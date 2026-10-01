@@ -35,6 +35,55 @@ GRACE_BOTTOM = 597   # bottoms align with the numbered slots
 HOTBAR_CENTERS = (229, 287, 344, 402, 459, 517, 574)  # numbered slot centers (reference px)
 
 
+# v0.15.1: AC normal skills are Cyan (Signature skills keep the navy/blue frame).
+# Boxes in reference px: tree nodes + their numbered hotbar slots.
+CYAN_RECOLOR_BOXES = (
+    (544, 154, 621, 235),   # Shield Charge (tree)
+    (682, 154, 760, 235),   # Fallen Angel (tree)
+    (376, 546, 428, 600),   # Shield Charge (hotbar slot 4)
+)
+CYAN_HUE = 186.0
+
+
+def recolor_blue_to_cyan(img, box):
+    """Shift only blue pixels (hue 190-250) toward cyan; gold, white and dark pixels untouched."""
+    x0, y0, x1, y1 = box
+    region = np.asarray(img.crop(box).convert("RGB"), dtype=np.float32) / 255.0
+    r, g, b = region[..., 0], region[..., 1], region[..., 2]
+    mx = region.max(axis=2)
+    mn = region.min(axis=2)
+    delta = mx - mn + 1e-6
+    hue = np.where(mx == r, (g - b) / delta % 6, np.where(mx == g, (b - r) / delta + 2, (r - g) / delta + 4)) * 60.0
+    sat = np.where(mx > 0, delta / (mx + 1e-6), 0)
+    val = mx
+    blue = (hue >= 190) & (hue <= 250) & (sat > 0.18)
+    # Compress the blue band around the cyan target, slightly brighter/saturated so it reads as cyan.
+    new_h = CYAN_HUE + (hue - 218.0) * 0.35
+    new_s = np.clip(sat * 1.08, 0, 1)
+    new_v = np.clip(val * 1.12, 0, 1)
+    weight = np.clip((sat - 0.18) / 0.15, 0, 1) * blue
+    hh = new_h / 60.0
+    i = np.floor(hh).astype(int) % 6
+    f = hh - np.floor(hh)
+    p_ = new_v * (1 - new_s)
+    q_ = new_v * (1 - new_s * f)
+    t_ = new_v * (1 - new_s * (1 - f))
+    choices_r = [new_v, q_, p_, p_, t_, new_v]
+    choices_g = [t_, new_v, new_v, q_, p_, p_]
+    choices_b = [p_, p_, t_, new_v, new_v, q_]
+    nr = np.choose(i, choices_r)
+    ng = np.choose(i, choices_g)
+    nb = np.choose(i, choices_b)
+    out = region.copy()
+    for c, n in ((0, nr), (1, ng), (2, nb)):
+        out[..., c] = region[..., c] * (1 - weight) + n * weight
+    patch = Image.fromarray((np.clip(out, 0, 1) * 255).astype(np.uint8))
+    if img.mode == "RGBA":
+        patch = patch.convert("RGBA")
+    img.paste(patch, (x0, y0))
+    return img
+
+
 def composite_footer(ref, target):
     tw, th = target.size
     sx, sy = tw / 1011.0, th / 662.0
@@ -112,6 +161,9 @@ def build_backdrop():
         out = erase_box(out, (cx - 9, 607, cx + 9, 622))
     out = erase_box(out, (668, 607, 716, 622))
 
+    for box in CYAN_RECOLOR_BOXES:
+        out = recolor_blue_to_cyan(out, box)
+
     slot = grace_slot(ref)
     gx0 = GRACE_CX - slot.width // 2
     gy0 = GRACE_BOTTOM - slot.height
@@ -187,7 +239,6 @@ def main():
     rounded_button(16, "+").save(os.path.join(OUT, "Tier_Plus.png"))
     rounded_button(16, "-").save(os.path.join(OUT, "Tier_Minus.png"))
     confirm_plaque(160, 42).save(os.path.join(OUT, "Confirm_Plaque.png"))
-    selection_ring().save(os.path.join(OUT, "Select_Ring.png"))
     print("UI assets written to", OUT)
 
 

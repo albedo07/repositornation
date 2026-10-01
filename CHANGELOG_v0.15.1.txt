@@ -1,0 +1,11 @@
+Immortal Heroes v0.15.1 - Cyan AC Skills + No Ghost Border + Single/Combo Keys
+- Removed the "ghost" selection border around clicked skills. Selection is shown by the
+  Tier +/- controls under the nameplate.
+- AC normal skills (Shield Charge, Fallen Angel) are now Cyan, on the tree and on the
+  hotbar, so they are distinct from the navy/blue Signature skills. Recolor only touches
+  the blue pixels; gold frames and glyphs are untouched (tools/build_ui_assets.py).
+- Keybinds: every hotbar slot AND Grace can be a single key OR Modifier + Key.
+  Click a label, then either press one key (single) or hold a key and press another (combo).
+  Each binding has its own modifier ([Hotbar] SlotNModifier / GraceModifier; None = single).
+  Right-click resets to default (M4 + N, M4 + R). Duplicate bindings swap.
+- No combat, progression, or tooltip-content changes.

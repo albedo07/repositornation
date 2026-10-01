@@ -20,10 +20,6 @@ def render(pending, out_path, node=(405, 375, (370, 287, 442, 355))):
     plaque = Image.open(os.path.join(A, "Confirm_Plaque.png"))
     im = base.resize((1180, 772), Image.LANCZOS)
     cx_ref, plate_bottom, icon = node
-    g = Image.new("RGBA", im.size, (0, 0, 0, 0))
-    ImageDraw.Draw(g).rounded_rectangle((R(icon[0] - 4), R(icon[1] - 4), R(icon[2] + 4), R(icon[3] + 4)),
-                                        radius=R(8), outline=(255, 214, 110, 230), width=R(3))
-    im = Image.alpha_composite(im, g.filter(ImageFilter.GaussianBlur(3)))
     b, cx, y = R(18), R(cx_ref), R(plate_bottom + 3)
     d = ImageDraw.Draw(im)
     fk = ImageFont.truetype(FONT, R(10.5))
@@ -51,6 +47,6 @@ def render(pending, out_path, node=(405, 375, (370, 287, 442, 355))):
 
 if __name__ == "__main__":
     out = os.path.join(ROOT, "docs", "previews")
-    render(True, os.path.join(out, "PREVIEW_v0.15.0_pending.png"))
-    render(False, os.path.join(out, "PREVIEW_v0.15.0_selected.png"))
+    render(True, os.path.join(out, "PREVIEW_v0.15.1_pending.png"))
+    render(False, os.path.join(out, "PREVIEW_v0.15.1_selected.png"))
     print("previews written")

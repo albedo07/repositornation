@@ -1,10 +1,9 @@
-Immortal Heroes v0.15.0 - Test focus
+Immortal Heroes v0.15.1 - Test focus
 
-1. Hotbar area should match the approved preview (docs/previews/PREVIEW_v0.15.0_*.png).
-2. Click a skill: gold ring around the icon, + centered right under its name.
-   Press +: - and + side by side, CONFIRM plaque appears over the compass. Click CONFIRM.
-3. Close the tree with pending points: they are discarded.
-4. Click "3" under slot 3, press F: label shows F. Click "4", press F: 3 and 4 swap.
-   Right-click a label: back to default. Esc while "PRESS KEY": cancels (tree stays open).
-5. Click "M4 + R": press a modifier, then a key. Right-click resets to M4 + R.
-6. Restart the game: bindings persist (BepInEx/config, [Hotbar] section).
+1. Click skills: no ghost border; only + (or - +) under the nameplate.
+2. Shield Charge + Fallen Angel are Cyan (tree + hotbar slot 4); Goddess Relic / Judgement Hammer stay navy.
+3. Click "1" under slot 1, tap F alone: label shows F (single key).
+4. Click it again, hold M4 and press 3: label shows M4 + 3 (combo).
+5. Same for Grace (M4 + R): tap G alone -> G; hold LShift + press R -> LShift + R.
+6. Right-click any label: back to default. Esc while waiting: cancels.
+7. Restart: bindings persist ([Hotbar] in the config).

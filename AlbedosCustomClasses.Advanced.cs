@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.15.0";
+        public const string ModVersion = "0.15.1";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -519,18 +519,18 @@ namespace AlbedosCustomClassesAdvanced
         private Texture2D _treeTierPlusTex;
         private Texture2D _treeTierMinusTex;
         private Texture2D _treeConfirmPlaqueTex;
-        private Texture2D _treeSelectRingTex;
 
         // v0.15.0 click-to-assign hotbar keys (Skill Tree hotbar).
-        private ConfigEntry<KeyCode> _hotbarModifier;
-        private ConfigEntry<KeyCode> _hotbarGraceKey;
-        private readonly ConfigEntry<KeyCode>[] _hotbarSlotKeys = new ConfigEntry<KeyCode>[7];
+        // v0.15.1: every binding is either a single key or Modifier + Key (Modifier None = single key).
+        // Index 0-6 = numbered slots 1-7, index 7 = Grace.
+        private const int HotbarBindingCount = 8;
+        private const int BindGrace = 7;
         private const int BindNone = -1;
-        private const int BindGraceModifier = 7;
-        private const int BindGraceKey = 8;
+        private readonly ConfigEntry<KeyCode>[] _hotbarSlotKeys = new ConfigEntry<KeyCode>[HotbarBindingCount];
+        private readonly ConfigEntry<KeyCode>[] _hotbarSlotMods = new ConfigEntry<KeyCode>[HotbarBindingCount];
         private int _bindCaptureTarget = BindNone;
         private int _bindCaptureStartFrame;
-        private KeyCode _bindPendingModifier = KeyCode.None;
+        private KeyCode _bindCaptureFirst = KeyCode.None;
         private static KeyCode[] _bindableKeyCodes;
         private string _treeHoveredTitle = "";
         private string _treeHoveredBody = "";
@@ -561,13 +561,18 @@ namespace AlbedosCustomClassesAdvanced
             _ultimate = Config.Bind("Hotkeys", "Skill6", KeyCode.Alpha6, "Advancement active skill slot 6. Ultimate only when slot 6 is the class's last numbered skill.");
             _skillbookKey = Config.Bind("Hotkeys", "Skillbook", KeyCode.K, "Open or close the skillbook.");
 
-            // v0.15.0: Skill Tree hotbar keys. Rebind in-game by clicking the labels under the
-            // hotbar slots (right-click resets). Prototype: casting still uses [Hotkeys] until
+            // v0.15.0/v0.15.1: Skill Tree hotbar keys. Rebind in-game by clicking the labels under
+            // the hotbar slots (right-click resets). Each binding is a single key or Modifier + Key;
+            // set a Modifier to None for a single key. Prototype: casting still uses [Hotkeys] until
             // the tree hotbar is wired to the combat runtime.
-            _hotbarModifier = Config.Bind("Hotbar", "Modifier", KeyCode.Mouse3, "Shared hold-modifier for every hotbar slot and Grace (Mouse3 = M4).");
-            for (int i = 0; i < _hotbarSlotKeys.Length; i++)
-                _hotbarSlotKeys[i] = Config.Bind("Hotbar", "Slot" + (i + 1).ToString(), KeyCode.Alpha1 + i, "Key for numbered hotbar slot " + (i + 1).ToString() + " (used with Modifier).");
-            _hotbarGraceKey = Config.Bind("Hotbar", "GraceKey", KeyCode.R, "Key for the Grace slot (used with Modifier).");
+            for (int i = 0; i < 7; i++)
+            {
+                string slot = "Slot" + (i + 1).ToString();
+                _hotbarSlotKeys[i] = Config.Bind("Hotbar", slot, KeyCode.Alpha1 + i, "Key for numbered hotbar slot " + (i + 1).ToString() + ".");
+                _hotbarSlotMods[i] = Config.Bind("Hotbar", slot + "Modifier", KeyCode.Mouse3, "Hold-modifier for slot " + (i + 1).ToString() + " (Mouse3 = M4). None = single key.");
+            }
+            _hotbarSlotKeys[BindGrace] = Config.Bind("Hotbar", "GraceKey", KeyCode.R, "Key for the Grace slot.");
+            _hotbarSlotMods[BindGrace] = Config.Bind("Hotbar", "GraceModifier", KeyCode.Mouse3, "Hold-modifier for the Grace slot (Mouse3 = M4). None = single key.");
 
             _enableVfx = Config.Bind("Interface", "EnableVFX", true, "Enable advanced-skill visual effects.");
             _showCombatHud = Config.Bind("Interface", "ShowCombatHud", true, "Show the unified class skill HUD.");
@@ -6785,7 +6790,6 @@ namespace AlbedosCustomClassesAdvanced
             _treeTierPlusTex = LoadUiPng("Tier_Plus.png");
             _treeTierMinusTex = LoadUiPng("Tier_Minus.png");
             _treeConfirmPlaqueTex = LoadUiPng("Confirm_Plaque.png");
-            _treeSelectRingTex = LoadUiPng("Select_Ring.png");
             return true;
         }
 
@@ -7030,7 +7034,7 @@ namespace AlbedosCustomClassesAdvanced
                     ? "Tier " + hoverTier.ToString() + " / " + node.MaxTier.ToString() + (pending > 0 ? "   Pending +" + pending.ToString() : "")
                     : "No allocatable Tiers";
                 _treeHoveredTitle = node.TooltipTitle;
-                string slotState = node.Kind == TreeNodeKind.Grace ? "  •  DEDICATED " + ShortKeyName(_hotbarModifier.Value) + " + " + ShortKeyName(_hotbarGraceKey.Value) : (node.Mandatory ? "  •  HOTBAR LOCKED" : "  •  OPTIONAL");
+                string slotState = node.Kind == TreeNodeKind.Grace ? "  •  DEDICATED " + FormatHotbarBinding(BindGrace) : (node.Mandatory ? "  •  HOTBAR LOCKED" : "  •  OPTIONAL");
                 _treeHoveredBody = tierLine + slotState + "\n" + node.TooltipBody;
             }
 
@@ -7040,7 +7044,7 @@ namespace AlbedosCustomClassesAdvanced
             if (_treeSelectedNodeId != node.Id)
                 return;
 
-            DrawReferenceSelectedAccent(icon, node.Kind);
+            // v0.15.1: no selection ring/underline; the Tier controls under the nameplate mark the selection.
 
             if (node.MaxTier <= 0)
                 return;
@@ -7117,10 +7121,7 @@ namespace AlbedosCustomClassesAdvanced
             for (int i = 0; i < centers.Length; i++)
             {
                 Rect label = ScaleReferenceRect(centers[i] - 26f, 607f, 52f, 15f);
-                string text = _bindCaptureTarget == i ? "PRESS KEY" : ShortKeyName(_hotbarSlotKeys[i].Value);
-                DrawHotbarKeyLabel(label, text, _bindCaptureTarget == i, i,
-                    "HOTBAR SLOT " + (i + 1).ToString() + " - " + ShortKeyName(_hotbarModifier.Value) + " + " + ShortKeyName(_hotbarSlotKeys[i].Value),
-                    "Click, then press a key to rebind. Right-click resets to default. Esc cancels.\nA key already used by another slot is swapped.");
+                DrawHotbarKeyLabel(label, i, "HOTBAR SLOT " + (i + 1).ToString() + " - " + FormatHotbarBinding(i));
             }
         }
 
@@ -7177,15 +7178,6 @@ namespace AlbedosCustomClassesAdvanced
 
         private void DrawReferenceSelectedAccent(Rect icon, TreeNodeKind kind)
         {
-            if (_treeSelectRingTex != null)
-            {
-                // Soft gold ring around the icon frame; never crosses the nameplate text.
-                float pad = Mathf.Max(icon.width, icon.height) * 0.16f;
-                GUI.color = Color.white;
-                GUI.DrawTexture(new Rect(icon.x - pad, icon.y - pad, icon.width + pad * 2f, icon.height + pad * 2f), _treeSelectRingTex);
-                return;
-            }
-
             Color gold = new Color(0.98f, 0.82f, 0.36f, 0.88f);
             Rect cue = new Rect(icon.x + 7f, icon.yMax + 2f, icon.width - 14f, 2f);
             GUI.color = gold;
@@ -7214,16 +7206,7 @@ namespace AlbedosCustomClassesAdvanced
             // v0.15.0: the Grace slot and the right panel are baked artwork. Code only adds the
             // live Grace key label and the CONFIRM plaque (only while Tiers are pending).
             Rect graceLabel = ScaleReferenceRect(641f, 607f, 100f, 15f);
-            string graceText;
-            if (_bindCaptureTarget == BindGraceModifier)
-                graceText = "PRESS MODIFIER";
-            else if (_bindCaptureTarget == BindGraceKey)
-                graceText = ShortKeyName(_bindPendingModifier) + " + ...";
-            else
-                graceText = ShortKeyName(_hotbarModifier.Value) + " + " + ShortKeyName(_hotbarGraceKey.Value);
-            DrawHotbarKeyLabel(graceLabel, graceText, _bindCaptureTarget == BindGraceModifier || _bindCaptureTarget == BindGraceKey, BindGraceModifier,
-                "GRACE - " + ShortKeyName(_hotbarModifier.Value) + " + " + ShortKeyName(_hotbarGraceKey.Value),
-                "Click, then press the modifier, then the key. The modifier is shared by every hotbar slot.\nRight-click resets to M4 + R. Esc cancels.");
+            DrawHotbarKeyLabel(graceLabel, BindGrace, "GRACE - " + FormatHotbarBinding(BindGrace));
 
             int pendingTotal = GetPrototypeTotalPending();
             if (pendingTotal <= 0)
@@ -7247,15 +7230,17 @@ namespace AlbedosCustomClassesAdvanced
                 ConfirmPrototypePending();
         }
 
-        private void DrawHotbarKeyLabel(Rect rect, string text, bool capturing, int bindTarget, string tooltipTitle, string tooltipBody)
+        private void DrawHotbarKeyLabel(Rect rect, int bindTarget, string tooltipTitle)
         {
             Event e = Event.current;
             bool hover = rect.Contains(e.mousePosition);
+            bool capturing = _bindCaptureTarget == bindTarget;
 
             if (hover)
             {
                 _treeHoveredTitle = tooltipTitle;
-                _treeHoveredBody = tooltipBody;
+                _treeHoveredBody = "Click, then press a single key, or hold a modifier and press a key for a combo (e.g. M4 + 3).\n"
+                    + "Right-click resets to default. Esc cancels. A binding already used by another slot is swapped.";
             }
 
             if (hover && e.type == EventType.MouseDown && e.button == 1)
@@ -7264,6 +7249,14 @@ namespace AlbedosCustomClassesAdvanced
                 e.Use();
                 return;
             }
+
+            string text;
+            if (!capturing)
+                text = FormatHotbarBinding(bindTarget);
+            else if (_bindCaptureFirst != KeyCode.None)
+                text = ShortKeyName(_bindCaptureFirst) + " + ...";
+            else
+                text = "PRESS KEY";
 
             GUIStyle style = capturing ? _treeFooterKeyCaptureStyle : (hover ? _treeFooterKeyHoverStyle : _treeFooterKeyStyle);
             if (capturing)
@@ -7278,17 +7271,24 @@ namespace AlbedosCustomClassesAdvanced
                 BeginHotbarKeyCapture(bindTarget);
         }
 
+        private string FormatHotbarBinding(int index)
+        {
+            KeyCode mod = _hotbarSlotMods[index].Value;
+            KeyCode key = _hotbarSlotKeys[index].Value;
+            return mod == KeyCode.None ? ShortKeyName(key) : ShortKeyName(mod) + " + " + ShortKeyName(key);
+        }
+
         private void BeginHotbarKeyCapture(int target)
         {
             _bindCaptureTarget = target;
             _bindCaptureStartFrame = Time.frameCount;
-            _bindPendingModifier = KeyCode.None;
+            _bindCaptureFirst = KeyCode.None;
         }
 
         private void CancelHotbarKeyCapture()
         {
             _bindCaptureTarget = BindNone;
-            _bindPendingModifier = KeyCode.None;
+            _bindCaptureFirst = KeyCode.None;
         }
 
         private void UpdateHotbarKeyCapture()
@@ -7327,66 +7327,68 @@ namespace AlbedosCustomClassesAdvanced
                 _bindableKeyCodes = list.ToArray();
             }
 
+            // Combo detection: the first key pressed is held; if a second key goes down while it is
+            // held, the first becomes the modifier. If the first key is released alone, it is a
+            // single-key binding. This lets M4 (or Shift/Ctrl/etc.) be either a modifier or a key.
+            if (_bindCaptureFirst == KeyCode.None)
+            {
+                for (int i = 0; i < _bindableKeyCodes.Length; i++)
+                {
+                    if (Input.GetKeyDown(_bindableKeyCodes[i]))
+                    {
+                        _bindCaptureFirst = _bindableKeyCodes[i];
+                        return;
+                    }
+                }
+                return;
+            }
+
             for (int i = 0; i < _bindableKeyCodes.Length; i++)
             {
                 KeyCode k = _bindableKeyCodes[i];
-                if (!Input.GetKeyDown(k))
-                    continue;
-
-                if (_bindCaptureTarget == BindGraceModifier)
+                if (k != _bindCaptureFirst && Input.GetKeyDown(k))
                 {
-                    _bindPendingModifier = k;
-                    _bindCaptureTarget = BindGraceKey;
-                    _bindCaptureStartFrame = Time.frameCount;
-                    return;
-                }
-
-                if (_bindCaptureTarget == BindGraceKey)
-                {
-                    if (k == _bindPendingModifier)
-                        return;
-                    _hotbarModifier.Value = _bindPendingModifier;
-                    _hotbarGraceKey.Value = k;
-                    Logger.LogInfo("Hotbar: Grace bound to " + ShortKeyName(_bindPendingModifier) + " + " + ShortKeyName(k));
+                    AssignHotbarBinding(_bindCaptureTarget, _bindCaptureFirst, k);
                     CancelHotbarKeyCapture();
                     return;
                 }
+            }
 
-                AssignHotbarSlotKey(_bindCaptureTarget, k);
+            if (!Input.GetKey(_bindCaptureFirst))
+            {
+                AssignHotbarBinding(_bindCaptureTarget, KeyCode.None, _bindCaptureFirst);
                 CancelHotbarKeyCapture();
-                return;
             }
         }
 
-        private void AssignHotbarSlotKey(int slot, KeyCode key)
+        private void AssignHotbarBinding(int index, KeyCode modifier, KeyCode key)
         {
-            if (slot < 0 || slot >= _hotbarSlotKeys.Length)
+            if (index < 0 || index >= HotbarBindingCount)
                 return;
 
-            KeyCode previous = _hotbarSlotKeys[slot].Value;
-            for (int i = 0; i < _hotbarSlotKeys.Length; i++)
+            KeyCode previousMod = _hotbarSlotMods[index].Value;
+            KeyCode previousKey = _hotbarSlotKeys[index].Value;
+            for (int i = 0; i < HotbarBindingCount; i++)
             {
-                if (i != slot && _hotbarSlotKeys[i].Value == key)
-                    _hotbarSlotKeys[i].Value = previous;
+                if (i != index && _hotbarSlotMods[i].Value == modifier && _hotbarSlotKeys[i].Value == key)
+                {
+                    _hotbarSlotMods[i].Value = previousMod;
+                    _hotbarSlotKeys[i].Value = previousKey;
+                }
             }
 
             // BepInEx saves the .cfg automatically when a ConfigEntry value changes.
-            _hotbarSlotKeys[slot].Value = key;
-            Logger.LogInfo("Hotbar: slot " + (slot + 1).ToString() + " bound to " + ShortKeyName(key));
+            _hotbarSlotMods[index].Value = modifier;
+            _hotbarSlotKeys[index].Value = key;
+            Logger.LogInfo("Hotbar: " + (index == BindGrace ? "Grace" : "slot " + (index + 1).ToString()) + " bound to " + FormatHotbarBinding(index));
         }
 
-        private void ResetHotbarBinding(int target)
+        private void ResetHotbarBinding(int index)
         {
             CancelHotbarKeyCapture();
-            if (target == BindGraceModifier || target == BindGraceKey)
-            {
-                _hotbarModifier.Value = (KeyCode)_hotbarModifier.DefaultValue;
-                _hotbarGraceKey.Value = (KeyCode)_hotbarGraceKey.DefaultValue;
+            if (index < 0 || index >= HotbarBindingCount)
                 return;
-            }
-
-            if (target >= 0 && target < _hotbarSlotKeys.Length)
-                AssignHotbarSlotKey(target, (KeyCode)_hotbarSlotKeys[target].DefaultValue);
+            AssignHotbarBinding(index, (KeyCode)_hotbarSlotMods[index].DefaultValue, (KeyCode)_hotbarSlotKeys[index].DefaultValue);
         }
 
         private static string ShortKeyName(KeyCode key)
