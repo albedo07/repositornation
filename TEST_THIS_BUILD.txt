@@ -1,9 +1,10 @@
-Immortal Heroes v0.14.7 - Test focus
+Immortal Heroes v0.15.0 - Test focus
 
-1. Tree colors should now match the reference PNG: dark navy frame, rich parchment, strong gold.
-   If it looks TOO dark, set SkillTreeColorSpaceCorrection = false in the config and tell me.
-2. Footer: no flat blue/brown boxes. Grace box and right panel are the original painted art.
-3. HEAVEN'S LIGHT inside the Grace box; M4 + R underneath; numbers 1-7 under slots, crisp.
-4. Queue a Tier with +: CONFIRM + "N PENDING" appears in the right panel. Click it to commit.
-5. Close without confirming: pending discarded.
-6. Note: tooltips and the +/- buttons still use code-drawn backgrounds and may look slightly light.
+1. Hotbar area should match the approved preview (docs/previews/PREVIEW_v0.15.0_*.png).
+2. Click a skill: gold ring around the icon, + centered right under its name.
+   Press +: - and + side by side, CONFIRM plaque appears over the compass. Click CONFIRM.
+3. Close the tree with pending points: they are discarded.
+4. Click "3" under slot 3, press F: label shows F. Click "4", press F: 3 and 4 swap.
+   Right-click a label: back to default. Esc while "PRESS KEY": cancels (tree stays open).
+5. Click "M4 + R": press a modifier, then a key. Right-click resets to M4 + R.
+6. Restart the game: bindings persist (BepInEx/config, [Hotbar] section).

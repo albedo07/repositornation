@@ -32,6 +32,7 @@ SLOT = 49            # numbered hotbar slot size in the new footer
 GRACE = 56           # Grace slot: slightly larger, distinct gold frame
 GRACE_CX = 691
 GRACE_BOTTOM = 597   # bottoms align with the numbered slots
+HOTBAR_CENTERS = (229, 287, 344, 402, 459, 517, 574)  # numbered slot centers (reference px)
 
 
 def composite_footer(ref, target):
@@ -106,6 +107,11 @@ def build_backdrop():
     # Remove the wide HEAVEN'S LIGHT box (keep the baked "M4 + R" under it).
     out = erase_box(out, (634, 531, 751, 606))
 
+    # v0.15.0: hotkey labels are drawn (and rebindable) in code, so erase the baked ones.
+    for cx in HOTBAR_CENTERS:
+        out = erase_box(out, (cx - 9, 607, cx + 9, 622))
+    out = erase_box(out, (668, 607, 716, 622))
+
     slot = grace_slot(ref)
     gx0 = GRACE_CX - slot.width // 2
     gy0 = GRACE_BOTTOM - slot.height
@@ -163,12 +169,25 @@ def confirm_plaque(w, h, scale=4):
     return img.resize((w * 2, h * 2), Image.LANCZOS)
 
 
+def selection_ring(size=96, scale=4):
+    """Soft gold ring drawn around the selected node's icon frame."""
+    S = size * scale
+    img = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    pad = int(S * 0.08)
+    d.rounded_rectangle((pad, pad, S - pad, S - pad), radius=int(S * 0.1),
+                        outline=(255, 214, 110, 235), width=int(S * 0.035))
+    img = img.filter(ImageFilter.GaussianBlur(S * 0.02))
+    return img.resize((size, size), Image.LANCZOS)
+
+
 def main():
     backdrop = build_backdrop()
     backdrop.save(os.path.join(OUT, "Cleric_Paladin_Reference.png"))
     rounded_button(16, "+").save(os.path.join(OUT, "Tier_Plus.png"))
     rounded_button(16, "-").save(os.path.join(OUT, "Tier_Minus.png"))
     confirm_plaque(160, 42).save(os.path.join(OUT, "Confirm_Plaque.png"))
+    selection_ring().save(os.path.join(OUT, "Select_Ring.png"))
     print("UI assets written to", OUT)
 
 

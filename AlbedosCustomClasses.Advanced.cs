@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.14.7";
+        public const string ModVersion = "0.15.0";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -494,6 +494,9 @@ namespace AlbedosCustomClassesAdvanced
         private GUIStyle _treeFooterGraceStyle;
         private GUIStyle _treeFooterConfirmStyle;
         private GUIStyle _treeFooterConfirmHoverStyle;
+        private GUIStyle _treeFooterPendingStyle;
+        private GUIStyle _treeFooterKeyHoverStyle;
+        private GUIStyle _treeFooterKeyCaptureStyle;
         private GUIStyle _treeTinyLeftStyle;
         private GUIStyle _treeTooltipTitleStyle;
         private GUIStyle _treeTooltipBodyStyle;
@@ -513,6 +516,22 @@ namespace AlbedosCustomClassesAdvanced
         private Texture2D _treeBlueGlowTex;
         private Texture2D _treeReferenceBackdropTex;
         private bool _treeReferenceBackdropLoadAttempted;
+        private Texture2D _treeTierPlusTex;
+        private Texture2D _treeTierMinusTex;
+        private Texture2D _treeConfirmPlaqueTex;
+        private Texture2D _treeSelectRingTex;
+
+        // v0.15.0 click-to-assign hotbar keys (Skill Tree hotbar).
+        private ConfigEntry<KeyCode> _hotbarModifier;
+        private ConfigEntry<KeyCode> _hotbarGraceKey;
+        private readonly ConfigEntry<KeyCode>[] _hotbarSlotKeys = new ConfigEntry<KeyCode>[7];
+        private const int BindNone = -1;
+        private const int BindGraceModifier = 7;
+        private const int BindGraceKey = 8;
+        private int _bindCaptureTarget = BindNone;
+        private int _bindCaptureStartFrame;
+        private KeyCode _bindPendingModifier = KeyCode.None;
+        private static KeyCode[] _bindableKeyCodes;
         private string _treeHoveredTitle = "";
         private string _treeHoveredBody = "";
         private GUIStyle _treeHotkeyStyle;
@@ -541,6 +560,14 @@ namespace AlbedosCustomClassesAdvanced
             }
             _ultimate = Config.Bind("Hotkeys", "Skill6", KeyCode.Alpha6, "Advancement active skill slot 6. Ultimate only when slot 6 is the class's last numbered skill.");
             _skillbookKey = Config.Bind("Hotkeys", "Skillbook", KeyCode.K, "Open or close the skillbook.");
+
+            // v0.15.0: Skill Tree hotbar keys. Rebind in-game by clicking the labels under the
+            // hotbar slots (right-click resets). Prototype: casting still uses [Hotkeys] until
+            // the tree hotbar is wired to the combat runtime.
+            _hotbarModifier = Config.Bind("Hotbar", "Modifier", KeyCode.Mouse3, "Shared hold-modifier for every hotbar slot and Grace (Mouse3 = M4).");
+            for (int i = 0; i < _hotbarSlotKeys.Length; i++)
+                _hotbarSlotKeys[i] = Config.Bind("Hotbar", "Slot" + (i + 1).ToString(), KeyCode.Alpha1 + i, "Key for numbered hotbar slot " + (i + 1).ToString() + " (used with Modifier).");
+            _hotbarGraceKey = Config.Bind("Hotbar", "GraceKey", KeyCode.R, "Key for the Grace slot (used with Modifier).");
 
             _enableVfx = Config.Bind("Interface", "EnableVFX", true, "Enable advanced-skill visual effects.");
             _showCombatHud = Config.Bind("Interface", "ShowCombatHud", true, "Show the unified class skill HUD.");
@@ -948,13 +975,19 @@ namespace AlbedosCustomClassesAdvanced
             if (player == null)
                 return;
 
-            if (_skillbookOpen && Input.GetKeyDown(KeyCode.Escape))
+            // While a hotbar key is being captured, Esc / the Skillbook key only serve the capture.
+            // Combat runtime ticking below continues normally.
+            bool capturingKey = _bindCaptureTarget != BindNone;
+            if (capturingKey)
+                UpdateHotbarKeyCapture();
+
+            if (!capturingKey && _skillbookOpen && Input.GetKeyDown(KeyCode.Escape))
             {
                 ToggleSkillbook();
                 return;
             }
 
-            if (Input.GetKeyDown(_skillbookKey.Value))
+            if (!capturingKey && Input.GetKeyDown(_skillbookKey.Value))
             {
                 if (_skillbookOpen)
                     ToggleSkillbook();
@@ -6478,6 +6511,7 @@ namespace AlbedosCustomClassesAdvanced
             }
             else
             {
+                CancelHotbarKeyCapture();
                 _treePrototypePending.Clear();
                 _treeSelectedNodeId = "";
                 DragonCombat.SetUiInputBlocked(false);
@@ -6743,18 +6777,31 @@ namespace AlbedosCustomClassesAdvanced
                 return false;
 
             _treeReferenceBackdropLoadAttempted = true;
+            _treeReferenceBackdropTex = LoadUiPng("Cleric_Paladin_Reference.png");
+            if (_treeReferenceBackdropTex == null)
+                return false;
 
+            // v0.15.0 component art. Each is optional: a missing file falls back to code drawing.
+            _treeTierPlusTex = LoadUiPng("Tier_Plus.png");
+            _treeTierMinusTex = LoadUiPng("Tier_Minus.png");
+            _treeConfirmPlaqueTex = LoadUiPng("Confirm_Plaque.png");
+            _treeSelectRingTex = LoadUiPng("Select_Ring.png");
+            return true;
+        }
+
+        private Texture2D LoadUiPng(string fileName)
+        {
             try
             {
                 // Keep raw-file IO late-bound here. Windows PowerShell Add-Type can otherwise
                 // try to resolve Valheim's IO facade through a second mscorlib reference while
                 // compiling this staging DLL, which produces a duplicate-identity compiler error.
-                string assetPath = Paths.PluginPath + "/ImmortalHeroesAssets/Cleric_Paladin_Reference.png";
+                string assetPath = Paths.PluginPath + "/ImmortalHeroesAssets/" + fileName;
                 Type fileType = typeof(object).Assembly.GetType("System.IO.File");
                 if (fileType == null)
                 {
                     Logger.LogWarning("Immortal Heroes UI file API unavailable; using procedural fallback.");
-                    return false;
+                    return null;
                 }
 
                 MethodInfo existsMethod = fileType.GetMethod("Exists", BindingFlags.Public | BindingFlags.Static, null, new Type[] { typeof(string) }, null);
@@ -6762,7 +6809,7 @@ namespace AlbedosCustomClassesAdvanced
                 if (existsMethod == null || readMethod == null || !(bool)existsMethod.Invoke(null, new object[] { assetPath }))
                 {
                     Logger.LogWarning("Immortal Heroes UI asset missing; using procedural fallback: " + assetPath);
-                    return false;
+                    return null;
                 }
 
                 byte[] bytes = (byte[])readMethod.Invoke(null, new object[] { assetPath });
@@ -6780,7 +6827,7 @@ namespace AlbedosCustomClassesAdvanced
                 {
                     Destroy(texture);
                     Logger.LogWarning("Immortal Heroes UI image decoder unavailable; using procedural fallback.");
-                    return false;
+                    return null;
                 }
 
                 MethodInfo loadImageMethod = imageConversionType.GetMethod(
@@ -6795,7 +6842,7 @@ namespace AlbedosCustomClassesAdvanced
                 {
                     Destroy(texture);
                     Logger.LogWarning("Immortal Heroes UI byte-array decoder unavailable; using procedural fallback.");
-                    return false;
+                    return null;
                 }
 
                 object decodeResult = loadImageMethod.Invoke(null, new object[] { texture, bytes, false });
@@ -6803,19 +6850,18 @@ namespace AlbedosCustomClassesAdvanced
                 {
                     Destroy(texture);
                     Logger.LogWarning("Immortal Heroes UI asset could not be decoded; using procedural fallback.");
-                    return false;
+                    return null;
                 }
 
-                texture.name = "ImmortalHeroes_ClericPaladin_Reference";
+                texture.name = "ImmortalHeroes_" + fileName;
                 ApplyLinearColorSpaceCompensation(texture);
-                _treeReferenceBackdropTex = texture;
-                Logger.LogInfo("Immortal Heroes reference UI asset loaded once: " + texture.width + "x" + texture.height);
-                return true;
+                Logger.LogInfo("Immortal Heroes UI asset loaded once: " + fileName + " " + texture.width + "x" + texture.height);
+                return texture;
             }
             catch (Exception ex)
             {
-                Logger.LogWarning("Immortal Heroes reference UI load failed; using procedural fallback. " + ex.Message);
-                return false;
+                Logger.LogWarning("Immortal Heroes UI asset load failed (" + fileName + "); using procedural fallback. " + ex.Message);
+                return null;
             }
         }
 
@@ -6984,7 +7030,7 @@ namespace AlbedosCustomClassesAdvanced
                     ? "Tier " + hoverTier.ToString() + " / " + node.MaxTier.ToString() + (pending > 0 ? "   Pending +" + pending.ToString() : "")
                     : "No allocatable Tiers";
                 _treeHoveredTitle = node.TooltipTitle;
-                string slotState = node.Kind == TreeNodeKind.Grace ? "  •  DEDICATED M4 + R" : (node.Mandatory ? "  •  HOTBAR LOCKED" : "  •  OPTIONAL");
+                string slotState = node.Kind == TreeNodeKind.Grace ? "  •  DEDICATED " + ShortKeyName(_hotbarModifier.Value) + " + " + ShortKeyName(_hotbarGraceKey.Value) : (node.Mandatory ? "  •  HOTBAR LOCKED" : "  •  OPTIONAL");
                 _treeHoveredBody = tierLine + slotState + "\n" + node.TooltipBody;
             }
 
@@ -7003,17 +7049,20 @@ namespace AlbedosCustomClassesAdvanced
             int pendingTier = GetPrototypePending(node.Id);
             int effectiveTier = currentTier + pendingTier;
 
-            float controlSize = Mathf.Max(16f, Mathf.Min(icon.width, icon.height) * 0.22f);
-            float controlY = group.yMax + 1f;
-            float gap = 5f;
+            // v0.15.0: controls hang directly under the skill's nameplate, centered on it.
+            // + alone is centered; with pending Tiers, - and + sit symmetrically either side.
+            Vector2 anchor = GetReferenceNameplateAnchor(node);
+            const float buttonRef = 18f;
+            const float gapRef = 3f;
+            float buttonY = anchor.y + gapRef;
 
             bool canAdd = effectiveTier < node.MaxTier;
             bool canRemove = pendingTier > 0;
 
             if (canAdd && canRemove)
             {
-                Rect minusRect = new Rect(group.center.x - controlSize - gap * 0.5f, controlY, controlSize, controlSize);
-                Rect plusRect = new Rect(group.center.x + gap * 0.5f, controlY, controlSize, controlSize);
+                Rect minusRect = ScaleReferenceRect(anchor.x - gapRef - buttonRef, buttonY, buttonRef, buttonRef);
+                Rect plusRect = ScaleReferenceRect(anchor.x + gapRef, buttonY, buttonRef, buttonRef);
                 DrawTierQueueButton(minusRect, "-");
                 DrawTierQueueButton(plusRect, "+");
                 if (GUI.Button(minusRect, GUIContent.none, GUIStyle.none))
@@ -7023,123 +7072,264 @@ namespace AlbedosCustomClassesAdvanced
             }
             else if (canAdd)
             {
-                Rect plusRect = new Rect(group.center.x - controlSize * 0.5f, controlY, controlSize, controlSize);
+                Rect plusRect = ScaleReferenceRect(anchor.x - buttonRef * 0.5f, buttonY, buttonRef, buttonRef);
                 DrawTierQueueButton(plusRect, "+");
                 if (GUI.Button(plusRect, GUIContent.none, GUIStyle.none))
                     AddPrototypePending(node.Id, node.MaxTier);
             }
             else if (canRemove)
             {
-                Rect minusRect = new Rect(group.center.x - controlSize * 0.5f, controlY, controlSize, controlSize);
+                Rect minusRect = ScaleReferenceRect(anchor.x - buttonRef * 0.5f, buttonY, buttonRef, buttonRef);
                 DrawTierQueueButton(minusRect, "-");
                 if (GUI.Button(minusRect, GUIContent.none, GUIStyle.none))
                     RemovePrototypePending(node.Id);
             }
         }
 
+        // Nameplate anchors measured from the approved artwork (reference px):
+        // x = nameplate center, y = nameplate bottom edge.
+        private static readonly Dictionary<string, Vector2> ReferenceNameplateAnchors = new Dictionary<string, Vector2>
+        {
+            { "lightning_zap", new Vector2(200f, 247f) },
+            { "righteous_strike", new Vector2(201f, 375f) },
+            { "holy_wave", new Vector2(201f, 499f) },
+            { "goddess_relic", new Vector2(404f, 247f) },
+            { "judgement_hammer", new Vector2(405f, 375f) },
+            { "heavens_light", new Vector2(416f, 499f) },
+            { "shield_charge", new Vector2(582f, 247f) },
+            { "fallen_angel", new Vector2(720f, 247f) },
+            { "ray_of_hope", new Vector2(720f, 375f) },
+            { "electric_smite", new Vector2(902f, 355f) }
+        };
+
+        private static Vector2 GetReferenceNameplateAnchor(ReferenceNodeUi node)
+        {
+            Vector2 anchor;
+            if (ReferenceNameplateAnchors.TryGetValue(node.Id, out anchor))
+                return anchor;
+            return new Vector2(node.GroupRect.center.x, node.GroupRect.yMax);
+        }
+
         private void DrawReferenceHotbarHotkeys()
         {
-            // Hotkeys belong to the actual hotbar, never under tree nodes.
-            float[] centers = { 225f, 283f, 340f, 398f, 455f, 512f, 570f };
-            string[] keys = { "1", "2", "3", "4", "5", "6", "7" };
-
+            // v0.15.0: labels are live and clickable (click = rebind, right-click = reset).
+            float[] centers = { 229f, 287f, 344f, 402f, 459f, 517f, 574f };
             for (int i = 0; i < centers.Length; i++)
             {
-                Rect label = ScaleReferenceRect(centers[i] - 16f, 605f, 32f, 16f);
-                DrawFooterText(label, keys[i], _treeFooterKeyStyle);
+                Rect label = ScaleReferenceRect(centers[i] - 26f, 607f, 52f, 15f);
+                string text = _bindCaptureTarget == i ? "PRESS KEY" : ShortKeyName(_hotbarSlotKeys[i].Value);
+                DrawHotbarKeyLabel(label, text, _bindCaptureTarget == i, i,
+                    "HOTBAR SLOT " + (i + 1).ToString() + " - " + ShortKeyName(_hotbarModifier.Value) + " + " + ShortKeyName(_hotbarSlotKeys[i].Value),
+                    "Click, then press a key to rebind. Right-click resets to default. Esc cancels.\nA key already used by another slot is swapped.");
             }
-        }
-
-        private void DrawReferenceRankAccent(Rect icon, TreeNodeKind kind)
-        {
-            // The painted frames remain untouched. Rank identity uses small jewels only so the
-            // tree never picks up debug-looking cyan/pink corner brackets.
-            Color accent = GetTreeNodeColor(kind);
-            Rect frame = new Rect(icon.x - 3f, icon.y - 3f, icon.width + 6f, icon.height + 6f);
-
-            if (kind == TreeNodeKind.Signature)
-                accent = new Color(0.14f, 0.32f, 0.72f, 0.98f);
-            else if (kind == TreeNodeKind.AdvancementNormal)
-                accent = new Color(0.18f, 0.82f, 0.94f, 0.98f);
-            else if (kind == TreeNodeKind.Buff)
-                accent = new Color(0.30f, 0.82f, 0.42f, 0.98f);
-
-            if (kind == TreeNodeKind.Ascended)
-            {
-                DrawDiamond(new Vector2(frame.center.x, frame.y - 3f), 4.5f, accent);
-                DrawDiamond(new Vector2(frame.center.x, frame.yMax + 3f), 3.5f, new Color(accent.r, accent.g, accent.b, 0.80f));
-            }
-            else if (kind == TreeNodeKind.Signature)
-            {
-                DrawDiamond(new Vector2(frame.center.x, frame.y - 3f), 4f, new Color(0.46f, 0.66f, 1f, 0.98f));
-                DrawDiamond(new Vector2(frame.x - 3f, frame.center.y), 2.7f, accent);
-                DrawDiamond(new Vector2(frame.xMax + 3f, frame.center.y), 2.7f, accent);
-            }
-            else if (kind == TreeNodeKind.AdvancementNormal)
-            {
-                DrawDiamond(new Vector2(frame.x - 3f, frame.center.y), 2.5f, accent);
-                DrawDiamond(new Vector2(frame.xMax + 3f, frame.center.y), 2.5f, accent);
-            }
-            else if (kind == TreeNodeKind.Buff)
-            {
-                DrawDiamond(new Vector2(frame.x - 3f, frame.center.y), 2.5f, accent);
-                DrawDiamond(new Vector2(frame.xMax + 3f, frame.center.y), 2.5f, accent);
-            }
-            else if (kind == TreeNodeKind.Grace)
-            {
-                Color gold = new Color(0.96f, 0.78f, 0.24f, 1f);
-                DrawDiamond(new Vector2(frame.center.x, frame.y - 4f), 5f, gold);
-                DrawDiamond(new Vector2(frame.center.x, frame.yMax + 4f), 3.5f, new Color(gold.r, gold.g, gold.b, 0.78f));
-            }
-            else if (kind == TreeNodeKind.Ultimate || kind == TreeNodeKind.AscendedUltimate)
-            {
-                Color gold = new Color(0.96f, 0.76f, 0.30f, 1f);
-                DrawDiamond(new Vector2(frame.center.x, frame.y - 6f), 6f, gold);
-                DrawDiamond(new Vector2(frame.x - 4f, frame.center.y), 4f, accent);
-                DrawDiamond(new Vector2(frame.xMax + 4f, frame.center.y), 4f, accent);
-                DrawDiamond(new Vector2(frame.center.x, frame.yMax + 5f), 3f, gold);
-            }
-        }
-
-        private void DrawReferenceSelectedAccent(Rect icon, TreeNodeKind kind)
-        {
-            Color gold = new Color(0.98f, 0.82f, 0.36f, 0.88f);
-            Rect cue = new Rect(icon.x + 7f, icon.yMax + 2f, icon.width - 14f, 2f);
-            GUI.color = gold;
-            GUI.DrawTexture(cue, _treeGoldTex);
-            GUI.color = Color.white;
-        }
-
-        private void DrawTierQueueButton(Rect rect, string symbol)
-        {
-            DrawFilledBorder(rect, new Color(0.16f, 0.18f, 0.19f, 0.98f), new Color(0.92f, 0.73f, 0.27f, 1f), 1f);
-            GUI.Label(rect, symbol, _treeSubHeaderStyle);
         }
 
         private void DrawReferenceFooterUx()
         {
-            // v0.14.7: the footer is the approved painted artwork, untouched. No interiors are
-            // repainted and no boxes are drawn; only text and the Confirm hotspot sit on top.
-            // Baked Grace box (reference px): x 640-740, y 540-600. Baked right panel: x 760-975.
-            Rect graceName = ScaleReferenceRect(644f, 559f, 92f, 22f);
-            Rect graceHotkey = ScaleReferenceRect(634f, 605f, 112f, 16f);
-            DrawFooterText(graceName, "HEAVEN'S LIGHT", _treeFooterGraceStyle);
-            DrawFooterText(graceHotkey, "M4 + R", _treeFooterKeyStyle);
+            // v0.15.0: the Grace slot and the right panel are baked artwork. Code only adds the
+            // live Grace key label and the CONFIRM plaque (only while Tiers are pending).
+            Rect graceLabel = ScaleReferenceRect(641f, 607f, 100f, 15f);
+            string graceText;
+            if (_bindCaptureTarget == BindGraceModifier)
+                graceText = "PRESS MODIFIER";
+            else if (_bindCaptureTarget == BindGraceKey)
+                graceText = ShortKeyName(_bindPendingModifier) + " + ...";
+            else
+                graceText = ShortKeyName(_hotbarModifier.Value) + " + " + ShortKeyName(_hotbarGraceKey.Value);
+            DrawHotbarKeyLabel(graceLabel, graceText, _bindCaptureTarget == BindGraceModifier || _bindCaptureTarget == BindGraceKey, BindGraceModifier,
+                "GRACE - " + ShortKeyName(_hotbarModifier.Value) + " + " + ShortKeyName(_hotbarGraceKey.Value),
+                "Click, then press the modifier, then the key. The modifier is shared by every hotbar slot.\nRight-click resets to M4 + R. Esc cancels.");
 
             int pendingTotal = GetPrototypeTotalPending();
             if (pendingTotal <= 0)
                 return;
 
-            // Confirmation only exists while there are queued changes, centered in the baked
-            // right panel with no extra frame.
-            Rect confirmHit = ScaleReferenceRect(790f, 556f, 156f, 30f);
-            Rect pendingLine = ScaleReferenceRect(790f, 588f, 156f, 16f);
-            bool hover = confirmHit.Contains(Event.current.mousePosition);
-            DrawFooterText(confirmHit, "CONFIRM", hover ? _treeFooterConfirmHoverStyle : _treeFooterConfirmStyle);
-            DrawFooterText(pendingLine, pendingTotal.ToString() + " PENDING", _treeFooterKeyStyle);
+            Rect plaque = ScaleReferenceRect(792f, 557f, 160f, 42f);
+            bool hover = plaque.Contains(Event.current.mousePosition);
+            if (_treeConfirmPlaqueTex != null)
+            {
+                GUI.color = hover ? Color.white : new Color(0.92f, 0.92f, 0.92f, 1f);
+                GUI.DrawTexture(plaque, _treeConfirmPlaqueTex);
+                GUI.color = Color.white;
+            }
 
-            if (GUI.Button(confirmHit, GUIContent.none, GUIStyle.none))
+            Rect confirmText = new Rect(plaque.x, plaque.y + plaque.height * 0.10f, plaque.width, plaque.height * 0.50f);
+            Rect pendingText = new Rect(plaque.x, plaque.y + plaque.height * 0.58f, plaque.width, plaque.height * 0.28f);
+            DrawFooterText(confirmText, "CONFIRM", hover ? _treeFooterConfirmHoverStyle : _treeFooterConfirmStyle);
+            DrawFooterText(pendingText, pendingTotal.ToString() + " PENDING", _treeFooterPendingStyle);
+
+            if (GUI.Button(plaque, GUIContent.none, GUIStyle.none))
                 ConfirmPrototypePending();
+        }
+
+        private void DrawHotbarKeyLabel(Rect rect, string text, bool capturing, int bindTarget, string tooltipTitle, string tooltipBody)
+        {
+            Event e = Event.current;
+            bool hover = rect.Contains(e.mousePosition);
+
+            if (hover)
+            {
+                _treeHoveredTitle = tooltipTitle;
+                _treeHoveredBody = tooltipBody;
+            }
+
+            if (hover && e.type == EventType.MouseDown && e.button == 1)
+            {
+                ResetHotbarBinding(bindTarget);
+                e.Use();
+                return;
+            }
+
+            GUIStyle style = capturing ? _treeFooterKeyCaptureStyle : (hover ? _treeFooterKeyHoverStyle : _treeFooterKeyStyle);
+            if (capturing)
+            {
+                Color c = style.normal.textColor;
+                c.a = 0.55f + 0.45f * Mathf.PingPong(Time.unscaledTime * 2.2f, 1f);
+                style.normal.textColor = c;
+            }
+            DrawFooterText(rect, text, style);
+
+            if (GUI.Button(rect, GUIContent.none, GUIStyle.none))
+                BeginHotbarKeyCapture(bindTarget);
+        }
+
+        private void BeginHotbarKeyCapture(int target)
+        {
+            _bindCaptureTarget = target;
+            _bindCaptureStartFrame = Time.frameCount;
+            _bindPendingModifier = KeyCode.None;
+        }
+
+        private void CancelHotbarKeyCapture()
+        {
+            _bindCaptureTarget = BindNone;
+            _bindPendingModifier = KeyCode.None;
+        }
+
+        private void UpdateHotbarKeyCapture()
+        {
+            if (!_skillbookOpen)
+            {
+                CancelHotbarKeyCapture();
+                return;
+            }
+
+            // Ignore the frame of the click that started the capture.
+            if (Time.frameCount <= _bindCaptureStartFrame)
+                return;
+
+            if (Input.GetKeyDown(KeyCode.Escape))
+            {
+                CancelHotbarKeyCapture();
+                return;
+            }
+
+            if (_bindableKeyCodes == null)
+            {
+                Array values = Enum.GetValues(typeof(KeyCode));
+                List<KeyCode> list = new List<KeyCode>();
+                foreach (object value in values)
+                {
+                    KeyCode k = (KeyCode)value;
+                    // Left/right click stay UI clicks; joystick codes are excluded.
+                    if (k == KeyCode.None || k == KeyCode.Escape || k == KeyCode.Mouse0 || k == KeyCode.Mouse1)
+                        continue;
+                    if ((int)k >= (int)KeyCode.JoystickButton0)
+                        continue;
+                    if (!list.Contains(k))
+                        list.Add(k);
+                }
+                _bindableKeyCodes = list.ToArray();
+            }
+
+            for (int i = 0; i < _bindableKeyCodes.Length; i++)
+            {
+                KeyCode k = _bindableKeyCodes[i];
+                if (!Input.GetKeyDown(k))
+                    continue;
+
+                if (_bindCaptureTarget == BindGraceModifier)
+                {
+                    _bindPendingModifier = k;
+                    _bindCaptureTarget = BindGraceKey;
+                    _bindCaptureStartFrame = Time.frameCount;
+                    return;
+                }
+
+                if (_bindCaptureTarget == BindGraceKey)
+                {
+                    if (k == _bindPendingModifier)
+                        return;
+                    _hotbarModifier.Value = _bindPendingModifier;
+                    _hotbarGraceKey.Value = k;
+                    Logger.LogInfo("Hotbar: Grace bound to " + ShortKeyName(_bindPendingModifier) + " + " + ShortKeyName(k));
+                    CancelHotbarKeyCapture();
+                    return;
+                }
+
+                AssignHotbarSlotKey(_bindCaptureTarget, k);
+                CancelHotbarKeyCapture();
+                return;
+            }
+        }
+
+        private void AssignHotbarSlotKey(int slot, KeyCode key)
+        {
+            if (slot < 0 || slot >= _hotbarSlotKeys.Length)
+                return;
+
+            KeyCode previous = _hotbarSlotKeys[slot].Value;
+            for (int i = 0; i < _hotbarSlotKeys.Length; i++)
+            {
+                if (i != slot && _hotbarSlotKeys[i].Value == key)
+                    _hotbarSlotKeys[i].Value = previous;
+            }
+
+            // BepInEx saves the .cfg automatically when a ConfigEntry value changes.
+            _hotbarSlotKeys[slot].Value = key;
+            Logger.LogInfo("Hotbar: slot " + (slot + 1).ToString() + " bound to " + ShortKeyName(key));
+        }
+
+        private void ResetHotbarBinding(int target)
+        {
+            CancelHotbarKeyCapture();
+            if (target == BindGraceModifier || target == BindGraceKey)
+            {
+                _hotbarModifier.Value = (KeyCode)_hotbarModifier.DefaultValue;
+                _hotbarGraceKey.Value = (KeyCode)_hotbarGraceKey.DefaultValue;
+                return;
+            }
+
+            if (target >= 0 && target < _hotbarSlotKeys.Length)
+                AssignHotbarSlotKey(target, (KeyCode)_hotbarSlotKeys[target].DefaultValue);
+        }
+
+        private static string ShortKeyName(KeyCode key)
+        {
+            if (key == KeyCode.None)
+                return "-";
+            if (key >= KeyCode.Alpha0 && key <= KeyCode.Alpha9)
+                return ((int)(key - KeyCode.Alpha0)).ToString();
+            if (key >= KeyCode.Keypad0 && key <= KeyCode.Keypad9)
+                return "Num" + ((int)(key - KeyCode.Keypad0)).ToString();
+            if (key >= KeyCode.Mouse0 && key <= KeyCode.Mouse6)
+                return "M" + ((int)(key - KeyCode.Mouse0) + 1).ToString();
+
+            switch (key)
+            {
+                case KeyCode.LeftShift: return "LShift";
+                case KeyCode.RightShift: return "RShift";
+                case KeyCode.LeftControl: return "LCtrl";
+                case KeyCode.RightControl: return "RCtrl";
+                case KeyCode.LeftAlt: return "LAlt";
+                case KeyCode.RightAlt: return "RAlt";
+                case KeyCode.BackQuote: return "`";
+                case KeyCode.Minus: return "-";
+                case KeyCode.Equals: return "=";
+                case KeyCode.Space: return "Space";
+                case KeyCode.CapsLock: return "Caps";
+                default: return key.ToString();
+            }
         }
 
         private void DrawFooterText(Rect rect, string text, GUIStyle style)
@@ -8188,8 +8378,19 @@ namespace AlbedosCustomClassesAdvanced
             _treeFooterGraceStyle.fontSize = 13;
             _treeFooterGraceStyle.normal.textColor = new Color(1f, 0.86f, 0.48f, 1f);
 
+            _treeFooterKeyHoverStyle = new GUIStyle(_treeFooterKeyStyle);
+            _treeFooterKeyHoverStyle.normal.textColor = new Color(1f, 0.95f, 0.75f, 1f);
+
+            _treeFooterKeyCaptureStyle = new GUIStyle(_treeFooterKeyStyle);
+            _treeFooterKeyCaptureStyle.fontSize = 10;
+            _treeFooterKeyCaptureStyle.normal.textColor = new Color(1f, 0.80f, 0.32f, 1f);
+
+            _treeFooterPendingStyle = new GUIStyle(_treeFooterKeyStyle);
+            _treeFooterPendingStyle.fontSize = 10;
+            _treeFooterPendingStyle.normal.textColor = new Color(0.93f, 0.86f, 0.70f, 1f);
+
             _treeFooterConfirmStyle = new GUIStyle(_treeFooterKeyStyle);
-            _treeFooterConfirmStyle.fontSize = 20;
+            _treeFooterConfirmStyle.fontSize = 17;
             _treeFooterConfirmStyle.normal.textColor = new Color(0.98f, 0.82f, 0.42f, 1f);
 
             _treeFooterConfirmHoverStyle = new GUIStyle(_treeFooterConfirmStyle);

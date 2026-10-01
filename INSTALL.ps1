@@ -195,8 +195,12 @@ try {
     New-Item -ItemType Directory -Path $stageDir | Out-Null
     $stageAssetDir = Join-Path $stageDir "ImmortalHeroesAssets"
     New-Item -ItemType Directory -Path $stageAssetDir | Out-Null
-    $stageUiAsset = Join-Path $stageAssetDir "Cleric_Paladin_Reference.png"
-    Copy-Item -LiteralPath $uiAssetSource -Destination $stageUiAsset -Force
+    # v0.15.0: stage every UI asset (backdrop, Tier buttons, Confirm plaque, selection ring).
+    $uiAssetDir = Split-Path -Parent $uiAssetSource
+    $uiAssets = Get-ChildItem -LiteralPath $uiAssetDir -File -Filter "*.png"
+    foreach ($asset in $uiAssets) {
+        Copy-Item -LiteralPath $asset.FullName -Destination (Join-Path $stageAssetDir $asset.Name) -Force
+    }
 
     $coreOut = Join-Path $stageDir "AlbedosCustomClasses.dll"
     $runtimeOut = Join-Path $stageDir "AlbedosCustomClasses.CombatRuntime.dll"
@@ -322,11 +326,13 @@ try {
     if (-not (Test-Path -LiteralPath $liveAssetDir)) {
         New-Item -ItemType Directory -Path $liveAssetDir | Out-Null
     }
-    $liveUiAsset = Join-Path $liveAssetDir "Cleric_Paladin_Reference.png"
-    if (Test-Path -LiteralPath $liveUiAsset) {
-        Copy-Item -LiteralPath $liveUiAsset -Destination ($liveUiAsset + ".backup-" + $stamp) -Force
+    foreach ($asset in $uiAssets) {
+        $liveUiAsset = Join-Path $liveAssetDir $asset.Name
+        if (Test-Path -LiteralPath $liveUiAsset) {
+            Copy-Item -LiteralPath $liveUiAsset -Destination ($liveUiAsset + ".backup-" + $stamp) -Force
+        }
+        Copy-Item -LiteralPath (Join-Path $stageAssetDir $asset.Name) -Destination $liveUiAsset -Force
     }
-    Copy-Item -LiteralPath $stageUiAsset -Destination $liveUiAsset -Force
 
     Remove-Item -LiteralPath $stageDir -Recurse -Force -ErrorAction SilentlyContinue
     Write-Host ""
@@ -341,7 +347,7 @@ try {
     Write-Host "  AlbedosCustomClasses.Advanced.dll         (Warrior/Cleric advancements + clean dynamic HUD)" -ForegroundColor White
     Write-Host "  DragonsAltar.Sorcerer.dll                 (Wizard/Spellcaster advancements + clean dynamic HUD)" -ForegroundColor White
     Write-Host "  DragonsAltar.DevTools.dll                 (developer skill tuning + world range/radius preview)" -ForegroundColor White
-    Write-Host "  ImmortalHeroesAssets\Cleric_Paladin_Reference.png (reference-quality UI art, loaded once)" -ForegroundColor White
+    Write-Host "  ImmortalHeroesAssets\*.png (Skill Tree art, Tier buttons, Confirm plaque, selection ring)" -ForegroundColor White
     Write-Host ""
     Write-Host "If a risky combat DLL fails, the staged installer will not replace your current live set." -ForegroundColor Cyan
     Write-Host ""

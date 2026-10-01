@@ -1,0 +1,16 @@
+Immortal Heroes v0.15.0 - Hotbar Area + Tier Controls + Click-to-Assign Keys
+- Hotbar area rebuilt from the approved target design (tools/build_ui_assets.py):
+  continuous ornate footer, no pasted Grace panel, compass ornament in the right panel.
+- Grace is now a slot-style gold box (Heaven's Light icon), slightly larger than the
+  numbered slots, with a soft glow. Key label underneath.
+- Tier +/- buttons: art buttons centered directly under each skill's nameplate.
+  + alone is centered; with pending Tiers, - and + sit symmetrically.
+- Selected skill: soft gold ring around the icon (old underline crossed the nameplate).
+- CONFIRM: gold plaque centered over the compass, shown only while Tiers are pending.
+- NEW: click-to-assign hotkeys. Click a number under a hotbar slot, press a key/mouse
+  button. Grace label: press modifier, then key. Right-click = reset. Esc = cancel.
+  Duplicate keys swap between slots. Saved automatically to the .cfg ([Hotbar] section).
+  NOTE: the tree hotbar is still a prototype; skill casting keeps using [Hotkeys]
+  until the tree hotbar is wired to the combat runtime (roadmap item 2).
+- INSTALL.ps1 now installs every PNG in ImmortalHeroesAssets.
+- No combat, progression, or tooltip-content changes.

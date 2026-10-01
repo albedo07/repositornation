@@ -25,6 +25,13 @@ def render(pending, out_path, node=(405, 375, (370, 287, 442, 355))):
                                         radius=R(8), outline=(255, 214, 110, 230), width=R(3))
     im = Image.alpha_composite(im, g.filter(ImageFilter.GaussianBlur(3)))
     b, cx, y = R(18), R(cx_ref), R(plate_bottom + 3)
+    d = ImageDraw.Draw(im)
+    fk = ImageFont.truetype(FONT, R(10.5))
+    labels = [(c, str(i + 1)) for i, c in enumerate((229, 287, 344, 402, 459, 517, 574))] + [(691, "M4 + R")]
+    for cx_l, text in labels:
+        w = d.textlength(text, font=fk)
+        d.text((R(cx_l) - w / 2 + 1, R(608) + 1), text, font=fk, fill=(0, 0, 0, 220))
+        d.text((R(cx_l) - w / 2, R(608)), text, font=fk, fill=(237, 214, 158))
     if pending:
         im.alpha_composite(minus.resize((b, b), Image.LANCZOS), (cx - R(3) - b, y))
         im.alpha_composite(plus.resize((b, b), Image.LANCZOS), (cx + R(3), y))
