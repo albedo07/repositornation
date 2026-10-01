@@ -6,6 +6,9 @@
 - Latest package: **v0.16.0 — Drag & Drop Hotbar**. Recent work is almost entirely UI polish; do NOT change combat/progression logic unless explicitly requested.
 - Never patch visual problems by drawing random rectangles over the reference asset. Keep approved artwork intact; make layout/components fit properly.
 
+## Framework doc (source of truth for design)
+- Google Doc "Immortal Heroes Framework": https://docs.google.com/document/d/1sTpQSP7Gr1kHJ7cdl1b7WtOomv7C7_k5_Bmj2cqw_Xg/edit (fileId `1sTpQSP7Gr1kHJ7cdl1b7WtOomv7C7_k5_Bmj2cqw_Xg`). Read it with Drive `read_file_content`. The user allows edits when we make major changes or add terms; editing needs the Google Docs connector.
+
 ## Core philosophy
 - RPG + Survival, never EZ mode. Skills add power/options without trivializing survival, gathering, bosses, terrain, prep, food.
 - Standalone first, compatibility second. Optional EpicMMO/EpicLoot/Jewelcrafting/CL&LC support later; must work without them.
