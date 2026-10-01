@@ -24,6 +24,9 @@ def render(pending, out_path, node=(405, 375, (370, 287, 442, 355)), layout=DEFA
     for cx, skill in zip((229, 287, 344, 402, 459, 517, 574), layout):
         tex = os.path.join(A, ("Icon_" + skill if skill else "Slot_Empty") + ".png")
         base.alpha_composite(Image.open(tex).convert("RGBA").resize((49, 54), Image.LANCZOS), (cx - 24, 551))
+        if skill in ("lightning_zap", "goddess_relic", "judgement_hammer", "electric_smite"):
+            badge = Image.open(os.path.join(A, "Badge_Permanent.png")).convert("RGBA").resize((19, 19), Image.LANCZOS)
+            base.alpha_composite(badge, (cx + 14, 547))
     im = base.resize((1180, 772), Image.LANCZOS)
     cx_ref, plate_bottom, icon = node
     b, cx, y = R(18), R(cx_ref), R(plate_bottom + 3)

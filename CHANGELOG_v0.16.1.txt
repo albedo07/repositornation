@@ -1,0 +1,5 @@
+Immortal Heroes v0.16.1 - Permanent Badge on Hotbar
+- Permanent hotbar skills (Signature, Ascended, Ultimate) now show the same gold diamond badge
+  as on the tree, on their hotbar slot and on the icon while dragging.
+- New asset Badge_Permanent.png (redrawn crisp from the tree badge).
+- No other changes.

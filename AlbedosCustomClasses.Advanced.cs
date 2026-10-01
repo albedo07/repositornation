@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.16.0";
+        public const string ModVersion = "0.16.1";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -543,6 +543,7 @@ namespace AlbedosCustomClassesAdvanced
         private string _hotbarLayoutOwnerKey = "";
         private readonly Dictionary<string, Texture2D> _treeSkillIconTex = new Dictionary<string, Texture2D>();
         private Texture2D _treeSlotEmptyTex;
+        private Texture2D _treePermanentBadgeTex;
         private string _pressSkillId = "";
         private int _pressSlot = -1;
         private Vector2 _pressPos;
@@ -6809,6 +6810,7 @@ namespace AlbedosCustomClassesAdvanced
             // v0.15.0 component art. Each is optional: a missing file falls back to code drawing.
             _treeTierPlusTex = LoadUiPng("Tier_Plus.png");
             _treeSlotEmptyTex = LoadUiPng("Slot_Empty.png");
+            _treePermanentBadgeTex = LoadUiPng("Badge_Permanent.png");
             for (int i = 0; i < ClericPaladinReferenceNodes.Length; i++)
             {
                 ReferenceNodeUi skillNode = ClericPaladinReferenceNodes[i];
@@ -7280,6 +7282,10 @@ namespace AlbedosCustomClassesAdvanced
                     GUI.color = Color.white;
                 }
 
+                // v0.16.1: same badge as the tree marks skills that can't leave the hotbar.
+                if (!empty && !draggingFromHere && IsPermanentHotbarSkill(id))
+                    DrawPermanentBadge(r);
+
                 if (!_dragActive && hoverSlot == i && !empty)
                 {
                     ReferenceNodeUi node = FindReferenceNode(id);
@@ -7295,6 +7301,17 @@ namespace AlbedosCustomClassesAdvanced
                     e.Use();
                 }
             }
+        }
+
+        private void DrawPermanentBadge(Rect slotRect)
+        {
+            if (_treePermanentBadgeTex == null)
+                return;
+
+            // Sits over the slot's top-right frame corner, like the badge on the tree node.
+            float size = slotRect.width * 0.39f;
+            Rect badge = new Rect(slotRect.xMax - size * 0.58f, slotRect.y - size * 0.21f, size, size);
+            GUI.DrawTexture(badge, _treePermanentBadgeTex);
         }
 
         private void BeginTreePress(string skillId, int slot, Vector2 position)
@@ -7348,6 +7365,8 @@ namespace AlbedosCustomClassesAdvanced
                     Rect ghost = new Rect(e.mousePosition.x - slot.width * 0.5f, e.mousePosition.y - slot.height * 0.5f, slot.width, slot.height);
                     GUI.color = new Color(1f, 1f, 1f, 0.85f);
                     GUI.DrawTexture(ghost, tex);
+                    if (IsPermanentHotbarSkill(_pressSkillId))
+                        DrawPermanentBadge(ghost);
                     GUI.color = Color.white;
                 }
             }

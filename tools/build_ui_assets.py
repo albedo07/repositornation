@@ -243,6 +243,30 @@ def empty_socket():
     return frame
 
 
+def permanent_badge(size=48, scale=4):
+    """The tree's 'permanent on the hotbar' badge (dark diamond, gold rim, gold star), redrawn crisp."""
+    S = size * scale
+    img = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    c = S / 2.0
+
+    def diamond(r):
+        return [(c, c - r), (c + r, c), (c, c + r), (c - r, c)]
+
+    d.polygon(diamond(S * 0.49), fill=(70, 46, 16, 255))          # dark outer edge
+    d.polygon(diamond(S * 0.45), fill=(226, 182, 92, 255))        # gold rim
+    d.polygon(diamond(S * 0.37), fill=(118, 86, 38, 255))         # inner bevel
+    d.polygon(diamond(S * 0.33), fill=(34, 24, 14, 255))          # dark face
+    glow = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    ImageDraw.Draw(glow).ellipse((c - S * 0.16, c - S * 0.16, c + S * 0.16, c + S * 0.16), fill=(255, 200, 90, 120))
+    img = Image.alpha_composite(img, glow.filter(ImageFilter.GaussianBlur(S * 0.05)))
+    d = ImageDraw.Draw(img)
+    a, b = S * 0.15, S * 0.04                                      # 4-point star
+    d.polygon([(c, c - a), (c + b, c - b), (c + a, c), (c + b, c + b), (c, c + a), (c - b, c + b), (c - a, c), (c - b, c - b)],
+              fill=(255, 220, 130, 255))
+    return img.resize((size, size), Image.LANCZOS)
+
+
 def rounded_button(size, glyph, scale=4):
     s = size * scale
     img = Image.new("RGBA", (s, s), (0, 0, 0, 0))
@@ -311,6 +335,7 @@ def main():
     rounded_button(16, "-").save(os.path.join(OUT, "Tier_Minus.png"))
     confirm_plaque(160, 42).save(os.path.join(OUT, "Confirm_Plaque.png"))
     empty_socket().save(os.path.join(OUT, "Slot_Empty.png"))
+    permanent_badge().save(os.path.join(OUT, "Badge_Permanent.png"))
     print("UI assets written to", OUT)
 
 

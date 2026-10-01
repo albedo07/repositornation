@@ -1,14 +1,6 @@
-Immortal Heroes v0.16.0 - Test focus (drag & drop hotbar)
+Immortal Heroes v0.16.1 - Test focus
 
-Setup: Righteous Strike / Fallen Angel start at Tier 0 - give each 1 Tier (+ then CONFIRM) so they can be dragged.
-
-1. Drag slot 1 (Lightning Zap) onto slot 4: they swap.
-2. Drag Shield Charge (removable) off the hotbar: slot becomes an empty socket.
-   Drag Goddess Relic (Signature) off: message, it stays.
-3. Drag Righteous Strike from the tree onto the empty socket: placed.
-4. Drag Fallen Angel from the tree onto Holy Wave (removable): replaces it.
-5. Remove one removable skill, then drag a tree skill onto a PERMANENT slot left of the gap:
-   it is inserted, skills shift right into the gap.
-6. With all 7 slots full, drag a tree skill onto a permanent slot: nothing happens + message.
-7. Click a node without moving: still just selects it (+ / - appear).
-8. Close and reopen the tree, then relog: layout persists.
+1. Lightning Zap, Goddess Relic, Judgement Hammer and Electric Smite show the gold diamond badge
+   on the top-right corner of their hotbar slot. Removable skills don't.
+2. Move a permanent skill to another slot: the badge travels with it (also visible while dragging).
+3. Everything from v0.16.0 still works (swap / remove / place / replace / insert).
