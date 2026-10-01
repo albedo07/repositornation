@@ -82,7 +82,7 @@
 - Old changelogs in `docs/changelog/`, past UI previews in `docs/previews/`.
 - Package releases as `Immortal_Heroes_vX.Y.Z_<Name>.zip` with the same flat layout as the repo root (sources, INSTALL.*, ImmortalHeroesAssets/, CHANGELOG + TEST_THIS_BUILD).
 - Valheim uses Linear color space: IMGUI showed the artwork gamma-lifted (in-game = source^(1/2.2)). v0.14.7 compensates the backdrop texture at load (`ApplyLinearColorSpaceCompensation`). Code-drawn colors/textures (tooltips, +/- buttons) are still uncompensated.
-- Syntax check locally: `mcs --parse -langversion:5 <file>.cs` (no Valheim refs here, so full compile happens on the user's PC).
+- Before packaging ALWAYS run `tools/compile_check/check.sh` (semantic compile of Advanced.cs vs a known-good baseline with stubbed Valheim/BepInEx types; new error signatures = real bugs) plus `mcs --parse -langversion:5` on every edited .cs. The real compile still happens on the user's PC.
 - UI art pipeline: `tools/build_ui_assets.py` builds every PNG in `ImmortalHeroesAssets/` from `docs/source_art/` (reference v0.14 + approved footer target). Edit the script, never hand-paint the output. `tools/render_preview.py` renders in-game-size previews into `docs/previews/`.
 - Hotbar keys: `[Hotbar]` config (Modifier, Slot1–7, GraceKey) is rebindable in the tree; still a prototype — casting uses `[Hotkeys]` until the tree hotbar is wired to the runtime.
 - Node control positions come from `ReferenceNameplateAnchors` (nameplate center x, bottom y, reference px).

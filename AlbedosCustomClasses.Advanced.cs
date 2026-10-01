@@ -7124,6 +7124,91 @@ namespace AlbedosCustomClassesAdvanced
             }
         }
 
+        private void DrawReferenceRankAccent(Rect icon, TreeNodeKind kind)
+        {
+            // The painted frames remain untouched. Rank identity uses small jewels only so the
+            // tree never picks up debug-looking cyan/pink corner brackets.
+            Color accent = GetTreeNodeColor(kind);
+            Rect frame = new Rect(icon.x - 3f, icon.y - 3f, icon.width + 6f, icon.height + 6f);
+
+            if (kind == TreeNodeKind.Signature)
+                accent = new Color(0.14f, 0.32f, 0.72f, 0.98f);
+            else if (kind == TreeNodeKind.AdvancementNormal)
+                accent = new Color(0.18f, 0.82f, 0.94f, 0.98f);
+            else if (kind == TreeNodeKind.Buff)
+                accent = new Color(0.30f, 0.82f, 0.42f, 0.98f);
+
+            if (kind == TreeNodeKind.Ascended)
+            {
+                DrawDiamond(new Vector2(frame.center.x, frame.y - 3f), 4.5f, accent);
+                DrawDiamond(new Vector2(frame.center.x, frame.yMax + 3f), 3.5f, new Color(accent.r, accent.g, accent.b, 0.80f));
+            }
+            else if (kind == TreeNodeKind.Signature)
+            {
+                DrawDiamond(new Vector2(frame.center.x, frame.y - 3f), 4f, new Color(0.46f, 0.66f, 1f, 0.98f));
+                DrawDiamond(new Vector2(frame.x - 3f, frame.center.y), 2.7f, accent);
+                DrawDiamond(new Vector2(frame.xMax + 3f, frame.center.y), 2.7f, accent);
+            }
+            else if (kind == TreeNodeKind.AdvancementNormal)
+            {
+                DrawDiamond(new Vector2(frame.x - 3f, frame.center.y), 2.5f, accent);
+                DrawDiamond(new Vector2(frame.xMax + 3f, frame.center.y), 2.5f, accent);
+            }
+            else if (kind == TreeNodeKind.Buff)
+            {
+                DrawDiamond(new Vector2(frame.x - 3f, frame.center.y), 2.5f, accent);
+                DrawDiamond(new Vector2(frame.xMax + 3f, frame.center.y), 2.5f, accent);
+            }
+            else if (kind == TreeNodeKind.Grace)
+            {
+                Color gold = new Color(0.96f, 0.78f, 0.24f, 1f);
+                DrawDiamond(new Vector2(frame.center.x, frame.y - 4f), 5f, gold);
+                DrawDiamond(new Vector2(frame.center.x, frame.yMax + 4f), 3.5f, new Color(gold.r, gold.g, gold.b, 0.78f));
+            }
+            else if (kind == TreeNodeKind.Ultimate || kind == TreeNodeKind.AscendedUltimate)
+            {
+                Color gold = new Color(0.96f, 0.76f, 0.30f, 1f);
+                DrawDiamond(new Vector2(frame.center.x, frame.y - 6f), 6f, gold);
+                DrawDiamond(new Vector2(frame.x - 4f, frame.center.y), 4f, accent);
+                DrawDiamond(new Vector2(frame.xMax + 4f, frame.center.y), 4f, accent);
+                DrawDiamond(new Vector2(frame.center.x, frame.yMax + 5f), 3f, gold);
+            }
+        }
+
+        private void DrawReferenceSelectedAccent(Rect icon, TreeNodeKind kind)
+        {
+            if (_treeSelectRingTex != null)
+            {
+                // Soft gold ring around the icon frame; never crosses the nameplate text.
+                float pad = Mathf.Max(icon.width, icon.height) * 0.16f;
+                GUI.color = Color.white;
+                GUI.DrawTexture(new Rect(icon.x - pad, icon.y - pad, icon.width + pad * 2f, icon.height + pad * 2f), _treeSelectRingTex);
+                return;
+            }
+
+            Color gold = new Color(0.98f, 0.82f, 0.36f, 0.88f);
+            Rect cue = new Rect(icon.x + 7f, icon.yMax + 2f, icon.width - 14f, 2f);
+            GUI.color = gold;
+            GUI.DrawTexture(cue, _treeGoldTex);
+            GUI.color = Color.white;
+        }
+
+        private void DrawTierQueueButton(Rect rect, string symbol)
+        {
+            Texture2D art = symbol == "+" ? _treeTierPlusTex : _treeTierMinusTex;
+            if (art != null)
+            {
+                bool hover = rect.Contains(Event.current.mousePosition);
+                GUI.color = hover ? new Color(1f, 1f, 1f, 1f) : new Color(0.9f, 0.9f, 0.9f, 1f);
+                GUI.DrawTexture(rect, art);
+                GUI.color = Color.white;
+                return;
+            }
+
+            DrawFilledBorder(rect, new Color(0.16f, 0.18f, 0.19f, 0.98f), new Color(0.92f, 0.73f, 0.27f, 1f), 1f);
+            GUI.Label(rect, symbol, _treeSubHeaderStyle);
+        }
+
         private void DrawReferenceFooterUx()
         {
             // v0.15.0: the Grace slot and the right panel are baked artwork. Code only adds the

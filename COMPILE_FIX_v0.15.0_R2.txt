@@ -1,0 +1,6 @@
+v0.15.0 R2 Compile Fix
+- Restored DrawReferenceSelectedAccent, DrawTierQueueButton and DrawReferenceRankAccent,
+  which the v0.15.0 footer rewrite removed by accident ("name does not exist" at ~7043).
+- The v0.15.0 changes to those methods (selection ring, Tier button art) are included.
+- New pre-package semantic compile check (tools/compile_check) catches this class of error.
+- No UI, gameplay, progression or asset changes beyond v0.15.0.
