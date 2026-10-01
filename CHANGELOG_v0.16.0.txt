@@ -1,0 +1,18 @@
+Immortal Heroes v0.16.0 - Drag & Drop Hotbar
+- Numbered hotbar (slots 1-7) is now dynamic; Grace keeps its own dedicated slot (untouched).
+- PERMANENT (cannot leave the hotbar): Signature, Ascended and Ultimate skills.
+  All other skills are removable.
+- Drag a hotbar skill onto another slot: they switch places (permanent skills can move too).
+- Drag a removable skill off the hotbar: it is removed (slot shows an empty socket).
+- Drag a skill from the tree onto the hotbar:
+  * empty slot -> placed
+  * slot with a removable skill -> replaces it
+  * slot with a permanent skill -> inserted there, skills shift right into the nearest empty slot
+    (if the only empty slot is to the left, they shift left instead)
+  * hotbar full and target is permanent -> nothing ("Hotbar is full - remove a skill first")
+  * skill already on the hotbar -> swaps with the target slot
+- Only learned skills (Tier 1+) can be dragged from the tree; click without moving still selects.
+- Layout is saved per character (and per Advancement) in the character's data.
+- Hotbar icons are now separate assets (Icon_<skill>.png, Slot_Empty.png); the slot row in the
+  backdrop is clean. Righteous Strike / Fallen Angel got hotbar icons.
+- No combat or progression changes. Casting still uses [Hotkeys] (tree hotbar not wired yet).

@@ -33,6 +33,15 @@ GRACE = 56           # Grace slot: slightly larger, distinct gold frame
 GRACE_CX = 691
 GRACE_BOTTOM = 597   # bottoms align with the numbered slots
 HOTBAR_CENTERS = (229, 287, 344, 402, 459, 517, 574)  # numbered slot centers (reference px)
+SLOT_Y0, SLOT_Y1 = 551, 605                            # slot frame top/bottom incl. shadow
+# Default hotbar art order (v0.15.2 approved): skill id per numbered slot.
+HOTBAR_DEFAULT = ("lightning_zap", "goddess_relic", "judgement_hammer", "shield_charge",
+                  "ray_of_hope", "holy_wave", "electric_smite")
+# Skills without hotbar art: (tree icon interior box, hotbar slot whose cyan frame they reuse)
+TREE_ONLY_ICONS = {
+    "righteous_strike": ((176, 299, 228, 346), 5),
+    "fallen_angel": ((695, 167, 747, 214), 3),
+}
 
 
 # v0.15.1/v0.15.2: normal (interchangeable) skills are Cyan, Class and AC alike.
@@ -168,12 +177,70 @@ def build_backdrop():
     for box in CYAN_RECOLOR_BOXES:
         out = recolor_blue_to_cyan(out, box)
 
+    # v0.16.0: the numbered hotbar is dynamic (drag & drop). Export every skill's slot icon,
+    # then clear the slot row so the code draws icons / empty sockets on a clean bar.
+    export_slot_icons(out)
+    out = erase_rows(out, (200, SLOT_Y0 - 4, 602, SLOT_Y1 + 2))
+
     slot = grace_slot(ref)
     gx0 = GRACE_CX - slot.width // 2
     gy0 = GRACE_BOTTOM - slot.height
     out = add_glow(out, (GRACE_CX, gy0 + slot.height // 2), 44, (255, 200, 90), 105)
     out.alpha_composite(slot, (gx0, gy0))
     return out.convert("RGBA")
+
+
+def slot_box(cx):
+    return (cx - 24, SLOT_Y0, cx + 25, SLOT_Y1)
+
+
+def export_slot_icons(img):
+    rgba = img.convert("RGBA")
+    for cx, skill in zip(HOTBAR_CENTERS, HOTBAR_DEFAULT):
+        rgba.crop(slot_box(cx)).save(os.path.join(OUT, "Icon_" + skill + ".png"))
+    for skill, (interior, frame_slot) in TREE_ONLY_ICONS.items():
+        frame = rgba.crop(slot_box(HOTBAR_CENTERS[frame_slot])).copy()
+        inset = (7, 8, 7, 8)
+        iw = frame.width - inset[0] - inset[2]
+        ih = frame.height - inset[1] - inset[3]
+        icon = rgba.crop(interior).resize((iw, ih), Image.LANCZOS)
+        frame.paste(icon, (inset[0], inset[1]))
+        frame.save(os.path.join(OUT, "Icon_" + skill + ".png"))
+
+
+def erase_rows(img, box, grain=1.6):
+    """Clear a strip by interpolating each column between the rows just above and below it."""
+    x0, y0, x1, y1 = box
+    a = np.asarray(img.convert("RGB"), dtype=np.float32).copy()
+    top = a[y0 - 2:y0, x0:x1].mean(axis=0)
+    bot = a[y1:y1 + 2, x0:x1].mean(axis=0)
+    # Smooth along x so single bright/dark pixels in the edge rows don't become vertical streaks.
+    k = np.exp(-0.5 * (np.arange(-24, 25) / 9.0) ** 2)
+    k /= k.sum()
+    for arr in (top, bot):
+        for c in range(3):
+            padded = np.pad(arr[:, c], 24, mode="edge")
+            arr[:, c] = np.convolve(padded, k, mode="valid")
+    t = (np.arange(y1 - y0, dtype=np.float32) + 0.5) / (y1 - y0)
+    fill = top[None, :, :] * (1 - t[:, None, None]) + bot[None, :, :] * t[:, None, None]
+    fill += np.random.default_rng(11).normal(0, grain, fill.shape[:2])[:, :, None]
+    a[y0:y1, x0:x1] = fill.clip(0, 255)
+    return Image.fromarray(a.astype(np.uint8)).convert("RGBA")
+
+
+def empty_socket():
+    """Empty numbered slot: the gold slot frame with a dark recessed interior (stored at 2x)."""
+    src = Image.open(os.path.join(SRC, "Cleric_Paladin_Reference_v0.14.png")).convert("RGBA")
+    w, h = 49 * 2, (SLOT_Y1 - SLOT_Y0) * 2
+    frame = src.crop((380, 408, 453, 477)).resize((w, h), Image.LANCZOS)
+    d = ImageDraw.Draw(frame)
+    inset = 15
+    for y in range(inset, h - inset):
+        t = (y - inset) / float(h - 2 * inset)
+        d.line((inset, y, w - inset, y), fill=(int(14 + 8 * t), int(20 + 9 * t), int(34 + 12 * t), 255))
+    cx, cy, k = w // 2, h // 2, 6
+    d.polygon([(cx, cy - k), (cx + k, cy), (cx, cy + k), (cx - k, cy)], fill=(150, 118, 60, 255))
+    return frame
 
 
 def rounded_button(size, glyph, scale=4):
@@ -243,6 +310,7 @@ def main():
     rounded_button(16, "+").save(os.path.join(OUT, "Tier_Plus.png"))
     rounded_button(16, "-").save(os.path.join(OUT, "Tier_Minus.png"))
     confirm_plaque(160, 42).save(os.path.join(OUT, "Confirm_Plaque.png"))
+    empty_socket().save(os.path.join(OUT, "Slot_Empty.png"))
     print("UI assets written to", OUT)
 
 

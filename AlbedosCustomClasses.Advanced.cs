@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.15.2";
+        public const string ModVersion = "0.16.0";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -532,6 +532,22 @@ namespace AlbedosCustomClassesAdvanced
         private int _bindCaptureStartFrame;
         private KeyCode _bindCaptureFirst = KeyCode.None;
         private static KeyCode[] _bindableKeyCodes;
+
+        // v0.16.0 drag & drop hotbar (numbered slots 1-7). Grace keeps its own slot and is never dragged.
+        // Permanent (cannot leave the hotbar): Signature, Ascended and Ultimate skills.
+        private const string HotbarLayoutKeyPrefix = "ImmortalHeroes.HotbarLayout.";
+        private static readonly float[] HotbarSlotCenters = { 229f, 287f, 344f, 402f, 459f, 517f, 574f };
+        private static readonly string[] DefaultClericPaladinHotbar =
+            { "lightning_zap", "goddess_relic", "judgement_hammer", "shield_charge", "ray_of_hope", "holy_wave", "electric_smite" };
+        private string[] _hotbarLayout;
+        private string _hotbarLayoutOwnerKey = "";
+        private readonly Dictionary<string, Texture2D> _treeSkillIconTex = new Dictionary<string, Texture2D>();
+        private Texture2D _treeSlotEmptyTex;
+        private string _pressSkillId = "";
+        private int _pressSlot = -1;
+        private Vector2 _pressPos;
+        private bool _dragActive;
+        private int _pressReleasedFrame;
         private string _treeHoveredTitle = "";
         private string _treeHoveredBody = "";
         private GUIStyle _treeHotkeyStyle;
@@ -985,6 +1001,8 @@ namespace AlbedosCustomClassesAdvanced
             bool capturingKey = _bindCaptureTarget != BindNone;
             if (capturingKey)
                 UpdateHotbarKeyCapture();
+
+            UpdateTreePressRelease();
 
             if (!capturingKey && _skillbookOpen && Input.GetKeyDown(KeyCode.Escape))
             {
@@ -6517,6 +6535,7 @@ namespace AlbedosCustomClassesAdvanced
             else
             {
                 CancelHotbarKeyCapture();
+                ClearTreePress();
                 _treePrototypePending.Clear();
                 _treeSelectedNodeId = "";
                 DragonCombat.SetUiInputBlocked(false);
@@ -6751,6 +6770,7 @@ namespace AlbedosCustomClassesAdvanced
             {
                 DrawReferenceClericPaladinTree();
                 DrawTreeTooltip();
+                HandleTreePointer();
 
                 // The close button is already painted into the reference art. Keep its hotspot
                 // invisible so the asset stays visually 1:1 instead of receiving a second IMGUI button.
@@ -6788,6 +6808,16 @@ namespace AlbedosCustomClassesAdvanced
 
             // v0.15.0 component art. Each is optional: a missing file falls back to code drawing.
             _treeTierPlusTex = LoadUiPng("Tier_Plus.png");
+            _treeSlotEmptyTex = LoadUiPng("Slot_Empty.png");
+            for (int i = 0; i < ClericPaladinReferenceNodes.Length; i++)
+            {
+                ReferenceNodeUi skillNode = ClericPaladinReferenceNodes[i];
+                if (skillNode.Kind == TreeNodeKind.Grace)
+                    continue;
+                Texture2D icon = LoadUiPng("Icon_" + skillNode.Id + ".png");
+                if (icon != null)
+                    _treeSkillIconTex[skillNode.Id] = icon;
+            }
             _treeTierMinusTex = LoadUiPng("Tier_Minus.png");
             _treeConfirmPlaqueTex = LoadUiPng("Confirm_Plaque.png");
             return true;
@@ -7012,8 +7042,15 @@ namespace AlbedosCustomClassesAdvanced
             for (int i = 0; i < ClericPaladinReferenceNodes.Length; i++)
                 DrawReferenceNode(ClericPaladinReferenceNodes[i]);
 
+            DrawReferenceHotbarSlots();
             DrawReferenceHotbarHotkeys();
             DrawReferenceFooterUx();
+
+            if (_dragActive)
+            {
+                _treeHoveredTitle = "";
+                _treeHoveredBody = "";
+            }
         }
 
         private void DrawReferenceNode(ReferenceNodeUi node)
@@ -7038,8 +7075,13 @@ namespace AlbedosCustomClassesAdvanced
                 _treeHoveredBody = tierLine + slotState + "\n" + node.TooltipBody;
             }
 
-            if (GUI.Button(icon, GUIContent.none, GUIStyle.none))
-                _treeSelectedNodeId = node.Id;
+            // v0.16.0: press on the icon starts a click (select) or, once moved, a drag to the hotbar.
+            Event ev = Event.current;
+            if (ev.type == EventType.MouseDown && ev.button == 0 && icon.Contains(ev.mousePosition))
+            {
+                BeginTreePress(node.Id, -1, ev.mousePosition);
+                ev.Use();
+            }
 
             if (_treeSelectedNodeId != node.Id)
                 return;
@@ -7112,6 +7154,315 @@ namespace AlbedosCustomClassesAdvanced
             if (ReferenceNameplateAnchors.TryGetValue(node.Id, out anchor))
                 return anchor;
             return new Vector2(node.GroupRect.center.x, node.GroupRect.yMax);
+        }
+
+        private ReferenceNodeUi FindReferenceNode(string id)
+        {
+            for (int i = 0; i < ClericPaladinReferenceNodes.Length; i++)
+            {
+                if (ClericPaladinReferenceNodes[i].Id == id)
+                    return ClericPaladinReferenceNodes[i];
+            }
+            return null;
+        }
+
+        private bool IsPermanentHotbarSkill(string id)
+        {
+            ReferenceNodeUi node = FindReferenceNode(id);
+            return node != null && node.Mandatory && node.Kind != TreeNodeKind.Grace;
+        }
+
+        private bool CanSlotSkill(string id)
+        {
+            ReferenceNodeUi node = FindReferenceNode(id);
+            if (node == null || node.Kind == TreeNodeKind.Grace)
+                return false;
+            // Only learned skills (Tier 1+) can be placed; permanent skills are always slotted.
+            return IsPermanentHotbarSkill(id) || GetPrototypeTier(id) > 0;
+        }
+
+        private string[] GetHotbarLayout()
+        {
+            Player player = Player.m_localPlayer;
+            string owner = player == null ? "" : player.GetInstanceID().ToString() + "|" + GetAdvancement(player);
+            if (_hotbarLayout != null && owner == _hotbarLayoutOwnerKey)
+                return _hotbarLayout;
+
+            _hotbarLayoutOwnerKey = owner;
+            _hotbarLayout = LoadHotbarLayout(player);
+            return _hotbarLayout;
+        }
+
+        private string[] LoadHotbarLayout(Player player)
+        {
+            string[] defaults = (string[])DefaultClericPaladinHotbar.Clone();
+            if (player == null)
+                return defaults;
+
+            string saved = ReadPlayerData(player, HotbarLayoutKeyPrefix + GetAdvancement(player));
+            if (string.IsNullOrEmpty(saved))
+                return defaults;
+
+            string[] parts = saved.Split(',');
+            if (parts.Length != defaults.Length)
+                return defaults;
+
+            string[] loaded = new string[parts.Length];
+            for (int i = 0; i < parts.Length; i++)
+            {
+                string id = parts[i].Trim();
+                bool valid = id.Length > 0 && FindReferenceNode(id) != null && Array.IndexOf(loaded, id) < 0;
+                loaded[i] = valid ? id : "";
+            }
+
+            // Every permanent skill must be present, otherwise the saved layout is stale.
+            for (int i = 0; i < ClericPaladinReferenceNodes.Length; i++)
+            {
+                string id = ClericPaladinReferenceNodes[i].Id;
+                if (IsPermanentHotbarSkill(id) && Array.IndexOf(loaded, id) < 0)
+                    return defaults;
+            }
+
+            return loaded;
+        }
+
+        private void SaveHotbarLayout()
+        {
+            Player player = Player.m_localPlayer;
+            if (player == null || _hotbarLayout == null)
+                return;
+
+            IDictionary data = GetCustomData(player);
+            if (data == null)
+                return;
+
+            data[HotbarLayoutKeyPrefix + GetAdvancement(player)] = string.Join(",", _hotbarLayout);
+        }
+
+        private Rect HotbarSlotRect(int slot)
+        {
+            return ScaleReferenceRect(HotbarSlotCenters[slot] - 24f, 551f, 49f, 54f);
+        }
+
+        private int GetHotbarSlotAt(Vector2 position)
+        {
+            for (int i = 0; i < HotbarSlotCenters.Length; i++)
+            {
+                if (HotbarSlotRect(i).Contains(position))
+                    return i;
+            }
+            return -1;
+        }
+
+        private void DrawReferenceHotbarSlots()
+        {
+            string[] layout = GetHotbarLayout();
+            Event e = Event.current;
+            int hoverSlot = GetHotbarSlotAt(e.mousePosition);
+
+            for (int i = 0; i < layout.Length; i++)
+            {
+                Rect r = HotbarSlotRect(i);
+                string id = layout[i];
+                bool empty = string.IsNullOrEmpty(id);
+                bool draggingFromHere = _dragActive && _pressSlot == i;
+
+                Texture2D tex = null;
+                if (!empty && !draggingFromHere)
+                    _treeSkillIconTex.TryGetValue(id, out tex);
+                if (tex == null)
+                    tex = _treeSlotEmptyTex;
+
+                if (tex != null)
+                {
+                    GUI.color = _dragActive && hoverSlot == i ? new Color(1f, 0.92f, 0.70f, 1f) : Color.white;
+                    GUI.DrawTexture(r, tex);
+                    GUI.color = Color.white;
+                }
+
+                if (!_dragActive && hoverSlot == i && !empty)
+                {
+                    ReferenceNodeUi node = FindReferenceNode(id);
+                    _treeHoveredTitle = node != null ? node.TooltipTitle : id;
+                    _treeHoveredBody = IsPermanentHotbarSkill(id)
+                        ? "PERMANENT - stays on the hotbar.\nDrag onto another slot to swap places."
+                        : "Drag onto another slot to swap places, or drag it off the hotbar to remove it.";
+                }
+
+                if (!empty && e.type == EventType.MouseDown && e.button == 0 && r.Contains(e.mousePosition))
+                {
+                    BeginTreePress(id, i, e.mousePosition);
+                    e.Use();
+                }
+            }
+        }
+
+        private void BeginTreePress(string skillId, int slot, Vector2 position)
+        {
+            _pressSkillId = skillId;
+            _pressSlot = slot;
+            _pressPos = position;
+            _dragActive = false;
+            _pressReleasedFrame = 0;
+        }
+
+        private void ClearTreePress()
+        {
+            _pressSkillId = "";
+            _pressSlot = -1;
+            _dragActive = false;
+            _pressReleasedFrame = 0;
+        }
+
+        private void HandleTreePointer()
+        {
+            if (string.IsNullOrEmpty(_pressSkillId))
+                return;
+
+            Event e = Event.current;
+            if (e.type == EventType.MouseDrag)
+            {
+                if (!_dragActive && (e.mousePosition - _pressPos).sqrMagnitude > 36f && (_pressSlot >= 0 || CanSlotSkill(_pressSkillId)))
+                    _dragActive = true;
+                if (_dragActive)
+                    e.Use();
+            }
+            else if (e.type == EventType.MouseUp && e.button == 0)
+            {
+                if (_dragActive)
+                    DropTreeDrag(GetHotbarSlotAt(e.mousePosition));
+                else if (_pressSlot < 0)
+                    _treeSelectedNodeId = _pressSkillId;
+
+                ClearTreePress();
+                e.Use();
+                return;
+            }
+
+            if (_dragActive && e.type == EventType.Repaint)
+            {
+                Texture2D tex;
+                if (_treeSkillIconTex.TryGetValue(_pressSkillId, out tex))
+                {
+                    Rect slot = HotbarSlotRect(0);
+                    Rect ghost = new Rect(e.mousePosition.x - slot.width * 0.5f, e.mousePosition.y - slot.height * 0.5f, slot.width, slot.height);
+                    GUI.color = new Color(1f, 1f, 1f, 0.85f);
+                    GUI.DrawTexture(ghost, tex);
+                    GUI.color = Color.white;
+                }
+            }
+        }
+
+        private void UpdateTreePressRelease()
+        {
+            // Safety net for a release outside the Skill Tree window (IMGUI never sees that MouseUp).
+            // Wait two frames so a normal in-window MouseUp is always handled by OnGUI first.
+            if (string.IsNullOrEmpty(_pressSkillId) || Input.GetMouseButton(0))
+            {
+                _pressReleasedFrame = 0;
+                return;
+            }
+
+            if (_pressReleasedFrame == 0)
+            {
+                _pressReleasedFrame = Time.frameCount;
+                return;
+            }
+
+            if (Time.frameCount - _pressReleasedFrame < 2)
+                return;
+
+            if (_dragActive)
+                DropTreeDrag(-1);
+            ClearTreePress();
+        }
+
+        private void DropTreeDrag(int target)
+        {
+            string[] layout = GetHotbarLayout();
+            string id = _pressSkillId;
+            int from = _pressSlot >= 0 ? _pressSlot : Array.IndexOf(layout, id);
+
+            if (from >= 0)
+            {
+                // Already on the hotbar: dropping on a slot swaps; dragging a slot off the hotbar removes it.
+                if (target >= 0)
+                {
+                    if (target != from)
+                    {
+                        string swap = layout[target];
+                        layout[target] = layout[from];
+                        layout[from] = swap;
+                        SaveHotbarLayout();
+                    }
+                    return;
+                }
+
+                if (_pressSlot >= 0)
+                {
+                    if (IsPermanentHotbarSkill(id))
+                    {
+                        ShowMessage("Signature, Ascended and Ultimate skills stay on the hotbar");
+                        return;
+                    }
+                    layout[from] = "";
+                    SaveHotbarLayout();
+                }
+                return;
+            }
+
+            if (target < 0)
+                return;
+
+            string occupant = layout[target];
+            if (string.IsNullOrEmpty(occupant) || !IsPermanentHotbarSkill(occupant))
+            {
+                // Empty or removable skill: place / replace.
+                layout[target] = id;
+                SaveHotbarLayout();
+                return;
+            }
+
+            // Permanent skill there: insert at this slot and push skills right into the nearest empty slot.
+            int emptySlot = -1;
+            for (int i = target + 1; i < layout.Length; i++)
+            {
+                if (string.IsNullOrEmpty(layout[i]))
+                {
+                    emptySlot = i;
+                    break;
+                }
+            }
+
+            if (emptySlot >= 0)
+            {
+                for (int i = emptySlot; i > target; i--)
+                    layout[i] = layout[i - 1];
+                layout[target] = id;
+                SaveHotbarLayout();
+                return;
+            }
+
+            // No room to the right: use the nearest empty slot on the left instead.
+            for (int i = target - 1; i >= 0; i--)
+            {
+                if (string.IsNullOrEmpty(layout[i]))
+                {
+                    emptySlot = i;
+                    break;
+                }
+            }
+
+            if (emptySlot >= 0)
+            {
+                for (int i = emptySlot; i < target; i++)
+                    layout[i] = layout[i + 1];
+                layout[target] = id;
+                SaveHotbarLayout();
+                return;
+            }
+
+            ShowMessage("Hotbar is full - remove a skill first");
         }
 
         private void DrawReferenceHotbarHotkeys()

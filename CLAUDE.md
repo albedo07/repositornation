@@ -3,7 +3,7 @@
 ## Working rules
 - User wants short responses and real execution, not long explanations.
 - **RUSH B** = immediately code the obvious requested task, minimal commentary, use latest approved build as baseline, don't redesign unrelated things, verify and package.
-- Latest package: **v0.15.2 — Cyan Normal Skills (Class + AC)**. Recent work is almost entirely UI polish; do NOT change combat/progression logic unless explicitly requested.
+- Latest package: **v0.16.0 — Drag & Drop Hotbar**. Recent work is almost entirely UI polish; do NOT change combat/progression logic unless explicitly requested.
 - Never patch visual problems by drawing random rectangles over the reference asset. Keep approved artwork intact; make layout/components fit properly.
 
 ## Core philosophy
@@ -51,7 +51,7 @@
 - Lv36 Ultimate Unlock Quest. Ultimate tiers auto: Lv40 T1 / Lv44 T2 / Lv48 T3. Lv50 Ultimate Ascension Quest (requires T3).
 - Free Skill Reset Scroll at Lv32 (or on late Advancement if already past Lv32).
 - After Advancement, normal Class Reset unavailable; special Reset Class NPC planned.
-- Hotbar: 7 numbered slots + Grace (M4+R). Mandatory numbered: Ascended prereq + both Signatures + Ultimate. Remaining 3 from 5 optional. Ultimate can go in any numbered slot.
+- Hotbar: 7 numbered slots + Grace (M4+R). Permanent (can't be removed): Signature, Ascended, Ultimate. Everything else removable. Drag & drop rules: slot->slot swaps; removable dragged off = removed; tree->empty = place; tree->removable = replace; tree->permanent = insert + shift right into nearest empty (left if none right); full + permanent target = nothing. Grace slot is separate and never dragged.
 
 ## Skill tree UI
 - No visible C1–C5 labels. Only skill name under node; category goes in tooltip. No connector arrows.
@@ -86,3 +86,5 @@
 - UI art pipeline: `tools/build_ui_assets.py` builds every PNG in `ImmortalHeroesAssets/` from `docs/source_art/` (reference v0.14 + approved footer target). Edit the script, never hand-paint the output. `tools/render_preview.py` renders in-game-size previews into `docs/previews/`.
 - Hotbar keys: `[Hotbar]` config (SlotN + SlotNModifier, GraceKey + GraceModifier; Modifier None = single key) is rebindable in the tree; still a prototype — casting uses `[Hotkeys]` until the tree hotbar is wired to the runtime.
 - Node control positions come from `ReferenceNameplateAnchors` (nameplate center x, bottom y, reference px).
+- Hotbar is dynamic since v0.16.0: icons are `Icon_<skillId>.png` + `Slot_Empty.png`, layout saved per character in `m_customData` key `ImmortalHeroes.HotbarLayout.<Advancement>`.
+- Tree states ideation (approved direction): A = no Class (neutral panels, "CHOOSE A CLASS AT THE ALTAR FIRST"), B = Class only (Class skills all Cyan, no badge; AC blank or sealed, "ADVANCE AT LV 16"), C = locked skills (grey + padlock + unlock text). `tools/render_states.py`.

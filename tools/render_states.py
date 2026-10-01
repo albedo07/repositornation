@@ -224,8 +224,176 @@ def header_text(img, cx, y, title, sub=None, color=INK):
         text_c(d, cx, y + 30, sub, font(11, False), (100, 78, 52))
 
 
+# ---------------------------------------------------------------- integrated panel neutralizing
+CLASS_BODY = (33, 116, 309, 520)
+AC_BODY = (338, 116, 976, 520)
+CLERIC_EMBLEM = (79, 112, 37)          # cx, cy, r  (generic compass emblem, kept)
+CLERIC_TITLE = (140, 86, 268, 118)     # baked "CLERIC"
+CLERIC_SUB = (150, 122, 258, 140)      # baked "hover for Blessing" plaque text
+PALADIN_TITLE = (596, 86, 724, 118)    # baked "PALADIN"
+PALADIN_SUB = (588, 122, 762, 140)
+PALADIN_CREST = (512, 66, 592, 150)    # winged cross (Paladin identity)
+
+
+def hsv_arrays(region):
+    r, g, b = region[..., 0], region[..., 1], region[..., 2]
+    mx, mn = region.max(axis=2), region.min(axis=2)
+    dl = mx - mn + 1e-6
+    hue = np.where(mx == r, (g - b) / dl % 6, np.where(mx == g, (b - r) / dl + 2, (r - g) / dl + 4)) * 60.0
+    sat = np.where(mx > 0, dl / (mx + 1e-6), 0)
+    return hue, sat, mx
+
+
+def inpaint_h(img, box, grain=1.5, seed=5):
+    """Fill a box by interpolating between the columns just left and right of it."""
+    x0, y0, x1, y1 = box
+    a = np.asarray(img.convert("RGB"), dtype=np.float32).copy()
+    left = a[y0:y1, x0 - 3:x0].mean(axis=1)
+    right = a[y0:y1, x1:x1 + 3].mean(axis=1)
+    t = (np.arange(x1 - x0, dtype=np.float32) + 0.5) / (x1 - x0)
+    fill = left[:, None, :] * (1 - t[None, :, None]) + right[:, None, :] * t[None, :, None]
+    fill += np.random.default_rng(seed).normal(0, grain, fill.shape[:2])[:, :, None]
+    a[y0:y1, x0:x1] = fill.clip(0, 255)
+    out = Image.fromarray(a.astype(np.uint8)).convert("RGBA")
+    return out
+
+
+def neutral_body(img, body, texture, keep_until_y=130, keep_boxes=(), corner=34, emblem=None):
+    """Replace a panel's scene with `texture`, inside the panel's own inner edge.
+    Keeps: header-band pixels in the top strip (saturated band colors + gold), gold ornaments
+    near the edges/corners, and an optional emblem circle."""
+    x0, y0, x1, y1 = body
+    w, h = x1 - x0, y1 - y0
+    orig = np.asarray(img.convert("RGB").crop(body), dtype=np.float32) / 255.0
+    hue, sat, val = hsv_arrays(orig)
+    yy, xx = np.mgrid[0:h, 0:w]
+
+    fill = Image.new("L", (w, h), 0)
+    ImageDraw.Draw(fill).rounded_rectangle((0, -30, w - 1, h - 1), radius=15, fill=255)
+    fill = np.asarray(fill, dtype=np.float32) / 255.0
+
+    gold = (hue >= 28) & (hue <= 62) & (sat > 0.38) & (val > 0.42)
+    band = (sat > 0.30) & (((hue >= 195) & (hue <= 250)) | (hue >= 320) | (hue <= 12))
+    top = (yy + y0) < keep_until_y
+    for bx0, by0, bx1, by1 in keep_boxes:
+        top |= (xx + x0 >= bx0) & (xx + x0 < bx1) & (yy + y0 >= by0) & (yy + y0 < by1)
+    # Gold ornaments only overlap the body in the bottom corners.
+    corners = (yy > h - 1 - corner) & ((xx < corner) | (xx > w - 1 - corner))
+    keep = (top & (band | gold)) | (corners & gold)
+    if emblem:
+        ex, ey, er = emblem
+        keep |= ((xx + x0 - ex) ** 2 + (yy + y0 - ey) ** 2) < er * er
+    keep_img = Image.fromarray((keep * 255).astype(np.uint8)).filter(ImageFilter.MaxFilter(3)).filter(ImageFilter.GaussianBlur(1.0))
+    keep = np.asarray(keep_img, dtype=np.float32) / 255.0
+    alpha = np.asarray(Image.fromarray((fill * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(1.2)),
+                       dtype=np.float32) / 255.0 * (1 - keep)
+    tex = np.asarray(texture.convert("RGB").resize((w, h)), dtype=np.float32) / 255.0
+    # Soft inner shadow along the panel edge so the new surface sits *inside* the frame.
+    dist = np.minimum.reduce([xx, w - 1 - xx, h - 1 - yy]).astype(np.float32)
+    shade = 1.0 - 0.18 * np.exp(-dist / 6.0)
+    tex = tex * shade[..., None]
+    out = orig * (1 - alpha[..., None]) + tex * alpha[..., None]
+    img.paste(Image.fromarray((out.clip(0, 1) * 255).astype(np.uint8)).convert("RGBA"), body[:2])
+    return img
+
+
+def recolor_rose_to_navy(img, box):
+    x0, y0, x1, y1 = box
+    reg = np.asarray(img.convert("RGB").crop(box), dtype=np.float32) / 255.0
+    hue, sat, val = hsv_arrays(reg)
+    rose = ((hue >= 315) | (hue <= 15)) & (sat > 0.15)
+    wgt = (np.clip((sat - 0.15) / 0.15, 0, 1) * rose)[..., None]
+    lum = reg.mean(axis=2, keepdims=True)
+    navy = np.array([0.16, 0.25, 0.45]) * (0.55 + lum * 0.9)
+    out = reg * (1 - wgt) + navy * wgt
+    img.paste(Image.fromarray((out.clip(0, 1) * 255).astype(np.uint8)).convert("RGBA"), box[:2])
+    return img
+
+
+def compass_emblem(size):
+    src = Image.open(os.path.join(ROOT, "docs", "source_art", "Cleric_Paladin_Reference_v0.14.png")).convert("RGBA")
+    ex, ey, er = CLERIC_EMBLEM
+    em = src.crop((ex - er, ey - er, ex + er, ey + er)).resize((size, size), Image.LANCZOS)
+    m = Image.new("L", (size * 4, size * 4), 0)
+    ImageDraw.Draw(m).ellipse((4, 4, size * 4 - 4, size * 4 - 4), fill=255)
+    em.putalpha(m.resize((size, size), Image.LANCZOS))
+    return em
+
+
+def header_title(img, cx, cy, text, size):
+    d = ImageDraw.Draw(img)
+    f = font(size)
+    w = d.textlength(text, font=f)
+    for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1), (1, 1)):
+        d.text((cx - w / 2 + dx, cy - size * 0.62 + dy), text, font=f, fill=(40, 26, 14))
+    d.text((cx - w / 2, cy - size * 0.62), text, font=f, fill=(246, 236, 212))
+
+
+def neutral_class_panel(img, sub):
+    img = inpaint_h(img, CLERIC_TITLE)
+    img = inpaint_h(img, CLERIC_SUB, grain=0.8)
+    img = neutral_body(img, CLASS_BODY, neutral_parchment((CLASS_BODY[2] - CLASS_BODY[0], CLASS_BODY[3] - CLASS_BODY[1]), seed=11),
+                       keep_until_y=124, emblem=CLERIC_EMBLEM)
+    header_title(img, 203, 102, "CLASS", 22)
+    d = ImageDraw.Draw(img)
+    text_c(d, 203, 130, sub, font(11, False), (96, 70, 44))
+    return img
+
+
+def neutral_ac_panel(img, texture, sub):
+    img = inpaint_h(img, PALADIN_TITLE)
+    img = inpaint_h(img, PALADIN_SUB, grain=0.8)
+    img = inpaint_h(img, PALADIN_CREST, grain=1.0)
+    img = recolor_rose_to_navy(img, (338, 60, 976, 131))
+    img = recolor_rose_to_navy(img, (478, 125, 524, 150))
+    img = neutral_body(img, AC_BODY, texture, keep_until_y=129, keep_boxes=((478, 125, 524, 150),))
+    em = compass_emblem(66)
+    img.alpha_composite(em, (552 - 33, 108 - 33))
+    header_title(img, 660, 102, "ADVANCEMENT", 17)
+    d = ImageDraw.Draw(img)
+    text_c(d, 660, 134, sub, font(11, False), (96, 70, 44) if texture_is_light(texture) else (214, 200, 170))
+    return img
+
+
+def texture_is_light(texture):
+    return np.asarray(texture.convert("L")).mean() > 120
+
+
+def navy_texture(size, seed):
+    t = neutral_parchment(size, seed=seed)
+    a = np.asarray(t.convert("RGB"), dtype=np.float32) / 233.0
+    navy = np.array([24, 36, 62], dtype=np.float32)
+    return Image.fromarray((a * navy[None, None, :] * 1.15).clip(0, 255).astype(np.uint8)).convert("RGBA")
+
+
+def remove_lz_badge(img):
+    """Pre-Advancement nothing is permanent: replace Lightning Zap's corner badge with the plain
+    frame corner taken from Righteous Strike (same frame style, scaled to LZ's frame)."""
+    src = img.copy()
+    rs_corner = src.crop((205, 279, 246, 316))          # RS top-right corner (frame + background)
+    rs_corner = rs_corner.resize((43, 39), Image.LANCZOS)
+    m = Image.new("L", rs_corner.size, 0)
+    ImageDraw.Draw(m).rounded_rectangle((2, 2, rs_corner.width - 3, rs_corner.height - 3), radius=6, fill=255)
+    img.paste(rs_corner, (202, 146), m.filter(ImageFilter.GaussianBlur(1.5)))
+    return img
+
+
+DEFAULT_HOTBAR = ("lightning_zap", "goddess_relic", "judgement_hammer", "shield_charge",
+                  "ray_of_hope", "holy_wave", "electric_smite")
+
+
+def draw_hotbar(img, layout):
+    """Draw the dynamic hotbar exactly like the game: icon per slot, empty socket otherwise."""
+    sock = Image.open(os.path.join(A, "Slot_Empty.png")).convert("RGBA").resize((49, 54), Image.LANCZOS)
+    for cx, skill in zip(SLOT_CENTERS, layout):
+        tex = sock if not skill else Image.open(os.path.join(A, "Icon_" + skill + ".png")).convert("RGBA")
+        img.alpha_composite(tex.resize((49, 54), Image.LANCZOS), (cx - 24, 551))
+    return img
+
+
 def base():
-    return Image.open(os.path.join(A, "Cleric_Paladin_Reference.png")).convert("RGBA")
+    img = Image.open(os.path.join(A, "Cleric_Paladin_Reference.png")).convert("RGBA")
+    return draw_hotbar(img, DEFAULT_HOTBAR)
 
 
 def save(img, name):
@@ -235,22 +403,13 @@ def save(img, name):
 # ---------------------------------------------------------------- states
 def state_no_class():
     img = base()
-    for panel in (CLASS_FILL, AC_FILL):
-        rounded_paste(img, neutral_parchment((panel[2] - panel[0], panel[3] - panel[1]), seed=panel[0]), panel)
-    header_text(img, 171, 104, "CLASS", "no Class chosen")
-    header_text(img, 657, 104, "ADVANCEMENT", "locked")
-    # faint compass emblem behind the message
-    em = Image.open(os.path.join(ROOT, "docs", "source_art", "Cleric_Paladin_Reference_v0.14.png")).convert("RGBA").crop((38, 72, 120, 154))
-    em = em.resize((150, 150), Image.LANCZOS)
-    m = Image.new("L", (150, 150), 0)
-    ImageDraw.Draw(m).ellipse((8, 8, 142, 142), fill=40)
-    em.putalpha(m.filter(ImageFilter.GaussianBlur(6)))
-    img.alpha_composite(em, (505 - 75, 300 - 75))
+    img = neutral_class_panel(img, "no Class chosen")
+    img = neutral_ac_panel(img, neutral_parchment((AC_BODY[2] - AC_BODY[0], AC_BODY[3] - AC_BODY[1]), seed=7), "locked")
     pl = plaque(560, 96)
-    img.alpha_composite(pl, (505 - 280, 300 - 48))
+    img.alpha_composite(pl, (505 - 280, 318 - 48))
     d = ImageDraw.Draw(img)
-    text_c(d, 505, 272, "CHOOSE A CLASS AT THE ALTAR FIRST", font(18), GOLD, shadow=(0, 0, 0))
-    text_c(d, 505, 300, "Visit the Dragon's Altar to begin your path.", font(12, False), (226, 214, 186))
+    text_c(d, 505, 290, "CHOOSE A CLASS AT THE ALTAR FIRST", font(18), GOLD, shadow=(0, 0, 0))
+    text_c(d, 505, 318, "Visit the Dragon's Altar to begin your path.", font(12, False), (226, 214, 186))
     for cx in SLOT_CENTERS:
         empty_socket(img, cx)
     erase_grace(img, locked=True)
@@ -270,16 +429,17 @@ def erase_grace(img, locked):
 
 def class_only_common():
     img = base()
-    # Before Advancement every Class skill is interchangeable -> Cyan (Lightning Zap not yet Ascended).
+    # Before Advancement every Class skill is interchangeable -> Cyan, no permanent badge.
     img = recolor_hue(img, NODES["lightning_zap"][0], 280, 345, 186)
-    img = recolor_hue(img, (205, 546, 254, 600), 280, 345, 186)
+    img = remove_lz_badge(img)
     for cx in SLOT_CENTERS[3:]:
         empty_socket(img, cx, locked=True)
-    # Class hotbar: Lightning Zap / Righteous Strike / Holy Wave in slots 1-3
+    # Slots 1-3: the three Class skills, all cut the same way from their tree nodes.
     src = img.copy()
-    rs = src.crop((167, 289, 236, 352)).resize((49, 49), Image.LANCZOS)
-    hw = src.crop((167, 414, 236, 477)).resize((49, 49), Image.LANCZOS)
-    for cx, icon in ((287, rs), (344, hw)):
+    crops = ((164, 156, 236, 229), (167, 289, 236, 352), (167, 414, 236, 477))
+    for cx, box in zip(SLOT_CENTERS[:3], crops):
+        icon = src.crop(box).resize((49, 49), Image.LANCZOS)
+        img.alpha_composite(socket_art(), (cx - 27, SLOT_TOP - 3))
         img.paste(icon, (cx - 24, SLOT_TOP))
     erase_grace(img, locked=True)
     hotkey_labels(img, [(cx, str(i + 1), (237, 214, 158) if i < 3 else (140, 124, 96)) for i, cx in enumerate(SLOT_CENTERS)]
@@ -289,47 +449,33 @@ def class_only_common():
 
 def state_class_only_sealed():
     img = class_only_common()
-    night = neutral_parchment((AC_FILL[2] - AC_FILL[0], AC_FILL[3] - AC_FILL[1]), seed=7)
-    a = np.asarray(night.convert("RGB"), dtype=np.float32) / 233.0
-    navy = np.array([24, 36, 62], dtype=np.float32)
-    night = Image.fromarray((a * navy[None, None, :] * 1.15).clip(0, 255).astype(np.uint8)).convert("RGBA")
-    rounded_paste(img, night, AC_FILL)
+    img = neutral_ac_panel(img, navy_texture((AC_BODY[2] - AC_BODY[0], AC_BODY[3] - AC_BODY[1]), 7), "sealed until you Advance")
     d = ImageDraw.Draw(img)
-    text_c(d, 657, 104, "ADVANCEMENT", font(24), GOLD, shadow=(0, 0, 0))
-    text_c(d, 657, 134, "Sealed until you Advance", font(12, False), (214, 200, 170))
-    img.alpha_composite(padlock(84), (657 - 42, 172))
+    img.alpha_composite(padlock(78), (657 - 39, 180))
     reqs = [("Reach Level 16", True), ("Max a Class skill to Tier 7", False), ("Complete the Advancement Quest", False)]
-    y = 278
+    y = 280
     for text, done in reqs:
-        mark = "◆" if done else "◇"
+        mark = "\u25c6" if done else "\u25c7"
         col = (236, 206, 130) if done else (206, 194, 168)
         text_c(d, 657, y, mark + "  " + text, font(14, False), col, shadow=(0, 0, 0))
         y += 28
-    text_c(d, 657, 380, "CHOOSE YOUR PATH", font(13), (236, 206, 130), shadow=(0, 0, 0))
+    text_c(d, 657, 382, "CHOOSE YOUR PATH", font(13), (236, 206, 130), shadow=(0, 0, 0))
     pl = plaque(150, 40)
     for cx, name in ((577, "PALADIN"), (737, "PRIEST")):
-        img.alpha_composite(pl, (cx - 75, 404))
-        text_c(d, cx, 415, name, font(14), (190, 170, 128), shadow=(0, 0, 0))
+        img.alpha_composite(pl, (cx - 75, 406))
+        text_c(d, cx, 417, name, font(14), (190, 170, 128), shadow=(0, 0, 0))
     save(img, "STATE_B1_ClassOnly_Sealed.png")
 
 
-def state_class_only_preview():
+def state_class_only_blank():
     img = class_only_common()
-    # The AC tree stays visible as a preview: every AC node locked, panel desaturated + dimmed.
-    region = np.asarray(img.crop(AC_PANEL).convert("RGB"), dtype=np.float32)
-    gray = region.mean(axis=2, keepdims=True)
-    desat = region * 0.30 + gray * 0.70
-    img.paste(Image.fromarray(desat.clip(0, 255).astype(np.uint8)).convert("RGBA"), AC_PANEL[:2],
-              Image.new("L", (AC_PANEL[2] - AC_PANEL[0], AC_PANEL[3] - AC_PANEL[1]), 255))
-    for nid in ("goddess_relic", "judgement_hammer", "heavens_light", "shield_charge", "fallen_angel", "ray_of_hope", "electric_smite"):
-        img = lock_node(img, nid)
-    img = veil(img, AC_PANEL, (30, 30, 40), 55)
+    img = neutral_ac_panel(img, neutral_parchment((AC_BODY[2] - AC_BODY[0], AC_BODY[3] - AC_BODY[1]), seed=7), "locked")
+    pl = plaque(420, 84)
+    img.alpha_composite(pl, (657 - 210, 318 - 42))
     d = ImageDraw.Draw(img)
-    pl = plaque(300, 44)
-    img.alpha_composite(pl, (657 - 150, 420))
-    text_c(d, 657, 427, "PREVIEW  ·  ADVANCE AT LV 16", font(13), GOLD, shadow=(0, 0, 0))
-    text_c(d, 657, 446, "Paladin  |  Priest", font(10, False), (210, 196, 166))
-    save(img, "STATE_B2_ClassOnly_Preview.png")
+    text_c(d, 657, 294, "ADVANCE AT LV 16", font(20), GOLD, shadow=(0, 0, 0))
+    text_c(d, 657, 322, "Complete the Advancement Quest to choose your path.", font(11, False), (226, 214, 186))
+    save(img, "STATE_B2_ClassOnly_Blank.png")
 
 
 def state_advanced_locked():
@@ -351,6 +497,6 @@ def state_advanced_locked():
 if __name__ == "__main__":
     state_no_class()
     state_class_only_sealed()
-    state_class_only_preview()
+    state_class_only_blank()
     state_advanced_locked()
     print("state previews written")

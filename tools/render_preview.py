@@ -13,11 +13,17 @@ def R(v):
     return int(round(v * S))
 
 
-def render(pending, out_path, node=(405, 375, (370, 287, 442, 355))):
+DEFAULT = ("lightning_zap", "goddess_relic", "judgement_hammer", "shield_charge", "ray_of_hope", "holy_wave", "electric_smite")
+
+
+def render(pending, out_path, node=(405, 375, (370, 287, 442, 355)), layout=DEFAULT):
     base = Image.open(os.path.join(A, "Cleric_Paladin_Reference.png")).convert("RGBA")
     plus = Image.open(os.path.join(A, "Tier_Plus.png"))
     minus = Image.open(os.path.join(A, "Tier_Minus.png"))
     plaque = Image.open(os.path.join(A, "Confirm_Plaque.png"))
+    for cx, skill in zip((229, 287, 344, 402, 459, 517, 574), layout):
+        tex = os.path.join(A, ("Icon_" + skill if skill else "Slot_Empty") + ".png")
+        base.alpha_composite(Image.open(tex).convert("RGBA").resize((49, 54), Image.LANCZOS), (cx - 24, 551))
     im = base.resize((1180, 772), Image.LANCZOS)
     cx_ref, plate_bottom, icon = node
     b, cx, y = R(18), R(cx_ref), R(plate_bottom + 3)
@@ -49,4 +55,6 @@ if __name__ == "__main__":
     out = os.path.join(ROOT, "docs", "previews")
     render(True, os.path.join(out, "PREVIEW_v0.15.1_pending.png"))
     render(False, os.path.join(out, "PREVIEW_v0.15.1_selected.png"))
+    render(False, os.path.join(out, "PREVIEW_v0.16.0_hotbar_edited.png"),
+           layout=("lightning_zap", "righteous_strike", "goddess_relic", "judgement_hammer", "", "fallen_angel", "electric_smite"))
     print("previews written")

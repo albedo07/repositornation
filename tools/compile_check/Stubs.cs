@@ -16,7 +16,7 @@ namespace BepInEx {
   [AttributeUsage(AttributeTargets.Class, AllowMultiple=true)] public class BepInDependency : Attribute { public BepInDependency(string a){} public BepInDependency(string a, DependencyFlags f){} public enum DependencyFlags { HardDependency=1, SoftDependency=2 } }
   public static class Paths { public static string PluginPath; public static string ConfigPath; }
 }
-public class Character : MonoBehaviour {} public class Player : Character {} public class HitData {} public class Skills { public enum SkillType { None, Swords, Knives, Clubs, Polearms, Spears, Blocking, Axes, Bows, ElementalMagic, BloodMagic, Unarmed, Pickaxes, WoodCutting, Crossbows, Jump, Run } } public class ItemDrop : MonoBehaviour { public class ItemData {} }
+public class Character : MonoBehaviour {} public class Player : Character { public static Player m_localPlayer; } public class HitData {} public class Skills { public enum SkillType { None, Swords, Knives, Clubs, Polearms, Spears, Blocking, Axes, Bows, ElementalMagic, BloodMagic, Unarmed, Pickaxes, WoodCutting, Crossbows, Jump, Run } } public class ItemDrop : MonoBehaviour { public class ItemData {} }
 namespace DragonsAltarCombat { public class _Stub {} }
 namespace AlbedosCustomClassesSkills { public class _Stub {} }
 namespace AlbedosCustomClasses { public class _Stub {} }
