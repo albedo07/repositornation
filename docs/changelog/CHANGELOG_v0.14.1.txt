@@ -1,0 +1,9 @@
+Immortal Heroes v0.14.1 — Footer Inset Fix
+
+- Right footer action panel is now a true child panel inset inside the existing Hotbar Design Border.
+- Restored visible padding around the right panel so it no longer looks pasted onto / outside the frame.
+- Grace remains a separate dedicated hotbar cell.
+- HEAVEN'S LIGHT uses smaller gold text fully inside the Grace frame.
+- M4 + R is anchored at the bottom of the Grace node.
+- CONFIRM remains hidden until at least one Tier point is pending.
+- Pending +/- Tier queue behavior is unchanged.

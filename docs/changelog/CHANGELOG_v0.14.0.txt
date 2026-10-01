@@ -1,0 +1,16 @@
+Immortal Heroes v0.14.1 — Footer UX Final Pass
+
+FOOTER
+- Restored Grace as its own dedicated hotbar-side panel.
+- Footer no longer draws a permanent bottom-right box.
+- Former Color Key area is plain footer breathing room.
+- HEAVEN'S LIGHT and M4 + R render inside the dedicated Grace panel.
+- CONFIRM appears only while one or more Tier points are pending, using the open footer space without creating a permanent panel.
+
+TIER ALLOCATION
+- Selecting a tiered skill shows +.
+- Once a pending point exists, - also appears.
+- + adds one pending Tier without committing it.
+- - removes one pending Tier only; it can never remove an already-confirmed Tier.
+- CONFIRM commits every pending Tier allocation.
+- Closing the Skill Tree still discards unconfirmed pending allocations.

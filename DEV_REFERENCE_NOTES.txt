@@ -1,0 +1,36 @@
+ALBEDO'S CUSTOM CLASSES - VALHEIMLEGENDS REFERENCE NOTES
+
+User-provided material reviewed:
+- ValheimLegends-main source tree
+- Decompiled ValheimLegends code
+- momos3939 ValheimLegends 0.7.10 package/DLL
+
+Useful patterns adopted:
+1. VL_Utility.FindCrosshairObject
+   - GameCamera.instance position/forward
+   - Physics.RaycastAll
+   - nearest-hit sort
+   - ignore local player's attached Rigidbody
+2. Ability raycast masks
+   - Default
+   - static_solid
+   - Default_small
+   - piece_nonsolid
+   - terrain
+   - vehicle
+   - piece
+   - viewblock
+   - character / character_net / character_ghost
+3. Projectile classes (Duelist/Monk/Mage)
+   - spawn near player
+   - Player.GetAimDir(spawnPosition)
+   - Projectile.Setup(owner, velocity, ...)
+4. Priest Sanctify
+   - obtain physical aim hit
+   - spawn effect/projectile above that hit
+   - drop it onto the target
+
+PROJECT RULE:
+Future point-and-click/projectile skills should use AlbedoAimUtility.
+Do not create another independent camera/aiming implementation unless a
+skill intentionally requires special targeting.

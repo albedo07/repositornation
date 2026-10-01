@@ -1,0 +1,4 @@
+v0.14.1 Compile Fix
+- Renamed the hover-only currentTier local to hoverTier inside DrawReferenceNode.
+- Fixes the PowerShell Add-Type / legacy C# compiler scope collision at line ~6939.
+- No UI, gameplay, progression, or asset changes.

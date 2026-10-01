@@ -1,0 +1,6 @@
+IMMORTAL HEROES v0.14.1 - COMPILE FIX
+
+R1: Prevented the installer dependency retry from importing duplicate framework assemblies such as mscorlib/System/System.Core.
+R2: Removed compile-time Texture2D.LoadImage overload resolution. The reference PNG now decodes through a late-bound byte[] ImageConversion call, avoiding Windows PowerShell Add-Type's System.ReadOnlySpan/mscorlib mismatch.
+
+No gameplay, progression, balance, layout, or art changes.

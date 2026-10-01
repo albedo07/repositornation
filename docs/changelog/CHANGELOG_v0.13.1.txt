@@ -1,0 +1,10 @@
+IMMORTAL HEROES v0.14.1 - REFERENCE ASSET REBUILD
+
+- First asset-driven Skill Tree render pass.
+- Cleric -> Paladin now renders from the approved ornate reference PNG instead of trying to recreate finished fantasy art with procedural IMGUI rectangles.
+- Reference texture is loaded once from BepInEx/plugins/ImmortalHeroesAssets and cached.
+- Color Key is covered/removed in-game per latest direction.
+- Invisible hover hotspots preserve live Blessing/Mastery/skill/Grace/Ultimate tooltips without drawing duplicate controls over the art.
+- Existing procedural v0.13.0 tree remains as a safe fallback if the asset is missing or cannot decode.
+- Installer stages all 8 DLLs first, then installs the UI asset alongside them.
+- No combat/progression behavior changed.

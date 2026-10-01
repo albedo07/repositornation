@@ -1,0 +1,24 @@
+IMMORTAL HEROES - v0.13.1 IMPLEMENTATION NOTES
+
+FOUNDATION
+- Cleric now owns two explicit Weapon Mastery Blessings: Shield Weapon Mastery and Divine Duality. The old hidden blanket equipment movement-speed exemption is retired.
+- Sword Master, Mercenary, Wizard and Spellcaster mastery rules are runtime equipment-state checks rather than permanent unconditional buffs.
+- Paladin passive selection is stored as one locked choice and cleared by Class Reset.
+- Arcane Blood Magic Damage is defined as an umbrella for Eitr-based magic, including magical physical portions and magic-weapon attacks.
+- Sorcerer's emergency teleport is documented only; no unsafe automatic teleport code is included yet.
+
+PRIEST
+- Grand Cross is self-cast only. Divine Intervention and Heaven's Judgement retain Cross Cast support.
+- Grand Sigil Armor bonus scales from current Armor rather than adding flat Armor.
+- Grand Sigil death-save supports nearby allies without replacing the Priest's existing self-save or active barrier.
+
+DEFERRED
+- Weapon-combination-specific animations.
+- #2 regressions: Elemental Cataclysm charge, Astral Greatblade crosshair, Arcane Phalanx anti-spam, 5th-hit indicator removal.
+- Sword Master and Paladin skill-identity rewrites.
+
+
+UI ASSET PASS
+- Cleric -> Paladin Skill Tree now prefers a cached external reference-quality PNG from BepInEx/plugins/ImmortalHeroesAssets.
+- The procedural renderer remains fallback-only.
+- Color Key is masked out in the live reference render.

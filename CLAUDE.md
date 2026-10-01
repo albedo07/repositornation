@@ -74,3 +74,10 @@
 4. Return to combat skill revisions.
 5. Standalone/compatibility cleanup; possible Jötunn removal.
 6. Merge into one `ImmortalHeroes.dll`.
+
+## Build & repo layout
+- 8 source files at repo root → 8 DLLs, built on the user's Windows PC by `INSTALL.bat` / `INSTALL.ps1` (PowerShell `Add-Type`, staged compile, then installs to `BepInEx/plugins` + `ImmortalHeroesAssets/`).
+- `Add-Type` uses the **legacy C# 5 compiler**: no `$"..."` interpolation, no `?.`, no `nameof`, no expression-bodied members, no auto-property initializers, no out-var/tuples/pattern matching. Watch local-variable scope collisions across blocks.
+- UI art: `ImmortalHeroesAssets/Cleric_Paladin_Reference.png` (1011×662, the approved reference). Procedural renderer is fallback only.
+- Old changelogs in `docs/changelog/`, past UI previews in `docs/previews/`.
+- Package releases as `Immortal_Heroes_vX.Y.Z_<Name>.zip` with the same flat layout as the repo root (sources, INSTALL.*, ImmortalHeroesAssets/, CHANGELOG + TEST_THIS_BUILD).

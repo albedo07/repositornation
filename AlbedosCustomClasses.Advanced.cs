@@ -1,0 +1,8318 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Reflection;
+using BepInEx;
+using BepInEx.Configuration;
+using HarmonyLib;
+using UnityEngine;
+using AlbedosCustomClassesSkills;
+using DragonsAltarCombat;
+using AlbedosCustomClasses;
+
+namespace AlbedosCustomClassesAdvanced
+{
+    public class MoonlightDotTracker : MonoBehaviour
+    {
+        private AdvancedPlugin _plugin;
+        private Player _owner;
+        private float _radius;
+        private float _spiritPerSecond;
+        private float _duration;
+        private readonly HashSet<int> _dotted = new HashSet<int>();
+
+        public void Initialize(
+            AdvancedPlugin plugin,
+            Player owner,
+            float radius,
+            float spiritPerSecond,
+            float duration
+        )
+        {
+            _plugin = plugin;
+            _owner = owner;
+            _radius = Mathf.Max(0.1f, radius);
+            _spiritPerSecond = Mathf.Max(0f, spiritPerSecond);
+            _duration = Mathf.Max(0.1f, duration);
+        }
+
+        private void Update()
+        {
+            if (_plugin == null || _owner == null)
+                return;
+
+            Collider[] hits = Physics.OverlapSphere(transform.position, _radius);
+
+            for (int i = 0; i < hits.Length; i++)
+            {
+                Character target = hits[i].GetComponentInParent<Character>();
+
+                if (target == null)
+                    continue;
+
+                int id = target.GetInstanceID();
+
+                if (_dotted.Contains(id))
+                    continue;
+
+                if (!_plugin.IsMoonlightEnemy(_owner, target))
+                    continue;
+
+                _dotted.Add(id);
+                _plugin.ApplyMoonlightSpiritDot(
+                    _owner,
+                    target,
+                    _spiritPerSecond,
+                    _duration
+                );
+            }
+        }
+    }
+
+    internal class RefreshingDotState
+    {
+        public Player Attacker;
+        public Character Target;
+        public float DamagePerSecond;
+        public float EndTime;
+        public float NextTick;
+    }
+
+    internal class JudgementMarkState
+    {
+        public Character Target;
+        public string Source;
+        public float EndTime;
+    }
+
+    internal class PriestRelicState
+    {
+        public GameObject Cross;
+        public Vector3 Position;
+        public float Radius;
+        public float EndTime;
+        public bool IsLightning;
+        public string CooldownId;
+        public float CooldownSeconds;
+        public bool CooldownStarted;
+    }
+
+    public class PriestRelicMarker : MonoBehaviour
+    {
+        internal PriestRelicState State;
+    }
+
+    public class AegisWallMarker : MonoBehaviour
+    {
+        public Player Caster;
+        public bool Shattered;
+    }
+
+    [BepInPlugin(ModGuid, ModName, ModVersion)]
+    [BepInDependency("albedo.customclasses", BepInDependency.DependencyFlags.HardDependency)]
+    [BepInDependency("albedo.customclasses.skills", BepInDependency.DependencyFlags.HardDependency)]
+    [BepInDependency("albedo.customclasses.combatruntime", BepInDependency.DependencyFlags.HardDependency)]
+    public class AdvancedPlugin : BaseUnityPlugin
+    {
+        public const string ModGuid = "albedo.customclasses.advanced";
+        public const string ModName = "Dragon's Altar - Advancements";
+        public const string ModVersion = "0.14.6";
+
+        private const string ClassDataKey = "AlbedoCustomClasses.Class";
+        private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
+        private const string PaladinVitalityKey = "AlbedoCustomClasses.Paladin.Vitality";
+        private const string PaladinOffenseKey = "AlbedoCustomClasses.Paladin.Offense";
+        private const string PaladinPassiveKey = "AlbedoCustomClasses.Paladin.Passive";
+        private const string PriestOffenseKey = "AlbedoCustomClasses.Priest.Offense";
+
+        public static AdvancedPlugin Instance;
+
+        private ConfigEntry<KeyCode> _modifier;
+        private ConfigEntry<KeyCode> _skill4;
+        private ConfigEntry<KeyCode> _skill5;
+        private ConfigEntry<KeyCode> _skill7;
+        private ConfigEntry<KeyCode> _skill8;
+        private ConfigEntry<KeyCode> _skill9;
+        private ConfigEntry<KeyCode> _passiveActive;
+        private ConfigEntry<KeyCode> _ultimate;
+        private ConfigEntry<KeyCode> _skillbookKey;
+
+        private ConfigEntry<bool> _enableVfx;
+        private ConfigEntry<bool> _showCombatHud;
+        private ConfigEntry<float> _hudScale;
+        private ConfigEntry<float> _hudBottomOffset;
+        private ConfigEntry<bool> _testingForceCooldowns;
+        private ConfigEntry<float> _testingCooldownSeconds;
+
+        private ConfigEntry<float> _moonCooldown;
+        private ConfigEntry<float> _moonStamina;
+        private ConfigEntry<float> _moonLength;
+        private ConfigEntry<float> _moonWidth;
+        private ConfigEntry<float> _moonSpeed;
+        private DamageConfig _moonDamage;
+        private ConfigEntry<float> _moonSpiritDot;
+        private ConfigEntry<float> _moonSpiritDuration;
+
+        private ConfigEntry<float> _crescentCooldown;
+        private ConfigEntry<float> _crescentStamina;
+        private ConfigEntry<float> _crescentRange;
+        private ConfigEntry<float> _crescentTravelTime;
+        private ConfigEntry<float> _crescentSlashWidth;
+        private ConfigEntry<float> _crescentSlashHeight;
+        private ConfigEntry<float> _crescentSpreadAngle;
+        private ConfigEntry<float> _crescentPersistentTick;
+        private DamageConfig _crescentDamage;
+
+        private ConfigEntry<float> _judgementCooldown;
+        private ConfigEntry<float> _judgementStamina;
+        private ConfigEntry<float> _judgementRange;
+        private ConfigEntry<float> _judgementRadius;
+        private ConfigEntry<float> _judgementSlashDamage;
+        private ConfigEntry<float> _judgementBuffer;
+        private readonly float[] _judgementChargeReadyAt = new float[4];
+        private float _judgementNextCastAt;
+
+        private ConfigEntry<float> _severedCooldown;
+        private ConfigEntry<float> _severedStamina;
+        private ConfigEntry<float> _severedRange;
+        private ConfigEntry<float> _severedWidth;
+        private ConfigEntry<float> _severedDelay;
+        private DamageConfig _severedDamage;
+
+        private ConfigEntry<float> _emptyCooldown;
+        private ConfigEntry<float> _emptyStamina;
+        private ConfigEntry<float> _emptyCounterWindow;
+        private ConfigEntry<float> _emptyBehindDistance;
+        private ConfigEntry<int> _emptyCutCount;
+        private ConfigEntry<float> _emptyCutInterval;
+        private ConfigEntry<float> _emptySlashDamage;
+        private float _emptySheathCounterUntil;
+
+        private ConfigEntry<float> _halfmoonCooldown;
+        private ConfigEntry<float> _halfmoonStamina;
+        private ConfigEntry<float> _halfmoonRadius;
+        private DamageConfig _halfmoonDamage;
+        private ConfigEntry<float> _halfmoonSpiritDot;
+        private ConfigEntry<float> _halfmoonSpiritDuration;
+        private ConfigEntry<float> _halfmoonSecondSlashDelay;
+
+        private ConfigEntry<float> _swordSkillBonus;
+        private ConfigEntry<float> _swordAttackSpeedPassive;
+        private ConfigEntry<float> _swordAttackSpeedActive;
+        private ConfigEntry<float> _swordActiveDuration;
+        private ConfigEntry<float> _swordActiveCooldown;
+
+        private ConfigEntry<float> _stompCooldown;
+        private ConfigEntry<float> _stompStamina;
+        private ConfigEntry<float> _stompWindup;
+        private ConfigEntry<float> _stompRadius;
+        private ConfigEntry<float> _stompAftershockDelay;
+        private ConfigEntry<float> _stompAftershockRadius;
+        private DamageConfig _stompDamage;
+
+        private ConfigEntry<float> _boneCooldown;
+        private ConfigEntry<float> _boneStamina;
+        private ConfigEntry<float> _boneWindup;
+        private ConfigEntry<float> _boneRadius;
+        private DamageConfig _boneDamage;
+
+        private ConfigEntry<float> _circleCooldown;
+        private ConfigEntry<float> _circleStamina;
+        private ConfigEntry<float> _circleWindup;
+        private ConfigEntry<float> _circleRadius;
+        private ConfigEntry<float> _circleDamageMultiplier;
+        private ConfigEntry<float> _circleWindupTravel;
+
+        private ConfigEntry<float> _seismicCooldown;
+        private ConfigEntry<float> _seismicStamina;
+        private ConfigEntry<float> _seismicRange;
+        private ConfigEntry<float> _seismicWidth;
+        private ConfigEntry<float> _seismicTravelTime;
+        private ConfigEntry<float> _seismicEndRadius;
+        private ConfigEntry<float> _seismicDamageMultiplier;
+
+        private ConfigEntry<float> _reaverCooldown;
+        private ConfigEntry<float> _reaverStamina;
+        private ConfigEntry<float> _reaverRadius;
+        private ConfigEntry<float> _reaverDuration;
+        private ConfigEntry<float> _reaverHitRadius;
+        private ConfigEntry<float> _reaverDamageMultiplier;
+
+        private ConfigEntry<float> _whirlwindCooldown;
+        private ConfigEntry<float> _whirlwindStamina;
+        private ConfigEntry<float> _whirlwindRadius;
+        private ConfigEntry<float> _whirlwindDuration;
+        private ConfigEntry<float> _whirlwindInterval;
+        private ConfigEntry<float> _whirlwindWeaponMultiplier;
+
+        private ConfigEntry<float> _mercAxesBonus;
+        private ConfigEntry<float> _mercAttackDamage;
+        private ConfigEntry<float> _mercHealthBonus;
+        private ConfigEntry<float> _mercAggroRadius;
+        private ConfigEntry<float> _mercTauntRadius;
+        private ConfigEntry<float> _mercTauntDuration;
+        private ConfigEntry<float> _mercExposeDuration;
+        private ConfigEntry<float> _mercTauntCooldown;
+        private ConfigEntry<float> _mercFuryGainPerWeaponHit;
+        private ConfigEntry<float> _mercFuryGainPerSkillTarget;
+        private ConfigEntry<float> _mercFuryDuration;
+        private ConfigEntry<float> _mercFuryCooldown;
+        private ConfigEntry<float> _mercFuryBoneConeRange;
+        private ConfigEntry<float> _mercFuryBoneConeAngle;
+        private ConfigEntry<float> _mercFuryBoneConeMultiplier;
+        private float _mercFury;
+        private float _mercFuryUntil;
+        private float _mercFuryCooldownUntil;
+        private bool _mercFuryEndAnnounced;
+
+        private ConfigEntry<float> _goddessCooldown;
+        private ConfigEntry<float> _goddessStamina;
+        private ConfigEntry<float> _goddessRadius;
+        private ConfigEntry<float> _goddessRange;
+        private DamageConfig _goddessDamage;
+        private ConfigEntry<float> _goddessSpiritDot;
+        private ConfigEntry<float> _goddessSpiritDuration;
+        private ConfigEntry<float> _goddessWindup;
+
+        private ConfigEntry<float> _rayCooldown;
+        private ConfigEntry<float> _rayStamina;
+        private ConfigEntry<float> _rayWindup;
+        private ConfigEntry<float> _rayHealPercent;
+        private ConfigEntry<float> _rayDamageBuff;
+        private ConfigEntry<float> _rayBuffDuration;
+        private ConfigEntry<float> _rayRadius;
+        private ConfigEntry<float> _raySpiritBurnDuration;
+        private ConfigEntry<float> _shieldChargeCooldown;
+        private ConfigEntry<float> _shieldChargeStamina;
+        private ConfigEntry<float> _shieldChargeDistance;
+        private ConfigEntry<float> _shieldChargeSpeedMultiplier;
+        private ConfigEntry<float> _shieldChargeRadius;
+        private ConfigEntry<float> _shieldChargePersistentTick;
+        private DamageConfig _shieldChargeDamage;
+        private bool _shieldChargeActive;
+        private Player _shieldChargePlayer;
+
+        private ConfigEntry<float> _verdictCooldown;
+        private ConfigEntry<float> _verdictStamina;
+        private ConfigEntry<float> _verdictRange;
+        private ConfigEntry<float> _verdictRadius;
+        private ConfigEntry<float> _verdictWindup;
+        private DamageConfig _verdictDamage;
+
+        private ConfigEntry<float> _aegisCooldown;
+        private ConfigEntry<float> _aegisStamina;
+        private ConfigEntry<float> _aegisRange;
+        private ConfigEntry<float> _aegisWidth;
+        private ConfigEntry<float> _aegisHeight;
+        private ConfigEntry<float> _aegisDuration;
+        private ConfigEntry<float> _aegisWindup;
+        private ConfigEntry<float> _aegisImpactRadius;
+        private ConfigEntry<float> _aegisShockwaveRadius;
+        private DamageConfig _aegisDamage;
+        private DamageConfig _aegisShockwaveDamage;
+
+        private ConfigEntry<float> _judgementMarkDuration;
+        private ConfigEntry<float> _judgementMarkedMultiplier;
+        private ConfigEntry<float> _judgementCrossMultiplier;
+        private ConfigEntry<float> _judgementDetonationLightning;
+        private ConfigEntry<float> _judgementDetonationSpirit;
+        private ConfigEntry<float> _judgementCrippleDuration;
+        private readonly Dictionary<int, JudgementMarkState> _judgementMarks = new Dictionary<int, JudgementMarkState>();
+        private string _paladinMarkSourceContext = string.Empty;
+        private bool _judgementDetonationInProgress;
+
+        private ConfigEntry<float> _divineCooldown;
+        private ConfigEntry<float> _divineStamina;
+        private ConfigEntry<float> _divineRadius;
+        private DamageConfig _divineDamage;
+        private ConfigEntry<float> _divineFireDot;
+        private ConfigEntry<float> _divineSpiritDot;
+        private ConfigEntry<float> _divineSpiritDuration;
+        private ConfigEntry<float> _divineWindup;
+        private ConfigEntry<float> _divineTrailRange;
+        private ConfigEntry<float> _divineTrailTravelTime;
+        private ConfigEntry<float> _divineTrailPersistentTick;
+        private DamageConfig _divineTrailDamage;
+        private ConfigEntry<float> _divineZapDamage;
+
+        private ConfigEntry<float> _paladinElementalBonus;
+        private ConfigEntry<float> _paladinElementalFlatEitr;
+        private ConfigEntry<float> _paladinElementalEitrRegen;
+        private ConfigEntry<float> _holyKnightMoveSpeed;
+        private ConfigEntry<float> _holyKnightFlatHealth;
+        private ConfigEntry<float> _holyKnightFlatStamina;
+        private ConfigEntry<float> _holyKnightRegen;
+        private ConfigEntry<float> _holyKnightAttackSpeed;
+        private ConfigEntry<float> _mercTwoHandedAttackSpeed;
+        private ConfigEntry<float> _priestArmorBonusPercent;
+
+        private ConfigEntry<float> _lightningRelicCooldown;
+        private ConfigEntry<float> _lightningRelicStamina;
+        private ConfigEntry<float> _lightningRelicRadius;
+        private ConfigEntry<float> _lightningRelicRange;
+        private ConfigEntry<float> _lightningRelicDuration;
+        private ConfigEntry<float> _lightningRelicInterval;
+        private DamageConfig _lightningRelicDamage;
+        private ConfigEntry<float> _lightningRelicSpiritDot;
+        private ConfigEntry<float> _lightningRelicSpiritDuration;
+
+        private ConfigEntry<float> _holyRelicCooldown;
+        private ConfigEntry<float> _holyRelicStamina;
+        private ConfigEntry<float> _holyRelicRadius;
+        private ConfigEntry<float> _holyRelicRange;
+        private ConfigEntry<float> _holyRelicDuration;
+        private ConfigEntry<float> _holyRelicInterval;
+        private ConfigEntry<float> _holyRelicHealPercent;
+        private ConfigEntry<float> _holyRelicBuffDuration;
+        private ConfigEntry<float> _holyRelicDamageBuff;
+        private ConfigEntry<float> _holyRelicAttackSpeedBuff;
+        private ConfigEntry<float> _holyRelicMoveSpeedBuff;
+        private ConfigEntry<float> _holyRelicRegenBuff;
+        private ConfigEntry<float> _holyRelicDefenseBuff;
+
+        private ConfigEntry<float> _consecratedConnectRange;
+        private ConfigEntry<float> _consecratedRadius;
+        private ConfigEntry<float> _consecratedMultiplier;
+        private ConfigEntry<float> _consecratedExposeDuration;
+
+        private ConfigEntry<float> _interventionCooldown;
+        private ConfigEntry<float> _interventionStamina;
+        private ConfigEntry<float> _interventionRange;
+        private ConfigEntry<float> _interventionRadius;
+        private ConfigEntry<float> _interventionWindup;
+        private ConfigEntry<float> _interventionHealPercent;
+        private ConfigEntry<float> _interventionBarrierHp;
+        private ConfigEntry<float> _interventionBuffDuration;
+        private ConfigEntry<float> _interventionExposeDuration;
+        private DamageConfig _interventionDamage;
+
+        private ConfigEntry<float> _grandCrossCooldown;
+        private ConfigEntry<float> _grandCrossStamina;
+        private ConfigEntry<float> _grandCrossWidth;
+        private ConfigEntry<float> _grandCrossRange;
+        private ConfigEntry<float> _grandCrossTravelTime;
+        private ConfigEntry<float> _grandCrossWindup;
+        private ConfigEntry<float> _grandCrossTickInterval;
+        private ConfigEntry<float> _grandCrossSpiritDot;
+        private ConfigEntry<float> _grandCrossSpiritDuration;
+        private DamageConfig _grandCrossDamage;
+
+        private ConfigEntry<float> _heavensCooldown;
+        private ConfigEntry<float> _heavensStamina;
+        private ConfigEntry<float> _heavensRadius;
+        private ConfigEntry<float> _heavensWindup;
+        private ConfigEntry<float> _heavensDuration;
+        private ConfigEntry<float> _heavensStrikeInterval;
+        private ConfigEntry<int> _heavensStrikesPerWave;
+        private ConfigEntry<float> _heavensStrikeRadius;
+        private ConfigEntry<float> _heavensFrostDuration;
+        private DamageConfig _heavensDamage;
+
+        private ConfigEntry<float> _tempestCooldown;
+        private ConfigEntry<float> _tempestStamina;
+        private ConfigEntry<float> _tempestRadius;
+        private ConfigEntry<float> _tempestRange;
+        private ConfigEntry<float> _tempestDuration;
+        private ConfigEntry<float> _tempestStrikeInterval;
+        private ConfigEntry<int> _tempestMaxStrikes;
+        private ConfigEntry<float> _tempestZapDamage;
+        private DamageConfig _tempestDamage;
+        private ConfigEntry<float> _tempestSpiritDot;
+        private ConfigEntry<float> _tempestFireDot;
+        private ConfigEntry<float> _tempestFrostDuration;
+        private ConfigEntry<float> _tempestFireDuration;
+        private ConfigEntry<float> _tempestSpiritDuration;
+        private ConfigEntry<float> _tempestExposeDuration;
+
+        private ConfigEntry<float> _priestMartialSkillBonus;
+        private ConfigEntry<float> _priestElementalBonus;
+        private ConfigEntry<float> _grandProcChance;
+        private ConfigEntry<float> _grandProcReduction;
+        private ConfigEntry<float> _grandCooldown;
+        private ConfigEntry<float> _grandStamina;
+        private ConfigEntry<float> _grandRadius;
+        private ConfigEntry<float> _grandBarrierHp;
+        private ConfigEntry<float> _grandBarrierDuration;
+        private ConfigEntry<float> _grandWindup;
+
+        private ConfigEntry<string> _defaultPaladinVitality;
+        private ConfigEntry<string> _defaultPaladinOffense;
+        private ConfigEntry<string> _defaultPriestOffense;
+        private ConfigEntry<float> _sharedCrossCastRange;
+        private ConfigEntry<float> _acrobaticAscentLift;
+        private ConfigEntry<float> _acrobaticJumpHeight;
+
+        private readonly Dictionary<string, float> _cooldowns = new Dictionary<string, float>();
+        private readonly Dictionary<int, float> _crossBuffUntil = new Dictionary<int, float>();
+        private readonly Dictionary<int, BarrierState> _barriers = new Dictionary<int, BarrierState>();
+        private readonly List<PriestRelicState> _priestRelics = new List<PriestRelicState>();
+        private readonly Dictionary<int, RefreshingDotState> _refreshingSpiritBurns = new Dictionary<int, RefreshingDotState>();
+        private readonly Dictionary<int, RefreshingDotState> _refreshingFireBurns = new Dictionary<int, RefreshingDotState>();
+        private bool _lightningRelicCasting;
+        private bool _holyRelicCasting;
+
+        private float _swordActiveUntil;
+        private float _nextAggroPulse;
+
+        private Harmony _harmony;
+
+
+        private bool _skillbookOpen;
+        private Rect _skillbookRect = new Rect(0f, 0f, 1180f, 772f);
+        private bool _savedCursorVisible;
+        private CursorLockMode _savedCursorLock;
+
+        private GUIStyle _titleStyle;
+        private GUIStyle _slotStyle;
+        private GUIStyle _slotLockedStyle;
+        private GUIStyle _passiveStyle;
+        private GUIStyle _bookHeaderStyle;
+        private GUIStyle _bookTextStyle;
+        private GUIStyle _hudKeyStyle;
+        private GUIStyle _hudCooldownStyle;
+        private Texture2D _slotReadyTex;
+        private Texture2D _slotCooldownTex;
+        private Texture2D _slotLockedTex;
+
+        // v0.14.5 Immortal Heroes Skill Tree reference-asset implementation.
+        // Gameplay progression is intentionally not wired yet; this pass establishes the
+        // reusable visual language and layout before Project 4 changes skill mechanics.
+        private GUIStyle _treeWindowStyle;
+        private GUIStyle _treeTitleStyle;
+        private GUIStyle _treeHeaderStyle;
+        private GUIStyle _treeHeaderEmblemStyle;
+        private GUIStyle _treeSubHeaderStyle;
+        private GUIStyle _treeNodeIconStyle;
+        private GUIStyle _treeUltimateIconStyle;
+        private GUIStyle _treeNodeNameStyle;
+        private GUIStyle _treeNamePlateDarkStyle;
+        private GUIStyle _treeNamePlateLightStyle;
+        private GUIStyle _treeRankStyle;
+        private GUIStyle _treeTinyStyle;
+        private GUIStyle _treeTinyLeftStyle;
+        private GUIStyle _treeTooltipTitleStyle;
+        private GUIStyle _treeTooltipBodyStyle;
+        private GUIStyle _treeWatermarkStyle;
+        private Texture2D _treeMainTex;
+        private Texture2D _treeClassAreaTex;
+        private Texture2D _treeAdvAreaTex;
+        private Texture2D _treeClassHeaderTex;
+        private Texture2D _treeAdvHeaderTex;
+        private Texture2D _treeNodeInnerTex;
+        private Texture2D _treeGoldTex;
+        private Texture2D _treeShadowTex;
+        private Texture2D _treeHotbarTex;
+        private Texture2D _treeGoldGlowTex;
+        private Texture2D _treeMagentaGlowTex;
+        private Texture2D _treeMaroonGlowTex;
+        private Texture2D _treeBlueGlowTex;
+        private Texture2D _treeReferenceBackdropTex;
+        private bool _treeReferenceBackdropLoadAttempted;
+        private string _treeHoveredTitle = "";
+        private string _treeHoveredBody = "";
+        private GUIStyle _treeHotkeyStyle;
+        private string _treeSelectedNodeId = "";
+        private readonly Dictionary<string, int> _treePrototypeTiers = new Dictionary<string, int>();
+        private readonly Dictionary<string, int> _treePrototypePending = new Dictionary<string, int>();
+
+        private void Awake()
+        {
+            Instance = this;
+
+            _modifier = Config.Bind("Hotkeys", "Modifier", KeyCode.Mouse3, "Thumb mouse button used with advanced skills.");
+            _skill4 = Config.Bind("Hotkeys", "Skill4", KeyCode.Alpha4, "First advancement active skill.");
+            _skill5 = Config.Bind("Hotkeys", "Skill5", KeyCode.Alpha5, "Second advancement active skill. WIP during framework testing.");
+            _skill7 = Config.Bind("Hotkeys", "Skill7", KeyCode.Alpha7, "Additional active skill slot 7.");
+            _skill8 = Config.Bind("Hotkeys", "Skill8", KeyCode.Alpha8, "Additional development active skill slot 8.");
+            _skill9 = Config.Bind("Hotkeys", "Skill9", KeyCode.Alpha9, "Additional development active skill slot 9 / final Ultimate slot for five-skill advancements.");
+            _passiveActive = Config.Bind("Hotkeys", "PassiveActiveKey", KeyCode.R, "Activatable passive key. Dragon's Altar framework reserves Mouse4 + R for activatable passives.");
+
+            // v0.10.0 migration: old configs may still contain PassiveActive = Alpha4.
+            // The legacy key is intentionally ignored. Activatable passives are fixed to R.
+            if (_passiveActive.Value != KeyCode.R)
+            {
+                Logger.LogWarning("PassiveActiveKey conflicted with the Dragon's Altar control layout. Resetting activatable passive to R.");
+                _passiveActive.Value = KeyCode.R;
+            }
+            _ultimate = Config.Bind("Hotkeys", "Skill6", KeyCode.Alpha6, "Advancement active skill slot 6. Ultimate only when slot 6 is the class's last numbered skill.");
+            _skillbookKey = Config.Bind("Hotkeys", "Skillbook", KeyCode.K, "Open or close the skillbook.");
+
+            _enableVfx = Config.Bind("Interface", "EnableVFX", true, "Enable advanced-skill visual effects.");
+            _showCombatHud = Config.Bind("Interface", "ShowCombatHud", true, "Show the unified class skill HUD.");
+            _hudScale = Config.Bind("Interface", "HudScale", 1f, "Unified HUD scale.");
+            _hudBottomOffset = Config.Bind("Interface", "HudBottomOffset_v0113", 105f, "Bottom margin for the compact RPG skill HUD. Fresh v0.11.3 key avoids stale 330px development offsets.");
+            _testingForceCooldowns = Config.Bind("Testing", "ForceCooldowns", true, "Testing mode: force every advancement cooldown to one value.");
+            _testingCooldownSeconds = Config.Bind("Testing", "CooldownSeconds", 5f, "Testing cooldown used while ForceCooldowns is enabled.");
+
+            _moonCooldown = Config.Bind("Sword Master Moonlight Splitter", "Cooldown", 12f, "Seconds.");
+            _moonStamina = Config.Bind("Sword Master Moonlight Splitter", "StaminaCost", 24f, "Stamina cost.");
+            _moonLength = Config.Bind("Sword Master Moonlight Splitter", "TravelDistanceMeters_v0109", 50f, "Authoritative v0.10.9 travel distance. Fresh key prevents old 25m configs from overriding the 50m specification.");
+            _moonWidth = Config.Bind("Sword Master Moonlight Splitter", "WidthMeters_v0109", 9f, "Authoritative v0.10.9 width. Fresh key prevents the previous narrower config from overriding the 1.5x width specification.");
+            _moonSpeed = Config.Bind("Sword Master Moonlight Splitter", "ProjectileSpeed", 20f, "Visible Ghost laser travel speed in literal meters per second.");
+            _moonDamage = BindDamage("Sword Master Moonlight Damage", 0f, 34f, 0f, 0f, 0f, 0f, 0f, 24f);
+            _moonSpiritDot = Config.Bind("Sword Master Moonlight Splitter", "LegacySpiritDotPerSecond", 0f, "Framework says Moonlight Splitter deals Spirit damage WITHOUT Spirit Burn. Kept only for old config compatibility.");
+            _moonSpiritDuration = Config.Bind("Sword Master Moonlight Splitter", "LegacySpiritDotDuration", 0f, "Unused in v0.10.0.");
+
+            _crescentCooldown = Config.Bind("Sword Master Crescent Cleave", "Cooldown", 14f, "Seconds.");
+            _crescentStamina = Config.Bind("Sword Master Crescent Cleave", "StaminaCost", 30f, "Stamina cost.");
+            _crescentRange = Config.Bind("Sword Master Crescent Cleave", "RangeMeters_v0109", 20f, "Authoritative v0.10.9 travel distance. Fresh key prevents old 15m configs from overriding the 20m specification.");
+            _crescentTravelTime = Config.Bind("Sword Master Crescent Cleave", "TravelTimeSeconds_v0109", 4f, "Authoritative v0.10.9 travel time. 20m over 4s preserves the previous 5m-per-second wave speed.");
+            _crescentSlashWidth = Config.Bind("Sword Master Crescent Cleave", "SlashWidth", 1f, "Width in meters of EACH vertical travelling slash hitbox.");
+            _crescentSlashHeight = Config.Bind("Sword Master Crescent Cleave", "SlashHeight", 6.4f, "Doubled vertical cleave height.");
+            _crescentSpreadAngle = Config.Bind("Sword Master Crescent Cleave", "ConeSpreadDegrees_v0109", 120f, "Very wide cone matching the supplied second-cone reference: 120 degrees total spread, with the center slash travelling straight ahead.");
+            _crescentPersistentTick = Config.Bind("Sword Master Crescent Cleave", "PersistentHitInterval", 0.5f, "Persistent Hitbox: enemies still inside the cleave can be damaged again every 0.5s.");
+            _crescentDamage = BindDamage("Sword Master Crescent Cleave Damage", 0f, 28f, 0f, 0f, 0f, 0f, 0f, 20f);
+
+            _judgementCooldown = Config.Bind("Sword Master Judgement Cut", "RechargeSecondsPerStack", 12f, "Independent recharge time for each of the four stacks.");
+            _judgementStamina = Config.Bind("Sword Master Judgement Cut", "StaminaCost", 18f, "Stamina cost per stack activation.");
+            _judgementRange = Config.Bind("Sword Master Judgement Cut", "CastRange", 15f, "Maximum Ground PAC / Target PAC / Free Aim cast range.");
+            _judgementRadius = Config.Bind("Sword Master Judgement Cut", "Radius", 4f, "Sphere radius around the chosen cast point.");
+            _judgementSlashDamage = Config.Bind("Sword Master Judgement Cut", "SlashDamagePerCut", 24f, "Pure Slash damage dealt by each of the three cuts. No Spirit, DoT or debuff.");
+            _judgementBuffer = Config.Bind("Sword Master Judgement Cut", "ActivationBufferSeconds", 0.5f, "Minimum delay between charge activations. Independent stack recharge remains 12 seconds per spent stack.");
+
+            _severedCooldown = Config.Bind("Sword Master Severed Horizon", "Cooldown", 20f, "Seconds.");
+            _severedStamina = Config.Bind("Sword Master Severed Horizon", "StaminaCost", 36f, "Stamina cost.");
+            _severedRange = Config.Bind("Sword Master Severed Horizon", "Range", 30f, "Length of the visible world-cut line.");
+            _severedWidth = Config.Bind("Sword Master Severed Horizon", "Width", 1.5f, "Damage width around the world-cut line.");
+            _severedDelay = Config.Bind("Sword Master Severed Horizon", "TearDelay", 0.65f, "Delay between drawing the line and the full-line tear.");
+            _severedDamage = BindDamage("Sword Master Severed Horizon Damage", 0f, 82f, 0f, 0f, 0f, 0f, 0f, 0f);
+
+            _emptyCooldown = Config.Bind("Sword Master Empty Sheath", "Cooldown", 18f, "Seconds.");
+            _emptyStamina = Config.Bind("Sword Master Empty Sheath", "StaminaCost", 24f, "Stamina cost.");
+            _emptyCounterWindow = Config.Bind("Sword Master Empty Sheath", "CounterWindow", 0.8f, "Brief counter stance duration.");
+            _emptyBehindDistance = Config.Bind("Sword Master Empty Sheath", "BehindDistance", 1.6f, "Distance behind the attacker after a successful counter.");
+            _emptyCutCount = Config.Bind("Sword Master Empty Sheath", "RetaliationCuts", 4, "Rapid delayed cuts after a successful counter.");
+            _emptyCutInterval = Config.Bind("Sword Master Empty Sheath", "RetaliationCutInterval", 0.10f, "Interval between retaliation cuts.");
+            _emptySlashDamage = Config.Bind("Sword Master Empty Sheath", "SlashDamagePerCut", 34f, "Pure Slash damage per retaliation cut.");
+
+            _halfmoonCooldown = Config.Bind("Sword Master Halfmoon Slash", "Cooldown", 40f, "Seconds.");
+            _halfmoonStamina = Config.Bind("Sword Master Halfmoon Slash", "StaminaCost", 50f, "Stamina cost.");
+            _halfmoonRadius = Config.Bind("Sword Master Halfmoon Slash", "Radius", 22f, "Expanded frontal slash radius.");
+            _halfmoonDamage = BindDamage("Sword Master Halfmoon Damage v2", 0f, 130f, 0f, 0f, 0f, 0f, 0f, 60f);
+            _halfmoonSpiritDot = Config.Bind("Sword Master Halfmoon Slash", "SpiritDotPerSecond", 18f, "Ultimate-strength Spirit Burn damage per second.");
+            _halfmoonSpiritDuration = Config.Bind("Sword Master Halfmoon Slash", "SpiritDotDuration", 10f, "Framework Spirit Burn duration.");
+            _halfmoonSecondSlashDelay = Config.Bind("Sword Master Halfmoon Slash", "SecondSlashDelay", 0.65f, "Delay in seconds between the primary slash and the 0.5x afterimage slash.");
+
+            _swordSkillBonus = Config.Bind("Sword Master Passive", "LegacySwordSkillBonus", 0f, "Legacy Sword-skill bonus retained for config compatibility. The Way of the Sword no longer grants flat skill levels.");
+            _swordAttackSpeedPassive = Config.Bind("Sword Master Passive", "WayOfTheSwordAttackSpeedPercent_v0123", 100f, "The Way of the Sword: +100% Attack Speed while exactly one Sword is equipped and the off-hand is empty.");
+            _swordAttackSpeedActive = Config.Bind("Sword Master Passive", "LegacyActiveAttackSpeedPercent", 0f, "Legacy Sword Mastery active setting. The Way of the Sword is passive-only.");
+            _swordActiveDuration = Config.Bind("Sword Master Passive", "LegacyActiveDuration", 0f, "Legacy setting. Unused.");
+            _swordActiveCooldown = Config.Bind("Sword Master Passive", "LegacyActiveCooldown", 0f, "Legacy setting. Unused.");
+
+            // v0.10.0 migration from all known previous Sword Master defaults.
+            if (Mathf.Approximately(_swordAttackSpeedPassive.Value, 15f) ||
+                Mathf.Approximately(_swordAttackSpeedPassive.Value, 50f))
+                _swordAttackSpeedPassive.Value = 75f;
+
+            if (Mathf.Approximately(_swordAttackSpeedActive.Value, 25f) ||
+                Mathf.Approximately(_swordAttackSpeedActive.Value, 50f))
+                _swordAttackSpeedActive.Value = 100f;
+
+            if (Mathf.Approximately(_swordActiveDuration.Value, 15f))
+                _swordActiveDuration.Value = 10f;
+
+            if (Mathf.Approximately(_halfmoonSpiritDot.Value, 12f))
+                _halfmoonSpiritDot.Value = 18f;
+
+            MigrateFloat(_rayCooldown, 24f, 30f);
+            MigrateFloat(_rayHealPercent, 80f, 30f);
+            MigrateFloat(_rayBuffDuration, 60f, 12f);
+
+            _stompCooldown = Config.Bind("Mercenary Stomp", "Cooldown", 10f, "Seconds.");
+            _stompStamina = Config.Bind("Mercenary Stomp", "StaminaCost", 25f, "Stamina cost.");
+            _stompWindup = Config.Bind("Mercenary Stomp", "Windup", 0.5f, "First stomp wind-up. The full earthquake sequence lasts 1.5s.");
+            _stompRadius = Config.Bind("Mercenary Stomp", "Radius", 3f, "First stomp radius: true 3m center-to-edge.");
+            _stompAftershockDelay = Config.Bind("Mercenary Stomp", "AftershockDelay", 1f, "Seconds after the first impact before the aftershock.");
+            _stompAftershockRadius = Config.Bind("Mercenary Stomp", "AftershockRadius", 10f, "Aftershock radius: true 10m center-to-edge.");
+            _stompDamage = BindDamage("Mercenary Stomp Damage", 42f, 0f, 0f, 0f, 0f, 0f, 0f, 0f);
+
+            _boneCooldown = Config.Bind("Mercenary Bonecrusher", "Cooldown", 16f, "Seconds.");
+            _boneStamina = Config.Bind("Mercenary Bonecrusher", "StaminaCost", 34f, "Stamina cost.");
+            _boneWindup = Config.Bind("Mercenary Bonecrusher", "Windup", 2f, "Target flat-ground air sequence: about 2 seconds from takeoff to landing. Cliff falls extend until physical landing.");
+            _boneRadius = Config.Bind("Mercenary Bonecrusher", "Radius", 10f, "Framework AoE radius: literal 10m.");
+            _boneDamage = BindDamage("Mercenary Bonecrusher Damage", 70f, 0f, 0f, 0f, 0f, 0f, 0f, 0f);
+
+            _circleCooldown = Config.Bind("Mercenary Circle Swing", "Cooldown", 16f, "Seconds.");
+            _circleStamina = Config.Bind("Mercenary Circle Swing", "StaminaCost", 36f, "Stamina cost.");
+            _circleWindup = Config.Bind("Mercenary Circle Swing", "Windup", 1.5f, "Heavy steerable wind-up before the violent circular swing.");
+            _circleRadius = Config.Bind("Mercenary Circle Swing", "Radius", 7f, "True 7m center-to-edge radius.");
+            _circleDamageMultiplier = Config.Bind("Mercenary Circle Swing", "WeaponDamageMultiplier", 1.75f, "Significant burst: multiplier applied to the held weapon damage/elements.");
+            _circleWindupTravel = Config.Bind("Mercenary Circle Swing", "WindupTravel", 0.5f, "Maximum steerable movement distance during the wind-up.");
+
+            _seismicCooldown = Config.Bind("Mercenary Seismic Guillotine", "Cooldown", 18f, "Prototype cooldown; developer tunable.");
+            _seismicStamina = Config.Bind("Mercenary Seismic Guillotine", "StaminaCost", 38f, "Prototype stamina cost; developer tunable.");
+            _seismicRange = Config.Bind("Mercenary Seismic Guillotine", "Range", 15f, "Maximum Ground PAC / Target PAC distance. The fissure stops at the aimed point when it is closer than max range.");
+            _seismicWidth = Config.Bind("Mercenary Seismic Guillotine", "Width", 6f, "Base fissure width. Unchained Fury widens and branches it.");
+            _seismicTravelTime = Config.Bind("Mercenary Seismic Guillotine", "TravelTime", 1.0f, "Time for Seismic Shocks to cover the full configured range. Default: 15m in 1.0s; shorter casts preserve the same travel speed.");
+            _seismicEndRadius = Config.Bind("Mercenary Seismic Guillotine", "EndRuptureRadius", 10f, "Finishing rupture radius.");
+            _seismicDamageMultiplier = Config.Bind("Mercenary Seismic Guillotine", "WeaponDamageMultiplier", 1.20f, "Prototype held-weapon damage multiplier for fissure and finishing rupture.");
+
+            _reaverCooldown = Config.Bind("Mercenary Reavers Orbit", "Cooldown", 16f, "Prototype cooldown; developer tunable.");
+            _reaverStamina = Config.Bind("Mercenary Reavers Orbit", "StaminaCost", 32f, "Prototype stamina cost; developer tunable.");
+            _reaverRadius = Config.Bind("Mercenary Reavers Orbit", "OrbitRadius", 8f, "Maximum outward orbit radius.");
+            _reaverDuration = Config.Bind("Mercenary Reavers Orbit", "Duration", 1.6f, "Full outward-and-return orbit duration.");
+            _reaverHitRadius = Config.Bind("Mercenary Reavers Orbit", "HitRadius", 1.35f, "Hit radius around each travelling axe point.");
+            _reaverDamageMultiplier = Config.Bind("Mercenary Reavers Orbit", "WeaponDamageMultiplier", 0.80f, "Prototype held-weapon multiplier per outward/return pass.");
+
+            _whirlwindCooldown = Config.Bind("Mercenary Whirlwind", "Cooldown", 40f, "Seconds.");
+            _whirlwindStamina = Config.Bind("Mercenary Whirlwind", "StaminaCost", 55f, "Stamina cost.");
+            _whirlwindRadius = Config.Bind("Mercenary Whirlwind", "Radius", 2f, "Framework Whirlwind radius: literal 2m.");
+            _whirlwindDuration = Config.Bind("Mercenary Whirlwind", "Duration", 6f, "Framework duration.");
+            _whirlwindInterval = Config.Bind("Mercenary Whirlwind", "HitInterval", 0.5f, "Framework hit interval.");
+            _whirlwindWeaponMultiplier = Config.Bind("Mercenary Whirlwind", "WeaponDamageMultiplier", 0.5f, "Framework: each tick is half a normal held-weapon attack.");
+
+            _mercAxesBonus = Config.Bind("Mercenary Passive", "AxesSkillBonus", 20f, "Effective Axes skill bonus.");
+            _mercAttackDamage = Config.Bind("Mercenary Passive", "AttackDamagePercent", 8f, "Weapon attack damage bonus.");
+            _mercHealthBonus = Config.Bind("Mercenary Passive", "FlatHealthBonus", 50f, "Flat maximum health bonus.");
+            _mercAggroRadius = Config.Bind("Mercenary Passive", "AggroRadius", 20f, "Nearby enemies are encouraged to target the Mercenary.");
+            _mercTauntRadius = Config.Bind("Mercenary Passive", "TauntRadius", 15f, "Barbaric active taunt radius in meters.");
+            _mercTauntDuration = Config.Bind("Mercenary Passive", "TauntDuration", 6f, "Barbaric active taunt duration in seconds.");
+            _mercExposeDuration = Config.Bind("Mercenary Passive", "TauntExposeDuration", 10f, "Expose duration for enemies hit by Barbaric.");
+            _mercTauntCooldown = Config.Bind("Mercenary Passive", "TauntCooldown", 20f, "Barbaric activation cooldown; testing override still applies.");
+            _mercFuryGainPerWeaponHit = Config.Bind("Mercenary Unchained Fury", "FuryGainPerWeaponHit", 1f, "Fury gained per successful normal melee hit while Fury is ready.");
+            _mercFuryGainPerSkillTarget = Config.Bind("Mercenary Unchained Fury", "FuryGainPerSkillTarget", 3f, "Fury gained for each enemy hit by a Mercenary skill. Multi-target skills gain this amount once per actual target hit.");
+            _mercFuryDuration = Config.Bind("Mercenary Unchained Fury", "Duration", 10f, "Unchained Fury active duration.");
+            _mercFuryCooldown = Config.Bind("Mercenary Unchained Fury", "Cooldown", 300f, "Lockout that begins after Unchained Fury ends. Fury cannot build during this lockout.");
+            _mercFuryBoneConeRange = Config.Bind("Mercenary Unchained Fury", "BonecrusherConeRange", 12f, "Ascension-style forward shockwave range added to Bonecrusher during Fury.");
+            _mercFuryBoneConeAngle = Config.Bind("Mercenary Unchained Fury", "BonecrusherConeAngle", 100f, "Ascension-style Bonecrusher shockwave cone angle during Fury.");
+            _mercFuryBoneConeMultiplier = Config.Bind("Mercenary Unchained Fury", "BonecrusherConeDamageMultiplier", 0.75f, "Temporary Fury shockwave damage multiplier relative to Bonecrusher damage.");
+
+            // v0.11.7 migration: existing BepInEx configs keep old values unless explicitly moved.
+            // Only migrate the exact v0.11.6 defaults so deliberate custom tuning is preserved.
+            if (Mathf.Approximately(_boneRadius.Value, 5f)) _boneRadius.Value = 10f;
+            if (Mathf.Approximately(_seismicRange.Value, 18f)) _seismicRange.Value = 15f;
+            if (Mathf.Approximately(_seismicWidth.Value, 3f)) _seismicWidth.Value = 6f;
+            if (Mathf.Approximately(_seismicEndRadius.Value, 4f)) _seismicEndRadius.Value = 10f;
+            if (Mathf.Approximately(_mercFuryGainPerWeaponHit.Value, 5f)) _mercFuryGainPerWeaponHit.Value = 1f;
+
+            // v0.11.8 migration: preserve the new constant Seismic Shock travel speed for existing v0.11.7 configs.
+            if (Mathf.Approximately(_seismicTravelTime.Value, 1.6f)) _seismicTravelTime.Value = 1.0f;
+
+            _goddessCooldown = Config.Bind("Paladin Goddess Relic", "Cooldown", 14f, "Seconds.");
+            _goddessStamina = Config.Bind("Paladin Goddess Relic", "StaminaCost", 30f, "Stamina cost.");
+            _goddessRadius = Config.Bind("Paladin Goddess Relic", "Radius", 7f, "Framework AoE radius: literal 7m. Cross visual size is unchanged.");
+            _goddessRange = Config.Bind("Paladin Goddess Relic", "Range", 50f, "Ground PAC cast distance in literal meters. Works indoors.");
+            _goddessDamage = BindDamage("Paladin Goddess Relic Damage", 38f, 0f, 0f, 0f, 0f, 42f, 0f, 32f);
+            _goddessSpiritDot = Config.Bind("Paladin Goddess Relic", "SpiritDotPerSecond", 8f, "Spirit Burn damage per second.");
+            _goddessSpiritDuration = Config.Bind("Paladin Goddess Relic", "SpiritDotDuration", 6f, "Default DoT duration.");
+            _goddessWindup = Config.Bind("Paladin Goddess Relic", "Windup", 1f, "Framework windup.");
+
+            _rayCooldown = Config.Bind("Paladin Ray of Hope", "Cooldown", 30f, "Seconds.");
+            _rayStamina = Config.Bind("Paladin Ray of Hope", "StaminaCost", 35f, "Stamina cost.");
+            _rayWindup = Config.Bind("Paladin Ray of Hope", "ChannelTime", 2f, "Channel time.");
+            _rayHealPercent = Config.Bind("Paladin Ray of Hope", "HealPercent", 30f, "Heal 30 percent max HP.");
+            _rayDamageBuff = Config.Bind("Paladin Ray of Hope", "AttackDamageBonusPercent", 30f, "Attack Damage Bonus.");
+            _rayBuffDuration = Config.Bind("Paladin Ray of Hope", "BuffDuration", 12f, "Buff duration.");
+            _rayRadius = Config.Bind("Paladin Ray of Hope", "Radius", 7f, "Wave radius.");
+            _raySpiritBurnDuration = Config.Bind("Paladin Ray of Hope", "SpiritBurnDuration", 8f, "Enemy Spirit Burn duration.");
+            _shieldChargeCooldown = Config.Bind("Paladin Shield Charge", "Cooldown", 18f, "Seconds.");
+            _shieldChargeStamina = Config.Bind("Paladin Shield Charge", "StaminaCost", 28f, "Stamina cost.");
+            _shieldChargeDistance = Config.Bind("Paladin Shield Charge", "Distance", 15f, "Literal 15m charge.");
+            _shieldChargeSpeedMultiplier = Config.Bind("Paladin Shield Charge", "MovementSpeedMultiplier", 1.5f, "1.5x current run speed.");
+            _shieldChargeRadius = Config.Bind("Paladin Shield Charge", "BashRadius", 4f, "4m frontal attack radius.");
+            _shieldChargePersistentTick = Config.Bind("Paladin Shield Charge", "PersistentHitInterval", 0.5f, "Persistent Damage interval.");
+            _shieldChargeDamage = BindDamage("Paladin Shield Charge Damage", 42f, 0f, 0f, 0f, 0f, 28f, 0f, 0f);
+
+            _verdictCooldown = Config.Bind("Paladin Divine Verdict", "Cooldown", 22f, "Seconds.");
+            _verdictStamina = Config.Bind("Paladin Divine Verdict", "StaminaCost", 38f, "Stamina cost.");
+            _verdictRange = Config.Bind("Paladin Divine Verdict", "Range", 35f, "Ground PAC / Target PAC range.");
+            _verdictRadius = Config.Bind("Paladin Divine Verdict", "Radius", 8f, "Colossal holy hammer impact radius.");
+            _verdictWindup = Config.Bind("Paladin Divine Verdict", "Windup", 1f, "Sky-summon windup before the hammer falls.");
+            _verdictDamage = BindDamage("Paladin Divine Verdict Damage", 85f, 0f, 0f, 0f, 0f, 30f, 0f, 50f);
+
+            _aegisCooldown = Config.Bind("Paladin Aegis Fall", "Cooldown", 24f, "Seconds.");
+            _aegisStamina = Config.Bind("Paladin Aegis Fall", "StaminaCost", 42f, "Stamina cost.");
+            _aegisRange = Config.Bind("Paladin Aegis Fall", "Range", 35f, "Ground PAC / Target PAC range.");
+            _aegisWidth = Config.Bind("Paladin Aegis Fall", "WallWidth", 7f, "Physical shield-wall width.");
+            _aegisHeight = Config.Bind("Paladin Aegis Fall", "WallHeight", 5f, "Physical shield-wall height.");
+            _aegisDuration = Config.Bind("Paladin Aegis Fall", "WallDuration", 12f, "Seconds the Physical Aegis remains if not shattered.");
+            _aegisWindup = Config.Bind("Paladin Aegis Fall", "Windup", 1f, "Sky-summon windup before the shield falls.");
+            _aegisImpactRadius = Config.Bind("Paladin Aegis Fall", "ImpactRadius", 5f, "Damage radius when the Aegis lands.");
+            _aegisShockwaveRadius = Config.Bind("Paladin Aegis Fall", "ShatterShockwaveRadius", 10f, "Holy shockwave radius when Shield Charge shatters your own Aegis.");
+            _aegisDamage = BindDamage("Paladin Aegis Fall Damage", 62f, 0f, 0f, 0f, 0f, 20f, 0f, 32f);
+            _aegisShockwaveDamage = BindDamage("Paladin Aegis Shatter Damage", 48f, 0f, 0f, 0f, 0f, 36f, 0f, 42f);
+
+            _judgementMarkDuration = Config.Bind("Paladin Judgement Mark", "Duration", 8f, "How long a Lightning Zap or Goddess Relic Judgement Mark remains.");
+            _judgementMarkedMultiplier = Config.Bind("Paladin Judgement Mark", "MarkedHitMultiplier", 1.5f, "Damage multiplier when hitting a marked enemy.");
+            _judgementCrossMultiplier = Config.Bind("Paladin Judgement Mark", "CrossMarkMultiplier", 2f, "Damage multiplier when the opposite marking source hits a marked enemy.");
+            _judgementDetonationLightning = Config.Bind("Paladin Judgement Mark", "DetonationLightningDamage", 35f, "Bonus Lightning damage from Judgement Detonation.");
+            _judgementDetonationSpirit = Config.Bind("Paladin Judgement Mark", "DetonationSpiritDamage", 35f, "Bonus Spirit damage from Judgement Detonation.");
+            _judgementCrippleDuration = Config.Bind("Paladin Judgement Mark", "CrippleDuration", 6f, "Cripple duration caused by a marked non-Lightning hit.");
+
+            _divineCooldown = Config.Bind("Paladin Electric Smite", "Cooldown", 45f, "Seconds.");
+            _divineStamina = Config.Bind("Paladin Electric Smite", "StaminaCost", 55f, "Stamina cost.");
+            _divineRadius = Config.Bind("Paladin Electric Smite", "Radius", 5f, "Framework impact radius: literal 5m.");
+            _divineDamage = BindDamage("Paladin Electric Smite Damage v2", 90f, 0f, 0f, 40f, 0f, 100f, 0f, 70f);
+            _divineFireDot = Config.Bind("Paladin Electric Smite", "FireDotPerSecond", 6f, "Fire Burn damage per second.");
+            _divineSpiritDot = Config.Bind("Paladin Electric Smite", "SpiritDotPerSecond", 9f, "Spirit Burn damage per second.");
+            _divineSpiritDuration = Config.Bind("Paladin Electric Smite", "SpiritDotDuration", 6f, "Default DoT duration.");
+            _divineWindup = Config.Bind("Paladin Electric Smite", "Windup", 2f, "Target flat-ground air sequence: about 2 seconds from takeoff to landing. Cliff falls extend until physical landing.");
+            _divineTrailRange = Config.Bind("Paladin Electric Smite", "TrailRangeMeters_v0109", 10f, "Sixteen Ground Projectile trails spread in all directions for 10m.");
+            _divineTrailTravelTime = Config.Bind("Paladin Electric Smite", "TrailTravelTimeSeconds_v0109", 3f, "Ground Projectile travel time to the full 10m radius.");
+            _divineTrailPersistentTick = Config.Bind("Paladin Electric Smite", "TrailPersistentHitInterval", 0.5f, "Persistent Damage interval while an enemy remains in any Electric Smite trail.");
+            _divineTrailDamage = BindDamage("Paladin Electric Smite Trail Damage v0109", 0f, 0f, 0f, 0f, 0f, 18f, 0f, 0f);
+            _divineZapDamage = Config.Bind("Paladin Electric Smite", "ZapExplosionLightningDamage", 0f, "0 uses Combat Runtime Zap default.");
+
+            _paladinElementalBonus = Config.Bind("Paladin Passive - Elemental Savant", "ElementalDamagePercent", 25f, "+25% Fire/Frost/Lightning/Poison/Spirit damage.");
+            _paladinElementalFlatEitr = Config.Bind("Paladin Passive - Elemental Savant", "FlatEitr", 30f, "+30 flat Max Eitr.");
+            _paladinElementalEitrRegen = Config.Bind("Paladin Passive - Elemental Savant", "EitrRegenPercent", 30f, "+30% Eitr Regen.");
+            _holyKnightMoveSpeed = Config.Bind("Paladin Passive - Holy Knight", "MoveSpeedPercent", 25f, "+25% Movement Speed.");
+            _holyKnightFlatHealth = Config.Bind("Paladin Passive - Holy Knight", "FlatHealth", 35f, "+35 flat Max HP.");
+            _holyKnightFlatStamina = Config.Bind("Paladin Passive - Holy Knight", "FlatStamina", 35f, "+35 flat Max Stamina.");
+            _holyKnightRegen = Config.Bind("Paladin Passive - Holy Knight", "HealthStaminaRegenPercent", 30f, "+30% HP and Stamina Regen.");
+            _holyKnightAttackSpeed = Config.Bind("Paladin Passive - Holy Knight", "WeaponShieldAttackSpeedPercent", 75f, "+75% Attack Speed while any weapon and any Shield are equipped together.");
+            _mercTwoHandedAttackSpeed = Config.Bind("Mercenary Weapon Mastery - Warfreak", "TwoHandedAttackSpeedPercent", 125f, "+125% Attack Speed while wielding a two-handed weapon.");
+            _priestArmorBonusPercent = Config.Bind("Priest Grand Sigil", "CurrentArmorBonusPercent_v0123", 30f, "Passive: +30% of current equipped Armor.");
+
+            _lightningRelicCooldown = Config.Bind("Priest Lightning Relic", "Cooldown", 14f, "Cooldown starts only after the active Relic is relinquished or its 16s lifetime ends.");
+            _lightningRelicStamina = Config.Bind("Priest Lightning Relic", "StaminaCost", 30f, "Stamina cost.");
+            _lightningRelicRadius = Config.Bind("Priest Lightning Relic", "Radius", 10f, "Pulse radius in literal meters.");
+            _lightningRelicRange = Config.Bind("Priest Lightning Relic", "Range", 35f, "Ground PAC cast distance in literal meters. Works indoors.");
+            _lightningRelicDuration = Config.Bind("Priest Lightning Relic", "Duration", 16f, "Active lifetime before cooldown begins.");
+            _lightningRelicInterval = Config.Bind("Priest Lightning Relic", "HitInterval", 1f, "Pulse interval.");
+            _lightningRelicDamage = BindDamage("Priest Lightning Relic Damage", 0f, 0f, 0f, 0f, 0f, 32f, 0f, 22f);
+            _lightningRelicSpiritDot = Config.Bind("Priest Lightning Relic", "LegacySpiritDotPerSecond", 0f, "Lightning Relic has no Spirit DoT. Unused.");
+            _lightningRelicSpiritDuration = Config.Bind("Priest Lightning Relic", "LegacySpiritDotDuration", 0f, "Unused.");
+
+            _holyRelicCooldown = Config.Bind("Priest Holy Relic", "Cooldown", 18f, "Cooldown starts only after the active Relic is relinquished or its 16s lifetime ends.");
+            _holyRelicStamina = Config.Bind("Priest Holy Relic", "StaminaCost", 40f, "Stamina cost.");
+            _holyRelicRadius = Config.Bind("Priest Holy Relic", "Radius", 10f, "Pulse radius in literal meters.");
+            _holyRelicRange = Config.Bind("Priest Holy Relic", "Range", 35f, "Ground PAC cast distance in literal meters.");
+            _holyRelicDuration = Config.Bind("Priest Holy Relic", "Duration", 16f, "Active lifetime before cooldown begins.");
+            _holyRelicInterval = Config.Bind("Priest Holy Relic", "PulseInterval", 2f, "Holy Relic keeps the existing 2s pulse interval.");
+            _holyRelicHealPercent = Config.Bind("Priest Holy Relic", "HealPercentPerPulse", 15f, "Max-HP heal per pulse.");
+            _holyRelicBuffDuration = Config.Bind("Priest Holy Relic", "BuffDuration", 4f, "Buff refresh duration.");
+            _holyRelicDamageBuff = Config.Bind("Priest Holy Relic", "DamageBuffPercent", 20f, "Attack Damage Bonus.");
+            _holyRelicAttackSpeedBuff = Config.Bind("Priest Holy Relic", "AttackSpeedPercent", 20f, "Attack Speed Bonus.");
+            _holyRelicMoveSpeedBuff = Config.Bind("Priest Holy Relic", "MoveSpeedPercent", 20f, "Movement Speed Bonus.");
+            _holyRelicRegenBuff = Config.Bind("Priest Holy Relic", "StaminaRegenPercent", 0f, "Not part of the current Holy Relic design; zero by default.");
+            _holyRelicDefenseBuff = Config.Bind("Priest Holy Relic", "DefensePercent", 20f, "Overall Defense Bonus.");
+
+            _consecratedConnectRange = Config.Bind("Priest Consecrated Ground", "ConnectionRange", 15f, "Lightning Relic and Holy Relic must be within this horizontal distance to connect.");
+            _consecratedRadius = Config.Bind("Priest Consecrated Ground", "Radius", 15f, "Fixed Consecrated Ground radius regardless of how close the two Relics are.");
+            _consecratedMultiplier = Config.Bind("Priest Consecrated Ground", "SignaturePotencyMultiplier", 1.25f, "Multiplier applied to Lightning Relic direct damage and Holy Relic heal/buffs inside Consecrated Ground.");
+            _consecratedExposeDuration = Config.Bind("Priest Consecrated Ground", "ExposeDuration", 4f, "Expose duration applied by Lightning Relic inside Consecrated Ground.");
+
+            _interventionCooldown = Config.Bind("Priest Divine Intervention", "Cooldown", 24f, "Seconds.");
+            _interventionStamina = Config.Bind("Priest Divine Intervention", "StaminaCost", 45f, "Stamina cost.");
+            _interventionRange = Config.Bind("Priest Divine Intervention", "CrossCastRange", 35f, "Maximum distance for selecting an active Priest Cross with the crosshair. If no Cross is selected, the skill self-casts.");
+            _interventionRadius = Config.Bind("Priest Divine Intervention", "Radius", 10f, "Self/Cross-centered AoE radius, matching the intended Holy Wave-style cast behavior.");
+            _interventionWindup = Config.Bind("Priest Divine Intervention", "Windup", 1f, "Short holy burst windup.");
+            _interventionHealPercent = Config.Bind("Priest Divine Intervention", "HealPercent", 20f, "Max-HP heal.");
+            _interventionBarrierHp = Config.Bind("Priest Divine Intervention", "BarrierHP", 150f, "Temporary barrier HP.");
+            _interventionBuffDuration = Config.Bind("Priest Divine Intervention", "SupportDuration", 6f, "Hyper Armor / defense support duration.");
+            _interventionExposeDuration = Config.Bind("Priest Divine Intervention", "ExposeDuration", 8f, "Expose duration on enemies hit.");
+            _interventionDamage = BindDamage("Priest Divine Intervention Damage", 0f, 0f, 0f, 0f, 0f, 40f, 0f, 40f);
+
+            _grandCrossCooldown = Config.Bind("Priest Grand Cross", "Cooldown", 24f, "Seconds.");
+            _grandCrossStamina = Config.Bind("Priest Grand Cross", "StaminaCost", 40f, "Stamina cost.");
+            _grandCrossWidth = Config.Bind("Priest Grand Cross", "Width", 15f, "Full width of the travelling X.");
+            _grandCrossRange = Config.Bind("Priest Grand Cross", "Range", 25f, "Ghost projectile travel distance.");
+            _grandCrossTravelTime = Config.Bind("Priest Grand Cross", "TravelTime", 6f, "Time to complete the full configured range.");
+            _grandCrossWindup = Config.Bind("Priest Grand Cross", "Windup", 0.6f, "Two fast sword slashes form the travelling X.");
+            _grandCrossTickInterval = Config.Bind("Priest Grand Cross", "PersistentHitInterval", 0.5f, "Persistent Damage interval while an enemy remains inside the travelling X.");
+            _grandCrossSpiritDot = Config.Bind("Priest Grand Cross", "SpiritDotPerSecond", 7f, "Spirit Burn damage per second.");
+            _grandCrossSpiritDuration = Config.Bind("Priest Grand Cross", "SpiritDotDuration", 4f, "Spirit Burn duration refreshed by Grand Cross.");
+            _grandCrossDamage = BindDamage("Priest Grand Cross Damage", 0f, 0f, 0f, 0f, 0f, 30f, 0f, 26f);
+
+            _heavensCooldown = Config.Bind("Priest Heavens Judgement", "Cooldown", 26f, "Seconds.");
+            _heavensStamina = Config.Bind("Priest Heavens Judgement", "StaminaCost", 45f, "Stamina cost.");
+            _heavensRadius = Config.Bind("Priest Heavens Judgement", "Radius", 10f, "Self/Cross-centered barrage radius.");
+            _heavensWindup = Config.Bind("Priest Heavens Judgement", "Windup", 1.5f, "Ground-circle warning time before the holy barrage.");
+            _heavensDuration = Config.Bind("Priest Heavens Judgement", "BarrageDuration", 1.5f, "Duration of the Holy Beam barrage.");
+            _heavensStrikeInterval = Config.Bind("Priest Heavens Judgement", "StrikeInterval", 0.25f, "Spacing between Holy Beam waves.");
+            _heavensStrikesPerWave = Config.Bind("Priest Heavens Judgement", "BeamsPerWave", 4, "Holy Beams per wave.");
+            _heavensStrikeRadius = Config.Bind("Priest Heavens Judgement", "BeamImpactRadius", 1.8f, "Damage radius of each Holy Beam.");
+            _heavensFrostDuration = Config.Bind("Priest Heavens Judgement", "FrostDuration", 4f, "Frost duration applied by every Holy Beam hit.");
+            _heavensDamage = BindDamage("Priest Heavens Judgement Damage", 0f, 0f, 0f, 0f, 0f, 22f, 0f, 28f);
+
+            _tempestCooldown = Config.Bind("Priest Lightning Tempest", "Cooldown", 45f, "Seconds.");
+            _tempestStamina = Config.Bind("Priest Lightning Tempest", "StaminaCost", 60f, "Stamina cost.");
+            _tempestRadius = Config.Bind("Priest Lightning Tempest", "Radius", 8f, "Framework storm radius: literal 8m.");
+            _tempestRange = Config.Bind("Priest Lightning Tempest", "Range", 50f, "Ground PAC cast distance in literal meters.");
+            _tempestDuration = Config.Bind("Priest Lightning Tempest", "Duration", 10f, "Framework duration.");
+            _tempestStrikeInterval = Config.Bind("Priest Lightning Tempest", "StrikeInterval", 0.35f, "Testing/default spacing between strike batches.");
+            _tempestMaxStrikes = Config.Bind("Priest Lightning Tempest", "MaxSimultaneousStrikes", 7, "Framework maximum simultaneous strikes.");
+            _tempestZapDamage = Config.Bind("Priest Lightning Tempest", "ZapExplosionLightningDamage", 0f, "0 uses Combat Runtime Zap default.");
+            _tempestDamage = BindDamage("Priest Lightning Tempest Damage v2", 0f, 0f, 0f, 0f, 0f, 18f, 0f, 0f);
+            _tempestSpiritDot = Config.Bind("Priest Lightning Tempest", "SpiritDotPerSecond", 8f, "Refreshing Spirit Burn damage per second.");
+            _tempestFireDot = Config.Bind("Priest Lightning Tempest", "FireDotPerSecond", 5f, "Refreshing Fire Burn damage per second.");
+            _tempestFrostDuration = Config.Bind("Priest Lightning Tempest", "FrostDuration", 3f, "Frost duration refreshed by every strike.");
+            _tempestFireDuration = Config.Bind("Priest Lightning Tempest", "FireDuration", 4f, "Fire Burn duration refreshed by every strike.");
+            _tempestSpiritDuration = Config.Bind("Priest Lightning Tempest", "SpiritDuration", 4f, "Spirit Burn duration refreshed by every strike.");
+            _tempestExposeDuration = Config.Bind("Priest Lightning Tempest", "ExposeDuration", 15f, "Expose duration refreshed by every strike.");
+
+            _priestMartialSkillBonus = Config.Bind("Priest Grand Sigil", "MartialSkillBonus", 20f, "Effective Clubs/Maces skill bonus when Martial is chosen.");
+            _priestElementalBonus = Config.Bind("Priest Grand Sigil", "ElementalDamagePercent", 20f, "Elemental magic damage bonus.");
+            _grandProcChance = Config.Bind("Priest Grand Sigil", "LegacyPassiveBarrierProcChance", 0f, "Legacy v0.6 setting. Grand Sigil now uses the framework death-save behavior instead.");
+            _grandProcReduction = Config.Bind("Priest Grand Sigil", "LegacyPassiveBarrierReductionPercent", 0f, "Legacy v0.6 setting. Unused.");
+            _grandCooldown = Config.Bind("Priest Grand Sigil", "ActiveCooldown", 60f, "Seconds. Testing override forces 5 seconds.");
+            _grandStamina = Config.Bind("Priest Grand Sigil", "ActiveStaminaCost", 35f, "Stamina cost.");
+            _grandRadius = Config.Bind("Priest Grand Sigil", "ActiveRadius", 5f, "Framework ally barrier radius: literal 5m.");
+            _grandBarrierHp = Config.Bind("Priest Grand Sigil", "BarrierHP", 300f, "Framework barrier hit points.");
+            _grandBarrierDuration = Config.Bind("Priest Grand Sigil", "BarrierDuration", 30f, "Testing/default maximum barrier lifetime because the framework does not state one.");
+            _grandWindup = Config.Bind("Priest Grand Sigil", "ActiveWindup", 1.5f, "Framework active windup.");
+
+            _defaultPaladinVitality = Config.Bind("Passive Choices", "LegacyPaladinVitalityDefault", "Health", "Legacy Heart of Glory setting retained for config compatibility.");
+            _defaultPaladinOffense = Config.Bind("Passive Choices", "LegacyPaladinOffenseDefault", "Martial", "Legacy Heart of Glory setting retained for config compatibility.");
+            _defaultPriestOffense = Config.Bind("Passive Choices", "PriestOffenseDefault", "Martial", "Martial or Elemental.");
+
+            _sharedCrossCastRange = Config.Bind("Targeting", "SharedCrossGroundPACRange", 35f, "Shared cross-selection range used by Priest Cross Cast skills and physical Cross targeting.");
+            _acrobaticAscentLift = Config.Bind("Acrobatic Jump Skills", "LegacyAscentHangAcceleration", 4f, "Legacy compatibility value. v0.10.8 uses a guaranteed scripted ascent so Valheim cannot cancel the jump at takeoff.");
+            _acrobaticJumpHeight = Config.Bind("Acrobatic Jump Skills", "JumpHeight", 2f, "Guaranteed cinematic jump height above the takeoff point before committed descent.");
+
+            // v0.10.0 scale migration: known old defaults only.
+            // Range values are framework center-to-edge meters; VFX now reach and hold the true radius like the DirtyHoe grid reference.
+            MigrateFloat(_moonLength, 100f, 25f);
+            MigrateFloat(_moonSpeed, 42f, 20f);
+            MigrateFloat(_crescentRange, 30f, 15f);
+            MigrateFloat(_crescentTravelTime, 1.1f, 3f);
+            MigrateFloat(_stompRadius, 16f, 3f);
+            MigrateFloat(_stompRadius, 8f, 3f);
+            MigrateFloat(_stompRadius, 4f, 3f);
+            MigrateFloat(_boneWindup, 2f, 1.5f);
+            MigrateFloat(_boneRadius, 10f, 5f);
+            MigrateFloat(_whirlwindRadius, 4f, 2f);
+            MigrateFloat(_goddessRadius, 14f, 7f);
+            MigrateFloat(_goddessRange, 100f, 50f);
+            MigrateFloat(_divineRadius, 10f, 5f);
+            MigrateFloat(_divineTrailRange, 20f, 10f);
+            MigrateFloat(_lightningRelicRadius, 7f, 10f);
+            MigrateFloat(_lightningRelicRange, 50f, 35f);
+            MigrateFloat(_lightningRelicDuration, 12f, 16f);
+            MigrateFloat(_holyRelicRadius, 7f, 10f);
+            MigrateFloat(_holyRelicRange, 50f, 35f);
+            MigrateFloat(_interventionRadius, 7f, 10f);
+            MigrateFloat(_tempestRadius, 16f, 8f);
+            MigrateFloat(_tempestRange, 100f, 50f);
+            MigrateFloat(_grandRadius, 10f, 5f);
+
+            TryInstallPatches();
+
+            Logger.LogInfo(ModName + " v" + ModVersion + " loaded.");
+            Logger.LogInfo("Advancement skills, passives, unified HUD and Skillbook are ready.");
+        }
+
+        private void OnDestroy()
+        {
+            EndShieldCharge();
+            if (_harmony != null)
+            {
+                try
+                {
+                    _harmony.UnpatchSelf();
+                }
+                catch
+                {
+                }
+            }
+
+            if (_skillbookOpen)
+            {
+                RestoreCursor();
+                DragonCombat.SetUiInputBlocked(false);
+            }
+        }
+
+        private void MigrateFloat(ConfigEntry<float> entry, float oldValue, float newValue)
+        {
+            if (entry != null && Mathf.Approximately(entry.Value, oldValue))
+                entry.Value = newValue;
+        }
+
+        private DamageConfig BindDamage(string section, float blunt, float slash, float pierce, float fire, float frost, float lightning, float poison, float spirit)
+        {
+            DamageConfig cfg = new DamageConfig();
+            cfg.Blunt = Config.Bind(section, "Blunt", blunt, "Blunt damage.");
+            cfg.Slash = Config.Bind(section, "Slash", slash, "Slash damage.");
+            cfg.Pierce = Config.Bind(section, "Pierce", pierce, "Pierce damage.");
+            cfg.Fire = Config.Bind(section, "Fire", fire, "Fire damage.");
+            cfg.Frost = Config.Bind(section, "Frost", frost, "Frost damage.");
+            cfg.Lightning = Config.Bind(section, "Lightning", lightning, "Lightning damage.");
+            cfg.Poison = Config.Bind(section, "Poison", poison, "Poison damage.");
+            cfg.Spirit = Config.Bind(section, "Spirit", spirit, "Spirit damage.");
+            return cfg;
+        }
+
+        private void Update()
+        {
+            UpdateRefreshingDots();
+
+            Player player = Player.m_localPlayer;
+            if (player == null)
+                return;
+
+            if (_skillbookOpen && Input.GetKeyDown(KeyCode.Escape))
+            {
+                ToggleSkillbook();
+                return;
+            }
+
+            if (Input.GetKeyDown(_skillbookKey.Value))
+            {
+                if (_skillbookOpen)
+                    ToggleSkillbook();
+                else if (!Plugin.IsClassPanelOpen && !DragonCombat.IsGameplayHudSuppressed())
+                    ToggleSkillbook();
+            }
+
+            string advancement = GetAdvancement(player);
+            UpdateCombatRuntimeState(player, advancement);
+            CleanupTimedStates();
+            UpdateMercenaryFuryState(player, advancement);
+
+            if (advancement == "Mercenary" && Time.time >= _nextAggroPulse)
+            {
+                _nextAggroPulse = Time.time + 2f;
+                EncourageAggro(player, Mathf.Max(1f, _mercAggroRadius.Value));
+            }
+
+            if (_skillbookOpen)
+                return;
+
+            if (!Input.GetKey(_modifier.Value))
+                return;
+
+            if (Input.GetKeyDown(_skill4.Value))
+            {
+                if (advancement == "Sword Master")
+                    CastMoonlightSplitter(player);
+                else if (advancement == "Mercenary")
+                    CastStomp(player);
+                else if (advancement == "Paladin")
+                    CastGoddessRelic(player);
+                else if (advancement == "Priest")
+                    CastLightningRelic(player);
+            }
+
+            if (Input.GetKeyDown(_skill5.Value))
+            {
+                if (advancement == "Sword Master")
+                    CastCrescentCleave(player);
+                else if (advancement == "Mercenary")
+                    CastBonecrusher(player);
+                else if (advancement == "Paladin")
+                    CastRayOfHope(player);
+                else if (advancement == "Priest")
+                    CastHolyRelic(player);
+            }
+
+            if (Input.GetKeyDown(_passiveActive.Value))
+            {
+                if (advancement == "Mercenary")
+                    ActivateBarbaric(player);
+                else if (advancement == "Priest")
+                    ActivateGrandSigil(player);
+            }
+
+            // Advancement classes use five numbered skills plus an Ultimate on the last numbered hotkey.
+            if (Input.GetKeyDown(_ultimate.Value))
+            {
+                if (advancement == "Sword Master")
+                    CastJudgementCut(player);
+                else if (advancement == "Mercenary")
+                    CastCircleSwing(player);
+                else if (advancement == "Paladin")
+                {
+                    // M4+6 only STARTS Shield Charge. It is never a recast button.
+                    // Left Click is the dedicated manual Shield Bash input while charging.
+                    if (!_shieldChargeActive)
+                        CastShieldCharge(player);
+                }
+                else if (advancement == "Priest")
+                    CastDivineIntervention(player);
+            }
+
+            if (Input.GetKeyDown(_skill7.Value))
+            {
+                if (advancement == "Sword Master")
+                    CastSeveredHorizon(player);
+                else if (advancement == "Paladin")
+                    CastDivineVerdict(player);
+                else if (advancement == "Mercenary")
+                    CastSeismicGuillotine(player);
+                else if (advancement == "Priest")
+                    CastGrandCross(player);
+            }
+
+            if (Input.GetKeyDown(_skill8.Value))
+            {
+                if (advancement == "Sword Master")
+                    CastEmptySheath(player);
+                else if (advancement == "Paladin")
+                    CastAegisFall(player);
+                else if (advancement == "Mercenary")
+                    CastReaversOrbit(player);
+                else if (advancement == "Priest")
+                    CastHeavensJudgement(player);
+            }
+
+            if (Input.GetKeyDown(_skill9.Value))
+            {
+                if (advancement == "Sword Master")
+                    CastHalfmoonSlash(player);
+                else if (advancement == "Paladin")
+                    CastElectricSmite(player);
+                else if (advancement == "Mercenary")
+                    CastWhirlwind(player);
+                else if (advancement == "Priest")
+                    CastLightningTempest(player);
+            }
+        }
+
+        private void CastMoonlightSplitter(Player player)
+        {
+            const string id = "SwordMaster.MoonlightSplitter";
+            if (!BeginCast(player, id, _moonCooldown.Value, _moonStamina.Value))
+                return;
+
+            float windup = DragonCombat.ScaleWindup(player, 1f);
+            DragonCombat.LockSkill(player, windup + 1.05f);
+            DragonCombat.PlaySkillPose(player, "Moonlight", windup + 1.10f);
+            StartCoroutine(MoonlightRoutine(player, windup));
+        }
+
+        private IEnumerator MoonlightRoutine(Player player, float windup)
+        {
+            ShowMessage("Moonlight Splitter");
+            if (windup > 0f)
+                yield return new WaitForSeconds(windup);
+
+            float range = Mathf.Max(1f, _moonLength.Value);
+            float width = Mathf.Max(0.5f, _moonWidth.Value);
+
+            for (int slash = 0; slash < 3; slash++)
+            {
+                if (player == null || player.IsDead())
+                    yield break;
+
+                DragonCombat.PlaySkillPose(player, "Moonlight", 0.32f);
+                Vector3 origin = player.GetEyePoint() + player.transform.up * -0.25f;
+                Vector3 forward = AlbedoAimUtility.GetProjectileDirection(player, origin);
+                StartCoroutine(GhostSlashProjectile(player, origin, forward, range, width, _moonSpeed.Value, _moonDamage));
+
+                if (slash < 2)
+                    yield return new WaitForSeconds(0.5f);
+            }
+        }
+
+        private IEnumerator GhostSlashProjectile(Player player, Vector3 origin, Vector3 forward, float range, float width, float speed, DamageConfig damage)
+        {
+            if (forward.sqrMagnitude < 0.01f)
+                forward = player.transform.forward;
+            forward.Normalize();
+            speed = Mathf.Max(1f, speed);
+            range = Mathf.Max(1f, range);
+            width = Mathf.Max(0.5f, width);
+
+            Vector3 right = Vector3.Cross(Vector3.up, forward).normalized;
+            if (right.sqrMagnitude < 0.01f)
+                right = Vector3.right;
+
+            GameObject visual = null;
+            LineRenderer line = null;
+            if (_enableVfx.Value)
+            {
+                visual = new GameObject("DragonsAltarMoonlightGhost");
+                line = visual.AddComponent<LineRenderer>();
+                line.useWorldSpace = true;
+                line.positionCount = 2;
+                line.startWidth = 0.48f;
+                line.endWidth = 0.24f;
+                line.startColor = new Color(0.45f, 0.78f, 1f, 1f);
+                line.endColor = new Color(0.88f, 0.97f, 1f, 0.9f);
+                Shader shader = Shader.Find("Sprites/Default");
+                if (shader != null)
+                    line.material = new Material(shader);
+            }
+
+            HashSet<Character> hitTargets = new HashSet<Character>();
+            float distance = 0f;
+            while (distance < range)
+            {
+                if (player == null)
+                    break;
+
+                distance = Mathf.Min(range, distance + speed * Time.deltaTime);
+                Vector3 center = origin + forward * distance;
+
+                Collider[] hits = Physics.OverlapBox(center, new Vector3(width * 0.5f, 1.2f, 0.35f), Quaternion.LookRotation(forward, Vector3.up));
+                for (int i = 0; i < hits.Length; i++)
+                {
+                    Character target = hits[i].GetComponentInParent<Character>();
+                    if (target == null || hitTargets.Contains(target) || !IsEnemy(player, target))
+                        continue;
+                    hitTargets.Add(target);
+                    DealDamage(player, target, damage, 8f, false);
+                }
+
+                if (line != null)
+                {
+                    line.SetPosition(0, center - right * width * 0.5f);
+                    line.SetPosition(1, center + right * width * 0.5f);
+                }
+
+                // Ghost projectile: terrain and structures do not shorten its full configured range.
+                yield return null;
+            }
+
+            if (visual != null)
+                Destroy(visual);
+        }
+
+        private void CastCrescentCleave(Player player)
+        {
+            const string id = "SwordMaster.CrescentCleave";
+            if (!BeginCast(player, id, _crescentCooldown.Value, _crescentStamina.Value))
+                return;
+
+            float windup = DragonCombat.ScaleWindup(player, 1f);
+            DragonCombat.LockSkill(player, windup);
+            DragonCombat.PlaySkillPose(player, "Crescent", windup + 0.10f);
+            StartCoroutine(CrescentCleaveRoutine(player, windup));
+        }
+
+        private IEnumerator CrescentCleaveRoutine(Player player, float windup)
+        {
+            ShowMessage("Crescent Cleave");
+
+            if (windup > 0f)
+                yield return new WaitForSeconds(windup);
+
+            if (player == null || player.IsDead())
+                yield break;
+
+            Vector3 baseForward = AlbedoAimUtility.GetProjectileDirection(
+                player,
+                player.transform.position + Vector3.up * 0.5f
+            );
+
+            baseForward.y = 0f;
+
+            if (baseForward.sqrMagnitude < 0.01f)
+                baseForward = player.transform.forward;
+
+            baseForward.y = 0f;
+
+            if (baseForward.sqrMagnitude < 0.01f)
+                baseForward = Vector3.forward;
+
+            baseForward.Normalize();
+
+            float totalSpread = Mathf.Clamp(_crescentSpreadAngle.Value, 8f, 140f);
+            float halfSpread = totalSpread * 0.5f;
+
+            // Five rays: one straight center slash plus four spreading slashes.
+            float[] angles = new float[]
+            {
+                -halfSpread,
+                -halfSpread * 0.5f,
+                 0f,
+                 halfSpread * 0.5f,
+                 halfSpread
+            };
+
+            float range = Mathf.Max(1f, _crescentRange.Value);
+            float width = Mathf.Max(0.25f, _crescentSlashWidth.Value);
+            float height = Mathf.Max(1f, _crescentSlashHeight.Value);
+            float travelTime = Mathf.Max(0.20f, _crescentTravelTime.Value);
+            Vector3 origin = player.transform.position + baseForward * 0.45f;
+
+            for (int i = 0; i < angles.Length; i++)
+            {
+                Vector3 direction = Quaternion.AngleAxis(angles[i], Vector3.up) * baseForward;
+
+                StartCoroutine(
+                    CrescentVerticalSlashWave(
+                        player,
+                        origin,
+                        direction,
+                        range,
+                        width,
+                        height,
+                        travelTime
+                    )
+                );
+            }
+        }
+
+        private void CastJudgementCut(Player player)
+        {
+            if (Time.time < _judgementNextCastAt)
+                return;
+
+            int chargeIndex = GetReadyJudgementChargeIndex();
+            if (chargeIndex < 0)
+            {
+                ShowMessage("Judgement Cut recharge: " + GetJudgementNextRecharge().ToString("0.0") + "s");
+                return;
+            }
+
+            float stamina = Mathf.Max(0f, _judgementStamina.Value);
+            if (GetStamina(player) < stamina)
+            {
+                ShowMessage("Not enough stamina");
+                return;
+            }
+
+            UseStamina(player, stamina);
+            float recharge = Mathf.Max(0f, _judgementCooldown.Value);
+            _judgementChargeReadyAt[chargeIndex] = Time.time + recharge;
+            _judgementNextCastAt = Time.time + Mathf.Max(0f, _judgementBuffer.Value);
+
+            Vector3 point = GetAimPoint(player, Mathf.Max(1f, _judgementRange.Value));
+            DragonCombat.LockSkill(player, 0.40f);
+            DragonCombat.PlaySkillPose(player, "Moonlight", 0.45f);
+            StartCoroutine(JudgementCutRoutine(player, point));
+        }
+
+        private IEnumerator JudgementCutRoutine(Player player, Vector3 point)
+        {
+            ShowMessage("Judgement Cut");
+            float radius = Mathf.Max(0.5f, _judgementRadius.Value);
+            float slashDamage = Mathf.Max(0f, _judgementSlashDamage.Value);
+
+            if (player == null || player.IsDead())
+                yield break;
+
+            // OG-style Judgement Cut: all three cuts resolve on the same frame.
+            // Damage and the three sphere-cut visuals are simultaneous; only the existing
+            // per-stack recharge and 0.5s activation buffer govern repeated casts.
+            for (int slash = 0; slash < 3; slash++)
+            {
+                List<Character> targets = GetSphereTargets(player, point, radius);
+                for (int i = 0; i < targets.Count; i++)
+                {
+                    HitData hit = new HitData();
+                    hit.m_damage.m_slash = slashDamage;
+                    hit.m_point = targets[i].transform.position;
+                    hit.m_dir = (targets[i].transform.position - point).normalized;
+                    hit.m_pushForce = 0f;
+                    hit.SetAttacker(player);
+                    targets[i].Damage(hit);
+                }
+
+                if (_enableVfx.Value)
+                    StartCoroutine(AnimateJudgementSphereCut(point, radius, slash));
+            }
+
+            yield break;
+        }
+
+        private int GetReadyJudgementChargeIndex()
+        {
+            for (int i = 0; i < _judgementChargeReadyAt.Length; i++)
+            {
+                if (Time.time >= _judgementChargeReadyAt[i])
+                    return i;
+            }
+            return -1;
+        }
+
+        private int GetJudgementReadyChargeCount()
+        {
+            int ready = 0;
+            for (int i = 0; i < _judgementChargeReadyAt.Length; i++)
+            {
+                if (Time.time >= _judgementChargeReadyAt[i])
+                    ready++;
+            }
+            return ready;
+        }
+
+        private float GetJudgementNextRecharge()
+        {
+            int ready = GetJudgementReadyChargeCount();
+            if (ready >= _judgementChargeReadyAt.Length)
+                return 0f;
+
+            float smallest = float.MaxValue;
+            for (int i = 0; i < _judgementChargeReadyAt.Length; i++)
+            {
+                float remaining = _judgementChargeReadyAt[i] - Time.time;
+                if (remaining > 0f && remaining < smallest)
+                    smallest = remaining;
+            }
+            return smallest == float.MaxValue ? 0f : Mathf.Max(0f, smallest);
+        }
+
+        private IEnumerator AnimateJudgementSphereCut(Vector3 center, float radius, int slash)
+        {
+            Vector3 axisA = Vector3.right;
+            Vector3 axisB = Vector3.forward;
+            if (slash == 1)
+            {
+                axisA = Vector3.right;
+                axisB = Vector3.up;
+            }
+            else if (slash == 2)
+            {
+                axisA = Vector3.forward;
+                axisB = Vector3.up;
+            }
+
+            GameObject obj = new GameObject("DragonsAltarJudgementCut");
+            LineRenderer line = obj.AddComponent<LineRenderer>();
+            line.useWorldSpace = true;
+            line.loop = true;
+            line.positionCount = 49;
+            line.startWidth = 0.11f;
+            line.endWidth = 0.11f;
+            Color color = new Color(0.72f, 0.82f, 1f, 0.95f);
+            line.startColor = color;
+            line.endColor = color;
+            Shader shader = Shader.Find("Sprites/Default");
+            if (shader != null)
+                line.material = new Material(shader);
+
+            float elapsed = 0f;
+            const float duration = 0.34f;
+            while (elapsed < duration)
+            {
+                float t = elapsed / duration;
+                float visualRadius = radius * Mathf.Lerp(0.72f, 1f, Mathf.Clamp01(t * 3f));
+                Color frame = color;
+                frame.a = color.a * (1f - Mathf.Clamp01(t));
+                line.startColor = frame;
+                line.endColor = frame;
+
+                for (int i = 0; i < line.positionCount; i++)
+                {
+                    float angle = ((float)i / (float)(line.positionCount - 1)) * Mathf.PI * 2f;
+                    line.SetPosition(i, center + axisA * Mathf.Cos(angle) * visualRadius + axisB * Mathf.Sin(angle) * visualRadius);
+                }
+
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+            Destroy(obj);
+        }
+
+        private void CastSeveredHorizon(Player player)
+        {
+            const string id = "SwordMaster.SeveredHorizon";
+            if (!BeginCast(player, id, _severedCooldown.Value, _severedStamina.Value))
+                return;
+
+            Vector3 origin = player.transform.position + Vector3.up * 0.9f;
+            Vector3 forward = GetCrosshairDirection(player, origin);
+            forward.y = 0f;
+            if (forward.sqrMagnitude < 0.01f)
+                forward = player.transform.forward;
+            forward.Normalize();
+
+            float range = Mathf.Max(1f, _severedRange.Value);
+            Vector3 start = player.transform.position + forward * 0.8f + Vector3.up * 0.9f;
+            Vector3 end = start + forward * range;
+
+            DragonCombat.LockSkill(player, 0.30f);
+            DragonCombat.PlaySkillPose(player, "Moonlight", 0.36f);
+            StartCoroutine(SeveredHorizonRoutine(player, start, end));
+        }
+
+        private IEnumerator SeveredHorizonRoutine(Player player, Vector3 start, Vector3 end)
+        {
+            ShowMessage("Severed Horizon");
+            float delay = Mathf.Max(0.05f, _severedDelay.Value);
+            float width = Mathf.Max(0.25f, _severedWidth.Value);
+
+            if (_enableVfx.Value)
+                StartCoroutine(AnimateSeveredHorizonLine(start, end, width, delay));
+
+            yield return new WaitForSeconds(delay);
+            if (player == null || player.IsDead())
+                yield break;
+
+            Collider[] hits = Physics.OverlapCapsule(start, end, width * 0.5f, ~0, QueryTriggerInteraction.Ignore);
+            HashSet<Character> damaged = new HashSet<Character>();
+            for (int i = 0; i < hits.Length; i++)
+            {
+                Character target = hits[i].GetComponentInParent<Character>();
+                if (target == null || damaged.Contains(target) || !IsEnemy(player, target))
+                    continue;
+                damaged.Add(target);
+                DealDamage(player, target, _severedDamage, 0f, false);
+            }
+
+            if (_enableVfx.Value)
+            {
+                Vector3 midpoint = (start + end) * 0.5f;
+                StartCoroutine(AnimateRing(midpoint - Vector3.up * 0.82f, 0.2f, Mathf.Max(1f, width * 1.5f), 0.28f,
+                    new Color(0.72f, 0.86f, 1f, 0.92f), 0.08f));
+            }
+        }
+
+        private IEnumerator AnimateSeveredHorizonLine(Vector3 start, Vector3 end, float width, float delay)
+        {
+            GameObject obj = new GameObject("DragonsAltarSeveredHorizon");
+            LineRenderer line = obj.AddComponent<LineRenderer>();
+            line.useWorldSpace = true;
+            line.positionCount = 2;
+            line.SetPosition(0, start);
+            line.SetPosition(1, end);
+            line.startWidth = Mathf.Max(0.05f, width * 0.08f);
+            line.endWidth = line.startWidth;
+            Color color = new Color(0.70f, 0.86f, 1f, 0.92f);
+            line.startColor = color;
+            line.endColor = color;
+            Shader shader = Shader.Find("Sprites/Default");
+            if (shader != null)
+                line.material = new Material(shader);
+
+            float elapsed = 0f;
+            while (elapsed < delay)
+            {
+                float t = Mathf.Clamp01(elapsed / delay);
+                float pulse = Mathf.Lerp(0.06f, Mathf.Max(0.10f, width * 0.18f), t);
+                line.startWidth = pulse;
+                line.endWidth = pulse;
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+
+            line.startWidth = Mathf.Max(0.16f, width * 0.34f);
+            line.endWidth = line.startWidth;
+            yield return new WaitForSeconds(0.12f);
+            Destroy(obj);
+        }
+
+        private void CastEmptySheath(Player player)
+        {
+            const string id = "SwordMaster.EmptySheath";
+            if (!BeginCast(player, id, _emptyCooldown.Value, _emptyStamina.Value))
+                return;
+
+            _emptySheathCounterUntil = Time.time + Mathf.Max(0.1f, _emptyCounterWindow.Value);
+            DragonCombat.LockSkill(player, 0.12f);
+            DragonCombat.PlaySkillPose(player, "EmptySheath", Mathf.Max(0.18f, _emptyCounterWindow.Value));
+            ShowMessage("Empty Sheath");
+
+            if (_enableVfx.Value)
+                StartCoroutine(AnimateRing(player.transform.position + Vector3.up * 0.05f, 0.5f, 1.8f,
+                    Mathf.Max(0.18f, _emptyCounterWindow.Value), new Color(0.78f, 0.88f, 1f, 0.75f), 0.07f));
+        }
+
+        private IEnumerator EmptySheathCounterRoutine(Player player, Character attacker)
+        {
+            if (player == null || attacker == null || player.IsDead() || attacker.IsDead())
+                yield break;
+
+            ShowMessage("Empty Sheath - COUNTER");
+            Vector3 attackerForward = attacker.transform.forward;
+            attackerForward.y = 0f;
+            if (attackerForward.sqrMagnitude < 0.01f)
+                attackerForward = (attacker.transform.position - player.transform.position).normalized;
+            if (attackerForward.sqrMagnitude < 0.01f)
+                attackerForward = Vector3.forward;
+            attackerForward.Normalize();
+
+            Vector3 destination = attacker.transform.position - attackerForward * Mathf.Max(0.5f, _emptyBehindDistance.Value);
+            RaycastHit groundHit;
+            if (Physics.Raycast(destination + Vector3.up * 3f, Vector3.down, out groundHit, 7f, ~0, QueryTriggerInteraction.Ignore))
+                destination.y = groundHit.point.y + 0.06f;
+            else
+                destination.y = player.transform.position.y;
+
+            Rigidbody body = player.GetComponent<Rigidbody>();
+            if (body != null)
+            {
+                body.velocity = Vector3.zero;
+                body.position = destination;
+            }
+            player.transform.position = destination;
+
+            Vector3 face = attacker.transform.position - destination;
+            face.y = 0f;
+            if (face.sqrMagnitude > 0.01f)
+                player.transform.rotation = Quaternion.LookRotation(face.normalized, Vector3.up);
+
+            yield return new WaitForSeconds(0.18f);
+
+            int cuts = Mathf.Clamp(_emptyCutCount.Value, 1, 12);
+            float interval = Mathf.Max(0.03f, _emptyCutInterval.Value);
+            float slashDamage = Mathf.Max(0f, _emptySlashDamage.Value);
+            for (int i = 0; i < cuts; i++)
+            {
+                if (player == null || attacker == null || player.IsDead() || attacker.IsDead())
+                    yield break;
+
+                HitData hit = new HitData();
+                hit.m_damage.m_slash = slashDamage;
+                hit.m_point = attacker.transform.position;
+                hit.m_dir = (attacker.transform.position - player.transform.position).normalized;
+                hit.m_pushForce = 0f;
+                hit.SetAttacker(player);
+                attacker.Damage(hit);
+
+                if (_enableVfx.Value)
+                    StartCoroutine(AnimateJudgementSphereCut(attacker.transform.position + Vector3.up * 0.9f, 2.2f, i % 3));
+
+                if (i < cuts - 1)
+                    yield return new WaitForSeconds(interval);
+            }
+        }
+
+        private void CastHalfmoonSlash(Player player)
+        {
+            const string id = "SwordMaster.HalfmoonSlash";
+            if (!BeginCast(player, id, _halfmoonCooldown.Value, _halfmoonStamina.Value))
+                return;
+
+            float windup = DragonCombat.ScaleWindup(player, 2f);
+            DragonCombat.LockSkill(player, windup);
+            DragonCombat.PlaySkillPose(player, "Halfmoon", windup + 0.12f);
+            StartCoroutine(HalfmoonRoutine(player, windup));
+        }
+
+        private IEnumerator HalfmoonRoutine(Player player, float windup)
+        {
+            ShowMessage("Halfmoon Slash");
+            if (windup > 0f)
+                yield return new WaitForSeconds(windup);
+
+            if (player == null || player.IsDead())
+                yield break;
+
+            float radius = Mathf.Max(2f, _halfmoonRadius.Value);
+            Vector3 forward = AlbedoAimUtility.GetProjectileDirection(player, player.transform.position + Vector3.up * 1f);
+            forward.y = 0f;
+            if (forward.sqrMagnitude < 0.01f)
+                forward = player.transform.forward;
+            forward.Normalize();
+
+            ApplyHalfmoonHit(player, forward, radius, 1f);
+            if (_enableVfx.Value)
+                StartCoroutine(AnimateHalfmoonArc(player.transform.position + Vector3.up * 0.9f, forward, radius));
+
+            yield return new WaitForSeconds(Mathf.Clamp(_halfmoonSecondSlashDelay.Value, 0.10f, 2f));
+            ApplyHalfmoonHit(player, forward, radius, 0.5f);
+            if (_enableVfx.Value)
+                StartCoroutine(AnimateHalfmoonArc(player.transform.position + Vector3.up * 1.05f, forward, radius * 0.92f));
+        }
+
+        private void ApplyHalfmoonHit(Player player, Vector3 forward, float radius, float multiplier)
+        {
+            List<Character> targets = GetFrontalTargets(player, player.transform.position + Vector3.up * 0.8f, forward, radius, 170f);
+            for (int i = 0; i < targets.Count; i++)
+            {
+                DealScaledDamage(player, targets[i], _halfmoonDamage, 26f, multiplier);
+                StartCoroutine(SpiritDot(player, targets[i], _halfmoonSpiritDot.Value * multiplier, _halfmoonSpiritDuration.Value));
+                DragonCombat.Stun(targets[i], player.transform.position);
+            }
+        }
+
+        private void ActivateSwordMastery(Player player)
+        {
+            const string id = "SwordMaster.SwordMastery";
+            if (!BeginCast(player, id, _swordActiveCooldown.Value, 0f))
+                return;
+
+            const float activationTime = 1f;
+
+            // Boss-power style activation: lock for one second, play Valheim's
+            // Guardian/Boss Power activation trigger, THEN start the 10s buff.
+            DragonCombat.LockSkill(player, activationTime);
+            DragonCombat.PlayAnimation(player, "gpower");
+            StartCoroutine(SwordMasteryActivationRoutine(player, activationTime));
+        }
+
+        private IEnumerator SwordMasteryActivationRoutine(Player player, float activationTime)
+        {
+            ShowMessage("Sword Mastery - Activating");
+
+            if (activationTime > 0f)
+                yield return new WaitForSeconds(activationTime);
+
+            if (player == null || player.IsDead())
+                yield break;
+
+            _swordActiveUntil = Time.time + Mathf.Max(0.1f, _swordActiveDuration.Value);
+            ShowMessage("Sword Mastery");
+
+            if (_enableVfx.Value)
+                StartCoroutine(
+                    AnimateAura(
+                        player,
+                        new Color(0.45f, 0.82f, 1f, 0.9f),
+                        Mathf.Max(0.1f, _swordActiveDuration.Value)
+                    )
+                );
+        }
+
+        private void CastStomp(Player player)
+        {
+            const string id = "Mercenary.Stomp";
+            if (!BeginCast(player, id, _stompCooldown.Value, _stompStamina.Value))
+                return;
+
+            float windup = Mathf.Max(0f, _stompWindup.Value);
+            DragonCombat.LockSkill(player, 1f);
+            DragonCombat.PlaySkillPose(player, "Stomp", Mathf.Max(0.65f, windup + 0.15f));
+            StartCoroutine(StompRoutine(player, windup));
+        }
+
+        private IEnumerator StompRoutine(Player player, float windup)
+        {
+            ShowMessage("Stomp");
+            if (windup > 0f)
+                yield return new WaitForSeconds(windup);
+            if (player == null || player.IsDead())
+                yield break;
+
+            Vector3 center = player.transform.position;
+            float firstRadius = Mathf.Max(0.5f, _stompRadius.Value);
+            List<Character> firstTargets = GetSphereTargets(player, center, firstRadius);
+            for (int i = 0; i < firstTargets.Count; i++)
+            {
+                DealDamage(player, firstTargets[i], _stompDamage, 24f, false);
+                GainMercenaryFuryFromSkillHit(player);
+                if (DragonCombat.IsSmallEnemy(firstTargets[i]))
+                    DragonCombat.Stun(firstTargets[i], center);
+            }
+            if (_enableVfx.Value)
+                StartCoroutine(AnimateRing(center + Vector3.up * 0.08f, 0.4f, firstRadius, 0.55f, new Color(0.78f, 0.50f, 0.22f, 1f), 0.14f));
+
+            float delay = Mathf.Max(0f, _stompAftershockDelay.Value);
+            if (delay > 0f)
+                yield return new WaitForSeconds(delay);
+            if (player == null || player.IsDead())
+                yield break;
+
+            float aftershockRadius = Mathf.Max(firstRadius, _stompAftershockRadius.Value);
+            List<Character> aftershockTargets = GetSphereTargets(player, center, aftershockRadius);
+            for (int i = 0; i < aftershockTargets.Count; i++)
+            {
+                DealDamage(player, aftershockTargets[i], _stompDamage, 30f, false);
+                GainMercenaryFuryFromSkillHit(player);
+                if (DragonCombat.IsSmallEnemy(aftershockTargets[i]))
+                    DragonCombat.Stun(aftershockTargets[i], center);
+            }
+            if (_enableVfx.Value)
+                StartCoroutine(AnimateRing(center + Vector3.up * 0.10f, firstRadius, aftershockRadius, 0.70f, new Color(0.95f, 0.62f, 0.22f, 1f), 0.18f));
+        }
+
+        private void CastBonecrusher(Player player)
+        {
+            const string id = "Mercenary.Bonecrusher";
+            if (!BeginCast(player, id, _boneCooldown.Value, _boneStamina.Value))
+                return;
+
+            float takeoffDelay = 0.08f;
+            DragonCombat.LockSkill(player, takeoffDelay);
+            DragonCombat.PlaySkillPose(player, "Slam", 8f);
+            StartCoroutine(BonecrusherRoutine(player, takeoffDelay));
+        }
+
+        private IEnumerator BonecrusherRoutine(Player player, float takeoffDelay)
+        {
+            ShowMessage("Bonecrusher");
+            yield return StartCoroutine(AcrobaticJumpUntilLanding(player, takeoffDelay, Mathf.Max(1.5f, _boneWindup.Value)));
+            if (player == null || player.IsDead())
+                yield break;
+
+            DragonCombat.PlaySkillPose(player, "Slam", 0.35f);
+            Vector3 center = player.transform.position;
+            float radius = Mathf.Max(0.5f, _boneRadius.Value);
+            List<Character> targets = GetSphereTargets(player, center, radius);
+            for (int i = 0; i < targets.Count; i++)
+            {
+                DealDamage(player, targets[i], _boneDamage, 34f, true);
+                DragonCombat.ApplyBrokenBones(targets[i], 6f);
+                DragonCombat.ApplyCripple(targets[i], 6f);
+                ForceStagger(targets[i], player);
+                GainMercenaryFuryFromSkillHit(player);
+            }
+            if (_enableVfx.Value)
+                StartCoroutine(AnimateRing(center + Vector3.up * 0.08f, 0.3f, radius, 0.55f, new Color(1f, 0.46f, 0.16f, 1f), 0.17f));
+
+            if (IsUnchainedFuryActive())
+                FuryBonecrusherCone(player, center, FlatForward(player));
+        }
+
+        private void CastCircleSwing(Player player)
+        {
+            const string id = "Mercenary.CircleSwing";
+            if (!BeginCast(player, id, _circleCooldown.Value, _circleStamina.Value))
+                return;
+
+            float windup = Mathf.Max(0.1f, _circleWindup.Value);
+            DragonCombat.LockSkill(player, windup);
+            DragonCombat.GrantHyperArmor(player, windup + 0.25f);
+            DragonCombat.PlaySkillPose(player, "CircleSwing", windup + 0.18f);
+            StartCoroutine(CircleSwingRoutine(player, windup));
+        }
+
+        private IEnumerator CircleSwingRoutine(Player player, float windup)
+        {
+            ShowMessage("Circle Swing");
+            if (player == null || player.IsDead()) yield break;
+
+            Rigidbody rb = player.GetComponent<Rigidbody>();
+            Vector3 forward = FlatForward(player);
+            float maxTravel = Mathf.Max(0f, _circleWindupTravel.Value);
+            float travelled = 0f;
+            float elapsed = 0f;
+
+            // Deliberate heavy-footed wind-up: steerable, but capped to a tiny total shuffle.
+            while (elapsed < windup)
+            {
+                if (player == null || player.IsDead()) yield break;
+
+                float horizontal = Input.GetAxisRaw("Horizontal");
+                float vertical = Input.GetAxisRaw("Vertical");
+                Vector3 steer = player.transform.forward * vertical + player.transform.right * horizontal;
+                steer.y = 0f;
+                if (steer.sqrMagnitude < 0.01f)
+                    steer = FlatForward(player);
+                else
+                    steer.Normalize();
+
+                if (steer.sqrMagnitude > 0.01f)
+                    forward = steer.normalized;
+
+                float remainingTravel = Mathf.Max(0f, maxTravel - travelled);
+                float step = Mathf.Min(remainingTravel, (maxTravel / Mathf.Max(0.05f, windup)) * Time.deltaTime);
+                if (step > 0f)
+                {
+                    Vector3 next = (rb != null ? rb.position : player.transform.position) + forward * step;
+                    if (rb != null) rb.MovePosition(next);
+                    else player.transform.position = next;
+                    travelled += step;
+                }
+
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+
+            if (player == null || player.IsDead()) yield break;
+            Vector3 center = player.transform.position;
+            float radius = Mathf.Max(0.5f, _circleRadius.Value);
+            DamageSnapshot weapon = GetWeaponDamage(player);
+            List<Character> targets = GetSphereTargets(player, center, radius);
+            for (int i = 0; i < targets.Count; i++)
+            {
+                DealSnapshotDamage(player, targets[i], weapon, Mathf.Max(1f, _circleDamageMultiplier.Value), 48f, true);
+                GainMercenaryFuryFromSkillHit(player);
+            }
+
+            if (_enableVfx.Value)
+            {
+                StartCoroutine(AnimateRing(center + Vector3.up * 0.10f, 0.6f, radius, 0.65f, new Color(1f, 0.56f, 0.18f, 1f), 0.20f));
+                StartCoroutine(AnimateHalfmoonArc(center + Vector3.up * 1.0f, forward, radius * 0.95f));
+            }
+        }
+
+        private void CastSeismicGuillotine(Player player)
+        {
+            const string id = "Mercenary.SeismicGuillotine";
+            if (!BeginCast(player, id, _seismicCooldown.Value, _seismicStamina.Value))
+                return;
+
+            DragonCombat.LockSkill(player, 0.45f);
+            DragonCombat.PlaySkillPose(player, "Stomp", 0.55f);
+            StartCoroutine(SeismicGuillotineRoutine(player));
+        }
+
+        private IEnumerator SeismicGuillotineRoutine(Player player)
+        {
+            ShowMessage(IsUnchainedFuryActive() ? "Seismic Guillotine - UNCHAINED" : "Seismic Guillotine");
+            yield return new WaitForSeconds(0.28f);
+            if (player == null || player.IsDead())
+                yield break;
+
+            Vector3 origin = player.transform.position;
+            float maxRange = Mathf.Max(2f, _seismicRange.Value);
+            Vector3 aimPoint = GetAimPoint(player, maxRange);
+            Vector3 aimDelta = aimPoint - origin;
+            aimDelta.y = 0f;
+            Vector3 forward = aimDelta.sqrMagnitude > 0.01f ? aimDelta.normalized : GetCrosshairDirection(player, origin);
+            forward.y = 0f;
+            if (forward.sqrMagnitude < 0.01f) forward = FlatForward(player);
+            forward.Normalize();
+            float range = Mathf.Clamp(aimDelta.magnitude, 0f, maxRange);
+            DamageSnapshot weapon = GetWeaponDamage(player);
+            float width = Mathf.Max(0.75f, _seismicWidth.Value);
+            float fullRangeTravelTime = Mathf.Max(0.05f, _seismicTravelTime.Value);
+            float shockSpeed = maxRange / fullRangeTravelTime;
+            float multiplier = Mathf.Max(0f, _seismicDamageMultiplier.Value);
+            bool fury = IsUnchainedFuryActive();
+            HashSet<int> sharedHits = new HashSet<int>();
+
+            if (fury)
+                width *= 1.75f;
+
+            StartCoroutine(SeismicFissure(player, origin, forward, range, width, shockSpeed, weapon, multiplier, sharedHits, true));
+
+            if (fury)
+            {
+                Vector3 left = Quaternion.AngleAxis(-25f, Vector3.up) * forward;
+                Vector3 right = Quaternion.AngleAxis(25f, Vector3.up) * forward;
+                StartCoroutine(SeismicFissure(player, origin, left, range * 0.82f, width * 0.72f, shockSpeed, weapon, multiplier * 0.75f, sharedHits, false));
+                StartCoroutine(SeismicFissure(player, origin, right, range * 0.82f, width * 0.72f, shockSpeed, weapon, multiplier * 0.75f, sharedHits, false));
+            }
+        }
+
+        private IEnumerator SeismicFissure(Player player, Vector3 origin, Vector3 forward, float range, float width, float shockSpeed, DamageSnapshot weapon, float multiplier, HashSet<int> sharedHits, bool finishingRupture)
+        {
+            forward.y = 0f;
+            if (forward.sqrMagnitude < 0.01f) forward = Vector3.forward;
+            forward.Normalize();
+
+            int groundMask = LayerMask.GetMask("Default", "static_solid", "Default_small", "piece_nonsolid", "terrain", "vehicle", "piece", "viewblock");
+            const float shockSpacing = 1f;
+            const float baseShockRadius = 2f;
+            float safeSpeed = Mathf.Max(0.1f, shockSpeed);
+            float shockRadius = baseShockRadius * (IsUnchainedFuryActive() ? 1.75f : 1f);
+            int shockCount = Mathf.FloorToInt(Mathf.Max(0f, range) / shockSpacing + 0.0001f);
+            float elapsed = 0f;
+
+            for (int shockIndex = 1; shockIndex <= shockCount; shockIndex++)
+            {
+                float shockDistance = shockIndex * shockSpacing;
+                float shockTime = shockDistance / safeSpeed;
+                while (elapsed < shockTime)
+                {
+                    if (player == null || player.IsDead()) yield break;
+                    elapsed += Time.deltaTime;
+                    yield return null;
+                }
+
+                Vector3 shockPoint = GetSeismicGroundPoint(origin + forward * shockDistance, groundMask);
+                Collider[] hits = Physics.OverlapSphere(shockPoint + Vector3.up * 0.75f, shockRadius, ~0, QueryTriggerInteraction.Ignore);
+                for (int i = 0; i < hits.Length; i++)
+                {
+                    Character target = hits[i].GetComponentInParent<Character>();
+                    if (target == null || !IsEnemy(player, target)) continue;
+                    int tid = target.GetInstanceID();
+                    if (!sharedHits.Add(tid)) continue;
+                    DealSnapshotDamage(player, target, weapon, multiplier, 30f, false);
+                    GainMercenaryFuryFromSkillHit(player);
+                    if (DragonCombat.IsSmallEnemy(target))
+                        ApplyMercenaryDisplacement(target, forward * 2.5f + Vector3.up * 6.5f);
+                    else
+                        target.Stagger(forward);
+                }
+
+                if (_enableVfx.Value)
+                    StartCoroutine(AnimateRing(shockPoint + Vector3.up * 0.05f, 0.35f, shockRadius, 0.16f, new Color(0.95f, 0.42f, 0.16f, 0.85f), 0.06f));
+            }
+
+            float ruptureTime = Mathf.Max(0f, range) / safeSpeed;
+            while (elapsed < ruptureTime)
+            {
+                if (player == null || player.IsDead()) yield break;
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+
+            if (!finishingRupture || player == null || player.IsDead()) yield break;
+
+            Vector3 rupturePoint = GetSeismicGroundPoint(origin + forward * Mathf.Max(0f, range), groundMask);
+            float endRadius = Mathf.Max(1f, _seismicEndRadius.Value) * (IsUnchainedFuryActive() ? 1.35f : 1f);
+            List<Character> endTargets = GetSphereTargets(player, rupturePoint, endRadius);
+            for (int i = 0; i < endTargets.Count; i++)
+            {
+                DealSnapshotDamage(player, endTargets[i], weapon, multiplier, 44f, false);
+                GainMercenaryFuryFromSkillHit(player);
+                if (DragonCombat.IsSmallEnemy(endTargets[i]))
+                    ApplyMercenaryDisplacement(endTargets[i], forward * 2.2f + Vector3.up * 7f);
+                else
+                    endTargets[i].Stagger(forward);
+            }
+            if (_enableVfx.Value)
+                StartCoroutine(AnimateRing(rupturePoint + Vector3.up * 0.08f, width * 0.5f, endRadius, 0.46f, new Color(1f, 0.52f, 0.18f, 0.95f), 0.16f));
+        }
+
+        private Vector3 GetSeismicGroundPoint(Vector3 projected, int groundMask)
+        {
+            RaycastHit ground;
+            if (Physics.Raycast(projected + Vector3.up * 7f, Vector3.down, out ground, 18f, groundMask))
+                return ground.point;
+            return projected;
+        }
+
+        private void CastReaversOrbit(Player player)
+        {
+            const string id = "Mercenary.ReaversOrbit";
+            if (!BeginCast(player, id, _reaverCooldown.Value, _reaverStamina.Value))
+                return;
+
+            DragonCombat.PlaySkillPose(player, "CircleSwing", 0.45f);
+            StartCoroutine(ReaversOrbitRoutine(player));
+        }
+
+        private IEnumerator ReaversOrbitRoutine(Player player)
+        {
+            ShowMessage("Reaver's Orbit");
+            DamageSnapshot weapon = GetWeaponDamage(player);
+            float maxRadius = Mathf.Max(2f, _reaverRadius.Value);
+            float duration = Mathf.Max(0.5f, _reaverDuration.Value);
+            float hitRadius = Mathf.Max(0.4f, _reaverHitRadius.Value);
+            float multiplier = Mathf.Max(0f, _reaverDamageMultiplier.Value);
+            HashSet<int> outwardHits = new HashSet<int>();
+            HashSet<int> returnHits = new HashSet<int>();
+            float elapsed = 0f;
+            float nextVisual = 0f;
+
+            while (elapsed <= duration)
+            {
+                if (player == null || player.IsDead()) yield break;
+                float t = Mathf.Clamp01(elapsed / duration);
+                bool returning = t >= 0.5f;
+                float phase = returning ? (t - 0.5f) * 2f : t * 2f;
+                float radius = returning ? Mathf.Lerp(maxRadius, 0.65f, phase) : Mathf.Lerp(0.65f, maxRadius, phase);
+                float spin = t * 360f;
+                Vector3 center = player.transform.position + Vector3.up * 1.0f;
+                Vector3[] points = new Vector3[2];
+                points[0] = center + (Quaternion.AngleAxis(spin, Vector3.up) * Vector3.forward) * radius;
+                points[1] = center + (Quaternion.AngleAxis(180f - spin, Vector3.up) * Vector3.forward) * radius;
+                HashSet<int> phaseHits = returning ? returnHits : outwardHits;
+
+                for (int a = 0; a < points.Length; a++)
+                {
+                    Collider[] hits = Physics.OverlapSphere(points[a], hitRadius, ~0, QueryTriggerInteraction.Ignore);
+                    for (int i = 0; i < hits.Length; i++)
+                    {
+                        Character target = hits[i].GetComponentInParent<Character>();
+                        if (target == null || !IsEnemy(player, target)) continue;
+                        int tid = target.GetInstanceID();
+                        if (!phaseHits.Add(tid)) continue;
+                        DealSnapshotDamage(player, target, weapon, multiplier, returning ? 8f : 24f, false);
+                        GainMercenaryFuryFromSkillHit(player);
+                        Vector3 radial = target.transform.position - player.transform.position;
+                        radial.y = 0f;
+                        if (radial.sqrMagnitude < 0.01f) radial = player.transform.forward;
+                        radial.Normalize();
+                        if (!returning)
+                            ApplyMercenaryDisplacement(target, radial * 5f + Vector3.up * 0.8f);
+                        else if (DragonCombat.IsSmallEnemy(target))
+                            ApplyMercenaryDisplacement(target, -radial * 6f + Vector3.up * 0.4f);
+                    }
+                }
+
+                if (_enableVfx.Value && elapsed >= nextVisual)
+                {
+                    nextVisual = elapsed + 0.10f;
+                    StartCoroutine(AnimateRing(points[0], 0.18f, hitRadius, 0.16f, new Color(1f, 0.58f, 0.20f, 0.82f), 0.07f));
+                    StartCoroutine(AnimateRing(points[1], 0.18f, hitRadius, 0.16f, new Color(1f, 0.58f, 0.20f, 0.82f), 0.07f));
+                }
+
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+        }
+
+        private void FuryBonecrusherCone(Player player, Vector3 origin, Vector3 forward)
+        {
+            float range = Mathf.Max(2f, _mercFuryBoneConeRange.Value);
+            float angle = Mathf.Clamp(_mercFuryBoneConeAngle.Value, 20f, 170f);
+            float multiplier = Mathf.Max(0f, _mercFuryBoneConeMultiplier.Value);
+            List<Character> targets = GetFrontalTargets(player, origin, forward, range, angle);
+            for (int i = 0; i < targets.Count; i++)
+            {
+                DealScaledDamage(player, targets[i], _boneDamage, 34f, multiplier);
+                if (DragonCombat.IsSmallEnemy(targets[i]))
+                    ApplyMercenaryDisplacement(targets[i], forward * 4f + Vector3.up * 7.5f);
+                else
+                    targets[i].Stagger(forward);
+            }
+            if (_enableVfx.Value)
+                StartCoroutine(AnimateHalfmoonArc(origin + Vector3.up * 0.25f, forward, range));
+        }
+
+        private void ApplyMercenaryDisplacement(Character target, Vector3 velocityChange)
+        {
+            if (target == null || target.IsDead()) return;
+            Rigidbody body = target.GetComponent<Rigidbody>();
+            if (body != null)
+                body.AddForce(velocityChange, ForceMode.VelocityChange);
+        }
+
+        private void CastWhirlwind(Player player)
+        {
+            const string id = "Mercenary.Whirlwind";
+            if (!BeginCast(player, id, _whirlwindCooldown.Value, _whirlwindStamina.Value))
+                return;
+
+            float duration = Mathf.Max(0.1f, _whirlwindDuration.Value);
+
+            // Framework exception: Whirlwind allows normal movement while spinning.
+            // Combat Runtime suppresses sprint/other actions but keeps movedir intact.
+            DragonCombat.BeginWhirlwind(player, duration);
+            StartCoroutine(WhirlwindRoutine(player));
+        }
+
+        private IEnumerator WhirlwindRoutine(Player player)
+        {
+            ShowMessage("Whirlwind");
+            DamageSnapshot weapon = GetWeaponDamage(player);
+            float duration = Mathf.Max(0.5f, _whirlwindDuration.Value);
+            float interval = Mathf.Max(0.1f, _whirlwindInterval.Value);
+            int ticks = Mathf.Max(1, Mathf.RoundToInt(duration / interval));
+
+            for (int tick = 0; tick < ticks; tick++)
+            {
+                if (player == null || player.IsDead())
+                    yield break;
+
+                                if (tick % 2 == 0)
+                    DragonCombat.PlaySkillPose(player, "Whirlwind", 0.34f);
+                else
+                    DragonCombat.PlaySkillPose(player, "Whirlwind", 0.34f);
+                List<Character> targets = GetSphereTargets(player, player.transform.position, Mathf.Max(0.5f, _whirlwindRadius.Value));
+                for (int i = 0; i < targets.Count; i++)
+                {
+                    DealSnapshotDamage(player, targets[i], weapon, Mathf.Max(0f, _whirlwindWeaponMultiplier.Value), 14f);
+                    GainMercenaryFuryFromSkillHit(player);
+                }
+
+                if (_enableVfx.Value)
+                    StartCoroutine(AnimateRing(player.transform.position + Vector3.up * 0.9f, 0.4f, Mathf.Max(0.5f, _whirlwindRadius.Value), Mathf.Min(0.32f, interval), new Color(1f, 0.62f, 0.22f, 0.75f), 0.10f));
+
+                yield return new WaitForSeconds(interval);
+            }
+        }
+
+        private void CastGoddessRelic(Player player)
+        {
+            const string id = "Paladin.GoddessRelic";
+            Vector3 target;
+            float range = Mathf.Max(1f, _sharedCrossCastRange.Value);
+            if (!TryGetPhysicalAimPoint(player, range, out target))
+            {
+                ShowMessage("Aim at a physical target");
+                return;
+            }
+            if (!BeginCast(player, id, _goddessCooldown.Value, _goddessStamina.Value))
+                return;
+
+            float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _goddessWindup.Value));
+            DragonCombat.LockSkill(player, windup);
+            DragonCombat.PlaySkillPose(player, "SkyCast", windup + 0.10f);
+            StartCoroutine(GoddessRelicRoutine(player, target, windup));
+        }
+
+        private IEnumerator GoddessRelicRoutine(Player player, Vector3 target, float windup)
+        {
+            ShowMessage("Goddess Relic");
+            if (windup > 0f)
+                yield return new WaitForSeconds(windup);
+
+            const float crossHeight = 6.5f;
+            Vector3 finalCenter = GetGroundedCrossCenter(target, crossHeight);
+            Vector3 skyPoint = DragonCombat.GetIndoorSafeSkyPoint(finalCenter, 7f);
+            GameObject cross = CreateCross(
+                skyPoint,
+                new Color(1f, 0.82f, 0.35f, 1f),
+                crossHeight,
+                3.5f,
+                0.12f,
+                _enableVfx.Value
+            );
+
+            float fallTime = DragonCombat.GetSkySummonDropTime();
+            float elapsed = 0f;
+            while (elapsed < fallTime)
+            {
+                float progress = DragonCombat.GetSkySummonFallProgress(elapsed / fallTime);
+                if (cross != null)
+                    cross.transform.position = Vector3.Lerp(skyPoint, finalCenter, progress);
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+            if (cross != null)
+            {
+                cross.transform.position = finalCenter;
+                Vector3 toCaster = player.transform.position - finalCenter;
+                toCaster.y = 0f;
+                if (toCaster.sqrMagnitude > 0.01f)
+                    cross.transform.rotation = Quaternion.LookRotation(toCaster.normalized, Vector3.up);
+                SetCrossPhysical(cross, true);
+            }
+
+            if (_enableVfx.Value)
+            {
+                CreateLightning(target, new Color(0.62f, 0.88f, 1f, 1f), 0.32f);
+                StartCoroutine(AnimateRing(target + Vector3.up * 0.08f, 0.3f, Mathf.Max(1f, _goddessRadius.Value), 0.55f, new Color(1f, 0.82f, 0.35f, 0.92f), 0.12f));
+            }
+
+            List<Character> targets = GetSphereTargets(player, target, Mathf.Max(1f, _goddessRadius.Value));
+            for (int i = 0; i < targets.Count; i++)
+            {
+                _paladinMarkSourceContext = "GoddessRelic";
+                try
+                {
+                    DealDamage(player, targets[i], _goddessDamage, 20f, false);
+                }
+                finally
+                {
+                    _paladinMarkSourceContext = string.Empty;
+                }
+                StartCoroutine(SpiritDot(player, targets[i], _goddessSpiritDot.Value, _goddessSpiritDuration.Value));
+            }
+            if (cross != null)
+                Destroy(cross, 3.0f);
+        }
+
+        private void CastRayOfHope(Player player)
+        {
+            const string id = "Paladin.RayOfHope";
+            if (!BeginCast(player, id, _rayCooldown.Value, _rayStamina.Value))
+                return;
+            float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _rayWindup.Value));
+            DragonCombat.LockSkill(player, windup);
+            DragonCombat.PlaySkillPose(player, "Channel", windup + 0.10f);
+            StartCoroutine(RayOfHopeRoutine(player, windup));
+        }
+
+        private IEnumerator RayOfHopeRoutine(Player player, float windup)
+        {
+            ShowMessage("Ray of Hope");
+            if (windup > 0f)
+                yield return new WaitForSeconds(windup);
+            if (player == null || player.IsDead())
+                yield break;
+
+            float radius = Mathf.Max(1f, _rayRadius.Value);
+            float healAmount = player.GetMaxHealth() * Mathf.Clamp(_rayHealPercent.Value, 0f, 100f) / 100f;
+            Collider[] allyHits = Physics.OverlapSphere(player.transform.position, radius);
+            HashSet<Player> allies = new HashSet<Player>();
+            for (int i = 0; i < allyHits.Length; i++) { Player ally = allyHits[i].GetComponentInParent<Player>(); if (ally == null || allies.Contains(ally)) continue; allies.Add(ally); Heal(ally, healAmount); DragonCombat.ApplyTimedBuff(ally, "Paladin.RayOfHope", Mathf.Max(0.1f, _rayBuffDuration.Value), Mathf.Max(0f, _rayDamageBuff.Value) / 100f, 0f, 0f, 0f, 0f, 0f, false); }
+            List<Character> enemies = GetSphereTargets(player, player.transform.position, radius);
+            for (int i = 0; i < enemies.Count; i++) RefreshSpiritBurn(player, enemies[i], 1f, Mathf.Max(0.1f, _raySpiritBurnDuration.Value));
+            if (_enableVfx.Value) StartCoroutine(AnimateRing(player.transform.position + Vector3.up * 0.12f, 0.6f, radius, 0.8f, new Color(1f, 0.93f, 0.52f, 0.95f), 0.11f));
+        }
+
+        private void CastShieldCharge(Player player)
+        {
+            if (player == null || player.IsDead() || _shieldChargeActive) return;
+            Rigidbody body = player.GetComponent<Rigidbody>();
+            CapsuleCollider capsule = player.GetComponent<CapsuleCollider>();
+            // Never fall back to moving the Transform without a physical body.
+            if (body == null || capsule == null || !capsule.enabled || capsule.isTrigger)
+            {
+                ShowMessage("Shield Charge needs a solid player collider");
+                return;
+            }
+            if (!BeginCast(player, "Paladin.ShieldCharge", _shieldChargeCooldown.Value, _shieldChargeStamina.Value)) return;
+            _shieldChargeActive = true;
+            _shieldChargePlayer = player;
+            StartCoroutine(ShieldChargeRoutine(player, body, capsule));
+        }
+
+        private IEnumerator ShieldChargeRoutine(Player player, Rigidbody body, CapsuleCollider capsule)
+        {
+            ShowMessage("Shield Charge");
+            Vector3 forward = player.GetLookDir();
+            forward.y = 0f;
+            if (forward.sqrMagnitude < 0.01f) forward = player.transform.forward;
+            forward.Normalize();
+            float lastLookYaw = Mathf.Atan2(forward.x, forward.z) * Mathf.Rad2Deg;
+            float limit = Mathf.Max(1f, _shieldChargeDistance.Value);
+            float radius = Mathf.Max(0.5f, _shieldChargeRadius.Value);
+            float chargeProgress = 0f;
+            Dictionary<int, float> nextHitAt = new Dictionary<int, float>();
+            Dictionary<int, int> persistentHitCount = new Dictionary<int, int>();
+            bool bigTargetReachedCap = false;
+            try
+            {
+                while (player != null && player == Player.m_localPlayer && !player.IsDead() &&
+                       body != null && capsule != null && capsule.enabled && GetAdvancement(player) == "Paladin")
+                {
+                    // Physical blockers stop position but do not pause the 15m skill budget.
+                    // Charging into a wall therefore behaves like running on a treadmill.
+                    // Dedicated manual finisher: Left Click triggers Shield Bash.
+                    // Pressing M4+6 again does nothing while Shield Charge is active.
+                    if (Input.GetMouseButtonDown(0))
+                    {
+                        ShieldChargeBash(player, forward);
+                        break;
+                    }
+                    Vector3 look = player.GetLookDir();
+                    look.y = 0f;
+                    float lookYaw = look.sqrMagnitude > 0.01f
+                        ? Mathf.Atan2(look.x, look.z) * Mathf.Rad2Deg : lastLookYaw;
+                    float steer = 0f;
+                    if (GetShieldChargeButton("Left", KeyCode.A) || GetShieldChargeButton("JoyLeft", KeyCode.None)) steer -= 1f;
+                    if (GetShieldChargeButton("Right", KeyCode.D) || GetShieldChargeButton("JoyRight", KeyCode.None)) steer += 1f;
+                    float turn = Mathf.DeltaAngle(lastLookYaw, lookYaw) + steer * 120f * Time.fixedDeltaTime;
+                    forward = (Quaternion.AngleAxis(turn, Vector3.up) * forward).normalized;
+                    lastLookYaw = lookYaw;
+
+                    // Prevent normal controls adding a second, unswept movement.
+                    // Look/steering input and the dedicated Left Click Bash input remain available.
+                    DragonCombat.LockSkill(player, 0.1f);
+                    float speed = Mathf.Max(1f, player.m_runSpeed) * Mathf.Max(1f, _shieldChargeSpeedMultiplier.Value);
+                    float requested = Mathf.Min(speed * Time.fixedDeltaTime, limit - chargeProgress);
+                    float step = GetShieldChargeStep(player, body, capsule, forward, requested);
+                    body.velocity = new Vector3(0f, body.velocity.y, 0f);
+                    body.MoveRotation(Quaternion.LookRotation(forward, Vector3.up));
+                    if (step > 0f) body.MovePosition(body.position + forward * step);
+                    chargeProgress += requested;
+
+                    // Damage still runs when allowed movement is zero.
+                    Vector3 center = player.transform.position + forward * Mathf.Max(0.8f, radius * 0.55f) + Vector3.up;
+                    Collider[] hits = Physics.OverlapSphere(center, radius, ~0, QueryTriggerInteraction.Ignore);
+                    for (int i = 0; i < hits.Length; i++)
+                    {
+                        Character target = hits[i].GetComponentInParent<Character>();
+                        if (target == null || !IsEnemy(player, target)) continue;
+                        int tid = target.GetInstanceID();
+                        float allowed;
+                        if (nextHitAt.TryGetValue(tid, out allowed) && Time.time < allowed) continue;
+                        if (!CanShieldChargeHit(player, target, hits[i], forward)) continue;
+                        nextHitAt[tid] = Time.time + Mathf.Max(0.10f, _shieldChargePersistentTick.Value);
+                        DealShieldChargeDamage(player, target, forward, false);
+
+                        // Small enemies may be run over for the whole 15m.
+                        // Big/Boss targets cap at four Persistent Damage ticks,
+                        // then the charge converts immediately into Shield Bash.
+                        if (!DragonCombat.IsSmallEnemy(target))
+                        {
+                            int count = 0;
+                            persistentHitCount.TryGetValue(tid, out count);
+                            count++;
+                            persistentHitCount[tid] = count;
+                            if (count >= 4)
+                                bigTargetReachedCap = true;
+                        }
+                    }
+
+                    if (bigTargetReachedCap || chargeProgress >= limit - 0.01f)
+                    {
+                        ShieldChargeBash(player, forward);
+                        break;
+                    }
+
+                    yield return new WaitForFixedUpdate();
+                }
+            }
+            finally
+            {
+                EndShieldCharge();
+            }
+        }
+
+        private static bool _shieldChargeInputResolved;
+        private static MethodInfo _shieldChargeGetButtonMethod;
+
+        private static bool GetShieldChargeButton(string buttonName, KeyCode fallbackKey)
+        {
+            if (!_shieldChargeInputResolved)
+            {
+                _shieldChargeInputResolved = true;
+                Assembly[] loaded = AppDomain.CurrentDomain.GetAssemblies();
+                for (int i = 0; i < loaded.Length; i++)
+                {
+                    Type inputType = loaded[i].GetType("ZInput", false);
+                    if (inputType == null) continue;
+                    _shieldChargeGetButtonMethod = inputType.GetMethod(
+                        "GetButton",
+                        BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
+                        null,
+                        new Type[] { typeof(string) },
+                        null
+                    );
+                    if (_shieldChargeGetButtonMethod != null) break;
+                }
+            }
+
+            if (_shieldChargeGetButtonMethod != null)
+            {
+                try
+                {
+                    object value = _shieldChargeGetButtonMethod.Invoke(null, new object[] { buttonName });
+                    if (value is bool && (bool)value) return true;
+                }
+                catch
+                {
+                    // Keep the charge steerable even if a Valheim input API changes.
+                }
+            }
+
+            return fallbackKey != KeyCode.None && Input.GetKey(fallbackKey);
+        }
+
+        private bool IsShieldChargeSolid(Player player, Collider collider)
+        {
+            if (collider == null || !collider.enabled || collider.isTrigger) return false;
+            if (collider.transform == player.transform || collider.transform.IsChildOf(player.transform)) return false;
+            if (collider.GetComponentInParent<Character>() == player) return false;
+            return !Physics.GetIgnoreLayerCollision(player.gameObject.layer, collider.gameObject.layer);
+        }
+
+        private float GetShieldChargeStep(Player player, Rigidbody body, CapsuleCollider capsule, Vector3 forward, float requested)
+        {
+            const float skin = 0.05f;
+            float step = requested;
+            // Sweeps can miss an object overlapping the starting capsule.
+            // Allow movement out of an overlap, but never further into it.
+            Bounds bounds = capsule.bounds;
+            Collider[] nearby = Physics.OverlapBox(bounds.center, bounds.extents + Vector3.one * skin,
+                Quaternion.identity, ~0, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < nearby.Length; i++)
+            {
+                Collider other = nearby[i];
+                if (TryShatterOwnedAegis(player, other)) continue;
+                if (!IsShieldChargeSolid(player, other)) continue;
+                Vector3 separation;
+                float depth;
+                if (!Physics.ComputePenetration(capsule, capsule.transform.position, capsule.transform.rotation,
+                    other, other.transform.position, other.transform.rotation, out separation, out depth)) continue;
+                bool ground = other.GetComponentInParent<Character>() == null && separation.y >= 0.65f;
+                if (!ground && depth > 0f && Vector3.Dot(forward, separation) < -0.001f) return 0f;
+            }
+            RaycastHit[] blockers = body.SweepTestAll(forward, requested + skin, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < blockers.Length; i++)
+            {
+                RaycastHit hit = blockers[i];
+                if (TryShatterOwnedAegis(player, hit.collider)) continue;
+                if (!IsShieldChargeSolid(player, hit.collider)) continue;
+                bool ground = hit.collider.GetComponentInParent<Character>() == null && hit.normal.y >= 0.65f;
+                if (ground) continue;
+                // A contact behind us must not prevent steering away.
+                if (hit.normal.sqrMagnitude > 0.01f && Vector3.Dot(forward, hit.normal) >= -0.001f) continue;
+                step = Mathf.Min(step, Mathf.Max(0f, hit.distance - skin));
+            }
+            return step;
+        }
+
+        private bool CanShieldChargeHit(Player player, Character target, Collider targetCollider, Vector3 forward)
+        {
+            Vector3 origin = player.transform.position + Vector3.up;
+            Vector3 point = targetCollider.ClosestPoint(origin);
+            Vector3 offset = point - origin;
+            if (Vector3.Dot(targetCollider.bounds.center - origin, forward) < 0f) return false;
+            float distance = offset.magnitude;
+            if (distance < 0.01f) return true;
+            // A wall or another solid enemy stops damage: this skill is not Ghost.
+            RaycastHit[] blockers = Physics.RaycastAll(origin, offset / distance, distance, ~0, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < blockers.Length; i++)
+            {
+                Collider other = blockers[i].collider;
+                if (!IsShieldChargeSolid(player, other)) continue;
+                if (other.GetComponentInParent<Character>() == target) continue;
+                if (blockers[i].distance < distance - 0.01f) return false;
+            }
+            return true;
+        }
+
+        private void EndShieldCharge()
+        {
+            if (_shieldChargePlayer != null)
+            {
+                Rigidbody body = _shieldChargePlayer.GetComponent<Rigidbody>();
+                if (body != null) body.velocity = new Vector3(0f, body.velocity.y, 0f);
+                DragonCombat.LockSkill(_shieldChargePlayer, 0f);
+            }
+            _shieldChargePlayer = null;
+            _shieldChargeActive = false;
+        }
+
+        private void ShieldChargeBash(Player player, Vector3 forward)
+        {
+            if (player == null || player.IsDead()) return;
+            ShowMessage("Shield Bash");
+            float radius = Mathf.Max(0.5f, _shieldChargeRadius.Value);
+            Vector3 center = player.transform.position + forward * Mathf.Max(1f, radius * 0.65f) + Vector3.up;
+            Collider[] hits = Physics.OverlapSphere(center, radius, ~0, QueryTriggerInteraction.Ignore);
+            HashSet<Character> damaged = new HashSet<Character>();
+            for (int i = 0; i < hits.Length; i++)
+            {
+                Character target = hits[i].GetComponentInParent<Character>();
+                if (target == null || damaged.Contains(target) || !IsEnemy(player, target)) continue;
+                if (!CanShieldChargeHit(player, target, hits[i], forward)) continue;
+                damaged.Add(target);
+                DealShieldChargeDamage(player, target, forward, true);
+            }
+            if (_enableVfx.Value)
+            {
+                StartCoroutine(AnimateRing(center - Vector3.up * 0.9f, 0.4f, radius, 0.45f,
+                    new Color(1f, 0.90f, 0.38f, 0.95f), 0.16f));
+                CreateLightning(center, new Color(0.65f, 0.88f, 1f, 1f), 0.25f);
+            }
+        }
+
+        private void DealShieldChargeDamage(Player player, Character target, Vector3 forward, bool finalBash)
+        {
+            HitData hit = new HitData();
+            hit.m_damage.m_blunt = _shieldChargeDamage.Blunt.Value;
+            hit.m_damage.m_lightning = _shieldChargeDamage.Lightning.Value;
+            hit.m_point = target.transform.position;
+            Vector3 side = Vector3.Cross(Vector3.up, forward).normalized;
+            float sign = Vector3.Dot(target.transform.position - player.transform.position, side) >= 0f ? 1f : -1f;
+            bool small = DragonCombat.IsSmallEnemy(target);
+            hit.m_dir = small ? side * sign : forward;
+            hit.m_pushForce = small ? (finalBash ? 85f : 52f) : 0f;
+            hit.SetAttacker(player);
+            target.Damage(hit);
+        }
+
+        private void CastDivineVerdict(Player player)
+        {
+            const string id = "Paladin.DivineVerdict";
+            Vector3 target;
+            if (!TryGetPhysicalAimPoint(player, Mathf.Max(1f, _verdictRange.Value), out target))
+            {
+                ShowMessage("Aim at a physical target");
+                return;
+            }
+            if (!BeginCast(player, id, _verdictCooldown.Value, _verdictStamina.Value))
+                return;
+
+            float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _verdictWindup.Value));
+            DragonCombat.LockSkill(player, windup);
+            DragonCombat.PlaySkillPose(player, "SkyCast", windup + 0.10f);
+            StartCoroutine(DivineVerdictRoutine(player, target, windup));
+        }
+
+        private IEnumerator DivineVerdictRoutine(Player player, Vector3 target, float windup)
+        {
+            ShowMessage("Divine Verdict");
+            if (windup > 0f)
+                yield return new WaitForSeconds(windup);
+            if (player == null || player.IsDead())
+                yield break;
+
+            Vector3 sky = DragonCombat.GetIndoorSafeSkyPoint(target, 8f);
+            GameObject hammer = CreateHolyHammer(sky, new Color(1f, 0.86f, 0.38f, 1f));
+            float fallTime = DragonCombat.GetSkySummonDropTime();
+            float elapsed = 0f;
+            while (elapsed < fallTime)
+            {
+                float progress = DragonCombat.GetSkySummonFallProgress(elapsed / fallTime);
+                if (hammer != null)
+                    hammer.transform.position = Vector3.Lerp(sky, target + Vector3.up * 2.6f, progress);
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+            if (hammer != null)
+                Destroy(hammer);
+
+            float radius = Mathf.Max(1f, _verdictRadius.Value);
+            List<Character> targets = GetSphereTargets(player, target, radius);
+            for (int i = 0; i < targets.Count; i++)
+            {
+                Character enemy = targets[i];
+                if (HasActiveJudgementMark(enemy))
+                {
+                    TriggerJudgementDetonation(player, enemy);
+                    _judgementMarks.Remove(enemy.GetInstanceID());
+                }
+                DealDamage(player, enemy, _verdictDamage, 34f, false);
+            }
+
+            if (_enableVfx.Value)
+                StartCoroutine(AnimateRing(target + Vector3.up * 0.08f, 0.5f, radius, 0.65f,
+                    new Color(1f, 0.82f, 0.34f, 0.95f), 0.16f));
+        }
+
+        private GameObject CreateHolyHammer(Vector3 center, Color color)
+        {
+            GameObject root = new GameObject("DragonsAltarDivineVerdictHammer");
+            root.transform.position = center;
+            if (!_enableVfx.Value)
+                return root;
+
+            Shader shader = Shader.Find("Sprites/Default");
+            GameObject shaftObj = new GameObject("shaft");
+            shaftObj.transform.SetParent(root.transform, false);
+            LineRenderer shaft = shaftObj.AddComponent<LineRenderer>();
+            shaft.useWorldSpace = false;
+            shaft.positionCount = 2;
+            shaft.startWidth = 0.45f;
+            shaft.endWidth = 0.45f;
+            shaft.startColor = color;
+            shaft.endColor = color;
+            shaft.SetPosition(0, new Vector3(0f, -3.0f, 0f));
+            shaft.SetPosition(1, new Vector3(0f, 2.0f, 0f));
+            if (shader != null) shaft.material = new Material(shader);
+
+            GameObject headObj = new GameObject("head");
+            headObj.transform.SetParent(root.transform, false);
+            LineRenderer head = headObj.AddComponent<LineRenderer>();
+            head.useWorldSpace = false;
+            head.positionCount = 2;
+            head.startWidth = 1.35f;
+            head.endWidth = 1.35f;
+            head.startColor = color;
+            head.endColor = color;
+            head.SetPosition(0, new Vector3(-2.8f, 1.8f, 0f));
+            head.SetPosition(1, new Vector3(2.8f, 1.8f, 0f));
+            if (shader != null) head.material = new Material(shader);
+            return root;
+        }
+
+        private void CastAegisFall(Player player)
+        {
+            const string id = "Paladin.AegisFall";
+            Vector3 target;
+            if (!TryGetPhysicalAimPoint(player, Mathf.Max(1f, _aegisRange.Value), out target))
+            {
+                ShowMessage("Aim at a physical target");
+                return;
+            }
+            if (!BeginCast(player, id, _aegisCooldown.Value, _aegisStamina.Value))
+                return;
+
+            float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _aegisWindup.Value));
+            DragonCombat.LockSkill(player, windup);
+            DragonCombat.PlaySkillPose(player, "SkyCast", windup + 0.10f);
+            StartCoroutine(AegisFallRoutine(player, target, windup));
+        }
+
+        private IEnumerator AegisFallRoutine(Player player, Vector3 target, float windup)
+        {
+            ShowMessage("Aegis Fall");
+            if (windup > 0f)
+                yield return new WaitForSeconds(windup);
+            if (player == null || player.IsDead())
+                yield break;
+
+            float width = Mathf.Max(2f, _aegisWidth.Value);
+            float height = Mathf.Max(2f, _aegisHeight.Value);
+            Vector3 finalCenter = target + Vector3.up * (height * 0.5f + 0.05f);
+            Vector3 sky = DragonCombat.GetIndoorSafeSkyPoint(finalCenter, 8f);
+            GameObject aegis = CreateAegisWall(sky, player, width, height);
+
+            Vector3 toCaster = player.transform.position - finalCenter;
+            toCaster.y = 0f;
+            Quaternion facing = toCaster.sqrMagnitude > 0.01f
+                ? Quaternion.LookRotation(toCaster.normalized, Vector3.up)
+                : player.transform.rotation;
+            if (aegis != null)
+                aegis.transform.rotation = facing;
+
+            float fallTime = DragonCombat.GetSkySummonDropTime();
+            float elapsed = 0f;
+            while (elapsed < fallTime)
+            {
+                float progress = DragonCombat.GetSkySummonFallProgress(elapsed / fallTime);
+                if (aegis != null)
+                    aegis.transform.position = Vector3.Lerp(sky, finalCenter, progress);
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+
+            if (aegis != null)
+            {
+                aegis.transform.position = finalCenter;
+                Collider wallCollider = aegis.GetComponentInChildren<Collider>();
+                if (wallCollider != null)
+                    wallCollider.enabled = true;
+                Destroy(aegis, Mathf.Max(1f, _aegisDuration.Value));
+            }
+
+            float radius = Mathf.Max(1f, _aegisImpactRadius.Value);
+            List<Character> targets = GetSphereTargets(player, target, radius);
+            for (int i = 0; i < targets.Count; i++)
+                DealDamage(player, targets[i], _aegisDamage, 36f, false);
+
+            if (_enableVfx.Value)
+                StartCoroutine(AnimateRing(target + Vector3.up * 0.08f, 0.5f, radius, 0.60f,
+                    new Color(0.88f, 0.94f, 1f, 0.94f), 0.14f));
+        }
+
+        private GameObject CreateAegisWall(Vector3 center, Player caster, float width, float height)
+        {
+            GameObject root = new GameObject("DragonsAltarAegisFall");
+            root.transform.position = center;
+            AegisWallMarker marker = root.AddComponent<AegisWallMarker>();
+            marker.Caster = caster;
+            marker.Shattered = false;
+
+            GameObject wall = new GameObject("wall");
+            wall.transform.SetParent(root.transform, false);
+            BoxCollider collider = wall.AddComponent<BoxCollider>();
+            collider.size = new Vector3(width, height, 0.65f);
+            collider.center = Vector3.zero;
+            collider.isTrigger = false;
+            collider.enabled = false;
+
+            if (_enableVfx.Value)
+            {
+                Shader shader = Shader.Find("Sprites/Default");
+                LineRenderer line = wall.AddComponent<LineRenderer>();
+                line.useWorldSpace = false;
+                line.loop = true;
+                line.positionCount = 5;
+                line.startWidth = 0.16f;
+                line.endWidth = 0.16f;
+                Color color = new Color(0.84f, 0.93f, 1f, 0.96f);
+                line.startColor = color;
+                line.endColor = color;
+                float hw = width * 0.5f;
+                float hh = height * 0.5f;
+                line.SetPosition(0, new Vector3(-hw, -hh, 0f));
+                line.SetPosition(1, new Vector3(-hw, hh, 0f));
+                line.SetPosition(2, new Vector3(hw, hh, 0f));
+                line.SetPosition(3, new Vector3(hw, -hh, 0f));
+                line.SetPosition(4, new Vector3(-hw, -hh, 0f));
+                if (shader != null) line.material = new Material(shader);
+            }
+            return root;
+        }
+
+        private bool TryShatterOwnedAegis(Player player, Collider collider)
+        {
+            if (player == null || collider == null)
+                return false;
+            AegisWallMarker marker = collider.GetComponentInParent<AegisWallMarker>();
+            if (marker == null || marker.Caster != player || marker.Shattered)
+                return false;
+            ShatterAegis(player, marker);
+            return true;
+        }
+
+        private void ShatterAegis(Player player, AegisWallMarker marker)
+        {
+            if (marker == null || marker.Shattered)
+                return;
+            marker.Shattered = true;
+            Vector3 center = marker.transform.position - Vector3.up * (Mathf.Max(2f, _aegisHeight.Value) * 0.5f);
+            Collider[] colliders = marker.GetComponentsInChildren<Collider>();
+            for (int i = 0; i < colliders.Length; i++)
+                if (colliders[i] != null) colliders[i].enabled = false;
+
+            float radius = Mathf.Max(1f, _aegisShockwaveRadius.Value);
+            List<Character> targets = GetSphereTargets(player, center, radius);
+            for (int i = 0; i < targets.Count; i++)
+                DealDamage(player, targets[i], _aegisShockwaveDamage, 44f, false);
+
+            if (_enableVfx.Value)
+                StartCoroutine(AnimateRing(center + Vector3.up * 0.08f, 0.8f, radius, 0.55f,
+                    new Color(1f, 0.90f, 0.48f, 0.96f), 0.18f));
+            ShowMessage("Aegis Shattered");
+            Destroy(marker.gameObject);
+        }
+
+        private void CastElectricSmite(Player player)
+        {
+            const string id = "Paladin.ElectricSmite";
+            if (!BeginCast(player, id, _divineCooldown.Value, _divineStamina.Value))
+                return;
+
+            float takeoffDelay = 0.08f;
+            DragonCombat.LockSkill(player, takeoffDelay);
+            DragonCombat.PlaySkillPose(player, "Slam", 8f);
+            StartCoroutine(ElectricSmiteRoutine(player, takeoffDelay));
+        }
+
+        private IEnumerator ElectricSmiteRoutine(Player player, float takeoffDelay)
+        {
+            ShowMessage("Electric Smite");
+            yield return StartCoroutine(AcrobaticJumpUntilLanding(player, takeoffDelay, Mathf.Max(1.5f, _divineWindup.Value)));
+            if (player == null || player.IsDead())
+                yield break;
+
+            DragonCombat.PlaySkillPose(player, "Slam", 0.35f);
+            Vector3 point = player.transform.position;
+            float radius = Mathf.Max(1f, _divineRadius.Value);
+            List<Character> targets = GetSphereTargets(player, point, radius);
+            for (int i = 0; i < targets.Count; i++)
+            {
+                DealDamage(player, targets[i], _divineDamage, 32f, false);
+                DragonCombat.ApplyExpose(targets[i], 6f);
+                StartCoroutine(FireDot(player, targets[i], _divineFireDot.Value, 6f));
+                StartCoroutine(SpiritDot(player, targets[i], _divineSpiritDot.Value, _divineSpiritDuration.Value));
+            }
+
+            if (_enableVfx.Value)
+                StartCoroutine(AnimateRing(point + Vector3.up * 0.08f, 0.4f, radius, 0.52f, new Color(1f, 0.68f, 0.20f, 1f), 0.14f));
+
+            // Sixteen Ground Projectile trails, evenly spaced every 22.5 degrees.
+            // A shared persistent-hit gate prevents targets near the origin from being hit
+            // sixteen times at once simply because the radial trails overlap there.
+            Dictionary<int, float> sharedTrailNextHitAt = new Dictionary<int, float>();
+            for (int i = 0; i < 16; i++)
+            {
+                Vector3 dir = Quaternion.AngleAxis((float)i * 22.5f, Vector3.up) * Vector3.forward;
+                StartCoroutine(SpiritTrail(
+                    player,
+                    point,
+                    dir,
+                    Mathf.Max(1f, _divineTrailRange.Value),
+                    Mathf.Max(0.2f, _divineTrailTravelTime.Value),
+                    sharedTrailNextHitAt
+                ));
+            }
+        }
+
+        private IEnumerator AcrobaticJumpUntilLanding(Player player, float takeoffDelay, float flatAirTime)
+        {
+            if (takeoffDelay > 0f)
+                yield return new WaitForSeconds(takeoffDelay);
+            if (player == null || player.IsDead())
+                yield break;
+
+            Rigidbody body = player.GetComponent<Rigidbody>();
+            if (body == null)
+                yield break;
+
+            ResetFallDamageState(player);
+
+            float height = Mathf.Clamp(_acrobaticJumpHeight.Value, 1.5f, 3.0f);
+            float targetAir = Mathf.Max(1.5f, flatAirTime);
+            float ascentDuration = targetAir * 0.55f;
+            float hangDuration = targetAir * 0.20f;
+            float startY = body.position.y;
+            float peakY = startY + height;
+            float ascentStart = Time.time;
+
+            // Guaranteed cinematic takeoff. We directly drive only the Y axis while
+            // Valheim keeps normal horizontal movement, so the player can steer during ascent.
+            // This avoids the previous bug where Valheim immediately cancelled the velocity launch.
+            DragonCombat.BeginMobileCast(player, ascentDuration + hangDuration + 0.10f, false);
+            while (player != null && !player.IsDead())
+            {
+                float elapsed = Time.time - ascentStart;
+                if (elapsed >= ascentDuration)
+                    break;
+
+                float t = Mathf.Clamp01(elapsed / Mathf.Max(0.05f, ascentDuration));
+                float eased = Mathf.Sin(t * Mathf.PI * 0.5f);
+                Vector3 pos = body.position;
+                float desiredY = Mathf.Lerp(startY, peakY, eased);
+                body.MovePosition(new Vector3(pos.x, desiredY, pos.z));
+                Vector3 v = body.velocity;
+                v.y = Mathf.Max(0f, (peakY - desiredY) / Mathf.Max(0.05f, ascentDuration - elapsed));
+                body.velocity = v;
+                ResetFallDamageState(player);
+                yield return new WaitForFixedUpdate();
+            }
+
+            // Hidden Featherfall-like hangtime: hold the peak briefly with no status icon.
+            float hangEnd = Time.time + hangDuration;
+            while (player != null && !player.IsDead() && Time.time < hangEnd)
+            {
+                Vector3 pos = body.position;
+                body.MovePosition(new Vector3(pos.x, peakY, pos.z));
+                Vector3 v = body.velocity;
+                v.y = 0f;
+                body.velocity = v;
+                ResetFallDamageState(player);
+                yield return new WaitForFixedUpdate();
+            }
+
+            // Apex reached: maneuvering ends. From this point the skill is committed
+            // descent/free-fall and can last much longer than two seconds if cast off a cliff.
+            DragonCombat.EndMobileCast(player);
+            Vector3 releaseVelocity = body.velocity;
+            if (releaseVelocity.y > -0.5f)
+                releaseVelocity.y = -0.5f;
+            body.velocity = releaseVelocity;
+
+            float landingSafety = Time.time + 30f;
+            while (player != null && !player.IsDead() && Time.time < landingSafety)
+            {
+                ResetFallDamageState(player);
+                DragonCombat.LockSkill(player, 0.12f);
+
+                if (IsPlayerGrounded(player) && body.velocity.y <= 0.25f)
+                    break;
+
+                yield return new WaitForFixedUpdate();
+            }
+
+            ResetFallDamageState(player);
+            DragonCombat.EndMobileCast(player);
+        }
+
+        private bool IsPlayerGrounded(Player player)
+        {
+            if (player == null)
+                return false;
+
+            try
+            {
+                MethodInfo method = typeof(Character).GetMethod("IsOnGround", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (method != null)
+                    return Convert.ToBoolean(method.Invoke(player, null));
+            }
+            catch
+            {
+            }
+
+            RaycastHit hit;
+            return Physics.Raycast(player.transform.position + Vector3.up * 0.2f, Vector3.down, out hit, 0.45f, ~0, QueryTriggerInteraction.Ignore);
+        }
+
+        private void ResetFallDamageState(Player player)
+        {
+            if (player == null)
+                return;
+
+            ResetFloatField(player, "m_maxAirAltitude", player.transform.position.y);
+            ResetFloatField(player, "m_lastGroundHeight", player.transform.position.y);
+            ResetFloatField(player, "m_fallSpeed", 0f);
+            ResetFloatField(player, "m_fallTimer", 0f);
+            ResetBoolField(player, "m_fall", false);
+            ResetBoolField(player, "m_falling", false);
+        }
+
+        private void ResetFloatField(Player player, string fieldName, float value)
+        {
+            try
+            {
+                FieldInfo field = typeof(Character).GetField(fieldName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (field != null && field.FieldType == typeof(float))
+                    field.SetValue(player, value);
+            }
+            catch
+            {
+            }
+        }
+
+        private void ResetBoolField(Player player, string fieldName, bool value)
+        {
+            try
+            {
+                FieldInfo field = typeof(Character).GetField(fieldName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (field != null && field.FieldType == typeof(bool))
+                    field.SetValue(player, value);
+            }
+            catch
+            {
+            }
+        }
+
+        private void CastLightningRelic(Player player)
+        {
+            const string id = "Priest.LightningRelic";
+
+            PriestRelicState active = FindPriestRelic(true);
+            if (active != null)
+            {
+                RelinquishPriestRelic(active);
+                ShowMessage("Lightning Relic relinquished");
+                return;
+            }
+
+            if (_lightningRelicCasting)
+                return;
+
+            Vector3 target;
+            float range = Mathf.Max(1f, _lightningRelicRange.Value);
+            if (!TryGetPhysicalAimPoint(player, range, out target))
+            {
+                ShowMessage("Aim at a physical target");
+                return;
+            }
+
+            if (!BeginPriestRelicCast(player, id, _lightningRelicStamina.Value))
+                return;
+
+            _lightningRelicCasting = true;
+            float windup = DragonCombat.ScaleWindup(player, 1.5f);
+            DragonCombat.LockSkill(player, windup);
+            DragonCombat.PlaySkillPose(player, "SkyCast", windup + 0.10f);
+            StartCoroutine(LightningRelicRoutine(player, target, windup, id));
+        }
+
+        private IEnumerator LightningRelicRoutine(Player player, Vector3 target, float windup, string cooldownId)
+        {
+            ShowMessage("Lightning Relic");
+            if (windup > 0f)
+                yield return new WaitForSeconds(windup);
+
+            if (player == null || player.IsDead())
+            {
+                _lightningRelicCasting = false;
+                SetPriestCooldownNow(cooldownId, _lightningRelicCooldown.Value);
+                yield break;
+            }
+
+            float duration = Mathf.Max(0.5f, _lightningRelicDuration.Value);
+            float interval = Mathf.Max(0.1f, _lightningRelicInterval.Value);
+            float radius = Mathf.Max(1f, _lightningRelicRadius.Value);
+            const float crossHeight = 4.2f;
+            Vector3 finalCenter = GetGroundedCrossCenter(target, crossHeight);
+            Vector3 sky = DragonCombat.GetIndoorSafeSkyPoint(finalCenter, 5f);
+            GameObject cross = CreateCross(
+                sky,
+                new Color(0.55f, 0.88f, 1f, 1f),
+                crossHeight,
+                2.5f,
+                0.09f,
+                _enableVfx.Value
+            );
+
+            float drop = DragonCombat.GetSkySummonDropTime();
+            float e = 0f;
+            while (e < drop)
+            {
+                if (player == null || player.IsDead())
+                {
+                    if (cross != null)
+                        Destroy(cross);
+                    _lightningRelicCasting = false;
+                    SetPriestCooldownNow(cooldownId, _lightningRelicCooldown.Value);
+                    yield break;
+                }
+
+                float progress = DragonCombat.GetSkySummonFallProgress(e / drop);
+                if (cross != null)
+                    cross.transform.position = Vector3.Lerp(sky, finalCenter, progress);
+                e += Time.deltaTime;
+                yield return null;
+            }
+
+            if (cross != null)
+            {
+                cross.transform.position = finalCenter;
+                SetCrossPhysical(cross, true);
+            }
+
+            PriestRelicState relic = RegisterPriestRelic(
+                cross,
+                target,
+                radius,
+                duration,
+                true,
+                cooldownId,
+                _lightningRelicCooldown.Value
+            );
+            _lightningRelicCasting = false;
+
+            float nextPulse = Time.time;
+            while (relic != null && Time.time < relic.EndTime && relic.Cross != null)
+            {
+                if (player == null || player.IsDead())
+                    break;
+
+                if (Time.time >= nextPulse)
+                {
+                    List<Character> targets = GetSphereTargets(player, target, radius);
+                    for (int i = 0; i < targets.Count; i++)
+                    {
+                        bool consecrated = IsInsideConsecratedGround(targets[i].transform.position);
+                        float multiplier = consecrated ? Mathf.Max(1f, _consecratedMultiplier.Value) : 1f;
+                        DealDamageScaled(player, targets[i], _lightningRelicDamage, multiplier, 6f, false);
+                        DragonCombat.ApplyCripple(targets[i], 6f);
+                        if (consecrated)
+                            DragonCombat.ApplyExpose(targets[i], Mathf.Max(0.1f, _consecratedExposeDuration.Value));
+                    }
+
+                    if (_enableVfx.Value)
+                    {
+                        CreateLightning(target, new Color(0.48f, 0.82f, 1f, 0.92f), Mathf.Min(0.22f, interval * 0.45f));
+                        StartCoroutine(AnimateRing(target + Vector3.up * 0.08f, 0.3f, radius, Mathf.Min(0.32f, interval), new Color(0.58f, 0.90f, 1f, 0.65f), 0.05f));
+                        PulseConsecratedGroundVfx();
+                    }
+
+                    nextPulse = Time.time + interval;
+                }
+
+                yield return null;
+            }
+
+            FinishPriestRelic(relic);
+        }
+
+        private void CastHolyRelic(Player player)
+        {
+            const string id = "Priest.HolyRelic";
+
+            PriestRelicState active = FindPriestRelic(false);
+            if (active != null)
+            {
+                RelinquishPriestRelic(active);
+                ShowMessage("Holy Relic relinquished");
+                return;
+            }
+
+            if (_holyRelicCasting)
+                return;
+
+            Vector3 target;
+            if (!TryGetPhysicalAimPoint(player, Mathf.Max(1f, _holyRelicRange.Value), out target))
+            {
+                ShowMessage("Aim at a physical target");
+                return;
+            }
+
+            if (!BeginPriestRelicCast(player, id, _holyRelicStamina.Value))
+                return;
+
+            _holyRelicCasting = true;
+            float windup = DragonCombat.ScaleWindup(player, 1f);
+            DragonCombat.LockSkill(player, windup);
+            DragonCombat.PlaySkillPose(player, "SkyCast", windup + 0.10f);
+            StartCoroutine(HolyRelicRoutine(player, target, windup, id));
+        }
+
+        private IEnumerator HolyRelicRoutine(Player player, Vector3 target, float windup, string cooldownId)
+        {
+            ShowMessage("Holy Relic");
+            if (windup > 0f)
+                yield return new WaitForSeconds(windup);
+
+            if (player == null || player.IsDead())
+            {
+                _holyRelicCasting = false;
+                SetPriestCooldownNow(cooldownId, _holyRelicCooldown.Value);
+                yield break;
+            }
+
+            float duration = Mathf.Max(2f, _holyRelicDuration.Value);
+            float interval = Mathf.Max(0.5f, _holyRelicInterval.Value);
+            float radius = Mathf.Max(1f, _holyRelicRadius.Value);
+            const float crossHeight = 4.2f;
+            Vector3 finalCenter = GetGroundedCrossCenter(target, crossHeight);
+            Vector3 sky = DragonCombat.GetIndoorSafeSkyPoint(finalCenter, 5f);
+            GameObject cross = CreateCross(
+                sky,
+                new Color(1f, 0.90f, 0.45f, 1f),
+                crossHeight,
+                2.7f,
+                0.10f,
+                _enableVfx.Value
+            );
+
+            float drop = DragonCombat.GetSkySummonDropTime();
+            float e = 0f;
+            while (e < drop)
+            {
+                if (player == null || player.IsDead())
+                {
+                    if (cross != null)
+                        Destroy(cross);
+                    _holyRelicCasting = false;
+                    SetPriestCooldownNow(cooldownId, _holyRelicCooldown.Value);
+                    yield break;
+                }
+
+                float progress = DragonCombat.GetSkySummonFallProgress(e / drop);
+                if (cross != null)
+                    cross.transform.position = Vector3.Lerp(sky, finalCenter, progress);
+                e += Time.deltaTime;
+                yield return null;
+            }
+
+            if (cross != null)
+            {
+                cross.transform.position = finalCenter;
+                SetCrossPhysical(cross, true);
+            }
+
+            PriestRelicState relic = RegisterPriestRelic(
+                cross,
+                target,
+                radius,
+                duration,
+                false,
+                cooldownId,
+                _holyRelicCooldown.Value
+            );
+            _holyRelicCasting = false;
+
+            float nextPulse = Time.time;
+            while (relic != null && Time.time < relic.EndTime && relic.Cross != null)
+            {
+                if (player == null || player.IsDead())
+                    break;
+
+                if (Time.time >= nextPulse)
+                {
+                    List<Player> players = GetPlayersInSphere(target, radius);
+                    if (!players.Contains(player) && Vector3.Distance(player.transform.position, target) <= radius)
+                        players.Add(player);
+
+                    for (int i = 0; i < players.Count; i++)
+                    {
+                        Player ally = players[i];
+                        bool consecrated = IsInsideConsecratedGround(ally.transform.position);
+                        float multiplier = consecrated ? Mathf.Max(1f, _consecratedMultiplier.Value) : 1f;
+                        Heal(ally, ally.GetMaxHealth() * Mathf.Max(0f, _holyRelicHealPercent.Value) * multiplier / 100f);
+                        DragonCombat.ApplyTimedBuff(
+                            ally,
+                            "Priest.HolyRelic",
+                            Mathf.Max(0.1f, _holyRelicBuffDuration.Value),
+                            Mathf.Max(0f, _holyRelicDamageBuff.Value) * multiplier / 100f,
+                            Mathf.Max(0f, _holyRelicAttackSpeedBuff.Value) * multiplier / 100f,
+                            Mathf.Max(0f, _holyRelicMoveSpeedBuff.Value) * multiplier / 100f,
+                            Mathf.Clamp(_holyRelicDefenseBuff.Value * multiplier, 0f, 95f) / 100f,
+                            Mathf.Max(0f, _holyRelicRegenBuff.Value) / 100f,
+                            0f,
+                            true
+                        );
+                    }
+
+                    if (_enableVfx.Value)
+                    {
+                        StartCoroutine(AnimateRing(target + Vector3.up * 0.10f, 0.6f, radius, 0.70f, new Color(1f, 0.86f, 0.35f, 0.92f), 0.10f));
+                        PulseConsecratedGroundVfx();
+                    }
+
+                    nextPulse = Time.time + interval;
+                }
+
+                yield return null;
+            }
+
+            FinishPriestRelic(relic);
+        }
+
+        private void CastDivineIntervention(Player player)
+        {
+            const string id = "Priest.DivineIntervention";
+            bool crossCast;
+            Vector3 center = GetPriestSelfOrCrossCastCenter(player, Mathf.Max(1f, _interventionRange.Value), out crossCast);
+
+            if (!BeginCast(player, id, _interventionCooldown.Value, _interventionStamina.Value))
+                return;
+
+            float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _interventionWindup.Value));
+            DragonCombat.LockSkill(player, windup);
+            DragonCombat.PlaySkillPose(player, "Wave", windup + 0.10f);
+            StartCoroutine(DivineInterventionRoutine(player, center, windup, crossCast));
+        }
+
+        private IEnumerator DivineInterventionRoutine(Player player, Vector3 center, float windup, bool crossCast)
+        {
+            ShowMessage(crossCast ? "Divine Intervention - Cross Cast" : "Divine Intervention");
+            if (windup > 0f)
+                yield return new WaitForSeconds(windup);
+            if (player == null || player.IsDead())
+                yield break;
+
+            float radius = Mathf.Max(1f, _interventionRadius.Value);
+
+            if (_enableVfx.Value)
+                StartCoroutine(AnimateRing(center + Vector3.up * 0.08f, 0.8f, radius, 0.65f, new Color(1f, 0.92f, 0.48f, 0.95f), 0.13f));
+
+            List<Character> enemies = GetSphereTargets(player, center, radius);
+            for (int i = 0; i < enemies.Count; i++)
+            {
+                DealDamageScaled(player, enemies[i], _interventionDamage, 1f, 12f, false);
+                DragonCombat.ApplyExpose(enemies[i], Mathf.Max(0.1f, _interventionExposeDuration.Value));
+            }
+
+            List<Player> allies = GetPlayersInSphere(center, radius);
+            if (!allies.Contains(player) && Vector3.Distance(player.transform.position, center) <= radius)
+                allies.Add(player);
+
+            for (int i = 0; i < allies.Count; i++)
+            {
+                Player ally = allies[i];
+                Heal(ally, ally.GetMaxHealth() * Mathf.Max(0f, _interventionHealPercent.Value) / 100f);
+                DragonCombat.ApplyTimedBuff(
+                    ally,
+                    "Priest.DivineIntervention",
+                    Mathf.Max(0.1f, _interventionBuffDuration.Value),
+                    0f,
+                    0f,
+                    0f,
+                    0.20f,
+                    0f,
+                    0f,
+                    true
+                );
+                GrantPriestBarrier(ally, Mathf.Max(1f, _interventionBarrierHp.Value), GetArmor(player), Mathf.Max(1f, _interventionBuffDuration.Value));
+            }
+        }
+
+        private void CastGrandCross(Player player)
+        {
+            const string id = "Priest.GrandCross";
+            if (!BeginCast(player, id, _grandCrossCooldown.Value, _grandCrossStamina.Value))
+                return;
+
+            // Grand Cross is self-cast only. Signature Crosses may reposition
+            // Divine Intervention / Heaven's Judgement, but never Grand Cross.
+            Vector3 origin = player.transform.position + Vector3.up * 2.5f;
+            Vector3 forward = AlbedoAimUtility.GetProjectileDirection(player, player.GetEyePoint());
+            forward.y = 0f;
+            if (forward.sqrMagnitude < 0.01f)
+                forward = FlatForward(player);
+            forward.Normalize();
+
+            float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _grandCrossWindup.Value));
+            DragonCombat.LockSkill(player, windup);
+            StartCoroutine(GrandCrossRoutine(player, origin, forward, windup));
+        }
+
+        private IEnumerator GrandCrossRoutine(Player player, Vector3 origin, Vector3 forward, float windup)
+        {
+            ShowMessage("Grand Cross");
+
+            float firstSlash = windup * 0.5f;
+            float secondSlash = Mathf.Max(0f, windup - firstSlash);
+
+            DragonCombat.PlaySkillPose(player, "Crescent", firstSlash + 0.08f);
+            if (firstSlash > 0f)
+                yield return new WaitForSeconds(firstSlash);
+
+            if (player == null || player.IsDead())
+                yield break;
+
+            DragonCombat.PlaySkillPose(player, "Crescent", secondSlash + 0.08f);
+            if (secondSlash > 0f)
+                yield return new WaitForSeconds(secondSlash);
+
+            if (player == null || player.IsDead())
+                yield break;
+
+            float width = Mathf.Max(1f, _grandCrossWidth.Value);
+            float height = Mathf.Max(2f, width * 0.60f);
+            float range = Mathf.Max(1f, _grandCrossRange.Value);
+            float travelTime = Mathf.Max(0.1f, _grandCrossTravelTime.Value);
+            float tickInterval = Mathf.Max(0.10f, _grandCrossTickInterval.Value);
+            Vector3 right = Vector3.Cross(Vector3.up, forward).normalized;
+            if (right.sqrMagnitude < 0.01f)
+                right = Vector3.right;
+
+            GameObject visualRoot = null;
+            LineRenderer slashA = null;
+            LineRenderer slashB = null;
+            if (_enableVfx.Value)
+            {
+                visualRoot = new GameObject("DragonsAltarGrandCross");
+                slashA = CreatePriestPersistentLine(visualRoot.transform, "GrandCrossSlashA", new Color(0.36f, 0.82f, 1f, 0.98f), 0.42f);
+                slashB = CreatePriestPersistentLine(visualRoot.transform, "GrandCrossSlashB", new Color(0.72f, 0.94f, 1f, 0.98f), 0.42f);
+            }
+
+            Dictionary<int, float> nextHitAt = new Dictionary<int, float>();
+            Quaternion rotation = Quaternion.LookRotation(forward, Vector3.up);
+            float elapsed = 0f;
+
+            while (elapsed <= travelTime)
+            {
+                if (player == null || player.IsDead())
+                    break;
+
+                float t = Mathf.Clamp01(elapsed / travelTime);
+                Vector3 center = origin + forward * (range * t);
+                float halfWidth = width * 0.5f;
+                float halfHeight = height * 0.5f;
+
+                if (slashA != null)
+                {
+                    slashA.SetPosition(0, center - right * halfWidth - Vector3.up * halfHeight);
+                    slashA.SetPosition(1, center + right * halfWidth + Vector3.up * halfHeight);
+                }
+                if (slashB != null)
+                {
+                    slashB.SetPosition(0, center - right * halfWidth + Vector3.up * halfHeight);
+                    slashB.SetPosition(1, center + right * halfWidth - Vector3.up * halfHeight);
+                }
+
+                Collider[] hits = Physics.OverlapBox(
+                    center,
+                    new Vector3(halfWidth, halfHeight, 0.8f),
+                    rotation,
+                    ~0,
+                    QueryTriggerInteraction.Ignore
+                );
+
+                HashSet<int> frameTargets = new HashSet<int>();
+                for (int i = 0; i < hits.Length; i++)
+                {
+                    Character enemy = hits[i].GetComponentInParent<Character>();
+                    if (enemy == null || !IsEnemy(player, enemy))
+                        continue;
+
+                    int enemyId = enemy.GetInstanceID();
+                    if (!frameTargets.Add(enemyId))
+                        continue;
+
+                    float nextAllowed;
+                    if (nextHitAt.TryGetValue(enemyId, out nextAllowed) && Time.time < nextAllowed)
+                        continue;
+
+                    nextHitAt[enemyId] = Time.time + tickInterval;
+                    DealDamage(player, enemy, _grandCrossDamage, 5f, false);
+                    RefreshSpiritBurn(player, enemy, _grandCrossSpiritDot.Value, Mathf.Max(0.1f, _grandCrossSpiritDuration.Value));
+                }
+
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+
+            if (visualRoot != null)
+                Destroy(visualRoot);
+        }
+
+        private void CastHeavensJudgement(Player player)
+        {
+            const string id = "Priest.HeavensJudgement";
+            if (!BeginCast(player, id, _heavensCooldown.Value, _heavensStamina.Value))
+                return;
+
+            bool crossCast;
+            Vector3 center = GetPriestSelfOrCrossCastCenter(player, Mathf.Max(1f, _sharedCrossCastRange.Value), out crossCast);
+            float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _heavensWindup.Value));
+            DragonCombat.LockSkill(player, windup);
+            DragonCombat.PlaySkillPose(player, "Sigil", windup + 0.10f);
+            StartCoroutine(HeavensJudgementRoutine(player, center, windup, crossCast));
+        }
+
+        private IEnumerator HeavensJudgementRoutine(Player player, Vector3 center, float windup, bool crossCast)
+        {
+            ShowMessage(crossCast ? "Heaven's Judgement - Cross Cast" : "Heaven's Judgement");
+
+            float radius = Mathf.Max(1f, _heavensRadius.Value);
+            float duration = Mathf.Max(0.1f, _heavensDuration.Value);
+            float interval = Mathf.Max(0.1f, _heavensStrikeInterval.Value);
+            int beamsPerWave = Mathf.Clamp(_heavensStrikesPerWave.Value, 1, 12);
+            float impactRadius = Mathf.Max(0.5f, _heavensStrikeRadius.Value);
+
+            if (_enableVfx.Value)
+                StartCoroutine(AnimateRing(center + Vector3.up * 0.08f, radius, radius, windup + duration + 0.10f, new Color(1f, 0.92f, 0.52f, 0.82f), 0.14f));
+
+            if (windup > 0f)
+                yield return new WaitForSeconds(windup);
+
+            if (player == null || player.IsDead())
+                yield break;
+
+            int groundMask = LayerMask.GetMask(
+                "Default",
+                "static_solid",
+                "Default_small",
+                "piece_nonsolid",
+                "terrain",
+                "vehicle",
+                "piece",
+                "viewblock"
+            );
+
+            float elapsed = 0f;
+            while (elapsed < duration)
+            {
+                HashSet<int> hitThisWave = new HashSet<int>();
+
+                for (int beam = 0; beam < beamsPerWave; beam++)
+                {
+                    Vector2 random = UnityEngine.Random.insideUnitCircle * radius;
+                    Vector3 strike = center + new Vector3(random.x, 0f, random.y);
+                    RaycastHit ground;
+                    if (Physics.Raycast(strike + Vector3.up * 10f, Vector3.down, out ground, 24f, groundMask))
+                        strike = ground.point;
+
+                    if (_enableVfx.Value)
+                    {
+                        Vector3 sky = DragonCombat.GetIndoorSafeSkyPoint(strike + Vector3.up * 0.1f, 7f);
+                        CreateTemporaryBeam(sky, strike + Vector3.up * 0.08f, new Color(1f, 0.94f, 0.62f, 0.96f), 0.24f, Mathf.Min(0.20f, interval * 0.8f));
+                        StartCoroutine(AnimateRing(strike + Vector3.up * 0.06f, 0.25f, impactRadius, Mathf.Min(0.28f, interval), new Color(1f, 0.90f, 0.46f, 0.70f), 0.07f));
+                    }
+
+                    List<Character> targets = GetSphereTargets(player, strike, impactRadius);
+                    for (int i = 0; i < targets.Count; i++)
+                    {
+                        Character enemy = targets[i];
+                        int enemyId = enemy.GetInstanceID();
+                        if (!hitThisWave.Add(enemyId))
+                            continue;
+
+                        DealDamage(player, enemy, _heavensDamage, 7f, false);
+                        DragonCombat.ApplyFrost(enemy, Mathf.Max(0.1f, _heavensFrostDuration.Value));
+                    }
+                }
+
+                elapsed += interval;
+                yield return new WaitForSeconds(interval);
+            }
+        }
+
+        private LineRenderer CreatePriestPersistentLine(Transform parent, string name, Color color, float width)
+        {
+            GameObject obj = new GameObject(name);
+            obj.transform.SetParent(parent, false);
+            LineRenderer line = obj.AddComponent<LineRenderer>();
+            line.useWorldSpace = true;
+            line.positionCount = 2;
+            line.startWidth = Mathf.Max(0.02f, width);
+            line.endWidth = Mathf.Max(0.02f, width);
+            line.startColor = color;
+            line.endColor = color;
+            Shader shader = Shader.Find("Sprites/Default");
+            if (shader != null)
+                line.material = new Material(shader);
+            return line;
+        }
+
+        private void CastLightningTempest(Player player)
+        {
+            const string id = "Priest.LightningTempest";
+            Vector3 target;
+            if (!TryGetPhysicalAimPoint(player, Mathf.Max(1f, _tempestRange.Value), out target))
+            {
+                ShowMessage("Aim at a physical target");
+                return;
+            }
+            if (!BeginCast(player, id, _tempestCooldown.Value, _tempestStamina.Value))
+                return;
+
+            float windup = DragonCombat.ScaleWindup(player, 1f);
+            DragonCombat.LockSkill(player, windup);
+            DragonCombat.PlaySkillPose(player, "Tempest", windup + 0.10f);
+            StartCoroutine(LightningTempestRoutine(player, target, windup));
+        }
+
+        private IEnumerator LightningTempestRoutine(Player player, Vector3 center, float windup)
+        {
+            ShowMessage("Lightning Tempest");
+            if (windup > 0f)
+                yield return new WaitForSeconds(windup);
+
+            float duration = Mathf.Max(1f, _tempestDuration.Value);
+            float interval = Mathf.Max(0.1f, _tempestStrikeInterval.Value);
+            float radius = Mathf.Max(1f, _tempestRadius.Value);
+            int maxStrikes = Mathf.Clamp(_tempestMaxStrikes.Value, 1, 7);
+            float elapsed = 0f;
+
+            while (elapsed < duration)
+            {
+                int strikes = UnityEngine.Random.Range(1, maxStrikes + 1);
+                for (int sIndex = 0; sIndex < strikes; sIndex++)
+                {
+                    Vector2 circle = UnityEngine.Random.insideUnitCircle * radius;
+                    Vector3 strike = center + new Vector3(circle.x, 0f, circle.y);
+                    RaycastHit ground;
+                    int mask = LayerMask.GetMask("Default", "static_solid", "Default_small", "piece_nonsolid", "terrain", "vehicle", "piece", "viewblock");
+                    if (Physics.Raycast(strike + Vector3.up * 6f, Vector3.down, out ground, 12f, mask))
+                        strike = ground.point;
+
+                    if (_enableVfx.Value)
+                        CreateLightning(strike, new Color(0.55f, 0.86f, 1f, 1f), 0.28f);
+
+                    List<Character> targets = GetSphereTargets(player, strike, 1.6f);
+                    for (int i = 0; i < targets.Count; i++)
+                    {
+                        Character enemy = targets[i];
+                        DealDamage(player, enemy, _tempestDamage, 8f, false);
+                        DragonCombat.ApplyFrost(enemy, Mathf.Max(0.1f, _tempestFrostDuration.Value));
+                        DragonCombat.ApplyExpose(enemy, Mathf.Max(0.1f, _tempestExposeDuration.Value));
+                        DragonCombat.ApplyZap(player, enemy, _tempestZapDamage.Value, 0f, 0f);
+                        RefreshFireBurn(player, enemy, _tempestFireDot.Value, Mathf.Max(0.1f, _tempestFireDuration.Value));
+                        RefreshSpiritBurn(player, enemy, _tempestSpiritDot.Value, Mathf.Max(0.1f, _tempestSpiritDuration.Value));
+                    }
+                }
+                elapsed += interval;
+                yield return new WaitForSeconds(interval);
+            }
+        }
+
+        private void ActivateGrandSigil(Player player)
+        {
+            const string id = "Priest.GrandSigil";
+            if (!BeginCast(player, id, _grandCooldown.Value, _grandStamina.Value))
+                return;
+
+            float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _grandWindup.Value));
+            DragonCombat.LockSkill(player, windup);
+            DragonCombat.PlaySkillPose(player, "Sigil", windup + 0.10f);
+            StartCoroutine(GrandSigilBarrierRoutine(player, windup));
+        }
+
+        private IEnumerator GrandSigilBarrierRoutine(Player player, float windup)
+        {
+            ShowMessage("Grand Sigil");
+            if (windup > 0f)
+                yield return new WaitForSeconds(windup);
+            if (player == null || player.IsDead())
+                yield break;
+
+            float radius = Mathf.Max(1f, _grandRadius.Value);
+            float armor = GetArmor(player);
+            List<Player> players = GetPlayersInSphere(player.transform.position, radius);
+
+            if (!players.Contains(player))
+                players.Add(player);
+
+            for (int i = 0; i < players.Count; i++)
+            {
+                Player ally = players[i];
+                BarrierState state = new BarrierState();
+                state.HP = Mathf.Max(1f, _grandBarrierHp.Value);
+                state.Armor = Mathf.Max(0f, armor);
+                state.EndTime = Time.time + Mathf.Max(1f, _grandBarrierDuration.Value);
+                _barriers[ally.GetInstanceID()] = state;
+
+                if (_enableVfx.Value)
+                    StartCoroutine(BarrierVisual(ally));
+            }
+
+            if (_enableVfx.Value)
+                StartCoroutine(AnimateRing(player.transform.position + Vector3.up * 0.10f, 0.5f, radius, 0.65f, new Color(0.56f, 0.90f, 1f, 0.92f), 0.10f));
+        }
+        private bool BeginPriestRelicCast(Player player, string id, float stamina)
+        {
+            float remaining = GetCooldownRemaining(id);
+            if (remaining > 0f)
+            {
+                ShowMessage("Cooldown: " + remaining.ToString("0.0") + "s");
+                return false;
+            }
+
+            stamina = Mathf.Max(0f, stamina);
+            if (GetStamina(player) < stamina)
+            {
+                ShowMessage("Not enough stamina");
+                return false;
+            }
+
+            UseStamina(player, stamina);
+            return true;
+        }
+
+        private void SetPriestCooldownNow(string id, float cooldown)
+        {
+            if (string.IsNullOrEmpty(id))
+                return;
+
+            if (_testingForceCooldowns.Value)
+                cooldown = Mathf.Max(0f, _testingCooldownSeconds.Value);
+
+            _cooldowns[id] = Time.time + Mathf.Max(0f, cooldown);
+        }
+
+        private void StartPriestRelicCooldown(PriestRelicState relic)
+        {
+            if (relic == null || relic.CooldownStarted)
+                return;
+
+            relic.CooldownStarted = true;
+            SetPriestCooldownNow(relic.CooldownId, relic.CooldownSeconds);
+        }
+
+        private PriestRelicState RegisterPriestRelic(
+            GameObject cross,
+            Vector3 position,
+            float radius,
+            float duration,
+            bool isLightning,
+            string cooldownId,
+            float cooldownSeconds
+        )
+        {
+            CleanupPriestRelics();
+
+            PriestRelicState existing = FindPriestRelic(isLightning);
+            if (existing != null)
+                RelinquishPriestRelic(existing);
+
+            PriestRelicState state = new PriestRelicState();
+            state.Cross = cross;
+            state.Position = position;
+            state.Radius = Mathf.Max(0.5f, radius);
+            state.EndTime = Time.time + Mathf.Max(0.5f, duration);
+            state.IsLightning = isLightning;
+            state.CooldownId = cooldownId;
+            state.CooldownSeconds = Mathf.Max(0f, cooldownSeconds);
+            state.CooldownStarted = false;
+            _priestRelics.Add(state);
+
+            if (cross != null)
+            {
+                PriestRelicMarker marker = cross.GetComponent<PriestRelicMarker>();
+                if (marker == null)
+                    marker = cross.AddComponent<PriestRelicMarker>();
+                marker.State = state;
+            }
+
+            return state;
+        }
+
+        private PriestRelicState FindPriestRelic(bool isLightning)
+        {
+            CleanupPriestRelics();
+            for (int i = 0; i < _priestRelics.Count; i++)
+            {
+                PriestRelicState relic = _priestRelics[i];
+                if (relic != null && relic.IsLightning == isLightning && relic.Cross != null && Time.time < relic.EndTime)
+                    return relic;
+            }
+            return null;
+        }
+
+        private void RelinquishPriestRelic(PriestRelicState relic)
+        {
+            if (relic == null)
+                return;
+
+            relic.EndTime = Time.time;
+            StartPriestRelicCooldown(relic);
+
+            if (relic.Cross != null)
+                Destroy(relic.Cross);
+
+            _priestRelics.Remove(relic);
+        }
+
+        private void FinishPriestRelic(PriestRelicState relic)
+        {
+            if (relic == null)
+                return;
+
+            StartPriestRelicCooldown(relic);
+
+            if (relic.Cross != null)
+                Destroy(relic.Cross);
+
+            _priestRelics.Remove(relic);
+        }
+
+        private void CleanupPriestRelics()
+        {
+            for (int i = _priestRelics.Count - 1; i >= 0; i--)
+            {
+                PriestRelicState relic = _priestRelics[i];
+                if (relic == null)
+                {
+                    _priestRelics.RemoveAt(i);
+                    continue;
+                }
+
+                if (Time.time >= relic.EndTime || relic.Cross == null)
+                {
+                    StartPriestRelicCooldown(relic);
+                    if (relic.Cross != null)
+                        Destroy(relic.Cross);
+                    _priestRelics.RemoveAt(i);
+                }
+            }
+        }
+
+        private List<PriestRelicState> GetActivePriestRelics()
+        {
+            CleanupPriestRelics();
+            return new List<PriestRelicState>(_priestRelics);
+        }
+
+        private bool TryGetAimedPriestRelic(Player player, float range, out PriestRelicState relic)
+        {
+            relic = null;
+            if (player == null)
+                return false;
+
+            CleanupPriestRelics();
+
+            Vector3 origin = player.GetEyePoint();
+            Vector3 direction = AlbedoAimUtility.GetProjectileDirection(player, origin);
+            if (direction.sqrMagnitude < 0.01f)
+                direction = player.transform.forward;
+            direction.Normalize();
+
+            RaycastHit[] hits = Physics.RaycastAll(origin, direction, Mathf.Max(1f, range), ~0, QueryTriggerInteraction.Ignore);
+            int nearestIndex = -1;
+            float nearestDistance = float.MaxValue;
+
+            for (int i = 0; i < hits.Length; i++)
+            {
+                if (hits[i].distance < nearestDistance)
+                {
+                    nearestDistance = hits[i].distance;
+                    nearestIndex = i;
+                }
+            }
+
+            if (nearestIndex < 0 || hits[nearestIndex].collider == null)
+                return false;
+
+            PriestRelicMarker marker = hits[nearestIndex].collider.GetComponentInParent<PriestRelicMarker>();
+            if (marker == null || marker.State == null)
+                return false;
+
+            PriestRelicState candidate = marker.State;
+            if (candidate.Cross == null || Time.time >= candidate.EndTime)
+                return false;
+
+            relic = candidate;
+            return true;
+        }
+
+        private Vector3 GetPriestSelfOrCrossCastCenter(Player player, float range, out bool crossCast)
+        {
+            PriestRelicState relic;
+            if (TryGetAimedPriestRelic(player, range, out relic))
+            {
+                crossCast = true;
+                return relic.Position;
+            }
+
+            crossCast = false;
+            return player == null ? Vector3.zero : player.transform.position;
+        }
+
+        private bool TryGetConsecratedGround(out Vector3 center, out float radius)
+        {
+            center = Vector3.zero;
+            radius = Mathf.Max(1f, _consecratedRadius.Value);
+
+            PriestRelicState lightning = FindPriestRelic(true);
+            PriestRelicState holy = FindPriestRelic(false);
+            if (lightning == null || holy == null)
+                return false;
+
+            Vector3 delta = lightning.Position - holy.Position;
+            delta.y = 0f;
+            float connectRange = Mathf.Max(0f, _consecratedConnectRange.Value);
+            if (delta.sqrMagnitude > connectRange * connectRange)
+                return false;
+
+            center = (lightning.Position + holy.Position) * 0.5f;
+            return true;
+        }
+
+        private bool IsInsideConsecratedGround(Vector3 point)
+        {
+            Vector3 center;
+            float radius;
+            if (!TryGetConsecratedGround(out center, out radius))
+                return false;
+
+            Vector3 delta = point - center;
+            delta.y = 0f;
+            return delta.sqrMagnitude <= radius * radius;
+        }
+
+        private void PulseConsecratedGroundVfx()
+        {
+            if (!_enableVfx.Value)
+                return;
+
+            Vector3 center;
+            float radius;
+            if (!TryGetConsecratedGround(out center, out radius))
+                return;
+
+            PriestRelicState lightning = FindPriestRelic(true);
+            PriestRelicState holy = FindPriestRelic(false);
+            if (lightning == null || holy == null)
+                return;
+
+            CreateTemporaryBeam(
+                lightning.Position + Vector3.up * 1.2f,
+                holy.Position + Vector3.up * 1.2f,
+                new Color(1f, 0.90f, 0.42f, 0.78f),
+                0.10f,
+                0.55f
+            );
+            StartCoroutine(
+                AnimateRing(
+                    center + Vector3.up * 0.07f,
+                    radius,
+                    radius,
+                    1.05f,
+                    new Color(1f, 0.88f, 0.38f, 0.52f),
+                    0.08f
+                )
+            );
+        }
+
+        private void DealDamageScaled(Player attacker, Character target, DamageConfig cfg, float multiplier, float push, bool forceStagger)
+        {
+            if (attacker == null || target == null || cfg == null)
+                return;
+            multiplier = Mathf.Max(0f, multiplier);
+            HitData hit = new HitData();
+            hit.m_damage.m_blunt = cfg.Blunt.Value * multiplier;
+            hit.m_damage.m_slash = cfg.Slash.Value * multiplier;
+            hit.m_damage.m_pierce = cfg.Pierce.Value * multiplier;
+            hit.m_damage.m_fire = cfg.Fire.Value * multiplier;
+            hit.m_damage.m_frost = cfg.Frost.Value * multiplier;
+            hit.m_damage.m_lightning = cfg.Lightning.Value * multiplier;
+            hit.m_damage.m_poison = cfg.Poison.Value * multiplier;
+            hit.m_damage.m_spirit = cfg.Spirit.Value * multiplier;
+            hit.m_point = target.transform.position;
+            hit.m_dir = (target.transform.position - attacker.transform.position).normalized;
+            hit.m_pushForce = Mathf.Max(0f, push);
+            hit.SetAttacker(attacker);
+            if (forceStagger)
+                TrySetForceStagger(hit);
+            target.Damage(hit);
+        }
+
+        private void GrantPriestBarrier(Player ally, float hp, float armor, float duration)
+        {
+            if (ally == null)
+                return;
+            int id = ally.GetInstanceID();
+            BarrierState state;
+            if (!_barriers.TryGetValue(id, out state) || state == null || Time.time >= state.EndTime)
+            {
+                state = new BarrierState();
+                _barriers[id] = state;
+            }
+            state.HP = Mathf.Max(state.HP, Mathf.Max(1f, hp));
+            state.Armor = Mathf.Max(state.Armor, Mathf.Max(0f, armor));
+            state.EndTime = Mathf.Max(state.EndTime, Time.time + Mathf.Max(0.5f, duration));
+            if (_enableVfx.Value)
+                StartCoroutine(BarrierVisual(ally));
+        }
+
+        private void CreateTemporaryBeam(Vector3 start, Vector3 end, Color color, float width, float lifetime)
+        {
+            GameObject obj = new GameObject("DragonsAltarPriestBeam");
+            LineRenderer line = obj.AddComponent<LineRenderer>();
+            line.useWorldSpace = true;
+            line.positionCount = 2;
+            line.startWidth = Mathf.Max(0.02f, width);
+            line.endWidth = Mathf.Max(0.02f, width * 0.75f);
+            line.startColor = color;
+            line.endColor = color;
+            Shader shader = Shader.Find("Sprites/Default");
+            if (shader != null)
+                line.material = new Material(shader);
+            line.SetPosition(0, start);
+            line.SetPosition(1, end);
+            Destroy(obj, Mathf.Max(0.05f, lifetime));
+        }
+
+        private void RefreshSpiritBurn(Player attacker, Character target, float damagePerSecond, float duration)
+        {
+            RefreshDot(_refreshingSpiritBurns, attacker, target, damagePerSecond, duration);
+        }
+
+        private void RefreshFireBurn(Player attacker, Character target, float damagePerSecond, float duration)
+        {
+            RefreshDot(_refreshingFireBurns, attacker, target, damagePerSecond, duration);
+        }
+
+        private void RefreshDot(Dictionary<int, RefreshingDotState> states, Player attacker, Character target, float damagePerSecond, float duration)
+        {
+            if (states == null || target == null || target.IsDead()) return;
+            int id = target.GetInstanceID();
+            RefreshingDotState state;
+            if (!states.TryGetValue(id, out state) || state == null)
+            {
+                state = new RefreshingDotState();
+                state.NextTick = Time.time + 1f;
+                states[id] = state;
+            }
+            state.Attacker = attacker;
+            state.Target = target;
+            state.DamagePerSecond = Mathf.Max(0f, damagePerSecond);
+            state.EndTime = Time.time + Mathf.Max(0.1f, duration);
+        }
+
+        private void UpdateRefreshingDots()
+        {
+            UpdateRefreshingDotDictionary(_refreshingSpiritBurns, true);
+            UpdateRefreshingDotDictionary(_refreshingFireBurns, false);
+        }
+
+        private void UpdateRefreshingDotDictionary(Dictionary<int, RefreshingDotState> states, bool spirit)
+        {
+            if (states == null || states.Count == 0) return;
+            float now = Time.time;
+            List<int> remove = null;
+            foreach (KeyValuePair<int, RefreshingDotState> pair in states)
+            {
+                RefreshingDotState state = pair.Value;
+                if (state == null || state.Target == null || state.Target.IsDead() || now >= state.EndTime)
+                {
+                    if (remove == null) remove = new List<int>();
+                    remove.Add(pair.Key);
+                    continue;
+                }
+                if (now >= state.NextTick)
+                {
+                    state.NextTick = now + 1f;
+                    if (spirit) DragonCombat.ApplySpiritBurnTick(state.Attacker, state.Target, state.DamagePerSecond);
+                    else DragonCombat.ApplyFireBurnTick(state.Attacker, state.Target, state.DamagePerSecond);
+                }
+            }
+            if (remove != null) for (int i=0;i<remove.Count;i++) states.Remove(remove[i]);
+        }
+
+        private IEnumerator FireDot(Player attacker, Character target, float damagePerSecond, float duration)
+        {
+            int ticks = Mathf.Max(1, Mathf.CeilToInt(Mathf.Max(0.1f, duration)));
+            float damage = Mathf.Max(0f, damagePerSecond);
+            for (int i = 0; i < ticks; i++)
+            {
+                yield return new WaitForSeconds(1f);
+                if (target == null || target.IsDead())
+                    yield break;
+                DragonCombat.ApplyFireBurnTick(attacker, target, damage);
+            }
+        }
+
+        private IEnumerator CrescentVerticalSlashWave(
+            Player player,
+            Vector3 origin,
+            Vector3 forward,
+            float range,
+            float width,
+            float height,
+            float travelTime
+        )
+        {
+            forward.y = 0f;
+
+            if (forward.sqrMagnitude < 0.01f)
+                forward = player.transform.forward;
+
+            forward.y = 0f;
+
+            if (forward.sqrMagnitude < 0.01f)
+                forward = Vector3.forward;
+
+            forward.Normalize();
+
+            Dictionary<int, float> nextHitAt = new Dictionary<int, float>();
+            float elapsed = 0f;
+
+            int groundMask = LayerMask.GetMask(
+                "Default",
+                "static_solid",
+                "Default_small",
+                "piece_nonsolid",
+                "terrain",
+                "vehicle",
+                "piece",
+                "viewblock"
+            );
+
+            while (elapsed <= travelTime)
+            {
+                float t = Mathf.Clamp01(elapsed / Mathf.Max(0.05f, travelTime));
+                Vector3 point = origin + forward * Mathf.Lerp(0.35f, range, t);
+
+                // Keep each slash riding the terrain/slope as it moves outward.
+                RaycastHit ground;
+
+                if (Physics.Raycast(point + Vector3.up * 5f, Vector3.down, out ground, 12f, groundMask))
+                    point = ground.point;
+
+                float depth = 2.5f;
+                Vector3 center = point + Vector3.up * (height * 0.5f);
+
+                // Vertical blade hitbox:
+                // X = ~1m width, Y = tall vertical blade, Z = thin travelling depth.
+                Collider[] hits = Physics.OverlapBox(
+                    center,
+                    new Vector3(width * 0.5f, height * 0.5f, depth * 0.5f),
+                    Quaternion.LookRotation(forward, Vector3.up)
+                );
+
+                for (int i = 0; i < hits.Length; i++)
+                {
+                    Character target = hits[i].GetComponentInParent<Character>();
+
+                    if (target == null || !IsEnemy(player, target))
+                        continue;
+
+                    int targetId = target.GetInstanceID();
+                    float nextAllowed;
+                    if (nextHitAt.TryGetValue(targetId, out nextAllowed) && Time.time < nextAllowed)
+                        continue;
+
+                    nextHitAt[targetId] = Time.time + Mathf.Max(0.10f, _crescentPersistentTick.Value);
+                    DealDamage(player, target, _crescentDamage, 8f, false);
+                }
+
+                if (_enableVfx.Value)
+                {
+                    CreateCrescentVerticalSlashVisual(
+                        point,
+                        forward,
+                        width,
+                        height,
+                        0.10f
+                    );
+                }
+
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+        }
+
+        private IEnumerator SpiritTrail(
+            Player player,
+            Vector3 origin,
+            Vector3 forward,
+            float range,
+            float travelTime,
+            Dictionary<int, float> sharedNextHitAt
+        )
+        {
+            forward.y = 0f;
+            if (forward.sqrMagnitude < 0.01f)
+                forward = Vector3.forward;
+            forward.Normalize();
+
+            if (sharedNextHitAt == null)
+                sharedNextHitAt = new Dictionary<int, float>();
+
+            int groundMask = LayerMask.GetMask(
+                "Default",
+                "static_solid",
+                "Default_small",
+                "piece_nonsolid",
+                "terrain",
+                "vehicle",
+                "piece",
+                "viewblock"
+            );
+
+            float elapsed = 0f;
+            while (elapsed <= travelTime)
+            {
+                if (player == null || player.IsDead())
+                    yield break;
+
+                float t = Mathf.Clamp01(elapsed / Mathf.Max(0.05f, travelTime));
+                Vector3 projected = origin + forward * (range * t);
+                RaycastHit ground;
+
+                // Ground Projectile nature: each trail rides the physical surface.
+                // If there is no surface under this sample, do not create a floating trail segment.
+                if (!Physics.Raycast(projected + Vector3.up * 8f, Vector3.down, out ground, 24f, groundMask))
+                {
+                    elapsed += Time.deltaTime;
+                    yield return null;
+                    continue;
+                }
+
+                Vector3 point = ground.point;
+                Collider[] hits = Physics.OverlapSphere(
+                    point + Vector3.up * 0.35f,
+                    0.9f,
+                    ~0,
+                    QueryTriggerInteraction.Ignore
+                );
+
+                for (int i = 0; i < hits.Length; i++)
+                {
+                    Character target = hits[i].GetComponentInParent<Character>();
+                    if (target == null || !IsEnemy(player, target))
+                        continue;
+
+                    int targetId = target.GetInstanceID();
+                    float nextAllowed;
+                    if (sharedNextHitAt.TryGetValue(targetId, out nextAllowed) && Time.time < nextAllowed)
+                        continue;
+
+                    sharedNextHitAt[targetId] = Time.time + Mathf.Max(0.10f, _divineTrailPersistentTick.Value);
+
+                    // Persistent direct Lightning Damage + refreshed Spirit DoT.
+                    DealDamage(player, target, _divineTrailDamage, 0f, false);
+                    RefreshSpiritBurn(player, target, _divineSpiritDot.Value, Mathf.Max(0.1f, _divineSpiritDuration.Value));
+                }
+
+                if (_enableVfx.Value)
+                {
+                    StartCoroutine(AnimateRing(
+                        point + Vector3.up * 0.06f,
+                        0.12f,
+                        0.80f,
+                        0.22f,
+                        new Color(0.55f, 0.86f, 1f, 0.82f),
+                        0.05f
+                    ));
+                }
+
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+        }
+
+        private List<Character> GetFrontalTargets(Player player, Vector3 origin, Vector3 forward, float range, float angle)
+        {
+            List<Character> result = new List<Character>();
+            HashSet<Character> seen = new HashSet<Character>();
+
+            forward.y = 0f;
+
+            if (forward.sqrMagnitude < 0.01f)
+            {
+                forward = player.transform.forward;
+                forward.y = 0f;
+            }
+
+            if (forward.sqrMagnitude < 0.01f)
+                forward = Vector3.forward;
+
+            forward.Normalize();
+
+            Collider[] hits = Physics.OverlapSphere(origin, range);
+
+            for (int i = 0; i < hits.Length; i++)
+            {
+                Collider collider = hits[i];
+                Character target = collider.GetComponentInParent<Character>();
+
+                if (target == null || seen.Contains(target) || !IsEnemy(player, target))
+                    continue;
+
+                Vector3 closest = collider.ClosestPoint(origin);
+                Vector3 horizontalClosest = closest - origin;
+                horizontalClosest.y = 0f;
+
+                if (horizontalClosest.sqrMagnitude > range * range)
+                    continue;
+
+                Vector3 directionPoint = collider.bounds.center - origin;
+                directionPoint.y = 0f;
+
+                if (directionPoint.sqrMagnitude < 0.001f)
+                    directionPoint = horizontalClosest;
+
+                if (directionPoint.sqrMagnitude > 0.001f &&
+                    Vector3.Angle(forward, directionPoint.normalized) > angle * 0.5f)
+                    continue;
+
+                seen.Add(target);
+                result.Add(target);
+            }
+
+            return result;
+        }
+
+        private void DealScaledDamage(Player attacker, Character target, DamageConfig cfg, float push, float multiplier)
+        {
+            HitData hit = new HitData();
+            multiplier = Mathf.Max(0f, multiplier);
+            hit.m_damage.m_blunt = cfg.Blunt.Value * multiplier;
+            hit.m_damage.m_slash = cfg.Slash.Value * multiplier;
+            hit.m_damage.m_pierce = cfg.Pierce.Value * multiplier;
+            hit.m_damage.m_fire = cfg.Fire.Value * multiplier;
+            hit.m_damage.m_frost = cfg.Frost.Value * multiplier;
+            hit.m_damage.m_lightning = cfg.Lightning.Value * multiplier;
+            hit.m_damage.m_poison = cfg.Poison.Value * multiplier;
+            hit.m_damage.m_spirit = cfg.Spirit.Value * multiplier;
+            hit.m_point = target.transform.position;
+            hit.m_dir = (target.transform.position - attacker.transform.position).normalized;
+            hit.m_pushForce = push;
+            hit.SetAttacker(attacker);
+            target.Damage(hit);
+        }
+
+        private void DealSnapshotDamage(Player attacker, Character target, DamageSnapshot snapshot, float multiplier, float push)
+        {
+            HitData hit = new HitData();
+            multiplier = Mathf.Max(0f, multiplier);
+            hit.m_damage.m_blunt = snapshot.Blunt * multiplier;
+            hit.m_damage.m_slash = snapshot.Slash * multiplier;
+            hit.m_damage.m_pierce = snapshot.Pierce * multiplier;
+            hit.m_damage.m_fire = snapshot.Fire * multiplier;
+            hit.m_damage.m_frost = snapshot.Frost * multiplier;
+            hit.m_damage.m_lightning = snapshot.Lightning * multiplier;
+            hit.m_damage.m_poison = snapshot.Poison * multiplier;
+            hit.m_damage.m_spirit = snapshot.Spirit * multiplier;
+            hit.m_point = target.transform.position;
+            hit.m_dir = (target.transform.position - attacker.transform.position).normalized;
+            hit.m_pushForce = push;
+            hit.SetAttacker(attacker);
+            target.Damage(hit);
+        }
+
+        private void DealSnapshotDamage(Player attacker, Character target, DamageSnapshot snapshot, float multiplier, float push, bool forceStagger)
+        {
+            HitData hit = new HitData();
+            multiplier = Mathf.Max(0f, multiplier);
+            hit.m_damage.m_blunt = snapshot.Blunt * multiplier;
+            hit.m_damage.m_slash = snapshot.Slash * multiplier;
+            hit.m_damage.m_pierce = snapshot.Pierce * multiplier;
+            hit.m_damage.m_fire = snapshot.Fire * multiplier;
+            hit.m_damage.m_frost = snapshot.Frost * multiplier;
+            hit.m_damage.m_lightning = snapshot.Lightning * multiplier;
+            hit.m_damage.m_poison = snapshot.Poison * multiplier;
+            hit.m_damage.m_spirit = snapshot.Spirit * multiplier;
+            hit.m_point = target.transform.position;
+            hit.m_dir = (target.transform.position - attacker.transform.position).normalized;
+            hit.m_pushForce = push;
+            hit.SetAttacker(attacker);
+            if (forceStagger)
+                TrySetForceStagger(hit);
+            target.Damage(hit);
+            if (forceStagger)
+                ForceStagger(target, attacker);
+        }
+
+        private IEnumerator SpiritDot(Player attacker, Character target, float damagePerSecond, float duration)
+        {
+            int ticks = Mathf.Max(1, Mathf.CeilToInt(Mathf.Max(0.1f, duration)));
+            float damage = Mathf.Max(0f, damagePerSecond);
+
+            for (int i = 0; i < ticks; i++)
+            {
+                yield return new WaitForSeconds(1f);
+
+                if (target == null || target.IsDead())
+                    yield break;
+
+                DragonCombat.ApplySpiritBurnTick(attacker, target, damage);
+            }
+        }
+
+        private bool BeginCast(Player player, string id, float cooldown, float stamina)
+        {
+            if (_testingForceCooldowns.Value)
+                cooldown = Mathf.Max(0f, _testingCooldownSeconds.Value);
+
+            float remaining = GetCooldownRemaining(id);
+            if (remaining > 0f)
+            {
+                ShowMessage("Cooldown: " + remaining.ToString("0.0") + "s");
+                return false;
+            }
+
+            stamina = Mathf.Max(0f, stamina);
+
+            if (GetStamina(player) < stamina)
+            {
+                ShowMessage("Not enough stamina");
+                return false;
+            }
+
+            UseStamina(player, stamina);
+            _cooldowns[id] = Time.time + Mathf.Max(0f, cooldown);
+            return true;
+        }
+
+        public float GetCooldownRemaining(string id)
+        {
+            float end;
+
+            if (!_cooldowns.TryGetValue(id, out end))
+                return 0f;
+
+            return Mathf.Max(0f, end - Time.time);
+        }
+
+        private void DealDamage(Player attacker, Character target, DamageConfig cfg, float push, bool forceStagger)
+        {
+            HitData hit = new HitData();
+            hit.m_damage.m_blunt = cfg.Blunt.Value;
+            hit.m_damage.m_slash = cfg.Slash.Value;
+            hit.m_damage.m_pierce = cfg.Pierce.Value;
+            hit.m_damage.m_fire = cfg.Fire.Value;
+            hit.m_damage.m_frost = cfg.Frost.Value;
+            hit.m_damage.m_lightning = cfg.Lightning.Value;
+            hit.m_damage.m_poison = cfg.Poison.Value;
+            hit.m_damage.m_spirit = cfg.Spirit.Value;
+            hit.m_point = target.transform.position;
+            hit.m_dir = (target.transform.position - attacker.transform.position).normalized;
+            hit.m_pushForce = push;
+            hit.SetAttacker(attacker);
+
+            if (forceStagger)
+                TrySetForceStagger(hit);
+
+            target.Damage(hit);
+        }
+
+        private void DealSnapshotDamage(Player attacker, Character target, DamageSnapshot damage, float push)
+        {
+            HitData hit = new HitData();
+            hit.m_damage.m_blunt = damage.Blunt;
+            hit.m_damage.m_slash = damage.Slash;
+            hit.m_damage.m_pierce = damage.Pierce;
+            hit.m_damage.m_fire = damage.Fire;
+            hit.m_damage.m_frost = damage.Frost;
+            hit.m_damage.m_lightning = damage.Lightning;
+            hit.m_damage.m_poison = damage.Poison;
+            hit.m_damage.m_spirit = damage.Spirit;
+            hit.m_point = target.transform.position;
+            hit.m_dir = (target.transform.position - attacker.transform.position).normalized;
+            hit.m_pushForce = push;
+            hit.SetAttacker(attacker);
+            target.Damage(hit);
+        }
+
+        private void TrySetForceStagger(HitData hit)
+        {
+            try
+            {
+                FieldInfo field = typeof(HitData).GetField(
+                    "m_forceStagger",
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
+                );
+
+                if (field != null)
+                    field.SetValue(hit, true);
+            }
+            catch
+            {
+            }
+        }
+
+        private void ForceStagger(Character target, Player attacker)
+        {
+            try
+            {
+                MethodInfo method = target.GetType().GetMethod(
+                    "Stagger",
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                    null,
+                    new Type[] { typeof(Vector3) },
+                    null
+                );
+
+                if (method != null)
+                {
+                    Vector3 direction = (target.transform.position - attacker.transform.position).normalized;
+                    method.Invoke(target, new object[] { direction });
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private List<Character> GetSphereTargets(Player attacker, Vector3 center, float radius)
+        {
+            List<Character> result = new List<Character>();
+            Collider[] hits = Physics.OverlapSphere(center, radius);
+            HashSet<int> seen = new HashSet<int>();
+
+            for (int i = 0; i < hits.Length; i++)
+            {
+                Character target = hits[i].GetComponentInParent<Character>();
+
+                if (target == null || !IsEnemy(attacker, target))
+                    continue;
+
+                int id = target.GetInstanceID();
+                if (seen.Add(id))
+                    result.Add(target);
+            }
+
+            return result;
+        }
+
+        private List<Character> GetAimedBoxTargets(Player attacker, Vector3 origin, Vector3 forward, float length, float width)
+        {
+            List<Character> result = new List<Character>();
+            length = Mathf.Max(0.5f, length);
+            width = Mathf.Max(0.5f, width);
+
+            forward.y = 0f;
+            if (forward.sqrMagnitude < 0.01f)
+                forward = attacker.transform.forward;
+
+            forward.y = 0f;
+            if (forward.sqrMagnitude < 0.01f)
+                forward = Vector3.forward;
+
+            forward.Normalize();
+
+            Vector3 center = origin + forward * (length * 0.5f);
+            Vector3 half = new Vector3(width * 0.5f, 2.5f, length * 0.5f);
+            Quaternion rotation = Quaternion.LookRotation(forward, Vector3.up);
+            Collider[] hits = Physics.OverlapBox(center, half, rotation);
+            HashSet<int> seen = new HashSet<int>();
+
+            for (int i = 0; i < hits.Length; i++)
+            {
+                Character target = hits[i].GetComponentInParent<Character>();
+
+                if (target == null || !IsEnemy(attacker, target))
+                    continue;
+
+                int id = target.GetInstanceID();
+
+                if (seen.Add(id))
+                    result.Add(target);
+            }
+
+            return result;
+        }
+
+        private List<Character> GetForwardBoxTargets(Player attacker, float length, float width)
+        {
+            List<Character> result = new List<Character>();
+            Vector3 forward = FlatForward(attacker);
+            Vector3 center = attacker.transform.position + forward * (length * 0.5f) + Vector3.up * 1.0f;
+            Vector3 half = new Vector3(width * 0.5f, 2.5f, length * 0.5f);
+            Quaternion rotation = Quaternion.LookRotation(forward, Vector3.up);
+            Collider[] hits = Physics.OverlapBox(center, half, rotation);
+            HashSet<int> seen = new HashSet<int>();
+
+            for (int i = 0; i < hits.Length; i++)
+            {
+                Character target = hits[i].GetComponentInParent<Character>();
+
+                if (target == null || !IsEnemy(attacker, target))
+                    continue;
+
+                int id = target.GetInstanceID();
+                if (seen.Add(id))
+                    result.Add(target);
+            }
+
+            return result;
+        }
+
+        private List<Character> GetFrontalTargets(Player attacker, Vector3 forward, float radius, float minimumDot)
+        {
+            List<Character> all = GetSphereTargets(attacker, attacker.transform.position, radius);
+            List<Character> result = new List<Character>();
+
+            for (int i = 0; i < all.Count; i++)
+            {
+                Vector3 toTarget = all[i].transform.position - attacker.transform.position;
+                toTarget.y = 0f;
+
+                if (toTarget.sqrMagnitude < 0.01f)
+                {
+                    result.Add(all[i]);
+                    continue;
+                }
+
+                toTarget.Normalize();
+
+                if (Vector3.Dot(forward, toTarget) >= minimumDot)
+                    result.Add(all[i]);
+            }
+
+            return result;
+        }
+
+        private List<Player> GetPlayersInSphere(Vector3 center, float radius)
+        {
+            List<Player> result = new List<Player>();
+            Collider[] hits = Physics.OverlapSphere(center, radius);
+            HashSet<int> seen = new HashSet<int>();
+
+            for (int i = 0; i < hits.Length; i++)
+            {
+                Player player = hits[i].GetComponentInParent<Player>();
+
+                if (player == null)
+                    continue;
+
+                int id = player.GetInstanceID();
+
+                if (seen.Add(id))
+                    result.Add(player);
+            }
+
+            return result;
+        }
+
+        public bool IsMoonlightEnemy(Player attacker, Character target)
+        {
+            return IsEnemy(attacker, target);
+        }
+
+        public void ApplyMoonlightSpiritDot(Player attacker, Character target, float spiritPerSecond, float duration)
+        {
+            StartCoroutine(SpiritDot(attacker, target, spiritPerSecond, duration));
+        }
+
+        private bool IsEnemy(Player attacker, Character target)
+        {
+            if (target == null || target == attacker || target.IsDead())
+                return false;
+
+            if (target is Player)
+                return false;
+
+            try
+            {
+                MethodInfo method = target.GetType().GetMethod(
+                    "IsTamed",
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
+                );
+
+                if (method != null && Convert.ToBoolean(method.Invoke(target, null)))
+                    return false;
+            }
+            catch
+            {
+            }
+
+            return true;
+        }
+
+        private Vector3 FlatForward(Player player)
+        {
+            Vector3 forward = player.transform.forward;
+            forward.y = 0f;
+
+            if (forward.sqrMagnitude < 0.01f)
+                forward = Vector3.forward;
+
+            forward.Normalize();
+            return forward;
+        }
+
+        private bool TryGetPhysicalAimPoint(Player player, float range, out Vector3 point)
+        {
+            return AlbedoAimUtility.TryGetPhysicalTarget(player, range, out point);
+        }
+
+        private Vector3 GetCrosshairDirection(Player player, Vector3 origin)
+        {
+            return AlbedoAimUtility.GetProjectileDirection(player, origin);
+        }
+
+        private Vector3 GetAimPoint(Player player, float range)
+        {
+            Vector3 target;
+
+            if (AlbedoAimUtility.TryGetPhysicalTarget(player, range, out target))
+                return target;
+
+            Vector3 origin = player == null ? Vector3.zero : player.GetEyePoint();
+            return AlbedoAimUtility.GetFarCrosshairPoint(player, origin, range);
+        }
+
+        private void Heal(Character target, float amount)
+        {
+            if (target == null || amount <= 0f)
+                return;
+
+            try
+            {
+                MethodInfo[] methods = target.GetType().GetMethods(
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
+                );
+
+                for (int i = 0; i < methods.Length; i++)
+                {
+                    MethodInfo method = methods[i];
+
+                    if (method.Name != "Heal")
+                        continue;
+
+                    ParameterInfo[] parameters = method.GetParameters();
+
+                    if (parameters.Length < 1 || parameters[0].ParameterType != typeof(float))
+                        continue;
+
+                    object[] args = new object[parameters.Length];
+                    args[0] = amount;
+
+                    for (int j = 1; j < parameters.Length; j++)
+                    {
+                        if (parameters[j].HasDefaultValue)
+                            args[j] = parameters[j].DefaultValue;
+                        else if (parameters[j].ParameterType == typeof(bool))
+                            args[j] = true;
+                        else if (parameters[j].ParameterType.IsValueType)
+                            args[j] = Activator.CreateInstance(parameters[j].ParameterType);
+                        else
+                            args[j] = null;
+                    }
+
+                    method.Invoke(target, args);
+                    return;
+                }
+            }
+            catch
+            {
+            }
+
+            target.SetHealth(Mathf.Min(target.GetMaxHealth(), target.GetHealth() + amount));
+        }
+
+        private float GetStamina(Player player)
+        {
+            try
+            {
+                MethodInfo method = typeof(Player).GetMethod(
+                    "GetStamina",
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
+                );
+
+                if (method != null)
+                    return Convert.ToSingle(method.Invoke(player, null));
+            }
+            catch
+            {
+            }
+
+            FieldInfo field = typeof(Player).GetField(
+                "m_stamina",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
+            );
+
+            if (field == null)
+                return 0f;
+
+            return Convert.ToSingle(field.GetValue(player));
+        }
+
+        private void UseStamina(Player player, float amount)
+        {
+            try
+            {
+                MethodInfo[] methods = typeof(Player).GetMethods(
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
+                );
+
+                for (int i = 0; i < methods.Length; i++)
+                {
+                    MethodInfo method = methods[i];
+
+                    if (method.Name != "UseStamina")
+                        continue;
+
+                    ParameterInfo[] parameters = method.GetParameters();
+
+                    if (parameters.Length < 1 || parameters[0].ParameterType != typeof(float))
+                        continue;
+
+                    object[] args = new object[parameters.Length];
+                    args[0] = amount;
+
+                    for (int j = 1; j < parameters.Length; j++)
+                    {
+                        if (parameters[j].HasDefaultValue)
+                            args[j] = parameters[j].DefaultValue;
+                        else if (parameters[j].ParameterType == typeof(bool))
+                            args[j] = false;
+                        else if (parameters[j].ParameterType.IsValueType)
+                            args[j] = Activator.CreateInstance(parameters[j].ParameterType);
+                        else
+                            args[j] = null;
+                    }
+
+                    method.Invoke(player, args);
+                    DragonCombat.BlockStaminaRegen(player, 0.20f);
+                    return;
+                }
+            }
+            catch
+            {
+            }
+
+            FieldInfo field = typeof(Player).GetField(
+                "m_stamina",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
+            );
+
+            if (field != null)
+            {
+                field.SetValue(player, Mathf.Max(0f, GetStamina(player) - amount));
+                DragonCombat.BlockStaminaRegen(player, 0.20f);
+            }
+        }
+
+        private float GetArmor(Player player)
+        {
+            if (player == null)
+                return 0f;
+
+            string[] methodNames = new string[] { "GetBodyArmor", "GetArmor" };
+            for (int i = 0; i < methodNames.Length; i++)
+            {
+                try
+                {
+                    MethodInfo method = player.GetType().GetMethod(
+                        methodNames[i],
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                        null,
+                        Type.EmptyTypes,
+                        null
+                    );
+
+                    if (method != null && method.ReturnType == typeof(float))
+                        return Convert.ToSingle(method.Invoke(player, null));
+                }
+                catch
+                {
+                }
+            }
+
+            return 0f;
+        }
+
+        private DamageSnapshot GetWeaponDamage(Player player)
+        {
+            DamageSnapshot snapshot = new DamageSnapshot();
+
+            try
+            {
+                MethodInfo currentWeapon = player.GetType().GetMethod(
+                    "GetCurrentWeapon",
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
+                );
+
+                if (currentWeapon == null)
+                {
+                    snapshot.Blunt = 15f;
+                    return snapshot;
+                }
+
+                object item = currentWeapon.Invoke(player, null);
+
+                if (item == null)
+                {
+                    snapshot.Blunt = 15f;
+                    return snapshot;
+                }
+
+                MethodInfo getDamage = item.GetType().GetMethod(
+                    "GetDamage",
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                    null,
+                    Type.EmptyTypes,
+                    null
+                );
+
+                if (getDamage == null)
+                {
+                    snapshot.Blunt = 15f;
+                    return snapshot;
+                }
+
+                object damage = getDamage.Invoke(item, null);
+
+                if (damage == null)
+                {
+                    snapshot.Blunt = 15f;
+                    return snapshot;
+                }
+
+                snapshot.Blunt = ReadFloatField(damage, "m_blunt");
+                snapshot.Slash = ReadFloatField(damage, "m_slash");
+                snapshot.Pierce = ReadFloatField(damage, "m_pierce");
+                snapshot.Fire = ReadFloatField(damage, "m_fire");
+                snapshot.Frost = ReadFloatField(damage, "m_frost");
+                snapshot.Lightning = ReadFloatField(damage, "m_lightning");
+                snapshot.Poison = ReadFloatField(damage, "m_poison");
+                snapshot.Spirit = ReadFloatField(damage, "m_spirit");
+
+                if (snapshot.Total() <= 0f)
+                    snapshot.Blunt = 15f;
+            }
+            catch
+            {
+                snapshot.Blunt = 15f;
+            }
+
+            return snapshot;
+        }
+
+        private float ReadFloatField(object obj, string name)
+        {
+            try
+            {
+                FieldInfo field = obj.GetType().GetField(
+                    name,
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
+                );
+
+                if (field != null)
+                    return Convert.ToSingle(field.GetValue(obj));
+            }
+            catch
+            {
+            }
+
+            return 0f;
+        }
+
+        private void EncourageAggro(Player player, float radius)
+        {
+            Type baseAiType = FindTypeByName("BaseAI");
+
+            if (baseAiType == null)
+                return;
+
+            Collider[] hits = Physics.OverlapSphere(player.transform.position, radius);
+            HashSet<int> seen = new HashSet<int>();
+
+            for (int i = 0; i < hits.Length; i++)
+            {
+                Character target = hits[i].GetComponentInParent<Character>();
+
+                if (target == null || !IsEnemy(player, target))
+                    continue;
+
+                Component ai = target.GetComponent(baseAiType);
+
+                if (ai == null)
+                    continue;
+
+                int id = ai.GetInstanceID();
+
+                if (!seen.Add(id))
+                    continue;
+
+                TryInvoke(ai, "SetAlerted", new object[] { true });
+                TryInvoke(ai, "SetTarget", new object[] { player });
+            }
+        }
+
+        private void ActivateBarbaric(Player player)
+        {
+            if (IsUnchainedFuryActive())
+            {
+                ShowMessage("Unchained Fury active");
+                return;
+            }
+
+            if (_mercFury >= 100f && Time.time >= _mercFuryCooldownUntil)
+            {
+                _mercFury = 0f;
+                _mercFuryUntil = Time.time + Mathf.Max(0.5f, _mercFuryDuration.Value);
+                _mercFuryCooldownUntil = _mercFuryUntil + Mathf.Max(0f, _mercFuryCooldown.Value);
+                _mercFuryEndAnnounced = false;
+                DragonCombat.PlaySkillPose(player, "Shout", 0.75f);
+                ShowMessage("UNCHAINED FURY");
+                if (_enableVfx.Value)
+                    StartCoroutine(AnimateAura(player, new Color(1f, 0.22f, 0.08f, 0.92f), Mathf.Max(0.5f, _mercFuryDuration.Value)));
+                return;
+            }
+
+            if (!BeginCast(player, "Mercenary.Barbaric", _mercTauntCooldown.Value, 0f))
+                return;
+
+            DragonCombat.LockSkill(player, 1f);
+            DragonCombat.PlaySkillPose(player, "Shout", 1f);
+            ShowMessage("Barbaric: Taunt");
+            StartCoroutine(BarbaricTauntRoutine(player));
+        }
+
+        private bool IsUnchainedFuryActive()
+        {
+            return Time.time < _mercFuryUntil;
+        }
+
+        private void UpdateMercenaryFuryState(Player player, string advancement)
+        {
+            if (advancement != "Mercenary")
+            {
+                _mercFury = 0f;
+                _mercFuryUntil = 0f;
+                _mercFuryCooldownUntil = 0f;
+                _mercFuryEndAnnounced = false;
+                return;
+            }
+
+            if (_mercFuryUntil > 0f && Time.time >= _mercFuryUntil && !_mercFuryEndAnnounced)
+            {
+                _mercFuryEndAnnounced = true;
+                ShowMessage("Unchained Fury ended");
+            }
+        }
+
+        private void TryBuildMercenaryFury(Player attacker, Character target, HitData hit)
+        {
+            if (attacker == null || target == null || hit == null || GetAdvancement(attacker) != "Mercenary") return;
+            if (!IsEnemy(attacker, target)) return;
+            if (!IsNormalMeleeHit(attacker, hit) || TotalDamage(hit) <= 0f) return;
+            GainMercenaryFury(Mathf.Max(0f, _mercFuryGainPerWeaponHit.Value));
+        }
+
+        private void GainMercenaryFuryFromSkillHit(Player attacker)
+        {
+            if (attacker == null || GetAdvancement(attacker) != "Mercenary") return;
+            GainMercenaryFury(Mathf.Max(0f, _mercFuryGainPerSkillTarget.Value));
+        }
+
+        private void GainMercenaryFury(float amount)
+        {
+            if (amount <= 0f || IsUnchainedFuryActive() || Time.time < _mercFuryCooldownUntil || _mercFury >= 100f)
+                return;
+
+            float before = _mercFury;
+            _mercFury = Mathf.Clamp(_mercFury + amount, 0f, 100f);
+            if (before < 100f && _mercFury >= 100f)
+                ShowMessage("FURY 100 - M4+R");
+        }
+
+        private bool IsNormalMeleeHit(Player attacker, HitData hit)
+        {
+            if (attacker == null || hit == null || !IsWeaponHit(hit))
+                return false;
+
+            try
+            {
+                MethodInfo method = attacker.GetType().GetMethod("GetCurrentWeapon", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (method == null) return true;
+                object item = method.Invoke(attacker, null);
+                if (item == null) return true;
+                FieldInfo sharedField = item.GetType().GetField("m_shared", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (sharedField == null) return true;
+                object shared = sharedField.GetValue(item);
+                if (shared == null) return true;
+                FieldInfo skillField = shared.GetType().GetField("m_skillType", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (skillField == null) return true;
+                object skillValue = skillField.GetValue(shared);
+                string skill = skillValue == null ? "" : skillValue.ToString();
+
+                return skill == "Axes" || skill == "Swords" || skill == "Knives" || skill == "Clubs" ||
+                       skill == "Polearms" || skill == "Spears" || skill == "Unarmed";
+            }
+            catch
+            {
+                return true;
+            }
+        }
+
+        private IEnumerator BarbaricTauntRoutine(Player player)
+        {
+            yield return new WaitForSeconds(1f);
+            if (player == null || player.IsDead() || GetAdvancement(player) != "Mercenary")
+                yield break;
+
+            float radius = Mathf.Max(0f, _mercTauntRadius.Value);
+            Collider[] hits = Physics.OverlapSphere(player.transform.position, radius);
+            HashSet<Character> targets = new HashSet<Character>();
+            for (int i = 0; i < hits.Length; i++)
+            {
+                Character target = hits[i].GetComponentInParent<Character>();
+                if (target != null && IsEnemy(player, target) && targets.Add(target))
+                    DragonCombat.ApplyExpose(target, Mathf.Max(0.1f, _mercExposeDuration.Value));
+            }
+
+            if (_enableVfx.Value)
+                StartCoroutine(AnimateRing(player.transform.position + Vector3.up * 0.1f, 0.5f, radius, 0.6f, new Color(0.95f, 0.35f, 0.18f, 0.9f), 0.15f));
+
+            Type aiType = FindTypeByName("BaseAI");
+            float end = Time.time + Mathf.Max(0.1f, _mercTauntDuration.Value);
+            while (Time.time < end && player != null && !player.IsDead() && GetAdvancement(player) == "Mercenary")
+            {
+                if (aiType != null)
+                    foreach (Character target in targets)
+                    {
+                        if (target == null || target.IsDead()) continue;
+                        Component ai = target.GetComponent(aiType);
+                        if (ai == null) continue;
+                        TryInvoke(ai, "SetAlerted", new object[] { true });
+                        TryInvoke(ai, "SetTarget", new object[] { player });
+                    }
+                yield return new WaitForSeconds(0.25f);
+            }
+        }
+
+        private Type FindTypeByName(string name)
+        {
+            Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
+
+            for (int i = 0; i < assemblies.Length; i++)
+            {
+                try
+                {
+                    Type[] types = assemblies[i].GetTypes();
+
+                    for (int j = 0; j < types.Length; j++)
+                    {
+                        if (types[j] != null && types[j].Name == name)
+                            return types[j];
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            return null;
+        }
+
+        private void TryInvoke(object target, string methodName, object[] args)
+        {
+            try
+            {
+                MethodInfo[] methods = target.GetType().GetMethods(
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
+                );
+
+                for (int i = 0; i < methods.Length; i++)
+                {
+                    if (methods[i].Name != methodName)
+                        continue;
+
+                    ParameterInfo[] parameters = methods[i].GetParameters();
+
+                    if (parameters.Length != args.Length)
+                        continue;
+
+                    methods[i].Invoke(target, args);
+                    return;
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private void UpdateCombatRuntimeState(Player player, string advancement)
+        {
+            if (player == null)
+                return;
+
+            if (advancement == "Sword Master" && HasSingleSwordWithEmptyOffhand(player))
+            {
+                // The Way of the Sword: one Sword, empty off-hand, no shield.
+                float factor = 1f + Mathf.Max(0f, _swordAttackSpeedPassive.Value) / 100f;
+                DragonCombat.SetAttackSpeedSource(player, factor, 0.30f);
+                return;
+            }
+
+            if (advancement == "Mercenary")
+            {
+                ItemDrop.ItemData weapon = player.GetCurrentWeapon();
+                if (DragonCombat.IsTwoHandedWeapon(weapon))
+                {
+                    float factor = 1f + Mathf.Max(0f, _mercTwoHandedAttackSpeed.Value) / 100f;
+                    DragonCombat.SetAttackSpeedSource(player, factor, 0.30f);
+                }
+                return;
+            }
+
+            if (advancement == "Paladin" && IsPaladinPassive(player, "HolyKnight") && HasWeaponAndShield(player))
+            {
+                float factor = 1f + Mathf.Max(0f, _holyKnightAttackSpeed.Value) / 100f;
+                DragonCombat.SetAttackSpeedSource(player, factor, 0.30f);
+            }
+        }
+
+        private bool HasSingleSwordWithEmptyOffhand(Player player)
+        {
+            ItemDrop.ItemData right = DragonCombat.GetHandItem(player, "m_rightItem");
+            ItemDrop.ItemData left = DragonCombat.GetHandItem(player, "m_leftItem");
+
+            bool rightSword = right != null && right.m_shared != null && right.m_shared.m_skillType == Skills.SkillType.Swords;
+            bool leftSword = left != null && left.m_shared != null && left.m_shared.m_skillType == Skills.SkillType.Swords;
+
+            return (rightSword && left == null) || (leftSword && right == null);
+        }
+
+        private bool HasWeaponAndShield(Player player)
+        {
+            ItemDrop.ItemData right = DragonCombat.GetHandItem(player, "m_rightItem");
+            ItemDrop.ItemData left = DragonCombat.GetHandItem(player, "m_leftItem");
+
+            return (DragonCombat.IsShield(left) && IsCombatWeapon(right)) ||
+                   (DragonCombat.IsShield(right) && IsCombatWeapon(left));
+        }
+
+        private bool IsCombatWeapon(ItemDrop.ItemData item)
+        {
+            return item != null &&
+                   !DragonCombat.IsShield(item) &&
+                   (DragonCombat.IsOneHandedWeapon(item) ||
+                    DragonCombat.IsTwoHandedWeapon(item) ||
+                    DragonCombat.IsMagicWeapon(item));
+        }
+
+        private bool IsHoldingSkillType(Player player, Skills.SkillType skillType)
+        {
+            try
+            {
+                MethodInfo method = player.GetType().GetMethod("GetCurrentWeapon", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (method == null)
+                    return false;
+                object item = method.Invoke(player, null);
+                if (item == null)
+                    return false;
+                FieldInfo sharedField = item.GetType().GetField("m_shared", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (sharedField == null)
+                    return false;
+                object shared = sharedField.GetValue(item);
+                if (shared == null)
+                    return false;
+                FieldInfo skillField = shared.GetType().GetField("m_skillType", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (skillField == null)
+                    return false;
+                object value = skillField.GetValue(shared);
+                return value is Skills.SkillType && (Skills.SkillType)value == skillType;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private bool HasCrossBuff(Player player)
+        {
+            if (player == null)
+                return false;
+
+            float end;
+
+            if (!_crossBuffUntil.TryGetValue(player.GetInstanceID(), out end))
+                return false;
+
+            return Time.time < end;
+        }
+
+        private void CleanupTimedStates()
+        {
+            List<int> removeBuffs = new List<int>();
+
+            foreach (KeyValuePair<int, float> pair in _crossBuffUntil)
+            {
+                if (Time.time >= pair.Value)
+                    removeBuffs.Add(pair.Key);
+            }
+
+            for (int i = 0; i < removeBuffs.Count; i++)
+                _crossBuffUntil.Remove(removeBuffs[i]);
+
+            List<int> removeBarriers = new List<int>();
+
+            foreach (KeyValuePair<int, BarrierState> pair in _barriers)
+            {
+                if (Time.time >= pair.Value.EndTime || pair.Value.HP <= 0f)
+                    removeBarriers.Add(pair.Key);
+            }
+
+            for (int i = 0; i < removeBarriers.Count; i++)
+                _barriers.Remove(removeBarriers[i]);
+        }
+
+        private string GetClass(Player player)
+        {
+            return ReadPlayerData(player, ClassDataKey);
+        }
+
+        private string GetAdvancement(Player player)
+        {
+            return ReadPlayerData(player, AdvancementDataKey);
+        }
+
+        private string ReadPlayerData(Player player, string key)
+        {
+            IDictionary data = GetCustomData(player);
+
+            if (data == null || !data.Contains(key))
+                return "";
+
+            object value = data[key];
+            return value == null ? "" : value.ToString();
+        }
+
+        private string GetChoice(Player player, string key, string fallback)
+        {
+            string value = ReadPlayerData(player, key);
+
+            if (string.IsNullOrEmpty(value))
+                return fallback;
+
+            return value;
+        }
+
+        private void SetChoice(Player player, string key, string value)
+        {
+            IDictionary data = GetCustomData(player);
+
+            if (data == null)
+                return;
+
+            if (data.Contains(key))
+            {
+                object existing = data[key];
+
+                if (existing != null && !string.IsNullOrEmpty(existing.ToString()))
+                {
+                    ShowMessage("Heart of Glory choice is locked until Class Reset");
+                    return;
+                }
+            }
+
+            data[key] = value;
+            ShowMessage("Heart of Glory locked: " + value);
+        }
+
+        private IDictionary GetCustomData(Player player)
+        {
+            if (player == null)
+                return null;
+
+            try
+            {
+                FieldInfo field = typeof(Player).GetField(
+                    "m_customData",
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
+                );
+
+                if (field == null)
+                    return null;
+
+                return field.GetValue(player) as IDictionary;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private bool IsPaladinPassive(Player player, string passive)
+        {
+            return player != null &&
+                   GetAdvancement(player) == "Paladin" &&
+                   ReadPlayerData(player, PaladinPassiveKey) == passive;
+        }
+
+        private void SetPaladinPassiveChoice(Player player, string passive)
+        {
+            IDictionary data = GetCustomData(player);
+            if (data == null)
+                return;
+
+            string existing = ReadPlayerData(player, PaladinPassiveKey);
+            if (!string.IsNullOrEmpty(existing))
+            {
+                ShowMessage("Paladin passive is locked until Class Reset");
+                return;
+            }
+
+            data[PaladinPassiveKey] = passive;
+            ShowMessage(passive == "ElementalSavant" ? "Elemental Savant locked" : "Holy Knight locked");
+            RefreshFoodStats(player);
+        }
+
+        private void RefreshFoodStats(Player player)
+        {
+            if (player == null)
+                return;
+
+            try
+            {
+                MethodInfo method = player.GetType().GetMethod(
+                    "UpdateFood",
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                    null,
+                    new Type[] { typeof(float), typeof(bool) },
+                    null
+                );
+
+                if (method != null)
+                    method.Invoke(player, new object[] { 0f, true });
+            }
+            catch
+            {
+            }
+        }
+
+        private float GetSkillBonus(Player player, Skills.SkillType skillType)
+        {
+            string advancement = GetAdvancement(player);
+
+            if (advancement == "Mercenary" && skillType == Skills.SkillType.Axes)
+                return Mathf.Max(0f, _mercAxesBonus.Value);
+
+            return 0f;
+        }
+
+        private void PatchWithHarmony(MethodBase original, HarmonyMethod prefix, HarmonyMethod postfix)
+        {
+            if (_harmony == null || original == null)
+                return;
+
+            MethodInfo[] methods = typeof(Harmony).GetMethods(
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
+            );
+
+            for (int i = 0; i < methods.Length; i++)
+            {
+                MethodInfo method = methods[i];
+
+                if (method.Name != "Patch")
+                    continue;
+
+                ParameterInfo[] parameters = method.GetParameters();
+
+                if (parameters.Length < 1)
+                    continue;
+
+                if (!typeof(MethodBase).IsAssignableFrom(parameters[0].ParameterType))
+                    continue;
+
+                bool compatible = true;
+
+                for (int p = 1; p < parameters.Length; p++)
+                {
+                    if (parameters[p].ParameterType != typeof(HarmonyMethod))
+                    {
+                        compatible = false;
+                        break;
+                    }
+                }
+
+                if (!compatible)
+                    continue;
+
+                object[] args = new object[parameters.Length];
+                args[0] = original;
+
+                for (int p = 1; p < parameters.Length; p++)
+                    args[p] = null;
+
+                if (parameters.Length > 1)
+                    args[1] = prefix;
+
+                if (parameters.Length > 2)
+                    args[2] = postfix;
+
+                try
+                {
+                    method.Invoke(_harmony, args);
+                    return;
+                }
+                catch
+                {
+                }
+            }
+
+            throw new MissingMethodException("Could not find a compatible Harmony Patch overload.");
+        }
+
+        private void TryInstallPatches()
+        {
+            _harmony = new Harmony(ModGuid);
+
+            int count = 0;
+            count += PatchSkillQueries("GetSkillLevel", "SkillLevelPostfix");
+            count += PatchSkillQueries("GetSkillFactor", "SkillFactorPostfix");
+            count += PatchFloatRefSEMan("ModifyHealthRegen", "HealthRegenPrefix");
+            count += PatchFloatRefSEMan("ModifyStaminaRegen", "StaminaRegenPrefix");
+            count += PatchFloatRefSEMan("ModifyEitrRegen", "EitrRegenPrefix");
+            count += PatchFloatRefSEMan("ModifySpeed", "MoveSpeedPrefix");
+            count += PatchGetMaxHealth();
+            count += PatchPlayerFloatGetter("GetMaxStamina", "MaxStaminaPostfix");
+            int armorPatches = PatchPlayerFloatGetter("GetBodyArmor", "ArmorPostfix");
+            if (armorPatches == 0)
+                armorPatches = PatchPlayerFloatGetter("GetArmor", "ArmorPostfix");
+            count += armorPatches;
+            count += PatchPlayerFloatSetter("SetMaxEitr", "PaladinSetMaxEitrPrefix");
+            count += PatchDamageMethods();
+            count += PatchLightningZapContext();
+
+            Logger.LogInfo("Advanced passive hooks installed: " + count);
+        }
+
+        private int PatchSkillQueries(string methodName, string patchName)
+        {
+            int count = 0;
+
+            try
+            {
+                MethodInfo patchMethod = typeof(AdvancedPlugin).GetMethod(
+                    patchName,
+                    BindingFlags.Static | BindingFlags.NonPublic
+                );
+
+                if (patchMethod == null)
+                    return 0;
+
+                HarmonyMethod postfix = new HarmonyMethod(patchMethod);
+                MethodInfo[] methods = typeof(Skills).GetMethods(
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
+                );
+
+                for (int i = 0; i < methods.Length; i++)
+                {
+                    MethodInfo method = methods[i];
+
+                    if (method.Name != methodName || method.ReturnType != typeof(float))
+                        continue;
+
+                    ParameterInfo[] parameters = method.GetParameters();
+
+                    if (parameters.Length < 1 || parameters[0].ParameterType != typeof(Skills.SkillType))
+                        continue;
+
+                    try
+                    {
+                        PatchWithHarmony(method, null, postfix);
+                        count++;
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogWarning("Could not patch " + methodName + ": " + ex.Message);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning("Could not scan " + methodName + ": " + ex.Message);
+            }
+
+            return count;
+        }
+
+        private int PatchFloatRefSEMan(string methodName, string patchName)
+        {
+            int count = 0;
+
+            try
+            {
+                Type seman = AccessTools.TypeByName("SEMan");
+
+                if (seman == null)
+                    return 0;
+
+                MethodInfo patchMethod = typeof(AdvancedPlugin).GetMethod(
+                    patchName,
+                    BindingFlags.Static | BindingFlags.NonPublic
+                );
+
+                if (patchMethod == null)
+                    return 0;
+
+                HarmonyMethod prefix = new HarmonyMethod(patchMethod);
+                Type floatRef = typeof(float).MakeByRefType();
+
+                MethodInfo[] methods = seman.GetMethods(
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
+                );
+
+                for (int i = 0; i < methods.Length; i++)
+                {
+                    MethodInfo method = methods[i];
+
+                    if (method.Name != methodName)
+                        continue;
+
+                    ParameterInfo[] parameters = method.GetParameters();
+
+                    if (parameters.Length < 1 || parameters[0].ParameterType != floatRef)
+                        continue;
+
+                    try
+                    {
+                        PatchWithHarmony(method, prefix, null);
+                        count++;
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogWarning("Could not patch " + methodName + ": " + ex.Message);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning("Could not scan " + methodName + ": " + ex.Message);
+            }
+
+            return count;
+        }
+
+        private int PatchGetMaxHealth()
+        {
+            int count = 0;
+
+            try
+            {
+                MethodInfo patchMethod = typeof(AdvancedPlugin).GetMethod(
+                    "MaxHealthPostfix",
+                    BindingFlags.Static | BindingFlags.NonPublic
+                );
+
+                if (patchMethod == null)
+                    return 0;
+
+                HarmonyMethod postfix = new HarmonyMethod(patchMethod);
+                MethodInfo[] methods = typeof(Player).GetMethods(
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
+                );
+
+                for (int i = 0; i < methods.Length; i++)
+                {
+                    MethodInfo method = methods[i];
+
+                    if (method.Name != "GetMaxHealth" || method.ReturnType != typeof(float))
+                        continue;
+
+                    if (method.GetParameters().Length != 0)
+                        continue;
+
+                    try
+                    {
+                        PatchWithHarmony(method, null, postfix);
+                        count++;
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogWarning("Could not patch GetMaxHealth: " + ex.Message);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning("Could not scan GetMaxHealth: " + ex.Message);
+            }
+
+            return count;
+        }
+
+        private int PatchPlayerFloatGetter(string methodName, string patchName)
+        {
+            int count = 0;
+            try
+            {
+                MethodInfo patchMethod = typeof(AdvancedPlugin).GetMethod(
+                    patchName,
+                    BindingFlags.Static | BindingFlags.NonPublic
+                );
+                if (patchMethod == null)
+                    return 0;
+
+                HarmonyMethod postfix = new HarmonyMethod(patchMethod);
+                MethodInfo[] methods = typeof(Player).GetMethods(
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
+                );
+
+                for (int i = 0; i < methods.Length; i++)
+                {
+                    MethodInfo method = methods[i];
+                    if (method.Name != methodName || method.ReturnType != typeof(float) || method.GetParameters().Length != 0)
+                        continue;
+
+                    try
+                    {
+                        PatchWithHarmony(method, null, postfix);
+                        count++;
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogWarning("Could not patch " + methodName + ": " + ex.Message);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning("Could not scan " + methodName + ": " + ex.Message);
+            }
+            return count;
+        }
+
+        private int PatchPlayerFloatSetter(string methodName, string patchName)
+        {
+            int count = 0;
+            try
+            {
+                MethodInfo patchMethod = typeof(AdvancedPlugin).GetMethod(
+                    patchName,
+                    BindingFlags.Static | BindingFlags.NonPublic
+                );
+                if (patchMethod == null)
+                    return 0;
+
+                HarmonyMethod prefix = new HarmonyMethod(patchMethod);
+                MethodInfo[] methods = typeof(Player).GetMethods(
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
+                );
+
+                for (int i = 0; i < methods.Length; i++)
+                {
+                    MethodInfo method = methods[i];
+                    if (method.Name != methodName)
+                        continue;
+
+                    ParameterInfo[] parameters = method.GetParameters();
+                    if (parameters.Length < 1 || parameters[0].ParameterType != typeof(float))
+                        continue;
+
+                    try
+                    {
+                        PatchWithHarmony(method, prefix, null);
+                        count++;
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogWarning("Could not patch " + methodName + ": " + ex.Message);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning("Could not scan " + methodName + ": " + ex.Message);
+            }
+            return count;
+        }
+
+        private int PatchDamageMethods()
+        {
+            int count = 0;
+
+            try
+            {
+                MethodInfo patchMethod = typeof(AdvancedPlugin).GetMethod(
+                    "DamagePrefix",
+                    BindingFlags.Static | BindingFlags.NonPublic
+                );
+
+                if (patchMethod == null)
+                    return 0;
+
+                HarmonyMethod prefix = new HarmonyMethod(patchMethod);
+                HashSet<MethodBase> seen = new HashSet<MethodBase>();
+                Type[] types = new Type[] { typeof(Character), typeof(Player) };
+
+                for (int t = 0; t < types.Length; t++)
+                {
+                    MethodInfo[] methods = types[t].GetMethods(
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
+                    );
+
+                    for (int i = 0; i < methods.Length; i++)
+                    {
+                        MethodInfo method = methods[i];
+
+                        if (method.Name != "Damage")
+                            continue;
+
+                        ParameterInfo[] parameters = method.GetParameters();
+
+                        if (parameters.Length < 1 || parameters[0].ParameterType != typeof(HitData))
+                            continue;
+
+                        if (!seen.Add(method))
+                            continue;
+
+                        try
+                        {
+                            PatchWithHarmony(method, prefix, null);
+                            count++;
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.LogWarning("Could not patch Damage: " + ex.Message);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning("Could not scan Damage: " + ex.Message);
+            }
+
+            return count;
+        }
+
+        private int PatchLightningZapContext()
+        {
+            try
+            {
+                MethodInfo method = typeof(SkillsPlugin).GetMethod(
+                    "CastLightningZap",
+                    BindingFlags.Instance | BindingFlags.NonPublic
+                );
+                MethodInfo prefixMethod = typeof(AdvancedPlugin).GetMethod(
+                    "LightningZapContextPrefix",
+                    BindingFlags.Static | BindingFlags.NonPublic
+                );
+                MethodInfo postfixMethod = typeof(AdvancedPlugin).GetMethod(
+                    "LightningZapContextPostfix",
+                    BindingFlags.Static | BindingFlags.NonPublic
+                );
+                if (method == null || prefixMethod == null || postfixMethod == null)
+                    return 0;
+
+                PatchWithHarmony(method, new HarmonyMethod(prefixMethod), new HarmonyMethod(postfixMethod));
+                return 1;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning("Could not patch Lightning Zap mark context: " + ex.Message);
+                return 0;
+            }
+        }
+
+        private static void LightningZapContextPrefix(object[] __args)
+        {
+            if (Instance == null)
+                return;
+            Instance._paladinMarkSourceContext = string.Empty;
+            if (__args == null || __args.Length < 1)
+                return;
+            Player player = __args[0] as Player;
+            if (player != null && Instance.GetAdvancement(player) == "Paladin")
+                Instance._paladinMarkSourceContext = "LightningZap";
+        }
+
+        private static void LightningZapContextPostfix()
+        {
+            if (Instance != null)
+                Instance._paladinMarkSourceContext = string.Empty;
+        }
+
+        private static void SkillLevelPostfix(Skills __instance, object[] __args, ref float __result)
+        {
+            if (Instance == null || __args == null || __args.Length < 1)
+                return;
+
+            if (!(__args[0] is Skills.SkillType))
+                return;
+
+            Player player = Instance.GetPlayerFromSkills(__instance);
+
+            if (player == null)
+                return;
+
+            float bonus = Instance.GetSkillBonus(player, (Skills.SkillType)__args[0]);
+
+            if (bonus > 0f)
+                __result = Mathf.Clamp(__result + bonus, 0f, 100f);
+        }
+
+        private static void SkillFactorPostfix(Skills __instance, object[] __args, ref float __result)
+        {
+            if (Instance == null || __args == null || __args.Length < 1)
+                return;
+
+            if (!(__args[0] is Skills.SkillType))
+                return;
+
+            Player player = Instance.GetPlayerFromSkills(__instance);
+
+            if (player == null)
+                return;
+
+            float bonus = Instance.GetSkillBonus(player, (Skills.SkillType)__args[0]);
+
+            if (bonus > 0f)
+                __result = Mathf.Clamp01(__result + bonus / 100f);
+        }
+
+        private static void HealthRegenPrefix(object __instance, ref float __0)
+        {
+            if (Instance == null)
+                return;
+
+            Player player = Instance.GetPlayerFromSEMan(__instance);
+            if (player == null)
+                return;
+
+            if (Instance.IsPaladinPassive(player, "HolyKnight"))
+                __0 *= 1f + Mathf.Max(0f, Instance._holyKnightRegen.Value) / 100f;
+        }
+
+        private static void StaminaRegenPrefix(object __instance, ref float __0)
+        {
+            if (Instance == null)
+                return;
+
+            Player player = Instance.GetPlayerFromSEMan(__instance);
+            if (player == null)
+                return;
+
+            if (Instance.IsPaladinPassive(player, "HolyKnight"))
+                __0 *= 1f + Mathf.Max(0f, Instance._holyKnightRegen.Value) / 100f;
+
+            if (Instance.HasCrossBuff(player))
+                __0 *= 1f + Mathf.Max(0f, Instance._holyRelicRegenBuff.Value) / 100f;
+        }
+
+        private static void EitrRegenPrefix(object __instance, ref float __0)
+        {
+            if (Instance == null)
+                return;
+
+            Player player = Instance.GetPlayerFromSEMan(__instance);
+            if (player == null)
+                return;
+
+            if (Instance.IsPaladinPassive(player, "ElementalSavant"))
+                __0 *= 1f + Mathf.Max(0f, Instance._paladinElementalEitrRegen.Value) / 100f;
+
+            if (Instance.HasCrossBuff(player))
+                __0 *= 1f + Mathf.Max(0f, Instance._holyRelicRegenBuff.Value) / 100f;
+        }
+
+        private static void MoveSpeedPrefix(object __instance, ref float __0)
+        {
+            if (Instance == null)
+                return;
+
+            Player player = Instance.GetPlayerFromSEMan(__instance);
+            if (player == null)
+                return;
+
+            if (Instance.IsPaladinPassive(player, "HolyKnight"))
+                __0 *= 1f + Mathf.Max(0f, Instance._holyKnightMoveSpeed.Value) / 100f;
+
+            if (Instance.HasCrossBuff(player))
+                __0 *= 1f + Mathf.Max(0f, Instance._holyRelicMoveSpeedBuff.Value) / 100f;
+        }
+
+        private static void MaxHealthPostfix(Player __instance, ref float __result)
+        {
+            if (Instance == null || __instance == null)
+                return;
+
+            if (Instance.GetAdvancement(__instance) == "Mercenary")
+                __result += Mathf.Max(0f, Instance._mercHealthBonus.Value);
+
+            if (Instance.IsPaladinPassive(__instance, "HolyKnight"))
+                __result += Mathf.Max(0f, Instance._holyKnightFlatHealth.Value);
+        }
+
+        private static void MaxStaminaPostfix(Player __instance, ref float __result)
+        {
+            if (Instance == null || __instance == null)
+                return;
+
+            if (Instance.IsPaladinPassive(__instance, "HolyKnight"))
+                __result += Mathf.Max(0f, Instance._holyKnightFlatStamina.Value);
+        }
+
+        private static void ArmorPostfix(Player __instance, ref float __result)
+        {
+            if (Instance == null || __instance == null)
+                return;
+
+            if (Instance.GetAdvancement(__instance) == "Priest")
+                __result *= 1f + Mathf.Max(0f, Instance._priestArmorBonusPercent.Value) / 100f;
+        }
+
+        private static void PaladinSetMaxEitrPrefix(Player __instance, ref float __0)
+        {
+            if (Instance == null || __instance == null)
+                return;
+
+            if (Instance.IsPaladinPassive(__instance, "ElementalSavant"))
+                __0 += Mathf.Max(0f, Instance._paladinElementalFlatEitr.Value);
+        }
+
+        private static void DamagePrefix(Character __instance, object[] __args)
+        {
+            if (Instance == null || __args == null || __args.Length < 1)
+                return;
+
+            if (!(__args[0] is HitData))
+                return;
+
+            HitData hit = (HitData)__args[0];
+
+            Player targetPlayer = __instance as Player;
+
+            if (targetPlayer != null)
+                Instance.ModifyIncomingDamage(targetPlayer, hit);
+
+            Player attacker = hit.GetAttacker() as Player;
+
+            if (attacker != null)
+                Instance.ModifyOutgoingDamage(attacker, __instance, hit);
+        }
+
+        private void ModifyOutgoingDamage(Player attacker, Character target, HitData hit)
+        {
+            string advancement = GetAdvancement(attacker);
+
+            if (advancement == "Mercenary" && IsWeaponHit(hit))
+                ScaleDamage(hit, 1f + Mathf.Max(0f, _mercAttackDamage.Value) / 100f);
+
+            if (advancement == "Mercenary")
+                TryBuildMercenaryFury(attacker, target, hit);
+
+            if (advancement == "Paladin" && !_judgementDetonationInProgress)
+                ApplyPaladinJudgementInteraction(attacker, target, hit);
+
+            if (advancement == "Paladin" && IsPaladinPassive(attacker, "ElementalSavant"))
+            {
+                float factor = 1f + Mathf.Max(0f, _paladinElementalBonus.Value) / 100f;
+                hit.m_damage.m_fire *= factor;
+                hit.m_damage.m_frost *= factor;
+                hit.m_damage.m_lightning *= factor;
+                hit.m_damage.m_poison *= factor;
+                hit.m_damage.m_spirit *= factor;
+            }
+
+            if (HasCrossBuff(attacker))
+                ScaleDamage(hit, 1f + Mathf.Max(0f, _holyRelicDamageBuff.Value) / 100f);
+        }
+
+        private void ModifyIncomingDamage(Player target, HitData hit)
+        {
+            if (target != null && GetAdvancement(target) == "Sword Master" && Time.time <= _emptySheathCounterUntil)
+            {
+                Character attacker = hit == null ? null : hit.GetAttacker();
+                if (attacker != null && attacker != target && IsEnemy(target, attacker))
+                {
+                    _emptySheathCounterUntil = 0f;
+                    ScaleDamage(hit, 0f);
+                    hit.m_pushForce = 0f;
+                    StartCoroutine(EmptySheathCounterRoutine(target, attacker));
+                    return;
+                }
+            }
+
+            BarrierState barrier;
+            int id = target.GetInstanceID();
+
+            if (_barriers.TryGetValue(id, out barrier) &&
+                Time.time < barrier.EndTime &&
+                barrier.HP > 0f)
+            {
+                float raw = TotalDamage(hit);
+                float effective = Mathf.Max(0f, raw - barrier.Armor);
+
+                if (effective <= barrier.HP)
+                {
+                    barrier.HP -= effective;
+                    ScaleDamage(hit, 0f);
+                    _barriers[id] = barrier;
+                }
+                else
+                {
+                    float overflow = effective - barrier.HP;
+                    _barriers.Remove(id);
+
+                    float ratio = raw <= 0f ? 0f : Mathf.Clamp01(overflow / raw);
+                    ScaleDamage(hit, ratio);
+                }
+
+                if (_enableVfx.Value && target == Player.m_localPlayer)
+                    StartCoroutine(BarrierHitVisual(target));
+
+                return;
+            }
+
+        }
+
+        private void ApplyPaladinJudgementInteraction(Player attacker, Character target, HitData hit)
+        {
+            if (attacker == null || target == null || hit == null)
+                return;
+
+            int id = target.GetInstanceID();
+            JudgementMarkState mark;
+            bool hasMark = _judgementMarks.TryGetValue(id, out mark) &&
+                           mark != null && mark.Target == target && Time.time < mark.EndTime;
+            if (!hasMark)
+                _judgementMarks.Remove(id);
+
+            string source = _paladinMarkSourceContext;
+            bool isMarkingHit = !string.IsNullOrEmpty(source);
+
+            if (hasMark)
+            {
+                bool crossMark = isMarkingHit && !string.Equals(mark.Source, source, StringComparison.Ordinal);
+                if (crossMark)
+                {
+                    ScaleDamage(hit, Mathf.Max(1f, _judgementCrossMultiplier.Value));
+                    TriggerJudgementDetonation(attacker, target);
+                }
+                else
+                {
+                    ScaleDamage(hit, Mathf.Max(1f, _judgementMarkedMultiplier.Value));
+                    if (hit.m_damage.m_lightning > 0.001f)
+                        DragonCombat.ApplyZap(attacker, target, 0f, 0f, 0f);
+                    else
+                        DragonCombat.ApplyCripple(target, Mathf.Max(0.1f, _judgementCrippleDuration.Value));
+                }
+            }
+
+            if (isMarkingHit)
+            {
+                JudgementMarkState fresh = new JudgementMarkState();
+                fresh.Target = target;
+                fresh.Source = source;
+                fresh.EndTime = Time.time + Mathf.Max(0.1f, _judgementMarkDuration.Value);
+                _judgementMarks[id] = fresh;
+            }
+        }
+
+        private bool HasActiveJudgementMark(Character target)
+        {
+            if (target == null)
+                return false;
+            JudgementMarkState mark;
+            int id = target.GetInstanceID();
+            if (!_judgementMarks.TryGetValue(id, out mark) || mark == null || mark.Target != target || Time.time >= mark.EndTime)
+            {
+                _judgementMarks.Remove(id);
+                return false;
+            }
+            return true;
+        }
+
+        private void TriggerJudgementDetonation(Player attacker, Character target)
+        {
+            if (attacker == null || target == null || target.IsDead())
+                return;
+            _judgementDetonationInProgress = true;
+            try
+            {
+                HitData detonation = new HitData();
+                detonation.m_damage.m_lightning = Mathf.Max(0f, _judgementDetonationLightning.Value);
+                detonation.m_damage.m_spirit = Mathf.Max(0f, _judgementDetonationSpirit.Value);
+                detonation.m_point = target.transform.position;
+                detonation.m_dir = (target.transform.position - attacker.transform.position).normalized;
+                detonation.m_pushForce = 16f;
+                detonation.SetAttacker(attacker);
+                target.Damage(detonation);
+            }
+            finally
+            {
+                _judgementDetonationInProgress = false;
+            }
+
+            if (_enableVfx.Value)
+                StartCoroutine(AnimateRing(target.transform.position + Vector3.up * 0.08f, 0.25f, 2.5f, 0.35f,
+                    new Color(1f, 0.82f, 0.28f, 0.96f), 0.12f));
+        }
+
+        private bool IsWeaponHit(HitData hit)
+        {
+            try
+            {
+                FieldInfo field = typeof(HitData).GetField(
+                    "m_skill",
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
+                );
+
+                if (field == null)
+                    return false;
+
+                object value = field.GetValue(hit);
+
+                if (value == null)
+                    return false;
+
+                return value.ToString() != "None";
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private float TotalDamage(HitData hit)
+        {
+            return Mathf.Max(
+                0f,
+                hit.m_damage.m_blunt +
+                hit.m_damage.m_slash +
+                hit.m_damage.m_pierce +
+                hit.m_damage.m_fire +
+                hit.m_damage.m_frost +
+                hit.m_damage.m_lightning +
+                hit.m_damage.m_poison +
+                hit.m_damage.m_spirit
+            );
+        }
+
+        private void ScaleDamage(HitData hit, float factor)
+        {
+            factor = Mathf.Max(0f, factor);
+            hit.m_damage.m_blunt *= factor;
+            hit.m_damage.m_slash *= factor;
+            hit.m_damage.m_pierce *= factor;
+            hit.m_damage.m_fire *= factor;
+            hit.m_damage.m_frost *= factor;
+            hit.m_damage.m_lightning *= factor;
+            hit.m_damage.m_poison *= factor;
+            hit.m_damage.m_spirit *= factor;
+        }
+
+        private Player GetPlayerFromSkills(Skills skills)
+        {
+            if (skills == null)
+                return null;
+
+            try
+            {
+                FieldInfo[] fields = typeof(Skills).GetFields(
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
+                );
+
+                for (int i = 0; i < fields.Length; i++)
+                {
+                    Player player = fields[i].GetValue(skills) as Player;
+
+                    if (player != null)
+                        return player;
+                }
+            }
+            catch
+            {
+            }
+
+            return null;
+        }
+
+        private Player GetPlayerFromSEMan(object seman)
+        {
+            if (seman == null)
+                return null;
+
+            try
+            {
+                FieldInfo[] fields = seman.GetType().GetFields(
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
+                );
+
+                for (int i = 0; i < fields.Length; i++)
+                {
+                    Player player = fields[i].GetValue(seman) as Player;
+
+                    if (player != null)
+                        return player;
+                }
+            }
+            catch
+            {
+            }
+
+            return null;
+        }
+        private IEnumerator AnimateHalfmoonArc(Vector3 center, Vector3 forward, float radius)
+        {
+            GameObject obj = new GameObject("AlbedoHalfmoon");
+            LineRenderer line = obj.AddComponent<LineRenderer>();
+            line.useWorldSpace = true;
+            line.positionCount = 28;
+            line.startWidth = 0.36f;
+            line.endWidth = 0.12f;
+
+            Shader shader = Shader.Find("Sprites/Default");
+            if (shader != null)
+                line.material = new Material(shader);
+
+            Vector3 right = Vector3.Cross(Vector3.up, forward).normalized;
+            float duration = 0.45f;
+            float elapsed = 0f;
+
+            while (elapsed < duration)
+            {
+                float t = elapsed / duration;
+                float currentRadius = Mathf.Lerp(radius * 0.65f, radius, t);
+                Color color = new Color(0.52f, 0.83f, 1f, 1f - t);
+
+                line.startColor = color;
+                line.endColor = new Color(0.90f, 0.97f, 1f, color.a);
+
+                for (int i = 0; i < line.positionCount; i++)
+                {
+                    float p = (float)i / (float)(line.positionCount - 1);
+                    float angle = Mathf.Lerp(-80f, 80f, p) * Mathf.Deg2Rad;
+                    Vector3 point = forward * Mathf.Cos(angle) * currentRadius + right * Mathf.Sin(angle) * currentRadius;
+                    point.y = Mathf.Sin(p * Mathf.PI) * 4.6f;
+                    line.SetPosition(i, center + point);
+                }
+
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+
+            Destroy(obj);
+        }
+
+        private IEnumerator AnimateRing(Vector3 center, float startRadius, float endRadius, float duration, Color color, float width)
+        {
+            GameObject obj = new GameObject("AlbedoAdvancedRing");
+            LineRenderer line = obj.AddComponent<LineRenderer>();
+            line.useWorldSpace = true;
+            line.loop = true;
+            line.positionCount = 49;
+            line.startWidth = width;
+            line.endWidth = width;
+
+            Shader shader = Shader.Find("Sprites/Default");
+            if (shader != null)
+                line.material = new Material(shader);
+
+            float elapsed = 0f;
+            float safeDuration = Mathf.Max(0.05f, duration);
+
+            while (elapsed < safeDuration)
+            {
+                float t = elapsed / safeDuration;
+                float grow = Mathf.Clamp01(t / 0.22f);
+                float radius = Mathf.Lerp(startRadius, endRadius, Mathf.SmoothStep(0f, 1f, grow));
+                Color frame = color;
+                float fade = t <= 0.72f ? 1f : Mathf.Clamp01(1f - (t - 0.72f) / 0.28f);
+                frame.a = color.a * fade;
+                line.startColor = frame;
+                line.endColor = frame;
+
+                for (int i = 0; i < line.positionCount; i++)
+                {
+                    float angle = ((float)i / (float)(line.positionCount - 1)) * Mathf.PI * 2f;
+                    line.SetPosition(i, center + new Vector3(Mathf.Cos(angle) * radius, 0f, Mathf.Sin(angle) * radius));
+                }
+
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+
+            Destroy(obj);
+        }
+
+        private IEnumerator AnimateAura(Player player, Color color, float duration)
+        {
+            float elapsed = 0f;
+
+            while (elapsed < duration)
+            {
+                if (player == null)
+                    yield break;
+
+                StartCoroutine(
+                    AnimateRing(
+                        player.transform.position + Vector3.up * 0.8f,
+                        0.5f,
+                        2.1f,
+                        0.35f,
+                        color,
+                        0.05f
+                    )
+                );
+
+                yield return new WaitForSeconds(0.28f);
+                elapsed += 0.28f;
+            }
+        }
+
+        private Vector3 GetGroundedCrossCenter(Vector3 targetPoint, float height)
+        {
+            return targetPoint + Vector3.up * (Mathf.Max(0.1f, height) * 0.5f + 0.04f);
+        }
+
+        private GameObject CreateCross(
+            Vector3 center,
+            Color color,
+            float height,
+            float width,
+            float lineWidth,
+            bool visible
+        )
+        {
+            GameObject root = new GameObject("DragonsAltarHolyCross");
+            root.transform.position = center;
+
+            float physicalThickness = Mathf.Max(0.40f, lineWidth * 4f);
+
+            GameObject vertical = new GameObject("vertical");
+            vertical.transform.SetParent(root.transform, false);
+
+            BoxCollider verticalCollider = vertical.AddComponent<BoxCollider>();
+            verticalCollider.center = Vector3.zero;
+            verticalCollider.size = new Vector3(physicalThickness, height, physicalThickness);
+            verticalCollider.isTrigger = false;
+            verticalCollider.enabled = false;
+
+            GameObject horizontal = new GameObject("horizontal");
+            horizontal.transform.SetParent(root.transform, false);
+
+            BoxCollider horizontalCollider = horizontal.AddComponent<BoxCollider>();
+            horizontalCollider.center = new Vector3(0f, height * 0.12f, 0f);
+            horizontalCollider.size = new Vector3(width, physicalThickness, physicalThickness);
+            horizontalCollider.isTrigger = false;
+            horizontalCollider.enabled = false;
+
+            if (visible)
+            {
+                Shader shader = Shader.Find("Sprites/Default");
+
+                LineRenderer v = vertical.AddComponent<LineRenderer>();
+                v.useWorldSpace = false;
+                v.positionCount = 2;
+                v.startWidth = lineWidth;
+                v.endWidth = lineWidth;
+                v.startColor = color;
+                v.endColor = color;
+                v.SetPosition(0, new Vector3(0f, -height * 0.5f, 0f));
+                v.SetPosition(1, new Vector3(0f, height * 0.5f, 0f));
+
+                if (shader != null)
+                    v.material = new Material(shader);
+
+                LineRenderer h = horizontal.AddComponent<LineRenderer>();
+                h.useWorldSpace = false;
+                h.positionCount = 2;
+                h.startWidth = lineWidth;
+                h.endWidth = lineWidth;
+                h.startColor = color;
+                h.endColor = color;
+                h.SetPosition(0, new Vector3(-width * 0.5f, height * 0.12f, 0f));
+                h.SetPosition(1, new Vector3(width * 0.5f, height * 0.12f, 0f));
+
+                if (shader != null)
+                    h.material = new Material(shader);
+
+                GameObject lightObject = new GameObject("light");
+                lightObject.transform.SetParent(root.transform, false);
+                Light light = lightObject.AddComponent<Light>();
+                light.type = LightType.Point;
+                light.color = color;
+                light.range = Mathf.Max(height, width) * 1.8f;
+                light.intensity = 1.4f;
+                light.shadows = LightShadows.None;
+            }
+
+            return root;
+        }
+
+        private void SetCrossPhysical(GameObject cross, bool physical)
+        {
+            if (cross == null)
+                return;
+
+            Collider[] colliders = cross.GetComponentsInChildren<Collider>();
+
+            for (int i = 0; i < colliders.Length; i++)
+            {
+                if (colliders[i] != null)
+                    colliders[i].enabled = physical;
+            }
+        }
+
+        private void CreateCrescentVerticalSlashVisual(
+            Vector3 groundPoint,
+            Vector3 forward,
+            float width,
+            float height,
+            float lifetime
+        )
+        {
+            forward.y = 0f;
+
+            if (forward.sqrMagnitude < 0.01f)
+                forward = Vector3.forward;
+
+            forward.Normalize();
+
+            Vector3 right = Vector3.Cross(Vector3.up, forward).normalized;
+            Color core = new Color(0.72f, 0.94f, 1f, 0.95f);
+            Color glow = new Color(0.30f, 0.72f, 1f, 0.50f);
+            Shader shader = Shader.Find("Sprites/Default");
+
+            float[] sideOffsets = new float[]
+            {
+                -width * 0.5f,
+                0f,
+                width * 0.5f
+            };
+
+            for (int i = 0; i < sideOffsets.Length; i++)
+            {
+                GameObject obj = new GameObject("DragonCrescentVerticalSlash");
+                LineRenderer line = obj.AddComponent<LineRenderer>();
+
+                line.useWorldSpace = true;
+                line.positionCount = 2;
+                line.startWidth = i == 1 ? 0.17f : 0.08f;
+                line.endWidth = line.startWidth;
+                line.startColor = i == 1 ? core : glow;
+                line.endColor = i == 1 ? core : glow;
+
+                Vector3 basePoint = groundPoint + right * sideOffsets[i] + Vector3.up * 0.08f;
+                line.SetPosition(0, basePoint);
+                line.SetPosition(1, basePoint + Vector3.up * height);
+
+                if (shader != null)
+                    line.material = new Material(shader);
+
+                Destroy(obj, Mathf.Max(0.04f, lifetime));
+            }
+        }
+
+        private void CreateLightning(Vector3 point, Color color, float lifetime)
+        {
+            GameObject obj = new GameObject("AlbedoAdvancedLightning");
+            LineRenderer line = obj.AddComponent<LineRenderer>();
+            line.useWorldSpace = true;
+            line.positionCount = 9;
+            line.startWidth = 0.12f;
+            line.endWidth = 0.28f;
+            line.startColor = color;
+            line.endColor = color;
+
+            Shader shader = Shader.Find("Sprites/Default");
+            if (shader != null)
+                line.material = new Material(shader);
+
+            Vector3 top = point + Vector3.up * 11f;
+
+            for (int i = 0; i < line.positionCount; i++)
+            {
+                float t = (float)i / (float)(line.positionCount - 1);
+                Vector3 position = Vector3.Lerp(top, point, t);
+                float offset = Mathf.Sin((float)i * 4.91f + Time.time * 10f) * 0.38f;
+                position.x += offset;
+                position.z -= offset * 0.6f;
+                line.SetPosition(i, position);
+            }
+
+            Destroy(obj, Mathf.Max(0.05f, lifetime));
+        }
+
+        private IEnumerator BarrierVisual(Player player)
+        {
+            if (player == null)
+                yield break;
+
+            Vector3 center = player.transform.position + Vector3.up * 1f;
+
+            yield return AnimateRing(
+                center,
+                0.5f,
+                2.4f,
+                0.55f,
+                new Color(0.55f, 0.91f, 1f, 0.92f),
+                0.10f
+            );
+        }
+
+        private IEnumerator BarrierHitVisual(Player player)
+        {
+            if (player == null)
+                yield break;
+
+            yield return AnimateRing(
+                player.transform.position + Vector3.up * 1f,
+                0.7f,
+                1.7f,
+                0.28f,
+                new Color(0.72f, 0.94f, 1f, 0.95f),
+                0.09f
+            );
+        }
+
+        private void ToggleSkillbook()
+        {
+            _skillbookOpen = !_skillbookOpen;
+
+            if (_skillbookOpen)
+            {
+                _savedCursorVisible = Cursor.visible;
+                _savedCursorLock = Cursor.lockState;
+                Cursor.visible = true;
+                Cursor.lockState = CursorLockMode.None;
+                DragonCombat.SetUiInputBlocked(true);
+                _skillbookRect.x = (Screen.width - _skillbookRect.width) * 0.5f;
+                _skillbookRect.y = (Screen.height - _skillbookRect.height) * 0.5f;
+            }
+            else
+            {
+                _treePrototypePending.Clear();
+                _treeSelectedNodeId = "";
+                DragonCombat.SetUiInputBlocked(false);
+                RestoreCursor();
+            }
+        }
+
+        private void RestoreCursor()
+        {
+            Cursor.visible = _savedCursorVisible;
+            Cursor.lockState = _savedCursorLock;
+        }
+
+        private void OnGUI()
+        {
+            Player player = Player.m_localPlayer;
+
+            if (player == null)
+                return;
+
+            EnsureUiStyles();
+
+            if (_showCombatHud.Value && !_skillbookOpen && !Plugin.IsClassPanelOpen && !DragonCombat.IsGameplayHudSuppressed())
+                DrawCombatHud(player);
+
+            if (_skillbookOpen)
+                _skillbookRect = GUI.Window(706060, _skillbookRect, DrawSkillbookWindow, "", _treeWindowStyle);
+        }
+
+        private void DrawCombatHud(Player player)
+        {
+            string className = GetClass(player);
+
+            // Sorcerer / Wizard / Spellcaster own their HUD in the isolated
+            // Sorcerer module. This keeps one HUD on screen at a time.
+            if (className != "Warrior" && className != "Cleric")
+                return;
+
+            string advancement = GetAdvancement(player);
+            List<string> names = new List<string>();
+            List<float> cooldowns = new List<float>();
+
+            if (className == "Warrior")
+            {
+                names.Add("Heavy Slash");
+                names.Add("Impact Wave");
+                names.Add("Impact Punch");
+                cooldowns.Add(SkillsPlugin.Instance == null ? 0f : SkillsPlugin.Instance.GetCooldownForUi("Warrior.HeavySlash"));
+                cooldowns.Add(SkillsPlugin.Instance == null ? 0f : SkillsPlugin.Instance.GetCooldownForUi("Warrior.ImpactWave"));
+                cooldowns.Add(SkillsPlugin.Instance == null ? 0f : SkillsPlugin.Instance.GetCooldownForUi("Warrior.ImpactPunch"));
+            }
+            else
+            {
+                names.Add("Lightning Zap");
+                names.Add("Righteous Strike");
+                names.Add("Holy Wave");
+                cooldowns.Add(SkillsPlugin.Instance == null ? 0f : SkillsPlugin.Instance.GetCooldownForUi("Cleric.LightningZap"));
+                cooldowns.Add(SkillsPlugin.Instance == null ? 0f : SkillsPlugin.Instance.GetCooldownForUi("Cleric.RighteousStrike"));
+                cooldowns.Add(SkillsPlugin.Instance == null ? 0f : SkillsPlugin.Instance.GetCooldownForUi("Cleric.HolyWave"));
+            }
+
+            if (!string.IsNullOrEmpty(advancement))
+            {
+                names.Add(GetAdvancedSkillName(advancement));
+                cooldowns.Add(GetCooldownRemaining(GetAdvancedSkillId(advancement)));
+                names.Add(GetAdvancedSkill5Name(advancement));
+                cooldowns.Add(GetCooldownRemaining(GetAdvancedSkill5Id(advancement)));
+
+                if (advancement == "Paladin")
+                {
+                    names.Add("Shield Charge"); cooldowns.Add(GetCooldownRemaining("Paladin.ShieldCharge"));
+                    names.Add("Divine Verdict"); cooldowns.Add(GetCooldownRemaining("Paladin.DivineVerdict"));
+                    names.Add("Aegis Fall"); cooldowns.Add(GetCooldownRemaining("Paladin.AegisFall"));
+                    names.Add("Electric Smite"); cooldowns.Add(GetCooldownRemaining("Paladin.ElectricSmite"));
+                }
+                else if (advancement == "Mercenary")
+                {
+                    names.Add("Circle Swing"); cooldowns.Add(GetCooldownRemaining("Mercenary.CircleSwing"));
+                    names.Add("Seismic Guillotine"); cooldowns.Add(GetCooldownRemaining("Mercenary.SeismicGuillotine"));
+                    names.Add("Reaver's Orbit"); cooldowns.Add(GetCooldownRemaining("Mercenary.ReaversOrbit"));
+                    names.Add("Whirlwind"); cooldowns.Add(GetCooldownRemaining("Mercenary.Whirlwind"));
+                }
+                else if (advancement == "Sword Master")
+                {
+                    names.Add("Judgement Cut"); cooldowns.Add(GetJudgementNextRecharge());
+                    names.Add("Severed Horizon"); cooldowns.Add(GetCooldownRemaining("SwordMaster.SeveredHorizon"));
+                    names.Add("Empty Sheath"); cooldowns.Add(GetCooldownRemaining("SwordMaster.EmptySheath"));
+                    names.Add("Halfmoon Slash"); cooldowns.Add(GetCooldownRemaining("SwordMaster.HalfmoonSlash"));
+                }
+                else if (advancement == "Priest")
+                {
+                    names.Add("Divine Intervention"); cooldowns.Add(GetCooldownRemaining("Priest.DivineIntervention"));
+                    names.Add("Grand Cross"); cooldowns.Add(GetCooldownRemaining("Priest.GrandCross"));
+                    names.Add("Heaven's Judgement"); cooldowns.Add(GetCooldownRemaining("Priest.HeavensJudgement"));
+                    names.Add("Lightning Tempest"); cooldowns.Add(GetCooldownRemaining("Priest.LightningTempest"));
+                }
+                else
+                {
+                    names.Add(GetUltimateName(advancement));
+                    cooldowns.Add(GetCooldownRemaining(GetUltimateId(advancement)));
+                }
+            }
+
+            int count = names.Count;
+            if (count <= 0)
+                return;
+
+            float scale = Mathf.Clamp(_hudScale.Value, 0.65f, 1.45f);
+            float size = 54f * scale;
+            float gap = 5f * scale;
+            float passiveGap = string.IsNullOrEmpty(advancement) ? 0f : 10f * scale;
+            float passiveSize = string.IsNullOrEmpty(advancement) ? 0f : size;
+            float totalWidth = size * count + gap * Mathf.Max(0, count - 1) + passiveGap + passiveSize;
+            float x = (Screen.width - totalWidth) * 0.5f;
+            float reserve = Mathf.Clamp(_hudBottomOffset.Value, 70f, 260f) * scale;
+            float y = Screen.height - reserve - size;
+
+            Color titleColor = className == "Warrior" ? new Color(1f, 0.66f, 0.30f, 1f) : new Color(0.60f, 0.88f, 1f, 1f);
+            _titleStyle.normal.textColor = titleColor;
+            string title = className;
+            if (!string.IsNullOrEmpty(advancement))
+                title += "  >  " + advancement;
+            GUI.Label(new Rect(x, y - 21f * scale, totalWidth, 18f * scale), title.ToUpper(), _titleStyle);
+
+            for (int i = 0; i < count; i++)
+            {
+                Rect rect = new Rect(x + i * (size + gap), y, size, size);
+                Texture2D previous = _slotStyle.normal.background;
+                float cooldown = cooldowns[i];
+                _slotStyle.normal.background = cooldown > 0.05f ? _slotCooldownTex : _slotReadyTex;
+                GUI.Box(rect, GetSkillInitials(names[i]), _slotStyle);
+                GUI.Label(new Rect(rect.x + 4f * scale, rect.y + 2f * scale, 18f * scale, 16f * scale), (i + 1).ToString(), _hudKeyStyle);
+                if (advancement == "Sword Master" && names[i] == "Judgement Cut")
+                    GUI.Label(new Rect(rect.x + 3f * scale, rect.y + 30f * scale, rect.width - 6f * scale, 20f * scale), GetJudgementReadyChargeCount().ToString() + "/4", _hudCooldownStyle);
+                else if (cooldown > 0.05f)
+                    GUI.Label(new Rect(rect.x + 3f * scale, rect.y + 30f * scale, rect.width - 6f * scale, 20f * scale), cooldown.ToString("0.0"), _hudCooldownStyle);
+                _slotStyle.normal.background = previous;
+            }
+
+            if (!string.IsNullOrEmpty(advancement))
+            {
+                float px = x + count * (size + gap) - gap + passiveGap;
+                Rect passiveRect = new Rect(px, y, size, size);
+                GUI.Box(passiveRect, GetSkillInitials(GetAdvancedPassiveName(advancement)), _slotLockedStyle);
+                GUI.Label(new Rect(passiveRect.x + 4f * scale, passiveRect.y + 2f * scale, 20f * scale, 16f * scale), "R", _hudKeyStyle);
+                if (advancement == "Mercenary")
+                {
+                    string furyLabel = IsUnchainedFuryActive() ? "FURY!" : Mathf.RoundToInt(_mercFury).ToString();
+                    GUI.Label(new Rect(passiveRect.x + 3f * scale, passiveRect.y + 30f * scale, passiveRect.width - 6f * scale, 20f * scale), furyLabel, _hudCooldownStyle);
+                }
+            }
+        }
+
+        private string GetSkillInitials(string name)
+        {
+            if (string.IsNullOrEmpty(name))
+                return "?";
+            string[] words = name.Split(new char[] { ' ', '-', '/' }, StringSplitOptions.RemoveEmptyEntries);
+            string result = "";
+            for (int i = 0; i < words.Length && result.Length < 3; i++)
+            {
+                string word = words[i];
+                if (string.IsNullOrEmpty(word) || char.IsDigit(word[0]))
+                    continue;
+                result += char.ToUpperInvariant(word[0]);
+            }
+            return string.IsNullOrEmpty(result) ? "?" : result;
+        }
+
+        private void DrawHudSlot(Rect rect, string icon, string name, string hotkey, float cooldown, bool locked)
+        {
+            GUIStyle style = locked ? _slotLockedStyle : _slotStyle;
+
+            if (!locked)
+                style.normal.background = cooldown > 0.01f ? _slotCooldownTex : _slotReadyTex;
+
+            GUI.Box(rect, "", style);
+
+            Color oldColor = GUI.color;
+            GUI.color = locked ? new Color(0.45f, 0.45f, 0.45f, 1f) : Color.white;
+
+            GUI.Label(
+                new Rect(rect.x + 8f, rect.y + 6f, 28f, rect.height - 12f),
+                icon,
+                _bookHeaderStyle
+            );
+
+            GUI.Label(
+                new Rect(rect.x + 38f, rect.y + 6f, rect.width - 44f, 24f),
+                name,
+                _bookTextStyle
+            );
+
+            string status = hotkey;
+
+            if (!locked && cooldown > 0.01f)
+                status += "   " + cooldown.ToString("0.0") + "s";
+
+            GUI.Label(
+                new Rect(rect.x + 38f, rect.y + 31f, rect.width - 44f, 22f),
+                status,
+                _passiveStyle
+            );
+
+            GUI.color = oldColor;
+        }
+
+        private void DrawSkillbookWindow(int windowId)
+        {
+            Player player = Player.m_localPlayer;
+            if (player == null)
+                return;
+
+            _treeHoveredTitle = "";
+            _treeHoveredBody = "";
+
+            string className = GetClass(player);
+            string advancement = GetAdvancement(player);
+
+            // The first live visual prototype is Cleric -> Paladin because that is the
+            // branch used to establish the Immortal Heroes UI framework. Clerics may
+            // preview Paladin before Advancement; an already-selected Paladin uses the
+            // same layout. Every other branch keeps the v0.12.3 Skillbook until its
+            // Immortal Heroes tree is authored from this reusable framework.
+            if (!(className == "Cleric" && (string.IsNullOrEmpty(advancement) || advancement == "Paladin")))
+            {
+                DrawLegacySkillbookWindow(windowId);
+                return;
+            }
+
+            if (EnsureReferenceBackdropLoaded())
+            {
+                DrawReferenceClericPaladinTree();
+                DrawTreeTooltip();
+
+                // The close button is already painted into the reference art. Keep its hotspot
+                // invisible so the asset stays visually 1:1 instead of receiving a second IMGUI button.
+                if (GUI.Button(ScaleReferenceRect(936f, 17f, 38f, 38f), GUIContent.none, GUIStyle.none))
+                    ToggleSkillbook();
+
+                GUI.DragWindow(ScaleReferenceRect(0f, 0f, 930f, 62f));
+                return;
+            }
+
+            // Asset-safe fallback: if the PNG is missing for any reason, the previous procedural
+            // renderer remains available instead of breaking the Skill Tree.
+            DrawImmortalHeroesBackdrop();
+            DrawClericPaladinTree(player, advancement == "Paladin");
+            DrawTreeTooltip();
+
+            if (GUI.Button(new Rect(_skillbookRect.width - 54f, 15f, 34f, 30f), "X"))
+                ToggleSkillbook();
+
+            GUI.DragWindow(new Rect(0f, 0f, _skillbookRect.width - 70f, 52f));
+        }
+
+        private bool EnsureReferenceBackdropLoaded()
+        {
+            if (_treeReferenceBackdropTex != null)
+                return true;
+
+            if (_treeReferenceBackdropLoadAttempted)
+                return false;
+
+            _treeReferenceBackdropLoadAttempted = true;
+
+            try
+            {
+                // Keep raw-file IO late-bound here. Windows PowerShell Add-Type can otherwise
+                // try to resolve Valheim's IO facade through a second mscorlib reference while
+                // compiling this staging DLL, which produces a duplicate-identity compiler error.
+                string assetPath = Paths.PluginPath + "/ImmortalHeroesAssets/Cleric_Paladin_Reference.png";
+                Type fileType = typeof(object).Assembly.GetType("System.IO.File");
+                if (fileType == null)
+                {
+                    Logger.LogWarning("Immortal Heroes UI file API unavailable; using procedural fallback.");
+                    return false;
+                }
+
+                MethodInfo existsMethod = fileType.GetMethod("Exists", BindingFlags.Public | BindingFlags.Static, null, new Type[] { typeof(string) }, null);
+                MethodInfo readMethod = fileType.GetMethod("ReadAllBytes", BindingFlags.Public | BindingFlags.Static, null, new Type[] { typeof(string) }, null);
+                if (existsMethod == null || readMethod == null || !(bool)existsMethod.Invoke(null, new object[] { assetPath }))
+                {
+                    Logger.LogWarning("Immortal Heroes UI asset missing; using procedural fallback: " + assetPath);
+                    return false;
+                }
+
+                byte[] bytes = (byte[])readMethod.Invoke(null, new object[] { assetPath });
+                Texture2D texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                texture.wrapMode = TextureWrapMode.Clamp;
+                texture.filterMode = FilterMode.Bilinear;
+
+                // Do NOT call Texture2D.LoadImage(byte[]) directly here. Valheim's current
+                // Unity ImageConversion assembly exposes modern span-based overload metadata that
+                // Windows PowerShell Add-Type cannot resolve against its own .NET Framework
+                // mscorlib. Late-bind the legacy byte[] overload so staging compilation never
+                // touches System.ReadOnlySpan<T>.
+                Type imageConversionType = Type.GetType("UnityEngine.ImageConversion, UnityEngine.ImageConversionModule");
+                if (imageConversionType == null)
+                {
+                    Destroy(texture);
+                    Logger.LogWarning("Immortal Heroes UI image decoder unavailable; using procedural fallback.");
+                    return false;
+                }
+
+                MethodInfo loadImageMethod = imageConversionType.GetMethod(
+                    "LoadImage",
+                    BindingFlags.Public | BindingFlags.Static,
+                    null,
+                    new Type[] { typeof(Texture2D), typeof(byte[]), typeof(bool) },
+                    null
+                );
+
+                if (loadImageMethod == null)
+                {
+                    Destroy(texture);
+                    Logger.LogWarning("Immortal Heroes UI byte-array decoder unavailable; using procedural fallback.");
+                    return false;
+                }
+
+                object decodeResult = loadImageMethod.Invoke(null, new object[] { texture, bytes, false });
+                if (!(decodeResult is bool) || !(bool)decodeResult)
+                {
+                    Destroy(texture);
+                    Logger.LogWarning("Immortal Heroes UI asset could not be decoded; using procedural fallback.");
+                    return false;
+                }
+
+                texture.name = "ImmortalHeroes_ClericPaladin_Reference";
+                _treeReferenceBackdropTex = texture;
+                Logger.LogInfo("Immortal Heroes reference UI asset loaded once: " + texture.width + "x" + texture.height);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning("Immortal Heroes reference UI load failed; using procedural fallback. " + ex.Message);
+                return false;
+            }
+        }
+
+        private Rect ScaleReferenceRect(float x, float y, float width, float height)
+        {
+            const float sourceWidth = 1011f;
+            const float sourceHeight = 662f;
+            float sx = _skillbookRect.width / sourceWidth;
+            float sy = _skillbookRect.height / sourceHeight;
+            return new Rect(x * sx, y * sy, width * sx, height * sy);
+        }
+
+        private void RegisterReferenceHotspot(Rect rect, string title, string body)
+        {
+            if (!rect.Contains(Event.current.mousePosition))
+                return;
+
+            _treeHoveredTitle = title;
+            _treeHoveredBody = body;
+        }
+
+        private sealed class ReferenceNodeUi
+        {
+            public readonly string Id;
+            public readonly Rect GroupRect;
+            public readonly Rect IconRect;
+            public readonly string Hotkey;
+            public readonly TreeNodeKind Kind;
+            public readonly bool Mandatory;
+            public readonly int MaxTier;
+            public readonly string TooltipTitle;
+            public readonly string TooltipBody;
+
+            public ReferenceNodeUi(string id, Rect groupRect, Rect iconRect, string hotkey, TreeNodeKind kind, bool mandatory, int maxTier, string tooltipTitle, string tooltipBody)
+            {
+                Id = id;
+                GroupRect = groupRect;
+                IconRect = iconRect;
+                Hotkey = hotkey;
+                Kind = kind;
+                Mandatory = mandatory;
+                MaxTier = maxTier;
+                TooltipTitle = tooltipTitle;
+                TooltipBody = tooltipBody;
+            }
+        }
+
+        private static readonly ReferenceNodeUi[] ClericPaladinReferenceNodes =
+        {
+            new ReferenceNodeUi("lightning_zap", new Rect(151f, 151f, 98f, 105f), new Rect(164f, 158f, 72f, 72f), "1", TreeNodeKind.Ascended, true, 7,
+                "ASCENDED - LIGHTNING ZAP", "Mandatory prerequisite Class skill. Remains locked on the numbered hotbar after Advancement."),
+            new ReferenceNodeUi("righteous_strike", new Rect(151f, 287f, 98f, 105f), new Rect(167f, 290f, 69f, 69f), "", TreeNodeKind.ClassNormal, false, 7,
+                "ATTACK - RIGHTEOUS STRIKE", "Cleric Class skill. Optional hotbar skill after Advancement."),
+            new ReferenceNodeUi("holy_wave", new Rect(151f, 413f, 98f, 105f), new Rect(167f, 416f, 69f, 69f), "6", TreeNodeKind.Buff, false, 7,
+                "BUFF - HOLY WAVE", "7m pulse: heal 25 HP immediately, then 5% Total HP per second for 6 seconds."),
+
+            new ReferenceNodeUi("goddess_relic", new Rect(357f, 151f, 103f, 105f), new Rect(369f, 158f, 70f, 72f), "2", TreeNodeKind.Signature, true, 5,
+                "ATTACK - GODDESS RELIC", "Paladin Signature Skill. Mandatory numbered hotbar skill."),
+            new ReferenceNodeUi("judgement_hammer", new Rect(357f, 287f, 103f, 105f), new Rect(369f, 290f, 70f, 69f), "3", TreeNodeKind.Signature, true, 5,
+                "ATTACK - JUDGEMENT HAMMER", "Paladin Signature Skill. Mandatory numbered hotbar skill."),
+            new ReferenceNodeUi("heavens_light", new Rect(357f, 413f, 103f, 105f), new Rect(370f, 416f, 71f, 71f), "M4 + R", TreeNodeKind.Grace, true, 0,
+                "GRACE - HEAVEN'S LIGHT", "10m cast snapshot: +40% Overall Defense and removes equipment Movement Speed penalties for 1 minute. 10 minute cooldown."),
+
+            new ReferenceNodeUi("shield_charge", new Rect(532f, 151f, 103f, 105f), new Rect(548f, 158f, 68f, 72f), "4", TreeNodeKind.AdvancementNormal, false, 5,
+                "ATTACK - SHIELD CHARGE", "Paladin Advancement skill. Optional hotbar skill."),
+            new ReferenceNodeUi("fallen_angel", new Rect(672f, 151f, 103f, 105f), new Rect(686f, 158f, 69f, 72f), "", TreeNodeKind.AdvancementNormal, false, 5,
+                "ATTACK - FALLEN ANGEL", "Paladin Advancement skill. Optional hotbar skill."),
+            new ReferenceNodeUi("ray_of_hope", new Rect(672f, 287f, 103f, 105f), new Rect(686f, 290f, 69f, 69f), "5", TreeNodeKind.Buff, false, 5,
+                "BUFF - RAY OF HOPE", "Paladin support skill. Optional hotbar skill."),
+
+            new ReferenceNodeUi("electric_smite", new Rect(831f, 204f, 133f, 165f), new Rect(850f, 214f, 103f, 108f), "7", TreeNodeKind.Ultimate, true, 3,
+                "ULTIMATE - ELECTRIC SMITE", "Acrobatic landing followed by sixteen 10m Ground Projectile Lightning Trails with Persistent Damage.")
+        };
+
+        private void DrawReferenceClericPaladinTree()
+        {
+            Rect full = new Rect(0f, 0f, _skillbookRect.width, _skillbookRect.height);
+            GUI.color = Color.white;
+            GUI.DrawTexture(full, _treeReferenceBackdropTex, ScaleMode.StretchToFill, true);
+
+            RegisterReferenceHotspot(ScaleReferenceRect(31f, 76f, 286f, 64f),
+                "CLERIC'S BLESSING",
+                "All Shields: 1.5x Block Force + Block Armor. Staff + Shield allowed. No movement penalty from Shields, Staves, or one-handed Club-skill weapons. +35 Max HP and +20% HP Regen.");
+            RegisterReferenceHotspot(ScaleReferenceRect(332f, 76f, 651f, 64f),
+                "HOLY TRINITY - MASTERY",
+                "Club-type melee + Shield: +15 Clubs (effective cap 100), no Armor movement penalties, and the Club's current Blunt damage guarantees Slash and Pierce each reach at least 50% of that Blunt value without lowering existing damage.");
+
+            for (int i = 0; i < ClericPaladinReferenceNodes.Length; i++)
+                DrawReferenceNode(ClericPaladinReferenceNodes[i]);
+
+            DrawReferenceHotbarHotkeys();
+            DrawReferenceFooterUx();
+        }
+
+        private void DrawReferenceNode(ReferenceNodeUi node)
+        {
+            Rect group = ScaleReferenceRect(node.GroupRect.x, node.GroupRect.y, node.GroupRect.width, node.GroupRect.height);
+            Rect icon = ScaleReferenceRect(node.IconRect.x, node.IconRect.y, node.IconRect.width, node.IconRect.height);
+
+            if (!_treePrototypeTiers.ContainsKey(node.Id))
+                _treePrototypeTiers[node.Id] = 0;
+
+            // Rank identity is already baked into the approved node artwork.
+
+            if (group.Contains(Event.current.mousePosition))
+            {
+                int hoverTier = GetPrototypeTier(node.Id);
+                int pending = GetPrototypePending(node.Id);
+                string tierLine = node.MaxTier > 0
+                    ? "Tier " + hoverTier.ToString() + " / " + node.MaxTier.ToString() + (pending > 0 ? "   Pending +" + pending.ToString() : "")
+                    : "No allocatable Tiers";
+                _treeHoveredTitle = node.TooltipTitle;
+                string slotState = node.Kind == TreeNodeKind.Grace ? "  •  DEDICATED M4 + R" : (node.Mandatory ? "  •  HOTBAR LOCKED" : "  •  OPTIONAL");
+                _treeHoveredBody = tierLine + slotState + "\n" + node.TooltipBody;
+            }
+
+            if (GUI.Button(icon, GUIContent.none, GUIStyle.none))
+                _treeSelectedNodeId = node.Id;
+
+            if (_treeSelectedNodeId != node.Id)
+                return;
+
+            DrawReferenceSelectedAccent(icon, node.Kind);
+
+            if (node.MaxTier <= 0)
+                return;
+
+            int currentTier = GetPrototypeTier(node.Id);
+            int pendingTier = GetPrototypePending(node.Id);
+            int effectiveTier = currentTier + pendingTier;
+
+            float controlSize = Mathf.Max(16f, Mathf.Min(icon.width, icon.height) * 0.22f);
+            float controlY = group.yMax + 1f;
+            float gap = 5f;
+
+            bool canAdd = effectiveTier < node.MaxTier;
+            bool canRemove = pendingTier > 0;
+
+            if (canAdd && canRemove)
+            {
+                Rect minusRect = new Rect(group.center.x - controlSize - gap * 0.5f, controlY, controlSize, controlSize);
+                Rect plusRect = new Rect(group.center.x + gap * 0.5f, controlY, controlSize, controlSize);
+                DrawTierQueueButton(minusRect, "-");
+                DrawTierQueueButton(plusRect, "+");
+                if (GUI.Button(minusRect, GUIContent.none, GUIStyle.none))
+                    RemovePrototypePending(node.Id);
+                if (GUI.Button(plusRect, GUIContent.none, GUIStyle.none))
+                    AddPrototypePending(node.Id, node.MaxTier);
+            }
+            else if (canAdd)
+            {
+                Rect plusRect = new Rect(group.center.x - controlSize * 0.5f, controlY, controlSize, controlSize);
+                DrawTierQueueButton(plusRect, "+");
+                if (GUI.Button(plusRect, GUIContent.none, GUIStyle.none))
+                    AddPrototypePending(node.Id, node.MaxTier);
+            }
+            else if (canRemove)
+            {
+                Rect minusRect = new Rect(group.center.x - controlSize * 0.5f, controlY, controlSize, controlSize);
+                DrawTierQueueButton(minusRect, "-");
+                if (GUI.Button(minusRect, GUIContent.none, GUIStyle.none))
+                    RemovePrototypePending(node.Id);
+            }
+        }
+
+        private void DrawReferenceHotbarHotkeys()
+        {
+            // Hotkeys belong to the actual hotbar, never under tree nodes.
+            float[] centers = { 225f, 283f, 340f, 398f, 455f, 512f, 570f };
+            string[] keys = { "1", "2", "3", "4", "5", "6", "7" };
+
+            for (int i = 0; i < centers.Length; i++)
+            {
+                Rect label = ScaleReferenceRect(centers[i] - 16f, 607f, 32f, 14f);
+                GUI.Label(new Rect(label.x + 1f, label.y + 1f, label.width, label.height), keys[i], _treeTinyStyle);
+                GUI.Label(label, keys[i], _treeTinyStyle);
+            }
+        }
+
+        private void DrawReferenceRankAccent(Rect icon, TreeNodeKind kind)
+        {
+            // The painted frames remain untouched. Rank identity uses small jewels only so the
+            // tree never picks up debug-looking cyan/pink corner brackets.
+            Color accent = GetTreeNodeColor(kind);
+            Rect frame = new Rect(icon.x - 3f, icon.y - 3f, icon.width + 6f, icon.height + 6f);
+
+            if (kind == TreeNodeKind.Signature)
+                accent = new Color(0.14f, 0.32f, 0.72f, 0.98f);
+            else if (kind == TreeNodeKind.AdvancementNormal)
+                accent = new Color(0.18f, 0.82f, 0.94f, 0.98f);
+            else if (kind == TreeNodeKind.Buff)
+                accent = new Color(0.30f, 0.82f, 0.42f, 0.98f);
+
+            if (kind == TreeNodeKind.Ascended)
+            {
+                DrawDiamond(new Vector2(frame.center.x, frame.y - 3f), 4.5f, accent);
+                DrawDiamond(new Vector2(frame.center.x, frame.yMax + 3f), 3.5f, new Color(accent.r, accent.g, accent.b, 0.80f));
+            }
+            else if (kind == TreeNodeKind.Signature)
+            {
+                DrawDiamond(new Vector2(frame.center.x, frame.y - 3f), 4f, new Color(0.46f, 0.66f, 1f, 0.98f));
+                DrawDiamond(new Vector2(frame.x - 3f, frame.center.y), 2.7f, accent);
+                DrawDiamond(new Vector2(frame.xMax + 3f, frame.center.y), 2.7f, accent);
+            }
+            else if (kind == TreeNodeKind.AdvancementNormal)
+            {
+                DrawDiamond(new Vector2(frame.x - 3f, frame.center.y), 2.5f, accent);
+                DrawDiamond(new Vector2(frame.xMax + 3f, frame.center.y), 2.5f, accent);
+            }
+            else if (kind == TreeNodeKind.Buff)
+            {
+                DrawDiamond(new Vector2(frame.x - 3f, frame.center.y), 2.5f, accent);
+                DrawDiamond(new Vector2(frame.xMax + 3f, frame.center.y), 2.5f, accent);
+            }
+            else if (kind == TreeNodeKind.Grace)
+            {
+                Color gold = new Color(0.96f, 0.78f, 0.24f, 1f);
+                DrawDiamond(new Vector2(frame.center.x, frame.y - 4f), 5f, gold);
+                DrawDiamond(new Vector2(frame.center.x, frame.yMax + 4f), 3.5f, new Color(gold.r, gold.g, gold.b, 0.78f));
+            }
+            else if (kind == TreeNodeKind.Ultimate || kind == TreeNodeKind.AscendedUltimate)
+            {
+                Color gold = new Color(0.96f, 0.76f, 0.30f, 1f);
+                DrawDiamond(new Vector2(frame.center.x, frame.y - 6f), 6f, gold);
+                DrawDiamond(new Vector2(frame.x - 4f, frame.center.y), 4f, accent);
+                DrawDiamond(new Vector2(frame.xMax + 4f, frame.center.y), 4f, accent);
+                DrawDiamond(new Vector2(frame.center.x, frame.yMax + 5f), 3f, gold);
+            }
+        }
+
+        private void DrawReferenceSelectedAccent(Rect icon, TreeNodeKind kind)
+        {
+            Color gold = new Color(0.98f, 0.82f, 0.36f, 0.88f);
+            Rect cue = new Rect(icon.x + 7f, icon.yMax + 2f, icon.width - 14f, 2f);
+            GUI.color = gold;
+            GUI.DrawTexture(cue, _treeGoldTex);
+            GUI.color = Color.white;
+        }
+
+        private void DrawTierQueueButton(Rect rect, string symbol)
+        {
+            DrawFilledBorder(rect, new Color(0.16f, 0.18f, 0.19f, 0.98f), new Color(0.92f, 0.73f, 0.27f, 1f), 1f);
+            GUI.Label(rect, symbol, _treeSubHeaderStyle);
+        }
+
+        private void DrawReferenceFooterUx()
+        {
+            // v0.14.6: footer cleanup is entirely code-side. The baked outer gold dividers stay
+            // untouched; we only repaint the interiors so Grace and the right endcap read as one
+            // continuous footer instead of translucent/blurred child panels.
+            Rect graceCell = ScaleReferenceRect(620f, 535f, 136f, 92f);
+            Rect rightCell = ScaleReferenceRect(756f, 535f, 229f, 92f);
+
+            DrawFooterCellInterior(graceCell);
+            DrawFooterCellInterior(rightCell);
+
+            // Grace mirrors the numbered hotbar language: the skill name lives inside its gold
+            // skill box, while the dedicated control sits directly underneath the box.
+            Rect graceBox = ScaleReferenceRect(634f, 538f, 112f, 61f);
+            Rect graceInner = new Rect(graceBox.x + 5f, graceBox.y + 5f, graceBox.width - 10f, graceBox.height - 10f);
+            GUI.color = new Color(0.20f, 0.135f, 0.045f, 1f);
+            GUI.DrawTexture(graceInner, _treeGoldTex);
+            GUI.color = Color.white;
+
+            Color graceGold = new Color(0.94f, 0.73f, 0.25f, 0.98f);
+            DrawBorder(graceBox, graceGold, 1.5f);
+            DrawBorder(new Rect(graceBox.x + 3f, graceBox.y + 3f, graceBox.width - 6f, graceBox.height - 6f),
+                new Color(graceGold.r, graceGold.g, graceGold.b, 0.45f), 1f);
+            DrawDiamond(new Vector2(graceBox.center.x, graceBox.y + 2f), 4.5f, graceGold);
+            DrawDiamond(new Vector2(graceBox.center.x, graceBox.yMax - 2f), 3f,
+                new Color(graceGold.r, graceGold.g, graceGold.b, 0.78f));
+
+            Rect graceName = new Rect(graceBox.x + 7f, graceBox.y + 19f, graceBox.width - 14f, 16f);
+            Rect graceHotkey = ScaleReferenceRect(634f, 603f, 112f, 15f);
+            GUI.Label(graceName, "HEAVEN'S LIGHT", _treeRankStyle);
+            GUI.Label(new Rect(graceHotkey.x + 1f, graceHotkey.y + 1f, graceHotkey.width, graceHotkey.height), "M4 + R", _treeTinyStyle);
+            GUI.Label(graceHotkey, "M4 + R", _treeTinyStyle);
+
+            int pendingTotal = GetPrototypeTotalPending();
+            if (pendingTotal <= 0)
+            {
+                DrawFooterCompassEndcap(rightCell);
+                return;
+            }
+
+            // Confirmation only exists while there are queued changes. It uses the existing endcap
+            // space directly—no nested panel, no extra rectangle, no pasted-on child frame.
+            Rect confirmHit = new Rect(rightCell.x + 38f, rightCell.y + 28f, rightCell.width - 76f, 24f);
+            GUI.Label(confirmHit, "CONFIRM", _treeSubHeaderStyle);
+            GUI.Label(new Rect(rightCell.x + 34f, rightCell.y + 55f, rightCell.width - 68f, 13f),
+                pendingTotal.ToString() + " PENDING", _treeTinyStyle);
+
+            if (GUI.Button(confirmHit, GUIContent.none, GUIStyle.none))
+                ConfirmPrototypePending();
+        }
+
+        private void DrawFooterCellInterior(Rect cell)
+        {
+            // Keep the baked outer filigree/dividers visible; replace only the washed-out center.
+            Rect inner = new Rect(cell.x + 5f, cell.y + 5f, cell.width - 10f, cell.height - 10f);
+            GUI.color = Color.white;
+            GUI.DrawTexture(inner, _treeHotbarTex);
+            GUI.color = Color.white;
+        }
+
+        private void DrawFooterCompassEndcap(Rect cell)
+        {
+            Vector2 center = new Vector2(cell.center.x, cell.center.y + 1f);
+            Color gold = new Color(0.72f, 0.53f, 0.23f, 0.72f);
+            Color faintGold = new Color(gold.r, gold.g, gold.b, 0.38f);
+
+            float longArm = Mathf.Min(cell.width, cell.height) * 0.29f;
+            float shortArm = longArm * 0.66f;
+
+            DrawFooterCompassArm(center, longArm, 0f, gold, 1.5f);
+            DrawFooterCompassArm(center, longArm, 90f, gold, 1.5f);
+            DrawFooterCompassArm(center, shortArm, 45f, faintGold, 1f);
+            DrawFooterCompassArm(center, shortArm, -45f, faintGold, 1f);
+
+            DrawDiamond(center, 5.5f, gold);
+            DrawDiamond(new Vector2(center.x, center.y - longArm), 3.2f, gold);
+            DrawDiamond(new Vector2(center.x, center.y + longArm), 2.8f, faintGold);
+            DrawDiamond(new Vector2(center.x - longArm, center.y), 2.6f, faintGold);
+            DrawDiamond(new Vector2(center.x + longArm, center.y), 2.6f, faintGold);
+
+            GUI.color = faintGold;
+            GUI.DrawTexture(new Rect(center.x - longArm - 26f, center.y - 0.5f, 22f, 1f), _treeGoldTex);
+            GUI.DrawTexture(new Rect(center.x + longArm + 4f, center.y - 0.5f, 22f, 1f), _treeGoldTex);
+            GUI.color = Color.white;
+        }
+
+        private void DrawFooterCompassArm(Vector2 center, float length, float angle, Color color, float thickness)
+        {
+            Matrix4x4 oldMatrix = GUI.matrix;
+            GUIUtility.RotateAroundPivot(angle, center);
+            GUI.color = color;
+            GUI.DrawTexture(new Rect(center.x - length, center.y - thickness * 0.5f, length * 2f, thickness), _treeGoldTex);
+            GUI.color = Color.white;
+            GUI.matrix = oldMatrix;
+        }
+
+        private int GetPrototypeTier(string nodeId)
+        {
+            int current;
+            return _treePrototypeTiers.TryGetValue(nodeId, out current) ? current : 0;
+        }
+
+        private int GetPrototypePending(string nodeId)
+        {
+            int pending;
+            return _treePrototypePending.TryGetValue(nodeId, out pending) ? pending : 0;
+        }
+
+        private int GetPrototypeTotalPending()
+        {
+            int total = 0;
+            foreach (KeyValuePair<string, int> kvp in _treePrototypePending)
+                total += kvp.Value;
+            return total;
+        }
+
+        private void AddPrototypePending(string nodeId, int maxTier)
+        {
+            int current = GetPrototypeTier(nodeId);
+            int pending = GetPrototypePending(nodeId);
+            if (current + pending >= maxTier)
+                return;
+
+            _treePrototypePending[nodeId] = pending + 1;
+        }
+
+        private void RemovePrototypePending(string nodeId)
+        {
+            int pending = GetPrototypePending(nodeId);
+            if (pending <= 0)
+                return;
+
+            if (pending == 1)
+                _treePrototypePending.Remove(nodeId);
+            else
+                _treePrototypePending[nodeId] = pending - 1;
+        }
+
+        private void ConfirmPrototypePending()
+        {
+            foreach (KeyValuePair<string, int> kvp in _treePrototypePending)
+                _treePrototypeTiers[kvp.Key] = GetPrototypeTier(kvp.Key) + kvp.Value;
+
+            _treePrototypePending.Clear();
+        }
+
+        private void DrawImmortalHeroesBackdrop()
+        {
+            Rect full = new Rect(0f, 0f, _skillbookRect.width, _skillbookRect.height);
+
+            // v0.14.5: the live IMGUI shell now follows the approved Immortal Heroes
+            // concept more closely using procedural parchment gradients, sacred navy,
+            // restrained rose and lightweight gold ornament instead of flat prototype fills.
+            GUI.DrawTexture(full, _treeMainTex);
+
+            Rect topBand = new Rect(10f, 10f, full.width - 20f, 72f);
+            GUI.DrawTexture(topBand, _treeHotbarTex);
+            DrawOrnateFrame(topBand, new Color(0.88f, 0.68f, 0.29f, 0.98f), 2f, true);
+            DrawBorder(new Rect(topBand.x + 7f, topBand.y + 7f, topBand.width - 14f, topBand.height - 14f),
+                new Color(0.98f, 0.86f, 0.56f, 0.24f), 1f);
+
+            // Thin luminous rails make the title band read as engraved metal rather than a flat bar.
+            GUI.color = new Color(0.95f, 0.76f, 0.36f, 0.88f);
+            GUI.DrawTexture(new Rect(topBand.x + 18f, topBand.y + 5f, topBand.width - 36f, 2f), _treeGoldTex);
+            GUI.DrawTexture(new Rect(topBand.x + 18f, topBand.yMax - 7f, topBand.width - 36f, 2f), _treeGoldTex);
+            GUI.color = Color.white;
+
+            Rect frame = new Rect(10f, 10f, full.width - 20f, full.height - 20f);
+            DrawOrnateFrame(frame, new Color(0.84f, 0.64f, 0.27f, 1f), 3f, true);
+            DrawBorder(new Rect(frame.x + 7f, frame.y + 7f, frame.width - 14f, frame.height - 14f),
+                new Color(0.98f, 0.88f, 0.63f, 0.32f), 1f);
+
+            // Stronger corner jewels approximate the ornate concept art without external assets.
+            DrawDiamond(new Vector2(frame.x + 10f, frame.y + 10f), 7f, new Color(0.92f, 0.72f, 0.31f, 0.95f));
+            DrawDiamond(new Vector2(frame.xMax - 10f, frame.y + 10f), 7f, new Color(0.92f, 0.72f, 0.31f, 0.95f));
+            DrawDiamond(new Vector2(frame.x + 10f, frame.yMax - 10f), 7f, new Color(0.92f, 0.72f, 0.31f, 0.95f));
+            DrawDiamond(new Vector2(frame.xMax - 10f, frame.yMax - 10f), 7f, new Color(0.92f, 0.72f, 0.31f, 0.95f));
+
+            float cx = full.width * 0.50f;
+            Rect crestGlow = new Rect(cx - 48f, 6f, 96f, 82f);
+            GUI.DrawTexture(crestGlow, _treeGoldGlowTex);
+            DrawDiamond(new Vector2(cx, 48f), 18f, new Color(0.97f, 0.77f, 0.34f, 1f));
+            DrawDiamond(new Vector2(cx, 48f), 10f, new Color(0.22f, 0.13f, 0.055f, 1f));
+            GUI.Label(new Rect(cx - 22f, 23f, 44f, 48f), "✝", _treeHeaderEmblemStyle);
+            GUI.color = new Color(0.94f, 0.73f, 0.31f, 0.86f);
+            GUI.DrawTexture(new Rect(cx - 58f, 47f, 36f, 2f), _treeGoldTex);
+            GUI.DrawTexture(new Rect(cx + 22f, 47f, 36f, 2f), _treeGoldTex);
+            GUI.color = Color.white;
+
+            GUI.Label(new Rect(34f, 17f, 410f, 38f), "IMMORTAL HEROES", _treeTitleStyle);
+            GUI.Label(new Rect(36f, 49f, 410f, 20f), "SKILL TREE  •  UI PROTOTYPE", _treeTinyLeftStyle);
+        }
+
+        private void DrawClericPaladinTree(Player player, bool advanced)
+        {
+            const float bodyY = 88f;
+            const float bodyH = 558f;
+            Rect classArea = new Rect(28f, bodyY, 315f, bodyH);
+            Rect advArea = new Rect(353f, bodyY, 799f, bodyH);
+
+            // Distinct identities: Cleric sits on cool sacred parchment while Paladin owns
+            // a warmer ivory/rose field. The watermark motifs make each side read as a class,
+            // not just as two tinted rectangles.
+            GUI.DrawTexture(classArea, _treeClassAreaTex);
+            GUI.DrawTexture(advArea, _treeAdvAreaTex);
+            DrawOrnateFrame(classArea, new Color(0.36f, 0.58f, 0.75f, 0.94f), 2f, true);
+            DrawOrnateFrame(advArea, new Color(0.66f, 0.35f, 0.42f, 0.92f), 2f, true);
+
+            // Concept-art side banners: they visually anchor Class vs Advancement without adding more labels.
+            Rect clericBanner = new Rect(classArea.x + 7f, classArea.y + 78f, 22f, classArea.height - 100f);
+            DrawFilledBorder(clericBanner, new Color(0.035f, 0.13f, 0.23f, 0.88f), new Color(0.84f, 0.66f, 0.30f, 0.78f), 1f);
+            GUI.Label(new Rect(clericBanner.x - 2f, clericBanner.y + 74f, clericBanner.width + 4f, 66f), "✝", _treeHeaderEmblemStyle);
+            Rect paladinBanner = new Rect(advArea.xMax - 29f, advArea.y + 78f, 22f, advArea.height - 100f);
+            DrawFilledBorder(paladinBanner, new Color(0.37f, 0.085f, 0.14f, 0.78f), new Color(0.84f, 0.66f, 0.30f, 0.72f), 1f);
+            GUI.Label(new Rect(paladinBanner.x - 2f, paladinBanner.y + 78f, paladinBanner.width + 4f, 66f), "✦", _treeHeaderEmblemStyle);
+
+            DrawBorder(new Rect(classArea.x + 10f, classArea.y + 10f, classArea.width - 20f, classArea.height - 20f),
+                new Color(0.38f, 0.57f, 0.70f, 0.24f), 1f);
+            DrawBorder(new Rect(advArea.x + 10f, advArea.y + 10f, advArea.width - 20f, advArea.height - 20f),
+                new Color(0.68f, 0.39f, 0.45f, 0.20f), 1f);
+
+            DrawPanelWatermark(new Rect(classArea.x + 14f, classArea.y + 76f, classArea.width - 28f, classArea.height - 96f),
+                "✝", new Color(0.22f, 0.47f, 0.68f, 0.075f));
+            DrawPanelWatermark(new Rect(advArea.x + 18f, advArea.y + 76f, advArea.width - 36f, advArea.height - 96f),
+                "♜", new Color(0.58f, 0.24f, 0.31f, 0.055f));
+
+            // Gold seam between Class and Advancement.
+            GUI.color = new Color(0.82f, 0.62f, 0.27f, 0.85f);
+            GUI.DrawTexture(new Rect(347f, bodyY + 5f, 2f, bodyH - 10f), _treeGoldTex);
+            GUI.color = Color.white;
+            DrawDiamond(new Vector2(348f, bodyY + 38f), 6f, new Color(0.90f, 0.70f, 0.32f, 0.95f));
+            DrawDiamond(new Vector2(348f, bodyY + bodyH - 38f), 6f, new Color(0.90f, 0.70f, 0.32f, 0.95f));
+
+            Rect clericHeader = new Rect(46f, 100f, 275f, 58f);
+            Rect paladinHeader = new Rect(380f, 100f, 742f, 58f);
+            DrawHeaderRibbon(clericHeader, _treeClassHeaderTex, new Color(0.95f, 0.77f, 0.38f, 1f), false);
+            DrawHeaderRibbon(paladinHeader, _treeAdvHeaderTex, new Color(0.95f, 0.77f, 0.38f, 1f), true);
+            GUI.DrawTexture(new Rect(clericHeader.x - 12f, clericHeader.y - 10f, 74f, 74f), _treeGoldGlowTex);
+            GUI.DrawTexture(new Rect(paladinHeader.x - 10f, paladinHeader.y - 10f, 74f, 74f), _treeGoldGlowTex);
+            DrawDiamond(new Vector2(clericHeader.x + 23f, clericHeader.center.y), 14f, new Color(0.92f, 0.73f, 0.33f, 0.95f));
+            DrawDiamond(new Vector2(paladinHeader.x + 24f, paladinHeader.center.y), 14f, new Color(0.92f, 0.73f, 0.33f, 0.95f));
+
+            // Header emblems and centered class names.
+            GUI.Label(new Rect(50f, 103f, 42f, 40f), "✦", _treeHeaderEmblemStyle);
+            GUI.Label(new Rect(105f, 103f, 205f, 30f), "CLERIC", _treeHeaderStyle);
+            GUI.Label(new Rect(105f, 132f, 205f, 17f), "hover for Blessing", _treeTinyStyle);
+
+            GUI.Label(new Rect(384f, 103f, 54f, 40f), "✝", _treeHeaderEmblemStyle);
+            GUI.Label(new Rect(446f, 103f, 655f, 30f), "PALADIN", _treeHeaderStyle);
+            GUI.Label(new Rect(446f, 132f, 655f, 17f), "hover for Holy Trinity Mastery", _treeTinyStyle);
+
+            if (clericHeader.Contains(Event.current.mousePosition))
+            {
+                _treeHoveredTitle = "CLERIC'S BLESSING";
+                _treeHoveredBody = "All Shields: 1.5x Block Force + Block Armor. Staff + Shield allowed. No movement penalty from Shields, Staves, or one-handed Club-skill weapons. +35 Max HP and +20% HP Regen.";
+            }
+            if (paladinHeader.Contains(Event.current.mousePosition))
+            {
+                _treeHoveredTitle = "HOLY TRINITY — MASTERY";
+                _treeHoveredBody = "While wielding a Club-type melee weapon + Shield: +15 Clubs, no Armor movement penalty, and Slash/Pierce are each brought up to 50% of current Blunt damage without lowering existing damage.";
+            }
+
+            // The only progression connector: Ascended Class prerequisite -> Advancement.
+
+            DrawTreeNode(new Rect(184f, 181f, 72f, 72f), "Lightning Zap", "⚡", TreeNodeKind.Ascended,
+                7, 7, true, "ASCENDED", "Prerequisite Class skill. Ascended skills stay on the numbered hotbar and cannot be removed.");
+            DrawTreeNode(new Rect(184f, 343f, 64f, 64f), "Righteous Strike", "RS", TreeNodeKind.ClassNormal,
+                7, 0, false, "CLASS", "Optional Class skill after Advancement. Holy Ground PAC strike with Blunt + Lightning and Expose.");
+            DrawTreeNode(new Rect(184f, 501f, 64f, 64f), "Holy Wave", "≈", TreeNodeKind.ClassNormal,
+                7, 0, false, "CLASS", "Optional Class skill after Advancement. Instant healing wave with immediate and sustained healing.");
+
+            DrawTreeNode(new Rect(418f, 181f, 70f, 70f), "Goddess Relic", "✝", TreeNodeKind.Signature,
+                5, 0, true, "SIGNATURE", "Signature Skill. A divine Cross drops from the sky. Signature skills are mandatory hotbar skills.");
+            DrawTreeNode(new Rect(418f, 343f, 70f, 70f), "Judgement Hammer", "JH", TreeNodeKind.Signature,
+                5, 0, true, "SIGNATURE", "Signature Skill. Travelling holy hammer projectile. Signature skills are mandatory hotbar skills.");
+            DrawTreeNode(new Rect(438f, 505f, 76f, 76f), "Heaven's Light", "✦", TreeNodeKind.Grace,
+                0, 0, false, "GRACE  •  M4+R", "+40% Overall Defense and removes equipment movement penalties. 1 minute duration, 10 minute cooldown. Grace uses its own standalone M4+R hotbox.");
+
+            DrawTreeNode(new Rect(638f, 184f, 64f, 64f), "Shield Charge", "SC", TreeNodeKind.AdvancementNormal,
+                5, 0, false, "ADVANCEMENT", "Interchangeable Advancement skill. Normal Advancement nodes use cyan styling.");
+            DrawTreeNode(new Rect(824f, 184f, 64f, 64f), "Fallen Angel", "↓", TreeNodeKind.AdvancementNormal,
+                5, 0, false, "ADVANCEMENT", "Interchangeable Advancement skill. Jump high, nose-dive, then slam a 10m area.");
+            DrawTreeNode(new Rect(824f, 343f, 64f, 64f), "Ray of Hope", "+", TreeNodeKind.Buff,
+                5, 0, false, "BUFF / SUPPORT", "Interchangeable non-damaging/support Advancement skill.");
+
+            DrawTreeNode(new Rect(1002f, 240f, 112f, 112f), "Electric Smite", "⚡", TreeNodeKind.Ultimate,
+                3, 0, true, "ULTIMATE", "Ultimate. Mandatory once unlocked, but freely movable to any of the seven numbered hotbar slots.");
+
+            DrawHotbarPreview();
+        }
+
+        private enum TreeNodeKind
+        {
+            ClassNormal,
+            AdvancementNormal,
+            Buff,
+            Signature,
+            Ascended,
+            Ultimate,
+            AscendedUltimate,
+            Grace
+        }
+
+        private void DrawTreeNode(Rect rect, string name, string icon, TreeNodeKind kind, int maxTier, int tier, bool mandatory, string rankLabel, string tooltip)
+        {
+            Color accent = GetTreeNodeColor(kind);
+            float border = GetTreeBorderThickness(kind);
+            bool ultimate = kind == TreeNodeKind.Ultimate || kind == TreeNodeKind.AscendedUltimate;
+            bool grace = kind == TreeNodeKind.Grace;
+
+            Texture2D glow = null;
+            if (kind == TreeNodeKind.Ascended) glow = _treeMagentaGlowTex;
+            else if (ultimate) glow = _treeMaroonGlowTex;
+            else if (grace) glow = _treeGoldGlowTex;
+            else if (kind == TreeNodeKind.Signature) glow = _treeBlueGlowTex;
+            if (glow != null)
+            {
+                float glowPad = ultimate ? 28f : grace ? 20f : 14f;
+                GUI.DrawTexture(new Rect(rect.x - glowPad, rect.y - glowPad, rect.width + glowPad * 2f, rect.height + glowPad * 2f), glow);
+            }
+
+            Rect shadow = new Rect(rect.x + 4f, rect.y + 5f, rect.width, rect.height);
+            GUI.DrawTexture(shadow, _treeShadowTex);
+
+            // Rank-specific frame language: muted gold outer frame + category-colored inner frame.
+            float outerPad = ultimate ? 10f : kind == TreeNodeKind.Ascended ? 7f : kind == TreeNodeKind.Signature ? 5f : grace ? 7f : 3f;
+            Rect outer = new Rect(rect.x - outerPad, rect.y - outerPad, rect.width + outerPad * 2f, rect.height + outerPad * 2f);
+            Color outerGold = ultimate ? new Color(0.95f, 0.70f, 0.28f, 1f) :
+                              kind == TreeNodeKind.Ascended ? new Color(0.95f, 0.70f, 0.42f, 0.95f) :
+                              grace ? new Color(0.95f, 0.77f, 0.22f, 1f) :
+                              new Color(0.78f, 0.62f, 0.31f, 0.82f);
+            DrawOrnateFrame(outer, outerGold, ultimate ? 3f : 2f, true);
+
+            Color inner = grace ? new Color(0.20f, 0.14f, 0.035f, 0.99f) :
+                          ultimate ? new Color(0.22f, 0.075f, 0.10f, 0.99f) :
+                          new Color(0.075f, 0.09f, 0.13f, 0.99f);
+            DrawFilledBorder(rect, inner, accent, border);
+            DrawBorder(new Rect(rect.x + 4f, rect.y + 4f, rect.width - 8f, rect.height - 8f),
+                new Color(accent.r, accent.g, accent.b, 0.33f), 1f);
+
+            DrawTreeNodeCornerAccents(outer, accent, kind);
+
+            if (kind == TreeNodeKind.Ascended)
+            {
+                DrawDiamond(new Vector2(outer.center.x, outer.y - 2f), 5f, accent);
+                DrawDiamond(new Vector2(outer.center.x, outer.yMax + 2f), 4f, new Color(accent.r, accent.g, accent.b, 0.75f));
+            }
+            else if (kind == TreeNodeKind.Signature)
+            {
+                DrawDiamond(new Vector2(outer.center.x, outer.y - 1f), 4f, new Color(0.55f, 0.70f, 1f, 0.95f));
+            }
+            else if (ultimate)
+            {
+                DrawDiamond(new Vector2(outer.center.x, outer.y - 4f), 8f, outerGold);
+                DrawDiamond(new Vector2(outer.x - 2f, outer.center.y), 5f, new Color(accent.r, accent.g, accent.b, 0.88f));
+                DrawDiamond(new Vector2(outer.xMax + 2f, outer.center.y), 5f, new Color(accent.r, accent.g, accent.b, 0.88f));
+            }
+
+            GUI.Label(new Rect(rect.x, rect.y + 1f, rect.width, rect.height - 9f), icon, ultimate ? _treeUltimateIconStyle : _treeNodeIconStyle);
+
+            if (mandatory)
+            {
+                Rect pin = new Rect(outer.xMax - 15f, outer.y - 2f, 22f, 22f);
+                DrawFilledBorder(pin, new Color(0.16f, 0.11f, 0.045f, 1f), new Color(0.96f, 0.78f, 0.35f, 1f), 1f);
+                GUI.Label(pin, "♦", _treeTinyStyle);
+            }
+
+            if (maxTier > 0)
+            {
+                float pipGap = 2f;
+                float pip = Mathf.Clamp((rect.width - 12f - pipGap * (maxTier - 1)) / maxTier, 4f, 7f);
+                float total = pip * maxTier + pipGap * (maxTier - 1);
+                float px = rect.x + (rect.width - total) * 0.5f;
+                float py = rect.yMax - 7f;
+                for (int i = 0; i < maxTier; i++)
+                {
+                    Color pc = i < tier ? accent : new Color(0.37f, 0.34f, 0.31f, 0.78f);
+                    GUI.color = pc;
+                    GUI.DrawTexture(new Rect(px + i * (pip + pipGap), py, pip, 4f), _treeGoldTex);
+                    GUI.color = Color.white;
+                }
+            }
+
+            // Parchment nameplate mirrors the concept art and separates names from the node color itself.
+            float plateW = ultimate ? 176f : 154f;
+            Rect plate = new Rect(rect.center.x - plateW * 0.5f, rect.yMax + 7f, plateW, 25f);
+            DrawNamePlate(plate, name, ultimate);
+
+            Rect hoverRect = new Rect(outer.x - 8f, outer.y - 8f, outer.width + 16f, outer.height + 56f);
+            if (hoverRect.Contains(Event.current.mousePosition))
+            {
+                _treeHoveredTitle = name.ToUpperInvariant();
+                _treeHoveredBody = rankLabel + (mandatory ? "  •  HOTBAR LOCKED" : "  •  OPTIONAL") + "\n" + tooltip;
+            }
+        }
+
+        private void DrawHeaderRibbon(Rect rect, Texture2D fill, Color gold, bool longRibbon)
+        {
+            Rect shadow = new Rect(rect.x + 3f, rect.y + 4f, rect.width, rect.height);
+            GUI.color = new Color(0f, 0f, 0f, 0.18f);
+            GUI.DrawTexture(shadow, _treeGoldTex);
+            GUI.color = Color.white;
+
+            GUI.DrawTexture(rect, fill);
+            DrawOrnateFrame(rect, gold, 2f, true);
+            DrawBorder(new Rect(rect.x + 5f, rect.y + 5f, rect.width - 10f, rect.height - 10f),
+                new Color(gold.r, gold.g, gold.b, 0.26f), 1f);
+
+            float fold = longRibbon ? 18f : 14f;
+            GUI.color = new Color(gold.r, gold.g, gold.b, 0.76f);
+            GUI.DrawTexture(new Rect(rect.x - fold, rect.center.y - 1f, fold, 2f), _treeGoldTex);
+            GUI.DrawTexture(new Rect(rect.xMax, rect.center.y - 1f, fold, 2f), _treeGoldTex);
+            GUI.color = Color.white;
+            DrawDiamond(new Vector2(rect.x, rect.center.y), 5f, gold);
+            DrawDiamond(new Vector2(rect.xMax, rect.center.y), 5f, gold);
+        }
+
+        private void DrawPanelWatermark(Rect rect, string glyph, Color color)
+        {
+            Color old = GUI.color;
+            GUI.color = color;
+            GUI.Label(rect, glyph, _treeWatermarkStyle);
+            GUI.color = old;
+
+            Vector2 c = rect.center;
+            DrawDiamond(new Vector2(c.x, rect.y + 30f), 5f, color);
+            DrawDiamond(new Vector2(c.x, rect.yMax - 30f), 5f, color);
+            DrawDiamond(new Vector2(rect.x + 28f, c.y), 4f, color);
+            DrawDiamond(new Vector2(rect.xMax - 28f, c.y), 4f, color);
+        }
+
+        private void DrawTreeNodeCornerAccents(Rect rect, Color accent, TreeNodeKind kind)
+        {
+            float reach = kind == TreeNodeKind.Ultimate || kind == TreeNodeKind.AscendedUltimate ? 12f :
+                          kind == TreeNodeKind.Ascended ? 9f :
+                          kind == TreeNodeKind.Signature || kind == TreeNodeKind.Grace ? 7f : 4f;
+            float thickness = kind == TreeNodeKind.Ultimate || kind == TreeNodeKind.AscendedUltimate ? 2f : 1f;
+            float offset = 3f;
+
+            GUI.color = new Color(accent.r, accent.g, accent.b, 0.90f);
+            // top-left
+            GUI.DrawTexture(new Rect(rect.x - offset, rect.y - offset, reach, thickness), _treeGoldTex);
+            GUI.DrawTexture(new Rect(rect.x - offset, rect.y - offset, thickness, reach), _treeGoldTex);
+            // top-right
+            GUI.DrawTexture(new Rect(rect.xMax - reach + offset, rect.y - offset, reach, thickness), _treeGoldTex);
+            GUI.DrawTexture(new Rect(rect.xMax + offset - thickness, rect.y - offset, thickness, reach), _treeGoldTex);
+            // bottom-left
+            GUI.DrawTexture(new Rect(rect.x - offset, rect.yMax + offset - thickness, reach, thickness), _treeGoldTex);
+            GUI.DrawTexture(new Rect(rect.x - offset, rect.yMax - reach + offset, thickness, reach), _treeGoldTex);
+            // bottom-right
+            GUI.DrawTexture(new Rect(rect.xMax - reach + offset, rect.yMax + offset - thickness, reach, thickness), _treeGoldTex);
+            GUI.DrawTexture(new Rect(rect.xMax + offset - thickness, rect.yMax - reach + offset, thickness, reach), _treeGoldTex);
+            GUI.color = Color.white;
+        }
+
+        private Color GetTreeNodeColor(TreeNodeKind kind)
+        {
+            if (kind == TreeNodeKind.ClassNormal) return new Color(0.25f, 0.53f, 0.91f, 1f);      // blue
+            if (kind == TreeNodeKind.AdvancementNormal) return new Color(0.16f, 0.78f, 0.88f, 1f); // cyan
+            if (kind == TreeNodeKind.Buff) return new Color(0.30f, 0.78f, 0.42f, 1f);             // green
+            if (kind == TreeNodeKind.Signature) return new Color(0.16f, 0.31f, 0.70f, 1f);        // navy blue
+            if (kind == TreeNodeKind.Ascended) return new Color(0.90f, 0.27f, 0.76f, 1f);         // magenta
+            if (kind == TreeNodeKind.Ultimate) return new Color(0.72f, 0.34f, 0.43f, 1f);         // pastel maroon
+            if (kind == TreeNodeKind.AscendedUltimate) return new Color(0.92f, 0.18f, 0.22f, 1f); // red
+            return new Color(0.94f, 0.73f, 0.18f, 1f);                                            // Grace yellow
+        }
+
+        private float GetTreeBorderThickness(TreeNodeKind kind)
+        {
+            if (kind == TreeNodeKind.Ultimate || kind == TreeNodeKind.AscendedUltimate) return 4f;
+            if (kind == TreeNodeKind.Ascended) return 4f;
+            if (kind == TreeNodeKind.Signature) return 3f;
+            if (kind == TreeNodeKind.Grace) return 3f;
+            return 2f;
+        }
+
+        private void DrawHotbarPreview()
+        {
+            Rect band = new Rect(28f, 660f, 1124f, 96f);
+            GUI.DrawTexture(band, _treeHotbarTex);
+            DrawOrnateFrame(band, new Color(0.82f, 0.63f, 0.29f, 0.98f), 2f, true);
+            DrawBorder(new Rect(band.x + 7f, band.y + 7f, band.width - 14f, band.height - 14f),
+                new Color(0.90f, 0.72f, 0.36f, 0.24f), 1f);
+
+            // v0.14.5: Color Key removed. The node language should explain itself through
+            // borders, color and hover tooltips, so the footer can breathe like the approved reference.
+            Rect infoPanel = new Rect(42f, 669f, 168f, 70f);
+            DrawBorder(infoPanel, new Color(0.82f, 0.64f, 0.31f, 0.24f), 1f);
+            GUI.Label(new Rect(48f, 670f, 156f, 22f), "7-SLOT HOTBAR", _treeSubHeaderStyle);
+            GUI.Label(new Rect(48f, 695f, 156f, 40f), "Mandatory skills stay slotted;\nall 7 numbered slots are movable.", _treeTinyStyle);
+
+            string[] icons = { "⚡", "✝", "JH", "SC", "+", "≈", "ES" };
+            bool[] pinned = { true, true, true, false, false, false, true };
+            TreeNodeKind[] kinds = { TreeNodeKind.Ascended, TreeNodeKind.Signature, TreeNodeKind.Signature, TreeNodeKind.AdvancementNormal, TreeNodeKind.Buff, TreeNodeKind.AdvancementNormal, TreeNodeKind.Ultimate };
+
+            float sx = 228f;
+            for (int i = 0; i < 7; i++)
+            {
+                Rect slot = new Rect(sx + i * 68f, 683f, 54f, 54f);
+                Color accent = GetTreeNodeColor(kinds[i]);
+                DrawFilledBorder(slot, new Color(0.055f, 0.075f, 0.105f, 1f), accent, 2f);
+                DrawBorder(new Rect(slot.x - 3f, slot.y - 3f, slot.width + 6f, slot.height + 6f),
+                    new Color(0.82f, 0.64f, 0.31f, 0.52f), 1f);
+                DrawTreeNodeCornerAccents(new Rect(slot.x - 2f, slot.y - 2f, slot.width + 4f, slot.height + 4f), accent, kinds[i]);
+                GUI.Label(slot, icons[i], _treeNodeIconStyle);
+                GUI.Label(new Rect(slot.x, 663f, slot.width, 17f), (i + 1).ToString(), _treeTinyStyle);
+                if (pinned[i])
+                {
+                    Rect pin = new Rect(slot.xMax - 11f, slot.y - 5f, 16f, 16f);
+                    DrawFilledBorder(pin, new Color(0.16f, 0.11f, 0.045f, 1f), new Color(0.96f, 0.78f, 0.35f, 1f), 1f);
+                    GUI.Label(pin, "♦", _treeTinyStyle);
+                }
+            }
+
+            // With the legend gone, Grace gets the breathing room it deserves instead of sharing
+            // the footer with a dev-style key. It remains visually separate from the 7 numbered slots.
+            Rect grace = new Rect(790f, 672f, 300f, 72f);
+            Color graceAccent = GetTreeNodeColor(TreeNodeKind.Grace);
+            GUI.DrawTexture(new Rect(grace.x - 18f, grace.y - 18f, grace.width + 36f, grace.height + 36f), _treeGoldGlowTex);
+            DrawFilledBorder(grace, new Color(0.16f, 0.11f, 0.025f, 1f), graceAccent, 3f);
+            DrawOrnateFrame(new Rect(grace.x - 6f, grace.y - 6f, grace.width + 12f, grace.height + 12f),
+                new Color(0.93f, 0.73f, 0.25f, 0.94f), 2f, true);
+            DrawDiamond(new Vector2(grace.x + 34f, grace.center.y), 6f, graceAccent);
+            DrawDiamond(new Vector2(grace.xMax - 34f, grace.center.y), 6f, graceAccent);
+            GUI.Label(new Rect(grace.x, grace.y + 6f, grace.width, 27f), "GRACE", _treeSubHeaderStyle);
+            GUI.Label(new Rect(grace.x, grace.y + 38f, grace.width, 20f), "M4 + R", _treeRankStyle);
+        }
+
+        private void DrawPrototypeUnavailable(string className, string advancement)
+        {
+            GUI.Label(new Rect(70f, 125f, 1040f, 45f), "IMMORTAL HEROES SKILL TREE FRAMEWORK", _treeHeaderStyle);
+            GUI.Label(new Rect(70f, 182f, 1040f, 72f),
+                "v0.14.5 ships the reference-asset tree for Cleric → Paladin. Choose Cleric at the Altar to preview the tree before Advancement, or choose Paladin to view it as your active Advancement tree.",
+                _treeTooltipBodyStyle);
+            GUI.Label(new Rect(70f, 280f, 1040f, 36f),
+                "Current character: " + (string.IsNullOrEmpty(className) ? "No Class" : className) +
+                (string.IsNullOrEmpty(advancement) ? "" : " → " + advancement), _treeSubHeaderStyle);
+
+            Rect sample = new Rect(70f, 350f, 1040f, 230f);
+            DrawFilledBorder(sample, new Color(0.12f, 0.13f, 0.15f, 0.95f), new Color(0.65f, 0.55f, 0.30f, 0.9f), 2f);
+            GUI.Label(new Rect(95f, 370f, 990f, 40f), "FRAMEWORK READY FOR THE OTHER CLASS TREES", _treeSubHeaderStyle);
+            GUI.Label(new Rect(95f, 420f, 990f, 120f),
+                "The reusable node system already supports Class, Advancement, Buff, Signature, Ascended, Ultimate, Ascended Ultimate and Grace visual states, mandatory-hotbar markers, Tier pips, header tooltips and the 7-slot + Grace hotbar preview.",
+                _treeTooltipBodyStyle);
+        }
+
+        private void DrawTreeTooltip()
+        {
+            if (string.IsNullOrEmpty(_treeHoveredTitle))
+                return;
+
+            Vector2 mouse = Event.current.mousePosition;
+            float w = 355f;
+            float h = 118f;
+            float x = Mathf.Min(mouse.x + 18f, _skillbookRect.width - w - 18f);
+            float y = Mathf.Min(mouse.y + 18f, _skillbookRect.height - h - 18f);
+            Rect rect = new Rect(x, y, w, h);
+            DrawFilledBorder(rect, new Color(0.055f, 0.06f, 0.075f, 0.98f), new Color(0.84f, 0.67f, 0.31f, 1f), 2f);
+            GUI.Label(new Rect(x + 14f, y + 10f, w - 28f, 24f), _treeHoveredTitle, _treeTooltipTitleStyle);
+            GUI.Label(new Rect(x + 14f, y + 37f, w - 28f, h - 46f), _treeHoveredBody, _treeTooltipBodyStyle);
+        }
+
+        private void DrawNamePlate(Rect rect, string text, bool ultimate)
+        {
+            // v0.14.5: every skill name uses the same clean parchment banner language.
+            // Ultimate prestige lives in the node/frame itself rather than a chunky colored label.
+            Color border = ultimate ? new Color(0.83f, 0.57f, 0.25f, 1f) : new Color(0.73f, 0.55f, 0.28f, 0.98f);
+            Rect shadow = new Rect(rect.x + 2f, rect.y + 2f, rect.width, rect.height);
+
+            GUI.color = new Color(0f, 0f, 0f, ultimate ? 0.18f : 0.12f);
+            GUI.DrawTexture(shadow, _treeGoldTex);
+            GUI.color = Color.white;
+
+            // Reuse the cached parchment texture; never allocate textures from OnGUI.
+            GUI.color = Color.white;
+            GUI.DrawTexture(rect, _treeMainTex);
+            DrawBorder(rect, border, ultimate ? 2f : 1f);
+            DrawBorder(new Rect(rect.x + 3f, rect.y + 3f, rect.width - 6f, rect.height - 6f),
+                new Color(border.r, border.g, border.b, ultimate ? 0.28f : 0.18f), 1f);
+
+            // Small end-caps keep the banner ornate without turning it back into a colored rank label.
+            GUI.color = border;
+            GUI.DrawTexture(new Rect(rect.x - 9f, rect.center.y - 1f, 9f, 2f), _treeGoldTex);
+            GUI.DrawTexture(new Rect(rect.xMax, rect.center.y - 1f, 9f, 2f), _treeGoldTex);
+            GUI.color = Color.white;
+            DrawDiamond(new Vector2(rect.x - 8f, rect.center.y), ultimate ? 4f : 3f, border);
+            DrawDiamond(new Vector2(rect.xMax + 8f, rect.center.y), ultimate ? 4f : 3f, border);
+
+            if (ultimate)
+            {
+                Color maroon = GetTreeNodeColor(TreeNodeKind.Ultimate);
+                GUI.color = new Color(maroon.r, maroon.g, maroon.b, 0.72f);
+                GUI.DrawTexture(new Rect(rect.x + 12f, rect.y + 2f, rect.width - 24f, 2f), _treeGoldTex);
+                GUI.DrawTexture(new Rect(rect.x + 12f, rect.yMax - 4f, rect.width - 24f, 2f), _treeGoldTex);
+                GUI.color = Color.white;
+            }
+
+            GUI.Label(rect, text, _treeNamePlateDarkStyle);
+        }
+
+        private void DrawOrnateFrame(Rect rect, Color color, float thickness, bool corners)
+        {
+            DrawBorder(rect, color, thickness);
+            if (!corners)
+                return;
+
+            float arm = Mathf.Min(14f, Mathf.Min(rect.width, rect.height) * 0.18f);
+            GUI.color = color;
+            GUI.DrawTexture(new Rect(rect.x - 2f, rect.y + arm, arm, 1f), _treeGoldTex);
+            GUI.DrawTexture(new Rect(rect.x + arm, rect.y - 2f, 1f, arm), _treeGoldTex);
+            GUI.DrawTexture(new Rect(rect.xMax - arm + 2f, rect.y + arm, arm, 1f), _treeGoldTex);
+            GUI.DrawTexture(new Rect(rect.xMax - arm, rect.y - 2f, 1f, arm), _treeGoldTex);
+            GUI.DrawTexture(new Rect(rect.x - 2f, rect.yMax - arm, arm, 1f), _treeGoldTex);
+            GUI.DrawTexture(new Rect(rect.x + arm, rect.yMax - arm + 2f, 1f, arm), _treeGoldTex);
+            GUI.DrawTexture(new Rect(rect.xMax - arm + 2f, rect.yMax - arm, arm, 1f), _treeGoldTex);
+            GUI.DrawTexture(new Rect(rect.xMax - arm, rect.yMax - arm + 2f, 1f, arm), _treeGoldTex);
+            GUI.color = Color.white;
+
+            DrawDiamond(new Vector2(rect.x, rect.y), 3.5f, color);
+            DrawDiamond(new Vector2(rect.xMax, rect.y), 3.5f, color);
+            DrawDiamond(new Vector2(rect.x, rect.yMax), 3.5f, color);
+            DrawDiamond(new Vector2(rect.xMax, rect.yMax), 3.5f, color);
+        }
+
+        private void DrawDiamond(Vector2 center, float radius, Color color)
+        {
+            GUI.color = color;
+            int rows = Mathf.Max(2, Mathf.CeilToInt(radius * 2f));
+            for (int i = 0; i < rows; i++)
+            {
+                float half = radius - Mathf.Abs((i + 0.5f) - radius);
+                float y = center.y - radius + i;
+                GUI.DrawTexture(new Rect(center.x - Mathf.Max(0.5f, half), y, Mathf.Max(1f, half * 2f), 1f), _treeGoldTex);
+            }
+            GUI.color = Color.white;
+        }
+
+        private void DrawFilledBorder(Rect rect, Color fill, Color border, float thickness)
+        {
+            GUI.color = fill;
+            GUI.DrawTexture(rect, _treeGoldTex);
+            GUI.color = Color.white;
+            DrawBorder(rect, border, thickness);
+        }
+
+        private void DrawBorder(Rect rect, Color color, float thickness)
+        {
+            GUI.color = color;
+            GUI.DrawTexture(new Rect(rect.x, rect.y, rect.width, thickness), _treeGoldTex);
+            GUI.DrawTexture(new Rect(rect.x, rect.yMax - thickness, rect.width, thickness), _treeGoldTex);
+            GUI.DrawTexture(new Rect(rect.x, rect.y, thickness, rect.height), _treeGoldTex);
+            GUI.DrawTexture(new Rect(rect.xMax - thickness, rect.y, thickness, rect.height), _treeGoldTex);
+            GUI.color = Color.white;
+        }
+
+        private void DrawTreeLine(Vector2 a, Vector2 b, float thickness, Color color)
+        {
+            // The prototype uses orthogonal connectors to stay clean and lightweight in IMGUI.
+            GUI.color = color;
+            if (Mathf.Abs(a.y - b.y) < 0.5f)
+            {
+                float x = Mathf.Min(a.x, b.x);
+                GUI.DrawTexture(new Rect(x, a.y - thickness * 0.5f, Mathf.Abs(b.x - a.x), thickness), _treeGoldTex);
+            }
+            else if (Mathf.Abs(a.x - b.x) < 0.5f)
+            {
+                float y = Mathf.Min(a.y, b.y);
+                GUI.DrawTexture(new Rect(a.x - thickness * 0.5f, y, thickness, Mathf.Abs(b.y - a.y)), _treeGoldTex);
+            }
+            else
+            {
+                // L-shaped connector for non-aligned nodes.
+                float midX = (a.x + b.x) * 0.5f;
+                float x1 = Mathf.Min(a.x, midX);
+                float x2 = Mathf.Min(midX, b.x);
+                GUI.DrawTexture(new Rect(x1, a.y - thickness * 0.5f, Mathf.Abs(midX - a.x), thickness), _treeGoldTex);
+                GUI.DrawTexture(new Rect(midX - thickness * 0.5f, Mathf.Min(a.y, b.y), thickness, Mathf.Abs(b.y - a.y)), _treeGoldTex);
+                GUI.DrawTexture(new Rect(x2, b.y - thickness * 0.5f, Mathf.Abs(b.x - midX), thickness), _treeGoldTex);
+            }
+            GUI.color = Color.white;
+        }
+
+        private void DrawArrowHead(Vector2 tip, Color color)
+        {
+            GUI.color = color;
+            GUI.DrawTexture(new Rect(tip.x - 10f, tip.y - 5f, 10f, 3f), _treeGoldTex);
+            GUI.DrawTexture(new Rect(tip.x - 7f, tip.y + 2f, 7f, 3f), _treeGoldTex);
+            GUI.color = Color.white;
+        }
+
+        private void DrawLegacySkillbookWindow(int windowId)
+        {
+            Player player = Player.m_localPlayer;
+
+            if (player == null)
+                return;
+
+            string className = GetClass(player);
+            string advancement = GetAdvancement(player);
+
+            GUI.Label(
+                new Rect(30f, 34f, 920f, 32f),
+                className + (string.IsNullOrEmpty(advancement) ? "" : "  >  " + advancement),
+                _bookHeaderStyle
+            );
+
+            GUI.Label(
+                new Rect(30f, 66f, 920f, 25f),
+                "Fixed class kit - skills belong to the class and are not interchangeable.",
+                _passiveStyle
+            );
+
+            if (className == "Warrior")
+            {
+                DrawBookCard(new Rect(30f, 105f, 440f, 90f), "Heavy Slash", "M4 + 1", "0.7s heavy horizontal Slash. Inflicts Broken Bones.");
+                DrawBookCard(new Rect(30f, 202f, 440f, 90f), "Impact Wave", "M4 + 2", "Ground Projectile: Blunt + Pierce line wave that follows terrain.");
+                DrawBookCard(new Rect(30f, 299f, 440f, 90f), "Impact Punch", "M4 + 3", "0.5s punch, 2m x 2m. Blunt damage; Stuns Small enemies.");
+                DrawBookCard(new Rect(30f, 396f, 440f, 72f), "Warrior Blessing", "PASSIVE", "Hyper Armor if the incoming hit is below 30% of max HP; timed parry is 2x stronger.");
+            }
+            else if (className == "Cleric")
+            {
+                DrawBookCard(new Rect(30f, 105f, 440f, 90f), "Lightning Zap", "M4 + 1", "Instant 10m Ghost cone. Pierce + Lightning and inflicts Zap.");
+                DrawBookCard(new Rect(30f, 202f, 440f, 90f), "Righteous Strike", "M4 + 2", "0.7s Ground PAC Sky Summon. Blunt + Lightning, 5m AoE, inflicts Expose.");
+                DrawBookCard(new Rect(30f, 299f, 440f, 90f), "Holy Wave", "M4 + 3", "Instant 7m wave: 25 HP now + 5% max HP/sec for 6s. VFX pulses once.");
+                DrawBookCard(new Rect(30f, 396f, 440f, 72f), "Cleric Blessings", "PASSIVE", "Shield Weapon Mastery: every Shield gets 1.5x Block Force + Block Power. Divine Duality: wield a Staff + Shield together.");
+            }
+            else if (className == "Sorcerer")
+            {
+                DrawBookCard(new Rect(30f, 105f, 440f, 90f), "Flame Burst", "M4 + 1", "10m Fire cone with Fire Burn.");
+                DrawBookCard(new Rect(30f, 202f, 440f, 90f), "Glacial Descent", "M4 + 2", "Ground PAC: 5m Blunt + Frost impact.");
+                DrawBookCard(new Rect(30f, 299f, 440f, 90f), "Stonefang Eruption", "M4 + 3", "Ground PAC: 5m Blunt + Pierce; Small Stun, Small/Big Cripple.");
+                DrawBookCard(new Rect(30f, 396f, 440f, 72f), "Arcane Blood", "PASSIVE", "+30% Eitr Regen, +40 Max Eitr and +30% Magic Damage. Emergency escape remains planned, not active yet.");
+            }
+            else
+            {
+                GUI.Label(new Rect(30f, 120f, 900f, 80f), "Choose a class at Dragon's Altar first.", _bookHeaderStyle);
+            }
+
+            if (string.IsNullOrEmpty(advancement))
+            {
+                GUI.Box(new Rect(500f, 105f, 445f, 335f), "");
+
+                GUI.Label(
+                    new Rect(520f, 150f, 405f, 80f),
+                    "NO ADVANCEMENT SELECTED",
+                    _bookHeaderStyle
+                );
+
+                GUI.Label(
+                    new Rect(520f, 230f, 405f, 110f),
+                    "Use Dragon's Altar and choose one of your base-class advancements to unlock its additional active skills and advanced passive.",
+                    _bookTextStyle
+                );
+            }
+            else
+            {
+                DrawBookCard(new Rect(500f, 105f, 445f, 82f), GetAdvancedSkillName(advancement), "M4 + 4", GetAdvancedSkillDescription(advancement));
+                DrawBookCard(new Rect(500f, 194f, 445f, 82f), GetAdvancedSkill5Name(advancement), "M4 + 5", GetAdvancedSkill5Description(advancement));
+                if (advancement == "Mercenary")
+                    DrawBookCard(new Rect(500f, 283f, 445f, 82f), "Circle Swing", "M4 + 6", "1.5s steerable heavy wind-up with only 0.5m total shuffle. 7m radius, 1.75x held-weapon damage, force-Stuns Small/Big/Boss; uninterruptable Hyper Armor.");
+                else if (advancement == "Paladin")
+                    DrawBookCard(new Rect(500f, 283f, 445f, 82f), "Shield Charge", "M4 + 6", "Steerable physical 15m charge. Big/Boss cap: 4 persistent ticks, then Bash.");
+                else if (advancement == "Sword Master")
+                    DrawBookCard(new Rect(500f, 283f, 445f, 82f), "Judgement Cut", "M4 + 6", "4 stacks. Ground PAC / Target PAC / Free Aim within 15m. Each cast creates a 4m sphere with 3 pure Slash cuts resolving instantly and simultaneously; each spent stack independently recharges in 12s, with a 0.5s buffer between activations.");
+                else if (advancement == "Priest")
+                    DrawBookCard(new Rect(500f, 283f, 445f, 82f), "Divine Intervention", "M4 + 6", "10m self-centered Holy Wave-style AoE. Aim directly at Lightning Relic or Holy Relic to Cross Cast the same AoE from that Cross instead.");
+                else
+                    DrawBookCard(new Rect(500f, 283f, 445f, 82f), GetUltimateName(advancement), "M4 + 6", GetUltimateDescription(advancement));
+
+                float passiveY = 372f;
+                if (advancement == "Sword Master")
+                {
+                    DrawBookCard(new Rect(500f, 372f, 445f, 82f), "Severed Horizon / Empty Sheath", "M4 + 7 / M4 + 8", "Severed Horizon draws a long world-cut line, then tears the whole line open at once. Empty Sheath is a brief full-negation counter that slips behind the attacker and answers with rapid delayed Slash cuts.");
+                    DrawBookCard(new Rect(500f, 461f, 445f, 82f), "Halfmoon Slash", "M4 + 9", GetUltimateDescription(advancement));
+                    passiveY = 550f;
+                }
+                else if (advancement == "Mercenary")
+                {
+                    DrawBookCard(new Rect(500f, 372f, 445f, 82f), "Seismic Guillotine / Reaver's Orbit", "M4 + 7 / M4 + 8", "Seismic: Ground/Target PAC up to 15m. 1 Seismic Shock every 1m (2m radius), constant travel speed, then a 10m endpoint Explosion; point-blank casts skip Shocks. Fury still widens + branches it. Reaver: dual opposing axe arcs; outward push, returning pull on Small enemies.");
+                    DrawBookCard(new Rect(500f, 461f, 445f, 82f), "Whirlwind", "M4 + 9", "ULTIMATE. Mobile 6s spin; every 0.5s deals 0.5x held-weapon damage and carries weapon elements. Unchained Fury does not modify it.");
+                    passiveY = 550f;
+                }
+                else if (advancement == "Paladin")
+                {
+                    DrawBookCard(new Rect(500f, 372f, 445f, 82f), "Divine Verdict / Aegis Fall", "M4 + 7 / M4 + 8", "Verdict drops a colossal holy hammer and immediately detonates marked enemies in the impact. Aegis Fall drops a Physical divine wall; Shield Charge shatters your own Aegis into a holy shockwave.");
+                    DrawBookCard(new Rect(500f, 461f, 445f, 82f), "Electric Smite", "M4 + 9", "ULTIMATE. Acrobatic landing into sixteen 10m Ground Projectile Lightning Trails. No vertical/sky Lightning bolt visuals.");
+                    passiveY = 550f;
+                }
+                else if (advancement == "Priest")
+                {
+                    DrawBookCard(new Rect(500f, 372f, 445f, 82f), "Grand Cross / Heaven's Judgement", "M4 + 7 / M4 + 8", "Grand Cross: SELF-CAST ONLY. Two slashes form a 15m-wide Ghost X that travels 25m in 6s with Persistent Lightning + Spirit damage and Spirit Burn. Heaven's Judgement: self/Cross Cast 10m Holy Beam barrage, 1.5s windup + 1.5s barrage, inflicts Frost.");
+                    DrawBookCard(new Rect(500f, 461f, 445f, 82f), "Lightning Tempest", "M4 + 9", GetUltimateDescription(advancement));
+                    passiveY = 550f;
+                }
+                DrawBookCard(
+                    new Rect(500f, passiveY, 445f, 96f),
+                    GetAdvancedPassiveName(advancement),
+                    (advancement == "Paladin" || advancement == "Sword Master") ? "PASSIVE" : "M4 + R + PASSIVE",
+                    GetAdvancedPassiveDescription(player, advancement)
+                );
+            }
+
+            if (advancement == "Paladin")
+            {
+                GUI.Label(
+                    new Rect(30f, 465f, 440f, 24f),
+                    "PALADIN PASSIVE - CHOOSE ONCE / LOCKED UNTIL CLASS RESET",
+                    _bookHeaderStyle
+                );
+
+                string passive = ReadPlayerData(player, PaladinPassiveKey);
+                bool locked = !string.IsNullOrEmpty(passive);
+                bool oldEnabled = GUI.enabled;
+                GUI.enabled = !locked;
+
+                if (GUI.Button(
+                    new Rect(30f, 500f, 205f, 54f),
+                    passive == "ElementalSavant" ? "Elemental Savant [LOCKED]" : "Elemental Savant"
+                ))
+                    SetPaladinPassiveChoice(player, "ElementalSavant");
+
+                if (GUI.Button(
+                    new Rect(245f, 500f, 205f, 54f),
+                    passive == "HolyKnight" ? "Holy Knight [LOCKED]" : "Holy Knight"
+                ))
+                    SetPaladinPassiveChoice(player, "HolyKnight");
+
+                GUI.enabled = oldEnabled;
+            }
+            if (GUI.Button(new Rect(815f, 635f, 130f, 38f), "Close"))
+                ToggleSkillbook();
+
+            GUI.DragWindow(new Rect(0f, 0f, 980f, 32f));
+        }
+
+        private void DrawBookCard(Rect rect, string name, string hotkey, string description)
+        {
+            GUI.Box(rect, "");
+
+            GUI.Label(
+                new Rect(rect.x + 15f, rect.y + 10f, rect.width - 30f, 25f),
+                name,
+                _bookHeaderStyle
+            );
+
+            GUI.Label(
+                new Rect(rect.x + 15f, rect.y + 37f, rect.width - 30f, 20f),
+                hotkey,
+                _passiveStyle
+            );
+
+            GUI.Label(
+                new Rect(rect.x + 15f, rect.y + 60f, rect.width - 30f, rect.height - 65f),
+                description,
+                _bookTextStyle
+            );
+        }
+
+        private string GetAdvancedSkill5Name(string advancement)
+        {
+            if (advancement == "Sword Master") return "Crescent Cleave";
+            if (advancement == "Mercenary") return "Bonecrusher";
+            if (advancement == "Paladin") return "Ray of Hope";
+            if (advancement == "Priest") return "Holy Relic";
+            return "Advancement Skill";
+        }
+
+        private string GetAdvancedSkill5Id(string advancement)
+        {
+            if (advancement == "Sword Master") return "SwordMaster.CrescentCleave";
+            if (advancement == "Mercenary") return "Mercenary.Bonecrusher";
+            if (advancement == "Paladin") return "Paladin.RayOfHope";
+            if (advancement == "Priest") return "Priest.HolyRelic";
+            return "";
+        }
+
+        private string GetAdvancedSkillName(string advancement)
+        {
+            if (advancement == "Sword Master") return "Moonlight Splitter";
+            if (advancement == "Mercenary") return "Stomp";
+            if (advancement == "Paladin") return "Goddess Relic";
+            if (advancement == "Priest") return "Lightning Relic";
+            return "Advanced Skill";
+        }
+
+        private string GetAdvancedSkillDescription(string advancement)
+        {
+            if (advancement == "Sword Master") return "3 extra-wide Ghost Slash + Spirit waves, 0.5s apart. 50m configured travel; no Spirit Burn.";
+            if (advancement == "Mercenary") return "0.5s first stomp: 3m Blunt impact. 1s later: 10m aftershock. Only Small enemies are Stunned.";
+            if (advancement == "Paladin") return "1s Ground PAC Sky Summon. Huge cross, 7m AoE: Blunt + Lightning + Spirit Burn. Lands Physical, faces the caster, remains 3s and applies Judgement Mark.";
+            if (advancement == "Priest") return "1.5s Ground PAC Signature Cross. 10m pulses every 1s for 16s: Lightning + Spirit, no DoT, inflicts Cripple. Recast relinquishes it; cooldown starts only when it leaves. Within 15m of Holy Relic it creates a fixed 15m Consecrated Ground.";
+            return "";
+        }
+
+        private string GetAdvancedSkill5Description(string advancement)
+        {
+            if (advancement == "Sword Master") return "Five widening ground cleaves over 20m at the same travel speed, with a 1.5x wider cone. Slash + Spirit direct damage; no Burn.";
+            if (advancement == "Mercenary") return "Acrobatic jump-slam; 10m Blunt AoE, Broken Bones + Cripple, and Stuns all enemy archetypes.";
+            if (advancement == "Paladin") return "2s channel. Heal allies 30% max HP; +30% Attack Damage for 12s; enemies receive 8s Spirit Burn. 30s cooldown.";
+            if (advancement == "Priest") return "Holy Relic: 10m buff/heal Cross for 16s, retaining its 2s pulse interval. Recast relinquishes it; cooldown starts only when it leaves. Within 15m of Lightning Relic it creates the fixed 15m Consecrated Ground.";
+            return "";
+        }
+
+        private string GetAdvancedPassiveName(string advancement)
+        {
+            if (advancement == "Sword Master") return "The Way of the Sword";
+            if (advancement == "Mercenary") return "Barbaric / Warfreak";
+            if (advancement == "Paladin") return "Elemental Savant / Holy Knight";
+            if (advancement == "Priest") return "Grand Sigil";
+            return "Advanced Passive";
+        }
+
+        private string GetAdvancedPassiveDescription(Player player, string advancement)
+        {
+            if (advancement == "Sword Master")
+                return "The Way of the Sword: +100% Attack Speed while exactly one Sword is equipped and the off-hand is empty. Passive only.";
+
+            if (advancement == "Mercenary")
+            {
+                float lockout = Mathf.Max(0f, _mercFuryCooldownUntil - Time.time);
+                string furyState = IsUnchainedFuryActive() ? "UNCHAINED ACTIVE" : (lockout > 0f ? "LOCKOUT " + lockout.ToString("0") + "s" : "FURY " + Mathf.RoundToInt(_mercFury).ToString() + "/100");
+                return "Warfreak: dual-wield any two one-handed weapons; +125% Attack Speed with two-handed weapons. Barbaric keeps +20 Axes, +8% Attack Damage, +50 HP, aggro and Unchained Fury. " + furyState + ".";
+            }
+
+            if (advancement == "Paladin")
+            {
+                string passive = ReadPlayerData(player, PaladinPassiveKey);
+                if (passive == "ElementalSavant")
+                    return "Elemental Savant [LOCKED]: +25% elemental damage, +30 Max Eitr and +30% Eitr Regen.";
+                if (passive == "HolyKnight")
+                    return "Holy Knight [LOCKED]: +25% Move, +35 HP, +35 Stamina, +30% HP/Stamina Regen, +75% Attack Speed with any weapon + any Shield.";
+                return "Choose once: Elemental Savant (+25% elemental damage, +30 Eitr, +30% Eitr Regen) OR Holy Knight (+25% Move, +35 HP/Stamina, +30% HP/Stamina Regen, +75% weapon+shield Attack Speed).";
+            }
+
+            if (advancement == "Priest")
+                return "Grand Sigil: +30% of current Armor. Self lethal hit -> 1 HP, heal 50% over 7s, +50% Move and +100% Stamina Regen; nearby allies within 20m gain the same death-save with a longer cooldown. Activate: 300 HP ally barrier.";
+
+            return "";
+        }
+
+        private string GetUltimateName(string advancement)
+        {
+            if (advancement == "Sword Master") return "Halfmoon Slash";
+            if (advancement == "Mercenary") return "Whirlwind";
+            if (advancement == "Paladin") return "Electric Smite";
+            if (advancement == "Priest") return "Lightning Tempest";
+            return "Ultimate";
+        }
+
+        private string GetUltimateDescription(string advancement)
+        {
+            if (advancement == "Sword Master") return "2s windup. Huge non-projectile Slash + Spirit hit, 10s Spirit Burn, Stun, then 0.5x afterimage slash.";
+            if (advancement == "Mercenary") return "Spin 6s. Every 0.5s deals 0.5x held-weapon damage and carries its damage elements.";
+            if (advancement == "Paladin") return "Acrobatic jump-slam followed by sixteen 10m Ground Projectile Lightning Trails. No sky-lightning bolt visuals; trails carry the persistent Lightning/Spirit effect.";
+            if (advancement == "Priest") return "ULTIMATE. 10s, 8m random Lightning barrage (max 7 simultaneous). Direct damage is Lightning only; every hit refreshes Frost, Fire Burn, Spirit Burn, Zap and Expose.";
+            return "";
+        }
+
+        private string GetAdvancedSkillId(string advancement)
+        {
+            if (advancement == "Sword Master") return "SwordMaster.MoonlightSplitter";
+            if (advancement == "Mercenary") return "Mercenary.Stomp";
+            if (advancement == "Paladin") return "Paladin.GoddessRelic";
+            if (advancement == "Priest") return "Priest.LightningRelic";
+            return "";
+        }
+
+        private string GetPassiveActiveId(string advancement)
+        {
+            if (advancement == "Priest") return "Priest.GrandSigil";
+            return "";
+        }
+
+        private string GetUltimateId(string advancement)
+        {
+            if (advancement == "Sword Master") return "SwordMaster.HalfmoonSlash";
+            if (advancement == "Mercenary") return "Mercenary.Whirlwind";
+            if (advancement == "Paladin") return "Paladin.ElectricSmite";
+            if (advancement == "Priest") return "Priest.LightningTempest";
+            return "";
+        }
+
+        private void EnsureUiStyles()
+        {
+            if (_titleStyle != null)
+                return;
+
+            _slotReadyTex = MakeTexture(new Color(0.07f, 0.08f, 0.11f, 0.58f));
+            _slotCooldownTex = MakeTexture(new Color(0.06f, 0.06f, 0.08f, 0.72f));
+            _slotLockedTex = MakeTexture(new Color(0.03f, 0.03f, 0.05f, 0.62f));
+
+            _titleStyle = new GUIStyle(GUI.skin.label);
+            _titleStyle.alignment = TextAnchor.MiddleCenter;
+            _titleStyle.fontSize = 17;
+            _titleStyle.fontStyle = FontStyle.Bold;
+
+            _slotStyle = new GUIStyle(GUI.skin.box);
+            _slotStyle.normal.background = _slotReadyTex;
+            _slotStyle.alignment = TextAnchor.MiddleCenter;
+            _slotStyle.fontSize = 17;
+            _slotStyle.fontStyle = FontStyle.Bold;
+            _slotStyle.normal.textColor = Color.white;
+
+            _slotLockedStyle = new GUIStyle(GUI.skin.box);
+            _slotLockedStyle.normal.background = _slotLockedTex;
+            _slotLockedStyle.alignment = TextAnchor.MiddleCenter;
+            _slotLockedStyle.fontSize = 16;
+            _slotLockedStyle.fontStyle = FontStyle.Bold;
+            _slotLockedStyle.normal.textColor = Color.white;
+
+            _passiveStyle = new GUIStyle(GUI.skin.label);
+            _passiveStyle.alignment = TextAnchor.MiddleCenter;
+            _passiveStyle.fontSize = 12;
+            _passiveStyle.normal.textColor = new Color(0.85f, 0.85f, 0.85f, 1f);
+
+            _bookHeaderStyle = new GUIStyle(GUI.skin.label);
+            _bookHeaderStyle.fontSize = 17;
+            _bookHeaderStyle.fontStyle = FontStyle.Bold;
+            _bookHeaderStyle.normal.textColor = Color.white;
+
+            _bookTextStyle = new GUIStyle(GUI.skin.label);
+            _bookTextStyle.fontSize = 13;
+            _bookTextStyle.wordWrap = true;
+            _bookTextStyle.normal.textColor = new Color(0.94f, 0.94f, 0.94f, 1f);
+
+            _hudKeyStyle = new GUIStyle(GUI.skin.label);
+            _hudKeyStyle.fontSize = 10;
+            _hudKeyStyle.fontStyle = FontStyle.Bold;
+            _hudKeyStyle.alignment = TextAnchor.UpperLeft;
+            _hudKeyStyle.normal.textColor = new Color(0.92f, 0.92f, 0.92f, 1f);
+
+            _hudCooldownStyle = new GUIStyle(GUI.skin.label);
+            _hudCooldownStyle.fontSize = 11;
+            _hudCooldownStyle.fontStyle = FontStyle.Bold;
+            _hudCooldownStyle.alignment = TextAnchor.LowerCenter;
+            _hudCooldownStyle.normal.textColor = new Color(1f, 0.82f, 0.35f, 1f);
+
+            // Immortal Heroes near-final art direction: warm ivory parchment, sacred blue Cleric,
+            // muted rose Paladin, dark navy framing, and restrained gold filigree.
+            _treeMainTex = MakeVerticalGradient(new Color(0.955f, 0.925f, 0.85f, 0.998f), new Color(0.86f, 0.81f, 0.71f, 0.998f), 72);
+            _treeClassAreaTex = MakeVerticalGradient(new Color(0.86f, 0.91f, 0.94f, 0.99f), new Color(0.74f, 0.83f, 0.89f, 0.985f), 72);
+            _treeAdvAreaTex = MakeVerticalGradient(new Color(0.95f, 0.89f, 0.84f, 0.99f), new Color(0.89f, 0.80f, 0.78f, 0.985f), 72);
+            _treeClassHeaderTex = MakeVerticalGradient(new Color(0.055f, 0.20f, 0.33f, 0.995f), new Color(0.025f, 0.10f, 0.18f, 0.995f), 48);
+            _treeAdvHeaderTex = MakeVerticalGradient(new Color(0.50f, 0.14f, 0.22f, 0.995f), new Color(0.31f, 0.065f, 0.12f, 0.995f), 48);
+            _treeHotbarTex = MakeVerticalGradient(new Color(0.055f, 0.105f, 0.15f, 0.995f), new Color(0.025f, 0.055f, 0.085f, 0.995f), 48);
+            _treeNodeInnerTex = MakeVerticalGradient(new Color(0.095f, 0.115f, 0.155f, 1f), new Color(0.045f, 0.055f, 0.085f, 1f), 32);
+            _treeGoldTex = MakeTexture(Color.white);
+            _treeShadowTex = MakeTexture(new Color(0f, 0f, 0f, 0.24f));
+            _treeGoldGlowTex = MakeRadialGlow(new Color(0.98f, 0.74f, 0.23f, 0.38f), new Color(0.98f, 0.74f, 0.23f, 0f), 72);
+            _treeMagentaGlowTex = MakeRadialGlow(new Color(0.95f, 0.22f, 0.73f, 0.30f), new Color(0.95f, 0.22f, 0.73f, 0f), 72);
+            _treeMaroonGlowTex = MakeRadialGlow(new Color(0.76f, 0.18f, 0.25f, 0.32f), new Color(0.76f, 0.18f, 0.25f, 0f), 72);
+            _treeBlueGlowTex = MakeRadialGlow(new Color(0.18f, 0.45f, 0.95f, 0.22f), new Color(0.18f, 0.45f, 0.95f, 0f), 72);
+
+            _treeWindowStyle = new GUIStyle(GUI.skin.window);
+            _treeWindowStyle.normal.background = _treeMainTex;
+            _treeWindowStyle.padding = new RectOffset(0, 0, 0, 0);
+
+            _treeTitleStyle = new GUIStyle(GUI.skin.label);
+            _treeTitleStyle.fontSize = 28;
+            _treeTitleStyle.fontStyle = FontStyle.Bold;
+            _treeTitleStyle.alignment = TextAnchor.MiddleLeft;
+            _treeTitleStyle.normal.textColor = new Color(0.97f, 0.88f, 0.66f, 1f);
+
+            _treeHeaderStyle = new GUIStyle(GUI.skin.label);
+            _treeHeaderStyle.fontSize = 25;
+            _treeHeaderStyle.fontStyle = FontStyle.Bold;
+            _treeHeaderStyle.alignment = TextAnchor.MiddleCenter;
+            _treeHeaderStyle.normal.textColor = new Color(0.97f, 0.91f, 0.77f, 1f);
+
+            _treeHeaderEmblemStyle = new GUIStyle(GUI.skin.label);
+            _treeHeaderEmblemStyle.fontSize = 24;
+            _treeHeaderEmblemStyle.fontStyle = FontStyle.Bold;
+            _treeHeaderEmblemStyle.alignment = TextAnchor.MiddleCenter;
+            _treeHeaderEmblemStyle.normal.textColor = new Color(0.95f, 0.76f, 0.34f, 1f);
+
+            _treeSubHeaderStyle = new GUIStyle(GUI.skin.label);
+            _treeSubHeaderStyle.fontSize = 15;
+            _treeSubHeaderStyle.fontStyle = FontStyle.Bold;
+            _treeSubHeaderStyle.alignment = TextAnchor.MiddleCenter;
+            _treeSubHeaderStyle.normal.textColor = new Color(0.94f, 0.80f, 0.49f, 1f);
+
+            _treeNodeIconStyle = new GUIStyle(GUI.skin.label);
+            _treeNodeIconStyle.fontSize = 21;
+            _treeNodeIconStyle.fontStyle = FontStyle.Bold;
+            _treeNodeIconStyle.alignment = TextAnchor.MiddleCenter;
+            _treeNodeIconStyle.normal.textColor = Color.white;
+
+            _treeUltimateIconStyle = new GUIStyle(_treeNodeIconStyle);
+            _treeUltimateIconStyle.fontSize = 31;
+            _treeUltimateIconStyle.normal.textColor = new Color(1f, 0.92f, 0.72f, 1f);
+
+            _treeNodeNameStyle = new GUIStyle(GUI.skin.label);
+            _treeNodeNameStyle.fontSize = 13;
+            _treeNodeNameStyle.fontStyle = FontStyle.Bold;
+            _treeNodeNameStyle.alignment = TextAnchor.MiddleCenter;
+            _treeNodeNameStyle.normal.textColor = new Color(0.18f, 0.14f, 0.11f, 1f);
+
+            _treeNamePlateDarkStyle = new GUIStyle(_treeNodeNameStyle);
+            _treeNamePlateDarkStyle.fontSize = 12;
+            _treeNamePlateDarkStyle.normal.textColor = new Color(0.16f, 0.12f, 0.09f, 1f);
+
+            _treeNamePlateLightStyle = new GUIStyle(_treeNodeNameStyle);
+            _treeNamePlateLightStyle.fontSize = 13;
+            _treeNamePlateLightStyle.normal.textColor = new Color(0.98f, 0.90f, 0.72f, 1f);
+
+            _treeRankStyle = new GUIStyle(GUI.skin.label);
+            _treeRankStyle.fontSize = 10;
+            _treeRankStyle.fontStyle = FontStyle.Bold;
+            _treeRankStyle.alignment = TextAnchor.MiddleCenter;
+            _treeRankStyle.normal.textColor = new Color(0.94f, 0.80f, 0.49f, 1f);
+
+            _treeTinyStyle = new GUIStyle(GUI.skin.label);
+            _treeTinyStyle.fontSize = 10;
+            _treeTinyStyle.alignment = TextAnchor.MiddleCenter;
+            _treeTinyStyle.wordWrap = true;
+            _treeTinyStyle.normal.textColor = new Color(0.91f, 0.86f, 0.76f, 1f);
+
+            _treeTinyLeftStyle = new GUIStyle(_treeTinyStyle);
+            _treeTinyLeftStyle.alignment = TextAnchor.MiddleLeft;
+            _treeTinyLeftStyle.normal.textColor = new Color(0.84f, 0.82f, 0.76f, 1f);
+
+            _treeHotkeyStyle = new GUIStyle(_treeTinyStyle);
+            _treeHotkeyStyle.fontSize = 10;
+            _treeHotkeyStyle.fontStyle = FontStyle.Bold;
+            _treeHotkeyStyle.alignment = TextAnchor.MiddleCenter;
+            _treeHotkeyStyle.normal.textColor = new Color(0.23f, 0.17f, 0.11f, 0.96f);
+
+            _treeWatermarkStyle = new GUIStyle(GUI.skin.label);
+            _treeWatermarkStyle.fontSize = 150;
+            _treeWatermarkStyle.fontStyle = FontStyle.Bold;
+            _treeWatermarkStyle.alignment = TextAnchor.MiddleCenter;
+            _treeWatermarkStyle.normal.textColor = Color.white;
+
+            _treeTooltipTitleStyle = new GUIStyle(_treeSubHeaderStyle);
+            _treeTooltipTitleStyle.alignment = TextAnchor.UpperLeft;
+            _treeTooltipTitleStyle.fontSize = 14;
+
+            _treeTooltipBodyStyle = new GUIStyle(GUI.skin.label);
+            _treeTooltipBodyStyle.fontSize = 12;
+            _treeTooltipBodyStyle.wordWrap = true;
+            _treeTooltipBodyStyle.alignment = TextAnchor.UpperLeft;
+            _treeTooltipBodyStyle.normal.textColor = new Color(0.92f, 0.92f, 0.89f, 1f);
+        }
+
+        private Texture2D MakeTexture(Color color)
+        {
+            Texture2D texture = new Texture2D(1, 1);
+            texture.SetPixel(0, 0, color);
+            texture.Apply();
+            return texture;
+        }
+
+        private Texture2D MakeVerticalGradient(Color top, Color bottom, int height)
+        {
+            int h = Mathf.Max(2, height);
+            Texture2D texture = new Texture2D(2, h);
+            texture.wrapMode = TextureWrapMode.Clamp;
+            texture.filterMode = FilterMode.Bilinear;
+            for (int y = 0; y < h; y++)
+            {
+                float t = y / (float)(h - 1);
+                Color c = Color.Lerp(top, bottom, t);
+                texture.SetPixel(0, y, c);
+                texture.SetPixel(1, y, c);
+            }
+            texture.Apply();
+            return texture;
+        }
+
+        private Texture2D MakeRadialGlow(Color center, Color edge, int size)
+        {
+            int s = Mathf.Max(8, size);
+            Texture2D texture = new Texture2D(s, s);
+            texture.wrapMode = TextureWrapMode.Clamp;
+            texture.filterMode = FilterMode.Bilinear;
+            Vector2 middle = new Vector2((s - 1) * 0.5f, (s - 1) * 0.5f);
+            float maxDistance = Mathf.Max(1f, middle.magnitude);
+            for (int y = 0; y < s; y++)
+            {
+                for (int x = 0; x < s; x++)
+                {
+                    float d = Vector2.Distance(new Vector2(x, y), middle) / maxDistance;
+                    float t = Mathf.Clamp01(d);
+                    texture.SetPixel(x, y, Color.Lerp(center, edge, t * t));
+                }
+            }
+            texture.Apply();
+            return texture;
+        }
+
+        private string FormatHotkey(KeyCode modifier, KeyCode key)
+        {
+            string modifierText = modifier.ToString();
+
+            if (modifier == KeyCode.Mouse3)
+                modifierText = "M4";
+            else if (modifier == KeyCode.Mouse4)
+                modifierText = "M5";
+
+            string keyText = key.ToString();
+
+            if (key >= KeyCode.Alpha0 && key <= KeyCode.Alpha9)
+                keyText = ((int)key - (int)KeyCode.Alpha0).ToString();
+
+            return modifierText + " + " + keyText;
+        }
+
+        private void ShowMessage(string message)
+        {
+            if (MessageHud.instance != null)
+                MessageHud.instance.ShowMessage(MessageHud.MessageType.Center, message);
+        }
+
+        private class DamageConfig
+        {
+            public ConfigEntry<float> Blunt;
+            public ConfigEntry<float> Slash;
+            public ConfigEntry<float> Pierce;
+            public ConfigEntry<float> Fire;
+            public ConfigEntry<float> Frost;
+            public ConfigEntry<float> Lightning;
+            public ConfigEntry<float> Poison;
+            public ConfigEntry<float> Spirit;
+        }
+
+        private class DamageSnapshot
+        {
+            public float Blunt;
+            public float Slash;
+            public float Pierce;
+            public float Fire;
+            public float Frost;
+            public float Lightning;
+            public float Poison;
+            public float Spirit;
+
+            public void Scale(float factor)
+            {
+                Blunt *= factor;
+                Slash *= factor;
+                Pierce *= factor;
+                Fire *= factor;
+                Frost *= factor;
+                Lightning *= factor;
+                Poison *= factor;
+                Spirit *= factor;
+            }
+
+            public float Total()
+            {
+                return Blunt + Slash + Pierce + Fire + Frost + Lightning + Poison + Spirit;
+            }
+        }
+
+        private class BarrierState
+        {
+            public float HP;
+            public float Armor;
+            public float EndTime;
+        }
+    }
+}

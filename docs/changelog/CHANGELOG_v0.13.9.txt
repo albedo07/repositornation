@@ -1,0 +1,12 @@
+Immortal Heroes v0.14.1 — Skill Tree Footer + Rank Pass
+
+- Removed hotkey labels from the skill-tree nodes.
+- Removed baked hotbar numbers above the seven hotbar icons.
+- Added hotkey numbers underneath the seven hotbar boxes.
+- Rebuilt the footer so Grace and the old legend area become one continuous Heaven's Light panel.
+- Heaven's Light / M4 + R is now the footer Grace identity.
+- Confirm appears only while one or more Tier allocations are pending, using the right half of the same footer panel.
+- Removed rectangular debug-style node rank outlines.
+- Added rank-specific fantasy corner/jewel accents for Signature, Advancement, Buff, Ascended, Grace and Ultimate nodes.
+- Selection no longer draws a ghost box; selected nodes use a small gold jewel and the tier + button.
+- Tier + button is centered below the selected skill group instead of floating inside the icon.

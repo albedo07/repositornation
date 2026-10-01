@@ -1,0 +1,7 @@
+IMMORTAL HEROES v0.14.1 - COMPILE FIX R2
+
+Fixed the Windows PowerShell Add-Type failure caused by the direct Texture2D.LoadImage(byte[]) call resolving against Unity's modern ReadOnlySpan metadata.
+
+The PNG loader now late-binds UnityEngine.ImageConversion.LoadImage(Texture2D, byte[], bool) through reflection. This keeps System.ReadOnlySpan<T> completely out of compile-time overload resolution while preserving one-time cached PNG loading at runtime.
+
+No gameplay, progression, balance, layout, or art changes.

@@ -1,0 +1,6 @@
+Immortal Heroes v0.14.5 — Test focus
+
+1. Footer far-right end should look integrated, not like a nested/pasted-on box.
+2. Grace remains a separate cell. HEAVEN'S LIGHT is inside; M4 + R is below.
+3. Select a tiered skill: + appears. Queue a point: - appears and CONFIRM appears at far right.
+4. Closing without confirming discards pending allocations.

@@ -1,0 +1,28 @@
+Immortal Heroes v0.14.1 — Skill Tree Rebuild
+
+VISUAL RESET
+- Rebuilt from the clean v0.13.1 reference-asset baseline instead of stacking more runtime patches.
+- Removed the Class -> Advancement arrow from the master artwork itself.
+- Removed the Color Key contents from the master artwork while preserving the ornate footer frame.
+- Removed the generic GRACE footer copy from the artwork; the live footer now reads HEAVEN'S LIGHT / M4 + R.
+- No runtime cover rectangles are used to hide the arrow or Color Key.
+
+NODE UI
+- Added a single coordinate map for all Cleric -> Paladin nodes.
+- Added consistent hotkey labels beneath currently slotted skills.
+- Added category accents: Ascended magenta, Signature deep blue, normal Advancement cyan, Buff green, Grace gold, Ultimate maroon/gold.
+- Added a clean selected-node accent without large ghost boxes.
+
+TIER ALLOCATION UX
+- Clicking a skill selects it only; it never upgrades on the first click.
+- A small + badge appears attached to the selected Tiered skill.
+- + queues a pending Tier instead of committing immediately.
+- CONFIRM appears only while pending allocations exist and is contained inside the former Color Key frame.
+- Confirm commits all pending prototype Tiers at once.
+- Closing the Skill Tree cancels unconfirmed pending allocations.
+- Grace has no Tier + button.
+
+TOOLTIPS
+- Tooltip titles use the new type/name format, e.g. ASCENDED - LIGHTNING ZAP, ATTACK - GODDESS RELIC, BUFF - RAY OF HOPE, GRACE - HEAVEN'S LIGHT, ULTIMATE - ELECTRIC SMITE.
+
+No combat skill behavior was changed in this pass.

@@ -1,0 +1,6 @@
+v0.14.5 Footer Final Cleanup
+- Far-right footer end is now built directly from the left footer compartment design, mirrored and cleaned of text.
+- Removed floating rank/debug jewels from tree nodes; approved painted frames/colors remain authoritative.
+- Selected node uses a subtle attached underline instead of a floating marker.
+- Grace keeps HEAVEN'S LIGHT inside its box with M4 + R directly underneath.
+- Confirm remains hidden until pending Tier allocations exist and is centered inside the right footer end-cap.

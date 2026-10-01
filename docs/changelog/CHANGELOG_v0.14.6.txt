@@ -1,0 +1,8 @@
+Immortal Heroes v0.14.6 - Footer + Grace Cleanup
+- Removed the washed-out footer interiors by repainting only inside the existing baked footer cells.
+- Grace cell now uses the same dark footer background as the hotbar.
+- Heaven's Light box interior is repainted crisp and opaque; its baked outer placement is preserved.
+- Heaven's Light stays inside the Grace box; M4 + R stays directly underneath.
+- Far-right footer endcap now uses the same dark footer treatment and a centered gold compass ornament.
+- No nested right-side box is drawn.
+- Pending CONFIRM behavior, + / - Tier queue behavior, node layout, tooltips, and combat are unchanged.

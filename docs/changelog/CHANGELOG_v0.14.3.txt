@@ -1,0 +1,7 @@
+Immortal Heroes v0.14.3 — Grace Hotbar Polish
+
+- Preserves the approved v0.14.2 footer and right-end treatment.
+- Shrinks the baked Heaven's Light gold hotbar box slightly.
+- Keeps HEAVEN'S LIGHT centered inside the gold box.
+- Moves M4 + R directly underneath the Grace box, matching slots 1–7.
+- No class-tree layout, combat, tooltip, tier-queue, or progression behavior changes.

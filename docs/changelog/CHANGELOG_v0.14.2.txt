@@ -1,0 +1,17 @@
+Immortal Heroes v0.14.2 — Footer Integrated Final
+
+UI
+- Rebuilt the right footer end as part of the footer design itself; removed the nested pasted-on panel treatment.
+- Right footer now mirrors the left-side rounded gold/navy visual language and sits fully inside the bottom hotbar frame.
+- Grace remains its own dedicated hotbar cell.
+- Heaven's Light and M4 + R are kept fully inside the Grace cell.
+- Confirm appears only when pending Tier allocations exist and uses an invisible click target over integrated footer text (no child rectangle).
+- Rank accents no longer use debug-looking corner brackets; they now use small rank-specific jewels/diamonds.
+
+Tier Queue UX
+- Selected tiered skills retain + / - pending allocation controls.
+- Minus removes only unconfirmed Tier points.
+- Confirm commits queued Tier points.
+- Closing the Skill Tree continues to discard unconfirmed allocations.
+
+No combat skill mechanics changed.

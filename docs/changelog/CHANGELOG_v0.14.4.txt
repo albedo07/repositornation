@@ -1,0 +1,8 @@
+Immortal Heroes v0.14.5 — Footer Mirror Fix
+
+- Removed the nested right-side footer rectangle from the reference asset.
+- Rebuilt the far-right footer end using the same integrated rounded/gold visual language as the left 7-SLOT HOTBAR cell.
+- Kept Grace separate.
+- HEAVEN'S LIGHT remains inside the Grace box; M4 + R remains directly underneath it.
+- Pending CONFIRM text still appears only when points are queued, with no extra child panel.
+- No gameplay/combat changes.
