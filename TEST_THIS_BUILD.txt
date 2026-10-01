@@ -1,7 +1,7 @@
-Immortal Heroes v0.15.1 - Test focus
+Immortal Heroes v0.15.2 - Test focus
 
 1. Click skills: no ghost border; only + (or - +) under the nameplate.
-2. Shield Charge + Fallen Angel are Cyan (tree + hotbar slot 4); Goddess Relic / Judgement Hammer stay navy.
+2. Righteous Strike, Holy Wave, Shield Charge, Fallen Angel are Cyan (tree + hotbar slots 4, 6); Goddess Relic / Judgement Hammer stay navy.
 3. Click "1" under slot 1, tap F alone: label shows F (single key).
 4. Click it again, hold M4 and press 3: label shows M4 + 3 (combo).
 5. Same for Grace (M4 + R): tap G alone -> G; hold LShift + press R -> LShift + R.

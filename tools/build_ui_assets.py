@@ -35,12 +35,16 @@ GRACE_BOTTOM = 597   # bottoms align with the numbered slots
 HOTBAR_CENTERS = (229, 287, 344, 402, 459, 517, 574)  # numbered slot centers (reference px)
 
 
-# v0.15.1: AC normal skills are Cyan (Signature skills keep the navy/blue frame).
+# v0.15.1/v0.15.2: normal (interchangeable) skills are Cyan, Class and AC alike.
+# Signature skills keep the navy/blue frame; Ascended stays magenta.
 # Boxes in reference px: tree nodes + their numbered hotbar slots.
 CYAN_RECOLOR_BOXES = (
     (544, 154, 621, 235),   # Shield Charge (tree)
     (682, 154, 760, 235),   # Fallen Angel (tree)
     (376, 546, 428, 600),   # Shield Charge (hotbar slot 4)
+    (166, 286, 238, 353),   # Righteous Strike (tree) - Class normal = interchangeable = Cyan
+    (166, 410, 238, 478),   # Holy Wave (tree)
+    (491, 546, 543, 600),   # Holy Wave (hotbar slot 6)
 )
 CYAN_HUE = 186.0
 

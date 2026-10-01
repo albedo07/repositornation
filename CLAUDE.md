@@ -3,7 +3,7 @@
 ## Working rules
 - User wants short responses and real execution, not long explanations.
 - **RUSH B** = immediately code the obvious requested task, minimal commentary, use latest approved build as baseline, don't redesign unrelated things, verify and package.
-- Latest package: **v0.15.1 — Cyan AC Skills + No Ghost Border + Single/Combo Keys**. Recent work is almost entirely UI polish; do NOT change combat/progression logic unless explicitly requested.
+- Latest package: **v0.15.2 — Cyan Normal Skills (Class + AC)**. Recent work is almost entirely UI polish; do NOT change combat/progression logic unless explicitly requested.
 - Never patch visual problems by drawing random rectangles over the reference asset. Keep approved artwork intact; make layout/components fit properly.
 
 ## Core philosophy
@@ -60,7 +60,7 @@
   - Class: Lightning Zap, Righteous Strike, Holy Wave.
   - Paladin: Goddess Relic, Judgement Hammer, Shield Charge, Fallen Angel, Ray of Hope, Electric Smite (Ultimate).
   - Grace: Heaven's Light.
-- Node colors: Class normal Blue · AC normal Cyan · Buff Green · Signature Navy · Ascended Magenta · Ultimate Pastel Maroon · Ascended Ultimate Red · Grace Yellow/Gold.
+- Node colors: Normal = interchangeable skills (Class AND AC) Cyan — before Advancement all 3 Class skills are Cyan · Buff Green (e.g. Ray of Hope) · Signature Navy · Ascended Magenta · Ultimate Pastel Maroon · Ascended Ultimate Red · Grace Yellow/Gold.
 - Prestige: Ultimate > Ascended > Signature > Normal > Buff; Grace unique. Ultimate node larger, Grace slightly larger.
 - Style: ornate gold high-fantasy frame, parchment; Cleric side blue sacred/cathedral, Paladin side warm rose/kingdom. Compact, airy node spacing.
 - Footer: one unified ornate footer. Left = "7-SLOT HOTBAR" info. Middle = slots 1–7 with hotkey numbers under each box. Grace = own gold box, "HEAVEN'S LIGHT" inside, `M4 + R` under the box (matching numbered slots). Far-right uses same ornate treatment — not a nested/flat/pasted blue rectangle. No Color Key.

@@ -1,0 +1,5 @@
+Immortal Heroes v0.15.2 - Cyan Normal Skills
+- Normal = interchangeable skills are Cyan for Class and AC alike:
+  Righteous Strike and Holy Wave (tree + hotbar slot 6) join Shield Charge and Fallen Angel.
+- Lightning Zap stays Ascended magenta; Goddess Relic / Judgement Hammer stay Signature navy.
+- Art-only change via tools/build_ui_assets.py. No code behavior changes.
