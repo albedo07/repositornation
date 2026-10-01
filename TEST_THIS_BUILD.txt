@@ -1,6 +1,9 @@
-Immortal Heroes v0.14.5 — Test focus
+Immortal Heroes v0.14.7 - Test focus
 
-1. Footer far-right end should look integrated, not like a nested/pasted-on box.
-2. Grace remains a separate cell. HEAVEN'S LIGHT is inside; M4 + R is below.
-3. Select a tiered skill: + appears. Queue a point: - appears and CONFIRM appears at far right.
-4. Closing without confirming discards pending allocations.
+1. Tree colors should now match the reference PNG: dark navy frame, rich parchment, strong gold.
+   If it looks TOO dark, set SkillTreeColorSpaceCorrection = false in the config and tell me.
+2. Footer: no flat blue/brown boxes. Grace box and right panel are the original painted art.
+3. HEAVEN'S LIGHT inside the Grace box; M4 + R underneath; numbers 1-7 under slots, crisp.
+4. Queue a Tier with +: CONFIRM + "N PENDING" appears in the right panel. Click it to commit.
+5. Close without confirming: pending discarded.
+6. Note: tooltips and the +/- buttons still use code-drawn backgrounds and may look slightly light.

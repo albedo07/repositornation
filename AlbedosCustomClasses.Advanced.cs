@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.14.6";
+        public const string ModVersion = "0.14.7";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -139,6 +139,7 @@ namespace AlbedosCustomClassesAdvanced
 
         private ConfigEntry<bool> _enableVfx;
         private ConfigEntry<bool> _showCombatHud;
+        private ConfigEntry<bool> _uiColorSpaceCorrection;
         private ConfigEntry<float> _hudScale;
         private ConfigEntry<float> _hudBottomOffset;
         private ConfigEntry<bool> _testingForceCooldowns;
@@ -489,6 +490,10 @@ namespace AlbedosCustomClassesAdvanced
         private GUIStyle _treeNamePlateLightStyle;
         private GUIStyle _treeRankStyle;
         private GUIStyle _treeTinyStyle;
+        private GUIStyle _treeFooterKeyStyle;
+        private GUIStyle _treeFooterGraceStyle;
+        private GUIStyle _treeFooterConfirmStyle;
+        private GUIStyle _treeFooterConfirmHoverStyle;
         private GUIStyle _treeTinyLeftStyle;
         private GUIStyle _treeTooltipTitleStyle;
         private GUIStyle _treeTooltipBodyStyle;
@@ -539,6 +544,7 @@ namespace AlbedosCustomClassesAdvanced
 
             _enableVfx = Config.Bind("Interface", "EnableVFX", true, "Enable advanced-skill visual effects.");
             _showCombatHud = Config.Bind("Interface", "ShowCombatHud", true, "Show the unified class skill HUD.");
+            _uiColorSpaceCorrection = Config.Bind("Interface", "SkillTreeColorSpaceCorrection", true, "Compensate the Skill Tree artwork for Valheim's Linear color space so it is not drawn washed out. Disable only if the tree looks too dark.");
             _hudScale = Config.Bind("Interface", "HudScale", 1f, "Unified HUD scale.");
             _hudBottomOffset = Config.Bind("Interface", "HudBottomOffset_v0113", 105f, "Bottom margin for the compact RPG skill HUD. Fresh v0.11.3 key avoids stale 330px development offsets.");
             _testingForceCooldowns = Config.Bind("Testing", "ForceCooldowns", true, "Testing mode: force every advancement cooldown to one value.");
@@ -6801,6 +6807,7 @@ namespace AlbedosCustomClassesAdvanced
                 }
 
                 texture.name = "ImmortalHeroes_ClericPaladin_Reference";
+                ApplyLinearColorSpaceCompensation(texture);
                 _treeReferenceBackdropTex = texture;
                 Logger.LogInfo("Immortal Heroes reference UI asset loaded once: " + texture.width + "x" + texture.height);
                 return true;
@@ -6810,6 +6817,62 @@ namespace AlbedosCustomClassesAdvanced
                 Logger.LogWarning("Immortal Heroes reference UI load failed; using procedural fallback. " + ex.Message);
                 return false;
             }
+        }
+
+        private static Font FindValheimSerifFont()
+        {
+            // Valheim's own UI serif. Falls back to the IMGUI default if it cannot be found.
+            Font[] fonts = Resources.FindObjectsOfTypeAll<Font>();
+            Font fallback = null;
+            for (int i = 0; i < fonts.Length; i++)
+            {
+                if (fonts[i] == null)
+                    continue;
+                if (fonts[i].name == "AveriaSerifLibre-Bold")
+                    return fonts[i];
+                if (fallback == null && fonts[i].name.StartsWith("AveriaSerifLibre"))
+                    fallback = fonts[i];
+            }
+            return fallback;
+        }
+
+        private void ApplyLinearColorSpaceCompensation(Texture2D texture)
+        {
+            // v0.14.7: Valheim renders in Linear color space and IMGUI was presenting this sRGB
+            // artwork with an extra gamma lift (measured in-game: displayed = source^(1/2.2)),
+            // which made the whole tree look bleached. Pre-compensate the pixels once at load so
+            // the approved artwork appears exactly as painted. The artwork file itself is untouched.
+            if (texture == null || _uiColorSpaceCorrection == null || !_uiColorSpaceCorrection.Value)
+                return;
+            if (QualitySettings.activeColorSpace != ColorSpace.Linear)
+                return;
+
+            Color32[] pixels = texture.GetPixels32();
+            byte[] lut = new byte[256 * 4];
+            for (int i = 0; i < 256; i++)
+            {
+                // Four ordered-dither variants per input value keep dark navy gradients from banding.
+                float linear = Mathf.GammaToLinearSpace(i / 255f) * 255f;
+                for (int d = 0; d < 4; d++)
+                {
+                    float dither = (d + 0.5f) / 4f - 0.5f;
+                    lut[i * 4 + d] = (byte)Mathf.Clamp(Mathf.RoundToInt(linear + dither), 0, 255);
+                }
+            }
+
+            int width = texture.width;
+            for (int i = 0; i < pixels.Length; i++)
+            {
+                int x = i % width;
+                int y = i / width;
+                int d = ((x & 1) << 1) | ((x ^ y) & 1);
+                Color32 c = pixels[i];
+                pixels[i] = new Color32(lut[c.r * 4 + d], lut[c.g * 4 + d], lut[c.b * 4 + d], c.a);
+            }
+
+            texture.SetPixels32(pixels);
+            texture.Apply(false, false);
+            Logger.LogInfo("Immortal Heroes Skill Tree: Linear color-space compensation applied to UI artwork.");
         }
 
         private Rect ScaleReferenceRect(float x, float y, float width, float height)
@@ -6982,9 +7045,8 @@ namespace AlbedosCustomClassesAdvanced
 
             for (int i = 0; i < centers.Length; i++)
             {
-                Rect label = ScaleReferenceRect(centers[i] - 16f, 607f, 32f, 14f);
-                GUI.Label(new Rect(label.x + 1f, label.y + 1f, label.width, label.height), keys[i], _treeTinyStyle);
-                GUI.Label(label, keys[i], _treeTinyStyle);
+                Rect label = ScaleReferenceRect(centers[i] - 16f, 605f, 32f, 16f);
+                DrawFooterText(label, keys[i], _treeFooterKeyStyle);
             }
         }
 
@@ -7056,98 +7118,38 @@ namespace AlbedosCustomClassesAdvanced
 
         private void DrawReferenceFooterUx()
         {
-            // v0.14.6: footer cleanup is entirely code-side. The baked outer gold dividers stay
-            // untouched; we only repaint the interiors so Grace and the right endcap read as one
-            // continuous footer instead of translucent/blurred child panels.
-            Rect graceCell = ScaleReferenceRect(620f, 535f, 136f, 92f);
-            Rect rightCell = ScaleReferenceRect(756f, 535f, 229f, 92f);
-
-            DrawFooterCellInterior(graceCell);
-            DrawFooterCellInterior(rightCell);
-
-            // Grace mirrors the numbered hotbar language: the skill name lives inside its gold
-            // skill box, while the dedicated control sits directly underneath the box.
-            Rect graceBox = ScaleReferenceRect(634f, 538f, 112f, 61f);
-            Rect graceInner = new Rect(graceBox.x + 5f, graceBox.y + 5f, graceBox.width - 10f, graceBox.height - 10f);
-            GUI.color = new Color(0.20f, 0.135f, 0.045f, 1f);
-            GUI.DrawTexture(graceInner, _treeGoldTex);
-            GUI.color = Color.white;
-
-            Color graceGold = new Color(0.94f, 0.73f, 0.25f, 0.98f);
-            DrawBorder(graceBox, graceGold, 1.5f);
-            DrawBorder(new Rect(graceBox.x + 3f, graceBox.y + 3f, graceBox.width - 6f, graceBox.height - 6f),
-                new Color(graceGold.r, graceGold.g, graceGold.b, 0.45f), 1f);
-            DrawDiamond(new Vector2(graceBox.center.x, graceBox.y + 2f), 4.5f, graceGold);
-            DrawDiamond(new Vector2(graceBox.center.x, graceBox.yMax - 2f), 3f,
-                new Color(graceGold.r, graceGold.g, graceGold.b, 0.78f));
-
-            Rect graceName = new Rect(graceBox.x + 7f, graceBox.y + 19f, graceBox.width - 14f, 16f);
-            Rect graceHotkey = ScaleReferenceRect(634f, 603f, 112f, 15f);
-            GUI.Label(graceName, "HEAVEN'S LIGHT", _treeRankStyle);
-            GUI.Label(new Rect(graceHotkey.x + 1f, graceHotkey.y + 1f, graceHotkey.width, graceHotkey.height), "M4 + R", _treeTinyStyle);
-            GUI.Label(graceHotkey, "M4 + R", _treeTinyStyle);
+            // v0.14.7: the footer is the approved painted artwork, untouched. No interiors are
+            // repainted and no boxes are drawn; only text and the Confirm hotspot sit on top.
+            // Baked Grace box (reference px): x 640-740, y 540-600. Baked right panel: x 760-975.
+            Rect graceName = ScaleReferenceRect(644f, 559f, 92f, 22f);
+            Rect graceHotkey = ScaleReferenceRect(634f, 605f, 112f, 16f);
+            DrawFooterText(graceName, "HEAVEN'S LIGHT", _treeFooterGraceStyle);
+            DrawFooterText(graceHotkey, "M4 + R", _treeFooterKeyStyle);
 
             int pendingTotal = GetPrototypeTotalPending();
             if (pendingTotal <= 0)
-            {
-                DrawFooterCompassEndcap(rightCell);
                 return;
-            }
 
-            // Confirmation only exists while there are queued changes. It uses the existing endcap
-            // space directly—no nested panel, no extra rectangle, no pasted-on child frame.
-            Rect confirmHit = new Rect(rightCell.x + 38f, rightCell.y + 28f, rightCell.width - 76f, 24f);
-            GUI.Label(confirmHit, "CONFIRM", _treeSubHeaderStyle);
-            GUI.Label(new Rect(rightCell.x + 34f, rightCell.y + 55f, rightCell.width - 68f, 13f),
-                pendingTotal.ToString() + " PENDING", _treeTinyStyle);
+            // Confirmation only exists while there are queued changes, centered in the baked
+            // right panel with no extra frame.
+            Rect confirmHit = ScaleReferenceRect(790f, 556f, 156f, 30f);
+            Rect pendingLine = ScaleReferenceRect(790f, 588f, 156f, 16f);
+            bool hover = confirmHit.Contains(Event.current.mousePosition);
+            DrawFooterText(confirmHit, "CONFIRM", hover ? _treeFooterConfirmHoverStyle : _treeFooterConfirmStyle);
+            DrawFooterText(pendingLine, pendingTotal.ToString() + " PENDING", _treeFooterKeyStyle);
 
             if (GUI.Button(confirmHit, GUIContent.none, GUIStyle.none))
                 ConfirmPrototypePending();
         }
 
-        private void DrawFooterCellInterior(Rect cell)
+        private void DrawFooterText(Rect rect, string text, GUIStyle style)
         {
-            // Keep the baked outer filigree/dividers visible; replace only the washed-out center.
-            Rect inner = new Rect(cell.x + 5f, cell.y + 5f, cell.width - 10f, cell.height - 10f);
-            GUI.color = Color.white;
-            GUI.DrawTexture(inner, _treeHotbarTex);
-            GUI.color = Color.white;
-        }
-
-        private void DrawFooterCompassEndcap(Rect cell)
-        {
-            Vector2 center = new Vector2(cell.center.x, cell.center.y + 1f);
-            Color gold = new Color(0.72f, 0.53f, 0.23f, 0.72f);
-            Color faintGold = new Color(gold.r, gold.g, gold.b, 0.38f);
-
-            float longArm = Mathf.Min(cell.width, cell.height) * 0.29f;
-            float shortArm = longArm * 0.66f;
-
-            DrawFooterCompassArm(center, longArm, 0f, gold, 1.5f);
-            DrawFooterCompassArm(center, longArm, 90f, gold, 1.5f);
-            DrawFooterCompassArm(center, shortArm, 45f, faintGold, 1f);
-            DrawFooterCompassArm(center, shortArm, -45f, faintGold, 1f);
-
-            DrawDiamond(center, 5.5f, gold);
-            DrawDiamond(new Vector2(center.x, center.y - longArm), 3.2f, gold);
-            DrawDiamond(new Vector2(center.x, center.y + longArm), 2.8f, faintGold);
-            DrawDiamond(new Vector2(center.x - longArm, center.y), 2.6f, faintGold);
-            DrawDiamond(new Vector2(center.x + longArm, center.y), 2.6f, faintGold);
-
-            GUI.color = faintGold;
-            GUI.DrawTexture(new Rect(center.x - longArm - 26f, center.y - 0.5f, 22f, 1f), _treeGoldTex);
-            GUI.DrawTexture(new Rect(center.x + longArm + 4f, center.y - 0.5f, 22f, 1f), _treeGoldTex);
-            GUI.color = Color.white;
-        }
-
-        private void DrawFooterCompassArm(Vector2 center, float length, float angle, Color color, float thickness)
-        {
-            Matrix4x4 oldMatrix = GUI.matrix;
-            GUIUtility.RotateAroundPivot(angle, center);
-            GUI.color = color;
-            GUI.DrawTexture(new Rect(center.x - length, center.y - thickness * 0.5f, length * 2f, thickness), _treeGoldTex);
-            GUI.color = Color.white;
-            GUI.matrix = oldMatrix;
+            // One crisp dark drop shadow instead of a same-color double draw.
+            Color oldText = style.normal.textColor;
+            style.normal.textColor = new Color(0f, 0f, 0f, 0.85f);
+            GUI.Label(new Rect(rect.x + 1f, rect.y + 1f, rect.width, rect.height), text, style);
+            style.normal.textColor = oldText;
+            GUI.Label(rect, text, style);
         }
 
         private int GetPrototypeTier(string nodeId)
@@ -8170,6 +8172,28 @@ namespace AlbedosCustomClassesAdvanced
             _treeTinyStyle.alignment = TextAnchor.MiddleCenter;
             _treeTinyStyle.wordWrap = true;
             _treeTinyStyle.normal.textColor = new Color(0.91f, 0.86f, 0.76f, 1f);
+
+            Font serif = FindValheimSerifFont();
+
+            _treeFooterKeyStyle = new GUIStyle(GUI.skin.label);
+            if (serif != null) _treeFooterKeyStyle.font = serif;
+            _treeFooterKeyStyle.fontSize = 12;
+            _treeFooterKeyStyle.fontStyle = FontStyle.Bold;
+            _treeFooterKeyStyle.alignment = TextAnchor.MiddleCenter;
+            _treeFooterKeyStyle.wordWrap = false;
+            _treeFooterKeyStyle.clipping = TextClipping.Overflow;
+            _treeFooterKeyStyle.normal.textColor = new Color(0.93f, 0.84f, 0.62f, 1f);
+
+            _treeFooterGraceStyle = new GUIStyle(_treeFooterKeyStyle);
+            _treeFooterGraceStyle.fontSize = 13;
+            _treeFooterGraceStyle.normal.textColor = new Color(1f, 0.86f, 0.48f, 1f);
+
+            _treeFooterConfirmStyle = new GUIStyle(_treeFooterKeyStyle);
+            _treeFooterConfirmStyle.fontSize = 20;
+            _treeFooterConfirmStyle.normal.textColor = new Color(0.98f, 0.82f, 0.42f, 1f);
+
+            _treeFooterConfirmHoverStyle = new GUIStyle(_treeFooterConfirmStyle);
+            _treeFooterConfirmHoverStyle.normal.textColor = new Color(1f, 0.95f, 0.75f, 1f);
 
             _treeTinyLeftStyle = new GUIStyle(_treeTinyStyle);
             _treeTinyLeftStyle.alignment = TextAnchor.MiddleLeft;

@@ -1,0 +1,12 @@
+Immortal Heroes v0.14.7 - Color Space + Footer Restore
+- FIX: Skill Tree no longer looks washed out. Valheim renders in Linear color space and the
+  artwork was being shown gamma-lifted (measured: in-game = source^(1/2.2)). The texture is now
+  compensated once at load (with light dithering to avoid banding). Artwork file unchanged.
+  Config: [Interface] SkillTreeColorSpaceCorrection = true (set false if the tree looks too dark).
+- Footer: removed all code-painted rectangles (Grace fill, right panel fill, compass endcap).
+  The approved baked footer art now shows through untouched.
+- HEAVEN'S LIGHT sits inside the baked gold Grace box; M4 + R directly underneath.
+- Footer text (1-7, M4 + R, HEAVEN'S LIGHT, CONFIRM) uses Valheim's serif font with one dark
+  drop shadow (no more blurry double-draw).
+- CONFIRM (+ pending count) appears centered in the baked right panel only when pending > 0.
+- No combat, progression, node layout, tooltip or +/- behavior changes.
