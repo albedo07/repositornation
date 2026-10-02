@@ -9,7 +9,7 @@ namespace AlbedosCustomClassesPassives
     {
         public const string ModGuid = "albedo.customclasses.passives";
         public const string ModName = "Dragon's Altar - Base Blessings Compatibility";
-        public const string ModVersion = "0.17.2";
+        public const string ModVersion = "0.18.0";
 
         private void Awake()
         {

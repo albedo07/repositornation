@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.17.2";
+        public const string ModVersion = "0.18.0";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1292,6 +1292,24 @@ namespace DragonsAltarCombat
     {
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
+
+        // v0.18.0: Immortal Heroes Tier power (+10% damage/healing per Tier). The Advanced module
+        // registers the provider; skills in other modules ask for their multiplier by skill id.
+        public static Func<Player, string, float> SkillPowerProvider;
+
+        public static float GetSkillPower(Player player, string skillId)
+        {
+            if (SkillPowerProvider == null || player == null || string.IsNullOrEmpty(skillId))
+                return 1f;
+            try
+            {
+                return Mathf.Max(0f, SkillPowerProvider(player, skillId));
+            }
+            catch
+            {
+                return 1f;
+            }
+        }
 
         public static void SetUiInputBlocked(bool blocked)
         {

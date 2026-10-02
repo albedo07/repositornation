@@ -3,7 +3,7 @@
 ## Working rules
 - User wants short responses and real execution, not long explanations.
 - **RUSH B** = immediately code the obvious requested task, minimal commentary, use latest approved build as baseline, don't redesign unrelated things, verify and package.
-- Latest package: **v0.17.2 — Hammer Size** (v0.17.1 Paladin Tweaks, v0.17.0 Paladin Rework + Ascended Test Switch). Recent work is almost entirely UI polish; do NOT change combat/progression logic unless explicitly requested.
+- Latest package: **v0.18.0 — Paladin Progression part 1** (v0.17.2 Hammer Size, v0.17.1 Paladin Tweaks, v0.17.0 Paladin Rework). Do NOT change combat/progression logic unless explicitly requested.
 - Never patch visual problems by drawing random rectangles over the reference asset. Keep approved artwork intact; make layout/components fit properly.
 
 ## Framework doc (source of truth for design)
@@ -32,12 +32,18 @@
 - Commands (admins on servers, anyone in single player): `/ih [player] <cmd>`; level N / -N, xp N, classtierpoints N, actierpoints N, resetskill all|<skill>, class <mc>, advance <ac>, ascend <skill>, info. Names with spaces in quotes.
 - Tree state B1 (sealed AC panel with checklist) chosen over B2.
 
-## Tier decisions (2026-10-02, next pass = Paladin tree fully functional)
-- Each Tier = +10% damage AND healing of that skill (placeholder until real Tier effects are designed).
+## Tier / progression (v0.18.0 implemented for Paladin)
+- Each Tier = +10% damage AND healing of that skill (`[Progression] TierPowerPercent`; placeholder until real Tier effects are designed). DoTs are not scaled yet.
 - Unlocked skills start at Tier 0 and are usable at Tier 0 (0 = not upgraded). Ultimate too: castable at Tier 0 from Lv36.
-- Tier display: star slots (7 Class / 5 AC / 3 Ultimate) or a 0/7 count; previews `tools/render_tiers.py` -> docs/previews/TIER_*.png (A stars, B count chip, C both). Tier Points counter replaces the "hover for ..." header line (pending user choice).
-- Heaven's Light gets built as a real Grace (M4+R) in this pass.
+- Tier display = Option C (approved): stars (7 Class / 5 AC / 3 Ultimate) + "n/max" count under the nameplate, - / + flank the stars. Tier Points counter replaces the "hover for ..." header line (approved). Tooltips = RPG description + full stats (damage incl. Tier bonus, area, effects, cooldown, cost).
+- Data in `m_customData`: `ImmortalHeroes.Level`, `.Tiers` ("id=n;..."), `.Ascended` (comma list), `.BonusClassPoints`, `.BonusAdvancementPoints`. Code block "v0.18.0 Immortal Heroes progression" in Advanced.cs (Ih* methods); `DragonCombat.SkillPowerProvider` lets Skills.cs scale Cleric skills.
+- 80% gate rule implemented as: points spent >= round(0.8 x points earned at the gate level) -> Lv24 needs 3, Lv32 needs 6.
+- Righteous Strike is Ascended automatically for an advanced Paladin. `[Testing] AscendedSkills` and `[Testing] UnlockAllSkills` still exist for testing.
+- `/ih` registered as a Terminal.ConsoleCommand (chat `/ih ...`, F5 `ih ...`); only the local player for now (other players need server sync).
+- Backdrops: `Cleric_Paladin_Reference.png` (advanced: RS Magenta + badge, LZ Cyan) and `Cleric_Paladin_PreAdvance.png` (all Class skills Cyan); header subtitle text removed from both (code draws it).
+- Next (v0.18.1): tree hotbar casts skills with the rebinds (Paladin only), Heaven's Light Grace on M4+R, Advance/Ascend from the tree (+ Advancement prerequisites at the Altar), B1 sealed AC panel art.
 - Only Paladin moves to the tree hotbar; other ACs stay on fixed `[Hotkeys]` until Paladin is finished, then copy it (universal tree).
+- F8 Config window (DevTools, rewritten v0.18.0): every setting of every module (float/int/bool/string/KeyCode/enum), tabs + search, auto-saves to the .cfg, same Section/Key across modules edited together, Test Cooldowns toggle.
 
 ## Ascended designs (approved so far; tooltip header "ASCENDED - <SKILL>", names unchanged)
 - Paladin Righteous Strike (Ascended MC): 7m, applies Judgement Mark, Expose 8s, a second smaller strike (3m, 0.5x) when it detonates a Mark; also spawns 12 Lightning Trails in all directions, 7m range, faster than Electric Smite's trails, each applying Spirit DoT for 6s.
@@ -130,7 +136,7 @@
 - Old changelogs in `docs/changelog/`, past UI previews in `docs/previews/`.
 - Package releases as `Immortal_Heroes_vX.Y.Z_<Name>.zip` with the same flat layout as the repo root (sources, INSTALL.*, ImmortalHeroesAssets/, CHANGELOG + TEST_THIS_BUILD).
 - Valheim uses Linear color space: IMGUI showed the artwork gamma-lifted (in-game = source^(1/2.2)). v0.14.7 compensates the backdrop texture at load (`ApplyLinearColorSpaceCompensation`). Code-drawn colors/textures (tooltips, +/- buttons) are still uncompensated.
-- Before packaging ALWAYS run `tools/compile_check/check.sh` (semantic compile of Advanced + CombatRuntime + Skills vs a known-good baseline with stubbed Valheim/BepInEx types; any new error signature = real bug; add real Valheim members to Stubs.cs when they show up as noise) plus `mcs --parse -langversion:5` on every edited .cs. The real compile still happens on the user's PC.
+- Before packaging ALWAYS run `tools/compile_check/check.sh` (semantic compile of Advanced + CombatRuntime + Skills + DevTools vs a known-good baseline with stubbed Valheim/BepInEx types; any new error signature = real bug; add real Valheim members to Stubs.cs when they show up as noise) plus `mcs --parse -langversion:5` on every edited .cs. The real compile still happens on the user's PC.
 - UI art pipeline: `tools/build_ui_assets.py` builds every PNG in `ImmortalHeroesAssets/` from `docs/source_art/` (reference v0.14 + approved footer target). Edit the script, never hand-paint the output. `tools/render_preview.py` renders in-game-size previews into `docs/previews/`.
 - Hotbar keys: `[Hotbar]` config (SlotN + SlotNModifier, GraceKey + GraceModifier; Modifier None = single key) is rebindable in the tree; still a prototype — casting uses `[Hotkeys]` until the tree hotbar is wired to the runtime.
 - Node control positions come from `ReferenceNameplateAnchors` (nameplate center x, bottom y, reference px).

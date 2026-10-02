@@ -328,9 +328,66 @@ def selection_ring(size=96, scale=4):
     return img.resize((size, size), Image.LANCZOS)
 
 
+def class_skill_variants(backdrop):
+    """v0.18.0: Righteous Strike is Paladin's Ascended Class skill (Magenta + permanent badge) and
+    Lightning Zap is a normal (Cyan) skill. Before Advancement every Class skill is Cyan with no badge.
+    The baked "hover for ..." header lines are cleared: the code draws the live Tier Points there."""
+    import render_states as rs
+    base = rs.recolor_hue(backdrop.copy(), (148, 142, 253, 240), 280, 345, 186)
+    base = rs.recolor_hue(base, (154, 146, 248, 238), 345, 360, 186)
+    base = rs.recolor_hue(base, (154, 146, 248, 238), 0, 20, 186)
+    base = rs.remove_lz_badge(base)
+    base = fade_pink_haze(base, (150, 136, 256, 244))
+    base = rs.inpaint_h(base, rs.CLERIC_SUB)
+    base = rs.inpaint_h(base, rs.PALADIN_SUB)
+    pre = base.copy()
+    advanced = rs.recolor_hue(base, (150, 276, 252, 368), 160, 215, 305)
+    badge = permanent_badge().resize((23, 23), Image.LANCZOS)
+    advanced.alpha_composite(badge, (218, 283))
+    return advanced, pre
+
+
+def fade_pink_haze(img, box):
+    """Lightning Zap's old Magenta glow leaves a faint pink haze on the parchment; neutralize it."""
+    import render_states as rs
+    region = np.asarray(img.crop(box).convert("RGB"), dtype=np.float32) / 255.0
+    hue, sat, mx = rs.hsv_arrays(region)
+    pink = ((hue >= 290) | (hue <= 14)) & (sat < 0.32)
+    gray = region.mean(axis=2, keepdims=True)
+    warm = gray * np.array([1.03, 1.0, 0.95])
+    out = np.where(pink[..., None], warm, region)
+    img.paste(Image.fromarray((out.clip(0, 1) * 255).astype(np.uint8)).convert("RGBA"), box[:2])
+    return img
+
+
+def recolor_icon(name, out_name, lo, hi, target):
+    import render_states as rs
+    icon = Image.open(os.path.join(OUT, name)).convert("RGBA")
+    alpha = icon.getchannel("A")
+    icon = rs.recolor_hue(icon, (0, 0, icon.width, icon.height), lo, hi, target)
+    icon.putalpha(alpha)
+    icon.save(os.path.join(OUT, out_name))
+
+
+def tier_assets():
+    import render_tiers as rt
+    import render_states as rs
+    rt.star(48, "full").save(os.path.join(OUT, "Tier_Star_Full.png"))
+    rt.star(48, "pending").save(os.path.join(OUT, "Tier_Star_Pending.png"))
+    rt.star(48, "empty").save(os.path.join(OUT, "Tier_Star_Empty.png"))
+    rs.padlock(48).save(os.path.join(OUT, "Lock_Padlock.png"))
+
+
 def main():
     backdrop = build_backdrop()
-    backdrop.save(os.path.join(OUT, "Cleric_Paladin_Reference.png"))
+    advanced, pre = class_skill_variants(backdrop)
+    advanced.save(os.path.join(OUT, "Cleric_Paladin_Reference.png"))
+    pre.save(os.path.join(OUT, "Cleric_Paladin_PreAdvance.png"))
+    # Hotbar icons: Lightning Zap Cyan; Righteous Strike Magenta (Ascended) + Cyan (before Advancement).
+    recolor_icon("Icon_righteous_strike.png", "Icon_righteous_strike_Normal.png", 0, 1, 0)
+    recolor_icon("Icon_righteous_strike.png", "Icon_righteous_strike.png", 160, 215, 305)
+    recolor_icon("Icon_lightning_zap.png", "Icon_lightning_zap.png", 280, 345, 186)
+    tier_assets()
     rounded_button(16, "+").save(os.path.join(OUT, "Tier_Plus.png"))
     rounded_button(16, "-").save(os.path.join(OUT, "Tier_Minus.png"))
     confirm_plaque(160, 42).save(os.path.join(OUT, "Confirm_Plaque.png"))

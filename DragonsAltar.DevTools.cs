@@ -9,18 +9,26 @@ namespace DragonsAltarDevTools
 {
     internal class DevSetting
     {
-        public BaseUnityPlugin Owner;
-        public ConfigFile File;
-        public ConfigEntryBase Entry;
-        public string PluginGuid;
         public string Section;
         public string Key;
         public string Id;
-        public bool IsInteger;
+        public string Tab;
+        public string Description;
+        public Type SettingType;
         public float SliderMin;
         public float SliderMax;
+        // The same Section/Key can exist in several Immortal Heroes modules (e.g. [Testing]).
+        // Every copy is edited together so the modules never disagree.
+        public readonly List<ConfigEntryBase> Entries = new List<ConfigEntryBase>();
+        public readonly List<ConfigFile> Files = new List<ConfigFile>();
+
+        public ConfigEntryBase Main { get { return Entries[0]; } }
+        public bool IsNumber { get { return SettingType == typeof(float) || SettingType == typeof(int); } }
     }
 
+    // v0.18.0: the in-game Config window. Every setting of every Immortal Heroes module
+    // (numbers, toggles, text, keys, choices) is editable here and saved to the .cfg files,
+    // so the cfg never has to be opened by hand.
     [BepInPlugin(ModGuid, ModName, ModVersion)]
     [BepInDependency("albedo.customclasses", BepInDependency.DependencyFlags.HardDependency)]
     [BepInDependency("albedo.customclasses.combatruntime", BepInDependency.DependencyFlags.HardDependency)]
@@ -31,7 +39,7 @@ namespace DragonsAltarDevTools
     {
         public const string ModGuid = "albedo.customclasses.devtools";
         public const string ModName = "Dragon's Altar - Developer Tools";
-        public const string ModVersion = "0.17.2";
+        public const string ModVersion = "0.18.0";
 
         public static DeveloperToolsPlugin Instance;
 
@@ -40,44 +48,65 @@ namespace DragonsAltarDevTools
             get { return Instance != null && Instance._open; }
         }
 
+        private static readonly string[] Tabs = { "Paladin & Cleric", "Other Skills", "Testing", "Keys & Hotbar", "General" };
+        private static readonly string[] AscendableSkills =
+            { "righteous_strike", "goddess_relic", "judgement_hammer", "shield_charge", "fallen_angel", "ray_of_hope", "electric_smite" };
+
         private ConfigEntry<KeyCode> _toggleKey;
         private ConfigEntry<bool> _enableWorldPreview;
+        private ConfigEntry<bool> _autoSave;
 
         private readonly List<DevSetting> _settings = new List<DevSetting>();
         private readonly List<string> _sections = new List<string>();
         private readonly Dictionary<string, string> _inputBuffers = new Dictionary<string, string>();
         private readonly List<GameObject> _previewObjects = new List<GameObject>();
+        private readonly HashSet<ConfigFile> _dirtyFiles = new HashSet<ConfigFile>();
+        private static KeyCode[] _allKeys;
 
-        private Rect _windowRect = new Rect(55f, 55f, 1120f, 690f);
+        private Rect _windowRect = new Rect(55f, 55f, 1120f, 700f);
         private Vector2 _sectionScroll;
         private Vector2 _settingScroll;
+        private string _selectedTab = "Paladin & Cleric";
         private string _selectedSection = string.Empty;
         private string _selectedSettingId = string.Empty;
+        private string _search = string.Empty;
+        private string _status = string.Empty;
+        private float _statusUntil;
+        private float _lastChangeTime;
+        private DevSetting _captureSetting;
+        private int _captureFrame;
         private bool _open;
         private bool _preview;
         private bool _savedCursorVisible;
         private CursorLockMode _savedCursorLock;
-        private string _mode = "CUSTOM";
         private GUIStyle _titleStyle;
         private GUIStyle _smallStyle;
+        private GUIStyle _descStyle;
         private GUIStyle _selectedButtonStyle;
         private GUIStyle _sectionButtonStyle;
+        private GUIStyle _tabStyle;
+        private GUIStyle _tabSelectedStyle;
         private GUIStyle _valueStyle;
+        private GUIStyle _onStyle;
+        private GUIStyle _offStyle;
         private Texture2D _panelTexture;
         private Texture2D _selectedTexture;
         private Texture2D _buttonTexture;
+        private Texture2D _onTexture;
 
         private void Awake()
         {
             Instance = this;
-            _toggleKey = Config.Bind("Developer UI", "ToggleKey", KeyCode.F8, "Open or close the Dragon's Altar developer tuning console.");
+            _toggleKey = Config.Bind("Developer UI", "ToggleKey", KeyCode.F8, "Open or close the Immortal Heroes Config window.");
             _enableWorldPreview = Config.Bind("Developer UI", "EnableWorldPreview", true, "Allow the selected range/radius setting to draw an in-world ruler preview.");
+            _autoSave = Config.Bind("Developer UI", "AutoSave", true, "Save changes made in the Config window to the .cfg files automatically.");
             _preview = _enableWorldPreview.Value;
-            Logger.LogInfo(ModName + " v" + ModVersion + " loaded. Press " + _toggleKey.Value.ToString() + " for Skill Tuning.");
+            Logger.LogInfo(ModName + " v" + ModVersion + " loaded. Press " + _toggleKey.Value.ToString() + " for the Config window.");
         }
 
         private void OnDestroy()
         {
+            SaveDirty();
             ClosePanel();
             ClearPreview();
             Instance = null;
@@ -85,6 +114,12 @@ namespace DragonsAltarDevTools
 
         private void Update()
         {
+            if (_captureSetting != null)
+            {
+                UpdateKeyCapture();
+                return;
+            }
+
             if (Input.GetKeyDown(_toggleKey.Value))
             {
                 if (_open)
@@ -99,7 +134,10 @@ namespace DragonsAltarDevTools
                 return;
             }
 
-            if (_preview && _enableWorldPreview.Value)
+            if (_dirtyFiles.Count > 0 && _autoSave.Value && Time.unscaledTime - _lastChangeTime > 0.75f)
+                SaveDirty();
+
+            if (_open && _preview && _enableWorldPreview.Value)
                 UpdateWorldPreview();
             else
                 ClearPreview();
@@ -127,6 +165,9 @@ namespace DragonsAltarDevTools
                 return;
 
             _open = false;
+            _captureSetting = null;
+            if (_autoSave.Value)
+                SaveDirty();
             SetJotunnInputBlock(false);
             Cursor.visible = _savedCursorVisible;
             Cursor.lockState = _savedCursorLock;
@@ -171,19 +212,23 @@ namespace DragonsAltarDevTools
             return null;
         }
 
+        // ------------------------------------------------------------------ settings model
+        private static bool IsSupportedType(Type type)
+        {
+            return type == typeof(float) || type == typeof(int) || type == typeof(bool) || type == typeof(string) || (type != null && type.IsEnum);
+        }
+
         private void RefreshSettings()
         {
             _settings.Clear();
-            _sections.Clear();
             _inputBuffers.Clear();
+            Dictionary<string, DevSetting> byKey = new Dictionary<string, DevSetting>();
 
             UnityEngine.Object[] plugins = UnityEngine.Object.FindObjectsOfType(typeof(BaseUnityPlugin));
-            Dictionary<string, DevSetting> dedupe = new Dictionary<string, DevSetting>();
-
             for (int i = 0; i < plugins.Length; i++)
             {
                 BaseUnityPlugin plugin = plugins[i] as BaseUnityPlugin;
-                if (plugin == null || plugin == this)
+                if (plugin == null)
                     continue;
 
                 string guid = string.Empty;
@@ -195,6 +240,8 @@ namespace DragonsAltarDevTools
                 catch
                 {
                 }
+                if (plugin == this)
+                    guid = ModGuid;
 
                 if (string.IsNullOrEmpty(guid) || !guid.StartsWith("albedo.customclasses", StringComparison.OrdinalIgnoreCase))
                     continue;
@@ -206,48 +253,41 @@ namespace DragonsAltarDevTools
                 foreach (KeyValuePair<ConfigDefinition, ConfigEntryBase> pair in entries)
                 {
                     ConfigEntryBase entry = pair.Value;
-                    if (entry == null)
+                    if (entry == null || !IsSupportedType(entry.SettingType))
                         continue;
 
                     string section = entry.Definition.Section;
                     string key = entry.Definition.Key;
-
-                    if (!IsSkillSection(section))
-                        continue;
-                    if (!IsTunableKey(key))
-                        continue;
-                    if (ShouldSkipDuplicateRuntimeConfig(guid, section))
-                        continue;
-
-                    Type settingType = entry.SettingType;
-                    bool isInteger = settingType == typeof(int);
-                    bool isFloat = settingType == typeof(float);
-                    if (!isInteger && !isFloat)
-                        continue;
-
                     string unique = section + "|" + key;
-                    if (dedupe.ContainsKey(unique))
-                        continue;
-
-                    DevSetting setting = new DevSetting();
-                    setting.Owner = plugin;
-                    setting.File = plugin.Config;
-                    setting.Entry = entry;
-                    setting.PluginGuid = guid;
-                    setting.Section = section;
-                    setting.Key = key;
-                    setting.Id = guid + "|" + unique;
-                    setting.IsInteger = isInteger;
-                    GetSliderBounds(key, out setting.SliderMin, out setting.SliderMax);
-                    dedupe.Add(unique, setting);
-                    _settings.Add(setting);
-
-                    if (!_sections.Contains(section))
-                        _sections.Add(section);
+                    DevSetting setting;
+                    if (!byKey.TryGetValue(unique, out setting))
+                    {
+                        setting = new DevSetting();
+                        setting.Section = section;
+                        setting.Key = key;
+                        setting.Id = unique;
+                        setting.SettingType = entry.SettingType;
+                        setting.Tab = TabFor(section, entry.SettingType);
+                        try
+                        {
+                            setting.Description = entry.Description == null ? "" : entry.Description.Description;
+                        }
+                        catch
+                        {
+                            setting.Description = "";
+                        }
+                        GetSliderBounds(entry, key, out setting.SliderMin, out setting.SliderMax);
+                        byKey.Add(unique, setting);
+                        _settings.Add(setting);
+                    }
+                    if (entry.SettingType == setting.SettingType)
+                    {
+                        setting.Entries.Add(entry);
+                        setting.Files.Add(plugin.Config);
+                    }
                 }
             }
 
-            _sections.Sort(StringComparer.OrdinalIgnoreCase);
             _settings.Sort(delegate(DevSetting a, DevSetting b)
             {
                 int sectionCompare = string.Compare(a.Section, b.Section, StringComparison.OrdinalIgnoreCase);
@@ -255,87 +295,87 @@ namespace DragonsAltarDevTools
                     return sectionCompare;
                 return string.Compare(a.Key, b.Key, StringComparison.OrdinalIgnoreCase);
             });
+            RebuildSections();
+        }
 
-            if (_sections.Count > 0 && (string.IsNullOrEmpty(_selectedSection) || !_sections.Contains(_selectedSection)))
+        private void RebuildSections()
+        {
+            _sections.Clear();
+            string search = (_search ?? "").Trim().ToLowerInvariant();
+            for (int i = 0; i < _settings.Count; i++)
+            {
+                DevSetting s = _settings[i];
+                if (!MatchesFilter(s, search))
+                    continue;
+                if (!_sections.Contains(s.Section))
+                    _sections.Add(s.Section);
+            }
+            if (_sections.Count > 0 && !_sections.Contains(_selectedSection))
                 _selectedSection = _sections[0];
-
             EnsureSelectedSetting();
         }
 
-        private bool ShouldSkipDuplicateRuntimeConfig(string guid, string section)
+        private bool MatchesFilter(DevSetting s, string search)
         {
-            if (guid == "albedo.customclasses.sorcerer" && section.StartsWith("Sorcerer.", StringComparison.OrdinalIgnoreCase))
-                return true;
-            return false;
+            if (search.Length > 0)
+                return s.Section.ToLowerInvariant().Contains(search) || s.Key.ToLowerInvariant().Contains(search);
+            return s.Tab == _selectedTab;
         }
 
-        private bool IsSkillSection(string section)
+        private static string TabFor(string section, Type type)
         {
-            if (string.IsNullOrEmpty(section))
-                return false;
-
-            return section.StartsWith("Warrior.", StringComparison.OrdinalIgnoreCase) ||
-                   section.StartsWith("Cleric.", StringComparison.OrdinalIgnoreCase) ||
-                   section.StartsWith("Sword Master", StringComparison.OrdinalIgnoreCase) ||
-                   section.StartsWith("Mercenary", StringComparison.OrdinalIgnoreCase) ||
-                   section.StartsWith("Paladin", StringComparison.OrdinalIgnoreCase) ||
-                   section.StartsWith("Priest", StringComparison.OrdinalIgnoreCase) ||
-                   section.StartsWith("Sorcerer.", StringComparison.OrdinalIgnoreCase) ||
-                   section.StartsWith("Wizard", StringComparison.OrdinalIgnoreCase) ||
-                   section.StartsWith("Spellcaster", StringComparison.OrdinalIgnoreCase) ||
-                   section == "Grand Sigil Survival" ||
-                   section == "Acrobatic Jump Skills";
+            if (section == "Testing" || section == "Progression" || section == "Developer UI")
+                return "Testing";
+            if (section == "Hotkeys" || section == "Hotbar" || type == typeof(KeyCode))
+                return "Keys & Hotbar";
+            if (section.StartsWith("Paladin", StringComparison.OrdinalIgnoreCase) || section.StartsWith("Cleric", StringComparison.OrdinalIgnoreCase))
+                return "Paladin & Cleric";
+            if (section.StartsWith("Warrior", StringComparison.OrdinalIgnoreCase) ||
+                section.StartsWith("Sword Master", StringComparison.OrdinalIgnoreCase) ||
+                section.StartsWith("Mercenary", StringComparison.OrdinalIgnoreCase) ||
+                section.StartsWith("Priest", StringComparison.OrdinalIgnoreCase) ||
+                section.StartsWith("Sorcerer", StringComparison.OrdinalIgnoreCase) ||
+                section.StartsWith("Wizard", StringComparison.OrdinalIgnoreCase) ||
+                section.StartsWith("Spellcaster", StringComparison.OrdinalIgnoreCase) ||
+                section == "Grand Sigil Survival" ||
+                section == "Acrobatic Jump Skills")
+                return "Other Skills";
+            return "General";
         }
 
-        private bool IsTunableKey(string key)
+        private static bool IsDamageKey(string lower)
         {
-            if (string.IsNullOrEmpty(key))
-                return false;
-
-            string lower = key.ToLowerInvariant();
-            if (lower.Contains("damage") || lower.Contains("dotpersecond") || lower.Contains("healpercent") || lower.Contains("immediateheal"))
-                return false;
-
-            return lower.Contains("cooldown") ||
-                   lower.Contains("recharge") ||
-                   lower.Contains("radius") ||
-                   lower.Contains("range") ||
-                   lower.Contains("distance") ||
-                   lower.Contains("length") ||
-                   lower.Contains("width") ||
-                   lower.Contains("height") ||
-                   lower.Contains("windup") ||
-                   lower.Contains("channel") ||
-                   lower.Contains("duration") ||
-                   lower.Contains("interval") ||
-                   lower.Contains("delay") ||
-                   lower.Contains("speed") ||
-                   lower.Contains("traveltime") ||
-                   lower.Contains("cone") ||
-                   lower.Contains("degrees") ||
-                   lower.Contains("angle") ||
-                   lower.Contains("droptime") ||
-                   lower.Contains("cost") ||
-                   lower.Contains("charges") ||
-                   lower.Contains("count") ||
-                   lower.Contains("strikes") ||
-                   lower.Contains("multiplier");
+            return lower == "blunt" || lower == "slash" || lower == "pierce" || lower == "fire" || lower == "frost" ||
+                   lower == "lightning" || lower == "poison" || lower == "spirit" || lower.Contains("damage") || lower.Contains("dotpersecond");
         }
 
-        private void GetSliderBounds(string key, out float min, out float max)
+        private void GetSliderBounds(ConfigEntryBase entry, string key, out float min, out float max)
         {
             string lower = key.ToLowerInvariant();
             min = 0f;
             max = 100f;
 
+            try
+            {
+                AcceptableValueRange<float> fr = entry.Description == null ? null : entry.Description.AcceptableValues as AcceptableValueRange<float>;
+                if (fr != null) { min = fr.MinValue; max = fr.MaxValue; return; }
+                AcceptableValueRange<int> ir = entry.Description == null ? null : entry.Description.AcceptableValues as AcceptableValueRange<int>;
+                if (ir != null) { min = ir.MinValue; max = ir.MaxValue; return; }
+            }
+            catch
+            {
+            }
+
             if (lower.Contains("cooldown") || lower.Contains("recharge")) max = 300f;
-            else if (lower.Contains("degrees") || lower.Contains("angle") || lower.Contains("cone")) max = 180f;
+            else if (IsDamageKey(lower)) max = 300f;
+            else if (lower.Contains("percent")) max = 200f;
+            else if (lower.Contains("degrees") || lower.Contains("angle") || lower.Contains("cone")) max = 360f;
             else if (lower.Contains("radius") || lower.Contains("width") || lower.Contains("height")) max = 50f;
             else if (lower.Contains("range") || lower.Contains("distance") || lower.Contains("length")) max = 100f;
             else if (lower.Contains("duration")) max = 120f;
-            else if (lower.Contains("windup") || lower.Contains("channel") || lower.Contains("interval") || lower.Contains("delay") || lower.Contains("traveltime") || lower.Contains("droptime")) max = 20f;
+            else if (lower.Contains("windup") || lower.Contains("channel") || lower.Contains("interval") || lower.Contains("delay") || lower.Contains("traveltime") || lower.Contains("droptime") || lower.Contains("time")) max = 20f;
             else if (lower.Contains("speed")) max = 100f;
-            else if (lower.Contains("cost")) max = 500f;
+            else if (lower.Contains("cost") || lower.Contains("health") || lower.Contains("barrier") || lower.Contains("hp")) max = 500f;
             else if (lower.Contains("charges") || lower.Contains("count") || lower.Contains("strikes")) { min = 1f; max = 50f; }
             else if (lower.Contains("multiplier")) max = 10f;
         }
@@ -361,7 +401,6 @@ namespace DragonsAltarDevTools
         {
             if (string.IsNullOrEmpty(id))
                 return null;
-
             for (int i = 0; i < _settings.Count; i++)
             {
                 if (_settings[i].Id == id)
@@ -370,14 +409,16 @@ namespace DragonsAltarDevTools
             return null;
         }
 
+        private DevSetting FindSetting(string section, string key)
+        {
+            return FindSetting(section + "|" + key);
+        }
+
         private float GetNumericValue(DevSetting setting)
         {
             try
             {
-                object value = setting.Entry.BoxedValue;
-                if (setting.IsInteger)
-                    return Convert.ToSingle((int)value, CultureInfo.InvariantCulture);
-                return Convert.ToSingle((float)value, CultureInfo.InvariantCulture);
+                return Convert.ToSingle(setting.Main.BoxedValue, CultureInfo.InvariantCulture);
             }
             catch
             {
@@ -389,10 +430,7 @@ namespace DragonsAltarDevTools
         {
             try
             {
-                object value = setting.Entry.DefaultValue;
-                if (setting.IsInteger)
-                    return Convert.ToSingle((int)value, CultureInfo.InvariantCulture);
-                return Convert.ToSingle((float)value, CultureInfo.InvariantCulture);
+                return Convert.ToSingle(setting.Main.DefaultValue, CultureInfo.InvariantCulture);
             }
             catch
             {
@@ -400,90 +438,85 @@ namespace DragonsAltarDevTools
             }
         }
 
+        // Writes the value into every copy of the setting and marks the files for saving.
+        private void SetValue(DevSetting setting, object value)
+        {
+            if (setting == null)
+                return;
+            for (int i = 0; i < setting.Entries.Count; i++)
+            {
+                ConfigFile file = setting.Files[i];
+                bool oldSave = file.SaveOnConfigSet;
+                try
+                {
+                    file.SaveOnConfigSet = false;
+                    setting.Entries[i].BoxedValue = value;
+                    _dirtyFiles.Add(file);
+                }
+                catch
+                {
+                }
+                finally
+                {
+                    file.SaveOnConfigSet = oldSave;
+                }
+            }
+            _lastChangeTime = Time.unscaledTime;
+        }
+
         private void SetNumericValue(DevSetting setting, float value)
         {
-            if (setting == null || setting.Entry == null || setting.File == null)
+            if (setting == null)
                 return;
+            if (setting.SettingType == typeof(int))
+                SetValue(setting, Mathf.RoundToInt(value));
+            else
+                SetValue(setting, value);
+            _inputBuffers[setting.Id] = FormatValue(GetNumericValue(setting));
 
-            bool oldSave = setting.File.SaveOnConfigSet;
-            try
+            // Editing a real cooldown only matters while Test Cooldowns is off.
+            if (IsCooldownKey(setting.Key) && setting.Section != "Testing" && GetTestCooldowns())
             {
-                if (IsCooldownKey(setting.Key))
-                    DisableLegacyCooldownOverrides();
-
-                setting.File.SaveOnConfigSet = false;
-                if (setting.IsInteger)
-                    setting.Entry.BoxedValue = Mathf.RoundToInt(value);
-                else
-                    setting.Entry.BoxedValue = value;
-                _inputBuffers[setting.Id] = FormatValue(GetNumericValue(setting));
-                _mode = "CUSTOM";
-            }
-            catch
-            {
-            }
-            finally
-            {
-                setting.File.SaveOnConfigSet = oldSave;
+                SetTestCooldowns(false);
+                ShowStatus("Test Cooldowns turned OFF so your cooldown values apply.");
             }
         }
 
-        private void SetEntryWithoutSaving(ConfigFile file, ConfigEntryBase entry, object value)
+        private void SetToDefault(DevSetting setting)
         {
-            if (file == null || entry == null)
+            if (setting == null)
                 return;
-
-            bool oldSave = file.SaveOnConfigSet;
-            try
-            {
-                file.SaveOnConfigSet = false;
-                entry.BoxedValue = value;
-            }
-            catch
-            {
-            }
-            finally
-            {
-                file.SaveOnConfigSet = oldSave;
-            }
+            SetValue(setting, setting.Main.DefaultValue);
+            _inputBuffers.Remove(setting.Id);
         }
 
-        private void ApplyMode(bool developer)
+        private void SaveDirty()
         {
-            for (int i = 0; i < _settings.Count; i++)
+            if (_dirtyFiles.Count == 0)
+                return;
+            foreach (ConfigFile file in _dirtyFiles)
             {
-                DevSetting setting = _settings[i];
-                float value = GetDefaultNumericValue(setting);
-                if (developer && IsCooldownKey(setting.Key))
-                    value = 5f;
-
-                if (setting.IsInteger)
-                    SetEntryWithoutSaving(setting.File, setting.Entry, Mathf.RoundToInt(value));
-                else
-                    SetEntryWithoutSaving(setting.File, setting.Entry, value);
-
-                _inputBuffers[setting.Id] = FormatValue(GetNumericValue(setting));
+                try
+                {
+                    file.Save();
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogWarning("Config save failed: " + ex.Message);
+                }
             }
-
-            DisableLegacyCooldownOverrides();
-            _mode = developer ? "DEVELOPER - 5s COOLDOWNS" : "DEFAULT";
+            _dirtyFiles.Clear();
+            ShowStatus("Saved to .cfg");
         }
 
-        private bool IsCooldownKey(string key)
-        {
-            string lower = key.ToLowerInvariant();
-            return lower.Contains("cooldown") || lower.Contains("rechargeseconds");
-        }
-
-        private void DisableLegacyCooldownOverrides()
+        private void ReloadAll()
         {
             UnityEngine.Object[] plugins = UnityEngine.Object.FindObjectsOfType(typeof(BaseUnityPlugin));
             for (int i = 0; i < plugins.Length; i++)
             {
                 BaseUnityPlugin plugin = plugins[i] as BaseUnityPlugin;
-                if (plugin == null || plugin == this)
+                if (plugin == null)
                     continue;
-
                 string guid = string.Empty;
                 try
                 {
@@ -493,22 +526,54 @@ namespace DragonsAltarDevTools
                 catch
                 {
                 }
-
-                if (string.IsNullOrEmpty(guid) || !guid.StartsWith("albedo.customclasses", StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                IDictionary<ConfigDefinition, ConfigEntryBase> entries = plugin.Config as IDictionary<ConfigDefinition, ConfigEntryBase>;
-                if (entries == null)
-                    continue;
-
-                ConfigEntryBase forceEntry;
-                if (entries.TryGetValue(new ConfigDefinition("Testing", "ForceCooldowns"), out forceEntry))
-                    SetEntryWithoutSaving(plugin.Config, forceEntry, false);
-
-                ConfigEntryBase secondsEntry;
-                if (entries.TryGetValue(new ConfigDefinition("Testing", "CooldownSeconds"), out secondsEntry))
-                    SetEntryWithoutSaving(plugin.Config, secondsEntry, 5f);
+                if (plugin == this || guid.StartsWith("albedo.customclasses", StringComparison.OrdinalIgnoreCase))
+                {
+                    try
+                    {
+                        plugin.Config.Reload();
+                    }
+                    catch
+                    {
+                    }
+                }
             }
+            _dirtyFiles.Clear();
+            RefreshSettings();
+            ShowStatus("Reloaded from .cfg");
+        }
+
+        private void ShowStatus(string text)
+        {
+            _status = text;
+            _statusUntil = Time.unscaledTime + 3f;
+        }
+
+        private static bool IsCooldownKey(string key)
+        {
+            string lower = key.ToLowerInvariant();
+            return lower.Contains("cooldown") || lower.Contains("rechargeseconds");
+        }
+
+        private bool GetTestCooldowns()
+        {
+            DevSetting force = FindSetting("Testing", "ForceCooldowns");
+            if (force == null)
+                return false;
+            try
+            {
+                return (bool)force.Main.BoxedValue;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private void SetTestCooldowns(bool on)
+        {
+            DevSetting force = FindSetting("Testing", "ForceCooldowns");
+            if (force != null)
+                SetValue(force, on);
         }
 
         private string FormatValue(float value)
@@ -518,6 +583,35 @@ namespace DragonsAltarDevTools
             return value.ToString("0.##", CultureInfo.InvariantCulture);
         }
 
+        // ------------------------------------------------------------------ key capture
+        private void UpdateKeyCapture()
+        {
+            if (Time.frameCount <= _captureFrame + 1)
+                return;
+            if (Input.GetKeyDown(KeyCode.Escape))
+            {
+                _captureSetting = null;
+                ShowStatus("Key change cancelled");
+                return;
+            }
+            if (_allKeys == null)
+                _allKeys = (KeyCode[])Enum.GetValues(typeof(KeyCode));
+            for (int i = 0; i < _allKeys.Length; i++)
+            {
+                KeyCode key = _allKeys[i];
+                if (key == KeyCode.None || key == KeyCode.Mouse0 || key == KeyCode.Mouse1)
+                    continue;
+                if (Input.GetKeyDown(key))
+                {
+                    SetValue(_captureSetting, key);
+                    ShowStatus(FriendlyKey(_captureSetting.Key) + " = " + key.ToString());
+                    _captureSetting = null;
+                    return;
+                }
+            }
+        }
+
+        // ------------------------------------------------------------------ drawing
         private void EnsureStyles()
         {
             if (_titleStyle != null)
@@ -526,6 +620,7 @@ namespace DragonsAltarDevTools
             _panelTexture = MakeTexture(new Color(0.035f, 0.04f, 0.055f, 0.97f));
             _selectedTexture = MakeTexture(new Color(0.20f, 0.42f, 0.52f, 0.95f));
             _buttonTexture = MakeTexture(new Color(0.10f, 0.12f, 0.16f, 0.94f));
+            _onTexture = MakeTexture(new Color(0.18f, 0.48f, 0.26f, 0.96f));
 
             _titleStyle = new GUIStyle(GUI.skin.label);
             _titleStyle.fontSize = 21;
@@ -535,6 +630,12 @@ namespace DragonsAltarDevTools
             _smallStyle = new GUIStyle(GUI.skin.label);
             _smallStyle.fontSize = 12;
             _smallStyle.normal.textColor = new Color(0.78f, 0.83f, 0.89f, 1f);
+
+            _descStyle = new GUIStyle(_smallStyle);
+            _descStyle.fontSize = 11;
+            _descStyle.wordWrap = false;
+            _descStyle.clipping = TextClipping.Clip;
+            _descStyle.normal.textColor = new Color(0.62f, 0.66f, 0.72f, 1f);
 
             _valueStyle = new GUIStyle(GUI.skin.textField);
             _valueStyle.alignment = TextAnchor.MiddleCenter;
@@ -547,6 +648,19 @@ namespace DragonsAltarDevTools
 
             _selectedButtonStyle = new GUIStyle(_sectionButtonStyle);
             _selectedButtonStyle.normal.background = _selectedTexture;
+
+            _tabStyle = new GUIStyle(_sectionButtonStyle);
+            _tabStyle.alignment = TextAnchor.MiddleCenter;
+            _tabStyle.fontSize = 13;
+            _tabStyle.fontStyle = FontStyle.Bold;
+
+            _tabSelectedStyle = new GUIStyle(_tabStyle);
+            _tabSelectedStyle.normal.background = _selectedTexture;
+
+            _offStyle = new GUIStyle(_tabStyle);
+            _onStyle = new GUIStyle(_tabStyle);
+            _onStyle.normal.background = _onTexture;
+            _onStyle.hover.background = _onTexture;
         }
 
         private Texture2D MakeTexture(Color color)
@@ -565,7 +679,7 @@ namespace DragonsAltarDevTools
             EnsureStyles();
             Color old = GUI.color;
             GUI.color = Color.white;
-            _windowRect = GUI.Window(990011, _windowRect, DrawWindow, "DRAGON'S ALTAR - SKILL TUNING");
+            _windowRect = GUI.Window(990011, _windowRect, DrawWindow, "IMMORTAL HEROES - CONFIG");
             GUI.color = old;
         }
 
@@ -573,52 +687,78 @@ namespace DragonsAltarDevTools
         {
             GUI.DrawTexture(new Rect(0f, 22f, _windowRect.width, _windowRect.height - 22f), _panelTexture);
 
-            GUI.Label(new Rect(22f, 34f, 520f, 28f), "Developer Skill Tuning", _titleStyle);
-            GUI.Label(new Rect(22f, 64f, 620f, 20f), "Session-only tuning. Slider steps are 1; type decimals in the value box.", _smallStyle);
+            GUI.Label(new Rect(22f, 30f, 420f, 28f), "Immortal Heroes Config", _titleStyle);
+            string saveState = _dirtyFiles.Count > 0 ? (_autoSave.Value ? "Saving..." : "Unsaved changes") : "All changes saved";
+            if (Time.unscaledTime < _statusUntil)
+                saveState = _status;
+            GUI.Label(new Rect(22f, 58f, 420f, 20f), saveState + "   |   " + _toggleKey.Value.ToString() + " / Esc closes", _smallStyle);
 
-            bool defaultPressed = GUI.Button(new Rect(650f, 37f, 132f, 38f), "DEFAULT");
-            bool developerPressed = GUI.Button(new Rect(790f, 37f, 190f, 38f), "DEVELOPER - 5s CD");
-            if (defaultPressed) ApplyMode(false);
-            if (developerPressed) ApplyMode(true);
-
-            GUI.Label(new Rect(987f, 45f, 110f, 24f), _mode, _smallStyle);
-
-            bool nextPreview = GUI.Toggle(new Rect(650f, 82f, 220f, 24f), _preview, " Preview selected value");
-            if (nextPreview != _preview)
+            bool test = GetTestCooldowns();
+            if (GUI.Button(new Rect(440f, 34f, 190f, 34f), test ? "TEST COOLDOWNS: ON" : "TEST COOLDOWNS: OFF", test ? _onStyle : _offStyle))
             {
-                _preview = nextPreview;
-                if (!_preview)
-                    ClearPreview();
+                SetTestCooldowns(!test);
+                ShowStatus(!test ? "Every cooldown uses Testing CooldownSeconds" : "Real cooldowns restored");
             }
-
-            if (GUI.Button(new Rect(880f, 80f, 105f, 28f), "Refresh"))
-                RefreshSettings();
-            if (GUI.Button(new Rect(993f, 80f, 105f, 28f), "Close"))
+            bool nextAuto = GUI.Toggle(new Rect(640f, 40f, 110f, 24f), _autoSave.Value, " Auto-save");
+            if (nextAuto != _autoSave.Value)
+            {
+                _autoSave.Value = nextAuto;
+                Config.Save();
+            }
+            if (GUI.Button(new Rect(755f, 34f, 100f, 34f), "SAVE"))
+                SaveDirty();
+            if (GUI.Button(new Rect(862f, 34f, 120f, 34f), "RELOAD .CFG"))
+                ReloadAll();
+            if (GUI.Button(new Rect(990f, 34f, 108f, 34f), "CLOSE"))
                 ClosePanel();
 
-            GUI.Box(new Rect(18f, 116f, 320f, 542f), "SKILLS");
-            GUI.Box(new Rect(348f, 116f, 754f, 542f), "TUNING");
+            // Tabs + search
+            float tx = 22f;
+            for (int i = 0; i < Tabs.Length; i++)
+            {
+                bool selectedTab = Tabs[i] == _selectedTab && string.IsNullOrEmpty(_search);
+                if (GUI.Button(new Rect(tx, 84f, 150f, 28f), Tabs[i], selectedTab ? _tabSelectedStyle : _tabStyle))
+                {
+                    _selectedTab = Tabs[i];
+                    _search = string.Empty;
+                    _sectionScroll = Vector2.zero;
+                    _settingScroll = Vector2.zero;
+                    RebuildSections();
+                }
+                tx += 156f;
+            }
+            GUI.Label(new Rect(812f, 88f, 60f, 22f), "Search", _smallStyle);
+            string nextSearch = GUI.TextField(new Rect(868f, 85f, 230f, 26f), _search ?? "");
+            if (nextSearch != _search)
+            {
+                _search = nextSearch;
+                _sectionScroll = Vector2.zero;
+                RebuildSections();
+            }
 
-            Rect sectionView = new Rect(30f, 145f, 296f, 500f);
-            Rect sectionContent = new Rect(0f, 0f, 270f, Mathf.Max(500f, _sections.Count * 34f + 8f));
+            GUI.Box(new Rect(18f, 122f, 300f, 562f), "SECTIONS");
+            GUI.Box(new Rect(328f, 122f, 774f, 562f), "");
+
+            Rect sectionView = new Rect(28f, 148f, 282f, 528f);
+            Rect sectionContent = new Rect(0f, 0f, 260f, Mathf.Max(520f, _sections.Count * 32f + 8f));
             _sectionScroll = GUI.BeginScrollView(sectionView, _sectionScroll, sectionContent);
             float sy = 4f;
             for (int i = 0; i < _sections.Count; i++)
             {
                 string section = _sections[i];
                 GUIStyle style = section == _selectedSection ? _selectedButtonStyle : _sectionButtonStyle;
-                if (GUI.Button(new Rect(4f, sy, 252f, 29f), FriendlySectionName(section), style))
+                if (GUI.Button(new Rect(4f, sy, 252f, 28f), FriendlySectionName(section), style))
                 {
                     _selectedSection = section;
                     EnsureSelectedSetting();
                     _settingScroll = Vector2.zero;
                 }
-                sy += 34f;
+                sy += 32f;
             }
             GUI.EndScrollView();
 
             DrawSettingsPanel();
-            GUI.DragWindow(new Rect(0f, 0f, _windowRect.width - 120f, 28f));
+            GUI.DragWindow(new Rect(0f, 0f, _windowRect.width, 24f));
         }
 
         private string FriendlySectionName(string section)
@@ -629,81 +769,233 @@ namespace DragonsAltarDevTools
         private void DrawSettingsPanel()
         {
             List<DevSetting> visible = new List<DevSetting>();
+            string search = (_search ?? "").Trim().ToLowerInvariant();
             for (int i = 0; i < _settings.Count; i++)
             {
-                if (_settings[i].Section == _selectedSection)
-                    visible.Add(_settings[i]);
+                DevSetting s = _settings[i];
+                if (s.Section != _selectedSection)
+                    continue;
+                if (search.Length > 0 && !s.Section.ToLowerInvariant().Contains(search) && !s.Key.ToLowerInvariant().Contains(search))
+                    continue;
+                visible.Add(s);
             }
 
-            GUI.Label(new Rect(368f, 143f, 700f, 26f), FriendlySectionName(_selectedSection), _titleStyle);
+            GUI.Label(new Rect(344f, 128f, 520f, 26f), FriendlySectionName(_selectedSection), _titleStyle);
+            if (visible.Count > 0 && GUI.Button(new Rect(918f, 130f, 170f, 26f), "SECTION DEFAULTS"))
+            {
+                for (int i = 0; i < visible.Count; i++)
+                    SetToDefault(visible[i]);
+                ShowStatus(FriendlySectionName(_selectedSection) + " reset to defaults");
+            }
+            bool nextPreview = GUI.Toggle(new Rect(344f, 156f, 330f, 20f), _preview, " Show range / radius preview in the world");
+            if (nextPreview != _preview)
+            {
+                _preview = nextPreview;
+                if (!_preview)
+                    ClearPreview();
+            }
 
-            DevSetting selected = FindSetting(_selectedSettingId);
-            string previewText = selected == null ? "No preview value selected" : "Preview: " + FriendlyKey(selected.Key) + " = " + FormatValue(GetNumericValue(selected));
-            GUI.Label(new Rect(368f, 171f, 700f, 20f), previewText, _smallStyle);
-
-            Rect view = new Rect(364f, 200f, 722f, 435f);
-            Rect content = new Rect(0f, 0f, 694f, Mathf.Max(430f, visible.Count * 62f + 8f));
+            Rect view = new Rect(338f, 182f, 756f, 494f);
+            float rowHeight = 58f;
+            float contentHeight = 8f;
+            for (int i = 0; i < visible.Count; i++)
+                contentHeight += visible[i].Key == "AscendedSkills" ? 118f : rowHeight;
+            Rect content = new Rect(0f, 0f, 730f, Mathf.Max(490f, contentHeight));
             _settingScroll = GUI.BeginScrollView(view, _settingScroll, content);
 
-            float y = 5f;
+            float y = 4f;
             for (int i = 0; i < visible.Count; i++)
             {
                 DevSetting setting = visible[i];
                 bool selectedRow = setting.Id == _selectedSettingId;
+                float h = setting.Key == "AscendedSkills" ? 114f : rowHeight - 4f;
                 if (selectedRow)
-                    GUI.Box(new Rect(0f, y - 3f, 676f, 56f), "");
+                    GUI.Box(new Rect(0f, y - 2f, 724f, h), "");
 
-                if (GUI.Button(new Rect(4f, y + 4f, 188f, 28f), FriendlyKey(setting.Key), selectedRow ? _selectedButtonStyle : _sectionButtonStyle))
+                if (GUI.Button(new Rect(4f, y + 3f, 210f, 28f), FriendlyKey(setting.Key), selectedRow ? _selectedButtonStyle : _sectionButtonStyle))
                     _selectedSettingId = setting.Id;
 
-                float current = GetNumericValue(setting);
-                float slider = GUI.HorizontalSlider(new Rect(205f, y + 12f, 285f, 20f), current, setting.SliderMin, setting.SliderMax);
-                float stepped = Mathf.Round(slider);
-                if (Mathf.Abs(slider - current) > 0.01f)
-                {
-                    SetNumericValue(setting, stepped);
-                    current = GetNumericValue(setting);
-                }
+                if (setting.IsNumber)
+                    DrawNumberRow(setting, y);
+                else if (setting.SettingType == typeof(bool))
+                    DrawBoolRow(setting, y);
+                else if (setting.SettingType == typeof(KeyCode))
+                    DrawKeyRow(setting, y);
+                else if (setting.SettingType.IsEnum)
+                    DrawEnumRow(setting, y);
+                else if (setting.Key == "AscendedSkills")
+                    DrawAscendedRow(setting, y);
+                else
+                    DrawStringRow(setting, y);
 
-                string buffer;
-                if (!_inputBuffers.TryGetValue(setting.Id, out buffer))
-                {
-                    buffer = FormatValue(current);
-                    _inputBuffers[setting.Id] = buffer;
-                }
+                if (GUI.Button(new Rect(640f, y + 3f, 78f, 28f), "Default"))
+                    SetToDefault(setting);
 
-                string next = GUI.TextField(new Rect(505f, y + 4f, 74f, 29f), buffer, _valueStyle);
-                if (next != buffer)
-                {
-                    _inputBuffers[setting.Id] = next;
-                    float parsed;
-                    if (float.TryParse(next, NumberStyles.Float, CultureInfo.InvariantCulture, out parsed))
-                        SetNumericValue(setting, parsed);
-                }
-
-                if (GUI.Button(new Rect(590f, y + 4f, 78f, 29f), "Default"))
-                    SetNumericValue(setting, GetDefaultNumericValue(setting));
-
-                GUI.Label(new Rect(205f, y + 33f, 455f, 18f), "Default " + FormatValue(GetDefaultNumericValue(setting)) + "   |   Slider " + FormatValue(setting.SliderMin) + "-" + FormatValue(setting.SliderMax), _smallStyle);
-                y += 62f;
+                if (setting.Key != "AscendedSkills")
+                    GUI.Label(new Rect(8f, y + 33f, 710f, 18f), DescriptionLine(setting), _descStyle);
+                y += setting.Key == "AscendedSkills" ? 118f : rowHeight;
             }
 
             GUI.EndScrollView();
         }
 
+        private string DescriptionLine(DevSetting setting)
+        {
+            string text = string.IsNullOrEmpty(setting.Description) ? "" : setting.Description;
+            string def;
+            try
+            {
+                def = setting.IsNumber ? FormatValue(GetDefaultNumericValue(setting)) : Convert.ToString(setting.Main.DefaultValue, CultureInfo.InvariantCulture);
+            }
+            catch
+            {
+                def = "?";
+            }
+            return "Default " + def + (text.Length > 0 ? "   |   " + text : "");
+        }
+
+        private void DrawNumberRow(DevSetting setting, float y)
+        {
+            float current = GetNumericValue(setting);
+            float slider = GUI.HorizontalSlider(new Rect(226f, y + 12f, 300f, 20f), Mathf.Clamp(current, setting.SliderMin, setting.SliderMax), setting.SliderMin, setting.SliderMax);
+            if (Mathf.Abs(slider - Mathf.Clamp(current, setting.SliderMin, setting.SliderMax)) > 0.01f)
+            {
+                float step = setting.SliderMax - setting.SliderMin <= 20f ? 0.1f : 1f;
+                SetNumericValue(setting, Mathf.Round(slider / step) * step);
+                current = GetNumericValue(setting);
+            }
+
+            string buffer;
+            if (!_inputBuffers.TryGetValue(setting.Id, out buffer))
+            {
+                buffer = FormatValue(current);
+                _inputBuffers[setting.Id] = buffer;
+            }
+
+            string next = GUI.TextField(new Rect(540f, y + 3f, 90f, 28f), buffer, _valueStyle);
+            if (next != buffer)
+            {
+                _inputBuffers[setting.Id] = next;
+                float parsed;
+                if (float.TryParse(next, NumberStyles.Float, CultureInfo.InvariantCulture, out parsed))
+                {
+                    if (setting.SettingType == typeof(int))
+                        SetValue(setting, Mathf.RoundToInt(parsed));
+                    else
+                        SetValue(setting, parsed);
+                    if (IsCooldownKey(setting.Key) && setting.Section != "Testing" && GetTestCooldowns())
+                    {
+                        SetTestCooldowns(false);
+                        ShowStatus("Test Cooldowns turned OFF so your cooldown values apply.");
+                    }
+                }
+            }
+        }
+
+        private void DrawBoolRow(DevSetting setting, float y)
+        {
+            bool value = false;
+            try
+            {
+                value = (bool)setting.Main.BoxedValue;
+            }
+            catch
+            {
+            }
+            if (GUI.Button(new Rect(226f, y + 3f, 120f, 28f), value ? "ON" : "OFF", value ? _onStyle : _offStyle))
+                SetValue(setting, !value);
+        }
+
+        private void DrawKeyRow(DevSetting setting, float y)
+        {
+            bool capturing = _captureSetting == setting;
+            string label = capturing ? "Press a key...  (Esc cancels)" : Convert.ToString(setting.Main.BoxedValue, CultureInfo.InvariantCulture);
+            if (GUI.Button(new Rect(226f, y + 3f, 300f, 28f), label, capturing ? _tabSelectedStyle : _tabStyle))
+            {
+                _captureSetting = setting;
+                _captureFrame = Time.frameCount;
+            }
+        }
+
+        private void DrawEnumRow(DevSetting setting, float y)
+        {
+            Array values = Enum.GetValues(setting.SettingType);
+            object current = setting.Main.BoxedValue;
+            int index = Array.IndexOf(values, current);
+            if (GUI.Button(new Rect(226f, y + 3f, 34f, 28f), "<"))
+                SetValue(setting, values.GetValue((index - 1 + values.Length) % values.Length));
+            GUI.Label(new Rect(266f, y + 7f, 220f, 22f), Convert.ToString(current, CultureInfo.InvariantCulture), _smallStyle);
+            if (GUI.Button(new Rect(492f, y + 3f, 34f, 28f), ">"))
+                SetValue(setting, values.GetValue((index + 1) % values.Length));
+        }
+
+        private void DrawStringRow(DevSetting setting, float y)
+        {
+            string current = Convert.ToString(setting.Main.BoxedValue, CultureInfo.InvariantCulture) ?? "";
+            string next = GUI.TextField(new Rect(226f, y + 3f, 404f, 28f), current);
+            if (next != current)
+                SetValue(setting, next);
+        }
+
+        // [Testing] AscendedSkills: one checkbox per Paladin skill instead of a comma list.
+        private void DrawAscendedRow(DevSetting setting, float y)
+        {
+            string current = Convert.ToString(setting.Main.BoxedValue, CultureInfo.InvariantCulture) ?? "";
+            List<string> list = new List<string>();
+            string[] parts = current.Split(',');
+            for (int i = 0; i < parts.Length; i++)
+            {
+                string part = parts[i].Trim();
+                if (part.Length > 0 && !list.Contains(part))
+                    list.Add(part);
+            }
+            GUI.Label(new Rect(226f, y + 7f, 400f, 22f), "Force these skills Ascended (testing):", _smallStyle);
+            bool changed = false;
+            for (int i = 0; i < AscendableSkills.Length; i++)
+            {
+                string skill = AscendableSkills[i];
+                float x = 8f + (i % 4) * 178f;
+                float row = y + 36f + (i / 4) * 30f;
+                bool on = list.Contains(skill);
+                bool next = GUI.Toggle(new Rect(x, row, 172f, 24f), on, " " + PrettySkill(skill));
+                if (next != on)
+                {
+                    if (next) list.Add(skill);
+                    else list.Remove(skill);
+                    changed = true;
+                }
+            }
+            if (changed)
+                SetValue(setting, string.Join(", ", list.ToArray()));
+        }
+
+        private static string PrettySkill(string id)
+        {
+            string[] words = id.Split('_');
+            for (int i = 0; i < words.Length; i++)
+            {
+                if (words[i].Length > 0)
+                    words[i] = char.ToUpperInvariant(words[i][0]) + words[i].Substring(1);
+            }
+            return string.Join(" ", words);
+        }
+
         private string FriendlyKey(string key)
         {
-            string text = key.Replace("_v0109", "");
-            text = text.Replace("Meters", "");
-            text = text.Replace("Seconds", "");
+            string text = key;
+            int v = text.LastIndexOf("_v0", StringComparison.Ordinal);
+            if (v > 0)
+                text = text.Substring(0, v);
+            text = text.Replace("Meters", "").Replace("Seconds", "");
             return text;
         }
 
+        // ------------------------------------------------------------------ world preview
         private void UpdateWorldPreview()
         {
             Player player = Player.m_localPlayer;
             DevSetting setting = FindSetting(_selectedSettingId);
-            if (player == null || setting == null)
+            if (player == null || setting == null || !setting.IsNumber)
             {
                 ClearPreview();
                 return;
@@ -760,10 +1052,10 @@ namespace DragonsAltarDevTools
                 for (int j = 0; j < _settings.Count; j++)
                 {
                     DevSetting setting = _settings[j];
-                    if (setting.Section != section)
+                    if (setting.Section != section || !setting.IsNumber)
                         continue;
                     string key = setting.Key.ToLowerInvariant();
-                    if (key == wanted.ToLowerInvariant() || key.StartsWith(wanted.ToLowerInvariant(), StringComparison.OrdinalIgnoreCase))
+                    if (key == wanted || key.StartsWith(wanted, StringComparison.OrdinalIgnoreCase))
                         return Mathf.Max(0f, GetNumericValue(setting));
                 }
             }
@@ -842,7 +1134,7 @@ namespace DragonsAltarDevTools
             int arcPoints = 25;
             line.loop = false;
             line.positionCount = arcPoints + 3;
-            float half = Mathf.Clamp(degrees * 0.5f, 0f, 89.5f);
+            float half = Mathf.Clamp(degrees * 0.5f, 0f, 179.5f);
             Vector3 left = Quaternion.Euler(0f, -half, 0f) * forward;
             line.SetPosition(0, GroundPoint(origin));
             line.SetPosition(1, GroundPoint(origin + left * range));

@@ -1,6 +1,14 @@
-Immortal Heroes v0.17.2 - Test focus (Paladin)
+Immortal Heroes v0.18.0 - Test focus (Paladin progression)
 
-1. Judgement Hammer (normal): starts Greydwarf Brute size, grows in small steps, ~7-8m tall and ~2m wide at 20m.
-2. Judgement Hammer (Ascended, [Testing] AscendedSkills = judgement_hammer): keeps growing on the way back,
-   never past 10m tall x 3m wide.
-3. Check the hammer no longer clips deep into the ground and its hits match its visible size.
+Every character starts at Lv 1. To test a Paladin, type in chat:
+  /ih level 50          (or any level)
+  /ih info              (level, points, tiers)
+
+1. Skill Tree (K): stars + count under each skill, TIER POINTS in the headers, locked skills dimmed with a padlock.
+2. Select a skill, press + / -, then CONFIRM. Reopen the tree and relog: Tiers stay.
+3. Hover any skill: full tooltip (damage goes up 10% per Tier).
+4. Lv gates: /ih level 20 -> Shield Charge locked (Lv24); /ih level 24 -> still locked until 3 points are spent.
+5. Ascend: /ih ascend "Goddess Relic" (needs Lv32 + Tier 5). Tooltip header changes to ASCENDED.
+6. /ih level 10 -> Advancement annulled (Class tree unlocks again).
+7. F8 Config window: change a value, close, open the .cfg: it is saved. Try the Keys tab (click, press a key).
+Not in this build yet: tree hotbar casting, Heaven's Light Grace, Advance/Ascend buttons in the tree.

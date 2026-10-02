@@ -181,7 +181,7 @@ namespace AlbedosCustomClassesSkills
         public static SkillsPlugin Instance;
         public const string ModGuid = "albedo.customclasses.skills";
         public const string ModName = "Dragon's Altar - Starter Skills";
-        public const string ModVersion = "0.17.2";
+        public const string ModVersion = "0.18.0";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";
@@ -754,7 +754,8 @@ namespace AlbedosCustomClassesSkills
                 StartCoroutine(AnimateRing(caster.transform.position + Vector3.up * 0.16f, 0.4f, Mathf.Max(1f, _holyRadius.Value) * 0.72f, 0.60f, new Color(0.75f, 0.95f, 1f, 0.85f), 0.045f, 0.08f));
             }
 
-            HealPlayers(caster.transform.position, _holyRadius.Value, _holyImmediate.Value);
+            float holyPower = DragonCombat.GetSkillPower(caster, "holy_wave");
+            HealPlayers(caster.transform.position, _holyRadius.Value, _holyImmediate.Value * holyPower);
 
             int ticks = Mathf.Max(1, Mathf.RoundToInt(Mathf.Max(1f, _holyDuration.Value)));
             for (int i = 0; i < ticks; i++)
@@ -768,7 +769,7 @@ namespace AlbedosCustomClassesSkills
                     if (ally == null || healed.Contains(ally))
                         continue;
                     healed.Add(ally);
-                    Heal(ally, ally.GetMaxHealth() * Mathf.Max(0f, _holyPercent.Value) / 100f);
+                    Heal(ally, ally.GetMaxHealth() * Mathf.Max(0f, _holyPercent.Value) / 100f * holyPower);
                 }
             }
         }
@@ -1099,6 +1100,11 @@ namespace AlbedosCustomClassesSkills
         private void DealDamage(Player attacker, Character target, DamageConfig cfg, float push)
         {
             float magic = DragonCombat.GetSorcererMagicDamageMultiplier(attacker);
+            // v0.18.0: Tier power for the Cleric Class skills.
+            if (cfg == _zapDamage)
+                magic *= DragonCombat.GetSkillPower(attacker, "lightning_zap");
+            else if (cfg == _righteousDamage)
+                magic *= DragonCombat.GetSkillPower(attacker, "righteous_strike");
             HitData hit = new HitData();
             hit.m_damage.m_blunt = cfg.Blunt.Value * magic;
             hit.m_damage.m_slash = cfg.Slash.Value * magic;

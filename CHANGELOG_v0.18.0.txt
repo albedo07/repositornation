@@ -1,0 +1,31 @@
+Immortal Heroes v0.18.0 - Paladin Progression (part 1)
+
+Progression (saved per character)
+- Level (1-80), Class Tier Points (+2 every 2 levels, Lv4-16 = 14) and Advancement Tier Points
+  (+1 every 2 levels, Lv18-56 = 20, only after Advancing).
+- Each Tier = +10% damage and healing for that skill ([Progression] TierPowerPercent).
+- Skills start at Tier 0 and are usable at Tier 0. Ultimate Tiers rise on their own at Lv40/44/48.
+- Unlock gates: Signatures at Advancement, Shield Charge Lv24 + 3 points spent,
+  Fallen Angel / Ray of Hope Lv32 + 6 points spent, Electric Smite Lv36. Locked skills can't be cast.
+- Class tree locks after Advancement. Righteous Strike becomes Ascended when you Advance to Paladin.
+- Ascensions: Lv32 one Signature (Tier 5), Lv42 one other Paladin skill (Tier 5), Lv50 Ultimate (Tier 3).
+- Dropping below Lv16/32/42/50 annuls Advancement / Ascensions; over-spent pools reset.
+
+/ih command (chat "/ih ..." or F5 console "ih ..."; admins only on servers)
+- level N | level +N | level -N, classtierpoints N, actierpoints N, resetskill all|<skill>,
+  class <Warrior|Cleric|Sorcerer>, advance Paladin, ascend <skill>, info, help.
+
+Skill Tree
+- Real Tiers: stars + count under every skill (gold = saved, cyan = pending), - / + beside the stars,
+  CONFIRM saves to the character. Header shows TIER POINTS left (Class panel LOCKED after Advancement).
+- Locked skills: dimmed + padlock + requirement.
+- Full tooltips: description, Tier bonus, damage (with Tier bonus), area, effects, cooldown, cost.
+- Art: Righteous Strike is the Ascended (Magenta) Class skill, Lightning Zap is Cyan;
+  before Advancement all Class skills are Cyan.
+- Hotbar: locked skills leave it, unlocked permanent skills are always on it.
+
+Config window (F8)
+- Every setting of every module: numbers, ON/OFF toggles, text, keys (click + press), choices.
+- Tabs (Paladin & Cleric / Other Skills / Testing / Keys & Hotbar / General) + search.
+- Auto-saves to the .cfg files. SAVE, RELOAD .CFG, SECTION DEFAULTS, TEST COOLDOWNS ON/OFF.
+- [Testing] AscendedSkills is a checkbox list.
