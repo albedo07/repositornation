@@ -1,0 +1,27 @@
+Immortal Heroes v0.18.1 - Functional Skill Tree (Paladin)
+
+Hotbar
+- Cleric (before Advancement) and Paladin now cast from the Skill Tree hotbar: each numbered slot
+  casts the skill placed there in the tree, using the key you bound under it (default M4 + 1..7).
+- Grace slot: M4 + R casts Heaven's Light.
+- The old fixed [Hotkeys] no longer cast Cleric / Paladin skills (other classes unchanged).
+- New in-game HUD for Cleric / Paladin: the same icons and order as the tree hotbar,
+  key under each slot, cooldown on the icon, Grace slot on the right, level in the title.
+- Before Advancement the bar starts with Lightning Zap, Righteous Strike, Holy Wave.
+
+Heaven's Light (Grace) - now a real skill
+- You and players within 10m: +40% Overall Defense and no equipment movement penalties for 60s.
+- 10 min cooldown, free, 0.5s instant cast. Re-casting refreshes, never stacks. [Paladin Heavens Light]
+
+Advance / Ascend from the tree
+- Before Advancement the Paladin panel shows an ADVANCE TO PALADIN plaque with the checklist:
+  Lv 16, Righteous Strike Tier 7, all 14 Class Tier Points spent.
+- The Altar now refuses Paladin until the same requirements are met (and says what is missing).
+- Select an eligible skill: an ASCEND plaque appears where CONFIRM goes (click twice to confirm).
+  Tooltips say when each skill can Ascend.
+
+Polish
+- Tier stars are centered under the nameplate; the n/max count sits to their right.
+- Tooltip keywords are colored like vanilla: numbers in orange, damage types by element
+  (Fire, Frost, Lightning, Poison, Spirit, physical), effects (Expose, Cripple, Stun, Zap,
+  Judgement Mark...) in violet, buffs / HP in green, Stamina in yellow.

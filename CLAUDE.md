@@ -3,7 +3,7 @@
 ## Working rules
 - User wants short responses and real execution, not long explanations.
 - **RUSH B** = immediately code the obvious requested task, minimal commentary, use latest approved build as baseline, don't redesign unrelated things, verify and package.
-- Latest package: **v0.18.0 — Paladin Progression part 1** (v0.17.2 Hammer Size, v0.17.1 Paladin Tweaks, v0.17.0 Paladin Rework). Do NOT change combat/progression logic unless explicitly requested.
+- Latest package: **v0.18.1 — Functional Skill Tree** (v0.18.0 Paladin Progression, v0.17.2 Hammer Size, v0.17.1 Paladin Tweaks). Do NOT change combat/progression logic unless explicitly requested.
 - Never patch visual problems by drawing random rectangles over the reference asset. Keep approved artwork intact; make layout/components fit properly.
 
 ## Framework doc (source of truth for design)
@@ -41,7 +41,8 @@
 - Righteous Strike is Ascended automatically for an advanced Paladin. `[Testing] AscendedSkills` and `[Testing] UnlockAllSkills` still exist for testing.
 - `/ih` registered as a Terminal.ConsoleCommand (chat `/ih ...`, F5 `ih ...`); only the local player for now (other players need server sync).
 - Backdrops: `Cleric_Paladin_Reference.png` (advanced: RS Magenta + badge, LZ Cyan) and `Cleric_Paladin_PreAdvance.png` (all Class skills Cyan); header subtitle text removed from both (code draws it).
-- Next (v0.18.1): tree hotbar casts skills with the rebinds (Paladin only), Heaven's Light Grace on M4+R, Advance/Ascend from the tree (+ Advancement prerequisites at the Altar), B1 sealed AC panel art.
+- v0.18.1 done: Cleric (pre-Advancement) + Paladin cast from the tree hotbar (`[Hotbar]` bindings; `DragonCombat.TreeHotbarProvider`, Skills.cs skips its fixed keys, `SkillsPlugin.CastFromHotbar`), new HUD mirrors the tree hotbar, Heaven's Light Grace (`[Paladin Heavens Light]`, `DragonCombat.GrantNoEquipmentPenalty`), ADVANCE plaque + checklist in the sealed Paladin panel, Altar Paladin advancement patched to require Lv16 + RS T7 + 14 spent, ASCEND plaque (double click) in the footer, colored tooltip keywords (vanilla-like).
+- Still open: B1 sealed-panel art, Grace slot locked look before Advancement, DoT Tier scaling, other ACs.
 - Only Paladin moves to the tree hotbar; other ACs stay on fixed `[Hotkeys]` until Paladin is finished, then copy it (universal tree).
 - F8 Config window (DevTools, rewritten v0.18.0): every setting of every module (float/int/bool/string/KeyCode/enum), tabs + search, auto-saves to the .cfg, same Section/Key across modules edited together, Test Cooldowns toggle.
 

@@ -388,6 +388,8 @@ def main():
     recolor_icon("Icon_righteous_strike.png", "Icon_righteous_strike.png", 160, 215, 305)
     recolor_icon("Icon_lightning_zap.png", "Icon_lightning_zap.png", 280, 345, 186)
     tier_assets()
+    # v0.18.1: Grace slot icon for the in-game hotbar HUD (cut from the footer Grace box).
+    advanced.crop((662, 542, 721, 599)).save(os.path.join(OUT, "Icon_heavens_light.png"))
     rounded_button(16, "+").save(os.path.join(OUT, "Tier_Plus.png"))
     rounded_button(16, "-").save(os.path.join(OUT, "Tier_Minus.png"))
     confirm_plaque(160, 42).save(os.path.join(OUT, "Confirm_Plaque.png"))

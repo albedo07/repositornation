@@ -181,7 +181,7 @@ namespace AlbedosCustomClassesSkills
         public static SkillsPlugin Instance;
         public const string ModGuid = "albedo.customclasses.skills";
         public const string ModName = "Dragon's Altar - Starter Skills";
-        public const string ModVersion = "0.18.0";
+        public const string ModVersion = "0.18.1";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";
@@ -493,6 +493,10 @@ namespace AlbedosCustomClassesSkills
             if (selectedClass == "Sorcerer")
                 DragonCombat.ApplyTimedBuff(player, "Sorcerer.ArcaneBlood", 0.35f, 0f, 0f, 0f, 0f, 0f, Mathf.Max(0f, _sorcererEitrRegenBonus.Value) / 100f, false);
 
+            // v0.18.1: Cleric (Paladin tree) skills are cast from the Skill Tree hotbar instead.
+            if (DragonCombat.IsTreeHotbarActive(player))
+                return;
+
             if (!Input.GetKey(_modifier.Value))
                 return;
 
@@ -668,6 +672,19 @@ namespace AlbedosCustomClassesSkills
 
             if (_enableVfx.Value)
                 StartCoroutine(AnimateRing(player.transform.position + forward * range + Vector3.up * 0.08f, 0.2f, width, 0.24f, new Color(1f, 0.78f, 0.30f, 0.92f), 0.09f, 0f));
+        }
+
+        // v0.18.1: entry point for the Skill Tree hotbar (Advanced module).
+        public void CastFromHotbar(Player player, string skillId)
+        {
+            if (player == null || player.IsDead())
+                return;
+            if (skillId == "lightning_zap")
+                CastLightningZap(player);
+            else if (skillId == "righteous_strike")
+                CastRighteousStrike(player);
+            else if (skillId == "holy_wave")
+                CastHolyWave(player);
         }
 
         private void CastLightningZap(Player player)

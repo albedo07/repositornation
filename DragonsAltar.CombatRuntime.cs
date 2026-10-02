@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.18.0";
+        public const string ModVersion = "0.18.1";
 
         internal static DragonCombatPlugin Instance;
 
@@ -798,10 +798,10 @@ namespace DragonsAltarCombat
 
         private static void EquipmentMovementPostfix(Player __instance, ref float __result)
         {
-            // v0.12.3: Cleric's two Weapon Mastery Blessings are Shield Weapon Mastery
-            // and Divine Duality. The old blanket equipment movement-penalty removal
-            // is intentionally retired rather than kept as a hidden third blessing.
-            return;
+            // v0.12.3: the old blanket Cleric removal stays retired.
+            // v0.18.1: Heaven's Light (Grace) removes equipment movement penalties while active.
+            if (__result < 0f && DragonCombat.HasNoEquipmentPenalty(__instance))
+                __result = 0f;
         }
 
         private static void EquipItemPrefix(Humanoid __instance, object[] __args, ref EquipPatchState __state)
@@ -1309,6 +1309,40 @@ namespace DragonsAltarCombat
             {
                 return 1f;
             }
+        }
+
+        // v0.18.1: the Immortal Heroes Skill Tree hotbar owns skill input for this player
+        // (Cleric -> Paladin first). Class skill modules skip their fixed hotkeys when true.
+        public static Func<Player, bool> TreeHotbarProvider;
+
+        public static bool IsTreeHotbarActive(Player player)
+        {
+            if (TreeHotbarProvider == null || player == null)
+                return false;
+            try
+            {
+                return TreeHotbarProvider(player);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        // v0.18.1: timed removal of equipment movement penalties (Heaven's Light Grace).
+        private static readonly Dictionary<int, float> NoEquipmentPenaltyUntil = new Dictionary<int, float>();
+
+        public static void GrantNoEquipmentPenalty(Player player, float seconds)
+        {
+            if (player == null)
+                return;
+            NoEquipmentPenaltyUntil[player.GetInstanceID()] = Time.time + Mathf.Max(0.1f, seconds);
+        }
+
+        public static bool HasNoEquipmentPenalty(Player player)
+        {
+            float until;
+            return player != null && NoEquipmentPenaltyUntil.TryGetValue(player.GetInstanceID(), out until) && Time.time < until;
         }
 
         public static void SetUiInputBlocked(bool blocked)

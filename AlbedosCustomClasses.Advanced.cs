@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.18.0";
+        public const string ModVersion = "0.18.1";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1046,6 +1046,7 @@ namespace AlbedosCustomClassesAdvanced
             MigrateFloat(_grandRadius, 10f, 5f);
 
             BindImmortalProgression();
+            BindTreeHotbar();
             TryInstallPatches();
 
             Logger.LogInfo(ModName + " v" + ModVersion + " loaded.");
@@ -1138,6 +1139,13 @@ namespace AlbedosCustomClassesAdvanced
 
             if (_skillbookOpen)
                 return;
+
+            // v0.18.1: Cleric / Paladin cast from the Skill Tree hotbar (bindings from [Hotbar]).
+            if (IhUsesTreeHotbar(player))
+            {
+                HandleTreeHotbarInput(player);
+                return;
+            }
 
             if (!Input.GetKey(_modifier.Value))
                 return;
@@ -6133,6 +6141,7 @@ namespace AlbedosCustomClassesAdvanced
             count += PatchDamageMethods();
             count += PatchLightningZapContext();
             count += PatchRighteousStrikeAscended();
+            count += PatchAltarAdvancement();
 
             Logger.LogInfo("Advanced passive hooks installed: " + count);
         }
@@ -6489,6 +6498,45 @@ namespace AlbedosCustomClassesAdvanced
                 Logger.LogWarning("Could not patch Righteous Strike (Ascended): " + ex.Message);
                 return 0;
             }
+        }
+
+        // v0.18.1: the Altar only lets a Cleric Advance to Paladin once the requirements are met.
+        private int PatchAltarAdvancement()
+        {
+            try
+            {
+                MethodInfo method = typeof(Plugin).GetMethod("ApplyAdvancementSelection", BindingFlags.Instance | BindingFlags.NonPublic);
+                MethodInfo prefixMethod = typeof(AdvancedPlugin).GetMethod("AltarAdvancementPrefix", BindingFlags.Static | BindingFlags.NonPublic);
+                if (method == null || prefixMethod == null)
+                    return 0;
+                PatchWithHarmony(method, new HarmonyMethod(prefixMethod), null);
+                return 1;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning("Could not patch Altar Advancement: " + ex.Message);
+                return 0;
+            }
+        }
+
+        private static bool AltarAdvancementPrefix(object[] __args)
+        {
+            if (Instance == null || __args == null || __args.Length < 1 || (__args[0] as string) != "Paladin")
+                return true;
+            Player player = Player.m_localPlayer;
+            if (player == null || !string.IsNullOrEmpty(Instance.GetAdvancement(player)))
+                return true;
+            List<string> lines = new List<string>();
+            if (Instance.IhAdvanceChecklist(player, lines))
+                return true;
+            List<string> missing = new List<string>();
+            for (int i = 0; i < lines.Count; i++)
+            {
+                if (lines[i].StartsWith("-"))
+                    missing.Add(lines[i].Substring(2));
+            }
+            Instance.ShowMessage("Not ready to Advance: " + string.Join(", ", missing.ToArray()));
+            return false;
         }
 
         // An Ascended Paladin's Righteous Strike is handled here; the Cleric version is skipped.
@@ -7557,6 +7605,12 @@ namespace AlbedosCustomClassesAdvanced
 
         private bool IhTryAscend(Player player, string id, out string message)
         {
+            return IhCheckAscend(player, id, true, out message);
+        }
+
+        // apply = false only checks the requirements (used by the tree's ASCEND button).
+        private bool IhCheckAscend(Player player, string id, bool apply, out string message)
+        {
             message = "";
             int level = IhGetLevel(player);
             HashSet<string> set = new HashSet<string>(IhAscendedSet(player));
@@ -7599,6 +7653,13 @@ namespace AlbedosCustomClassesAdvanced
                 message = "Requires " + IhSkillName(id) + " at Tier " + needTier.ToString() + ".";
                 return false;
             }
+            if (set.Contains(id))
+            {
+                message = IhSkillName(id) + " is already Ascended.";
+                return false;
+            }
+            if (!apply)
+                return true;
             set.Add(id);
             IhSetAscended(player, set);
             _hotbarLayoutOwnerKey = "";
@@ -7911,7 +7972,7 @@ namespace AlbedosCustomClassesAdvanced
 
         private string IhLine(string label, string value)
         {
-            return "<color=" + IhHex(0.93f, 0.76f, 0.40f) + "><b>" + label + "</b></color>  " + value + "\n";
+            return "<color=" + IhHex(0.93f, 0.76f, 0.40f) + "><b>" + label + "</b></color>  " + IhColorize(value) + "\n";
         }
 
         private static string IhDamage(float blunt, float slash, float pierce, float fire, float frost, float lightning, float poison, float spirit, float power)
@@ -8100,11 +8161,15 @@ namespace AlbedosCustomClassesAdvanced
                     b.Append(IhCost(_divineCooldown.Value, _divineStamina.Value, "~" + IhNum(_divineWindup.Value) + "s leap"));
                     break;
                 case "heavens_light":
-                    b.Append(IhLine("Grace", "players within 10m: +40% Overall Defense, no equipment movement penalties, 1 min"));
-                    b.Append(IhLine("Cooldown", "10 min  ·  free  ·  " + FormatHotbarBinding(BindGrace)));
-                    b.Append("<color=" + IhHex(1f, 0.70f, 0.40f) + ">Castable from the Grace slot in the next build.</color>\n");
+                    b.Append(IhLine("Grace", "you and players within " + IhNum(_graceLightRadius.Value) + "m: +" + IhNum(_graceLightDefense.Value) + "% Overall Defense, no equipment movement penalties for " + IhNum(_graceLightDuration.Value) + "s"));
+                    b.Append(IhLine("Cooldown", IhNum(_graceLightCooldown.Value / 60f) + " min  ·  free  ·  " + FormatHotbarBinding(BindGrace)));
+
                     break;
             }
+
+            string rule = IhAscensionRule(id);
+            if (rule.Length > 0 && !ascended)
+                b.Append("<color=" + IhHex(0.92f, 0.55f, 0.95f) + ">" + rule + "</color>\n");
 
             string slot;
             if (node.Kind == TreeNodeKind.Grace)
@@ -8219,7 +8284,7 @@ namespace AlbedosCustomClassesAdvanced
             const float gap = 2f;
             float countWidth = 24f;
             float total = maxTier * size + (maxTier - 1) * gap;
-            float x0 = anchor.x - (total + 3f + countWidth) * 0.5f;
+            float x0 = anchor.x - total * 0.5f;
             float y = anchor.y + 3f;
             for (int i = 0; i < maxTier; i++)
             {
@@ -8260,6 +8325,352 @@ namespace AlbedosCustomClassesAdvanced
                 shortReason = "Advance at Lv 16";
             GUI.Label(ScaleReferenceRect(anchor.x - 70f, anchor.y + 2f, 140f, 14f),
                 "<color=" + IhHex(0.36f, 0.26f, 0.18f) + ">" + shortReason + "</color>", _ihLockTextStyle);
+        }
+
+        // =====================================================================================
+        // v0.18.1 Functional Skill Tree hotbar (Cleric -> Paladin): the 7 numbered slots cast
+        // whatever the tree layout holds with the [Hotbar] bindings, the Grace slot casts
+        // Heaven's Light, Advance / Ascend happen from the tree.
+        // =====================================================================================
+        private ConfigEntry<float> _graceLightCooldown;
+        private ConfigEntry<float> _graceLightDuration;
+        private ConfigEntry<float> _graceLightRadius;
+        private ConfigEntry<float> _graceLightDefense;
+        private Texture2D _ihGraceIconTex;
+        private float _ihAscendArmedUntil;
+        private string _ihAscendArmedSkill = "";
+        private static System.Text.RegularExpressions.Regex _ihKeywordRegex;
+
+        private void BindTreeHotbar()
+        {
+            _graceLightCooldown = Config.Bind("Paladin Heavens Light", "Cooldown", 600f, "Grace cooldown in seconds (10 min).");
+            _graceLightDuration = Config.Bind("Paladin Heavens Light", "Duration", 60f, "Buff duration in seconds.");
+            _graceLightRadius = Config.Bind("Paladin Heavens Light", "Radius", 10f, "Players within this radius when cast get the buff (snapshot).");
+            _graceLightDefense = Config.Bind("Paladin Heavens Light", "OverallDefensePercent", 40f, "Overall Defense bonus (less damage taken).");
+            DragonCombat.TreeHotbarProvider = IhUsesTreeHotbar;
+        }
+
+        // Cleric before Advancement and Cleric -> Paladin use the Skill Tree hotbar.
+        private bool IhUsesTreeHotbar(Player player)
+        {
+            if (player == null || GetClass(player) != "Cleric")
+                return false;
+            string advancement = GetAdvancement(player);
+            return string.IsNullOrEmpty(advancement) || advancement == "Paladin";
+        }
+
+        private bool IhBindingPressed(int index)
+        {
+            KeyCode key = _hotbarSlotKeys[index].Value;
+            KeyCode mod = _hotbarSlotMods[index].Value;
+            if (key == KeyCode.None || !Input.GetKeyDown(key))
+                return false;
+            return mod == KeyCode.None || Input.GetKey(mod);
+        }
+
+        private void HandleTreeHotbarInput(Player player)
+        {
+            if (Plugin.IsClassPanelOpen || DragonCombat.IsGameplayHudSuppressed())
+                return;
+            string[] layout = GetHotbarLayout();
+            for (int i = 0; i < layout.Length && i < BindGrace; i++)
+            {
+                if (!string.IsNullOrEmpty(layout[i]) && IhBindingPressed(i))
+                {
+                    IhCastSkill(player, layout[i]);
+                    return;
+                }
+            }
+            if (IhBindingPressed(BindGrace))
+                IhCastSkill(player, IhGrace);
+        }
+
+        private void IhCastSkill(Player player, string id)
+        {
+            if (player == null || player.IsDead() || !IhCanCast(player, id))
+                return;
+            switch (id)
+            {
+                case "lightning_zap":
+                case "righteous_strike":
+                case "holy_wave":
+                    if (SkillsPlugin.Instance != null)
+                        SkillsPlugin.Instance.CastFromHotbar(player, id);
+                    break;
+                case "goddess_relic": CastGoddessRelic(player); break;
+                case "judgement_hammer": CastJudgementHammer(player); break;
+                case "shield_charge":
+                    if (!_shieldChargeActive)
+                        CastShieldCharge(player);
+                    break;
+                case "fallen_angel": CastFallenAngel(player); break;
+                case "ray_of_hope": CastRayOfHope(player); break;
+                case "electric_smite": CastElectricSmite(player); break;
+                case "heavens_light": CastHeavensLight(player); break;
+            }
+        }
+
+        // GRACE - Heaven's Light: 10m snapshot, +40% Overall Defense, no equipment movement
+        // penalties, 1 minute, 10 minute cooldown, free. Re-casting refreshes (never stacks).
+        private void CastHeavensLight(Player player)
+        {
+            const string id = "Paladin.HeavensLight";
+            if (!BeginCast(player, id, _graceLightCooldown.Value, 0f))
+                return;
+            DragonCombat.LockSkill(player, 0.5f);
+            DragonCombat.PlaySkillPose(player, "Chant", 0.50f);
+            ShowMessage("Heaven's Light");
+
+            float radius = Mathf.Max(1f, _graceLightRadius.Value);
+            float duration = Mathf.Max(1f, _graceLightDuration.Value);
+            Collider[] hits = Physics.OverlapSphere(player.transform.position, radius);
+            HashSet<Player> allies = new HashSet<Player>();
+            allies.Add(player);
+            for (int i = 0; i < hits.Length; i++)
+            {
+                Player ally = hits[i].GetComponentInParent<Player>();
+                if (ally != null)
+                    allies.Add(ally);
+            }
+            foreach (Player ally in allies)
+            {
+                DragonCombat.ApplyTimedBuff(ally, "Paladin.HeavensLight", duration, 0f, 0f, 0f, Mathf.Max(0f, _graceLightDefense.Value) / 100f, 0f, 0f, false);
+                DragonCombat.GrantNoEquipmentPenalty(ally, duration);
+            }
+            if (_enableVfx.Value)
+            {
+                StartCoroutine(AnimateRing(player.transform.position + Vector3.up * 0.10f, 0.6f, radius, 0.9f, new Color(1f, 0.86f, 0.42f, 0.95f), 0.10f));
+                StartCoroutine(AnimateRing(player.transform.position + Vector3.up * 0.16f, 0.4f, radius * 0.6f, 0.7f, new Color(1f, 0.97f, 0.80f, 0.85f), 0.05f));
+            }
+        }
+
+        private float IhCooldown(Player player, string id)
+        {
+            SkillsPlugin skills = SkillsPlugin.Instance;
+            switch (id)
+            {
+                case "lightning_zap": return skills == null ? 0f : skills.GetCooldownForUi("Cleric.LightningZap");
+                case "righteous_strike":
+                    return IsAscendedSkill(id) ? GetCooldownRemaining("Paladin.AscendedRighteousStrike") : (skills == null ? 0f : skills.GetCooldownForUi("Cleric.RighteousStrike"));
+                case "holy_wave": return skills == null ? 0f : skills.GetCooldownForUi("Cleric.HolyWave");
+                case "goddess_relic": return GetCooldownRemaining("Paladin.GoddessRelic");
+                case "judgement_hammer": return GetCooldownRemaining("Paladin.JudgementHammer");
+                case "shield_charge": return GetCooldownRemaining("Paladin.ShieldCharge");
+                case "fallen_angel": return GetCooldownRemaining("Paladin.FallenAngel");
+                case "ray_of_hope": return GetCooldownRemaining("Paladin.RayOfHope");
+                case "electric_smite": return GetCooldownRemaining("Paladin.ElectricSmite");
+                case "heavens_light": return GetCooldownRemaining("Paladin.HeavensLight");
+            }
+            return 0f;
+        }
+
+        // In-game HUD for the tree hotbar: same icons, layout and bindings as the Skill Tree.
+        private void DrawTreeHotbarHud(Player player)
+        {
+            if (!EnsureReferenceBackdropLoaded())
+                return;
+            string[] layout = GetHotbarLayout();
+            float scale = Mathf.Clamp(_hudScale.Value, 0.65f, 1.45f);
+            float size = 50f * scale;
+            float gap = 6f * scale;
+            float graceGap = 16f * scale;
+            float totalWidth = size * 7f + gap * 6f + graceGap + size * 1.08f;
+            float x = (Screen.width - totalWidth) * 0.5f;
+            float reserve = Mathf.Clamp(_hudBottomOffset.Value, 70f, 260f) * scale;
+            float y = Screen.height - reserve - size;
+
+            string title = GetClass(player) + (string.IsNullOrEmpty(GetAdvancement(player)) ? "" : "  >  " + GetAdvancement(player)) + "   Lv " + IhGetLevel(player).ToString();
+            _titleStyle.normal.textColor = new Color(0.60f, 0.88f, 1f, 1f);
+            GUI.Label(new Rect(x, y - 22f * scale, totalWidth, 18f * scale), title.ToUpper(), _titleStyle);
+
+            for (int i = 0; i < 7; i++)
+            {
+                Rect rect = new Rect(x + i * (size + gap), y, size, size * 1.1f);
+                DrawHudTreeSlot(player, rect, i < layout.Length ? layout[i] : "", i, scale);
+            }
+            Rect grace = new Rect(x + 7f * (size + gap) - gap + graceGap, y - size * 0.04f, size * 1.08f, size * 1.18f);
+            DrawHudTreeSlot(player, grace, IhIsUnlocked(player, IhGrace) ? IhGrace : "", BindGrace, scale);
+        }
+
+        private void DrawHudTreeSlot(Player player, Rect rect, string id, int binding, float scale)
+        {
+            Texture2D tex = string.IsNullOrEmpty(id) ? _treeSlotEmptyTex : (id == IhGrace ? _ihGraceIconTex : GetSkillIconTex(id));
+            if (tex == null)
+                tex = _treeSlotEmptyTex;
+            if (tex != null)
+                GUI.DrawTexture(rect, tex);
+            if (!string.IsNullOrEmpty(id))
+            {
+                if (IsPermanentHotbarSkill(id))
+                    DrawPermanentBadge(rect);
+                float cooldown = IhCooldown(player, id);
+                if (cooldown > 0.05f)
+                {
+                    Rect inner = new Rect(rect.x + rect.width * 0.14f, rect.y + rect.height * 0.14f, rect.width * 0.72f, rect.height * 0.72f);
+                    GUI.color = new Color(0f, 0f, 0f, 0.62f);
+                    GUI.DrawTexture(inner, Texture2D.whiteTexture);
+                    GUI.color = Color.white;
+                    GUI.Label(inner, cooldown >= 60f ? Mathf.CeilToInt(cooldown / 60f).ToString() + "m" : cooldown.ToString(cooldown >= 10f ? "0" : "0.0"), _hudCooldownStyle);
+                }
+            }
+            GUI.Label(new Rect(rect.x - 10f, rect.yMax - 1f, rect.width + 20f, 16f * scale), FormatHotbarBinding(binding), _hudKeyStyle);
+        }
+
+        // ------------------------------------------------------------------ Advance / Ascend
+        private bool IhAdvanceChecklist(Player player, List<string> lines)
+        {
+            int level = IhGetLevel(player);
+            int rsTier = IhGetTier(player, IhAscendedClassSkill);
+            int spent = IhSpent(player, IhClassSkills);
+            bool lv = level >= 16;
+            bool rs = rsTier >= 7;
+            bool pts = spent >= 14;
+            lines.Add((lv ? "+ " : "- ") + "Lv 16  (" + level.ToString() + ")");
+            lines.Add((rs ? "+ " : "- ") + "Righteous Strike Tier 7  (" + rsTier.ToString() + "/7)");
+            lines.Add((pts ? "+ " : "- ") + "14 Class Tier Points spent  (" + spent.ToString() + "/14)");
+            return lv && rs && pts;
+        }
+
+        private void IhAdvanceToPaladin(Player player)
+        {
+            List<string> lines = new List<string>();
+            if (!IhAdvanceChecklist(player, lines))
+            {
+                ShowMessage("Not ready to Advance yet.");
+                return;
+            }
+            IhWrite(player, AdvancementDataKey, "Paladin");
+            _treePrototypePending.Clear();
+            _treeSelectedNodeId = "";
+            _hotbarLayoutOwnerKey = "";
+            ShowMessage("Advanced to Paladin! Righteous Strike has Ascended.");
+        }
+
+        // Advance plaque inside the sealed Paladin panel (before Advancement).
+        private void IhDrawAdvancePanel(Player player)
+        {
+            if (player == null || GetClass(player) != "Cleric" || !string.IsNullOrEmpty(GetAdvancement(player)))
+                return;
+            IhEnsureTreeStyles();
+            List<string> lines = new List<string>();
+            bool ready = IhAdvanceChecklist(player, lines);
+            Rect plaque = ScaleReferenceRect(500f, 408f, 160f, 42f);
+            bool hover = plaque.Contains(Event.current.mousePosition);
+            if (_treeConfirmPlaqueTex != null)
+            {
+                GUI.color = ready ? (hover ? Color.white : new Color(0.92f, 0.92f, 0.92f, 1f)) : new Color(0.55f, 0.55f, 0.55f, 1f);
+                GUI.DrawTexture(plaque, _treeConfirmPlaqueTex);
+                GUI.color = Color.white;
+            }
+            DrawFooterText(new Rect(plaque.x, plaque.y + plaque.height * 0.10f, plaque.width, plaque.height * 0.50f), "ADVANCE", hover && ready ? _treeFooterConfirmHoverStyle : _treeFooterConfirmStyle);
+            DrawFooterText(new Rect(plaque.x, plaque.y + plaque.height * 0.58f, plaque.width, plaque.height * 0.28f), "TO PALADIN", _treeFooterPendingStyle);
+
+            _ihLockTextStyle.fontSize = Mathf.Max(8, Mathf.RoundToInt(ScaleReferenceRect(0f, 0f, 0f, 10f).height));
+            string ok = IhHex(0.20f, 0.45f, 0.18f);
+            string no = IhHex(0.55f, 0.16f, 0.12f);
+            for (int i = 0; i < lines.Count; i++)
+            {
+                bool done = lines[i].StartsWith("+");
+                GUI.Label(ScaleReferenceRect(460f, 454f + i * 14f, 240f, 14f),
+                    "<color=" + (done ? ok : no) + ">" + (done ? "◆ " : "◇ ") + lines[i].Substring(2) + "</color>", _ihLockTextStyle);
+            }
+            if (hover)
+            {
+                _treeHoveredTitle = "ADVANCE - PALADIN";
+                _treeHoveredBody = ready
+                    ? "Become a Paladin. Righteous Strike Ascends, the Class tree locks, and Paladin Tier Points start at Lv 18."
+                    : "Complete every requirement to Advance.";
+            }
+            if (ready && GUI.Button(plaque, GUIContent.none, GUIStyle.none))
+                IhAdvanceToPaladin(player);
+        }
+
+        // ASCEND plaque in the footer (where CONFIRM appears) for the selected, eligible skill.
+        private void IhDrawAscendButton(Player player)
+        {
+            if (player == null || string.IsNullOrEmpty(_treeSelectedNodeId) || GetPrototypeTotalPending() > 0)
+                return;
+            string message;
+            if (!IhCheckAscend(player, _treeSelectedNodeId, false, out message))
+                return;
+            Rect plaque = ScaleReferenceRect(792f, 557f, 160f, 42f);
+            bool hover = plaque.Contains(Event.current.mousePosition);
+            bool armed = _ihAscendArmedSkill == _treeSelectedNodeId && Time.unscaledTime < _ihAscendArmedUntil;
+            if (_treeConfirmPlaqueTex != null)
+            {
+                GUI.color = hover ? Color.white : new Color(0.92f, 0.92f, 0.92f, 1f);
+                GUI.DrawTexture(plaque, _treeConfirmPlaqueTex);
+                GUI.color = Color.white;
+            }
+            DrawFooterText(new Rect(plaque.x, plaque.y + plaque.height * 0.10f, plaque.width, plaque.height * 0.50f), armed ? "CLICK AGAIN" : "ASCEND", hover ? _treeFooterConfirmHoverStyle : _treeFooterConfirmStyle);
+            DrawFooterText(new Rect(plaque.x, plaque.y + plaque.height * 0.58f, plaque.width, plaque.height * 0.28f), IhSkillName(_treeSelectedNodeId).ToUpperInvariant(), _treeFooterPendingStyle);
+            if (hover)
+            {
+                _treeHoveredTitle = "ASCEND - " + IhSkillName(_treeSelectedNodeId).ToUpperInvariant();
+                _treeHoveredBody = "Ascension is permanent for this character. Click twice to confirm.";
+            }
+            if (GUI.Button(plaque, GUIContent.none, GUIStyle.none))
+            {
+                if (!armed)
+                {
+                    _ihAscendArmedSkill = _treeSelectedNodeId;
+                    _ihAscendArmedUntil = Time.unscaledTime + 3f;
+                }
+                else
+                {
+                    IhCheckAscend(player, _treeSelectedNodeId, true, out message);
+                    ShowMessage(message);
+                    _ihAscendArmedSkill = "";
+                }
+            }
+        }
+
+        private string IhAscensionRule(string id)
+        {
+            if (IhContains(IhSignatureSkills, id)) return "Ascends at Lv 32 with Tier 5 (one Signature only).";
+            if (IhContains(IhNormalAdvSkills, id)) return "Ascends at Lv 42 with Tier 5 (one of Shield Charge / Fallen Angel / Ray of Hope).";
+            if (id == IhUltimate) return "Ascends at Lv 50 with Tier 3.";
+            if (id == IhAscendedClassSkill) return "Ascends when you Advance to Paladin.";
+            return "";
+        }
+
+        // ------------------------------------------------------------------ tooltip keywords
+        private string IhColorize(string text)
+        {
+            if (_ihKeywordRegex == null)
+                _ihKeywordRegex = new System.Text.RegularExpressions.Regex(
+                    @"(?<kw>\b(?:Fire Burn|Spirit Burn|Broken Bones|Judgement Mark|Hyper Armor|Overall Defense|attack damage|Max HP|Blunt|Slash|Pierce|Fire|Frost|Lightning|Poison|Spirit|Expose|Cripple|Stuns|Stun|Zap|Barrier|Stamina|HP)\b)|(?<num>(?<![A-Za-z0-9.])[+-]?\d+(?:\.\d+)?(?:%|s\b|m\b|x\b|°)?)");
+            return _ihKeywordRegex.Replace(text, new System.Text.RegularExpressions.MatchEvaluator(IhColorMatch));
+        }
+
+        private string IhColorMatch(System.Text.RegularExpressions.Match match)
+        {
+            string value = match.Value;
+            if (match.Groups["num"].Success)
+                return "<b><color=" + IhHex(1f, 0.64f, 0.22f) + ">" + value + "</color></b>";
+            string color;
+            switch (value)
+            {
+                case "Blunt":
+                case "Slash":
+                case "Pierce": color = IhHex(0.86f, 0.82f, 0.74f); break;
+                case "Fire":
+                case "Fire Burn": color = IhHex(1f, 0.46f, 0.26f); break;
+                case "Frost": color = IhHex(0.55f, 0.82f, 1f); break;
+                case "Lightning": color = IhHex(1f, 0.92f, 0.38f); break;
+                case "Poison": color = IhHex(0.56f, 0.92f, 0.36f); break;
+                case "Spirit":
+                case "Spirit Burn": color = IhHex(0.78f, 0.90f, 1f); break;
+                case "Hyper Armor":
+                case "Overall Defense":
+                case "attack damage":
+                case "Barrier":
+                case "Max HP":
+                case "HP": color = IhHex(0.52f, 0.95f, 0.55f); break;
+                case "Stamina": color = IhHex(1f, 0.86f, 0.36f); break;
+                default: color = IhHex(0.84f, 0.62f, 1f); break;
+            }
+            return "<b><color=" + color + ">" + value + "</color></b>";
         }
 
         private void ToggleSkillbook()
@@ -8311,6 +8722,12 @@ namespace AlbedosCustomClassesAdvanced
 
         private void DrawCombatHud(Player player)
         {
+            if (IhUsesTreeHotbar(player))
+            {
+                DrawTreeHotbarHud(player);
+                return;
+            }
+
             string className = GetClass(player);
 
             // Sorcerer / Wizard / Spellcaster own their HUD in the isolated
@@ -8572,6 +8989,7 @@ namespace AlbedosCustomClassesAdvanced
             _ihStarEmptyTex = LoadUiPng("Tier_Star_Empty.png");
             _ihPadlockTex = LoadUiPng("Lock_Padlock.png");
             _ihRsNormalIconTex = LoadUiPng("Icon_righteous_strike_Normal.png");
+            _ihGraceIconTex = LoadUiPng("Icon_heavens_light.png");
             return true;
         }
 
@@ -8797,6 +9215,7 @@ namespace AlbedosCustomClassesAdvanced
 
             for (int i = 0; i < ClericPaladinReferenceNodes.Length; i++)
                 DrawReferenceNode(ClericPaladinReferenceNodes[i]);
+            IhDrawAdvancePanel(treePlayer);
 
             DrawReferenceHotbarSlots();
             DrawReferenceHotbarHotkeys();
@@ -8969,7 +9388,10 @@ namespace AlbedosCustomClassesAdvanced
 
         private string[] LoadHotbarLayout(Player player)
         {
-            string[] defaults = (string[])DefaultClericPaladinHotbar.Clone();
+            // v0.18.1: before Advancement the bar starts with the three Class skills.
+            string[] defaults = IhIsPaladin(player)
+                ? (string[])DefaultClericPaladinHotbar.Clone()
+                : new string[] { "lightning_zap", "righteous_strike", "holy_wave", "", "", "", "" };
             if (player == null)
                 return defaults;
 
@@ -9353,7 +9775,10 @@ namespace AlbedosCustomClassesAdvanced
 
             int pendingTotal = GetPrototypeTotalPending();
             if (pendingTotal <= 0)
+            {
+                IhDrawAscendButton(Player.m_localPlayer);
                 return;
+            }
 
             Rect plaque = ScaleReferenceRect(792f, 557f, 160f, 42f);
             bool hover = plaque.Contains(Event.current.mousePosition);
