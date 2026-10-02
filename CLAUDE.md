@@ -3,7 +3,7 @@
 ## Working rules
 - User wants short responses and real execution, not long explanations.
 - **RUSH B** = immediately code the obvious requested task, minimal commentary, use latest approved build as baseline, don't redesign unrelated things, verify and package.
-- Latest package: **v0.18.1 — Functional Skill Tree** (v0.18.0 Paladin Progression, v0.17.2 Hammer Size, v0.17.1 Paladin Tweaks). Do NOT change combat/progression logic unless explicitly requested.
+- Latest package: **v0.18.2 — Tree Polish** (v0.18.1 Functional Skill Tree, v0.18.0 Paladin Progression, v0.17.2 Hammer Size). Do NOT change combat/progression logic unless explicitly requested.
 - Never patch visual problems by drawing random rectangles over the reference asset. Keep approved artwork intact; make layout/components fit properly.
 
 ## Framework doc (source of truth for design)
@@ -42,7 +42,9 @@
 - `/ih` registered as a Terminal.ConsoleCommand (chat `/ih ...`, F5 `ih ...`); only the local player for now (other players need server sync).
 - Backdrops: `Cleric_Paladin_Reference.png` (advanced: RS Magenta + badge, LZ Cyan) and `Cleric_Paladin_PreAdvance.png` (all Class skills Cyan); header subtitle text removed from both (code draws it).
 - v0.18.1 done: Cleric (pre-Advancement) + Paladin cast from the tree hotbar (`[Hotbar]` bindings; `DragonCombat.TreeHotbarProvider`, Skills.cs skips its fixed keys, `SkillsPlugin.CastFromHotbar`), new HUD mirrors the tree hotbar, Heaven's Light Grace (`[Paladin Heavens Light]`, `DragonCombat.GrantNoEquipmentPenalty`), ADVANCE plaque + checklist in the sealed Paladin panel, Altar Paladin advancement patched to require Lv16 + RS T7 + 14 spent, ASCEND plaque (double click) in the footer, colored tooltip keywords (vanilla-like).
-- Still open: B1 sealed-panel art, Grace slot locked look before Advancement, DoT Tier scaling, other ACs.
+- v0.18.2: locked nodes copy their region from `Cleric_Paladin_Locked.png` (greyed nodes; `LockedRegions` in code must match `LOCKED_REGIONS` in build_ui_assets.py) + padlock; Grace slot greyed/padlocked before Advancement; stars/padlock load with mipmaps; LZ hotbar icon built with the same Cyan frame as RS/HW.
+- Tooltip style (approved direction): Valheim serif, description first, then "Subject - value" lines. White = info, Yellow = subject, Cyan = damage types (incl. Fire Burn / Spirit Burn). No other colors; Radius/Range/Duration/Stamina Cost/Wind Up Time/Cooldown are separate lines.
+- Still open: B1 sealed-panel art, DoT Tier scaling, other ACs.
 - Only Paladin moves to the tree hotbar; other ACs stay on fixed `[Hotkeys]` until Paladin is finished, then copy it (universal tree).
 - F8 Config window (DevTools, rewritten v0.18.0): every setting of every module (float/int/bool/string/KeyCode/enum), tabs + search, auto-saves to the .cfg, same Section/Key across modules edited together, Test Cooldowns toggle.
 

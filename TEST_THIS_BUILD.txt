@@ -1,4 +1,7 @@
-Immortal Heroes v0.18.1 - Test focus (functional Skill Tree)
+Immortal Heroes v0.18.2 - Test focus (tree polish + functional Skill Tree)
+
+0. v0.18.2: check the HUD icons match, locked skills are greyed art (no box), Grace locked before Advancing,
+   stars look clean, tooltips read like Valheim (white text, yellow subjects, cyan damage types).
 
 Setup: /ih class Cleric, then /ih level 16 (fresh Cleric) - or /ih level 50 on your Paladin.
 

@@ -1,0 +1,11 @@
+Immortal Heroes v0.18.2 - Tree Polish
+
+1. Hotbar: Lightning Zap's icon now uses the exact same Cyan frame as Righteous Strike / Holy Wave.
+2. Locked skills: no more dark box. A locked skill now shows its own artwork greyed out
+   (cut from a new greyed backdrop, Cleric_Paladin_Locked.png) + padlock + requirement.
+3. Heaven's Light: the Grace slot is greyed + padlocked before Advancement (tree footer and HUD).
+4. Tier stars: rendered with mipmaps and snapped to whole pixels so they no longer look torn.
+5. Tooltips rewritten Valheim-style, in Valheim's serif font:
+   description first (white), then one "Subject - value" line per fact.
+   White = information, Yellow = subject, Cyan = damage types. Nothing else is colored.
+   Radius, Range, Duration, Stamina Cost, Wind Up Time and Cooldown each get their own line.

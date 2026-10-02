@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.18.1";
+        public const string ModVersion = "0.18.2";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -7344,6 +7344,36 @@ namespace AlbedosCustomClassesAdvanced
         private Texture2D _ihPadlockTex;
         private Texture2D _ihPreAdvanceBackdropTex;
         private Texture2D _ihRsNormalIconTex;
+        private Texture2D _ihLockedBackdropTex;
+
+        // v0.18.2: a locked node copies its region from the greyed backdrop (reference px, x0 y0 x1 y1).
+        // Must match LOCKED_REGIONS in tools/build_ui_assets.py.
+        private static readonly Dictionary<string, Rect> LockedRegions = new Dictionary<string, Rect>
+        {
+            { "goddess_relic", Rect.MinMaxRect(352f, 140f, 458f, 250f) },
+            { "judgement_hammer", Rect.MinMaxRect(352f, 273f, 458f, 378f) },
+            { "heavens_light", Rect.MinMaxRect(362f, 393f, 470f, 502f) },
+            { "shield_charge", Rect.MinMaxRect(532f, 140f, 634f, 250f) },
+            { "fallen_angel", Rect.MinMaxRect(670f, 140f, 772f, 250f) },
+            { "ray_of_hope", Rect.MinMaxRect(670f, 273f, 772f, 378f) },
+            { "electric_smite", Rect.MinMaxRect(826f, 192f, 980f, 358f) },
+            { "grace_slot", Rect.MinMaxRect(660f, 539f, 723f, 601f) }
+        };
+
+        private bool IhDrawLockedRegion(string key)
+        {
+            Rect r;
+            if (_ihLockedBackdropTex == null || !LockedRegions.TryGetValue(key, out r))
+                return false;
+            Rect uv = new Rect(r.x / 1011f, 1f - r.yMax / 662f, r.width / 1011f, r.height / 662f);
+            GUI.DrawTextureWithTexCoords(IhSnap(ScaleReferenceRect(r.x, r.y, r.width, r.height)), _ihLockedBackdropTex, uv);
+            return true;
+        }
+
+        private static Rect IhSnap(Rect r)
+        {
+            return new Rect(Mathf.Round(r.x), Mathf.Round(r.y), Mathf.Round(r.width), Mathf.Round(r.height));
+        }
 
         private void BindImmortalProgression()
         {
@@ -7972,7 +8002,12 @@ namespace AlbedosCustomClassesAdvanced
 
         private string IhLine(string label, string value)
         {
-            return "<color=" + IhHex(0.93f, 0.76f, 0.40f) + "><b>" + label + "</b></color>  " + IhColorize(value) + "\n";
+            return "<color=" + IhHex(1f, 0.84f, 0.30f) + ">" + label + "</color>" + IhWhite(" - " + IhColorize(value)) + "\n";
+        }
+
+        private string IhWhite(string text)
+        {
+            return "<color=" + IhHex(0.95f, 0.94f, 0.91f) + ">" + text + "</color>";
         }
 
         private static string IhDamage(float blunt, float slash, float pierce, float fire, float frost, float lightning, float poison, float spirit, float power)
@@ -7985,7 +8020,7 @@ namespace AlbedosCustomClassesAdvanced
                 if (values[i] > 0.001f)
                     parts.Add(IhNum(values[i] * power) + " " + names[i]);
             }
-            return parts.Count == 0 ? "-" : string.Join(" · ", parts.ToArray());
+            return parts.Count == 0 ? "-" : string.Join(", ", parts.ToArray());
         }
 
         private static string IhDamage(DamageConfig cfg, float power)
@@ -8027,10 +8062,6 @@ namespace AlbedosCustomClassesAdvanced
             return IhCfg("albedo.customclasses.combatruntime", "Debuffs", key, fallback);
         }
 
-        private string IhCost(float cooldown, float stamina, string cast)
-        {
-            return IhLine("Cooldown", IhNum(cooldown) + "s  ·  " + IhNum(stamina) + " Stamina  ·  " + cast);
-        }
 
         private string IhSkillTitle(string id, ReferenceNodeUi node, bool ascended)
         {
@@ -8039,6 +8070,8 @@ namespace AlbedosCustomClassesAdvanced
             return node != null ? node.TooltipTitle : IhSkillName(id).ToUpperInvariant();
         }
 
+        // v0.18.2: Valheim-style skill sheet. Description first, then one "Subject - value" line per fact.
+        // White = information, Yellow = subject, Cyan = damage types. Nothing else is colored.
         private string IhBuildTooltip(Player player, ReferenceNodeUi node, out string title)
         {
             string id = node.Id;
@@ -8052,162 +8085,201 @@ namespace AlbedosCustomClassesAdvanced
             const string sk = "albedo.customclasses.skills";
             System.Text.StringBuilder b = new System.Text.StringBuilder();
 
-            string reason;
-            bool unlocked = IhIsUnlocked(player, id, out reason);
-            string cyan = IhHex(0.55f, 0.90f, 1f);
-            if (!unlocked)
-                b.Append("<color=" + IhHex(1f, 0.45f, 0.38f) + "><b>LOCKED</b> - " + reason + "</color>\n");
+            b.Append(IhWhite(IhLore(id, ascended)) + "\n\n");
+
             if (maxTier > 0)
             {
-                string tierText = "Tier " + tier.ToString() + "/" + maxTier.ToString() + "  (+" + IhNum(pct * tier) + "% damage & healing)";
+                string tierText = tier.ToString() + "/" + maxTier.ToString();
                 if (pending > 0)
-                    tierText += "  <color=" + cyan + ">→ " + (tier + pending).ToString() + "/" + maxTier.ToString() + " (+" + IhNum(pct * (tier + pending)) + "%) pending</color>";
+                    tierText += "  →  " + (tier + pending).ToString() + "/" + maxTier.ToString() + " (pending)";
+                tierText += "   +" + IhNum(pct * (tier + pending)) + "% Damage & Healing";
+                b.Append(IhLine("Tier", tierText));
                 if (id == IhUltimate)
-                    tierText += "\nTiers rise on their own at Lv 40 / 44 / 48.";
-                b.Append(tierText + "\n");
+                    b.Append(IhLine("Tier Up", "automatic at Lv 40, 44, 48"));
             }
-            b.Append("<i><color=" + IhHex(0.78f, 0.74f, 0.66f) + ">" + IhLore(id, ascended) + "</color></i>\n");
+            string reason;
+            if (!IhIsUnlocked(player, id, out reason))
+                b.Append(IhLine("Requires", reason));
 
             switch (id)
             {
                 case "lightning_zap":
                     b.Append(IhLine("Damage", IhSkillsDamage("Cleric.Lightning Zap.Damage", power)));
-                    b.Append(IhLine("Area", IhNum(IhCfg(sk, "Cleric.Lightning Zap", "Range", 10f)) + "m cone (" + IhNum(IhCfg(sk, "Cleric.Lightning Zap", "ConeDegrees", 70f)) + "°) in front of you"));
-                    b.Append(IhLine("Inflicts", "Zap - explodes after " + IhNum(IhRuntime("ZapDelay", 3f)) + "s for " + IhNum(IhRuntime("ZapLightningDamage", 25f)) + " Lightning (" + IhNum(IhRuntime("ZapRadius", 1f)) + "m)"));
-                    b.Append(IhCost(IhCfg(sk, "Cleric.Lightning Zap", "Cooldown", 8f), IhCfg(sk, "Cleric.Lightning Zap", "StaminaCost", 18f), "Instant"));
+                    b.Append(IhLine("Area", "Cone, " + IhNum(IhCfg(sk, "Cleric.Lightning Zap", "Range", 10f)) + "m, " + IhNum(IhCfg(sk, "Cleric.Lightning Zap", "ConeDegrees", 70f)) + "°"));
+                    b.Append(IhLine("Inflicts", "Zap, explodes after " + IhNum(IhRuntime("ZapDelay", 3f)) + "s"));
+                    b.Append(IhLine("Zap Damage", IhNum(IhRuntime("ZapLightningDamage", 25f)) + " Lightning, " + IhNum(IhRuntime("ZapRadius", 1f)) + "m"));
+                    IhCosts(b, IhCfg(sk, "Cleric.Lightning Zap", "StaminaCost", 18f), "Instant", IhCfg(sk, "Cleric.Lightning Zap", "Cooldown", 8f));
                     break;
                 case "righteous_strike":
                     if (ascended)
                     {
                         b.Append(IhLine("Damage", IhDamage(_rsAscDamage, power)));
-                        b.Append(IhLine("Area", IhNum(_rsAscRadius.Value) + "m at your aim point (up to " + IhNum(_rsAscRange.Value) + "m)"));
-                        b.Append(IhLine("Inflicts", "Expose " + IhNum(_rsAscExpose.Value) + "s · Judgement Mark"));
-                        b.Append(IhLine("Trails", "12 Lightning Trails, " + IhNum(_rsAscTrailRange.Value) + "m: " + IhDamage(_rsAscTrailDamage, power) + " every " + IhNum(_rsAscTrailTick.Value) + "s + Spirit Burn " + IhNum(_rsAscSpiritDot.Value) + "/s for " + IhNum(_rsAscSpiritDuration.Value) + "s"));
-                        b.Append(IhLine("Detonate", "hitting a Mark strikes again (" + IhNum(_rsAscFollowRadius.Value) + "m, " + IhNum(_rsAscFollowMultiplier.Value * 100f) + "% damage)"));
-                        b.Append(IhCost(_rsAscCooldown.Value, _rsAscStamina.Value, IhNum(_rsAscWindup.Value) + "s Wind-up"));
+                        b.Append(IhLine("Radius", IhNum(_rsAscRadius.Value) + "m"));
+                        b.Append(IhLine("Range", IhNum(_rsAscRange.Value) + "m"));
+                        b.Append(IhLine("Inflicts", "Expose, " + IhNum(_rsAscExpose.Value) + "s"));
+                        b.Append(IhLine("Applies", "Judgement Mark"));
+                        b.Append(IhLine("Trails", "12 Lightning Trails, " + IhNum(_rsAscTrailRange.Value) + "m"));
+                        b.Append(IhLine("Trail Damage", IhDamage(_rsAscTrailDamage, power) + " every " + IhNum(_rsAscTrailTick.Value) + "s"));
+                        b.Append(IhLine("Trail Burn", "Spirit Burn " + IhNum(_rsAscSpiritDot.Value) + "/s, " + IhNum(_rsAscSpiritDuration.Value) + "s"));
+                        b.Append(IhLine("Detonation", "second strike, " + IhNum(_rsAscFollowRadius.Value) + "m, " + IhNum(_rsAscFollowMultiplier.Value * 100f) + "% Damage"));
+                        IhCosts(b, _rsAscStamina.Value, IhNum(_rsAscWindup.Value) + "s", _rsAscCooldown.Value);
                     }
                     else
                     {
                         b.Append(IhLine("Damage", IhSkillsDamage("Cleric.Righteous Strike.Damage", power)));
-                        b.Append(IhLine("Area", IhNum(IhCfg(sk, "Cleric.Righteous Strike", "Radius", 5f)) + "m at your aim point (up to " + IhNum(IhCfg(sk, "Cleric.Righteous Strike", "Range", 50f)) + "m)"));
-                        b.Append(IhLine("Inflicts", "Expose " + IhNum(IhCfg(sk, "Cleric.Righteous Strike", "ExposeDuration", 6f)) + "s (+" + IhNum(IhRuntime("ExposeDamageTakenPercent", 20f)) + "% damage taken)"));
-                        b.Append(IhCost(IhCfg(sk, "Cleric.Righteous Strike", "Cooldown", 8f), IhCfg(sk, "Cleric.Righteous Strike", "StaminaCost", 20f), IhNum(IhCfg(sk, "Cleric.Righteous Strike", "Windup", 0.7f)) + "s Wind-up"));
+                        b.Append(IhLine("Radius", IhNum(IhCfg(sk, "Cleric.Righteous Strike", "Radius", 5f)) + "m"));
+                        b.Append(IhLine("Range", IhNum(IhCfg(sk, "Cleric.Righteous Strike", "Range", 50f)) + "m"));
+                        b.Append(IhLine("Inflicts", "Expose, " + IhNum(IhCfg(sk, "Cleric.Righteous Strike", "ExposeDuration", 6f)) + "s"));
+                        IhCosts(b, IhCfg(sk, "Cleric.Righteous Strike", "StaminaCost", 20f), IhNum(IhCfg(sk, "Cleric.Righteous Strike", "Windup", 0.7f)) + "s", IhCfg(sk, "Cleric.Righteous Strike", "Cooldown", 8f));
                     }
                     break;
                 case "holy_wave":
-                    b.Append(IhLine("Healing", IhNum(IhCfg(sk, "Cleric.Holy Wave", "ImmediateHeal", 25f) * power) + " HP, then " + IhNum(IhCfg(sk, "Cleric.Holy Wave", "HealPercentPerSecond", 5f) * power) + "% Max HP/s for " + IhNum(IhCfg(sk, "Cleric.Holy Wave", "Duration", 6f)) + "s"));
-                    b.Append(IhLine("Area", IhNum(IhCfg(sk, "Cleric.Holy Wave", "Radius", 7f)) + "m around you · all players"));
-                    b.Append(IhCost(IhCfg(sk, "Cleric.Holy Wave", "Cooldown", 8f), IhCfg(sk, "Cleric.Holy Wave", "StaminaCost", 25f), "Instant"));
+                    b.Append(IhLine("Healing", IhNum(IhCfg(sk, "Cleric.Holy Wave", "ImmediateHeal", 25f) * power) + " HP"));
+                    b.Append(IhLine("Regeneration", IhNum(IhCfg(sk, "Cleric.Holy Wave", "HealPercentPerSecond", 5f) * power) + "% of Total HP per second"));
+                    b.Append(IhLine("Duration", IhNum(IhCfg(sk, "Cleric.Holy Wave", "Duration", 6f)) + "s"));
+                    b.Append(IhLine("Radius", IhNum(IhCfg(sk, "Cleric.Holy Wave", "Radius", 7f)) + "m"));
+                    IhCosts(b, IhCfg(sk, "Cleric.Holy Wave", "StaminaCost", 25f), "Instant", IhCfg(sk, "Cleric.Holy Wave", "Cooldown", 8f));
                     break;
                 case "goddess_relic":
                     if (ascended)
                     {
                         b.Append(IhLine("Damage", IhDamage(_goddessAscDamage, power)));
-                        b.Append(IhLine("Area", IhNum(_goddessAscRadius.Value) + "m at your aim point (up to " + IhNum(_goddessRange.Value) + "m) · giant cross"));
-                        b.Append(IhLine("Inflicts", "Judgement Mark"));
+                        b.Append(IhLine("Radius", IhNum(_goddessAscRadius.Value) + "m"));
+                        b.Append(IhLine("Range", IhNum(_goddessRange.Value) + "m"));
+                        b.Append(IhLine("Applies", "Judgement Mark"));
                     }
                     else
                     {
                         b.Append(IhLine("Damage", IhDamage(_goddessDamage, power)));
-                        b.Append(IhLine("Area", IhNum(_goddessRadiusV17.Value) + "m at your aim point (up to " + IhNum(_goddessRange.Value) + "m)"));
-                        b.Append(IhLine("Inflicts", "Spirit Burn " + IhNum(_goddessSpiritDot.Value) + "/s for " + IhNum(_goddessSpiritDuration.Value) + "s"));
+                        b.Append(IhLine("Radius", IhNum(_goddessRadiusV17.Value) + "m"));
+                        b.Append(IhLine("Range", IhNum(_goddessRange.Value) + "m"));
+                        b.Append(IhLine("Inflicts", "Spirit Burn " + IhNum(_goddessSpiritDot.Value) + "/s, " + IhNum(_goddessSpiritDuration.Value) + "s"));
                     }
-                    b.Append(IhCost(_goddessCooldown.Value, _goddessStamina.Value, IhNum(_goddessWindup.Value) + "s Wind-up"));
+                    IhCosts(b, _goddessStamina.Value, IhNum(_goddessWindup.Value) + "s", _goddessCooldown.Value);
                     break;
                 case "judgement_hammer":
-                    b.Append(IhLine("Damage", IhDamage(_hammerDamage, power) + " every " + IhNum(_hammerTick.Value) + "s, +" + IhNum(_hammerDamagePerStep.Value * 100f) + "% per " + IhNum(_hammerStepMeters.Value) + "m flown"));
-                    b.Append(IhLine("Flight", IhNum(_hammerRange.Value) + "m Free Aim · pierces enemies, stops at walls"));
-                    b.Append(IhLine("Size", IhNum(_hammerStartHeight.Value) + "m → " + IhNum(ascended ? _hammerAscMaxHeight.Value : _hammerMaxHeight.Value) + "m tall as it flies"));
-                    b.Append(IhLine("Inflicts", "Cripple " + IhNum(_hammerCrippleDuration.Value) + "s (-" + IhNum(IhRuntime("CrippleMovementSlowPercent", 50f)) + "% move speed)" + (ascended ? " · Judgement Mark" : "")));
+                    b.Append(IhLine("Damage", IhDamage(_hammerDamage, power) + ", every " + IhNum(_hammerTick.Value) + "s"));
+                    b.Append(IhLine("Growth", "+" + IhNum(_hammerDamagePerStep.Value * 100f) + "% Damage per " + IhNum(_hammerStepMeters.Value) + "m flown"));
+                    b.Append(IhLine("Range", IhNum(_hammerRange.Value) + "m"));
+                    b.Append(IhLine("Size", IhNum(_hammerStartHeight.Value) + "m to " + IhNum(ascended ? _hammerAscMaxHeight.Value : _hammerMaxHeight.Value) + "m tall"));
+                    b.Append(IhLine("Inflicts", "Cripple, " + IhNum(_hammerCrippleDuration.Value) + "s"));
                     if (ascended)
-                        b.Append(IhLine("Return", "flies back hitting again · catch it: -" + IhNum(_hammerCatchCooldownCut.Value) + "% cooldown"));
-                    b.Append(IhCost(_hammerCooldown.Value, _hammerStamina.Value, IhNum(_hammerWindup.Value) + "s Wind-up"));
+                    {
+                        b.Append(IhLine("Applies", "Judgement Mark"));
+                        b.Append(IhLine("Return", "flies back to you, hitting again"));
+                        b.Append(IhLine("Catch", "-" + IhNum(_hammerCatchCooldownCut.Value) + "% Cooldown"));
+                    }
+                    IhCosts(b, _hammerStamina.Value, IhNum(_hammerWindup.Value) + "s", _hammerCooldown.Value);
                     break;
                 case "shield_charge":
-                    b.Append(IhLine("Damage", IhDamage(_shieldChargeDamage, power) + " every " + IhNum(_shieldChargePersistentTick.Value) + "s while charging"));
-                    b.Append(IhLine("Charge", IhNum(ascended ? _chargeAscDistance.Value : _shieldChargeDistance.Value) + "m at " + IhNum(_shieldChargeSpeedMultiplier.Value) + "x speed · " + IhNum(ascended ? _chargeAscHitRadius.Value : _shieldChargeRadius.Value) + "m hitbox"));
-                    b.Append(IhLine("Bash", ascended
-                        ? "Left Click: " + IhNum(_chargeAscBashRadius.Value) + "m " + IhNum(_chargeAscBashAngle.Value) + "° cone, Stuns Big foes"
-                        : "Left Click: shield bash in front of you"));
+                    b.Append(IhLine("Damage", IhDamage(_shieldChargeDamage, power) + ", every " + IhNum(_shieldChargePersistentTick.Value) + "s"));
+                    b.Append(IhLine("Distance", IhNum(ascended ? _chargeAscDistance.Value : _shieldChargeDistance.Value) + "m"));
+                    b.Append(IhLine("Speed", IhNum(_shieldChargeSpeedMultiplier.Value) + "x"));
+                    b.Append(IhLine("Hitbox", IhNum(ascended ? _chargeAscHitRadius.Value : _shieldChargeRadius.Value) + "m"));
                     if (ascended)
-                        b.Append(IhLine("Bonus", "Hyper Armor while charging"));
-                    b.Append(IhCost(_shieldChargeCooldown.Value, _shieldChargeStamina.Value, "Instant"));
+                    {
+                        b.Append(IhLine("Shield Bash", "Left Click, " + IhNum(_chargeAscBashRadius.Value) + "m cone, " + IhNum(_chargeAscBashAngle.Value) + "°"));
+                        b.Append(IhLine("Inflicts", "Stun (Big enemies too)"));
+                        b.Append(IhLine("Gain", "Hyper Armor while charging"));
+                    }
+                    else
+                    {
+                        b.Append(IhLine("Shield Bash", "Left Click while charging"));
+                    }
+                    IhCosts(b, _shieldChargeStamina.Value, "Instant", _shieldChargeCooldown.Value);
                     break;
                 case "fallen_angel":
                     b.Append(IhLine("Damage", IhDamage(_angelDamage, power)));
-                    b.Append(IhLine("Area", IhNum(_angelJumpHeight.Value) + "m leap, " + IhNum(_angelRadius.Value) + "m impact · no fall damage"));
-                    b.Append(IhLine("Inflicts", "Stun · Broken Bones " + IhNum(_angelBrokenBones.Value) + "s (+" + IhNum(IhRuntime("BrokenBonesPhysicalDamageTakenPercent", 20f)) + "% physical taken)"));
+                    b.Append(IhLine("Leap", IhNum(_angelJumpHeight.Value) + "m"));
+                    b.Append(IhLine("Radius", IhNum(_angelRadius.Value) + "m"));
+                    b.Append(IhLine("Inflicts", "Stun, Broken Bones " + IhNum(_angelBrokenBones.Value) + "s"));
                     if (ascended)
                     {
-                        b.Append(IhLine("Ring", IhNum(_angelRingRadius.Value) + "m for " + IhNum(_angelRingDuration.Value) + "s: Fire Burn " + IhNum(_angelFireDot.Value) + "/s + Spirit Burn " + IhNum(_angelSpiritDot.Value) + "/s (" + IhNum(_angelBurnDuration.Value) + "s, refreshed)"));
-                        b.Append(IhLine("Bonus", "Hyper Armor through the dive + " + IhNum(_angelHyperAfter.Value) + "s"));
+                        b.Append(IhLine("Burning Ring", IhNum(_angelRingRadius.Value) + "m, " + IhNum(_angelRingDuration.Value) + "s"));
+                        b.Append(IhLine("Ring Burn", "Fire Burn " + IhNum(_angelFireDot.Value) + "/s, Spirit Burn " + IhNum(_angelSpiritDot.Value) + "/s, " + IhNum(_angelBurnDuration.Value) + "s"));
+                        b.Append(IhLine("Gain", "Hyper Armor, dive + " + IhNum(_angelHyperAfter.Value) + "s"));
                     }
-                    b.Append(IhCost(_angelCooldown.Value, _angelStamina.Value, "Instant"));
+                    IhCosts(b, _angelStamina.Value, "Instant", _angelCooldown.Value);
                     break;
                 case "ray_of_hope":
-                    b.Append(IhLine("Healing", IhNum(_rayHealPercent.Value * power) + "% Max HP to players in " + IhNum(_rayRadius.Value) + "m"));
-                    b.Append(IhLine("Buff", "+" + IhNum(_rayDamageBuff.Value) + "% attack damage for " + IhNum(_rayBuffDuration.Value) + "s"));
-                    b.Append(IhLine("Inflicts", "Spirit Burn on enemies for " + IhNum(_raySpiritBurnDuration.Value) + "s"));
+                    b.Append(IhLine("Healing", IhNum(_rayHealPercent.Value * power) + "% of Total HP"));
+                    b.Append(IhLine("Radius", IhNum(_rayRadius.Value) + "m"));
                     if (ascended)
-                        b.Append(IhLine("Bonus", "cleanses Burn / Poison / Frost · " + IhNum(_rayAscBarrier.Value) + " HP Barrier for " + IhNum(_rayAscBarrierDuration.Value) + "s"));
-                    b.Append(IhCost(_rayCooldown.Value, _rayStamina.Value, "Instant"));
+                    {
+                        b.Append(IhLine("Gain", IhNum(_rayAscBarrier.Value) + " HP Barrier, " + IhNum(_rayAscBarrierDuration.Value) + "s"));
+                        b.Append(IhLine("Cleanse", "Burn, Poison, Frost"));
+                    }
+                    b.Append(IhLine("Buff", IhNum(_rayDamageBuff.Value) + "% Attack Damage, " + IhNum(_rayBuffDuration.Value) + "s"));
+                    b.Append(IhLine("Inflicts", "Spirit Burn, " + IhNum(_raySpiritBurnDuration.Value) + "s"));
+                    IhCosts(b, _rayStamina.Value, "Instant", _rayCooldown.Value);
                     break;
                 case "electric_smite":
-                    b.Append(IhLine("Damage", IhDamage(_divineDamage, power) + " (" + IhNum(_divineRadius.Value) + "m landing)"));
-                    b.Append(IhLine("Inflicts", "Fire Burn " + IhNum(_divineFireDot.Value) + "/s + Spirit Burn " + IhNum(_divineSpiritDot.Value) + "/s for " + IhNum(_divineSpiritDuration.Value) + "s"));
-                    b.Append(IhLine("Trails", "16 Lightning Trails, " + IhNum(_divineTrailRange.Value) + "m: " + IhDamage(_divineTrailDamage, power) + " every " + IhNum(_divineTrailPersistentTick.Value) + "s"));
+                    b.Append(IhLine("Damage", IhDamage(_divineDamage, power)));
+                    b.Append(IhLine("Radius", IhNum(_divineRadius.Value) + "m"));
+                    b.Append(IhLine("Inflicts", "Fire Burn " + IhNum(_divineFireDot.Value) + "/s, Spirit Burn " + IhNum(_divineSpiritDot.Value) + "/s, " + IhNum(_divineSpiritDuration.Value) + "s"));
+                    b.Append(IhLine("Trails", "16 Lightning Trails, " + IhNum(_divineTrailRange.Value) + "m"));
+                    b.Append(IhLine("Trail Damage", IhDamage(_divineTrailDamage, power) + " every " + IhNum(_divineTrailPersistentTick.Value) + "s"));
                     if (ascended)
-                        b.Append(IhLine("Storm", IhNum(_smiteStormRadius.Value) + "m for " + IhNum(_smiteStormDuration.Value) + "s: " + IhDamage(_smiteStormDamage, power) + " every " + IhNum(_smiteStormTick.Value) + "s + Fire & Spirit Burn"));
-                    b.Append(IhCost(_divineCooldown.Value, _divineStamina.Value, "~" + IhNum(_divineWindup.Value) + "s leap"));
+                    {
+                        b.Append(IhLine("Thunderstorm", IhNum(_smiteStormRadius.Value) + "m, " + IhNum(_smiteStormDuration.Value) + "s"));
+                        b.Append(IhLine("Storm Damage", IhDamage(_smiteStormDamage, power) + " every " + IhNum(_smiteStormTick.Value) + "s"));
+                        b.Append(IhLine("Storm Burn", "Fire Burn, Spirit Burn, " + IhNum(_smiteStormDotDuration.Value) + "s"));
+                    }
+                    IhCosts(b, _divineStamina.Value, IhNum(_divineWindup.Value) + "s leap", _divineCooldown.Value);
                     break;
                 case "heavens_light":
-                    b.Append(IhLine("Grace", "you and players within " + IhNum(_graceLightRadius.Value) + "m: +" + IhNum(_graceLightDefense.Value) + "% Overall Defense, no equipment movement penalties for " + IhNum(_graceLightDuration.Value) + "s"));
-                    b.Append(IhLine("Cooldown", IhNum(_graceLightCooldown.Value / 60f) + " min  ·  free  ·  " + FormatHotbarBinding(BindGrace)));
-
+                    b.Append(IhLine("Buff", IhNum(_graceLightDefense.Value) + "% Overall Defense"));
+                    b.Append(IhLine("Removes", "equipment movement penalties"));
+                    b.Append(IhLine("Radius", IhNum(_graceLightRadius.Value) + "m"));
+                    b.Append(IhLine("Duration", IhNum(_graceLightDuration.Value) + "s"));
+                    b.Append(IhLine("Cost", "None"));
+                    b.Append(IhLine("Wind Up Time", "Instant"));
+                    b.Append(IhLine("Cooldown", IhNum(_graceLightCooldown.Value / 60f) + " min"));
+                    b.Append(IhLine("Key", FormatHotbarBinding(BindGrace)));
                     break;
             }
 
             string rule = IhAscensionRule(id);
             if (rule.Length > 0 && !ascended)
-                b.Append("<color=" + IhHex(0.92f, 0.55f, 0.95f) + ">" + rule + "</color>\n");
+                b.Append(IhLine("Ascension", rule));
+            if (node.Kind != TreeNodeKind.Grace)
+                b.Append(IhLine("Hotbar", IsPermanentHotbarSkill(id) ? "Permanent" : "Optional"));
+            return b.ToString().TrimEnd('\n');
+        }
 
-            string slot;
-            if (node.Kind == TreeNodeKind.Grace)
-                slot = "GRACE SLOT";
-            else if (IsPermanentHotbarSkill(id))
-                slot = "PERMANENT ON HOTBAR";
-            else
-                slot = "OPTIONAL HOTBAR SKILL";
-            b.Append("<color=" + IhHex(0.62f, 0.60f, 0.56f) + ">" + slot + "</color>");
-            return b.ToString();
+        private void IhCosts(System.Text.StringBuilder b, float stamina, string windup, float cooldown)
+        {
+            b.Append(IhLine("Stamina Cost", IhNum(stamina)));
+            b.Append(IhLine("Wind Up Time", windup));
+            b.Append(IhLine("Cooldown", IhNum(cooldown) + "s"));
         }
 
         private static string IhLore(string id, bool ascended)
         {
             switch (id)
             {
-                case "lightning_zap": return "Heaven's wrath leaps from your palm, branding every foe before you with a crackling charge.";
+                case "lightning_zap": return "Heaven's wrath leaps from your palm in a cone, branding every foe it touches with a Zap that soon bursts.";
                 case "righteous_strike": return ascended
-                    ? "The heavens answer twice: judgement falls from the sky, and lightning races across the earth."
-                    : "Call down a pillar of holy lightning upon the wicked.";
-                case "holy_wave": return "A warm tide of light that mends the wounds of the faithful.";
+                    ? "Call down a holy pillar at your aim. Judgement falls, and lightning races across the earth in every direction."
+                    : "Call down a pillar of holy lightning at your aim, smiting and exposing the wicked.";
+                case "holy_wave": return "Release a warm tide of light that heals you and every ally it touches, and keeps mending them.";
                 case "goddess_relic": return ascended
-                    ? "The Goddess herself hurls her colossal cross, and all beneath it are judged."
+                    ? "The Goddess hurls her colossal cross at your aim. All beneath it are crushed and marked for judgement."
                     : "Summon the Goddess's cross from the heavens to crush all who stand beneath it.";
                 case "judgement_hammer": return ascended
-                    ? "The hammer of judgement always returns to the hand that threw it."
-                    : "Hurl a hammer of judgement that grows heavier with every meter it flies.";
-                case "shield_charge": return "Raise your shield and charge, trampling all who dare stand in your path.";
+                    ? "Hurl a hammer of judgement that grows with every meter, then returns to the hand that threw it."
+                    : "Hurl a hammer of judgement that grows heavier with every meter it flies, crushing all in its path.";
+                case "shield_charge": return "Raise your shield and charge forward, trampling everyone who dares stand in your path.";
                 case "fallen_angel": return ascended
-                    ? "You fall like a burning star, and the earth itself catches fire."
+                    ? "Leap to the heavens and fall like a burning star. The ground you strike catches holy fire."
                     : "Leap to the heavens, then fall upon your enemies like a wrathful angel.";
                 case "ray_of_hope": return ascended
-                    ? "A radiant ray that purges every ailment and wraps the faithful in light."
-                    : "A radiant ray that heals your allies and empowers their arms, while searing the wicked.";
+                    ? "Unleash a radial wave that heals, shields and purifies you and every ally it touches, while searing the wicked."
+                    : "Unleash a radial wave that heals and empowers you and every ally it touches, while searing the wicked.";
                 case "electric_smite": return ascended
-                    ? "You become the storm. Thunder follows wherever your hammer falls."
-                    : "Rise into the storm and strike the earth with the fury of the heavens.";
-                case "heavens_light": return "The light of heaven shields all who stand beside you.";
+                    ? "Rise into the storm and strike the earth. Lightning races outward, and a thunderstorm rages where you land."
+                    : "Rise into the storm and strike the earth with the fury of the heavens, sending lightning racing outward.";
+                case "heavens_light": return "The light of heaven shields you and every ally beside you, lightening their burden.";
             }
             return "";
         }
@@ -8290,7 +8362,7 @@ namespace AlbedosCustomClassesAdvanced
             {
                 Texture2D tex = i < tier ? _ihStarFullTex : (i < tier + pending ? _ihStarPendingTex : _ihStarEmptyTex);
                 if (tex != null)
-                    GUI.DrawTexture(ScaleReferenceRect(x0 + i * (size + gap), y, size, size), tex);
+                    GUI.DrawTexture(IhSnap(ScaleReferenceRect(x0 + i * (size + gap), y, size, size)), tex);
             }
             IhEnsureTreeStyles();
             _ihCountStyle.fontSize = Mathf.Max(8, Mathf.RoundToInt(ScaleReferenceRect(0f, 0f, 0f, 10f).height));
@@ -8302,14 +8374,11 @@ namespace AlbedosCustomClassesAdvanced
 
         private void IhDrawLockedNode(ReferenceNodeUi node, string reason)
         {
-            Rect icon = ScaleReferenceRect(node.IconRect.x, node.IconRect.y, node.IconRect.width, node.IconRect.height);
-            GUI.color = new Color(0.02f, 0.02f, 0.03f, 0.62f);
-            GUI.DrawTexture(icon, Texture2D.whiteTexture);
-            GUI.color = Color.white;
+            IhDrawLockedRegion(node.Id);
             if (_ihPadlockTex != null)
             {
                 float lockSize = node.Id == IhUltimate ? 30f : 24f;
-                GUI.DrawTexture(ScaleReferenceRect(node.IconRect.xMax - lockSize + 4f, node.IconRect.yMax - lockSize + 4f, lockSize, lockSize), _ihPadlockTex);
+                GUI.DrawTexture(IhSnap(ScaleReferenceRect(node.IconRect.xMax - lockSize + 4f, node.IconRect.yMax - lockSize + 4f, lockSize, lockSize)), _ihPadlockTex);
             }
             IhEnsureTreeStyles();
             Vector2 anchor = GetReferenceNameplateAnchor(node);
@@ -8489,7 +8558,22 @@ namespace AlbedosCustomClassesAdvanced
                 DrawHudTreeSlot(player, rect, i < layout.Length ? layout[i] : "", i, scale);
             }
             Rect grace = new Rect(x + 7f * (size + gap) - gap + graceGap, y - size * 0.04f, size * 1.08f, size * 1.18f);
-            DrawHudTreeSlot(player, grace, IhIsUnlocked(player, IhGrace) ? IhGrace : "", BindGrace, scale);
+            if (IhIsUnlocked(player, IhGrace))
+            {
+                DrawHudTreeSlot(player, grace, IhGrace, BindGrace, scale);
+            }
+            else
+            {
+                if (_ihGraceIconTex != null)
+                {
+                    GUI.color = new Color(0.32f, 0.32f, 0.32f, 1f);
+                    GUI.DrawTexture(grace, _ihGraceIconTex);
+                    GUI.color = Color.white;
+                }
+                if (_ihPadlockTex != null)
+                    GUI.DrawTexture(new Rect(grace.center.x - grace.width * 0.22f, grace.center.y - grace.width * 0.22f, grace.width * 0.44f, grace.width * 0.44f), _ihPadlockTex);
+                GUI.Label(new Rect(grace.x - 10f, grace.yMax - 1f, grace.width + 20f, 16f * scale), FormatHotbarBinding(BindGrace), _hudKeyStyle);
+            }
         }
 
         private void DrawHudTreeSlot(Player player, Rect rect, string id, int binding, float scale)
@@ -8627,10 +8711,10 @@ namespace AlbedosCustomClassesAdvanced
 
         private string IhAscensionRule(string id)
         {
-            if (IhContains(IhSignatureSkills, id)) return "Ascends at Lv 32 with Tier 5 (one Signature only).";
-            if (IhContains(IhNormalAdvSkills, id)) return "Ascends at Lv 42 with Tier 5 (one of Shield Charge / Fallen Angel / Ray of Hope).";
-            if (id == IhUltimate) return "Ascends at Lv 50 with Tier 3.";
-            if (id == IhAscendedClassSkill) return "Ascends when you Advance to Paladin.";
+            if (IhContains(IhSignatureSkills, id)) return "Lv 32, Tier 5 (one Signature)";
+            if (IhContains(IhNormalAdvSkills, id)) return "Lv 42, Tier 5 (one of Shield Charge, Fallen Angel, Ray of Hope)";
+            if (id == IhUltimate) return "Lv 50, Tier 3";
+            if (id == IhAscendedClassSkill) return "when you Advance to Paladin";
             return "";
         }
 
@@ -8639,38 +8723,14 @@ namespace AlbedosCustomClassesAdvanced
         {
             if (_ihKeywordRegex == null)
                 _ihKeywordRegex = new System.Text.RegularExpressions.Regex(
-                    @"(?<kw>\b(?:Fire Burn|Spirit Burn|Broken Bones|Judgement Mark|Hyper Armor|Overall Defense|attack damage|Max HP|Blunt|Slash|Pierce|Fire|Frost|Lightning|Poison|Spirit|Expose|Cripple|Stuns|Stun|Zap|Barrier|Stamina|HP)\b)|(?<num>(?<![A-Za-z0-9.])[+-]?\d+(?:\.\d+)?(?:%|s\b|m\b|x\b|°)?)");
+                    @"\b(?:Fire Burn|Spirit Burn|Blunt|Slash|Pierce|Fire|Frost|Lightning|Poison|Spirit)\b");
             return _ihKeywordRegex.Replace(text, new System.Text.RegularExpressions.MatchEvaluator(IhColorMatch));
         }
 
+        // Damage types are Cyan; the rest of the line stays white.
         private string IhColorMatch(System.Text.RegularExpressions.Match match)
         {
-            string value = match.Value;
-            if (match.Groups["num"].Success)
-                return "<b><color=" + IhHex(1f, 0.64f, 0.22f) + ">" + value + "</color></b>";
-            string color;
-            switch (value)
-            {
-                case "Blunt":
-                case "Slash":
-                case "Pierce": color = IhHex(0.86f, 0.82f, 0.74f); break;
-                case "Fire":
-                case "Fire Burn": color = IhHex(1f, 0.46f, 0.26f); break;
-                case "Frost": color = IhHex(0.55f, 0.82f, 1f); break;
-                case "Lightning": color = IhHex(1f, 0.92f, 0.38f); break;
-                case "Poison": color = IhHex(0.56f, 0.92f, 0.36f); break;
-                case "Spirit":
-                case "Spirit Burn": color = IhHex(0.78f, 0.90f, 1f); break;
-                case "Hyper Armor":
-                case "Overall Defense":
-                case "attack damage":
-                case "Barrier":
-                case "Max HP":
-                case "HP": color = IhHex(0.52f, 0.95f, 0.55f); break;
-                case "Stamina": color = IhHex(1f, 0.86f, 0.36f); break;
-                default: color = IhHex(0.84f, 0.62f, 1f); break;
-            }
-            return "<b><color=" + color + ">" + value + "</color></b>";
+            return "<color=" + IhHex(0.42f, 0.88f, 1f) + ">" + match.Value + "</color>";
         }
 
         private void ToggleSkillbook()
@@ -8984,16 +9044,23 @@ namespace AlbedosCustomClassesAdvanced
             _treeConfirmPlaqueTex = LoadUiPng("Confirm_Plaque.png");
             // v0.18.0 progression art.
             _ihPreAdvanceBackdropTex = LoadUiPng("Cleric_Paladin_PreAdvance.png");
-            _ihStarFullTex = LoadUiPng("Tier_Star_Full.png");
-            _ihStarPendingTex = LoadUiPng("Tier_Star_Pending.png");
-            _ihStarEmptyTex = LoadUiPng("Tier_Star_Empty.png");
-            _ihPadlockTex = LoadUiPng("Lock_Padlock.png");
+            _ihStarFullTex = LoadUiPng("Tier_Star_Full.png", true);
+            _ihStarPendingTex = LoadUiPng("Tier_Star_Pending.png", true);
+            _ihStarEmptyTex = LoadUiPng("Tier_Star_Empty.png", true);
+            _ihPadlockTex = LoadUiPng("Lock_Padlock.png", true);
+            _ihLockedBackdropTex = LoadUiPng("Cleric_Paladin_Locked.png");
             _ihRsNormalIconTex = LoadUiPng("Icon_righteous_strike_Normal.png");
             _ihGraceIconTex = LoadUiPng("Icon_heavens_light.png");
             return true;
         }
 
         private Texture2D LoadUiPng(string fileName)
+        {
+            return LoadUiPng(fileName, false);
+        }
+
+        // v0.18.2: small icons (stars, padlock) use mipmaps so they stay crisp when drawn small.
+        private Texture2D LoadUiPng(string fileName, bool mipmaps)
         {
             try
             {
@@ -9017,9 +9084,9 @@ namespace AlbedosCustomClassesAdvanced
                 }
 
                 byte[] bytes = (byte[])readMethod.Invoke(null, new object[] { assetPath });
-                Texture2D texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                Texture2D texture = new Texture2D(2, 2, TextureFormat.RGBA32, mipmaps);
                 texture.wrapMode = TextureWrapMode.Clamp;
-                texture.filterMode = FilterMode.Bilinear;
+                texture.filterMode = mipmaps ? FilterMode.Trilinear : FilterMode.Bilinear;
 
                 // Do NOT call Texture2D.LoadImage(byte[]) directly here. Valheim's current
                 // Unity ImageConversion assembly exposes modern span-based overload metadata that
@@ -9067,6 +9134,17 @@ namespace AlbedosCustomClassesAdvanced
                 Logger.LogWarning("Immortal Heroes UI asset load failed (" + fileName + "); using procedural fallback. " + ex.Message);
                 return null;
             }
+        }
+
+        private static Font FindValheimFont(string name)
+        {
+            Font[] fonts = Resources.FindObjectsOfTypeAll<Font>();
+            for (int i = 0; i < fonts.Length; i++)
+            {
+                if (fonts[i] != null && fonts[i].name == name)
+                    return fonts[i];
+            }
+            return null;
         }
 
         private static Font FindValheimSerifFont()
@@ -9121,7 +9199,7 @@ namespace AlbedosCustomClassesAdvanced
             }
 
             texture.SetPixels32(pixels);
-            texture.Apply(false, false);
+            texture.Apply(texture.mipmapCount > 1, false);
             Logger.LogInfo("Immortal Heroes Skill Tree: Linear color-space compensation applied to UI artwork.");
         }
 
@@ -9770,6 +9848,9 @@ namespace AlbedosCustomClassesAdvanced
         {
             // v0.15.0: the Grace slot and the right panel are baked artwork. Code only adds the
             // live Grace key label and the CONFIRM plaque (only while Tiers are pending).
+            Player footerPlayer = Player.m_localPlayer;
+            if (!IhIsUnlocked(footerPlayer, IhGrace) && IhDrawLockedRegion("grace_slot") && _ihPadlockTex != null)
+                GUI.DrawTexture(IhSnap(ScaleReferenceRect(679f, 556f, 26f, 26f)), _ihPadlockTex);
             Rect graceLabel = ScaleReferenceRect(641f, 607f, 100f, 15f);
             DrawHotbarKeyLabel(graceLabel, BindGrace, "GRACE - " + FormatHotbarBinding(BindGrace));
 
@@ -11082,7 +11163,13 @@ namespace AlbedosCustomClassesAdvanced
             _treeTooltipTitleStyle.fontSize = 14;
 
             _treeTooltipBodyStyle = new GUIStyle(GUI.skin.label);
-            _treeTooltipBodyStyle.fontSize = 12;
+            // v0.18.2: Valheim's own serif for the whole skill sheet.
+            Font tooltipSerif = FindValheimFont("AveriaSerifLibre-Regular");
+            if (tooltipSerif == null) tooltipSerif = FindValheimSerifFont();
+            if (tooltipSerif != null) _treeTooltipBodyStyle.font = tooltipSerif;
+            Font titleSerif = FindValheimSerifFont();
+            if (titleSerif != null) _treeTooltipTitleStyle.font = titleSerif;
+            _treeTooltipBodyStyle.fontSize = 13;
             _treeTooltipBodyStyle.wordWrap = true;
             _treeTooltipBodyStyle.alignment = TextAnchor.UpperLeft;
             _treeTooltipBodyStyle.normal.textColor = new Color(0.92f, 0.92f, 0.89f, 1f);

@@ -369,6 +369,63 @@ def recolor_icon(name, out_name, lo, hi, target):
     icon.save(os.path.join(OUT, out_name))
 
 
+# v0.18.2: regions drawn from the "locked" backdrop over a locked node (reference px).
+# Must match LockedRegions in AlbedosCustomClasses.Advanced.cs.
+LOCKED_REGIONS = {
+    "goddess_relic": (352, 140, 458, 250),
+    "judgement_hammer": (352, 273, 458, 378),
+    "heavens_light": (362, 393, 470, 502),
+    "shield_charge": (532, 140, 634, 250),
+    "fallen_angel": (670, 140, 772, 250),
+    "ray_of_hope": (670, 273, 772, 378),
+    "electric_smite": (826, 192, 980, 358),
+    "grace_slot": (660, 539, 723, 601),
+}
+
+
+def locked_backdrop(pre):
+    """Every Paladin node greyed exactly like the approved locked-state preview (no padlock / text,
+    the code draws those). The runtime copies only the locked node's region from this image."""
+    import render_states as rs
+    img = pre.copy()
+    for node in ("goddess_relic", "judgement_hammer", "heavens_light", "shield_charge", "fallen_angel",
+                 "ray_of_hope", "electric_smite"):
+        box, (cx, pb) = rs.NODES[node]
+        if node == "electric_smite":
+            x0, y0, x1, y1 = 845, 211, 974, 336  # exact frame: the banner behind it stays untouched
+        else:
+            x0, y0, x1, y1 = box[0] - 10, box[1] - 10, box[2] + 10, box[3] + 10
+        region = np.asarray(img.crop((x0, y0, x1, y1)).convert("RGB"), dtype=np.float32) / 255.0
+        mx, mn = region.max(axis=2), region.min(axis=2)
+        sat = (mx - mn) / (mx + 1e-6)
+        parchment = (mx > 0.62) & (sat < 0.32)
+        gray = region.mean(axis=2, keepdims=True).repeat(3, axis=2)
+        locked = gray * 0.50 + np.array([0.035, 0.03, 0.02])
+        w = (~parchment).astype(np.float32)
+        w = np.asarray(Image.fromarray((w * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(0.7)),
+                       dtype=np.float32)[..., None] / 255.0
+        out = region * (1 - w) + locked * w
+        img.paste(Image.fromarray((out.clip(0, 1) * 255).astype(np.uint8)).convert("RGBA"), (x0, y0))
+        half = 64 if node == "electric_smite" else 52
+        img = rs.veil(img, (cx - half, pb - 25, cx + half, pb), (236, 226, 204), 125, radius=6)
+    # Grace footer box: the whole gold box greyed.
+    gx0, gy0, gx1, gy1 = 663, 542, 721, 599
+    region = np.asarray(img.crop((gx0, gy0, gx1, gy1)).convert("RGB"), dtype=np.float32) / 255.0
+    gray = region.mean(axis=2, keepdims=True).repeat(3, axis=2) * 0.55
+    img.paste(Image.fromarray((gray.clip(0, 1) * 255).astype(np.uint8)).convert("RGBA"), (gx0, gy0))
+    return img
+
+
+def framed_icon(source, interior, frame_file, out_name):
+    frame = Image.open(os.path.join(OUT, frame_file)).convert("RGBA")
+    inset = (7, 8, 7, 8)
+    iw = frame.width - inset[0] - inset[2]
+    ih = frame.height - inset[1] - inset[3]
+    icon = source.convert("RGBA").crop(interior).resize((iw, ih), Image.LANCZOS)
+    frame.paste(icon, (inset[0], inset[1]))
+    frame.save(os.path.join(OUT, out_name))
+
+
 def tier_assets():
     import render_tiers as rt
     import render_states as rs
@@ -383,10 +440,12 @@ def main():
     advanced, pre = class_skill_variants(backdrop)
     advanced.save(os.path.join(OUT, "Cleric_Paladin_Reference.png"))
     pre.save(os.path.join(OUT, "Cleric_Paladin_PreAdvance.png"))
+    locked_backdrop(pre).save(os.path.join(OUT, "Cleric_Paladin_Locked.png"))
     # Hotbar icons: Lightning Zap Cyan; Righteous Strike Magenta (Ascended) + Cyan (before Advancement).
     recolor_icon("Icon_righteous_strike.png", "Icon_righteous_strike_Normal.png", 0, 1, 0)
     recolor_icon("Icon_righteous_strike.png", "Icon_righteous_strike.png", 160, 215, 305)
-    recolor_icon("Icon_lightning_zap.png", "Icon_lightning_zap.png", 280, 345, 186)
+    # v0.18.2: Lightning Zap gets the exact same Cyan slot frame as Righteous Strike / Holy Wave.
+    framed_icon(pre, (174, 168, 226, 220), "Icon_holy_wave.png", "Icon_lightning_zap.png")
     tier_assets()
     # v0.18.1: Grace slot icon for the in-game hotbar HUD (cut from the footer Grace box).
     advanced.crop((662, 542, 721, 599)).save(os.path.join(OUT, "Icon_heavens_light.png"))
