@@ -32,6 +32,15 @@
 - Commands (admins on servers, anyone in single player): `/ih [player] <cmd>`; level N / -N, xp N, classtierpoints N, actierpoints N, resetskill all|<skill>, class <mc>, advance <ac>, ascend <skill>, info. Names with spaces in quotes.
 - Tree state B1 (sealed AC panel with checklist) chosen over B2.
 
+## Ascended designs (approved so far; tooltip header "ASCENDED - <SKILL>", names unchanged)
+- Paladin Shield Charge (Ascended): 20m budget, Hyper Armor while charging, Bash = 7m cone that also Stuns Big; charge hitbox radius 4m -> 6m.
+- Paladin Fallen Angel (Ascended): impact leaves a 10m ring for 6s; inside it enemies get Spirit Burn + Fire Burn (3s, refreshed while inside); Hyper Armor through the dive + 3s.
+- Paladin Electric Smite (Ascended Ultimate): keep 16 trails; adds a 6m Thunderstorm for 4s, hits every 0.5s: Lightning damage + Fire DoT + Spirit DoT (3s, refreshed per hit). Smaller/weaker Lightning Tempest.
+- Paladin Goddess Relic (Ascended): 10m damage radius, heavy Blunt + Lightning, applies Judgement Mark, cross 3x size.
+- Base changes: Goddess Relic radius 7m -> 5m, cross about the size of a 0-star Troll. Ray of Hope and Holy Wave: no wind-up, instant cast with 0.5s movement lock, animation = main hand raised like chanting.
+- Rule: instant-cast skills lock movement for 0.5s (was 0.4s in the Framework doc).
+- Code status (2026-10-02): NOT implemented yet: Judgement Hammer, Fallen Angel (code still has Divine Verdict / Aegis Fall), Frenzied Charge, Eclipse (code still has Severed Horizon / Empty Sheath), Gravity Blast. Graces are not implemented as M4+R skills yet (only legacy activatable passives).
+
 ## Core philosophy
 - RPG + Survival, never EZ mode. Skills add power/options without trivializing survival, gathering, bosses, terrain, prep, food.
 - Standalone first, compatibility second. Optional EpicMMO/EpicLoot/Jewelcrafting/CL&LC support later; must work without them.
