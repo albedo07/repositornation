@@ -451,19 +451,15 @@ def state_class_only_sealed():
     img = class_only_common()
     img = neutral_ac_panel(img, navy_texture((AC_BODY[2] - AC_BODY[0], AC_BODY[3] - AC_BODY[1]), 7), "sealed until you Advance")
     d = ImageDraw.Draw(img)
-    img.alpha_composite(padlock(78), (657 - 39, 180))
+    # Padlock + requirement checklist, centered as one group in the panel body (y 152..520).
+    img.alpha_composite(padlock(78), (657 - 39, 214))
     reqs = [("Reach Level 16", True), ("Max a Class skill to Tier 7", False), ("Complete the Advancement Quest", False)]
-    y = 280
+    y = 316
     for text, done in reqs:
         mark = "\u25c6" if done else "\u25c7"
         col = (236, 206, 130) if done else (206, 194, 168)
         text_c(d, 657, y, mark + "  " + text, font(14, False), col, shadow=(0, 0, 0))
-        y += 28
-    text_c(d, 657, 382, "CHOOSE YOUR PATH", font(13), (236, 206, 130), shadow=(0, 0, 0))
-    pl = plaque(150, 40)
-    for cx, name in ((577, "PALADIN"), (737, "PRIEST")):
-        img.alpha_composite(pl, (cx - 75, 406))
-        text_c(d, cx, 417, name, font(14), (190, 170, 128), shadow=(0, 0, 0))
+        y += 30
     save(img, "STATE_B1_ClassOnly_Sealed.png")
 
 
