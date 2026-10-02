@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.17.0";
+        public const string ModVersion = "0.17.1";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -833,10 +833,10 @@ namespace AlbedosCustomClassesAdvanced
             _testingAscendedSkills = Config.Bind("Testing", "AscendedSkills", "", "Temporary until the Ascension system exists: comma list of skill ids treated as Ascended. Paladin: righteous_strike, goddess_relic, judgement_hammer, shield_charge, fallen_angel, ray_of_hope, electric_smite.");
 
             _goddessRadiusV17 = Config.Bind("Paladin Goddess Relic", "Radius_v017", 5f, "Damage radius in meters.");
-            _goddessCrossHeight = Config.Bind("Paladin Goddess Relic", "CrossHeight_v017", 4.6f, "Cross height in meters (about a 0-star Troll).");
-            _goddessCrossWidth = Config.Bind("Paladin Goddess Relic", "CrossWidth_v017", 2.5f, "Cross arm width in meters.");
+            _goddessCrossHeight = Config.Bind("Paladin Goddess Relic", "CrossHeight_v0171", 6.5f, "Cross height in meters (about a 0-star Troll).");
+            _goddessCrossWidth = Config.Bind("Paladin Goddess Relic", "CrossWidth_v0171", 3.5f, "Cross arm width in meters.");
             _goddessAscRadius = Config.Bind("Paladin Goddess Relic Ascended", "Radius", 10f, "Ascended damage radius.");
-            _goddessAscSizeMultiplier = Config.Bind("Paladin Goddess Relic Ascended", "CrossSizeMultiplier", 3f, "Ascended cross size compared to the normal cross.");
+            _goddessAscSizeMultiplier = Config.Bind("Paladin Goddess Relic Ascended", "CrossSizeMultiplier_v0171", 2.12f, "Ascended cross size compared to the normal cross (2.12 keeps the approved 13.8m Ascended cross).");
             _goddessAscDamage = BindDamage("Paladin Goddess Relic Ascended Damage", 120f, 0f, 0f, 0f, 0f, 60f, 0f, 0f);
 
             _rayAscBarrier = Config.Bind("Paladin Ray of Hope Ascended", "BarrierHP", 150f, "Barrier HP granted to allies in the wave.");
@@ -3179,7 +3179,7 @@ namespace AlbedosCustomClassesAdvanced
                 int growthSteps = Mathf.FloorToInt(travelled / stepMeters);
                 size = 1f + Mathf.Max(0f, _hammerSizePerStep.Value) * growthSteps;
                 damageMultiplier = 1f + Mathf.Max(0f, _hammerDamagePerStep.Value) * growthSteps;
-                spin += 900f * Time.deltaTime;
+                spin += 360f * Time.deltaTime;
                 UpdateHammerVisual(hammer, pos, dir, spin, size);
                 HammerHits(player, pos, Mathf.Max(0.2f, _hammerBaseRadius.Value) * size, damageMultiplier, nextHitAt, ascended);
 
@@ -3211,7 +3211,7 @@ namespace AlbedosCustomClassesAdvanced
                     }
                     Vector3 back = toHome.normalized;
                     pos += back * Mathf.Min(speed * Time.deltaTime, toHome.magnitude);
-                    spin += 900f * Time.deltaTime;
+                    spin += 360f * Time.deltaTime;
                     UpdateHammerVisual(hammer, pos, back, spin, size);
                     HammerHits(player, pos, Mathf.Max(0.2f, _hammerBaseRadius.Value) * size, damageMultiplier, nextHitAt, true);
                     yield return null;
@@ -3230,8 +3230,8 @@ namespace AlbedosCustomClassesAdvanced
             Vector3 flat = dir;
             flat.y = 0f;
             Quaternion facing = flat.sqrMagnitude > 0.01f ? Quaternion.LookRotation(flat.normalized, Vector3.up) : Quaternion.identity;
-            // Vertical spin around the axis perpendicular to the flight path.
-            hammer.transform.rotation = facing * Quaternion.AngleAxis(spin, Vector3.right) * Quaternion.AngleAxis(90f, Vector3.forward);
+            // Upright hammer doing continuous front flips: spin around the axis across the flight path.
+            hammer.transform.rotation = facing * Quaternion.AngleAxis(spin, Vector3.right);
             hammer.transform.localScale = Vector3.one * (0.25f * size);
         }
 

@@ -1,0 +1,5 @@
+Immortal Heroes v0.17.1 - Paladin Tweaks
+- Goddess Relic: normal cross is bigger (6.5m tall, 3.5m arms) to match a 0-star Troll.
+  The Ascended cross keeps its approved size (about 13.8m).
+- Judgement Hammer: stands upright and spins in continuous front flips around the axis
+  across its flight path, at a calmer 360 degrees per second. Growth stays uncapped.

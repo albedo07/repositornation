@@ -1,4 +1,4 @@
-Immortal Heroes v0.17.0 - Test focus (Paladin)
+Immortal Heroes v0.17.1 - Test focus (Paladin)
 
 Normal versions (Paladin character):
 1. Goddess Relic: smaller Troll-sized cross, 5m impact.

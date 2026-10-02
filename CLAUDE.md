@@ -3,7 +3,7 @@
 ## Working rules
 - User wants short responses and real execution, not long explanations.
 - **RUSH B** = immediately code the obvious requested task, minimal commentary, use latest approved build as baseline, don't redesign unrelated things, verify and package.
-- Latest package: **v0.17.0 — Paladin Rework + Ascended Test Switch**. Recent work is almost entirely UI polish; do NOT change combat/progression logic unless explicitly requested.
+- Latest package: **v0.17.1 — Paladin Tweaks** (v0.17.0 = Paladin Rework + Ascended Test Switch). Recent work is almost entirely UI polish; do NOT change combat/progression logic unless explicitly requested.
 - Never patch visual problems by drawing random rectangles over the reference asset. Keep approved artwork intact; make layout/components fit properly.
 
 ## Framework doc (source of truth for design)
@@ -43,6 +43,8 @@
 - Paladin Judgement Hammer (Ascended): after it stops (wall or max range) it flies back to the Paladin keeping its grown size, hitting everything again; catching it cuts its cooldown by 30%; applies Judgement Mark.
 - Base changes: Goddess Relic radius 7m -> 5m, cross about the size of a 0-star Troll. Ray of Hope and Holy Wave: no wind-up, instant cast with 0.5s movement lock, animation = main hand raised like chanting.
 - Rule: instant-cast skills lock movement for 0.5s (was 0.4s in the Framework doc).
+- Range/radius reference: the MyDirtyHoe grid in-game is THE ruler for every meter value we discuss (user's 10m radius screenshot, 2026-10-02). 1 Unity unit = 1m.
+- Goddess Relic normal cross 6.5m x 3.5m (0-star Troll); Ascended cross ~13.8m (approved). Judgement Hammer: upright, front-flips, no growth cap.
 - Code status: v0.17.0 implemented Judgement Hammer + Fallen Angel (Divine Verdict / Aegis Fall code kept but unused) and all Paladin Ascended versions behind `[Testing] AscendedSkills`. NOT implemented yet: Frenzied Charge, Eclipse (code still has Severed Horizon / Empty Sheath), Gravity Blast. Graces are not implemented as M4+R skills yet (only legacy activatable passives).
 
 ## Core philosophy
