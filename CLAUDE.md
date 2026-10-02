@@ -9,6 +9,29 @@
 ## Framework doc (source of truth for design)
 - Google Doc "Immortal Heroes Framework": https://docs.google.com/document/d/1sTpQSP7Gr1kHJ7cdl1b7WtOomv7C7_k5_Bmj2cqw_Xg/edit (fileId `1sTpQSP7Gr1kHJ7cdl1b7WtOomv7C7_k5_Bmj2cqw_Xg`). Read it with Drive `read_file_content`. The user allows edits when we make major changes or add terms; editing needs the Google Docs connector.
 
+## Progression decisions (2026-10-02, not yet in code)
+- "MC" = Main Class (formerly "Class").
+- Ascended MC skill per AC: Sword Master Impact Wave · Mercenary Heavy Slash · Paladin Righteous Strike · Priest Holy Wave · Wizard Glacial Descent · Spellcaster Stonefang Eruption. (Tree art still shows Lightning Zap as Paladin's Ascended: fix when the universal tree is built.)
+- Signatures (unlock at Advancement Lv16) / Lv24 skill / Lv32 pair:
+  - Sword Master: Moonlight Splitter + Crescent Cleave / Blade Storm / Frenzied Charge, Eclipse
+  - Mercenary: Stomp + Circle Swing / Bonecrusher / Seismic Guillotine, Reaver's Orbit
+  - Paladin: Goddess Relic + Judgement Hammer / Shield Charge / Fallen Angel, Ray of Hope
+  - Priest: Lightning Relic + Holy Relic / Divine Intervention / Grand Cross, Heaven's Judgement
+  - Wizard: Meteor Fall + Gravity Dominion / Astral Railcannon / Astral Greatblade, Frost Nova
+  - Spellcaster: Arcane Phalanx + Afterimage Arsenal / Void Step / Rift Echo, Gravity Blast
+- Gravity Blast (new Spellcaster skill): Laser Projectile, Free Aim, travels 15m in 4s, Slash + Pierce only, persistent damage every 0.5s, 5m orb radius/pull (orb about Greydwarf Brute size), passes through enemies, stops on walls/physical objects, pulls Small only; Big/Boss get Cripple 3s (refreshes per hit).
+- Sorcerer: cannot Block/Parry and cannot equip Shields (auto-unequip with message on becoming Sorcerer). Melee penalty is only Warlock's -70%. Spellcaster = attack interval -50%. Wizard +40% Eitr regen only during Overcharge.
+- Judgement Mark: only Paladin's Ascended Righteous Strike and the 2 Paladin Signatures apply it; a Mark-applying skill hitting a marked target detonates it.
+- Advancement prerequisites: Lv16, the AC's MC skill at Tier 7, AND all 14 MC Tier Points spent. MC points never carry into the AC pool; MC tree locks after Advancement.
+- Ascensions (free for now, no quests): limits 1 Ascended MC skill, 1 Signature, 1 normal AC skill, + Ultimate Ascension. Only level + Tier requirements until quests exist. Class Reset before Advancement stays free.
+- Losing levels (commands) below 16/32/42/50 voids Advancement/Ascensions ("annulment"); spent > earned points auto-reset that pool.
+- XP: own system, EpicMMO-style creature table (saved in docs/reference/epicmmo_xp_tables), x2 per star, auto entries for unknown creatures. See docs/reference/MOD_REFERENCE_NOTES.md.
+- Death: -5% total XP, protected floor = 10% of total XP and never below current level; no loss for 10 min after any death.
+- Guilds (own system, later): active guildmates within 100m get 80% of kill XP each; quest rewards individual.
+- Level-up rewards: Tier Points + message/effect only. Attribute points come later in a separate mod; expose level/XP API + events for it.
+- Commands (admins on servers, anyone in single player): `/ih [player] <cmd>`; level N / -N, xp N, classtierpoints N, actierpoints N, resetskill all|<skill>, class <mc>, advance <ac>, ascend <skill>, info. Names with spaces in quotes.
+- Tree state B1 (sealed AC panel with checklist) chosen over B2.
+
 ## Core philosophy
 - RPG + Survival, never EZ mode. Skills add power/options without trivializing survival, gathering, bosses, terrain, prep, food.
 - Standalone first, compatibility second. Optional EpicMMO/EpicLoot/Jewelcrafting/CL&LC support later; must work without them.
