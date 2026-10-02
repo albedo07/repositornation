@@ -452,9 +452,10 @@ def state_class_only_sealed():
     img = neutral_ac_panel(img, navy_texture((AC_BODY[2] - AC_BODY[0], AC_BODY[3] - AC_BODY[1]), 7), "sealed until you Advance")
     d = ImageDraw.Draw(img)
     # Padlock + requirement checklist, centered as one group in the panel body (y 152..520).
-    img.alpha_composite(padlock(78), (657 - 39, 214))
-    reqs = [("Reach Level 16", True), ("Max a Class skill to Tier 7", False), ("Complete the Advancement Quest", False)]
-    y = 316
+    img.alpha_composite(padlock(78), (657 - 39, 202))
+    reqs = [("Reach Level 16", True), ("Spend all 14 Class Tier Points", False),
+            ("Max a Class skill to Tier 7", False), ("Complete the Advancement Quest", False)]
+    y = 304
     for text, done in reqs:
         mark = "\u25c6" if done else "\u25c7"
         col = (236, 206, 130) if done else (206, 194, 168)
