@@ -21,7 +21,7 @@
   - Spellcaster: Arcane Phalanx + Afterimage Arsenal / Void Step / Rift Echo, Gravity Blast
 - Gravity Blast (new Spellcaster skill): Laser Projectile, Free Aim, travels 15m in 4s, Slash + Pierce only, persistent damage every 0.5s, 5m orb radius/pull (orb about Greydwarf Brute size), passes through enemies, stops on walls/physical objects, pulls Small only; Big/Boss get Cripple 3s (refreshes per hit).
 - Sorcerer: cannot Block/Parry and cannot equip Shields (auto-unequip with message on becoming Sorcerer). Melee penalty is only Warlock's -70%. Spellcaster = attack interval -50%. Wizard +40% Eitr regen only during Overcharge.
-- Judgement Mark: only Paladin's Ascended Righteous Strike and the 2 Paladin Signatures apply it; a Mark-applying skill hitting a marked target detonates it.
+- Judgement Mark: only Paladin's Ascended Righteous Strike and the Ascended Signature (whichever of Goddess Relic / Judgement Hammer is Ascended) apply it; normal Signatures don't. A Mark-applying skill hitting a marked target detonates it.
 - Advancement prerequisites: Lv16, the AC's MC skill at Tier 7, AND all 14 MC Tier Points spent. MC points never carry into the AC pool; MC tree locks after Advancement.
 - Ascensions (free for now, no quests): limits 1 Ascended MC skill, 1 Signature, 1 normal AC skill, + Ultimate Ascension. Only level + Tier requirements until quests exist. Class Reset before Advancement stays free.
 - Losing levels (commands) below 16/32/42/50 voids Advancement/Ascensions ("annulment"); spent > earned points auto-reset that pool.
@@ -37,6 +37,7 @@
 - Paladin Fallen Angel (Ascended): impact leaves a 10m ring for 6s; inside it enemies get Spirit Burn + Fire Burn (3s, refreshed while inside); Hyper Armor through the dive + 3s.
 - Paladin Electric Smite (Ascended Ultimate): keep 16 trails; adds a 6m Thunderstorm for 4s, hits every 0.5s: Lightning damage + Fire DoT + Spirit DoT (3s, refreshed per hit). Smaller/weaker Lightning Tempest.
 - Paladin Goddess Relic (Ascended): 10m damage radius, heavy Blunt + Lightning, applies Judgement Mark, cross 3x size.
+- Paladin Judgement Hammer (Ascended): after it stops (wall or max range) it flies back to the Paladin keeping its grown size, hitting everything again; catching it cuts its cooldown by 30%; applies Judgement Mark.
 - Base changes: Goddess Relic radius 7m -> 5m, cross about the size of a 0-star Troll. Ray of Hope and Holy Wave: no wind-up, instant cast with 0.5s movement lock, animation = main hand raised like chanting.
 - Rule: instant-cast skills lock movement for 0.5s (was 0.4s in the Framework doc).
 - Code status (2026-10-02): NOT implemented yet: Judgement Hammer, Fallen Angel (code still has Divine Verdict / Aegis Fall), Frenzied Charge, Eclipse (code still has Severed Horizon / Empty Sheath), Gravity Blast. Graces are not implemented as M4+R skills yet (only legacy activatable passives).
