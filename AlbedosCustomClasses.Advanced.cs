@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.16.1";
+        public const string ModVersion = "0.17.0";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -320,6 +320,27 @@ namespace AlbedosCustomClassesAdvanced
         private ConfigEntry<float> _judgementCrippleDuration;
         private readonly Dictionary<int, JudgementMarkState> _judgementMarks = new Dictionary<int, JudgementMarkState>();
         private string _paladinMarkSourceContext = string.Empty;
+
+        // v0.17.0 Paladin rework + temporary Ascended test switch.
+        private ConfigEntry<string> _testingAscendedSkills;
+        private string _ascendedCacheRaw;
+        private readonly HashSet<string> _ascendedCache = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private bool _judgementDetonatedOnLastHit;
+        private ConfigEntry<float> _goddessRadiusV17, _goddessCrossHeight, _goddessCrossWidth, _goddessAscRadius, _goddessAscSizeMultiplier;
+        private DamageConfig _goddessAscDamage;
+        private ConfigEntry<float> _rayAscBarrier, _rayAscBarrierDuration;
+        private ConfigEntry<float> _hammerCooldown, _hammerStamina, _hammerWindup, _hammerRange, _hammerTravelTime, _hammerBaseRadius,
+            _hammerStepMeters, _hammerSizePerStep, _hammerDamagePerStep, _hammerTick, _hammerCrippleDuration, _hammerCatchCooldownCut;
+        private DamageConfig _hammerDamage;
+        private ConfigEntry<float> _angelCooldown, _angelStamina, _angelJumpHeight, _angelRiseTime, _angelDiveSpeed, _angelRadius,
+            _angelBrokenBones, _angelRingRadius, _angelRingDuration, _angelBurnDuration, _angelFireDot, _angelSpiritDot, _angelHyperAfter;
+        private DamageConfig _angelDamage;
+        private ConfigEntry<float> _chargeAscDistance, _chargeAscHitRadius, _chargeAscBashRadius, _chargeAscBashAngle;
+        private ConfigEntry<float> _smiteStormRadius, _smiteStormDuration, _smiteStormTick, _smiteStormDotDuration, _smiteStormFireDot, _smiteStormSpiritDot;
+        private DamageConfig _smiteStormDamage;
+        private ConfigEntry<float> _rsAscCooldown, _rsAscStamina, _rsAscWindup, _rsAscRange, _rsAscRadius, _rsAscExpose, _rsAscFollowRadius,
+            _rsAscFollowMultiplier, _rsAscTrailRange, _rsAscTrailTime, _rsAscTrailTick, _rsAscSpiritDot, _rsAscSpiritDuration;
+        private DamageConfig _rsAscDamage, _rsAscTrailDamage;
         private bool _judgementDetonationInProgress;
 
         private ConfigEntry<float> _divineCooldown;
@@ -808,6 +829,77 @@ namespace AlbedosCustomClassesAdvanced
             _divineTrailDamage = BindDamage("Paladin Electric Smite Trail Damage v0109", 0f, 0f, 0f, 0f, 0f, 18f, 0f, 0f);
             _divineZapDamage = Config.Bind("Paladin Electric Smite", "ZapExplosionLightningDamage", 0f, "0 uses Combat Runtime Zap default.");
 
+            // v0.17.0: temporary Ascended test switch + Paladin rework.
+            _testingAscendedSkills = Config.Bind("Testing", "AscendedSkills", "", "Temporary until the Ascension system exists: comma list of skill ids treated as Ascended. Paladin: righteous_strike, goddess_relic, judgement_hammer, shield_charge, fallen_angel, ray_of_hope, electric_smite.");
+
+            _goddessRadiusV17 = Config.Bind("Paladin Goddess Relic", "Radius_v017", 5f, "Damage radius in meters.");
+            _goddessCrossHeight = Config.Bind("Paladin Goddess Relic", "CrossHeight_v017", 4.6f, "Cross height in meters (about a 0-star Troll).");
+            _goddessCrossWidth = Config.Bind("Paladin Goddess Relic", "CrossWidth_v017", 2.5f, "Cross arm width in meters.");
+            _goddessAscRadius = Config.Bind("Paladin Goddess Relic Ascended", "Radius", 10f, "Ascended damage radius.");
+            _goddessAscSizeMultiplier = Config.Bind("Paladin Goddess Relic Ascended", "CrossSizeMultiplier", 3f, "Ascended cross size compared to the normal cross.");
+            _goddessAscDamage = BindDamage("Paladin Goddess Relic Ascended Damage", 120f, 0f, 0f, 0f, 0f, 60f, 0f, 0f);
+
+            _rayAscBarrier = Config.Bind("Paladin Ray of Hope Ascended", "BarrierHP", 150f, "Barrier HP granted to allies in the wave.");
+            _rayAscBarrierDuration = Config.Bind("Paladin Ray of Hope Ascended", "BarrierDuration", 12f, "Barrier duration.");
+
+            _hammerCooldown = Config.Bind("Paladin Judgement Hammer", "Cooldown", 16f, "Seconds.");
+            _hammerStamina = Config.Bind("Paladin Judgement Hammer", "StaminaCost", 32f, "Stamina cost.");
+            _hammerWindup = Config.Bind("Paladin Judgement Hammer", "Windup", 1f, "Framework default wind-up (no wind-up specified).");
+            _hammerRange = Config.Bind("Paladin Judgement Hammer", "Range", 20f, "Free Aim Laser Projectile range.");
+            _hammerTravelTime = Config.Bind("Paladin Judgement Hammer", "TravelTime", 1.5f, "Seconds to travel the full range.");
+            _hammerBaseRadius = Config.Bind("Paladin Judgement Hammer", "BaseHitRadius", 0.9f, "Hit radius at size 1x.");
+            _hammerStepMeters = Config.Bind("Paladin Judgement Hammer", "GrowthStepMeters", 0.5f, "Every this many meters travelled, size and damage grow.");
+            _hammerSizePerStep = Config.Bind("Paladin Judgement Hammer", "SizeGrowthPerStep", 0.5f, "+0.5x size per step (Framework doc).");
+            _hammerDamagePerStep = Config.Bind("Paladin Judgement Hammer", "DamageGrowthPerStep", 0.3f, "+0.3x damage per step (Framework doc).");
+            _hammerTick = Config.Bind("Paladin Judgement Hammer", "PersistentHitInterval", 0.5f, "Persistent Damage interval per enemy.");
+            _hammerCrippleDuration = Config.Bind("Paladin Judgement Hammer", "CrippleDuration", 6f, "Cripple duration.");
+            _hammerCatchCooldownCut = Config.Bind("Paladin Judgement Hammer Ascended", "CatchCooldownCutPercent", 30f, "Catching the returning hammer cuts its cooldown by this percent.");
+            _hammerDamage = BindDamage("Paladin Judgement Hammer Damage", 40f, 0f, 0f, 0f, 0f, 22f, 0f, 0f);
+
+            _angelCooldown = Config.Bind("Paladin Fallen Angel", "Cooldown", 20f, "Seconds.");
+            _angelStamina = Config.Bind("Paladin Fallen Angel", "StaminaCost", 40f, "Stamina cost.");
+            _angelJumpHeight = Config.Bind("Paladin Fallen Angel", "JumpHeight", 7f, "Leap height in meters.");
+            _angelRiseTime = Config.Bind("Paladin Fallen Angel", "RiseTime", 0.55f, "Seconds to reach the top of the leap.");
+            _angelDiveSpeed = Config.Bind("Paladin Fallen Angel", "DiveSpeed", 28f, "Downward speed of the head-first dive.");
+            _angelRadius = Config.Bind("Paladin Fallen Angel", "ImpactRadius", 10f, "Landing impact radius.");
+            _angelBrokenBones = Config.Bind("Paladin Fallen Angel", "BrokenBonesDuration", 6f, "Broken Bones duration.");
+            _angelDamage = BindDamage("Paladin Fallen Angel Damage", 95f, 0f, 0f, 0f, 0f, 0f, 0f, 0f);
+            _angelRingRadius = Config.Bind("Paladin Fallen Angel Ascended", "BurnRingRadius", 10f, "Radius of the burning ring left on impact.");
+            _angelRingDuration = Config.Bind("Paladin Fallen Angel Ascended", "BurnRingDuration", 6f, "How long the ring lasts.");
+            _angelBurnDuration = Config.Bind("Paladin Fallen Angel Ascended", "BurnDuration", 3f, "Spirit Burn + Fire Burn duration, refreshed while inside.");
+            _angelFireDot = Config.Bind("Paladin Fallen Angel Ascended", "FireDotPerSecond", 6f, "Fire Burn damage per second.");
+            _angelSpiritDot = Config.Bind("Paladin Fallen Angel Ascended", "SpiritDotPerSecond", 6f, "Spirit Burn damage per second.");
+            _angelHyperAfter = Config.Bind("Paladin Fallen Angel Ascended", "HyperArmorAfterLanding", 3f, "Hyper Armor kept after landing.");
+
+            _chargeAscDistance = Config.Bind("Paladin Shield Charge Ascended", "Distance", 20f, "Charge budget in meters.");
+            _chargeAscHitRadius = Config.Bind("Paladin Shield Charge Ascended", "ChargeHitRadius", 6f, "Charge hitbox radius.");
+            _chargeAscBashRadius = Config.Bind("Paladin Shield Charge Ascended", "BashConeRadius", 7f, "Bash cone length.");
+            _chargeAscBashAngle = Config.Bind("Paladin Shield Charge Ascended", "BashConeAngle", 120f, "Bash cone total angle in degrees.");
+
+            _smiteStormRadius = Config.Bind("Paladin Electric Smite Ascended", "ThunderstormRadius", 6f, "Thunderstorm radius.");
+            _smiteStormDuration = Config.Bind("Paladin Electric Smite Ascended", "ThunderstormDuration", 4f, "Thunderstorm duration.");
+            _smiteStormTick = Config.Bind("Paladin Electric Smite Ascended", "ThunderstormHitInterval", 0.5f, "Seconds between Thunderstorm hits.");
+            _smiteStormDotDuration = Config.Bind("Paladin Electric Smite Ascended", "DotDuration", 3f, "Fire + Spirit DoT duration, refreshed every hit.");
+            _smiteStormFireDot = Config.Bind("Paladin Electric Smite Ascended", "FireDotPerSecond", 5f, "Fire DoT per second.");
+            _smiteStormSpiritDot = Config.Bind("Paladin Electric Smite Ascended", "SpiritDotPerSecond", 5f, "Spirit DoT per second.");
+            _smiteStormDamage = BindDamage("Paladin Electric Smite Thunderstorm Damage", 0f, 0f, 0f, 0f, 0f, 22f, 0f, 0f);
+
+            _rsAscCooldown = Config.Bind("Paladin Righteous Strike Ascended", "Cooldown", 8f, "Seconds.");
+            _rsAscStamina = Config.Bind("Paladin Righteous Strike Ascended", "StaminaCost", 20f, "Stamina cost.");
+            _rsAscWindup = Config.Bind("Paladin Righteous Strike Ascended", "Windup", 0.7f, "Wind-up.");
+            _rsAscRange = Config.Bind("Paladin Righteous Strike Ascended", "Range", 50f, "Ground PAC range.");
+            _rsAscRadius = Config.Bind("Paladin Righteous Strike Ascended", "Radius", 7f, "Strike radius.");
+            _rsAscExpose = Config.Bind("Paladin Righteous Strike Ascended", "ExposeDuration", 8f, "Expose duration.");
+            _rsAscFollowRadius = Config.Bind("Paladin Righteous Strike Ascended", "FollowUpRadius", 3f, "Second strike radius after a Mark detonation.");
+            _rsAscFollowMultiplier = Config.Bind("Paladin Righteous Strike Ascended", "FollowUpDamageMultiplier", 0.5f, "Second strike damage multiplier.");
+            _rsAscTrailRange = Config.Bind("Paladin Righteous Strike Ascended", "TrailRange", 7f, "Lightning Trail length.");
+            _rsAscTrailTime = Config.Bind("Paladin Righteous Strike Ascended", "TrailTravelTime", 1f, "Seconds for a trail to reach full length (faster than Electric Smite).");
+            _rsAscTrailTick = Config.Bind("Paladin Righteous Strike Ascended", "TrailHitInterval", 0.5f, "Persistent hit interval inside trails.");
+            _rsAscSpiritDot = Config.Bind("Paladin Righteous Strike Ascended", "SpiritDotPerSecond", 6f, "Trail Spirit DoT per second.");
+            _rsAscSpiritDuration = Config.Bind("Paladin Righteous Strike Ascended", "SpiritDotDuration", 6f, "Trail Spirit DoT duration.");
+            _rsAscDamage = BindDamage("Paladin Righteous Strike Ascended Damage", 40f, 0f, 0f, 0f, 0f, 48f, 0f, 0f);
+            _rsAscTrailDamage = BindDamage("Paladin Righteous Strike Ascended Trail Damage", 0f, 0f, 0f, 0f, 0f, 10f, 0f, 0f);
+
             _paladinElementalBonus = Config.Bind("Paladin Passive - Elemental Savant", "ElementalDamagePercent", 25f, "+25% Fire/Frost/Lightning/Poison/Spirit damage.");
             _paladinElementalFlatEitr = Config.Bind("Paladin Passive - Elemental Savant", "FlatEitr", 30f, "+30 flat Max Eitr.");
             _paladinElementalEitrRegen = Config.Bind("Paladin Passive - Elemental Savant", "EitrRegenPercent", 30f, "+30% Eitr Regen.");
@@ -1091,7 +1183,7 @@ namespace AlbedosCustomClassesAdvanced
                 if (advancement == "Sword Master")
                     CastSeveredHorizon(player);
                 else if (advancement == "Paladin")
-                    CastDivineVerdict(player);
+                    CastJudgementHammer(player);
                 else if (advancement == "Mercenary")
                     CastSeismicGuillotine(player);
                 else if (advancement == "Priest")
@@ -1103,7 +1195,7 @@ namespace AlbedosCustomClassesAdvanced
                 if (advancement == "Sword Master")
                     CastEmptySheath(player);
                 else if (advancement == "Paladin")
-                    CastAegisFall(player);
+                    CastFallenAngel(player);
                 else if (advancement == "Mercenary")
                     CastReaversOrbit(player);
                 else if (advancement == "Priest")
@@ -2161,15 +2253,22 @@ namespace AlbedosCustomClassesAdvanced
             if (windup > 0f)
                 yield return new WaitForSeconds(windup);
 
-            const float crossHeight = 6.5f;
+            // v0.17.0: normal cross is about a 0-star Troll, 5m radius, no Mark.
+            // Ascended: 3x cross, 10m radius, heavy Blunt + Lightning and it applies Judgement Mark.
+            bool ascended = IsAscendedSkill("goddess_relic");
+            float sizeMultiplier = ascended ? Mathf.Max(1f, _goddessAscSizeMultiplier.Value) : 1f;
+            float crossHeight = Mathf.Max(1f, _goddessCrossHeight.Value) * sizeMultiplier;
+            float crossWidth = Mathf.Max(0.5f, _goddessCrossWidth.Value) * sizeMultiplier;
+            float radius = Mathf.Max(1f, ascended ? _goddessAscRadius.Value : _goddessRadiusV17.Value);
+
             Vector3 finalCenter = GetGroundedCrossCenter(target, crossHeight);
-            Vector3 skyPoint = DragonCombat.GetIndoorSafeSkyPoint(finalCenter, 7f);
+            Vector3 skyPoint = DragonCombat.GetIndoorSafeSkyPoint(finalCenter, Mathf.Max(7f, crossHeight + 2f));
             GameObject cross = CreateCross(
                 skyPoint,
                 new Color(1f, 0.82f, 0.35f, 1f),
                 crossHeight,
-                3.5f,
-                0.12f,
+                crossWidth,
+                0.12f * sizeMultiplier,
                 _enableVfx.Value
             );
 
@@ -2196,22 +2295,29 @@ namespace AlbedosCustomClassesAdvanced
             if (_enableVfx.Value)
             {
                 CreateLightning(target, new Color(0.62f, 0.88f, 1f, 1f), 0.32f);
-                StartCoroutine(AnimateRing(target + Vector3.up * 0.08f, 0.3f, Mathf.Max(1f, _goddessRadius.Value), 0.55f, new Color(1f, 0.82f, 0.35f, 0.92f), 0.12f));
+                StartCoroutine(AnimateRing(target + Vector3.up * 0.08f, 0.3f, radius, 0.55f, new Color(1f, 0.82f, 0.35f, 0.92f), 0.12f));
             }
 
-            List<Character> targets = GetSphereTargets(player, target, Mathf.Max(1f, _goddessRadius.Value));
+            List<Character> targets = GetSphereTargets(player, target, radius);
             for (int i = 0; i < targets.Count; i++)
             {
-                _paladinMarkSourceContext = "GoddessRelic";
-                try
+                if (ascended)
+                {
+                    _paladinMarkSourceContext = "GoddessRelic";
+                    try
+                    {
+                        DealDamage(player, targets[i], _goddessAscDamage, 28f, false);
+                    }
+                    finally
+                    {
+                        _paladinMarkSourceContext = string.Empty;
+                    }
+                }
+                else
                 {
                     DealDamage(player, targets[i], _goddessDamage, 20f, false);
+                    StartCoroutine(SpiritDot(player, targets[i], _goddessSpiritDot.Value, _goddessSpiritDuration.Value));
                 }
-                finally
-                {
-                    _paladinMarkSourceContext = string.Empty;
-                }
-                StartCoroutine(SpiritDot(player, targets[i], _goddessSpiritDot.Value, _goddessSpiritDuration.Value));
             }
             if (cross != null)
                 Destroy(cross, 3.0f);
@@ -2222,10 +2328,10 @@ namespace AlbedosCustomClassesAdvanced
             const string id = "Paladin.RayOfHope";
             if (!BeginCast(player, id, _rayCooldown.Value, _rayStamina.Value))
                 return;
-            float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _rayWindup.Value));
-            DragonCombat.LockSkill(player, windup);
-            DragonCombat.PlaySkillPose(player, "Channel", windup + 0.10f);
-            StartCoroutine(RayOfHopeRoutine(player, windup));
+            // v0.17.0: instant cast (no channel), 0.5s movement lock, chant animation.
+            DragonCombat.LockSkill(player, 0.5f);
+            DragonCombat.PlaySkillPose(player, "Chant", 0.50f);
+            StartCoroutine(RayOfHopeRoutine(player, 0f));
         }
 
         private IEnumerator RayOfHopeRoutine(Player player, float windup)
@@ -2240,7 +2346,20 @@ namespace AlbedosCustomClassesAdvanced
             float healAmount = player.GetMaxHealth() * Mathf.Clamp(_rayHealPercent.Value, 0f, 100f) / 100f;
             Collider[] allyHits = Physics.OverlapSphere(player.transform.position, radius);
             HashSet<Player> allies = new HashSet<Player>();
-            for (int i = 0; i < allyHits.Length; i++) { Player ally = allyHits[i].GetComponentInParent<Player>(); if (ally == null || allies.Contains(ally)) continue; allies.Add(ally); Heal(ally, healAmount); DragonCombat.ApplyTimedBuff(ally, "Paladin.RayOfHope", Mathf.Max(0.1f, _rayBuffDuration.Value), Mathf.Max(0f, _rayDamageBuff.Value) / 100f, 0f, 0f, 0f, 0f, 0f, false); }
+            bool ascended = IsAscendedSkill("ray_of_hope");
+            for (int i = 0; i < allyHits.Length; i++)
+            {
+                Player ally = allyHits[i].GetComponentInParent<Player>();
+                if (ally == null || allies.Contains(ally)) continue;
+                allies.Add(ally);
+                Heal(ally, healAmount);
+                DragonCombat.ApplyTimedBuff(ally, "Paladin.RayOfHope", Mathf.Max(0.1f, _rayBuffDuration.Value), Mathf.Max(0f, _rayDamageBuff.Value) / 100f, 0f, 0f, 0f, 0f, 0f, false);
+                if (ascended)
+                {
+                    CleanseAilments(ally);
+                    GrantPriestBarrier(ally, Mathf.Max(1f, _rayAscBarrier.Value), 0f, Mathf.Max(0.5f, _rayAscBarrierDuration.Value));
+                }
+            }
             List<Character> enemies = GetSphereTargets(player, player.transform.position, radius);
             for (int i = 0; i < enemies.Count; i++) RefreshSpiritBurn(player, enemies[i], 1f, Mathf.Max(0.1f, _raySpiritBurnDuration.Value));
             if (_enableVfx.Value) StartCoroutine(AnimateRing(player.transform.position + Vector3.up * 0.12f, 0.6f, radius, 0.8f, new Color(1f, 0.93f, 0.52f, 0.95f), 0.11f));
@@ -2271,8 +2390,9 @@ namespace AlbedosCustomClassesAdvanced
             if (forward.sqrMagnitude < 0.01f) forward = player.transform.forward;
             forward.Normalize();
             float lastLookYaw = Mathf.Atan2(forward.x, forward.z) * Mathf.Rad2Deg;
-            float limit = Mathf.Max(1f, _shieldChargeDistance.Value);
-            float radius = Mathf.Max(0.5f, _shieldChargeRadius.Value);
+            bool ascended = IsAscendedSkill("shield_charge");
+            float limit = Mathf.Max(1f, ascended ? _chargeAscDistance.Value : _shieldChargeDistance.Value);
+            float radius = Mathf.Max(0.5f, ascended ? _chargeAscHitRadius.Value : _shieldChargeRadius.Value);
             float chargeProgress = 0f;
             Dictionary<int, float> nextHitAt = new Dictionary<int, float>();
             Dictionary<int, int> persistentHitCount = new Dictionary<int, int>();
@@ -2305,6 +2425,8 @@ namespace AlbedosCustomClassesAdvanced
                     // Prevent normal controls adding a second, unswept movement.
                     // Look/steering input and the dedicated Left Click Bash input remain available.
                     DragonCombat.LockSkill(player, 0.1f);
+                    if (ascended)
+                        DragonCombat.GrantHyperArmor(player, 0.25f);
                     float speed = Mathf.Max(1f, player.m_runSpeed) * Mathf.Max(1f, _shieldChargeSpeedMultiplier.Value);
                     float requested = Mathf.Min(speed * Time.fixedDeltaTime, limit - chargeProgress);
                     float step = GetShieldChargeStep(player, body, capsule, forward, requested);
@@ -2476,17 +2598,30 @@ namespace AlbedosCustomClassesAdvanced
         {
             if (player == null || player.IsDead()) return;
             ShowMessage("Shield Bash");
-            float radius = Mathf.Max(0.5f, _shieldChargeRadius.Value);
-            Vector3 center = player.transform.position + forward * Mathf.Max(1f, radius * 0.65f) + Vector3.up;
+            bool ascended = IsAscendedSkill("shield_charge");
+            float radius = Mathf.Max(0.5f, ascended ? _chargeAscBashRadius.Value : _shieldChargeRadius.Value);
+            float halfAngle = Mathf.Clamp(_chargeAscBashAngle.Value, 10f, 360f) * 0.5f;
+            Vector3 center = ascended
+                ? player.transform.position + Vector3.up
+                : player.transform.position + forward * Mathf.Max(1f, radius * 0.65f) + Vector3.up;
             Collider[] hits = Physics.OverlapSphere(center, radius, ~0, QueryTriggerInteraction.Ignore);
             HashSet<Character> damaged = new HashSet<Character>();
             for (int i = 0; i < hits.Length; i++)
             {
                 Character target = hits[i].GetComponentInParent<Character>();
                 if (target == null || damaged.Contains(target) || !IsEnemy(player, target)) continue;
+                if (ascended)
+                {
+                    // Ascended Bash is a frontal cone.
+                    Vector3 flat = target.transform.position - player.transform.position;
+                    flat.y = 0f;
+                    if (flat.sqrMagnitude > 0.01f && Vector3.Angle(forward, flat) > halfAngle) continue;
+                }
                 if (!CanShieldChargeHit(player, target, hits[i], forward)) continue;
                 damaged.Add(target);
                 DealShieldChargeDamage(player, target, forward, true);
+                if (ascended && !target.IsBoss() && !DragonCombat.IsSmallEnemy(target))
+                    DragonCombat.Stun(target, player.transform.position);
             }
             if (_enableVfx.Value)
             {
@@ -2798,6 +2933,476 @@ namespace AlbedosCustomClassesAdvanced
                     Mathf.Max(0.2f, _divineTrailTravelTime.Value),
                     sharedTrailNextHitAt
                 ));
+            }
+
+            if (IsAscendedSkill("electric_smite"))
+                StartCoroutine(SmiteThunderstormRoutine(player, point));
+        }
+
+        // ===== v0.17.0 Paladin rework + Ascended test switch =====
+
+        private bool IsAscendedSkill(string skillId)
+        {
+            string raw = _testingAscendedSkills == null ? "" : (_testingAscendedSkills.Value ?? "");
+            if (!string.Equals(raw, _ascendedCacheRaw, StringComparison.Ordinal))
+            {
+                _ascendedCacheRaw = raw;
+                _ascendedCache.Clear();
+                string[] parts = raw.Split(',');
+                for (int i = 0; i < parts.Length; i++)
+                {
+                    string part = parts[i].Trim();
+                    if (part.Length > 0)
+                        _ascendedCache.Add(part);
+                }
+            }
+            return _ascendedCache.Contains(skillId);
+        }
+
+        // Same algorithm as Valheim's string.GetStableHashCode(), used for status effect names.
+        private static int StableHash(string text)
+        {
+            unchecked
+            {
+                int hash1 = 5381;
+                int hash2 = hash1;
+                for (int i = 0; i < text.Length && text[i] != '\0'; i += 2)
+                {
+                    hash1 = ((hash1 << 5) + hash1) ^ text[i];
+                    if (i == text.Length - 1 || text[i + 1] == '\0')
+                        break;
+                    hash2 = ((hash2 << 5) + hash2) ^ text[i + 1];
+                }
+                return hash1 + hash2 * 1566083941;
+            }
+        }
+
+        private void CleanseAilments(Player ally)
+        {
+            if (ally == null)
+                return;
+            int id = ally.GetInstanceID();
+            _refreshingFireBurns.Remove(id);
+            _refreshingSpiritBurns.Remove(id);
+            try
+            {
+                object seman = ally.GetSEMan();
+                if (seman == null)
+                    return;
+                MethodInfo remove = seman.GetType().GetMethod("RemoveStatusEffect",
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                    null, new Type[] { typeof(int), typeof(bool) }, null);
+                if (remove == null)
+                    return;
+                string[] ailments = { "Burning", "Spirit", "Poison", "Frost" };
+                for (int i = 0; i < ailments.Length; i++)
+                    remove.Invoke(seman, new object[] { StableHash(ailments[i]), false });
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning("Ray of Hope cleanse failed: " + ex.Message);
+            }
+        }
+
+        // Ground Projectile trail with configurable damage and Spirit DoT (Ascended Righteous Strike).
+        private IEnumerator PaladinTrail(Player player, Vector3 origin, Vector3 forward, float range, float travelTime,
+            Dictionary<int, float> sharedNextHitAt, DamageConfig damage, float spiritDps, float spiritDuration, float tick)
+        {
+            forward.y = 0f;
+            if (forward.sqrMagnitude < 0.01f)
+                forward = Vector3.forward;
+            forward.Normalize();
+            int groundMask = LayerMask.GetMask("Default", "static_solid", "Default_small", "piece_nonsolid", "terrain", "vehicle", "piece", "viewblock");
+
+            float elapsed = 0f;
+            while (elapsed <= travelTime)
+            {
+                if (player == null || player.IsDead())
+                    yield break;
+
+                float t = Mathf.Clamp01(elapsed / Mathf.Max(0.05f, travelTime));
+                Vector3 projected = origin + forward * (range * t);
+                RaycastHit ground;
+                if (Physics.Raycast(projected + Vector3.up * 8f, Vector3.down, out ground, 24f, groundMask))
+                {
+                    Vector3 point = ground.point;
+                    Collider[] hits = Physics.OverlapSphere(point + Vector3.up * 0.35f, 0.9f, ~0, QueryTriggerInteraction.Ignore);
+                    for (int i = 0; i < hits.Length; i++)
+                    {
+                        Character target = hits[i].GetComponentInParent<Character>();
+                        if (target == null || !IsEnemy(player, target))
+                            continue;
+                        int targetId = target.GetInstanceID();
+                        float nextAllowed;
+                        if (sharedNextHitAt.TryGetValue(targetId, out nextAllowed) && Time.time < nextAllowed)
+                            continue;
+                        sharedNextHitAt[targetId] = Time.time + Mathf.Max(0.10f, tick);
+                        DealDamage(player, target, damage, 0f, false);
+                        RefreshSpiritBurn(player, target, spiritDps, Mathf.Max(0.1f, spiritDuration));
+                    }
+
+                    if (_enableVfx.Value)
+                        StartCoroutine(AnimateRing(point + Vector3.up * 0.06f, 0.12f, 0.80f, 0.20f, new Color(0.62f, 0.86f, 1f, 0.82f), 0.05f));
+                }
+
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+        }
+
+        private void CastAscendedRighteousStrike(Player player)
+        {
+            const string id = "Paladin.AscendedRighteousStrike";
+            Vector3 target;
+            if (!TryGetPhysicalAimPoint(player, Mathf.Max(1f, _rsAscRange.Value), out target))
+            {
+                ShowMessage("Aim at a physical target");
+                return;
+            }
+            if (!BeginCast(player, id, _rsAscCooldown.Value, _rsAscStamina.Value))
+                return;
+
+            float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _rsAscWindup.Value));
+            DragonCombat.LockSkill(player, windup);
+            DragonCombat.PlaySkillPose(player, "SkyCast", windup + 0.10f);
+            StartCoroutine(AscendedRighteousStrikeRoutine(player, target, windup));
+        }
+
+        private IEnumerator AscendedRighteousStrikeRoutine(Player player, Vector3 target, float windup)
+        {
+            ShowMessage("Righteous Strike");
+            if (windup > 0f)
+                yield return new WaitForSeconds(windup);
+            if (player == null || player.IsDead())
+                yield break;
+
+            float radius = Mathf.Max(1f, _rsAscRadius.Value);
+            if (_enableVfx.Value)
+            {
+                CreateLightning(target, new Color(0.62f, 0.88f, 1f, 1f), 0.32f);
+                StartCoroutine(AnimateRing(target + Vector3.up * 0.08f, 0.3f, radius, 0.5f, new Color(0.70f, 0.90f, 1f, 0.95f), 0.12f));
+            }
+
+            bool anyDetonation = false;
+            List<Character> targets = GetSphereTargets(player, target, radius);
+            for (int i = 0; i < targets.Count; i++)
+            {
+                _judgementDetonatedOnLastHit = false;
+                _paladinMarkSourceContext = "RighteousStrike";
+                try
+                {
+                    DealDamage(player, targets[i], _rsAscDamage, 14f, false);
+                }
+                finally
+                {
+                    _paladinMarkSourceContext = string.Empty;
+                }
+                if (_judgementDetonatedOnLastHit)
+                    anyDetonation = true;
+                DragonCombat.ApplyExpose(targets[i], Mathf.Max(0.1f, _rsAscExpose.Value));
+            }
+
+            // 12 Lightning Trails in all directions, faster than Electric Smite's.
+            Dictionary<int, float> sharedNextHitAt = new Dictionary<int, float>();
+            for (int i = 0; i < 12; i++)
+            {
+                Vector3 dir = Quaternion.AngleAxis(i * 30f, Vector3.up) * Vector3.forward;
+                StartCoroutine(PaladinTrail(player, target, dir, Mathf.Max(1f, _rsAscTrailRange.Value), Mathf.Max(0.1f, _rsAscTrailTime.Value),
+                    sharedNextHitAt, _rsAscTrailDamage, _rsAscSpiritDot.Value, _rsAscSpiritDuration.Value, _rsAscTrailTick.Value));
+            }
+
+            if (!anyDetonation)
+                yield break;
+
+            // A Mark detonation calls a second, smaller strike on the same spot.
+            yield return new WaitForSeconds(0.5f);
+            if (player == null || player.IsDead())
+                yield break;
+            float followRadius = Mathf.Max(0.5f, _rsAscFollowRadius.Value);
+            if (_enableVfx.Value)
+            {
+                CreateLightning(target, new Color(0.82f, 0.95f, 1f, 1f), 0.25f);
+                StartCoroutine(AnimateRing(target + Vector3.up * 0.08f, 0.2f, followRadius, 0.35f, new Color(0.82f, 0.95f, 1f, 0.95f), 0.10f));
+            }
+            List<Character> follow = GetSphereTargets(player, target, followRadius);
+            for (int i = 0; i < follow.Count; i++)
+                DealDamageScaled(player, follow[i], _rsAscDamage, Mathf.Max(0f, _rsAscFollowMultiplier.Value), 8f, false);
+        }
+
+        private void CastJudgementHammer(Player player)
+        {
+            const string id = "Paladin.JudgementHammer";
+            if (!BeginCast(player, id, _hammerCooldown.Value, _hammerStamina.Value))
+                return;
+            float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _hammerWindup.Value));
+            DragonCombat.LockSkill(player, windup);
+            DragonCombat.PlaySkillPose(player, "Raise", windup + 0.10f);
+            StartCoroutine(JudgementHammerRoutine(player, windup));
+        }
+
+        private IEnumerator JudgementHammerRoutine(Player player, float windup)
+        {
+            const string id = "Paladin.JudgementHammer";
+            ShowMessage("Judgement Hammer");
+            if (windup > 0f)
+                yield return new WaitForSeconds(windup);
+            if (player == null || player.IsDead())
+                yield break;
+
+            bool ascended = IsAscendedSkill("judgement_hammer");
+            Vector3 dir = player.GetLookDir();
+            if (dir.sqrMagnitude < 0.01f)
+                dir = player.transform.forward;
+            dir.Normalize();
+            Vector3 pos = player.transform.position + Vector3.up * 1.4f + dir * 0.8f;
+            float range = Mathf.Max(1f, _hammerRange.Value);
+            float speed = range / Mathf.Max(0.1f, _hammerTravelTime.Value);
+            float stepMeters = Mathf.Max(0.05f, _hammerStepMeters.Value);
+            int solidMask = LayerMask.GetMask("Default", "static_solid", "Default_small", "piece", "terrain", "vehicle");
+            Dictionary<int, float> nextHitAt = new Dictionary<int, float>();
+            GameObject hammer = CreateHolyHammer(pos, new Color(1f, 0.86f, 0.38f, 1f));
+            float spin = 0f;
+            float travelled = 0f;
+            float size = 1f;
+            float damageMultiplier = 1f;
+
+            // Laser Projectile: straight line, no fall-off. Passes through enemies, stops at walls/objects.
+            while (travelled < range && player != null && !player.IsDead())
+            {
+                float step = Mathf.Min(speed * Time.deltaTime, range - travelled);
+                RaycastHit wall;
+                bool blocked = Physics.Raycast(pos, dir, out wall, step + 0.05f, solidMask, QueryTriggerInteraction.Ignore) &&
+                               wall.collider.GetComponentInParent<Character>() == null;
+                pos = blocked ? wall.point - dir * 0.05f : pos + dir * step;
+                travelled += blocked ? wall.distance : step;
+
+                int growthSteps = Mathf.FloorToInt(travelled / stepMeters);
+                size = 1f + Mathf.Max(0f, _hammerSizePerStep.Value) * growthSteps;
+                damageMultiplier = 1f + Mathf.Max(0f, _hammerDamagePerStep.Value) * growthSteps;
+                spin += 900f * Time.deltaTime;
+                UpdateHammerVisual(hammer, pos, dir, spin, size);
+                HammerHits(player, pos, Mathf.Max(0.2f, _hammerBaseRadius.Value) * size, damageMultiplier, nextHitAt, ascended);
+
+                if (blocked)
+                    break;
+                yield return null;
+            }
+
+            if (ascended && player != null && !player.IsDead())
+            {
+                // Ascended: flies back to the Paladin keeping its size, hitting everything again.
+                nextHitAt.Clear();
+                float safety = Time.time + 8f;
+                while (player != null && !player.IsDead() && Time.time < safety)
+                {
+                    Vector3 home = player.transform.position + Vector3.up * 1.2f;
+                    Vector3 toHome = home - pos;
+                    if (toHome.magnitude < 1.5f)
+                    {
+                        float end;
+                        if (_cooldowns.TryGetValue(id, out end))
+                        {
+                            float total = _testingForceCooldowns.Value ? _testingCooldownSeconds.Value : _hammerCooldown.Value;
+                            float cut = Mathf.Max(0f, total) * Mathf.Clamp01(_hammerCatchCooldownCut.Value / 100f);
+                            _cooldowns[id] = Mathf.Max(Time.time, end - cut);
+                        }
+                        ShowMessage("Hammer caught");
+                        break;
+                    }
+                    Vector3 back = toHome.normalized;
+                    pos += back * Mathf.Min(speed * Time.deltaTime, toHome.magnitude);
+                    spin += 900f * Time.deltaTime;
+                    UpdateHammerVisual(hammer, pos, back, spin, size);
+                    HammerHits(player, pos, Mathf.Max(0.2f, _hammerBaseRadius.Value) * size, damageMultiplier, nextHitAt, true);
+                    yield return null;
+                }
+            }
+
+            if (hammer != null)
+                Destroy(hammer);
+        }
+
+        private void UpdateHammerVisual(GameObject hammer, Vector3 pos, Vector3 dir, float spin, float size)
+        {
+            if (hammer == null)
+                return;
+            hammer.transform.position = pos;
+            Vector3 flat = dir;
+            flat.y = 0f;
+            Quaternion facing = flat.sqrMagnitude > 0.01f ? Quaternion.LookRotation(flat.normalized, Vector3.up) : Quaternion.identity;
+            // Vertical spin around the axis perpendicular to the flight path.
+            hammer.transform.rotation = facing * Quaternion.AngleAxis(spin, Vector3.right) * Quaternion.AngleAxis(90f, Vector3.forward);
+            hammer.transform.localScale = Vector3.one * (0.25f * size);
+        }
+
+        private void HammerHits(Player player, Vector3 pos, float radius, float damageMultiplier, Dictionary<int, float> nextHitAt, bool marks)
+        {
+            List<Character> targets = GetSphereTargets(player, pos, radius);
+            for (int i = 0; i < targets.Count; i++)
+            {
+                Character target = targets[i];
+                int tid = target.GetInstanceID();
+                float allowed;
+                if (nextHitAt.TryGetValue(tid, out allowed) && Time.time < allowed)
+                    continue;
+                nextHitAt[tid] = Time.time + Mathf.Max(0.1f, _hammerTick.Value);
+                if (marks)
+                    _paladinMarkSourceContext = "JudgementHammer";
+                try
+                {
+                    DealDamageScaled(player, target, _hammerDamage, damageMultiplier, 6f, false);
+                }
+                finally
+                {
+                    _paladinMarkSourceContext = string.Empty;
+                }
+                DragonCombat.ApplyCripple(target, Mathf.Max(0.1f, _hammerCrippleDuration.Value));
+            }
+        }
+
+        private void CastFallenAngel(Player player)
+        {
+            const string id = "Paladin.FallenAngel";
+            Rigidbody body = player == null ? null : player.GetComponent<Rigidbody>();
+            if (body == null)
+                return;
+            if (!BeginCast(player, id, _angelCooldown.Value, _angelStamina.Value))
+                return;
+            DragonCombat.LockSkill(player, 0.1f);
+            DragonCombat.PlaySkillPose(player, "Raise", Mathf.Max(0.3f, _angelRiseTime.Value) + 0.2f);
+            StartCoroutine(FallenAngelRoutine(player, body));
+        }
+
+        private IEnumerator FallenAngelRoutine(Player player, Rigidbody body)
+        {
+            ShowMessage("Fallen Angel");
+            bool ascended = IsAscendedSkill("fallen_angel");
+            Vector3 forward = player.GetLookDir();
+            forward.y = 0f;
+            if (forward.sqrMagnitude < 0.01f)
+                forward = player.transform.forward;
+            forward.Normalize();
+
+            ResetFallDamageState(player);
+            float riseTime = Mathf.Max(0.2f, _angelRiseTime.Value);
+            float height = Mathf.Max(1f, _angelJumpHeight.Value);
+            Vector3 start = body.position;
+            float riseStart = Time.time;
+
+            // Leap high (slight forward drift so the dive lands ahead of the Paladin).
+            while (player != null && !player.IsDead())
+            {
+                float t = Mathf.Clamp01((Time.time - riseStart) / riseTime);
+                float eased = Mathf.Sin(t * Mathf.PI * 0.5f);
+                body.MovePosition(start + Vector3.up * (height * eased) + forward * (2.5f * t));
+                body.velocity = Vector3.zero;
+                ResetFallDamageState(player);
+                DragonCombat.LockSkill(player, 0.12f);
+                if (ascended)
+                    DragonCombat.GrantHyperArmor(player, 0.3f);
+                if (t >= 1f)
+                    break;
+                yield return new WaitForFixedUpdate();
+            }
+
+            // Short hang, then a head-first nose-dive until physical landing.
+            float hangEnd = Time.time + 0.15f;
+            while (player != null && !player.IsDead() && Time.time < hangEnd)
+            {
+                body.velocity = Vector3.zero;
+                ResetFallDamageState(player);
+                DragonCombat.LockSkill(player, 0.12f);
+                yield return new WaitForFixedUpdate();
+            }
+
+            DragonCombat.PlaySkillPose(player, "Slam", 3f);
+            float diveSpeed = Mathf.Max(5f, _angelDiveSpeed.Value);
+            float safety = Time.time + 10f;
+            while (player != null && !player.IsDead() && Time.time < safety)
+            {
+                body.velocity = forward * 3f + Vector3.down * diveSpeed;
+                ResetFallDamageState(player);
+                DragonCombat.LockSkill(player, 0.12f);
+                if (ascended)
+                    DragonCombat.GrantHyperArmor(player, 0.3f);
+                if (IsPlayerGrounded(player) && Time.time > hangEnd + 0.05f)
+                    break;
+                yield return new WaitForFixedUpdate();
+            }
+            if (player == null || player.IsDead())
+                yield break;
+
+            ResetFallDamageState(player);
+            body.velocity = Vector3.zero;
+            DragonCombat.LockSkill(player, 0.35f);
+            DragonCombat.PlaySkillPose(player, "Slam", 0.35f);
+
+            Vector3 point = player.transform.position;
+            float radius = Mathf.Max(1f, _angelRadius.Value);
+            List<Character> targets = GetSphereTargets(player, point, radius);
+            for (int i = 0; i < targets.Count; i++)
+            {
+                DealDamage(player, targets[i], _angelDamage, 30f, true);
+                DragonCombat.ApplyBrokenBones(targets[i], Mathf.Max(0.1f, _angelBrokenBones.Value));
+                DragonCombat.Stun(targets[i], point);
+            }
+            if (_enableVfx.Value)
+            {
+                CreateLightning(point, new Color(1f, 0.92f, 0.62f, 1f), 0.3f);
+                StartCoroutine(AnimateRing(point + Vector3.up * 0.08f, 0.4f, radius, 0.55f, new Color(1f, 0.88f, 0.48f, 1f), 0.16f));
+            }
+
+            if (ascended)
+            {
+                DragonCombat.GrantHyperArmor(player, Mathf.Max(0f, _angelHyperAfter.Value));
+                StartCoroutine(FallenAngelBurnRingRoutine(player, point));
+            }
+        }
+
+        private IEnumerator FallenAngelBurnRingRoutine(Player player, Vector3 center)
+        {
+            float radius = Mathf.Max(1f, _angelRingRadius.Value);
+            float end = Time.time + Mathf.Max(0.5f, _angelRingDuration.Value);
+            float burn = Mathf.Max(0.1f, _angelBurnDuration.Value);
+            while (Time.time < end && player != null)
+            {
+                List<Character> targets = GetSphereTargets(player, center, radius);
+                for (int i = 0; i < targets.Count; i++)
+                {
+                    // Spirit Burn + Fire Burn, 3s, refreshed while the enemy stays inside the ring.
+                    RefreshSpiritBurn(player, targets[i], _angelSpiritDot.Value, burn);
+                    RefreshFireBurn(player, targets[i], _angelFireDot.Value, burn);
+                }
+                if (_enableVfx.Value)
+                    StartCoroutine(AnimateRing(center + Vector3.up * 0.06f, radius * 0.92f, radius, 0.45f, new Color(1f, 0.55f, 0.25f, 0.85f), 0.10f));
+                yield return new WaitForSeconds(0.5f);
+            }
+        }
+
+        private IEnumerator SmiteThunderstormRoutine(Player player, Vector3 center)
+        {
+            float radius = Mathf.Max(1f, _smiteStormRadius.Value);
+            float end = Time.time + Mathf.Max(0.5f, _smiteStormDuration.Value);
+            float tick = Mathf.Max(0.1f, _smiteStormTick.Value);
+            float dot = Mathf.Max(0.1f, _smiteStormDotDuration.Value);
+            while (Time.time < end && player != null && !player.IsDead())
+            {
+                List<Character> targets = GetSphereTargets(player, center, radius);
+                for (int i = 0; i < targets.Count; i++)
+                {
+                    DealDamage(player, targets[i], _smiteStormDamage, 0f, false);
+                    RefreshFireBurn(player, targets[i], _smiteStormFireDot.Value, dot);
+                    RefreshSpiritBurn(player, targets[i], _smiteStormSpiritDot.Value, dot);
+                }
+                if (_enableVfx.Value)
+                {
+                    for (int s = 0; s < 3; s++)
+                    {
+                        Vector2 r = UnityEngine.Random.insideUnitCircle * radius;
+                        CreateLightning(center + new Vector3(r.x, 0f, r.y), new Color(0.62f, 0.86f, 1f, 1f), 0.22f);
+                    }
+                }
+                yield return new WaitForSeconds(tick);
             }
         }
 
@@ -5433,6 +6038,7 @@ namespace AlbedosCustomClassesAdvanced
             count += PatchPlayerFloatSetter("SetMaxEitr", "PaladinSetMaxEitrPrefix");
             count += PatchDamageMethods();
             count += PatchLightningZapContext();
+            count += PatchRighteousStrikeAscended();
 
             Logger.LogInfo("Advanced passive hooks installed: " + count);
         }
@@ -5766,6 +6372,43 @@ namespace AlbedosCustomClassesAdvanced
             }
         }
 
+        private int PatchRighteousStrikeAscended()
+        {
+            try
+            {
+                MethodInfo method = typeof(SkillsPlugin).GetMethod(
+                    "CastRighteousStrike",
+                    BindingFlags.Instance | BindingFlags.NonPublic
+                );
+                MethodInfo prefixMethod = typeof(AdvancedPlugin).GetMethod(
+                    "RighteousStrikeAscendedPrefix",
+                    BindingFlags.Static | BindingFlags.NonPublic
+                );
+                if (method == null || prefixMethod == null)
+                    return 0;
+
+                PatchWithHarmony(method, new HarmonyMethod(prefixMethod), null);
+                return 1;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning("Could not patch Righteous Strike (Ascended): " + ex.Message);
+                return 0;
+            }
+        }
+
+        // An Ascended Paladin's Righteous Strike is handled here; the Cleric version is skipped.
+        private static bool RighteousStrikeAscendedPrefix(object[] __args)
+        {
+            if (Instance == null || __args == null || __args.Length < 1)
+                return true;
+            Player player = __args[0] as Player;
+            if (player == null || Instance.GetAdvancement(player) != "Paladin" || !Instance.IsAscendedSkill("righteous_strike"))
+                return true;
+            Instance.CastAscendedRighteousStrike(player);
+            return false;
+        }
+
         private static void LightningZapContextPrefix(object[] __args)
         {
             if (Instance == null)
@@ -5773,9 +6416,8 @@ namespace AlbedosCustomClassesAdvanced
             Instance._paladinMarkSourceContext = string.Empty;
             if (__args == null || __args.Length < 1)
                 return;
-            Player player = __args[0] as Player;
-            if (player != null && Instance.GetAdvancement(player) == "Paladin")
-                Instance._paladinMarkSourceContext = "LightningZap";
+            // v0.17.0: Lightning Zap no longer applies Judgement Mark. Only Ascended Righteous Strike
+            // and the Ascended Signature do.
         }
 
         private static void LightningZapContextPostfix()
@@ -6033,13 +6675,18 @@ namespace AlbedosCustomClassesAdvanced
             string source = _paladinMarkSourceContext;
             bool isMarkingHit = !string.IsNullOrEmpty(source);
 
+            bool detonated = false;
             if (hasMark)
             {
-                bool crossMark = isMarkingHit && !string.Equals(mark.Source, source, StringComparison.Ordinal);
-                if (crossMark)
+                // v0.17.0: any Mark-applying skill (Ascended Righteous Strike / Ascended Signature)
+                // hitting a marked target detonates and consumes the Mark.
+                if (isMarkingHit)
                 {
                     ScaleDamage(hit, Mathf.Max(1f, _judgementCrossMultiplier.Value));
                     TriggerJudgementDetonation(attacker, target);
+                    _judgementMarks.Remove(id);
+                    _judgementDetonatedOnLastHit = true;
+                    detonated = true;
                 }
                 else
                 {
@@ -6051,7 +6698,7 @@ namespace AlbedosCustomClassesAdvanced
                 }
             }
 
-            if (isMarkingHit)
+            if (isMarkingHit && !detonated)
             {
                 JudgementMarkState fresh = new JudgementMarkState();
                 fresh.Target = target;
@@ -7073,6 +7720,11 @@ namespace AlbedosCustomClassesAdvanced
                     ? "Tier " + hoverTier.ToString() + " / " + node.MaxTier.ToString() + (pending > 0 ? "   Pending +" + pending.ToString() : "")
                     : "No allocatable Tiers";
                 _treeHoveredTitle = node.TooltipTitle;
+                if (IsAscendedSkill(node.Id))
+                {
+                    int dash = node.TooltipTitle.IndexOf(" - ", StringComparison.Ordinal);
+                    _treeHoveredTitle = "ASCENDED - " + (dash >= 0 ? node.TooltipTitle.Substring(dash + 3) : node.TooltipTitle);
+                }
                 string slotState = node.Kind == TreeNodeKind.Grace ? "  •  DEDICATED " + FormatHotbarBinding(BindGrace) : (node.Mandatory ? "  •  HOTBAR LOCKED" : "  •  OPTIONAL");
                 _treeHoveredBody = tierLine + slotState + "\n" + node.TooltipBody;
             }

@@ -1,6 +1,12 @@
-Immortal Heroes v0.16.1 - Test focus
+Immortal Heroes v0.17.0 - Test focus (Paladin)
 
-1. Lightning Zap, Goddess Relic, Judgement Hammer and Electric Smite show the gold diamond badge
-   on the top-right corner of their hotbar slot. Removable skills don't.
-2. Move a permanent skill to another slot: the badge travels with it (also visible while dragging).
-3. Everything from v0.16.0 still works (swap / remove / place / replace / insert).
+Normal versions (Paladin character):
+1. Goddess Relic: smaller Troll-sized cross, 5m impact.
+2. Ray of Hope + Holy Wave: instant, ~0.5s stop, main hand raised.
+3. Judgement Hammer (old Divine Verdict key): hammer flies 20m along your aim, grows as it travels,
+   passes through enemies, stops at walls, Cripples.
+4. Fallen Angel (old Aegis Fall key): big leap + dive, 10m stun impact, no fall damage.
+
+Ascended versions: open BepInEx/config/albedo.customclasses.advanced.cfg, find [Testing] and set
+  AscendedSkills = righteous_strike, goddess_relic, judgement_hammer, shield_charge, fallen_angel, ray_of_hope, electric_smite
+(any subset works). Restart or reload the config, then test each skill. Tree tooltips read "ASCENDED - ...".

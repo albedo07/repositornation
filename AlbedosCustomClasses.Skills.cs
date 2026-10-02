@@ -181,7 +181,7 @@ namespace AlbedosCustomClassesSkills
         public static SkillsPlugin Instance;
         public const string ModGuid = "albedo.customclasses.skills";
         public const string ModName = "Dragon's Altar - Starter Skills";
-        public const string ModVersion = "0.16.1";
+        public const string ModVersion = "0.17.0";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";
@@ -739,8 +739,9 @@ namespace AlbedosCustomClassesSkills
             if (!BeginCast(player, id, _holyCooldown.Value, _holyStamina.Value))
                 return;
 
-            DragonCombat.LockSkill(player, 0.4f);
-            DragonCombat.PlaySkillPose(player, "Wave", 0.40f);
+            // v0.17.0: instant cast, 0.5s movement lock, chant animation.
+            DragonCombat.LockSkill(player, 0.5f);
+            DragonCombat.PlaySkillPose(player, "Chant", 0.50f);
             ShowMessage("Holy Wave");
             StartCoroutine(HolyWaveRoutine(player));
         }

@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.16.1";
+        public const string ModVersion = "0.17.0";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1202,6 +1202,16 @@ namespace DragonsAltarCombat
                 Offset(HumanBodyBones.RightUpperArm, new Vector3(-92f, 0f, -12f), weight);
                 Offset(HumanBodyBones.RightLowerArm, new Vector3(-18f, 0f, 4f), weight);
                 Offset(HumanBodyBones.LeftUpperArm, new Vector3(-42f, 0f, 18f), weight * 0.55f);
+                return;
+            }
+
+            if (style == "Chant")
+            {
+                // v0.17.0: main hand lifted forward and up, like chanting a spell (instant casts).
+                Offset(HumanBodyBones.Chest, new Vector3(-4f, 0f, 0f), weight);
+                Offset(HumanBodyBones.RightUpperArm, new Vector3(-78f, -12f, -10f), weight);
+                Offset(HumanBodyBones.RightLowerArm, new Vector3(-34f, 0f, 0f), weight);
+                Offset(HumanBodyBones.RightHand, new Vector3(-18f, 0f, 0f), weight);
                 return;
             }
 

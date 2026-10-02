@@ -3,7 +3,7 @@
 ## Working rules
 - User wants short responses and real execution, not long explanations.
 - **RUSH B** = immediately code the obvious requested task, minimal commentary, use latest approved build as baseline, don't redesign unrelated things, verify and package.
-- Latest package: **v0.16.1 — Permanent Badge on Hotbar** (v0.16.0 = Drag & Drop Hotbar). Recent work is almost entirely UI polish; do NOT change combat/progression logic unless explicitly requested.
+- Latest package: **v0.17.0 — Paladin Rework + Ascended Test Switch**. Recent work is almost entirely UI polish; do NOT change combat/progression logic unless explicitly requested.
 - Never patch visual problems by drawing random rectangles over the reference asset. Keep approved artwork intact; make layout/components fit properly.
 
 ## Framework doc (source of truth for design)
@@ -43,7 +43,7 @@
 - Paladin Judgement Hammer (Ascended): after it stops (wall or max range) it flies back to the Paladin keeping its grown size, hitting everything again; catching it cuts its cooldown by 30%; applies Judgement Mark.
 - Base changes: Goddess Relic radius 7m -> 5m, cross about the size of a 0-star Troll. Ray of Hope and Holy Wave: no wind-up, instant cast with 0.5s movement lock, animation = main hand raised like chanting.
 - Rule: instant-cast skills lock movement for 0.5s (was 0.4s in the Framework doc).
-- Code status (2026-10-02): NOT implemented yet: Judgement Hammer, Fallen Angel (code still has Divine Verdict / Aegis Fall), Frenzied Charge, Eclipse (code still has Severed Horizon / Empty Sheath), Gravity Blast. Graces are not implemented as M4+R skills yet (only legacy activatable passives).
+- Code status: v0.17.0 implemented Judgement Hammer + Fallen Angel (Divine Verdict / Aegis Fall code kept but unused) and all Paladin Ascended versions behind `[Testing] AscendedSkills`. NOT implemented yet: Frenzied Charge, Eclipse (code still has Severed Horizon / Empty Sheath), Gravity Blast. Graces are not implemented as M4+R skills yet (only legacy activatable passives).
 
 ## Core philosophy
 - RPG + Survival, never EZ mode. Skills add power/options without trivializing survival, gathering, bosses, terrain, prep, food.
@@ -121,7 +121,7 @@
 - Old changelogs in `docs/changelog/`, past UI previews in `docs/previews/`.
 - Package releases as `Immortal_Heroes_vX.Y.Z_<Name>.zip` with the same flat layout as the repo root (sources, INSTALL.*, ImmortalHeroesAssets/, CHANGELOG + TEST_THIS_BUILD).
 - Valheim uses Linear color space: IMGUI showed the artwork gamma-lifted (in-game = source^(1/2.2)). v0.14.7 compensates the backdrop texture at load (`ApplyLinearColorSpaceCompensation`). Code-drawn colors/textures (tooltips, +/- buttons) are still uncompensated.
-- Before packaging ALWAYS run `tools/compile_check/check.sh` (semantic compile of Advanced.cs vs a known-good baseline with stubbed Valheim/BepInEx types; new error signatures = real bugs) plus `mcs --parse -langversion:5` on every edited .cs. The real compile still happens on the user's PC.
+- Before packaging ALWAYS run `tools/compile_check/check.sh` (semantic compile of Advanced + CombatRuntime + Skills vs a known-good baseline with stubbed Valheim/BepInEx types; any new error signature = real bug; add real Valheim members to Stubs.cs when they show up as noise) plus `mcs --parse -langversion:5` on every edited .cs. The real compile still happens on the user's PC.
 - UI art pipeline: `tools/build_ui_assets.py` builds every PNG in `ImmortalHeroesAssets/` from `docs/source_art/` (reference v0.14 + approved footer target). Edit the script, never hand-paint the output. `tools/render_preview.py` renders in-game-size previews into `docs/previews/`.
 - Hotbar keys: `[Hotbar]` config (SlotN + SlotNModifier, GraceKey + GraceModifier; Modifier None = single key) is rebindable in the tree; still a prototype — casting uses `[Hotkeys]` until the tree hotbar is wired to the runtime.
 - Node control positions come from `ReferenceNameplateAnchors` (nameplate center x, bottom y, reference px).

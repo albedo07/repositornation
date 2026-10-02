@@ -1,0 +1,22 @@
+Immortal Heroes v0.17.0 - Paladin Rework + Ascended Test Switch
+NORMAL SKILLS
+- Goddess Relic: radius 5m, cross about the size of a 0-star Troll, no longer applies Judgement Mark.
+- Ray of Hope: instant cast (no channel), 0.5s movement lock, new "chant" animation (main hand raised).
+- Holy Wave (Cleric): 0.5s movement lock + chant animation.
+- Judgement Hammer (NEW, replaces Divine Verdict on the same key): Free Aim 20m Laser Projectile.
+  Spinning hammer flies straight, passes through enemies, stops at walls/objects. Every 0.5m it grows
+  +0.5x size and +0.3x damage. Persistent hits every 0.5s, Blunt + Lightning, Cripple.
+- Fallen Angel (NEW, replaces Aegis Fall on the same key): leap high, head-first dive; 10m landing impact,
+  Blunt damage, Broken Bones, Stuns every enemy archetype.
+- Judgement Mark: Lightning Zap no longer marks. Only Ascended Righteous Strike and the Ascended
+  Signature mark. Any Mark-applying hit on a marked enemy detonates and consumes the Mark.
+ASCENDED (turn on with [Testing] AscendedSkills in the Advancements config)
+- righteous_strike: 7m, Mark, Expose 8s, 12 fast Lightning Trails (7m) with 6s Spirit DoT,
+  second strike (3m, 0.5x) after a Mark detonation.
+- goddess_relic: 10m radius, heavy Blunt + Lightning, applies Mark, cross 3x size.
+- judgement_hammer: flies back to you keeping its size, hitting again; catching it cuts cooldown 30%; Marks.
+- shield_charge: 20m, Hyper Armor while charging, 6m charge hitbox, 7m Bash cone that also Stuns Big.
+- fallen_angel: 10m ring for 6s (Spirit + Fire Burn, 3s, refreshed while inside), Hyper Armor dive + 3s.
+- ray_of_hope: also cleanses Burn/Spirit/Poison/Frost and grants a 150 HP Barrier.
+- electric_smite: 6m Thunderstorm for 4s after landing (Lightning every 0.5s + Fire/Spirit DoT 3s).
+All values are configurable in BepInEx/config (sections "Paladin ..." and "... Ascended").
