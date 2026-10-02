@@ -3,7 +3,7 @@
 ## Working rules
 - User wants short responses and real execution, not long explanations.
 - **RUSH B** = immediately code the obvious requested task, minimal commentary, use latest approved build as baseline, don't redesign unrelated things, verify and package.
-- Latest package: **v0.17.1 — Paladin Tweaks** (v0.17.0 = Paladin Rework + Ascended Test Switch). Recent work is almost entirely UI polish; do NOT change combat/progression logic unless explicitly requested.
+- Latest package: **v0.17.2 — Hammer Size** (v0.17.1 Paladin Tweaks, v0.17.0 Paladin Rework + Ascended Test Switch). Recent work is almost entirely UI polish; do NOT change combat/progression logic unless explicitly requested.
 - Never patch visual problems by drawing random rectangles over the reference asset. Keep approved artwork intact; make layout/components fit properly.
 
 ## Framework doc (source of truth for design)
@@ -32,6 +32,13 @@
 - Commands (admins on servers, anyone in single player): `/ih [player] <cmd>`; level N / -N, xp N, classtierpoints N, actierpoints N, resetskill all|<skill>, class <mc>, advance <ac>, ascend <skill>, info. Names with spaces in quotes.
 - Tree state B1 (sealed AC panel with checklist) chosen over B2.
 
+## Tier decisions (2026-10-02, next pass = Paladin tree fully functional)
+- Each Tier = +10% damage AND healing of that skill (placeholder until real Tier effects are designed).
+- Unlocked skills start at Tier 0 and are usable at Tier 0 (0 = not upgraded). Ultimate too: castable at Tier 0 from Lv36.
+- Tier display: star slots (7 Class / 5 AC / 3 Ultimate) or a 0/7 count; previews `tools/render_tiers.py` -> docs/previews/TIER_*.png (A stars, B count chip, C both). Tier Points counter replaces the "hover for ..." header line (pending user choice).
+- Heaven's Light gets built as a real Grace (M4+R) in this pass.
+- Only Paladin moves to the tree hotbar; other ACs stay on fixed `[Hotkeys]` until Paladin is finished, then copy it (universal tree).
+
 ## Ascended designs (approved so far; tooltip header "ASCENDED - <SKILL>", names unchanged)
 - Paladin Righteous Strike (Ascended MC): 7m, applies Judgement Mark, Expose 8s, a second smaller strike (3m, 0.5x) when it detonates a Mark; also spawns 12 Lightning Trails in all directions, 7m range, faster than Electric Smite's trails, each applying Spirit DoT for 6s.
 - Paladin Ray of Hope (Ascended): cleanses Burn/Poison/Frost from allies + 150 HP Barrier (on top of the instant normal version).
@@ -44,7 +51,7 @@
 - Base changes: Goddess Relic radius 7m -> 5m, cross about the size of a 0-star Troll. Ray of Hope and Holy Wave: no wind-up, instant cast with 0.5s movement lock, animation = main hand raised like chanting.
 - Rule: instant-cast skills lock movement for 0.5s (was 0.4s in the Framework doc).
 - Range/radius reference: the MyDirtyHoe grid in-game is THE ruler for every meter value we discuss (user's 10m radius screenshot, 2026-10-02). 1 Unity unit = 1m.
-- Goddess Relic normal cross 6.5m x 3.5m (0-star Troll); Ascended cross ~13.8m (approved). Judgement Hammer: upright, front-flips, no growth cap.
+- Goddess Relic normal cross 6.5m x 3.5m (0-star Troll); Ascended cross ~13.8m (approved). Judgement Hammer (v0.17.2): upright, front-flips; starts Greydwarf Brute size (2.5m x 0.8m), grows every 0.2s, ~7.4m x 2m at 20m (normal cap 8m x 2m); Ascended keeps growing on the return up to 10m x 3m (hard cap, never infinite).
 - Code status: v0.17.0 implemented Judgement Hammer + Fallen Angel (Divine Verdict / Aegis Fall code kept but unused) and all Paladin Ascended versions behind `[Testing] AscendedSkills`. NOT implemented yet: Frenzied Charge, Eclipse (code still has Severed Horizon / Empty Sheath), Gravity Blast. Graces are not implemented as M4+R skills yet (only legacy activatable passives).
 
 ## Core philosophy

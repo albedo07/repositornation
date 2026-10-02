@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.17.1";
+        public const string ModVersion = "0.17.2";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -330,7 +330,9 @@ namespace AlbedosCustomClassesAdvanced
         private DamageConfig _goddessAscDamage;
         private ConfigEntry<float> _rayAscBarrier, _rayAscBarrierDuration;
         private ConfigEntry<float> _hammerCooldown, _hammerStamina, _hammerWindup, _hammerRange, _hammerTravelTime, _hammerBaseRadius,
-            _hammerStepMeters, _hammerSizePerStep, _hammerDamagePerStep, _hammerTick, _hammerCrippleDuration, _hammerCatchCooldownCut;
+            _hammerStepMeters, _hammerDamagePerStep, _hammerTick, _hammerCrippleDuration, _hammerCatchCooldownCut,
+            _hammerStartHeight, _hammerStartWidth, _hammerGrowthInterval, _hammerHeightPerStep, _hammerWidthPerStep, _hammerMaxHeight, _hammerMaxWidth,
+            _hammerAscMaxHeight, _hammerAscMaxWidth, _hammerAscWidthPerStep, _hammerHitRadiusPerHeight;
         private DamageConfig _hammerDamage;
         private ConfigEntry<float> _angelCooldown, _angelStamina, _angelJumpHeight, _angelRiseTime, _angelDiveSpeed, _angelRadius,
             _angelBrokenBones, _angelRingRadius, _angelRingDuration, _angelBurnDuration, _angelFireDot, _angelSpiritDot, _angelHyperAfter;
@@ -847,9 +849,19 @@ namespace AlbedosCustomClassesAdvanced
             _hammerWindup = Config.Bind("Paladin Judgement Hammer", "Windup", 1f, "Framework default wind-up (no wind-up specified).");
             _hammerRange = Config.Bind("Paladin Judgement Hammer", "Range", 20f, "Free Aim Laser Projectile range.");
             _hammerTravelTime = Config.Bind("Paladin Judgement Hammer", "TravelTime", 1.5f, "Seconds to travel the full range.");
-            _hammerBaseRadius = Config.Bind("Paladin Judgement Hammer", "BaseHitRadius", 0.9f, "Hit radius at size 1x.");
-            _hammerStepMeters = Config.Bind("Paladin Judgement Hammer", "GrowthStepMeters", 0.5f, "Every this many meters travelled, size and damage grow.");
-            _hammerSizePerStep = Config.Bind("Paladin Judgement Hammer", "SizeGrowthPerStep", 0.5f, "+0.5x size per step (Framework doc).");
+            _hammerBaseRadius = Config.Bind("Paladin Judgement Hammer", "BaseHitRadius", 0.9f, "Minimum hit radius.");
+            _hammerStepMeters = Config.Bind("Paladin Judgement Hammer", "GrowthStepMeters", 0.5f, "Every this many meters travelled, damage grows (stops when the size cap is reached).");
+            _hammerStartHeight = Config.Bind("Paladin Judgement Hammer", "StartHeight_v0172", 2.5f, "Meters tall at launch (about a Greydwarf Brute).");
+            _hammerStartWidth = Config.Bind("Paladin Judgement Hammer", "StartWidth_v0172", 0.8f, "Meters wide at launch.");
+            _hammerGrowthInterval = Config.Bind("Paladin Judgement Hammer", "GrowthInterval_v0172", 0.2f, "Seconds between size growth steps.");
+            _hammerHeightPerStep = Config.Bind("Paladin Judgement Hammer", "HeightPerStep_v0172", 0.7f, "Meters of height per growth step (20m flight = ~7.4m tall).");
+            _hammerWidthPerStep = Config.Bind("Paladin Judgement Hammer", "WidthPerStep_v0172", 0.17f, "Meters of width per growth step (20m flight = ~2m wide).");
+            _hammerMaxHeight = Config.Bind("Paladin Judgement Hammer", "MaxHeight_v0172", 8f, "Size cap (meters tall).");
+            _hammerMaxWidth = Config.Bind("Paladin Judgement Hammer", "MaxWidth_v0172", 2f, "Size cap (meters wide).");
+            _hammerHitRadiusPerHeight = Config.Bind("Paladin Judgement Hammer", "HitRadiusPerHeight_v0172", 0.35f, "Hit radius = height x this (never below BaseHitRadius).");
+            _hammerAscMaxHeight = Config.Bind("Paladin Judgement Hammer Ascended", "MaxHeight_v0172", 10f, "Ascended size cap (meters tall). Keeps growing on the return flight up to this.");
+            _hammerAscMaxWidth = Config.Bind("Paladin Judgement Hammer Ascended", "MaxWidth_v0172", 3f, "Ascended size cap (meters wide).");
+            _hammerAscWidthPerStep = Config.Bind("Paladin Judgement Hammer Ascended", "WidthPerStep_v0172", 0.2f, "Ascended meters of width per growth step.");
             _hammerDamagePerStep = Config.Bind("Paladin Judgement Hammer", "DamageGrowthPerStep", 0.3f, "+0.3x damage per step (Framework doc).");
             _hammerTick = Config.Bind("Paladin Judgement Hammer", "PersistentHitInterval", 0.5f, "Persistent Damage interval per enemy.");
             _hammerCrippleDuration = Config.Bind("Paladin Judgement Hammer", "CrippleDuration", 6f, "Cripple duration.");
@@ -3163,10 +3175,13 @@ namespace AlbedosCustomClassesAdvanced
             GameObject hammer = CreateHolyHammer(pos, new Color(1f, 0.86f, 0.38f, 1f));
             float spin = 0f;
             float travelled = 0f;
-            float size = 1f;
+            float flightTime = 0f;
             float damageMultiplier = 1f;
+            float height = Mathf.Max(0.5f, _hammerStartHeight.Value);
+            float width = Mathf.Max(0.2f, _hammerStartWidth.Value);
 
             // Laser Projectile: straight line, no fall-off. Passes through enemies, stops at walls/objects.
+            // Grows every GrowthInterval seconds, capped (normal 8m x 2m, Ascended 10m x 3m).
             while (travelled < range && player != null && !player.IsDead())
             {
                 float step = Mathf.Min(speed * Time.deltaTime, range - travelled);
@@ -3175,13 +3190,15 @@ namespace AlbedosCustomClassesAdvanced
                                wall.collider.GetComponentInParent<Character>() == null;
                 pos = blocked ? wall.point - dir * 0.05f : pos + dir * step;
                 travelled += blocked ? wall.distance : step;
+                flightTime += Time.deltaTime;
 
-                int growthSteps = Mathf.FloorToInt(travelled / stepMeters);
-                size = 1f + Mathf.Max(0f, _hammerSizePerStep.Value) * growthSteps;
-                damageMultiplier = 1f + Mathf.Max(0f, _hammerDamagePerStep.Value) * growthSteps;
+                bool capped = UpdateHammerSize(flightTime, ascended, out height, out width);
+                if (!capped)
+                    damageMultiplier = 1f + Mathf.Max(0f, _hammerDamagePerStep.Value) * Mathf.FloorToInt(travelled / stepMeters);
                 spin += 360f * Time.deltaTime;
-                UpdateHammerVisual(hammer, pos, dir, spin, size);
-                HammerHits(player, pos, Mathf.Max(0.2f, _hammerBaseRadius.Value) * size, damageMultiplier, nextHitAt, ascended);
+                Vector3 center = HammerCenter(pos, height);
+                UpdateHammerVisual(hammer, center, dir, spin, height, width);
+                HammerHits(player, center, HammerHitRadius(height), damageMultiplier, nextHitAt, ascended);
 
                 if (blocked)
                     break;
@@ -3190,7 +3207,7 @@ namespace AlbedosCustomClassesAdvanced
 
             if (ascended && player != null && !player.IsDead())
             {
-                // Ascended: flies back to the Paladin keeping its size, hitting everything again.
+                // Ascended: flies back to the Paladin, still growing up to its cap, hitting everything again.
                 nextHitAt.Clear();
                 float safety = Time.time + 8f;
                 while (player != null && !player.IsDead() && Time.time < safety)
@@ -3210,10 +3227,17 @@ namespace AlbedosCustomClassesAdvanced
                         break;
                     }
                     Vector3 back = toHome.normalized;
-                    pos += back * Mathf.Min(speed * Time.deltaTime, toHome.magnitude);
+                    float move = Mathf.Min(speed * Time.deltaTime, toHome.magnitude);
+                    pos += back * move;
+                    travelled += move;
+                    flightTime += Time.deltaTime;
+                    bool capped = UpdateHammerSize(flightTime, true, out height, out width);
+                    if (!capped)
+                        damageMultiplier = 1f + Mathf.Max(0f, _hammerDamagePerStep.Value) * Mathf.FloorToInt(travelled / stepMeters);
                     spin += 360f * Time.deltaTime;
-                    UpdateHammerVisual(hammer, pos, back, spin, size);
-                    HammerHits(player, pos, Mathf.Max(0.2f, _hammerBaseRadius.Value) * size, damageMultiplier, nextHitAt, true);
+                    Vector3 center = HammerCenter(pos, height);
+                    UpdateHammerVisual(hammer, center, back, spin, height, width);
+                    HammerHits(player, center, HammerHitRadius(height), damageMultiplier, nextHitAt, true);
                     yield return null;
                 }
             }
@@ -3222,7 +3246,32 @@ namespace AlbedosCustomClassesAdvanced
                 Destroy(hammer);
         }
 
-        private void UpdateHammerVisual(GameObject hammer, Vector3 pos, Vector3 dir, float spin, float size)
+        // Returns true once the size cap is reached.
+        private bool UpdateHammerSize(float flightTime, bool ascended, out float height, out float width)
+        {
+            int steps = Mathf.FloorToInt(flightTime / Mathf.Max(0.05f, _hammerGrowthInterval.Value));
+            float maxHeight = Mathf.Max(0.5f, ascended ? _hammerAscMaxHeight.Value : _hammerMaxHeight.Value);
+            float maxWidth = Mathf.Max(0.2f, ascended ? _hammerAscMaxWidth.Value : _hammerMaxWidth.Value);
+            float widthStep = Mathf.Max(0f, ascended ? _hammerAscWidthPerStep.Value : _hammerWidthPerStep.Value);
+            float rawHeight = Mathf.Max(0.5f, _hammerStartHeight.Value) + Mathf.Max(0f, _hammerHeightPerStep.Value) * steps;
+            float rawWidth = Mathf.Max(0.2f, _hammerStartWidth.Value) + widthStep * steps;
+            height = Mathf.Min(rawHeight, maxHeight);
+            width = Mathf.Min(rawWidth, maxWidth);
+            return rawHeight >= maxHeight;
+        }
+
+        // Lift the spin center so the flipping hammer does not dig into the ground.
+        private Vector3 HammerCenter(Vector3 pos, float height)
+        {
+            return pos + Vector3.up * Mathf.Max(0f, height * 0.5f - 1.4f);
+        }
+
+        private float HammerHitRadius(float height)
+        {
+            return Mathf.Max(Mathf.Max(0.2f, _hammerBaseRadius.Value), height * Mathf.Max(0f, _hammerHitRadiusPerHeight.Value));
+        }
+
+        private void UpdateHammerVisual(GameObject hammer, Vector3 pos, Vector3 dir, float spin, float height, float width)
         {
             if (hammer == null)
                 return;
@@ -3232,7 +3281,30 @@ namespace AlbedosCustomClassesAdvanced
             Quaternion facing = flat.sqrMagnitude > 0.01f ? Quaternion.LookRotation(flat.normalized, Vector3.up) : Quaternion.identity;
             // Upright hammer doing continuous front flips: spin around the axis across the flight path.
             hammer.transform.rotation = facing * Quaternion.AngleAxis(spin, Vector3.right);
-            hammer.transform.localScale = Vector3.one * (0.25f * size);
+            hammer.transform.localScale = Vector3.one;
+
+            // Real meters: shaft along local Y, head across local X (width), head on top.
+            float half = height * 0.5f;
+            float headThick = height * 0.22f;
+            Transform shaftT = hammer.transform.Find("shaft");
+            Transform headT = hammer.transform.Find("head");
+            LineRenderer shaft = shaftT == null ? null : shaftT.GetComponent<LineRenderer>();
+            LineRenderer head = headT == null ? null : headT.GetComponent<LineRenderer>();
+            if (shaft != null)
+            {
+                float shaftWidth = Mathf.Max(0.1f, width * 0.16f);
+                shaft.startWidth = shaftWidth;
+                shaft.endWidth = shaftWidth;
+                shaft.SetPosition(0, new Vector3(0f, -half, 0f));
+                shaft.SetPosition(1, new Vector3(0f, half - headThick, 0f));
+            }
+            if (head != null)
+            {
+                head.startWidth = headThick;
+                head.endWidth = headThick;
+                head.SetPosition(0, new Vector3(-width * 0.5f, half - headThick * 0.5f, 0f));
+                head.SetPosition(1, new Vector3(width * 0.5f, half - headThick * 0.5f, 0f));
+            }
         }
 
         private void HammerHits(Player player, Vector3 pos, float radius, float damageMultiplier, Dictionary<int, float> nextHitAt, bool marks)

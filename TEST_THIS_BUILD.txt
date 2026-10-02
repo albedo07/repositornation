@@ -1,12 +1,6 @@
-Immortal Heroes v0.17.1 - Test focus (Paladin)
+Immortal Heroes v0.17.2 - Test focus (Paladin)
 
-Normal versions (Paladin character):
-1. Goddess Relic: smaller Troll-sized cross, 5m impact.
-2. Ray of Hope + Holy Wave: instant, ~0.5s stop, main hand raised.
-3. Judgement Hammer (old Divine Verdict key): hammer flies 20m along your aim, grows as it travels,
-   passes through enemies, stops at walls, Cripples.
-4. Fallen Angel (old Aegis Fall key): big leap + dive, 10m stun impact, no fall damage.
-
-Ascended versions: open BepInEx/config/albedo.customclasses.advanced.cfg, find [Testing] and set
-  AscendedSkills = righteous_strike, goddess_relic, judgement_hammer, shield_charge, fallen_angel, ray_of_hope, electric_smite
-(any subset works). Restart or reload the config, then test each skill. Tree tooltips read "ASCENDED - ...".
+1. Judgement Hammer (normal): starts Greydwarf Brute size, grows in small steps, ~7-8m tall and ~2m wide at 20m.
+2. Judgement Hammer (Ascended, [Testing] AscendedSkills = judgement_hammer): keeps growing on the way back,
+   never past 10m tall x 3m wide.
+3. Check the hammer no longer clips deep into the ground and its hits match its visible size.

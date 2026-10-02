@@ -1,0 +1,9 @@
+Immortal Heroes v0.17.2 - Hammer Size
+
+Judgement Hammer
+- Starts about Greydwarf Brute size (2.5m tall, 0.8m wide) and grows every 0.2s.
+- At the default 20m range it ends ~7.4m tall x 2m wide (normal cap 8m x 2m).
+- Ascended: keeps growing on the return flight, hard cap 10m tall x 3m wide.
+- Hit radius follows the real height (35% of height, min 0.9m); spin center is lifted so it does not dig into the ground.
+- Damage still grows per meter travelled, and stops growing once the size cap is reached.
+- New config keys (*_v0172) in [Paladin Judgement Hammer] / [Paladin Judgement Hammer Ascended].
