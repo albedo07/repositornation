@@ -33,6 +33,9 @@
 - Tree state B1 (sealed AC panel with checklist) chosen over B2.
 
 ## Ascended designs (approved so far; tooltip header "ASCENDED - <SKILL>", names unchanged)
+- Paladin Righteous Strike (Ascended MC): 7m, applies Judgement Mark, Expose 8s, a second smaller strike (3m, 0.5x) when it detonates a Mark; also spawns 12 Lightning Trails in all directions, 7m range, faster than Electric Smite's trails, each applying Spirit DoT for 6s.
+- Paladin Ray of Hope (Ascended): cleanses Burn/Poison/Frost from allies + 150 HP Barrier (on top of the instant normal version).
+- Testing: until Ascension exists, `[Testing] AscendedSkills` (comma list of skill ids) turns on Ascended versions.
 - Paladin Shield Charge (Ascended): 20m budget, Hyper Armor while charging, Bash = 7m cone that also Stuns Big; charge hitbox radius 4m -> 6m.
 - Paladin Fallen Angel (Ascended): impact leaves a 10m ring for 6s; inside it enemies get Spirit Burn + Fire Burn (3s, refreshed while inside); Hyper Armor through the dive + 3s.
 - Paladin Electric Smite (Ascended Ultimate): keep 16 trails; adds a 6m Thunderstorm for 4s, hits every 0.5s: Lightning damage + Fire DoT + Spirit DoT (3s, refreshed per hit). Smaller/weaker Lightning Tempest.
