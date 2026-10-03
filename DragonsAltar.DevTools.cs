@@ -13,6 +13,7 @@ namespace DragonsAltarDevTools
         public string Key;
         public string Id;
         public string Tab;
+        public string Group;
         public string Description;
         public Type SettingType;
         public float SliderMin;
@@ -39,7 +40,7 @@ namespace DragonsAltarDevTools
     {
         public const string ModGuid = "albedo.customclasses.devtools";
         public const string ModName = "Dragon's Altar - Developer Tools";
-        public const string ModVersion = "0.20.4";
+        public const string ModVersion = "0.20.5";
 
         public static DeveloperToolsPlugin Instance;
 
@@ -48,7 +49,13 @@ namespace DragonsAltarDevTools
             get { return Instance != null && Instance._open; }
         }
 
-        private static readonly string[] Tabs = { "Paladin & Cleric", "Other Skills", "Testing", "Keys & Hotbar", "General" };
+        // v0.20.4: one tab per Base Class (Advancement picked from a dropdown inside it), a
+        // Progression tab (Level, Tier Points, Ascensions), Testing and General. Keys and the
+        // Hotbar are set in the Skill Tree, so they are not listed here anymore.
+        private static readonly string[] Tabs = { "Warrior", "Cleric", "Sorcerer", "Progression", "Testing", "General" };
+        private static readonly string[] WarriorGroups = { "Warrior", "Sword Master", "Mercenary" };
+        private static readonly string[] ClericGroups = { "Cleric", "Paladin", "Priest" };
+        private static readonly string[] SorcererGroups = { "Sorcerer", "Wizard", "Spellcaster" };
         private static readonly string[] AscendableSkills =
             { "righteous_strike", "goddess_relic", "judgement_hammer", "shield_charge", "fallen_angel", "ray_of_hope", "electric_smite" };
 
@@ -66,7 +73,12 @@ namespace DragonsAltarDevTools
         private Rect _windowRect = new Rect(55f, 55f, 1120f, 700f);
         private Vector2 _sectionScroll;
         private Vector2 _settingScroll;
-        private string _selectedTab = "Paladin & Cleric";
+        private string _selectedTab = "Cleric";
+        private readonly Dictionary<string, string> _selectedGroup = new Dictionary<string, string>();
+        private bool _groupDropdownOpen;
+        private string _levelBuffer = "";
+        private string _classBonusBuffer = "";
+        private string _advBonusBuffer = "";
         private string _selectedSection = string.Empty;
         private string _selectedSettingId = string.Empty;
         private string _search = string.Empty;
@@ -253,7 +265,7 @@ namespace DragonsAltarDevTools
                 foreach (KeyValuePair<ConfigDefinition, ConfigEntryBase> pair in entries)
                 {
                     ConfigEntryBase entry = pair.Value;
-                    if (entry == null || !IsSupportedType(entry.SettingType))
+                    if (entry == null || !IsSupportedType(entry.SettingType) || entry.SettingType == typeof(KeyCode))
                         continue;
 
                     string section = entry.Definition.Section;
@@ -268,6 +280,11 @@ namespace DragonsAltarDevTools
                         setting.Id = unique;
                         setting.SettingType = entry.SettingType;
                         setting.Tab = TabFor(section, entry.SettingType);
+                        setting.Group = GroupFor(section);
+                        // Hidden from the lists (Keys/Hotbar live in the Skill Tree; Ascensions have
+                        // their own switches in the Progression tab) but still editable by code.
+                        if (key == "AscendedSkills")
+                            setting.Tab = "";
                         try
                         {
                             setting.Description = entry.Description == null ? "" : entry.Description.Description;
@@ -317,30 +334,69 @@ namespace DragonsAltarDevTools
 
         private bool MatchesFilter(DevSetting s, string search)
         {
+            if (s.Tab.Length == 0)
+                return false;
             if (search.Length > 0)
                 return s.Section.ToLowerInvariant().Contains(search) || s.Key.ToLowerInvariant().Contains(search);
-            return s.Tab == _selectedTab;
+            if (s.Tab != _selectedTab)
+                return false;
+            return GroupsFor(_selectedTab) == null || s.Group == CurrentGroup();
+        }
+
+        // Base Class / Advancement each section belongs to ("" = not a class section).
+        private static string GroupFor(string section)
+        {
+            string[][] all = { WarriorGroups, ClericGroups, SorcererGroups };
+            for (int i = 0; i < all.Length; i++)
+                for (int j = 0; j < all[i].Length; j++)
+                    if (section.StartsWith(all[i][j], StringComparison.OrdinalIgnoreCase))
+                        return all[i][j];
+            if (section == "Grand Sigil Survival")
+                return "Priest";
+            if (section == "Acrobatic Jump Skills")
+                return "Mercenary";
+            return "";
         }
 
         private static string TabFor(string section, Type type)
         {
+            if (section == "Hotkeys" || section == "Hotbar")
+                return "";
             if (section == "Testing" || section == "Progression" || section == "Developer UI")
                 return "Testing";
-            if (section == "Hotkeys" || section == "Hotbar" || type == typeof(KeyCode))
-                return "Keys & Hotbar";
-            if (section.StartsWith("Paladin", StringComparison.OrdinalIgnoreCase) || section.StartsWith("Cleric", StringComparison.OrdinalIgnoreCase))
-                return "Paladin & Cleric";
-            if (section.StartsWith("Warrior", StringComparison.OrdinalIgnoreCase) ||
-                section.StartsWith("Sword Master", StringComparison.OrdinalIgnoreCase) ||
-                section.StartsWith("Mercenary", StringComparison.OrdinalIgnoreCase) ||
-                section.StartsWith("Priest", StringComparison.OrdinalIgnoreCase) ||
-                section.StartsWith("Sorcerer", StringComparison.OrdinalIgnoreCase) ||
-                section.StartsWith("Wizard", StringComparison.OrdinalIgnoreCase) ||
-                section.StartsWith("Spellcaster", StringComparison.OrdinalIgnoreCase) ||
-                section == "Grand Sigil Survival" ||
-                section == "Acrobatic Jump Skills")
-                return "Other Skills";
+            string group = GroupFor(section);
+            if (Array.IndexOf(WarriorGroups, group) >= 0)
+                return "Warrior";
+            if (Array.IndexOf(ClericGroups, group) >= 0)
+                return "Cleric";
+            if (Array.IndexOf(SorcererGroups, group) >= 0)
+                return "Sorcerer";
             return "General";
+        }
+
+        private static string[] GroupsFor(string tab)
+        {
+            if (tab == "Warrior") return WarriorGroups;
+            if (tab == "Cleric") return ClericGroups;
+            if (tab == "Sorcerer") return SorcererGroups;
+            return null;
+        }
+
+        private string CurrentGroup()
+        {
+            string[] groups = GroupsFor(_selectedTab);
+            if (groups == null)
+                return "";
+            string group;
+            if (!_selectedGroup.TryGetValue(_selectedTab, out group) || Array.IndexOf(groups, group) < 0)
+                group = groups[0];
+            return group;
+        }
+
+        private static string GroupLabel(string tab, string group)
+        {
+            string[] groups = GroupsFor(tab);
+            return group + (groups != null && groups[0] == group ? "  (Base Class)" : "  (Advancement)");
         }
 
         private static bool IsDamageKey(string lower)
@@ -389,7 +445,7 @@ namespace DragonsAltarDevTools
             _selectedSettingId = string.Empty;
             for (int i = 0; i < _settings.Count; i++)
             {
-                if (_settings[i].Section == _selectedSection)
+                if (_settings[i].Section == _selectedSection && _settings[i].Tab.Length > 0)
                 {
                     _selectedSettingId = _settings[i].Id;
                     break;
@@ -717,15 +773,16 @@ namespace DragonsAltarDevTools
             for (int i = 0; i < Tabs.Length; i++)
             {
                 bool selectedTab = Tabs[i] == _selectedTab && string.IsNullOrEmpty(_search);
-                if (GUI.Button(new Rect(tx, 84f, 150f, 28f), Tabs[i], selectedTab ? _tabSelectedStyle : _tabStyle))
+                if (GUI.Button(new Rect(tx, 84f, 124f, 28f), Tabs[i], selectedTab ? _tabSelectedStyle : _tabStyle))
                 {
                     _selectedTab = Tabs[i];
                     _search = string.Empty;
+                    _groupDropdownOpen = false;
                     _sectionScroll = Vector2.zero;
                     _settingScroll = Vector2.zero;
                     RebuildSections();
                 }
-                tx += 156f;
+                tx += 130f;
             }
             GUI.Label(new Rect(812f, 88f, 60f, 22f), "Search", _smallStyle);
             string nextSearch = GUI.TextField(new Rect(868f, 85f, 230f, 26f), _search ?? "");
@@ -736,10 +793,47 @@ namespace DragonsAltarDevTools
                 RebuildSections();
             }
 
+            if (_selectedTab == "Progression" && string.IsNullOrEmpty(_search))
+            {
+                DrawProgressionPage();
+                GUI.DragWindow(new Rect(0f, 0f, _windowRect.width, 24f));
+                return;
+            }
+
             GUI.Box(new Rect(18f, 122f, 300f, 562f), "SECTIONS");
             GUI.Box(new Rect(328f, 122f, 774f, 562f), "");
 
-            Rect sectionView = new Rect(28f, 148f, 282f, 528f);
+            // Class tabs: pick the Base Class or one of its Advancements first.
+            float listTop = 148f;
+            string[] groups = string.IsNullOrEmpty(_search) ? GroupsFor(_selectedTab) : null;
+            if (groups != null)
+            {
+                GUI.Label(new Rect(30f, 146f, 270f, 18f), "SHOW SETTINGS FOR", _smallStyle);
+                if (GUI.Button(new Rect(28f, 166f, 282f, 30f), GroupLabel(_selectedTab, CurrentGroup()) + (_groupDropdownOpen ? "   ▲" : "   ▼"), _tabSelectedStyle))
+                    _groupDropdownOpen = !_groupDropdownOpen;
+                listTop = 204f;
+                if (_groupDropdownOpen)
+                {
+                    // While the list is open it replaces the sections, so no click falls through.
+                    for (int i = 0; i < groups.Length; i++)
+                    {
+                        Rect r = new Rect(36f, listTop + i * 34f, 266f, 30f);
+                        if (GUI.Button(r, GroupLabel(_selectedTab, groups[i]), groups[i] == CurrentGroup() ? _selectedButtonStyle : _sectionButtonStyle))
+                        {
+                            _selectedGroup[_selectedTab] = groups[i];
+                            _groupDropdownOpen = false;
+                            _sectionScroll = Vector2.zero;
+                            _settingScroll = Vector2.zero;
+                            RebuildSections();
+                        }
+                    }
+                    DrawSettingsPanel();
+                    GUI.DragWindow(new Rect(0f, 0f, _windowRect.width, 24f));
+                    return;
+                }
+            }
+
+            Rect sectionView = new Rect(28f, listTop, 282f, 676f - listTop);
             Rect sectionContent = new Rect(0f, 0f, 260f, Mathf.Max(520f, _sections.Count * 32f + 8f));
             _sectionScroll = GUI.BeginScrollView(sectionView, _sectionScroll, sectionContent);
             float sy = 4f;
@@ -747,7 +841,7 @@ namespace DragonsAltarDevTools
             {
                 string section = _sections[i];
                 GUIStyle style = section == _selectedSection ? _selectedButtonStyle : _sectionButtonStyle;
-                if (GUI.Button(new Rect(4f, sy, 252f, 28f), FriendlySectionName(section), style))
+                if (GUI.Button(new Rect(4f, sy, 252f, 28f), ShortSectionName(section), style))
                 {
                     _selectedSection = section;
                     EnsureSelectedSetting();
@@ -766,6 +860,15 @@ namespace DragonsAltarDevTools
             return section.Replace(".", " - ");
         }
 
+        // In a class tab the dropdown already names the class, so "Paladin Goddess Relic" lists as "Goddess Relic".
+        private string ShortSectionName(string section)
+        {
+            string group = string.IsNullOrEmpty(_search) ? CurrentGroup() : "";
+            if (group.Length > 0 && section.Length > group.Length + 1 && section.StartsWith(group, StringComparison.OrdinalIgnoreCase))
+                return section.Substring(group.Length + 1).Trim();
+            return FriendlySectionName(section);
+        }
+
         private void DrawSettingsPanel()
         {
             List<DevSetting> visible = new List<DevSetting>();
@@ -773,7 +876,7 @@ namespace DragonsAltarDevTools
             for (int i = 0; i < _settings.Count; i++)
             {
                 DevSetting s = _settings[i];
-                if (s.Section != _selectedSection)
+                if (s.Section != _selectedSection || s.Tab.Length == 0)
                     continue;
                 if (search.Length > 0 && !s.Section.ToLowerInvariant().Contains(search) && !s.Key.ToLowerInvariant().Contains(search))
                     continue;
@@ -799,7 +902,7 @@ namespace DragonsAltarDevTools
             float rowHeight = 58f;
             float contentHeight = 8f;
             for (int i = 0; i < visible.Count; i++)
-                contentHeight += visible[i].Key == "AscendedSkills" ? 118f : rowHeight;
+                contentHeight += rowHeight;
             Rect content = new Rect(0f, 0f, 730f, Mathf.Max(490f, contentHeight));
             _settingScroll = GUI.BeginScrollView(view, _settingScroll, content);
 
@@ -808,7 +911,7 @@ namespace DragonsAltarDevTools
             {
                 DevSetting setting = visible[i];
                 bool selectedRow = setting.Id == _selectedSettingId;
-                float h = setting.Key == "AscendedSkills" ? 114f : rowHeight - 4f;
+                float h = rowHeight - 4f;
                 if (selectedRow)
                     GUI.Box(new Rect(0f, y - 2f, 724f, h), "");
 
@@ -823,17 +926,14 @@ namespace DragonsAltarDevTools
                     DrawKeyRow(setting, y);
                 else if (setting.SettingType.IsEnum)
                     DrawEnumRow(setting, y);
-                else if (setting.Key == "AscendedSkills")
-                    DrawAscendedRow(setting, y);
                 else
                     DrawStringRow(setting, y);
 
                 if (GUI.Button(new Rect(640f, y + 3f, 78f, 28f), "Default"))
                     SetToDefault(setting);
 
-                if (setting.Key != "AscendedSkills")
-                    GUI.Label(new Rect(8f, y + 33f, 710f, 18f), DescriptionLine(setting), _descStyle);
-                y += setting.Key == "AscendedSkills" ? 118f : rowHeight;
+                GUI.Label(new Rect(8f, y + 33f, 710f, 18f), DescriptionLine(setting), _descStyle);
+                y += rowHeight;
             }
 
             GUI.EndScrollView();
@@ -937,9 +1037,122 @@ namespace DragonsAltarDevTools
                 SetValue(setting, next);
         }
 
-        // [Testing] AscendedSkills: one checkbox per Paladin skill instead of a comma list.
-        private void DrawAscendedRow(DevSetting setting, float y)
+        // ------------------------------------------------------------------ v0.20.4 Progression tab
+        // Level and Tier Points use the Advanced module's /ih rules (by reflection, no compile link);
+        // the Ascension switches write [Testing] AscendedSkills, which the skills read immediately.
+        private object AdvancedInstance(out Type type)
         {
+            type = FindLoadedType("AlbedosCustomClassesAdvanced.AdvancedPlugin");
+            if (type == null)
+                return null;
+            System.Reflection.FieldInfo field = type.GetField("Instance", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+            return field == null ? null : field.GetValue(null);
+        }
+
+        private object CallAdvanced(string method, object[] args)
+        {
+            try
+            {
+                Type type;
+                object instance = AdvancedInstance(out type);
+                if (instance == null)
+                    return null;
+                System.Reflection.MethodInfo info = type.GetMethod(method, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+                return info == null ? null : info.Invoke(instance, args);
+            }
+            catch (Exception ex)
+            {
+                ShowStatus("Progression call failed: " + ex.Message);
+                return null;
+            }
+        }
+
+        private void RunAdvanced(string method, object[] args)
+        {
+            string note = CallAdvanced(method, args) as string;
+            if (!string.IsNullOrEmpty(note))
+                ShowStatus(note);
+        }
+
+        private static int ParseInt(string text, int fallback)
+        {
+            int value;
+            return int.TryParse((text ?? "").Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out value) ? value : fallback;
+        }
+
+        // One "label  [-] [value] [+]  [Set]" row. Returns the value to apply, or int.MinValue.
+        private int NumberStepper(float x, float y, string label, ref string buffer, int current, int min, int max)
+        {
+            GUI.Label(new Rect(x, y + 5f, 190f, 22f), label, _smallStyle);
+            int result = int.MinValue;
+            if (GUI.Button(new Rect(x + 196f, y, 34f, 30f), "-", _tabStyle))
+                result = Mathf.Clamp(current - 1, min, max);
+            buffer = GUI.TextField(new Rect(x + 236f, y, 70f, 30f), buffer, _valueStyle);
+            if (GUI.Button(new Rect(x + 312f, y, 34f, 30f), "+", _tabStyle))
+                result = Mathf.Clamp(current + 1, min, max);
+            if (GUI.Button(new Rect(x + 354f, y, 64f, 30f), "SET", _tabStyle))
+                result = Mathf.Clamp(ParseInt(buffer, current), min, max);
+            if (result != int.MinValue)
+                buffer = result.ToString(CultureInfo.InvariantCulture);
+            return result;
+        }
+
+        private void DrawProgressionPage()
+        {
+            GUI.Box(new Rect(18f, 122f, 540f, 562f), "TIER POINTS");
+            GUI.Box(new Rect(568f, 122f, 534f, 562f), "ASCENSIONS");
+
+            int[] p = CallAdvanced("DevPointSummary", null) as int[];
+            if (p == null || p.Length < 7)
+            {
+                GUI.Label(new Rect(40f, 160f, 500f, 60f), "Load a character first (this page edits the character you are playing).", _smallStyle);
+            }
+            else
+            {
+                string who = CallAdvanced("DevCharacterName", null) as string;
+                GUI.Label(new Rect(40f, 150f, 500f, 28f), "Lv " + p[0].ToString() + "   " + (who ?? ""), _titleStyle);
+                GUI.Label(new Rect(40f, 180f, 500f, 36f),
+                    "Class points come from Lv 4-16, Advancement points from Lv 18 after Advancing.\nBonus points are added on top of what your level gives.", _descStyle);
+
+                if (_levelBuffer.Length == 0) _levelBuffer = p[0].ToString(CultureInfo.InvariantCulture);
+                if (_classBonusBuffer.Length == 0) _classBonusBuffer = p[5].ToString(CultureInfo.InvariantCulture);
+                if (_advBonusBuffer.Length == 0) _advBonusBuffer = p[6].ToString(CultureInfo.InvariantCulture);
+
+                int level = NumberStepper(40f, 230f, "Level", ref _levelBuffer, p[0], 1, 80);
+                if (level != int.MinValue)
+                    RunAdvanced("DevCommand", new object[] { "level " + level.ToString(CultureInfo.InvariantCulture) });
+
+                GUI.Label(new Rect(40f, 290f, 500f, 24f), "CLASS TIER POINTS", _tabStyle);
+                GUI.Label(new Rect(40f, 318f, 500f, 22f), "Left " + (p[1] - p[2]).ToString() + "   |   Earned " + p[1].ToString() + "   |   Spent " + p[2].ToString(), _smallStyle);
+                int classBonus = NumberStepper(40f, 346f, "Bonus Class points", ref _classBonusBuffer, p[5], 0, 99);
+                if (classBonus != int.MinValue)
+                    RunAdvanced("DevSetBonusPoints", new object[] { false, classBonus });
+
+                GUI.Label(new Rect(40f, 406f, 500f, 24f), "ADVANCEMENT TIER POINTS", _tabStyle);
+                GUI.Label(new Rect(40f, 434f, 500f, 22f), "Left " + (p[3] - p[4]).ToString() + "   |   Earned " + p[3].ToString() + "   |   Spent " + p[4].ToString(), _smallStyle);
+                int advBonus = NumberStepper(40f, 462f, "Bonus Advancement points", ref _advBonusBuffer, p[6], 0, 99);
+                if (advBonus != int.MinValue)
+                    RunAdvanced("DevSetBonusPoints", new object[] { true, advBonus });
+                GUI.Label(new Rect(40f, 496f, 500f, 18f), "Advancement points only count once the character has Advanced.", _descStyle);
+
+                if (GUI.Button(new Rect(40f, 620f, 260f, 34f), "RESET ALL TIERS & ASCENSIONS", _tabStyle))
+                    RunAdvanced("DevCommand", new object[] { "resetskill all" });
+                GUI.Label(new Rect(310f, 626f, 240f, 22f), "Gives every spent point back.", _descStyle);
+            }
+
+            DrawAscensionSwitches();
+        }
+
+        private void DrawAscensionSwitches()
+        {
+            GUI.Label(new Rect(588f, 150f, 500f, 40f),
+                "Switch a skill to its Ascended version right away (testing: no level or Tier rules).\nThe Skill Tree shows it with the Magenta frame.", _descStyle);
+            DevSetting setting = FindSetting("Testing", "AscendedSkills");
+            if (setting == null)
+            {
+                GUI.Label(new Rect(588f, 200f, 500f, 22f), "Ascension switches need the Advanced module.", _smallStyle);
+                return;
+            }
             string current = Convert.ToString(setting.Main.BoxedValue, CultureInfo.InvariantCulture) ?? "";
             List<string> list = new List<string>();
             string[] parts = current.Split(',');
@@ -949,24 +1162,32 @@ namespace DragonsAltarDevTools
                 if (part.Length > 0 && !list.Contains(part))
                     list.Add(part);
             }
-            GUI.Label(new Rect(226f, y + 7f, 400f, 22f), "Force these skills Ascended (testing):", _smallStyle);
+
+            GUI.Label(new Rect(588f, 196f, 500f, 22f), "PALADIN", _tabStyle);
             bool changed = false;
             for (int i = 0; i < AscendableSkills.Length; i++)
             {
                 string skill = AscendableSkills[i];
-                float x = 8f + (i % 4) * 178f;
-                float row = y + 36f + (i / 4) * 30f;
+                float y = 226f + i * 40f;
                 bool on = list.Contains(skill);
-                bool next = GUI.Toggle(new Rect(x, row, 172f, 24f), on, " " + PrettySkill(skill));
-                if (next != on)
+                string name = PrettySkill(skill) + (skill == "electric_smite" ? "  (Ultimate)" : "");
+                GUI.Label(new Rect(596f, y + 6f, 300f, 22f), name, _smallStyle);
+                if (GUI.Button(new Rect(920f, y, 160f, 30f), on ? "ASCENDED" : "NORMAL", on ? _onStyle : _offStyle))
                 {
-                    if (next) list.Add(skill);
-                    else list.Remove(skill);
+                    if (on) list.Remove(skill);
+                    else list.Add(skill);
                     changed = true;
                 }
             }
+            GUI.Label(new Rect(596f, 226f + AscendableSkills.Length * 40f, 490f, 20f),
+                "Righteous Strike is always Ascended for an Advanced Paladin.", _descStyle);
+            GUI.Label(new Rect(588f, 540f, 500f, 22f), "PRIEST", _tabStyle);
+            GUI.Label(new Rect(596f, 570f, 490f, 40f), "No Ascended versions are designed for Priest yet.", _descStyle);
             if (changed)
+            {
                 SetValue(setting, string.Join(", ", list.ToArray()));
+                ShowStatus("Ascensions updated");
+            }
         }
 
         private static string PrettySkill(string id)

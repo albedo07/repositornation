@@ -1,13 +1,12 @@
-Immortal Heroes v0.20.4 - Test focus (tree frames + Altar cards)
+Immortal Heroes v0.20.5 - Test focus (F8 Config window + Altar descriptions)
 
-1. Cleric before Advancement -> open the tree (PALADIN and PRIEST previews):
-   locked nodes keep their full coloured border; only the art inside is grey.
-2. Electric Smite / Lightning Tempest art is centred in its frame; padlock in the corner.
-3. PRIEST preview: Divine Intervention frame Green, Heaven's Judgement Cyan,
-   Lightning Relic / Holy Relic Navy. Hotbar icons of the Priest show the same colours.
-4. [Testing] AscendedSkills = goddess_relic,electric_smite -> Goddess Relic frame Magenta,
-   Electric Smite frame Red. Advanced Paladin: Righteous Strike frame Magenta.
-5. Altar: no black panel behind the Warrior / Cleric / Sorcerer cards (and the
-   Advancement cards); the card art is visible behind the name and role text.
-6. If a frame looks wrong, send a screenshot: the art is measured from the tree
-   backdrop, not tested in Valheim here.
+1. F8 -> Cleric tab -> dropdown: Cleric / Paladin / Priest each show only their sections.
+   Same for the Warrior and Sorcerer tabs.
+2. No Keys & Hotbar tab; the hotbar keys still work and can be changed in the Skill Tree.
+3. Progression tab with a character loaded:
+   - Level - / + / SET changes the level (tree Tier Points follow).
+   - Bonus Class / Advancement points SET -> "Left" goes up, the tree header matches.
+   - Goddess Relic NORMAL -> ASCENDED: the tree shows the Magenta frame and the skill casts Ascended.
+   - RESET ALL TIERS & ASCENSIONS gives every spent point back.
+4. Search (e.g. "cooldown") still finds settings across all tabs.
+5. Altar: click Lightning Zap -> only its description, no stats.

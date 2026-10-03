@@ -1,0 +1,22 @@
+IMMORTAL HEROES v0.20.5 - CONFIG WINDOW
+
+F8 CONFIG WINDOW
+- Tabs: Warrior | Cleric | Sorcerer | Progression | Testing | General.
+- Each class tab has a "SHOW SETTINGS FOR" dropdown: the Base Class or one of its
+  Advancements (Cleric -> Cleric / Paladin / Priest, Warrior -> Warrior / Sword Master /
+  Mercenary, Sorcerer -> Sorcerer / Wizard / Spellcaster). Section names drop the class
+  prefix ("Paladin Goddess Relic" lists as "Goddess Relic").
+- New Progression tab, for the character you are playing:
+  Level (- / + / SET), Class and Advancement Tier Points (left, earned, spent, plus
+  bonus points), RESET ALL TIERS & ASCENSIONS, and ASCENDED / NORMAL switches for every
+  Paladin skill with an Ascended version (works immediately; the tree shows the Magenta frame).
+  It uses the same rules as the /ih command.
+- Keys & Hotbar removed from the window. Keys are set in the Skill Tree; the settings
+  still exist in the .cfg files.
+- Search still looks through every tab.
+
+ALTAR
+- Clicking a skill now shows only its description (no Tier, damage or cost lines).
+
+UNCHANGED
+Combat, progression rules, saves, Skill Tree.

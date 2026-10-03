@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.20.4";
+        public const string ModVersion = "0.20.5";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -8068,6 +8068,56 @@ namespace AlbedosCustomClassesAdvanced
                     tiers.Add(IhSkillName(all[i]) + " " + IhGetTier(player, all[i]).ToString() + "/" + IhMaxTier(all[i]).ToString() + (IhIsAscended(player, all[i]) ? "*" : ""));
                 notes.Add(string.Join(", ", tiers.ToArray()) + "   (* Ascended)");
             }
+        }
+
+        // ------------------------------------------------------------------ v0.20.4 F8 Progression tab bridge
+        // DevTools calls these by reflection (no compile link). Same rules as the /ih command.
+
+        // { level, class earned, class spent, adv earned, adv spent, bonus class, bonus adv }
+        public int[] DevPointSummary()
+        {
+            Player player = Player.m_localPlayer;
+            if (player == null)
+                return null;
+            return new int[] {
+                IhGetLevel(player),
+                IhClassPointsEarned(player), IhSpent(player, IhClassSkills),
+                IhAdvPointsEarned(player), IhSpent(player, IhBranchSkills(player)),
+                IhReadInt(player, IhBonusClassKey, 0), IhReadInt(player, IhBonusAdvKey, 0) };
+        }
+
+        public string DevCharacterName()
+        {
+            Player player = Player.m_localPlayer;
+            if (player == null)
+                return "";
+            string mc = GetClass(player), ac = GetAdvancement(player);
+            return (mc == "" ? "No Class" : mc) + (ac == "" ? "" : "  >  " + ac);
+        }
+
+        public string DevSetBonusPoints(bool advancement, int value)
+        {
+            Player player = Player.m_localPlayer;
+            if (player == null)
+                return "No character loaded.";
+            List<string> notes = new List<string>();
+            IhWrite(player, advancement ? IhBonusAdvKey : IhBonusClassKey, Mathf.Max(0, value).ToString());
+            IhEnforcePools(player, notes);
+            return notes.Count > 0 ? string.Join(" ", notes.ToArray()) : (advancement ? "Advancement" : "Class") + " bonus Tier Points set to " + Mathf.Max(0, value).ToString() + ".";
+        }
+
+        public string DevCommand(string line)
+        {
+            List<string> notes = new List<string>();
+            try
+            {
+                IhRunCommand(line ?? "", notes);
+            }
+            catch (Exception ex)
+            {
+                notes.Add("Command failed: " + ex.Message);
+            }
+            return string.Join(" ", notes.ToArray());
         }
 
         // ------------------------------------------------------------------ tooltips

@@ -18,7 +18,7 @@ namespace AlbedosCustomClasses
     {
         public const string ModGuid = "albedo.customclasses";
         public const string ModName = "Dragon's Altar";
-        public const string ModVersion = "0.20.4";
+        public const string ModVersion = "0.20.5";
 
         internal const string ClassDataKey = "AlbedoCustomClasses.Class";
         internal const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -861,8 +861,12 @@ namespace AlbedosCustomClasses
                                 if((string)node.GetType().GetField("Id").GetValue(node)!=entry.Id) continue;
                                 object[] args={Player.m_localPlayer,node,null};
                                 string body=(string)type.GetMethod("IhBuildTooltip",BindingFlags.NonPublic|BindingFlags.Instance).Invoke(instance,args);
-                                // White tooltip text belongs on navy; use parchment ink here.
-                                return System.Text.RegularExpressions.Regex.Replace(body,@"</?color(?:=[^>]+)?>",string.Empty);
+                                // v0.20.4: the Altar shows the description only (the tree tooltip's first
+                                // paragraph); Tier, damage and cost lines stay in the Skill Tree.
+                                body=System.Text.RegularExpressions.Regex.Replace(body,@"</?color(?:=[^>]+)?>",string.Empty);
+                                int cut=body.IndexOf("\n\n",StringComparison.Ordinal);
+                                string lore=(cut>=0 ? body.Substring(0,cut) : body).Trim();
+                                return lore.Length>0 && lore.IndexOf(" - ",StringComparison.Ordinal)<0 ? lore : entry.Description;
                             }
                         }
                     }

@@ -3,7 +3,7 @@
 ## Working rules
 - User wants short responses and real execution, not long explanations.
 - **RUSH B** = immediately code the obvious requested task, minimal commentary, use latest approved build as baseline, don't redesign unrelated things, verify and package.
-- Latest package: **v0.20.4 — Tree and Altar Fixes**, built on ChatGPT's v0.20.3 (Universal Tree runtime chassis + uGUI Altar with Altar_Background/Altar_ClassCards; it REPLACED our v0.19.2/0.19.3 IMGUI Altar, which the user accepted as the new base). Older: v0.19.x ours, v0.19.0 ChatGPT. Do NOT change combat/progression logic unless explicitly requested.
+- Latest package: **v0.20.5 — Config Window** (v0.20.4 Tree and Altar Fixes), built on ChatGPT's v0.20.3 (Universal Tree runtime chassis + uGUI Altar with Altar_Background/Altar_ClassCards; it REPLACED our v0.19.2/0.19.3 IMGUI Altar, which the user accepted as the new base). Older: v0.19.x ours, v0.19.0 ChatGPT. Do NOT change combat/progression logic unless explicitly requested.
 - Never patch visual problems by drawing random rectangles over the reference asset. Keep approved artwork intact; make layout/components fit properly.
 
 ## Framework doc (source of truth for design)
@@ -52,7 +52,9 @@
 - TREE FRAMES (v0.20.4): frames keep their colour when locked; only the art inside the painted opening greys (`Tree_LockMask.png`). Openings = `IhFieldRect` (= FIELDS in `tools/build_tree_frames.py`); Priest art is blitted donor opening -> slot opening (`IhPriestArtworkRect`). Frame colour = skill category via `IhSkillFrameColor` (Ascended Magenta, Ascended Ultimate Red, Ultimate Maroon, Signature Navy, Buff/support Green: Ray of Hope, Divine Intervention; else Cyan); when it differs from the painted slot colour a `Frame_<slot>_<color>.png` overlay is drawn (and stamped into the Priest canvas so its hotbar icons match).
 - ALTAR CARDS (v0.20.4): no dark margin around the cards (`tools/build_altar_cards.py` from docs/source_art/Altar_ClassCards_v0.20.3.png); text veil 30% + soft text glow so card art shows behind the name/role.
 - Only Paladin moves to the tree hotbar; other ACs stay on fixed `[Hotkeys]` until Paladin is finished, then copy it (universal tree).
-- F8 Config window (DevTools, rewritten v0.18.0): every setting of every module (float/int/bool/string/KeyCode/enum), tabs + search, auto-saves to the .cfg, same Section/Key across modules edited together, Test Cooldowns toggle.
+- F8 Config window (DevTools, rewritten v0.18.0): every setting of every module, tabs + search, auto-saves to the .cfg, same Section/Key across modules edited together, Test Cooldowns toggle.
+- v0.20.5 F8 layout (user goal: always easy to understand): tabs Warrior | Cleric | Sorcerer | Progression | Testing | General; class tabs have a "SHOW SETTINGS FOR" dropdown (Base Class / its ACs, `GroupFor`). Progression tab = Level, Class/AC Tier Points (bonus via `DevSetBonusPoints`), reset, ASCENDED/NORMAL switches (write `[Testing] AscendedSkills`); Advanced exposes `DevPointSummary` / `DevCharacterName` / `DevSetBonusPoints` / `DevCommand` (reflection, /ih rules). Keys/Hotbar are NOT in the window (set in the Skill Tree).
+- Altar skill inspection shows the description only (first paragraph of the tree tooltip), no stats.
 
 ## Ascended designs (approved so far; tooltip header "ASCENDED - <SKILL>", names unchanged)
 - Paladin Righteous Strike (Ascended MC): 7m, applies Judgement Mark, Expose 8s, a second smaller strike (3m, 0.5x) when it detonates a Mark; also spawns 12 Lightning Trails in all directions, 7m range, faster than Electric Smite's trails, each applying Spirit DoT for 6s.
