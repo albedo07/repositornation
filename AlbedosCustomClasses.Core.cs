@@ -17,7 +17,7 @@ namespace AlbedosCustomClasses
     {
         public const string ModGuid = "albedo.customclasses";
         public const string ModName = "Dragon's Altar";
-        public const string ModVersion = "0.19.2";
+        public const string ModVersion = "0.19.3";
 
         internal const string ClassDataKey = "AlbedoCustomClasses.Class";
         internal const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1579,6 +1579,8 @@ namespace AlbedosCustomClasses
         private Texture2D _altarDialog;
         private Texture2D _altarEmblemGlow;
         private Texture2D _altarHeadingStar;
+        private Texture2D _altarAcBackdrop;
+        private Texture2D _altarAcHighlight;
         private readonly System.Collections.Generic.Dictionary<string, Texture2D> _altarTex = new System.Collections.Generic.Dictionary<string, Texture2D>();
         private Rect _altarRect;
         private GUIStyle _altarTitleStyle;
@@ -1613,6 +1615,8 @@ namespace AlbedosCustomClasses
             _altarDialog = LoadAltarPng("Altar_Dialog.png");
             _altarEmblemGlow = LoadAltarPng("Altar_EmblemGlow.png");
             _altarHeadingStar = LoadAltarPng("Altar_HeadingStar.png");
+            _altarAcBackdrop = LoadAltarPng("AltarAC_Backdrop.png");
+            _altarAcHighlight = LoadAltarPng("AltarAC_CardHighlight.png");
             return true;
         }
 
@@ -1758,12 +1762,20 @@ namespace AlbedosCustomClasses
             GUI.depth = -50;
             GUI.BeginGroup(_altarRect);
             GUI.color = Color.white;
-            GUI.DrawTexture(new Rect(0f, 0f, _altarRect.width, _altarRect.height), _altarBackdrop);
-            DrawAltarCommon();
-            if (_classUiPage == 1)
-                DrawAltarAdvancementPage();
+            bool acPage = _classUiPage == 1 && _altarAcBackdrop != null;
+            GUI.DrawTexture(new Rect(0f, 0f, _altarRect.width, _altarRect.height), acPage ? _altarAcBackdrop : _altarBackdrop);
+            if (acPage)
+            {
+                DrawAltarAcPage();
+            }
             else
-                DrawAltarBasePage();
+            {
+                DrawAltarCommon();
+                if (_classUiPage == 1)
+                    DrawAltarAdvancementPage();
+                else
+                    DrawAltarBasePage();
+            }
             if (_altarConfirm)
                 DrawAltarConfirmation();
             GUI.EndGroup();
@@ -1825,19 +1837,26 @@ namespace AlbedosCustomClasses
             DrawAltarBandTitle(550f, 161f, title, role);
         }
 
-        // Header band title between its two stars (106 concept px free) + spaced role line below.
+        // Header band title flanked by two stars that follow its width (max 170 concept px) + role line.
         private void DrawAltarBandTitle(float centerX, float top, string title, string role)
         {
             string text = title.ToUpperInvariant();
             float size = 22f;
             _altarTitleStyle.fontSize = AltarFont(size);
-            while (size > 12f && _altarTitleStyle.CalcSize(new GUIContent(text)).x * AltarW / _altarRect.width > 104f)
+            float textW = _altarTitleStyle.CalcSize(new GUIContent(text)).x * AltarW / _altarRect.width;
+            while (size > 13f && textW > 170f)
             {
                 size -= 0.5f;
                 _altarTitleStyle.fontSize = AltarFont(size);
+                textW = _altarTitleStyle.CalcSize(new GUIContent(text)).x * AltarW / _altarRect.width;
+            }
+            if (_altarHeadingStar != null)
+            {
+                GUI.DrawTexture(AltarR(centerX - textW * 0.5f - 22f, top + 8f, 14f, 14f), _altarHeadingStar);
+                GUI.DrawTexture(AltarR(centerX + textW * 0.5f + 8f, top + 8f, 14f, 14f), _altarHeadingStar);
             }
             _altarRoleStyle.fontSize = AltarFont(9f);
-            GUI.Label(AltarR(centerX - 80f, top, 160f, 30f), text, _altarTitleStyle);
+            GUI.Label(AltarR(centerX - 100f, top, 200f, 30f), text, _altarTitleStyle);
             GUI.Label(AltarR(centerX - 110f, top + 30f, 220f, 16f), SpacedCaps(role), _altarRoleStyle);
         }
 
@@ -2050,6 +2069,217 @@ namespace AlbedosCustomClasses
                 RequestAdvancementConfirmation();
             if (!_altarConfirm && AltarClick(back))
                 ShowBaseClassPage();
+        }
+
+        // =====================================================================================
+        // v0.19.3 Advancement page (approved concept docs/source_art/Altar_AC_Concept.png).
+        // Layout in 802x687 concept px like the base page. The concept's SKILLS list was incomplete:
+        // every Advancement now lists all of its skills (Ultimate marked) and PASSIVE shows the
+        // Mastery + Grace, from the Framework design.
+        // =====================================================================================
+        private static readonly Rect AltarAcCardA = new Rect(35f, 265f, 288f, 117f);
+        private static readonly Rect AltarAcCardB = new Rect(35f, 388f, 288f, 117f);
+
+        private static string[] AltarAcSkills(string ac)
+        {
+            switch (ac)
+            {
+                case "Sword Master": return new string[] { "Moonlight Splitter", "Crescent Cleave", "Blade Storm", "Frenzied Charge", "Eclipse", "Halfmoon Slash" };
+                case "Mercenary": return new string[] { "Stomp", "Circle Swing", "Bonecrusher", "Seismic Guillotine", "Reaver's Orbit", "Whirlwind" };
+                case "Paladin": return new string[] { "Goddess Relic", "Judgement Hammer", "Shield Charge", "Fallen Angel", "Ray of Hope", "Electric Smite" };
+                case "Priest": return new string[] { "Lightning Relic", "Holy Relic", "Divine Intervention", "Grand Cross", "Heaven's Judgement", "Lightning Tempest" };
+                case "Wizard": return new string[] { "Meteor Fall", "Gravity Dominion", "Astral Railcannon", "Astral Greatblade", "Frost Nova", "Elemental Cataclysm" };
+            }
+            return new string[] { "Arcane Phalanx", "Afterimage Arsenal", "Void Step", "Rift Echo", "Gravity Blast", "Arcane Rupture" };
+        }
+
+        // Mastery (permanent AC trait) and Grace (M4 + R) per Advancement.
+        private static string AltarAcMastery(string ac)
+        {
+            switch (ac)
+            {
+                case "Sword Master": return "The Way of the Sword";
+                case "Mercenary": return "Warfreak";
+                case "Paladin": return "Holy Trinity";
+                case "Priest": return "Bless Thy Sinners";
+                case "Wizard": return "Archmage";
+            }
+            return "Yin and Yang";
+        }
+
+        private static string AltarAcGrace(string ac)
+        {
+            switch (ac)
+            {
+                case "Sword Master": return "Knight's Guidance";
+                case "Mercenary": return "Battlecry";
+                case "Paladin": return "Heaven's Light";
+                case "Priest": return "Grand Sigil";
+                case "Wizard": return "Clockwork";
+            }
+            return "Rift Walker";
+        }
+
+        private static string AltarAcCardRole(string ac)
+        {
+            switch (ac)
+            {
+                case "Sword Master": return "Speed + spirit swordplay";
+                case "Mercenary": return "Control + brutal AoE";
+                case "Paladin": return "Holy impact + resilience";
+                case "Priest": return "Relics + team support";
+                case "Wizard": return "Charged large-scale magic";
+            }
+            return "Rapid mobile spatial magic";
+        }
+
+        private static string AltarSkillIcon(string skill)
+        {
+            string id = skill.ToLowerInvariant().Replace("'", "").Replace(" ", "_");
+            switch (id)
+            {
+                case "lightning_zap": case "holy_wave": case "goddess_relic": case "judgement_hammer": case "shield_charge":
+                case "fallen_angel": case "ray_of_hope": case "electric_smite": case "lightning_relic": case "holy_relic":
+                case "divine_intervention": case "grand_cross": case "heavens_judgement": case "lightning_tempest":
+                case "grand_sigil": case "heavens_light":
+                    return "Icon_" + id + ".png";
+                case "righteous_strike": return "Icon_righteous_strike_Normal.png";
+            }
+            return null;
+        }
+
+        private void DrawAltarSkillIcon(Rect r, string skill)
+        {
+            string file = AltarSkillIcon(skill);
+            Texture2D tex = file == null ? null : AltarTexture(file);
+            if (tex != null)
+            {
+                GUI.DrawTexture(r, tex);
+                return;
+            }
+            Texture2D slot = AltarTexture("Slot_Empty.png");
+            if (slot != null)
+                GUI.DrawTexture(r, slot);
+            int old = _altarTitleStyle.fontSize;
+            _altarTitleStyle.fontSize = Mathf.Max(6, Mathf.RoundToInt(r.height * 0.36f));
+            GUI.Label(r, Initials(skill), _altarTitleStyle);
+            _altarTitleStyle.fontSize = old;
+        }
+
+        private void DrawAltarSectionHeader(float x, float y, string text, float lineEnd)
+        {
+            if (_altarHeadingStar != null)
+                GUI.DrawTexture(AltarR(x, y + 2f, 10f, 10f), _altarHeadingStar);
+            _altarHeadingStyle.fontSize = AltarFont(11.5f);
+            GUI.Label(AltarR(x + 13f, y - 2f, 120f, 16f), text, _altarHeadingStyle);
+            float textW = _altarHeadingStyle.CalcSize(new GUIContent(text)).x * AltarW / _altarRect.width;
+            float lx = x + 18f + textW;
+            if (_altarHeadingStar != null)
+                GUI.DrawTexture(AltarR(lx, y + 3f, 8f, 8f), _altarHeadingStar);
+            Color line = AltarColor(0.62f, 0.44f, 0.20f);
+            GUI.color = new Color(line.r, line.g, line.b, 0.8f);
+            GUI.DrawTexture(AltarR(lx + 10f, y + 7f, Mathf.Max(0f, lineEnd - lx - 10f), 1f), Texture2D.whiteTexture);
+            GUI.color = Color.white;
+        }
+
+        private void DrawAltarAcCard(Rect slot, string ac, bool selected)
+        {
+            Rect r = AltarR(slot.x, slot.y, slot.width, slot.height);
+            bool hover = AltarHover(r);
+            Texture2D card = AltarTexture("AltarAC_Card_" + ac.Replace(" ", "") + ".png");
+            bool baked = ac == "Paladin" || ac == "Priest";
+            if (card != null && !(baked && _advancementParent == "Cleric" && ((ac == "Paladin" && slot.y < 300f) || (ac == "Priest" && slot.y > 300f))))
+                GUI.DrawTexture(r, card);
+            if (!baked)
+            {
+                // Name + role on the card's light mist (the concept's Paladin / Priest have them painted).
+                _altarHeadingStyle.fontSize = AltarFont(ac.Length > 10 ? 15f : 18f);
+                Color old = _altarHeadingStyle.normal.textColor;
+                _altarHeadingStyle.normal.textColor = AltarColor(0.12f, 0.09f, 0.10f);
+                GUI.Label(AltarR(slot.x + 104f, slot.y + 36f, 176f, 26f), ac.ToUpperInvariant(), _altarHeadingStyle);
+                _altarHeadingStyle.normal.textColor = old;
+                _altarBodyStyle.fontSize = AltarFont(9.5f);
+                GUI.Label(AltarR(slot.x + 104f, slot.y + 62f, 176f, 16f), AltarAcCardRole(ac), _altarBodyStyle);
+            }
+            if ((selected || hover) && _altarAcHighlight != null)
+            {
+                GUI.color = selected ? Color.white : new Color(1f, 1f, 1f, 0.45f);
+                GUI.DrawTexture(AltarR(slot.x - 8f, slot.y - 8f, 304f, 133f), _altarAcHighlight);
+                GUI.color = Color.white;
+            }
+            if (!_altarConfirm && AltarClick(r))
+                FocusAdvancement(ac);
+        }
+
+        // Name (bold, shrinks to fit 98 concept px) over a small caption.
+        private void DrawAltarPassiveLine(float y, string name, string caption)
+        {
+            float size = 9.4f;
+            _altarBodyStyle.fontSize = AltarFont(size);
+            while (size > 7f && _altarBodyStyle.CalcSize(new GUIContent("<b>" + name + "</b>")).x * AltarW / _altarRect.width > 98f)
+            {
+                size -= 0.4f;
+                _altarBodyStyle.fontSize = AltarFont(size);
+            }
+            GUI.Label(AltarR(660f, y, 104f, 14f), "<b>" + name + "</b>", _altarBodyStyle);
+            _altarBodyStyle.fontSize = AltarFont(9f);
+            GUI.Label(AltarR(660f, y + 12f, 104f, 14f), caption, _altarBodyStyle);
+        }
+
+        private void DrawAltarAcPage()
+        {
+            Player player = Player.m_localPlayer;
+            string cls = player == null ? "" : GetSelectedClass(player);
+            string adv = player == null ? "" : GetSelectedAdvancement(player);
+            _altarStatusStyle.fontSize = AltarFont(10.5f);
+            GUI.Label(AltarR(294f, 117f, 110f, 20f), string.IsNullOrEmpty(cls) ? "None" : cls, _altarStatusStyle);
+            GUI.Label(AltarR(506f, 117f, 130f, 20f), string.IsNullOrEmpty(adv) ? "None" : adv, _altarStatusStyle);
+
+            if (!_altarConfirm)
+            {
+                if (AltarClick(AltarR(30f, 22f, 31f, 29f)))
+                    ResetClassSelection();
+                if (AltarClick(AltarR(722f, 22f, 31f, 29f)))
+                    CloseClassPanel();
+                if (AltarClick(AltarR(35f, 153f, 149f, 35f)))
+                    ShowBaseClassPage();
+            }
+
+            string[] pair = SplitList(GetBaseClassSkills(_advancementParent), "ADVANCEMENTS");
+            if (pair.Length >= 2)
+            {
+                DrawAltarAcCard(AltarAcCardA, pair[0], _focusedAdvancement == pair[0]);
+                DrawAltarAcCard(AltarAcCardB, pair[1], _focusedAdvancement == pair[1]);
+            }
+
+            DrawAltarBandTitle(547f, 154f, _focusedAdvancement, GetAdvancementRole(_focusedAdvancement));
+            DrawAltarDescription(GetAdvancementDescription(_focusedAdvancement), 212f, 462f);
+
+            // SKILLS: every skill of the Advancement, Ultimate marked.
+            string[] skills = AltarAcSkills(_focusedAdvancement);
+            _altarBodyStyle.fontSize = AltarFont(9.4f);
+            for (int i = 0; i < skills.Length; i++)
+            {
+                float y = 495f + i * 14.2f;
+                DrawAltarSkillIcon(AltarR(372f, y, 14f, 14f), skills[i]);
+                string label = i == skills.Length - 1 ? skills[i] + "  (Ultimate)" : skills[i];
+                GUI.Label(AltarR(392f, y - 0.5f, 220f, 15f), label, _altarBodyStyle);
+            }
+
+            // PASSIVE: Mastery, then the Grace (M4 + R).
+            DrawAltarSectionHeader(633f, 478f, "PASSIVE", 752f);
+            Texture2D emblem = AltarTexture("Altar_Emblem_" + _focusedAdvancement.Replace(" ", "") + ".png");
+            if (emblem != null)
+                GUI.DrawTexture(AltarR(632f, 496f, 24f, 24f), emblem);
+            DrawAltarPassiveLine(496f, AltarAcMastery(_focusedAdvancement), "Mastery");
+            DrawAltarSkillIcon(AltarR(632f, 530f, 24f, 24f), AltarAcGrace(_focusedAdvancement));
+            DrawAltarPassiveLine(530f, AltarAcGrace(_focusedAdvancement), "Grace  (M4 + R)");
+
+            bool canChoose = player != null && cls == _advancementParent;
+            Rect choose = AltarR(434f, 580f, 214f, 43f);
+            DrawAltarButton(choose, canChoose ? "Choose " + _focusedAdvancement : "Choose " + _advancementParent + " First", true, canChoose);
+            if (!_altarConfirm && canChoose && AltarClick(choose))
+                RequestAdvancementConfirmation();
         }
 
         private void DrawAltarConfirmation()

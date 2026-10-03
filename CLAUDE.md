@@ -3,7 +3,7 @@
 ## Working rules
 - User wants short responses and real execution, not long explanations.
 - **RUSH B** = immediately code the obvious requested task, minimal commentary, use latest approved build as baseline, don't redesign unrelated things, verify and package.
-- Latest package: **v0.19.2 — Dragon's Altar** (v0.19.1 Universal Tree, v0.19.0 Cleric Bloodline = ChatGPT build: Priest tree + hotbar). Do NOT change combat/progression logic unless explicitly requested.
+- Latest package: **v0.19.3 — Advancement Selection** (v0.19.2 Dragon's Altar, v0.19.1 Universal Tree, v0.19.0 Cleric Bloodline = ChatGPT build). Do NOT change combat/progression logic unless explicitly requested.
 - Never patch visual problems by drawing random rectangles over the reference asset. Keep approved artwork intact; make layout/components fit properly.
 
 ## Framework doc (source of truth for design)
@@ -48,6 +48,7 @@
 - v0.19.0 (ChatGPT): Priest tree/hotbar/HUD/Tiers, PALADIN/PRIEST preview selector before Advancement, `IhTemplateSlot(id)` maps every Priest id to its Paladin slot (anchors, lock regions). Tooltip rule changed there: Cyan = numeric values + units (not damage names); Tier fractions White; no Hotbar row.
 - UNIVERSAL TREE RULE (v0.19.1): every AC tree uses the Paladin chrome and Paladin node slots pixel-for-pixel. AC art from a separate painting is never copied as a panel: `tools/build_priest_assets.py` cuts each node / title / Grace box, auto-aligns it to the Paladin slot (edge correlation) and composites onto the Paladin backdrop -> `Cleric_<AC>_Reference.png`, `Cleric_<AC>_Locked.png`, `Icon_<id>.png` (Paladin slot frames). Copy this for future ACs. Source paintings live in docs/source_art.
 - ALTAR (v0.19.2, implemented in Core.cs): the user's concept `docs/source_art/Altar_Concept.png` (802x687) IS the approved reference - do not restyle it like the Skill Tree. `tools/build_altar_assets.py` bakes static parts into `Altar_Backdrop.png` (2x) and cuts sprites (card highlight, dialog, emblems, heading star, bottom-left blank); Core.cs IMGUI (`OnGUI`, Altar* methods, concept-px layout via `AltarR`) draws everything dynamic and reuses Core's existing state/actions (FocusBaseClass, Request*Confirmation, ConfirmPendingSelection, ResetClassSelection...). Jotunn panel = fallback if art missing. Advancement page: emblems are the selector, SKILLS/PASSIVE bottom-left. Compile check now also compiles Core separately (tools/compile_check/StubsCore.cs).
+- ALTAR ADVANCEMENT PAGE (v0.19.3): concept `docs/source_art/Altar_AC_Concept.png` (794x675, stretched to 802x687) -> `AltarAC_*.png` via `build_ac()`; Core.cs `DrawAltarAcPage`. User rule: follow the concept's design/art exactly but FIX its content holes (concept SKILLS list was incomplete -> code lists all 6 skills per AC + Mastery and Grace under PASSIVE).
 - Only Paladin moves to the tree hotbar; other ACs stay on fixed `[Hotkeys]` until Paladin is finished, then copy it (universal tree).
 - F8 Config window (DevTools, rewritten v0.18.0): every setting of every module (float/int/bool/string/KeyCode/enum), tabs + search, auto-saves to the .cfg, same Section/Key across modules edited together, Test Cooldowns toggle.
 

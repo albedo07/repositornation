@@ -460,6 +460,7 @@ def main():
     # v0.19.2: Dragon's Altar (approved concept docs/source_art/Altar_Concept.png).
     import build_altar_assets
     build_altar_assets.build()
+    build_altar_assets.build_ac()
     print("UI assets written to", OUT)
 
 

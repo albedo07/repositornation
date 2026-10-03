@@ -1,0 +1,17 @@
+Immortal Heroes v0.19.3 - Advancement Selection
+
+Dragon's Altar Advancement page rebuilt from the approved concept (docs/source_art/Altar_AC_Concept.png):
+- Header subtitle ADVANCEMENT SELECTION, live Base class / Advancement status, Reset and Close.
+- Left: < Base Classes button, CHOOSE AN ADVANCEMENT, the parent class's two Advancement cards.
+  The focused card wears the gold frame; hover previews it; click to read it.
+  Paladin / Priest cards are the concept's paintings; Sword Master, Mercenary, Wizard and
+  Spellcaster cards are built from them (recolored, own emblem, name + role drawn).
+- Right: title + role on the band, IDENTITY / MECHANICS / BEST FOR, SKILLS, PASSIVE, Choose <AC>
+  (or "Choose <Class> First").
+- Fixed the concept's holes:
+  - SKILLS now lists every skill of the Advancement, one per row with its icon, Ultimate marked
+    (the concept skipped Shield Charge-style entries and merged skills into shared rows).
+  - PASSIVE shows the Mastery (with the Advancement emblem) and the Grace with its M4 + R key.
+  - Long names (SWORD MASTER, The Way of the Sword) shrink to fit; header stars follow the title
+    width on both Altar pages.
+- Skills without icon art yet show their initials on an empty slot.

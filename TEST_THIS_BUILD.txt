@@ -1,10 +1,8 @@
-Immortal Heroes v0.19.2 - Test focus (Dragon's Altar)
+Immortal Heroes v0.19.3 - Test focus (Altar Advancement page)
 
-1. Interact with the Dragon's Altar: the new window opens centered (Esc / X closes).
-2. Click Warrior / Cleric / Sorcerer: gold frame moves, right panel updates (title, text, kit, emblems).
-3. Choose Cleric -> confirmation card -> Yes, Confirm: status shows Base class: Cleric.
-4. View Advancements (or click the Paladin / Priest emblem): Advancement page, gold ring on the
-   selected emblem, SKILLS + PASSIVE at the bottom left, < Base Classes goes back.
-5. Choose Paladin with the requirements unmet: the Altar refuses and lists what is missing.
-6. Reset (top left): press twice within 5 s to reset the class.
-7. Check text fits at your resolution (1080p / 1440p) and nothing overlaps.
+1. Altar -> click Cleric -> View Advancements (or a Paladin / Priest emblem).
+2. Advancement page: gold frame on the focused card, click the other card to switch.
+3. SKILLS lists all 6 skills (Ultimate last), PASSIVE shows Mastery + Grace.
+4. < Base Classes returns; Choose <AC> works only for your own class (otherwise "Choose <Class> First").
+5. Try Warrior and Sorcerer: their Advancement cards appear with their names.
+6. Base Classes page still works as in v0.19.2.
