@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Reflection;
 using BepInEx;
@@ -17,7 +17,7 @@ namespace AlbedosCustomClasses
     {
         public const string ModGuid = "albedo.customclasses";
         public const string ModName = "Dragon's Altar";
-        public const string ModVersion = "0.18.2";
+        public const string ModVersion = "0.19.0";
 
         internal const string ClassDataKey = "AlbedoCustomClasses.Class";
         internal const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1458,6 +1458,14 @@ namespace AlbedosCustomClasses
 
             if (data.Contains(PriestOffenseKey))
                 data.Remove(PriestOffenseKey);
+
+            // Reset/change of the base Class returns its earned points for reassignment.
+            // Preserve Level and bonus-point totals; clear chosen Tiers and branch loadouts.
+            string[] treeKeys = { "ImmortalHeroes.Tiers", "ImmortalHeroes.Ascended",
+                "ImmortalHeroes.HotbarLayout.", "ImmortalHeroes.HotbarLayout.Paladin",
+                "ImmortalHeroes.HotbarLayout.Priest" };
+            foreach (string key in treeKeys)
+                if (data.Contains(key)) data.Remove(key);
         }
 
         internal static string GetSelectedClass(Player player)

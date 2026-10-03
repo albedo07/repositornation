@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
@@ -17,7 +17,7 @@ namespace AlbedosCustomClassesGuardian
     {
         public const string ModGuid = "albedo.customclasses.guardian";
         public const string ModName = "Dragon's Altar - Grand Sigil Survival";
-        public const string ModVersion = "0.18.2";
+        public const string ModVersion = "0.19.0";
 
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 

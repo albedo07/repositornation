@@ -1,0 +1,11 @@
+Immortal Heroes v0.18.4 - Seamless Node + Lock Fix
+
+1. Removed v0.18.3's rectangular Lightning Zap draw overlay. The loaded backdrop
+   now receives a one-time frame/glyph repair, matching boundary colors to the
+   surrounding tree. Both Cleric and Paladin backdrops receive the repair.
+2. Heaven's Light padlock uses its actual painted frame as its anchor, clear of
+   the nameplate. Other skills' lock positions are unchanged.
+3. Tier fractions in tooltips stay White, including pending Tier fractions.
+   The Damage & Healing bonus remains Cyan.
+4. All 8 version labels and the installer banner now identify v0.18.4.
+   Combat, progression, inputs and original PNG assets are unchanged.

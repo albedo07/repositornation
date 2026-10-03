@@ -1,0 +1,7 @@
+Immortal Heroes v0.18.5 - Tooltip Unit Colors
+
+- Extend Cyan highlighting to the unit/symbol attached to a numeric value:
+  m, s, ms, min, degree symbol, %, HP, x, m/s, HP/s and /s.
+- Tier fractions remain White, including pending Tiers.
+- Preserve v0.18.4 tree artwork repair, Heaven's Light lock and other UI behavior.
+- Update all 8 module versions and installer banner to v0.18.5.

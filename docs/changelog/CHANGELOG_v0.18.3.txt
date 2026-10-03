@@ -1,0 +1,9 @@
+Immortal Heroes v0.18.3 - Tooltip + Node Fix
+
+1. Cyan highlights now target numeric values (including decimals and signs).
+   Damage names, words and units stay White; subjects stay Yellow.
+2. Removed the Hotbar - Permanent/Optional row from skill tooltips.
+3. Replaced Lightning Zap's split baked tree frame at draw time with the existing
+   Holy Wave Cyan frame and Zap glyph, before and after Advancement. Nameplate/stars stay in place.
+4. Updated all 8 module version labels and the installer banner to v0.18.3.
+   No combat/progression changes. Existing art files are unchanged.

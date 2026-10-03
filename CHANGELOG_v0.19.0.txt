@@ -1,0 +1,20 @@
+Immortal Heroes v0.19.0 - Cleric Bloodline
+
+1. Shared Cleric node objects and saved Class Tiers for both advancement routes.
+2. Priest tree: signature/normal/Ultimate/Grace nodes, branch-aware locks and Tiers,
+   config-backed tooltips, cyan values with units, white Tier fractions.
+3. Functional Priest hotbar/HUD: all 7 ability routes and cooldowns; saved key/slot
+   order; permanent signatures/Ultimate; separate Grand Sigil Grace slot.
+4. Priest direct damage scales with its actual skill Tier. Holy Relic and Divine
+   Intervention healing scale too. Other existing combat mechanics are retained.
+5. Pre-Advancement Paladin/Priest preview selector; both use the same entry checklist
+   at the tree and Altar. Switching previews preserves shared pending Class points.
+6. Confirm-time validation rejects stale/locked/over-budget Tiers; character, level
+   and advancement changes clear stale drag/selection state.
+7. Paladin remains on its existing IDs, saves and Ascended mechanics. Priest IDs
+   and loadout are separate. Explicit base-Class reset clears chosen tree data.
+8. Priest uses the existing Cleric background pixels for its left panel/chrome;
+   only its right advancement panel and Grace artwork are replaced.
+9. All module versions updated to v0.19.0. Installer validates Priest artwork too.
+
+Not included: new Priest Ascended variants, a new XP system, or an in-game test.
