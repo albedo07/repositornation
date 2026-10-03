@@ -3,7 +3,7 @@
 ## Working rules
 - User wants short responses and real execution, not long explanations.
 - **RUSH B** = immediately code the obvious requested task, minimal commentary, use latest approved build as baseline, don't redesign unrelated things, verify and package.
-- Latest package: **v0.18.2 — Tree Polish** (v0.18.1 Functional Skill Tree, v0.18.0 Paladin Progression, v0.17.2 Hammer Size). Do NOT change combat/progression logic unless explicitly requested.
+- Latest package: **v0.19.1 — Universal Tree** (v0.19.0 Cleric Bloodline = ChatGPT build: Priest tree + hotbar, v0.18.3-0.18.5 tooltip tweaks; v0.18.2 Tree Polish). Do NOT change combat/progression logic unless explicitly requested.
 - Never patch visual problems by drawing random rectangles over the reference asset. Keep approved artwork intact; make layout/components fit properly.
 
 ## Framework doc (source of truth for design)
@@ -45,6 +45,9 @@
 - v0.18.2: locked nodes copy their region from `Cleric_Paladin_Locked.png` (greyed nodes; `LockedRegions` in code must match `LOCKED_REGIONS` in build_ui_assets.py) + padlock; Grace slot greyed/padlocked before Advancement; stars/padlock load with mipmaps; LZ hotbar icon built with the same Cyan frame as RS/HW.
 - Tooltip style (approved direction): Valheim serif, description first, then "Subject - value" lines. White = info, Yellow = subject, Cyan = damage types (incl. Fire Burn / Spirit Burn). No other colors; Radius/Range/Duration/Stamina Cost/Wind Up Time/Cooldown are separate lines.
 - Still open: B1 sealed-panel art, DoT Tier scaling, other ACs.
+- v0.19.0 (ChatGPT): Priest tree/hotbar/HUD/Tiers, PALADIN/PRIEST preview selector before Advancement, `IhTemplateSlot(id)` maps every Priest id to its Paladin slot (anchors, lock regions). Tooltip rule changed there: Cyan = numeric values + units (not damage names); Tier fractions White; no Hotbar row.
+- UNIVERSAL TREE RULE (v0.19.1): every AC tree uses the Paladin chrome and Paladin node slots pixel-for-pixel. AC art from a separate painting is never copied as a panel: `tools/build_priest_assets.py` cuts each node / title / Grace box, auto-aligns it to the Paladin slot (edge correlation) and composites onto the Paladin backdrop -> `Cleric_<AC>_Reference.png`, `Cleric_<AC>_Locked.png`, `Icon_<id>.png` (Paladin slot frames). Copy this for future ACs. Source paintings live in docs/source_art.
+- Altar redesign (design only, `tools/render_altar_preview.py`): Class selection on the same panel - left = 3 Class nodes, right = focused Class (Blessing, Class skills, Advancements), footer = hotbar preview + CHOOSE plaque. Class icons are placeholders (glyphs).
 - Only Paladin moves to the tree hotbar; other ACs stay on fixed `[Hotkeys]` until Paladin is finished, then copy it (universal tree).
 - F8 Config window (DevTools, rewritten v0.18.0): every setting of every module (float/int/bool/string/KeyCode/enum), tabs + search, auto-saves to the .cfg, same Section/Key across modules edited together, Test Cooldowns toggle.
 

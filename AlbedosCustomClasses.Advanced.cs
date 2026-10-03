@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.19.0";
+        public const string ModVersion = "0.19.1";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -9398,13 +9398,15 @@ namespace AlbedosCustomClassesAdvanced
         private static readonly ReferenceNodeUi[] ClericPriestReferenceNodes =
         {
             ClericPaladinReferenceNodes[0], ClericPaladinReferenceNodes[1], ClericPaladinReferenceNodes[2],
-            new ReferenceNodeUi("lightning_relic", new Rect(357f,151f,103f,105f),new Rect(369f,156f,70f,65f),"",TreeNodeKind.Signature,true,5,"ATTACK - LIGHTNING RELIC",""),
-            new ReferenceNodeUi("holy_relic",new Rect(357f,287f,103f,105f),new Rect(369f,288f,70f,63f),"",TreeNodeKind.Signature,true,5,"BUFF - HOLY RELIC",""),
-            new ReferenceNodeUi("grand_sigil",new Rect(357f,413f,103f,105f),new Rect(380f,409f,74f,67f),"",TreeNodeKind.Grace,true,0,"GRACE - GRAND SIGIL",""),
-            new ReferenceNodeUi("divine_intervention",new Rect(520f,151f,126f,105f),new Rect(548f,156f,68f,65f),"",TreeNodeKind.AdvancementNormal,false,5,"SUPPORT - DIVINE INTERVENTION",""),
-            new ReferenceNodeUi("grand_cross",new Rect(672f,151f,103f,105f),new Rect(686f,156f,69f,65f),"",TreeNodeKind.AdvancementNormal,false,5,"ATTACK - GRAND CROSS",""),
-            new ReferenceNodeUi("heavens_judgement",new Rect(663f,287f,120f,105f),new Rect(686f,288f,69f,63f),"",TreeNodeKind.AdvancementNormal,false,5,"ATTACK - HEAVEN'S JUDGEMENT",""),
-            new ReferenceNodeUi("lightning_tempest",new Rect(831f,204f,133f,165f),new Rect(850f,214f,103f,108f),"",TreeNodeKind.Ultimate,true,3,"ULTIMATE - LIGHTNING TEMPEST","")
+            // v0.19.1: universal tree - every Priest node sits on the exact Paladin node slot
+            // (same group / icon rects, nameplate anchors and lock regions via IhTemplateSlot).
+            new ReferenceNodeUi("lightning_relic", new Rect(357f, 151f, 103f, 105f), new Rect(369f, 158f, 70f, 72f), "", TreeNodeKind.Signature, true, 5, "ATTACK - LIGHTNING RELIC", ""),
+            new ReferenceNodeUi("holy_relic", new Rect(357f, 287f, 103f, 105f), new Rect(369f, 290f, 70f, 69f), "", TreeNodeKind.Signature, true, 5, "BUFF - HOLY RELIC", ""),
+            new ReferenceNodeUi("grand_sigil", new Rect(357f, 413f, 103f, 105f), new Rect(370f, 416f, 71f, 71f), "", TreeNodeKind.Grace, true, 0, "GRACE - GRAND SIGIL", ""),
+            new ReferenceNodeUi("divine_intervention", new Rect(532f, 151f, 103f, 105f), new Rect(548f, 158f, 68f, 72f), "", TreeNodeKind.AdvancementNormal, false, 5, "SUPPORT - DIVINE INTERVENTION", ""),
+            new ReferenceNodeUi("grand_cross", new Rect(672f, 151f, 103f, 105f), new Rect(686f, 158f, 69f, 72f), "", TreeNodeKind.AdvancementNormal, false, 5, "ATTACK - GRAND CROSS", ""),
+            new ReferenceNodeUi("heavens_judgement", new Rect(672f, 287f, 103f, 105f), new Rect(686f, 290f, 69f, 69f), "", TreeNodeKind.AdvancementNormal, false, 5, "ATTACK - HEAVEN'S JUDGEMENT", ""),
+            new ReferenceNodeUi("lightning_tempest", new Rect(831f, 204f, 133f, 165f), new Rect(850f, 214f, 103f, 108f), "", TreeNodeKind.Ultimate, true, 3, "ULTIMATE - LIGHTNING TEMPEST", "")
         };
 
         private void DrawReferenceClericPaladinTree()
@@ -9502,14 +9504,20 @@ namespace AlbedosCustomClassesAdvanced
             string[] branches = { "Paladin", "Priest" };
             for (int i = 0; i < branches.Length; i++)
             {
-                Rect r = ScaleReferenceRect(800f + i * 83f, 124f, 80f, 20f);
+                // v0.19.1: same ornate plaque art as CONFIRM / ADVANCE (no flat boxes).
+                Rect r = ScaleReferenceRect(796f + i * 90f, 121f, 86f, 24f);
                 bool selected = _ihPreviewBranch == branches[i];
-                DrawFilledBorder(r, new Color(0.10f,0.12f,0.15f,0.95f),
-                    selected ? new Color(1f,0.80f,0.30f,1f) : new Color(0.55f,0.46f,0.30f,1f), 1f);
-                GUIStyle style = new GUIStyle(_treeFooterPendingStyle);
+                bool hoverBranch = r.Contains(Event.current.mousePosition);
+                if (_treeConfirmPlaqueTex != null)
+                {
+                    GUI.color = selected ? Color.white : (hoverBranch ? new Color(0.80f, 0.80f, 0.80f, 1f) : new Color(0.55f, 0.55f, 0.55f, 1f));
+                    GUI.DrawTexture(r, _treeConfirmPlaqueTex);
+                    GUI.color = Color.white;
+                }
+                GUIStyle style = new GUIStyle(selected ? _treeFooterConfirmStyle : _treeFooterPendingStyle);
                 style.alignment = TextAnchor.MiddleCenter;
-                style.fontSize = Mathf.Max(9, Mathf.RoundToInt(r.height * 0.60f));
-                GUI.Label(r, branches[i].ToUpperInvariant(), style);
+                style.fontSize = Mathf.Max(9, Mathf.RoundToInt(r.height * 0.46f));
+                DrawFooterText(r, branches[i].ToUpperInvariant(), style);
                 if (r.Contains(Event.current.mousePosition))
                 {
                     _treeHoveredTitle = branches[i].ToUpperInvariant() + " - PREVIEW";
@@ -9527,75 +9535,24 @@ namespace AlbedosCustomClassesAdvanced
             }
         }
 
-        private Texture2D IhCopyTexture(Texture2D source, string name)
-        {
-            Texture2D texture = new Texture2D(source.width,source.height,TextureFormat.RGBA32,false);
-            texture.name = name;
-            texture.wrapMode = TextureWrapMode.Clamp;
-            texture.filterMode = FilterMode.Bilinear;
-            texture.SetPixels(source.GetPixels());
-            texture.Apply(false,false);
-            return texture;
-        }
-
-        private Texture2D IhCropIcon(Texture2D source, Rect rect, string name)
-        {
-            const int width = 64, height = 64;
-            Texture2D icon = new Texture2D(width,height,TextureFormat.RGBA32,false);
-            icon.name = name;
-            icon.wrapMode = TextureWrapMode.Clamp;
-            icon.filterMode = FilterMode.Bilinear;
-            for (int y = 0; y < height; y++)
-                for (int x = 0; x < width; x++)
-                {
-                    float u = (rect.x + (x + 0.5f) * rect.width / width) / 1011f;
-                    float v = 1f - (rect.yMax - (y + 0.5f) * rect.height / height) / 662f;
-                    icon.SetPixel(x,y,source.GetPixelBilinear(u,v));
-                }
-            icon.Apply(false,false);
-            return icon;
-        }
-
+        // v0.19.1: the Priest tree is pre-built on the exact Paladin chrome (tools/build_priest_assets.py):
+        // same frame, header, footer and node slots, so both branches line up pixel for pixel.
         private void IhLoadPriestArtwork()
         {
-            Texture2D source = LoadUiPng("Cleric_Priest_Artwork.png");
-            if (source == null || _ihPreAdvanceBackdropTex == null)
+            _ihPriestBackdropTex = LoadUiPng("Cleric_Priest_Reference.png");
+            _ihPriestLockedTex = LoadUiPng("Cleric_Priest_Locked.png");
+            if (_ihPriestBackdropTex == null)
             {
-                if (source != null) Destroy(source);
-                Logger.LogWarning("Priest artwork is missing. Re-run INSTALL.bat to restore the full Cleric tree.");
+                Logger.LogWarning("Priest Skill Tree art is missing. Re-run INSTALL.bat to restore it.");
                 return;
             }
-            // One authoritative Class panel and chrome. Only the Advancement area and
-            // its Grace icon are taken from the Priest texture; Cleric pixels are identical.
-            _ihPriestBackdropTex = IhCopyTexture(_ihPreAdvanceBackdropTex,"ImmortalHeroes_ClericPriest");
-            for (int y = 76; y < 523; y++)
-                for (int x = 334; x < 984; x++)
-                    _ihPriestBackdropTex.SetPixel(x,661-y,source.GetPixelBilinear((x+0.5f)/1011f,1f-(y+0.5f)/662f));
-            for (int y = 539; y < 601; y++)
-                for (int x = 660; x < 723; x++)
-                    _ihPriestBackdropTex.SetPixel(x,661-y,source.GetPixelBilinear((x+0.5f)/1011f,1f-(y+0.5f)/662f));
-            _ihPriestBackdropTex.Apply(false,false);
-            Destroy(source);
-            _ihPriestLockedTex = IhCopyTexture(_ihPriestBackdropTex,"ImmortalHeroes_ClericPriestLocked");
-            // Grey the artwork inside each frame, not the surrounding paper or nameplate.
-            for (int i = 3; i <= ClericPriestReferenceNodes.Length; i++)
-            {
-                Rect area = i == ClericPriestReferenceNodes.Length
-                    ? new Rect(664f,543f,56f,55f) : ClericPriestReferenceNodes[i].IconRect;
-                for (int y = Mathf.RoundToInt(area.y); y < Mathf.RoundToInt(area.yMax); y++)
-                    for (int x = Mathf.RoundToInt(area.x); x < Mathf.RoundToInt(area.xMax); x++)
-                    {
-                        Color c = _ihPriestLockedTex.GetPixel(x,661-y);
-                        float grey = (c.r * 0.299f + c.g * 0.587f + c.b * 0.114f) * 0.72f;
-                        _ihPriestLockedTex.SetPixel(x,661-y,new Color(grey,grey,grey,c.a));
-                    }
-            }
-            _ihPriestLockedTex.Apply(false,false);
+            IhRepairLightningZapBackdrop(_ihPriestBackdropTex);
             for (int i = 3; i < ClericPriestReferenceNodes.Length; i++)
             {
-                ReferenceNodeUi node = ClericPriestReferenceNodes[i];
-                Rect rect = node.IconRect;
-                _treeSkillIconTex[node.Id] = IhCropIcon(_ihPriestBackdropTex,rect,"ImmortalHeroes_"+node.Id);
+                string id = ClericPriestReferenceNodes[i].Id;
+                Texture2D icon = LoadUiPng("Icon_" + id + ".png");
+                if (icon != null)
+                    _treeSkillIconTex[id] = icon;
             }
         }
 

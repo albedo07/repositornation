@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.19.0";
+        public const string ModVersion = "0.19.1";
 
         internal static DragonCombatPlugin Instance;
 

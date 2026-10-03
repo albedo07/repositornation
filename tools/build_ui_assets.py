@@ -454,6 +454,9 @@ def main():
     confirm_plaque(160, 42).save(os.path.join(OUT, "Confirm_Plaque.png"))
     empty_socket().save(os.path.join(OUT, "Slot_Empty.png"))
     permanent_badge().save(os.path.join(OUT, "Badge_Permanent.png"))
+    # v0.19.1: Cleric -> Priest tree on the same chrome (needs the files above).
+    import build_priest_assets
+    build_priest_assets.build()
     print("UI assets written to", OUT)
 
 

@@ -1,28 +1,9 @@
-v0.19.0 - Cleric bloodline in-game checks
+Immortal Heroes v0.19.1 - Test focus (universal tree)
 
-1. Install with Valheim closed. Confirm INSTALL.bat compiles all 8 DLLs successfully.
-2. Open an existing Paladin: verify saved Tiers, hotbar order and Ascensions remain.
-3. On a test Cleric, open K. Toggle PALADIN / PRIEST: same left panel and Tier values.
-   Queue Class points; switching previews must preserve them. Confirm the points.
-4. At Lv 16 with RS 7/7 and 14 spent Class points, choose PRIEST and Advance.
-   The Altar must refuse advancement if those requirements are not met.
-5. Priest: Relics + Grand Sigil unlocked; remaining nodes show their requirements.
-   Spend Priest points; confirm/reopen/relog and check the values persist.
-6. Test /ih level 24 with 3 Priest points spent, then Lv 32 with 6 spent.
-   Divine Intervention, then Grand Cross/Heaven's Judgement unlock in order.
-7. /ih level 36 unlocks Lightning Tempest; check automatic Tiers at 40 / 44 / 48.
-8. Cast Lightning Relic and Holy Relic. Recast to relinquish; check end cooldowns.
-   Check Consecrated Ground, Divine Intervention Cross Cast, Heaven's Judgement
-   Cross Cast, Grand Cross self-only cast, Lightning Tempest and Grand Sigil.
-9. Reorder skills, rebind a key, reopen and relog. Casting and HUD must follow slots.
-   Mandatory skills cannot be removed. Grand Sigil stays outside numbered slots.
-10. Hover nodes/hotbar: subjects Yellow, values+units Cyan, Tier fractions White.
-    No Hotbar tooltip row. Locks must not cover labels. ESC closes K.
-
-Use a test character for /ih class, reset and branch-change tests: those commands
-intentionally alter character progression. /ih advance Priest and Paladin are
-admin/testing shortcuts; normal advancement uses the checklist above.
-
-Report any installer error verbatim with BepInEx/LogOutput.log if available.
-Priest Ascended variants have no defined mechanics in this source and are not
-implemented by this UI pass. Existing Paladin Ascensions remain as before.
+1. Cleric before Advancement, open K, toggle PALADIN / PRIEST (top right plaques):
+   the frame, header, footer and every node position must stay exactly in place - only
+   the node art and the title change.
+2. Priest: stars, padlocks, lock text, - / + and the Grace box line up like on Paladin.
+3. Priest locked nodes are greyed the same way as Paladin locked nodes.
+4. Priest hotbar / HUD icons have the same frames as the Paladin icons.
+5. Everything from v0.19.0 still works (Priest skills, Tiers, Advance, Altar checklist).

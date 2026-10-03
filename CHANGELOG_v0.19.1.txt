@@ -1,0 +1,20 @@
+Immortal Heroes v0.19.1 - Universal Tree
+
+Priest tree now uses the exact same panel as Paladin
+- The Priest painting was generated separately and drifts up to 3 px from the Paladin art
+  (panel border, nodes, Grace box). v0.19.0 copied its whole right panel at runtime, which
+  left seams and shifted every Priest node, nameplate, star row and lock.
+- New pipeline (tools/build_priest_assets.py): each Priest node, the PRIEST title and the
+  Grand Sigil box are cut from the painting, auto-aligned to the matching Paladin node slot
+  and placed on the Paladin backdrop. Frame, header, footer, background and every node slot
+  are now pixel-identical between Paladin and Priest.
+- New files: Cleric_Priest_Reference.png, Cleric_Priest_Locked.png (greyed exactly like
+  Paladin's locked nodes), Icon_<priest skill>.png hotbar icons built with the same slot frames
+  as the Paladin icons. The source painting moved to docs/source_art (not shipped).
+- Priest node rects now equal the Paladin slot rects (click areas, padlocks, stars, anchors).
+- PALADIN / PRIEST preview selector uses the ornate plaque art instead of flat boxes.
+
+Design preview only (not in game yet)
+- docs/previews/ALTAR_ClassSelect_*.png: the Dragon's Altar Class selection on the same
+  universal panel (Classes as nodes on the left, focused Class details on the right,
+  hotbar preview + CHOOSE plaque in the footer).
