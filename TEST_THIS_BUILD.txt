@@ -1,11 +1,10 @@
-Immortal Heroes v0.20.7 - Test focus
+Immortal Heroes v0.20.8 - Test focus
 
-1. Tree: hover Ray of Hope (values Green), Goddess Relic (Navy), Electric Smite (Maroon),
-   Shield Charge (Cyan). Switch Goddess Relic to ASCENDED in F8 -> values Magenta.
-2. Angel Comet everywhere Fallen Angel used to be (tree name, tooltip, cast message).
-3. PRIEST preview: Grace shows Heaven's Crucible (tree, tooltip, footer); HUD Grace icon
-   visible after Advancing to Priest; Mastery tooltip says Bless Thy Sinners.
-4. PALADIN / PRIEST buttons top right are gold plaques.
-5. Altar: Cleric / Paladin / Priest passives show the new names and texts.
-6. F8 Cleric tab: no Aegis Fall / Divine Verdict, no "v2" / "v0109" in names,
-   keys read "Stamina Cost", "Cooldown"...
+1. Cleric (any): Max HP +35; HP regen faster; Shield / Staff / 1H Club give no movement penalty
+   (a two-handed Club still does).
+2. Paladin with Club + Shield: Clubs skill +15; heavy armor no longer slows you; weapon hits show
+   Slash and Pierce at least half of Blunt. Swap to a Sword: none of it applies.
+3. Priest Heaven's Crucible (M4+R): no stamina cost, 250 HP Barrier on you and allies within 10m,
+   lasts 16s, 10 min cooldown (Test Cooldowns overrides that).
+4. Priest death-save: 6s recovery, faster movement, actions cost far less stamina for 6s.
+5. Tree: Holy Wave frame Green, Divine Intervention Cyan.

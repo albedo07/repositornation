@@ -40,7 +40,7 @@ namespace DragonsAltarDevTools
     {
         public const string ModGuid = "albedo.customclasses.devtools";
         public const string ModName = "Dragon's Altar - Developer Tools";
-        public const string ModVersion = "0.20.7";
+        public const string ModVersion = "0.20.8";
 
         public static DeveloperToolsPlugin Instance;
 
@@ -389,7 +389,9 @@ namespace DragonsAltarDevTools
             if (key.StartsWith("Legacy", StringComparison.OrdinalIgnoreCase))
                 return true;
             return section.StartsWith("Paladin Aegis", StringComparison.OrdinalIgnoreCase) ||
-                   section.StartsWith("Paladin Divine Verdict", StringComparison.OrdinalIgnoreCase);
+                   section.StartsWith("Paladin Divine Verdict", StringComparison.OrdinalIgnoreCase) ||
+                   section.StartsWith("Paladin Passive", StringComparison.OrdinalIgnoreCase) ||   // retired for Holy Trinity
+                   section == "Passive Choices";
         }
 
         // Display name only (the .cfg keeps its section names): no version tags, current skill names.

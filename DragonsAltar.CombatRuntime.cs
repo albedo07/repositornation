@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.20.7";
+        public const string ModVersion = "0.20.8";
 
         internal static DragonCombatPlugin Instance;
 
@@ -47,6 +47,8 @@ namespace DragonsAltarCombat
         internal ConfigEntry<bool> EnableDivineStaffShield;
         internal ConfigEntry<bool> EnableSpellcasterDualGunStaves;
         internal ConfigEntry<bool> RemoveDivineEquipmentMovementPenalty;
+        internal ConfigEntry<bool> ClericBlessingNoPenalty;
+        internal ConfigEntry<bool> HolyTrinityNoArmorPenalty;
         internal ConfigEntry<float> SorcererMagicDamageBonus;
         internal ConfigEntry<bool> BlockHotbarWhenSkillModifierHeld;
         internal ConfigEntry<bool> EnableRuntime;
@@ -64,6 +66,8 @@ namespace DragonsAltarCombat
             EnableDivineStaffShield = Config.Bind("Weapon Mastery", "EnableDivineStaffShield", true, "Divine Duality: Cleric may equip a Staff and Shield together, including before advancement.");
             EnableSpellcasterDualGunStaves = Config.Bind("Weapon Mastery", "EnableSpellcasterDualGunStaves", true, "Allow Spellcaster to equip two rapid-fire Gun Staves. The Sorcerer module handles cadence and accuracy without a synthetic off-hand projectile.");
             RemoveDivineEquipmentMovementPenalty = Config.Bind("Weapon Mastery", "LegacyRemoveDivineEquipmentMovementPenalty", false, "Legacy option retained for config compatibility. Cleric no longer gets a blanket equipment movement-penalty removal.");
+            ClericBlessingNoPenalty = Config.Bind("Cleric Blessing", "NoShieldStaffClubMovementPenalty", true, "Cleric's Blessing: Shields, Staves and one-handed Club weapons have no movement penalty (two-handed Clubs excluded).");
+            HolyTrinityNoArmorPenalty = Config.Bind("Paladin Holy Trinity", "NoArmorMovementPenalty", true, "Holy Trinity (Club-type melee weapon + any Shield): Armor has no movement penalty.");
             SorcererMagicDamageBonus = Config.Bind("Sorcerer Blessing", "MagicDamagePercent", 30f, "Arcane Blood Magic Damage bonus. Applies to Eitr-based Sorcerer magic, including magical physical portions and magic-weapon attacks.");
             BlockHotbarWhenSkillModifierHeld = Config.Bind("Hotkeys", "BlockHotbarWhenSkillModifierHeld", true, "Prevents Alpha1-Alpha0 from also activating Valheim hotbar slots while the Dragon's Altar skill modifier is held.");
             DefaultDebuffDuration = Config.Bind("Debuffs", "DefaultDuration", 6f, "Default debuff duration in seconds.");
@@ -198,6 +202,7 @@ namespace DragonsAltarCombat
             count += PatchAttackGetStamina();
             count += PatchAttackStart();
             count += PatchEquipmentMovement();
+            count += PatchUseStamina();
             count += PatchBlockAttack();
             count += PatchEquipItem();
             count += PatchHotbarUse();
@@ -397,6 +402,39 @@ namespace DragonsAltarCombat
             }
 
             return count;
+        }
+
+        // v0.20.8: Bless Thy Sinners "-70% Stamina Usage for all actions" (Player.UseStamina amount).
+        private int PatchUseStamina()
+        {
+            MethodInfo prefix = typeof(DragonCombatPlugin).GetMethod("UseStaminaPrefix", BindingFlags.Static | BindingFlags.NonPublic);
+            if (prefix == null)
+                return 0;
+            int count = 0;
+            MethodInfo[] methods = typeof(Player).GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            for (int i = 0; i < methods.Length; i++)
+            {
+                MethodInfo method = methods[i];
+                ParameterInfo[] parameters = method.GetParameters();
+                if (method.Name != "UseStamina" || parameters.Length < 1 || parameters[0].ParameterType != typeof(float))
+                    continue;
+                try
+                {
+                    PatchWithHarmony(method, new HarmonyMethod(prefix), null);
+                    count++;
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogWarning("Could not patch Player.UseStamina: " + ex.Message);
+                }
+            }
+            return count;
+        }
+
+        private static void UseStaminaPrefix(Player __instance, ref float __0)
+        {
+            if (__0 > 0f)
+                __0 *= DragonCombat.GetStaminaUseMultiplier(__instance);
         }
 
         private int PatchEquipmentMovement()
@@ -798,10 +836,51 @@ namespace DragonsAltarCombat
 
         private static void EquipmentMovementPostfix(Player __instance, ref float __result)
         {
-            // v0.12.3: the old blanket Cleric removal stays retired.
             // v0.18.1: Heaven's Light (Grace) removes equipment movement penalties while active.
             if (__result < 0f && DragonCombat.HasNoEquipmentPenalty(__instance))
+            {
                 __result = 0f;
+                return;
+            }
+            if (__result >= 0f || Instance == null || __instance == null || DragonCombat.GetClassName(__instance) != "Cleric")
+                return;
+
+            // v0.20.8 Cleric's Blessing: no penalty from Shields, Staves and one-handed Club weapons.
+            ItemDrop.ItemData right = DragonCombat.GetHandItem(__instance, "m_rightItem");
+            ItemDrop.ItemData left = DragonCombat.GetHandItem(__instance, "m_leftItem");
+            if (Instance.ClericBlessingNoPenalty.Value)
+            {
+                __result -= ClericExemptPenalty(right);
+                if (left != right)
+                    __result -= ClericExemptPenalty(left);
+            }
+
+            // v0.20.8 Holy Trinity (Paladin, Club-type melee weapon + any Shield): no Armor penalty.
+            if (Instance.HolyTrinityNoArmorPenalty.Value && DragonCombat.IsHolyTrinityActive(__instance))
+            {
+                string[] armor = { "m_chestItem", "m_legItem", "m_helmetItem", "m_shoulderItem" };
+                for (int i = 0; i < armor.Length; i++)
+                    __result -= NegativeModifier(DragonCombat.GetHandItem(__instance, armor[i]));
+            }
+            if (__result > 0f)
+                __result = 0f;
+        }
+
+        private static float NegativeModifier(ItemDrop.ItemData item)
+        {
+            if (item == null || item.m_shared == null)
+                return 0f;
+            return Mathf.Min(0f, item.m_shared.m_movementModifier);
+        }
+
+        private static float ClericExemptPenalty(ItemDrop.ItemData item)
+        {
+            if (item == null || item.m_shared == null)
+                return 0f;
+            bool oneHandedClub = item.m_shared.m_skillType == Skills.SkillType.Clubs && !DragonCombat.IsTwoHandedWeapon(item);
+            if (DragonCombat.IsShield(item) || DragonCombat.IsStaffWeapon(item) || oneHandedClub)
+                return NegativeModifier(item);
+            return 0f;
         }
 
         private static void EquipItemPrefix(Humanoid __instance, object[] __args, ref EquipPatchState __state)
@@ -1327,6 +1406,40 @@ namespace DragonsAltarCombat
             {
                 return false;
             }
+        }
+
+        // v0.20.8: Holy Trinity condition, shared by CombatRuntime (movement) and Advanced (Clubs, damage).
+        public static bool IsHolyTrinityActive(Player player)
+        {
+            if (player == null || GetAdvancementName(player) != "Paladin" || GetClassName(player) != "Cleric")
+                return false;
+            ItemDrop.ItemData right = GetHandItem(player, "m_rightItem");
+            ItemDrop.ItemData left = GetHandItem(player, "m_leftItem");
+            bool club = right != null && right.m_shared != null && right.m_shared.m_skillType == Skills.SkillType.Clubs && !IsMagicWeapon(right);
+            return club && IsShield(left);
+        }
+
+        // v0.20.8: timed stamina-usage reduction (Bless Thy Sinners emergency window).
+        private static readonly Dictionary<int, KeyValuePair<float, float>> StaminaUseCuts = new Dictionary<int, KeyValuePair<float, float>>();
+
+        public static void ApplyStaminaUseCut(Player player, float fraction, float seconds)
+        {
+            if (player == null)
+                return;
+            StaminaUseCuts[player.GetInstanceID()] = new KeyValuePair<float, float>(Mathf.Clamp01(fraction), Time.time + Mathf.Max(0.1f, seconds));
+        }
+
+        public static float GetStaminaUseMultiplier(Player player)
+        {
+            KeyValuePair<float, float> cut;
+            if (player == null || !StaminaUseCuts.TryGetValue(player.GetInstanceID(), out cut))
+                return 1f;
+            if (Time.time > cut.Value)
+            {
+                StaminaUseCuts.Remove(player.GetInstanceID());
+                return 1f;
+            }
+            return 1f - cut.Key;
         }
 
         // v0.18.1: timed removal of equipment movement penalties (Heaven's Light Grace).

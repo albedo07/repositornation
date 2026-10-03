@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.20.7";
+        public const string ModVersion = "0.20.8";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -369,6 +369,11 @@ namespace AlbedosCustomClassesAdvanced
         private ConfigEntry<float> _holyKnightAttackSpeed;
         private ConfigEntry<float> _mercTwoHandedAttackSpeed;
         private ConfigEntry<float> _priestArmorBonusPercent;
+        private ConfigEntry<float> _clericBlessingHealth;
+        private ConfigEntry<float> _clericBlessingRegen;
+        private ConfigEntry<float> _holyTrinityClubs;
+        private ConfigEntry<float> _holyTrinityMinPercent;
+        private ConfigEntry<float> _crucibleArmorPercent;
 
         private ConfigEntry<float> _lightningRelicCooldown;
         private ConfigEntry<float> _lightningRelicStamina;
@@ -920,7 +925,14 @@ namespace AlbedosCustomClassesAdvanced
             _holyKnightRegen = Config.Bind("Paladin Passive - Holy Knight", "HealthStaminaRegenPercent", 30f, "+30% HP and Stamina Regen.");
             _holyKnightAttackSpeed = Config.Bind("Paladin Passive - Holy Knight", "WeaponShieldAttackSpeedPercent", 75f, "+75% Attack Speed while any weapon and any Shield are equipped together.");
             _mercTwoHandedAttackSpeed = Config.Bind("Mercenary Weapon Mastery - Warfreak", "TwoHandedAttackSpeedPercent", 125f, "+125% Attack Speed while wielding a two-handed weapon.");
-            _priestArmorBonusPercent = Config.Bind("Priest Grand Sigil", "CurrentArmorBonusPercent_v0123", 30f, "Passive: +30% of current equipped Armor.");
+            // v0.20.8: the permanent +30% Priest Armor passive is not in the Framework (Heaven's Crucible
+            // snapshots 30% of the Priest's Armor onto its Barrier instead). Kept as a hidden Legacy value.
+            _priestArmorBonusPercent = Config.Bind("Priest Grand Sigil", "LegacyCurrentArmorBonusPercent", 0f, "Legacy: retired permanent Priest Armor bonus.");
+            _clericBlessingHealth = Config.Bind("Cleric Blessing", "FlatHealth", 35f, "Cleric's Blessing: flat Max HP.");
+            _clericBlessingRegen = Config.Bind("Cleric Blessing", "HealthRegenPercent", 20f, "Cleric's Blessing: HP Regen bonus in percent.");
+            _holyTrinityClubs = Config.Bind("Paladin Holy Trinity", "ClubsBonus", 15f, "Holy Trinity: Clubs skill bonus (effective skill capped at 100).");
+            _holyTrinityMinPercent = Config.Bind("Paladin Holy Trinity", "SlashPierceMinPercentOfBlunt", 50f, "Holy Trinity: Slash and Pierce are each raised to at least this percent of the hit's Blunt damage (never lowered).");
+            _crucibleArmorPercent = Config.Bind("Priest Grand Sigil", "BarrierArmorPercent", 30f, "Heaven's Crucible: Barrier Armor = this percent of the Priest's current Armor, snapshotted at cast.");
 
             _lightningRelicCooldown = Config.Bind("Priest Lightning Relic", "Cooldown", 14f, "Cooldown starts only after the active Relic is relinquished or its 16s lifetime ends.");
             _lightningRelicStamina = Config.Bind("Priest Lightning Relic", "StaminaCost", 30f, "Stamina cost.");
@@ -1004,11 +1016,12 @@ namespace AlbedosCustomClassesAdvanced
             _priestElementalBonus = Config.Bind("Priest Grand Sigil", "ElementalDamagePercent", 20f, "Elemental magic damage bonus.");
             _grandProcChance = Config.Bind("Priest Grand Sigil", "LegacyPassiveBarrierProcChance", 0f, "Legacy v0.6 setting. Grand Sigil now uses the framework death-save behavior instead.");
             _grandProcReduction = Config.Bind("Priest Grand Sigil", "LegacyPassiveBarrierReductionPercent", 0f, "Legacy v0.6 setting. Unused.");
-            _grandCooldown = Config.Bind("Priest Grand Sigil", "ActiveCooldown", 60f, "Seconds. Testing override forces 5 seconds.");
-            _grandStamina = Config.Bind("Priest Grand Sigil", "ActiveStaminaCost", 35f, "Stamina cost.");
-            _grandRadius = Config.Bind("Priest Grand Sigil", "ActiveRadius", 5f, "Framework ally barrier radius: literal 5m.");
-            _grandBarrierHp = Config.Bind("Priest Grand Sigil", "BarrierHP", 300f, "Framework barrier hit points.");
-            _grandBarrierDuration = Config.Bind("Priest Grand Sigil", "BarrierDuration", 30f, "Testing/default maximum barrier lifetime because the framework does not state one.");
+            // v0.20.8 Heaven's Crucible (Grace) per the Framework: 10m snapshot, 250 HP Barrier, 16s, 10 min, no cost.
+            _grandCooldown = Config.Bind("Priest Grand Sigil", "ActiveCooldown_v0208", 600f, "Heaven's Crucible cooldown in seconds (10 min), starts on activation.");
+            _grandStamina = Config.Bind("Priest Grand Sigil", "ActiveStaminaCost_v0208", 0f, "Graces cost no resources.");
+            _grandRadius = Config.Bind("Priest Grand Sigil", "ActiveRadius_v0208", 10f, "Allies within this radius at cast get their own Barrier.");
+            _grandBarrierHp = Config.Bind("Priest Grand Sigil", "BarrierHP_v0208", 250f, "Barrier hit points.");
+            _grandBarrierDuration = Config.Bind("Priest Grand Sigil", "BarrierDuration_v0208", 16f, "Barrier lasts this long or until broken.");
             _grandWindup = Config.Bind("Priest Grand Sigil", "ActiveWindup", 1.5f, "Framework active windup.");
 
             _defaultPaladinVitality = Config.Bind("Passive Choices", "LegacyPaladinVitalityDefault", "Health", "Legacy Heart of Glory setting retained for config compatibility.");
@@ -1043,7 +1056,6 @@ namespace AlbedosCustomClassesAdvanced
             MigrateFloat(_interventionRadius, 7f, 10f);
             MigrateFloat(_tempestRadius, 16f, 8f);
             MigrateFloat(_tempestRange, 100f, 50f);
-            MigrateFloat(_grandRadius, 10f, 5f);
 
             BindImmortalProgression();
             BindTreeHotbar();
@@ -4297,7 +4309,8 @@ namespace AlbedosCustomClassesAdvanced
                 yield break;
 
             float radius = Mathf.Max(1f, _grandRadius.Value);
-            float armor = GetArmor(player);
+            // Snapshot: 30% of the Priest's current Armor, not updated if equipment changes later.
+            float armor = GetArmor(player) * Mathf.Max(0f, _crucibleArmorPercent.Value) / 100f;
             List<Player> players = GetPlayersInSphere(player.transform.position, radius);
 
             if (!players.Contains(player))
@@ -6012,11 +6025,10 @@ namespace AlbedosCustomClassesAdvanced
             }
         }
 
+        // v0.20.8: the Elemental Savant / Holy Knight choice is retired; Holy Trinity is the Paladin Mastery.
         private bool IsPaladinPassive(Player player, string passive)
         {
-            return player != null &&
-                   GetAdvancement(player) == "Paladin" &&
-                   ReadPlayerData(player, PaladinPassiveKey) == passive;
+            return false;
         }
 
         private void SetPaladinPassiveChoice(Player player, string passive)
@@ -6066,6 +6078,10 @@ namespace AlbedosCustomClassesAdvanced
 
             if (advancement == "Mercenary" && skillType == Skills.SkillType.Axes)
                 return Mathf.Max(0f, _mercAxesBonus.Value);
+
+            // v0.20.8 Holy Trinity: +15 Clubs (the skill hooks cap the effective level at 100).
+            if (skillType == Skills.SkillType.Clubs && DragonCombat.IsHolyTrinityActive(player))
+                return Mathf.Max(0f, _holyTrinityClubs.Value);
 
             return 0f;
         }
@@ -6635,6 +6651,10 @@ namespace AlbedosCustomClassesAdvanced
 
             if (Instance.IsPaladinPassive(player, "HolyKnight"))
                 __0 *= 1f + Mathf.Max(0f, Instance._holyKnightRegen.Value) / 100f;
+
+            // v0.20.8 Cleric's Blessing: +20% HP Regen.
+            if (Instance.GetClass(player) == "Cleric")
+                __0 *= 1f + Mathf.Max(0f, Instance._clericBlessingRegen.Value) / 100f;
         }
 
         private static void StaminaRegenPrefix(object __instance, ref float __0)
@@ -6695,6 +6715,10 @@ namespace AlbedosCustomClassesAdvanced
 
             if (Instance.IsPaladinPassive(__instance, "HolyKnight"))
                 __result += Mathf.Max(0f, Instance._holyKnightFlatHealth.Value);
+
+            // v0.20.8 Cleric's Blessing: +35 flat HP (Paladin and Priest keep it).
+            if (Instance.GetClass(__instance) == "Cleric")
+                __result += Mathf.Max(0f, Instance._clericBlessingHealth.Value);
         }
 
         private static void MaxStaminaPostfix(Player __instance, ref float __result)
@@ -6711,8 +6735,7 @@ namespace AlbedosCustomClassesAdvanced
             if (Instance == null || __instance == null)
                 return;
 
-            if (Instance.GetAdvancement(__instance) == "Priest")
-                __result *= 1f + Mathf.Max(0f, Instance._priestArmorBonusPercent.Value) / 100f;
+            // v0.20.8: the permanent Priest Armor bonus is retired (see Heaven's Crucible).
         }
 
         private static void PaladinSetMaxEitrPrefix(Player __instance, ref float __0)
@@ -6757,6 +6780,14 @@ namespace AlbedosCustomClassesAdvanced
 
             if (advancement == "Paladin" && !_judgementDetonationInProgress)
                 ApplyPaladinJudgementInteraction(attacker, target, hit);
+
+            // v0.20.8 Holy Trinity: Slash and Pierce each rise to at least 50% of the hit's Blunt, never lowered.
+            if (advancement == "Paladin" && IsWeaponHit(hit) && DragonCombat.IsHolyTrinityActive(attacker))
+            {
+                float floor = hit.m_damage.m_blunt * Mathf.Max(0f, _holyTrinityMinPercent.Value) / 100f;
+                if (hit.m_damage.m_slash < floor) hit.m_damage.m_slash = floor;
+                if (hit.m_damage.m_pierce < floor) hit.m_damage.m_pierce = floor;
+            }
 
             if (advancement == "Paladin" && IsPaladinPassive(attacker, "ElementalSavant"))
             {
@@ -9507,7 +9538,7 @@ namespace AlbedosCustomClassesAdvanced
             new ReferenceNodeUi("lightning_relic", ClericPaladinReferenceNodes[3].GroupRect, ClericPaladinReferenceNodes[3].IconRect,"",TreeNodeKind.Signature,true,5,"ATTACK - LIGHTNING RELIC",""),
             new ReferenceNodeUi("holy_relic", ClericPaladinReferenceNodes[4].GroupRect, ClericPaladinReferenceNodes[4].IconRect,"",TreeNodeKind.Signature,true,5,"BUFF - HOLY RELIC",""),
             new ReferenceNodeUi("grand_sigil", ClericPaladinReferenceNodes[5].GroupRect, ClericPaladinReferenceNodes[5].IconRect,"",TreeNodeKind.Grace,true,0,"GRACE - HEAVEN'S CRUCIBLE",""),
-            new ReferenceNodeUi("divine_intervention", ClericPaladinReferenceNodes[6].GroupRect, ClericPaladinReferenceNodes[6].IconRect,"",TreeNodeKind.AdvancementNormal,false,5,"BUFF - DIVINE INTERVENTION",""),
+            new ReferenceNodeUi("divine_intervention", ClericPaladinReferenceNodes[6].GroupRect, ClericPaladinReferenceNodes[6].IconRect,"",TreeNodeKind.AdvancementNormal,false,5,"SUPPORT - DIVINE INTERVENTION",""),
             new ReferenceNodeUi("grand_cross", ClericPaladinReferenceNodes[7].GroupRect, ClericPaladinReferenceNodes[7].IconRect,"",TreeNodeKind.AdvancementNormal,false,5,"ATTACK - GRAND CROSS",""),
             new ReferenceNodeUi("heavens_judgement", ClericPaladinReferenceNodes[8].GroupRect, ClericPaladinReferenceNodes[8].IconRect,"",TreeNodeKind.AdvancementNormal,false,5,"ATTACK - HEAVEN'S JUDGEMENT",""),
             new ReferenceNodeUi("lightning_tempest", ClericPaladinReferenceNodes[9].GroupRect, ClericPaladinReferenceNodes[9].IconRect,"",TreeNodeKind.Ultimate,true,3,"ULTIMATE - LIGHTNING TEMPEST","")
@@ -9860,7 +9891,9 @@ namespace AlbedosCustomClassesAdvanced
             if(node.Kind==TreeNodeKind.Grace) return "gold";
             if(IhIsUltimate(id)) return "maroon";
             if(IhContains(IhSignatureSkills,id) || IhContains(IhPriestSignatures,id)) return "navy";
-            if(id=="ray_of_hope" || id=="divine_intervention") return "green";
+            // Non-damaging skills are Green (Holy Wave; Ray of Hope = the Framework's Buff example).
+            // A skill that deals direct damage is Cyan (Divine Intervention heals AND damages).
+            if(id=="ray_of_hope" || id=="holy_wave") return "green";
             return "cyan";
         }
 
@@ -10156,10 +10189,14 @@ namespace AlbedosCustomClassesAdvanced
                     IhCosts(b,_tempestStamina.Value,"1s",_tempestCooldown.Value);
                     break;
                 case "grand_sigil":
-                    b.Append(IhLine("Barrier",IhNum(_grandBarrierHp.Value)+" HP"));
+                    // Same lines and order as Heaven's Light (the other Cleric Grace).
+                    b.Append(IhLine("Barrier",IhNum(_grandBarrierHp.Value)+" HP each, until broken"));
+                    b.Append(IhLine("Barrier Armor",IhNum(_crucibleArmorPercent.Value)+"% of your Armor (snapshot)"));
                     b.Append(IhLine("Radius",IhNum(_grandRadius.Value)+"m"));
                     b.Append(IhLine("Duration",IhNum(_grandBarrierDuration.Value)+"s"));
-                    IhCosts(b,_grandStamina.Value,IhNum(_grandWindup.Value)+"s",_grandCooldown.Value);
+                    b.Append(IhLine("Cost",_grandStamina.Value>0f ? IhNum(_grandStamina.Value)+" Stamina" : "None"));
+                    b.Append(IhLine("Wind Up Time",IhNum(_grandWindup.Value)+"s"));
+                    b.Append(IhLine("Cooldown",IhNum(_grandCooldown.Value/60f)+" min"));
                     b.Append(IhLine("Key",FormatHotbarBinding(BindGrace)));
                     break;
             }
@@ -11793,16 +11830,11 @@ namespace AlbedosCustomClassesAdvanced
 
             if (advancement == "Paladin")
             {
-                string passive = ReadPlayerData(player, PaladinPassiveKey);
-                if (passive == "ElementalSavant")
-                    return "Elemental Savant [LOCKED]: +25% elemental damage, +30 Max Eitr and +30% Eitr Regen.";
-                if (passive == "HolyKnight")
-                    return "Holy Knight [LOCKED]: +25% Move, +35 HP, +35 Stamina, +30% HP/Stamina Regen, +75% Attack Speed with any weapon + any Shield.";
-                return "Choose once: Elemental Savant (+25% elemental damage, +30 Eitr, +30% Eitr Regen) OR Holy Knight (+25% Move, +35 HP/Stamina, +30% HP/Stamina Regen, +75% weapon+shield Attack Speed).";
+                return "Holy Trinity: with a Club-type weapon and a Shield, +15 Clubs, no Armor movement penalty, and Slash / Pierce at least 50% of Blunt.";
             }
 
             if (advancement == "Priest")
-                return "Bless Thy Sinners: +30% of current Armor. Self lethal hit -> 1 HP, heal 50% over 7s, +50% Move and +100% Stamina Regen; nearby allies within 20m gain the same death-save with a longer cooldown. Grace: Heaven's Crucible barrier.";
+                return "Bless Thy Sinners: you and allies within 20m survive a lethal hit at 1 HP, recover 50% HP over 6s, +50% Move Speed and -70% Stamina use. Self 20 min, each ally 40 min.";
 
             return "";
         }

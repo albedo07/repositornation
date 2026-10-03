@@ -1,0 +1,26 @@
+IMMORTAL HEROES v0.20.8 - CLERIC PER FRAMEWORK
+
+MECHANICS (now match the Framework doc)
+- Cleric's Blessing: +35 Max HP, +20% HP Regen, and no movement penalty from Shields,
+  Staves and one-handed Club weapons (two-handed Clubs excluded). Paladin and Priest keep it.
+  (1.5x shield Block Force / Armor and Staff + Shield were already in.)
+- Holy Trinity (Paladin Mastery) replaces the old Elemental Savant / Holy Knight choice.
+  With a Club-type melee weapon + any Shield: +15 Clubs (effective cap 100), no Armor
+  movement penalty, Slash and Pierce each raised to at least 50% of the hit's Blunt
+  (never lowered).
+- Heaven's Crucible (Priest Grace): you and allies within 10m at cast get their own 250 HP
+  Barrier; Barrier Armor = 30% of your Armor, snapshotted at cast; 16s or until broken;
+  10 min cooldown from activation; no cost. The old permanent +30% Priest Armor passive
+  is retired (it is not in the Framework).
+- Bless Thy Sinners (Priest Mastery): recovery 50% HP over 6s (was 7s), +50% Move Speed and
+  -70% Stamina Usage for all actions during those 6s (was +100% Stamina Regen); ally save
+  cooldown 40 min per ally (was 35). Self 20 min and the 20m radius were already right.
+  New values use new .cfg keys, so they apply even if your .cfg had the old ones.
+
+COLOURS
+- Non-damaging skills are Green: Holy Wave is now Green (frame, hotbar icon, tooltip values).
+- Divine Intervention deals damage, so it is Cyan again (header SUPPORT).
+
+UI
+- Heaven's Crucible tooltip uses the same lines as Heaven's Light (Cost None, minutes).
+- F8 hides the retired Paladin passive sections.

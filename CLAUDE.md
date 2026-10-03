@@ -3,7 +3,7 @@
 ## Working rules
 - User wants short responses and real execution, not long explanations.
 - **RUSH B** = immediately code the obvious requested task, minimal commentary, use latest approved build as baseline, don't redesign unrelated things, verify and package.
-- Latest package: **v0.20.7 — Cleric Consistency** (v0.20.6 Polish, v0.20.5 Config Window, v0.20.4 Tree and Altar Fixes), built on ChatGPT's v0.20.3 (Universal Tree runtime chassis + uGUI Altar with Altar_Background/Altar_ClassCards; it REPLACED our v0.19.2/0.19.3 IMGUI Altar, which the user accepted as the new base). Older: v0.19.x ours, v0.19.0 ChatGPT. Do NOT change combat/progression logic unless explicitly requested.
+- Latest package: **v0.20.8 — Cleric per Framework** (v0.20.7 Cleric Consistency, v0.20.6 Polish, v0.20.5 Config Window, v0.20.4 Tree and Altar Fixes), built on ChatGPT's v0.20.3 (Universal Tree runtime chassis + uGUI Altar with Altar_Background/Altar_ClassCards; it REPLACED our v0.19.2/0.19.3 IMGUI Altar, which the user accepted as the new base). Older: v0.19.x ours, v0.19.0 ChatGPT. Do NOT change combat/progression logic unless explicitly requested.
 - Never patch visual problems by drawing random rectangles over the reference asset. Keep approved artwork intact; make layout/components fit properly.
 
 ## Framework doc (source of truth for design)
@@ -59,6 +59,8 @@
 - Working style (user, 2026-10-03): find and fix misalignments / inconsistencies proactively (anything off by even a few px); prefer text over preview images when an image costs a lot.
 - SCOPE (user, 2026-10-03): only Cleric + Paladin + Priest until they are perfect; ignore Warrior / Sorcerer and their ACs (Altar texts, keys, trees).
 - v0.20.7 decisions: Fallen Angel is renamed **Angel Comet** (display; id stays `fallen_angel`). Priest Grace = **Heaven's Crucible** (id stays `grand_sigil`), Priest Mastery = **Bless Thy Sinners** (GuardianAngel death-save). Tooltip value colour = the skill's frame colour (`IhAccentFor`). Branch selector = plaque. F8 hides retired sections/Legacy keys (`IsRetired`) and shows clean names (`DisplaySection`, spaced keys).
+- v0.20.8 (user: "the docs are updated, follow them"): Framework doc = source of truth for mechanics too. Implemented Cleric's Blessing HP/regen/movement, Holy Trinity (`DragonCombat.IsHolyTrinityActive`; old Elemental Savant/Holy Knight retired via `IsPaladinPassive` = false), Heaven's Crucible values (`*_v0208` keys) + 30% Armor snapshot, Bless Thy Sinners 6s / 40 min / -70% stamina use (`DragonCombat.ApplyStaminaUseCut`, Player.UseStamina prefix). NOT yet: Bless Thy Sinners Buckler parry system (doubled parry, 1.5x Block Force, 10m Holy Shockwave, Hyper Armor 5s, +75% next skill).
+- Colour rule (user): non-damaging skills are Green; any skill that deals damage is Cyan (Holy Wave Green, Divine Intervention Cyan; Ray of Hope Green as the Framework's Buff example).
 - Altar skill inspection shows the description only (first paragraph of the tree tooltip), no stats.
 
 ## Ascended designs (approved so far; tooltip header "ASCENDED - <SKILL>", names unchanged)

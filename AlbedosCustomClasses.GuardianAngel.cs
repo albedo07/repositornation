@@ -17,7 +17,7 @@ namespace AlbedosCustomClassesGuardian
     {
         public const string ModGuid = "albedo.customclasses.guardian";
         public const string ModName = "Dragon's Altar - Grand Sigil Survival";
-        public const string ModVersion = "0.20.7";
+        public const string ModVersion = "0.20.8";
 
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -28,6 +28,7 @@ namespace AlbedosCustomClassesGuardian
         private ConfigEntry<float> _allyRadius;
         private ConfigEntry<float> _recoveryPercent;
         private ConfigEntry<float> _recoveryDuration;
+        private ConfigEntry<float> _staminaUseCut;
         private ConfigEntry<bool> _enableVfx;
         private ConfigEntry<bool> _testingForceCooldowns;
         private ConfigEntry<float> _testingCooldownSeconds;
@@ -41,10 +42,11 @@ namespace AlbedosCustomClassesGuardian
             Instance = this;
 
             _selfCooldown = Config.Bind("Grand Sigil Survival", "PriestSelfCooldownSeconds_v0123", 1200f, "Priest Grand Sigil death-save cooldown: 20 minutes.");
-            _allyCooldown = Config.Bind("Grand Sigil Survival", "AllyResurrectionCooldownSeconds_v0123", 2100f, "Ally Grand Sigil death-save cooldown while protected by a nearby Priest: 35 minutes.");
+            _allyCooldown = Config.Bind("Grand Sigil Survival", "AllyResurrectionCooldownSeconds_v0208", 2400f, "Bless Thy Sinners: ally death-save cooldown, 40 minutes per ally.");
             _allyRadius = Config.Bind("Grand Sigil Survival", "AllyProtectionRadiusMeters_v0123", 20f, "Allies within 20m of a living Priest receive Grand Sigil's death-save.");
             _recoveryPercent = Config.Bind("Grand Sigil Survival", "RecoveryPercent", 50f, "Percent of max HP restored after a lethal hit is prevented.");
-            _recoveryDuration = Config.Bind("Grand Sigil Survival", "RecoveryDuration", 7f, "Framework: recovery duration in seconds.");
+            _recoveryDuration = Config.Bind("Grand Sigil Survival", "RecoveryDuration_v0208", 6f, "Bless Thy Sinners: 50% HP recovered over this many seconds; the speed / stamina window lasts as long.");
+            _staminaUseCut = Config.Bind("Grand Sigil Survival", "StaminaUseReductionPercent", 70f, "Bless Thy Sinners: less Stamina used for all actions during the recovery window.");
             _enableVfx = Config.Bind("Visuals", "EnableVFX", true, "Enable Grand Sigil survival visual effects.");
             _testingForceCooldowns = Config.Bind("Testing", "ForceCooldowns", true, "Testing mode: force Grand Sigil survival cooldown to one value.");
             _testingCooldownSeconds = Config.Bind("Testing", "CooldownSeconds", 5f, "Testing cooldown used while ForceCooldowns is enabled.");
@@ -161,7 +163,9 @@ namespace AlbedosCustomClassesGuardian
             if (_enableVfx.Value)
                 StartCoroutine(GrandSigilVisual(player));
 
-            DragonCombat.ApplyTimedBuff(player, "Priest.GrandSigilRecovery", Mathf.Max(0.1f, _recoveryDuration.Value), 0f, 0f, 0.50f, 0f, 1.00f, 0f, false);
+            // Framework: +50% Movement Speed and -70% Stamina Usage for the 6s emergency window.
+            DragonCombat.ApplyTimedBuff(player, "Priest.GrandSigilRecovery", Mathf.Max(0.1f, _recoveryDuration.Value), 0f, 0f, 0.50f, 0f, 0f, 0f, false);
+            DragonCombat.ApplyStaminaUseCut(player, Mathf.Max(0f, _staminaUseCut.Value) / 100f, Mathf.Max(0.1f, _recoveryDuration.Value));
             StartCoroutine(Recovery(player));
 
             if (MessageHud.instance != null)
