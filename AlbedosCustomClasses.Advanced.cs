@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.19.3";
+        public const string ModVersion = "0.20.3";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1055,6 +1055,9 @@ namespace AlbedosCustomClassesAdvanced
 
         private void OnDestroy()
         {
+            foreach(Texture2D texture in _ihAscendedIconArt.Values) if(texture!=null) Destroy(texture);
+            foreach(Texture2D texture in _ihPolishTextures) if(texture!=null) Destroy(texture);
+            _ihAscendedIconArt.Clear(); _ihPolishTextures.Clear();
             EndShieldCharge();
             if (_harmony != null)
             {
@@ -8473,10 +8476,9 @@ namespace AlbedosCustomClassesAdvanced
                 float lockSize = IhIsUltimate(node.Id) ? 30f : 24f;
                 // Heaven's Light's painted frame sits above/right of its older hit rect.
                 // Anchor its lock inside the actual frame, clear of the nameplate.
-                Rect lockRect = IhPriestSkill(node.Id)
-                    ? new Rect(node.IconRect.xMax-lockSize-1f,node.IconRect.yMax-lockSize-1f,lockSize,lockSize)
-                    : node.Id == IhGrace ? new Rect(428f, 449f, lockSize, lockSize)
-                    : new Rect(node.IconRect.xMax - lockSize + 4f, node.IconRect.yMax - lockSize + 4f, lockSize, lockSize);
+                Rect lockRect = node.Id == IhGrace
+                    ? new Rect(428f,449f,lockSize,lockSize)
+                    : IhCornerLock(IhVisualIconRect(node),lockSize);
                 GUI.DrawTexture(IhSnap(ScaleReferenceRect(lockRect.x, lockRect.y, lockRect.width, lockRect.height)), _ihPadlockTex);
             }
             IhEnsureTreeStyles();
@@ -9171,6 +9173,12 @@ namespace AlbedosCustomClassesAdvanced
             _ihGraceIconTex = LoadUiPng("Icon_heavens_light.png");
             IhRepairLightningZapBackdrop(_treeReferenceBackdropTex);
             IhRepairLightningZapBackdrop(_ihPreAdvanceBackdropTex);
+            foreach(Texture2D texture in _ihAscendedIconArt.Values) if(texture!=null) Destroy(texture);
+            _ihAscendedIconArt.Clear();
+            IhPrepareCenteredHotbarArt();
+            IhPrepareUniversalBanner(_treeReferenceBackdropTex);
+            IhPrepareUniversalBanner(_ihPreAdvanceBackdropTex);
+            IhPrepareSharedNameplates();
             IhLoadPriestArtwork();
             return true;
         }
@@ -9398,15 +9406,13 @@ namespace AlbedosCustomClassesAdvanced
         private static readonly ReferenceNodeUi[] ClericPriestReferenceNodes =
         {
             ClericPaladinReferenceNodes[0], ClericPaladinReferenceNodes[1], ClericPaladinReferenceNodes[2],
-            // v0.19.1: universal tree - every Priest node sits on the exact Paladin node slot
-            // (same group / icon rects, nameplate anchors and lock regions via IhTemplateSlot).
-            new ReferenceNodeUi("lightning_relic", new Rect(357f, 151f, 103f, 105f), new Rect(369f, 158f, 70f, 72f), "", TreeNodeKind.Signature, true, 5, "ATTACK - LIGHTNING RELIC", ""),
-            new ReferenceNodeUi("holy_relic", new Rect(357f, 287f, 103f, 105f), new Rect(369f, 290f, 70f, 69f), "", TreeNodeKind.Signature, true, 5, "BUFF - HOLY RELIC", ""),
-            new ReferenceNodeUi("grand_sigil", new Rect(357f, 413f, 103f, 105f), new Rect(370f, 416f, 71f, 71f), "", TreeNodeKind.Grace, true, 0, "GRACE - GRAND SIGIL", ""),
-            new ReferenceNodeUi("divine_intervention", new Rect(532f, 151f, 103f, 105f), new Rect(548f, 158f, 68f, 72f), "", TreeNodeKind.AdvancementNormal, false, 5, "SUPPORT - DIVINE INTERVENTION", ""),
-            new ReferenceNodeUi("grand_cross", new Rect(672f, 151f, 103f, 105f), new Rect(686f, 158f, 69f, 72f), "", TreeNodeKind.AdvancementNormal, false, 5, "ATTACK - GRAND CROSS", ""),
-            new ReferenceNodeUi("heavens_judgement", new Rect(672f, 287f, 103f, 105f), new Rect(686f, 290f, 69f, 69f), "", TreeNodeKind.AdvancementNormal, false, 5, "ATTACK - HEAVEN'S JUDGEMENT", ""),
-            new ReferenceNodeUi("lightning_tempest", new Rect(831f, 204f, 133f, 165f), new Rect(850f, 214f, 103f, 108f), "", TreeNodeKind.Ultimate, true, 3, "ULTIMATE - LIGHTNING TEMPEST", "")
+            new ReferenceNodeUi("lightning_relic", ClericPaladinReferenceNodes[3].GroupRect, ClericPaladinReferenceNodes[3].IconRect,"",TreeNodeKind.Signature,true,5,"ATTACK - LIGHTNING RELIC",""),
+            new ReferenceNodeUi("holy_relic", ClericPaladinReferenceNodes[4].GroupRect, ClericPaladinReferenceNodes[4].IconRect,"",TreeNodeKind.Signature,true,5,"BUFF - HOLY RELIC",""),
+            new ReferenceNodeUi("grand_sigil", ClericPaladinReferenceNodes[5].GroupRect, ClericPaladinReferenceNodes[5].IconRect,"",TreeNodeKind.Grace,true,0,"GRACE - GRAND SIGIL",""),
+            new ReferenceNodeUi("divine_intervention", ClericPaladinReferenceNodes[6].GroupRect, ClericPaladinReferenceNodes[6].IconRect,"",TreeNodeKind.AdvancementNormal,false,5,"SUPPORT - DIVINE INTERVENTION",""),
+            new ReferenceNodeUi("grand_cross", ClericPaladinReferenceNodes[7].GroupRect, ClericPaladinReferenceNodes[7].IconRect,"",TreeNodeKind.AdvancementNormal,false,5,"ATTACK - GRAND CROSS",""),
+            new ReferenceNodeUi("heavens_judgement", ClericPaladinReferenceNodes[8].GroupRect, ClericPaladinReferenceNodes[8].IconRect,"",TreeNodeKind.AdvancementNormal,false,5,"ATTACK - HEAVEN'S JUDGEMENT",""),
+            new ReferenceNodeUi("lightning_tempest", ClericPaladinReferenceNodes[9].GroupRect, ClericPaladinReferenceNodes[9].IconRect,"",TreeNodeKind.Ultimate,true,3,"ULTIMATE - LIGHTNING TEMPEST","")
         };
 
         private void DrawReferenceClericPaladinTree()
@@ -9416,7 +9422,7 @@ namespace AlbedosCustomClassesAdvanced
             Player treePlayer = Player.m_localPlayer;
             // v0.18.0: before Advancement every Class skill is Cyan (no Ascended Righteous Strike).
             Texture2D backdrop = IhTreeBranch() == "Priest" && _ihPriestBackdropTex != null
-                ? _ihPriestBackdropTex : (!IhIsPaladin(treePlayer) && _ihPreAdvanceBackdropTex != null ? _ihPreAdvanceBackdropTex : _treeReferenceBackdropTex);
+                ? _ihPriestBackdropTex : (_ihPreAdvanceBackdropTex != null ? _ihPreAdvanceBackdropTex : _treeReferenceBackdropTex);
             GUI.DrawTexture(full, backdrop, ScaleMode.StretchToFill, true);
             IhDrawHeaderPoints(treePlayer);
 
@@ -9431,6 +9437,7 @@ namespace AlbedosCustomClassesAdvanced
             ReferenceNodeUi[] nodes = IhTreeNodes();
             for (int i = 0; i < nodes.Length; i++)
                 DrawReferenceNode(nodes[i]);
+            IhDrawUniversalBranchLabels();
             IhDrawAdvancePanel(treePlayer);
 
             DrawReferenceHotbarSlots();
@@ -9504,20 +9511,14 @@ namespace AlbedosCustomClassesAdvanced
             string[] branches = { "Paladin", "Priest" };
             for (int i = 0; i < branches.Length; i++)
             {
-                // v0.19.1: same ornate plaque art as CONFIRM / ADVANCE (no flat boxes).
-                Rect r = ScaleReferenceRect(796f + i * 90f, 121f, 86f, 24f);
+                Rect r = ScaleReferenceRect(800f + i * 83f, 124f, 80f, 20f);
                 bool selected = _ihPreviewBranch == branches[i];
-                bool hoverBranch = r.Contains(Event.current.mousePosition);
-                if (_treeConfirmPlaqueTex != null)
-                {
-                    GUI.color = selected ? Color.white : (hoverBranch ? new Color(0.80f, 0.80f, 0.80f, 1f) : new Color(0.55f, 0.55f, 0.55f, 1f));
-                    GUI.DrawTexture(r, _treeConfirmPlaqueTex);
-                    GUI.color = Color.white;
-                }
-                GUIStyle style = new GUIStyle(selected ? _treeFooterConfirmStyle : _treeFooterPendingStyle);
+                DrawFilledBorder(r, new Color(0.10f,0.12f,0.15f,0.95f),
+                    selected ? new Color(1f,0.80f,0.30f,1f) : new Color(0.55f,0.46f,0.30f,1f), 1f);
+                GUIStyle style = new GUIStyle(_treeFooterPendingStyle);
                 style.alignment = TextAnchor.MiddleCenter;
-                style.fontSize = Mathf.Max(9, Mathf.RoundToInt(r.height * 0.46f));
-                DrawFooterText(r, branches[i].ToUpperInvariant(), style);
+                style.fontSize = Mathf.Max(9, Mathf.RoundToInt(r.height * 0.60f));
+                GUI.Label(r, branches[i].ToUpperInvariant(), style);
                 if (r.Contains(Event.current.mousePosition))
                 {
                     _treeHoveredTitle = branches[i].ToUpperInvariant() + " - PREVIEW";
@@ -9535,25 +9536,280 @@ namespace AlbedosCustomClassesAdvanced
             }
         }
 
-        // v0.19.1: the Priest tree is pre-built on the exact Paladin chrome (tools/build_priest_assets.py):
-        // same frame, header, footer and node slots, so both branches line up pixel for pixel.
+        private Texture2D IhCopyTexture(Texture2D source, string name)
+        {
+            Texture2D texture = new Texture2D(source.width,source.height,TextureFormat.RGBA32,false);
+            texture.name = name;
+            texture.wrapMode = TextureWrapMode.Clamp;
+            texture.filterMode = FilterMode.Bilinear;
+            texture.SetPixels(source.GetPixels());
+            texture.Apply(false,false);
+            return texture;
+        }
+
+        private Texture2D IhCropIcon(Texture2D source, Rect rect, string name)
+        {
+            const int width = 64, height = 64;
+            Texture2D icon = new Texture2D(width,height,TextureFormat.RGBA32,false);
+            icon.name = name;
+            icon.wrapMode = TextureWrapMode.Clamp;
+            icon.filterMode = FilterMode.Bilinear;
+            for (int y = 0; y < height; y++)
+                for (int x = 0; x < width; x++)
+                {
+                    float u = (rect.x + (x + 0.5f) * rect.width / width) / 1011f;
+                    float v = 1f - (rect.yMax - (y + 0.5f) * rect.height / height) / 662f;
+                    icon.SetPixel(x,y,source.GetPixelBilinear(u,v));
+                }
+            icon.Apply(false,false);
+            return icon;
+        }
+
+        // One set of measured painted-frame bounds, shared by both branches.
+        private static Rect IhVisualIconRect(ReferenceNodeUi node)
+        {
+            switch(IhTemplateSlot(node.Id))
+            {
+                case "lightning_zap": return new Rect(167f,158f,67f,65f);
+                case "righteous_strike": return new Rect(167f,290f,69f,65f);
+                case "holy_wave": return new Rect(167f,416f,69f,63f);
+                case "goddess_relic": return new Rect(369f,158f,70f,65f);
+                case "judgement_hammer": return new Rect(369f,290f,70f,65f);
+                case "shield_charge": return new Rect(548f,158f,68f,65f);
+                case "fallen_angel": return new Rect(686f,158f,69f,65f);
+                case "ray_of_hope": return new Rect(686f,290f,69f,65f);
+                case "heavens_light": return new Rect(381f,410f,72f,64f);
+                case "electric_smite": return new Rect(850f,214f,103f,108f);
+            }
+            return node.IconRect;
+        }
+
+        private static Rect IhCornerLock(Rect frame, float size)
+        {
+            // Padlock sits inside the lower-right border, never on the nameplate.
+            return new Rect(frame.xMax-size-1f,frame.yMax-size-1f,size,size);
+        }
+
+        private readonly Dictionary<string,Texture2D> _ihAscendedIconArt = new Dictionary<string,Texture2D>();
+        private readonly List<Texture2D> _ihPolishTextures = new List<Texture2D>();
+
+        private Texture2D IhNormalizeHotbarIcon(Texture2D source, Texture2D frame, float verticalOffset = 0.02f)
+        {
+            if(source==null || frame==null) return source;
+            Texture2D result=IhCopyTexture(frame,"ImmortalHeroes_CenteredIcon");
+            // The shared Holy Wave bezel is retained exactly; only its inner field changes.
+            int left=Mathf.RoundToInt(result.width*0.15f), right=Mathf.RoundToInt(result.width*0.85f);
+            int bottom=Mathf.RoundToInt(result.height*0.15f), top=Mathf.RoundToInt(result.height*0.85f);
+            for(int y=bottom;y<top;y++) for(int x=left;x<right;x++)
+            {
+                float u=0.21f+(x-left+0.5f)/(right-left)*0.58f;
+                float v=0.20f+verticalOffset+(y-bottom+0.5f)/(top-bottom)*0.60f;
+                result.SetPixel(x,y,source.GetPixelBilinear(u,v));
+            }
+            result.Apply(false,false); _ihPolishTextures.Add(result); return result;
+        }
+
+        private void IhPrepareCenteredHotbarArt()
+        {
+            Texture2D frame,zap;
+            if(!_treeSkillIconTex.TryGetValue("holy_wave",out frame)) return;
+            if(_treeSkillIconTex.TryGetValue("lightning_zap",out zap))
+                _treeSkillIconTex["lightning_zap"]=IhNormalizeHotbarIcon(zap,frame);
+            if(_ihRsNormalIconTex!=null) _ihRsNormalIconTex=IhNormalizeHotbarIcon(_ihRsNormalIconTex,frame,0.05f);
+        }
+
+        private Texture2D IhAscendedArt(string id, Texture2D normal)
+        {
+            if(normal==null) return null;
+            Texture2D result;
+            if(_ihAscendedIconArt.TryGetValue(id,out result)) return result;
+            result=IhCopyTexture(normal,"ImmortalHeroes_Ascended_"+id);
+            for(int y=0;y<result.height;y++) for(int x=0;x<result.width;x++)
+            {
+                Color c=result.GetPixel(x,y);
+                // Preserve neutral glyphs and gold trim; recolor chromatic skill energy.
+                float max=Mathf.Max(c.r,Mathf.Max(c.g,c.b)), min=Mathf.Min(c.r,Mathf.Min(c.g,c.b));
+                bool energy=c.b>c.r*1.12f || c.g>c.r*1.18f;
+                if(energy && max-min>0.035f)
+                    result.SetPixel(x,y,new Color(max,Mathf.Min(c.g,max*0.24f),max*0.92f,c.a));
+            }
+            result.Apply(false,false); _ihAscendedIconArt[id]=result; return result;
+        }
+
+        private void IhBlitArt(Texture2D target, Rect targetRect, Texture2D source, Rect sourceRect)
+        {
+            int x0=Mathf.RoundToInt(targetRect.x), y0=Mathf.RoundToInt(targetRect.y);
+            int w=Mathf.RoundToInt(targetRect.width),h=Mathf.RoundToInt(targetRect.height);
+            for(int y=0;y<h;y++) for(int x=0;x<w;x++)
+            {
+                float u=(sourceRect.x+(x+0.5f)/w*sourceRect.width)/1011f;
+                float v=1f-(sourceRect.y+(y+0.5f)/h*sourceRect.height)/662f;
+                target.SetPixel(x0+x,661-y0-y,source.GetPixelBilinear(u,v));
+            }
+        }
+
+        private static float IhLabelWidth(string id)
+        {
+            switch(IhTemplateSlot(id)) {
+                case "judgement_hammer": return 112f;
+                case "heavens_light": return 102f;
+                case "electric_smite": return 126f;
+                default: return 96f;
+            }
+        }
+
+        private void IhInpaintText(Texture2D target, Rect area)
+        {
+            int left=Mathf.RoundToInt(area.x),top=Mathf.RoundToInt(area.y);
+            int width=Mathf.RoundToInt(area.width),height=Mathf.RoundToInt(area.height);
+            Color[] pixels=new Color[width*height];
+            float r=0,g=0,b=0; int count=0;
+            for(int y=0;y<height;y++) for(int x=0;x<width;x++)
+                if(x==0 || y==0 || x==width-1 || y==height-1) {
+                    Color c=target.GetPixel(left+x,661-top-y); pixels[y*width+x]=c;
+                    r+=c.r;g+=c.g;b+=c.b;count++;
+                }
+            Color paper=new Color(r/count,g/count,b/count,1f);
+            for(int y=1;y<height-1;y++)for(int x=1;x<width-1;x++)pixels[y*width+x]=paper;
+            // Boundary-matched fill removes lettering without stripes, pasted patches or frame edits.
+            for(int iteration=0;iteration<160;iteration++)
+                for(int y=1;y<height-1;y++)for(int x=1;x<width-1;x++) {
+                    int i=y*width+x;Color a=pixels[i-1],c=pixels[i+1],d=pixels[i-width],e=pixels[i+width];
+                    pixels[i]=new Color((a.r+c.r+d.r+e.r)*0.25f,(a.g+c.g+d.g+e.g)*0.25f,(a.b+c.b+d.b+e.b)*0.25f,1f);
+                }
+            for(int y=1;y<height-1;y++)for(int x=1;x<width-1;x++)target.SetPixel(left+x,661-top-y,pixels[y*width+x]);
+        }
+
+        private void IhBlankPaintedLabel(Texture2D target, Vector2 anchor, float width)
+        {
+            IhInpaintText(target,new Rect(anchor.x-width/2f,anchor.y-22f,width,21f));
+        }
+
+        private void IhPrepareUniversalBanner(Texture2D target)
+        {
+            if(target==null) return;
+            IhInpaintText(target,new Rect(594f,92f,165f,27f));
+            target.Apply(false,false);
+        }
+
+        private void IhDrawUniversalBranchLabels()
+        {
+            GUIStyle title=new GUIStyle(_treeHeaderStyle);
+            title.alignment=TextAnchor.MiddleCenter;
+            Font branchSerif=FindValheimFont("AveriaSerifLibre-Regular");
+            if(branchSerif!=null) title.font=branchSerif;
+            title.fontSize=Mathf.Max(12,Mathf.RoundToInt(ScaleReferenceRect(0,0,0,28).height));
+            title.normal.textColor=new Color(1f,0.93f,0.77f,1f);
+            GUI.Label(ScaleReferenceRect(592f,87f,176f,35f),IhTreeBranch().ToUpperInvariant(),title);
+
+            GUIStyle label=new GUIStyle(_treeNodeNameStyle);
+            label.fontSize=Mathf.Max(8,Mathf.RoundToInt(ScaleReferenceRect(0,0,0,10.5f).height));
+            label.alignment=TextAnchor.MiddleCenter;
+            Font serif=FindValheimFont("AveriaSerifLibre-Regular");
+            if(serif!=null) label.font=serif;
+            label.fontStyle=FontStyle.Bold;
+            label.normal.textColor=new Color(0.18f,0.14f,0.11f,1f);
+            foreach(ReferenceNodeUi node in IhTreeNodes())
+            {
+                if(Array.IndexOf(IhClassSkills,node.Id)>=0) continue;
+                Vector2 anchor=GetReferenceNameplateAnchor(node);
+                GUI.Label(ScaleReferenceRect(anchor.x-61f,anchor.y-22f,122f,20f),IhSkillName(node.Id),label);
+            }
+        }
+
+        private void IhDrawAscendedNodeArt(ReferenceNodeUi node)
+        {
+            if(!IsAscendedSkill(node.Id) && node.Id!=IhAscendedClassSkill) return;
+            Texture2D art=GetSkillIconTex(node.Id);
+            if(art==null) return;
+            Rect frame=IhVisualIconRect(node);
+            // Replace only the inside of the painted frame, retaining its integrated border.
+            Rect inner=new Rect(frame.x+7f,frame.y+7f,frame.width-14f,frame.height-14f);
+            GUI.DrawTextureWithTexCoords(IhSnap(ScaleReferenceRect(inner.x,inner.y,inner.width,inner.height)),art,new Rect(0.15f,0.15f,0.70f,0.70f));
+            if(!IsAscendedSkill(node.Id)) return;
+            // Bright magenta edge makes every Ascension readable, including neutral energy art.
+            Rect scaled=ScaleReferenceRect(inner.x,inner.y,inner.width,inner.height);
+            Color saved=GUI.color; GUI.color=new Color(1f,0.16f,0.78f,0.8f);
+            GUI.DrawTexture(new Rect(scaled.x,scaled.y,scaled.width,1f),Texture2D.whiteTexture);
+            GUI.DrawTexture(new Rect(scaled.x,scaled.yMax-1f,scaled.width,1f),Texture2D.whiteTexture);
+            GUI.color=saved;
+        }
+
+        private static Rect IhPriestArtworkRect(string id)
+        {
+            switch(id) {
+                case "lightning_relic":return new Rect(369,156,70,65);
+                case "holy_relic":return new Rect(369,288,70,63);
+                case "grand_sigil":return new Rect(380,409,74,67);
+                case "divine_intervention":return new Rect(548,156,68,65);
+                case "grand_cross":return new Rect(686,156,69,63);
+                case "heavens_judgement":return new Rect(686,288,69,63);
+                default:return new Rect(850,214,103,108);
+            }
+        }
+
         private void IhLoadPriestArtwork()
         {
-            _ihPriestBackdropTex = LoadUiPng("Cleric_Priest_Reference.png");
-            _ihPriestLockedTex = LoadUiPng("Cleric_Priest_Locked.png");
-            if (_ihPriestBackdropTex == null)
+            Texture2D source=LoadUiPng("Cleric_Priest_Artwork.png");
+            if(source==null || _ihPreAdvanceBackdropTex==null)
             {
-                Logger.LogWarning("Priest Skill Tree art is missing. Re-run INSTALL.bat to restore it.");
+                if(source!=null) Destroy(source);
+                Logger.LogWarning("Priest art missing. Re-run INSTALL.bat.");
                 return;
             }
-            IhRepairLightningZapBackdrop(_ihPriestBackdropTex);
-            for (int i = 3; i < ClericPriestReferenceNodes.Length; i++)
+            // No cathedral, ribbon, divider, footer or perimeter pixels are replaced.
+            // Priest uses the exact Paladin canvas. Only skill interiors and text change.
+            _ihPriestBackdropTex=IhCopyTexture(_ihPreAdvanceBackdropTex,"ImmortalHeroes_UniversalPriest");
+            for(int i=3;i<ClericPriestReferenceNodes.Length;i++)
             {
-                string id = ClericPriestReferenceNodes[i].Id;
-                Texture2D icon = LoadUiPng("Icon_" + id + ".png");
-                if (icon != null)
-                    _treeSkillIconTex[id] = icon;
+                ReferenceNodeUi node=ClericPriestReferenceNodes[i];
+                Rect destination=IhVisualIconRect(node), donor=IhPriestArtworkRect(node.Id);
+                Rect inner=new Rect(destination.x+7,destination.y+7,destination.width-14,destination.height-14);
+                Rect sourceInner=new Rect(donor.x+donor.width*0.20f,donor.y+donor.height*0.20f,donor.width*0.60f,donor.height*0.60f);
+                IhBlitArt(_ihPriestBackdropTex,inner,source,sourceInner);
+                _treeSkillIconTex[node.Id]=IhCropIcon(_ihPriestBackdropTex,destination,"ImmortalHeroes_"+node.Id);
             }
+            // The Grace slot keeps its original frame too.
+            IhBlitArt(_ihPriestBackdropTex,new Rect(670,548,44,44),source,new Rect(394.8f,422.4f,44.4f,40.2f));
+            _ihPriestBackdropTex.Apply(false,false);
+            Destroy(source);
+            _ihPriestLockedTex=IhMakeSharedLockedBackdrop(_ihPriestBackdropTex);
+        }
+
+        private void IhPrepareSharedNameplates()
+        {
+            // Prepare the chassis ONCE, before either branch is created.
+            // Both branches retain exactly the same plaque pixels and live text styling.
+            if(_ihPreAdvanceBackdropTex==null) return;
+            for(int i=3;i<ClericPaladinReferenceNodes.Length;i++) {
+                ReferenceNodeUi node=ClericPaladinReferenceNodes[i];
+                IhBlankPaintedLabel(_ihPreAdvanceBackdropTex,GetReferenceNameplateAnchor(node),IhLabelWidth(node.Id));
+            }
+            _ihPreAdvanceBackdropTex.Apply(false,false);
+            if(_ihLockedBackdropTex!=null) Destroy(_ihLockedBackdropTex);
+            _ihLockedBackdropTex=IhMakeSharedLockedBackdrop(_ihPreAdvanceBackdropTex);
+        }
+
+        private Texture2D IhMakeSharedLockedBackdrop(Texture2D backdrop)
+        {
+            Texture2D result=IhCopyTexture(backdrop,"ImmortalHeroes_SharedLockedState");
+            // Dim only the symbol field; preserve the universal gold frame and badges.
+            // Nameplates and all surrounding art stay untouched on both branches.
+            for(int i=3;i<=ClericPaladinReferenceNodes.Length;i++) {
+                Rect area;
+                if(i==ClericPaladinReferenceNodes.Length) area=new Rect(670,548,44,44);
+                else {
+                    Rect frame=IhVisualIconRect(ClericPaladinReferenceNodes[i]);
+                    area=new Rect(frame.x+7,frame.y+7,frame.width-14,frame.height-14);
+                }
+                for(int y=Mathf.RoundToInt(area.y);y<Mathf.RoundToInt(area.yMax);y++)
+                    for(int x=Mathf.RoundToInt(area.x);x<Mathf.RoundToInt(area.xMax);x++) {
+                        Color c=result.GetPixel(x,661-y);
+                        float grey=(c.r*0.299f+c.g*0.587f+c.b*0.114f)*0.72f;
+                        result.SetPixel(x,661-y,new Color(grey,grey,grey,c.a));
+                    }
+            }
+            result.Apply(false,false);return result;
         }
 
         private string IhBuildPriestTooltip(Player player, ReferenceNodeUi node, out string title)
@@ -9673,6 +9929,7 @@ namespace AlbedosCustomClassesAdvanced
 
             // v0.18.0: locked = dimmed icon + padlock + requirement; unlocked = Tier stars + count.
             Rect row = new Rect();
+            if (unlocked) IhDrawAscendedNodeArt(node);
             if (!unlocked)
                 IhDrawLockedNode(node, lockReason);
             else if (maxTier > 0)
@@ -9923,11 +10180,11 @@ namespace AlbedosCustomClassesAdvanced
 
         private Texture2D GetSkillIconTex(string id)
         {
-            if (id == IhAscendedClassSkill && _ihRsNormalIconTex != null && !IhIsPaladin(Player.m_localPlayer))
-                return _ihRsNormalIconTex;
-            if (id == IhGrace) return _ihGraceIconTex;
-            Texture2D tex;
-            return _treeSkillIconTex.TryGetValue(id, out tex) ? tex : null;
+            Texture2D texture;
+            if(id==IhAscendedClassSkill && _ihRsNormalIconTex!=null) texture=_ihRsNormalIconTex;
+            else if(id==IhGrace) texture=_ihGraceIconTex;
+            else if(!_treeSkillIconTex.TryGetValue(id,out texture)) return null;
+            return IsAscendedSkill(id) ? IhAscendedArt(id,texture) : texture;
         }
 
         private void DrawPermanentBadge(Rect slotRect)
@@ -10204,7 +10461,7 @@ namespace AlbedosCustomClassesAdvanced
             // live Grace key label and the CONFIRM plaque (only while Tiers are pending).
             Player footerPlayer = Player.m_localPlayer;
             if (!IhIsUnlocked(footerPlayer, IhTreeBranch() == "Priest" ? IhPriestGrace : IhGrace) && IhDrawLockedRegion("grace_slot") && _ihPadlockTex != null)
-                GUI.DrawTexture(IhSnap(ScaleReferenceRect(679f, 556f, 26f, 26f)), _ihPadlockTex);
+                GUI.DrawTexture(IhSnap(ScaleReferenceRect(690f, 571f, 26f, 26f)), _ihPadlockTex);
             Rect graceLabel = ScaleReferenceRect(641f, 607f, 100f, 15f);
             DrawHotbarKeyLabel(graceLabel, BindGrace, "GRACE - " + FormatHotbarBinding(BindGrace));
 

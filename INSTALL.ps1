@@ -1,7 +1,7 @@
 ﻿$ErrorActionPreference = "Stop"
 
 Write-Host ""
-Write-Host "IMMORTAL HEROES v0.19.3 - ADVANCEMENT SELECTION" -ForegroundColor Cyan
+Write-Host "IMMORTAL HEROES v0.20.3 - ALTAR UI" -ForegroundColor Cyan
 Write-Host "Protected build: all 8 DLLs compile in staging before the live profile is touched." -ForegroundColor Gray
 Write-Host ""
 
@@ -159,7 +159,11 @@ try {
     $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
     $uiAssetSource = Join-Path $scriptDir "ImmortalHeroesAssets\Cleric_Paladin_Reference.png"
     Need-File $uiAssetSource "Immortal Heroes shared Cleric/Paladin UI asset"
-    Need-File (Join-Path $scriptDir "ImmortalHeroesAssets\Cleric_Priest_Reference.png") "Immortal Heroes Priest UI asset"
+    Need-File (Join-Path $scriptDir "ImmortalHeroesAssets\Cleric_Priest_Artwork.png") "Immortal Heroes Priest UI asset"
+
+    Need-File (Join-Path $scriptDir "ImmortalHeroesAssets\Altar_Background.png") "Altar background"
+    Need-File (Join-Path $scriptDir "ImmortalHeroesAssets\Altar_ClassCards.png") "Altar class cards"
+    Need-File (Join-Path $scriptDir "ImmortalHeroesAssets\Confirm_Plaque.png") "Altar button plaque"
 
     $coreSource = Join-Path $scriptDir "AlbedosCustomClasses.Core.cs"
     $runtimeSource = Join-Path $scriptDir "DragonsAltar.CombatRuntime.cs"

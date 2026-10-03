@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Reflection;
 using BepInEx;
 using BepInEx.Configuration;
@@ -17,7 +18,7 @@ namespace AlbedosCustomClasses
     {
         public const string ModGuid = "albedo.customclasses";
         public const string ModName = "Dragon's Altar";
-        public const string ModVersion = "0.19.3";
+        public const string ModVersion = "0.20.3";
 
         internal const string ClassDataKey = "AlbedoCustomClasses.Class";
         internal const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -32,7 +33,8 @@ namespace AlbedosCustomClasses
             get
             {
                 return Instance != null &&
-                       (Instance._altarOpen || (Instance._classPanel != null && Instance._classPanel.activeSelf));
+                       Instance._classPanel != null &&
+                       Instance._classPanel.activeSelf;
             }
         }
 
@@ -51,14 +53,12 @@ namespace AlbedosCustomClasses
         private Text _baseDetailTitle;
         private Text _baseDetailRole;
         private Text _baseDetailBody;
-        private Text _baseDetailSkills;
         private Text _advancementPageTitle;
         private Text _advancementBaseSummaryTitle;
         private Text _advancementBaseSummaryBody;
         private Text _advDetailTitle;
         private Text _advDetailRole;
         private Text _advDetailBody;
-        private Text _advDetailSkills;
         private Text _chooseBaseButtonText;
         private Text _chooseAdvButtonText;
         private Text _confirmationText;
@@ -106,6 +106,11 @@ namespace AlbedosCustomClasses
 
         private void OnDestroy()
         {
+            if (_classPanel != null) Destroy(_classPanel);
+            foreach (Sprite sprite in _altarSprites.Values) if (sprite != null) Destroy(sprite);
+            foreach (Texture2D texture in _altarTextures) if (texture != null) Destroy(texture);
+            _altarSprites.Clear();
+            _altarTextures.Clear();
             PrefabManager.OnVanillaPrefabsAvailable -= RegisterShrine;
 
             if (!GUIManager.IsHeadless())
@@ -117,6 +122,7 @@ namespace AlbedosCustomClasses
 
         private void Update()
         {
+            if (IsClassPanelOpen) FitAltarToCanvas();
             if (IsClassPanelOpen && Input.GetKeyDown(KeyCode.Escape))
             {
                 CloseClassPanel();
@@ -514,354 +520,475 @@ namespace AlbedosCustomClasses
             return null;
         }
 
+        // Altar presentation only. Selection/persistence/combat methods below are unchanged.
+        private static readonly Color AltarGold = new Color(1f, 0.88f, 0.62f, 1f);
+        private static readonly Color AltarInk = new Color(0.16f, 0.10f, 0.07f, 1f);
+        private readonly Dictionary<string, Sprite> _altarSprites = new Dictionary<string, Sprite>();
+        private readonly List<Texture2D> _altarTextures = new List<Texture2D>();
+        private readonly Dictionary<string, Image> _altarBaseCards = new Dictionary<string, Image>();
+        private readonly Dictionary<string, Image> _altarAdvCards = new Dictionary<string, Image>();
+        private Text _altarSubtitle;
+        private ScrollRect _altarBaseScroll;
+        private ScrollRect _altarAdvScroll;
+
+        private RectTransform AltarRect(string name, Transform parent, Vector2 position, Vector2 size)
+        {
+            GameObject go = new GameObject(name, typeof(RectTransform));
+            RectTransform rect = go.GetComponent<RectTransform>();
+            rect.SetParent(parent, false);
+            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition = position;
+            rect.sizeDelta = size;
+            return rect;
+        }
+
+        private Sprite AltarSprite(string name)
+        {
+            Sprite cached;
+            if (_altarSprites.TryGetValue(name, out cached)) return cached;
+            Texture2D texture = null;
+            try
+            {
+                // Use the same late-bound byte[] decoder as the existing installer-compatible UI.
+                Type file = typeof(object).Assembly.GetType("System.IO.File");
+                MethodInfo read = file.GetMethod("ReadAllBytes", new Type[] { typeof(string) });
+                byte[] bytes = (byte[])read.Invoke(null, new object[] { Paths.PluginPath + "/ImmortalHeroesAssets/" + name });
+                texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                Type decoder = Type.GetType("UnityEngine.ImageConversion, UnityEngine.ImageConversionModule");
+                MethodInfo load = decoder.GetMethod("LoadImage", BindingFlags.Static | BindingFlags.Public, null,
+                    new Type[] { typeof(Texture2D), typeof(byte[]), typeof(bool) }, null);
+                if (!(bool)load.Invoke(null, new object[] { texture, bytes, false })) throw new Exception("PNG decode failed");
+                texture.wrapMode = TextureWrapMode.Clamp;
+                texture.filterMode = FilterMode.Bilinear;
+                // uGUI handles sRGB textures; do not apply the skill tree's IMGUI-only gamma fix.
+                cached = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f));
+                _altarTextures.Add(texture);
+                _altarSprites[name] = cached;
+                return cached;
+            }
+            catch (Exception ex)
+            {
+                if (texture != null) Destroy(texture);
+                Logger.LogWarning("Altar art unavailable: " + name + ". Using readable fallback. " + ex.Message);
+                _altarSprites[name] = null;
+                return null;
+            }
+        }
+
+        private Sprite AltarCardSprite(string name)
+        {
+            string key = "card:" + name;
+            Sprite result;
+            if (_altarSprites.TryGetValue(key, out result)) return result;
+            Sprite sheet = AltarSprite("Altar_ClassCards.png");
+            if (sheet == null) return null;
+            string[] names = { "Warrior", "Cleric", "Sorcerer", "Sword Master", "Mercenary", "Paladin", "Priest", "Wizard", "Spellcaster" };
+            int index = Array.IndexOf(names, name);
+            if (index < 0) return null;
+            float w = sheet.texture.width / 3f, h = sheet.texture.height / 3f;
+            // Sprite rects start at bottom-left; atlas cells are authored top-left row-major.
+            result = Sprite.Create(sheet.texture, new Rect((index % 3) * w, (2 - index / 3) * h, w, h), new Vector2(0.5f, 0.5f));
+            _altarSprites[key] = result;
+            return result;
+        }
+
+        private Sprite AltarLabelVeil()
+        {
+            Sprite result;
+            if (_altarSprites.TryGetValue("label-veil", out result)) return result;
+            Texture2D texture = new Texture2D(64, 32, TextureFormat.RGBA32, false);
+            texture.wrapMode = TextureWrapMode.Clamp;
+            texture.filterMode = FilterMode.Bilinear;
+            for (int y = 0; y < 32; y++)
+                for (int x = 0; x < 64; x++)
+                {
+                    float edge = Mathf.Min(Mathf.Min(x / 8f, (63 - x) / 8f), Mathf.Min(y / 5f, (31 - y) / 5f));
+                    texture.SetPixel(x, y, new Color(1f, 1f, 1f, Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(edge))));
+                }
+            texture.Apply(false, true);
+            result = Sprite.Create(texture, new Rect(0, 0, 64, 32), new Vector2(0.5f, 0.5f));
+            _altarTextures.Add(texture);
+            _altarSprites["label-veil"] = result;
+            return result;
+        }
+
+        private Image AltarImage(string name, Transform parent, Vector2 position, Vector2 size, Sprite sprite, Color color, bool blocksInput)
+        {
+            Image image = AltarRect(name, parent, position, size).gameObject.AddComponent<Image>();
+            image.sprite = sprite;
+            image.color = color;
+            image.raycastTarget = blocksInput;
+            return image;
+        }
+
+        private Text CreateWrappedText(Transform parent, string text, Vector2 position, float width, float height,
+            int fontSize, Color color, bool bold, TextAnchor alignment)
+        {
+            Text label = AltarRect("AltarText", parent, position, new Vector2(width, height)).gameObject.AddComponent<Text>();
+            label.font = bold ? GUIManager.Instance.AveriaSerifBold : GUIManager.Instance.AveriaSerif;
+            label.text = text;
+            label.fontSize = fontSize;
+            label.color = color;
+            label.alignment = alignment;
+            label.horizontalOverflow = HorizontalWrapMode.Wrap;
+            label.verticalOverflow = VerticalWrapMode.Truncate;
+            label.supportRichText = true;
+            label.raycastTarget = false;
+            return label;
+        }
+
+        private Button AltarButton(Transform parent, string text, Vector2 position, Vector2 size, UnityEngine.Events.UnityAction action)
+        {
+            Image image = AltarImage("AltarButton", parent, position, size, AltarSprite("Confirm_Plaque.png"), Color.white, true);
+            if (image.sprite == null) image.color = new Color(0.07f, 0.12f, 0.22f, 1f);
+            Button button = image.gameObject.AddComponent<Button>();
+            button.targetGraphic = image;
+            ColorBlock colors = button.colors;
+            colors.normalColor = Color.white;
+            colors.highlightedColor = new Color(1f, 0.93f, 0.77f, 1f);
+            colors.pressedColor = new Color(0.70f, 0.76f, 0.85f, 1f);
+            colors.disabledColor = new Color(0.48f, 0.48f, 0.48f, 0.85f);
+            button.colors = colors;
+            button.onClick.AddListener(action);
+            CreateWrappedText(image.transform, text, Vector2.zero, size.x - 38f, size.y - 6f, 17, AltarGold, true, TextAnchor.MiddleCenter);
+            return button;
+        }
+
+        private void FitAltarToCanvas()
+        {
+            if (_classPanel == null) return;
+            RectTransform parent = _classPanel.transform.parent as RectTransform;
+            if (parent == null || parent.rect.width <= 0f || parent.rect.height <= 0f) return;
+            float scale = Mathf.Min((parent.rect.width - 32f) / 1040f, (parent.rect.height - 32f) / 900f);
+            scale = Mathf.Max(0.1f, Mathf.Min(1.15f, scale));
+            _classPanel.transform.localScale = new Vector3(scale, scale, 1f);
+        }
+
         private void BuildClassPanel()
         {
-            if (GUIManager.CustomGUIFront == null)
-                return;
-
-            if (_classPanel != null)
-            {
-                Destroy(_classPanel);
-                _classPanel = null;
-            }
-
-            _classPanel = GUIManager.Instance.CreateWoodpanel(
-                parent: GUIManager.CustomGUIFront.transform,
-                anchorMin: new Vector2(0.5f, 0.5f),
-                anchorMax: new Vector2(0.5f, 0.5f),
-                position: Vector2.zero,
-                width: 1040f,
-                height: 900f,
-                draggable: false
-            );
-
-            GUIManager.Instance.CreateText(
-                text: "DRAGON'S ALTAR",
-                parent: _classPanel.transform,
-                anchorMin: new Vector2(0.5f, 0.5f),
-                anchorMax: new Vector2(0.5f, 0.5f),
-                position: new Vector2(0f, 407f),
-                font: GUIManager.Instance.AveriaSerifBold,
-                fontSize: 31,
-                color: GUIManager.Instance.ValheimOrange,
-                outline: true,
-                outlineColor: Color.black,
-                width: 700f,
-                height: 42f,
-                addContentSizeFitter: false
-            );
-
-            GameObject resetObject = GUIManager.Instance.CreateButton(
-                text: "Reset",
-                parent: _classPanel.transform,
-                anchorMin: new Vector2(0.5f, 0.5f),
-                anchorMax: new Vector2(0.5f, 0.5f),
-                position: new Vector2(-455f, 407f),
-                width: 92f,
-                height: 34f
-            );
-            resetObject.GetComponent<Button>().onClick.AddListener(ResetClassSelection);
-
-            GameObject closeObject = GUIManager.Instance.CreateButton(
-                text: "Close",
-                parent: _classPanel.transform,
-                anchorMin: new Vector2(0.5f, 0.5f),
-                anchorMax: new Vector2(0.5f, 0.5f),
-                position: new Vector2(455f, 407f),
-                width: 92f,
-                height: 34f
-            );
-            closeObject.GetComponent<Button>().onClick.AddListener(CloseClassPanel);
-
-            GameObject currentClassObject = GUIManager.Instance.CreateText(
-                text: "Base class: None",
-                parent: _classPanel.transform,
-                anchorMin: new Vector2(0.5f, 0.5f),
-                anchorMax: new Vector2(0.5f, 0.5f),
-                position: new Vector2(-205f, 362f),
-                font: GUIManager.Instance.AveriaSerif,
-                fontSize: 16,
-                color: Color.white,
-                outline: true,
-                outlineColor: Color.black,
-                width: 370f,
-                height: 28f,
-                addContentSizeFitter: false
-            );
-            _currentClassText = currentClassObject.GetComponent<Text>();
-
-            GameObject currentAdvancementObject = GUIManager.Instance.CreateText(
-                text: "Advancement: None",
-                parent: _classPanel.transform,
-                anchorMin: new Vector2(0.5f, 0.5f),
-                anchorMax: new Vector2(0.5f, 0.5f),
-                position: new Vector2(205f, 362f),
-                font: GUIManager.Instance.AveriaSerif,
-                fontSize: 16,
-                color: Color.white,
-                outline: true,
-                outlineColor: Color.black,
-                width: 370f,
-                height: 28f,
-                addContentSizeFitter: false
-            );
-            _currentAdvancementText = currentAdvancementObject.GetComponent<Text>();
-
+            if (GUIManager.CustomGUIFront == null) return;
+            if (_classPanel != null) { _classPanel.SetActive(false); Destroy(_classPanel); }
+            _altarBaseCards.Clear();
+            _altarAdvCards.Clear();
+            _classPanel = AltarRect("ImmortalHeroesAltar", GUIManager.CustomGUIFront.transform, Vector2.zero, new Vector2(1040f, 900f)).gameObject;
+            Sprite art = AltarSprite("Altar_Background.png");
+            AltarImage("AltarBackdrop", _classPanel.transform, Vector2.zero, new Vector2(1040f, 900f), art,
+                art == null ? new Color(0.86f, 0.79f, 0.65f, 1f) : Color.white, true);
+            CreateWrappedText(_classPanel.transform, "DRAGON'S ALTAR", new Vector2(0f, 342f), 690f, 44f, 34, AltarGold, true, TextAnchor.MiddleCenter);
+            _altarSubtitle = CreateWrappedText(_classPanel.transform, "IMMORTAL HEROES  •  CLASS SELECTION", new Vector2(0f, 318f), 690f, 24f, 15, AltarGold, false, TextAnchor.MiddleCenter);
+            AltarButton(_classPanel.transform, "Reset", new Vector2(-440f, 402f), new Vector2(116f, 40f), ResetClassSelection);
+            AltarButton(_classPanel.transform, "Close", new Vector2(440f, 402f), new Vector2(116f, 40f), CloseClassPanel);
+            _currentClassText = CreateWrappedText(_classPanel.transform, "Base class: None", new Vector2(-135f, 285f), 260f, 27f, 18, AltarInk, true, TextAnchor.MiddleCenter);
+            _currentAdvancementText = CreateWrappedText(_classPanel.transform, "Advancement: None", new Vector2(150f, 285f), 295f, 27f, 18, AltarInk, true, TextAnchor.MiddleCenter);
             BuildBaseClassPage();
             BuildAdvancementPage();
             BuildConfirmationPanel();
-
+            CreateWrappedText(_classPanel.transform, "IMMORTAL HEROES", new Vector2(0f, -421f), 600f, 24f, 13, AltarGold, false, TextAnchor.MiddleCenter);
+            FitAltarToCanvas();
             ShowBaseClassPage();
             _classPanel.SetActive(false);
         }
 
         private GameObject CreateUiGroup(string name)
         {
-            GameObject group = new GameObject(name);
-            group.transform.SetParent(_classPanel.transform, false);
-
-            RectTransform rect = group.AddComponent<RectTransform>();
-            rect.anchorMin = new Vector2(0.5f, 0.5f);
-            rect.anchorMax = new Vector2(0.5f, 0.5f);
-            rect.pivot = new Vector2(0.5f, 0.5f);
-            rect.anchoredPosition = new Vector2(0f, -18f);
-            rect.sizeDelta = new Vector2(980f, 710f);
-            return group;
+            return AltarRect(name, _classPanel.transform, Vector2.zero, new Vector2(1040f, 900f)).gameObject;
         }
 
-        private GameObject CreateDarkPanel(Transform parent, Vector2 position, Vector2 size, Color accent)
+        private sealed class AltarSkillEntry
         {
-            GameObject panel = new GameObject("DragonAltarDetailPanel");
-            panel.transform.SetParent(parent, false);
+            public string Name, Id, Description;
+            public AltarSkillEntry(string name, string id, string description) { Name = name; Id = id; Description = description; }
+        }
+        private Transform _altarBaseSkillFooter, _altarAdvSkillFooter;
+        private Text _altarBaseMechanics, _altarAdvMechanics;
+        private ScrollRect _altarBaseMechanicsScroll, _altarAdvMechanicsScroll;
+        private readonly List<Button> _altarBaseSkillButtons = new List<Button>();
+        private readonly List<Button> _altarAdvSkillButtons = new List<Button>();
 
-            RectTransform rect = panel.AddComponent<RectTransform>();
-            rect.anchorMin = new Vector2(0.5f, 0.5f);
-            rect.anchorMax = new Vector2(0.5f, 0.5f);
-            rect.pivot = new Vector2(0.5f, 0.5f);
-            rect.anchoredPosition = position;
-            rect.sizeDelta = size;
-
-            Image image = panel.AddComponent<Image>();
-            image.color = new Color(0.025f, 0.025f, 0.035f, 0.70f);
-
-            Outline outline = panel.AddComponent<Outline>();
-            outline.effectColor = new Color(accent.r, accent.g, accent.b, 0.55f);
-            outline.effectDistance = new Vector2(1f, -1f);
-            return panel;
+        private void AltarRule(Transform parent, float x, float y, float width, float height)
+        {
+            AltarImage("GoldRule", parent, new Vector2(x,y), new Vector2(width,height), null, new Color(0.62f,0.40f,0.12f,0.8f), false);
+            RectTransform diamond = AltarImage("GoldDiamond", parent, new Vector2(x,y), new Vector2(5f,5f), null, new Color(0.74f,0.48f,0.15f,1f), false).rectTransform;
+            diamond.localEulerAngles = new Vector3(0f,0f,45f);
         }
 
-        private Text CreateWrappedText(Transform parent, string text, Vector2 position, float width, float height, int fontSize, Color color, bool bold, TextAnchor alignment)
+        private ScrollRect AltarTextScroll(Transform parent, string name, Vector2 position, Vector2 size, out Text text)
         {
-            GameObject obj = GUIManager.Instance.CreateText(
-                text: text,
-                parent: parent,
-                anchorMin: new Vector2(0.5f, 0.5f),
-                anchorMax: new Vector2(0.5f, 0.5f),
-                position: position,
-                font: bold ? GUIManager.Instance.AveriaSerifBold : GUIManager.Instance.AveriaSerif,
-                fontSize: fontSize,
-                color: color,
-                outline: true,
-                outlineColor: Color.black,
-                width: width,
-                height: height,
-                addContentSizeFitter: false
-            );
+            RectTransform viewport = AltarRect(name, parent, position, size);
+            Image target = viewport.gameObject.AddComponent<Image>(); target.color = Color.clear;
+            viewport.gameObject.AddComponent<RectMask2D>();
+            ScrollRect scroll = viewport.gameObject.AddComponent<ScrollRect>();
+            scroll.viewport = viewport; scroll.horizontal = false; scroll.vertical = true;
+            scroll.movementType = ScrollRect.MovementType.Clamped; scroll.scrollSensitivity = 25f;
+            text = CreateWrappedText(viewport,"",Vector2.zero,size.x - 16f,0f,16,AltarInk,false,TextAnchor.UpperLeft);
+            RectTransform content = text.rectTransform;
+            content.anchorMin = new Vector2(0f,1f); content.anchorMax = new Vector2(1f,1f);
+            content.pivot = new Vector2(0.5f,1f); content.sizeDelta = new Vector2(-16f,0f);
+            content.anchoredPosition = Vector2.zero;
+            text.verticalOverflow = VerticalWrapMode.Overflow;
+            ContentSizeFitter fitter = text.gameObject.AddComponent<ContentSizeFitter>();
+            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            scroll.content = content;
+            Image track = AltarImage("DetailScrollTrack", parent, new Vector2(position.x + size.x / 2f - 2f, position.y), new Vector2(4f,size.y), null, new Color(0.6f,0.4f,0.15f,0.15f), true);
+            Scrollbar bar = track.gameObject.AddComponent<Scrollbar>();
+            Image handle = AltarImage("DetailScrollHandle", track.transform, Vector2.zero, new Vector2(4f,20f), null, new Color(0.64f,0.43f,0.15f,0.8f), true);
+            handle.rectTransform.sizeDelta = Vector2.zero;
+            bar.handleRect = handle.rectTransform; bar.targetGraphic = handle;
+            bar.direction = Scrollbar.Direction.BottomToTop;
+            scroll.verticalScrollbar = bar;
+            scroll.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHide;
+            return scroll;
+        }
 
-            Text label = obj.GetComponent<Text>();
-            if (label != null)
+        private static string AltarOverview(string description)
+        {
+            // Keep the identity and playstyle; mechanics belong exclusively to a clicked skill.
+            int mechanics = description.IndexOf("<b>CORE MECHANICS</b>", StringComparison.Ordinal);
+            if (mechanics < 0) mechanics = description.IndexOf("<b>MECHANICS</b>", StringComparison.Ordinal);
+            if (mechanics < 0) return description;
+            int tail = description.IndexOf("<b>PLAYSTYLE</b>", mechanics, StringComparison.Ordinal);
+            if (tail < 0) tail = description.IndexOf("<b>BEST FOR</b>", mechanics, StringComparison.Ordinal);
+            return description.Substring(0, mechanics).TrimEnd() + (tail < 0 ? "" : "\n\n" + description.Substring(tail));
+        }
+
+        private void BuildAltarSkillDetails(Transform parent, bool advancement)
+        {
+            Text overview;
+            ScrollRect overviewScroll = AltarTextScroll(parent,"ClassOverview",new Vector2(215f,110f),new Vector2(520f,120f),out overview);
+            AltarRule(parent,215f,38f,520f,1f);
+            CreateWrappedText(parent,"MECHANICS",new Vector2(215f,20f),500f,26f,19,new Color(0.40f,0.20f,0.08f,1f),true,TextAnchor.MiddleLeft);
+            Text mechanics;
+            ScrollRect mechanicsScroll = AltarTextScroll(parent,"SelectedSkillMechanics",new Vector2(215f,-60f),new Vector2(520f,126f),out mechanics);
+            Transform footer = AltarRect("SkillFooter",parent,Vector2.zero,new Vector2(1040f,900f));
+            AltarRule(footer,215f,-133f,520f,1f);
+            AltarRule(footer,310f,-222f,1f,174f);
+            AltarRule(footer,215f,-313f,520f,1f);
+            CreateWrappedText(footer,"SKILLS",new Vector2(85f,-150f),240f,28f,20,new Color(0.40f,0.20f,0.08f,1f),true,TextAnchor.MiddleLeft);
+            CreateWrappedText(footer,"PASSIVE",new Vector2(397f,-150f),146f,28f,20,new Color(0.40f,0.20f,0.08f,1f),true,TextAnchor.MiddleCenter);
+            if (advancement) { _advDetailBody=overview; _altarAdvScroll=overviewScroll; _altarAdvMechanics=mechanics; _altarAdvMechanicsScroll=mechanicsScroll; _altarAdvSkillFooter=footer; }
+            else { _baseDetailBody=overview; _altarBaseScroll=overviewScroll; _altarBaseMechanics=mechanics; _altarBaseMechanicsScroll=mechanicsScroll; _altarBaseSkillFooter=footer; }
+        }
+
+        private Sprite AltarSkillIcon(string id)
+        {
+            string key="skill-icon:"+id;
+            Sprite result;
+            if (_altarSprites.TryGetValue(key,out result)) return result;
+            string[] priest={"lightning_relic","holy_relic","grand_sigil","divine_intervention","grand_cross","heavens_judgement","lightning_tempest"};
+            Rect[] regions={new Rect(369,156,70,65),new Rect(369,288,70,63),new Rect(380,409,74,67),new Rect(548,156,68,65),new Rect(686,156,69,65),new Rect(686,288,69,63),new Rect(850,214,103,108)};
+            int index=Array.IndexOf(priest,id);
+            if(index>=0)
             {
-                label.alignment = alignment;
-                label.horizontalOverflow = HorizontalWrapMode.Wrap;
-                label.verticalOverflow = VerticalWrapMode.Truncate;
-                label.supportRichText = true;
+                Sprite source=AltarSprite("Cleric_Priest_Artwork.png");
+                if(source==null) return null;
+                Rect r=regions[index]; float sx=source.texture.width/1011f, sy=source.texture.height/662f;
+                result=Sprite.Create(source.texture,new Rect(r.x*sx,(662f-r.yMax)*sy,r.width*sx,r.height*sy),new Vector2(0.5f,0.5f));
             }
-            return label;
+            else
+            {
+                string[] existing={"lightning_zap","righteous_strike","holy_wave","goddess_relic","judgement_hammer","shield_charge","fallen_angel","ray_of_hope","electric_smite","heavens_light"};
+                if(Array.IndexOf(existing,id)<0) return null;
+                // Reuse a cached sprite, without registering a second ownership entry.
+                return AltarSprite("Icon_"+id+".png");
+            }
+            _altarSprites[key]=result; return result;
+        }
+
+        private void RefreshAltarSkillFooter(string className, bool advancement)
+        {
+            Transform footer=advancement ? _altarAdvSkillFooter : _altarBaseSkillFooter;
+            Text mechanics=advancement ? _altarAdvMechanics : _altarBaseMechanics;
+            ScrollRect scroll=advancement ? _altarAdvMechanicsScroll : _altarBaseMechanicsScroll;
+            if(footer==null || mechanics==null) return;
+            mechanics.text=string.Empty;
+            scroll.verticalNormalizedPosition=1f;
+            List<Button> buttons=advancement ? _altarAdvSkillButtons : _altarBaseSkillButtons;
+            buttons.Clear();
+            Transform old=footer.Find("SkillChoices");
+            if(old!=null) { old.gameObject.SetActive(false); Destroy(old.gameObject); }
+            Transform group=AltarRect("SkillChoices",footer,Vector2.zero,new Vector2(1040f,900f));
+            AltarSkillEntry[] skills=AltarSkillEntries(className,false);
+            AltarSkillEntry[] passives=AltarSkillEntries(className,true);
+            bool twoColumns=skills.Length>3;
+            for(int i=0;i<skills.Length;i++)
+            {
+                int row=twoColumns ? i/2 : i, col=twoColumns ? i%2 : 0;
+                float x=twoColumns ? 40f+col*175f : 126f;
+                CreateAltarSkillChoice(group,skills[i],new Vector2(x,-186f-row*43f),twoColumns ? 172f : 345f,mechanics,scroll,buttons);
+            }
+            for(int i=0;i<passives.Length;i++)
+                CreateAltarSkillChoice(group,passives[i],new Vector2(397f,(passives.Length==1 ? -199f : -186f)-i*43f),160f,mechanics,scroll,buttons,passives.Length==1);
+        }
+
+        private void CreateAltarSkillChoice(Transform parent, AltarSkillEntry entry, Vector2 position, float width, Text mechanics, ScrollRect scroll, List<Button> buttons, bool largeIcon = false)
+        {
+            Image row=AltarImage("Inspect_"+entry.Id,parent,position,new Vector2(width,largeIcon ? 66f : 40f),AltarLabelVeil(),new Color(1f,0.83f,0.48f,1f),true);
+            Button button=row.gameObject.AddComponent<Button>(); button.targetGraphic=row;
+            ColorBlock colors=button.colors; colors.normalColor=new Color(1f,1f,1f,0f); colors.highlightedColor=new Color(1f,1f,1f,0.45f); colors.pressedColor=new Color(1f,1f,1f,0.7f); button.colors=colors;
+            Sprite icon=AltarSkillIcon(entry.Id);
+            Image tile=AltarImage("SkillIcon",row.transform,new Vector2(-width/2f+(largeIcon ? 27f : 17f),0f),new Vector2(largeIcon ? 48f : 30f,largeIcon ? 48f : 30f),icon,icon==null ? new Color(0.08f,0.15f,0.26f,1f) : Color.white,false);
+            Outline outline=tile.gameObject.AddComponent<Outline>(); outline.effectColor=AltarGold; outline.effectDistance=new Vector2(1f,-1f);
+            if(icon==null) CreateWrappedText(tile.transform,entry.Name.Substring(0,1),Vector2.zero,28f,28f,19,AltarGold,true,TextAnchor.MiddleCenter);
+            CreateWrappedText(row.transform,entry.Name,new Vector2(largeIcon ? 28f : 18f,0f),width-(largeIcon ? 60f : 40f),largeIcon ? 66f : 40f,width>200f ? 15 : 13,AltarInk,false,TextAnchor.MiddleLeft);
+            buttons.Add(button);
+            button.onClick.AddListener(delegate {
+                // Inspection only: no casts, tier changes, class selection or save writes.
+                mechanics.text="<b>"+entry.Name+"</b>\n\n"+AltarSkillDescription(entry);
+                Canvas.ForceUpdateCanvases();
+                scroll.verticalNormalizedPosition=1f;
+                foreach(Button item in buttons) { ColorBlock c=item.colors; c.normalColor=new Color(1f,1f,1f,item==button ? 0.60f : 0f); item.colors=c; }
+            });
+        }
+
+        private string AltarSkillDescription(AltarSkillEntry entry)
+        {
+            // Read the existing Cleric-tree tooltip builder without linking Core to Advanced.
+            // This preserves live configured values and existing meter/degree/percent units.
+            try
+            {
+                Type type=Type.GetType("AlbedosCustomClassesAdvanced.AdvancedPlugin, AlbedosCustomClasses.Advanced");
+                if(type!=null && Player.m_localPlayer!=null)
+                {
+                    object instance=type.GetField("Instance",BindingFlags.Public|BindingFlags.Static).GetValue(null);
+                    if(instance!=null)
+                    {
+                        string[] fields={"ClericPaladinReferenceNodes","ClericPriestReferenceNodes"};
+                        foreach(string field in fields)
+                        {
+                            Array nodes=type.GetField(field,BindingFlags.NonPublic|BindingFlags.Static).GetValue(null) as Array;
+                            foreach(object node in nodes)
+                            {
+                                if((string)node.GetType().GetField("Id").GetValue(node)!=entry.Id) continue;
+                                object[] args={Player.m_localPlayer,node,null};
+                                string body=(string)type.GetMethod("IhBuildTooltip",BindingFlags.NonPublic|BindingFlags.Instance).Invoke(instance,args);
+                                // White tooltip text belongs on navy; use parchment ink here.
+                                return System.Text.RegularExpressions.Regex.Replace(body,@"</?color(?:=[^>]+)?>",string.Empty);
+                            }
+                        }
+                    }
+                }
+            }
+            catch(Exception ex) { Logger.LogDebug("Altar skill preview fallback: "+entry.Id+" "+ex.Message); }
+            return entry.Description;
+        }
+
+        private static AltarSkillEntry[] AltarSkillEntries(string className, bool passive)
+        {
+            switch(className)
+            {
+                case "Warrior": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Warrior Blessing","warrior_blessing","Hyper Armor if the incoming hit is below 30% of max HP; timed parry is 2x stronger.") } : new AltarSkillEntry[] { new AltarSkillEntry("Heavy Slash","heavy_slash","0.7s heavy horizontal Slash. Inflicts Broken Bones."), new AltarSkillEntry("Impact Wave","impact_wave","Ground Projectile: Blunt + Pierce line wave that follows terrain."), new AltarSkillEntry("Impact Punch","impact_punch","0.5s punch, 2m x 2m. Blunt damage; Stuns Small enemies.") };
+                case "Cleric": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Cleric Blessings","cleric_blessings","Shield Weapon Mastery: every Shield gets 1.5x Block Force + Block Power. Divine Duality: wield a Staff + Shield together.") } : new AltarSkillEntry[] { new AltarSkillEntry("Lightning Zap","lightning_zap","Instant 10m Ghost cone. Pierce + Lightning and inflicts Zap."), new AltarSkillEntry("Righteous Strike","righteous_strike","0.7s Ground PAC Sky Summon. Blunt + Lightning, 5m AoE, inflicts Expose."), new AltarSkillEntry("Holy Wave","holy_wave","Instant 7m wave: 25 HP now + 5% max HP/sec for 6s. VFX pulses once.") };
+                case "Sorcerer": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Arcane Blood","arcane_blood","+30% Eitr Regen, +40 Max Eitr and +30% Magic Damage. Emergency escape remains planned, not active yet.") } : new AltarSkillEntry[] { new AltarSkillEntry("Flame Burst","flame_burst","10m Fire cone with Fire Burn."), new AltarSkillEntry("Glacial Descent","glacial_descent","Ground PAC: 5m Blunt + Frost impact."), new AltarSkillEntry("Stonefang Eruption","stonefang_eruption","Ground PAC: 5m Blunt + Pierce; Small Stun, Small/Big Cripple.") };
+                case "Sword Master": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("The Way of the Sword","the_way_of_the_sword","Gain +100% Attack Speed while holding exactly one Sword with an empty off-hand.") } : new AltarSkillEntry[] { new AltarSkillEntry("Moonlight Splitter","moonlight_splitter","Release three extra-wide Ghost waves dealing direct Slash and Spirit damage."), new AltarSkillEntry("Crescent Cleave","crescent_cleave","Send five widening ground cleaves forward, dealing direct Slash and Spirit damage."), new AltarSkillEntry("Judgement Cut","judgement_cut","4 stacks. Ground PAC / Target PAC / Free Aim within 15m. Each cast creates a 4m sphere with 3 pure Slash cuts resolving instantly and simultaneously; each spent stack independently recharges in 12s, with a 0.5s buffer between activations."), new AltarSkillEntry("Halfmoon Slash (Ultimate)","halfmoon_slash","Wind up a large Slash and Spirit strike with Spirit Burn and Stun, followed by an afterimage slash.") };
+                case "Mercenary": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Barbaric / Warfreak","barbaric___warfreak","Barbaric grants its existing Axe, damage, health and Fury effects. Warfreak enables dual one-handed weapons and faster two-handed attacks.") } : new AltarSkillEntry[] { new AltarSkillEntry("Stomp","stomp","Stomp nearby enemies, then release a larger delayed aftershock. Stuns Small enemies."), new AltarSkillEntry("Bonecrusher","bonecrusher","Perform an acrobatic jump-slam dealing Blunt damage, Broken Bones and Cripple, and stunning enemies."), new AltarSkillEntry("Circle Swing","circle_swing","1.5s steerable heavy wind-up with only 0.5m total shuffle. 7m radius, 1.75x held-weapon damage, force-Stuns Small/Big/Boss; uninterruptable Hyper Armor."), new AltarSkillEntry("Seismic Guillotine","seismic_guillotine","Charge toward a ground or enemy target, generating Seismic Shocks along the path and an endpoint explosion. Point-blank casts skip the travelling shocks."), new AltarSkillEntry("Reaver's Orbit","reavers_orbit","Launch opposing axe arcs that push Small enemies outward and pull them back on their return."), new AltarSkillEntry("Whirlwind (Ultimate)","whirlwind","ULTIMATE. Mobile 6s spin; every 0.5s deals 0.5x held-weapon damage and carries weapon elements. Unchained Fury does not modify it.") };
+                case "Paladin": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Elemental Savant","elemental_savant","One locked passive choice: +25% elemental damage, +30 Max Eitr and +30% Eitr Regen."), new AltarSkillEntry("Holy Knight","holy_knight","One locked passive choice: +25% Movement Speed, +35 HP, +35 Stamina, +30% HP/Stamina Regen, and +75% Attack Speed while a weapon is paired with a Shield."), new AltarSkillEntry("Heaven's Light (Grace)","heavens_light","Protect nearby allies with increased defense and remove equipment movement penalties for the effect duration.") } : new AltarSkillEntry[] { new AltarSkillEntry("Goddess Relic","goddess_relic","Summon a physical Cross that deals Blunt and Lightning damage, applies Spirit Burn and marks enemies for Judgement."), new AltarSkillEntry("Judgement Hammer","judgement_hammer","Call a holy hammer onto the target area and detonate marked enemies caught in its impact."), new AltarSkillEntry("Shield Charge","shield_charge","Steerable physical 15m charge. Big/Boss cap: 4 persistent ticks, then Bash."), new AltarSkillEntry("Fallen Angel","fallen_angel","Drop a physical divine wall. Shield Charge can shatter your own wall into a holy shockwave."), new AltarSkillEntry("Ray of Hope","ray_of_hope","Channel a burst of healing for allies, strengthen their attacks and apply Spirit Burn to nearby enemies."), new AltarSkillEntry("Electric Smite (Ultimate)","electric_smite","Leap and slam down, releasing sixteen ground-level Lightning Trails with persistent damage.") };
+                case "Priest": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Grand Sigil","grand_sigil","Grant a protective barrier to yourself and nearby allies. Grand Sigil also increases armor and provides the existing lethal-hit recovery effect.") } : new AltarSkillEntry[] { new AltarSkillEntry("Lightning Relic","lightning_relic","Plant a Cross that pulses Lightning and Spirit damage and inflicts Cripple. Recast to relinquish it. Placing it near Holy Relic creates Consecrated Ground."), new AltarSkillEntry("Holy Relic","holy_relic","Raise a healing and buffing Cross. Recast to relinquish it. Placing it near Lightning Relic creates Consecrated Ground."), new AltarSkillEntry("Divine Intervention","divine_intervention","10m self-centered Holy Wave-style AoE. Aim directly at Lightning Relic or Holy Relic to Cross Cast the same AoE from that Cross instead."), new AltarSkillEntry("Grand Cross","grand_cross","Self-cast crossing Ghost blades that travel forward, dealing persistent Lightning and Spirit damage with Spirit Burn."), new AltarSkillEntry("Heaven's Judgement","heavens_judgement","Call a barrage of holy beams around yourself or an aimed active Cross. Inflicts Frost."), new AltarSkillEntry("Lightning Tempest (Ultimate)","lightning_tempest","Unleash a Lightning barrage that refreshes Frost, Fire Burn, Spirit Burn, Zap and Expose.") };
+                case "Wizard": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Overcharge","overcharge","Activate the Wizard's existing Overcharge buff."), new AltarSkillEntry("Staff Charge","staff_charge","Charge a held Staff shot through three stages. Charging consumes Eitr; the first stage expands the impact radius and later stages increase damage.") } : new AltarSkillEntry[] { new AltarSkillEntry("Gravity Dominion","gravity_dominion","Create a gravitational field at the targeted area that controls enemies inside it."), new AltarSkillEntry("Astral Greatblade","astral_greatblade","Wind up and aim an astral blade attack. Holding the charge increases its power."), new AltarSkillEntry("Frost Nova","frost_nova","Release an area burst of Frost around the caster."), new AltarSkillEntry("Meteor Fall","meteor_fall","Call a meteor onto the targeted ground area."), new AltarSkillEntry("Astral Railcannon","astral_railcannon","Assemble and fire an aimed magical beam through the area ahead."), new AltarSkillEntry("Elemental Cataclysm (Ultimate)","elemental_cataclysm","Charge and release the Wizard's large elemental area attack at the targeted location.") };
+                case "Spellcaster": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Riftwalker / Phase Flow","riftwalker___phase_flow","Create linked Rifts and interact to travel between them. Void Step and Rift travel trigger the existing Phase Flow mobility effect.") } : new AltarSkillEntry[] { new AltarSkillEntry("Rift Echo","rift_echo","Create an echo window that duplicates attacks with weaker magical shots."), new AltarSkillEntry("Void Step","void_step","Teleport to a targeted ground location or in your free-aim direction."), new AltarSkillEntry("Arcane Phalanx","arcane_phalanx","Summon hovering arcane swords and fire them with attacks. Cooldown begins after the swords are consumed."), new AltarSkillEntry("Afterimage Arsenal","afterimage_arsenal","Create supporting afterimages that add weaker follow-up shots."), new AltarSkillEntry("Arcane Rupture (Ultimate)","arcane_rupture","Spend an independently recharging charge to rupture a targeted area while retaining movement.") };
+            }
+            return new AltarSkillEntry[0];
         }
 
         private void BuildBaseClassPage()
         {
             _baseClassPage = CreateUiGroup("DragonAltarBaseClassPage");
-
-            CreateWrappedText(
-                _baseClassPage.transform,
-                "BASE CLASSES",
-                new Vector2(-285f, 302f),
-                330f,
-                34f,
-                22,
-                GUIManager.Instance.ValheimOrange,
-                true,
-                TextAnchor.MiddleCenter
-            );
-
-            CreateBaseClassNavRow("Warrior", "Front-line physical bruiser", 170f, new Color(1f, 0.63f, 0.28f, 1f));
-            CreateBaseClassNavRow("Cleric", "Holy hybrid support", 25f, new Color(0.55f, 0.86f, 1f, 1f));
-            CreateBaseClassNavRow("Sorcerer", "Eitr-first magic specialist", -120f, new Color(0.78f, 0.52f, 1f, 1f));
-
-            CreateDarkPanel(_baseClassPage.transform, new Vector2(190f, -5f), new Vector2(535f, 585f), new Color(1f, 0.60f, 0.24f, 1f));
-            _baseDetailTitle = CreateWrappedText(_baseClassPage.transform, "WARRIOR", new Vector2(190f, 250f), 390f, 36f, 23, Color.white, true, TextAnchor.MiddleCenter);
-            _baseDetailRole = CreateWrappedText(_baseClassPage.transform, "FRONT-LINE PHYSICAL BRUISER", new Vector2(190f, 214f), 390f, 28f, 14, new Color(0.90f, 0.78f, 0.58f, 1f), true, TextAnchor.MiddleCenter);
-            _baseDetailBody = CreateWrappedText(_baseClassPage.transform, "", new Vector2(190f, 45f), 475f, 285f, 13, new Color(0.94f, 0.94f, 0.94f, 1f), false, TextAnchor.UpperLeft);
-            _baseDetailSkills = CreateWrappedText(_baseClassPage.transform, "", new Vector2(190f, -152f), 475f, 95f, 13, new Color(0.84f, 0.90f, 1f, 1f), false, TextAnchor.UpperLeft);
-
-            GameObject choose = GUIManager.Instance.CreateButton(
-                text: "Choose Warrior",
-                parent: _baseClassPage.transform,
-                anchorMin: new Vector2(0.5f, 0.5f),
-                anchorMax: new Vector2(0.5f, 0.5f),
-                position: new Vector2(85f, -265f),
-                width: 210f,
-                height: 42f
-            );
+            AltarImage("BaseHeadingPlaque", _baseClassPage.transform, new Vector2(-282f, 218f), new Vector2(380f, 62f), AltarSprite("Confirm_Plaque.png"), Color.white, false);
+            CreateWrappedText(_baseClassPage.transform, "BASE CLASSES", new Vector2(-282f, 218f), 350f, 42f, 28, AltarGold, true, TextAnchor.MiddleCenter);
+            CreateBaseClassNavRow("Warrior", "Front-line physical bruiser", 95f, Color.white);
+            CreateBaseClassNavRow("Cleric", "Holy hybrid support", -75f, Color.white);
+            CreateBaseClassNavRow("Sorcerer", "Eitr-first magic specialist", -245f, Color.white);
+            _baseDetailTitle = CreateWrappedText(_baseClassPage.transform, "", new Vector2(215f, 228f), 500f, 36f, 30, AltarGold, true, TextAnchor.MiddleCenter);
+            _baseDetailRole = CreateWrappedText(_baseClassPage.transform, "", new Vector2(215f, 203f), 500f, 20f, 14, AltarGold, false, TextAnchor.MiddleCenter);
+            BuildAltarSkillDetails(_baseClassPage.transform, false);
+            Button choose = AltarButton(_baseClassPage.transform, "Choose Warrior", new Vector2(80f, -352f), new Vector2(248f, 56f), RequestBaseClassConfirmation);
             _chooseBaseButtonText = choose.GetComponentInChildren<Text>();
-            choose.GetComponent<Button>().onClick.AddListener(RequestBaseClassConfirmation);
+            AltarButton(_baseClassPage.transform, "View Advancements", new Vector2(345f, -352f), new Vector2(258f, 56f), OpenFocusedAdvancements);
+        }
 
-            GameObject view = GUIManager.Instance.CreateButton(
-                text: "View Advancements",
-                parent: _baseClassPage.transform,
-                anchorMin: new Vector2(0.5f, 0.5f),
-                anchorMax: new Vector2(0.5f, 0.5f),
-                position: new Vector2(300f, -265f),
-                width: 210f,
-                height: 42f
-            );
-            view.GetComponent<Button>().onClick.AddListener(OpenFocusedAdvancements);
+        private void AltarClassCard(Transform parent, string name, string role, float y, bool advancement)
+        {
+            Sprite sprite = AltarCardSprite(name);
+            Image image = AltarImage("ClassCard_" + name, parent, new Vector2(-282f, y), new Vector2(388f, 150f), sprite,
+                sprite == null ? new Color(0.90f, 0.84f, 0.72f, 1f) : Color.white, true);
+            Outline outline = image.gameObject.AddComponent<Outline>();
+            outline.effectColor = new Color(1f, 0.74f, 0.23f, 0.95f);
+            outline.effectDistance = new Vector2(2f, -2f);
+            outline.enabled = false;
+            Button button = image.gameObject.AddComponent<Button>();
+            button.targetGraphic = image;
+            ColorBlock colors = button.colors;
+            colors.highlightedColor = new Color(1f, 0.93f, 0.78f, 1f);
+            colors.pressedColor = new Color(0.8f, 0.85f, 0.9f, 1f);
+            button.colors = colors;
+            button.onClick.AddListener(delegate { if (advancement) FocusAdvancement(name); else FocusBaseClass(name); });
+            AltarImage("CardLabelParchment", image.transform, new Vector2(82f, -3f), new Vector2(222f, 124f), AltarLabelVeil(), new Color(0.98f, 0.92f, 0.80f, 0.88f), false);
+            CreateWrappedText(image.transform, name.ToUpper(), new Vector2(82f, 18f), 198f, 58f, 23, AltarInk, true, TextAnchor.MiddleCenter);
+            CreateWrappedText(image.transform, role, new Vector2(82f, -33f), 194f, 40f, 15, AltarInk, false, TextAnchor.MiddleCenter);
+            (advancement ? _altarAdvCards : _altarBaseCards)[name] = image;
+        }
+
+        private void RefreshAltarCards(Dictionary<string, Image> cards, string selected)
+        {
+            foreach (KeyValuePair<string, Image> card in cards)
+            {
+                if (card.Value == null) continue;
+                bool active = card.Key == selected;
+                card.Value.GetComponent<Outline>().enabled = active;
+                ColorBlock colors = card.Value.GetComponent<Button>().colors;
+                colors.normalColor = active ? Color.white : new Color(0.88f, 0.88f, 0.88f, 1f);
+                card.Value.GetComponent<Button>().colors = colors;
+            }
         }
 
         private void CreateBaseClassNavRow(string className, string role, float y, Color accent)
         {
-            CreateIconPlaceholder(_baseClassPage.transform, new Vector2(-430f, y + 10f), 58f, accent);
+            AltarClassCard(_baseClassPage.transform, className, role, y, false);
+        }
 
-            GameObject button = GUIManager.Instance.CreateButton(
-                text: className.ToUpper(),
-                parent: _baseClassPage.transform,
-                anchorMin: new Vector2(0.5f, 0.5f),
-                anchorMax: new Vector2(0.5f, 0.5f),
-                position: new Vector2(-295f, y + 18f),
-                width: 225f,
-                height: 46f
-            );
-            button.GetComponent<Button>().onClick.AddListener(delegate { FocusBaseClass(className); });
-
-            CreateWrappedText(
-                _baseClassPage.transform,
-                role,
-                new Vector2(-295f, y - 23f),
-                245f,
-                28f,
-                13,
-                accent,
-                true,
-                TextAnchor.MiddleCenter
-            );
+        private void CreateAdvancementNavRow(Transform parent, string advancementName, string role, float y, Color accent)
+        {
+            AltarClassCard(parent, advancementName, role, y, true);
         }
 
         private void BuildAdvancementPage()
         {
             _advancementPage = CreateUiGroup("DragonAltarAdvancementPage");
-
-            GameObject back = GUIManager.Instance.CreateButton(
-                text: "< Base Classes",
-                parent: _advancementPage.transform,
-                anchorMin: new Vector2(0.5f, 0.5f),
-                anchorMax: new Vector2(0.5f, 0.5f),
-                position: new Vector2(-385f, 302f),
-                width: 180f,
-                height: 36f
-            );
-            back.GetComponent<Button>().onClick.AddListener(ShowBaseClassPage);
-
-            _advancementBaseSummaryTitle = CreateWrappedText(
-                _advancementPage.transform,
-                "WARRIOR - FRONT-LINE PHYSICAL BRUISER",
-                new Vector2(120f, 306f),
-                650f,
-                28f,
-                16,
-                GUIManager.Instance.ValheimOrange,
-                true,
-                TextAnchor.MiddleCenter
-            );
-
-            _advancementBaseSummaryBody = CreateWrappedText(
-                _advancementPage.transform,
-                "Heavy melee foundation built around Hyper Armor, Broken Bones and direct frontline pressure.",
-                new Vector2(120f, 278f),
-                650f,
-                34f,
-                12,
-                new Color(0.88f, 0.88f, 0.88f, 1f),
-                false,
-                TextAnchor.MiddleCenter
-            );
-
-            _advancementPageTitle = CreateWrappedText(
-                _advancementPage.transform,
-                "CHOOSE AN ADVANCEMENT",
-                new Vector2(-290f, 220f),
-                330f,
-                38f,
-                20,
-                GUIManager.Instance.ValheimOrange,
-                true,
-                TextAnchor.MiddleCenter
-            );
-
-            CreateDarkPanel(_advancementPage.transform, new Vector2(190f, -5f), new Vector2(535f, 585f), new Color(0.86f, 0.62f, 0.30f, 1f));
-
-            _advDetailTitle = CreateWrappedText(_advancementPage.transform, "SWORD MASTER", new Vector2(190f, 250f), 420f, 36f, 23, Color.white, true, TextAnchor.MiddleCenter);
-            _advDetailRole = CreateWrappedText(_advancementPage.transform, "FAST SWORD SPECIALIST", new Vector2(190f, 214f), 420f, 28f, 14, new Color(0.84f, 0.90f, 1f, 1f), true, TextAnchor.MiddleCenter);
-            _advDetailBody = CreateWrappedText(_advancementPage.transform, "", new Vector2(190f, 45f), 475f, 285f, 13, new Color(0.94f, 0.94f, 0.94f, 1f), false, TextAnchor.UpperLeft);
-            _advDetailSkills = CreateWrappedText(_advancementPage.transform, "", new Vector2(190f, -152f), 475f, 95f, 13, new Color(0.84f, 0.90f, 1f, 1f), false, TextAnchor.UpperLeft);
-
-            GameObject choose = GUIManager.Instance.CreateButton(
-                text: "Choose Sword Master",
-                parent: _advancementPage.transform,
-                anchorMin: new Vector2(0.5f, 0.5f),
-                anchorMax: new Vector2(0.5f, 0.5f),
-                position: new Vector2(190f, -265f),
-                width: 270f,
-                height: 42f
-            );
-            _chooseAdvButton = choose.GetComponent<Button>();
-            _chooseAdvButtonText = choose.GetComponentInChildren<Text>();
-            _chooseAdvButton.onClick.AddListener(RequestAdvancementConfirmation);
+            AltarImage("AdvHeadingPlaque", _advancementPage.transform, new Vector2(-282f, 212f), new Vector2(380f, 82f), AltarSprite("Confirm_Plaque.png"), Color.white, false);
+            _advancementPageTitle = CreateWrappedText(_advancementPage.transform, "CHOOSE AN\nADVANCEMENT", new Vector2(-282f, 212f), 340f, 67f, 25, AltarGold, true, TextAnchor.MiddleCenter);
+            AltarButton(_advancementPage.transform, "‹ Base Classes", new Vector2(-282f, 146f), new Vector2(240f, 43f), ShowBaseClassPage);
+            AltarImage("FoundationParchment", _advancementPage.transform, new Vector2(-282f, -326f), new Vector2(376f, 128f), AltarLabelVeil(), new Color(0.98f, 0.92f, 0.8f, 0.9f), false);
+            _advancementBaseSummaryTitle = CreateWrappedText(_advancementPage.transform, "", new Vector2(-282f, -285f), 350f, 50f, 16, AltarInk, true, TextAnchor.MiddleCenter);
+            _advancementBaseSummaryBody = CreateWrappedText(_advancementPage.transform, "", new Vector2(-282f, -348f), 350f, 72f, 14, AltarInk, false, TextAnchor.MiddleCenter);
+            _advDetailTitle = CreateWrappedText(_advancementPage.transform, "", new Vector2(215f, 228f), 500f, 36f, 30, AltarGold, true, TextAnchor.MiddleCenter);
+            _advDetailRole = CreateWrappedText(_advancementPage.transform, "", new Vector2(215f, 203f), 500f, 20f, 14, AltarGold, false, TextAnchor.MiddleCenter);
+            BuildAltarSkillDetails(_advancementPage.transform, true);
+            _chooseAdvButton = AltarButton(_advancementPage.transform, "Choose Advancement", new Vector2(215f, -352f), new Vector2(340f, 56f), RequestAdvancementConfirmation);
+            _chooseAdvButtonText = _chooseAdvButton.GetComponentInChildren<Text>();
         }
 
-        private void CreateAdvancementNavRow(Transform parent, string advancementName, string role, float y, Color accent)
+        private void BuildConfirmationPanel()
         {
-            CreateIconPlaceholder(parent, new Vector2(-430f, y + 10f), 58f, accent);
-
-            GameObject button = GUIManager.Instance.CreateButton(
-                text: advancementName.ToUpper(),
-                parent: parent,
-                anchorMin: new Vector2(0.5f, 0.5f),
-                anchorMax: new Vector2(0.5f, 0.5f),
-                position: new Vector2(-295f, y + 18f),
-                width: 225f,
-                height: 46f
-            );
-            button.GetComponent<Button>().onClick.AddListener(delegate { FocusAdvancement(advancementName); });
-
-            CreateWrappedText(
-                parent,
-                role,
-                new Vector2(-295f, y - 23f),
-                245f,
-                28f,
-                13,
-                accent,
-                true,
-                TextAnchor.MiddleCenter
-            );
+            _confirmationPanel = AltarImage("DragonAltarConfirmation", _classPanel.transform, Vector2.zero, new Vector2(1040f, 900f), null, new Color(0.02f, 0.04f, 0.08f, 0.86f), true).gameObject;
+            Image parchment = AltarImage("ConfirmParchment", _confirmationPanel.transform, Vector2.zero, new Vector2(660f, 370f), null, new Color(0.96f, 0.89f, 0.75f, 1f), true);
+            Outline border = parchment.gameObject.AddComponent<Outline>();
+            border.effectColor = AltarGold;
+            border.effectDistance = new Vector2(3f, -3f);
+            CreateWrappedText(parchment.transform, "CONFIRM YOUR CHOICE", new Vector2(0f, 136f), 610f, 46f, 27, AltarInk, true, TextAnchor.MiddleCenter);
+            _confirmationText = CreateWrappedText(parchment.transform, "", new Vector2(0f, 20f), 580f, 172f, 18, AltarInk, false, TextAnchor.MiddleCenter);
+            AltarButton(parchment.transform, "Yes, Confirm", new Vector2(-150f, -125f), new Vector2(260f, 50f), ConfirmPendingSelection);
+            AltarButton(parchment.transform, "Cancel", new Vector2(150f, -125f), new Vector2(260f, 50f), CancelConfirmation);
+            _confirmationPanel.SetActive(false);
         }
 
         private void RebuildAdvancementNavigation()
         {
+            _altarAdvCards.Clear();
             Transform old = _advancementPage.transform.Find("AdvancementNavigation");
             if (old != null)
+            {
+                old.gameObject.SetActive(false);
                 Destroy(old.gameObject);
+            }
 
             GameObject nav = new GameObject("AdvancementNavigation");
             nav.transform.SetParent(_advancementPage.transform, false);
@@ -874,120 +1001,48 @@ namespace AlbedosCustomClasses
 
             if (_advancementParent == "Warrior")
             {
-                CreateAdvancementNavRow(nav.transform, "Sword Master", "Speed + spirit swordplay", 80f, new Color(0.72f, 0.86f, 1f, 1f));
-                CreateAdvancementNavRow(nav.transform, "Mercenary", "Control + brutal AoE", -75f, new Color(1f, 0.72f, 0.35f, 1f));
+                CreateAdvancementNavRow(nav.transform, "Sword Master", "Speed + spirit swordplay", 25f, new Color(0.72f, 0.86f, 1f, 1f));
+                CreateAdvancementNavRow(nav.transform, "Mercenary", "Control + brutal AoE", -155f, new Color(1f, 0.72f, 0.35f, 1f));
             }
             else if (_advancementParent == "Cleric")
             {
-                CreateAdvancementNavRow(nav.transform, "Paladin", "Holy impact + resilience", 80f, new Color(1f, 0.87f, 0.42f, 1f));
-                CreateAdvancementNavRow(nav.transform, "Priest", "Relics + team support", -75f, new Color(0.60f, 0.91f, 1f, 1f));
+                CreateAdvancementNavRow(nav.transform, "Paladin", "Holy impact + resilience", 25f, new Color(1f, 0.87f, 0.42f, 1f));
+                CreateAdvancementNavRow(nav.transform, "Priest", "Relics + team support", -155f, new Color(0.60f, 0.91f, 1f, 1f));
             }
             else
             {
-                CreateAdvancementNavRow(nav.transform, "Wizard", "Charged large-scale magic", 80f, new Color(0.78f, 0.42f, 1f, 1f));
-                CreateAdvancementNavRow(nav.transform, "Spellcaster", "Rapid mobile spatial magic", -75f, new Color(0.92f, 0.50f, 1f, 1f));
+                CreateAdvancementNavRow(nav.transform, "Wizard", "Charged large-scale magic", 25f, new Color(0.78f, 0.42f, 1f, 1f));
+                CreateAdvancementNavRow(nav.transform, "Spellcaster", "Rapid mobile spatial magic", -155f, new Color(0.92f, 0.50f, 1f, 1f));
             }
         }
 
-        private void BuildConfirmationPanel()
-        {
-            _confirmationPanel = CreateDarkPanel(_classPanel.transform, Vector2.zero, new Vector2(570f, 300f), new Color(1f, 0.64f, 0.28f, 1f));
-            _confirmationPanel.name = "DragonAltarConfirmation";
-
-            CreateWrappedText(
-                _confirmationPanel.transform,
-                "CONFIRM YOUR CHOICE",
-                new Vector2(0f, 105f),
-                500f,
-                38f,
-                22,
-                GUIManager.Instance.ValheimOrange,
-                true,
-                TextAnchor.MiddleCenter
-            );
-
-            _confirmationText = CreateWrappedText(
-                _confirmationPanel.transform,
-                "",
-                new Vector2(0f, 20f),
-                490f,
-                125f,
-                15,
-                Color.white,
-                false,
-                TextAnchor.MiddleCenter
-            );
-
-            GameObject confirm = GUIManager.Instance.CreateButton(
-                text: "Yes, Confirm",
-                parent: _confirmationPanel.transform,
-                anchorMin: new Vector2(0.5f, 0.5f),
-                anchorMax: new Vector2(0.5f, 0.5f),
-                position: new Vector2(-115f, -100f),
-                width: 205f,
-                height: 42f
-            );
-            confirm.GetComponent<Button>().onClick.AddListener(ConfirmPendingSelection);
-
-            GameObject cancel = GUIManager.Instance.CreateButton(
-                text: "Cancel",
-                parent: _confirmationPanel.transform,
-                anchorMin: new Vector2(0.5f, 0.5f),
-                anchorMax: new Vector2(0.5f, 0.5f),
-                position: new Vector2(115f, -100f),
-                width: 205f,
-                height: 42f
-            );
-            cancel.GetComponent<Button>().onClick.AddListener(CancelConfirmation);
-
-            _confirmationPanel.SetActive(false);
-        }
-
-        private void CreateIconPlaceholder(Transform parent, Vector2 position, float size, Color accent)
-        {
-            GameObject icon = new GameObject("DragonAltarIconPlaceholder");
-            icon.transform.SetParent(parent, false);
-
-            RectTransform rect = icon.AddComponent<RectTransform>();
-            rect.anchorMin = new Vector2(0.5f, 0.5f);
-            rect.anchorMax = new Vector2(0.5f, 0.5f);
-            rect.pivot = new Vector2(0.5f, 0.5f);
-            rect.anchoredPosition = position;
-            rect.sizeDelta = new Vector2(size, size);
-
-            Image image = icon.AddComponent<Image>();
-            image.color = new Color(0.025f, 0.025f, 0.035f, 0.82f);
-
-            Outline outline = icon.AddComponent<Outline>();
-            outline.effectColor = new Color(accent.r, accent.g, accent.b, 0.92f);
-            outline.effectDistance = new Vector2(1.5f, -1.5f);
-        }
 
         private void FocusBaseClass(string className)
         {
             _focusedBaseClass = className;
+            if (_altarBaseScroll != null) _altarBaseScroll.verticalNormalizedPosition = 1f;
             UpdateBaseClassDetail();
         }
 
         private void UpdateBaseClassDetail()
         {
+            RefreshAltarCards(_altarBaseCards, _focusedBaseClass);
             string role = GetBaseClassRole(_focusedBaseClass);
             Color accent = GetBaseClassAccent(_focusedBaseClass);
 
             if (_baseDetailTitle != null)
             {
                 _baseDetailTitle.text = _focusedBaseClass.ToUpper();
-                _baseDetailTitle.color = accent;
+                _baseDetailTitle.color = AltarGold;
             }
             if (_baseDetailRole != null)
             {
                 _baseDetailRole.text = role.ToUpper();
-                _baseDetailRole.color = accent;
+                _baseDetailRole.color = AltarGold;
             }
             if (_baseDetailBody != null)
-                _baseDetailBody.text = GetBaseClassDescription(_focusedBaseClass);
-            if (_baseDetailSkills != null)
-                _baseDetailSkills.text = GetBaseClassSkills(_focusedBaseClass);
+                _baseDetailBody.text = AltarOverview(GetBaseClassDescription(_focusedBaseClass));
+            RefreshAltarSkillFooter(_focusedBaseClass, false);
             if (_chooseBaseButtonText != null)
                 _chooseBaseButtonText.text = "Choose " + _focusedBaseClass;
         }
@@ -1002,7 +1057,7 @@ namespace AlbedosCustomClasses
         private void ShowBaseClassPage()
         {
             _classUiPage = 0;
-            _altarConfirm = false;
+            if (_altarSubtitle != null) _altarSubtitle.text = "IMMORTAL HEROES  •  CLASS SELECTION";
             if (_confirmationPanel != null)
                 _confirmationPanel.SetActive(false);
             if (_baseClassPage != null)
@@ -1015,7 +1070,7 @@ namespace AlbedosCustomClasses
         private void ShowAdvancementPage()
         {
             _classUiPage = 1;
-            _altarConfirm = false;
+            if (_altarSubtitle != null) _altarSubtitle.text = "IMMORTAL HEROES  •  ADVANCEMENT SELECTION";
             if (_confirmationPanel != null)
                 _confirmationPanel.SetActive(false);
             if (_baseClassPage != null)
@@ -1024,7 +1079,7 @@ namespace AlbedosCustomClasses
                 _advancementPage.SetActive(true);
 
             if (_advancementPageTitle != null)
-                _advancementPageTitle.text = "CHOOSE AN ADVANCEMENT";
+                _advancementPageTitle.text = "CHOOSE AN\nADVANCEMENT";
             if (_advancementBaseSummaryTitle != null)
                 _advancementBaseSummaryTitle.text = _advancementParent.ToUpper() + "  -  " + GetBaseClassRole(_advancementParent).ToUpper();
             if (_advancementBaseSummaryBody != null)
@@ -1037,22 +1092,23 @@ namespace AlbedosCustomClasses
         private void FocusAdvancement(string advancementName)
         {
             _focusedAdvancement = advancementName;
+            RefreshAltarCards(_altarAdvCards, advancementName);
+            if (_altarAdvScroll != null) _altarAdvScroll.verticalNormalizedPosition = 1f;
             Color accent = GetAdvancementAccent(advancementName);
 
             if (_advDetailTitle != null)
             {
                 _advDetailTitle.text = advancementName.ToUpper();
-                _advDetailTitle.color = accent;
+                _advDetailTitle.color = AltarGold;
             }
             if (_advDetailRole != null)
             {
                 _advDetailRole.text = GetAdvancementRole(advancementName).ToUpper();
-                _advDetailRole.color = accent;
+                _advDetailRole.color = AltarGold;
             }
             if (_advDetailBody != null)
-                _advDetailBody.text = GetAdvancementDescription(advancementName);
-            if (_advDetailSkills != null)
-                _advDetailSkills.text = GetAdvancementSkills(advancementName);
+                _advDetailBody.text = AltarOverview(GetAdvancementDescription(advancementName));
+            RefreshAltarSkillFooter(advancementName, true);
 
             Player player = Player.m_localPlayer;
             string selectedClass = player == null ? string.Empty : GetSelectedClass(player);
@@ -1108,7 +1164,6 @@ namespace AlbedosCustomClasses
 
         private void ShowConfirmation()
         {
-            _altarConfirm = true;
             if (_baseClassPage != null)
                 _baseClassPage.SetActive(false);
             if (_advancementPage != null)
@@ -1134,7 +1189,6 @@ namespace AlbedosCustomClasses
 
         private void ConfirmPendingSelection()
         {
-            _altarConfirm = false;
             string type = _pendingSelectionType;
             string name = _pendingSelectionName;
             string required = _pendingRequiredClass;
@@ -1283,24 +1337,12 @@ namespace AlbedosCustomClasses
             _focusedAdvancement = string.IsNullOrEmpty(selectedAdvancement) ? GetFirstAdvancement(_focusedBaseClass) : selectedAdvancement;
             ShowBaseClassPage();
 
-            // v0.19.2: Immortal Heroes Altar art (IMGUI); the Jotunn panel is the fallback.
-            if (EnsureAltarArt())
-            {
-                _altarOpen = true;
-                _altarConfirm = false;
-                _classPanel.SetActive(false);
-            }
-            else
-            {
-                _classPanel.SetActive(true);
-            }
+            _classPanel.SetActive(true);
             GUIManager.BlockInput(true);
         }
 
         private void CloseClassPanel()
         {
-            _altarOpen = false;
-            _altarConfirm = false;
             if (_classPanel != null)
                 _classPanel.SetActive(false);
             GUIManager.BlockInput(false);
@@ -1557,761 +1599,6 @@ namespace AlbedosCustomClasses
             {
                 return null;
             }
-        }
-
-        // =====================================================================================
-        // v0.19.2 Dragon's Altar - Immortal Heroes look (approved concept docs/source_art/Altar_Concept.png).
-        // Same pages, texts and actions as before; only the presentation is new. The concept is the
-        // reference artwork (802x687 "concept px"); tools/build_altar_assets.py bakes the static parts
-        // and this code draws everything that changes. The Jotunn panel stays as the fallback when the
-        // art is missing.
-        // =====================================================================================
-        private const float AltarW = 802f;
-        private const float AltarH = 687f;
-        private bool _altarOpen;
-        private bool _altarConfirm;
-        private bool _altarArtTried;
-        private Texture2D _altarBackdrop;
-        private Texture2D _altarHighlight;
-        private Texture2D _altarBottomLeftBlank;
-        private Texture2D _altarButtonNavy;
-        private Texture2D _altarButtonLight;
-        private Texture2D _altarDialog;
-        private Texture2D _altarEmblemGlow;
-        private Texture2D _altarHeadingStar;
-        private Texture2D _altarAcBackdrop;
-        private Texture2D _altarAcHighlight;
-        private readonly System.Collections.Generic.Dictionary<string, Texture2D> _altarTex = new System.Collections.Generic.Dictionary<string, Texture2D>();
-        private Rect _altarRect;
-        private GUIStyle _altarTitleStyle;
-        private GUIStyle _altarRoleStyle;
-        private GUIStyle _altarStatusStyle;
-        private GUIStyle _altarHeadingStyle;
-        private GUIStyle _altarBodyStyle;
-        private GUIStyle _altarLabelStyle;
-        private GUIStyle _altarButtonStyle;
-        private GUIStyle _altarDialogTitleStyle;
-
-        private static readonly string[] AltarClasses = { "Warrior", "Cleric", "Sorcerer" };
-        private static readonly Rect[] AltarCards =
-        {
-            new Rect(49f, 240f, 274f, 110f), new Rect(49f, 360f, 274f, 110f), new Rect(49f, 482f, 275f, 111f)
-        };
-
-        private bool EnsureAltarArt()
-        {
-            if (_altarBackdrop != null)
-                return true;
-            if (_altarArtTried)
-                return false;
-            _altarArtTried = true;
-            _altarBackdrop = LoadAltarPng("Altar_Backdrop.png");
-            if (_altarBackdrop == null)
-                return false;
-            _altarHighlight = LoadAltarPng("Altar_CardHighlight.png");
-            _altarBottomLeftBlank = LoadAltarPng("Altar_BottomLeftBlank.png");
-            _altarButtonNavy = LoadAltarPng("Altar_ButtonNavy.png");
-            _altarButtonLight = LoadAltarPng("Altar_ButtonLight.png");
-            _altarDialog = LoadAltarPng("Altar_Dialog.png");
-            _altarEmblemGlow = LoadAltarPng("Altar_EmblemGlow.png");
-            _altarHeadingStar = LoadAltarPng("Altar_HeadingStar.png");
-            _altarAcBackdrop = LoadAltarPng("AltarAC_Backdrop.png");
-            _altarAcHighlight = LoadAltarPng("AltarAC_CardHighlight.png");
-            return true;
-        }
-
-        private Texture2D AltarTexture(string fileName)
-        {
-            Texture2D tex;
-            if (_altarTex.TryGetValue(fileName, out tex))
-                return tex;
-            tex = LoadAltarPng(fileName);
-            _altarTex[fileName] = tex;
-            return tex;
-        }
-
-        // Same late-bound loader as the Skill Tree (Add-Type cannot bind the span-based overloads).
-        private Texture2D LoadAltarPng(string fileName)
-        {
-            try
-            {
-                string assetPath = Paths.PluginPath + "/ImmortalHeroesAssets/" + fileName;
-                Type fileType = typeof(object).Assembly.GetType("System.IO.File");
-                if (fileType == null)
-                    return null;
-                MethodInfo existsMethod = fileType.GetMethod("Exists", BindingFlags.Public | BindingFlags.Static, null, new Type[] { typeof(string) }, null);
-                MethodInfo readMethod = fileType.GetMethod("ReadAllBytes", BindingFlags.Public | BindingFlags.Static, null, new Type[] { typeof(string) }, null);
-                if (existsMethod == null || readMethod == null || !(bool)existsMethod.Invoke(null, new object[] { assetPath }))
-                    return null;
-                byte[] bytes = (byte[])readMethod.Invoke(null, new object[] { assetPath });
-                Texture2D texture = new Texture2D(2, 2, TextureFormat.RGBA32, true);
-                texture.wrapMode = TextureWrapMode.Clamp;
-                texture.filterMode = FilterMode.Trilinear;
-                Type imageConversionType = Type.GetType("UnityEngine.ImageConversion, UnityEngine.ImageConversionModule");
-                MethodInfo loadImageMethod = imageConversionType == null ? null : imageConversionType.GetMethod(
-                    "LoadImage", BindingFlags.Public | BindingFlags.Static, null, new Type[] { typeof(Texture2D), typeof(byte[]), typeof(bool) }, null);
-                if (loadImageMethod == null)
-                {
-                    Destroy(texture);
-                    return null;
-                }
-                object ok = loadImageMethod.Invoke(null, new object[] { texture, bytes, false });
-                if (!(ok is bool) || !(bool)ok)
-                {
-                    Destroy(texture);
-                    return null;
-                }
-                texture.name = "ImmortalHeroes_" + fileName;
-                if (QualitySettings.activeColorSpace == ColorSpace.Linear)
-                {
-                    // Valheim renders in Linear space; IMGUI would show the artwork gamma-lifted.
-                    Color32[] pixels = texture.GetPixels32();
-                    byte[] lut = new byte[256];
-                    for (int i = 0; i < 256; i++)
-                        lut[i] = (byte)Mathf.Clamp(Mathf.RoundToInt(Mathf.GammaToLinearSpace(i / 255f) * 255f), 0, 255);
-                    for (int i = 0; i < pixels.Length; i++)
-                    {
-                        Color32 c = pixels[i];
-                        pixels[i] = new Color32(lut[c.r], lut[c.g], lut[c.b], c.a);
-                    }
-                    texture.SetPixels32(pixels);
-                    texture.Apply(true, false);
-                }
-                return texture;
-            }
-            catch (Exception ex)
-            {
-                Logger.LogWarning("Dragon's Altar art could not load (" + fileName + "): " + ex.Message);
-                return null;
-            }
-        }
-
-        private static Color AltarColor(float r, float g, float b)
-        {
-            if (QualitySettings.activeColorSpace != ColorSpace.Linear)
-                return new Color(r, g, b, 1f);
-            return new Color(Mathf.GammaToLinearSpace(r), Mathf.GammaToLinearSpace(g), Mathf.GammaToLinearSpace(b), 1f);
-        }
-
-        private Rect AltarR(float x, float y, float w, float h)
-        {
-            float s = _altarRect.width / AltarW;
-            return new Rect(Mathf.Round(x * s), Mathf.Round(y * s), Mathf.Round(w * s), Mathf.Round(h * s));
-        }
-
-        private int AltarFont(float conceptPx)
-        {
-            return Mathf.Max(8, Mathf.RoundToInt(conceptPx * _altarRect.width / AltarW));
-        }
-
-        private void EnsureAltarStyles()
-        {
-            if (_altarTitleStyle != null)
-                return;
-            Font bold = GUIManager.Instance != null ? GUIManager.Instance.AveriaSerifBold : null;
-            Font regular = GUIManager.Instance != null ? GUIManager.Instance.AveriaSerif : null;
-
-            _altarTitleStyle = new GUIStyle(GUI.skin.label);
-            if (bold != null) _altarTitleStyle.font = bold;
-            _altarTitleStyle.alignment = TextAnchor.MiddleCenter;
-            _altarTitleStyle.clipping = TextClipping.Overflow;
-            _altarTitleStyle.wordWrap = false;
-            _altarTitleStyle.normal.textColor = AltarColor(0.97f, 0.92f, 0.80f);
-
-            _altarRoleStyle = new GUIStyle(_altarTitleStyle);
-            _altarRoleStyle.normal.textColor = AltarColor(0.86f, 0.82f, 0.72f);
-
-            _altarStatusStyle = new GUIStyle(_altarTitleStyle);
-            _altarStatusStyle.alignment = TextAnchor.MiddleLeft;
-            _altarStatusStyle.normal.textColor = AltarColor(0.55f, 0.10f, 0.08f);
-
-            _altarHeadingStyle = new GUIStyle(_altarTitleStyle);
-            _altarHeadingStyle.alignment = TextAnchor.MiddleLeft;
-            _altarHeadingStyle.normal.textColor = AltarColor(0.52f, 0.12f, 0.10f);
-
-            _altarBodyStyle = new GUIStyle(GUI.skin.label);
-            if (regular != null) _altarBodyStyle.font = regular;
-            _altarBodyStyle.alignment = TextAnchor.UpperLeft;
-            _altarBodyStyle.wordWrap = true;
-            _altarBodyStyle.richText = true;
-            _altarBodyStyle.normal.textColor = AltarColor(0.16f, 0.12f, 0.10f);
-
-            _altarLabelStyle = new GUIStyle(_altarBodyStyle);
-            _altarLabelStyle.alignment = TextAnchor.UpperCenter;
-            _altarLabelStyle.wordWrap = false;
-            _altarLabelStyle.clipping = TextClipping.Overflow;
-
-            _altarButtonStyle = new GUIStyle(_altarTitleStyle);
-
-            _altarDialogTitleStyle = new GUIStyle(_altarTitleStyle);
-        }
-
-        private void OnGUI()
-        {
-            if (!_altarOpen || _altarBackdrop == null)
-                return;
-            EnsureAltarStyles();
-            float h = Mathf.Min(Screen.height * 0.90f, AltarH * 1.7f);
-            float w = h * AltarW / AltarH;
-            if (w > Screen.width * 0.96f)
-            {
-                w = Screen.width * 0.96f;
-                h = w * AltarH / AltarW;
-            }
-            _altarRect = new Rect(Mathf.Round((Screen.width - w) * 0.5f), Mathf.Round((Screen.height - h) * 0.5f), Mathf.Round(w), Mathf.Round(h));
-            GUI.depth = -50;
-            GUI.BeginGroup(_altarRect);
-            GUI.color = Color.white;
-            bool acPage = _classUiPage == 1 && _altarAcBackdrop != null;
-            GUI.DrawTexture(new Rect(0f, 0f, _altarRect.width, _altarRect.height), acPage ? _altarAcBackdrop : _altarBackdrop);
-            if (acPage)
-            {
-                DrawAltarAcPage();
-            }
-            else
-            {
-                DrawAltarCommon();
-                if (_classUiPage == 1)
-                    DrawAltarAdvancementPage();
-                else
-                    DrawAltarBasePage();
-            }
-            if (_altarConfirm)
-                DrawAltarConfirmation();
-            GUI.EndGroup();
-        }
-
-        private bool AltarClick(Rect r)
-        {
-            return GUI.Button(r, GUIContent.none, GUIStyle.none);
-        }
-
-        private bool AltarHover(Rect r)
-        {
-            return !_altarConfirm && r.Contains(Event.current.mousePosition);
-        }
-
-        private void DrawAltarCommon()
-        {
-            Player player = Player.m_localPlayer;
-            string cls = player == null ? "" : GetSelectedClass(player);
-            string adv = player == null ? "" : GetSelectedAdvancement(player);
-            _altarStatusStyle.fontSize = AltarFont(10.5f);
-            GUI.Label(AltarR(303f, 125f, 110f, 20f), string.IsNullOrEmpty(cls) ? "None" : cls, _altarStatusStyle);
-            GUI.Label(AltarR(512f, 125f, 130f, 20f), string.IsNullOrEmpty(adv) ? "None" : adv, _altarStatusStyle);
-
-            if (_altarConfirm)
-                return;
-            Rect reset = AltarR(40f, 33f, 34f, 31f);
-            Rect close = AltarR(724f, 32f, 35f, 31f);
-            if (AltarClick(reset))
-                ResetClassSelection();
-            if (AltarClick(close))
-                CloseClassPanel();
-
-            // Class cards: the focused one wears the gold highlight; hover previews it.
-            string selected = _classUiPage == 1 ? _advancementParent : _focusedBaseClass;
-            for (int i = 0; i < AltarClasses.Length; i++)
-            {
-                Rect card = AltarCards[i];
-                Rect hit = AltarR(card.x, card.y, card.width, card.height);
-                bool isSelected = AltarClasses[i] == selected;
-                bool hover = AltarHover(hit);
-                if ((isSelected || hover) && _altarHighlight != null)
-                {
-                    GUI.color = isSelected ? Color.white : new Color(1f, 1f, 1f, 0.45f);
-                    GUI.DrawTexture(AltarR(card.x - 10f, card.y - 8f, 298f, 126f), _altarHighlight);
-                    GUI.color = Color.white;
-                }
-                if (AltarClick(hit))
-                {
-                    FocusBaseClass(AltarClasses[i]);
-                    if (_classUiPage == 1)
-                        ShowBaseClassPage();
-                }
-            }
-        }
-
-        private void DrawAltarHeader(string title, string role)
-        {
-            DrawAltarBandTitle(550f, 161f, title, role);
-        }
-
-        // Header band title flanked by two stars that follow its width (max 170 concept px) + role line.
-        private void DrawAltarBandTitle(float centerX, float top, string title, string role)
-        {
-            string text = title.ToUpperInvariant();
-            float size = 22f;
-            _altarTitleStyle.fontSize = AltarFont(size);
-            float textW = _altarTitleStyle.CalcSize(new GUIContent(text)).x * AltarW / _altarRect.width;
-            while (size > 13f && textW > 170f)
-            {
-                size -= 0.5f;
-                _altarTitleStyle.fontSize = AltarFont(size);
-                textW = _altarTitleStyle.CalcSize(new GUIContent(text)).x * AltarW / _altarRect.width;
-            }
-            if (_altarHeadingStar != null)
-            {
-                GUI.DrawTexture(AltarR(centerX - textW * 0.5f - 22f, top + 8f, 14f, 14f), _altarHeadingStar);
-                GUI.DrawTexture(AltarR(centerX + textW * 0.5f + 8f, top + 8f, 14f, 14f), _altarHeadingStar);
-            }
-            _altarRoleStyle.fontSize = AltarFont(9f);
-            GUI.Label(AltarR(centerX - 100f, top, 200f, 30f), text, _altarTitleStyle);
-            GUI.Label(AltarR(centerX - 110f, top + 30f, 220f, 16f), SpacedCaps(role), _altarRoleStyle);
-        }
-
-        private static string SpacedCaps(string text)
-        {
-            return string.IsNullOrEmpty(text) ? "" : text.ToUpperInvariant().Replace(" ", "  ");
-        }
-
-        // "<b>HEADING</b>\nparagraph\n\n<b>HEADING</b>..." -> ornament + heading + rule + wrapped body.
-        private void DrawAltarDescription(string text, float top, float bottom)
-        {
-            string[] lines = text.Replace("\r", "").Split('\n');
-            float size = 10.6f;
-            for (int attempt = 0; attempt < 6; attempt++)
-            {
-                if (AltarDescriptionHeight(lines, size) <= bottom - top)
-                    break;
-                size -= 0.5f;
-            }
-            float y = top;
-            for (int i = 0; i < lines.Length; i++)
-            {
-                string line = lines[i].Trim();
-                if (line.Length == 0)
-                {
-                    y += size * 0.45f;
-                    continue;
-                }
-                if (line.StartsWith("<b>") && line.EndsWith("</b>"))
-                {
-                    string heading = line.Substring(3, line.Length - 7);
-                    if (_altarHeadingStar != null)
-                        GUI.DrawTexture(AltarR(365f, y + 2f, 11f, 11f), _altarHeadingStar);
-                    _altarHeadingStyle.fontSize = AltarFont(size + 1.4f);
-                    Rect hr = AltarR(380f, y - 1f, 260f, size + 6f);
-                    GUI.Label(hr, heading, _altarHeadingStyle);
-                    float textW = _altarHeadingStyle.CalcSize(new GUIContent(heading)).x * AltarW / _altarRect.width;
-                    float lx = 386f + textW;
-                    if (_altarHeadingStar != null)
-                        GUI.DrawTexture(AltarR(lx, y + 3f, 9f, 9f), _altarHeadingStar);
-                    GUI.color = new Color(AltarColor(0.62f, 0.44f, 0.20f).r, AltarColor(0.62f, 0.44f, 0.20f).g, AltarColor(0.62f, 0.44f, 0.20f).b, 0.8f);
-                    GUI.DrawTexture(AltarR(lx + 11f, y + 7f, Mathf.Max(0f, 630f - lx - 11f), 1f), Texture2D.whiteTexture);
-                    GUI.color = Color.white;
-                    y += size + 9f;
-                }
-                else
-                {
-                    _altarBodyStyle.fontSize = AltarFont(size);
-                    Rect area = AltarR(365f, y, 300f, 400f);
-                    float h = _altarBodyStyle.CalcHeight(new GUIContent(line), area.width) * AltarW / _altarRect.width;
-                    GUI.Label(AltarR(365f, y, 300f, h + 2f), line, _altarBodyStyle);
-                    y += h + 3f;
-                }
-            }
-        }
-
-        private float AltarDescriptionHeight(string[] lines, float size)
-        {
-            _altarBodyStyle.fontSize = AltarFont(size);
-            float width = AltarR(0f, 0f, 300f, 1f).width;
-            float y = 0f;
-            for (int i = 0; i < lines.Length; i++)
-            {
-                string line = lines[i].Trim();
-                if (line.Length == 0) y += size * 0.45f;
-                else if (line.StartsWith("<b>") && line.EndsWith("</b>")) y += size + 9f;
-                else y += _altarBodyStyle.CalcHeight(new GUIContent(line), width) * AltarW / _altarRect.width + 3f;
-            }
-            return y;
-        }
-
-        private static string[] SplitList(string skillsText, string label)
-        {
-            // "<b>STARTER KIT</b>  A  |  B  |  C\n<b>ADVANCEMENTS</b>  X  |  Y"
-            string[] rows = skillsText.Split('\n');
-            for (int i = 0; i < rows.Length; i++)
-            {
-                string tag = "<b>" + label + "</b>";
-                if (!rows[i].StartsWith(tag))
-                    continue;
-                string[] parts = rows[i].Substring(tag.Length).Split('|');
-                for (int p = 0; p < parts.Length; p++)
-                    parts[p] = parts[p].Trim();
-                return parts;
-            }
-            return new string[0];
-        }
-
-        private static string AltarIconFile(string skill)
-        {
-            switch (skill)
-            {
-                case "Lightning Zap": return "Icon_lightning_zap.png";
-                case "Righteous Strike": return "Icon_righteous_strike_Normal.png";
-                case "Holy Wave": return "Icon_holy_wave.png";
-            }
-            return null;
-        }
-
-        private void DrawAltarBasePage()
-        {
-            DrawAltarHeader(_focusedBaseClass, GetBaseClassRole(_focusedBaseClass));
-            DrawAltarDescription(GetBaseClassDescription(_focusedBaseClass), 224f, 468f);
-
-            string skillsText = GetBaseClassSkills(_focusedBaseClass);
-            string[] kit = SplitList(skillsText, "STARTER KIT");
-            float[] kitX = { 395f, 461f, 526f };
-            _altarLabelStyle.fontSize = AltarFont(7.8f);
-            for (int i = 0; i < kit.Length && i < kitX.Length; i++)
-            {
-                Rect icon = AltarR(kitX[i] - 20f, 509f, 40f, 42f);
-                string file = AltarIconFile(kit[i]);
-                Texture2D tex = file == null ? null : AltarTexture(file);
-                if (tex == null)
-                    tex = AltarTexture("Slot_Empty.png");
-                if (tex != null)
-                    GUI.DrawTexture(icon, tex);
-                if (file == null)
-                    GUI.Label(AltarR(kitX[i] - 20f, 521f, 40f, 16f), Initials(kit[i]), _altarTitleStyle);
-                GUI.Label(AltarR(kitX[i] - 34f, 553f, 68f, 14f), kit[i], _altarLabelStyle);
-            }
-            DrawAltarEmblems(SplitList(skillsText, "ADVANCEMENTS"), "");
-
-            Rect choose = AltarR(365f, 575f, 202f, 47f);
-            Rect view = AltarR(577f, 576f, 173f, 44f);
-            DrawAltarButton(choose, "Choose " + _focusedBaseClass, true, true);
-            DrawAltarButton(view, "View Advancements", false, true);
-            if (!_altarConfirm && AltarClick(choose))
-                RequestBaseClassConfirmation();
-            if (!_altarConfirm && AltarClick(view))
-                OpenFocusedAdvancements();
-        }
-
-        private static string Initials(string name)
-        {
-            string[] words = name.Split(' ');
-            string result = "";
-            for (int i = 0; i < words.Length && result.Length < 3; i++)
-                if (words[i].Length > 0) result += char.ToUpperInvariant(words[i][0]);
-            return result;
-        }
-
-        private void DrawAltarEmblems(string[] advancements, string focused)
-        {
-            float[] cx = { 625f, 704f };
-            _altarLabelStyle.fontSize = AltarFont(9f);
-            for (int i = 0; i < advancements.Length && i < cx.Length; i++)
-            {
-                string name = advancements[i];
-                Rect emblem = AltarR(cx[i] - 23f, 508f, 46f, 46f);
-                bool hover = AltarHover(AltarR(cx[i] - 30f, 504f, 60f, 66f));
-                if ((name == focused || hover) && _altarEmblemGlow != null)
-                {
-                    GUI.color = name == focused ? Color.white : new Color(1f, 1f, 1f, 0.5f);
-                    GUI.DrawTexture(AltarR(cx[i] - 31f, 500f, 62f, 62f), _altarEmblemGlow);
-                    GUI.color = Color.white;
-                }
-                Texture2D tex = AltarTexture("Altar_Emblem_" + name.Replace(" ", "") + ".png");
-                if (tex != null)
-                    GUI.DrawTexture(emblem, tex);
-                GUI.Label(AltarR(cx[i] - 40f, 556f, 80f, 14f), name, _altarLabelStyle);
-                if (!_altarConfirm && AltarClick(AltarR(cx[i] - 30f, 504f, 60f, 66f)))
-                {
-                    _advancementParent = _focusedBaseClass;
-                    _focusedAdvancement = name;
-                    ShowAdvancementPage();
-                }
-            }
-        }
-
-        private void DrawAltarButton(Rect r, string text, bool navy, bool enabled)
-        {
-            bool hover = enabled && AltarHover(r);
-            _altarButtonStyle.fontSize = AltarFont(text.Length > 18 ? 11f : (navy ? 14.5f : 11.5f));
-            Color textColor = navy ? AltarColor(0.96f, 0.92f, 0.82f) : AltarColor(0.14f, 0.16f, 0.26f);
-            if (hover)
-                textColor = navy ? AltarColor(1f, 0.86f, 0.48f) : AltarColor(0.45f, 0.18f, 0.08f);
-            if (!enabled)
-                textColor = AltarColor(0.55f, 0.55f, 0.55f);
-            _altarButtonStyle.normal.textColor = textColor;
-            GUI.Label(new Rect(r.x, r.y - r.height * 0.04f, r.width, r.height), text, _altarButtonStyle);
-        }
-
-        private void DrawAltarAdvancementPage()
-        {
-            DrawAltarHeader(_focusedAdvancement, GetAdvancementRole(_focusedAdvancement));
-            DrawAltarDescription(GetAdvancementDescription(_focusedAdvancement), 224f, 468f);
-
-            // Bottom-left: SKILLS + PASSIVE (replaces the Base Class STARTER KIT row).
-            if (_altarBottomLeftBlank != null)
-                GUI.DrawTexture(AltarR(356f, 480f, 210f, 92f), _altarBottomLeftBlank);
-            _altarHeadingStyle.fontSize = AltarFont(10.5f);
-            _altarHeadingStyle.alignment = TextAnchor.MiddleCenter;
-            GUI.Label(AltarR(380f, 484f, 165f, 16f), "S K I L L S", _altarHeadingStyle);
-            _altarHeadingStyle.alignment = TextAnchor.MiddleLeft;
-            string skillsText = GetAdvancementSkills(_focusedAdvancement).Replace("<b>SKILLS</b>  ", "").Replace("  |  ", ", ");
-            _altarBodyStyle.fontSize = AltarFont(9f);
-            GUI.Label(AltarR(368f, 503f, 192f, 68f), skillsText.Replace("\n<b>", "\n\n<b>"), _altarBodyStyle);
-
-            string[] pair = SplitList(GetBaseClassSkills(_advancementParent), "ADVANCEMENTS");
-            DrawAltarEmblems(pair, _focusedAdvancement);
-
-            Player player = Player.m_localPlayer;
-            bool canChoose = player != null && GetSelectedClass(player) == _advancementParent;
-            Rect choose = AltarR(365f, 575f, 202f, 47f);
-            Rect back = AltarR(577f, 576f, 173f, 44f);
-            DrawAltarButton(choose, canChoose ? "Choose " + _focusedAdvancement : "Choose " + _advancementParent + " First", true, canChoose);
-            DrawAltarButton(back, "< Base Classes", false, true);
-            if (!_altarConfirm && canChoose && AltarClick(choose))
-                RequestAdvancementConfirmation();
-            if (!_altarConfirm && AltarClick(back))
-                ShowBaseClassPage();
-        }
-
-        // =====================================================================================
-        // v0.19.3 Advancement page (approved concept docs/source_art/Altar_AC_Concept.png).
-        // Layout in 802x687 concept px like the base page. The concept's SKILLS list was incomplete:
-        // every Advancement now lists all of its skills (Ultimate marked) and PASSIVE shows the
-        // Mastery + Grace, from the Framework design.
-        // =====================================================================================
-        private static readonly Rect AltarAcCardA = new Rect(35f, 265f, 288f, 117f);
-        private static readonly Rect AltarAcCardB = new Rect(35f, 388f, 288f, 117f);
-
-        private static string[] AltarAcSkills(string ac)
-        {
-            switch (ac)
-            {
-                case "Sword Master": return new string[] { "Moonlight Splitter", "Crescent Cleave", "Blade Storm", "Frenzied Charge", "Eclipse", "Halfmoon Slash" };
-                case "Mercenary": return new string[] { "Stomp", "Circle Swing", "Bonecrusher", "Seismic Guillotine", "Reaver's Orbit", "Whirlwind" };
-                case "Paladin": return new string[] { "Goddess Relic", "Judgement Hammer", "Shield Charge", "Fallen Angel", "Ray of Hope", "Electric Smite" };
-                case "Priest": return new string[] { "Lightning Relic", "Holy Relic", "Divine Intervention", "Grand Cross", "Heaven's Judgement", "Lightning Tempest" };
-                case "Wizard": return new string[] { "Meteor Fall", "Gravity Dominion", "Astral Railcannon", "Astral Greatblade", "Frost Nova", "Elemental Cataclysm" };
-            }
-            return new string[] { "Arcane Phalanx", "Afterimage Arsenal", "Void Step", "Rift Echo", "Gravity Blast", "Arcane Rupture" };
-        }
-
-        // Mastery (permanent AC trait) and Grace (M4 + R) per Advancement.
-        private static string AltarAcMastery(string ac)
-        {
-            switch (ac)
-            {
-                case "Sword Master": return "The Way of the Sword";
-                case "Mercenary": return "Warfreak";
-                case "Paladin": return "Holy Trinity";
-                case "Priest": return "Bless Thy Sinners";
-                case "Wizard": return "Archmage";
-            }
-            return "Yin and Yang";
-        }
-
-        private static string AltarAcGrace(string ac)
-        {
-            switch (ac)
-            {
-                case "Sword Master": return "Knight's Guidance";
-                case "Mercenary": return "Battlecry";
-                case "Paladin": return "Heaven's Light";
-                case "Priest": return "Grand Sigil";
-                case "Wizard": return "Clockwork";
-            }
-            return "Rift Walker";
-        }
-
-        private static string AltarAcCardRole(string ac)
-        {
-            switch (ac)
-            {
-                case "Sword Master": return "Speed + spirit swordplay";
-                case "Mercenary": return "Control + brutal AoE";
-                case "Paladin": return "Holy impact + resilience";
-                case "Priest": return "Relics + team support";
-                case "Wizard": return "Charged large-scale magic";
-            }
-            return "Rapid mobile spatial magic";
-        }
-
-        private static string AltarSkillIcon(string skill)
-        {
-            string id = skill.ToLowerInvariant().Replace("'", "").Replace(" ", "_");
-            switch (id)
-            {
-                case "lightning_zap": case "holy_wave": case "goddess_relic": case "judgement_hammer": case "shield_charge":
-                case "fallen_angel": case "ray_of_hope": case "electric_smite": case "lightning_relic": case "holy_relic":
-                case "divine_intervention": case "grand_cross": case "heavens_judgement": case "lightning_tempest":
-                case "grand_sigil": case "heavens_light":
-                    return "Icon_" + id + ".png";
-                case "righteous_strike": return "Icon_righteous_strike_Normal.png";
-            }
-            return null;
-        }
-
-        private void DrawAltarSkillIcon(Rect r, string skill)
-        {
-            string file = AltarSkillIcon(skill);
-            Texture2D tex = file == null ? null : AltarTexture(file);
-            if (tex != null)
-            {
-                GUI.DrawTexture(r, tex);
-                return;
-            }
-            Texture2D slot = AltarTexture("Slot_Empty.png");
-            if (slot != null)
-                GUI.DrawTexture(r, slot);
-            int old = _altarTitleStyle.fontSize;
-            _altarTitleStyle.fontSize = Mathf.Max(6, Mathf.RoundToInt(r.height * 0.36f));
-            GUI.Label(r, Initials(skill), _altarTitleStyle);
-            _altarTitleStyle.fontSize = old;
-        }
-
-        private void DrawAltarSectionHeader(float x, float y, string text, float lineEnd)
-        {
-            if (_altarHeadingStar != null)
-                GUI.DrawTexture(AltarR(x, y + 2f, 10f, 10f), _altarHeadingStar);
-            _altarHeadingStyle.fontSize = AltarFont(11.5f);
-            GUI.Label(AltarR(x + 13f, y - 2f, 120f, 16f), text, _altarHeadingStyle);
-            float textW = _altarHeadingStyle.CalcSize(new GUIContent(text)).x * AltarW / _altarRect.width;
-            float lx = x + 18f + textW;
-            if (_altarHeadingStar != null)
-                GUI.DrawTexture(AltarR(lx, y + 3f, 8f, 8f), _altarHeadingStar);
-            Color line = AltarColor(0.62f, 0.44f, 0.20f);
-            GUI.color = new Color(line.r, line.g, line.b, 0.8f);
-            GUI.DrawTexture(AltarR(lx + 10f, y + 7f, Mathf.Max(0f, lineEnd - lx - 10f), 1f), Texture2D.whiteTexture);
-            GUI.color = Color.white;
-        }
-
-        private void DrawAltarAcCard(Rect slot, string ac, bool selected)
-        {
-            Rect r = AltarR(slot.x, slot.y, slot.width, slot.height);
-            bool hover = AltarHover(r);
-            Texture2D card = AltarTexture("AltarAC_Card_" + ac.Replace(" ", "") + ".png");
-            bool baked = ac == "Paladin" || ac == "Priest";
-            if (card != null && !(baked && _advancementParent == "Cleric" && ((ac == "Paladin" && slot.y < 300f) || (ac == "Priest" && slot.y > 300f))))
-                GUI.DrawTexture(r, card);
-            if (!baked)
-            {
-                // Name + role on the card's light mist (the concept's Paladin / Priest have them painted).
-                _altarHeadingStyle.fontSize = AltarFont(ac.Length > 10 ? 15f : 18f);
-                Color old = _altarHeadingStyle.normal.textColor;
-                _altarHeadingStyle.normal.textColor = AltarColor(0.12f, 0.09f, 0.10f);
-                GUI.Label(AltarR(slot.x + 104f, slot.y + 36f, 176f, 26f), ac.ToUpperInvariant(), _altarHeadingStyle);
-                _altarHeadingStyle.normal.textColor = old;
-                _altarBodyStyle.fontSize = AltarFont(9.5f);
-                GUI.Label(AltarR(slot.x + 104f, slot.y + 62f, 176f, 16f), AltarAcCardRole(ac), _altarBodyStyle);
-            }
-            if ((selected || hover) && _altarAcHighlight != null)
-            {
-                GUI.color = selected ? Color.white : new Color(1f, 1f, 1f, 0.45f);
-                GUI.DrawTexture(AltarR(slot.x - 8f, slot.y - 8f, 304f, 133f), _altarAcHighlight);
-                GUI.color = Color.white;
-            }
-            if (!_altarConfirm && AltarClick(r))
-                FocusAdvancement(ac);
-        }
-
-        // Name (bold, shrinks to fit 98 concept px) over a small caption.
-        private void DrawAltarPassiveLine(float y, string name, string caption)
-        {
-            float size = 9.4f;
-            _altarBodyStyle.fontSize = AltarFont(size);
-            while (size > 7f && _altarBodyStyle.CalcSize(new GUIContent("<b>" + name + "</b>")).x * AltarW / _altarRect.width > 98f)
-            {
-                size -= 0.4f;
-                _altarBodyStyle.fontSize = AltarFont(size);
-            }
-            GUI.Label(AltarR(660f, y, 104f, 14f), "<b>" + name + "</b>", _altarBodyStyle);
-            _altarBodyStyle.fontSize = AltarFont(9f);
-            GUI.Label(AltarR(660f, y + 12f, 104f, 14f), caption, _altarBodyStyle);
-        }
-
-        private void DrawAltarAcPage()
-        {
-            Player player = Player.m_localPlayer;
-            string cls = player == null ? "" : GetSelectedClass(player);
-            string adv = player == null ? "" : GetSelectedAdvancement(player);
-            _altarStatusStyle.fontSize = AltarFont(10.5f);
-            GUI.Label(AltarR(294f, 117f, 110f, 20f), string.IsNullOrEmpty(cls) ? "None" : cls, _altarStatusStyle);
-            GUI.Label(AltarR(506f, 117f, 130f, 20f), string.IsNullOrEmpty(adv) ? "None" : adv, _altarStatusStyle);
-
-            if (!_altarConfirm)
-            {
-                if (AltarClick(AltarR(30f, 22f, 31f, 29f)))
-                    ResetClassSelection();
-                if (AltarClick(AltarR(722f, 22f, 31f, 29f)))
-                    CloseClassPanel();
-                if (AltarClick(AltarR(35f, 153f, 149f, 35f)))
-                    ShowBaseClassPage();
-            }
-
-            string[] pair = SplitList(GetBaseClassSkills(_advancementParent), "ADVANCEMENTS");
-            if (pair.Length >= 2)
-            {
-                DrawAltarAcCard(AltarAcCardA, pair[0], _focusedAdvancement == pair[0]);
-                DrawAltarAcCard(AltarAcCardB, pair[1], _focusedAdvancement == pair[1]);
-            }
-
-            DrawAltarBandTitle(547f, 154f, _focusedAdvancement, GetAdvancementRole(_focusedAdvancement));
-            DrawAltarDescription(GetAdvancementDescription(_focusedAdvancement), 212f, 462f);
-
-            // SKILLS: every skill of the Advancement, Ultimate marked.
-            string[] skills = AltarAcSkills(_focusedAdvancement);
-            _altarBodyStyle.fontSize = AltarFont(9.4f);
-            for (int i = 0; i < skills.Length; i++)
-            {
-                float y = 495f + i * 14.2f;
-                DrawAltarSkillIcon(AltarR(372f, y, 14f, 14f), skills[i]);
-                string label = i == skills.Length - 1 ? skills[i] + "  (Ultimate)" : skills[i];
-                GUI.Label(AltarR(392f, y - 0.5f, 220f, 15f), label, _altarBodyStyle);
-            }
-
-            // PASSIVE: Mastery, then the Grace (M4 + R).
-            DrawAltarSectionHeader(633f, 478f, "PASSIVE", 752f);
-            Texture2D emblem = AltarTexture("Altar_Emblem_" + _focusedAdvancement.Replace(" ", "") + ".png");
-            if (emblem != null)
-                GUI.DrawTexture(AltarR(632f, 496f, 24f, 24f), emblem);
-            DrawAltarPassiveLine(496f, AltarAcMastery(_focusedAdvancement), "Mastery");
-            DrawAltarSkillIcon(AltarR(632f, 530f, 24f, 24f), AltarAcGrace(_focusedAdvancement));
-            DrawAltarPassiveLine(530f, AltarAcGrace(_focusedAdvancement), "Grace  (M4 + R)");
-
-            bool canChoose = player != null && cls == _advancementParent;
-            Rect choose = AltarR(434f, 580f, 214f, 43f);
-            DrawAltarButton(choose, canChoose ? "Choose " + _focusedAdvancement : "Choose " + _advancementParent + " First", true, canChoose);
-            if (!_altarConfirm && canChoose && AltarClick(choose))
-                RequestAdvancementConfirmation();
-        }
-
-        private void DrawAltarConfirmation()
-        {
-            GUI.color = new Color(0f, 0f, 0f, 0.55f);
-            GUI.DrawTexture(new Rect(0f, 0f, _altarRect.width, _altarRect.height), Texture2D.whiteTexture);
-            GUI.color = Color.white;
-            // Dialog = the right panel's header + parchment joined to its button row and bottom frame
-            // (425 x 238 concept px, tools/build_altar_assets.py), centered.
-            float dw = 425f, dh = 238f;
-            float dx = (AltarW - dw) * 0.5f, dy = (AltarH - dh) * 0.5f;
-            if (_altarDialog != null)
-                GUI.DrawTexture(AltarR(dx, dy, dw, dh), _altarDialog);
-            DrawAltarBandTitle(dx + 198f, dy + 9f, "Confirm", "Your Choice");
-
-            string text = _confirmationText != null ? _confirmationText.text : "";
-            _altarBodyStyle.fontSize = AltarFont(10.5f);
-            _altarBodyStyle.alignment = TextAnchor.UpperCenter;
-            GUI.Label(AltarR(dx + 18f, dy + 66f, 272f, 110f), text, _altarBodyStyle);
-            _altarBodyStyle.alignment = TextAnchor.UpperLeft;
-
-            Rect yes = AltarR(dx + 15f, dy + 181f, 202f, 47f);
-            Rect no = AltarR(dx + 227f, dy + 182f, 173f, 44f);
-            bool keep = _altarConfirm;
-            _altarConfirm = false; // let the dialog's own buttons react to hover
-            DrawAltarButton(yes, "Yes, Confirm", true, true);
-            DrawAltarButton(no, "Cancel", false, true);
-            _altarConfirm = keep;
-            if (AltarClick(yes))
-                ConfirmPendingSelection();
-            else if (AltarClick(no))
-                CancelConfirmation();
         }
 
         private static void ShowCenterMessage(string message)
