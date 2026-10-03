@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.20.8";
+        public const string ModVersion = "0.20.9";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -374,6 +374,14 @@ namespace AlbedosCustomClassesAdvanced
         private ConfigEntry<float> _holyTrinityClubs;
         private ConfigEntry<float> _holyTrinityMinPercent;
         private ConfigEntry<float> _crucibleArmorPercent;
+        private DamageConfig _shockwaveDamage;
+        private ConfigEntry<float> _shockwaveRadius;
+        private ConfigEntry<float> _shockwaveCooldown;
+        private ConfigEntry<float> _parryHyperArmorSeconds;
+        private ConfigEntry<float> _parryEmpowerPercent;
+        private bool _parryEmpowerPending;
+        private string _empoweredSkill = "";
+        private float _empoweredUntil;
 
         private ConfigEntry<float> _lightningRelicCooldown;
         private ConfigEntry<float> _lightningRelicStamina;
@@ -933,6 +941,12 @@ namespace AlbedosCustomClassesAdvanced
             _holyTrinityClubs = Config.Bind("Paladin Holy Trinity", "ClubsBonus", 15f, "Holy Trinity: Clubs skill bonus (effective skill capped at 100).");
             _holyTrinityMinPercent = Config.Bind("Paladin Holy Trinity", "SlashPierceMinPercentOfBlunt", 50f, "Holy Trinity: Slash and Pierce are each raised to at least this percent of the hit's Blunt damage (never lowered).");
             _crucibleArmorPercent = Config.Bind("Priest Grand Sigil", "BarrierArmorPercent", 30f, "Heaven's Crucible: Barrier Armor = this percent of the Priest's current Armor, snapshotted at cast.");
+            // v0.20.9 Bless Thy Sinners - Buckler Parry (Framework).
+            _shockwaveDamage = BindDamage("Priest Holy Shockwave Damage", 0f, 0f, 0f, 0f, 0f, 0f, 0f, 60f);
+            _shockwaveRadius = Config.Bind("Priest Holy Shockwave", "Radius", 10f, "Buckler Parry: Holy Shockwave radius in meters.");
+            _shockwaveCooldown = Config.Bind("Priest Holy Shockwave", "Cooldown", 15f, "Seconds between Holy Shockwaves.");
+            _parryHyperArmorSeconds = Config.Bind("Priest Holy Shockwave", "HyperArmorSeconds", 5f, "Every Buckler Parry grants Hyper Armor for this long.");
+            _parryEmpowerPercent = Config.Bind("Priest Holy Shockwave", "NextSkillDamagePercent", 75f, "Every Buckler Parry empowers the next damaging skill by this percent for that entire skill instance.");
 
             _lightningRelicCooldown = Config.Bind("Priest Lightning Relic", "Cooldown", 14f, "Cooldown starts only after the active Relic is relinquished or its 16s lifetime ends.");
             _lightningRelicStamina = Config.Bind("Priest Lightning Relic", "StaminaCost", 30f, "Stamina cost.");
@@ -7503,6 +7517,7 @@ namespace AlbedosCustomClassesAdvanced
             _damageSkillIds[_heavensDamage] = "heavens_judgement";
             _damageSkillIds[_tempestDamage] = IhPriestUltimate;
             DragonCombat.SkillPowerProvider = IhSkillPower;
+            DragonCombat.BucklerParryHandler = OnBucklerParry;
         }
 
         private float DamagePower(Player attacker, DamageConfig cfg)
@@ -7510,7 +7525,7 @@ namespace AlbedosCustomClassesAdvanced
             string skillId;
             if (cfg == null || !_damageSkillIds.TryGetValue(cfg, out skillId))
                 return 1f;
-            return IhSkillPower(attacker, skillId);
+            return IhSkillPower(attacker, skillId) * IhEmpowerFactor(skillId);
         }
 
         // +TierPowerPercent per Tier (Ultimate uses its automatic Tier).
@@ -7518,7 +7533,79 @@ namespace AlbedosCustomClassesAdvanced
         {
             if (player == null || player != Player.m_localPlayer || _ihTierPowerPercent == null)
                 return 1f;
-            return 1f + Mathf.Max(0f, _ihTierPowerPercent.Value) / 100f * IhGetTier(player, skillId);
+            float power = 1f + Mathf.Max(0f, _ihTierPowerPercent.Value) / 100f * IhGetTier(player, skillId);
+            // Lightning Zap / Righteous Strike damage is computed in Skills.cs through this provider;
+            // they deal no healing, so the parry empowerment can ride on it for them only.
+            if (skillId == "lightning_zap" || skillId == "righteous_strike")
+                power *= IhEmpowerFactor(skillId);
+            return power;
+        }
+
+        // ------------------------------------------------------------------ v0.20.9 Buckler Parry
+        private float IhEmpowerFactor(string skillId)
+        {
+            if (skillId != _empoweredSkill || Time.time > _empoweredUntil)
+                return 1f;
+            return 1f + Mathf.Max(0f, _parryEmpowerPercent.Value) / 100f;
+        }
+
+        // Skills the Priest can cast that deal damage (they consume the empowerment).
+        private static bool IhPriestDamageSkill(string id)
+        {
+            switch (id)
+            {
+                case "lightning_zap": case "righteous_strike": case "lightning_relic": case "divine_intervention":
+                case "grand_cross": case "heavens_judgement": case "lightning_tempest":
+                    return true;
+            }
+            return false;
+        }
+
+        // Seconds one cast of the skill keeps dealing damage ("that entire skill instance").
+        private float IhSkillInstanceSeconds(string id)
+        {
+            switch (id)
+            {
+                case "lightning_relic": return Mathf.Max(0f, _lightningRelicDuration.Value) + 3f;
+                case "grand_cross": return Mathf.Max(0f, _grandCrossWindup.Value) + Mathf.Max(0f, _grandCrossTravelTime.Value) + 1f;
+                case "heavens_judgement": return Mathf.Max(0f, _heavensWindup.Value) + Mathf.Max(0f, _heavensDuration.Value) + 1f;
+                case "lightning_tempest": return Mathf.Max(0f, _tempestDuration.Value) + 2f;
+                case "divine_intervention": return Mathf.Max(0f, _interventionWindup.Value) + 1.5f;
+            }
+            return 2.5f; // Lightning Zap / Righteous Strike: wind-up + impact
+        }
+
+        private void OnBucklerParry(Player player)
+        {
+            if (player == null || player != Player.m_localPlayer || player.IsDead() || !IhIsPriest(player))
+                return;
+
+            // Every parry: Hyper Armor + the next damaging skill is empowered.
+            DragonCombat.ApplyTimedBuff(player, "Priest.BucklerParry", Mathf.Max(0.1f, _parryHyperArmorSeconds.Value), 0f, 0f, 0f, 0f, 0f, 0f, true);
+            _parryEmpowerPending = true;
+
+            const string id = "Priest.HolyShockwave";
+            if (GetCooldownRemaining(id) > 0f)
+            {
+                ShowMessage("Holy Parry - next skill empowered");
+                return;
+            }
+            SetPriestCooldownNow(id, _shockwaveCooldown.Value);
+            ShowMessage("Holy Shockwave - next skill empowered");
+
+            Vector3 center = player.transform.position;
+            float radius = Mathf.Max(1f, _shockwaveRadius.Value);
+            if (_enableVfx.Value)
+                StartCoroutine(AnimateRing(center + Vector3.up * 0.08f, 0.6f, radius, 0.45f, new Color(1f, 0.95f, 0.70f, 0.95f), 0.12f));
+            List<Character> enemies = GetSphereTargets(player, center, radius);
+            for (int i = 0; i < enemies.Count; i++)
+            {
+                Character enemy = enemies[i];
+                // Direct Spirit damage, no DoT; Stuns Small and Big (never Bosses).
+                DealDamageScaled(player, enemy, _shockwaveDamage, 1f, 10f, false);
+                if (!enemy.IsBoss())
+                    DragonCombat.Stun(enemy, center);
+            }
         }
 
         private int IhReadInt(Player player, string key, int fallback)
@@ -8688,6 +8775,25 @@ namespace AlbedosCustomClassesAdvanced
         {
             if (player == null || player.IsDead() || !IhCanCast(player, id))
                 return;
+            // v0.20.9: a pending Buckler Parry empowerment goes to the next damaging skill that
+            // actually starts (cooldown starts, or a Relic / its cast begins), never to a failed press.
+            bool tryEmpower = _parryEmpowerPending && IhIsPriest(player) && IhPriestDamageSkill(id) && IhCooldown(player, id) <= 0f;
+            bool relicBefore = id == "lightning_relic" && (FindPriestRelic(true) != null || _lightningRelicCasting);
+            IhCastSkillNow(player, id);
+            if (tryEmpower && !relicBefore)
+            {
+                bool started = IhCooldown(player, id) > 0f || (id == "lightning_relic" && (FindPriestRelic(true) != null || _lightningRelicCasting));
+                if (started)
+                {
+                    _parryEmpowerPending = false;
+                    _empoweredSkill = id;
+                    _empoweredUntil = Time.time + IhSkillInstanceSeconds(id);
+                }
+            }
+        }
+
+        private void IhCastSkillNow(Player player, string id)
+        {
             switch (id)
             {
                 case "lightning_zap":
@@ -11834,7 +11940,7 @@ namespace AlbedosCustomClassesAdvanced
             }
 
             if (advancement == "Priest")
-                return "Bless Thy Sinners: you and allies within 20m survive a lethal hit at 1 HP, recover 50% HP over 6s, +50% Move Speed and -70% Stamina use. Self 20 min, each ally 40 min.";
+                return "You and allies within 20m survive a lethal hit at 1 HP, then recover 50% HP over 6s with +50% Move Speed and -70% Stamina use. Self 20 min, each ally 40 min.\n\nBuckler: doubled Parry. A Parry grants 5s Hyper Armor and +75% Damage to your next skill, and releases a 10m Holy Shockwave (Spirit damage, Stuns Small and Big; 15s cooldown).";
 
             return "";
         }

@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.20.8";
+        public const string ModVersion = "0.20.9";
 
         internal static DragonCombatPlugin Instance;
 
@@ -470,6 +470,7 @@ namespace DragonsAltarCombat
         {
             MethodInfo prefix = typeof(DragonCombatPlugin).GetMethod("BlockAttackPrefix", BindingFlags.Static | BindingFlags.NonPublic);
             MethodInfo postfix = typeof(DragonCombatPlugin).GetMethod("BlockAttackPostfix", BindingFlags.Static | BindingFlags.NonPublic);
+            MethodInfo restoreOnly = typeof(DragonCombatPlugin).GetMethod("BlockAttackRestorePostfix", BindingFlags.Static | BindingFlags.NonPublic);
             HashSet<MethodBase> seen = new HashSet<MethodBase>();
             int count = 0;
             Type[] types = new Type[] { typeof(Player), typeof(Humanoid) };
@@ -479,7 +480,9 @@ namespace DragonsAltarCombat
                     if (method.Name != "BlockAttack" || !seen.Add(method)) continue;
                     try
                     {
-                        PatchWithHarmony(method, new HarmonyMethod(prefix), new HarmonyMethod(postfix));
+                        // The parry hook reads the bool result; any other overload only restores the shield.
+                        MethodInfo post = method.ReturnType == typeof(bool) ? postfix : restoreOnly;
+                        PatchWithHarmony(method, new HarmonyMethod(prefix), new HarmonyMethod(post));
                         count++;
                     }
                     catch (Exception ex) { Logger.LogWarning("Could not patch BlockAttack: " + ex.Message); }
@@ -502,6 +505,13 @@ namespace DragonsAltarCombat
                 // Valheim applies m_timedBlockBonus only to a successful timed parry.
                 if (DragonCombat.GetClassName(player) == "Warrior")
                     __state.ParryField = SetTemporaryBlockMultiplier(blocker.m_shared, "m_timedBlockBonus", 2f, out __state.OriginalParry);
+                // v0.20.9 Bless Thy Sinners: a Priest holding a Buckler has doubled Parry strength
+                // (Block Force 1.5x comes from Cleric's Blessing below, same as every Cleric shield).
+                if (DragonCombat.GetAdvancementName(player) == "Priest" && DragonCombat.IsBuckler(blocker))
+                {
+                    __state.ParryField = SetTemporaryBlockMultiplier(blocker.m_shared, "m_timedBlockBonus", 2f, out __state.OriginalParry);
+                    __state.BucklerParryWindow = DragonCombat.IsInParryWindow(player);
+                }
                 if (DragonCombat.GetClassName(player) == "Cleric" && DragonCombat.IsShield(blocker))
                 {
                     // Shield Weapon Mastery: every shield gets 1.5x Block Force AND Block Power.
@@ -511,7 +521,7 @@ namespace DragonsAltarCombat
             }
             catch (Exception ex)
             {
-                BlockAttackPostfix(__state);
+                RestoreBlockState(__state);
                 __state = new BlockPatchState();
                 if (Instance != null) Instance.Logger.LogWarning("Block blessing skipped: " + ex.Message);
             }
@@ -527,7 +537,23 @@ namespace DragonsAltarCombat
             return field;
         }
 
-        private static void BlockAttackPostfix(BlockPatchState __state)
+        private static void BlockAttackPostfix(BlockPatchState __state, bool __result, object __instance)
+        {
+            RestoreBlockState(__state);
+            // A successful block that started inside the parry window = a Buckler Parry.
+            if (__result && __state.BucklerParryWindow && DragonCombat.BucklerParryHandler != null)
+            {
+                try { DragonCombat.BucklerParryHandler(__instance as Player); }
+                catch (Exception ex) { if (Instance != null) Instance.Logger.LogWarning("Buckler Parry failed: " + ex.Message); }
+            }
+        }
+
+        private static void BlockAttackRestorePostfix(BlockPatchState __state)
+        {
+            RestoreBlockState(__state);
+        }
+
+        private static void RestoreBlockState(BlockPatchState __state)
         {
             if (__state.Shared == null) return;
             try
@@ -1149,6 +1175,7 @@ namespace DragonsAltarCombat
         public float OriginalParry;
         public float OriginalForce;
         public float OriginalPower;
+        public bool BucklerParryWindow;
     }
 
     internal class AnimatorSpeedRuntimeState
@@ -1401,6 +1428,44 @@ namespace DragonsAltarCombat
             try
             {
                 return TreeHotbarProvider(player);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        // v0.20.9: Bless Thy Sinners Buckler Parry. Advanced (Priest skills) handles the effects.
+        public static Action<Player> BucklerParryHandler;
+
+        // Bucklers by name (vanilla + most mods), or a shield with a buckler-class parry bonus.
+        public static bool IsBuckler(ItemDrop.ItemData item)
+        {
+            if (!IsShield(item) || IsTowerShield(item))
+                return false;
+            string name = item.m_shared.m_name == null ? "" : item.m_shared.m_name.ToLowerInvariant();
+            string prefab = "";
+            try
+            {
+                if (item.m_dropPrefab != null && item.m_dropPrefab.name != null)
+                    prefab = item.m_dropPrefab.name.ToLowerInvariant();
+            }
+            catch
+            {
+            }
+            return name.Contains("buckler") || prefab.Contains("buckler") || item.m_shared.m_timedBlockBonus >= 2.5f;
+        }
+
+        // Same test Valheim uses for a timed block: the block started less than 0.25s ago.
+        public static bool IsInParryWindow(Humanoid humanoid)
+        {
+            try
+            {
+                FieldInfo field = typeof(Humanoid).GetField("m_blockTimer", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (field == null)
+                    return false;
+                float timer = (float)field.GetValue(humanoid);
+                return timer >= 0f && timer < 0.25f;
             }
             catch
             {

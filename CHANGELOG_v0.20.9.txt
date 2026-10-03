@@ -1,0 +1,18 @@
+IMMORTAL HEROES v0.20.9 - BUCKLER PARRY (Bless Thy Sinners)
+
+PRIEST MASTERY - BUCKLER PARRY (Framework)
+- While the Priest holds a Buckler, Parry strength is doubled. Block Force is 1.5x
+  (Cleric's Blessing, the same bonus every Cleric shield has; not stacked twice).
+- Every successful Buckler Parry:
+  - 5s Hyper Armor.
+  - Empowers the Priest's next DAMAGING skill: +75% Damage for that entire skill instance
+    (a Lightning Relic's whole 16s life, every Grand Cross / Heaven's Judgement / Tempest hit).
+    It is used only when the skill really starts (not on cooldown / failed presses) and is
+    not spent on non-damaging skills (Holy Wave, Holy Relic, Heaven's Crucible).
+- Holy Shockwave on Parry: 10m, direct Spirit damage (no DoT), Stuns Small and Big enemies
+  (never Bosses), 15s cooldown. Parries during the cooldown still give Hyper Armor + empower.
+- Buckler = any shield named Buckler (vanilla and most mods) or with a buckler-class parry
+  bonus (2.5x+); tower shields never count.
+- F8 > Cleric > Priest > Holy Shockwave / Holy Shockwave Damage: radius, cooldown, Hyper Armor
+  time, empower %, Spirit damage (default 60: the Framework gives no number).
+- Mastery tooltip and Altar texts describe the parry.

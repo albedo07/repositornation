@@ -1,10 +1,10 @@
-Immortal Heroes v0.20.8 - Test focus
+Immortal Heroes v0.20.9 - Test focus (Priest Buckler Parry)
 
-1. Cleric (any): Max HP +35; HP regen faster; Shield / Staff / 1H Club give no movement penalty
-   (a two-handed Club still does).
-2. Paladin with Club + Shield: Clubs skill +15; heavy armor no longer slows you; weapon hits show
-   Slash and Pierce at least half of Blunt. Swap to a Sword: none of it applies.
-3. Priest Heaven's Crucible (M4+R): no stamina cost, 250 HP Barrier on you and allies within 10m,
-   lasts 16s, 10 min cooldown (Test Cooldowns overrides that).
-4. Priest death-save: 6s recovery, faster movement, actions cost far less stamina for 6s.
-5. Tree: Holy Wave frame Green, Divine Intervention Cyan.
+1. Priest + Bronze or Iron Buckler: parry an attack (block right as it lands).
+   -> "Holy Shockwave - next skill empowered", gold ring 10m, enemies around take Spirit
+   damage and stagger (a boss does not stagger).
+2. Parry again within 15s -> "Holy Parry - next skill empowered" (no shockwave).
+3. After a parry, cast Grand Cross: its hits deal ~1.75x. Cast it again: normal.
+   Cast Holy Wave first: the empowerment stays for the next damaging skill.
+4. With a round shield (not a buckler) or as Paladin: nothing happens on parry.
+5. Hyper Armor: after a parry you are not staggered for 5s.
