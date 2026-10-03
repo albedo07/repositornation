@@ -1,10 +1,5 @@
-Immortal Heroes v0.20.9 - Test focus (Priest Buckler Parry)
-
-1. Priest + Bronze or Iron Buckler: parry an attack (block right as it lands).
-   -> "Holy Shockwave - next skill empowered", gold ring 10m, enemies around take Spirit
-   damage and stagger (a boss does not stagger).
-2. Parry again within 15s -> "Holy Parry - next skill empowered" (no shockwave).
-3. After a parry, cast Grand Cross: its hits deal ~1.75x. Cast it again: normal.
-   Cast Holy Wave first: the empowerment stays for the next damaging skill.
-4. With a round shield (not a buckler) or as Paladin: nothing happens on parry.
-5. Hyper Armor: after a parry you are not staggered for 5s.
+Immortal Heroes v0.21.0 - Test focus (Priest Ascended; F8 Progression switches)
+1. Advanced Priest: Holy Wave frame Magenta + badge; cast: 10m ring, echo ring 2s later.
+2. Holy Wave twice on the same ally within 10s -> Bloom (heal + small gold ring hurting enemies).
+3. Each skill switched to ASCENDED: check the tooltip "Ascended" line and the effect listed.
+4. Lightning Relic Ascended: relinquish it -> blast. Tempest Ascended: storm moves with you.

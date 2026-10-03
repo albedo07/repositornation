@@ -1,0 +1,21 @@
+IMMORTAL HEROES v0.21.0 - PRIEST ASCENDED
+
+New shared mechanic - SANCTIFIED (Priest's Judgement Mark): applied to allies only by Ascended
+Holy Wave and the Ascended Signature, lasts 10s. Sanctifying an already Sanctified ally makes
+them BLOOM: 15% Max HP heal + 4m Spirit pulse, and removes Sanctified (no loops).
+
+- Holy Wave (Ascended Class skill, automatic for an Advanced Priest, permanent on the hotbar):
+  10m, Sanctifies, double instant heal below 30% HP, 5m echo wave 2s later at half healing.
+- Lightning Relic: 14m, pulses arc to 3 more enemies within 6m past the radius, Sanctify allies;
+  the Cross detonates (8m Lightning + Spirit, Stuns Small) when it ends or is relinquished.
+- Holy Relic: 14m, +30% buffs, pulses cleanse Burn / Poison / Frost and Sanctify;
+  final 25% Max HP heal when it ends.
+- Divine Intervention: Cross Cast with both Relics up fires from both; 250 HP Barrier;
+  enemies are staggered inward.
+- Grand Cross: 20m wide, travels 35m, ends in an 8m burst that Stuns Small and Big.
+- Heaven's Judgement: 14m, 3s barrage, beams heal allies 3% Max HP, ends with a Pillar of Heaven.
+- Lightning Tempest (Ultimate): Eye of the Storm - follows the Priest, 12m, allies inside
+  +20% Defense + Hyper Armor; ends with Heaven's Wrath (instant Zap on every enemy inside).
+- Real Ascension rules now work for Priest too (/ih ascend, tree ASCEND): Lv32 Signature,
+  Lv42 one of DI / Grand Cross / Heaven's Judgement, Lv50 Ultimate.
+- F8 Progression: Priest ASCENDED / NORMAL switches. All values in F8 > Cleric > Priest.

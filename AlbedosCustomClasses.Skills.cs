@@ -181,7 +181,7 @@ namespace AlbedosCustomClassesSkills
         public static SkillsPlugin Instance;
         public const string ModGuid = "albedo.customclasses.skills";
         public const string ModName = "Dragon's Altar - Starter Skills";
-        public const string ModVersion = "0.20.9";
+        public const string ModVersion = "0.21.0";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";

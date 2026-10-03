@@ -3,7 +3,7 @@
 ## Working rules
 - User wants short responses and real execution, not long explanations.
 - **RUSH B** = immediately code the obvious requested task, minimal commentary, use latest approved build as baseline, don't redesign unrelated things, verify and package.
-- Latest package: **v0.20.9 — Buckler Parry** (v0.20.8 Cleric per Framework, v0.20.7 Cleric Consistency, v0.20.6 Polish, v0.20.5 Config Window, v0.20.4 Tree and Altar Fixes), built on ChatGPT's v0.20.3 (Universal Tree runtime chassis + uGUI Altar with Altar_Background/Altar_ClassCards; it REPLACED our v0.19.2/0.19.3 IMGUI Altar, which the user accepted as the new base). Older: v0.19.x ours, v0.19.0 ChatGPT. Do NOT change combat/progression logic unless explicitly requested.
+- Latest package: **v0.21.0 — Priest Ascended** (v0.20.9 Buckler Parry, v0.20.8 Cleric per Framework, v0.20.7 Cleric Consistency, v0.20.6 Polish, v0.20.5 Config Window, v0.20.4 Tree and Altar Fixes), built on ChatGPT's v0.20.3 (Universal Tree runtime chassis + uGUI Altar with Altar_Background/Altar_ClassCards; it REPLACED our v0.19.2/0.19.3 IMGUI Altar, which the user accepted as the new base). Older: v0.19.x ours, v0.19.0 ChatGPT. Do NOT change combat/progression logic unless explicitly requested.
 - Never patch visual problems by drawing random rectangles over the reference asset. Keep approved artwork intact; make layout/components fit properly.
 
 ## Framework doc (source of truth for design)
@@ -62,6 +62,11 @@
 - v0.20.8 (user: "the docs are updated, follow them"): Framework doc = source of truth for mechanics too. Implemented Cleric's Blessing HP/regen/movement, Holy Trinity (`DragonCombat.IsHolyTrinityActive`; old Elemental Savant/Holy Knight retired via `IsPaladinPassive` = false), Heaven's Crucible values (`*_v0208` keys) + 30% Armor snapshot, Bless Thy Sinners 6s / 40 min / -70% stamina use (`DragonCombat.ApplyStaminaUseCut`, Player.UseStamina prefix). v0.20.9 Buckler Parry done: CombatRuntime BlockAttack prefix doubles parry for Priest + `DragonCombat.IsBuckler`, timed-block check `IsInParryWindow` (m_blockTimer < 0.25) -> `DragonCombat.BucklerParryHandler` -> Advanced `OnBucklerParry` (Hyper Armor 5s every parry, `_parryEmpowerPending` consumed by the next damaging skill that really starts in `IhCastSkill`, `IhEmpowerFactor` via DamagePower / LZ+RS provider for `IhSkillInstanceSeconds`; Holy Shockwave 10m Spirit 60 default, Stun non-bosses, 15s CD).
 - Colour rule (user): non-damaging skills are Green; any skill that deals damage is Cyan (Holy Wave Green, Divine Intervention Cyan; Ray of Hope Green as the Framework's Buff example).
 - Altar skill inspection shows the description only (first paragraph of the tree tooltip), no stats.
+
+## Priest Ascended (approved 2026-10-03, implemented v0.21.0, `Priest * Ascended` config sections)
+- Sanctified (ally mark, 10s) from Ascended Holy Wave + Ascended Signature only; re-applying = Bloom (15% heal + 4m Spirit pulse, removes it). Holy Wave = Priest's Ascended MC (auto on Advance, permanent).
+- Holy Wave 10m + echo 5m/50% after 2s, x2 instant heal <30% HP · Lightning Relic 14m, 3 arcs, Sanctify, end blast 8m Stun Small · Holy Relic 14m, +30% buffs, cleanse, Sanctify, end heal 25% · DI dual Cross Cast, 250 Barrier, inward stagger · Grand Cross 20m/35m + 8m burst Stun Small/Big · Heaven's Judgement 14m, 3s, beams heal 3%, Pillar · Tempest follows Priest 12m, allies +20% Def + Hyper Armor, end Zap detonation.
+- User rule: be short, no fluff, min-max tokens.
 
 ## Ascended designs (approved so far; tooltip header "ASCENDED - <SKILL>", names unchanged)
 - Paladin Righteous Strike (Ascended MC): 7m, applies Judgement Mark, Expose 8s, a second smaller strike (3m, 0.5x) when it detonates a Mark; also spawns 12 Lightning Trails in all directions, 7m range, faster than Electric Smite's trails, each applying Spirit DoT for 6s.

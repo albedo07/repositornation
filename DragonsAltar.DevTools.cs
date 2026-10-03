@@ -40,7 +40,7 @@ namespace DragonsAltarDevTools
     {
         public const string ModGuid = "albedo.customclasses.devtools";
         public const string ModName = "Dragon's Altar - Developer Tools";
-        public const string ModVersion = "0.20.9";
+        public const string ModVersion = "0.21.0";
 
         public static DeveloperToolsPlugin Instance;
 
@@ -58,6 +58,8 @@ namespace DragonsAltarDevTools
         private static readonly string[] SorcererGroups = { "Sorcerer", "Wizard", "Spellcaster" };
         private static readonly string[] AscendableSkills =
             { "righteous_strike", "goddess_relic", "judgement_hammer", "shield_charge", "fallen_angel", "ray_of_hope", "electric_smite" };
+        private static readonly string[] PriestAscendableSkills =
+            { "holy_wave", "lightning_relic", "holy_relic", "divine_intervention", "grand_cross", "heavens_judgement", "lightning_tempest" };
 
         private ConfigEntry<KeyCode> _toggleKey;
         private ConfigEntry<bool> _enableWorldPreview;
@@ -1201,26 +1203,11 @@ namespace DragonsAltarDevTools
                     list.Add(part);
             }
 
-            GUI.Label(new Rect(588f, 196f, 500f, 22f), "PALADIN", _tabStyle);
             bool changed = false;
-            for (int i = 0; i < AscendableSkills.Length; i++)
-            {
-                string skill = AscendableSkills[i];
-                float y = 226f + i * 40f;
-                bool on = list.Contains(skill);
-                string name = PrettySkill(skill) + (skill == "electric_smite" ? "  (Ultimate)" : "");
-                GUI.Label(new Rect(596f, y + 6f, 300f, 22f), name, _smallStyle);
-                if (GUI.Button(new Rect(920f, y, 160f, 30f), on ? "ASCENDED" : "NORMAL", on ? _onStyle : _offStyle))
-                {
-                    if (on) list.Remove(skill);
-                    else list.Add(skill);
-                    changed = true;
-                }
-            }
-            GUI.Label(new Rect(596f, 226f + AscendableSkills.Length * 40f, 490f, 20f),
-                "Righteous Strike is always Ascended for an Advanced Paladin.", _descStyle);
-            GUI.Label(new Rect(588f, 540f, 500f, 22f), "PRIEST", _tabStyle);
-            GUI.Label(new Rect(596f, 570f, 490f, 40f), "No Ascended versions are designed for Priest yet.", _descStyle);
+            changed |= DrawAscendColumn(list, "PALADIN", AscendableSkills, 588f);
+            changed |= DrawAscendColumn(list, "PRIEST", PriestAscendableSkills, 848f);
+            GUI.Label(new Rect(588f, 520f, 500f, 40f),
+                "Righteous Strike (Paladin) and Holy Wave (Priest) are always Ascended once you Advance.", _descStyle);
             if (changed)
             {
                 SetValue(setting, string.Join(", ", list.ToArray()));
@@ -1228,9 +1215,30 @@ namespace DragonsAltarDevTools
             }
         }
 
+        private bool DrawAscendColumn(List<string> list, string header, string[] skills, float x)
+        {
+            GUI.Label(new Rect(x, 196f, 244f, 22f), header, _tabStyle);
+            bool changed = false;
+            for (int i = 0; i < skills.Length; i++)
+            {
+                string skill = skills[i];
+                float y = 226f + i * 40f;
+                bool on = list.Contains(skill);
+                GUI.Label(new Rect(x + 4f, y + 6f, 150f, 22f), PrettySkill(skill), _smallStyle);
+                if (GUI.Button(new Rect(x + 154f, y, 90f, 30f), on ? "ASCENDED" : "NORMAL", on ? _onStyle : _offStyle))
+                {
+                    if (on) list.Remove(skill);
+                    else list.Add(skill);
+                    changed = true;
+                }
+            }
+            return changed;
+        }
+
         private static string PrettySkill(string id)
         {
             if (id == "fallen_angel") return "Angel Comet";
+            if (id == "heavens_judgement") return "Heaven's Judgement";
             string[] words = id.Split('_');
             for (int i = 0; i < words.Length; i++)
             {

@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.20.9";
+        public const string ModVersion = "0.21.0";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -380,6 +380,14 @@ namespace AlbedosCustomClassesAdvanced
         private ConfigEntry<float> _parryHyperArmorSeconds;
         private ConfigEntry<float> _parryEmpowerPercent;
         private bool _parryEmpowerPending;
+        // v0.21.0 Priest Ascended
+        private ConfigEntry<float> _sanctifiedDuration, _bloomHealPercent, _bloomRadius;
+        private DamageConfig _bloomDamage, _relicAscBlastDamage, _crossAscBurstDamage, _pillarDamage;
+        private ConfigEntry<float> _ahwRadius, _ahwEchoDelay, _ahwEchoRadius, _ahwEchoPercent, _ahwLowHp;
+        private ConfigEntry<float> _relicAscRadius, _relicAscChainRange, _relicAscBlastRadius, _holyRelicAscBuff, _holyRelicAscEndHeal;
+        private ConfigEntry<float> _diAscBarrier, _crossAscWidth, _crossAscRange, _crossAscBurstRadius;
+        private ConfigEntry<float> _hjAscRadius, _hjAscDuration, _hjAscBeamHeal, _hjAscPillarRadius, _tempestAscRadius, _tempestAscDefense;
+        private readonly Dictionary<int, float> _sanctifiedUntil = new Dictionary<int, float>();
         private string _empoweredSkill = "";
         private float _empoweredUntil;
 
@@ -946,6 +954,34 @@ namespace AlbedosCustomClassesAdvanced
             _shockwaveRadius = Config.Bind("Priest Holy Shockwave", "Radius", 10f, "Buckler Parry: Holy Shockwave radius in meters.");
             _shockwaveCooldown = Config.Bind("Priest Holy Shockwave", "Cooldown", 15f, "Seconds between Holy Shockwaves.");
             _parryHyperArmorSeconds = Config.Bind("Priest Holy Shockwave", "HyperArmorSeconds", 5f, "Every Buckler Parry grants Hyper Armor for this long.");
+            const string pa = "Priest Ascended";
+            _sanctifiedDuration = Config.Bind(pa, "SanctifiedDuration", 10f, "Sanctified lasts this long on an ally.");
+            _bloomHealPercent = Config.Bind(pa, "BloomHealPercent", 15f, "Bloom: instant heal, % of the ally's Max HP.");
+            _bloomRadius = Config.Bind(pa, "BloomRadius", 4f, "Bloom: holy pulse radius around the ally.");
+            _bloomDamage = BindDamage("Priest Sanctified Bloom Damage", 0f, 0f, 0f, 0f, 0f, 0f, 0f, 35f);
+            _ahwRadius = Config.Bind("Priest Holy Wave Ascended", "Radius", 10f, "Ascended Holy Wave radius.");
+            _ahwEchoDelay = Config.Bind("Priest Holy Wave Ascended", "EchoDelay", 2f, "Seconds before the echo wave.");
+            _ahwEchoRadius = Config.Bind("Priest Holy Wave Ascended", "EchoRadius", 5f, "Echo wave radius.");
+            _ahwEchoPercent = Config.Bind("Priest Holy Wave Ascended", "EchoHealPercent", 50f, "Echo heal, % of the first wave's heal.");
+            _ahwLowHp = Config.Bind("Priest Holy Wave Ascended", "LowHealthPercent", 30f, "Allies below this % HP get double the instant heal.");
+            _relicAscRadius = Config.Bind("Priest Relics Ascended", "Radius", 14f, "Ascended Lightning / Holy Relic pulse radius.");
+            _relicAscChainRange = Config.Bind("Priest Relics Ascended", "LightningChainRange", 6f, "Ascended Lightning Relic: each pulse arcs to up to 3 more enemies this far past its radius.");
+            _relicAscBlastRadius = Config.Bind("Priest Relics Ascended", "LightningEndBlastRadius", 8f, "Ascended Lightning Relic: blast radius when the Cross ends.");
+            _relicAscBlastDamage = BindDamage("Priest Lightning Relic Ascended Blast Damage", 0f, 0f, 0f, 0f, 0f, 60f, 0f, 60f);
+            _holyRelicAscBuff = Config.Bind("Priest Relics Ascended", "HolyBuffPercent", 30f, "Ascended Holy Relic buff percent (was 20).");
+            _holyRelicAscEndHeal = Config.Bind("Priest Relics Ascended", "HolyEndHealPercent", 25f, "Ascended Holy Relic: final heal, % Max HP, when the Cross ends.");
+            _diAscBarrier = Config.Bind("Priest Divine Intervention Ascended", "BarrierHP", 250f, "Ascended Divine Intervention Barrier HP.");
+            _crossAscWidth = Config.Bind("Priest Grand Cross Ascended", "Width", 20f, "Ascended Grand Cross width.");
+            _crossAscRange = Config.Bind("Priest Grand Cross Ascended", "Range", 35f, "Ascended Grand Cross travel distance.");
+            _crossAscBurstRadius = Config.Bind("Priest Grand Cross Ascended", "BurstRadius", 8f, "Ascended Grand Cross end burst radius.");
+            _crossAscBurstDamage = BindDamage("Priest Grand Cross Ascended Burst Damage", 0f, 0f, 0f, 0f, 0f, 50f, 0f, 50f);
+            _hjAscRadius = Config.Bind("Priest Heavens Judgement Ascended", "Radius", 14f, "Ascended Heaven's Judgement radius.");
+            _hjAscDuration = Config.Bind("Priest Heavens Judgement Ascended", "BarrageDuration", 3f, "Ascended barrage duration.");
+            _hjAscBeamHeal = Config.Bind("Priest Heavens Judgement Ascended", "BeamHealPercent", 3f, "Each beam heals allies in the circle, % Max HP.");
+            _hjAscPillarRadius = Config.Bind("Priest Heavens Judgement Ascended", "PillarRadius", 4f, "Final Pillar of Heaven radius at the centre.");
+            _pillarDamage = BindDamage("Priest Heavens Judgement Pillar Damage", 0f, 0f, 0f, 0f, 0f, 120f, 0f, 120f);
+            _tempestAscRadius = Config.Bind("Priest Lightning Tempest Ascended", "Radius", 12f, "Ascended Tempest radius (follows the Priest).");
+            _tempestAscDefense = Config.Bind("Priest Lightning Tempest Ascended", "AllyDefensePercent", 20f, "Allies inside: Overall Defense bonus (+ Hyper Armor).");
             _parryEmpowerPercent = Config.Bind("Priest Holy Shockwave", "NextSkillDamagePercent", 75f, "Every Buckler Parry empowers the next damaging skill by this percent for that entire skill instance.");
 
             _lightningRelicCooldown = Config.Bind("Priest Lightning Relic", "Cooldown", 14f, "Cooldown starts only after the active Relic is relinquished or its 16s lifetime ends.");
@@ -3732,7 +3768,8 @@ namespace AlbedosCustomClassesAdvanced
 
             float duration = Mathf.Max(0.5f, _lightningRelicDuration.Value);
             float interval = Mathf.Max(0.1f, _lightningRelicInterval.Value);
-            float radius = Mathf.Max(1f, _lightningRelicRadius.Value);
+            bool ascended = IsAscendedSkill("lightning_relic");
+            float radius = Mathf.Max(1f, ascended ? _relicAscRadius.Value : _lightningRelicRadius.Value);
             const float crossHeight = 4.2f;
             Vector3 finalCenter = GetGroundedCrossCenter(target, crossHeight);
             Vector3 sky = DragonCombat.GetIndoorSafeSkyPoint(finalCenter, 5f);
@@ -3800,6 +3837,24 @@ namespace AlbedosCustomClassesAdvanced
                         if (consecrated)
                             DragonCombat.ApplyExpose(targets[i], Mathf.Max(0.1f, _consecratedExposeDuration.Value));
                     }
+                    if (ascended)
+                    {
+                        // Arcs to up to 3 more enemies just past the radius; Sanctifies allies inside.
+                        List<Character> outer = GetSphereTargets(player, target, radius + Mathf.Max(0f, _relicAscChainRange.Value));
+                        int arcs = 0;
+                        for (int i = 0; i < outer.Count && arcs < 3; i++)
+                        {
+                            if (targets.Contains(outer[i]))
+                                continue;
+                            DealDamageScaled(player, outer[i], _lightningRelicDamage, 1f, 6f, false);
+                            if (_enableVfx.Value)
+                                CreateTemporaryBeam(target + Vector3.up * 3f, outer[i].transform.position + Vector3.up, new Color(0.55f, 0.88f, 1f, 0.95f), 0.10f, 0.15f);
+                            arcs++;
+                        }
+                        List<Player> blessed = IhAlliesInRadius(player, target, radius);
+                        for (int i = 0; i < blessed.Count; i++)
+                            IhSanctify(player, blessed[i]);
+                    }
 
                     if (_enableVfx.Value)
                     {
@@ -3814,6 +3869,23 @@ namespace AlbedosCustomClassesAdvanced
                 yield return null;
             }
 
+            if (ascended && player != null && !player.IsDead())
+            {
+                // The Cross detonates when it ends or is relinquished.
+                float blast = Mathf.Max(1f, _relicAscBlastRadius.Value);
+                if (_enableVfx.Value)
+                {
+                    CreateLightning(target, new Color(0.55f, 0.88f, 1f, 1f), 0.35f);
+                    StartCoroutine(AnimateRing(target + Vector3.up * 0.08f, 0.5f, blast, 0.45f, new Color(0.58f, 0.90f, 1f, 0.95f), 0.12f));
+                }
+                List<Character> hit = GetSphereTargets(player, target, blast);
+                for (int i = 0; i < hit.Count; i++)
+                {
+                    DealDamageScaled(player, hit[i], _relicAscBlastDamage, 1f, 10f, false);
+                    if (DragonCombat.IsSmallEnemy(hit[i]))
+                        DragonCombat.Stun(hit[i], target);
+                }
+            }
             FinishPriestRelic(relic);
         }
 
@@ -3864,7 +3936,10 @@ namespace AlbedosCustomClassesAdvanced
 
             float duration = Mathf.Max(2f, _holyRelicDuration.Value);
             float interval = Mathf.Max(0.5f, _holyRelicInterval.Value);
-            float radius = Mathf.Max(1f, _holyRelicRadius.Value);
+            bool ascended = IsAscendedSkill("holy_relic");
+            float radius = Mathf.Max(1f, ascended ? _relicAscRadius.Value : _holyRelicRadius.Value);
+            // Ascended: buffs 30% instead of 20% (same ratio for every buff).
+            float buffScale = ascended ? Mathf.Max(0f, _holyRelicAscBuff.Value) / 20f : 1f;
             const float crossHeight = 4.2f;
             Vector3 finalCenter = GetGroundedCrossCenter(target, crossHeight);
             Vector3 sky = DragonCombat.GetIndoorSafeSkyPoint(finalCenter, 5f);
@@ -3932,14 +4007,19 @@ namespace AlbedosCustomClassesAdvanced
                         bool consecrated = IsInsideConsecratedGround(ally.transform.position);
                         float multiplier = consecrated ? Mathf.Max(1f, _consecratedMultiplier.Value) : 1f;
                         Heal(ally, ally.GetMaxHealth() * Mathf.Max(0f, _holyRelicHealPercent.Value) * multiplier * IhSkillPower(player, "holy_relic") / 100f);
+                        if (ascended)
+                        {
+                            CleanseAilments(ally);
+                            IhSanctify(player, ally);
+                        }
                         DragonCombat.ApplyTimedBuff(
                             ally,
                             "Priest.HolyRelic",
                             Mathf.Max(0.1f, _holyRelicBuffDuration.Value),
-                            Mathf.Max(0f, _holyRelicDamageBuff.Value) * multiplier / 100f,
-                            Mathf.Max(0f, _holyRelicAttackSpeedBuff.Value) * multiplier / 100f,
-                            Mathf.Max(0f, _holyRelicMoveSpeedBuff.Value) * multiplier / 100f,
-                            Mathf.Clamp(_holyRelicDefenseBuff.Value * multiplier, 0f, 95f) / 100f,
+                            Mathf.Max(0f, _holyRelicDamageBuff.Value) * multiplier * buffScale / 100f,
+                            Mathf.Max(0f, _holyRelicAttackSpeedBuff.Value) * multiplier * buffScale / 100f,
+                            Mathf.Max(0f, _holyRelicMoveSpeedBuff.Value) * multiplier * buffScale / 100f,
+                            Mathf.Clamp(_holyRelicDefenseBuff.Value * multiplier * buffScale, 0f, 95f) / 100f,
                             Mathf.Max(0f, _holyRelicRegenBuff.Value) / 100f,
                             0f,
                             true
@@ -3958,6 +4038,15 @@ namespace AlbedosCustomClassesAdvanced
                 yield return null;
             }
 
+            if (ascended && player != null && !player.IsDead())
+            {
+                // Final blessing when the Cross ends or is relinquished.
+                List<Player> blessed = IhAlliesInRadius(player, target, radius);
+                for (int i = 0; i < blessed.Count; i++)
+                    Heal(blessed[i], blessed[i].GetMaxHealth() * Mathf.Max(0f, _holyRelicAscEndHeal.Value) / 100f);
+                if (_enableVfx.Value)
+                    StartCoroutine(AnimateRing(target + Vector3.up * 0.08f, 0.5f, radius, 0.6f, new Color(1f, 0.92f, 0.50f, 0.95f), 0.12f));
+            }
             FinishPriestRelic(relic);
         }
 
@@ -3974,6 +4063,16 @@ namespace AlbedosCustomClassesAdvanced
             DragonCombat.LockSkill(player, windup);
             DragonCombat.PlaySkillPose(player, "Wave", windup + 0.10f);
             StartCoroutine(DivineInterventionRoutine(player, center, windup, crossCast));
+            // Ascended: a Cross Cast while both Relics stand also fires from the other Relic.
+            if (crossCast && IsAscendedSkill("divine_intervention"))
+            {
+                PriestRelicState lightning = FindPriestRelic(true), holy = FindPriestRelic(false);
+                if (lightning != null && holy != null)
+                {
+                    Vector3 other = Vector3.Distance(lightning.Position, center) < 0.5f ? holy.Position : lightning.Position;
+                    StartCoroutine(DivineInterventionRoutine(player, other, windup, true));
+                }
+            }
         }
 
         private IEnumerator DivineInterventionRoutine(Player player, Vector3 center, float windup, bool crossCast)
@@ -3994,6 +4093,9 @@ namespace AlbedosCustomClassesAdvanced
             {
                 DealDamageScaled(player, enemies[i], _interventionDamage, 1f, 12f, false);
                 DragonCombat.ApplyExpose(enemies[i], Mathf.Max(0.1f, _interventionExposeDuration.Value));
+                // Ascended: enemies are yanked toward the centre (stagger aimed inward).
+                if (IsAscendedSkill("divine_intervention") && !enemies[i].IsBoss())
+                    DragonCombat.Stun(enemies[i], enemies[i].transform.position * 2f - center);
             }
 
             List<Player> allies = GetPlayersInSphere(center, radius);
@@ -4016,7 +4118,8 @@ namespace AlbedosCustomClassesAdvanced
                     0f,
                     true
                 );
-                GrantPriestBarrier(ally, Mathf.Max(1f, _interventionBarrierHp.Value), GetArmor(player), Mathf.Max(1f, _interventionBuffDuration.Value));
+                float barrierHp = IsAscendedSkill("divine_intervention") ? _diAscBarrier.Value : _interventionBarrierHp.Value;
+                GrantPriestBarrier(ally, Mathf.Max(1f, barrierHp), GetArmor(player), Mathf.Max(1f, _interventionBuffDuration.Value));
             }
         }
 
@@ -4061,9 +4164,10 @@ namespace AlbedosCustomClassesAdvanced
             if (player == null || player.IsDead())
                 yield break;
 
-            float width = Mathf.Max(1f, _grandCrossWidth.Value);
+            bool ascended = IsAscendedSkill("grand_cross");
+            float width = Mathf.Max(1f, ascended ? _crossAscWidth.Value : _grandCrossWidth.Value);
             float height = Mathf.Max(2f, width * 0.60f);
-            float range = Mathf.Max(1f, _grandCrossRange.Value);
+            float range = Mathf.Max(1f, ascended ? _crossAscRange.Value : _grandCrossRange.Value);
             float travelTime = Mathf.Max(0.1f, _grandCrossTravelTime.Value);
             float tickInterval = Mathf.Max(0.10f, _grandCrossTickInterval.Value);
             Vector3 right = Vector3.Cross(Vector3.up, forward).normalized;
@@ -4139,6 +4243,22 @@ namespace AlbedosCustomClassesAdvanced
 
             if (visualRoot != null)
                 Destroy(visualRoot);
+
+            if (ascended && player != null && !player.IsDead())
+            {
+                // Holy cross burst where the X stops: Stuns Small and Big.
+                Vector3 end = origin + forward * range;
+                float burst = Mathf.Max(1f, _crossAscBurstRadius.Value);
+                if (_enableVfx.Value)
+                    StartCoroutine(AnimateRing(end, 0.5f, burst, 0.45f, new Color(0.72f, 0.94f, 1f, 0.95f), 0.12f));
+                List<Character> hit = GetSphereTargets(player, end, burst);
+                for (int i = 0; i < hit.Count; i++)
+                {
+                    DealDamageScaled(player, hit[i], _crossAscBurstDamage, 1f, 10f, false);
+                    if (!hit[i].IsBoss())
+                        DragonCombat.Stun(hit[i], end);
+                }
+            }
         }
 
         private void CastHeavensJudgement(Player player)
@@ -4159,8 +4279,9 @@ namespace AlbedosCustomClassesAdvanced
         {
             ShowMessage(crossCast ? "Heaven's Judgement - Cross Cast" : "Heaven's Judgement");
 
-            float radius = Mathf.Max(1f, _heavensRadius.Value);
-            float duration = Mathf.Max(0.1f, _heavensDuration.Value);
+            bool ascended = IsAscendedSkill("heavens_judgement");
+            float radius = Mathf.Max(1f, ascended ? _hjAscRadius.Value : _heavensRadius.Value);
+            float duration = Mathf.Max(0.1f, ascended ? _hjAscDuration.Value : _heavensDuration.Value);
             float interval = Mathf.Max(0.1f, _heavensStrikeInterval.Value);
             int beamsPerWave = Mathf.Clamp(_heavensStrikesPerWave.Value, 1, 12);
             float impactRadius = Mathf.Max(0.5f, _heavensStrikeRadius.Value);
@@ -4216,10 +4337,31 @@ namespace AlbedosCustomClassesAdvanced
                         DealDamage(player, enemy, _heavensDamage, 7f, false);
                         DragonCombat.ApplyFrost(enemy, Mathf.Max(0.1f, _heavensFrostDuration.Value));
                     }
+
+                    if (ascended)
+                    {
+                        List<Player> allies = IhAlliesInRadius(player, center, radius);
+                        for (int i = 0; i < allies.Count; i++)
+                            Heal(allies[i], allies[i].GetMaxHealth() * Mathf.Max(0f, _hjAscBeamHeal.Value) / 100f);
+                    }
                 }
 
                 elapsed += interval;
                 yield return new WaitForSeconds(interval);
+            }
+
+            if (ascended && player != null && !player.IsDead())
+            {
+                // Pillar of Heaven at the centre.
+                float pillar = Mathf.Max(0.5f, _hjAscPillarRadius.Value);
+                if (_enableVfx.Value)
+                {
+                    CreateTemporaryBeam(DragonCombat.GetIndoorSafeSkyPoint(center, 9f), center, new Color(1f, 0.96f, 0.70f, 1f), 1.2f, 0.5f);
+                    StartCoroutine(AnimateRing(center + Vector3.up * 0.08f, 0.5f, pillar, 0.4f, new Color(1f, 0.94f, 0.62f, 0.95f), 0.14f));
+                }
+                List<Character> hit = GetSphereTargets(player, center, pillar);
+                for (int i = 0; i < hit.Count; i++)
+                    DealDamageScaled(player, hit[i], _pillarDamage, 1f, 10f, false);
             }
         }
 
@@ -4266,12 +4408,21 @@ namespace AlbedosCustomClassesAdvanced
 
             float duration = Mathf.Max(1f, _tempestDuration.Value);
             float interval = Mathf.Max(0.1f, _tempestStrikeInterval.Value);
-            float radius = Mathf.Max(1f, _tempestRadius.Value);
+            bool ascended = IsAscendedSkill("lightning_tempest");
+            float radius = Mathf.Max(1f, ascended ? _tempestAscRadius.Value : _tempestRadius.Value);
             int maxStrikes = Mathf.Clamp(_tempestMaxStrikes.Value, 1, 7);
             float elapsed = 0f;
 
             while (elapsed < duration)
             {
+                if (ascended && player != null && !player.IsDead())
+                {
+                    // Eye of the Storm: follows the Priest; allies inside get Defense + Hyper Armor.
+                    center = player.transform.position;
+                    List<Player> allies = IhAlliesInRadius(player, center, radius);
+                    for (int i = 0; i < allies.Count; i++)
+                        DragonCombat.ApplyTimedBuff(allies[i], "Priest.EyeOfTheStorm", interval + 0.6f, 0f, 0f, 0f, Mathf.Clamp(_tempestAscDefense.Value, 0f, 95f) / 100f, 0f, 0f, true);
+                }
                 int strikes = UnityEngine.Random.Range(1, maxStrikes + 1);
                 for (int sIndex = 0; sIndex < strikes; sIndex++)
                 {
@@ -4299,6 +4450,17 @@ namespace AlbedosCustomClassesAdvanced
                 }
                 elapsed += interval;
                 yield return new WaitForSeconds(interval);
+            }
+
+            if (ascended && player != null && !player.IsDead())
+            {
+                // Heaven's Wrath: every enemy inside takes an instant Zap detonation.
+                center = player.transform.position;
+                if (_enableVfx.Value)
+                    StartCoroutine(AnimateRing(center + Vector3.up * 0.08f, 0.5f, radius, 0.45f, new Color(1f, 0.40f, 0.36f, 0.95f), 0.14f));
+                List<Character> hit = GetSphereTargets(player, center, radius);
+                for (int i = 0; i < hit.Count; i++)
+                    DragonCombat.ApplyZap(player, hit[i], _tempestZapDamage.Value, 0f, 0f);
             }
         }
 
@@ -7394,6 +7556,8 @@ namespace AlbedosCustomClassesAdvanced
         private const string IhPriestGrace = "grand_sigil";
         private static readonly string[] IhPriestAdvSkills = { "lightning_relic", "holy_relic", "divine_intervention", "grand_cross", "heavens_judgement" };
         private static readonly string[] IhPriestSignatures = { "lightning_relic", "holy_relic" };
+        private static readonly string[] IhPriestNormalAdvSkills = { "divine_intervention", "grand_cross", "heavens_judgement" };
+        private const string IhPriestAscendedClassSkill = "holy_wave";
         private string _ihPreviewBranch = "Paladin";
         private string _ihUiOwner = "";
         private Texture2D _ihPriestBackdropTex;
@@ -7518,6 +7682,9 @@ namespace AlbedosCustomClassesAdvanced
             _damageSkillIds[_tempestDamage] = IhPriestUltimate;
             DragonCombat.SkillPowerProvider = IhSkillPower;
             DragonCombat.BucklerParryHandler = OnBucklerParry;
+            _damageSkillIds[_relicAscBlastDamage] = "lightning_relic";
+            _damageSkillIds[_crossAscBurstDamage] = "grand_cross";
+            _damageSkillIds[_pillarDamage] = "heavens_judgement";
         }
 
         private float DamagePower(Player attacker, DamageConfig cfg)
@@ -7573,6 +7740,95 @@ namespace AlbedosCustomClassesAdvanced
                 case "divine_intervention": return Mathf.Max(0f, _interventionWindup.Value) + 1.5f;
             }
             return 2.5f; // Lightning Zap / Righteous Strike: wind-up + impact
+        }
+
+        // ------------------------------------------------------------------ v0.21.0 Sanctified
+        // Applied only by Ascended Holy Wave and the Ascended Signature. Touching an ally who is
+        // already Sanctified makes them Bloom (heal + holy pulse) and removes it: it never loops.
+        private void IhSanctify(Player caster, Player ally)
+        {
+            if (caster == null || ally == null || ally.IsDead())
+                return;
+            int id = ally.GetInstanceID();
+            float until;
+            if (_sanctifiedUntil.TryGetValue(id, out until) && Time.time < until)
+            {
+                _sanctifiedUntil.Remove(id);
+                Heal(ally, ally.GetMaxHealth() * Mathf.Max(0f, _bloomHealPercent.Value) / 100f);
+                float r = Mathf.Max(0.5f, _bloomRadius.Value);
+                List<Character> enemies = GetSphereTargets(caster, ally.transform.position, r);
+                for (int i = 0; i < enemies.Count; i++)
+                    DealDamageScaled(caster, enemies[i], _bloomDamage, 1f, 6f, false);
+                if (_enableVfx.Value)
+                    StartCoroutine(AnimateRing(ally.transform.position + Vector3.up * 0.1f, 0.3f, r, 0.35f, new Color(1f, 0.95f, 0.65f, 0.95f), 0.10f));
+                return;
+            }
+            _sanctifiedUntil[id] = Time.time + Mathf.Max(0.5f, _sanctifiedDuration.Value);
+        }
+
+        private List<Player> IhAlliesInRadius(Player caster, Vector3 center, float radius)
+        {
+            List<Player> allies = GetPlayersInSphere(center, radius);
+            if (caster != null && !allies.Contains(caster) && Vector3.Distance(caster.transform.position, center) <= radius)
+                allies.Add(caster);
+            return allies;
+        }
+
+        // Ascended Holy Wave: 10m, Sanctifies, low-HP allies get double instant heal, echo wave after 2s.
+        private void CastAscendedHolyWave(Player player)
+        {
+            const string sk = "albedo.customclasses.skills";
+            if (!BeginCast(player, "Priest.AscendedHolyWave", IhCfg(sk, "Cleric.Holy Wave", "Cooldown", 8f), IhCfg(sk, "Cleric.Holy Wave", "StaminaCost", 25f)))
+                return;
+            DragonCombat.LockSkill(player, 0.5f);
+            DragonCombat.PlaySkillPose(player, "Wave", 0.6f);
+            ShowMessage("Holy Wave");
+            StartCoroutine(AscendedHolyWaveRoutine(player));
+        }
+
+        private IEnumerator AscendedHolyWaveRoutine(Player player)
+        {
+            const string sk = "albedo.customclasses.skills";
+            float power = IhSkillPower(player, "holy_wave");
+            float instant = IhCfg(sk, "Cleric.Holy Wave", "ImmediateHeal", 25f) * power;
+            float perSecond = IhCfg(sk, "Cleric.Holy Wave", "HealPercentPerSecond", 5f) * power;
+            float duration = IhCfg(sk, "Cleric.Holy Wave", "Duration", 6f);
+            Vector3 center = player.transform.position;
+            float radius = Mathf.Max(1f, _ahwRadius.Value);
+            if (_enableVfx.Value)
+                StartCoroutine(AnimateRing(center + Vector3.up * 0.08f, 0.6f, radius, 0.6f, new Color(0.62f, 1f, 0.70f, 0.95f), 0.12f));
+            List<Player> allies = IhAlliesInRadius(player, center, radius);
+            for (int i = 0; i < allies.Count; i++)
+            {
+                Player ally = allies[i];
+                bool low = ally.GetHealth() < ally.GetMaxHealth() * Mathf.Max(0f, _ahwLowHp.Value) / 100f;
+                Heal(ally, low ? instant * 2f : instant);
+                StartCoroutine(IhHealOverTime(ally, perSecond, duration));
+                IhSanctify(player, ally);
+            }
+            yield return new WaitForSeconds(Mathf.Max(0.1f, _ahwEchoDelay.Value));
+            if (player == null || player.IsDead())
+                yield break;
+            // Echo: smaller and weaker, never Sanctifies (so one cast cannot Bloom by itself).
+            center = player.transform.position;
+            float echoRadius = Mathf.Max(1f, _ahwEchoRadius.Value);
+            float echo = instant * Mathf.Max(0f, _ahwEchoPercent.Value) / 100f;
+            if (_enableVfx.Value)
+                StartCoroutine(AnimateRing(center + Vector3.up * 0.08f, 0.4f, echoRadius, 0.45f, new Color(0.62f, 1f, 0.70f, 0.80f), 0.09f));
+            allies = IhAlliesInRadius(player, center, echoRadius);
+            for (int i = 0; i < allies.Count; i++)
+                Heal(allies[i], echo);
+        }
+
+        private IEnumerator IhHealOverTime(Player ally, float percentPerSecond, float seconds)
+        {
+            float end = Time.time + Mathf.Max(0f, seconds);
+            while (Time.time < end && ally != null && !ally.IsDead())
+            {
+                yield return new WaitForSeconds(1f);
+                if (ally != null && !ally.IsDead())
+                    Heal(ally, ally.GetMaxHealth() * Mathf.Max(0f, percentPerSecond) / 100f);
+            }
         }
 
         private void OnBucklerParry(Player player)
@@ -7827,6 +8083,11 @@ namespace AlbedosCustomClassesAdvanced
                 return false;
             if (id == IhAscendedClassSkill && IhIsPaladin(player))
                 return true;
+            // v0.21.0: Priest's Ascended Class skill is Holy Wave (Ascends when you Advance).
+            if (id == IhPriestAscendedClassSkill && IhIsPriest(player))
+                return true;
+            if (IhIsPriest(player))
+                return IhPriestSkill(id) && IhAscendedSet(player).Contains(id);
             return !IhPriestSkill(id) && IhIsPaladin(player) && IhAscendedSet(player).Contains(id);
         }
 
@@ -7841,23 +8102,26 @@ namespace AlbedosCustomClassesAdvanced
             message = "";
             int level = IhGetLevel(player);
             HashSet<string> set = new HashSet<string>(IhAscendedSet(player));
-            if (!IhIsPaladin(player))
+            bool priest = IhIsPriest(player);
+            if (!IhIsPaladin(player) && !priest)
             {
-                message = IhIsPriest(player) ? "Priest Ascended variants are not defined in this build. Its normal Tiers and Ultimate Tiers remain available."
-                    : "Only an Advanced Paladin can Ascend Paladin skills.";
+                message = "Only an Advanced Paladin or Priest can Ascend skills.";
                 return false;
             }
-            if (id == IhAscendedClassSkill)
+            if (id == (priest ? IhPriestAscendedClassSkill : IhAscendedClassSkill))
             {
-                message = "Righteous Strike is already Ascended (it Ascends when you Advance).";
+                message = IhSkillName(id) + " is already Ascended (it Ascends when you Advance).";
                 return false;
             }
             string[] group;
             int needLevel;
             int needTier;
-            if (IhContains(IhSignatureSkills, id)) { group = IhSignatureSkills; needLevel = 32; needTier = 5; }
-            else if (IhContains(IhNormalAdvSkills, id)) { group = IhNormalAdvSkills; needLevel = 42; needTier = 5; }
-            else if (id == IhUltimate) { group = new string[] { IhUltimate }; needLevel = 50; needTier = 3; }
+            string[] signatures = priest ? IhPriestSignatures : IhSignatureSkills;
+            string[] normals = priest ? IhPriestNormalAdvSkills : IhNormalAdvSkills;
+            string ultimate = priest ? IhPriestUltimate : IhUltimate;
+            if (IhContains(signatures, id)) { group = signatures; needLevel = 32; needTier = 5; }
+            else if (IhContains(normals, id)) { group = normals; needLevel = 42; needTier = 5; }
+            else if (id == ultimate) { group = new string[] { ultimate }; needLevel = 50; needTier = 3; }
             else
             {
                 message = "That skill cannot Ascend.";
@@ -8432,6 +8696,8 @@ namespace AlbedosCustomClassesAdvanced
                     }
                     break;
                 case "holy_wave":
+                    if (ascended && IhIsPriest(player))
+                        b.Append(IhLine("Ascended", IhPriestAscendedSummary("holy_wave")));
                     b.Append(IhLine("Healing", IhNum(IhCfg(sk, "Cleric.Holy Wave", "ImmediateHeal", 25f) * power) + " HP"));
                     b.Append(IhLine("Regeneration", IhNum(IhCfg(sk, "Cleric.Holy Wave", "HealPercentPerSecond", 5f) * power) + "% of Total HP per second"));
                     b.Append(IhLine("Duration", IhNum(IhCfg(sk, "Cleric.Holy Wave", "Duration", 6f)) + "s"));
@@ -8796,9 +9062,13 @@ namespace AlbedosCustomClassesAdvanced
         {
             switch (id)
             {
+                case "holy_wave":
+                    if (IsAscendedSkill("holy_wave") && IhIsPriest(player)) { CastAscendedHolyWave(player); break; }
+                    if (SkillsPlugin.Instance != null)
+                        SkillsPlugin.Instance.CastFromHotbar(player, id);
+                    break;
                 case "lightning_zap":
                 case "righteous_strike":
-                case "holy_wave":
                     if (SkillsPlugin.Instance != null)
                         SkillsPlugin.Instance.CastFromHotbar(player, id);
                     break;
@@ -8864,7 +9134,8 @@ namespace AlbedosCustomClassesAdvanced
                 case "lightning_zap": return skills == null ? 0f : skills.GetCooldownForUi("Cleric.LightningZap");
                 case "righteous_strike":
                     return IsAscendedSkill(id) ? GetCooldownRemaining("Paladin.AscendedRighteousStrike") : (skills == null ? 0f : skills.GetCooldownForUi("Cleric.RighteousStrike"));
-                case "holy_wave": return skills == null ? 0f : skills.GetCooldownForUi("Cleric.HolyWave");
+                case "holy_wave":
+                    return IsAscendedSkill(id) && IhIsPriest(player) ? GetCooldownRemaining("Priest.AscendedHolyWave") : (skills == null ? 0f : skills.GetCooldownForUi("Cleric.HolyWave"));
                 case "goddess_relic": return GetCooldownRemaining("Paladin.GoddessRelic");
                 case "judgement_hammer": return GetCooldownRemaining("Paladin.JudgementHammer");
                 case "shield_charge": return GetCooldownRemaining("Paladin.ShieldCharge");
@@ -10202,9 +10473,25 @@ namespace AlbedosCustomClassesAdvanced
             result.Apply(false,false);return result;
         }
 
+        // v0.21.0: one "Ascended" line per Ascended Priest skill (header ASCENDED - <SKILL>).
+        private static string IhPriestAscendedSummary(string id)
+        {
+            switch (id)
+            {
+                case "holy_wave": return "10m, Sanctifies allies, double instant heal below 30% HP, 5m echo wave after 2s at half healing";
+                case "lightning_relic": return "14m pulses arc to 3 more enemies and Sanctify allies; the Cross detonates (8m, Stuns Small) when it ends";
+                case "holy_relic": return "14m, +30% buffs, pulses cleanse Burn / Poison / Frost and Sanctify; final 25% Max HP heal when it ends";
+                case "divine_intervention": return "with both Relics up, a Cross Cast fires from both; 250 HP Barrier; enemies are pulled inward";
+                case "grand_cross": return "20m wide, travels 35m, ends in an 8m holy burst that Stuns Small and Big";
+                case "heavens_judgement": return "14m circle, 3s barrage, beams heal allies 3% Max HP, ends with a Pillar of Heaven";
+                case "lightning_tempest": return "follows you, 12m; allies inside get +20% Defense and Hyper Armor; ends by detonating every Zap";
+            }
+            return "";
+        }
+
         private string IhBuildPriestTooltip(Player player, ReferenceNodeUi node, out string title)
         {
-            title = node.TooltipTitle;
+            title = IsAscendedSkill(node.Id) ? "ASCENDED - " + IhSkillName(node.Id).ToUpperInvariant() : node.TooltipTitle;
             string id = node.Id;
             float power = IhSkillPower(player,id);
             System.Text.StringBuilder b = new System.Text.StringBuilder();
@@ -10306,6 +10593,7 @@ namespace AlbedosCustomClassesAdvanced
                     b.Append(IhLine("Key",FormatHotbarBinding(BindGrace)));
                     break;
             }
+            if(IsAscendedSkill(id)) b.Append(IhLine("Ascended",IhPriestAscendedSummary(id)));
             return b.ToString().TrimEnd('\n');
         }
 
@@ -10405,6 +10693,9 @@ namespace AlbedosCustomClassesAdvanced
 
         private bool IsPermanentHotbarSkill(string id)
         {
+            // v0.21.0: Priest's Ascended Class skill (Holy Wave) is permanent like Righteous Strike.
+            if (id == IhPriestAscendedClassSkill && IhIsPriest(Player.m_localPlayer))
+                return IhIsUnlocked(Player.m_localPlayer, id);
             ReferenceNodeUi node = FindReferenceNode(id);
             if (node == null || !node.Mandatory || node.Kind == TreeNodeKind.Grace)
                 return false;
