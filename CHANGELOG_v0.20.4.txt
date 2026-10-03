@@ -1,0 +1,27 @@
+IMMORTAL HEROES v0.20.4 - TREE AND ALTAR FIXES
+Built on ChatGPT's v0.20.3 Universal Tree build (all its features kept).
+
+SKILL TREE
+- Locked skills keep their frame colour. Only the skill art inside the frame turns
+  black and white. The old greyed box was inset by a fixed 7 px and covered the inner
+  edge of the coloured border.
+- Electric Smite (and every Priest skill) art is centred again. Each frame's real
+  opening is now measured, so the grey and the Priest art fill exactly that opening.
+- Frame colours follow the skill category on both branches:
+  Cyan = interchangeable, Navy = Signature, Green = Buff / support,
+  Magenta = Ascended, Pastel Maroon = Ultimate, Red = Ascended Ultimate, Gold = Grace.
+  Priest: Divine Intervention is now Green and Heaven's Judgement is now Cyan
+  (they inherited the Paladin slot colours before). Ascended skills get a Magenta
+  frame instead of a magenta-tinted inner picture; Ascended Ultimate gets a Red frame.
+- New assets: Tree_LockMask.png and Frame_<slot>_<colour>.png
+  (tools/build_tree_frames.py).
+
+ALTAR
+- Removed the dark panel baked around every class card's gold frame
+  (Altar_ClassCards.png now has a transparent margin; tools/build_altar_cards.py).
+- The parchment veil behind the card name and role is now light (30% instead of
+  88%), so the card art shows through. The letters get a soft parchment glow so
+  they stay readable.
+
+UNCHANGED
+Combat, progression, saves, tooltips and Altar actions.

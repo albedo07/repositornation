@@ -1,8 +1,13 @@
-Immortal Heroes v0.19.3 - Test focus (Altar Advancement page)
+Immortal Heroes v0.20.4 - Test focus (tree frames + Altar cards)
 
-1. Altar -> click Cleric -> View Advancements (or a Paladin / Priest emblem).
-2. Advancement page: gold frame on the focused card, click the other card to switch.
-3. SKILLS lists all 6 skills (Ultimate last), PASSIVE shows Mastery + Grace.
-4. < Base Classes returns; Choose <AC> works only for your own class (otherwise "Choose <Class> First").
-5. Try Warrior and Sorcerer: their Advancement cards appear with their names.
-6. Base Classes page still works as in v0.19.2.
+1. Cleric before Advancement -> open the tree (PALADIN and PRIEST previews):
+   locked nodes keep their full coloured border; only the art inside is grey.
+2. Electric Smite / Lightning Tempest art is centred in its frame; padlock in the corner.
+3. PRIEST preview: Divine Intervention frame Green, Heaven's Judgement Cyan,
+   Lightning Relic / Holy Relic Navy. Hotbar icons of the Priest show the same colours.
+4. [Testing] AscendedSkills = goddess_relic,electric_smite -> Goddess Relic frame Magenta,
+   Electric Smite frame Red. Advanced Paladin: Righteous Strike frame Magenta.
+5. Altar: no black panel behind the Warrior / Cleric / Sorcerer cards (and the
+   Advancement cards); the card art is visible behind the name and role text.
+6. If a frame looks wrong, send a screenshot: the art is measured from the tree
+   backdrop, not tested in Valheim here.

@@ -18,7 +18,7 @@ namespace AlbedosCustomClasses
     {
         public const string ModGuid = "albedo.customclasses";
         public const string ModName = "Dragon's Altar";
-        public const string ModVersion = "0.20.3";
+        public const string ModVersion = "0.20.4";
 
         internal const string ClassDataKey = "AlbedoCustomClasses.Class";
         internal const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -921,10 +921,22 @@ namespace AlbedosCustomClasses
             colors.pressedColor = new Color(0.8f, 0.85f, 0.9f, 1f);
             button.colors = colors;
             button.onClick.AddListener(delegate { if (advancement) FocusAdvancement(name); else FocusBaseClass(name); });
-            AltarImage("CardLabelParchment", image.transform, new Vector2(82f, -3f), new Vector2(222f, 124f), AltarLabelVeil(), new Color(0.98f, 0.92f, 0.80f, 0.88f), false);
-            CreateWrappedText(image.transform, name.ToUpper(), new Vector2(82f, 18f), 198f, 58f, 23, AltarInk, true, TextAnchor.MiddleCenter);
-            CreateWrappedText(image.transform, role, new Vector2(82f, -33f), 194f, 40f, 15, AltarInk, false, TextAnchor.MiddleCenter);
+            // v0.20.4: a light veil only, so the card art stays visible behind the text;
+            // a soft parchment glow on the letters keeps them readable on darker art.
+            AltarImage("CardLabelParchment", image.transform, new Vector2(82f, -3f), new Vector2(222f, 124f), AltarLabelVeil(), new Color(0.98f, 0.92f, 0.80f, 0.30f), false);
+            AltarCardTextGlow(CreateWrappedText(image.transform, name.ToUpper(), new Vector2(82f, 18f), 198f, 58f, 23, AltarInk, true, TextAnchor.MiddleCenter));
+            AltarCardTextGlow(CreateWrappedText(image.transform, role, new Vector2(82f, -33f), 194f, 40f, 15, AltarInk, false, TextAnchor.MiddleCenter));
             (advancement ? _altarAdvCards : _altarBaseCards)[name] = image;
+        }
+
+        private static void AltarCardTextGlow(Text label)
+        {
+            Outline glow = label.gameObject.AddComponent<Outline>();
+            glow.effectColor = new Color(0.99f, 0.94f, 0.82f, 0.55f);
+            glow.effectDistance = new Vector2(1.2f, -1.2f);
+            Shadow halo = label.gameObject.AddComponent<Shadow>();
+            halo.effectColor = new Color(0.99f, 0.94f, 0.82f, 0.35f);
+            halo.effectDistance = new Vector2(-1.2f, 1.2f);
         }
 
         private void RefreshAltarCards(Dictionary<string, Image> cards, string selected)

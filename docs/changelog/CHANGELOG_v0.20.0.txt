@@ -1,0 +1,7 @@
+v0.20.0 - Altar UI
+Presentation-only update to the base and Advancement Class Selection menus.
+Adds Altar_Background.png and a nine-card Altar_ClassCards.png atlas.
+Replaces wood panels and icon placeholders with live ornate themed controls.
+Adds safe canvas fitting, full scrolling class details, selected-card highlight,
+button states and matching confirmation styling. Keeps original actions/copy.
+Core compile passed with local references. Live Valheim verification pending.

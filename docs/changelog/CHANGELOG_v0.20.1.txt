@@ -1,0 +1,7 @@
+v0.20.1 - Altar skill inspection and footer polish
+Integrated the reference Skills / Passive section with individual clickable
+entries. Mechanics starts empty; clicking an entry fills only that panel.
+Added selected-entry highlights, native scrolling and larger single passive icons.
+Reused existing Cleric-tree descriptions via a read-only reflection bridge, with
+baseline summaries as fallback. All combat modules and class selection rules are
+unchanged. No new or modified combat skills.

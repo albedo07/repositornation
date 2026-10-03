@@ -1,0 +1,31 @@
+IMMORTAL HEROES v0.20.3 - UNIVERSAL SKILL TREE
+
+INSTALL
+Close Valheim, extract the entire ZIP, then run INSTALL.bat. The installer
+compiles against your installed game assemblies. Prior features are included.
+
+FIXED
+Paladin previously used painted labels and an older locked-state texture;
+Priest used live labels, donor-art frames and separate node geometry.
+Both branches now use the same blank nameplates, live serif name renderer,
+canonical node rectangles, hit areas, tier rows and locked-state renderer.
+Priest donor art supplies symbol interiors only. Background, frame, plaque,
+badge, lock placement and footer geometry stay fixed when changing branches.
+Locked state dims the symbol fields without grey rectangles on the background.
+This establishes the shared presentation for both implemented Cleric branches.
+
+PRESERVED
+Skill names, symbol art and descriptions remain specific to each branch.
+Combat, progression, saves, Altar functionality and tooltip units are unchanged.
+
+VALIDATION
+Core and Advanced, plus CombatRuntime and Skills compile dependencies, passed
+C# 5 compilation against available Valheim/Jotunn references.
+All eight source modules parse. Only three existing presentation methods changed;
+new helpers are presentation-only. No existing gameplay method was changed.
+CPU texture tests verified 642,004 common pixels in BOTH normal and locked
+views, seven identical node/hit layouts, ten lock bounds, common icon bezels
+and distinct Ascended art. Reports are in Validation/UniversalTree.
+Raw validation images omit live text and runtime overlays by design.
+Older validation folders document earlier releases.
+No live Valheim runtime test was available here.

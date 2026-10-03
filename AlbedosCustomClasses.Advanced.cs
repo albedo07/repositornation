@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.20.3";
+        public const string ModVersion = "0.20.4";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1057,7 +1057,7 @@ namespace AlbedosCustomClassesAdvanced
         {
             foreach(Texture2D texture in _ihAscendedIconArt.Values) if(texture!=null) Destroy(texture);
             foreach(Texture2D texture in _ihPolishTextures) if(texture!=null) Destroy(texture);
-            _ihAscendedIconArt.Clear(); _ihPolishTextures.Clear();
+            _ihAscendedIconArt.Clear(); _ihPolishTextures.Clear(); _ihFrameSprites.Clear();
             EndShieldCharge();
             if (_harmony != null)
             {
@@ -8471,6 +8471,7 @@ namespace AlbedosCustomClassesAdvanced
         private void IhDrawLockedNode(ReferenceNodeUi node, string reason)
         {
             IhDrawLockedRegion(node.Id);
+            IhDrawFrameOverlay(node);
             if (_ihPadlockTex != null)
             {
                 float lockSize = IhIsUltimate(node.Id) ? 30f : 24f;
@@ -9717,34 +9718,114 @@ namespace AlbedosCustomClassesAdvanced
             }
         }
 
-        private void IhDrawAscendedNodeArt(ReferenceNodeUi node)
+        // v0.20.4: painted opening of every frame (reference px), measured by tools/build_tree_frames.py
+        // (FIELDS). Locks grey only this opening; the coloured frame band stays in colour.
+        private static Rect IhFieldRect(string slot)
         {
-            if(!IsAscendedSkill(node.Id) && node.Id!=IhAscendedClassSkill) return;
-            Texture2D art=GetSkillIconTex(node.Id);
-            if(art==null) return;
-            Rect frame=IhVisualIconRect(node);
-            // Replace only the inside of the painted frame, retaining its integrated border.
-            Rect inner=new Rect(frame.x+7f,frame.y+7f,frame.width-14f,frame.height-14f);
-            GUI.DrawTextureWithTexCoords(IhSnap(ScaleReferenceRect(inner.x,inner.y,inner.width,inner.height)),art,new Rect(0.15f,0.15f,0.70f,0.70f));
-            if(!IsAscendedSkill(node.Id)) return;
-            // Bright magenta edge makes every Ascension readable, including neutral energy art.
-            Rect scaled=ScaleReferenceRect(inner.x,inner.y,inner.width,inner.height);
-            Color saved=GUI.color; GUI.color=new Color(1f,0.16f,0.78f,0.8f);
-            GUI.DrawTexture(new Rect(scaled.x,scaled.y,scaled.width,1f),Texture2D.whiteTexture);
-            GUI.DrawTexture(new Rect(scaled.x,scaled.yMax-1f,scaled.width,1f),Texture2D.whiteTexture);
-            GUI.color=saved;
+            switch(slot)
+            {
+                case "lightning_zap": return Rect.MinMaxRect(175f,166f,229f,217f);
+                case "righteous_strike": return Rect.MinMaxRect(175f,295f,228f,345f);
+                case "holy_wave": return Rect.MinMaxRect(175f,420f,228f,469f);
+                case "goddess_relic": return Rect.MinMaxRect(378f,166f,431f,217f);
+                case "judgement_hammer": return Rect.MinMaxRect(379f,295f,433f,345f);
+                case "heavens_light": return Rect.MinMaxRect(390f,418f,444f,469f);
+                case "shield_charge": return Rect.MinMaxRect(553f,166f,605f,217f);
+                case "fallen_angel": return Rect.MinMaxRect(690f,166f,743f,217f);
+                case "ray_of_hope": return Rect.MinMaxRect(691f,295f,743f,345f);
+                case "electric_smite": return Rect.MinMaxRect(863f,227f,952f,314f);
+            }
+            return new Rect(0f,0f,0f,0f);
         }
 
+        // Frame_<slot>_<color>.png covers the field rect padded by this (FRAME_PAD in the script).
+        private static Rect IhFrameSpriteRect(string slot)
+        {
+            Rect f=IhFieldRect(slot);
+            float pad=slot==IhUltimate ? 13f : 10f;
+            return Rect.MinMaxRect(f.xMin-pad,f.yMin-pad,f.xMax+pad,f.yMax+pad);
+        }
+
+        // Colour painted on the universal chassis for each slot.
+        private static string IhPaintedFrameColor(string slot)
+        {
+            switch(slot)
+            {
+                case "goddess_relic": case "judgement_hammer": return "navy";
+                case "ray_of_hope": return "green";
+                case "electric_smite": return "maroon";
+                case "heavens_light": return "gold";
+            }
+            return "cyan";
+        }
+
+        // Category colour of a skill: Ascended Magenta, Ascended Ultimate Red, Ultimate Maroon,
+        // Signature Navy, Buff / non-damaging Green, everything else (interchangeable) Cyan.
+        private string IhSkillFrameColor(ReferenceNodeUi node)
+        {
+            string id=node.Id;
+            if(node.Kind==TreeNodeKind.Grace) return "gold";
+            bool ascended=IsAscendedSkill(id);
+            if(IhIsUltimate(id)) return ascended ? "red" : "maroon";
+            if(ascended) return "magenta";
+            if(IhContains(IhSignatureSkills,id) || IhContains(IhPriestSignatures,id)) return "navy";
+            if(id=="ray_of_hope" || id=="divine_intervention") return "green";
+            return "cyan";
+        }
+
+        private readonly Dictionary<string,Texture2D> _ihFrameSprites = new Dictionary<string,Texture2D>();
+
+        private Texture2D IhFrameSprite(string slot, string color)
+        {
+            string key=slot+"_"+color;
+            Texture2D texture;
+            if(_ihFrameSprites.TryGetValue(key,out texture)) return texture;
+            texture=LoadUiPng("Frame_"+key+".png");
+            _ihFrameSprites[key]=texture;
+            if(texture!=null) _ihPolishTextures.Add(texture);
+            return texture;
+        }
+
+        // Recolours the frame band when the skill's category differs from the painted slot colour.
+        private void IhDrawFrameOverlay(ReferenceNodeUi node)
+        {
+            string slot=IhTemplateSlot(node.Id);
+            string color=IhSkillFrameColor(node);
+            if(color==IhPaintedFrameColor(slot)) return;
+            Texture2D sprite=IhFrameSprite(slot,color);
+            if(sprite==null) return;
+            Rect r=IhFrameSpriteRect(slot);
+            GUI.DrawTexture(IhSnap(ScaleReferenceRect(r.x,r.y,r.width,r.height)),sprite);
+        }
+
+        // CPU version used while building the Priest canvas, so its hotbar icons carry the same frame.
+        private void IhStampFrame(Texture2D target, string slot, string color)
+        {
+            Texture2D sprite=IhFrameSprite(slot,color);
+            if(target==null || sprite==null) return;
+            Rect r=IhFrameSpriteRect(slot);
+            int x0=Mathf.RoundToInt(r.x), y0=Mathf.RoundToInt(r.y);
+            for(int y=0;y<sprite.height;y++) for(int x=0;x<sprite.width;x++)
+            {
+                Color s=sprite.GetPixel(x,sprite.height-1-y);
+                if(s.a<=0.001f) continue;
+                int tx=x0+x, ty=661-(y0+y);
+                Color c=target.GetPixel(tx,ty);
+                target.SetPixel(tx,ty,new Color(c.r+(s.r-c.r)*s.a,c.g+(s.g-c.g)*s.a,c.b+(s.b-c.b)*s.a,c.a));
+            }
+        }
+
+        // Same openings on Cleric_Priest_Artwork.png (PRIEST_DONOR_FIELDS): blitted field -> field.
         private static Rect IhPriestArtworkRect(string id)
         {
             switch(id) {
-                case "lightning_relic":return new Rect(369,156,70,65);
-                case "holy_relic":return new Rect(369,288,70,63);
-                case "grand_sigil":return new Rect(380,409,74,67);
-                case "divine_intervention":return new Rect(548,156,68,65);
-                case "grand_cross":return new Rect(686,156,69,63);
-                case "heavens_judgement":return new Rect(686,288,69,63);
-                default:return new Rect(850,214,103,108);
+                case "lightning_relic":return Rect.MinMaxRect(378,164,431,215);
+                case "holy_relic":return Rect.MinMaxRect(379,294,433,344);
+                case "grand_sigil":return Rect.MinMaxRect(389,416,443,467);
+                case "divine_intervention":return Rect.MinMaxRect(553,166,605,217);
+                case "grand_cross":return Rect.MinMaxRect(690,166,743,217);
+                case "heavens_judgement":return Rect.MinMaxRect(691,294,743,344);
+                default:return Rect.MinMaxRect(863,226,952,313);
             }
         }
 
@@ -9763,11 +9844,17 @@ namespace AlbedosCustomClassesAdvanced
             for(int i=3;i<ClericPriestReferenceNodes.Length;i++)
             {
                 ReferenceNodeUi node=ClericPriestReferenceNodes[i];
-                Rect destination=IhVisualIconRect(node), donor=IhPriestArtworkRect(node.Id);
-                Rect inner=new Rect(destination.x+7,destination.y+7,destination.width-14,destination.height-14);
-                Rect sourceInner=new Rect(donor.x+donor.width*0.20f,donor.y+donor.height*0.20f,donor.width*0.60f,donor.height*0.60f);
-                IhBlitArt(_ihPriestBackdropTex,inner,source,sourceInner);
-                _treeSkillIconTex[node.Id]=IhCropIcon(_ihPriestBackdropTex,destination,"ImmortalHeroes_"+node.Id);
+                // v0.20.4: the painted opening is replaced 1:1, so the art stays centred and
+                // never covers the frame band.
+                IhBlitArt(_ihPriestBackdropTex,IhFieldRect(IhTemplateSlot(node.Id)),source,IhPriestArtworkRect(node.Id));
+                string color=IhSkillFrameColor(node), slot=IhTemplateSlot(node.Id);
+                if(color!=IhPaintedFrameColor(slot) && color!="magenta" && color!="red")
+                    IhStampFrame(_ihPriestBackdropTex,slot,color);
+            }
+            for(int i=3;i<ClericPriestReferenceNodes.Length;i++)
+            {
+                ReferenceNodeUi node=ClericPriestReferenceNodes[i];
+                _treeSkillIconTex[node.Id]=IhCropIcon(_ihPriestBackdropTex,IhVisualIconRect(node),"ImmortalHeroes_"+node.Id);
             }
             // The Grace slot keeps its original frame too.
             IhBlitArt(_ihPriestBackdropTex,new Rect(670,548,44,44),source,new Rect(394.8f,422.4f,44.4f,40.2f));
@@ -9793,22 +9880,22 @@ namespace AlbedosCustomClassesAdvanced
         private Texture2D IhMakeSharedLockedBackdrop(Texture2D backdrop)
         {
             Texture2D result=IhCopyTexture(backdrop,"ImmortalHeroes_SharedLockedState");
-            // Dim only the symbol field; preserve the universal gold frame and badges.
-            // Nameplates and all surrounding art stay untouched on both branches.
-            for(int i=3;i<=ClericPaladinReferenceNodes.Length;i++) {
-                Rect area;
-                if(i==ClericPaladinReferenceNodes.Length) area=new Rect(670,548,44,44);
-                else {
-                    Rect frame=IhVisualIconRect(ClericPaladinReferenceNodes[i]);
-                    area=new Rect(frame.x+7,frame.y+7,frame.width-14,frame.height-14);
-                }
+            // v0.20.4: grey only the art inside each frame opening (Tree_LockMask.png alpha);
+            // frame bands, corner ornaments and badges keep their colour.
+            Texture2D mask=LoadUiPng("Tree_LockMask.png");
+            for(int i=0;i<=ClericPaladinReferenceNodes.Length;i++) {
+                Rect area=i==ClericPaladinReferenceNodes.Length ? new Rect(670,548,44,44)
+                    : IhFieldRect(ClericPaladinReferenceNodes[i].Id);
                 for(int y=Mathf.RoundToInt(area.y);y<Mathf.RoundToInt(area.yMax);y++)
                     for(int x=Mathf.RoundToInt(area.x);x<Mathf.RoundToInt(area.xMax);x++) {
+                        float weight=mask!=null && mask.width==1011 && mask.height==662 ? mask.GetPixel(x,661-y).a : 1f;
+                        if(weight<=0.001f) continue;
                         Color c=result.GetPixel(x,661-y);
                         float grey=(c.r*0.299f+c.g*0.587f+c.b*0.114f)*0.72f;
-                        result.SetPixel(x,661-y,new Color(grey,grey,grey,c.a));
+                        result.SetPixel(x,661-y,new Color(c.r+(grey-c.r)*weight,c.g+(grey-c.g)*weight,c.b+(grey-c.b)*weight,c.a));
                     }
             }
+            if(mask!=null) Destroy(mask);
             result.Apply(false,false);return result;
         }
 
@@ -9929,7 +10016,8 @@ namespace AlbedosCustomClassesAdvanced
 
             // v0.18.0: locked = dimmed icon + padlock + requirement; unlocked = Tier stars + count.
             Rect row = new Rect();
-            if (unlocked) IhDrawAscendedNodeArt(node);
+            if (unlocked)
+                IhDrawFrameOverlay(node);
             if (!unlocked)
                 IhDrawLockedNode(node, lockReason);
             else if (maxTier > 0)

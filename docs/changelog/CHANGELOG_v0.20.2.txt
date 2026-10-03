@@ -1,0 +1,6 @@
+v0.20.2 - Visual consistency
+Centers Lightning Zap and Righteous Strike hotbar art within the Holy Wave frame.
+Centers Altar titles/subtitles. Ascended state now drives magenta node/hotbar art.
+Moves locks inside the lower-right painted frame corner. Rebuilds Priest from
+the same Paladin backdrop, replacing only skill interiors and live lettering.
+Retains all mechanics and v0.20.1 Altar inspection behavior.
