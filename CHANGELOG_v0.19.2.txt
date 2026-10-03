@@ -1,0 +1,19 @@
+Immortal Heroes v0.19.2 - Dragon's Altar
+
+The Altar menu now uses the approved Immortal Heroes design (docs/source_art/Altar_Concept.png).
+Same pages, texts and actions as before - only the look is new.
+
+- Header: DRAGON'S ALTAR, Reset (top left) and Close (top right), live Base class / Advancement status.
+- Left: BASE CLASSES with the Warrior / Cleric / Sorcerer cards. The focused class wears the gold
+  frame; hovering a card previews it. Click a card to read about it.
+- Right: class title + role on the blue band, IDENTITY / CORE MECHANICS / PLAYSTYLE (text shrinks
+  to fit), STARTER KIT icons, the two ADVANCEMENTS emblems, Choose <Class> and View Advancements.
+- Advancement page: same window; the parent class stays highlighted, the Advancement emblems
+  become the selector (gold ring on the one you are reading), SKILLS + PASSIVE replace the
+  starter kit, buttons become Choose <Advancement> (or "Choose <Class> First") and < Base Classes.
+  Clicking an emblem on the Base Class page jumps straight to that Advancement.
+- Confirmation: a small card in the same style (CONFIRM / YOUR CHOICE) with Yes, Confirm / Cancel.
+- Esc closes. If the art files are missing, the old Jotunn panel is used.
+- Art: tools/build_altar_assets.py builds Altar_*.png from the concept (static parts baked,
+  everything that changes drawn live). Paladin / Priest emblems come from the concept; the other
+  Advancements use recolored class medallions until real emblems exist.

@@ -1,9 +1,10 @@
-Immortal Heroes v0.19.1 - Test focus (universal tree)
+Immortal Heroes v0.19.2 - Test focus (Dragon's Altar)
 
-1. Cleric before Advancement, open K, toggle PALADIN / PRIEST (top right plaques):
-   the frame, header, footer and every node position must stay exactly in place - only
-   the node art and the title change.
-2. Priest: stars, padlocks, lock text, - / + and the Grace box line up like on Paladin.
-3. Priest locked nodes are greyed the same way as Paladin locked nodes.
-4. Priest hotbar / HUD icons have the same frames as the Paladin icons.
-5. Everything from v0.19.0 still works (Priest skills, Tiers, Advance, Altar checklist).
+1. Interact with the Dragon's Altar: the new window opens centered (Esc / X closes).
+2. Click Warrior / Cleric / Sorcerer: gold frame moves, right panel updates (title, text, kit, emblems).
+3. Choose Cleric -> confirmation card -> Yes, Confirm: status shows Base class: Cleric.
+4. View Advancements (or click the Paladin / Priest emblem): Advancement page, gold ring on the
+   selected emblem, SKILLS + PASSIVE at the bottom left, < Base Classes goes back.
+5. Choose Paladin with the requirements unmet: the Altar refuses and lists what is missing.
+6. Reset (top left): press twice within 5 s to reset the class.
+7. Check text fits at your resolution (1080p / 1440p) and nothing overlaps.

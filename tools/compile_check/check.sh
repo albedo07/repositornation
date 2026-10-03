@@ -24,6 +24,13 @@ done
 for d in base head; do
   (cd "$WORK/$d" && mcs -langversion:5 -target:library $REFS -out:x.dll $FILES "$ROOT/tools/compile_check/Stubs.cs" > mcs.log 2>&1 || true)
 done
+# Core (Dragon's Altar) compiles separately: Stubs.cs fakes its Plugin class for the other modules.
+grep -v "^namespace AlbedosCustomClasses {" "$ROOT/tools/compile_check/Stubs.cs" > "$WORK/StubsCore.cs"
+git -C "$ROOT" show "$BASE:AlbedosCustomClasses.Core.cs" > "$WORK/base/AlbedosCustomClasses.Core.cs"
+cp "$ROOT/AlbedosCustomClasses.Core.cs" "$WORK/head/AlbedosCustomClasses.Core.cs"
+for d in base head; do
+  (cd "$WORK/$d" && mcs -langversion:5 -target:library $REFS -out:core.dll AlbedosCustomClasses.Core.cs "$WORK/StubsCore.cs" "$ROOT/tools/compile_check/StubsCore.cs" > core.log 2>&1 || true)
+done
 python3 - "$WORK" <<'PY'
 import re, sys
 w = sys.argv[1]
@@ -34,6 +41,8 @@ def load(p):
         if m: out.setdefault((m.group(3), m.group(4)), []).append(m.group(1).split('/')[-1] + ':' + m.group(2))
     return out
 b, h = load(w + '/base/mcs.log'), load(w + '/head/mcs.log')
+for k, v in load(w + '/base/core.log').items(): b.setdefault(k, []).extend(v)
+for k, v in load(w + '/head/core.log').items(): h.setdefault(k, []).extend(v)
 bad = [(k, v) for k, v in h.items() if k not in b]
 for k, v in bad: print('NEW ERROR', k[0], k[1], 'lines', v)
 print('COMPILE CHECK', 'FAILED' if bad else 'PASSED', '(%d new signatures)' % len(bad))

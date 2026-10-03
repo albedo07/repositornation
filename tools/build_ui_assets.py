@@ -457,6 +457,9 @@ def main():
     # v0.19.1: Cleric -> Priest tree on the same chrome (needs the files above).
     import build_priest_assets
     build_priest_assets.build()
+    # v0.19.2: Dragon's Altar (approved concept docs/source_art/Altar_Concept.png).
+    import build_altar_assets
+    build_altar_assets.build()
     print("UI assets written to", OUT)
 
 
