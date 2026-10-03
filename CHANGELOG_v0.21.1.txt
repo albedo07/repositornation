@@ -1,0 +1,8 @@
+IMMORTAL HEROES v0.21.1 - CLERIC TWEAKS
+- Advancing to Priest requires Holy Wave Tier 7 (Paladin keeps Righteous Strike Tier 7);
+  tree checklist and Altar both follow the branch.
+- Ascended Holy Wave: no wind up; aim at an ally within 30m to cast it on them.
+- Divine Intervention heal scales 20% (Tier 0) -> 50% Max HP at Tier 5.
+- Angel Comet: jump + nose-dive take 2.5s (WindUpTime); old RiseTime / DiveSpeed hidden in F8.
+- New icon art: Righteous Strike (holy lightning pillar), Judgement Hammer (hammer), Shield Charge
+  (shield charging forward) - no more letters; tree, hotbar, HUD and Altar.

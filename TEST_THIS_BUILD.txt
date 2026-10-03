@@ -1,5 +1,6 @@
-Immortal Heroes v0.21.0 - Test focus (Priest Ascended; F8 Progression switches)
-1. Advanced Priest: Holy Wave frame Magenta + badge; cast: 10m ring, echo ring 2s later.
-2. Holy Wave twice on the same ally within 10s -> Bloom (heal + small gold ring hurting enemies).
-3. Each skill switched to ASCENDED: check the tooltip "Ascended" line and the effect listed.
-4. Lightning Relic Ascended: relinquish it -> blast. Tempest Ascended: storm moves with you.
+Immortal Heroes v0.21.1 - Test focus
+1. Priest preview checklist says Holy Wave Tier 7; Altar blocks Priest until it is 7.
+2. Ascended Holy Wave: aim at an ally -> ring on them, instant.
+3. Divine Intervention tooltip heal 50% at Tier 5.
+4. Angel Comet lands ~2.5s after the press.
+5. RS / JH / SC icons in tree, hotbar, HUD, Altar.

@@ -40,7 +40,7 @@ namespace DragonsAltarDevTools
     {
         public const string ModGuid = "albedo.customclasses.devtools";
         public const string ModName = "Dragon's Altar - Developer Tools";
-        public const string ModVersion = "0.21.0";
+        public const string ModVersion = "0.21.1";
 
         public static DeveloperToolsPlugin Instance;
 
@@ -389,6 +389,9 @@ namespace DragonsAltarDevTools
         private static bool IsRetired(string section, string key)
         {
             if (key.StartsWith("Legacy", StringComparison.OrdinalIgnoreCase))
+                return true;
+            // Angel Comet timing now comes from WindUpTime (v0.21.1).
+            if (section == "Paladin Fallen Angel" && (key == "RiseTime" || key == "DiveSpeed"))
                 return true;
             return section.StartsWith("Paladin Aegis", StringComparison.OrdinalIgnoreCase) ||
                    section.StartsWith("Paladin Divine Verdict", StringComparison.OrdinalIgnoreCase) ||

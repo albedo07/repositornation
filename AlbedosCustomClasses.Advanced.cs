@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.21.0";
+        public const string ModVersion = "0.21.1";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -383,6 +383,7 @@ namespace AlbedosCustomClassesAdvanced
         // v0.21.0 Priest Ascended
         private ConfigEntry<float> _sanctifiedDuration, _bloomHealPercent, _bloomRadius;
         private DamageConfig _bloomDamage, _relicAscBlastDamage, _crossAscBurstDamage, _pillarDamage;
+        private ConfigEntry<float> _ahwAllyRange, _diHealAtMax, _angelWindupTotal;
         private ConfigEntry<float> _ahwRadius, _ahwEchoDelay, _ahwEchoRadius, _ahwEchoPercent, _ahwLowHp;
         private ConfigEntry<float> _relicAscRadius, _relicAscChainRange, _relicAscBlastRadius, _holyRelicAscBuff, _holyRelicAscEndHeal;
         private ConfigEntry<float> _diAscBarrier, _crossAscWidth, _crossAscRange, _crossAscBurstRadius;
@@ -964,6 +965,9 @@ namespace AlbedosCustomClassesAdvanced
             _ahwEchoRadius = Config.Bind("Priest Holy Wave Ascended", "EchoRadius", 5f, "Echo wave radius.");
             _ahwEchoPercent = Config.Bind("Priest Holy Wave Ascended", "EchoHealPercent", 50f, "Echo heal, % of the first wave's heal.");
             _ahwLowHp = Config.Bind("Priest Holy Wave Ascended", "LowHealthPercent", 30f, "Allies below this % HP get double the instant heal.");
+            _ahwAllyRange = Config.Bind("Priest Holy Wave Ascended", "AllyCastRange", 30f, "Aim at an ally within this range to cast the wave on them (no wind up).");
+            _diHealAtMax = Config.Bind("Priest Divine Intervention", "HealPercentAtMaxTier", 50f, "Heal at Tier 5 (% Max HP); scales evenly from HealPercent at Tier 0.");
+            _angelWindupTotal = Config.Bind("Paladin Fallen Angel", "WindUpTime_v0211", 2.5f, "Angel Comet: total seconds from the jump to the dive landing.");
             _relicAscRadius = Config.Bind("Priest Relics Ascended", "Radius", 14f, "Ascended Lightning / Holy Relic pulse radius.");
             _relicAscChainRange = Config.Bind("Priest Relics Ascended", "LightningChainRange", 6f, "Ascended Lightning Relic: each pulse arcs to up to 3 more enemies this far past its radius.");
             _relicAscBlastRadius = Config.Bind("Priest Relics Ascended", "LightningEndBlastRadius", 8f, "Ascended Lightning Relic: blast radius when the Cross ends.");
@@ -3445,7 +3449,7 @@ namespace AlbedosCustomClassesAdvanced
             if (!BeginCast(player, id, _angelCooldown.Value, _angelStamina.Value))
                 return;
             DragonCombat.LockSkill(player, 0.1f);
-            DragonCombat.PlaySkillPose(player, "Raise", Mathf.Max(0.3f, _angelRiseTime.Value) + 0.2f);
+            DragonCombat.PlaySkillPose(player, "Raise", Mathf.Max(0.6f, _angelWindupTotal.Value) * 0.56f + 0.2f);
             StartCoroutine(FallenAngelRoutine(player, body));
         }
 
@@ -3460,7 +3464,10 @@ namespace AlbedosCustomClassesAdvanced
             forward.Normalize();
 
             ResetFallDamageState(player);
-            float riseTime = Mathf.Max(0.2f, _angelRiseTime.Value);
+            // v0.21.1: jump + nose-dive take WindUpTime (2.5s) in total.
+            float total = Mathf.Max(0.6f, _angelWindupTotal.Value);
+            float riseTime = total * 0.56f;
+            float hangTime = total * 0.06f;
             float height = Mathf.Max(1f, _angelJumpHeight.Value);
             Vector3 start = body.position;
             float riseStart = Time.time;
@@ -3482,7 +3489,7 @@ namespace AlbedosCustomClassesAdvanced
             }
 
             // Short hang, then a head-first nose-dive until physical landing.
-            float hangEnd = Time.time + 0.15f;
+            float hangEnd = Time.time + hangTime;
             while (player != null && !player.IsDead() && Time.time < hangEnd)
             {
                 body.velocity = Vector3.zero;
@@ -3492,7 +3499,7 @@ namespace AlbedosCustomClassesAdvanced
             }
 
             DragonCombat.PlaySkillPose(player, "Slam", 3f);
-            float diveSpeed = Mathf.Max(5f, _angelDiveSpeed.Value);
+            float diveSpeed = Mathf.Max(3f, height / Mathf.Max(0.1f, total - riseTime - hangTime));
             float safety = Time.time + 10f;
             while (player != null && !player.IsDead() && Time.time < safety)
             {
@@ -4105,7 +4112,10 @@ namespace AlbedosCustomClassesAdvanced
             for (int i = 0; i < allies.Count; i++)
             {
                 Player ally = allies[i];
-                Heal(ally, ally.GetMaxHealth() * Mathf.Max(0f, _interventionHealPercent.Value) * IhSkillPower(player, "divine_intervention") / 100f);
+                // v0.21.1: heal scales from HealPercent (Tier 0) to HealPercentAtMaxTier (Tier 5).
+                float diTier = Mathf.Clamp01(IhGetTier(player, "divine_intervention") / (float)Mathf.Max(1, IhMaxTier("divine_intervention")));
+                float diHeal = Mathf.Lerp(Mathf.Max(0f, _interventionHealPercent.Value), Mathf.Max(0f, _diHealAtMax.Value), diTier);
+                Heal(ally, ally.GetMaxHealth() * diHeal / 100f);
                 DragonCombat.ApplyTimedBuff(
                     ally,
                     "Priest.DivineIntervention",
@@ -6737,7 +6747,7 @@ namespace AlbedosCustomClassesAdvanced
                 return false;
             }
             List<string> lines = new List<string>();
-            if (Instance.IhAdvanceChecklist(player, lines))
+            if (Instance.IhAdvanceChecklist(player, lines, __args[0] as string))
                 return true;
             List<string> missing = new List<string>();
             for (int i = 0; i < lines.Count; i++)
@@ -7793,7 +7803,9 @@ namespace AlbedosCustomClassesAdvanced
             float instant = IhCfg(sk, "Cleric.Holy Wave", "ImmediateHeal", 25f) * power;
             float perSecond = IhCfg(sk, "Cleric.Holy Wave", "HealPercentPerSecond", 5f) * power;
             float duration = IhCfg(sk, "Cleric.Holy Wave", "Duration", 6f);
-            Vector3 center = player.transform.position;
+            // Aim at an ally (within range) to centre the wave on them; otherwise on yourself.
+            Player aimed = IhAimedAlly(player, Mathf.Max(1f, _ahwAllyRange.Value));
+            Vector3 center = aimed != null ? aimed.transform.position : player.transform.position;
             float radius = Mathf.Max(1f, _ahwRadius.Value);
             if (_enableVfx.Value)
                 StartCoroutine(AnimateRing(center + Vector3.up * 0.08f, 0.6f, radius, 0.6f, new Color(0.62f, 1f, 0.70f, 0.95f), 0.12f));
@@ -7818,6 +7830,29 @@ namespace AlbedosCustomClassesAdvanced
             allies = IhAlliesInRadius(player, center, echoRadius);
             for (int i = 0; i < allies.Count; i++)
                 Heal(allies[i], echo);
+        }
+
+        private Player IhAimedAlly(Player caster, float range)
+        {
+            if (caster == null || GameCamera.instance == null)
+                return null;
+            Transform cam = GameCamera.instance.transform;
+            RaycastHit[] hits = Physics.SphereCastAll(cam.position, 0.6f, cam.forward, range + 8f, ~0, QueryTriggerInteraction.Ignore);
+            Player best = null;
+            float bestDist = float.MaxValue;
+            for (int i = 0; i < hits.Length; i++)
+            {
+                Player p = hits[i].collider == null ? null : hits[i].collider.GetComponentInParent<Player>();
+                if (p == null || p == caster || p.IsDead())
+                    continue;
+                float d = Vector3.Distance(caster.transform.position, p.transform.position);
+                if (d <= range && hits[i].distance < bestDist)
+                {
+                    best = p;
+                    bestDist = hits[i].distance;
+                }
+            }
+            return best;
         }
 
         private IEnumerator IhHealOverTime(Player ally, float percentPerSecond, float seconds)
@@ -8763,7 +8798,7 @@ namespace AlbedosCustomClassesAdvanced
                         b.Append(IhLine("Ring Burn", "Fire Burn " + IhNum(_angelFireDot.Value) + "/s, Spirit Burn " + IhNum(_angelSpiritDot.Value) + "/s, " + IhNum(_angelBurnDuration.Value) + "s"));
                         b.Append(IhLine("Gain", "Hyper Armor, dive + " + IhNum(_angelHyperAfter.Value) + "s"));
                     }
-                    IhCosts(b, _angelStamina.Value, "Instant", _angelCooldown.Value);
+                    IhCosts(b, _angelStamina.Value, IhNum(_angelWindupTotal.Value) + "s", _angelCooldown.Value);
                     break;
                 case "ray_of_hope":
                     b.Append(IhLine("Healing", IhNum(_rayHealPercent.Value * power) + "% of Total HP"));
@@ -9224,14 +9259,22 @@ namespace AlbedosCustomClassesAdvanced
         // ------------------------------------------------------------------ Advance / Ascend
         private bool IhAdvanceChecklist(Player player, List<string> lines)
         {
+            return IhAdvanceChecklist(player, lines, IhTreeBranch());
+        }
+
+        // v0.21.1: the Class skill to max is the branch's Ascended Class skill
+        // (Paladin: Righteous Strike, Priest: Holy Wave).
+        private bool IhAdvanceChecklist(Player player, List<string> lines, string branch)
+        {
+            string prereq = branch == "Priest" ? IhPriestAscendedClassSkill : IhAscendedClassSkill;
             int level = IhGetLevel(player);
-            int rsTier = IhGetTier(player, IhAscendedClassSkill);
+            int rsTier = IhGetTier(player, prereq);
             int spent = IhSpent(player, IhClassSkills);
             bool lv = level >= 16;
             bool rs = rsTier >= 7;
             bool pts = spent >= 14;
             lines.Add((lv ? "+ " : "- ") + "Lv 16  (" + level.ToString() + ")");
-            lines.Add((rs ? "+ " : "- ") + "Righteous Strike Tier 7  (" + rsTier.ToString() + "/7)");
+            lines.Add((rs ? "+ " : "- ") + IhSkillName(prereq) + " Tier 7  (" + rsTier.ToString() + "/7)");
             lines.Add((pts ? "+ " : "- ") + "14 Class Tier Points spent  (" + spent.ToString() + "/14)");
             return lv && rs && pts;
         }
@@ -9338,6 +9381,7 @@ namespace AlbedosCustomClassesAdvanced
             if (IhContains(IhNormalAdvSkills, id)) return "Lv 42, Tier 5 (one of Shield Charge, Angel Comet, Ray of Hope)";
             if (id == IhUltimate) return "Lv 50, Tier 3";
             if (id == IhAscendedClassSkill) return "when you Advance to Paladin";
+            if (id == IhPriestAscendedClassSkill) return "when you Advance to Priest";
             return "";
         }
 
@@ -10478,7 +10522,7 @@ namespace AlbedosCustomClassesAdvanced
         {
             switch (id)
             {
-                case "holy_wave": return "10m, Sanctifies allies, double instant heal below 30% HP, 5m echo wave after 2s at half healing";
+                case "holy_wave": return "no wind up, aim at an ally to cast it on them; 10m, Sanctifies allies, double instant heal below 30% HP, 5m echo wave after 2s at half healing";
                 case "lightning_relic": return "14m pulses arc to 3 more enemies and Sanctify allies; the Cross detonates (8m, Stuns Small) when it ends";
                 case "holy_relic": return "14m, +30% buffs, pulses cleanse Burn / Poison / Frost and Sanctify; final 25% Max HP heal when it ends";
                 case "divine_intervention": return "with both Relics up, a Cross Cast fires from both; 250 HP Barrier; enemies are pulled inward";
@@ -10546,7 +10590,7 @@ namespace AlbedosCustomClassesAdvanced
                     break;
                 case "divine_intervention":
                     b.Append(IhLine("Damage",IhDamage(_interventionDamage,power)));
-                    b.Append(IhLine("Healing",IhNum(_interventionHealPercent.Value*power)+"% Total HP"));
+                    b.Append(IhLine("Healing",IhNum(Mathf.Lerp(_interventionHealPercent.Value,_diHealAtMax.Value,Mathf.Clamp01(IhGetTier(player,id)/5f)))+"% Total HP ("+IhNum(_diHealAtMax.Value)+"% at Tier 5)"));
                     b.Append(IhLine("Barrier",IhNum(_interventionBarrierHp.Value)+" HP"));
                     b.Append(IhLine("Radius",IhNum(_interventionRadius.Value)+"m"));
                     b.Append(IhLine("Cross Cast Range",IhNum(_interventionRange.Value)+"m"));
