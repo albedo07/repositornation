@@ -3,7 +3,7 @@
 ## Working rules
 - User wants short responses and real execution, not long explanations.
 - **RUSH B** = immediately code the obvious requested task, minimal commentary, use latest approved build as baseline, don't redesign unrelated things, verify and package.
-- Latest package: **v0.20.6 — Polish** (v0.20.5 Config Window, v0.20.4 Tree and Altar Fixes), built on ChatGPT's v0.20.3 (Universal Tree runtime chassis + uGUI Altar with Altar_Background/Altar_ClassCards; it REPLACED our v0.19.2/0.19.3 IMGUI Altar, which the user accepted as the new base). Older: v0.19.x ours, v0.19.0 ChatGPT. Do NOT change combat/progression logic unless explicitly requested.
+- Latest package: **v0.20.7 — Cleric Consistency** (v0.20.6 Polish, v0.20.5 Config Window, v0.20.4 Tree and Altar Fixes), built on ChatGPT's v0.20.3 (Universal Tree runtime chassis + uGUI Altar with Altar_Background/Altar_ClassCards; it REPLACED our v0.19.2/0.19.3 IMGUI Altar, which the user accepted as the new base). Older: v0.19.x ours, v0.19.0 ChatGPT. Do NOT change combat/progression logic unless explicitly requested.
 - Never patch visual problems by drawing random rectangles over the reference asset. Keep approved artwork intact; make layout/components fit properly.
 
 ## Framework doc (source of truth for design)
@@ -57,6 +57,8 @@
 - v0.20.6 universal tree geometry (measured on the chassis, reuse for every AC): nameplate anchor x = plate/frame centre; AC plate blank widths = plate width - 14 (`IhLabelWidth`, JH 103); live names shrink to fit; stars + count centred as one group; padlock = `IhCornerLock(IhFieldRect)` (corner 4 px past the opening); AC title centred at x 665 (blank 596-734, keeps the gold star); Ascended nodes get the permanent badge. Hotbar icons for every branch = `IhComposeHotbarIcons` (hotbar frame of the category colour + tree opening art, 3 px inset). Tier tooltip line names Damage / Healing per skill (`IhTierBonusLabel`).
 - F8 class tabs (v0.20.6): Base Class sections first, then a collapsible header per AC (user missed the v0.20.5 dropdown).
 - Working style (user, 2026-10-03): find and fix misalignments / inconsistencies proactively (anything off by even a few px); prefer text over preview images when an image costs a lot.
+- SCOPE (user, 2026-10-03): only Cleric + Paladin + Priest until they are perfect; ignore Warrior / Sorcerer and their ACs (Altar texts, keys, trees).
+- v0.20.7 decisions: Fallen Angel is renamed **Angel Comet** (display; id stays `fallen_angel`). Priest Grace = **Heaven's Crucible** (id stays `grand_sigil`), Priest Mastery = **Bless Thy Sinners** (GuardianAngel death-save). Tooltip value colour = the skill's frame colour (`IhAccentFor`). Branch selector = plaque. F8 hides retired sections/Legacy keys (`IsRetired`) and shows clean names (`DisplaySection`, spaced keys).
 - Altar skill inspection shows the description only (first paragraph of the tree tooltip), no stats.
 
 ## Ascended designs (approved so far; tooltip header "ASCENDED - <SKILL>", names unchanged)

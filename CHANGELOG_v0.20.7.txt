@@ -1,0 +1,25 @@
+IMMORTAL HEROES v0.20.7 - CLERIC CONSISTENCY
+
+NAMES (display only; skill ids, saves and hotbar layouts unchanged)
+- Fallen Angel is now Angel Comet (tree, tooltip, hotbar message, Altar, F8).
+- Priest Grace is Heaven's Crucible, Priest Mastery is Bless Thy Sinners
+  (tree, tooltip, death-save messages, Altar, F8).
+
+SKILL TREE
+- Tooltip values use the skill's own colour: Cyan, Navy, Green, Magenta (Ascended),
+  Maroon (Ultimate), Red (Ascended Ultimate), Gold (Grace).
+- PALADIN / PRIEST preview buttons use the ornate plaque (unselected one dimmed).
+- Divine Intervention tooltip header: BUFF (matches its Green frame).
+- Fix: Priest's Heaven's Crucible hotbar / HUD icon (missing since v0.20.6),
+  built in Heaven's Light's gold frame.
+
+ALTAR (Cleric, Paladin, Priest only)
+- Cleric's Blessing, Holy Trinity (Mastery), Heaven's Light (Grace),
+  Bless Thy Sinners (Mastery), Heaven's Crucible (Grace) replace the old passive texts.
+- Skill entries use the tree descriptions; Paladin lists all 6 skills.
+
+F8 CONFIG WINDOW
+- Hidden: removed skills (Aegis Fall, Aegis Shatter, Divine Verdict) and every Legacy setting
+  (still in the .cfg, not shown).
+- Clean names: no version tags ("Electric Smite Damage v2" -> "Electric Smite Damage"),
+  current skill names, and readable keys ("StaminaCost" -> "Stamina Cost").

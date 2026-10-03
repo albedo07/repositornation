@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.20.6";
+        public const string ModVersion = "0.20.7";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -3389,7 +3389,7 @@ namespace AlbedosCustomClassesAdvanced
 
         private IEnumerator FallenAngelRoutine(Player player, Rigidbody body)
         {
-            ShowMessage("Fallen Angel");
+            ShowMessage("Angel Comet");
             bool ascended = IsAscendedSkill("fallen_angel");
             Vector3 forward = player.GetLookDir();
             forward.y = 0f;
@@ -4290,7 +4290,7 @@ namespace AlbedosCustomClassesAdvanced
 
         private IEnumerator GrandSigilBarrierRoutine(Player player, float windup)
         {
-            ShowMessage("Grand Sigil");
+            ShowMessage("Heaven's Crucible");
             if (windup > 0f)
                 yield return new WaitForSeconds(windup);
             if (player == null || player.IsDead())
@@ -7838,7 +7838,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "goddess_relic": return "Goddess Relic";
                 case "judgement_hammer": return "Judgement Hammer";
                 case "shield_charge": return "Shield Charge";
-                case "fallen_angel": return "Fallen Angel";
+                case "fallen_angel": return "Angel Comet";
                 case "ray_of_hope": return "Ray of Hope";
                 case "electric_smite": return "Electric Smite";
                 case "heavens_light": return "Heaven's Light";
@@ -7848,7 +7848,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "grand_cross": return "Grand Cross";
                 case "heavens_judgement": return "Heaven's Judgement";
                 case "lightning_tempest": return "Lightning Tempest";
-                case "grand_sigil": return "Grand Sigil";
+                case "grand_sigil": return "Heaven's Crucible";
             }
             return id;
         }
@@ -8219,7 +8219,39 @@ namespace AlbedosCustomClassesAdvanced
 
         // v0.18.2: Valheim-style skill sheet. Description first, then one "Subject - value" line per fact.
         // White = information and Tier fractions, Yellow = subject, Cyan = values with units.
+        // v0.20.7: tooltip values take the skill's own frame colour (Cyan, Navy, Green, Magenta,
+        // Maroon, Red, Gold) instead of one fixed Cyan.
+        private Color _ihTooltipAccent = new Color(0.42f, 0.88f, 1f, 1f);
+
+        private static Color IhAccentFor(string frameColor)
+        {
+            switch (frameColor)
+            {
+                case "navy": return new Color(0.52f, 0.68f, 1f, 1f);
+                case "green": return new Color(0.46f, 0.95f, 0.56f, 1f);
+                case "magenta": return new Color(1f, 0.46f, 0.92f, 1f);
+                case "maroon": return new Color(1f, 0.58f, 0.68f, 1f);
+                case "red": return new Color(1f, 0.36f, 0.30f, 1f);
+                case "gold": return new Color(1f, 0.95f, 0.66f, 1f);
+            }
+            return new Color(0.42f, 0.88f, 1f, 1f);
+        }
+
         private string IhBuildTooltip(Player player, ReferenceNodeUi node, out string title)
+        {
+            Color saved = _ihTooltipAccent;
+            _ihTooltipAccent = IhAccentFor(IhSkillFrameColor(node));
+            try
+            {
+                return IhBuildTooltipBody(player, node, out title);
+            }
+            finally
+            {
+                _ihTooltipAccent = saved;
+            }
+        }
+
+        private string IhBuildTooltipBody(Player player, ReferenceNodeUi node, out string title)
         {
             string id = node.Id;
             if (IhPriestSkill(id)) return IhBuildPriestTooltip(player, node, out title);
@@ -8429,7 +8461,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "shield_charge": return "Raise your shield and charge forward, trampling everyone who dares stand in your path.";
                 case "fallen_angel": return ascended
                     ? "Leap to the heavens and fall like a burning star. The ground you strike catches holy fire."
-                    : "Leap to the heavens, then fall upon your enemies like a wrathful angel.";
+                    : "Leap to the heavens, then crash upon your enemies like a blazing comet.";
                 case "ray_of_hope": return ascended
                     ? "Unleash a radial wave that heals, shields and purifies you and every ally it touches, while searing the wicked."
                     : "Unleash a radial wave that heals and empowers you and every ally it touches, while searing the wicked.";
@@ -8895,7 +8927,7 @@ namespace AlbedosCustomClassesAdvanced
         private string IhAscensionRule(string id)
         {
             if (IhContains(IhSignatureSkills, id)) return "Lv 32, Tier 5 (one Signature)";
-            if (IhContains(IhNormalAdvSkills, id)) return "Lv 42, Tier 5 (one of Shield Charge, Fallen Angel, Ray of Hope)";
+            if (IhContains(IhNormalAdvSkills, id)) return "Lv 42, Tier 5 (one of Shield Charge, Angel Comet, Ray of Hope)";
             if (id == IhUltimate) return "Lv 50, Tier 3";
             if (id == IhAscendedClassSkill) return "when you Advance to Paladin";
             return "";
@@ -8913,7 +8945,7 @@ namespace AlbedosCustomClassesAdvanced
         // Color values with their measurement units; descriptive words stay white.
         private string IhColorMatch(System.Text.RegularExpressions.Match match)
         {
-            return "<color=" + IhHex(0.42f, 0.88f, 1f) + ">" + match.Value + "</color>";
+            return "<color=" + IhHex(_ihTooltipAccent.r, _ihTooltipAccent.g, _ihTooltipAccent.b) + ">" + match.Value + "</color>";
         }
 
         private void ToggleSkillbook()
@@ -9461,7 +9493,7 @@ namespace AlbedosCustomClassesAdvanced
             new ReferenceNodeUi("shield_charge", new Rect(532f, 151f, 103f, 105f), new Rect(548f, 158f, 68f, 72f), "4", TreeNodeKind.AdvancementNormal, false, 5,
                 "ATTACK - SHIELD CHARGE", "Paladin Advancement skill. Optional hotbar skill."),
             new ReferenceNodeUi("fallen_angel", new Rect(672f, 151f, 103f, 105f), new Rect(686f, 158f, 69f, 72f), "", TreeNodeKind.AdvancementNormal, false, 5,
-                "ATTACK - FALLEN ANGEL", "Paladin Advancement skill. Optional hotbar skill."),
+                "ATTACK - ANGEL COMET", "Paladin Advancement skill. Optional hotbar skill."),
             new ReferenceNodeUi("ray_of_hope", new Rect(672f, 287f, 103f, 105f), new Rect(686f, 290f, 69f, 69f), "5", TreeNodeKind.Buff, false, 5,
                 "BUFF - RAY OF HOPE", "Paladin support skill. Optional hotbar skill."),
 
@@ -9474,8 +9506,8 @@ namespace AlbedosCustomClassesAdvanced
             ClericPaladinReferenceNodes[0], ClericPaladinReferenceNodes[1], ClericPaladinReferenceNodes[2],
             new ReferenceNodeUi("lightning_relic", ClericPaladinReferenceNodes[3].GroupRect, ClericPaladinReferenceNodes[3].IconRect,"",TreeNodeKind.Signature,true,5,"ATTACK - LIGHTNING RELIC",""),
             new ReferenceNodeUi("holy_relic", ClericPaladinReferenceNodes[4].GroupRect, ClericPaladinReferenceNodes[4].IconRect,"",TreeNodeKind.Signature,true,5,"BUFF - HOLY RELIC",""),
-            new ReferenceNodeUi("grand_sigil", ClericPaladinReferenceNodes[5].GroupRect, ClericPaladinReferenceNodes[5].IconRect,"",TreeNodeKind.Grace,true,0,"GRACE - GRAND SIGIL",""),
-            new ReferenceNodeUi("divine_intervention", ClericPaladinReferenceNodes[6].GroupRect, ClericPaladinReferenceNodes[6].IconRect,"",TreeNodeKind.AdvancementNormal,false,5,"SUPPORT - DIVINE INTERVENTION",""),
+            new ReferenceNodeUi("grand_sigil", ClericPaladinReferenceNodes[5].GroupRect, ClericPaladinReferenceNodes[5].IconRect,"",TreeNodeKind.Grace,true,0,"GRACE - HEAVEN'S CRUCIBLE",""),
+            new ReferenceNodeUi("divine_intervention", ClericPaladinReferenceNodes[6].GroupRect, ClericPaladinReferenceNodes[6].IconRect,"",TreeNodeKind.AdvancementNormal,false,5,"BUFF - DIVINE INTERVENTION",""),
             new ReferenceNodeUi("grand_cross", ClericPaladinReferenceNodes[7].GroupRect, ClericPaladinReferenceNodes[7].IconRect,"",TreeNodeKind.AdvancementNormal,false,5,"ATTACK - GRAND CROSS",""),
             new ReferenceNodeUi("heavens_judgement", ClericPaladinReferenceNodes[8].GroupRect, ClericPaladinReferenceNodes[8].IconRect,"",TreeNodeKind.AdvancementNormal,false,5,"ATTACK - HEAVEN'S JUDGEMENT",""),
             new ReferenceNodeUi("lightning_tempest", ClericPaladinReferenceNodes[9].GroupRect, ClericPaladinReferenceNodes[9].IconRect,"",TreeNodeKind.Ultimate,true,3,"ULTIMATE - LIGHTNING TEMPEST","")
@@ -9496,7 +9528,7 @@ namespace AlbedosCustomClassesAdvanced
                 "CLERIC'S BLESSING",
                 "All Shields: 1.5x Block Force + Block Armor. Staff + Shield allowed. No movement penalty from Shields, Staves, or one-handed Club-skill weapons. +35 Max HP and +20% HP Regen.");
             RegisterReferenceHotspot(ScaleReferenceRect(332f, 76f, 651f, 64f),
-                (IhTreeBranch() == "Priest" ? "GRAND SIGIL - MASTERY" : "HOLY TRINITY - MASTERY"),
+                (IhTreeBranch() == "Priest" ? "BLESS THY SINNERS - MASTERY" : "HOLY TRINITY - MASTERY"),
                 IhTreeBranch() == "Priest" ? GetAdvancedPassiveDescription(treePlayer, "Priest") : "Club-type melee + Shield: +15 Clubs (effective cap 100), no Armor movement penalties, and the Club's current Blunt damage guarantees Slash and Pierce each reach at least 50% of that Blunt value without lowering existing damage.");
 
             IhDrawBranchSelector(treePlayer);
@@ -9577,14 +9609,24 @@ namespace AlbedosCustomClassesAdvanced
             string[] branches = { "Paladin", "Priest" };
             for (int i = 0; i < branches.Length; i++)
             {
-                Rect r = ScaleReferenceRect(800f + i * 83f, 124f, 80f, 20f);
+                // v0.20.7: same ornate plaque as CONFIRM / ADVANCE; the unselected branch is dimmed.
+                Rect r = ScaleReferenceRect(796f + i * 90f, 120f, 86f, 25f);
                 bool selected = _ihPreviewBranch == branches[i];
-                DrawFilledBorder(r, new Color(0.10f,0.12f,0.15f,0.95f),
-                    selected ? new Color(1f,0.80f,0.30f,1f) : new Color(0.55f,0.46f,0.30f,1f), 1f);
-                GUIStyle style = new GUIStyle(_treeFooterPendingStyle);
+                bool hover = r.Contains(Event.current.mousePosition);
+                if (_treeConfirmPlaqueTex != null)
+                {
+                    Color old = GUI.color;
+                    GUI.color = selected ? Color.white : (hover ? new Color(0.82f, 0.82f, 0.82f, 1f) : new Color(0.58f, 0.58f, 0.58f, 1f));
+                    GUI.DrawTexture(r, _treeConfirmPlaqueTex);
+                    GUI.color = old;
+                }
+                else
+                    DrawFilledBorder(r, new Color(0.10f,0.12f,0.15f,0.95f),
+                        selected ? new Color(1f,0.80f,0.30f,1f) : new Color(0.55f,0.46f,0.30f,1f), 1f);
+                GUIStyle style = new GUIStyle(selected ? _treeFooterConfirmStyle : _treeFooterPendingStyle);
                 style.alignment = TextAnchor.MiddleCenter;
-                style.fontSize = Mathf.Max(9, Mathf.RoundToInt(r.height * 0.60f));
-                GUI.Label(r, branches[i].ToUpperInvariant(), style);
+                style.fontSize = Mathf.Max(9, Mathf.RoundToInt(r.height * 0.46f));
+                DrawFooterText(r, branches[i].ToUpperInvariant(), style);
                 if (r.Contains(Event.current.mousePosition))
                 {
                     _treeHoveredTitle = branches[i].ToUpperInvariant() + " - PREVIEW";
@@ -9839,9 +9881,10 @@ namespace AlbedosCustomClassesAdvanced
         private Texture2D IhComposeHotbarIcon(Texture2D frame, Texture2D backdrop, Rect field, string name)
         {
             Texture2D icon=IhCopyTexture(frame,name);
-            // Inner opening of the 49x54 hotbar frame (inset 7 / 8 px, same as build_ui_assets.framed_icon).
-            float sx=frame.width/49f, sy=frame.height/54f;
-            int ix0=Mathf.RoundToInt(7f*sx), iy0=Mathf.RoundToInt(8f*sy);
+            // Inner opening of the hotbar frame: 49x54 skill frames inset 7 / 8 px (same as
+            // build_ui_assets.framed_icon), the 59x57 Grace frame (Icon_heavens_light) 9 / 10 px.
+            bool grace=frame.width==59 && frame.height==57;
+            int ix0=grace ? 9 : Mathf.RoundToInt(7f*frame.width/49f), iy0=grace ? 10 : Mathf.RoundToInt(8f*frame.height/54f);
             int iw=frame.width-2*ix0, ih=frame.height-2*iy0;
             // Centre crop of the tree opening with the hotbar opening's aspect: no stretching.
             float aspect=(float)iw/ih;
@@ -9865,8 +9908,9 @@ namespace AlbedosCustomClassesAdvanced
             for(int i=0;i<nodes.Length;i++)
             {
                 ReferenceNodeUi node=nodes[i];
-                if(node.Kind==TreeNodeKind.Grace) continue;
-                string file=IhHotbarFrameFile(IhBaseFrameColor(node));
+                // Heaven's Light keeps its own icon; other Graces (Heaven's Crucible...) use its gold frame.
+                if(node.Kind==TreeNodeKind.Grace && node.Id==IhGrace) continue;
+                string file=node.Kind==TreeNodeKind.Grace ? "Icon_heavens_light.png" : IhHotbarFrameFile(IhBaseFrameColor(node));
                 Texture2D frame;
                 if(!frames.TryGetValue(file,out frame)) { frame=LoadUiPng(file); frames[file]=frame; }
                 if(frame==null) continue;
@@ -10034,7 +10078,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "grand_cross": lore = "Carve a radiant X through the battlefield. Its crossing blades travel forward, burning every foe they touch."; break;
                 case "heavens_judgement": lore = "Call a barrage of holy beams around yourself or an aimed Relic, chilling the enemies caught beneath them."; break;
                 case "lightning_tempest": lore = "Unleash a restless storm, layering lightning and afflictions across the battlefield."; break;
-                case "grand_sigil": lore = "Place a protective Barrier around yourself and nearby allies. Your Grand Sigil Mastery also guards against a lethal blow."; break;
+                case "grand_sigil": lore = "Wrap yourself and nearby allies in a holy Barrier that holds until it breaks."; break;
             }
             b.Append(IhWhite(lore)+"\n\n");
             int max = IhMaxTier(id);
@@ -11099,7 +11143,7 @@ namespace AlbedosCustomClassesAdvanced
 
             DrawTreeNode(new Rect(638f, 184f, 64f, 64f), "Shield Charge", "SC", TreeNodeKind.AdvancementNormal,
                 5, 0, false, "ADVANCEMENT", "Interchangeable Advancement skill. Normal Advancement nodes use cyan styling.");
-            DrawTreeNode(new Rect(824f, 184f, 64f, 64f), "Fallen Angel", "↓", TreeNodeKind.AdvancementNormal,
+            DrawTreeNode(new Rect(824f, 184f, 64f, 64f), "Angel Comet", "↓", TreeNodeKind.AdvancementNormal,
                 5, 0, false, "ADVANCEMENT", "Interchangeable Advancement skill. Jump high, nose-dive, then slam a 10m area.");
             DrawTreeNode(new Rect(824f, 343f, 64f, 64f), "Ray of Hope", "+", TreeNodeKind.Buff,
                 5, 0, false, "BUFF / SUPPORT", "Interchangeable non-damaging/support Advancement skill.");
@@ -11730,8 +11774,8 @@ namespace AlbedosCustomClassesAdvanced
         {
             if (advancement == "Sword Master") return "The Way of the Sword";
             if (advancement == "Mercenary") return "Barbaric / Warfreak";
-            if (advancement == "Paladin") return "Elemental Savant / Holy Knight";
-            if (advancement == "Priest") return "Grand Sigil";
+            if (advancement == "Paladin") return "Holy Trinity";
+            if (advancement == "Priest") return "Bless Thy Sinners";
             return "Advanced Passive";
         }
 
@@ -11758,7 +11802,7 @@ namespace AlbedosCustomClassesAdvanced
             }
 
             if (advancement == "Priest")
-                return "Grand Sigil: +30% of current Armor. Self lethal hit -> 1 HP, heal 50% over 7s, +50% Move and +100% Stamina Regen; nearby allies within 20m gain the same death-save with a longer cooldown. Activate: 300 HP ally barrier.";
+                return "Bless Thy Sinners: +30% of current Armor. Self lethal hit -> 1 HP, heal 50% over 7s, +50% Move and +100% Stamina Regen; nearby allies within 20m gain the same death-save with a longer cooldown. Grace: Heaven's Crucible barrier.";
 
             return "";
         }

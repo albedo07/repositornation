@@ -40,7 +40,7 @@ namespace DragonsAltarDevTools
     {
         public const string ModGuid = "albedo.customclasses.devtools";
         public const string ModName = "Dragon's Altar - Developer Tools";
-        public const string ModVersion = "0.20.6";
+        public const string ModVersion = "0.20.7";
 
         public static DeveloperToolsPlugin Instance;
 
@@ -282,7 +282,7 @@ namespace DragonsAltarDevTools
                         setting.Group = GroupFor(section);
                         // Hidden from the lists (Keys/Hotbar live in the Skill Tree; Ascensions have
                         // their own switches in the Progression tab) but still editable by code.
-                        if (key == "AscendedSkills")
+                        if (key == "AscendedSkills" || IsRetired(section, key))
                             setting.Tab = "";
                         try
                         {
@@ -380,6 +380,27 @@ namespace DragonsAltarDevTools
             if (Array.IndexOf(SorcererGroups, group) >= 0)
                 return "Sorcerer";
             return "General";
+        }
+
+        // v0.20.7: settings of removed skills (Aegis Fall, Divine Verdict) and legacy keys stay in
+        // the .cfg for compatibility but are not shown.
+        private static bool IsRetired(string section, string key)
+        {
+            if (key.StartsWith("Legacy", StringComparison.OrdinalIgnoreCase))
+                return true;
+            return section.StartsWith("Paladin Aegis", StringComparison.OrdinalIgnoreCase) ||
+                   section.StartsWith("Paladin Divine Verdict", StringComparison.OrdinalIgnoreCase);
+        }
+
+        // Display name only (the .cfg keeps its section names): no version tags, current skill names.
+        private static string DisplaySection(string section)
+        {
+            string text = System.Text.RegularExpressions.Regex.Replace(section, @"\s+v\d+$", "");
+            text = text.Replace("Fallen Angel", "Angel Comet")
+                       .Replace("Grand Sigil Survival", "Priest Bless Thy Sinners")
+                       .Replace("Priest Grand Sigil", "Priest Heaven's Crucible")
+                       .Replace("Heavens ", "Heaven's ");
+            return text;
         }
 
         private static string[] GroupsFor(string tab)
@@ -871,15 +892,16 @@ namespace DragonsAltarDevTools
 
         private string FriendlySectionName(string section)
         {
-            return section.Replace(".", " - ");
+            return DisplaySection(section).Replace(".", " - ");
         }
 
         // In a class tab the header already names the class, so "Paladin Goddess Relic" lists as "Goddess Relic".
         private string ShortSectionName(string section)
         {
             string group = string.IsNullOrEmpty(_search) ? GroupFor(section) : "";
-            if (group.Length > 0 && section.Length > group.Length + 1 && section.StartsWith(group, StringComparison.OrdinalIgnoreCase))
-                return section.Substring(group.Length + 1).Trim();
+            string shown = DisplaySection(section);
+            if (group.Length > 0 && shown.Length > group.Length + 1 && shown.StartsWith(group, StringComparison.OrdinalIgnoreCase))
+                return shown.Substring(group.Length + 1).Trim();
             return FriendlySectionName(section);
         }
 
@@ -1206,6 +1228,7 @@ namespace DragonsAltarDevTools
 
         private static string PrettySkill(string id)
         {
+            if (id == "fallen_angel") return "Angel Comet";
             string[] words = id.Split('_');
             for (int i = 0; i < words.Length; i++)
             {
@@ -1222,7 +1245,9 @@ namespace DragonsAltarDevTools
             if (v > 0)
                 text = text.Substring(0, v);
             text = text.Replace("Meters", "").Replace("Seconds", "");
-            return text;
+            // v0.20.7: "StaminaCost" reads as "Stamina Cost", "HP" / "PAC" stay together.
+            text = System.Text.RegularExpressions.Regex.Replace(text, @"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])", " ");
+            return text.Replace("_", " ").Trim();
         }
 
         // ------------------------------------------------------------------ world preview

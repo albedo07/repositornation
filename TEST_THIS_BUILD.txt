@@ -1,12 +1,11 @@
-Immortal Heroes v0.20.6 - Test focus
+Immortal Heroes v0.20.7 - Test focus
 
-1. Tooltips: Lightning Zap "Tier ... Damage", Holy Wave "Healing", Divine Intervention
-   "Damage & Healing".
-2. Tree (Paladin and Priest preview): names, stars + count centred under every plate,
-   plate edges clean, "Divine Intervention" fits its plate, padlocks in the same corner spot.
-3. AC title (PALADIN / PRIEST) centred, the small gold star right of it still visible.
-4. Progression tab: switch Shield Charge to ASCENDED -> Magenta frame + corner badge.
-5. Hotbar: every icon uses its tree art in the matching frame colour (Electric Smite
-   shows its painting, not "ES"); Priest icons centred.
-6. F8 -> Cleric tab: "CLERIC Base Class" sections, then "PALADIN" and "PRIEST"
-   headers that open / close.
+1. Tree: hover Ray of Hope (values Green), Goddess Relic (Navy), Electric Smite (Maroon),
+   Shield Charge (Cyan). Switch Goddess Relic to ASCENDED in F8 -> values Magenta.
+2. Angel Comet everywhere Fallen Angel used to be (tree name, tooltip, cast message).
+3. PRIEST preview: Grace shows Heaven's Crucible (tree, tooltip, footer); HUD Grace icon
+   visible after Advancing to Priest; Mastery tooltip says Bless Thy Sinners.
+4. PALADIN / PRIEST buttons top right are gold plaques.
+5. Altar: Cleric / Paladin / Priest passives show the new names and texts.
+6. F8 Cleric tab: no Aegis Fall / Divine Verdict, no "v2" / "v0109" in names,
+   keys read "Stamina Cost", "Cooldown"...

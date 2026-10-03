@@ -17,7 +17,7 @@ namespace AlbedosCustomClassesGuardian
     {
         public const string ModGuid = "albedo.customclasses.guardian";
         public const string ModName = "Dragon's Altar - Grand Sigil Survival";
-        public const string ModVersion = "0.20.6";
+        public const string ModVersion = "0.20.7";
 
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -167,12 +167,12 @@ namespace AlbedosCustomClassesGuardian
             if (MessageHud.instance != null)
                 MessageHud.instance.ShowMessage(
                     MessageHud.MessageType.Center,
-                    allyProtection ? "Grand Sigil - Resurrection" : "Grand Sigil"
+                    allyProtection ? "Bless Thy Sinners - Resurrection" : "Bless Thy Sinners"
                 );
 
             Logger.LogInfo(allyProtection
-                ? "Grand Sigil Resurrection prevented ally lethal damage."
-                : "Grand Sigil prevented Priest lethal damage.");
+                ? "Bless Thy Sinners prevented ally lethal damage."
+                : "Bless Thy Sinners prevented Priest lethal damage.");
         }
 
         private IEnumerator GrandSigilVisual(Player player)
