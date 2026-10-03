@@ -1,12 +1,12 @@
-Immortal Heroes v0.20.5 - Test focus (F8 Config window + Altar descriptions)
+Immortal Heroes v0.20.6 - Test focus
 
-1. F8 -> Cleric tab -> dropdown: Cleric / Paladin / Priest each show only their sections.
-   Same for the Warrior and Sorcerer tabs.
-2. No Keys & Hotbar tab; the hotbar keys still work and can be changed in the Skill Tree.
-3. Progression tab with a character loaded:
-   - Level - / + / SET changes the level (tree Tier Points follow).
-   - Bonus Class / Advancement points SET -> "Left" goes up, the tree header matches.
-   - Goddess Relic NORMAL -> ASCENDED: the tree shows the Magenta frame and the skill casts Ascended.
-   - RESET ALL TIERS & ASCENSIONS gives every spent point back.
-4. Search (e.g. "cooldown") still finds settings across all tabs.
-5. Altar: click Lightning Zap -> only its description, no stats.
+1. Tooltips: Lightning Zap "Tier ... Damage", Holy Wave "Healing", Divine Intervention
+   "Damage & Healing".
+2. Tree (Paladin and Priest preview): names, stars + count centred under every plate,
+   plate edges clean, "Divine Intervention" fits its plate, padlocks in the same corner spot.
+3. AC title (PALADIN / PRIEST) centred, the small gold star right of it still visible.
+4. Progression tab: switch Shield Charge to ASCENDED -> Magenta frame + corner badge.
+5. Hotbar: every icon uses its tree art in the matching frame colour (Electric Smite
+   shows its painting, not "ES"); Priest icons centred.
+6. F8 -> Cleric tab: "CLERIC Base Class" sections, then "PALADIN" and "PRIEST"
+   headers that open / close.

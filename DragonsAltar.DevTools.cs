@@ -40,7 +40,7 @@ namespace DragonsAltarDevTools
     {
         public const string ModGuid = "albedo.customclasses.devtools";
         public const string ModName = "Dragon's Altar - Developer Tools";
-        public const string ModVersion = "0.20.5";
+        public const string ModVersion = "0.20.6";
 
         public static DeveloperToolsPlugin Instance;
 
@@ -74,8 +74,7 @@ namespace DragonsAltarDevTools
         private Vector2 _sectionScroll;
         private Vector2 _settingScroll;
         private string _selectedTab = "Cleric";
-        private readonly Dictionary<string, string> _selectedGroup = new Dictionary<string, string>();
-        private bool _groupDropdownOpen;
+        private readonly HashSet<string> _openGroups = new HashSet<string>(new string[] { "Warrior", "Cleric", "Sorcerer" });
         private string _levelBuffer = "";
         private string _classBonusBuffer = "";
         private string _advBonusBuffer = "";
@@ -327,6 +326,17 @@ namespace DragonsAltarDevTools
                 if (!_sections.Contains(s.Section))
                     _sections.Add(s.Section);
             }
+            string[] order = string.IsNullOrEmpty(search) ? GroupsFor(_selectedTab) : null;
+            if (order != null)
+            {
+                List<string> sorted = new List<string>();
+                for (int g = 0; g < order.Length; g++)
+                    for (int i = 0; i < _sections.Count; i++)
+                        if (GroupFor(_sections[i]) == order[g])
+                            sorted.Add(_sections[i]);
+                _sections.Clear();
+                _sections.AddRange(sorted);
+            }
             if (_sections.Count > 0 && !_sections.Contains(_selectedSection))
                 _selectedSection = _sections[0];
             EnsureSelectedSetting();
@@ -338,9 +348,7 @@ namespace DragonsAltarDevTools
                 return false;
             if (search.Length > 0)
                 return s.Section.ToLowerInvariant().Contains(search) || s.Key.ToLowerInvariant().Contains(search);
-            if (s.Tab != _selectedTab)
-                return false;
-            return GroupsFor(_selectedTab) == null || s.Group == CurrentGroup();
+            return s.Tab == _selectedTab;
         }
 
         // Base Class / Advancement each section belongs to ("" = not a class section).
@@ -382,21 +390,26 @@ namespace DragonsAltarDevTools
             return null;
         }
 
-        private string CurrentGroup()
+        private bool IsGroupOpen(string group)
         {
-            string[] groups = GroupsFor(_selectedTab);
-            if (groups == null)
-                return "";
-            string group;
-            if (!_selectedGroup.TryGetValue(_selectedTab, out group) || Array.IndexOf(groups, group) < 0)
-                group = groups[0];
-            return group;
+            return _openGroups.Contains(group);
         }
 
-        private static string GroupLabel(string tab, string group)
+        private void SetGroupOpen(string group, bool open)
         {
-            string[] groups = GroupsFor(tab);
-            return group + (groups != null && groups[0] == group ? "  (Base Class)" : "  (Advancement)");
+            if (open) _openGroups.Add(group);
+            else _openGroups.Remove(group);
+            // Keep the selection visible: a closed group hands it to its first open neighbour.
+            if (!open && GroupFor(_selectedSection) == group)
+            {
+                for (int i = 0; i < _sections.Count; i++)
+                    if (IsGroupOpen(GroupFor(_sections[i])))
+                    {
+                        _selectedSection = _sections[i];
+                        EnsureSelectedSetting();
+                        break;
+                    }
+            }
         }
 
         private static bool IsDamageKey(string lower)
@@ -777,7 +790,6 @@ namespace DragonsAltarDevTools
                 {
                     _selectedTab = Tabs[i];
                     _search = string.Empty;
-                    _groupDropdownOpen = false;
                     _sectionScroll = Vector2.zero;
                     _settingScroll = Vector2.zero;
                     RebuildSections();
@@ -803,47 +815,49 @@ namespace DragonsAltarDevTools
             GUI.Box(new Rect(18f, 122f, 300f, 562f), "SECTIONS");
             GUI.Box(new Rect(328f, 122f, 774f, 562f), "");
 
-            // Class tabs: pick the Base Class or one of its Advancements first.
-            float listTop = 148f;
+            // v0.20.6: class tabs list the Base Class sections first, then one header per
+            // Advancement (click to open / close), so every AC is visible in its Base Class tab.
             string[] groups = string.IsNullOrEmpty(_search) ? GroupsFor(_selectedTab) : null;
-            if (groups != null)
+            List<string> rows = new List<string>();   // "#Group" = header, otherwise a section
+            if (groups == null)
+                rows.AddRange(_sections);
+            else
             {
-                GUI.Label(new Rect(30f, 146f, 270f, 18f), "SHOW SETTINGS FOR", _smallStyle);
-                if (GUI.Button(new Rect(28f, 166f, 282f, 30f), GroupLabel(_selectedTab, CurrentGroup()) + (_groupDropdownOpen ? "   ▲" : "   ▼"), _tabSelectedStyle))
-                    _groupDropdownOpen = !_groupDropdownOpen;
-                listTop = 204f;
-                if (_groupDropdownOpen)
+                for (int g = 0; g < groups.Length; g++)
                 {
-                    // While the list is open it replaces the sections, so no click falls through.
-                    for (int i = 0; i < groups.Length; i++)
-                    {
-                        Rect r = new Rect(36f, listTop + i * 34f, 266f, 30f);
-                        if (GUI.Button(r, GroupLabel(_selectedTab, groups[i]), groups[i] == CurrentGroup() ? _selectedButtonStyle : _sectionButtonStyle))
-                        {
-                            _selectedGroup[_selectedTab] = groups[i];
-                            _groupDropdownOpen = false;
-                            _sectionScroll = Vector2.zero;
-                            _settingScroll = Vector2.zero;
-                            RebuildSections();
-                        }
-                    }
-                    DrawSettingsPanel();
-                    GUI.DragWindow(new Rect(0f, 0f, _windowRect.width, 24f));
-                    return;
+                    List<string> inGroup = new List<string>();
+                    for (int i = 0; i < _sections.Count; i++)
+                        if (GroupFor(_sections[i]) == groups[g])
+                            inGroup.Add(_sections[i]);
+                    if (inGroup.Count == 0)
+                        continue;
+                    rows.Add("#" + groups[g]);
+                    if (IsGroupOpen(groups[g]))
+                        rows.AddRange(inGroup);
                 }
             }
 
-            Rect sectionView = new Rect(28f, listTop, 282f, 676f - listTop);
-            Rect sectionContent = new Rect(0f, 0f, 260f, Mathf.Max(520f, _sections.Count * 32f + 8f));
+            Rect sectionView = new Rect(28f, 148f, 282f, 528f);
+            Rect sectionContent = new Rect(0f, 0f, 260f, Mathf.Max(520f, rows.Count * 32f + 8f));
             _sectionScroll = GUI.BeginScrollView(sectionView, _sectionScroll, sectionContent);
             float sy = 4f;
-            for (int i = 0; i < _sections.Count; i++)
+            for (int i = 0; i < rows.Count; i++)
             {
-                string section = _sections[i];
-                GUIStyle style = section == _selectedSection ? _selectedButtonStyle : _sectionButtonStyle;
-                if (GUI.Button(new Rect(4f, sy, 252f, 28f), ShortSectionName(section), style))
+                string row = rows[i];
+                if (row.StartsWith("#"))
                 {
-                    _selectedSection = section;
+                    string group = row.Substring(1);
+                    bool open = IsGroupOpen(group);
+                    string label = (open ? "▼  " : "►  ") + group.ToUpperInvariant() + (group == groups[0] ? "   Base Class" : "   Advancement");
+                    if (GUI.Button(new Rect(0f, sy, 260f, 28f), label, _tabSelectedStyle))
+                        SetGroupOpen(group, !open);
+                    sy += 32f;
+                    continue;
+                }
+                GUIStyle style = row == _selectedSection ? _selectedButtonStyle : _sectionButtonStyle;
+                if (GUI.Button(new Rect(groups == null ? 4f : 14f, sy, groups == null ? 252f : 242f, 28f), ShortSectionName(row), style))
+                {
+                    _selectedSection = row;
                     EnsureSelectedSetting();
                     _settingScroll = Vector2.zero;
                 }
@@ -860,10 +874,10 @@ namespace DragonsAltarDevTools
             return section.Replace(".", " - ");
         }
 
-        // In a class tab the dropdown already names the class, so "Paladin Goddess Relic" lists as "Goddess Relic".
+        // In a class tab the header already names the class, so "Paladin Goddess Relic" lists as "Goddess Relic".
         private string ShortSectionName(string section)
         {
-            string group = string.IsNullOrEmpty(_search) ? CurrentGroup() : "";
+            string group = string.IsNullOrEmpty(_search) ? GroupFor(section) : "";
             if (group.Length > 0 && section.Length > group.Length + 1 && section.StartsWith(group, StringComparison.OrdinalIgnoreCase))
                 return section.Substring(group.Length + 1).Trim();
             return FriendlySectionName(section);

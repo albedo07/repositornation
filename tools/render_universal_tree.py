@@ -21,8 +21,9 @@ NAMES = {
 }
 PRIEST_SLOT = {v: k for k, v in tf.PRIEST_DONOR_GUESS.items()}
 ANCHORS = {"goddess_relic": (404, 247), "judgement_hammer": (405, 375), "heavens_light": (416, 499),
-           "shield_charge": (582, 247), "fallen_angel": (720, 247), "ray_of_hope": (720, 375), "electric_smite": (902, 355)}
-LABEL_W = {"judgement_hammer": 112, "heavens_light": 102, "electric_smite": 126}
+           "shield_charge": (579.5, 247), "fallen_angel": (716.5, 247), "ray_of_hope": (716, 375), "electric_smite": (907.5, 355)}
+LABEL_W = {"goddess_relic": 74, "judgement_hammer": 103, "heavens_light": 77, "shield_charge": 71, "fallen_angel": 69,
+           "ray_of_hope": 70, "electric_smite": 109}
 
 
 def inpaint(img, box):
@@ -39,7 +40,7 @@ def chassis():
     img = np.asarray(Image.open(os.path.join(A, "Cleric_Paladin_PreAdvance.png")).convert("RGB"), dtype=np.float64) / 255.0
     img = img.copy()
     for slot, (cx, by) in ANCHORS.items():
-        w = LABEL_W.get(slot, 96)
+        w = LABEL_W.get(slot, 74)
         inpaint(img, (cx - w / 2.0, by - 22, w, 21))
     return img
 

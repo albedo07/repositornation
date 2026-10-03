@@ -3,7 +3,7 @@
 ## Working rules
 - User wants short responses and real execution, not long explanations.
 - **RUSH B** = immediately code the obvious requested task, minimal commentary, use latest approved build as baseline, don't redesign unrelated things, verify and package.
-- Latest package: **v0.20.5 — Config Window** (v0.20.4 Tree and Altar Fixes), built on ChatGPT's v0.20.3 (Universal Tree runtime chassis + uGUI Altar with Altar_Background/Altar_ClassCards; it REPLACED our v0.19.2/0.19.3 IMGUI Altar, which the user accepted as the new base). Older: v0.19.x ours, v0.19.0 ChatGPT. Do NOT change combat/progression logic unless explicitly requested.
+- Latest package: **v0.20.6 — Polish** (v0.20.5 Config Window, v0.20.4 Tree and Altar Fixes), built on ChatGPT's v0.20.3 (Universal Tree runtime chassis + uGUI Altar with Altar_Background/Altar_ClassCards; it REPLACED our v0.19.2/0.19.3 IMGUI Altar, which the user accepted as the new base). Older: v0.19.x ours, v0.19.0 ChatGPT. Do NOT change combat/progression logic unless explicitly requested.
 - Never patch visual problems by drawing random rectangles over the reference asset. Keep approved artwork intact; make layout/components fit properly.
 
 ## Framework doc (source of truth for design)
@@ -54,6 +54,9 @@
 - Only Paladin moves to the tree hotbar; other ACs stay on fixed `[Hotkeys]` until Paladin is finished, then copy it (universal tree).
 - F8 Config window (DevTools, rewritten v0.18.0): every setting of every module, tabs + search, auto-saves to the .cfg, same Section/Key across modules edited together, Test Cooldowns toggle.
 - v0.20.5 F8 layout (user goal: always easy to understand): tabs Warrior | Cleric | Sorcerer | Progression | Testing | General; class tabs have a "SHOW SETTINGS FOR" dropdown (Base Class / its ACs, `GroupFor`). Progression tab = Level, Class/AC Tier Points (bonus via `DevSetBonusPoints`), reset, ASCENDED/NORMAL switches (write `[Testing] AscendedSkills`); Advanced exposes `DevPointSummary` / `DevCharacterName` / `DevSetBonusPoints` / `DevCommand` (reflection, /ih rules). Keys/Hotbar are NOT in the window (set in the Skill Tree).
+- v0.20.6 universal tree geometry (measured on the chassis, reuse for every AC): nameplate anchor x = plate/frame centre; AC plate blank widths = plate width - 14 (`IhLabelWidth`, JH 103); live names shrink to fit; stars + count centred as one group; padlock = `IhCornerLock(IhFieldRect)` (corner 4 px past the opening); AC title centred at x 665 (blank 596-734, keeps the gold star); Ascended nodes get the permanent badge. Hotbar icons for every branch = `IhComposeHotbarIcons` (hotbar frame of the category colour + tree opening art, 3 px inset). Tier tooltip line names Damage / Healing per skill (`IhTierBonusLabel`).
+- F8 class tabs (v0.20.6): Base Class sections first, then a collapsible header per AC (user missed the v0.20.5 dropdown).
+- Working style (user, 2026-10-03): find and fix misalignments / inconsistencies proactively (anything off by even a few px); prefer text over preview images when an image costs a lot.
 - Altar skill inspection shows the description only (first paragraph of the tree tooltip), no stats.
 
 ## Ascended designs (approved so far; tooltip header "ASCENDED - <SKILL>", names unchanged)

@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.20.5";
+        public const string ModVersion = "0.20.6";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -8240,7 +8240,7 @@ namespace AlbedosCustomClassesAdvanced
                 string tierText = tier.ToString() + "/" + maxTier.ToString();
                 if (pending > 0)
                     tierText += "  →  " + (tier + pending).ToString() + "/" + maxTier.ToString() + " (pending)";
-                tierText += "   +" + IhNum(pct * (tier + pending)) + "% Damage & Healing";
+                tierText += "   +" + IhNum(pct * (tier + pending)) + "% " + IhTierBonusLabel(id);
                 b.Append(IhLine("Tier", tierText));
                 if (id == IhUltimate)
                     b.Append(IhLine("Tier Up", "automatic at Lv 40, 44, 48"));
@@ -8400,6 +8400,17 @@ namespace AlbedosCustomClassesAdvanced
             b.Append(IhLine("Cooldown", IhNum(cooldown) + "s"));
         }
 
+        // v0.20.6: the Tier line names only what the skill actually scales.
+        private static string IhTierBonusLabel(string id)
+        {
+            switch (id)
+            {
+                case "holy_wave": case "ray_of_hope": case "holy_relic": return "Healing";
+                case "divine_intervention": return "Damage & Healing";
+            }
+            return "Damage";
+        }
+
         private static string IhLore(string id, bool ascended)
         {
             switch (id)
@@ -8466,7 +8477,7 @@ namespace AlbedosCustomClassesAdvanced
                 ? "<color=" + ink + ">TIER POINTS  </color><color=" + red + ">" + Mathf.Max(0, advLeft).ToString() + "</color>"
                 : "<color=" + ink + ">SEALED  ·  ADVANCE AT LV 16</color>";
             GUI.Label(ScaleReferenceRect(150f, 122f, 108f, 18f), classText, _ihHeaderStyle);
-            GUI.Label(ScaleReferenceRect(588f, 122f, 174f, 18f), advText, _ihHeaderStyle);
+            GUI.Label(ScaleReferenceRect(578f, 122f, 174f, 18f), advText, _ihHeaderStyle); // centred under the title (x 665)
         }
 
         private int IhPendingSum(string[] ids)
@@ -8500,9 +8511,15 @@ namespace AlbedosCustomClassesAdvanced
             Vector2 anchor = GetReferenceNameplateAnchor(node);
             float size = IhIsUltimate(node.Id) ? 17f : (maxTier == 7 ? 12f : 14f);
             const float gap = 2f;
-            float countWidth = 24f;
             float total = maxTier * size + (maxTier - 1) * gap;
-            float x0 = anchor.x - total * 0.5f;
+            IhEnsureTreeStyles();
+            _ihCountStyle.fontSize = Mathf.Max(8, Mathf.RoundToInt(ScaleReferenceRect(0f, 0f, 0f, 10f).height));
+            string countText = (tier + pending).ToString() + "/" + maxTier.ToString();
+            // v0.20.6: stars + count are centred together under the plate (the count used to hang
+            // off the right, pushing the group ~13 px off centre). Width measured in reference px.
+            float scale = Mathf.Max(0.01f, ScaleReferenceRect(0f, 0f, 100f, 0f).width / 100f);
+            float countWidth = Mathf.Ceil(_ihCountStyle.CalcSize(new GUIContent(countText)).x / scale) + 1f;
+            float x0 = anchor.x - (total + 3f + countWidth) * 0.5f;
             float y = anchor.y + 3f;
             for (int i = 0; i < maxTier; i++)
             {
@@ -8510,11 +8527,9 @@ namespace AlbedosCustomClassesAdvanced
                 if (tex != null)
                     GUI.DrawTexture(IhSnap(ScaleReferenceRect(x0 + i * (size + gap), y, size, size)), tex);
             }
-            IhEnsureTreeStyles();
-            _ihCountStyle.fontSize = Mathf.Max(8, Mathf.RoundToInt(ScaleReferenceRect(0f, 0f, 0f, 10f).height));
             string color = pending > 0 ? IhHex(0.12f, 0.45f, 0.58f) : IhHex(0.40f, 0.27f, 0.12f);
-            GUI.Label(ScaleReferenceRect(x0 + total + 3f, y - 1f, countWidth, size + 2f),
-                "<color=" + color + ">" + (tier + pending).ToString() + "/" + maxTier.ToString() + "</color>", _ihCountStyle);
+            GUI.Label(ScaleReferenceRect(x0 + total + 3f, y - 1f, countWidth + 4f, size + 2f),
+                "<color=" + color + ">" + countText + "</color>", _ihCountStyle);
             rowRect = new Rect(x0, y, total + 3f + countWidth, size);
         }
 
@@ -8527,9 +8542,9 @@ namespace AlbedosCustomClassesAdvanced
                 float lockSize = IhIsUltimate(node.Id) ? 30f : 24f;
                 // Heaven's Light's painted frame sits above/right of its older hit rect.
                 // Anchor its lock inside the actual frame, clear of the nameplate.
-                Rect lockRect = node.Id == IhGrace
-                    ? new Rect(428f,449f,lockSize,lockSize)
-                    : IhCornerLock(IhVisualIconRect(node),lockSize);
+                // v0.20.6: same spot on every frame: the padlock's lower-right corner sits 4 px past
+                // the art opening's corner (it used to vary from 1 to 12 px per slot).
+                Rect lockRect = IhCornerLock(IhFieldRect(IhTemplateSlot(node.Id)),lockSize);
                 GUI.DrawTexture(IhSnap(ScaleReferenceRect(lockRect.x, lockRect.y, lockRect.width, lockRect.height)), _ihPadlockTex);
             }
             IhEnsureTreeStyles();
@@ -9226,7 +9241,7 @@ namespace AlbedosCustomClassesAdvanced
             IhRepairLightningZapBackdrop(_ihPreAdvanceBackdropTex);
             foreach(Texture2D texture in _ihAscendedIconArt.Values) if(texture!=null) Destroy(texture);
             _ihAscendedIconArt.Clear();
-            IhPrepareCenteredHotbarArt();
+            IhComposeHotbarIcons(ClericPaladinReferenceNodes, _ihPreAdvanceBackdropTex);
             IhPrepareUniversalBanner(_treeReferenceBackdropTex);
             IhPrepareUniversalBanner(_ihPreAdvanceBackdropTex);
             IhPrepareSharedNameplates();
@@ -9598,24 +9613,6 @@ namespace AlbedosCustomClassesAdvanced
             return texture;
         }
 
-        private Texture2D IhCropIcon(Texture2D source, Rect rect, string name)
-        {
-            const int width = 64, height = 64;
-            Texture2D icon = new Texture2D(width,height,TextureFormat.RGBA32,false);
-            icon.name = name;
-            icon.wrapMode = TextureWrapMode.Clamp;
-            icon.filterMode = FilterMode.Bilinear;
-            for (int y = 0; y < height; y++)
-                for (int x = 0; x < width; x++)
-                {
-                    float u = (rect.x + (x + 0.5f) * rect.width / width) / 1011f;
-                    float v = 1f - (rect.yMax - (y + 0.5f) * rect.height / height) / 662f;
-                    icon.SetPixel(x,y,source.GetPixelBilinear(u,v));
-                }
-            icon.Apply(false,false);
-            return icon;
-        }
-
         // One set of measured painted-frame bounds, shared by both branches.
         private static Rect IhVisualIconRect(ReferenceNodeUi node)
         {
@@ -9638,36 +9635,11 @@ namespace AlbedosCustomClassesAdvanced
         private static Rect IhCornerLock(Rect frame, float size)
         {
             // Padlock sits inside the lower-right border, never on the nameplate.
-            return new Rect(frame.xMax-size-1f,frame.yMax-size-1f,size,size);
+            return new Rect(frame.xMax+4f-size,frame.yMax+4f-size,size,size);
         }
 
         private readonly Dictionary<string,Texture2D> _ihAscendedIconArt = new Dictionary<string,Texture2D>();
         private readonly List<Texture2D> _ihPolishTextures = new List<Texture2D>();
-
-        private Texture2D IhNormalizeHotbarIcon(Texture2D source, Texture2D frame, float verticalOffset = 0.02f)
-        {
-            if(source==null || frame==null) return source;
-            Texture2D result=IhCopyTexture(frame,"ImmortalHeroes_CenteredIcon");
-            // The shared Holy Wave bezel is retained exactly; only its inner field changes.
-            int left=Mathf.RoundToInt(result.width*0.15f), right=Mathf.RoundToInt(result.width*0.85f);
-            int bottom=Mathf.RoundToInt(result.height*0.15f), top=Mathf.RoundToInt(result.height*0.85f);
-            for(int y=bottom;y<top;y++) for(int x=left;x<right;x++)
-            {
-                float u=0.21f+(x-left+0.5f)/(right-left)*0.58f;
-                float v=0.20f+verticalOffset+(y-bottom+0.5f)/(top-bottom)*0.60f;
-                result.SetPixel(x,y,source.GetPixelBilinear(u,v));
-            }
-            result.Apply(false,false); _ihPolishTextures.Add(result); return result;
-        }
-
-        private void IhPrepareCenteredHotbarArt()
-        {
-            Texture2D frame,zap;
-            if(!_treeSkillIconTex.TryGetValue("holy_wave",out frame)) return;
-            if(_treeSkillIconTex.TryGetValue("lightning_zap",out zap))
-                _treeSkillIconTex["lightning_zap"]=IhNormalizeHotbarIcon(zap,frame);
-            if(_ihRsNormalIconTex!=null) _ihRsNormalIconTex=IhNormalizeHotbarIcon(_ihRsNormalIconTex,frame,0.05f);
-        }
 
         private Texture2D IhAscendedArt(string id, Texture2D normal)
         {
@@ -9701,11 +9673,17 @@ namespace AlbedosCustomClassesAdvanced
 
         private static float IhLabelWidth(string id)
         {
+            // v0.20.6: inner text width of each painted plate (plate width - 14 px), measured on the
+            // chassis. The old 96-126 px boxes were wider than the plates and smeared their edges.
             switch(IhTemplateSlot(id)) {
-                case "judgement_hammer": return 112f;
-                case "heavens_light": return 102f;
-                case "electric_smite": return 126f;
-                default: return 96f;
+                case "goddess_relic": return 74f;
+                case "judgement_hammer": return 103f;
+                case "heavens_light": return 77f;
+                case "shield_charge": return 71f;
+                case "fallen_angel": return 69f;
+                case "ray_of_hope": return 70f;
+                case "electric_smite": return 109f;
+                default: return 74f;
             }
         }
 
@@ -9739,7 +9717,8 @@ namespace AlbedosCustomClassesAdvanced
         private void IhPrepareUniversalBanner(Texture2D target)
         {
             if(target==null) return;
-            IhInpaintText(target,new Rect(594f,92f,165f,27f));
+            // v0.20.6: only the painted name (x 600-719); the old 594-759 box also erased the gold star.
+            IhInpaintText(target,new Rect(596f,92f,138f,27f));
             target.Apply(false,false);
         }
 
@@ -9751,7 +9730,11 @@ namespace AlbedosCustomClassesAdvanced
             if(branchSerif!=null) title.font=branchSerif;
             title.fontSize=Mathf.Max(12,Mathf.RoundToInt(ScaleReferenceRect(0,0,0,28).height));
             title.normal.textColor=new Color(1f,0.93f,0.77f,1f);
-            GUI.Label(ScaleReferenceRect(592f,87f,176f,35f),IhTreeBranch().ToUpperInvariant(),title);
+            // Centred between the emblem and the gold star (x 665), shrunk to fit long AC names.
+            Rect titleRect=ScaleReferenceRect(598f,87f,134f,35f);
+            string branchName=IhTreeBranch().ToUpperInvariant();
+            while(title.fontSize>10 && title.CalcSize(new GUIContent(branchName)).x>titleRect.width) title.fontSize--;
+            GUI.Label(titleRect,branchName,title);
 
             GUIStyle label=new GUIStyle(_treeNodeNameStyle);
             label.fontSize=Mathf.Max(8,Mathf.RoundToInt(ScaleReferenceRect(0,0,0,10.5f).height));
@@ -9764,7 +9747,14 @@ namespace AlbedosCustomClassesAdvanced
             {
                 if(Array.IndexOf(IhClassSkills,node.Id)>=0) continue;
                 Vector2 anchor=GetReferenceNameplateAnchor(node);
-                GUI.Label(ScaleReferenceRect(anchor.x-61f,anchor.y-22f,122f,20f),IhSkillName(node.Id),label);
+                // Long names (Divine Intervention, Heaven's Judgement) shrink to stay inside the plate.
+                float width=IhLabelWidth(node.Id);
+                Rect r=ScaleReferenceRect(anchor.x-width/2f,anchor.y-22f,width,20f);
+                string name=IhSkillName(node.Id);
+                int size=Mathf.Max(8,Mathf.RoundToInt(ScaleReferenceRect(0,0,0,10.5f).height));
+                label.fontSize=size;
+                while(label.fontSize>7 && label.CalcSize(new GUIContent(name)).x>r.width) label.fontSize--;
+                GUI.Label(r,name,label);
             }
         }
 
@@ -9818,9 +9808,82 @@ namespace AlbedosCustomClassesAdvanced
             bool ascended=IsAscendedSkill(id);
             if(IhIsUltimate(id)) return ascended ? "red" : "maroon";
             if(ascended) return "magenta";
+            return IhBaseFrameColor(node);
+        }
+
+        // Category colour without Ascension (Ascension is applied on top at draw time).
+        private static string IhBaseFrameColor(ReferenceNodeUi node)
+        {
+            string id=node.Id;
+            if(node.Kind==TreeNodeKind.Grace) return "gold";
+            if(IhIsUltimate(id)) return "maroon";
             if(IhContains(IhSignatureSkills,id) || IhContains(IhPriestSignatures,id)) return "navy";
             if(id=="ray_of_hope" || id=="divine_intervention") return "green";
             return "cyan";
+        }
+
+        // v0.20.6: every hotbar icon (every branch) = the hotbar frame of the skill's category colour
+        // + that skill's art from its tree opening. Replaces the old mix of baked Paladin icons
+        // (some were "ES"/"SC" letter placeholders) and off-centre Priest crops of tree nodes.
+        private static string IhHotbarFrameFile(string color)
+        {
+            switch(color)
+            {
+                case "navy": return "Icon_goddess_relic.png";
+                case "green": return "Icon_ray_of_hope.png";
+                case "maroon": return "Icon_electric_smite.png";
+            }
+            return "Icon_shield_charge.png";
+        }
+
+        private Texture2D IhComposeHotbarIcon(Texture2D frame, Texture2D backdrop, Rect field, string name)
+        {
+            Texture2D icon=IhCopyTexture(frame,name);
+            // Inner opening of the 49x54 hotbar frame (inset 7 / 8 px, same as build_ui_assets.framed_icon).
+            float sx=frame.width/49f, sy=frame.height/54f;
+            int ix0=Mathf.RoundToInt(7f*sx), iy0=Mathf.RoundToInt(8f*sy);
+            int iw=frame.width-2*ix0, ih=frame.height-2*iy0;
+            // Centre crop of the tree opening with the hotbar opening's aspect: no stretching.
+            float aspect=(float)iw/ih;
+            float cw=Mathf.Min(field.width,field.height*aspect), ch=cw/aspect;
+            float left=field.center.x-cw*0.5f, top=field.center.y-ch*0.5f;
+            for(int y=0;y<ih;y++) for(int x=0;x<iw;x++)
+            {
+                float rx=left+(x+0.5f)/iw*cw;
+                float ry=top+ch-(y+0.5f)/ih*ch;
+                icon.SetPixel(ix0+x,iy0+y,backdrop.GetPixelBilinear(rx/1011f,1f-ry/662f));
+            }
+            icon.Apply(false,false);
+            _ihPolishTextures.Add(icon);
+            return icon;
+        }
+
+        private void IhComposeHotbarIcons(ReferenceNodeUi[] nodes, Texture2D backdrop)
+        {
+            if(backdrop==null) return;
+            Dictionary<string,Texture2D> frames=new Dictionary<string,Texture2D>();
+            for(int i=0;i<nodes.Length;i++)
+            {
+                ReferenceNodeUi node=nodes[i];
+                if(node.Kind==TreeNodeKind.Grace) continue;
+                string file=IhHotbarFrameFile(IhBaseFrameColor(node));
+                Texture2D frame;
+                if(!frames.TryGetValue(file,out frame)) { frame=LoadUiPng(file); frames[file]=frame; }
+                if(frame==null) continue;
+                Rect field=IhFieldRect(IhTemplateSlot(node.Id));
+                if(field.width<=0f) continue;
+                // 3 px inside the opening: keeps the frame rim and the badge tip out of the icon.
+                field=new Rect(field.x+3f,field.y+3f,field.width-6f,field.height-6f);
+                Texture2D old;
+                if(_treeSkillIconTex.TryGetValue(node.Id,out old) && old!=null && !_ihPolishTextures.Contains(old)) Destroy(old);
+                _treeSkillIconTex[node.Id]=IhComposeHotbarIcon(frame,backdrop,field,"ImmortalHeroes_Hotbar_"+node.Id);
+                if(node.Id==IhAscendedClassSkill)
+                {
+                    if(_ihRsNormalIconTex!=null && !_ihPolishTextures.Contains(_ihRsNormalIconTex)) Destroy(_ihRsNormalIconTex);
+                    _ihRsNormalIconTex=_treeSkillIconTex[node.Id];
+                }
+            }
+            foreach(Texture2D frame in frames.Values) if(frame!=null) Destroy(frame);
         }
 
         private readonly Dictionary<string,Texture2D> _ihFrameSprites = new Dictionary<string,Texture2D>();
@@ -9841,11 +9904,22 @@ namespace AlbedosCustomClassesAdvanced
         {
             string slot=IhTemplateSlot(node.Id);
             string color=IhSkillFrameColor(node);
-            if(color==IhPaintedFrameColor(slot)) return;
-            Texture2D sprite=IhFrameSprite(slot,color);
-            if(sprite==null) return;
-            Rect r=IhFrameSpriteRect(slot);
-            GUI.DrawTexture(IhSnap(ScaleReferenceRect(r.x,r.y,r.width,r.height)),sprite);
+            if(color!=IhPaintedFrameColor(slot))
+            {
+                Texture2D sprite=IhFrameSprite(slot,color);
+                if(sprite!=null)
+                {
+                    Rect r=IhFrameSpriteRect(slot);
+                    GUI.DrawTexture(IhSnap(ScaleReferenceRect(r.x,r.y,r.width,r.height)),sprite);
+                }
+            }
+            // Ascended skills are permanent: give them the same corner badge Signatures / Ultimates
+            // have painted (Goddess Relic, Judgement Hammer and Electric Smite slots already show one).
+            if(color=="magenta" && slot!="goddess_relic" && slot!="judgement_hammer" && slot!=IhUltimate && _treePermanentBadgeTex!=null)
+            {
+                Rect f=IhFieldRect(slot);
+                GUI.DrawTexture(IhSnap(ScaleReferenceRect(f.xMax-11.5f,f.yMin-17.5f,23f,23f)),_treePermanentBadgeTex);
+            }
         }
 
         // CPU version used while building the Priest canvas, so its hotbar icons carry the same frame.
@@ -9901,11 +9975,7 @@ namespace AlbedosCustomClassesAdvanced
                 if(color!=IhPaintedFrameColor(slot) && color!="magenta" && color!="red")
                     IhStampFrame(_ihPriestBackdropTex,slot,color);
             }
-            for(int i=3;i<ClericPriestReferenceNodes.Length;i++)
-            {
-                ReferenceNodeUi node=ClericPriestReferenceNodes[i];
-                _treeSkillIconTex[node.Id]=IhCropIcon(_ihPriestBackdropTex,IhVisualIconRect(node),"ImmortalHeroes_"+node.Id);
-            }
+            IhComposeHotbarIcons(ClericPriestReferenceNodes,_ihPriestBackdropTex);
             // The Grace slot keeps its original frame too.
             IhBlitArt(_ihPriestBackdropTex,new Rect(670,548,44,44),source,new Rect(394.8f,422.4f,44.4f,40.2f));
             _ihPriestBackdropTex.Apply(false,false);
@@ -9974,7 +10044,7 @@ namespace AlbedosCustomClassesAdvanced
                 string value = tier.ToString()+"/"+max.ToString();
                 if(pending>0) value += "  →  "+(tier+pending).ToString()+"/"+max.ToString()+" (pending)";
                 float pct = _ihTierPowerPercent == null ? 10f : _ihTierPowerPercent.Value;
-                b.Append(IhLine("Tier",value+"   +"+IhNum(pct*(tier+pending))+"% Damage & Healing"));
+                b.Append(IhLine("Tier",value+"   +"+IhNum(pct*(tier+pending))+"% "+IhTierBonusLabel(id)));
                 if(IhIsUltimate(id)) b.Append(IhLine("Tier Up","automatic at Lv 40, 44, 48"));
             }
             string reason;
@@ -10116,16 +10186,17 @@ namespace AlbedosCustomClassesAdvanced
         // x = nameplate center, y = nameplate bottom edge.
         private static readonly Dictionary<string, Vector2> ReferenceNameplateAnchors = new Dictionary<string, Vector2>
         {
-            { "lightning_zap", new Vector2(200f, 247f) },
+            // v0.20.6: x = measured plate/frame centre (SC, FA, RoH were 3-4 px right, ES 5 px left).
+            { "lightning_zap", new Vector2(201.5f, 247f) },
             { "righteous_strike", new Vector2(201f, 375f) },
             { "holy_wave", new Vector2(201f, 499f) },
             { "goddess_relic", new Vector2(404f, 247f) },
             { "judgement_hammer", new Vector2(405f, 375f) },
             { "heavens_light", new Vector2(416f, 499f) },
-            { "shield_charge", new Vector2(582f, 247f) },
-            { "fallen_angel", new Vector2(720f, 247f) },
-            { "ray_of_hope", new Vector2(720f, 375f) },
-            { "electric_smite", new Vector2(902f, 355f) }
+            { "shield_charge", new Vector2(579.5f, 247f) },
+            { "fallen_angel", new Vector2(716.5f, 247f) },
+            { "ray_of_hope", new Vector2(716f, 375f) },
+            { "electric_smite", new Vector2(907.5f, 355f) }
         };
 
         private static Vector2 GetReferenceNameplateAnchor(ReferenceNodeUi node)
@@ -10599,7 +10670,7 @@ namespace AlbedosCustomClassesAdvanced
             // live Grace key label and the CONFIRM plaque (only while Tiers are pending).
             Player footerPlayer = Player.m_localPlayer;
             if (!IhIsUnlocked(footerPlayer, IhTreeBranch() == "Priest" ? IhPriestGrace : IhGrace) && IhDrawLockedRegion("grace_slot") && _ihPadlockTex != null)
-                GUI.DrawTexture(IhSnap(ScaleReferenceRect(690f, 571f, 26f, 26f)), _ihPadlockTex);
+                GUI.DrawTexture(IhSnap(ScaleReferenceRect(692f, 570f, 26f, 26f)), _ihPadlockTex);
             Rect graceLabel = ScaleReferenceRect(641f, 607f, 100f, 15f);
             DrawHotbarKeyLabel(graceLabel, BindGrace, "GRACE - " + FormatHotbarBinding(BindGrace));
 

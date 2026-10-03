@@ -1,0 +1,22 @@
+IMMORTAL HEROES v0.20.6 - POLISH
+
+SKILL TREE (universal: Paladin, Priest and every future AC)
+- Tooltip Tier line names only what the skill scales: "Damage", "Healing"
+  (Holy Wave, Ray of Hope, Holy Relic) or "Damage & Healing" (Divine Intervention).
+- Names, stars and lock text are centred on their plates again (Shield Charge, Fallen
+  Angel and Ray of Hope were 3-4 px right, Electric Smite 5 px left).
+- The live AC names no longer smear the plate edges (the blanking box was wider than
+  the plates); long names (Divine Intervention, Heaven's Judgement) shrink to fit.
+- Stars + "n/max" count are centred together (the count used to hang off the right).
+- Padlocks sit at the same corner spot on every frame (was 1-12 px different per slot).
+- AC title centred between the emblem and the gold star; the star is no longer erased.
+  Long AC names shrink to fit. "SEALED / TIER POINTS" line centred under it.
+- Ascended skills get the permanent corner badge, like Signatures / Ultimates.
+- Hotbar icons are built the same way for every skill: the hotbar frame in the skill's
+  category colour + the skill's own tree art. Electric Smite and others no longer show
+  letter placeholders; Priest icons are no longer off-centre tree crops.
+
+F8 CONFIG WINDOW
+- Class tabs list the Base Class sections first, then one header per Advancement
+  (click to open / close): Warrior > Sword Master, Mercenary; Cleric > Paladin, Priest;
+  Sorcerer > Wizard, Spellcaster.
