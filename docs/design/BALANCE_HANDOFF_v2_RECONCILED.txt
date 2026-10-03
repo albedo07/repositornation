@@ -1,0 +1,173 @@
+IMMORTAL HEROES - BALANCE + ASCENSION HANDOFF (RECONCILED v2, 2026-10-03)
+Replaces the 4 Oct "Complete Class Balance & Coding Handoff" wherever they differ.
+
+AUTHORITY (highest first)
+1. Framework Google Doc (current) + decisions recorded in CLAUDE.md.
+2. The user's approved "Ascension balance proposal - coding handoff" (Warrior/Sorcerer ACs).
+3. The old handoff's numeric damage budgets, ONLY where 1-2 give no number.
+Scope of this file: damage/heal balance targets + Ascended designs for Sword Master,
+Mercenary, Wizard, Spellcaster. Cleric / Paladin / Priest designs stay as built (v0.21.1).
+Open items are tagged [Q#] and listed at the end.
+
+0. CORRECTIONS TO THE OLD HANDOFF
+- It audited v0.21.0. Already done in v0.21.1: Priest Advance needs Holy Wave T7;
+  Ascended Holy Wave castable on an aimed ally (no wind up); Divine Intervention heal
+  20% -> 50% Max HP at Tier 5 (user request, keep); Angel Comet (id fallen_angel)
+  2.5s jump+dive wind up.
+- Tier = +10% damage AND healing per Tier for every skill (Framework). The proposed
+  1+0.04*Tier heal curve is rejected.
+- Burns: Framework default = 3% of the target's CURRENT HP per tick (Spirit 1.5x).
+  This is intended, not a bug. See [Q1] for the new stacking burns.
+- Sorcerer third Class skill = Flame Burst (Framework). Arcane Bullets is gone
+  (Rift Echo replaced it).
+- Framework already defines (no "VERIFY" needed): Warrior's Blessing (+20 Run/+20 Jump,
+  Hyper Armor <30% Total HP, 2x parry), Way of the Sword (+20 Sword, +50% Sword attack
+  speed), Warfreak (+50% attack speed, +30% Armor, +10 Sword/Axe/Clubs), Unchained Fury
+  (auto at 100, 20s, 3 min lockout, +1/+3, drains after 60s out of combat), Knight's
+  Guidance, Battlecry, Archmage charge, Overcharge (300 Eitr, 12s, +40%/+40%/+40%, 5s
+  buffer), Clockwork (+30% Skill Damage, 50% CDR, 22s, 10 min), Yin and Yang, Rift Walker.
+  The old handoff's replacement numbers for these are discarded.
+- Real code issues it found (Cleric side) - to fix: Ray of Hope heals by the CASTER's
+  Max HP (should be each ally's); Lightning Tempest final "instant" Zap uses the 3s
+  default; Ascended Heaven's Judgement heals 3% per BEAM (48 beams = 144%); Holy Relic
+  15%/pulse x8 = 120%; Judgement Hammer damage growth reaches ~13x; Divine Intervention
+  Barrier armor = 100% of Priest Armor (Crucible uses 30%). Numbers: [Q8].
+
+1. SHARED RULES (approved)
+- D = one normal hit of that skill at the same Tier/stats; B = full normal cast where
+  named. Ascended % replace any generic Ascension multiplier. Secondary damage uses the
+  base value, not a previous hit's final damage. Defenses apply once per event.
+- Bosses: immune to Stun, Freeze, roots, knockdown, launch, forced animations. Slows at
+  50% strength, max 30%. Pulls at 20%, never snapped/pinned. Damage always applies. [Q2]
+- Big pulls 40% where a skill allows Big.
+- One hit per ENEMY (not collider) per permitted event. Repeats don't restart
+  stagger/launch. Sub-hits, afterimages, burns, ticks never spawn themselves and never
+  multiply Fury / Overcharge gains beyond the normal cast's allowance.
+- Stacking burns: tick 0.5s, max 5 stacks per caster per skill per target, refresh
+  extends duration without resetting the tick, recast refreshes the same pool.
+- Damaging projectiles stop at solid terrain unless the skill is Ghost (Framework). [Q3]
+- Ground effects follow valid surfaces, never through floors/walls.
+- Keep friendly-fire / structure rules.
+
+2. WARRIOR
+Class (Framework): Heavy Slash (single heavy horizontal slash, Broken Bones, 0.7s,
+3.5m) [Q4] · Impact Wave (Ground Projectile 10m x 2m, Blunt > Pierce) · Impact Punch
+(2m x 2m, 0.5s, Blunt, Stun Small).
+Proposed normal budgets: Heavy Slash 100 Slash; Impact Wave 60 (40 Blunt/20 Pierce);
+Impact Punch 45 Blunt. Costs/cooldowns: old handoff values as starting points.
+
+2.1 SWORD MASTER
+Normal (Framework) + proposed per-hit D:
+- Moonlight Splitter (Sig): 3 Ghost Laser waves, 0.5s apart, 50m, width 1.5x old.
+  Slash + Spirit, no burn. D 70 (45/25).
+- Crescent Cleave (Sig): 5 Ground cleaves, 120 deg spread, 20m in 4s, persistent hit
+  every 0.5s, Slash + Spirit, no burn. D 65 per cleave = that cleave's TOTAL allowance
+  per target across its persistent ticks.
+- Blade Storm (Lv24): 4 stacks, each own 12s recharge, 0.5s buffer, Ground/Target/Free
+  Aim 15m, 4m sphere, 3 simultaneous Slash-only hits. D 60 per activation (3 x 20).
+- Frenzied Charge (Lv32): 1.5s thrust wind up, 8m dash, Slash + aftereffect slashes;
+  launch Small, Stun Big. B 120 (80% dash / 20% aftereffect).
+- Eclipse (Lv32): 0.3s wind up, blade grows, 360 deg 7m swing, Slash + Spirit + Spirit
+  DoT, small knockback (non-Boss). D 110 (75/35).
+- Halfmoon Slash (Ult): huge frontal non-projectile slash, >=2s wind up, Slash + Spirit,
+  Spirit Burn 10s, Stun (Boss rule [Q2]); afterimage 0.65s later at 0.5x. B 240 (160+80).
+- Knight's Guidance (Grace): Framework, no change.
+Ascended (approved): Impact Wave (MC) 15m x 3m 100% D + path aftershock 3m sections
+every 0.2s 35% D, one hit each, max 135% · Moonlight 0.5s wind up, 4 waves 0.3s apart
+65% D, 1s finisher wind up, wave 5 110% D 2x speed/width/height, afterimage +0.2s 55% D,
+425% total [Q3] · Crescent 7 x 45% + 6 x 30% (0.3s later, between), 4s fire trails 10% D
+per 0.5s shared timer, 3s burn 3% D/stack/0.5s, 5 stacks, 1 stack per 0.3s [Q1] ·
+Blade Storm 6 stacks, 85% D + 0.15s extra cut 25% D, same recharge · Frenzied Charge
+0.5s, 12m, 2x width, 115% B allowance, no new finisher · Eclipse 8m, 110% D, 0.5s
+reflect window (-0.25/+0.25s), original projectile damage, once each · Halfmoon 1s,
+main + 2 secondary traveling slashes 0.4s apart, 20m over 5s, pierce, stop at terrain,
+tick 0.3s: main 10% B, secondary 4% B, max 17 ticks per projectile per target. [Q5]
+
+2.2 MERCENARY
+Normal (Framework) + proposed D:
+- Stomp (Sig): 0.5s, 3m Blunt + Stun Small, then exactly 1s later ONE 10m aftershock
+  from the original spot (Blunt + Stun Small). Lock 1.0s. D 70 central, 35 aftershock.
+- Circle Swing (Sig): 1.5s wind up with Hyper Armor; NOW normal walking speed during the
+  wind up (approved, replaces the 0.5m steer cap); 7m full circle, 1.75x held weapon
+  snapshot, Stun Small/Big (Boss [Q2]).
+- Bonecrusher (Lv24): 2m cinematic jump (~2s), steer during ascent only, 10m landing,
+  Blunt + Broken Bones + Cripple + Stun. D 150 Blunt.
+- Seismic Guillotine (Lv32): 15m PAC, 2m Shock every 1m (15m in 1.0s), 10m endpoint
+  explosion; wider + 2 extra cracks during Unchained Fury. Endpoint 100 Blunt; shocks 10
+  each, max 40 per target per cast.
+- PUNISHING BOMB (Lv32, replaces Reaver's Orbit, approved): 0.5s bat-swing throw,
+  ballistic (Staff of Embers-like), one explosion on first enemy/object/terrain, ignores
+  self, 7m Blunt = 80% of Circle Swing single hit (= 1.4x weapon snapshot), 6s burn 2% of
+  explosion per 0.5s (= +24%). Migrate Reaver's Orbit Tiers/hotbar/Ascension to it.
+- Whirlwind (Ult): 6s spin, hit every 0.5s at 0.5x weapon damage + elements. B = 12 ticks.
+  Unchained Fury does not modify it.
+- Battlecry (Grace), Unchained Fury: Framework, no change.
+Ascended (approved): Heavy Slash (MC) 5m reach, finisher 140%, finisher hit = 2s Hyper
+Armor (refresh, not stack) [Q4] · Stomp + third impact at 15m, 40% of central D [Q6] ·
+Circle Swing 9m, 2 swings 0.5s apart 90% + 60% D, Hyper Armor, 2nd launches Small high,
+Big low · Punishing Bomb 12m, same damage, 6s ground fire 4%/0.5s, 6s stacking burn 0.75%
+/stack/0.5s, 5 stacks, 1 stack per 0.5s · Bonecrusher one landing 100% D + shock 0.5s
+later 50% D, no 2nd jump · Seismic 25m, endpoint 140%, shock budget unchanged, endpoint
+30% slow 3s (Boss 15%) · Whirlwind 8s, Hyper Armor, 16 ticks x 7.5% B + final sweep
+60% B x (spin time / 8s), none on death, no pull.
+
+3. SORCERER
+Class (Framework): Flame Burst (instant 10m cone, Fire + Fire Burn, Ghost) · Glacial
+Descent (Sky Summon PAC, 5m, Blunt + Frost, Frost on all) · Stonefang Eruption (PAC 5m,
+Blunt + Pierce, Stun Small, Cripple Small/Big, no Boss Cripple).
+Proposed D: Flame Burst 50 Fire; Glacial 90 (30 Blunt/60 Frost); Stonefang 80 (50 Pierce/
+30 Blunt).
+
+3.1 WIZARD
+Normal (Framework) + proposed D:
+- Meteor Fall (Sig): PAC ~7m, Blunt + Fire + Fire Burn, stagger/knockback. D 130
+  (60 Blunt/70 Fire). NEW (approved): hold to charge 1 stack/s, max 3: 120/140/160%
+  damage, 110/120/130% radius, meteor grows, cost once.
+- Gravity Dominion (Sig): PAC 7m ~5s, pulls Small, Expose 5s refreshing, Big Crippled
+  (not pulled), Boss Exposed only. B 200 (10 pulses x 20).
+- Astral Railcannon (Lv24): 2.5s assembly, 50m Laser AoE, 4m lane. B 180 (90 Lightning/
+  90 Spirit), one hit per target.
+- Astral Greatblade (Lv32): crosshair-aimed slam 15m x 2m, Blunt + Slash + Spirit +
+  Spirit Burn, Stun (Boss [Q2]); 1s quick release 1x, charge up to +2s for 2x. D 150.
+- Frost Nova (Lv32): 10m self AoE, heavy Frost, Frost 8s, Stun Small, slow Big. D 100.
+- Elemental Cataclysm (Ult): large PAC, Fire+Frost+Lightning+Poison+Blunt+Slash+Pierce,
+  Expose only; hold up to 6s, ~3x at full charge. B 320 at quick release.
+- Archmage, Overcharge, Clockwork: Framework, no change.
+Ascended (approved): Glacial (MC) 8m, 100% D; inner 3m 135% D instead + Freeze 1.5s
+(Boss 15% slow) · Meteor + 3 small meteors (5 at 3 stacks), 12% of the charged main each,
+0.25s apart, spread around the point, indicators · Gravity Dominion 10m / 7s, same pulse,
+pull Small 100% / Big 40% / Boss 20%, end explosion 25% of normal B, launches Small,
+Stuns Big 1.5s · Railcannon 1s wind up, steerable 4s beam, 20 ticks x 9% B, release ends
+· Greatblade no charge, 15m, 1s, 3 slams 1s apart at 70% of uncharged D, re-aimed each
+· Frost Nova 10m aura on caster 6s, 12 ticks x 8% D, Frost 0.75s refresh, end explosion
+44% D + Freeze 2s Small/Big (Boss 15% slow) · Cataclysm second bombardment 1.5s later,
+60% of the first [Q7], no refund, no third.
+
+3.2 SPELLCASTER
+Normal (Framework) + proposed D:
+- Arcane Phalanx (Sig): 8 swords (Framework) [Q9], Slash + Pierce, 0.3s per-sword buffer,
+  recast arms VOLLEY READY. D 35 per sword (20 Pierce/15 Slash).
+- Afterimage Arsenal (Sig): 8s, first copy on cast, Void Step/Rift travel leaves more,
+  max 3, copies fire weaker volleys every 0.5s while Mouse1 held. Budget: all copies
+  together <= 30% of player output.
+- Void Step (Lv24): no interruption, PAC 50m / Free Aim 15m, Feather Falling until
+  grounded. 1 charge.
+- Rift Echo (Lv32): 8s, Mouse1 echo every 0.5s, rift behind aimed enemy. D 18 Spirit.
+- Gravity Blast (Lv32): Laser Projectile Free Aim, Brute-sized orb, 15m over 4s, 5m
+  radius, persistent every 0.5s, Slash + Pierce only, passes enemies, stops at walls/
+  objects, pulls Small slowly; Big/Boss Cripple 3s (refresh). D 20 per tick.
+- Arcane Rupture (Ult): 3 charges, 20s each, 0.5s buffer, PAC 10m, 1s location wind up,
+  caster can Sprint, Rupture stack interaction kept. D 100 (50 Lightning/50 Spirit).
+- Yin and Yang, Rift Walker: Framework, no change.
+Ascended (approved): Stonefang (MC) 7m, 80% D + 4s field 8 ticks x 20% D from +0.5s,
+shared timer · Phalanx 8 x 65% + first-impact 4m Astral Spear eruption 80% of a sword
+(full 8-sword volley only) [Q9] · Afterimage: 3 Astral Clones, tap 1 / hold 1s fills to
+3, 16s each, tap at cap replaces oldest, copies skills at 25% and weapon fire at 30%,
+copy charge/Ascended state, no recursion, no resources, no heal/buff duplication,
+dismissed on death/logout/class change [Q10] · Void Step 2 charges, sequential
+recovery, momentum kept, no departure rift [Q11] · Rift Echo cadence 0.35s, same damage
+and duration · Gravity Blast 25m, impact 130% D [Q12], Big pull 40% / Boss 20% · Arcane
+Rupture 4 charges, 120% D each, same recovery.
+
+4. QUESTIONS - see chat. Answers get written back here, into CLAUDE.md, and into the
+Framework doc.
