@@ -1,0 +1,33 @@
+IMMORTAL HEROES v0.23.2 - SPELLCASTER
+=====================================
+(First start resets every setting to default once, Dev Mode OFF.)
+Includes v0.23.1 Wizard (see docs/changelog/CHANGELOG_v0.23.1.txt).
+
+SPELLCASTER (Framework 3.2)
+- Yin and Yang: any Staff / Wand attacks twice as fast (interval -50%), single or dual.
+- Arcane Phalanx: 4 swords (was 8). Holding Mouse1 launches one every 0.3s (hard buffer,
+  releasing Mouse1 never resets it). Recast arms the volley, Left Click fires all.
+  Cooldown starts once every sword is gone. Damage in F8 "Spellcaster Arcane Phalanx Damage".
+- NEW Gravity Blast: Free Aim Laser orb (Greydwarf Brute size), 15m over 4s, Slash + Pierce
+  every 0.5s in 5m, passes through enemies, stops at walls, pulls Small slowly, Cripples
+  Big/Boss 3s (refreshed per hit).
+- NEW Rift Walker (Grace, M4+R): Portal A, then Portal B within 30s, each up to 50m
+  (Free Aim, mid-air allowed). Linked for 30s, E to travel either way, airborne exits get
+  Feather Falling. 2 min cooldown from Portal A (a failed B still uses it).
+- Arcane Rupture damage now in F8 ("Spellcaster Arcane Rupture Damage").
+- Tree tooltips show full stats for every Spellcaster skill and Rift Walker.
+- Altar: Yin and Yang (Mastery) + Rift Walker (Grace) texts, correct skill list.
+
+ASCENDED (all 7)
+- Stonefang Eruption (Ascended MC): 7m, no wind up, eruption 80%, then the spikes stay 4s
+  and hit every 0.5s for 20% (8 ticks).
+- Arcane Phalanx: 8 swords at 65% each; launching all 8 together erupts an Astral Spear on
+  the first impact (4m, 80% of one sword, four spears).
+- Afterimage Arsenal: up to 3 Astral Clones, 16s each. Tap = one clone, hold 1s = every
+  missing one, at 3 a tap replaces the oldest. Each clone has its own 45s cooldown. Clones
+  copy your weapon attacks at 30% (while you hold Mouse1) and your Gravity Blast / Arcane
+  Rupture at 25%. They leave on death or class change. (Other skill copies are visual only.)
+- Void Step: 2 charges (recovered one after the other), keeps your momentum.
+- Rift Echo: echoes every 0.35s instead of 0.5s.
+- Gravity Blast: 25m, pulls Big 40% / Bosses 20%, bursts for 130% when the orb stops.
+- Arcane Rupture: 4 charges, 120% damage.

@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Dragon's Altar - Sorcerer Advancements";
-        public const string ModVersion = "0.23.1";
+        public const string ModVersion = "0.23.2";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -425,7 +425,8 @@ namespace DragonsAltarSorcerer
             _gunStaffFiringMoveBonus = Config.Bind("Spellcaster Gun Staff", "LegacyFiringMovementBonusPercent", 0f, "Legacy setting retained only for config compatibility. Firing no longer grants artificial movement speed.");
 
             BindWizardV0231();
-            _ruptureCharges = Mathf.Max(1, _ruptureMaxCharges.Value);
+            BindSpellcasterV0232();
+            _ruptureCharges = RuptureMax();
 
             try
             {
@@ -606,6 +607,8 @@ namespace DragonsAltarSorcerer
                 return;
             }
 
+            if (GetClass(player) != "Sorcerer" || GetAdvancement(player) != "Spellcaster")
+                ClearClones(); // Astral Clones leave on class change
             if (GetClass(player) != "Sorcerer")
             {
                 RestoreGunStaffTimings();
@@ -645,9 +648,7 @@ namespace DragonsAltarSorcerer
             if (advancement == "Spellcaster")
             {
                 bool dualGunStaff = IsDualGunStaffEquipped(player);
-                float speed = dualGunStaff
-                    ? Mathf.Max(1f, _dualGunStaffAttackSpeedMultiplier.Value)
-                    : Mathf.Max(1f, _gunStaffFireRateMultiplier.Value);
+                float speed = Mathf.Max(1f, _yyAttackSpeed.Value); // Yin and Yang: attack interval -50%, single or dual
 
                 if (Time.time < _phaseFlowUntil)
                     speed *= 1.133333f;
@@ -673,7 +674,12 @@ namespace DragonsAltarSorcerer
             // Afterimage Arsenal responsive with Gun Staves, regular Staves,
             // melee weapons, tools, shields, or even bare fists.
             if (advancement == "Spellcaster")
+            {
                 UpdateSpellcasterHeldFire(player);
+                UpdateCloneHold(player);
+                UpdateVoidCharges(player);
+                if (player.IsDead()) ClearClones();
+            }
             else
                 _nextSpellcasterHeldFire = 0f;
 
@@ -703,7 +709,7 @@ namespace DragonsAltarSorcerer
                 else if (Input.GetKeyDown(_skill6.Value)) CastArcanePhalanx(player);
                 else if (Input.GetKeyDown(_skill7.Value)) CastAfterimageArsenal(player);
                 else if (Input.GetKeyDown(_skill8.Value)) CastArcaneRupture(player);
-                else if (Input.GetKeyDown(_passive.Value)) ActivateTwinRift(player);
+                else if (Input.GetKeyDown(_passive.Value)) ActivateRiftWalker(player);
             }
         }
 
@@ -727,6 +733,9 @@ namespace DragonsAltarSorcerer
                 case "void_step": if (adv == "Spellcaster") CastVoidStep(player); return true;
                 case "rift_echo": if (adv == "Spellcaster") CastRiftEcho(player); return true;
                 case "arcane_rupture": if (adv == "Spellcaster") CastArcaneRupture(player); return true;
+                case "gravity_blast": if (adv == "Spellcaster") CastGravityBlast(player); return true;
+                case "rift_walker": if (adv == "Spellcaster") ActivateRiftWalker(player); return true;
+                case "stonefang_eruption_ascended": if (adv == "Spellcaster") CastAscendedStonefang(player); return true;
             }
             return false;
         }
@@ -744,9 +753,15 @@ namespace DragonsAltarSorcerer
                 case "clockwork": return CooldownRemaining("Wizard.Clockwork");
                 case "glacial_descent": return CooldownRemaining("Sorcerer.GlacialDescent");
                 case "arcane_phalanx": return CooldownRemaining("Spellcaster.ArcanePhalanx");
-                case "afterimage_arsenal": return CooldownRemaining("Spellcaster.AfterimageArsenal");
+                case "afterimage_arsenal":
+                    if (Player.m_localPlayer != null && IsSpellAscended(Player.m_localPlayer, "afterimage_arsenal")) return CloneCooldownRemaining();
+                    return CooldownRemaining("Spellcaster.AfterimageArsenal");
                 case "void_step": return CooldownRemaining("Spellcaster.VoidStep");
                 case "rift_echo": return CooldownRemaining("Spellcaster.RiftEcho");
+                case "gravity_blast": return CooldownRemaining("Spellcaster.GravityBlast");
+                case "rift_walker": return CooldownRemaining("Spellcaster.RiftWalker");
+                case "stonefang_eruption": return CooldownRemaining("Sorcerer.StonefangEruption");
+                case "arcane_rupture": return _ruptureCharges > 0 ? 0f : GetRuptureNextRecharge();
             }
             return 0f;
         }
@@ -1446,6 +1461,7 @@ namespace DragonsAltarSorcerer
 
         private void CastAfterimageArsenal(Player player)
         {
+            if (IsSpellAscended(player, "afterimage_arsenal")) { CastAscendedAfterimage(player); return; }
             if (!BeginSkill(player, "Spellcaster.AfterimageArsenal", _afterimageCooldown.Value, _afterimageEitr.Value))
                 return;
             _afterimageUntil = Time.time + Mathf.Max(1f, _afterimageDuration.Value);
@@ -1591,7 +1607,8 @@ namespace DragonsAltarSorcerer
 
         private void CastVoidStep(Player player)
         {
-            if (CooldownRemaining("Spellcaster.VoidStep") > 0f) { ShowCooldown("Spellcaster.VoidStep"); return; }
+            UpdateVoidCharges(player);
+            if (_voidCharges <= 0) { ShowCooldown("Spellcaster.VoidStep"); return; }
             Vector3 dest;
             bool airborne = false;
             if (AlbedoAimUtility.TryGetPhysicalTarget(player, DragonCombat.M(_voidGroundRange.Value), out dest))
@@ -1603,17 +1620,26 @@ namespace DragonsAltarSorcerer
                 dest = player.transform.position + dir * Mathf.Max(1f, DragonCombat.M(_voidFreeRange.Value));
                 airborne = true;
             }
-            StartCooldown("Spellcaster.VoidStep", _voidCooldown.Value);
+            int max = VoidMaxCharges(player);
+            if (_voidCharges >= max)
+                _voidNextCharge = Time.time + Mathf.Max(0.1f, _testingForceCooldowns.Value ? _testingCooldown.Value : DragonCombat.ScaleCooldown(player, "Spellcaster.VoidStep", _voidCooldown.Value));
+            _voidCharges--;
+            _cooldowns["Spellcaster.VoidStep"] = _voidCharges > 0 ? 0f : _voidNextCharge;
             if (Time.time < _afterimageUntil)
                 SpawnAfterimage(player.transform.position, player.transform.rotation);
+            Rigidbody body = player.GetComponent<Rigidbody>();
+            Vector3 momentum = body != null ? body.velocity : Vector3.zero;
             TeleportPlayer(player, dest);
+            if (body != null && IsSpellAscended(player, "void_step"))
+                body.velocity = momentum; // Ascended keeps momentum
             // Always clear fall state. A lower Ground PAC destination used to
             // inherit the pre-teleport altitude and deal fall damage on landing.
             ApplyFeatherFall(player);
             TriggerPhaseFlow(player);
             if (_enableVfx.Value) StartCoroutine(RingVfx(dest, 1.6f, new Color(0.58f, 0.12f, 1f, 0.95f), 0.35f));
-            ShowMessage(airborne ? "Void Step - Free Aim / Feather Falling" : "Void Step");
+            ShowMessage((airborne ? "Void Step - Free Aim / Feather Falling" : "Void Step") + (max > 1 ? " (" + _voidCharges + "/" + max + ")" : ""));
         }
+
 
         private void BeginWizardStaffCharge(Player player, ItemDrop.ItemData weapon)
         {
@@ -1972,21 +1998,6 @@ namespace DragonsAltarSorcerer
             target.Damage(hit);
         }
 
-        private void CastArcanePhalanx(Player player)
-        {
-            if (_phalanxSwords.Count > 0)
-            {
-                _phalanxVolleyArmed = true;
-                ShowMessage("Phalanx Volley READY - aim and Left Click");
-                return;
-            }
-            if (!BeginSkill(player, "Spellcaster.ArcanePhalanx", _phalanxCooldown.Value, _phalanxEitr.Value)) return;
-            DragonCombat.BeginMobileCast(player, 0.4f, false);
-            int count = Mathf.Max(1, _phalanxCount.Value);
-            for (int i = 0; i < count; i++) _phalanxSwords.Add(CreateArcaneSword(player.transform.position));
-            ShowMessage("Arcane Phalanx x" + count);
-        }
-
         private void OnNormalMagicAttack(Player player, ItemDrop.ItemData weapon)
         {
             // Keep the attack postfix only as a low-latency assist. The actual
@@ -2013,29 +2024,24 @@ namespace DragonsAltarSorcerer
         {
             if (player == null)
                 return;
-
-            bool hasHeldFollowUp = (_phalanxSwords.Count > 0 && !_phalanxVolleyArmed) ||
-                                   Time.time < _riftEchoUntil ||
-                                   (Time.time < _afterimageUntil && _spellcasterAfterimages.Count > 0);
-            if (!hasHeldFollowUp)
-            {
-                _nextSpellcasterHeldFire = 0f;
-                return;
-            }
-
-            if (Time.time < _nextSpellcasterHeldFire)
-                return;
-
-            _nextSpellcasterHeldFire = Time.time + 0.50f;
             ItemDrop.ItemData weapon = GetCurrentWeapon(player);
-
-            // These active follow-ups now pulse every 0.5s while Mouse1 is held,
-            // regardless of what the Spellcaster currently has equipped.
-            FireRiftEcho(player, weapon);
-            FireAfterimages(player, weapon);
-
-            if (_phalanxSwords.Count > 0 && !_phalanxVolleyArmed)
+            // Rift Echo, Afterimages and Astral Clones pulse on a fixed cadence while Mouse1 is held,
+            // regardless of what the Spellcaster has equipped (Ascended Rift Echo: 0.35s).
+            bool echoActive = Time.time < _riftEchoUntil ||
+                              (Time.time < _afterimageUntil && _spellcasterAfterimages.Count > 0) ||
+                              ActiveCloneCount() > 0;
+            if (echoActive && Time.time >= _nextSpellcasterHeldFire)
             {
+                float cadence = Time.time < _riftEchoUntil && IsSpellAscended(player, "rift_echo") ? _reAscCadence.Value : 0.5f;
+                _nextSpellcasterHeldFire = Time.time + Mathf.Max(0.1f, cadence);
+                FireRiftEcho(player, weapon);
+                FireAfterimages(player, weapon);
+                CloneWeaponCopies(player, weapon);
+            }
+            // Arcane Phalanx: each sword has a hard launch buffer that releasing Mouse1 never resets.
+            if (_phalanxSwords.Count > 0 && !_phalanxVolleyArmed && Time.time >= _nextPhalanxLaunch)
+            {
+                _nextPhalanxLaunch = Time.time + Mathf.Max(0.05f, _phalanxBuffer.Value);
                 GameObject sword = _phalanxSwords[0];
                 _phalanxSwords.RemoveAt(0);
                 LaunchSword(player, sword);
@@ -2178,12 +2184,130 @@ namespace DragonsAltarSorcerer
             return new Color(0.72f, 0.26f, 1f, 1f);
         }
 
+        // =====================================================================================
+        // v0.23.2 SPELLCASTER REWORK (Framework 3.2 + approved Ascensions). Spellcaster skills
+        // have no wind up (Yin and Yang); damage sections "Spellcaster <Skill> Damage".
+        // =====================================================================================
+        private WizDamage _phalanxDmg, _ruptureDmg, _gravityBlastDmg, _stoneAscDmg;
+        private ConfigEntry<int> _phalanxCountV;
+        private ConfigEntry<float> _phalanxBuffer, _phalanxRange;
+        private ConfigEntry<float> _gbCooldown, _gbEitr, _gbRange, _gbTravel, _gbRadius, _gbTick, _gbPull, _gbCripple, _gbOrbSize;
+        private ConfigEntry<float> _riftWalkerCooldown, _riftWalkerRange, _riftWalkerWindow, _riftWalkerLife;
+        private ConfigEntry<float> _yyAttackSpeed;
+        private ConfigEntry<float> _saAscRadius, _saAscEruption, _saAscTickPercent, _saAscDuration, _saAscCooldown, _saAscEitr, _saAscRange;
+        private ConfigEntry<int> _paAscCount;
+        private ConfigEntry<float> _paAscPercent, _paAscSpearRadius, _paAscSpearPercent;
+        private ConfigEntry<float> _aaAscLife, _aaAscSlotCooldown, _aaAscSkillPercent, _aaAscWeaponPercent, _aaAscHold;
+        private ConfigEntry<int> _vsAscCharges;
+        private ConfigEntry<float> _reAscCadence;
+        private ConfigEntry<float> _gbAscRange, _gbAscBurst, _gbAscBig, _gbAscBoss;
+        private ConfigEntry<int> _ruAscCharges;
+        private ConfigEntry<float> _ruAscDamage;
+        private float _nextPhalanxLaunch;
+        private bool _phalanxSpearArmed;
+        private int _voidCharges = -1;
+        private float _voidNextCharge;
+        private readonly GameObject[] _clones = new GameObject[3];
+        private readonly float[] _cloneUntil = new float[3];
+        private readonly float[] _cloneSlotReady = new float[3];
+        private readonly float[] _cloneBorn = new float[3];
+        private float _cloneHoldStart = -1f;
+
+        private void BindSpellcasterV0232()
+        {
+            const string p = "Spellcaster Arcane Phalanx";
+            _phalanxCountV = Config.Bind(p, "SwordCount_v0232", 4, "Hovering swords (Ascended: 8).");
+            _phalanxBuffer = Config.Bind(p, "LaunchBuffer", 0.3f, "Hard minimum seconds between two sword launches while Mouse1 is held.");
+            _phalanxRange = Config.Bind(p, "Range", 50f, "Sword flight range (Laser Projectile, Free Aim).");
+            _phalanxDmg = BindWizDamage("Spellcaster Arcane Phalanx Damage", 0f, 34f, 34f, 0f, 0f, 0f, 0f, 0f);
+            const string r = "Spellcaster Arcane Rupture";
+            _ruptureDmg = BindWizDamage("Spellcaster Arcane Rupture Damage", 0f, 0f, 0f, 0f, 0f, 55f, 0f, 45f);
+            const string g = "Spellcaster Gravity Blast";
+            _gbCooldown = Config.Bind(g, "Cooldown", 14f, "Seconds.");
+            _gbEitr = Config.Bind(g, "EitrCost", 40f, "Eitr cost (Spellcaster pays half).");
+            _gbRange = Config.Bind(g, "Range", 15f, "Travel distance (Laser Projectile, Free Aim).");
+            _gbTravel = Config.Bind(g, "TravelTime", 4f, "Seconds to travel the range.");
+            _gbRadius = Config.Bind(g, "Radius", 5f, "Damage / pull radius around the orb.");
+            _gbTick = Config.Bind(g, "HitInterval", 0.5f, "Persistent damage interval.");
+            _gbPull = Config.Bind(g, "PullStrength", 2.5f, "Slow pull of Small enemies toward the orb per tick.");
+            _gbCripple = Config.Bind(g, "CrippleDuration", 3f, "Big and Boss: Cripple, refreshed on every hit.");
+            _gbOrbSize = Config.Bind(g, "OrbSize", 2.5f, "Orb diameter (about a Greydwarf Brute).");
+            _gravityBlastDmg = BindWizDamage("Spellcaster Gravity Blast Damage", 0f, 16f, 16f, 0f, 0f, 0f, 0f, 0f);
+            const string w = "Spellcaster Rift Walker";
+            _riftWalkerCooldown = Config.Bind(w, "Cooldown", 120f, "Seconds, starting when Portal A is placed (a failed B still uses it).");
+            _riftWalkerRange = Config.Bind(w, "PlacementRange", 50f, "Max distance for each portal (physical aim; Free Aim mid-air otherwise).");
+            _riftWalkerWindow = Config.Bind(w, "PlacementWindow", 30f, "Seconds to place Portal B after A.");
+            _riftWalkerLife = Config.Bind(w, "LinkedLifetime", 30f, "Seconds both portals work once B is placed.");
+            _yyAttackSpeed = Config.Bind("Spellcaster Gun Staff", "AttackSpeedMultiplier_v0232", 2f, "Yin and Yang: Staff / Wand attack interval -50% (2x speed), single or dual.");
+            const string sa = "Spellcaster Stonefang Eruption Ascended";
+            _saAscRadius = Config.Bind(sa, "Radius", 7f, "Ascended radius.");
+            _saAscEruption = Config.Bind(sa, "EruptionPercent", 80f, "Eruption damage %.");
+            _saAscTickPercent = Config.Bind(sa, "SpikeTickPercent", 20f, "Spikes: % every 0.5s.");
+            _saAscDuration = Config.Bind(sa, "SpikeDuration", 4f, "Spikes stay this long (8 ticks).");
+            _saAscCooldown = Config.Bind(sa, "Cooldown", 9f, "Seconds.");
+            _saAscEitr = Config.Bind(sa, "EitrCost", 24f, "Eitr cost.");
+            _saAscRange = Config.Bind(sa, "GroundPACRange", 40f, "Ground PAC range.");
+            _stoneAscDmg = BindWizDamage("Spellcaster Stonefang Eruption Ascended Damage", 32f, 0f, 30f, 0f, 0f, 0f, 0f, 0f);
+            const string pa = "Spellcaster Arcane Phalanx Ascended";
+            _paAscCount = Config.Bind(pa, "SwordCount", 8, "Ascended swords.");
+            _paAscPercent = Config.Bind(pa, "SwordDamagePercent", 65f, "Each Ascended sword.");
+            _paAscSpearRadius = Config.Bind(pa, "AstralSpearRadius", 4f, "Full 8-sword volley: eruption on the first impact.");
+            _paAscSpearPercent = Config.Bind(pa, "AstralSpearPercent", 80f, "Eruption: % of one sword.");
+            const string aa = "Spellcaster Afterimage Arsenal Ascended";
+            _aaAscLife = Config.Bind(aa, "CloneLifetime", 16f, "Seconds each Astral Clone stays.");
+            _aaAscSlotCooldown = Config.Bind(aa, "CloneCooldown", 45f, "Each clone's own cooldown from its summon.");
+            _aaAscSkillPercent = Config.Bind(aa, "SkillCopyPercent", 25f, "Clones copy your Spellcaster skills at this %.");
+            _aaAscWeaponPercent = Config.Bind(aa, "WeaponCopyPercent", 30f, "Clones copy your weapon attacks at this %.");
+            _aaAscHold = Config.Bind(aa, "HoldToSummonAll", 1f, "Hold the key this long to summon every missing clone.");
+            _vsAscCharges = Config.Bind("Spellcaster Void Step Ascended", "Charges", 2, "Charges, recovered one after the other; keeps momentum.");
+            _reAscCadence = Config.Bind("Spellcaster Rift Echo Ascended", "EchoInterval", 0.35f, "Seconds between echoes (normal 0.5).");
+            const string ga = "Spellcaster Gravity Blast Ascended";
+            _gbAscRange = Config.Bind(ga, "Range", 25f, "Ascended travel distance (same speed).");
+            _gbAscBurst = Config.Bind(ga, "EndBurstPercent", 130f, "Burst when the orb stops: % of one hit.");
+            _gbAscBig = Config.Bind(ga, "BigPullPercent", 40f, "Big enemies are pulled at this strength.");
+            _gbAscBoss = Config.Bind(ga, "BossPullPercent", 20f, "Bosses are pulled at this strength (they can still act).");
+            _ruAscCharges = Config.Bind("Spellcaster Arcane Rupture Ascended", "MaxCharges", 4, "Ascended charges.");
+            _ruAscDamage = Config.Bind("Spellcaster Arcane Rupture Ascended", "DamagePercent", 120f, "Ascended explosion damage %.");
+        }
+
+        private bool IsSpellAscended(Player player, string id)
+        {
+            return DragonCombat.IsSkillAscended(player, id);
+        }
+
+        // ------------------------------------------------------------------ Arcane Phalanx
+        private float _phalanxSwordPercent = 1f;
+
+        private void CastArcanePhalanx(Player player)
+        {
+            if (_phalanxSwords.Count > 0)
+            {
+                _phalanxVolleyArmed = true;
+                ShowMessage("Phalanx Volley READY - aim and Left Click");
+                return;
+            }
+            if (CooldownRemaining("Spellcaster.ArcanePhalanx") > 0f) { ShowCooldown("Spellcaster.ArcanePhalanx"); return; }
+            if (!SpendEitr(player, _phalanxEitr.Value)) { ShowMessage("Not enough Eitr"); return; }
+            bool ascended = IsSpellAscended(player, "arcane_phalanx");
+            int count = Mathf.Max(1, ascended ? _paAscCount.Value : _phalanxCountV.Value);
+            _phalanxSwordPercent = ascended ? _paAscPercent.Value / 100f : 1f;
+            _phalanxSpearArmed = false;
+            DragonCombat.BeginMobileCast(player, 0.3f, false);
+            for (int i = 0; i < count; i++) _phalanxSwords.Add(CreateArcaneSword(player.transform.position));
+            _nextPhalanxLaunch = Time.time + 0.15f;
+            ShowMessage("Arcane Phalanx x" + count);
+            CloneCopySkill(player, "arcane_phalanx");
+        }
+
         private void LaunchAllPhalanx(Player player)
         {
             List<GameObject> copy = new List<GameObject>(_phalanxSwords);
             _phalanxSwords.Clear();
+            // Ascended: all 8 launched together arm one Astral Spear eruption on the first impact.
+            _phalanxSpearArmed = IsSpellAscended(player, "arcane_phalanx") && copy.Count >= Mathf.Max(1, _paAscCount.Value);
             for (int i = 0; i < copy.Count; i++) LaunchSword(player, copy[i]);
             ShowMessage("PHALANX VOLLEY x" + copy.Count);
+            StartCooldown("Spellcaster.ArcanePhalanx", _phalanxCooldown.Value);
         }
 
         private void LaunchSword(Player player, GameObject sword)
@@ -2191,14 +2315,16 @@ namespace DragonsAltarSorcerer
             if (sword == null) return;
             Vector3 origin = sword.transform.position;
             Vector3 dir = AlbedoAimUtility.GetProjectileDirection(player, origin);
-            StartCoroutine(SwordProjectile(player, sword, origin, dir));
+            StartCoroutine(SwordProjectile(player, sword, origin, dir, _phalanxSwordPercent));
+            if (_phalanxSwords.Count == 0 && !_phalanxVolleyArmed && CooldownRemaining("Spellcaster.ArcanePhalanx") <= 0f)
+                StartCooldown("Spellcaster.ArcanePhalanx", _phalanxCooldown.Value); // cooldown starts once every sword is gone
         }
 
-        private IEnumerator SwordProjectile(Player player, GameObject sword, Vector3 origin, Vector3 dir)
+        private IEnumerator SwordProjectile(Player player, GameObject sword, Vector3 origin, Vector3 dir, float percent)
         {
             dir.Normalize();
             float traveled = 0f;
-            float range = 50f;
+            float range = DragonCombat.M(Mathf.Max(1f, _phalanxRange.Value));
             Vector3 pos = origin;
             while (traveled < range)
             {
@@ -2210,19 +2336,326 @@ namespace DragonsAltarSorcerer
                 {
                     if (hits[i].collider == null || hits[i].collider.isTrigger || IsPlayerCollider(player, hits[i].collider)) continue;
                     Character target = hits[i].collider.GetComponentInParent<Character>();
-                    if (target != null && IsEnemy(player, target)) Deal(player, target, 0f, 34f, 34f, 0f, 0f, 0f, 0f, 0f, 8f, false);
+                    if (target != null && !IsEnemy(player, target)) continue;
+                    if (target != null) DealWiz(player, target, _phalanxDmg, percent, "arcane_phalanx", 8f, false);
                     pos = hits[i].point;
                     stop = true;
                     break;
                 }
                 if (!stop) pos += dir * step;
-                sword.transform.position = pos;
-                sword.transform.rotation = Quaternion.LookRotation(dir, Vector3.up);
+                if (sword != null)
+                {
+                    sword.transform.position = pos;
+                    sword.transform.rotation = Quaternion.LookRotation(dir, Vector3.up);
+                }
                 traveled += step;
-                if (stop) break;
+                if (stop)
+                {
+                    if (_phalanxSpearArmed)
+                    {
+                        _phalanxSpearArmed = false;
+                        AstralSpearEruption(player, pos, percent);
+                    }
+                    break;
+                }
                 yield return null;
             }
-            Destroy(sword);
+            if (sword != null) Destroy(sword);
+        }
+
+        private void AstralSpearEruption(Player player, Vector3 point, float swordPercent)
+        {
+            float radius = DragonCombat.M(_paAscSpearRadius.Value);
+            List<Character> targets = GetSphereTargets(player, point, radius);
+            for (int i = 0; i < targets.Count; i++)
+                DealWiz(player, targets[i], _phalanxDmg, swordPercent * _paAscSpearPercent.Value / 100f, "arcane_phalanx", 14f, true);
+            if (!_enableVfx.Value) return;
+            StartCoroutine(RingVfx(point, radius, new Color(0.72f, 0.40f, 1f, 1f), 0.5f));
+            for (int i = 0; i < 4; i++) // four cosmetic spears
+            {
+                float a = i * Mathf.PI * 0.5f + 0.4f;
+                Vector3 p = point + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * radius * 0.45f;
+                CreateBeam(p - Vector3.up * 0.5f, p + Vector3.up * 4.5f, new Color(0.80f, 0.55f, 1f, 1f), 0.35f, 0.6f);
+            }
+        }
+
+        // ------------------------------------------------------------------ Gravity Blast (new)
+        private void CastGravityBlast(Player player)
+        {
+            if (!BeginSkill(player, "Spellcaster.GravityBlast", _gbCooldown.Value, _gbEitr.Value)) return;
+            DragonCombat.BeginMobileCast(player, 0.3f, false);
+            Vector3 origin = player.GetEyePoint() + player.transform.forward * 1.2f;
+            Vector3 dir = AlbedoAimUtility.GetProjectileDirection(player, origin);
+            StartCoroutine(GravityBlastRoutine(player, origin, dir, IsSpellAscended(player, "gravity_blast"), 1f));
+            CloneCopySkill(player, "gravity_blast");
+        }
+
+        private IEnumerator GravityBlastRoutine(Player player, Vector3 origin, Vector3 dir, bool ascended, float scale)
+        {
+            ShowMessage("Gravity Blast");
+            dir.Normalize();
+            float normalRange = DragonCombat.M(Mathf.Max(1f, _gbRange.Value));
+            float range = ascended ? DragonCombat.M(Mathf.Max(1f, _gbAscRange.Value)) : normalRange;
+            float speed = normalRange / Mathf.Max(0.5f, _gbTravel.Value);
+            float life = range / Mathf.Max(0.1f, speed);
+            float radius = DragonCombat.M(_gbRadius.Value);
+            float tick = Mathf.Max(0.1f, _gbTick.Value);
+            int solid = LayerMask.GetMask("Default", "static_solid", "Default_small", "piece", "terrain", "vehicle");
+            GameObject orb = _enableVfx.Value ? CreateOrb(origin, DragonCombat.M(_gbOrbSize.Value), new Color(0.18f, 0.02f, 0.30f, 0.92f)) : null;
+            Vector3 pos = origin;
+            bool moving = true;
+            float elapsed = 0f;
+            float nextTick = 0f;
+            while (elapsed < life && player != null)
+            {
+                if (moving)
+                {
+                    float step = speed * Time.deltaTime;
+                    RaycastHit wall;
+                    // passes through every enemy, stops at walls and other physical objects
+                    if (Physics.SphereCast(pos, 0.4f, dir, out wall, step, solid, QueryTriggerInteraction.Ignore) && wall.collider.GetComponentInParent<Character>() == null)
+                    {
+                        pos += dir * Mathf.Max(0f, wall.distance - 0.1f);
+                        moving = false;
+                    }
+                    else pos += dir * step;
+                    if (orb != null) orb.transform.position = pos;
+                }
+                if (elapsed >= nextTick)
+                {
+                    nextTick = elapsed + tick;
+                    List<Character> targets = GetSphereTargets(player, pos, radius);
+                    for (int i = 0; i < targets.Count; i++)
+                    {
+                        Character enemy = targets[i];
+                        DealWiz(player, enemy, _gravityBlastDmg, scale, "gravity_blast", 0f, false);
+                        bool small = DragonCombat.IsSmallEnemy(enemy);
+                        bool boss = IsBoss(enemy);
+                        if (small) PullToward(enemy, pos, _gbPull.Value);
+                        else
+                        {
+                            DragonCombat.ApplyCripple(enemy, _gbCripple.Value);
+                            if (ascended) PullToward(enemy, pos, _gbPull.Value * (boss ? _gbAscBoss.Value : _gbAscBig.Value) / 100f);
+                        }
+                    }
+                    if (_enableVfx.Value) StartCoroutine(RingVfx(pos, radius, new Color(0.40f, 0.10f, 0.70f, 0.55f), Mathf.Min(0.4f, tick)));
+                }
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+            if (orb != null) Destroy(orb);
+            if (!ascended || player == null) yield break;
+            List<Character> hit = GetSphereTargets(player, pos, radius);
+            for (int i = 0; i < hit.Count; i++)
+                DealWiz(player, hit[i], _gravityBlastDmg, scale * _gbAscBurst.Value / 100f, "gravity_blast", 14f, true);
+            if (_enableVfx.Value) { StartCoroutine(RingVfx(pos, radius, new Color(0.65f, 0.25f, 1f, 1f), 0.6f)); CreateLightningBurst(pos, radius); }
+        }
+
+        // ------------------------------------------------------------------ Rift Walker (Grace)
+        private bool PlacePortalPoint(Player player, out Vector3 point, out bool airborne)
+        {
+            float range = DragonCombat.M(_riftWalkerRange.Value);
+            airborne = false;
+            if (AlbedoAimUtility.TryGetPhysicalTarget(player, range, out point)) { point += Vector3.up * 0.15f; return true; }
+            Vector3 origin = player.GetEyePoint();
+            Vector3 dir = AlbedoAimUtility.GetProjectileDirection(player, origin);
+            point = origin + dir * Mathf.Min(range, DragonCombat.M(15f)); // Free Aim / mid-air placement
+            airborne = true;
+            return true;
+        }
+
+        private void ActivateRiftWalker(Player player)
+        {
+            if (!_riftAwaitingB || _riftA == null)
+            {
+                if (CooldownRemaining("Spellcaster.RiftWalker") > 0f) { ShowCooldown("Spellcaster.RiftWalker"); return; }
+                Vector3 a; bool airA;
+                PlacePortalPoint(player, out a, out airA);
+                DestroyRifts();
+                _riftA = CreateRift(a);
+                _riftAwaitingB = true;
+                _riftEndTime = Time.time + Mathf.Max(1f, _riftWalkerWindow.Value);
+                StartCooldown("Spellcaster.RiftWalker", _riftWalkerCooldown.Value); // from Portal A placement
+                ShowMessage("Portal A placed - aim and press the Grace key again for Portal B");
+                return;
+            }
+            Vector3 b; bool airB;
+            if (!PlacePortalPoint(player, out b, out airB)) { ShowMessage("Portal B could not be placed"); return; }
+            _riftB = CreateRift(b);
+            LinkRifts();
+            _riftAwaitingB = false;
+            _riftEndTime = Time.time + Mathf.Max(1f, _riftWalkerLife.Value);
+            ShowMessage("Rift Walker linked - press E at a portal to travel");
+        }
+
+        // ------------------------------------------------------------------ Ascended Stonefang (Spellcaster's Ascended MC)
+        private void CastAscendedStonefang(Player player)
+        {
+            Vector3 target;
+            if (!AlbedoAimUtility.TryGetPhysicalTarget(player, DragonCombat.M(_saAscRange.Value), out target)) { ShowMessage("Aim at a physical target"); return; }
+            if (!BeginSkill(player, "Sorcerer.StonefangEruption", _saAscCooldown.Value, _saAscEitr.Value)) return;
+            DragonCombat.BeginMobileCast(player, 0.3f, false); // Spellcaster: no wind up
+            StartCoroutine(AscendedStonefangRoutine(player, target));
+        }
+
+        private IEnumerator AscendedStonefangRoutine(Player player, Vector3 target)
+        {
+            ShowMessage("Stonefang Eruption");
+            float radius = DragonCombat.M(_saAscRadius.Value);
+            List<Character> targets = GetSphereTargets(player, target, radius);
+            for (int i = 0; i < targets.Count; i++)
+            {
+                Character enemy = targets[i];
+                DealWiz(player, enemy, _stoneAscDmg, _saAscEruption.Value / 100f, "stonefang_eruption", 20f, false);
+                if (DragonCombat.IsSmallEnemy(enemy)) DragonCombat.Stun(enemy, target);
+                if (!IsBoss(enemy)) DragonCombat.ApplyCripple(enemy, 6f);
+            }
+            if (_enableVfx.Value) CreateStoneSpikes(target, radius);
+            int ticks = Mathf.Max(1, Mathf.RoundToInt(_saAscDuration.Value / 0.5f));
+            for (int t = 0; t < ticks; t++)
+            {
+                yield return new WaitForSeconds(0.5f);
+                if (player == null) yield break;
+                List<Character> inside = GetSphereTargets(player, target, radius);
+                for (int i = 0; i < inside.Count; i++)
+                    DealWiz(player, inside[i], _stoneAscDmg, _saAscTickPercent.Value / 100f, "stonefang_eruption", 0f, false);
+                if (_enableVfx.Value && t % 2 == 1) CreateStoneSpikes(target, radius);
+            }
+        }
+
+        // ------------------------------------------------------------------ Void Step charges (Ascended)
+        private int VoidMaxCharges(Player player)
+        {
+            return IsSpellAscended(player, "void_step") ? Mathf.Max(1, _vsAscCharges.Value) : 1;
+        }
+
+        private void UpdateVoidCharges(Player player)
+        {
+            int max = VoidMaxCharges(player);
+            if (_voidCharges < 0 || _voidCharges > max) _voidCharges = max;
+            if (_voidCharges < max && Time.time >= _voidNextCharge)
+            {
+                _voidCharges++;
+                if (_voidCharges < max) _voidNextCharge = Time.time + Mathf.Max(0.1f, _testingForceCooldowns.Value ? _testingCooldown.Value : DragonCombat.ScaleCooldown(player, "Spellcaster.VoidStep", _voidCooldown.Value));
+            }
+            _cooldowns["Spellcaster.VoidStep"] = _voidCharges > 0 ? 0f : _voidNextCharge;
+        }
+
+        // ------------------------------------------------------------------ Ascended Afterimage Arsenal (Astral Clones)
+        private int ActiveCloneCount()
+        {
+            int n = 0;
+            for (int i = 0; i < 3; i++) if (_clones[i] != null && Time.time < _cloneUntil[i]) n++;
+            return n;
+        }
+
+        private bool SummonClone(Player player, bool replaceOldest)
+        {
+            int slot = -1;
+            for (int i = 0; i < 3; i++)
+                if ((_clones[i] == null || Time.time >= _cloneUntil[i]) && Time.time >= _cloneSlotReady[i]) { slot = i; break; }
+            if (slot < 0 && replaceOldest)
+            {
+                float oldest = float.MaxValue;
+                for (int i = 0; i < 3; i++)
+                    if (_clones[i] != null && Time.time >= _cloneSlotReady[i] && _cloneBorn[i] < oldest) { oldest = _cloneBorn[i]; slot = i; }
+            }
+            if (slot < 0) return false;
+            if (!SpendEitr(player, _afterimageEitr.Value / 3f)) { ShowMessage("Not enough Eitr"); return false; }
+            if (_clones[slot] != null) Destroy(_clones[slot]);
+            Vector3 side = Quaternion.AngleAxis(-60f + 60f * slot, Vector3.up) * -player.transform.forward;
+            Vector3 pos = player.transform.position + side * 1.8f;
+            GameObject root = new GameObject("SpellcasterAstralClone");
+            root.transform.position = pos;
+            root.transform.rotation = player.transform.rotation;
+            if (_enableVfx.Value)
+            {
+                CreateAfterimagePart(root.transform, PrimitiveType.Capsule, new Vector3(0f, 1.0f, 0f), new Vector3(0.52f, 0.90f, 0.42f));
+                CreateAfterimagePart(root.transform, PrimitiveType.Sphere, new Vector3(0f, 2.05f, 0f), new Vector3(0.42f, 0.42f, 0.42f));
+                StartCoroutine(RingVfx(pos + Vector3.up * 0.05f, 1.15f, new Color(0.40f, 0.70f, 1f, 0.80f), 0.45f));
+            }
+            _clones[slot] = root;
+            _cloneBorn[slot] = Time.time;
+            _cloneUntil[slot] = Time.time + Mathf.Max(1f, _aaAscLife.Value);
+            _cloneSlotReady[slot] = Time.time + Mathf.Max(0f, _testingForceCooldowns.Value ? _testingCooldown.Value : _aaAscSlotCooldown.Value);
+            Destroy(root, Mathf.Max(1f, _aaAscLife.Value));
+            return true;
+        }
+
+        private void CastAscendedAfterimage(Player player)
+        {
+            _cloneHoldStart = Time.time; // tap = one clone on release, hold 1s = every missing one
+        }
+
+        private void UpdateCloneHold(Player player)
+        {
+            if (_cloneHoldStart < 0f) return;
+            bool held = SkillKeyHeld(player, "afterimage_arsenal", _skill7.Value);
+            if (held && Time.time - _cloneHoldStart >= Mathf.Max(0.2f, _aaAscHold.Value))
+            {
+                _cloneHoldStart = -1f;
+                int made = 0;
+                while (ActiveCloneCount() < 3 && SummonClone(player, false)) made++;
+                ShowMessage(made > 0 ? "Astral Clones x" + made : "Astral Clones are recovering");
+                return;
+            }
+            if (!held)
+            {
+                _cloneHoldStart = -1f;
+                bool ok = SummonClone(player, ActiveCloneCount() >= 3);
+                ShowMessage(ok ? "Astral Clone" : "Astral Clones are recovering");
+            }
+        }
+
+        private float CloneCooldownRemaining()
+        {
+            float best = float.MaxValue;
+            for (int i = 0; i < 3; i++) best = Mathf.Min(best, Mathf.Max(0f, _cloneSlotReady[i] - Time.time));
+            return best == float.MaxValue ? 0f : best;
+        }
+
+        // Clones copy weapon attacks (30%) on the held-fire cadence.
+        private void CloneWeaponCopies(Player player, ItemDrop.ItemData weapon)
+        {
+            if (ActiveCloneCount() == 0) return;
+            Character target = FindAimedEnemy(player, DragonCombat.M(50f), 14f);
+            if (target == null) return;
+            MagicDamageSnapshot damage = GetMagicWeaponDamage(weapon);
+            for (int i = 0; i < 3; i++)
+            {
+                if (_clones[i] == null || Time.time >= _cloneUntil[i]) continue;
+                Vector3 origin = _clones[i].transform.position + Vector3.up * 1.2f;
+                if (_enableVfx.Value) CreateBeam(origin, target.transform.position + Vector3.up, new Color(0.40f, 0.70f, 1f, 0.75f), 0.10f, 0.22f);
+                DealMagicWeaponDamage(player, target, damage, _aaAscWeaponPercent.Value / 100f);
+            }
+        }
+
+        // Clones copy your Spellcaster skills at 25% (they never copy other clones).
+        private void CloneCopySkill(Player player, string id)
+        {
+            if (!IsSpellAscended(player, "afterimage_arsenal") || ActiveCloneCount() == 0) return;
+            float scale = _aaAscSkillPercent.Value / 100f;
+            for (int i = 0; i < 3; i++)
+            {
+                if (_clones[i] == null || Time.time >= _cloneUntil[i]) continue;
+                Vector3 origin = _clones[i].transform.position + Vector3.up * 1.4f;
+                if (id == "gravity_blast")
+                    StartCoroutine(GravityBlastRoutine(player, origin, AlbedoAimUtility.GetProjectileDirection(player, origin), IsSpellAscended(player, "gravity_blast"), scale));
+                else if (id == "arcane_rupture_hit")
+                    continue;
+                else if (_enableVfx.Value)
+                    StartCoroutine(RingVfx(_clones[i].transform.position, 1.2f, new Color(0.40f, 0.70f, 1f, 0.8f), 0.3f));
+            }
+        }
+
+        private void ClearClones()
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                if (_clones[i] != null) Destroy(_clones[i]);
+                _clones[i] = null;
+                _cloneUntil[i] = 0f;
+            }
         }
 
         private void CastArcaneRupture(Player player)
@@ -2233,11 +2666,12 @@ namespace DragonsAltarSorcerer
             Vector3 target;
             if (!AlbedoAimUtility.TryGetPhysicalTarget(player, DragonCombat.M(_ruptureRange.Value), out target)) { ShowMessage("Aim at a physical target"); return; }
             if (_ruptureCharges <= 0) { ShowMessage("Arcane Rupture: no charges"); return; }
+            CloneCopySkill(player, "arcane_rupture");
             _ruptureCharges--;
             _ruptureRechargeAt.Add(Time.time + Mathf.Max(1f, _ruptureRecharge.Value));
             _ruptureNextCastAt = Time.time + Mathf.Max(0f, _ruptureBuffer.Value);
             StartCoroutine(RuptureRoutine(player, target));
-            ShowMessage("Arcane Rupture " + _ruptureCharges + "/" + Mathf.Max(1, _ruptureMaxCharges.Value));
+            ShowMessage("Arcane Rupture " + _ruptureCharges + "/" + RuptureMax());
         }
 
         private IEnumerator RuptureRoutine(Player player, Vector3 target)
@@ -2258,7 +2692,12 @@ namespace DragonsAltarSorcerer
                 state.DamageStack++;
                 float mult = state.DamageStack >= 3 ? 2f : 1f;
                 if (state.DamageStack >= 3) state.DamageStack = 0;
-                Deal(player, enemy, 0f, 0f, 0f, 0f, 0f, 55f * mult, 0f, 45f * mult, 16f, false);
+                float asc = IsSpellAscended(player, "arcane_rupture") ? _ruAscDamage.Value / 100f : 1f;
+                DealWiz(player, enemy, _ruptureDmg, mult * asc, "arcane_rupture", 16f, false);
+                // Ascended Afterimage: every Astral Clone copies the explosion at 25%.
+                if (IsSpellAscended(player, "afterimage_arsenal"))
+                    for (int c = 0; c < ActiveCloneCount(); c++)
+                        DealWiz(player, enemy, _ruptureDmg, mult * asc * _aaAscSkillPercent.Value / 100f, "arcane_rupture", 0f, false);
 
                 if (DragonCombat.IsSmallEnemy(enemy)) DragonCombat.Stun(enemy, target);
                 else
@@ -2313,9 +2752,15 @@ namespace DragonsAltarSorcerer
             DragonCombat.ApplyTimedBuff(player, "Spellcaster.PhaseFlow", _phaseDuration.Value, 0f, 0f, 0.15f, 0f, 0f, 0.25f, false);
         }
 
+        private int RuptureMax()
+        {
+            Player player = Player.m_localPlayer;
+            return player != null && IsSpellAscended(player, "arcane_rupture") ? Mathf.Max(1, _ruAscCharges.Value) : Mathf.Max(1, _ruptureMaxCharges.Value);
+        }
+
         private float GetRuptureNextRecharge()
         {
-            int maxCharges = Mathf.Max(1, _ruptureMaxCharges.Value);
+            int maxCharges = RuptureMax();
             if (_ruptureCharges >= maxCharges || _ruptureRechargeAt.Count == 0)
                 return 0f;
             float next = float.MaxValue;
@@ -2330,13 +2775,14 @@ namespace DragonsAltarSorcerer
 
         private void UpdateRuptureCharges()
         {
+            if (_ruptureCharges + _ruptureRechargeAt.Count < RuptureMax()) _ruptureCharges++; // Ascended: 4th charge
             if (_ruptureRechargeAt.Count == 0) return;
             for (int i = _ruptureRechargeAt.Count - 1; i >= 0; i--)
             {
                 if (Time.time >= _ruptureRechargeAt[i])
                 {
                     _ruptureRechargeAt.RemoveAt(i);
-                    _ruptureCharges = Mathf.Min(Mathf.Max(1, _ruptureMaxCharges.Value), _ruptureCharges + 1);
+                    _ruptureCharges = Mathf.Min(RuptureMax(), _ruptureCharges + 1);
                 }
             }
         }

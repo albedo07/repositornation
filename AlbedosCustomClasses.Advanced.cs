@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.23.1";
+        public const string ModVersion = "0.23.2";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -10639,6 +10639,7 @@ namespace AlbedosCustomClassesAdvanced
             IhAppendMercenaryStats(b, player, id, ascended, power);
             IhAppendSorcererStats(b, id, power);
             IhAppendWizardStats(b, player, id, ascended, power);
+            IhAppendSpellcasterStats(b, player, id, ascended, power);
             // v0.22.0: Warrior / Sorcerer skills list their approved Ascended effect until their
             // full stat tooltips come with each Advancement rework.
             string ascendedText = IhKitAscendedSummary(id);
@@ -10753,6 +10754,65 @@ namespace AlbedosCustomClassesAdvanced
             }
         }
 
+        // v0.23.2: Spellcaster stats (values live in the Sorcerer module; Spellcaster pays half Eitr, no wind up).
+        private void IhAppendSpellcasterStats(System.Text.StringBuilder b, Player player, string id, bool ascended, float power)
+        {
+            const string p = "Spellcaster Arcane Phalanx";
+            switch (id)
+            {
+                case "arcane_phalanx":
+                    b.Append(IhLine("Damage", IhSorcDamage("Spellcaster Arcane Phalanx Damage", power * (ascended ? IhW("Spellcaster Arcane Phalanx Ascended", "SwordDamagePercent", 65f) / 100f : 1f)) + " per sword"));
+                    b.Append(IhLine("Swords", IhNum(ascended ? IhW("Spellcaster Arcane Phalanx Ascended", "SwordCount", 8f) : IhW(p, "SwordCount_v0232", 4f)) + ", Mouse1 launches one every " + IhNum(IhW(p, "LaunchBuffer", 0.3f)) + "s; recast + Left Click = volley"));
+                    if (ascended) b.Append(IhLine("Astral Spear", "a full 8-sword volley erupts on its first impact: " + IhNum(IhW("Spellcaster Arcane Phalanx Ascended", "AstralSpearRadius", 4f)) + "m, " + IhNum(IhW("Spellcaster Arcane Phalanx Ascended", "AstralSpearPercent", 80f)) + "% of one sword"));
+                    IhEitrCosts(b, IhW(p, "EitrCost", 40f) * 0.5f, "None", IhW(p, "Cooldown", 15f));
+                    return;
+                case "afterimage_arsenal":
+                    if (ascended)
+                    {
+                        b.Append(IhLine("Astral Clones", "up to 3, " + IhNum(IhW("Spellcaster Afterimage Arsenal Ascended", "CloneLifetime", 16f)) + "s each; tap = one, hold " + IhNum(IhW("Spellcaster Afterimage Arsenal Ascended", "HoldToSummonAll", 1f)) + "s = all missing"));
+                        b.Append(IhLine("Copies", IhNum(IhW("Spellcaster Afterimage Arsenal Ascended", "SkillCopyPercent", 25f)) + "% of your skills, " + IhNum(IhW("Spellcaster Afterimage Arsenal Ascended", "WeaponCopyPercent", 30f)) + "% of your weapon attacks"));
+                        IhEitrCosts(b, IhW("Spellcaster Afterimage Arsenal", "EitrCost", 50f) / 3f * 0.5f, "None", IhW("Spellcaster Afterimage Arsenal Ascended", "CloneCooldown", 45f));
+                        return;
+                    }
+                    b.Append(IhLine("Damage", IhNum(IhW("Spellcaster Afterimage Arsenal", "DamageMultiplier", 0.35f) * 100f) + "% of your weapon per afterimage shot"));
+                    b.Append(IhLine("Duration", IhNum(IhW("Spellcaster Afterimage Arsenal", "Duration", 8f)) + "s, up to 3 afterimages (Void Step / Rift travel leave more)"));
+                    IhEitrCosts(b, IhW("Spellcaster Afterimage Arsenal", "EitrCost", 50f) * 0.5f, "None", IhW("Spellcaster Afterimage Arsenal", "Cooldown", 18f));
+                    return;
+                case "void_step":
+                    b.Append(IhLine("Range", IhNum(IhW("Spellcaster Void Step", "GroundPacRange", 50f)) + "m on a surface, " + IhNum(IhW("Spellcaster Void Step", "FreeAimRange", 15f)) + "m Free Aim"));
+                    b.Append(IhLine("Effect", "Feather Falling until grounded, no fall damage" + (ascended ? "; " + IhNum(IhW("Spellcaster Void Step Ascended", "Charges", 2f)) + " charges, keeps momentum" : "")));
+                    b.Append(IhLine("Cost", "None"));
+                    b.Append(IhLine("Wind Up Time", "None"));
+                    b.Append(IhLine("Cooldown", IhNum(IhW("Spellcaster Void Step", "Cooldown", 5f)) + "s"));
+                    return;
+                case "rift_echo":
+                    b.Append(IhLine("Damage", IhNum(IhW("Spellcaster Rift Echo", "EchoDamageMultiplier", 0.45f) * 100f) + "% of your weapon per echo"));
+                    b.Append(IhLine("Echo", "every " + IhNum(ascended ? IhW("Spellcaster Rift Echo Ascended", "EchoInterval", 0.35f) : 0.5f) + "s while Mouse1 is held, " + IhNum(IhW("Spellcaster Rift Echo", "Duration", 8f)) + "s"));
+                    IhEitrCosts(b, IhW("Spellcaster Rift Echo", "EitrCost", 45f) * 0.5f, "None", IhW("Spellcaster Rift Echo", "Cooldown", 16f));
+                    return;
+                case "gravity_blast":
+                    b.Append(IhLine("Damage", IhSorcDamage("Spellcaster Gravity Blast Damage", power) + " every " + IhNum(IhW("Spellcaster Gravity Blast", "HitInterval", 0.5f)) + "s"));
+                    b.Append(IhLine("Travel", IhNum(ascended ? IhW("Spellcaster Gravity Blast Ascended", "Range", 25f) : IhW("Spellcaster Gravity Blast", "Range", 15f)) + "m, " + IhNum(IhW("Spellcaster Gravity Blast", "Range", 15f)) + "m per " + IhNum(IhW("Spellcaster Gravity Blast", "TravelTime", 4f)) + "s, Free Aim, passes enemies"));
+                    b.Append(IhLine("Radius", IhNum(IhW("Spellcaster Gravity Blast", "Radius", 5f)) + "m"));
+                    b.Append(IhLine("Inflicts", ascended ? "pulls Small, Big 40%, Bosses 20%; Cripple (Big, Boss)" : "pulls Small; Cripple " + IhNum(IhW("Spellcaster Gravity Blast", "CrippleDuration", 3f)) + "s (Big, Boss)"));
+                    if (ascended) b.Append(IhLine("End Burst", IhNum(IhW("Spellcaster Gravity Blast Ascended", "EndBurstPercent", 130f)) + "% when the orb stops"));
+                    IhEitrCosts(b, IhW("Spellcaster Gravity Blast", "EitrCost", 40f) * 0.5f, "None", IhW("Spellcaster Gravity Blast", "Cooldown", 14f));
+                    return;
+                case "arcane_rupture":
+                    b.Append(IhLine("Damage", IhSorcDamage("Spellcaster Arcane Rupture Damage", power * (ascended ? IhW("Spellcaster Arcane Rupture Ascended", "DamagePercent", 120f) / 100f : 1f)) + ", every 3rd hit on a target x2"));
+                    b.Append(IhLine("Radius", IhNum(IhW("Spellcaster Arcane Rupture", "Radius", 10f)) + "m, the spot winds up " + IhNum(IhW("Spellcaster Arcane Rupture", "LocationWindup", 1f)) + "s while you move"));
+                    b.Append(IhLine("Charges", IhNum(ascended ? IhW("Spellcaster Arcane Rupture Ascended", "MaxCharges", 4f) : IhW("Spellcaster Arcane Rupture", "MaxCharges", 3f)) + ", each recharges in " + IhNum(IhW("Spellcaster Arcane Rupture", "RechargeSeconds", 20f)) + "s"));
+                    return;
+                case "rift_walker":
+                    b.Append(IhLine("Portals", "A, then B within " + IhNum(IhW("Spellcaster Rift Walker", "PlacementWindow", 30f)) + "s, each up to " + IhNum(IhW("Spellcaster Rift Walker", "PlacementRange", 50f)) + "m (Free Aim, mid-air allowed)"));
+                    b.Append(IhLine("Travel", "E at either portal, " + IhNum(IhW("Spellcaster Rift Walker", "LinkedLifetime", 30f)) + "s once linked; airborne exits grant Feather Falling"));
+                    b.Append(IhLine("Cost", "None"));
+                    b.Append(IhLine("Wind Up Time", "None"));
+                    b.Append(IhLine("Cooldown", IhNum(IhW("Spellcaster Rift Walker", "Cooldown", 120f) / 60f) + " min, from Portal A"));
+                    return;
+            }
+        }
+
         private void IhEitrCosts(System.Text.StringBuilder b, float eitr, string windup, float cooldown)
         {
             b.Append(IhLine("Eitr Cost", IhNum(eitr)));
@@ -10849,7 +10909,7 @@ namespace AlbedosCustomClassesAdvanced
         {
             switch (id)
             {
-                case "gravity_blast": case "rift_walker":
+                case "__none__":
                     return true;
             }
             return false;
@@ -11163,9 +11223,15 @@ namespace AlbedosCustomClassesAdvanced
                     if (SkillsPlugin.Instance != null)
                         SkillsPlugin.Instance.CastFromHotbar(player, id);
                     break;
+                case "stonefang_eruption":
+                    // v0.23.2: Spellcaster's Ascended MC lives in the Sorcerer module.
+                    if (IsAscendedSkill("stonefang_eruption") && GetAdvancement(player) == "Spellcaster" && DragonCombat.TryExternalCast(player, "stonefang_eruption_ascended"))
+                        break;
+                    if (SkillsPlugin.Instance != null)
+                        SkillsPlugin.Instance.CastFromHotbar(player, id);
+                    break;
                 case "impact_punch":
                 case "flame_burst":
-                case "stonefang_eruption":
                     if (SkillsPlugin.Instance != null)
                         SkillsPlugin.Instance.CastFromHotbar(player, id);
                     break;
@@ -11264,7 +11330,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "impact_punch": return skills == null ? 0f : skills.GetCooldownForUi("Warrior.ImpactPunch");
                 case "flame_burst": return skills == null ? 0f : skills.GetCooldownForUi("Sorcerer.FlameBurst");
                 case "glacial_descent": return Mathf.Max(skills == null ? 0f : skills.GetCooldownForUi("Sorcerer.GlacialDescent"), DragonCombat.ExternalCooldown("glacial_descent"));
-                case "stonefang_eruption": return skills == null ? 0f : skills.GetCooldownForUi("Sorcerer.StonefangEruption");
+                case "stonefang_eruption": return Mathf.Max(skills == null ? 0f : skills.GetCooldownForUi("Sorcerer.StonefangEruption"), DragonCombat.ExternalCooldown("stonefang_eruption"));
                 case "moonlight_splitter": return GetCooldownRemaining("SwordMaster.MoonlightSplitter");
                 case "crescent_cleave": return GetCooldownRemaining("SwordMaster.CrescentCleave");
                 case "blade_storm": return GetReadyJudgementChargeIndex() >= 0 ? 0f : GetJudgementNextRecharge();
