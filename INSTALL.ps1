@@ -1,7 +1,7 @@
 ﻿$ErrorActionPreference = "Stop"
 
 Write-Host ""
-Write-Host "IMMORTAL HEROES v0.22.0 - UNIVERSAL KITS" -ForegroundColor Cyan
+Write-Host "IMMORTAL HEROES v0.22.1 - KIT UI FIXES" -ForegroundColor Cyan
 Write-Host "Protected build: all 8 DLLs compile in staging before the live profile is touched." -ForegroundColor Gray
 Write-Host ""
 

@@ -1,14 +1,6 @@
-TEST v0.22.0 - UNIVERSAL KITS
-Cleric first (must be unchanged): open the tree as Paladin and as Priest, Tiers, hotbar, Advance.
-Warrior (use /ih class Warrior, /ih level 16 or F8 > Progression):
-1. Open the tree: WARRIOR title, Heavy Slash / Impact Wave / Impact Punch plates, initials on
-   dark placeholder art, SWORD MASTER / MERCENARY preview plaques.
-2. Spend Class points, CONFIRM; hotbar casts Heavy Slash / Impact Wave / Impact Punch.
-3. Impact Wave Tier 7 + 14 spent at Lv 16 -> ADVANCE TO SWORD MASTER (Impact Wave turns Magenta,
-   permanent on the hotbar). Same at the Altar.
-4. Sword Master hotbar: Moonlight Splitter, Crescent Cleave, Blade Storm, Halfmoon (Lv 36) cast;
-   Frenzied Charge / Eclipse / Knight's Guidance show "arrives with its Sword Master update".
-5. Mercenary: Stomp, Circle Swing, Bonecrusher, Seismic Guillotine, Whirlwind cast.
-Sorcerer: same flow; Wizard / Spellcaster skills cast from the tree hotbar; their old HUD is gone.
-6. Ascend (Lv 32 Signature T5 etc.) and F8 Ascension switches for each Class.
-Report anything off by even a few px (titles, plates, initials).
+TEST v0.22.1 - KIT UI FIXES
+1. Warrior / Sorcerer / Cleric before Lv 16: HUD Grace slot = grey Grace icon + padlock + M4 + R.
+2. Tree header "SEALED · ADVANCE AT LV 16" centred on its strip (Paladin / Priest too).
+3. SWORD MASTER | MERCENARY and WIZARD | SPELLCASTER plaques: no overlap, same text size.
+4. Impact Wave / Glacial Descent plates: clean, no stray mark.
+Then the v0.22.0 checklist (in docs/changelog) still applies.

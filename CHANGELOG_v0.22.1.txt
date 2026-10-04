@@ -1,0 +1,8 @@
+IMMORTAL HEROES v0.22.1 - KIT UI FIXES
+- HUD: the Grace slot before Advancement shows the (greyed, padlocked) Grace of the previewed
+  branch again (was a lone padlock; Cleric was affected too).
+- Advancement header ("SEALED · ADVANCE AT LV 16" / Tier Points) centred on its painted strip.
+- Branch plaques (SWORD MASTER / MERCENARY, WIZARD / SPELLCASTER): one shared font size that fits
+  the longest name, no more overlap.
+- Middle Class plate (Impact Wave, Glacial Descent): the old painted "Righteous Strike" text is
+  fully erased (it was wider than the blank and left a stray mark).

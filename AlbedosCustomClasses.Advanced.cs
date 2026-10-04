@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.22.0";
+        public const string ModVersion = "0.22.1";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -7703,9 +7703,12 @@ namespace AlbedosCustomClassesAdvanced
             IhKit k = IhPlayerKit(player);
             return k == null ? new string[0] : k.Adv;
         }
+        // Before Advancement the (locked) Grace of the previewed branch is shown.
         private string IhGraceFor(Player player)
         {
             IhKit k = IhPlayerKit(player);
+            if (k == null && player != null && player == Player.m_localPlayer)
+                k = IhTreeKit();
             return k == null ? "" : k.Grace;
         }
         private ReferenceNodeUi[] IhTreeNodes()
@@ -9191,7 +9194,7 @@ namespace AlbedosCustomClassesAdvanced
                 ? "<color=" + ink + ">TIER POINTS  </color><color=" + red + ">" + Mathf.Max(0, advLeft).ToString() + "</color>"
                 : "<color=" + ink + ">SEALED  ·  ADVANCE AT LV 16</color>";
             GUI.Label(ScaleReferenceRect(150f, 122f, 108f, 18f), classText, _ihHeaderStyle);
-            GUI.Label(ScaleReferenceRect(578f, 122f, 174f, 18f), advText, _ihHeaderStyle); // centred under the title (x 665)
+            GUI.Label(ScaleReferenceRect(580f, 122f, 194f, 18f), advText, _ihHeaderStyle); // centred on the painted strip (x 577-776)
         }
 
         private int IhPendingSum(string[] ids)
@@ -10396,10 +10399,18 @@ namespace AlbedosCustomClassesAdvanced
         {
             if (player == null || !string.IsNullOrEmpty(GetAdvancement(player))) return;
             string[] branches = IhBranchesOf(GetClass(player));
+            // v0.22.0: one shared font size that fits the longest branch name (SWORD MASTER) inside
+            // its plaque, so both plaques match and nothing spills onto the neighbour.
+            Rect probe = ScaleReferenceRect(794f, 120f, 88f, 25f);
+            GUIStyle measure = new GUIStyle(_treeFooterConfirmStyle);
+            measure.fontSize = Mathf.Max(9, Mathf.RoundToInt(probe.height * 0.46f));
+            for (int i = 0; i < branches.Length; i++)
+                while (measure.fontSize > 7 && measure.CalcSize(new GUIContent(branches[i].ToUpperInvariant())).x > probe.width * 0.84f)
+                    measure.fontSize--;
             for (int i = 0; i < branches.Length; i++)
             {
                 // v0.20.7: same ornate plaque as CONFIRM / ADVANCE; the unselected branch is dimmed.
-                Rect r = ScaleReferenceRect(796f + i * 90f, 120f, 86f, 25f);
+                Rect r = ScaleReferenceRect(794f + i * 92f, 120f, 88f, 25f);
                 bool selected = _ihPreviewBranch == branches[i];
                 bool hover = r.Contains(Event.current.mousePosition);
                 if (_treeConfirmPlaqueTex != null)
@@ -10414,7 +10425,7 @@ namespace AlbedosCustomClassesAdvanced
                         selected ? new Color(1f,0.80f,0.30f,1f) : new Color(0.55f,0.46f,0.30f,1f), 1f);
                 GUIStyle style = new GUIStyle(selected ? _treeFooterConfirmStyle : _treeFooterPendingStyle);
                 style.alignment = TextAnchor.MiddleCenter;
-                style.fontSize = Mathf.Max(9, Mathf.RoundToInt(r.height * 0.46f));
+                style.fontSize = measure.fontSize;
                 DrawFooterText(r, branches[i].ToUpperInvariant(), style);
                 if (r.Contains(Event.current.mousePosition))
                 {
@@ -10920,7 +10931,7 @@ namespace AlbedosCustomClassesAdvanced
             // The chassis carries the Cleric title and Class plate text: blank them, live text is drawn.
             IhInpaintText(canvas, new Rect(145f, 91f, 118f, 25f));
             for (int i = 0; i < 3; i++)
-                IhBlankPaintedLabel(canvas, ReferenceNameplateAnchors[IhClassSlots[i]], IhClassLabelWidth(IhClassSlots[i]));
+                IhBlankPaintedLabel(canvas, ReferenceNameplateAnchors[IhClassSlots[i]], IhClassSlots[i] == "righteous_strike" ? 86f : IhClassLabelWidth(IhClassSlots[i]));
             Texture2D art = LoadUiPng(k.Class + "_" + k.Ac.Replace(" ", "") + "_Artwork.png");
             bool hasArt = art != null && art.width == 1011 && art.height == 662;
             ReferenceNodeUi[] nodes = IhKitNodes(k);
