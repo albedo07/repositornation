@@ -1,0 +1,32 @@
+IMMORTAL HEROES v0.22.3 - SWORD MASTER
+Altar placement
+- Class / Advancement cards: every card is cut from its own measured frame (the painted frames sat
+  up to 8 px apart inside the atlas), so all cards are the same size and line up.
+- Card name and role centred on the card's art panel and balanced vertically (were 4 px right and
+  9 px low). Header plaque, Base Classes button and the bottom summary measured centred.
+- Altar Sword Master list: Moonlight Splitter, Crescent Cleave, Blade Storm, Frenzied Charge,
+  Eclipse, Halfmoon Slash + The Way of the Sword (Mastery) and Knight's Guidance (Grace).
+  Warrior's Blessing text per the Framework.
+Sword Master (Framework + approved Ascensions; new config keys so the new defaults apply)
+- The Way of the Sword: exactly one Sword (two-handed too): +20 Sword, +50% Attack Speed.
+  Blocking or Dodging stops the rest of a Sword Master skill (waves, afterimages, aftershocks).
+- Moonlight Splitter 45 Slash + 25 Spirit per wave.  Ascended: 4 waves 0.3s apart (65%), 1s finisher
+  wind up, finisher 110% at 2x speed/width/height, afterimage 0.2s later (55%), Ghost.
+- Crescent Cleave 45 Slash + 20 Spirit per cleave; a cleave's total on one target = its damage
+  (2 persistent hits of 50%).  Ascended: 7 cleaves (45%) + 6 between them 0.3s later (30%),
+  4s fire trails (10% every 0.5s, max 8 per target) and stacking Burn (3% per stack, 5 stacks).
+- Blade Storm (was Judgement Cut): 3 cuts of 20 Slash.  Ascended: 6 stacks, cuts 85%, extra cut
+  0.15s later (25% of the activation).
+- NEW Frenzied Charge: 1.5s thrust wind up, steerable 8m dash, 96 Slash, launches Small / Stuns
+  Big, then a 24 Slash aftereffect along the path.  Ascended: 0.5s, 12m, double width, 115%.
+- NEW Eclipse: 0.3s, 360 degree 7m swing, 75 Slash + 35 Spirit, Spirit Burn, knockback (not
+  Bosses).  Ascended: 8m, 110%, reflects enemy projectiles for 0.5s around the slash.
+- Halfmoon Slash 107 Slash + 53 Spirit, afterimage 50%, Spirit Burn 6/s for 10s, Stun.
+  Ascended: 1s wind up, a main slash + 2 more (0.4s apart) travel 20m in 5s, hit every 0.3s
+  (10% / 4% of the Ultimate, max 17 hits each), stop at terrain, keep Spirit Burn + Stun.
+- NEW Knight's Guidance (Grace, M4+R): 10m allies, +50% Movement, +40% Stamina Regen, -30% Stamina
+  use, 3 min, 13 min cooldown.
+- Impact Wave 40 Blunt + 20 Pierce.  Ascended (Sword Master's Ascended Class skill): 15m x 3m wave,
+  then an aftershock runs back along the travelled path in 3m sections every 0.2s (35%).
+- Sword Master tooltips show full stats; Tier power applies to all Sword Master skills.
+- F8 hides the superseded Sword Master values and the retired Severed Horizon / Empty Sheath.

@@ -40,7 +40,7 @@ namespace DragonsAltarDevTools
     {
         public const string ModGuid = "albedo.customclasses.devtools";
         public const string ModName = "Dragon's Altar - Developer Tools";
-        public const string ModVersion = "0.22.2";
+        public const string ModVersion = "0.22.3";
 
         public static DeveloperToolsPlugin Instance;
 
@@ -402,6 +402,17 @@ namespace DragonsAltarDevTools
             // Angel Comet timing now comes from WindUpTime (v0.21.1).
             if (section == "Paladin Fallen Angel" && (key == "RiseTime" || key == "DiveSpeed"))
                 return true;
+            // v0.22.3 Sword Master rework: superseded by the *_v0223 keys / "v0223" damage sections.
+            if (section == "Sword Master Moonlight Damage" || section == "Sword Master Crescent Cleave Damage" ||
+                section == "Sword Master Halfmoon Damage v2" || section == "Warrior.Impact Wave.Damage")
+                return true;
+            if ((section == "Sword Master Judgement Cut" && key == "SlashDamagePerCut") ||
+                (section == "Sword Master Halfmoon Slash" && key == "SpiritDotPerSecond") ||
+                (section == "Sword Master Passive" && key == "WayOfTheSwordAttackSpeedPercent_v0123"))
+                return true;
+            if (section.StartsWith("Sword Master Severed Horizon", StringComparison.OrdinalIgnoreCase) ||
+                section.StartsWith("Sword Master Empty Sheath", StringComparison.OrdinalIgnoreCase))
+                return true;
             return section.StartsWith("Paladin Aegis", StringComparison.OrdinalIgnoreCase) ||
                    section.StartsWith("Paladin Divine Verdict", StringComparison.OrdinalIgnoreCase) ||
                    section.StartsWith("Paladin Passive", StringComparison.OrdinalIgnoreCase) ||   // retired for Holy Trinity
@@ -415,7 +426,9 @@ namespace DragonsAltarDevTools
             text = text.Replace("Fallen Angel", "Angel Comet")
                        .Replace("Grand Sigil Survival", "Priest Bless Thy Sinners")
                        .Replace("Priest Grand Sigil", "Priest Heaven's Crucible")
-                       .Replace("Heavens ", "Heaven's ");
+                       .Replace("Heavens ", "Heaven's ")
+                       .Replace("Judgement Cut", "Blade Storm")
+                       .Replace("Knights Guidance", "Knight's Guidance");
             return text;
         }
 

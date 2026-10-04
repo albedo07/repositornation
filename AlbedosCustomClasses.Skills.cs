@@ -181,7 +181,7 @@ namespace AlbedosCustomClassesSkills
         public static SkillsPlugin Instance;
         public const string ModGuid = "albedo.customclasses.skills";
         public const string ModName = "Dragon's Altar - Starter Skills";
-        public const string ModVersion = "0.22.2";
+        public const string ModVersion = "0.22.3";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";
@@ -301,7 +301,7 @@ namespace AlbedosCustomClassesSkills
             _impactLength = Config.Bind("Warrior.Impact Wave", "Length", 10f, "Framework Ground Projectile range: literal 10m.");
             _impactWidth = Config.Bind("Warrior.Impact Wave", "Width", 2f, "Framework Ground Projectile width: literal 2m.");
             _impactTravelTime = Config.Bind("Warrior.Impact Wave", "TravelTime", 0.65f, "Testing/default travel time across full range.");
-            _impactDamage = BindDamage("Warrior.Impact Wave.Damage", 35f, 0f, 18f, 0f, 0f, 0f, 0f, 0f);
+            _impactDamage = BindDamage("Warrior.Impact Wave.Damage v0223", 40f, 0f, 20f, 0f, 0f, 0f, 0f, 0f);
 
             _punchCooldown = Config.Bind("Warrior.Impact Punch", "Cooldown", 8f, "Seconds.");
             _punchStamina = Config.Bind("Warrior.Impact Punch", "StaminaCost", 12f, "Stamina cost.");

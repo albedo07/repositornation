@@ -1,7 +1,7 @@
 ﻿$ErrorActionPreference = "Stop"
 
 Write-Host ""
-Write-Host "IMMORTAL HEROES v0.22.2 - HUD AND ALTAR FIXES" -ForegroundColor Cyan
+Write-Host "IMMORTAL HEROES v0.22.3 - SWORD MASTER" -ForegroundColor Cyan
 Write-Host "Protected build: all 8 DLLs compile in staging before the live profile is touched." -ForegroundColor Gray
 Write-Host ""
 

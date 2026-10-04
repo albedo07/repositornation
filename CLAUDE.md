@@ -3,7 +3,7 @@
 ## Working rules
 - User wants short responses and real execution, not long explanations.
 - **RUSH B** = immediately code the obvious requested task, minimal commentary, use latest approved build as baseline, don't redesign unrelated things, verify and package.
-- Latest package: **v0.22.2 — HUD and Altar Fixes** (v0.22.1 Kit UI Fixes, v0.22.0 Universal Kits, v0.21.2 Balance Pass, v0.21.1 Cleric Tweaks, v0.21.0 Priest Ascended, v0.20.9 Buckler Parry, v0.20.8 Cleric per Framework, v0.20.7 Cleric Consistency, v0.20.6 Polish, v0.20.5 Config Window, v0.20.4 Tree and Altar Fixes), built on ChatGPT's v0.20.3 (Universal Tree runtime chassis + uGUI Altar with Altar_Background/Altar_ClassCards; it REPLACED our v0.19.2/0.19.3 IMGUI Altar, which the user accepted as the new base). Older: v0.19.x ours, v0.19.0 ChatGPT. Do NOT change combat/progression logic unless explicitly requested.
+- Latest package: **v0.22.3 — Sword Master** (v0.22.2 HUD and Altar Fixes, v0.22.1 Kit UI Fixes, v0.22.0 Universal Kits, v0.21.2 Balance Pass, v0.21.1 Cleric Tweaks, v0.21.0 Priest Ascended, v0.20.9 Buckler Parry, v0.20.8 Cleric per Framework, v0.20.7 Cleric Consistency, v0.20.6 Polish, v0.20.5 Config Window, v0.20.4 Tree and Altar Fixes), built on ChatGPT's v0.20.3 (Universal Tree runtime chassis + uGUI Altar with Altar_Background/Altar_ClassCards; it REPLACED our v0.19.2/0.19.3 IMGUI Altar, which the user accepted as the new base). Older: v0.19.x ours, v0.19.0 ChatGPT. Do NOT change combat/progression logic unless explicitly requested.
 - Never patch visual problems by drawing random rectangles over the reference asset. Keep approved artwork intact; make layout/components fit properly.
 
 ## Framework doc (source of truth for design)
@@ -85,6 +85,7 @@
 - Hotbar save key: Cleric keeps `HotbarLayout.<AC>`; others `HotbarLayout.<Class>.<AC>` (`IhHotbarSaveKey`).
 - Compile check now includes Sorcerer.cs (Stubs: Hoverable/Interactable).
 - v0.22.1: AC header strip centre x 677 (strip 577-776, rect 580,122,194,18); branch plaques 88 wide at x 794 + i*92 with one shared fitted font; IhGraceFor falls back to the previewed branch before Advancement.
+- v0.22.3 Sword Master done (block "v0.22.3 SWORD MASTER REWORK" in Advanced.cs, `BindSwordMasterV0223`): all normal + Ascended skills, Frenzied Charge, Eclipse, Knight's Guidance, Mastery (+20 Sword / +50% AS with exactly one Sword, Block/Dodge interrupt via `_smInterruptAt`), stacking burns (`IhAddBurnStack`, universal 0.5s ticks), tooltips (`IhAppendSwordMasterStats`). Altar cards use measured frame bounds (`AltarCardBounds`) and text centred on the art panel (+78 px).
 - v0.22.2: HUD key labels use `_hudKeyCenterStyle` (UpperCenter); Altar shows Icon_righteous_strike_Normal.png (Icon_righteous_strike.png is the Ascended magenta frame).
 
 ## Ascended designs (approved so far; tooltip header "ASCENDED - <SKILL>", names unchanged)

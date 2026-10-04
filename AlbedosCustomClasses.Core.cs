@@ -18,7 +18,7 @@ namespace AlbedosCustomClasses
     {
         public const string ModGuid = "albedo.customclasses";
         public const string ModName = "Dragon's Altar";
-        public const string ModVersion = "0.22.2";
+        public const string ModVersion = "0.22.3";
 
         internal const string ClassDataKey = "AlbedoCustomClasses.Class";
         internal const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -575,6 +575,12 @@ namespace AlbedosCustomClasses
             }
         }
 
+        // x, y, width, height of every card frame in Altar_ClassCards.png (alpha > 50%), same order as names.
+        private static readonly int[] AltarCardBounds = {
+            8, 11, 580, 283,   594, 12, 582, 282,   1183, 12, 585, 282,
+            8, 301, 580, 284,  595, 301, 581, 284,  1183, 301, 586, 288,
+            8, 592, 580, 282,  595, 592, 581, 282,  1183, 592, 583, 282 };
+
         private Sprite AltarCardSprite(string name)
         {
             string key = "card:" + name;
@@ -585,9 +591,13 @@ namespace AlbedosCustomClasses
             string[] names = { "Warrior", "Cleric", "Sorcerer", "Sword Master", "Mercenary", "Paladin", "Priest", "Wizard", "Spellcaster" };
             int index = Array.IndexOf(names, name);
             if (index < 0) return null;
-            float w = sheet.texture.width / 3f, h = sheet.texture.height / 3f;
-            // Sprite rects start at bottom-left; atlas cells are authored top-left row-major.
-            result = Sprite.Create(sheet.texture, new Rect((index % 3) * w, (2 - index / 3) * h, w, h), new Vector2(0.5f, 0.5f));
+            // v0.22.3: each painted frame sits at a slightly different offset/size inside its atlas
+            // cell (up to 8 px), so cards drawn from whole cells looked shifted and resized against
+            // each other. Use each card's measured frame bounds (atlas px, top-left origin, 1774x887).
+            int[] b = AltarCardBounds;
+            float sx = sheet.texture.width / 1774f, sy = sheet.texture.height / 887f;
+            int k = index * 4;
+            result = Sprite.Create(sheet.texture, new Rect(b[k] * sx, (887 - b[k + 1] - b[k + 3]) * sy, b[k + 2] * sx, b[k + 3] * sy), new Vector2(0.5f, 0.5f));
             _altarSprites[key] = result;
             return result;
         }
@@ -882,10 +892,10 @@ namespace AlbedosCustomClasses
         {
             switch(className)
             {
-                case "Warrior": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Warrior Blessing","warrior_blessing","Hyper Armor if the incoming hit is below 30% of max HP; timed parry is 2x stronger.") } : new AltarSkillEntry[] { new AltarSkillEntry("Heavy Slash","heavy_slash","0.7s heavy horizontal Slash. Inflicts Broken Bones."), new AltarSkillEntry("Impact Wave","impact_wave","Ground Projectile: Blunt + Pierce line wave that follows terrain."), new AltarSkillEntry("Impact Punch","impact_punch","0.5s punch, 2m x 2m. Blunt damage; Stuns Small enemies.") };
+                case "Warrior": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Warrior's Blessing","warrior_blessing","Hyper Armor against any hit below 30% of your Total HP. Parry strength x2. +20 Run and +20 Jump skill.") } : new AltarSkillEntry[] { new AltarSkillEntry("Heavy Slash","heavy_slash","0.7s heavy horizontal Slash. Inflicts Broken Bones."), new AltarSkillEntry("Impact Wave","impact_wave","Ground Projectile: Blunt + Pierce line wave that follows terrain."), new AltarSkillEntry("Impact Punch","impact_punch","0.5s punch, 2m x 2m. Blunt damage; Stuns Small enemies.") };
                 case "Cleric": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Cleric's Blessing","cleric_blessing","Every Shield gets 1.5x Block Force and Block Armor. Wield a Staff and a Shield together. No movement penalty from Shields, Staves or one-handed Club weapons. +35 Max HP and +20% HP Regen.") } : new AltarSkillEntry[] { new AltarSkillEntry("Lightning Zap","lightning_zap","Heaven's wrath leaps from your palm in a cone, branding every foe it touches with a Zap that soon bursts."), new AltarSkillEntry("Righteous Strike","righteous_strike","Call down a pillar of holy lightning at your aim, smiting and exposing the wicked."), new AltarSkillEntry("Holy Wave","holy_wave","Release a warm tide of light that heals you and every ally it touches, and keeps mending them.") };
                 case "Sorcerer": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Arcane Blood","arcane_blood","+30% Eitr Regen, +40 Max Eitr and +30% Magic Damage. Emergency escape remains planned, not active yet.") } : new AltarSkillEntry[] { new AltarSkillEntry("Flame Burst","flame_burst","10m Fire cone with Fire Burn."), new AltarSkillEntry("Glacial Descent","glacial_descent","Ground PAC: 5m Blunt + Frost impact."), new AltarSkillEntry("Stonefang Eruption","stonefang_eruption","Ground PAC: 5m Blunt + Pierce; Small Stun, Small/Big Cripple.") };
-                case "Sword Master": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("The Way of the Sword","the_way_of_the_sword","Gain +100% Attack Speed while holding exactly one Sword with an empty off-hand.") } : new AltarSkillEntry[] { new AltarSkillEntry("Moonlight Splitter","moonlight_splitter","Release three extra-wide Ghost waves dealing direct Slash and Spirit damage."), new AltarSkillEntry("Crescent Cleave","crescent_cleave","Send five widening ground cleaves forward, dealing direct Slash and Spirit damage."), new AltarSkillEntry("Judgement Cut","judgement_cut","4 stacks. Ground PAC / Target PAC / Free Aim within 15m. Each cast creates a 4m sphere with 3 pure Slash cuts resolving instantly and simultaneously; each spent stack independently recharges in 12s, with a 0.5s buffer between activations."), new AltarSkillEntry("Halfmoon Slash (Ultimate)","halfmoon_slash","Wind up a large Slash and Spirit strike with Spirit Burn and Stun, followed by an afterimage slash.") };
+                case "Sword Master": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("The Way of the Sword (Mastery)","the_way_of_the_sword","With exactly one Sword: +20 Sword, +50% Attack Speed and no Sword movement penalty. Blocking or Dodging stops the rest of a Sword Master skill."), new AltarSkillEntry("Knight's Guidance (Grace)","knights_guidance","Lead every ally around you: faster movement, quicker stamina and less effort for every action, for 3 minutes.") } : new AltarSkillEntry[] { new AltarSkillEntry("Moonlight Splitter","moonlight_splitter","Three crescent waves of moonlight cleave through everything in their path."), new AltarSkillEntry("Crescent Cleave","crescent_cleave","Five giant crescent cleaves tear across the ground in a wide fan."), new AltarSkillEntry("Blade Storm","blade_storm","Rend space itself: a sphere of blades bursts at your aim, again and again."), new AltarSkillEntry("Frenzied Charge","frenzied_charge","Pull back, then dash forward with a thrust that launches small foes and stuns the large."), new AltarSkillEntry("Eclipse","eclipse","Your blade swells with magic for one sweeping slash all around you."), new AltarSkillEntry("Halfmoon Slash (Ultimate)","halfmoon_slash","A colossal half-moon slash, followed by its afterimage.") };
                 case "Mercenary": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Barbaric / Warfreak","barbaric___warfreak","Barbaric grants its existing Axe, damage, health and Fury effects. Warfreak enables dual one-handed weapons and faster two-handed attacks.") } : new AltarSkillEntry[] { new AltarSkillEntry("Stomp","stomp","Stomp nearby enemies, then release a larger delayed aftershock. Stuns Small enemies."), new AltarSkillEntry("Bonecrusher","bonecrusher","Perform an acrobatic jump-slam dealing Blunt damage, Broken Bones and Cripple, and stunning enemies."), new AltarSkillEntry("Circle Swing","circle_swing","1.5s steerable heavy wind-up with only 0.5m total shuffle. 7m radius, 1.75x held-weapon damage, force-Stuns Small/Big/Boss; uninterruptable Hyper Armor."), new AltarSkillEntry("Seismic Guillotine","seismic_guillotine","Charge toward a ground or enemy target, generating Seismic Shocks along the path and an endpoint explosion. Point-blank casts skip the travelling shocks."), new AltarSkillEntry("Reaver's Orbit","reavers_orbit","Launch opposing axe arcs that push Small enemies outward and pull them back on their return."), new AltarSkillEntry("Whirlwind (Ultimate)","whirlwind","ULTIMATE. Mobile 6s spin; every 0.5s deals 0.5x held-weapon damage and carries weapon elements. Unchained Fury does not modify it.") };
                 case "Paladin": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Holy Trinity (Mastery)","holy_trinity","With a Club-type weapon and a Shield: +15 Clubs, no Armor movement penalty, and Slash and Pierce each rise to at least 50% of your current Blunt damage."), new AltarSkillEntry("Heaven's Light (Grace)","heavens_light","Bless every ally around you with +40% Overall Defense and free them from equipment movement penalties for 1 minute.") } : new AltarSkillEntry[] { new AltarSkillEntry("Goddess Relic","goddess_relic","Summon a holy Cross that strikes with Blunt and Lightning and burns foes with Spirit fire."), new AltarSkillEntry("Judgement Hammer","judgement_hammer","Hurl a holy hammer that grows as it flies, crushing everything in its path."), new AltarSkillEntry("Shield Charge","shield_charge","Raise your shield and charge forward, trampling everyone who dares stand in your path."), new AltarSkillEntry("Angel Comet","fallen_angel","Leap to the heavens, then crash upon your enemies like a blazing comet."), new AltarSkillEntry("Ray of Hope","ray_of_hope","Raise your hand to the heavens, healing every ally around you and strengthening their attacks."), new AltarSkillEntry("Electric Smite (Ultimate)","electric_smite","Leap and slam down, releasing sixteen Lightning Trails that tear across the ground.") };
                 case "Priest": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Bless Thy Sinners (Mastery)","bless_thy_sinners","When you or an ally within 20m would die, survive at 1 HP and recover 50% HP over time with a burst of speed. Your own save recharges in 20 minutes, each ally's separately. With a Buckler, a Parry releases a Holy Shockwave, grants Hyper Armor and empowers your next skill."), new AltarSkillEntry("Heaven's Crucible (Grace)","grand_sigil","Wrap yourself and nearby allies in a holy Barrier that holds until it breaks.") } : new AltarSkillEntry[] { new AltarSkillEntry("Lightning Relic","lightning_relic","Plant a Cross of lightning. Its pulses punish nearby foes; place Holy Relic beside it to consecrate the ground."), new AltarSkillEntry("Holy Relic","holy_relic","Raise a sacred Cross that restores your allies and strengthens everyone within its light."), new AltarSkillEntry("Divine Intervention","divine_intervention","Answer danger with a burst of holy power, restoring allies and exposing enemies around you or an aimed Relic."), new AltarSkillEntry("Grand Cross","grand_cross","Carve a radiant X through the battlefield. Its crossing blades travel forward, burning every foe they touch."), new AltarSkillEntry("Heaven's Judgement","heavens_judgement","Call a barrage of holy beams around yourself or an aimed Relic, chilling the enemies caught beneath them."), new AltarSkillEntry("Lightning Tempest (Ultimate)","lightning_tempest","Unleash a restless storm, layering lightning and afflictions across the battlefield.") };
@@ -929,9 +939,11 @@ namespace AlbedosCustomClasses
             button.onClick.AddListener(delegate { if (advancement) FocusAdvancement(name); else FocusBaseClass(name); });
             // v0.20.4: a light veil only, so the card art stays visible behind the text;
             // a soft parchment glow on the letters keeps them readable on darker art.
-            AltarImage("CardLabelParchment", image.transform, new Vector2(82f, -3f), new Vector2(222f, 124f), AltarLabelVeil(), new Color(0.98f, 0.92f, 0.80f, 0.30f), false);
-            AltarCardTextGlow(CreateWrappedText(image.transform, name.ToUpper(), new Vector2(82f, 18f), 198f, 58f, 23, AltarInk, true, TextAnchor.MiddleCenter));
-            AltarCardTextGlow(CreateWrappedText(image.transform, role, new Vector2(82f, -33f), 194f, 40f, 15, AltarInk, false, TextAnchor.MiddleCenter));
+            // v0.22.3: centred on the card's art panel (measured 41%-98.5% of the card width -> centre
+            // +78 px), name and role balanced around the panel's vertical centre.
+            AltarImage("CardLabelParchment", image.transform, new Vector2(78f, 0f), new Vector2(222f, 124f), AltarLabelVeil(), new Color(0.98f, 0.92f, 0.80f, 0.30f), false);
+            AltarCardTextGlow(CreateWrappedText(image.transform, name.ToUpper(), new Vector2(78f, 19f), 198f, 58f, 23, AltarInk, true, TextAnchor.MiddleCenter));
+            AltarCardTextGlow(CreateWrappedText(image.transform, role, new Vector2(78f, -22f), 194f, 40f, 15, AltarInk, false, TextAnchor.MiddleCenter));
             (advancement ? _altarAdvCards : _altarBaseCards)[name] = image;
         }
 

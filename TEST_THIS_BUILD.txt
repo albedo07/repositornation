@@ -1,4 +1,14 @@
-TEST v0.22.2 - HUD AND ALTAR FIXES
-1. HUD (any class): every key label centred under its slot, Grace label under the Grace box.
-2. Altar > Cleric > SKILLS: Righteous Strike icon has a Cyan frame like the other two.
-3. Quick regression: Paladin and Priest tree, hotbar, Advance, Ascend behave as in v0.21.2.
+TEST v0.22.3 - SWORD MASTER
+Altar: cards (base page + Advancement page) identical size, aligned; names/roles centred on the art.
+Sword Master (F8 > Progression for levels; Ascension switches for Ascended versions):
+1. One Sword: attack speed +50%, Sword skill +20 (character skills screen).
+2. Moonlight (3 waves) / Ascended (4 fast + big finisher + afterimage). Block or Dodge mid-cast stops it.
+3. Crescent: 5 cleaves; Ascended: 13 cleaves, orange fire trails, burning ticks.
+4. Blade Storm: 4 stacks (Ascended 6 + extra cut).
+5. Frenzied Charge: wind up, dash steers with the camera, small mobs fly, big ones stagger, slash trail.
+6. Eclipse: 360 slash + knockback; Ascended: stand near Greyling/Deathsquito archers - arrows/spit fly back.
+7. Halfmoon: big slash + afterimage; Ascended: 3 slow travelling slashes, stop at walls/hills.
+8. Knight's Guidance on M4+R: faster run, less stamina; 13 min cooldown.
+9. Impact Wave (Ascended for Sword Master): longer wave + aftershock back toward you.
+10. Tooltips: every Sword Master skill shows damage/area/costs.
+Cleric quick regression: tree, hotbar, a few casts.
