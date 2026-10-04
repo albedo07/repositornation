@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.23.2";
+        public const string ModVersion = "0.23.3";
 
         internal static DragonCombatPlugin Instance;
 
@@ -82,7 +82,7 @@ namespace DragonsAltarCombat
             ZapDelay = Config.Bind("Debuffs", "ZapDelay_v0212", 2f, "Seconds before Zap explodes (universal rule: 2s).");
             ZapRadius = Config.Bind("Debuffs", "ZapRadius", 1f, "Zap explosion radius.");
             CharacterHeightMeters = Config.Bind("Measurement", "CharacterHeightMeters", 0.5f, "v0.22.5 ruler (user rule): your character's height counts as this many meters. Every range, radius, width, length and travel speed in every config is in these meters.");
-            UnitsPerMeterOverride = Config.Bind("Measurement", "UnitsPerMeterOverride", 1f, "Unity units per config meter. 1 = the confirmed in-game ruler (user, v0.22.6). 0 = automatic from character height / CharacterHeightMeters.");
+            UnitsPerMeterOverride = Config.Bind("Measurement", "UnitsPerMeterOverride", 1.5f, "Unity units per config meter. 1.5 = the confirmed in-game ruler (user, v0.23.3). 0 = automatic from character height / CharacterHeightMeters.");
             ZapDamage = Config.Bind("Debuffs", "ZapLightningDamage", 25f, "Testing/default lightning damage for Zap because the framework does not specify an amount.");
             BurnsUseCurrentHpPercent = Config.Bind("Damage Over Time", "LegacyBurnsUseCurrentHpPercent_v0212", false, "Legacy: burns now deal the skill's own burn damage. True = old 3% CURRENT HP burns.");
             FireBurnCurrentHpPercent = Config.Bind("Damage Over Time", "FireBurnCurrentHpPercentPerTick", 3f, "Fire Burn = 3 percent of CURRENT HP per tick.");

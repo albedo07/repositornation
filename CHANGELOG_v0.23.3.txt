@@ -1,0 +1,29 @@
+IMMORTAL HEROES v0.23.3 - TWEAKS
+================================
+(First start resets every setting to default once, Dev Mode OFF.)
+
+GENERAL
+- Ruler: Units Per Meter Override default 1.5 (your new measurement).
+- Names: Wizard is now ARCHMAGE, Spellcaster is now HORIZON WALKER everywhere you can
+  read it (Altar, Skill Tree, HUD, F8 sections). Saved characters keep working.
+- Charged skills: the charge timer starts the moment you press the key (the wind up runs
+  at the same time): Meteor Fall, Astral Greatblade, Elemental Cataclysm.
+
+FIXES
+- HUD title (Mercenary Fury) no longer wraps into two overlapping lines; it has a shadow.
+- Altar Advancement page summary box: lighter parchment, title + body as one block centred
+  both ways inside it, shrinks to fit so nothing sticks out.
+
+MERCENARY
+- Ascended Heavy Slash: 110 Slash (110% of the normal 100).
+- Bonecrusher, Circle Swing, Punishing Bomb (and its ground fire): 7m, normal and Ascended.
+- Whirlwind: every tick = one normal attack of your weapon (was half).
+- Ascended Whirlwind: tornado (rings) that pulls every enemy within 4m (Big 40%, Bosses
+  20%); the blades still hit at 2m.
+- Stomp: aftershock and the Ascended third shock now deal 100% of the first stomp.
+- Punishing Bomb: explosion = 200% of your basic attack damage.
+- Seismic Guillotine: 2.0x weapon damage (was 1.2x).
+
+ARCHMAGE
+- Charged Staff attack: 1 stack per second (was 1 per 2s).
+- Ascended Meteor Fall: 0.5s wind up.

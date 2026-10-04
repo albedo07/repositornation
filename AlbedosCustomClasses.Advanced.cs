@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.23.2";
+        public const string ModVersion = "0.23.3";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -730,7 +730,7 @@ namespace AlbedosCustomClassesAdvanced
             _boneCooldown = Config.Bind("Mercenary Bonecrusher", "Cooldown", 16f, "Seconds.");
             _boneStamina = Config.Bind("Mercenary Bonecrusher", "StaminaCost", 34f, "Stamina cost.");
             _boneWindup = Config.Bind("Mercenary Bonecrusher", "Windup", 2f, "Target flat-ground air sequence: about 2 seconds from takeoff to landing. Cliff falls extend until physical landing.");
-            _boneRadius = Config.Bind("Mercenary Bonecrusher", "Radius", 10f, "Framework AoE radius: literal 10m.");
+            _boneRadius = Config.Bind("Mercenary Bonecrusher", "Radius", 7f, "AoE radius (normal and Ascended).");
             _boneDamage = BindDamage("Mercenary Bonecrusher Damage", 70f, 0f, 0f, 0f, 0f, 0f, 0f, 0f);
 
             _circleCooldown = Config.Bind("Mercenary Circle Swing", "Cooldown", 16f, "Seconds.");
@@ -746,7 +746,7 @@ namespace AlbedosCustomClassesAdvanced
             _seismicWidth = Config.Bind("Mercenary Seismic Guillotine", "Width", 6f, "Base fissure width. Unchained Fury widens and branches it.");
             _seismicTravelTime = Config.Bind("Mercenary Seismic Guillotine", "TravelTime", 1.0f, "Time for Seismic Shocks to cover the full configured range. Default: 15m in 1.0s; shorter casts preserve the same travel speed.");
             _seismicEndRadius = Config.Bind("Mercenary Seismic Guillotine", "EndRuptureRadius", 10f, "Finishing rupture radius.");
-            _seismicDamageMultiplier = Config.Bind("Mercenary Seismic Guillotine", "WeaponDamageMultiplier", 1.20f, "Prototype held-weapon damage multiplier for fissure and finishing rupture.");
+            _seismicDamageMultiplier = Config.Bind("Mercenary Seismic Guillotine", "WeaponDamageMultiplier", 2f, "Held-weapon damage multiplier for the fissure and the finishing rupture.");
 
             _reaverCooldown = Config.Bind("Mercenary Reavers Orbit", "Cooldown", 16f, "Prototype cooldown; developer tunable.");
             _reaverStamina = Config.Bind("Mercenary Reavers Orbit", "StaminaCost", 32f, "Prototype stamina cost; developer tunable.");
@@ -760,7 +760,7 @@ namespace AlbedosCustomClassesAdvanced
             _whirlwindRadius = Config.Bind("Mercenary Whirlwind", "Radius", 2f, "Framework Whirlwind radius: literal 2m.");
             _whirlwindDuration = Config.Bind("Mercenary Whirlwind", "Duration", 6f, "Framework duration.");
             _whirlwindInterval = Config.Bind("Mercenary Whirlwind", "HitInterval", 0.5f, "Framework hit interval.");
-            _whirlwindWeaponMultiplier = Config.Bind("Mercenary Whirlwind", "WeaponDamageMultiplier", 0.5f, "Framework: each tick is half a normal held-weapon attack.");
+            _whirlwindWeaponMultiplier = Config.Bind("Mercenary Whirlwind", "WeaponDamageMultiplier", 1f, "Each tick = one normal attack of the held weapon.");
 
             _mercAxesBonus = Config.Bind("Mercenary Passive", "AxesSkillBonus", 20f, "Effective Axes skill bonus.");
             _mercAttackDamage = Config.Bind("Mercenary Passive", "AttackDamagePercent", 8f, "Weapon attack damage bonus.");
@@ -2611,6 +2611,7 @@ namespace AlbedosCustomClassesAdvanced
         // =====================================================================================
         private ConfigEntry<float> _warfreakSkillBonus, _warfreakAttackSpeed, _warfreakArmor;
         private ConfigEntry<float> _furyDurationV, _furyLockoutV, _furyDrainDelay, _furyDrainPerSecond;
+        private ConfigEntry<float> _whirlAscPullRadius, _whirlAscPull, _whirlAscPullBig, _whirlAscPullBoss;
         private DamageConfig _stompDamageV, _boneDamageV, _heavyAscDamage;
         private ConfigEntry<float> _stompAftershockDelayV, _stompAftershockPercent, _stompAscRadius, _stompAscPercent;
         private ConfigEntry<float> _circleAscRadius, _circleAscFirst, _circleAscSecond, _circleAscGap;
@@ -2641,13 +2642,13 @@ namespace AlbedosCustomClassesAdvanced
 
             _stompDamageV = BindDamage("Mercenary Stomp Damage v0224", 70f, 0f, 0f, 0f, 0f, 0f, 0f, 0f);
             _stompAftershockDelayV = Config.Bind("Mercenary Stomp", "AftershockDelay_v0224", 0.5f, "Seconds between impacts (0.5s, user 2026-10-04).");
-            _stompAftershockPercent = Config.Bind("Mercenary Stomp", "AftershockDamagePercent", 50f, "10m aftershock damage (% of the central stomp).");
+            _stompAftershockPercent = Config.Bind("Mercenary Stomp", "AftershockDamagePercent", 100f, "Aftershock damage (% of the central stomp).");
             const string sa = "Mercenary Stomp Ascended";
             _stompAscRadius = Config.Bind(sa, "ThirdImpactRadius", 15f, "Third impact radius.");
-            _stompAscPercent = Config.Bind(sa, "ThirdImpactDamagePercent", 40f, "Third impact damage (% of the central stomp).");
+            _stompAscPercent = Config.Bind(sa, "ThirdImpactDamagePercent", 100f, "Third impact damage (% of the central stomp).");
 
             const string ca = "Mercenary Circle Swing Ascended";
-            _circleAscRadius = Config.Bind(ca, "Radius", 9f, "Ascended radius.");
+            _circleAscRadius = Config.Bind(ca, "Radius", 7f, "Ascended radius.");
             _circleAscFirst = Config.Bind(ca, "FirstSwingPercent", 90f, "First swing (% of a normal swing).");
             _circleAscSecond = Config.Bind(ca, "SecondSwingPercent", 60f, "Second swing (% of a normal swing); launches Small high, Big lower.");
             _circleAscGap = Config.Bind(ca, "SwingInterval", 0.5f, "Seconds between the two swings.");
@@ -2668,11 +2669,11 @@ namespace AlbedosCustomClassesAdvanced
             _bombWindup = Config.Bind(b, "Windup", 0.5f, "Bat-swing throw.");
             _bombSpeed = Config.Bind(b, "ThrowSpeed", 22f, "Launch speed (ballistic, falls with gravity).");
             _bombRadius = Config.Bind(b, "Radius", 7f, "Explosion radius.");
-            _bombWeaponMultiplier = Config.Bind(b, "WeaponDamageMultiplier", 1.4f, "Blunt explosion = held weapon damage x this (80% of a Circle Swing hit).");
+            _bombWeaponMultiplier = Config.Bind(b, "WeaponDamageMultiplier", 2f, "Explosion = 200% of your current basic attack (held weapon) damage.");
             _bombBurnPercent = Config.Bind(b, "BurnPercent", 2f, "Burn: % of the explosion damage every 0.5s.");
             _bombBurnDuration = Config.Bind(b, "BurnSeconds", 6f, "Burn duration.");
             const string ba2 = "Mercenary Punishing Bomb Ascended";
-            _bombAscRadius = Config.Bind(ba2, "Radius", 12f, "Ascended explosion radius.");
+            _bombAscRadius = Config.Bind(ba2, "Radius", 7f, "Ascended explosion and ground fire radius.");
             _bombAscFireSeconds = Config.Bind(ba2, "GroundFireSeconds", 6f, "Ground fire lifetime.");
             _bombAscFirePercent = Config.Bind(ba2, "GroundFirePercent", 4f, "Ground fire: % of the explosion every 0.5s.");
             _bombAscBurnPercent = Config.Bind(ba2, "BurnPercentPerStack", 0.75f, "Stacking Burn: % of the explosion per stack every 0.5s.");
@@ -2680,6 +2681,10 @@ namespace AlbedosCustomClassesAdvanced
 
             const string wa = "Mercenary Whirlwind Ascended";
             _whirlAscDuration = Config.Bind(wa, "Duration", 8f, "Maximum spin time.");
+            _whirlAscPullRadius = Config.Bind(wa, "TornadoPullRadius", 4f, "Tornado: every enemy within this radius is pulled in (the blades still hit at Whirlwind Radius).");
+            _whirlAscPull = Config.Bind(wa, "TornadoPullStrength", 6f, "Pull impulse per 0.5s on Small enemies.");
+            _whirlAscPullBig = Config.Bind(wa, "TornadoBigPullPercent", 40f, "Big enemies are pulled at this strength.");
+            _whirlAscPullBoss = Config.Bind(wa, "TornadoBossPullPercent", 20f, "Bosses are pulled at this strength.");
             _whirlAscTickPercent = Config.Bind(wa, "TickPercent", 7.5f, "Each 0.5s hit (% of the whole normal Whirlwind).");
             _whirlAscSweepPercent = Config.Bind(wa, "FinalSweepPercent", 60f, "Final sweep (% of the whole normal Whirlwind) x spin time / max time. Recast to end early.");
 
@@ -2694,7 +2699,7 @@ namespace AlbedosCustomClassesAdvanced
             const string h = "Mercenary Heavy Slash Ascended";
             _hsAscReach = Config.Bind(h, "Reach", 5f, "Ascended reach (normal 3.5m).");
             _hsAscHyper = Config.Bind(h, "HyperArmorOnHit", 2f, "Hyper Armor seconds when it connects (refreshes, never stacks).");
-            _heavyAscDamage = BindDamage("Mercenary Heavy Slash Ascended Damage", 0f, 90f, 0f, 0f, 0f, 0f, 0f, 0f);
+            _heavyAscDamage = BindDamage("Mercenary Heavy Slash Ascended Damage", 0f, 110f, 0f, 0f, 0f, 0f, 0f, 0f);
 
             _damageSkillIds[_stompDamageV] = "stomp";
             _damageSkillIds[_boneDamageV] = "bonecrusher";
@@ -2994,6 +2999,24 @@ namespace AlbedosCustomClassesAdvanced
                 if (_whirlStopRequested) break;
                 DragonCombat.GrantHyperArmor(player, interval + 0.1f);
                 DragonCombat.PlaySkillPose(player, "Whirlwind", 0.34f);
+                // v0.23.3 Tornado: pulls every archetype within 4m (weaker on Big / Bosses).
+                float pullRadius = Mathf.Max(0.5f, DragonCombat.M(_whirlAscPullRadius.Value));
+                List<Character> pulled = GetSphereTargets(player, player.transform.position, pullRadius);
+                for (int i = 0; i < pulled.Count; i++)
+                {
+                    Character enemy = pulled[i];
+                    float strength = _whirlAscPull.Value * (enemy.IsBoss() ? _whirlAscPullBoss.Value / 100f : DragonCombat.IsSmallEnemy(enemy) ? 1f : _whirlAscPullBig.Value / 100f);
+                    Rigidbody body = enemy.GetComponent<Rigidbody>();
+                    Vector3 toward = player.transform.position - enemy.transform.position;
+                    toward.y = 0f;
+                    if (body != null && toward.sqrMagnitude > 0.3f) body.AddForce(toward.normalized * strength, ForceMode.VelocityChange);
+                }
+                if (_enableVfx.Value)
+                    for (int ring = 0; ring < 5; ring++)
+                    {
+                        float t = ring / 4f;
+                        StartCoroutine(AnimateRing(player.transform.position + Vector3.up * (0.3f + ring * 1.1f), Mathf.Lerp(0.5f, pullRadius * 0.5f, t), Mathf.Lerp(0.8f, pullRadius, t), Mathf.Min(0.45f, interval), new Color(0.80f, 0.82f, 0.86f, 0.55f - t * 0.25f), 0.07f));
+                    }
                 List<Character> targets = GetSphereTargets(player, player.transform.position, Mathf.Max(0.5f, DragonCombat.M(_whirlwindRadius.Value)));
                 for (int i = 0; i < targets.Count; i++)
                 {
@@ -10000,6 +10023,14 @@ namespace AlbedosCustomClassesAdvanced
             return false;
         }
 
+        // v0.23.3 display names: Wizard -> Archmage, Spellcaster -> Horizon Walker (ids unchanged).
+        internal static string IhAcDisplay(string ac)
+        {
+            if (ac == "Spellcaster") return "Horizon Walker";
+            if (ac == "Wizard") return "Archmage";
+            return ac;
+        }
+
         private static string IhSkillName(string id)
         {
             switch (id)
@@ -11367,7 +11398,7 @@ namespace AlbedosCustomClassesAdvanced
             float reserve = Mathf.Clamp(_hudBottomOffset.Value, 70f, 260f) * scale;
             float y = Screen.height - reserve - size;
 
-            string title = GetClass(player) + (string.IsNullOrEmpty(GetAdvancement(player)) ? "" : "  >  " + GetAdvancement(player)) + "   Lv " + IhGetLevel(player).ToString();
+            string title = GetClass(player) + (string.IsNullOrEmpty(GetAdvancement(player)) ? "" : "  >  " + IhAcDisplay(GetAdvancement(player))) + "   Lv " + IhGetLevel(player).ToString();
             // v0.22.4: Mercenary's Fury gauge.
             if (GetAdvancement(player) == "Mercenary")
             {
@@ -11376,8 +11407,12 @@ namespace AlbedosCustomClassesAdvanced
                     : lockout > 0f ? "   FURY LOCKED " + Mathf.CeilToInt(lockout).ToString() + "s"
                     : "   FURY " + Mathf.FloorToInt(_mercFury).ToString();
             }
+            Rect titleRect = new Rect(x, y - 24f * scale, totalWidth, 20f * scale);
+            _titleStyle.fontSize = Mathf.RoundToInt(15f * scale);
+            _titleStyle.normal.textColor = new Color(0f, 0f, 0f, 0.85f);
+            GUI.Label(new Rect(titleRect.x + 1.5f, titleRect.y + 1.5f, titleRect.width, titleRect.height), title.ToUpper(), _titleStyle);
             _titleStyle.normal.textColor = new Color(0.60f, 0.88f, 1f, 1f);
-            GUI.Label(new Rect(x, y - 22f * scale, totalWidth, 18f * scale), title.ToUpper(), _titleStyle);
+            GUI.Label(titleRect, title.ToUpper(), _titleStyle);
 
             for (int i = 0; i < 7; i++)
             {
@@ -11487,7 +11522,7 @@ namespace AlbedosCustomClassesAdvanced
                 GUI.color = Color.white;
             }
             DrawFooterText(new Rect(plaque.x, plaque.y + plaque.height * 0.10f, plaque.width, plaque.height * 0.50f), "ADVANCE", hover && ready ? _treeFooterConfirmHoverStyle : _treeFooterConfirmStyle);
-            DrawFooterText(new Rect(plaque.x, plaque.y + plaque.height * 0.58f, plaque.width, plaque.height * 0.28f), "TO " + IhTreeBranch().ToUpperInvariant(), _treeFooterPendingStyle);
+            DrawFooterText(new Rect(plaque.x, plaque.y + plaque.height * 0.58f, plaque.width, plaque.height * 0.28f), "TO " + IhAcDisplay(IhTreeBranch()).ToUpperInvariant(), _treeFooterPendingStyle);
 
             _ihLockTextStyle.fontSize = Mathf.Max(8, Mathf.RoundToInt(ScaleReferenceRect(0f, 0f, 0f, 10f).height));
             string ok = IhHex(0.20f, 0.45f, 0.18f);
@@ -11500,7 +11535,7 @@ namespace AlbedosCustomClassesAdvanced
             }
             if (hover)
             {
-                _treeHoveredTitle = "ADVANCE - " + IhTreeBranch().ToUpperInvariant();
+                _treeHoveredTitle = "ADVANCE - " + IhAcDisplay(IhTreeBranch()).ToUpperInvariant();
                 _treeHoveredBody = ready
                     ? "Become a " + IhTreeBranch() + ". The shared Class Tiers lock; Advancement Tier Points start at Lv 18."
                     : "Complete every requirement to Advance.";
@@ -12261,7 +12296,7 @@ namespace AlbedosCustomClassesAdvanced
             GUIStyle measure = new GUIStyle(_treeFooterConfirmStyle);
             measure.fontSize = Mathf.Max(9, Mathf.RoundToInt(probe.height * 0.46f));
             for (int i = 0; i < branches.Length; i++)
-                while (measure.fontSize > 7 && measure.CalcSize(new GUIContent(branches[i].ToUpperInvariant())).x > probe.width * 0.84f)
+                while (measure.fontSize > 7 && measure.CalcSize(new GUIContent(IhAcDisplay(branches[i]).ToUpperInvariant())).x > probe.width * 0.84f)
                     measure.fontSize--;
             for (int i = 0; i < branches.Length; i++)
             {
@@ -12282,10 +12317,10 @@ namespace AlbedosCustomClassesAdvanced
                 GUIStyle style = new GUIStyle(selected ? _treeFooterConfirmStyle : _treeFooterPendingStyle);
                 style.alignment = TextAnchor.MiddleCenter;
                 style.fontSize = measure.fontSize;
-                DrawFooterText(r, branches[i].ToUpperInvariant(), style);
+                DrawFooterText(r, IhAcDisplay(branches[i]).ToUpperInvariant(), style);
                 if (r.Contains(Event.current.mousePosition))
                 {
-                    _treeHoveredTitle = branches[i].ToUpperInvariant() + " - PREVIEW";
+                    _treeHoveredTitle = IhAcDisplay(branches[i]).ToUpperInvariant() + " - PREVIEW";
                     _treeHoveredBody = "View the " + branches[i] + " branch. Your " + GetClass(player) + " skills and pending Class Tiers stay the same.";
                 }
                 if (GUI.Button(r,GUIContent.none,GUIStyle.none) && !selected)
@@ -12430,7 +12465,7 @@ namespace AlbedosCustomClassesAdvanced
             title.normal.textColor=new Color(1f,0.93f,0.77f,1f);
             // Centred between the emblem and the gold star (x 665), shrunk to fit long AC names.
             Rect titleRect=ScaleReferenceRect(598f,87f,134f,35f);
-            string branchName=IhTreeBranch().ToUpperInvariant();
+            string branchName=IhAcDisplay(IhTreeBranch()).ToUpperInvariant();
             while(title.fontSize>10 && title.CalcSize(new GUIContent(branchName)).x>titleRect.width) title.fontSize--;
             GUI.Label(titleRect,branchName,title);
 
@@ -12853,7 +12888,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "Wizard": return "ARCHMAGE - MASTERY";
                 case "Spellcaster": return "YIN AND YANG - MASTERY";
             }
-            return ac.ToUpperInvariant() + " - MASTERY";
+            return IhAcDisplay(ac).ToUpperInvariant() + " - MASTERY";
         }
 
         private static string IhMasteryText(string ac)
@@ -12862,7 +12897,7 @@ namespace AlbedosCustomClassesAdvanced
             {
                 case "Sword Master": return "+20 Sword (effective cap 100), +50% Sword Attack Speed, no Sword movement penalty. Blocking or Dodging stops the rest of a Sword Master skill.";
                 case "Mercenary": return "Dual-wield any two one-handed physical weapons. +10 Sword, Axe and Clubs (cap 100). +50% Attack Speed with two one-handed or a two-handed physical weapon. No physical weapon movement penalty. +30% Armor and stronger aggro. Unchained Fury: +1 Fury per melee hit, +3 per enemy hit by a skill; at 100 it triggers for 20s (3 min lockout).";
-                case "Wizard": return "Charged Staff attacks (Mouse2 + Mouse1): up to 3 stacks, 2s each, 1 Eitr per 0.1s. Stack 1 doubles the size, Stacks 2-3 add damage. Overcharge: after 300 Eitr spent, 12s of +40% wind-up speed, +40% Eitr Regen and +40% Magic Damage.";
+                case "Wizard": return "Charged Staff attacks (Mouse2 + Mouse1): up to 3 stacks, 1 per second, 1 Eitr per 0.1s. Stack 1 doubles the size, Stacks 2-3 add damage. Overcharge: after 300 Eitr spent, 12s of +40% wind-up speed, +40% Eitr Regen and +40% Magic Damage.";
                 case "Spellcaster": return "Staff / Wand attack interval -50%, Eitr use -50%, +20% Eitr Regen, normal Staff / Wand damage -50%. No skill wind-ups, no Staff / Wand movement penalty. Dual Gun Staves fire together and are 100% accurate.";
             }
             return "";
@@ -14749,6 +14784,8 @@ namespace AlbedosCustomClassesAdvanced
             _titleStyle.alignment = TextAnchor.MiddleCenter;
             _titleStyle.fontSize = 17;
             _titleStyle.fontStyle = FontStyle.Bold;
+            _titleStyle.wordWrap = false; // v0.23.3: the long Fury title wrapped into two overlapping lines
+            _titleStyle.clipping = TextClipping.Overflow;
 
             _slotStyle = new GUIStyle(GUI.skin.box);
             _slotStyle.normal.background = _slotReadyTex;

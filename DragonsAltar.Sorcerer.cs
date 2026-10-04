@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Dragon's Altar - Sorcerer Advancements";
-        public const string ModVersion = "0.23.2";
+        public const string ModVersion = "0.23.3";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -387,7 +387,7 @@ namespace DragonsAltarSorcerer
 
             _wizardHeldStaffEitrRegen = Config.Bind("Wizard Staff Weapon Mastery", "HeldStaffEitrRegenPercent_v0231", 0f, "Additional Eitr Regen while the Wizard is actually holding a Staff.");
             _wizardHeldStaffFlatEitr = Config.Bind("Wizard Staff Weapon Mastery", "HeldStaffFlatEitr_v0231", 0f, "Flat Max Eitr while the Wizard is actually holding a Staff.");
-            _wizardChargeThreshold = Config.Bind("Wizard Staff Charge", "SecondsPerStack_v0111", 2f, "Two seconds per charge stack. Maximum three stacks.");
+            _wizardChargeThreshold = Config.Bind("Wizard Staff Charge", "SecondsPerStack_v0111", 1f, "Seconds per charge stack (v0.23.3: 1 stack per second). Maximum three stacks.");
             _wizardChargeBaseRadius = Config.Bind("Wizard Staff Charge", "BaseExplosionRadius", 2.5f, "Quick-release impact radius. Radius becomes exactly 2x at stack 1 and does not grow further.");
             _wizardChargeExtraEitrPerSecond = Config.Bind("Wizard Staff Charge", "EitrPerSecond_v0111", 10f, "Development rule: 1 Eitr per 0.1s while charging, stopping at 3 stacks.");
             _wizardChargeMaxDamageMultiplier = Config.Bind("Wizard Staff Charge", "ThreeStackDamageMultiplier_v0111", 2.5f, "Prototype full-charge damage multiplier. Radius does not increase after stack 1.");
@@ -438,7 +438,7 @@ namespace DragonsAltarSorcerer
                 Logger.LogWarning("Sorcerer optional patches failed: " + ex.Message);
             }
 
-            Logger.LogInfo(ModName + " v" + ModVersion + " loaded. Sorcerer / Wizard / Spellcaster alpha is ready.");
+            Logger.LogInfo(ModName + " v" + ModVersion + " loaded. Sorcerer / Archmage / Horizon Walker alpha is ready.");
         }
 
         private void InstallPatches()
@@ -876,6 +876,7 @@ namespace DragonsAltarSorcerer
         private ConfigEntry<float> _ocThreshold, _ocDuration, _ocBuffer, _ocWindup, _ocRegen, _ocMagic;
         private ConfigEntry<float> _clockRadius, _clockDuration, _clockCooldown, _clockSkillDamage, _clockCdr;
         private ConfigEntry<float> _gdAscRadius, _gdAscCore, _gdAscCoreDamage, _gdAscFreeze, _gdAscBossSlow, _gdAscCooldown, _gdAscEitr, _gdAscWindup, _gdAscRange;
+        private ConfigEntry<float> _mfAscWindup;
         private ConfigEntry<float> _mfAscPercent, _mfAscRadius, _mfAscGap, _mfAscSpread;
         private ConfigEntry<float> _gvAscRadius, _gvAscDuration, _gvAscBig, _gvAscBoss, _gvAscBlast, _gvAscStun;
         private ConfigEntry<float> _rcAscWindup, _rcAscDuration, _rcAscTick, _rcAscTickPercent;
@@ -955,6 +956,7 @@ namespace DragonsAltarSorcerer
             _glacialAscDmg = BindWizDamage("Wizard Glacial Descent Ascended Damage", 34f, 0f, 0f, 0f, 42f, 0f, 0f, 0f);
             const string ma = "Wizard Meteor Fall Ascended";
             _mfAscPercent = Config.Bind(ma, "SmallMeteorPercent", 12f, "Each small meteor: % of the charged main meteor.");
+            _mfAscWindup = Config.Bind(ma, "Windup", 0.5f, "Ascended wind up (the charge timer still starts on the key press).");
             _mfAscRadius = Config.Bind(ma, "SmallMeteorRadius", 3f, "Small meteor radius.");
             _mfAscGap = Config.Bind(ma, "Interval", 0.25f, "Seconds between small meteors (3, or 5 at full charge).");
             _mfAscSpread = Config.Bind(ma, "Spread", 5f, "Distance of the small meteors from the target point.");
@@ -1083,21 +1085,25 @@ namespace DragonsAltarSorcerer
         private IEnumerator AstralGreatbladeRoutine(Player player)
         {
             ShowMessage("Astral Greatblade");
+            // Charge timer starts on the key press; the 1s wind up runs at the same time.
             float baseWindup = ScaleWindup(player, Mathf.Max(0f, _bladeWindup.Value));
-            DragonCombat.LockSkill(player, baseWindup + 0.1f);
-            DragonCombat.PlaySkillPose(player, "HeavySlash", baseWindup + 0.10f);
-            if (baseWindup > 0f) yield return new WaitForSeconds(baseWindup);
-            float charged = 0f;
             float max = Mathf.Max(0.1f, _bladeChargeMax.Value);
-            while (player != null && SkillKeyHeld(player, "astral_greatblade", _skill5.Value) && charged < max)
+            float pressed = Time.time;
+            float heldFor = 0f;
+            bool holding = true;
+            while (player != null && !player.IsDead())
             {
+                float elapsed = Time.time - pressed;
+                if (holding && SkillKeyHeld(player, "astral_greatblade", _skill5.Value) && elapsed < baseWindup + max) heldFor = elapsed;
+                else holding = false;
+                if (elapsed >= baseWindup && !holding) break;
                 DragonCombat.LockSkill(player, 0.12f);
                 DragonCombat.PlaySkillPose(player, "HeavySlash", 0.12f);
-                charged += Time.deltaTime;
-                if (_enableVfx.Value && ((int)(charged * 10f) % 3 == 0)) StartCoroutine(RingVfx(player.transform.position, 1.5f + charged, new Color(0.62f, 0.18f, 1f, 0.65f), 0.15f));
+                if (_enableVfx.Value && heldFor > baseWindup && ((int)(heldFor * 10f) % 3 == 0)) StartCoroutine(RingVfx(player.transform.position, 1.5f + heldFor, new Color(0.62f, 0.18f, 1f, 0.65f), 0.15f));
                 yield return null;
             }
             if (player == null || player.IsDead()) yield break;
+            float charged = Mathf.Max(0f, heldFor - baseWindup);
             GreatbladeSlam(player, 1f + Mathf.Clamp01(charged / max));
         }
 
@@ -1198,7 +1204,7 @@ namespace DragonsAltarSorcerer
             Vector3 target;
             if (!AlbedoAimUtility.TryGetPhysicalTarget(player, DragonCombat.M(_meteorRange.Value), out target)) { ShowMessage("Aim at a physical target"); return; }
             if (!BeginSkill(player, "Wizard.MeteorFall", _meteorCooldown.Value, _meteorEitr.Value)) return; // cost paid once
-            float windup = ScaleWindup(player, Mathf.Max(0f, _meteorWindup.Value));
+            float windup = ScaleWindup(player, Mathf.Max(0f, IsWizAscended(player, "meteor_fall") ? _mfAscWindup.Value : _meteorWindup.Value));
             DragonCombat.LockSkill(player, windup + 0.1f);
             DragonCombat.PlaySkillPose(player, "SkyCast", windup + 0.10f);
             StartCoroutine(MeteorRoutine(player, target, windup));
@@ -1207,17 +1213,22 @@ namespace DragonsAltarSorcerer
         private IEnumerator MeteorRoutine(Player player, Vector3 target, float windup)
         {
             ShowMessage("Meteor Fall");
-            if (windup > 0f) yield return new WaitForSeconds(windup);
-            // Hold to charge: 1 stack per second, max 3 (120/140/160% damage, 110/120/130% radius).
-            float charged = 0f;
+            // v0.23.3 universal rule: the charge timer starts the moment the key is pressed (the wind up
+            // runs at the same time). 1 stack per full second held, max 3; released before 1s = no stack.
+            float pressed = Time.time;
+            float heldFor = 0f;
+            bool holding = true;
             int stacks = 0;
-            while (player != null && !player.IsDead() && stacks < 3 && SkillKeyHeld(player, "meteor_fall", _skill7.Value))
+            while (player != null && !player.IsDead())
             {
+                float elapsed = Time.time - pressed;
+                if (holding && SkillKeyHeld(player, "meteor_fall", _skill7.Value) && stacks < 3) heldFor = elapsed;
+                else holding = false;
+                int now = Mathf.Min(3, Mathf.FloorToInt(heldFor));
+                if (now > stacks) { stacks = now; ShowMessage("Meteor Fall " + stacks + "/3"); if (_enableVfx.Value) StartCoroutine(RingVfx(target, DragonCombat.M(_meteorRadius.Value) * (1f + 0.1f * stacks), new Color(1f, 0.45f, 0.10f, 0.75f), 0.4f)); }
+                if (elapsed >= windup && (!holding || stacks >= 3)) break;
                 DragonCombat.LockSkill(player, 0.12f);
                 DragonCombat.PlaySkillPose(player, "SkyCast", 0.12f);
-                charged += Time.deltaTime;
-                int now = Mathf.Min(3, Mathf.FloorToInt(charged));
-                if (now > stacks) { stacks = now; ShowMessage("Meteor Fall " + stacks + "/3"); if (_enableVfx.Value) StartCoroutine(RingVfx(target, DragonCombat.M(_meteorRadius.Value) * (1f + 0.1f * stacks), new Color(1f, 0.45f, 0.10f, 0.75f), 0.4f)); }
                 yield return null;
             }
             if (player == null || player.IsDead()) yield break;
@@ -1347,12 +1358,15 @@ namespace DragonsAltarSorcerer
             float minWindup = ScaleWindup(player, Mathf.Max(0f, _cataclysmWindup.Value));
             float charge = 0f;
             float elapsed = 0f;
-            while (player != null && !player.IsDead() && charge < max && (elapsed < minWindup || SkillKeyHeld(player, "elemental_cataclysm", _skill9.Value)))
+            bool holding = true;
+            while (player != null && !player.IsDead() && charge < max && (elapsed < minWindup || holding))
             {
                 DragonCombat.LockSkill(player, 0.12f);
                 DragonCombat.PlaySkillPose(player, "SkyCast", 0.12f);
                 elapsed += Time.deltaTime;
-                if (elapsed > minWindup) charge += Time.deltaTime;
+                // charge timer from the key press; it stops the moment the key is released
+                if (holding && SkillKeyHeld(player, "elemental_cataclysm", _skill9.Value)) charge = elapsed;
+                else holding = false;
                 if (_enableVfx.Value && ((int)(elapsed * 10f) % 4 == 0)) StartCoroutine(RingVfx(target, radius * Mathf.Clamp01(0.2f + charge / max), new Color(0.76f, 0.30f, 1f, 0.55f), 0.16f));
                 yield return null;
             }

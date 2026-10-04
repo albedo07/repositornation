@@ -18,7 +18,7 @@ namespace AlbedosCustomClasses
     {
         public const string ModGuid = "albedo.customclasses";
         public const string ModName = "Dragon's Altar";
-        public const string ModVersion = "0.23.2";
+        public const string ModVersion = "0.23.3";
 
         internal const string ClassDataKey = "AlbedoCustomClasses.Class";
         internal const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -899,7 +899,7 @@ namespace AlbedosCustomClasses
                 case "Mercenary": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Warfreak (Mastery)","warfreak","Dual-wield any two one-handed physical weapons. +10 Sword, Axe and Clubs, +50% Attack Speed with two one-handed or a two-handed physical weapon, no physical weapon movement penalty, +30% Armor. Unchained Fury triggers at 100 Fury for 20s."), new AltarSkillEntry("Battlecry (Grace)","battlecry","A war cry: you and nearby allies deal +15% damage to creatures for 1 minute and +25% damage to trees, rocks and ore for 3 minutes.") } : new AltarSkillEntry[] { new AltarSkillEntry("Stomp","stomp","Stomp the earth: a crushing impact, then an aftershock rolls outward."), new AltarSkillEntry("Circle Swing","circle_swing","Wind up and swing your weapon in a full circle, staggering everything around you."), new AltarSkillEntry("Bonecrusher","bonecrusher","Leap high and crash down, shattering the bones of everything below."), new AltarSkillEntry("Seismic Guillotine","seismic_guillotine","Tear a fissure through the ground to your aim, ending in a seismic explosion."), new AltarSkillEntry("Punishing Bomb","punishing_bomb","Bat a bomb into the enemy lines. It bursts on the first thing it touches and leaves them burning."), new AltarSkillEntry("Whirlwind (Ultimate)","whirlwind","Spin into a whirlwind of steel, carving everything that comes near.") };
                 case "Paladin": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Holy Trinity (Mastery)","holy_trinity","With a Club-type weapon and a Shield: +15 Clubs, no Armor movement penalty, and Slash and Pierce each rise to at least 50% of your current Blunt damage."), new AltarSkillEntry("Heaven's Light (Grace)","heavens_light","Bless every ally around you with +40% Overall Defense and free them from equipment movement penalties for 1 minute.") } : new AltarSkillEntry[] { new AltarSkillEntry("Goddess Relic","goddess_relic","Summon a holy Cross that strikes with Blunt and Lightning and burns foes with Spirit fire."), new AltarSkillEntry("Judgement Hammer","judgement_hammer","Hurl a holy hammer that grows as it flies, crushing everything in its path."), new AltarSkillEntry("Shield Charge","shield_charge","Raise your shield and charge forward, trampling everyone who dares stand in your path."), new AltarSkillEntry("Angel Comet","fallen_angel","Leap to the heavens, then crash upon your enemies like a blazing comet."), new AltarSkillEntry("Ray of Hope","ray_of_hope","Raise your hand to the heavens, healing every ally around you and strengthening their attacks."), new AltarSkillEntry("Electric Smite (Ultimate)","electric_smite","Leap and slam down, releasing sixteen Lightning Trails that tear across the ground.") };
                 case "Priest": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Bless Thy Sinners (Mastery)","bless_thy_sinners","When you or an ally within 20m would die, survive at 1 HP and recover 50% HP over time with a burst of speed. Your own save recharges in 20 minutes, each ally's separately. With a Buckler, a Parry releases a Holy Shockwave, grants Hyper Armor and empowers your next skill."), new AltarSkillEntry("Heaven's Crucible (Grace)","grand_sigil","Wrap yourself and nearby allies in a holy Barrier that holds until it breaks.") } : new AltarSkillEntry[] { new AltarSkillEntry("Lightning Relic","lightning_relic","Plant a Cross of lightning. Its pulses punish nearby foes; place Holy Relic beside it to consecrate the ground."), new AltarSkillEntry("Holy Relic","holy_relic","Raise a sacred Cross that restores your allies and strengthens everyone within its light."), new AltarSkillEntry("Divine Intervention","divine_intervention","Answer danger with a burst of holy power, restoring allies and exposing enemies around you or an aimed Relic."), new AltarSkillEntry("Grand Cross","grand_cross","Carve a radiant X through the battlefield. Its crossing blades travel forward, burning every foe they touch."), new AltarSkillEntry("Heaven's Judgement","heavens_judgement","Call a barrage of holy beams around yourself or an aimed Relic, chilling the enemies caught beneath them."), new AltarSkillEntry("Lightning Tempest (Ultimate)","lightning_tempest","Unleash a restless storm, layering lightning and afflictions across the battlefield.") };
-                case "Wizard": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Archmage (Mastery)","archmage","Charge normal Staff attacks (not Gun Staves) up to 6s for 3 stacks; the first stack doubles the impact size. Spending 300 Eitr triggers Overcharge for 12s: +40% faster wind up, +40% Eitr Regen and +40% Magic Damage."), new AltarSkillEntry("Clockwork (Grace)","clockwork","Bend time for you and nearby allies: +30% Skill Damage and skills that start their cooldown are 50% faster to recover for 22s.") } : new AltarSkillEntry[] { new AltarSkillEntry("Gravity Dominion","gravity_dominion","Create a gravitational field at the targeted area that controls enemies inside it."), new AltarSkillEntry("Astral Greatblade","astral_greatblade","Wind up and aim an astral blade attack. Holding the charge increases its power."), new AltarSkillEntry("Frost Nova","frost_nova","Release an area burst of Frost around the caster."), new AltarSkillEntry("Meteor Fall","meteor_fall","Call a meteor onto the targeted ground area."), new AltarSkillEntry("Astral Railcannon","astral_railcannon","Assemble and fire an aimed magical beam through the area ahead."), new AltarSkillEntry("Elemental Cataclysm (Ultimate)","elemental_cataclysm","Charge and release the Wizard's large elemental area attack at the targeted location.") };
+                case "Wizard": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Archmage (Mastery)","archmage","Charge normal Staff attacks (not Gun Staves) for up to 3 stacks, 1 per second; the first stack doubles the impact size. Spending 300 Eitr triggers Overcharge for 12s: +40% faster wind up, +40% Eitr Regen and +40% Magic Damage."), new AltarSkillEntry("Clockwork (Grace)","clockwork","Bend time for you and nearby allies: +30% Skill Damage and skills that start their cooldown are 50% faster to recover for 22s.") } : new AltarSkillEntry[] { new AltarSkillEntry("Gravity Dominion","gravity_dominion","Create a gravitational field at the targeted area that controls enemies inside it."), new AltarSkillEntry("Astral Greatblade","astral_greatblade","Wind up and aim an astral blade attack. Holding the charge increases its power."), new AltarSkillEntry("Frost Nova","frost_nova","Release an area burst of Frost around the caster."), new AltarSkillEntry("Meteor Fall","meteor_fall","Call a meteor onto the targeted ground area."), new AltarSkillEntry("Astral Railcannon","astral_railcannon","Assemble and fire an aimed magical beam through the area ahead."), new AltarSkillEntry("Elemental Cataclysm (Ultimate)","elemental_cataclysm","Charge and release the Archmage's large elemental area attack at the targeted location.") };
                 case "Spellcaster": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Yin and Yang (Mastery)","yin_and_yang","With any Staff or Wand: attacks twice as fast, Eitr use -50%, +20% Eitr Regen, normal Staff/Wand damage -50%. No skill wind up, no Staff/Wand movement penalty. Dual Gun Staves fire together with perfect accuracy."), new AltarSkillEntry("Rift Walker (Grace)","rift_walker","Place two linked portals up to 50m away and travel between them with E.") } : new AltarSkillEntry[] { new AltarSkillEntry("Arcane Phalanx","arcane_phalanx","Summon hovering arcane swords; Mouse1 launches them one by one, recast and click to fire them all."), new AltarSkillEntry("Afterimage Arsenal","afterimage_arsenal","Leave spectral copies of yourself that fire along with your attacks."), new AltarSkillEntry("Void Step","void_step","Teleport instantly to your aim, even mid-attack, and float down safely."), new AltarSkillEntry("Rift Echo","rift_echo","Open rifts behind your target that echo your attacks back through it."), new AltarSkillEntry("Gravity Blast","gravity_blast","Hurl a ball of darkness that grinds through every enemy and drags the small ones in."), new AltarSkillEntry("Arcane Rupture (Ultimate)","arcane_rupture","Rupture the ground at your aim again and again, up to three charges, while you keep moving.") };
             }
             return new AltarSkillEntry[0];
@@ -943,7 +943,7 @@ namespace AlbedosCustomClasses
             // v0.22.3: centred on the card's art panel (measured 41%-98.5% of the card width -> centre
             // +78 px), name and role balanced around the panel's vertical centre.
             AltarImage("CardLabelParchment", image.transform, new Vector2(78f, 0f), new Vector2(222f, 124f), AltarLabelVeil(), new Color(0.98f, 0.92f, 0.80f, 0.30f), false);
-            AltarCardTextGlow(CreateWrappedText(image.transform, name.ToUpper(), new Vector2(78f, 19f), 198f, 58f, 23, AltarInk, true, TextAnchor.MiddleCenter));
+            AltarCardTextGlow(CreateWrappedText(image.transform, AcDisplay(name).ToUpper(), new Vector2(78f, 19f), 198f, 58f, 23, AltarInk, true, TextAnchor.MiddleCenter));
             AltarCardTextGlow(CreateWrappedText(image.transform, role, new Vector2(78f, -22f), 194f, 40f, 15, AltarInk, false, TextAnchor.MiddleCenter));
             (advancement ? _altarAdvCards : _altarBaseCards)[name] = image;
         }
@@ -981,15 +981,31 @@ namespace AlbedosCustomClasses
             AltarClassCard(parent, advancementName, role, y, true);
         }
 
+        // v0.23.3 display names (internal ids stay "Wizard" / "Spellcaster" so saves keep working).
+        internal static string AcDisplay(string ac)
+        {
+            if (ac == "Spellcaster") return "Horizon Walker";
+            if (ac == "Wizard") return "Archmage";
+            return ac;
+        }
+
         private void BuildAdvancementPage()
         {
             _advancementPage = CreateUiGroup("DragonAltarAdvancementPage");
             AltarImage("AdvHeadingPlaque", _advancementPage.transform, new Vector2(-291f, 212f), new Vector2(380f, 82f), AltarSprite("Confirm_Plaque.png"), Color.white, false);
             _advancementPageTitle = CreateWrappedText(_advancementPage.transform, "CHOOSE AN\nADVANCEMENT", new Vector2(-291f, 212f), 340f, 67f, 25, AltarGold, true, TextAnchor.MiddleCenter);
             AltarButton(_advancementPage.transform, "‹ Base Classes", new Vector2(-291f, 146f), new Vector2(240f, 43f), ShowBaseClassPage);
-            AltarImage("FoundationParchment", _advancementPage.transform, new Vector2(-291f, -326f), new Vector2(404f, 128f), AltarLabelVeil(), new Color(0.98f, 0.92f, 0.8f, 0.9f), false);
-            _advancementBaseSummaryTitle = CreateWrappedText(_advancementPage.transform, "", new Vector2(-291f, -285f), 330f, 50f, 16, AltarInk, true, TextAnchor.MiddleCenter);
-            _advancementBaseSummaryBody = CreateWrappedText(_advancementPage.transform, "", new Vector2(-291f, -348f), 330f, 72f, 14, AltarInk, false, TextAnchor.MiddleCenter);
+            // v0.23.3: lighter veil (like the cards) and ONE text block (title + body) centred both ways
+            // inside the veil's opaque part (veil 404x150, 8/64 + 5/32 soft edges -> ~300x104 usable),
+            // shrunk to fit so nothing sticks out.
+            AltarImage("FoundationParchment", _advancementPage.transform, new Vector2(-291f, -326f), new Vector2(404f, 150f), AltarLabelVeil(), new Color(0.98f, 0.92f, 0.8f, 0.55f), false);
+            _advancementBaseSummaryTitle = CreateWrappedText(_advancementPage.transform, "", new Vector2(-291f, -326f), 296f, 100f, 15, AltarInk, false, TextAnchor.MiddleCenter);
+            _advancementBaseSummaryTitle.supportRichText = true;
+            _advancementBaseSummaryTitle.resizeTextForBestFit = true;
+            _advancementBaseSummaryTitle.resizeTextMinSize = 9;
+            _advancementBaseSummaryTitle.resizeTextMaxSize = 15;
+            AltarCardTextGlow(_advancementBaseSummaryTitle);
+            _advancementBaseSummaryBody = null;
             _advDetailTitle = CreateWrappedText(_advancementPage.transform, "", new Vector2(215f, 228f), 500f, 36f, 30, AltarGold, true, TextAnchor.MiddleCenter);
             _advDetailRole = CreateWrappedText(_advancementPage.transform, "", new Vector2(215f, 203f), 500f, 20f, 14, AltarGold, false, TextAnchor.MiddleCenter);
             BuildAltarSkillDetails(_advancementPage.transform, true);
@@ -1112,7 +1128,7 @@ namespace AlbedosCustomClasses
             if (_advancementPageTitle != null)
                 _advancementPageTitle.text = "CHOOSE AN\nADVANCEMENT";
             if (_advancementBaseSummaryTitle != null)
-                _advancementBaseSummaryTitle.text = _advancementParent.ToUpper() + "  -  " + GetBaseClassRole(_advancementParent).ToUpper();
+                _advancementBaseSummaryTitle.text = "<b>" + _advancementParent.ToUpper() + "</b>\n<b>" + GetBaseClassRole(_advancementParent).ToUpper() + "</b>\n\n" + GetBaseClassSummary(_advancementParent);
             if (_advancementBaseSummaryBody != null)
                 _advancementBaseSummaryBody.text = GetBaseClassSummary(_advancementParent);
 
@@ -1129,7 +1145,7 @@ namespace AlbedosCustomClasses
 
             if (_advDetailTitle != null)
             {
-                _advDetailTitle.text = advancementName.ToUpper();
+                _advDetailTitle.text = AcDisplay(advancementName).ToUpper();
                 _advDetailTitle.color = AltarGold;
             }
             if (_advDetailRole != null)
@@ -1186,7 +1202,7 @@ namespace AlbedosCustomClasses
             if (_confirmationText != null)
             {
                 _confirmationText.text =
-                    "Advance from <b>" + _advancementParent + "</b> to <b>" + _focusedAdvancement + "</b>?\n\n" +
+                    "Advance from <b>" + _advancementParent + "</b> to <b>" + AcDisplay(_focusedAdvancement) + "</b>?\n\n" +
                     "This defines the specialized skills, passive mechanics and playstyle of this path.\n\n" +
                     "Are you definite with this choice?";
             }
@@ -1301,7 +1317,7 @@ namespace AlbedosCustomClasses
         {
             if (className == "Warrior") return "<b>STARTER KIT</b>  Heavy Slash  |  Impact Wave  |  Impact Punch\n<b>ADVANCEMENTS</b>  Sword Master  |  Mercenary";
             if (className == "Cleric") return "<b>STARTER KIT</b>  Lightning Zap  |  Righteous Strike  |  Holy Wave\n<b>ADVANCEMENTS</b>  Paladin  |  Priest";
-            return "<b>STARTER KIT</b>  Flame Burst  |  Glacial Descent  |  Stonefang Eruption\n<b>ADVANCEMENTS</b>  Wizard  |  Spellcaster";
+            return "<b>STARTER KIT</b>  Flame Burst  |  Glacial Descent  |  Stonefang Eruption\n<b>ADVANCEMENTS</b>  Archmage  |  Horizon Walker";
         }
 
         private string GetAdvancementDescription(string advancementName)
@@ -1324,9 +1340,9 @@ namespace AlbedosCustomClasses
             }
             if (advancementName == "Wizard")
             {
-                return "<b>IDENTITY</b>\nWizard is the deliberate heavy-artillery caster: huge committed spells, charged Staff shots and overwhelming single releases.\n\n<b>ARCHMAGE (MASTERY)</b>\nCharge normal Staff attacks (not Gun Staves) up to 6s for 3 stacks; the first stack doubles the impact size. Spending 300 Eitr triggers Overcharge for 12s: +40% faster wind up, +40% Eitr Regen and +40% Magic Damage.\n\n<b>BEST FOR</b>\nPlayers who want magical artillery, giant telegraphed attacks and the satisfaction of charging one disgusting hit instead of spraying dozens of smaller ones.";
+                return "<b>IDENTITY</b>\nThe Archmage is the deliberate heavy-artillery caster: huge committed spells, charged Staff shots and overwhelming single releases.\n\n<b>ARCHMAGE (MASTERY)</b>\nCharge normal Staff attacks (not Gun Staves) for up to 3 stacks, 1 per second; the first stack doubles the impact size. Spending 300 Eitr triggers Overcharge for 12s: +40% faster wind up, +40% Eitr Regen and +40% Magic Damage.\n\n<b>BEST FOR</b>\nPlayers who want magical artillery, giant telegraphed attacks and the satisfaction of charging one disgusting hit instead of spraying dozens of smaller ones.";
             }
-            return "<b>IDENTITY</b>\nSpellcaster is the mobile gunmage: sprint-casting, rapid Staff pressure, dual Gun Staves and spatial tricks everywhere.\n\n<b>YIN AND YANG (MASTERY)</b>\nWith any Staff or Wand: attacks twice as fast, Eitr use -50%, +20% Eitr Regen, normal Staff/Wand damage -50%. No skill wind up and no Staff/Wand movement penalty. Dual Gun Staves fire together with perfect accuracy.\n\n<b>BEST FOR</b>\nPlayers who never want to stand still: constant fire, teleports, portals and clones.";
+            return "<b>IDENTITY</b>\nThe Horizon Walker is the mobile gunmage: sprint-casting, rapid Staff pressure, dual Gun Staves and spatial tricks everywhere.\n\n<b>YIN AND YANG (MASTERY)</b>\nWith any Staff or Wand: attacks twice as fast, Eitr use -50%, +20% Eitr Regen, normal Staff/Wand damage -50%. No skill wind up and no Staff/Wand movement penalty. Dual Gun Staves fire together with perfect accuracy.\n\n<b>BEST FOR</b>\nPlayers who never want to stand still: constant fire, teleports, portals and clones.";
         }
 
         private string GetAdvancementSkills(string advancementName)
@@ -1358,7 +1374,7 @@ namespace AlbedosCustomClasses
                 _currentClassText.text = "Base class: " + (string.IsNullOrEmpty(selectedClass) ? "None" : selectedClass);
 
             if (_currentAdvancementText != null)
-                _currentAdvancementText.text = "Advancement: " + (string.IsNullOrEmpty(selectedAdvancement) ? "None" : selectedAdvancement);
+                _currentAdvancementText.text = "Advancement: " + (string.IsNullOrEmpty(selectedAdvancement) ? "None" : AcDisplay(selectedAdvancement));
 
             if (!string.IsNullOrEmpty(selectedClass))
                 _focusedBaseClass = selectedClass;
@@ -1453,7 +1469,7 @@ namespace AlbedosCustomClasses
             ShowCenterMessage("Advanced to " + advancementName);
 
             if (_currentAdvancementText != null)
-                _currentAdvancementText.text = "Advancement: " + advancementName;
+                _currentAdvancementText.text = "Advancement: " + AcDisplay(advancementName);
 
             _focusedAdvancement = advancementName;
             ShowAdvancementPage();

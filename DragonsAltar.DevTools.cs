@@ -40,7 +40,7 @@ namespace DragonsAltarDevTools
     {
         public const string ModGuid = "albedo.customclasses.devtools";
         public const string ModName = "Dragon's Altar - Developer Tools";
-        public const string ModVersion = "0.23.2";
+        public const string ModVersion = "0.23.3";
 
         public static DeveloperToolsPlugin Instance;
 
@@ -77,7 +77,7 @@ namespace DragonsAltarDevTools
         private bool _defaultsChecked;
         private float _allDefaultsArmedUntil;
         // v0.22.5: every new pass starts from the default values once (user rule); raise this per pass.
-        private const string DefaultsPass = "0.23.2";
+        private const string DefaultsPass = "0.23.3";
 
         private readonly List<DevSetting> _settings = new List<DevSetting>();
         private readonly List<string> _sections = new List<string>();
@@ -476,6 +476,9 @@ namespace DragonsAltarDevTools
                        .Replace("Judgement Cut", "Blade Storm")
                        .Replace("Knights Guidance", "Knight's Guidance")
                        .Replace("Mercenary Weapon Mastery - Warfreak", "Mercenary Warfreak");
+            // v0.23.3 display names (config sections keep their ids).
+            if (text.StartsWith("Spellcaster", StringComparison.Ordinal)) text = "Horizon Walker" + text.Substring(11);
+            if (text.StartsWith("Wizard", StringComparison.Ordinal)) text = "Archmage" + text.Substring(6);
             return text;
         }
 
@@ -973,7 +976,7 @@ namespace DragonsAltarDevTools
                 {
                     string group = row.Substring(1);
                     bool open = IsGroupOpen(group);
-                    string label = (open ? "▼  " : "►  ") + group.ToUpperInvariant() + (group == groups[0] ? "   Base Class" : "   Advancement");
+                    string label = (open ? "▼  " : "►  ") + (group == "Spellcaster" ? "HORIZON WALKER" : group == "Wizard" ? "ARCHMAGE" : group.ToUpperInvariant()) + (group == groups[0] ? "   Base Class" : "   Advancement");
                     if (GUI.Button(new Rect(0f, sy, 260f, 28f), label, _tabSelectedStyle))
                         SetGroupOpen(group, !open);
                     sy += 32f;
@@ -1003,6 +1006,8 @@ namespace DragonsAltarDevTools
         private string ShortSectionName(string section)
         {
             string group = string.IsNullOrEmpty(_search) ? GroupFor(section) : "";
+            if (group == "Spellcaster") group = "Horizon Walker";
+            else if (group == "Wizard") group = "Archmage";
             string shown = DisplaySection(section);
             if (group.Length > 0 && shown.Length > group.Length + 1 && shown.StartsWith(group, StringComparison.OrdinalIgnoreCase))
                 return shown.Substring(group.Length + 1).Trim();
@@ -1317,7 +1322,7 @@ namespace DragonsAltarDevTools
                 changed |= DrawAscendColumn(list, "WIZARD", WizardAscendableSkills, 588f);
                 changed |= DrawAscendColumn(list, "SPELLCASTER", SpellcasterAscendableSkills, 848f);
                 GUI.Label(new Rect(588f, 520f, 500f, 40f),
-                    "Glacial Descent (Wizard) and Stonefang Eruption (Spellcaster) are always Ascended once you Advance.", _descStyle);
+                    "Glacial Descent (Archmage) and Stonefang Eruption (Horizon Walker) are always Ascended once you Advance.", _descStyle);
             }
             else
             {
