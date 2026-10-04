@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.21.1";
+        public const string ModVersion = "0.21.2";
 
         internal static DragonCombatPlugin Instance;
 
@@ -77,10 +77,10 @@ namespace DragonsAltarCombat
             FrostMovementSlow = Config.Bind("Debuffs", "FrostMovementSlowPercent", 30f, "Default movement slow while Frost is active.");
             FrostAttackSpeedSlow = Config.Bind("Debuffs", "FrostAttackSpeedSlowPercent", 30f, "Default attack-animation slow while Frost is active.");
             FrostPhysicalDamageBonus = Config.Bind("Debuffs", "FrostPhysicalDamageTakenPercent", 20f, "Extra physical damage taken while Frost weakens physical defense.");
-            ZapDelay = Config.Bind("Debuffs", "ZapDelay", 3f, "Seconds before Zap explodes.");
+            ZapDelay = Config.Bind("Debuffs", "ZapDelay_v0212", 2f, "Seconds before Zap explodes (universal rule: 2s).");
             ZapRadius = Config.Bind("Debuffs", "ZapRadius", 1f, "Zap explosion radius.");
             ZapDamage = Config.Bind("Debuffs", "ZapLightningDamage", 25f, "Testing/default lightning damage for Zap because the framework does not specify an amount.");
-            BurnsUseCurrentHpPercent = Config.Bind("Damage Over Time", "BurnsUseCurrentHpPercent", true, "Fire/Spirit Burns scale from CURRENT HP.");
+            BurnsUseCurrentHpPercent = Config.Bind("Damage Over Time", "LegacyBurnsUseCurrentHpPercent_v0212", false, "Legacy: burns now deal the skill's own burn damage. True = old 3% CURRENT HP burns.");
             FireBurnCurrentHpPercent = Config.Bind("Damage Over Time", "FireBurnCurrentHpPercentPerTick", 3f, "Fire Burn = 3 percent of CURRENT HP per tick.");
             SpiritBurnMultiplier = Config.Bind("Damage Over Time", "SpiritBurnMultiplierVsFire", 1.5f, "Spirit Burn remains 1.5x stronger than Fire.");
             MinimumBurnTick = Config.Bind("Damage Over Time", "MinimumBurnTickDamage", 1f, "Minimum percentage Burn tick.");
@@ -2184,7 +2184,9 @@ namespace DragonsAltarCombat
 
             if (damage <= 0f && DragonCombatPlugin.Instance != null)
                 damage = DragonCombatPlugin.Instance.ZapDamage.Value;
-            if (delay <= 0f && DragonCombatPlugin.Instance != null)
+            if (delay < 0f)
+                delay = 0.01f; // negative = instant detonation
+            else if (delay <= 0f && DragonCombatPlugin.Instance != null)
                 delay = DragonCombatPlugin.Instance.ZapDelay.Value;
             if (radius <= 0f && DragonCombatPlugin.Instance != null)
                 radius = DragonCombatPlugin.Instance.ZapRadius.Value;
@@ -2198,7 +2200,7 @@ namespace DragonsAltarCombat
 
         public static void Stun(Character target, Vector3 fromPoint)
         {
-            if (target == null || target.IsDead())
+            if (target == null || target.IsDead() || target.IsBoss()) // Bosses are never stunned (global rule)
                 return;
             Vector3 dir = target.transform.position - fromPoint;
             if (dir.sqrMagnitude < 0.01f)

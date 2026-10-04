@@ -1,0 +1,19 @@
+IMMORTAL HEROES v0.21.2 - BALANCE PASS
+Universal rules
+- Burns deal the skill's own burn damage (no more 3% of the target's current HP).
+  Old behaviour: F8 > Damage Over Time > Legacy... = true.
+- Zap explodes after 2s (was 3s).
+- Bosses are never Stunned (central Stun + Mercenary staggers). They can still be slowed.
+Paladin
+- Judgement Hammer: no size cap anymore (hammer and hitbox keep growing in flight, the
+  Ascended return included); damage growth stops at 5x (MaxDamageMultiplier_v0212).
+Priest
+- Holy Relic: 4% Max HP per pulse (was 15%), +10% of it per Tier.
+- Divine Intervention Barrier Armor = 30% of the Priest's Armor (was 100%), same as Heaven's Crucible.
+- Buckler Parry: next damaging skill +35% (was +75%).
+- Ascended Lightning Tempest: Heaven's Wrath Zap now explodes instantly (it waited 3s).
+Fixes
+- Ray of Hope heals each ally by THEIR Max HP (used the Paladin's).
+Docs
+- docs/design/BALANCE_HANDOFF_v2_RECONCILED.txt: balance + Ascension plan for Warrior /
+  Sorcerer ACs, reconciled with the Framework.

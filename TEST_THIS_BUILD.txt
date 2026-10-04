@@ -1,6 +1,11 @@
-Immortal Heroes v0.21.1 - Test focus
-1. Priest preview checklist says Holy Wave Tier 7; Altar blocks Priest until it is 7.
-2. Ascended Holy Wave: aim at an ally -> ring on them, instant.
-3. Divine Intervention tooltip heal 50% at Tier 5.
-4. Angel Comet lands ~2.5s after the press.
-5. RS / JH / SC icons in tree, hotbar, HUD, Altar.
+TEST v0.21.2 - BALANCE PASS
+1. Goddess Relic / Angel Comet / Grand Cross burns: small ticks (a few HP/s), not big % chunks on a boss.
+2. Lightning Zap: explosion 2s after the hit.
+3. Judgement Hammer: grows the whole flight (Ascended: also on the way back); damage tooltip says "up to 5x".
+4. Holy Relic: ~4% Max HP per pulse at Tier 0.
+5. Divine Intervention: Barrier still absorbs; it should break a bit faster than before.
+6. Buckler Parry then a skill: noticeably weaker bonus than before (+35%).
+7. Ascended Lightning Tempest: enemies inside explode the moment it ends.
+8. Ray of Hope with an ally whose Max HP differs from yours: they heal by their own Max HP.
+9. Any Stun skill on a boss: boss keeps moving (still takes damage).
+Tip: F8 values reset to the new defaults automatically (new keys).

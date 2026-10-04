@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.21.1";
+        public const string ModVersion = "0.21.2";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -332,7 +332,7 @@ namespace AlbedosCustomClassesAdvanced
         private ConfigEntry<float> _hammerCooldown, _hammerStamina, _hammerWindup, _hammerRange, _hammerTravelTime, _hammerBaseRadius,
             _hammerStepMeters, _hammerDamagePerStep, _hammerTick, _hammerCrippleDuration, _hammerCatchCooldownCut,
             _hammerStartHeight, _hammerStartWidth, _hammerGrowthInterval, _hammerHeightPerStep, _hammerWidthPerStep, _hammerMaxHeight, _hammerMaxWidth,
-            _hammerAscMaxHeight, _hammerAscMaxWidth, _hammerAscWidthPerStep, _hammerHitRadiusPerHeight;
+            _hammerAscMaxHeight, _hammerAscMaxWidth, _hammerAscWidthPerStep, _hammerHitRadiusPerHeight, _hammerDamageCap;
         private DamageConfig _hammerDamage;
         private ConfigEntry<float> _angelCooldown, _angelStamina, _angelJumpHeight, _angelRiseTime, _angelDiveSpeed, _angelRadius,
             _angelBrokenBones, _angelRingRadius, _angelRingDuration, _angelBurnDuration, _angelFireDot, _angelSpiritDot, _angelHyperAfter;
@@ -427,7 +427,7 @@ namespace AlbedosCustomClassesAdvanced
         private ConfigEntry<float> _interventionRadius;
         private ConfigEntry<float> _interventionWindup;
         private ConfigEntry<float> _interventionHealPercent;
-        private ConfigEntry<float> _interventionBarrierHp;
+        private ConfigEntry<float> _interventionBarrierHp, _interventionBarrierArmor;
         private ConfigEntry<float> _interventionBuffDuration;
         private ConfigEntry<float> _interventionExposeDuration;
         private DamageConfig _interventionDamage;
@@ -877,12 +877,13 @@ namespace AlbedosCustomClassesAdvanced
             _hammerGrowthInterval = Config.Bind("Paladin Judgement Hammer", "GrowthInterval_v0172", 0.2f, "Seconds between size growth steps.");
             _hammerHeightPerStep = Config.Bind("Paladin Judgement Hammer", "HeightPerStep_v0172", 0.7f, "Meters of height per growth step (20m flight = ~7.4m tall).");
             _hammerWidthPerStep = Config.Bind("Paladin Judgement Hammer", "WidthPerStep_v0172", 0.17f, "Meters of width per growth step (20m flight = ~2m wide).");
-            _hammerMaxHeight = Config.Bind("Paladin Judgement Hammer", "MaxHeight_v0172", 8f, "Size cap (meters tall).");
-            _hammerMaxWidth = Config.Bind("Paladin Judgement Hammer", "MaxWidth_v0172", 2f, "Size cap (meters wide).");
+            _hammerMaxHeight = Config.Bind("Paladin Judgement Hammer", "LegacyMaxHeight_v0172", 8f, "Size cap (meters tall).");
+            _hammerMaxWidth = Config.Bind("Paladin Judgement Hammer", "LegacyMaxWidth_v0172", 2f, "Size cap (meters wide).");
             _hammerHitRadiusPerHeight = Config.Bind("Paladin Judgement Hammer", "HitRadiusPerHeight_v0172", 0.35f, "Hit radius = height x this (never below BaseHitRadius).");
-            _hammerAscMaxHeight = Config.Bind("Paladin Judgement Hammer Ascended", "MaxHeight_v0172", 10f, "Ascended size cap (meters tall). Keeps growing on the return flight up to this.");
-            _hammerAscMaxWidth = Config.Bind("Paladin Judgement Hammer Ascended", "MaxWidth_v0172", 3f, "Ascended size cap (meters wide).");
+            _hammerAscMaxHeight = Config.Bind("Paladin Judgement Hammer Ascended", "LegacyMaxHeight_v0172", 10f, "Ascended size cap (meters tall). Keeps growing on the return flight up to this.");
+            _hammerAscMaxWidth = Config.Bind("Paladin Judgement Hammer Ascended", "LegacyMaxWidth_v0172", 3f, "Ascended size cap (meters wide).");
             _hammerAscWidthPerStep = Config.Bind("Paladin Judgement Hammer Ascended", "WidthPerStep_v0172", 0.2f, "Ascended meters of width per growth step.");
+            _hammerDamageCap = Config.Bind("Paladin Judgement Hammer", "MaxDamageMultiplier_v0212", 5f, "Damage growth stops at this multiplier. The hammer itself keeps growing (no size cap).");
             _hammerDamagePerStep = Config.Bind("Paladin Judgement Hammer", "DamageGrowthPerStep", 0.3f, "+0.3x damage per step (Framework doc).");
             _hammerTick = Config.Bind("Paladin Judgement Hammer", "PersistentHitInterval", 0.5f, "Persistent Damage interval per enemy.");
             _hammerCrippleDuration = Config.Bind("Paladin Judgement Hammer", "CrippleDuration", 6f, "Cripple duration.");
@@ -986,7 +987,7 @@ namespace AlbedosCustomClassesAdvanced
             _pillarDamage = BindDamage("Priest Heavens Judgement Pillar Damage", 0f, 0f, 0f, 0f, 0f, 120f, 0f, 120f);
             _tempestAscRadius = Config.Bind("Priest Lightning Tempest Ascended", "Radius", 12f, "Ascended Tempest radius (follows the Priest).");
             _tempestAscDefense = Config.Bind("Priest Lightning Tempest Ascended", "AllyDefensePercent", 20f, "Allies inside: Overall Defense bonus (+ Hyper Armor).");
-            _parryEmpowerPercent = Config.Bind("Priest Holy Shockwave", "NextSkillDamagePercent", 75f, "Every Buckler Parry empowers the next damaging skill by this percent for that entire skill instance.");
+            _parryEmpowerPercent = Config.Bind("Priest Holy Shockwave", "NextSkillDamagePercent_v0212", 35f, "Every Buckler Parry empowers the next damaging skill by this percent for that entire skill instance.");
 
             _lightningRelicCooldown = Config.Bind("Priest Lightning Relic", "Cooldown", 14f, "Cooldown starts only after the active Relic is relinquished or its 16s lifetime ends.");
             _lightningRelicStamina = Config.Bind("Priest Lightning Relic", "StaminaCost", 30f, "Stamina cost.");
@@ -1004,7 +1005,7 @@ namespace AlbedosCustomClassesAdvanced
             _holyRelicRange = Config.Bind("Priest Holy Relic", "Range", 35f, "Ground PAC cast distance in literal meters.");
             _holyRelicDuration = Config.Bind("Priest Holy Relic", "Duration", 16f, "Active lifetime before cooldown begins.");
             _holyRelicInterval = Config.Bind("Priest Holy Relic", "PulseInterval", 2f, "Holy Relic keeps the existing 2s pulse interval.");
-            _holyRelicHealPercent = Config.Bind("Priest Holy Relic", "HealPercentPerPulse", 15f, "Max-HP heal per pulse.");
+            _holyRelicHealPercent = Config.Bind("Priest Holy Relic", "HealPercentPerPulse_v0212", 4f, "Max-HP heal per pulse (each Tier adds +10% of it).");
             _holyRelicBuffDuration = Config.Bind("Priest Holy Relic", "BuffDuration", 4f, "Buff refresh duration.");
             _holyRelicDamageBuff = Config.Bind("Priest Holy Relic", "DamageBuffPercent", 20f, "Attack Damage Bonus.");
             _holyRelicAttackSpeedBuff = Config.Bind("Priest Holy Relic", "AttackSpeedPercent", 20f, "Attack Speed Bonus.");
@@ -1024,6 +1025,7 @@ namespace AlbedosCustomClassesAdvanced
             _interventionWindup = Config.Bind("Priest Divine Intervention", "Windup", 1f, "Short holy burst windup.");
             _interventionHealPercent = Config.Bind("Priest Divine Intervention", "HealPercent", 20f, "Max-HP heal.");
             _interventionBarrierHp = Config.Bind("Priest Divine Intervention", "BarrierHP", 150f, "Temporary barrier HP.");
+            _interventionBarrierArmor = Config.Bind("Priest Divine Intervention", "BarrierArmorPercent", 30f, "Barrier Armor = this percent of the Priest's current Armor (same rule as Heaven's Crucible).");
             _interventionBuffDuration = Config.Bind("Priest Divine Intervention", "SupportDuration", 6f, "Hyper Armor / defense support duration.");
             _interventionExposeDuration = Config.Bind("Priest Divine Intervention", "ExposeDuration", 8f, "Expose duration on enemies hit.");
             _interventionDamage = BindDamage("Priest Divine Intervention Damage", 0f, 0f, 0f, 0f, 0f, 40f, 0f, 40f);
@@ -2160,7 +2162,7 @@ namespace AlbedosCustomClassesAdvanced
                     GainMercenaryFuryFromSkillHit(player);
                     if (DragonCombat.IsSmallEnemy(target))
                         ApplyMercenaryDisplacement(target, forward * 2.5f + Vector3.up * 6.5f);
-                    else
+                    else if (!target.IsBoss())
                         target.Stagger(forward);
                 }
 
@@ -2187,7 +2189,7 @@ namespace AlbedosCustomClassesAdvanced
                 GainMercenaryFuryFromSkillHit(player);
                 if (DragonCombat.IsSmallEnemy(endTargets[i]))
                     ApplyMercenaryDisplacement(endTargets[i], forward * 2.2f + Vector3.up * 7f);
-                else
+                else if (!endTargets[i].IsBoss())
                     endTargets[i].Stagger(forward);
             }
             if (_enableVfx.Value)
@@ -2284,7 +2286,7 @@ namespace AlbedosCustomClassesAdvanced
                 DealScaledDamage(player, targets[i], _boneDamage, 34f, multiplier);
                 if (DragonCombat.IsSmallEnemy(targets[i]))
                     ApplyMercenaryDisplacement(targets[i], forward * 4f + Vector3.up * 7.5f);
-                else
+                else if (!targets[i].IsBoss())
                     targets[i].Stagger(forward);
             }
             if (_enableVfx.Value)
@@ -2459,7 +2461,7 @@ namespace AlbedosCustomClassesAdvanced
                 yield break;
 
             float radius = Mathf.Max(1f, _rayRadius.Value);
-            float healAmount = player.GetMaxHealth() * Mathf.Clamp(_rayHealPercent.Value, 0f, 100f) / 100f * IhSkillPower(player, "ray_of_hope");
+            float healPercent = Mathf.Clamp(_rayHealPercent.Value, 0f, 100f) / 100f * IhSkillPower(player, "ray_of_hope");
             Collider[] allyHits = Physics.OverlapSphere(player.transform.position, radius);
             HashSet<Player> allies = new HashSet<Player>();
             bool ascended = IsAscendedSkill("ray_of_hope");
@@ -2468,7 +2470,7 @@ namespace AlbedosCustomClassesAdvanced
                 Player ally = allyHits[i].GetComponentInParent<Player>();
                 if (ally == null || allies.Contains(ally)) continue;
                 allies.Add(ally);
-                Heal(ally, healAmount);
+                Heal(ally, ally.GetMaxHealth() * healPercent);
                 DragonCombat.ApplyTimedBuff(ally, "Paladin.RayOfHope", Mathf.Max(0.1f, _rayBuffDuration.Value), Mathf.Max(0f, _rayDamageBuff.Value) / 100f, 0f, 0f, 0f, 0f, 0f, false);
                 if (ascended)
                 {
@@ -3302,7 +3304,7 @@ namespace AlbedosCustomClassesAdvanced
 
                 bool capped = UpdateHammerSize(flightTime, ascended, out height, out width);
                 if (!capped)
-                    damageMultiplier = 1f + Mathf.Max(0f, _hammerDamagePerStep.Value) * Mathf.FloorToInt(travelled / stepMeters);
+                    damageMultiplier = Mathf.Min(Mathf.Max(1f, _hammerDamageCap.Value), 1f + Mathf.Max(0f, _hammerDamagePerStep.Value) * Mathf.FloorToInt(travelled / stepMeters));
                 spin += 360f * Time.deltaTime;
                 Vector3 center = HammerCenter(pos, height);
                 UpdateHammerVisual(hammer, center, dir, spin, height, width);
@@ -3341,7 +3343,7 @@ namespace AlbedosCustomClassesAdvanced
                     flightTime += Time.deltaTime;
                     bool capped = UpdateHammerSize(flightTime, true, out height, out width);
                     if (!capped)
-                        damageMultiplier = 1f + Mathf.Max(0f, _hammerDamagePerStep.Value) * Mathf.FloorToInt(travelled / stepMeters);
+                        damageMultiplier = Mathf.Min(Mathf.Max(1f, _hammerDamageCap.Value), 1f + Mathf.Max(0f, _hammerDamagePerStep.Value) * Mathf.FloorToInt(travelled / stepMeters));
                     spin += 360f * Time.deltaTime;
                     Vector3 center = HammerCenter(pos, height);
                     UpdateHammerVisual(hammer, center, back, spin, height, width);
@@ -3358,14 +3360,13 @@ namespace AlbedosCustomClassesAdvanced
         private bool UpdateHammerSize(float flightTime, bool ascended, out float height, out float width)
         {
             int steps = Mathf.FloorToInt(flightTime / Mathf.Max(0.05f, _hammerGrowthInterval.Value));
-            float maxHeight = Mathf.Max(0.5f, ascended ? _hammerAscMaxHeight.Value : _hammerMaxHeight.Value);
-            float maxWidth = Mathf.Max(0.2f, ascended ? _hammerAscMaxWidth.Value : _hammerMaxWidth.Value);
             float widthStep = Mathf.Max(0f, ascended ? _hammerAscWidthPerStep.Value : _hammerWidthPerStep.Value);
             float rawHeight = Mathf.Max(0.5f, _hammerStartHeight.Value) + Mathf.Max(0f, _hammerHeightPerStep.Value) * steps;
             float rawWidth = Mathf.Max(0.2f, _hammerStartWidth.Value) + widthStep * steps;
-            height = Mathf.Min(rawHeight, maxHeight);
-            width = Mathf.Min(rawWidth, maxWidth);
-            return rawHeight >= maxHeight;
+            // v0.21.2: no size cap (the hitbox keeps growing); damage is capped separately.
+            height = rawHeight;
+            width = rawWidth;
+            return false;
         }
 
         // Lift the spin center so the flipping hammer does not dig into the ground.
@@ -4129,7 +4130,7 @@ namespace AlbedosCustomClassesAdvanced
                     true
                 );
                 float barrierHp = IsAscendedSkill("divine_intervention") ? _diAscBarrier.Value : _interventionBarrierHp.Value;
-                GrantPriestBarrier(ally, Mathf.Max(1f, barrierHp), GetArmor(player), Mathf.Max(1f, _interventionBuffDuration.Value));
+                GrantPriestBarrier(ally, Mathf.Max(1f, barrierHp), GetArmor(player) * Mathf.Max(0f, _interventionBarrierArmor.Value) / 100f, Mathf.Max(1f, _interventionBuffDuration.Value));
             }
         }
 
@@ -4470,7 +4471,7 @@ namespace AlbedosCustomClassesAdvanced
                     StartCoroutine(AnimateRing(center + Vector3.up * 0.08f, 0.5f, radius, 0.45f, new Color(1f, 0.40f, 0.36f, 0.95f), 0.14f));
                 List<Character> hit = GetSphereTargets(player, center, radius);
                 for (int i = 0; i < hit.Count; i++)
-                    DragonCombat.ApplyZap(player, hit[i], _tempestZapDamage.Value, 0f, 0f);
+                    DragonCombat.ApplyZap(player, hit[i], _tempestZapDamage.Value, -1f, 0f);
             }
         }
 
@@ -8703,7 +8704,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "lightning_zap":
                     b.Append(IhLine("Damage", IhSkillsDamage("Cleric.Lightning Zap.Damage", power)));
                     b.Append(IhLine("Area", "Cone, " + IhNum(IhCfg(sk, "Cleric.Lightning Zap", "Range", 10f)) + "m, " + IhNum(IhCfg(sk, "Cleric.Lightning Zap", "ConeDegrees", 70f)) + "°"));
-                    b.Append(IhLine("Inflicts", "Zap, explodes after " + IhNum(IhRuntime("ZapDelay", 3f)) + "s"));
+                    b.Append(IhLine("Inflicts", "Zap, explodes after " + IhNum(IhRuntime("ZapDelay_v0212", 2f)) + "s"));
                     b.Append(IhLine("Zap Damage", IhNum(IhRuntime("ZapLightningDamage", 25f)) + " Lightning, " + IhNum(IhRuntime("ZapRadius", 1f)) + "m"));
                     IhCosts(b, IhCfg(sk, "Cleric.Lightning Zap", "StaminaCost", 18f), "Instant", IhCfg(sk, "Cleric.Lightning Zap", "Cooldown", 8f));
                     break;
@@ -8758,9 +8759,9 @@ namespace AlbedosCustomClassesAdvanced
                     break;
                 case "judgement_hammer":
                     b.Append(IhLine("Damage", IhDamage(_hammerDamage, power) + ", every " + IhNum(_hammerTick.Value) + "s"));
-                    b.Append(IhLine("Growth", "+" + IhNum(_hammerDamagePerStep.Value * 100f) + "% Damage per " + IhNum(_hammerStepMeters.Value) + "m flown"));
+                    b.Append(IhLine("Growth", "+" + IhNum(_hammerDamagePerStep.Value * 100f) + "% Damage per " + IhNum(_hammerStepMeters.Value) + "m flown, up to " + IhNum(_hammerDamageCap.Value) + "x"));
                     b.Append(IhLine("Range", IhNum(_hammerRange.Value) + "m"));
-                    b.Append(IhLine("Size", IhNum(_hammerStartHeight.Value) + "m to " + IhNum(ascended ? _hammerAscMaxHeight.Value : _hammerMaxHeight.Value) + "m tall"));
+                    b.Append(IhLine("Size", IhNum(_hammerStartHeight.Value) + "m tall, keeps growing in flight"));
                     b.Append(IhLine("Inflicts", "Cripple, " + IhNum(_hammerCrippleDuration.Value) + "s"));
                     if (ascended)
                     {
@@ -12275,7 +12276,7 @@ namespace AlbedosCustomClassesAdvanced
             }
 
             if (advancement == "Priest")
-                return "You and allies within 20m survive a lethal hit at 1 HP, then recover 50% HP over 6s with +50% Move Speed and -70% Stamina use. Self 20 min, each ally 40 min.\n\nBuckler: doubled Parry. A Parry grants 5s Hyper Armor and +75% Damage to your next skill, and releases a 10m Holy Shockwave (Spirit damage, Stuns Small and Big; 15s cooldown).";
+                return "You and allies within 20m survive a lethal hit at 1 HP, then recover 50% HP over 6s with +50% Move Speed and -70% Stamina use. Self 20 min, each ally 40 min.\n\nBuckler: doubled Parry. A Parry grants 5s Hyper Armor and +35% Damage to your next skill, and releases a 10m Holy Shockwave (Spirit damage, Stuns Small and Big; 15s cooldown).";
 
             return "";
         }
