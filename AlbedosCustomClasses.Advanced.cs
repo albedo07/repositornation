@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.23.3";
+        public const string ModVersion = "0.23.4";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -10793,20 +10793,20 @@ namespace AlbedosCustomClassesAdvanced
             {
                 case "arcane_phalanx":
                     b.Append(IhLine("Damage", IhSorcDamage("Spellcaster Arcane Phalanx Damage", power * (ascended ? IhW("Spellcaster Arcane Phalanx Ascended", "SwordDamagePercent", 65f) / 100f : 1f)) + " per sword"));
-                    b.Append(IhLine("Swords", IhNum(ascended ? IhW("Spellcaster Arcane Phalanx Ascended", "SwordCount", 8f) : IhW(p, "SwordCount_v0232", 4f)) + ", Mouse1 launches one every " + IhNum(IhW(p, "LaunchBuffer", 0.3f)) + "s; recast + Left Click = volley"));
+                    b.Append(IhLine("Swords", IhNum(ascended ? IhW("Spellcaster Arcane Phalanx Ascended", "SwordCount", 8f) : IhW(p, "SwordCount_v0232", 4f)) + " for " + IhNum(IhW(p, "Duration", 16f)) + "s, Mouse1 launches one every " + IhNum(IhW(p, "LaunchBuffer", 0.3f)) + "s; recast + Left Click = volley"));
                     if (ascended) b.Append(IhLine("Astral Spear", "a full 8-sword volley erupts on its first impact: " + IhNum(IhW("Spellcaster Arcane Phalanx Ascended", "AstralSpearRadius", 4f)) + "m, " + IhNum(IhW("Spellcaster Arcane Phalanx Ascended", "AstralSpearPercent", 80f)) + "% of one sword"));
                     IhEitrCosts(b, IhW(p, "EitrCost", 40f) * 0.5f, "None", IhW(p, "Cooldown", 15f));
                     return;
                 case "afterimage_arsenal":
                     if (ascended)
                     {
-                        b.Append(IhLine("Astral Clones", "up to 3, " + IhNum(IhW("Spellcaster Afterimage Arsenal Ascended", "CloneLifetime", 16f)) + "s each; tap = one, hold " + IhNum(IhW("Spellcaster Afterimage Arsenal Ascended", "HoldToSummonAll", 1f)) + "s = all missing"));
-                        b.Append(IhLine("Copies", IhNum(IhW("Spellcaster Afterimage Arsenal Ascended", "SkillCopyPercent", 25f)) + "% of your skills, " + IhNum(IhW("Spellcaster Afterimage Arsenal Ascended", "WeaponCopyPercent", 30f)) + "% of your weapon attacks"));
-                        IhEitrCosts(b, IhW("Spellcaster Afterimage Arsenal", "EitrCost", 50f) / 3f * 0.5f, "None", IhW("Spellcaster Afterimage Arsenal Ascended", "CloneCooldown", 45f));
+                        b.Append(IhLine("Mimics", "3 clones follow you 0.2s behind (teleports and Rifts too) and repeat every weapon attack for 100% damage; they never cast skills"));
+                        b.Append(IhLine("Duration", IhNum(IhW("Spellcaster Afterimage Arsenal", "Duration", 16f)) + "s"));
+                        IhEitrCosts(b, IhW("Spellcaster Afterimage Arsenal", "EitrCost", 50f) * 0.5f, "None", IhW("Spellcaster Afterimage Arsenal", "Cooldown", 18f));
                         return;
                     }
-                    b.Append(IhLine("Damage", IhNum(IhW("Spellcaster Afterimage Arsenal", "DamageMultiplier", 0.35f) * 100f) + "% of your weapon per afterimage shot"));
-                    b.Append(IhLine("Duration", IhNum(IhW("Spellcaster Afterimage Arsenal", "Duration", 8f)) + "s, up to 3 afterimages (Void Step / Rift travel leave more)"));
+                    b.Append(IhLine("Damage", IhNum(IhW("Spellcaster Afterimage Arsenal", "DamageMultiplier", 1f) * 100f) + "% of your weapon per afterimage shot"));
+                    b.Append(IhLine("Duration", IhNum(IhW("Spellcaster Afterimage Arsenal", "Duration", 16f)) + "s, up to 3 afterimages (Void Step / Rift travel leave more)"));
                     IhEitrCosts(b, IhW("Spellcaster Afterimage Arsenal", "EitrCost", 50f) * 0.5f, "None", IhW("Spellcaster Afterimage Arsenal", "Cooldown", 18f));
                     return;
                 case "void_step":
@@ -10817,8 +10817,8 @@ namespace AlbedosCustomClassesAdvanced
                     b.Append(IhLine("Cooldown", IhNum(IhW("Spellcaster Void Step", "Cooldown", 5f)) + "s"));
                     return;
                 case "rift_echo":
-                    b.Append(IhLine("Damage", IhNum(IhW("Spellcaster Rift Echo", "EchoDamageMultiplier", 0.45f) * 100f) + "% of your weapon per echo"));
-                    b.Append(IhLine("Echo", "every " + IhNum(ascended ? IhW("Spellcaster Rift Echo Ascended", "EchoInterval", 0.35f) : 0.5f) + "s while Mouse1 is held, " + IhNum(IhW("Spellcaster Rift Echo", "Duration", 8f)) + "s"));
+                    b.Append(IhLine("Damage", IhNum(IhW("Spellcaster Rift Echo", "EchoDamageMultiplier", 1f) * 100f) + "% of your weapon per echo"));
+                    b.Append(IhLine("Echo", (ascended ? "3 rifts, " : "") + "every " + IhNum(IhW("Spellcaster Rift Echo", "EchoInterval_v0234", 0.3f)) + "s while Mouse1 is held, " + IhNum(IhW("Spellcaster Rift Echo", "Duration", 16f)) + "s"));
                     IhEitrCosts(b, IhW("Spellcaster Rift Echo", "EitrCost", 45f) * 0.5f, "None", IhW("Spellcaster Rift Echo", "Cooldown", 16f));
                     return;
                 case "gravity_blast":
@@ -10974,9 +10974,9 @@ namespace AlbedosCustomClassesAdvanced
                 case "elemental_cataclysm": return "a second bombardment at 60%";
                 case "stonefang_eruption": return "7m; the spikes stay 4s and keep hitting";
                 case "arcane_phalanx": return "8 swords; a full volley erupts into Astral Spears";
-                case "afterimage_arsenal": return "up to 3 Astral Clones that copy your attacks";
+                case "afterimage_arsenal": return "3 mimics follow you and repeat your attacks at 100%";
                 case "void_step": return "2 charges, keeps momentum";
-                case "rift_echo": return "echoes every 0.35s";
+                case "rift_echo": return "3 rifts at once, each 100%";
                 case "gravity_blast": return "25m, bursts for 130% when it stops, pulls Big too";
                 case "arcane_rupture": return "4 charges, 120% each";
             }

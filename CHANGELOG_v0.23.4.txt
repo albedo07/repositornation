@@ -1,0 +1,16 @@
+IMMORTAL HEROES v0.23.4 - HORIZON WALKER
+========================================
+(First start resets every setting to default once, Dev Mode OFF.)
+Includes v0.23.3 Tweaks (docs/changelog/CHANGELOG_v0.23.3.txt).
+
+HORIZON WALKER
+- Aiming: Afterimage Arsenal, Rift Echo and the mimics now read the creature under your
+  crosshair (its hitbox), so aiming at a Troll hits the Troll, not the ground behind it.
+- 16s: Afterimage Arsenal, Rift Echo and Arcane Phalanx (unlaunched swords fade after 16s,
+  normal and Ascended).
+- Rift Echo: every 0.3s while you hold Left Click, 100% of your attack.
+  Ascended: 3 rifts at once, each 100%.
+- Afterimage Arsenal: afterimages deal 100% of your attack.
+- Ascended Afterimage Arsenal: 3 mimics follow you 0.2s behind - they copy your movement
+  (sprint, strafe...), follow your teleports and Rifts, and repeat every weapon attack 0.2s
+  later for 100% of your weapon damage. They never cast skills. (Replaces the Astral Clones.)

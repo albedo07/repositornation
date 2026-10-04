@@ -1,9 +1,9 @@
-TEST THIS BUILD - v0.23.3 Tweaks
-================================
-1. Measurement default 1.5 in F8.
-2. Names: Altar cards / tree / HUD / F8 say Archmage and Horizon Walker.
-3. Mercenary HUD title readable (Fury / Locked).
-4. Altar Advancement page: summary box text centred and inside the parchment.
-5. Merc: radii 7m, Whirlwind damage, Ascended tornado pull, Stomp shocks, Bomb, Seismic.
-6. Meteor Fall: tap (<1s) = no stack; hold = stacks from the moment you press.
-7. Staff charge: 3 stacks in 3s.
+TEST THIS BUILD - v0.23.4 Horizon Walker (+ v0.23.3 Tweaks)
+==========================================================
+v0.23.3: see docs/changelog/CHANGELOG_v0.23.3.txt (Merc tweaks, names, ruler 1.5, Altar box).
+
+1. Afterimage Arsenal / Rift Echo aimed at a Troll: shots hit the Troll.
+2. Rift Echo: hold Left Click -> an echo every 0.3s for 16s. Ascended: 3 rifts.
+3. Arcane Phalanx: unused swords vanish after 16s.
+4. Ascended Afterimage Arsenal: 3 mimics trail you 0.2s behind, copy movement, Void Step
+   and Rifts, and repeat your attacks 0.2s later.
