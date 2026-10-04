@@ -31,8 +31,6 @@ FIELDS = {"lightning_zap": (175, 166, 229, 217), "righteous_strike": (175, 295, 
           "goddess_relic": (378, 166, 431, 217), "judgement_hammer": (379, 295, 433, 345), "heavens_light": (390, 418, 444, 469),
           "shield_charge": (553, 166, 605, 217), "fallen_angel": (690, 166, 743, 217), "ray_of_hope": (691, 295, 743, 345),
           "electric_smite": (863, 227, 952, 314)}
-GRACE_INNER = (393, 421, 442, 467)
-FOOTER_INNER = (671, 551, 712, 590)
 ANCHORS = {"lightning_zap": (201.5, 247), "righteous_strike": (201, 375), "holy_wave": (201, 499), "goddess_relic": (404, 247),
            "judgement_hammer": (405, 375), "heavens_light": (416, 499), "shield_charge": (579.5, 247), "fallen_angel": (716.5, 247),
            "ray_of_hope": (716, 375), "electric_smite": (907.5, 355)}
@@ -77,7 +75,8 @@ GRADES = {
     "horizonwalker": ([(6, 4, 22), (66, 34, 160), (170, 128, 255), (244, 236, 255)], 0.75),
 }
 # Panel hue per identity (degrees) for the background re-hue and the wash tint.
-HUES = {"warrior": 358, "swordmaster": 214, "mercenary": 14, "sorcerer": 276, "archmage": 284, "horizonwalker": 262}
+SATS = {"priest": 0.45}
+HUES = {"priest": 145, "warrior": 358, "swordmaster": 214, "mercenary": 14, "sorcerer": 276, "archmage": 284, "horizonwalker": 262}
 
 
 def category(sid):
@@ -122,8 +121,107 @@ def icon_art(sid, w, h, key):
     return out.filter(ImageFilter.UnsharpMask(radius=1.0, percent=60, threshold=2))
 
 
-def paste_field(canvas, box, sid, key):
-    canvas.paste(icon_art(sid, box[2] - box[0], box[3] - box[1], key), box[:2])
+# ----------------------------------------------------------------------------------------------
+# Exact masks (v0.23.10). Every frame / badge / plate keeps its painted pixels: art only fills the
+# painted opening, the background only changes where nothing is drawn on top of it.
+# ----------------------------------------------------------------------------------------------
+HW_TO_LZ = 256   # Advanced.cs IhRepairLightningZapBackdrop: Zap's frame = Holy Wave's frame 256 px up
+
+
+def sprite_for(slot):
+    """(alpha image, origin) of the painted frame shape of a slot (Frame_<slot>_*.png)."""
+    src = "holy_wave" if slot == "lightning_zap" else slot
+    for name in sorted(os.listdir(A)):
+        if name.startswith("Frame_" + src + "_"):
+            sp = Image.open(os.path.join(A, name)).convert("RGBA").split()[3]
+            f = FIELDS[src]
+            pad = 13 if src == "electric_smite" else 10
+            ox, oy = f[0] - pad, f[1] - pad
+            if slot == "lightning_zap":
+                oy -= HW_TO_LZ
+            return sp, (ox, oy)
+    return None, None
+
+
+def corner_cut_rect(size, box, cut):
+    m = Image.new("L", size, 0)
+    x0, y0, x1, y1 = box
+    ImageDraw.Draw(m).polygon([(x0 + cut, y0), (x1 - cut, y0), (x1, y0 + cut), (x1, y1 - cut), (x1 - cut, y1), (x0 + cut, y1),
+                               (x0, y1 - cut), (x0, y0 + cut)], fill=255)
+    return m
+
+
+# Measured on the anchor chassis (dark opening inside the gold bevel, bevel corner pieces excluded).
+GRACE_OPEN = (390, 418, 443, 468)
+FOOTER_OPEN = (671, 552, 710, 590)
+
+
+def badge_mask(size):
+    """Painted Signature / Ultimate badges = Badge_Permanent.png at the live badge rect."""
+    m = Image.new("L", size, 0)
+    b = Image.open(os.path.join(A, "Badge_Permanent.png")).convert("RGBA").split()[3].resize((23, 23), Image.LANCZOS)
+    for slot in ("goddess_relic", "judgement_hammer", "electric_smite"):
+        f = FIELDS[slot]
+        m.paste(255, (int(round(f[2] - 11.5)), int(round(f[1] - 17.5))), b.point(lambda v: 255 if v > 90 else 0))
+    return m.filter(ImageFilter.MaxFilter(3))
+
+
+def opening_mask(size, slot):
+    if slot == "heavens_light":
+        return corner_cut_rect(size, GRACE_OPEN, 4)
+    if slot == "footer":
+        return corner_cut_rect(size, FOOTER_OPEN, 3)
+    sp, (ox, oy) = sprite_for(slot)
+    full = Image.new("L", size, 255)
+    full.paste(0, (ox, oy), sp.point(lambda v: 255 if v > 60 else 0))
+    if slot == "lightning_zap":
+        f = FIELDS["holy_wave"]
+        f = (f[0], f[1] - HW_TO_LZ, f[2], f[3] - HW_TO_LZ)
+    else:
+        f = FIELDS[slot]
+    rect = Image.new("L", size, 0)
+    ImageDraw.Draw(rect).rectangle([f[0], f[1], f[2] - 1, f[3] - 1], fill=255)
+    m = np.minimum(np.asarray(full), np.asarray(rect))
+    m = np.minimum(m, 255 - np.asarray(badge_mask(size)))
+    return Image.fromarray(m.astype(np.uint8))
+
+
+def paste_art(canvas, slot, sid, key):
+    m = opening_mask(canvas.size, slot)
+    a = np.asarray(m)
+    ys, xs = np.nonzero(a)
+    x0, y0, x1, y1 = xs.min(), ys.min(), xs.max() + 1, ys.max() + 1
+    art = np.asarray(icon_art(sid, x1 - x0, y1 - y0, key), dtype=np.float64)
+    # Inner bevel shade like the painted icons: 2 px darker rim inside the opening.
+    sub = m.crop((x0, y0, x1, y1))
+    e1 = np.asarray(sub.filter(ImageFilter.MinFilter(3)), dtype=np.float64) / 255.0
+    e2 = np.asarray(sub.filter(ImageFilter.MinFilter(5)), dtype=np.float64) / 255.0
+    shade = 0.55 + 0.25 * e1 + 0.20 * e2
+    art = np.clip(art * shade[..., None], 0, 255).astype(np.uint8)
+    layer = Image.new(canvas.mode, canvas.size)
+    layer.paste(Image.fromarray(art).convert(canvas.mode), (x0, y0))
+    canvas.paste(layer, (0, 0), m)
+
+
+def repair_lz(img):
+    """Same repair the game applies at load (IhRepairLightningZapBackdrop): Zap's broken frame is
+    rebuilt from Holy Wave's, boundary colour differences diffused inward."""
+    a = np.asarray(img.convert("RGB"), dtype=np.float64)
+    left, top, w, h = 156, 146, 92, 82
+    ys = np.minimum(np.arange(top, top + h) + HW_TO_LZ, 480)
+    art = a[ys][:, left:left + w].copy()
+    cur = a[top:top + h, left:left + w]
+    corr = np.zeros_like(art)
+    edge = np.zeros((h, w), bool)
+    edge[0, :] = edge[-1, :] = edge[:, 0] = edge[:, -1] = True
+    corr[edge] = cur[edge] - art[edge]
+    for _ in range(500):
+        inner = (corr[:-2, 1:-1] + corr[2:, 1:-1] + corr[1:-1, :-2] + corr[1:-1, 2:]) * 0.25
+        corr[1:-1, 1:-1] = inner
+    out = a.copy()
+    out[top + 1:top + h - 1, left + 1:left + w - 1] = (art + corr)[1:-1, 1:-1]
+    res = Image.fromarray(np.clip(out, 0, 255).astype(np.uint8))
+    return res.convert(img.mode) if img.mode != "RGB" else res
 
 
 # ----------------------------------------------------------------------------------------------
@@ -131,49 +229,53 @@ def paste_field(canvas, box, sid, key):
 # ----------------------------------------------------------------------------------------------
 def frame_mask(size):
     m = Image.new("L", size, 0)
-    for slot, f in FIELDS.items():
-        pad = 13 if slot == "electric_smite" else 10
-        sx, sy = f[0] - pad, f[1] - pad
-        sprite = None
-        for name in os.listdir(A):
-            if name.startswith("Frame_" + slot + "_"):
-                sprite = Image.open(os.path.join(A, name)).convert("RGBA")
-                break
-        if sprite is not None:
-            alpha = sprite.split()[3].point(lambda v: 255 if v > 8 else 0)
-            m.paste(255, (sx, sy), alpha)
-            ImageDraw.Draw(m).rectangle([f[0], f[1], f[2] - 1, f[3] - 1], fill=255)
-        else:
-            ImageDraw.Draw(m).rectangle([sx, sy, f[2] + pad, f[3] + pad], fill=255)
-    d = ImageDraw.Draw(m)
-    # Signature / Ultimate badges at the top-right corners.
-    for slot in ("goddess_relic", "judgement_hammer", "electric_smite"):
+    for slot in FIELDS:
+        if slot == "heavens_light":
+            continue
+        sp, (ox, oy) = sprite_for(slot)
+        m.paste(255, (ox, oy), sp.point(lambda v: 255 if v > 8 else 0))
+    # Heaven's Light gold box: measured outer bevel incl. its corner ornaments.
+    ImageDraw.Draw(m).rectangle([386, 413, 448, 473], fill=255)
+    for slot in FIELDS:
+        if slot == "heavens_light":
+            continue
         f = FIELDS[slot]
-        d.rectangle([f[2] - 12, f[1] - 16, f[2] + 14, f[1] + 10], fill=255)
+        if slot == "lightning_zap":
+            f = FIELDS["holy_wave"]
+            f = (f[0], f[1] - HW_TO_LZ, f[2], f[3] - HW_TO_LZ)
+        ImageDraw.Draw(m).rectangle([f[0], f[1], f[2] - 1, f[3] - 1], fill=255)
+    m = Image.fromarray(np.maximum(np.asarray(m), np.asarray(badge_mask(size))))
     return m.filter(ImageFilter.MaxFilter(3))
 
 
+def plate_edges(L, ax, ay):
+    """Outer side edges of a nameplate: the first column (searching inward from outside) whose
+    rows ay-16..ay-8 are mostly the dark plate outline."""
+    rows = L[ay - 16:ay - 7]
+    def side(rng, inward):
+        for x in rng:
+            if (rows[:, x] < 168).sum() >= 6 and (rows[:, x + 3 * inward] >= 195).sum() >= 7:
+                return x
+        return None
+    return side(range(ax - 85, ax), 1), side(range(ax + 85, ax, -1), -1)
+
+
+def plate_polygon(L, slot):
+    if slot == "electric_smite":
+        return [(842, 325), (982, 325), (982, 355), (842, 355), (835, 349), (835, 331)]
+    ax, ay = ANCHORS[slot]
+    ax, ay = int(round(ax)), int(ay)
+    xl, xr = plate_edges(L, ax, ay)
+    top, bot, c = ay - 24, ay, 7
+    return [(xl + c, top), (xr - c, top), (xr, top + c), (xr, bot - c), (xr - c, bot), (xl + c, bot), (xl, bot - c), (xl, top + c)]
+
+
 def plate_mask(chassis, size):
-    a = np.asarray(chassis.convert("RGB"), dtype=np.int32)
-    L = a.sum(2) // 3
+    L = np.asarray(chassis.convert("L"), dtype=np.int32)
     m = Image.new("L", size, 0)
-    d = ImageDraw.Draw(m)
-    for slot, (ax, ay) in ANCHORS.items():
-        ax, ay = int(round(ax)), int(ay)
-        if slot == "electric_smite":
-            # The Ultimate plate is larger and runs into the panel border (measured).
-            d.polygon([(843, 322), (982, 322), (982, 358), (843, 358), (831, 340)], fill=255)
-            continue
-        row = ay - 19
-        lx = ax
-        while lx > 0 and L[row, lx - 1] >= 200:
-            lx -= 1
-        rx = ax
-        while rx < a.shape[1] - 1 and L[row, rx + 1] >= 200:
-            rx += 1
-        top, bot, mid = ay - 27, ay + 2, ay - 13
-        d.polygon([(lx - 8, top), (rx + 8, top), (rx + 15, mid), (rx + 8, bot), (lx - 8, bot), (lx - 15, mid)], fill=255)
-    return m
+    for slot in ANCHORS:
+        ImageDraw.Draw(m).polygon(plate_polygon(L, slot), fill=255)
+    return m.filter(ImageFilter.MaxFilter(3))
 
 
 def static_mask(size):
@@ -194,7 +296,7 @@ def rehue_region(size):
     return m
 
 
-def rehue(img, mask, left_hue, right_hue):
+def rehue(img, mask, left_hue, right_hue, left_sat=0.8, right_sat=0.8):
     a = np.asarray(img.convert("RGB"), dtype=np.float64) / 255.0
     mx, mn = a.max(2), a.min(2)
     v = mx
@@ -206,13 +308,15 @@ def rehue(img, mask, left_hue, right_hue):
     hue = np.where(mx == g, (b - r) / dlt + 2, hue)
     hue = np.where(mx == b, (r - g) / dlt + 4, hue)
     hue = hue * 60.0
-    gold = (hue >= 22) & (hue <= 62)
-    chroma = (s > 0.10) & ~gold
+    # Gold ornaments (saturated gold) keep their colour; warm paper / paint gets the class hue.
+    gold = (hue >= 22) & (hue <= 62) & (s > 0.40) & (v > 0.45)
+    chroma = (s > 0.08) & ~gold
     h, w = mx.shape
     target = np.where(np.arange(w)[None, :] < 323, left_hue, right_hue).astype(np.float64)
     target = np.broadcast_to(target, (h, w))
     nh = target / 60.0
-    c = v * s
+    sat_scale = np.broadcast_to(np.where(np.arange(w)[None, :] < 323, left_sat, right_sat), (h, w))
+    c = v * s * sat_scale
     x = c * (1 - np.abs(nh % 2 - 1))
     m0 = v - c
     i = np.floor(nh).astype(int) % 6
@@ -251,31 +355,64 @@ def washed_scene(name, box, hue, focus):
 
 
 def build_background(chassis, class_key, ac_key, class_scene, ac_scene):
+    """class_key None = keep the Class (left) panel exactly as painted (Priest)."""
     size = chassis.size
-    protect = Image.fromarray(np.maximum.reduce([np.asarray(frame_mask(size)), np.asarray(plate_mask(chassis, size))]))
-    base = rehue(chassis, rehue_region(size), HUES[class_key], HUES[ac_key])
-    # Keep frames / plates exactly as painted (no re-hue on them).
+    protect = Image.fromarray(np.maximum(np.asarray(frame_mask(size)), np.asarray(plate_mask(chassis, size))))
+    region = rehue_region(size)
+    if class_key is None:
+        ImageDraw.Draw(region).rectangle([0, 0, 322, 661], fill=0)
+    base = rehue(chassis, region, HUES.get(class_key, 0), HUES[ac_key], SATS.get(class_key, 0.8), SATS.get(ac_key, 0.8))
+    # Frames / plates / badges keep their painted pixels (no re-hue on them).
     base.paste(chassis, (0, 0), protect)
     scene_layer = base.copy()
-    scene_layer.paste(washed_scene(class_scene, (34, 142, 310, 516), HUES[class_key], 0.16), (34, 142))
+    if class_key is not None:
+        scene_layer.paste(washed_scene(class_scene, (34, 142, 310, 516), HUES[class_key], 0.16), (34, 142))
     scene_layer.paste(washed_scene(ac_scene, (338, 142, 975, 516), HUES[ac_key], 0.55), (338, 142))
-    # Scene fades in over 22 px from the panel edges (no rectangular seam) and hugs frames / plates.
-    edge = static_mask(size).filter(ImageFilter.MaxFilter(9)).filter(ImageFilter.GaussianBlur(11))
-    edge = np.clip((np.asarray(edge, dtype=np.float64) - 0) * 1.6, 0, 255)
-    near = np.asarray(protect.filter(ImageFilter.MaxFilter(3)).filter(ImageFilter.GaussianBlur(1.5)), dtype=np.float64)
+    # Scene fades in over ~22 px from the panel edges (no rectangular seam) and stops exactly at
+    # the frame / plate / badge mattes (1 px soft edge, no halo patches).
+    edge = static_mask(size).filter(ImageFilter.MaxFilter(5)).filter(ImageFilter.GaussianBlur(7))
+    edge = np.clip(np.asarray(edge, dtype=np.float64) * 1.6, 0, 255)
+    near = np.asarray(protect.filter(ImageFilter.GaussianBlur(0.8)), dtype=np.float64)
     keep = np.maximum(edge, near)
-    scene_alpha = Image.fromarray((255 - keep).astype(np.uint8))
-    # Re-assert the hard masks after the feather so no plate / frame pixel changes.
-    hard = Image.fromarray(np.maximum(np.asarray(static_mask(size)), np.asarray(protect)))
+    if class_key is None:
+        keep[:, :323] = 255
     out = base.copy()
-    out.paste(scene_layer, (0, 0), scene_alpha)
-    out.paste(base, (0, 0), hard.point(lambda v: 255 if v > 0 else 0))
+    out.paste(scene_layer, (0, 0), Image.fromarray((255 - keep).astype(np.uint8)))
+    out.paste(base, (0, 0), protect)
     return out
+
+
+def finish_header(img):
+    """v0.23.10: the tree is no longer a prototype. 'SKILL TREE - UI PROTOTYPE' becomes 'SKILL TREE',
+    re-centred under IMMORTAL HEROES (title x 107-399)."""
+    a = np.asarray(img.convert("RGB"), dtype=np.float64)
+    words = a[46:60, 124:219].copy()
+    x0, y0, x1, y1 = 120, 46, 364, 60
+    region = a[y0:y1, x0:x1].copy()
+    edge = np.zeros(region.shape[:2], bool)
+    edge[0, :] = edge[-1, :] = edge[:, 0] = edge[:, -1] = True
+    fill = region.copy()
+    fill[~edge] = region[edge].mean(0)
+    for _ in range(400):
+        fill[1:-1, 1:-1] = (fill[:-2, 1:-1] + fill[2:, 1:-1] + fill[1:-1, :-2] + fill[1:-1, 2:]) * 0.25
+    a[y0:y1, x0:x1] = fill
+    # Paste the painted "SKILL TREE" lettering (lighter than the band) at the new centre.
+    nx = int(round((107 + 399) / 2.0 - words.shape[1] / 2.0))
+    band = a[46:60, nx:nx + words.shape[1]]
+    lum_w = words.max(2, keepdims=True)
+    lum_b = band.max(2, keepdims=True)
+    alpha = np.clip((lum_w - lum_b - 12) / 60.0, 0, 1)
+    a[46:60, nx:nx + words.shape[1]] = band * (1 - alpha) + words * alpha
+    res = Image.fromarray(np.clip(a, 0, 255).astype(np.uint8))
+    return res.convert(img.mode) if img.mode != "RGB" else res
 
 
 # ----------------------------------------------------------------------------------------------
 FRAME_FILE = {"cyan": "Icon_shield_charge.png", "navy": "Icon_goddess_relic.png", "green": "Icon_ray_of_hope.png",
               "maroon": "Icon_electric_smite.png", "gold": "Icon_heavens_light.png", "magenta": "Icon_righteous_strike.png"}
+# Measured painted openings of the static frames (x0, y0, x1, y1 exclusive).
+ICON_OPEN = {"Icon_heavens_light.png": (9, 10, 49, 49)}
+ICON_OPEN_DEFAULT = (5, 6, 44, 48)
 
 
 def frame_source(name):
@@ -287,27 +424,33 @@ def frame_source(name):
 
 
 def write_icon(sid, key, out_name=None, color=None):
-    icon = Image.open(frame_source(FRAME_FILE[color or category(sid)])).convert("RGBA")
-    iw, ih = icon.width - 14, icon.height - 16
-    icon.paste(icon_art(sid, iw, ih, key).convert("RGBA"), (7, 8))
+    fname = FRAME_FILE[color or category(sid)]
+    icon = Image.open(frame_source(fname)).convert("RGBA")
+    x0, y0, x1, y1 = ICON_OPEN.get(fname, ICON_OPEN_DEFAULT)
+    icon.paste(icon_art(sid, x1 - x0, y1 - y0, key).convert("RGBA"), (x0, y0))
     icon.save(os.path.join(A, out_name or ("Icon_" + sid + ".png")))
+
+
+def fill_tree(img, cskills, adv, ult, grace, ckey, akey):
+    for slot, sid in zip(CLASS_SLOTS, cskills):
+        paste_art(img, slot, sid, ckey)
+    for slot, sid in zip(ADV_SLOTS, adv):
+        paste_art(img, slot, sid, akey)
+    paste_art(img, "electric_smite", ult, akey)
+    paste_art(img, "heavens_light", grace, akey)
+    paste_art(img, "footer", grace, akey)
 
 
 def main():
     preview = sys.argv[sys.argv.index("--preview") + 1] if "--preview" in sys.argv else None
     if preview:
         os.makedirs(preview, exist_ok=True)
-    chassis = Image.open(os.path.join(KEEP, "Cleric_Paladin_PreAdvance.png")).convert("RGB")
+    raw = Image.open(os.path.join(KEEP, "Cleric_Paladin_PreAdvance.png")).convert("RGB")
+    chassis = repair_lz(raw)
     for kit in KITS:
         cls, ac, cskills, adv, ult, grace, ckey, akey, cscene, ascene = kit
-        out = build_background(chassis, ckey, akey, cscene, ascene)
-        for slot, sid in zip(CLASS_SLOTS, cskills):
-            paste_field(out, FIELDS[slot], sid, ckey)
-        for slot, sid in zip(ADV_SLOTS, adv):
-            paste_field(out, FIELDS[slot], sid, akey)
-        paste_field(out, FIELDS["electric_smite"], ult, akey)
-        paste_field(out, GRACE_INNER, grace, akey)
-        paste_field(out, FOOTER_INNER, grace, akey)
+        out = finish_header(build_background(chassis, ckey, akey, cscene, ascene))
+        fill_tree(out, cskills, adv, ult, grace, ckey, akey)
         name = "%s_%s_Artwork.png" % (cls, ac)
         out.save(os.path.join(A, name))
         if preview:
@@ -318,38 +461,45 @@ def main():
             write_icon(sid, akey)
         print("wrote", name)
 
-    # Cleric: Paladin canvases (field art + footer Grace) and the Priest donor painting.
-    pal_slots = dict(zip(CLASS_SLOTS + ADV_SLOTS + ["electric_smite", "heavens_light"],
-                         CLERIC_KITS[0][1] + CLERIC_KITS[0][2] + [CLERIC_KITS[0][3], CLERIC_KITS[0][4]]))
+    # Cleric. Paladin keeps its painted panels; the game repairs Zap's frame itself at load.
+    _, pc, pa, pu, pg = CLERIC_KITS[0]
     for name in ("Cleric_Paladin_PreAdvance.png", "Cleric_Paladin_Reference.png"):
-        img = Image.open(os.path.join(KEEP, name)).convert("RGBA")
-        for slot, sid in pal_slots.items():
-            box = GRACE_INNER if slot == "heavens_light" else FIELDS[slot]
-            paste_field(img, box, sid, "cleric")
-        paste_field(img, FOOTER_INNER, "heavens_light", "cleric")
+        img = finish_header(Image.open(os.path.join(KEEP, name)).convert("RGBA"))
+        fill_tree(img, pc, pa, pu, pg, "cleric", "cleric")
         img.save(os.path.join(A, name))
         if preview and name.endswith("PreAdvance.png"):
             img.save(os.path.join(preview, name))
+    # Priest gets its own AC panel (priest scene, jade-gold), Cleric panel unchanged.
+    _, qc, qa, qu, qg = CLERIC_KITS[1]
+    pri_bg = finish_header(build_background(chassis, None, "priest", None, "priest"))
+    fill_tree(pri_bg, qc, qa, qu, qg, "cleric", "cleric")
+    pri_bg.save(os.path.join(A, "Cleric_Priest_Backdrop.png"))
+    if preview:
+        pri_bg.save(os.path.join(preview, "Cleric_Priest_Backdrop.png"))
+    # The Priest donor painting (still read by IhLoadPriestArtwork) gets the same field art.
     pri = Image.open(os.path.join(KEEP, "Cleric_Priest_Artwork.png")).convert("RGB")
     sx, sy = pri.width / 1011.0, pri.height / 662.0
-    donor = {"lightning_relic": (378, 164, 431, 215), "holy_relic": (379, 294, 433, 344), "grand_sigil": (389, 416, 443, 467),
+    donor = {"lightning_relic": "goddess_relic", "holy_relic": "judgement_hammer", "grand_sigil": "heavens_light",
+             "divine_intervention": "shield_charge", "grand_cross": "fallen_angel", "heavens_judgement": "ray_of_hope",
+             "lightning_tempest": "electric_smite"}
+    rects = {"lightning_relic": (378, 164, 431, 215), "holy_relic": (379, 294, 433, 344), "grand_sigil": (389, 416, 443, 467),
              "divine_intervention": (553, 166, 605, 217), "grand_cross": (690, 166, 743, 217), "heavens_judgement": (691, 294, 743, 344),
              "lightning_tempest": (863, 226, 952, 313)}
-    for sid, b in donor.items():
-        if sid == "grand_sigil":
-            b = (392, 419, 441, 465)   # opening only; the Priest Grace keeps its painted bevel
+    for sid, b in rects.items():
+        # Render the slot exactly as the backdrop shows it, then resample into the donor rect.
+        crop = pri_bg.crop(FIELDS[donor[sid]])   # the game blits donor rect -> this field rect
         box = tuple(int(round(v * s)) for v, s in zip(b, (sx, sy, sx, sy)))
-        pri.paste(icon_art(sid, box[2] - box[0], box[3] - box[1], "cleric"), box[:2])
-    fb = (394.8, 422.4, 394.8 + 44.4, 422.4 + 40.2)          # footer Grace source rect (IhLoadPriestArtwork)
+        pri.paste(crop.resize((box[2] - box[0], box[3] - box[1]), Image.LANCZOS), box[:2])
+    fb = (394.8, 422.4, 394.8 + 44.4, 422.4 + 40.2)
     box = (int(round(fb[0] * sx)), int(round(fb[1] * sy)), int(round(fb[2] * sx)), int(round(fb[3] * sy)))
-    pri.paste(icon_art("grand_sigil", box[2] - box[0], box[3] - box[1], "cleric"), box[:2])
+    pri.paste(pri_bg.crop((394, 422, 439, 462)).resize((box[2] - box[0], box[3] - box[1]), Image.LANCZOS), box[:2])
     pri.save(os.path.join(A, "Cleric_Priest_Artwork.png"))
     for _, cskills, adv, ult, grace in CLERIC_KITS:
         for sid in cskills + adv + [ult, grace]:
             write_icon(sid, "cleric")
     write_icon("righteous_strike", "cleric", "Icon_righteous_strike_Normal.png", "cyan")
     write_icon("righteous_strike", "cleric", "Icon_righteous_strike.png", "magenta")
-    print("wrote Cleric canvases, Priest artwork and 51 icons")
+    print("wrote Cleric canvases, Priest backdrop + artwork and 51 icons")
 
 
 if __name__ == "__main__":

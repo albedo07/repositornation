@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.23.9";
+        public const string ModVersion = "0.23.10";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -11429,7 +11429,9 @@ namespace AlbedosCustomClassesAdvanced
                 if (GetSkillIconTex(IhGraceFor(player)) != null)
                     GUI.DrawTexture(grace, GetSkillIconTex(IhGraceFor(player)));
                 IhDrawPlaceholderInitials(new Rect(grace.x + grace.width * 0.14f, grace.y + grace.height * 0.15f, grace.width * 0.72f, grace.height * 0.70f), IhGraceFor(player), true);
-                Rect graceInner = new Rect(grace.x + grace.width * 0.14f, grace.y + grace.height * 0.14f, grace.width * 0.72f, grace.height * 0.72f);
+                // v0.23.10: exactly the painted opening of the 59x57 Grace frame (x 9-48, y 10-48);
+                // the old 14%-86% box also darkened the gold bevel.
+                Rect graceInner = new Rect(grace.x + grace.width * (9f / 59f), grace.y + grace.height * (10f / 57f), grace.width * (40f / 59f), grace.height * (39f / 57f));
                 GUI.color = new Color(0.10f, 0.10f, 0.11f, 0.62f);
                 GUI.DrawTexture(graceInner, Texture2D.whiteTexture);
                 GUI.color = Color.white;
@@ -11452,7 +11454,11 @@ namespace AlbedosCustomClassesAdvanced
                 if (IsPermanentHotbarSkill(id))
                     DrawPermanentBadge(rect);
                 float cooldown = IhCooldown(player, id);
-                Rect inner = new Rect(rect.x + rect.width * 0.14f, rect.y + rect.height * 0.14f, rect.width * 0.72f, rect.height * 0.72f);
+                // v0.23.10: the shade covers exactly the painted opening of the frame (no unshaded rim).
+                bool graceFrame = tex != null && tex.width == 59 && tex.height == 57;
+                Rect inner = graceFrame
+                    ? new Rect(rect.x + rect.width * (9f / 59f), rect.y + rect.height * (10f / 57f), rect.width * (40f / 59f), rect.height * (39f / 57f))
+                    : new Rect(rect.x + rect.width * (5f / 49f), rect.y + rect.height * (6f / 54f), rect.width * (39f / 49f), rect.height * (42f / 54f));
                 int ready, max;
                 float next;
                 bool stacked = DragonCombat.TryGetSkillStacks(id, out ready, out max, out next);
@@ -12402,8 +12408,8 @@ namespace AlbedosCustomClassesAdvanced
                 DrawFooterText(r, IhAcDisplay(branches[i]).ToUpperInvariant(), style);
                 if (r.Contains(Event.current.mousePosition))
                 {
-                    _treeHoveredTitle = IhAcDisplay(branches[i]).ToUpperInvariant() + " - PREVIEW";
-                    _treeHoveredBody = "View the " + IhAcDisplay(branches[i]) + " branch. Your " + GetClass(player) + " skills and pending Class Tiers stay the same.";
+                    _treeHoveredTitle = IhAcDisplay(branches[i]).ToUpperInvariant() + " - LOCKED";
+                    _treeHoveredBody = "Show the sealed " + IhAcDisplay(branches[i]) + " tree. It unlocks when you Advance at Lv 16. Your " + GetClass(player) + " skills and pending Class Tiers stay the same.";
                 }
                 if (IhClickable(r, "branch:" + branches[i]) && !selected)
                 {
@@ -12462,8 +12468,13 @@ namespace AlbedosCustomClassesAdvanced
             Texture2D result;
             if(_ihAscendedIconArt.TryGetValue(id,out result)) return result;
             result=IhCopyTexture(normal,"ImmortalHeroes_Ascended_"+id);
+            // v0.23.10: only the frame turns Magenta; the painted skill art keeps its own colours.
+            int ox,oy,ow,oh;
+            IhHotbarOpening(result,out ox,out oy,out ow,out oh);
             for(int y=0;y<result.height;y++) for(int x=0;x<result.width;x++)
             {
+                int ty=result.height-1-y;
+                if(x>=ox && x<ox+ow && ty>=oy && ty<oy+oh) continue;
                 Color c=result.GetPixel(x,y);
                 // Preserve neutral glyphs and gold trim; recolor chromatic skill energy.
                 float max=Mathf.Max(c.r,Mathf.Max(c.g,c.b)), min=Mathf.Min(c.r,Mathf.Min(c.g,c.b));
@@ -12671,11 +12682,8 @@ namespace AlbedosCustomClassesAdvanced
         private Texture2D IhComposeHotbarIcon(Texture2D frame, Texture2D backdrop, Rect field, string name)
         {
             Texture2D icon=IhCopyTexture(frame,name);
-            // Inner opening of the hotbar frame: 49x54 skill frames inset 7 / 8 px (same as
-            // build_ui_assets.framed_icon), the 59x57 Grace frame (Icon_heavens_light) 9 / 10 px.
-            bool grace=frame.width==59 && frame.height==57;
-            int ix0=grace ? 9 : Mathf.RoundToInt(7f*frame.width/49f), iy0=grace ? 10 : Mathf.RoundToInt(8f*frame.height/54f);
-            int iw=frame.width-2*ix0, ih=frame.height-2*iy0;
+            int ix0,iy0,iw,ih;
+            IhHotbarOpening(frame,out ix0,out iy0,out iw,out ih);
             // Centre crop of the tree opening with the hotbar opening's aspect: no stretching.
             float aspect=(float)iw/ih;
             float cw=Mathf.Min(field.width,field.height*aspect), ch=cw/aspect;
@@ -12683,12 +12691,22 @@ namespace AlbedosCustomClassesAdvanced
             for(int y=0;y<ih;y++) for(int x=0;x<iw;x++)
             {
                 float rx=left+(x+0.5f)/iw*cw;
-                float ry=top+ch-(y+0.5f)/ih*ch;
-                icon.SetPixel(ix0+x,iy0+y,backdrop.GetPixelBilinear(rx/1011f,1f-ry/662f));
+                float ry=top+(y+0.5f)/ih*ch;
+                icon.SetPixel(ix0+x,frame.height-1-(iy0+y),backdrop.GetPixelBilinear(rx/1011f,1f-ry/662f));
             }
             icon.Apply(false,false);
             _ihPolishTextures.Add(icon);
             return icon;
+        }
+
+        // v0.23.10: measured painted openings of the hotbar frames (top-left origin). 49x54 skill
+        // frames: x 5-43, y 6-47; the 59x57 Grace frame (Icon_heavens_light): x 9-48, y 10-48. The old
+        // 7/8 and 9/10 insets left a ring of the frame file's own art and covered one gold column.
+        private static void IhHotbarOpening(Texture2D frame, out int x0, out int y0, out int w, out int h)
+        {
+            if(frame.width==59 && frame.height==57) { x0=9; y0=10; w=40; h=39; return; }
+            x0=Mathf.RoundToInt(5f*frame.width/49f); y0=Mathf.RoundToInt(6f*frame.height/54f);
+            w=Mathf.RoundToInt(39f*frame.width/49f); h=Mathf.RoundToInt(42f*frame.height/54f);
         }
 
         private void IhComposeHotbarIcons(ReferenceNodeUi[] nodes, Texture2D backdrop)
@@ -12796,22 +12814,33 @@ namespace AlbedosCustomClassesAdvanced
                 Logger.LogWarning("Priest art missing. Re-run INSTALL.bat.");
                 return;
             }
-            // No cathedral, ribbon, divider, footer or perimeter pixels are replaced.
-            // Priest uses the exact Paladin canvas. Only skill interiors and text change.
+            // Priest uses the Paladin chassis pixel for pixel (frames, plates, anchors).
             _ihPriestBackdropTex=IhCopyTexture(_ihPreAdvanceBackdropTex,"ImmortalHeroes_UniversalPriest");
+            // v0.23.10: Priest has its own AC panel (tools/build_class_art.py): the whole canvas with
+            // every skill opening and the footer Grace already painted inside their frames.
+            Texture2D own=LoadUiPng("Cleric_Priest_Backdrop.png");
+            bool hasOwn=own!=null && own.width==1011 && own.height==662;
+            if(hasOwn)
+            {
+                _ihPriestBackdropTex.SetPixels(own.GetPixels());
+                IhInpaintText(_ihPriestBackdropTex,new Rect(596f,92f,138f,27f));
+                for(int i=3;i<ClericPriestReferenceNodes.Length;i++)
+                    IhBlankPaintedLabel(_ihPriestBackdropTex,GetReferenceNameplateAnchor(ClericPriestReferenceNodes[i]),IhLabelWidth(ClericPriestReferenceNodes[i].Id));
+            }
+            if(own!=null) Destroy(own);
             for(int i=3;i<ClericPriestReferenceNodes.Length;i++)
             {
                 ReferenceNodeUi node=ClericPriestReferenceNodes[i];
                 // v0.20.4: the painted opening is replaced 1:1, so the art stays centred and
                 // never covers the frame band.
-                IhBlitArt(_ihPriestBackdropTex,IhFieldRect(IhTemplateSlot(node.Id)),source,IhPriestArtworkRect(node.Id));
+                if(!hasOwn) IhBlitArt(_ihPriestBackdropTex,IhFieldRect(IhTemplateSlot(node.Id)),source,IhPriestArtworkRect(node.Id));
                 string color=IhSkillFrameColor(node), slot=IhTemplateSlot(node.Id);
                 if(color!=IhPaintedFrameColor(slot) && color!="magenta" && color!="red")
                     IhStampFrame(_ihPriestBackdropTex,slot,color);
             }
             IhComposeHotbarIcons(ClericPriestReferenceNodes,_ihPriestBackdropTex);
             // The Grace slot keeps its original frame too.
-            IhBlitArt(_ihPriestBackdropTex,new Rect(670,548,44,44),source,new Rect(394.8f,422.4f,44.4f,40.2f));
+            if(!hasOwn) IhBlitArt(_ihPriestBackdropTex,new Rect(670,548,44,44),source,new Rect(394.8f,422.4f,44.4f,40.2f));
             _ihPriestBackdropTex.Apply(false,false);
             Destroy(source);
             _ihPriestLockedTex=IhMakeSharedLockedBackdrop(_ihPriestBackdropTex);

@@ -1,0 +1,22 @@
+IMMORTAL HEROES v0.23.10 - Art Fixes
+====================================
+Checked against the approved anchor (v0.21.2) pixel by pixel.
+
+Fixes
+- Top Class node (Heavy Slash / Flame Burst slot) was "sliced": the kit art was built from the raw
+  chassis whose Zap frame has a broken right edge. It now uses the same repaired frame the game
+  builds for Cleric (Holy Wave's frame), and the art fills only the painted opening.
+- Signature / Ultimate badges no longer look pasted: the art used to cover the badge corner and a
+  pale box sat behind it. Art stops at the badge; the background now runs right up to it.
+- No pale halos around frames and nameplates: frames, badges and plates use exact mattes.
+- Grace borders: the tree Grace box, the footer Grace box and the hotbar / HUD Grace icon no
+  longer overlap their gold bevel (the hotbar icon used to cover one gold column and show two rows
+  of Heaven's Light art). Locked-Grace and cooldown shading now cover exactly the opening.
+- Ascended (Magenta) hotbar icons recolour only the frame, not the painted art.
+
+Changes
+- Priest has its own tree background (Priest scene, jade/ivory); Paladin keeps its own panel.
+- Skill tree is final: header reads "SKILL TREE" (no "UI PROTOTYPE").
+- Before Advancement the AC side is the locked tree: branch plaques read "<AC> - LOCKED".
+
+Settings reset to defaults once (Dev Mode OFF).
