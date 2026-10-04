@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.23.7";
+        public const string ModVersion = "0.23.8";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -377,11 +377,13 @@ namespace AlbedosCustomClassesAdvanced
         private DamageConfig _shockwaveDamage;
         private ConfigEntry<float> _shockwaveRadius;
         private ConfigEntry<float> _shockwaveCooldown;
+        private ConfigEntry<float> _holyParryEmpowerCooldown;
         private ConfigEntry<float> _parryHyperArmorSeconds;
         private ConfigEntry<float> _parryEmpowerPercent;
         private bool _parryEmpowerPending;
         // v0.21.0 Priest Ascended
         private ConfigEntry<float> _sanctifiedDuration, _bloomHealPercent, _bloomRadius;
+        private ConfigEntry<float> _crossAscExpose, _crossAscDotMultiplier;
         private DamageConfig _bloomDamage, _relicAscBlastDamage, _crossAscBurstDamage, _pillarDamage;
         private ConfigEntry<float> _ahwAllyRange, _diHealAtMax, _angelWindupTotal;
         private ConfigEntry<float> _ahwRadius, _ahwEchoDelay, _ahwEchoRadius, _ahwEchoPercent, _ahwLowHp;
@@ -957,6 +959,7 @@ namespace AlbedosCustomClassesAdvanced
             _shockwaveDamage = BindDamage("Priest Holy Shockwave Damage", 0f, 0f, 0f, 0f, 0f, 0f, 0f, 60f);
             _shockwaveRadius = Config.Bind("Priest Holy Shockwave", "Radius", 10f, "Buckler Parry: Holy Shockwave radius in meters.");
             _shockwaveCooldown = Config.Bind("Priest Holy Shockwave", "Cooldown", 15f, "Seconds between Holy Shockwaves.");
+            _holyParryEmpowerCooldown = Config.Bind("Priest Holy Shockwave", "EmpowerCooldown", 25f, "Holy Parry: the empowered-skill buff lasts until a skill uses it; after that a Parry can't grant it again for this many seconds.");
             _parryHyperArmorSeconds = Config.Bind("Priest Holy Shockwave", "HyperArmorSeconds", 5f, "Every Buckler Parry grants Hyper Armor for this long.");
             const string pa = "Priest Ascended";
             _sanctifiedDuration = Config.Bind(pa, "SanctifiedDuration", 10f, "Sanctified lasts this long on an ally.");
@@ -978,9 +981,11 @@ namespace AlbedosCustomClassesAdvanced
             _holyRelicAscBuff = Config.Bind("Priest Relics Ascended", "HolyBuffPercent", 30f, "Ascended Holy Relic buff percent (was 20).");
             _holyRelicAscEndHeal = Config.Bind("Priest Relics Ascended", "HolyEndHealPercent", 25f, "Ascended Holy Relic: final heal, % Max HP, when the Cross ends.");
             _diAscBarrier = Config.Bind("Priest Divine Intervention Ascended", "BarrierHP", 250f, "Ascended Divine Intervention Barrier HP.");
-            _crossAscWidth = Config.Bind("Priest Grand Cross Ascended", "Width", 20f, "Ascended Grand Cross width.");
+            _crossAscWidth = Config.Bind("Priest Grand Cross Ascended", "Width", 12f, "Ascended Grand Cross width.");
             _crossAscRange = Config.Bind("Priest Grand Cross Ascended", "Range", 35f, "Ascended Grand Cross travel distance.");
-            _crossAscBurstRadius = Config.Bind("Priest Grand Cross Ascended", "BurstRadius", 8f, "Ascended Grand Cross end burst radius.");
+            _crossAscBurstRadius = Config.Bind("Priest Grand Cross Ascended", "BurstRadius", 8f, "Retired v0.23.8 (no end burst).");
+            _crossAscExpose = Config.Bind("Priest Grand Cross Ascended", "ExposeDuration", 6f, "v0.23.8: every enemy hit is Exposed for this many seconds (refreshed per hit).");
+            _crossAscDotMultiplier = Config.Bind("Priest Grand Cross Ascended", "SpiritDotMultiplier", 2f, "v0.23.8: Spirit DoT multiplier vs the normal Grand Cross (2 = 100% more).");
             _crossAscBurstDamage = BindDamage("Priest Grand Cross Ascended Burst Damage", 0f, 0f, 0f, 0f, 0f, 50f, 0f, 50f);
             _hjAscRadius = Config.Bind("Priest Heavens Judgement Ascended", "Radius", 14f, "Ascended Heaven's Judgement radius.");
             _hjAscDuration = Config.Bind("Priest Heavens Judgement Ascended", "BarrageDuration", 3f, "Ascended barrage duration.");
@@ -993,7 +998,7 @@ namespace AlbedosCustomClassesAdvanced
 
             _lightningRelicCooldown = Config.Bind("Priest Lightning Relic", "Cooldown", 14f, "Cooldown starts only after the active Relic is relinquished or its 16s lifetime ends.");
             _lightningRelicStamina = Config.Bind("Priest Lightning Relic", "StaminaCost", 30f, "Stamina cost.");
-            _lightningRelicRadius = Config.Bind("Priest Lightning Relic", "Radius", 10f, "Pulse radius in literal meters.");
+            _lightningRelicRadius = Config.Bind("Priest Lightning Relic", "Radius", 7f, "Pulse radius in literal meters.");
             _lightningRelicRange = Config.Bind("Priest Lightning Relic", "Range", 35f, "Ground PAC cast distance in literal meters. Works indoors.");
             _lightningRelicDuration = Config.Bind("Priest Lightning Relic", "Duration", 16f, "Active lifetime before cooldown begins.");
             _lightningRelicInterval = Config.Bind("Priest Lightning Relic", "HitInterval", 1f, "Pulse interval.");
@@ -1003,7 +1008,7 @@ namespace AlbedosCustomClassesAdvanced
 
             _holyRelicCooldown = Config.Bind("Priest Holy Relic", "Cooldown", 18f, "Cooldown starts only after the active Relic is relinquished or its 16s lifetime ends.");
             _holyRelicStamina = Config.Bind("Priest Holy Relic", "StaminaCost", 40f, "Stamina cost.");
-            _holyRelicRadius = Config.Bind("Priest Holy Relic", "Radius", 10f, "Pulse radius in literal meters.");
+            _holyRelicRadius = Config.Bind("Priest Holy Relic", "Radius", 7f, "Pulse radius in literal meters.");
             _holyRelicRange = Config.Bind("Priest Holy Relic", "Range", 35f, "Ground PAC cast distance in literal meters.");
             _holyRelicDuration = Config.Bind("Priest Holy Relic", "Duration", 16f, "Active lifetime before cooldown begins.");
             _holyRelicInterval = Config.Bind("Priest Holy Relic", "PulseInterval", 2f, "Holy Relic keeps the existing 2s pulse interval.");
@@ -1016,7 +1021,7 @@ namespace AlbedosCustomClassesAdvanced
             _holyRelicDefenseBuff = Config.Bind("Priest Holy Relic", "DefensePercent", 20f, "Overall Defense Bonus.");
 
             _consecratedConnectRange = Config.Bind("Priest Consecrated Ground", "ConnectionRange", 15f, "Lightning Relic and Holy Relic must be within this horizontal distance to connect.");
-            _consecratedRadius = Config.Bind("Priest Consecrated Ground", "Radius", 15f, "Fixed Consecrated Ground radius regardless of how close the two Relics are.");
+            _consecratedRadius = Config.Bind("Priest Consecrated Ground", "Radius", 10f, "Fixed Consecrated Ground radius regardless of how close the two Relics are.");
             _consecratedMultiplier = Config.Bind("Priest Consecrated Ground", "SignaturePotencyMultiplier", 1.25f, "Multiplier applied to Lightning Relic direct damage and Holy Relic heal/buffs inside Consecrated Ground.");
             _consecratedExposeDuration = Config.Bind("Priest Consecrated Ground", "ExposeDuration", 4f, "Expose duration applied by Lightning Relic inside Consecrated Ground.");
 
@@ -1034,7 +1039,7 @@ namespace AlbedosCustomClassesAdvanced
 
             _grandCrossCooldown = Config.Bind("Priest Grand Cross", "Cooldown", 24f, "Seconds.");
             _grandCrossStamina = Config.Bind("Priest Grand Cross", "StaminaCost", 40f, "Stamina cost.");
-            _grandCrossWidth = Config.Bind("Priest Grand Cross", "Width", 15f, "Full width of the travelling X.");
+            _grandCrossWidth = Config.Bind("Priest Grand Cross", "Width", 7f, "Full width of the travelling X.");
             _grandCrossRange = Config.Bind("Priest Grand Cross", "Range", 25f, "Ghost projectile travel distance.");
             _grandCrossTravelTime = Config.Bind("Priest Grand Cross", "TravelTime", 6f, "Time to complete the full configured range.");
             _grandCrossWindup = Config.Bind("Priest Grand Cross", "Windup", 0.6f, "Two fast sword slashes form the travelling X.");
@@ -5884,7 +5889,11 @@ namespace AlbedosCustomClassesAdvanced
 
                     nextHitAt[enemyId] = Time.time + tickInterval;
                     DealDamage(player, enemy, _grandCrossDamage, 5f, false);
-                    RefreshSpiritBurn(player, enemy, _grandCrossSpiritDot.Value, Mathf.Max(0.1f, _grandCrossSpiritDuration.Value));
+                    // v0.23.8 Ascended: no end burst; every hit Exposes and the Spirit DoT is doubled.
+                    float dot = _grandCrossSpiritDot.Value * (ascended ? Mathf.Max(0f, _crossAscDotMultiplier.Value) : 1f);
+                    RefreshSpiritBurn(player, enemy, dot, Mathf.Max(0.1f, _grandCrossSpiritDuration.Value));
+                    if (ascended)
+                        DragonCombat.ApplyExpose(enemy, Mathf.Max(0.1f, _crossAscExpose.Value));
                 }
 
                 elapsed += Time.deltaTime;
@@ -5894,21 +5903,7 @@ namespace AlbedosCustomClassesAdvanced
             if (visualRoot != null)
                 Destroy(visualRoot);
 
-            if (ascended && player != null && !player.IsDead())
-            {
-                // Holy cross burst where the X stops: Stuns Small and Big.
-                Vector3 end = origin + forward * range;
-                float burst = Mathf.Max(1f, DragonCombat.M(_crossAscBurstRadius.Value));
-                if (_enableVfx.Value)
-                    StartCoroutine(AnimateRing(end, 0.5f, burst, 0.45f, new Color(0.72f, 0.94f, 1f, 0.95f), 0.12f));
-                List<Character> hit = GetSphereTargets(player, end, burst);
-                for (int i = 0; i < hit.Count; i++)
-                {
-                    DealDamageScaled(player, hit[i], _crossAscBurstDamage, 1f, 10f, false);
-                    if (!hit[i].IsBoss())
-                        DragonCombat.Stun(hit[i], end);
-                }
-            }
+            // v0.23.8: the Ascended end burst is retired (Expose + doubled Spirit DoT instead).
         }
 
         private void CastHeavensJudgement(Player player)
@@ -8128,50 +8123,26 @@ namespace AlbedosCustomClassesAdvanced
 
         private int PatchGetMaxHealth()
         {
-            int count = 0;
-
+            // v0.23.8: the flat HP bonus is added where Valheim STORES max health
+            // (Character.SetMaxHealth(float), called by Player.UpdateFood). A GetMaxHealth
+            // postfix only changed the bar: SetMaxHealth kept clamping health to the food value.
             try
             {
-                MethodInfo patchMethod = typeof(AdvancedPlugin).GetMethod(
-                    "MaxHealthPostfix",
-                    BindingFlags.Static | BindingFlags.NonPublic
-                );
-
-                if (patchMethod == null)
-                    return 0;
-
-                HarmonyMethod postfix = new HarmonyMethod(patchMethod);
-                MethodInfo[] methods = typeof(Player).GetMethods(
-                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
-                );
-
-                for (int i = 0; i < methods.Length; i++)
+                MethodInfo patchMethod = typeof(AdvancedPlugin).GetMethod("SetMaxHealthPrefix", BindingFlags.Static | BindingFlags.NonPublic);
+                MethodInfo original = typeof(Character).GetMethod("SetMaxHealth", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new Type[] { typeof(float) }, null);
+                if (patchMethod == null || original == null)
                 {
-                    MethodInfo method = methods[i];
-
-                    if (method.Name != "GetMaxHealth" || method.ReturnType != typeof(float))
-                        continue;
-
-                    if (method.GetParameters().Length != 0)
-                        continue;
-
-                    try
-                    {
-                        PatchWithHarmony(method, null, postfix);
-                        count++;
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.LogWarning("Could not patch GetMaxHealth: " + ex.Message);
-                    }
+                    Logger.LogWarning("Could not find Character.SetMaxHealth(float).");
+                    return 0;
                 }
+                PatchWithHarmony(original, new HarmonyMethod(patchMethod), null);
+                return 1;
             }
             catch (Exception ex)
             {
-                Logger.LogWarning("Could not scan GetMaxHealth: " + ex.Message);
+                Logger.LogWarning("Could not patch SetMaxHealth: " + ex.Message);
             }
-
-            return count;
+            return 0;
         }
 
         private int PatchPlayerFloatGetter(string methodName, string patchName)
@@ -8550,19 +8521,22 @@ namespace AlbedosCustomClassesAdvanced
                 __0 *= 1f + Mathf.Max(0f, Instance._holyRelicMoveSpeedBuff.Value) / 100f;
         }
 
-        private static void MaxHealthPostfix(Player __instance, ref float __result)
+        private static void SetMaxHealthPrefix(Character __instance, ref float __0)
         {
-            if (Instance == null || __instance == null)
+            Player player = __instance as Player;
+            if (Instance == null || player == null)
                 return;
+            float __result = __0;
 
             // v0.22.4: Warfreak has no flat HP bonus (old Barbaric +50 HP retired).
 
-            if (Instance.IsPaladinPassive(__instance, "HolyKnight"))
+            if (Instance.IsPaladinPassive(player, "HolyKnight"))
                 __result += Mathf.Max(0f, Instance._holyKnightFlatHealth.Value);
 
             // v0.20.8 Cleric's Blessing: +35 flat HP (Paladin and Priest keep it).
-            if (Instance.GetClass(__instance) == "Cleric")
+            if (Instance.GetClass(player) == "Cleric")
                 __result += Mathf.Max(0f, Instance._clericBlessingHealth.Value);
+            __0 = __result;
         }
 
         private static void MaxStaminaPostfix(Player __instance, ref float __result)
@@ -9645,18 +9619,19 @@ namespace AlbedosCustomClassesAdvanced
             if (player == null || player != Player.m_localPlayer || player.IsDead() || !IhIsPriest(player))
                 return;
 
-            // Every parry: Hyper Armor + the next damaging skill is empowered.
+            // Every parry: Hyper Armor. v0.23.8: the empowered-skill buff is granted once, kept
+            // until a skill uses it (one prompt), then "Priest.HolyParry" blocks it for 25s.
             DragonCombat.ApplyTimedBuff(player, "Priest.BucklerParry", Mathf.Max(0.1f, _parryHyperArmorSeconds.Value), 0f, 0f, 0f, 0f, 0f, 0f, true);
-            _parryEmpowerPending = true;
+            if (!_parryEmpowerPending && GetCooldownRemaining("Priest.HolyParry") <= 0f)
+            {
+                _parryEmpowerPending = true;
+                ShowMessage("Holy Parry - next skill empowered");
+            }
 
             const string id = "Priest.HolyShockwave";
             if (GetCooldownRemaining(id) > 0f)
-            {
-                ShowMessage("Holy Parry - next skill empowered");
                 return;
-            }
             SetPriestCooldownNow(id, _shockwaveCooldown.Value);
-            ShowMessage("Holy Shockwave - next skill empowered");
 
             Vector3 center = player.transform.position;
             float radius = Mathf.Max(1f, DragonCombat.M(_shockwaveRadius.Value));
@@ -11216,6 +11191,7 @@ namespace AlbedosCustomClassesAdvanced
                 if (started)
                 {
                     _parryEmpowerPending = false;
+                    SetPriestCooldownNow("Priest.HolyParry", _holyParryEmpowerCooldown.Value);
                     _empoweredSkill = id;
                     _empoweredUntil = Time.time + IhSkillInstanceSeconds(id);
                 }
@@ -13056,7 +13032,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "lightning_relic": return "14m pulses arc to 3 more enemies and Sanctify allies; the Cross detonates (8m, Stuns Small) when it ends";
                 case "holy_relic": return "14m, +30% buffs, pulses cleanse Burn / Poison / Frost and Sanctify; final 25% Max HP heal when it ends";
                 case "divine_intervention": return "with both Relics up, a Cross Cast fires from both; 250 HP Barrier; enemies are pulled inward";
-                case "grand_cross": return "20m wide, travels 35m, ends in an 8m holy burst that Stuns Small and Big";
+                case "grand_cross": return IhNum(Instance._crossAscWidth.Value) + "m wide, travels " + IhNum(Instance._crossAscRange.Value) + "m; every enemy hit is Exposed (" + IhNum(Instance._crossAscExpose.Value) + "s) and takes double Spirit Burn";
                 case "heavens_judgement": return "14m circle, 3s barrage, beams heal allies 3% Max HP, ends with a Pillar of Heaven";
                 case "lightning_tempest": return "follows you, 12m; allies inside get +20% Defense and Hyper Armor; ends by detonating every Zap";
             }
@@ -14959,7 +14935,7 @@ namespace AlbedosCustomClassesAdvanced
             }
 
             if (advancement == "Priest")
-                return "+10% Magic Damage (Fire, Frost, Lightning, Poison, Spirit). You and allies within 20m survive a lethal hit at 1 HP, then recover 50% HP over 6s with +50% Move Speed and -70% Stamina use. Self 20 min, each ally 40 min.\n\nBuckler: doubled Parry. A Parry grants 5s Hyper Armor and +35% Damage to your next skill, and releases a 10m Holy Shockwave (Spirit damage, Stuns Small and Big; 15s cooldown).";
+                return "+10% Magic Damage (Fire, Frost, Lightning, Poison, Spirit). You and allies within 20m survive a lethal hit at 1 HP, then recover 50% HP over 6s with +50% Move Speed and -70% Stamina use. Self 20 min, each ally 40 min.\n\nBuckler: doubled Parry. A Parry grants 5s Hyper Armor and empowers your next skill with +35% Damage (kept until used, then 25s before a Parry can grant it again), and releases a 10m Holy Shockwave (Spirit damage, Stuns Small and Big; 15s cooldown).";
 
             return "";
         }

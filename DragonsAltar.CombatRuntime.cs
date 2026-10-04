@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.23.7";
+        public const string ModVersion = "0.23.8";
 
         internal static DragonCombatPlugin Instance;
 
@@ -3008,6 +3008,11 @@ namespace DragonsAltarCombat
                     if (raw > 0f && raw < targetPlayer.GetMaxHealth() * threshold)
                         HitHyperArmorUntil[targetPlayer.GetInstanceID()] = Time.time + 0.20f;
                 }
+
+                // v0.23.8 rule: Hyper Armor = no knockback (push force zeroed on the hit itself,
+                // on top of the ApplyPushback / Stagger prefixes).
+                if (HasHyperArmor(targetPlayer))
+                    hit.m_pushForce = 0f;
             }
 
             DebuffState state;

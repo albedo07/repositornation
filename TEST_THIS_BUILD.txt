@@ -1,9 +1,8 @@
-TEST THIS BUILD - v0.23.7 Polish
-================================
-1. Archmage tree before Lv 24/32: "Spend 3 Tier Points" / "Spend 6 Tier Points" readable.
-2. Hover a skill near the tree edge: the tooltip leaves the window (no squeezing).
-3. Grace node: no highlight. Hotbar empty slots: no highlight.
-4. HUD Arcane Rupture after using a charge: cooldown number above, x/4 pill below.
-5. HUD locked Grace: gold frame normal colour.
-6. Gravity Blast: let it run out -> purple blast at the orb (no sky lightning).
-7. Paladin tree header hover: HEAVEN'S WILL - MASTERY; Paladin / Priest elemental damage +10%.
+TEST THIS BUILD - v0.23.8 Icons
+===============================
+1. Cleric with food: HP bar fills to the full max (e.g. 170/170), not 135.
+2. Priest + Buckler: parry twice -> "Holy Parry" message only once; use a skill, parry again
+   within 25s -> no new empowerment.
+3. Relics 7m, Consecrated Ground 10m, Grand Cross 7m wide; Ascended 12m, no end burst, Expose.
+4. Get hit hard while in Hyper Armor (e.g. Whirlwind Ascended): no knockback.
+5. Open Sword Master / Mercenary / Archmage / Horizon Walker trees + Altar: every skill has art.

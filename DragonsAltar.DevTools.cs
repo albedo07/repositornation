@@ -40,7 +40,7 @@ namespace DragonsAltarDevTools
     {
         public const string ModGuid = "albedo.customclasses.devtools";
         public const string ModName = "Dragon's Altar - Developer Tools";
-        public const string ModVersion = "0.23.7";
+        public const string ModVersion = "0.23.8";
 
         public static DeveloperToolsPlugin Instance;
 
@@ -77,7 +77,7 @@ namespace DragonsAltarDevTools
         private bool _defaultsChecked;
         private float _allDefaultsArmedUntil;
         // v0.22.5: every new pass starts from the default values once (user rule); raise this per pass.
-        private const string DefaultsPass = "0.23.7";
+        private const string DefaultsPass = "0.23.8";
 
         private readonly List<DevSetting> _settings = new List<DevSetting>();
         private readonly List<string> _sections = new List<string>();
@@ -433,6 +433,9 @@ namespace DragonsAltarDevTools
             if ((section == "Spellcaster Arcane Phalanx" && key == "SwordCount") ||
                 (section == "Spellcaster Riftwalker" && (key == "RiftDuration" || key == "RiftPairRange")) ||
                 (section == "Spellcaster Gun Staff" && (key == "SingleAttackSpeedMultiplier_v0123" || key == "DualAttackSpeedMultiplier_v0123" || key == "LegacyFiringMovementBonusPercent")))
+                return true;
+            // v0.23.8: Ascended Grand Cross has no end burst.
+            if (section == "Priest Grand Cross Ascended Burst Damage" || (section == "Priest Grand Cross Ascended" && key == "BurstRadius"))
                 return true;
             // v0.23.1 Wizard: Archmage has no held-Staff bonus (Overcharge carries the Eitr Regen).
             if (section == "Wizard Staff Weapon Mastery")

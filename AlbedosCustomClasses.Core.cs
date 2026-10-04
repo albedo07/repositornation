@@ -41,7 +41,7 @@ namespace AlbedosCustomClasses
     {
         public const string ModGuid = "albedo.customclasses";
         public const string ModName = "Dragon's Altar";
-        public const string ModVersion = "0.23.7";
+        public const string ModVersion = "0.23.8";
 
         internal const string ClassDataKey = "AlbedoCustomClasses.Class";
         internal const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -847,8 +847,15 @@ namespace AlbedosCustomClasses
             }
             else
             {
-                string[] existing={"lightning_zap","righteous_strike","holy_wave","goddess_relic","judgement_hammer","shield_charge","fallen_angel","ray_of_hope","electric_smite","heavens_light"};
-                if(Array.IndexOf(existing,id)<0) return null;
+                // v0.23.8: every kit has Icon_<id>.png (tools/paint_kit_icons.py). Masteries have no icon.
+                try
+                {
+                    Type file=typeof(object).Assembly.GetType("System.IO.File");
+                    MethodInfo exists=file.GetMethod("Exists",new Type[]{typeof(string)});
+                    string name=id=="righteous_strike" ? "Icon_righteous_strike_Normal.png" : "Icon_"+id+".png";
+                    if(!(bool)exists.Invoke(null,new object[]{Paths.PluginPath+"/ImmortalHeroesAssets/"+name})) return null;
+                }
+                catch { return null; }
                 // Reuse a cached sprite, without registering a second ownership entry.
                 // v0.22.2: Icon_righteous_strike.png is the Ascended (Magenta) frame; the Altar shows
                 // the Class skill, so it uses the normal Cyan icon.
@@ -1389,7 +1396,7 @@ namespace AlbedosCustomClasses
             }
             if (advancementName == "Priest")
             {
-                return "<b>IDENTITY</b>\nPriest is the battlefield support: holy Relics anchor the fight, while heals, barriers and judgement rain from afar.\n\n<b>BLESS THY SINNERS (MASTERY)</b>\n+10% Magic Damage. When you or an ally within 20m would die, survive at 1 HP and recover 50% HP over time with a burst of speed. Your own save recharges in 20 minutes, each ally's separately. With a Buckler your Parry is doubled; a Parry grants 5s Hyper Armor, +35% Damage to your next skill and a 10m Holy Shockwave that Stuns.\n\n<b>HEAVEN'S CRUCIBLE (GRACE)</b>\nWrap yourself and nearby allies in a holy Barrier that holds until it breaks.\n\n<b>BEST FOR</b>\nPlayers who want to keep everyone alive and control the battlefield.";
+                return "<b>IDENTITY</b>\nPriest is the battlefield support: holy Relics anchor the fight, while heals, barriers and judgement rain from afar.\n\n<b>BLESS THY SINNERS (MASTERY)</b>\n+10% Magic Damage. When you or an ally within 20m would die, survive at 1 HP and recover 50% HP over time with a burst of speed. Your own save recharges in 20 minutes, each ally's separately. With a Buckler your Parry is doubled; a Parry grants 5s Hyper Armor, +35% Damage to your next skill (kept until used, 25s cooldown after) and a 10m Holy Shockwave that Stuns.\n\n<b>HEAVEN'S CRUCIBLE (GRACE)</b>\nWrap yourself and nearby allies in a holy Barrier that holds until it breaks.\n\n<b>BEST FOR</b>\nPlayers who want to keep everyone alive and control the battlefield.";
             }
             if (advancementName == "Wizard")
             {

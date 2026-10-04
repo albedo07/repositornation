@@ -1,0 +1,22 @@
+IMMORTAL HEROES v0.23.8 - Icons
+===============================
+Fixes
+- Cleric's Blessing +35 HP now really raises max HP (added where Valheim stores max health;
+  before only the bar showed 170 while health was capped at the food value).
+- Hyper Armor = no knockback (push force zeroed on every hit while Hyper Armor is active).
+
+Priest
+- Holy Parry: the "next skill empowered" buff is announced once and kept until a skill uses it;
+  after use, parries can't grant it again for 25s ([Priest Holy Shockwave] EmpowerCooldown).
+  Hyper Armor on every parry and the 15s Holy Shockwave are unchanged.
+- Lightning Relic / Holy Relic radius 7m (was 10m). Consecrated Ground radius 10m (was 15m).
+- Grand Cross width 7m (was 15m).
+- Ascended Grand Cross: width 12m (was 20m), no end burst; every enemy hit is Exposed (6s)
+  and takes double Spirit Burn.
+
+Art
+- Skill icons for Sword Master, Mercenary, Archmage and Horizon Walker (all 34 skills + Graces),
+  same style as the Cleric icons (tools/paint_kit_icons.py). Placeholder initials are gone.
+  Tree, hotbar, HUD and Altar all use them.
+
+Framework doc updated. Settings reset to defaults once (Dev Mode OFF).
