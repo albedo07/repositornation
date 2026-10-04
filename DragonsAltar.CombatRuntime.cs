@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.23.4";
+        public const string ModVersion = "0.23.5";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1491,6 +1491,28 @@ namespace DragonsAltarCombat
             {
                 return false;
             }
+        }
+
+        // v0.23.5 universal stack counter: any module reports a skill's stacks / charges
+        // (ready, max, seconds until the next one) and the one HUD draws them all the same way.
+        public delegate bool SkillStackQuery(string skillId, out int ready, out int max, out float nextSeconds);
+        private static readonly List<SkillStackQuery> StackQueries = new List<SkillStackQuery>();
+
+        public static void RegisterStackQuery(SkillStackQuery query)
+        {
+            if (query != null && !StackQueries.Contains(query)) StackQueries.Add(query);
+        }
+
+        public static bool TryGetSkillStacks(string skillId, out int ready, out int max, out float nextSeconds)
+        {
+            ready = 0; max = 0; nextSeconds = 0f;
+            for (int i = 0; i < StackQueries.Count; i++)
+            {
+                try { if (StackQueries[i](skillId, out ready, out max, out nextSeconds) && max > 1) return true; }
+                catch { }
+            }
+            ready = 0; max = 0; nextSeconds = 0f;
+            return false;
         }
 
         // v0.23.1: hold-to-charge skills ask whether the hotbar key of a skill is still held, and

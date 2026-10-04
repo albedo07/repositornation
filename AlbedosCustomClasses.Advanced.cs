@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.23.4";
+        public const string ModVersion = "0.23.5";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1605,6 +1605,17 @@ namespace AlbedosCustomClassesAdvanced
                 if (_enableVfx.Value)
                     StartCoroutine(AnimateJudgementSphereCut(point, radius * 1.1f, 0));
             }
+        }
+
+        // v0.23.5: Blade Storm charges for the universal stack counter.
+        private bool IhStackQuery(string id, out int ready, out int max, out float next)
+        {
+            ready = 0; max = 0; next = 0f;
+            if (id != "blade_storm") return false;
+            ready = GetJudgementReadyChargeCount();
+            max = BladeStormStacks();
+            next = GetJudgementNextRecharge();
+            return true;
         }
 
         private int BladeStormStacks()
@@ -11129,6 +11140,7 @@ namespace AlbedosCustomClassesAdvanced
             _graceLightDefense = Config.Bind("Paladin Heavens Light", "OverallDefensePercent", 40f, "Overall Defense bonus (less damage taken).");
             DragonCombat.TreeHotbarProvider = IhUsesTreeHotbar;
             DragonCombat.TreeSkillKeyHeldProvider = IhSkillKeyHeld;
+            DragonCombat.RegisterStackQuery(IhStackQuery);
             DragonCombat.AscendedProvider = delegate(Player p, string skillId) { return p == Player.m_localPlayer && IsAscendedSkill(skillId); };
         }
 
@@ -11451,16 +11463,61 @@ namespace AlbedosCustomClassesAdvanced
                 if (IsPermanentHotbarSkill(id))
                     DrawPermanentBadge(rect);
                 float cooldown = IhCooldown(player, id);
+                Rect inner = new Rect(rect.x + rect.width * 0.14f, rect.y + rect.height * 0.14f, rect.width * 0.72f, rect.height * 0.72f);
+                int ready, max;
+                float next;
+                bool stacked = DragonCombat.TryGetSkillStacks(id, out ready, out max, out next);
+                if (stacked && ready <= 0 && next > cooldown) cooldown = next;
                 if (cooldown > 0.05f)
                 {
-                    Rect inner = new Rect(rect.x + rect.width * 0.14f, rect.y + rect.height * 0.14f, rect.width * 0.72f, rect.height * 0.72f);
                     GUI.color = new Color(0f, 0f, 0f, 0.62f);
                     GUI.DrawTexture(inner, Texture2D.whiteTexture);
                     GUI.color = Color.white;
-                    GUI.Label(inner, cooldown >= 60f ? Mathf.CeilToInt(cooldown / 60f).ToString() + "m" : cooldown.ToString(cooldown >= 10f ? "0" : "0.0"), _hudCooldownStyle);
+                    GUI.Label(inner, IhFormatCooldown(cooldown), _hudCooldownStyle);
                 }
+                if (stacked)
+                    IhDrawStackCounter(inner, ready, max, ready > 0 && ready < max ? next : 0f, scale);
             }
             GUI.Label(new Rect(rect.x - 10f, rect.yMax - 1f, rect.width + 20f, 16f * scale), FormatHotbarBinding(binding), _hudKeyCenterStyle);
+        }
+
+        private static string IhFormatCooldown(float seconds)
+        {
+            return seconds >= 60f ? Mathf.CeilToInt(seconds / 60f).ToString() + "m" : seconds.ToString(seconds >= 10f ? "0" : "0.0");
+        }
+
+        // v0.23.5 universal stack counter: ready/max pill at the bottom right of the icon, and the
+        // next stack's recharge timer at the top while some (but not all) stacks are spent.
+        private GUIStyle _hudStackStyle;
+
+        private void IhDrawStackCounter(Rect inner, int ready, int max, float next, float scale)
+        {
+            if (_hudStackStyle == null)
+            {
+                _hudStackStyle = new GUIStyle(GUI.skin.label);
+                _hudStackStyle.alignment = TextAnchor.MiddleCenter;
+                _hudStackStyle.fontStyle = FontStyle.Bold;
+                _hudStackStyle.wordWrap = false;
+                _hudStackStyle.clipping = TextClipping.Overflow;
+            }
+            _hudStackStyle.fontSize = Mathf.Max(9, Mathf.RoundToInt(11f * scale));
+            Rect pill = new Rect(inner.xMax - 22f * scale, inner.yMax - 13f * scale, 26f * scale, 15f * scale);
+            GUI.color = new Color(0.02f, 0.03f, 0.06f, 0.85f);
+            GUI.DrawTexture(pill, Texture2D.whiteTexture);
+            GUI.color = ready > 0 ? new Color(1f, 0.86f, 0.42f, 1f) : new Color(0.65f, 0.65f, 0.65f, 1f);
+            GUI.DrawTexture(new Rect(pill.x, pill.y, pill.width, 1.5f), Texture2D.whiteTexture);
+            GUI.color = Color.white;
+            _hudStackStyle.normal.textColor = ready > 0 ? new Color(1f, 0.92f, 0.62f, 1f) : new Color(0.8f, 0.8f, 0.8f, 1f);
+            GUI.Label(pill, ready.ToString() + "/" + max.ToString(), _hudStackStyle);
+            if (next > 0.05f)
+            {
+                Rect timer = new Rect(inner.x, inner.y - 1f, inner.width, 14f * scale);
+                GUI.color = new Color(0f, 0f, 0f, 0.55f);
+                GUI.DrawTexture(timer, Texture2D.whiteTexture);
+                GUI.color = Color.white;
+                _hudStackStyle.normal.textColor = new Color(0.75f, 0.92f, 1f, 1f);
+                GUI.Label(timer, IhFormatCooldown(next), _hudStackStyle);
+            }
         }
 
         // ------------------------------------------------------------------ Advance / Ascend
@@ -11502,7 +11559,7 @@ namespace AlbedosCustomClassesAdvanced
             _treeSelectedNodeId = "";
             _hotbarLayoutOwnerKey = "";
             IhKit advancedKit = IhKitFor(GetClass(player), branch);
-            ShowMessage("Advanced to " + branch + "!" + (advancedKit != null ? " " + IhSkillName(advancedKit.AscendedClass) + " has Ascended." : ""));
+            ShowMessage("Advanced to " + IhAcDisplay(branch) + "!" + (advancedKit != null ? " " + IhSkillName(advancedKit.AscendedClass) + " has Ascended." : ""));
         }
 
         // Advance plaque inside the sealed Paladin panel (before Advancement).
@@ -11537,10 +11594,10 @@ namespace AlbedosCustomClassesAdvanced
             {
                 _treeHoveredTitle = "ADVANCE - " + IhAcDisplay(IhTreeBranch()).ToUpperInvariant();
                 _treeHoveredBody = ready
-                    ? "Become a " + IhTreeBranch() + ". The shared Class Tiers lock; Advancement Tier Points start at Lv 18."
+                    ? "Become a " + IhAcDisplay(IhTreeBranch()) + ". The shared Class Tiers lock; Advancement Tier Points start at Lv 18."
                     : "Complete every requirement to Advance.";
             }
-            if (ready && GUI.Button(plaque, GUIContent.none, GUIStyle.none))
+            if (ready && IhClickable(plaque, "advance"))
                 IhAdvanceToPaladin(player);
         }
 
@@ -11568,7 +11625,7 @@ namespace AlbedosCustomClassesAdvanced
                 _treeHoveredTitle = "ASCEND - " + IhSkillName(_treeSelectedNodeId).ToUpperInvariant();
                 _treeHoveredBody = "Ascension is permanent for this character. Click twice to confirm.";
             }
-            if (GUI.Button(plaque, GUIContent.none, GUIStyle.none))
+            if (IhClickable(plaque, "ascend"))
             {
                 if (!armed)
                 {
@@ -11887,10 +11944,17 @@ namespace AlbedosCustomClassesAdvanced
 
                 // The close button is already painted into the reference art. Keep its hotspot
                 // invisible so the asset stays visually 1:1 instead of receiving a second IMGUI button.
-                if (GUI.Button(ScaleReferenceRect(936f, 17f, 38f, 38f), GUIContent.none, GUIStyle.none))
+                if (IhClickable(ScaleReferenceRect(936f, 17f, 38f, 38f), "close"))
                     ToggleSkillbook();
 
                 GUI.DragWindow(ScaleReferenceRect(0f, 0f, 930f, 62f));
+                // v0.23.5: a click on empty space clears the selection and its highlight.
+                if (Event.current.type == EventType.MouseDown && Event.current.button == 0 && !_dragActive)
+                {
+                    _treeSelectedNodeId = "";
+                    _uiSelectedKey = "";
+                    _ihAscendArmedSkill = "";
+                }
                 return;
             }
 
@@ -12321,9 +12385,9 @@ namespace AlbedosCustomClassesAdvanced
                 if (r.Contains(Event.current.mousePosition))
                 {
                     _treeHoveredTitle = IhAcDisplay(branches[i]).ToUpperInvariant() + " - PREVIEW";
-                    _treeHoveredBody = "View the " + branches[i] + " branch. Your " + GetClass(player) + " skills and pending Class Tiers stay the same.";
+                    _treeHoveredBody = "View the " + IhAcDisplay(branches[i]) + " branch. Your " + GetClass(player) + " skills and pending Class Tiers stay the same.";
                 }
-                if (GUI.Button(r,GUIContent.none,GUIStyle.none) && !selected)
+                if (IhClickable(r, "branch:" + branches[i]) && !selected)
                 {
                     _ihPreviewBranch = branches[i];
                     _treeSelectedNodeId = "";
@@ -13086,6 +13150,7 @@ namespace AlbedosCustomClassesAdvanced
             Rect opening = IhFieldRect(IhTemplateSlot(node.Id));
             IhDrawPlaceholderInitials(ScaleReferenceRect(opening.x, opening.y, opening.width, opening.height), node.Id, !unlocked);
 
+            IhDrawHighlight(icon, _treeSelectedNodeId == node.Id, icon.Contains(Event.current.mousePosition));
             if (group.Contains(Event.current.mousePosition))
             {
                 string title;
@@ -13113,14 +13178,14 @@ namespace AlbedosCustomClassesAdvanced
             {
                 Rect minusRect = ScaleReferenceRect(row.x - buttonRef - 3f, buttonY, buttonRef, buttonRef);
                 DrawTierQueueButton(minusRect, "-");
-                if (GUI.Button(minusRect, GUIContent.none, GUIStyle.none))
+                if (IhClickable(minusRect, "minus:" + node.Id))
                     RemovePrototypePending(node.Id);
             }
             if (canAdd)
             {
                 Rect plusRect = ScaleReferenceRect(row.xMax + 2f, buttonY, buttonRef, buttonRef);
                 DrawTierQueueButton(plusRect, "+");
-                if (GUI.Button(plusRect, GUIContent.none, GUIStyle.none))
+                if (IhClickable(plusRect, "plus:" + node.Id))
                     AddPrototypePending(node.Id, maxTier);
             }
         }
@@ -13338,6 +13403,7 @@ namespace AlbedosCustomClassesAdvanced
                 if (!empty && !draggingFromHere && IsPermanentHotbarSkill(id))
                     DrawPermanentBadge(r);
 
+                if (!_dragActive) IhDrawHighlight(r, false, hoverSlot == i);
                 if (!_dragActive && hoverSlot == i && !empty)
                 {
                     ReferenceNodeUi node = FindReferenceNode(id);
@@ -13614,6 +13680,47 @@ namespace AlbedosCustomClassesAdvanced
             GUI.color = Color.white;
         }
 
+        // v0.23.5 universal highlight: hovering anything clickable lights it up; the last clicked
+        // control (or the selected node) stays highlighted until a click on empty space clears it.
+        private string _uiSelectedKey = "";
+
+        private void IhDrawHighlight(Rect r, bool selected, bool hover)
+        {
+            if ((!selected && !hover) || Event.current.type != EventType.Repaint) return;
+            Color edge = selected ? new Color(1f, 0.80f, 0.30f, 0.95f) : new Color(1f, 0.95f, 0.78f, 0.60f);
+            GUI.color = new Color(1f, 0.90f, 0.55f, selected ? 0.12f : 0.08f);
+            GUI.DrawTexture(r, Texture2D.whiteTexture);
+            float w = selected ? 2.5f : 1.5f;
+            GUI.color = edge;
+            GUI.DrawTexture(new Rect(r.x, r.y, r.width, w), Texture2D.whiteTexture);
+            GUI.DrawTexture(new Rect(r.x, r.yMax - w, r.width, w), Texture2D.whiteTexture);
+            GUI.DrawTexture(new Rect(r.x, r.y, w, r.height), Texture2D.whiteTexture);
+            GUI.DrawTexture(new Rect(r.xMax - w, r.y, w, r.height), Texture2D.whiteTexture);
+            if (selected)
+            {
+                // soft outer glow
+                GUI.color = new Color(1f, 0.80f, 0.30f, 0.30f);
+                Rect o = new Rect(r.x - 3f, r.y - 3f, r.width + 6f, r.height + 6f);
+                GUI.DrawTexture(new Rect(o.x, o.y, o.width, 2f), Texture2D.whiteTexture);
+                GUI.DrawTexture(new Rect(o.x, o.yMax - 2f, o.width, 2f), Texture2D.whiteTexture);
+                GUI.DrawTexture(new Rect(o.x, o.y, 2f, o.height), Texture2D.whiteTexture);
+                GUI.DrawTexture(new Rect(o.xMax - 2f, o.y, 2f, o.height), Texture2D.whiteTexture);
+            }
+            GUI.color = Color.white;
+        }
+
+        // Invisible hotspot over painted art, with the universal hover / selected highlight.
+        private bool IhClickable(Rect r, string key)
+        {
+            IhDrawHighlight(r, key == _uiSelectedKey, r.Contains(Event.current.mousePosition));
+            if (GUI.Button(r, GUIContent.none, GUIStyle.none))
+            {
+                _uiSelectedKey = key;
+                return true;
+            }
+            return false;
+        }
+
         private void DrawTierQueueButton(Rect rect, string symbol)
         {
             Texture2D art = symbol == "+" ? _treeTierPlusTex : _treeTierMinusTex;
@@ -13665,7 +13772,7 @@ namespace AlbedosCustomClassesAdvanced
             DrawFooterText(confirmText, "CONFIRM", hover ? _treeFooterConfirmHoverStyle : _treeFooterConfirmStyle);
             DrawFooterText(pendingText, pendingTotal.ToString() + " PENDING", _treeFooterPendingStyle);
 
-            if (GUI.Button(plaque, GUIContent.none, GUIStyle.none))
+            if (IhClickable(plaque, "confirm"))
                 ConfirmPrototypePending();
         }
 
@@ -13706,7 +13813,7 @@ namespace AlbedosCustomClassesAdvanced
             }
             DrawFooterText(rect, text, style);
 
-            if (GUI.Button(rect, GUIContent.none, GUIStyle.none))
+            if (IhClickable(rect, "bind:" + bindTarget))
                 BeginHotbarKeyCapture(bindTarget);
         }
 

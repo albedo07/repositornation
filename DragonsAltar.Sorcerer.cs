@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Dragon's Altar - Sorcerer Advancements";
-        public const string ModVersion = "0.23.4";
+        public const string ModVersion = "0.23.5";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -319,6 +319,7 @@ namespace DragonsAltarSorcerer
         {
             Instance = this;
             DragonCombat.RegisterSkillModule(CastFromTree, CooldownForTree);
+            DragonCombat.RegisterStackQuery(StackQuery);
 
             _modifier = Config.Bind("Hotkeys", "Modifier", KeyCode.Mouse3, "Mouse4 modifier.");
             _skill1 = Config.Bind("Hotkeys", "Skill1", KeyCode.Alpha1, "Sorcerer base skill 1.");
@@ -1205,6 +1206,7 @@ namespace DragonsAltarSorcerer
             Vector3 target;
             if (!AlbedoAimUtility.TryGetPhysicalTarget(player, DragonCombat.M(_meteorRange.Value), out target)) { ShowMessage("Aim at a physical target"); return; }
             if (!BeginSkill(player, "Wizard.MeteorFall", _meteorCooldown.Value, _meteorEitr.Value)) return; // cost paid once
+            _meteorChargeShown = 0;
             float windup = ScaleWindup(player, Mathf.Max(0f, IsWizAscended(player, "meteor_fall") ? _mfAscWindup.Value : _meteorWindup.Value));
             DragonCombat.LockSkill(player, windup + 0.1f);
             DragonCombat.PlaySkillPose(player, "SkyCast", windup + 0.10f);
@@ -1226,13 +1228,14 @@ namespace DragonsAltarSorcerer
                 if (holding && SkillKeyHeld(player, "meteor_fall", _skill7.Value) && stacks < 3) heldFor = elapsed;
                 else holding = false;
                 int now = Mathf.Min(3, Mathf.FloorToInt(heldFor));
-                if (now > stacks) { stacks = now; ShowMessage("Meteor Fall " + stacks + "/3"); if (_enableVfx.Value) StartCoroutine(RingVfx(target, DragonCombat.M(_meteorRadius.Value) * (1f + 0.1f * stacks), new Color(1f, 0.45f, 0.10f, 0.75f), 0.4f)); }
+                if (now > stacks) { stacks = now; _meteorChargeShown = stacks; if (_enableVfx.Value) StartCoroutine(RingVfx(target, DragonCombat.M(_meteorRadius.Value) * (1f + 0.1f * stacks), new Color(1f, 0.45f, 0.10f, 0.75f), 0.4f)); }
                 if (elapsed >= windup && (!holding || stacks >= 3)) break;
                 DragonCombat.LockSkill(player, 0.12f);
                 DragonCombat.PlaySkillPose(player, "SkyCast", 0.12f);
                 yield return null;
             }
             if (player == null || player.IsDead()) yield break;
+            _meteorChargeShown = 0;
             float damageMul = 1f + 0.2f * stacks;
             float radius = DragonCombat.M(_meteorRadius.Value) * (1f + 0.1f * stacks);
             yield return StartCoroutine(MeteorImpact(player, target, radius, damageMul, 2.4f * (1f + 0.15f * stacks)));
@@ -2245,6 +2248,7 @@ namespace DragonsAltarSorcerer
         private ConfigEntry<int> _ruAscCharges;
         private ConfigEntry<float> _ruAscDamage;
         private float _nextPhalanxLaunch;
+        private int _meteorChargeShown;
         private float _nextAfterimageFire;
         private float _phalanxExpireAt;
         private bool _phalanxSpearArmed;
@@ -2793,6 +2797,37 @@ namespace DragonsAltarSorcerer
         {
             _phaseFlowUntil = Time.time + Mathf.Max(0.5f, _phaseDuration.Value);
             DragonCombat.ApplyTimedBuff(player, "Spellcaster.PhaseFlow", _phaseDuration.Value, 0f, 0f, 0.15f, 0f, 0f, 0.25f, false);
+        }
+
+        // v0.23.5 universal stack counter (Arcane Rupture charges, Ascended Void Step charges,
+        // Arcane Phalanx swords left, Meteor Fall charge stacks while charging).
+        private bool StackQuery(string id, out int ready, out int max, out float next)
+        {
+            ready = 0; max = 0; next = 0f;
+            Player player = Player.m_localPlayer;
+            if (player == null) return false;
+            switch (id)
+            {
+                case "arcane_rupture":
+                    ready = _ruptureCharges; max = RuptureMax(); next = GetRuptureNextRecharge();
+                    return true;
+                case "void_step":
+                    max = VoidMaxCharges(player);
+                    if (max <= 1) return false;
+                    ready = Mathf.Max(0, _voidCharges < 0 ? max : _voidCharges);
+                    next = ready < max ? Mathf.Max(0f, _voidNextCharge - Time.time) : 0f;
+                    return true;
+                case "arcane_phalanx":
+                    if (_phalanxSwords.Count == 0) return false;
+                    ready = _phalanxSwords.Count;
+                    max = IsSpellAscended(player, "arcane_phalanx") ? Mathf.Max(1, _paAscCount.Value) : Mathf.Max(1, _phalanxCountV.Value);
+                    return true;
+                case "meteor_fall":
+                    if (_meteorChargeShown <= 0) return false;
+                    ready = _meteorChargeShown; max = 3;
+                    return true;
+            }
+            return false;
         }
 
         private int RuptureMax()

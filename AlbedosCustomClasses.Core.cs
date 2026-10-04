@@ -9,16 +9,39 @@ using Jotunn.Configs;
 using Jotunn.Entities;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
 
 namespace AlbedosCustomClasses
 {
+    // v0.23.5 universal hover highlight for uGUI (Altar): a light glow while the pointer is over it.
+    // Only enter/exit are handled, so ScrollRects keep receiving drag and scroll events.
+    public class AltarHoverGlow : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
+    {
+        public Outline Glow;
+
+        public void OnPointerEnter(PointerEventData eventData)
+        {
+            if (Glow != null) Glow.enabled = true;
+        }
+
+        public void OnPointerExit(PointerEventData eventData)
+        {
+            if (Glow != null) Glow.enabled = false;
+        }
+
+        private void OnDisable()
+        {
+            if (Glow != null) Glow.enabled = false;
+        }
+    }
+
     [BepInPlugin(ModGuid, ModName, ModVersion)]
     [BepInDependency("com.jotunn.jotunn", BepInDependency.DependencyFlags.HardDependency)]
     public class Plugin : BaseUnityPlugin
     {
         public const string ModGuid = "albedo.customclasses";
         public const string ModName = "Dragon's Altar";
-        public const string ModVersion = "0.23.4";
+        public const string ModVersion = "0.23.5";
 
         internal const string ClassDataKey = "AlbedoCustomClasses.Class";
         internal const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -660,8 +683,33 @@ namespace AlbedosCustomClasses
             colors.disabledColor = new Color(0.48f, 0.48f, 0.48f, 0.85f);
             button.colors = colors;
             button.onClick.AddListener(action);
+            AddAltarHoverGlow(image.gameObject);
             CreateWrappedText(image.transform, text, Vector2.zero, size.x - 38f, size.y - 6f, 17, AltarGold, true, TextAnchor.MiddleCenter);
             return button;
+        }
+
+        private static void AddAltarHoverGlow(GameObject go)
+        {
+            if (go == null) return;
+            Outline glow = go.AddComponent<Outline>();
+            glow.effectColor = new Color(1f, 0.95f, 0.72f, 0.90f);
+            glow.effectDistance = new Vector2(2.5f, -2.5f);
+            glow.enabled = false;
+            AltarHoverGlow hover = go.AddComponent<AltarHoverGlow>();
+            hover.Glow = glow;
+        }
+
+        // v0.23.5: a click on empty Altar space clears the highlighted card / skill.
+        private void ClearAltarSelection()
+        {
+            RefreshAltarCards(_altarBaseCards, "");
+            RefreshAltarCards(_altarAdvCards, "");
+            List<Button>[] lists = { _altarBaseSkillButtons, _altarAdvSkillButtons };
+            for (int l = 0; l < lists.Length; l++)
+            {
+                if (lists[l] == null) continue;
+                foreach (Button item in lists[l]) { if (item == null) continue; ColorBlock c = item.colors; c.normalColor = new Color(1f, 1f, 1f, 0f); item.colors = c; }
+            }
         }
 
         private void FitAltarToCanvas()
@@ -682,8 +730,11 @@ namespace AlbedosCustomClasses
             _altarAdvCards.Clear();
             _classPanel = AltarRect("ImmortalHeroesAltar", GUIManager.CustomGUIFront.transform, Vector2.zero, new Vector2(1040f, 900f)).gameObject;
             Sprite art = AltarSprite("Altar_Background.png");
-            AltarImage("AltarBackdrop", _classPanel.transform, Vector2.zero, new Vector2(1040f, 900f), art,
+            Image backdrop = AltarImage("AltarBackdrop", _classPanel.transform, Vector2.zero, new Vector2(1040f, 900f), art,
                 art == null ? new Color(0.86f, 0.79f, 0.65f, 1f) : Color.white, true);
+            Button blank = backdrop.gameObject.AddComponent<Button>();
+            blank.transition = Selectable.Transition.None;
+            blank.onClick.AddListener(ClearAltarSelection);
             CreateWrappedText(_classPanel.transform, "DRAGON'S ALTAR", new Vector2(0f, 342f), 690f, 44f, 34, AltarGold, true, TextAnchor.MiddleCenter);
             _altarSubtitle = CreateWrappedText(_classPanel.transform, "IMMORTAL HEROES  •  CLASS SELECTION", new Vector2(0f, 318f), 690f, 24f, 15, AltarGold, false, TextAnchor.MiddleCenter);
             AltarButton(_classPanel.transform, "Reset", new Vector2(-440f, 402f), new Vector2(116f, 40f), ResetClassSelection);
@@ -836,6 +887,7 @@ namespace AlbedosCustomClasses
         {
             Image row=AltarImage("Inspect_"+entry.Id,parent,position,new Vector2(width,largeIcon ? 66f : 40f),AltarLabelVeil(),new Color(1f,0.83f,0.48f,1f),true);
             Button button=row.gameObject.AddComponent<Button>(); button.targetGraphic=row;
+            AddAltarHoverGlow(row.gameObject);
             ColorBlock colors=button.colors; colors.normalColor=new Color(1f,1f,1f,0f); colors.highlightedColor=new Color(1f,1f,1f,0.45f); colors.pressedColor=new Color(1f,1f,1f,0.7f); button.colors=colors;
             Sprite icon=AltarSkillIcon(entry.Id);
             Image tile=AltarImage("SkillIcon",row.transform,new Vector2(-width/2f+(largeIcon ? 27f : 17f),0f),new Vector2(largeIcon ? 48f : 30f,largeIcon ? 48f : 30f),icon,icon==null ? new Color(0.08f,0.15f,0.26f,1f) : Color.white,false);
@@ -937,6 +989,7 @@ namespace AlbedosCustomClasses
             colors.pressedColor = new Color(0.8f, 0.85f, 0.9f, 1f);
             button.colors = colors;
             button.onClick.AddListener(delegate { if (advancement) FocusAdvancement(name); else FocusBaseClass(name); });
+            AddAltarHoverGlow(image.gameObject);
             // v0.20.4: a light veil only, so the card art stays visible behind the text;
             // a soft parchment glow on the letters keeps them readable on darker art.
             // v0.22.5: cards centred in the left column (opening x 30-563 of the 1349 px backdrop -> centre -291).

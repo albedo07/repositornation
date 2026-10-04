@@ -1,0 +1,24 @@
+IMMORTAL HEROES v0.23.5 - UNIVERSAL UI
+======================================
+(First start resets every setting to default once, Dev Mode OFF.)
+Includes v0.23.3 Tweaks and v0.23.4 Horizon Walker (docs/changelog).
+
+UNIVERSAL STACK COUNTER
+- One look for every skill with stacks / charges on the hotbar: a ready/max pill at the
+  bottom right of the icon, the next stack's timer along the top while some are spent, and
+  the normal dark cooldown only when none are left.
+  Blade Storm, Arcane Rupture, Ascended Void Step, Arcane Phalanx (swords left) and
+  Meteor Fall (charge stacks while you hold it).
+
+HIGHLIGHTS
+- Skill Tree: hovering a node, + / -, a hotbar slot, the branch plaques, ADVANCE / ASCEND /
+  CONFIRM, key bindings or the close button lights it up. The selected node (and the last
+  clicked control) stays highlighted; a click on empty space clears it.
+- Altar: cards, buttons and skill entries glow on hover; a click on empty space clears the
+  highlighted card / skill.
+- Texts that named the branch now use Archmage / Horizon Walker ("Advanced to ...").
+
+FRAMEWORK DOC
+- Updated: Archmage / Horizon Walker names, ruler 1.5, Mercenary numbers, Horizon Walker
+  changes, Ascended Meteor wind up, and the universal rules (charge on press, stack
+  counter, highlights).
