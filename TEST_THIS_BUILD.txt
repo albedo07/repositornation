@@ -1,14 +1,16 @@
-TEST v0.22.3 - SWORD MASTER
-Altar: cards (base page + Advancement page) identical size, aligned; names/roles centred on the art.
-Sword Master (F8 > Progression for levels; Ascension switches for Ascended versions):
-1. One Sword: attack speed +50%, Sword skill +20 (character skills screen).
-2. Moonlight (3 waves) / Ascended (4 fast + big finisher + afterimage). Block or Dodge mid-cast stops it.
-3. Crescent: 5 cleaves; Ascended: 13 cleaves, orange fire trails, burning ticks.
-4. Blade Storm: 4 stacks (Ascended 6 + extra cut).
-5. Frenzied Charge: wind up, dash steers with the camera, small mobs fly, big ones stagger, slash trail.
-6. Eclipse: 360 slash + knockback; Ascended: stand near Greyling/Deathsquito archers - arrows/spit fly back.
-7. Halfmoon: big slash + afterimage; Ascended: 3 slow travelling slashes, stop at walls/hills.
-8. Knight's Guidance on M4+R: faster run, less stamina; 13 min cooldown.
-9. Impact Wave (Ascended for Sword Master): longer wave + aftershock back toward you.
-10. Tooltips: every Sword Master skill shows damage/area/costs.
-Cleric quick regression: tree, hotbar, a few casts.
+TEST v0.22.4 - SWORD MASTER + MERCENARY
+Use F8 > Progression (level, Ascension switches) and the /ih commands.
+SWORD MASTER: see docs/changelog/CHANGELOG_v0.22.3.txt (all 7 skills + Ascended, Knight's Guidance,
+  Block/Dodge interrupt, +50% AS / +20 Sword with one Sword).
+MERCENARY
+1. Two 1H weapons or a 2H: attacks faster, no weapon slowdown; Armor shown +30%.
+2. Hit things: HUD title shows FURY n; at 100 UNCHAINED FURY 20s, then FURY LOCKED.
+3. Stomp: two impacts 0.5s apart (Ascended: three, 15m).
+4. Circle Swing: you can walk during the wind up; Ascended: two swings, second launches.
+5. Bonecrusher: jump-slam (Ascended: ground shock after landing).
+6. Seismic Guillotine (Ascended 25m, endpoint Cripple).
+7. Punishing Bomb: arcs, explodes on first contact, burns (Ascended: ground fire).
+8. Whirlwind (Ascended: press again to end early, final sweep).
+9. Battlecry on M4+R: chop a tree / mine a rock before and after - more damage.
+10. Heavy Slash as Mercenary with Ascension: longer reach, Hyper Armor on hit.
+Cleric quick regression: tree, hotbar, casts.

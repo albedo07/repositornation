@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.22.3";
+        public const string ModVersion = "0.22.4";
 
         internal static DragonCombatPlugin Instance;
 
@@ -868,7 +868,23 @@ namespace DragonsAltarCombat
                 __result = 0f;
                 return;
             }
-            if (__result >= 0f || Instance == null || __instance == null || DragonCombat.GetClassName(__instance) != "Cleric")
+            if (__result >= 0f || Instance == null || __instance == null)
+                return;
+            // v0.22.4 Warfreak (Mercenary): no movement penalty from physical weapons.
+            // v0.22.3 The Way of the Sword (Sword Master): no movement penalty from Swords.
+            string advancement = DragonCombat.GetAdvancementName(__instance);
+            if (advancement == "Mercenary" || advancement == "Sword Master")
+            {
+                ItemDrop.ItemData mainHand = DragonCombat.GetHandItem(__instance, "m_rightItem");
+                ItemDrop.ItemData offHand = DragonCombat.GetHandItem(__instance, "m_leftItem");
+                __result -= WeaponMasteryExemptPenalty(mainHand, advancement);
+                if (offHand != mainHand)
+                    __result -= WeaponMasteryExemptPenalty(offHand, advancement);
+                if (__result > 0f)
+                    __result = 0f;
+                return;
+            }
+            if (DragonCombat.GetClassName(__instance) != "Cleric")
                 return;
 
             // v0.20.8 Cleric's Blessing: no penalty from Shields, Staves and one-handed Club weapons.
@@ -897,6 +913,18 @@ namespace DragonsAltarCombat
             if (item == null || item.m_shared == null)
                 return 0f;
             return Mathf.Min(0f, item.m_shared.m_movementModifier);
+        }
+
+        private static float WeaponMasteryExemptPenalty(ItemDrop.ItemData item, string advancement)
+        {
+            if (item == null || item.m_shared == null)
+                return 0f;
+            Skills.SkillType s = item.m_shared.m_skillType;
+            bool exempt = advancement == "Sword Master"
+                ? s == Skills.SkillType.Swords
+                : (s == Skills.SkillType.Swords || s == Skills.SkillType.Axes || s == Skills.SkillType.Clubs ||
+                   s == Skills.SkillType.Knives || s == Skills.SkillType.Polearms || s == Skills.SkillType.Spears);
+            return exempt ? NegativeModifier(item) : 0f;
         }
 
         private static float ClericExemptPenalty(ItemDrop.ItemData item)

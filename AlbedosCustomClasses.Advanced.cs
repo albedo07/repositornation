@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.22.3";
+        public const string ModVersion = "0.22.4";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1117,6 +1117,7 @@ namespace AlbedosCustomClassesAdvanced
             BindImmortalProgression();
             BindTreeHotbar();
             BindSwordMasterV0223();
+            BindMercenaryV0224();
             TryInstallPatches();
 
             Logger.LogInfo(ModName + " v" + ModVersion + " loaded.");
@@ -2553,6 +2554,604 @@ namespace AlbedosCustomClassesAdvanced
             }
         }
 
+        // =====================================================================================
+        // v0.22.4 MERCENARY REWORK (Framework + approved Ascensions, 2026-10-04).
+        // Warfreak (+10 Sword/Axe/Clubs, +50% AS with dual 1H or 2H physical, no physical weapon
+        // movement penalty, +30% Armor, aggro), Unchained Fury (auto at 100, 20s, 3 min lockout,
+        // drains after 60s out of combat), Stomp, Circle Swing, Bonecrusher, Seismic Guillotine,
+        // Punishing Bomb (replaces Reaver's Orbit), Whirlwind, Battlecry Grace, Ascended Heavy Slash.
+        // =====================================================================================
+        private ConfigEntry<float> _warfreakSkillBonus, _warfreakAttackSpeed, _warfreakArmor;
+        private ConfigEntry<float> _furyDurationV, _furyLockoutV, _furyDrainDelay, _furyDrainPerSecond;
+        private DamageConfig _stompDamageV, _boneDamageV, _heavyAscDamage;
+        private ConfigEntry<float> _stompAftershockDelayV, _stompAftershockPercent, _stompAscRadius, _stompAscPercent;
+        private ConfigEntry<float> _circleAscRadius, _circleAscFirst, _circleAscSecond, _circleAscGap;
+        private ConfigEntry<float> _boneAscShockDelay, _boneAscShockPercent;
+        private ConfigEntry<float> _seismicAscRange, _seismicAscEndpoint, _seismicAscSlow;
+        private ConfigEntry<float> _bombCooldown, _bombStamina, _bombWindup, _bombSpeed, _bombRadius, _bombWeaponMultiplier, _bombBurnPercent, _bombBurnDuration;
+        private ConfigEntry<float> _bombAscRadius, _bombAscFireSeconds, _bombAscFirePercent, _bombAscBurnPercent;
+        private ConfigEntry<int> _bombAscBurnStacks;
+        private ConfigEntry<float> _whirlAscDuration, _whirlAscTickPercent, _whirlAscSweepPercent;
+        private ConfigEntry<float> _bcRadius, _bcCreatureBonus, _bcCreatureDuration, _bcEnvBonus, _bcEnvDuration, _bcCooldown;
+        private ConfigEntry<float> _hsAscReach, _hsAscHyper;
+        private float _mercLastCombat;
+        private bool _whirlStopRequested;
+        private bool _whirlActive;
+        private float _battlecryEnvUntil;
+
+        private void BindMercenaryV0224()
+        {
+            const string w = "Mercenary Weapon Mastery - Warfreak";
+            _warfreakSkillBonus = Config.Bind(w, "SwordAxeClubsBonus_v0224", 10f, "+Sword, Axe and Clubs skill (effective cap 100).");
+            _warfreakAttackSpeed = Config.Bind(w, "AttackSpeedPercent_v0224", 50f, "+Attack Speed with two one-handed or one two-handed physical weapon.");
+            _warfreakArmor = Config.Bind(w, "ArmorPercent_v0224", 30f, "+% of current Armor.");
+            const string f = "Mercenary Unchained Fury";
+            _furyDurationV = Config.Bind(f, "Duration_v0224", 20f, "Unchained Fury lasts this long once Fury reaches 100 (automatic).");
+            _furyLockoutV = Config.Bind(f, "Lockout_v0224", 180f, "Fury cannot build for this long after Unchained Fury ends.");
+            _furyDrainDelay = Config.Bind(f, "DrainDelay", 60f, "Seconds out of combat before stored Fury drains.");
+            _furyDrainPerSecond = Config.Bind(f, "DrainPerSecond", 1f, "Fury lost per second once draining.");
+
+            _stompDamageV = BindDamage("Mercenary Stomp Damage v0224", 70f, 0f, 0f, 0f, 0f, 0f, 0f, 0f);
+            _stompAftershockDelayV = Config.Bind("Mercenary Stomp", "AftershockDelay_v0224", 0.5f, "Seconds between impacts (0.5s, user 2026-10-04).");
+            _stompAftershockPercent = Config.Bind("Mercenary Stomp", "AftershockDamagePercent", 50f, "10m aftershock damage (% of the central stomp).");
+            const string sa = "Mercenary Stomp Ascended";
+            _stompAscRadius = Config.Bind(sa, "ThirdImpactRadius", 15f, "Third impact radius.");
+            _stompAscPercent = Config.Bind(sa, "ThirdImpactDamagePercent", 40f, "Third impact damage (% of the central stomp).");
+
+            const string ca = "Mercenary Circle Swing Ascended";
+            _circleAscRadius = Config.Bind(ca, "Radius", 9f, "Ascended radius.");
+            _circleAscFirst = Config.Bind(ca, "FirstSwingPercent", 90f, "First swing (% of a normal swing).");
+            _circleAscSecond = Config.Bind(ca, "SecondSwingPercent", 60f, "Second swing (% of a normal swing); launches Small high, Big lower.");
+            _circleAscGap = Config.Bind(ca, "SwingInterval", 0.5f, "Seconds between the two swings.");
+
+            _boneDamageV = BindDamage("Mercenary Bonecrusher Damage v0224", 150f, 0f, 0f, 0f, 0f, 0f, 0f, 0f);
+            const string ba = "Mercenary Bonecrusher Ascended";
+            _boneAscShockDelay = Config.Bind(ba, "GroundShockDelay", 0.5f, "Seconds after the landing.");
+            _boneAscShockPercent = Config.Bind(ba, "GroundShockDamagePercent", 50f, "Ground shock damage (% of the landing).");
+
+            const string ga = "Mercenary Seismic Guillotine Ascended";
+            _seismicAscRange = Config.Bind(ga, "Range", 25f, "Ascended maximum range.");
+            _seismicAscEndpoint = Config.Bind(ga, "EndpointDamagePercent", 140f, "Endpoint explosion (% of normal).");
+            _seismicAscSlow = Config.Bind(ga, "EndpointCrippleSeconds", 3f, "Endpoint Cripple duration (Small and Big; Bosses get the reduced Boss slow).");
+
+            const string b = "Mercenary Punishing Bomb";
+            _bombCooldown = Config.Bind(b, "Cooldown", 20f, "Seconds.");
+            _bombStamina = Config.Bind(b, "StaminaCost", 32f, "Stamina cost.");
+            _bombWindup = Config.Bind(b, "Windup", 0.5f, "Bat-swing throw.");
+            _bombSpeed = Config.Bind(b, "ThrowSpeed", 22f, "Launch speed (ballistic, falls with gravity).");
+            _bombRadius = Config.Bind(b, "Radius", 7f, "Explosion radius.");
+            _bombWeaponMultiplier = Config.Bind(b, "WeaponDamageMultiplier", 1.4f, "Blunt explosion = held weapon damage x this (80% of a Circle Swing hit).");
+            _bombBurnPercent = Config.Bind(b, "BurnPercent", 2f, "Burn: % of the explosion damage every 0.5s.");
+            _bombBurnDuration = Config.Bind(b, "BurnSeconds", 6f, "Burn duration.");
+            const string ba2 = "Mercenary Punishing Bomb Ascended";
+            _bombAscRadius = Config.Bind(ba2, "Radius", 12f, "Ascended explosion radius.");
+            _bombAscFireSeconds = Config.Bind(ba2, "GroundFireSeconds", 6f, "Ground fire lifetime.");
+            _bombAscFirePercent = Config.Bind(ba2, "GroundFirePercent", 4f, "Ground fire: % of the explosion every 0.5s.");
+            _bombAscBurnPercent = Config.Bind(ba2, "BurnPercentPerStack", 0.75f, "Stacking Burn: % of the explosion per stack every 0.5s.");
+            _bombAscBurnStacks = Config.Bind(ba2, "BurnMaxStacks", 5, "Maximum Burn stacks (one per target every 0.5s).");
+
+            const string wa = "Mercenary Whirlwind Ascended";
+            _whirlAscDuration = Config.Bind(wa, "Duration", 8f, "Maximum spin time.");
+            _whirlAscTickPercent = Config.Bind(wa, "TickPercent", 7.5f, "Each 0.5s hit (% of the whole normal Whirlwind).");
+            _whirlAscSweepPercent = Config.Bind(wa, "FinalSweepPercent", 60f, "Final sweep (% of the whole normal Whirlwind) x spin time / max time. Recast to end early.");
+
+            const string bc = "Mercenary Battlecry";
+            _bcRadius = Config.Bind(bc, "Radius", 10f, "Players within this radius at cast get the buff (snapshot).");
+            _bcCreatureBonus = Config.Bind(bc, "CreatureDamagePercent", 15f, "+Attack Damage against creatures.");
+            _bcCreatureDuration = Config.Bind(bc, "CreatureDuration", 60f, "Seconds.");
+            _bcEnvBonus = Config.Bind(bc, "EnvironmentDamagePercent", 25f, "+Damage to trees, rocks, ore and other environment objects.");
+            _bcEnvDuration = Config.Bind(bc, "EnvironmentDuration", 180f, "Seconds.");
+            _bcCooldown = Config.Bind(bc, "Cooldown", 600f, "Grace cooldown in seconds (10 min).");
+
+            const string h = "Mercenary Heavy Slash Ascended";
+            _hsAscReach = Config.Bind(h, "Reach", 5f, "Ascended reach (normal 3.5m).");
+            _hsAscHyper = Config.Bind(h, "HyperArmorOnHit", 2f, "Hyper Armor seconds when it connects (refreshes, never stacks).");
+            _heavyAscDamage = BindDamage("Mercenary Heavy Slash Ascended Damage", 0f, 140f, 0f, 0f, 0f, 0f, 0f, 0f);
+
+            _damageSkillIds[_stompDamageV] = "stomp";
+            _damageSkillIds[_boneDamageV] = "bonecrusher";
+            _damageSkillIds[_heavyAscDamage] = "heavy_slash";
+        }
+
+        // ------------------------------------------------------------------ Warfreak helpers
+        private static bool IhIsPhysicalMelee(ItemDrop.ItemData item)
+        {
+            if (item == null || item.m_shared == null) return false;
+            Skills.SkillType s = item.m_shared.m_skillType;
+            return s == Skills.SkillType.Swords || s == Skills.SkillType.Axes || s == Skills.SkillType.Clubs ||
+                   s == Skills.SkillType.Knives || s == Skills.SkillType.Polearms || s == Skills.SkillType.Spears;
+        }
+
+        private bool HasWarfreakWeapons(Player player)
+        {
+            ItemDrop.ItemData right = DragonCombat.GetHandItem(player, "m_rightItem");
+            ItemDrop.ItemData left = DragonCombat.GetHandItem(player, "m_leftItem");
+            if (right != null && right == left)
+                return IhIsPhysicalMelee(right) && DragonCombat.IsTwoHandedWeapon(right);
+            if (right != null && DragonCombat.IsTwoHandedWeapon(right) && IhIsPhysicalMelee(right)) return true;
+            if (left != null && DragonCombat.IsTwoHandedWeapon(left) && IhIsPhysicalMelee(left)) return true;
+            return IhIsPhysicalMelee(right) && IhIsPhysicalMelee(left) && DragonCombat.IsOneHandedWeapon(right) && DragonCombat.IsOneHandedWeapon(left);
+        }
+
+        private void ActivateUnchainedFury(Player player)
+        {
+            _mercFury = 0f;
+            _mercFuryUntil = Time.time + Mathf.Max(0.5f, _furyDurationV.Value);
+            _mercFuryCooldownUntil = _mercFuryUntil + Mathf.Max(0f, _furyLockoutV.Value);
+            _mercFuryEndAnnounced = false;
+            if (player != null)
+            {
+                DragonCombat.PlaySkillPose(player, "Shout", 0.75f);
+                if (_enableVfx.Value)
+                    StartCoroutine(AnimateAura(player, new Color(1f, 0.22f, 0.08f, 0.92f), Mathf.Max(0.5f, _furyDurationV.Value)));
+            }
+            ShowMessage("UNCHAINED FURY");
+        }
+
+        private void UpdateFuryDrain(Player player)
+        {
+            if (_mercFury <= 0f || IsUnchainedFuryActive()) return;
+            if (Time.time - _mercLastCombat < Mathf.Max(0f, _furyDrainDelay.Value)) return;
+            _mercFury = Mathf.Max(0f, _mercFury - Mathf.Max(0f, _furyDrainPerSecond.Value) * Time.deltaTime);
+        }
+
+        // ------------------------------------------------------------------ Stomp
+        private IEnumerator StompRoutineV(Player player, float windup)
+        {
+            ShowMessage("Stomp");
+            if (windup > 0f) yield return new WaitForSeconds(windup);
+            if (player == null || player.IsDead()) yield break;
+            bool ascended = IsAscendedSkill("stomp");
+            Vector3 center = player.transform.position;
+            float gap = Mathf.Max(0f, _stompAftershockDelayV.Value);
+            float first = Mathf.Max(0.5f, _stompRadius.Value);
+            float second = Mathf.Max(first, _stompAftershockRadius.Value);
+            StompRing(player, center, 0f, first, 1f, 24f);
+            yield return new WaitForSeconds(gap);
+            if (player == null || player.IsDead()) yield break;
+            StompRing(player, center, first, second, Mathf.Max(0f, _stompAftershockPercent.Value) / 100f, 30f);
+            if (!ascended) yield break;
+            yield return new WaitForSeconds(gap);
+            if (player == null || player.IsDead()) yield break;
+            StompRing(player, center, second, Mathf.Max(second, _stompAscRadius.Value), Mathf.Max(0f, _stompAscPercent.Value) / 100f, 34f);
+        }
+
+        // One impact: every enemy inside the radius once (the rings expand from the same spot).
+        private void StompRing(Player player, Vector3 center, float innerVisual, float radius, float multiplier, float push)
+        {
+            List<Character> targets = GetSphereTargets(player, center, radius);
+            for (int i = 0; i < targets.Count; i++)
+            {
+                DealDamageScaled(player, targets[i], _stompDamageV, multiplier, push, false);
+                GainMercenaryFuryFromSkillHit(player);
+                if (DragonCombat.IsSmallEnemy(targets[i]))
+                    DragonCombat.Stun(targets[i], center);
+            }
+            if (_enableVfx.Value)
+                StartCoroutine(AnimateRing(center + Vector3.up * 0.08f, Mathf.Max(0.4f, innerVisual), radius, 0.55f, new Color(0.95f, 0.58f, 0.22f, 1f), 0.16f));
+        }
+
+        // ------------------------------------------------------------------ Circle Swing
+        private IEnumerator CircleSwingRoutineV(Player player, float windup)
+        {
+            ShowMessage("Circle Swing");
+            if (player == null || player.IsDead()) yield break;
+            // Wind up at normal walking speed (no Sprint), with Hyper Armor.
+            DragonCombat.BeginWhirlwind(player, windup);
+            DragonCombat.GrantHyperArmor(player, windup + 0.25f);
+            yield return new WaitForSeconds(windup);
+            if (player == null || player.IsDead()) yield break;
+            bool ascended = IsAscendedSkill("circle_swing");
+            float radius = Mathf.Max(0.5f, ascended ? _circleAscRadius.Value : _circleRadius.Value);
+            float baseMult = Mathf.Max(0f, _circleDamageMultiplier.Value);
+            DamageSnapshot weapon = GetWeaponDamage(player);
+            CircleSwingHit(player, weapon, radius, baseMult * (ascended ? _circleAscFirst.Value / 100f : 1f), false);
+            if (!ascended) yield break;
+            DragonCombat.GrantHyperArmor(player, _circleAscGap.Value + 0.3f);
+            DragonCombat.LockSkill(player, _circleAscGap.Value + 0.1f);
+            DragonCombat.PlaySkillPose(player, "CircleSwing", _circleAscGap.Value + 0.2f);
+            yield return new WaitForSeconds(Mathf.Max(0.05f, _circleAscGap.Value));
+            if (player == null || player.IsDead()) yield break;
+            CircleSwingHit(player, weapon, radius, baseMult * _circleAscSecond.Value / 100f, true);
+        }
+
+        private void CircleSwingHit(Player player, DamageSnapshot weapon, float radius, float multiplier, bool launch)
+        {
+            Vector3 center = player.transform.position;
+            List<Character> targets = GetSphereTargets(player, center, radius);
+            for (int i = 0; i < targets.Count; i++)
+            {
+                Character target = targets[i];
+                bool boss = target.IsBoss();
+                DealSnapshotDamage(player, target, weapon, multiplier, boss ? 0f : 48f, !boss);
+                GainMercenaryFuryFromSkillHit(player);
+                if (!launch || boss) continue;
+                Vector3 away = target.transform.position - center;
+                away.y = 0f;
+                away = away.sqrMagnitude > 0.01f ? away.normalized : Vector3.forward;
+                ApplyMercenaryDisplacement(target, away * 2f + Vector3.up * (DragonCombat.IsSmallEnemy(target) ? 9f : 4f));
+            }
+            if (_enableVfx.Value)
+            {
+                StartCoroutine(AnimateRing(center + Vector3.up * 0.10f, 0.6f, radius, 0.65f, new Color(1f, 0.56f, 0.18f, 1f), 0.20f));
+                StartCoroutine(AnimateHalfmoonArc(center + Vector3.up * 1.0f, FlatForward(player), radius * 0.95f));
+            }
+        }
+
+        // ------------------------------------------------------------------ Bonecrusher
+        private IEnumerator BonecrusherRoutineV(Player player, float takeoffDelay)
+        {
+            ShowMessage("Bonecrusher");
+            yield return StartCoroutine(AcrobaticJumpUntilLanding(player, takeoffDelay, Mathf.Max(1.5f, _boneWindup.Value)));
+            if (player == null || player.IsDead()) yield break;
+            DragonCombat.PlaySkillPose(player, "Slam", 0.35f);
+            Vector3 center = player.transform.position;
+            float radius = Mathf.Max(0.5f, _boneRadius.Value);
+            List<Character> targets = GetSphereTargets(player, center, radius);
+            for (int i = 0; i < targets.Count; i++)
+            {
+                bool boss = targets[i].IsBoss();
+                DealDamageScaled(player, targets[i], _boneDamageV, 1f, boss ? 0f : 34f, !boss);
+                DragonCombat.ApplyBrokenBones(targets[i], 6f);
+                DragonCombat.ApplyCripple(targets[i], 6f);
+                if (!boss) ForceStagger(targets[i], player);
+                GainMercenaryFuryFromSkillHit(player);
+            }
+            if (_enableVfx.Value)
+                StartCoroutine(AnimateRing(center + Vector3.up * 0.08f, 0.3f, radius, 0.55f, new Color(1f, 0.46f, 0.16f, 1f), 0.17f));
+            if (!IsAscendedSkill("bonecrusher")) yield break;
+            // Ascended: a ground shock 0.5s later (50%), no second jump.
+            yield return new WaitForSeconds(Mathf.Max(0f, _boneAscShockDelay.Value));
+            if (player == null || player.IsDead()) yield break;
+            List<Character> shock = GetSphereTargets(player, center, radius);
+            for (int i = 0; i < shock.Count; i++)
+            {
+                DealDamageScaled(player, shock[i], _boneDamageV, Mathf.Max(0f, _boneAscShockPercent.Value) / 100f, 12f, false);
+                GainMercenaryFuryFromSkillHit(player);
+            }
+            if (_enableVfx.Value)
+                StartCoroutine(AnimateRing(center + Vector3.up * 0.06f, radius * 0.4f, radius, 0.45f, new Color(0.95f, 0.66f, 0.30f, 0.95f), 0.12f));
+        }
+
+        // ------------------------------------------------------------------ Punishing Bomb
+        private void CastPunishingBomb(Player player)
+        {
+            if (!BeginCast(player, "Mercenary.PunishingBomb", _bombCooldown.Value, _bombStamina.Value)) return;
+            float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _bombWindup.Value));
+            DragonCombat.LockSkill(player, windup + 0.1f);
+            DragonCombat.PlaySkillPose(player, "HeavySlash", windup + 0.15f);
+            StartCoroutine(PunishingBombRoutine(player, windup));
+        }
+
+        private IEnumerator PunishingBombRoutine(Player player, float windup)
+        {
+            ShowMessage("Punishing Bomb");
+            if (windup > 0f) yield return new WaitForSeconds(windup);
+            if (player == null || player.IsDead()) yield break;
+            bool ascended = IsAscendedSkill("punishing_bomb");
+            DamageSnapshot weapon = GetWeaponDamage(player);
+            Vector3 origin = player.GetEyePoint() + player.transform.forward * 0.6f;
+            Vector3 dir = AlbedoAimUtility.GetProjectileDirection(player, origin);
+            Vector3 vel = (dir.normalized + Vector3.up * 0.15f).normalized * Mathf.Max(5f, _bombSpeed.Value);
+            GameObject bomb = null;
+            if (_enableVfx.Value)
+            {
+                bomb = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                bomb.name = "DragonsAltarPunishingBomb";
+                Collider col = bomb.GetComponent<Collider>();
+                if (col != null) Destroy(col);
+                bomb.transform.localScale = Vector3.one * 0.55f;
+                Renderer r = bomb.GetComponent<Renderer>();
+                Shader shader = Shader.Find("Sprites/Default");
+                if (r != null && shader != null) { r.material = new Material(shader); r.material.color = new Color(0.20f, 0.14f, 0.10f, 1f); }
+            }
+            Vector3 pos = origin;
+            Vector3 impact = pos;
+            int solid = IhSolidMask();
+            float life = 0f;
+            bool exploded = false;
+            while (life < 6f && player != null)
+            {
+                float dt = Time.deltaTime;
+                Vector3 next = pos + vel * dt;
+                vel += Physics.gravity * dt;
+                Vector3 step = next - pos;
+                // First valid contact: an enemy or anything solid (the thrower's own colliders are ignored).
+                RaycastHit hit;
+                if (Physics.SphereCast(pos, 0.3f, step.normalized, out hit, step.magnitude, ~0, QueryTriggerInteraction.Ignore))
+                {
+                    Character c = hit.collider.GetComponentInParent<Character>();
+                    if (c != player && (c == null || IsEnemy(player, c) || ((1 << hit.collider.gameObject.layer) & solid) != 0))
+                    {
+                        impact = hit.point;
+                        exploded = true;
+                        break;
+                    }
+                }
+                pos = next;
+                if (bomb != null) bomb.transform.position = pos;
+                life += dt;
+                yield return null;
+            }
+            if (bomb != null) Destroy(bomb);
+            if (!exploded) impact = pos;
+            if (player == null) yield break;
+            float radius = Mathf.Max(1f, ascended ? _bombAscRadius.Value : _bombRadius.Value);
+            float mult = Mathf.Max(0f, _bombWeaponMultiplier.Value) * IhSkillPower(player, "punishing_bomb");
+            float explosion = (weapon.Blunt + weapon.Slash + weapon.Pierce) * mult;
+            List<Character> targets = GetSphereTargets(player, impact, radius);
+            for (int i = 0; i < targets.Count; i++)
+            {
+                HitData h = new HitData();
+                h.m_damage.m_blunt = explosion;
+                h.m_point = targets[i].transform.position;
+                h.m_dir = (targets[i].transform.position - impact).normalized;
+                h.m_pushForce = targets[i].IsBoss() ? 0f : 20f;
+                h.SetAttacker(player);
+                targets[i].Damage(h);
+                GainMercenaryFuryFromSkillHit(player);
+                if (ascended)
+                    IhAddBurnStack(player, targets[i], "punishing_bomb", explosion * _bombAscBurnPercent.Value / 100f, _bombBurnDuration.Value, _bombAscBurnStacks.Value, 0.5f);
+                else
+                    IhAddBurnStack(player, targets[i], "punishing_bomb", explosion * _bombBurnPercent.Value / 100f, _bombBurnDuration.Value, 1, 0f);
+            }
+            if (_enableVfx.Value)
+            {
+                StartCoroutine(AnimateRing(impact + Vector3.up * 0.1f, 0.4f, radius, 0.5f, new Color(1f, 0.48f, 0.14f, 1f), 0.22f));
+                StartCoroutine(AnimateRing(impact + Vector3.up * 1.2f, 0.3f, radius * 0.7f, 0.35f, new Color(1f, 0.80f, 0.40f, 0.9f), 0.14f));
+            }
+            if (ascended)
+                StartCoroutine(PunishingBombFireRoutine(player, impact, radius, explosion));
+        }
+
+        private IEnumerator PunishingBombFireRoutine(Player player, Vector3 center, float radius, float explosion)
+        {
+            float end = Time.time + Mathf.Max(0.5f, _bombAscFireSeconds.Value);
+            while (Time.time < end && player != null)
+            {
+                yield return new WaitForSeconds(0.5f);
+                if (player == null) yield break;
+                List<Character> targets = GetSphereTargets(player, center, radius);
+                for (int i = 0; i < targets.Count; i++)
+                {
+                    // Ground fire hugs valid ground: skip targets far above/below the impact.
+                    if (Mathf.Abs(targets[i].transform.position.y - center.y) > 3f) continue;
+                    IhDealRaw(player, targets[i], 0f, 0f, explosion * _bombAscFirePercent.Value / 100f, 0f);
+                    IhAddBurnStack(player, targets[i], "punishing_bomb", explosion * _bombAscBurnPercent.Value / 100f, _bombBurnDuration.Value, _bombAscBurnStacks.Value, 0.5f);
+                }
+                if (_enableVfx.Value)
+                    StartCoroutine(AnimateRing(center + Vector3.up * 0.06f, radius * 0.3f, radius, 0.45f, new Color(1f, 0.38f, 0.10f, 0.7f), 0.10f));
+            }
+        }
+
+        // ------------------------------------------------------------------ Whirlwind (Ascended)
+        private IEnumerator WhirlwindAscendedRoutine(Player player)
+        {
+            ShowMessage("Whirlwind");
+            _whirlActive = true;
+            _whirlStopRequested = false;
+            DamageSnapshot weapon = GetWeaponDamage(player);
+            float interval = Mathf.Max(0.1f, _whirlwindInterval.Value);
+            float maxTime = Mathf.Max(0.5f, _whirlAscDuration.Value);
+            // B = the whole normal Whirlwind on one target (ticks x weapon multiplier).
+            float normalTicks = Mathf.Max(1f, Mathf.Round(Mathf.Max(0.5f, _whirlwindDuration.Value) / interval));
+            float b = normalTicks * Mathf.Max(0f, _whirlwindWeaponMultiplier.Value);
+            float tickMult = b * Mathf.Max(0f, _whirlAscTickPercent.Value) / 100f;
+            float start = Time.time;
+            int maxTicks = Mathf.Max(1, Mathf.RoundToInt(maxTime / interval));
+            DragonCombat.BeginWhirlwind(player, maxTime);
+            for (int tick = 0; tick < maxTicks; tick++)
+            {
+                if (player == null || player.IsDead()) { _whirlActive = false; yield break; }
+                if (_whirlStopRequested) break;
+                DragonCombat.GrantHyperArmor(player, interval + 0.1f);
+                DragonCombat.PlaySkillPose(player, "Whirlwind", 0.34f);
+                List<Character> targets = GetSphereTargets(player, player.transform.position, Mathf.Max(0.5f, _whirlwindRadius.Value));
+                for (int i = 0; i < targets.Count; i++)
+                {
+                    DealSnapshotDamage(player, targets[i], weapon, tickMult, 14f);
+                    if (tick % 2 == 0) GainMercenaryFuryFromSkillHit(player);
+                }
+                if (_enableVfx.Value)
+                    StartCoroutine(AnimateRing(player.transform.position + Vector3.up * 0.9f, 0.4f, Mathf.Max(0.5f, _whirlwindRadius.Value), Mathf.Min(0.32f, interval), new Color(1f, 0.62f, 0.22f, 0.75f), 0.10f));
+                yield return new WaitForSeconds(interval);
+            }
+            _whirlActive = false;
+            DragonCombat.BeginWhirlwind(player, 0.05f);
+            if (player == null || player.IsDead()) yield break;
+            // Final sweep scales with the time actually spun; ending early gives a smaller sweep.
+            float spun = Mathf.Clamp(Time.time - start, 0f, maxTime);
+            float sweep = b * Mathf.Max(0f, _whirlAscSweepPercent.Value) / 100f * spun / maxTime;
+            List<Character> swept = GetSphereTargets(player, player.transform.position, Mathf.Max(0.5f, _whirlwindRadius.Value) + 1f);
+            for (int i = 0; i < swept.Count; i++)
+                DealSnapshotDamage(player, swept[i], weapon, sweep, 30f);
+            if (_enableVfx.Value)
+                StartCoroutine(AnimateRing(player.transform.position + Vector3.up * 0.9f, 0.5f, Mathf.Max(0.5f, _whirlwindRadius.Value) + 1.5f, 0.4f, new Color(1f, 0.80f, 0.35f, 0.95f), 0.18f));
+        }
+
+        // ------------------------------------------------------------------ Battlecry (Grace)
+        private void CastBattlecry(Player player)
+        {
+            if (!BeginCast(player, "Mercenary.Battlecry", _bcCooldown.Value, 0f)) return;
+            DragonCombat.LockSkill(player, 0.5f);
+            DragonCombat.PlaySkillPose(player, "Shout", 0.75f);
+            ShowMessage("Battlecry");
+            float radius = Mathf.Max(1f, _bcRadius.Value);
+            HashSet<Player> allies = new HashSet<Player>();
+            allies.Add(player);
+            Collider[] hits = Physics.OverlapSphere(player.transform.position, radius);
+            for (int i = 0; i < hits.Length; i++)
+            {
+                Player ally = hits[i].GetComponentInParent<Player>();
+                if (ally != null) allies.Add(ally);
+            }
+            foreach (Player ally in allies)
+                DragonCombat.ApplyTimedBuff(ally, "Mercenary.Battlecry", Mathf.Max(1f, _bcCreatureDuration.Value), Mathf.Max(0f, _bcCreatureBonus.Value) / 100f, 0f, 0f, 0f, 0f, 0f, false);
+            // Environment bonus: this client's own tool / weapon hits on trees, rocks, ore, objects.
+            _battlecryEnvUntil = Time.time + Mathf.Max(1f, _bcEnvDuration.Value);
+            if (_enableVfx.Value)
+                StartCoroutine(AnimateRing(player.transform.position + Vector3.up * 0.10f, 0.6f, radius, 0.9f, new Color(1f, 0.40f, 0.16f, 0.95f), 0.12f));
+        }
+
+        private int PatchEnvironmentDamage()
+        {
+            int count = 0;
+            MethodInfo prefix = typeof(AdvancedPlugin).GetMethod("EnvironmentDamagePrefix", BindingFlags.Static | BindingFlags.NonPublic);
+            if (prefix == null) return 0;
+            string[] names = { "TreeBase", "TreeLog", "MineRock", "MineRock5", "Destructible" };
+            for (int n = 0; n < names.Length; n++)
+            {
+                try
+                {
+                    Type type = Type.GetType(names[n] + ", assembly_valheim");
+                    if (type == null) continue;
+                    MethodInfo damage = type.GetMethod("Damage", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new Type[] { typeof(HitData) }, null);
+                    if (damage == null) continue;
+                    PatchWithHarmony(damage, new HarmonyMethod(prefix), null);
+                    count++;
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogWarning("Could not patch " + names[n] + ".Damage: " + ex.Message);
+                }
+            }
+            return count;
+        }
+
+        private static void EnvironmentDamagePrefix(object[] __args)
+        {
+            if (Instance == null || __args == null || __args.Length < 1) return;
+            HitData hit = __args[0] as HitData;
+            if (hit == null || Time.time >= Instance._battlecryEnvUntil) return;
+            Player attacker = hit.GetAttacker() as Player;
+            if (attacker == null || attacker != Player.m_localPlayer) return;
+            Instance.ScaleDamage(hit, 1f + Mathf.Max(0f, Instance._bcEnvBonus.Value) / 100f);
+        }
+
+        // ------------------------------------------------------------------ Heavy Slash (Ascended MC)
+        private void CastAscendedHeavySlash(Player player)
+        {
+            const string sk = "albedo.customclasses.skills";
+            if (!BeginCast(player, "Mercenary.AscendedHeavySlash", IhCfg(sk, "Warrior.Heavy Slash", "Cooldown", 8f), IhCfg(sk, "Warrior.Heavy Slash", "StaminaCost", 20f))) return;
+            float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, IhCfg(sk, "Warrior.Heavy Slash", "Windup", 0.7f)));
+            DragonCombat.LockSkill(player, windup);
+            DragonCombat.PlaySkillPose(player, "HeavySlash", windup + 0.10f);
+            StartCoroutine(AscendedHeavySlashRoutine(player, windup));
+        }
+
+        private IEnumerator AscendedHeavySlashRoutine(Player player, float windup)
+        {
+            const string sk = "albedo.customclasses.skills";
+            ShowMessage("Heavy Slash");
+            if (windup > 0f) yield return new WaitForSeconds(windup);
+            if (player == null || player.IsDead()) yield break;
+            Vector3 origin = player.transform.position + Vector3.up * 1.0f;
+            Vector3 forward = GetCrosshairDirection(player, origin);
+            float range = Mathf.Max(0.5f, _hsAscReach.Value);
+            float angle = Mathf.Clamp(IhCfg(sk, "Warrior.Heavy Slash", "ArcDegrees", 120f), 20f, 180f);
+            List<Character> targets = GetFrontalTargets(player, origin, forward, range, angle);
+            for (int i = 0; i < targets.Count; i++)
+            {
+                DealDamageScaled(player, targets[i], _heavyAscDamage, 1f, 18f, false);
+                DragonCombat.ApplyBrokenBones(targets[i], 6f);
+                GainMercenaryFuryFromSkillHit(player);
+            }
+            // Connecting grants Hyper Armor; recasting refreshes it, it never adds up.
+            if (targets.Count > 0)
+                DragonCombat.GrantHyperArmor(player, Mathf.Max(0f, _hsAscHyper.Value));
+            if (_enableVfx.Value)
+                StartCoroutine(AnimateHalfmoonArc(origin, FlatForward(player), range));
+        }
+
+        // ------------------------------------------------------------------ tooltips
+        private void IhAppendMercenaryStats(System.Text.StringBuilder b, Player player, string id, bool ascended, float power)
+        {
+            const string sk = "albedo.customclasses.skills";
+            switch (id)
+            {
+                case "heavy_slash":
+                    if (ascended && IhPlayerKit(player) != null && IhPlayerKit(player).Ac == "Mercenary")
+                    {
+                        b.Append(IhLine("Damage", IhDamage(_heavyAscDamage, power)));
+                        b.Append(IhLine("Reach", IhNum(_hsAscReach.Value) + "m"));
+                        b.Append(IhLine("On Hit", IhNum(_hsAscHyper.Value) + "s Hyper Armor"));
+                    }
+                    else
+                    {
+                        b.Append(IhLine("Damage", IhSkillsDamage("Warrior.Heavy Slash.Damage v0224", power)));
+                        b.Append(IhLine("Reach", IhNum(IhCfg(sk, "Warrior.Heavy Slash", "Range", 3.5f)) + "m"));
+                    }
+                    b.Append(IhLine("Inflicts", "Broken Bones, 6s"));
+                    IhCosts(b, IhCfg(sk, "Warrior.Heavy Slash", "StaminaCost", 20f), IhNum(IhCfg(sk, "Warrior.Heavy Slash", "Windup", 0.7f)) + "s", IhCfg(sk, "Warrior.Heavy Slash", "Cooldown", 8f));
+                    break;
+                case "impact_punch":
+                    b.Append(IhLine("Damage", IhSkillsDamage("Warrior.Impact Punch.Damage v0224", power)));
+                    b.Append(IhLine("Reach", "2m x 2m"));
+                    b.Append(IhLine("Inflicts", "Stun (Small)"));
+                    IhCosts(b, IhCfg(sk, "Warrior.Impact Punch", "StaminaCost", 12f), IhNum(IhCfg(sk, "Warrior.Impact Punch", "Windup", 0.5f)) + "s", IhCfg(sk, "Warrior.Impact Punch", "Cooldown", 7f));
+                    break;
+                case "stomp":
+                    b.Append(IhLine("Damage", IhDamage(_stompDamageV, power) + ", aftershock " + IhNum(_stompAftershockPercent.Value) + "%" + (ascended ? ", third " + IhNum(_stompAscPercent.Value) + "%" : "")));
+                    b.Append(IhLine("Radius", IhNum(_stompRadius.Value) + "m, then " + IhNum(_stompAftershockRadius.Value) + "m" + (ascended ? ", then " + IhNum(_stompAscRadius.Value) + "m" : "") + ", " + IhNum(_stompAftershockDelayV.Value) + "s apart"));
+                    b.Append(IhLine("Inflicts", "Stun (Small)"));
+                    IhCosts(b, _stompStamina.Value, IhNum(_stompWindup.Value) + "s", _stompCooldown.Value);
+                    break;
+                case "circle_swing":
+                    b.Append(IhLine("Damage", IhNum(_circleDamageMultiplier.Value * power * 100f) + "% weapon damage" + (ascended ? ", then two swings " + IhNum(_circleAscFirst.Value) + "% + " + IhNum(_circleAscSecond.Value) + "%" : "")));
+                    b.Append(IhLine("Radius", IhNum(ascended ? _circleAscRadius.Value : _circleRadius.Value) + "m"));
+                    b.Append(IhLine("Wind Up", "walk freely, Hyper Armor"));
+                    b.Append(IhLine("Inflicts", ascended ? "Stun, launch (second swing)" : "Stun (Small, Big)"));
+                    IhCosts(b, _circleStamina.Value, IhNum(_circleWindup.Value) + "s", _circleCooldown.Value);
+                    break;
+                case "bonecrusher":
+                    b.Append(IhLine("Damage", IhDamage(_boneDamageV, power) + (ascended ? ", ground shock " + IhNum(_boneAscShockPercent.Value) + "%" : "")));
+                    b.Append(IhLine("Radius", IhNum(_boneRadius.Value) + "m"));
+                    b.Append(IhLine("Inflicts", "Broken Bones, Cripple, Stun"));
+                    IhCosts(b, _boneStamina.Value, "jump", _boneCooldown.Value);
+                    break;
+                case "seismic_guillotine":
+                    b.Append(IhLine("Damage", IhNum(_seismicDamageMultiplier.Value * power * 100f) + "% weapon damage" + (ascended ? ", endpoint " + IhNum(_seismicAscEndpoint.Value) + "%" : "")));
+                    b.Append(IhLine("Range", IhNum(ascended ? _seismicAscRange.Value : _seismicRange.Value) + "m, endpoint " + IhNum(_seismicEndRadius.Value) + "m"));
+                    if (ascended) b.Append(IhLine("Inflicts", "Cripple " + IhNum(_seismicAscSlow.Value) + "s at the endpoint"));
+                    IhCosts(b, _seismicStamina.Value, "0.3s", _seismicCooldown.Value);
+                    break;
+                case "punishing_bomb":
+                    b.Append(IhLine("Damage", IhNum(_bombWeaponMultiplier.Value * power * 100f) + "% weapon damage as Blunt"));
+                    b.Append(IhLine("Radius", IhNum(ascended ? _bombAscRadius.Value : _bombRadius.Value) + "m"));
+                    if (ascended)
+                    {
+                        b.Append(IhLine("Ground Fire", IhNum(_bombAscFirePercent.Value) + "% every 0.5s for " + IhNum(_bombAscFireSeconds.Value) + "s"));
+                        b.Append(IhLine("Inflicts", "Burn " + IhNum(_bombAscBurnPercent.Value) + "% per stack, up to " + _bombAscBurnStacks.Value.ToString() + " stacks"));
+                    }
+                    else
+                        b.Append(IhLine("Inflicts", "Burn " + IhNum(_bombBurnPercent.Value) + "% every 0.5s, " + IhNum(_bombBurnDuration.Value) + "s"));
+                    IhCosts(b, _bombStamina.Value, IhNum(_bombWindup.Value) + "s", _bombCooldown.Value);
+                    break;
+                case "whirlwind":
+                    if (ascended)
+                    {
+                        b.Append(IhLine("Duration", "up to " + IhNum(_whirlAscDuration.Value) + "s, Hyper Armor, recast to end"));
+                        b.Append(IhLine("Damage", IhNum(_whirlAscTickPercent.Value) + "% of the whole spin every " + IhNum(_whirlwindInterval.Value) + "s, final sweep up to " + IhNum(_whirlAscSweepPercent.Value) + "%"));
+                    }
+                    else
+                    {
+                        b.Append(IhLine("Duration", IhNum(_whirlwindDuration.Value) + "s, walk freely"));
+                        b.Append(IhLine("Damage", IhNum(_whirlwindWeaponMultiplier.Value * 100f) + "% weapon damage every " + IhNum(_whirlwindInterval.Value) + "s"));
+                    }
+                    b.Append(IhLine("Radius", IhNum(_whirlwindRadius.Value) + "m"));
+                    IhCosts(b, _whirlwindStamina.Value, "Instant", _whirlwindCooldown.Value);
+                    break;
+                case "battlecry":
+                    b.Append(IhLine("Buff", "+" + IhNum(_bcCreatureBonus.Value) + "% Attack Damage to creatures for " + IhNum(_bcCreatureDuration.Value / 60f) + " min"));
+                    b.Append(IhLine("Labor", "+" + IhNum(_bcEnvBonus.Value) + "% damage to trees, rocks and ore for " + IhNum(_bcEnvDuration.Value / 60f) + " min"));
+                    b.Append(IhLine("Radius", IhNum(_bcRadius.Value) + "m"));
+                    b.Append(IhLine("Cost", "None"));
+                    b.Append(IhLine("Cooldown", IhNum(_bcCooldown.Value / 60f) + " min"));
+                    b.Append(IhLine("Key", FormatHotbarBinding(BindGrace)));
+                    break;
+            }
+        }
+
         private void CastSeveredHorizon(Player player)
         {
             const string id = "SwordMaster.SeveredHorizon";
@@ -2824,7 +3423,7 @@ namespace AlbedosCustomClassesAdvanced
             float windup = Mathf.Max(0f, _stompWindup.Value);
             DragonCombat.LockSkill(player, 1f);
             DragonCombat.PlaySkillPose(player, "Stomp", Mathf.Max(0.65f, windup + 0.15f));
-            StartCoroutine(StompRoutine(player, windup));
+            StartCoroutine(StompRoutineV(player, windup));
         }
 
         private IEnumerator StompRoutine(Player player, float windup)
@@ -2876,7 +3475,7 @@ namespace AlbedosCustomClassesAdvanced
             float takeoffDelay = 0.08f;
             DragonCombat.LockSkill(player, takeoffDelay);
             DragonCombat.PlaySkillPose(player, "Slam", 8f);
-            StartCoroutine(BonecrusherRoutine(player, takeoffDelay));
+            StartCoroutine(BonecrusherRoutineV(player, takeoffDelay));
         }
 
         private IEnumerator BonecrusherRoutine(Player player, float takeoffDelay)
@@ -2912,10 +3511,9 @@ namespace AlbedosCustomClassesAdvanced
                 return;
 
             float windup = Mathf.Max(0.1f, _circleWindup.Value);
-            DragonCombat.LockSkill(player, windup);
-            DragonCombat.GrantHyperArmor(player, windup + 0.25f);
+            // v0.22.4: normal walking speed during the wind up (no Sprint), Hyper Armor.
             DragonCombat.PlaySkillPose(player, "CircleSwing", windup + 0.18f);
-            StartCoroutine(CircleSwingRoutine(player, windup));
+            StartCoroutine(CircleSwingRoutineV(player, windup));
         }
 
         private IEnumerator CircleSwingRoutine(Player player, float windup)
@@ -2997,7 +3595,8 @@ namespace AlbedosCustomClassesAdvanced
                 yield break;
 
             Vector3 origin = player.transform.position;
-            float maxRange = Mathf.Max(2f, _seismicRange.Value);
+            bool seismicAscended = IsAscendedSkill("seismic_guillotine");
+            float maxRange = Mathf.Max(2f, seismicAscended ? _seismicAscRange.Value : _seismicRange.Value);
             Vector3 aimPoint = GetAimPoint(player, maxRange);
             Vector3 aimDelta = aimPoint - origin;
             aimDelta.y = 0f;
@@ -3009,7 +3608,8 @@ namespace AlbedosCustomClassesAdvanced
             DamageSnapshot weapon = GetWeaponDamage(player);
             float width = Mathf.Max(0.75f, _seismicWidth.Value);
             float fullRangeTravelTime = Mathf.Max(0.05f, _seismicTravelTime.Value);
-            float shockSpeed = maxRange / fullRangeTravelTime;
+            // Same shock speed as the normal 15m skill: a longer range never slows close casts.
+            float shockSpeed = Mathf.Max(2f, _seismicRange.Value) / fullRangeTravelTime;
             float multiplier = Mathf.Max(0f, _seismicDamageMultiplier.Value);
             bool fury = IsUnchainedFuryActive();
             HashSet<int> sharedHits = new HashSet<int>();
@@ -3086,10 +3686,14 @@ namespace AlbedosCustomClassesAdvanced
             Vector3 rupturePoint = GetSeismicGroundPoint(origin + forward * Mathf.Max(0f, range), groundMask);
             float endRadius = Mathf.Max(1f, _seismicEndRadius.Value) * (IsUnchainedFuryActive() ? 1.35f : 1f);
             List<Character> endTargets = GetSphereTargets(player, rupturePoint, endRadius);
+            bool endAscended = IsAscendedSkill("seismic_guillotine");
+            float endMultiplier = multiplier * (endAscended ? Mathf.Max(0f, _seismicAscEndpoint.Value) / 100f : 1f);
             for (int i = 0; i < endTargets.Count; i++)
             {
-                DealSnapshotDamage(player, endTargets[i], weapon, multiplier, 44f, false);
+                DealSnapshotDamage(player, endTargets[i], weapon, endMultiplier, 44f, false);
                 GainMercenaryFuryFromSkillHit(player);
+                if (endAscended)
+                    DragonCombat.ApplyCripple(endTargets[i], Mathf.Max(0.1f, _seismicAscSlow.Value));
                 if (DragonCombat.IsSmallEnemy(endTargets[i]))
                     ApplyMercenaryDisplacement(endTargets[i], forward * 2.2f + Vector3.up * 7f);
                 else if (!endTargets[i].IsBoss())
@@ -3209,6 +3813,11 @@ namespace AlbedosCustomClassesAdvanced
             const string id = "Mercenary.Whirlwind";
             if (!BeginCast(player, id, _whirlwindCooldown.Value, _whirlwindStamina.Value))
                 return;
+            if (IsAscendedSkill("whirlwind"))
+            {
+                StartCoroutine(WhirlwindAscendedRoutine(player));
+                return;
+            }
 
             float duration = Mathf.Max(0.1f, _whirlwindDuration.Value);
 
@@ -3239,7 +3848,8 @@ namespace AlbedosCustomClassesAdvanced
                 for (int i = 0; i < targets.Count; i++)
                 {
                     DealSnapshotDamage(player, targets[i], weapon, Mathf.Max(0f, _whirlwindWeaponMultiplier.Value), 14f);
-                    GainMercenaryFuryFromSkillHit(player);
+                    // Continuous channel: Fury at most +3 per target per second.
+                    if (tick % 2 == 0) GainMercenaryFuryFromSkillHit(player);
                 }
 
                 if (_enableVfx.Value)
@@ -6770,6 +7380,7 @@ namespace AlbedosCustomClassesAdvanced
                 _mercFuryEndAnnounced = true;
                 ShowMessage("Unchained Fury ended");
             }
+            UpdateFuryDrain(player);
         }
 
         private void TryBuildMercenaryFury(Player attacker, Character target, HitData hit)
@@ -6786,15 +7397,16 @@ namespace AlbedosCustomClassesAdvanced
             GainMercenaryFury(Mathf.Max(0f, _mercFuryGainPerSkillTarget.Value));
         }
 
+        // v0.22.4: Unchained Fury triggers by itself at 100 (Framework), never from a key.
         private void GainMercenaryFury(float amount)
         {
+            _mercLastCombat = Time.time;
             if (amount <= 0f || IsUnchainedFuryActive() || Time.time < _mercFuryCooldownUntil || _mercFury >= 100f)
                 return;
 
-            float before = _mercFury;
             _mercFury = Mathf.Clamp(_mercFury + amount, 0f, 100f);
-            if (before < 100f && _mercFury >= 100f)
-                ShowMessage("FURY 100 - M4+R");
+            if (_mercFury >= 100f)
+                ActivateUnchainedFury(Player.m_localPlayer);
         }
 
         private bool IsNormalMeleeHit(Player attacker, HitData hit)
@@ -6928,12 +7540,9 @@ namespace AlbedosCustomClassesAdvanced
 
             if (advancement == "Mercenary")
             {
-                ItemDrop.ItemData weapon = player.GetCurrentWeapon();
-                if (DragonCombat.IsTwoHandedWeapon(weapon))
-                {
-                    float factor = 1f + Mathf.Max(0f, _mercTwoHandedAttackSpeed.Value) / 100f;
-                    DragonCombat.SetAttackSpeedSource(player, factor, 0.30f);
-                }
+                // v0.22.4 Warfreak: +50% with two one-handed or one two-handed physical weapon.
+                if (HasWarfreakWeapons(player))
+                    DragonCombat.SetAttackSpeedSource(player, 1f + Mathf.Max(0f, _warfreakAttackSpeed.Value) / 100f, 0.30f);
                 return;
             }
 
@@ -7175,8 +7784,9 @@ namespace AlbedosCustomClassesAdvanced
         {
             string advancement = GetAdvancement(player);
 
-            if (advancement == "Mercenary" && skillType == Skills.SkillType.Axes)
-                return Mathf.Max(0f, _mercAxesBonus.Value);
+            // v0.22.4 Warfreak: +10 Sword, Axe and Clubs (effective cap 100).
+            if (advancement == "Mercenary" && (skillType == Skills.SkillType.Axes || skillType == Skills.SkillType.Swords || skillType == Skills.SkillType.Clubs))
+                return Mathf.Max(0f, _warfreakSkillBonus.Value);
 
             // v0.22.3 The Way of the Sword: +20 Sword with exactly one Sword (effective cap 100).
             if (advancement == "Sword Master" && skillType == Skills.SkillType.Swords && _wotsSwordBonus != null && HasExactlyOneSword(player))
@@ -7274,6 +7884,7 @@ namespace AlbedosCustomClassesAdvanced
             count += PatchLightningZapContext();
             count += PatchRighteousStrikeAscended();
             count += PatchAltarAdvancement();
+            count += PatchEnvironmentDamage();
 
             Logger.LogInfo("Advanced passive hooks installed: " + count);
         }
@@ -7814,8 +8425,7 @@ namespace AlbedosCustomClassesAdvanced
             if (Instance == null || __instance == null)
                 return;
 
-            if (Instance.GetAdvancement(__instance) == "Mercenary")
-                __result += Mathf.Max(0f, Instance._mercHealthBonus.Value);
+            // v0.22.4: Warfreak has no flat HP bonus (old Barbaric +50 HP retired).
 
             if (Instance.IsPaladinPassive(__instance, "HolyKnight"))
                 __result += Mathf.Max(0f, Instance._holyKnightFlatHealth.Value);
@@ -7840,6 +8450,9 @@ namespace AlbedosCustomClassesAdvanced
                 return;
 
             // v0.20.8: the permanent Priest Armor bonus is retired (see Heaven's Crucible).
+            // v0.22.4 Warfreak: +30% of current Armor.
+            if (Instance.GetAdvancement(__instance) == "Mercenary" && Instance._warfreakArmor != null)
+                __result *= 1f + Mathf.Max(0f, Instance._warfreakArmor.Value) / 100f;
         }
 
         private static void PaladinSetMaxEitrPrefix(Player __instance, ref float __0)
@@ -7876,8 +8489,7 @@ namespace AlbedosCustomClassesAdvanced
         {
             string advancement = GetAdvancement(attacker);
 
-            if (advancement == "Mercenary" && IsWeaponHit(hit))
-                ScaleDamage(hit, 1f + Mathf.Max(0f, _mercAttackDamage.Value) / 100f);
+            // v0.22.4: the old Barbaric +8% Attack Damage is retired (not part of Warfreak).
 
             if (advancement == "Mercenary")
                 TryBuildMercenaryFury(attacker, target, hit);
@@ -9928,6 +10540,7 @@ namespace AlbedosCustomClassesAdvanced
 
             // v0.22.3: Sword Master stats (other Warrior / Sorcerer kits follow with their reworks).
             IhAppendSwordMasterStats(b, player, id, ascended, power);
+            IhAppendMercenaryStats(b, player, id, ascended, power);
             // v0.22.0: Warrior / Sorcerer skills list their approved Ascended effect until their
             // full stat tooltips come with each Advancement rework.
             string ascendedText = IhKitAscendedSummary(id);
@@ -10030,7 +10643,7 @@ namespace AlbedosCustomClassesAdvanced
         {
             switch (id)
             {
-                case "punishing_bomb": case "battlecry": case "clockwork":
+                case "clockwork":
                 case "gravity_blast": case "rift_walker":
                     return true;
             }
@@ -10320,6 +10933,11 @@ namespace AlbedosCustomClassesAdvanced
                 case "eclipse": CastEclipse(player); break;
                 case "knights_guidance": CastKnightsGuidance(player); break;
                 case "heavy_slash":
+                    // Mercenary's Ascended Class skill; every other case is the Class skill.
+                    if (GetAdvancement(player) == "Mercenary" && IsAscendedSkill("heavy_slash")) { CastAscendedHeavySlash(player); break; }
+                    if (SkillsPlugin.Instance != null)
+                        SkillsPlugin.Instance.CastFromHotbar(player, id);
+                    break;
                 case "impact_punch":
                 case "flame_burst":
                 case "glacial_descent":
@@ -10335,7 +10953,13 @@ namespace AlbedosCustomClassesAdvanced
                 case "circle_swing": CastCircleSwing(player); break;
                 case "bonecrusher": CastBonecrusher(player); break;
                 case "seismic_guillotine": CastSeismicGuillotine(player); break;
-                case "whirlwind": CastWhirlwind(player); break;
+                case "whirlwind":
+                    // Ascended: recast while spinning ends it early with a proportional final sweep.
+                    if (_whirlActive && IsAscendedSkill("whirlwind")) { _whirlStopRequested = true; break; }
+                    CastWhirlwind(player);
+                    break;
+                case "punishing_bomb": CastPunishingBomb(player); break;
+                case "battlecry": CastBattlecry(player); break;
                 default:
                     // Wizard / Spellcaster live in the Sorcerer module; not-yet-built skills say so.
                     if (!DragonCombat.TryExternalCast(player, id))
@@ -10402,7 +11026,11 @@ namespace AlbedosCustomClassesAdvanced
                 case "heavens_judgement": return GetCooldownRemaining("Priest.HeavensJudgement");
                 case "lightning_tempest": return GetCooldownRemaining("Priest.LightningTempest");
                 case "grand_sigil": return GetCooldownRemaining("Priest.GrandSigil");
-                case "heavy_slash": return skills == null ? 0f : skills.GetCooldownForUi("Warrior.HeavySlash");
+                case "heavy_slash":
+                    if (GetAdvancement(player) == "Mercenary" && IsAscendedSkill(id)) return GetCooldownRemaining("Mercenary.AscendedHeavySlash");
+                    return skills == null ? 0f : skills.GetCooldownForUi("Warrior.HeavySlash");
+                case "punishing_bomb": return GetCooldownRemaining("Mercenary.PunishingBomb");
+                case "battlecry": return GetCooldownRemaining("Mercenary.Battlecry");
                 case "impact_wave":
                     if (GetAdvancement(player) == "Sword Master" && IsAscendedSkill(id)) return GetCooldownRemaining("SwordMaster.AscendedImpactWave");
                     return skills == null ? 0f : skills.GetCooldownForUi("Warrior.ImpactWave");
@@ -10450,6 +11078,14 @@ namespace AlbedosCustomClassesAdvanced
             float y = Screen.height - reserve - size;
 
             string title = GetClass(player) + (string.IsNullOrEmpty(GetAdvancement(player)) ? "" : "  >  " + GetAdvancement(player)) + "   Lv " + IhGetLevel(player).ToString();
+            // v0.22.4: Mercenary's Fury gauge.
+            if (GetAdvancement(player) == "Mercenary")
+            {
+                float lockout = _mercFuryCooldownUntil - Time.time;
+                title += IsUnchainedFuryActive() ? "   UNCHAINED FURY " + Mathf.CeilToInt(_mercFuryUntil - Time.time).ToString() + "s"
+                    : lockout > 0f ? "   FURY LOCKED " + Mathf.CeilToInt(lockout).ToString() + "s"
+                    : "   FURY " + Mathf.FloorToInt(_mercFury).ToString();
+            }
             _titleStyle.normal.textColor = new Color(0.60f, 0.88f, 1f, 1f);
             GUI.Label(new Rect(x, y - 22f * scale, totalWidth, 18f * scale), title.ToUpper(), _titleStyle);
 
@@ -13739,7 +14375,7 @@ namespace AlbedosCustomClassesAdvanced
         private string GetAdvancedPassiveName(string advancement)
         {
             if (advancement == "Sword Master") return "The Way of the Sword";
-            if (advancement == "Mercenary") return "Barbaric / Warfreak";
+            if (advancement == "Mercenary") return "Warfreak";
             if (advancement == "Paladin") return "Holy Trinity";
             if (advancement == "Priest") return "Bless Thy Sinners";
             return "Advanced Passive";
@@ -13748,13 +14384,13 @@ namespace AlbedosCustomClassesAdvanced
         private string GetAdvancedPassiveDescription(Player player, string advancement)
         {
             if (advancement == "Sword Master")
-                return "The Way of the Sword: +100% Attack Speed while exactly one Sword is equipped and the off-hand is empty. Passive only.";
+                return IhMasteryText("Sword Master");
 
             if (advancement == "Mercenary")
             {
                 float lockout = Mathf.Max(0f, _mercFuryCooldownUntil - Time.time);
                 string furyState = IsUnchainedFuryActive() ? "UNCHAINED ACTIVE" : (lockout > 0f ? "LOCKOUT " + lockout.ToString("0") + "s" : "FURY " + Mathf.RoundToInt(_mercFury).ToString() + "/100");
-                return "Warfreak: dual-wield any two one-handed weapons; +125% Attack Speed with two-handed weapons. Barbaric keeps +20 Axes, +8% Attack Damage, +50 HP, aggro and Unchained Fury. " + furyState + ".";
+                return IhMasteryText("Mercenary") + " " + furyState + ".";
             }
 
             if (advancement == "Paladin")

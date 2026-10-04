@@ -1,0 +1,29 @@
+IMMORTAL HEROES v0.22.4 - MERCENARY (includes v0.22.3 Sword Master, see docs/changelog)
+Warrior Class
+- Heavy Slash 100 Slash (one strike), Impact Punch 45 Blunt.
+Mercenary (Framework + approved Ascensions; new config keys so the new defaults apply)
+- Warfreak: +10 Sword, Axe and Clubs; +50% Attack Speed with two one-handed or one two-handed
+  physical weapon; no physical weapon movement penalty; +30% Armor; aggro. The old Barbaric
+  extras (+20 Axes, +8% damage, +50 HP, taunt) are retired.
+- Unchained Fury: +1 per melee hit, +3 per enemy hit by a skill; at 100 it triggers by itself
+  for 20s, then a 3 min lockout; stored Fury drains 1/s after 60s out of combat. Fury shows on
+  the HUD title. (Seismic Guillotine still widens and branches during Fury.)
+- Heavy Slash (Mercenary's Ascended Class skill): 5m reach, 140 Slash, 2s Hyper Armor on hit.
+- Stomp 70 Blunt, then a 10m aftershock 0.5s later (50%), Stun Small.
+  Ascended: third impact at 15m 0.5s later (40%).
+- Circle Swing: walk at normal speed during the 1.5s wind up (Hyper Armor), 7m, 175% weapon,
+  Stun Small/Big (never Bosses).  Ascended: 9m, two swings 0.5s apart (90% + 60%), Hyper Armor,
+  second swing launches Small high and Big lower.
+- Bonecrusher 150 Blunt, 10m, Broken Bones + Cripple + Stun.  Ascended: ground shock 0.5s after
+  landing (50%), no second jump. (The old Fury cone is retired.)
+- Seismic Guillotine unchanged.  Ascended: 25m range at the same shock speed, endpoint 140% and
+  Cripple 3s.
+- NEW Punishing Bomb (replaces Reaver's Orbit): 0.5s bat-swing throw, ballistic bomb that
+  explodes on the first enemy / object / terrain it touches: 7m, 140% weapon damage as Blunt,
+  Burn 2% every 0.5s for 6s.  Ascended: 12m, 6s ground fire (4% every 0.5s) and stacking Burn
+  (0.75% per stack, 5 stacks).
+- Whirlwind: 6s, 50% weapon every 0.5s, walk freely.  Ascended: up to 8s with Hyper Armor,
+  7.5% of the whole spin per hit; recast to end early; final sweep up to 60% scaled by spin time.
+- NEW Battlecry (Grace, M4+R): 10m allies +15% damage to creatures for 1 min, +25% damage to
+  trees, rocks and ore for 3 min, 10 min cooldown.
+- Mercenary tooltips with full stats; Altar Mercenary / Sword Master texts updated.

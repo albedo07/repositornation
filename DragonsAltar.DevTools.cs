@@ -40,7 +40,7 @@ namespace DragonsAltarDevTools
     {
         public const string ModGuid = "albedo.customclasses.devtools";
         public const string ModName = "Dragon's Altar - Developer Tools";
-        public const string ModVersion = "0.22.3";
+        public const string ModVersion = "0.22.4";
 
         public static DeveloperToolsPlugin Instance;
 
@@ -410,6 +410,17 @@ namespace DragonsAltarDevTools
                 (section == "Sword Master Halfmoon Slash" && key == "SpiritDotPerSecond") ||
                 (section == "Sword Master Passive" && key == "WayOfTheSwordAttackSpeedPercent_v0123"))
                 return true;
+            // v0.22.4 Mercenary rework: superseded values and the retired Barbaric / Reaver's Orbit.
+            if (section == "Mercenary Stomp Damage" || section == "Mercenary Bonecrusher Damage" ||
+                section == "Warrior.Heavy Slash.Damage" || section == "Warrior.Impact Punch.Damage" ||
+                section.StartsWith("Mercenary Reavers Orbit", StringComparison.OrdinalIgnoreCase) ||
+                (section == "Mercenary Passive" && key != "AggroRadius"))
+                return true;
+            if ((section == "Mercenary Stomp" && key == "AftershockDelay") ||
+                (section == "Mercenary Circle Swing" && key == "WindupTravel") ||
+                (section == "Mercenary Weapon Mastery - Warfreak" && key == "TwoHandedAttackSpeedPercent") ||
+                (section == "Mercenary Unchained Fury" && (key == "Duration" || key == "Cooldown" || key.StartsWith("Bonecrusher", StringComparison.Ordinal))))
+                return true;
             if (section.StartsWith("Sword Master Severed Horizon", StringComparison.OrdinalIgnoreCase) ||
                 section.StartsWith("Sword Master Empty Sheath", StringComparison.OrdinalIgnoreCase))
                 return true;
@@ -428,7 +439,8 @@ namespace DragonsAltarDevTools
                        .Replace("Priest Grand Sigil", "Priest Heaven's Crucible")
                        .Replace("Heavens ", "Heaven's ")
                        .Replace("Judgement Cut", "Blade Storm")
-                       .Replace("Knights Guidance", "Knight's Guidance");
+                       .Replace("Knights Guidance", "Knight's Guidance")
+                       .Replace("Mercenary Weapon Mastery - Warfreak", "Mercenary Warfreak");
             return text;
         }
 

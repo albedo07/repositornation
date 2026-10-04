@@ -181,7 +181,7 @@ namespace AlbedosCustomClassesSkills
         public static SkillsPlugin Instance;
         public const string ModGuid = "albedo.customclasses.skills";
         public const string ModName = "Dragon's Altar - Starter Skills";
-        public const string ModVersion = "0.22.3";
+        public const string ModVersion = "0.22.4";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";
@@ -293,7 +293,7 @@ namespace AlbedosCustomClassesSkills
             _heavyWindup = Config.Bind("Warrior.Heavy Slash", "Windup", 0.7f, "Base windup before Attack Speed modifiers.");
             _heavyRange = Config.Bind("Warrior.Heavy Slash", "Range", 3.5f, "Literal Valheim-meter reach. Heavy Slash has no exact framework distance, so 3.5m remains the prototype default.");
             _heavyAngle = Config.Bind("Warrior.Heavy Slash", "ArcDegrees", 120f, "Horizontal slash arc.");
-            _heavyDamage = BindDamage("Warrior.Heavy Slash.Damage", 0f, 55f, 0f, 0f, 0f, 0f, 0f, 0f);
+            _heavyDamage = BindDamage("Warrior.Heavy Slash.Damage v0224", 0f, 100f, 0f, 0f, 0f, 0f, 0f, 0f);
 
             _impactCooldown = Config.Bind("Warrior.Impact Wave", "Cooldown", 8f, "Seconds.");
             _impactStamina = Config.Bind("Warrior.Impact Wave", "StaminaCost", 18f, "Stamina cost.");
@@ -308,7 +308,7 @@ namespace AlbedosCustomClassesSkills
             _punchWindup = Config.Bind("Warrior.Impact Punch", "Windup", 0.5f, "Base windup before Attack Speed modifiers.");
             _punchRange = Config.Bind("Warrior.Impact Punch", "Range", 2f, "Framework reach: literal 2m.");
             _punchWidth = Config.Bind("Warrior.Impact Punch", "Width", 2f, "Framework hitbox width: literal 2m.");
-            _punchDamage = BindDamage("Warrior.Impact Punch.Damage", 42f, 0f, 0f, 0f, 0f, 0f, 0f, 0f);
+            _punchDamage = BindDamage("Warrior.Impact Punch.Damage v0224", 45f, 0f, 0f, 0f, 0f, 0f, 0f, 0f);
 
             _zapCooldown = Config.Bind("Cleric.Lightning Zap", "Cooldown", 8f, "Seconds.");
             _zapStamina = Config.Bind("Cleric.Lightning Zap", "StaminaCost", 18f, "Stamina cost.");
