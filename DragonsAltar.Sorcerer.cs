@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Dragon's Altar - Sorcerer Advancements";
-        public const string ModVersion = "0.23.6";
+        public const string ModVersion = "0.23.7";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -2541,11 +2541,32 @@ namespace DragonsAltarSorcerer
             }
             if (orb != null) Destroy(orb);
             if (scale >= 1f) _gbOrbActive = false;
-            if ((!ascended && !detonated) || player == null) yield break;
+            // v0.23.7: the orb always detonates when it ends (normal and Ascended) or on the 2nd recast.
+            if (player == null) yield break;
             List<Character> hit = GetSphereTargets(player, pos, radius);
             for (int i = 0; i < hit.Count; i++)
                 DealWiz(player, hit[i], _gravityBlastDmg, scale * _gbAscBurst.Value / 100f, "gravity_blast", 14f, true);
-            if (_enableVfx.Value) { StartCoroutine(RingVfx(pos, radius, new Color(0.65f, 0.25f, 1f, 1f), 0.6f)); CreateLightningBurst(pos, radius); }
+            if (_enableVfx.Value) StartCoroutine(ExplosionVfx(pos, radius, new Color(0.55f, 0.18f, 0.95f, 0.85f)));
+        }
+
+        // A blast at the orb itself (no strikes from the sky): a flash sphere that swells and fades,
+        // with shock rings racing out to the radius.
+        private IEnumerator ExplosionVfx(Vector3 center, float radius, Color color)
+        {
+            GameObject flash = CreateOrb(center, radius * 0.3f, color);
+            for (int i = 0; i < 3; i++)
+                StartCoroutine(RingVfx(center + Vector3.up * (0.3f + i * 0.9f), radius * (0.7f + 0.15f * i), new Color(color.r, color.g, color.b, 0.9f - 0.2f * i), 0.35f + 0.1f * i));
+            float t = 0f;
+            Renderer r = flash != null ? flash.GetComponent<Renderer>() : null;
+            while (t < 0.4f && flash != null)
+            {
+                float k = t / 0.4f;
+                flash.transform.localScale = Vector3.one * Mathf.Lerp(radius * 0.3f, radius * 2f, k);
+                if (r != null && r.material != null) r.material.color = new Color(color.r, color.g, color.b, color.a * (1f - k));
+                t += Time.deltaTime;
+                yield return null;
+            }
+            if (flash != null) Destroy(flash);
         }
 
         // ------------------------------------------------------------------ Rift Walker (Grace)

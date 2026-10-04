@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.23.6";
+        public const string ModVersion = "0.23.7";
 
         internal static DragonCombatPlugin Instance;
 
@@ -29,6 +29,7 @@ namespace DragonsAltarCombat
         internal ConfigEntry<float> ZapDelay;
         internal ConfigEntry<float> ZapRadius;
         internal ConfigEntry<float> CharacterHeightMeters;
+        internal ConfigEntry<float> ClericMasteryMagicDamage;
         internal ConfigEntry<float> UnitsPerMeterOverride;
         internal ConfigEntry<float> ZapDamage;
         internal ConfigEntry<bool> BurnsUseCurrentHpPercent;
@@ -81,6 +82,7 @@ namespace DragonsAltarCombat
             FrostPhysicalDamageBonus = Config.Bind("Debuffs", "FrostPhysicalDamageTakenPercent", 20f, "Extra physical damage taken while Frost weakens physical defense.");
             ZapDelay = Config.Bind("Debuffs", "ZapDelay_v0212", 2f, "Seconds before Zap explodes (universal rule: 2s).");
             ZapRadius = Config.Bind("Debuffs", "ZapRadius", 1f, "Zap explosion radius.");
+            ClericMasteryMagicDamage = Config.Bind("Cleric Mastery", "MagicDamagePercent", 10f, "Heaven's Will (Paladin) and Bless Thy Sinners (Priest): +Magic Damage (Fire, Frost, Lightning, Poison, Spirit) on everything they deal.");
             CharacterHeightMeters = Config.Bind("Measurement", "CharacterHeightMeters", 0.5f, "v0.22.5 ruler (user rule): your character's height counts as this many meters. Every range, radius, width, length and travel speed in every config is in these meters.");
             UnitsPerMeterOverride = Config.Bind("Measurement", "UnitsPerMeterOverride", 1.5f, "Unity units per config meter. 1.5 = the confirmed in-game ruler (user, v0.23.3). 0 = automatic from character height / CharacterHeightMeters.");
             ZapDamage = Config.Bind("Debuffs", "ZapLightningDamage", 25f, "Testing/default lightning damage for Zap because the framework does not specify an amount.");
@@ -2937,6 +2939,21 @@ namespace DragonsAltarCombat
                 float outgoingBonus = GetTimedBuffSum(attacker, "AttackDamage");
                 if (outgoingBonus != 0f)
                     hit.m_damage.Modify(Mathf.Max(0f, 1f + outgoingBonus));
+
+                // v0.23.7 Heaven's Will / Bless Thy Sinners: Cleric hybrid guardians, +10% Magic Damage.
+                if (GetClass(attacker) == "Cleric" && DragonCombatPlugin.Instance != null)
+                {
+                    string ac = GetAdvancementName(attacker);
+                    if (ac == "Paladin" || ac == "Priest")
+                    {
+                        float m = 1f + Mathf.Max(0f, DragonCombatPlugin.Instance.ClericMasteryMagicDamage.Value) / 100f;
+                        hit.m_damage.m_fire *= m;
+                        hit.m_damage.m_frost *= m;
+                        hit.m_damage.m_lightning *= m;
+                        hit.m_damage.m_poison *= m;
+                        hit.m_damage.m_spirit *= m;
+                    }
+                }
 
                 // Clockwork: skill hits carry no weapon skill type.
                 float clockwork = ClockworkSkillDamage(attacker);

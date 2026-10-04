@@ -1,10 +1,9 @@
-TEST THIS BUILD - v0.23.6 Astral Twins
-======================================
-1. Ascended Afterimage Arsenal: 3 purple copies of your character copy you 0.2s late
-   (run, roll, shield, dual Gun Staves). Hold Mouse1: they fire with you.
-2. Gravity Blast: recast once = orb stops; recast again = explosion.
-3. Astral Greatblade: no charge. Ascended: rooted during the 3 slams.
-4. Meteor Fall / Cataclysm: hold past max, move your aim (ring follows), release = lands there.
-   Icon shows x/3 + timer while charging.
-5. Skill Tree highlights: gold halo hugging the frame (nodes, hotbar, + / -).
-6. Knight's Guidance / other non-Cleric Grace boxes: even gold border.
+TEST THIS BUILD - v0.23.7 Polish
+================================
+1. Archmage tree before Lv 24/32: "Spend 3 Tier Points" / "Spend 6 Tier Points" readable.
+2. Hover a skill near the tree edge: the tooltip leaves the window (no squeezing).
+3. Grace node: no highlight. Hotbar empty slots: no highlight.
+4. HUD Arcane Rupture after using a charge: cooldown number above, x/4 pill below.
+5. HUD locked Grace: gold frame normal colour.
+6. Gravity Blast: let it run out -> purple blast at the orb (no sky lightning).
+7. Paladin tree header hover: HEAVEN'S WILL - MASTERY; Paladin / Priest elemental damage +10%.

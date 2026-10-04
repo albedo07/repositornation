@@ -40,7 +40,7 @@ namespace DragonsAltarDevTools
     {
         public const string ModGuid = "albedo.customclasses.devtools";
         public const string ModName = "Dragon's Altar - Developer Tools";
-        public const string ModVersion = "0.23.6";
+        public const string ModVersion = "0.23.7";
 
         public static DeveloperToolsPlugin Instance;
 
@@ -77,7 +77,7 @@ namespace DragonsAltarDevTools
         private bool _defaultsChecked;
         private float _allDefaultsArmedUntil;
         // v0.22.5: every new pass starts from the default values once (user rule); raise this per pass.
-        private const string DefaultsPass = "0.23.6";
+        private const string DefaultsPass = "0.23.7";
 
         private readonly List<DevSetting> _settings = new List<DevSetting>();
         private readonly List<string> _sections = new List<string>();

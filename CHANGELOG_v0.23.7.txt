@@ -1,0 +1,27 @@
+IMMORTAL HEROES v0.23.7 - POLISH
+================================
+(First start resets every setting to default once, Dev Mode OFF.)
+
+UI
+- Locked node text ("Spend 3 Tier Points") no longer overlaps its neighbour: no branch
+  name, and it shrinks to fit its own column.
+- Tooltips are their own top-most window: they can extend past the Skill Tree window
+  instead of being squeezed inside it (flip to the left near the screen edge).
+- Grace nodes have no hover / selected highlight (nothing to configure there); empty
+  hotbar slots don't highlight either.
+- HUD: the stack pill sits at the bottom centre and the cooldown number moves up, so they
+  never cover each other.
+- HUD locked Grace: the gold frame stays in full colour, only the art inside is shaded,
+  padlock in the corner (it no longer looks unpainted).
+
+HORIZON WALKER
+- Gravity Blast always explodes when it ends (normal and Ascended, 130%), and on the 2nd
+  recast. The explosion is a blast at the orb (swelling flash + shock rings), nothing falls
+  from the sky.
+
+CLERIC (hybrid guardians)
+- Paladin Mastery renamed HEAVEN'S WILL (same mechanics) + 10% Magic Damage.
+- Priest Mastery Bless Thy Sinners: + 10% Magic Damage.
+  Magic Damage = Fire, Frost, Lightning, Poison and Spirit on everything they deal.
+  F8: [Cleric Mastery] MagicDamagePercent.
+- Framework doc updated (Heaven's Will, Bless Thy Sinners as a Mastery, Gravity Blast).

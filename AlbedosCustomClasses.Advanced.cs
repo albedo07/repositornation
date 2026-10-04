@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.23.6";
+        public const string ModVersion = "0.23.7";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -9854,7 +9854,7 @@ namespace AlbedosCustomClassesAdvanced
             int need = IhGateSpend(gate);
             if (IhSpent(player, IhBranchSkills(player)) < need)
             {
-                reason = "Spend " + need.ToString() + " " + branch + " Tier Points first";
+                reason = "Spend " + need.ToString() + " " + IhAcDisplay(branch) + " Tier Points first";
                 return false;
             }
             return true;
@@ -10838,7 +10838,7 @@ namespace AlbedosCustomClassesAdvanced
                     b.Append(IhLine("Radius", IhNum(IhW("Spellcaster Gravity Blast", "Radius", 5f)) + "m"));
                     b.Append(IhLine("Inflicts", ascended ? "pulls Small, Big 40%, Bosses 20%; Cripple (Big, Boss)" : "pulls Small; Cripple " + IhNum(IhW("Spellcaster Gravity Blast", "CrippleDuration", 3f)) + "s (Big, Boss)"));
                     b.Append(IhLine("Recast", "1st: the orb stops where it is; 2nd: it explodes for " + IhNum(IhW("Spellcaster Gravity Blast Ascended", "EndBurstPercent", 130f)) + "%"));
-                    if (ascended) b.Append(IhLine("End Burst", IhNum(IhW("Spellcaster Gravity Blast Ascended", "EndBurstPercent", 130f)) + "% when the orb ends"));
+                    b.Append(IhLine("End Burst", IhNum(IhW("Spellcaster Gravity Blast Ascended", "EndBurstPercent", 130f)) + "% when the orb ends"));
                     IhEitrCosts(b, IhW("Spellcaster Gravity Blast", "EitrCost", 40f) * 0.5f, "None", IhW("Spellcaster Gravity Blast", "Cooldown", 14f));
                     return;
                 case "arcane_rupture":
@@ -11112,11 +11112,20 @@ namespace AlbedosCustomClassesAdvanced
             else if (reason.StartsWith("Unlocks at "))
                 shortReason = reason;
             else if (reason.StartsWith("Spend "))
-                shortReason = reason.Replace(" Paladin", "").Replace(" Priest", "").Replace(" first", "");
+            {
+                // v0.23.7: "Spend 3 Tier Points" (no branch name) so neighbouring nodes never collide.
+                string[] words = reason.Split(' ');
+                shortReason = words.Length > 1 ? "Spend " + words[1] + " Tier Points" : reason;
+            }
             else if (reason.StartsWith("Advance"))
                 shortReason = "Advance at Lv 16";
-            GUI.Label(ScaleReferenceRect(anchor.x - 70f, anchor.y + 2f, 140f, 14f),
-                "<color=" + IhHex(0.36f, 0.26f, 0.18f) + ">" + shortReason + "</color>", _ihLockTextStyle);
+            // Fit inside the node's own column (nodes are ~137 px apart): shrink instead of overflowing.
+            Rect lockLabel = ScaleReferenceRect(anchor.x - 60f, anchor.y + 2f, 120f, 14f);
+            int baseSize = _ihLockTextStyle.fontSize;
+            while (_ihLockTextStyle.fontSize > 7 && _ihLockTextStyle.CalcSize(new GUIContent(shortReason)).x > lockLabel.width)
+                _ihLockTextStyle.fontSize--;
+            GUI.Label(lockLabel, "<color=" + IhHex(0.36f, 0.26f, 0.18f) + ">" + shortReason + "</color>", _ihLockTextStyle);
+            _ihLockTextStyle.fontSize = baseSize;
         }
 
         // =====================================================================================
@@ -11439,14 +11448,17 @@ namespace AlbedosCustomClassesAdvanced
             }
             else
             {
+                // v0.23.7: keep the gold frame in full colour; only the art inside is shaded
+                // (tinting the whole icon made the frame look unpainted), padlock in the corner.
                 if (GetSkillIconTex(IhGraceFor(player)) != null)
-                {
-                    GUI.color = new Color(0.32f, 0.32f, 0.32f, 1f);
                     GUI.DrawTexture(grace, GetSkillIconTex(IhGraceFor(player)));
-                    GUI.color = Color.white;
-                }
+                IhDrawPlaceholderInitials(new Rect(grace.x + grace.width * 0.14f, grace.y + grace.height * 0.15f, grace.width * 0.72f, grace.height * 0.70f), IhGraceFor(player), true);
+                Rect graceInner = new Rect(grace.x + grace.width * 0.14f, grace.y + grace.height * 0.14f, grace.width * 0.72f, grace.height * 0.72f);
+                GUI.color = new Color(0.10f, 0.10f, 0.11f, 0.62f);
+                GUI.DrawTexture(graceInner, Texture2D.whiteTexture);
+                GUI.color = Color.white;
                 if (_ihPadlockTex != null)
-                    GUI.DrawTexture(new Rect(grace.center.x - grace.width * 0.22f, grace.center.y - grace.width * 0.22f, grace.width * 0.44f, grace.width * 0.44f), _ihPadlockTex);
+                    GUI.DrawTexture(new Rect(graceInner.xMax - grace.width * 0.36f, graceInner.yMax - grace.width * 0.36f, grace.width * 0.40f, grace.width * 0.40f), _ihPadlockTex);
                 GUI.Label(new Rect(grace.x - 10f, grace.yMax - 1f, grace.width + 20f, 16f * scale), FormatHotbarBinding(BindGrace), _hudKeyCenterStyle);
             }
         }
@@ -11477,7 +11489,9 @@ namespace AlbedosCustomClassesAdvanced
                     GUI.color = new Color(0f, 0f, 0f, 0.62f);
                     GUI.DrawTexture(inner, Texture2D.whiteTexture);
                     GUI.color = Color.white;
-                    GUI.Label(inner, IhFormatCooldown(cooldown), _hudCooldownStyle);
+                    // v0.23.7: with a stack pill at the bottom the number moves to the upper part
+                    Rect number = stacked ? new Rect(inner.x, inner.y, inner.width, inner.height * 0.62f) : inner;
+                    GUI.Label(number, IhFormatCooldown(cooldown), _hudCooldownStyle);
                 }
                 if (stacked)
                     IhDrawStackCounter(inner, ready, max, (charging || ready > 0) && ready < max ? next : 0f, scale);
@@ -11505,7 +11519,7 @@ namespace AlbedosCustomClassesAdvanced
                 _hudStackStyle.clipping = TextClipping.Overflow;
             }
             _hudStackStyle.fontSize = Mathf.Max(9, Mathf.RoundToInt(11f * scale));
-            Rect pill = new Rect(inner.xMax - 22f * scale, inner.yMax - 13f * scale, 26f * scale, 15f * scale);
+            Rect pill = new Rect(inner.center.x - 13f * scale, inner.yMax - 14f * scale, 26f * scale, 14f * scale); // bottom centre, clear of the cooldown number
             GUI.color = new Color(0.02f, 0.03f, 0.06f, 0.85f);
             GUI.DrawTexture(pill, Texture2D.whiteTexture);
             GUI.color = ready > 0 ? new Color(1f, 0.86f, 0.42f, 1f) : new Color(0.65f, 0.65f, 0.65f, 1f);
@@ -11730,7 +11744,31 @@ namespace AlbedosCustomClassesAdvanced
                 DrawCombatHud(player);
 
             if (_skillbookOpen)
+            {
                 _skillbookRect = GUI.Window(706060, _skillbookRect, DrawSkillbookWindow, "", _treeWindowStyle);
+                // v0.23.7: the tooltip is its own top-most window so it can leave the tree window
+                // instead of being squeezed inside it.
+                if (_ttShow)
+                {
+                    GUI.Window(706061, _ttRect, DrawTooltipWindow, "", GUIStyle.none);
+                    GUI.BringWindowToFront(706061);
+                }
+            }
+            else
+                _ttShow = false;
+        }
+
+        private bool _ttShow;
+        private Rect _ttRect;
+        private string _ttTitle = "", _ttBody = "";
+        private float _ttBodyHeight;
+
+        private void DrawTooltipWindow(int id)
+        {
+            Rect rect = new Rect(0f, 0f, _ttRect.width, _ttRect.height);
+            DrawFilledBorder(rect, new Color(0.055f, 0.06f, 0.075f, 0.98f), new Color(0.84f, 0.67f, 0.31f, 1f), 2f);
+            GUI.Label(new Rect(14f, 10f, rect.width - 28f, 24f), _ttTitle, _treeTooltipTitleStyle);
+            GUI.Label(new Rect(14f, 37f, rect.width - 28f, _ttBodyHeight + 4f), _ttBody, _treeTooltipBodyStyle);
         }
 
         private void DrawCombatHud(Player player)
@@ -12277,8 +12315,8 @@ namespace AlbedosCustomClassesAdvanced
             string treeBranch = IhTreeBranch();
             if (treeBranch == "Priest" || treeBranch == "Paladin")
                 RegisterReferenceHotspot(ScaleReferenceRect(332f, 76f, 651f, 64f),
-                    (treeBranch == "Priest" ? "BLESS THY SINNERS - MASTERY" : "HOLY TRINITY - MASTERY"),
-                    treeBranch == "Priest" ? GetAdvancedPassiveDescription(treePlayer, "Priest") : "Club-type melee + Shield: +15 Clubs (effective cap 100), no Armor movement penalties, and the Club's current Blunt damage guarantees Slash and Pierce each reach at least 50% of that Blunt value without lowering existing damage.");
+                    (treeBranch == "Priest" ? "BLESS THY SINNERS - MASTERY" : "HEAVEN'S WILL - MASTERY"),
+                    treeBranch == "Priest" ? GetAdvancedPassiveDescription(treePlayer, "Priest") : "+10% Magic Damage (Fire, Frost, Lightning, Poison, Spirit). Club-type melee + Shield: +15 Clubs (effective cap 100), no Armor movement penalties, and the Club's current Blunt damage guarantees Slash and Pierce each reach at least 50% of that Blunt value without lowering existing damage.");
             else
                 RegisterReferenceHotspot(ScaleReferenceRect(332f, 76f, 651f, 64f), IhMasteryTitle(treeBranch), IhMasteryText(treeBranch));
 
@@ -13409,7 +13447,7 @@ namespace AlbedosCustomClassesAdvanced
                 if (!empty && !draggingFromHere && IsPermanentHotbarSkill(id))
                     DrawPermanentBadge(r);
 
-                if (!_dragActive) IhDrawGlow(r, "slot:" + (tex == null ? "none" : tex.name), tex, false, hoverSlot == i);
+                if (!_dragActive && !empty) IhDrawGlow(r, "slot:" + (tex == null ? "none" : tex.name), tex, false, hoverSlot == i);
                 if (!_dragActive && hoverSlot == i && !empty)
                 {
                     ReferenceNodeUi node = FindReferenceNode(id);
@@ -13772,6 +13810,8 @@ namespace AlbedosCustomClassesAdvanced
         // Tree node: the halo hugs the frame (its frame sprite, or the painted Grace frame).
         private void IhDrawNodeGlow(ReferenceNodeUi node, bool selected, bool hover)
         {
+            // Graces have no Tiers and can't be configured: nothing to click, so no highlight.
+            if (node == null || node.Kind == TreeNodeKind.Grace) return;
             string slot = IhTemplateSlot(node.Id);
             if (slot == "heavens_light")
             {
@@ -14229,7 +14269,7 @@ namespace AlbedosCustomClassesAdvanced
 
             GUI.Label(new Rect(384f, 103f, 54f, 40f), "✝", _treeHeaderEmblemStyle);
             GUI.Label(new Rect(446f, 103f, 655f, 30f), "PALADIN", _treeHeaderStyle);
-            GUI.Label(new Rect(446f, 132f, 655f, 17f), "hover for Holy Trinity Mastery", _treeTinyStyle);
+            GUI.Label(new Rect(446f, 132f, 655f, 17f), "hover for Heaven's Will Mastery", _treeTinyStyle);
 
             if (clericHeader.Contains(Event.current.mousePosition))
             {
@@ -14238,7 +14278,7 @@ namespace AlbedosCustomClassesAdvanced
             }
             if (paladinHeader.Contains(Event.current.mousePosition))
             {
-                _treeHoveredTitle = "HOLY TRINITY — MASTERY";
+                _treeHoveredTitle = "HEAVEN'S WILL — MASTERY";
                 _treeHoveredBody = "While wielding a Club-type melee weapon + Shield: +15 Clubs, no Armor movement penalty, and Slash/Pierce are each brought up to 50% of current Blunt damage without lowering existing damage.";
             }
 
@@ -14529,21 +14569,26 @@ namespace AlbedosCustomClassesAdvanced
         private void DrawTreeTooltip()
         {
             if (string.IsNullOrEmpty(_treeHoveredTitle))
+            {
+                _ttShow = false;
                 return;
-
-            // v0.18.0: rich-text skill sheet, height fits the content.
-            Vector2 mouse = Event.current.mousePosition;
+            }
+            // v0.18.0: rich-text skill sheet, height fits the content. Positioned in SCREEN space
+            // (v0.23.7) and drawn as its own window, so it may extend past the tree window.
+            Vector2 mouse = Event.current.mousePosition + _skillbookRect.position;
             _treeTooltipBodyStyle.richText = true;
             float w = 400f;
             float bodyHeight = _treeTooltipBodyStyle.CalcHeight(new GUIContent(_treeHoveredBody), w - 28f);
             float h = Mathf.Max(70f, bodyHeight + 50f);
-            float x = Mathf.Min(mouse.x + 18f, _skillbookRect.width - w - 12f);
-            float y = Mathf.Min(mouse.y + 18f, _skillbookRect.height - h - 12f);
+            float x = mouse.x + 18f;
+            if (x + w > Screen.width - 8f) x = mouse.x - w - 18f;
+            float y = Mathf.Min(mouse.y + 18f, Screen.height - h - 8f);
             y = Mathf.Max(8f, y);
-            Rect rect = new Rect(x, y, w, h);
-            DrawFilledBorder(rect, new Color(0.055f, 0.06f, 0.075f, 0.98f), new Color(0.84f, 0.67f, 0.31f, 1f), 2f);
-            GUI.Label(new Rect(x + 14f, y + 10f, w - 28f, 24f), _treeHoveredTitle, _treeTooltipTitleStyle);
-            GUI.Label(new Rect(x + 14f, y + 37f, w - 28f, bodyHeight + 4f), _treeHoveredBody, _treeTooltipBodyStyle);
+            _ttRect = new Rect(Mathf.Max(8f, x), y, w, h);
+            _ttTitle = _treeHoveredTitle;
+            _ttBody = _treeHoveredBody;
+            _ttBodyHeight = bodyHeight;
+            _ttShow = true;
         }
 
         private void DrawNamePlate(Rect rect, string text, bool ultimate)
@@ -14891,7 +14936,7 @@ namespace AlbedosCustomClassesAdvanced
         {
             if (advancement == "Sword Master") return "The Way of the Sword";
             if (advancement == "Mercenary") return "Warfreak";
-            if (advancement == "Paladin") return "Holy Trinity";
+            if (advancement == "Paladin") return "Heaven's Will";
             if (advancement == "Priest") return "Bless Thy Sinners";
             return "Advanced Passive";
         }
@@ -14910,11 +14955,11 @@ namespace AlbedosCustomClassesAdvanced
 
             if (advancement == "Paladin")
             {
-                return "Holy Trinity: with a Club-type weapon and a Shield, +15 Clubs, no Armor movement penalty, and Slash / Pierce at least 50% of Blunt.";
+                return "Heaven's Will: +10% Magic Damage. With a Club-type weapon and a Shield, +15 Clubs, no Armor movement penalty, and Slash / Pierce at least 50% of Blunt.";
             }
 
             if (advancement == "Priest")
-                return "You and allies within 20m survive a lethal hit at 1 HP, then recover 50% HP over 6s with +50% Move Speed and -70% Stamina use. Self 20 min, each ally 40 min.\n\nBuckler: doubled Parry. A Parry grants 5s Hyper Armor and +35% Damage to your next skill, and releases a 10m Holy Shockwave (Spirit damage, Stuns Small and Big; 15s cooldown).";
+                return "+10% Magic Damage (Fire, Frost, Lightning, Poison, Spirit). You and allies within 20m survive a lethal hit at 1 HP, then recover 50% HP over 6s with +50% Move Speed and -70% Stamina use. Self 20 min, each ally 40 min.\n\nBuckler: doubled Parry. A Parry grants 5s Hyper Armor and +35% Damage to your next skill, and releases a 10m Holy Shockwave (Spirit damage, Stuns Small and Big; 15s cooldown).";
 
             return "";
         }
