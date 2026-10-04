@@ -18,7 +18,7 @@ namespace AlbedosCustomClasses
     {
         public const string ModGuid = "albedo.customclasses";
         public const string ModName = "Dragon's Altar";
-        public const string ModVersion = "0.22.4";
+        public const string ModVersion = "0.22.5";
 
         internal const string ClassDataKey = "AlbedoCustomClasses.Class";
         internal const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -908,8 +908,8 @@ namespace AlbedosCustomClasses
         private void BuildBaseClassPage()
         {
             _baseClassPage = CreateUiGroup("DragonAltarBaseClassPage");
-            AltarImage("BaseHeadingPlaque", _baseClassPage.transform, new Vector2(-282f, 218f), new Vector2(380f, 62f), AltarSprite("Confirm_Plaque.png"), Color.white, false);
-            CreateWrappedText(_baseClassPage.transform, "BASE CLASSES", new Vector2(-282f, 218f), 350f, 42f, 28, AltarGold, true, TextAnchor.MiddleCenter);
+            AltarImage("BaseHeadingPlaque", _baseClassPage.transform, new Vector2(-291f, 218f), new Vector2(380f, 62f), AltarSprite("Confirm_Plaque.png"), Color.white, false);
+            CreateWrappedText(_baseClassPage.transform, "BASE CLASSES", new Vector2(-291f, 218f), 350f, 42f, 28, AltarGold, true, TextAnchor.MiddleCenter);
             CreateBaseClassNavRow("Warrior", "Front-line physical bruiser", 95f, Color.white);
             CreateBaseClassNavRow("Cleric", "Holy hybrid support", -75f, Color.white);
             CreateBaseClassNavRow("Sorcerer", "Eitr-first magic specialist", -245f, Color.white);
@@ -924,7 +924,7 @@ namespace AlbedosCustomClasses
         private void AltarClassCard(Transform parent, string name, string role, float y, bool advancement)
         {
             Sprite sprite = AltarCardSprite(name);
-            Image image = AltarImage("ClassCard_" + name, parent, new Vector2(-282f, y), new Vector2(388f, 150f), sprite,
+            Image image = AltarImage("ClassCard_" + name, parent, new Vector2(-291f, y), new Vector2(388f, 150f), sprite,
                 sprite == null ? new Color(0.90f, 0.84f, 0.72f, 1f) : Color.white, true);
             Outline outline = image.gameObject.AddComponent<Outline>();
             outline.effectColor = new Color(1f, 0.74f, 0.23f, 0.95f);
@@ -939,6 +939,7 @@ namespace AlbedosCustomClasses
             button.onClick.AddListener(delegate { if (advancement) FocusAdvancement(name); else FocusBaseClass(name); });
             // v0.20.4: a light veil only, so the card art stays visible behind the text;
             // a soft parchment glow on the letters keeps them readable on darker art.
+            // v0.22.5: cards centred in the left column (opening x 30-563 of the 1349 px backdrop -> centre -291).
             // v0.22.3: centred on the card's art panel (measured 41%-98.5% of the card width -> centre
             // +78 px), name and role balanced around the panel's vertical centre.
             AltarImage("CardLabelParchment", image.transform, new Vector2(78f, 0f), new Vector2(222f, 124f), AltarLabelVeil(), new Color(0.98f, 0.92f, 0.80f, 0.30f), false);
@@ -983,12 +984,12 @@ namespace AlbedosCustomClasses
         private void BuildAdvancementPage()
         {
             _advancementPage = CreateUiGroup("DragonAltarAdvancementPage");
-            AltarImage("AdvHeadingPlaque", _advancementPage.transform, new Vector2(-282f, 212f), new Vector2(380f, 82f), AltarSprite("Confirm_Plaque.png"), Color.white, false);
-            _advancementPageTitle = CreateWrappedText(_advancementPage.transform, "CHOOSE AN\nADVANCEMENT", new Vector2(-282f, 212f), 340f, 67f, 25, AltarGold, true, TextAnchor.MiddleCenter);
-            AltarButton(_advancementPage.transform, "‹ Base Classes", new Vector2(-282f, 146f), new Vector2(240f, 43f), ShowBaseClassPage);
-            AltarImage("FoundationParchment", _advancementPage.transform, new Vector2(-282f, -326f), new Vector2(376f, 128f), AltarLabelVeil(), new Color(0.98f, 0.92f, 0.8f, 0.9f), false);
-            _advancementBaseSummaryTitle = CreateWrappedText(_advancementPage.transform, "", new Vector2(-282f, -285f), 350f, 50f, 16, AltarInk, true, TextAnchor.MiddleCenter);
-            _advancementBaseSummaryBody = CreateWrappedText(_advancementPage.transform, "", new Vector2(-282f, -348f), 350f, 72f, 14, AltarInk, false, TextAnchor.MiddleCenter);
+            AltarImage("AdvHeadingPlaque", _advancementPage.transform, new Vector2(-291f, 212f), new Vector2(380f, 82f), AltarSprite("Confirm_Plaque.png"), Color.white, false);
+            _advancementPageTitle = CreateWrappedText(_advancementPage.transform, "CHOOSE AN\nADVANCEMENT", new Vector2(-291f, 212f), 340f, 67f, 25, AltarGold, true, TextAnchor.MiddleCenter);
+            AltarButton(_advancementPage.transform, "‹ Base Classes", new Vector2(-291f, 146f), new Vector2(240f, 43f), ShowBaseClassPage);
+            AltarImage("FoundationParchment", _advancementPage.transform, new Vector2(-291f, -326f), new Vector2(404f, 128f), AltarLabelVeil(), new Color(0.98f, 0.92f, 0.8f, 0.9f), false);
+            _advancementBaseSummaryTitle = CreateWrappedText(_advancementPage.transform, "", new Vector2(-291f, -285f), 330f, 50f, 16, AltarInk, true, TextAnchor.MiddleCenter);
+            _advancementBaseSummaryBody = CreateWrappedText(_advancementPage.transform, "", new Vector2(-291f, -348f), 330f, 72f, 14, AltarInk, false, TextAnchor.MiddleCenter);
             _advDetailTitle = CreateWrappedText(_advancementPage.transform, "", new Vector2(215f, 228f), 500f, 36f, 30, AltarGold, true, TextAnchor.MiddleCenter);
             _advDetailRole = CreateWrappedText(_advancementPage.transform, "", new Vector2(215f, 203f), 500f, 20f, 14, AltarGold, false, TextAnchor.MiddleCenter);
             BuildAltarSkillDetails(_advancementPage.transform, true);

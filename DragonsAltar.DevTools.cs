@@ -40,7 +40,7 @@ namespace DragonsAltarDevTools
     {
         public const string ModGuid = "albedo.customclasses.devtools";
         public const string ModName = "Dragon's Altar - Developer Tools";
-        public const string ModVersion = "0.22.4";
+        public const string ModVersion = "0.22.5";
 
         public static DeveloperToolsPlugin Instance;
 
@@ -73,6 +73,11 @@ namespace DragonsAltarDevTools
         private ConfigEntry<KeyCode> _toggleKey;
         private ConfigEntry<bool> _enableWorldPreview;
         private ConfigEntry<bool> _autoSave;
+        private ConfigEntry<string> _defaultsApplied;
+        private bool _defaultsChecked;
+        private float _allDefaultsArmedUntil;
+        // v0.22.5: every new pass starts from the default values once (user rule); raise this per pass.
+        private const string DefaultsPass = "0.22.5";
 
         private readonly List<DevSetting> _settings = new List<DevSetting>();
         private readonly List<string> _sections = new List<string>();
@@ -122,6 +127,7 @@ namespace DragonsAltarDevTools
             _toggleKey = Config.Bind("Developer UI", "ToggleKey", KeyCode.F8, "Open or close the Immortal Heroes Config window.");
             _enableWorldPreview = Config.Bind("Developer UI", "EnableWorldPreview", true, "Allow the selected range/radius setting to draw an in-world ruler preview.");
             _autoSave = Config.Bind("Developer UI", "AutoSave", true, "Save changes made in the Config window to the .cfg files automatically.");
+            _defaultsApplied = Config.Bind("Developer UI", "DefaultsAppliedForVersion", "", "Internal: the pass whose default values were last applied. Clear it to reset every setting to default on the next start.");
             _preview = _enableWorldPreview.Value;
             Logger.LogInfo(ModName + " v" + ModVersion + " loaded. Press " + _toggleKey.Value.ToString() + " for the Config window.");
         }
@@ -136,6 +142,19 @@ namespace DragonsAltarDevTools
 
         private void Update()
         {
+            if (!_defaultsChecked)
+            {
+                _defaultsChecked = true;
+                if (_defaultsApplied.Value != DefaultsPass)
+                {
+                    RefreshSettings();
+                    ResetAllToDefaults();
+                    SaveDirty();
+                    _defaultsApplied.Value = DefaultsPass;
+                    Config.Save();
+                    Logger.LogInfo("Immortal Heroes v" + DefaultsPass + ": every setting reset to its default value (Dev Mode off).");
+                }
+            }
             if (_captureSetting != null)
             {
                 UpdateKeyCapture();
@@ -410,6 +429,11 @@ namespace DragonsAltarDevTools
                 (section == "Sword Master Halfmoon Slash" && key == "SpiritDotPerSecond") ||
                 (section == "Sword Master Passive" && key == "WayOfTheSwordAttackSpeedPercent_v0123"))
                 return true;
+            // v0.22.5 Halfmoon: Width replaces Radius; the Ascended travelling slashes became one finisher wave.
+            if ((section == "Sword Master Halfmoon Slash" && key == "Radius") ||
+                (section == "Sword Master Halfmoon Slash Ascended" && (key == "Width" || key == "SecondaryInterval" || key == "HitInterval" ||
+                 key == "MainTickPercent" || key == "SecondaryTickPercent" || key == "MaxHitsPerSlash")))
+                return true;
             // v0.22.4 Mercenary rework: superseded values and the retired Barbaric / Reaver's Orbit.
             if (section == "Mercenary Stomp Damage" || section == "Mercenary Bonecrusher Damage" ||
                 section == "Warrior.Heavy Slash.Damage" || section == "Warrior.Impact Punch.Damage" ||
@@ -621,6 +645,18 @@ namespace DragonsAltarDevTools
             _inputBuffers.Remove(setting.Id);
         }
 
+        // Every setting of every module back to its default (key bindings, hotbar and this window's own options are kept).
+        private void ResetAllToDefaults()
+        {
+            for (int i = 0; i < _settings.Count; i++)
+            {
+                DevSetting s = _settings[i];
+                if (s.Section == "Developer UI" || s.Section == "Hotbar" || s.Section == "Hotkeys")
+                    continue;
+                SetToDefault(s);
+            }
+        }
+
         private void SaveDirty()
         {
             if (_dirtyFiles.Count == 0)
@@ -818,19 +854,35 @@ namespace DragonsAltarDevTools
         {
             GUI.DrawTexture(new Rect(0f, 22f, _windowRect.width, _windowRect.height - 22f), _panelTexture);
 
-            GUI.Label(new Rect(22f, 30f, 420f, 28f), "Immortal Heroes Config", _titleStyle);
+            GUI.Label(new Rect(22f, 30f, 340f, 28f), "Immortal Heroes Config", _titleStyle);
             string saveState = _dirtyFiles.Count > 0 ? (_autoSave.Value ? "Saving..." : "Unsaved changes") : "All changes saved";
             if (Time.unscaledTime < _statusUntil)
                 saveState = _status;
-            GUI.Label(new Rect(22f, 58f, 420f, 20f), saveState + "   |   " + _toggleKey.Value.ToString() + " / Esc closes", _smallStyle);
+            GUI.Label(new Rect(22f, 58f, 340f, 20f), saveState + "   |   " + _toggleKey.Value.ToString() + " / Esc closes", _smallStyle);
 
+            // v0.22.5: DEV MODE = every cooldown uses Testing CooldownSeconds (5s); DEFAULT = every setting to default.
             bool test = GetTestCooldowns();
-            if (GUI.Button(new Rect(440f, 34f, 190f, 34f), test ? "TEST COOLDOWNS: ON" : "TEST COOLDOWNS: OFF", test ? _onStyle : _offStyle))
+            if (GUI.Button(new Rect(370f, 34f, 150f, 34f), test ? "DEV MODE: ON" : "DEV MODE: OFF", test ? _onStyle : _offStyle))
             {
                 SetTestCooldowns(!test);
-                ShowStatus(!test ? "Every cooldown uses Testing CooldownSeconds" : "Real cooldowns restored");
+                ShowStatus(!test ? "Dev Mode: every cooldown is 5s" : "Dev Mode off: real cooldowns");
             }
-            bool nextAuto = GUI.Toggle(new Rect(640f, 40f, 110f, 24f), _autoSave.Value, " Auto-save");
+            bool armed = Time.unscaledTime < _allDefaultsArmedUntil;
+            if (GUI.Button(new Rect(526f, 34f, 112f, 34f), armed ? "CONFIRM?" : "DEFAULT", armed ? _onStyle : GUI.skin.button))
+            {
+                if (armed)
+                {
+                    _allDefaultsArmedUntil = 0f;
+                    ResetAllToDefaults();
+                    ShowStatus("Every setting reset to default");
+                }
+                else
+                {
+                    _allDefaultsArmedUntil = Time.unscaledTime + 3f;
+                    ShowStatus("Click again within 3s to reset EVERY setting");
+                }
+            }
+            bool nextAuto = GUI.Toggle(new Rect(646f, 40f, 105f, 24f), _autoSave.Value, " Auto-save");
             if (nextAuto != _autoSave.Value)
             {
                 _autoSave.Value = nextAuto;
@@ -1317,6 +1369,19 @@ namespace DragonsAltarDevTools
         }
 
         // ------------------------------------------------------------------ world preview
+        // v0.22.5: same ruler as DragonCombat.M (1 m = character height / CharacterHeightMeters).
+        private float PreviewUnitsPerMeter(Player player)
+        {
+            DevSetting fixedUnits = FindSetting("Measurement", "UnitsPerMeterOverride");
+            if (fixedUnits != null && GetNumericValue(fixedUnits) > 0f)
+                return GetNumericValue(fixedUnits);
+            DevSetting meters = FindSetting("Measurement", "CharacterHeightMeters");
+            float m = meters != null ? Mathf.Max(0.05f, GetNumericValue(meters)) : 0.5f;
+            CapsuleCollider capsule = player.GetComponent<CapsuleCollider>();
+            float height = capsule != null && capsule.height > 1f ? capsule.height * Mathf.Abs(player.transform.lossyScale.y) : 1.85f;
+            return height / m;
+        }
+
         private void UpdateWorldPreview()
         {
             Player player = Player.m_localPlayer;
@@ -1327,7 +1392,8 @@ namespace DragonsAltarDevTools
                 return;
             }
 
-            float value = Mathf.Max(0f, GetNumericValue(setting));
+            float scale = PreviewUnitsPerMeter(player);
+            float value = Mathf.Max(0f, GetNumericValue(setting)) * scale;
             string lower = setting.Key.ToLowerInvariant();
             Vector3 origin = GroundPoint(player.transform.position + Vector3.up * 0.2f);
             Vector3 forward = player.transform.forward;
@@ -1345,7 +1411,7 @@ namespace DragonsAltarDevTools
 
             if (lower.Contains("cone") || lower.Contains("degrees") || lower.Contains("angle"))
             {
-                float range = FindCompanionValue(setting.Section, new string[] { "Range", "RangeMeters", "CastRange", "GroundPACRange", "GroundPacRange", "Distance", "Length" }, 10f);
+                float range = FindCompanionValue(setting.Section, new string[] { "Range", "RangeMeters", "CastRange", "GroundPACRange", "GroundPacRange", "Distance", "Length" }, 10f) * scale;
                 DrawCone(0, origin, forward, range, value);
                 TrimPreview(1);
                 return;
@@ -1353,7 +1419,7 @@ namespace DragonsAltarDevTools
 
             if (lower.Contains("width"))
             {
-                float range = FindCompanionValue(setting.Section, new string[] { "Range", "RangeMeters", "CastRange", "GroundPACRange", "GroundPacRange", "Distance", "Length" }, 10f);
+                float range = FindCompanionValue(setting.Section, new string[] { "Range", "RangeMeters", "CastRange", "GroundPACRange", "GroundPacRange", "Distance", "Length" }, 10f) * scale;
                 DrawLane(0, origin, forward, range, value);
                 TrimPreview(1);
                 return;

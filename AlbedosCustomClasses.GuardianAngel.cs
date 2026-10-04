@@ -17,7 +17,7 @@ namespace AlbedosCustomClassesGuardian
     {
         public const string ModGuid = "albedo.customclasses.guardian";
         public const string ModName = "Dragon's Altar - Grand Sigil Survival";
-        public const string ModVersion = "0.22.4";
+        public const string ModVersion = "0.22.5";
 
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -48,7 +48,7 @@ namespace AlbedosCustomClassesGuardian
             _recoveryDuration = Config.Bind("Grand Sigil Survival", "RecoveryDuration_v0208", 6f, "Bless Thy Sinners: 50% HP recovered over this many seconds; the speed / stamina window lasts as long.");
             _staminaUseCut = Config.Bind("Grand Sigil Survival", "StaminaUseReductionPercent", 70f, "Bless Thy Sinners: less Stamina used for all actions during the recovery window.");
             _enableVfx = Config.Bind("Visuals", "EnableVFX", true, "Enable Grand Sigil survival visual effects.");
-            _testingForceCooldowns = Config.Bind("Testing", "ForceCooldowns", true, "Testing mode: force Grand Sigil survival cooldown to one value.");
+            _testingForceCooldowns = Config.Bind("Testing", "ForceCooldowns", false, "Testing mode: force Grand Sigil survival cooldown to one value.");
             _testingCooldownSeconds = Config.Bind("Testing", "CooldownSeconds", 5f, "Testing cooldown used while ForceCooldowns is enabled.");
 
             try
@@ -127,7 +127,7 @@ namespace AlbedosCustomClassesGuardian
 
         private bool HasNearbyPriest(Player player)
         {
-            float radius = Mathf.Max(1f, _allyRadius.Value);
+            float radius = Mathf.Max(1f, DragonCombat.M(_allyRadius.Value));
             Collider[] hits = Physics.OverlapSphere(player.transform.position, radius, ~0, QueryTriggerInteraction.Ignore);
             HashSet<int> seen = new HashSet<int>();
 

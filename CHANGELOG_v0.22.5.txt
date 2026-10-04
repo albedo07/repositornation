@@ -1,0 +1,35 @@
+IMMORTAL HEROES v0.22.5 - CALIBRATION
+=====================================
+
+NEW RULER (every class, every skill)
+- 1 m = two stacked characters (your character = 0.5 m tall). Every range, radius, width,
+  length, dash distance and travel speed in every config is now in these meters and is
+  converted to world size at runtime from your character's real height.
+  [Measurement] CharacterHeightMeters = 0.5 (UnitsPerMeterOverride 0 = automatic).
+- Result: everything is about 3.7x bigger in the world than before at the same numbers.
+  Durations stay the same (dashes, waves, Shield Charge keep their timing over the bigger
+  distance). Punishing Bomb's throw is scaled so its arc reaches proportionally farther.
+- The F8 range/radius world preview uses the same ruler.
+
+F8 CONFIG
+- DEV MODE button (was Test Cooldowns): every cooldown = 5s. OFF by default now.
+- DEFAULT button: click twice within 3s to reset EVERY setting to its default
+  (keys, hotbar and window options are kept).
+- This build resets every setting to its default once on first start (Dev Mode off).
+
+ALTAR
+- Class / Advancement cards centred in the left column (were 9 px right, touching the border).
+- Headings, buttons and the base-class summary box in the left column moved with them;
+  the summary text is narrower so it no longer runs into the box's faded edges.
+
+SWORD MASTER
+- Halfmoon Slash: Width 12m (side to side), normal and Ascended.
+- Ascended Halfmoon Slash reworked: the normal 2 slashes, then a 0.5s stance (sword pulled
+  back); within 3s press Left Click -> 0.5s spinning swing -> a huge Free Aim Ghost wave:
+  1.5x width (18m), 3x damage, 30m in 5s, Spirit Burn + Stun (Bosses never Stunned).
+  No click within 3s = no finisher.
+- Frenzied Charge: follows the terrain (up and down slopes), falls off clear edges (never
+  snaps to the bottom), passes through every creature (each hit once).
+
+MERCENARY
+- Ascended Heavy Slash: 140 -> 90 Slash base (Tier 7 = 153).

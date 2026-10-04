@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.22.4";
+        public const string ModVersion = "0.22.5";
 
         internal static DragonCombatPlugin Instance;
 
@@ -28,6 +28,8 @@ namespace DragonsAltarCombat
         internal ConfigEntry<float> FrostPhysicalDamageBonus;
         internal ConfigEntry<float> ZapDelay;
         internal ConfigEntry<float> ZapRadius;
+        internal ConfigEntry<float> CharacterHeightMeters;
+        internal ConfigEntry<float> UnitsPerMeterOverride;
         internal ConfigEntry<float> ZapDamage;
         internal ConfigEntry<bool> BurnsUseCurrentHpPercent;
         internal ConfigEntry<float> FireBurnCurrentHpPercent;
@@ -79,6 +81,8 @@ namespace DragonsAltarCombat
             FrostPhysicalDamageBonus = Config.Bind("Debuffs", "FrostPhysicalDamageTakenPercent", 20f, "Extra physical damage taken while Frost weakens physical defense.");
             ZapDelay = Config.Bind("Debuffs", "ZapDelay_v0212", 2f, "Seconds before Zap explodes (universal rule: 2s).");
             ZapRadius = Config.Bind("Debuffs", "ZapRadius", 1f, "Zap explosion radius.");
+            CharacterHeightMeters = Config.Bind("Measurement", "CharacterHeightMeters", 0.5f, "v0.22.5 ruler (user rule): your character's height counts as this many meters. Every range, radius, width, length and travel speed in every config is in these meters.");
+            UnitsPerMeterOverride = Config.Bind("Measurement", "UnitsPerMeterOverride", 0f, "0 = automatic (measured character height / CharacterHeightMeters). Above 0 = fixed Unity units per meter.");
             ZapDamage = Config.Bind("Debuffs", "ZapLightningDamage", 25f, "Testing/default lightning damage for Zap because the framework does not specify an amount.");
             BurnsUseCurrentHpPercent = Config.Bind("Damage Over Time", "LegacyBurnsUseCurrentHpPercent_v0212", false, "Legacy: burns now deal the skill's own burn damage. True = old 3% CURRENT HP burns.");
             FireBurnCurrentHpPercent = Config.Bind("Damage Over Time", "FireBurnCurrentHpPercentPerTick", 3f, "Fire Burn = 3 percent of CURRENT HP per tick.");
@@ -1424,6 +1428,35 @@ namespace DragonsAltarCombat
 
     public static class DragonCombat
     {
+        // v0.22.5 universal ruler: config meters -> world units. 1 m = (character height / 0.5),
+        // i.e. two stacked characters. Height measured once from the standing local player (1.85 until then).
+        private static float _measuredHeight;
+
+        public static float UnitsPerMeter()
+        {
+            DragonCombatPlugin plugin = DragonCombatPlugin.Instance;
+            if (plugin != null && plugin.UnitsPerMeterOverride != null && plugin.UnitsPerMeterOverride.Value > 0f)
+                return plugin.UnitsPerMeterOverride.Value;
+            float meters = plugin != null && plugin.CharacterHeightMeters != null ? Mathf.Max(0.05f, plugin.CharacterHeightMeters.Value) : 0.5f;
+            if (_measuredHeight <= 0f)
+            {
+                Player player = Player.m_localPlayer;
+                if (player != null)
+                {
+                    CapsuleCollider capsule = player.GetComponent<CapsuleCollider>();
+                    if (capsule != null && capsule.height > 1f)
+                        _measuredHeight = capsule.height * Mathf.Abs(player.transform.lossyScale.y);
+                }
+            }
+            float height = _measuredHeight > 0f ? _measuredHeight : 1.85f;
+            return height / meters;
+        }
+
+        public static float M(float meters)
+        {
+            return meters * UnitsPerMeter();
+        }
+
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -2252,7 +2285,7 @@ namespace DragonsAltarCombat
             else if (delay <= 0f && DragonCombatPlugin.Instance != null)
                 delay = DragonCombatPlugin.Instance.ZapDelay.Value;
             if (radius <= 0f && DragonCombatPlugin.Instance != null)
-                radius = DragonCombatPlugin.Instance.ZapRadius.Value;
+                radius = M(DragonCombatPlugin.Instance.ZapRadius.Value);
 
             state.ZapPending = true;
             state.ZapAt = Time.time + Mathf.Max(0.1f, delay);

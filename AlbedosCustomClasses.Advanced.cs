@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.22.4";
+        public const string ModVersion = "0.22.5";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -191,7 +191,7 @@ namespace AlbedosCustomClassesAdvanced
 
         private ConfigEntry<float> _halfmoonCooldown;
         private ConfigEntry<float> _halfmoonStamina;
-        private ConfigEntry<float> _halfmoonRadius;
+        private ConfigEntry<float> _halfmoonRadius, _halfmoonWidth;
         private DamageConfig _halfmoonDamage;
         private ConfigEntry<float> _halfmoonSpiritDot;
         private ConfigEntry<float> _halfmoonSpiritDuration;
@@ -641,7 +641,7 @@ namespace AlbedosCustomClassesAdvanced
             _uiColorSpaceCorrection = Config.Bind("Interface", "SkillTreeColorSpaceCorrection", true, "Compensate the Skill Tree artwork for Valheim's Linear color space so it is not drawn washed out. Disable only if the tree looks too dark.");
             _hudScale = Config.Bind("Interface", "HudScale", 1f, "Unified HUD scale.");
             _hudBottomOffset = Config.Bind("Interface", "HudBottomOffset_v0113", 105f, "Bottom margin for the compact RPG skill HUD. Fresh v0.11.3 key avoids stale 330px development offsets.");
-            _testingForceCooldowns = Config.Bind("Testing", "ForceCooldowns", true, "Testing mode: force every advancement cooldown to one value.");
+            _testingForceCooldowns = Config.Bind("Testing", "ForceCooldowns", false, "Testing mode: force every advancement cooldown to one value.");
             _testingCooldownSeconds = Config.Bind("Testing", "CooldownSeconds", 5f, "Testing cooldown used while ForceCooldowns is enabled.");
 
             _moonCooldown = Config.Bind("Sword Master Moonlight Splitter", "Cooldown", 12f, "Seconds.");
@@ -687,7 +687,8 @@ namespace AlbedosCustomClassesAdvanced
 
             _halfmoonCooldown = Config.Bind("Sword Master Halfmoon Slash", "Cooldown", 40f, "Seconds.");
             _halfmoonStamina = Config.Bind("Sword Master Halfmoon Slash", "StaminaCost", 50f, "Stamina cost.");
-            _halfmoonRadius = Config.Bind("Sword Master Halfmoon Slash", "Radius", 22f, "Expanded frontal slash radius.");
+            _halfmoonRadius = Config.Bind("Sword Master Halfmoon Slash", "Radius", 22f, "Legacy (v0.22.5 uses Width).");
+            _halfmoonWidth = Config.Bind("Sword Master Halfmoon Slash", "Width", 12f, "Side-to-side width of the frontal half-moon (radius = half of it). Normal and Ascended.");
             _halfmoonDamage = BindDamage("Sword Master Halfmoon Damage v2", 0f, 130f, 0f, 0f, 0f, 0f, 0f, 60f);
             _halfmoonSpiritDot = Config.Bind("Sword Master Halfmoon Slash", "SpiritDotPerSecond", 18f, "Ultimate-strength Spirit Burn damage per second.");
             _halfmoonSpiritDuration = Config.Bind("Sword Master Halfmoon Slash", "SpiritDotDuration", 10f, "Framework Spirit Burn duration.");
@@ -1219,7 +1220,7 @@ namespace AlbedosCustomClassesAdvanced
             if (advancement == "Mercenary" && Time.time >= _nextAggroPulse)
             {
                 _nextAggroPulse = Time.time + 2f;
-                EncourageAggro(player, Mathf.Max(1f, _mercAggroRadius.Value));
+                EncourageAggro(player, Mathf.Max(1f, DragonCombat.M(_mercAggroRadius.Value)));
             }
 
             if (_skillbookOpen)
@@ -1365,8 +1366,8 @@ namespace AlbedosCustomClassesAdvanced
             if (windup > 0f)
                 yield return new WaitForSeconds(windup);
 
-            float range = Mathf.Max(1f, _moonLength.Value);
-            float width = Mathf.Max(0.5f, _moonWidth.Value);
+            float range = Mathf.Max(1f, DragonCombat.M(_moonLength.Value));
+            float width = Mathf.Max(0.5f, DragonCombat.M(_moonWidth.Value));
 
             for (int slash = 0; slash < 3; slash++)
             {
@@ -1376,7 +1377,7 @@ namespace AlbedosCustomClassesAdvanced
                 DragonCombat.PlaySkillPose(player, "Moonlight", 0.32f);
                 Vector3 origin = player.GetEyePoint() + player.transform.up * -0.25f;
                 Vector3 forward = AlbedoAimUtility.GetProjectileDirection(player, origin);
-                StartCoroutine(GhostSlashWave(player, origin, forward, range, width, _moonSpeed.Value, _moonDamageV, 1f, 1f));
+                StartCoroutine(GhostSlashWave(player, origin, forward, range, width, DragonCombat.M(_moonSpeed.Value), _moonDamageV, 1f, 1f));
 
                 if (slash < 2)
                     yield return new WaitForSeconds(0.5f);
@@ -1554,7 +1555,7 @@ namespace AlbedosCustomClassesAdvanced
             _judgementChargeReadyAt[chargeIndex] = Time.time + recharge;
             _judgementNextCastAt = Time.time + Mathf.Max(0f, _judgementBuffer.Value);
 
-            Vector3 point = GetAimPoint(player, Mathf.Max(1f, _judgementRange.Value));
+            Vector3 point = GetAimPoint(player, Mathf.Max(1f, DragonCombat.M(_judgementRange.Value)));
             DragonCombat.LockSkill(player, 0.40f);
             DragonCombat.PlaySkillPose(player, "Moonlight", 0.45f);
             StartCoroutine(JudgementCutRoutine(player, point));
@@ -1563,7 +1564,7 @@ namespace AlbedosCustomClassesAdvanced
         private IEnumerator JudgementCutRoutine(Player player, Vector3 point)
         {
             ShowMessage("Blade Storm");
-            float radius = Mathf.Max(0.5f, _judgementRadius.Value);
+            float radius = Mathf.Max(0.5f, DragonCombat.M(_judgementRadius.Value));
             bool ascended = IsAscendedSkill("blade_storm");
             float baseCut = Mathf.Max(0f, _bladeCutDamage.Value) * IhSkillPower(player, "blade_storm");
             float slashDamage = baseCut * (ascended ? Mathf.Max(0f, _bladeAscFirst.Value) / 100f : 1f);
@@ -1718,6 +1719,7 @@ namespace AlbedosCustomClassesAdvanced
         private ConfigEntry<float> _eclipseCooldown, _eclipseStamina, _eclipseWindup, _eclipseRadius, _eclipseBurn, _eclipseBurnDuration, _eclipsePush;
         private ConfigEntry<float> _eclipseAscRadius, _eclipseAscDamage, _eclipseAscReflectWindow;
         private ConfigEntry<float> _halfAscWindup, _halfAscRange, _halfAscTravel, _halfAscGap, _halfAscTick, _halfAscMain, _halfAscSecondary, _halfAscWidth;
+        private ConfigEntry<float> _halfAscPullBack, _halfAscWindow, _halfAscReleaseWindup, _halfAscFinWidthMult, _halfAscFinDamageMult;
         private ConfigEntry<float> _kgRadius, _kgDuration, _kgCooldown, _kgMove, _kgRegen, _kgStaminaCut;
         private ConfigEntry<float> _iwAscLength, _iwAscWidth, _iwAscSection, _iwAscSectionGap, _iwAscAftershock;
         private float _smInterruptAt = -100f;
@@ -1792,10 +1794,15 @@ namespace AlbedosCustomClassesAdvanced
             _halfmoonSpiritDotV = Config.Bind("Sword Master Halfmoon Slash", "SpiritDotPerSecond_v0223", 6f, "Spirit Burn damage per second (10s).");
             const string ha = "Sword Master Halfmoon Slash Ascended";
             _halfAscWindup = Config.Bind(ha, "Windup", 1f, "Ascended wind up.");
-            _halfAscRange = Config.Bind(ha, "Range", 20f, "Each travelling slash flies this far.");
-            _halfAscTravel = Config.Bind(ha, "TravelTime", 5f, "Seconds to fly the full range.");
+            _halfAscRange = Config.Bind(ha, "Range", 30f, "The finisher wave flies this far (Ghost: passes terrain and walls).");
+            _halfAscTravel = Config.Bind(ha, "TravelTime", 5f, "Seconds for the finisher wave to fly the full range.");
             _halfAscGap = Config.Bind(ha, "SecondaryInterval", 0.4f, "Seconds between the three slashes.");
-            _halfAscWidth = Config.Bind(ha, "Width", 8f, "Width of the main slash (secondary slashes 80%).");
+            _halfAscWidth = Config.Bind(ha, "Width", 8f, "Legacy (v0.22.5: the finisher is Width x FinisherWidthMultiplier).");
+            _halfAscPullBack = Config.Bind(ha, "FinisherStanceWindup", 0.5f, "After the 2 slashes: pull the sword back and hold the stance.");
+            _halfAscWindow = Config.Bind(ha, "FinisherWindow", 3f, "Seconds to press Left Click once the stance is held. No click = no finisher.");
+            _halfAscReleaseWindup = Config.Bind(ha, "FinisherReleaseWindup", 0.5f, "Spinning swing after Left Click before the wave leaves.");
+            _halfAscFinWidthMult = Config.Bind(ha, "FinisherWidthMultiplier", 1.5f, "Finisher wave width = Halfmoon Width x this.");
+            _halfAscFinDamageMult = Config.Bind(ha, "FinisherDamageMultiplier", 3f, "Finisher wave damage = Halfmoon damage x this.");
             _halfAscTick = Config.Bind(ha, "HitInterval", 0.3f, "Persistent hit interval per target.");
             _halfAscMain = Config.Bind(ha, "MainTickPercent", 10f, "Main slash hit (% of the whole normal Ultimate on one target).");
             _halfAscSecondary = Config.Bind(ha, "SecondaryTickPercent", 4f, "Secondary slash hit (% of the whole normal Ultimate).");
@@ -1945,14 +1952,14 @@ namespace AlbedosCustomClassesAdvanced
         {
             ShowMessage("Moonlight Splitter");
             if (windup > 0f) yield return new WaitForSeconds(windup);
-            float range = Mathf.Max(1f, _moonLength.Value);
-            float width = Mathf.Max(0.5f, _moonWidth.Value);
+            float range = Mathf.Max(1f, DragonCombat.M(_moonLength.Value));
+            float width = Mathf.Max(0.5f, DragonCombat.M(_moonWidth.Value));
             for (int wave = 0; wave < 4; wave++)
             {
                 if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
                 DragonCombat.PlaySkillPose(player, "Moonlight", 0.28f);
                 Vector3 origin = player.GetEyePoint() + player.transform.up * -0.25f;
-                StartCoroutine(GhostSlashWave(player, origin, AlbedoAimUtility.GetProjectileDirection(player, origin), range, width, _moonSpeed.Value, _moonDamageV, _moonAscWave.Value / 100f, 1f));
+                StartCoroutine(GhostSlashWave(player, origin, AlbedoAimUtility.GetProjectileDirection(player, origin), range, width, DragonCombat.M(_moonSpeed.Value), _moonDamageV, _moonAscWave.Value / 100f, 1f));
                 if (wave < 3) yield return new WaitForSeconds(Mathf.Max(0.05f, _moonAscInterval.Value));
             }
             float finisherWindup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _moonAscFinisherWindup.Value));
@@ -1962,14 +1969,20 @@ namespace AlbedosCustomClassesAdvanced
             if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
             Vector3 fo = player.GetEyePoint() + player.transform.up * -0.25f;
             Vector3 fd = AlbedoAimUtility.GetProjectileDirection(player, fo);
-            StartCoroutine(GhostSlashWave(player, fo, fd, range, width * 2f, _moonSpeed.Value * 2f, _moonDamageV, _moonAscFinisher.Value / 100f, 2f));
+            StartCoroutine(GhostSlashWave(player, fo, fd, range, width * 2f, DragonCombat.M(_moonSpeed.Value) * 2f, _moonDamageV, _moonAscFinisher.Value / 100f, 2f));
             yield return new WaitForSeconds(Mathf.Max(0f, _moonAscAfterDelay.Value));
             if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
-            StartCoroutine(GhostSlashWave(player, fo, fd, range, width * 2f, _moonSpeed.Value * 2f, _moonDamageV, _moonAscAfter.Value / 100f, 2f));
+            StartCoroutine(GhostSlashWave(player, fo, fd, range, width * 2f, DragonCombat.M(_moonSpeed.Value) * 2f, _moonDamageV, _moonAscAfter.Value / 100f, 2f));
         }
 
         // Ghost laser wave: passes terrain (Ghost), pierces enemies, each enemy hit once per wave.
         private IEnumerator GhostSlashWave(Player player, Vector3 origin, Vector3 forward, float range, float width, float speed, DamageConfig damage, float multiplier, float heightScale)
+        {
+            return GhostSlashWave(player, origin, forward, range, width, speed, damage, multiplier, heightScale, false);
+        }
+
+        // halfmoon = the Ascended Halfmoon finisher: also Spirit Burn + Stun (Bosses never Stunned).
+        private IEnumerator GhostSlashWave(Player player, Vector3 origin, Vector3 forward, float range, float width, float speed, DamageConfig damage, float multiplier, float heightScale, bool halfmoon)
         {
             if (forward.sqrMagnitude < 0.01f) forward = player.transform.forward;
             forward.Normalize();
@@ -2004,6 +2017,11 @@ namespace AlbedosCustomClassesAdvanced
                     if (target == null || hitTargets.Contains(target) || !IsEnemy(player, target)) continue;
                     hitTargets.Add(target);
                     DealDamageScaled(player, target, damage, multiplier, 8f, false);
+                    if (halfmoon)
+                    {
+                        StartCoroutine(SpiritDot(player, target, _halfmoonSpiritDotV.Value, _halfmoonSpiritDuration.Value));
+                        DragonCombat.Stun(target, center);
+                    }
                 }
                 if (line != null)
                 {
@@ -2029,9 +2047,9 @@ namespace AlbedosCustomClassesAdvanced
         private IEnumerator CrescentCleaveWave(Player player, Vector3 origin, Vector3 forward, float multiplier, IhCrescentCast cast, bool ascended)
         {
             if (cast != null) cast.Running++;
-            float range = Mathf.Max(1f, _crescentRange.Value);
-            float width = Mathf.Max(0.25f, _crescentSlashWidth.Value);
-            float height = Mathf.Max(1f, _crescentSlashHeight.Value);
+            float range = Mathf.Max(1f, DragonCombat.M(_crescentRange.Value));
+            float width = Mathf.Max(0.25f, DragonCombat.M(_crescentSlashWidth.Value));
+            float height = Mathf.Max(1f, DragonCombat.M(_crescentSlashHeight.Value));
             float travelTime = Mathf.Max(0.20f, _crescentTravelTime.Value);
             forward.y = 0f;
             if (forward.sqrMagnitude < 0.01f) forward = player.transform.forward;
@@ -2090,8 +2108,8 @@ namespace AlbedosCustomClassesAdvanced
                 {
                     if (Time.time > cast.Times[p] + life) continue;
                     if (_enableVfx.Value && p % 2 == 0)
-                        StartCoroutine(AnimateRing(cast.Points[p] + Vector3.up * 0.08f, 0.2f, 0.9f, 0.45f, new Color(1f, 0.46f, 0.12f, 0.75f), 0.06f));
-                    List<Character> near = GetSphereTargets(player, cast.Points[p] + Vector3.up * 0.6f, 1.2f);
+                        StartCoroutine(AnimateRing(cast.Points[p] + Vector3.up * 0.08f, 0.2f, DragonCombat.M(0.9f), 0.45f, new Color(1f, 0.46f, 0.12f, 0.75f), 0.06f));
+                    List<Character> near = GetSphereTargets(player, cast.Points[p] + Vector3.up * 0.6f, DragonCombat.M(1.2f));
                     for (int i = 0; i < near.Count; i++)
                     {
                         int id = near[i].GetInstanceID();
@@ -2126,20 +2144,65 @@ namespace AlbedosCustomClassesAdvanced
             StartCoroutine(FrenziedChargeRoutine(player, body, capsule, windup, ascended, Time.time));
         }
 
+        // Only terrain / buildings stop the dash; creatures are passed through.
+        private float FrenzyStep(Rigidbody body, Vector3 forward, float requested)
+        {
+            const float skin = 0.05f;
+            float step = requested;
+            RaycastHit[] blockers = body.SweepTestAll(forward, requested + skin, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < blockers.Length; i++)
+            {
+                RaycastHit hit = blockers[i];
+                if (hit.collider == null || hit.collider.GetComponentInParent<Character>() != null) continue;
+                if (hit.normal.y >= 0.65f) continue; // walkable slope: followed, not blocking
+                if (Vector3.Dot(forward, hit.normal) >= -0.001f) continue;
+                step = Mathf.Min(step, Mathf.Max(0f, hit.distance - skin));
+            }
+            return step;
+        }
+
+        private List<Collider> FrenzyIgnoreCreatures(Player player, CapsuleCollider capsule, float radius)
+        {
+            List<Collider> ignored = new List<Collider>();
+            Collider[] near = Physics.OverlapSphere(player.transform.position, radius, ~0, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < near.Length; i++)
+            {
+                Collider c = near[i];
+                if (c == null || c == capsule || c.isTrigger) continue;
+                Character owner = c.GetComponentInParent<Character>();
+                if (owner == null || owner == player) continue;
+                Physics.IgnoreCollision(capsule, c, true);
+                ignored.Add(c);
+            }
+            return ignored;
+        }
+
+        private static void FrenzyRestoreCollisions(CapsuleCollider capsule, List<Collider> ignored)
+        {
+            if (capsule == null || ignored == null) return;
+            for (int i = 0; i < ignored.Count; i++)
+                if (ignored[i] != null) Physics.IgnoreCollision(capsule, ignored[i], false);
+        }
+
         private IEnumerator FrenziedChargeRoutine(Player player, Rigidbody body, CapsuleCollider capsule, float windup, bool ascended, float start)
         {
             ShowMessage("Frenzied Charge");
             if (windup > 0f) yield return new WaitForSeconds(windup);
             if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
             _frenzyActive = true;
-            float distance = Mathf.Max(1f, ascended ? _frenzyAscDistance.Value : _frenzyDistance.Value);
-            float width = Mathf.Max(0.5f, _frenzyWidth.Value) * (ascended ? Mathf.Max(1f, _frenzyAscWidthMult.Value) : 1f);
+            float distance = Mathf.Max(1f, ascended ? DragonCombat.M(_frenzyAscDistance.Value) : DragonCombat.M(_frenzyDistance.Value));
+            float width = Mathf.Max(0.5f, DragonCombat.M(_frenzyWidth.Value)) * (ascended ? Mathf.Max(1f, _frenzyAscWidthMult.Value) : 1f);
             float damage = ascended ? Mathf.Max(0f, _frenzyAscDamage.Value) / 100f : 1f;
             float speed = distance / Mathf.Max(0.1f, _frenzyDashTime.Value);
             Vector3 forward = IhFlatAim(player);
             Vector3 startPos = player.transform.position;
             HashSet<int> hit = new HashSet<int>();
             float moved = 0f;
+            // v0.22.5: passes through every creature (one big hit each), follows the terrain like a
+            // Ground PAC, and only a clear edge makes it fall (never snaps down a cliff).
+            List<Collider> ignored = FrenzyIgnoreCreatures(player, capsule, distance + width + 4f);
+            int ground = IhSolidMask();
+            bool falling = false;
             try
             {
                 while (moved < distance && player != null && !player.IsDead() && body != null)
@@ -2150,13 +2213,27 @@ namespace AlbedosCustomClassesAdvanced
                     look.y = 0f;
                     if (look.sqrMagnitude > 0.01f) forward = Vector3.RotateTowards(forward, look.normalized, 4f * Time.fixedDeltaTime, 0f).normalized;
                     float requested = Mathf.Min(speed * Time.fixedDeltaTime, distance - moved);
-                    float step = GetShieldChargeStep(player, body, capsule, forward, requested);
-                    body.velocity = new Vector3(0f, body.velocity.y, 0f);
+                    float step = FrenzyStep(body, forward, requested);
+                    Vector3 next = body.position + forward * step;
+                    float climb = 0.6f + requested * 1.8f; // up to ~60 degree slopes per physics step
+                    RaycastHit floor;
+                    bool onSlope = !falling && Physics.Raycast(next + Vector3.up * (climb + 0.5f), Vector3.down, out floor, climb * 2f + 0.5f, ground, QueryTriggerInteraction.Ignore) &&
+                        floor.collider.GetComponentInParent<Character>() == null;
+                    if (onSlope)
+                    {
+                        next.y = floor.point.y;
+                        body.velocity = Vector3.zero;
+                    }
+                    else
+                    {
+                        falling = true; // clear edge: keep the momentum, gravity does the rest
+                        body.velocity = new Vector3(0f, body.velocity.y, 0f);
+                    }
                     body.MoveRotation(Quaternion.LookRotation(forward, Vector3.up));
-                    if (step > 0f) body.MovePosition(body.position + forward * step);
+                    body.MovePosition(next);
                     moved += requested;
                     DragonCombat.LockSkill(player, 0.1f);
-                    List<Character> targets = GetSphereTargets(player, player.transform.position + forward * 0.8f + Vector3.up, width * 0.5f + 0.5f);
+                    List<Character> targets = GetSphereTargets(player, next + forward * 0.8f + Vector3.up, width * 0.5f + 0.5f);
                     for (int i = 0; i < targets.Count; i++)
                     {
                         Character target = targets[i];
@@ -2170,12 +2247,13 @@ namespace AlbedosCustomClassesAdvanced
                             DragonCombat.Stun(target, player.transform.position);
                     }
                     if (_enableVfx.Value)
-                        StartCoroutine(AnimateRing(player.transform.position + Vector3.up * 0.1f, 0.2f, width * 0.6f, 0.2f, new Color(0.62f, 0.84f, 1f, 0.8f), 0.06f));
+                        StartCoroutine(AnimateRing(next + Vector3.up * 0.1f, 0.2f, width * 0.6f, 0.2f, new Color(0.62f, 0.84f, 1f, 0.8f), 0.06f));
                 }
             }
             finally
             {
                 _frenzyActive = false;
+                FrenzyRestoreCollisions(capsule, ignored);
             }
             if (player == null || player.IsDead()) yield break;
             Vector3 endPos = player.transform.position;
@@ -2212,7 +2290,7 @@ namespace AlbedosCustomClassesAdvanced
         {
             ShowMessage("Eclipse");
             float window = Mathf.Max(0f, _eclipseAscReflectWindow.Value);
-            float radius = Mathf.Max(1f, ascended ? _eclipseAscRadius.Value : _eclipseRadius.Value);
+            float radius = Mathf.Max(1f, ascended ? DragonCombat.M(_eclipseAscRadius.Value) : DragonCombat.M(_eclipseRadius.Value));
             if (ascended && window > 0f)
                 StartCoroutine(EclipseReflectRoutine(player, Mathf.Max(0f, windup - window * 0.5f), window, radius + 2f));
             if (_enableVfx.Value)
@@ -2268,96 +2346,65 @@ namespace AlbedosCustomClassesAdvanced
         }
 
         // ------------------------------------------------------------------ Halfmoon Slash (Ascended)
+        // v0.22.5: the normal two slashes, then pull back and hold the stance; Left Click within the
+        // window releases a huge Free Aim Ghost wave (Getsuga): 1.5x width, 3x damage, 30m in 5s.
         private IEnumerator HalfmoonAscendedRoutine(Player player, float windup, float start)
         {
             ShowMessage("Halfmoon Slash");
             if (windup > 0f) yield return new WaitForSeconds(windup);
             if (player == null || player.IsDead()) yield break;
+            float radius = HalfmoonRadius();
             Vector3 forward = IhFlatAim(player);
-            Vector3 origin = player.transform.position + forward * 1.2f;
-            HashSet<int> stunned = new HashSet<int>();
-            // B = the whole normal Ultimate on one target (main + 0.5x afterimage).
-            float main = 1.5f * Mathf.Max(0f, _halfAscMain.Value) / 100f;
-            float secondary = 1.5f * Mathf.Max(0f, _halfAscSecondary.Value) / 100f;
-            StartCoroutine(HalfmoonTraveller(player, origin, forward, main, stunned, 1f));
-            for (int i = 0; i < 2; i++)
-            {
-                yield return new WaitForSeconds(Mathf.Max(0.05f, _halfAscGap.Value));
-                if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
-                StartCoroutine(HalfmoonTraveller(player, origin, forward, secondary, stunned, 0.8f));
-            }
-        }
-
-        private IEnumerator HalfmoonTraveller(Player player, Vector3 origin, Vector3 forward, float tickMultiplier, HashSet<int> stunned, float scale)
-        {
-            float range = Mathf.Max(1f, _halfAscRange.Value);
-            float speed = range / Mathf.Max(0.5f, _halfAscTravel.Value);
-            float width = Mathf.Max(1f, _halfAscWidth.Value) * scale;
-            float tick = Mathf.Max(0.05f, _halfAscTick.Value);
-            int maxTicks = Mathf.Max(1, _halfAscMaxTicks.Value);
-            int ground = IhSolidMask();
-            Dictionary<int, float> nextHit = new Dictionary<int, float>();
-            Dictionary<int, int> hits = new Dictionary<int, int>();
-            Vector3 right = Vector3.Cross(Vector3.up, forward).normalized;
-            GameObject visual = null;
-            LineRenderer line = null;
+            ApplyHalfmoonHit(player, forward, radius, 1f);
             if (_enableVfx.Value)
+                StartCoroutine(AnimateHalfmoonArc(player.transform.position + Vector3.up * 0.9f, forward, radius));
+            yield return new WaitForSeconds(Mathf.Clamp(_halfmoonSecondSlashDelay.Value, 0.10f, 2f));
+            if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
+            ApplyHalfmoonHit(player, forward, radius, 0.5f);
+            if (_enableVfx.Value)
+                StartCoroutine(AnimateHalfmoonArc(player.transform.position + Vector3.up * 1.05f, forward, radius * 0.92f));
+
+            float pull = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _halfAscPullBack.Value));
+            DragonCombat.LockSkill(player, pull + 0.15f);
+            DragonCombat.PlaySkillPose(player, "Halfmoon", pull + 0.15f);
+            if (pull > 0f) yield return new WaitForSeconds(pull);
+            if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
+
+            ShowMessage("Left Click: release the Halfmoon");
+            float until = Time.time + Mathf.Max(0.2f, _halfAscWindow.Value);
+            bool released = false;
+            while (Time.time < until)
             {
-                visual = new GameObject("DragonsAltarHalfmoonTraveller");
-                line = visual.AddComponent<LineRenderer>();
-                line.useWorldSpace = true;
-                line.positionCount = 9;
-                line.startWidth = 0.55f * scale;
-                line.endWidth = 0.55f * scale;
-                Color c = new Color(0.66f, 0.84f, 1f, 0.95f);
-                line.startColor = c;
-                line.endColor = c;
-                Shader shader = Shader.Find("Sprites/Default");
-                if (shader != null) line.material = new Material(shader);
-            }
-            float distance = 0f;
-            Vector3 pos = origin;
-            while (distance < range && player != null)
-            {
-                float step = speed * Time.deltaTime;
-                Vector3 next = origin + forward * (distance + step);
-                RaycastHit floor;
-                if (Physics.Raycast(next + Vector3.up * 4f, Vector3.down, out floor, 10f, ground)) next.y = floor.point.y;
-                RaycastHit wall;
-                if (Physics.Raycast(pos + Vector3.up * 1.2f, forward, out wall, step + 0.3f, ground, QueryTriggerInteraction.Ignore) &&
-                    wall.collider.GetComponentInParent<Character>() == null)
-                    break; // stops at terrain / walls
-                distance += step;
-                pos = next;
-                Collider[] cols = Physics.OverlapBox(pos + Vector3.up * 1.4f, new Vector3(width * 0.5f, 1.6f, 0.6f), Quaternion.LookRotation(forward, Vector3.up));
-                for (int i = 0; i < cols.Length; i++)
-                {
-                    Character target = cols[i].GetComponentInParent<Character>();
-                    if (target == null || !IsEnemy(player, target)) continue;
-                    int id = target.GetInstanceID();
-                    float allowed;
-                    int count;
-                    hits.TryGetValue(id, out count);
-                    if (count >= maxTicks || (nextHit.TryGetValue(id, out allowed) && Time.time < allowed)) continue;
-                    nextHit[id] = Time.time + tick;
-                    hits[id] = count + 1;
-                    DealDamageScaled(player, target, _halfmoonDamageV, tickMultiplier, 2f, false);
-                    if (!stunned.Contains(id))
-                    {
-                        stunned.Add(id);
-                        StartCoroutine(SpiritDot(player, target, _halfmoonSpiritDotV.Value, _halfmoonSpiritDuration.Value));
-                        DragonCombat.Stun(target, pos);
-                    }
-                }
-                if (line != null)
-                    for (int p = 0; p < 9; p++)
-                    {
-                        float a = (p / 8f - 0.5f) * Mathf.PI * 0.9f;
-                        line.SetPosition(p, pos + Vector3.up * 1.4f + right * Mathf.Sin(a) * width * 0.5f + forward * Mathf.Cos(a) * 1.2f * scale);
-                    }
+                if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
+                // Holding the stance: movement and normal attacks stay locked, the camera still aims.
+                DragonCombat.LockSkill(player, 0.12f);
+                DragonCombat.PlaySkillPose(player, "Halfmoon", 0.12f);
+                if (Input.GetMouseButtonDown(0)) { released = true; break; }
                 yield return null;
             }
-            if (visual != null) Destroy(visual);
+            if (!released)
+            {
+                ShowMessage("The Halfmoon fades");
+                yield break;
+            }
+
+            float swing = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _halfAscReleaseWindup.Value));
+            DragonCombat.LockSkill(player, swing + 0.2f);
+            DragonCombat.PlaySkillPose(player, "CircleSwing", swing + 0.2f);
+            if (swing > 0f) yield return new WaitForSeconds(swing);
+            if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
+            Vector3 origin = player.GetEyePoint() + player.transform.up * -0.25f;
+            Vector3 dir = AlbedoAimUtility.GetProjectileDirection(player, origin);
+            float range = Mathf.Max(1f, DragonCombat.M(_halfAscRange.Value));
+            float width = radius * 2f * Mathf.Max(1f, _halfAscFinWidthMult.Value);
+            float speed = range / Mathf.Max(0.5f, _halfAscTravel.Value);
+            ShowMessage("Halfmoon Slash!");
+            StartCoroutine(GhostSlashWave(player, origin, dir, range, width, speed, _halfmoonDamageV, Mathf.Max(0f, _halfAscFinDamageMult.Value), 3f, true));
+        }
+
+        private float HalfmoonRadius()
+        {
+            return Mathf.Max(1f, DragonCombat.M(_halfmoonWidth.Value) * 0.5f);
         }
 
         // ------------------------------------------------------------------ Knight's Guidance (Grace)
@@ -2367,7 +2414,7 @@ namespace AlbedosCustomClassesAdvanced
             DragonCombat.LockSkill(player, 0.5f);
             DragonCombat.PlaySkillPose(player, "Chant", 0.50f);
             ShowMessage("Knight's Guidance");
-            float radius = Mathf.Max(1f, _kgRadius.Value);
+            float radius = Mathf.Max(1f, DragonCombat.M(_kgRadius.Value));
             float duration = Mathf.Max(1f, _kgDuration.Value);
             HashSet<Player> allies = new HashSet<Player>();
             allies.Add(player);
@@ -2403,10 +2450,10 @@ namespace AlbedosCustomClassesAdvanced
             ShowMessage("Impact Wave");
             if (windup > 0f) yield return new WaitForSeconds(windup);
             if (player == null || player.IsDead()) yield break;
-            float length = Mathf.Max(1f, _iwAscLength.Value);
-            float width = Mathf.Max(0.5f, _iwAscWidth.Value);
+            float length = Mathf.Max(1f, DragonCombat.M(_iwAscLength.Value));
+            float width = Mathf.Max(0.5f, DragonCombat.M(_iwAscWidth.Value));
             // Same wave speed as the normal skill (normal: 10m in TravelTime).
-            float travel = Mathf.Max(0.1f, IhCfg(sk, "Warrior.Impact Wave", "TravelTime", 0.65f)) * length / Mathf.Max(1f, IhCfg(sk, "Warrior.Impact Wave", "Length", 10f));
+            float travel = Mathf.Max(0.1f, IhCfg(sk, "Warrior.Impact Wave", "TravelTime", 0.65f)) * length / Mathf.Max(1f, DragonCombat.M(IhCfg(sk, "Warrior.Impact Wave", "Length", 10f)));
             Vector3 origin = player.transform.position + Vector3.up * 0.35f;
             Vector3 forward = IhFlatAim(player);
             int ground = LayerMask.GetMask("Default", "static_solid", "Default_small", "piece_nonsolid", "terrain", "vehicle", "piece", "viewblock");
@@ -2438,7 +2485,7 @@ namespace AlbedosCustomClassesAdvanced
                 yield return null;
             }
             // Aftershock: from the cast position back along the travelled path, 3m sections.
-            float section = Mathf.Max(0.5f, _iwAscSection.Value);
+            float section = Mathf.Max(0.5f, DragonCombat.M(_iwAscSection.Value));
             HashSet<int> shockHit = new HashSet<int>();
             for (float s = 0f; s < reached; s += section)
             {
@@ -2532,13 +2579,14 @@ namespace AlbedosCustomClassesAdvanced
                 case "halfmoon_slash":
                     if (ascended)
                     {
-                        b.Append(IhLine("Slashes", "3 travelling, " + IhNum(_halfAscRange.Value) + "m in " + IhNum(_halfAscTravel.Value) + "s"));
-                        b.Append(IhLine("Damage", IhNum(_halfAscMain.Value) + "% / " + IhNum(_halfAscSecondary.Value) + "% of the Ultimate every " + IhNum(_halfAscTick.Value) + "s"));
+                        b.Append(IhLine("Damage", IhDamage(_halfmoonDamageV, power) + ", afterimage 50%"));
+                        b.Append(IhLine("Width", IhNum(_halfmoonWidth.Value) + "m, frontal"));
+                        b.Append(IhLine("Finisher", "Left Click within " + IhNum(_halfAscWindow.Value) + "s: " + IhNum(_halfAscFinDamageMult.Value * 100f) + "% Damage, " + IhNum(_halfmoonWidth.Value * _halfAscFinWidthMult.Value) + "m wide, " + IhNum(_halfAscRange.Value) + "m in " + IhNum(_halfAscTravel.Value) + "s (Ghost, Free Aim)"));
                     }
                     else
                     {
                         b.Append(IhLine("Damage", IhDamage(_halfmoonDamageV, power) + ", afterimage 50%"));
-                        b.Append(IhLine("Radius", IhNum(_halfmoonRadius.Value) + "m, frontal"));
+                        b.Append(IhLine("Width", IhNum(_halfmoonWidth.Value) + "m, frontal"));
                     }
                     b.Append(IhLine("Inflicts", "Stun, Spirit Burn " + IhNum(_halfmoonSpiritDotV.Value) + "/s, " + IhNum(_halfmoonSpiritDuration.Value) + "s"));
                     IhCosts(b, _halfmoonStamina.Value, ascended ? IhNum(_halfAscWindup.Value) + "s" : "2s", _halfmoonCooldown.Value);
@@ -2646,7 +2694,7 @@ namespace AlbedosCustomClassesAdvanced
             const string h = "Mercenary Heavy Slash Ascended";
             _hsAscReach = Config.Bind(h, "Reach", 5f, "Ascended reach (normal 3.5m).");
             _hsAscHyper = Config.Bind(h, "HyperArmorOnHit", 2f, "Hyper Armor seconds when it connects (refreshes, never stacks).");
-            _heavyAscDamage = BindDamage("Mercenary Heavy Slash Ascended Damage", 0f, 140f, 0f, 0f, 0f, 0f, 0f, 0f);
+            _heavyAscDamage = BindDamage("Mercenary Heavy Slash Ascended Damage", 0f, 90f, 0f, 0f, 0f, 0f, 0f, 0f);
 
             _damageSkillIds[_stompDamageV] = "stomp";
             _damageSkillIds[_boneDamageV] = "bonecrusher";
@@ -2704,8 +2752,8 @@ namespace AlbedosCustomClassesAdvanced
             bool ascended = IsAscendedSkill("stomp");
             Vector3 center = player.transform.position;
             float gap = Mathf.Max(0f, _stompAftershockDelayV.Value);
-            float first = Mathf.Max(0.5f, _stompRadius.Value);
-            float second = Mathf.Max(first, _stompAftershockRadius.Value);
+            float first = Mathf.Max(0.5f, DragonCombat.M(_stompRadius.Value));
+            float second = Mathf.Max(first, DragonCombat.M(_stompAftershockRadius.Value));
             StompRing(player, center, 0f, first, 1f, 24f);
             yield return new WaitForSeconds(gap);
             if (player == null || player.IsDead()) yield break;
@@ -2713,7 +2761,7 @@ namespace AlbedosCustomClassesAdvanced
             if (!ascended) yield break;
             yield return new WaitForSeconds(gap);
             if (player == null || player.IsDead()) yield break;
-            StompRing(player, center, second, Mathf.Max(second, _stompAscRadius.Value), Mathf.Max(0f, _stompAscPercent.Value) / 100f, 34f);
+            StompRing(player, center, second, Mathf.Max(second, DragonCombat.M(_stompAscRadius.Value)), Mathf.Max(0f, _stompAscPercent.Value) / 100f, 34f);
         }
 
         // One impact: every enemy inside the radius once (the rings expand from the same spot).
@@ -2742,7 +2790,7 @@ namespace AlbedosCustomClassesAdvanced
             yield return new WaitForSeconds(windup);
             if (player == null || player.IsDead()) yield break;
             bool ascended = IsAscendedSkill("circle_swing");
-            float radius = Mathf.Max(0.5f, ascended ? _circleAscRadius.Value : _circleRadius.Value);
+            float radius = Mathf.Max(0.5f, ascended ? DragonCombat.M(_circleAscRadius.Value) : DragonCombat.M(_circleRadius.Value));
             float baseMult = Mathf.Max(0f, _circleDamageMultiplier.Value);
             DamageSnapshot weapon = GetWeaponDamage(player);
             CircleSwingHit(player, weapon, radius, baseMult * (ascended ? _circleAscFirst.Value / 100f : 1f), false);
@@ -2786,7 +2834,7 @@ namespace AlbedosCustomClassesAdvanced
             if (player == null || player.IsDead()) yield break;
             DragonCombat.PlaySkillPose(player, "Slam", 0.35f);
             Vector3 center = player.transform.position;
-            float radius = Mathf.Max(0.5f, _boneRadius.Value);
+            float radius = Mathf.Max(0.5f, DragonCombat.M(_boneRadius.Value));
             List<Character> targets = GetSphereTargets(player, center, radius);
             for (int i = 0; i < targets.Count; i++)
             {
@@ -2832,7 +2880,7 @@ namespace AlbedosCustomClassesAdvanced
             DamageSnapshot weapon = GetWeaponDamage(player);
             Vector3 origin = player.GetEyePoint() + player.transform.forward * 0.6f;
             Vector3 dir = AlbedoAimUtility.GetProjectileDirection(player, origin);
-            Vector3 vel = (dir.normalized + Vector3.up * 0.15f).normalized * Mathf.Max(5f, _bombSpeed.Value);
+            Vector3 vel = (dir.normalized + Vector3.up * 0.15f).normalized * Mathf.Max(5f, _bombSpeed.Value) * Mathf.Sqrt(DragonCombat.UnitsPerMeter()); // ballistic: range grows with speed squared
             GameObject bomb = null;
             if (_enableVfx.Value)
             {
@@ -2876,7 +2924,7 @@ namespace AlbedosCustomClassesAdvanced
             if (bomb != null) Destroy(bomb);
             if (!exploded) impact = pos;
             if (player == null) yield break;
-            float radius = Mathf.Max(1f, ascended ? _bombAscRadius.Value : _bombRadius.Value);
+            float radius = Mathf.Max(1f, ascended ? DragonCombat.M(_bombAscRadius.Value) : DragonCombat.M(_bombRadius.Value));
             float mult = Mathf.Max(0f, _bombWeaponMultiplier.Value) * IhSkillPower(player, "punishing_bomb");
             float explosion = (weapon.Blunt + weapon.Slash + weapon.Pierce) * mult;
             List<Character> targets = GetSphereTargets(player, impact, radius);
@@ -2946,14 +2994,14 @@ namespace AlbedosCustomClassesAdvanced
                 if (_whirlStopRequested) break;
                 DragonCombat.GrantHyperArmor(player, interval + 0.1f);
                 DragonCombat.PlaySkillPose(player, "Whirlwind", 0.34f);
-                List<Character> targets = GetSphereTargets(player, player.transform.position, Mathf.Max(0.5f, _whirlwindRadius.Value));
+                List<Character> targets = GetSphereTargets(player, player.transform.position, Mathf.Max(0.5f, DragonCombat.M(_whirlwindRadius.Value)));
                 for (int i = 0; i < targets.Count; i++)
                 {
                     DealSnapshotDamage(player, targets[i], weapon, tickMult, 14f);
                     if (tick % 2 == 0) GainMercenaryFuryFromSkillHit(player);
                 }
                 if (_enableVfx.Value)
-                    StartCoroutine(AnimateRing(player.transform.position + Vector3.up * 0.9f, 0.4f, Mathf.Max(0.5f, _whirlwindRadius.Value), Mathf.Min(0.32f, interval), new Color(1f, 0.62f, 0.22f, 0.75f), 0.10f));
+                    StartCoroutine(AnimateRing(player.transform.position + Vector3.up * 0.9f, 0.4f, Mathf.Max(0.5f, DragonCombat.M(_whirlwindRadius.Value)), Mathf.Min(0.32f, interval), new Color(1f, 0.62f, 0.22f, 0.75f), 0.10f));
                 yield return new WaitForSeconds(interval);
             }
             _whirlActive = false;
@@ -2962,11 +3010,11 @@ namespace AlbedosCustomClassesAdvanced
             // Final sweep scales with the time actually spun; ending early gives a smaller sweep.
             float spun = Mathf.Clamp(Time.time - start, 0f, maxTime);
             float sweep = b * Mathf.Max(0f, _whirlAscSweepPercent.Value) / 100f * spun / maxTime;
-            List<Character> swept = GetSphereTargets(player, player.transform.position, Mathf.Max(0.5f, _whirlwindRadius.Value) + 1f);
+            List<Character> swept = GetSphereTargets(player, player.transform.position, Mathf.Max(0.5f, DragonCombat.M(_whirlwindRadius.Value)) + 1f);
             for (int i = 0; i < swept.Count; i++)
                 DealSnapshotDamage(player, swept[i], weapon, sweep, 30f);
             if (_enableVfx.Value)
-                StartCoroutine(AnimateRing(player.transform.position + Vector3.up * 0.9f, 0.5f, Mathf.Max(0.5f, _whirlwindRadius.Value) + 1.5f, 0.4f, new Color(1f, 0.80f, 0.35f, 0.95f), 0.18f));
+                StartCoroutine(AnimateRing(player.transform.position + Vector3.up * 0.9f, 0.5f, Mathf.Max(0.5f, DragonCombat.M(_whirlwindRadius.Value)) + 1.5f, 0.4f, new Color(1f, 0.80f, 0.35f, 0.95f), 0.18f));
         }
 
         // ------------------------------------------------------------------ Battlecry (Grace)
@@ -2976,7 +3024,7 @@ namespace AlbedosCustomClassesAdvanced
             DragonCombat.LockSkill(player, 0.5f);
             DragonCombat.PlaySkillPose(player, "Shout", 0.75f);
             ShowMessage("Battlecry");
-            float radius = Mathf.Max(1f, _bcRadius.Value);
+            float radius = Mathf.Max(1f, DragonCombat.M(_bcRadius.Value));
             HashSet<Player> allies = new HashSet<Player>();
             allies.Add(player);
             Collider[] hits = Physics.OverlapSphere(player.transform.position, radius);
@@ -3047,7 +3095,7 @@ namespace AlbedosCustomClassesAdvanced
             if (player == null || player.IsDead()) yield break;
             Vector3 origin = player.transform.position + Vector3.up * 1.0f;
             Vector3 forward = GetCrosshairDirection(player, origin);
-            float range = Mathf.Max(0.5f, _hsAscReach.Value);
+            float range = Mathf.Max(0.5f, DragonCombat.M(_hsAscReach.Value));
             float angle = Mathf.Clamp(IhCfg(sk, "Warrior.Heavy Slash", "ArcDegrees", 120f), 20f, 180f);
             List<Character> targets = GetFrontalTargets(player, origin, forward, range, angle);
             for (int i = 0; i < targets.Count; i++)
@@ -3165,7 +3213,7 @@ namespace AlbedosCustomClassesAdvanced
                 forward = player.transform.forward;
             forward.Normalize();
 
-            float range = Mathf.Max(1f, _severedRange.Value);
+            float range = Mathf.Max(1f, DragonCombat.M(_severedRange.Value));
             Vector3 start = player.transform.position + forward * 0.8f + Vector3.up * 0.9f;
             Vector3 end = start + forward * range;
 
@@ -3178,7 +3226,7 @@ namespace AlbedosCustomClassesAdvanced
         {
             ShowMessage("Severed Horizon");
             float delay = Mathf.Max(0.05f, _severedDelay.Value);
-            float width = Mathf.Max(0.25f, _severedWidth.Value);
+            float width = Mathf.Max(0.25f, DragonCombat.M(_severedWidth.Value));
 
             if (_enableVfx.Value)
                 StartCoroutine(AnimateSeveredHorizonLine(start, end, width, delay));
@@ -3270,7 +3318,7 @@ namespace AlbedosCustomClassesAdvanced
                 attackerForward = Vector3.forward;
             attackerForward.Normalize();
 
-            Vector3 destination = attacker.transform.position - attackerForward * Mathf.Max(0.5f, _emptyBehindDistance.Value);
+            Vector3 destination = attacker.transform.position - attackerForward * Mathf.Max(0.5f, DragonCombat.M(_emptyBehindDistance.Value));
             RaycastHit groundHit;
             if (Physics.Raycast(destination + Vector3.up * 3f, Vector3.down, out groundHit, 7f, ~0, QueryTriggerInteraction.Ignore))
                 destination.y = groundHit.point.y + 0.06f;
@@ -3346,7 +3394,7 @@ namespace AlbedosCustomClassesAdvanced
             if (player == null || player.IsDead())
                 yield break;
 
-            float radius = Mathf.Max(2f, _halfmoonRadius.Value);
+            float radius = HalfmoonRadius();
             Vector3 forward = AlbedoAimUtility.GetProjectileDirection(player, player.transform.position + Vector3.up * 1f);
             forward.y = 0f;
             if (forward.sqrMagnitude < 0.01f)
@@ -3435,7 +3483,7 @@ namespace AlbedosCustomClassesAdvanced
                 yield break;
 
             Vector3 center = player.transform.position;
-            float firstRadius = Mathf.Max(0.5f, _stompRadius.Value);
+            float firstRadius = Mathf.Max(0.5f, DragonCombat.M(_stompRadius.Value));
             List<Character> firstTargets = GetSphereTargets(player, center, firstRadius);
             for (int i = 0; i < firstTargets.Count; i++)
             {
@@ -3453,7 +3501,7 @@ namespace AlbedosCustomClassesAdvanced
             if (player == null || player.IsDead())
                 yield break;
 
-            float aftershockRadius = Mathf.Max(firstRadius, _stompAftershockRadius.Value);
+            float aftershockRadius = Mathf.Max(firstRadius, DragonCombat.M(_stompAftershockRadius.Value));
             List<Character> aftershockTargets = GetSphereTargets(player, center, aftershockRadius);
             for (int i = 0; i < aftershockTargets.Count; i++)
             {
@@ -3487,7 +3535,7 @@ namespace AlbedosCustomClassesAdvanced
 
             DragonCombat.PlaySkillPose(player, "Slam", 0.35f);
             Vector3 center = player.transform.position;
-            float radius = Mathf.Max(0.5f, _boneRadius.Value);
+            float radius = Mathf.Max(0.5f, DragonCombat.M(_boneRadius.Value));
             List<Character> targets = GetSphereTargets(player, center, radius);
             for (int i = 0; i < targets.Count; i++)
             {
@@ -3523,7 +3571,7 @@ namespace AlbedosCustomClassesAdvanced
 
             Rigidbody rb = player.GetComponent<Rigidbody>();
             Vector3 forward = FlatForward(player);
-            float maxTravel = Mathf.Max(0f, _circleWindupTravel.Value);
+            float maxTravel = Mathf.Max(0f, DragonCombat.M(_circleWindupTravel.Value));
             float travelled = 0f;
             float elapsed = 0f;
 
@@ -3560,7 +3608,7 @@ namespace AlbedosCustomClassesAdvanced
 
             if (player == null || player.IsDead()) yield break;
             Vector3 center = player.transform.position;
-            float radius = Mathf.Max(0.5f, _circleRadius.Value);
+            float radius = Mathf.Max(0.5f, DragonCombat.M(_circleRadius.Value));
             DamageSnapshot weapon = GetWeaponDamage(player);
             List<Character> targets = GetSphereTargets(player, center, radius);
             for (int i = 0; i < targets.Count; i++)
@@ -3596,7 +3644,7 @@ namespace AlbedosCustomClassesAdvanced
 
             Vector3 origin = player.transform.position;
             bool seismicAscended = IsAscendedSkill("seismic_guillotine");
-            float maxRange = Mathf.Max(2f, seismicAscended ? _seismicAscRange.Value : _seismicRange.Value);
+            float maxRange = Mathf.Max(2f, seismicAscended ? DragonCombat.M(_seismicAscRange.Value) : DragonCombat.M(_seismicRange.Value));
             Vector3 aimPoint = GetAimPoint(player, maxRange);
             Vector3 aimDelta = aimPoint - origin;
             aimDelta.y = 0f;
@@ -3606,10 +3654,10 @@ namespace AlbedosCustomClassesAdvanced
             forward.Normalize();
             float range = Mathf.Clamp(aimDelta.magnitude, 0f, maxRange);
             DamageSnapshot weapon = GetWeaponDamage(player);
-            float width = Mathf.Max(0.75f, _seismicWidth.Value);
+            float width = Mathf.Max(0.75f, DragonCombat.M(_seismicWidth.Value));
             float fullRangeTravelTime = Mathf.Max(0.05f, _seismicTravelTime.Value);
             // Same shock speed as the normal 15m skill: a longer range never slows close casts.
-            float shockSpeed = Mathf.Max(2f, _seismicRange.Value) / fullRangeTravelTime;
+            float shockSpeed = Mathf.Max(2f, DragonCombat.M(_seismicRange.Value)) / fullRangeTravelTime;
             float multiplier = Mathf.Max(0f, _seismicDamageMultiplier.Value);
             bool fury = IsUnchainedFuryActive();
             HashSet<int> sharedHits = new HashSet<int>();
@@ -3684,7 +3732,7 @@ namespace AlbedosCustomClassesAdvanced
             if (!finishingRupture || player == null || player.IsDead()) yield break;
 
             Vector3 rupturePoint = GetSeismicGroundPoint(origin + forward * Mathf.Max(0f, range), groundMask);
-            float endRadius = Mathf.Max(1f, _seismicEndRadius.Value) * (IsUnchainedFuryActive() ? 1.35f : 1f);
+            float endRadius = Mathf.Max(1f, DragonCombat.M(_seismicEndRadius.Value)) * (IsUnchainedFuryActive() ? 1.35f : 1f);
             List<Character> endTargets = GetSphereTargets(player, rupturePoint, endRadius);
             bool endAscended = IsAscendedSkill("seismic_guillotine");
             float endMultiplier = multiplier * (endAscended ? Mathf.Max(0f, _seismicAscEndpoint.Value) / 100f : 1f);
@@ -3725,9 +3773,9 @@ namespace AlbedosCustomClassesAdvanced
         {
             ShowMessage("Reaver's Orbit");
             DamageSnapshot weapon = GetWeaponDamage(player);
-            float maxRadius = Mathf.Max(2f, _reaverRadius.Value);
+            float maxRadius = Mathf.Max(2f, DragonCombat.M(_reaverRadius.Value));
             float duration = Mathf.Max(0.5f, _reaverDuration.Value);
-            float hitRadius = Mathf.Max(0.4f, _reaverHitRadius.Value);
+            float hitRadius = Mathf.Max(0.4f, DragonCombat.M(_reaverHitRadius.Value));
             float multiplier = Mathf.Max(0f, _reaverDamageMultiplier.Value);
             HashSet<int> outwardHits = new HashSet<int>();
             HashSet<int> returnHits = new HashSet<int>();
@@ -3784,7 +3832,7 @@ namespace AlbedosCustomClassesAdvanced
 
         private void FuryBonecrusherCone(Player player, Vector3 origin, Vector3 forward)
         {
-            float range = Mathf.Max(2f, _mercFuryBoneConeRange.Value);
+            float range = Mathf.Max(2f, DragonCombat.M(_mercFuryBoneConeRange.Value));
             float angle = Mathf.Clamp(_mercFuryBoneConeAngle.Value, 20f, 170f);
             float multiplier = Mathf.Max(0f, _mercFuryBoneConeMultiplier.Value);
             List<Character> targets = GetFrontalTargets(player, origin, forward, range, angle);
@@ -3844,7 +3892,7 @@ namespace AlbedosCustomClassesAdvanced
                     DragonCombat.PlaySkillPose(player, "Whirlwind", 0.34f);
                 else
                     DragonCombat.PlaySkillPose(player, "Whirlwind", 0.34f);
-                List<Character> targets = GetSphereTargets(player, player.transform.position, Mathf.Max(0.5f, _whirlwindRadius.Value));
+                List<Character> targets = GetSphereTargets(player, player.transform.position, Mathf.Max(0.5f, DragonCombat.M(_whirlwindRadius.Value)));
                 for (int i = 0; i < targets.Count; i++)
                 {
                     DealSnapshotDamage(player, targets[i], weapon, Mathf.Max(0f, _whirlwindWeaponMultiplier.Value), 14f);
@@ -3853,7 +3901,7 @@ namespace AlbedosCustomClassesAdvanced
                 }
 
                 if (_enableVfx.Value)
-                    StartCoroutine(AnimateRing(player.transform.position + Vector3.up * 0.9f, 0.4f, Mathf.Max(0.5f, _whirlwindRadius.Value), Mathf.Min(0.32f, interval), new Color(1f, 0.62f, 0.22f, 0.75f), 0.10f));
+                    StartCoroutine(AnimateRing(player.transform.position + Vector3.up * 0.9f, 0.4f, Mathf.Max(0.5f, DragonCombat.M(_whirlwindRadius.Value)), Mathf.Min(0.32f, interval), new Color(1f, 0.62f, 0.22f, 0.75f), 0.10f));
 
                 yield return new WaitForSeconds(interval);
             }
@@ -3863,7 +3911,7 @@ namespace AlbedosCustomClassesAdvanced
         {
             const string id = "Paladin.GoddessRelic";
             Vector3 target;
-            float range = Mathf.Max(1f, _sharedCrossCastRange.Value);
+            float range = Mathf.Max(1f, DragonCombat.M(_sharedCrossCastRange.Value));
             if (!TryGetPhysicalAimPoint(player, range, out target))
             {
                 ShowMessage("Aim at a physical target");
@@ -3888,9 +3936,9 @@ namespace AlbedosCustomClassesAdvanced
             // Ascended: 3x cross, 10m radius, heavy Blunt + Lightning and it applies Judgement Mark.
             bool ascended = IsAscendedSkill("goddess_relic");
             float sizeMultiplier = ascended ? Mathf.Max(1f, _goddessAscSizeMultiplier.Value) : 1f;
-            float crossHeight = Mathf.Max(1f, _goddessCrossHeight.Value) * sizeMultiplier;
-            float crossWidth = Mathf.Max(0.5f, _goddessCrossWidth.Value) * sizeMultiplier;
-            float radius = Mathf.Max(1f, ascended ? _goddessAscRadius.Value : _goddessRadiusV17.Value);
+            float crossHeight = Mathf.Max(1f, DragonCombat.M(_goddessCrossHeight.Value)) * sizeMultiplier;
+            float crossWidth = Mathf.Max(0.5f, DragonCombat.M(_goddessCrossWidth.Value)) * sizeMultiplier;
+            float radius = Mathf.Max(1f, ascended ? DragonCombat.M(_goddessAscRadius.Value) : DragonCombat.M(_goddessRadiusV17.Value));
 
             Vector3 finalCenter = GetGroundedCrossCenter(target, crossHeight);
             Vector3 skyPoint = DragonCombat.GetIndoorSafeSkyPoint(finalCenter, Mathf.Max(7f, crossHeight + 2f));
@@ -3973,7 +4021,7 @@ namespace AlbedosCustomClassesAdvanced
             if (player == null || player.IsDead())
                 yield break;
 
-            float radius = Mathf.Max(1f, _rayRadius.Value);
+            float radius = Mathf.Max(1f, DragonCombat.M(_rayRadius.Value));
             float healPercent = Mathf.Clamp(_rayHealPercent.Value, 0f, 100f) / 100f * IhSkillPower(player, "ray_of_hope");
             Collider[] allyHits = Physics.OverlapSphere(player.transform.position, radius);
             HashSet<Player> allies = new HashSet<Player>();
@@ -4022,8 +4070,8 @@ namespace AlbedosCustomClassesAdvanced
             forward.Normalize();
             float lastLookYaw = Mathf.Atan2(forward.x, forward.z) * Mathf.Rad2Deg;
             bool ascended = IsAscendedSkill("shield_charge");
-            float limit = Mathf.Max(1f, ascended ? _chargeAscDistance.Value : _shieldChargeDistance.Value);
-            float radius = Mathf.Max(0.5f, ascended ? _chargeAscHitRadius.Value : _shieldChargeRadius.Value);
+            float limit = Mathf.Max(1f, ascended ? DragonCombat.M(_chargeAscDistance.Value) : DragonCombat.M(_shieldChargeDistance.Value));
+            float radius = Mathf.Max(0.5f, ascended ? DragonCombat.M(_chargeAscHitRadius.Value) : DragonCombat.M(_shieldChargeRadius.Value));
             float chargeProgress = 0f;
             Dictionary<int, float> nextHitAt = new Dictionary<int, float>();
             Dictionary<int, int> persistentHitCount = new Dictionary<int, int>();
@@ -4058,7 +4106,7 @@ namespace AlbedosCustomClassesAdvanced
                     DragonCombat.LockSkill(player, 0.1f);
                     if (ascended)
                         DragonCombat.GrantHyperArmor(player, 0.25f);
-                    float speed = Mathf.Max(1f, player.m_runSpeed) * Mathf.Max(1f, _shieldChargeSpeedMultiplier.Value);
+                    float speed = Mathf.Max(1f, player.m_runSpeed) * Mathf.Max(1f, _shieldChargeSpeedMultiplier.Value) * DragonCombat.UnitsPerMeter(); // v0.22.5: same charge time over the scaled distance
                     float requested = Mathf.Min(speed * Time.fixedDeltaTime, limit - chargeProgress);
                     float step = GetShieldChargeStep(player, body, capsule, forward, requested);
                     body.velocity = new Vector3(0f, body.velocity.y, 0f);
@@ -4230,7 +4278,7 @@ namespace AlbedosCustomClassesAdvanced
             if (player == null || player.IsDead()) return;
             ShowMessage("Shield Bash");
             bool ascended = IsAscendedSkill("shield_charge");
-            float radius = Mathf.Max(0.5f, ascended ? _chargeAscBashRadius.Value : _shieldChargeRadius.Value);
+            float radius = Mathf.Max(0.5f, ascended ? DragonCombat.M(_chargeAscBashRadius.Value) : DragonCombat.M(_shieldChargeRadius.Value));
             float halfAngle = Mathf.Clamp(_chargeAscBashAngle.Value, 10f, 360f) * 0.5f;
             Vector3 center = ascended
                 ? player.transform.position + Vector3.up
@@ -4282,7 +4330,7 @@ namespace AlbedosCustomClassesAdvanced
         {
             const string id = "Paladin.DivineVerdict";
             Vector3 target;
-            if (!TryGetPhysicalAimPoint(player, Mathf.Max(1f, _verdictRange.Value), out target))
+            if (!TryGetPhysicalAimPoint(player, Mathf.Max(1f, DragonCombat.M(_verdictRange.Value)), out target))
             {
                 ShowMessage("Aim at a physical target");
                 return;
@@ -4319,7 +4367,7 @@ namespace AlbedosCustomClassesAdvanced
             if (hammer != null)
                 Destroy(hammer);
 
-            float radius = Mathf.Max(1f, _verdictRadius.Value);
+            float radius = Mathf.Max(1f, DragonCombat.M(_verdictRadius.Value));
             List<Character> targets = GetSphereTargets(player, target, radius);
             for (int i = 0; i < targets.Count; i++)
             {
@@ -4377,7 +4425,7 @@ namespace AlbedosCustomClassesAdvanced
         {
             const string id = "Paladin.AegisFall";
             Vector3 target;
-            if (!TryGetPhysicalAimPoint(player, Mathf.Max(1f, _aegisRange.Value), out target))
+            if (!TryGetPhysicalAimPoint(player, Mathf.Max(1f, DragonCombat.M(_aegisRange.Value)), out target))
             {
                 ShowMessage("Aim at a physical target");
                 return;
@@ -4399,8 +4447,8 @@ namespace AlbedosCustomClassesAdvanced
             if (player == null || player.IsDead())
                 yield break;
 
-            float width = Mathf.Max(2f, _aegisWidth.Value);
-            float height = Mathf.Max(2f, _aegisHeight.Value);
+            float width = Mathf.Max(2f, DragonCombat.M(_aegisWidth.Value));
+            float height = Mathf.Max(2f, DragonCombat.M(_aegisHeight.Value));
             Vector3 finalCenter = target + Vector3.up * (height * 0.5f + 0.05f);
             Vector3 sky = DragonCombat.GetIndoorSafeSkyPoint(finalCenter, 8f);
             GameObject aegis = CreateAegisWall(sky, player, width, height);
@@ -4433,7 +4481,7 @@ namespace AlbedosCustomClassesAdvanced
                 Destroy(aegis, Mathf.Max(1f, _aegisDuration.Value));
             }
 
-            float radius = Mathf.Max(1f, _aegisImpactRadius.Value);
+            float radius = Mathf.Max(1f, DragonCombat.M(_aegisImpactRadius.Value));
             List<Character> targets = GetSphereTargets(player, target, radius);
             for (int i = 0; i < targets.Count; i++)
                 DealDamage(player, targets[i], _aegisDamage, 36f, false);
@@ -4499,12 +4547,12 @@ namespace AlbedosCustomClassesAdvanced
             if (marker == null || marker.Shattered)
                 return;
             marker.Shattered = true;
-            Vector3 center = marker.transform.position - Vector3.up * (Mathf.Max(2f, _aegisHeight.Value) * 0.5f);
+            Vector3 center = marker.transform.position - Vector3.up * (Mathf.Max(2f, DragonCombat.M(_aegisHeight.Value)) * 0.5f);
             Collider[] colliders = marker.GetComponentsInChildren<Collider>();
             for (int i = 0; i < colliders.Length; i++)
                 if (colliders[i] != null) colliders[i].enabled = false;
 
-            float radius = Mathf.Max(1f, _aegisShockwaveRadius.Value);
+            float radius = Mathf.Max(1f, DragonCombat.M(_aegisShockwaveRadius.Value));
             List<Character> targets = GetSphereTargets(player, center, radius);
             for (int i = 0; i < targets.Count; i++)
                 DealDamage(player, targets[i], _aegisShockwaveDamage, 44f, false);
@@ -4537,7 +4585,7 @@ namespace AlbedosCustomClassesAdvanced
 
             DragonCombat.PlaySkillPose(player, "Slam", 0.35f);
             Vector3 point = player.transform.position;
-            float radius = Mathf.Max(1f, _divineRadius.Value);
+            float radius = Mathf.Max(1f, DragonCombat.M(_divineRadius.Value));
             List<Character> targets = GetSphereTargets(player, point, radius);
             for (int i = 0; i < targets.Count; i++)
             {
@@ -4561,7 +4609,7 @@ namespace AlbedosCustomClassesAdvanced
                     player,
                     point,
                     dir,
-                    Mathf.Max(1f, _divineTrailRange.Value),
+                    Mathf.Max(1f, DragonCombat.M(_divineTrailRange.Value)),
                     Mathf.Max(0.2f, _divineTrailTravelTime.Value),
                     sharedTrailNextHitAt
                 ));
@@ -4661,7 +4709,7 @@ namespace AlbedosCustomClassesAdvanced
                 if (Physics.Raycast(projected + Vector3.up * 8f, Vector3.down, out ground, 24f, groundMask))
                 {
                     Vector3 point = ground.point;
-                    Collider[] hits = Physics.OverlapSphere(point + Vector3.up * 0.35f, 0.9f, ~0, QueryTriggerInteraction.Ignore);
+                    Collider[] hits = Physics.OverlapSphere(point + Vector3.up * 0.35f, DragonCombat.M(0.9f), ~0, QueryTriggerInteraction.Ignore);
                     for (int i = 0; i < hits.Length; i++)
                     {
                         Character target = hits[i].GetComponentInParent<Character>();
@@ -4677,7 +4725,7 @@ namespace AlbedosCustomClassesAdvanced
                     }
 
                     if (_enableVfx.Value)
-                        StartCoroutine(AnimateRing(point + Vector3.up * 0.06f, 0.12f, 0.80f, 0.20f, new Color(0.62f, 0.86f, 1f, 0.82f), 0.05f));
+                        StartCoroutine(AnimateRing(point + Vector3.up * 0.06f, 0.12f, DragonCombat.M(0.80f), 0.20f, new Color(0.62f, 0.86f, 1f, 0.82f), 0.05f));
                 }
 
                 elapsed += Time.deltaTime;
@@ -4689,7 +4737,7 @@ namespace AlbedosCustomClassesAdvanced
         {
             const string id = "Paladin.AscendedRighteousStrike";
             Vector3 target;
-            if (!TryGetPhysicalAimPoint(player, Mathf.Max(1f, _rsAscRange.Value), out target))
+            if (!TryGetPhysicalAimPoint(player, Mathf.Max(1f, DragonCombat.M(_rsAscRange.Value)), out target))
             {
                 ShowMessage("Aim at a physical target");
                 return;
@@ -4711,7 +4759,7 @@ namespace AlbedosCustomClassesAdvanced
             if (player == null || player.IsDead())
                 yield break;
 
-            float radius = Mathf.Max(1f, _rsAscRadius.Value);
+            float radius = Mathf.Max(1f, DragonCombat.M(_rsAscRadius.Value));
             if (_enableVfx.Value)
             {
                 CreateLightning(target, new Color(0.62f, 0.88f, 1f, 1f), 0.32f);
@@ -4742,7 +4790,7 @@ namespace AlbedosCustomClassesAdvanced
             for (int i = 0; i < 12; i++)
             {
                 Vector3 dir = Quaternion.AngleAxis(i * 30f, Vector3.up) * Vector3.forward;
-                StartCoroutine(PaladinTrail(player, target, dir, Mathf.Max(1f, _rsAscTrailRange.Value), Mathf.Max(0.1f, _rsAscTrailTime.Value),
+                StartCoroutine(PaladinTrail(player, target, dir, Mathf.Max(1f, DragonCombat.M(_rsAscTrailRange.Value)), Mathf.Max(0.1f, _rsAscTrailTime.Value),
                     sharedNextHitAt, _rsAscTrailDamage, _rsAscSpiritDot.Value, _rsAscSpiritDuration.Value, _rsAscTrailTick.Value));
             }
 
@@ -4753,7 +4801,7 @@ namespace AlbedosCustomClassesAdvanced
             yield return new WaitForSeconds(0.5f);
             if (player == null || player.IsDead())
                 yield break;
-            float followRadius = Mathf.Max(0.5f, _rsAscFollowRadius.Value);
+            float followRadius = Mathf.Max(0.5f, DragonCombat.M(_rsAscFollowRadius.Value));
             if (_enableVfx.Value)
             {
                 CreateLightning(target, new Color(0.82f, 0.95f, 1f, 1f), 0.25f);
@@ -4790,9 +4838,9 @@ namespace AlbedosCustomClassesAdvanced
                 dir = player.transform.forward;
             dir.Normalize();
             Vector3 pos = player.transform.position + Vector3.up * 1.4f + dir * 0.8f;
-            float range = Mathf.Max(1f, _hammerRange.Value);
+            float range = Mathf.Max(1f, DragonCombat.M(_hammerRange.Value));
             float speed = range / Mathf.Max(0.1f, _hammerTravelTime.Value);
-            float stepMeters = Mathf.Max(0.05f, _hammerStepMeters.Value);
+            float stepMeters = Mathf.Max(0.05f, DragonCombat.M(_hammerStepMeters.Value));
             int solidMask = LayerMask.GetMask("Default", "static_solid", "Default_small", "piece", "terrain", "vehicle");
             Dictionary<int, float> nextHitAt = new Dictionary<int, float>();
             GameObject hammer = CreateHolyHammer(pos, new Color(1f, 0.86f, 0.38f, 1f));
@@ -4800,8 +4848,8 @@ namespace AlbedosCustomClassesAdvanced
             float travelled = 0f;
             float flightTime = 0f;
             float damageMultiplier = 1f;
-            float height = Mathf.Max(0.5f, _hammerStartHeight.Value);
-            float width = Mathf.Max(0.2f, _hammerStartWidth.Value);
+            float height = Mathf.Max(0.5f, DragonCombat.M(_hammerStartHeight.Value));
+            float width = Mathf.Max(0.2f, DragonCombat.M(_hammerStartWidth.Value));
 
             // Laser Projectile: straight line, no fall-off. Passes through enemies, stops at walls/objects.
             // Grows every GrowthInterval seconds, capped (normal 8m x 2m, Ascended 10m x 3m).
@@ -4873,9 +4921,9 @@ namespace AlbedosCustomClassesAdvanced
         private bool UpdateHammerSize(float flightTime, bool ascended, out float height, out float width)
         {
             int steps = Mathf.FloorToInt(flightTime / Mathf.Max(0.05f, _hammerGrowthInterval.Value));
-            float widthStep = Mathf.Max(0f, ascended ? _hammerAscWidthPerStep.Value : _hammerWidthPerStep.Value);
-            float rawHeight = Mathf.Max(0.5f, _hammerStartHeight.Value) + Mathf.Max(0f, _hammerHeightPerStep.Value) * steps;
-            float rawWidth = Mathf.Max(0.2f, _hammerStartWidth.Value) + widthStep * steps;
+            float widthStep = Mathf.Max(0f, ascended ? DragonCombat.M(_hammerAscWidthPerStep.Value) : DragonCombat.M(_hammerWidthPerStep.Value));
+            float rawHeight = Mathf.Max(0.5f, DragonCombat.M(_hammerStartHeight.Value)) + Mathf.Max(0f, DragonCombat.M(_hammerHeightPerStep.Value)) * steps;
+            float rawWidth = Mathf.Max(0.2f, DragonCombat.M(_hammerStartWidth.Value)) + widthStep * steps;
             // v0.21.2: no size cap (the hitbox keeps growing); damage is capped separately.
             height = rawHeight;
             width = rawWidth;
@@ -4890,7 +4938,7 @@ namespace AlbedosCustomClassesAdvanced
 
         private float HammerHitRadius(float height)
         {
-            return Mathf.Max(Mathf.Max(0.2f, _hammerBaseRadius.Value), height * Mathf.Max(0f, _hammerHitRadiusPerHeight.Value));
+            return Mathf.Max(Mathf.Max(0.2f, DragonCombat.M(_hammerBaseRadius.Value)), height * Mathf.Max(0f, _hammerHitRadiusPerHeight.Value));
         }
 
         private void UpdateHammerVisual(GameObject hammer, Vector3 pos, Vector3 dir, float spin, float height, float width)
@@ -4982,7 +5030,7 @@ namespace AlbedosCustomClassesAdvanced
             float total = Mathf.Max(0.6f, _angelWindupTotal.Value);
             float riseTime = total * 0.56f;
             float hangTime = total * 0.06f;
-            float height = Mathf.Max(1f, _angelJumpHeight.Value);
+            float height = Mathf.Max(1f, DragonCombat.M(_angelJumpHeight.Value));
             Vector3 start = body.position;
             float riseStart = Time.time;
 
@@ -5035,7 +5083,7 @@ namespace AlbedosCustomClassesAdvanced
             DragonCombat.PlaySkillPose(player, "Slam", 0.35f);
 
             Vector3 point = player.transform.position;
-            float radius = Mathf.Max(1f, _angelRadius.Value);
+            float radius = Mathf.Max(1f, DragonCombat.M(_angelRadius.Value));
             List<Character> targets = GetSphereTargets(player, point, radius);
             for (int i = 0; i < targets.Count; i++)
             {
@@ -5058,7 +5106,7 @@ namespace AlbedosCustomClassesAdvanced
 
         private IEnumerator FallenAngelBurnRingRoutine(Player player, Vector3 center)
         {
-            float radius = Mathf.Max(1f, _angelRingRadius.Value);
+            float radius = Mathf.Max(1f, DragonCombat.M(_angelRingRadius.Value));
             float end = Time.time + Mathf.Max(0.5f, _angelRingDuration.Value);
             float burn = Mathf.Max(0.1f, _angelBurnDuration.Value);
             while (Time.time < end && player != null)
@@ -5078,7 +5126,7 @@ namespace AlbedosCustomClassesAdvanced
 
         private IEnumerator SmiteThunderstormRoutine(Player player, Vector3 center)
         {
-            float radius = Mathf.Max(1f, _smiteStormRadius.Value);
+            float radius = Mathf.Max(1f, DragonCombat.M(_smiteStormRadius.Value));
             float end = Time.time + Mathf.Max(0.5f, _smiteStormDuration.Value);
             float tick = Mathf.Max(0.1f, _smiteStormTick.Value);
             float dot = Mathf.Max(0.1f, _smiteStormDotDuration.Value);
@@ -5257,7 +5305,7 @@ namespace AlbedosCustomClassesAdvanced
                 return;
 
             Vector3 target;
-            float range = Mathf.Max(1f, _lightningRelicRange.Value);
+            float range = Mathf.Max(1f, DragonCombat.M(_lightningRelicRange.Value));
             if (!TryGetPhysicalAimPoint(player, range, out target))
             {
                 ShowMessage("Aim at a physical target");
@@ -5290,7 +5338,7 @@ namespace AlbedosCustomClassesAdvanced
             float duration = Mathf.Max(0.5f, _lightningRelicDuration.Value);
             float interval = Mathf.Max(0.1f, _lightningRelicInterval.Value);
             bool ascended = IsAscendedSkill("lightning_relic");
-            float radius = Mathf.Max(1f, ascended ? _relicAscRadius.Value : _lightningRelicRadius.Value);
+            float radius = Mathf.Max(1f, ascended ? DragonCombat.M(_relicAscRadius.Value) : DragonCombat.M(_lightningRelicRadius.Value));
             const float crossHeight = 4.2f;
             Vector3 finalCenter = GetGroundedCrossCenter(target, crossHeight);
             Vector3 sky = DragonCombat.GetIndoorSafeSkyPoint(finalCenter, 5f);
@@ -5361,7 +5409,7 @@ namespace AlbedosCustomClassesAdvanced
                     if (ascended)
                     {
                         // Arcs to up to 3 more enemies just past the radius; Sanctifies allies inside.
-                        List<Character> outer = GetSphereTargets(player, target, radius + Mathf.Max(0f, _relicAscChainRange.Value));
+                        List<Character> outer = GetSphereTargets(player, target, radius + Mathf.Max(0f, DragonCombat.M(_relicAscChainRange.Value)));
                         int arcs = 0;
                         for (int i = 0; i < outer.Count && arcs < 3; i++)
                         {
@@ -5393,7 +5441,7 @@ namespace AlbedosCustomClassesAdvanced
             if (ascended && player != null && !player.IsDead())
             {
                 // The Cross detonates when it ends or is relinquished.
-                float blast = Mathf.Max(1f, _relicAscBlastRadius.Value);
+                float blast = Mathf.Max(1f, DragonCombat.M(_relicAscBlastRadius.Value));
                 if (_enableVfx.Value)
                 {
                     CreateLightning(target, new Color(0.55f, 0.88f, 1f, 1f), 0.35f);
@@ -5426,7 +5474,7 @@ namespace AlbedosCustomClassesAdvanced
                 return;
 
             Vector3 target;
-            if (!TryGetPhysicalAimPoint(player, Mathf.Max(1f, _holyRelicRange.Value), out target))
+            if (!TryGetPhysicalAimPoint(player, Mathf.Max(1f, DragonCombat.M(_holyRelicRange.Value)), out target))
             {
                 ShowMessage("Aim at a physical target");
                 return;
@@ -5458,7 +5506,7 @@ namespace AlbedosCustomClassesAdvanced
             float duration = Mathf.Max(2f, _holyRelicDuration.Value);
             float interval = Mathf.Max(0.5f, _holyRelicInterval.Value);
             bool ascended = IsAscendedSkill("holy_relic");
-            float radius = Mathf.Max(1f, ascended ? _relicAscRadius.Value : _holyRelicRadius.Value);
+            float radius = Mathf.Max(1f, ascended ? DragonCombat.M(_relicAscRadius.Value) : DragonCombat.M(_holyRelicRadius.Value));
             // Ascended: buffs 30% instead of 20% (same ratio for every buff).
             float buffScale = ascended ? Mathf.Max(0f, _holyRelicAscBuff.Value) / 20f : 1f;
             const float crossHeight = 4.2f;
@@ -5575,7 +5623,7 @@ namespace AlbedosCustomClassesAdvanced
         {
             const string id = "Priest.DivineIntervention";
             bool crossCast;
-            Vector3 center = GetPriestSelfOrCrossCastCenter(player, Mathf.Max(1f, _interventionRange.Value), out crossCast);
+            Vector3 center = GetPriestSelfOrCrossCastCenter(player, Mathf.Max(1f, DragonCombat.M(_interventionRange.Value)), out crossCast);
 
             if (!BeginCast(player, id, _interventionCooldown.Value, _interventionStamina.Value))
                 return;
@@ -5604,7 +5652,7 @@ namespace AlbedosCustomClassesAdvanced
             if (player == null || player.IsDead())
                 yield break;
 
-            float radius = Mathf.Max(1f, _interventionRadius.Value);
+            float radius = Mathf.Max(1f, DragonCombat.M(_interventionRadius.Value));
 
             if (_enableVfx.Value)
                 StartCoroutine(AnimateRing(center + Vector3.up * 0.08f, 0.8f, radius, 0.65f, new Color(1f, 0.92f, 0.48f, 0.95f), 0.13f));
@@ -5689,9 +5737,9 @@ namespace AlbedosCustomClassesAdvanced
                 yield break;
 
             bool ascended = IsAscendedSkill("grand_cross");
-            float width = Mathf.Max(1f, ascended ? _crossAscWidth.Value : _grandCrossWidth.Value);
+            float width = Mathf.Max(1f, ascended ? DragonCombat.M(_crossAscWidth.Value) : DragonCombat.M(_grandCrossWidth.Value));
             float height = Mathf.Max(2f, width * 0.60f);
-            float range = Mathf.Max(1f, ascended ? _crossAscRange.Value : _grandCrossRange.Value);
+            float range = Mathf.Max(1f, ascended ? DragonCombat.M(_crossAscRange.Value) : DragonCombat.M(_grandCrossRange.Value));
             float travelTime = Mathf.Max(0.1f, _grandCrossTravelTime.Value);
             float tickInterval = Mathf.Max(0.10f, _grandCrossTickInterval.Value);
             Vector3 right = Vector3.Cross(Vector3.up, forward).normalized;
@@ -5772,7 +5820,7 @@ namespace AlbedosCustomClassesAdvanced
             {
                 // Holy cross burst where the X stops: Stuns Small and Big.
                 Vector3 end = origin + forward * range;
-                float burst = Mathf.Max(1f, _crossAscBurstRadius.Value);
+                float burst = Mathf.Max(1f, DragonCombat.M(_crossAscBurstRadius.Value));
                 if (_enableVfx.Value)
                     StartCoroutine(AnimateRing(end, 0.5f, burst, 0.45f, new Color(0.72f, 0.94f, 1f, 0.95f), 0.12f));
                 List<Character> hit = GetSphereTargets(player, end, burst);
@@ -5792,7 +5840,7 @@ namespace AlbedosCustomClassesAdvanced
                 return;
 
             bool crossCast;
-            Vector3 center = GetPriestSelfOrCrossCastCenter(player, Mathf.Max(1f, _sharedCrossCastRange.Value), out crossCast);
+            Vector3 center = GetPriestSelfOrCrossCastCenter(player, Mathf.Max(1f, DragonCombat.M(_sharedCrossCastRange.Value)), out crossCast);
             float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _heavensWindup.Value));
             DragonCombat.LockSkill(player, windup);
             DragonCombat.PlaySkillPose(player, "Sigil", windup + 0.10f);
@@ -5804,11 +5852,11 @@ namespace AlbedosCustomClassesAdvanced
             ShowMessage(crossCast ? "Heaven's Judgement - Cross Cast" : "Heaven's Judgement");
 
             bool ascended = IsAscendedSkill("heavens_judgement");
-            float radius = Mathf.Max(1f, ascended ? _hjAscRadius.Value : _heavensRadius.Value);
+            float radius = Mathf.Max(1f, ascended ? DragonCombat.M(_hjAscRadius.Value) : DragonCombat.M(_heavensRadius.Value));
             float duration = Mathf.Max(0.1f, ascended ? _hjAscDuration.Value : _heavensDuration.Value);
             float interval = Mathf.Max(0.1f, _heavensStrikeInterval.Value);
             int beamsPerWave = Mathf.Clamp(_heavensStrikesPerWave.Value, 1, 12);
-            float impactRadius = Mathf.Max(0.5f, _heavensStrikeRadius.Value);
+            float impactRadius = Mathf.Max(0.5f, DragonCombat.M(_heavensStrikeRadius.Value));
 
             if (_enableVfx.Value)
                 StartCoroutine(AnimateRing(center + Vector3.up * 0.08f, radius, radius, windup + duration + 0.10f, new Color(1f, 0.92f, 0.52f, 0.82f), 0.14f));
@@ -5877,7 +5925,7 @@ namespace AlbedosCustomClassesAdvanced
             if (ascended && player != null && !player.IsDead())
             {
                 // Pillar of Heaven at the centre.
-                float pillar = Mathf.Max(0.5f, _hjAscPillarRadius.Value);
+                float pillar = Mathf.Max(0.5f, DragonCombat.M(_hjAscPillarRadius.Value));
                 if (_enableVfx.Value)
                 {
                     CreateTemporaryBeam(DragonCombat.GetIndoorSafeSkyPoint(center, 9f), center, new Color(1f, 0.96f, 0.70f, 1f), 1.2f, 0.5f);
@@ -5910,7 +5958,7 @@ namespace AlbedosCustomClassesAdvanced
         {
             const string id = "Priest.LightningTempest";
             Vector3 target;
-            if (!TryGetPhysicalAimPoint(player, Mathf.Max(1f, _tempestRange.Value), out target))
+            if (!TryGetPhysicalAimPoint(player, Mathf.Max(1f, DragonCombat.M(_tempestRange.Value)), out target))
             {
                 ShowMessage("Aim at a physical target");
                 return;
@@ -5933,7 +5981,7 @@ namespace AlbedosCustomClassesAdvanced
             float duration = Mathf.Max(1f, _tempestDuration.Value);
             float interval = Mathf.Max(0.1f, _tempestStrikeInterval.Value);
             bool ascended = IsAscendedSkill("lightning_tempest");
-            float radius = Mathf.Max(1f, ascended ? _tempestAscRadius.Value : _tempestRadius.Value);
+            float radius = Mathf.Max(1f, ascended ? DragonCombat.M(_tempestAscRadius.Value) : DragonCombat.M(_tempestRadius.Value));
             int maxStrikes = Mathf.Clamp(_tempestMaxStrikes.Value, 1, 7);
             float elapsed = 0f;
 
@@ -5960,7 +6008,7 @@ namespace AlbedosCustomClassesAdvanced
                     if (_enableVfx.Value)
                         CreateLightning(strike, new Color(0.55f, 0.86f, 1f, 1f), 0.28f);
 
-                    List<Character> targets = GetSphereTargets(player, strike, 1.6f);
+                    List<Character> targets = GetSphereTargets(player, strike, DragonCombat.M(1.6f));
                     for (int i = 0; i < targets.Count; i++)
                     {
                         Character enemy = targets[i];
@@ -6008,7 +6056,7 @@ namespace AlbedosCustomClassesAdvanced
             if (player == null || player.IsDead())
                 yield break;
 
-            float radius = Mathf.Max(1f, _grandRadius.Value);
+            float radius = Mathf.Max(1f, DragonCombat.M(_grandRadius.Value));
             // Snapshot: 30% of the Priest's current Armor, not updated if equipment changes later.
             float armor = GetArmor(player) * Mathf.Max(0f, _crucibleArmorPercent.Value) / 100f;
             List<Player> players = GetPlayersInSphere(player.transform.position, radius);
@@ -6234,7 +6282,7 @@ namespace AlbedosCustomClassesAdvanced
         private bool TryGetConsecratedGround(out Vector3 center, out float radius)
         {
             center = Vector3.zero;
-            radius = Mathf.Max(1f, _consecratedRadius.Value);
+            radius = Mathf.Max(1f, DragonCombat.M(_consecratedRadius.Value));
 
             PriestRelicState lightning = FindPriestRelic(true);
             PriestRelicState holy = FindPriestRelic(false);
@@ -6243,7 +6291,7 @@ namespace AlbedosCustomClassesAdvanced
 
             Vector3 delta = lightning.Position - holy.Position;
             delta.y = 0f;
-            float connectRange = Mathf.Max(0f, _consecratedConnectRange.Value);
+            float connectRange = Mathf.Max(0f, DragonCombat.M(_consecratedConnectRange.Value));
             if (delta.sqrMagnitude > connectRange * connectRange)
                 return false;
 
@@ -7444,7 +7492,7 @@ namespace AlbedosCustomClassesAdvanced
             if (player == null || player.IsDead() || GetAdvancement(player) != "Mercenary")
                 yield break;
 
-            float radius = Mathf.Max(0f, _mercTauntRadius.Value);
+            float radius = Mathf.Max(0f, DragonCombat.M(_mercTauntRadius.Value));
             Collider[] hits = Physics.OverlapSphere(player.transform.position, radius);
             HashSet<Character> targets = new HashSet<Character>();
             for (int i = 0; i < hits.Length; i++)
@@ -9409,7 +9457,7 @@ namespace AlbedosCustomClassesAdvanced
             {
                 _sanctifiedUntil.Remove(id);
                 Heal(ally, ally.GetMaxHealth() * Mathf.Max(0f, _bloomHealPercent.Value) / 100f);
-                float r = Mathf.Max(0.5f, _bloomRadius.Value);
+                float r = Mathf.Max(0.5f, DragonCombat.M(_bloomRadius.Value));
                 List<Character> enemies = GetSphereTargets(caster, ally.transform.position, r);
                 for (int i = 0; i < enemies.Count; i++)
                     DealDamageScaled(caster, enemies[i], _bloomDamage, 1f, 6f, false);
@@ -9448,9 +9496,9 @@ namespace AlbedosCustomClassesAdvanced
             float perSecond = IhCfg(sk, "Cleric.Holy Wave", "HealPercentPerSecond", 5f) * power;
             float duration = IhCfg(sk, "Cleric.Holy Wave", "Duration", 6f);
             // Aim at an ally (within range) to centre the wave on them; otherwise on yourself.
-            Player aimed = IhAimedAlly(player, Mathf.Max(1f, _ahwAllyRange.Value));
+            Player aimed = IhAimedAlly(player, Mathf.Max(1f, DragonCombat.M(_ahwAllyRange.Value)));
             Vector3 center = aimed != null ? aimed.transform.position : player.transform.position;
-            float radius = Mathf.Max(1f, _ahwRadius.Value);
+            float radius = Mathf.Max(1f, DragonCombat.M(_ahwRadius.Value));
             if (_enableVfx.Value)
                 StartCoroutine(AnimateRing(center + Vector3.up * 0.08f, 0.6f, radius, 0.6f, new Color(0.62f, 1f, 0.70f, 0.95f), 0.12f));
             List<Player> allies = IhAlliesInRadius(player, center, radius);
@@ -9467,7 +9515,7 @@ namespace AlbedosCustomClassesAdvanced
                 yield break;
             // Echo: smaller and weaker, never Sanctifies (so one cast cannot Bloom by itself).
             center = player.transform.position;
-            float echoRadius = Mathf.Max(1f, _ahwEchoRadius.Value);
+            float echoRadius = Mathf.Max(1f, DragonCombat.M(_ahwEchoRadius.Value));
             float echo = instant * Mathf.Max(0f, _ahwEchoPercent.Value) / 100f;
             if (_enableVfx.Value)
                 StartCoroutine(AnimateRing(center + Vector3.up * 0.08f, 0.4f, echoRadius, 0.45f, new Color(0.62f, 1f, 0.70f, 0.80f), 0.09f));
@@ -9529,7 +9577,7 @@ namespace AlbedosCustomClassesAdvanced
             ShowMessage("Holy Shockwave - next skill empowered");
 
             Vector3 center = player.transform.position;
-            float radius = Mathf.Max(1f, _shockwaveRadius.Value);
+            float radius = Mathf.Max(1f, DragonCombat.M(_shockwaveRadius.Value));
             if (_enableVfx.Value)
                 StartCoroutine(AnimateRing(center + Vector3.up * 0.08f, 0.6f, radius, 0.45f, new Color(1f, 0.95f, 0.70f, 0.95f), 0.12f));
             List<Character> enemies = GetSphereTargets(player, center, radius);
@@ -10661,7 +10709,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "blade_storm": return "6 stacks; each cast adds an extra cut (25%)";
                 case "frenzied_charge": return "0.5s wind up, 12m, double width, 115% damage";
                 case "eclipse": return "8m, 110%, reflects enemy projectiles";
-                case "halfmoon_slash": return "a main slash and two more travel 20m, hitting every 0.3s";
+                case "halfmoon_slash": return "after the two slashes, hold the stance and Left Click to release a huge Free Aim Ghost wave (3x damage, 1.5x width, 30m)";
                 case "heavy_slash": return "5m reach, 140% damage, 2s Hyper Armor on hit";
                 case "stomp": return "a third impact at 15m (40%)";
                 case "circle_swing": return "9m, two swings (90% + 60%), Hyper Armor, launches";
@@ -10979,7 +11027,7 @@ namespace AlbedosCustomClassesAdvanced
             DragonCombat.PlaySkillPose(player, "Chant", 0.50f);
             ShowMessage("Heaven's Light");
 
-            float radius = Mathf.Max(1f, _graceLightRadius.Value);
+            float radius = Mathf.Max(1f, DragonCombat.M(_graceLightRadius.Value));
             float duration = Mathf.Max(1f, _graceLightDuration.Value);
             Collider[] hits = Physics.OverlapSphere(player.transform.position, radius);
             HashSet<Player> allies = new HashSet<Player>();

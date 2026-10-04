@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Dragon's Altar - Sorcerer Advancements";
-        public const string ModVersion = "0.22.4";
+        public const string ModVersion = "0.22.5";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -336,7 +336,7 @@ namespace DragonsAltarSorcerer
             _showHud = Config.Bind("General", "ShowSorcererHud", true, "Show the clean dynamic Sorcerer / Wizard / Spellcaster HUD.");
             _hudScale = Config.Bind("Interface", "HudScale", 1f, "Unified Dragon's Altar skill HUD scale.");
             _hudBottomOffset = Config.Bind("Interface", "HudBottomOffset_v0113", 105f, "Bottom margin for the compact RPG skill HUD. Fresh v0.11.3 key avoids stale 330px development offsets.");
-            _testingForceCooldowns = Config.Bind("Testing", "ForceCooldowns", true, "Force ordinary Sorcerer cooldowns to the testing value.");
+            _testingForceCooldowns = Config.Bind("Testing", "ForceCooldowns", false, "Force ordinary Sorcerer cooldowns to the testing value.");
             _testingCooldown = Config.Bind("Testing", "CooldownSeconds", 5f, "Testing cooldown.");
 
             _flameCooldown = Config.Bind("Sorcerer Flame Burst", "Cooldown", 7f, "Seconds.");
@@ -760,20 +760,20 @@ namespace DragonsAltarSorcerer
             if (windup > 0f) yield return new WaitForSeconds(windup);
             Vector3 origin = player.transform.position + Vector3.up;
             Vector3 forward = FlatForward(player);
-            List<Character> targets = GetConeTargets(player, origin, forward, _flameRange.Value, _flameAngle.Value);
+            List<Character> targets = GetConeTargets(player, origin, forward, DragonCombat.M(_flameRange.Value), _flameAngle.Value);
             for (int i = 0; i < targets.Count; i++)
             {
                 Deal(player, targets[i], 0f, 0f, 0f, 34f, 0f, 0f, 0f, 0f, 6f, false);
                 StartCoroutine(BurnRoutine(player, targets[i], false, 6f));
             }
-            if (_enableVfx.Value) StartCoroutine(ConeVfx(origin, forward, _flameRange.Value, _flameAngle.Value, new Color(1f, 0.28f, 0.05f, 0.95f)));
+            if (_enableVfx.Value) StartCoroutine(ConeVfx(origin, forward, DragonCombat.M(_flameRange.Value), _flameAngle.Value, new Color(1f, 0.28f, 0.05f, 0.95f)));
             ShowMessage("Flame Burst");
         }
 
         private void CastGlacialDescent(Player player)
         {
             Vector3 target;
-            if (!AlbedoAimUtility.TryGetPhysicalTarget(player, _iceRange.Value, out target)) { ShowMessage("Aim at a physical target"); return; }
+            if (!AlbedoAimUtility.TryGetPhysicalTarget(player, DragonCombat.M(_iceRange.Value), out target)) { ShowMessage("Aim at a physical target"); return; }
             if (!BeginSkill(player, "Sorcerer.GlacialDescent", _iceCooldown.Value, _iceEitr.Value)) return;
             float windup = ScaleWindup(player, 1f);
             DragonCombat.LockSkill(player, windup);
@@ -785,7 +785,7 @@ namespace DragonsAltarSorcerer
         {
             if (windup > 0f) yield return new WaitForSeconds(windup);
             Vector3 sky = DragonCombat.GetIndoorSafeSkyPoint(target, 8f);
-            GameObject chunk = _enableVfx.Value ? CreateIceChunk(sky, _iceRadius.Value) : null;
+            GameObject chunk = _enableVfx.Value ? CreateIceChunk(sky, DragonCombat.M(_iceRadius.Value)) : null;
             float drop = Mathf.Max(0.12f, DragonCombat.GetSkySummonDropTime());
             float e = 0f;
             while (e < drop)
@@ -795,20 +795,20 @@ namespace DragonsAltarSorcerer
                 yield return null;
             }
             if (chunk != null) Destroy(chunk, 0.30f);
-            List<Character> targets = GetSphereTargets(player, target, _iceRadius.Value);
+            List<Character> targets = GetSphereTargets(player, target, DragonCombat.M(_iceRadius.Value));
             for (int i = 0; i < targets.Count; i++)
             {
                 Deal(player, targets[i], 22f, 0f, 0f, 0f, 36f, 0f, 0f, 0f, 12f, false);
                 DragonCombat.ApplyFrost(targets[i], 6f);
             }
-            if (_enableVfx.Value) StartCoroutine(RingVfx(target, _iceRadius.Value, new Color(0.55f, 0.90f, 1f, 0.95f), 0.7f));
+            if (_enableVfx.Value) StartCoroutine(RingVfx(target, DragonCombat.M(_iceRadius.Value), new Color(0.55f, 0.90f, 1f, 0.95f), 0.7f));
             ShowMessage("Glacial Descent");
         }
 
         private void CastStonefang(Player player)
         {
             Vector3 target;
-            if (!AlbedoAimUtility.TryGetPhysicalTarget(player, _stoneRange.Value, out target)) { ShowMessage("Aim at a physical target"); return; }
+            if (!AlbedoAimUtility.TryGetPhysicalTarget(player, DragonCombat.M(_stoneRange.Value), out target)) { ShowMessage("Aim at a physical target"); return; }
             if (!BeginSkill(player, "Sorcerer.Stonefang", _stoneCooldown.Value, _stoneEitr.Value)) return;
             float windup = ScaleWindup(player, 0.8f);
             DragonCombat.LockSkill(player, windup);
@@ -819,7 +819,7 @@ namespace DragonsAltarSorcerer
         private IEnumerator StonefangRoutine(Player player, Vector3 target, float windup)
         {
             if (windup > 0f) yield return new WaitForSeconds(windup);
-            List<Character> targets = GetSphereTargets(player, target, _stoneRadius.Value);
+            List<Character> targets = GetSphereTargets(player, target, DragonCombat.M(_stoneRadius.Value));
             for (int i = 0; i < targets.Count; i++)
             {
                 Character enemy = targets[i];
@@ -832,7 +832,7 @@ namespace DragonsAltarSorcerer
                 else if (!IsBoss(enemy))
                     DragonCombat.ApplyCripple(enemy, 6f);
             }
-            if (_enableVfx.Value) CreateStoneSpikes(target, _stoneRadius.Value);
+            if (_enableVfx.Value) CreateStoneSpikes(target, DragonCombat.M(_stoneRadius.Value));
             ShowMessage("Stonefang Eruption");
         }
 
@@ -853,7 +853,7 @@ namespace DragonsAltarSorcerer
             float end = Time.time + _gravityDuration.Value;
             while (Time.time < end)
             {
-                List<Character> targets = GetSphereTargets(player, center, _gravityRadius.Value);
+                List<Character> targets = GetSphereTargets(player, center, DragonCombat.M(_gravityRadius.Value));
                 for (int i = 0; i < targets.Count; i++)
                 {
                     Character enemy = targets[i];
@@ -862,7 +862,7 @@ namespace DragonsAltarSorcerer
                     else if (!IsBoss(enemy)) DragonCombat.ApplyCripple(enemy, 6f);
                     Deal(player, enemy, 0f, 0f, 0f, 0f, 0f, 14f, 0f, 14f, 2f, false);
                 }
-                if (_enableVfx.Value) StartCoroutine(RingVfx(center, _gravityRadius.Value, new Color(0.45f, 0.12f, 0.75f, 0.85f), 0.85f));
+                if (_enableVfx.Value) StartCoroutine(RingVfx(center, DragonCombat.M(_gravityRadius.Value), new Color(0.45f, 0.12f, 0.75f, 0.85f), 0.85f));
                 yield return new WaitForSeconds(1f);
             }
             ShowMessage("Gravity Dominion");
@@ -895,14 +895,14 @@ namespace DragonsAltarSorcerer
 
             float multiplier = 1f + Mathf.Clamp01(charged / max);
             Vector3 forward = FlatForward(player);
-            List<Character> targets = GetBoxTargets(player, player.transform.position + Vector3.up, forward, _bladeRange.Value, _bladeWidth.Value);
+            List<Character> targets = GetBoxTargets(player, player.transform.position + Vector3.up, forward, DragonCombat.M(_bladeRange.Value), DragonCombat.M(_bladeWidth.Value));
             for (int i = 0; i < targets.Count; i++)
             {
                 Deal(player, targets[i], 55f * multiplier, 62f * multiplier, 0f, 0f, 0f, 0f, 0f, 48f * multiplier, 32f, true);
                 StartCoroutine(BurnRoutine(player, targets[i], true, 6f));
                 DragonCombat.Stun(targets[i], player.transform.position);
             }
-            if (_enableVfx.Value) StartCoroutine(GreatbladeVfx(player.transform.position, forward, _bladeRange.Value, _bladeWidth.Value));
+            if (_enableVfx.Value) StartCoroutine(GreatbladeVfx(player.transform.position, forward, DragonCombat.M(_bladeRange.Value), DragonCombat.M(_bladeWidth.Value)));
             ShowMessage("Astral Greatblade x" + multiplier.ToString("0.0"));
         }
 
@@ -918,7 +918,7 @@ namespace DragonsAltarSorcerer
         private IEnumerator FrostNovaRoutine(Player player, float windup)
         {
             if (windup > 0f) yield return new WaitForSeconds(windup);
-            List<Character> targets = GetSphereTargets(player, player.transform.position, _novaRadius.Value);
+            List<Character> targets = GetSphereTargets(player, player.transform.position, DragonCombat.M(_novaRadius.Value));
             for (int i = 0; i < targets.Count; i++)
             {
                 Character enemy = targets[i];
@@ -927,14 +927,14 @@ namespace DragonsAltarSorcerer
                 if (DragonCombat.IsSmallEnemy(enemy)) DragonCombat.Stun(enemy, player.transform.position);
                 else ForceStagger(enemy, player.transform.position);
             }
-            if (_enableVfx.Value) StartCoroutine(RingVfx(player.transform.position, _novaRadius.Value, new Color(0.48f, 0.90f, 1f, 0.95f), 0.8f));
+            if (_enableVfx.Value) StartCoroutine(RingVfx(player.transform.position, DragonCombat.M(_novaRadius.Value), new Color(0.48f, 0.90f, 1f, 0.95f), 0.8f));
             ShowMessage("Frost Nova");
         }
 
         private void CastMeteorFall(Player player)
         {
             Vector3 target;
-            if (!AlbedoAimUtility.TryGetPhysicalTarget(player, _meteorRange.Value, out target)) { ShowMessage("Aim at a physical target"); return; }
+            if (!AlbedoAimUtility.TryGetPhysicalTarget(player, DragonCombat.M(_meteorRange.Value), out target)) { ShowMessage("Aim at a physical target"); return; }
             if (!BeginSkill(player, "Wizard.MeteorFall", _meteorCooldown.Value, _meteorEitr.Value)) return;
             float windup = ScaleWindup(player, 1.2f);
             DragonCombat.LockSkill(player, windup);
@@ -956,14 +956,14 @@ namespace DragonsAltarSorcerer
                 yield return null;
             }
             if (meteor != null) Destroy(meteor);
-            List<Character> targets = GetSphereTargets(player, target, _meteorRadius.Value);
+            List<Character> targets = GetSphereTargets(player, target, DragonCombat.M(_meteorRadius.Value));
             for (int i = 0; i < targets.Count; i++)
             {
                 Deal(player, targets[i], 80f, 0f, 0f, 80f, 0f, 0f, 0f, 0f, 35f, true);
                 StartCoroutine(BurnRoutine(player, targets[i], false, 6f));
                 ForceStagger(targets[i], target);
             }
-            if (_enableVfx.Value) StartCoroutine(RingVfx(target, _meteorRadius.Value, new Color(1f, 0.22f, 0.02f, 1f), 0.75f));
+            if (_enableVfx.Value) StartCoroutine(RingVfx(target, DragonCombat.M(_meteorRadius.Value), new Color(1f, 0.22f, 0.02f, 1f), 0.75f));
             ShowMessage("Meteor Fall");
         }
 
@@ -997,8 +997,8 @@ namespace DragonsAltarSorcerer
             if (windup > 0f)
                 yield return new WaitForSeconds(windup);
 
-            float range = Mathf.Max(5f, _railRange.Value);
-            float width = Mathf.Max(0.8f, _railWidth.Value);
+            float range = Mathf.Max(5f, DragonCombat.M(_railRange.Value));
+            float width = Mathf.Max(0.8f, DragonCombat.M(_railWidth.Value));
             List<Character> targets = GetBoxTargets(player, origin, forward, range, width);
             MagicDamageSnapshot damage = GetMagicWeaponDamage(GetCurrentWeapon(player));
             for (int i = 0; i < targets.Count; i++)
@@ -1015,7 +1015,7 @@ namespace DragonsAltarSorcerer
         private void CastElementalCataclysm(Player player)
         {
             Vector3 target;
-            if (!AlbedoAimUtility.TryGetPhysicalTarget(player, _cataclysmRange.Value, out target)) { ShowMessage("Aim at a physical target"); return; }
+            if (!AlbedoAimUtility.TryGetPhysicalTarget(player, DragonCombat.M(_cataclysmRange.Value), out target)) { ShowMessage("Aim at a physical target"); return; }
             if (CooldownRemaining("Wizard.ElementalCataclysm") > 0f) { ShowCooldown("Wizard.ElementalCataclysm"); return; }
             if (!SpendEitr(player, _cataclysmEitr.Value)) { ShowMessage("Not enough Eitr"); return; }
             StartCooldown("Wizard.ElementalCataclysm", _cataclysmCooldown.Value);
@@ -1030,11 +1030,11 @@ namespace DragonsAltarSorcerer
             {
                 DragonCombat.LockSkill(player, 0.12f);
                 charge += Time.deltaTime;
-                if (_enableVfx.Value && ((int)(charge * 10f) % 4 == 0)) StartCoroutine(RingVfx(target, _cataclysmRadius.Value * Mathf.Clamp01(0.2f + charge / max), new Color(0.76f, 0.30f, 1f, 0.55f), 0.16f));
+                if (_enableVfx.Value && ((int)(charge * 10f) % 4 == 0)) StartCoroutine(RingVfx(target, DragonCombat.M(_cataclysmRadius.Value) * Mathf.Clamp01(0.2f + charge / max), new Color(0.76f, 0.30f, 1f, 0.55f), 0.16f));
                 yield return null;
             }
             float multiplier = 1f + 2f * Mathf.Clamp01(charge / max);
-            List<Character> targets = GetSphereTargets(player, target, _cataclysmRadius.Value);
+            List<Character> targets = GetSphereTargets(player, target, DragonCombat.M(_cataclysmRadius.Value));
             for (int i = 0; i < targets.Count; i++)
             {
                 Character enemy = targets[i];
@@ -1043,8 +1043,8 @@ namespace DragonsAltarSorcerer
             }
             if (_enableVfx.Value)
             {
-                StartCoroutine(RingVfx(target, _cataclysmRadius.Value, new Color(1f, 0.35f, 0.05f, 1f), 1f));
-                CreateLightningBurst(target, _cataclysmRadius.Value);
+                StartCoroutine(RingVfx(target, DragonCombat.M(_cataclysmRadius.Value), new Color(1f, 0.35f, 0.05f, 1f), 1f));
+                CreateLightningBurst(target, DragonCombat.M(_cataclysmRadius.Value));
             }
             ShowMessage("ELEMENTAL CATACLYSM x" + multiplier.ToString("0.0"));
         }
@@ -1163,7 +1163,7 @@ namespace DragonsAltarSorcerer
             Vector3 dir = to / distance;
             GameObject orb = _enableVfx.Value ? CreateOrb(origin, 0.18f, new Color(0.82f, 0.30f, 1f, 1f)) : null;
             float traveled = 0f;
-            float speed = 38f;
+            float speed = 38f * DragonCombat.UnitsPerMeter();
 
             while (traveled < distance)
             {
@@ -1211,13 +1211,13 @@ namespace DragonsAltarSorcerer
             if (CooldownRemaining("Spellcaster.VoidStep") > 0f) { ShowCooldown("Spellcaster.VoidStep"); return; }
             Vector3 dest;
             bool airborne = false;
-            if (AlbedoAimUtility.TryGetPhysicalTarget(player, _voidGroundRange.Value, out dest))
+            if (AlbedoAimUtility.TryGetPhysicalTarget(player, DragonCombat.M(_voidGroundRange.Value), out dest))
                 dest += Vector3.up * 0.15f;
             else
             {
                 Vector3 origin = player.GetEyePoint();
                 Vector3 dir = AlbedoAimUtility.GetProjectileDirection(player, origin);
-                dest = player.transform.position + dir * Mathf.Max(1f, _voidFreeRange.Value);
+                dest = player.transform.position + dir * Mathf.Max(1f, DragonCombat.M(_voidFreeRange.Value));
                 airborne = true;
             }
             StartCooldown("Spellcaster.VoidStep", _voidCooldown.Value);
@@ -1290,7 +1290,7 @@ namespace DragonsAltarSorcerer
 
             if (_enableVfx.Value && held > 0.15f && ((int)(held * 10f) % 3 == 0))
             {
-                float radius = _wizardChargeStacks >= 1 ? _wizardChargeBaseRadius.Value * 2f : _wizardChargeBaseRadius.Value;
+                float radius = _wizardChargeStacks >= 1 ? DragonCombat.M(_wizardChargeBaseRadius.Value) * 2f : DragonCombat.M(_wizardChargeBaseRadius.Value);
                 StartCoroutine(RingVfx(player.transform.position, Mathf.Max(0.5f, radius), new Color(0.70f, 0.24f, 1f, 0.48f), 0.12f));
             }
 
@@ -1332,7 +1332,7 @@ namespace DragonsAltarSorcerer
                 return;
             }
 
-            float radius = Mathf.Max(0.5f, _wizardChargeBaseRadius.Value) * 2f;
+            float radius = Mathf.Max(0.5f, DragonCombat.M(_wizardChargeBaseRadius.Value)) * 2f;
             float maxMultiplier = Mathf.Max(1f, _wizardChargeMaxDamageMultiplier.Value);
             float t = Mathf.Clamp01((float)releasedStacks / 3f);
             float multiplier = Mathf.Lerp(1f, maxMultiplier, t);
@@ -1386,7 +1386,7 @@ namespace DragonsAltarSorcerer
             GameObject orb = _enableVfx.Value ? CreateOrb(origin, Mathf.Max(0.24f, radius * 0.11f), new Color(0.72f, 0.22f, 1f, 1f)) : null;
             Vector3 pos = origin;
             float traveled = 0f;
-            float range = Mathf.Max(1f, _wizardChargeRange.Value);
+            float range = Mathf.Max(1f, DragonCombat.M(_wizardChargeRange.Value));
             float speed = Mathf.Max(5f, GetPrimaryAttackFloat(weapon, "m_projectileVel", 20f));
             float gravity = Mathf.Max(0f, GetPrimaryProjectileFloat(weapon, "m_gravity", 5f));
             float drag = Mathf.Max(0f, GetPrimaryProjectileFloat(weapon, "m_drag", 0f));
@@ -1819,7 +1819,7 @@ namespace DragonsAltarSorcerer
             Vector3 pos = origin;
             while (traveled < range)
             {
-                float step = Mathf.Min(45f * Time.deltaTime, range - traveled);
+                float step = Mathf.Min(45f * DragonCombat.UnitsPerMeter() * Time.deltaTime, range - traveled);
                 RaycastHit[] hits = Physics.RaycastAll(pos, dir, step + 0.25f);
                 Array.Sort(hits, delegate(RaycastHit a, RaycastHit b) { return a.distance.CompareTo(b.distance); });
                 bool stop = false;
@@ -1848,7 +1848,7 @@ namespace DragonsAltarSorcerer
                 return;
 
             Vector3 target;
-            if (!AlbedoAimUtility.TryGetPhysicalTarget(player, _ruptureRange.Value, out target)) { ShowMessage("Aim at a physical target"); return; }
+            if (!AlbedoAimUtility.TryGetPhysicalTarget(player, DragonCombat.M(_ruptureRange.Value), out target)) { ShowMessage("Aim at a physical target"); return; }
             if (_ruptureCharges <= 0) { ShowMessage("Arcane Rupture: no charges"); return; }
             _ruptureCharges--;
             _ruptureRechargeAt.Add(Time.time + Mathf.Max(1f, _ruptureRecharge.Value));
@@ -1859,9 +1859,9 @@ namespace DragonsAltarSorcerer
 
         private IEnumerator RuptureRoutine(Player player, Vector3 target)
         {
-            if (_enableVfx.Value) StartCoroutine(RingVfx(target, _ruptureRadius.Value, new Color(0.58f, 0.10f, 0.95f, 0.70f), _ruptureWindup.Value));
+            if (_enableVfx.Value) StartCoroutine(RingVfx(target, DragonCombat.M(_ruptureRadius.Value), new Color(0.58f, 0.10f, 0.95f, 0.70f), _ruptureWindup.Value));
             yield return new WaitForSeconds(Mathf.Max(0.1f, _ruptureWindup.Value));
-            List<Character> targets = GetSphereTargets(player, target, _ruptureRadius.Value);
+            List<Character> targets = GetSphereTargets(player, target, DragonCombat.M(_ruptureRadius.Value));
             for (int i = 0; i < targets.Count; i++)
             {
                 Character enemy = targets[i];
@@ -1888,7 +1888,7 @@ namespace DragonsAltarSorcerer
                     else state.StunCycleHits--;
                 }
             }
-            if (_enableVfx.Value) CreateLightningBurst(target, _ruptureRadius.Value);
+            if (_enableVfx.Value) CreateLightningBurst(target, DragonCombat.M(_ruptureRadius.Value));
         }
 
         private void ActivateTwinRift(Player player)
@@ -1904,8 +1904,8 @@ namespace DragonsAltarSorcerer
             }
 
             Vector3 target;
-            if (!AlbedoAimUtility.TryGetPhysicalTarget(player, _riftRange.Value, out target)) { ShowMessage("Rift B needs a physical point within 30m"); return; }
-            if (Vector3.Distance(_riftA.transform.position, target) > _riftRange.Value) { ShowMessage("Rift B is too far from Rift A"); return; }
+            if (!AlbedoAimUtility.TryGetPhysicalTarget(player, DragonCombat.M(_riftRange.Value), out target)) { ShowMessage("Rift B needs a physical point within 30m"); return; }
+            if (Vector3.Distance(_riftA.transform.position, target) > DragonCombat.M(_riftRange.Value)) { ShowMessage("Rift B is too far from Rift A"); return; }
             _riftB = CreateRift(target + Vector3.up * 0.15f);
             LinkRifts();
             _riftAwaitingB = false;
