@@ -1,0 +1,29 @@
+IMMORTAL HEROES v0.23.6 - ASTRAL TWINS
+======================================
+(First start resets every setting to default once, Dev Mode OFF.)
+
+HORIZON WALKER
+- Ascended Afterimage Arsenal: the 3 mimics are now Astral twins - purple ghost copies of
+  YOUR character (armour, shield, both Gun Staves...) that replay every movement and
+  animation 0.2s late: run, strafe, roll, attack. They follow teleports and Rifts, and are
+  rebuilt when you change equipment.
+- They now fire while you hold Mouse1: every real shot / swing (each Gun Staff burst, each
+  melee hit) is copied 0.2s later for 100% of your weapon damage.
+- Gravity Blast: recast while the orb is out - 1st recast stops it where it is, 2nd recast
+  makes it explode (130%).
+
+ARCHMAGE
+- Astral Greatblade: no charging any more (1s wind up, one slam).
+- Ascended Astral Greatblade: you cannot move during the three slams.
+- Ascended Astral Railcannon: 15% of the normal shot per tick (was 9%).
+- Charged skills (Meteor Fall, Elemental Cataclysm): at max stacks you can keep holding as
+  long as you like (no movement); a ring follows your aim and the skill lands where you
+  aim when you release.
+- Charge counter on the hotbar icon while charging (x/3 with the time to the next stack,
+  no cooldown shade), plus the "Meteor Fall x/3" message again.
+
+UI
+- Highlights redone: a soft gold halo generated from the real border of each node frame,
+  hotbar icon and +/- button (hover = soft, selected = strong).
+- Locked Grace boxes (tree node + footer): the placeholder no longer covers the gold inner
+  bevel unevenly, so the frame looks even on every side.

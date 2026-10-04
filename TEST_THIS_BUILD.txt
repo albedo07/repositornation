@@ -1,10 +1,10 @@
-TEST THIS BUILD - v0.23.5 Universal UI (+ v0.23.3 Tweaks, v0.23.4 Horizon Walker)
-=================================================================================
-See docs/changelog/CHANGELOG_v0.23.3.txt and CHANGELOG_v0.23.4.txt for those lists.
-
-1. Stack counter: Blade Storm, Arcane Rupture (and Ascended Void Step) show "x/max" on the
-   icon and the next-stack timer on top; all spent = dark cooldown.
-2. Meteor Fall while holding: 1/3, 2/3, 3/3 on its icon.
-3. Skill Tree: hover anything clickable = soft gold frame; click a node = stronger frame
-   that stays; click empty space = it clears.
-4. Altar: hover cards / buttons / skill entries = glow; click empty space = highlight clears.
+TEST THIS BUILD - v0.23.6 Astral Twins
+======================================
+1. Ascended Afterimage Arsenal: 3 purple copies of your character copy you 0.2s late
+   (run, roll, shield, dual Gun Staves). Hold Mouse1: they fire with you.
+2. Gravity Blast: recast once = orb stops; recast again = explosion.
+3. Astral Greatblade: no charge. Ascended: rooted during the 3 slams.
+4. Meteor Fall / Cataclysm: hold past max, move your aim (ring follows), release = lands there.
+   Icon shows x/3 + timer while charging.
+5. Skill Tree highlights: gold halo hugging the frame (nodes, hotbar, + / -).
+6. Knight's Guidance / other non-Cleric Grace boxes: even gold border.

@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Dragon's Altar - Sorcerer Advancements";
-        public const string ModVersion = "0.23.5";
+        public const string ModVersion = "0.23.6";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -455,6 +455,20 @@ namespace DragonsAltarSorcerer
                     PatchWithHarmony(attacks[i], new HarmonyMethod(attackPrefix), new HarmonyMethod(attackPostfix));
             }
 
+            // v0.23.6: mimics copy every real shot / swing (one call per projectile burst or melee hit
+            // check), so holding Mouse1 with a Gun Staff keeps them firing.
+            MethodInfo shotPostfix = typeof(SorcererPlugin).GetMethod("AttackShotPostfix", BindingFlags.Static | BindingFlags.NonPublic);
+            int shotHooks = 0;
+            for (int i = 0; i < attacks.Length; i++)
+            {
+                if (attacks[i].Name == "FireProjectileBurst" || attacks[i].Name == "DoMeleeAttack" || attacks[i].Name == "DoAreaAttack")
+                {
+                    PatchWithHarmony(attacks[i], null, new HarmonyMethod(shotPostfix));
+                    shotHooks++;
+                }
+            }
+            _mimicShotHooks = shotHooks > 0;
+
             MethodInfo eitrPrefix = typeof(SorcererPlugin).GetMethod("TryUseEitrPrefix", BindingFlags.Static | BindingFlags.NonPublic);
             MethodInfo[] playerMethods = typeof(Player).GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
             for (int i = 0; i < playerMethods.Length; i++)
@@ -579,8 +593,27 @@ namespace DragonsAltarSorcerer
             }
             if (player == null) player = Player.m_localPlayer;
             if (player == null || player != Player.m_localPlayer) return;
-            Instance.QueueMimicAttack(player, weapon);
+            if (!Instance._mimicShotHooks) Instance.QueueMimicAttack(player, weapon);
             Instance.OnNormalMagicAttack(player, weapon);
+        }
+
+        private bool _mimicShotHooks;
+        private static FieldInfo _attackCharacterField;
+        private static FieldInfo _attackWeaponField;
+
+        private static void AttackShotPostfix(Attack __instance)
+        {
+            if (Instance == null || __instance == null) return;
+            try
+            {
+                if (_attackCharacterField == null) _attackCharacterField = typeof(Attack).GetField("m_character", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (_attackWeaponField == null) _attackWeaponField = typeof(Attack).GetField("m_weapon", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                Player player = _attackCharacterField == null ? null : _attackCharacterField.GetValue(__instance) as Player;
+                if (player == null || player != Player.m_localPlayer) return;
+                ItemDrop.ItemData weapon = _attackWeaponField == null ? null : _attackWeaponField.GetValue(__instance) as ItemDrop.ItemData;
+                Instance.QueueMimicAttack(player, weapon);
+            }
+            catch { }
         }
 
         private void OnDestroy()
@@ -973,7 +1006,7 @@ namespace DragonsAltarSorcerer
             _rcAscWindup = Config.Bind(ra, "Windup", 1f, "Ascended wind up.");
             _rcAscDuration = Config.Bind(ra, "BeamDuration", 4f, "Hold the key to keep the beam (release ends it).");
             _rcAscTick = Config.Bind(ra, "TickInterval", 0.2f, "Seconds between beam ticks (20 ticks over 4s).");
-            _rcAscTickPercent = Config.Bind(ra, "TickPercent", 9f, "Each tick: % of the normal shot.");
+            _rcAscTickPercent = Config.Bind(ra, "TickPercent", 15f, "Each tick: % of the normal shot.");
             const string ba = "Wizard Astral Greatblade Ascended";
             _gbAscWindup = Config.Bind(ba, "Windup", 1f, "Ascended wind up (no charging).");
             _gbAscGap = Config.Bind(ba, "SlamInterval", 1f, "Seconds between the three slams.");
@@ -1084,29 +1117,16 @@ namespace DragonsAltarSorcerer
             return aim.sqrMagnitude < 0.01f ? FlatForward(player) : aim.normalized;
         }
 
+        // v0.23.6: Astral Greatblade no longer charges (user): 1s wind up, one slam.
         private IEnumerator AstralGreatbladeRoutine(Player player)
         {
             ShowMessage("Astral Greatblade");
-            // Charge timer starts on the key press; the 1s wind up runs at the same time.
-            float baseWindup = ScaleWindup(player, Mathf.Max(0f, _bladeWindup.Value));
-            float max = Mathf.Max(0.1f, _bladeChargeMax.Value);
-            float pressed = Time.time;
-            float heldFor = 0f;
-            bool holding = true;
-            while (player != null && !player.IsDead())
-            {
-                float elapsed = Time.time - pressed;
-                if (holding && SkillKeyHeld(player, "astral_greatblade", _skill5.Value) && elapsed < baseWindup + max) heldFor = elapsed;
-                else holding = false;
-                if (elapsed >= baseWindup && !holding) break;
-                DragonCombat.LockSkill(player, 0.12f);
-                DragonCombat.PlaySkillPose(player, "HeavySlash", 0.12f);
-                if (_enableVfx.Value && heldFor > baseWindup && ((int)(heldFor * 10f) % 3 == 0)) StartCoroutine(RingVfx(player.transform.position, 1.5f + heldFor, new Color(0.62f, 0.18f, 1f, 0.65f), 0.15f));
-                yield return null;
-            }
+            float windup = ScaleWindup(player, Mathf.Max(0f, _bladeWindup.Value));
+            DragonCombat.LockSkill(player, windup + 0.3f);
+            DragonCombat.PlaySkillPose(player, "HeavySlash", windup + 0.15f);
+            if (windup > 0f) yield return new WaitForSeconds(windup);
             if (player == null || player.IsDead()) yield break;
-            float charged = Mathf.Max(0f, heldFor - baseWindup);
-            GreatbladeSlam(player, 1f + Mathf.Clamp01(charged / max));
+            GreatbladeSlam(player, 1f);
         }
 
         private void GreatbladeSlam(Player player, float multiplier)
@@ -1129,12 +1149,14 @@ namespace DragonsAltarSorcerer
         {
             ShowMessage("Astral Greatblade");
             float windup = ScaleWindup(player, Mathf.Max(0f, _gbAscWindup.Value));
-            DragonCombat.LockSkill(player, windup + 0.1f);
+            // you cannot move while the three slams happen
+            DragonCombat.LockSkill(player, windup + 2f * Mathf.Max(0.1f, _gbAscGap.Value) + 0.4f);
             DragonCombat.PlaySkillPose(player, "HeavySlash", windup + 0.10f);
             if (windup > 0f) yield return new WaitForSeconds(windup);
             for (int slam = 0; slam < 3; slam++)
             {
                 if (player == null || player.IsDead()) yield break;
+                DragonCombat.LockSkill(player, Mathf.Max(0.1f, _gbAscGap.Value) + 0.3f);
                 DragonCombat.PlaySkillPose(player, "HeavySlash", 0.35f);
                 GreatbladeSlam(player, _gbAscPercent.Value / 100f);
                 if (slam < 2) yield return new WaitForSeconds(Mathf.Max(0.1f, _gbAscGap.Value));
@@ -1222,20 +1244,31 @@ namespace DragonsAltarSorcerer
             float heldFor = 0f;
             bool holding = true;
             int stacks = 0;
+            float nextMarker = 0f;
             while (player != null && !player.IsDead())
             {
                 float elapsed = Time.time - pressed;
-                if (holding && SkillKeyHeld(player, "meteor_fall", _skill7.Value) && stacks < 3) heldFor = elapsed;
+                // v0.23.6: at max stacks it can be held as long as you like; it lands where you aim on release.
+                if (holding && SkillKeyHeld(player, "meteor_fall", _skill7.Value)) heldFor = elapsed;
                 else holding = false;
+                Vector3 aimNow;
+                if (holding && AlbedoAimUtility.TryGetPhysicalTarget(player, DragonCombat.M(_meteorRange.Value), out aimNow)) target = aimNow;
+                _meteorChargeNext = stacks < 3 ? Mathf.Max(0f, Mathf.Floor(heldFor) + 1f - heldFor) : 0f;
+                if (_enableVfx.Value && holding && Time.time >= nextMarker)
+                {
+                    nextMarker = Time.time + 0.2f;
+                    StartCoroutine(RingVfx(target, DragonCombat.M(_meteorRadius.Value) * (1f + 0.1f * stacks), new Color(1f, 0.45f, 0.10f, 0.55f), 0.22f));
+                }
                 int now = Mathf.Min(3, Mathf.FloorToInt(heldFor));
-                if (now > stacks) { stacks = now; _meteorChargeShown = stacks; if (_enableVfx.Value) StartCoroutine(RingVfx(target, DragonCombat.M(_meteorRadius.Value) * (1f + 0.1f * stacks), new Color(1f, 0.45f, 0.10f, 0.75f), 0.4f)); }
-                if (elapsed >= windup && (!holding || stacks >= 3)) break;
+                if (now > stacks) { stacks = now; _meteorChargeShown = stacks; ShowMessage("Meteor Fall " + stacks + "/3" + (stacks >= 3 ? " - release to drop it where you aim" : "")); if (_enableVfx.Value) StartCoroutine(RingVfx(target, DragonCombat.M(_meteorRadius.Value) * (1f + 0.1f * stacks), new Color(1f, 0.45f, 0.10f, 0.75f), 0.4f)); }
+                if (elapsed >= windup && !holding) break;
                 DragonCombat.LockSkill(player, 0.12f);
                 DragonCombat.PlaySkillPose(player, "SkyCast", 0.12f);
                 yield return null;
             }
             if (player == null || player.IsDead()) yield break;
             _meteorChargeShown = 0;
+            _meteorChargeNext = 0f;
             float damageMul = 1f + 0.2f * stacks;
             float radius = DragonCombat.M(_meteorRadius.Value) * (1f + 0.1f * stacks);
             yield return StartCoroutine(MeteorImpact(player, target, radius, damageMul, 2.4f * (1f + 0.15f * stacks)));
@@ -1363,17 +1396,24 @@ namespace DragonsAltarSorcerer
             float charge = 0f;
             float elapsed = 0f;
             bool holding = true;
-            while (player != null && !player.IsDead() && charge < max && (elapsed < minWindup || holding))
+            float nextMarker = 0f;
+            while (player != null && !player.IsDead() && (elapsed < minWindup || holding))
             {
                 DragonCombat.LockSkill(player, 0.12f);
                 DragonCombat.PlaySkillPose(player, "SkyCast", 0.12f);
                 elapsed += Time.deltaTime;
                 // charge timer from the key press; it stops the moment the key is released
-                if (holding && SkillKeyHeld(player, "elemental_cataclysm", _skill9.Value)) charge = elapsed;
+                if (holding && SkillKeyHeld(player, "elemental_cataclysm", _skill9.Value)) charge = Mathf.Min(max, elapsed);
                 else holding = false;
+                _cataclysmCharge01 = charge / max;
+                // v0.23.6: hold as long as you like at full charge; it lands where you aim on release.
+                Vector3 aimNow;
+                if (holding && AlbedoAimUtility.TryGetPhysicalTarget(player, DragonCombat.M(_cataclysmRange.Value), out aimNow)) target = aimNow;
+                if (_enableVfx.Value && holding && Time.time >= nextMarker) { nextMarker = Time.time + 0.2f; StartCoroutine(RingVfx(target, radius, new Color(0.76f, 0.30f, 1f, 0.45f), 0.22f)); }
                 if (_enableVfx.Value && ((int)(elapsed * 10f) % 4 == 0)) StartCoroutine(RingVfx(target, radius * Mathf.Clamp01(0.2f + charge / max), new Color(0.76f, 0.30f, 1f, 0.55f), 0.16f));
                 yield return null;
             }
+            _cataclysmCharge01 = 0f;
             if (player == null) yield break;
             float multiplier = 1f + (Mathf.Max(1f, _cataclysmMaxMultiplier.Value) - 1f) * Mathf.Clamp01(charge / max);
             CataclysmBlast(player, target, radius, multiplier);
@@ -2249,6 +2289,8 @@ namespace DragonsAltarSorcerer
         private ConfigEntry<float> _ruAscDamage;
         private float _nextPhalanxLaunch;
         private int _meteorChargeShown;
+        private float _cataclysmCharge01;
+        private float _meteorChargeNext;
         private float _nextAfterimageFire;
         private float _phalanxExpireAt;
         private bool _phalanxSpearArmed;
@@ -2301,7 +2343,7 @@ namespace DragonsAltarSorcerer
             _reAscCadence = Config.Bind("Spellcaster Rift Echo", "EchoInterval_v0234", 0.3f, "Seconds between echoes while Mouse1 is held (normal and Ascended; Ascended opens 3 rifts).");
             const string ga = "Spellcaster Gravity Blast Ascended";
             _gbAscRange = Config.Bind(ga, "Range", 25f, "Ascended travel distance (same speed).");
-            _gbAscBurst = Config.Bind(ga, "EndBurstPercent", 130f, "Burst when the orb stops: % of one hit.");
+            _gbAscBurst = Config.Bind(ga, "EndBurstPercent", 130f, "Burst when the orb ends (Ascended) or is detonated by the 2nd recast (normal too): % of one hit.");
             _gbAscBig = Config.Bind(ga, "BigPullPercent", 40f, "Big enemies are pulled at this strength.");
             _gbAscBoss = Config.Bind(ga, "BossPullPercent", 20f, "Bosses are pulled at this strength (they can still act).");
             _ruAscCharges = Config.Bind("Spellcaster Arcane Rupture Ascended", "MaxCharges", 4, "Ascended charges.");
@@ -2419,9 +2461,21 @@ namespace DragonsAltarSorcerer
         }
 
         // ------------------------------------------------------------------ Gravity Blast (new)
+        // v0.23.6: recast while the orb is out: 1st recast stops it where it is, 2nd makes it explode now.
+        private bool _gbOrbActive;
+        private int _gbRecasts;
+
         private void CastGravityBlast(Player player)
         {
+            if (_gbOrbActive)
+            {
+                _gbRecasts++;
+                ShowMessage(_gbRecasts == 1 ? "Gravity Blast - halted" : "Gravity Blast - detonate");
+                return;
+            }
             if (!BeginSkill(player, "Spellcaster.GravityBlast", _gbCooldown.Value, _gbEitr.Value)) return;
+            _gbOrbActive = true;
+            _gbRecasts = 0;
             DragonCombat.BeginMobileCast(player, 0.3f, false);
             Vector3 origin = player.GetEyePoint() + player.transform.forward * 1.2f;
             Vector3 dir = AlbedoAimUtility.GetProjectileDirection(player, origin);
@@ -2445,8 +2499,11 @@ namespace DragonsAltarSorcerer
             bool moving = true;
             float elapsed = 0f;
             float nextTick = 0f;
+            bool detonated = false;
             while (elapsed < life && player != null)
             {
+                if (scale >= 1f && _gbRecasts >= 1) moving = false;
+                if (scale >= 1f && _gbRecasts >= 2) { detonated = true; break; }
                 if (moving)
                 {
                     float step = speed * Time.deltaTime;
@@ -2483,7 +2540,8 @@ namespace DragonsAltarSorcerer
                 yield return null;
             }
             if (orb != null) Destroy(orb);
-            if (!ascended || player == null) yield break;
+            if (scale >= 1f) _gbOrbActive = false;
+            if ((!ascended && !detonated) || player == null) yield break;
             List<Character> hit = GetSphereTargets(player, pos, radius);
             for (int i = 0; i < hit.Count; i++)
                 DealWiz(player, hit[i], _gravityBlastDmg, scale * _gbAscBurst.Value / 100f, "gravity_blast", 14f, true);
@@ -2584,8 +2642,6 @@ namespace DragonsAltarSorcerer
         // Three clones replay your movement 0.2s late (they follow teleports and Rifts too) and copy
         // every weapon attack 0.2s later for 100% of your weapon damage. They never cast skills.
         private readonly List<float> _mimicTimes = new List<float>();
-        private readonly List<Vector3> _mimicPos = new List<Vector3>();
-        private readonly List<Quaternion> _mimicRot = new List<Quaternion>();
         private readonly List<float> _mimicAttackAt = new List<float>();
         private readonly List<ItemDrop.ItemData> _mimicAttackWeapon = new List<ItemDrop.ItemData>();
         private float _mimicUntil;
@@ -2604,21 +2660,89 @@ namespace DragonsAltarSorcerer
             if (!BeginSkill(player, "Spellcaster.AfterimageArsenal", _afterimageCooldown.Value, _afterimageEitr.Value)) return;
             ClearClones();
             _mimicUntil = Time.time + Mathf.Max(1f, _afterimageDuration.Value);
+            BuildAstralMimics(player);
+            ShowMessage("Afterimage Arsenal - 3 Astral twins");
+        }
+
+        // v0.23.6 Astral twins: a purple ghost copy of YOUR model (armour, shield, weapons, both Gun
+        // Staves...) whose every bone replays your pose 0.2s late, so they run, roll and attack
+        // exactly like you. Rebuilt when your equipment changes.
+        private Transform _mimicSource;
+        private Transform[] _mimicSourceBones;
+        private readonly Transform[][] _mimicBones = new Transform[3][];
+        private readonly List<Vector3[]> _poseLocalPos = new List<Vector3[]>();
+        private readonly List<Quaternion[]> _poseLocalRot = new List<Quaternion[]>();
+        private readonly List<Vector3> _poseRootPos = new List<Vector3>();
+        private readonly List<Quaternion> _poseRootRot = new List<Quaternion>();
+        private float _mimicNextEquipCheck;
+        private Material _mimicMaterial;
+
+        private Transform FindPlayerVisual(Player player)
+        {
+            Transform visual = player.transform.Find("Visual");
+            if (visual != null) return visual;
+            Animator anim = player.GetComponentInChildren<Animator>();
+            return anim != null ? anim.transform : null;
+        }
+
+        private void BuildAstralMimics(Player player)
+        {
+            for (int i = 0; i < 3; i++) { if (_clones[i] != null) Destroy(_clones[i]); _clones[i] = null; _mimicBones[i] = null; }
+            _poseLocalPos.Clear(); _poseLocalRot.Clear(); _poseRootPos.Clear(); _poseRootRot.Clear();
+            _mimicSource = FindPlayerVisual(player);
+            if (_mimicSource == null) return;
+            _mimicSourceBones = _mimicSource.GetComponentsInChildren<Transform>(true);
+            if (_mimicMaterial == null)
+            {
+                Shader shader = Shader.Find("Sprites/Default");
+                _mimicMaterial = shader != null ? new Material(shader) : null;
+                if (_mimicMaterial != null) _mimicMaterial.color = new Color(0.58f, 0.30f, 1f, 0.42f);
+            }
             for (int i = 0; i < 3; i++)
             {
-                GameObject root = new GameObject("HorizonWalkerMimic");
-                root.transform.position = player.transform.position + player.transform.rotation * MimicOffsets[i];
-                root.transform.rotation = player.transform.rotation;
-                if (_enableVfx.Value)
+                GameObject copy = null;
+                bool wasActive = _mimicSource.gameObject.activeSelf;
+                try
                 {
-                    CreateAfterimagePart(root.transform, PrimitiveType.Capsule, new Vector3(0f, 1.0f, 0f), new Vector3(0.52f, 0.90f, 0.42f));
-                    CreateAfterimagePart(root.transform, PrimitiveType.Sphere, new Vector3(0f, 2.05f, 0f), new Vector3(0.42f, 0.42f, 0.42f));
-                    CreateAfterimagePart(root.transform, PrimitiveType.Capsule, new Vector3(-0.48f, 1.35f, 0.02f), new Vector3(0.16f, 0.62f, 0.16f));
-                    CreateAfterimagePart(root.transform, PrimitiveType.Capsule, new Vector3(0.48f, 1.35f, 0.02f), new Vector3(0.16f, 0.62f, 0.16f));
+                    // Copy while inactive so none of the player's scripts wake up on the twin.
+                    _mimicSource.gameObject.SetActive(false);
+                    copy = Instantiate(_mimicSource.gameObject);
                 }
-                _clones[i] = root;
+                finally
+                {
+                    _mimicSource.gameObject.SetActive(wasActive);
+                }
+                if (copy == null) continue;
+                copy.name = "HorizonWalkerAstralTwin";
+                StripToVisual(copy);
+                copy.SetActive(true);
+                _clones[i] = copy;
+                _mimicBones[i] = copy.GetComponentsInChildren<Transform>(true);
             }
-            ShowMessage("Afterimage Arsenal - 3 mimics");
+            _mimicNextEquipCheck = Time.time + 0.5f;
+        }
+
+        // Keep only transforms + renderers; every renderer becomes the astral ghost material.
+        private void StripToVisual(GameObject copy)
+        {
+            Component[] all = copy.GetComponentsInChildren<Component>(true);
+            for (int pass = 0; pass < 2; pass++)
+                for (int i = all.Length - 1; i >= 0; i--)
+                {
+                    Component c = all[i];
+                    if (c == null || c is Transform || c is Renderer || c is MeshFilter) continue;
+                    try { DestroyImmediate(c); } catch { }
+                }
+            Renderer[] renderers = copy.GetComponentsInChildren<Renderer>(true);
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                if (renderers[i] == null) continue;
+                if (renderers[i] is ParticleSystemRenderer || _mimicMaterial == null) { renderers[i].enabled = renderers[i] is ParticleSystemRenderer ? false : renderers[i].enabled; continue; }
+                Material[] mats = new Material[Mathf.Max(1, renderers[i].sharedMaterials.Length)];
+                for (int m = 0; m < mats.Length; m++) mats[m] = _mimicMaterial;
+                renderers[i].sharedMaterials = mats;
+                renderers[i].shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            }
         }
 
         public void QueueMimicAttack(Player player, ItemDrop.ItemData weapon)
@@ -2633,24 +2757,51 @@ namespace DragonsAltarSorcerer
             if (ActiveCloneCount() == 0)
             {
                 if (Time.time >= _mimicUntil && _clones[0] != null) ClearClones();
-                _mimicTimes.Clear(); _mimicPos.Clear(); _mimicRot.Clear();
                 return;
             }
-            // record, then replay the pose from 0.2s ago
+            if (_mimicSource == null || _mimicSourceBones == null) { BuildAstralMimics(player); if (_mimicSource == null) return; }
+            // equipment changed (new attachments / removed ones) -> rebuild the twins
+            if (Time.time >= _mimicNextEquipCheck)
+            {
+                _mimicNextEquipCheck = Time.time + 0.5f;
+                if (_mimicSource.GetComponentsInChildren<Transform>(true).Length != _mimicSourceBones.Length) { BuildAstralMimics(player); return; }
+            }
+            int n = _mimicSourceBones.Length;
+            Vector3[] lp = new Vector3[n];
+            Quaternion[] lr = new Quaternion[n];
+            for (int k = 0; k < n; k++)
+            {
+                Transform t = _mimicSourceBones[k];
+                if (t == null) { BuildAstralMimics(player); return; }
+                lp[k] = t.localPosition;
+                lr[k] = t.localRotation;
+            }
             _mimicTimes.Add(Time.time);
-            _mimicPos.Add(player.transform.position);
-            _mimicRot.Add(player.transform.rotation);
+            _poseLocalPos.Add(lp);
+            _poseLocalRot.Add(lr);
+            _poseRootPos.Add(_mimicSource.position);
+            _poseRootRot.Add(_mimicSource.rotation);
             while (_mimicTimes.Count > 2 && _mimicTimes[1] <= Time.time - 0.2f)
             {
-                _mimicTimes.RemoveAt(0); _mimicPos.RemoveAt(0); _mimicRot.RemoveAt(0);
+                _mimicTimes.RemoveAt(0); _poseLocalPos.RemoveAt(0); _poseLocalRot.RemoveAt(0); _poseRootPos.RemoveAt(0); _poseRootRot.RemoveAt(0);
             }
-            Vector3 pos = _mimicPos[0];
-            Quaternion rot = _mimicRot[0];
+            Vector3[] sp = _poseLocalPos[0];
+            Quaternion[] sr = _poseLocalRot[0];
+            Vector3 rootPos = _poseRootPos[0];
+            Quaternion rootRot = _poseRootRot[0];
             for (int i = 0; i < 3; i++)
             {
-                if (_clones[i] == null) continue;
-                _clones[i].transform.position = pos + rot * MimicOffsets[i];
-                _clones[i].transform.rotation = rot;
+                if (_clones[i] == null || _mimicBones[i] == null) continue;
+                Transform[] bones = _mimicBones[i];
+                bones[0].position = rootPos + rootRot * MimicOffsets[i];
+                bones[0].rotation = rootRot;
+                int m = Mathf.Min(bones.Length, sp.Length);
+                for (int k = 1; k < m; k++)
+                {
+                    if (bones[k] == null) continue;
+                    bones[k].localPosition = sp[k];
+                    bones[k].localRotation = sr[k];
+                }
             }
             for (int a = _mimicAttackAt.Count - 1; a >= 0; a--)
             {
@@ -2703,7 +2854,11 @@ namespace DragonsAltarSorcerer
             {
                 if (_clones[i] != null) Destroy(_clones[i]);
                 _clones[i] = null;
+                _mimicBones[i] = null;
             }
+            _mimicSource = null;
+            _mimicSourceBones = null;
+            _mimicTimes.Clear(); _poseLocalPos.Clear(); _poseLocalRot.Clear(); _poseRootPos.Clear(); _poseRootRot.Clear();
             _mimicAttackAt.Clear();
             _mimicAttackWeapon.Clear();
         }
@@ -2823,8 +2978,14 @@ namespace DragonsAltarSorcerer
                     max = IsSpellAscended(player, "arcane_phalanx") ? Mathf.Max(1, _paAscCount.Value) : Mathf.Max(1, _phalanxCountV.Value);
                     return true;
                 case "meteor_fall":
-                    if (_meteorChargeShown <= 0) return false;
-                    ready = _meteorChargeShown; max = 3;
+                    if (_meteorChargeShown <= 0 && _meteorChargeNext <= 0f) return false;
+                    ready = _meteorChargeShown; max = 3; next = -Mathf.Max(0.01f, _meteorChargeNext); // charging
+                    return true;
+                case "elemental_cataclysm":
+                    if (_cataclysmCharge01 <= 0f) return false;
+                    max = Mathf.Max(2, Mathf.RoundToInt(_cataclysmCharge.Value));
+                    ready = Mathf.FloorToInt(_cataclysmCharge01 * max + 0.001f);
+                    next = -Mathf.Max(0.01f, ready < max ? (1f - (_cataclysmCharge01 * max - ready)) * _cataclysmCharge.Value / max : 0f); // charging
                     return true;
             }
             return false;

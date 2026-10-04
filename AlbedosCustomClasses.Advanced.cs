@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.23.5";
+        public const string ModVersion = "0.23.6";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -10751,10 +10751,10 @@ namespace AlbedosCustomClassesAdvanced
                     IhEitrCosts(b, IhW("Wizard Gravity Dominion", "EitrCost", 35f), IhNum(IhW("Wizard Gravity Dominion", "Windup", 1f)) + "s", IhW("Wizard Gravity Dominion", "Cooldown", 14f));
                     return;
                 case "astral_greatblade":
-                    b.Append(IhLine("Damage", IhSorcDamage("Wizard Astral Greatblade Damage", power) + (ascended ? ", 3 slams x " + IhNum(IhW("Wizard Astral Greatblade Ascended", "SlamPercent", 70f)) + "%" : ", up to 2x charged")));
+                    b.Append(IhLine("Damage", IhSorcDamage("Wizard Astral Greatblade Damage", power) + (ascended ? ", 3 slams x " + IhNum(IhW("Wizard Astral Greatblade Ascended", "SlamPercent", 70f)) + "%" : "")));
                     b.Append(IhLine("Area", IhNum(IhW("Wizard Astral Greatblade", "Range", 15f)) + "m x " + IhNum(IhW("Wizard Astral Greatblade", "Width", 2f)) + "m, along your aim"));
                     b.Append(IhLine("Inflicts", "Stun (Small, Big), Spirit Burn " + IhNum(IhW("Wizard Astral Greatblade", "SpiritBurnDuration", 6f)) + "s"));
-                    IhEitrCosts(b, IhW("Wizard Astral Greatblade", "EitrCost", 35f), ascended ? IhNum(IhW("Wizard Astral Greatblade Ascended", "Windup", 1f)) + "s" : IhNum(IhW("Wizard Astral Greatblade", "Windup", 1f)) + "s + up to " + IhNum(IhW("Wizard Astral Greatblade", "AdditionalChargeTime", 2f)) + "s charge", IhW("Wizard Astral Greatblade", "Cooldown", 12f));
+                    IhEitrCosts(b, IhW("Wizard Astral Greatblade", "EitrCost", 35f), ascended ? IhNum(IhW("Wizard Astral Greatblade Ascended", "Windup", 1f)) + "s" : IhNum(IhW("Wizard Astral Greatblade", "Windup", 1f)) + "s", IhW("Wizard Astral Greatblade", "Cooldown", 12f));
                     return;
                 case "frost_nova":
                     b.Append(IhLine("Damage", IhSorcDamage("Wizard Frost Nova Damage", power)));
@@ -10768,7 +10768,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "meteor_fall":
                     b.Append(IhLine("Damage", IhSorcDamage("Wizard Meteor Fall Damage", power) + ", charged 120/140/160%"));
                     b.Append(IhLine("Radius", IhNum(IhW("Wizard Meteor Fall", "Radius", 7f)) + "m, charged 110/120/130%"));
-                    b.Append(IhLine("Charge", "hold the key: 1 stack per second, max 3, cost paid once"));
+                    b.Append(IhLine("Charge", "hold the key: 1 stack per second, max 3, then hold as long as you like; it lands where you aim on release. Cost paid once"));
                     b.Append(IhLine("Inflicts", "Fire Burn " + IhNum(IhW("Wizard Meteor Fall", "FireBurnDuration", 6f)) + "s, heavy stagger"));
                     IhEitrCosts(b, IhW("Wizard Meteor Fall", "EitrCost", 45f), IhNum(IhW("Wizard Meteor Fall", "Windup", 1.2f)) + "s + charge", IhW("Wizard Meteor Fall", "Cooldown", 18f));
                     return;
@@ -10781,7 +10781,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "elemental_cataclysm":
                     b.Append(IhLine("Damage", IhSorcDamage("Wizard Elemental Cataclysm Damage", power) + ", up to " + IhNum(IhW("Wizard Elemental Cataclysm", "FullChargeMultiplier", 3f)) + "x charged"));
                     b.Append(IhLine("Radius", IhNum(IhW("Wizard Elemental Cataclysm", "Radius", 10f)) + "m"));
-                    b.Append(IhLine("Charge", "hold the key up to " + IhNum(IhW("Wizard Elemental Cataclysm", "MaxChargeTime", 6f)) + "s"));
+                    b.Append(IhLine("Charge", "hold the key, full after " + IhNum(IhW("Wizard Elemental Cataclysm", "MaxChargeTime", 6f)) + "s, then as long as you like; it lands where you aim on release"));
                     b.Append(IhLine("Inflicts", "Expose " + IhNum(IhW("Wizard Elemental Cataclysm", "ExposeDuration", 15f)) + "s"));
                     IhEitrCosts(b, IhW("Wizard Elemental Cataclysm", "EitrCost", 80f), "charge", IhW("Wizard Elemental Cataclysm", "Cooldown", 75f));
                     return;
@@ -10837,7 +10837,8 @@ namespace AlbedosCustomClassesAdvanced
                     b.Append(IhLine("Travel", IhNum(ascended ? IhW("Spellcaster Gravity Blast Ascended", "Range", 25f) : IhW("Spellcaster Gravity Blast", "Range", 15f)) + "m, " + IhNum(IhW("Spellcaster Gravity Blast", "Range", 15f)) + "m per " + IhNum(IhW("Spellcaster Gravity Blast", "TravelTime", 4f)) + "s, Free Aim, passes enemies"));
                     b.Append(IhLine("Radius", IhNum(IhW("Spellcaster Gravity Blast", "Radius", 5f)) + "m"));
                     b.Append(IhLine("Inflicts", ascended ? "pulls Small, Big 40%, Bosses 20%; Cripple (Big, Boss)" : "pulls Small; Cripple " + IhNum(IhW("Spellcaster Gravity Blast", "CrippleDuration", 3f)) + "s (Big, Boss)"));
-                    if (ascended) b.Append(IhLine("End Burst", IhNum(IhW("Spellcaster Gravity Blast Ascended", "EndBurstPercent", 130f)) + "% when the orb stops"));
+                    b.Append(IhLine("Recast", "1st: the orb stops where it is; 2nd: it explodes for " + IhNum(IhW("Spellcaster Gravity Blast Ascended", "EndBurstPercent", 130f)) + "%"));
+                    if (ascended) b.Append(IhLine("End Burst", IhNum(IhW("Spellcaster Gravity Blast Ascended", "EndBurstPercent", 130f)) + "% when the orb ends"));
                     IhEitrCosts(b, IhW("Spellcaster Gravity Blast", "EitrCost", 40f) * 0.5f, "None", IhW("Spellcaster Gravity Blast", "Cooldown", 14f));
                     return;
                 case "arcane_rupture":
@@ -11467,7 +11468,10 @@ namespace AlbedosCustomClassesAdvanced
                 int ready, max;
                 float next;
                 bool stacked = DragonCombat.TryGetSkillStacks(id, out ready, out max, out next);
-                if (stacked && ready <= 0 && next > cooldown) cooldown = next;
+                // next < 0 = the skill is being charged right now: no cooldown shade, live charge timer
+                bool charging = stacked && next < 0f;
+                if (charging) { cooldown = 0f; next = -next; }
+                if (stacked && !charging && ready <= 0 && next > cooldown) cooldown = next;
                 if (cooldown > 0.05f)
                 {
                     GUI.color = new Color(0f, 0f, 0f, 0.62f);
@@ -11476,7 +11480,7 @@ namespace AlbedosCustomClassesAdvanced
                     GUI.Label(inner, IhFormatCooldown(cooldown), _hudCooldownStyle);
                 }
                 if (stacked)
-                    IhDrawStackCounter(inner, ready, max, ready > 0 && ready < max ? next : 0f, scale);
+                    IhDrawStackCounter(inner, ready, max, (charging || ready > 0) && ready < max ? next : 0f, scale);
             }
             GUI.Label(new Rect(rect.x - 10f, rect.yMax - 1f, rect.width + 20f, 16f * scale), FormatHotbarBinding(binding), _hudKeyCenterStyle);
         }
@@ -12896,14 +12900,16 @@ namespace AlbedosCustomClassesAdvanced
                 string slot = IhTemplateSlot(node.Id);
                 Rect field = IhFieldRect(slot);
                 if (hasArt) { IhBlitArt(canvas, field, art, field); _ihPlaceholderArt.Remove(node.Id); }
-                else { IhFillPlaceholder(canvas, field); _ihPlaceholderArt.Add(node.Id); }
+                // v0.23.6: the painted Grace frames have a gold inner bevel that the field rect
+                // overlapped unevenly (left/top 3px, none right/bottom); fill only the dark opening.
+                else { IhFillPlaceholder(canvas, slot == "heavens_light" ? Rect.MinMaxRect(393f, 421f, 442f, 467f) : field); _ihPlaceholderArt.Add(node.Id); }
                 string color = IhBaseFrameColor(node);
                 if (color != IhPaintedFrameColor(slot))
                     IhStampFrame(canvas, slot, color);
             }
             // Grace box in the footer.
             Rect graceBox = new Rect(670f, 548f, 44f, 44f);
-            if (hasArt) IhBlitArt(canvas, graceBox, art, graceBox); else IhFillPlaceholder(canvas, graceBox);
+            if (hasArt) IhBlitArt(canvas, graceBox, art, graceBox); else IhFillPlaceholder(canvas, Rect.MinMaxRect(671f, 551f, 712f, 590f));
             canvas.Apply(false, false);
             if (art != null) Destroy(art);
             IhComposeHotbarIcons(nodes, canvas);
@@ -13150,7 +13156,7 @@ namespace AlbedosCustomClassesAdvanced
             Rect opening = IhFieldRect(IhTemplateSlot(node.Id));
             IhDrawPlaceholderInitials(ScaleReferenceRect(opening.x, opening.y, opening.width, opening.height), node.Id, !unlocked);
 
-            IhDrawHighlight(icon, _treeSelectedNodeId == node.Id, icon.Contains(Event.current.mousePosition));
+            IhDrawNodeGlow(node, _treeSelectedNodeId == node.Id, icon.Contains(Event.current.mousePosition));
             if (group.Contains(Event.current.mousePosition))
             {
                 string title;
@@ -13178,14 +13184,14 @@ namespace AlbedosCustomClassesAdvanced
             {
                 Rect minusRect = ScaleReferenceRect(row.x - buttonRef - 3f, buttonY, buttonRef, buttonRef);
                 DrawTierQueueButton(minusRect, "-");
-                if (IhClickable(minusRect, "minus:" + node.Id))
+                if (IhClickable(minusRect, "minus:" + node.Id, _treeTierMinusTex))
                     RemovePrototypePending(node.Id);
             }
             if (canAdd)
             {
                 Rect plusRect = ScaleReferenceRect(row.xMax + 2f, buttonY, buttonRef, buttonRef);
                 DrawTierQueueButton(plusRect, "+");
-                if (IhClickable(plusRect, "plus:" + node.Id))
+                if (IhClickable(plusRect, "plus:" + node.Id, _treeTierPlusTex))
                     AddPrototypePending(node.Id, maxTier);
             }
         }
@@ -13403,7 +13409,7 @@ namespace AlbedosCustomClassesAdvanced
                 if (!empty && !draggingFromHere && IsPermanentHotbarSkill(id))
                     DrawPermanentBadge(r);
 
-                if (!_dragActive) IhDrawHighlight(r, false, hoverSlot == i);
+                if (!_dragActive) IhDrawGlow(r, "slot:" + (tex == null ? "none" : tex.name), tex, false, hoverSlot == i);
                 if (!_dragActive && hoverSlot == i && !empty)
                 {
                     ReferenceNodeUi node = FindReferenceNode(id);
@@ -13684,35 +13690,112 @@ namespace AlbedosCustomClassesAdvanced
         // control (or the selected node) stays highlighted until a click on empty space clears it.
         private string _uiSelectedKey = "";
 
-        private void IhDrawHighlight(Rect r, bool selected, bool hover)
+        // v0.23.6: highlights follow the real border. A soft gold halo is generated once from the
+        // alpha of the thing being highlighted (node frame sprite, hotbar icon, +/- art); plain
+        // hotspots over painted art use a rounded-rect halo. Hover = soft, selected = strong.
+        private readonly Dictionary<string, Texture2D> _ihGlowCache = new Dictionary<string, Texture2D>();
+        private const int IhGlowPad = 6;
+
+        private Texture2D IhGlowFrom(string key, Texture2D src)
+        {
+            Texture2D glow;
+            if (_ihGlowCache.TryGetValue(key, out glow)) return glow;
+            int w = 48, h = 48;
+            float[] a;
+            try
+            {
+                if (src == null) throw new Exception("rect");
+                w = src.width; h = src.height;
+                if (w > 160 || h > 160) { float k = 160f / Mathf.Max(w, h); w = Mathf.Max(8, Mathf.RoundToInt(w * k)); h = Mathf.Max(8, Mathf.RoundToInt(h * k)); }
+                a = new float[w * h];
+                for (int y = 0; y < h; y++)
+                    for (int x = 0; x < w; x++)
+                        a[y * w + x] = src.GetPixelBilinear((x + 0.5f) / w, (y + 0.5f) / h).a > 0.35f ? 1f : 0f;
+            }
+            catch
+            {
+                a = new float[w * h];
+                for (int y = 2; y < h - 2; y++)
+                    for (int x = 2; x < w - 2; x++)
+                        a[y * w + x] = 1f;
+            }
+            int G = IhGlowPad, W = w + 2 * G, H = h + 2 * G;
+            Color[] px = new Color[W * H];
+            for (int y = 0; y < H; y++)
+                for (int x = 0; x < W; x++)
+                {
+                    // distance to the nearest solid pixel (small window), as a soft falloff
+                    float best = 0f;
+                    for (int dy = -G; dy <= G && best < 1f; dy++)
+                        for (int dx = -G; dx <= G; dx++)
+                        {
+                            int sx = x - G + dx, sy = y - G + dy;
+                            if (sx < 0 || sy < 0 || sx >= w || sy >= h || a[sy * w + sx] <= 0f) continue;
+                            float d = Mathf.Sqrt(dx * dx + dy * dy);
+                            float v = Mathf.Clamp01(1f - d / (G + 0.5f));
+                            if (v > best) best = v;
+                        }
+                    // keep the halo mostly OUTSIDE the art so the border itself stays readable
+                    int ox = x - G, oy = y - G;
+                    bool inside = ox >= 0 && oy >= 0 && ox < w && oy < h && a[oy * w + ox] > 0f;
+                    float alpha = inside ? 0.18f : best * best;
+                    px[y * W + x] = new Color(1f, 0.83f, 0.38f, alpha);
+                }
+            glow = new Texture2D(W, H, TextureFormat.RGBA32, false);
+            glow.wrapMode = TextureWrapMode.Clamp;
+            glow.filterMode = FilterMode.Bilinear;
+            glow.SetPixels(px);
+            glow.Apply(false, true);
+            _ihGlowCache[key] = glow;
+            return glow;
+        }
+
+        private void IhDrawGlow(Rect r, string key, Texture2D src, bool selected, bool hover)
         {
             if ((!selected && !hover) || Event.current.type != EventType.Repaint) return;
-            Color edge = selected ? new Color(1f, 0.80f, 0.30f, 0.95f) : new Color(1f, 0.95f, 0.78f, 0.60f);
-            GUI.color = new Color(1f, 0.90f, 0.55f, selected ? 0.12f : 0.08f);
-            GUI.DrawTexture(r, Texture2D.whiteTexture);
-            float w = selected ? 2.5f : 1.5f;
-            GUI.color = edge;
-            GUI.DrawTexture(new Rect(r.x, r.y, r.width, w), Texture2D.whiteTexture);
-            GUI.DrawTexture(new Rect(r.x, r.yMax - w, r.width, w), Texture2D.whiteTexture);
-            GUI.DrawTexture(new Rect(r.x, r.y, w, r.height), Texture2D.whiteTexture);
-            GUI.DrawTexture(new Rect(r.xMax - w, r.y, w, r.height), Texture2D.whiteTexture);
-            if (selected)
-            {
-                // soft outer glow
-                GUI.color = new Color(1f, 0.80f, 0.30f, 0.30f);
-                Rect o = new Rect(r.x - 3f, r.y - 3f, r.width + 6f, r.height + 6f);
-                GUI.DrawTexture(new Rect(o.x, o.y, o.width, 2f), Texture2D.whiteTexture);
-                GUI.DrawTexture(new Rect(o.x, o.yMax - 2f, o.width, 2f), Texture2D.whiteTexture);
-                GUI.DrawTexture(new Rect(o.x, o.y, 2f, o.height), Texture2D.whiteTexture);
-                GUI.DrawTexture(new Rect(o.xMax - 2f, o.y, 2f, o.height), Texture2D.whiteTexture);
-            }
+            Texture2D glow = IhGlowFrom(key, src);
+            float padX = r.width * IhGlowPad / Mathf.Max(1f, glow.width - 2 * IhGlowPad);
+            float padY = r.height * IhGlowPad / Mathf.Max(1f, glow.height - 2 * IhGlowPad);
+            Rect g = new Rect(r.x - padX, r.y - padY, r.width + 2f * padX, r.height + 2f * padY);
+            GUI.color = new Color(1f, 1f, 1f, selected ? 1f : 0.85f);
+            GUI.DrawTexture(g, glow);
+            if (selected) GUI.DrawTexture(g, glow); // stronger, double pass
             GUI.color = Color.white;
+        }
+
+        // Plain hotspots over painted art (plaques, close button, key labels).
+        private void IhDrawHighlight(Rect r, bool selected, bool hover)
+        {
+            IhDrawGlow(r, "rect", null, selected, hover);
+        }
+
+        // Tree node: the halo hugs the frame (its frame sprite, or the painted Grace frame).
+        private void IhDrawNodeGlow(ReferenceNodeUi node, bool selected, bool hover)
+        {
+            string slot = IhTemplateSlot(node.Id);
+            if (slot == "heavens_light")
+            {
+                Rect hl = Rect.MinMaxRect(379f, 407f, 459f, 481f);
+                IhDrawGlow(ScaleReferenceRect(hl.x, hl.y, hl.width, hl.height), "rect", null, selected, hover);
+                return;
+            }
+            Texture2D sprite = null;
+            string[] colors = { "cyan", "green", "magenta", "navy", "red" };
+            for (int i = 0; i < colors.Length && sprite == null; i++) sprite = IhFrameSprite(slot, colors[i]);
+            Rect fr = IhFrameSpriteRect(slot);
+            IhDrawGlow(ScaleReferenceRect(fr.x, fr.y, fr.width, fr.height), "frame:" + slot, sprite, selected, hover);
         }
 
         // Invisible hotspot over painted art, with the universal hover / selected highlight.
         private bool IhClickable(Rect r, string key)
         {
-            IhDrawHighlight(r, key == _uiSelectedKey, r.Contains(Event.current.mousePosition));
+            return IhClickable(r, key, null);
+        }
+
+        private bool IhClickable(Rect r, string key, Texture2D shape)
+        {
+            if (shape == null) IhDrawHighlight(r, key == _uiSelectedKey, r.Contains(Event.current.mousePosition));
+            else IhDrawGlow(r, "tex:" + key.Split(':')[0], shape, key == _uiSelectedKey, r.Contains(Event.current.mousePosition));
             if (GUI.Button(r, GUIContent.none, GUIStyle.none))
             {
                 _uiSelectedKey = key;
