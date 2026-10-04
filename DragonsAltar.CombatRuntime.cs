@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.21.2";
+        public const string ModVersion = "0.22.0";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1433,6 +1433,41 @@ namespace DragonsAltarCombat
             {
                 return false;
             }
+        }
+
+        // v0.22.0: skill modules that are not linked to Advanced (Sorcerer) register here so the
+        // universal tree hotbar can cast them and show their cooldowns by skill id.
+        private static readonly List<Func<Player, string, bool>> ExternalCasters = new List<Func<Player, string, bool>>();
+        private static readonly List<Func<string, float>> ExternalCooldowns = new List<Func<string, float>>();
+
+        public static void RegisterSkillModule(Func<Player, string, bool> cast, Func<string, float> cooldown)
+        {
+            if (cast != null && !ExternalCasters.Contains(cast)) ExternalCasters.Add(cast);
+            if (cooldown != null && !ExternalCooldowns.Contains(cooldown)) ExternalCooldowns.Add(cooldown);
+        }
+
+        public static bool TryExternalCast(Player player, string skillId)
+        {
+            for (int i = 0; i < ExternalCasters.Count; i++)
+            {
+                try { if (ExternalCasters[i](player, skillId)) return true; }
+                catch { }
+            }
+            return false;
+        }
+
+        public static float ExternalCooldown(string skillId)
+        {
+            for (int i = 0; i < ExternalCooldowns.Count; i++)
+            {
+                try
+                {
+                    float value = ExternalCooldowns[i](skillId);
+                    if (value > 0f) return value;
+                }
+                catch { }
+            }
+            return 0f;
         }
 
         // v0.20.9: Bless Thy Sinners Buckler Parry. Advanced (Priest skills) handles the effects.

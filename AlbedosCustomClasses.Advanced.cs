@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.21.2";
+        public const string ModVersion = "0.22.0";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -6737,10 +6737,11 @@ namespace AlbedosCustomClassesAdvanced
 
         private static bool AltarAdvancementPrefix(object[] __args)
         {
-            if (Instance == null || __args == null || __args.Length < 1 || ((__args[0] as string) != "Paladin" && (__args[0] as string) != "Priest"))
+            if (Instance == null || __args == null || __args.Length < 1)
                 return true;
             Player player = Player.m_localPlayer;
-            if (player == null || !string.IsNullOrEmpty(Instance.GetAdvancement(player)))
+            // v0.22.0: every Advancement with a universal kit has the same requirements.
+            if (player == null || IhKitFor(Instance.GetClass(player), __args[0] as string) == null || !string.IsNullOrEmpty(Instance.GetAdvancement(player)))
                 return true;
             if (Instance.GetPrototypeTotalPending() > 0)
             {
@@ -7569,22 +7570,118 @@ namespace AlbedosCustomClassesAdvanced
         private static readonly string[] IhPriestSignatures = { "lightning_relic", "holy_relic" };
         private static readonly string[] IhPriestNormalAdvSkills = { "divine_intervention", "grand_cross", "heavens_judgement" };
         private const string IhPriestAscendedClassSkill = "holy_wave";
+
+        // v0.22.0 universal kit: every Advancement Class is data. Class skills map 1:1 onto the
+        // chassis Class slots (Lightning Zap / Righteous Strike / Holy Wave), the 5 AC skills onto
+        // the Paladin slots (2 Signatures, the Lv24 skill, the Lv32 pair), then Ultimate and Grace.
+        private sealed class IhKit
+        {
+            public readonly string Class, Ac, Ultimate, Grace, AscendedClass, SpecialAscension;
+            public readonly string[] ClassSkills, Adv, Signatures, Normals;
+            public IhKit(string cls, string ac, string[] classSkills, string[] adv, string ultimate, string grace, string ascendedClass, string specialAscension)
+            {
+                Class = cls; Ac = ac; ClassSkills = classSkills; Adv = adv; Ultimate = ultimate; Grace = grace;
+                AscendedClass = ascendedClass; SpecialAscension = specialAscension ?? "";
+                Signatures = new string[] { adv[0], adv[1] };
+                List<string> normals = new List<string>();
+                for (int i = 2; i < adv.Length; i++)
+                    if (adv[i] != SpecialAscension) normals.Add(adv[i]);
+                Normals = normals.ToArray();
+            }
+        }
+        private static readonly string[] IhClassSlots = { "lightning_zap", "righteous_strike", "holy_wave" };
+        private static readonly string[] IhAdvSlots = { "goddess_relic", "judgement_hammer", "shield_charge", "fallen_angel", "ray_of_hope" };
+        private static readonly string[] IhWarriorSkills = { "heavy_slash", "impact_wave", "impact_punch" };
+        private static readonly string[] IhSorcererSkills = { "flame_burst", "glacial_descent", "stonefang_eruption" };
+        private static readonly IhKit[] IhKits =
+        {
+            new IhKit("Cleric", "Paladin", IhClassSkills, IhAdvSkills, IhUltimate, IhGrace, IhAscendedClassSkill, null),
+            new IhKit("Cleric", "Priest", IhClassSkills, IhPriestAdvSkills, IhPriestUltimate, IhPriestGrace, IhPriestAscendedClassSkill, null),
+            new IhKit("Warrior", "Sword Master", IhWarriorSkills, new string[] { "moonlight_splitter", "crescent_cleave", "blade_storm", "frenzied_charge", "eclipse" }, "halfmoon_slash", "knights_guidance", "impact_wave", null),
+            new IhKit("Warrior", "Mercenary", IhWarriorSkills, new string[] { "stomp", "circle_swing", "bonecrusher", "seismic_guillotine", "punishing_bomb" }, "whirlwind", "battlecry", "heavy_slash", null),
+            new IhKit("Sorcerer", "Wizard", IhSorcererSkills, new string[] { "meteor_fall", "gravity_dominion", "astral_railcannon", "astral_greatblade", "frost_nova" }, "elemental_cataclysm", "clockwork", "glacial_descent", null),
+            // Spellcaster: Void Step has its own Lv 42 Ascension on top of the normal one (5 total).
+            new IhKit("Sorcerer", "Spellcaster", IhSorcererSkills, new string[] { "arcane_phalanx", "afterimage_arsenal", "void_step", "rift_echo", "gravity_blast" }, "arcane_rupture", "rift_walker", "stonefang_eruption", "void_step")
+        };
+        private static IhKit IhKitFor(string cls, string ac)
+        {
+            for (int i = 0; i < IhKits.Length; i++)
+                if (IhKits[i].Class == cls && IhKits[i].Ac == ac) return IhKits[i];
+            return null;
+        }
+        // The kit that owns an Advancement-side skill (AC skills, Ultimate, Grace are unique per kit).
+        private static IhKit IhKitOf(string id)
+        {
+            for (int i = 0; i < IhKits.Length; i++)
+            {
+                IhKit k = IhKits[i];
+                if (IhContains(k.Adv, id) || k.Ultimate == id || k.Grace == id) return k;
+            }
+            return null;
+        }
+        private static string[] IhClassSkillsOf(string cls)
+        {
+            if (cls == "Cleric") return IhClassSkills;
+            if (cls == "Warrior") return IhWarriorSkills;
+            if (cls == "Sorcerer") return IhSorcererSkills;
+            return new string[0];
+        }
+        private static string IhClassOfSkill(string id)
+        {
+            if (IhContains(IhClassSkills, id)) return "Cleric";
+            if (IhContains(IhWarriorSkills, id)) return "Warrior";
+            if (IhContains(IhSorcererSkills, id)) return "Sorcerer";
+            return "";
+        }
+        private static bool IhIsAnyClassSkill(string id)
+        {
+            return IhClassOfSkill(id).Length > 0;
+        }
+        private static string[] IhBranchesOf(string cls)
+        {
+            List<string> list = new List<string>();
+            for (int i = 0; i < IhKits.Length; i++)
+                if (IhKits[i].Class == cls) list.Add(IhKits[i].Ac);
+            return list.ToArray();
+        }
+        private IhKit IhPlayerKit(Player player)
+        {
+            return player == null ? null : IhKitFor(GetClass(player), GetAdvancement(player));
+        }
+        private IhKit IhTreeKit()
+        {
+            Player player = Player.m_localPlayer;
+            return player == null ? null : IhKitFor(GetClass(player), IhTreeBranch());
+        }
+        private string[] IhPlayerClassSkills(Player player)
+        {
+            return player == null ? new string[0] : IhClassSkillsOf(GetClass(player));
+        }
         private string _ihPreviewBranch = "Paladin";
         private string _ihUiOwner = "";
         private Texture2D _ihPriestBackdropTex;
         private Texture2D _ihPriestLockedTex;
         private string IhTreeBranch()
         {
-            string branch = GetAdvancement(Player.m_localPlayer);
-            return branch == "Priest" || branch == "Paladin" ? branch : _ihPreviewBranch;
+            Player player = Player.m_localPlayer;
+            if (player == null) return _ihPreviewBranch;
+            string cls = GetClass(player);
+            string branch = GetAdvancement(player);
+            if (IhKitFor(cls, branch) != null) return branch;
+            // Before Advancement: the previewed branch of this Class (first branch by default).
+            string[] branches = IhBranchesOf(cls);
+            if (branches.Length > 0 && Array.IndexOf(branches, _ihPreviewBranch) < 0)
+                _ihPreviewBranch = branches[0];
+            return _ihPreviewBranch;
         }
         private bool IhIsPriest(Player player)
         {
             return GetClass(player) == "Cleric" && GetAdvancement(player) == "Priest";
         }
+        // v0.22.0: any Advanced Class with a universal kit (name kept from the Cleric-only days).
         private bool IhIsClericAdvanced(Player player)
         {
-            return IhIsPaladin(player) || IhIsPriest(player);
+            return IhPlayerKit(player) != null;
         }
         private static bool IhPriestSkill(string id)
         {
@@ -7592,31 +7689,45 @@ namespace AlbedosCustomClassesAdvanced
         }
         private static bool IhIsUltimate(string id)
         {
-            return id == IhUltimate || id == IhPriestUltimate;
+            for (int i = 0; i < IhKits.Length; i++)
+                if (IhKits[i].Ultimate == id) return true;
+            return false;
+        }
+        private static bool IhIsSignature(string id)
+        {
+            IhKit k = IhKitOf(id);
+            return k != null && IhContains(k.Signatures, id);
         }
         private string[] IhBranchSkills(Player player)
         {
-            return IhIsPriest(player) ? IhPriestAdvSkills : IhAdvSkills;
+            IhKit k = IhPlayerKit(player);
+            return k == null ? new string[0] : k.Adv;
         }
         private string IhGraceFor(Player player)
         {
-            return IhIsPriest(player) ? IhPriestGrace : IhGrace;
+            IhKit k = IhPlayerKit(player);
+            return k == null ? "" : k.Grace;
         }
         private ReferenceNodeUi[] IhTreeNodes()
         {
-            return IhTreeBranch() == "Priest" ? ClericPriestReferenceNodes : ClericPaladinReferenceNodes;
+            string branch = IhTreeBranch();
+            if (branch == "Priest") return ClericPriestReferenceNodes;
+            if (branch == "Paladin") return ClericPaladinReferenceNodes;
+            IhKit k = IhTreeKit();
+            return k == null ? ClericPaladinReferenceNodes : IhKitNodes(k);
         }
+        // Chassis slot of any skill id (anchors, frames, openings, lock regions).
         private static string IhTemplateSlot(string id)
         {
-            switch (id)
+            for (int i = 0; i < IhKits.Length; i++)
             {
-                case "lightning_relic": return "goddess_relic";
-                case "holy_relic": return "judgement_hammer";
-                case "divine_intervention": return "shield_charge";
-                case "grand_cross": return "fallen_angel";
-                case "heavens_judgement": return "ray_of_hope";
-                case "lightning_tempest": return IhUltimate;
-                case "grand_sigil": return IhGrace;
+                IhKit k = IhKits[i];
+                int c = Array.IndexOf(k.ClassSkills, id);
+                if (c >= 0) return IhClassSlots[c];
+                int a = Array.IndexOf(k.Adv, id);
+                if (a >= 0) return IhAdvSlots[a];
+                if (k.Ultimate == id) return IhUltimate;
+                if (k.Grace == id) return IhGrace;
             }
             return id;
         }
@@ -7657,7 +7768,8 @@ namespace AlbedosCustomClassesAdvanced
         private bool IhDrawLockedRegion(string key)
         {
             Rect r;
-            Texture2D locked = IhTreeBranch() == "Priest" ? _ihPriestLockedTex : _ihLockedBackdropTex;
+            Texture2D locked = IhKitBackdrop(IhTreeKit(), true);
+            if (locked == null) locked = _ihLockedBackdropTex;
             if (locked == null || !LockedRegions.TryGetValue(IhTemplateSlot(key), out r))
                 return false;
             Rect uv = new Rect(r.x / 1011f, 1f - r.yMax / 662f, r.width / 1011f, r.height / 662f);
@@ -7939,9 +8051,10 @@ namespace AlbedosCustomClassesAdvanced
 
         private int IhMaxTier(string id)
         {
-            if (IhContains(IhClassSkills, id)) return 7;
-            if (IhContains(IhAdvSkills, id) || IhContains(IhPriestAdvSkills, id)) return 5;
+            if (IhIsAnyClassSkill(id)) return 7;
             if (IhIsUltimate(id)) return 3;
+            IhKit k = IhKitOf(id);
+            if (k != null && IhContains(k.Adv, id)) return 5;
             return 0;
         }
 
@@ -8033,11 +8146,14 @@ namespace AlbedosCustomClassesAdvanced
             return Mathf.FloorToInt(earned * 0.8f + 0.5f);
         }
 
+        // AC slot 3 (the Lv24 skill) and slots 4-5 (the Lv32 pair), Ultimate Lv36, the rest Lv16.
         private static int IhGateLevel(string id)
         {
-            if (id == "shield_charge" || id == "divine_intervention") return 24;
-            if (id == "fallen_angel" || id == "ray_of_hope" || id == "grand_cross" || id == "heavens_judgement") return 32;
             if (IhIsUltimate(id)) return 36;
+            IhKit k = IhKitOf(id);
+            int index = k == null ? -1 : Array.IndexOf(k.Adv, id);
+            if (index == 2) return 24;
+            if (index >= 3) return 32;
             return 16;
         }
 
@@ -8045,19 +8161,22 @@ namespace AlbedosCustomClassesAdvanced
         {
             reason = "";
             if (player == null) return false;
-            if (GetClass(player) != "Cleric")
-            {
-                reason = "Choose the Cleric Class at the Altar";
-                return false;
-            }
-            if (IhContains(IhClassSkills, id)) return true;
-            bool priest = IhPriestSkill(id);
-            if (!priest && !IhContains(IhAdvSkills, id) && id != IhGrace && id != IhUltimate)
+            string cls = GetClass(player);
+            string skillClass = IhClassOfSkill(id);
+            IhKit kit = IhKitOf(id);
+            if (skillClass.Length == 0 && kit == null)
             {
                 reason = "Unknown skill";
                 return false;
             }
-            string branch = priest ? "Priest" : "Paladin";
+            string needClass = skillClass.Length > 0 ? skillClass : kit.Class;
+            if (cls != needClass)
+            {
+                reason = "Choose the " + needClass + " Class at the Altar";
+                return false;
+            }
+            if (skillClass.Length > 0) return true;
+            string branch = kit.Ac;
             if (GetAdvancement(player) != branch)
             {
                 reason = "Advance to " + branch + " at Lv 16";
@@ -8117,14 +8236,14 @@ namespace AlbedosCustomClassesAdvanced
         {
             if (player == null)
                 return false;
-            if (id == IhAscendedClassSkill && IhIsPaladin(player))
+            // v0.22.0: the kit's Ascended Class skill Ascends when you Advance (Righteous Strike,
+            // Holy Wave, Impact Wave, Heavy Slash, Glacial Descent, Stonefang Eruption).
+            IhKit kit = IhPlayerKit(player);
+            if (kit == null)
+                return false;
+            if (id == kit.AscendedClass)
                 return true;
-            // v0.21.0: Priest's Ascended Class skill is Holy Wave (Ascends when you Advance).
-            if (id == IhPriestAscendedClassSkill && IhIsPriest(player))
-                return true;
-            if (IhIsPriest(player))
-                return IhPriestSkill(id) && IhAscendedSet(player).Contains(id);
-            return !IhPriestSkill(id) && IhIsPaladin(player) && IhAscendedSet(player).Contains(id);
+            return (IhContains(kit.Adv, id) || id == kit.Ultimate) && IhAscendedSet(player).Contains(id);
         }
 
         private bool IhTryAscend(Player player, string id, out string message)
@@ -8138,13 +8257,13 @@ namespace AlbedosCustomClassesAdvanced
             message = "";
             int level = IhGetLevel(player);
             HashSet<string> set = new HashSet<string>(IhAscendedSet(player));
-            bool priest = IhIsPriest(player);
-            if (!IhIsPaladin(player) && !priest)
+            IhKit kit = IhPlayerKit(player);
+            if (kit == null)
             {
-                message = "Only an Advanced Paladin or Priest can Ascend skills.";
+                message = "Only an Advanced character can Ascend skills.";
                 return false;
             }
-            if (id == (priest ? IhPriestAscendedClassSkill : IhAscendedClassSkill))
+            if (id == kit.AscendedClass)
             {
                 message = IhSkillName(id) + " is already Ascended (it Ascends when you Advance).";
                 return false;
@@ -8152,11 +8271,13 @@ namespace AlbedosCustomClassesAdvanced
             string[] group;
             int needLevel;
             int needTier;
-            string[] signatures = priest ? IhPriestSignatures : IhSignatureSkills;
-            string[] normals = priest ? IhPriestNormalAdvSkills : IhNormalAdvSkills;
-            string ultimate = priest ? IhPriestUltimate : IhUltimate;
+            string[] signatures = kit.Signatures;
+            string[] normals = kit.Normals;
+            string ultimate = kit.Ultimate;
             if (IhContains(signatures, id)) { group = signatures; needLevel = 32; needTier = 5; }
             else if (IhContains(normals, id)) { group = normals; needLevel = 42; needTier = 5; }
+            // Spellcaster's Void Step: its own Lv 42 Ascension, separate from the normal-skill one.
+            else if (id == kit.SpecialAscension) { group = new string[] { id }; needLevel = 42; needTier = 5; }
             else if (id == ultimate) { group = new string[] { ultimate }; needLevel = 50; needTier = 3; }
             else
             {
@@ -8201,19 +8322,23 @@ namespace AlbedosCustomClassesAdvanced
             level = Mathf.Clamp(level, 1, IhMaxLevel);
             IhWrite(player, IhLevelKey, level.ToString());
             HashSet<string> set = new HashSet<string>(IhAscendedSet(player));
+            IhKit levelKit = IhPlayerKit(player);
             if (level < 16 && !string.IsNullOrEmpty(GetAdvancement(player)))
             {
-                IhClearTiers(player, IhAdvSkills);
-                IhClearTiers(player, IhPriestAdvSkills);
+                for (int k = 0; k < IhKits.Length; k++)
+                    if (IhKits[k].Class == GetClass(player)) IhClearTiers(player, IhKits[k].Adv);
                 IhWrite(player, AdvancementDataKey, "");
                 set.Clear();
                 notes.Add("Below Lv 16: Advancement annulled.");
             }
-            if (level < 50 && set.Remove(IhUltimate)) notes.Add("Below Lv 50: Ultimate Ascension annulled.");
-            for (int i = 0; i < IhNormalAdvSkills.Length; i++)
-                if (level < 42 && set.Remove(IhNormalAdvSkills[i])) notes.Add("Below Lv 42: " + IhSkillName(IhNormalAdvSkills[i]) + " Ascension annulled.");
-            for (int i = 0; i < IhSignatureSkills.Length; i++)
-                if (level < 32 && set.Remove(IhSignatureSkills[i])) notes.Add("Below Lv 32: " + IhSkillName(IhSignatureSkills[i]) + " Ascension annulled.");
+            if (levelKit != null)
+            {
+                if (level < 50 && set.Remove(levelKit.Ultimate)) notes.Add("Below Lv 50: Ultimate Ascension annulled.");
+                for (int i = 2; i < levelKit.Adv.Length; i++)
+                    if (level < 42 && set.Remove(levelKit.Adv[i])) notes.Add("Below Lv 42: " + IhSkillName(levelKit.Adv[i]) + " Ascension annulled.");
+                for (int i = 0; i < levelKit.Signatures.Length; i++)
+                    if (level < 32 && set.Remove(levelKit.Signatures[i])) notes.Add("Below Lv 32: " + IhSkillName(levelKit.Signatures[i]) + " Ascension annulled.");
+            }
             IhSetAscended(player, set);
             IhEnforcePools(player, notes);
             _hotbarLayoutOwnerKey = "";
@@ -8221,17 +8346,19 @@ namespace AlbedosCustomClassesAdvanced
 
         private void IhEnforcePools(Player player, List<string> notes)
         {
-            if (IhSpent(player, IhClassSkills) > IhClassPointsEarned(player))
+            string[] classSkills = IhPlayerClassSkills(player);
+            if (IhSpent(player, classSkills) > IhClassPointsEarned(player))
             {
-                IhClearTiers(player, IhClassSkills);
+                IhClearTiers(player, classSkills);
                 notes.Add("Class Tiers reset (more points spent than earned).");
             }
             if (IhSpent(player, IhBranchSkills(player)) > IhAdvPointsEarned(player))
             {
                 IhClearTiers(player, IhBranchSkills(player));
                 HashSet<string> set = new HashSet<string>(IhAscendedSet(player));
-                for (int i = 0; i < IhAdvSkills.Length; i++)
-                    set.Remove(IhAdvSkills[i]);
+                string[] branchSkills = IhBranchSkills(player);
+                for (int i = 0; i < branchSkills.Length; i++)
+                    set.Remove(branchSkills[i]);
                 IhSetAscended(player, set);
                 notes.Add(GetAdvancement(player) + " Tiers reset (more points spent than earned).");
             }
@@ -8267,6 +8394,40 @@ namespace AlbedosCustomClassesAdvanced
                 case "heavens_judgement": return "Heaven's Judgement";
                 case "lightning_tempest": return "Lightning Tempest";
                 case "grand_sigil": return "Heaven's Crucible";
+                case "heavy_slash": return "Heavy Slash";
+                case "impact_wave": return "Impact Wave";
+                case "impact_punch": return "Impact Punch";
+                case "moonlight_splitter": return "Moonlight Splitter";
+                case "crescent_cleave": return "Crescent Cleave";
+                case "blade_storm": return "Blade Storm";
+                case "frenzied_charge": return "Frenzied Charge";
+                case "eclipse": return "Eclipse";
+                case "halfmoon_slash": return "Halfmoon Slash";
+                case "knights_guidance": return "Knight's Guidance";
+                case "stomp": return "Stomp";
+                case "circle_swing": return "Circle Swing";
+                case "bonecrusher": return "Bonecrusher";
+                case "seismic_guillotine": return "Seismic Guillotine";
+                case "punishing_bomb": return "Punishing Bomb";
+                case "whirlwind": return "Whirlwind";
+                case "battlecry": return "Battlecry";
+                case "flame_burst": return "Flame Burst";
+                case "glacial_descent": return "Glacial Descent";
+                case "stonefang_eruption": return "Stonefang Eruption";
+                case "meteor_fall": return "Meteor Fall";
+                case "gravity_dominion": return "Gravity Dominion";
+                case "astral_railcannon": return "Astral Railcannon";
+                case "astral_greatblade": return "Astral Greatblade";
+                case "frost_nova": return "Frost Nova";
+                case "elemental_cataclysm": return "Elemental Cataclysm";
+                case "clockwork": return "Clockwork";
+                case "arcane_phalanx": return "Arcane Phalanx";
+                case "afterimage_arsenal": return "Afterimage Arsenal";
+                case "void_step": return "Void Step";
+                case "rift_echo": return "Rift Echo";
+                case "gravity_blast": return "Gravity Blast";
+                case "arcane_rupture": return "Arcane Rupture";
+                case "rift_walker": return "Rift Walker";
             }
             return id;
         }
@@ -8476,12 +8637,13 @@ namespace AlbedosCustomClassesAdvanced
             {
                 notes.Add("Lv " + IhGetLevel(player).ToString() + "  " + (GetClass(player) == "" ? "No Class" : GetClass(player)) +
                           (GetAdvancement(player) == "" ? "" : " > " + GetAdvancement(player)));
-                notes.Add("Class Tier Points " + (IhClassPointsEarned(player) - IhSpent(player, IhClassSkills)).ToString() + " left of " + IhClassPointsEarned(player).ToString() +
+                notes.Add("Class Tier Points " + (IhClassPointsEarned(player) - IhSpent(player, IhPlayerClassSkills(player))).ToString() + " left of " + IhClassPointsEarned(player).ToString() +
                           "  |  Advancement " + (IhAdvPointsEarned(player) - IhSpent(player, IhBranchSkills(player))).ToString() + " left of " + IhAdvPointsEarned(player).ToString());
                 List<string> tiers = new List<string>();
-                List<string> all = new List<string>(IhClassSkills);
+                List<string> all = new List<string>(IhPlayerClassSkills(player));
                 all.AddRange(IhBranchSkills(player));
-                all.Add(IhIsPriest(player) ? IhPriestUltimate : IhUltimate);
+                IhKit infoKit = IhPlayerKit(player);
+                if (infoKit != null) all.Add(infoKit.Ultimate);
                 for (int i = 0; i < all.Count; i++)
                     tiers.Add(IhSkillName(all[i]) + " " + IhGetTier(player, all[i]).ToString() + "/" + IhMaxTier(all[i]).ToString() + (IhIsAscended(player, all[i]) ? "*" : ""));
                 notes.Add(string.Join(", ", tiers.ToArray()) + "   (* Ascended)");
@@ -8499,9 +8661,15 @@ namespace AlbedosCustomClassesAdvanced
                 return null;
             return new int[] {
                 IhGetLevel(player),
-                IhClassPointsEarned(player), IhSpent(player, IhClassSkills),
+                IhClassPointsEarned(player), IhSpent(player, IhPlayerClassSkills(player)),
                 IhAdvPointsEarned(player), IhSpent(player, IhBranchSkills(player)),
                 IhReadInt(player, IhBonusClassKey, 0), IhReadInt(player, IhBonusAdvKey, 0) };
+        }
+
+        public string DevClassName()
+        {
+            Player player = Player.m_localPlayer;
+            return player == null ? "" : GetClass(player);
         }
 
         public string DevCharacterName()
@@ -8839,9 +9007,16 @@ namespace AlbedosCustomClassesAdvanced
                     break;
             }
 
+            // v0.22.0: Warrior / Sorcerer skills list their approved Ascended effect until their
+            // full stat tooltips come with each Advancement rework.
+            string ascendedText = IhKitAscendedSummary(id);
+            if (ascended && ascendedText.Length > 0)
+                b.Append(IhLine("Ascended", ascendedText));
+            if (IhKitPending(id))
+                b.Append(IhLine("Status", "arrives with the " + (IhKitOf(id) != null ? IhKitOf(id).Ac : "Class") + " update"));
             string rule = IhAscensionRule(id);
             if (rule.Length > 0 && !ascended)
-                b.Append(IhLine("Ascension", rule));
+                b.Append(IhLine("Ascension", rule) + (ascendedText.Length > 0 ? IhLine("Ascended", ascendedText) : ""));
             return b.ToString().TrimEnd('\n');
         }
 
@@ -8889,6 +9064,92 @@ namespace AlbedosCustomClassesAdvanced
                     ? "Rise into the storm and strike the earth. Lightning races outward, and a thunderstorm rages where you land."
                     : "Rise into the storm and strike the earth with the fury of the heavens, sending lightning racing outward.";
                 case "heavens_light": return "The light of heaven shields you and every ally beside you, lightening their burden.";
+                // v0.22.0 Warrior
+                case "heavy_slash": return "A heavy horizontal slash that breaks the bones of everything in front of you.";
+                case "impact_wave": return "Strike the ground upward and send a shockwave tearing along the earth.";
+                case "impact_punch": return "A quick, crushing punch that knocks small foes senseless.";
+                case "moonlight_splitter": return "Three crescent waves of moonlight cleave through everything in their path.";
+                case "crescent_cleave": return "Five giant crescent cleaves tear across the ground in a wide fan.";
+                case "blade_storm": return "Rend space itself: a sphere of blades bursts at your aim, again and again.";
+                case "frenzied_charge": return "Pull back, then dash forward with a thrust that launches small foes and stuns the large.";
+                case "eclipse": return "Your blade swells with magic for one sweeping slash all around you.";
+                case "halfmoon_slash": return "A colossal half-moon slash, followed by its afterimage.";
+                case "knights_guidance": return "Lead your allies: faster movement, quicker stamina and less effort for every action.";
+                case "stomp": return "Stomp the earth: a crushing impact, then an aftershock rolls outward.";
+                case "circle_swing": return "Wind up and swing your weapon in a full circle, staggering everything around you.";
+                case "bonecrusher": return "Leap high and crash down, shattering the bones of everything below.";
+                case "seismic_guillotine": return "Tear a fissure through the ground to your aim, ending in a seismic explosion.";
+                case "punishing_bomb": return "Bat a bomb into the enemy lines. It bursts on the first thing it touches and leaves them burning.";
+                case "whirlwind": return "Spin into a whirlwind of steel, carving everything that comes near.";
+                case "battlecry": return "A war cry that drives you and your allies to hit harder, in battle and at work.";
+                // v0.22.0 Sorcerer
+                case "flame_burst": return "A cone of fire bursts from your hands, setting every foe ablaze.";
+                case "glacial_descent": return "Drop a massive chunk of ice onto your aim, freezing the ground around it.";
+                case "stonefang_eruption": return "Jagged stone fangs erupt at your aim, piercing and crippling all above them.";
+                case "meteor_fall": return "Call a meteor down on your aim. Hold to make it bigger.";
+                case "gravity_dominion": return "Seize gravity at your aim: small foes are dragged in, every enemy is exposed.";
+                case "astral_railcannon": return "Assemble an astral cannon and fire a devastating beam across the battlefield.";
+                case "astral_greatblade": return "Summon an astral greatsword and slam it down along your aim.";
+                case "frost_nova": return "Release a freezing nova around you.";
+                case "elemental_cataclysm": return "Unleash every element at once on your aim. Hold to strengthen it.";
+                case "clockwork": return "Bend time for you and your allies: stronger skills and faster cooldowns.";
+                case "arcane_phalanx": return "Summon spectral swords around you and launch them at your aim.";
+                case "afterimage_arsenal": return "Leave spectral copies of yourself that fight beside you.";
+                case "void_step": return "Step through the void to your aim, without stopping what you are doing.";
+                case "rift_echo": return "Open rifts behind your target that echo your attacks back through them.";
+                case "gravity_blast": return "Launch a ball of darkness that drags small foes in and cripples the rest.";
+                case "arcane_rupture": return "Rupture the arcane at your aim, up to three times in a row.";
+                case "rift_walker": return "Open two linked portals for you and your allies.";
+            }
+            return "";
+        }
+
+        // Skills of the universal kits whose code is not written yet (cast shows a message).
+        private static bool IhKitPending(string id)
+        {
+            switch (id)
+            {
+                case "frenzied_charge": case "eclipse": case "knights_guidance":
+                case "punishing_bomb": case "battlecry": case "clockwork":
+                case "gravity_blast": case "rift_walker":
+                    return true;
+            }
+            return false;
+        }
+
+        // Approved Ascended versions (Framework, 2026-10-04) for the Warrior / Sorcerer kits.
+        private static string IhKitAscendedSummary(string id)
+        {
+            switch (id)
+            {
+                case "impact_wave": return "15m x 3m; an aftershock runs back along the path (35%)";
+                case "moonlight_splitter": return "4 fast waves (65%), then a double-size finisher (110%) and its afterimage (55%)";
+                case "crescent_cleave": return "13 cleaves in two fans, burning fire trails and stacking Burn";
+                case "blade_storm": return "6 stacks; each cast adds an extra cut (25%)";
+                case "frenzied_charge": return "0.5s wind up, 12m, double width, 115% damage";
+                case "eclipse": return "8m, 110%, reflects enemy projectiles";
+                case "halfmoon_slash": return "a main slash and two more travel 20m, hitting every 0.3s";
+                case "heavy_slash": return "5m reach, 140% damage, 2s Hyper Armor on hit";
+                case "stomp": return "a third impact at 15m (40%)";
+                case "circle_swing": return "9m, two swings (90% + 60%), Hyper Armor, launches";
+                case "bonecrusher": return "the landing is followed by a ground shock (50%)";
+                case "seismic_guillotine": return "25m, endpoint 140% and slows";
+                case "punishing_bomb": return "12m, 6s ground fire and stacking Burn";
+                case "whirlwind": return "8s with Hyper Armor and a final sweep";
+                case "glacial_descent": return "8m; the central 3m deals 135% and Freezes";
+                case "meteor_fall": return "3 smaller meteors follow (5 at full charge)";
+                case "gravity_dominion": return "10m for 7s, pulls Big too, ends in an explosion";
+                case "astral_railcannon": return "a steerable 4s beam";
+                case "astral_greatblade": return "three slams, no charging";
+                case "frost_nova": return "a 10m Frost Aura on you for 6s, then a freezing explosion";
+                case "elemental_cataclysm": return "a second bombardment at 60%";
+                case "stonefang_eruption": return "7m; the spikes stay 4s and keep hitting";
+                case "arcane_phalanx": return "8 swords; a full volley erupts into Astral Spears";
+                case "afterimage_arsenal": return "up to 3 Astral Clones that copy your attacks";
+                case "void_step": return "2 charges, keeps momentum";
+                case "rift_echo": return "echoes every 0.35s";
+                case "gravity_blast": return "25m, bursts for 130% when it stops, pulls Big too";
+                case "arcane_rupture": return "4 charges, 120% each";
             }
             return "";
         }
@@ -8917,7 +9178,8 @@ namespace AlbedosCustomClassesAdvanced
         {
             IhEnsureTreeStyles();
             bool advanced = IhIsClericAdvanced(player);
-            int classLeft = IhClassPointsEarned(player) - IhSpent(player, IhClassSkills) - IhPendingSum(IhClassSkills);
+            string[] headerClassSkills = IhPlayerClassSkills(player);
+            int classLeft = IhClassPointsEarned(player) - IhSpent(player, headerClassSkills) - IhPendingSum(headerClassSkills);
             int advLeft = IhAdvPointsEarned(player) - IhSpent(player, IhBranchSkills(player)) - IhPendingSum(IhBranchSkills(player));
             _ihHeaderStyle.fontSize = Mathf.Max(9, Mathf.RoundToInt(ScaleReferenceRect(0f, 0f, 0f, 11.5f).height));
             string ink = IhHex(0.36f, 0.26f, 0.18f);
@@ -8945,11 +9207,12 @@ namespace AlbedosCustomClassesAdvanced
         {
             if (player == null || !IhIsUnlocked(player, id))
                 return false;
-            if (IhContains(IhClassSkills, id))
+            string[] queueClassSkills = IhPlayerClassSkills(player);
+            if (IhContains(queueClassSkills, id))
             {
                 if (!string.IsNullOrEmpty(GetAdvancement(player)))
                     return false; // the Class tree locks after Advancement
-                return IhClassPointsEarned(player) - IhSpent(player, IhClassSkills) - IhPendingSum(IhClassSkills) > 0;
+                return IhClassPointsEarned(player) - IhSpent(player, queueClassSkills) - IhPendingSum(queueClassSkills) > 0;
             }
             if (IhContains(IhBranchSkills(player), id))
                 return IhAdvPointsEarned(player) - IhSpent(player, IhBranchSkills(player)) - IhPendingSum(IhBranchSkills(player)) > 0;
@@ -9039,12 +9302,13 @@ namespace AlbedosCustomClassesAdvanced
         }
 
         // Cleric before Advancement and Cleric -> Paladin use the Skill Tree hotbar.
+        // v0.22.0: every Class with a universal kit (Cleric, Warrior, Sorcerer) casts from the tree hotbar.
         private bool IhUsesTreeHotbar(Player player)
         {
-            if (player == null || GetClass(player) != "Cleric")
+            if (player == null || IhBranchesOf(GetClass(player)).Length == 0)
                 return false;
             string advancement = GetAdvancement(player);
-            return string.IsNullOrEmpty(advancement) || advancement == "Paladin" || advancement == "Priest";
+            return string.IsNullOrEmpty(advancement) || IhKitFor(GetClass(player), advancement) != null;
         }
 
         private bool IhBindingPressed(int index)
@@ -9125,6 +9389,30 @@ namespace AlbedosCustomClassesAdvanced
                 case "heavens_judgement": CastHeavensJudgement(player); break;
                 case "lightning_tempest": CastLightningTempest(player); break;
                 case "grand_sigil": ActivateGrandSigil(player); break;
+                // v0.22.0 Warrior / Sword Master / Mercenary (current skill code until each AC rework).
+                case "heavy_slash":
+                case "impact_wave":
+                case "impact_punch":
+                case "flame_burst":
+                case "glacial_descent":
+                case "stonefang_eruption":
+                    if (SkillsPlugin.Instance != null)
+                        SkillsPlugin.Instance.CastFromHotbar(player, id);
+                    break;
+                case "moonlight_splitter": CastMoonlightSplitter(player); break;
+                case "crescent_cleave": CastCrescentCleave(player); break;
+                case "blade_storm": CastJudgementCut(player); break;
+                case "halfmoon_slash": CastHalfmoonSlash(player); break;
+                case "stomp": CastStomp(player); break;
+                case "circle_swing": CastCircleSwing(player); break;
+                case "bonecrusher": CastBonecrusher(player); break;
+                case "seismic_guillotine": CastSeismicGuillotine(player); break;
+                case "whirlwind": CastWhirlwind(player); break;
+                default:
+                    // Wizard / Spellcaster live in the Sorcerer module; not-yet-built skills say so.
+                    if (!DragonCombat.TryExternalCast(player, id))
+                        ShowMessage(IhSkillName(id) + " arrives with its " + (IhKitOf(id) != null ? IhKitOf(id).Ac : "Class") + " update.");
+                    break;
             }
         }
 
@@ -9186,8 +9474,23 @@ namespace AlbedosCustomClassesAdvanced
                 case "heavens_judgement": return GetCooldownRemaining("Priest.HeavensJudgement");
                 case "lightning_tempest": return GetCooldownRemaining("Priest.LightningTempest");
                 case "grand_sigil": return GetCooldownRemaining("Priest.GrandSigil");
+                case "heavy_slash": return skills == null ? 0f : skills.GetCooldownForUi("Warrior.HeavySlash");
+                case "impact_wave": return skills == null ? 0f : skills.GetCooldownForUi("Warrior.ImpactWave");
+                case "impact_punch": return skills == null ? 0f : skills.GetCooldownForUi("Warrior.ImpactPunch");
+                case "flame_burst": return skills == null ? 0f : skills.GetCooldownForUi("Sorcerer.FlameBurst");
+                case "glacial_descent": return skills == null ? 0f : skills.GetCooldownForUi("Sorcerer.GlacialDescent");
+                case "stonefang_eruption": return skills == null ? 0f : skills.GetCooldownForUi("Sorcerer.StonefangEruption");
+                case "moonlight_splitter": return GetCooldownRemaining("SwordMaster.MoonlightSplitter");
+                case "crescent_cleave": return GetCooldownRemaining("SwordMaster.CrescentCleave");
+                case "blade_storm": return GetReadyJudgementChargeIndex() >= 0 ? 0f : GetJudgementNextRecharge();
+                case "halfmoon_slash": return GetCooldownRemaining("SwordMaster.HalfmoonSlash");
+                case "stomp": return GetCooldownRemaining("Mercenary.Stomp");
+                case "circle_swing": return GetCooldownRemaining("Mercenary.CircleSwing");
+                case "bonecrusher": return GetCooldownRemaining("Mercenary.Bonecrusher");
+                case "seismic_guillotine": return GetCooldownRemaining("Mercenary.SeismicGuillotine");
+                case "whirlwind": return GetCooldownRemaining("Mercenary.Whirlwind");
             }
-            return 0f;
+            return DragonCombat.ExternalCooldown(id);
         }
 
         // In-game HUD for the tree hotbar: same icons, layout and bindings as the Skill Tree.
@@ -9195,6 +9498,14 @@ namespace AlbedosCustomClassesAdvanced
         {
             if (!EnsureReferenceBackdropLoaded())
                 return;
+            // v0.22.0: hotbar icons come from the branch canvas; build it even if the tree was never opened.
+            IhKit iconKit = IhPlayerKit(player);
+            if (iconKit == null)
+            {
+                string[] branches = IhBranchesOf(GetClass(player));
+                if (branches.Length > 0) iconKit = IhKitFor(GetClass(player), branches[0]);
+            }
+            IhKitBackdrop(iconKit, false);
             string[] layout = GetHotbarLayout();
             float scale = Mathf.Clamp(_hudScale.Value, 0.65f, 1.45f);
             float size = 50f * scale;
@@ -9242,6 +9553,7 @@ namespace AlbedosCustomClassesAdvanced
                 GUI.DrawTexture(rect, tex);
             if (!string.IsNullOrEmpty(id))
             {
+                IhDrawPlaceholderInitials(new Rect(rect.x + rect.width * 0.14f, rect.y + rect.height * 0.15f, rect.width * 0.72f, rect.height * 0.70f), id, false);
                 if (IsPermanentHotbarSkill(id))
                     DrawPermanentBadge(rect);
                 float cooldown = IhCooldown(player, id);
@@ -9267,10 +9579,11 @@ namespace AlbedosCustomClassesAdvanced
         // (Paladin: Righteous Strike, Priest: Holy Wave).
         private bool IhAdvanceChecklist(Player player, List<string> lines, string branch)
         {
-            string prereq = branch == "Priest" ? IhPriestAscendedClassSkill : IhAscendedClassSkill;
+            IhKit branchKit = IhKitFor(GetClass(player), branch);
+            string prereq = branchKit != null ? branchKit.AscendedClass : IhAscendedClassSkill;
             int level = IhGetLevel(player);
             int rsTier = IhGetTier(player, prereq);
-            int spent = IhSpent(player, IhClassSkills);
+            int spent = IhSpent(player, IhPlayerClassSkills(player));
             bool lv = level >= 16;
             bool rs = rsTier >= 7;
             bool pts = spent >= 14;
@@ -9282,7 +9595,7 @@ namespace AlbedosCustomClassesAdvanced
 
         private void IhAdvanceToPaladin(Player player)
         {
-            if (player == null || GetClass(player) != "Cleric" || !string.IsNullOrEmpty(GetAdvancement(player))) return;
+            if (player == null || IhBranchesOf(GetClass(player)).Length == 0 || !string.IsNullOrEmpty(GetAdvancement(player))) return;
             List<string> lines = new List<string>();
             if (!IhAdvanceChecklist(player, lines) || GetPrototypeTotalPending() > 0)
             {
@@ -9294,13 +9607,14 @@ namespace AlbedosCustomClassesAdvanced
             _treePrototypePending.Clear();
             _treeSelectedNodeId = "";
             _hotbarLayoutOwnerKey = "";
-            ShowMessage("Advanced to " + branch + (branch == "Paladin" ? "! Righteous Strike has Ascended." : "!"));
+            IhKit advancedKit = IhKitFor(GetClass(player), branch);
+            ShowMessage("Advanced to " + branch + "!" + (advancedKit != null ? " " + IhSkillName(advancedKit.AscendedClass) + " has Ascended." : ""));
         }
 
         // Advance plaque inside the sealed Paladin panel (before Advancement).
         private void IhDrawAdvancePanel(Player player)
         {
-            if (player == null || GetClass(player) != "Cleric" || !string.IsNullOrEmpty(GetAdvancement(player)))
+            if (player == null || IhBranchesOf(GetClass(player)).Length == 0 || !string.IsNullOrEmpty(GetAdvancement(player)))
                 return;
             IhEnsureTreeStyles();
             List<string> lines = new List<string>();
@@ -9378,11 +9692,27 @@ namespace AlbedosCustomClassesAdvanced
 
         private string IhAscensionRule(string id)
         {
-            if (IhContains(IhSignatureSkills, id)) return "Lv 32, Tier 5 (one Signature)";
-            if (IhContains(IhNormalAdvSkills, id)) return "Lv 42, Tier 5 (one of Shield Charge, Angel Comet, Ray of Hope)";
-            if (id == IhUltimate) return "Lv 50, Tier 3";
-            if (id == IhAscendedClassSkill) return "when you Advance to Paladin";
-            if (id == IhPriestAscendedClassSkill) return "when you Advance to Priest";
+            IhKit k = IhKitOf(id);
+            if (k != null)
+            {
+                if (IhContains(k.Signatures, id)) return "Lv 32, Tier 5 (one Signature)";
+                if (id == k.SpecialAscension) return "Lv 42, Tier 5 (its own Ascension quest)";
+                if (IhContains(k.Normals, id))
+                {
+                    List<string> names = new List<string>();
+                    for (int i = 0; i < k.Normals.Length; i++) names.Add(IhSkillName(k.Normals[i]));
+                    return "Lv 42, Tier 5 (one of " + string.Join(", ", names.ToArray()) + ")";
+                }
+                if (id == k.Ultimate) return "Lv 50, Tier 3";
+            }
+            // Ascended Class skill of a branch of the viewer's Class.
+            Player player = Player.m_localPlayer;
+            string[] branches = player == null ? new string[0] : IhBranchesOf(GetClass(player));
+            for (int i = 0; i < branches.Length; i++)
+            {
+                IhKit b = IhKitFor(GetClass(player), branches[i]);
+                if (b != null && b.AscendedClass == id) return "when you Advance to " + b.Ac;
+            }
             return "";
         }
 
@@ -9649,7 +9979,7 @@ namespace AlbedosCustomClassesAdvanced
             // preview Paladin before Advancement; an already-selected Paladin uses the
             // same layout. Every other branch keeps the v0.12.3 Skillbook until its
             // Immortal Heroes tree is authored from this reusable framework.
-            if (!(className == "Cleric" && (string.IsNullOrEmpty(advancement) || advancement == "Paladin" || advancement == "Priest")))
+            if (!(IhBranchesOf(className).Length > 0 && (string.IsNullOrEmpty(advancement) || IhKitFor(className, advancement) != null)))
             {
                 DrawLegacySkillbookWindow(windowId);
                 return;
@@ -9972,17 +10302,23 @@ namespace AlbedosCustomClassesAdvanced
             GUI.color = Color.white;
             Player treePlayer = Player.m_localPlayer;
             // v0.18.0: before Advancement every Class skill is Cyan (no Ascended Righteous Strike).
-            Texture2D backdrop = IhTreeBranch() == "Priest" && _ihPriestBackdropTex != null
-                ? _ihPriestBackdropTex : (_ihPreAdvanceBackdropTex != null ? _ihPreAdvanceBackdropTex : _treeReferenceBackdropTex);
+            // v0.22.0: every branch draws its own universal canvas (same chassis, own skill art).
+            string treeClass = GetClass(treePlayer);
+            Texture2D backdrop = IhKitBackdrop(IhTreeKit(), false);
+            if (backdrop == null)
+                backdrop = _ihPreAdvanceBackdropTex != null ? _ihPreAdvanceBackdropTex : _treeReferenceBackdropTex;
             GUI.DrawTexture(full, backdrop, ScaleMode.StretchToFill, true);
             IhDrawHeaderPoints(treePlayer);
 
             RegisterReferenceHotspot(ScaleReferenceRect(31f, 76f, 286f, 64f),
-                "CLERIC'S BLESSING",
-                "All Shields: 1.5x Block Force + Block Armor. Staff + Shield allowed. No movement penalty from Shields, Staves, or one-handed Club-skill weapons. +35 Max HP and +20% HP Regen.");
-            RegisterReferenceHotspot(ScaleReferenceRect(332f, 76f, 651f, 64f),
-                (IhTreeBranch() == "Priest" ? "BLESS THY SINNERS - MASTERY" : "HOLY TRINITY - MASTERY"),
-                IhTreeBranch() == "Priest" ? GetAdvancedPassiveDescription(treePlayer, "Priest") : "Club-type melee + Shield: +15 Clubs (effective cap 100), no Armor movement penalties, and the Club's current Blunt damage guarantees Slash and Pierce each reach at least 50% of that Blunt value without lowering existing damage.");
+                IhClassBlessingTitle(treeClass), IhClassBlessingText(treeClass));
+            string treeBranch = IhTreeBranch();
+            if (treeBranch == "Priest" || treeBranch == "Paladin")
+                RegisterReferenceHotspot(ScaleReferenceRect(332f, 76f, 651f, 64f),
+                    (treeBranch == "Priest" ? "BLESS THY SINNERS - MASTERY" : "HOLY TRINITY - MASTERY"),
+                    treeBranch == "Priest" ? GetAdvancedPassiveDescription(treePlayer, "Priest") : "Club-type melee + Shield: +15 Clubs (effective cap 100), no Armor movement penalties, and the Club's current Blunt damage guarantees Slash and Pierce each reach at least 50% of that Blunt value without lowering existing damage.");
+            else
+                RegisterReferenceHotspot(ScaleReferenceRect(332f, 76f, 651f, 64f), IhMasteryTitle(treeBranch), IhMasteryText(treeBranch));
 
             IhDrawBranchSelector(treePlayer);
             ReferenceNodeUi[] nodes = IhTreeNodes();
@@ -10059,7 +10395,7 @@ namespace AlbedosCustomClassesAdvanced
         private void IhDrawBranchSelector(Player player)
         {
             if (player == null || !string.IsNullOrEmpty(GetAdvancement(player))) return;
-            string[] branches = { "Paladin", "Priest" };
+            string[] branches = IhBranchesOf(GetClass(player));
             for (int i = 0; i < branches.Length; i++)
             {
                 // v0.20.7: same ornate plaque as CONFIRM / ADVANCE; the unselected branch is dimmed.
@@ -10083,7 +10419,7 @@ namespace AlbedosCustomClassesAdvanced
                 if (r.Contains(Event.current.mousePosition))
                 {
                     _treeHoveredTitle = branches[i].ToUpperInvariant() + " - PREVIEW";
-                    _treeHoveredBody = "View the " + branches[i] + " branch. Your Cleric skills and pending Class Tiers stay the same.";
+                    _treeHoveredBody = "View the " + branches[i] + " branch. Your " + GetClass(player) + " skills and pending Class Tiers stay the same.";
                 }
                 if (GUI.Button(r,GUIContent.none,GUIStyle.none) && !selected)
                 {
@@ -10238,12 +10574,27 @@ namespace AlbedosCustomClassesAdvanced
             if(serif!=null) label.font=serif;
             label.fontStyle=FontStyle.Bold;
             label.normal.textColor=new Color(0.18f,0.14f,0.11f,1f);
+            Player labelPlayer=Player.m_localPlayer;
+            string labelClass=labelPlayer==null ? "Cleric" : GetClass(labelPlayer);
+            if(labelClass!="Cleric")
+            {
+                // v0.22.0: the Class title is painted for Cleric only; other Classes draw it live
+                // in the blanked banner (between the compass emblem and the gold star).
+                GUIStyle classTitle=new GUIStyle(title);
+                Rect classRect=ScaleReferenceRect(143f,87f,122f,35f);
+                classTitle.fontSize=title.fontSize;
+                string className=labelClass.ToUpperInvariant();
+                while(classTitle.fontSize>10 && classTitle.CalcSize(new GUIContent(className)).x>classRect.width) classTitle.fontSize--;
+                GUI.Label(classRect,className,classTitle);
+            }
             foreach(ReferenceNodeUi node in IhTreeNodes())
             {
-                if(Array.IndexOf(IhClassSkills,node.Id)>=0) continue;
+                // Cleric Class plates are painted on the chassis; every other Class gets live names.
+                bool classSkill=IhIsAnyClassSkill(node.Id);
+                if(classSkill && labelClass=="Cleric") continue;
                 Vector2 anchor=GetReferenceNameplateAnchor(node);
                 // Long names (Divine Intervention, Heaven's Judgement) shrink to stay inside the plate.
-                float width=IhLabelWidth(node.Id);
+                float width=classSkill ? IhClassLabelWidth(IhTemplateSlot(node.Id)) : IhLabelWidth(node.Id);
                 Rect r=ScaleReferenceRect(anchor.x-width/2f,anchor.y-22f,width,20f);
                 string name=IhSkillName(node.Id);
                 int size=Mathf.Max(8,Mathf.RoundToInt(ScaleReferenceRect(0,0,0,10.5f).height));
@@ -10312,10 +10663,10 @@ namespace AlbedosCustomClassesAdvanced
             string id=node.Id;
             if(node.Kind==TreeNodeKind.Grace) return "gold";
             if(IhIsUltimate(id)) return "maroon";
-            if(IhContains(IhSignatureSkills,id) || IhContains(IhPriestSignatures,id)) return "navy";
+            if(IhIsSignature(id)) return "navy";
             // Non-damaging skills are Green (Holy Wave; Ray of Hope = the Framework's Buff example).
             // A skill that deals direct damage is Cyan (Divine Intervention heals AND damages).
-            if(id=="ray_of_hope" || id=="holy_wave") return "green";
+            if(id=="ray_of_hope" || id=="holy_wave" || id=="void_step") return "green";
             return "cyan";
         }
 
@@ -10480,6 +10831,174 @@ namespace AlbedosCustomClassesAdvanced
             _ihPriestBackdropTex.Apply(false,false);
             Destroy(source);
             _ihPriestLockedTex=IhMakeSharedLockedBackdrop(_ihPriestBackdropTex);
+        }
+
+        // =====================================================================================
+        // v0.22.0 universal kit trees (Warrior / Sorcerer branches). Same chassis, slots, frames,
+        // nameplates and locks as Paladin/Priest; only the skill art and text change.
+        // Art: ImmortalHeroesAssets/<Class>_<AC>_Artwork.png (1011x662, nodes at the chassis
+        // positions, like Cleric_Priest_Artwork). Until it exists each opening is a placeholder
+        // and the skill's initials are drawn on it.
+        // =====================================================================================
+        private static readonly Dictionary<string, ReferenceNodeUi[]> IhKitNodeCache = new Dictionary<string, ReferenceNodeUi[]>();
+        private readonly Dictionary<string, Texture2D> _ihKitBackdrops = new Dictionary<string, Texture2D>();
+        private readonly Dictionary<string, Texture2D> _ihKitLocked = new Dictionary<string, Texture2D>();
+        private readonly HashSet<string> _ihPlaceholderArt = new HashSet<string>();
+
+        private static string IhNodeTitle(IhKit k, string id)
+        {
+            string prefix = id == k.Grace ? "GRACE - " : id == k.Ultimate ? "ULTIMATE - " : id == "void_step" ? "SUPPORT - " : "ATTACK - ";
+            return prefix + IhSkillName(id).ToUpperInvariant();
+        }
+
+        private static ReferenceNodeUi[] IhKitNodes(IhKit k)
+        {
+            if (k.Ac == "Paladin") return ClericPaladinReferenceNodes;
+            if (k.Ac == "Priest") return ClericPriestReferenceNodes;
+            ReferenceNodeUi[] nodes;
+            if (IhKitNodeCache.TryGetValue(k.Ac, out nodes)) return nodes;
+            ReferenceNodeUi[] p = ClericPaladinReferenceNodes;
+            nodes = new ReferenceNodeUi[p.Length];
+            for (int i = 0; i < 3; i++)
+            {
+                string id = k.ClassSkills[i];
+                bool asc = id == k.AscendedClass;
+                nodes[i] = new ReferenceNodeUi(id, p[i].GroupRect, p[i].IconRect, "", asc ? TreeNodeKind.Ascended : TreeNodeKind.ClassNormal, asc, 7, IhNodeTitle(k, id), "");
+            }
+            // Same order as the Paladin array: Signature, Signature, Grace, Lv24, Lv32, Lv32, Ultimate.
+            string[] ids = { k.Adv[0], k.Adv[1], k.Grace, k.Adv[2], k.Adv[3], k.Adv[4], k.Ultimate };
+            for (int i = 0; i < ids.Length; i++)
+            {
+                string id = ids[i];
+                ReferenceNodeUi src = p[i + 3];
+                TreeNodeKind kind = id == k.Grace ? TreeNodeKind.Grace : id == k.Ultimate ? TreeNodeKind.Ultimate
+                    : IhContains(k.Signatures, id) ? TreeNodeKind.Signature : id == "void_step" ? TreeNodeKind.Buff : TreeNodeKind.AdvancementNormal;
+                bool mandatory = kind == TreeNodeKind.Grace || kind == TreeNodeKind.Ultimate || kind == TreeNodeKind.Signature;
+                int maxTier = kind == TreeNodeKind.Grace ? 0 : kind == TreeNodeKind.Ultimate ? 3 : 5;
+                nodes[i + 3] = new ReferenceNodeUi(id, src.GroupRect, src.IconRect, "", kind, mandatory, maxTier, IhNodeTitle(k, id), "");
+            }
+            IhKitNodeCache[k.Ac] = nodes;
+            return nodes;
+        }
+
+        // Painted Class-plate text widths (plate - 14 px), measured like the AC plates.
+        private static float IhClassLabelWidth(string slot)
+        {
+            return slot == "righteous_strike" ? 80f : slot == "holy_wave" ? 74f : 77f;
+        }
+
+        private Texture2D IhKitBackdrop(IhKit k, bool locked)
+        {
+            if (k == null) return null;
+            if (k.Ac == "Priest") return locked ? _ihPriestLockedTex : _ihPriestBackdropTex;
+            if (k.Ac == "Paladin") return locked ? _ihLockedBackdropTex : (_ihPreAdvanceBackdropTex != null ? _ihPreAdvanceBackdropTex : _treeReferenceBackdropTex);
+            if (!_ihKitBackdrops.ContainsKey(k.Ac))
+                IhBuildKitCanvas(k);
+            Texture2D texture;
+            return (locked ? _ihKitLocked : _ihKitBackdrops).TryGetValue(k.Ac, out texture) ? texture : null;
+        }
+
+        private void IhFillPlaceholder(Texture2D target, Rect field)
+        {
+            int x0 = Mathf.RoundToInt(field.x), y0 = Mathf.RoundToInt(field.y);
+            int w = Mathf.RoundToInt(field.width), h = Mathf.RoundToInt(field.height);
+            Color inner = new Color(0.20f, 0.18f, 0.16f, 1f), outer = new Color(0.09f, 0.08f, 0.07f, 1f);
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    float dx = (x + 0.5f) / w - 0.5f, dy = (y + 0.5f) / h - 0.5f;
+                    float t = Mathf.Clamp01(Mathf.Sqrt(dx * dx + dy * dy) * 1.6f);
+                    target.SetPixel(x0 + x, 661 - y0 - y, Color.Lerp(inner, outer, t));
+                }
+        }
+
+        private void IhBuildKitCanvas(IhKit k)
+        {
+            _ihKitBackdrops[k.Ac] = null;
+            if (_ihPreAdvanceBackdropTex == null) return;
+            Texture2D canvas = IhCopyTexture(_ihPreAdvanceBackdropTex, "ImmortalHeroes_Universal_" + k.Ac);
+            // The chassis carries the Cleric title and Class plate text: blank them, live text is drawn.
+            IhInpaintText(canvas, new Rect(145f, 91f, 118f, 25f));
+            for (int i = 0; i < 3; i++)
+                IhBlankPaintedLabel(canvas, ReferenceNameplateAnchors[IhClassSlots[i]], IhClassLabelWidth(IhClassSlots[i]));
+            Texture2D art = LoadUiPng(k.Class + "_" + k.Ac.Replace(" ", "") + "_Artwork.png");
+            bool hasArt = art != null && art.width == 1011 && art.height == 662;
+            ReferenceNodeUi[] nodes = IhKitNodes(k);
+            for (int i = 0; i < nodes.Length; i++)
+            {
+                ReferenceNodeUi node = nodes[i];
+                string slot = IhTemplateSlot(node.Id);
+                Rect field = IhFieldRect(slot);
+                if (hasArt) { IhBlitArt(canvas, field, art, field); _ihPlaceholderArt.Remove(node.Id); }
+                else { IhFillPlaceholder(canvas, field); _ihPlaceholderArt.Add(node.Id); }
+                string color = IhBaseFrameColor(node);
+                if (color != IhPaintedFrameColor(slot))
+                    IhStampFrame(canvas, slot, color);
+            }
+            // Grace box in the footer.
+            Rect graceBox = new Rect(670f, 548f, 44f, 44f);
+            if (hasArt) IhBlitArt(canvas, graceBox, art, graceBox); else IhFillPlaceholder(canvas, graceBox);
+            canvas.Apply(false, false);
+            if (art != null) Destroy(art);
+            IhComposeHotbarIcons(nodes, canvas);
+            _ihKitBackdrops[k.Ac] = canvas;
+            _ihKitLocked[k.Ac] = IhMakeSharedLockedBackdrop(canvas);
+        }
+
+        // Skill initials on a placeholder opening (tree, hotbar, HUD) until the painting arrives.
+        private void IhDrawPlaceholderInitials(Rect rect, string id, bool dim)
+        {
+            if (string.IsNullOrEmpty(id) || !_ihPlaceholderArt.Contains(id)) return;
+            IhEnsureTreeStyles();
+            GUIStyle style = new GUIStyle(_ihHeaderStyle);
+            style.alignment = TextAnchor.MiddleCenter;
+            style.fontStyle = FontStyle.Bold;
+            style.fontSize = Mathf.Max(9, Mathf.RoundToInt(rect.height * 0.36f));
+            string text = GetSkillInitials(IhSkillName(id));
+            Color old = GUI.color;
+            style.normal.textColor = new Color(0f, 0f, 0f, 0.8f);
+            GUI.Label(new Rect(rect.x + 1f, rect.y + 1f, rect.width, rect.height), text, style);
+            style.normal.textColor = dim ? new Color(0.62f, 0.60f, 0.56f, 1f) : new Color(1f, 0.90f, 0.66f, 1f);
+            GUI.Label(rect, text, style);
+            GUI.color = old;
+        }
+
+        private static string IhClassBlessingTitle(string cls)
+        {
+            return cls == "Warrior" ? "WARRIOR'S BLESSING" : cls == "Sorcerer" ? "WARLOCK - SORCERER'S BLESSING" : "CLERIC'S BLESSING";
+        }
+
+        private static string IhClassBlessingText(string cls)
+        {
+            if (cls == "Warrior")
+                return "Hyper Armor against any hit below 30% of your Total HP. Parry strength x2. +20 Run and +20 Jump skill.";
+            if (cls == "Sorcerer")
+                return "Creature melee damage -70% (mining and woodcutting are not affected). +65 Max Eitr, +35% Eitr Regen, Eitr starts regenerating twice as fast. Cannot Block, Parry or equip Shields.";
+            return "All Shields: 1.5x Block Force + Block Armor. Staff + Shield allowed. No movement penalty from Shields, Staves, or one-handed Club-skill weapons. +35 Max HP and +20% HP Regen.";
+        }
+
+        private static string IhMasteryTitle(string ac)
+        {
+            switch (ac)
+            {
+                case "Sword Master": return "THE WAY OF THE SWORD - MASTERY";
+                case "Mercenary": return "WARFREAK - MASTERY";
+                case "Wizard": return "ARCHMAGE - MASTERY";
+                case "Spellcaster": return "YIN AND YANG - MASTERY";
+            }
+            return ac.ToUpperInvariant() + " - MASTERY";
+        }
+
+        private static string IhMasteryText(string ac)
+        {
+            switch (ac)
+            {
+                case "Sword Master": return "+20 Sword (effective cap 100), +50% Sword Attack Speed, no Sword movement penalty. Blocking or Dodging stops the rest of a Sword Master skill.";
+                case "Mercenary": return "Dual-wield any two one-handed physical weapons. +10 Sword, Axe and Clubs (cap 100). +50% Attack Speed with two one-handed or a two-handed physical weapon. No physical weapon movement penalty. +30% Armor and stronger aggro. Unchained Fury: +1 Fury per melee hit, +3 per enemy hit by a skill; at 100 it triggers for 20s (3 min lockout).";
+                case "Wizard": return "Charged Staff attacks (Mouse2 + Mouse1): up to 3 stacks, 2s each, 1 Eitr per 0.1s. Stack 1 doubles the size, Stacks 2-3 add damage. Overcharge: after 300 Eitr spent, 12s of +40% wind-up speed, +40% Eitr Regen and +40% Magic Damage.";
+                case "Spellcaster": return "Staff / Wand attack interval -50%, Eitr use -50%, +20% Eitr Regen, normal Staff / Wand damage -50%. No skill wind-ups, no Staff / Wand movement penalty. Dual Gun Staves fire together and are 100% accurate.";
+            }
+            return "";
         }
 
         private void IhPrepareSharedNameplates()
@@ -10662,6 +11181,8 @@ namespace AlbedosCustomClassesAdvanced
                 IhDrawLockedNode(node, lockReason);
             else if (maxTier > 0)
                 IhDrawTierRow(node, currentTier, pendingTier, out row);
+            Rect opening = IhFieldRect(IhTemplateSlot(node.Id));
+            IhDrawPlaceholderInitials(ScaleReferenceRect(opening.x, opening.y, opening.width, opening.height), node.Id, !unlocked);
 
             if (group.Contains(Event.current.mousePosition))
             {
@@ -10733,21 +11254,27 @@ namespace AlbedosCustomClassesAdvanced
                 if (ClericPaladinReferenceNodes[i].Id == id) return ClericPaladinReferenceNodes[i];
             for (int i = 3; i < ClericPriestReferenceNodes.Length; i++)
                 if (ClericPriestReferenceNodes[i].Id == id) return ClericPriestReferenceNodes[i];
+            for (int k = 2; k < IhKits.Length; k++)
+            {
+                ReferenceNodeUi[] nodes = IhKitNodes(IhKits[k]);
+                for (int i = 0; i < nodes.Length; i++)
+                    if (nodes[i].Id == id) return nodes[i];
+            }
             return null;
         }
 
         private bool IsPermanentHotbarSkill(string id)
         {
-            // v0.21.0: Priest's Ascended Class skill (Holy Wave) is permanent like Righteous Strike.
-            if (id == IhPriestAscendedClassSkill && IhIsPriest(Player.m_localPlayer))
-                return IhIsUnlocked(Player.m_localPlayer, id);
+            // v0.22.0: the kit's Ascended Class skill is permanent after Advancement (before it, every
+            // Class skill is interchangeable); Signatures and the Ultimate are permanent once unlocked.
+            Player player = Player.m_localPlayer;
+            if (IhIsAnyClassSkill(id))
+            {
+                IhKit kit = IhPlayerKit(player);
+                return kit != null && kit.AscendedClass == id && IhIsUnlocked(player, id);
+            }
             ReferenceNodeUi node = FindReferenceNode(id);
             if (node == null || !node.Mandatory || node.Kind == TreeNodeKind.Grace)
-                return false;
-            // v0.18.0: Signature / Ascended / Ultimate are permanent once unlocked; before
-            // Advancement Righteous Strike is a normal, interchangeable Class skill.
-            Player player = Player.m_localPlayer;
-            if (id == IhAscendedClassSkill && !IhIsPaladin(player))
                 return false;
             return IhIsUnlocked(player, id);
         }
@@ -10809,15 +11336,19 @@ namespace AlbedosCustomClassesAdvanced
         private string[] LoadHotbarLayout(Player player)
         {
             // v0.18.1: before Advancement the bar starts with the three Class skills.
-            string[] defaults = IhIsPriest(player)
-                ? new string[] { "holy_wave", "lightning_relic", "holy_relic", "divine_intervention", "grand_cross", "heavens_judgement", "lightning_tempest" }
-                : IhIsPaladin(player)
+            IhKit kit = IhPlayerKit(player);
+            string[] classSkills = IhPlayerClassSkills(player);
+            string[] defaults = IhIsPaladin(player)
                 ? (string[])DefaultClericPaladinHotbar.Clone()
-                : new string[] { "lightning_zap", "righteous_strike", "holy_wave", "", "", "", "" };
+                : kit != null
+                ? new string[] { kit.AscendedClass, kit.Adv[0], kit.Adv[1], kit.Adv[2], kit.Adv[3], kit.Adv[4], kit.Ultimate }
+                : classSkills.Length == 3
+                ? new string[] { classSkills[0], classSkills[1], classSkills[2], "", "", "", "" }
+                : new string[] { "", "", "", "", "", "", "" };
             if (player == null)
                 return defaults;
 
-            string saved = ReadPlayerData(player, HotbarLayoutKeyPrefix + GetAdvancement(player));
+            string saved = ReadPlayerData(player, IhHotbarSaveKey(player));
             if (string.IsNullOrEmpty(saved))
                 return defaults;
 
@@ -10847,7 +11378,15 @@ namespace AlbedosCustomClassesAdvanced
             if (data == null)
                 return;
 
-            data[HotbarLayoutKeyPrefix + GetAdvancement(player)] = string.Join(",", _hotbarLayout);
+            data[IhHotbarSaveKey(player)] = string.Join(",", _hotbarLayout);
+        }
+
+        // Cleric keeps its original keys (by Advancement); other Classes add the Class name so a
+        // pre-Advancement bar never collides between Classes.
+        private string IhHotbarSaveKey(Player player)
+        {
+            string cls = GetClass(player);
+            return HotbarLayoutKeyPrefix + (cls == "Cleric" ? GetAdvancement(player) : cls + "." + GetAdvancement(player));
         }
 
         private Rect HotbarSlotRect(int slot)
@@ -10890,6 +11429,8 @@ namespace AlbedosCustomClassesAdvanced
                     GUI.DrawTexture(r, tex);
                     GUI.color = Color.white;
                 }
+                if (!empty && !draggingFromHere)
+                    IhDrawPlaceholderInitials(new Rect(r.x + r.width * 0.14f, r.y + r.height * 0.15f, r.width * 0.72f, r.height * 0.70f), id, false);
 
                 // v0.16.1: same badge as the tree marks skills that can't leave the hotbar.
                 if (!empty && !draggingFromHere && IsPermanentHotbarSkill(id))
@@ -11192,8 +11733,12 @@ namespace AlbedosCustomClassesAdvanced
             // v0.15.0: the Grace slot and the right panel are baked artwork. Code only adds the
             // live Grace key label and the CONFIRM plaque (only while Tiers are pending).
             Player footerPlayer = Player.m_localPlayer;
-            if (!IhIsUnlocked(footerPlayer, IhTreeBranch() == "Priest" ? IhPriestGrace : IhGrace) && IhDrawLockedRegion("grace_slot") && _ihPadlockTex != null)
+            IhKit footerKit = IhTreeKit();
+            string footerGrace = footerKit != null ? footerKit.Grace : IhGrace;
+            bool graceLocked = !IhIsUnlocked(footerPlayer, footerGrace);
+            if (graceLocked && IhDrawLockedRegion("grace_slot") && _ihPadlockTex != null)
                 GUI.DrawTexture(IhSnap(ScaleReferenceRect(692f, 570f, 26f, 26f)), _ihPadlockTex);
+            IhDrawPlaceholderInitials(ScaleReferenceRect(670f, 548f, 44f, 44f), footerGrace, graceLocked);
             Rect graceLabel = ScaleReferenceRect(641f, 607f, 100f, 15f);
             DrawHotbarKeyLabel(graceLabel, BindGrace, "GRACE - " + FormatHotbarBinding(BindGrace));
 
@@ -11467,13 +12012,14 @@ namespace AlbedosCustomClassesAdvanced
         {
             Player player = Player.m_localPlayer;
             if (player == null) { _treePrototypePending.Clear(); return; }
-            int classSpend = IhPendingSum(IhClassSkills);
+            string[] confirmClassSkills = IhPlayerClassSkills(player);
+            int classSpend = IhPendingSum(confirmClassSkills);
             int advSpend = IhPendingSum(IhBranchSkills(player));
-            bool valid = classSpend <= IhClassPointsEarned(player) - IhSpent(player, IhClassSkills)
+            bool valid = classSpend <= IhClassPointsEarned(player) - IhSpent(player, confirmClassSkills)
                 && advSpend <= IhAdvPointsEarned(player) - IhSpent(player, IhBranchSkills(player));
             foreach (KeyValuePair<string,int> kvp in _treePrototypePending)
                 if (kvp.Value < 1 || !IhIsUnlocked(player, kvp.Key) || IhIsUltimate(kvp.Key)
-                    || (IhContains(IhClassSkills,kvp.Key) && !string.IsNullOrEmpty(GetAdvancement(player)))
+                    || (IhContains(confirmClassSkills,kvp.Key) && !string.IsNullOrEmpty(GetAdvancement(player)))
                     || GetPrototypeTier(kvp.Key) + kvp.Value > IhMaxTier(kvp.Key)) valid = false;
             if (!valid)
             {

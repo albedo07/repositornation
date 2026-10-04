@@ -181,7 +181,7 @@ namespace AlbedosCustomClassesSkills
         public static SkillsPlugin Instance;
         public const string ModGuid = "albedo.customclasses.skills";
         public const string ModName = "Dragon's Altar - Starter Skills";
-        public const string ModVersion = "0.21.2";
+        public const string ModVersion = "0.22.0";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";
@@ -685,6 +685,19 @@ namespace AlbedosCustomClassesSkills
                 CastRighteousStrike(player);
             else if (skillId == "holy_wave")
                 CastHolyWave(player);
+            // v0.22.0: Warrior and Sorcerer Class skills cast from the universal tree hotbar too.
+            else if (skillId == "heavy_slash")
+                CastHeavySlash(player);
+            else if (skillId == "impact_wave")
+                CastImpactWave(player);
+            else if (skillId == "impact_punch")
+                CastImpactPunch(player);
+            else if (skillId == "flame_burst")
+                CastFlameBurst(player);
+            else if (skillId == "glacial_descent")
+                CastGlacialDescent(player);
+            else if (skillId == "stonefang_eruption")
+                CastStonefangEruption(player);
         }
 
         private void CastLightningZap(Player player)
@@ -1122,6 +1135,19 @@ namespace AlbedosCustomClassesSkills
                 magic *= DragonCombat.GetSkillPower(attacker, "lightning_zap");
             else if (cfg == _righteousDamage)
                 magic *= DragonCombat.GetSkillPower(attacker, "righteous_strike");
+            // v0.22.0: Warrior / Sorcerer Class skills use their Tiers too (+10% per Tier).
+            else if (cfg == _heavyDamage)
+                magic *= DragonCombat.GetSkillPower(attacker, "heavy_slash");
+            else if (cfg == _impactDamage)
+                magic *= DragonCombat.GetSkillPower(attacker, "impact_wave");
+            else if (cfg == _punchDamage)
+                magic *= DragonCombat.GetSkillPower(attacker, "impact_punch");
+            else if (cfg == _flameDamage)
+                magic *= DragonCombat.GetSkillPower(attacker, "flame_burst");
+            else if (cfg == _glacialDamage)
+                magic *= DragonCombat.GetSkillPower(attacker, "glacial_descent");
+            else if (cfg == _stoneDamage)
+                magic *= DragonCombat.GetSkillPower(attacker, "stonefang_eruption");
             HitData hit = new HitData();
             hit.m_damage.m_blunt = cfg.Blunt.Value * magic;
             hit.m_damage.m_slash = cfg.Slash.Value * magic;

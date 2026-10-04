@@ -14,7 +14,7 @@ cd "$WORK/refs"
 [ -d unity ] || { curl -sSL -o unity.nupkg https://api.nuget.org/v3-flatcontainer/unityengine.modules/2021.3.33/unityengine.modules.2021.3.33.nupkg && unzip -qo unity.nupkg -d unity; }
 [ -d harmony ] || { curl -sSL -o harmony.nupkg https://api.nuget.org/v3-flatcontainer/harmonyx/2.10.2/harmonyx.2.10.2.nupkg && unzip -qo harmony.nupkg -d harmony; }
 REFS="$(ls "$WORK"/refs/unity/lib/net45/*.dll | sed 's/^/-r:/' | tr '\n' ' ') -r:$WORK/refs/harmony/lib/net45/0Harmony.dll"
-FILES="AlbedosCustomClasses.Advanced.cs DragonsAltar.CombatRuntime.cs AlbedosCustomClasses.Skills.cs DragonsAltar.DevTools.cs AlbedosCustomClasses.GuardianAngel.cs"
+FILES="AlbedosCustomClasses.Advanced.cs DragonsAltar.CombatRuntime.cs AlbedosCustomClasses.Skills.cs DragonsAltar.DevTools.cs AlbedosCustomClasses.GuardianAngel.cs DragonsAltar.Sorcerer.cs"
 rm -rf "$WORK/base" "$WORK/head"
 mkdir -p "$WORK/base" "$WORK/head"
 for F in $FILES; do

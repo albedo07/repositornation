@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Dragon's Altar - Sorcerer Advancements";
-        public const string ModVersion = "0.21.2";
+        public const string ModVersion = "0.22.0";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -318,6 +318,7 @@ namespace DragonsAltarSorcerer
         private void Awake()
         {
             Instance = this;
+            DragonCombat.RegisterSkillModule(CastFromTree, CooldownForTree);
 
             _modifier = Config.Bind("Hotkeys", "Modifier", KeyCode.Mouse3, "Mouse4 modifier.");
             _skill1 = Config.Bind("Hotkeys", "Skill1", KeyCode.Alpha1, "Sorcerer base skill 1.");
@@ -677,6 +678,10 @@ namespace DragonsAltarSorcerer
 
             UpdateWizardStaffCharge(player, advancement);
 
+            // v0.22.0: the universal Skill Tree hotbar owns skill input (CastFromTree below).
+            if (DragonCombat.IsTreeHotbarActive(player))
+                return;
+
             if (!Input.GetKey(_modifier.Value))
                 return;
 
@@ -699,6 +704,46 @@ namespace DragonsAltarSorcerer
                 else if (Input.GetKeyDown(_skill8.Value)) CastArcaneRupture(player);
                 else if (Input.GetKeyDown(_passive.Value)) ActivateTwinRift(player);
             }
+        }
+
+        // v0.22.0 universal tree hotbar: Wizard / Spellcaster skills by tree id.
+        private bool CastFromTree(Player player, string id)
+        {
+            if (player == null || player.IsDead()) return false;
+            string adv = GetAdvancement(player);
+            switch (id)
+            {
+                case "meteor_fall": if (adv == "Wizard") CastMeteorFall(player); return true;
+                case "gravity_dominion": if (adv == "Wizard") CastGravityDominion(player); return true;
+                case "astral_railcannon": if (adv == "Wizard") CastAstralRailcannon(player); return true;
+                case "astral_greatblade": if (adv == "Wizard") CastAstralGreatblade(player); return true;
+                case "frost_nova": if (adv == "Wizard") CastFrostNova(player); return true;
+                case "elemental_cataclysm": if (adv == "Wizard") CastElementalCataclysm(player); return true;
+                case "arcane_phalanx": if (adv == "Spellcaster") CastArcanePhalanx(player); return true;
+                case "afterimage_arsenal": if (adv == "Spellcaster") CastAfterimageArsenal(player); return true;
+                case "void_step": if (adv == "Spellcaster") CastVoidStep(player); return true;
+                case "rift_echo": if (adv == "Spellcaster") CastRiftEcho(player); return true;
+                case "arcane_rupture": if (adv == "Spellcaster") CastArcaneRupture(player); return true;
+            }
+            return false;
+        }
+
+        private float CooldownForTree(string id)
+        {
+            switch (id)
+            {
+                case "meteor_fall": return CooldownRemaining("Wizard.MeteorFall");
+                case "gravity_dominion": return CooldownRemaining("Wizard.GravityDominion");
+                case "astral_railcannon": return CooldownRemaining("Wizard.AstralRailcannon");
+                case "astral_greatblade": return CooldownRemaining("Wizard.AstralGreatblade");
+                case "frost_nova": return CooldownRemaining("Wizard.FrostNova");
+                case "elemental_cataclysm": return CooldownRemaining("Wizard.ElementalCataclysm");
+                case "arcane_phalanx": return CooldownRemaining("Spellcaster.ArcanePhalanx");
+                case "afterimage_arsenal": return CooldownRemaining("Spellcaster.AfterimageArsenal");
+                case "void_step": return CooldownRemaining("Spellcaster.VoidStep");
+                case "rift_echo": return CooldownRemaining("Spellcaster.RiftEcho");
+            }
+            return 0f;
         }
 
         private void CastFlameBurst(Player player)
@@ -2637,7 +2682,7 @@ namespace DragonsAltarSorcerer
                 return;
 
             Player player = Player.m_localPlayer;
-            if (player == null || GetClass(player) != "Sorcerer")
+            if (player == null || GetClass(player) != "Sorcerer" || DragonCombat.IsTreeHotbarActive(player))
                 return;
 
             EnsureHudStyles();

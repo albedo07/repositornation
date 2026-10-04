@@ -40,7 +40,7 @@ namespace DragonsAltarDevTools
     {
         public const string ModGuid = "albedo.customclasses.devtools";
         public const string ModName = "Dragon's Altar - Developer Tools";
-        public const string ModVersion = "0.21.2";
+        public const string ModVersion = "0.22.0";
 
         public static DeveloperToolsPlugin Instance;
 
@@ -60,6 +60,15 @@ namespace DragonsAltarDevTools
             { "righteous_strike", "goddess_relic", "judgement_hammer", "shield_charge", "fallen_angel", "ray_of_hope", "electric_smite" };
         private static readonly string[] PriestAscendableSkills =
             { "holy_wave", "lightning_relic", "holy_relic", "divine_intervention", "grand_cross", "heavens_judgement", "lightning_tempest" };
+        // v0.22.0: the switches follow the character's Class (Ascended Class skill, 5 AC skills, Ultimate).
+        private static readonly string[] SwordMasterAscendableSkills =
+            { "impact_wave", "moonlight_splitter", "crescent_cleave", "blade_storm", "frenzied_charge", "eclipse", "halfmoon_slash" };
+        private static readonly string[] MercenaryAscendableSkills =
+            { "heavy_slash", "stomp", "circle_swing", "bonecrusher", "seismic_guillotine", "punishing_bomb", "whirlwind" };
+        private static readonly string[] WizardAscendableSkills =
+            { "glacial_descent", "meteor_fall", "gravity_dominion", "astral_railcannon", "astral_greatblade", "frost_nova", "elemental_cataclysm" };
+        private static readonly string[] SpellcasterAscendableSkills =
+            { "stonefang_eruption", "arcane_phalanx", "afterimage_arsenal", "void_step", "rift_echo", "gravity_blast", "arcane_rupture" };
 
         private ConfigEntry<KeyCode> _toggleKey;
         private ConfigEntry<bool> _enableWorldPreview;
@@ -1207,10 +1216,28 @@ namespace DragonsAltarDevTools
             }
 
             bool changed = false;
-            changed |= DrawAscendColumn(list, "PALADIN", AscendableSkills, 588f);
-            changed |= DrawAscendColumn(list, "PRIEST", PriestAscendableSkills, 848f);
-            GUI.Label(new Rect(588f, 520f, 500f, 40f),
-                "Righteous Strike (Paladin) and Holy Wave (Priest) are always Ascended once you Advance.", _descStyle);
+            string cls = CallAdvanced("DevClassName", null) as string;
+            if (cls == "Warrior")
+            {
+                changed |= DrawAscendColumn(list, "SWORD MASTER", SwordMasterAscendableSkills, 588f);
+                changed |= DrawAscendColumn(list, "MERCENARY", MercenaryAscendableSkills, 848f);
+                GUI.Label(new Rect(588f, 520f, 500f, 40f),
+                    "Impact Wave (Sword Master) and Heavy Slash (Mercenary) are always Ascended once you Advance.", _descStyle);
+            }
+            else if (cls == "Sorcerer")
+            {
+                changed |= DrawAscendColumn(list, "WIZARD", WizardAscendableSkills, 588f);
+                changed |= DrawAscendColumn(list, "SPELLCASTER", SpellcasterAscendableSkills, 848f);
+                GUI.Label(new Rect(588f, 520f, 500f, 40f),
+                    "Glacial Descent (Wizard) and Stonefang Eruption (Spellcaster) are always Ascended once you Advance.", _descStyle);
+            }
+            else
+            {
+                changed |= DrawAscendColumn(list, "PALADIN", AscendableSkills, 588f);
+                changed |= DrawAscendColumn(list, "PRIEST", PriestAscendableSkills, 848f);
+                GUI.Label(new Rect(588f, 520f, 500f, 40f),
+                    "Righteous Strike (Paladin) and Holy Wave (Priest) are always Ascended once you Advance.", _descStyle);
+            }
             if (changed)
             {
                 SetValue(setting, string.Join(", ", list.ToArray()));
@@ -1242,6 +1269,7 @@ namespace DragonsAltarDevTools
         {
             if (id == "fallen_angel") return "Angel Comet";
             if (id == "heavens_judgement") return "Heaven's Judgement";
+            if (id == "knights_guidance") return "Knight's Guidance";
             string[] words = id.Split('_');
             for (int i = 0; i < words.Length; i++)
             {

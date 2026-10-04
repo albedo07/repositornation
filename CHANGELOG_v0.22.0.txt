@@ -1,0 +1,24 @@
+IMMORTAL HEROES v0.22.0 - UNIVERSAL KITS
+Warrior and Sorcerer now use the same Skill Tree, Tiers, Advancement and hotbar as Cleric.
+- Every Advancement Class is now data (Class skills, 2 Signatures, Lv24 skill, Lv32 pair,
+  Ultimate, Grace, Ascended Class skill), all on the same chassis slots, frames, nameplates,
+  locks and footer as Paladin / Priest.
+  Sword Master: Impact Wave (Ascended) | Moonlight Splitter, Crescent Cleave | Blade Storm |
+    Frenzied Charge, Eclipse | Halfmoon Slash | Knight's Guidance
+  Mercenary: Heavy Slash (Ascended) | Stomp, Circle Swing | Bonecrusher |
+    Seismic Guillotine, Punishing Bomb | Whirlwind | Battlecry
+  Wizard: Glacial Descent (Ascended) | Meteor Fall, Gravity Dominion | Astral Railcannon |
+    Astral Greatblade, Frost Nova | Elemental Cataclysm | Clockwork
+  Spellcaster: Stonefang Eruption (Ascended) | Arcane Phalanx, Afterimage Arsenal | Void Step |
+    Rift Echo, Gravity Blast | Arcane Rupture | Rift Walker
+- Warrior / Sorcerer: Class Tier Points, the Paladin/Priest-style branch preview, ADVANCE from the
+  tree (Lv 16 + Ascended Class skill Tier 7 + 14 points), Altar Advancement uses the same rules,
+  Ascension (Spellcaster: Void Step has its own Lv 42 Ascension = 5 Ascended skills).
+- Their skills cast from the tree hotbar (old M4+number keys retired for them, same as Cleric).
+  Tier power (+10%/Tier) now applies to the Warrior and Sorcerer Class skills.
+- Art: placeholders (skill initials) until the paintings arrive. Class title and Class skill
+  names are drawn live for Warrior / Sorcerer.
+- Not built yet (cast shows a message): Frenzied Charge, Eclipse, Punishing Bomb, Gravity Blast,
+  and the four Graces. Existing skills keep their current code until each Advancement rework.
+- F8 > Progression: Ascension switches follow your Class (Sword Master / Mercenary,
+  Wizard / Spellcaster).

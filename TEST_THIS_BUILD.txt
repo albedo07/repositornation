@@ -1,11 +1,14 @@
-TEST v0.21.2 - BALANCE PASS
-1. Goddess Relic / Angel Comet / Grand Cross burns: small ticks (a few HP/s), not big % chunks on a boss.
-2. Lightning Zap: explosion 2s after the hit.
-3. Judgement Hammer: grows the whole flight (Ascended: also on the way back); damage tooltip says "up to 5x".
-4. Holy Relic: ~4% Max HP per pulse at Tier 0.
-5. Divine Intervention: Barrier still absorbs; it should break a bit faster than before.
-6. Buckler Parry then a skill: noticeably weaker bonus than before (+35%).
-7. Ascended Lightning Tempest: enemies inside explode the moment it ends.
-8. Ray of Hope with an ally whose Max HP differs from yours: they heal by their own Max HP.
-9. Any Stun skill on a boss: boss keeps moving (still takes damage).
-Tip: F8 values reset to the new defaults automatically (new keys).
+TEST v0.22.0 - UNIVERSAL KITS
+Cleric first (must be unchanged): open the tree as Paladin and as Priest, Tiers, hotbar, Advance.
+Warrior (use /ih class Warrior, /ih level 16 or F8 > Progression):
+1. Open the tree: WARRIOR title, Heavy Slash / Impact Wave / Impact Punch plates, initials on
+   dark placeholder art, SWORD MASTER / MERCENARY preview plaques.
+2. Spend Class points, CONFIRM; hotbar casts Heavy Slash / Impact Wave / Impact Punch.
+3. Impact Wave Tier 7 + 14 spent at Lv 16 -> ADVANCE TO SWORD MASTER (Impact Wave turns Magenta,
+   permanent on the hotbar). Same at the Altar.
+4. Sword Master hotbar: Moonlight Splitter, Crescent Cleave, Blade Storm, Halfmoon (Lv 36) cast;
+   Frenzied Charge / Eclipse / Knight's Guidance show "arrives with its Sword Master update".
+5. Mercenary: Stomp, Circle Swing, Bonecrusher, Seismic Guillotine, Whirlwind cast.
+Sorcerer: same flow; Wizard / Spellcaster skills cast from the tree hotbar; their old HUD is gone.
+6. Ascend (Lv 32 Signature T5 etc.) and F8 Ascension switches for each Class.
+Report anything off by even a few px (titles, plates, initials).
