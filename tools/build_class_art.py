@@ -54,7 +54,7 @@ KITS = [
     # v0.24.0 Ranger: no paintings yet -> class-coloured panels without a scene and dark placeholder
     # openings (the game draws the skill initials until Icon_<id>.png exists).
     ("Ranger", "Acrobat", ["piercing_arrow", "tumble_shot", "snare_trap"],
-     ["gale_volley", "cyclone_arrow", "swallow_dive", "skyfall_barrage", "ricochet_arrow"], "tempest_dance", "tailwind",
+     ["gale_volley", "cyclone_arrow", "swallow_dive", "skyfall_barrage", "ricochet_arrow"], "furious_winds", "tailwind",
      "ranger", "acrobat", None, None),
     ("Ranger", "Bowmaster", ["piercing_arrow", "tumble_shot", "snare_trap"],
      ["ballista_shot", "arrow_rain", "pinning_shot", "explosive_arrow", "splitting_arrow"], "starfall_volley", "hawks_vigil",

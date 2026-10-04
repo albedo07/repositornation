@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.24.0";
+        public const string ModVersion = "0.24.1";
 
         internal static DragonCombatPlugin Instance;
 
@@ -732,6 +732,14 @@ namespace DragonsAltarCombat
                 blockHold = false;
             }
 
+            // v0.24.1: skill modules may remap mouse input (Ranger: Left Click quick shots,
+            // Right Click = charged shot, no Block). Runs before the skill-lock filters below.
+            if (DragonCombat.ControlsHook != null)
+            {
+                try { DragonCombat.ControlsHook(__instance, ref attack, ref attackHold, ref block, ref blockHold); }
+                catch { }
+            }
+
             if (DragonCombat.IsSkillLocked(__instance))
             {
                 movedir = Vector3.zero;
@@ -891,11 +899,13 @@ namespace DragonsAltarCombat
             // (bows sit in the left hand, crossbows in the right).
             if (DragonCombat.GetClassName(__instance) == "Ranger")
             {
+                // v0.24.1: Crossbows lose their penalty only for the Bowmaster.
+                bool crossbows = advancement == "Bowmaster";
                 ItemDrop.ItemData r = DragonCombat.GetHandItem(__instance, "m_rightItem");
                 ItemDrop.ItemData l = DragonCombat.GetHandItem(__instance, "m_leftItem");
-                __result -= RangedExemptPenalty(r);
+                __result -= RangedExemptPenalty(r, crossbows);
                 if (l != r)
-                    __result -= RangedExemptPenalty(l);
+                    __result -= RangedExemptPenalty(l, crossbows);
                 if (__result > 0f)
                     __result = 0f;
                 return;
@@ -931,12 +941,12 @@ namespace DragonsAltarCombat
             return Mathf.Min(0f, item.m_shared.m_movementModifier);
         }
 
-        private static float RangedExemptPenalty(ItemDrop.ItemData item)
+        private static float RangedExemptPenalty(ItemDrop.ItemData item, bool crossbows)
         {
             if (item == null || item.m_shared == null)
                 return 0f;
             Skills.SkillType s = item.m_shared.m_skillType;
-            return s == Skills.SkillType.Bows || s == Skills.SkillType.Crossbows ? NegativeModifier(item) : 0f;
+            return s == Skills.SkillType.Bows || (crossbows && s == Skills.SkillType.Crossbows) ? NegativeModifier(item) : 0f;
         }
 
         private static float WeaponMasteryExemptPenalty(ItemDrop.ItemData item, string advancement)
@@ -1624,6 +1634,10 @@ namespace DragonsAltarCombat
         // universal tree hotbar can cast them and show their cooldowns by skill id.
         private static readonly List<Func<Player, string, bool>> ExternalCasters = new List<Func<Player, string, bool>>();
         private static readonly List<Func<string, float>> ExternalCooldowns = new List<Func<string, float>>();
+
+        // v0.24.1: input remap hook for skill modules (one module: Ranger).
+        public delegate void ControlsFilter(Player player, ref bool attack, ref bool attackHold, ref bool block, ref bool blockHold);
+        public static ControlsFilter ControlsHook;
 
         // v0.24.0: generic hooks for skill modules (Ranger). Skill level bonuses by Skills.SkillType
         // name (read by Advanced GetSkillBonus) and filters that see every hit before it lands.

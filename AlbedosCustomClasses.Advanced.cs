@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.24.0";
+        public const string ModVersion = "0.24.1";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -9237,7 +9237,7 @@ namespace AlbedosCustomClassesAdvanced
             // Spellcaster: Void Step has its own Lv 42 Ascension on top of the normal one (5 total).
             new IhKit("Sorcerer", "Spellcaster", IhSorcererSkills, new string[] { "arcane_phalanx", "afterimage_arsenal", "void_step", "rift_echo", "gravity_blast" }, "arcane_rupture", "rift_walker", "stonefang_eruption", "void_step"),
             // v0.24.0 Ranger (DragonsAltar.Ranger.cs).
-            new IhKit("Ranger", "Acrobat", IhRangerSkills, new string[] { "gale_volley", "cyclone_arrow", "swallow_dive", "skyfall_barrage", "ricochet_arrow" }, "tempest_dance", "tailwind", "tumble_shot", null),
+            new IhKit("Ranger", "Acrobat", IhRangerSkills, new string[] { "gale_volley", "cyclone_arrow", "swallow_dive", "skyfall_barrage", "ricochet_arrow" }, "furious_winds", "tailwind", "tumble_shot", null),
             new IhKit("Ranger", "Bowmaster", IhRangerSkills, new string[] { "ballista_shot", "arrow_rain", "pinning_shot", "explosive_arrow", "splitting_arrow" }, "starfall_volley", "hawks_vigil", "piercing_arrow", null)
         };
         private static IhKit IhKitFor(string cls, string ac)
@@ -10099,7 +10099,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "swallow_dive": return "Swallow Dive";
                 case "skyfall_barrage": return "Skyfall Barrage";
                 case "ricochet_arrow": return "Ricochet Arrow";
-                case "tempest_dance": return "Tempest Dance";
+                case "furious_winds": return "Furious Winds";
                 case "tailwind": return "Tailwind";
                 case "ballista_shot": return "Ballista Shot";
                 case "arrow_rain": return "Arrow Rain";
@@ -10761,7 +10761,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "tumble_shot":
                     b.Append(IhLine("Damage", IhBowPct(IhR("Ranger Tumble Shot", "DamagePercent", 70f), power) + " per arrow"));
                     b.Append(IhLine("Arrows", IhNum(ascended ? IhR("Ranger Tumble Shot Ascended", "Arrows", 5f) : IhR("Ranger Tumble Shot", "Arrows", 3f)) + " in a " + IhNum(IhR("Ranger Tumble Shot", "FanDegrees", 24f)) + "° fan"));
-                    b.Append(IhLine("Backflip", IhNum(IhR("Ranger Tumble Shot", "FlipDistance", 6f)) + "m"));
+                    b.Append(IhLine("Backflip", "Swift " + IhNum(IhR("Ranger Tumble Shot", "FlipDistance_v0241", 2f)) + "m straight back in 0.3s"));
                     IhCosts(b, IhR("Ranger Tumble Shot", "StaminaCost", 18f), "Instant", IhR("Ranger Tumble Shot", "Cooldown", 7f));
                     break;
                 case "snare_trap":
@@ -10800,11 +10800,52 @@ namespace AlbedosCustomClassesAdvanced
                     b.Append(IhLine("Bounces", IhNum(ascended ? IhR("Acrobat Ricochet Arrow Ascended", "Bounces", 10f) : IhR("Acrobat Ricochet Arrow", "Bounces", 6f)) + " within " + IhNum(IhR("Acrobat Ricochet Arrow", "BounceRange", 10f)) + "m"));
                     IhCosts(b, IhR("Acrobat Ricochet Arrow", "StaminaCost", 20f), "Instant", IhR("Acrobat Ricochet Arrow", "Cooldown", 10f));
                     break;
-                case "tempest_dance":
-                    b.Append(IhLine("Damage", IhBowPct(IhR("Acrobat Tempest Dance", "ShotPercent", 120f), power) + " per blink, gale " + IhBowPct(IhR("Acrobat Tempest Dance", "BurstPercent", 150f), power)));
-                    b.Append(IhLine("Duration", IhNum(ascended ? IhR("Acrobat Tempest Dance Ascended", "Duration", 9f) : IhR("Acrobat Tempest Dance", "Duration", 6f)) + "s, Hyper Armor, up to " + IhNum(IhR("Acrobat Tempest Dance", "MaxTargets", 10f)) + " blinks within " + IhNum(IhR("Acrobat Tempest Dance", "Range", 25f)) + "m"));
-                    b.Append(IhLine("Gale", IhNum(IhR("Acrobat Tempest Dance", "BurstRadius", 10f)) + "m, launches Small enemies"));
-                    IhCosts(b, IhR("Acrobat Tempest Dance", "StaminaCost", 40f), "Instant", IhR("Acrobat Tempest Dance", "Cooldown", 120f));
+                case "furious_winds":
+                    b.Append(IhLine("Damage", IhBowPct(IhR("Acrobat Furious Winds", "SlashPercent", 25f), power) + " Slash every " + IhNum(IhR("Acrobat Furious Winds", "TickInterval", 0.25f)) + "s"));
+                    b.Append(IhLine("Inflicts", "Spirit Burn, a stack per hit (" + IhNum(IhR("Acrobat Furious Winds", "SpiritDotPercentPerStack", 4f)) + "% per stack), " + IhNum(IhR("Acrobat Furious Winds", "SpiritDotDuration", 6f)) + "s, refreshed"));
+                    b.Append(IhLine("Barrier", IhNum(ascended ? IhR("Acrobat Furious Winds Ascended", "Radius", 14f) : IhR("Acrobat Furious Winds", "Radius", 10f)) + "m: no enemy and no enemy projectile gets in, Hyper Armor"));
+                    b.Append(IhLine("Duration", IhNum(ascended ? IhR("Acrobat Furious Winds Ascended", "Duration", 5f) : IhR("Acrobat Furious Winds", "Duration", 3f)) + "s" + (ascended ? ", ends in a gale (" + IhBowPct(IhR("Acrobat Furious Winds Ascended", "FinalGalePercent", 150f), power) + ")" : "")));
+                    IhCosts(b, IhR("Acrobat Furious Winds", "StaminaCost", 40f), "Instant", IhR("Acrobat Furious Winds", "Cooldown", 90f));
+                    break;
+                case "ballista_shot":
+                    b.Append(IhLine("Damage", IhBowPct(IhR("Bowmaster Ballista Shot", "DamagePercent", 200f), power) + ", +" + IhNum(IhR("Bowmaster Ballista Shot", "DamagePerStackPercent", 40f)) + "% per stack"));
+                    b.Append(IhLine("Charge", "Hold: 3 stacks, 1 per second; +" + IhNum(IhR("Bowmaster Ballista Shot", "WidthPerStack", 1f)) + "m width each; hold at max to keep aiming"));
+                    b.Append(IhLine("Range", IhNum(IhR("Bowmaster Ballista Shot", "Range", 60f)) + "m Laser Projectile, pierces, knocks back Small, staggers Big"));
+                    IhCosts(b, IhR("Bowmaster Ballista Shot", "StaminaCost", 30f), "Hold", IhR("Bowmaster Ballista Shot", "Cooldown", 14f));
+                    break;
+                case "arrow_rain":
+                    b.Append(IhLine("Damage", IhBowPct(IhR("Bowmaster Arrow Rain", "DamagePercent", 25f), power) + " every " + IhNum(IhR("Bowmaster Arrow Rain", "HitInterval", 0.4f)) + "s for " + IhNum(IhR("Bowmaster Arrow Rain", "Duration", 4f)) + "s"));
+                    b.Append(IhLine("Radius", IhNum(IhR("Bowmaster Arrow Rain", "Radius", 10f)) + "m, Ground PAC " + IhNum(IhR("Bowmaster Arrow Rain", "Range", 45f)) + "m"));
+                    b.Append(IhLine("Inflicts", "Cripple " + IhNum(IhR("Bowmaster Arrow Rain", "CrippleDuration", 2f)) + "s" + (ascended ? ", Freeze every " + IhNum(IhR("Bowmaster Arrow Rain Ascended", "HitsToFreeze", 3f)) + " hits" : "")));
+                    IhCosts(b, IhR("Bowmaster Arrow Rain", "StaminaCost", 30f), "Instant", IhR("Bowmaster Arrow Rain", "Cooldown", 16f));
+                    break;
+                case "pinning_shot":
+                    b.Append(IhLine("Damage", IhBowPct(IhR("Bowmaster Pinning Shot", "DamagePercent", 150f), power)));
+                    b.Append(IhLine("Pin", IhNum(IhR("Bowmaster Pinning Shot", "SmallPinSeconds", 4f)) + "s Small, " + IhNum(IhR("Bowmaster Pinning Shot", "BigPinSeconds", 1.5f)) + "s Big + Cripple, Bosses Crippled"));
+                    b.Append(IhLine("Pinned", "+" + IhNum(IhR("Bowmaster Pinning Shot", "PinnedSkillDamagePercent", 25f)) + "% damage from your skills" + (ascended ? "; chains to " + IhNum(IhR("Bowmaster Pinning Shot Ascended", "ChainTargets", 2f)) + " nearby enemies" : "")));
+                    IhCosts(b, IhR("Bowmaster Pinning Shot", "StaminaCost", 20f), "Instant", IhR("Bowmaster Pinning Shot", "Cooldown", 12f));
+                    break;
+                case "explosive_arrow":
+                    b.Append(IhLine("Damage", IhBowPct(IhR("Bowmaster Explosive Arrow", "DamagePercent", 180f), power) + " Fire + Blunt"));
+                    b.Append(IhLine("Radius", IhNum(IhR("Bowmaster Explosive Arrow", "Radius", 7f)) + "m"));
+                    b.Append(IhLine("Inflicts", "Fire Burn " + IhNum(IhR("Bowmaster Explosive Arrow", "FireBurnDuration", 4f)) + "s, Stun (Small)" + (ascended ? "; burning field " + IhNum(IhR("Bowmaster Explosive Arrow Ascended", "FireFieldSeconds", 3f)) + "s" : "")));
+                    IhCosts(b, IhR("Bowmaster Explosive Arrow", "StaminaCost", 22f), "Instant", IhR("Bowmaster Explosive Arrow", "Cooldown", 12f));
+                    break;
+                case "splitting_arrow":
+                    b.Append(IhLine("Damage", IhBowPct(IhR("Bowmaster Splitting Arrow", "DamagePercent", 120f), power) + ", splits " + IhBowPct(IhR("Bowmaster Splitting Arrow", "SplitPercent", 50f), power)));
+                    b.Append(IhLine("Splits", IhNum(IhR("Bowmaster Splitting Arrow", "Splits", 8f)) + " arrows in a " + IhNum(IhR("Bowmaster Splitting Arrow", "ConeDegrees", 60f)) + "° cone, " + IhNum(IhR("Bowmaster Splitting Arrow", "SplitRange", 20f)) + "m" + (ascended ? "; each splits again" : "")));
+                    IhCosts(b, IhR("Bowmaster Splitting Arrow", "StaminaCost", 20f), "Instant", IhR("Bowmaster Splitting Arrow", "Cooldown", 10f));
+                    break;
+                case "starfall_volley":
+                    b.Append(IhLine("Damage", IhBowPct(IhR("Bowmaster Starfall Volley", "ImpactPercent", 120f), power) + " per arrow (" + IhNum(IhR("Bowmaster Starfall Volley", "ImpactRadius", 4f)) + "m)"));
+                    b.Append(IhLine("Area", IhNum(IhR("Bowmaster Starfall Volley", "Radius", 20f)) + "m Ground PAC, an arrow every " + IhNum(IhR("Bowmaster Starfall Volley", "Interval", 0.25f)) + "s for " + IhNum(IhR("Bowmaster Starfall Volley", "Duration", 5f)) + "s"));
+                    IhCosts(b, IhR("Bowmaster Starfall Volley", "StaminaCost", 45f), IhNum(IhR("Bowmaster Starfall Volley", "ChannelSeconds", 2f)) + "s channel", IhR("Bowmaster Starfall Volley", "Cooldown", 150f));
+                    break;
+                case "hawks_vigil":
+                    b.Append(IhLine("Effect", "Marks enemies within " + IhNum(IhR("Bowmaster Hawks Vigil", "RevealRadius", 60f)) + "m; allies +" + IhNum(IhR("Bowmaster Hawks Vigil", "RangedDamagePercent", 20f)) + "% ranged damage"));
+                    b.Append(IhLine("Radius", IhNum(IhR("Bowmaster Hawks Vigil", "AllyRadius", 10f)) + "m (snapshot)"));
+                    b.Append(IhLine("Duration", IhNum(IhR("Bowmaster Hawks Vigil", "Duration", 60f) / 60f) + " min"));
+                    b.Append(IhLine("Cooldown", IhNum(IhR("Bowmaster Hawks Vigil", "Cooldown", 600f) / 60f) + " min"));
                     break;
                 case "tailwind":
                     b.Append(IhLine("Effect", "+" + IhNum(IhR("Acrobat Tailwind", "MoveSpeedPercent", 50f)) + "% Move Speed, +" + IhNum(IhR("Acrobat Tailwind", "JumpSkillBonus", 30f)) + " Jump, no fall damage"));
@@ -11043,7 +11084,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "swallow_dive": return "Dash through the enemy line as a gust of wind, cutting everything you pass.";
                 case "skyfall_barrage": return "Leap high into the sky and rain arrows on the ground below.";
                 case "ricochet_arrow": return "An arrow that bounces from foe to foe, hitting harder each time.";
-                case "tempest_dance": return "Become the storm: blink from foe to foe, then burst into a gale.";
+                case "furious_winds": return "A whirlwind of magical leaves shields you and shreds every foe that comes near.";
                 case "tailwind": return "Wind lifts you and your allies: faster feet, higher jumps and no fall damage.";
                 case "ballista_shot": return "Hold to draw a siege-strength arrow that blasts through the enemy line.";
                 case "arrow_rain": return "Darken the sky over your aim with a crippling volley.";
@@ -11062,9 +11103,6 @@ namespace AlbedosCustomClassesAdvanced
             switch (id)
             {
                 case "__none__":
-                // v0.24.0: Bowmaster skills arrive with the next pass.
-                case "ballista_shot": case "arrow_rain": case "pinning_shot": case "explosive_arrow":
-                case "splitting_arrow": case "starfall_volley": case "hawks_vigil":
                     return true;
             }
             return false;
@@ -11111,7 +11149,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "swallow_dive": return "3 charges; each dash leaves a wind slash that hits again after 0.5s";
                 case "skyfall_barrage": return "14m circle that you steer while hovering";
                 case "ricochet_arrow": return "10 bounces; the last one explodes (4m)";
-                case "tempest_dance": return "9s; the final gale pulls everything in before launching it";
+                case "furious_winds": return "5s, 14m, ends in a gale that launches Small enemies";
             }
             return "";
         }
@@ -13164,7 +13202,7 @@ namespace AlbedosCustomClassesAdvanced
             if (cls == "Warrior")
                 return "Hyper Armor against any hit below 30% of your Total HP. Parry strength x2. +20 Run and +20 Jump skill.";
             if (cls == "Ranger")
-                return "+20 Bows and +20 Sneak. No movement penalty from Bows or Crossbows. -30% fall damage.";
+                return "+20 Bows, +20 Dodge, -30% fall damage, no Bow movement penalty. Charged-shot draw time -50% (Bows skill removes the rest). Left Click: a 4-shot chain at full-draw range (4th shot 150%). Right Click: the charged shot, Left Click releases, letting go cancels. Infinite arrows / bolts: you deal 50% of your Bow / Crossbow damage + 50% of the ammo only while you carry a full stack (100). Cannot Block or use Shields.";
             if (cls == "Sorcerer")
                 return "Creature melee damage -70% (mining and woodcutting are not affected). +65 Max Eitr, +35% Eitr Regen, Eitr starts regenerating twice as fast. Cannot Block, Parry or equip Shields.";
             return "All Shields: 1.5x Block Force + Block Armor. Staff + Shield allowed. No movement penalty from Shields, Staves, or one-handed Club-skill weapons. +35 Max HP and +20% HP Regen.";
@@ -13192,8 +13230,8 @@ namespace AlbedosCustomClassesAdvanced
                 case "Mercenary": return "Dual-wield any two one-handed physical weapons. +10 Sword, Axe and Clubs (cap 100). +50% Attack Speed with two one-handed or a two-handed physical weapon. No physical weapon movement penalty. +30% Armor and stronger aggro. Unchained Fury: +1 Fury per melee hit, +3 per enemy hit by a skill; at 100 it triggers for 20s (3 min lockout).";
                 case "Wizard": return "Charged Staff attacks (Mouse2 + Mouse1): up to 3 stacks, 1 per second, 1 Eitr per 0.1s. Stack 1 doubles the size, Stacks 2-3 add damage. Overcharge: after 300 Eitr spent, 12s of +40% wind-up speed, +40% Eitr Regen and +40% Magic Damage.";
                 case "Spellcaster": return "Staff / Wand attack interval -50%, Eitr use -50%, +20% Eitr Regen, normal Staff / Wand damage -50%. No skill wind-ups, no Staff / Wand movement penalty. Dual Gun Staves fire together and are 100% accurate.";
-                case "Acrobat": return "A second jump in mid-air. Dodge costs 50% less Stamina. Every Ranger skill can be cast in the air. Each enemy hit by your skills takes 1s off your shortest running cooldown (up to 3s per cast).";
-                case "Bowmaster": return "Standing still builds Focus: up to 5 stacks, +8% damage and +10% range each; moving drains it. Fully charged shots deal +30% damage. Crossbows reload 40% faster.";
+                case "Acrobat": return "A second jump in mid-air. Dodge costs 50% less Stamina. Every Ranger skill can be cast in the air. Each enemy hit by your skills takes 1s off your shortest running cooldown (up to 3s per cast). Cannot wield Crossbows.";
+                case "Bowmaster": return "Standing still builds Focus: up to 5 stacks, +8% damage and +10% range each; moving drains it. Fully charged shots deal +30% damage. Crossbows: reload time -75%, no movement penalty, a loaded Crossbow stays loaded when unequipped (no Left Click chain).";
             }
             return "";
         }

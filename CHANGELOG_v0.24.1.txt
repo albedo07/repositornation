@@ -1,0 +1,28 @@
+IMMORTAL HEROES v0.24.1 - Bowmaster
+===================================
+Ranger's Blessing (Wildborn) rework
+- +20 Bows, +20 Dodge (was Sneak), -30% fall damage, no Bow movement penalty.
+- Charged-shot draw time -50%; the Bows skill removes the rest (Bows 100 = no draw time).
+- Left Click: no charging, a 4-shot chain at full-draw range (4th shot 150%, half Stamina).
+- Right Click: the vanilla charged shot. Left Click releases it; letting go of Right Click cancels.
+- Infinite arrows / bolts (never consumed; with none at all a basic one is fired).
+- Damage = 50% of the Bow / Crossbow + 50% of the equipped ammo, the ammo part only while you carry
+  a full stack (100). Same rule for skills.
+- Rangers cannot Block and cannot use Shields (unequipped with a message).
+- Tumble Shot: a swift, uncontrolled 2m backflip straight back in 0.3s (tumble animation), arrows
+  loosed mid-flip.
+
+Acrobat
+- Tempest Dance replaced by FURIOUS WINDS (Ultimate): 3s leaf whirlwind, 10m wind barrier that no
+  enemy or enemy projectile passes, Slash every 0.25s + a Spirit DoT that stacks every tick (6s,
+  refreshed). Ascended: 5s, 14m, ends in a gale that launches Small enemies.
+- The Acrobat can never wield a Crossbow (unequipped with a message).
+
+Bowmaster (now playable)
+- Deadeye (Mastery): Focus stacks (5, +8% damage / +10% range each, standing still), fully charged
+  shots +30%, Crossbows: reload -75%, no movement penalty, stay loaded when unequipped, no chain.
+- Hawk's Vigil (Grace): marks enemies within 60m, allies within 10m +20% ranged damage, 1 min.
+- Ballista Shot (hold to charge, 3 stacks), Arrow Rain, Pinning Shot, Explosive Arrow, Splitting
+  Arrow, Starfall Volley (Ultimate), every Ascended version (Piercing Arrow = Ascended Class skill).
+
+Framework doc updated. Settings reset to defaults once (Dev Mode OFF).

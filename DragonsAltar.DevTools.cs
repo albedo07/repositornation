@@ -40,7 +40,7 @@ namespace DragonsAltarDevTools
     {
         public const string ModGuid = "albedo.customclasses.devtools";
         public const string ModName = "Dragon's Altar - Developer Tools";
-        public const string ModVersion = "0.24.0";
+        public const string ModVersion = "0.24.1";
 
         public static DeveloperToolsPlugin Instance;
 
@@ -58,7 +58,7 @@ namespace DragonsAltarDevTools
         private static readonly string[] SorcererGroups = { "Sorcerer", "Wizard", "Spellcaster" };
         private static readonly string[] RangerGroups = { "Ranger", "Acrobat", "Bowmaster" };
         private static readonly string[] AcrobatAscendableSkills =
-            { "tumble_shot", "gale_volley", "cyclone_arrow", "swallow_dive", "skyfall_barrage", "ricochet_arrow", "tempest_dance" };
+            { "tumble_shot", "gale_volley", "cyclone_arrow", "swallow_dive", "skyfall_barrage", "ricochet_arrow", "furious_winds" };
         private static readonly string[] BowmasterAscendableSkills =
             { "piercing_arrow", "ballista_shot", "arrow_rain", "pinning_shot", "explosive_arrow", "splitting_arrow", "starfall_volley" };
         private static readonly string[] AscendableSkills =
@@ -82,7 +82,7 @@ namespace DragonsAltarDevTools
         private bool _defaultsChecked;
         private float _allDefaultsArmedUntil;
         // v0.22.5: every new pass starts from the default values once (user rule); raise this per pass.
-        private const string DefaultsPass = "0.24.0";
+        private const string DefaultsPass = "0.24.1";
 
         private readonly List<DevSetting> _settings = new List<DevSetting>();
         private readonly List<string> _sections = new List<string>();

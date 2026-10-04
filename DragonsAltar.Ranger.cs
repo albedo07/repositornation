@@ -4,13 +4,17 @@ using System.Collections.Generic;
 using System.Reflection;
 using BepInEx;
 using BepInEx.Configuration;
+using HarmonyLib;
 using UnityEngine;
 using DragonsAltarCombat;
 using AlbedosCustomClassesSkills;
 
 // v0.24.0 RANGER (Immortal Heroes Framework 4): Ranger Class (Wildborn, Piercing Arrow, Tumble Shot,
-// Snare Trap) and the Acrobat Advancement (Windstep, Tailwind, 5 skills + Tempest Dance and every
-// Ascended version). Bowmaster arrives in the next pass (its skills say so when cast).
+// Snare Trap), Acrobat (Windstep, Tailwind, 5 skills + Furious Winds) and, since v0.24.1, Bowmaster
+// (Deadeye, Hawk's Vigil, 5 skills + Starfall Volley), every Ascended version.
+// v0.24.1 Wildborn rework: Left Click = 4-hit quick-shot chain at full-draw range, Right Click = the
+// vanilla charged shot (Left Click releases, letting go cancels), no Block / Shields, infinite ammo,
+// damage = 50% Bow + 50% of the ammo only with a full stack (100) of it.
 // Every skill is cast from the universal tree hotbar: Advanced routes unknown ids here through
 // DragonCombat.TryExternalCast, cooldowns come back through ExternalCooldown.
 namespace DragonsAltarRanger
@@ -36,7 +40,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Dragon's Altar - Ranger";
-        public const string ModVersion = "0.24.0";
+        public const string ModVersion = "0.24.1";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -52,7 +56,7 @@ namespace DragonsAltarRanger
         private ConfigEntry<float> _testingCooldown;
 
         // Wildborn (Ranger's Blessing)
-        private ConfigEntry<float> _wbBows, _wbSneak, _wbFall;
+        private ConfigEntry<float> _wbBows, _wbDodge, _wbFall, _wbDrawSpeed, _wbBowPercent, _wbAmmoPercent, _wbFullStack, _wbChainBonus, _wbChainReset, _wbQuickStamina;
         // Class skills
         private ConfigEntry<float> _paCooldown, _paStamina, _paDamage, _paRange, _paSpeed, _paCripple;
         private ConfigEntry<float> _paAscRange, _paAscWidth, _paAscExpose;
@@ -68,8 +72,17 @@ namespace DragonsAltarRanger
         private ConfigEntry<float> _sdCharges, _sdRecharge, _sdStamina, _sdDamage, _sdDistance, _sdRadius, _sdAscCharges, _sdAscDelay, _sdAscPercent;
         private ConfigEntry<float> _sbCooldown, _sbStamina, _sbDamage, _sbRange, _sbHeight, _sbRadius, _sbDuration, _sbInterval, _sbAscRadius;
         private ConfigEntry<float> _rcCooldown, _rcStamina, _rcDamage, _rcRange, _rcBounces, _rcBounceRange, _rcBonus, _rcAscBounces, _rcAscBlast, _rcAscBlastPercent;
-        private ConfigEntry<float> _tdCooldown, _tdStamina, _tdDuration, _tdTargets, _tdRange, _tdInterval, _tdShot, _tdBurstRadius, _tdBurst, _tdAscDuration;
+        private ConfigEntry<float> _fwCooldown, _fwStamina, _fwDuration, _fwRadius, _fwInterval, _fwSlash, _fwDot, _fwDotDuration, _fwAscDuration, _fwAscRadius, _fwAscBurst;
         private ConfigEntry<float> _twCooldown, _twDuration, _twRadius, _twMove, _twJump;
+        // Bowmaster
+        private ConfigEntry<float> _deFocusMax, _deFocusDamage, _deFocusRange, _deFullCharge, _deReload;
+        private ConfigEntry<float> _hvCooldown, _hvDuration, _hvRadius, _hvReveal, _hvRanged;
+        private ConfigEntry<float> _bsCooldown, _bsStamina, _bsDamage, _bsStack, _bsRange, _bsWidth, _bsWidthStack, _bsAscLine, _bsAscLinePercent;
+        private ConfigEntry<float> _arCooldown, _arStamina, _arDamage, _arRange, _arRadius, _arDuration, _arInterval, _arCripple, _arAscFreezeHits, _arAscFreeze;
+        private ConfigEntry<float> _psCooldown, _psStamina, _psDamage, _psRange, _psSmall, _psBig, _psBonus, _psAscChains, _psAscChainRange;
+        private ConfigEntry<float> _eaCooldown, _eaStamina, _eaDamage, _eaRange, _eaRadius, _eaBurn, _eaBurnDuration, _eaAscField, _eaAscFieldPercent;
+        private ConfigEntry<float> _saCooldown, _saStamina, _saDamage, _saRange, _saSplits, _saCone, _saSplitPercent, _saSplitRange, _saAscSplits, _saAscPercent;
+        private ConfigEntry<float> _sfCooldown, _sfStamina, _sfRange, _sfRadius, _sfChannel, _sfDuration, _sfInterval, _sfImpact, _sfDamage, _sfAscRadius, _sfAscDamage;
 
         // Runtime state
         private int _diveCharges = -1;
@@ -88,8 +101,15 @@ namespace DragonsAltarRanger
 
             const string wb = "Ranger Blessing";
             _wbBows = Config.Bind(wb, "BowsSkillBonus", 20f, "Wildborn: +Bows skill.");
-            _wbSneak = Config.Bind(wb, "SneakSkillBonus", 20f, "Wildborn: +Sneak skill.");
+            _wbDodge = Config.Bind(wb, "DodgeSkillBonus", 20f, "Wildborn: +Dodge skill (when the game has a Dodge skill).");
             _wbFall = Config.Bind(wb, "FallDamageReductionPercent", 30f, "Wildborn: less fall damage.");
+            _wbDrawSpeed = Config.Bind(wb, "DrawSpeedPercent", 50f, "Charged-shot draw time -50%; the Bows skill removes the rest (Bows 100 = instant).");
+            _wbBowPercent = Config.Bind(wb, "BowDamagePercent", 50f, "Rangers deal this % of the Bow / Crossbow damage.");
+            _wbAmmoPercent = Config.Bind(wb, "AmmoDamagePercent", 50f, "...plus this % of the arrow / bolt damage, only with a full stack of it.");
+            _wbFullStack = Config.Bind(wb, "FullStack", 100f, "Ammo count needed for the ammo damage bonus. Ammo is never consumed.");
+            _wbChainBonus = Config.Bind(wb, "ChainFourthHitPercent", 150f, "Left Click chain: the 4th shot deals this %.");
+            _wbChainReset = Config.Bind(wb, "ChainResetSeconds", 2f, "The chain resets after this long without a shot.");
+            _wbQuickStamina = Config.Bind(wb, "QuickShotStaminaPercent", 50f, "Left Click shots use this % of the normal Stamina.");
 
             const string pa = "Ranger Piercing Arrow";
             _paCooldown = Config.Bind(pa, "Cooldown", 8f, "Seconds.");
@@ -109,7 +129,7 @@ namespace DragonsAltarRanger
             _tsDamage = Config.Bind(ts, "DamagePercent", 70f, "Per arrow, % of your bow + arrow damage.");
             _tsArrows = Config.Bind(ts, "Arrows", 3f, "Arrows in the fan.");
             _tsFan = Config.Bind(ts, "FanDegrees", 24f, "Fan width.");
-            _tsDistance = Config.Bind(ts, "FlipDistance", 6f, "Backflip distance (m).");
+            _tsDistance = Config.Bind(ts, "FlipDistance_v0241", 2f, "Swift backflip distance (m), always straight back.");
             _tsRange = Config.Bind(ts, "Range", 35f, "Arrow range (m).");
             const string tsa = "Ranger Tumble Shot Ascended";
             _tsAscArrows = Config.Bind(tsa, "Arrows", 5f, "Acrobat's Ascended Class skill: arrows.");
@@ -195,17 +215,19 @@ namespace DragonsAltarRanger
             _rcAscBlast = Config.Bind(rca, "FinalBlastRadius", 4f, "m.");
             _rcAscBlastPercent = Config.Bind(rca, "FinalBlastPercent", 100f, "%.");
 
-            const string td = "Acrobat Tempest Dance";
-            _tdCooldown = Config.Bind(td, "Cooldown", 120f, "Seconds.");
-            _tdStamina = Config.Bind(td, "StaminaCost", 40f, "Stamina.");
-            _tdDuration = Config.Bind(td, "Duration", 6f, "Seconds, Hyper Armor.");
-            _tdTargets = Config.Bind(td, "MaxTargets", 10f, "Blinks.");
-            _tdRange = Config.Bind(td, "Range", 25f, "m.");
-            _tdInterval = Config.Bind(td, "BlinkInterval", 0.5f, "Seconds.");
-            _tdShot = Config.Bind(td, "ShotPercent", 120f, "Each point-blank shot.");
-            _tdBurstRadius = Config.Bind(td, "BurstRadius", 10f, "Final gale (m).");
-            _tdBurst = Config.Bind(td, "BurstPercent", 150f, "Final gale, launches Small enemies.");
-            _tdAscDuration = Config.Bind("Acrobat Tempest Dance Ascended", "Duration", 9f, "Seconds; the gale pulls everything in first.");
+            const string fw = "Acrobat Furious Winds";
+            _fwCooldown = Config.Bind(fw, "Cooldown", 90f, "Seconds.");
+            _fwStamina = Config.Bind(fw, "StaminaCost", 40f, "Stamina.");
+            _fwDuration = Config.Bind(fw, "Duration", 3f, "Seconds; you stand in the storm.");
+            _fwRadius = Config.Bind(fw, "Radius", 10f, "Wind barrier radius (m): no enemy or enemy projectile gets inside.");
+            _fwInterval = Config.Bind(fw, "TickInterval", 0.25f, "Seconds between leaf cuts.");
+            _fwSlash = Config.Bind(fw, "SlashPercent", 25f, "Each tick: % of your Ranger damage as Slash to every enemy at the barrier.");
+            _fwDot = Config.Bind(fw, "SpiritDotPercentPerStack", 4f, "Spirit DoT per stack every 0.5s (% of your Ranger damage). Every tick adds a stack.");
+            _fwDotDuration = Config.Bind(fw, "SpiritDotDuration", 6f, "Seconds, refreshed on every hit.");
+            const string fwa = "Acrobat Furious Winds Ascended";
+            _fwAscDuration = Config.Bind(fwa, "Duration", 5f, "Seconds.");
+            _fwAscRadius = Config.Bind(fwa, "Radius", 14f, "m.");
+            _fwAscBurst = Config.Bind(fwa, "FinalGalePercent", 150f, "The storm ends in a gale that launches Small enemies.");
 
             const string tw = "Acrobat Tailwind";
             _twCooldown = Config.Bind(tw, "Cooldown", 600f, "Seconds (Grace, free).");
@@ -214,10 +236,89 @@ namespace DragonsAltarRanger
             _twMove = Config.Bind(tw, "MoveSpeedPercent", 50f, "+Move Speed.");
             _twJump = Config.Bind(tw, "JumpSkillBonus", 30f, "+Jump skill. No fall damage.");
 
+            const string de = "Bowmaster Deadeye";
+            _deFocusMax = Config.Bind(de, "FocusMax", 5f, "Focus stacks (1 per second standing still; moving drains them over 2s).");
+            _deFocusDamage = Config.Bind(de, "DamagePerFocusPercent", 8f, "+damage per stack.");
+            _deFocusRange = Config.Bind(de, "RangePerFocusPercent", 10f, "+range per stack.");
+            _deFullCharge = Config.Bind(de, "FullChargeDamagePercent", 30f, "Fully charged shots deal this much more.");
+            _deReload = Config.Bind(de, "CrossbowReloadReductionPercent", 75f, "Crossbow reload time reduction. Loaded Crossbows stay loaded when unequipped.");
+            const string hv = "Bowmaster Hawks Vigil";
+            _hvCooldown = Config.Bind(hv, "Cooldown", 600f, "Seconds (Grace, free).");
+            _hvDuration = Config.Bind(hv, "Duration", 60f, "Seconds.");
+            _hvRadius = Config.Bind(hv, "AllyRadius", 10f, "Snapshot radius for the ally buff (m).");
+            _hvReveal = Config.Bind(hv, "RevealRadius", 60f, "Enemies within this range are marked (m).");
+            _hvRanged = Config.Bind(hv, "RangedDamagePercent", 20f, "+ranged damage.");
+            const string bs = "Bowmaster Ballista Shot";
+            _bsCooldown = Config.Bind(bs, "Cooldown", 14f, "Seconds.");
+            _bsStamina = Config.Bind(bs, "StaminaCost", 30f, "Stamina.");
+            _bsDamage = Config.Bind(bs, "DamagePercent", 200f, "Uncharged shot.");
+            _bsStack = Config.Bind(bs, "DamagePerStackPercent", 40f, "+damage per charge stack (3 stacks, 1 per second; hold past max to keep aiming).");
+            _bsRange = Config.Bind(bs, "Range", 60f, "Laser Projectile range (m).");
+            _bsWidth = Config.Bind(bs, "Width", 1f, "m.");
+            _bsWidthStack = Config.Bind(bs, "WidthPerStack", 1f, "m per stack.");
+            _bsAscLine = Config.Bind("Bowmaster Ballista Shot Ascended", "ShockwaveLength", 30f, "Full charge leaves a shockwave line (m).");
+            _bsAscLinePercent = Config.Bind("Bowmaster Ballista Shot Ascended", "ShockwavePercent", 60f, "% of the shot, 0.3s later.");
+            const string ar = "Bowmaster Arrow Rain";
+            _arCooldown = Config.Bind(ar, "Cooldown", 16f, "Seconds.");
+            _arStamina = Config.Bind(ar, "StaminaCost", 30f, "Stamina.");
+            _arDamage = Config.Bind(ar, "DamagePercent", 25f, "Per hit.");
+            _arRange = Config.Bind(ar, "Range", 45f, "Ground PAC range (m).");
+            _arRadius = Config.Bind(ar, "Radius", 10f, "m.");
+            _arDuration = Config.Bind(ar, "Duration", 4f, "Seconds.");
+            _arInterval = Config.Bind(ar, "HitInterval", 0.4f, "Seconds.");
+            _arCripple = Config.Bind(ar, "CrippleDuration", 2f, "Refreshed per hit.");
+            _arAscFreezeHits = Config.Bind("Bowmaster Arrow Rain Ascended", "HitsToFreeze", 3f, "Frozen arrows: Slow, then Freeze after this many hits.");
+            _arAscFreeze = Config.Bind("Bowmaster Arrow Rain Ascended", "FreezeDuration", 2f, "Seconds (Bosses are slowed instead).");
+            const string ps = "Bowmaster Pinning Shot";
+            _psCooldown = Config.Bind(ps, "Cooldown", 12f, "Seconds.");
+            _psStamina = Config.Bind(ps, "StaminaCost", 20f, "Stamina.");
+            _psDamage = Config.Bind(ps, "DamagePercent", 150f, "%.");
+            _psRange = Config.Bind(ps, "Range", 50f, "m.");
+            _psSmall = Config.Bind(ps, "SmallPinSeconds", 4f, "Small enemies are nailed in place.");
+            _psBig = Config.Bind(ps, "BigPinSeconds", 1.5f, "Big enemies (+ Cripple); Bosses are only Crippled.");
+            _psBonus = Config.Bind(ps, "PinnedSkillDamagePercent", 25f, "Pinned targets take more damage from your skills.");
+            _psAscChains = Config.Bind("Bowmaster Pinning Shot Ascended", "ChainTargets", 2f, "Also pins this many nearby enemies.");
+            _psAscChainRange = Config.Bind("Bowmaster Pinning Shot Ascended", "ChainRange", 6f, "m.");
+            const string ea = "Bowmaster Explosive Arrow";
+            _eaCooldown = Config.Bind(ea, "Cooldown", 12f, "Seconds.");
+            _eaStamina = Config.Bind(ea, "StaminaCost", 22f, "Stamina.");
+            _eaDamage = Config.Bind(ea, "DamagePercent", 180f, "Blast, Fire + Blunt.");
+            _eaRange = Config.Bind(ea, "Range", 50f, "m.");
+            _eaRadius = Config.Bind(ea, "Radius", 7f, "m.");
+            _eaBurn = Config.Bind(ea, "FireBurnPercent", 10f, "Fire Burn per 0.5s tick (% of the blast).");
+            _eaBurnDuration = Config.Bind(ea, "FireBurnDuration", 4f, "Seconds.");
+            _eaAscField = Config.Bind("Bowmaster Explosive Arrow Ascended", "FireFieldSeconds", 3f, "A burning field stays.");
+            _eaAscFieldPercent = Config.Bind("Bowmaster Explosive Arrow Ascended", "FireFieldPercent", 20f, "Every 0.5s.");
+            const string sa = "Bowmaster Splitting Arrow";
+            _saCooldown = Config.Bind(sa, "Cooldown", 10f, "Seconds.");
+            _saStamina = Config.Bind(sa, "StaminaCost", 20f, "Stamina.");
+            _saDamage = Config.Bind(sa, "DamagePercent", 120f, "First hit.");
+            _saRange = Config.Bind(sa, "Range", 50f, "m.");
+            _saSplits = Config.Bind(sa, "Splits", 8f, "Arrows behind the target.");
+            _saCone = Config.Bind(sa, "ConeDegrees", 60f, "Cone.");
+            _saSplitPercent = Config.Bind(sa, "SplitPercent", 50f, "Each split arrow.");
+            _saSplitRange = Config.Bind(sa, "SplitRange", 20f, "m.");
+            _saAscSplits = Config.Bind("Bowmaster Splitting Arrow Ascended", "SecondSplits", 3f, "Each split arrow splits again on its first hit.");
+            _saAscPercent = Config.Bind("Bowmaster Splitting Arrow Ascended", "SecondSplitPercent", 30f, "%.");
+            const string sf = "Bowmaster Starfall Volley";
+            _sfCooldown = Config.Bind(sf, "Cooldown", 150f, "Seconds.");
+            _sfStamina = Config.Bind(sf, "StaminaCost", 45f, "Stamina.");
+            _sfRange = Config.Bind(sf, "Range", 50f, "Ground PAC range (m).");
+            _sfRadius = Config.Bind(sf, "Radius", 20f, "Area (m).");
+            _sfChannel = Config.Bind(sf, "ChannelSeconds", 2f, "Seconds.");
+            _sfDuration = Config.Bind(sf, "Duration", 5f, "Seconds of falling arrows.");
+            _sfInterval = Config.Bind(sf, "Interval", 0.25f, "A giant arrow every...");
+            _sfImpact = Config.Bind(sf, "ImpactRadius", 4f, "m.");
+            _sfDamage = Config.Bind(sf, "ImpactPercent", 120f, "%.");
+            _sfAscRadius = Config.Bind("Bowmaster Starfall Volley Ascended", "FinalArrowRadius", 8f, "Ends with a meteor-sized arrow (m).");
+            _sfAscDamage = Config.Bind("Bowmaster Starfall Volley Ascended", "FinalArrowPercent", 300f, "%.");
+
             DragonCombat.RegisterSkillModule(CastFromTree, CooldownForTree);
             DragonCombat.RegisterStackQuery(StackQuery);
             DragonCombat.RegisterSkillLevelBonus(SkillLevelBonus);
             DragonCombat.RegisterIncomingHitFilter(IncomingHit);
+            DragonCombat.ControlsHook = RangerControls;
+            InstallPatches();
             Logger.LogInfo(ModName + " v" + ModVersion + " loaded.");
         }
 
@@ -238,8 +339,15 @@ namespace DragonsAltarRanger
                 case "swallow_dive": if (adv == "Acrobat") CastSwallowDive(player); return adv == "Acrobat";
                 case "skyfall_barrage": if (adv == "Acrobat") CastSkyfallBarrage(player); return adv == "Acrobat";
                 case "ricochet_arrow": if (adv == "Acrobat") CastRicochetArrow(player); return adv == "Acrobat";
-                case "tempest_dance": if (adv == "Acrobat") CastTempestDance(player); return adv == "Acrobat";
+                case "furious_winds": if (adv == "Acrobat") CastFuriousWinds(player); return adv == "Acrobat";
                 case "tailwind": if (adv == "Acrobat") CastTailwind(player); return adv == "Acrobat";
+                case "ballista_shot": if (adv == "Bowmaster") CastBallistaShot(player); return adv == "Bowmaster";
+                case "arrow_rain": if (adv == "Bowmaster") CastArrowRain(player); return adv == "Bowmaster";
+                case "pinning_shot": if (adv == "Bowmaster") CastPinningShot(player); return adv == "Bowmaster";
+                case "explosive_arrow": if (adv == "Bowmaster") CastExplosiveArrow(player); return adv == "Bowmaster";
+                case "splitting_arrow": if (adv == "Bowmaster") CastSplittingArrow(player); return adv == "Bowmaster";
+                case "starfall_volley": if (adv == "Bowmaster") CastStarfallVolley(player); return adv == "Bowmaster";
+                case "hawks_vigil": if (adv == "Bowmaster") CastHawksVigil(player); return adv == "Bowmaster";
             }
             return false;
         }
@@ -256,8 +364,15 @@ namespace DragonsAltarRanger
                 case "swallow_dive": return DiveCharges() > 0 ? 0f : Mathf.Max(0f, _diveNextCharge - Time.time);
                 case "skyfall_barrage": return CooldownRemaining("Acrobat.SkyfallBarrage");
                 case "ricochet_arrow": return CooldownRemaining("Acrobat.RicochetArrow");
-                case "tempest_dance": return CooldownRemaining("Acrobat.TempestDance");
+                case "furious_winds": return CooldownRemaining("Acrobat.FuriousWinds");
                 case "tailwind": return CooldownRemaining("Acrobat.Tailwind");
+                case "ballista_shot": return _ballistaCharging ? 0f : CooldownRemaining("Bowmaster.BallistaShot");
+                case "arrow_rain": return CooldownRemaining("Bowmaster.ArrowRain");
+                case "pinning_shot": return CooldownRemaining("Bowmaster.PinningShot");
+                case "explosive_arrow": return CooldownRemaining("Bowmaster.ExplosiveArrow");
+                case "splitting_arrow": return CooldownRemaining("Bowmaster.SplittingArrow");
+                case "starfall_volley": return CooldownRemaining("Bowmaster.StarfallVolley");
+                case "hawks_vigil": return CooldownRemaining("Bowmaster.HawksVigil");
             }
             return 0f;
         }
@@ -265,6 +380,14 @@ namespace DragonsAltarRanger
         private bool StackQuery(string id, out int ready, out int max, out float next)
         {
             ready = 0; max = 0; next = 0f;
+            if (id == "ballista_shot" && _ballistaCharging)
+            {
+                // Charging: live stacks, no cooldown shade (universal charge rule).
+                max = 3;
+                ready = _ballistaStacks;
+                next = -Mathf.Max(0.01f, _ballistaStacks >= 3 ? 0.01f : (_ballistaNextStack - Time.time));
+                return true;
+            }
             if (id != "swallow_dive") return false;
             Player player = Player.m_localPlayer;
             if (player == null || GetAdvancement(player) != "Acrobat") return false;
@@ -282,7 +405,7 @@ namespace DragonsAltarRanger
             if (GetClass(player) == "Ranger")
             {
                 if (skill == "Bows") bonus += Mathf.Max(0f, _wbBows.Value);
-                if (skill == "Sneak") bonus += Mathf.Max(0f, _wbSneak.Value);
+                if (skill == "Dodge") bonus += Mathf.Max(0f, _wbDodge.Value);
             }
             if (skill == "Jump" && TailwindActive(player)) bonus += Mathf.Max(0f, _twJump.Value);
             return bonus;
@@ -327,6 +450,9 @@ namespace DragonsAltarRanger
             bool ranger = GetClass(player) == "Ranger";
             bool acrobat = ranger && GetAdvancement(player) == "Acrobat";
             UpdateDodgeCost(player, acrobat);
+            if (ranger) UpdateForbiddenGear(player, acrobat);
+            UpdateFocus(player, ranger && GetAdvancement(player) == "Bowmaster");
+            UpdateLoadedCrossbow(player, ranger && GetAdvancement(player) == "Bowmaster");
             UpdateTraps(player);
             UpdateDiveCharges(player, acrobat);
             bool grounded = IsGrounded(player);
@@ -415,19 +541,48 @@ namespace DragonsAltarRanger
             StartCoroutine(TumbleRoutine(player, ascended));
         }
 
+        // v0.24.1: a swift, uncontrolled backflip straight back (2m in 0.3s), arrows loosed mid-flip.
         private IEnumerator TumbleRoutine(Player player, bool ascended)
         {
             Vector3 start = player.transform.position;
             ShowMessage("Tumble Shot");
-            Leap(player, -FlatAim(player), DragonCombat.M(_tsDistance.Value), 0.45f);
-            if (ascended && _enableVfx.Value) StartCoroutine(RingVfx(start, DragonCombat.M(_tsAscGust.Value), new Color(0.55f, 1f, 0.90f, 0.9f), 1.0f));
             if (ascended)
             {
                 List<Character> gust = GetSphereTargets(player, start, DragonCombat.M(_tsAscGust.Value));
                 for (int i = 0; i < gust.Count; i++) DragonCombat.ApplyCripple(gust[i], _tsAscCripple.Value);
+                if (_enableVfx.Value) StartCoroutine(RingVfx(start, DragonCombat.M(_tsAscGust.Value), new Color(0.55f, 1f, 0.90f, 0.9f), 1.0f));
             }
-            yield return new WaitForSeconds(0.2f);
-            if (player == null || player.IsDead()) yield break;
+            Vector3 back = -FlatAim(player);
+            float distance = DragonCombat.M(Mathf.Max(0.5f, _tsDistance.Value));
+            RaycastHit wall;
+            if (Physics.Raycast(start + Vector3.up * 0.6f, back, out wall, distance + 0.4f, SolidMask(), QueryTriggerInteraction.Ignore) &&
+                wall.collider.GetComponentInParent<Character>() == null)
+                distance = Mathf.Max(0f, wall.distance - 0.4f);
+            Vector3 end = start + back * distance;
+            Rigidbody body = player.GetComponent<Rigidbody>();
+            DragonCombat.LockSkill(player, 0.35f);
+            DragonCombat.PlayAnimation(player, "dodge");
+            const float duration = 0.3f;
+            bool fired = false;
+            float t = 0f;
+            while (t < duration && player != null && !player.IsDead())
+            {
+                t += Time.fixedDeltaTime;
+                float k = Mathf.Clamp01(t / duration);
+                Vector3 p = Vector3.Lerp(start, end, k) + Vector3.up * Mathf.Sin(k * Mathf.PI) * DragonCombat.M(0.6f);
+                p.y = Mathf.Max(p.y, GroundAt(p).y);
+                player.transform.position = p;
+                if (body != null) { body.position = p; body.velocity = Vector3.zero; }
+                if (!fired && k >= 0.5f) { fired = true; TumbleVolley(player, ascended); }
+                yield return new WaitForFixedUpdate();
+            }
+            if (player == null) yield break;
+            if (!fired) TumbleVolley(player, ascended);
+            ResetFloatField(player, "m_maxAirAltitude", player.transform.position.y);
+        }
+
+        private void TumbleVolley(Player player, bool ascended)
+        {
             RangerArrowDamage d = ArrowDamage(player);
             float mult = _tsDamage.Value / 100f * DragonCombat.GetSkillPower(player, "tumble_shot");
             int count = Mathf.Max(1, Mathf.RoundToInt(ascended ? _tsAscArrows.Value : _tsArrows.Value));
@@ -444,7 +599,6 @@ namespace DragonsAltarRanger
                     }
                     return false;
                 });
-            Shoot(player, null);
         }
 
         // ------------------------------------------------------------------ Snare Trap
@@ -777,66 +931,165 @@ namespace DragonsAltarRanger
             }
         }
 
-        // ------------------------------------------------------------------ Tempest Dance
-        private void CastTempestDance(Player player)
+        // ------------------------------------------------------------------ Furious Winds (Ultimate)
+        // v0.24.1 (replaces Tempest Dance): a whirlwind of magical leaves around you. No enemy and no
+        // enemy projectile gets inside the barrier; everything at its edge is cut (Slash) and takes a
+        // stacking Spirit DoT (every tick adds a stack, refreshed to 6s).
+        private readonly Dictionary<int, int> _fwStacks = new Dictionary<int, int>();
+        private readonly Dictionary<int, float> _fwStackUntil = new Dictionary<int, float>();
+        private static Type _projectileType;
+
+        private void CastFuriousWinds(Player player)
         {
-            if (!RequireBow(player)) return;
-            if (!BeginSkill(player, "Acrobat.TempestDance", _tdCooldown.Value, _tdStamina.Value)) return;
-            StartCoroutine(TempestRoutine(player, DragonCombat.IsSkillAscended(player, "tempest_dance")));
+            if (!BeginSkill(player, "Acrobat.FuriousWinds", _fwCooldown.Value, _fwStamina.Value)) return;
+            StartCoroutine(FuriousWindsRoutine(player, DragonCombat.IsSkillAscended(player, "furious_winds")));
         }
 
-        private IEnumerator TempestRoutine(Player player, bool ascended)
+        private IEnumerator FuriousWindsRoutine(Player player, bool ascended)
         {
-            ShowMessage("TEMPEST DANCE");
-            float duration = Mathf.Max(1f, ascended ? _tdAscDuration.Value : _tdDuration.Value);
-            DragonCombat.GrantHyperArmor(player, duration + 0.5f);
-            int id = player.GetInstanceID();
-            _noFallUntilGrounded[id] = true;
-            float end = Time.time + duration;
-            int blinks = 0, max = Mathf.Max(1, Mathf.RoundToInt(_tdTargets.Value));
+            ShowMessage("FURIOUS WINDS");
+            float duration = Mathf.Max(0.5f, ascended ? _fwAscDuration.Value : _fwDuration.Value);
+            float radius = DragonCombat.M(ascended ? _fwAscRadius.Value : _fwRadius.Value);
+            DragonCombat.GrantHyperArmor(player, duration + 0.3f);
+            DragonCombat.LockSkill(player, duration);
+            DragonCombat.PlaySkillPose(player, "Whirlwind", duration);
+            GameObject storm = _enableVfx.Value ? CreateLeafStorm(player.transform.position, radius) : null;
             RangerArrowDamage d = ArrowDamage(player);
-            float mult = _tdShot.Value / 100f * DragonCombat.GetSkillPower(player, "tempest_dance");
-            HashSet<int> visited = new HashSet<int>();
-            Rigidbody body = player.GetComponent<Rigidbody>();
-            while (Time.time < end && blinks < max && player != null && !player.IsDead())
+            float power = DragonCombat.GetSkillPower(player, "furious_winds");
+            float slash = Mathf.Max(0f, _fwSlash.Value) / 100f * power * d.Total();
+            float end = Time.time + duration, nextTick = 0f, nextDot = Time.time + 0.5f;
+            while (Time.time < end && player != null && !player.IsDead())
             {
-                Character target = NearestEnemy(player, DragonCombat.M(_tdRange.Value), visited);
-                if (target == null) { visited.Clear(); target = NearestEnemy(player, DragonCombat.M(_tdRange.Value), visited); }
-                if (target == null) break;
-                visited.Add(target.GetInstanceID());
-                Vector3 from = player.transform.position;
-                Vector3 away = from - target.transform.position;
-                away.y = 0f;
-                if (away.sqrMagnitude < 0.01f) away = -target.transform.forward;
-                Vector3 spot = target.transform.position + away.normalized * DragonCombat.M(2.5f);
-                spot = GroundAt(spot);
-                player.transform.position = spot;
-                if (body != null) { body.position = spot; body.velocity = Vector3.zero; }
-                FaceTowards(player, target.transform.position);
-                Shoot(player, null);
-                Deal(player, target, d, mult, 6f, false);
-                if (_enableVfx.Value) LineVfx(from + Vector3.up, spot + Vector3.up, new Color(0.55f, 1f, 0.90f, 0.85f), 0.12f, 0.25f);
-                blinks++;
-                yield return new WaitForSeconds(Mathf.Max(0.1f, _tdInterval.Value));
+                Vector3 c = player.transform.position;
+                if (storm != null) { storm.transform.position = c; storm.transform.Rotate(0f, 540f * Time.deltaTime, 0f, Space.World); }
+                // Wind barrier: enemies are pushed back to the edge, enemy projectiles are blown away.
+                List<Character> near = GetSphereTargets(player, c, radius + DragonCombat.M(1.5f));
+                for (int i = 0; i < near.Count; i++)
+                {
+                    Vector3 off = near[i].transform.position - c;
+                    off.y = 0f;
+                    if (off.sqrMagnitude < 0.01f) off = Vector3.forward;
+                    if (off.magnitude < radius)
+                    {
+                        Vector3 edge = c + off.normalized * radius;
+                        edge.y = near[i].transform.position.y;
+                        near[i].transform.position = edge;
+                        Rigidbody rb = near[i].GetComponent<Rigidbody>();
+                        if (rb != null) { rb.position = edge; rb.velocity = off.normalized * DragonCombat.M(4f); }
+                    }
+                }
+                BlowAwayProjectiles(player, c, radius);
+                if (Time.time >= nextTick)
+                {
+                    nextTick = Time.time + Mathf.Max(0.05f, _fwInterval.Value);
+                    for (int i = 0; i < near.Count; i++)
+                    {
+                        Character enemy = near[i];
+                        RangerArrowDamage cut = new RangerArrowDamage();
+                        cut.Slash = slash;
+                        Deal(player, enemy, cut, 1f, 0f, false);
+                        int id = enemy.GetInstanceID();
+                        int stacks;
+                        _fwStacks.TryGetValue(id, out stacks);
+                        _fwStacks[id] = stacks + 1;
+                        _fwStackUntil[id] = Time.time + Mathf.Max(0.5f, _fwDotDuration.Value);
+                        OnSkillHit(player);
+                    }
+                }
+                if (Time.time >= nextDot) { nextDot = Time.time + 0.5f; FuriousDotTick(player, d.Total() * power); }
+                yield return null;
             }
-            if (player == null || player.IsDead()) yield break;
-            Vector3 center = player.transform.position;
-            float radius = DragonCombat.M(_tdBurstRadius.Value);
-            if (ascended)
+            if (storm != null) Destroy(storm);
+            if (player != null && !player.IsDead() && ascended)
             {
-                List<Character> pulled = GetSphereTargets(player, center, radius * 1.5f);
-                for (int i = 0; i < pulled.Count; i++) PullToward(pulled[i], center, DragonCombat.IsSmallEnemy(pulled[i]) ? 14f : 6f);
-                yield return new WaitForSeconds(0.35f);
+                List<Character> burst = GetSphereTargets(player, player.transform.position, radius + DragonCombat.M(1.5f));
+                for (int i = 0; i < burst.Count; i++)
+                {
+                    Deal(player, burst[i], d, _fwAscBurst.Value / 100f * power, DragonCombat.IsSmallEnemy(burst[i]) ? 40f : 8f, false);
+                    if (DragonCombat.IsSmallEnemy(burst[i])) Launch(burst[i], 9f);
+                }
+                if (_enableVfx.Value) StartCoroutine(RingVfx(player.transform.position, radius, new Color(0.55f, 1f, 0.70f, 1f), 0.8f));
             }
-            List<Character> burst = GetSphereTargets(player, center, radius);
-            float bmult = _tdBurst.Value / 100f * DragonCombat.GetSkillPower(player, "tempest_dance");
-            for (int i = 0; i < burst.Count; i++)
+            // The DoT keeps ticking after the storm until each enemy's 6s run out.
+            StartCoroutine(FuriousDotAfter(player, ArrowDamage(player).Total() * power));
+        }
+
+        private void FuriousDotTick(Player player, float baseDamage)
+        {
+            List<int> expired = new List<int>();
+            foreach (KeyValuePair<int, int> pair in _fwStacks)
             {
-                Deal(player, burst[i], d, bmult, DragonCombat.IsSmallEnemy(burst[i]) ? 40f : 8f, false);
-                if (DragonCombat.IsSmallEnemy(burst[i])) Launch(burst[i], 9f);
+                float until;
+                if (!_fwStackUntil.TryGetValue(pair.Key, out until) || Time.time >= until) { expired.Add(pair.Key); continue; }
+                Character target = FindCharacter(pair.Key);
+                if (target == null || target.IsDead()) { expired.Add(pair.Key); continue; }
+                DragonCombat.ApplySpiritBurnTick(player, target, baseDamage * Mathf.Max(0f, _fwDot.Value) / 100f * pair.Value);
             }
-            if (_enableVfx.Value) StartCoroutine(RingVfx(center, radius, new Color(0.55f, 1f, 0.90f, 1f), 0.8f));
-            ShowMessage("Tempest Dance - gale");
+            for (int i = 0; i < expired.Count; i++) { _fwStacks.Remove(expired[i]); _fwStackUntil.Remove(expired[i]); }
+        }
+
+        private IEnumerator FuriousDotAfter(Player player, float baseDamage)
+        {
+            while (_fwStacks.Count > 0 && player != null)
+            {
+                yield return new WaitForSeconds(0.5f);
+                FuriousDotTick(player, baseDamage);
+            }
+        }
+
+        private Character FindCharacter(int instanceId)
+        {
+            Player player = Player.m_localPlayer;
+            if (player == null) return null;
+            List<Character> all = GetSphereTargets(player, player.transform.position, DragonCombat.M(80f));
+            for (int i = 0; i < all.Count; i++) if (all[i].GetInstanceID() == instanceId) return all[i];
+            return null;
+        }
+
+        private void BlowAwayProjectiles(Player player, Vector3 center, float radius)
+        {
+            if (_projectileType == null) _projectileType = Type.GetType("Projectile, assembly_valheim");
+            if (_projectileType == null) return;
+            UnityEngine.Object[] all = UnityEngine.Object.FindObjectsOfType(_projectileType);
+            FieldInfo ownerField = _projectileType.GetField("m_owner", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            for (int i = 0; i < all.Length; i++)
+            {
+                Component p = all[i] as Component;
+                if (p == null) continue;
+                Character owner = ownerField == null ? null : ownerField.GetValue(p) as Character;
+                if (owner == player || owner is Player) continue;
+                if ((p.transform.position - center).sqrMagnitude <= radius * radius * 1.1f)
+                    Destroy(p.gameObject);
+            }
+        }
+
+        private GameObject CreateLeafStorm(Vector3 pos, float radius)
+        {
+            GameObject obj = new GameObject("RangerFuriousWinds");
+            obj.transform.position = pos;
+            Color[] colors = { new Color(0.45f, 0.95f, 0.45f, 0.9f), new Color(0.70f, 1f, 0.55f, 0.8f), new Color(0.40f, 0.85f, 0.70f, 0.8f) };
+            for (int k = 0; k < 6; k++)
+            {
+                GameObject ring = new GameObject("Leaves" + k);
+                ring.transform.SetParent(obj.transform, false);
+                LineRenderer line = ring.AddComponent<LineRenderer>();
+                line.useWorldSpace = false;
+                line.positionCount = 20;
+                line.startWidth = 0.18f;
+                line.endWidth = 0.02f;
+                Color c = colors[k % colors.Length];
+                line.startColor = c;
+                line.endColor = new Color(c.r, c.g, c.b, 0.05f);
+                Material m = VfxMaterial(Color.white);
+                if (m != null) line.material = m;
+                float r = radius * (0.55f + 0.08f * k);
+                for (int i = 0; i < 20; i++)
+                {
+                    float a = (float)i / 20f * Mathf.PI * 0.9f + k * 1.05f;
+                    line.SetPosition(i, new Vector3(Mathf.Cos(a) * r, 0.3f + k * 0.45f, Mathf.Sin(a) * r));
+                }
+            }
+            return obj;
         }
 
         // ------------------------------------------------------------------ Tailwind (Grace)
@@ -862,6 +1115,892 @@ namespace DragonsAltarRanger
                 _tailwindUntil[ally.GetInstanceID()] = Time.time + duration;
             }
             if (_enableVfx.Value) StartCoroutine(RingVfx(player.transform.position, DragonCombat.M(_twRadius.Value), new Color(0.55f, 1f, 0.90f, 0.95f), 0.9f));
+        }
+
+        // ==================================================================================
+        // v0.24.1 WILDBORN RUNTIME: input remap, infinite ammo, Ranger damage, gear rules
+        // ==================================================================================
+        private Harmony _harmony;
+        private bool _charging, _releasePending;
+        private float _releaseAt, _chargeDraw;
+        private int _chain;
+        private float _lastQuickShot;
+        private float _pendingShotMult = 1f;
+        private bool _pendingShotActive;
+        private object _toggledAttack;
+
+        private void InstallPatches()
+        {
+            try { _harmony = new Harmony(ModGuid); }
+            catch (Exception ex) { Logger.LogWarning("Ranger: Harmony unavailable: " + ex.Message); return; }
+            Type attack = typeof(Attack);
+            Patch(FindMethod(attack, "UseAmmo", 1), "UseAmmoPrefix", null);
+            Patch(FindMethod(attack, "FireProjectileBurst", 0), "FireBurstPrefix", "FireBurstPostfix");
+            Patch(FindMethod(attack, "GetAttackStamina", 0), null, "AttackStaminaPostfix");
+            Type projectile = Type.GetType("Projectile, assembly_valheim");
+            if (projectile != null) Patch(FindMethod(projectile, "Setup", 6), "ProjectileSetupPrefix", null);
+            Patch(FindMethod(typeof(Player), "GetAttackDrawPercentage", 0), null, "DrawPercentagePostfix");
+            Patch(FindMethod(typeof(ItemDrop.ItemData), "GetWeaponLoadingTime", 0), null, "LoadingTimePostfix");
+        }
+
+        private static MethodInfo FindMethod(Type type, string name, int minParams)
+        {
+            for (Type t = type; t != null; t = t.BaseType)
+            {
+                MethodInfo[] methods = t.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+                for (int i = 0; i < methods.Length; i++)
+                    if (methods[i].Name == name && methods[i].GetParameters().Length >= minParams && (minParams > 0 || methods[i].GetParameters().Length == 0))
+                        return methods[i];
+            }
+            return null;
+        }
+
+        private void Patch(MethodInfo original, string prefix, string postfix)
+        {
+            if (original == null) { Logger.LogWarning("Ranger: patch target missing for " + (prefix ?? postfix)); return; }
+            HarmonyMethod pre = prefix == null ? null : new HarmonyMethod(typeof(RangerPlugin).GetMethod(prefix, BindingFlags.Static | BindingFlags.NonPublic));
+            HarmonyMethod post = postfix == null ? null : new HarmonyMethod(typeof(RangerPlugin).GetMethod(postfix, BindingFlags.Static | BindingFlags.NonPublic));
+            MethodInfo[] methods = typeof(Harmony).GetMethods(BindingFlags.Instance | BindingFlags.Public);
+            for (int i = 0; i < methods.Length; i++)
+            {
+                if (methods[i].Name != "Patch") continue;
+                ParameterInfo[] ps = methods[i].GetParameters();
+                if (ps.Length < 3 || !typeof(MethodBase).IsAssignableFrom(ps[0].ParameterType)) continue;
+                bool ok = true;
+                for (int p = 1; p < ps.Length; p++) if (ps[p].ParameterType != typeof(HarmonyMethod)) { ok = false; break; }
+                if (!ok) continue;
+                object[] args = new object[ps.Length];
+                args[0] = original; args[1] = pre; args[2] = post;
+                try { methods[i].Invoke(_harmony, args); return; }
+                catch (Exception ex) { Logger.LogWarning("Ranger: could not patch " + original.Name + ": " + ex.Message); return; }
+            }
+        }
+
+        private static bool IsBow(ItemDrop.ItemData item)
+        {
+            return item != null && item.m_shared != null && item.m_shared.m_skillType == Skills.SkillType.Bows;
+        }
+
+        private static bool IsCrossbow(ItemDrop.ItemData item)
+        {
+            return item != null && item.m_shared != null && item.m_shared.m_skillType == Skills.SkillType.Crossbows;
+        }
+
+        private static bool IsLocalRanger(Character c)
+        {
+            Player p = c as Player;
+            return p != null && p == Player.m_localPlayer && Instance != null && Instance.GetClass(p) == "Ranger";
+        }
+
+        // Left Click = quick shots (no draw, full-draw range). Right Click held = vanilla charged shot;
+        // Left Click releases it, letting go of Right Click cancels it. Rangers can never Block.
+        private void RangerControls(Player player, ref bool attack, ref bool attackHold, ref bool block, ref bool blockHold)
+        {
+            if (player != Player.m_localPlayer || GetClass(player) != "Ranger") { RestoreBowDraw(); return; }
+            bool rmb = block || blockHold;
+            block = false;
+            blockHold = false;
+            ItemDrop.ItemData weapon = GetCurrentWeapon(player);
+            if (!IsBow(weapon)) { _charging = false; RestoreBowDraw(); return; }   // Crossbows: vanilla Left Click
+            if (_releasePending)
+            {
+                if (Time.time - _releaseAt > 1.5f) { _releasePending = false; SetBowDraw(weapon, false); }
+                attack = false; attackHold = false;
+                return;
+            }
+            if (rmb)
+            {
+                if (!_charging) { _charging = true; SetBowDraw(weapon, true); }
+                _chargeDraw = DrawPercent(player);
+                if (attack) { _charging = false; _releasePending = true; _releaseAt = Time.time; attackHold = false; }
+                else attackHold = true;
+                attack = false;
+                return;
+            }
+            if (_charging)
+            {
+                _charging = false;
+                CancelDraw(player, weapon);
+                attack = false; attackHold = false;
+                return;
+            }
+            SetBowDraw(weapon, false);
+        }
+
+        private void SetBowDraw(ItemDrop.ItemData weapon, bool draw)
+        {
+            if (weapon == null || weapon.m_shared == null) return;
+            object atk = weapon.m_shared.m_attack;
+            FieldInfo f = atk == null ? null : atk.GetType().GetField("m_bowDraw", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (f == null) return;
+            if (_toggledAttack != null && _toggledAttack != atk) RestoreBowDraw();
+            if ((bool)f.GetValue(atk) != draw) f.SetValue(atk, draw);
+            _toggledAttack = atk;
+        }
+
+        private void RestoreBowDraw()
+        {
+            if (_toggledAttack == null) return;
+            FieldInfo f = _toggledAttack.GetType().GetField("m_bowDraw", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (f != null) f.SetValue(_toggledAttack, true);
+            _toggledAttack = null;
+        }
+
+        private float DrawPercent(Player player)
+        {
+            try
+            {
+                MethodInfo m = FindMethod(typeof(Player), "GetAttackDrawPercentage", 0);
+                return m == null ? 0f : Convert.ToSingle(m.Invoke(player, null));
+            }
+            catch { return 0f; }
+        }
+
+        private void CancelDraw(Player player, ItemDrop.ItemData weapon)
+        {
+            try
+            {
+                for (Type t = typeof(Player); t != null; t = t.BaseType)
+                {
+                    FieldInfo f = t.GetField("m_attackDrawTime", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+                    if (f != null) { f.SetValue(player, -1f); break; }
+                }
+                object atk = weapon.m_shared.m_attack;
+                FieldInfo stateField = atk.GetType().GetField("m_drawAnimationState", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                string state = stateField == null ? null : stateField.GetValue(atk) as string;
+                FieldInfo zf = typeof(Player).GetField("m_zanim", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                object zanim = zf == null ? null : zf.GetValue(player);
+                if (zanim != null && !string.IsNullOrEmpty(state))
+                {
+                    MethodInfo setBool = zanim.GetType().GetMethod("SetBool", new Type[] { typeof(string), typeof(bool) });
+                    if (setBool != null) setBool.Invoke(zanim, new object[] { state, false });
+                }
+            }
+            catch { }
+            SetBowDraw(weapon, false);
+        }
+
+        // Ammo is infinite for Rangers: the equipped arrow / bolt is used without being consumed;
+        // with none at all a basic one is fired (and adds no damage).
+        private static bool UseAmmoPrefix(Attack __instance, ref ItemDrop.ItemData __0, ref bool __result)
+        {
+            try
+            {
+                Character owner = ReadField(__instance, "m_character") as Character;
+                if (Instance == null || !IsLocalRanger(owner)) return true;
+                ItemDrop.ItemData weapon = ReadField(__instance, "m_weapon") as ItemDrop.ItemData;
+                if (weapon == null || weapon.m_shared == null || string.IsNullOrEmpty(weapon.m_shared.m_ammoType)) return true;
+                ItemDrop.ItemData ammo = Instance.FindAmmo((Player)owner, weapon);
+                if (ammo == null) ammo = Instance.DefaultAmmo(weapon.m_shared.m_ammoType);
+                if (ammo == null) return true;
+                __0 = ammo;
+                __result = true;
+                return false;
+            }
+            catch { return true; }
+        }
+
+        private static void FireBurstPrefix(Attack __instance)
+        {
+            if (Instance == null) return;
+            Character owner = ReadField(__instance, "m_character") as Character;
+            if (!IsLocalRanger(owner)) return;
+            Instance.PrepareShot(__instance);
+        }
+
+        private static void FireBurstPostfix()
+        {
+            if (Instance == null) return;
+            Instance._pendingShotActive = false;
+            Instance._pendingShotMult = 1f;
+            if (Instance._releasePending)
+            {
+                Instance._releasePending = false;
+                Player p = Player.m_localPlayer;
+                if (p != null) Instance.SetBowDraw(Instance.GetCurrentWeapon(p), false);
+            }
+        }
+
+        // Left Click chain: the 4th quick shot deals 150%. Bowmaster: fully charged shots +30%.
+        private void PrepareShot(Attack attack)
+        {
+            Player player = Player.m_localPlayer;
+            ItemDrop.ItemData weapon = ReadField(attack, "m_weapon") as ItemDrop.ItemData;
+            float mult = 1f;
+            object bowDraw = ReadField(attack, "m_bowDraw");
+            bool charged = bowDraw is bool && (bool)bowDraw;
+            if (IsBow(weapon) && !charged)
+            {
+                if (Time.time - _lastQuickShot > Mathf.Max(0.2f, _wbChainReset.Value)) _chain = 0;
+                _lastQuickShot = Time.time;
+                _chain++;
+                if (_chain >= 4) { mult *= Mathf.Max(0f, _wbChainBonus.Value) / 100f; _chain = 0; }
+            }
+            else if (IsBow(weapon) && charged && _chargeDraw >= 0.99f && GetAdvancement(player) == "Bowmaster")
+                mult *= 1f + Mathf.Max(0f, _deFullCharge.Value) / 100f;
+            _pendingShotMult = mult;
+            _pendingShotActive = true;
+        }
+
+        // Every Ranger projectile: 50% Bow + 50% ammo (full stack only), shot bonus, Focus, Hawk's Vigil;
+        // Focus also adds range (faster arrow).
+        private static void ProjectileSetupPrefix(object[] __args)
+        {
+            try
+            {
+                if (Instance == null || __args == null || __args.Length < 6) return;
+                Character owner = __args[0] as Character;
+                if (!IsLocalRanger(owner)) return;
+                HitData hit = __args[3] as HitData;
+                ItemDrop.ItemData weapon = __args[4] as ItemDrop.ItemData;
+                ItemDrop.ItemData ammo = __args[5] as ItemDrop.ItemData;
+                if (hit == null || !(IsBow(weapon) || IsCrossbow(weapon))) return;
+                Player player = (Player)owner;
+                bool full = ammo != null && Instance.HasFullStack(player, ammo);
+                RangerArrowDamage w = new RangerArrowDamage(), a = new RangerArrowDamage();
+                Instance.AddItemDamage(w, weapon, 1f);
+                if (ammo != null) Instance.AddItemDamage(a, ammo, 1f);
+                float bp = Instance._wbBowPercent.Value / 100f, ap = full ? Instance._wbAmmoPercent.Value / 100f : 0f;
+                float extra = (Instance._pendingShotActive ? Instance._pendingShotMult : 1f) * Instance.RangedBonus(player);
+                hit.m_damage.m_blunt *= Ratio(w.Blunt, a.Blunt, bp, ap) * extra;
+                hit.m_damage.m_slash *= Ratio(w.Slash, a.Slash, bp, ap) * extra;
+                hit.m_damage.m_pierce *= Ratio(w.Pierce, a.Pierce, bp, ap) * extra;
+                hit.m_damage.m_fire *= Ratio(w.Fire, a.Fire, bp, ap) * extra;
+                hit.m_damage.m_frost *= Ratio(w.Frost, a.Frost, bp, ap) * extra;
+                hit.m_damage.m_lightning *= Ratio(w.Lightning, a.Lightning, bp, ap) * extra;
+                hit.m_damage.m_poison *= Ratio(w.Poison, a.Poison, bp, ap) * extra;
+                hit.m_damage.m_spirit *= Ratio(w.Spirit, a.Spirit, bp, ap) * extra;
+                float range = Instance.FocusRangeMultiplier(player);
+                if (range > 1.001f && __args[1] is Vector3) __args[1] = (Vector3)__args[1] * range;
+            }
+            catch { }
+        }
+
+        private static float Ratio(float weapon, float ammo, float weaponShare, float ammoShare)
+        {
+            float total = weapon + ammo;
+            return total <= 0.0001f ? weaponShare : (weapon * weaponShare + ammo * ammoShare) / total;
+        }
+
+        private static void AttackStaminaPostfix(Attack __instance, ref float __result)
+        {
+            try
+            {
+                if (Instance == null || !IsLocalRanger(ReadField(__instance, "m_character") as Character)) return;
+                object bowDraw = ReadField(__instance, "m_bowDraw");
+                if (IsBow(ReadField(__instance, "m_weapon") as ItemDrop.ItemData) && bowDraw is bool && !(bool)bowDraw)
+                    __result *= Mathf.Clamp01(Instance._wbQuickStamina.Value / 100f);
+            }
+            catch { }
+        }
+
+        // Charged-shot draw time: -50%, and the Bows skill removes the rest (Bows 100 = instant).
+        private static void DrawPercentagePostfix(Humanoid __instance, ref float __result)
+        {
+            try
+            {
+                Player player = __instance as Player;
+                if (Instance == null || player == null || !IsLocalRanger(player)) return;
+                ItemDrop.ItemData weapon = Instance.GetCurrentWeapon(player);
+                if (!IsBow(weapon)) return;
+                float drawTime = 0f;
+                for (Type t = typeof(Player); t != null; t = t.BaseType)
+                {
+                    FieldInfo f = t.GetField("m_attackDrawTime", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+                    if (f != null) { drawTime = (float)f.GetValue(player); break; }
+                }
+                if (drawTime <= 0f) return;
+                object min = ReadField(weapon.m_shared.m_attack, "m_drawDurationMin");
+                float baseTime = min is float ? (float)min : 1f;
+                float skill = Mathf.Clamp01(player.GetSkillFactor(Skills.SkillType.Bows));
+                float time = baseTime * Mathf.Clamp01(1f - Instance._wbDrawSpeed.Value / 100f) * (1f - skill);
+                __result = time <= 0.01f ? 1f : Mathf.Clamp01(drawTime / time);
+            }
+            catch { }
+        }
+
+        // Bowmaster: Crossbow reload time -75%.
+        private static void LoadingTimePostfix(ItemDrop.ItemData __instance, ref float __result)
+        {
+            try
+            {
+                Player p = Player.m_localPlayer;
+                if (Instance == null || p == null || !IsCrossbow(__instance) || Instance.GetClass(p) != "Ranger" || Instance.GetAdvancement(p) != "Bowmaster") return;
+                __result *= Mathf.Clamp01(1f - Instance._deReload.Value / 100f);
+            }
+            catch { }
+        }
+
+        private static object ReadField(object o, string name)
+        {
+            if (o == null) return null;
+            for (Type t = o.GetType(); t != null; t = t.BaseType)
+            {
+                FieldInfo f = t.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+                if (f != null) return f.GetValue(o);
+            }
+            return null;
+        }
+
+        // The equipped / first ammo matching the weapon (arrows for Bows, bolts for Crossbows).
+        private ItemDrop.ItemData FindAmmo(Player player, ItemDrop.ItemData weapon)
+        {
+            if (player == null || weapon == null || weapon.m_shared == null) return null;
+            string type = weapon.m_shared.m_ammoType;
+            if (string.IsNullOrEmpty(type)) return null;
+            ItemDrop.ItemData equipped = GetAmmo(player);
+            if (equipped != null && equipped.m_shared != null && equipped.m_shared.m_ammoType == type) return equipped;
+            List<ItemDrop.ItemData> items = InventoryItems(player);
+            for (int i = 0; i < items.Count; i++)
+                if (items[i] != null && items[i].m_shared != null && IsAmmo(items[i]) && items[i].m_shared.m_ammoType == type) return items[i];
+            return null;
+        }
+
+        private bool HasFullStack(Player player, ItemDrop.ItemData ammo)
+        {
+            if (ammo == null || ammo.m_shared == null) return false;
+            int count = 0;
+            List<ItemDrop.ItemData> items = InventoryItems(player);
+            for (int i = 0; i < items.Count; i++)
+                if (items[i] != null && items[i].m_shared != null && items[i].m_shared.m_name == ammo.m_shared.m_name) count += items[i].m_stack;
+            return count >= Mathf.Max(1, Mathf.RoundToInt(_wbFullStack.Value));
+        }
+
+        private List<ItemDrop.ItemData> InventoryItems(Player player)
+        {
+            try
+            {
+                object inv = FindMethod(typeof(Player), "GetInventory", 0).Invoke(player, null);
+                MethodInfo all = inv == null ? null : inv.GetType().GetMethod("GetAllItems", Type.EmptyTypes);
+                List<ItemDrop.ItemData> list = all == null ? null : all.Invoke(inv, null) as List<ItemDrop.ItemData>;
+                if (list != null) return list;
+            }
+            catch { }
+            return new List<ItemDrop.ItemData>();
+        }
+
+        private readonly Dictionary<string, ItemDrop.ItemData> _defaultAmmo = new Dictionary<string, ItemDrop.ItemData>();
+
+        private ItemDrop.ItemData DefaultAmmo(string ammoType)
+        {
+            ItemDrop.ItemData cached;
+            if (_defaultAmmo.TryGetValue(ammoType, out cached)) return cached;
+            ItemDrop.ItemData found = null;
+            try
+            {
+                Type odb = Type.GetType("ObjectDB, assembly_valheim");
+                object db = odb == null ? null : odb.GetField("instance", BindingFlags.Static | BindingFlags.Public).GetValue(null);
+                MethodInfo get = db == null ? null : odb.GetMethod("GetItemPrefab", new Type[] { typeof(string) });
+                string[] names = { "ArrowWood", "BoltBone", "ArrowFlint", "BoltIron" };
+                for (int i = 0; i < names.Length && found == null && get != null; i++)
+                {
+                    GameObject prefab = get.Invoke(db, new object[] { names[i] }) as GameObject;
+                    ItemDrop drop = prefab == null ? null : prefab.GetComponent<ItemDrop>();
+                    if (drop != null && drop.m_itemData != null && drop.m_itemData.m_shared != null && drop.m_itemData.m_shared.m_ammoType == ammoType)
+                        found = drop.m_itemData;
+                }
+            }
+            catch { }
+            if (found != null) _defaultAmmo[ammoType] = found;
+            return found;
+        }
+
+        // No Shields for any Ranger; the Acrobat never wields a Crossbow.
+        private float _gearMessageAt;
+
+        private void UpdateForbiddenGear(Player player, bool acrobat)
+        {
+            string[] hands = { "m_leftItem", "m_rightItem" };
+            for (int i = 0; i < hands.Length; i++)
+            {
+                ItemDrop.ItemData item = ReadField(player, hands[i]) as ItemDrop.ItemData;
+                if (item == null || item.m_shared == null) continue;
+                bool shield = DragonCombat.IsShield(item);
+                bool crossbow = acrobat && IsCrossbow(item);
+                if (!shield && !crossbow) continue;
+                try
+                {
+                    MethodInfo un = FindMethod(typeof(Humanoid), "UnequipItem", 1);
+                    if (un != null)
+                    {
+                        object[] args = new object[un.GetParameters().Length];
+                        args[0] = item;
+                        for (int k = 1; k < args.Length; k++) args[k] = un.GetParameters()[k].ParameterType == typeof(bool) ? (object)true : null;
+                        un.Invoke(player, args);
+                    }
+                }
+                catch { }
+                if (Time.time > _gearMessageAt)
+                {
+                    _gearMessageAt = Time.time + 2f;
+                    ShowMessage(shield ? "Rangers cannot use Shields" : "The Acrobat cannot wield Crossbows");
+                }
+            }
+        }
+
+        // Bowmaster: a loaded Crossbow stays loaded when you holster / unequip it.
+        private readonly HashSet<ItemDrop.ItemData> _loadedCrossbows = new HashSet<ItemDrop.ItemData>();
+        private ItemDrop.ItemData _prevWeapon, _prevLoaded;
+        private FieldInfo _loadedField;
+        private bool _loadedFieldSearched;
+
+        private void UpdateLoadedCrossbow(Player player, bool bowmaster)
+        {
+            if (!bowmaster) { _loadedCrossbows.Clear(); return; }
+            if (!_loadedFieldSearched)
+            {
+                _loadedFieldSearched = true;
+                for (Type t = typeof(Player); t != null && _loadedField == null; t = t.BaseType)
+                {
+                    FieldInfo[] fs = t.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+                    for (int i = 0; i < fs.Length; i++)
+                        if (fs[i].FieldType == typeof(ItemDrop.ItemData) && fs[i].Name.IndexOf("Loaded", StringComparison.OrdinalIgnoreCase) >= 0) { _loadedField = fs[i]; break; }
+                }
+            }
+            if (_loadedField == null) return;
+            ItemDrop.ItemData weapon = GetCurrentWeapon(player);
+            ItemDrop.ItemData loaded = _loadedField.GetValue(player) as ItemDrop.ItemData;
+            if (loaded != null && IsCrossbow(loaded)) _loadedCrossbows.Add(loaded);
+            if (loaded == null && IsCrossbow(weapon) && _loadedCrossbows.Contains(weapon))
+            {
+                if (_prevWeapon == weapon && _prevLoaded == weapon) _loadedCrossbows.Remove(weapon);   // it was fired
+                else { _loadedField.SetValue(player, weapon); loaded = weapon; }                     // re-equipped: still loaded
+            }
+            _prevWeapon = weapon;
+            _prevLoaded = loaded;
+        }
+
+        // ==================================================================================
+        // v0.24.1 BOWMASTER
+        // ==================================================================================
+        private float _focus, _focusClock;
+        private int _focusShown;
+        private readonly Dictionary<int, float> _vigilUntil = new Dictionary<int, float>();
+        private readonly Dictionary<int, float> _pinnedUntil = new Dictionary<int, float>();
+        private bool _ballistaCharging;
+        private int _ballistaStacks;
+        private float _ballistaNextStack;
+
+        // Deadeye: +1 Focus per second standing still (max 5); moving / dodging drains it over 2s.
+        private void UpdateFocus(Player player, bool bowmaster)
+        {
+            if (!bowmaster) { _focus = 0f; _focusShown = 0; return; }
+            Rigidbody body = player.GetComponent<Rigidbody>();
+            Vector3 v = body != null ? body.velocity : Vector3.zero;
+            v.y = 0f;
+            bool still = v.magnitude < DragonCombat.M(0.4f) && IsGrounded(player);
+            float max = Mathf.Max(0f, _deFocusMax.Value);
+            if (still) _focus = Mathf.Min(max, _focus + Time.deltaTime);
+            else _focus = Mathf.Max(0f, _focus - Time.deltaTime * max / 2f);
+            int stacks = Mathf.FloorToInt(_focus);
+            if (stacks != _focusShown)
+            {
+                if (stacks >= Mathf.RoundToInt(max) && max > 0f) ShowMessage("Deadeye - Focus " + stacks + "/" + Mathf.RoundToInt(max));
+                _focusShown = stacks;
+            }
+        }
+
+        private int FocusStacks(Player player)
+        {
+            return player != null && GetAdvancement(player) == "Bowmaster" ? Mathf.FloorToInt(_focus) : 0;
+        }
+
+        private float FocusRangeMultiplier(Player player)
+        {
+            return 1f + FocusStacks(player) * Mathf.Max(0f, _deFocusRange.Value) / 100f;
+        }
+
+        // Focus (+8% per stack) and Hawk's Vigil (+20% ranged) for every Ranger shot and skill hit.
+        private float RangedBonus(Player player)
+        {
+            float m = 1f + FocusStacks(player) * Mathf.Max(0f, _deFocusDamage.Value) / 100f;
+            float until;
+            if (player != null && _vigilUntil.TryGetValue(player.GetInstanceID(), out until) && Time.time < until)
+                m *= 1f + Mathf.Max(0f, _hvRanged.Value) / 100f;
+            return m;
+        }
+
+        private bool IsPinned(Character target)
+        {
+            float until;
+            return target != null && _pinnedUntil.TryGetValue(target.GetInstanceID(), out until) && Time.time < until;
+        }
+
+        private bool RequireRangedForBowmaster(Player player)
+        {
+            if (IsBow(GetCurrentWeapon(player)) || IsCrossbow(GetCurrentWeapon(player))) return true;
+            ShowMessage("Requires a Bow or Crossbow");
+            return false;
+        }
+
+        // ------------------------------------------------------------------ Ballista Shot (Signature)
+        // Hold to charge (from the key press): 1 stack per second up to 3; at max you can keep holding,
+        // rooted, re-aiming every frame. Releasing fires a huge piercing Laser Projectile.
+        private void CastBallistaShot(Player player)
+        {
+            if (_ballistaCharging) return;
+            if (!RequireRangedForBowmaster(player)) return;
+            if (CooldownRemaining("Bowmaster.BallistaShot") > 0f) { ShowCooldown("Bowmaster.BallistaShot"); return; }
+            if (GetStamina(player) < _bsStamina.Value) { ShowMessage("Not enough stamina"); return; }
+            UseStamina(player, _bsStamina.Value);
+            StartCoroutine(BallistaRoutine(player, DragonCombat.IsSkillAscended(player, "ballista_shot")));
+        }
+
+        private IEnumerator BallistaRoutine(Player player, bool ascended)
+        {
+            _ballistaCharging = true;
+            _ballistaStacks = 0;
+            _ballistaNextStack = Time.time + 1f;
+            ShowMessage("Ballista Shot - hold to charge");
+            DragonCombat.PlaySkillPose(player, "Channel", 0.3f);
+            float started = Time.time;
+            while (player != null && !player.IsDead() && (DragonCombat.IsTreeSkillKeyHeld("ballista_shot") || Time.time - started < 0.15f))
+            {
+                DragonCombat.LockSkill(player, 0.15f);
+                if (_ballistaStacks < 3 && Time.time >= _ballistaNextStack)
+                {
+                    _ballistaStacks++;
+                    _ballistaNextStack = Time.time + 1f;
+                    ShowMessage("Ballista Shot " + _ballistaStacks + "/3" + (_ballistaStacks >= 3 ? " - release to fire" : ""));
+                }
+                yield return null;
+            }
+            _ballistaCharging = false;
+            if (player == null || player.IsDead()) yield break;
+            StartCooldown("Bowmaster.BallistaShot", _bsCooldown.Value);
+            int stacks = _ballistaStacks;
+            RangerArrowDamage d = ArrowDamage(player);
+            float mult = (_bsDamage.Value / 100f) * (1f + stacks * _bsStack.Value / 100f) * DragonCombat.GetSkillPower(player, "ballista_shot");
+            float width = DragonCombat.M(_bsWidth.Value + stacks * _bsWidthStack.Value);
+            float range = DragonCombat.M(_bsRange.Value) * FocusRangeMultiplier(player);
+            Vector3 origin = ShotOrigin(player);
+            Vector3 dir = AimDir(player, origin);
+            Shoot(player, "BALLISTA SHOT" + (stacks > 0 ? " x" + stacks : ""));
+            StartCoroutine(ArrowFlight(player, origin, dir, DragonCombat.M(90f), range, width * 0.5f, true, new Color(0.75f, 1f, 0.55f, 1f), 0f,
+                delegate(Character enemy)
+                {
+                    bool small = DragonCombat.IsSmallEnemy(enemy);
+                    Deal(player, enemy, d, mult, small ? 30f : 6f, !small);
+                    return true;
+                }, null));
+            if (_enableVfx.Value) LineVfx(origin, origin + dir * range, new Color(0.80f, 1f, 0.60f, 0.6f), width * 0.6f, 0.25f);
+            if (ascended && stacks >= 3)
+            {
+                yield return new WaitForSeconds(0.3f);
+                if (player == null) yield break;
+                Vector3 flat = new Vector3(dir.x, 0f, dir.z).normalized;
+                Vector3 a = player.transform.position, b = a + flat * DragonCombat.M(_bsAscLine.Value);
+                List<Character> line = PathTargets(player, a, b, Mathf.Max(DragonCombat.M(1.5f), width));
+                for (int i = 0; i < line.Count; i++) Deal(player, line[i], d, mult * _bsAscLinePercent.Value / 100f, 10f, false);
+                if (_enableVfx.Value) LineVfx(a + Vector3.up * 0.2f, b + Vector3.up * 0.2f, new Color(0.85f, 1f, 0.70f, 0.9f), width, 0.5f);
+            }
+        }
+
+        // ------------------------------------------------------------------ Arrow Rain (Signature)
+        private void CastArrowRain(Player player)
+        {
+            if (!RequireRangedForBowmaster(player)) return;
+            Vector3 point;
+            if (!AlbedoAimUtility.TryGetPhysicalTarget(player, DragonCombat.M(_arRange.Value) * FocusRangeMultiplier(player), out point)) { ShowMessage("Aim at the ground"); return; }
+            if (!BeginSkill(player, "Bowmaster.ArrowRain", _arCooldown.Value, _arStamina.Value)) return;
+            Shoot(player, "Arrow Rain");
+            StartCoroutine(ArrowRainRoutine(player, point, DragonCombat.IsSkillAscended(player, "arrow_rain")));
+        }
+
+        private IEnumerator ArrowRainRoutine(Player player, Vector3 point, bool ascended)
+        {
+            float radius = DragonCombat.M(_arRadius.Value);
+            float end = Time.time + Mathf.Max(0.5f, _arDuration.Value);
+            RangerArrowDamage d = ArrowDamage(player);
+            float mult = _arDamage.Value / 100f * DragonCombat.GetSkillPower(player, "arrow_rain");
+            Dictionary<int, int> hits = new Dictionary<int, int>();
+            while (Time.time < end && player != null)
+            {
+                List<Character> inside = GetSphereTargets(player, point, radius);
+                for (int i = 0; i < inside.Count; i++)
+                {
+                    Character enemy = inside[i];
+                    Deal(player, enemy, d, mult, 0f, false);
+                    DragonCombat.ApplyCripple(enemy, _arCripple.Value);
+                    if (ascended)
+                    {
+                        int n;
+                        hits.TryGetValue(enemy.GetInstanceID(), out n);
+                        n++;
+                        hits[enemy.GetInstanceID()] = n;
+                        if (n % Mathf.Max(1, Mathf.RoundToInt(_arAscFreezeHits.Value)) == 0) DragonCombat.Freeze(enemy, _arAscFreeze.Value, 0.3f);
+                    }
+                }
+                if (_enableVfx.Value)
+                {
+                    Color c = ascended ? new Color(0.60f, 0.90f, 1f, 0.9f) : new Color(0.75f, 1f, 0.55f, 0.9f);
+                    for (int k = 0; k < 10; k++)
+                    {
+                        Vector2 r = UnityEngine.Random.insideUnitCircle * radius;
+                        Vector3 g = point + new Vector3(r.x, 0f, r.y);
+                        LineVfx(g + Vector3.up * DragonCombat.M(9f) + new Vector3(0.6f, 0f, 0.6f), g, c, 0.05f, 0.18f);
+                    }
+                    StartCoroutine(RingVfx(point, radius, c, Mathf.Max(0.05f, _arInterval.Value)));
+                }
+                yield return new WaitForSeconds(Mathf.Max(0.1f, _arInterval.Value));
+            }
+        }
+
+        // ------------------------------------------------------------------ Pinning Shot (Lv24)
+        private void CastPinningShot(Player player)
+        {
+            if (!RequireRangedForBowmaster(player)) return;
+            Character target = AimedEnemy(player, DragonCombat.M(_psRange.Value) * FocusRangeMultiplier(player));
+            if (target == null) { ShowMessage("No target in sight"); return; }
+            if (!BeginSkill(player, "Bowmaster.PinningShot", _psCooldown.Value, _psStamina.Value)) return;
+            Shoot(player, "Pinning Shot");
+            Vector3 from = ShotOrigin(player);
+            if (_enableVfx.Value) LineVfx(from, target.transform.position + Vector3.up, new Color(0.75f, 1f, 0.55f, 1f), 0.08f, 0.2f);
+            RangerArrowDamage d = ArrowDamage(player);
+            float mult = _psDamage.Value / 100f * DragonCombat.GetSkillPower(player, "pinning_shot");
+            Pin(player, target, d, mult);
+            if (DragonCombat.IsSkillAscended(player, "pinning_shot"))
+            {
+                List<Character> near = GetSphereTargets(player, target.transform.position, DragonCombat.M(_psAscChainRange.Value));
+                int chains = Mathf.RoundToInt(_psAscChains.Value);
+                for (int i = 0; i < near.Count && chains > 0; i++)
+                {
+                    if (near[i] == target) continue;
+                    if (_enableVfx.Value) LineVfx(target.transform.position + Vector3.up, near[i].transform.position + Vector3.up, new Color(0.85f, 1f, 0.70f, 1f), 0.05f, 0.25f);
+                    Pin(player, near[i], d, mult * 0.5f);
+                    chains--;
+                }
+            }
+        }
+
+        private void Pin(Player player, Character target, RangerArrowDamage d, float mult)
+        {
+            Deal(player, target, d, mult, 0f, false);
+            OnSkillHit(player);
+            if (IsBossTarget(target)) { DragonCombat.ApplyCripple(target, _psBig.Value); return; }
+            bool small = DragonCombat.IsSmallEnemy(target);
+            float seconds = small ? _psSmall.Value : _psBig.Value;
+            if (!small) DragonCombat.ApplyCripple(target, seconds + 2f);
+            _pinnedUntil[target.GetInstanceID()] = Time.time + seconds;
+            StartCoroutine(PinRoutine(target, seconds));
+        }
+
+        private IEnumerator PinRoutine(Character target, float seconds)
+        {
+            Vector3 at = target.transform.position;
+            Rigidbody body = target.GetComponent<Rigidbody>();
+            float end = Time.time + seconds;
+            if (_enableVfx.Value) StartCoroutine(RingVfx(at, DragonCombat.M(1f), new Color(0.75f, 1f, 0.55f, 1f), seconds));
+            while (Time.time < end && target != null && !target.IsDead())
+            {
+                target.transform.position = at;
+                if (body != null) { body.position = at; body.velocity = Vector3.zero; }
+                yield return new WaitForFixedUpdate();
+            }
+        }
+
+        private static bool IsBossTarget(Character target)
+        {
+            try
+            {
+                MethodInfo m = target.GetType().GetMethod("IsBoss", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                return m != null && Convert.ToBoolean(m.Invoke(target, null));
+            }
+            catch { return false; }
+        }
+
+        // ------------------------------------------------------------------ Explosive Arrow (Lv32)
+        private void CastExplosiveArrow(Player player)
+        {
+            if (!RequireRangedForBowmaster(player)) return;
+            if (!BeginSkill(player, "Bowmaster.ExplosiveArrow", _eaCooldown.Value, _eaStamina.Value)) return;
+            Vector3 origin = ShotOrigin(player);
+            Vector3 dir = AimDir(player, origin);
+            Shoot(player, "Explosive Arrow");
+            bool ascended = DragonCombat.IsSkillAscended(player, "explosive_arrow");
+            StartCoroutine(ArrowFlight(player, origin, dir, DragonCombat.M(70f), DragonCombat.M(_eaRange.Value) * FocusRangeMultiplier(player), DragonCombat.M(0.35f), false,
+                new Color(1f, 0.55f, 0.25f, 1f), 0f, delegate(Character enemy) { return false; },
+                delegate(Vector3 at) { Explode(player, at, ascended); }));
+        }
+
+        private void Explode(Player player, Vector3 at, bool ascended)
+        {
+            if (player == null) return;
+            float radius = DragonCombat.M(_eaRadius.Value);
+            RangerArrowDamage d = ArrowDamage(player);
+            float total = d.Total();
+            RangerArrowDamage blast = new RangerArrowDamage();
+            blast.Fire = total * 0.5f;
+            blast.Blunt = total * 0.5f;
+            float mult = _eaDamage.Value / 100f * DragonCombat.GetSkillPower(player, "explosive_arrow");
+            List<Character> hits = GetSphereTargets(player, at, radius);
+            for (int i = 0; i < hits.Count; i++)
+            {
+                Deal(player, hits[i], blast, mult, 12f, false);
+                OnSkillHit(player);
+                if (DragonCombat.IsSmallEnemy(hits[i])) DragonCombat.Stun(hits[i], at);
+                StartCoroutine(BurnRoutine(player, hits[i], total * mult * Mathf.Max(0f, _eaBurn.Value) / 100f, _eaBurnDuration.Value));
+            }
+            if (_enableVfx.Value) StartCoroutine(RingVfx(at, radius, new Color(1f, 0.55f, 0.20f, 1f), 0.6f));
+            if (ascended) StartCoroutine(FireFieldRoutine(player, at, radius, total * mult * Mathf.Max(0f, _eaAscFieldPercent.Value) / 100f));
+        }
+
+        private IEnumerator BurnRoutine(Player player, Character target, float perTick, float duration)
+        {
+            float end = Time.time + Mathf.Max(0.5f, duration);
+            while (Time.time < end && target != null && !target.IsDead())
+            {
+                yield return new WaitForSeconds(0.5f);
+                if (target != null && !target.IsDead()) DragonCombat.ApplyFireBurnTick(player, target, perTick);
+            }
+        }
+
+        private IEnumerator FireFieldRoutine(Player player, Vector3 at, float radius, float perTick)
+        {
+            float end = Time.time + Mathf.Max(0.5f, _eaAscField.Value);
+            while (Time.time < end && player != null)
+            {
+                if (_enableVfx.Value) StartCoroutine(RingVfx(at, radius * 0.9f, new Color(1f, 0.40f, 0.10f, 0.8f), 0.5f));
+                List<Character> inside = GetSphereTargets(player, at, radius);
+                for (int i = 0; i < inside.Count; i++) DragonCombat.ApplyFireBurnTick(player, inside[i], perTick);
+                yield return new WaitForSeconds(0.5f);
+            }
+        }
+
+        // ------------------------------------------------------------------ Splitting Arrow (Lv32)
+        private void CastSplittingArrow(Player player)
+        {
+            if (!RequireRangedForBowmaster(player)) return;
+            if (!BeginSkill(player, "Bowmaster.SplittingArrow", _saCooldown.Value, _saStamina.Value)) return;
+            Vector3 origin = ShotOrigin(player);
+            Vector3 dir = AimDir(player, origin);
+            Shoot(player, "Splitting Arrow");
+            RangerArrowDamage d = ArrowDamage(player);
+            float mult = _saDamage.Value / 100f * DragonCombat.GetSkillPower(player, "splitting_arrow");
+            bool ascended = DragonCombat.IsSkillAscended(player, "splitting_arrow");
+            StartCoroutine(ArrowFlight(player, origin, dir, DragonCombat.M(70f), DragonCombat.M(_saRange.Value) * FocusRangeMultiplier(player), DragonCombat.M(0.35f), false,
+                new Color(0.75f, 1f, 0.55f, 1f), 0f,
+                delegate(Character enemy)
+                {
+                    Deal(player, enemy, d, mult, 4f, false);
+                    OnSkillHit(player);
+                    Split(player, enemy, dir, d, mult, Mathf.RoundToInt(_saSplits.Value), _saCone.Value, _saSplitPercent.Value / 100f, ascended ? 1 : 0);
+                    return false;
+                }, null));
+        }
+
+        private void Split(Player player, Character source, Vector3 dir, RangerArrowDamage d, float mult, int count, float cone, float share, int depth)
+        {
+            Vector3 from = source.transform.position + Vector3.up + dir.normalized * DragonCombat.M(1.2f);
+            Vector3 flat = new Vector3(dir.x, 0f, dir.z).normalized;
+            for (int i = 0; i < count; i++)
+            {
+                float a = count == 1 ? 0f : -cone * 0.5f + cone * i / (count - 1);
+                Vector3 sdir = Quaternion.AngleAxis(a, Vector3.up) * flat;
+                int left = depth;
+                StartCoroutine(ArrowFlight(player, from, sdir, DragonCombat.M(55f), DragonCombat.M(_saSplitRange.Value), DragonCombat.M(0.3f), false,
+                    new Color(0.85f, 1f, 0.65f, 1f), 0f,
+                    delegate(Character enemy)
+                    {
+                        if (enemy == source) return false;
+                        Deal(player, enemy, d, mult * share, 3f, false);
+                        OnSkillHit(player);
+                        if (left > 0) Split(player, enemy, sdir, d, mult, Mathf.RoundToInt(_saAscSplits.Value), 40f, _saAscPercent.Value / 100f, left - 1);
+                        return false;
+                    }, null));
+            }
+        }
+
+        // ------------------------------------------------------------------ Starfall Volley (Ultimate)
+        private void CastStarfallVolley(Player player)
+        {
+            if (!RequireRangedForBowmaster(player)) return;
+            Vector3 point;
+            if (!AlbedoAimUtility.TryGetPhysicalTarget(player, DragonCombat.M(_sfRange.Value) * FocusRangeMultiplier(player), out point)) { ShowMessage("Aim at the ground"); return; }
+            if (!BeginSkill(player, "Bowmaster.StarfallVolley", _sfCooldown.Value, _sfStamina.Value)) return;
+            StartCoroutine(StarfallRoutine(player, point, DragonCombat.IsSkillAscended(player, "starfall_volley")));
+        }
+
+        private IEnumerator StarfallRoutine(Player player, Vector3 point, bool ascended)
+        {
+            ShowMessage("STARFALL VOLLEY");
+            float channel = Mathf.Max(0f, _sfChannel.Value);
+            DragonCombat.LockSkill(player, channel);
+            DragonCombat.PlaySkillPose(player, "SkyCast", channel);
+            float radius = DragonCombat.M(_sfRadius.Value);
+            if (_enableVfx.Value) StartCoroutine(RingVfx(point, radius, new Color(0.80f, 1f, 0.60f, 0.8f), channel + _sfDuration.Value));
+            yield return new WaitForSeconds(channel);
+            if (player == null || player.IsDead()) yield break;
+            RangerArrowDamage d = ArrowDamage(player);
+            float mult = _sfDamage.Value / 100f * DragonCombat.GetSkillPower(player, "starfall_volley");
+            float impact = DragonCombat.M(_sfImpact.Value);
+            float end = Time.time + Mathf.Max(0.5f, _sfDuration.Value);
+            while (Time.time < end && player != null)
+            {
+                Vector2 r = UnityEngine.Random.insideUnitCircle * radius;
+                Vector3 g = GroundAt(point + new Vector3(r.x, 0f, r.y));
+                StarImpact(player, g, impact, d, mult, 0.4f);
+                yield return new WaitForSeconds(Mathf.Max(0.05f, _sfInterval.Value));
+            }
+            if (ascended && player != null)
+            {
+                yield return new WaitForSeconds(0.3f);
+                StarImpact(player, GroundAt(point), DragonCombat.M(_sfAscRadius.Value), d, _sfAscDamage.Value / 100f * DragonCombat.GetSkillPower(player, "starfall_volley"), 1.5f);
+            }
+        }
+
+        private void StarImpact(Player player, Vector3 at, float radius, RangerArrowDamage d, float mult, float width)
+        {
+            if (_enableVfx.Value)
+            {
+                LineVfx(at + Vector3.up * DragonCombat.M(25f), at, new Color(0.85f, 1f, 0.70f, 1f), width, 0.25f);
+                StartCoroutine(RingVfx(at, radius, new Color(0.85f, 1f, 0.70f, 0.9f), 0.3f));
+            }
+            List<Character> hits = GetSphereTargets(player, at, radius);
+            for (int i = 0; i < hits.Count; i++)
+            {
+                Deal(player, hits[i], d, mult, 10f, !DragonCombat.IsSmallEnemy(hits[i]));
+                OnSkillHit(player);
+            }
+        }
+
+        // ------------------------------------------------------------------ Hawk's Vigil (Grace)
+        private void CastHawksVigil(Player player)
+        {
+            if (CooldownRemaining("Bowmaster.HawksVigil") > 0f) { ShowCooldown("Bowmaster.HawksVigil"); return; }
+            StartCooldown("Bowmaster.HawksVigil", _hvCooldown.Value);
+            DragonCombat.LockSkill(player, 0.5f);
+            DragonCombat.PlaySkillPose(player, "Raise", 0.5f);
+            ShowMessage("Hawk's Vigil");
+            float duration = Mathf.Max(1f, _hvDuration.Value);
+            Collider[] hits = Physics.OverlapSphere(player.transform.position, DragonCombat.M(_hvRadius.Value));
+            HashSet<Player> allies = new HashSet<Player>();
+            allies.Add(player);
+            for (int i = 0; i < hits.Length; i++)
+            {
+                Player ally = hits[i].GetComponentInParent<Player>();
+                if (ally != null) allies.Add(ally);
+            }
+            foreach (Player ally in allies) _vigilUntil[ally.GetInstanceID()] = Time.time + duration;
+            StartCoroutine(VigilMarks(player, duration));
+        }
+
+        private IEnumerator VigilMarks(Player player, float duration)
+        {
+            float end = Time.time + duration;
+            while (Time.time < end && player != null && !player.IsDead())
+            {
+                if (_enableVfx.Value)
+                {
+                    List<Character> enemies = GetSphereTargets(player, player.transform.position, DragonCombat.M(_hvReveal.Value));
+                    for (int i = 0; i < enemies.Count; i++)
+                    {
+                        Vector3 top = enemies[i].transform.position + Vector3.up * DragonCombat.M(2.6f);
+                        LineVfx(top + Vector3.up * DragonCombat.M(1.2f), top, new Color(1f, 0.85f, 0.30f, 0.95f), 0.18f, 0.55f);
+                    }
+                }
+                yield return new WaitForSeconds(0.5f);
+            }
         }
 
         // ------------------------------------------------------------------ shared skill helpers
@@ -1063,17 +2202,20 @@ namespace DragonsAltarRanger
             return s == Skills.SkillType.Bows || s == Skills.SkillType.Crossbows;
         }
 
-        // Skill damage = your Bow / Crossbow + the loaded arrow / bolt (no ammo: the bow alone).
+        // v0.24.1 Ranger damage: 50% of the Bow / Crossbow + 50% of the equipped ammo, the ammo part
+        // only while you carry a full stack (100) of it. Ammo is never consumed.
         private RangerArrowDamage ArrowDamage(Player player)
         {
             RangerArrowDamage d = new RangerArrowDamage();
-            AddItemDamage(d, GetCurrentWeapon(player));
-            AddItemDamage(d, GetAmmo(player));
-            if (d.Total() <= 0f) d.Pierce = 30f;
+            ItemDrop.ItemData weapon = GetCurrentWeapon(player);
+            AddItemDamage(d, weapon, _wbBowPercent.Value / 100f);
+            ItemDrop.ItemData ammo = FindAmmo(player, weapon);
+            if (ammo != null && HasFullStack(player, ammo)) AddItemDamage(d, ammo, _wbAmmoPercent.Value / 100f);
+            if (d.Total() <= 0f) d.Pierce = 15f;
             return d;
         }
 
-        private void AddItemDamage(RangerArrowDamage d, ItemDrop.ItemData item)
+        private void AddItemDamage(RangerArrowDamage d, ItemDrop.ItemData item, float scale)
         {
             if (item == null || !IsRangedWeapon(item) && !IsAmmo(item)) return;
             try
@@ -1081,9 +2223,9 @@ namespace DragonsAltarRanger
                 MethodInfo m = item.GetType().GetMethod("GetDamage", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
                 object dmg = m == null ? null : m.Invoke(item, null);
                 if (dmg == null) return;
-                d.Blunt += Field(dmg, "m_blunt"); d.Slash += Field(dmg, "m_slash"); d.Pierce += Field(dmg, "m_pierce");
-                d.Fire += Field(dmg, "m_fire"); d.Frost += Field(dmg, "m_frost"); d.Lightning += Field(dmg, "m_lightning");
-                d.Poison += Field(dmg, "m_poison"); d.Spirit += Field(dmg, "m_spirit");
+                d.Blunt += Field(dmg, "m_blunt") * scale; d.Slash += Field(dmg, "m_slash") * scale; d.Pierce += Field(dmg, "m_pierce") * scale;
+                d.Fire += Field(dmg, "m_fire") * scale; d.Frost += Field(dmg, "m_frost") * scale; d.Lightning += Field(dmg, "m_lightning") * scale;
+                d.Poison += Field(dmg, "m_poison") * scale; d.Spirit += Field(dmg, "m_spirit") * scale;
             }
             catch { }
         }
@@ -1111,7 +2253,8 @@ namespace DragonsAltarRanger
         private void Deal(Player attacker, Character target, RangerArrowDamage d, float multiplier, float push, bool stagger)
         {
             if (target == null || target.IsDead() || d == null) return;
-            float m = Mathf.Max(0f, multiplier);
+            float m = Mathf.Max(0f, multiplier) * RangedBonus(attacker);
+            if (IsPinned(target)) m *= 1f + Mathf.Max(0f, _psBonus.Value) / 100f;
             HitData hit = new HitData();
             hit.m_damage.m_blunt = d.Blunt * m;
             hit.m_damage.m_slash = d.Slash * m;
