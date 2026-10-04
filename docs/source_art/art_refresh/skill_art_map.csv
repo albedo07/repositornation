@@ -1,0 +1,52 @@
+id,name,class_name,lineage,role,state,file,action
+heavy_slash,Heavy Slash,Warrior,Warrior,attack,normal,icons/Icon_heavy_slash.png,Broad physical horizontal sword strike.
+impact_wave,Impact Wave,Warrior,Warrior,attack,normal,icons/Icon_impact_wave.png,Upward swing drives a shockwave along the ground.
+impact_punch,Impact Punch,Warrior,Warrior,attack,normal,icons/Icon_impact_punch.png,Compact forward armored punch and blunt impact.
+moonlight_splitter,Moonlight Splitter,Sword Master,Warrior,signature,normal,icons/Icon_moonlight_splitter.png,Three horizontal ghost crescent projectiles; no normal-state fire.
+crescent_cleave,Crescent Cleave,Sword Master,Warrior,signature,normal,icons/Icon_crescent_cleave.png,Five vertical traveling ground cleaves spreading in a fan; no normal-state fire.
+blade_storm,Blade Storm,Sword Master,Warrior,attack,normal,icons/Icon_blade_storm.png,Three cuts inside a localized spatial sphere; not a tornado.
+frenzied_charge,Frenzied Charge,Sword Master,Warrior,attack,normal,icons/Icon_frenzied_charge.png,Straight sword thrust and forward dash.
+eclipse,Eclipse,Sword Master,Warrior,attack,normal,icons/Icon_eclipse.png,Enlarged magical sword completing a full circular sweep.
+halfmoon_slash,Halfmoon Slash,Sword Master,Warrior,ultimate,normal,icons/Icon_halfmoon_slash.png,Huge frontal melee sweep with an afterimage; normal state is not a projectile.
+knights_guidance,Knight’s Guidance,Sword Master,Warrior,grace,normal,icons/Icon_knights_guidance.png,Swift armored steps and guiding golden wind: movement and stamina support.
+stomp,Stomp,Mercenary,Warrior,signature,normal,icons/Icon_stomp.png,Boot impact and concentric ground aftershocks.
+circle_swing,Circle Swing,Mercenary,Warrior,signature,normal,icons/Icon_circle_swing.png,Fighter physically swinging a heavy weapon in a full circle.
+punishing_bomb,Punishing Bomb,Mercenary,Warrior,attack,normal,icons/Icon_punishing_bomb.png,Thrown iron bomb exploding against ground; blunt impact with fire.
+bonecrusher,Bonecrusher,Mercenary,Warrior,attack,normal,icons/Icon_bonecrusher.png,Armored fighter landing bodily from a jump; no falling summoned hammer.
+seismic_guillotine,Seismic Guillotine,Mercenary,Warrior,attack,normal,icons/Icon_seismic_guillotine.png,Advancing line of ground fractures ending in an explosion; no guillotine blade.
+whirlwind,Whirlwind,Mercenary,Warrior,ultimate,normal,icons/Icon_whirlwind.png,Fighter actively spinning a weapon around their body.
+battlecry,Battlecry,Mercenary,Warrior,grace,normal,icons/Icon_battlecry.png,Roaring fighter with outward rallying sound arcs.
+lightning_zap,Lightning Zap,Cleric,Cleric,attack,normal,icons/Icon_lightning_zap.png,Forward horizontal lightning cone from the caster; not a sky strike.
+righteous_strike,Righteous Strike,Cleric,Cleric,attack,normal,icons/Icon_righteous_strike.png,One vertical lightning pillar striking a ground target.
+holy_wave,Holy Wave,Cleric,Cleric,support,normal,icons/Icon_holy_wave.png,Outward healing wave from a raised hand and caster.
+goddess_relic,Goddess Relic,Paladin,Cleric,signature,normal,icons/Icon_goddess_relic.png,Huge solid upright cross falling into the ground.
+judgement_hammer,Judgement Hammer,Paladin,Cleric,signature,normal,icons/Icon_judgement_hammer.png,Hammer flies forward horizontally while rotating vertically.
+shield_charge,Shield Charge,Paladin,Cleric,attack,normal,icons/Icon_shield_charge.png,Armored fighter rushing forward behind a raised shield.
+fallen_angel,Angel Comet,Paladin,Cleric,attack,normal,icons/Icon_fallen_angel.png,Armored human diving headfirst like a comet; no angel creature.
+ray_of_hope,Ray of Hope,Paladin,Cleric,support,normal,icons/Icon_ray_of_hope.png,Raised hand releases a supportive healing and buff wave.
+electric_smite,Electric Smite,Paladin,Cleric,ultimate,normal,icons/Icon_electric_smite.png,"Acrobatic landing releases radial lightning trails along the ground, not from the sky."
+heavens_light,Heaven’s Light,Paladin,Cleric,grace,normal,icons/Icon_heavens_light.png,Defensive holy blessing surrounds allies.
+lightning_relic,Lightning Relic,Priest,Cleric,signature,normal,icons/Icon_lightning_relic.png,Planted player-height cross pulsing blue electricity.
+holy_relic,Holy Relic,Priest,Cleric,support,normal,icons/Icon_holy_relic.png,Planted player-height cross emitting healing rings.
+divine_intervention,Divine Intervention,Priest,Cleric,support,normal,icons/Icon_divine_intervention.png,Protective holy burst around allies and a planted cross.
+grand_cross,Grand Cross,Priest,Cleric,attack,normal,icons/Icon_grand_cross.png,"Two diagonal slashes form a forward-traveling X, not an upright cross."
+heavens_judgement,Heaven’s Judgement,Priest,Cleric,attack,normal,icons/Icon_heavens_judgement.png,Multiple slender straight holy beams bombard a ground circle.
+lightning_tempest,Lightning Tempest,Priest,Cleric,ultimate,normal,icons/Icon_lightning_tempest.png,Multiple jagged vertical sky bolts strike a storm area.
+grand_sigil,Heaven’s Crucible,Priest,Cleric,grace,normal,icons/Icon_grand_sigil.png,Strong luminous barrier encloses allied silhouettes.
+flame_burst,Flame Burst,Sorcerer,Sorcerer,attack,normal,icons/Icon_flame_burst.png,Short forward cone of flame from the caster; not a fireball.
+glacial_descent,Glacial Descent,Sorcerer,Sorcerer,attack,normal,icons/Icon_glacial_descent.png,Massive chunk of ice descends from above and strikes the ground.
+stonefang_eruption,Stonefang Eruption,Sorcerer,Sorcerer,attack,normal,icons/Icon_stonefang_eruption.png,Natural jagged stone spikes rise out of the ground.
+gravity_dominion,Gravity Dominion,Archmage,Sorcerer,signature,normal,icons/Icon_gravity_dominion.png,Stationary circular gravity field pulls matter inward; not a traveling orb.
+astral_greatblade,Astral Greatblade,Archmage,Sorcerer,attack,normal,icons/Icon_astral_greatblade.png,Giant purple spectral sword extends from the casting weapon and slams down.
+frost_nova,Frost Nova,Archmage,Sorcerer,attack,normal,icons/Icon_frost_nova.png,Radial frost burst around the caster; not falling ice.
+meteor_fall,Meteor Fall,Archmage,Sorcerer,signature,normal,icons/Icon_meteor_fall.png,Single fiery rock descends onto a ground target; normal state has no secondary meteors.
+astral_railcannon,Astral Railcannon,Archmage,Sorcerer,attack,normal,icons/Icon_astral_railcannon.png,Directed energy beam focused through rotating arcane rings; no mechanical cannon.
+elemental_cataclysm,Elemental Cataclysm,Archmage,Sorcerer,ultimate,normal,icons/Icon_elemental_cataclysm.png,"Large multielement ground detonation, visually broader than Meteor Fall."
+clockwork,Clockwork,Archmage,Sorcerer,grace,normal,icons/Icon_clockwork.png,Clock face and time-magic rings communicate cooldown support.
+rift_echo,Rift Echo,Horizon Walker,Sorcerer,attack,normal,icons/Icon_rift_echo.png,Portal behind an enemy fires a copied shot toward their back.
+void_step,Void Step,Horizon Walker,Sorcerer,support,normal,icons/Icon_void_step.png,Caster disappears and reappears between two spatial tears.
+arcane_phalanx,Arcane Phalanx,Horizon Walker,Sorcerer,signature,normal,icons/Icon_arcane_phalanx.png,Four spectral swords hover around a mobile caster in the normal state.
+afterimage_arsenal,Afterimage Arsenal,Horizon Walker,Sorcerer,signature,normal,icons/Icon_afterimage_arsenal.png,"Matching astral copies of the caster; normal copies are stationary, not followers."
+gravity_blast,Gravity Blast,Horizon Walker,Sorcerer,attack,normal,icons/Icon_gravity_blast.png,"Traveling dark gravity orb with horizontal motion, distinct from Dominion."
+arcane_rupture,Arcane Rupture,Horizon Walker,Sorcerer,ultimate,normal,icons/Icon_arcane_rupture.png,Localized spatial detonation over a circular ground target.
+rift_walker,Rift Walker,Horizon Walker,Sorcerer,grace,normal,icons/Icon_rift_walker.png,Two linked traversal portals.

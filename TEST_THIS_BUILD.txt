@@ -1,8 +1,8 @@
-TEST THIS BUILD - v0.23.8 Icons
-===============================
-1. Cleric with food: HP bar fills to the full max (e.g. 170/170), not 135.
-2. Priest + Buckler: parry twice -> "Holy Parry" message only once; use a skill, parry again
-   within 25s -> no new empowerment.
-3. Relics 7m, Consecrated Ground 10m, Grand Cross 7m wide; Ascended 12m, no end burst, Expose.
-4. Get hit hard while in Hyper Armor (e.g. Whirlwind Ascended): no knockback.
-5. Open Sword Master / Mercenary / Archmage / Horizon Walker trees + Altar: every skill has art.
+TEST THIS BUILD - v0.23.9 Class Art
+===================================
+1. Open the Skill Tree as Warrior (Sword Master / Mercenary preview) and Sorcerer (Archmage /
+   Horizon Walker): class-coloured panels with scenes, painted icons, names readable.
+2. Switch the AC preview: nodes, plates and frames stay in exactly the same place.
+3. Paladin and Priest trees: new painted icons, backgrounds as before.
+4. Locked nodes: frame keeps its colour, only the art greys. Hotbar + HUD show the same art.
+5. Altar: every skill (Priest included) shows its icon.

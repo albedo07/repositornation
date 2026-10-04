@@ -1,0 +1,22 @@
+IMMORTAL HEROES v0.23.9 - Class Art
+===================================
+Art only. No combat, progression, layout or anchor changes.
+
+Skill icons
+- All 51 skills (every Class, AC, Ultimate and Grace, Cleric included) use the painted icons from
+  your Art Refresh pack, colour-graded to their Class:
+  Warrior amber steel - Sword Master blue - Mercenary ember red - Cleric holy gold / blue -
+  Sorcerer, Archmage and Horizon Walker purple.
+- Same frames, sizes and positions as before; frame colour still follows the skill category
+  (Signature navy, Ultimate maroon, Grace gold, support green, Ascended magenta).
+- Tree, hotbar, HUD and Altar all use them. The Altar now loads Priest icons as their own files
+  (no more crops from the Priest painting).
+
+Backgrounds (Warrior and Sorcerer trees)
+- Class panel = the Base Class scene, AC panel = the AC scene, washed like the Cleric watercolours.
+- Panel paint, banners and tracery are recoloured to the Class / AC colour.
+- Frames, nameplates, badges, borders, header and footer are untouched pixel for pixel.
+- Cleric / Paladin / Priest backgrounds unchanged.
+
+Rebuild: tools/build_class_art.py (pack in docs/source_art/art_refresh, originals in
+docs/source_art/backdrops_v0238). Settings reset to defaults once (Dev Mode OFF).

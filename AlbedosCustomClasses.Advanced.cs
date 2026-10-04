@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.23.8";
+        public const string ModVersion = "0.23.9";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -12901,19 +12901,29 @@ namespace AlbedosCustomClassesAdvanced
             _ihKitBackdrops[k.Ac] = null;
             if (_ihPreAdvanceBackdropTex == null) return;
             Texture2D canvas = IhCopyTexture(_ihPreAdvanceBackdropTex, "ImmortalHeroes_Universal_" + k.Ac);
+            Texture2D art = LoadUiPng(k.Class + "_" + k.Ac.Replace(" ", "") + "_Artwork.png");
+            bool hasArt = art != null && art.width == 1011 && art.height == 662;
+            ReferenceNodeUi[] nodes = IhKitNodes(k);
+            if (hasArt)
+            {
+                // v0.23.9: the Artwork is the whole class canvas (class-coloured panels + scenes,
+                // tools/build_class_art.py) on the same chassis pixels: frames, plates and anchors are
+                // identical. Its painted Paladin labels / banner name are blanked again below.
+                canvas.SetPixels(art.GetPixels());
+                IhInpaintText(canvas, new Rect(596f, 92f, 138f, 27f));
+                for (int i = 3; i < nodes.Length; i++)
+                    IhBlankPaintedLabel(canvas, ReferenceNameplateAnchors[IhTemplateSlot(nodes[i].Id)], IhLabelWidth(nodes[i].Id));
+            }
             // The chassis carries the Cleric title and Class plate text: blank them, live text is drawn.
             IhInpaintText(canvas, new Rect(145f, 91f, 118f, 25f));
             for (int i = 0; i < 3; i++)
                 IhBlankPaintedLabel(canvas, ReferenceNameplateAnchors[IhClassSlots[i]], IhClassSlots[i] == "righteous_strike" ? 86f : IhClassLabelWidth(IhClassSlots[i]));
-            Texture2D art = LoadUiPng(k.Class + "_" + k.Ac.Replace(" ", "") + "_Artwork.png");
-            bool hasArt = art != null && art.width == 1011 && art.height == 662;
-            ReferenceNodeUi[] nodes = IhKitNodes(k);
             for (int i = 0; i < nodes.Length; i++)
             {
                 ReferenceNodeUi node = nodes[i];
                 string slot = IhTemplateSlot(node.Id);
                 Rect field = IhFieldRect(slot);
-                if (hasArt) { IhBlitArt(canvas, field, art, field); _ihPlaceholderArt.Remove(node.Id); }
+                if (hasArt) _ihPlaceholderArt.Remove(node.Id);
                 // v0.23.6: the painted Grace frames have a gold inner bevel that the field rect
                 // overlapped unevenly (left/top 3px, none right/bottom); fill only the dark opening.
                 else { IhFillPlaceholder(canvas, slot == "heavens_light" ? Rect.MinMaxRect(393f, 421f, 442f, 467f) : field); _ihPlaceholderArt.Add(node.Id); }
@@ -12923,7 +12933,7 @@ namespace AlbedosCustomClassesAdvanced
             }
             // Grace box in the footer.
             Rect graceBox = new Rect(670f, 548f, 44f, 44f);
-            if (hasArt) IhBlitArt(canvas, graceBox, art, graceBox); else IhFillPlaceholder(canvas, Rect.MinMaxRect(671f, 551f, 712f, 590f));
+            if (!hasArt) IhFillPlaceholder(canvas, Rect.MinMaxRect(671f, 551f, 712f, 590f));
             canvas.Apply(false, false);
             if (art != null) Destroy(art);
             IhComposeHotbarIcons(nodes, canvas);

@@ -41,7 +41,7 @@ namespace AlbedosCustomClasses
     {
         public const string ModGuid = "albedo.customclasses";
         public const string ModName = "Dragon's Altar";
-        public const string ModVersion = "0.23.8";
+        public const string ModVersion = "0.23.9";
 
         internal const string ClassDataKey = "AlbedoCustomClasses.Class";
         internal const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -835,33 +835,20 @@ namespace AlbedosCustomClasses
             string key="skill-icon:"+id;
             Sprite result;
             if (_altarSprites.TryGetValue(key,out result)) return result;
-            string[] priest={"lightning_relic","holy_relic","grand_sigil","divine_intervention","grand_cross","heavens_judgement","lightning_tempest"};
-            Rect[] regions={new Rect(369,156,70,65),new Rect(369,288,70,63),new Rect(380,409,74,67),new Rect(548,156,68,65),new Rect(686,156,69,65),new Rect(686,288,69,63),new Rect(850,214,103,108)};
-            int index=Array.IndexOf(priest,id);
-            if(index>=0)
+            // v0.23.9: every skill (Priest included) has its own Icon_<id>.png (tools/build_class_art.py).
+            // Masteries have no icon.
+            try
             {
-                Sprite source=AltarSprite("Cleric_Priest_Artwork.png");
-                if(source==null) return null;
-                Rect r=regions[index]; float sx=source.texture.width/1011f, sy=source.texture.height/662f;
-                result=Sprite.Create(source.texture,new Rect(r.x*sx,(662f-r.yMax)*sy,r.width*sx,r.height*sy),new Vector2(0.5f,0.5f));
+                Type file=typeof(object).Assembly.GetType("System.IO.File");
+                MethodInfo exists=file.GetMethod("Exists",new Type[]{typeof(string)});
+                string name=id=="righteous_strike" ? "Icon_righteous_strike_Normal.png" : "Icon_"+id+".png";
+                if(!(bool)exists.Invoke(null,new object[]{Paths.PluginPath+"/ImmortalHeroesAssets/"+name})) return null;
             }
-            else
-            {
-                // v0.23.8: every kit has Icon_<id>.png (tools/paint_kit_icons.py). Masteries have no icon.
-                try
-                {
-                    Type file=typeof(object).Assembly.GetType("System.IO.File");
-                    MethodInfo exists=file.GetMethod("Exists",new Type[]{typeof(string)});
-                    string name=id=="righteous_strike" ? "Icon_righteous_strike_Normal.png" : "Icon_"+id+".png";
-                    if(!(bool)exists.Invoke(null,new object[]{Paths.PluginPath+"/ImmortalHeroesAssets/"+name})) return null;
-                }
-                catch { return null; }
-                // Reuse a cached sprite, without registering a second ownership entry.
-                // v0.22.2: Icon_righteous_strike.png is the Ascended (Magenta) frame; the Altar shows
-                // the Class skill, so it uses the normal Cyan icon.
-                return AltarSprite(id=="righteous_strike" ? "Icon_righteous_strike_Normal.png" : "Icon_"+id+".png");
-            }
-            _altarSprites[key]=result; return result;
+            catch { return null; }
+            // Reuse a cached sprite, without registering a second ownership entry.
+            // v0.22.2: Icon_righteous_strike.png is the Ascended (Magenta) frame; the Altar shows
+            // the Class skill, so it uses the normal Cyan icon.
+            return AltarSprite(id=="righteous_strike" ? "Icon_righteous_strike_Normal.png" : "Icon_"+id+".png");
         }
 
         private void RefreshAltarSkillFooter(string className, bool advancement)

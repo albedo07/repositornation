@@ -1,0 +1,990 @@
+{
+  "version": "Art refresh for v0.23.8 review",
+  "source": "Attached Immortal Heroes Framework, Classes 1–3.2; v0.23.8 Icons ZIP",
+  "colors": {
+    "attack": "#39ddeb",
+    "signature": "#4f8ee9",
+    "support": "#62d88d",
+    "grace": "#e6bd59",
+    "ultimate": "#b94462",
+    "ascended": "#ee56e6"
+  },
+  "classes": [
+    {
+      "name": "Warrior",
+      "lineage": "Warrior",
+      "scene": "scenes/warrior.jpg",
+      "tree_background": "scenes/warrior.jpg",
+      "base": true
+    },
+    {
+      "name": "Sword Master",
+      "lineage": "Warrior",
+      "scene": "scenes/sword_master.jpg",
+      "tree_background": "scenes/warrior.jpg",
+      "base": false
+    },
+    {
+      "name": "Mercenary",
+      "lineage": "Warrior",
+      "scene": "scenes/mercenary.jpg",
+      "tree_background": "scenes/warrior.jpg",
+      "base": false
+    },
+    {
+      "name": "Cleric",
+      "lineage": "Cleric",
+      "scene": "scenes/cleric.jpg",
+      "tree_background": "scenes/cleric.jpg",
+      "base": true
+    },
+    {
+      "name": "Paladin",
+      "lineage": "Cleric",
+      "scene": "scenes/paladin.jpg",
+      "tree_background": "scenes/cleric.jpg",
+      "base": false
+    },
+    {
+      "name": "Priest",
+      "lineage": "Cleric",
+      "scene": "scenes/priest.jpg",
+      "tree_background": "scenes/cleric.jpg",
+      "base": false
+    },
+    {
+      "name": "Sorcerer",
+      "lineage": "Sorcerer",
+      "scene": "scenes/sorcerer.jpg",
+      "tree_background": "scenes/sorcerer.jpg",
+      "base": true
+    },
+    {
+      "name": "Archmage",
+      "lineage": "Sorcerer",
+      "scene": "scenes/archmage.jpg",
+      "tree_background": "scenes/sorcerer.jpg",
+      "base": false
+    },
+    {
+      "name": "Horizon Walker",
+      "lineage": "Sorcerer",
+      "scene": "scenes/horizon_walker.jpg",
+      "tree_background": "scenes/sorcerer.jpg",
+      "base": false
+    }
+  ],
+  "skills": [
+    {
+      "id": "heavy_slash",
+      "name": "Heavy Slash",
+      "class_name": "Warrior",
+      "lineage": "Warrior",
+      "role": "attack",
+      "file": "icons/Icon_heavy_slash.png",
+      "action": "Broad physical horizontal sword strike.",
+      "source_rect": [
+        3,
+        3,
+        311,
+        275
+      ],
+      "state": "normal",
+      "frame_color": "#39ddeb"
+    },
+    {
+      "id": "impact_wave",
+      "name": "Impact Wave",
+      "class_name": "Warrior",
+      "lineage": "Warrior",
+      "role": "attack",
+      "file": "icons/Icon_impact_wave.png",
+      "action": "Upward swing drives a shockwave along the ground.",
+      "source_rect": [
+        317,
+        3,
+        624,
+        275
+      ],
+      "state": "normal",
+      "frame_color": "#39ddeb"
+    },
+    {
+      "id": "impact_punch",
+      "name": "Impact Punch",
+      "class_name": "Warrior",
+      "lineage": "Warrior",
+      "role": "attack",
+      "file": "icons/Icon_impact_punch.png",
+      "action": "Compact forward armored punch and blunt impact.",
+      "source_rect": [
+        630,
+        3,
+        937,
+        275
+      ],
+      "state": "normal",
+      "frame_color": "#39ddeb"
+    },
+    {
+      "id": "moonlight_splitter",
+      "name": "Moonlight Splitter",
+      "class_name": "Sword Master",
+      "lineage": "Warrior",
+      "role": "signature",
+      "file": "icons/Icon_moonlight_splitter.png",
+      "action": "Three horizontal ghost crescent projectiles; no normal-state fire.",
+      "source_rect": [
+        943,
+        3,
+        1251,
+        275
+      ],
+      "state": "normal",
+      "frame_color": "#4f8ee9"
+    },
+    {
+      "id": "crescent_cleave",
+      "name": "Crescent Cleave",
+      "class_name": "Sword Master",
+      "lineage": "Warrior",
+      "role": "signature",
+      "file": "icons/Icon_crescent_cleave.png",
+      "action": "Five vertical traveling ground cleaves spreading in a fan; no normal-state fire.",
+      "source_rect": [
+        1257,
+        3,
+        1565,
+        275
+      ],
+      "state": "normal",
+      "frame_color": "#4f8ee9"
+    },
+    {
+      "id": "blade_storm",
+      "name": "Blade Storm",
+      "class_name": "Sword Master",
+      "lineage": "Warrior",
+      "role": "attack",
+      "file": "icons/Icon_blade_storm.png",
+      "action": "Three cuts inside a localized spatial sphere; not a tornado.",
+      "source_rect": [
+        1571,
+        3,
+        1878,
+        275
+      ],
+      "state": "normal",
+      "frame_color": "#39ddeb"
+    },
+    {
+      "id": "frenzied_charge",
+      "name": "Frenzied Charge",
+      "class_name": "Sword Master",
+      "lineage": "Warrior",
+      "role": "attack",
+      "file": "icons/Icon_frenzied_charge.png",
+      "action": "Straight sword thrust and forward dash.",
+      "source_rect": [
+        3,
+        281,
+        311,
+        525
+      ],
+      "state": "normal",
+      "frame_color": "#39ddeb"
+    },
+    {
+      "id": "eclipse",
+      "name": "Eclipse",
+      "class_name": "Sword Master",
+      "lineage": "Warrior",
+      "role": "attack",
+      "file": "icons/Icon_eclipse.png",
+      "action": "Enlarged magical sword completing a full circular sweep.",
+      "source_rect": [
+        317,
+        281,
+        624,
+        525
+      ],
+      "state": "normal",
+      "frame_color": "#39ddeb"
+    },
+    {
+      "id": "halfmoon_slash",
+      "name": "Halfmoon Slash",
+      "class_name": "Sword Master",
+      "lineage": "Warrior",
+      "role": "ultimate",
+      "file": "icons/Icon_halfmoon_slash.png",
+      "action": "Huge frontal melee sweep with an afterimage; normal state is not a projectile.",
+      "source_rect": [
+        630,
+        281,
+        937,
+        525
+      ],
+      "state": "normal",
+      "frame_color": "#b94462"
+    },
+    {
+      "id": "knights_guidance",
+      "name": "Knight’s Guidance",
+      "class_name": "Sword Master",
+      "lineage": "Warrior",
+      "role": "grace",
+      "file": "icons/Icon_knights_guidance.png",
+      "action": "Swift armored steps and guiding golden wind: movement and stamina support.",
+      "source_rect": [
+        943,
+        281,
+        1251,
+        525
+      ],
+      "state": "normal",
+      "frame_color": "#e6bd59"
+    },
+    {
+      "id": "stomp",
+      "name": "Stomp",
+      "class_name": "Mercenary",
+      "lineage": "Warrior",
+      "role": "signature",
+      "file": "icons/Icon_stomp.png",
+      "action": "Boot impact and concentric ground aftershocks.",
+      "source_rect": [
+        1257,
+        281,
+        1565,
+        525
+      ],
+      "state": "normal",
+      "frame_color": "#4f8ee9"
+    },
+    {
+      "id": "circle_swing",
+      "name": "Circle Swing",
+      "class_name": "Mercenary",
+      "lineage": "Warrior",
+      "role": "signature",
+      "file": "icons/Icon_circle_swing.png",
+      "action": "Fighter physically swinging a heavy weapon in a full circle.",
+      "source_rect": [
+        1571,
+        281,
+        1878,
+        525
+      ],
+      "state": "normal",
+      "frame_color": "#4f8ee9"
+    },
+    {
+      "id": "punishing_bomb",
+      "name": "Punishing Bomb",
+      "class_name": "Mercenary",
+      "lineage": "Warrior",
+      "role": "attack",
+      "file": "icons/Icon_punishing_bomb.png",
+      "action": "Thrown iron bomb exploding against ground; blunt impact with fire.",
+      "source_rect": [
+        3,
+        531,
+        311,
+        833
+      ],
+      "state": "normal",
+      "frame_color": "#39ddeb"
+    },
+    {
+      "id": "bonecrusher",
+      "name": "Bonecrusher",
+      "class_name": "Mercenary",
+      "lineage": "Warrior",
+      "role": "attack",
+      "file": "icons/Icon_bonecrusher.png",
+      "action": "Armored fighter landing bodily from a jump; no falling summoned hammer.",
+      "source_rect": [
+        317,
+        531,
+        624,
+        833
+      ],
+      "state": "normal",
+      "frame_color": "#39ddeb"
+    },
+    {
+      "id": "seismic_guillotine",
+      "name": "Seismic Guillotine",
+      "class_name": "Mercenary",
+      "lineage": "Warrior",
+      "role": "attack",
+      "file": "icons/Icon_seismic_guillotine.png",
+      "action": "Advancing line of ground fractures ending in an explosion; no guillotine blade.",
+      "source_rect": [
+        630,
+        531,
+        937,
+        833
+      ],
+      "state": "normal",
+      "frame_color": "#39ddeb"
+    },
+    {
+      "id": "whirlwind",
+      "name": "Whirlwind",
+      "class_name": "Mercenary",
+      "lineage": "Warrior",
+      "role": "ultimate",
+      "file": "icons/Icon_whirlwind.png",
+      "action": "Fighter actively spinning a weapon around their body.",
+      "source_rect": [
+        943,
+        531,
+        1251,
+        833
+      ],
+      "state": "normal",
+      "frame_color": "#b94462"
+    },
+    {
+      "id": "battlecry",
+      "name": "Battlecry",
+      "class_name": "Mercenary",
+      "lineage": "Warrior",
+      "role": "grace",
+      "file": "icons/Icon_battlecry.png",
+      "action": "Roaring fighter with outward rallying sound arcs.",
+      "source_rect": [
+        1257,
+        531,
+        1565,
+        833
+      ],
+      "state": "normal",
+      "frame_color": "#e6bd59"
+    },
+    {
+      "id": "lightning_zap",
+      "name": "Lightning Zap",
+      "class_name": "Cleric",
+      "lineage": "Cleric",
+      "role": "attack",
+      "file": "icons/Icon_lightning_zap.png",
+      "action": "Forward horizontal lightning cone from the caster; not a sky strike.",
+      "source_rect": [
+        3,
+        3,
+        253,
+        339
+      ],
+      "state": "normal",
+      "frame_color": "#39ddeb"
+    },
+    {
+      "id": "righteous_strike",
+      "name": "Righteous Strike",
+      "class_name": "Cleric",
+      "lineage": "Cleric",
+      "role": "attack",
+      "file": "icons/Icon_righteous_strike.png",
+      "action": "One vertical lightning pillar striking a ground target.",
+      "source_rect": [
+        259,
+        3,
+        509,
+        339
+      ],
+      "state": "normal",
+      "frame_color": "#39ddeb"
+    },
+    {
+      "id": "holy_wave",
+      "name": "Holy Wave",
+      "class_name": "Cleric",
+      "lineage": "Cleric",
+      "role": "support",
+      "file": "icons/Icon_holy_wave.png",
+      "action": "Outward healing wave from a raised hand and caster.",
+      "source_rect": [
+        515,
+        3,
+        765,
+        339
+      ],
+      "state": "normal",
+      "frame_color": "#62d88d"
+    },
+    {
+      "id": "goddess_relic",
+      "name": "Goddess Relic",
+      "class_name": "Paladin",
+      "lineage": "Cleric",
+      "role": "signature",
+      "file": "icons/Icon_goddess_relic.png",
+      "action": "Huge solid upright cross falling into the ground.",
+      "source_rect": [
+        771,
+        3,
+        1021,
+        339
+      ],
+      "state": "normal",
+      "frame_color": "#4f8ee9"
+    },
+    {
+      "id": "judgement_hammer",
+      "name": "Judgement Hammer",
+      "class_name": "Paladin",
+      "lineage": "Cleric",
+      "role": "signature",
+      "file": "icons/Icon_judgement_hammer.png",
+      "action": "Hammer flies forward horizontally while rotating vertically.",
+      "source_rect": [
+        1027,
+        3,
+        1277,
+        339
+      ],
+      "state": "normal",
+      "frame_color": "#4f8ee9"
+    },
+    {
+      "id": "shield_charge",
+      "name": "Shield Charge",
+      "class_name": "Paladin",
+      "lineage": "Cleric",
+      "role": "attack",
+      "file": "icons/Icon_shield_charge.png",
+      "action": "Armored fighter rushing forward behind a raised shield.",
+      "source_rect": [
+        1283,
+        3,
+        1533,
+        339
+      ],
+      "state": "normal",
+      "frame_color": "#39ddeb"
+    },
+    {
+      "id": "fallen_angel",
+      "name": "Angel Comet",
+      "class_name": "Paladin",
+      "lineage": "Cleric",
+      "role": "attack",
+      "file": "icons/Icon_fallen_angel.png",
+      "action": "Armored human diving headfirst like a comet; no angel creature.",
+      "source_rect": [
+        3,
+        345,
+        253,
+        681
+      ],
+      "state": "normal",
+      "frame_color": "#39ddeb"
+    },
+    {
+      "id": "ray_of_hope",
+      "name": "Ray of Hope",
+      "class_name": "Paladin",
+      "lineage": "Cleric",
+      "role": "support",
+      "file": "icons/Icon_ray_of_hope.png",
+      "action": "Raised hand releases a supportive healing and buff wave.",
+      "source_rect": [
+        259,
+        345,
+        509,
+        681
+      ],
+      "state": "normal",
+      "frame_color": "#62d88d"
+    },
+    {
+      "id": "electric_smite",
+      "name": "Electric Smite",
+      "class_name": "Paladin",
+      "lineage": "Cleric",
+      "role": "ultimate",
+      "file": "icons/Icon_electric_smite.png",
+      "action": "Acrobatic landing releases radial lightning trails along the ground, not from the sky.",
+      "source_rect": [
+        515,
+        345,
+        765,
+        681
+      ],
+      "state": "normal",
+      "frame_color": "#b94462"
+    },
+    {
+      "id": "heavens_light",
+      "name": "Heaven’s Light",
+      "class_name": "Paladin",
+      "lineage": "Cleric",
+      "role": "grace",
+      "file": "icons/Icon_heavens_light.png",
+      "action": "Defensive holy blessing surrounds allies.",
+      "source_rect": [
+        771,
+        345,
+        1021,
+        681
+      ],
+      "state": "normal",
+      "frame_color": "#e6bd59"
+    },
+    {
+      "id": "lightning_relic",
+      "name": "Lightning Relic",
+      "class_name": "Priest",
+      "lineage": "Cleric",
+      "role": "signature",
+      "file": "icons/Icon_lightning_relic.png",
+      "action": "Planted player-height cross pulsing blue electricity.",
+      "source_rect": [
+        1027,
+        345,
+        1277,
+        681
+      ],
+      "state": "normal",
+      "frame_color": "#4f8ee9"
+    },
+    {
+      "id": "holy_relic",
+      "name": "Holy Relic",
+      "class_name": "Priest",
+      "lineage": "Cleric",
+      "role": "support",
+      "file": "icons/Icon_holy_relic.png",
+      "action": "Planted player-height cross emitting healing rings.",
+      "source_rect": [
+        1283,
+        345,
+        1533,
+        681
+      ],
+      "state": "normal",
+      "frame_color": "#62d88d"
+    },
+    {
+      "id": "divine_intervention",
+      "name": "Divine Intervention",
+      "class_name": "Priest",
+      "lineage": "Cleric",
+      "role": "support",
+      "file": "icons/Icon_divine_intervention.png",
+      "action": "Protective holy burst around allies and a planted cross.",
+      "source_rect": [
+        3,
+        687,
+        253,
+        1021
+      ],
+      "state": "normal",
+      "frame_color": "#62d88d"
+    },
+    {
+      "id": "grand_cross",
+      "name": "Grand Cross",
+      "class_name": "Priest",
+      "lineage": "Cleric",
+      "role": "attack",
+      "file": "icons/Icon_grand_cross.png",
+      "action": "Two diagonal slashes form a forward-traveling X, not an upright cross.",
+      "source_rect": [
+        259,
+        687,
+        509,
+        1021
+      ],
+      "state": "normal",
+      "frame_color": "#39ddeb"
+    },
+    {
+      "id": "heavens_judgement",
+      "name": "Heaven’s Judgement",
+      "class_name": "Priest",
+      "lineage": "Cleric",
+      "role": "attack",
+      "file": "icons/Icon_heavens_judgement.png",
+      "action": "Multiple slender straight holy beams bombard a ground circle.",
+      "source_rect": [
+        515,
+        687,
+        765,
+        1021
+      ],
+      "state": "normal",
+      "frame_color": "#39ddeb"
+    },
+    {
+      "id": "lightning_tempest",
+      "name": "Lightning Tempest",
+      "class_name": "Priest",
+      "lineage": "Cleric",
+      "role": "ultimate",
+      "file": "icons/Icon_lightning_tempest.png",
+      "action": "Multiple jagged vertical sky bolts strike a storm area.",
+      "source_rect": [
+        771,
+        687,
+        1021,
+        1021
+      ],
+      "state": "normal",
+      "frame_color": "#b94462"
+    },
+    {
+      "id": "grand_sigil",
+      "name": "Heaven’s Crucible",
+      "class_name": "Priest",
+      "lineage": "Cleric",
+      "role": "grace",
+      "file": "icons/Icon_grand_sigil.png",
+      "action": "Strong luminous barrier encloses allied silhouettes.",
+      "source_rect": [
+        1027,
+        687,
+        1277,
+        1021
+      ],
+      "state": "normal",
+      "frame_color": "#e6bd59"
+    },
+    {
+      "id": "flame_burst",
+      "name": "Flame Burst",
+      "class_name": "Sorcerer",
+      "lineage": "Sorcerer",
+      "role": "attack",
+      "file": "icons/Icon_flame_burst.png",
+      "action": "Short forward cone of flame from the caster; not a fireball.",
+      "source_rect": [
+        3,
+        3,
+        253,
+        327
+      ],
+      "state": "normal",
+      "frame_color": "#39ddeb"
+    },
+    {
+      "id": "glacial_descent",
+      "name": "Glacial Descent",
+      "class_name": "Sorcerer",
+      "lineage": "Sorcerer",
+      "role": "attack",
+      "file": "icons/Icon_glacial_descent.png",
+      "action": "Massive chunk of ice descends from above and strikes the ground.",
+      "source_rect": [
+        259,
+        3,
+        509,
+        327
+      ],
+      "state": "normal",
+      "frame_color": "#39ddeb"
+    },
+    {
+      "id": "stonefang_eruption",
+      "name": "Stonefang Eruption",
+      "class_name": "Sorcerer",
+      "lineage": "Sorcerer",
+      "role": "attack",
+      "file": "icons/Icon_stonefang_eruption.png",
+      "action": "Natural jagged stone spikes rise out of the ground.",
+      "source_rect": [
+        515,
+        3,
+        765,
+        327
+      ],
+      "state": "normal",
+      "frame_color": "#39ddeb"
+    },
+    {
+      "id": "gravity_dominion",
+      "name": "Gravity Dominion",
+      "class_name": "Archmage",
+      "lineage": "Sorcerer",
+      "role": "signature",
+      "file": "icons/Icon_gravity_dominion.png",
+      "action": "Stationary circular gravity field pulls matter inward; not a traveling orb.",
+      "source_rect": [
+        771,
+        3,
+        1021,
+        327
+      ],
+      "state": "normal",
+      "frame_color": "#4f8ee9"
+    },
+    {
+      "id": "astral_greatblade",
+      "name": "Astral Greatblade",
+      "class_name": "Archmage",
+      "lineage": "Sorcerer",
+      "role": "attack",
+      "file": "icons/Icon_astral_greatblade.png",
+      "action": "Giant purple spectral sword extends from the casting weapon and slams down.",
+      "source_rect": [
+        1027,
+        3,
+        1277,
+        327
+      ],
+      "state": "normal",
+      "frame_color": "#39ddeb"
+    },
+    {
+      "id": "frost_nova",
+      "name": "Frost Nova",
+      "class_name": "Archmage",
+      "lineage": "Sorcerer",
+      "role": "attack",
+      "file": "icons/Icon_frost_nova.png",
+      "action": "Radial frost burst around the caster; not falling ice.",
+      "source_rect": [
+        1283,
+        3,
+        1533,
+        327
+      ],
+      "state": "normal",
+      "frame_color": "#39ddeb"
+    },
+    {
+      "id": "meteor_fall",
+      "name": "Meteor Fall",
+      "class_name": "Archmage",
+      "lineage": "Sorcerer",
+      "role": "signature",
+      "file": "icons/Icon_meteor_fall.png",
+      "action": "Single fiery rock descends onto a ground target; normal state has no secondary meteors.",
+      "source_rect": [
+        3,
+        333,
+        253,
+        652
+      ],
+      "state": "normal",
+      "frame_color": "#4f8ee9"
+    },
+    {
+      "id": "astral_railcannon",
+      "name": "Astral Railcannon",
+      "class_name": "Archmage",
+      "lineage": "Sorcerer",
+      "role": "attack",
+      "file": "icons/Icon_astral_railcannon.png",
+      "action": "Directed energy beam focused through rotating arcane rings; no mechanical cannon.",
+      "source_rect": [
+        259,
+        333,
+        509,
+        652
+      ],
+      "state": "normal",
+      "frame_color": "#39ddeb"
+    },
+    {
+      "id": "elemental_cataclysm",
+      "name": "Elemental Cataclysm",
+      "class_name": "Archmage",
+      "lineage": "Sorcerer",
+      "role": "ultimate",
+      "file": "icons/Icon_elemental_cataclysm.png",
+      "action": "Large multielement ground detonation, visually broader than Meteor Fall.",
+      "source_rect": [
+        515,
+        333,
+        765,
+        652
+      ],
+      "state": "normal",
+      "frame_color": "#b94462"
+    },
+    {
+      "id": "clockwork",
+      "name": "Clockwork",
+      "class_name": "Archmage",
+      "lineage": "Sorcerer",
+      "role": "grace",
+      "file": "icons/Icon_clockwork.png",
+      "action": "Clock face and time-magic rings communicate cooldown support.",
+      "source_rect": [
+        771,
+        333,
+        1021,
+        652
+      ],
+      "state": "normal",
+      "frame_color": "#e6bd59"
+    },
+    {
+      "id": "rift_echo",
+      "name": "Rift Echo",
+      "class_name": "Horizon Walker",
+      "lineage": "Sorcerer",
+      "role": "attack",
+      "file": "icons/Icon_rift_echo.png",
+      "action": "Portal behind an enemy fires a copied shot toward their back.",
+      "source_rect": [
+        1027,
+        333,
+        1277,
+        652
+      ],
+      "state": "normal",
+      "frame_color": "#39ddeb"
+    },
+    {
+      "id": "void_step",
+      "name": "Void Step",
+      "class_name": "Horizon Walker",
+      "lineage": "Sorcerer",
+      "role": "support",
+      "file": "icons/Icon_void_step.png",
+      "action": "Caster disappears and reappears between two spatial tears.",
+      "source_rect": [
+        1283,
+        333,
+        1533,
+        652
+      ],
+      "state": "normal",
+      "frame_color": "#62d88d"
+    },
+    {
+      "id": "arcane_phalanx",
+      "name": "Arcane Phalanx",
+      "class_name": "Horizon Walker",
+      "lineage": "Sorcerer",
+      "role": "signature",
+      "file": "icons/Icon_arcane_phalanx.png",
+      "action": "Four spectral swords hover around a mobile caster in the normal state.",
+      "source_rect": [
+        3,
+        658,
+        253,
+        1021
+      ],
+      "state": "normal",
+      "frame_color": "#4f8ee9"
+    },
+    {
+      "id": "afterimage_arsenal",
+      "name": "Afterimage Arsenal",
+      "class_name": "Horizon Walker",
+      "lineage": "Sorcerer",
+      "role": "signature",
+      "file": "icons/Icon_afterimage_arsenal.png",
+      "action": "Matching astral copies of the caster; normal copies are stationary, not followers.",
+      "source_rect": [
+        259,
+        658,
+        509,
+        1021
+      ],
+      "state": "normal",
+      "frame_color": "#4f8ee9"
+    },
+    {
+      "id": "gravity_blast",
+      "name": "Gravity Blast",
+      "class_name": "Horizon Walker",
+      "lineage": "Sorcerer",
+      "role": "attack",
+      "file": "icons/Icon_gravity_blast.png",
+      "action": "Traveling dark gravity orb with horizontal motion, distinct from Dominion.",
+      "source_rect": [
+        515,
+        658,
+        765,
+        1021
+      ],
+      "state": "normal",
+      "frame_color": "#39ddeb"
+    },
+    {
+      "id": "arcane_rupture",
+      "name": "Arcane Rupture",
+      "class_name": "Horizon Walker",
+      "lineage": "Sorcerer",
+      "role": "ultimate",
+      "file": "icons/Icon_arcane_rupture.png",
+      "action": "Localized spatial detonation over a circular ground target.",
+      "source_rect": [
+        771,
+        658,
+        1021,
+        1021
+      ],
+      "state": "normal",
+      "frame_color": "#b94462"
+    },
+    {
+      "id": "rift_walker",
+      "name": "Rift Walker",
+      "class_name": "Horizon Walker",
+      "lineage": "Sorcerer",
+      "role": "grace",
+      "file": "icons/Icon_rift_walker.png",
+      "action": "Two linked traversal portals.",
+      "source_rect": [
+        1027,
+        658,
+        1277,
+        1021
+      ],
+      "state": "normal",
+      "frame_color": "#e6bd59"
+    }
+  ],
+  "advancement_order": {
+    "Sword Master": [
+      "moonlight_splitter",
+      "crescent_cleave",
+      "blade_storm",
+      "frenzied_charge",
+      "eclipse"
+    ],
+    "Mercenary": [
+      "stomp",
+      "circle_swing",
+      "bonecrusher",
+      "seismic_guillotine",
+      "punishing_bomb"
+    ],
+    "Paladin": [
+      "goddess_relic",
+      "judgement_hammer",
+      "shield_charge",
+      "fallen_angel",
+      "ray_of_hope"
+    ],
+    "Priest": [
+      "lightning_relic",
+      "holy_relic",
+      "divine_intervention",
+      "grand_cross",
+      "heavens_judgement"
+    ],
+    "Archmage": [
+      "meteor_fall",
+      "gravity_dominion",
+      "astral_railcannon",
+      "astral_greatblade",
+      "frost_nova"
+    ],
+    "Horizon Walker": [
+      "arcane_phalanx",
+      "afterimage_arsenal",
+      "void_step",
+      "rift_echo",
+      "gravity_blast"
+    ]
+  }
+}
