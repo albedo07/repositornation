@@ -33,3 +33,8 @@ SWORD MASTER
 
 MERCENARY
 - Ascended Heavy Slash: 140 -> 90 Slash base (Tier 7 = 153).
+
+R2
+- Fixed the install compile error (Frenzied Charge: "Use of unassigned local variable 'floor'").
+- Framework doc updated: ruler, Halfmoon width + Ascended finisher, Frenzied Charge movement,
+  Ascended Heavy Slash damage.

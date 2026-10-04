@@ -2216,7 +2216,7 @@ namespace AlbedosCustomClassesAdvanced
                     float step = FrenzyStep(body, forward, requested);
                     Vector3 next = body.position + forward * step;
                     float climb = 0.6f + requested * 1.8f; // up to ~60 degree slopes per physics step
-                    RaycastHit floor;
+                    RaycastHit floor = new RaycastHit();
                     bool onSlope = !falling && Physics.Raycast(next + Vector3.up * (climb + 0.5f), Vector3.down, out floor, climb * 2f + 0.5f, ground, QueryTriggerInteraction.Ignore) &&
                         floor.collider.GetComponentInParent<Character>() == null;
                     if (onSlope)
