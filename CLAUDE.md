@@ -70,6 +70,7 @@
 - User rule: be short, no fluff, min-max tokens.
 
 ## Balance + Warrior/Sorcerer Ascensions (user decisions 2026-10-04)
+- Framework doc updated 2026-10-04 with all of this (Ascended lists for Sword Master / Mercenary / Priest / Wizard / Spellcaster, Punishing Bomb, burns, Zap 2s, Boss rule, Fallen Angel -> Angel Comet).
 - Plan file: `docs/design/BALANCE_HANDOFF_v2_RECONCILED.txt`. Authority: Framework + our discussions > user's approved Ascension list > old ChatGPT handoff numbers.
 - Universal (done v0.21.2): all burns deal the skill's own damage (no 3% current HP; legacy key off); Zap explodes after 2s (`ZapDelay_v0212`); Bosses never Stunned (central `DragonCombat.Stun` guard), can be slowed (50% strength, max 30%), pulled at 20%.
 - Cleric numbers (done v0.21.2): Hammer damage cap 5x (`MaxDamageMultiplier_v0212`), no size cap (hitbox keeps growing); Holy Relic 4%/pulse + Tier; DI Barrier armor 30%; Parry +35%; Ray of Hope heals by recipient Max HP; Ascended Tempest Wrath Zap instant (ApplyZap delay < 0); Ascended Heaven's Judgement beam heal stays 3%.
