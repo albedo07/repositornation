@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.23.0";
+        public const string ModVersion = "0.23.1";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -6151,6 +6151,8 @@ namespace AlbedosCustomClassesAdvanced
 
             if (_testingForceCooldowns.Value)
                 cooldown = Mathf.Max(0f, _testingCooldownSeconds.Value);
+            else
+                cooldown = DragonCombat.ScaleCooldown(Player.m_localPlayer, id, cooldown); // v0.23.1 Clockwork
 
             _cooldowns[id] = Time.time + Mathf.Max(0f, cooldown);
         }
@@ -6831,6 +6833,8 @@ namespace AlbedosCustomClassesAdvanced
         {
             if (_testingForceCooldowns.Value)
                 cooldown = Mathf.Max(0f, _testingCooldownSeconds.Value);
+            else
+                cooldown = DragonCombat.ScaleCooldown(player, id, cooldown); // v0.23.1 Clockwork
 
             float remaining = GetCooldownRemaining(id);
             if (remaining > 0f)
@@ -10634,6 +10638,7 @@ namespace AlbedosCustomClassesAdvanced
             IhAppendSwordMasterStats(b, player, id, ascended, power);
             IhAppendMercenaryStats(b, player, id, ascended, power);
             IhAppendSorcererStats(b, id, power);
+            IhAppendWizardStats(b, player, id, ascended, power);
             // v0.22.0: Warrior / Sorcerer skills list their approved Ascended effect until their
             // full stat tooltips come with each Advancement rework.
             string ascendedText = IhKitAscendedSummary(id);
@@ -10673,6 +10678,78 @@ namespace AlbedosCustomClassesAdvanced
                     b.Append(IhLine("Inflicts", "Stun (Small), Cripple " + IhNum(IhCfg(sk, "Sorcerer.Stonefang Eruption", "CrippleDuration", 6f)) + "s (Small, Big)"));
                     IhEitrCosts(b, IhCfg(sk, "Sorcerer.Stonefang Eruption", "EitrCost", 24f), IhNum(IhCfg(sk, "Sorcerer.Stonefang Eruption", "Windup", 0.8f)) + "s", IhCfg(sk, "Sorcerer.Stonefang Eruption", "Cooldown", 9f));
                     break;
+            }
+        }
+
+        // v0.23.1: Wizard stats (values live in the Sorcerer module).
+        private const string IhSorcGuid = "albedo.customclasses.sorcerer";
+
+        private static float IhW(string section, string key, float fallback)
+        {
+            return IhCfg(IhSorcGuid, section, key, fallback);
+        }
+
+        private static string IhSorcDamage(string section, float power)
+        {
+            return IhDamage(IhW(section, "Blunt", 0f), IhW(section, "Slash", 0f), IhW(section, "Pierce", 0f), IhW(section, "Fire", 0f),
+                IhW(section, "Frost", 0f), IhW(section, "Lightning", 0f), IhW(section, "Poison", 0f), IhW(section, "Spirit", 0f), power);
+        }
+
+        private void IhAppendWizardStats(System.Text.StringBuilder b, Player player, string id, bool ascended, float power)
+        {
+            switch (id)
+            {
+                case "gravity_dominion":
+                    b.Append(IhLine("Damage", IhSorcDamage("Wizard Gravity Dominion Damage", power) + " every " + IhNum(IhW("Wizard Gravity Dominion", "HitInterval", 1f)) + "s"));
+                    b.Append(IhLine("Radius", IhNum(ascended ? IhW("Wizard Gravity Dominion Ascended", "Radius", 10f) : IhW("Wizard Gravity Dominion", "Radius", 7f)) + "m"));
+                    b.Append(IhLine("Duration", IhNum(ascended ? IhW("Wizard Gravity Dominion Ascended", "Duration", 7f) : IhW("Wizard Gravity Dominion", "Duration", 5f)) + "s"));
+                    b.Append(IhLine("Inflicts", ascended ? "Expose; pulls Small fully, Big 40%, Bosses 20%; Cripple (Big)" : "Expose; pulls Small; Cripple (Big)"));
+                    if (ascended) b.Append(IhLine("End Blast", IhNum(IhW("Wizard Gravity Dominion Ascended", "EndBlastPercent", 25f)) + "% of the full skill, launches Small, Stuns Big"));
+                    IhEitrCosts(b, IhW("Wizard Gravity Dominion", "EitrCost", 35f), IhNum(IhW("Wizard Gravity Dominion", "Windup", 1f)) + "s", IhW("Wizard Gravity Dominion", "Cooldown", 14f));
+                    return;
+                case "astral_greatblade":
+                    b.Append(IhLine("Damage", IhSorcDamage("Wizard Astral Greatblade Damage", power) + (ascended ? ", 3 slams x " + IhNum(IhW("Wizard Astral Greatblade Ascended", "SlamPercent", 70f)) + "%" : ", up to 2x charged")));
+                    b.Append(IhLine("Area", IhNum(IhW("Wizard Astral Greatblade", "Range", 15f)) + "m x " + IhNum(IhW("Wizard Astral Greatblade", "Width", 2f)) + "m, along your aim"));
+                    b.Append(IhLine("Inflicts", "Stun (Small, Big), Spirit Burn " + IhNum(IhW("Wizard Astral Greatblade", "SpiritBurnDuration", 6f)) + "s"));
+                    IhEitrCosts(b, IhW("Wizard Astral Greatblade", "EitrCost", 35f), ascended ? IhNum(IhW("Wizard Astral Greatblade Ascended", "Windup", 1f)) + "s" : IhNum(IhW("Wizard Astral Greatblade", "Windup", 1f)) + "s + up to " + IhNum(IhW("Wizard Astral Greatblade", "AdditionalChargeTime", 2f)) + "s charge", IhW("Wizard Astral Greatblade", "Cooldown", 12f));
+                    return;
+                case "frost_nova":
+                    b.Append(IhLine("Damage", IhSorcDamage("Wizard Frost Nova Damage", power)));
+                    b.Append(IhLine("Radius", IhNum(IhW("Wizard Frost Nova", "Radius", 10f)) + "m around you"));
+                    if (ascended)
+                        b.Append(IhLine("Frost Aura", IhNum(IhW("Wizard Frost Nova Ascended", "AuraDuration", 6f)) + "s, 12 ticks x " + IhNum(IhW("Wizard Frost Nova Ascended", "TickPercent", 8f)) + "%, then " + IhNum(IhW("Wizard Frost Nova Ascended", "ExplosionPercent", 44f)) + "% + Freeze " + IhNum(IhW("Wizard Frost Nova Ascended", "FreezeDuration", 2f)) + "s"));
+                    else
+                        b.Append(IhLine("Inflicts", "Frost " + IhNum(IhW("Wizard Frost Nova", "FrostDuration", 8f)) + "s, Stun (Small), heavy stagger (Big)"));
+                    IhEitrCosts(b, IhW("Wizard Frost Nova", "EitrCost", 38f), IhNum(IhW("Wizard Frost Nova", "Windup", 1f)) + "s", IhW("Wizard Frost Nova", "Cooldown", 14f));
+                    return;
+                case "meteor_fall":
+                    b.Append(IhLine("Damage", IhSorcDamage("Wizard Meteor Fall Damage", power) + ", charged 120/140/160%"));
+                    b.Append(IhLine("Radius", IhNum(IhW("Wizard Meteor Fall", "Radius", 7f)) + "m, charged 110/120/130%"));
+                    b.Append(IhLine("Charge", "hold the key: 1 stack per second, max 3, cost paid once"));
+                    b.Append(IhLine("Inflicts", "Fire Burn " + IhNum(IhW("Wizard Meteor Fall", "FireBurnDuration", 6f)) + "s, heavy stagger"));
+                    IhEitrCosts(b, IhW("Wizard Meteor Fall", "EitrCost", 45f), IhNum(IhW("Wizard Meteor Fall", "Windup", 1.2f)) + "s + charge", IhW("Wizard Meteor Fall", "Cooldown", 18f));
+                    return;
+                case "astral_railcannon":
+                    b.Append(IhLine("Damage", IhNum(IhW("Wizard Astral Railcannon", "WeaponDamageMultiplier", 1.75f) * 100f * power) + "% of your Staff's damage" + (ascended ? ", beam 20 ticks x " + IhNum(IhW("Wizard Astral Railcannon Ascended", "TickPercent", 9f)) + "%" : "")));
+                    b.Append(IhLine("Area", "Laser AoE " + IhNum(IhW("Wizard Astral Railcannon", "Range", 50f)) + "m x " + IhNum(IhW("Wizard Astral Railcannon", "Width", 4f)) + "m, Free Aim"));
+                    if (ascended) b.Append(IhLine("Beam", "hold the key to steer it for up to " + IhNum(IhW("Wizard Astral Railcannon Ascended", "BeamDuration", 4f)) + "s"));
+                    IhEitrCosts(b, IhW("Wizard Astral Railcannon", "EitrCost", 65f), IhNum(ascended ? IhW("Wizard Astral Railcannon Ascended", "Windup", 1f) : IhW("Wizard Astral Railcannon", "Windup", 2.5f)) + "s", IhW("Wizard Astral Railcannon", "Cooldown", 22f));
+                    return;
+                case "elemental_cataclysm":
+                    b.Append(IhLine("Damage", IhSorcDamage("Wizard Elemental Cataclysm Damage", power) + ", up to " + IhNum(IhW("Wizard Elemental Cataclysm", "FullChargeMultiplier", 3f)) + "x charged"));
+                    b.Append(IhLine("Radius", IhNum(IhW("Wizard Elemental Cataclysm", "Radius", 10f)) + "m"));
+                    b.Append(IhLine("Charge", "hold the key up to " + IhNum(IhW("Wizard Elemental Cataclysm", "MaxChargeTime", 6f)) + "s"));
+                    b.Append(IhLine("Inflicts", "Expose " + IhNum(IhW("Wizard Elemental Cataclysm", "ExposeDuration", 15f)) + "s"));
+                    IhEitrCosts(b, IhW("Wizard Elemental Cataclysm", "EitrCost", 80f), "charge", IhW("Wizard Elemental Cataclysm", "Cooldown", 75f));
+                    return;
+                case "clockwork":
+                    b.Append(IhLine("Buff", "+" + IhNum(IhW("Wizard Clockwork", "SkillDamagePercent", 30f)) + "% Skill Damage, -" + IhNum(IhW("Wizard Clockwork", "CooldownReductionPercent", 50f)) + "% cooldown for skills that start their cooldown while active (not Graces)"));
+                    b.Append(IhLine("Radius", IhNum(IhW("Wizard Clockwork", "Radius", 10f)) + "m"));
+                    b.Append(IhLine("Duration", IhNum(IhW("Wizard Clockwork", "Duration", 22f)) + "s"));
+                    b.Append(IhLine("Cost", "None"));
+                    b.Append(IhLine("Wind Up Time", "Instant"));
+                    b.Append(IhLine("Cooldown", IhNum(IhW("Wizard Clockwork", "Cooldown", 600f) / 60f) + " min"));
+                    return;
             }
         }
 
@@ -10772,7 +10849,6 @@ namespace AlbedosCustomClassesAdvanced
         {
             switch (id)
             {
-                case "clockwork":
                 case "gravity_blast": case "rift_walker":
                     return true;
             }
@@ -10961,6 +11037,8 @@ namespace AlbedosCustomClassesAdvanced
             _graceLightRadius = Config.Bind("Paladin Heavens Light", "Radius", 10f, "Players within this radius when cast get the buff (snapshot).");
             _graceLightDefense = Config.Bind("Paladin Heavens Light", "OverallDefensePercent", 40f, "Overall Defense bonus (less damage taken).");
             DragonCombat.TreeHotbarProvider = IhUsesTreeHotbar;
+            DragonCombat.TreeSkillKeyHeldProvider = IhSkillKeyHeld;
+            DragonCombat.AscendedProvider = delegate(Player p, string skillId) { return p == Player.m_localPlayer && IsAscendedSkill(skillId); };
         }
 
         // Cleric before Advancement and Cleric -> Paladin use the Skill Tree hotbar.
@@ -10971,6 +11049,17 @@ namespace AlbedosCustomClassesAdvanced
                 return false;
             string advancement = GetAdvancement(player);
             return string.IsNullOrEmpty(advancement) || IhKitFor(GetClass(player), advancement) != null;
+        }
+
+        // v0.23.1: hold-to-charge skills (Meteor Fall, Astral Greatblade, Elemental Cataclysm).
+        private bool IhSkillKeyHeld(string id)
+        {
+            if (string.IsNullOrEmpty(id)) return false;
+            string[] layout = GetHotbarLayout();
+            for (int i = 0; i < layout.Length && i < BindGrace; i++)
+                if (layout[i] == id && _hotbarSlotKeys[i].Value != KeyCode.None && Input.GetKey(_hotbarSlotKeys[i].Value))
+                    return true;
+            return false;
         }
 
         private bool IhBindingPressed(int index)
@@ -11067,9 +11156,15 @@ namespace AlbedosCustomClassesAdvanced
                     if (SkillsPlugin.Instance != null)
                         SkillsPlugin.Instance.CastFromHotbar(player, id);
                     break;
+                case "glacial_descent":
+                    // v0.23.1: Wizard's Ascended MC lives in the Sorcerer module.
+                    if (IsAscendedSkill("glacial_descent") && GetAdvancement(player) == "Wizard" && DragonCombat.TryExternalCast(player, "glacial_descent_ascended"))
+                        break;
+                    if (SkillsPlugin.Instance != null)
+                        SkillsPlugin.Instance.CastFromHotbar(player, id);
+                    break;
                 case "impact_punch":
                 case "flame_burst":
-                case "glacial_descent":
                 case "stonefang_eruption":
                     if (SkillsPlugin.Instance != null)
                         SkillsPlugin.Instance.CastFromHotbar(player, id);
@@ -11168,7 +11263,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "knights_guidance": return GetCooldownRemaining("SwordMaster.KnightsGuidance");
                 case "impact_punch": return skills == null ? 0f : skills.GetCooldownForUi("Warrior.ImpactPunch");
                 case "flame_burst": return skills == null ? 0f : skills.GetCooldownForUi("Sorcerer.FlameBurst");
-                case "glacial_descent": return skills == null ? 0f : skills.GetCooldownForUi("Sorcerer.GlacialDescent");
+                case "glacial_descent": return Mathf.Max(skills == null ? 0f : skills.GetCooldownForUi("Sorcerer.GlacialDescent"), DragonCombat.ExternalCooldown("glacial_descent"));
                 case "stonefang_eruption": return skills == null ? 0f : skills.GetCooldownForUi("Sorcerer.StonefangEruption");
                 case "moonlight_splitter": return GetCooldownRemaining("SwordMaster.MoonlightSplitter");
                 case "crescent_cleave": return GetCooldownRemaining("SwordMaster.CrescentCleave");

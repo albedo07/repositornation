@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Dragon's Altar - Sorcerer Advancements";
-        public const string ModVersion = "0.23.0";
+        public const string ModVersion = "0.23.1";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -385,8 +385,8 @@ namespace DragonsAltarSorcerer
             _railWidth = Config.Bind("Wizard Astral Railcannon", "Width", 4f, "Beam width.");
             _railWindup = Config.Bind("Wizard Astral Railcannon", "Windup", 2.5f, "Deliberate cannon assembly time.");
 
-            _wizardHeldStaffEitrRegen = Config.Bind("Wizard Staff Weapon Mastery", "HeldStaffEitrRegenPercent_v0123", 20f, "Additional Eitr Regen while the Wizard is actually holding a Staff.");
-            _wizardHeldStaffFlatEitr = Config.Bind("Wizard Staff Weapon Mastery", "HeldStaffFlatEitr_v0123", 30f, "Flat Max Eitr while the Wizard is actually holding a Staff.");
+            _wizardHeldStaffEitrRegen = Config.Bind("Wizard Staff Weapon Mastery", "HeldStaffEitrRegenPercent_v0231", 0f, "Additional Eitr Regen while the Wizard is actually holding a Staff.");
+            _wizardHeldStaffFlatEitr = Config.Bind("Wizard Staff Weapon Mastery", "HeldStaffFlatEitr_v0231", 0f, "Flat Max Eitr while the Wizard is actually holding a Staff.");
             _wizardChargeThreshold = Config.Bind("Wizard Staff Charge", "SecondsPerStack_v0111", 2f, "Two seconds per charge stack. Maximum three stacks.");
             _wizardChargeBaseRadius = Config.Bind("Wizard Staff Charge", "BaseExplosionRadius", 2.5f, "Quick-release impact radius. Radius becomes exactly 2x at stack 1 and does not grow further.");
             _wizardChargeExtraEitrPerSecond = Config.Bind("Wizard Staff Charge", "EitrPerSecond_v0111", 10f, "Development rule: 1 Eitr per 0.1s while charging, stopping at 3 stacks.");
@@ -424,6 +424,7 @@ namespace DragonsAltarSorcerer
             _dualGunStaffAttackSpeedMultiplier = Config.Bind("Spellcaster Gun Staff", "DualAttackSpeedMultiplier_v0123", 2f, "Dual Gun Staves baseline: +100% Attack Speed. Example: 0.50s cadence becomes 0.25s.");
             _gunStaffFiringMoveBonus = Config.Bind("Spellcaster Gun Staff", "LegacyFiringMovementBonusPercent", 0f, "Legacy setting retained only for config compatibility. Firing no longer grants artificial movement speed.");
 
+            BindWizardV0231();
             _ruptureCharges = Mathf.Max(1, _ruptureMaxCharges.Value);
 
             try
@@ -639,7 +640,7 @@ namespace DragonsAltarSorcerer
                 DragonCombat.ApplyTimedBuff(player, "Sorcerer.AdvancementEitrRegen", 0.35f, 0f, 0f, 0f, 0f, 0f, advancementRegen, false);
 
             if (Time.time < _overchargeUntil)
-                DragonCombat.ApplyTimedBuff(player, "Wizard.Overcharge", 0.35f, 0f, 0f, 0f, 0f, 0f, 0.30f, false);
+                DragonCombat.ApplyTimedBuff(player, "Wizard.Overcharge", 0.35f, 0f, 0f, 0f, 0f, 0f, Mathf.Max(0f, _ocRegen.Value) / 100f, false);
 
             if (advancement == "Spellcaster")
             {
@@ -719,6 +720,8 @@ namespace DragonsAltarSorcerer
                 case "astral_greatblade": if (adv == "Wizard") CastAstralGreatblade(player); return true;
                 case "frost_nova": if (adv == "Wizard") CastFrostNova(player); return true;
                 case "elemental_cataclysm": if (adv == "Wizard") CastElementalCataclysm(player); return true;
+                case "clockwork": if (adv == "Wizard") CastClockwork(player); return true;
+                case "glacial_descent_ascended": if (adv == "Wizard") CastAscendedGlacial(player); return true;
                 case "arcane_phalanx": if (adv == "Spellcaster") CastArcanePhalanx(player); return true;
                 case "afterimage_arsenal": if (adv == "Spellcaster") CastAfterimageArsenal(player); return true;
                 case "void_step": if (adv == "Spellcaster") CastVoidStep(player); return true;
@@ -738,6 +741,8 @@ namespace DragonsAltarSorcerer
                 case "astral_greatblade": return CooldownRemaining("Wizard.AstralGreatblade");
                 case "frost_nova": return CooldownRemaining("Wizard.FrostNova");
                 case "elemental_cataclysm": return CooldownRemaining("Wizard.ElementalCataclysm");
+                case "clockwork": return CooldownRemaining("Wizard.Clockwork");
+                case "glacial_descent": return CooldownRemaining("Sorcerer.GlacialDescent");
                 case "arcane_phalanx": return CooldownRemaining("Spellcaster.ArcanePhalanx");
                 case "afterimage_arsenal": return CooldownRemaining("Spellcaster.AfterimageArsenal");
                 case "void_step": return CooldownRemaining("Spellcaster.VoidStep");
@@ -764,7 +769,7 @@ namespace DragonsAltarSorcerer
             for (int i = 0; i < targets.Count; i++)
             {
                 Deal(player, targets[i], 0f, 0f, 0f, 34f, 0f, 0f, 0f, 0f, 6f, false);
-                StartCoroutine(BurnRoutine(player, targets[i], false, 6f));
+                StartCoroutine(BurnRoutine(player, targets[i], false, 6f, 2f));
             }
             if (_enableVfx.Value) StartCoroutine(ConeVfx(origin, forward, DragonCombat.M(_flameRange.Value), _flameAngle.Value, new Color(1f, 0.28f, 0.05f, 0.95f)));
             ShowMessage("Flame Burst");
@@ -836,117 +841,397 @@ namespace DragonsAltarSorcerer
             ShowMessage("Stonefang Eruption");
         }
 
+        // =====================================================================================
+        // v0.23.1 WIZARD REWORK (Framework 3.1 + approved Ascensions). Damage lives in config
+        // sections "Wizard <Skill> Damage"; every skill scales with its Tier (+10% per Tier),
+        // Overcharge (+40% Magic Damage) and Clockwork (+30% Skill Damage, central runtime).
+        // =====================================================================================
+        private sealed class WizDamage
+        {
+            public ConfigEntry<float> Blunt, Slash, Pierce, Fire, Frost, Lightning, Poison, Spirit;
+        }
+
+        private WizDamage _gravityDmg, _bladeDmg, _novaDmg, _meteorDmg, _cataclysmDmg, _glacialAscDmg;
+        private ConfigEntry<float> _gravityWindup, _gravityTick, _gravityPull, _gravityExpose, _gravityCripple;
+        private ConfigEntry<float> _bladeWindup, _bladeBurnPercent, _bladeBurnSeconds;
+        private ConfigEntry<float> _novaWindup, _novaFrost;
+        private ConfigEntry<float> _meteorWindup, _meteorBurnPercent, _meteorBurnSeconds;
+        private ConfigEntry<float> _railShotMultiplier, _railRecoil;
+        private ConfigEntry<float> _cataclysmWindup, _cataclysmMaxMultiplier, _cataclysmExpose;
+        private ConfigEntry<float> _ocThreshold, _ocDuration, _ocBuffer, _ocWindup, _ocRegen, _ocMagic;
+        private ConfigEntry<float> _clockRadius, _clockDuration, _clockCooldown, _clockSkillDamage, _clockCdr;
+        private ConfigEntry<float> _gdAscRadius, _gdAscCore, _gdAscCoreDamage, _gdAscFreeze, _gdAscBossSlow, _gdAscCooldown, _gdAscEitr, _gdAscWindup, _gdAscRange;
+        private ConfigEntry<float> _mfAscPercent, _mfAscRadius, _mfAscGap, _mfAscSpread;
+        private ConfigEntry<float> _gvAscRadius, _gvAscDuration, _gvAscBig, _gvAscBoss, _gvAscBlast, _gvAscStun;
+        private ConfigEntry<float> _rcAscWindup, _rcAscDuration, _rcAscTick, _rcAscTickPercent;
+        private ConfigEntry<float> _gbAscWindup, _gbAscGap, _gbAscPercent;
+        private ConfigEntry<float> _fnAscDuration, _fnAscTickPercent, _fnAscBlast, _fnAscFreeze, _fnAscBossSlow;
+        private ConfigEntry<float> _ccAscDelay, _ccAscPercent;
+        private float _overchargeLockedUntil;
+
+        private WizDamage BindWizDamage(string section, float blunt, float slash, float pierce, float fire, float frost, float lightning, float poison, float spirit)
+        {
+            WizDamage d = new WizDamage();
+            d.Blunt = Config.Bind(section, "Blunt", blunt, "Blunt damage.");
+            d.Slash = Config.Bind(section, "Slash", slash, "Slash damage.");
+            d.Pierce = Config.Bind(section, "Pierce", pierce, "Pierce damage.");
+            d.Fire = Config.Bind(section, "Fire", fire, "Fire damage.");
+            d.Frost = Config.Bind(section, "Frost", frost, "Frost damage.");
+            d.Lightning = Config.Bind(section, "Lightning", lightning, "Lightning damage.");
+            d.Poison = Config.Bind(section, "Poison", poison, "Poison damage.");
+            d.Spirit = Config.Bind(section, "Spirit", spirit, "Spirit damage.");
+            return d;
+        }
+
+        private void BindWizardV0231()
+        {
+            const string g = "Wizard Gravity Dominion";
+            _gravityWindup = Config.Bind(g, "Windup", 1f, "Wind up.");
+            _gravityTick = Config.Bind(g, "HitInterval", 1f, "Seconds between pulses.");
+            _gravityPull = Config.Bind(g, "PullStrength", 7f, "Pull impulse on Small enemies per pulse.");
+            _gravityExpose = Config.Bind(g, "ExposeDuration", 5f, "Expose (refreshed while inside).");
+            _gravityCripple = Config.Bind(g, "CrippleDuration", 2f, "Cripple on Big enemies (refreshed while inside).");
+            _gravityDmg = BindWizDamage("Wizard Gravity Dominion Damage", 0f, 0f, 0f, 0f, 0f, 14f, 0f, 14f);
+            const string b = "Wizard Astral Greatblade";
+            _bladeWindup = Config.Bind(b, "Windup", 1f, "Quick release wind up (charging adds up to AdditionalChargeTime).");
+            _bladeBurnPercent = Config.Bind(b, "SpiritBurnPercentPerTick", 6f, "Spirit Burn: every 0.5s, % of the slam's Spirit damage.");
+            _bladeBurnSeconds = Config.Bind(b, "SpiritBurnDuration", 6f, "Spirit Burn duration.");
+            _bladeDmg = BindWizDamage("Wizard Astral Greatblade Damage", 55f, 62f, 0f, 0f, 0f, 0f, 0f, 48f);
+            const string n = "Wizard Frost Nova";
+            _novaWindup = Config.Bind(n, "Windup", 1f, "Wind up.");
+            _novaFrost = Config.Bind(n, "FrostDuration", 8f, "Frost on Small, Big and Boss.");
+            _novaDmg = BindWizDamage("Wizard Frost Nova Damage", 0f, 0f, 0f, 0f, 62f, 0f, 0f, 0f);
+            const string m = "Wizard Meteor Fall";
+            _meteorWindup = Config.Bind(m, "Windup", 1.2f, "Wind up before charging (hold the key to charge, 1 stack per second, max 3).");
+            _meteorBurnPercent = Config.Bind(m, "FireBurnPercentPerTick", 6f, "Fire Burn: every 0.5s, % of the meteor's Fire damage.");
+            _meteorBurnSeconds = Config.Bind(m, "FireBurnDuration", 6f, "Fire Burn duration.");
+            _meteorDmg = BindWizDamage("Wizard Meteor Fall Damage", 80f, 0f, 0f, 80f, 0f, 0f, 0f, 0f);
+            const string r = "Wizard Astral Railcannon";
+            _railShotMultiplier = Config.Bind(r, "WeaponDamageMultiplier", 1.75f, "The shot deals the held Staff's damage x this.");
+            _railRecoil = Config.Bind(r, "Recoil", 4.5f, "Backwards push on the Wizard.");
+            const string c = "Wizard Elemental Cataclysm";
+            _cataclysmWindup = Config.Bind(c, "MinimumWindup", 0.5f, "Quick release wind up.");
+            _cataclysmMaxMultiplier = Config.Bind(c, "FullChargeMultiplier", 3f, "Damage at full charge (scales continuously from 1x).");
+            _cataclysmExpose = Config.Bind(c, "ExposeDuration", 15f, "Expose: the only ailment.");
+            _cataclysmDmg = BindWizDamage("Wizard Elemental Cataclysm Damage", 55f, 55f, 55f, 55f, 55f, 55f, 55f, 0f);
+            const string o = "Wizard Overcharge";
+            _ocThreshold = Config.Bind(o, "EitrSpentToTrigger", 300f, "Eitr spent to activate Overcharge.");
+            _ocDuration = Config.Bind(o, "Duration", 12f, "Seconds active.");
+            _ocBuffer = Config.Bind(o, "AccumulationBuffer", 5f, "Seconds after it ends before Eitr spent counts again.");
+            _ocWindup = Config.Bind(o, "WindupSpeedPercent", 40f, "Faster wind up for long-cast skills.");
+            _ocRegen = Config.Bind(o, "EitrRegenPercent", 40f, "Eitr Regen while active.");
+            _ocMagic = Config.Bind(o, "MagicDamagePercent", 40f, "Magic Damage while active.");
+            const string k = "Wizard Clockwork";
+            _clockRadius = Config.Bind(k, "Radius", 10f, "Players within this radius at cast get Clockwork (snapshot).");
+            _clockDuration = Config.Bind(k, "Duration", 22f, "Seconds.");
+            _clockCooldown = Config.Bind(k, "Cooldown", 600f, "Seconds (10 min).");
+            _clockSkillDamage = Config.Bind(k, "SkillDamagePercent", 30f, "+Skill Damage.");
+            _clockCdr = Config.Bind(k, "CooldownReductionPercent", 50f, "Non-Grace cooldowns that START while active are this much shorter.");
+            const string ga = "Wizard Glacial Descent Ascended";
+            _gdAscRadius = Config.Bind(ga, "Radius", 8f, "Ascended radius.");
+            _gdAscCore = Config.Bind(ga, "CoreRadius", 3f, "Central radius: bigger hit + Freeze.");
+            _gdAscCoreDamage = Config.Bind(ga, "CoreDamagePercent", 135f, "Damage inside the core.");
+            _gdAscFreeze = Config.Bind(ga, "FreezeDuration", 1.5f, "Freeze inside the core.");
+            _gdAscBossSlow = Config.Bind(ga, "BossSlowPercent", 15f, "Bosses are slowed instead of Frozen.");
+            _gdAscCooldown = Config.Bind(ga, "Cooldown", 10f, "Seconds.");
+            _gdAscEitr = Config.Bind(ga, "EitrCost", 28f, "Eitr cost.");
+            _gdAscWindup = Config.Bind(ga, "Windup", 1f, "Wind up.");
+            _gdAscRange = Config.Bind(ga, "GroundPACRange", 50f, "Ground PAC range.");
+            _glacialAscDmg = BindWizDamage("Wizard Glacial Descent Ascended Damage", 34f, 0f, 0f, 0f, 42f, 0f, 0f, 0f);
+            const string ma = "Wizard Meteor Fall Ascended";
+            _mfAscPercent = Config.Bind(ma, "SmallMeteorPercent", 12f, "Each small meteor: % of the charged main meteor.");
+            _mfAscRadius = Config.Bind(ma, "SmallMeteorRadius", 3f, "Small meteor radius.");
+            _mfAscGap = Config.Bind(ma, "Interval", 0.25f, "Seconds between small meteors (3, or 5 at full charge).");
+            _mfAscSpread = Config.Bind(ma, "Spread", 5f, "Distance of the small meteors from the target point.");
+            const string gva = "Wizard Gravity Dominion Ascended";
+            _gvAscRadius = Config.Bind(gva, "Radius", 10f, "Ascended radius.");
+            _gvAscDuration = Config.Bind(gva, "Duration", 7f, "Seconds.");
+            _gvAscBig = Config.Bind(gva, "BigPullPercent", 40f, "Pull strength on Big enemies.");
+            _gvAscBoss = Config.Bind(gva, "BossPullPercent", 20f, "Pull strength on Bosses.");
+            _gvAscBlast = Config.Bind(gva, "EndBlastPercent", 25f, "End explosion: % of the normal skill's full damage.");
+            _gvAscStun = Config.Bind(gva, "BigStunSeconds", 1.5f, "End explosion Stuns Big (Small are launched).");
+            const string ra = "Wizard Astral Railcannon Ascended";
+            _rcAscWindup = Config.Bind(ra, "Windup", 1f, "Ascended wind up.");
+            _rcAscDuration = Config.Bind(ra, "BeamDuration", 4f, "Hold the key to keep the beam (release ends it).");
+            _rcAscTick = Config.Bind(ra, "TickInterval", 0.2f, "Seconds between beam ticks (20 ticks over 4s).");
+            _rcAscTickPercent = Config.Bind(ra, "TickPercent", 9f, "Each tick: % of the normal shot.");
+            const string ba = "Wizard Astral Greatblade Ascended";
+            _gbAscWindup = Config.Bind(ba, "Windup", 1f, "Ascended wind up (no charging).");
+            _gbAscGap = Config.Bind(ba, "SlamInterval", 1f, "Seconds between the three slams.");
+            _gbAscPercent = Config.Bind(ba, "SlamPercent", 70f, "Each slam: % of the uncharged slam (re-aimed at the crosshair).");
+            const string na = "Wizard Frost Nova Ascended";
+            _fnAscDuration = Config.Bind(na, "AuraDuration", 6f, "Frost Aura on the Wizard (12 ticks).");
+            _fnAscTickPercent = Config.Bind(na, "TickPercent", 8f, "Each aura tick: % of the normal Nova.");
+            _fnAscBlast = Config.Bind(na, "ExplosionPercent", 44f, "Final explosion: % of the normal Nova.");
+            _fnAscFreeze = Config.Bind(na, "FreezeDuration", 2f, "Explosion Freezes Small and Big.");
+            _fnAscBossSlow = Config.Bind(na, "BossSlowPercent", 15f, "Bosses are slowed instead of Frozen.");
+            const string ca = "Wizard Elemental Cataclysm Ascended";
+            _ccAscDelay = Config.Bind(ca, "SecondBombardmentDelay", 1.5f, "Seconds after the first.");
+            _ccAscPercent = Config.Bind(ca, "SecondBombardmentPercent", 60f, "% of the first (charged) bombardment.");
+        }
+
+        private bool IsWizAscended(Player player, string id)
+        {
+            return DragonCombat.IsSkillAscended(player, id);
+        }
+
+        // Hold-to-charge: the tree hotbar key of the skill, or the legacy M4+key.
+        private bool SkillKeyHeld(Player player, string id, KeyCode legacy)
+        {
+            if (DragonCombat.IsTreeHotbarActive(player))
+                return DragonCombat.IsTreeSkillKeyHeld(id);
+            return Input.GetKey(_modifier.Value) && Input.GetKey(legacy);
+        }
+
+        private void DealWiz(Player attacker, Character target, WizDamage d, float multiplier, string skillId, float push, bool stagger)
+        {
+            if (d == null) return;
+            float m = Mathf.Max(0f, multiplier) * DragonCombat.GetSkillPower(attacker, skillId);
+            Deal(attacker, target, d.Blunt.Value * m, d.Slash.Value * m, d.Pierce.Value * m, d.Fire.Value * m, d.Frost.Value * m, d.Lightning.Value * m, d.Poison.Value * m, d.Spirit.Value * m, push, stagger);
+        }
+
+        private static float WizTotal(WizDamage d)
+        {
+            return d.Blunt.Value + d.Slash.Value + d.Pierce.Value + d.Fire.Value + d.Frost.Value + d.Lightning.Value + d.Poison.Value + d.Spirit.Value;
+        }
+
+        // ------------------------------------------------------------------ Gravity Dominion
         private void CastGravityDominion(Player player)
         {
             Vector3 target;
-            if (!AlbedoAimUtility.TryGetPhysicalTarget(player, 50f, out target)) { ShowMessage("Aim at a physical target"); return; }
+            if (!AlbedoAimUtility.TryGetPhysicalTarget(player, DragonCombat.M(50f), out target)) { ShowMessage("Aim at a physical target"); return; }
             if (!BeginSkill(player, "Wizard.GravityDominion", _gravityCooldown.Value, _gravityEitr.Value)) return;
-            float windup = ScaleWindup(player, 1f);
+            float windup = ScaleWindup(player, Mathf.Max(0f, _gravityWindup.Value));
             DragonCombat.LockSkill(player, windup);
             DragonCombat.PlaySkillPose(player, "Channel", windup + 0.10f);
-            StartCoroutine(GravityRoutine(player, target, windup));
+            StartCoroutine(GravityRoutine(player, target, windup, IsWizAscended(player, "gravity_dominion")));
         }
 
-        private IEnumerator GravityRoutine(Player player, Vector3 center, float windup)
+        private IEnumerator GravityRoutine(Player player, Vector3 center, float windup, bool ascended)
         {
+            ShowMessage("Gravity Dominion");
             if (windup > 0f) yield return new WaitForSeconds(windup);
-            float end = Time.time + _gravityDuration.Value;
-            while (Time.time < end)
+            float radius = DragonCombat.M(ascended ? _gvAscRadius.Value : _gravityRadius.Value);
+            float duration = ascended ? _gvAscDuration.Value : _gravityDuration.Value;
+            float tick = Mathf.Max(0.2f, _gravityTick.Value);
+            float end = Time.time + Mathf.Max(0.5f, duration);
+            while (Time.time < end && player != null)
             {
-                List<Character> targets = GetSphereTargets(player, center, DragonCombat.M(_gravityRadius.Value));
+                List<Character> targets = GetSphereTargets(player, center, radius);
                 for (int i = 0; i < targets.Count; i++)
                 {
                     Character enemy = targets[i];
-                    DragonCombat.ApplyExpose(enemy, 5f);
-                    if (DragonCombat.IsSmallEnemy(enemy)) PullToward(enemy, center, 7f);
-                    else if (!IsBoss(enemy)) DragonCombat.ApplyCripple(enemy, 6f);
-                    Deal(player, enemy, 0f, 0f, 0f, 0f, 0f, 14f, 0f, 14f, 2f, false);
+                    DragonCombat.ApplyExpose(enemy, _gravityExpose.Value);
+                    bool small = DragonCombat.IsSmallEnemy(enemy);
+                    bool boss = IsBoss(enemy);
+                    if (small) PullToward(enemy, center, _gravityPull.Value);
+                    else if (ascended) PullToward(enemy, center, _gravityPull.Value * (boss ? _gvAscBoss.Value : _gvAscBig.Value) / 100f);
+                    if (!small && !boss) DragonCombat.ApplyCripple(enemy, _gravityCripple.Value);
+                    DealWiz(player, enemy, _gravityDmg, 1f, "gravity_dominion", 2f, false);
                 }
-                if (_enableVfx.Value) StartCoroutine(RingVfx(center, DragonCombat.M(_gravityRadius.Value), new Color(0.45f, 0.12f, 0.75f, 0.85f), 0.85f));
-                yield return new WaitForSeconds(1f);
+                if (_enableVfx.Value) StartCoroutine(RingVfx(center, radius, new Color(0.45f, 0.12f, 0.75f, 0.85f), Mathf.Min(0.85f, tick)));
+                yield return new WaitForSeconds(tick);
             }
-            ShowMessage("Gravity Dominion");
+            if (!ascended || player == null) yield break;
+            // Ascended end blast: % of the normal skill's FULL damage (every normal pulse together).
+            float fullPulses = Mathf.Max(1f, _gravityDuration.Value / tick);
+            List<Character> hit = GetSphereTargets(player, center, radius);
+            for (int i = 0; i < hit.Count; i++)
+            {
+                Character enemy = hit[i];
+                DealWiz(player, enemy, _gravityDmg, fullPulses * _gvAscBlast.Value / 100f, "gravity_dominion", 12f, true);
+                if (DragonCombat.IsSmallEnemy(enemy))
+                {
+                    Rigidbody body = enemy.GetComponent<Rigidbody>();
+                    if (body != null) body.AddForce(Vector3.up * 9f + (enemy.transform.position - center).normalized * 4f, ForceMode.VelocityChange);
+                }
+                else if (!IsBoss(enemy)) DragonCombat.Freeze(enemy, _gvAscStun.Value, 0f);
+            }
+            if (_enableVfx.Value) { StartCoroutine(RingVfx(center, radius, new Color(0.75f, 0.30f, 1f, 1f), 0.6f)); CreateLightningBurst(center, radius); }
         }
 
+        // ------------------------------------------------------------------ Astral Greatblade
         private void CastAstralGreatblade(Player player)
         {
-            if (CooldownRemaining("Wizard.AstralGreatblade") > 0f) { ShowCooldown("Wizard.AstralGreatblade"); return; }
-            if (!SpendEitr(player, _bladeEitr.Value)) { ShowMessage("Not enough Eitr"); return; }
-            StartCooldown("Wizard.AstralGreatblade", _bladeCooldown.Value);
-            StartCoroutine(AstralGreatbladeRoutine(player));
+            if (!BeginSkill(player, "Wizard.AstralGreatblade", _bladeCooldown.Value, _bladeEitr.Value)) return;
+            if (IsWizAscended(player, "astral_greatblade")) StartCoroutine(AscendedGreatbladeRoutine(player));
+            else StartCoroutine(AstralGreatbladeRoutine(player));
+        }
+
+        private Vector3 GreatbladeDirection(Player player)
+        {
+            Vector3 aim = AlbedoAimUtility.GetProjectileDirection(player, player.GetEyePoint());
+            aim.y = 0f; // slammed down along the crosshair's horizontal aim, not the body's facing
+            return aim.sqrMagnitude < 0.01f ? FlatForward(player) : aim.normalized;
         }
 
         private IEnumerator AstralGreatbladeRoutine(Player player)
         {
-            float baseWindup = ScaleWindup(player, 1f);
-            DragonCombat.LockSkill(player, baseWindup);
+            ShowMessage("Astral Greatblade");
+            float baseWindup = ScaleWindup(player, Mathf.Max(0f, _bladeWindup.Value));
+            DragonCombat.LockSkill(player, baseWindup + 0.1f);
             DragonCombat.PlaySkillPose(player, "HeavySlash", baseWindup + 0.10f);
-            yield return new WaitForSeconds(baseWindup);
-
+            if (baseWindup > 0f) yield return new WaitForSeconds(baseWindup);
             float charged = 0f;
             float max = Mathf.Max(0.1f, _bladeChargeMax.Value);
-            while (Input.GetKey(_modifier.Value) && Input.GetKey(_skill5.Value) && charged < max)
+            while (player != null && SkillKeyHeld(player, "astral_greatblade", _skill5.Value) && charged < max)
             {
                 DragonCombat.LockSkill(player, 0.12f);
+                DragonCombat.PlaySkillPose(player, "HeavySlash", 0.12f);
                 charged += Time.deltaTime;
                 if (_enableVfx.Value && ((int)(charged * 10f) % 3 == 0)) StartCoroutine(RingVfx(player.transform.position, 1.5f + charged, new Color(0.62f, 0.18f, 1f, 0.65f), 0.15f));
                 yield return null;
             }
-
-            float multiplier = 1f + Mathf.Clamp01(charged / max);
-            Vector3 forward = FlatForward(player);
-            List<Character> targets = GetBoxTargets(player, player.transform.position + Vector3.up, forward, DragonCombat.M(_bladeRange.Value), DragonCombat.M(_bladeWidth.Value));
-            for (int i = 0; i < targets.Count; i++)
-            {
-                Deal(player, targets[i], 55f * multiplier, 62f * multiplier, 0f, 0f, 0f, 0f, 0f, 48f * multiplier, 32f, true);
-                StartCoroutine(BurnRoutine(player, targets[i], true, 6f));
-                DragonCombat.Stun(targets[i], player.transform.position);
-            }
-            if (_enableVfx.Value) StartCoroutine(GreatbladeVfx(player.transform.position, forward, DragonCombat.M(_bladeRange.Value), DragonCombat.M(_bladeWidth.Value)));
-            ShowMessage("Astral Greatblade x" + multiplier.ToString("0.0"));
+            if (player == null || player.IsDead()) yield break;
+            GreatbladeSlam(player, 1f + Mathf.Clamp01(charged / max));
         }
 
+        private void GreatbladeSlam(Player player, float multiplier)
+        {
+            Vector3 forward = GreatbladeDirection(player);
+            float range = DragonCombat.M(_bladeRange.Value);
+            float width = DragonCombat.M(_bladeWidth.Value);
+            List<Character> targets = GetBoxTargets(player, player.transform.position + Vector3.up, forward, range, width);
+            float burn = _bladeDmg.Spirit.Value * multiplier * DragonCombat.GetSkillPower(player, "astral_greatblade") * _bladeBurnPercent.Value / 100f;
+            for (int i = 0; i < targets.Count; i++)
+            {
+                DealWiz(player, targets[i], _bladeDmg, multiplier, "astral_greatblade", 32f, true);
+                StartCoroutine(BurnRoutine(player, targets[i], true, _bladeBurnSeconds.Value, burn));
+                DragonCombat.Stun(targets[i], player.transform.position);
+            }
+            if (_enableVfx.Value) StartCoroutine(GreatbladeVfx(player.transform.position, forward, range, width));
+        }
+
+        private IEnumerator AscendedGreatbladeRoutine(Player player)
+        {
+            ShowMessage("Astral Greatblade");
+            float windup = ScaleWindup(player, Mathf.Max(0f, _gbAscWindup.Value));
+            DragonCombat.LockSkill(player, windup + 0.1f);
+            DragonCombat.PlaySkillPose(player, "HeavySlash", windup + 0.10f);
+            if (windup > 0f) yield return new WaitForSeconds(windup);
+            for (int slam = 0; slam < 3; slam++)
+            {
+                if (player == null || player.IsDead()) yield break;
+                DragonCombat.PlaySkillPose(player, "HeavySlash", 0.35f);
+                GreatbladeSlam(player, _gbAscPercent.Value / 100f);
+                if (slam < 2) yield return new WaitForSeconds(Mathf.Max(0.1f, _gbAscGap.Value));
+            }
+        }
+
+        // ------------------------------------------------------------------ Frost Nova
         private void CastFrostNova(Player player)
         {
             if (!BeginSkill(player, "Wizard.FrostNova", _novaCooldown.Value, _novaEitr.Value)) return;
-            float windup = ScaleWindup(player, 1f);
+            bool ascended = IsWizAscended(player, "frost_nova");
+            float windup = ScaleWindup(player, Mathf.Max(0f, _novaWindup.Value));
             DragonCombat.LockSkill(player, windup);
             DragonCombat.PlaySkillPose(player, "Wave", windup + 0.10f);
-            StartCoroutine(FrostNovaRoutine(player, windup));
+            StartCoroutine(ascended ? FrostAuraRoutine(player, windup) : FrostNovaRoutine(player, windup));
         }
 
         private IEnumerator FrostNovaRoutine(Player player, float windup)
         {
+            ShowMessage("Frost Nova");
             if (windup > 0f) yield return new WaitForSeconds(windup);
-            List<Character> targets = GetSphereTargets(player, player.transform.position, DragonCombat.M(_novaRadius.Value));
+            if (player == null) yield break;
+            float radius = DragonCombat.M(_novaRadius.Value);
+            List<Character> targets = GetSphereTargets(player, player.transform.position, radius);
             for (int i = 0; i < targets.Count; i++)
             {
                 Character enemy = targets[i];
-                Deal(player, enemy, 0f, 0f, 0f, 0f, 62f, 0f, 0f, 0f, 18f, false);
-                DragonCombat.ApplyFrost(enemy, 8f);
+                DealWiz(player, enemy, _novaDmg, 1f, "frost_nova", 18f, false);
+                DragonCombat.ApplyFrost(enemy, _novaFrost.Value);
                 if (DragonCombat.IsSmallEnemy(enemy)) DragonCombat.Stun(enemy, player.transform.position);
-                else ForceStagger(enemy, player.transform.position);
+                else if (!IsBoss(enemy)) { ForceStagger(enemy, player.transform.position); DragonCombat.ApplyCripple(enemy, 3f); }
             }
-            if (_enableVfx.Value) StartCoroutine(RingVfx(player.transform.position, DragonCombat.M(_novaRadius.Value), new Color(0.48f, 0.90f, 1f, 0.95f), 0.8f));
-            ShowMessage("Frost Nova");
+            if (_enableVfx.Value) StartCoroutine(RingVfx(player.transform.position, radius, new Color(0.48f, 0.90f, 1f, 0.95f), 0.8f));
         }
 
+        // Ascended: a 10m Frost Aura on the Wizard (12 ticks), then an explosion that Freezes.
+        private IEnumerator FrostAuraRoutine(Player player, float windup)
+        {
+            ShowMessage("Frost Nova - Frost Aura");
+            if (windup > 0f) yield return new WaitForSeconds(windup);
+            float radius = DragonCombat.M(_novaRadius.Value);
+            int ticks = 12;
+            float gap = Mathf.Max(0.1f, _fnAscDuration.Value / ticks);
+            for (int t = 0; t < ticks; t++)
+            {
+                if (player == null || player.IsDead()) yield break;
+                List<Character> targets = GetSphereTargets(player, player.transform.position, radius);
+                for (int i = 0; i < targets.Count; i++)
+                {
+                    DealWiz(player, targets[i], _novaDmg, _fnAscTickPercent.Value / 100f, "frost_nova", 0f, false);
+                    DragonCombat.ApplyFrost(targets[i], Mathf.Max(1f, gap * 2f));
+                }
+                if (_enableVfx.Value) StartCoroutine(RingVfx(player.transform.position, radius, new Color(0.55f, 0.92f, 1f, 0.55f), gap));
+                yield return new WaitForSeconds(gap);
+            }
+            if (player == null || player.IsDead()) yield break;
+            List<Character> hit = GetSphereTargets(player, player.transform.position, radius);
+            for (int i = 0; i < hit.Count; i++)
+            {
+                DealWiz(player, hit[i], _novaDmg, _fnAscBlast.Value / 100f, "frost_nova", 18f, false);
+                DragonCombat.Freeze(hit[i], _fnAscFreeze.Value, _fnAscBossSlow.Value / 100f);
+            }
+            if (_enableVfx.Value) StartCoroutine(RingVfx(player.transform.position, radius, new Color(0.70f, 0.97f, 1f, 1f), 0.8f));
+        }
+
+        // ------------------------------------------------------------------ Meteor Fall
         private void CastMeteorFall(Player player)
         {
             Vector3 target;
             if (!AlbedoAimUtility.TryGetPhysicalTarget(player, DragonCombat.M(_meteorRange.Value), out target)) { ShowMessage("Aim at a physical target"); return; }
-            if (!BeginSkill(player, "Wizard.MeteorFall", _meteorCooldown.Value, _meteorEitr.Value)) return;
-            float windup = ScaleWindup(player, 1.2f);
-            DragonCombat.LockSkill(player, windup);
+            if (!BeginSkill(player, "Wizard.MeteorFall", _meteorCooldown.Value, _meteorEitr.Value)) return; // cost paid once
+            float windup = ScaleWindup(player, Mathf.Max(0f, _meteorWindup.Value));
+            DragonCombat.LockSkill(player, windup + 0.1f);
             DragonCombat.PlaySkillPose(player, "SkyCast", windup + 0.10f);
             StartCoroutine(MeteorRoutine(player, target, windup));
         }
 
         private IEnumerator MeteorRoutine(Player player, Vector3 target, float windup)
         {
+            ShowMessage("Meteor Fall");
             if (windup > 0f) yield return new WaitForSeconds(windup);
+            // Hold to charge: 1 stack per second, max 3 (120/140/160% damage, 110/120/130% radius).
+            float charged = 0f;
+            int stacks = 0;
+            while (player != null && !player.IsDead() && stacks < 3 && SkillKeyHeld(player, "meteor_fall", _skill7.Value))
+            {
+                DragonCombat.LockSkill(player, 0.12f);
+                DragonCombat.PlaySkillPose(player, "SkyCast", 0.12f);
+                charged += Time.deltaTime;
+                int now = Mathf.Min(3, Mathf.FloorToInt(charged));
+                if (now > stacks) { stacks = now; ShowMessage("Meteor Fall " + stacks + "/3"); if (_enableVfx.Value) StartCoroutine(RingVfx(target, DragonCombat.M(_meteorRadius.Value) * (1f + 0.1f * stacks), new Color(1f, 0.45f, 0.10f, 0.75f), 0.4f)); }
+                yield return null;
+            }
+            if (player == null || player.IsDead()) yield break;
+            float damageMul = 1f + 0.2f * stacks;
+            float radius = DragonCombat.M(_meteorRadius.Value) * (1f + 0.1f * stacks);
+            yield return StartCoroutine(MeteorImpact(player, target, radius, damageMul, 2.4f * (1f + 0.15f * stacks)));
+            if (player == null || !IsWizAscended(player, "meteor_fall")) yield break;
+            // Ascended: 3 smaller meteors (5 at full charge) around the target, 12% of the charged main each.
+            int count = stacks >= 3 ? 5 : 3;
+            float small = DragonCombat.M(_mfAscRadius.Value);
+            float spread = DragonCombat.M(_mfAscSpread.Value);
+            float start = UnityEngine.Random.Range(0f, 360f);
+            for (int i = 0; i < count; i++)
+            {
+                float a = (start + 360f / count * i) * Mathf.Deg2Rad;
+                Vector3 p = target + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * spread;
+                RaycastHit floor;
+                if (Physics.Raycast(p + Vector3.up * 20f, Vector3.down, out floor, 40f, LayerMask.GetMask("Default", "static_solid", "Default_small", "piece", "terrain"), QueryTriggerInteraction.Ignore))
+                    p = floor.point;
+                if (_enableVfx.Value) StartCoroutine(RingVfx(p, small, new Color(1f, 0.35f, 0.05f, 0.85f), 0.5f)); // landing marker
+                StartCoroutine(MeteorImpact(player, p, small, damageMul * _mfAscPercent.Value / 100f, 1.1f));
+                yield return new WaitForSeconds(Mathf.Max(0.05f, _mfAscGap.Value));
+            }
+        }
+
+        private IEnumerator MeteorImpact(Player player, Vector3 target, float radius, float multiplier, float size)
+        {
             Vector3 sky = DragonCombat.GetIndoorSafeSkyPoint(target, 12f);
-            GameObject meteor = _enableVfx.Value ? CreateMeteor(sky) : null;
+            GameObject meteor = _enableVfx.Value ? CreateOrb(sky, size, new Color(1f, 0.20f, 0.02f, 1f)) : null;
             float drop = 0.45f;
             float e = 0f;
             while (e < drop)
@@ -956,26 +1241,27 @@ namespace DragonsAltarSorcerer
                 yield return null;
             }
             if (meteor != null) Destroy(meteor);
-            List<Character> targets = GetSphereTargets(player, target, DragonCombat.M(_meteorRadius.Value));
+            if (player == null) yield break;
+            float burn = _meteorDmg.Fire.Value * multiplier * DragonCombat.GetSkillPower(player, "meteor_fall") * _meteorBurnPercent.Value / 100f;
+            List<Character> targets = GetSphereTargets(player, target, radius);
             for (int i = 0; i < targets.Count; i++)
             {
-                Deal(player, targets[i], 80f, 0f, 0f, 80f, 0f, 0f, 0f, 0f, 35f, true);
-                StartCoroutine(BurnRoutine(player, targets[i], false, 6f));
+                DealWiz(player, targets[i], _meteorDmg, multiplier, "meteor_fall", 35f, true);
+                StartCoroutine(BurnRoutine(player, targets[i], false, _meteorBurnSeconds.Value, burn));
                 ForceStagger(targets[i], target);
             }
-            if (_enableVfx.Value) StartCoroutine(RingVfx(target, DragonCombat.M(_meteorRadius.Value), new Color(1f, 0.22f, 0.02f, 1f), 0.75f));
-            ShowMessage("Meteor Fall");
+            if (_enableVfx.Value) StartCoroutine(RingVfx(target, radius, new Color(1f, 0.22f, 0.02f, 1f), 0.75f));
         }
 
-
+        // ------------------------------------------------------------------ Astral Railcannon
         private void CastAstralRailcannon(Player player)
         {
-            if (!BeginSkill(player, "Wizard.AstralRailcannon", _railCooldown.Value, _railEitr.Value))
-                return;
-            float windup = ScaleWindup(player, Mathf.Max(0.5f, _railWindup.Value));
+            if (!BeginSkill(player, "Wizard.AstralRailcannon", _railCooldown.Value, _railEitr.Value)) return;
+            bool ascended = IsWizAscended(player, "astral_railcannon");
+            float windup = ScaleWindup(player, Mathf.Max(0.2f, ascended ? _rcAscWindup.Value : _railWindup.Value));
             DragonCombat.LockSkill(player, windup);
             DragonCombat.PlaySkillPose(player, "Channel", windup + 0.15f);
-            StartCoroutine(AstralRailcannonRoutine(player, windup));
+            StartCoroutine(ascended ? AscendedRailcannonRoutine(player, windup) : AstralRailcannonRoutine(player, windup));
         }
 
         private IEnumerator AstralRailcannonRoutine(Player player, float windup)
@@ -983,72 +1269,169 @@ namespace DragonsAltarSorcerer
             ShowMessage("Astral Railcannon");
             Vector3 origin = player.GetEyePoint();
             Vector3 forward = AlbedoAimUtility.GetProjectileDirection(player, origin);
-            forward.Normalize();
-
             if (_enableVfx.Value)
-            {
                 for (int ring = 0; ring < 4; ring++)
-                {
-                    float d = 1.5f + ring * 1.25f;
-                    StartCoroutine(RingVfx(origin + forward * d, 0.75f + ring * 0.25f, new Color(0.72f, 0.20f, 1f, 0.82f), Mathf.Max(0.35f, windup)));
-                }
-            }
+                    StartCoroutine(RingVfx(origin + forward * (1.5f + ring * 1.25f), 0.75f + ring * 0.25f, new Color(0.72f, 0.20f, 1f, 0.82f), Mathf.Max(0.35f, windup)));
+            if (windup > 0f) yield return new WaitForSeconds(windup);
+            if (player == null || player.IsDead()) yield break;
+            origin = player.GetEyePoint();
+            forward = AlbedoAimUtility.GetProjectileDirection(player, origin); // Free Aim at release
+            RailShot(player, origin, forward, Mathf.Max(0f, _railShotMultiplier.Value), 0.45f);
+            Rigidbody rb = player.GetComponent<Rigidbody>();
+            if (rb != null) rb.AddForce(-forward * _railRecoil.Value, ForceMode.VelocityChange);
+        }
 
-            if (windup > 0f)
-                yield return new WaitForSeconds(windup);
-
+        private void RailShot(Player player, Vector3 origin, Vector3 forward, float multiplier, float beamLife)
+        {
             float range = Mathf.Max(5f, DragonCombat.M(_railRange.Value));
             float width = Mathf.Max(0.8f, DragonCombat.M(_railWidth.Value));
             List<Character> targets = GetBoxTargets(player, origin, forward, range, width);
             MagicDamageSnapshot damage = GetMagicWeaponDamage(GetCurrentWeapon(player));
+            float m = multiplier * DragonCombat.GetSkillPower(player, "astral_railcannon");
             for (int i = 0; i < targets.Count; i++)
-                DealMagicWeaponDamage(player, targets[i], damage, 1.75f);
-
+                DealMagicWeaponDamage(player, targets[i], damage, m);
             if (_enableVfx.Value)
-                CreateBeam(origin, origin + forward * range, new Color(0.86f, 0.50f, 1f, 0.98f), width * 0.55f, 0.45f);
-
-            Rigidbody rb = player.GetComponent<Rigidbody>();
-            if (rb != null)
-                rb.AddForce(-forward * 4.5f, ForceMode.VelocityChange);
+                CreateBeam(origin, origin + forward * range, new Color(0.86f, 0.50f, 1f, 0.98f), width * 0.55f, beamLife);
         }
 
+        // Ascended: a steerable beam for up to 4s (20 ticks x 9% of the normal shot); releasing ends it.
+        private IEnumerator AscendedRailcannonRoutine(Player player, float windup)
+        {
+            ShowMessage("Astral Railcannon");
+            if (windup > 0f) yield return new WaitForSeconds(windup);
+            float tick = Mathf.Max(0.05f, _rcAscTick.Value);
+            float end = Time.time + Mathf.Max(tick, _rcAscDuration.Value);
+            float shot = Mathf.Max(0f, _railShotMultiplier.Value) * _rcAscTickPercent.Value / 100f;
+            bool first = true;
+            while (player != null && !player.IsDead() && Time.time < end)
+            {
+                if (!first && !SkillKeyHeld(player, "astral_railcannon", _skill8.Value)) break;
+                first = false;
+                DragonCombat.LockSkill(player, tick + 0.05f);
+                DragonCombat.PlaySkillPose(player, "Channel", tick + 0.05f);
+                Vector3 origin = player.GetEyePoint();
+                RailShot(player, origin, AlbedoAimUtility.GetProjectileDirection(player, origin), shot, tick + 0.02f);
+                yield return new WaitForSeconds(tick);
+            }
+        }
+
+        // ------------------------------------------------------------------ Elemental Cataclysm
         private void CastElementalCataclysm(Player player)
         {
             Vector3 target;
             if (!AlbedoAimUtility.TryGetPhysicalTarget(player, DragonCombat.M(_cataclysmRange.Value), out target)) { ShowMessage("Aim at a physical target"); return; }
-            if (CooldownRemaining("Wizard.ElementalCataclysm") > 0f) { ShowCooldown("Wizard.ElementalCataclysm"); return; }
-            if (!SpendEitr(player, _cataclysmEitr.Value)) { ShowMessage("Not enough Eitr"); return; }
-            StartCooldown("Wizard.ElementalCataclysm", _cataclysmCooldown.Value);
+            if (!BeginSkill(player, "Wizard.ElementalCataclysm", _cataclysmCooldown.Value, _cataclysmEitr.Value)) return;
             StartCoroutine(CataclysmRoutine(player, target));
         }
 
         private IEnumerator CataclysmRoutine(Player player, Vector3 target)
         {
+            ShowMessage("Elemental Cataclysm");
+            float radius = DragonCombat.M(_cataclysmRadius.Value);
             float max = Mathf.Max(1f, _cataclysmCharge.Value);
+            float minWindup = ScaleWindup(player, Mathf.Max(0f, _cataclysmWindup.Value));
             float charge = 0f;
-            while (Input.GetKey(_modifier.Value) && Input.GetKey(_skill8.Value) && charge < max)
+            float elapsed = 0f;
+            while (player != null && !player.IsDead() && charge < max && (elapsed < minWindup || SkillKeyHeld(player, "elemental_cataclysm", _skill9.Value)))
             {
                 DragonCombat.LockSkill(player, 0.12f);
-                charge += Time.deltaTime;
-                if (_enableVfx.Value && ((int)(charge * 10f) % 4 == 0)) StartCoroutine(RingVfx(target, DragonCombat.M(_cataclysmRadius.Value) * Mathf.Clamp01(0.2f + charge / max), new Color(0.76f, 0.30f, 1f, 0.55f), 0.16f));
+                DragonCombat.PlaySkillPose(player, "SkyCast", 0.12f);
+                elapsed += Time.deltaTime;
+                if (elapsed > minWindup) charge += Time.deltaTime;
+                if (_enableVfx.Value && ((int)(elapsed * 10f) % 4 == 0)) StartCoroutine(RingVfx(target, radius * Mathf.Clamp01(0.2f + charge / max), new Color(0.76f, 0.30f, 1f, 0.55f), 0.16f));
                 yield return null;
             }
-            float multiplier = 1f + 2f * Mathf.Clamp01(charge / max);
-            List<Character> targets = GetSphereTargets(player, target, DragonCombat.M(_cataclysmRadius.Value));
+            if (player == null) yield break;
+            float multiplier = 1f + (Mathf.Max(1f, _cataclysmMaxMultiplier.Value) - 1f) * Mathf.Clamp01(charge / max);
+            CataclysmBlast(player, target, radius, multiplier);
+            ShowMessage("ELEMENTAL CATACLYSM x" + multiplier.ToString("0.0"));
+            if (!IsWizAscended(player, "elemental_cataclysm")) yield break;
+            yield return new WaitForSeconds(Mathf.Max(0.1f, _ccAscDelay.Value));
+            if (player == null) yield break;
+            CataclysmBlast(player, target, radius, multiplier * _ccAscPercent.Value / 100f);
+        }
+
+        private void CataclysmBlast(Player player, Vector3 target, float radius, float multiplier)
+        {
+            List<Character> targets = GetSphereTargets(player, target, radius);
             for (int i = 0; i < targets.Count; i++)
             {
-                Character enemy = targets[i];
-                Deal(player, enemy, 55f * multiplier, 55f * multiplier, 55f * multiplier, 55f * multiplier, 55f * multiplier, 55f * multiplier, 55f * multiplier, 0f, 55f, true);
-                DragonCombat.ApplyExpose(enemy, 15f);
+                DealWiz(player, targets[i], _cataclysmDmg, multiplier, "elemental_cataclysm", 55f, true);
+                DragonCombat.ApplyExpose(targets[i], _cataclysmExpose.Value);
             }
             if (_enableVfx.Value)
             {
-                StartCoroutine(RingVfx(target, DragonCombat.M(_cataclysmRadius.Value), new Color(1f, 0.35f, 0.05f, 1f), 1f));
-                CreateLightningBurst(target, DragonCombat.M(_cataclysmRadius.Value));
+                StartCoroutine(RingVfx(target, radius, new Color(1f, 0.35f, 0.05f, 1f), 1f));
+                CreateLightningBurst(target, radius);
             }
-            ShowMessage("ELEMENTAL CATACLYSM x" + multiplier.ToString("0.0"));
         }
 
+        // ------------------------------------------------------------------ Ascended Glacial Descent (Wizard's Ascended MC)
+        private void CastAscendedGlacial(Player player)
+        {
+            Vector3 target;
+            if (!AlbedoAimUtility.TryGetPhysicalTarget(player, DragonCombat.M(_gdAscRange.Value), out target)) { ShowMessage("Aim at a physical target"); return; }
+            if (!BeginSkill(player, "Sorcerer.GlacialDescent", _gdAscCooldown.Value, _gdAscEitr.Value)) return;
+            float windup = ScaleWindup(player, Mathf.Max(0f, _gdAscWindup.Value));
+            DragonCombat.LockSkill(player, windup);
+            DragonCombat.PlaySkillPose(player, "SkyCast", windup + 0.10f);
+            StartCoroutine(AscendedGlacialRoutine(player, target, windup));
+        }
+
+        private IEnumerator AscendedGlacialRoutine(Player player, Vector3 target, float windup)
+        {
+            ShowMessage("Glacial Descent");
+            if (windup > 0f) yield return new WaitForSeconds(windup);
+            float radius = DragonCombat.M(_gdAscRadius.Value);
+            float core = DragonCombat.M(_gdAscCore.Value);
+            Vector3 sky = DragonCombat.GetIndoorSafeSkyPoint(target, 12f);
+            GameObject chunk = _enableVfx.Value ? CreateIceChunk(sky, radius * 0.6f) : null;
+            float e = 0f;
+            while (e < 0.45f)
+            {
+                if (chunk != null) chunk.transform.position = Vector3.Lerp(sky, target + Vector3.up * 1.4f, e / 0.45f);
+                e += Time.deltaTime;
+                yield return null;
+            }
+            if (chunk != null) Destroy(chunk);
+            if (player == null) yield break;
+            List<Character> targets = GetSphereTargets(player, target, radius);
+            for (int i = 0; i < targets.Count; i++)
+            {
+                Character enemy = targets[i];
+                Vector3 flat = enemy.transform.position - target;
+                flat.y = 0f;
+                bool inCore = flat.magnitude <= core;
+                DealWiz(player, enemy, _glacialAscDmg, inCore ? _gdAscCoreDamage.Value / 100f : 1f, "glacial_descent", 18f, false);
+                DragonCombat.ApplyFrost(enemy, 6f);
+                if (inCore) DragonCombat.Freeze(enemy, _gdAscFreeze.Value, _gdAscBossSlow.Value / 100f);
+            }
+            if (_enableVfx.Value)
+            {
+                StartCoroutine(RingVfx(target, radius, new Color(0.50f, 0.90f, 1f, 0.95f), 0.6f));
+                StartCoroutine(RingVfx(target, core, new Color(0.85f, 0.98f, 1f, 1f), 0.8f));
+            }
+        }
+
+        // ------------------------------------------------------------------ Clockwork (Grace)
+        private void CastClockwork(Player player)
+        {
+            if (!BeginSkill(player, "Wizard.Clockwork", _clockCooldown.Value, 0f)) return;
+            DragonCombat.LockSkill(player, 0.5f);
+            DragonCombat.PlaySkillPose(player, "Chant", 0.5f);
+            ShowMessage("Clockwork");
+            Collider[] hits = Physics.OverlapSphere(player.transform.position, DragonCombat.M(_clockRadius.Value));
+            HashSet<Player> allies = new HashSet<Player>();
+            allies.Add(player);
+            for (int i = 0; i < hits.Length; i++)
+            {
+                Player ally = hits[i].GetComponentInParent<Player>();
+                if (ally != null) allies.Add(ally);
+            }
+            foreach (Player ally in allies)
+                DragonCombat.GrantClockwork(ally, _clockDuration.Value, _clockSkillDamage.Value / 100f, 1f - Mathf.Clamp01(_clockCdr.Value / 100f));
+            if (_enableVfx.Value) StartCoroutine(RingVfx(player.transform.position, DragonCombat.M(_clockRadius.Value), new Color(1f, 0.82f, 0.35f, 0.95f), 0.8f));
+        }
 
         private void CastRiftEcho(Player player)
         {
@@ -2010,33 +2393,43 @@ namespace DragonsAltarSorcerer
             return false;
         }
 
+        // v0.23.1 Overcharge (Framework): 300 Eitr spent -> 12s of +40% wind up speed, +40% Eitr
+        // Regen, +40% Magic Damage; nothing accumulates while active nor for the 5s buffer after.
         private void RegisterEitrSpent(float amount)
         {
             if (GetAdvancement(Player.m_localPlayer) != "Wizard") return;
+            if (Time.time < _overchargeLockedUntil) return;
             _overchargeEitrSpent += Mathf.Max(0f, amount);
-            if (_overchargeEitrSpent >= 100f)
+            if (_overchargeEitrSpent >= Mathf.Max(1f, _ocThreshold.Value))
             {
-                _overchargeEitrSpent -= 100f;
-                _overchargeUntil = Time.time + 6f;
+                _overchargeEitrSpent = 0f;
+                _overchargeUntil = Time.time + Mathf.Max(0.5f, _ocDuration.Value);
+                _overchargeLockedUntil = _overchargeUntil + Mathf.Max(0f, _ocBuffer.Value);
                 ShowMessage("OVERCHARGE");
             }
+        }
+
+        public float OverchargeGauge()
+        {
+            return Time.time < _overchargeUntil ? -1f : _overchargeEitrSpent;
         }
 
         private float ScaleWindup(Player player, float seconds)
         {
             float value = DragonCombat.ScaleWindup(player, seconds);
-            if (Time.time < _overchargeUntil) value *= 0.80f;
+            if (Time.time < _overchargeUntil) value /= 1f + Mathf.Max(0f, _ocWindup.Value) / 100f;
             return Mathf.Max(0f, value);
         }
 
+        // Overcharge Magic Damage (Wizard spells are magic; applied to every element of the hit).
         private float ElementMultiplier()
         {
-            return Time.time < _overchargeUntil ? 1.30f : 1f;
+            return Time.time < _overchargeUntil ? 1f + Mathf.Max(0f, _ocMagic.Value) / 100f : 1f;
         }
 
         private void StartCooldown(string id, float normal)
         {
-            float seconds = _testingForceCooldowns.Value ? _testingCooldown.Value : normal;
+            float seconds = _testingForceCooldowns.Value ? _testingCooldown.Value : DragonCombat.ScaleCooldown(Player.m_localPlayer, id, normal);
             _cooldowns[id] = Time.time + Mathf.Max(0f, seconds);
         }
 
@@ -2058,9 +2451,9 @@ namespace DragonsAltarSorcerer
             float magic = DragonCombat.GetSorcererMagicDamageMultiplier(attacker);
             float e = ElementMultiplier();
             HitData hit = new HitData();
-            hit.m_damage.m_blunt = blunt * magic;
-            hit.m_damage.m_slash = slash * magic;
-            hit.m_damage.m_pierce = pierce * magic;
+            hit.m_damage.m_blunt = blunt * e * magic;
+            hit.m_damage.m_slash = slash * e * magic;
+            hit.m_damage.m_pierce = pierce * e * magic;
             hit.m_damage.m_fire = fire * e * magic;
             hit.m_damage.m_frost = frost * e * magic;
             hit.m_damage.m_lightning = lightning * e * magic;
@@ -2074,14 +2467,16 @@ namespace DragonsAltarSorcerer
             target.Damage(hit);
         }
 
-        private IEnumerator BurnRoutine(Player attacker, Character target, bool spirit, float duration)
+        // Universal burn rule (v0.21.2): 0.5s ticks dealing the skill's own damage (perTick).
+        private IEnumerator BurnRoutine(Player attacker, Character target, bool spirit, float duration, float perTick)
         {
             float end = Time.time + Mathf.Max(0.1f, duration);
             while (target != null && !target.IsDead() && Time.time < end)
             {
-                if (spirit) DragonCombat.ApplySpiritBurnTick(attacker, target, 1f);
-                else DragonCombat.ApplyFireBurnTick(attacker, target, 1f);
-                yield return new WaitForSeconds(1f);
+                yield return new WaitForSeconds(0.5f);
+                if (target == null || target.IsDead()) yield break;
+                if (spirit) DragonCombat.ApplySpiritBurnTick(attacker, target, perTick);
+                else DragonCombat.ApplyFireBurnTick(attacker, target, perTick);
             }
         }
 

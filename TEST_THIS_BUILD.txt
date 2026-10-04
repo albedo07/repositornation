@@ -1,15 +1,15 @@
-TEST THIS BUILD - v0.23.0 Sorcerer
-==================================
+TEST THIS BUILD - v0.23.1 Wizard
+================================
 First start resets every setting to default (Dev Mode OFF). F8 -> DEV MODE to test.
+Ascended versions: F8 > Progression > ASCENDED switches.
 
-1. Ruler: sizes should match what you saw with Units Per Meter Override = 1.
-2. Angel Comet onto a Troll: you land on the ground beside/under it, not on its head.
-   Same for Bonecrusher and Electric Smite.
-3. Aim Righteous Strike / Glacial Descent at a Troll: it lands on the ground behind/under it.
-4. Grand Cross: aim up/down, the X follows the crosshair.
-5. Sorcerer:
-   - Hit a creature with an axe/club: about 30% damage. Chop a tree / mine: normal.
-   - Max Eitr +65, faster Eitr regen start.
-   - Block key does nothing; equipping a Shield removes it with a message.
-   - Flame Burst burns (ticks every 0.5s).
-   - Tree tooltips of the 3 Sorcerer skills show damage, area, Eitr, wind up, cooldown.
+1. Meteor Fall: tap = normal; hold the key = 1/2/3 stacks (message), bigger meteor + ring.
+2. Astral Greatblade: aim with the crosshair (not where you face); hold = charge to 2x.
+3. Elemental Cataclysm: tap = quick cast; hold up to 6s = up to 3x.
+4. Railcannon fires where the crosshair points.
+5. Frost Nova: Frost, Stun Small, Big staggered + slowed.
+6. Overcharge: spend 300 Eitr -> "OVERCHARGE" for 12s (faster casts, more damage/regen).
+7. Clockwork (M4+R): cast a skill during it -> its cooldown is halved; tooltip shows stats.
+8. Ascended: Glacial core Freeze; Meteor small meteors; Gravity pulls Big + end blast;
+   Railcannon steerable beam (hold the key); Greatblade 3 slams; Frost Aura 6s + freeze
+   blast; Cataclysm second bombardment.

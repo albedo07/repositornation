@@ -1,0 +1,43 @@
+IMMORTAL HEROES v0.23.1 - WIZARD
+================================
+(First start resets every setting to default once, Dev Mode OFF.)
+
+WIZARD (Framework 3.1)
+- Every Wizard skill now has its own damage section in F8 ("Wizard <Skill> Damage") and
+  scales +10% per Tier like every other class.
+- Burns follow the universal rule (0.5s ticks, the skill's own damage): Astral Greatblade
+  Spirit Burn and Meteor Fall Fire Burn.
+- Meteor Fall: hold its hotbar key to charge - 1 stack per second, max 3
+  (120/140/160% damage, 110/120/130% radius), the meteor grows, cost paid once.
+- Astral Greatblade: slams along your crosshair's aim (not your body facing); hold its key
+  to charge up to 2s more (up to 2x).
+- Elemental Cataclysm: hold its own hotbar key to charge up to 6s (1x -> 3x); Expose only.
+- Astral Railcannon: aims where the crosshair is when it fires (Free Aim).
+- Frost Nova: Frost 8s, Stun Small, heavy stagger + slow on Big, Frost still on Bosses.
+- Overcharge: 300 Eitr spent -> 12s of +40% faster wind up, +40% Eitr Regen, +40% Magic
+  Damage; nothing accumulates while active or during the 5s buffer after.
+- Retired: the held-Staff +20% Eitr Regen / +30 Max Eitr (not part of Archmage).
+- NEW Clockwork (Grace, M4+R): 10m snapshot, +30% Skill Damage, and every non-Grace skill
+  that starts its cooldown while active gets a 50% shorter cooldown. 22s, 10 min cooldown.
+  Works for every class's skills (Cleric, Warrior, Sorcerer).
+
+ASCENDED (all 7)
+- Glacial Descent (Ascended MC): 8m; the central 3m deals 135% and Freezes 1.5s
+  (Bosses: 15% slow).
+- Meteor Fall: 3 small meteors land around the target 0.25s apart (5 at full charge),
+  12% of the charged main meteor each, with landing markers.
+- Gravity Dominion: 10m for 7s, pulls Small fully / Big 40% / Bosses 20%, ends in an
+  explosion (25% of the normal skill's full damage) that launches Small and Stuns Big 1.5s.
+- Astral Railcannon: 1s wind up, then hold the key to steer a beam for up to 4s
+  (20 ticks x 9% of the normal shot). Releasing ends it.
+- Astral Greatblade: no charging, three slams 1s apart at 70%, each re-aimed.
+- Frost Nova: a 10m Frost Aura on you for 6s (12 ticks x 8%), then a 44% explosion that
+  Freezes Small and Big 2s (Bosses: 15% slow).
+- Elemental Cataclysm: a second bombardment 1.5s later at 60% of the first.
+- New "Freeze" effect: Stun + almost full stop + Frost; Bosses only slowed.
+
+TOOLTIPS / ALTAR
+- Tree tooltips show full stats for every Wizard skill and Clockwork.
+- Altar: Archmage (Mastery) + Clockwork (Grace) texts.
+
+NEXT: Spellcaster (v0.23.2).

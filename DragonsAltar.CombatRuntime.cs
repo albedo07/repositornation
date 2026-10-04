@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.23.0";
+        public const string ModVersion = "0.23.1";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1493,6 +1493,88 @@ namespace DragonsAltarCombat
             }
         }
 
+        // v0.23.1: hold-to-charge skills ask whether the hotbar key of a skill is still held, and
+        // modules without the progression data ask whether a skill is Ascended (Advanced registers both).
+        public static Func<string, bool> TreeSkillKeyHeldProvider;
+        public static Func<Player, string, bool> AscendedProvider;
+
+        public static bool IsTreeSkillKeyHeld(string skillId)
+        {
+            if (TreeSkillKeyHeldProvider == null) return false;
+            try { return TreeSkillKeyHeldProvider(skillId); }
+            catch { return false; }
+        }
+
+        public static bool IsSkillAscended(Player player, string skillId)
+        {
+            if (AscendedProvider == null || player == null) return false;
+            try { return AscendedProvider(player, skillId); }
+            catch { return false; }
+        }
+
+        // v0.23.1 Freeze: Small/Big are stopped (Stun + 98% slow + Frost) for the duration;
+        // Bosses are never frozen, only slowed by bossSlow.
+        public static void Freeze(Character target, float seconds, float bossSlow)
+        {
+            if (target == null || target.IsDead()) return;
+            DragonCrippleController controller = target.GetComponent<DragonCrippleController>();
+            if (controller == null) controller = target.gameObject.AddComponent<DragonCrippleController>();
+            if (target.IsBoss())
+            {
+                controller.Apply(target, 1f - Mathf.Clamp01(bossSlow), Mathf.Max(0.1f, seconds));
+                return;
+            }
+            Stun(target, target.transform.position - target.transform.forward);
+            controller.Apply(target, 0.02f, Mathf.Max(0.1f, seconds));
+            ApplyFrost(target, Mathf.Max(0.1f, seconds));
+        }
+
+        // v0.23.1 Clockwork (Wizard Grace): +Skill Damage (hits without a weapon skill = skill hits)
+        // and a cooldown multiplier for every non-Grace skill that ENTERS cooldown while active.
+        private static readonly Dictionary<int, float> ClockworkUntil = new Dictionary<int, float>();
+        private static readonly Dictionary<int, float> ClockworkDamage = new Dictionary<int, float>();
+        private static readonly Dictionary<int, float> ClockworkCooldown = new Dictionary<int, float>();
+
+        public static void GrantClockwork(Player player, float seconds, float skillDamageBonus, float cooldownMultiplier)
+        {
+            if (player == null) return;
+            int id = player.GetInstanceID();
+            ClockworkUntil[id] = Time.time + Mathf.Max(0.1f, seconds);
+            ClockworkDamage[id] = Mathf.Max(0f, skillDamageBonus);
+            ClockworkCooldown[id] = Mathf.Clamp(cooldownMultiplier, 0f, 1f);
+        }
+
+        public static bool IsClockworkActive(Player player)
+        {
+            float until;
+            return player != null && ClockworkUntil.TryGetValue(player.GetInstanceID(), out until) && Time.time < until;
+        }
+
+        // Called by every module when a cooldown starts: Graces are never shortened.
+        public static float ScaleCooldown(Player player, string cooldownId, float seconds)
+        {
+            if (string.IsNullOrEmpty(cooldownId)) return seconds;
+            string[] graces = { "KnightsGuidance", "Battlecry", "HeavensLight", "GrandSigil", "Clockwork", "RiftWalker", "TwinRift" };
+            for (int i = 0; i < graces.Length; i++)
+                if (cooldownId.IndexOf(graces[i], StringComparison.Ordinal) >= 0) return seconds;
+            return seconds * CooldownMultiplier(player);
+        }
+
+        // Every module multiplies a NON-Grace cooldown by this when it starts.
+        public static float CooldownMultiplier(Player player)
+        {
+            if (!IsClockworkActive(player)) return 1f;
+            float value;
+            return ClockworkCooldown.TryGetValue(player.GetInstanceID(), out value) ? value : 1f;
+        }
+
+        private static float ClockworkSkillDamage(Player player)
+        {
+            if (!IsClockworkActive(player)) return 0f;
+            float value;
+            return ClockworkDamage.TryGetValue(player.GetInstanceID(), out value) ? value : 0f;
+        }
+
         // v0.22.0: skill modules that are not linked to Advanced (Sorcerer) register here so the
         // universal tree hotbar can cast them and show their cooldowns by skill id.
         private static readonly List<Func<Player, string, bool>> ExternalCasters = new List<Func<Player, string, bool>>();
@@ -2833,6 +2915,11 @@ namespace DragonsAltarCombat
                 float outgoingBonus = GetTimedBuffSum(attacker, "AttackDamage");
                 if (outgoingBonus != 0f)
                     hit.m_damage.Modify(Mathf.Max(0f, 1f + outgoingBonus));
+
+                // Clockwork: skill hits carry no weapon skill type.
+                float clockwork = ClockworkSkillDamage(attacker);
+                if (clockwork > 0f && ReadHitSkill(hit) == Skills.SkillType.None)
+                    hit.m_damage.Modify(1f + clockwork);
 
                 if (GetClass(attacker) == "Sorcerer")
                 {

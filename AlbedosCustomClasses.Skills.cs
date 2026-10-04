@@ -220,7 +220,7 @@ namespace AlbedosCustomClassesSkills
         public static SkillsPlugin Instance;
         public const string ModGuid = "albedo.customclasses.skills";
         public const string ModName = "Dragon's Altar - Starter Skills";
-        public const string ModVersion = "0.23.0";
+        public const string ModVersion = "0.23.1";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";
@@ -1112,6 +1112,8 @@ namespace AlbedosCustomClassesSkills
             if (player == null || player.IsDead()) return false;
             if (_testingForceCooldowns.Value)
                 cooldown = Mathf.Max(0f, _testingCooldownSeconds.Value);
+            else
+                cooldown = DragonCombat.ScaleCooldown(player, id, cooldown); // v0.23.1 Clockwork
 
             float remaining = CooldownRemaining(id);
             if (remaining > 0f) { ShowMessage("Cooldown: " + remaining.ToString("0.0") + "s"); return false; }
@@ -1145,6 +1147,8 @@ namespace AlbedosCustomClassesSkills
         {
             if (_testingForceCooldowns.Value)
                 cooldown = Mathf.Max(0f, _testingCooldownSeconds.Value);
+            else
+                cooldown = DragonCombat.ScaleCooldown(player, id, cooldown); // v0.23.1 Clockwork
 
             cooldown = Mathf.Max(0f, cooldown);
             staminaCost = Mathf.Max(0f, staminaCost);
