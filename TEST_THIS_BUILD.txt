@@ -1,15 +1,15 @@
-TEST THIS BUILD - v0.22.5 Calibration
-=====================================
-Note: first start resets every setting to default (Dev Mode OFF). Press F8 -> DEV MODE to test.
+TEST THIS BUILD - v0.23.0 Sorcerer
+==================================
+First start resets every setting to default (Dev Mode OFF). F8 -> DEV MODE to test.
 
-1. Ruler: F8 > any Radius/Range > "Show range / radius preview". A 1m circle radius should be
-   two character heights. Cast a few skills (Paladin/Priest included) and check the sizes.
-2. Altar: cards, BASE CLASSES / CHOOSE AN ADVANCEMENT plaques and the summary box are centred
-   in the left column (equal gaps left/right).
-3. F8: DEV MODE toggles 5s cooldowns; DEFAULT asks CONFIRM? and resets everything.
-4. Halfmoon (normal): 12m wide frontal slash + afterimage.
-5. Halfmoon (Ascended): 2 slashes -> stance -> Left Click within 3s -> spin -> big wave you
-   aim with the camera; passes through walls; 30m in 5s. Wait 3s without clicking: it fades.
-6. Frenzied Charge: dash up and down a slope (should hug the ground), off a cliff edge (should
-   fall, not teleport), through a group of enemies (no stopping, one hit each).
-7. Mercenary Ascended Heavy Slash: damage lower (90 Slash base).
+1. Ruler: sizes should match what you saw with Units Per Meter Override = 1.
+2. Angel Comet onto a Troll: you land on the ground beside/under it, not on its head.
+   Same for Bonecrusher and Electric Smite.
+3. Aim Righteous Strike / Glacial Descent at a Troll: it lands on the ground behind/under it.
+4. Grand Cross: aim up/down, the X follows the crosshair.
+5. Sorcerer:
+   - Hit a creature with an axe/club: about 30% damage. Chop a tree / mine: normal.
+   - Max Eitr +65, faster Eitr regen start.
+   - Block key does nothing; equipping a Shield removes it with a message.
+   - Flame Burst burns (ticks every 0.5s).
+   - Tree tooltips of the 3 Sorcerer skills show damage, area, Eitr, wind up, cooldown.

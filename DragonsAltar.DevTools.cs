@@ -40,7 +40,7 @@ namespace DragonsAltarDevTools
     {
         public const string ModGuid = "albedo.customclasses.devtools";
         public const string ModName = "Dragon's Altar - Developer Tools";
-        public const string ModVersion = "0.22.5";
+        public const string ModVersion = "0.23.0";
 
         public static DeveloperToolsPlugin Instance;
 
@@ -77,7 +77,7 @@ namespace DragonsAltarDevTools
         private bool _defaultsChecked;
         private float _allDefaultsArmedUntil;
         // v0.22.5: every new pass starts from the default values once (user rule); raise this per pass.
-        private const string DefaultsPass = "0.22.5";
+        private const string DefaultsPass = "0.23.0";
 
         private readonly List<DevSetting> _settings = new List<DevSetting>();
         private readonly List<string> _sections = new List<string>();
@@ -428,6 +428,9 @@ namespace DragonsAltarDevTools
             if ((section == "Sword Master Judgement Cut" && key == "SlashDamagePerCut") ||
                 (section == "Sword Master Halfmoon Slash" && key == "SpiritDotPerSecond") ||
                 (section == "Sword Master Passive" && key == "WayOfTheSwordAttackSpeedPercent_v0123"))
+                return true;
+            // v0.23.0 Warlock replaces Arcane Blood.
+            if (section == "Sorcerer Blessing" && (key == "EitrRegenPercent_v0123" || key == "FlatMaxEitr_v0123" || key == "MagicDamagePercent"))
                 return true;
             // v0.22.5 Halfmoon: Width replaces Radius; the Ascended travelling slashes became one finisher wave.
             if ((section == "Sword Master Halfmoon Slash" && key == "Radius") ||

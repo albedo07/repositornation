@@ -1,0 +1,24 @@
+IMMORTAL HEROES v0.23.0 - SORCERER
+==================================
+(First start resets every setting to default once, Dev Mode OFF.)
+
+RULES (from your v0.22.5 test)
+- Ruler: the default is now Units Per Meter Override = 1 (the setting you confirmed as the
+  true measurement).
+- Sky Summon / Ground PAC aiming passes through creatures to the ground behind them
+  (Righteous Strike, Goddess Relic, Glacial Descent, Stonefang, Relics, Meteor, Rift...).
+- Jump-slam skills ignore creature collisions until they land on terrain or a non-creature
+  object: Angel Comet, Bonecrusher, Electric Smite. No more landing on a Troll's head.
+- Laser Projectiles are Free Aim: Grand Cross now flies along the crosshair (pitch included).
+- Framework doc updated with all of the above.
+
+SORCERER (Warlock, per Framework)
+- Creature melee damage -70% (mining / woodcutting unaffected).
+- +65 Max Eitr (was 40), +35% Eitr Regen (was 30), Eitr regen starts twice as fast.
+- Cannot Block or Parry (whole class, any weapon). Shields are unequipped with a message.
+- Old Arcane Blood +30% Magic Damage retired (not part of Warlock).
+- Flame Burst Fire Burn follows the universal rule: every 0.5s, 6% of its Fire damage, 6s.
+- Tree tooltips now show full stats for Flame Burst, Glacial Descent and Stonefang Eruption.
+- Altar / skill book texts updated to Warlock.
+
+NEXT: Wizard, then Spellcaster.

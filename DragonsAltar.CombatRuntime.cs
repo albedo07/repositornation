@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.22.5";
+        public const string ModVersion = "0.23.0";
 
         internal static DragonCombatPlugin Instance;
 
@@ -70,7 +70,7 @@ namespace DragonsAltarCombat
             RemoveDivineEquipmentMovementPenalty = Config.Bind("Weapon Mastery", "LegacyRemoveDivineEquipmentMovementPenalty", false, "Legacy option retained for config compatibility. Cleric no longer gets a blanket equipment movement-penalty removal.");
             ClericBlessingNoPenalty = Config.Bind("Cleric Blessing", "NoShieldStaffClubMovementPenalty", true, "Cleric's Blessing: Shields, Staves and one-handed Club weapons have no movement penalty (two-handed Clubs excluded).");
             HolyTrinityNoArmorPenalty = Config.Bind("Paladin Holy Trinity", "NoArmorMovementPenalty", true, "Holy Trinity (Club-type melee weapon + any Shield): Armor has no movement penalty.");
-            SorcererMagicDamageBonus = Config.Bind("Sorcerer Blessing", "MagicDamagePercent", 30f, "Arcane Blood Magic Damage bonus. Applies to Eitr-based Sorcerer magic, including magical physical portions and magic-weapon attacks.");
+            SorcererMagicDamageBonus = Config.Bind("Sorcerer Blessing", "MagicDamagePercent_v0230", 0f, "Retired Arcane Blood Magic Damage bonus (Warlock has none, v0.23.0). Kept for tuning; 0 = off.");
             BlockHotbarWhenSkillModifierHeld = Config.Bind("Hotkeys", "BlockHotbarWhenSkillModifierHeld", true, "Prevents Alpha1-Alpha0 from also activating Valheim hotbar slots while the Dragon's Altar skill modifier is held.");
             DefaultDebuffDuration = Config.Bind("Debuffs", "DefaultDuration", 6f, "Default debuff duration in seconds.");
             ExposeDamageBonus = Config.Bind("Debuffs", "ExposeDamageTakenPercent", 20f, "Extra damage taken while Exposed. Resistant damage types are also normalized to neutral.");
@@ -82,7 +82,7 @@ namespace DragonsAltarCombat
             ZapDelay = Config.Bind("Debuffs", "ZapDelay_v0212", 2f, "Seconds before Zap explodes (universal rule: 2s).");
             ZapRadius = Config.Bind("Debuffs", "ZapRadius", 1f, "Zap explosion radius.");
             CharacterHeightMeters = Config.Bind("Measurement", "CharacterHeightMeters", 0.5f, "v0.22.5 ruler (user rule): your character's height counts as this many meters. Every range, radius, width, length and travel speed in every config is in these meters.");
-            UnitsPerMeterOverride = Config.Bind("Measurement", "UnitsPerMeterOverride", 0f, "0 = automatic (measured character height / CharacterHeightMeters). Above 0 = fixed Unity units per meter.");
+            UnitsPerMeterOverride = Config.Bind("Measurement", "UnitsPerMeterOverride", 1f, "Unity units per config meter. 1 = the confirmed in-game ruler (user, v0.22.6). 0 = automatic from character height / CharacterHeightMeters.");
             ZapDamage = Config.Bind("Debuffs", "ZapLightningDamage", 25f, "Testing/default lightning damage for Zap because the framework does not specify an amount.");
             BurnsUseCurrentHpPercent = Config.Bind("Damage Over Time", "LegacyBurnsUseCurrentHpPercent_v0212", false, "Legacy: burns now deal the skill's own burn damage. True = old 3% CURRENT HP burns.");
             FireBurnCurrentHpPercent = Config.Bind("Damage Over Time", "FireBurnCurrentHpPercentPerTick", 3f, "Fire Burn = 3 percent of CURRENT HP per tick.");
@@ -723,12 +723,9 @@ namespace DragonsAltarCombat
                 }
             }
 
-            if (DragonCombat.GetClassName(__instance) == "Sorcerer" &&
-                (currentAdvancement == "Wizard" || currentAdvancement == "Spellcaster") &&
-                DragonCombat.IsStaffWeapon(currentWeapon))
+            if (DragonCombat.GetClassName(__instance) == "Sorcerer")
             {
-                // Staves occupy the caster's hands and cannot block. Wands are
-                // deliberately excluded so a shield + Wand setup can still block.
+                // v0.23.0 Warlock: a Sorcerer (and both ACs) can never Block or Parry.
                 block = false;
                 blockHold = false;
             }
@@ -2817,6 +2814,13 @@ namespace DragonsAltarCombat
             PlayAnimation(player, trigger);
         }
 
+        private static bool IsWarlockMeleeSkill(Skills.SkillType skill)
+        {
+            return skill == Skills.SkillType.Swords || skill == Skills.SkillType.Knives || skill == Skills.SkillType.Clubs ||
+                   skill == Skills.SkillType.Polearms || skill == Skills.SkillType.Spears || skill == Skills.SkillType.Axes ||
+                   skill == Skills.SkillType.Unarmed || skill == Skills.SkillType.Pickaxes;
+        }
+
         public static DamagePatchState BeginDamage(Character target, HitData hit)
         {
             DamagePatchState patchState = new DamagePatchState();
@@ -2840,6 +2844,13 @@ namespace DragonsAltarCombat
                         IsMagicWeapon(current) &&
                         hitSkill != Skills.SkillType.None &&
                         hitSkill == current.m_shared.m_skillType;
+
+                    if (!normalMagicWeaponHit && IsWarlockMeleeSkill(hitSkill))
+                    {
+                        // v0.23.0 Warlock: creature-facing melee -70%. Trees, rocks and ore are not
+                        // Characters, so labor damage never reaches this and stays unpenalised.
+                        hit.m_damage.Modify(0.30f);
+                    }
 
                     if (normalMagicWeaponHit)
                     {

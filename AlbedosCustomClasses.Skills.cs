@@ -110,13 +110,15 @@ namespace AlbedosCustomClassesSkills
             return false;
         }
 
+        // v0.22.6 rule: Sky Summon / Ground PAC targets are terrain or physical objects, never a
+        // creature (the crosshair ray passes through creatures to the surface behind them).
         public static bool TryGetPhysicalTarget(Player player, float range, out Vector3 point)
         {
             point = Vector3.zero;
 
             RaycastHit hit;
 
-            if (!TryGetFirstCrosshairHit(player, out hit))
+            if (!TryGetFirstSurfaceHit(player, out hit))
                 return false;
 
             float maxRange = Mathf.Max(0.1f, range);
@@ -127,6 +129,43 @@ namespace AlbedosCustomClassesSkills
 
             point = hit.point;
             return true;
+        }
+
+        private static bool TryGetFirstSurfaceHit(Player player, out RaycastHit worldHit)
+        {
+            worldHit = new RaycastHit();
+            if (player == null)
+                return false;
+            Vector3 rayOrigin;
+            Vector3 rayDirection;
+            if (GameCamera.instance != null)
+            {
+                rayOrigin = GameCamera.instance.transform.position;
+                rayDirection = GameCamera.instance.transform.forward;
+            }
+            else
+            {
+                rayOrigin = player.GetEyePoint();
+                rayDirection = player.GetLookDir();
+            }
+            if (rayDirection.sqrMagnitude < 0.01f)
+                return false;
+            rayDirection.Normalize();
+            RaycastHit[] hits = Physics.RaycastAll(rayOrigin, rayDirection, 1000f, CrosshairMask);
+            if (hits == null || hits.Length == 0)
+                return false;
+            Array.Sort(hits, delegate(RaycastHit a, RaycastHit b) { return a.distance.CompareTo(b.distance); });
+            for (int i = 0; i < hits.Length; i++)
+            {
+                Collider collider = hits[i].collider;
+                if (collider == null || collider.isTrigger || IsLocalPlayerCollider(player, collider))
+                    continue;
+                if (collider.GetComponentInParent<Character>() != null)
+                    continue;
+                worldHit = hits[i];
+                return true;
+            }
+            return false;
         }
 
         public static Vector3 GetProjectileDirection(Player player, Vector3 spawnPosition)
@@ -181,7 +220,7 @@ namespace AlbedosCustomClassesSkills
         public static SkillsPlugin Instance;
         public const string ModGuid = "albedo.customclasses.skills";
         public const string ModName = "Dragon's Altar - Starter Skills";
-        public const string ModVersion = "0.22.5";
+        public const string ModVersion = "0.23.0";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";
@@ -258,6 +297,9 @@ namespace AlbedosCustomClassesSkills
         private DamageConfig _stoneDamage;
         private ConfigEntry<float> _sorcererEitrRegenBonus;
         private ConfigEntry<float> _sorcererMaxEitrBonus;
+        private ConfigEntry<float> _sorcererRegenDelayMultiplier;
+        private ConfigEntry<float> _flameBurnPercent;
+        private float _baseEitrRegenDelay = -1f;
 
         private ConfigEntry<bool> _showSkillHud;
         private ConfigEntry<bool> _enableVfx;
@@ -352,8 +394,10 @@ namespace AlbedosCustomClassesSkills
             _stoneRadius = Config.Bind("Sorcerer.Stonefang Eruption", "Radius", 5f, "Literal 5m radius.");
             _stoneCrippleDuration = Config.Bind("Sorcerer.Stonefang Eruption", "CrippleDuration", 6f, "Cripple duration.");
             _stoneDamage = BindDamage("Sorcerer.Stonefang Eruption.Damage", 32f, 0f, 30f, 0f, 0f, 0f, 0f, 0f);
-            _sorcererEitrRegenBonus = Config.Bind("Sorcerer Blessing", "EitrRegenPercent_v0123", 30f, "Arcane Blood: +30% Eitr Regen.");
-            _sorcererMaxEitrBonus = Config.Bind("Sorcerer Blessing", "FlatMaxEitr_v0123", 40f, "Arcane Blood: +40 flat maximum Eitr.");
+            _sorcererEitrRegenBonus = Config.Bind("Sorcerer Blessing", "EitrRegenPercent_v0230", 35f, "Warlock: +35% Eitr Regen.");
+            _sorcererMaxEitrBonus = Config.Bind("Sorcerer Blessing", "FlatMaxEitr_v0230", 65f, "Warlock: +65 flat maximum Eitr.");
+            _sorcererRegenDelayMultiplier = Config.Bind("Sorcerer Blessing", "EitrRegenDelayMultiplier", 0.5f, "Warlock: the delay before Eitr starts regenerating is multiplied by this (0.5 = halved).");
+            _flameBurnPercent = Config.Bind("Sorcerer.Flame Burst", "BurnPercentPerTick", 6f, "Fire Burn: every 0.5s deals this % of Flame Burst's Fire damage (universal burn rule).");
             InstallArcaneBloodMaxEitr();
 
             _showSkillHud = Config.Bind("Interface", "ShowSkillHud", true, "Show the current class skill HUD.");
@@ -437,6 +481,34 @@ namespace AlbedosCustomClassesSkills
                 __0 += Mathf.Max(0f, Instance._sorcererMaxEitrBonus.Value);
         }
 
+        // v0.23.0 Warlock: halved Eitr regen delay; Shields cannot be equipped (unequipped with a message).
+        private void UpdateWarlock(Player player, bool sorcerer)
+        {
+            try
+            {
+                FieldInfo delay = typeof(Player).GetField("m_eitrRegenDelay", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (delay != null && delay.FieldType == typeof(float))
+                {
+                    if (_baseEitrRegenDelay < 0f)
+                        _baseEitrRegenDelay = (float)delay.GetValue(player);
+                    float wanted = sorcerer ? _baseEitrRegenDelay * Mathf.Clamp(_sorcererRegenDelayMultiplier.Value, 0f, 1f) : _baseEitrRegenDelay;
+                    if (!Mathf.Approximately((float)delay.GetValue(player), wanted))
+                        delay.SetValue(player, wanted);
+                }
+            }
+            catch
+            {
+            }
+            if (!sorcerer)
+                return;
+            ItemDrop.ItemData left = DragonCombat.GetHandItem(player, "m_leftItem");
+            if (left != null && DragonCombat.IsShield(left))
+            {
+                player.UnequipItem(left, true);
+                ShowMessage("A Sorcerer cannot use Shields");
+            }
+        }
+
         private void RefreshFoodStats(Player player)
         {
             if (player == null)
@@ -485,13 +557,14 @@ namespace AlbedosCustomClassesSkills
                 else if (selectedClass == "Cleric")
                     ShowMessage("Cleric ready");
                 else if (selectedClass == "Sorcerer")
-                    ShowMessage("Sorcerer Blessing: Arcane Blood");
+                    ShowMessage("Sorcerer's Blessing: Warlock");
 
                 RefreshFoodStats(player);
             }
 
             if (selectedClass == "Sorcerer")
                 DragonCombat.ApplyTimedBuff(player, "Sorcerer.ArcaneBlood", 0.35f, 0f, 0f, 0f, 0f, 0f, Mathf.Max(0f, _sorcererEitrRegenBonus.Value) / 100f, false);
+            UpdateWarlock(player, selectedClass == "Sorcerer");
 
             // v0.18.1: Cleric (Paladin tree) skills are cast from the Skill Tree hotbar instead.
             if (DragonCombat.IsTreeHotbarActive(player))
@@ -814,7 +887,7 @@ namespace AlbedosCustomClassesSkills
             Vector3 origin = player.transform.position + Vector3.up * 1.1f;
             Vector3 forward = GetCrosshairDirection(player, origin);
             List<Character> targets = GetConeTargets(player, origin, forward, Mathf.Max(1f, DragonCombat.M(_flameRange.Value)), Mathf.Clamp(_flameConeAngle.Value, 10f, 170f));
-            for (int i = 0; i < targets.Count; i++) { DealDamage(player, targets[i], _flameDamage, 7f); StartCoroutine(FireBurnRoutine(player, targets[i], Mathf.Max(0.1f, _flameBurnDuration.Value))); }
+            for (int i = 0; i < targets.Count; i++) { DealDamage(player, targets[i], _flameDamage, 7f); StartCoroutine(FlameBurnRoutine(player, targets[i], Mathf.Max(0.1f, _flameBurnDuration.Value))); }
             if (_enableVfx.Value) StartCoroutine(AnimateSlashArc(player.transform.position + Vector3.up * 0.9f, forward, Mathf.Max(1f, DragonCombat.M(_flameRange.Value)), _flameConeAngle.Value, new Color(1f, 0.28f, 0.05f, 1f)));
         }
 
@@ -851,6 +924,19 @@ namespace AlbedosCustomClassesSkills
         private IEnumerator AnimateStoneSpike(Vector3 point, float duration)
         {
             GameObject spike = GameObject.CreatePrimitive(PrimitiveType.Cube); spike.name = "DragonsAltarStonefangSpike"; spike.transform.position = point + Vector3.down * 2f; spike.transform.localScale = new Vector3(0.75f,3.4f,0.75f); spike.transform.rotation = Quaternion.Euler(0f,UnityEngine.Random.Range(0f,360f),12f); Collider c = spike.GetComponent<Collider>(); if (c != null) Destroy(c); Renderer r = spike.GetComponent<Renderer>(); if (r != null) { Shader s = Shader.Find("Sprites/Default"); if (s != null) r.material = new Material(s); if (r.material != null) r.material.color = new Color(0.42f,0.34f,0.27f,0.94f); } float e = 0f; float safe = Mathf.Max(0.12f,duration); while (e < safe) { float t = Mathf.Clamp01(e/safe); spike.transform.position = Vector3.Lerp(point+Vector3.down*2f, point+Vector3.up*1.3f,t); e += Time.deltaTime; yield return null; } yield return new WaitForSeconds(0.22f); Destroy(spike);
+        }
+
+        // Universal burn rule: 0.5s ticks dealing the skill's own damage (here a % of Flame Burst's Fire).
+        private IEnumerator FlameBurnRoutine(Player attacker, Character target, float duration)
+        {
+            float perTick = _flameDamage.Fire.Value * Mathf.Max(0f, _flameBurnPercent.Value) / 100f * DragonCombat.GetSkillPower(attacker, "flame_burst");
+            float end = Time.time + Mathf.Max(0.1f, duration);
+            while (Time.time < end)
+            {
+                yield return new WaitForSeconds(0.5f);
+                if (target == null || target.IsDead()) yield break;
+                DragonCombat.ApplyFireBurnTick(attacker, target, perTick);
+            }
         }
 
         private IEnumerator FireBurnRoutine(Player attacker, Character target, float duration)

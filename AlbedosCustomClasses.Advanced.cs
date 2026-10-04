@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.22.5";
+        public const string ModVersion = "0.23.0";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -5026,6 +5026,7 @@ namespace AlbedosCustomClassesAdvanced
             forward.Normalize();
 
             ResetFallDamageState(player);
+            StartCoroutine(IhCreatureGhost(player, 30f)); // v0.22.6: the dive lands on terrain, never on a Troll's head
             // v0.21.1: jump + nose-dive take WindUpTime (2.5s) in total.
             float total = Mathf.Max(0.6f, _angelWindupTotal.Value);
             float riseTime = total * 0.56f;
@@ -5163,6 +5164,7 @@ namespace AlbedosCustomClassesAdvanced
                 yield break;
 
             ResetFallDamageState(player);
+            StartCoroutine(IhCreatureGhost(player, 30f)); // v0.22.6: jump slams land on terrain, never on a creature
 
             float height = Mathf.Clamp(_acrobaticJumpHeight.Value, 1.5f, 3.0f);
             float targetAir = Mathf.Max(1.5f, flatAirTime);
@@ -5231,6 +5233,47 @@ namespace AlbedosCustomClassesAdvanced
             DragonCombat.EndMobileCast(player);
         }
 
+        // v0.22.6 rule: jump-slam skills ignore creature collisions from takeoff until they stand on
+        // terrain / a non-creature object again (checked every physics step, re-scanned every 0.1s).
+        private IEnumerator IhCreatureGhost(Player player, float maxSeconds)
+        {
+            if (player == null) yield break;
+            CapsuleCollider capsule = player.GetComponent<CapsuleCollider>();
+            if (capsule == null) yield break;
+            List<Collider> ignored = new List<Collider>();
+            float start = Time.time;
+            float nextScan = 0f;
+            try
+            {
+                while (player != null && !player.IsDead() && Time.time - start < maxSeconds)
+                {
+                    if (Time.time >= nextScan)
+                    {
+                        nextScan = Time.time + 0.1f;
+                        Collider[] near = Physics.OverlapSphere(player.transform.position, 12f, ~0, QueryTriggerInteraction.Ignore);
+                        for (int i = 0; i < near.Length; i++)
+                        {
+                            Collider c = near[i];
+                            if (c == null || c == capsule || c.isTrigger || ignored.Contains(c)) continue;
+                            Character owner = c.GetComponentInParent<Character>();
+                            if (owner == null || owner == player) continue;
+                            Physics.IgnoreCollision(capsule, c, true);
+                            ignored.Add(c);
+                        }
+                    }
+                    if (Time.time - start > 0.4f && IsPlayerGrounded(player) && !DragonCombat.IsSkillLocked(player))
+                        break;
+                    yield return new WaitForFixedUpdate();
+                }
+                yield return new WaitForSeconds(0.25f);
+            }
+            finally
+            {
+                for (int i = 0; i < ignored.Count; i++)
+                    if (ignored[i] != null && capsule != null) Physics.IgnoreCollision(capsule, ignored[i], false);
+            }
+        }
+
         private bool IsPlayerGrounded(Player player)
         {
             if (player == null)
@@ -5247,7 +5290,7 @@ namespace AlbedosCustomClassesAdvanced
             }
 
             RaycastHit hit;
-            return Physics.Raycast(player.transform.position + Vector3.up * 0.2f, Vector3.down, out hit, 0.45f, ~0, QueryTriggerInteraction.Ignore);
+            return Physics.Raycast(player.transform.position + Vector3.up * 0.2f, Vector3.down, out hit, 0.45f, IhSolidMask(), QueryTriggerInteraction.Ignore);
         }
 
         private void ResetFallDamageState(Player player)
@@ -5703,9 +5746,9 @@ namespace AlbedosCustomClassesAdvanced
 
             // Grand Cross is self-cast only. Signature Crosses may reposition
             // Divine Intervention / Heaven's Judgement, but never Grand Cross.
+            // v0.22.6 rule: Laser Projectiles are Free Aim -> the X flies along the crosshair (pitch too).
             Vector3 origin = player.transform.position + Vector3.up * 2.5f;
-            Vector3 forward = AlbedoAimUtility.GetProjectileDirection(player, player.GetEyePoint());
-            forward.y = 0f;
+            Vector3 forward = AlbedoAimUtility.GetProjectileDirection(player, origin);
             if (forward.sqrMagnitude < 0.01f)
                 forward = FlatForward(player);
             forward.Normalize();
@@ -5745,6 +5788,7 @@ namespace AlbedosCustomClassesAdvanced
             Vector3 right = Vector3.Cross(Vector3.up, forward).normalized;
             if (right.sqrMagnitude < 0.01f)
                 right = Vector3.right;
+            Vector3 crossUp = Vector3.Cross(forward, right).normalized;
 
             GameObject visualRoot = null;
             LineRenderer slashA = null;
@@ -5757,7 +5801,7 @@ namespace AlbedosCustomClassesAdvanced
             }
 
             Dictionary<int, float> nextHitAt = new Dictionary<int, float>();
-            Quaternion rotation = Quaternion.LookRotation(forward, Vector3.up);
+            Quaternion rotation = Quaternion.LookRotation(forward, crossUp);
             float elapsed = 0f;
 
             while (elapsed <= travelTime)
@@ -5772,13 +5816,13 @@ namespace AlbedosCustomClassesAdvanced
 
                 if (slashA != null)
                 {
-                    slashA.SetPosition(0, center - right * halfWidth - Vector3.up * halfHeight);
-                    slashA.SetPosition(1, center + right * halfWidth + Vector3.up * halfHeight);
+                    slashA.SetPosition(0, center - right * halfWidth - crossUp * halfHeight);
+                    slashA.SetPosition(1, center + right * halfWidth + crossUp * halfHeight);
                 }
                 if (slashB != null)
                 {
-                    slashB.SetPosition(0, center - right * halfWidth + Vector3.up * halfHeight);
-                    slashB.SetPosition(1, center + right * halfWidth - Vector3.up * halfHeight);
+                    slashB.SetPosition(0, center - right * halfWidth + crossUp * halfHeight);
+                    slashB.SetPosition(1, center + right * halfWidth - crossUp * halfHeight);
                 }
 
                 Collider[] hits = Physics.OverlapBox(
@@ -10589,6 +10633,7 @@ namespace AlbedosCustomClassesAdvanced
             // v0.22.3: Sword Master stats (other Warrior / Sorcerer kits follow with their reworks).
             IhAppendSwordMasterStats(b, player, id, ascended, power);
             IhAppendMercenaryStats(b, player, id, ascended, power);
+            IhAppendSorcererStats(b, id, power);
             // v0.22.0: Warrior / Sorcerer skills list their approved Ascended effect until their
             // full stat tooltips come with each Advancement rework.
             string ascendedText = IhKitAscendedSummary(id);
@@ -10600,6 +10645,42 @@ namespace AlbedosCustomClassesAdvanced
             if (rule.Length > 0 && !ascended)
                 b.Append(IhLine("Ascension", rule) + (ascendedText.Length > 0 ? IhLine("Ascended", ascendedText) : ""));
             return b.ToString().TrimEnd('\n');
+        }
+
+        // v0.23.0: Sorcerer Class skills (values live in the Skills module).
+        private void IhAppendSorcererStats(System.Text.StringBuilder b, string id, float power)
+        {
+            const string sk = "albedo.customclasses.skills";
+            switch (id)
+            {
+                case "flame_burst":
+                    b.Append(IhLine("Damage", IhSkillsDamage("Sorcerer.Flame Burst.Damage", power)));
+                    b.Append(IhLine("Area", "Cone, " + IhNum(IhCfg(sk, "Sorcerer.Flame Burst", "Range", 10f)) + "m, " + IhNum(IhCfg(sk, "Sorcerer.Flame Burst", "ConeDegrees", 75f)) + "°, Ghost"));
+                    b.Append(IhLine("Inflicts", "Fire Burn " + IhNum(IhCfg(sk, "Sorcerer.Flame Burst", "BurnPercentPerTick", 6f)) + "% Fire every 0.5s, " + IhNum(IhCfg(sk, "Sorcerer.Flame Burst", "FireBurnDuration", 6f)) + "s"));
+                    IhEitrCosts(b, IhCfg(sk, "Sorcerer.Flame Burst", "EitrCost", 18f), "Instant", IhCfg(sk, "Sorcerer.Flame Burst", "Cooldown", 7f));
+                    break;
+                case "glacial_descent":
+                    b.Append(IhLine("Damage", IhSkillsDamage("Sorcerer.Glacial Descent.Damage", power)));
+                    b.Append(IhLine("Radius", IhNum(IhCfg(sk, "Sorcerer.Glacial Descent", "Radius", 5f)) + "m"));
+                    b.Append(IhLine("Range", IhNum(IhCfg(sk, "Sorcerer.Glacial Descent", "GroundPACRange", 50f)) + "m"));
+                    b.Append(IhLine("Inflicts", "Frost " + IhNum(IhCfg(sk, "Sorcerer.Glacial Descent", "FrostDuration", 6f)) + "s (Small, Big and Boss)"));
+                    IhEitrCosts(b, IhCfg(sk, "Sorcerer.Glacial Descent", "EitrCost", 28f), IhNum(IhCfg(sk, "Sorcerer.Glacial Descent", "Windup", 1f)) + "s", IhCfg(sk, "Sorcerer.Glacial Descent", "Cooldown", 10f));
+                    break;
+                case "stonefang_eruption":
+                    b.Append(IhLine("Damage", IhSkillsDamage("Sorcerer.Stonefang Eruption.Damage", power)));
+                    b.Append(IhLine("Radius", IhNum(IhCfg(sk, "Sorcerer.Stonefang Eruption", "Radius", 5f)) + "m"));
+                    b.Append(IhLine("Range", IhNum(IhCfg(sk, "Sorcerer.Stonefang Eruption", "GroundPACRange", 40f)) + "m"));
+                    b.Append(IhLine("Inflicts", "Stun (Small), Cripple " + IhNum(IhCfg(sk, "Sorcerer.Stonefang Eruption", "CrippleDuration", 6f)) + "s (Small, Big)"));
+                    IhEitrCosts(b, IhCfg(sk, "Sorcerer.Stonefang Eruption", "EitrCost", 24f), IhNum(IhCfg(sk, "Sorcerer.Stonefang Eruption", "Windup", 0.8f)) + "s", IhCfg(sk, "Sorcerer.Stonefang Eruption", "Cooldown", 9f));
+                    break;
+            }
+        }
+
+        private void IhEitrCosts(System.Text.StringBuilder b, float eitr, string windup, float cooldown)
+        {
+            b.Append(IhLine("Eitr Cost", IhNum(eitr)));
+            b.Append(IhLine("Wind Up Time", windup));
+            b.Append(IhLine("Cooldown", IhNum(cooldown) + "s"));
         }
 
         private void IhCosts(System.Text.StringBuilder b, float stamina, string windup, float cooldown)
@@ -14248,7 +14329,7 @@ namespace AlbedosCustomClassesAdvanced
                 DrawBookCard(new Rect(30f, 105f, 440f, 90f), "Flame Burst", "M4 + 1", "10m Fire cone with Fire Burn.");
                 DrawBookCard(new Rect(30f, 202f, 440f, 90f), "Glacial Descent", "M4 + 2", "Ground PAC: 5m Blunt + Frost impact.");
                 DrawBookCard(new Rect(30f, 299f, 440f, 90f), "Stonefang Eruption", "M4 + 3", "Ground PAC: 5m Blunt + Pierce; Small Stun, Small/Big Cripple.");
-                DrawBookCard(new Rect(30f, 396f, 440f, 72f), "Arcane Blood", "PASSIVE", "+30% Eitr Regen, +40 Max Eitr and +30% Magic Damage. Emergency escape remains planned, not active yet.");
+                DrawBookCard(new Rect(30f, 396f, 440f, 72f), "Warlock", "BLESSING", "Creature melee -70% (labor unaffected). +65 Max Eitr, +35% Eitr Regen, faster regen start. No Block, Parry or Shields.");
             }
             else
             {
