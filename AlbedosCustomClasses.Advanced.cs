@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.24.1";
+        public const string ModVersion = "0.24.2";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -10761,7 +10761,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "tumble_shot":
                     b.Append(IhLine("Damage", IhBowPct(IhR("Ranger Tumble Shot", "DamagePercent", 70f), power) + " per arrow"));
                     b.Append(IhLine("Arrows", IhNum(ascended ? IhR("Ranger Tumble Shot Ascended", "Arrows", 5f) : IhR("Ranger Tumble Shot", "Arrows", 3f)) + " in a " + IhNum(IhR("Ranger Tumble Shot", "FanDegrees", 24f)) + "° fan"));
-                    b.Append(IhLine("Backflip", "Swift " + IhNum(IhR("Ranger Tumble Shot", "FlipDistance_v0241", 2f)) + "m straight back in 0.3s"));
+                    b.Append(IhLine("Backflip", "Swift " + IhNum(IhR("Ranger Tumble Shot", "FlipDistance_v0241", 2f)) + "m straight back in 0.3s, " + IhNum(IhR("Ranger Blessing", "BackJumpIFrames", 0.5f)) + "s i-frames"));
                     IhCosts(b, IhR("Ranger Tumble Shot", "StaminaCost", 18f), "Instant", IhR("Ranger Tumble Shot", "Cooldown", 7f));
                     break;
                 case "snare_trap":
@@ -10774,13 +10774,13 @@ namespace AlbedosCustomClassesAdvanced
                 case "gale_volley":
                     b.Append(IhLine("Damage", IhBowPct(IhR("Acrobat Gale Volley", "DamagePercent", 60f), power) + " per arrow"));
                     b.Append(IhLine("Arrows", IhNum(IhR("Acrobat Gale Volley", "Arrows", 7f)) + " in a " + IhNum(IhR("Acrobat Gale Volley", "FanDegrees", 60f)) + "° fan" + (ascended ? ", two fans" : "")));
-                    b.Append(IhLine("Effect", "Leap back " + IhNum(IhR("Acrobat Gale Volley", "LeapDistance", 5f)) + "m, knocks back Small enemies"));
+                    b.Append(IhLine("Effect", "Swift " + IhNum(IhR("Acrobat Gale Volley", "LeapDistance_v0242", 2f)) + "m leap back in 0.3s, " + IhNum(IhR("Ranger Blessing", "BackJumpIFrames", 0.5f)) + "s i-frames, knocks back Small enemies"));
                     IhCosts(b, IhR("Acrobat Gale Volley", "StaminaCost", 22f), "Instant", IhR("Acrobat Gale Volley", "Cooldown", 9f));
                     break;
                 case "cyclone_arrow":
                     b.Append(IhLine("Damage", IhBowPct(IhR("Acrobat Cyclone Arrow", "DamagePercent", 35f), power) + " every " + IhNum(IhR("Acrobat Cyclone Arrow", "HitInterval", 0.3f)) + "s"));
                     b.Append(IhLine("Range", IhNum(IhR("Acrobat Cyclone Arrow", "Range", 30f)) + "m in " + IhNum(IhR("Acrobat Cyclone Arrow", "TravelTime", 3f)) + "s, Free Aim"));
-                    b.Append(IhLine("Radius", IhNum(IhR("Acrobat Cyclone Arrow", "Radius", 3f)) + "m, pulls Small enemies"));
+                    b.Append(IhLine("Radius", IhNum(IhR("Acrobat Cyclone Arrow", "Radius", 3f)) + "m, pulls Small enemies" + (ascended ? "; splits into " + IhNum(IhR("Acrobat Cyclone Arrow Ascended", "Splits", 3f)) + " on its first hit" : "")));
                     IhCosts(b, IhR("Acrobat Cyclone Arrow", "StaminaCost", 25f), "Instant", IhR("Acrobat Cyclone Arrow", "Cooldown", 12f));
                     break;
                 case "swallow_dive":
@@ -10803,7 +10803,8 @@ namespace AlbedosCustomClassesAdvanced
                 case "furious_winds":
                     b.Append(IhLine("Damage", IhBowPct(IhR("Acrobat Furious Winds", "SlashPercent", 25f), power) + " Slash every " + IhNum(IhR("Acrobat Furious Winds", "TickInterval", 0.25f)) + "s"));
                     b.Append(IhLine("Inflicts", "Spirit Burn, a stack per hit (" + IhNum(IhR("Acrobat Furious Winds", "SpiritDotPercentPerStack", 4f)) + "% per stack), " + IhNum(IhR("Acrobat Furious Winds", "SpiritDotDuration", 6f)) + "s, refreshed"));
-                    b.Append(IhLine("Barrier", IhNum(ascended ? IhR("Acrobat Furious Winds Ascended", "Radius", 14f) : IhR("Acrobat Furious Winds", "Radius", 10f)) + "m: no enemy and no enemy projectile gets in, Hyper Armor"));
+                    b.Append(IhLine("Radius", IhNum(ascended ? IhR("Acrobat Furious Winds Ascended", "Radius", 14f) : IhR("Acrobat Furious Winds", "Radius", 10f)) + "m attack, Hyper Armor"));
+                    b.Append(IhLine("Barrier", IhNum(ascended ? IhR("Acrobat Furious Winds Ascended", "BarrierRadius", 10f) : IhR("Acrobat Furious Winds", "BarrierRadius", 7f)) + "m: enemies can't get closer and are slowly pushed out (Small " + IhNum(IhR("Acrobat Furious Winds", "SmallPushSeconds", 5f)) + "s, Big / Boss " + IhNum(IhR("Acrobat Furious Winds", "BigPushSeconds", 8f)) + "s); no enemy projectile gets in"));
                     b.Append(IhLine("Duration", IhNum(ascended ? IhR("Acrobat Furious Winds Ascended", "Duration", 5f) : IhR("Acrobat Furious Winds", "Duration", 3f)) + "s" + (ascended ? ", ends in a gale (" + IhBowPct(IhR("Acrobat Furious Winds Ascended", "FinalGalePercent", 150f), power) + ")" : "")));
                     IhCosts(b, IhR("Acrobat Furious Winds", "StaminaCost", 40f), "Instant", IhR("Acrobat Furious Winds", "Cooldown", 90f));
                     break;
@@ -10811,6 +10812,7 @@ namespace AlbedosCustomClassesAdvanced
                     b.Append(IhLine("Damage", IhBowPct(IhR("Bowmaster Ballista Shot", "DamagePercent", 200f), power) + ", +" + IhNum(IhR("Bowmaster Ballista Shot", "DamagePerStackPercent", 40f)) + "% per stack"));
                     b.Append(IhLine("Charge", "Hold: 3 stacks, 1 per second; +" + IhNum(IhR("Bowmaster Ballista Shot", "WidthPerStack", 1f)) + "m width each; hold at max to keep aiming"));
                     b.Append(IhLine("Range", IhNum(IhR("Bowmaster Ballista Shot", "Range", 60f)) + "m Laser Projectile, pierces, knocks back Small, staggers Big"));
+                    if (ascended) b.Append(IhLine("Full Charge", "every enemy pierced erupts (" + IhNum(IhR("Bowmaster Ballista Shot Ascended", "ShockwaveRadius_v0242", 5f)) + "m, " + IhNum(IhR("Bowmaster Ballista Shot Ascended", "ShockwavePercent", 60f)) + "% of the shot)"));
                     IhCosts(b, IhR("Bowmaster Ballista Shot", "StaminaCost", 30f), "Hold", IhR("Bowmaster Ballista Shot", "Cooldown", 14f));
                     break;
                 case "arrow_rain":
@@ -10832,13 +10834,15 @@ namespace AlbedosCustomClassesAdvanced
                     IhCosts(b, IhR("Bowmaster Explosive Arrow", "StaminaCost", 22f), "Instant", IhR("Bowmaster Explosive Arrow", "Cooldown", 12f));
                     break;
                 case "splitting_arrow":
-                    b.Append(IhLine("Damage", IhBowPct(IhR("Bowmaster Splitting Arrow", "DamagePercent", 120f), power) + ", splits " + IhBowPct(IhR("Bowmaster Splitting Arrow", "SplitPercent", 50f), power)));
-                    b.Append(IhLine("Splits", IhNum(IhR("Bowmaster Splitting Arrow", "Splits", 8f)) + " arrows in a " + IhNum(IhR("Bowmaster Splitting Arrow", "ConeDegrees", 60f)) + "° cone, " + IhNum(IhR("Bowmaster Splitting Arrow", "SplitRange", 20f)) + "m" + (ascended ? "; each splits again" : "")));
-                    IhCosts(b, IhR("Bowmaster Splitting Arrow", "StaminaCost", 20f), "Instant", IhR("Bowmaster Splitting Arrow", "Cooldown", 10f));
+                    b.Append(IhLine("Damage", IhBowPct(IhR("Bowmaster Splitting Arrow", "VolleyPercent_v0242", 90f), power) + " per volley to every enemy in the cone"));
+                    b.Append(IhLine("Volleys", IhNum(ascended ? IhR("Bowmaster Splitting Arrow Ascended", "Volleys", 5f) : IhR("Bowmaster Splitting Arrow", "Volleys", 3f)) + " x " + IhNum(IhR("Bowmaster Splitting Arrow", "ArrowsPerVolley", 5f)) + " arrows, " + IhNum(ascended ? IhR("Bowmaster Splitting Arrow Ascended", "VolleyInterval", 0.25f) : IhR("Bowmaster Splitting Arrow", "VolleyInterval", 0.5f)) + "s apart, standing still"));
+                    b.Append(IhLine("Area", IhNum(IhR("Bowmaster Splitting Arrow", "Range_v0242", 15f)) + "m, " + IhNum(IhR("Bowmaster Splitting Arrow", "ConeDegrees_v0242", 120f)) + "° cone, arrows pass through"));
+                    if (ascended) b.Append(IhLine("Inflicts", "Fire Burn, a stack per hit (" + IhNum(IhR("Bowmaster Splitting Arrow Ascended", "FireDotPercentPerStack", 6f)) + "% per stack), " + IhNum(IhR("Bowmaster Splitting Arrow Ascended", "FireDotDuration", 6f)) + "s, refreshed"));
+                    IhCosts(b, IhR("Bowmaster Splitting Arrow", "StaminaCost", 25f), "Instant", IhR("Bowmaster Splitting Arrow", "Cooldown", 10f));
                     break;
                 case "starfall_volley":
-                    b.Append(IhLine("Damage", IhBowPct(IhR("Bowmaster Starfall Volley", "ImpactPercent", 120f), power) + " per arrow (" + IhNum(IhR("Bowmaster Starfall Volley", "ImpactRadius", 4f)) + "m)"));
-                    b.Append(IhLine("Area", IhNum(IhR("Bowmaster Starfall Volley", "Radius", 20f)) + "m Ground PAC, an arrow every " + IhNum(IhR("Bowmaster Starfall Volley", "Interval", 0.25f)) + "s for " + IhNum(IhR("Bowmaster Starfall Volley", "Duration", 5f)) + "s"));
+                    b.Append(IhLine("Damage", IhBowPct(IhR("Bowmaster Starfall Volley", "TickPercent_v0242", 45f), power) + " to EVERY enemy in the area every " + IhNum(IhR("Bowmaster Starfall Volley", "HitInterval", 0.5f)) + "s for " + IhNum(IhR("Bowmaster Starfall Volley", "Duration", 5f)) + "s"));
+                    b.Append(IhLine("Area", IhNum(IhR("Bowmaster Starfall Volley", "Radius", 20f)) + "m Ground PAC" + (ascended ? "; ends with a giant arrow (" + IhNum(IhR("Bowmaster Starfall Volley Ascended", "FinalArrowPercent", 300f)) + "% to every enemy)" : "")));
                     IhCosts(b, IhR("Bowmaster Starfall Volley", "StaminaCost", 45f), IhNum(IhR("Bowmaster Starfall Volley", "ChannelSeconds", 2f)) + "s channel", IhR("Bowmaster Starfall Volley", "Cooldown", 150f));
                     break;
                 case "hawks_vigil":
@@ -11079,7 +11083,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "piercing_arrow": return "A straight arrow that tears through every foe in its line and cripples the first.";
                 case "tumble_shot": return "Backflip away and loose a fan of arrows at your aim.";
                 case "snare_trap": return "Set a hidden snare that holds small prey in place and slows the large.";
-                case "gale_volley": return "Leap back and loose a wide fan of arrows that blows small foes away.";
+                case "gale_volley": return "Spring back out of reach and loose a wide fan of arrows that blows small foes away.";
                 case "cyclone_arrow": return "A slow, spinning arrow of wind that drags small foes along its path.";
                 case "swallow_dive": return "Dash through the enemy line as a gust of wind, cutting everything you pass.";
                 case "skyfall_barrage": return "Leap high into the sky and rain arrows on the ground below.";
@@ -11090,7 +11094,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "arrow_rain": return "Darken the sky over your aim with a crippling volley.";
                 case "pinning_shot": return "Nail your target to the ground and leave it open to your next shots.";
                 case "explosive_arrow": return "An arrow that bursts into flame on impact.";
-                case "splitting_arrow": return "An arrow that shatters into a cone of arrows on its first hit.";
+                case "splitting_arrow": return "Plant your feet and loose volley after volley into a wide cone.";
                 case "starfall_volley": return "Call giant arrows down from the heavens across the battlefield.";
                 case "hawks_vigil": return "Reveal every enemy around you and sharpen your allies' aim.";
             }
@@ -11145,11 +11149,17 @@ namespace AlbedosCustomClassesAdvanced
                 case "tumble_shot": return "5 arrows; a kill resets the cooldown; leaves a 4m gust that Cripples";
                 case "piercing_arrow": return "60m, the arrow widens as it flies and Exposes";
                 case "gale_volley": return "a second fan arcs over the first";
-                case "cyclone_arrow": return "splits into 3 smaller cyclones when it ends";
+                case "cyclone_arrow": return "splits into 3 smaller cyclones when it first catches an enemy";
                 case "swallow_dive": return "3 charges; each dash leaves a wind slash that hits again after 0.5s";
                 case "skyfall_barrage": return "14m circle that you steer while hovering";
                 case "ricochet_arrow": return "10 bounces; the last one explodes (4m)";
-                case "furious_winds": return "5s, 14m, ends in a gale that launches Small enemies";
+                case "furious_winds": return "5s, 14m (10m barrier), ends in a gale that launches Small enemies";
+                case "ballista_shot": return "at full charge every enemy it pierces erupts (5m, 60%)";
+                case "arrow_rain": return "frozen arrows: every 3rd hit Freezes";
+                case "pinning_shot": return "also pins 2 nearby enemies";
+                case "explosive_arrow": return "leaves a burning field for 3s";
+                case "splitting_arrow": return "5 volleys 0.25s apart, each hit stacks a Fire Burn";
+                case "starfall_volley": return "ends with a giant arrow: 300% to every enemy in the area";
             }
             return "";
         }

@@ -1,10 +1,12 @@
-TEST THIS BUILD - v0.24.1 Bowmaster
-===================================
-1. Ranger + Bow: Left Click fires instantly at full range (hold = auto chain, 4th hit stronger).
-   Hold Right Click = draw; Left Click releases; let go of Right Click = cancel. No blocking.
-2. Arrows don't go down. Damage with < 100 arrows vs a full stack of 100 (bonus only at 100).
-3. Equip a Shield as Ranger -> it comes off. Acrobat + Crossbow -> it comes off.
-4. Tumble Shot: quick 2m backflip, arrows mid-flip.
-5. Acrobat Furious Winds: enemies and their projectiles can't get inside 10m; stacking Spirit DoT.
-6. Bowmaster (/ih advance Bowmaster): stand still -> "Focus 5/5"; Crossbow reloads fast, holster and
-   re-equip -> still loaded. All 5 skills, Starfall Volley, Hawk's Vigil.
+TEST THIS BUILD - v0.24.2 Ranger Polish
+=======================================
+1. Ranger + Bow: Left Click chain fires real arrows; hold Right Click, Left Click releases an arrow.
+   Tap Right Click / release instantly, then charge again at once (no lockout). Try with 0 arrows.
+2. Tumble Shot: backflip 2m straight back, no vanilla dodge slide; take a hit mid-flip = no damage.
+3. Acrobat Gale Volley: same 2m swift back-jump + i-frames.
+4. Ascended Cyclone Arrow (F8 > Progression > Ascended): splits as soon as it touches an enemy.
+5. Furious Winds: enemies next to you drift out slowly (Small ~5s, Big ~8s) to 7m and can't walk
+   back in; enemies at 7-10m still take damage; arrows from enemies vanish at 7m.
+6. Bowmaster Splitting Arrow: rooted, 3 volleys in a wide cone (Ascended 5 fast volleys + burn).
+7. Starfall Volley: every enemy in the 20m circle takes damage every 0.5s.
+8. Look at the Ranger tree (both ACs), the hotbar icons and the Altar Ranger cards.

@@ -26,6 +26,8 @@ A = os.path.join(ROOT, "ImmortalHeroesAssets")
 PACK = os.path.join(ROOT, "docs", "source_art", "art_refresh")
 KEEP = os.path.join(ROOT, "docs", "source_art", "backdrops_v0238")
 OLD_FRAMES = os.path.join(ROOT, "docs", "source_art", "backdrops_v0210")
+# v0.24.2 Ranger art: the user's scenes (backgrounds/) + our icons from tools/build_ranger_icons.py.
+RANGER = os.path.join(ROOT, "docs", "source_art", "ranger_kali")
 
 FIELDS = {"lightning_zap": (175, 166, 229, 217), "righteous_strike": (175, 295, 228, 345), "holy_wave": (175, 420, 228, 469),
           "goddess_relic": (378, 166, 431, 217), "judgement_hammer": (379, 295, 433, 345), "heavens_light": (390, 418, 444, 469),
@@ -51,14 +53,13 @@ KITS = [
     ("Sorcerer", "Spellcaster", ["flame_burst", "glacial_descent", "stonefang_eruption"],
      ["arcane_phalanx", "afterimage_arsenal", "void_step", "rift_echo", "gravity_blast"], "arcane_rupture", "rift_walker",
      "sorcerer", "horizonwalker", "sorcerer", "horizon_walker"),
-    # v0.24.0 Ranger: no paintings yet -> class-coloured panels without a scene and dark placeholder
-    # openings (the game draws the skill initials until Icon_<id>.png exists).
+    # v0.24.2 Ranger: the user's Ranger / Acrobat / Bowmaster scenes, icons from build_ranger_icons.py.
     ("Ranger", "Acrobat", ["piercing_arrow", "tumble_shot", "snare_trap"],
      ["gale_volley", "cyclone_arrow", "swallow_dive", "skyfall_barrage", "ricochet_arrow"], "furious_winds", "tailwind",
-     "ranger", "acrobat", None, None),
+     "ranger", "acrobat", "ranger", "acrobat"),
     ("Ranger", "Bowmaster", ["piercing_arrow", "tumble_shot", "snare_trap"],
      ["ballista_shot", "arrow_rain", "pinning_shot", "explosive_arrow", "splitting_arrow"], "starfall_volley", "hawks_vigil",
-     "ranger", "bowmaster", None, None),
+     "ranger", "bowmaster", "ranger", "bowmaster"),
 ]
 CLERIC_KITS = [
     ("Paladin", ["lightning_zap", "righteous_strike", "holy_wave"],
@@ -69,8 +70,8 @@ CLERIC_KITS = [
 SIGNATURES = {"moonlight_splitter", "crescent_cleave", "stomp", "circle_swing", "meteor_fall", "gravity_dominion", "arcane_phalanx",
               "afterimage_arsenal", "gale_volley", "cyclone_arrow", "ballista_shot", "arrow_rain", "goddess_relic", "judgement_hammer", "lightning_relic", "holy_relic"}
 GREEN = {"ray_of_hope", "holy_wave", "void_step"}
-ULTIMATES = {"halfmoon_slash", "whirlwind", "elemental_cataclysm", "arcane_rupture", "electric_smite", "lightning_tempest"}
-GRACES = {"knights_guidance", "battlecry", "clockwork", "rift_walker", "heavens_light", "grand_sigil"}
+ULTIMATES = {"furious_winds", "starfall_volley", "halfmoon_slash", "whirlwind", "elemental_cataclysm", "arcane_rupture", "electric_smite", "lightning_tempest"}
+GRACES = {"tailwind", "hawks_vigil", "knights_guidance", "battlecry", "clockwork", "rift_walker", "heavens_light", "grand_sigil"}
 
 # Gradient maps (shadow, mid, light, highlight) + blend strength, per identity.
 GRADES = {
@@ -81,6 +82,9 @@ GRADES = {
     "sorcerer": ([(9, 4, 20), (78, 30, 150), (186, 118, 255), (248, 234, 255)], 0.78),
     "archmage": ([(9, 4, 20), (84, 28, 150), (196, 116, 255), (250, 234, 255)], 0.75),
     "horizonwalker": ([(6, 4, 22), (66, 34, 160), (170, 128, 255), (244, 236, 255)], 0.75),
+    "ranger": ([(5, 12, 8), (46, 96, 40), (160, 220, 120), (240, 255, 228)], 0.35),
+    "acrobat": ([(4, 12, 14), (30, 100, 92), (130, 235, 205), (236, 255, 250)], 0.40),
+    "bowmaster": ([(8, 12, 4), (70, 96, 30), (196, 220, 110), (255, 250, 220)], 0.35),
 }
 # Panel hue per identity (degrees) for the background re-hue and the wash tint.
 SATS = {"priest": 0.45}
@@ -114,8 +118,21 @@ def grade(img, key):
     return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8))
 
 
+def icon_path(sid):
+    for folder in (os.path.join(PACK, "icons"), os.path.join(RANGER, "icons")):
+        p = os.path.join(folder, "Icon_" + sid + ".png")
+        if os.path.exists(p):
+            return p
+    return None
+
+
+def scene_path(name):
+    p = os.path.join(PACK, "scenes", name + ".jpg")
+    return p if os.path.exists(p) else os.path.join(RANGER, "backgrounds", name + ".jpg")
+
+
 def icon_art(sid, w, h, key):
-    src = Image.open(os.path.join(PACK, "icons", "Icon_" + sid + ".png")).convert("RGB")
+    src = Image.open(icon_path(sid)).convert("RGB")
     src = grade(src, key)
     # Cover-crop to the opening's aspect (centre), then downscale with a light sharpen.
     sw, sh = src.size
@@ -195,7 +212,7 @@ def opening_mask(size, slot):
 
 
 def has_icon(sid):
-    return os.path.exists(os.path.join(PACK, "icons", "Icon_" + sid + ".png"))
+    return icon_path(sid) is not None
 
 
 def placeholder_art(w, h):
@@ -357,7 +374,7 @@ def hue_rgb(hue, s, v):
 def washed_scene(name, box, hue, focus):
     """Scene cover-cropped into box, washed light like the Cleric watercolour panels."""
     w, h = box[2] - box[0] + 1, box[3] - box[1] + 1
-    sc = Image.open(os.path.join(PACK, "scenes", name + ".jpg")).convert("RGB")
+    sc = Image.open(scene_path(name)).convert("RGB")
     sw, sh = sc.size
     asp = w / float(h)
     if sw / float(sh) > asp:

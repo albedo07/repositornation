@@ -1,0 +1,63 @@
+{
+  "classes": [
+    {
+      "name": "Ranger",
+      "lineage": "Ranger",
+      "background": "backgrounds/ranger.jpg",
+      "card": "cards/ranger.jpg",
+      "default_tree_background": "backgrounds/ranger.jpg",
+      "base_class": true
+    },
+    {
+      "name": "Acrobat",
+      "lineage": "Ranger",
+      "background": "backgrounds/acrobat.jpg",
+      "card": "cards/acrobat.jpg",
+      "default_tree_background": "backgrounds/ranger.jpg",
+      "base_class": false
+    },
+    {
+      "name": "Bowmaster",
+      "lineage": "Ranger",
+      "background": "backgrounds/bowmaster.jpg",
+      "card": "cards/bowmaster.jpg",
+      "default_tree_background": "backgrounds/ranger.jpg",
+      "base_class": false
+    },
+    {
+      "name": "Kali",
+      "lineage": "Kali",
+      "background": "backgrounds/kali.jpg",
+      "card": "cards/kali.jpg",
+      "default_tree_background": "backgrounds/kali.jpg",
+      "base_class": true
+    },
+    {
+      "name": "Duelist",
+      "lineage": "Kali",
+      "background": "backgrounds/duelist.jpg",
+      "card": "cards/duelist.jpg",
+      "default_tree_background": "backgrounds/kali.jpg",
+      "base_class": false
+    },
+    {
+      "name": "Assassin",
+      "lineage": "Kali",
+      "background": "backgrounds/assassin.jpg",
+      "card": "cards/assassin.jpg",
+      "default_tree_background": "backgrounds/kali.jpg",
+      "base_class": false
+    }
+  ],
+  "scope": "Background and selection-card artwork only. Combat identity concepts, not approved skill or equipment specifications.",
+  "dimensions": {
+    "background": [
+      1024,
+      512
+    ],
+    "card": [
+      512,
+      512
+    ]
+  }
+}
