@@ -1,0 +1,8 @@
+IMMORTAL HEROES v0.22.2 - HUD AND ALTAR FIXES
+- HUD: hotkey labels (M4 + 1 ... M4 + R) are centred under their slots. The label style was
+  left-aligned, so every label sat ~17 px left of its skill (all classes).
+- Altar Class preview: Righteous Strike uses its normal Cyan icon (the old file is the Ascended
+  Magenta frame).
+- Regression scan vs v0.21.2 (last approved Cleric): unlock/Tier/gate/Ascension/hotbar/tooltip
+  rules resolve the same for Paladin and Priest. Lowering a Priest's level below 32/42/50 now
+  also annuls Priest Ascensions (only Paladin's were checked before).

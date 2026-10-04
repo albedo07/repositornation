@@ -3,7 +3,7 @@
 ## Working rules
 - User wants short responses and real execution, not long explanations.
 - **RUSH B** = immediately code the obvious requested task, minimal commentary, use latest approved build as baseline, don't redesign unrelated things, verify and package.
-- Latest package: **v0.22.1 — Kit UI Fixes** (v0.22.0 Universal Kits, v0.21.2 Balance Pass, v0.21.1 Cleric Tweaks, v0.21.0 Priest Ascended, v0.20.9 Buckler Parry, v0.20.8 Cleric per Framework, v0.20.7 Cleric Consistency, v0.20.6 Polish, v0.20.5 Config Window, v0.20.4 Tree and Altar Fixes), built on ChatGPT's v0.20.3 (Universal Tree runtime chassis + uGUI Altar with Altar_Background/Altar_ClassCards; it REPLACED our v0.19.2/0.19.3 IMGUI Altar, which the user accepted as the new base). Older: v0.19.x ours, v0.19.0 ChatGPT. Do NOT change combat/progression logic unless explicitly requested.
+- Latest package: **v0.22.2 — HUD and Altar Fixes** (v0.22.1 Kit UI Fixes, v0.22.0 Universal Kits, v0.21.2 Balance Pass, v0.21.1 Cleric Tweaks, v0.21.0 Priest Ascended, v0.20.9 Buckler Parry, v0.20.8 Cleric per Framework, v0.20.7 Cleric Consistency, v0.20.6 Polish, v0.20.5 Config Window, v0.20.4 Tree and Altar Fixes), built on ChatGPT's v0.20.3 (Universal Tree runtime chassis + uGUI Altar with Altar_Background/Altar_ClassCards; it REPLACED our v0.19.2/0.19.3 IMGUI Altar, which the user accepted as the new base). Older: v0.19.x ours, v0.19.0 ChatGPT. Do NOT change combat/progression logic unless explicitly requested.
 - Never patch visual problems by drawing random rectangles over the reference asset. Keep approved artwork intact; make layout/components fit properly.
 
 ## Framework doc (source of truth for design)
@@ -68,6 +68,7 @@
 - Holy Wave 10m + echo 5m/50% after 2s, x2 instant heal <30% HP · Lightning Relic 14m, 3 arcs, Sanctify, end blast 8m Stun Small · Holy Relic 14m, +30% buffs, cleanse, Sanctify, end heal 25% · DI dual Cross Cast, 250 Barrier, inward stagger · Grand Cross 20m/35m + 8m burst Stun Small/Big · Heaven's Judgement 14m, 3s, beams heal 3%, Pillar · Tempest follows Priest 12m, allies +20% Def + Hyper Armor, end Zap detonation.
 - v0.21.1: Advance prereq per branch (Priest = Holy Wave T7); Ascended Holy Wave castable on an aimed ally, no wind up; DI heal 20%->50% at T5; Angel Comet WindUpTime 2.5s (jump+dive); RS/JH/SC icon art via tools/paint_skill_icons.py (originals in docs/source_art/backdrops_v0210).
 - User rule: be short, no fluff, min-max tokens.
+- QA rule (user, 2026-10-04): scan before sending every pass. Anchor = last user-approved build (currently v0.21.2, commit 6af4931, for Cleric/Paladin/Priest): diff against it and check that approved behaviour/visuals did not change unless asked. Measure screenshots with pixels, never eyeball.
 
 ## Balance + Warrior/Sorcerer Ascensions (user decisions 2026-10-04)
 - Framework doc updated 2026-10-04 with all of this (Ascended lists for Sword Master / Mercenary / Priest / Wizard / Spellcaster, Punishing Bomb, burns, Zap 2s, Boss rule, Fallen Angel -> Angel Comet).
@@ -84,6 +85,7 @@
 - Hotbar save key: Cleric keeps `HotbarLayout.<AC>`; others `HotbarLayout.<Class>.<AC>` (`IhHotbarSaveKey`).
 - Compile check now includes Sorcerer.cs (Stubs: Hoverable/Interactable).
 - v0.22.1: AC header strip centre x 677 (strip 577-776, rect 580,122,194,18); branch plaques 88 wide at x 794 + i*92 with one shared fitted font; IhGraceFor falls back to the previewed branch before Advancement.
+- v0.22.2: HUD key labels use `_hudKeyCenterStyle` (UpperCenter); Altar shows Icon_righteous_strike_Normal.png (Icon_righteous_strike.png is the Ascended magenta frame).
 
 ## Ascended designs (approved so far; tooltip header "ASCENDED - <SKILL>", names unchanged)
 - Paladin Righteous Strike (Ascended MC): 7m, applies Judgement Mark, Expose 8s, a second smaller strike (3m, 0.5x) when it detonates a Mark; also spawns 12 Lightning Trails in all directions, 7m range, faster than Electric Smite's trails, each applying Spirit DoT for 6s.

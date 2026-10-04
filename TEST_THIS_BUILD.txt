@@ -1,6 +1,4 @@
-TEST v0.22.1 - KIT UI FIXES
-1. Warrior / Sorcerer / Cleric before Lv 16: HUD Grace slot = grey Grace icon + padlock + M4 + R.
-2. Tree header "SEALED · ADVANCE AT LV 16" centred on its strip (Paladin / Priest too).
-3. SWORD MASTER | MERCENARY and WIZARD | SPELLCASTER plaques: no overlap, same text size.
-4. Impact Wave / Glacial Descent plates: clean, no stray mark.
-Then the v0.22.0 checklist (in docs/changelog) still applies.
+TEST v0.22.2 - HUD AND ALTAR FIXES
+1. HUD (any class): every key label centred under its slot, Grace label under the Grace box.
+2. Altar > Cleric > SKILLS: Righteous Strike icon has a Cyan frame like the other two.
+3. Quick regression: Paladin and Priest tree, hotbar, Advance, Ascend behave as in v0.21.2.

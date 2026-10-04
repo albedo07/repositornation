@@ -18,7 +18,7 @@ namespace AlbedosCustomClasses
     {
         public const string ModGuid = "albedo.customclasses";
         public const string ModName = "Dragon's Altar";
-        public const string ModVersion = "0.22.1";
+        public const string ModVersion = "0.22.2";
 
         internal const string ClassDataKey = "AlbedoCustomClasses.Class";
         internal const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -789,7 +789,9 @@ namespace AlbedosCustomClasses
                 string[] existing={"lightning_zap","righteous_strike","holy_wave","goddess_relic","judgement_hammer","shield_charge","fallen_angel","ray_of_hope","electric_smite","heavens_light"};
                 if(Array.IndexOf(existing,id)<0) return null;
                 // Reuse a cached sprite, without registering a second ownership entry.
-                return AltarSprite("Icon_"+id+".png");
+                // v0.22.2: Icon_righteous_strike.png is the Ascended (Magenta) frame; the Altar shows
+                // the Class skill, so it uses the normal Cyan icon.
+                return AltarSprite(id=="righteous_strike" ? "Icon_righteous_strike_Normal.png" : "Icon_"+id+".png");
             }
             _altarSprites[key]=result; return result;
         }

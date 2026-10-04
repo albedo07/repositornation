@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.22.1";
+        public const string ModVersion = "0.22.2";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -515,6 +515,7 @@ namespace AlbedosCustomClassesAdvanced
         private GUIStyle _bookHeaderStyle;
         private GUIStyle _bookTextStyle;
         private GUIStyle _hudKeyStyle;
+        private GUIStyle _hudKeyCenterStyle; // tree HUD: key label centred under its slot
         private GUIStyle _hudCooldownStyle;
         private Texture2D _slotReadyTex;
         private Texture2D _slotCooldownTex;
@@ -9543,7 +9544,7 @@ namespace AlbedosCustomClassesAdvanced
                 }
                 if (_ihPadlockTex != null)
                     GUI.DrawTexture(new Rect(grace.center.x - grace.width * 0.22f, grace.center.y - grace.width * 0.22f, grace.width * 0.44f, grace.width * 0.44f), _ihPadlockTex);
-                GUI.Label(new Rect(grace.x - 10f, grace.yMax - 1f, grace.width + 20f, 16f * scale), FormatHotbarBinding(BindGrace), _hudKeyStyle);
+                GUI.Label(new Rect(grace.x - 10f, grace.yMax - 1f, grace.width + 20f, 16f * scale), FormatHotbarBinding(BindGrace), _hudKeyCenterStyle);
             }
         }
 
@@ -9569,7 +9570,7 @@ namespace AlbedosCustomClassesAdvanced
                     GUI.Label(inner, cooldown >= 60f ? Mathf.CeilToInt(cooldown / 60f).ToString() + "m" : cooldown.ToString(cooldown >= 10f ? "0" : "0.0"), _hudCooldownStyle);
                 }
             }
-            GUI.Label(new Rect(rect.x - 10f, rect.yMax - 1f, rect.width + 20f, 16f * scale), FormatHotbarBinding(binding), _hudKeyStyle);
+            GUI.Label(new Rect(rect.x - 10f, rect.yMax - 1f, rect.width + 20f, 16f * scale), FormatHotbarBinding(binding), _hudKeyCenterStyle);
         }
 
         // ------------------------------------------------------------------ Advance / Ascend
@@ -12928,6 +12929,8 @@ namespace AlbedosCustomClassesAdvanced
             _hudKeyStyle.fontStyle = FontStyle.Bold;
             _hudKeyStyle.alignment = TextAnchor.UpperLeft;
             _hudKeyStyle.normal.textColor = new Color(0.92f, 0.92f, 0.92f, 1f);
+            _hudKeyCenterStyle = new GUIStyle(_hudKeyStyle);
+            _hudKeyCenterStyle.alignment = TextAnchor.UpperCenter;
 
             _hudCooldownStyle = new GUIStyle(GUI.skin.label);
             _hudCooldownStyle.fontSize = 11;
