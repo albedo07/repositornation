@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.23.10";
+        public const string ModVersion = "0.24.0";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -7921,7 +7921,8 @@ namespace AlbedosCustomClassesAdvanced
             if (skillType == Skills.SkillType.Clubs && DragonCombat.IsHolyTrinityActive(player))
                 return Mathf.Max(0f, _holyTrinityClubs.Value);
 
-            return 0f;
+            // v0.24.0: skill modules (Ranger Wildborn +20 Bows / Sneak, Tailwind +Jump).
+            return Mathf.Max(0f, DragonCombat.ExternalSkillLevelBonus(player, skillType.ToString()));
         }
 
         private void PatchWithHarmony(MethodBase original, HarmonyMethod prefix, HarmonyMethod postfix)
@@ -9225,6 +9226,7 @@ namespace AlbedosCustomClassesAdvanced
         private static readonly string[] IhAdvSlots = { "goddess_relic", "judgement_hammer", "shield_charge", "fallen_angel", "ray_of_hope" };
         private static readonly string[] IhWarriorSkills = { "heavy_slash", "impact_wave", "impact_punch" };
         private static readonly string[] IhSorcererSkills = { "flame_burst", "glacial_descent", "stonefang_eruption" };
+        private static readonly string[] IhRangerSkills = { "piercing_arrow", "tumble_shot", "snare_trap" };
         private static readonly IhKit[] IhKits =
         {
             new IhKit("Cleric", "Paladin", IhClassSkills, IhAdvSkills, IhUltimate, IhGrace, IhAscendedClassSkill, null),
@@ -9233,7 +9235,10 @@ namespace AlbedosCustomClassesAdvanced
             new IhKit("Warrior", "Mercenary", IhWarriorSkills, new string[] { "stomp", "circle_swing", "bonecrusher", "seismic_guillotine", "punishing_bomb" }, "whirlwind", "battlecry", "heavy_slash", null),
             new IhKit("Sorcerer", "Wizard", IhSorcererSkills, new string[] { "meteor_fall", "gravity_dominion", "astral_railcannon", "astral_greatblade", "frost_nova" }, "elemental_cataclysm", "clockwork", "glacial_descent", null),
             // Spellcaster: Void Step has its own Lv 42 Ascension on top of the normal one (5 total).
-            new IhKit("Sorcerer", "Spellcaster", IhSorcererSkills, new string[] { "arcane_phalanx", "afterimage_arsenal", "void_step", "rift_echo", "gravity_blast" }, "arcane_rupture", "rift_walker", "stonefang_eruption", "void_step")
+            new IhKit("Sorcerer", "Spellcaster", IhSorcererSkills, new string[] { "arcane_phalanx", "afterimage_arsenal", "void_step", "rift_echo", "gravity_blast" }, "arcane_rupture", "rift_walker", "stonefang_eruption", "void_step"),
+            // v0.24.0 Ranger (DragonsAltar.Ranger.cs).
+            new IhKit("Ranger", "Acrobat", IhRangerSkills, new string[] { "gale_volley", "cyclone_arrow", "swallow_dive", "skyfall_barrage", "ricochet_arrow" }, "tempest_dance", "tailwind", "tumble_shot", null),
+            new IhKit("Ranger", "Bowmaster", IhRangerSkills, new string[] { "ballista_shot", "arrow_rain", "pinning_shot", "explosive_arrow", "splitting_arrow" }, "starfall_volley", "hawks_vigil", "piercing_arrow", null)
         };
         private static IhKit IhKitFor(string cls, string ac)
         {
@@ -9256,6 +9261,7 @@ namespace AlbedosCustomClassesAdvanced
             if (cls == "Cleric") return IhClassSkills;
             if (cls == "Warrior") return IhWarriorSkills;
             if (cls == "Sorcerer") return IhSorcererSkills;
+            if (cls == "Ranger") return IhRangerSkills;
             return new string[0];
         }
         private static string IhClassOfSkill(string id)
@@ -9263,6 +9269,7 @@ namespace AlbedosCustomClassesAdvanced
             if (IhContains(IhClassSkills, id)) return "Cleric";
             if (IhContains(IhWarriorSkills, id)) return "Warrior";
             if (IhContains(IhSorcererSkills, id)) return "Sorcerer";
+            if (IhContains(IhRangerSkills, id)) return "Ranger";
             return "";
         }
         private static bool IhIsAnyClassSkill(string id)
@@ -10000,6 +10007,17 @@ namespace AlbedosCustomClassesAdvanced
             }
         }
 
+        // Stated exceptions to the mid-air rule: Horizon Walker (every skill), Acrobat (Windstep:
+        // every Ranger skill), and recasts that only steer / end a skill that is already running.
+        private bool IhCastableMidAir(Player player, string id)
+        {
+            string adv = GetAdvancement(player);
+            if (adv == "Spellcaster" || adv == "Acrobat") return true;
+            if (id == "whirlwind" && _whirlActive) return true;
+            if (id == "shield_charge" && _shieldChargeActive) return true;
+            return false;
+        }
+
         private bool IhCanCast(Player player, string id)
         {
             string reason;
@@ -10072,6 +10090,24 @@ namespace AlbedosCustomClassesAdvanced
                 case "gravity_blast": return "Gravity Blast";
                 case "arcane_rupture": return "Arcane Rupture";
                 case "rift_walker": return "Rift Walker";
+                // v0.24.0 Ranger
+                case "piercing_arrow": return "Piercing Arrow";
+                case "tumble_shot": return "Tumble Shot";
+                case "snare_trap": return "Snare Trap";
+                case "gale_volley": return "Gale Volley";
+                case "cyclone_arrow": return "Cyclone Arrow";
+                case "swallow_dive": return "Swallow Dive";
+                case "skyfall_barrage": return "Skyfall Barrage";
+                case "ricochet_arrow": return "Ricochet Arrow";
+                case "tempest_dance": return "Tempest Dance";
+                case "tailwind": return "Tailwind";
+                case "ballista_shot": return "Ballista Shot";
+                case "arrow_rain": return "Arrow Rain";
+                case "pinning_shot": return "Pinning Shot";
+                case "explosive_arrow": return "Explosive Arrow";
+                case "splitting_arrow": return "Splitting Arrow";
+                case "starfall_volley": return "Starfall Volley";
+                case "hawks_vigil": return "Hawk's Vigil";
             }
             return id;
         }
@@ -10253,7 +10289,7 @@ namespace AlbedosCustomClassesAdvanced
             else if (cmd == "class")
             {
                 string mc = arg.Length == 0 ? "" : char.ToUpperInvariant(arg[0]) + arg.Substring(1).ToLowerInvariant();
-                if (mc != "Warrior" && mc != "Cleric" && mc != "Sorcerer") { notes.Add("Usage: /ih class Warrior|Cleric|Sorcerer"); return; }
+                if (mc != "Warrior" && mc != "Cleric" && mc != "Sorcerer" && mc != "Ranger") { notes.Add("Usage: /ih class Warrior|Cleric|Sorcerer|Ranger"); return; }
                 IhWrite(player, ClassDataKey, mc);
                 IhWrite(player, AdvancementDataKey, "");
                 IhSetTiers(player, new Dictionary<string, int>());
@@ -10262,10 +10298,16 @@ namespace AlbedosCustomClassesAdvanced
             }
             else if (cmd == "advance")
             {
+                // v0.24.0: any Advancement Class (display names accepted).
                 string ac = IhNormalizeSkill(arg);
-                if (ac != "paladin" && ac != "priest") { notes.Add("Usage: /ih advance Paladin|Priest"); return; }
-                IhWrite(player, ClassDataKey, "Cleric");
-                IhWrite(player, AdvancementDataKey, ac == "priest" ? "Priest" : "Paladin");
+                if (ac == "archmage") ac = "wizard";
+                if (ac == "horizon_walker") ac = "spellcaster";
+                IhKit target = null;
+                for (int k = 0; k < IhKits.Length; k++)
+                    if (IhNormalizeSkill(IhKits[k].Ac) == ac) target = IhKits[k];
+                if (target == null) { notes.Add("Usage: /ih advance <Advancement Class>"); return; }
+                IhWrite(player, ClassDataKey, target.Class);
+                IhWrite(player, AdvancementDataKey, target.Ac);
                 if (IhGetLevel(player) < 16)
                     IhWrite(player, IhLevelKey, "16");
                 _hotbarLayoutOwnerKey = "";
@@ -10657,6 +10699,7 @@ namespace AlbedosCustomClassesAdvanced
             IhAppendSorcererStats(b, id, power);
             IhAppendWizardStats(b, player, id, ascended, power);
             IhAppendSpellcasterStats(b, player, id, ascended, power);
+            IhAppendRangerStats(b, id, ascended, power);
             // v0.22.0: Warrior / Sorcerer skills list their approved Ascended effect until their
             // full stat tooltips come with each Advancement rework.
             string ascendedText = IhKitAscendedSummary(id);
@@ -10695,6 +10738,79 @@ namespace AlbedosCustomClassesAdvanced
                     b.Append(IhLine("Range", IhNum(IhCfg(sk, "Sorcerer.Stonefang Eruption", "GroundPACRange", 40f)) + "m"));
                     b.Append(IhLine("Inflicts", "Stun (Small), Cripple " + IhNum(IhCfg(sk, "Sorcerer.Stonefang Eruption", "CrippleDuration", 6f)) + "s (Small, Big)"));
                     IhEitrCosts(b, IhCfg(sk, "Sorcerer.Stonefang Eruption", "EitrCost", 24f), IhNum(IhCfg(sk, "Sorcerer.Stonefang Eruption", "Windup", 0.8f)) + "s", IhCfg(sk, "Sorcerer.Stonefang Eruption", "Cooldown", 9f));
+                    break;
+            }
+        }
+
+        // v0.24.0: Ranger / Acrobat stats (values live in the Ranger module). Damage scales with your
+        // Bow / Crossbow + loaded ammo, so it is shown as a % of that ("Bow Damage").
+        private const string IhRangerGuid = "albedo.customclasses.ranger";
+        private static float IhR(string section, string key, float fallback) { return IhCfg(IhRangerGuid, section, key, fallback); }
+        private string IhBowPct(float percent, float power) { return IhNum(percent * power) + "% Bow Damage"; }
+
+        private void IhAppendRangerStats(System.Text.StringBuilder b, string id, bool ascended, float power)
+        {
+            switch (id)
+            {
+                case "piercing_arrow":
+                    b.Append(IhLine("Damage", IhBowPct(IhR("Ranger Piercing Arrow", "DamagePercent", 160f), power) + ", every enemy in the line"));
+                    b.Append(IhLine("Range", IhNum(ascended ? IhR("Ranger Piercing Arrow Ascended", "Range", 60f) : IhR("Ranger Piercing Arrow", "Range", 40f)) + "m Laser Projectile, Free Aim"));
+                    b.Append(IhLine("Inflicts", "Cripple " + IhNum(IhR("Ranger Piercing Arrow", "CrippleDuration", 3f)) + "s (first enemy)" + (ascended ? ", Expose " + IhNum(IhR("Ranger Piercing Arrow Ascended", "ExposeDuration", 6f)) + "s" : "")));
+                    IhCosts(b, IhR("Ranger Piercing Arrow", "StaminaCost", 20f), "Instant", IhR("Ranger Piercing Arrow", "Cooldown", 8f));
+                    break;
+                case "tumble_shot":
+                    b.Append(IhLine("Damage", IhBowPct(IhR("Ranger Tumble Shot", "DamagePercent", 70f), power) + " per arrow"));
+                    b.Append(IhLine("Arrows", IhNum(ascended ? IhR("Ranger Tumble Shot Ascended", "Arrows", 5f) : IhR("Ranger Tumble Shot", "Arrows", 3f)) + " in a " + IhNum(IhR("Ranger Tumble Shot", "FanDegrees", 24f)) + "° fan"));
+                    b.Append(IhLine("Backflip", IhNum(IhR("Ranger Tumble Shot", "FlipDistance", 6f)) + "m"));
+                    IhCosts(b, IhR("Ranger Tumble Shot", "StaminaCost", 18f), "Instant", IhR("Ranger Tumble Shot", "Cooldown", 7f));
+                    break;
+                case "snare_trap":
+                    b.Append(IhLine("Damage", IhBowPct(IhR("Ranger Snare Trap", "DamagePercent", 50f), power)));
+                    b.Append(IhLine("Trigger Radius", IhNum(IhR("Ranger Snare Trap", "TriggerRadius", 4f)) + "m, Ground PAC " + IhNum(IhR("Ranger Snare Trap", "Range", 25f)) + "m"));
+                    b.Append(IhLine("Inflicts", "Stun (Small), Cripple " + IhNum(IhR("Ranger Snare Trap", "CrippleDuration", 4f)) + "s"));
+                    b.Append(IhLine("Traps", IhNum(IhR("Ranger Snare Trap", "MaxTraps", 2f)) + " at once, " + IhNum(IhR("Ranger Snare Trap", "Lifetime", 60f)) + "s each"));
+                    IhCosts(b, IhR("Ranger Snare Trap", "StaminaCost", 15f), "Instant", IhR("Ranger Snare Trap", "Cooldown", 12f));
+                    break;
+                case "gale_volley":
+                    b.Append(IhLine("Damage", IhBowPct(IhR("Acrobat Gale Volley", "DamagePercent", 60f), power) + " per arrow"));
+                    b.Append(IhLine("Arrows", IhNum(IhR("Acrobat Gale Volley", "Arrows", 7f)) + " in a " + IhNum(IhR("Acrobat Gale Volley", "FanDegrees", 60f)) + "° fan" + (ascended ? ", two fans" : "")));
+                    b.Append(IhLine("Effect", "Leap back " + IhNum(IhR("Acrobat Gale Volley", "LeapDistance", 5f)) + "m, knocks back Small enemies"));
+                    IhCosts(b, IhR("Acrobat Gale Volley", "StaminaCost", 22f), "Instant", IhR("Acrobat Gale Volley", "Cooldown", 9f));
+                    break;
+                case "cyclone_arrow":
+                    b.Append(IhLine("Damage", IhBowPct(IhR("Acrobat Cyclone Arrow", "DamagePercent", 35f), power) + " every " + IhNum(IhR("Acrobat Cyclone Arrow", "HitInterval", 0.3f)) + "s"));
+                    b.Append(IhLine("Range", IhNum(IhR("Acrobat Cyclone Arrow", "Range", 30f)) + "m in " + IhNum(IhR("Acrobat Cyclone Arrow", "TravelTime", 3f)) + "s, Free Aim"));
+                    b.Append(IhLine("Radius", IhNum(IhR("Acrobat Cyclone Arrow", "Radius", 3f)) + "m, pulls Small enemies"));
+                    IhCosts(b, IhR("Acrobat Cyclone Arrow", "StaminaCost", 25f), "Instant", IhR("Acrobat Cyclone Arrow", "Cooldown", 12f));
+                    break;
+                case "swallow_dive":
+                    b.Append(IhLine("Damage", IhBowPct(IhR("Acrobat Swallow Dive", "DamagePercent", 90f), power) + " to everything you pass"));
+                    b.Append(IhLine("Dash", IhNum(IhR("Acrobat Swallow Dive", "Distance", 12f)) + "m Free Aim, through enemies"));
+                    b.Append(IhLine("Charges", IhNum(ascended ? IhR("Acrobat Swallow Dive Ascended", "Charges", 3f) : IhR("Acrobat Swallow Dive", "Charges", 2f)) + ", " + IhNum(IhR("Acrobat Swallow Dive", "RechargeSeconds", 8f)) + "s each"));
+                    b.Append(IhLine("Stamina Cost", IhNum(IhR("Acrobat Swallow Dive", "StaminaCost", 15f))));
+                    break;
+                case "skyfall_barrage":
+                    b.Append(IhLine("Damage", IhBowPct(IhR("Acrobat Skyfall Barrage", "TickPercent", 30f), power) + " every " + IhNum(IhR("Acrobat Skyfall Barrage", "TickInterval", 0.25f)) + "s for " + IhNum(IhR("Acrobat Skyfall Barrage", "BarrageDuration", 2f)) + "s"));
+                    b.Append(IhLine("Radius", IhNum(ascended ? IhR("Acrobat Skyfall Barrage Ascended", "Radius", 14f) : IhR("Acrobat Skyfall Barrage", "Radius", 10f)) + "m, Ground PAC " + IhNum(IhR("Acrobat Skyfall Barrage", "Range", 35f)) + "m"));
+                    b.Append(IhLine("Effect", "Leap " + IhNum(IhR("Acrobat Skyfall Barrage", "JumpHeight", 15f)) + "m up and hover; no fall damage"));
+                    IhCosts(b, IhR("Acrobat Skyfall Barrage", "StaminaCost", 30f), "0.5s", IhR("Acrobat Skyfall Barrage", "Cooldown", 16f));
+                    break;
+                case "ricochet_arrow":
+                    b.Append(IhLine("Damage", IhBowPct(IhR("Acrobat Ricochet Arrow", "DamagePercent", 80f), power) + ", +" + IhNum(IhR("Acrobat Ricochet Arrow", "BounceBonusPercent", 10f)) + "% per bounce"));
+                    b.Append(IhLine("Bounces", IhNum(ascended ? IhR("Acrobat Ricochet Arrow Ascended", "Bounces", 10f) : IhR("Acrobat Ricochet Arrow", "Bounces", 6f)) + " within " + IhNum(IhR("Acrobat Ricochet Arrow", "BounceRange", 10f)) + "m"));
+                    IhCosts(b, IhR("Acrobat Ricochet Arrow", "StaminaCost", 20f), "Instant", IhR("Acrobat Ricochet Arrow", "Cooldown", 10f));
+                    break;
+                case "tempest_dance":
+                    b.Append(IhLine("Damage", IhBowPct(IhR("Acrobat Tempest Dance", "ShotPercent", 120f), power) + " per blink, gale " + IhBowPct(IhR("Acrobat Tempest Dance", "BurstPercent", 150f), power)));
+                    b.Append(IhLine("Duration", IhNum(ascended ? IhR("Acrobat Tempest Dance Ascended", "Duration", 9f) : IhR("Acrobat Tempest Dance", "Duration", 6f)) + "s, Hyper Armor, up to " + IhNum(IhR("Acrobat Tempest Dance", "MaxTargets", 10f)) + " blinks within " + IhNum(IhR("Acrobat Tempest Dance", "Range", 25f)) + "m"));
+                    b.Append(IhLine("Gale", IhNum(IhR("Acrobat Tempest Dance", "BurstRadius", 10f)) + "m, launches Small enemies"));
+                    IhCosts(b, IhR("Acrobat Tempest Dance", "StaminaCost", 40f), "Instant", IhR("Acrobat Tempest Dance", "Cooldown", 120f));
+                    break;
+                case "tailwind":
+                    b.Append(IhLine("Effect", "+" + IhNum(IhR("Acrobat Tailwind", "MoveSpeedPercent", 50f)) + "% Move Speed, +" + IhNum(IhR("Acrobat Tailwind", "JumpSkillBonus", 30f)) + " Jump, no fall damage"));
+                    b.Append(IhLine("Radius", IhNum(IhR("Acrobat Tailwind", "Radius", 10f)) + "m (snapshot)"));
+                    b.Append(IhLine("Duration", IhNum(IhR("Acrobat Tailwind", "Duration", 120f) / 60f) + " min"));
+                    b.Append(IhLine("Cooldown", IhNum(IhR("Acrobat Tailwind", "Cooldown", 600f) / 60f) + " min"));
                     break;
             }
         }
@@ -10918,6 +11034,24 @@ namespace AlbedosCustomClassesAdvanced
                 case "gravity_blast": return "Launch a ball of darkness that drags small foes in and cripples the rest.";
                 case "arcane_rupture": return "Rupture the arcane at your aim, up to three times in a row.";
                 case "rift_walker": return "Open two linked portals for you and your allies.";
+                // v0.24.0 Ranger
+                case "piercing_arrow": return "A straight arrow that tears through every foe in its line and cripples the first.";
+                case "tumble_shot": return "Backflip away and loose a fan of arrows at your aim.";
+                case "snare_trap": return "Set a hidden snare that holds small prey in place and slows the large.";
+                case "gale_volley": return "Leap back and loose a wide fan of arrows that blows small foes away.";
+                case "cyclone_arrow": return "A slow, spinning arrow of wind that drags small foes along its path.";
+                case "swallow_dive": return "Dash through the enemy line as a gust of wind, cutting everything you pass.";
+                case "skyfall_barrage": return "Leap high into the sky and rain arrows on the ground below.";
+                case "ricochet_arrow": return "An arrow that bounces from foe to foe, hitting harder each time.";
+                case "tempest_dance": return "Become the storm: blink from foe to foe, then burst into a gale.";
+                case "tailwind": return "Wind lifts you and your allies: faster feet, higher jumps and no fall damage.";
+                case "ballista_shot": return "Hold to draw a siege-strength arrow that blasts through the enemy line.";
+                case "arrow_rain": return "Darken the sky over your aim with a crippling volley.";
+                case "pinning_shot": return "Nail your target to the ground and leave it open to your next shots.";
+                case "explosive_arrow": return "An arrow that bursts into flame on impact.";
+                case "splitting_arrow": return "An arrow that shatters into a cone of arrows on its first hit.";
+                case "starfall_volley": return "Call giant arrows down from the heavens across the battlefield.";
+                case "hawks_vigil": return "Reveal every enemy around you and sharpen your allies' aim.";
             }
             return "";
         }
@@ -10928,6 +11062,9 @@ namespace AlbedosCustomClassesAdvanced
             switch (id)
             {
                 case "__none__":
+                // v0.24.0: Bowmaster skills arrive with the next pass.
+                case "ballista_shot": case "arrow_rain": case "pinning_shot": case "explosive_arrow":
+                case "splitting_arrow": case "starfall_volley": case "hawks_vigil":
                     return true;
             }
             return false;
@@ -10966,6 +11103,15 @@ namespace AlbedosCustomClassesAdvanced
                 case "rift_echo": return "3 rifts at once, each 100%";
                 case "gravity_blast": return "25m, bursts for 130% when it stops, pulls Big too";
                 case "arcane_rupture": return "4 charges, 120% each";
+                // v0.24.0 Ranger
+                case "tumble_shot": return "5 arrows; a kill resets the cooldown; leaves a 4m gust that Cripples";
+                case "piercing_arrow": return "60m, the arrow widens as it flies and Exposes";
+                case "gale_volley": return "a second fan arcs over the first";
+                case "cyclone_arrow": return "splits into 3 smaller cyclones when it ends";
+                case "swallow_dive": return "3 charges; each dash leaves a wind slash that hits again after 0.5s";
+                case "skyfall_barrage": return "14m circle that you steer while hovering";
+                case "ricochet_arrow": return "10 bounces; the last one explodes (4m)";
+                case "tempest_dance": return "9s; the final gale pulls everything in before launching it";
             }
             return "";
         }
@@ -11180,6 +11326,12 @@ namespace AlbedosCustomClassesAdvanced
         {
             if (player == null || player.IsDead() || !IhCanCast(player, id))
                 return;
+            // v0.24.0 universal rule: skills can't be cast in mid-air unless stated.
+            if (!IhCastableMidAir(player, id) && !IsPlayerGrounded(player))
+            {
+                ShowMessage("Can't cast " + IhSkillName(id) + " in mid-air");
+                return;
+            }
             // v0.20.9: a pending Buckler Parry empowerment goes to the next damaging skill that
             // actually starts (cooldown starts, or a Relic / its cast begins), never to a failed press.
             bool tryEmpower = _parryEmpowerPending && IhIsPriest(player) && IhPriestDamageSkill(id) && IhCooldown(player, id) <= 0f;
@@ -12925,6 +13077,17 @@ namespace AlbedosCustomClassesAdvanced
                 }
         }
 
+        private static bool IhAssetExists(string fileName)
+        {
+            try
+            {
+                Type file = typeof(object).Assembly.GetType("System.IO.File");
+                MethodInfo exists = file == null ? null : file.GetMethod("Exists", new Type[] { typeof(string) });
+                return exists != null && (bool)exists.Invoke(null, new object[] { Paths.PluginPath + "/ImmortalHeroesAssets/" + fileName });
+            }
+            catch { return false; }
+        }
+
         private void IhBuildKitCanvas(IhKit k)
         {
             _ihKitBackdrops[k.Ac] = null;
@@ -12952,7 +13115,10 @@ namespace AlbedosCustomClassesAdvanced
                 ReferenceNodeUi node = nodes[i];
                 string slot = IhTemplateSlot(node.Id);
                 Rect field = IhFieldRect(slot);
-                if (hasArt) _ihPlaceholderArt.Remove(node.Id);
+                // v0.24.0: a kit canvas may still hold placeholder openings (Ranger until its paintings):
+                // initials stay on every skill without its own Icon_<id>.png.
+                if (hasArt && IhAssetExists("Icon_" + node.Id + ".png")) _ihPlaceholderArt.Remove(node.Id);
+                else if (hasArt) _ihPlaceholderArt.Add(node.Id);
                 // v0.23.6: the painted Grace frames have a gold inner bevel that the field rect
                 // overlapped unevenly (left/top 3px, none right/bottom); fill only the dark opening.
                 else { IhFillPlaceholder(canvas, slot == "heavens_light" ? Rect.MinMaxRect(393f, 421f, 442f, 467f) : field); _ihPlaceholderArt.Add(node.Id); }
@@ -12990,13 +13156,15 @@ namespace AlbedosCustomClassesAdvanced
 
         private static string IhClassBlessingTitle(string cls)
         {
-            return cls == "Warrior" ? "WARRIOR'S BLESSING" : cls == "Sorcerer" ? "WARLOCK - SORCERER'S BLESSING" : "CLERIC'S BLESSING";
+            return cls == "Warrior" ? "WARRIOR'S BLESSING" : cls == "Sorcerer" ? "WARLOCK - SORCERER'S BLESSING" : cls == "Ranger" ? "WILDBORN - RANGER'S BLESSING" : "CLERIC'S BLESSING";
         }
 
         private static string IhClassBlessingText(string cls)
         {
             if (cls == "Warrior")
                 return "Hyper Armor against any hit below 30% of your Total HP. Parry strength x2. +20 Run and +20 Jump skill.";
+            if (cls == "Ranger")
+                return "+20 Bows and +20 Sneak. No movement penalty from Bows or Crossbows. -30% fall damage.";
             if (cls == "Sorcerer")
                 return "Creature melee damage -70% (mining and woodcutting are not affected). +65 Max Eitr, +35% Eitr Regen, Eitr starts regenerating twice as fast. Cannot Block, Parry or equip Shields.";
             return "All Shields: 1.5x Block Force + Block Armor. Staff + Shield allowed. No movement penalty from Shields, Staves, or one-handed Club-skill weapons. +35 Max HP and +20% HP Regen.";
@@ -13010,6 +13178,8 @@ namespace AlbedosCustomClassesAdvanced
                 case "Mercenary": return "WARFREAK - MASTERY";
                 case "Wizard": return "ARCHMAGE - MASTERY";
                 case "Spellcaster": return "YIN AND YANG - MASTERY";
+                case "Acrobat": return "WINDSTEP - MASTERY";
+                case "Bowmaster": return "DEADEYE - MASTERY";
             }
             return IhAcDisplay(ac).ToUpperInvariant() + " - MASTERY";
         }
@@ -13022,6 +13192,8 @@ namespace AlbedosCustomClassesAdvanced
                 case "Mercenary": return "Dual-wield any two one-handed physical weapons. +10 Sword, Axe and Clubs (cap 100). +50% Attack Speed with two one-handed or a two-handed physical weapon. No physical weapon movement penalty. +30% Armor and stronger aggro. Unchained Fury: +1 Fury per melee hit, +3 per enemy hit by a skill; at 100 it triggers for 20s (3 min lockout).";
                 case "Wizard": return "Charged Staff attacks (Mouse2 + Mouse1): up to 3 stacks, 1 per second, 1 Eitr per 0.1s. Stack 1 doubles the size, Stacks 2-3 add damage. Overcharge: after 300 Eitr spent, 12s of +40% wind-up speed, +40% Eitr Regen and +40% Magic Damage.";
                 case "Spellcaster": return "Staff / Wand attack interval -50%, Eitr use -50%, +20% Eitr Regen, normal Staff / Wand damage -50%. No skill wind-ups, no Staff / Wand movement penalty. Dual Gun Staves fire together and are 100% accurate.";
+                case "Acrobat": return "A second jump in mid-air. Dodge costs 50% less Stamina. Every Ranger skill can be cast in the air. Each enemy hit by your skills takes 1s off your shortest running cooldown (up to 3s per cast).";
+                case "Bowmaster": return "Standing still builds Focus: up to 5 stacks, +8% damage and +10% range each; moving drains it. Fully charged shots deal +30% damage. Crossbows reload 40% faster.";
             }
             return "";
         }

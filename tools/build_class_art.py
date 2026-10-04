@@ -51,6 +51,14 @@ KITS = [
     ("Sorcerer", "Spellcaster", ["flame_burst", "glacial_descent", "stonefang_eruption"],
      ["arcane_phalanx", "afterimage_arsenal", "void_step", "rift_echo", "gravity_blast"], "arcane_rupture", "rift_walker",
      "sorcerer", "horizonwalker", "sorcerer", "horizon_walker"),
+    # v0.24.0 Ranger: no paintings yet -> class-coloured panels without a scene and dark placeholder
+    # openings (the game draws the skill initials until Icon_<id>.png exists).
+    ("Ranger", "Acrobat", ["piercing_arrow", "tumble_shot", "snare_trap"],
+     ["gale_volley", "cyclone_arrow", "swallow_dive", "skyfall_barrage", "ricochet_arrow"], "tempest_dance", "tailwind",
+     "ranger", "acrobat", None, None),
+    ("Ranger", "Bowmaster", ["piercing_arrow", "tumble_shot", "snare_trap"],
+     ["ballista_shot", "arrow_rain", "pinning_shot", "explosive_arrow", "splitting_arrow"], "starfall_volley", "hawks_vigil",
+     "ranger", "bowmaster", None, None),
 ]
 CLERIC_KITS = [
     ("Paladin", ["lightning_zap", "righteous_strike", "holy_wave"],
@@ -59,7 +67,7 @@ CLERIC_KITS = [
      ["lightning_relic", "holy_relic", "divine_intervention", "grand_cross", "heavens_judgement"], "lightning_tempest", "grand_sigil"),
 ]
 SIGNATURES = {"moonlight_splitter", "crescent_cleave", "stomp", "circle_swing", "meteor_fall", "gravity_dominion", "arcane_phalanx",
-              "afterimage_arsenal", "goddess_relic", "judgement_hammer", "lightning_relic", "holy_relic"}
+              "afterimage_arsenal", "gale_volley", "cyclone_arrow", "ballista_shot", "arrow_rain", "goddess_relic", "judgement_hammer", "lightning_relic", "holy_relic"}
 GREEN = {"ray_of_hope", "holy_wave", "void_step"}
 ULTIMATES = {"halfmoon_slash", "whirlwind", "elemental_cataclysm", "arcane_rupture", "electric_smite", "lightning_tempest"}
 GRACES = {"knights_guidance", "battlecry", "clockwork", "rift_walker", "heavens_light", "grand_sigil"}
@@ -76,7 +84,7 @@ GRADES = {
 }
 # Panel hue per identity (degrees) for the background re-hue and the wash tint.
 SATS = {"priest": 0.45}
-HUES = {"priest": 145, "warrior": 358, "swordmaster": 214, "mercenary": 14, "sorcerer": 276, "archmage": 284, "horizonwalker": 262}
+HUES = {"ranger": 115, "acrobat": 170, "bowmaster": 95, "priest": 145, "warrior": 358, "swordmaster": 214, "mercenary": 14, "sorcerer": 276, "archmage": 284, "horizonwalker": 262}
 
 
 def category(sid):
@@ -186,12 +194,25 @@ def opening_mask(size, slot):
     return Image.fromarray(m.astype(np.uint8))
 
 
+def has_icon(sid):
+    return os.path.exists(os.path.join(PACK, "icons", "Icon_" + sid + ".png"))
+
+
+def placeholder_art(w, h):
+    """Same dark radial fill as Advanced.cs IhFillPlaceholder."""
+    yy, xx = np.mgrid[0:h, 0:w]
+    t = np.clip(np.hypot((xx + 0.5) / w - 0.5, (yy + 0.5) / h - 0.5) * 1.6, 0, 1)[..., None]
+    inner, outer = np.array([51, 46, 41], np.float64), np.array([23, 20, 18], np.float64)
+    return Image.fromarray((inner * (1 - t) + outer * t).astype(np.uint8))
+
+
 def paste_art(canvas, slot, sid, key):
     m = opening_mask(canvas.size, slot)
     a = np.asarray(m)
     ys, xs = np.nonzero(a)
     x0, y0, x1, y1 = xs.min(), ys.min(), xs.max() + 1, ys.max() + 1
-    art = np.asarray(icon_art(sid, x1 - x0, y1 - y0, key), dtype=np.float64)
+    src = icon_art(sid, x1 - x0, y1 - y0, key) if has_icon(sid) else placeholder_art(x1 - x0, y1 - y0)
+    art = np.asarray(src, dtype=np.float64)
     # Inner bevel shade like the painted icons: 2 px darker rim inside the opening.
     sub = m.crop((x0, y0, x1, y1))
     e1 = np.asarray(sub.filter(ImageFilter.MinFilter(3)), dtype=np.float64) / 255.0
@@ -365,9 +386,10 @@ def build_background(chassis, class_key, ac_key, class_scene, ac_scene):
     # Frames / plates / badges keep their painted pixels (no re-hue on them).
     base.paste(chassis, (0, 0), protect)
     scene_layer = base.copy()
-    if class_key is not None:
+    if class_key is not None and class_scene is not None:
         scene_layer.paste(washed_scene(class_scene, (34, 142, 310, 516), HUES[class_key], 0.16), (34, 142))
-    scene_layer.paste(washed_scene(ac_scene, (338, 142, 975, 516), HUES[ac_key], 0.55), (338, 142))
+    if ac_scene is not None:
+        scene_layer.paste(washed_scene(ac_scene, (338, 142, 975, 516), HUES[ac_key], 0.55), (338, 142))
     # Scene fades in over ~22 px from the panel edges (no rectangular seam) and stops exactly at
     # the frame / plate / badge mattes (1 px soft edge, no halo patches).
     edge = static_mask(size).filter(ImageFilter.MaxFilter(5)).filter(ImageFilter.GaussianBlur(7))
@@ -424,6 +446,8 @@ def frame_source(name):
 
 
 def write_icon(sid, key, out_name=None, color=None):
+    if not has_icon(sid):
+        return   # no painting yet: the game composes placeholder initials
     fname = FRAME_FILE[color or category(sid)]
     icon = Image.open(frame_source(fname)).convert("RGBA")
     x0, y0, x1, y1 = ICON_OPEN.get(fname, ICON_OPEN_DEFAULT)

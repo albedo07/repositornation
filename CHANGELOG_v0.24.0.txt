@@ -1,0 +1,32 @@
+IMMORTAL HEROES v0.24.0 - Ranger
+================================
+New Class: RANGER (Acrobat | Bowmaster). New module DragonsAltar.Ranger.dll (installer now builds 9 DLLs).
+
+Ranger (Class)
+- Wildborn (Blessing): +20 Bows, +20 Sneak, no Bow / Crossbow movement penalty, -30% fall damage.
+- Piercing Arrow: 40m Laser Projectile (Free Aim) through every enemy in the line, 160%, Cripples the first.
+- Tumble Shot: ~6m backflip firing a 3-arrow fan at your aim, no wind up.
+- Snare Trap: Ground PAC trap (4m trigger, 2 at once, 60s): 50%, Stuns Small, Cripples.
+- Skill damage = held Bow / Crossbow + loaded ammo. Arrow skills need a Bow or Crossbow.
+
+Acrobat (fully playable)
+- Windstep (Mastery): second jump in mid-air, Dodge -50% Stamina, every Ranger skill castable
+  in the air, each skill hit trims 1s off your shortest cooldown (max 3s per cast).
+- Tailwind (Grace): 10m snapshot, +50% Move Speed, +30 Jump, no fall damage, 2 min / 10 min CD.
+- Gale Volley, Cyclone Arrow (Signatures), Swallow Dive (2 charges), Skyfall Barrage, Ricochet
+  Arrow, Tempest Dance (Ultimate). Every Ascended version (Tumble Shot = Acrobat's Ascended MC).
+
+Bowmaster
+- Selectable at the Altar with its tree, tooltips and Ascension list; its skills arrive in v0.24.1
+  (casting one says so).
+
+Universal rule
+- Skills can't be cast in mid-air unless stated (Horizon Walker and Acrobat can; recasts that
+  steer / end a running skill such as Whirlwind or Shield Charge are allowed).
+
+UI / art
+- Altar: 4 Base Classes (cards scaled to fit), Ranger advancement page, placeholder Ranger cards.
+- Skill Tree: green / teal / emerald Ranger panels; skill openings are placeholders with initials
+  until the Ranger paintings exist. F8 has a Ranger tab. /ih class Ranger, /ih advance <any AC>.
+
+Framework doc updated (Ranger section + mid-air rule). Settings reset to defaults once.

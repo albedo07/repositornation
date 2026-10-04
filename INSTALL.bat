@@ -1,5 +1,5 @@
 @echo off
-title Immortal Heroes v0.23.10 - Art Fixes
+title Immortal Heroes v0.24.0 - Ranger
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
 echo.
 pause

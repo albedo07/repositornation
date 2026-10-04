@@ -1,8 +1,10 @@
-TEST THIS BUILD - v0.23.10 Art Fixes
-====================================
-1. Warrior / Sorcerer tree: top Class node frame is whole (no cut on its right side).
-2. Signature nodes: the diamond badge sits on the frame with nothing pale behind it.
-3. No light boxes around any frame or nameplate.
-4. Grace: tree node, footer box, hotbar and HUD (locked too) all show a complete gold frame.
-5. Priest tree has its own background; Paladin unchanged.
-6. Header reads IMMORTAL HEROES / SKILL TREE.
+TEST THIS BUILD - v0.24.0 Ranger
+================================
+1. Altar: four class cards (Warrior, Cleric, Sorcerer, Ranger) fit the column; Ranger -> View
+   Advancements shows Acrobat and Bowmaster.
+2. As Ranger with a bow: Piercing Arrow, Tumble Shot, Snare Trap from the tree hotbar.
+3. /ih advance Acrobat (or the Altar): every Acrobat skill + Tailwind; double jump in the air;
+   cast skills mid-air.
+4. Any other class: jump and try a skill in the air -> "Can't cast ... in mid-air".
+   Horizon Walker still casts in the air.
+5. F8: Ranger tab with Ranger / Acrobat / Bowmaster sections; tabs don't overlap the search box.

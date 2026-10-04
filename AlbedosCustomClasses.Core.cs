@@ -41,7 +41,7 @@ namespace AlbedosCustomClasses
     {
         public const string ModGuid = "albedo.customclasses";
         public const string ModName = "Dragon's Altar";
-        public const string ModVersion = "0.23.10";
+        public const string ModVersion = "0.24.0";
 
         internal const string ClassDataKey = "AlbedoCustomClasses.Class";
         internal const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -609,6 +609,18 @@ namespace AlbedosCustomClasses
             string key = "card:" + name;
             Sprite result;
             if (_altarSprites.TryGetValue(key, out result)) return result;
+            // v0.24.0: Ranger / Acrobat / Bowmaster cards live in their own sheet (3 cards of 580x283).
+            string[] ranger = { "Ranger", "Acrobat", "Bowmaster" };
+            int rangerIndex = Array.IndexOf(ranger, name);
+            if (rangerIndex >= 0)
+            {
+                Sprite rsheet = AltarSprite("Altar_RangerCards.png");
+                if (rsheet == null) return null;
+                float rsx = rsheet.texture.width / 1760f, rsy = rsheet.texture.height / 283f;
+                result = Sprite.Create(rsheet.texture, new Rect(rangerIndex * 590f * rsx, 0f, 580f * rsx, 283f * rsy), new Vector2(0.5f, 0.5f));
+                _altarSprites[key] = result;
+                return result;
+            }
             Sprite sheet = AltarSprite("Altar_ClassCards.png");
             if (sheet == null) return null;
             string[] names = { "Warrior", "Cleric", "Sorcerer", "Sword Master", "Mercenary", "Paladin", "Priest", "Wizard", "Spellcaster" };
@@ -941,6 +953,9 @@ namespace AlbedosCustomClasses
                 case "Warrior": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Warrior's Blessing","warrior_blessing","Hyper Armor against any hit below 30% of your Total HP. Parry strength x2. +20 Run and +20 Jump skill.") } : new AltarSkillEntry[] { new AltarSkillEntry("Heavy Slash","heavy_slash","0.7s heavy horizontal Slash. Inflicts Broken Bones."), new AltarSkillEntry("Impact Wave","impact_wave","Ground Projectile: Blunt + Pierce line wave that follows terrain."), new AltarSkillEntry("Impact Punch","impact_punch","0.5s punch, 2m x 2m. Blunt damage; Stuns Small enemies.") };
                 case "Cleric": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Cleric's Blessing","cleric_blessing","Every Shield gets 1.5x Block Force and Block Armor. Wield a Staff and a Shield together. No movement penalty from Shields, Staves or one-handed Club weapons. +35 Max HP and +20% HP Regen.") } : new AltarSkillEntry[] { new AltarSkillEntry("Lightning Zap","lightning_zap","Heaven's wrath leaps from your palm in a cone, branding every foe it touches with a Zap that soon bursts."), new AltarSkillEntry("Righteous Strike","righteous_strike","Call down a pillar of holy lightning at your aim, smiting and exposing the wicked."), new AltarSkillEntry("Holy Wave","holy_wave","Release a warm tide of light that heals you and every ally it touches, and keeps mending them.") };
                 case "Sorcerer": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Warlock (Blessing)","warlock","Creature melee damage -70% (mining and woodcutting are not affected). +65 Max Eitr, +35% Eitr Regen, and Eitr starts regenerating twice as fast. A Sorcerer cannot Block, Parry or equip Shields.") } : new AltarSkillEntry[] { new AltarSkillEntry("Flame Burst","flame_burst","10m Fire cone with Fire Burn."), new AltarSkillEntry("Glacial Descent","glacial_descent","Ground PAC: 5m Blunt + Frost impact."), new AltarSkillEntry("Stonefang Eruption","stonefang_eruption","Ground PAC: 5m Blunt + Pierce; Small Stun, Small/Big Cripple.") };
+                case "Ranger": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Wildborn (Blessing)","wildborn","+20 Bows and +20 Sneak. No movement penalty from Bows or Crossbows. -30% fall damage.") } : new AltarSkillEntry[] { new AltarSkillEntry("Piercing Arrow","piercing_arrow","A straight arrow that tears through every foe in its line and cripples the first."), new AltarSkillEntry("Tumble Shot","tumble_shot","Backflip away and loose a fan of arrows at your aim."), new AltarSkillEntry("Snare Trap","snare_trap","Set a hidden snare that holds small prey in place and slows the large.") };
+                case "Acrobat": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Windstep (Mastery)","windstep","A second jump in mid-air, Dodge costs 50% less Stamina, every Ranger skill can be cast in the air, and each skill hit trims your shortest cooldown."), new AltarSkillEntry("Tailwind (Grace)","tailwind","Wind lifts you and your allies: faster feet, higher jumps and no fall damage for 2 minutes.") } : new AltarSkillEntry[] { new AltarSkillEntry("Gale Volley","gale_volley","Leap back and loose a wide fan of arrows that blows small foes away."), new AltarSkillEntry("Cyclone Arrow","cyclone_arrow","A slow, spinning arrow of wind that drags small foes along its path."), new AltarSkillEntry("Swallow Dive","swallow_dive","Dash through the enemy line as a gust of wind, cutting everything you pass."), new AltarSkillEntry("Skyfall Barrage","skyfall_barrage","Leap high into the sky and rain arrows on the ground below."), new AltarSkillEntry("Ricochet Arrow","ricochet_arrow","An arrow that bounces from foe to foe, hitting harder each time."), new AltarSkillEntry("Tempest Dance (Ultimate)","tempest_dance","Become the storm: blink from foe to foe, then burst into a gale.") };
+                case "Bowmaster": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Deadeye (Mastery)","deadeye","Standing still builds Focus: more damage and range with every second. Fully charged shots hit harder and Crossbows reload faster."), new AltarSkillEntry("Hawk's Vigil (Grace)","hawks_vigil","Reveal every enemy around you and sharpen your allies' aim.") } : new AltarSkillEntry[] { new AltarSkillEntry("Ballista Shot","ballista_shot","Hold to draw a siege-strength arrow that blasts through the enemy line."), new AltarSkillEntry("Arrow Rain","arrow_rain","Darken the sky over your aim with a crippling volley."), new AltarSkillEntry("Pinning Shot","pinning_shot","Nail your target to the ground and leave it open to your next shots."), new AltarSkillEntry("Explosive Arrow","explosive_arrow","An arrow that bursts into flame on impact."), new AltarSkillEntry("Splitting Arrow","splitting_arrow","An arrow that shatters into a cone of arrows on its first hit."), new AltarSkillEntry("Starfall Volley (Ultimate)","starfall_volley","Call giant arrows down from the heavens across the battlefield.") };
                 case "Sword Master": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("The Way of the Sword (Mastery)","the_way_of_the_sword","With exactly one Sword: +20 Sword, +50% Attack Speed and no Sword movement penalty. Blocking or Dodging stops the rest of a Sword Master skill."), new AltarSkillEntry("Knight's Guidance (Grace)","knights_guidance","Lead every ally around you: faster movement, quicker stamina and less effort for every action, for 3 minutes.") } : new AltarSkillEntry[] { new AltarSkillEntry("Moonlight Splitter","moonlight_splitter","Three crescent waves of moonlight cleave through everything in their path."), new AltarSkillEntry("Crescent Cleave","crescent_cleave","Five giant crescent cleaves tear across the ground in a wide fan."), new AltarSkillEntry("Blade Storm","blade_storm","Rend space itself: a sphere of blades bursts at your aim, again and again."), new AltarSkillEntry("Frenzied Charge","frenzied_charge","Pull back, then dash forward with a thrust that launches small foes and stuns the large."), new AltarSkillEntry("Eclipse","eclipse","Your blade swells with magic for one sweeping slash all around you."), new AltarSkillEntry("Halfmoon Slash (Ultimate)","halfmoon_slash","A colossal half-moon slash, followed by its afterimage.") };
                 case "Mercenary": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Warfreak (Mastery)","warfreak","Dual-wield any two one-handed physical weapons. +10 Sword, Axe and Clubs, +50% Attack Speed with two one-handed or a two-handed physical weapon, no physical weapon movement penalty, +30% Armor. Unchained Fury triggers at 100 Fury for 20s."), new AltarSkillEntry("Battlecry (Grace)","battlecry","A war cry: you and nearby allies deal +15% damage to creatures for 1 minute and +25% damage to trees, rocks and ore for 3 minutes.") } : new AltarSkillEntry[] { new AltarSkillEntry("Stomp","stomp","Stomp the earth: a crushing impact, then an aftershock rolls outward."), new AltarSkillEntry("Circle Swing","circle_swing","Wind up and swing your weapon in a full circle, staggering everything around you."), new AltarSkillEntry("Bonecrusher","bonecrusher","Leap high and crash down, shattering the bones of everything below."), new AltarSkillEntry("Seismic Guillotine","seismic_guillotine","Tear a fissure through the ground to your aim, ending in a seismic explosion."), new AltarSkillEntry("Punishing Bomb","punishing_bomb","Bat a bomb into the enemy lines. It bursts on the first thing it touches and leaves them burning."), new AltarSkillEntry("Whirlwind (Ultimate)","whirlwind","Spin into a whirlwind of steel, carving everything that comes near.") };
                 case "Paladin": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Heaven's Will (Mastery)","holy_trinity","+10% Magic Damage. With a Club-type weapon and a Shield: +15 Clubs, no Armor movement penalty, and Slash and Pierce each rise to at least 50% of your current Blunt damage."), new AltarSkillEntry("Heaven's Light (Grace)","heavens_light","Bless every ally around you with +40% Overall Defense and free them from equipment movement penalties for 1 minute.") } : new AltarSkillEntry[] { new AltarSkillEntry("Goddess Relic","goddess_relic","Summon a holy Cross that strikes with Blunt and Lightning and burns foes with Spirit fire."), new AltarSkillEntry("Judgement Hammer","judgement_hammer","Hurl a holy hammer that grows as it flies, crushing everything in its path."), new AltarSkillEntry("Shield Charge","shield_charge","Raise your shield and charge forward, trampling everyone who dares stand in your path."), new AltarSkillEntry("Angel Comet","fallen_angel","Leap to the heavens, then crash upon your enemies like a blazing comet."), new AltarSkillEntry("Ray of Hope","ray_of_hope","Raise your hand to the heavens, healing every ally around you and strengthening their attacks."), new AltarSkillEntry("Electric Smite (Ultimate)","electric_smite","Leap and slam down, releasing sixteen Lightning Trails that tear across the ground.") };
@@ -956,9 +971,11 @@ namespace AlbedosCustomClasses
             _baseClassPage = CreateUiGroup("DragonAltarBaseClassPage");
             AltarImage("BaseHeadingPlaque", _baseClassPage.transform, new Vector2(-291f, 218f), new Vector2(380f, 62f), AltarSprite("Confirm_Plaque.png"), Color.white, false);
             CreateWrappedText(_baseClassPage.transform, "BASE CLASSES", new Vector2(-291f, 218f), 350f, 42f, 28, AltarGold, true, TextAnchor.MiddleCenter);
-            CreateBaseClassNavRow("Warrior", "Front-line physical bruiser", 95f, Color.white);
-            CreateBaseClassNavRow("Cleric", "Holy hybrid support", -75f, Color.white);
-            CreateBaseClassNavRow("Sorcerer", "Eitr-first magic specialist", -245f, Color.white);
+            // v0.24.0: four Base Classes; the cards keep their art and layout, scaled to fit the column.
+            CreateBaseClassNavRow("Warrior", "Front-line physical bruiser", 128f, Color.white);
+            CreateBaseClassNavRow("Cleric", "Holy hybrid support", 4f, Color.white);
+            CreateBaseClassNavRow("Sorcerer", "Eitr-first magic specialist", -120f, Color.white);
+            CreateBaseClassNavRow("Ranger", "Agile bow hunter", -244f, Color.white);
             _baseDetailTitle = CreateWrappedText(_baseClassPage.transform, "", new Vector2(215f, 228f), 500f, 36f, 30, AltarGold, true, TextAnchor.MiddleCenter);
             _baseDetailRole = CreateWrappedText(_baseClassPage.transform, "", new Vector2(215f, 203f), 500f, 20f, 14, AltarGold, false, TextAnchor.MiddleCenter);
             BuildAltarSkillDetails(_baseClassPage.transform, false);
@@ -1021,6 +1038,9 @@ namespace AlbedosCustomClasses
         private void CreateBaseClassNavRow(string className, string role, float y, Color accent)
         {
             AltarClassCard(_baseClassPage.transform, className, role, y, false);
+            Image card;
+            if (_altarBaseCards.TryGetValue(className, out card) && card != null)
+                card.rectTransform.localScale = new Vector3(0.80f, 0.80f, 1f);
         }
 
         private void CreateAdvancementNavRow(Transform parent, string advancementName, string role, float y, Color accent)
@@ -1102,6 +1122,11 @@ namespace AlbedosCustomClasses
             {
                 CreateAdvancementNavRow(nav.transform, "Paladin", "Holy impact + resilience", 25f, new Color(1f, 0.87f, 0.42f, 1f));
                 CreateAdvancementNavRow(nav.transform, "Priest", "Relics + team support", -155f, new Color(0.60f, 0.91f, 1f, 1f));
+            }
+            else if (_advancementParent == "Ranger")
+            {
+                CreateAdvancementNavRow(nav.transform, "Acrobat", "Aerial wind archery", 25f, new Color(0.45f, 0.95f, 0.85f, 1f));
+                CreateAdvancementNavRow(nav.transform, "Bowmaster", "Planted heavy artillery", -155f, new Color(0.55f, 0.85f, 0.45f, 1f));
             }
             else
             {
@@ -1301,6 +1326,7 @@ namespace AlbedosCustomClasses
         {
             if (className == "Warrior") return "Front-line physical bruiser";
             if (className == "Cleric") return "Holy hybrid support";
+            if (className == "Ranger") return "Agile bow hunter";
             return "Eitr-first magic specialist";
         }
 
@@ -1308,6 +1334,7 @@ namespace AlbedosCustomClasses
         {
             if (className == "Warrior") return new Color(1f, 0.63f, 0.28f, 1f);
             if (className == "Cleric") return new Color(0.55f, 0.86f, 1f, 1f);
+            if (className == "Ranger") return new Color(0.50f, 0.90f, 0.45f, 1f);
             return new Color(0.78f, 0.52f, 1f, 1f);
         }
 
@@ -1317,6 +1344,8 @@ namespace AlbedosCustomClasses
                 return "Heavy melee foundation built around Hyper Armor, Broken Bones and direct frontline pressure.";
             if (className == "Cleric")
                 return "Holy battlemage foundation mixing Lightning pressure, healing and flexible divine equipment.";
+            if (className == "Ranger")
+                return "Bow-first hunter foundation built around piercing shots, evasive tumbles and traps.";
             return "Magic-first foundation built around Eitr management, elemental pressure and Staff/Wand combat.";
         }
 
@@ -1324,6 +1353,7 @@ namespace AlbedosCustomClasses
         {
             if (className == "Warrior") return "Sword Master";
             if (className == "Cleric") return "Paladin";
+            if (className == "Ranger") return "Acrobat";
             return "Wizard";
         }
 
@@ -1334,6 +1364,8 @@ namespace AlbedosCustomClasses
             if (advancementName == "Paladin") return new Color(1f, 0.87f, 0.42f, 1f);
             if (advancementName == "Priest") return new Color(0.60f, 0.91f, 1f, 1f);
             if (advancementName == "Wizard") return new Color(0.78f, 0.42f, 1f, 1f);
+            if (advancementName == "Acrobat") return new Color(0.45f, 0.95f, 0.85f, 1f);
+            if (advancementName == "Bowmaster") return new Color(0.55f, 0.85f, 0.45f, 1f);
             return new Color(0.92f, 0.50f, 1f, 1f);
         }
 
@@ -1344,6 +1376,8 @@ namespace AlbedosCustomClasses
             if (advancementName == "Paladin") return "Holy impact and resilient offense";
             if (advancementName == "Priest") return "Relics, healing and team support";
             if (advancementName == "Wizard") return "Charged large-scale magic";
+            if (advancementName == "Acrobat") return "Aerial wind archery";
+            if (advancementName == "Bowmaster") return "Planted heavy artillery";
             return "Rapid mobile spatial magic";
         }
 
@@ -1357,6 +1391,8 @@ namespace AlbedosCustomClasses
             {
                 return "<b>IDENTITY</b>\nCleric mixes holy offense with healing and protection. It deals real damage without giving up the ability to rescue itself or its party.\n\n<b>CLERIC'S BLESSING</b>\nEvery Shield gets 1.5x Block Force and Block Armor. A Staff and a Shield can be wielded together. No movement penalty from Shields, Staves or one-handed Club weapons. +35 Max HP and +20% HP Regen.\n\n<b>BEST FOR</b>\nPlayers who want to fight on the front line and keep everyone standing.";
             }
+            if (className == "Ranger")
+                return "<b>IDENTITY</b>\nRanger is the bow-first hunter: precise shots from range, evasive footwork and traps that decide where the fight happens.\n\n<b>RANGER'S BLESSING - WILDBORN</b>\n+20 Bows and +20 Sneak. No movement penalty from Bows or Crossbows. -30% fall damage.\n\n<b>BEST FOR</b>\nPlayers who want to fight from range, then specialize into aerial wind archery (Acrobat) or planted heavy artillery (Bowmaster).";
             return "<b>IDENTITY</b>\nSorcerer is the magic-first base class. Its power comes from Eitr management and large spell effects rather than weapons.\n\n<b>SORCERER'S BLESSING - WARLOCK</b>\nCreature melee damage -70% (mining and woodcutting are not affected). +65 Max Eitr, +35% Eitr Regen, and Eitr starts regenerating twice as fast. A Sorcerer cannot Block, Parry or equip Shields.\n\n<b>BEST FOR</b>\nPlayers who want spell rotations, resource management and spectacular magic, then specialize into charged artillery (Wizard) or rapid mobile casting (Spellcaster).";
         }
 
@@ -1364,6 +1400,7 @@ namespace AlbedosCustomClasses
         {
             if (className == "Warrior") return "<b>STARTER KIT</b>  Heavy Slash  |  Impact Wave  |  Impact Punch\n<b>ADVANCEMENTS</b>  Sword Master  |  Mercenary";
             if (className == "Cleric") return "<b>STARTER KIT</b>  Lightning Zap  |  Righteous Strike  |  Holy Wave\n<b>ADVANCEMENTS</b>  Paladin  |  Priest";
+            if (className == "Ranger") return "<b>STARTER KIT</b>  Piercing Arrow  |  Tumble Shot  |  Snare Trap\n<b>ADVANCEMENTS</b>  Acrobat  |  Bowmaster";
             return "<b>STARTER KIT</b>  Flame Burst  |  Glacial Descent  |  Stonefang Eruption\n<b>ADVANCEMENTS</b>  Archmage  |  Horizon Walker";
         }
 
@@ -1389,6 +1426,10 @@ namespace AlbedosCustomClasses
             {
                 return "<b>IDENTITY</b>\nThe Archmage is the deliberate heavy-artillery caster: huge committed spells, charged Staff shots and overwhelming single releases.\n\n<b>ARCHMAGE (MASTERY)</b>\nCharge normal Staff attacks (not Gun Staves) for up to 3 stacks, 1 per second; the first stack doubles the impact size. Spending 300 Eitr triggers Overcharge for 12s: +40% faster wind up, +40% Eitr Regen and +40% Magic Damage.\n\n<b>BEST FOR</b>\nPlayers who want magical artillery, giant telegraphed attacks and the satisfaction of charging one disgusting hit instead of spraying dozens of smaller ones.";
             }
+            if (advancementName == "Acrobat")
+                return "<b>IDENTITY</b>\nThe Acrobat is the aerial skirmisher: always moving, always above the fight, raining wind-driven arrows from angles nobody expects.\n\n<b>WINDSTEP (MASTERY)</b>\nA second jump in mid-air, Dodge costs 50% less Stamina, every Ranger skill can be cast in the air, and each enemy hit by your skills trims 1s off your shortest cooldown (up to 3s per cast).\n\n<b>TAILWIND (GRACE)</b>\nYou and nearby allies move 50% faster, jump higher and take no fall damage for 2 minutes.\n\n<b>BEST FOR</b>\nPlayers who never want to touch the ground: fast cooldowns, dashes and shots from the air.";
+            if (advancementName == "Bowmaster")
+                return "<b>IDENTITY</b>\nThe Bowmaster is the planted artillery archer: long cooldowns, huge charged shots and volleys that decide a battle.\n\n<b>DEADEYE (MASTERY)</b>\nStanding still builds Focus (up to 5 stacks, +8% damage and +10% range each); moving drains it. Fully charged shots deal +30% damage and Crossbows reload 40% faster.\n\n<b>HAWK'S VIGIL (GRACE)</b>\nReveal enemies around you and give allies +20% ranged damage.\n\n<b>BEST FOR</b>\nPlayers who want to hold a position and land one devastating shot after another.";
             return "<b>IDENTITY</b>\nThe Horizon Walker is the mobile gunmage: sprint-casting, rapid Staff pressure, dual Gun Staves and spatial tricks everywhere.\n\n<b>YIN AND YANG (MASTERY)</b>\nWith any Staff or Wand: attacks twice as fast, Eitr use -50%, +20% Eitr Regen, normal Staff/Wand damage -50%. No skill wind up and no Staff/Wand movement penalty. Dual Gun Staves fire together with perfect accuracy.\n\n<b>BEST FOR</b>\nPlayers who never want to stand still: constant fire, teleports, portals and clones.";
         }
 
@@ -1399,6 +1440,8 @@ namespace AlbedosCustomClasses
             if (advancementName == "Mercenary") return "<b>SKILLS</b>  Stomp  |  Circle Swing  |  Bonecrusher  |  Seismic Guillotine  |  Punishing Bomb  |  Whirlwind (Ultimate)\n<b>MASTERY</b>  Warfreak  |  <b>GRACE</b>  Battlecry";
             if (advancementName == "Paladin") return "<b>SKILLS</b>  Goddess Relic  |  Judgement Hammer  |  Shield Charge  |  Angel Comet  |  Ray of Hope  |  Electric Smite (Ultimate)\n<b>MASTERY</b>  Heaven's Will  |  <b>GRACE</b>  Heaven's Light";
             if (advancementName == "Priest") return "<b>SKILLS</b>  Lightning Relic  |  Holy Relic  |  Divine Intervention  |  Grand Cross  |  Heaven's Judgement  |  Lightning Tempest (Ultimate)\n<b>MASTERY</b>  Bless Thy Sinners  |  <b>GRACE</b>  Heaven's Crucible";
+            if (advancementName == "Acrobat") return "<b>SKILLS</b>  Gale Volley  |  Cyclone Arrow  |  Swallow Dive  |  Skyfall Barrage  |  Ricochet Arrow  |  Tempest Dance (Ultimate)\n<b>MASTERY</b>  Windstep  |  <b>GRACE</b>  Tailwind";
+            if (advancementName == "Bowmaster") return "<b>SKILLS</b>  Ballista Shot  |  Arrow Rain  |  Pinning Shot  |  Explosive Arrow  |  Splitting Arrow  |  Starfall Volley (Ultimate)\n<b>MASTERY</b>  Deadeye  |  <b>GRACE</b>  Hawk's Vigil";
             if (advancementName == "Wizard") return "<b>SKILLS</b>  Meteor Fall  |  Gravity Dominion  |  Astral Railcannon  |  Astral Greatblade  |  Frost Nova  |  Elemental Cataclysm (Ultimate)\n<b>MASTERY</b>  Archmage  |  <b>GRACE</b>  Clockwork";
             return "<b>SKILLS</b>  Rift Echo  |  Void Step  |  Arcane Phalanx  |  Afterimage Arsenal  |  Arcane Rupture (Ultimate)\n<b>PASSIVE</b>  Riftwalker / Phase Flow + dual Gun Staff mastery";
         }

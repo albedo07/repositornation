@@ -40,7 +40,7 @@ namespace DragonsAltarDevTools
     {
         public const string ModGuid = "albedo.customclasses.devtools";
         public const string ModName = "Dragon's Altar - Developer Tools";
-        public const string ModVersion = "0.23.10";
+        public const string ModVersion = "0.24.0";
 
         public static DeveloperToolsPlugin Instance;
 
@@ -52,10 +52,15 @@ namespace DragonsAltarDevTools
         // v0.20.4: one tab per Base Class (Advancement picked from a dropdown inside it), a
         // Progression tab (Level, Tier Points, Ascensions), Testing and General. Keys and the
         // Hotbar are set in the Skill Tree, so they are not listed here anymore.
-        private static readonly string[] Tabs = { "Warrior", "Cleric", "Sorcerer", "Progression", "Testing", "General" };
+        private static readonly string[] Tabs = { "Warrior", "Cleric", "Sorcerer", "Ranger", "Progression", "Testing", "General" };
         private static readonly string[] WarriorGroups = { "Warrior", "Sword Master", "Mercenary" };
         private static readonly string[] ClericGroups = { "Cleric", "Paladin", "Priest" };
         private static readonly string[] SorcererGroups = { "Sorcerer", "Wizard", "Spellcaster" };
+        private static readonly string[] RangerGroups = { "Ranger", "Acrobat", "Bowmaster" };
+        private static readonly string[] AcrobatAscendableSkills =
+            { "tumble_shot", "gale_volley", "cyclone_arrow", "swallow_dive", "skyfall_barrage", "ricochet_arrow", "tempest_dance" };
+        private static readonly string[] BowmasterAscendableSkills =
+            { "piercing_arrow", "ballista_shot", "arrow_rain", "pinning_shot", "explosive_arrow", "splitting_arrow", "starfall_volley" };
         private static readonly string[] AscendableSkills =
             { "righteous_strike", "goddess_relic", "judgement_hammer", "shield_charge", "fallen_angel", "ray_of_hope", "electric_smite" };
         private static readonly string[] PriestAscendableSkills =
@@ -77,7 +82,7 @@ namespace DragonsAltarDevTools
         private bool _defaultsChecked;
         private float _allDefaultsArmedUntil;
         // v0.22.5: every new pass starts from the default values once (user rule); raise this per pass.
-        private const string DefaultsPass = "0.23.10";
+        private const string DefaultsPass = "0.24.0";
 
         private readonly List<DevSetting> _settings = new List<DevSetting>();
         private readonly List<string> _sections = new List<string>();
@@ -90,7 +95,7 @@ namespace DragonsAltarDevTools
         private Vector2 _sectionScroll;
         private Vector2 _settingScroll;
         private string _selectedTab = "Cleric";
-        private readonly HashSet<string> _openGroups = new HashSet<string>(new string[] { "Warrior", "Cleric", "Sorcerer" });
+        private readonly HashSet<string> _openGroups = new HashSet<string>(new string[] { "Warrior", "Cleric", "Sorcerer", "Ranger" });
         private string _levelBuffer = "";
         private string _classBonusBuffer = "";
         private string _advBonusBuffer = "";
@@ -384,7 +389,10 @@ namespace DragonsAltarDevTools
         // Base Class / Advancement each section belongs to ("" = not a class section).
         private static string GroupFor(string section)
         {
-            string[][] all = { WarriorGroups, ClericGroups, SorcererGroups };
+            // "Acrobatic Jump Skills" (Mercenary / Paladin jump slams) must not land in Acrobat.
+            if (section == "Acrobatic Jump Skills")
+                return "Mercenary";
+            string[][] all = { WarriorGroups, ClericGroups, SorcererGroups, RangerGroups };
             for (int i = 0; i < all.Length; i++)
                 for (int j = 0; j < all[i].Length; j++)
                     if (section.StartsWith(all[i][j], StringComparison.OrdinalIgnoreCase))
@@ -409,6 +417,8 @@ namespace DragonsAltarDevTools
                 return "Cleric";
             if (Array.IndexOf(SorcererGroups, group) >= 0)
                 return "Sorcerer";
+            if (Array.IndexOf(RangerGroups, group) >= 0)
+                return "Ranger";
             return "General";
         }
 
@@ -490,6 +500,7 @@ namespace DragonsAltarDevTools
             if (tab == "Warrior") return WarriorGroups;
             if (tab == "Cleric") return ClericGroups;
             if (tab == "Sorcerer") return SorcererGroups;
+            if (tab == "Ranger") return RangerGroups;
             return null;
         }
 
@@ -917,7 +928,8 @@ namespace DragonsAltarDevTools
             for (int i = 0; i < Tabs.Length; i++)
             {
                 bool selectedTab = Tabs[i] == _selectedTab && string.IsNullOrEmpty(_search);
-                if (GUI.Button(new Rect(tx, 84f, 124f, 28f), Tabs[i], selectedTab ? _tabSelectedStyle : _tabStyle))
+                // v0.24.0: 7 tabs (Ranger) fit before the Search box at x 812: 108 wide, 112 apart.
+                if (GUI.Button(new Rect(tx, 84f, 108f, 28f), Tabs[i], selectedTab ? _tabSelectedStyle : _tabStyle))
                 {
                     _selectedTab = Tabs[i];
                     _search = string.Empty;
@@ -925,7 +937,7 @@ namespace DragonsAltarDevTools
                     _settingScroll = Vector2.zero;
                     RebuildSections();
                 }
-                tx += 130f;
+                tx += 112f;
             }
             GUI.Label(new Rect(812f, 88f, 60f, 22f), "Search", _smallStyle);
             string nextSearch = GUI.TextField(new Rect(868f, 85f, 230f, 26f), _search ?? "");
@@ -1326,6 +1338,13 @@ namespace DragonsAltarDevTools
                 changed |= DrawAscendColumn(list, "SPELLCASTER", SpellcasterAscendableSkills, 848f);
                 GUI.Label(new Rect(588f, 520f, 500f, 40f),
                     "Glacial Descent (Archmage) and Stonefang Eruption (Horizon Walker) are always Ascended once you Advance.", _descStyle);
+            }
+            else if (cls == "Ranger")
+            {
+                changed |= DrawAscendColumn(list, "ACROBAT", AcrobatAscendableSkills, 588f);
+                changed |= DrawAscendColumn(list, "BOWMASTER", BowmasterAscendableSkills, 848f);
+                GUI.Label(new Rect(588f, 520f, 500f, 40f),
+                    "Tumble Shot (Acrobat) and Piercing Arrow (Bowmaster) are always Ascended once you Advance.", _descStyle);
             }
             else
             {

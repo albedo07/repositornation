@@ -1,7 +1,7 @@
 ﻿$ErrorActionPreference = "Stop"
 
 Write-Host ""
-Write-Host "IMMORTAL HEROES v0.23.10 - ART FIXES" -ForegroundColor Cyan
+Write-Host "IMMORTAL HEROES v0.24.0 - RANGER" -ForegroundColor Cyan
 Write-Host "Protected build: all 8 DLLs compile in staging before the live profile is touched." -ForegroundColor Gray
 Write-Host ""
 
@@ -172,6 +172,7 @@ try {
     $guardianSource = Join-Path $scriptDir "AlbedosCustomClasses.GuardianAngel.cs"
     $advancedSource = Join-Path $scriptDir "AlbedosCustomClasses.Advanced.cs"
     $sorcererSource = Join-Path $scriptDir "DragonsAltar.Sorcerer.cs"
+    $rangerSource = Join-Path $scriptDir "DragonsAltar.Ranger.cs"
     $devToolsSource = Join-Path $scriptDir "DragonsAltar.DevTools.cs"
 
     Need-File $coreSource "Core source"
@@ -181,6 +182,7 @@ try {
     Need-File $guardianSource "Guardian source"
     Need-File $advancedSource "Advanced source"
     Need-File $sorcererSource "Sorcerer source"
+    Need-File $rangerSource "Ranger source"
     Need-File $devToolsSource "Developer Tools source"
 
     if (-not (Test-Path -LiteralPath $pluginsDir)) {
@@ -194,6 +196,7 @@ try {
     $liveGuardianOut = Join-Path $pluginsDir "AlbedosCustomClasses.GuardianAngel.dll"
     $liveAdvancedOut = Join-Path $pluginsDir "AlbedosCustomClasses.Advanced.dll"
     $liveSorcererOut = Join-Path $pluginsDir "DragonsAltar.Sorcerer.dll"
+    $liveRangerOut = Join-Path $pluginsDir "DragonsAltar.Ranger.dll"
     $liveDevToolsOut = Join-Path $pluginsDir "DragonsAltar.DevTools.dll"
 
     $stageDir = Join-Path ([System.IO.Path]::GetTempPath()) ("AlbedosCustomClasses-" + [Guid]::NewGuid().ToString("N"))
@@ -214,6 +217,7 @@ try {
     $guardianOut = Join-Path $stageDir "AlbedosCustomClasses.GuardianAngel.dll"
     $advancedOut = Join-Path $stageDir "AlbedosCustomClasses.Advanced.dll"
     $sorcererOut = Join-Path $stageDir "DragonsAltar.Sorcerer.dll"
+    $rangerOut = Join-Path $stageDir "DragonsAltar.Ranger.dll"
     $devToolsOut = Join-Path $stageDir "DragonsAltar.DevTools.dll"
 
     $common = New-Object System.Collections.ArrayList
@@ -227,7 +231,7 @@ try {
         ForEach-Object { [void](Add-UniqueRef $common $_.FullName) }
 
     Write-Host ""
-    Write-Host "[1/8] Compiling shrine core to staging..." -ForegroundColor Yellow
+    Write-Host "[1/9] Compiling shrine core to staging..." -ForegroundColor Yellow
     $coreRefs = New-Object System.Collections.ArrayList
     foreach ($r in $common) { [void]$coreRefs.Add($r) }
     [void](Add-UniqueRef $coreRefs $jotunnDll)
@@ -235,7 +239,7 @@ try {
     Write-Host "      Core compile passed." -ForegroundColor Green
 
     Write-Host ""
-    Write-Host "[2/8] Compiling Combat Runtime to staging..." -ForegroundColor Yellow
+    Write-Host "[2/9] Compiling Combat Runtime to staging..." -ForegroundColor Yellow
     $runtimeRefs = New-Object System.Collections.ArrayList
     foreach ($r in $common) { [void]$runtimeRefs.Add($r) }
     [void](Add-UniqueRef $runtimeRefs $harmony)
@@ -243,7 +247,7 @@ try {
     Write-Host "      Combat Runtime compile passed." -ForegroundColor Green
 
     Write-Host ""
-    Write-Host "[3/8] Compiling starter skills to staging..." -ForegroundColor Yellow
+    Write-Host "[3/9] Compiling starter skills to staging..." -ForegroundColor Yellow
     $skillsRefs = New-Object System.Collections.ArrayList
     foreach ($r in $common) { [void]$skillsRefs.Add($r) }
     [void](Add-UniqueRef $skillsRefs $harmony)
@@ -252,7 +256,7 @@ try {
     Write-Host "      Starter skills compile passed." -ForegroundColor Green
 
     Write-Host ""
-    Write-Host "[4/8] Compiling base-blessings compatibility DLL to staging..." -ForegroundColor Yellow
+    Write-Host "[4/9] Compiling base-blessings compatibility DLL to staging..." -ForegroundColor Yellow
     $passivesRefs = New-Object System.Collections.ArrayList
     foreach ($r in $common) { [void]$passivesRefs.Add($r) }
     [void](Add-UniqueRef $passivesRefs $runtimeOut)
@@ -260,7 +264,7 @@ try {
     Write-Host "      Base-blessings compatibility compile passed." -ForegroundColor Green
 
     Write-Host ""
-    Write-Host "[5/8] Compiling Grand Sigil survival DLL to staging..." -ForegroundColor Yellow
+    Write-Host "[5/9] Compiling Grand Sigil survival DLL to staging..." -ForegroundColor Yellow
     $guardianRefs = New-Object System.Collections.ArrayList
     foreach ($r in $common) { [void]$guardianRefs.Add($r) }
     [void](Add-UniqueRef $guardianRefs $harmony)
@@ -269,7 +273,7 @@ try {
     Write-Host "      Grand Sigil survival compile passed." -ForegroundColor Green
 
     Write-Host ""
-    Write-Host "[6/8] Compiling advancements + Skillbook to staging..." -ForegroundColor Yellow
+    Write-Host "[6/9] Compiling advancements + Skillbook to staging..." -ForegroundColor Yellow
     $advancedRefs = New-Object System.Collections.ArrayList
     foreach ($r in $common) { [void]$advancedRefs.Add($r) }
     [void](Add-UniqueRef $advancedRefs $harmony)
@@ -280,7 +284,7 @@ try {
     Write-Host "      Advancements compile passed." -ForegroundColor Green
 
     Write-Host ""
-    Write-Host "[7/8] Compiling Sorcerer advancements to staging..." -ForegroundColor Yellow
+    Write-Host "[7/9] Compiling Sorcerer advancements to staging..." -ForegroundColor Yellow
     $sorcererRefs = New-Object System.Collections.ArrayList
     foreach ($r in $common) { [void]$sorcererRefs.Add($r) }
     [void](Add-UniqueRef $sorcererRefs $harmony)
@@ -291,13 +295,24 @@ try {
     Write-Host "      Sorcerer advancements compile passed." -ForegroundColor Green
 
     Write-Host ""
-    Write-Host "[8/8] Compiling Developer Tools to staging..." -ForegroundColor Yellow
+    Write-Host "[8/9] Compiling Ranger to staging..." -ForegroundColor Yellow
+    $rangerRefs = New-Object System.Collections.ArrayList
+    foreach ($r in $common) { [void]$rangerRefs.Add($r) }
+    [void](Add-UniqueRef $rangerRefs $harmony)
+    [void](Add-UniqueRef $rangerRefs $coreOut)
+    [void](Add-UniqueRef $rangerRefs $runtimeOut)
+    [void](Add-UniqueRef $rangerRefs $skillsOut)
+    Compile-WithDependencies $rangerSource $rangerOut $rangerRefs $managedDir $coreDir
+    Write-Host "      Ranger compile passed." -ForegroundColor Green
+
+    Write-Host ""
+    Write-Host "[9/9] Compiling Developer Tools to staging..." -ForegroundColor Yellow
     $devToolsRefs = New-Object System.Collections.ArrayList
     foreach ($r in $common) { [void]$devToolsRefs.Add($r) }
     Compile-WithDependencies $devToolsSource $devToolsOut $devToolsRefs $managedDir $coreDir
     Write-Host "      Developer Tools compile passed." -ForegroundColor Green
 
-    Write-Host "All 8 DLLs compiled successfully. Installing staged DLL set..." -ForegroundColor Cyan
+    Write-Host "All 9 DLLs compiled successfully. Installing staged DLL set..." -ForegroundColor Cyan
 
     $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 
@@ -309,6 +324,7 @@ try {
         $liveGuardianOut,
         $liveAdvancedOut,
         $liveSorcererOut,
+        $liveRangerOut,
         $liveDevToolsOut
     )
 
@@ -325,6 +341,7 @@ try {
     Copy-Item -LiteralPath $guardianOut -Destination $liveGuardianOut -Force
     Copy-Item -LiteralPath $advancedOut -Destination $liveAdvancedOut -Force
     Copy-Item -LiteralPath $sorcererOut -Destination $liveSorcererOut -Force
+    Copy-Item -LiteralPath $rangerOut -Destination $liveRangerOut -Force
     Copy-Item -LiteralPath $devToolsOut -Destination $liveDevToolsOut -Force
 
     $liveAssetDir = Join-Path $pluginsDir "ImmortalHeroesAssets"
@@ -343,7 +360,7 @@ try {
     Write-Host ""
     Write-Host "SUCCESS" -ForegroundColor Green
     Write-Host ""
-    Write-Host "Installed 8 isolated DLLs:" -ForegroundColor White
+    Write-Host "Installed 9 isolated DLLs:" -ForegroundColor White
     Write-Host "  AlbedosCustomClasses.dll                  (altar/core)" -ForegroundColor White
     Write-Host "  AlbedosCustomClasses.CombatRuntime.dll    (cast lock / debuffs / buffs / mastery runtime)" -ForegroundColor White
     Write-Host "  AlbedosCustomClasses.Skills.dll           (starter skills + VFX)" -ForegroundColor White
@@ -351,6 +368,7 @@ try {
     Write-Host "  AlbedosCustomClasses.GuardianAngel.dll    (Priest Grand Sigil survival)" -ForegroundColor White
     Write-Host "  AlbedosCustomClasses.Advanced.dll         (Warrior/Cleric advancements + clean dynamic HUD)" -ForegroundColor White
     Write-Host "  DragonsAltar.Sorcerer.dll                 (Wizard/Spellcaster advancements + clean dynamic HUD)" -ForegroundColor White
+    Write-Host "  DragonsAltar.Ranger.dll                   (Ranger Class + Acrobat / Bowmaster)" -ForegroundColor White
     Write-Host "  DragonsAltar.DevTools.dll                 (developer skill tuning + world range/radius preview)" -ForegroundColor White
     Write-Host "  ImmortalHeroesAssets\*.png (Skill Tree art, Tier buttons, Confirm plaque, selection ring)" -ForegroundColor White
     Write-Host ""
