@@ -1,0 +1,17 @@
+IMMORTAL HEROES v0.25.10 - RANGER MOTIONS (animation pass 4 of 4: every class now uses skill clips)
+
+ENGINE
+- Ranger's own body poses now share the body root with the skill clip engine (one owner, one rest pose):
+  a pose and a clip can never leave the body tilted.
+
+RANGER / ACROBAT / BOWMASTER (bow in the left hand, right hand draws to the cheek, side-on stance)
+- Piercing Arrow: snap draw, strong recoil.   Explosive Arrow: heavier kick-back.
+- Snare Trap: kneel, set the trap by hand.     Cyclone Arrow: drawn, full spin, loosed out of the turn.
+- Swallow Dive: arms swept back, head-first dive.
+- Skyfall Barrage: tucked backflip, then hovering aimed down until the barrage ends.
+- Ricochet Arrow: flicked trick shot.          Furious Winds: steady spin inside the leaf storm.
+- Tailwind: arms rise to the sides, palms up.  Hawk's Vigil: hand at the brow, scanning the horizon.
+- Arrow Rain: lean back, bow to the sky.       Starfall Volley: sky draw held through the channel.
+- Pinning Shot: one knee, steady draw.          Ballista Shot: crouched heavy draw while charging, siege recoil.
+- Splitting Arrow: draw sweeping across the cone, alternating sides per volley.
+- Quick-shot recoil only plays when no skill motion is running.

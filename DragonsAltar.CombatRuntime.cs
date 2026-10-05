@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.9";
+        public const string ModVersion = "0.25.10";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1823,6 +1823,74 @@ namespace DragonsAltarCombat
             BuildClericClips(c);
             BuildWarriorClips(c);
             BuildSorcererClips(c);
+            BuildRangerClips(c);
+        }
+
+        // ------------------------------------------------------------------ Ranger / Acrobat / Bowmaster
+        // Bow in the LEFT hand (arm straight at the target), the right hand draws the string to the cheek;
+        // archers stand side-on (spine twisted, head turned back along the arrow).
+        private static DragonClipKey Draw(float t)
+        {
+            return K(t).Sp(4f, -22f, 0f).Ch(0f, -12f, 0f).Hd(0f, 22f, 0f).LA(-88f, 0f, 12f).LF(-4f, 0f, 0f).RA(-85f, 0f, -12f).RF(-140f, 0f, 0f);
+        }
+
+        private static DragonClipKey Loose(float t)
+        {
+            return K(t).Sp(0f, -18f, 0f).Ch(-4f, -10f, 0f).Hd(0f, 20f, 0f).LA(-86f, 0f, 12f).LF(-4f, 0f, 0f).RA(-80f, 0f, -35f).RF(-55f, 0f, 0f).RH(15f, 0f, 0f);
+        }
+
+        private static DragonClipKey SkyDraw(float t)
+        {
+            return K(t).Sp(-16f, -14f, 0f).Ch(-12f, -8f, 0f).Hd(-30f, 14f, 0f).LA(-160f, 0f, 10f).LF(-4f, 0f, 0f).RA(-150f, 0f, -14f).RF(-135f, 0f, 0f).Rot(-8f, 0f, 0f);
+        }
+
+        private static void BuildRangerClips(Dictionary<string, DragonClipKey[]> c)
+        {
+            // Piercing Arrow: snap to full draw, release with a strong recoil.
+            c["rg_power"] = new DragonClipKey[] { K(-1f), Draw(-0.4f), Draw(-0.05f), Loose(0f).Rot(-10f, -10f, 0f).Off(0f, 0f, -0.15f), Loose(0.2f).Rot(-6f, -6f, 0f).Off(0f, 0f, -0.1f), K(0.55f) };
+            // Explosive Arrow: same, heavier kick-back.
+            c["rg_heavy"] = new DragonClipKey[] { K(-1f), Draw(-0.4f).Off(0f, -0.06f, 0f), Draw(-0.05f).Off(0f, -0.06f, 0f), Loose(0f).Rot(-18f, 0f, 0f).Off(0f, -0.04f, -0.28f), Loose(0.25f).Rot(-10f, 0f, 0f).Off(0f, -0.03f, -0.18f), K(0.6f) };
+            // Snare Trap: kneel and set the trap with the right hand on the ground.
+            DragonClipKey trap = K(0f).Sp(30f, 0f, 0f).Ch(12f, 0f, 0f).Hd(10f, 0f, 0f).RA(-40f, 0f, -10f).RF(-10f, 0f, 0f).RH(-20f, 0f, 0f).LA(-20f, 0f, 30f).LF(-40f, 0f, 0f).Rot(10f, 0f, 0f).Off(0f, -0.35f, 0f);
+            c["rg_trap"] = new DragonClipKey[] { K(-1f), trap, trap.Copy(0.25f), K(0.6f) };
+            // Cyclone Arrow: drawn, full spin, loosed out of the turn.
+            c["rg_spin"] = Join(K(-1f), Draw(-0.3f), Spin360(Draw(0f), 0f, 0.4f, 0.0f), Loose(0.45f), K(0.75f));
+            // Swallow Dive: arms swept back, head-first dive.
+            DragonClipKey dive = K(0f).Sp(10f, 0f, 0f).Ch(6f, 0f, 0f).Hd(-20f, 0f, 0f).RA(45f, 0f, -30f).LA(45f, 0f, 30f).Rot(70f, 0f, 0f);
+            c["rg_dive"] = new DragonClipKey[] { K(-1f), dive, dive.Copy(0.15f), K(0.45f) };
+            // Skyfall Barrage: tucked backflip into the air, then hovering aimed down (hold).
+            DragonClipKey tuck = K(0f).Sp(24f, 0f, 0f).Ch(12f, 0f, 0f).RA(-60f, 0f, -20f).RF(-90f, 0f, 0f).LA(-60f, 0f, 20f).LF(-90f, 0f, 0f);
+            c["rg_backflip"] = new DragonClipKey[] {
+                K(-1f), tuck.Copy(0f),
+                tuck.Copy(0.125f).Rot(-90f, 0f, 0f).Linear(), tuck.Copy(0.25f).Rot(-180f, 0f, 0f).Linear(),
+                tuck.Copy(0.375f).Rot(-270f, 0f, 0f).Linear(), tuck.Copy(0.5f).Rot(-360f, 0f, 0f).Linear(),
+                K(0.65f).Rot(-360f, 0f, 0f)
+            };
+            DragonClipKey hover = Draw(0f).LA(-40f, 0f, 12f).RA(-40f, 0f, -12f).Hd(20f, 22f, 0f).Rot(35f, 0f, 0f);
+            c["rg_hover"] = new DragonClipKey[] { K(-1f), hover, K(0.3f) };
+            // Ricochet Arrow: flicked trick shot from the hip, body twisting.
+            c["rg_trick"] = new DragonClipKey[] { K(-1f), Draw(-0.5f).Rot(0f, -10f, 6f), Loose(0f).Rot(-6f, 30f, -10f), Loose(0.15f).Rot(-4f, 26f, -8f), K(0.45f) };
+            // Tailwind: arms rise out to the sides, palms up, calling the wind.
+            DragonClipKey wind = K(0f).Sp(-8f, 0f, 0f).Ch(-10f, 0f, 0f).Hd(-18f, 0f, 0f).RA(-120f, 0f, -60f).RF(-10f, 0f, 0f).RH(-30f, 0f, 0f).LA(-120f, 0f, 60f).LF(-10f, 0f, 0f).LH(-30f, 0f, 0f).Off(0f, 0.08f, 0f);
+            c["rg_tailwind"] = new DragonClipKey[] { K(-1f), wind, wind.Copy(0.3f).Rot(0f, 0f, 2f), K(0.7f) };
+            // Hawk's Vigil: right hand at the brow, scanning the horizon left to right.
+            DragonClipKey vig = K(0f).Hd(-6f, -25f, 0f).RA(-100f, 0f, 20f).RF(-135f, 0f, 0f).RH(-20f, 0f, 0f).LA(-20f, 0f, 20f);
+            c["rg_vigil"] = new DragonClipKey[] { K(-1f), vig, vig.Copy(0.3f).Hd(-6f, 25f, 0f), vig.Copy(0.5f).Hd(-6f, 0f, 0f), K(0.8f) };
+            // Arrow Rain: lean back, bow raised to the sky, loose high.
+            c["rg_sky"] = new DragonClipKey[] { K(-1f), SkyDraw(-0.5f), SkyDraw(-0.05f), SkyDraw(0f).RF(-60f, 0f, 0f).RA(-145f, 0f, -35f), SkyDraw(0.2f).RF(-60f, 0f, 0f).RA(-145f, 0f, -35f), K(0.6f) };
+            // Starfall Volley: sky draw held through the channel, loosed at the end.
+            c["rg_starfall"] = new DragonClipKey[] { K(-1f), SkyDraw(-0.8f), SkyDraw(-0.05f), SkyDraw(0f).RF(-60f, 0f, 0f).RA(-145f, 0f, -35f), K(0.45f) };
+            // Pinning Shot: drop to one knee, steady draw, release.
+            c["rg_kneel"] = new DragonClipKey[] { K(-1f), Draw(-0.5f).Off(0f, -0.3f, 0f).Rot(8f, 0f, 0f), Draw(-0.05f).Off(0f, -0.32f, 0f).Rot(8f, 0f, 0f), Loose(0f).Off(0f, -0.32f, -0.05f).Rot(4f, 0f, 0f), Loose(0.25f).Off(0f, -0.3f, 0f).Rot(4f, 0f, 0f), K(0.6f) };
+            // Ballista Shot (hold while charging): crouched heavy draw, released with a siege recoil.
+            c["rg_ballista"] = new DragonClipKey[] {
+                K(-1f), Draw(-0.5f).Off(0f, -0.12f, 0f).Rot(-4f, 0f, 0f),
+                Draw(0f).RF(-150f, 0f, 0f).Off(0f, -0.15f, -0.04f).Rot(-6f, 0f, 0f),
+                Loose(0.06f).Rot(-20f, 0f, 0f).Off(0f, -0.08f, -0.35f), Loose(0.3f).Rot(-10f, 0f, 0f).Off(0f, -0.05f, -0.2f), K(0.7f)
+            };
+            // Splitting Arrow volleys: quick draw sweeping across the cone (alternating sides).
+            c["rg_split_a"] = new DragonClipKey[] { K(-1f), Draw(-0.5f).Rot(0f, -18f, 0f), Loose(0f).Rot(-4f, 20f, 0f), K(0.3f).Rot(0f, 10f, 0f) };
+            c["rg_split_b"] = new DragonClipKey[] { K(-1f), Draw(-0.5f).Rot(0f, 18f, 0f), Loose(0f).Rot(-4f, -20f, 0f), K(0.3f).Rot(0f, -10f, 0f) };
         }
 
         // ------------------------------------------------------------------ Sorcerer / Archmage / Horizon Walker

@@ -40,7 +40,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Dragon's Altar - Ranger";
-        public const string ModVersion = "0.25.9";
+        public const string ModVersion = "0.25.10";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -575,7 +575,7 @@ namespace DragonsAltarRanger
             float range = DragonCombat.M(ascended ? _paAscRange.Value : _paRange.Value);
             Vector3 origin = ShotOrigin(player);
             Vector3 dir = AimDir(player, origin);
-            StartCoroutine(PoseMotion(player, 0.4f, delegate(float k) { return Quaternion.Euler(-16f * Bump(k), -18f * Bump(k), 0f); }, delegate(float k) { return new Vector3(0f, 0f, -0.15f * Bump(k)); }));   // strong draw-shot recoil
+            DragonCombat.PlayClip(player, "rg_power", 0.1f);   // snap draw, strong recoil
             Shoot(player, "Piercing Arrow");
             bool first = true;
             float endWidth = DragonCombat.M(Mathf.Max(0.3f, _paAscWidth.Value));
@@ -653,8 +653,6 @@ namespace DragonsAltarRanger
         // a time (a new one takes over); the rest pose is restored when the last one ends.
         private int _poseToken;
         private bool _poseActive;
-        private Quaternion _poseBaseRot;
-        private Vector3 _poseBasePos;
 
         private IEnumerator PoseMotion(Player player, float duration, Func<float, Quaternion> rot, Func<float, Vector3> offset)
         {
@@ -665,20 +663,24 @@ namespace DragonsAltarRanger
         {
             Transform v = VisualOf(player);
             if (v == null) yield break;
-            int token = ++_poseToken;
-            if (!_poseActive) { _poseBaseRot = v.localRotation; _poseBasePos = v.localPosition; _poseActive = true; }
+            // v0.25.10: the Visual root is shared with the skill clip engine (one owner at a time, one
+            // rest pose), so a pose and a clip can never leave the body tilted.
+            int token = DragonCombat.ClaimMotionRoot(v);
+            int local = ++_poseToken;
+            _poseActive = true;
             Vector3 pivot = new Vector3(0f, 0.9f, 0f);
             float t = 0f;
-            while (player != null && !player.IsDead() && token == _poseToken && v != null && (keep != null ? keep() : t < duration))
+            while (player != null && !player.IsDead() && DragonCombat.OwnsMotionRoot(token) && v != null && (keep != null ? keep() : t < duration))
             {
                 float k = keep != null ? t : Mathf.Clamp01(t / Mathf.Max(0.01f, duration));
                 Quaternion r = rot == null ? Quaternion.identity : rot(k);
-                v.localRotation = _poseBaseRot * r;
-                v.localPosition = _poseBasePos + (pivot - r * pivot) + (offset == null ? Vector3.zero : offset(k));
+                v.localRotation = DragonCombat.MotionBaseRot * r;
+                v.localPosition = DragonCombat.MotionBasePos + (pivot - r * pivot) + (offset == null ? Vector3.zero : offset(k));
                 t += Time.deltaTime;
                 yield return null;
             }
-            if (token == _poseToken && v != null) { v.localRotation = _poseBaseRot; v.localPosition = _poseBasePos; _poseActive = false; }
+            DragonCombat.ReleaseMotionRoot(token, v);
+            if (local == _poseToken) _poseActive = false;
         }
 
         private static float Bump(float k) { return Mathf.Sin(Mathf.Clamp01(k) * Mathf.PI); }
@@ -734,8 +736,7 @@ namespace DragonsAltarRanger
             if (!AlbedoAimUtility.TryGetPhysicalTarget(player, DragonCombat.M(_snRange.Value), out point)) { ShowMessage("Aim at the ground"); return; }
             if (!BeginSkill(player, "Ranger.SnareTrap", _snCooldown.Value, _snStamina.Value)) return;
             DragonCombat.LockSkill(player, 0.5f);
-            DragonCombat.PlaySkillPose(player, "Punch", 0.4f);
-            StartCoroutine(PoseMotion(player, 0.5f, delegate(float k) { return Quaternion.Euler(28f * Bump(k), 0f, 0f); }, delegate(float k) { return new Vector3(0f, -0.35f * Bump(k), 0f); }));
+            DragonCombat.PlayClip(player, "rg_trap", 0.15f);
             int max = Mathf.Max(1, Mathf.RoundToInt(_snMax.Value));
             while (_traps.Count >= max) RemoveTrap(0);
             SnareTrap trap = new SnareTrap();
@@ -815,7 +816,7 @@ namespace DragonsAltarRanger
             if (!BeginSkill(player, "Acrobat.CycloneArrow", _cyCooldown.Value, _cyStamina.Value)) return;
             Vector3 origin = ShotOrigin(player);
             Vector3 dir = AimDir(player, origin);
-            StartCoroutine(PoseMotion(player, 0.45f, delegate(float k) { return Quaternion.Euler(8f * Bump(k), 360f * Mathf.SmoothStep(0f, 1f, k), 0f); }, null));   // spin-loose
+            DragonCombat.PlayClip(player, "rg_spin", 0.1f);   // spin-loose
             Shoot(player, "Cyclone Arrow");
             bool ascended = DragonCombat.IsSkillAscended(player, "cyclone_arrow");
             StartCoroutine(CycloneRoutine(player, origin, dir, DragonCombat.M(_cyRange.Value), Mathf.Max(0.2f, _cyTravel.Value), DragonCombat.M(_cyRadius.Value), 1f, ascended));
@@ -921,8 +922,7 @@ namespace DragonsAltarRanger
             }
             Vector3 end = start + dir * distance;
             Rigidbody body = player.GetComponent<Rigidbody>();
-            DragonCombat.PlaySkillPose(player, "Crescent", 0.3f);
-            StartCoroutine(PoseMotion(player, 0.4f, delegate(float k) { return Quaternion.Euler(75f * Bump(k), 0f, 0f); }, null));
+            DragonCombat.PlayClip(player, "rg_dive", 0.08f);
             float t = 0f, duration = 0.25f;
             while (t < duration && player != null)
             {
@@ -973,7 +973,7 @@ namespace DragonsAltarRanger
             RaycastHit ceiling;
             if (Physics.Raycast(start + Vector3.up, Vector3.up, out ceiling, DragonCombat.M(_sbHeight.Value), SolidMask(), QueryTriggerInteraction.Ignore))
                 top = start + Vector3.up * Mathf.Max(0f, ceiling.distance - 1.5f);
-            StartCoroutine(PoseMotion(player, 0.5f, delegate(float k) { return Quaternion.Euler(-360f * k, 0f, 0f); }, null));
+            DragonCombat.PlayClip(player, "rg_backflip", 0.05f);
             float t = 0f;
             while (t < 0.5f && player != null)
             {
@@ -985,7 +985,7 @@ namespace DragonsAltarRanger
             }
             float radius = DragonCombat.M(ascended ? _sbAscRadius.Value : _sbRadius.Value);
             float end = Time.time + Mathf.Max(0.2f, _sbDuration.Value);
-            StartCoroutine(PoseRoutine(player, 0f, delegate { return _hovering; }, delegate(float k) { return Quaternion.Euler(35f * Mathf.Clamp01(k * 4f), 0f, 0f); }, null));
+            DragonCombat.PlayClip(player, "rg_hover", 0.25f, true);   // aimed down while hovering
             float nextTick = 0f;
             RangerArrowDamage d = ArrowDamage(player);
             float mult = _sbDamage.Value / 100f * DragonCombat.GetSkillPower(player, "skyfall_barrage");
@@ -1018,6 +1018,7 @@ namespace DragonsAltarRanger
                 yield return new WaitForFixedUpdate();
             }
             _hovering = false;
+            DragonCombat.ClipStop(player, 0.3f);
         }
 
         // ------------------------------------------------------------------ Ricochet Arrow
@@ -1027,7 +1028,7 @@ namespace DragonsAltarRanger
             Character first = AimedEnemy(player, DragonCombat.M(_rcRange.Value));
             if (first == null) { ShowMessage("No target in sight"); return; }
             if (!BeginSkill(player, "Acrobat.RicochetArrow", _rcCooldown.Value, _rcStamina.Value)) return;
-            StartCoroutine(PoseMotion(player, 0.35f, delegate(float k) { return Quaternion.Euler(-6f * Bump(k), 30f * Bump(k), -10f * Bump(k)); }, null));   // flicked trick shot
+            DragonCombat.PlayClip(player, "rg_trick", 0.1f);   // flicked trick shot
             Shoot(player, "Ricochet Arrow");
             StartCoroutine(RicochetRoutine(player, first, DragonCombat.IsSkillAscended(player, "ricochet_arrow")));
         }
@@ -1096,8 +1097,7 @@ namespace DragonsAltarRanger
             Dictionary<int, float> held = new Dictionary<int, float>();
             DragonCombat.GrantHyperArmor(player, duration + 0.3f);
             DragonCombat.LockSkill(player, duration);
-            DragonCombat.PlaySkillPose(player, "Whirlwind", duration);
-            StartCoroutine(PoseMotion(player, duration, delegate(float k) { return Quaternion.Euler(0f, 720f * duration * k, 0f); }, null));
+            DragonCombat.PlaySpinClip(player, duration, 0.5f);   // two turns a second inside the leaf storm
             GameObject storm = _enableVfx.Value ? CreateLeafStorm(player.transform.position, radius) : null;
             RangerArrowDamage d = ArrowDamage(player);
             float power = DragonCombat.GetSkillPower(player, "furious_winds");
@@ -1265,8 +1265,7 @@ namespace DragonsAltarRanger
             if (CooldownRemaining("Acrobat.Tailwind") > 0f) { ShowCooldown("Acrobat.Tailwind"); return; }
             StartCooldown("Acrobat.Tailwind", _twCooldown.Value);
             DragonCombat.LockSkill(player, 0.5f);
-            DragonCombat.PlaySkillPose(player, "Raise", 0.5f);
-            StartCoroutine(PoseMotion(player, 0.6f, delegate(float k) { return Quaternion.Euler(-16f * Bump(k), 0f, 0f); }, delegate(float k) { return new Vector3(0f, 0.10f * Bump(k), 0f); }));   // chant
+            DragonCombat.PlayClip(player, "rg_tailwind", 0.2f);
             ShowMessage("Tailwind");
             float duration = Mathf.Max(1f, _twDuration.Value);
             HashSet<Player> allies = new HashSet<Player>();
@@ -1901,10 +1900,7 @@ namespace DragonsAltarRanger
             _ballistaStacks = 0;
             _ballistaNextStack = Time.time + 1f;
             ShowMessage("Ballista Shot - hold to charge");
-            DragonCombat.PlaySkillPose(player, "Channel", 0.3f);
-            StartCoroutine(PoseRoutine(player, 0f, delegate { return _ballistaCharging; },
-                delegate(float k) { return Quaternion.Euler(-12f * Mathf.Clamp01(k * 3f), 0f, 0f); },
-                delegate(float k) { return new Vector3(0f, -0.15f * Mathf.Clamp01(k * 3f), 0f); }));
+            DragonCombat.PlayClip(player, "rg_ballista", 0.35f, true);   // crouched heavy draw while charging
             float started = Time.time;
             while (player != null && !player.IsDead() && (DragonCombat.IsTreeSkillKeyHeld("ballista_shot") || Time.time - started < 0.15f))
             {
@@ -1928,8 +1924,7 @@ namespace DragonsAltarRanger
             Vector3 origin = ShotOrigin(player);
             Vector3 dir = AimDir(player, origin);
             Shoot(player, "BALLISTA SHOT" + (stacks > 0 ? " x" + stacks : ""));
-            float kick = 14f + stacks * 6f;   // v0.25.6: siege recoil, stronger per stack
-            StartCoroutine(PoseMotion(player, 0.45f + stacks * 0.05f, delegate(float k) { return Quaternion.Euler(-kick * Bump(k), 0f, 0f); }, delegate(float k) { return new Vector3(0f, 0f, -(0.2f + 0.08f * stacks) * Bump(k)); }));
+            DragonCombat.ClipImpact(player);   // release: siege recoil
             StartCoroutine(ArrowFlight(player, origin, dir, DragonCombat.M(90f), range, width * 0.5f, true, new Color(0.75f, 1f, 0.55f, 1f), 0f,
                 delegate(Character enemy)
                 {
@@ -1963,7 +1958,7 @@ namespace DragonsAltarRanger
             Vector3 point;
             if (!AlbedoAimUtility.TryGetPhysicalTarget(player, DragonCombat.M(_arRange.Value) * FocusRangeMultiplier(player), out point)) { ShowMessage("Aim at the ground"); return; }
             if (!BeginSkill(player, "Bowmaster.ArrowRain", _arCooldown.Value, _arStamina.Value)) return;
-            StartCoroutine(PoseMotion(player, 0.6f, delegate(float k) { return Quaternion.Euler(-32f * Bump(k), 0f, 0f); }, null));   // loose into the sky
+            DragonCombat.PlayClip(player, "rg_sky", 0.15f);   // loose into the sky
             Shoot(player, "Arrow Rain");
             StartCoroutine(ArrowRainRoutine(player, point, DragonCombat.IsSkillAscended(player, "arrow_rain")));
         }
@@ -2014,7 +2009,7 @@ namespace DragonsAltarRanger
         {
             if (!RequireRangedForBowmaster(player)) return;
             if (!BeginSkill(player, "Bowmaster.PinningShot", _psCooldown.Value, _psStamina.Value)) return;
-            StartCoroutine(PoseMotion(player, 0.5f, delegate(float k) { return Quaternion.Euler(14f * Bump(k), 0f, 0f); }, delegate(float k) { return new Vector3(0f, -0.35f * Bump(k), 0f); }));   // kneeling shot
+            DragonCombat.PlayClip(player, "rg_kneel", 0.15f);   // kneeling shot
             Shoot(player, "Pinning Shot");
             RangerArrowDamage d = ArrowDamage(player);
             float mult = _psDamage.Value / 100f * DragonCombat.GetSkillPower(player, "pinning_shot");
@@ -2081,7 +2076,7 @@ namespace DragonsAltarRanger
             if (!BeginSkill(player, "Bowmaster.ExplosiveArrow", _eaCooldown.Value, _eaStamina.Value)) return;
             Vector3 origin = ShotOrigin(player);
             Vector3 dir = AimDir(player, origin);
-            StartCoroutine(PoseMotion(player, 0.45f, delegate(float k) { return Quaternion.Euler(-20f * Bump(k), 0f, 0f); }, delegate(float k) { return new Vector3(0f, 0f, -0.25f * Bump(k)); }));   // heavy kick-back
+            DragonCombat.PlayClip(player, "rg_heavy", 0.12f);   // heavy kick-back
             Shoot(player, "Explosive Arrow");
             bool ascended = DragonCombat.IsSkillAscended(player, "explosive_arrow");
             StartCoroutine(ArrowFlight(player, origin, dir, DragonCombat.M(70f), DragonCombat.M(_eaRange.Value) * FocusRangeMultiplier(player), DragonCombat.M(0.35f), false,
@@ -2191,8 +2186,7 @@ namespace DragonsAltarRanger
                 flat.Normalize();
                 FaceTowards(player, player.transform.position + flat);
                 Shoot(player, null);
-                float sway = (v % 2 == 0) ? 1f : -1f;   // v0.25.6: alternating sweep per volley
-                StartCoroutine(PoseMotion(player, Mathf.Min(0.3f, interval), delegate(float k) { return Quaternion.Euler(-6f * Bump(k), sway * 22f * Bump(k), 0f); }, null));
+                DragonCombat.PlayClip(player, v % 2 == 0 ? "rg_split_a" : "rg_split_b", 0.06f);   // alternating sweep per volley
                 if (_enableVfx.Value)
                     for (int i = 0; i < arrows; i++)
                     {
@@ -2261,8 +2255,7 @@ namespace DragonsAltarRanger
             ShowMessage("STARFALL VOLLEY");
             float channel = Mathf.Max(0f, _sfChannel.Value);
             DragonCombat.LockSkill(player, channel);
-            DragonCombat.PlaySkillPose(player, "SkyCast", channel);
-            StartCoroutine(PoseMotion(player, channel + 0.3f, delegate(float k) { return Quaternion.Euler(-30f * Mathf.Clamp01(k * 3f) * Mathf.Clamp01((1f - k) * 6f), 0f, 0f); }, null));
+            DragonCombat.PlayClip(player, "rg_starfall", Mathf.Max(0.2f, channel));
             float radius = DragonCombat.M(_sfRadius.Value);
             if (_enableVfx.Value) StartCoroutine(RingVfx(point, radius, new Color(0.80f, 1f, 0.60f, 0.8f), channel + _sfDuration.Value));
             yield return new WaitForSeconds(channel);
@@ -2317,8 +2310,7 @@ namespace DragonsAltarRanger
             if (CooldownRemaining("Bowmaster.HawksVigil") > 0f) { ShowCooldown("Bowmaster.HawksVigil"); return; }
             StartCooldown("Bowmaster.HawksVigil", _hvCooldown.Value);
             DragonCombat.LockSkill(player, 0.5f);
-            DragonCombat.PlaySkillPose(player, "Raise", 0.5f);
-            StartCoroutine(PoseMotion(player, 0.6f, delegate(float k) { return Quaternion.Euler(-16f * Bump(k), 0f, 0f); }, delegate(float k) { return new Vector3(0f, 0.10f * Bump(k), 0f); }));   // chant
+            DragonCombat.PlayClip(player, "rg_vigil", 0.15f);
             ShowMessage("Hawk's Vigil");
             float duration = Mathf.Max(1f, _hvDuration.Value);
             Collider[] hits = Physics.OverlapSphere(player.transform.position, DragonCombat.M(_hvRadius.Value));
@@ -2489,7 +2481,8 @@ namespace DragonsAltarRanger
         private void Shoot(Player player, string message)
         {
             MarkSkillCast(player);
-            if (!_poseActive) StartCoroutine(PoseMotion(player, 0.22f, delegate(float k) { return Quaternion.Euler(-9f * Bump(k), 0f, 0f); }, null));
+            // small recoil only when no skill pose / clip is playing
+            if (!_poseActive && player.GetComponent<DragonSkillClipDriver>() == null) StartCoroutine(PoseMotion(player, 0.22f, delegate(float k) { return Quaternion.Euler(-9f * Bump(k), 0f, 0f); }, null));
             DragonCombat.LockSkill(player, 0.35f);
             DragonCombat.PlayWeaponAnimation(player, false, "bow_fire");
             if (!string.IsNullOrEmpty(message)) ShowMessage(message);

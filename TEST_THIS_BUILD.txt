@@ -1,5 +1,4 @@
-TEST v0.25.9
-1. Stat HUD: food icons in one horizontal row under the EXP bar; HUD is thin; no vanilla food/fork icons anywhere.
-2. Sorcerer / Archmage / Horizon Walker: cast every skill (and Ascended via F8) in third person.
-   Meteor Fall / Cataclysm: arms stay up while you hold, come down on release.
-   Tell me skill + arm if anything bends wrong.
+TEST v0.25.10
+Ranger / Acrobat / Bowmaster: cast every skill (Ascended via F8) in third person.
+Bow arm (left) should point at the target, right hand at the cheek while drawing.
+If an arm bends the wrong way, tell me skill + arm.
