@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.24.4";
+        public const string ModVersion = "0.25.0";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -139,6 +139,8 @@ namespace AlbedosCustomClassesAdvanced
 
         private ConfigEntry<bool> _enableVfx;
         private ConfigEntry<bool> _showCombatHud;
+        private ConfigEntry<bool> _ihHudEnabled;
+        private ConfigEntry<float> _ihHudScale, _ihHudX, _ihHudY;
         private ConfigEntry<bool> _uiColorSpaceCorrection;
         private ConfigEntry<float> _hudScale;
         private ConfigEntry<float> _hudBottomOffset;
@@ -642,6 +644,10 @@ namespace AlbedosCustomClassesAdvanced
             _showCombatHud = Config.Bind("Interface", "ShowCombatHud", true, "Show the unified class skill HUD.");
             _uiColorSpaceCorrection = Config.Bind("Interface", "SkillTreeColorSpaceCorrection", true, "Compensate the Skill Tree artwork for Valheim's Linear color space so it is not drawn washed out. Disable only if the tree looks too dark.");
             _hudScale = Config.Bind("Interface", "HudScale", 1f, "Unified HUD scale.");
+            _ihHudEnabled = Config.Bind("Immortal HUD", "Enabled", true, "Immortal Heroes vitals HUD (HP / Stamina / Eitr / food / level / buffs). Replaces the vanilla bars and status list.");
+            _ihHudScale = Config.Bind("Immortal HUD", "Scale", 1f, "Size of the vitals HUD.");
+            _ihHudX = Config.Bind("Immortal HUD", "X", 14f, "Left margin (px at 1080p).");
+            _ihHudY = Config.Bind("Immortal HUD", "Y", 96f, "Top margin (px at 1080p), below the vanilla item hotbar.");
             _hudBottomOffset = Config.Bind("Interface", "HudBottomOffset_v0113", 105f, "Bottom margin for the compact RPG skill HUD. Fresh v0.11.3 key avoids stale 330px development offsets.");
             _testingForceCooldowns = Config.Bind("Testing", "ForceCooldowns", false, "Testing mode: force every advancement cooldown to one value.");
             _testingCooldownSeconds = Config.Bind("Testing", "CooldownSeconds", 5f, "Testing cooldown used while ForceCooldowns is enabled.");
@@ -10783,8 +10789,8 @@ namespace AlbedosCustomClassesAdvanced
                     break;
                 case "cyclone_arrow":
                     b.Append(IhLine("Damage", IhBowPct(IhR("Acrobat Cyclone Arrow", "DamagePercent", 35f), power) + " every " + IhNum(IhR("Acrobat Cyclone Arrow", "HitInterval", 0.3f)) + "s"));
-                    b.Append(IhLine("Range", IhNum(IhR("Acrobat Cyclone Arrow", "Range", 30f)) + "m in " + IhNum(IhR("Acrobat Cyclone Arrow", "TravelTime", 3f)) + "s, Free Aim"));
-                    b.Append(IhLine("Radius", IhNum(IhR("Acrobat Cyclone Arrow", "Radius", 3f)) + "m, pulls Small enemies" + (ascended ? "; splits into " + IhNum(IhR("Acrobat Cyclone Arrow Ascended", "Splits", 3f)) + " on its first hit" : "")));
+                    b.Append(IhLine("Range", IhNum(IhR("Acrobat Cyclone Arrow", "Range", 30f)) + "m in " + IhNum(IhR("Acrobat Cyclone Arrow", "TravelTime_v0250", 6f)) + "s, Free Aim"));
+                    b.Append(IhLine("Radius", IhNum(IhR("Acrobat Cyclone Arrow", "Radius_v0250", 4f)) + "m, pulls Small enemies" + (ascended ? "; splits into " + IhNum(IhR("Acrobat Cyclone Arrow Ascended", "Splits", 3f)) + " on its first hit" : "")));
                     IhCosts(b, IhR("Acrobat Cyclone Arrow", "StaminaCost", 25f), "Instant", IhR("Acrobat Cyclone Arrow", "Cooldown", 12f));
                     break;
                 case "swallow_dive":
@@ -11389,7 +11395,20 @@ namespace AlbedosCustomClassesAdvanced
             // actually starts (cooldown starts, or a Relic / its cast begins), never to a failed press.
             bool tryEmpower = _parryEmpowerPending && IhIsPriest(player) && IhPriestDamageSkill(id) && IhCooldown(player, id) <= 0f;
             bool relicBefore = id == "lightning_relic" && (FindPriestRelic(true) != null || _lightningRelicCasting);
+            float cdBefore = IhCooldown(player, id);
+            int readyBefore = -1, maxStacks, readyAfter = -1;
+            float nextStack;
+            if (!DragonCombat.TryGetSkillStacks(id, out readyBefore, out maxStacks, out nextStack)) readyBefore = -1;
             IhCastSkillNow(player, id);
+            // v0.25.0: the skill's body motion plays only when it really started (cooldown started or
+            // a charge was spent). Ranger animates its own skills.
+            if (GetClass(player) != "Ranger")
+            {
+                if (readyBefore >= 0 && !DragonCombat.TryGetSkillStacks(id, out readyAfter, out maxStacks, out nextStack)) readyAfter = -1;
+                bool started = (cdBefore <= 0f && IhCooldown(player, id) > 0f) || (readyBefore >= 0 && readyAfter >= 0 && readyAfter < readyBefore);
+                string motion; float motionTime;
+                if (started && DragonCombat.SkillMotion(id, out motion, out motionTime)) DragonCombat.PlayBodyMotion(player, motion, motionTime);
+            }
             if (tryEmpower && !relicBefore)
             {
                 bool started = IhCooldown(player, id) > 0f || (id == "lightning_relic" && (FindPriestRelic(true) != null || _lightningRelicCasting));
@@ -11927,6 +11946,9 @@ namespace AlbedosCustomClassesAdvanced
 
             EnsureUiStyles();
 
+            if (_ihHudEnabled.Value && !IhHudUserHidden())
+                DrawImmortalHud(player);
+
             if (_showCombatHud.Value && !_skillbookOpen && !Plugin.IsClassPanelOpen && !DragonCombat.IsGameplayHudSuppressed())
                 DrawCombatHud(player);
 
@@ -11943,6 +11965,254 @@ namespace AlbedosCustomClassesAdvanced
             }
             else
                 _ttShow = false;
+        }
+
+        // ==================================================================================
+        // v0.25.0 IMMORTAL HUD: our own vitals panel (top-left, under the vanilla item hotbar).
+        // HP / Stamina / Eitr bars are ALWAYS shown (also at 0), plus food, level / class and every
+        // status effect (buffs green, debuffs red, timer under the icon). The vanilla health panel,
+        // stamina / eitr bars and status list are hidden while it is on.
+        // ==================================================================================
+        private GUIStyle _ihHudText, _ihHudSmall, _ihHudTiny;
+        private readonly Dictionary<string, Transform> _ihVanillaHudParts = new Dictionary<string, Transform>();
+        private static readonly string[] IhVanillaHudFields = { "m_healthPanel", "m_staminaBar2Root", "m_eitrBarRoot", "m_statusEffectListRoot" };
+
+        private void LateUpdate()
+        {
+            IhApplyVanillaHudVisibility();
+        }
+
+        private void IhApplyVanillaHudVisibility()
+        {
+            try
+            {
+                Type hudType = Type.GetType("Hud, assembly_valheim");
+                object hud = hudType == null ? null : hudType.GetField("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic).GetValue(null);
+                if (hud == null) return;
+                bool hide = _ihHudEnabled.Value && Player.m_localPlayer != null;
+                for (int i = 0; i < IhVanillaHudFields.Length; i++)
+                {
+                    Transform t;
+                    if (!_ihVanillaHudParts.TryGetValue(IhVanillaHudFields[i], out t) || t == null)
+                    {
+                        FieldInfo f = hudType.GetField(IhVanillaHudFields[i], BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                        object v = f == null ? null : f.GetValue(hud);
+                        t = v is Component ? ((Component)v).transform : (v is GameObject ? ((GameObject)v).transform : null);
+                        _ihVanillaHudParts[IhVanillaHudFields[i]] = t;
+                    }
+                    if (t == null) continue;
+                    Vector3 want = hide ? Vector3.zero : Vector3.one;
+                    if (t.localScale != want) t.localScale = want;
+                }
+            }
+            catch { }
+        }
+
+        private static bool IhHudUserHidden()
+        {
+            try
+            {
+                Type hudType = Type.GetType("Hud, assembly_valheim");
+                MethodInfo m = hudType == null ? null : hudType.GetMethod("IsUserHidden", BindingFlags.Static | BindingFlags.Public);
+                return m != null && Convert.ToBoolean(m.Invoke(null, null));
+            }
+            catch { return false; }
+        }
+
+        private void IhEnsureHudStyles(float s)
+        {
+            if (_ihHudText == null)
+            {
+                Font serif = FindValheimSerifFont();
+                _ihHudText = new GUIStyle(GUI.skin.label); _ihHudText.fontStyle = FontStyle.Bold; _ihHudText.alignment = TextAnchor.MiddleLeft;
+                _ihHudSmall = new GUIStyle(_ihHudText); _ihHudSmall.alignment = TextAnchor.MiddleRight;
+                _ihHudTiny = new GUIStyle(_ihHudText); _ihHudTiny.alignment = TextAnchor.UpperCenter; _ihHudTiny.fontStyle = FontStyle.Normal;
+                if (serif != null) { _ihHudText.font = serif; _ihHudSmall.font = serif; _ihHudTiny.font = serif; }
+                _ihHudText.normal.textColor = _ihHudSmall.normal.textColor = _ihHudTiny.normal.textColor = new Color(0.95f, 0.93f, 0.88f, 1f);
+            }
+            _ihHudText.fontSize = Mathf.RoundToInt(13f * s);
+            _ihHudSmall.fontSize = Mathf.RoundToInt(12f * s);
+            _ihHudTiny.fontSize = Mathf.RoundToInt(11f * s);
+        }
+
+        private void IhHudShadowLabel(Rect r, string text, GUIStyle style)
+        {
+            Color c = style.normal.textColor;
+            style.normal.textColor = new Color(0f, 0f, 0f, 0.85f);
+            GUI.Label(new Rect(r.x + 1f, r.y + 1f, r.width, r.height), text, style);
+            style.normal.textColor = c;
+            GUI.Label(r, text, style);
+        }
+
+        private void IhHudFill(Rect r, Color c)
+        {
+            GUI.color = c;
+            GUI.DrawTexture(r, Texture2D.whiteTexture);
+            GUI.color = Color.white;
+        }
+
+        // A bar: dark track, fill, thin top shine, label left, "cur / max" right.
+        private void IhHudBar(Rect r, float cur, float max, Color fill, string label, float s)
+        {
+            IhHudFill(r, new Color(0f, 0f, 0f, 0.55f));
+            Rect inner = new Rect(r.x + 1f, r.y + 1f, r.width - 2f, r.height - 2f);
+            IhHudFill(inner, new Color(fill.r * 0.22f, fill.g * 0.22f, fill.b * 0.22f, 0.9f));
+            float k = max > 0.01f ? Mathf.Clamp01(cur / max) : 0f;
+            if (k > 0f)
+            {
+                IhHudFill(new Rect(inner.x, inner.y, inner.width * k, inner.height), fill);
+                IhHudFill(new Rect(inner.x, inner.y, inner.width * k, Mathf.Max(1f, inner.height * 0.28f)), new Color(1f, 1f, 1f, 0.18f));
+            }
+            Rect text = new Rect(inner.x + 5f * s, inner.y - 1f, inner.width - 10f * s, inner.height + 2f);
+            IhHudShadowLabel(text, label, _ihHudText);
+            IhHudShadowLabel(text, Mathf.CeilToInt(Mathf.Max(0f, cur)).ToString() + " / " + Mathf.CeilToInt(Mathf.Max(0f, max)).ToString(), _ihHudSmall);
+        }
+
+        private static float IhCallFloat(object o, string method)
+        {
+            try
+            {
+                MethodInfo m = o.GetType().GetMethod(method, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+                return m == null ? 0f : Convert.ToSingle(m.Invoke(o, null));
+            }
+            catch { return 0f; }
+        }
+
+        private static object IhField(object o, string name)
+        {
+            if (o == null) return null;
+            for (Type t = o.GetType(); t != null; t = t.BaseType)
+            {
+                FieldInfo f = t.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+                if (f != null) return f.GetValue(o);
+            }
+            return null;
+        }
+
+        private static void IhDrawSprite(Rect r, Sprite sprite)
+        {
+            if (sprite == null || sprite.texture == null) return;
+            Rect tr = sprite.textureRect;
+            Texture2D tex = sprite.texture;
+            GUI.DrawTextureWithTexCoords(r, tex, new Rect(tr.x / tex.width, tr.y / tex.height, tr.width / tex.width, tr.height / tex.height));
+        }
+
+        private static readonly string[] IhDebuffWords = { "burn", "poison", "frost", "freez", "cold", "wet", "smok", "lightning", "shock", "tared", "slime", "encumber", "spirit", "bleed", "stagger", "slow", "debuff", "curse" };
+
+        private static bool IhIsDebuff(object se)
+        {
+            string a = ((se is UnityEngine.Object) ? ((UnityEngine.Object)se).name : "") + " " + (IhField(se, "m_name") as string ?? "");
+            a = a.ToLowerInvariant();
+            if (a.Contains("immune") || a.Contains("resist")) return false;
+            for (int i = 0; i < IhDebuffWords.Length; i++) if (a.Contains(IhDebuffWords[i])) return true;
+            return false;
+        }
+
+        private static string IhLocalize(string token)
+        {
+            if (string.IsNullOrEmpty(token)) return "";
+            try
+            {
+                Type loc = Type.GetType("Localization, assembly_valheim");
+                object inst = loc == null ? null : loc.GetProperty("instance", BindingFlags.Static | BindingFlags.Public).GetValue(null, null);
+                MethodInfo m = inst == null ? null : loc.GetMethod("Localize", new Type[] { typeof(string) });
+                if (m != null) return m.Invoke(inst, new object[] { token }) as string ?? token;
+            }
+            catch { }
+            return token;
+        }
+
+        private void DrawImmortalHud(Player player)
+        {
+            float s = Mathf.Clamp(_ihHudScale.Value, 0.6f, 2f) * Mathf.Max(0.6f, Screen.height / 1080f);
+            IhEnsureHudStyles(s);
+            float w = 300f * s;
+            float x = _ihHudX.Value * Screen.height / 1080f, y = _ihHudY.Value * Screen.height / 1080f;
+            float pad = 7f * s, barH = 17f * s, gap = 5f * s;
+
+            // Status effects (all of them, vanilla included).
+            List<object> effects = new List<object>();
+            try
+            {
+                object seman = player.GetSEMan();
+                MethodInfo get = seman == null ? null : seman.GetType().GetMethod("GetStatusEffects", Type.EmptyTypes);
+                System.Collections.IEnumerable list = get == null ? null : get.Invoke(seman, null) as System.Collections.IEnumerable;
+                if (list != null) foreach (object se in list) if (se != null && IhField(se, "m_icon") is Sprite) effects.Add(se);
+            }
+            catch { }
+            // Foods.
+            List<object> foods = new List<object>();
+            try
+            {
+                MethodInfo gf = typeof(Player).GetMethod("GetFoods", Type.EmptyTypes);
+                System.Collections.IEnumerable fl = gf == null ? null : gf.Invoke(player, null) as System.Collections.IEnumerable;
+                if (fl != null) foreach (object f in fl) if (f != null) foods.Add(f);
+            }
+            catch { }
+
+            float icon = 26f * s, iconGap = 5f * s;
+            int perRow = Mathf.Max(1, Mathf.FloorToInt((w - pad * 2f + iconGap) / (icon + iconGap)));
+            int rows = effects.Count == 0 ? 0 : (effects.Count + perRow - 1) / perRow;
+            float h = pad + 16f * s + gap + barH + gap + barH + gap + (foods.Count > 0 ? icon + 4f * s + gap : 0f) + (rows > 0 ? rows * (icon + 15f * s) : 0f) + pad;
+            Rect panel = new Rect(x, y, w, h);
+            IhHudFill(panel, new Color(0.04f, 0.045f, 0.06f, 0.62f));
+            IhHudFill(new Rect(panel.x, panel.y, panel.width, 1f), new Color(0.84f, 0.67f, 0.31f, 0.75f));
+            IhHudFill(new Rect(panel.x, panel.yMax - 1f, panel.width, 1f), new Color(0.84f, 0.67f, 0.31f, 0.45f));
+
+            float cx = panel.x + pad, cw = panel.width - pad * 2f, cy = panel.y + pad;
+            // Header: Lv + Class > AC + name.
+            string cls = GetClass(player), adv = GetAdvancement(player);
+            string head = "LV " + IhGetLevel(player).ToString() + "   " + (string.IsNullOrEmpty(cls) ? "NO CLASS" : cls.ToUpper() + (string.IsNullOrEmpty(adv) ? "" : "  >  " + IhAcDisplay(adv).ToUpper()));
+            _ihHudText.normal.textColor = new Color(0.98f, 0.82f, 0.45f, 1f);
+            IhHudShadowLabel(new Rect(cx, cy, cw, 16f * s), head, _ihHudText);
+            _ihHudText.normal.textColor = new Color(0.95f, 0.93f, 0.88f, 1f);
+            _ihHudSmall.normal.textColor = new Color(0.80f, 0.80f, 0.78f, 1f);
+            IhHudShadowLabel(new Rect(cx, cy, cw, 16f * s), player.GetPlayerName(), _ihHudSmall);
+            _ihHudSmall.normal.textColor = new Color(0.95f, 0.93f, 0.88f, 1f);
+            cy += 16f * s + gap;
+
+            IhHudBar(new Rect(cx, cy, cw, barH), player.GetHealth(), player.GetMaxHealth(), new Color(0.80f, 0.16f, 0.14f, 1f), "HP", s);
+            cy += barH + gap;
+            float half = (cw - gap) * 0.5f;
+            IhHudBar(new Rect(cx, cy, half, barH), player.GetStamina(), player.GetMaxStamina(), new Color(0.90f, 0.70f, 0.12f, 1f), "STA", s);
+            IhHudBar(new Rect(cx + half + gap, cy, half, barH), IhCallFloat(player, "GetEitr"), IhCallFloat(player, "GetMaxEitr"), new Color(0.55f, 0.30f, 0.90f, 1f), "EIT", s);
+            cy += barH + gap;
+
+            if (foods.Count > 0)
+            {
+                for (int i = 0; i < foods.Count; i++)
+                {
+                    object item = IhField(foods[i], "m_item");
+                    Sprite sp = null;
+                    try { MethodInfo gi = item == null ? null : item.GetType().GetMethod("GetIcon", Type.EmptyTypes); sp = gi == null ? null : gi.Invoke(item, null) as Sprite; } catch { }
+                    Rect ir = new Rect(cx + i * (icon * 2.3f + iconGap), cy, icon, icon);
+                    IhHudFill(ir, new Color(0f, 0f, 0f, 0.45f));
+                    IhDrawSprite(ir, sp);
+                    object t = IhField(foods[i], "m_time");
+                    float secs = t is float ? (float)t : 0f;
+                    IhHudShadowLabel(new Rect(ir.xMax + 3f * s, ir.y, icon * 1.3f, icon), secs >= 60f ? Mathf.CeilToInt(secs / 60f).ToString() + "m" : Mathf.CeilToInt(secs).ToString() + "s", _ihHudText);
+                }
+                cy += icon + 4f * s + gap;
+            }
+
+            for (int i = 0; i < effects.Count; i++)
+            {
+                object se = effects[i];
+                int r = i / perRow, c = i % perRow;
+                Rect ir = new Rect(cx + c * (icon + iconGap), cy + r * (icon + 15f * s), icon, icon);
+                bool debuff = IhIsDebuff(se);
+                IhHudFill(ir, new Color(0f, 0f, 0f, 0.45f));
+                IhDrawSprite(ir, IhField(se, "m_icon") as Sprite);
+                IhHudFill(new Rect(ir.x, ir.yMax - 2f * s, ir.width, 2f * s), debuff ? new Color(0.92f, 0.25f, 0.20f, 1f) : new Color(0.35f, 0.85f, 0.35f, 1f));
+                string txt = "";
+                try { MethodInfo gt = se.GetType().GetMethod("GetIconText", Type.EmptyTypes); txt = gt == null ? "" : gt.Invoke(se, null) as string ?? ""; } catch { }
+                IhHudShadowLabel(new Rect(ir.x - 6f * s, ir.yMax, ir.width + 12f * s, 14f * s), txt, _ihHudTiny);
+                if (ir.Contains(Event.current.mousePosition))
+                {
+                    string name = IhLocalize(IhField(se, "m_name") as string);
+                    IhHudShadowLabel(new Rect(panel.xMax + 6f * s, ir.y, 260f * s, icon), name, _ihHudText);
+                }
+            }
         }
 
         private bool _ttShow;
@@ -13732,8 +14002,9 @@ namespace AlbedosCustomClassesAdvanced
             result=IhCopyTexture(normal,"ImmortalHeroes_Ultimate_"+id);
             int ox,oy,ow,oh;
             IhHotbarOpening(result,out ox,out oy,out ow,out oh);
-            // Tree frame band: Maroon ~ (212,82,136), Ascended Red ~ (181,66,73). Gold trim (b < g) is kept.
-            Color tint=ascended ? new Color(1f,0.36f,0.40f,1f) : new Color(1f,0.39f,0.64f,1f);
+            // Gold trim (b < g) is kept; every other chromatic frame pixel is re-tinted.
+            // v0.25.0: Ultimates read as RED on the hotbar (deep red), Ascended = brighter, stronger red.
+            Color tint=ascended ? new Color(1f,0.10f,0.06f,1f) : new Color(0.86f,0.16f,0.14f,1f);
             for(int y=0;y<result.height;y++) for(int x=0;x<result.width;x++)
             {
                 int ty=result.height-1-y;
@@ -13742,7 +14013,7 @@ namespace AlbedosCustomClassesAdvanced
                 float max=Mathf.Max(c.r,Mathf.Max(c.g,c.b)), min=Mathf.Min(c.r,Mathf.Min(c.g,c.b));
                 if(c.b>c.g*1.02f && max-min>0.06f)
                 {
-                    float v=max*0.92f;
+                    float v=ascended ? Mathf.Min(1f,max*1.25f) : max*0.85f;
                     result.SetPixel(x,y,new Color(v*tint.r,v*tint.g,v*tint.b,c.a));
                 }
             }

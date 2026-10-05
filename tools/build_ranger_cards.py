@@ -22,6 +22,10 @@ CARDS = [("Cleric", 115, 0.85, "ranger", 0.30),
          ("Spellcaster", 170, 0.80, "acrobat", 0.30),
          ("Wizard", 95, 0.80, "bowmaster", 0.30)]
 PANEL = (252, 22, 563, 263)
+# Per card gradient maps (match the emblem): Ranger forest green, Acrobat teal-green, Bowmaster olive-gold.
+STOPS = {"ranger": [[28, 70, 40], [52, 150, 84], [150, 222, 120], [255, 246, 205]],
+         "acrobat": [[18, 60, 58], [36, 138, 118], [128, 224, 196], [240, 255, 240]],
+         "bowmaster": [[40, 64, 26], [96, 140, 52], [196, 214, 110], [255, 244, 200]]}
 EMBLEM = (126, 141, 112)       # emblem disc (card px): centre + radius inside the outer ring   # art panel interior inside the frame (card px)
 
 
@@ -63,11 +67,18 @@ def panel_scene(name, focus_y, size, hue):
     a = np.asarray(crop, dtype=np.float64)
     # v0.24.3: no parchment wash (it read as a faded sheet); just a light lift so the dark
     # portrait sits in the same brightness range as the other painted cards.
-    # v0.24.4: high-key like the painted cards (bright midtones, colour kept) so the shared 30%
-    # label veil disappears into the art instead of reading as a parchment slab on a dark portrait.
-    out = 255.0 * np.power(a / 255.0, 0.5)
+    # v0.25.0: vibrant + light like the painted cards, leaning green (Sorcerer reads purple,
+    # Cleric light, Warrior rustic): high-key gamma, shadows lifted into pale spring green,
+    # colour pushed towards the class hue, then extra saturation.
+    out = 255.0 * np.power(a / 255.0, 0.6)
+    lum = np.clip(out.mean(axis=2) / 255.0, 0, 1)
+    # Gradient map: deep forest -> emerald -> spring green -> warm sunlit highlight.
+    xs = np.array([0.0, 0.35, 0.7, 1.0])
+    stops = np.array(STOPS[name], dtype=np.float64)
+    mapped = np.stack([np.interp(lum, xs, stops[:, c]) for c in range(3)], -1)
+    out = out * 0.40 + mapped * 0.60
     grey = out.mean(axis=2, keepdims=True)
-    out = grey + (out - grey) * 1.25
+    out = grey + (out - grey) * 1.35
     return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8))
 
 

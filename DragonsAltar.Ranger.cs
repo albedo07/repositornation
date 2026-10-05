@@ -40,7 +40,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Dragon's Altar - Ranger";
-        public const string ModVersion = "0.24.4";
+        public const string ModVersion = "0.25.0";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -178,8 +178,8 @@ namespace DragonsAltarRanger
             _cyStamina = Config.Bind(cy, "StaminaCost", 25f, "Stamina.");
             _cyDamage = Config.Bind(cy, "DamagePercent", 35f, "Per hit.");
             _cyRange = Config.Bind(cy, "Range", 30f, "Laser Projectile range (m).");
-            _cyTravel = Config.Bind(cy, "TravelTime", 3f, "Seconds to cover the range.");
-            _cyRadius = Config.Bind(cy, "Radius", 3f, "Pull / hit radius (m).");
+            _cyTravel = Config.Bind(cy, "TravelTime_v0250", 6f, "Seconds to cover the range (slow, so enemies take several ticks).");
+            _cyRadius = Config.Bind(cy, "Radius_v0250", 4f, "Pull / hit radius (m).");
             _cyInterval = Config.Bind(cy, "HitInterval", 0.3f, "Seconds.");
             _cyPull = Config.Bind(cy, "PullStrength", 6f, "Pull on Small enemies.");
             const string cya = "Acrobat Cyclone Arrow Ascended";

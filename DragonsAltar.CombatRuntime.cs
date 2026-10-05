@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.24.4";
+        public const string ModVersion = "0.25.0";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1460,6 +1460,184 @@ namespace DragonsAltarCombat
 
     public static class DragonCombat
     {
+        // ==================================================================================
+        // v0.25.0 SKILL BODY MOTIONS: procedural action / gesture for every skill (Dragon Nest /
+        // Devil May Cry style): the body (Visual root) leans, crouches, spins and snaps around its
+        // centre on top of the vanilla pose. One motion at a time; rest pose restored at the end.
+        // ==================================================================================
+        private static int _motionToken;
+        private static bool _motionActive;
+        private static Quaternion _motionBaseRot;
+        private static Vector3 _motionBasePos;
+
+        public static void PlayBodyMotion(Player player, string preset, float duration)
+        {
+            if (player == null || player != Player.m_localPlayer || DragonCombatPlugin.Instance == null || string.IsNullOrEmpty(preset)) return;
+            DragonCombatPlugin.Instance.StartCoroutine(BodyMotionRoutine(player, preset, Mathf.Max(0.1f, duration)));
+        }
+
+        private static Transform BodyVisual(Player player)
+        {
+            for (Type t = player.GetType(); t != null; t = t.BaseType)
+            {
+                FieldInfo f = t.GetField("m_visual", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+                if (f != null) { GameObject g = f.GetValue(player) as GameObject; if (g != null) return g.transform; break; }
+            }
+            return player.transform.Find("Visual");
+        }
+
+        private static float Ease(float a, float b, float k) { return Mathf.Clamp01((k - a) / Mathf.Max(0.0001f, b - a)); }
+        private static float Bump(float k) { return Mathf.Sin(Mathf.Clamp01(k) * Mathf.PI); }
+
+        // pitch (+ = forward), yaw, roll in degrees; y / z offsets in metres-ish (Visual local units).
+        private static void MotionPose(string preset, float k, out Vector3 euler, out Vector3 offset)
+        {
+            euler = Vector3.zero; offset = Vector3.zero;
+            float windup = Ease(0f, 0.35f, k), strike = Ease(0.35f, 0.55f, k), recover = Ease(0.55f, 1f, k);
+            switch (preset)
+            {
+                case "slam":        // overhead smash: lean back, snap down into a crouch, recover
+                    euler.x = -18f * windup * (1f - strike) + 32f * strike * (1f - recover);
+                    offset.y = -0.30f * strike * (1f - recover);
+                    break;
+                case "lunge":       // step-in thrust
+                    euler.x = 22f * Bump(k);
+                    offset.z = 0.35f * Bump(k);
+                    offset.y = -0.10f * Bump(k);
+                    break;
+                case "spin":        // full horizontal spin slash
+                    euler.y = 360f * Mathf.SmoothStep(0f, 1f, k);
+                    euler.x = 10f * Bump(k);
+                    break;
+                case "double_spin":
+                    euler.y = 720f * Mathf.SmoothStep(0f, 1f, k);
+                    euler.x = 12f * Bump(k);
+                    break;
+                case "iai":         // low draw, then a fast upright cut with a body twist
+                    euler.x = 18f * windup * (1f - strike);
+                    offset.y = -0.25f * windup * (1f - strike);
+                    euler.y = 35f * strike * (1f - recover);
+                    euler.z = -8f * strike * (1f - recover);
+                    break;
+                case "cross":       // X-shaped double cut: roll left then right
+                    euler.z = 22f * Mathf.Sin(k * Mathf.PI * 2f) * (1f - k * 0.3f);
+                    euler.x = 10f * Bump(k);
+                    break;
+                case "cast":        // spell push: small lean back, thrust forward
+                    euler.x = -8f * windup * (1f - strike) + 14f * strike * (1f - recover);
+                    offset.z = 0.12f * strike * (1f - recover);
+                    break;
+                case "raise":       // chant to the sky, slight lift
+                    euler.x = -16f * Bump(k);
+                    offset.y = 0.08f * Bump(k);
+                    break;
+                case "grand":       // ultimate invocation: deep crouch, then rise and arch back
+                    euler.x = 20f * windup * (1f - strike) - 24f * strike * (1f - recover);
+                    offset.y = -0.35f * windup * (1f - strike) + 0.15f * strike * (1f - recover);
+                    break;
+                case "roar":        // war cry: arch back with a shake
+                    euler.x = -20f * Bump(k);
+                    euler.z = 4f * Mathf.Sin(k * Mathf.PI * 14f) * Bump(k);
+                    break;
+                case "plant":       // raise an object, then plant it in the ground
+                    euler.x = -12f * windup * (1f - strike) + 26f * strike * (1f - recover);
+                    offset.y = -0.22f * strike * (1f - recover);
+                    break;
+                case "throw":       // big wind-up throw
+                    euler.x = -22f * windup * (1f - strike) + 24f * strike * (1f - recover);
+                    euler.y = -25f * windup * (1f - strike) + 20f * strike * (1f - recover);
+                    break;
+                case "blink":       // quick lean into a dash
+                    euler.x = 30f * Bump(k);
+                    offset.y = -0.12f * Bump(k);
+                    break;
+            }
+        }
+
+        private static IEnumerator BodyMotionRoutine(Player player, string preset, float duration)
+        {
+            Transform v = BodyVisual(player);
+            if (v == null) yield break;
+            int token = ++_motionToken;
+            if (!_motionActive) { _motionBaseRot = v.localRotation; _motionBasePos = v.localPosition; _motionActive = true; }
+            Vector3 pivot = new Vector3(0f, 0.9f, 0f);
+            float t = 0f;
+            while (t < duration && player != null && !player.IsDead() && token == _motionToken && v != null)
+            {
+                Vector3 e, o;
+                MotionPose(preset, t / duration, out e, out o);
+                Quaternion r = Quaternion.Euler(e);
+                v.localRotation = _motionBaseRot * r;
+                v.localPosition = _motionBasePos + (pivot - r * pivot) + o;
+                t += Time.deltaTime;
+                yield return null;
+            }
+            if (token == _motionToken && v != null) { v.localRotation = _motionBaseRot; v.localPosition = _motionBasePos; _motionActive = false; }
+        }
+
+        // Preset + duration for every non-Ranger skill (Ranger animates its own skills).
+        public static bool SkillMotion(string id, out string preset, out float duration)
+        {
+            preset = null; duration = 0.5f;
+            switch (id)
+            {
+                // Warrior
+                case "heavy_slash": preset = "slam"; duration = 0.55f; break;
+                case "impact_wave": preset = "iai"; duration = 0.5f; break;
+                case "impact_punch": preset = "lunge"; duration = 0.4f; break;
+                // Sword Master
+                case "moonlight_splitter": preset = "iai"; duration = 0.45f; break;
+                case "crescent_cleave": preset = "spin"; duration = 0.45f; break;
+                case "blade_storm": preset = "cross"; duration = 0.4f; break;
+                case "frenzied_charge": preset = "lunge"; duration = 0.5f; break;
+                case "eclipse": preset = "iai"; duration = 0.6f; break;
+                case "halfmoon_slash": preset = "double_spin"; duration = 0.7f; break;
+                case "knights_guidance": preset = "raise"; duration = 0.6f; break;
+                // Mercenary
+                case "stomp": preset = "slam"; duration = 0.5f; break;
+                case "circle_swing": preset = "spin"; duration = 0.5f; break;
+                case "bonecrusher": preset = "slam"; duration = 0.6f; break;
+                case "seismic_guillotine": preset = "slam"; duration = 0.7f; break;
+                case "punishing_bomb": preset = "throw"; duration = 0.6f; break;
+                case "battlecry": preset = "roar"; duration = 0.8f; break;
+                // Cleric / Paladin / Priest
+                case "lightning_zap": preset = "cast"; duration = 0.4f; break;
+                case "righteous_strike": preset = "slam"; duration = 0.55f; break;
+                case "holy_wave": preset = "raise"; duration = 0.5f; break;
+                case "goddess_relic": preset = "plant"; duration = 0.6f; break;
+                case "judgement_hammer": preset = "throw"; duration = 0.55f; break;
+                case "ray_of_hope": preset = "raise"; duration = 0.5f; break;
+                case "electric_smite": preset = "grand"; duration = 0.9f; break;
+                case "heavens_light": preset = "raise"; duration = 0.6f; break;
+                case "lightning_relic": preset = "plant"; duration = 0.6f; break;
+                case "holy_relic": preset = "plant"; duration = 0.6f; break;
+                case "divine_intervention": preset = "raise"; duration = 0.6f; break;
+                case "grand_cross": preset = "cross"; duration = 0.55f; break;
+                case "heavens_judgement": preset = "raise"; duration = 0.8f; break;
+                case "lightning_tempest": preset = "grand"; duration = 1f; break;
+                case "grand_sigil": preset = "raise"; duration = 0.6f; break;
+                // Sorcerer / Archmage / Horizon Walker
+                case "flame_burst": preset = "cast"; duration = 0.4f; break;
+                case "glacial_descent": preset = "slam"; duration = 0.55f; break;
+                case "stonefang_eruption": preset = "slam"; duration = 0.55f; break;
+                case "meteor_fall": preset = "raise"; duration = 0.7f; break;
+                case "gravity_dominion": preset = "raise"; duration = 0.6f; break;
+                case "astral_railcannon": preset = "cast"; duration = 0.6f; break;
+                case "astral_greatblade": preset = "slam"; duration = 0.7f; break;
+                case "frost_nova": preset = "slam"; duration = 0.5f; break;
+                case "elemental_cataclysm": preset = "grand"; duration = 1f; break;
+                case "clockwork": preset = "raise"; duration = 0.6f; break;
+                case "arcane_phalanx": preset = "cast"; duration = 0.45f; break;
+                case "afterimage_arsenal": preset = "cross"; duration = 0.5f; break;
+                case "void_step": preset = "blink"; duration = 0.3f; break;
+                case "rift_echo": preset = "cast"; duration = 0.4f; break;
+                case "gravity_blast": preset = "cast"; duration = 0.5f; break;
+                case "arcane_rupture": preset = "grand"; duration = 0.8f; break;
+                case "rift_walker": preset = "raise"; duration = 0.5f; break;
+            }
+            return preset != null;
+        }
+
         private static readonly Dictionary<string, float> HyperFirstHitLast = new Dictionary<string, float>();
         private static readonly Dictionary<string, bool> HyperFirstHitGrant = new Dictionary<string, bool>();
 

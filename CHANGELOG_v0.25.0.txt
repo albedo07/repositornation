@@ -1,0 +1,19 @@
+IMMORTAL HEROES v0.25.0 - Immortal HUD
+======================================
+Immortal HUD (replaces the vanilla health / stamina / eitr bars and the status list)
+- Compact panel top-left under the item hotbar: Lv + Class > AC + name, HP bar, STA and EIT bars
+  (always shown, also at 0, with current / max), food icons with time left, and every buff /
+  debuff (green line = buff, red = debuff, timer under the icon, hover = name).
+- Settings: [Immortal HUD] Enabled / Scale / X / Y (F8). Disabling it brings the vanilla HUD back.
+
+Skill animations for every Class (body action on top of the vanilla pose, Dragon Nest / DMC style):
+  smash (Heavy Slash, Righteous Strike, Stomp, Bonecrusher, Seismic, Glacial, Stonefang, Greatblade,
+  Frost Nova), iai draw-cut (Impact Wave, Moonlight, Eclipse), spins (Crescent, Circle Swing,
+  Halfmoon x2), lunges (Impact Punch, Frenzied Charge), X-cuts (Blade Storm, Grand Cross,
+  Afterimage), throws (Punishing Bomb, Judgement Hammer), relic plants, spell pushes, chants,
+  war cry (Battlecry), ultimate invocations (Electric Smite, Tempest, Cataclysm, Rupture), blink.
+
+- Hotbar Ultimates are RED; Ascended Ultimates a brighter, stronger red.
+- Cyclone Arrow: 6s to cover 30m (several ticks per enemy), 4m radius.
+- Altar Ranger / Acrobat / Bowmaster cards: vibrant green (Acrobat teal, Bowmaster olive-gold).
+Settings reset to defaults once (Dev Mode OFF).
