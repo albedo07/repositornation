@@ -1,9 +1,6 @@
-TEST THIS BUILD - v0.24.3 Ranger Fixes
-======================================
-1. Shoot normally, then cast any Ranger skill: no extra normal arrow.
-2. Left Click held: 3 shots 0.5s apart, finisher, ~1.5s pause. Charged shot hits harder (120%).
-3. Bowmaster tree with Piercing Arrow Ascended: first node frame clean (Magenta, no Cyan edge).
-4. Hotbar Ultimate: Maroon frame (Ascended: Red), same as the tree.
-5. Buff icons under the minimap: Tailwind / Hawk's Vigil / Focus stacks / Hyper Armor / Barrier HP.
-6. Pinning Shot cone pins everyone inside; Explosive (Ascended) cluster bombs; Starfall 12m / 8s.
-7. Acrobat: jump off a cliff with low HP -> survive at 1 HP.
+TEST THIS BUILD - v0.24.4 Animations
+====================================
+1. Ranger: hold Left Click; after 1-2 shots the shots come every ~0.5s (finisher pause 1.5s).
+2. Watch each Ranger skill's body motion (backflips, dive, spin, crouch, braced Ballista, Starfall lean).
+3. Mercenary: small hits = no stagger/knockback; one hit >= 60% Max HP = normal reaction.
+4. Altar: Ranger / Acrobat / Bowmaster cards look like the other cards.

@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.24.3";
+        public const string ModVersion = "0.24.4";
 
         internal static DragonCombatPlugin Instance;
 
@@ -37,6 +37,7 @@ namespace DragonsAltarCombat
         internal ConfigEntry<float> SpiritBurnMultiplier;
         internal ConfigEntry<float> MinimumBurnTick;
         internal ConfigEntry<float> WarriorHyperArmorThreshold;
+        internal ConfigEntry<float> MercenaryHyperArmorThreshold;
         internal ConfigEntry<float> MasteryComboWindow;
         internal ConfigEntry<float> MasteryFinisherMultiplier;
         internal ConfigEntry<float> MasteryHeavyMultiplier;
@@ -91,6 +92,7 @@ namespace DragonsAltarCombat
             SpiritBurnMultiplier = Config.Bind("Damage Over Time", "SpiritBurnMultiplierVsFire", 1.5f, "Spirit Burn remains 1.5x stronger than Fire.");
             MinimumBurnTick = Config.Bind("Damage Over Time", "MinimumBurnTickDamage", 1f, "Minimum percentage Burn tick.");
             WarriorHyperArmorThreshold = Config.Bind("Warrior Blessing", "HyperArmorHitThresholdPercent", 30f, "Warrior ignores stagger/pushback when an incoming hit is below this percent of max HP.");
+            MercenaryHyperArmorThreshold = Config.Bind("Mercenary Mastery", "HyperArmorHitThresholdPercent", 60f, "Mercenary: Hyper Armor unless the FIRST hit of an enemy's attack is at least this percent of max HP (never accumulated).");
             MasteryComboWindow = Config.Bind("Weapon Mastery", "ComboWindow", 2f, "Combo progress survives interruption but resets after 2 seconds without another normal mastery attack.");
 
             if (Mathf.Approximately(MasteryComboWindow.Value, 1.5f))
@@ -1458,6 +1460,9 @@ namespace DragonsAltarCombat
 
     public static class DragonCombat
     {
+        private static readonly Dictionary<string, float> HyperFirstHitLast = new Dictionary<string, float>();
+        private static readonly Dictionary<string, bool> HyperFirstHitGrant = new Dictionary<string, bool>();
+
         // ==================================================================================
         // v0.24.3 BUFF INDICATORS: every Immortal Heroes buff on the local player is shown as a
         // display-only vanilla StatusEffect (icon + timer under the minimap, like Rested / Wet).
@@ -3221,10 +3226,25 @@ namespace DragonsAltarCombat
 
                 if (GetClass(targetPlayer) == "Warrior")
                 {
-                    float threshold = DragonCombatPlugin.Instance == null ? 0.30f : Mathf.Clamp01(DragonCombatPlugin.Instance.WarriorHyperArmorThreshold.Value / 100f);
+                    bool merc = GetAdvancement(targetPlayer) == "Mercenary";
+                    float threshold = DragonCombatPlugin.Instance == null ? (merc ? 0.60f : 0.30f)
+                        : Mathf.Clamp01((merc ? DragonCombatPlugin.Instance.MercenaryHyperArmorThreshold.Value : DragonCombatPlugin.Instance.WarriorHyperArmorThreshold.Value) / 100f);
                     float raw = Mathf.Max(0f, hit.GetTotalDamage());
-                    if (raw > 0f && raw < targetPlayer.GetMaxHealth() * threshold)
-                        HitHyperArmorUntil[targetPlayer.GetInstanceID()] = Time.time + 0.20f;
+                    // v0.24.4: decided by the FIRST hit of an attacker's attack only (follow-up hits within
+                    // 1s keep that decision); damage is never accumulated.
+                    Character source = hit.GetAttacker();
+                    string key = targetPlayer.GetInstanceID() + ":" + (source == null ? 0 : source.GetInstanceID());
+                    float last;
+                    bool grant;
+                    if (!HyperFirstHitLast.TryGetValue(key, out last) || Time.time - last > 1f || !HyperFirstHitGrant.TryGetValue(key, out grant))
+                    {
+                        grant = raw > 0f && raw < targetPlayer.GetMaxHealth() * threshold;
+                        if (HyperFirstHitLast.Count > 256) { HyperFirstHitLast.Clear(); HyperFirstHitGrant.Clear(); }
+                        HyperFirstHitGrant[key] = grant;
+                    }
+                    HyperFirstHitLast[key] = Time.time;
+                    if (grant) HitHyperArmorUntil[targetPlayer.GetInstanceID()] = Time.time + 0.20f;
+                    else HitHyperArmorUntil.Remove(targetPlayer.GetInstanceID());
                 }
 
                 // v0.23.8 rule: Hyper Armor = no knockback (push force zeroed on the hit itself,

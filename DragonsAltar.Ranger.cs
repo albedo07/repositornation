@@ -40,7 +40,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Dragon's Altar - Ranger";
-        public const string ModVersion = "0.24.3";
+        public const string ModVersion = "0.24.4";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -505,6 +505,7 @@ namespace DragonsAltarRanger
             UpdateDodgeCost(player, acrobat);
             if (acrobat) DragonCombat.ApplyStaminaUseCut(player, Mathf.Clamp01(_wsStaminaUse.Value / 100f), 0.5f);
             if (ranger) UpdateForbiddenGear(player, acrobat);
+            if (ranger) UpdateQuickShotSpeed(player);
             UpdateFocus(player, ranger && GetAdvancement(player) == "Bowmaster");
             UpdateLoadedCrossbow(player, ranger && GetAdvancement(player) == "Bowmaster");
             UpdateTraps(player);
@@ -625,10 +626,7 @@ namespace DragonsAltarRanger
             Rigidbody body = player.GetComponent<Rigidbody>();
             GrantIFrames(player, _rgIFrames.Value);
             DragonCombat.LockSkill(player, 0.35f);
-            Transform visual = flip ? VisualOf(player) : null;
-            Quaternion visRot = visual != null ? visual.localRotation : Quaternion.identity;
-            Vector3 visPos = visual != null ? visual.localPosition : Vector3.zero;
-            Vector3 pivot = new Vector3(0f, 0.9f, 0f);
+            if (flip) StartCoroutine(PoseMotion(player, 0.3f, delegate(float k) { return Quaternion.Euler(-360f * k, 0f, 0f); }, null));
             const float duration = 0.3f;
             bool fired = false;
             float t = 0f;
@@ -640,20 +638,48 @@ namespace DragonsAltarRanger
                 p.y = Mathf.Max(p.y, GroundAt(p).y);
                 player.transform.position = p;
                 if (body != null) { body.position = p; body.velocity = Vector3.zero; }
-                if (visual != null)
-                {
-                    Quaternion r = Quaternion.Euler(-360f * k, 0f, 0f);
-                    visual.localRotation = visRot * r;
-                    visual.localPosition = visPos + (pivot - r * pivot);
-                }
                 if (!fired && k >= 0.5f) { fired = true; if (midAction != null) midAction(); }
                 yield return new WaitForFixedUpdate();
             }
-            if (visual != null) { visual.localRotation = visRot; visual.localPosition = visPos; }
             if (player == null) yield break;
             if (!fired && midAction != null) midAction();
             ResetFloatField(player, "m_maxAirAltitude", player.transform.position.y);
         }
+
+        // v0.24.4 PROCEDURAL SKILL ANIMATIONS: the body (Visual root) is rotated / offset around its
+        // centre on top of the vanilla animation (backflips, dives, spins, leans, recoil). One motion at
+        // a time (a new one takes over); the rest pose is restored when the last one ends.
+        private int _poseToken;
+        private bool _poseActive;
+        private Quaternion _poseBaseRot;
+        private Vector3 _poseBasePos;
+
+        private IEnumerator PoseMotion(Player player, float duration, Func<float, Quaternion> rot, Func<float, Vector3> offset)
+        {
+            return PoseRoutine(player, duration, null, rot, offset);
+        }
+
+        private IEnumerator PoseRoutine(Player player, float duration, Func<bool> keep, Func<float, Quaternion> rot, Func<float, Vector3> offset)
+        {
+            Transform v = VisualOf(player);
+            if (v == null) yield break;
+            int token = ++_poseToken;
+            if (!_poseActive) { _poseBaseRot = v.localRotation; _poseBasePos = v.localPosition; _poseActive = true; }
+            Vector3 pivot = new Vector3(0f, 0.9f, 0f);
+            float t = 0f;
+            while (player != null && !player.IsDead() && token == _poseToken && v != null && (keep != null ? keep() : t < duration))
+            {
+                float k = keep != null ? t : Mathf.Clamp01(t / Mathf.Max(0.01f, duration));
+                Quaternion r = rot == null ? Quaternion.identity : rot(k);
+                v.localRotation = _poseBaseRot * r;
+                v.localPosition = _poseBasePos + (pivot - r * pivot) + (offset == null ? Vector3.zero : offset(k));
+                t += Time.deltaTime;
+                yield return null;
+            }
+            if (token == _poseToken && v != null) { v.localRotation = _poseBaseRot; v.localPosition = _poseBasePos; _poseActive = false; }
+        }
+
+        private static float Bump(float k) { return Mathf.Sin(Mathf.Clamp01(k) * Mathf.PI); }
 
         private static Transform VisualOf(Player player)
         {
@@ -707,6 +733,7 @@ namespace DragonsAltarRanger
             if (!BeginSkill(player, "Ranger.SnareTrap", _snCooldown.Value, _snStamina.Value)) return;
             DragonCombat.LockSkill(player, 0.5f);
             DragonCombat.PlaySkillPose(player, "Punch", 0.4f);
+            StartCoroutine(PoseMotion(player, 0.5f, delegate(float k) { return Quaternion.Euler(28f * Bump(k), 0f, 0f); }, delegate(float k) { return new Vector3(0f, -0.35f * Bump(k), 0f); }));
             int max = Mathf.Max(1, Mathf.RoundToInt(_snMax.Value));
             while (_traps.Count >= max) RemoveTrap(0);
             SnareTrap trap = new SnareTrap();
@@ -759,7 +786,7 @@ namespace DragonsAltarRanger
         {
             ShowMessage("Gale Volley");
             // v0.24.2: the same swift 2m back-jump as Tumble Shot (0.3s, i-frames 0.5s); arrows at the apex.
-            StartCoroutine(BackFlip(player, _gvLeap.Value, false, null));
+            StartCoroutine(BackFlip(player, _gvLeap.Value, true, null));
             yield return new WaitForSeconds(0.15f);
             int fans = ascended ? 2 : 1;
             for (int f = 0; f < fans; f++)
@@ -892,6 +919,7 @@ namespace DragonsAltarRanger
             Vector3 end = start + dir * distance;
             Rigidbody body = player.GetComponent<Rigidbody>();
             DragonCombat.PlaySkillPose(player, "Crescent", 0.3f);
+            StartCoroutine(PoseMotion(player, 0.4f, delegate(float k) { return Quaternion.Euler(75f * Bump(k), 0f, 0f); }, null));
             float t = 0f, duration = 0.25f;
             while (t < duration && player != null)
             {
@@ -942,6 +970,7 @@ namespace DragonsAltarRanger
             RaycastHit ceiling;
             if (Physics.Raycast(start + Vector3.up, Vector3.up, out ceiling, DragonCombat.M(_sbHeight.Value), SolidMask(), QueryTriggerInteraction.Ignore))
                 top = start + Vector3.up * Mathf.Max(0f, ceiling.distance - 1.5f);
+            StartCoroutine(PoseMotion(player, 0.5f, delegate(float k) { return Quaternion.Euler(-360f * k, 0f, 0f); }, null));
             float t = 0f;
             while (t < 0.5f && player != null)
             {
@@ -953,6 +982,7 @@ namespace DragonsAltarRanger
             }
             float radius = DragonCombat.M(ascended ? _sbAscRadius.Value : _sbRadius.Value);
             float end = Time.time + Mathf.Max(0.2f, _sbDuration.Value);
+            StartCoroutine(PoseRoutine(player, 0f, delegate { return _hovering; }, delegate(float k) { return Quaternion.Euler(35f * Mathf.Clamp01(k * 4f), 0f, 0f); }, null));
             float nextTick = 0f;
             RangerArrowDamage d = ArrowDamage(player);
             float mult = _sbDamage.Value / 100f * DragonCombat.GetSkillPower(player, "skyfall_barrage");
@@ -1063,6 +1093,7 @@ namespace DragonsAltarRanger
             DragonCombat.GrantHyperArmor(player, duration + 0.3f);
             DragonCombat.LockSkill(player, duration);
             DragonCombat.PlaySkillPose(player, "Whirlwind", duration);
+            StartCoroutine(PoseMotion(player, duration, delegate(float k) { return Quaternion.Euler(0f, 720f * duration * k, 0f); }, null));
             GameObject storm = _enableVfx.Value ? CreateLeafStorm(player.transform.position, radius) : null;
             RangerArrowDamage d = ArrowDamage(player);
             float power = DragonCombat.GetSkillPower(player, "furious_winds");
@@ -1257,6 +1288,27 @@ namespace DragonsAltarRanger
         private float _releaseAt, _chargeDraw;
         private int _chain;
         private float _nextQuickShot;
+        private float _qsPressedAt = -10f, _qsStart, _qsSpeed = 1.6f;
+        private bool _qsWasIn, _qsMeasuring;
+
+        // v0.24.4: the quick-shot animation is sped up until one shot (start -> end of the attack)
+        // takes ChainInterval minus a small margin; the speed adapts to the bow's real animation.
+        private void UpdateQuickShotSpeed(Player player)
+        {
+            ItemDrop.ItemData weapon = GetCurrentWeapon(player);
+            bool inAtk = InAttack(player);
+            bool quick = IsBow(weapon) && !_charging && !_releasePending;
+            if (inAtk && !_qsWasIn) { _qsStart = Time.time; _qsMeasuring = quick && Time.time - _qsPressedAt < 0.35f; }
+            if (inAtk && _qsMeasuring && quick) DragonCombat.SetAttackSpeedSource(player, _qsSpeed, 0.15f);
+            if (!inAtk && _qsWasIn && _qsMeasuring)
+            {
+                float took = Time.time - _qsStart;
+                float target = Mathf.Max(0.15f, _wbInterval.Value - 0.05f);
+                if (took > 0.05f) _qsSpeed = Mathf.Clamp(_qsSpeed * took / target, 1f, 5f);
+                _qsMeasuring = false;
+            }
+            _qsWasIn = inAtk;
+        }
         private float _lastQuickShot;
         private float _pendingShotMult = 1f;
         private bool _pendingShotActive;
@@ -1372,6 +1424,7 @@ namespace DragonsAltarRanger
             SetBowDraw(weapon, false);
             // v0.24.3: quick shots every 0.5s; the 4th (finisher) adds 1s before the next one.
             if (Time.time < _nextQuickShot || Time.time < _skillCastUntil) { attack = false; attackHold = false; }
+            else if (attack || attackHold) _qsPressedAt = Time.time;
         }
 
         private static bool InAttack(Player player)
@@ -1836,6 +1889,9 @@ namespace DragonsAltarRanger
             _ballistaNextStack = Time.time + 1f;
             ShowMessage("Ballista Shot - hold to charge");
             DragonCombat.PlaySkillPose(player, "Channel", 0.3f);
+            StartCoroutine(PoseRoutine(player, 0f, delegate { return _ballistaCharging; },
+                delegate(float k) { return Quaternion.Euler(-12f * Mathf.Clamp01(k * 3f), 0f, 0f); },
+                delegate(float k) { return new Vector3(0f, -0.15f * Mathf.Clamp01(k * 3f), 0f); }));
             float started = Time.time;
             while (player != null && !player.IsDead() && (DragonCombat.IsTreeSkillKeyHeld("ballista_shot") || Time.time - started < 0.15f))
             {
@@ -2186,6 +2242,7 @@ namespace DragonsAltarRanger
             float channel = Mathf.Max(0f, _sfChannel.Value);
             DragonCombat.LockSkill(player, channel);
             DragonCombat.PlaySkillPose(player, "SkyCast", channel);
+            StartCoroutine(PoseMotion(player, channel + 0.3f, delegate(float k) { return Quaternion.Euler(-30f * Mathf.Clamp01(k * 3f) * Mathf.Clamp01((1f - k) * 6f), 0f, 0f); }, null));
             float radius = DragonCombat.M(_sfRadius.Value);
             if (_enableVfx.Value) StartCoroutine(RingVfx(point, radius, new Color(0.80f, 1f, 0.60f, 0.8f), channel + _sfDuration.Value));
             yield return new WaitForSeconds(channel);
@@ -2411,6 +2468,7 @@ namespace DragonsAltarRanger
         private void Shoot(Player player, string message)
         {
             MarkSkillCast(player);
+            if (!_poseActive) StartCoroutine(PoseMotion(player, 0.22f, delegate(float k) { return Quaternion.Euler(-9f * Bump(k), 0f, 0f); }, null));
             DragonCombat.LockSkill(player, 0.35f);
             DragonCombat.PlayWeaponAnimation(player, false, "bow_fire");
             if (!string.IsNullOrEmpty(message)) ShowMessage(message);

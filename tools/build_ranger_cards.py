@@ -63,7 +63,11 @@ def panel_scene(name, focus_y, size, hue):
     a = np.asarray(crop, dtype=np.float64)
     # v0.24.3: no parchment wash (it read as a faded sheet); just a light lift so the dark
     # portrait sits in the same brightness range as the other painted cards.
-    out = 255 - (255 - a) * 0.78
+    # v0.24.4: high-key like the painted cards (bright midtones, colour kept) so the shared 30%
+    # label veil disappears into the art instead of reading as a parchment slab on a dark portrait.
+    out = 255.0 * np.power(a / 255.0, 0.5)
+    grey = out.mean(axis=2, keepdims=True)
+    out = grey + (out - grey) * 1.25
     return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8))
 
 

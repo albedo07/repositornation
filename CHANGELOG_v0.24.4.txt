@@ -1,0 +1,14 @@
+IMMORTAL HEROES v0.24.4 - Animations
+====================================
+- Ranger Left Click: the shot animation now speeds itself up until a shot takes 0.5s (it measures the
+  bow's real animation and adapts within the first 1-2 shots). Finisher still +1s.
+- Ranger skill animations (body motion on top of the vanilla poses): Tumble Shot + Gale Volley
+  backflip, Swallow Dive forward dive, Skyfall Barrage backflip on the way up + leaning down while
+  hovering, Furious Winds spin, Snare Trap crouch, Ballista Shot braced stance while charging,
+  Starfall Volley lean back to the sky, recoil on every bow skill.
+- Mercenary: Hyper Armor unless a single hit is 60% of Max HP or more. Decided by the FIRST hit of an
+  enemy's attack only (its follow-up hits within 1s keep that decision); damage never accumulates.
+  Same first-hit rule for the Warrior's 30%.
+- Altar Ranger / Acrobat / Bowmaster cards: portraits made high-key like the other cards, so the
+  label veil no longer reads as a parchment slab.
+Settings reset to defaults once (Dev Mode OFF).
