@@ -1,0 +1,18 @@
+IMMORTAL HEROES v0.25.18 - RANGED AND RIFT FAMILIES (Animation Blueprint, part D - blueprint complete)
+
+- RIFT CONDUCTOR (Horizon Walker, upper body only so your stride / shots continue): Rift Echo and the Phalanx
+  arm/volley = a pointing command; Gravity Blast recast = open stopping palm (halt) / pinch (detonate); Arcane
+  Rupture = wrist snapped at the point; Afterimage Arsenal = free hand flicked outward; Phalanx summon and Rift
+  Walker portals = hands open toward the array / placement. No crouch or body kick anymore.
+- GHOST STEP (Void Step): only a tiny lean, played as an accent, so a running cast or shot keeps its pose
+  through the teleport.
+- SIEGE CASTER (Astral Railcannon): side-on brace with the staff along the crosshair, shoulders load, one
+  restrained recoil on the shot, settle. The Ascended beam holds the brace without recoil per tick.
+- DEADEYE (Piercing, Explosive, Ricochet, Ballista, Pinning, Splitting): side-on archer stance with real legs,
+  one small recoil source (no more whole-body kick-back). Pinning Shot = real low brace (front knee forward, back
+  knee down); Ballista = wide stable stance + one heavy shoulder recoil; Splitting volleys sweep the torso across
+  the cone and chain without returning to idle.
+- REBOUND SHOT (Tumble Shot, Gale Volley, Skyfall flip): knees tucked through the backflip.
+- SKY ARCHER (Arrow Rain, Starfall, Skyfall hover): planted stance under the sky release, tucked legs in the hover.
+
+All 20 blueprint families are now in (v0.25.15 - v0.25.18).

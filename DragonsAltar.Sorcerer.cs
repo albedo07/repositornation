@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Dragon's Altar - Sorcerer Advancements";
-        public const string ModVersion = "0.25.17";
+        public const string ModVersion = "0.25.18";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1717,7 +1717,7 @@ namespace DragonsAltarSorcerer
                 SpawnAfterimage(player.transform.position, player.transform.rotation);
             Rigidbody body = player.GetComponent<Rigidbody>();
             Vector3 momentum = body != null ? body.velocity : Vector3.zero;
-            DragonCombat.PlayClip(player, "hw_voidstep", 0.06f);
+            DragonCombat.PlayAccent(player, "hw_voidstep", 0.05f);   // v0.25.18 Ghost Step never replaces the running pose
             TeleportPlayer(player, dest);
             if (body != null && IsSpellAscended(player, "void_step"))
                 body.velocity = momentum; // Ascended keeps momentum
@@ -2393,7 +2393,7 @@ namespace DragonsAltarSorcerer
             // Ascended: all 8 launched together arm one Astral Spear eruption on the first impact.
             _phalanxSpearArmed = IsSpellAscended(player, "arcane_phalanx") && copy.Count >= Mathf.Max(1, _paAscCount.Value);
             for (int i = 0; i < copy.Count; i++) LaunchSword(player, copy[i]);
-            DragonCombat.PlayClip(player, "hw_gravity_blast", 0.06f);   // both hands thrust: the swords fly
+            DragonCombat.PlayClip(player, "hw_point", 0.06f);   // v0.25.18 Rift Conductor: dispatch point
             ShowMessage("PHALANX VOLLEY x" + copy.Count);
             StartCooldown("Spellcaster.ArcanePhalanx", _phalanxCooldown.Value);
         }
@@ -2477,7 +2477,7 @@ namespace DragonsAltarSorcerer
             if (_gbOrbActive)
             {
                 _gbRecasts++;
-                DragonCombat.PlayClip(player, _gbRecasts == 1 ? "hw_rupture" : "hw_command", 0.08f);
+                DragonCombat.PlayClip(player, _gbRecasts == 1 ? "hw_stop" : "hw_pinch", 0.06f);   // v0.25.18 open stop / pinch detonate
                 ShowMessage(_gbRecasts == 1 ? "Gravity Blast - halted" : "Gravity Blast - detonate");
                 return;
             }

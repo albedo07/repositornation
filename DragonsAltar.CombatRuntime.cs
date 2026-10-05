@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.17";
+        public const string ModVersion = "0.25.18";
 
         internal static DragonCombatPlugin Instance;
 
@@ -2180,6 +2180,94 @@ namespace DragonsAltarCombat
             BuildBlueprintClips(c);
             BuildBlueprintB(c);
             BuildBlueprintC(c);
+            BuildBlueprintD(c);
+        }
+
+        // ------------------------------------------------------------------ v0.25.18 Blueprint part D
+        private static DragonClipKey Archer(DragonClipKey k, float depth)
+        {
+            // side-on archer stance: front (left) knee soft, feet apart
+            return k.LL(0.15f * depth, 0.12f, 0.22f * depth, 0f).RL(0f, 0.12f, 0.2f * depth, 0f);
+        }
+
+        private static void TuckLegs(Dictionary<string, DragonClipKey[]> c, string name)
+        {
+            DragonClipKey[] keys;
+            if (!c.TryGetValue(name, out keys)) return;
+            for (int i = 1; i < keys.Length - 1; i++) keys[i].LL(0.6f, 0f, 0.9f, 0f).RL(0.55f, 0f, 0.95f, 0f);
+        }
+
+        private static void BuildBlueprintD(Dictionary<string, DragonClipKey[]> c)
+        {
+            // ANIM_14 RIFT CONDUCTOR: short mobile commands, upper body only (no crouch, no root move), so the
+            // stride / firing underneath continues. Variants: point (dispatch), open (fan / array / portal),
+            // stop (open palm), pinch (detonate), pull (Gravity Dominion keeps its deliberate reach-and-pull).
+            DragonClipKey pt = K(0f).Sp(0f, 10f, 0f).Ch(0f, 6f, 0f).Hd(0f, -5f, 0f).RA(-95f, 0f, 5f).RF(-3f, 0f, 0f).RH(-10f, 0f, 0f);
+            c["hw_point"] = new DragonClipKey[] { K(-1f), K(-0.4f).RA(-75f, 0f, -10f).RF(-40f, 0f, 0f), pt, pt.Copy(0.15f), K(0.4f) };
+            DragonClipKey op = K(0f).Ch(-4f, 0f, 0f).RA(-90f, 0f, -45f).RF(-10f, 0f, 0f).RH(-30f, 0f, 0f);
+            c["hw_open"] = new DragonClipKey[] { K(-1f), K(-0.5f).RA(-70f, 0f, 20f).RF(-80f, 0f, 0f), op, op.Copy(0.18f), K(0.45f) };
+            DragonClipKey stp = K(0f).Hd(0f, -4f, 0f).RA(-95f, 0f, -5f).RF(-10f, 0f, 0f).RH(-65f, 0f, 0f);
+            c["hw_stop"] = new DragonClipKey[] { K(-1f), stp, stp.Copy(0.2f), K(0.45f) };
+            DragonClipKey pin = K(0f).Ch(2f, 4f, 0f).RA(-90f, 0f, 0f).RF(-25f, 0f, 0f).RH(25f, 0f, 0f);
+            c["hw_pinch"] = new DragonClipKey[] { K(-1f), K(-0.5f).RA(-90f, 0f, -5f).RF(-10f, 0f, 0f).RH(-30f, 0f, 0f), pin, pin.Copy(0.12f), K(0.35f) };
+            // Phalanx recast arms the volley with a closing point; the volley release is a dispatch point.
+            c["hw_command"] = c["hw_point"];
+            // Arcane Rupture: wrist snapped toward the selected point, then carry on.
+            DragonClipKey ru = K(0f).Sp(0f, 8f, 0f).RA(-92f, 0f, 0f).RF(-10f, 0f, 0f).RH(30f, 0f, 0f);
+            c["hw_rupture"] = new DragonClipKey[] { K(-1f), K(-0.5f).RA(-85f, 0f, -5f).RF(-20f, 0f, 0f).RH(-30f, 0f, 0f), ru, ru.Copy(0.12f), K(0.4f) };
+            // Rift Echo: brief finger indication of the target (the rifts open behind it).
+            c["hw_rift_echo"] = c["hw_point"];
+            // Afterimage Arsenal: free hand flicked outward to leave / summon a copy.
+            DragonClipKey fl = K(0f).Sp(0f, -6f, 0f).RA(-70f, 0f, -70f).RF(-10f, 0f, 0f).RH(-30f, 0f, 0f);
+            c["hw_afterimage"] = new DragonClipKey[] { K(-1f), K(-0.5f).RA(-60f, 0f, 25f).RF(-90f, 0f, 0f), fl, fl.Copy(0.12f), K(0.4f) };
+            // Arcane Phalanx summon / Rift Walker portal: hands open toward the array / placement point.
+            DragonClipKey rw = K(0f).Ch(-4f, 0f, 0f).Hd(-4f, 0f, 0f).RA(-95f, 0f, -45f).RF(-12f, 0f, 0f).RH(-25f, 0f, 0f).LA(-85f, 0f, 45f).LF(-12f, 0f, 0f).LH(-25f, 0f, 0f);
+            c["hw_rift_walker"] = new DragonClipKey[] { K(-1f), K(-0.5f).RA(-80f, 0f, 15f).RF(-60f, 0f, 0f).LA(-80f, 0f, -15f).LF(-60f, 0f, 0f), rw, rw.Copy(0.2f), K(0.5f) };
+            // ANIM_15 GHOST STEP (Void Step): non-owning transition - a tiny lean only (played as an accent,
+            // so a running cast / shot keeps its pose through the teleport).
+            c["hw_voidstep"] = new DragonClipKey[] { K(-1f), K(0f).Sp(5f, 0f, 0f).Ch(3f, 0f, 0f), K(0.12f) };
+
+            // ANIM_16 SIEGE CASTER (Astral Railcannon): side-on brace with the staff along the crosshair, shoulders
+            // load, one restrained recoil on the shot, settle. The Ascended beam holds the brace (no recoil per tick).
+            DragonClipKey br = K(-0.6f).Sp(8f, -25f, 0f).Ch(4f, -14f, 0f).Hd(0f, 22f, 0f).RA(-85f, 0f, -5f).RF(-20f, 0f, 0f).LA(-85f, -10f, -25f).LF(-15f, 0f, 0f).Off(0f, -0.1f, 0f).LL(0.3f, 0.12f, 0.4f, 0f).RL(0f, 0.12f, 0.35f, 0f);
+            DragonClipKey ld = br.Copy(-0.1f).Sp(10f, -28f, 0f).RF(-25f, 0f, 0f);
+            DragonClipKey fire = br.Copy(0f).Sp(2f, -22f, 0f).Ch(-4f, -12f, 0f).RA(-92f, 0f, -5f).RF(-35f, 0f, 0f).LA(-90f, -10f, -25f).LF(-25f, 0f, 0f).Off(0f, -0.1f, -0.12f);
+            c["wiz_railcannon"] = new DragonClipKey[] { K(-1f), br, ld, fire, br.Copy(0.25f), K(0.6f) };
+            c["wiz_railcannon_hold"] = new DragonClipKey[] { K(-1f), br, br.Copy(0f), K(0.25f) };
+
+            // ANIM_17 DEADEYE DRAW: aim -> draw/hold -> loose -> reset on a side-on archer stance; one small
+            // recoil source only (no root kick-back).
+            c["rg_power"] = new DragonClipKey[] { K(-1f), Archer(Draw(-0.4f), 1f), Archer(Draw(-0.05f), 1f), Archer(Loose(0f).Ch(-6f, -10f, 0f), 1f), Archer(Loose(0.15f), 1f), K(0.45f) };
+            c["rg_heavy"] = new DragonClipKey[] { K(-1f), Archer(Draw(-0.4f).Off(0f, -0.06f, 0f), 1.5f), Archer(Draw(-0.05f).Off(0f, -0.06f, 0f), 1.5f), Archer(Loose(0f).Ch(-10f, -12f, 0f).Off(0f, -0.06f, -0.08f), 1.5f), Archer(Loose(0.22f).Off(0f, -0.05f, -0.04f), 1.3f), K(0.55f) };
+            // Pinning Shot: low brace on real legs (front knee forward, back knee down).
+            DragonClipKey kn = K(0f).LL(0.55f, 0.05f, 0.85f, 0f).RL(-0.05f, 0.05f, 1.25f, 0f).Off(0f, -0.3f, 0f);
+            c["rg_kneel"] = new DragonClipKey[] {
+                K(-1f), Draw(-0.5f).LL(0.55f, 0.05f, 0.85f, 0f).RL(-0.05f, 0.05f, 1.25f, 0f).Off(0f, -0.3f, 0f),
+                Draw(-0.05f).LL(0.55f, 0.05f, 0.85f, 0f).RL(-0.05f, 0.05f, 1.25f, 0f).Off(0f, -0.3f, 0f),
+                Loose(0f).LL(0.55f, 0.05f, 0.85f, 0f).RL(-0.05f, 0.05f, 1.25f, 0f).Off(0f, -0.3f, -0.03f),
+                Loose(0.25f).LL(0.55f, 0.05f, 0.85f, 0f).RL(-0.05f, 0.05f, 1.25f, 0f).Off(0f, -0.3f, 0f), K(0.6f)
+            };
+            // Ballista: wide stable stance, controlled held draw, one heavy shoulder recoil on release.
+            c["rg_ballista"] = new DragonClipKey[] {
+                K(-1f), Draw(-0.5f).Off(0f, -0.12f, 0f).LL(0.3f, 0.15f, 0.4f, 0f).RL(0f, 0.15f, 0.4f, 0f),
+                Draw(0f).RF(-150f, 0f, 0f).Off(0f, -0.14f, -0.03f).LL(0.32f, 0.15f, 0.42f, 0f).RL(0f, 0.15f, 0.42f, 0f),
+                Loose(0.06f).Ch(-12f, -12f, 0f).Off(0f, -0.1f, -0.2f).LL(0.3f, 0.15f, 0.4f, 0f).RL(0f, 0.15f, 0.4f, 0f),
+                Loose(0.3f).Off(0f, -0.08f, -0.08f).LL(0.25f, 0.15f, 0.3f, 0f).RL(0f, 0.15f, 0.3f, 0f), K(0.7f)
+            };
+            // Ricochet: relaxed side-on hip trick shot.
+            c["rg_trick"] = new DragonClipKey[] { K(-1f), Archer(Draw(-0.5f).Sp(4f, -34f, 0f).Ch(0f, -18f, 0f), 0.7f), Archer(Loose(0f).Sp(0f, -10f, 6f).LA(-70f, 0f, 20f), 0.7f), Archer(Loose(0.15f).Sp(0f, -8f, 4f), 0.7f), K(0.45f) };
+            // Splitting Arrow: stable lower stance, the torso (not the root) sweeps across the cone, volleys chain.
+            c["rg_split_a"] = new DragonClipKey[] { K(-1f), Archer(Draw(-0.5f).Sp(6f, -40f, 0f).Off(0f, -0.08f, 0f), 1.4f), Archer(Loose(0f).Sp(6f, 2f, 0f).Off(0f, -0.08f, 0f), 1.4f), Archer(Draw(0.3f).Sp(6f, -10f, 0f).Off(0f, -0.08f, 0f), 1.4f), K(0.6f) };
+            c["rg_split_b"] = new DragonClipKey[] { K(-1f), Archer(Draw(-0.5f).Sp(6f, -4f, 0f).Off(0f, -0.08f, 0f), 1.4f), Archer(Loose(0f).Sp(6f, -40f, 0f).Off(0f, -0.08f, 0f), 1.4f), Archer(Draw(0.3f).Sp(6f, -22f, 0f).Off(0f, -0.08f, 0f), 1.4f), K(0.6f) };
+
+            // ANIM_18 REBOUND SHOT (Tumble / Gale / Skyfall flip): knees tucked through the backflip.
+            TuckLegs(c, "rg_tumble");
+            TuckLegs(c, "rg_backflip");
+            // ANIM_19 SKY ARCHER: planted stance under the sky release; hover = loosely tucked legs.
+            AddStance(c, "rg_sky", 0.6f);
+            AddStance(c, "rg_starfall", 0.8f);
+            DragonClipKey[] hv;
+            if (c.TryGetValue("rg_hover", out hv)) hv[1].LL(0.3f, 0f, 0.5f, 0f).RL(0.1f, 0f, 0.65f, 0f);
         }
 
         // ------------------------------------------------------------------ v0.25.17 Blueprint part C

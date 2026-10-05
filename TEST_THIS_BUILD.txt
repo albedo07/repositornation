@@ -1,11 +1,8 @@
-TEST v0.25.17
-1. Heavy Slash (Warrior / Merc Ascended): horizontal sweep at shoulder height.
-2. Moonlight Splitter: alternating left/right horizontal cuts; Ascended finisher = big horizontal cut.
-3. Crescent Cleave, Halfmoon, Grand Cross: wide stance, legs bent.
-4. Seismic Guillotine / Astral Greatblade: overhead raise then slam; Greatblade repeats re-raise. Impact Wave: low
-   rising upward cut.
-5. Stomp: knee lifts then foot stamps. Stonefang: staff pressed down. Snare: kneel and place.
-6. Blade Storm: quick draw from the left hip.
-7. Whirlwind / Furious Winds end facing forward with no snap; feet planted wide while spinning.
-8. Angel Comet: legs streamlined in the dive; landing crouch arrives with the hit.
-9. If any legs bend wrong: F8 [Runtime] LegMotionScale_v02515 = -1 and tell me.
+TEST v0.25.18
+1. Horizon Walker: Rift Echo / Phalanx recast / Rupture = quick point while you keep running; Gravity Blast recast
+   1 = open palm, recast 2 = pinch; Void Step keeps whatever pose you were in.
+2. Astral Railcannon: side-on brace, small recoil; Ascended beam = steady brace.
+3. Ranger: Piercing / Explosive / Ricochet / Ballista / Pinning / Splitting with legs in a stance, no body jolt;
+   Pinning = kneeling brace; Splitting sweeps the torso.
+4. Tumble / Gale / Skyfall: knees tucked in the flip.
+5. Legs everywhere (v0.25.15+): if knees bend backwards, F8 [Runtime] LegMotionScale_v02515 = -1 and tell me.
