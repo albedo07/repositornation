@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.4";
+        public const string ModVersion = "0.25.5";
 
         internal static DragonCombatPlugin Instance;
 
@@ -159,7 +159,8 @@ namespace DragonsAltarCombat
             Type hud = Type.GetType("Hud, assembly_valheim");
             if (hud == null) return 0;
             HarmonyMethod pre = new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("HudVitalsPrefix", BindingFlags.Static | BindingFlags.NonPublic));
-            string[] names = { "UpdateHealth", "UpdateStamina", "UpdateEitr", "UpdateFood" };
+            // UpdateFood keeps running: the vanilla food icons live inside the Immortal HUD.
+            string[] names = { "UpdateHealth", "UpdateStamina", "UpdateEitr" };
             int n = 0;
             for (int i = 0; i < names.Length; i++)
             {

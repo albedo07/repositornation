@@ -1,6 +1,7 @@
-TEST THIS BUILD - v0.25.4 Stat HUD
-==================================
-1. Bottom-left: gold frame + plaque (name · class), food + timers, HP / STA / EIT / Lv; buffs above it.
-2. No vanilla health bar, health icon, food column, stamina or eitr bar anywhere.
-3. Skill cooldowns / buff timers in seconds.
-4. Altar Ranger cards as bright as the other classes.
+TEST THIS BUILD - v0.25.5 HUD Rework
+====================================
+1. No vanilla health bar / red icon / stamina / eitr bar anywhere.
+2. The vanilla food icons sit inside our gold frame, left of HP / STA / EIT / Lv.
+3. Open the inventory: drag the HUD; close/reopen the game: position kept.
+4. Open the Altar / Skill Tree / Esc / big map: HUD + food hidden, nothing overlaps.
+5. Buff timers fully visible.

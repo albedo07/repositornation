@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.4";
+        public const string ModVersion = "0.25.5";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -140,7 +140,7 @@ namespace AlbedosCustomClassesAdvanced
         private ConfigEntry<bool> _enableVfx;
         private ConfigEntry<bool> _showCombatHud;
         private ConfigEntry<bool> _ihHudEnabled;
-        private ConfigEntry<float> _ihHudScale, _ihHudX, _ihHudY, _ihHudBottom;
+        private ConfigEntry<float> _ihHudScale, _ihHudX, _ihHudY, _ihHudBottom, _ihHudPosX, _ihHudPosY;
         private ConfigEntry<bool> _uiColorSpaceCorrection;
         private ConfigEntry<float> _hudScale;
         private ConfigEntry<float> _hudBottomOffset;
@@ -648,7 +648,9 @@ namespace AlbedosCustomClassesAdvanced
             _ihHudScale = Config.Bind("Immortal HUD", "Scale", 1f, "Size of the vitals HUD.");
             _ihHudX = Config.Bind("Immortal HUD", "X_v0254", 24f, "Left margin (px at 1080p).");
             _ihHudY = Config.Bind("Immortal HUD", "Y", 96f, "Unused since v0.25.4 (the HUD sits bottom-left).");
-            _ihHudBottom = Config.Bind("Immortal HUD", "Bottom", 150f, "Bottom margin (px at 1080p): the HUD sits bottom-left where the vanilla health / food panel was.");
+            _ihHudBottom = Config.Bind("Immortal HUD", "Bottom", 150f, "Unused since v0.25.5 (drag the HUD instead).");
+            _ihHudPosX = Config.Bind("Immortal HUD", "PosX", -1f, "HUD left edge (px at 1080p). -1 = default bottom-left. Set by dragging the HUD while the inventory is open.");
+            _ihHudPosY = Config.Bind("Immortal HUD", "PosY", -1f, "HUD top edge (px at 1080p). -1 = default bottom-left.");
             _hudBottomOffset = Config.Bind("Interface", "HudBottomOffset_v0113", 105f, "Bottom margin for the compact RPG skill HUD. Fresh v0.11.3 key avoids stale 330px development offsets.");
             _testingForceCooldowns = Config.Bind("Testing", "ForceCooldowns", false, "Testing mode: force every advancement cooldown to one value.");
             _testingCooldownSeconds = Config.Bind("Testing", "CooldownSeconds", 5f, "Testing cooldown used while ForceCooldowns is enabled.");
@@ -11997,7 +11999,6 @@ namespace AlbedosCustomClassesAdvanced
         private float _ihNextHotbarScan, _ihNextVanillaScan;
         private readonly List<Transform> _ihHiddenVanilla = new List<Transform>();
         private readonly List<object> _ihHudEffects = new List<object>();
-        private readonly List<object> _ihHudFoods = new List<object>();
         private int _ihHudFrame = -1;
         private bool _ihHudMenuOpen;
         private static Type _ihHudType, _ihHotkeyBarType, _ihInvGuiType, _ihMenuType, _ihMinimapType;
@@ -12007,11 +12008,54 @@ namespace AlbedosCustomClassesAdvanced
             IhApplyVanillaHud();
         }
 
-        // v0.25.4 vanilla vitals (EpicMMO's method): the whole vanilla health panel (health bar,
-        // its icon and the food icons, which our HUD draws itself), the stamina bar and the eitr bar
-        // are switched off, and DragonCombat.VanillaVitalsHidden blocks Hud.UpdateHealth / Stamina /
-        // Eitr / Food so the game never turns them back on.
+        // ==================================================================================
+        // v0.25.5 VANILLA VITALS + FOOD (EpicMMO's method, with the real Hud instance: Hud.instance is
+        // a PROPERTY, so the old field lookup returned null and nothing was ever hidden).
+        // - m_healthPanel/"Health" (the bar) and m_healthPanel/"healthicon" are switched off; the
+        //   stamina and eitr roots too; Hud.UpdateHealth / Stamina / Eitr are blocked (Combat Runtime).
+        // - The vanilla food icons stay vanilla (same icons, timers, tooltips) but the health panel is
+        //   MOVED every frame so the food sits inside our stat HUD; our frame is a uGUI image placed
+        //   right behind the health panel, so the food is enclosed like the old hotbar version.
+        // ==================================================================================
+        private bool _ihSkipCompensation;
+        private object _ihHudInstance;
+        private RectTransform _ihHealthPanel;
         private readonly List<GameObject> _ihVanillaVitals = new List<GameObject>();
+        private Rect _ihFoodBounds;          // screen-space (IMGUI coords) size of the visible food icons
+        private bool _ihFoodFound;
+        private Vector2 _ihFoodTarget;       // where our HUD wants the food's top-left (IMGUI coords)
+        private bool _ihFoodTargetSet;
+        private Rect _ihLastPanel;
+        private bool _ihPanelVisible;
+        private GameObject _ihFrameBg;
+        private Component _ihFrameImage;
+        private Sprite _ihFrameSprite;
+        private float _ihNextFoodMeasure;
+
+        private object IhHudObject()
+        {
+            if (_ihHudInstance != null && !(_ihHudInstance is UnityEngine.Object && (UnityEngine.Object)_ihHudInstance == null)) return _ihHudInstance;
+            _ihHudInstance = null;
+            if (_ihHudType == null) _ihHudType = Type.GetType("Hud, assembly_valheim");
+            if (_ihHudType == null) return null;
+            BindingFlags st = BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
+            PropertyInfo prop = _ihHudType.GetProperty("instance", st);
+            if (prop != null) _ihHudInstance = prop.GetValue(null, null);
+            if (_ihHudInstance == null)
+            {
+                FieldInfo f = _ihHudType.GetField("m_instance", st) ?? _ihHudType.GetField("instance", st);
+                if (f != null) _ihHudInstance = f.GetValue(null);
+            }
+            return _ihHudInstance;
+        }
+
+        private static Camera IhCanvasCamera(Component c)
+        {
+            Canvas canvas = c == null ? null : c.GetComponentInParent<Canvas>();
+            if (canvas == null) return null;
+            Canvas root = canvas.rootCanvas;
+            return root.renderMode == RenderMode.ScreenSpaceOverlay ? null : root.worldCamera;
+        }
 
         private void IhApplyVanillaHud()
         {
@@ -12019,21 +12063,27 @@ namespace AlbedosCustomClassesAdvanced
             DragonCombat.VanillaVitalsHidden = on;
             try
             {
-                if (Time.time >= _ihNextVanillaScan)
+                object hud = IhHudObject();
+                if (hud != null && (Time.time >= _ihNextVanillaScan || _ihHealthPanel == null))
                 {
                     _ihNextVanillaScan = Time.time + 3f;
                     _ihVanillaVitals.Clear();
-                    if (_ihHudType == null) _ihHudType = Type.GetType("Hud, assembly_valheim");
-                    object hud = _ihHudType == null ? null : _ihHudType.GetField("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic).GetValue(null);
-                    if (hud != null)
+                    BindingFlags inst = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+                    FieldInfo hp = _ihHudType.GetField("m_healthPanel", inst);
+                    _ihHealthPanel = hp == null ? null : IhAsTransform(hp.GetValue(hud)) as RectTransform;
+                    if (_ihHealthPanel != null)
                     {
-                        string[] fields = { "m_healthPanel", "m_staminaBar2Root", "m_eitrBarRoot" };
-                        for (int i = 0; i < fields.Length; i++)
-                        {
-                            FieldInfo f = _ihHudType.GetField(fields[i], BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                            Transform t = f == null ? null : IhAsTransform(f.GetValue(hud));
-                            if (t != null) _ihVanillaVitals.Add(t.gameObject);
-                        }
+                        Transform bar = _ihHealthPanel.Find("Health");
+                        Transform icon = _ihHealthPanel.Find("healthicon");
+                        if (bar != null) _ihVanillaVitals.Add(bar.gameObject);
+                        if (icon != null) _ihVanillaVitals.Add(icon.gameObject);
+                    }
+                    string[] roots = { "m_staminaBar2Root", "m_eitrBarRoot" };
+                    for (int i = 0; i < roots.Length; i++)
+                    {
+                        FieldInfo f = _ihHudType.GetField(roots[i], inst);
+                        Transform t = f == null ? null : IhAsTransform(f.GetValue(hud));
+                        if (t != null) _ihVanillaVitals.Add(t.gameObject);
                     }
                 }
                 for (int i = 0; i < _ihVanillaVitals.Count; i++)
@@ -12041,8 +12091,114 @@ namespace AlbedosCustomClassesAdvanced
                     GameObject g = _ihVanillaVitals[i];
                     if (g != null && g.activeSelf == on) g.SetActive(!on);
                 }
+                IhPlaceFood(on);
             }
             catch { }
+        }
+
+        // Keeps the vanilla food icons inside our HUD and our frame right behind them.
+        private void IhPlaceFood(bool on)
+        {
+            if (_ihHealthPanel == null) return;
+            Camera cam = IhCanvasCamera(_ihHealthPanel);
+            // Altar / tree / menu open: the food goes with our HUD (no stray vanilla bits on top).
+            bool showFood = !on || _ihPanelVisible;
+            if (_ihHealthPanel.gameObject.activeSelf != showFood) _ihHealthPanel.gameObject.SetActive(showFood);
+            if (!on) { if (_ihFrameBg != null) _ihFrameBg.SetActive(false); return; }
+
+            // Measure the visible food icons (once per second): world-space bounds of every active
+            // RectTransform under the health panel (the bar and its icon are already off).
+            Vector3[] c = new Vector3[4];
+            float minX = float.MaxValue, minY = float.MaxValue, maxX = float.MinValue, maxY = float.MinValue;
+            bool any = false;
+            bool measure = Time.time >= _ihNextFoodMeasure;
+            if (measure) _ihNextFoodMeasure = Time.time + 0.25f;
+            RectTransform[] parts = measure ? _ihHealthPanel.GetComponentsInChildren<RectTransform>(false) : new RectTransform[0];
+            for (int i = 0; i < parts.Length; i++)
+            {
+                if (parts[i] == _ihHealthPanel) continue;
+                parts[i].GetWorldCorners(c);
+                for (int k = 0; k < 4; k++)
+                {
+                    Vector2 sp = RectTransformUtility.WorldToScreenPoint(cam, c[k]);
+                    if (sp.x < minX) minX = sp.x;
+                    if (sp.x > maxX) maxX = sp.x;
+                    if (sp.y < minY) minY = sp.y;
+                    if (sp.y > maxY) { maxY = sp.y; }
+                    any = true;
+                }
+            }
+            if (measure)
+            {
+                _ihFoodFound = any && maxX > minX;
+                if (_ihFoodFound) _ihFoodBounds = Rect.MinMaxRect(minX, Screen.height - maxY, maxX, Screen.height - minY);
+            }
+
+            // Move the whole health panel so the food's top-left lands on our HUD's food slot.
+            if (_ihFoodFound && _ihFoodTargetSet && _ihPanelVisible)
+            {
+                Vector2 delta = new Vector2(_ihFoodTarget.x - _ihFoodBounds.x, -(_ihFoodTarget.y - _ihFoodBounds.y));
+                if (delta.sqrMagnitude > 0.25f)
+                {
+                    RectTransform parent = _ihHealthPanel.parent as RectTransform;
+                    Vector3 from, to;
+                    Vector2 cur = RectTransformUtility.WorldToScreenPoint(cam, _ihHealthPanel.position);
+                    if (parent != null && RectTransformUtility.ScreenPointToWorldPointInRectangle(parent, cur, cam, out from)
+                        && RectTransformUtility.ScreenPointToWorldPointInRectangle(parent, cur + delta, cam, out to))
+                    {
+                        _ihHealthPanel.position += to - from;
+                        _ihFoodBounds.position = _ihFoodTarget;   // until the next measurement
+                    }
+                }
+            }
+
+            // Frame (uGUI, behind the food): created once, then kept on our panel rect.
+            if (_ihFrameBg == null && _ihHealthPanel.parent != null)
+            {
+                Type imageType = Type.GetType("UnityEngine.UI.Image, UnityEngine.UI");
+                _ihSkipCompensation = true;
+                Texture2D tex = LoadUiPng("HUD_Frame.png");
+                _ihSkipCompensation = false;
+                if (imageType != null && tex != null)
+                {
+                    _ihFrameSprite = Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect, new Vector4(40f, 40f, 40f, 40f));
+                    _ihFrameBg = new GameObject("ImmortalHeroes_StatHudFrame", typeof(RectTransform));
+                    _ihFrameBg.transform.SetParent(_ihHealthPanel.parent, false);
+                    Component img = _ihFrameBg.AddComponent(imageType);
+                    imageType.GetProperty("sprite").SetValue(img, _ihFrameSprite, null);
+                    PropertyInfo typeProp = imageType.GetProperty("type");
+                    if (typeProp != null) typeProp.SetValue(img, Enum.ToObject(typeProp.PropertyType, 1), null);   // Sliced
+                    PropertyInfo ray = imageType.GetProperty("raycastTarget");
+                    if (ray != null) ray.SetValue(img, false, null);
+                }
+            }
+            if (_ihFrameBg != null)
+            {
+                bool show = _ihPanelVisible;
+                if (_ihFrameBg.activeSelf != show) _ihFrameBg.SetActive(show);
+                if (!show) return;
+                if (_ihFrameBg.transform.parent != _ihHealthPanel.parent) _ihFrameBg.transform.SetParent(_ihHealthPanel.parent, false);
+                if (_ihFrameBg.transform.GetSiblingIndex() != 0) _ihFrameBg.transform.SetAsFirstSibling();   // behind the food
+                RectTransform parent = _ihHealthPanel.parent as RectTransform;
+                RectTransform rt = _ihFrameBg.transform as RectTransform;
+                Vector2 tl, br;
+                Rect pr = _ihLastPanel;
+                if (parent != null
+                    && RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, new Vector2(pr.x, Screen.height - pr.y), cam, out tl)
+                    && RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, new Vector2(pr.xMax, Screen.height - pr.yMax), cam, out br))
+                {
+                    rt.anchorMin = rt.anchorMax = parent.pivot;
+                    rt.pivot = new Vector2(0f, 1f);
+                    rt.anchoredPosition = tl;
+                    rt.sizeDelta = new Vector2(Mathf.Abs(br.x - tl.x), Mathf.Abs(tl.y - br.y));
+                    // Corner ornaments ~20 px x HUD scale on screen: sliced border (40 tex px at
+                    // 100 ppu) / multiplier = 20*s screen px expressed in local units.
+                    float localPerPx = Mathf.Abs(br.x - tl.x) / Mathf.Max(1f, pr.width);
+                    if (_ihFrameImage == null) _ihFrameImage = _ihFrameBg.GetComponent(Type.GetType("UnityEngine.UI.Image, UnityEngine.UI"));
+                    PropertyInfo mult = _ihFrameImage == null ? null : _ihFrameImage.GetType().GetProperty("pixelsPerUnitMultiplier");
+                    if (mult != null) mult.SetValue(_ihFrameImage, Mathf.Clamp(2f / Mathf.Max(0.0001f, IhHudScale() * localPerPx), 0.01f, 100f), null);
+                }
+            }
         }
 
         private static Transform IhAsTransform(object v)
@@ -12082,7 +12238,8 @@ namespace AlbedosCustomClassesAdvanced
         {
             if (_ihHudFrame == Time.frameCount) return;
             _ihHudFrame = Time.frameCount;
-            _ihHudMenuOpen = IhMenuOpen() || IhHudUserHidden();
+            _ihHudMenuOpen = Plugin.IsClassPanelOpen || _skillbookOpen || IhHudUserHidden()
+                || IhStaticBool(ref _ihMenuType, "Menu", "IsVisible") || IhStaticBool(ref _ihMinimapType, "Minimap", "IsOpen");
             _ihHudEffects.Clear();
             try
             {
@@ -12092,14 +12249,7 @@ namespace AlbedosCustomClassesAdvanced
                 if (list != null) foreach (object se in list) if (se is IhStatusDisplay) _ihHudEffects.Add(se);
             }
             catch { }
-            _ihHudFoods.Clear();
-            try
-            {
-                MethodInfo gf = typeof(Player).GetMethod("GetFoods", Type.EmptyTypes);
-                System.Collections.IEnumerable fl = gf == null ? null : gf.Invoke(player, null) as System.Collections.IEnumerable;
-                if (fl != null) foreach (object f in fl) if (f != null) _ihHudFoods.Add(f);
-            }
-            catch { }
+
             if (Time.time >= _ihNextHotbarScan || _ihHotbarComp == null)
             {
                 _ihNextHotbarScan = Time.time + 1f;
@@ -12257,21 +12407,61 @@ namespace AlbedosCustomClassesAdvanced
                 }
         }
 
+        private bool _ihDragging;
+        private Vector2 _ihDragOffset;
+
         private void DrawImmortalHud(Player player)
         {
             IhGatherHudFrame(player);
+            _ihPanelVisible = !_ihHudMenuOpen;
             if (_ihHudMenuOpen) return;
-            if (!_ihHudArtLoaded) { _ihHudArtLoaded = true; _ihHudFrameTex = LoadUiPng("HUD_Frame.png"); _ihHudPlaqueTex = LoadUiPng("HUD_Plaque.png"); }
+            if (!_ihHudArtLoaded) { _ihHudArtLoaded = true; _ihHudPlaqueTex = LoadUiPng("HUD_Plaque.png"); }
             float s = IhHudScale();
             IhEnsureHudStyles(s);
 
-            // Bottom-left, where the vanilla health / food panel was.
-            float pw = 400f * s, ph = 112f * s;
-            float px = _ihHudX.Value * Screen.height / 1080f;
-            float py = Screen.height - _ihHudBottom.Value * Screen.height / 1080f - ph;
+            float pad = 18f * s, rowH = 17f * s, gap = 5f * s;
+            float statsW = 300f * s, statsH = rowH * 3f + gap * 2f;
+            float foodW = _ihFoodFound ? Mathf.Max(30f * s, _ihFoodBounds.width) : 40f * s;
+            float foodH = _ihFoodFound ? _ihFoodBounds.height : 0f;
+            float innerH = Mathf.Max(statsH, foodH);
+            float pw = pad + foodW + 18f * s + statsW + pad, ph = 14f * s + innerH + pad * 2f;
+
+            // Position: saved (drag), default bottom-left where the vanilla health panel sits.
+            float k1080 = Screen.height / 1080f;
+            float px = _ihHudPosX.Value >= 0f ? _ihHudPosX.Value * k1080 : 24f * k1080;
+            float py = _ihHudPosY.Value >= 0f ? _ihHudPosY.Value * k1080 : Screen.height - 150f * k1080 - ph;
+            px = Mathf.Clamp(px, 0f, Screen.width - pw);
+            py = Mathf.Clamp(py, 60f * s, Screen.height - ph);
             Rect panel = new Rect(px, py, pw, ph);
-            if (_ihHudFrameTex != null) IhDrawNineSlice(panel, _ihHudFrameTex, 40f, s * 0.5f);
-            else IhHudFill(panel, new Color(0.07f, 0.10f, 0.17f, 0.9f));
+
+            // Drag anywhere on the panel while the cursor is free (inventory open); saved on release.
+            Event e = Event.current;
+            if (Cursor.visible)
+            {
+                if (e.type == EventType.MouseDown && e.button == 0 && panel.Contains(e.mousePosition)) { _ihDragging = true; _ihDragOffset = e.mousePosition - new Vector2(px, py); e.Use(); }
+                else if (_ihDragging && e.type == EventType.MouseDrag)
+                {
+                    Vector2 np = e.mousePosition - _ihDragOffset;
+                    _ihHudPosX.Value = Mathf.Round(np.x / k1080);
+                    _ihHudPosY.Value = Mathf.Round(np.y / k1080);
+                    e.Use();
+                }
+                else if (_ihDragging && (e.type == EventType.MouseUp || e.rawType == EventType.MouseUp)) { _ihDragging = false; try { Config.Save(); } catch { } }
+                if (panel.Contains(e.mousePosition) && e.type == EventType.Repaint)
+                {
+                    Color c0 = _ihHudTiny.normal.textColor;
+                    _ihHudTiny.normal.textColor = new Color(0.95f, 0.85f, 0.55f, 0.85f);
+                    GUI.Label(new Rect(panel.x, panel.yMax + 2f * s, panel.width, 16f * s), "drag to move", _ihHudTiny);
+                    _ihHudTiny.normal.textColor = c0;
+                }
+            }
+            else _ihDragging = false;
+            _ihLastPanel = panel;
+
+            float inTop = panel.y + 14f * s + pad, inMid = inTop + innerH * 0.5f;
+            // Vanilla food goes here (moved by IhPlaceFood, enclosed by the uGUI frame behind it).
+            _ihFoodTarget = new Vector2(panel.x + pad, inMid - foodH * 0.5f);
+            _ihFoodTargetSet = true;
 
             // Header plaque on the top edge: Name · CLASS.
             string title = player.GetPlayerName() + "  ·  " + IhCurrentClassName(player).ToUpper();
@@ -12285,13 +12475,13 @@ namespace AlbedosCustomClassesAdvanced
             _ihHudTitle.alignment = TextAnchor.MiddleLeft;
             _ihHudTitle.normal.textColor = tc;
 
-            // Buffs / debuffs: one centred row on top of the HUD.
-            float icon = 28f * s, iconGap = 10f * s;
+            // Buffs / debuffs: one centred row on top of the HUD (timer fully visible under each).
+            float icon = 28f * s, iconGap = 12f * s;
             int count = _ihHudEffects.Count;
             if (count > 0)
             {
                 float rowW = count * icon + (count - 1) * iconGap;
-                float bx = panel.center.x - rowW * 0.5f, by = plaque.y - 8f * s - icon - 15f * s;
+                float bx = panel.center.x - rowW * 0.5f, by = plaque.y - 6f * s - 20f * s - icon;
                 for (int i = 0; i < count; i++)
                 {
                     IhStatusDisplay se = _ihHudEffects[i] as IhStatusDisplay;
@@ -12305,36 +12495,15 @@ namespace AlbedosCustomClassesAdvanced
                     IhHudFill(new Rect(ir.xMax - 1f, ir.y, 1f, ir.height), edge);
                     IhDrawSprite(new Rect(ir.x + 3f * s, ir.y + 3f * s, ir.width - 6f * s, ir.height - 6f * s), se.m_icon);
                     IhHudFill(new Rect(ir.x, ir.yMax + 1f, ir.width, 2f * s), new Color(0.30f, 0.78f, 0.30f, 1f));
-                    IhHudShadowLabel(new Rect(ir.x - 8f * s, ir.yMax + 3f * s, ir.width + 16f * s, 14f * s), se.GetIconText(), _ihHudTiny);
-                    if (ir.Contains(Event.current.mousePosition))
+                    IhHudShadowLabel(new Rect(ir.x - 14f * s, ir.yMax + 3f * s, ir.width + 28f * s, 18f * s), se.GetIconText(), _ihHudTiny);
+                    if (ir.Contains(e.mousePosition))
                         IhHudShadowLabel(new Rect(ir.x, ir.y - 18f * s, 260f * s, 16f * s), se.m_name, _ihHudText);
                 }
             }
 
-            // Inside: food column (left) + stats, both centred vertically in the frame.
-            float inTop = panel.y + 16f * s, inBottom = panel.yMax - 12f * s, inMid = (inTop + inBottom) * 0.5f;
-            float fx = panel.x + 24f * s, fIcon = 22f * s, fStep = 26f * s;
-            float fy = inMid - (fStep * 3f - (fStep - fIcon)) * 0.5f;
-            for (int i = 0; i < 3; i++)
-            {
-                Rect fr = new Rect(fx, fy + i * fStep, fIcon, fIcon);
-                IhHudFill(fr, new Color(0.02f, 0.03f, 0.05f, 0.75f));
-                if (i < _ihHudFoods.Count)
-                {
-                    object food = _ihHudFoods[i];
-                    object item = IhField(food, "m_item");
-                    Sprite sp = null;
-                    try { MethodInfo gi = item == null ? null : item.GetType().GetMethod("GetIcon", Type.EmptyTypes); sp = gi == null ? null : gi.Invoke(item, null) as Sprite; } catch { }
-                    IhDrawSprite(fr, sp);
-                    object t = IhField(food, "m_time");
-                    float secs = t is float ? (float)t : 0f;
-                    IhHudShadowLabel(new Rect(fr.xMax + 4f * s, fr.y, 40f * s, fIcon), secs >= 60f ? Mathf.CeilToInt(secs / 60f).ToString() + "m" : Mathf.CeilToInt(secs).ToString() + "s", _ihHudText);
-                }
-            }
-
-            float sx = panel.x + 96f * s, sw = panel.xMax - 24f * s - sx;
-            float rowH = 17f * s, gap = 5f * s;
-            float sy = inMid - (rowH * 3f + gap * 2f) * 0.5f;
+            // Stats, centred vertically next to the food.
+            float sx = panel.x + pad + foodW + 18f * s, sw = statsW;
+            float sy = inMid - statsH * 0.5f;
             IhHudStat(new Rect(sx, sy, sw, rowH), "HP", 34f * s, 74f * s, player.GetHealth(), player.GetMaxHealth(), new Color(0.80f, 0.13f, 0.13f, 1f), s);
             sy += rowH + gap;
             float half = (sw - 10f * s) * 0.5f;
@@ -12788,7 +12957,7 @@ namespace AlbedosCustomClassesAdvanced
             // artwork with an extra gamma lift (measured in-game: displayed = source^(1/2.2)),
             // which made the whole tree look bleached. Pre-compensate the pixels once at load so
             // the approved artwork appears exactly as painted. The artwork file itself is untouched.
-            if (texture == null || _uiColorSpaceCorrection == null || !_uiColorSpaceCorrection.Value)
+            if (texture == null || _uiColorSpaceCorrection == null || !_uiColorSpaceCorrection.Value || _ihSkipCompensation)
                 return;
             if (QualitySettings.activeColorSpace != ColorSpace.Linear)
                 return;

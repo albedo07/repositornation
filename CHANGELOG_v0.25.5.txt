@@ -1,0 +1,17 @@
+IMMORTAL HEROES v0.25.5 - HUD Rework
+====================================
+Why the vanilla HP never went away: Hud.instance is a property, not a field - our lookup returned
+nothing, so none of the hiding code ever ran. Fixed (property + field fallbacks).
+
+Stat HUD
+- Vanilla health bar ("Health") and its icon ("healthicon") switched off, stamina / eitr bars too, and
+  Hud.UpdateHealth / UpdateStamina / UpdateEitr blocked (EpicMMO's method).
+- The VANILLA food icons now sit inside our HUD: the vanilla food panel is moved into our frame every
+  frame and the ornate frame is a uGUI image placed behind it (like the old hotbar version). Same
+  vanilla icons, timers and tooltips; our own food copy is gone.
+- Draggable: open the inventory, drag the HUD anywhere; the position is saved ([Immortal HUD] PosX /
+  PosY, -1 = default bottom-left).
+- Hidden (food included) while the Altar, the Skill Tree, the Esc menu or the big map is open; stays
+  visible with the inventory so you can move it.
+- Buff timers no longer cropped.
+Settings reset to defaults once (Dev Mode OFF).
