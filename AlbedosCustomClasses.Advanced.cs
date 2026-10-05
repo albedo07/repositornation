@@ -12744,7 +12744,7 @@ namespace AlbedosCustomClassesAdvanced
                     IhDrawSprite(new Rect(ir.x + 3f * s, ir.y + 3f * s, ir.width - 6f * s, ir.height - 6f * s), se.m_icon);
                     IhHudFill(new Rect(ir.x, ir.yMax + 1f, ir.width, 2f * s), new Color(0.30f, 0.78f, 0.30f, 1f));
                     // v0.25.8: stacks (e.g. Barrier HP) on the icon AND the timer underneath.
-                    string timer = se.m_ttl > 0f ? Mathf.CeilToInt(Mathf.Max(0f, se.m_ttl - se.m_time)).ToString() + "s" : "";
+                    string timer = se.m_ttl > 0f ? Mathf.CeilToInt(se.Remaining()).ToString() + "s" : "";
                     if (se.Stacks > 0 && timer.Length > 0)
                     {
                         TextAnchor a0 = _ihHudTiny.alignment;

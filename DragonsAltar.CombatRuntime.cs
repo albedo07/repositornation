@@ -4945,6 +4945,12 @@ namespace DragonsAltarCombat
     {
         public int Stacks;
 
+        // v0.25.9: StatusEffect.m_time is protected in Valheim; outside code reads the time left here.
+        public float Remaining()
+        {
+            return m_ttl > 0f ? Mathf.Max(0f, m_ttl - m_time) : 0f;
+        }
+
         // v0.25.4: timers always in seconds (never "2m" that jumps to 59s).
         public override string GetIconText()
         {

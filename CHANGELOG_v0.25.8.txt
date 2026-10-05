@@ -1,4 +1,5 @@
 IMMORTAL HEROES v0.25.8 - WARRIOR MOTIONS (animation pass 2 of 4) + HUD LAYOUT
+R2: fixed the install compile error (StatusEffect.m_time is protected in Valheim; the buff timer now reads it through IhStatusDisplay.Remaining()).
 
 HUD
 - Skill hotbar: default = bottom-left corner (no more overlap with the hover text / crosshair area).
