@@ -1,0 +1,10 @@
+IMMORTAL HEROES v0.25.13 - TRAIT MOTIONS (animation pass 5: the moments that are not hotbar skills)
+
+- Ascended Judgement Hammer: hand stretched out calling the hammer back while it returns; catch + recoil.
+- Holy Shockwave (Priest Buckler Parry): the buckler is shoved out as the light bursts.
+- Bless Thy Sinners: crumpled low, then rising with arms opening.
+- Archmage Overcharge: energy bursts out, arms flung wide, head back, shaking.
+- Ascended Bonecrusher ground shock: a second stamp into the crater.
+- Tumble Shot / Gale Volley: real tucked backflip with the bow drawn upside down at the top, loosed on the way out
+  (was a plain body spin).
+- Arcane Phalanx volley (Left Click): both hands thrust, the swords fly.

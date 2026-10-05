@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.12";
+        public const string ModVersion = "0.25.13";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1903,6 +1903,54 @@ namespace DragonsAltarCombat
             BuildWarriorClips(c);
             BuildSorcererClips(c);
             BuildRangerClips(c);
+            BuildTraitClips(c);
+        }
+
+        // ------------------------------------------------------------------ v0.25.13 traits / Ascended extras
+        private static void BuildTraitClips(Dictionary<string, DragonClipKey[]> c)
+        {
+            // Ascended Judgement Hammer: hand stretched out calling the hammer back (hold), catch + recoil.
+            DragonClipKey call = K(0f).Sp(-6f, 8f, 0f).Ch(-4f, 6f, 0f).Hd(-6f, 0f, 0f).RA(-115f, 0f, -8f).RF(-10f, 0f, 0f).RH(-30f, 0f, 0f).LA(-20f, 0f, 25f);
+            c["cleric_hammer_call"] = new DragonClipKey[] {
+                K(-1f), call,
+                K(0.08f).Sp(-10f, 4f, 0f).Ch(-8f, 2f, 0f).RA(-95f, 0f, -8f).RF(-75f, 0f, 0f).RH(10f, 0f, 0f).LA(-20f, 0f, 25f).Rot(-6f, 0f, 0f).Off(0f, -0.04f, -0.06f),
+                K(0.25f).Sp(-6f, 0f, 0f).RA(-90f, 0f, -8f).RF(-70f, 0f, 0f).LA(-20f, 0f, 25f).Rot(-3f, 0f, 0f),
+                K(0.6f)
+            };
+            // Holy Shockwave (Buckler Parry): the buckler is shoved out, the light bursts from it.
+            DragonClipKey pb = K(0f).Sp(10f, 14f, 0f).Ch(6f, 10f, 0f).LA(-88f, 15f, 10f).LF(-10f, 0f, 0f).LH(-25f, 0f, 0f).RA(-20f, 0f, -30f).RF(-50f, 0f, 0f).Rot(5f, 6f, 0f).Off(0f, -0.06f, 0.08f);
+            c["cleric_parry_burst"] = new DragonClipKey[] {
+                K(-1f).LA(-70f, 25f, 20f).LF(-80f, 0f, 0f).Sp(4f, -6f, 0f),
+                pb, pb.Copy(0.15f), K(0.5f)
+            };
+            // Bless Thy Sinners: snatched back from death - crumpled low, then rising with arms opening.
+            c["cleric_rise"] = new DragonClipKey[] {
+                K(-1f).Sp(34f, 0f, 0f).Ch(16f, 0f, 0f).Hd(24f, 0f, 0f).RA(-30f, 0f, -10f).LA(-30f, 0f, 10f).Rot(12f, 0f, 0f).Off(0f, -0.38f, 0f),
+                K(-0.4f).Sp(20f, 0f, 0f).Ch(8f, 0f, 0f).Hd(6f, 0f, 0f).RA(-60f, 0f, -25f).LA(-60f, 0f, 25f).Rot(6f, 0f, 0f).Off(0f, -0.2f, 0f),
+                K(0f).Sp(-12f, 0f, 0f).Ch(-12f, 0f, 0f).Hd(-24f, 0f, 0f).RA(-120f, 0f, -55f).RF(-10f, 0f, 0f).LA(-120f, 0f, 55f).LF(-10f, 0f, 0f).Off(0f, 0.06f, 0f),
+                K(0.5f).Sp(-10f, 0f, 0f).Ch(-10f, 0f, 0f).Hd(-20f, 0f, 0f).RA(-115f, 0f, -55f).LA(-115f, 0f, 55f).Off(0f, 0.05f, 0f),
+                K(1.0f)
+            };
+            // Archmage Overcharge: energy bursts out - arms flung wide and down, head back, shaking.
+            DragonClipKey oc = K(0f).Sp(-16f, 0f, 0f).Ch(-14f, 0f, 0f).Hd(-24f, 0f, 0f).RA(-45f, 0f, -70f).RF(-10f, 0f, 0f).RH(-30f, 0f, 0f).LA(-45f, 0f, 70f).LF(-10f, 0f, 0f).LH(-30f, 0f, 0f).Off(0f, 0.04f, 0f);
+            c["wiz_overcharge"] = new DragonClipKey[] {
+                K(-1f).Sp(16f, 0f, 0f).Ch(8f, 0f, 0f).RA(-30f, 20f, 25f).RF(-80f, 0f, 0f).LA(-30f, -20f, -25f).LF(-80f, 0f, 0f).Off(0f, -0.08f, 0f),
+                oc, oc.Copy(0.1f).Rot(0f, 0f, 2f), oc.Copy(0.2f).Rot(0f, 0f, -2f), oc.Copy(0.3f).Rot(0f, 0f, 1.5f), oc.Copy(0.45f), K(0.85f)
+            };
+            // Ascended Bonecrusher ground shock: a second stamp into the crater.
+            DragonClipKey af = K(0f).Sp(30f, 0f, 0f).Ch(14f, 0f, 0f).RA(-35f, 0f, -12f).LA(-30f, 0f, 30f).Rot(10f, 0f, 0f).Off(0f, -0.22f, 0.04f);
+            c["merc_aftershock"] = new DragonClipKey[] { K(-1f), K(-0.5f).Sp(14f, 0f, 0f).RA(-80f, 0f, -12f).Off(0f, -0.08f, 0f), af, af.Copy(0.2f), K(0.55f) };
+            // Tumble Shot / Gale Volley: tucked backflip, bow drawn upside down at the top, loosed on the way out.
+            DragonClipKey tk = K(0f).Sp(26f, 0f, 0f).Ch(12f, 0f, 0f).RA(-70f, 0f, -20f).RF(-110f, 0f, 0f).LA(-70f, 0f, 20f).LF(-70f, 0f, 0f);
+            DragonClipKey dr = Draw(0f);
+            c["rg_tumble"] = new DragonClipKey[] {
+                K(-1f), tk.Copy(0f),
+                tk.Copy(0.075f).Rot(-90f, 0f, 0f).Linear(),
+                dr.Copy(0.15f).Rot(-180f, 0f, 0f).Linear(),
+                Loose(0.225f).Rot(-270f, 0f, 0f).Linear(),
+                Loose(0.3f).Rot(-360f, 0f, 0f).Linear(),
+                K(0.5f).Rot(-360f, 0f, 0f)
+            };
         }
 
         // ------------------------------------------------------------------ Ranger / Acrobat / Bowmaster

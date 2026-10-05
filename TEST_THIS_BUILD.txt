@@ -1,5 +1,3 @@
-TEST v0.25.12
-1. Angel Comet on a 0-star Troll: it should drop to about 1/8 HP (Tier 0).
-2. Electric Smite: a bit stronger than Angel Comet.
-3. Any Fire / Spirit Burn (Electric Smite, Halfmoon, Flame Burst, Ascended Angel Comet ring...):
-   the burn numbers climb every tick.
+TEST v0.25.13
+Ascended Judgement Hammer (catch it), Buckler Parry shockwave, Bless Thy Sinners save, Overcharge (spend 300 Eitr),
+Ascended Bonecrusher, Tumble Shot / Gale Volley, Phalanx volley: each plays its own motion and returns to rest.

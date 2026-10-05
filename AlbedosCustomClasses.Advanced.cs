@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.12";
+        public const string ModVersion = "0.25.13";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -2884,6 +2884,7 @@ namespace AlbedosCustomClassesAdvanced
                 StartCoroutine(AnimateRing(center + Vector3.up * 0.08f, 0.3f, radius, 0.55f, new Color(1f, 0.46f, 0.16f, 1f), 0.17f));
             if (!IsAscendedSkill("bonecrusher")) yield break;
             // Ascended: a ground shock 0.5s later (50%), no second jump.
+            DragonCombat.PlayClip(player, "merc_aftershock", Mathf.Max(0.1f, _boneAscShockDelay.Value));
             yield return new WaitForSeconds(Mathf.Max(0f, _boneAscShockDelay.Value));
             if (player == null || player.IsDead()) yield break;
             List<Character> shock = GetSphereTargets(player, center, radius);
@@ -4938,6 +4939,8 @@ namespace AlbedosCustomClassesAdvanced
                 // Ascended: flies back to the Paladin, still growing up to its cap, hitting everything again.
                 nextHitAt.Clear();
                 float safety = Time.time + 8f;
+                DragonCombat.PlayClip(player, "cleric_hammer_call", 0.2f, true);   // hand out, calling it back
+                bool caughtIt = false;
                 while (player != null && !player.IsDead() && Time.time < safety)
                 {
                     Vector3 home = player.transform.position + Vector3.up * 1.2f;
@@ -4952,6 +4955,8 @@ namespace AlbedosCustomClassesAdvanced
                             _cooldowns[id] = Mathf.Max(Time.time, end - cut);
                         }
                         ShowMessage("Hammer caught");
+                        DragonCombat.ClipImpact(player);   // catch + recoil
+                        caughtIt = true;
                         break;
                     }
                     Vector3 back = toHome.normalized;
@@ -4968,6 +4973,7 @@ namespace AlbedosCustomClassesAdvanced
                     HammerHits(player, center, HammerHitRadius(height), damageMultiplier, nextHitAt, true);
                     yield return null;
                 }
+                if (!caughtIt) DragonCombat.ClipStop(player, 0.3f);
             }
 
             if (hammer != null)
@@ -9799,6 +9805,7 @@ namespace AlbedosCustomClassesAdvanced
             if (GetCooldownRemaining(id) > 0f)
                 return;
             SetPriestCooldownNow(id, _shockwaveCooldown.Value);
+            DragonCombat.PlayClip(player, "cleric_parry_burst", 0.06f);
 
             Vector3 center = player.transform.position;
             float radius = Mathf.Max(1f, DragonCombat.M(_shockwaveRadius.Value));

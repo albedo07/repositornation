@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Dragon's Altar - Sorcerer Advancements";
-        public const string ModVersion = "0.25.12";
+        public const string ModVersion = "0.25.13";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -2393,6 +2393,7 @@ namespace DragonsAltarSorcerer
             // Ascended: all 8 launched together arm one Astral Spear eruption on the first impact.
             _phalanxSpearArmed = IsSpellAscended(player, "arcane_phalanx") && copy.Count >= Mathf.Max(1, _paAscCount.Value);
             for (int i = 0; i < copy.Count; i++) LaunchSword(player, copy[i]);
+            DragonCombat.PlayClip(player, "hw_gravity_blast", 0.06f);   // both hands thrust: the swords fly
             ShowMessage("PHALANX VOLLEY x" + copy.Count);
             StartCooldown("Spellcaster.ArcanePhalanx", _phalanxCooldown.Value);
         }
@@ -3133,6 +3134,7 @@ namespace DragonsAltarSorcerer
                 _overchargeUntil = Time.time + Mathf.Max(0.5f, _ocDuration.Value);
                 _overchargeLockedUntil = _overchargeUntil + Mathf.Max(0f, _ocBuffer.Value);
                 ShowMessage("OVERCHARGE");
+                DragonCombat.PlayClip(Player.m_localPlayer, "wiz_overcharge", 0.12f);
             }
         }
 

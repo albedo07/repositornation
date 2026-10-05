@@ -40,7 +40,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Dragon's Altar - Ranger";
-        public const string ModVersion = "0.25.12";
+        public const string ModVersion = "0.25.13";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -628,7 +628,7 @@ namespace DragonsAltarRanger
             Rigidbody body = player.GetComponent<Rigidbody>();
             GrantIFrames(player, _rgIFrames.Value);
             DragonCombat.LockSkill(player, 0.35f);
-            if (flip) StartCoroutine(PoseMotion(player, 0.3f, delegate(float k) { return Quaternion.Euler(-360f * k, 0f, 0f); }, null));
+            if (flip) DragonCombat.PlayClip(player, "rg_tumble", 0.02f);   // v0.25.13: tucked flip, draw upside down, loose
             const float duration = 0.3f;
             bool fired = false;
             float t = 0f;
