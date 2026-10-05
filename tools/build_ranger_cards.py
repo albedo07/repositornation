@@ -26,6 +26,7 @@ PANEL = (252, 22, 563, 263)
 STOPS = {"ranger": [[28, 70, 40], [52, 150, 84], [150, 222, 120], [255, 246, 205]],
          "acrobat": [[18, 60, 58], [36, 138, 118], [128, 224, 196], [240, 255, 240]],
          "bowmaster": [[40, 64, 26], [96, 140, 52], [196, 214, 110], [255, 244, 200]]}
+TARGET_LUM, TARGET_SAT = 0.66, 0.33
 EMBLEM = (126, 141, 112)       # emblem disc (card px): centre + radius inside the outer ring   # art panel interior inside the frame (card px)
 
 
@@ -70,16 +71,27 @@ def panel_scene(name, focus_y, size, hue):
     # v0.25.0: vibrant + light like the painted cards, leaning green (Sorcerer reads purple,
     # Cleric light, Warrior rustic): high-key gamma, shadows lifted into pale spring green,
     # colour pushed towards the class hue, then extra saturation.
-    out = 255.0 * np.power(a / 255.0, 0.6)
+    # v0.25.4: calibrated to the painted cards (measured: their art panels average ~0.66
+    # brightness and ~0.33 saturation; the dark portraits were ~0.38 and read as "locked").
+    # Gamma is solved so the panel hits that brightness, then a hint of green, then saturation
+    # is scaled to the same average.
+    base = a / 255.0
+    lo, hi = 0.15, 1.0
+    for _ in range(30):
+        g = (lo + hi) * 0.5
+        if np.power(base, g).mean() < TARGET_LUM: hi = g
+        else: lo = g
+    out = 255.0 * np.power(base, (lo + hi) * 0.5)
     lum = np.clip(out.mean(axis=2) / 255.0, 0, 1)
-    # Gradient map: deep forest -> emerald -> spring green -> warm sunlit highlight.
     xs = np.array([0.0, 0.35, 0.7, 1.0])
     stops = np.array(STOPS[name], dtype=np.float64)
     mapped = np.stack([np.interp(lum, xs, stops[:, c]) for c in range(3)], -1)
-    # v0.25.1: only a hint of green (the painted cards keep their own colours; this matches them).
-    out = out * 0.82 + mapped * 0.18
+    out = out * 0.86 + mapped * 0.14          # a hint of green
     grey = out.mean(axis=2, keepdims=True)
-    out = grey + (out - grey) * 1.15
+    for _ in range(3):
+        mx, mn = out.max(2), out.min(2)
+        sat = ((mx - mn) / np.maximum(mx, 1e-6)).mean()
+        out = np.clip(grey + (out - grey) * np.clip(TARGET_SAT / max(sat, 1e-3), 0.8, 1.6), 0, 255)
     return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8))
 
 

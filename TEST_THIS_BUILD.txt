@@ -1,6 +1,6 @@
-TEST THIS BUILD - v0.25.3 Lean HUD
+TEST THIS BUILD - v0.25.4 Stat HUD
 ==================================
-1. No vanilla health bar (food icons + timers still there).
-2. HUD: no panel background, each bar / buff on its own.
-3. Performance: check FPS in combat and with the Skill Tree open.
-4. Ranger skill motions (Piercing, Cyclone, Ricochet, Arrow Rain, Pinning, Explosive, Tailwind, Vigil).
+1. Bottom-left: gold frame + plaque (name · class), food + timers, HP / STA / EIT / Lv; buffs above it.
+2. No vanilla health bar, health icon, food column, stamina or eitr bar anywhere.
+3. Skill cooldowns / buff timers in seconds.
+4. Altar Ranger cards as bright as the other classes.

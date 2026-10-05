@@ -1,0 +1,20 @@
+IMMORTAL HEROES v0.25.4 - Stat HUD
+==================================
+Stat HUD (A + C)
+- Bottom-left, where the vanilla health / food panel was: ornate gold frame (the skill tree footer
+  box) with a navy header plaque on top ("Name · CLASS").
+- Inside: food icons + time left (left column) and our stats (HP, STA + EIT, Lv + EXP) centred.
+- Buffs / debuffs in one centred row on top of the HUD.
+- Vanilla health bar, its icon, food panel, stamina and eitr bars removed the EpicMMO way: switched off
+  and Valheim's Hud.UpdateHealth / UpdateStamina / UpdateEitr / UpdateFood are blocked while our HUD is
+  on, so nothing turns them back on. F8 > Immortal HUD: Enabled / Scale / X / Bottom.
+- The class name now lives only on the stat HUD (skill hotbar title removed; Mercenary's Fury gauge
+  stays above the skill hotbar).
+
+Timers
+- Every skill cooldown and every buff timer is shown in seconds (no "2m" that drops to 59s).
+
+Altar
+- Ranger / Acrobat / Bowmaster cards: as bright and colourful as the other cards (measured and matched:
+  ~0.66 brightness, ~0.33 saturation), with a hint of green.
+Settings reset to defaults once (Dev Mode OFF).

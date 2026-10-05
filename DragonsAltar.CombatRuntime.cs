@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.3";
+        public const string ModVersion = "0.25.4";
 
         internal static DragonCombatPlugin Instance;
 
@@ -152,6 +152,30 @@ namespace DragonsAltarCombat
             return 1;
         }
 
+        // v0.25.4 (EpicMMO's method): while the Immortal HUD is on, Valheim's own health / stamina /
+        // eitr / food HUD updates never run, so nothing re-enables the vanilla bars.
+        private int PatchHudVitals()
+        {
+            Type hud = Type.GetType("Hud, assembly_valheim");
+            if (hud == null) return 0;
+            HarmonyMethod pre = new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("HudVitalsPrefix", BindingFlags.Static | BindingFlags.NonPublic));
+            string[] names = { "UpdateHealth", "UpdateStamina", "UpdateEitr", "UpdateFood" };
+            int n = 0;
+            for (int i = 0; i < names.Length; i++)
+            {
+                MethodInfo m = hud.GetMethod(names[i], BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (m == null) continue;
+                PatchWithHarmony(m, pre, null);
+                n++;
+            }
+            return n;
+        }
+
+        private static bool HudVitalsPrefix()
+        {
+            return !DragonCombat.VanillaVitalsHidden;
+        }
+
         private static void HudStatusPrefix(List<StatusEffect> __0)
         {
             try { if (__0 != null) __0.RemoveAll(delegate(StatusEffect se) { return se is IhStatusDisplay; }); }
@@ -216,6 +240,7 @@ namespace DragonsAltarCombat
             int count = 0;
             count += PatchSetControls();
             count += PatchHudStatusList();
+            count += PatchHudVitals();
             count += PatchCheckRun();
             count += PatchInterruptMethod("Stagger");
             count += PatchInterruptMethod("AddStaggerDamage");
@@ -1478,6 +1503,9 @@ namespace DragonsAltarCombat
 
     public static class DragonCombat
     {
+        // v0.25.4: set by the Immortal HUD; blocks Hud.UpdateHealth / Stamina / Eitr / Food.
+        public static bool VanillaVitalsHidden;
+
         // v0.25.3 perf: type lookups by name are resolved once (they scanned every loaded assembly
         // several times per frame for the HUD / UI checks).
         private static readonly Dictionary<string, Type> TypeCache = new Dictionary<string, Type>();
@@ -4177,10 +4205,12 @@ namespace DragonsAltarCombat
     {
         public int Stacks;
 
+        // v0.25.4: timers always in seconds (never "2m" that jumps to 59s).
         public override string GetIconText()
         {
             if (Stacks > 0) return Stacks.ToString();
-            return base.GetIconText();
+            if (m_ttl <= 0f) return "";
+            return Mathf.CeilToInt(Mathf.Max(0f, m_ttl - m_time)).ToString() + "s";
         }
     }
 }
