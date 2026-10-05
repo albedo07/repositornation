@@ -1,0 +1,12 @@
+IMMORTAL HEROES v0.25.12 - ANGEL COMET AND BURNS
+
+PALADIN
+- Angel Comet impact: 95 Blunt -> 300 Blunt + 80 Fire + 140 Spirit (520). A 0-star Troll (600 HP) is left at
+  about 1/8 HP at Tier 0; higher Tiers can one-shot it.
+- Electric Smite landing (stays just above Angel Comet): 220 Blunt + 100 Fire + 240 Lightning + 120 Spirit (680).
+- Burns: Ascended Angel Comet ring 6 -> 20 Fire + 20 Spirit per second; Electric Smite 6 -> 18 Fire, 9 -> 24 Spirit.
+
+UNIVERSAL STACKING BURNS (every skill that applies Fire Burn or Spirit Burn, every class)
+- Each consecutive Burn tick on the same target hits harder than the previous one: +20% of the base tick per
+  tick, up to x4 ([Damage Over Time] StackingBurnPercentPerTick / StackingBurnMaxMultiplier).
+- Several burns ticking together share one step; the chain resets once the target stops burning (1.6s gap).

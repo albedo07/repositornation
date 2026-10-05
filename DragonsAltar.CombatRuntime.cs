@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.11";
+        public const string ModVersion = "0.25.12";
 
         internal static DragonCombatPlugin Instance;
 
@@ -33,6 +33,7 @@ namespace DragonsAltarCombat
         internal ConfigEntry<float> UnitsPerMeterOverride;
         internal ConfigEntry<float> ZapDamage;
         internal ConfigEntry<bool> BurnsUseCurrentHpPercent;
+        internal ConfigEntry<float> BurnRampPercent, BurnRampMax;
         internal ConfigEntry<float> FireBurnCurrentHpPercent;
         internal ConfigEntry<float> SpiritBurnMultiplier;
         internal ConfigEntry<float> MinimumBurnTick;
@@ -87,6 +88,8 @@ namespace DragonsAltarCombat
             CharacterHeightMeters = Config.Bind("Measurement", "CharacterHeightMeters", 0.5f, "v0.22.5 ruler (user rule): your character's height counts as this many meters. Every range, radius, width, length and travel speed in every config is in these meters.");
             UnitsPerMeterOverride = Config.Bind("Measurement", "UnitsPerMeterOverride", 1.5f, "Unity units per config meter. 1.5 = the confirmed in-game ruler (user, v0.23.3). 0 = automatic from character height / CharacterHeightMeters.");
             ZapDamage = Config.Bind("Debuffs", "ZapLightningDamage", 25f, "Testing/default lightning damage for Zap because the framework does not specify an amount.");
+            BurnRampPercent = Config.Bind("Damage Over Time", "StackingBurnPercentPerTick_v02512", 20f, "Universal: every consecutive Fire Burn / Spirit Burn tick on the same target deals this much MORE than the previous one (percent of the base tick). Resets when the burn stops.");
+            BurnRampMax = Config.Bind("Damage Over Time", "StackingBurnMaxMultiplier_v02512", 4f, "Cap for the stacking burn (x base tick damage).");
             BurnsUseCurrentHpPercent = Config.Bind("Damage Over Time", "LegacyBurnsUseCurrentHpPercent_v0212", false, "Legacy: burns now deal the skill's own burn damage. True = old 3% CURRENT HP burns.");
             FireBurnCurrentHpPercent = Config.Bind("Damage Over Time", "FireBurnCurrentHpPercentPerTick", 3f, "Fire Burn = 3 percent of CURRENT HP per tick.");
             SpiritBurnMultiplier = Config.Bind("Damage Over Time", "SpiritBurnMultiplierVsFire", 1.5f, "Spirit Burn remains 1.5x stronger than Fire.");
@@ -4172,15 +4175,44 @@ namespace DragonsAltarCombat
             return GetMovementModifier(item) <= -0.10f;
         }
 
+        // v0.25.12 universal stacking burns: consecutive Fire / Spirit Burn ticks on one target ramp up
+        // (+20% of the base tick per tick, x4 cap). Ticks less than 0.2s apart share a step (several burns
+        // ticking together); a gap of more than 1.6s resets the chain.
+        private class BurnChain { public float Last; public int Count; }
+        private static readonly Dictionary<string, BurnChain> BurnChains = new Dictionary<string, BurnChain>();
+
+        private static float BurnRamp(Character target, bool spirit)
+        {
+            if (target == null) return 1f;
+            string key = target.GetInstanceID().ToString() + (spirit ? "s" : "f");
+            BurnChain c;
+            float now = Time.time;
+            if (!BurnChains.TryGetValue(key, out c))
+            {
+                if (BurnChains.Count > 512) BurnChains.Clear();
+                c = new BurnChain();
+                c.Last = -100f;
+                BurnChains[key] = c;
+            }
+            float gap = now - c.Last;
+            if (gap > 1.6f) c.Count = 0;
+            else if (gap >= 0.2f) c.Count++;
+            c.Last = now;
+            DragonCombatPlugin plugin = DragonCombatPlugin.Instance;
+            float pct = plugin == null || plugin.BurnRampPercent == null ? 20f : Mathf.Max(0f, plugin.BurnRampPercent.Value);
+            float cap = plugin == null || plugin.BurnRampMax == null ? 4f : Mathf.Max(1f, plugin.BurnRampMax.Value);
+            return Mathf.Min(cap, 1f + pct / 100f * c.Count);
+        }
+
         public static void ApplySpiritBurnTick(Player attacker, Character target, float damage)
         {
-            float amount = ResolveBurnTickDamage(target, damage, true) * GetSorcererMagicDamageMultiplier(attacker);
+            float amount = ResolveBurnTickDamage(target, damage, true) * GetSorcererMagicDamageMultiplier(attacker) * BurnRamp(target, true);
             ApplyNativeDelayedDamage(attacker, target, "AddSpiritDamage", amount, true);
         }
 
         public static void ApplyFireBurnTick(Player attacker, Character target, float damage)
         {
-            float amount = ResolveBurnTickDamage(target, damage, false) * GetSorcererMagicDamageMultiplier(attacker);
+            float amount = ResolveBurnTickDamage(target, damage, false) * GetSorcererMagicDamageMultiplier(attacker) * BurnRamp(target, false);
             ApplyNativeDelayedDamage(attacker, target, "AddFireDamage", amount, false);
         }
 

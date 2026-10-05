@@ -1,5 +1,5 @@
-TEST v0.25.11
-1. Paladin with a Club + Shield: hit a Troll -> three numbers per hit (Blunt, Slash, Pierce).
-2. Hover a Club weapon in the inventory as Paladin: Slash / Pierce lines under Blunt (Heaven's Will).
-3. Cleric with a 1H Club / Shield: their Movement speed line shows 0% (... removed: Cleric's Blessing).
-4. Knockback / stagger feel the same as before (one push per swing).
+TEST v0.25.12
+1. Angel Comet on a 0-star Troll: it should drop to about 1/8 HP (Tier 0).
+2. Electric Smite: a bit stronger than Angel Comet.
+3. Any Fire / Spirit Burn (Electric Smite, Halfmoon, Flame Burst, Ascended Angel Comet ring...):
+   the burn numbers climb every tick.

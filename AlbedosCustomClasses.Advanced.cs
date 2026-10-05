@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.11";
+        public const string ModVersion = "0.25.12";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -856,9 +856,9 @@ namespace AlbedosCustomClassesAdvanced
             _divineCooldown = Config.Bind("Paladin Electric Smite", "Cooldown", 45f, "Seconds.");
             _divineStamina = Config.Bind("Paladin Electric Smite", "StaminaCost", 55f, "Stamina cost.");
             _divineRadius = Config.Bind("Paladin Electric Smite", "Radius", 5f, "Framework impact radius: literal 5m.");
-            _divineDamage = BindDamage("Paladin Electric Smite Damage v2", 90f, 0f, 0f, 40f, 0f, 100f, 0f, 70f);
-            _divineFireDot = Config.Bind("Paladin Electric Smite", "FireDotPerSecond", 6f, "Fire Burn damage per second.");
-            _divineSpiritDot = Config.Bind("Paladin Electric Smite", "SpiritDotPerSecond", 9f, "Spirit Burn damage per second.");
+            _divineDamage = BindDamage("Paladin Electric Smite Damage v02512", 220f, 0f, 0f, 100f, 0f, 240f, 0f, 120f);   // 680: just above Angel Comet
+            _divineFireDot = Config.Bind("Paladin Electric Smite", "FireDotPerSecond_v02512", 18f, "Fire Burn damage per second (first tick; universal stacking burns ramp it up).");
+            _divineSpiritDot = Config.Bind("Paladin Electric Smite", "SpiritDotPerSecond_v02512", 24f, "Spirit Burn damage per second (first tick; universal stacking burns ramp it up).");
             _divineSpiritDuration = Config.Bind("Paladin Electric Smite", "SpiritDotDuration", 6f, "Default DoT duration.");
             _divineWindup = Config.Bind("Paladin Electric Smite", "Windup", 2f, "Target flat-ground air sequence: about 2 seconds from takeoff to landing. Cliff falls extend until physical landing.");
             _divineTrailRange = Config.Bind("Paladin Electric Smite", "TrailRangeMeters_v0109", 10f, "Sixteen Ground Projectile trails spread in all directions for 10m.");
@@ -912,12 +912,12 @@ namespace AlbedosCustomClassesAdvanced
             _angelDiveSpeed = Config.Bind("Paladin Fallen Angel", "DiveSpeed", 28f, "Downward speed of the head-first dive.");
             _angelRadius = Config.Bind("Paladin Fallen Angel", "ImpactRadius", 10f, "Landing impact radius.");
             _angelBrokenBones = Config.Bind("Paladin Fallen Angel", "BrokenBonesDuration", 6f, "Broken Bones duration.");
-            _angelDamage = BindDamage("Paladin Fallen Angel Damage", 95f, 0f, 0f, 0f, 0f, 0f, 0f, 0f);
+            _angelDamage = BindDamage("Paladin Fallen Angel Damage v02512", 300f, 0f, 0f, 80f, 0f, 0f, 0f, 140f);   // 520: a Troll keeps ~1/8
             _angelRingRadius = Config.Bind("Paladin Fallen Angel Ascended", "BurnRingRadius", 10f, "Radius of the burning ring left on impact.");
             _angelRingDuration = Config.Bind("Paladin Fallen Angel Ascended", "BurnRingDuration", 6f, "How long the ring lasts.");
             _angelBurnDuration = Config.Bind("Paladin Fallen Angel Ascended", "BurnDuration", 3f, "Spirit Burn + Fire Burn duration, refreshed while inside.");
-            _angelFireDot = Config.Bind("Paladin Fallen Angel Ascended", "FireDotPerSecond", 6f, "Fire Burn damage per second.");
-            _angelSpiritDot = Config.Bind("Paladin Fallen Angel Ascended", "SpiritDotPerSecond", 6f, "Spirit Burn damage per second.");
+            _angelFireDot = Config.Bind("Paladin Fallen Angel Ascended", "FireDotPerSecond_v02512", 20f, "Fire Burn damage per second (first tick; universal stacking burns ramp it up).");
+            _angelSpiritDot = Config.Bind("Paladin Fallen Angel Ascended", "SpiritDotPerSecond_v02512", 20f, "Spirit Burn damage per second (first tick; universal stacking burns ramp it up).");
             _angelHyperAfter = Config.Bind("Paladin Fallen Angel Ascended", "HyperArmorAfterLanding", 3f, "Hyper Armor kept after landing.");
 
             _chargeAscDistance = Config.Bind("Paladin Shield Charge Ascended", "Distance", 20f, "Charge budget in meters.");
