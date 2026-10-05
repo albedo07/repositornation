@@ -1,0 +1,8 @@
+IMMORTAL HEROES v0.25.14 - SMOOTH MOTIONS (animation polish: no more shaking)
+
+- Engine fix: on frames where Valheim's animator does not rewrite a bone (physics-rate / culled updates), the skill
+  offset used to be stacked on top of itself and snap back next frame = jitter. Offsets are now always applied on
+  top of the last real animator pose (skill clips and the old pose driver).
+- All deliberate trembling removed: Halfmoon charge, Battlecry / Unchained Fury roar, Overcharge, Frost Nova,
+  Tailwind, legacy body-motion and pose-driver oscillations.
+- Ranger quick shots: the extra body recoil per shot is gone (the vanilla bow animation already recoils).

@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.13";
+        public const string ModVersion = "0.25.14";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1529,7 +1529,7 @@ namespace DragonsAltarCombat
 
             if (style == "Moonlight")
             {
-                float pulse = 0.78f + Mathf.Sin(phase * Mathf.PI * 6f) * 0.22f;
+                float pulse = 1f;
                 Offset(HumanBodyBones.Spine, new Vector3(0f, -22f, -4f), weight);
                 Offset(HumanBodyBones.RightUpperArm, new Vector3(-28f, -48f, -68f), weight * pulse);
                 Offset(HumanBodyBones.RightLowerArm, new Vector3(12f, -8f, -34f), weight * pulse);
@@ -1539,7 +1539,7 @@ namespace DragonsAltarCombat
 
             if (style == "Whirlwind")
             {
-                float sway = Mathf.Sin(phase * Mathf.PI * 8f);
+                float sway = 0f;
                 Offset(HumanBodyBones.Spine, new Vector3(0f, sway * 18f, 0f), weight);
                 Offset(HumanBodyBones.RightUpperArm, new Vector3(-12f, -28f, -78f), weight);
                 Offset(HumanBodyBones.LeftUpperArm, new Vector3(-12f, 28f, 78f), weight);
@@ -1548,7 +1548,7 @@ namespace DragonsAltarCombat
 
             if (style == "CircleSwing")
             {
-                float skip = Mathf.Sin(phase * Mathf.PI * 4f);
+                float skip = 0f;
                 float sweep = Mathf.SmoothStep(-1f, 1f, Mathf.Clamp01((phase - 0.58f) / 0.42f));
                 Offset(HumanBodyBones.Hips, new Vector3(skip * 7f, 0f, 0f), weight * 0.45f);
                 Offset(HumanBodyBones.Spine, new Vector3(0f, sweep * 72f, -8f), weight);
@@ -1571,13 +1571,22 @@ namespace DragonsAltarCombat
             }
         }
 
+        private readonly Dictionary<Transform, Quaternion> _poseBase = new Dictionary<Transform, Quaternion>();
+        private readonly Dictionary<Transform, Quaternion> _poseWritten = new Dictionary<Transform, Quaternion>();
+
         private void Offset(HumanBodyBones bone, Vector3 euler, float weight)
         {
             Transform target = _animator.GetBoneTransform(bone);
             if (target == null)
                 return;
 
-            target.localRotation = target.localRotation * Quaternion.Euler(euler * weight);
+            // v0.25.14: never stack the offset on a frame the animator did not rewrite the bone (jitter).
+            Quaternion cur = target.localRotation, written = Quaternion.identity, basePose = Quaternion.identity;
+            if (_poseWritten.TryGetValue(target, out written) && Quaternion.Angle(cur, written) < 0.01f && _poseBase.TryGetValue(target, out basePose)) cur = basePose;
+            _poseBase[target] = cur;
+            Quaternion w = cur * Quaternion.Euler(euler * weight);
+            target.localRotation = w;
+            _poseWritten[target] = w;
         }
     }
 
@@ -1640,6 +1649,9 @@ namespace DragonsAltarCombat
         private int _token;
         private Vector3[] _b = new Vector3[10];
         private Vector3 _r, _o;
+        private readonly Quaternion[] _animPose = new Quaternion[10];
+        private readonly Quaternion[] _written = new Quaternion[10];
+        private readonly bool[] _hasWritten = new bool[10];
 
         public void Begin(DragonClipKey[] keys, float windup, bool hold, Transform visual)
         {
@@ -1746,9 +1758,18 @@ namespace DragonsAltarCombat
             {
                 for (int i = 0; i < 10; i++)
                 {
-                    if (_b[i] == Vector3.zero) continue;
                     Transform bone = _animator.GetBoneTransform(Bones[i]);
-                    if (bone != null) bone.localRotation = bone.localRotation * Quaternion.Euler(_b[i]);
+                    if (bone == null) continue;
+                    // v0.25.14: the animator does not rewrite every bone every frame (physics-rate / culled
+                    // updates). Multiplying our offset onto a bone it did not rewrite stacked the offset and
+                    // made it jitter; reuse the last animator pose in that case.
+                    Quaternion cur = bone.localRotation;
+                    Quaternion basePose = _hasWritten[i] && Quaternion.Angle(cur, _written[i]) < 0.01f ? _animPose[i] : cur;
+                    _animPose[i] = basePose;
+                    Quaternion w = _b[i] == Vector3.zero ? basePose : basePose * Quaternion.Euler(_b[i]);
+                    bone.localRotation = w;
+                    _written[i] = w;
+                    _hasWritten[i] = true;
                 }
             }
             if (_visual != null && DragonCombat.OwnsMotionRoot(_token))
@@ -1935,7 +1956,7 @@ namespace DragonsAltarCombat
             DragonClipKey oc = K(0f).Sp(-16f, 0f, 0f).Ch(-14f, 0f, 0f).Hd(-24f, 0f, 0f).RA(-45f, 0f, -70f).RF(-10f, 0f, 0f).RH(-30f, 0f, 0f).LA(-45f, 0f, 70f).LF(-10f, 0f, 0f).LH(-30f, 0f, 0f).Off(0f, 0.04f, 0f);
             c["wiz_overcharge"] = new DragonClipKey[] {
                 K(-1f).Sp(16f, 0f, 0f).Ch(8f, 0f, 0f).RA(-30f, 20f, 25f).RF(-80f, 0f, 0f).LA(-30f, -20f, -25f).LF(-80f, 0f, 0f).Off(0f, -0.08f, 0f),
-                oc, oc.Copy(0.1f).Rot(0f, 0f, 2f), oc.Copy(0.2f).Rot(0f, 0f, -2f), oc.Copy(0.3f).Rot(0f, 0f, 1.5f), oc.Copy(0.45f), K(0.85f)
+                oc, oc.Copy(0.45f), K(0.85f)
             };
             // Ascended Bonecrusher ground shock: a second stamp into the crater.
             DragonClipKey af = K(0f).Sp(30f, 0f, 0f).Ch(14f, 0f, 0f).RA(-35f, 0f, -12f).LA(-30f, 0f, 30f).Rot(10f, 0f, 0f).Off(0f, -0.22f, 0.04f);
@@ -1999,7 +2020,7 @@ namespace DragonsAltarCombat
             c["rg_trick"] = new DragonClipKey[] { K(-1f), Draw(-0.5f).Rot(0f, -10f, 6f), Loose(0f).Rot(-6f, 30f, -10f), Loose(0.15f).Rot(-4f, 26f, -8f), K(0.45f) };
             // Tailwind: arms rise out to the sides, palms up, calling the wind.
             DragonClipKey wind = K(0f).Sp(-8f, 0f, 0f).Ch(-10f, 0f, 0f).Hd(-18f, 0f, 0f).RA(-120f, 0f, -60f).RF(-10f, 0f, 0f).RH(-30f, 0f, 0f).LA(-120f, 0f, 60f).LF(-10f, 0f, 0f).LH(-30f, 0f, 0f).Off(0f, 0.08f, 0f);
-            c["rg_tailwind"] = new DragonClipKey[] { K(-1f), wind, wind.Copy(0.3f).Rot(0f, 0f, 2f), K(0.7f) };
+            c["rg_tailwind"] = new DragonClipKey[] { K(-1f), wind, wind.Copy(0.3f), K(0.7f) };
             // Hawk's Vigil: right hand at the brow, scanning the horizon left to right.
             DragonClipKey vig = K(0f).Hd(-6f, -25f, 0f).RA(-100f, 0f, 20f).RF(-135f, 0f, 0f).RH(-20f, 0f, 0f).LA(-20f, 0f, 20f);
             c["rg_vigil"] = new DragonClipKey[] { K(-1f), vig, vig.Copy(0.3f).Hd(-6f, 25f, 0f), vig.Copy(0.5f).Hd(-6f, 0f, 0f), K(0.8f) };
@@ -2073,7 +2094,7 @@ namespace DragonsAltarCombat
             // Frost Nova: curl inward with the cold gathering, then burst wide open.
             DragonClipKey fnIn = K(-0.4f).Sp(24f, 0f, 0f).Ch(14f, 0f, 0f).Hd(14f, 0f, 0f).RA(-40f, 20f, 30f).RF(-60f, 0f, 0f).LA(-40f, -20f, -30f).LF(-60f, 0f, 0f).Rot(5f, 0f, 0f).Off(0f, -0.15f, 0f);
             DragonClipKey fnOut = K(0f).Sp(-14f, 0f, 0f).Ch(-12f, 0f, 0f).Hd(-16f, 0f, 0f).RA(-90f, 0f, -75f).RF(-5f, 0f, 0f).LA(-90f, 0f, 75f).LF(-5f, 0f, 0f).Rot(-5f, 0f, 0f).Off(0f, 0.05f, 0f);
-            c["wiz_nova"] = new DragonClipKey[] { K(-1f), fnIn, fnIn.Copy(-0.06f).Rot(5f, 0f, 1.5f), fnOut, fnOut.Copy(0.3f), K(0.7f) };
+            c["wiz_nova"] = new DragonClipKey[] { K(-1f), fnIn, fnIn.Copy(-0.06f), fnOut, fnOut.Copy(0.3f), K(0.7f) };
             // Clockwork: hand raised tracing a clock face, then snapped open.
             c["wiz_clockwork"] = new DragonClipKey[] {
                 K(-1f),
@@ -2212,7 +2233,7 @@ namespace DragonsAltarCombat
             DragonClipKey hmRelease = K(0f).Sp(8f, 40f, 0f).Ch(4f, 22f, 0f).Hd(0f, -14f, 0f).RA(-88f, 0f, 38f).RF(-4f, 0f, 0f).LA(5f, 0f, 30f).Rot(6f, 16f, 0f).Off(0f, -0.07f, 0.06f);
             c["sm_halfmoon"] = new DragonClipKey[] {
                 K(-1f), hmPull,
-                hmPull.Copy(-0.55f).Rot(6f, 0f, 1.5f), hmPull.Copy(-0.4f).Rot(6f, 0f, -1.5f), hmPull.Copy(-0.25f).Rot(6f, 0f, 1.5f), hmPull.Copy(-0.1f).Rot(6f, 0f, -1.5f),
+                hmPull.Copy(-0.1f),
                 hmRelease, hmRelease.Copy(0.45f)
             };
             DragonClipKey hm2 = K(0f).Sp(10f, -34f, 0f).Ch(6f, -18f, 0f).Hd(0f, 12f, 0f).RA(-80f, 0f, -60f).RF(-4f, 0f, 0f).LA(5f, 0f, 30f).Rot(6f, -14f, 0f).Off(0f, -0.07f, 0.06f);
@@ -2271,7 +2292,7 @@ namespace DragonsAltarCombat
             c["merc_roar"] = new DragonClipKey[] {
                 K(-1f),
                 K(-0.5f).Sp(14f, 0f, 0f).Ch(8f, 0f, 0f).Hd(10f, 0f, 0f).RA(-30f, 0f, -30f).RF(-60f, 0f, 0f).LA(-30f, 0f, 30f).LF(-60f, 0f, 0f).Off(0f, -0.1f, 0f),
-                roar, roar.Copy(0.1f).Rot(0f, 0f, 2f), roar.Copy(0.2f).Rot(0f, 0f, -2f), roar.Copy(0.3f).Rot(0f, 0f, 2f), roar.Copy(0.4f).Rot(0f, 0f, -2f), roar.Copy(0.55f),
+                roar, roar.Copy(0.55f),
                 K(0.95f)
             };
         }
@@ -2500,7 +2521,6 @@ namespace DragonsAltarCombat
                         float hold = pull * (1f - go);
                         euler.y = -50f * hold + 30f * go * (1f - back);
                         euler.x = 16f * hold + 12f * go * (1f - back);
-                        euler.z = 1.5f * Mathf.Sin(k * Mathf.PI * 40f) * hold;
                         offset.y = -0.32f * hold - 0.10f * go * (1f - back);
                     }
                     break;
@@ -2541,7 +2561,6 @@ namespace DragonsAltarCombat
                     break;
                 case "roar":        // war cry: arch back with a shake
                     euler.x = -20f * Bump(k);
-                    euler.z = 4f * Mathf.Sin(k * Mathf.PI * 14f) * Bump(k);
                     break;
                 case "plant":       // raise an object, then plant it in the ground
                     euler.x = -12f * windup * (1f - strike) + 26f * strike * (1f - recover);
@@ -2586,7 +2605,6 @@ namespace DragonsAltarCombat
                     {
                         float lean = Ease(0f, 0.1f, k) * (1f - Ease(0.9f, 1f, k));
                         euler.x = 28f * lean;
-                        euler.z = 5f * Mathf.Sin(k * Mathf.PI * 12f) * lean;
                         offset.y = -0.12f * lean;
                     }
                     break;
@@ -2614,7 +2632,6 @@ namespace DragonsAltarCombat
                 case "push":        // two-handed shove of force
                     euler.x = -14f * windup * (1f - strike) + 20f * strike * (1f - recover);
                     offset.z = 0.22f * strike * (1f - recover);
-                    euler.z = 6f * Mathf.Sin(k * Mathf.PI * 18f) * strike * (1f - recover);
                     break;
                 case "erupt":       // crouch and slam the ground, then rise as it erupts
                     offset.y = -0.32f * windup * (1f - strike) + 0.20f * strike * (1f - recover);
@@ -2623,7 +2640,6 @@ namespace DragonsAltarCombat
                 case "nova":        // curl in, then burst open
                     euler.x = 22f * windup * (1f - strike) - 18f * strike * (1f - recover);
                     offset.y = -0.28f * windup * (1f - strike) + 0.10f * strike * (1f - recover);
-                    euler.z = 3f * Mathf.Sin(k * Mathf.PI * 30f) * windup * (1f - strike);
                     break;
                 case "flick":       // quick half twist (flame / small burst)
                     euler.y = -35f * windup * (1f - strike) + 30f * strike * (1f - recover);

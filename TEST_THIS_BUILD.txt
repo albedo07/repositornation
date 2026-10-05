@@ -1,3 +1,3 @@
-TEST v0.25.13
-Ascended Judgement Hammer (catch it), Buckler Parry shockwave, Bless Thy Sinners save, Overcharge (spend 300 Eitr),
-Ascended Bonecrusher, Tumble Shot / Gale Volley, Phalanx volley: each plays its own motion and returns to rest.
+TEST v0.25.14
+Cast skills of every class in third person: arms and body move smoothly, no shaking / jitter during holds
+(Halfmoon charge, Meteor / Cataclysm charge, Shield Charge, Ballista charge) or quick-shot chains.

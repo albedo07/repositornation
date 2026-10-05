@@ -40,7 +40,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Dragon's Altar - Ranger";
-        public const string ModVersion = "0.25.13";
+        public const string ModVersion = "0.25.14";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -2481,8 +2481,8 @@ namespace DragonsAltarRanger
         private void Shoot(Player player, string message)
         {
             MarkSkillCast(player);
-            // small recoil only when no skill pose / clip is playing
-            if (!_poseActive && player.GetComponent<DragonSkillClipDriver>() == null) StartCoroutine(PoseMotion(player, 0.22f, delegate(float k) { return Quaternion.Euler(-9f * Bump(k), 0f, 0f); }, null));
+            // v0.25.14: no extra body recoil per shot (the vanilla bow animation already recoils; the added
+            // tilt read as shaking during quick-shot chains).
             DragonCombat.LockSkill(player, 0.35f);
             DragonCombat.PlayWeaponAnimation(player, false, "bow_fire");
             if (!string.IsNullOrEmpty(message)) ShowMessage(message);
