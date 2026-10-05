@@ -1,0 +1,33 @@
+IMMORTAL HEROES v0.25.6 - ORB AND MOTIONS
+
+HUD
+- Stat column 40% longer (HP, STA, EIT bars), frame grows with it.
+
+BARRIER
+- Any Barrier (Divine Intervention, Heaven's Crucible, Priest barriers) now wraps the player in a golden,
+  bright, see-through orb with a soft gold light. It follows you, pulses, and fades out when the Barrier
+  breaks or expires.
+- Heaven's Crucible now also shows the Barrier buff icon (HP as stacks).
+
+BUFF ICONS (each effect has its own shape AND colour)
+- Redrawn: Hyper Armor = orange anvil (was a shield like Defense), Barrier = gold orb, Defense = steel shield,
+  Attack Speed = crossed swords, Clockwork = bronze gear, Overcharge = magenta burst, Fury = flame,
+  Hawk's Vigil = hawk eye.
+- New per-source icons: Heaven's Light sun, Ray of Hope beams, Knight's Guidance winged boot,
+  Battlecry war horn, Holy Relic cross, Divine Intervention wings, Eye of the Storm storm cloud,
+  Buckler Parry buckler spark, Bless Thy Sinners heart, Tailwind wind, Phase Flow portal.
+
+ANIMATIONS
+- Motions now also play for charged / wind-up skills (charge starting or Stamina/Eitr spent counts as a cast).
+- New motions:
+  Cleric: Shield Charge (low shield rush + bash), Angel Comet (spring up, head-first dive),
+          Divine Intervention + Heaven's Crucible (kneel in prayer).
+  Warrior: Impact Punch (shoulder punch), Frenzied Charge (rush), Eclipse (rising spin + crushing cut),
+           Stomp (lift + drop), Bonecrusher (uppercut), Seismic Guillotine (leap slam).
+  Sorcerer: Flame Burst (flick), Stonefang (crouch + erupt), Meteor Fall (call down the sky),
+            Gravity Dominion (pull), Railcannon (recoil), Frost Nova (curl + burst),
+            Afterimage Arsenal (flourish), Rift Echo (tear), Gravity Blast (force shove).
+  Ranger: Ballista Shot recoil (stronger per stack), Splitting Arrow alternating sweep per volley.
+
+PERF
+- HUD Eitr read uses a cached method lookup.

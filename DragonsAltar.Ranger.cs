@@ -40,7 +40,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Dragon's Altar - Ranger";
-        public const string ModVersion = "0.25.5";
+        public const string ModVersion = "0.25.6";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -1928,6 +1928,8 @@ namespace DragonsAltarRanger
             Vector3 origin = ShotOrigin(player);
             Vector3 dir = AimDir(player, origin);
             Shoot(player, "BALLISTA SHOT" + (stacks > 0 ? " x" + stacks : ""));
+            float kick = 14f + stacks * 6f;   // v0.25.6: siege recoil, stronger per stack
+            StartCoroutine(PoseMotion(player, 0.45f + stacks * 0.05f, delegate(float k) { return Quaternion.Euler(-kick * Bump(k), 0f, 0f); }, delegate(float k) { return new Vector3(0f, 0f, -(0.2f + 0.08f * stacks) * Bump(k)); }));
             StartCoroutine(ArrowFlight(player, origin, dir, DragonCombat.M(90f), range, width * 0.5f, true, new Color(0.75f, 1f, 0.55f, 1f), 0f,
                 delegate(Character enemy)
                 {
@@ -2189,6 +2191,8 @@ namespace DragonsAltarRanger
                 flat.Normalize();
                 FaceTowards(player, player.transform.position + flat);
                 Shoot(player, null);
+                float sway = (v % 2 == 0) ? 1f : -1f;   // v0.25.6: alternating sweep per volley
+                StartCoroutine(PoseMotion(player, Mathf.Min(0.3f, interval), delegate(float k) { return Quaternion.Euler(-6f * Bump(k), sway * 22f * Bump(k), 0f); }, null));
                 if (_enableVfx.Value)
                     for (int i = 0; i < arrows; i++)
                     {

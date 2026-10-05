@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.5";
+        public const string ModVersion = "0.25.6";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1633,6 +1633,101 @@ namespace DragonsAltarCombat
                     euler.x = 30f * Bump(k);
                     offset.y = -0.12f * Bump(k);
                     break;
+                // v0.25.6 additional presets (one look per skill family)
+                case "stomp":       // lift the body, drop hard (no tilt)
+                    offset.y = 0.18f * windup * (1f - strike) - 0.28f * strike * (1f - recover);
+                    euler.x = 6f * strike * (1f - recover);
+                    break;
+                case "leap_slam":   // jump up leaning back, crash down into a deep crouch
+                    offset.y = 0.55f * windup * (1f - strike) - 0.35f * strike * (1f - recover);
+                    euler.x = -20f * windup * (1f - strike) + 40f * strike * (1f - recover);
+                    break;
+                case "uppercut":    // dip low, then rise and arch back
+                    offset.y = -0.25f * windup * (1f - strike) + 0.12f * strike * (1f - recover);
+                    euler.x = 14f * windup * (1f - strike) - 26f * strike * (1f - recover);
+                    euler.y = 20f * strike * (1f - recover);
+                    break;
+                case "punch":       // twist back, drive the shoulder forward
+                    euler.y = -30f * windup * (1f - strike) + 25f * strike * (1f - recover);
+                    euler.x = 18f * strike * (1f - recover);
+                    offset.z = 0.30f * strike * (1f - recover);
+                    break;
+                case "bash":        // shield charge: low forward lean held, shoulder pop at the end
+                    {
+                        float lean = Ease(0f, 0.15f, k), pop = Ease(0.80f, 0.90f, k), back = Ease(0.90f, 1f, k);
+                        euler.x = 24f * lean * (1f - back) + 10f * pop * (1f - back);
+                        offset.y = -0.18f * lean * (1f - back);
+                        offset.z = 0.25f * pop * (1f - back);
+                    }
+                    break;
+                case "rush":        // frenzied charge: forward lean with a running wobble
+                    {
+                        float lean = Ease(0f, 0.1f, k) * (1f - Ease(0.9f, 1f, k));
+                        euler.x = 28f * lean;
+                        euler.z = 5f * Mathf.Sin(k * Mathf.PI * 12f) * lean;
+                        offset.y = -0.12f * lean;
+                    }
+                    break;
+                case "dive":        // Angel Comet: spring up arched, then dive head-first into the ground
+                    {
+                        float up = Ease(0f, 0.45f, k), down = Ease(0.45f, 0.75f, k), back = Ease(0.75f, 1f, k);
+                        euler.x = -25f * up * (1f - down) + 55f * down * (1f - back);
+                        offset.y = 0.45f * up * (1f - down) - 0.30f * down * (1f - back);
+                    }
+                    break;
+                case "kneel":       // bow down in prayer, rise slowly
+                    euler.x = 24f * Bump(Ease(0f, 0.8f, k));
+                    offset.y = -0.38f * Bump(Ease(0f, 0.8f, k));
+                    break;
+                case "pull":        // reach out, then drag everything in (lean back, crouch)
+                    euler.x = 16f * windup * (1f - strike) - 22f * strike * (1f - recover);
+                    offset.y = -0.18f * strike * (1f - recover);
+                    offset.z = 0.15f * windup * (1f - strike) - 0.15f * strike * (1f - recover);
+                    break;
+                case "recoil":      // brace and aim, big kick-back on release
+                    euler.x = 10f * windup * (1f - strike) - 20f * strike * (1f - recover);
+                    offset.z = -0.35f * strike * (1f - recover);
+                    offset.y = -0.12f * windup * (1f - recover);
+                    break;
+                case "push":        // two-handed shove of force
+                    euler.x = -14f * windup * (1f - strike) + 20f * strike * (1f - recover);
+                    offset.z = 0.22f * strike * (1f - recover);
+                    euler.z = 6f * Mathf.Sin(k * Mathf.PI * 18f) * strike * (1f - recover);
+                    break;
+                case "erupt":       // crouch and slam the ground, then rise as it erupts
+                    offset.y = -0.32f * windup * (1f - strike) + 0.20f * strike * (1f - recover);
+                    euler.x = 26f * windup * (1f - strike) - 10f * strike * (1f - recover);
+                    break;
+                case "nova":        // curl in, then burst open
+                    euler.x = 22f * windup * (1f - strike) - 18f * strike * (1f - recover);
+                    offset.y = -0.28f * windup * (1f - strike) + 0.10f * strike * (1f - recover);
+                    euler.z = 3f * Mathf.Sin(k * Mathf.PI * 30f) * windup * (1f - strike);
+                    break;
+                case "flick":       // quick half twist (flame / small burst)
+                    euler.y = -35f * windup * (1f - strike) + 30f * strike * (1f - recover);
+                    euler.x = 10f * strike * (1f - recover);
+                    break;
+                case "call_down":   // raise to the sky, then drag the sky down
+                    euler.x = -24f * windup * (1f - strike) + 30f * strike * (1f - recover);
+                    offset.y = 0.12f * windup * (1f - strike) - 0.20f * strike * (1f - recover);
+                    break;
+                case "rend":        // diagonal tear through space
+                    euler.z = -18f * windup * (1f - strike) + 22f * strike * (1f - recover);
+                    euler.y = -20f * windup * (1f - strike) + 30f * strike * (1f - recover);
+                    euler.x = 10f * strike * (1f - recover);
+                    break;
+                case "flourish":    // half spin and back
+                    euler.y = 180f * Bump(k);
+                    euler.x = 8f * Bump(k);
+                    break;
+                case "eclipse":     // rise with a full spin, then a crushing downward cut
+                    {
+                        float spin = Ease(0f, 0.55f, k), cut = Ease(0.55f, 0.72f, k), back = Ease(0.72f, 1f, k);
+                        euler.y = 360f * Mathf.SmoothStep(0f, 1f, spin);
+                        offset.y = 0.35f * spin * (1f - cut) - 0.30f * cut * (1f - back);
+                        euler.x = 36f * cut * (1f - back);
+                    }
+                    break;
             }
         }
 
@@ -1666,20 +1761,20 @@ namespace DragonsAltarCombat
                 // Warrior
                 case "heavy_slash": preset = "slam"; duration = 0.55f; break;
                 case "impact_wave": preset = "iai"; duration = 0.5f; break;
-                case "impact_punch": preset = "lunge"; duration = 0.4f; break;
+                case "impact_punch": preset = "punch"; duration = 0.4f; break;
                 // Sword Master
                 case "moonlight_splitter": preset = "iai"; duration = 0.45f; break;
                 case "crescent_cleave": preset = "sword_pull"; duration = 0.55f; break;
                 case "blade_storm": preset = "cross"; duration = 0.4f; break;
-                case "frenzied_charge": preset = "lunge"; duration = 0.5f; break;
-                case "eclipse": preset = "iai"; duration = 0.6f; break;
+                case "frenzied_charge": preset = "rush"; duration = 1.0f; break;
+                case "eclipse": preset = "eclipse"; duration = 0.9f; break;
                 case "halfmoon_slash": preset = "charge_release"; duration = 1.1f; break;
                 case "knights_guidance": preset = "raise"; duration = 0.6f; break;
                 // Mercenary
-                case "stomp": preset = "slam"; duration = 0.5f; break;
+                case "stomp": preset = "stomp"; duration = 0.45f; break;
                 case "circle_swing": preset = "spin"; duration = 0.5f; break;
-                case "bonecrusher": preset = "slam"; duration = 0.6f; break;
-                case "seismic_guillotine": preset = "slam"; duration = 0.7f; break;
+                case "bonecrusher": preset = "uppercut"; duration = 0.6f; break;
+                case "seismic_guillotine": preset = "leap_slam"; duration = 0.8f; break;
                 case "punishing_bomb": preset = "throw"; duration = 0.6f; break;
                 case "battlecry": preset = "roar"; duration = 0.8f; break;
                 case "whirlwind": preset = "double_spin"; duration = 0.8f; break;
@@ -1689,32 +1784,34 @@ namespace DragonsAltarCombat
                 case "holy_wave": preset = "raise"; duration = 0.5f; break;
                 case "goddess_relic": preset = "plant"; duration = 0.6f; break;
                 case "judgement_hammer": preset = "throw"; duration = 0.55f; break;
+                case "shield_charge": preset = "bash"; duration = 1.2f; break;
+                case "fallen_angel": preset = "dive"; duration = 2.4f; break;
                 case "ray_of_hope": preset = "raise"; duration = 0.5f; break;
                 case "electric_smite": preset = "grand"; duration = 0.9f; break;
                 case "heavens_light": preset = "raise"; duration = 0.6f; break;
                 case "lightning_relic": preset = "plant"; duration = 0.6f; break;
                 case "holy_relic": preset = "plant"; duration = 0.6f; break;
-                case "divine_intervention": preset = "raise"; duration = 0.6f; break;
+                case "divine_intervention": preset = "kneel"; duration = 0.8f; break;
                 case "grand_cross": preset = "cross"; duration = 0.55f; break;
                 case "heavens_judgement": preset = "raise"; duration = 0.8f; break;
                 case "lightning_tempest": preset = "grand"; duration = 1f; break;
-                case "grand_sigil": preset = "raise"; duration = 0.6f; break;
+                case "grand_sigil": preset = "kneel"; duration = 0.7f; break;
                 // Sorcerer / Archmage / Horizon Walker
-                case "flame_burst": preset = "cast"; duration = 0.4f; break;
+                case "flame_burst": preset = "flick"; duration = 0.4f; break;
                 case "glacial_descent": preset = "slam"; duration = 0.55f; break;
-                case "stonefang_eruption": preset = "slam"; duration = 0.55f; break;
-                case "meteor_fall": preset = "raise"; duration = 0.7f; break;
-                case "gravity_dominion": preset = "raise"; duration = 0.6f; break;
-                case "astral_railcannon": preset = "cast"; duration = 0.6f; break;
+                case "stonefang_eruption": preset = "erupt"; duration = 0.6f; break;
+                case "meteor_fall": preset = "call_down"; duration = 0.7f; break;
+                case "gravity_dominion": preset = "pull"; duration = 0.7f; break;
+                case "astral_railcannon": preset = "recoil"; duration = 0.6f; break;
                 case "astral_greatblade": preset = "slam"; duration = 0.7f; break;
-                case "frost_nova": preset = "slam"; duration = 0.5f; break;
+                case "frost_nova": preset = "nova"; duration = 0.55f; break;
                 case "elemental_cataclysm": preset = "grand"; duration = 1f; break;
                 case "clockwork": preset = "raise"; duration = 0.6f; break;
                 case "arcane_phalanx": preset = "cast"; duration = 0.45f; break;
-                case "afterimage_arsenal": preset = "cross"; duration = 0.5f; break;
+                case "afterimage_arsenal": preset = "flourish"; duration = 0.5f; break;
                 case "void_step": preset = "blink"; duration = 0.3f; break;
-                case "rift_echo": preset = "cast"; duration = 0.4f; break;
-                case "gravity_blast": preset = "cast"; duration = 0.5f; break;
+                case "rift_echo": preset = "rend"; duration = 0.45f; break;
+                case "gravity_blast": preset = "push"; duration = 0.5f; break;
                 case "arcane_rupture": preset = "grand"; duration = 0.8f; break;
                 case "rift_walker": preset = "raise"; duration = 0.5f; break;
             }
@@ -1871,6 +1968,28 @@ namespace DragonsAltarCombat
             else if (hyper) icon = "hyper_armor";
             else icon = "generic";
             if (source.EndsWith("Overcharge")) icon = "overcharge";
+            // v0.25.6: every named buff source has its own icon (no look-alikes for different effects).
+            string own = SourceIcon(source);
+            if (own != null) icon = own;
+        }
+
+        private static string SourceIcon(string source)
+        {
+            switch (source)
+            {
+                case "Paladin.HeavensLight": return "sun";
+                case "Paladin.RayOfHope": return "ray";
+                case "SwordMaster.KnightsGuidance": return "wing_boot";
+                case "Mercenary.Battlecry": return "horn";
+                case "Priest.HolyRelic": return "relic";
+                case "Priest.DivineIntervention": return "wings";
+                case "Priest.EyeOfTheStorm": return "storm";
+                case "Priest.BucklerParry": return "parry";
+                case "Priest.GrandSigilRecovery": return "heart";
+                case "Acrobat.Tailwind": return "wind";
+                case "Spellcaster.PhaseFlow": return "portal";
+            }
+            return null;
         }
 
         // v0.22.5 universal ruler: config meters -> world units. 1 m = (character height / 0.5),

@@ -1,7 +1,9 @@
-TEST THIS BUILD - v0.25.5 HUD Rework
-====================================
-1. No vanilla health bar / red icon / stamina / eitr bar anywhere.
-2. The vanilla food icons sit inside our gold frame, left of HP / STA / EIT / Lv.
-3. Open the inventory: drag the HUD; close/reopen the game: position kept.
-4. Open the Altar / Skill Tree / Esc / big map: HUD + food hidden, nothing overlaps.
-5. Buff timers fully visible.
+TEST v0.25.6
+1. HUD: STA and EIT bars are longer; frame still encloses food + stats.
+2. Priest Divine Intervention / Heaven's Crucible: golden see-through orb around you (and allies), follows you,
+   fades when the Barrier breaks or runs out.
+3. Buff row: cast Heaven's Light, Ray of Hope, Knight's Guidance, Battlecry, Tailwind, Phase Flow, Hyper Armor:
+   every icon looks different.
+4. Motions: Shield Charge, Angel Comet, Divine Intervention, Impact Punch, Frenzied Charge, Eclipse, Stomp,
+   Bonecrusher, Seismic Guillotine, Meteor Fall (on press), Railcannon, Frost Nova, Gravity Blast, Rift Echo,
+   Ballista (release), Splitting Arrow.

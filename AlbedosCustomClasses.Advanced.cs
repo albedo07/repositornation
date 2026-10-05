@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.5";
+        public const string ModVersion = "0.25.6";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -6157,6 +6157,7 @@ namespace AlbedosCustomClassesAdvanced
                 state.Armor = Mathf.Max(0f, armor);
                 state.EndTime = Time.time + Mathf.Max(1f, _grandBarrierDuration.Value);
                 _barriers[ally.GetInstanceID()] = state;
+                DragonCombat.ShowStatus(ally, "barrier", "barrier", "Barrier", state.EndTime - Time.time, Mathf.CeilToInt(state.HP));
 
                 if (_enableVfx.Value)
                     StartCoroutine(BarrierVisual(ally));
@@ -9173,21 +9174,84 @@ namespace AlbedosCustomClassesAdvanced
             Destroy(obj, Mathf.Max(0.05f, lifetime));
         }
 
+        // v0.25.6: golden, bright, see-through orb around the player for as long as the Barrier lives.
+        private readonly HashSet<int> _barrierOrbs = new HashSet<int>();
+
         private IEnumerator BarrierVisual(Player player)
         {
             if (player == null)
                 yield break;
+            int id = player.GetInstanceID();
+            if (_barrierOrbs.Contains(id))
+                yield break;
+            _barrierOrbs.Add(id);
 
-            Vector3 center = player.transform.position + Vector3.up * 1f;
+            Shader shader = Shader.Find("Sprites/Default");
+            GameObject orb = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            orb.name = "ImmortalHeroesBarrierOrb";
+            Collider col = orb.GetComponent<Collider>();
+            if (col != null) Destroy(col);
+            Renderer r = orb.GetComponent<Renderer>();
+            Material mat = null;
+            if (r != null && shader != null)
+            {
+                mat = new Material(shader);
+                r.material = mat;
+                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                r.receiveShadows = false;
+            }
+            GameObject core = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            core.name = "ImmortalHeroesBarrierOrbCore";
+            Collider coreCol = core.GetComponent<Collider>();
+            if (coreCol != null) Destroy(coreCol);
+            core.transform.SetParent(orb.transform, false);
+            core.transform.localScale = Vector3.one * 0.94f;
+            Renderer coreR = core.GetComponent<Renderer>();
+            Material coreMat = null;
+            if (coreR != null && shader != null)
+            {
+                coreMat = new Material(shader);
+                coreR.material = coreMat;
+                coreR.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                coreR.receiveShadows = false;
+            }
+            Light glow = orb.AddComponent<Light>();
+            glow.type = LightType.Point;
+            glow.color = new Color(1f, 0.82f, 0.30f);
+            glow.range = 4f;
+            glow.intensity = 0.9f;
 
-            yield return AnimateRing(
-                center,
-                0.5f,
-                2.4f,
-                0.55f,
-                new Color(0.55f, 0.91f, 1f, 0.92f),
-                0.10f
-            );
+            float size = 2.7f;
+            float born = Time.time;
+            while (player != null && !player.IsDead())
+            {
+                BarrierState state;
+                if (!_barriers.TryGetValue(id, out state) || state == null || state.HP <= 0f || Time.time >= state.EndTime)
+                    break;
+                float grow = Mathf.Clamp01((Time.time - born) / 0.25f);
+                float pulse = 0.5f + 0.5f * Mathf.Sin(Time.time * 3.2f);
+                orb.transform.position = player.transform.position + Vector3.up * 0.95f;
+                orb.transform.localScale = Vector3.one * size * (0.6f + 0.4f * grow) * (1f + 0.02f * pulse);
+                if (mat != null) mat.color = new Color(1f, 0.86f, 0.30f, (0.16f + 0.06f * pulse) * grow);
+                if (coreMat != null) coreMat.color = new Color(1f, 0.95f, 0.55f, (0.08f + 0.04f * pulse) * grow);
+                yield return null;
+            }
+
+            // Fade out quickly on break / expiry.
+            float t = 0f;
+            while (t < 0.3f && orb != null)
+            {
+                t += Time.deltaTime;
+                float k = 1f - t / 0.3f;
+                if (player != null) orb.transform.position = player.transform.position + Vector3.up * 0.95f;
+                orb.transform.localScale = Vector3.one * size * (1f + 0.25f * (1f - k));
+                if (mat != null) mat.color = new Color(1f, 0.86f, 0.30f, 0.2f * k);
+                if (coreMat != null) coreMat.color = new Color(1f, 0.95f, 0.55f, 0.1f * k);
+                if (glow != null) glow.intensity = 0.9f * k;
+                yield return null;
+            }
+            if (orb != null) Destroy(orb);
+            _barrierOrbs.Remove(id);
         }
 
         private IEnumerator BarrierHitVisual(Player player)
@@ -11416,6 +11480,8 @@ namespace AlbedosCustomClassesAdvanced
             int readyBefore = -1, maxStacks, readyAfter = -1;
             float nextStack;
             if (!DragonCombat.TryGetSkillStacks(id, out readyBefore, out maxStacks, out nextStack)) readyBefore = -1;
+            bool chargingBefore = readyBefore >= 0 && nextStack < 0f;
+            float staBefore = player.GetStamina(), eitBefore = IhCallFloat(player, "GetEitr");
             IhCastSkillNow(player, id);
             // v0.25.0: the skill's body motion plays only when it really started (cooldown started or
             // a charge was spent). Ranger animates its own skills.
@@ -11423,6 +11489,10 @@ namespace AlbedosCustomClassesAdvanced
             {
                 if (readyBefore >= 0 && !DragonCombat.TryGetSkillStacks(id, out readyAfter, out maxStacks, out nextStack)) readyAfter = -1;
                 bool started = (cdBefore <= 0f && IhCooldown(player, id) > 0f) || (readyBefore >= 0 && readyAfter >= 0 && readyAfter < readyBefore);
+                // v0.25.6: charged / wind-up skills start without a cooldown yet: a charge that began
+                // (stack query next < 0) or a resource spent on this press also counts.
+                if (!started && readyAfter >= 0 && !chargingBefore && nextStack < 0f) started = true;
+                if (!started && cdBefore <= 0f && (player.GetStamina() < staBefore - 0.5f || IhCallFloat(player, "GetEitr") < eitBefore - 0.5f)) started = true;
                 string motion; float motionTime;
                 if (started && DragonCombat.SkillMotion(id, out motion, out motionTime)) DragonCombat.PlayBodyMotion(player, motion, motionTime);
             }
@@ -12349,11 +12419,20 @@ namespace AlbedosCustomClassesAdvanced
             IhHudShadowLabel(new Rect(bar.xMax, row.y, valueW, row.height), Mathf.CeilToInt(Mathf.Max(0f, cur)).ToString() + " / " + Mathf.CeilToInt(Mathf.Max(0f, max)).ToString(), _ihHudValue);
         }
 
+        private static readonly Dictionary<string, MethodInfo> _ihCallFloatCache = new Dictionary<string, MethodInfo>();
+
         private static float IhCallFloat(object o, string method)
         {
             try
             {
-                MethodInfo m = o.GetType().GetMethod(method, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+                if (o == null) return 0f;
+                string key = o.GetType().FullName + "." + method;
+                MethodInfo m;
+                if (!_ihCallFloatCache.TryGetValue(key, out m))
+                {
+                    m = o.GetType().GetMethod(method, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+                    _ihCallFloatCache[key] = m;
+                }
                 return m == null ? 0f : Convert.ToSingle(m.Invoke(o, null));
             }
             catch { return 0f; }
@@ -12420,7 +12499,7 @@ namespace AlbedosCustomClassesAdvanced
             IhEnsureHudStyles(s);
 
             float pad = 18f * s, rowH = 17f * s, gap = 5f * s;
-            float statsW = 300f * s, statsH = rowH * 3f + gap * 2f;
+            float statsW = 420f * s, statsH = rowH * 3f + gap * 2f;
             float foodW = _ihFoodFound ? Mathf.Max(30f * s, _ihFoodBounds.width) : 40f * s;
             float foodH = _ihFoodFound ? _ihFoodBounds.height : 0f;
             float innerH = Mathf.Max(statsH, foodH);
