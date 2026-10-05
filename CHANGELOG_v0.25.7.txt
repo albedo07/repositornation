@@ -1,0 +1,26 @@
+IMMORTAL HEROES v0.25.7 - CLERIC MOTIONS (animation pass 1 of 4: Cleric > Warrior > Sorcerer > Ranger)
+
+NEW ANIMATION ENGINE
+- Skill clips: keyframed poses for spine, chest, head, both arms and hands plus a whole-body lean/offset,
+  smoothly blended. Timed to each skill's REAL wind-up: the strike pose lands exactly on the impact,
+  then a follow-through and recovery. Charges / jumps hold their pose until the bash or the landing.
+
+CLERIC / PALADIN / PRIEST (every skill, incl. Ascended)
+- Lightning Zap: mace drawn to the shoulder, thrust forward as the cone bursts.
+- Righteous Strike: mace raised to the sky (looking up), trembling hold, snapped down at the target.
+- Ascended Righteous Strike: two-handed overhead raise, crouching slam.
+- Holy Wave: chant with the hand raised, arms sweep open as the ring leaves.
+- Ascended Holy Wave (ally): both hands reach out in a blessing push.
+- Goddess Relic: both hands call the cross from the sky, then pull it down into a crouch.
+- Judgement Hammer: hammer cocked behind the head while the shield arm aims, full-body hurl.
+- Shield Charge: low rush behind the raised shield, mace drawn back; Bash shoves the shield out.
+  No Bash -> blends back to rest.
+- Angel Comet: arms swept back like wings on the rise, head-first dive with arms forward, crash landing.
+- Electric Smite: two-handed mace overhead through the whole jump, crushing landing.
+- Ray of Hope: both palms to the sky.  Heaven's Light: mace thrust straight up like a torch.
+- Lightning / Holy Relic: relic lifted high, driven into the ground (Holy Relic opens the free hand in blessing).
+- Divine Intervention: hands to the chest in prayer, head bowed, then arms flung wide.
+- Grand Cross: two real slashes forming the X (high right -> low left, high left -> low right).
+- Heaven's Judgement: mace to the sky, free hand points at the circle, swings down as the barrage starts.
+- Lightning Tempest: crouch gathering power, explode upward with arms wide.
+- Heaven's Crucible: bowed prayer, rise lifting the shield high as the barrier forms.

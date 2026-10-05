@@ -1,7 +1,7 @@
 ﻿$ErrorActionPreference = "Stop"
 
 Write-Host ""
-Write-Host "IMMORTAL HEROES v0.25.6 - ORB AND MOTIONS" -ForegroundColor Cyan
+Write-Host "IMMORTAL HEROES v0.25.7 - CLERIC MOTIONS" -ForegroundColor Cyan
 Write-Host "Protected build: all 8 DLLs compile in staging before the live profile is touched." -ForegroundColor Gray
 Write-Host ""
 

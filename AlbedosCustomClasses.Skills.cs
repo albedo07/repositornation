@@ -220,7 +220,7 @@ namespace AlbedosCustomClassesSkills
         public static SkillsPlugin Instance;
         public const string ModGuid = "albedo.customclasses.skills";
         public const string ModName = "Dragon's Altar - Starter Skills";
-        public const string ModVersion = "0.25.6";
+        public const string ModVersion = "0.25.7";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";
@@ -780,7 +780,7 @@ namespace AlbedosCustomClassesSkills
                 return;
 
             DragonCombat.LockSkill(player, 0.4f);
-            DragonCombat.PlaySkillPose(player, "Raise", 0.40f);
+            DragonCombat.PlayClip(player, "cleric_zap", 0.12f);
             ShowMessage("Lightning Zap");
 
             Vector3 origin = player.transform.position + Vector3.up * 1.1f;
@@ -814,7 +814,7 @@ namespace AlbedosCustomClassesSkills
 
             float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _righteousWindup.Value));
             DragonCombat.LockSkill(player, windup);
-            DragonCombat.PlaySkillPose(player, "SkyCast", windup + 0.10f);
+            DragonCombat.PlayClip(player, "cleric_rs", windup);
             StartCoroutine(RighteousStrikeRoutine(player, target, windup));
         }
 
@@ -844,7 +844,7 @@ namespace AlbedosCustomClassesSkills
 
             // v0.17.0: instant cast, 0.5s movement lock, chant animation.
             DragonCombat.LockSkill(player, 0.5f);
-            DragonCombat.PlaySkillPose(player, "Chant", 0.50f);
+            DragonCombat.PlayClip(player, "cleric_wave", 0.15f);
             ShowMessage("Holy Wave");
             StartCoroutine(HolyWaveRoutine(player));
         }

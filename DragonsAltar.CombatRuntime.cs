@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.6";
+        public const string ModVersion = "0.25.7";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1502,6 +1502,176 @@ namespace DragonsAltarCombat
         }
     }
 
+    // ==================================================================================
+    // v0.25.7 SKILL CLIPS: keyframed bone animation (spine, chest, head, both arms, hands) plus a
+    // body-root lean/offset, timed to each skill: keys with T < 0 are fractions of the wind-up
+    // (-1 = cast start, 0 = impact), keys with T > 0 are seconds after impact. A "hold" clip stays on
+    // its T = 0 pose until DragonCombat.ClipImpact (landing, charge release, bash...).
+    // Bone euler vocabulary (as tuned for the Valheim rig in DragonSkillPoseDriver):
+    //   upper arm x- = swing forward/up (-90 forward, -160 overhead), x+ = back; right z- / left z+ = out to the side.
+    //   forearm x- = bend the elbow. spine/chest x+ = bend forward, y- = twist the right shoulder back.
+    //   head x- = look up. Root R.x+ = whole body leans forward; O = body offset (y down < 0).
+    // ==================================================================================
+    public class DragonClipKey
+    {
+        public float T;
+        public Vector3[] B = new Vector3[10];
+        public Vector3 R, O;
+        public DragonClipKey(float t) { T = t; }
+        public DragonClipKey Hp(float x, float y, float z) { B[0] = new Vector3(x, y, z); return this; }
+        public DragonClipKey Sp(float x, float y, float z) { B[1] = new Vector3(x, y, z); return this; }
+        public DragonClipKey Ch(float x, float y, float z) { B[2] = new Vector3(x, y, z); return this; }
+        public DragonClipKey Hd(float x, float y, float z) { B[3] = new Vector3(x, y, z); return this; }
+        public DragonClipKey RA(float x, float y, float z) { B[4] = new Vector3(x, y, z); return this; }
+        public DragonClipKey RF(float x, float y, float z) { B[5] = new Vector3(x, y, z); return this; }
+        public DragonClipKey RH(float x, float y, float z) { B[6] = new Vector3(x, y, z); return this; }
+        public DragonClipKey LA(float x, float y, float z) { B[7] = new Vector3(x, y, z); return this; }
+        public DragonClipKey LF(float x, float y, float z) { B[8] = new Vector3(x, y, z); return this; }
+        public DragonClipKey LH(float x, float y, float z) { B[9] = new Vector3(x, y, z); return this; }
+        public DragonClipKey Rot(float x, float y, float z) { R = new Vector3(x, y, z); return this; }
+        public DragonClipKey Off(float x, float y, float z) { O = new Vector3(x, y, z); return this; }
+        // Same pose as another key at a new time (holds / shakes).
+        public DragonClipKey Copy(float t)
+        {
+            DragonClipKey k = new DragonClipKey(t);
+            for (int i = 0; i < B.Length; i++) k.B[i] = B[i];
+            k.R = R; k.O = O;
+            return k;
+        }
+    }
+
+    public class DragonSkillClipDriver : MonoBehaviour
+    {
+        private static readonly HumanBodyBones[] Bones =
+        {
+            HumanBodyBones.Hips, HumanBodyBones.Spine, HumanBodyBones.Chest, HumanBodyBones.Head,
+            HumanBodyBones.RightUpperArm, HumanBodyBones.RightLowerArm, HumanBodyBones.RightHand,
+            HumanBodyBones.LeftUpperArm, HumanBodyBones.LeftLowerArm, HumanBodyBones.LeftHand
+        };
+        private static readonly Vector3 Pivot = new Vector3(0f, 0.9f, 0f);
+
+        private Animator _animator;
+        private Character _owner;
+        private Transform _visual;
+        private DragonClipKey[] _keys;
+        private float _start, _windup, _impactAt = -1f, _holdLimit;
+        private bool _hold;
+        private int _token;
+        private Vector3[] _b = new Vector3[10];
+        private Vector3 _r, _o;
+
+        public void Begin(DragonClipKey[] keys, float windup, bool hold, Transform visual)
+        {
+            if (_keys != null) ReleaseRoot();
+            _keys = keys;
+            _windup = Mathf.Max(0.1f, windup);
+            _hold = hold;
+            _start = Time.time;
+            _impactAt = -1f;
+            _holdLimit = Time.time + 12f;
+            _visual = visual;
+            if (_animator == null) _animator = GetComponentInChildren<Animator>();
+            _token = DragonCombat.ClaimMotionRoot(_visual);
+        }
+
+        public bool IsHolding { get { return _keys != null && _hold && _impactAt < 0f; } }
+
+        public void Impact()
+        {
+            if (_keys == null) return;
+            _hold = false;
+            if (_impactAt < 0f) _impactAt = Time.time;
+        }
+
+        // Blend from the current pose back to rest (charge ended without its finisher).
+        public void Stop(float blend)
+        {
+            if (_keys == null) return;
+            DragonClipKey from = new DragonClipKey(0f);
+            for (int i = 0; i < 10; i++) from.B[i] = _b[i];
+            from.R = _r; from.O = _o;
+            _keys = new DragonClipKey[] { from, new DragonClipKey(Mathf.Max(0.05f, blend)) };
+            _hold = false;
+            _start = Time.time - _windup;
+            _impactAt = Time.time;
+        }
+
+        private float Phase()
+        {
+            if (_impactAt >= 0f) return Time.time - _impactAt;
+            float p = -1f + (Time.time - _start) / _windup;
+            if (p < 0f) return p;
+            if (_hold && Time.time < _holdLimit) return 0f;
+            _impactAt = _start + _windup;
+            return Time.time - _impactAt;
+        }
+
+        private void Sample(float t)
+        {
+            DragonClipKey[] k = _keys;
+            int n = k.Length;
+            if (t <= k[0].T) { Set(k[0], k[0], 0f); return; }
+            if (t >= k[n - 1].T) { Set(k[n - 1], k[n - 1], 0f); return; }
+            for (int i = 0; i < n - 1; i++)
+            {
+                if (t >= k[i].T && t <= k[i + 1].T)
+                {
+                    float w = (t - k[i].T) / Mathf.Max(0.0001f, k[i + 1].T - k[i].T);
+                    Set(k[i], k[i + 1], Mathf.SmoothStep(0f, 1f, w));
+                    return;
+                }
+            }
+        }
+
+        private void Set(DragonClipKey a, DragonClipKey b, float w)
+        {
+            for (int i = 0; i < 10; i++) _b[i] = Vector3.Lerp(a.B[i], b.B[i], w);
+            _r = Vector3.Lerp(a.R, b.R, w);
+            _o = Vector3.Lerp(a.O, b.O, w);
+        }
+
+        private void LateUpdate()
+        {
+            if (_keys == null || _keys.Length == 0) { Destroy(this); return; }
+            if (_owner == null) _owner = GetComponent<Character>();
+            float t = Phase();
+            if (t > _keys[_keys.Length - 1].T || (_owner != null && _owner.IsDead()))
+            {
+                ReleaseRoot();
+                _keys = null;
+                Destroy(this);
+                return;
+            }
+            Sample(t);
+            if (_animator == null) _animator = GetComponentInChildren<Animator>();
+            if (_animator != null && _animator.isHuman)
+            {
+                for (int i = 0; i < 10; i++)
+                {
+                    if (_b[i] == Vector3.zero) continue;
+                    Transform bone = _animator.GetBoneTransform(Bones[i]);
+                    if (bone != null) bone.localRotation = bone.localRotation * Quaternion.Euler(_b[i]);
+                }
+            }
+            if (_visual != null && DragonCombat.OwnsMotionRoot(_token))
+            {
+                Quaternion q = Quaternion.Euler(_r);
+                _visual.localRotation = DragonCombat.MotionBaseRot * q;
+                _visual.localPosition = DragonCombat.MotionBasePos + (Pivot - q * Pivot) + _o;
+            }
+        }
+
+        private void ReleaseRoot()
+        {
+            if (_visual != null) DragonCombat.ReleaseMotionRoot(_token, _visual);
+        }
+
+        private void OnDestroy()
+        {
+            if (_keys != null) ReleaseRoot();
+        }
+    }
+
     public static class DragonCombat
     {
         // v0.25.4: set by the Immortal HUD; blocks Hud.UpdateHealth / Stamina / Eitr / Food.
@@ -1533,6 +1703,258 @@ namespace DragonsAltarCombat
         private static bool _motionActive;
         private static Quaternion _motionBaseRot;
         private static Vector3 _motionBasePos;
+
+        // Shared Visual-root ownership: one body motion / clip owns the root at a time (token).
+        public static Quaternion MotionBaseRot { get { return _motionBaseRot; } }
+        public static Vector3 MotionBasePos { get { return _motionBasePos; } }
+
+        public static int ClaimMotionRoot(Transform v)
+        {
+            if (v != null && !_motionActive) { _motionBaseRot = v.localRotation; _motionBasePos = v.localPosition; _motionActive = true; }
+            return ++_motionToken;
+        }
+
+        public static bool OwnsMotionRoot(int token) { return token == _motionToken; }
+
+        public static void ReleaseMotionRoot(int token, Transform v)
+        {
+            if (token != _motionToken || v == null || !_motionActive) return;
+            v.localRotation = _motionBaseRot;
+            v.localPosition = _motionBasePos;
+            _motionActive = false;
+        }
+
+        // v0.25.7: play a keyframed skill clip (see DragonSkillClipDriver). windup = seconds until the
+        // impact key; hold = stay on the impact pose until ClipImpact / ClipStop.
+        public static void PlayClip(Player player, string clip, float windup, bool hold)
+        {
+            if (player == null || player != Player.m_localPlayer || string.IsNullOrEmpty(clip)) return;
+            if (DragonCombatPlugin.Instance != null && !DragonCombatPlugin.Instance.EnableSkillAnimations.Value) return;
+            DragonClipKey[] keys = SkillClip(clip);
+            if (keys == null) return;
+            DragonSkillPoseDriver legacy = player.GetComponent<DragonSkillPoseDriver>();
+            if (legacy != null) UnityEngine.Object.Destroy(legacy);
+            DragonSkillClipDriver d = player.GetComponent<DragonSkillClipDriver>();
+            if (d == null) d = player.gameObject.AddComponent<DragonSkillClipDriver>();
+            d.Begin(keys, windup, hold, BodyVisual(player));
+        }
+
+        public static void PlayClip(Player player, string clip, float windup)
+        {
+            PlayClip(player, clip, windup, false);
+        }
+
+        public static void ClipImpact(Player player)
+        {
+            if (player == null) return;
+            DragonSkillClipDriver d = player.GetComponent<DragonSkillClipDriver>();
+            if (d != null) d.Impact();
+        }
+
+        public static void ClipStop(Player player, float blend)
+        {
+            if (player == null) return;
+            DragonSkillClipDriver d = player.GetComponent<DragonSkillClipDriver>();
+            if (d != null) d.Stop(blend);
+        }
+
+        public static bool HasClip(string clip) { return SkillClip(clip) != null; }
+
+        private static Dictionary<string, DragonClipKey[]> _clips;
+
+        private static DragonClipKey K(float t) { return new DragonClipKey(t); }
+
+        private static DragonClipKey[] SkillClip(string name)
+        {
+            if (_clips == null) { _clips = new Dictionary<string, DragonClipKey[]>(); BuildClips(_clips); }
+            DragonClipKey[] keys;
+            return _clips.TryGetValue(name, out keys) ? keys : null;
+        }
+
+        private static void BuildClips(Dictionary<string, DragonClipKey[]> c)
+        {
+            BuildClericClips(c);
+        }
+
+        // ------------------------------------------------------------------ Cleric / Paladin / Priest
+        private static void BuildClericClips(Dictionary<string, DragonClipKey[]> c)
+        {
+            // Lightning Zap: draw the mace back to the shoulder, thrust it forward, the cone bursts.
+            c["cleric_zap"] = new DragonClipKey[] {
+                K(-1f),
+                K(-0.45f).Sp(0f, -16f, 0f).Ch(-4f, -10f, 0f).RA(-40f, 0f, -20f).RF(-95f, 0f, 0f).LA(-20f, 0f, 18f),
+                K(0f).Sp(6f, 12f, 0f).Ch(6f, 8f, 0f).RA(-88f, -8f, -6f).RF(-8f, 0f, 0f).RH(-10f, 0f, 0f).LA(10f, 0f, 22f).Rot(5f, 0f, 0f).Off(0f, 0f, 0.05f),
+                K(0.16f).Sp(6f, 12f, 0f).Ch(6f, 8f, 0f).RA(-86f, -8f, -6f).RF(-10f, 0f, 0f).LA(10f, 0f, 22f).Rot(5f, 0f, 0f).Off(0f, 0f, 0.05f),
+                K(0.45f)
+            };
+            // Righteous Strike: raise the mace to the sky (head up), hold trembling, snap it down at the target.
+            DragonClipKey rsUp = K(-0.55f).Sp(-10f, -6f, 0f).Ch(-8f, 0f, 0f).Hd(-18f, 0f, 0f).RA(-155f, 0f, -12f).RF(-18f, 0f, 0f).LA(-25f, 0f, 24f).Off(0f, 0.04f, 0f);
+            c["cleric_rs"] = new DragonClipKey[] {
+                K(-1f), rsUp,
+                rsUp.Copy(-0.12f).RA(-160f, 0f, -14f),
+                K(0f).Sp(16f, 6f, 0f).Ch(10f, 0f, 0f).Hd(6f, 0f, 0f).RA(-78f, 0f, -6f).RF(-4f, 0f, 0f).LA(10f, 0f, 22f).Rot(7f, 0f, 0f).Off(0f, -0.06f, 0.04f),
+                K(0.25f).Sp(14f, 6f, 0f).Ch(8f, 0f, 0f).RA(-76f, 0f, -6f).LA(10f, 0f, 22f).Rot(6f, 0f, 0f).Off(0f, -0.05f, 0.04f),
+                K(0.6f)
+            };
+            // Ascended Righteous Strike: both hands on the mace overhead, leap-light crouch slam.
+            DragonClipKey rsaUp = K(-0.5f).Sp(-14f, 0f, 0f).Ch(-10f, 0f, 0f).Hd(-20f, 0f, 0f).RA(-165f, 0f, -6f).RF(-30f, 0f, 0f).LA(-160f, 0f, 8f).LF(-35f, 0f, 0f).Off(0f, 0.08f, 0f);
+            c["cleric_rs_asc"] = new DragonClipKey[] {
+                K(-1f), rsaUp,
+                rsaUp.Copy(-0.1f).Rot(-6f, 0f, 0f),
+                K(0f).Sp(30f, 0f, 0f).Ch(16f, 0f, 0f).Hd(10f, 0f, 0f).RA(-50f, 0f, -4f).RF(-6f, 0f, 0f).LA(-48f, 0f, 6f).LF(-8f, 0f, 0f).Rot(12f, 0f, 0f).Off(0f, -0.16f, 0.08f),
+                K(0.3f).Sp(28f, 0f, 0f).Ch(14f, 0f, 0f).RA(-46f, 0f, -4f).LA(-44f, 0f, 6f).Rot(11f, 0f, 0f).Off(0f, -0.15f, 0.08f),
+                K(0.75f)
+            };
+            // Holy Wave: chant with the main hand raised, then sweep both arms open as the ring leaves.
+            c["cleric_wave"] = new DragonClipKey[] {
+                K(-1f),
+                K(0f).Ch(-6f, 0f, 0f).Hd(-8f, 0f, 0f).RA(-100f, -10f, -10f).RF(-38f, 0f, 0f).RH(-20f, 0f, 0f).LA(-35f, 0f, 30f).LF(-30f, 0f, 0f).Off(0f, 0.03f, 0f),
+                K(0.14f).Ch(-10f, 0f, 0f).Hd(-10f, 0f, 0f).RA(-70f, 0f, -55f).RF(-10f, 0f, 0f).LA(-70f, 0f, 55f).LF(-10f, 0f, 0f).Rot(-4f, 0f, 0f).Off(0f, 0.04f, 0f),
+                K(0.32f).Ch(-8f, 0f, 0f).RA(-65f, 0f, -55f).LA(-65f, 0f, 55f).Rot(-3f, 0f, 0f),
+                K(0.6f)
+            };
+            // Ascended Holy Wave (aimed at an ally): reach both hands toward them, a quick blessing push.
+            c["cleric_wave_ally"] = new DragonClipKey[] {
+                K(-1f),
+                K(-0.4f).Ch(-6f, 0f, 0f).RA(-60f, -10f, -10f).RF(-60f, 0f, 0f).LA(-60f, 10f, 10f).LF(-60f, 0f, 0f),
+                K(0f).Sp(6f, 0f, 0f).Ch(6f, 0f, 0f).RA(-88f, -14f, -8f).RF(-6f, 0f, 0f).RH(-20f, 0f, 0f).LA(-88f, 14f, 8f).LF(-6f, 0f, 0f).LH(-20f, 0f, 0f).Rot(4f, 0f, 0f).Off(0f, 0f, 0.05f),
+                K(0.25f).Sp(6f, 0f, 0f).RA(-85f, -14f, -8f).LA(-85f, 14f, 8f).Rot(4f, 0f, 0f),
+                K(0.6f)
+            };
+            // Goddess Relic: lift both hands to the sky calling the cross, then pull it down to the ground.
+            DragonClipKey grUp = K(-0.45f).Sp(-12f, 0f, 0f).Ch(-10f, 0f, 0f).Hd(-22f, 0f, 0f).RA(-150f, 0f, -22f).RF(-12f, 0f, 0f).LA(-150f, 0f, 22f).LF(-12f, 0f, 0f).Off(0f, 0.05f, 0f);
+            c["cleric_goddess"] = new DragonClipKey[] {
+                K(-1f), grUp,
+                grUp.Copy(-0.08f).Hd(-26f, 0f, 0f).Off(0f, 0.07f, 0f),
+                K(0f).Sp(26f, 0f, 0f).Ch(14f, 0f, 0f).Hd(8f, 0f, 0f).RA(-45f, 0f, -18f).LA(-45f, 0f, 18f).Rot(8f, 0f, 0f).Off(0f, -0.12f, 0.04f),
+                K(0.35f).Sp(22f, 0f, 0f).Ch(12f, 0f, 0f).RA(-40f, 0f, -16f).LA(-40f, 0f, 16f).Rot(7f, 0f, 0f).Off(0f, -0.10f, 0.04f),
+                K(0.8f)
+            };
+            // Judgement Hammer: cock the hammer behind the head (shield arm aims), then hurl it.
+            DragonClipKey jhBack = K(-0.25f).Sp(-12f, -26f, 0f).Ch(-8f, -16f, 0f).Hd(-6f, 18f, 0f).RA(-165f, -10f, -20f).RF(-75f, 0f, 0f).RH(20f, 0f, 0f).LA(-85f, 10f, 10f).LF(-10f, 0f, 0f).Rot(-5f, 0f, 0f);
+            c["cleric_hammer"] = new DragonClipKey[] {
+                K(-1f), jhBack,
+                jhBack.Copy(-0.06f).Sp(-14f, -30f, 0f),
+                K(0f).Sp(22f, 22f, 0f).Ch(12f, 14f, 0f).Hd(0f, -6f, 0f).RA(-78f, 0f, -4f).RF(-4f, 0f, 0f).LA(15f, 0f, 25f).Rot(9f, 0f, 0f).Off(0f, -0.04f, 0.08f),
+                K(0.2f).Sp(24f, 26f, 0f).Ch(12f, 16f, 0f).RA(-35f, 0f, 10f).LA(15f, 0f, 25f).Rot(9f, 0f, 0f).Off(0f, -0.05f, 0.08f),
+                K(0.6f)
+            };
+            // Shield Charge (hold): shield forward at chest height, mace drawn back, low forward lean;
+            // impact = the Bash: shove the shield out and stomp in.
+            c["cleric_charge"] = new DragonClipKey[] {
+                K(-1f),
+                K(0f).Sp(18f, 10f, 0f).Ch(10f, 8f, 0f).Hd(-12f, 0f, 0f).LA(-80f, 20f, 18f).LF(-75f, 0f, 0f).RA(25f, 0f, -20f).RF(-40f, 0f, 0f).Rot(14f, 0f, 0f).Off(0f, -0.06f, 0f),
+                K(0.08f).Sp(24f, 16f, 0f).Ch(12f, 12f, 0f).Hd(-12f, 0f, 0f).LA(-92f, 10f, 10f).LF(-25f, 0f, 0f).RA(30f, 0f, -20f).RF(-40f, 0f, 0f).Rot(16f, 0f, 0f).Off(0f, -0.08f, 0.14f),
+                K(0.3f).Sp(20f, 12f, 0f).Ch(10f, 10f, 0f).LA(-88f, 10f, 10f).LF(-25f, 0f, 0f).RA(20f, 0f, -20f).Rot(12f, 0f, 0f).Off(0f, -0.06f, 0.1f),
+                K(0.6f)
+            };
+            // Angel Comet: arms swept back like wings on the rise (hold until the dive), arched back;
+            // dive = arms forward overhead, body pitched head-first; landing clip handles the crash.
+            c["cleric_angel_rise"] = new DragonClipKey[] {
+                K(-1f),
+                K(-0.5f).Sp(-14f, 0f, 0f).Ch(-12f, 0f, 0f).Hd(-24f, 0f, 0f).RA(30f, 0f, -70f).RF(-10f, 0f, 0f).LA(30f, 0f, 70f).LF(-10f, 0f, 0f).Rot(-10f, 0f, 0f),
+                K(0f).Sp(-16f, 0f, 0f).Ch(-14f, 0f, 0f).Hd(-26f, 0f, 0f).RA(35f, 0f, -80f).RF(-8f, 0f, 0f).LA(35f, 0f, 80f).LF(-8f, 0f, 0f).Rot(-12f, 0f, 0f),
+                K(0.15f).Sp(10f, 0f, 0f).Ch(8f, 0f, 0f).Hd(10f, 0f, 0f).RA(-160f, 0f, -10f).LA(-160f, 0f, 10f).Rot(55f, 0f, 0f),
+                K(0.45f).Sp(14f, 0f, 0f).Ch(10f, 0f, 0f).Hd(12f, 0f, 0f).RA(-165f, 0f, -8f).LA(-165f, 0f, 8f).Rot(60f, 0f, 0f),
+                K(3.5f).Sp(14f, 0f, 0f).Ch(10f, 0f, 0f).Hd(12f, 0f, 0f).RA(-165f, 0f, -8f).LA(-165f, 0f, 8f).Rot(60f, 0f, 0f)
+            };
+            // Heavy landing (Angel Comet / Electric Smite): crash into a deep crouch, mace in the ground.
+            c["cleric_land"] = new DragonClipKey[] {
+                K(-1f).Sp(14f, 0f, 0f).Ch(10f, 0f, 0f).RA(-120f, 0f, -10f).LA(-120f, 0f, 10f).Rot(30f, 0f, 0f),
+                K(0f).Sp(34f, 0f, 0f).Ch(18f, 0f, 0f).Hd(12f, 0f, 0f).RA(-40f, 0f, -10f).RF(-4f, 0f, 0f).LA(-30f, 0f, 35f).Rot(12f, 0f, 0f).Off(0f, -0.2f, 0.06f),
+                K(0.35f).Sp(30f, 0f, 0f).Ch(16f, 0f, 0f).Hd(8f, 0f, 0f).RA(-38f, 0f, -10f).LA(-28f, 0f, 35f).Rot(11f, 0f, 0f).Off(0f, -0.18f, 0.06f),
+                K(0.8f)
+            };
+            // Electric Smite (hold while airborne): two-handed mace raised overhead, back arched.
+            c["cleric_smite_air"] = new DragonClipKey[] {
+                K(-1f),
+                K(0f).Sp(-16f, 0f, 0f).Ch(-12f, 0f, 0f).Hd(-16f, 0f, 0f).RA(-168f, 0f, -6f).RF(-40f, 0f, 0f).LA(-160f, 0f, 8f).LF(-40f, 0f, 0f).Rot(-8f, 0f, 0f),
+                K(0.1f)
+            };
+            // Ray of Hope: both palms up to the sky, head lifted, slight rise.
+            c["cleric_ray"] = new DragonClipKey[] {
+                K(-1f),
+                K(0f).Sp(-8f, 0f, 0f).Ch(-10f, 0f, 0f).Hd(-24f, 0f, 0f).RA(-130f, 0f, -30f).RF(-15f, 0f, 0f).RH(-25f, 0f, 0f).LA(-130f, 0f, 30f).LF(-15f, 0f, 0f).LH(-25f, 0f, 0f).Off(0f, 0.05f, 0f),
+                K(0.3f).Sp(-8f, 0f, 0f).Ch(-10f, 0f, 0f).Hd(-24f, 0f, 0f).RA(-135f, 0f, -30f).LA(-135f, 0f, 30f).Off(0f, 0.06f, 0f),
+                K(0.65f)
+            };
+            // Heaven's Light: thrust the mace straight up like a torch, shield arm out.
+            c["cleric_light"] = new DragonClipKey[] {
+                K(-1f),
+                K(0f).Sp(-6f, 0f, 0f).Ch(-8f, 0f, 0f).Hd(-20f, 0f, 0f).RA(-172f, 0f, -4f).RF(-2f, 0f, 0f).LA(-40f, 0f, 45f).Off(0f, 0.06f, 0f),
+                K(0.35f).Sp(-6f, 0f, 0f).Ch(-8f, 0f, 0f).Hd(-20f, 0f, 0f).RA(-174f, 0f, -4f).LA(-40f, 0f, 45f).Off(0f, 0.06f, 0f),
+                K(0.7f)
+            };
+            // Relics: lift the relic high, then drive it down into the ground in a crouch.
+            DragonClipKey relUp = K(-0.4f).Sp(-8f, 0f, 0f).Ch(-6f, 0f, 0f).Hd(-12f, 0f, 0f).RA(-140f, 0f, -10f).RF(-25f, 0f, 0f).LA(-30f, 0f, 30f).Off(0f, 0.04f, 0f);
+            c["cleric_relic"] = new DragonClipKey[] {
+                K(-1f), relUp,
+                relUp.Copy(-0.1f).RA(-146f, 0f, -10f),
+                K(0f).Sp(32f, 0f, 0f).Ch(16f, 0f, 0f).Hd(10f, 0f, 0f).RA(-30f, 0f, -6f).RF(-6f, 0f, 0f).LA(-20f, 0f, 30f).Rot(10f, 0f, 0f).Off(0f, -0.18f, 0.06f),
+                K(0.35f).Sp(28f, 0f, 0f).Ch(14f, 0f, 0f).RA(-28f, 0f, -6f).LA(-20f, 0f, 30f).Rot(9f, 0f, 0f).Off(0f, -0.16f, 0.06f),
+                K(0.8f)
+            };
+            // Holy Relic: same plant, the free hand opens in blessing as it lands.
+            c["cleric_holy_relic"] = new DragonClipKey[] {
+                K(-1f), relUp,
+                relUp.Copy(-0.1f).LA(-60f, 0f, 30f).LH(-20f, 0f, 0f),
+                K(0f).Sp(30f, 0f, 0f).Ch(14f, 0f, 0f).Hd(4f, 0f, 0f).RA(-30f, 0f, -6f).RF(-6f, 0f, 0f).LA(-95f, 0f, 45f).LH(-30f, 0f, 0f).Rot(9f, 0f, 0f).Off(0f, -0.16f, 0.06f),
+                K(0.4f).Sp(26f, 0f, 0f).Ch(12f, 0f, 0f).RA(-28f, 0f, -6f).LA(-95f, 0f, 45f).Rot(8f, 0f, 0f).Off(0f, -0.14f, 0.06f),
+                K(0.85f)
+            };
+            // Divine Intervention: hands drawn to the chest in prayer, head bowed, then arms flung open wide.
+            DragonClipKey diPray = K(-0.35f).Sp(10f, 0f, 0f).Ch(6f, 0f, 0f).Hd(22f, 0f, 0f).RA(-45f, 20f, 18f).RF(-110f, 0f, 0f).LA(-45f, -20f, -18f).LF(-110f, 0f, 0f).Off(0f, -0.08f, 0f);
+            c["cleric_intervention"] = new DragonClipKey[] {
+                K(-1f), diPray,
+                diPray.Copy(-0.06f).Off(0f, -0.1f, 0f),
+                K(0f).Sp(-14f, 0f, 0f).Ch(-14f, 0f, 0f).Hd(-18f, 0f, 0f).RA(-100f, 0f, -65f).RF(-8f, 0f, 0f).LA(-100f, 0f, 65f).LF(-8f, 0f, 0f).Rot(-5f, 0f, 0f).Off(0f, 0.05f, 0f),
+                K(0.4f).Sp(-12f, 0f, 0f).Ch(-12f, 0f, 0f).Hd(-16f, 0f, 0f).RA(-98f, 0f, -65f).LA(-98f, 0f, 65f).Rot(-4f, 0f, 0f).Off(0f, 0.04f, 0f),
+                K(0.8f)
+            };
+            // Grand Cross, two slashes forming an X: high right -> low left, then high left -> low right.
+            c["cleric_cross_1"] = new DragonClipKey[] {
+                K(-1f),
+                K(-0.35f).Sp(-6f, -28f, 0f).Ch(-6f, -16f, 0f).RA(-150f, 0f, -45f).RF(-30f, 0f, 0f).LA(-20f, 0f, 25f),
+                K(0f).Sp(18f, 24f, 0f).Ch(10f, 16f, 0f).RA(-40f, 0f, 25f).RF(-10f, 0f, 0f).LA(5f, 0f, 25f).Rot(6f, 15f, 0f).Off(0f, -0.05f, 0.05f),
+                K(0.08f).Sp(16f, 26f, 0f).Ch(10f, 16f, 0f).RA(-40f, 0f, 30f).LA(5f, 0f, 25f).Rot(6f, 16f, 0f).Off(0f, -0.05f, 0.05f)
+            };
+            c["cleric_cross_2"] = new DragonClipKey[] {
+                K(-1f).Sp(16f, 26f, 0f).Ch(10f, 16f, 0f).RA(-40f, 0f, 30f).LA(5f, 0f, 25f).Rot(6f, 16f, 0f).Off(0f, -0.05f, 0.05f),
+                K(-0.4f).Sp(-6f, 24f, 0f).Ch(-6f, 14f, 0f).RA(-150f, 0f, 20f).RF(-40f, 0f, 0f).LA(-20f, 0f, 25f).Rot(0f, 10f, 0f),
+                K(0f).Sp(20f, -24f, 0f).Ch(12f, -16f, 0f).RA(-45f, 0f, -55f).RF(-6f, 0f, 0f).LA(5f, 0f, 25f).Rot(8f, -12f, 0f).Off(0f, -0.06f, 0.06f),
+                K(0.3f).Sp(18f, -22f, 0f).Ch(10f, -14f, 0f).RA(-42f, 0f, -55f).LA(5f, 0f, 25f).Rot(7f, -10f, 0f).Off(0f, -0.05f, 0.06f),
+                K(0.65f)
+            };
+            // Heaven's Judgement: mace to the sky, free hand points at the circle, trembling hold; the barrage
+            // starts as the mace swings down to point at it.
+            DragonClipKey hjUp = K(-0.5f).Sp(-10f, 0f, 0f).Ch(-10f, 0f, 0f).Hd(-16f, 0f, 0f).RA(-170f, 0f, -8f).RF(-6f, 0f, 0f).LA(-88f, 8f, 10f).LF(-4f, 0f, 0f).LH(-10f, 0f, 0f);
+            c["cleric_judgement"] = new DragonClipKey[] {
+                K(-1f), hjUp,
+                hjUp.Copy(-0.3f).RA(-174f, 0f, -10f).Off(0f, 0.02f, 0f),
+                hjUp.Copy(-0.12f).RA(-170f, 0f, -6f),
+                K(0f).Sp(14f, 0f, 0f).Ch(8f, 0f, 0f).Hd(4f, 0f, 0f).RA(-92f, 0f, -4f).RF(-2f, 0f, 0f).LA(-30f, 0f, 25f).Rot(6f, 0f, 0f).Off(0f, -0.04f, 0.04f),
+                K(0.5f).Sp(12f, 0f, 0f).Ch(6f, 0f, 0f).RA(-90f, 0f, -4f).LA(-30f, 0f, 25f).Rot(5f, 0f, 0f),
+                K(0.9f)
+            };
+            // Lightning Tempest: crouch gathering power with arms crossed low, then explode upward, arms wide to the sky.
+            DragonClipKey tpLow = K(-0.4f).Sp(24f, 0f, 0f).Ch(14f, 0f, 0f).Hd(14f, 0f, 0f).RA(-40f, 20f, 30f).RF(-50f, 0f, 0f).LA(-40f, -20f, -30f).LF(-50f, 0f, 0f).Rot(6f, 0f, 0f).Off(0f, -0.16f, 0f);
+            c["cleric_tempest"] = new DragonClipKey[] {
+                K(-1f), tpLow,
+                tpLow.Copy(-0.06f).Off(0f, -0.18f, 0f),
+                K(0f).Sp(-20f, 0f, 0f).Ch(-16f, 0f, 0f).Hd(-28f, 0f, 0f).RA(-150f, 0f, -40f).RF(-6f, 0f, 0f).LA(-150f, 0f, 40f).LF(-6f, 0f, 0f).Rot(-8f, 0f, 0f).Off(0f, 0.1f, 0f),
+                K(0.6f).Sp(-18f, 0f, 0f).Ch(-14f, 0f, 0f).Hd(-26f, 0f, 0f).RA(-152f, 0f, -40f).LA(-152f, 0f, 40f).Rot(-7f, 0f, 0f).Off(0f, 0.08f, 0f),
+                K(1.0f)
+            };
+            // Heaven's Crucible: kneel-like bow in prayer, then rise lifting the shield high as the barrier forms.
+            DragonClipKey crPray = K(-0.4f).Sp(22f, 0f, 0f).Ch(10f, 0f, 0f).Hd(24f, 0f, 0f).RA(-45f, 20f, 18f).RF(-110f, 0f, 0f).LA(-45f, -20f, -18f).LF(-110f, 0f, 0f).Rot(6f, 0f, 0f).Off(0f, -0.2f, 0f);
+            c["cleric_crucible"] = new DragonClipKey[] {
+                K(-1f), crPray,
+                crPray.Copy(-0.08f),
+                K(0f).Sp(-10f, 0f, 0f).Ch(-10f, 0f, 0f).Hd(-18f, 0f, 0f).LA(-165f, 0f, 10f).LF(-20f, 0f, 0f).RA(-60f, 0f, -45f).RF(-10f, 0f, 0f).Off(0f, 0.05f, 0f),
+                K(0.45f).Sp(-8f, 0f, 0f).Ch(-8f, 0f, 0f).Hd(-16f, 0f, 0f).LA(-165f, 0f, 10f).RA(-58f, 0f, -45f).Off(0f, 0.04f, 0f),
+                K(0.85f)
+            };
+        }
 
         public static void PlayBodyMotion(Player player, string preset, float duration)
         {
@@ -1778,24 +2200,7 @@ namespace DragonsAltarCombat
                 case "punishing_bomb": preset = "throw"; duration = 0.6f; break;
                 case "battlecry": preset = "roar"; duration = 0.8f; break;
                 case "whirlwind": preset = "double_spin"; duration = 0.8f; break;
-                // Cleric / Paladin / Priest
-                case "lightning_zap": preset = "cast"; duration = 0.4f; break;
-                case "righteous_strike": preset = "slam"; duration = 0.55f; break;
-                case "holy_wave": preset = "raise"; duration = 0.5f; break;
-                case "goddess_relic": preset = "plant"; duration = 0.6f; break;
-                case "judgement_hammer": preset = "throw"; duration = 0.55f; break;
-                case "shield_charge": preset = "bash"; duration = 1.2f; break;
-                case "fallen_angel": preset = "dive"; duration = 2.4f; break;
-                case "ray_of_hope": preset = "raise"; duration = 0.5f; break;
-                case "electric_smite": preset = "grand"; duration = 0.9f; break;
-                case "heavens_light": preset = "raise"; duration = 0.6f; break;
-                case "lightning_relic": preset = "plant"; duration = 0.6f; break;
-                case "holy_relic": preset = "plant"; duration = 0.6f; break;
-                case "divine_intervention": preset = "kneel"; duration = 0.8f; break;
-                case "grand_cross": preset = "cross"; duration = 0.55f; break;
-                case "heavens_judgement": preset = "raise"; duration = 0.8f; break;
-                case "lightning_tempest": preset = "grand"; duration = 1f; break;
-                case "grand_sigil": preset = "kneel"; duration = 0.7f; break;
+                // Cleric / Paladin / Priest: keyframed clips (PlayClip) at the real wind-up / impact.
                 // Sorcerer / Archmage / Horizon Walker
                 case "flame_burst": preset = "flick"; duration = 0.4f; break;
                 case "glacial_descent": preset = "slam"; duration = 0.55f; break;

@@ -1,9 +1,6 @@
-TEST v0.25.6
-1. HUD: STA and EIT bars are longer; frame still encloses food + stats.
-2. Priest Divine Intervention / Heaven's Crucible: golden see-through orb around you (and allies), follows you,
-   fades when the Barrier breaks or runs out.
-3. Buff row: cast Heaven's Light, Ray of Hope, Knight's Guidance, Battlecry, Tailwind, Phase Flow, Hyper Armor:
-   every icon looks different.
-4. Motions: Shield Charge, Angel Comet, Divine Intervention, Impact Punch, Frenzied Charge, Eclipse, Stomp,
-   Bonecrusher, Seismic Guillotine, Meteor Fall (on press), Railcannon, Frost Nova, Gravity Blast, Rift Echo,
-   Ballista (release), Splitting Arrow.
+TEST v0.25.7 (Cleric animations)
+Cast every Cleric / Paladin / Priest skill (and the Ascended versions via F8) in third person.
+Check: strike pose lands on the hit, no twisted / backwards arms, body returns to normal after.
+If an arm bends the wrong way, tell me the skill + which arm (I mirror that axis).
+Shield Charge: hold pose while charging; Left Click Bash = shield shove; no bash = smooth return.
+Angel Comet / Electric Smite: pose held in the air, crash pose on landing.

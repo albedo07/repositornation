@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.6";
+        public const string ModVersion = "0.25.7";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -3973,7 +3973,7 @@ namespace AlbedosCustomClassesAdvanced
 
             float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _goddessWindup.Value));
             DragonCombat.LockSkill(player, windup);
-            DragonCombat.PlaySkillPose(player, "SkyCast", windup + 0.10f);
+            DragonCombat.PlayClip(player, "cleric_goddess", windup);
             StartCoroutine(GoddessRelicRoutine(player, target, windup));
         }
 
@@ -4060,7 +4060,7 @@ namespace AlbedosCustomClassesAdvanced
                 return;
             // v0.17.0: instant cast (no channel), 0.5s movement lock, chant animation.
             DragonCombat.LockSkill(player, 0.5f);
-            DragonCombat.PlaySkillPose(player, "Chant", 0.50f);
+            DragonCombat.PlayClip(player, "cleric_ray", 0.15f);
             StartCoroutine(RayOfHopeRoutine(player, 0f));
         }
 
@@ -4115,6 +4115,7 @@ namespace AlbedosCustomClassesAdvanced
         private IEnumerator ShieldChargeRoutine(Player player, Rigidbody body, CapsuleCollider capsule)
         {
             ShowMessage("Shield Charge");
+            DragonCombat.PlayClip(player, "cleric_charge", 0.15f, true);
             Vector3 forward = player.GetLookDir();
             forward.y = 0f;
             if (forward.sqrMagnitude < 0.01f) forward = player.transform.forward;
@@ -4204,6 +4205,9 @@ namespace AlbedosCustomClassesAdvanced
             }
             finally
             {
+                // v0.25.7: no Bash -> the charge pose blends back to rest (Bash already took the impact).
+                DragonSkillClipDriver clip = player == null ? null : player.GetComponent<DragonSkillClipDriver>();
+                if (clip != null && clip.IsHolding) DragonCombat.ClipStop(player, 0.25f);
                 EndShieldCharge();
             }
         }
@@ -4326,6 +4330,7 @@ namespace AlbedosCustomClassesAdvanced
 
         private void ShieldChargeBash(Player player, Vector3 forward)
         {
+            DragonCombat.ClipImpact(player);
             if (player == null || player.IsDead()) return;
             ShowMessage("Shield Bash");
             bool ascended = IsAscendedSkill("shield_charge");
@@ -4623,7 +4628,7 @@ namespace AlbedosCustomClassesAdvanced
 
             float takeoffDelay = 0.08f;
             DragonCombat.LockSkill(player, takeoffDelay);
-            DragonCombat.PlaySkillPose(player, "Slam", 8f);
+            DragonCombat.PlayClip(player, "cleric_smite_air", 0.25f, true);
             StartCoroutine(ElectricSmiteRoutine(player, takeoffDelay));
         }
 
@@ -4634,7 +4639,7 @@ namespace AlbedosCustomClassesAdvanced
             if (player == null || player.IsDead())
                 yield break;
 
-            DragonCombat.PlaySkillPose(player, "Slam", 0.35f);
+            DragonCombat.PlayClip(player, "cleric_land", 0.1f);
             Vector3 point = player.transform.position;
             float radius = Mathf.Max(1f, DragonCombat.M(_divineRadius.Value));
             List<Character> targets = GetSphereTargets(player, point, radius);
@@ -4798,7 +4803,7 @@ namespace AlbedosCustomClassesAdvanced
 
             float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _rsAscWindup.Value));
             DragonCombat.LockSkill(player, windup);
-            DragonCombat.PlaySkillPose(player, "SkyCast", windup + 0.10f);
+            DragonCombat.PlayClip(player, "cleric_rs_asc", windup);
             StartCoroutine(AscendedRighteousStrikeRoutine(player, target, windup));
         }
 
@@ -4870,7 +4875,7 @@ namespace AlbedosCustomClassesAdvanced
                 return;
             float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _hammerWindup.Value));
             DragonCombat.LockSkill(player, windup);
-            DragonCombat.PlaySkillPose(player, "Raise", windup + 0.10f);
+            DragonCombat.PlayClip(player, "cleric_hammer", windup);
             StartCoroutine(JudgementHammerRoutine(player, windup));
         }
 
@@ -5062,7 +5067,7 @@ namespace AlbedosCustomClassesAdvanced
             if (!BeginCast(player, id, _angelCooldown.Value, _angelStamina.Value))
                 return;
             DragonCombat.LockSkill(player, 0.1f);
-            DragonCombat.PlaySkillPose(player, "Raise", Mathf.Max(0.6f, _angelWindupTotal.Value) * 0.56f + 0.2f);
+            DragonCombat.PlayClip(player, "cleric_angel_rise", Mathf.Max(0.6f, _angelWindupTotal.Value) * 0.62f);
             StartCoroutine(FallenAngelRoutine(player, body));
         }
 
@@ -5112,7 +5117,6 @@ namespace AlbedosCustomClassesAdvanced
                 yield return new WaitForFixedUpdate();
             }
 
-            DragonCombat.PlaySkillPose(player, "Slam", 3f);
             float diveSpeed = Mathf.Max(3f, height / Mathf.Max(0.1f, total - riseTime - hangTime));
             float safety = Time.time + 10f;
             while (player != null && !player.IsDead() && Time.time < safety)
@@ -5132,7 +5136,7 @@ namespace AlbedosCustomClassesAdvanced
             ResetFallDamageState(player);
             body.velocity = Vector3.zero;
             DragonCombat.LockSkill(player, 0.35f);
-            DragonCombat.PlaySkillPose(player, "Slam", 0.35f);
+            DragonCombat.PlayClip(player, "cleric_land", 0.1f);
 
             Vector3 point = player.transform.position;
             float radius = Mathf.Max(1f, DragonCombat.M(_angelRadius.Value));
@@ -5412,7 +5416,7 @@ namespace AlbedosCustomClassesAdvanced
             _lightningRelicCasting = true;
             float windup = DragonCombat.ScaleWindup(player, 1.5f);
             DragonCombat.LockSkill(player, windup);
-            DragonCombat.PlaySkillPose(player, "SkyCast", windup + 0.10f);
+            DragonCombat.PlayClip(player, "cleric_relic", windup);
             StartCoroutine(LightningRelicRoutine(player, target, windup, id));
         }
 
@@ -5580,7 +5584,7 @@ namespace AlbedosCustomClassesAdvanced
             _holyRelicCasting = true;
             float windup = DragonCombat.ScaleWindup(player, 1f);
             DragonCombat.LockSkill(player, windup);
-            DragonCombat.PlaySkillPose(player, "SkyCast", windup + 0.10f);
+            DragonCombat.PlayClip(player, "cleric_holy_relic", windup);
             StartCoroutine(HolyRelicRoutine(player, target, windup, id));
         }
 
@@ -5724,7 +5728,7 @@ namespace AlbedosCustomClassesAdvanced
 
             float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _interventionWindup.Value));
             DragonCombat.LockSkill(player, windup);
-            DragonCombat.PlaySkillPose(player, "Wave", windup + 0.10f);
+            DragonCombat.PlayClip(player, "cleric_intervention", windup);
             StartCoroutine(DivineInterventionRoutine(player, center, windup, crossCast));
             // Ascended: a Cross Cast while both Relics stand also fires from the other Relic.
             if (crossCast && IsAscendedSkill("divine_intervention"))
@@ -5816,14 +5820,14 @@ namespace AlbedosCustomClassesAdvanced
             float firstSlash = windup * 0.5f;
             float secondSlash = Mathf.Max(0f, windup - firstSlash);
 
-            DragonCombat.PlaySkillPose(player, "Crescent", firstSlash + 0.08f);
+            DragonCombat.PlayClip(player, "cleric_cross_1", firstSlash);
             if (firstSlash > 0f)
                 yield return new WaitForSeconds(firstSlash);
 
             if (player == null || player.IsDead())
                 yield break;
 
-            DragonCombat.PlaySkillPose(player, "Crescent", secondSlash + 0.08f);
+            DragonCombat.PlayClip(player, "cleric_cross_2", secondSlash);
             if (secondSlash > 0f)
                 yield return new WaitForSeconds(secondSlash);
 
@@ -5928,7 +5932,7 @@ namespace AlbedosCustomClassesAdvanced
             Vector3 center = GetPriestSelfOrCrossCastCenter(player, Mathf.Max(1f, DragonCombat.M(_sharedCrossCastRange.Value)), out crossCast);
             float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _heavensWindup.Value));
             DragonCombat.LockSkill(player, windup);
-            DragonCombat.PlaySkillPose(player, "Sigil", windup + 0.10f);
+            DragonCombat.PlayClip(player, "cleric_judgement", windup);
             StartCoroutine(HeavensJudgementRoutine(player, center, windup, crossCast));
         }
 
@@ -6053,7 +6057,7 @@ namespace AlbedosCustomClassesAdvanced
 
             float windup = DragonCombat.ScaleWindup(player, 1f);
             DragonCombat.LockSkill(player, windup);
-            DragonCombat.PlaySkillPose(player, "Tempest", windup + 0.10f);
+            DragonCombat.PlayClip(player, "cleric_tempest", windup);
             StartCoroutine(LightningTempestRoutine(player, target, windup));
         }
 
@@ -6129,7 +6133,7 @@ namespace AlbedosCustomClassesAdvanced
 
             float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _grandWindup.Value));
             DragonCombat.LockSkill(player, windup);
-            DragonCombat.PlaySkillPose(player, "Sigil", windup + 0.10f);
+            DragonCombat.PlayClip(player, "cleric_crucible", windup);
             StartCoroutine(GrandSigilBarrierRoutine(player, windup));
         }
 
@@ -9637,7 +9641,7 @@ namespace AlbedosCustomClassesAdvanced
             if (!BeginCast(player, "Priest.AscendedHolyWave", IhCfg(sk, "Cleric.Holy Wave", "Cooldown", 8f), IhCfg(sk, "Cleric.Holy Wave", "StaminaCost", 25f)))
                 return;
             DragonCombat.LockSkill(player, 0.5f);
-            DragonCombat.PlaySkillPose(player, "Wave", 0.6f);
+            DragonCombat.PlayClip(player, "cleric_wave_ally", 0.15f);
             ShowMessage("Holy Wave");
             StartCoroutine(AscendedHolyWaveRoutine(player));
         }
@@ -11606,7 +11610,7 @@ namespace AlbedosCustomClassesAdvanced
             if (!BeginCast(player, id, _graceLightCooldown.Value, 0f))
                 return;
             DragonCombat.LockSkill(player, 0.5f);
-            DragonCombat.PlaySkillPose(player, "Chant", 0.50f);
+            DragonCombat.PlayClip(player, "cleric_light", 0.15f);
             ShowMessage("Heaven's Light");
 
             float radius = Mathf.Max(1f, DragonCombat.M(_graceLightRadius.Value));
