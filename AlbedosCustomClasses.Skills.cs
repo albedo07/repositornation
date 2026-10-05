@@ -220,7 +220,7 @@ namespace AlbedosCustomClassesSkills
         public static SkillsPlugin Instance;
         public const string ModGuid = "albedo.customclasses.skills";
         public const string ModName = "Dragon's Altar - Starter Skills";
-        public const string ModVersion = "0.25.8";
+        public const string ModVersion = "0.25.9";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";
@@ -882,7 +882,7 @@ namespace AlbedosCustomClassesSkills
             const string id = "Sorcerer.FlameBurst";
             if (!BeginCastEitr(player, id, _flameCooldown.Value, _flameEitr.Value)) return;
             DragonCombat.LockSkill(player, 0.4f);
-            DragonCombat.PlaySkillPose(player, "Wave", 0.40f);
+            DragonCombat.PlayClip(player, "sorc_flame", 0.12f);
             ShowMessage("Flame Burst");
             Vector3 origin = player.transform.position + Vector3.up * 1.1f;
             Vector3 forward = GetCrosshairDirection(player, origin);
@@ -895,7 +895,7 @@ namespace AlbedosCustomClassesSkills
         {
             Vector3 target; if (!TryGetPhysicalAimPoint(player, Mathf.Max(1f, DragonCombat.M(_glacialRange.Value)), out target)) { ShowMessage("Aim at a physical target"); return; }
             const string id = "Sorcerer.GlacialDescent"; if (!BeginCastEitr(player, id, _glacialCooldown.Value, _glacialEitr.Value)) return;
-            float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _glacialWindup.Value)); DragonCombat.LockSkill(player, windup); DragonCombat.PlaySkillPose(player, "SkyCast", windup + 0.10f); StartCoroutine(GlacialDescentRoutine(player, target, windup));
+            float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _glacialWindup.Value)); DragonCombat.LockSkill(player, windup); DragonCombat.PlayClip(player, "sorc_glacial", windup); StartCoroutine(GlacialDescentRoutine(player, target, windup));
         }
 
         private IEnumerator GlacialDescentRoutine(Player player, Vector3 target, float windup)
@@ -911,7 +911,7 @@ namespace AlbedosCustomClassesSkills
         private void CastStonefangEruption(Player player)
         {
             Vector3 target; if (!TryGetPhysicalAimPoint(player, Mathf.Max(1f, DragonCombat.M(_stoneRange.Value)), out target)) { ShowMessage("Aim at a physical target"); return; }
-            const string id = "Sorcerer.StonefangEruption"; if (!BeginCastEitr(player, id, _stoneCooldown.Value, _stoneEitr.Value)) return; float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _stoneWindup.Value)); DragonCombat.LockSkill(player, windup); DragonCombat.PlaySkillPose(player, "Raise", windup + 0.10f); StartCoroutine(StonefangEruptionRoutine(player, target, windup));
+            const string id = "Sorcerer.StonefangEruption"; if (!BeginCastEitr(player, id, _stoneCooldown.Value, _stoneEitr.Value)) return; float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _stoneWindup.Value)); DragonCombat.LockSkill(player, windup); DragonCombat.PlayClip(player, "sorc_stonefang", windup); StartCoroutine(StonefangEruptionRoutine(player, target, windup));
         }
 
         private IEnumerator StonefangEruptionRoutine(Player player, Vector3 target, float windup)

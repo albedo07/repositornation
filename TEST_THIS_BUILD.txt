@@ -1,8 +1,5 @@
-TEST v0.25.8
-1. HUD: skill hotbar bottom-left corner, stat HUD right above it; open inventory and drag both; positions saved.
-2. Stat HUD: food icons in one row under the EXP bar, frame encloses them; HUD much thinner.
-3. Barrier (Divine Intervention / Crucible): HP number on the icon + seconds under it.
-4. Ascended Lightning Tempest: storm stays where cast.
-5. Warrior / Sword Master / Mercenary: cast every skill (and Ascended via F8) in third person.
-   Check strikes land on the hit, combos flow without snapping, no backwards arms.
+TEST v0.25.9
+1. Stat HUD: food icons in one horizontal row under the EXP bar; HUD is thin; no vanilla food/fork icons anywhere.
+2. Sorcerer / Archmage / Horizon Walker: cast every skill (and Ascended via F8) in third person.
+   Meteor Fall / Cataclysm: arms stay up while you hold, come down on release.
    Tell me skill + arm if anything bends wrong.

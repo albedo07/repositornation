@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.8";
+        public const string ModVersion = "0.25.9";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1822,6 +1822,88 @@ namespace DragonsAltarCombat
         {
             BuildClericClips(c);
             BuildWarriorClips(c);
+            BuildSorcererClips(c);
+        }
+
+        // ------------------------------------------------------------------ Sorcerer / Archmage / Horizon Walker
+        private static void BuildSorcererClips(Dictionary<string, DragonClipKey[]> c)
+        {
+            // Flame Burst: staff drawn back to the right shoulder, thrust forward, free palm pushes the fire.
+            DragonClipKey fbBack = K(-0.45f).Sp(0f, -20f, 0f).Ch(-4f, -12f, 0f).RA(-50f, 0f, -25f).RF(-90f, 0f, 0f).LA(-30f, 0f, 25f).LF(-60f, 0f, 0f);
+            DragonClipKey fbOut = K(0f).Sp(8f, 14f, 0f).Ch(6f, 8f, 0f).RA(-80f, -6f, -10f).RF(-8f, 0f, 0f).LA(-85f, 12f, 10f).LF(-6f, 0f, 0f).LH(-30f, 0f, 0f).Rot(5f, 0f, 0f).Off(0f, -0.03f, 0.06f);
+            c["sorc_flame"] = new DragonClipKey[] { K(-1f), fbBack, fbOut, fbOut.Copy(0.18f), K(0.5f) };
+            // Glacial Descent: staff to the sky, free hand open; swing down to point at the impact.
+            DragonClipKey gdUp = K(-0.55f).Sp(-10f, 0f, 0f).Ch(-10f, 0f, 0f).Hd(-18f, 0f, 0f).RA(-160f, 0f, -12f).RF(-15f, 0f, 0f).LA(-110f, 0f, 35f).LH(-30f, 0f, 0f).Off(0f, 0.04f, 0f);
+            DragonClipKey gdDown = K(0f).Sp(14f, 0f, 0f).Ch(8f, 0f, 0f).Hd(4f, 0f, 0f).RA(-85f, 0f, -6f).RF(-4f, 0f, 0f).LA(-20f, 0f, 30f).Rot(6f, 0f, 0f).Off(0f, -0.04f, 0.04f);
+            c["sorc_glacial"] = new DragonClipKey[] { K(-1f), gdUp, gdUp.Copy(-0.1f).RA(-165f, 0f, -12f), gdDown, gdDown.Copy(0.3f), K(0.65f) };
+            // Ascended Glacial: both hands to the sky, the whole body pulls the glacier down.
+            DragonClipKey gaUp = K(-0.5f).Sp(-14f, 0f, 0f).Ch(-12f, 0f, 0f).Hd(-24f, 0f, 0f).RA(-160f, 0f, -25f).RF(-15f, 0f, 0f).LA(-160f, 0f, 25f).LF(-15f, 0f, 0f).Off(0f, 0.07f, 0f);
+            DragonClipKey gaDown = K(0f).Sp(30f, 0f, 0f).Ch(14f, 0f, 0f).Hd(10f, 0f, 0f).RA(-50f, 0f, -20f).LA(-50f, 0f, 20f).Rot(10f, 0f, 0f).Off(0f, -0.16f, 0.06f);
+            c["sorc_glacial_asc"] = new DragonClipKey[] { K(-1f), gaUp, gaUp.Copy(-0.1f).Rot(-4f, 0f, 0f), gaDown, gaDown.Copy(0.35f), K(0.8f) };
+            // Stonefang Eruption: staff lifted upright, butt driven into the ground in a crouch, rise as fangs erupt.
+            DragonClipKey sfUp = K(-0.45f).Sp(-8f, 0f, 0f).Ch(-6f, 0f, 0f).RA(-120f, 0f, -10f).RF(-60f, 0f, 0f).LA(-110f, 0f, 10f).LF(-60f, 0f, 0f).Off(0f, 0.06f, 0f);
+            DragonClipKey sfDown = K(0f).Sp(32f, 0f, 0f).Ch(14f, 0f, 0f).Hd(8f, 0f, 0f).RA(-40f, 0f, -10f).RF(-30f, 0f, 0f).LA(-40f, 0f, 10f).LF(-30f, 0f, 0f).Rot(9f, 0f, 0f).Off(0f, -0.2f, 0.04f);
+            DragonClipKey sfRise = K(0.25f).Sp(-8f, 0f, 0f).Ch(-6f, 0f, 0f).Hd(-10f, 0f, 0f).RA(-60f, 0f, -45f).LA(-60f, 0f, 45f).Off(0f, 0.04f, 0f);
+            c["sorc_stonefang"] = new DragonClipKey[] { K(-1f), sfUp, sfDown, sfDown.Copy(0.1f), sfRise, K(0.7f) };
+            c["sorc_stonefang_asc"] = new DragonClipKey[] { K(-1f), sfUp, sfDown, sfDown.Copy(0.15f), sfRise.Copy(0.3f), sfDown.Copy(0.5f), sfRise.Copy(0.8f), sfDown.Copy(1.0f), sfRise.Copy(1.3f), K(1.7f) };
+            // Meteor Fall (hold while charging): both arms raised to the sky, trembling; release drags the sky down.
+            DragonClipKey mtUp = K(0f).Sp(-14f, 0f, 0f).Ch(-12f, 0f, 0f).Hd(-26f, 0f, 0f).RA(-165f, 0f, -20f).RF(-10f, 0f, 0f).LA(-165f, 0f, 20f).LF(-10f, 0f, 0f).Off(0f, 0.06f, 0f);
+            DragonClipKey mtDown = K(0.15f).Sp(28f, 0f, 0f).Ch(14f, 0f, 0f).Hd(8f, 0f, 0f).RA(-60f, 0f, -15f).LA(-60f, 0f, 15f).Rot(9f, 0f, 0f).Off(0f, -0.14f, 0.06f);
+            c["wiz_meteor"] = new DragonClipKey[] { K(-1f), mtUp.Copy(-0.4f), mtUp, mtDown, mtDown.Copy(0.45f), K(0.85f) };
+            // Elemental Cataclysm (hold): arms spread wide to the sky, body arched; release thrusts everything forward.
+            DragonClipKey ccUp = K(0f).Sp(-18f, 0f, 0f).Ch(-16f, 0f, 0f).Hd(-28f, 0f, 0f).RA(-140f, 0f, -55f).RF(-10f, 0f, 0f).LA(-140f, 0f, 55f).LF(-10f, 0f, 0f).Rot(-6f, 0f, 0f).Off(0f, 0.08f, 0f);
+            DragonClipKey ccOut = K(0.15f).Sp(22f, 0f, 0f).Ch(12f, 0f, 0f).Hd(-4f, 0f, 0f).RA(-85f, -10f, -8f).RF(-4f, 0f, 0f).LA(-85f, 10f, 8f).LF(-4f, 0f, 0f).Rot(10f, 0f, 0f).Off(0f, -0.1f, 0.1f);
+            c["wiz_cataclysm"] = new DragonClipKey[] { K(-1f), ccUp.Copy(-0.4f), ccUp, ccOut, ccOut.Copy(0.6f), K(1.0f) };
+            // Gravity Dominion: both arms reach out to the target, then fists dragged back to the chest.
+            DragonClipKey gvReach = K(-0.5f).Sp(8f, 0f, 0f).Ch(6f, 0f, 0f).RA(-88f, -10f, -10f).RF(-5f, 0f, 0f).RH(-20f, 0f, 0f).LA(-88f, 10f, 10f).LF(-5f, 0f, 0f).LH(-20f, 0f, 0f).Off(0f, 0f, 0.05f);
+            DragonClipKey gvPull = K(0f).Sp(-10f, 0f, 0f).Ch(-8f, 0f, 0f).RA(-50f, 20f, 15f).RF(-110f, 0f, 0f).LA(-50f, -20f, -15f).LF(-110f, 0f, 0f).Rot(-4f, 0f, 0f).Off(0f, -0.1f, -0.06f);
+            c["wiz_gravity"] = new DragonClipKey[] { K(-1f), gvReach, gvReach.Copy(-0.15f), gvPull, gvPull.Copy(0.5f), K(0.9f) };
+            // Astral Railcannon: brace low, staff levelled like a cannon (both hands), recoil on the shot.
+            DragonClipKey rcAim = K(-0.4f).Sp(10f, -10f, 0f).Ch(4f, -6f, 0f).RA(-88f, 0f, -6f).RF(-15f, 0f, 0f).LA(-80f, 15f, 15f).LF(-35f, 0f, 0f).Off(0f, -0.1f, 0f);
+            DragonClipKey rcKick = K(0f).Sp(-12f, -6f, 0f).Ch(-8f, -4f, 0f).Hd(-6f, 0f, 0f).RA(-100f, 0f, -6f).RF(-20f, 0f, 0f).LA(-92f, 15f, 15f).LF(-40f, 0f, 0f).Rot(-8f, 0f, 0f).Off(0f, -0.06f, -0.3f);
+            c["wiz_railcannon"] = new DragonClipKey[] { K(-1f), rcAim, rcAim.Copy(-0.05f), rcKick, rcAim.Copy(0.3f), K(0.7f) };
+            c["wiz_railcannon_hold"] = new DragonClipKey[] { K(-1f), rcAim, rcAim.Copy(0f).Off(0f, -0.1f, -0.05f), K(0.25f) };
+            // Astral Greatblade: conjured blade raised two-handed overhead, crushing slam.
+            DragonClipKey ab = K(0f).Sp(36f, 0f, 0f).Ch(16f, 0f, 0f).Hd(10f, 0f, 0f).RA(-30f, 0f, -4f).RF(-4f, 0f, 0f).LA(-30f, 0f, 6f).LF(-4f, 0f, 0f).Rot(12f, 0f, 0f).Off(0f, -0.18f, 0.08f);
+            c["wiz_greatblade"] = new DragonClipKey[] {
+                K(-1f),
+                K(-0.45f).Sp(-14f, 0f, 0f).Ch(-10f, 0f, 0f).Hd(-16f, 0f, 0f).RA(-168f, 0f, -6f).RF(-25f, 0f, 0f).LA(-160f, 0f, 8f).LF(-30f, 0f, 0f).Off(0f, 0.04f, 0f),
+                ab, ab.Copy(0.35f), K(0.8f)
+            };
+            c["wiz_greatblade_slam"] = new DragonClipKey[] {
+                K(-1f),
+                K(-0.5f).Sp(-12f, 0f, 0f).Ch(-8f, 0f, 0f).RA(-160f, 0f, -6f).RF(-25f, 0f, 0f).LA(-150f, 0f, 8f).LF(-30f, 0f, 0f).Off(0f, 0.04f, 0f),
+                ab, ab.Copy(0.25f), K(0.6f)
+            };
+            // Frost Nova: curl inward with the cold gathering, then burst wide open.
+            DragonClipKey fnIn = K(-0.4f).Sp(24f, 0f, 0f).Ch(14f, 0f, 0f).Hd(14f, 0f, 0f).RA(-40f, 20f, 30f).RF(-60f, 0f, 0f).LA(-40f, -20f, -30f).LF(-60f, 0f, 0f).Rot(5f, 0f, 0f).Off(0f, -0.15f, 0f);
+            DragonClipKey fnOut = K(0f).Sp(-14f, 0f, 0f).Ch(-12f, 0f, 0f).Hd(-16f, 0f, 0f).RA(-90f, 0f, -75f).RF(-5f, 0f, 0f).LA(-90f, 0f, 75f).LF(-5f, 0f, 0f).Rot(-5f, 0f, 0f).Off(0f, 0.05f, 0f);
+            c["wiz_nova"] = new DragonClipKey[] { K(-1f), fnIn, fnIn.Copy(-0.06f).Rot(5f, 0f, 1.5f), fnOut, fnOut.Copy(0.3f), K(0.7f) };
+            // Clockwork: hand raised tracing a clock face, then snapped open.
+            c["wiz_clockwork"] = new DragonClipKey[] {
+                K(-1f),
+                K(0f).Hd(-10f, 0f, 0f).RA(-115f, 0f, -20f).RF(-40f, 0f, 0f).RH(-20f, 0f, 0f).LA(-40f, 0f, 30f),
+                K(0.15f).Hd(-10f, 0f, 0f).RA(-120f, 0f, 10f).RF(-40f, 0f, 0f).RH(-20f, 0f, 0f).LA(-40f, 0f, 30f),
+                K(0.3f).Ch(-6f, 0f, 0f).Hd(-14f, 0f, 0f).RA(-120f, 0f, -55f).RF(-5f, 0f, 0f).LA(-100f, 0f, 55f).Off(0f, 0.04f, 0f),
+                K(0.7f)
+            };
+            // Horizon Walker (no wind up: quick, mobile gestures).
+            DragonClipKey phCmd = K(0f).Sp(6f, 18f, 0f).Ch(4f, 10f, 0f).RA(-95f, 0f, 20f).RF(-5f, 0f, 0f).RH(-15f, 0f, 0f).LA(-20f, 0f, 30f).Rot(3f, 10f, 0f);
+            c["hw_command"] = new DragonClipKey[] { K(-1f).RA(-120f, 0f, -40f).RF(-30f, 0f, 0f), phCmd, phCmd.Copy(0.15f), K(0.45f) };
+            DragonClipKey aaSweep = K(0f).Sp(8f, 30f, 0f).Ch(4f, 18f, 0f).RA(-85f, 0f, 45f).LA(-85f, 0f, 60f).Rot(4f, 20f, 0f);
+            c["hw_afterimage"] = new DragonClipKey[] { K(-1f).Sp(4f, -25f, 0f).RA(-80f, 0f, -60f).LA(-60f, 0f, 20f), aaSweep, aaSweep.Copy(0.2f), K(0.5f) };
+            DragonClipKey vsDash = K(0f).Sp(24f, 0f, 0f).Ch(12f, 0f, 0f).Hd(-10f, 0f, 0f).RA(30f, 0f, -20f).RF(-20f, 0f, 0f).LA(30f, 0f, 20f).LF(-20f, 0f, 0f).Rot(18f, 0f, 0f).Off(0f, -0.12f, 0.08f);
+            c["hw_voidstep"] = new DragonClipKey[] { K(-1f), vsDash, vsDash.Copy(0.12f), K(0.35f) };
+            DragonClipKey reCut = K(0f).Sp(14f, 24f, 0f).Ch(8f, 12f, 0f).RA(-40f, 0f, 30f).RF(-6f, 0f, 0f).LA(-20f, 0f, 30f).Rot(6f, 10f, -6f).Off(0f, -0.06f, 0.05f);
+            c["hw_rift_echo"] = new DragonClipKey[] { K(-1f).Sp(-4f, -24f, 0f).RA(-150f, 0f, -45f).RF(-30f, 0f, 0f).Rot(0f, 0f, 4f), reCut, reCut.Copy(0.18f), K(0.5f) };
+            DragonClipKey ruAim = K(-0.5f).Sp(6f, 0f, 0f).RA(-90f, 0f, -6f).RF(-5f, 0f, 0f).RH(-35f, 0f, 0f).LA(-30f, 0f, 30f);
+            DragonClipKey ruClench = K(0f).Sp(10f, 0f, 0f).Ch(6f, 0f, 0f).RA(-88f, 0f, -6f).RF(-40f, 0f, 0f).RH(20f, 0f, 0f).LA(-30f, 0f, 30f).Rot(4f, 0f, 0f).Off(0f, -0.04f, 0.03f);
+            c["hw_rupture"] = new DragonClipKey[] { K(-1f), ruAim, ruAim.Copy(-0.1f), ruClench, ruClench.Copy(0.25f), K(0.6f) };
+            DragonClipKey gbBack = K(-0.5f).Sp(-6f, 0f, 0f).RA(-60f, 20f, 15f).RF(-100f, 0f, 0f).LA(-60f, -20f, -15f).LF(-100f, 0f, 0f).Off(0f, -0.04f, -0.04f);
+            DragonClipKey gbPush = K(0f).Sp(14f, 0f, 0f).Ch(8f, 0f, 0f).RA(-90f, -10f, -8f).RF(-4f, 0f, 0f).RH(-30f, 0f, 0f).LA(-90f, 10f, 8f).LF(-4f, 0f, 0f).LH(-30f, 0f, 0f).Rot(6f, 0f, 0f).Off(0f, -0.05f, 0.1f);
+            c["hw_gravity_blast"] = new DragonClipKey[] { K(-1f), gbBack, gbPush, gbPush.Copy(0.2f), K(0.55f) };
+            DragonClipKey rwOpen = K(0f).Ch(-6f, 0f, 0f).Hd(-6f, 0f, 0f).RA(-100f, 0f, -60f).RF(-15f, 0f, 0f).LA(-100f, 0f, 60f).LF(-15f, 0f, 0f).Off(0f, 0.03f, 0f);
+            c["hw_rift_walker"] = new DragonClipKey[] { K(-1f).RA(-100f, 0f, 10f).RF(-40f, 0f, 0f).LA(-100f, 0f, -10f).LF(-40f, 0f, 0f), rwOpen, rwOpen.Copy(0.3f), K(0.7f) };
         }
 
         // ------------------------------------------------------------------ Warrior / Sword Master / Mercenary
@@ -2405,24 +2487,7 @@ namespace DragonsAltarCombat
             {
                 // Warrior / Sword Master / Mercenary: keyframed clips (PlayClip) at the real wind-up / impact.
                 // Cleric / Paladin / Priest: keyframed clips (PlayClip) at the real wind-up / impact.
-                // Sorcerer / Archmage / Horizon Walker
-                case "flame_burst": preset = "flick"; duration = 0.4f; break;
-                case "glacial_descent": preset = "slam"; duration = 0.55f; break;
-                case "stonefang_eruption": preset = "erupt"; duration = 0.6f; break;
-                case "meteor_fall": preset = "call_down"; duration = 0.7f; break;
-                case "gravity_dominion": preset = "pull"; duration = 0.7f; break;
-                case "astral_railcannon": preset = "recoil"; duration = 0.6f; break;
-                case "astral_greatblade": preset = "slam"; duration = 0.7f; break;
-                case "frost_nova": preset = "nova"; duration = 0.55f; break;
-                case "elemental_cataclysm": preset = "grand"; duration = 1f; break;
-                case "clockwork": preset = "raise"; duration = 0.6f; break;
-                case "arcane_phalanx": preset = "cast"; duration = 0.45f; break;
-                case "afterimage_arsenal": preset = "flourish"; duration = 0.5f; break;
-                case "void_step": preset = "blink"; duration = 0.3f; break;
-                case "rift_echo": preset = "rend"; duration = 0.45f; break;
-                case "gravity_blast": preset = "push"; duration = 0.5f; break;
-                case "arcane_rupture": preset = "grand"; duration = 0.8f; break;
-                case "rift_walker": preset = "raise"; duration = 0.5f; break;
+                // Sorcerer / Archmage / Horizon Walker: keyframed clips (PlayClip).
             }
             return preset != null;
         }

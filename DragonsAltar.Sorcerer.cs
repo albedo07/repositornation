@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Dragon's Altar - Sorcerer Advancements";
-        public const string ModVersion = "0.25.8";
+        public const string ModVersion = "0.25.9";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -806,7 +806,7 @@ namespace DragonsAltarSorcerer
             if (!BeginSkill(player, "Sorcerer.FlameBurst", _flameCooldown.Value, _flameEitr.Value)) return;
             float windup = ScaleWindup(player, 0.4f);
             DragonCombat.LockSkill(player, windup);
-            DragonCombat.PlaySkillPose(player, "Raise", windup + 0.08f);
+            DragonCombat.PlayClip(player, "sorc_flame", windup);
             StartCoroutine(FlameBurstRoutine(player, windup));
         }
 
@@ -832,7 +832,7 @@ namespace DragonsAltarSorcerer
             if (!BeginSkill(player, "Sorcerer.GlacialDescent", _iceCooldown.Value, _iceEitr.Value)) return;
             float windup = ScaleWindup(player, 1f);
             DragonCombat.LockSkill(player, windup);
-            DragonCombat.PlaySkillPose(player, "SkyCast", windup + 0.10f);
+            DragonCombat.PlayClip(player, "sorc_glacial", windup);
             StartCoroutine(GlacialRoutine(player, target, windup));
         }
 
@@ -867,7 +867,7 @@ namespace DragonsAltarSorcerer
             if (!BeginSkill(player, "Sorcerer.Stonefang", _stoneCooldown.Value, _stoneEitr.Value)) return;
             float windup = ScaleWindup(player, 0.8f);
             DragonCombat.LockSkill(player, windup);
-            DragonCombat.PlaySkillPose(player, "Slam", windup + 0.10f);
+            DragonCombat.PlayClip(player, "sorc_stonefang", windup);
             StartCoroutine(StonefangRoutine(player, target, windup));
         }
 
@@ -1055,7 +1055,7 @@ namespace DragonsAltarSorcerer
             if (!BeginSkill(player, "Wizard.GravityDominion", _gravityCooldown.Value, _gravityEitr.Value)) return;
             float windup = ScaleWindup(player, Mathf.Max(0f, _gravityWindup.Value));
             DragonCombat.LockSkill(player, windup);
-            DragonCombat.PlaySkillPose(player, "Channel", windup + 0.10f);
+            DragonCombat.PlayClip(player, "wiz_gravity", windup);
             StartCoroutine(GravityRoutine(player, target, windup, IsWizAscended(player, "gravity_dominion")));
         }
 
@@ -1123,7 +1123,7 @@ namespace DragonsAltarSorcerer
             ShowMessage("Astral Greatblade");
             float windup = ScaleWindup(player, Mathf.Max(0f, _bladeWindup.Value));
             DragonCombat.LockSkill(player, windup + 0.3f);
-            DragonCombat.PlaySkillPose(player, "HeavySlash", windup + 0.15f);
+            DragonCombat.PlayClip(player, "wiz_greatblade", windup);
             if (windup > 0f) yield return new WaitForSeconds(windup);
             if (player == null || player.IsDead()) yield break;
             GreatbladeSlam(player, 1f);
@@ -1151,13 +1151,13 @@ namespace DragonsAltarSorcerer
             float windup = ScaleWindup(player, Mathf.Max(0f, _gbAscWindup.Value));
             // you cannot move while the three slams happen
             DragonCombat.LockSkill(player, windup + 2f * Mathf.Max(0.1f, _gbAscGap.Value) + 0.4f);
-            DragonCombat.PlaySkillPose(player, "HeavySlash", windup + 0.10f);
+            DragonCombat.PlayClip(player, "wiz_greatblade", windup);
             if (windup > 0f) yield return new WaitForSeconds(windup);
             for (int slam = 0; slam < 3; slam++)
             {
                 if (player == null || player.IsDead()) yield break;
                 DragonCombat.LockSkill(player, Mathf.Max(0.1f, _gbAscGap.Value) + 0.3f);
-                DragonCombat.PlaySkillPose(player, "HeavySlash", 0.35f);
+                if (slam > 0) DragonCombat.PlayClip(player, "wiz_greatblade_slam", 0.2f);
                 GreatbladeSlam(player, _gbAscPercent.Value / 100f);
                 if (slam < 2) yield return new WaitForSeconds(Mathf.Max(0.1f, _gbAscGap.Value));
             }
@@ -1170,7 +1170,7 @@ namespace DragonsAltarSorcerer
             bool ascended = IsWizAscended(player, "frost_nova");
             float windup = ScaleWindup(player, Mathf.Max(0f, _novaWindup.Value));
             DragonCombat.LockSkill(player, windup);
-            DragonCombat.PlaySkillPose(player, "Wave", windup + 0.10f);
+            DragonCombat.PlayClip(player, "wiz_nova", windup);
             StartCoroutine(ascended ? FrostAuraRoutine(player, windup) : FrostNovaRoutine(player, windup));
         }
 
@@ -1231,7 +1231,7 @@ namespace DragonsAltarSorcerer
             _meteorChargeShown = 0;
             float windup = ScaleWindup(player, Mathf.Max(0f, IsWizAscended(player, "meteor_fall") ? _mfAscWindup.Value : _meteorWindup.Value));
             DragonCombat.LockSkill(player, windup + 0.1f);
-            DragonCombat.PlaySkillPose(player, "SkyCast", windup + 0.10f);
+            DragonCombat.PlayClip(player, "wiz_meteor", Mathf.Max(0.25f, windup), true);
             StartCoroutine(MeteorRoutine(player, target, windup));
         }
 
@@ -1263,12 +1263,12 @@ namespace DragonsAltarSorcerer
                 if (now > stacks) { stacks = now; _meteorChargeShown = stacks; ShowMessage("Meteor Fall " + stacks + "/3" + (stacks >= 3 ? " - release to drop it where you aim" : "")); if (_enableVfx.Value) StartCoroutine(RingVfx(target, DragonCombat.M(_meteorRadius.Value) * (1f + 0.1f * stacks), new Color(1f, 0.45f, 0.10f, 0.75f), 0.4f)); }
                 if (elapsed >= windup && !holding) break;
                 DragonCombat.LockSkill(player, 0.12f);
-                DragonCombat.PlaySkillPose(player, "SkyCast", 0.12f);
                 yield return null;
             }
             if (player == null || player.IsDead()) yield break;
             _meteorChargeShown = 0;
             _meteorChargeNext = 0f;
+            DragonCombat.ClipImpact(player);   // release: drag the sky down
             float damageMul = 1f + 0.2f * stacks;
             float radius = DragonCombat.M(_meteorRadius.Value) * (1f + 0.1f * stacks);
             yield return StartCoroutine(MeteorImpact(player, target, radius, damageMul, 2.4f * (1f + 0.15f * stacks)));
@@ -1323,7 +1323,7 @@ namespace DragonsAltarSorcerer
             bool ascended = IsWizAscended(player, "astral_railcannon");
             float windup = ScaleWindup(player, Mathf.Max(0.2f, ascended ? _rcAscWindup.Value : _railWindup.Value));
             DragonCombat.LockSkill(player, windup);
-            DragonCombat.PlaySkillPose(player, "Channel", windup + 0.15f);
+            DragonCombat.PlayClip(player, ascended ? "wiz_railcannon_hold" : "wiz_railcannon", windup, ascended);
             StartCoroutine(ascended ? AscendedRailcannonRoutine(player, windup) : AstralRailcannonRoutine(player, windup));
         }
 
@@ -1371,11 +1371,11 @@ namespace DragonsAltarSorcerer
                 if (!first && !SkillKeyHeld(player, "astral_railcannon", _skill8.Value)) break;
                 first = false;
                 DragonCombat.LockSkill(player, tick + 0.05f);
-                DragonCombat.PlaySkillPose(player, "Channel", tick + 0.05f);
                 Vector3 origin = player.GetEyePoint();
                 RailShot(player, origin, AlbedoAimUtility.GetProjectileDirection(player, origin), shot, tick + 0.02f);
                 yield return new WaitForSeconds(tick);
             }
+            DragonCombat.PlayClip(player, "wiz_railcannon", 0.05f);   // last kick, then rest
         }
 
         // ------------------------------------------------------------------ Elemental Cataclysm
@@ -1397,10 +1397,10 @@ namespace DragonsAltarSorcerer
             float elapsed = 0f;
             bool holding = true;
             float nextMarker = 0f;
+            DragonCombat.PlayClip(player, "wiz_cataclysm", Mathf.Max(0.3f, minWindup), true);
             while (player != null && !player.IsDead() && (elapsed < minWindup || holding))
             {
                 DragonCombat.LockSkill(player, 0.12f);
-                DragonCombat.PlaySkillPose(player, "SkyCast", 0.12f);
                 elapsed += Time.deltaTime;
                 // charge timer from the key press; it stops the moment the key is released
                 if (holding && SkillKeyHeld(player, "elemental_cataclysm", _skill9.Value)) charge = Mathf.Min(max, elapsed);
@@ -1415,6 +1415,7 @@ namespace DragonsAltarSorcerer
             }
             _cataclysmCharge01 = 0f;
             if (player == null) yield break;
+            DragonCombat.ClipImpact(player);
             float multiplier = 1f + (Mathf.Max(1f, _cataclysmMaxMultiplier.Value) - 1f) * Mathf.Clamp01(charge / max);
             CataclysmBlast(player, target, radius, multiplier);
             ShowMessage("ELEMENTAL CATACLYSM x" + multiplier.ToString("0.0"));
@@ -1447,7 +1448,7 @@ namespace DragonsAltarSorcerer
             if (!BeginSkill(player, "Sorcerer.GlacialDescent", _gdAscCooldown.Value, _gdAscEitr.Value)) return;
             float windup = ScaleWindup(player, Mathf.Max(0f, _gdAscWindup.Value));
             DragonCombat.LockSkill(player, windup);
-            DragonCombat.PlaySkillPose(player, "SkyCast", windup + 0.10f);
+            DragonCombat.PlayClip(player, "sorc_glacial_asc", windup);
             StartCoroutine(AscendedGlacialRoutine(player, target, windup));
         }
 
@@ -1491,7 +1492,7 @@ namespace DragonsAltarSorcerer
         {
             if (!BeginSkill(player, "Wizard.Clockwork", _clockCooldown.Value, 0f)) return;
             DragonCombat.LockSkill(player, 0.5f);
-            DragonCombat.PlaySkillPose(player, "Chant", 0.5f);
+            DragonCombat.PlayClip(player, "wiz_clockwork", 0.12f);
             ShowMessage("Clockwork");
             Collider[] hits = Physics.OverlapSphere(player.transform.position, DragonCombat.M(_clockRadius.Value));
             HashSet<Player> allies = new HashSet<Player>();
@@ -1512,6 +1513,7 @@ namespace DragonsAltarSorcerer
                 return;
             _riftEchoUntil = Time.time + Mathf.Max(1f, _riftEchoDuration.Value);
             DragonCombat.BeginMobileCast(player, 0.30f, true);
+            DragonCombat.PlayClip(player, "hw_rift_echo", 0.1f);
             ShowMessage("Rift Echo ACTIVE");
             if (_enableVfx.Value)
                 StartCoroutine(RingVfx(player.transform.position + Vector3.up * 0.12f, 2.0f, new Color(0.68f, 0.20f, 1f, 0.90f), 0.45f));
@@ -1525,6 +1527,7 @@ namespace DragonsAltarSorcerer
             _afterimageUntil = Time.time + Mathf.Max(1f, _afterimageDuration.Value);
             ClearAfterimages();
             SpawnAfterimage(player.transform.position, player.transform.rotation);
+            DragonCombat.PlayClip(player, "hw_afterimage", 0.1f);
             ShowMessage("Afterimage Arsenal ACTIVE");
         }
 
@@ -1714,6 +1717,7 @@ namespace DragonsAltarSorcerer
                 SpawnAfterimage(player.transform.position, player.transform.rotation);
             Rigidbody body = player.GetComponent<Rigidbody>();
             Vector3 momentum = body != null ? body.velocity : Vector3.zero;
+            DragonCombat.PlayClip(player, "hw_voidstep", 0.06f);
             TeleportPlayer(player, dest);
             if (body != null && IsSpellAscended(player, "void_step"))
                 body.velocity = momentum; // Ascended keeps momentum
@@ -2363,6 +2367,7 @@ namespace DragonsAltarSorcerer
             if (_phalanxSwords.Count > 0)
             {
                 _phalanxVolleyArmed = true;
+                DragonCombat.PlayClip(player, "hw_command", 0.1f);
                 ShowMessage("Phalanx Volley READY - aim and Left Click");
                 return;
             }
@@ -2376,6 +2381,7 @@ namespace DragonsAltarSorcerer
             for (int i = 0; i < count; i++) _phalanxSwords.Add(CreateArcaneSword(player.transform.position));
             _nextPhalanxLaunch = Time.time + 0.15f;
             _phalanxExpireAt = Time.time + Mathf.Max(1f, _phalanxLifetime.Value); // swords stay 16s
+            DragonCombat.PlayClip(player, "hw_rift_walker", 0.12f);   // both hands open: the swords appear
             ShowMessage("Arcane Phalanx x" + count);
             CloneCopySkill(player, "arcane_phalanx");
         }
@@ -2470,6 +2476,7 @@ namespace DragonsAltarSorcerer
             if (_gbOrbActive)
             {
                 _gbRecasts++;
+                DragonCombat.PlayClip(player, _gbRecasts == 1 ? "hw_rupture" : "hw_command", 0.08f);
                 ShowMessage(_gbRecasts == 1 ? "Gravity Blast - halted" : "Gravity Blast - detonate");
                 return;
             }
@@ -2477,6 +2484,7 @@ namespace DragonsAltarSorcerer
             _gbOrbActive = true;
             _gbRecasts = 0;
             DragonCombat.BeginMobileCast(player, 0.3f, false);
+            DragonCombat.PlayClip(player, "hw_gravity_blast", 0.12f);
             Vector3 origin = player.GetEyePoint() + player.transform.forward * 1.2f;
             Vector3 dir = AlbedoAimUtility.GetProjectileDirection(player, origin);
             StartCoroutine(GravityBlastRoutine(player, origin, dir, IsSpellAscended(player, "gravity_blast"), 1f));
@@ -2592,6 +2600,7 @@ namespace DragonsAltarSorcerer
                 DestroyRifts();
                 _riftA = CreateRift(a);
                 _riftAwaitingB = true;
+                DragonCombat.PlayClip(player, "hw_rift_walker", 0.12f);
                 _riftEndTime = Time.time + Mathf.Max(1f, _riftWalkerWindow.Value);
                 StartCooldown("Spellcaster.RiftWalker", _riftWalkerCooldown.Value); // from Portal A placement
                 ShowMessage("Portal A placed - aim and press the Grace key again for Portal B");
@@ -2600,6 +2609,7 @@ namespace DragonsAltarSorcerer
             Vector3 b; bool airB;
             if (!PlacePortalPoint(player, out b, out airB)) { ShowMessage("Portal B could not be placed"); return; }
             _riftB = CreateRift(b);
+            DragonCombat.PlayClip(player, "hw_rift_walker", 0.12f);
             LinkRifts();
             _riftAwaitingB = false;
             _riftEndTime = Time.time + Mathf.Max(1f, _riftWalkerLife.Value);
@@ -2613,6 +2623,7 @@ namespace DragonsAltarSorcerer
             if (!AlbedoAimUtility.TryGetPhysicalTarget(player, DragonCombat.M(_saAscRange.Value), out target)) { ShowMessage("Aim at a physical target"); return; }
             if (!BeginSkill(player, "Sorcerer.StonefangEruption", _saAscCooldown.Value, _saAscEitr.Value)) return;
             DragonCombat.BeginMobileCast(player, 0.3f, false); // Spellcaster: no wind up
+            DragonCombat.PlayClip(player, "sorc_stonefang_asc", 0.12f);
             StartCoroutine(AscendedStonefangRoutine(player, target));
         }
 
@@ -2682,6 +2693,7 @@ namespace DragonsAltarSorcerer
             ClearClones();
             _mimicUntil = Time.time + Mathf.Max(1f, _afterimageDuration.Value);
             BuildAstralMimics(player);
+            DragonCombat.PlayClip(player, "hw_afterimage", 0.1f);
             ShowMessage("Afterimage Arsenal - 3 Astral twins");
         }
 
@@ -2897,6 +2909,7 @@ namespace DragonsAltarSorcerer
             _ruptureRechargeAt.Add(Time.time + Mathf.Max(1f, _ruptureRecharge.Value));
             _ruptureNextCastAt = Time.time + Mathf.Max(0f, _ruptureBuffer.Value);
             StartCoroutine(RuptureRoutine(player, target));
+            DragonCombat.PlayClip(player, "hw_rupture", Mathf.Max(0.1f, _ruptureWindup.Value));
             ShowMessage("Arcane Rupture " + _ruptureCharges + "/" + RuptureMax());
         }
 

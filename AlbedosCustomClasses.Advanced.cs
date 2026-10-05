@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.8";
+        public const string ModVersion = "0.25.9";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -12220,7 +12220,7 @@ namespace AlbedosCustomClassesAdvanced
                     GameObject g = _ihVanillaVitals[i];
                     if (g != null && g.activeSelf == on) g.SetActive(!on);
                 }
-                IhLayoutFoodRow(hud, on);
+                IhLayoutFoodRow(hud, false);   // v0.25.9: keep vanilla food slots at their own positions (panel is off)
                 IhPlaceFood(on);
             }
             catch { }
@@ -12234,6 +12234,7 @@ namespace AlbedosCustomClassesAdvanced
         private readonly Dictionary<Transform, Vector3> _ihFoodOrig = new Dictionary<Transform, Vector3>();
         private float _ihFoodPitch;
         private bool _ihFoodLayoutTried;
+        private bool _ihMeasureVanillaFood;   // v0.25.9: off (our HUD draws the food row)
         private RectTransform _ihFoodPanelRef;
 
         private void IhLayoutFoodRow(object hud, bool on)
@@ -12339,10 +12340,13 @@ namespace AlbedosCustomClassesAdvanced
             if (_ihHealthPanel == null) return;
             Camera cam = IhCanvasCamera(_ihHealthPanel);
             // Altar / tree / menu open: the food goes with our HUD (no stray vanilla bits on top).
-            bool showFood = !on || _ihPanelVisible;
+            // v0.25.9: our HUD draws the food itself (one horizontal row); vanilla food stays off.
+            bool showFood = !on;
             if (_ihHealthPanel.gameObject.activeSelf != showFood) _ihHealthPanel.gameObject.SetActive(showFood);
             if (!on) { if (_ihFrameBg != null) _ihFrameBg.SetActive(false); return; }
-
+            _ihFoodFound = false;
+            if (_ihMeasureVanillaFood)
+            {
             // Measure the visible food icons (once per second): world-space bounds of every active
             // RectTransform under the health panel (the bar and its icon are already off).
             Vector3[] c = new Vector3[4];
@@ -12387,6 +12391,7 @@ namespace AlbedosCustomClassesAdvanced
                         _ihFoodBounds.position = _ihFoodTarget;   // until the next measurement
                     }
                 }
+            }
             }
 
             // Frame (uGUI, behind the food): created once, then kept on our panel rect.
@@ -12471,6 +12476,9 @@ namespace AlbedosCustomClassesAdvanced
             return false;
         }
 
+        private readonly List<object> _ihHudFoods = new List<object>();
+        private MethodInfo _ihGetFoods, _ihFoodIcon;
+
         private void IhGatherHudFrame(Player player)
         {
             if (_ihHudFrame == Time.frameCount) return;
@@ -12484,6 +12492,14 @@ namespace AlbedosCustomClassesAdvanced
                 MethodInfo get = seman == null ? null : seman.GetType().GetMethod("GetStatusEffects", Type.EmptyTypes);
                 System.Collections.IEnumerable list = get == null ? null : get.Invoke(seman, null) as System.Collections.IEnumerable;
                 if (list != null) foreach (object se in list) if (se is IhStatusDisplay) _ihHudEffects.Add(se);
+            }
+            catch { }
+            _ihHudFoods.Clear();
+            try
+            {
+                if (_ihGetFoods == null) _ihGetFoods = typeof(Player).GetMethod("GetFoods", Type.EmptyTypes);
+                System.Collections.IEnumerable fl = _ihGetFoods == null ? null : _ihGetFoods.Invoke(player, null) as System.Collections.IEnumerable;
+                if (fl != null) foreach (object f in fl) if (f != null) _ihHudFoods.Add(f);
             }
             catch { }
 
@@ -12605,15 +12621,21 @@ namespace AlbedosCustomClassesAdvanced
             catch { return 0f; }
         }
 
+        private static readonly Dictionary<string, FieldInfo> _ihFieldCache = new Dictionary<string, FieldInfo>();
+
+        // v0.25.9: FieldInfo cached per type + name (called every OnGUI event for the food row).
         private static object IhField(object o, string name)
         {
             if (o == null) return null;
-            for (Type t = o.GetType(); t != null; t = t.BaseType)
+            string key = o.GetType().FullName + ":" + name;
+            FieldInfo cached;
+            if (!_ihFieldCache.TryGetValue(key, out cached))
             {
-                FieldInfo f = t.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
-                if (f != null) return f.GetValue(o);
+                for (Type t = o.GetType(); t != null && cached == null; t = t.BaseType)
+                    cached = t.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+                _ihFieldCache[key] = cached;
             }
-            return null;
+            return cached == null ? null : cached.GetValue(o);
         }
 
         private static void IhDrawSprite(Rect r, Sprite sprite)
@@ -12668,7 +12690,7 @@ namespace AlbedosCustomClassesAdvanced
             // v0.25.8: thin layout: HP / STA + EIT / Lv + EXP, then the vanilla food in one row underneath.
             float pad = 18f * s, padY = 10f * s, rowH = 16f * s, gap = 4f * s;
             float statsW = 420f * s, statsH = rowH * 3f + gap * 2f;
-            float foodH = _ihFoodFound ? _ihFoodBounds.height : 0f;
+            float foodH = _ihHudFoods.Count > 0 ? 24f * s : 0f;
             float foodGap = foodH > 0f ? 6f * s : 0f;
             float pw = pad + statsW + pad, ph = 17f * s + statsH + foodGap + foodH + padY;
 
@@ -12771,6 +12793,32 @@ namespace AlbedosCustomClassesAdvanced
             IhHudShadowLabel(new Rect(sx, sy, 50f * s, rowH), "Lv " + IhGetLevel(player).ToString(), _ihHudText);
             IhHudThinBar(new Rect(sx + 50f * s, sy + (rowH - 4f * s) * 0.5f, sw - 50f * s - 42f * s, 4f * s), xp, new Color(0.25f, 0.62f, 0.85f, 1f));
             IhHudShadowLabel(new Rect(sx + sw - 42f * s, sy, 42f * s, rowH), Mathf.FloorToInt(xp * 100f).ToString() + "%", _ihHudValue);
+
+            // v0.25.9 food: one horizontal row under the EXP bar (icon + time left), lying down.
+            float fx = sx, fy = inTop + statsH + foodGap, fIcon = 24f * s;
+            for (int i = 0; i < _ihHudFoods.Count; i++)
+            {
+                object food = _ihHudFoods[i];
+                Rect fr = new Rect(fx, fy, fIcon, fIcon);
+                IhHudFill(fr, new Color(0.02f, 0.03f, 0.05f, 0.75f));
+                object item = IhField(food, "m_item");
+                Sprite sp = null;
+                try
+                {
+                    if (item != null && _ihFoodIcon == null) _ihFoodIcon = item.GetType().GetMethod("GetIcon", Type.EmptyTypes);
+                    sp = _ihFoodIcon == null || item == null ? null : _ihFoodIcon.Invoke(item, null) as Sprite;
+                }
+                catch { }
+                IhDrawSprite(new Rect(fr.x + 1f * s, fr.y + 1f * s, fr.width - 2f * s, fr.height - 2f * s), sp);
+                object t = IhField(food, "m_time");
+                float secs = t is float ? (float)t : 0f;
+                string label = secs >= 60f ? Mathf.CeilToInt(secs / 60f).ToString() + "m" : Mathf.CeilToInt(secs).ToString() + "s";
+                Color c0 = _ihHudText.normal.textColor;
+                if (secs < 60f) _ihHudText.normal.textColor = new Color(1f, 0.45f, 0.35f, 1f);
+                IhHudShadowLabel(new Rect(fr.xMax + 4f * s, fr.y, 40f * s, fIcon), label, _ihHudText);
+                _ihHudText.normal.textColor = c0;
+                fx += fIcon + 48f * s;
+            }
         }
 
         private bool _ttShow;

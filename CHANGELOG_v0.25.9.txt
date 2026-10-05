@@ -1,0 +1,18 @@
+IMMORTAL HEROES v0.25.9 - SORCERER MOTIONS (animation pass 3 of 4) + FOOD ROW
+
+HUD
+- Food now lies in ONE horizontal row under the EXP bar (icon + time left, red under 1 min), so the stat HUD
+  is thin. Our HUD draws the food itself; the whole vanilla health/food panel stays hidden (no stray fork icon).
+
+SORCERER / ARCHMAGE / HORIZON WALKER (every skill, incl. Ascended)
+- Flame Burst: staff drawn back, thrust forward, free palm pushes the fire.
+- Glacial Descent: staff to the sky, swung down at the impact. Ascended: both hands pull the glacier down.
+- Stonefang Eruption: staff butt driven into the ground, rise as the fangs erupt. Ascended: repeated slams.
+- Meteor Fall: arms raised to the sky for the whole charge, released = the sky is dragged down.
+- Elemental Cataclysm: arms spread wide to the sky while charging, thrust forward on release.
+- Gravity Dominion: reach out, then fists dragged back to the chest.
+- Astral Railcannon: braced, staff levelled like a cannon, recoil kick. Ascended: held aim while channelling.
+- Astral Greatblade: two-handed overhead slam (Ascended: one slam per strike).
+- Frost Nova: curl in, burst open.  Clockwork: hand traces the clock face, snaps open.
+- Horizon Walker (quick, no wind up): Phalanx summon / volley command, Afterimage sweep, Void Step dash lean,
+  Rift Echo tear, Arcane Rupture grab, Gravity Blast push (halt / detonate gestures), Rift Walker portal opening.
