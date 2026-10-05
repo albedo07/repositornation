@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.24.2";
+        public const string ModVersion = "0.24.3";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -2748,6 +2748,7 @@ namespace AlbedosCustomClassesAdvanced
             _mercFuryUntil = Time.time + Mathf.Max(0.5f, _furyDurationV.Value);
             _mercFuryCooldownUntil = _mercFuryUntil + Mathf.Max(0f, _furyLockoutV.Value);
             _mercFuryEndAnnounced = false;
+            DragonCombat.ShowStatus(player, "fury", "fury", "Unchained Fury", Mathf.Max(0.5f, _furyDurationV.Value), 0);
             if (player != null)
             {
                 DragonCombat.PlaySkillPose(player, "Shout", 0.75f);
@@ -6457,6 +6458,7 @@ namespace AlbedosCustomClassesAdvanced
             state.HP = Mathf.Max(state.HP, Mathf.Max(1f, hp));
             state.Armor = Mathf.Max(state.Armor, Mathf.Max(0f, armor));
             state.EndTime = Mathf.Max(state.EndTime, Time.time + Mathf.Max(0.5f, duration));
+            DragonCombat.ShowStatus(ally, "barrier", "barrier", "Barrier", state.EndTime - Time.time, Mathf.CeilToInt(state.HP));
             if (_enableVfx.Value)
                 StartCoroutine(BarrierVisual(ally));
         }
@@ -8654,11 +8656,13 @@ namespace AlbedosCustomClassesAdvanced
                     barrier.HP -= effective;
                     ScaleDamage(hit, 0f);
                     _barriers[id] = barrier;
+                    DragonCombat.ShowStatus(target as Player, "barrier", "barrier", "Barrier", barrier.EndTime - Time.time, Mathf.Max(1, Mathf.CeilToInt(barrier.HP)));
                 }
                 else
                 {
                     float overflow = effective - barrier.HP;
                     _barriers.Remove(id);
+                    DragonCombat.ClearStatus(target as Player, "barrier");
 
                     float ratio = raw <= 0f ? 0f : Mathf.Clamp01(overflow / raw);
                     ScaleDamage(hit, ratio);
@@ -10817,19 +10821,20 @@ namespace AlbedosCustomClassesAdvanced
                     break;
                 case "arrow_rain":
                     b.Append(IhLine("Damage", IhBowPct(IhR("Bowmaster Arrow Rain", "DamagePercent", 25f), power) + " every " + IhNum(IhR("Bowmaster Arrow Rain", "HitInterval", 0.4f)) + "s for " + IhNum(IhR("Bowmaster Arrow Rain", "Duration", 4f)) + "s"));
-                    b.Append(IhLine("Radius", IhNum(IhR("Bowmaster Arrow Rain", "Radius", 10f)) + "m, Ground PAC " + IhNum(IhR("Bowmaster Arrow Rain", "Range", 45f)) + "m"));
+                    b.Append(IhLine("Radius", IhNum(ascended ? IhR("Bowmaster Arrow Rain Ascended", "Radius", 8f) : IhR("Bowmaster Arrow Rain", "Radius_v0243", 6f)) + "m, Ground PAC " + IhNum(IhR("Bowmaster Arrow Rain", "Range", 45f)) + "m"));
                     b.Append(IhLine("Inflicts", "Cripple " + IhNum(IhR("Bowmaster Arrow Rain", "CrippleDuration", 2f)) + "s" + (ascended ? ", Freeze every " + IhNum(IhR("Bowmaster Arrow Rain Ascended", "HitsToFreeze", 3f)) + " hits" : "")));
                     IhCosts(b, IhR("Bowmaster Arrow Rain", "StaminaCost", 30f), "Instant", IhR("Bowmaster Arrow Rain", "Cooldown", 16f));
                     break;
                 case "pinning_shot":
                     b.Append(IhLine("Damage", IhBowPct(IhR("Bowmaster Pinning Shot", "DamagePercent", 150f), power)));
-                    b.Append(IhLine("Pin", IhNum(IhR("Bowmaster Pinning Shot", "SmallPinSeconds", 4f)) + "s Small, " + IhNum(IhR("Bowmaster Pinning Shot", "BigPinSeconds", 1.5f)) + "s Big + Cripple, Bosses Crippled"));
+                    b.Append(IhLine("Area", IhNum(IhR("Bowmaster Pinning Shot", "Range_v0243", 30f)) + "m, " + IhNum(IhR("Bowmaster Pinning Shot", "ConeDegrees", 40f)) + "° cone, everyone inside is hit"));
+                    b.Append(IhLine("Pin", IhNum(IhR("Bowmaster Pinning Shot", "SmallPinSeconds", 4f)) + "s Small, " + IhNum(IhR("Bowmaster Pinning Shot", "BigPinSeconds_v0243", 2.5f)) + "s Big + Cripple, Bosses Crippled"));
                     b.Append(IhLine("Pinned", "+" + IhNum(IhR("Bowmaster Pinning Shot", "PinnedSkillDamagePercent", 25f)) + "% damage from your skills" + (ascended ? "; chains to " + IhNum(IhR("Bowmaster Pinning Shot Ascended", "ChainTargets", 2f)) + " nearby enemies" : "")));
                     IhCosts(b, IhR("Bowmaster Pinning Shot", "StaminaCost", 20f), "Instant", IhR("Bowmaster Pinning Shot", "Cooldown", 12f));
                     break;
                 case "explosive_arrow":
                     b.Append(IhLine("Damage", IhBowPct(IhR("Bowmaster Explosive Arrow", "DamagePercent", 180f), power) + " Fire + Blunt"));
-                    b.Append(IhLine("Radius", IhNum(IhR("Bowmaster Explosive Arrow", "Radius", 7f)) + "m"));
+                    b.Append(IhLine("Radius", IhNum(IhR("Bowmaster Explosive Arrow", "Radius_v0243", 5f)) + "m" + (ascended ? "; then " + IhNum(IhR("Bowmaster Explosive Arrow Ascended", "ClusterBombs", 6f)) + " cluster bombs (" + IhNum(IhR("Bowmaster Explosive Arrow Ascended", "ClusterPercent", 40f)) + "% each)" : "")));
                     b.Append(IhLine("Inflicts", "Fire Burn " + IhNum(IhR("Bowmaster Explosive Arrow", "FireBurnDuration", 4f)) + "s, Stun (Small)" + (ascended ? "; burning field " + IhNum(IhR("Bowmaster Explosive Arrow Ascended", "FireFieldSeconds", 3f)) + "s" : "")));
                     IhCosts(b, IhR("Bowmaster Explosive Arrow", "StaminaCost", 22f), "Instant", IhR("Bowmaster Explosive Arrow", "Cooldown", 12f));
                     break;
@@ -10841,8 +10846,8 @@ namespace AlbedosCustomClassesAdvanced
                     IhCosts(b, IhR("Bowmaster Splitting Arrow", "StaminaCost", 25f), "Instant", IhR("Bowmaster Splitting Arrow", "Cooldown", 10f));
                     break;
                 case "starfall_volley":
-                    b.Append(IhLine("Damage", IhBowPct(IhR("Bowmaster Starfall Volley", "TickPercent_v0242", 45f), power) + " to EVERY enemy in the area every " + IhNum(IhR("Bowmaster Starfall Volley", "HitInterval", 0.5f)) + "s for " + IhNum(IhR("Bowmaster Starfall Volley", "Duration", 5f)) + "s"));
-                    b.Append(IhLine("Area", IhNum(IhR("Bowmaster Starfall Volley", "Radius", 20f)) + "m Ground PAC" + (ascended ? "; ends with a giant arrow (" + IhNum(IhR("Bowmaster Starfall Volley Ascended", "FinalArrowPercent", 300f)) + "% to every enemy)" : "")));
+                    b.Append(IhLine("Damage", IhBowPct(IhR("Bowmaster Starfall Volley", "TickPercent_v0242", 45f), power) + " to EVERY enemy in the area every " + IhNum(IhR("Bowmaster Starfall Volley", "HitInterval", 0.5f)) + "s for " + IhNum(IhR("Bowmaster Starfall Volley", "Duration_v0243", 8f)) + "s"));
+                    b.Append(IhLine("Area", IhNum(IhR("Bowmaster Starfall Volley", "Radius_v0243", 12f)) + "m Ground PAC" + (ascended ? "; ends with a giant arrow (" + IhNum(IhR("Bowmaster Starfall Volley Ascended", "FinalArrowPercent", 300f)) + "% to every enemy)" : "")));
                     IhCosts(b, IhR("Bowmaster Starfall Volley", "StaminaCost", 45f), IhNum(IhR("Bowmaster Starfall Volley", "ChannelSeconds", 2f)) + "s channel", IhR("Bowmaster Starfall Volley", "Cooldown", 150f));
                     break;
                 case "hawks_vigil":
@@ -11157,7 +11162,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "ballista_shot": return "at full charge every enemy it pierces erupts (5m, 60%)";
                 case "arrow_rain": return "frozen arrows: every 3rd hit Freezes";
                 case "pinning_shot": return "also pins 2 nearby enemies";
-                case "explosive_arrow": return "leaves a burning field for 3s";
+                case "explosive_arrow": return "a 5m burning field for 3s and 6 cluster bombs after the blast";
                 case "splitting_arrow": return "5 volleys 0.25s apart, each hit stacks a Fire Burn";
                 case "starfall_volley": return "ends with a giant arrow: 300% to every enemy in the area";
             }
@@ -12820,9 +12825,18 @@ namespace AlbedosCustomClassesAdvanced
         }
 
         // Frame_<slot>_<color>.png covers the field rect padded by this (FRAME_PAD in the script).
+        // v0.24.3: the Zap slot's frame IS Holy Wave's frame 256 px up (IhRepairLightningZapBackdrop),
+        // so its colour overlays / badge use Holy Wave's sprite and opening moved up, never the old
+        // broken Zap shape (that left the Cyan rim showing under a Magenta overlay).
+        private static Rect IhOverlayField(string slot)
+        {
+            if(slot=="lightning_zap") { Rect h=IhFieldRect("holy_wave"); return new Rect(h.x,h.y-256f,h.width,h.height); }
+            return IhFieldRect(slot);
+        }
+
         private static Rect IhFrameSpriteRect(string slot)
         {
-            Rect f=IhFieldRect(slot);
+            Rect f=IhOverlayField(slot);
             float pad=slot==IhUltimate ? 13f : 10f;
             return Rect.MinMaxRect(f.xMin-pad,f.yMin-pad,f.xMax+pad,f.yMax+pad);
         }
@@ -12942,7 +12956,7 @@ namespace AlbedosCustomClassesAdvanced
 
         private Texture2D IhFrameSprite(string slot, string color)
         {
-            string key=slot+"_"+color;
+            string key=(slot=="lightning_zap" ? "holy_wave" : slot)+"_"+color;
             Texture2D texture;
             if(_ihFrameSprites.TryGetValue(key,out texture)) return texture;
             texture=LoadUiPng("Frame_"+key+".png");
@@ -12969,7 +12983,7 @@ namespace AlbedosCustomClassesAdvanced
             // have painted (Goddess Relic, Judgement Hammer and Electric Smite slots already show one).
             if(color=="magenta" && slot!="goddess_relic" && slot!="judgement_hammer" && slot!=IhUltimate && _treePermanentBadgeTex!=null)
             {
-                Rect f=IhFieldRect(slot);
+                Rect f=IhOverlayField(slot);
                 GUI.DrawTexture(IhSnap(ScaleReferenceRect(f.xMax-11.5f,f.yMin-17.5f,23f,23f)),_treePermanentBadgeTex);
             }
         }
@@ -13212,7 +13226,7 @@ namespace AlbedosCustomClassesAdvanced
             if (cls == "Warrior")
                 return "Hyper Armor against any hit below 30% of your Total HP. Parry strength x2. +20 Run and +20 Jump skill.";
             if (cls == "Ranger")
-                return "+20 Bows, +20 Dodge, -30% fall damage, no Bow movement penalty. Charged-shot draw time -50% (Bows skill removes the rest). Left Click: a 4-shot chain at full-draw range (4th shot 150%). Right Click: the charged shot, Left Click releases, letting go cancels. Infinite arrows / bolts: you deal 50% of your Bow / Crossbow damage + 50% of the ammo only while you carry a full stack (100). Cannot Block or use Shields.";
+                return "+20 Bows, +20 Dodge, -30% fall damage, no Bow movement penalty. Left Click: a 4-shot chain at full-draw range, a shot every 0.5s (4th shot 150%, then 1s more before the next). Right Click: the charged shot (120% damage; the Bows skill shortens the draw), Left Click releases, letting go cancels. Infinite arrows / bolts: you deal 50% of your Bow / Crossbow damage + 50% of the ammo only while you carry a full stack (100). Cannot Block or use Shields.";
             if (cls == "Sorcerer")
                 return "Creature melee damage -70% (mining and woodcutting are not affected). +65 Max Eitr, +35% Eitr Regen, Eitr starts regenerating twice as fast. Cannot Block, Parry or equip Shields.";
             return "All Shields: 1.5x Block Force + Block Armor. Staff + Shield allowed. No movement penalty from Shields, Staves, or one-handed Club-skill weapons. +35 Max HP and +20% HP Regen.";
@@ -13240,7 +13254,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "Mercenary": return "Dual-wield any two one-handed physical weapons. +10 Sword, Axe and Clubs (cap 100). +50% Attack Speed with two one-handed or a two-handed physical weapon. No physical weapon movement penalty. +30% Armor and stronger aggro. Unchained Fury: +1 Fury per melee hit, +3 per enemy hit by a skill; at 100 it triggers for 20s (3 min lockout).";
                 case "Wizard": return "Charged Staff attacks (Mouse2 + Mouse1): up to 3 stacks, 1 per second, 1 Eitr per 0.1s. Stack 1 doubles the size, Stacks 2-3 add damage. Overcharge: after 300 Eitr spent, 12s of +40% wind-up speed, +40% Eitr Regen and +40% Magic Damage.";
                 case "Spellcaster": return "Staff / Wand attack interval -50%, Eitr use -50%, +20% Eitr Regen, normal Staff / Wand damage -50%. No skill wind-ups, no Staff / Wand movement penalty. Dual Gun Staves fire together and are 100% accurate.";
-                case "Acrobat": return "A second jump in mid-air. Dodge costs 50% less Stamina. Every Ranger skill can be cast in the air. Each enemy hit by your skills takes 1s off your shortest running cooldown (up to 3s per cast). Cannot wield Crossbows.";
+                case "Acrobat": return "A second jump in mid-air. Dodge costs 50% less Stamina, all Stamina use -35%. Fall damage -75% and a fall never kills you (1 HP). Every Ranger skill can be cast in the air. Each enemy hit by your skills takes 1s off your shortest running cooldown (up to 3s per cast). Cannot wield Crossbows.";
                 case "Bowmaster": return "Standing still builds Focus: up to 5 stacks, +8% damage and +10% range each; moving drains it. Fully charged shots deal +30% damage. Crossbows: reload time -75%, no movement penalty, a loaded Crossbow stays loaded when unequipped (no Left Click chain).";
             }
             return "";
@@ -13704,7 +13718,35 @@ namespace AlbedosCustomClassesAdvanced
             if(id==IhAscendedClassSkill && _ihRsNormalIconTex!=null) texture=_ihRsNormalIconTex;
             else if(id==IhGrace) texture=_ihGraceIconTex;
             else if(!_treeSkillIconTex.TryGetValue(id,out texture)) return null;
+            // v0.24.3: Ultimates keep the tree's colour on the hotbar (Maroon, Ascended Red).
+            if(IhIsUltimate(id)) return IhUltimateArt(id,texture,IsAscendedSkill(id));
             return IsAscendedSkill(id) ? IhAscendedArt(id,texture) : texture;
+        }
+
+        private Texture2D IhUltimateArt(string id, Texture2D normal, bool ascended)
+        {
+            if(normal==null) return null;
+            string key=(ascended ? "ult_red:" : "ult_maroon:")+id;
+            Texture2D result;
+            if(_ihAscendedIconArt.TryGetValue(key,out result)) return result;
+            result=IhCopyTexture(normal,"ImmortalHeroes_Ultimate_"+id);
+            int ox,oy,ow,oh;
+            IhHotbarOpening(result,out ox,out oy,out ow,out oh);
+            // Tree frame band: Maroon ~ (212,82,136), Ascended Red ~ (181,66,73). Gold trim (b < g) is kept.
+            Color tint=ascended ? new Color(1f,0.36f,0.40f,1f) : new Color(1f,0.39f,0.64f,1f);
+            for(int y=0;y<result.height;y++) for(int x=0;x<result.width;x++)
+            {
+                int ty=result.height-1-y;
+                if(x>=ox && x<ox+ow && ty>=oy && ty<oy+oh) continue;
+                Color c=result.GetPixel(x,y);
+                float max=Mathf.Max(c.r,Mathf.Max(c.g,c.b)), min=Mathf.Min(c.r,Mathf.Min(c.g,c.b));
+                if(c.b>c.g*1.02f && max-min>0.06f)
+                {
+                    float v=max*0.92f;
+                    result.SetPixel(x,y,new Color(v*tint.r,v*tint.g,v*tint.b,c.a));
+                }
+            }
+            result.Apply(false,false); _ihAscendedIconArt[key]=result; return result;
         }
 
         private void DrawPermanentBadge(Rect slotRect)

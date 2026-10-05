@@ -53,7 +53,7 @@ def rehue(img, hue, sat_scale):
 
 
 def panel_scene(name, focus_y, size, hue):
-    """Portrait cover-cropped to the art panel (keeps aspect), washed bright like the other cards."""
+    """Portrait cover-cropped to the art panel (keeps aspect), lightly lifted."""
     sc = Image.open(os.path.join(CARDS_ART, name + ".jpg")).convert("RGB")
     w, h = sc.size
     pw, ph = size
@@ -61,9 +61,9 @@ def panel_scene(name, focus_y, size, hue):
     y0 = int(np.clip(focus_y * h - ch / 2.0, 0, h - ch))
     crop = sc.crop((0, y0, w, y0 + ch)).resize(size, Image.LANCZOS)
     a = np.asarray(crop, dtype=np.float64)
-    paper = np.array([238, 246, 228], dtype=np.float64)
-    lifted = 255 - (255 - a) * (255 - paper * 0.30) / 255.0
-    out = lifted * 0.82 + paper * 0.18
+    # v0.24.3: no parchment wash (it read as a faded sheet); just a light lift so the dark
+    # portrait sits in the same brightness range as the other painted cards.
+    out = 255 - (255 - a) * 0.78
     return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8))
 
 
@@ -93,8 +93,8 @@ def main():
         if donor == "Wizard":
             card = bow_emblem(card)
         mask = Image.new("L", (x1 - x0, y1 - y0), 0)
-        ImageDraw.Draw(mask).rounded_rectangle([6, 6, x1 - x0 - 7, y1 - y0 - 7], radius=22, fill=255)
-        mask = mask.filter(ImageFilter.GaussianBlur(5))
+        ImageDraw.Draw(mask).rounded_rectangle([2, 2, x1 - x0 - 3, y1 - y0 - 3], radius=24, fill=255)
+        mask = mask.filter(ImageFilter.GaussianBlur(1.5))
         card.paste(art, (x0, y0), mask)
         out.paste(card, (i * 590, 0))
     out.save(os.path.join(A, "Altar_RangerCards.png"))

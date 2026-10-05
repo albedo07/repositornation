@@ -40,7 +40,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Dragon's Altar - Ranger";
-        public const string ModVersion = "0.24.2";
+        public const string ModVersion = "0.24.3";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -56,7 +56,7 @@ namespace DragonsAltarRanger
         private ConfigEntry<float> _testingCooldown;
 
         // Wildborn (Ranger's Blessing)
-        private ConfigEntry<float> _rgIFrames;
+        private ConfigEntry<float> _rgIFrames, _wbCharged, _wbInterval, _wbFinisherDelay, _wsFallReduction, _wsStaminaUse, _arAscRadius, _eaAscClusters, _eaAscClusterRadius, _eaAscClusterPercent, _psCone;
         private ConfigEntry<float> _wbBows, _wbDodge, _wbFall, _wbDrawSpeed, _wbBowPercent, _wbAmmoPercent, _wbFullStack, _wbChainBonus, _wbChainReset, _wbQuickStamina;
         // Class skills
         private ConfigEntry<float> _paCooldown, _paStamina, _paDamage, _paRange, _paSpeed, _paCripple;
@@ -106,7 +106,10 @@ namespace DragonsAltarRanger
             _wbBows = Config.Bind(wb, "BowsSkillBonus", 20f, "Wildborn: +Bows skill.");
             _wbDodge = Config.Bind(wb, "DodgeSkillBonus", 20f, "Wildborn: +Dodge skill (when the game has a Dodge skill).");
             _wbFall = Config.Bind(wb, "FallDamageReductionPercent", 30f, "Wildborn: less fall damage.");
-            _wbDrawSpeed = Config.Bind(wb, "DrawSpeedPercent", 50f, "Charged-shot draw time -50%; the Bows skill removes the rest (Bows 100 = instant).");
+            _wbDrawSpeed = Config.Bind(wb, "DrawSpeedPercent_v0243", 0f, "Charged-shot draw time reduction (removed in v0.24.3 for balance); the Bows skill still shortens the draw (Bows 100 = instant).");
+            _wbCharged = Config.Bind(wb, "ChargedShotPercent", 120f, "Right Click charged shots deal this %.");
+            _wbInterval = Config.Bind(wb, "ChainInterval", 0.5f, "Left Click: seconds between shots.");
+            _wbFinisherDelay = Config.Bind(wb, "FinisherExtraSeconds", 1f, "The 4th shot (finisher) takes this much longer before the next shot.");
             _wbBowPercent = Config.Bind(wb, "BowDamagePercent", 50f, "Rangers deal this % of the Bow / Crossbow damage.");
             _wbAmmoPercent = Config.Bind(wb, "AmmoDamagePercent", 50f, "...plus this % of the arrow / bolt damage, only with a full stack of it.");
             _wbFullStack = Config.Bind(wb, "FullStack", 100f, "Ammo count needed for the ammo damage bonus. Ammo is never consumed.");
@@ -152,6 +155,8 @@ namespace DragonsAltarRanger
 
             const string ws = "Acrobat Windstep";
             _wsDodge = Config.Bind(ws, "DodgeStaminaReductionPercent", 50f, "Dodge costs less Stamina.");
+            _wsFallReduction = Config.Bind(ws, "FallDamageReductionPercent", 75f, "Acrobat fall damage reduction (replaces Wildborn's). A fall never kills: you are left at 1 HP.");
+            _wsStaminaUse = Config.Bind(ws, "StaminaUseReductionPercent", 35f, "All Stamina usage reduced.");
             _wsJump = Config.Bind(ws, "AirJumpSpeed", 9f, "Second jump in mid-air: upward speed (m/s).");
             _wsJumpStamina = Config.Bind(ws, "AirJumpStamina", 10f, "Stamina for the second jump.");
             _wsRefund = Config.Bind(ws, "HitRefundSeconds", 1f, "Each enemy hit by a skill takes this off your shortest running cooldown.");
@@ -271,7 +276,8 @@ namespace DragonsAltarRanger
             _arStamina = Config.Bind(ar, "StaminaCost", 30f, "Stamina.");
             _arDamage = Config.Bind(ar, "DamagePercent", 25f, "Per hit.");
             _arRange = Config.Bind(ar, "Range", 45f, "Ground PAC range (m).");
-            _arRadius = Config.Bind(ar, "Radius", 10f, "m.");
+            _arRadius = Config.Bind(ar, "Radius_v0243", 6f, "m.");
+            _arAscRadius = Config.Bind("Bowmaster Arrow Rain Ascended", "Radius", 8f, "m.");
             _arDuration = Config.Bind(ar, "Duration", 4f, "Seconds.");
             _arInterval = Config.Bind(ar, "HitInterval", 0.4f, "Seconds.");
             _arCripple = Config.Bind(ar, "CrippleDuration", 2f, "Refreshed per hit.");
@@ -281,9 +287,10 @@ namespace DragonsAltarRanger
             _psCooldown = Config.Bind(ps, "Cooldown", 12f, "Seconds.");
             _psStamina = Config.Bind(ps, "StaminaCost", 20f, "Stamina.");
             _psDamage = Config.Bind(ps, "DamagePercent", 150f, "%.");
-            _psRange = Config.Bind(ps, "Range", 50f, "m.");
+            _psRange = Config.Bind(ps, "Range_v0243", 30f, "Cone range (m).");
             _psSmall = Config.Bind(ps, "SmallPinSeconds", 4f, "Small enemies are nailed in place.");
-            _psBig = Config.Bind(ps, "BigPinSeconds", 1.5f, "Big enemies (+ Cripple); Bosses are only Crippled.");
+            _psBig = Config.Bind(ps, "BigPinSeconds_v0243", 2.5f, "Big enemies are nailed in place too (+ Cripple); Bosses are only Crippled.");
+            _psCone = Config.Bind(ps, "ConeDegrees", 40f, "3 arrows in a cone: everyone inside the cone is hit (the arrows are cosmetic).");
             _psBonus = Config.Bind(ps, "PinnedSkillDamagePercent", 25f, "Pinned targets take more damage from your skills.");
             _psAscChains = Config.Bind("Bowmaster Pinning Shot Ascended", "ChainTargets", 2f, "Also pins this many nearby enemies.");
             _psAscChainRange = Config.Bind("Bowmaster Pinning Shot Ascended", "ChainRange", 6f, "m.");
@@ -292,7 +299,10 @@ namespace DragonsAltarRanger
             _eaStamina = Config.Bind(ea, "StaminaCost", 22f, "Stamina.");
             _eaDamage = Config.Bind(ea, "DamagePercent", 180f, "Blast, Fire + Blunt.");
             _eaRange = Config.Bind(ea, "Range", 50f, "m.");
-            _eaRadius = Config.Bind(ea, "Radius", 7f, "m.");
+            _eaRadius = Config.Bind(ea, "Radius_v0243", 5f, "m (the Ascended burning field uses the same radius).");
+            _eaAscClusters = Config.Bind("Bowmaster Explosive Arrow Ascended", "ClusterBombs", 6f, "After the blast, cluster bombs burst around it.");
+            _eaAscClusterRadius = Config.Bind("Bowmaster Explosive Arrow Ascended", "ClusterRadius", 2.5f, "Each cluster blast (m).");
+            _eaAscClusterPercent = Config.Bind("Bowmaster Explosive Arrow Ascended", "ClusterPercent", 40f, "% of the main blast per cluster bomb.");
             _eaBurn = Config.Bind(ea, "FireBurnPercent", 10f, "Fire Burn per 0.5s tick (% of the blast).");
             _eaBurnDuration = Config.Bind(ea, "FireBurnDuration", 4f, "Seconds.");
             _eaAscField = Config.Bind("Bowmaster Explosive Arrow Ascended", "FireFieldSeconds", 3f, "A burning field stays.");
@@ -315,14 +325,14 @@ namespace DragonsAltarRanger
             _sfCooldown = Config.Bind(sf, "Cooldown", 150f, "Seconds.");
             _sfStamina = Config.Bind(sf, "StaminaCost", 45f, "Stamina.");
             _sfRange = Config.Bind(sf, "Range", 50f, "Ground PAC range (m).");
-            _sfRadius = Config.Bind(sf, "Radius", 20f, "Area (m).");
+            _sfRadius = Config.Bind(sf, "Radius_v0243", 12f, "Area (m).");
             _sfChannel = Config.Bind(sf, "ChannelSeconds", 2f, "Seconds.");
-            _sfDuration = Config.Bind(sf, "Duration", 5f, "Seconds of falling arrows.");
+            _sfDuration = Config.Bind(sf, "Duration_v0243", 8f, "Seconds of falling arrows.");
             _sfInterval = Config.Bind(sf, "Interval", 0.25f, "A falling arrow (cosmetic) every...");
             _sfImpact = Config.Bind(sf, "ImpactRadius", 4f, "Cosmetic impact ring (m).");
             _sfTick = Config.Bind(sf, "HitInterval", 0.5f, "Every this often, EVERY enemy in the area is hit.");
             _sfDamage = Config.Bind(sf, "TickPercent_v0242", 45f, "% per hit.");
-            _sfAscRadius = Config.Bind("Bowmaster Starfall Volley Ascended", "FinalArrowRadius", 8f, "Ends with a meteor-sized arrow (m).");
+            _sfAscRadius = Config.Bind("Bowmaster Starfall Volley Ascended", "Radius", 12f, "Area of the final giant arrow (m).");
             _sfAscDamage = Config.Bind("Bowmaster Starfall Volley Ascended", "FinalArrowPercent", 300f, "% to every enemy in the area.");
 
             DragonCombat.RegisterSkillModule(CastFromTree, CooldownForTree);
@@ -446,7 +456,17 @@ namespace DragonsAltarRanger
                 return;
             }
             if (GetClass(player) == "Ranger")
-                hit.m_damage.Modify(Mathf.Clamp01(1f - _wbFall.Value / 100f));
+            {
+                bool acrobat = GetAdvancement(player) == "Acrobat";
+                hit.m_damage.Modify(Mathf.Clamp01(1f - (acrobat ? _wsFallReduction.Value : _wbFall.Value) / 100f));
+                // v0.24.3 Windstep: a fall never kills an Acrobat (left at 1 HP).
+                if (acrobat)
+                {
+                    float total = hit.GetTotalDamage();
+                    float hp = player.GetHealth();
+                    if (total >= hp && total > 0f) hit.m_damage.Modify(Mathf.Max(0f, hp - 1f) / total);
+                }
+            }
         }
 
         private static void SetHitFloat(HitData hit, string name, float value)
@@ -483,6 +503,7 @@ namespace DragonsAltarRanger
             bool ranger = GetClass(player) == "Ranger";
             bool acrobat = ranger && GetAdvancement(player) == "Acrobat";
             UpdateDodgeCost(player, acrobat);
+            if (acrobat) DragonCombat.ApplyStaminaUseCut(player, Mathf.Clamp01(_wsStaminaUse.Value / 100f), 0.5f);
             if (ranger) UpdateForbiddenGear(player, acrobat);
             UpdateFocus(player, ranger && GetAdvancement(player) == "Bowmaster");
             UpdateLoadedCrossbow(player, ranger && GetAdvancement(player) == "Bowmaster");
@@ -1235,6 +1256,7 @@ namespace DragonsAltarRanger
         private bool _charging, _releasePending;
         private float _releaseAt, _chargeDraw;
         private int _chain;
+        private float _nextQuickShot;
         private float _lastQuickShot;
         private float _pendingShotMult = 1f;
         private bool _pendingShotActive;
@@ -1248,6 +1270,7 @@ namespace DragonsAltarRanger
             Patch(FindMethod(attack, "UseAmmo", 1), "UseAmmoPrefix", null);
             Patch(FindStaticMethod(attack, "HaveAmmo", 2), null, "HaveAmmoPostfix");
             Patch(FindMethod(attack, "FireProjectileBurst", 0), "FireBurstPrefix", "FireBurstPostfix");
+            Patch(FindMethod(typeof(Humanoid), "OnAttackTrigger", 0), "AttackTriggerPrefix", null);
             Patch(FindMethod(attack, "GetAttackStamina", 0), null, "AttackStaminaPostfix");
             Type projectile = Type.GetType("Projectile, assembly_valheim");
             if (projectile != null) Patch(FindMethod(projectile, "Setup", 6), "ProjectileSetupPrefix", null);
@@ -1347,6 +1370,8 @@ namespace DragonsAltarRanger
                 return;
             }
             SetBowDraw(weapon, false);
+            // v0.24.3: quick shots every 0.5s; the 4th (finisher) adds 1s before the next one.
+            if (Time.time < _nextQuickShot || Time.time < _skillCastUntil) { attack = false; attackHold = false; }
         }
 
         private static bool InAttack(Player player)
@@ -1484,10 +1509,15 @@ namespace DragonsAltarRanger
                 if (Time.time - _lastQuickShot > Mathf.Max(0.2f, _wbChainReset.Value)) _chain = 0;
                 _lastQuickShot = Time.time;
                 _chain++;
-                if (_chain >= 4) { mult *= Mathf.Max(0f, _wbChainBonus.Value) / 100f; _chain = 0; }
+                float wait = Mathf.Max(0.1f, _wbInterval.Value);
+                if (_chain >= 4) { mult *= Mathf.Max(0f, _wbChainBonus.Value) / 100f; _chain = 0; wait += Mathf.Max(0f, _wbFinisherDelay.Value); }
+                _nextQuickShot = Time.time + wait;
             }
-            else if (IsBow(weapon) && charged && _chargeDraw >= 0.99f && GetAdvancement(player) == "Bowmaster")
-                mult *= 1f + Mathf.Max(0f, _deFullCharge.Value) / 100f;
+            else if (IsBow(weapon) && charged)
+            {
+                mult *= Mathf.Max(0f, _wbCharged.Value) / 100f;
+                if (_chargeDraw >= 0.99f && GetAdvancement(player) == "Bowmaster") mult *= 1f + Mathf.Max(0f, _deFullCharge.Value) / 100f;
+            }
             _pendingShotMult = mult;
             _pendingShotActive = true;
         }
@@ -1734,7 +1764,7 @@ namespace DragonsAltarRanger
         // Deadeye: +1 Focus per second standing still (max 5); moving / dodging drains it over 2s.
         private void UpdateFocus(Player player, bool bowmaster)
         {
-            if (!bowmaster) { _focus = 0f; _focusShown = 0; return; }
+            if (!bowmaster) { if (_focusShown > 0) DragonCombat.ClearStatus(player, "focus"); _focus = 0f; _focusShown = 0; return; }
             Rigidbody body = player.GetComponent<Rigidbody>();
             Vector3 v = body != null ? body.velocity : Vector3.zero;
             v.y = 0f;
@@ -1745,6 +1775,9 @@ namespace DragonsAltarRanger
             int stacks = Mathf.FloorToInt(_focus);
             if (stacks != _focusShown)
             {
+                // v0.24.3: Focus shows as a buff with its stack count.
+                if (stacks > 0) DragonCombat.ShowStatus(player, "focus", "focus", "Deadeye Focus", 0f, stacks);
+                else DragonCombat.ClearStatus(player, "focus");
                 if (stacks >= Mathf.RoundToInt(max) && max > 0f) ShowMessage("Deadeye - Focus " + stacks + "/" + Mathf.RoundToInt(max));
                 _focusShown = stacks;
             }
@@ -1865,7 +1898,7 @@ namespace DragonsAltarRanger
 
         private IEnumerator ArrowRainRoutine(Player player, Vector3 point, bool ascended)
         {
-            float radius = DragonCombat.M(_arRadius.Value);
+            float radius = DragonCombat.M(ascended ? _arAscRadius.Value : _arRadius.Value);
             float end = Time.time + Mathf.Max(0.5f, _arDuration.Value);
             RangerArrowDamage d = ArrowDamage(player);
             float mult = _arDamage.Value / 100f * DragonCombat.GetSkillPower(player, "arrow_rain");
@@ -1903,28 +1936,31 @@ namespace DragonsAltarRanger
         }
 
         // ------------------------------------------------------------------ Pinning Shot (Lv24)
+        // v0.24.3: 3 arrows in a 30m cone; everyone inside the cone is hit and pinned (the arrows are
+        // cosmetic). Small and Big are nailed in place, Bosses Crippled.
         private void CastPinningShot(Player player)
         {
             if (!RequireRangedForBowmaster(player)) return;
-            Character target = AimedEnemy(player, DragonCombat.M(_psRange.Value) * FocusRangeMultiplier(player));
-            if (target == null) { ShowMessage("No target in sight"); return; }
             if (!BeginSkill(player, "Bowmaster.PinningShot", _psCooldown.Value, _psStamina.Value)) return;
             Shoot(player, "Pinning Shot");
-            Vector3 from = ShotOrigin(player);
-            if (_enableVfx.Value) LineVfx(from, target.transform.position + Vector3.up, new Color(0.75f, 1f, 0.55f, 1f), 0.08f, 0.2f);
             RangerArrowDamage d = ArrowDamage(player);
             float mult = _psDamage.Value / 100f * DragonCombat.GetSkillPower(player, "pinning_shot");
-            Pin(player, target, d, mult);
+            float range = DragonCombat.M(_psRange.Value) * FocusRangeMultiplier(player);
+            List<Character> hits = ConeArea(player, 3, Mathf.Clamp(_psCone.Value, 1f, 179f), range, new Color(0.75f, 1f, 0.55f, 1f));
+            for (int i = 0; i < hits.Count; i++) Pin(player, hits[i], d, mult);
             if (DragonCombat.IsSkillAscended(player, "pinning_shot"))
             {
-                List<Character> near = GetSphereTargets(player, target.transform.position, DragonCombat.M(_psAscChainRange.Value));
                 int chains = Mathf.RoundToInt(_psAscChains.Value);
-                for (int i = 0; i < near.Count && chains > 0; i++)
+                for (int h = 0; h < hits.Count && chains > 0; h++)
                 {
-                    if (near[i] == target) continue;
-                    if (_enableVfx.Value) LineVfx(target.transform.position + Vector3.up, near[i].transform.position + Vector3.up, new Color(0.85f, 1f, 0.70f, 1f), 0.05f, 0.25f);
-                    Pin(player, near[i], d, mult * 0.5f);
-                    chains--;
+                    List<Character> near = GetSphereTargets(player, hits[h].transform.position, DragonCombat.M(_psAscChainRange.Value));
+                    for (int i = 0; i < near.Count && chains > 0; i++)
+                    {
+                        if (hits.Contains(near[i])) continue;
+                        if (_enableVfx.Value) LineVfx(hits[h].transform.position + Vector3.up, near[i].transform.position + Vector3.up, new Color(0.85f, 1f, 0.70f, 1f), 0.05f, 0.25f);
+                        Pin(player, near[i], d, mult * 0.5f);
+                        chains--;
+                    }
                 }
             }
         }
@@ -1933,7 +1969,7 @@ namespace DragonsAltarRanger
         {
             Deal(player, target, d, mult, 0f, false);
             OnSkillHit(player);
-            if (IsBossTarget(target)) { DragonCombat.ApplyCripple(target, _psBig.Value); return; }
+            if (IsBossTarget(target)) { DragonCombat.ApplyCripple(target, _psBig.Value + 2f); return; }
             bool small = DragonCombat.IsSmallEnemy(target);
             float seconds = small ? _psSmall.Value : _psBig.Value;
             if (!small) DragonCombat.ApplyCripple(target, seconds + 2f);
@@ -1998,7 +2034,28 @@ namespace DragonsAltarRanger
                 StartCoroutine(BurnRoutine(player, hits[i], total * mult * Mathf.Max(0f, _eaBurn.Value) / 100f, _eaBurnDuration.Value));
             }
             if (_enableVfx.Value) StartCoroutine(RingVfx(at, radius, new Color(1f, 0.55f, 0.20f, 1f), 0.6f));
-            if (ascended) StartCoroutine(FireFieldRoutine(player, at, radius, total * mult * Mathf.Max(0f, _eaAscFieldPercent.Value) / 100f));
+            if (ascended)
+            {
+                StartCoroutine(FireFieldRoutine(player, at, radius, total * mult * Mathf.Max(0f, _eaAscFieldPercent.Value) / 100f));
+                StartCoroutine(ClusterRoutine(player, at, radius, blast, mult * Mathf.Max(0f, _eaAscClusterPercent.Value) / 100f));
+            }
+        }
+
+        // Ascended: cluster bombs scatter from the blast and burst around it 0.35s later.
+        private IEnumerator ClusterRoutine(Player player, Vector3 at, float radius, RangerArrowDamage blast, float mult)
+        {
+            yield return new WaitForSeconds(0.35f);
+            int n = Mathf.Max(1, Mathf.RoundToInt(_eaAscClusters.Value));
+            float r = DragonCombat.M(Mathf.Max(0.5f, _eaAscClusterRadius.Value));
+            for (int i = 0; i < n && player != null; i++)
+            {
+                float a = (i + 0.5f) / n * Mathf.PI * 2f;
+                Vector3 p = GroundAt(at + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * radius * 0.75f);
+                List<Character> hits = GetSphereTargets(player, p, r);
+                for (int k = 0; k < hits.Count; k++) Deal(player, hits[k], blast, mult, 6f, false);
+                if (_enableVfx.Value) StartCoroutine(RingVfx(p, r, new Color(1f, 0.55f, 0.20f, 1f), 0.4f));
+                yield return new WaitForSeconds(0.06f);
+            }
         }
 
         private IEnumerator BurnRoutine(Player player, Character target, float perTick, float duration)
@@ -2157,7 +2214,7 @@ namespace DragonsAltarRanger
             {
                 yield return new WaitForSeconds(0.3f);
                 if (_enableVfx.Value) StarVfx(GroundAt(point), DragonCombat.M(_sfAscRadius.Value), 1.5f);
-                StarHitAll(player, point, radius, d, _sfAscDamage.Value / 100f * DragonCombat.GetSkillPower(player, "starfall_volley"));
+                StarHitAll(player, point, DragonCombat.M(_sfAscRadius.Value), d, _sfAscDamage.Value / 100f * DragonCombat.GetSkillPower(player, "starfall_volley"));
             }
         }
 
@@ -2198,21 +2255,58 @@ namespace DragonsAltarRanger
             StartCoroutine(VigilMarks(player, duration));
         }
 
+        // v0.24.3: enemies in range glow red (instead of floating markers) while Hawk's Vigil lasts.
         private IEnumerator VigilMarks(Player player, float duration)
         {
+            DragonCombat.ShowStatus(player, "hawks_vigil", "vigil", "Hawk's Vigil", duration, 0);
             float end = Time.time + duration;
+            HashSet<Character> lit = new HashSet<Character>();
             while (Time.time < end && player != null && !player.IsDead())
             {
-                if (_enableVfx.Value)
+                List<Character> enemies = GetSphereTargets(player, player.transform.position, DragonCombat.M(_hvReveal.Value));
+                HashSet<Character> now = new HashSet<Character>(enemies);
+                foreach (Character c in lit) if (c != null && !now.Contains(c)) SetRedHighlight(c, false);
+                lit.RemoveWhere(delegate(Character c) { return c == null || !now.Contains(c); });
+                for (int i = 0; i < enemies.Count; i++) if (lit.Add(enemies[i])) SetRedHighlight(enemies[i], true);
+                yield return new WaitForSeconds(0.5f);
+            }
+            foreach (Character c in lit) if (c != null) SetRedHighlight(c, false);
+        }
+
+        private static readonly int EmissionId = Shader.PropertyToID("_EmissionColor");
+
+        private void SetRedHighlight(Character c, bool on)
+        {
+            if (c == null) return;
+            Color red = new Color(0.85f, 0.04f, 0.02f, 1f);
+            // Valheim's MaterialMan owns the property blocks when present; fall back to our own block.
+            try
+            {
+                Type mm = Type.GetType("MaterialMan, assembly_valheim");
+                object inst = mm == null ? null : mm.GetProperty("instance", BindingFlags.Static | BindingFlags.Public).GetValue(null, null);
+                if (inst != null)
                 {
-                    List<Character> enemies = GetSphereTargets(player, player.transform.position, DragonCombat.M(_hvReveal.Value));
-                    for (int i = 0; i < enemies.Count; i++)
+                    if (on)
                     {
-                        Vector3 top = enemies[i].transform.position + Vector3.up * DragonCombat.M(2.6f);
-                        LineVfx(top + Vector3.up * DragonCombat.M(1.2f), top, new Color(1f, 0.85f, 0.30f, 0.95f), 0.18f, 0.55f);
+                        MethodInfo set = mm.GetMethod("SetValue", new Type[] { typeof(GameObject), typeof(int), typeof(Color) });
+                        if (set != null) { set.Invoke(inst, new object[] { c.gameObject, EmissionId, red }); return; }
+                    }
+                    else
+                    {
+                        MethodInfo reset = mm.GetMethod("ResetValue", new Type[] { typeof(GameObject), typeof(int) });
+                        if (reset != null) { reset.Invoke(inst, new object[] { c.gameObject, EmissionId }); return; }
                     }
                 }
-                yield return new WaitForSeconds(0.5f);
+            }
+            catch { }
+            Renderer[] rs = c.GetComponentsInChildren<Renderer>();
+            for (int i = 0; i < rs.Length; i++)
+            {
+                if (rs[i] is ParticleSystemRenderer || rs[i] is LineRenderer) continue;
+                MaterialPropertyBlock block = new MaterialPropertyBlock();
+                rs[i].GetPropertyBlock(block);
+                block.SetColor(EmissionId, on ? red : Color.black);
+                rs[i].SetPropertyBlock(block);
             }
         }
 
@@ -2234,20 +2328,40 @@ namespace DragonsAltarRanger
             _refundLeft -= cut;
         }
 
+        // v0.24.3 universal rule: everyone inside the skill's area is hit; the arrows are cosmetic.
         private void Fan(Player player, int count, float fanDegrees, float range, float pitchUp, Color color, Func<Character, bool> onHit)
+        {
+            List<Character> hits = ConeArea(player, count, fanDegrees, range, color);
+            for (int i = 0; i < hits.Count; i++) { onHit(hits[i]); OnSkillHit(player); }
+        }
+
+        // Fires count cosmetic arrows across the cone and returns every enemy inside it (range, half
+        // angle = cone / 2, at least 8 degrees so a narrow fan still catches what it is aimed at).
+        private List<Character> ConeArea(Player player, int count, float coneDegrees, float range, Color color)
         {
             Vector3 origin = ShotOrigin(player);
             Vector3 dir = AimDir(player, origin);
-            Vector3 right = Vector3.Cross(Vector3.up, dir);
-            if (right.sqrMagnitude < 0.01f) right = player.transform.right;
+            Vector3 flat = new Vector3(dir.x, 0f, dir.z);
+            if (flat.sqrMagnitude < 0.001f) flat = player.transform.forward;
+            flat.Normalize();
             for (int i = 0; i < count; i++)
             {
-                float a = count == 1 ? 0f : -fanDegrees * 0.5f + fanDegrees * i / (count - 1);
+                float a = count == 1 ? 0f : -coneDegrees * 0.5f + coneDegrees * i / (count - 1);
                 Vector3 shot = Quaternion.AngleAxis(a, Vector3.up) * dir;
-                if (pitchUp != 0f) shot = Quaternion.AngleAxis(-pitchUp, right.normalized) * shot;
-                StartCoroutine(ArrowFlight(player, origin, shot.normalized, DragonCombat.M(60f), range, DragonCombat.M(0.3f), false, color, 0f,
-                    delegate(Character enemy) { bool keep = onHit(enemy); OnSkillHit(player); return keep; }, null));
+                StartCoroutine(ArrowFlight(player, origin, shot.normalized, DragonCombat.M(60f), range, DragonCombat.M(0.3f), true, color, 0f,
+                    delegate(Character enemy) { return true; }, null));
             }
+            List<Character> result = new List<Character>();
+            float half = Mathf.Max(8f, coneDegrees * 0.5f);
+            List<Character> all = GetSphereTargets(player, player.transform.position, range);
+            for (int i = 0; i < all.Count; i++)
+            {
+                Vector3 to = all[i].transform.position - player.transform.position;
+                to.y = 0f;
+                if (to.sqrMagnitude > 0.25f && Vector3.Angle(flat, to) > half) continue;
+                result.Add(all[i]);
+            }
+            return result;
         }
 
         // Laser Projectile: straight, no fall off. pierce = keep flying through creatures; walls and
@@ -2296,6 +2410,7 @@ namespace DragonsAltarRanger
 
         private void Shoot(Player player, string message)
         {
+            MarkSkillCast(player);
             DragonCombat.LockSkill(player, 0.35f);
             DragonCombat.PlayWeaponAnimation(player, false, "bow_fire");
             if (!string.IsNullOrEmpty(message)) ShowMessage(message);
@@ -2556,7 +2671,31 @@ namespace DragonsAltarRanger
             if (GetStamina(player) < stamina) { ShowMessage("Not enough stamina"); return false; }
             UseStamina(player, stamina);
             StartCooldown(id, cooldown);
+            MarkSkillCast(player);
             return true;
+        }
+
+        // v0.24.3: a skill's animation must never fire the last normal attack again. Valheim keeps
+        // the previous Attack as m_currentAttack and the skill's bow animation event re-triggers it
+        // (an extra normal arrow on every skill right after normal shots).
+        private float _skillCastUntil;
+
+        private void MarkSkillCast(Player player)
+        {
+            _skillCastUntil = Time.time + 0.8f;
+            _charging = false;
+            _releasePending = false;
+            try
+            {
+                FieldInfo f = typeof(Humanoid).GetField("m_currentAttack", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (f != null) f.SetValue(player, null);
+            }
+            catch { }
+        }
+
+        private static bool AttackTriggerPrefix(Humanoid __instance)
+        {
+            return Instance == null || !IsLocalRanger(__instance) || Time.time >= Instance._skillCastUntil;
         }
 
         private float RechargeSeconds(Player player, string id, float seconds)

@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.24.2";
+        public const string ModVersion = "0.24.3";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1458,6 +1458,152 @@ namespace DragonsAltarCombat
 
     public static class DragonCombat
     {
+        // ==================================================================================
+        // v0.24.3 BUFF INDICATORS: every Immortal Heroes buff on the local player is shown as a
+        // display-only vanilla StatusEffect (icon + timer under the minimap, like Rested / Wet).
+        // icon = Buff_<icon>.png in ImmortalHeroesAssets; stacks > 0 replaces the timer text.
+        // ==================================================================================
+        private static readonly Dictionary<string, Sprite> StatusSprites = new Dictionary<string, Sprite>();
+
+        public static void ShowStatus(Player player, string key, string icon, string label, float seconds, int stacks)
+        {
+            try
+            {
+                if (player == null || player != Player.m_localPlayer || string.IsNullOrEmpty(key)) return;
+                object seman = player.GetSEMan();
+                if (seman == null) return;
+                string name = "IH_" + key;
+                int hash = StableHash(name);
+                MethodInfo get = seman.GetType().GetMethod("GetStatusEffect", new Type[] { typeof(int) });
+                IhStatusDisplay existing = get == null ? null : get.Invoke(seman, new object[] { hash }) as IhStatusDisplay;
+                if (existing != null)
+                {
+                    existing.m_ttl = seconds;
+                    SetStatusTime(existing, 0f);
+                    existing.Stacks = stacks;
+                    return;
+                }
+                IhStatusDisplay se = ScriptableObject.CreateInstance<IhStatusDisplay>();
+                se.name = name;
+                se.m_name = label;
+                se.m_tooltip = label;
+                se.m_ttl = seconds;
+                se.Stacks = stacks;
+                se.m_icon = StatusSprite(icon);
+                MethodInfo[] methods = seman.GetType().GetMethods(BindingFlags.Instance | BindingFlags.Public);
+                for (int i = 0; i < methods.Length; i++)
+                {
+                    ParameterInfo[] ps = methods[i].GetParameters();
+                    if (methods[i].Name != "AddStatusEffect" || ps.Length < 1 || ps[0].ParameterType != typeof(StatusEffect)) continue;
+                    object[] args = new object[ps.Length];
+                    args[0] = se;
+                    for (int a = 1; a < ps.Length; a++)
+                        args[a] = ps[a].HasDefaultValue ? ps[a].DefaultValue : (ps[a].ParameterType.IsValueType ? Activator.CreateInstance(ps[a].ParameterType) : null);
+                    if (ps.Length > 1 && ps[1].ParameterType == typeof(bool)) args[1] = true;
+                    methods[i].Invoke(seman, args);
+                    return;
+                }
+            }
+            catch { }
+        }
+
+        public static void ClearStatus(Player player, string key)
+        {
+            try
+            {
+                if (player == null || player != Player.m_localPlayer) return;
+                object seman = player.GetSEMan();
+                if (seman == null) return;
+                int hash = StableHash("IH_" + key);
+                MethodInfo[] methods = seman.GetType().GetMethods(BindingFlags.Instance | BindingFlags.Public);
+                for (int i = 0; i < methods.Length; i++)
+                {
+                    ParameterInfo[] ps = methods[i].GetParameters();
+                    if (methods[i].Name != "RemoveStatusEffect" || ps.Length < 1 || ps[0].ParameterType != typeof(int)) continue;
+                    object[] args = new object[ps.Length];
+                    args[0] = hash;
+                    for (int a = 1; a < ps.Length; a++) args[a] = ps[a].ParameterType == typeof(bool) ? (object)true : null;
+                    methods[i].Invoke(seman, args);
+                    return;
+                }
+            }
+            catch { }
+        }
+
+        private static void SetStatusTime(StatusEffect se, float value)
+        {
+            FieldInfo f = typeof(StatusEffect).GetField("m_time", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (f != null && f.FieldType == typeof(float)) f.SetValue(se, value);
+        }
+
+        // Same as Valheim's string.GetStableHashCode() (StatusEffect.NameHash uses it on the asset name).
+        private static int StableHash(string str)
+        {
+            unchecked
+            {
+                int num = 5381;
+                int num2 = num;
+                for (int i = 0; i < str.Length && str[i] != '\0'; i += 2)
+                {
+                    num = ((num << 5) + num) ^ str[i];
+                    if (i == str.Length - 1 || str[i + 1] == '\0') break;
+                    num2 = ((num2 << 5) + num2) ^ str[i + 1];
+                }
+                return num + num2 * 1566083941;
+            }
+        }
+
+        private static Sprite StatusSprite(string icon)
+        {
+            Sprite sprite;
+            if (StatusSprites.TryGetValue(icon, out sprite)) return sprite;
+            sprite = null;
+            try
+            {
+                string path = Paths.PluginPath + "/ImmortalHeroesAssets/Buff_" + icon + ".png";
+                Type fileType = typeof(object).Assembly.GetType("System.IO.File");
+                MethodInfo exists = fileType.GetMethod("Exists", new Type[] { typeof(string) });
+                if (!(bool)exists.Invoke(null, new object[] { path }))
+                    path = Paths.PluginPath + "/ImmortalHeroesAssets/Buff_generic.png";
+                MethodInfo read = fileType.GetMethod("ReadAllBytes", new Type[] { typeof(string) });
+                byte[] bytes = (byte[])read.Invoke(null, new object[] { path });
+                Texture2D tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                MethodInfo load = null;
+                Type conv = Type.GetType("UnityEngine.ImageConversion, UnityEngine.ImageConversionModule");
+                if (conv != null) load = conv.GetMethod("LoadImage", new Type[] { typeof(Texture2D), typeof(byte[]) });
+                if (load != null) load.Invoke(null, new object[] { tex, bytes });
+                tex.wrapMode = TextureWrapMode.Clamp;
+                sprite = Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height), new Vector2(0.5f, 0.5f));
+            }
+            catch { sprite = null; }
+            StatusSprites[icon] = sprite;
+            return sprite;
+        }
+
+        // Icon + label for a timed buff source ("Acrobat.Tailwind" -> "Tailwind").
+        private static void TimedBuffLook(string source, float damage, float speed, float move, float defense, float stamina, float eitr, bool hyper, out string icon, out string label)
+        {
+            string tail = source;
+            int dot = tail.LastIndexOf('.');
+            if (dot >= 0) tail = tail.Substring(dot + 1);
+            System.Text.StringBuilder b = new System.Text.StringBuilder();
+            for (int i = 0; i < tail.Length; i++)
+            {
+                if (i > 0 && char.IsUpper(tail[i]) && !char.IsUpper(tail[i - 1])) b.Append(' ');
+                b.Append(tail[i]);
+            }
+            label = b.ToString();
+            if (defense > 0f) icon = "defense";
+            else if (damage > 0f) icon = "damage";
+            else if (move > 0f) icon = "haste";
+            else if (speed > 0f) icon = "attack_speed";
+            else if (eitr > 0f) icon = "eitr";
+            else if (stamina > 0f) icon = "stamina";
+            else if (hyper) icon = "hyper_armor";
+            else icon = "generic";
+            if (source.EndsWith("Overcharge")) icon = "overcharge";
+        }
+
         // v0.22.5 universal ruler: config meters -> world units. 1 m = (character height / 0.5),
         // i.e. two stacked characters. Height measured once from the standing local player (1.85 until then).
         private static float _measuredHeight;
@@ -1597,6 +1743,7 @@ namespace DragonsAltarCombat
             ClockworkUntil[id] = Time.time + Mathf.Max(0.1f, seconds);
             ClockworkDamage[id] = Mathf.Max(0f, skillDamageBonus);
             ClockworkCooldown[id] = Mathf.Clamp(cooldownMultiplier, 0f, 1f);
+            ShowStatus(player, "clockwork", "clockwork", "Clockwork", seconds, 0);
         }
 
         public static bool IsClockworkActive(Player player)
@@ -2113,6 +2260,7 @@ namespace DragonsAltarCombat
             if (player == null)
                 return;
             ExplicitHyperArmorUntil[player.GetInstanceID()] = Time.time + Mathf.Max(0f, duration);
+            if (duration >= 1f) ShowStatus(player, "hyper_armor", "hyper_armor", "Hyper Armor", duration, 0);
         }
 
         public static bool HasHyperArmor(Character character)
@@ -2249,6 +2397,10 @@ namespace DragonsAltarCombat
 
             if (string.IsNullOrEmpty(source))
                 source = "Generic";
+
+            string statusIcon, statusLabel;
+            TimedBuffLook(source, attackDamageBonus, attackSpeedBonus, moveSpeedBonus, defenseBonus, staminaRegenBonus, eitrRegenBonus, hyperArmor, out statusIcon, out statusLabel);
+            if (duration >= 1f) ShowStatus(player, "buff_" + source, statusIcon, statusLabel, duration, 0);
 
             TimedBuffState state = new TimedBuffState();
             state.EndTime = Time.time + Mathf.Max(0.1f, duration);
@@ -3751,6 +3903,18 @@ namespace DragonsAltarCombat
                 _target.m_swimSpeed = _swimSpeed;
 
             _applied = false;
+        }
+    }
+
+    // Display-only status effect (no gameplay effect): stacks replace the timer text.
+    public class IhStatusDisplay : StatusEffect
+    {
+        public int Stacks;
+
+        public override string GetIconText()
+        {
+            if (Stacks > 0) return Stacks.ToString();
+            return base.GetIconText();
         }
     }
 }

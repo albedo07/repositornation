@@ -1,12 +1,9 @@
-TEST THIS BUILD - v0.24.2 Ranger Polish
-=======================================
-1. Ranger + Bow: Left Click chain fires real arrows; hold Right Click, Left Click releases an arrow.
-   Tap Right Click / release instantly, then charge again at once (no lockout). Try with 0 arrows.
-2. Tumble Shot: backflip 2m straight back, no vanilla dodge slide; take a hit mid-flip = no damage.
-3. Acrobat Gale Volley: same 2m swift back-jump + i-frames.
-4. Ascended Cyclone Arrow (F8 > Progression > Ascended): splits as soon as it touches an enemy.
-5. Furious Winds: enemies next to you drift out slowly (Small ~5s, Big ~8s) to 7m and can't walk
-   back in; enemies at 7-10m still take damage; arrows from enemies vanish at 7m.
-6. Bowmaster Splitting Arrow: rooted, 3 volleys in a wide cone (Ascended 5 fast volleys + burn).
-7. Starfall Volley: every enemy in the 20m circle takes damage every 0.5s.
-8. Look at the Ranger tree (both ACs), the hotbar icons and the Altar Ranger cards.
+TEST THIS BUILD - v0.24.3 Ranger Fixes
+======================================
+1. Shoot normally, then cast any Ranger skill: no extra normal arrow.
+2. Left Click held: 3 shots 0.5s apart, finisher, ~1.5s pause. Charged shot hits harder (120%).
+3. Bowmaster tree with Piercing Arrow Ascended: first node frame clean (Magenta, no Cyan edge).
+4. Hotbar Ultimate: Maroon frame (Ascended: Red), same as the tree.
+5. Buff icons under the minimap: Tailwind / Hawk's Vigil / Focus stacks / Hyper Armor / Barrier HP.
+6. Pinning Shot cone pins everyone inside; Explosive (Ascended) cluster bombs; Starfall 12m / 8s.
+7. Acrobat: jump off a cliff with low HP -> survive at 1 HP.

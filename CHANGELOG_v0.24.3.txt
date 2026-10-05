@@ -1,0 +1,32 @@
+IMMORTAL HEROES v0.24.3 - Ranger Fixes
+======================================
+Fixes
+- Skills no longer fire an extra normal arrow after normal shots (the skill animation re-triggered
+  the last vanilla attack).
+- Ranger Class tree: the first node (Zap slot) frame is no longer split when Ascended.
+- Hotbar: Ultimates use the tree's colour (Maroon; Ascended Red).
+
+Ranger
+- Left Click: a shot every 0.5s; the 4th (finisher) adds 1s before the next.
+- Charged shot (Right Click): 120% damage. The -50% draw time is removed (Bows skill still shortens it).
+- New rule: everyone inside a skill's area is hit; arrows are cosmetic (Tumble Shot, Gale Volley,
+  Pinning Shot).
+
+Acrobat (Windstep): fall damage -75% and a fall never kills (1 HP); all Stamina use -35%.
+
+Bowmaster
+- Arrow Rain 6m (Ascended 8m).
+- Pinning Shot: 3 arrows in a 30m / 40 degree cone; everyone inside is hit and pinned
+  (Small 4s, Big 2.5s, Bosses Crippled).
+- Explosive Arrow 5m. Ascended: 5m burning field + 6 cluster bombs (2.5m, 40% each).
+- Starfall Volley 12m, 8s. Ascended final arrow 12m.
+- Hawk's Vigil: enemies in range glow red.
+- Deadeye Focus shows as a buff with its stack count.
+
+Buff indicators
+- Immortal Heroes buffs show under the minimap like vanilla status effects (icon + timer):
+  Hyper Armor, Barrier (remaining HP), timed buffs (Tailwind, Heaven's Light, Knight's Guidance,
+  Battlecry, Overcharge...), Clockwork, Unchained Fury, Hawk's Vigil, Focus (stacks).
+
+Altar: Ranger / Acrobat / Bowmaster cards show the portraits without the parchment wash.
+Settings reset to defaults once (Dev Mode OFF).
