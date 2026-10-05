@@ -40,7 +40,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Dragon's Altar - Ranger";
-        public const string ModVersion = "0.25.1";
+        public const string ModVersion = "0.25.2";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -504,7 +504,8 @@ namespace DragonsAltarRanger
             bool acrobat = ranger && GetAdvancement(player) == "Acrobat";
             UpdateDodgeCost(player, acrobat);
             if (acrobat) DragonCombat.ApplyStaminaUseCut(player, Mathf.Clamp01(_wsStaminaUse.Value / 100f), 0.5f);
-            if (ranger) UpdateForbiddenGear(player, acrobat);
+            // v0.25.2 perf: gear rules 5x per second, not every frame.
+            if (ranger && Time.time >= _nextGearCheck) { _nextGearCheck = Time.time + 0.2f; UpdateForbiddenGear(player, acrobat); }
             if (ranger) UpdateQuickShotSpeed(player);
             UpdateFocus(player, ranger && GetAdvancement(player) == "Bowmaster");
             UpdateLoadedCrossbow(player, ranger && GetAdvancement(player) == "Bowmaster");
@@ -1427,11 +1428,14 @@ namespace DragonsAltarRanger
             else if (attack || attackHold) _qsPressedAt = Time.time;
         }
 
+        private static MethodInfo _inAttackMethod;
+
         private static bool InAttack(Player player)
         {
             try
             {
-                MethodInfo m = typeof(Humanoid).GetMethod("InAttack", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+                if (_inAttackMethod == null) _inAttackMethod = typeof(Humanoid).GetMethod("InAttack", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+                MethodInfo m = _inAttackMethod;
                 return m != null && Convert.ToBoolean(m.Invoke(player, null));
             }
             catch { return false; }
@@ -1456,11 +1460,14 @@ namespace DragonsAltarRanger
             _toggledAttack = null;
         }
 
+        private static MethodInfo _drawPctMethod;
+
         private float DrawPercent(Player player)
         {
             try
             {
-                MethodInfo m = FindMethod(typeof(Player), "GetAttackDrawPercentage", 0);
+                if (_drawPctMethod == null) _drawPctMethod = FindMethod(typeof(Player), "GetAttackDrawPercentage", 0);
+                MethodInfo m = _drawPctMethod;
                 return m == null ? 0f : Convert.ToSingle(m.Invoke(player, null));
             }
             catch { return 0f; }
@@ -1740,6 +1747,8 @@ namespace DragonsAltarRanger
 
         // No Shields for any Ranger; the Acrobat never wields a Crossbow.
         private float _gearMessageAt;
+
+        private float _nextGearCheck;
 
         private void UpdateForbiddenGear(Player player, bool acrobat)
         {
@@ -2830,11 +2839,15 @@ namespace DragonsAltarRanger
             catch { return null; }
         }
 
+        private static MethodInfo _onGroundMethod;
+        private static FieldInfo _customDataField;
+
         private bool IsGrounded(Player player)
         {
             try
             {
-                MethodInfo m = typeof(Character).GetMethod("IsOnGround", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (_onGroundMethod == null) _onGroundMethod = typeof(Character).GetMethod("IsOnGround", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                MethodInfo m = _onGroundMethod;
                 if (m != null) return Convert.ToBoolean(m.Invoke(player, null));
             }
             catch { }
@@ -2859,7 +2872,8 @@ namespace DragonsAltarRanger
             if (player == null) return "";
             try
             {
-                FieldInfo f = typeof(Player).GetField("m_customData", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (_customDataField == null) _customDataField = typeof(Player).GetField("m_customData", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                FieldInfo f = _customDataField;
                 IDictionary data = f == null ? null : f.GetValue(player) as IDictionary;
                 if (data == null || !data.Contains(key) || data[key] == null) return "";
                 return data[key].ToString();

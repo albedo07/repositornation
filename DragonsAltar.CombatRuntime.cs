@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.1";
+        public const string ModVersion = "0.25.2";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1683,6 +1683,7 @@ namespace DragonsAltarCombat
         // icon = Buff_<icon>.png in ImmortalHeroesAssets; stacks > 0 replaces the timer text.
         // ==================================================================================
         private static readonly Dictionary<string, Sprite> StatusSprites = new Dictionary<string, Sprite>();
+        private static MethodInfo _seGet;
 
         public static void ShowStatus(Player player, string key, string icon, string label, float seconds, int stacks)
         {
@@ -1693,7 +1694,8 @@ namespace DragonsAltarCombat
                 if (seman == null) return;
                 string name = "IH_" + key;
                 int hash = StableHash(name);
-                MethodInfo get = seman.GetType().GetMethod("GetStatusEffect", new Type[] { typeof(int) });
+                if (_seGet == null) _seGet = seman.GetType().GetMethod("GetStatusEffect", new Type[] { typeof(int) });
+                MethodInfo get = _seGet;
                 IhStatusDisplay existing = get == null ? null : get.Invoke(seman, new object[] { hash }) as IhStatusDisplay;
                 if (existing != null)
                 {
@@ -1702,6 +1704,7 @@ namespace DragonsAltarCombat
                     existing.Stacks = stacks;
                     return;
                 }
+                // v0.25.2 perf: no re-add while the same buff is refreshed every frame.
                 IhStatusDisplay se = ScriptableObject.CreateInstance<IhStatusDisplay>();
                 se.name = name;
                 se.m_name = label;
@@ -3999,13 +4002,16 @@ namespace DragonsAltarCombat
             return ReadPlayerData(player, AdvancementDataKey);
         }
 
+        private static FieldInfo _customDataField;   // v0.25.2 perf: read on every hit / speed / regen call
+
         private static string ReadPlayerData(Player player, string key)
         {
             if (player == null)
                 return "";
             try
             {
-                FieldInfo field = typeof(Player).GetField("m_customData", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (_customDataField == null) _customDataField = typeof(Player).GetField("m_customData", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                FieldInfo field = _customDataField;
                 if (field == null)
                     return "";
                 IDictionary data = field.GetValue(player) as IDictionary;

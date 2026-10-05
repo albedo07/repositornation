@@ -1,0 +1,19 @@
+IMMORTAL HEROES v0.25.2 - HUD Fixes
+===================================
+Immortal HUD
+- Its own panel UNDER the vanilla item hotbar; the hotbar is no longer moved or wrapped.
+- Reference style: dark panel with a thin grey border, "Name · CLASS" title, HP / STA / EIT bars with
+  deep, saturated colours (Linear colour space compensated - no more pink HP), Lv + EXP line, our buffs
+  in bordered boxes with a coloured line and the timer under each.
+- Hidden while the inventory, a menu or the big map is open (no more drawing over the inventory).
+- Vanilla HP / Stamina / Eitr fully removed: every Hud health / stamina / eitr element, including the
+  vertical health bar, its number and icon. The vanilla food icons stay.
+
+Performance (lag)
+- The HUD searched the scene for the hotbar every frame and re-measured it (now once per second) and
+  gathered its data on every IMGUI event (now once per frame).
+- The Skill Tree searched all loaded fonts on every draw call (now cached).
+- Every class / AC check read the player data through fresh reflection on every hit, speed, stamina
+  and regen call (Combat Runtime, Advanced, Skills, Sorcerer, Ranger): now cached.
+- Ranger: gear rules 5x per second instead of every frame; ground / attack / draw checks cached.
+Settings reset to defaults once (Dev Mode OFF).

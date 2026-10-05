@@ -1,5 +1,5 @@
 @echo off
-title Immortal Heroes v0.25.1 - HUD Style
+title Immortal Heroes v0.25.2 - HUD Fixes
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
 echo.
 pause

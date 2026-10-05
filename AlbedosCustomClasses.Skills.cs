@@ -220,7 +220,7 @@ namespace AlbedosCustomClassesSkills
         public static SkillsPlugin Instance;
         public const string ModGuid = "albedo.customclasses.skills";
         public const string ModName = "Dragon's Altar - Starter Skills";
-        public const string ModVersion = "0.25.1";
+        public const string ModVersion = "0.25.2";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";
@@ -1641,14 +1641,15 @@ namespace AlbedosCustomClassesSkills
             return value == null ? "" : value.ToString();
         }
 
+        private static FieldInfo _customDataFieldCache;   // v0.25.2 perf
+
         private IDictionary GetCustomData(Player player)
         {
             try
             {
-                FieldInfo field = typeof(Player).GetField(
-                    "m_customData",
-                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
-                );
+                if (_customDataFieldCache == null)
+                    _customDataFieldCache = typeof(Player).GetField("m_customData", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                FieldInfo field = _customDataFieldCache;
 
                 if (field == null)
                     return null;

@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Dragon's Altar - Sorcerer Advancements";
-        public const string ModVersion = "0.25.1";
+        public const string ModVersion = "0.25.2";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -3677,11 +3677,14 @@ namespace DragonsAltarSorcerer
         private string GetClass(Player player) { return ReadData(player, ClassDataKey); }
         private string GetAdvancement(Player player) { return ReadData(player, AdvancementDataKey); }
 
+        private static FieldInfo _customDataField;
+
         private string ReadData(Player player, string key)
         {
             try
             {
-                FieldInfo f = typeof(Player).GetField("m_customData", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (_customDataField == null) _customDataField = typeof(Player).GetField("m_customData", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                FieldInfo f = _customDataField;
                 IDictionary data = f == null ? null : f.GetValue(player) as IDictionary;
                 if (data == null || !data.Contains(key) || data[key] == null) return "";
                 return data[key].ToString();

@@ -1,7 +1,6 @@
-TEST THIS BUILD - v0.25.1 HUD Style
+TEST THIS BUILD - v0.25.2 HUD Fixes
 ===================================
-1. Top-left panel: title above the item hotbar, HP / STA / EIT / Lv rows, our buffs only.
-   Vanilla health bar gone, vanilla food icons still there, vanilla buffs top right.
-2. Skill hotbar title = current class only.
-3. Crescent Cleave / Halfmoon Slash: pull-and-release motions (no spin); Ascended finisher spins.
-4. Altar cards: veil barely visible on every card; Ranger cards only lightly green.
+1. Item hotbar untouched; our panel sits right under it (title, HP, STA/EIT, Lv, our buffs).
+2. No vanilla health / stamina / eitr anywhere; vanilla food icons still there.
+3. Open the inventory / map / Esc menu: our panel hides.
+4. Check if the lag is gone (open the Skill Tree too).
