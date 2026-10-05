@@ -1,8 +1,7 @@
-TEST THIS BUILD - v0.25.0 Immortal HUD
-======================================
-1. Top-left panel: HP / STA / EIT bars (EIT visible at 0), food timers, buffs/debuffs with timers.
-   Vanilla bars + top-right status list are gone. F8 > Immortal HUD: Scale / X / Y / Enabled.
-2. Cast skills of each Class: body action plays (smash, spin, iai, lunge, chant...).
-3. Hotbar Ultimate frame red; Ascended brighter red.
-4. Cyclone Arrow: slow, 4m, several hits per enemy.
-5. Altar: Ranger cards vibrant green.
+TEST THIS BUILD - v0.25.1 HUD Style
+===================================
+1. Top-left panel: title above the item hotbar, HP / STA / EIT / Lv rows, our buffs only.
+   Vanilla health bar gone, vanilla food icons still there, vanilla buffs top right.
+2. Skill hotbar title = current class only.
+3. Crescent Cleave / Halfmoon Slash: pull-and-release motions (no spin); Ascended finisher spins.
+4. Altar cards: veil barely visible on every card; Ranger cards only lightly green.

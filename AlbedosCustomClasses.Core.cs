@@ -41,7 +41,7 @@ namespace AlbedosCustomClasses
     {
         public const string ModGuid = "albedo.customclasses";
         public const string ModName = "Dragon's Altar";
-        public const string ModVersion = "0.25.0";
+        public const string ModVersion = "0.25.1";
 
         internal const string ClassDataKey = "AlbedoCustomClasses.Class";
         internal const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1001,12 +1001,12 @@ namespace AlbedosCustomClasses
             button.colors = colors;
             button.onClick.AddListener(delegate { if (advancement) FocusAdvancement(name); else FocusBaseClass(name); });
             AddAltarHoverGlow(image.gameObject);
-            // v0.20.4: a light veil only, so the card art stays visible behind the text;
+            // v0.20.4: a light veil only, so the card art stays visible behind the text (v0.25.1: 12%, barely visible);
             // a soft parchment glow on the letters keeps them readable on darker art.
             // v0.22.5: cards centred in the left column (opening x 30-563 of the 1349 px backdrop -> centre -291).
             // v0.22.3: centred on the card's art panel (measured 41%-98.5% of the card width -> centre
             // +78 px), name and role balanced around the panel's vertical centre.
-            AltarImage("CardLabelParchment", image.transform, new Vector2(78f, 0f), new Vector2(222f, 124f), AltarLabelVeil(), new Color(0.98f, 0.92f, 0.80f, 0.30f), false);
+            AltarImage("CardLabelParchment", image.transform, new Vector2(78f, 0f), new Vector2(222f, 124f), AltarLabelVeil(), new Color(0.98f, 0.92f, 0.80f, 0.12f), false);
             AltarCardTextGlow(CreateWrappedText(image.transform, AcDisplay(name).ToUpper(), new Vector2(78f, 19f), 198f, 58f, 23, AltarInk, true, TextAnchor.MiddleCenter));
             AltarCardTextGlow(CreateWrappedText(image.transform, role, new Vector2(78f, -22f), 194f, 40f, 15, AltarInk, false, TextAnchor.MiddleCenter));
             (advancement ? _altarAdvCards : _altarBaseCards)[name] = image;

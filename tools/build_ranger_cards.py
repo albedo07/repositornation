@@ -76,9 +76,10 @@ def panel_scene(name, focus_y, size, hue):
     xs = np.array([0.0, 0.35, 0.7, 1.0])
     stops = np.array(STOPS[name], dtype=np.float64)
     mapped = np.stack([np.interp(lum, xs, stops[:, c]) for c in range(3)], -1)
-    out = out * 0.40 + mapped * 0.60
+    # v0.25.1: only a hint of green (the painted cards keep their own colours; this matches them).
+    out = out * 0.82 + mapped * 0.18
     grey = out.mean(axis=2, keepdims=True)
-    out = grey + (out - grey) * 1.35
+    out = grey + (out - grey) * 1.15
     return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8))
 
 

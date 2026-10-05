@@ -1,0 +1,17 @@
+IMMORTAL HEROES v0.25.1 - HUD Style
+===================================
+Immortal HUD (your reference style)
+- One dark panel around the item hotbar: "Name · CLASS" on top, then HP, STA + EIT (label, thin bar,
+  current / max), Lv + EXP bar (placeholder 0% until XP exists), then our buffs (timer under each).
+- Only Immortal Heroes buffs are shown on it; vanilla / other mods' effects stay in the vanilla list
+  top right (ours are removed from that list).
+- Food is no longer in our panel (vanilla food icons stay). The vanilla health bar is removed.
+- Skill hotbar title shows just your current class (no "Class > AC", no level).
+
+Animations
+- Crescent Cleave = Sword Pull (blade pulled back at the side, then let go); Halfmoon Slash = Charge
+  Release (long held pull, then a big release). The spin is only on the Ascended Halfmoon finisher wave.
+- Animation legend added to the Framework.
+
+Altar cards: label veil 12% (was 30%) for every class; Ranger portraits only a hint of green.
+Settings reset to defaults once (Dev Mode OFF).

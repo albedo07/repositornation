@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.0";
+        public const string ModVersion = "0.25.1";
 
         internal static DragonCombatPlugin Instance;
 
@@ -141,6 +141,23 @@ namespace DragonsAltarCombat
             }
         }
 
+        // v0.25.1: our buffs live on the Immortal HUD only; the vanilla status list (top right) keeps
+        // showing vanilla / other mods' effects but never ours.
+        private int PatchHudStatusList()
+        {
+            Type hud = Type.GetType("Hud, assembly_valheim");
+            MethodInfo m = hud == null ? null : hud.GetMethod("UpdateStatusEffects", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (m == null) return 0;
+            PatchWithHarmony(m, new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("HudStatusPrefix", BindingFlags.Static | BindingFlags.NonPublic)), null);
+            return 1;
+        }
+
+        private static void HudStatusPrefix(List<StatusEffect> __0)
+        {
+            try { if (__0 != null) __0.RemoveAll(delegate(StatusEffect se) { return se is IhStatusDisplay; }); }
+            catch { }
+        }
+
         private void PatchWithHarmony(MethodBase original, HarmonyMethod prefix, HarmonyMethod postfix)
         {
             if (_harmony == null || original == null)
@@ -198,6 +215,7 @@ namespace DragonsAltarCombat
         {
             int count = 0;
             count += PatchSetControls();
+            count += PatchHudStatusList();
             count += PatchCheckRun();
             count += PatchInterruptMethod("Stagger");
             count += PatchInterruptMethod("AddStaggerDamage");
@@ -1500,6 +1518,24 @@ namespace DragonsAltarCombat
                     euler.x = -18f * windup * (1f - strike) + 32f * strike * (1f - recover);
                     offset.y = -0.30f * strike * (1f - recover);
                     break;
+                case "sword_pull":  // pull the sword back low at the side (twist away), then let it go
+                    {
+                        float pull = Ease(0f, 0.45f, k), go = Ease(0.45f, 0.62f, k), back = Ease(0.62f, 1f, k);
+                        euler.y = -40f * pull * (1f - go) + 25f * go * (1f - back);
+                        euler.x = 12f * pull * (1f - go) + 8f * go * (1f - back);
+                        offset.y = -0.22f * pull * (1f - back);
+                    }
+                    break;
+                case "charge_release": // long charged pull (held, trembling with power), then a big release
+                    {
+                        float pull = Ease(0f, 0.25f, k), go = Ease(0.68f, 0.80f, k), back = Ease(0.80f, 1f, k);
+                        float hold = pull * (1f - go);
+                        euler.y = -50f * hold + 30f * go * (1f - back);
+                        euler.x = 16f * hold + 12f * go * (1f - back);
+                        euler.z = 1.5f * Mathf.Sin(k * Mathf.PI * 40f) * hold;
+                        offset.y = -0.32f * hold - 0.10f * go * (1f - back);
+                    }
+                    break;
                 case "lunge":       // step-in thrust
                     euler.x = 22f * Bump(k);
                     offset.z = 0.35f * Bump(k);
@@ -1587,11 +1623,11 @@ namespace DragonsAltarCombat
                 case "impact_punch": preset = "lunge"; duration = 0.4f; break;
                 // Sword Master
                 case "moonlight_splitter": preset = "iai"; duration = 0.45f; break;
-                case "crescent_cleave": preset = "spin"; duration = 0.45f; break;
+                case "crescent_cleave": preset = "sword_pull"; duration = 0.55f; break;
                 case "blade_storm": preset = "cross"; duration = 0.4f; break;
                 case "frenzied_charge": preset = "lunge"; duration = 0.5f; break;
                 case "eclipse": preset = "iai"; duration = 0.6f; break;
-                case "halfmoon_slash": preset = "double_spin"; duration = 0.7f; break;
+                case "halfmoon_slash": preset = "charge_release"; duration = 1.1f; break;
                 case "knights_guidance": preset = "raise"; duration = 0.6f; break;
                 // Mercenary
                 case "stomp": preset = "slam"; duration = 0.5f; break;

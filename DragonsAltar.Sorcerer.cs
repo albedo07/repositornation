@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Dragon's Altar - Sorcerer Advancements";
-        public const string ModVersion = "0.25.0";
+        public const string ModVersion = "0.25.1";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -3832,7 +3832,7 @@ namespace DragonsAltarSorcerer
             float reserve = Mathf.Clamp(_hudBottomOffset.Value, 70f, 260f) * scale;
             float y = Screen.height - reserve - size;
 
-            GUI.Label(new Rect(x, y - 21f * scale, totalWidth, 18f * scale), "SORCERER" + (string.IsNullOrEmpty(adv) ? "" : "  >  " + adv.ToUpper()), _titleStyle);
+            GUI.Label(new Rect(x, y - 21f * scale, totalWidth, 18f * scale), (string.IsNullOrEmpty(adv) ? "SORCERER" : (adv == "Wizard" ? "ARCHMAGE" : adv == "Spellcaster" ? "HORIZON WALKER" : adv.ToUpper())), _titleStyle);
 
             for (int i = 0; i < count; i++)
             {
