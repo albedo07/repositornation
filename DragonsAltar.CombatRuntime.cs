@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.14";
+        public const string ModVersion = "0.25.15";
 
         internal static DragonCombatPlugin Instance;
 
@@ -47,6 +47,7 @@ namespace DragonsAltarCombat
         internal ConfigEntry<bool> MasteryComboStyleEnabled;
         internal ConfigEntry<float> MasteryComboSpeedPerStage;
         internal ConfigEntry<bool> EnableSkillAnimations;
+        internal ConfigEntry<float> LegMotionScale;
         internal ConfigEntry<float> SkySummonDropTime;
         internal ConfigEntry<bool> EnableWarfreakDualWield;
         internal ConfigEntry<bool> EnableDivineStaffShield;
@@ -66,6 +67,7 @@ namespace DragonsAltarCombat
 
             EnableRuntime = Config.Bind("Runtime", "Enabled", true, "Enable Dragon's Altar combat runtime patches.");
             EnableSkillAnimations = Config.Bind("Runtime", "EnableSkillAnimations", true, "Use Dragon's Altar procedural skill poses. Class skills do not trigger vanilla weapon attacks.");
+            LegMotionScale = Config.Bind("Runtime", "LegMotionScale_v02515", 1f, "Strength of the procedural leg poses (Unity humanoid muscles). 0 = legs untouched, -1 = inverted (if knees bend the wrong way on your rig).");
             SkySummonDropTime = Config.Bind("Skills", "SkySummonDropTime", 0.18f, "Seconds for a spawned Sky Summon object to slam from its indoor-safe spawn point to the target AFTER the character wind-up finishes.");
             EnableWarfreakDualWield = Config.Bind("Weapon Mastery", "EnableWarfreakDualWield", true, "Warfreak: Mercenary may equip any two one-handed weapons simultaneously. Dedicated combination animations are a later animation pass.");
             EnableDivineStaffShield = Config.Bind("Weapon Mastery", "EnableDivineStaffShield", true, "Divine Duality: Cleric may equip a Staff and Shield together, including before advancement.");
@@ -247,6 +249,37 @@ namespace DragonsAltarCombat
             return null;
         }
 
+        // v0.25.15: forced run locomotion (DragonCombat.ForceRun) overrides the movement floats Valheim
+        // sends to the local player's animator while a skill moves the body itself.
+        private int PatchForceRun()
+        {
+            Type z = Type.GetType("ZSyncAnimation, assembly_valheim");
+            if (z == null) return 0;
+            HarmonyMethod pre = new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("ZanimFloatPrefix", BindingFlags.Static | BindingFlags.NonPublic));
+            int n = 0;
+            MethodInfo[] ms = z.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+            for (int i = 0; i < ms.Length; i++)
+            {
+                if (ms[i].Name != "SetFloat") continue;
+                ParameterInfo[] ps = ms[i].GetParameters();
+                if (ps.Length != 2 || ps[1].ParameterType != typeof(float)) continue;
+                try { PatchWithHarmony(ms[i], pre, null); n++; }
+                catch (Exception ex) { Logger.LogWarning("Could not patch ZSyncAnimation.SetFloat: " + ex.Message); }
+            }
+            return n;
+        }
+
+        private static void ZanimFloatPrefix(object __instance, object[] __args)
+        {
+            try
+            {
+                if (__args == null || __args.Length < 2) return;
+                float v = (float)__args[1];
+                if (DragonCombat.ForceRunOverride(__instance, __args[0], ref v)) __args[1] = v;
+            }
+            catch { }
+        }
+
         private static bool HudVitalsPrefix()
         {
             return !DragonCombat.VanillaVitalsHidden;
@@ -317,6 +350,7 @@ namespace DragonsAltarCombat
             count += PatchSetControls();
             count += PatchHudStatusList();
             count += PatchHudVitals();
+            count += PatchForceRun();
             count += PatchItemTooltips();
             count += PatchCheckRun();
             count += PatchInterruptMethod("Stagger");
@@ -1605,6 +1639,10 @@ namespace DragonsAltarCombat
         public float T;
         public Vector3[] B = new Vector3[10];
         public Vector3 R, O;
+        // v0.25.15 legs (Unity humanoid muscle deltas, rig independent): per side lift (thigh forward +),
+        // spread (out +), bend (knee bend +), toe (foot up +). L[0..3] left, L[4..7] right.
+        public float[] L = new float[8];
+        public float Spin;   // v0.25.15 axial roll around the body's own head-to-feet axis (degrees)
         public bool Lin;   // linear (constant speed) blend INTO this key: spins
         public DragonClipKey(float t) { T = t; }
         public DragonClipKey Linear() { Lin = true; return this; }
@@ -1620,13 +1658,30 @@ namespace DragonsAltarCombat
         public DragonClipKey LH(float x, float y, float z) { B[9] = new Vector3(x, y, z); return this; }
         public DragonClipKey Rot(float x, float y, float z) { R = new Vector3(x, y, z); return this; }
         public DragonClipKey Off(float x, float y, float z) { O = new Vector3(x, y, z); return this; }
+        public DragonClipKey LL(float lift, float spread, float bend, float toe) { L[0] = lift; L[1] = spread; L[2] = bend; L[3] = toe; return this; }
+        public DragonClipKey RL(float lift, float spread, float bend, float toe) { L[4] = lift; L[5] = spread; L[6] = bend; L[7] = toe; return this; }
+        public DragonClipKey Sn(float degrees) { Spin = degrees; return this; }
         // Same pose as another key at a new time (holds / shakes).
         public DragonClipKey Copy(float t)
         {
             DragonClipKey k = new DragonClipKey(t);
             for (int i = 0; i < B.Length; i++) k.B[i] = B[i];
-            k.R = R; k.O = O; k.Lin = Lin;
+            for (int i = 0; i < L.Length; i++) k.L[i] = L[i];
+            k.R = R; k.O = O; k.Lin = Lin; k.Spin = Spin;
             return k;
+        }
+    }
+
+    public class DragonForceRun : MonoBehaviour
+    {
+        private Character _owner;
+        private void Update() { Tick(); }
+        private void FixedUpdate() { Tick(); }
+        private void Tick()
+        {
+            if (_owner == null) _owner = GetComponent<Character>();
+            if (_owner == null || _owner.IsDead()) { DragonCombat.ForceRun(_owner as Player, false); Destroy(this); return; }
+            DragonCombat.ForceRunTick();
         }
     }
 
@@ -1649,6 +1704,20 @@ namespace DragonsAltarCombat
         private int _token;
         private Vector3[] _b = new Vector3[10];
         private Vector3 _r, _o;
+        private readonly float[] _l = new float[8];
+        private float _spin;
+        // v0.25.15 legs: Unity humanoid muscles (HumanPoseHandler), applied on the animator's real pose.
+        private static readonly HumanBodyBones[] LegBones =
+        {
+            HumanBodyBones.LeftUpperLeg, HumanBodyBones.LeftLowerLeg, HumanBodyBones.LeftFoot,
+            HumanBodyBones.RightUpperLeg, HumanBodyBones.RightLowerLeg, HumanBodyBones.RightFoot
+        };
+        private static int[] _legMuscles;
+        private HumanPoseHandler _hph;
+        private HumanPose _hp;
+        private bool _legsBroken, _legHas;
+        private readonly Quaternion[] _legAnim = new Quaternion[6];
+        private readonly Quaternion[] _legWritten = new Quaternion[6];
         private readonly Quaternion[] _animPose = new Quaternion[10];
         private readonly Quaternion[] _written = new Quaternion[10];
         private readonly bool[] _hasWritten = new bool[10];
@@ -1666,17 +1735,18 @@ namespace DragonsAltarCombat
                 keys = copy;
             }
             _keys = keys;
-            _windup = Mathf.Max(0.1f, windup);
+            _windup = Mathf.Max(0.05f, windup);   // v0.25.15 release-first: instant casts react at once
             _hold = hold;
             _start = Time.time;
             _impactAt = -1f;
-            _holdLimit = Time.time + 12f;
+            _holdLimit = Time.time + 60f;          // safety only: holds end on their gameplay event
             _visual = visual;
             if (_animator == null) _animator = GetComponentInChildren<Animator>();
             _token = DragonCombat.ClaimMotionRoot(_visual);
         }
 
         public bool IsHolding { get { return _keys != null && _hold && _impactAt < 0f; } }
+        public bool IsPlaying { get { return _keys != null; } }
 
         public void Impact()
         {
@@ -1692,6 +1762,8 @@ namespace DragonsAltarCombat
             for (int i = 0; i < 10; i++) k.B[i] = _b[i];
             k.R = new Vector3(Mathf.DeltaAngle(0f, _r.x), Mathf.DeltaAngle(0f, _r.y), Mathf.DeltaAngle(0f, _r.z));
             k.O = _o;
+            for (int i = 0; i < 8; i++) k.L[i] = _l[i];
+            k.Spin = Mathf.DeltaAngle(0f, _spin);
             return k;
         }
 
@@ -1738,6 +1810,8 @@ namespace DragonsAltarCombat
             for (int i = 0; i < 10; i++) _b[i] = Vector3.Lerp(a.B[i], b.B[i], w);
             _r = Vector3.Lerp(a.R, b.R, w);
             _o = Vector3.Lerp(a.O, b.O, w);
+            for (int i = 0; i < 8; i++) _l[i] = Mathf.Lerp(a.L[i], b.L[i], w);
+            _spin = Mathf.Lerp(a.Spin, b.Spin, w);
         }
 
         private void LateUpdate()
@@ -1756,16 +1830,25 @@ namespace DragonsAltarCombat
             if (_animator == null) _animator = GetComponentInChildren<Animator>();
             if (_animator != null && _animator.isHuman)
             {
+                // v0.25.14: the animator does not rewrite every bone every frame (physics-rate / culled
+                // updates). A bone still holding what we wrote was skipped: put the stored animator pose
+                // back first so offsets never stack (arms/torso here, legs in ApplyLegs).
+                Transform[] bones = new Transform[10];
                 for (int i = 0; i < 10; i++)
                 {
                     Transform bone = _animator.GetBoneTransform(Bones[i]);
+                    bones[i] = bone;
                     if (bone == null) continue;
-                    // v0.25.14: the animator does not rewrite every bone every frame (physics-rate / culled
-                    // updates). Multiplying our offset onto a bone it did not rewrite stacked the offset and
-                    // made it jitter; reuse the last animator pose in that case.
                     Quaternion cur = bone.localRotation;
-                    Quaternion basePose = _hasWritten[i] && Quaternion.Angle(cur, _written[i]) < 0.01f ? _animPose[i] : cur;
-                    _animPose[i] = basePose;
+                    if (_hasWritten[i] && Quaternion.Angle(cur, _written[i]) < 0.01f) bone.localRotation = _animPose[i];
+                    else _animPose[i] = cur;
+                }
+                ApplyLegs(bones);
+                for (int i = 0; i < 10; i++)
+                {
+                    Transform bone = bones[i];
+                    if (bone == null) continue;
+                    Quaternion basePose = _animPose[i];
                     Quaternion w = _b[i] == Vector3.zero ? basePose : basePose * Quaternion.Euler(_b[i]);
                     bone.localRotation = w;
                     _written[i] = w;
@@ -1774,7 +1857,7 @@ namespace DragonsAltarCombat
             }
             if (_visual != null && DragonCombat.OwnsMotionRoot(_token))
             {
-                Quaternion q = Quaternion.Euler(_r);
+                Quaternion q = Quaternion.Euler(_r) * Quaternion.AngleAxis(_spin, Vector3.up);
                 _visual.localRotation = DragonCombat.MotionBaseRot * q;
                 _visual.localPosition = DragonCombat.MotionBasePos + (Pivot - q * Pivot) + _o;
             }
@@ -1785,9 +1868,83 @@ namespace DragonsAltarCombat
             if (_visual != null) DragonCombat.ReleaseMotionRoot(_token, _visual);
         }
 
+        // Leg muscles on top of the animator pose. Only the six leg bones keep the result: the torso,
+        // arms and hips are restored right after SetHumanPose, so nothing else is touched.
+        private void ApplyLegs(Transform[] bones)
+        {
+            if (_legsBroken) return;
+            Transform[] legs = new Transform[6];
+            for (int i = 0; i < 6; i++)
+            {
+                legs[i] = _animator.GetBoneTransform(LegBones[i]);
+                if (legs[i] == null) continue;
+                Quaternion cur = legs[i].localRotation;
+                if (_legHas && Quaternion.Angle(cur, _legWritten[i]) < 0.01f) legs[i].localRotation = _legAnim[i];
+                else _legAnim[i] = cur;
+            }
+            float scale = DragonCombatPlugin.Instance != null ? DragonCombatPlugin.Instance.LegMotionScale.Value : 1f;
+            bool any = false;
+            for (int i = 0; i < 8; i++) if (Mathf.Abs(_l[i] * scale) > 0.001f) any = true;
+            if (!any) { _legHas = false; return; }
+            try
+            {
+                if (_legMuscles == null)
+                {
+                    string[] names = HumanTrait.MuscleName;
+                    string[] want =
+                    {
+                        "Left Upper Leg Front-Back", "Left Upper Leg In-Out", "Left Lower Leg Stretch", "Left Foot Up-Down",
+                        "Right Upper Leg Front-Back", "Right Upper Leg In-Out", "Right Lower Leg Stretch", "Right Foot Up-Down"
+                    };
+                    int[] idx = new int[8];
+                    for (int i = 0; i < 8; i++) idx[i] = Array.IndexOf(names, want[i]);
+                    _legMuscles = idx;
+                }
+                if (_hph == null)
+                {
+                    if (_animator.avatar == null || !_animator.avatar.isHuman) { _legsBroken = true; return; }
+                    _hph = new HumanPoseHandler(_animator.avatar, _animator.transform);
+                    _hp = new HumanPose();
+                }
+                Transform root = _animator.transform;
+                Vector3 rootPos = root.localPosition;
+                Quaternion rootRot = root.localRotation;
+                Transform hips = bones[0];
+                Vector3 hipsPos = hips != null ? hips.localPosition : Vector3.zero;
+                Quaternion[] keep = new Quaternion[10];
+                for (int i = 0; i < 10; i++) if (bones[i] != null) keep[i] = bones[i].localRotation;
+
+                _hph.GetHumanPose(ref _hp);
+                for (int i = 0; i < 8; i++)
+                {
+                    int m = _legMuscles[i];
+                    if (m < 0 || _hp.muscles == null || m >= _hp.muscles.Length) continue;
+                    // Stretch is + when straight: a knee "bend" lowers it.
+                    float d = _l[i] * scale * ((i == 2 || i == 6) ? -1f : 1f);
+                    _hp.muscles[m] = Mathf.Clamp(_hp.muscles[m] + d, -1.5f, 1.5f);
+                }
+                _hph.SetHumanPose(ref _hp);
+
+                root.localPosition = rootPos;
+                root.localRotation = rootRot;
+                if (hips != null) hips.localPosition = hipsPos;
+                for (int i = 0; i < 10; i++) if (bones[i] != null) bones[i].localRotation = keep[i];
+                for (int i = 0; i < 6; i++) if (legs[i] != null) _legWritten[i] = legs[i].localRotation;
+                _legHas = true;
+            }
+            catch (Exception)
+            {
+                _legsBroken = true;
+                _legHas = false;
+            }
+        }
+
         private void OnDestroy()
         {
             if (_keys != null) ReleaseRoot();
+            IDisposable d = _hph as IDisposable;
+            if (d != null) { try { d.Dispose(); } catch { } }
+            _hph = null;
         }
     }
 
@@ -1891,6 +2048,99 @@ namespace DragonsAltarCombat
             PlayClip(player, clip, windup, false);
         }
 
+        // v0.25.15: automatic procs (Fury, Overcharge, death-save, parry burst) are low-priority accents:
+        // they never replace a skill clip that is playing.
+        public static void PlayAccent(Player player, string clip, float windup)
+        {
+            if (player == null) return;
+            DragonSkillClipDriver d = player.GetComponent<DragonSkillClipDriver>();
+            if (d != null && d.IsPlaying) return;
+            PlayClip(player, clip, windup, false);
+        }
+
+        // Landing / release event for a held clip. False = nothing was holding (caller may play a fallback).
+        public static bool ClipImpactIfHolding(Player player)
+        {
+            if (player == null) return false;
+            DragonSkillClipDriver d = player.GetComponent<DragonSkillClipDriver>();
+            if (d == null || !d.IsHolding) return false;
+            d.Impact();
+            return true;
+        }
+
+        // v0.25.15 forced run locomotion: skills that move the body themselves (Shield Charge, Frenzied
+        // Charge) show Valheim's real running legs. ZSyncAnimation.SetFloat("forward_speed") is overridden
+        // for the local player while on (CombatRuntime prefix) and the Animator is set every frame.
+        private static object _forceRunZanim;
+        private static Animator _forceRunAnimator;
+        private static float _forceRunSpeed;
+        private static readonly int ForwardSpeedHash = Animator.StringToHash("forward_speed");
+        private static readonly int SidewaySpeedHash = Animator.StringToHash("sideway_speed");
+
+        public static void ForceRun(Player player, bool on)
+        {
+            if (player == null || player != Player.m_localPlayer) return;
+            DragonForceRun fr = player.GetComponent<DragonForceRun>();
+            if (!on)
+            {
+                _forceRunZanim = null;
+                _forceRunAnimator = null;
+                if (fr != null) UnityEngine.Object.Destroy(fr);
+                return;
+            }
+            if (DragonCombatPlugin.Instance != null && !DragonCombatPlugin.Instance.EnableSkillAnimations.Value) return;
+            Component z = null;
+            Component[] cs = player.GetComponents<Component>();
+            for (int i = 0; i < cs.Length; i++) if (cs[i] != null && cs[i].GetType().Name == "ZSyncAnimation") { z = cs[i]; break; }
+            _forceRunZanim = z;
+            _forceRunAnimator = player.GetComponentInChildren<Animator>();
+            _forceRunSpeed = Mathf.Max(4f, player.m_runSpeed);
+            if (fr == null) player.gameObject.AddComponent<DragonForceRun>();
+        }
+
+        internal static void ForceRunTick()
+        {
+            if (_forceRunAnimator == null) return;
+            _forceRunAnimator.SetFloat(ForwardSpeedHash, _forceRunSpeed);
+            _forceRunAnimator.SetFloat(SidewaySpeedHash, 0f);
+        }
+
+        // ZSyncAnimation.SetFloat prefix body: true = the value was replaced.
+        internal static bool ForceRunOverride(object zanim, object key, ref float value)
+        {
+            if (_forceRunZanim == null || !ReferenceEquals(zanim, _forceRunZanim)) return false;
+            bool forward = key is int ? (int)key == ForwardSpeedHash : (key as string) == "forward_speed";
+            bool side = key is int ? (int)key == SidewaySpeedHash : (key as string) == "sideway_speed";
+            if (forward) { value = _forceRunSpeed; return true; }
+            if (side) { value = 0f; return true; }
+            return false;
+        }
+
+        // v0.25.15 render-only weapon stow (Olympic Hero fist landing): hides the main-hand item's renderers
+        // for `seconds`, then restores exactly the ones it hid. Nothing is unequipped, no stats change.
+        private static FieldInfo _rightItemField;
+        public static void StowMainWeapon(Player player, float seconds)
+        {
+            if (player == null || DragonCombatPlugin.Instance == null) return;
+            Component vis = null;
+            Component[] cs = player.GetComponentsInChildren<Component>();
+            for (int i = 0; i < cs.Length; i++) if (cs[i] != null && cs[i].GetType().Name == "VisEquipment") { vis = cs[i]; break; }
+            if (vis == null) return;
+            if (_rightItemField == null) _rightItemField = vis.GetType().GetField("m_rightItemInstance", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            GameObject item = _rightItemField == null ? null : _rightItemField.GetValue(vis) as GameObject;
+            if (item == null) return;
+            Renderer[] rs = item.GetComponentsInChildren<Renderer>();
+            List<Renderer> hidden = new List<Renderer>();
+            for (int i = 0; i < rs.Length; i++) if (rs[i] != null && rs[i].enabled) { rs[i].enabled = false; hidden.Add(rs[i]); }
+            if (hidden.Count > 0) DragonCombatPlugin.Instance.StartCoroutine(RestoreRenderers(hidden, seconds));
+        }
+
+        private static IEnumerator RestoreRenderers(List<Renderer> hidden, float seconds)
+        {
+            try { yield return new WaitForSeconds(Mathf.Max(0.05f, seconds)); }
+            finally { for (int i = 0; i < hidden.Count; i++) if (hidden[i] != null) hidden[i].enabled = true; }
+        }
+
         public static void ClipImpact(Player player)
         {
             if (player == null) return;
@@ -1925,6 +2175,60 @@ namespace DragonsAltarCombat
             BuildSorcererClips(c);
             BuildRangerClips(c);
             BuildTraitClips(c);
+            BuildBlueprintClips(c);
+        }
+
+        // ------------------------------------------------------------------ v0.25.15 Animation Blueprint (user storyboards)
+        private static void BuildBlueprintClips(Dictionary<string, DragonClipKey[]> c)
+        {
+            // ANIM_10 VANGUARD, shield profile (Shield Charge, hold while the charge really runs):
+            // BRACE low behind the shield -> DRIVE (Valheim's real run legs via ForceRun, torso leaned in,
+            // shield leading at chest height, sword trailing low behind) -> CONTACT shove on the Bash event
+            // (left shoulder leads, lunge legs) -> RECOVER weight back over the feet.
+            DragonClipKey vgBrace = K(-0.5f).Sp(20f, -10f, 0f).Ch(8f, -6f, 0f).Hd(-14f, 0f, 0f).LA(-75f, 15f, 15f).LF(-80f, 0f, 0f).RA(10f, 0f, -25f).RF(-60f, 0f, 0f).Rot(6f, 0f, 0f).Off(0f, -0.12f, 0f).LL(0.3f, 0f, 0.4f, 0f).RL(-0.1f, 0f, 0.3f, 0f);
+            DragonClipKey vgDrive = K(0f).Sp(24f, -12f, 0f).Ch(10f, -8f, 0f).Hd(-26f, 8f, 0f).LA(-78f, 18f, 12f).LF(-70f, 0f, 0f).RA(35f, 0f, -18f).RF(-20f, 0f, 0f).Rot(14f, 0f, 0f).Off(0f, -0.04f, 0f);
+            DragonClipKey vgContact = K(0.07f).Sp(26f, -26f, 0f).Ch(12f, -14f, 0f).Hd(-22f, 10f, 0f).LA(-95f, 5f, 8f).LF(-12f, 0f, 0f).LH(-15f, 0f, 0f).RA(40f, 0f, -20f).RF(-25f, 0f, 0f).Rot(14f, 0f, 0f).Off(0f, -0.14f, 0.18f).LL(0.5f, 0f, 0.45f, 0f).RL(-0.35f, 0f, 0.2f, 0f);
+            DragonClipKey vgRecover = K(0.45f).Sp(8f, -4f, 0f).Ch(2f, 0f, 0f).LA(-60f, 15f, 15f).LF(-70f, 0f, 0f).RA(5f, 0f, -20f).RF(-40f, 0f, 0f).Off(0f, -0.06f, 0f).LL(0.15f, 0f, 0.2f, 0f).RL(0f, 0f, 0.15f, 0f);
+            c["cleric_charge"] = new DragonClipKey[] { K(-1f), vgBrace, vgDrive, vgContact, vgContact.Copy(0.2f), vgRecover, K(0.8f) };
+
+            // ANIM_10 VANGUARD, thrust profile (Frenzied Charge): blade drawn back in a braced lunge (free
+            // hand guides), then the thrust leads the dash (real run legs while the dash moves the body).
+            DragonClipKey fvBack = K(-0.4f).Sp(16f, -30f, 0f).Ch(6f, -16f, 0f).Hd(-10f, 20f, 0f).RA(35f, 0f, -20f).RF(-80f, 0f, 0f).LA(-75f, 10f, 15f).LF(-15f, 0f, 0f).Rot(8f, 0f, 0f).Off(0f, -0.16f, -0.05f).LL(0.4f, 0f, 0.55f, 0f).RL(-0.2f, 0f, 0.4f, 0f);
+            DragonClipKey fvThrust = K(0f).Sp(20f, 15f, 0f).Ch(8f, 8f, 0f).Hd(-16f, -6f, 0f).RA(-88f, 0f, -4f).RF(-5f, 0f, 0f).LA(15f, 0f, 30f).LF(-20f, 0f, 0f).Rot(16f, 0f, 0f).Off(0f, -0.06f, 0.1f);
+            c["sm_thrust"] = new DragonClipKey[] { K(-1f), fvBack, fvBack.Copy(-0.08f), fvThrust, fvThrust.Copy(0.4f), K(0.75f) };
+
+            // ANIM_01 OLYMPIC HERO (Electric Smite holy / Bonecrusher brutal). Hold clip: wind up = takeoff +
+            // ascent + hang; the roll is spread over ascent and apex, then the poised falling pose is held
+            // through any descent (cliffs) until GROUND_CONTACT (ClipImpact) -> superhero landing.
+            c["olympic_hero"] = OlympicHero(false);
+            c["olympic_hero_brutal"] = OlympicHero(true);
+            // Fallback landing when nothing was holding (only the contact + recovery part).
+            DragonClipKey[] oh = c["olympic_hero"];
+            List<DragonClipKey> land = new List<DragonClipKey>();
+            land.Add(oh[5].Copy(-1f));
+            for (int i = 6; i < oh.Length; i++) land.Add(oh[i]);
+            c["olympic_land"] = land.ToArray();
+        }
+
+        private static DragonClipKey[] OlympicHero(bool brutal)
+        {
+            float d = brutal ? 1.15f : 1f;   // brutal: deeper compression, heavier settle
+            // 1 LOAD: knees compressed, hips/shoulders coiled, main elbow chambered, shield close.
+            DragonClipKey load = K(-0.93f).Sp(22f * d, -8f, 0f).Ch(10f, -6f, 0f).Hd(-14f, 0f, 0f).RA(-25f, 0f, -30f).RF(-115f, 0f, 0f).LA(-55f, 20f, 12f).LF(-85f, 0f, 0f).Off(0f, -0.22f * d, 0f).LL(0.45f * d, 0f, 0.7f * d, 0f).RL(0.45f * d, 0f, 0.7f * d, 0f);
+            // 2 LAUNCH: legs extend through the jump, torso inclines almost parallel to the ground.
+            DragonClipKey launch = K(-0.72f).Sp(6f, 0f, 0f).Ch(2f, 0f, 0f).Hd(-40f, 0f, 0f).RA(-35f, 0f, -20f).RF(-120f, 0f, 0f).LA(-50f, 20f, 10f).LF(-90f, 0f, 0f).Rot(70f, 0f, 0f).Off(0f, 0.1f, 0f).LL(-0.1f, 0f, 0.05f, -0.3f).RL(-0.1f, 0f, 0.05f, -0.3f);
+            // 3 ROLL: one full turn around the head-to-feet axis while horizontal, knees loosely tucked.
+            DragonClipKey roll0 = K(-0.6f).Sp(6f, 0f, 0f).Ch(2f, 0f, 0f).Hd(-38f, 0f, 0f).RA(-35f, 0f, -18f).RF(-120f, 0f, 0f).LA(-50f, 22f, 10f).LF(-90f, 0f, 0f).Rot(72f, 0f, 0f).Off(0f, 0.1f, 0f).LL(0.3f, 0f, 0.55f, 0f).RL(0.2f, 0f, 0.65f, 0f).Sn(25f);
+            DragonClipKey roll1 = roll0.Copy(-0.22f).Sn(360f);
+            // 4 UNWIND: turn complete, legs unfold (opposite foot forward), fist cocked above - not touching.
+            DragonClipKey poised = K(0f).Sp(14f, 0f, 0f).Ch(8f, 0f, 0f).Hd(-6f, 0f, 0f).RA(-70f, 0f, -18f).RF(-55f, 0f, 0f).LA(-45f, 22f, 14f).LF(-85f, 0f, 0f).Rot(28f, 0f, 0f).LL(0.6f, 0f, 0.45f, 0.1f).RL(-0.3f, 0f, 0.6f, 0f).Sn(360f);
+            // 5 IMPACT: main fist on the ground (elbow slightly bent), left foot planted forward, right knee
+            // folded behind near the ground, torso over the fist, head up toward the action.
+            DragonClipKey impact = K(0.08f).Sp(34f, 0f, 0f).Ch(16f, 0f, 0f).Hd(-30f, 0f, 0f).RA(-45f, 0f, -10f).RF(-12f, 0f, 0f).RH(10f, 0f, 0f).LA(-40f, 25f, 15f).LF(-80f, 0f, 0f).Rot(6f, 0f, 0f).Off(0f, -0.42f * d, 0.05f).LL(0.75f, 0f, 0.95f, 0.15f).RL(-0.15f, 0f, 1.2f, -0.2f).Sn(360f);
+            DragonClipKey settle = impact.Copy(brutal ? 0.3f : 0.2f).Off(0f, -0.44f * d, 0.05f);
+            // 6 RECOVER: push through the forward foot, fist lifts, back to the combat pose.
+            DragonClipKey rec = K(brutal ? 0.58f : 0.45f).Sp(16f, 0f, 0f).Ch(6f, 0f, 0f).Hd(-8f, 0f, 0f).RA(-15f, 0f, -15f).RF(-40f, 0f, 0f).LA(-45f, 20f, 15f).LF(-80f, 0f, 0f).Off(0f, -0.12f, 0f).LL(0.3f, 0f, 0.35f, 0f).RL(0f, 0f, 0.3f, 0f).Sn(360f);
+            return new DragonClipKey[] { K(-1f), load, launch, roll0, roll1, poised, impact, settle, rec, K(brutal ? 0.9f : 0.75f).Sn(360f) };
         }
 
         // ------------------------------------------------------------------ v0.25.13 traits / Ascended extras

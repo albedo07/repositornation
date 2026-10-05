@@ -1,0 +1,27 @@
+IMMORTAL HEROES v0.25.15 - VANGUARD AND OLYMPIC HERO (Animation Blueprint, part A)
+
+Engine (from the blueprint audit):
+- LEGS: skill clips now move the legs too (Unity humanoid muscles: thigh lift, spread, knee bend, foot), applied on
+  the animator's real pose with the same no-stacking rule as the arms. [Runtime] LegMotionScale_v02515
+  (1 = normal, 0 = legs untouched, -1 = inverted if knees bend the wrong way).
+- FORCED RUN: skills that move the body themselves (Shield Charge, Frenzied Charge) now play Valheim's real
+  running legs while they move.
+- Release-first: instant casts react after 0.05 s (was 0.1 s minimum).
+- Held clips end on their gameplay event (landing, bash, release); the old 12 s cap is gone (60 s safety only).
+- Automatic procs (Unchained Fury roar, Overcharge, Bless Thy Sinners rise, Holy Shockwave) are low-priority
+  accents: they never replace a skill animation that is playing.
+- Axial roll: clips can spin the body around its own head-to-feet axis.
+
+Clips:
+- SHIELD CHARGE (Vanguard, shield profile): brace low behind the shield, then a real run with the torso leaned in,
+  shield leading at chest height and the weapon trailing low behind. The Bash is a shoulder-first shield shove
+  with lunge legs, then you recover. Steering, collision and distance are unchanged.
+- FRENZIED CHARGE (Vanguard, thrust profile): braced lunge with the blade drawn back, then the thrust leads a
+  running dash.
+- ELECTRIC SMITE / BONECRUSHER (Olympic Hero): crouch load, launch almost horizontal, one full barrel roll over
+  the ascent/apex, unwind (left foot forward, fist cocked). The poised fall holds through any descent and the
+  superhero landing (fist on the ground, left foot planted, right knee folded behind, head up) plays on the real
+  ground contact, synced with the damage. The main weapon is hidden render-only while the fist is down (nothing
+  is unequipped). Bonecrusher = deeper load and a heavier settle.
+
+Docs: the animation blueprint is stored in docs/reference/animation_blueprint_v02514.

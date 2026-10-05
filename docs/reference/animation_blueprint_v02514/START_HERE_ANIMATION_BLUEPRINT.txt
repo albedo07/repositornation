@@ -1,0 +1,1909 @@
+IMMORTAL HEROES — NAMED ANIMATION BLUEPRINT
+Review baseline: Immortal_Heroes_v0.25.14_Smooth_Motions.zip
+Date: 5 October 2026
+Status: proposed art/motion direction and implementation handoff; NOT an implemented animation mod.
+
+PURPOSE AND SCOPE
+Create a reusable movement language that looks intentional for each skill. Reuse whole performances when actions truly match, equipment-specific variants when hand use differs, and individual phases when only part of an action matches. Do not force unrelated mechanics into one generic cast.
+
+Coverage: 68 unique active skills, Ultimates and Graces: four base classes plus eight advancements. Inherited base skills are documented once and reused in both branches. Also includes the relevant passive/weapon/proc motions below. Kali and its advancements do not have implemented kits in the reviewed source; no invented skill mapping is included for them.
+
+Naming: Archmage uses the legacy internal class ID Wizard. Horizon Walker uses Spellcaster. Angel Comet remains fallen_angel internally. Heaven’s Crucible remains grand_sigil. Deadeye Draw is the proposed animation name; it is separate from Bowmaster’s Deadeye mastery. The ranged sketch abbreviates it to DEADEYE.
+
+Package order: read this blueprint, look at the six storyboard sheets, then use animation_blueprint.json and skill_animation_map.csv for structured mapping. Source animation calls are supplied separately with original source line numbers. The pictures express silhouette and action direction; the written event/hand/collision contracts take precedence over incidental drawn equipment, effect color or geometry. These are concept sketches, not rigged clips or exact hitbox diagrams.
+
+REUSE MODEL
+Twenty families are proposed. This does NOT mean twenty finished production clips: left/right equipment profiles, rising versus falling strokes, hold loops, exits, ground/air variants and contact limbs still require authoring. The current source contains 89 named procedural clip presets; that is not a count of 89 unique imported/rigged animations. The benefit is shared choreography and event contracts, not a promised percentage reduction in file size or work.
+
+Exact or near-exact shared core:
+- Olympic Hero: Electric Smite + Bonecrusher. Same complete roll/landing, different weight/VFX.
+- Sky Command relic profile: Goddess Relic + Lightning Relic + Holy Relic. Same remote summon motion.
+- Wavecaller: radial healing, buffs and barriers. Small hand inserts personalize a Grace without changing the core.
+- Rebound Shot: Tumble Shot + Gale Volley. Same backflip path/apex release; projectile fan differs.
+
+Shared family with authored variants:
+- Earthbreaker: descending Seismic/Greatblade and rising Impact Wave; do not reverse-play one clip.
+- Power Pitch: hammer overarm throw versus bomb bat swing; torso mechanics shared, arm paths differ.
+- Vanguard: shield drive versus sword thrust; shield leads with off hand, sword with main hand.
+- Deadeye Draw / Sky Archer: bow and crossbow require different grip and firing profiles.
+
+Partial composition:
+- Skyfall: Rebound launch module + Sky Archer hover, then airborne/grounded recovery.
+- Halfmoon: Arc Cutter sequence + held stance + optional Cyclone finish.
+- Angel Comet and Swallow Dive: common streamline/exit, different actual movement paths.
+
+NON-NEGOTIABLE GAMEPLAY CONTRACT
+1. This pass changes presentation. Do not alter damage, ticks, charge counts, cooldowns, resource costs, range, projectile collision, movement distance/speed, target selection, boss rules, i-frames, armor or combo logic for animation convenience.
+2. Use executable behavior and current config as authority. Some old menu prose is stale. Do not restore earlier chat proposals when the ZIP has moved on. In particular: current Halfmoon has an optional held finisher; current Greatblade is not a charge attack; current Ascended Rift Echo uses multiple rifts; current Afterimage behavior is supported weapon mirroring, not arbitrary all-skill replication.
+3. Existing skill locks remain unchanged. An immediate effect can still have a short existing post-cast lock. “Instant/release-first” means no added latency, not a promise that all inputs are unlocked.
+4. Caster release, projectile collision, target detonation, landing and pulse ticks are different events. Bind each visual to the correct existing callback. One authoritative gameplay path applies damage; the animation never also applies a duplicate hit.
+5. A barrage, aura, summoned relic, afterimage or delayed shock can keep working after the player recovers. Do not force the player to pantomime every world tick.
+6. Do not add Warrior/Sorcerer mark-and-detonation mechanics. Cleric’s existing interactions remain untouched. Bosses do not gain stun/freeze/immobilizing reactions from a visual flourish; do not change status implementation during this art pass.
+7. Base-class motions remain shared across both advancements. Equipment and legal movement profiles can differ; the underlying Cleric/Warrior/Sorcerer/Ranger identity does not become two unrelated sets.
+
+TIMING AND EVENT VOCABULARY
+W = the ACTUAL scaled wind-up selected by the executing skill branch, not a constant copied from a tooltip.
+- Wind-up cast: prepare during W, reach release/contact at the existing callback, then cosmetic recovery.
+- W = 0: sample the release key on accepted input and play follow-through afterward. Never introduce 0.1–0.3s latency merely to show anticipation.
+- Charge: enter, hold quietly, release on the existing input condition. Existing charge/wind-up overlap stays intact. A max-charge visual loop can continue as long as the mechanic permits.
+- Channel: enter, loop for actual active duration, exit on the real stop. Tick rate is unrelated to animation frame rate.
+- Dash/jump: movement code owns translation; pose follows movement phases. Landing requires contact, not animation completion.
+- Proposed cosmetic follow-through ranges in the family descriptions are art targets, not new locks. They can blend out immediately when current input rules permit.
+
+Suggested event names are design labels, not existing API names. Map them to actual callbacks before implementing:
+CAST_RELEASE / SHOT_RELEASE / STROKE_RELEASE: commit the authorized cast or projectile.
+PROJECTILE_CONTACT / WORLD_IMPACT: object hits its target or ground.
+GROUND_CONTACT: character reaches valid ground.
+BUFF_APPLY / HEAL_APPLY: existing authoritative support application.
+CHARGE_START / BEAM_START / BEAM_END / CHANNEL_COMPLETE: sustained-state transitions.
+COMMAND_ACCEPTED / VOLLEY_ARMED / TARGET_DETONATION: separate remote command stages.
+TELEPORT_COMMIT: one instantaneous root move, preserving active pose.
+RETURN_CONTACT: successful returning hammer catch, not a timer assumption.
+
+OLYMPIC HERO — EXTRA PRECISE DIRECTION FOR CLAUDE
+Facing convention: forward is the player’s attack direction. Main hand is normally right; mirror only if the actual equipment system requires it. Maintain consistent handedness across the whole motion.
+The spin is an axial/barrel roll around the character’s head-to-feet axis while the torso is nearly horizontal. It is NOT a backflip, cartwheel or upright pirouette. Main elbow stays chambered; the shield remains close. Make one complete roll, then visibly unwind toward the landing before ground contact.
+Final pose: main fist on ground, opposite foot planted in front, main-side knee folded behind and near the ground, torso over the fist/forward leg, head looking toward the action. Elbow slightly bent; never hyperextend through terrain. The fist must not touch during the airborne unwind panel.
+Preserve the current movement routine’s ascent/hang/descent. Roll over ascent and apex, prepare contact during descent. A cliff can lengthen descent, so hold/adjust the poised falling state rather than freezing the animation at an already-grounded pose. Low-ceiling safety uses a compressed roll or no-roll variant while preserving accepted cast/impact timing.
+Electric Smite: sixteen ground-running trails at contact; Ascended storm can persist afterward. Bonecrusher: physical impact/dust/fractures, with delayed Ascended shock independent of recovery. Neither gains a second landing or a new hit because the body rolled.
+Literal fist contact with a weapon equipped requires render-only weapon stow/visibility restoration or an approved grip-safe variant. Do not unequip items, change stats, fabricate a new weapon or leave the main weapon hidden after cancellation. A shield stays equipped in the off hand.
+
+EQUIPMENT, LAYERS AND INTERRUPTS
+- Keep weapon attachment ownership stable. One-hand + shield, two-hand, dual physical weapons, staff/wand, dual Gun Staves, bow and crossbow need explicit hand profiles.
+- Bow: left hand holds bow, right draws/releases string. Crossbow: brace/trigger; no invisible string draw. Staff grip must not switch hands between panels unless deliberately animated.
+- If both hands are occupied by firing, a mobile magical command can reduce to wrist/head/VFX; it must not stop the weapon merely to display a finger point.
+- Grounded feet require real leg motion/contact; torso bending alone is not a crouch. Airborne-legal skills use an airborne overlay rather than a fake ground plant.
+- Gameplay root/rigidbody owns displacement and collision. Visual-root lean/rotation is presentation only. Do not move the collider twice or derive damage position from a rotated visual hand.
+- Priority: valid gameplay movement/cast > its required weapon/aim pose > cosmetic recovery > automatic buff/survival accent. Teleport is a transition that preserves the active pose, not a competing full-body cast.
+- A new valid skill can interrupt cosmetic recovery wherever input rules permit. Old clip cleanup must not reset bones or visibility owned by the new action.
+- On cancellation, interruption, death, equipment change or scene unload: release only owned visual offsets/tokens, restore temporary render-only weapon visibility, end hold loops, and stop obsolete VFX bindings. Do not cancel world effects that current gameplay intentionally leaves active.
+- Full turns should retain accumulated rotation during the spin, then blend equivalent final orientation without a backward full-circle unwind.
+
+PASSIVES, NORMAL ATTACKS AND AUXILIARY ACTIONS
+Warrior’s Blessing: static bonuses/Hyper Armor do not require a cast pose. Keep normal melee/parry reactions; no unsolicited roar per hit.
+The Way of the Sword: preserve normal sword animations at the current attack speed. Block/dodge cancellation still stops the rest of a Sword Master skill. No forced animation on passive bonuses.
+Warfreak / Unchained Fury: keep current dual-wield/two-hand weapon attacks. Fury can use War Cry’s small additive chest accent; if a skill owns the body, use VFX only. Never restart an attack when Fury triggers.
+Cleric’s Blessing: passive shield/staff permissions and stats require no cast. Equipment profile correctness is the animation work.
+Heaven’s Will: passive equipment/damage modifications require no cast. Do not create extra attacks for converted damage components.
+Bless Thy Sinners: Phoenix Rise is a small automatic recovery accent, not a knockdown or resurrection scene. Apply survival immediately. An ally save is an effect on that recipient, not a forced full caster animation. Current buckler parry shock uses a brief Wavecaller shield-opening accent if it does not overwrite the valid parry; otherwise VFX only. Empowering the next skill does not change its action choreography.
+Warlock: stat/equipment rules need no animation; keep current staff/wand attacks and restrictions.
+Archmage mastery: charged normal staff shots use Siege Caster’s aim/hold/release. Preserve actual normal-attack charge rules and projectile type. Overcharge uses War Cry’s quiet additive arcane variant, or VFX only while casting. Do not confuse the mastery with the display class rename.
+Yin and Yang: maintain mobile rapid staff/wand fire and paired Gun Staff grips. Simultaneous weapons must not both try to own the same arm. Summon/portal gestures are low-priority overlays. Copies mirror supported weapon animations, not recursively summon more copies or recast player skills.
+Wildborn: keep the current quick-shot Left Click timing/chain and Right Click charge. Deadeye Draw supplies release/hold styling without extra startup. Preserve one recoil source; the changelog specifically removed stacked recoil.
+Windstep: double jump can reuse Rebound’s launch/tuck module without an apex shot. Do not award extra arrows, distance, i-frames or another jump. Grounded Ranger skills require legal airborne pose variants when Acrobat casts them aloft.
+Deadeye mastery: Focus buildup needs an aim/VFX accent at most; do not restart a full draw animation each stack. Retain current crossbow reload behavior. Deadeye Draw is just this pack’s name for the reusable firing family.
+
+SOURCE AUDIT — FINDINGS TO ADDRESS WHEN CODING
+These are source-review findings, not claims of in-game reproduction. The supplied build was not launched or playtested for this deliverable.
+
+A. Legs are missing from the current procedural pose vocabulary.
+DragonsAltar.CombatRuntime.cs, DragonSkillClipDriver, approximately lines 1633–1700: ten controlled bones cover pelvis/spine/chest/head and arms/hands, not knees/feet. Olympic Hero, Rebound, kneels and real stomps need leg support or authored full-body clips/contact handling. Do not fake them by rotating only the torso/root.
+
+B. The driver clamps all wind-ups to at least 0.1s.
+CombatRuntime.cs:1669. Immediate effects such as Zap/Holy Wave/Flame Burst and several Ranger shots can run before the pose reaches release. See Skills.cs:783,847,885 and Ranger.cs:578,819, plus the corresponding effect code. Fix phase initialization/event binding; do not solve presentation lag by nerfing responsiveness. Tumble’s very short visual wind-up also needs alignment with the existing apex callback.
+
+C. The generic hold has a fixed 12s visual limit.
+CombatRuntime.cs:1673 and the phase logic around1714. Meteor and Ballista can remain held after reaching maximum charge in their current routines. The visual hold can therefore expire while gameplay still waits. Use actual charge/channel state for visuals, with an explicit cleanup path; do not auto-fire the skill at 12s to match a clip.
+
+D. Landing animation starts after movement returns, while damage is applied immediately.
+Advanced.cs:2865 onward (BonecrusherRoutineV) and4640 onward (ElectricSmiteRoutine): land_crash/cleric_land begins with a lead-in when the impact callback already runs. Pre-position the contact pose before landing and commit contact at the same authoritative event. The existing jump helper around5217 uses a30s landing safety timeout around5282. Its callers should distinguish genuine contact from timeout/cancel to avoid a possible false airborne impact. This is a correctness concern to verify during implementation, not an observed playtest result or permission to change combat balance.
+
+E. Root/pose jitter was already repaired.
+CombatRuntime’s stored base/written poses and transition handling plus CHANGELOG_v0.25.14.txt: retain anti-accumulation behavior. Do not add this frame’s offset to last frame’s already-modified bone, or restore old oscillating wind-ups removed from Halfmoon, Fury/Overcharge, Frost Nova and Tailwind.
+
+F. Local/remote presentation needs an explicit decision.
+CombatRuntime.cs:1848 onward PlayClip checks the local player. This entry point alone does not prove animation replication to remote players. Audit existing networking before promising other players see the new motions. If replication is needed, transmit authorized action/state events and derive pose; do not replicate gameplay damage through the art layer.
+
+G. Trace live call sites before replacing legacy code.
+Old BodyMotionRoutine/legacy pose sections still exist. Match the executing cast path and named clip calls in SOURCE_ANIMATION_CALLS.json. Editing a similarly named unused routine can leave the actual skill unchanged. A clip name can also be reused by unrelated gestures, so map skill state plus clip, not the string alone.
+
+H. Automatic procs can replace an active pose if routed through the same full-body player.
+GuardianAngel.cs:170 starts cleric_rise; Sorcerer.cs around3137 starts wiz_overcharge. Design automatic reactions as low-priority additive/VFX-only when a movement or cast owns the body. Preserve the actual proc effect regardless of animation priority.
+
+IMPLEMENTATION ORDER FOR CLAUDE
+1. Map current action callbacks, locks, equipment profiles and source presets. Introduce explicit release/contact/hold-state bindings without changing effects.
+2. Implement Sky Command relic sharing, Wavecaller radial sharing, Pulse Drive and mobile Rift Conductor. These provide the widest low-risk reuse.
+3. Add leg/contact capability and render-only equipment restoration before Olympic Hero/Rebound/Ground Seal full-body poses. Prototype Electric Smite and Bonecrusher together on flat ground, then slopes/cliffs/low ceilings.
+4. Implement martial sequences and continuous spins with current cancellation and accumulated-turn handling. Validate two-hand/shield/dual-wield profiles.
+5. Implement bow/crossbow profiles, charge/hover/channel states and teleport preservation. Fix instant-release alignment instead of delaying attacks.
+6. Review normal and Ascended variants side by side; certify that only intended visuals changed. Keep existing gameplay formulas/configuration untouched.
+
+FOCUSED ACCEPTANCE CHECKS
+- One authorized projectile/impact per existing event; no animation-driven duplicate damage or resource consumption.
+- Instant spells/shots still execute on the accepted input, with existing lock durations unchanged.
+- Held Meteor/Ballista remain visually held past12s until actual release/cancel.
+- Olympic Hero fist and ground burst align on flat ground/slopes; no premature contact while descending from a cliff; no false hit on cancellation/timeout.
+- Bonecrusher gets one jump/landing plus its world aftershock. Smite retains ground-running trails.
+- Three relics visibly use the same cast, fall at the chosen remote location and pulse independently.
+- Tumble/Gale preserve retreat distance, apex release, iframe interval and collision shortening.
+- Midair Acrobat casts never plant feet on imaginary ground. Skyfall exits to falling when still airborne.
+- Horizon Walker can move/fire/blink with no new animation locks; Phalanx recast does not fire before the next valid Mouse1.
+- Bow and crossbow hands remain correct, equipment is restored on all exits, and no duplicate recoil returns.
+- Autoprocs, charge release, death and a new cast do not leave stale root/bone/visibility ownership.
+- If remote visibility is required, verify with another client after the network pathway is audited.
+
+HOW TO READ THE FOLLOWING SPECIFICATIONS
+Each family defines shared key poses, timing and cautions. Each skill entry overrides only the listed variant, source, sequence and Ascended behavior. A family match does not authorize copying gameplay mechanics between its skills. Normal skills, Ultimates and Graces below are exhaustive for the implemented kits in this ZIP; passive handling is covered above.
+
+
+
+
+==============================================================================
+FAMILY INDEX / REUSE MAP
+==============================================================================
+
+
+ANIM_01 — Olympic Hero
+Used by: Bonecrusher, Electric Smite
+
+
+ANIM_02 — Sky Command
+Used by: Righteous Strike, Goddess Relic, Lightning Relic, Holy Relic, Heaven's Judgement, Lightning Tempest, Glacial Descent, Meteor Fall, Elemental Cataclysm
+
+
+ANIM_03 — Wavecaller
+Used by: Knight's Guidance, Holy Wave, Ray of Hope, Heaven's Light, Divine Intervention, Heaven's Crucible, Frost Nova, Clockwork, Tailwind, Hawk's Vigil
+
+
+ANIM_04 — War Cry
+Used by: Battlecry
+
+
+ANIM_05 — Arc Cutter
+Used by: Heavy Slash, Moonlight Splitter, Crescent Cleave, Halfmoon Slash, Grand Cross
+
+
+ANIM_06 — Earthbreaker
+Used by: Impact Wave, Seismic Guillotine, Astral Greatblade
+
+
+ANIM_07 — Ground Seal
+Used by: Stomp, Stonefang Eruption, Snare Trap
+
+
+ANIM_08 — Flash Draw
+Used by: Blade Storm
+
+
+ANIM_09 — Cyclone
+Used by: Eclipse, Halfmoon Slash, Circle Swing, Whirlwind, Cyclone Arrow, Furious Winds
+
+
+ANIM_10 — Vanguard
+Used by: Frenzied Charge, Shield Charge
+
+
+ANIM_11 — Comet Dive
+Used by: Angel Comet, Swallow Dive
+
+
+ANIM_12 — Power Pitch
+Used by: Punishing Bomb, Judgement Hammer
+
+
+ANIM_13 — Pulse Drive
+Used by: Impact Punch, Lightning Zap, Holy Wave, Flame Burst, Gravity Blast
+
+
+ANIM_14 — Rift Conductor
+Used by: Lightning Relic, Holy Relic, Stonefang Eruption, Gravity Dominion, Arcane Phalanx, Afterimage Arsenal, Rift Echo, Gravity Blast, Arcane Rupture, Rift Walker
+
+
+ANIM_15 — Ghost Step
+Used by: Void Step, Rift Walker
+
+
+ANIM_16 — Siege Caster
+Used by: Astral Railcannon
+
+
+ANIM_17 — Deadeye Draw
+Used by: Piercing Arrow, Cyclone Arrow, Ricochet Arrow, Ballista Shot, Pinning Shot, Explosive Arrow, Splitting Arrow
+
+
+ANIM_18 — Rebound Shot
+Used by: Tumble Shot, Gale Volley, Skyfall Barrage
+
+
+ANIM_19 — Sky Archer
+Used by: Skyfall Barrage, Arrow Rain, Starfall Volley
+
+
+ANIM_20 — Phoenix Rise
+Used by: Automatic Bless Thy Sinners survival proc; see passive section.
+
+
+
+==============================================================================
+DETAILED MOTION FAMILIES
+==============================================================================
+
+
+ANIM_01 — Olympic Hero
+------------------------------------------------------------
+
+Purpose: A near-horizontal aerial barrel roll into a main-hand superhero landing. The same performance reads holy or brutal through VFX and weight, not different body choreography.
+
+Key poses:
+  1. Load: compress knees, coil hips and shoulders, main elbow chambered; shield stays close.
+  2. Launch: extend legs through the existing jump, then incline the torso almost parallel to ground.
+  3. Roll: rotate once around the head-to-feet axis while horizontal; knees loosely tucked, head locates the landing area.
+  4. Unwind: complete the turn, unfold legs and bring main fist down; the hand remains above ground.
+  5. Impact: main fist contacts, opposite foot plants forward, same-side knee folds behind; elbow stays slightly bent.
+  6. Recover: hold weight briefly, push through forward foot, lift fist and blend to current combat/locomotion pose.
+
+Timing: Event-driven. Preserve current takeoff delay and physical ascent/hang/descent. Distribute the visual roll over ascent and apex; complete it before final contact preparation. Descent may be arbitrarily longer on a cliff. Suggested cosmetic contact settle 0.08–0.12s; recovery 0.20–0.35s, cancelable when existing input rules permit. These are proposed visual timings, not new locks.
+
+Body layer / movement: Full body plus visual-root orientation; gameplay rigidbody retains all translation/collision authority.
+
+Authored variants: Holy: Electric Smite, same roll and fist impact. Brutal: Bonecrusher, slightly deeper compression and heavier settle, same timing contract. No second jump for its Ascended aftershock.
+
+Event synchronization: GROUND_CONTACT is authoritative. Pre-position the landing pose so the contact key coincides with the existing damage callback. Play 16 ground trails for Smite, physical dust/shock for Bonecrusher. Delayed aftershocks use world events after the player has recovered.
+
+Do not break: Requires explicit knees/feet and contact support, absent from the current ten-bone clip vocabulary. Never fire on an aerial timer. With equipped weapons, use a reversible render-only stow/visibility profile for the main weapon if literal fist contact is required; never unequip or alter stats. Shield stays in the off hand. If stowing is unavailable, show a grip-compatible hand-led impact and flag it for review rather than passing a blade through the ground. Low ceilings use a compressed/no-roll safety variant without changing hit timing.
+
+
+ANIM_02 — Sky Command
+------------------------------------------------------------
+
+Purpose: One shared call-and-lower motion for distant sky summons and overhead bombardment.
+
+Key poses:
+  1. Gather: main hand or casting implement crosses the sternum; gaze confirms the remote target.
+  2. Call: lift the main arm overhead, off arm balances or keeps a shield close.
+  3. Hold: keep the raised silhouette quiet, with slight breathing only; track legal aim.
+  4. Release: pull the arm down and point toward the target.
+  5. Recover: return to guard while the summoned object continues independently.
+
+Timing: Fit gather/call into the existing scaled wind-up: roughly 0–35% gather, 35–80% lift, 80–100% direct/release. A charged version inserts a hold before release; charge and wind-up keep their current overlap. Do not add travel time to the caster lock. Instant applications use a short release-first upper-body gesture.
+
+Body layer / movement: Upper body by default; planted leg variant only while existing movement restrictions apply.
+
+Authored variants: One-hand + shield; two-hand staff; unarmed palm; charged two-arm lift; large ultimate reach. All use the same event order. Relics share the same actual cast style, not just similar titles.
+
+Event synchronization: CAST_RELEASE starts or commits the summon. WORLD_IMPACT happens later at the target and owns collision/damage/pulse start. Barrage ticks do not require repeated caster motions.
+
+Do not break: Goddess, Lightning and Holy Relics descend remotely in this build: the caster must not look as if manually planting them at their feet. Never aim a vertical lightning strike from the caster hand. Preserve indoor-safe spawn height and drop duration. Late hold release is input driven, not a fixed animation timer.
+
+
+ANIM_03 — Wavecaller
+------------------------------------------------------------
+
+Purpose: A short gather-and-open gesture for radial healing, buffs, barriers and self-centered bursts.
+
+Key poses:
+  1. Gather: main hand near sternum, shoulders draw inward slightly.
+  2. Open: lift chest and open the main forearm outward; free off hand follows or shield stays guarded.
+  3. Pulse: a clear outward opening signals the radial wave centered on the correct source.
+  4. Recover: hands settle without making the character kneel or stop walking.
+
+Timing: For instant skills, the effect occurs at accepted input; start the visual at its open/pulse key and use 0.15–0.30s nonblocking follow-through. Wind-up skills can use the full gather phase. Suggested recovery 0.15–0.25s, interruptible. Effect duration does not become animation duration.
+
+Body layer / movement: Upper-body additive; locomotion and aiming continue wherever current mechanics allow.
+
+Authored variants: Blessing: soft raised palm. Barrier: protective forearms open. Frost: stronger compression and sharp outward snap. Command salute: brief brow/weapon salute feeds the same opening for Knight’s Guidance and Hawk’s Vigil. These are hand-profile variants, not changes to pulse shape.
+
+Event synchronization: BUFF_APPLY / HEAL_APPLY / NOVA_RELEASE occur once at their existing callback. An allied/relic source remains there even though the caster performs the gesture. Persistent aura ticks and expiration bursts are independent.
+
+Do not break: Self waves are 360-degree radial rings, not forward beams. Do not force full-body recovery on instant heals. Damage or healing events are never duplicated because two arms open. Shield/staff/bow remains attached to its original hand.
+
+
+ANIM_04 — War Cry
+------------------------------------------------------------
+
+Purpose: A compact chest-led rally with a larger deliberate version and a small automatic reaction.
+
+Key poses:
+  1. Gather: elbows bend inward and torso compresses slightly.
+  2. Open: shoulders spread and chest rises over balanced hips.
+  3. Roar: head lifts modestly and fists/weapon widen.
+  4. Recover: return to the current stance without overshooting or trembling.
+
+Timing: Battlecry uses a brief visible release at actual buff application, then 0.25–0.45s cosmetic settle. Automatic Fury/Overcharge uses at most a 0.10–0.20s additive accent, or VFX only during a conflicting action.
+
+Body layer / movement: Upper-body additive by default; full stance only when idle and permitted.
+
+Authored variants: Mercenary: grounded fist clench and roar. Archmage: arms open and energy breath. Automatic proc: shoulder/chest accent only.
+
+Event synchronization: PROC_GRANTED and BUFF_APPLY must not wait for the visible pose. An automatic proc cannot replace an active skill clip or alter its scheduled impact.
+
+Do not break: Do not reintroduce the oscillation removed in v0.25.14. No camera shake baked into bones. No forced attack interruption, stun or root movement for an automatic trait.
+
+
+ANIM_05 — Arc Cutter
+------------------------------------------------------------
+
+Purpose: A reusable coil–cut–follow sequence whose plane and sequence count match the skill.
+
+Key poses:
+  1. Coil: weight settles, weapon chambers to the chosen side, head stays on aim.
+  2. Cut: hips lead and shoulders follow as the weapon crosses the intended plane.
+  3. Follow: blade finishes past the target line, elbows remain plausible.
+  4. Reset: return through a short guard or chain directly into the next chamber.
+
+Timing: The cut crosses its release plane at each existing attack callback. For repeated waves, reuse alternating cuts at the existing cadence, blending from current pose instead of returning to idle. Charged variants hold in coil and release only when the current skill allows.
+
+Body layer / movement: Upper body with a limited stance layer; translation remains owned by gameplay.
+
+Authored variants: Horizontal: Heavy Slash/Moonlight/Halfmoon. Opposing diagonals: Grand Cross’s two cuts. Fan: Crescent Cleave emits several remote cleaves from one broad sweep. Heavy finishing cut: increased amplitude, not a free extra hit.
+
+Event synchronization: CUT_RELEASE emits the intended projectile/wave or activates the melee snapshot. One fan can emit many projectiles. Afterimages are effect events, not necessarily additional physical swings.
+
+Do not break: The current warrior_heavy pose is diagonal while its lore calls it horizontal: use horizontal here. Moonlight’s horizontal wave should not be represented as an unrelated vertical slam merely because the existing finisher clip does that. Do not count every VFX trail as a new attack.
+
+
+ANIM_06 — Earthbreaker
+------------------------------------------------------------
+
+Purpose: A shared grounded power-stroke family with separately authored descending and rising paths.
+
+Key poses:
+  1. Load: bend knees and set weapon close to the body.
+  2. Prepare: descending version raises overhead; rising version draws low behind the hip.
+  3. Drive: transfer weight as weapon crosses down or up through the target plane.
+  4. Release: ground fissure/astral blade/wave starts along the authoritative aim.
+  5. Recover: unload the pose and return to guard or next slam.
+
+Timing: Use the existing wind-up W and release at its end. Repeated slams get one drive per real slam event. Suggested cosmetic settle 0.15–0.30s; no additional charge stage.
+
+Body layer / movement: Full upper body; stance layer only when movement is already committed.
+
+Authored variants: Downstroke: Seismic Guillotine / Astral Greatblade. Rising stroke: Impact Wave. Rising is a separately authored motion variant, NOT reverse playback of the downstroke: grips and balance must make sense.
+
+Event synchronization: STROKE_RELEASE starts the traveling ground effect; endpoint impact belongs to the effect. Greatblade aligns to crosshair aim, not an outdated torso facing.
+
+Do not break: Do not turn Seismic Guillotine into a falling guillotine prop. Do not make Impact Wave a downward stomp. A giant spectral blade can exaggerate weapon size without stretching the player skeleton.
+
+
+ANIM_07 — Ground Seal
+------------------------------------------------------------
+
+Purpose: A reusable low weight shift for a grounded command, stomp, or trap placement.
+
+Key poses:
+  1. Load: transfer weight to support leg, keep eyes on valid target.
+  2. Lower: bend both knees with a modest torso hinge.
+  3. Contact: foot stamps, staff butt presses, or free hand reaches down according to profile.
+  4. Recover: rise through legs; do not pop the whole model upward.
+
+Timing: Contact occurs at the real stomp/placement/cast callback. If an effect is immediate, begin at a shortened contact pose rather than postponing the effect. Follow-through 0.15–0.30s is cosmetic. Remote persistence does not require repeated stamping.
+
+Body layer / movement: Leg-aware full body for planted casts; mobile upper-body command variant for Horizon Walker’s instant Stonefang.
+
+Authored variants: Stomp = foot contact. Stonefang = staff/palm command, effect at aimed ground. Snare = small careful placement, not an impact explosion. They share lowering/recovery, but have distinct contact limbs.
+
+Event synchronization: LOCAL_CONTACT authorizes the visual stomp/placement cue only. REMOTE_ERUPTION stays at the aimed location. Subsequent shocks/ticks run independently from the original center.
+
+Do not break: No chest-through-knees bend to fake a crouch. Snare may be targeted remotely in code: show a placing/dispatching gesture without moving the player to the target. Acrobat airborne casting uses a wrist command instead of forcing ground contact.
+
+
+ANIM_08 — Flash Draw
+------------------------------------------------------------
+
+Purpose: A short sword command that causes several cuts at a remote point.
+
+Key poses:
+  1. Ready: main hand draws toward the opposite hip, blade safely angled.
+  2. Draw: a fast compact outward cut, head tracking the remote aim.
+  3. Release: remote slash sphere appears; torso does not teleport there.
+  4. Reset: controlled return to hip guard or next cast.
+
+Timing: Respect the charge/recast buffer. For immediate release, start at the draw key and spend 0.15–0.25s on cosmetic recovery. No mandatory resheathing delay between charges.
+
+Body layer / movement: Upper-body additive with optional low stance while stationary.
+
+Authored variants: Bare blade at hip, two-handed grip, or virtual-hilt command when the held item differs. A physical scabbard is optional, not required equipment.
+
+Event synchronization: DRAW_RELEASE creates the one authorized remote cut event. Its internal simultaneous cuts or Ascended extra cut remain effect logic.
+
+Do not break: Do not make Blade Storm a player-centered tornado. Do not create actual sheath/equip operations to support the pose. One cast consumes only its existing charge.
+
+
+ANIM_09 — Cyclone
+------------------------------------------------------------
+
+Purpose: A grounded yaw rotation with interchangeable entry, loop and exit.
+
+Key poses:
+  1. Coil: hips load opposite the intended turn, weapon close.
+  2. Turn: pivot supporting feet and sweep the active arm/weapon out.
+  3. Loop: continue continuous yaw with a stable head/torso silhouette.
+  4. Exit: decelerate into the next legal guard without unwinding backward.
+
+Timing: One-turn mode maps to a single attack sweep. Two-turn mode maps to two existing swing events and their gap. Loop mode runs for the channel duration and exits at the current stop callback. Visual RPM is cosmetic; damage ticks keep their existing independent schedule.
+
+Body layer / movement: Full body with footwork; visual yaw only. Gameplay movement, capsule orientation and aim are not spun involuntarily.
+
+Authored variants: Steel: Circle Swing/Whirlwind. Enlarged sword: Eclipse. Unarmed/bow-safe wind: Furious Winds. Finisher: Ascended Halfmoon release.
+
+Event synchronization: SWEEP_RELEASE is explicit for each one-shot; CHANNEL_TICK belongs to gameplay during loops; CHANNEL_END may invoke the existing final sweep. Reflection window stays attached to the actual Eclipse event.
+
+Do not break: Do not pivot a running character’s feet as if glued to one point. Do not add a circle-spin wind-up to an instant projectile. Handle final rotation as accumulated turns, then neutralize visually without a backwards 360-degree reset.
+
+
+ANIM_10 — Vanguard
+------------------------------------------------------------
+
+Purpose: A low forward drive sharing leg/torso motion while hand profiles distinguish shield bash from sword thrust.
+
+Key poses:
+  1. Brace: lower center of mass and keep head above lead shoulder.
+  2. Commit: active implement points forward; torso leans into travel.
+  3. Drive: short running/dashing posture that tracks legal steering.
+  4. Finish: shield shoves forward or sword finishes the thrust.
+  5. Recover: weight comes back over the feet.
+
+Timing: Enter within the existing wind-up or immediately for instant Shield Charge. Hold the drive while the actual dash runs. End at distance/collision/manual bash callbacks, not an animation timer.
+
+Body layer / movement: Full body, movement supplied exclusively by the current charge controller.
+
+Authored variants: Shield profile: off-hand shield leads, main weapon behind. Thrust profile: main-hand weapon points forward with off hand guiding when free. Never share the same arm pose blindly.
+
+Event synchronization: DASH_START, DASH_CONTACT and BASH/THRUST_END are separate. Continuous charge hit ticks are not additional arm thrusts.
+
+Do not break: Shield Charge retains its non-Ghost collision, steering and distance budget. Frenzied Charge retains its own traversal rules. Sharing visuals must never copy collision rules or invulnerability from one skill to another.
+
+
+ANIM_11 — Comet Dive
+------------------------------------------------------------
+
+Purpose: A streamlined head-leading travel pose with a safe exit.
+
+Key poses:
+  1. Align: look along travel direction and pull limbs into a narrow silhouette.
+  2. Dive: chest/head lead with arms protecting forward or swept behind according to equipment.
+  3. Brake: unfold legs and begin rotating upright only as needed at travel end.
+  4. Land/continue: compress if grounded, otherwise blend to airborne locomotion.
+
+Timing: Fit to the current movement duration. Angel Comet has its own ascent then dive; Swallow Dive is a short aimed dash. Swallow’s airborne exit must not wait for landing to finish the cast.
+
+Body layer / movement: Full-body orientation driven by path direction, translation controlled by gameplay.
+
+Authored variants: Angel: dramatic ascent into downward comet. Swallow: quick near-horizontal or aim-direction dive. Share streamline and exit modules, not the whole trajectory.
+
+Event synchronization: DIVE_END / WORLD_CONTACT drive their respective effects. A delayed wind slash is a separate path effect, not another dive.
+
+Do not break: Keep Angel Comet distinct from Olympic Hero’s axial spin. Do not drive the head into terrain; hands/weapon guard lead and hips rotate on landing. Preserve Swallow’s momentum, charges and airborne support.
+
+
+ANIM_12 — Power Pitch
+------------------------------------------------------------
+
+Purpose: One torso-coil and release family for thrown or batted magical projectiles.
+
+Key poses:
+  1. Load: main elbow/weapon chambers behind shoulder or side.
+  2. Drive: hips rotate first and chest follows.
+  3. Release: main arm extends through the launch direction.
+  4. Follow: arm finishes across body then resets.
+
+Timing: Release matches the projectile spawn callback at the end of the current wind-up. Returning projectiles get a separate short call/catch gesture at actual return, not a replay of the throw.
+
+Body layer / movement: Upper body with mild stance; no unrequested forward step displacement.
+
+Authored variants: Overarm pitch: Judgement Hammer. Sideways bat strike: Punishing Bomb. Both share coil and follow-through, but require different arm paths. Hammer return adds a catch overlay.
+
+Event synchronization: PROJECTILE_RELEASE starts flight; PROJECTILE_CONTACT triggers impact; RETURN_CONTACT triggers catch only if return really succeeds.
+
+Do not break: Do not throw away the equipped weapon or change inventory. Summoned hammer/bomb is a separate object. Batted bomb retains its ballistic falloff and first-contact explosion; hammer retains its own straight spinning flight.
+
+
+ANIM_13 — Pulse Drive
+------------------------------------------------------------
+
+Purpose: A compact chamber-and-push that reads as punch, cone blast, targeted blessing or orb launch.
+
+Key poses:
+  1. Chamber: main elbow close to ribs/shoulder; off hand guards.
+  2. Drive: main hand/implement moves forward toward the aim.
+  3. Release: fist/palm reaches the visual emission plane.
+  4. Reset: retract while maintaining aim and legal locomotion.
+
+Timing: Wind-up attacks use the full chamber. Instant casts start at release and follow through; they do not wait 0.1s for the hand. Usually 0.15–0.25s cosmetic follow-through.
+
+Body layer / movement: Upper-body additive; no automatic dash.
+
+Authored variants: Fist: Impact Punch. Palm/staff cone: Zap/Flame. Two-hand orb: Gravity Blast. Gentle directed palm: Ascended Holy Wave to ally.
+
+Event synchronization: PUNCH_CONTACT or CAST_RELEASE maps to the existing gameplay event. Cone originates in front of caster; orb continues independently; directed heal affects selected ally.
+
+Do not break: Same arm motion does not mean same hitbox. Zap is horizontal; Righteous Strike is a sky effect and uses Sky Command. Never add a lingering melee hitbox to magical gestures.
+
+
+ANIM_14 — Rift Conductor
+------------------------------------------------------------
+
+Purpose: Short mobile command gestures for effects that operate independently of the caster.
+
+Key poses:
+  1. Indicate: head and available hand/weapon sight the target.
+  2. Command: one short point, pinch, outward fan or inward pull.
+  3. Release: acknowledge creation/activation without holding the caster in place.
+  4. Continue: blend back into the already running movement/attack.
+
+Timing: Immediate variants are zero-wind-up release-first overlays. Gravity Dominion may use its existing deliberate wind-up with the inward-pull variant. Delayed ground detonation time is not caster wind-up. A two-stage input keeps its actual arming versus firing distinction.
+
+Body layer / movement: Upper-body additive, lower-body stride preserved; if a shot already owns the arms, reduce gesture to wrist/head/VFX rather than interrupt firing.
+
+Authored variants: Open/fan = swords, copies, portals. Point = dispatch. Pinch = detonate/stop. Pull = Gravity Dominion. Closing palm = dismiss a relic. These are explicit variants, not one ambiguous pose.
+
+Event synchronization: COMMAND_ACCEPTED, VOLLEY_ARMED, SHOT_RELEASE, PORTAL_PLACED, ORB_STOP, ORB_DETONATE and TARGET_DETONATION are separate signals.
+
+Do not break: Phalanx recast arms the volley; do not make the release gesture fire it early. Rift Echo fires behind the enemy, not from the caster hand. Arcane Rupture detonates after the target delay while caster stays mobile. World ticks/copies do not force repeated player gestures.
+
+
+ANIM_15 — Ghost Step
+------------------------------------------------------------
+
+Purpose: A teleport transition that preserves the motion already underway.
+
+Key poses:
+  1. Before: sample the current stride, attack, aim and equipment pose.
+  2. Depart: very small directional lean or VFX-only disappearance.
+  3. Arrive: restore the same phase at the destination.
+  4. Continue: carry on without a forced idle, stumble or landing.
+
+Timing: Teleport happens at the existing callback. Suggested cosmetic fade/lean 0.06–0.12s, but never delays transport. There is no interpolated run between endpoints.
+
+Body layer / movement: Non-owning transition overlay; preserve any higher-priority cast/attack state and lower-body phase.
+
+Authored variants: Void Step; Rift Walker traversal. Portal placement itself uses Rift Conductor.
+
+Event synchronization: TELEPORT_COMMIT moves gameplay root exactly once; disappearance/reappearance follow it. Featherfall/fall-state reset stays in the existing mechanic.
+
+Do not break: Do not reset animation to idle midattack. Do not translate through walls visually like a dash. Preserve current momentum policy and ground/air exit behavior. No new i-frames.
+
+
+ANIM_16 — Siege Caster
+------------------------------------------------------------
+
+Purpose: A braced aim/charge hold with a controlled magical release.
+
+Key poses:
+  1. Brace: staff settles toward crosshair, elbows maintain equipment grip.
+  2. Hold: shoulders load behind implement, stable stance or moving aim layer.
+  3. Fire: short recoil behind the beam/shot, head remains on aim.
+  4. Settle: return to firing posture or neutral depending on channel state.
+
+Timing: Normal Railcannon uses existing wind-up then one shot. Ascended beam uses one entry, sustained hold, and one release exit; do not replay the entire recoil every damage tick. Normal charged staff uses its existing charge/release rules.
+
+Body layer / movement: Upper body over locomotion where staff charging is mobile; committed leg profile only for an already restricted cast.
+
+Authored variants: Single beam; steered sustained beam; charged staff projectile; dual-staff compatibility uses two separate grips.
+
+Event synchronization: CHARGE_START, SHOT_RELEASE, BEAM_START, BEAM_END are explicit. Beam direction follows current aim; recoil is cosmetic and does not modify projectile falloff.
+
+Do not break: Do not invent a mechanical cannon. A spell beam and a normal ballistic staff shot use the same bracing concept but different gameplay projectile types. Overcharge accelerates wind-up via existing scaling, not arbitrary shortening of the whole skill.
+
+
+ANIM_17 — Deadeye Draw
+------------------------------------------------------------
+
+Purpose: A common bow/crossbow aim–release family. This animation name is separate from Bowmaster’s Deadeye mastery.
+
+Key poses:
+  1. Aim: bow remains in left hand and sight line stays toward crosshair.
+  2. Draw/hold: right fingers at string/cheek; crossbow profile braces its stock instead.
+  3. Loose: right fingers release, left arm stays extended; crossbow trigger profile has no phantom string draw.
+  4. Reset: small string-hand recovery into the next legal shot.
+
+Timing: Instant shots start at loose or use the current aim pose; no extra draw delay. Charged Ballista holds until input release. Repeated volleys fit the exact existing interval with no added reset lock. Cosmetic recoil comes from one owner only.
+
+Body layer / movement: Upper-body firing layer; planted leg/kneeling variant only if allowed by existing cast restrictions.
+
+Authored variants: Snap; charged siege draw; hip trick-shot; low braced pin; heavy explosive recoil; alternating fan volleys; bow versus crossbow equipment profiles.
+
+Event synchronization: SHOT_RELEASE spawns the projectile or resolves the current volley. Ricochet/cluster/bounce impacts do not trigger extra caster releases.
+
+Do not break: Do not call the animation when reloading/equipment would invalidate the skill. Preserve Ranger’s measured quick-shot timing and avoid restoring the doubled recoil removed in v0.25.14. Crossbow Bowmaster skills require a real compatible arm pose.
+
+
+ANIM_18 — Rebound Shot
+------------------------------------------------------------
+
+Purpose: A true backwards somersault while retreating, with a forward-facing aerial release.
+
+Key poses:
+  1. Load: compress knees while aiming toward the threat.
+  2. Flip: spring straight backward, tuck legs and rotate around the left-to-right body axis.
+  3. Apex shot: bow stays in left hand; sight and release toward original target during the existing midair event.
+  4. Land: extend legs and return facing the threat.
+
+Timing: Current shared BackFlip uses 0.3s travel; apex event near 0.15s. Preserve those mechanics. Do not stretch to a cinematic 1s flip. Use broad readable key poses and a tightly compressed draw transition.
+
+Body layer / movement: Full body; shared movement path supplied by current BackFlip routine.
+
+Authored variants: Tumble Shot and Gale Volley share the exact core. Ascended Gale adds a second firing accent after the first, not another jump.
+
+Event synchronization: APEX_RELEASE fires the fan once. Second fan follows its existing event even if the body is already landing. Invulnerability remains controlled by gameplay.
+
+Do not break: Not Olympic Hero: this rotation is a backflip, not a long-axis horizontal barrel roll. Keep bow from intersecting torso during tuck. Collision shortening must not suppress the shot event or duplicate it.
+
+
+ANIM_19 — Sky Archer
+------------------------------------------------------------
+
+Purpose: A shared raised-bow release and bombardment support family with a separate airborne hover module.
+
+Key poses:
+  1. Raise: bow inclines toward sky or target below according to variant.
+  2. Draw: right hand anchors string, left elbow stabilizes.
+  3. Loose: release one initiating shot or the current repeated volley.
+  4. Recover/hover: lower bow after ground cast, or maintain the aerial aim loop while hovering.
+
+Timing: Arrow Rain’s initiation uses its current instant acceptance; Starfall fits the actual channel then releases. Skyfall uses its existing 0.5s ascent and hover duration. Repeated hover gestures follow actual shot events, not every cosmetic falling arrow.
+
+Body layer / movement: Grounded upper body for sky release; full body only for Skyfall’s existing ascent/hover/descent.
+
+Authored variants: Upward command: Arrow Rain/Starfall. Downward hover fire: Skyfall after its own backflip ascent. Bowmaster crossbow profile tilts/braces the crossbow instead of drawing a nonexistent string.
+
+Event synchronization: SKY_RELEASE starts remote rain; CHANNEL_COMPLETE starts Starfall bombardment; HOVER_SHOT follows current periodic shots. Remote impact ticks continue independently after recovery.
+
+Do not break: Sharing sky effects does not justify replacing an archer with a mage hand-wave. Skyfall steering applies only where current Ascended mechanics allow. Landing recovery happens only on actual ground contact; no premature aerial kneel.
+
+
+ANIM_20 — Phoenix Rise
+------------------------------------------------------------
+
+Purpose: A restrained survival-proc recovery accent that reads as being restored without acting like a knockdown.
+
+Key poses:
+  1. Brace: brief shoulder/chest compression, retaining the current support pose.
+  2. Rise: torso straightens without moving the gameplay root.
+  3. Restore: a small opening and light accent show the save.
+  4. Continue: immediately resume the current movement/attack state.
+
+Timing: Automatic save applies immediately. Proposed additive visual length 0.20–0.40s only while it does not interrupt an action; otherwise show VFX only. Never add a full stand-up cinematic.
+
+Body layer / movement: Low-priority upper-body additive reaction; no new control lock.
+
+Authored variants: Bless Thy Sinners / Guardian Angel survival trigger in the current code.
+
+Event synchronization: SURVIVAL_PROC is authoritative and can preempt purely cosmetic idle styling, not gameplay skills. Do not replay it per heal tick.
+
+Do not break: Keep distinct from resurrecting a dead player. Do not add falling, kneeling or a delayed recovery requirement. Competing damage reactions and active casts take the defined priority; never start another root owner.
+
+
+
+==============================================================================
+COMPLETE SKILL-BY-SKILL MAPPING
+==============================================================================
+
+
+
+WARRIOR
+============================================================
+
+
+01. Heavy Slash [heavy_slash] — Skill
+
+Animation: Arc Cutter | Horizontal heavy cut
+
+Current intention: A short-range heavy horizontal strike with Broken Bones.
+
+Action to author: Set the weapon beside the rear hip, coil shoulders, then drive one broad horizontal cut. Keep the weapon plane aligned with the actual attack rather than the existing diagonal pose.
+
+Timing / event contract: Cross the strike plane when the existing melee damage snapshot runs. Preserve current wind-up scaling, equipment checks and input locks.
+
+Ascended / variant handling: Mercenary Ascension: stronger, longer-reaching strike and on-hit Hyper Armor. Broaden the follow-through; do not add a combo, extra strike or unconditional armor grant.
+
+Current preset(s): warrior_heavy, merc_heavy_asc
+
+Animation-call references: AlbedosCustomClasses.Advanced.cs:3141; AlbedosCustomClasses.Skills.cs:615
+
+
+02. Impact Wave [impact_wave] — Skill
+
+Animation: Earthbreaker | Rising stroke
+
+Current intention: Launch a ground-following shockwave along the aimed path.
+
+Action to author: Lower the blade or club near the rear hip, sink through the knees and cut upward through the ground-facing release line. Let the torso open as the wave leaves.
+
+Timing / event contract: STROKE_RELEASE starts the wave. Terrain following, travel and target hits remain in the projectile routine.
+
+Ascended / variant handling: Sword Master Ascension adds the returning path aftershock. One initial body stroke only; the aftershock is a world effect, not another swing.
+
+Current preset(s): warrior_impact_wave
+
+Animation-call references: AlbedosCustomClasses.Advanced.cs:2472; AlbedosCustomClasses.Skills.cs:652
+
+
+03. Impact Punch [impact_punch] — Skill
+
+Animation: Pulse Drive | Fist drive
+
+Current intention: A brief close-range punch that stuns eligible Small enemies.
+
+Action to author: Tuck the main elbow, turn the shoulder forward and punch straight through the target plane. Off hand protects the chest; feet do not slide forward.
+
+Timing / event contract: PUNCH_CONTACT at the existing post-wind-up hit. Use a render-only weapon accommodation if necessary; no inventory or hitbox changes.
+
+Ascended / variant handling: No dedicated Ascended version in the current kit.
+
+Current preset(s): warrior_punch
+
+Animation-call references: AlbedosCustomClasses.Skills.cs:713
+
+
+
+SWORD MASTER
+============================================================
+
+
+04. Moonlight Splitter [moonlight_splitter] — Skill
+
+Animation: Arc Cutter | Alternating horizontal waves
+
+Current intention: Repeated forward crescent waves; the caster actively releases each main wave.
+
+Action to author: Alternate short horizontal cuts without returning to idle. For the large final wave, settle into a deeper side chamber, briefly hold, then drive a wider horizontal finish.
+
+Timing / event contract: Each actual main-wave spawn receives one CUT_RELEASE. Use current per-wave intervals and final wind-up; do not reuse the same full wind-up before every cut.
+
+Ascended / variant handling: Four fast waves, a larger fifth, then its afterimage in this build. The afterimage repeats the effect silhouette without making an extra damage-owning player swing.
+
+Current preset(s): sm_slash_a, sm_slash_b, sm_moon_finisher
+
+Animation-call references: AlbedosCustomClasses.Advanced.cs:1393; AlbedosCustomClasses.Advanced.cs:1987; AlbedosCustomClasses.Advanced.cs:1994
+
+
+05. Crescent Cleave [crescent_cleave] — Skill
+
+Animation: Arc Cutter | Fan sweep
+
+Current intention: A single cast dispatches a fan of upright traveling cleaves.
+
+Action to author: Coil into a broad side sweep, extending the main hand toward the center of the fan. Add a small second wrist/shoulder accent for the delayed gap-filling fan.
+
+Timing / event contract: First and second fan-release callbacks own their cleave counts. Thirteen projectiles do not mean thirteen full-body swings.
+
+Ascended / variant handling: Seven initial cleaves and six gap-fill cleaves, with fire trails and Burn. The trails continue independently; preserve current delay and burn logic.
+
+Current preset(s): sm_crescent
+
+Animation-call references: AlbedosCustomClasses.Advanced.cs:1475
+
+
+06. Blade Storm [blade_storm] — Skill
+
+Animation: Flash Draw | Remote draw command
+
+Current intention: Spend a charge to create a sphere of cuts at the aimed location.
+
+Action to author: Bring the blade near the opposite hip, make one quick outward draw and finish in a narrow guard. Remote cuts answer the gesture; the player stays where they are.
+
+Timing / event contract: One DRAW_RELEASE per accepted cast/charge. Do not create a persistent player-centered spinning hitbox or require a real sheath.
+
+Ascended / variant handling: More charges and an extra remote cut per cast. Reuse exactly the same body action.
+
+Current preset(s): sm_blade_storm
+
+Animation-call references: AlbedosCustomClasses.Advanced.cs:1576
+
+
+07. Frenzied Charge [frenzied_charge] — Skill
+
+Animation: Vanguard | Sword thrust
+
+Current intention: A committed forward thrust dash.
+
+Action to author: Pull the sword near the ribs with point aimed forward, lean into the dash, then extend through the thrust. Recover from the actual endpoint with knees absorbing momentum.
+
+Timing / event contract: Preserve existing wind-up, dash path, collision policy and attack cancellation. The thrust endpoint is not inferred from clip length.
+
+Ascended / variant handling: Shorter wind-up, greater distance and width. Time-scale the entry and hold the drive; no added leap or spinning finisher.
+
+Current preset(s): sm_thrust
+
+Animation-call references: AlbedosCustomClasses.Advanced.cs:2170
+
+
+08. Eclipse [eclipse] — Skill
+
+Animation: Cyclone | Single great sweep
+
+Current intention: An enlarged magical blade cuts all around the caster.
+
+Action to author: Coil across the body and pivot through one full horizontal sweep, keeping the enlarged spectral blade outside the torso. Finish facing the legal combat direction.
+
+Timing / event contract: Bind the sweep to the existing radial hit event. Cosmetic blade arc does not add repeated contacts.
+
+Ascended / variant handling: Larger radius and an eligible-projectile reflection window. Tie the visible defensive arc to that exact existing window.
+
+Current preset(s): sm_eclipse
+
+Animation-call references: AlbedosCustomClasses.Advanced.cs:2312
+
+
+09. Halfmoon Slash [halfmoon_slash] — Ultimate
+
+Animation: Arc Cutter + Cyclone | Paired cuts, optional held spin finish
+
+Current intention: Two scheduled large slashes; current Ascension adds an input-controlled finisher.
+
+Action to author: Perform the current paired horizontal cuts. In Ascension, settle into the existing pulled-back stance; when the permitted Left Click arrives, flow into a strong spin cut and release the large wave.
+
+Timing / event contract: Preserve both scheduled slash events, stance eligibility, timeout/cancel and separate finisher input. Do not automatically fire the optional finisher.
+
+Ascended / variant handling: Current build uses a held stance and large Free Aim Ghost wave, not the earlier three slow persistent laser proposal. Match current code.
+
+Current preset(s): sm_halfmoon, sm_halfmoon_2, sm_halfmoon_stance, sm_halfmoon_finisher
+
+Animation-call references: AlbedosCustomClasses.Advanced.cs:2390; AlbedosCustomClasses.Advanced.cs:2397; AlbedosCustomClasses.Advanced.cs:2421; AlbedosCustomClasses.Advanced.cs:3432; AlbedosCustomClasses.Advanced.cs:3438; AlbedosCustomClasses.Advanced.cs:3466
+
+
+10. Knight's Guidance [knights_guidance] — Grace
+
+Animation: Wavecaller | Command salute
+
+Current intention: A radial party mobility/stamina Grace.
+
+Action to author: Briefly salute with the free hand or weapon, then open the forearm to send the blessing outward. Stay upright and ready to move.
+
+Timing / event contract: BUFF_APPLY remains immediate at its current callback. Long buff duration does not hold the salute.
+
+Ascended / variant handling: No separate Ascended Grace in the current kit.
+
+Current preset(s): sm_guidance
+
+Animation-call references: AlbedosCustomClasses.Advanced.cs:2444
+
+
+
+MERCENARY
+============================================================
+
+
+11. Stomp [stomp] — Skill
+
+Animation: Ground Seal | Foot stamp
+
+Current intention: A local stomp followed by outward ground shocks.
+
+Action to author: Shift onto the supporting leg, raise the striking knee modestly and stamp down hard. Let the knees and shoulders settle once while the shock travels away.
+
+Timing / event contract: First stomp impact aligns with FOOT_CONTACT. Later shocks remain centered on their original world position, not the player after moving away.
+
+Ascended / variant handling: A third wider impact is an effect-only continuation. No three stomps or additional locks.
+
+Current preset(s): merc_stomp
+
+Animation-call references: AlbedosCustomClasses.Advanced.cs:3529
+
+
+12. Circle Swing [circle_swing] — Skill
+
+Animation: Cyclone | Mobile wind-up sweep
+
+Current intention: A full-circle weapon swing with movement during preparation.
+
+Action to author: Carry the weapon across the rear shoulder while walking, then pivot through the swing. Blend the upper-body coil over locomotion until the actual sweep.
+
+Timing / event contract: Preserve full permitted walking speed during wind-up. Each actual swing gets its existing radial hit; visual rotation does not add hits.
+
+Ascended / variant handling: Two consecutive full swings. Chain directly into the second with its existing gap; launch eligibility remains damage/status logic.
+
+Current preset(s): merc_circle, merc_circle_2
+
+Animation-call references: AlbedosCustomClasses.Advanced.cs:2835; AlbedosCustomClasses.Advanced.cs:3067; AlbedosCustomClasses.Advanced.cs:3619
+
+
+13. Bonecrusher [bonecrusher] — Skill
+
+Animation: Olympic Hero | Brutal Olympic Hero
+
+Current intention: Leap and land with a heavy radial impact.
+
+Action to author: Use the same horizontal aerial roll and main-hand superhero landing as Electric Smite. Give the final compression a heavier physical weight; use dust, fractures and ground shock instead of lightning.
+
+Timing / event contract: Ground contact, not roll completion, authorizes impact. Preserve the current jump steering and landing routine. Keep the fist above ground until contact.
+
+Ascended / variant handling: One delayed ground shock after landing. Reuse the impact settle; do not force a second jump or replace the resumed attack with merc_aftershock.
+
+Current preset(s): air_overhead, land_crash, merc_aftershock
+
+Animation-call references: AlbedosCustomClasses.Advanced.cs:2870; AlbedosCustomClasses.Advanced.cs:2887; AlbedosCustomClasses.Advanced.cs:3581; AlbedosCustomClasses.Advanced.cs:4633
+
+
+14. Seismic Guillotine [seismic_guillotine] — Skill
+
+Animation: Earthbreaker | Descending fissure stroke
+
+Current intention: A weapon-driven ground fissure ending in an explosion.
+
+Action to author: Lift the weapon over the main shoulder, set the hips and slam down along the aim line. Keep the visual impact near the caster while the fissure travels to the endpoint.
+
+Timing / event contract: STROKE_RELEASE starts the line. The distant endpoint explosion follows the existing effect timing; no second caster hit.
+
+Ascended / variant handling: Longer travel and stronger endpoint/control effects. Same motion, current scaled timings.
+
+Current preset(s): merc_seismic
+
+Animation-call references: AlbedosCustomClasses.Advanced.cs:3690
+
+
+15. Punishing Bomb [punishing_bomb] — Skill
+
+Animation: Power Pitch | Bat launch
+
+Current intention: Bat a bomb into flight; it bursts on first physical contact.
+
+Action to author: Stage a summoned bomb near the strike path, coil as for a bat swing and sweep the held implement through the launch plane. The bomb departs in the aimed direction.
+
+Timing / event contract: Projectile spawn/release uses the existing cast callback. First collision, gravity and explosion remain projectile-owned; no extra melee swing damage.
+
+Ascended / variant handling: Larger explosion and persistent ground fire. Same single bat motion; fire ticks do not replay the swing.
+
+Current preset(s): merc_bomb
+
+Animation-call references: AlbedosCustomClasses.Advanced.cs:2906
+
+
+16. Whirlwind [whirlwind] — Ultimate
+
+Animation: Cyclone | Continuous weapon spin
+
+Current intention: A sustained spinning melee attack.
+
+Action to author: Enter with a tight coil, extend weapons into a stable repeated spin and decelerate into a sweep at exit where supported. Keep turn count continuous rather than snapping backward.
+
+Timing / event contract: Spin loop follows actual active duration. Damage ticks are independent of frame rate/number of visual revolutions. End early on the existing cancellation rules.
+
+Ascended / variant handling: Longer channel, Hyper Armor and a final sweep built by actual spin time. Final sweep visual occurs only when the existing mechanic grants it.
+
+Current preset(s): PlaySpinClip, merc_circle_2
+
+Animation-call references: AlbedosCustomClasses.Advanced.cs:2835; AlbedosCustomClasses.Advanced.cs:3027; AlbedosCustomClasses.Advanced.cs:3067; AlbedosCustomClasses.Advanced.cs:3941; DragonsAltar.CombatRuntime.cs:1874; DragonsAltar.Ranger.cs:1100
+
+
+17. Battlecry [battlecry] — Grace
+
+Animation: War Cry | Deliberate roar
+
+Current intention: A radial damage Grace for allies.
+
+Action to author: Compress the chest, draw elbows inward, then spread shoulders and roar with weapon held safely away. Return to combat stance without repeated shaking.
+
+Timing / event contract: BUFF_APPLY at current acceptance; visual follow-through cannot delay allies receiving it.
+
+Ascended / variant handling: No separate Ascended Grace. The smaller Fury proc variant must not hijack an active cast.
+
+Current preset(s): merc_roar
+
+Animation-call references: AlbedosCustomClasses.Advanced.cs:2767; AlbedosCustomClasses.Advanced.cs:3080
+
+
+
+CLERIC
+============================================================
+
+
+18. Lightning Zap [lightning_zap] — Skill
+
+Animation: Pulse Drive | Palm cone
+
+Current intention: Release a forward cone of lightning that applies the current Zap mechanics.
+
+Action to author: Snap the main palm forward from a short elbow chamber. Show lightning expanding forward in a cone, with the shield staying defensive.
+
+Timing / event contract: Current damage/effect is immediate even though the pose has a small lead-in. Use release-first alignment; retain the existing short skill lock rather than adding another wind-up.
+
+Ascended / variant handling: No dedicated class-skill Ascension in the current branches. Existing Zap interactions remain unchanged.
+
+Current preset(s): cleric_zap
+
+Animation-call references: AlbedosCustomClasses.Skills.cs:783
+
+
+19. Righteous Strike [righteous_strike] — Skill
+
+Animation: Sky Command | Single sky strike
+
+Current intention: Call vertical holy lightning onto the aimed ground.
+
+Action to author: Lift the main hand above the head and drag it down toward the target. The bolt descends at the remote point, not horizontally from the hand.
+
+Timing / event contract: CAST_RELEASE commits the strike after current wind-up. Any trail/follow-up events remain in their current world routines.
+
+Ascended / variant handling: Paladin class Ascension uses the larger strike/trail treatment. Keep one grounded call gesture; do not borrow Electric Smite’s leap.
+
+Current preset(s): cleric_rs, cleric_rs_asc
+
+Animation-call references: AlbedosCustomClasses.Advanced.cs:4808; AlbedosCustomClasses.Skills.cs:817
+
+
+20. Holy Wave [holy_wave] — Skill
+
+Animation: Wavecaller + Pulse Drive | Self wave / directed ally blessing
+
+Current intention: A radial heal with an Ascended ally-target option.
+
+Action to author: Normal: chest gather into an open palm and radial wave. Ascended targeted use: reach a gentle palm toward the chosen ally, then recover; self fallback retains Wavecaller.
+
+Timing / event contract: Healing occurs at the current callback. Correct the caster animation to that event; do not delay instant healing or move the effect center to the hand.
+
+Ascended / variant handling: Priest class Ascension switches the applicable targeted gesture/source behavior. It is the same underlying Cleric identity, not a separately styled base-class tree.
+
+Current preset(s): cleric_wave, cleric_wave_ally
+
+Animation-call references: AlbedosCustomClasses.Advanced.cs:9715; AlbedosCustomClasses.Skills.cs:847
+
+
+
+PALADIN
+============================================================
+
+
+21. Goddess Relic [goddess_relic] — Skill
+
+Animation: Sky Command | Relic call
+
+Current intention: Summon a large holy Cross that descends onto the remote target.
+
+Action to author: Use the shared Sky Command: gather at chest, raise main hand, then direct it down toward the placement point. Recover while the Cross is falling.
+
+Timing / event contract: Separate cast release, falling-object arrival and ground impact. Keep the existing indoor-safe height and drop-time calculation.
+
+Ascended / variant handling: Use the same cast with the current Ascended relic effects. Additional world effects do not require a new animation.
+
+Current preset(s): cleric_goddess
+
+Animation-call references: AlbedosCustomClasses.Advanced.cs:3978
+
+
+22. Judgement Hammer [judgement_hammer] — Skill
+
+Animation: Power Pitch | Overarm pitch + return catch
+
+Current intention: Hurl a growing holy hammer; Ascension enables its return.
+
+Action to author: Coil the main shoulder, pitch the summoned hammer overarm and follow across the chest. On actual return, open the hand toward it and absorb a small catch recoil.
+
+Timing / event contract: PROJECTILE_RELEASE and RETURN_CONTACT are separate. Only catch if it really returns. Do not remove the equipped weapon from inventory.
+
+Ascended / variant handling: Adds a return/catch overlay, not a second throwing cast or guaranteed catch on interrupted/failed returns.
+
+Current preset(s): cleric_hammer, cleric_hammer_call
+
+Animation-call references: AlbedosCustomClasses.Advanced.cs:4880; AlbedosCustomClasses.Advanced.cs:4942
+
+
+23. Shield Charge [shield_charge] — Skill
+
+Animation: Vanguard | Shield-first drive
+
+Current intention: Charge with the shield forward, retaining current steering and bash handling.
+
+Action to author: Lower the hips, put the off-hand shield ahead of the chest and hold the main weapon behind the shield rim. Drive continuously; finish with a short shield shove when the real bash occurs.
+
+Timing / event contract: Align entry to charge start, looping posture to actual movement, and bash to its separate event. Retain existing collision and distance budget.
+
+Ascended / variant handling: Current enhanced effects use the same drive and bash phases. No borrowed invulnerability or Ghost collision from sword movement.
+
+Current preset(s): cleric_charge
+
+Animation-call references: AlbedosCustomClasses.Advanced.cs:4120
+
+
+24. Angel Comet [fallen_angel] — Skill
+
+Animation: Comet Dive | Angel ascent and comet dive
+
+Current intention: Angel Comet rises and then drives down toward the target.
+
+Action to author: Open into the current ascent, align torso along the dive and streamline the limbs. At real contact, rotate hips under the torso and brace the main hand/guard safely.
+
+Timing / event contract: Ascent, dive start and ground contact follow the movement routine. Landing pose must already be prepared when damage occurs.
+
+Ascended / variant handling: Holy ground fire after impact needs no prolonged landing hold. Keep this head-leading dive distinct from Olympic Hero’s long-axis roll.
+
+Current preset(s): cleric_angel_rise, cleric_land
+
+Animation-call references: AlbedosCustomClasses.Advanced.cs:4644; AlbedosCustomClasses.Advanced.cs:5077; AlbedosCustomClasses.Advanced.cs:5146
+
+
+25. Ray of Hope [ray_of_hope] — Skill
+
+Animation: Wavecaller | Restorative opening
+
+Current intention: A radial restorative/empowering wave that also affects enemies.
+
+Action to author: Raise the main palm softly, then open the arm outward from the chest with a clear protective silhouette. Preserve shield grip and combat readiness.
+
+Timing / event contract: One radial application at the current callback, with healing/damage/status handling left intact. No forward beam despite the name Ray.
+
+Ascended / variant handling: Barrier/cleanse treatment uses the same gesture and stronger effect accent; no new channel.
+
+Current preset(s): cleric_ray
+
+Animation-call references: AlbedosCustomClasses.Advanced.cs:4065
+
+
+26. Electric Smite [electric_smite] — Ultimate
+
+Animation: Olympic Hero | Holy Olympic Hero
+
+Current intention: Leap and slam down, sending sixteen lightning trails over the ground.
+
+Action to author: Compress, launch, tilt almost horizontal and rotate once around the head-to-feet axis. Unwind before contact; main fist hits first in a superhero landing with opposite foot forward.
+
+Timing / event contract: Actual GROUND_CONTACT synchronizes fist, impact cue and trail launch. Preserve sixteen ground trails and their shared hit rules; no timer-driven premature impact.
+
+Ascended / variant handling: Storm effects after landing remain world effects. Same complete Olympic Hero motion for normal and Ascended; no repeated fist impacts per lightning tick.
+
+Current preset(s): air_overhead, cleric_land
+
+Animation-call references: AlbedosCustomClasses.Advanced.cs:3581; AlbedosCustomClasses.Advanced.cs:4633; AlbedosCustomClasses.Advanced.cs:4644; AlbedosCustomClasses.Advanced.cs:5146
+
+
+27. Heaven's Light [heavens_light] — Grace
+
+Animation: Wavecaller | Protective blessing
+
+Current intention: A radial defense/equipment-mobility Grace.
+
+Action to author: Cross the available forearm toward the chest then open into a protective blessing. A shield can rise slightly as the wave expands.
+
+Timing / event contract: BUFF_APPLY remains the single current event. Long defense duration does not hold the animation.
+
+Ascended / variant handling: No separate Ascended Grace.
+
+Current preset(s): cleric_light
+
+Animation-call references: AlbedosCustomClasses.Advanced.cs:11686
+
+
+
+PRIEST
+============================================================
+
+
+28. Lightning Relic [lightning_relic] — Skill
+
+Animation: Sky Command + Rift Conductor | Relic call / dismiss
+
+Current intention: A falling remote Cross becomes a persistent offensive relic.
+
+Action to author: Use exactly Goddess Relic’s Sky Command with the appropriate equipment profile. For a dismiss/relinquish recast, close the palm using Rift Conductor instead of replaying a summon.
+
+Timing / event contract: Release, fall, placement and recurring pulse are separate. Pulses cannot restart the caster animation; keep the existing replacement/recast logic.
+
+Ascended / variant handling: Enhanced relic behavior changes the world effect only. Shared relic combinations stay current; this pass does not redesign Sanctified interactions.
+
+Current preset(s): cleric_relic
+
+Animation-call references: AlbedosCustomClasses.Advanced.cs:5426
+
+
+29. Holy Relic [holy_relic] — Skill
+
+Animation: Sky Command + Rift Conductor | Relic call / dismiss
+
+Current intention: A remote restorative Cross descends and supports nearby allies.
+
+Action to author: Use the same Sky Command pose, timing structure and equipment rules as Goddess/Lightning Relic. Make the effect warmer and gentler, not the body choreography unrelated.
+
+Timing / event contract: The implementation summons from above despite planting language in some descriptions. Do not animate manually pushing a Cross into the caster’s ground.
+
+Ascended / variant handling: Enhanced support and paired-relic effects run independently. Recast dismissal uses the same short closing palm as Lightning Relic.
+
+Current preset(s): cleric_holy_relic
+
+Animation-call references: AlbedosCustomClasses.Advanced.cs:5594
+
+
+30. Divine Intervention [divine_intervention] — Skill
+
+Animation: Wavecaller | Remote-source blessing
+
+Current intention: A holy burst around the caster or an aimed relic.
+
+Action to author: Gather and open the main hand while looking toward the chosen source. Keep the body at the caster position; the wave originates at the actual source.
+
+Timing / event contract: CAST_RELEASE activates the existing selected-source burst. A distant relic target does not teleport the caster or require a projectile from the hand.
+
+Ascended / variant handling: Additional relic-source coverage needs effect duplication only, not multiple full-body gestures.
+
+Current preset(s): cleric_intervention
+
+Animation-call references: AlbedosCustomClasses.Advanced.cs:5738
+
+
+31. Grand Cross [grand_cross] — Skill
+
+Animation: Arc Cutter | Opposed diagonal cuts
+
+Current intention: Two crossing slashes create a traveling radiant X.
+
+Action to author: Cut diagonally across the torso, reverse through a short chamber, then cut along the opposite diagonal. Let the two spectral planes form the X beyond the hands.
+
+Timing / event contract: Use both existing slash timings and the current X projectile spawn logic. Keep the held implement coherent through both grips.
+
+Ascended / variant handling: Enlargement/other current projectile changes preserve the two-cut performance. Do not restore an obsolete endpoint explosion.
+
+Current preset(s): cleric_cross_1, cleric_cross_2
+
+Animation-call references: AlbedosCustomClasses.Advanced.cs:5830; AlbedosCustomClasses.Advanced.cs:5837
+
+
+32. Heaven's Judgement [heavens_judgement] — Skill
+
+Animation: Sky Command | Barrage command
+
+Current intention: Holy beams strike around the caster or an aimed relic source.
+
+Action to author: Raise the main hand with an open palm and pull it down decisively toward the chosen area. Recover while the barrage continues.
+
+Timing / event contract: One initiating CAST_RELEASE; later beam impacts and final effects remain remote callbacks. Retain original area source selection.
+
+Ascended / variant handling: The additional final column is a world event. Do not interrupt a later player action with another forced sky call.
+
+Current preset(s): cleric_judgement
+
+Animation-call references: AlbedosCustomClasses.Advanced.cs:5942
+
+
+33. Lightning Tempest [lightning_tempest] — Ultimate
+
+Animation: Sky Command | Grand storm call
+
+Current intention: Create a sustained storm field with repeated lightning effects.
+
+Action to author: Use the large Sky Command variant: wider reach and a stronger downward command, followed by immediate legal recovery.
+
+Timing / event contract: Storm creation is the release event. Repeated bolts do not require holding both arms overhead for the whole field duration.
+
+Ascended / variant handling: A following/moving storm changes field tracking, not caster locomotion or posture duration.
+
+Current preset(s): cleric_tempest
+
+Animation-call references: AlbedosCustomClasses.Advanced.cs:6067
+
+
+34. Heaven's Crucible [grand_sigil] — Grace
+
+Animation: Wavecaller | Barrier opening
+
+Current intention: Heaven’s Crucible wraps allies in a persistent barrier.
+
+Action to author: Gather forearms near the chest and open outward into a protective dome cue. Finish in the same combat-ready guard as Heaven’s Light.
+
+Timing / event contract: Barrier creation follows the existing wind-up/application. Breaking or refreshing a barrier is not a new caster animation unless there is a real recast.
+
+Ascended / variant handling: No separate Ascended Grace. Preserve internal ID grand_sigil.
+
+Current preset(s): cleric_crucible
+
+Animation-call references: AlbedosCustomClasses.Advanced.cs:6142
+
+
+
+SORCERER
+============================================================
+
+
+35. Flame Burst [flame_burst] — Skill
+
+Animation: Pulse Drive | Fire cone
+
+Current intention: A short forward cone of fire.
+
+Action to author: Chamber the casting arm or staff slightly, then push directly toward the crosshair. Keep the cone forward and the off hand available for the current equipment.
+
+Timing / event contract: Use the actual branch’s scaled wind-up, including zero-wind-up Horizon Walker. Immediate variants begin at release; preserve existing input restrictions.
+
+Ascended / variant handling: No dedicated Ascended class-skill version.
+
+Current preset(s): sorc_flame
+
+Animation-call references: AlbedosCustomClasses.Skills.cs:885; DragonsAltar.Sorcerer.cs:809
+
+
+36. Glacial Descent [glacial_descent] — Skill
+
+Animation: Sky Command | Ice sky call
+
+Current intention: Drop an ice impact onto aimed ground.
+
+Action to author: Lift the staff or main palm, hold a compact overhead silhouette, then direct the falling ice onto the target. The caster does not slam their own feet.
+
+Timing / event contract: Fit to existing scaled cast timing and remote impact callback. Zero-wind-up branch uses a short release-first command.
+
+Ascended / variant handling: Archmage Ascension enlarges the impact and central effect. Same gesture with a weightier release accent; no extra cast.
+
+Current preset(s): sorc_glacial, sorc_glacial_asc
+
+Animation-call references: AlbedosCustomClasses.Skills.cs:898; DragonsAltar.Sorcerer.cs:835; DragonsAltar.Sorcerer.cs:1451
+
+
+37. Stonefang Eruption [stonefang_eruption] — Skill
+
+Animation: Ground Seal + Rift Conductor | Ground command / mobile dispatch
+
+Current intention: Raise damaging stone fangs at aimed ground.
+
+Action to author: Base planted version: lower center of mass and press staff butt or palm downward to command the eruption. Horizon Walker: use only a quick downward wrist command while retaining stride/air pose.
+
+Timing / event contract: Remote eruption remains at the aimed point. Do not force the caster to that location or add a ground-contact requirement to an airborne-legal cast.
+
+Ascended / variant handling: Persistent spikes keep ticking after the initial command. They do not repeatedly stamp the caster or hold them in place.
+
+Current preset(s): sorc_stonefang, sorc_stonefang_asc
+
+Animation-call references: AlbedosCustomClasses.Skills.cs:914; DragonsAltar.Sorcerer.cs:870; DragonsAltar.Sorcerer.cs:2627
+
+
+
+ARCHMAGE
+============================================================
+
+
+38. Meteor Fall [meteor_fall] — Skill
+
+Animation: Sky Command | Charged sky call
+
+Current intention: Hold to strengthen a meteor aimed at the ground.
+
+Action to author: Gather, lift the implement high and hold a quiet call pose while aim remains adjustable. Pull down at release, then recover as the meteor falls.
+
+Timing / event contract: Charge begins alongside the current wind-up. Maintain hold until actual release/cancel, including time spent at maximum charge; do not use the pose driver’s fixed hold timeout as the release signal.
+
+Ascended / variant handling: Small follow-up meteors are automatic world events, including the larger count at full charge. No extra body casts per meteor.
+
+Current preset(s): wiz_meteor
+
+Animation-call references: DragonsAltar.Sorcerer.cs:1234
+
+
+39. Gravity Dominion [gravity_dominion] — Skill
+
+Animation: Rift Conductor | Deliberate gravity pull
+
+Current intention: Create a remote persistent gravitational field.
+
+Action to author: Reach toward the target, spread the fingers around an imagined sphere and pull the hand inward as the field establishes. Settle while the field continues.
+
+Timing / event contract: Keep the actual wind-up. Field pulse and pull ticks are independent of caster hand motion; preserve the selected world center.
+
+Ascended / variant handling: Larger, longer field and ending explosion. The final explosion does not force a delayed arm-clench during another skill.
+
+Current preset(s): wiz_gravity
+
+Animation-call references: DragonsAltar.Sorcerer.cs:1058
+
+
+40. Astral Railcannon [astral_railcannon] — Skill
+
+Animation: Siege Caster | Braced beam
+
+Current intention: Assemble and fire an aimed magical beam.
+
+Action to author: Brace the implement along the crosshair, shoulders behind the emission line. Release with restrained recoil; sustained version holds that aim posture and follows permitted aim changes.
+
+Timing / event contract: Normal: one SHOT_RELEASE. Ascended: BEAM_START, continuous current aiming/damage logic, then BEAM_END. No recoil on every damage tick.
+
+Ascended / variant handling: Four-second steerable beam in the current build. One entry and exit; interruption must clear hold/root ownership without firing an extra final beam.
+
+Current preset(s): wiz_railcannon, wiz_railcannon_hold
+
+Animation-call references: DragonsAltar.Sorcerer.cs:1326; DragonsAltar.Sorcerer.cs:1378
+
+
+41. Astral Greatblade [astral_greatblade] — Skill
+
+Animation: Earthbreaker | Repeated spectral downstroke
+
+Current intention: Slam a giant astral blade along the current aim.
+
+Action to author: Raise the casting implement as if taking the weight of a giant sword, then drive downward. Recoil into a ready overhead chamber for the next real slam.
+
+Timing / event contract: Each authoritative slam gets one aligned STROKE_RELEASE. Re-aim according to existing code. Correct any pose starting after the slam rather than delaying the hit.
+
+Ascended / variant handling: Three slams, no charge. Existing old altar wording about charging is stale; do not restore charging from it.
+
+Current preset(s): wiz_greatblade, wiz_greatblade_slam
+
+Animation-call references: DragonsAltar.Sorcerer.cs:1126; DragonsAltar.Sorcerer.cs:1154; DragonsAltar.Sorcerer.cs:1160
+
+
+42. Frost Nova [frost_nova] — Skill
+
+Animation: Wavecaller | Frost opening
+
+Current intention: Release a radial frost burst around the caster.
+
+Action to author: Compress the chest and elbows, then sharply open both available arms with a stable stance. Show a circular frost release, not a aimed cone.
+
+Timing / event contract: NOVA_RELEASE follows current scaled wind-up. Persistent aura ticks and final burst remain separate from the caster pose.
+
+Ascended / variant handling: Frost Aura lasts independently, then explodes. Do not hold a six-second open-arm pose or reintroduce the removed shaking.
+
+Current preset(s): wiz_nova
+
+Animation-call references: DragonsAltar.Sorcerer.cs:1173
+
+
+43. Elemental Cataclysm [elemental_cataclysm] — Ultimate
+
+Animation: Sky Command | Grand charged command
+
+Current intention: Charge a large targeted elemental area attack.
+
+Action to author: Lift both available arms/implement into the widest Sky Command silhouette, hold calmly while charge builds and drive downward when released.
+
+Timing / event contract: Preserve existing minimum wind-up, charge overlap and release input. Target detonation is a world event, not a requirement for the caster to hit the ground.
+
+Ascended / variant handling: Second bombardment at the original area is automatic. Same one cast; no Overcharge refund or added gesture.
+
+Current preset(s): wiz_cataclysm
+
+Animation-call references: DragonsAltar.Sorcerer.cs:1400
+
+
+44. Clockwork [clockwork] — Grace
+
+Animation: Wavecaller | Clockwork wrist insert
+
+Current intention: A radial skill/cooldown Grace.
+
+Action to author: Turn the free wrist as if setting a small clock, then open the forearm into the shared blessing pulse. Keep this insert short and equipment-compatible.
+
+Timing / event contract: BUFF_APPLY remains immediate at its current callback. No cast-time penalty for the decorative clock gesture.
+
+Ascended / variant handling: No separate Ascended Grace.
+
+Current preset(s): wiz_clockwork
+
+Animation-call references: DragonsAltar.Sorcerer.cs:1495
+
+
+
+HORIZON WALKER
+============================================================
+
+
+45. Arcane Phalanx [arcane_phalanx] — Skill
+
+Animation: Rift Conductor | Open / arm / dispatch
+
+Current intention: Summon hovering swords, fire individually, or arm and launch a full volley.
+
+Action to author: Open the available hand to array the swords. For individual releases use a small finger/implement accent only when arms are free. Recast uses a distinct closing/pointing command to arm the volley.
+
+Timing / event contract: Keep summon, recast-to-arm and the next fresh Mouse1-to-fire separate. Do not launch on the recast itself or let cosmetics consume normal weapon input.
+
+Ascended / variant handling: Eight swords and impact spears for the full volley. Spears are a remote effect; no player ground-stomp or four additional attacks.
+
+Current preset(s): hw_command, hw_rift_walker, hw_gravity_blast
+
+Animation-call references: DragonsAltar.Sorcerer.cs:2370; DragonsAltar.Sorcerer.cs:2384; DragonsAltar.Sorcerer.cs:2396; DragonsAltar.Sorcerer.cs:2480; DragonsAltar.Sorcerer.cs:2488; DragonsAltar.Sorcerer.cs:2604; DragonsAltar.Sorcerer.cs:2613
+
+
+46. Afterimage Arsenal [afterimage_arsenal] — Skill
+
+Animation: Rift Conductor | Copy fan
+
+Current intention: Create spectral copies that reproduce supported attacks.
+
+Action to author: Flick the free hand outward to leave or summon a copy, while retaining the current stride and aim. A hold-all input uses the same open-hand finish once its actual summon event occurs.
+
+Timing / event contract: Keep individual summon timers, hold behavior and clone lifetime logic. Clone attacks use their own mirrored weapon poses; they never retrigger the player’s summon gesture.
+
+Ascended / variant handling: Current Ascended copies follow and mirror supported weapon attacks. Do not implement the earlier proposed all-skill copying as part of an animation pass.
+
+Current preset(s): hw_afterimage
+
+Animation-call references: DragonsAltar.Sorcerer.cs:1530; DragonsAltar.Sorcerer.cs:2697
+
+
+47. Void Step [void_step] — Skill
+
+Animation: Ghost Step | Pose-preserving blink
+
+Current intention: Teleport without stopping the action underway.
+
+Action to author: Keep the current shooting/stride pose, add a tiny directional lean or just disappearance VFX, and reappear in the same action phase.
+
+Timing / event contract: Teleport commits at the existing callback. No anticipatory crouch, recovery lock or travel interpolation. Preserve current featherfall and momentum policy.
+
+Ascended / variant handling: Two charges and retained momentum. Reuse the same transition; no damaging departure rift.
+
+Current preset(s): hw_voidstep
+
+Animation-call references: DragonsAltar.Sorcerer.cs:1720
+
+
+48. Rift Echo [rift_echo] — Skill
+
+Animation: Rift Conductor | Remote echo command
+
+Current intention: Open rifts behind the target that echo attacks.
+
+Action to author: Indicate the target with a brief finger or implement tip movement, then continue firing. Rifts open behind the target, not as barrels attached to the player’s hands.
+
+Timing / event contract: One accepted command, independent echo timing afterward. If both hands are firing, use a head/wrist/VFX-only accent to avoid interrupting the weapon animation.
+
+Ascended / variant handling: Current build opens three rifts; it is not merely the older cadence-change proposal. No three separate caster gestures.
+
+Current preset(s): hw_rift_echo
+
+Animation-call references: DragonsAltar.Sorcerer.cs:1516
+
+
+49. Gravity Blast [gravity_blast] — Skill
+
+Animation: Pulse Drive + Rift Conductor | Orb push / stop / collapse
+
+Current intention: Launch a traveling gravity orb with current recast controls.
+
+Action to author: Push the orb out with Pulse Drive. Use an open stopping hand for its stop command and a compact pinch for a detonation command where supported.
+
+Timing / event contract: Keep initial cast and each recast state separate. Do not collapse the orb early because the launch animation ended.
+
+Ascended / variant handling: Longer travel and stronger stop burst follow current branch logic. Reuse the command states without inventing or removing recast inputs.
+
+Current preset(s): hw_gravity_blast, hw_rupture, hw_command
+
+Animation-call references: DragonsAltar.Sorcerer.cs:2370; DragonsAltar.Sorcerer.cs:2396; DragonsAltar.Sorcerer.cs:2480; DragonsAltar.Sorcerer.cs:2488; DragonsAltar.Sorcerer.cs:2913
+
+
+50. Arcane Rupture [arcane_rupture] — Ultimate
+
+Animation: Rift Conductor | Remote point command
+
+Current intention: Spend a charge to trigger a delayed rupture at aimed ground while moving.
+
+Action to author: Snap the available wrist toward the selected point and continue locomotion. Let the target telegraph build independently before the explosion.
+
+Timing / event contract: COMMAND_ACCEPTED occurs now; TARGET_DETONATION follows its existing delay. That delay is not a full-body caster wind-up or root lock.
+
+Ascended / variant handling: More charges and stronger explosions use the same gesture. Preserve recast buffer; no queued gesture spam during target delays.
+
+Current preset(s): hw_rupture
+
+Animation-call references: DragonsAltar.Sorcerer.cs:2480; DragonsAltar.Sorcerer.cs:2913
+
+
+51. Rift Walker [rift_walker] — Grace
+
+Animation: Rift Conductor + Ghost Step | Portal placement + traversal
+
+Current intention: Place two linked portals and traverse with the existing interaction.
+
+Action to author: Open the available hand toward each placement point using Rift Conductor. Traversal uses Ghost Step, preserving the walking/attack phase through the transition.
+
+Timing / event contract: PORTAL_A, PORTAL_B and TELEPORT_COMMIT are distinct. Do not teleport immediately on placing the second portal or change the E interaction.
+
+Ascended / variant handling: No separate Ascended Grace. Portals stay visually independent of the short caster gesture.
+
+Current preset(s): hw_rift_walker
+
+Animation-call references: DragonsAltar.Sorcerer.cs:2384; DragonsAltar.Sorcerer.cs:2604; DragonsAltar.Sorcerer.cs:2613
+
+
+
+RANGER
+============================================================
+
+
+52. Piercing Arrow [piercing_arrow] — Skill
+
+Animation: Deadeye Draw | Snap power shot
+
+Current intention: A straight piercing arrow with current first-hit control.
+
+Action to author: Use a clean forward aim and sharp string release, left bow arm stable. Retain one recoil source and quickly return the right hand toward its next legal draw.
+
+Timing / event contract: Current projectile starts immediately. Begin at loose rather than adding a new draw delay; impacts remain arrow-owned.
+
+Ascended / variant handling: Longer range, widening flight and Expose use the same shot. The growth does not stretch the bow or caster.
+
+Current preset(s): rg_power
+
+Animation-call references: DragonsAltar.Ranger.cs:578
+
+
+53. Tumble Shot [tumble_shot] — Skill
+
+Animation: Rebound Shot | Backflip fan
+
+Current intention: Retreat in a backflip and shoot a forward fan at the apex.
+
+Action to author: Compress, spring backward and tuck into a true backward somersault. Keep the bow in the left hand; fire toward the threat at the existing apex event and extend legs to land.
+
+Timing / event contract: Current shared travel is about 0.3s and apex about 0.15s. Align visual phase to movement instead of slowing gameplay for a longer flourish.
+
+Ascended / variant handling: Wider fan, cooldown reset conditions and departure gust do not add another flip or a second damage-owning release.
+
+Current preset(s): rg_tumble
+
+Animation-call references: DragonsAltar.Ranger.cs:631
+
+
+54. Snare Trap [snare_trap] — Skill
+
+Animation: Ground Seal | Careful placement
+
+Current intention: Place a ground snare at the selected valid location.
+
+Action to author: Lower through the knees, briefly dispatch/place with the free hand and rise. Use a wrist-only command when casting in the air as Acrobat.
+
+Timing / event contract: TRAP_PLACED matches current placement; activation by an enemy is a later world event. Do not move the player to a remote target.
+
+Ascended / variant handling: No dedicated Ascended version in the current kit.
+
+Current preset(s): rg_trap
+
+Animation-call references: DragonsAltar.Ranger.cs:739
+
+
+
+ACROBAT
+============================================================
+
+
+55. Gale Volley [gale_volley] — Skill
+
+Animation: Rebound Shot | Backflip gale fan
+
+Current intention: Spring backward while firing a wide wind-powered arrow fan.
+
+Action to author: Reuse Tumble Shot’s entire Rebound Shot sequence. Different arrow spread, wind and recoil accent communicate the stronger shot.
+
+Timing / event contract: Same shared BackFlip movement/apex event contract; preserve collision-shortened travel and current invulnerability timing.
+
+Ascended / variant handling: A second arcing fan gets a second short firing accent at its scheduled event, possibly during landing. Never add a second flip.
+
+Current preset(s): rg_tumble
+
+Animation-call references: DragonsAltar.Ranger.cs:631
+
+
+56. Cyclone Arrow [cyclone_arrow] — Skill
+
+Animation: Deadeye Draw + Cyclone | Snap shot with pivot exit
+
+Current intention: Fire a slow moving cyclone projectile.
+
+Action to author: Release the arrow immediately from the aim pose. A compact torso/foot pivot can follow as cosmetic recovery where grounded; airborne version keeps the flight pose.
+
+Timing / event contract: Do not make the player wait for the existing spin-loose choreography before the projectile appears. Projectile rotation and pulling are independent.
+
+Ascended / variant handling: Split cyclones on first catch are effect-only. The caster does not become a sustained whirlwind or fire three new shots.
+
+Current preset(s): rg_spin
+
+Animation-call references: DragonsAltar.Ranger.cs:819
+
+
+57. Swallow Dive [swallow_dive] — Skill
+
+Animation: Comet Dive | Short directional dive
+
+Current intention: An aimed dash cuts enemies along its path.
+
+Action to author: Streamline body along aim with bow tight against the torso, then unfold into the exit. Use a grounded compression only when actually landing.
+
+Timing / event contract: Match current short dash duration, wall stop and exit velocity. An airborne dash finishes in air; it must not wait for a landing animation.
+
+Ascended / variant handling: Three charges and a delayed wind slash along the path. Reuse the dive once per accepted charge; delayed slash is not another dash.
+
+Current preset(s): rg_dive
+
+Animation-call references: DragonsAltar.Ranger.cs:925
+
+
+58. Skyfall Barrage [skyfall_barrage] — Skill
+
+Animation: Rebound Shot + Sky Archer | Backflip ascent into hover fire
+
+Current intention: Rise, hover and shoot down into the area below.
+
+Action to author: Use Rebound Shot’s launch/flip module with the existing longer ascent, then settle into Sky Archer’s down-aim hover. Alternate small draw/release accents while hovering.
+
+Timing / event contract: Preserve the current ascent, ceiling check and real hover-shot cadence. On hover end, blend to falling before any grounded recovery.
+
+Ascended / variant handling: Steer the larger ground circle with permitted aim controls. Do not rotate the whole body through another flip for every shot.
+
+Current preset(s): rg_backflip, rg_hover
+
+Animation-call references: DragonsAltar.Ranger.cs:976; DragonsAltar.Ranger.cs:988
+
+
+59. Ricochet Arrow [ricochet_arrow] — Skill
+
+Animation: Deadeye Draw | Compact trick shot
+
+Current intention: One arrow bounces through multiple targets.
+
+Action to author: Angle the shoulders into a relaxed side-on trick-shot silhouette, loose one clean arrow and reset. Keep the grip mechanically plausible rather than tossing the bow.
+
+Timing / event contract: One SHOT_RELEASE. All bounces and damage escalation are projectile logic, not separate player shots.
+
+Ascended / variant handling: More bounces and a final explosion add no caster actions.
+
+Current preset(s): rg_trick
+
+Animation-call references: DragonsAltar.Ranger.cs:1031
+
+
+60. Furious Winds [furious_winds] — Ultimate
+
+Animation: Cyclone | Wind-arm spin
+
+Current intention: Maintain a leaf storm/barrier while spinning.
+
+Action to author: Use Cyclone’s continuous body rotation with bow held close or safely extended, keeping a stable center rather than flailing the arms. Exit into a readable open sweep.
+
+Timing / event contract: Loop only for the actual active duration. Leaves, barrier checks and damage ticks remain independent of visual turns.
+
+Ascended / variant handling: Larger field/duration and final gale use the existing end event; no extra rooted flourish after movement is allowed.
+
+Current preset(s): PlaySpinClip
+
+Animation-call references: AlbedosCustomClasses.Advanced.cs:3027; AlbedosCustomClasses.Advanced.cs:3941; DragonsAltar.CombatRuntime.cs:1874; DragonsAltar.Ranger.cs:1100
+
+
+61. Tailwind [tailwind] — Grace
+
+Animation: Wavecaller | Wind blessing
+
+Current intention: A radial movement/jump/fall-protection Grace.
+
+Action to author: Lift the free forearm as if catching an updraft, then open outward into the shared wave. Keep the bow in the left hand.
+
+Timing / event contract: Buff applies at the current callback. No repeated bobbing or shaking throughout the buff.
+
+Ascended / variant handling: No separate Ascended Grace.
+
+Current preset(s): rg_tailwind
+
+Animation-call references: DragonsAltar.Ranger.cs:1268
+
+
+
+BOWMASTER
+============================================================
+
+
+62. Ballista Shot [ballista_shot] — Skill
+
+Animation: Deadeye Draw | Siege draw
+
+Current intention: Hold a powerful piercing bow or crossbow shot.
+
+Action to author: Set a wide stable firing posture, draw and hold with controlled breathing. Release with one heavy shoulder recoil, then return to aim. Crossbow uses a braced trigger profile.
+
+Timing / event contract: Charge and fire follow current hold/release input. Holding at maximum charge must not be auto-released by the pose driver timeout.
+
+Ascended / variant handling: Full-charge pierce explosions remain target events. They do not trigger repeated recoil or new projectiles from the caster.
+
+Current preset(s): rg_ballista
+
+Animation-call references: DragonsAltar.Ranger.cs:1903
+
+
+63. Arrow Rain [arrow_rain] — Skill
+
+Animation: Sky Archer | Upward release
+
+Current intention: Initiate an arrow bombardment over the selected area.
+
+Action to author: Angle the bow or crossbow skyward, show the initiating release and lower back to normal aim. Start at the release key for the current instant cast.
+
+Timing / event contract: One SKY_RELEASE creates the field. Falling arrows and damage ticks continue after the caster recovers.
+
+Ascended / variant handling: Frozen-arrow effects change the bombardment, not caster choreography.
+
+Current preset(s): rg_sky
+
+Animation-call references: DragonsAltar.Ranger.cs:1961
+
+
+64. Pinning Shot [pinning_shot] — Skill
+
+Animation: Deadeye Draw | Low brace
+
+Current intention: A precise immobilizing/control arrow with current target rules.
+
+Action to author: Sink slightly at the knees while keeping the weapon level and loose one deliberate shot. A full kneel is optional only if it fits current restrictions and real leg support exists.
+
+Timing / event contract: Current release is immediate. Do not delay firing until a cinematic kneel finishes or invent an extra stationary lock.
+
+Ascended / variant handling: Additional nearby targets are effect handling, not three full player shots.
+
+Current preset(s): rg_kneel
+
+Animation-call references: DragonsAltar.Ranger.cs:2012
+
+
+65. Explosive Arrow [explosive_arrow] — Skill
+
+Animation: Deadeye Draw | Heavy snap release
+
+Current intention: Fire one projectile that explodes on impact.
+
+Action to author: Brace the weapon, loose sharply and absorb a small shoulder kick. Recover without letting the bow arm collapse or the crossbow float from its stock grip.
+
+Timing / event contract: One SHOT_RELEASE and later PROJECTILE_CONTACT. Only one recoil owner; no camera/bone double recoil.
+
+Ascended / variant handling: Ground fire and cluster bombs are remote continuations. Do not make the player throw additional bombs.
+
+Current preset(s): rg_heavy
+
+Animation-call references: DragonsAltar.Ranger.cs:2079
+
+
+66. Splitting Arrow [splitting_arrow] — Skill
+
+Animation: Deadeye Draw | Alternating fan volleys
+
+Current intention: A planted rapid volley sequence aimed through a cone.
+
+Action to author: Hold a stable lower stance and alternate small torso aim sweeps and string-hand resets. Chain releases directly without returning to idle.
+
+Timing / event contract: One release accent per existing volley callback. Preserve its current planted movement restriction and exact interval, including fast Ascended cadence.
+
+Ascended / variant handling: Five rapid volleys and stacking Burn. Time-compress the draw/reset, not the projectile count or cadence.
+
+Current preset(s): rg_split_a, rg_split_b
+
+Animation-call references: DragonsAltar.Ranger.cs:2189
+
+
+67. Starfall Volley [starfall_volley] — Ultimate
+
+Animation: Sky Archer | Channeled sky barrage
+
+Current intention: Channel to call a large arrow bombardment.
+
+Action to author: Raise the weapon toward the sky, hold a deliberate charge silhouette during the existing channel, then loose and return to guard while arrows fall.
+
+Timing / event contract: CHANNEL_COMPLETE initiates the remote bombardment. Do not play one full actor shot per decorative falling arrow or per enemy damaged.
+
+Ascended / variant handling: Final giant arrow follows the existing world-event schedule. Add a remote emphasis; do not force an unrelated later player cast.
+
+Current preset(s): rg_starfall
+
+Animation-call references: DragonsAltar.Ranger.cs:2258
+
+
+68. Hawk's Vigil [hawks_vigil] — Grace
+
+Animation: Wavecaller | Watchful salute
+
+Current intention: Reveal surrounding enemies and buff allied aim.
+
+Action to author: Briefly shade/salute near the brow with the free hand, then open outward in a restrained Wavecaller pulse. Keep the weapon in its correct grip.
+
+Timing / event contract: Buff/reveal snapshot remains immediate. Ongoing enemy outlines do not hold the player scanning or suppress normal attacks.
+
+Ascended / variant handling: No separate Ascended Grace.
+
+Current preset(s): rg_vigil
+
+Animation-call references: DragonsAltar.Ranger.cs:2313
+
+
+END OF HANDOFF. No mod code, binary, rigged clip or gameplay change is included.

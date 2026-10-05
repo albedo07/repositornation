@@ -1,0 +1,612 @@
+[
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 1367,
+    "source": "DragonCombat.PlayClip(player, \"sm_ready\", ascWindup);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 1374,
+    "source": "DragonCombat.PlayClip(player, \"sm_ready\", windup);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 1393,
+    "source": "DragonCombat.PlayClip(player, slash % 2 == 0 ? \"sm_slash_a\" : \"sm_slash_b\", 0.1f);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 1475,
+    "source": "DragonCombat.PlayClip(player, \"sm_crescent\", windup);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 1576,
+    "source": "DragonCombat.PlayClip(player, \"sm_blade_storm\", 0.12f);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 1987,
+    "source": "DragonCombat.PlayClip(player, wave % 2 == 0 ? \"sm_slash_a\" : \"sm_slash_b\", 0.08f);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 1994,
+    "source": "DragonCombat.PlayClip(player, \"sm_moon_finisher\", finisherWindup);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 2170,
+    "source": "DragonCombat.PlayClip(player, \"sm_thrust\", windup);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 2312,
+    "source": "DragonCombat.PlayClip(player, \"sm_eclipse\", windup);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 2390,
+    "source": "DragonCombat.PlayClip(player, \"sm_halfmoon_2\", 0.1f);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 2397,
+    "source": "DragonCombat.PlayClip(player, \"sm_halfmoon_stance\", pull, true);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 2415,
+    "source": "DragonCombat.ClipStop(player, 0.3f);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 2421,
+    "source": "DragonCombat.PlayClip(player, \"sm_halfmoon_finisher\", swing);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 2444,
+    "source": "DragonCombat.PlayClip(player, \"sm_guidance\", 0.15f);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 2472,
+    "source": "DragonCombat.PlayClip(player, \"warrior_impact_wave\", windup);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 2767,
+    "source": "DragonCombat.PlayClip(player, \"merc_roar\", 0.35f);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 2835,
+    "source": "DragonCombat.PlayClip(player, \"merc_circle_2\", Mathf.Max(0.05f, _circleAscGap.Value));"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 2870,
+    "source": "DragonCombat.PlayClip(player, \"land_crash\", 0.1f);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 2887,
+    "source": "DragonCombat.PlayClip(player, \"merc_aftershock\", Mathf.Max(0.1f, _boneAscShockDelay.Value));"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 2906,
+    "source": "DragonCombat.PlayClip(player, \"merc_bomb\", windup);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 3027,
+    "source": "DragonCombat.PlaySpinClip(player, maxTime, 0.3f);   // v0.25.8: tornado spin, faster turns"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 3067,
+    "source": "DragonCombat.PlayClip(player, \"merc_circle_2\", 0.08f);   // final sweep"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 3080,
+    "source": "DragonCombat.PlayClip(player, \"merc_roar\", 0.35f);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 3141,
+    "source": "DragonCombat.PlayClip(player, \"merc_heavy_asc\", windup);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 3432,
+    "source": "DragonCombat.PlayClip(player, \"sm_halfmoon\", ascWindup);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 3438,
+    "source": "DragonCombat.PlayClip(player, \"sm_halfmoon\", windup);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 3466,
+    "source": "DragonCombat.PlayClip(player, \"sm_halfmoon_2\", 0.1f);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 3529,
+    "source": "DragonCombat.PlayClip(player, \"merc_stomp\", windup);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 3581,
+    "source": "DragonCombat.PlayClip(player, \"air_overhead\", 0.2f, true);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 3619,
+    "source": "DragonCombat.PlayClip(player, \"merc_circle\", windup);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 3690,
+    "source": "DragonCombat.PlayClip(player, \"merc_seismic\", 0.28f);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 3941,
+    "source": "DragonCombat.PlaySpinClip(player, duration, 0.4f);   // v0.25.8: arms out, one turn every 0.4s"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 3978,
+    "source": "DragonCombat.PlayClip(player, \"cleric_goddess\", windup);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 4065,
+    "source": "DragonCombat.PlayClip(player, \"cleric_ray\", 0.15f);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 4120,
+    "source": "DragonCombat.PlayClip(player, \"cleric_charge\", 0.15f, true);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 4212,
+    "source": "if (clip != null && clip.IsHolding) DragonCombat.ClipStop(player, 0.25f);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 4335,
+    "source": "DragonCombat.ClipImpact(player);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 4633,
+    "source": "DragonCombat.PlayClip(player, \"air_overhead\", 0.25f, true);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 4644,
+    "source": "DragonCombat.PlayClip(player, \"cleric_land\", 0.1f);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 4808,
+    "source": "DragonCombat.PlayClip(player, \"cleric_rs_asc\", windup);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 4880,
+    "source": "DragonCombat.PlayClip(player, \"cleric_hammer\", windup);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 4942,
+    "source": "DragonCombat.PlayClip(player, \"cleric_hammer_call\", 0.2f, true);   // hand out, calling it back"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 4958,
+    "source": "DragonCombat.ClipImpact(player);   // catch + recoil"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 4976,
+    "source": "if (!caughtIt) DragonCombat.ClipStop(player, 0.3f);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 5077,
+    "source": "DragonCombat.PlayClip(player, \"cleric_angel_rise\", Mathf.Max(0.6f, _angelWindupTotal.Value) * 0.62f);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 5146,
+    "source": "DragonCombat.PlayClip(player, \"cleric_land\", 0.1f);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 5426,
+    "source": "DragonCombat.PlayClip(player, \"cleric_relic\", windup);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 5594,
+    "source": "DragonCombat.PlayClip(player, \"cleric_holy_relic\", windup);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 5738,
+    "source": "DragonCombat.PlayClip(player, \"cleric_intervention\", windup);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 5830,
+    "source": "DragonCombat.PlayClip(player, \"cleric_cross_1\", firstSlash);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 5837,
+    "source": "DragonCombat.PlayClip(player, \"cleric_cross_2\", secondSlash);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 5942,
+    "source": "DragonCombat.PlayClip(player, \"cleric_judgement\", windup);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 6067,
+    "source": "DragonCombat.PlayClip(player, \"cleric_tempest\", windup);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 6142,
+    "source": "DragonCombat.PlayClip(player, \"cleric_crucible\", windup);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 9715,
+    "source": "DragonCombat.PlayClip(player, \"cleric_wave_ally\", 0.15f);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 9808,
+    "source": "DragonCombat.PlayClip(player, \"cleric_parry_burst\", 0.06f);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Advanced.cs",
+    "line": 11686,
+    "source": "DragonCombat.PlayClip(player, \"cleric_light\", 0.15f);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Skills.cs",
+    "line": 615,
+    "source": "DragonCombat.PlayClip(player, \"warrior_heavy\", windup);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Skills.cs",
+    "line": 652,
+    "source": "DragonCombat.PlayClip(player, \"warrior_impact_wave\", windup);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Skills.cs",
+    "line": 713,
+    "source": "DragonCombat.PlayClip(player, \"warrior_punch\", windup);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Skills.cs",
+    "line": 783,
+    "source": "DragonCombat.PlayClip(player, \"cleric_zap\", 0.12f);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Skills.cs",
+    "line": 817,
+    "source": "DragonCombat.PlayClip(player, \"cleric_rs\", windup);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Skills.cs",
+    "line": 847,
+    "source": "DragonCombat.PlayClip(player, \"cleric_wave\", 0.15f);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Skills.cs",
+    "line": 885,
+    "source": "DragonCombat.PlayClip(player, \"sorc_flame\", 0.12f);"
+  },
+  {
+    "file": "AlbedosCustomClasses.Skills.cs",
+    "line": 898,
+    "source": "float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _glacialWindup.Value)); DragonCombat.LockSkill(player, windup); DragonCombat.PlayClip(player, \"sorc_glacial\", windup); StartCoroutine(GlacialDescentRoutine(player, target, windup));"
+  },
+  {
+    "file": "AlbedosCustomClasses.Skills.cs",
+    "line": 914,
+    "source": "const string id = \"Sorcerer.StonefangEruption\"; if (!BeginCastEitr(player, id, _stoneCooldown.Value, _stoneEitr.Value)) return; float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _stoneWindup.Value)); DragonCombat.LockSkill(player, windup); DragonCombat.PlayClip(player, \"sorc_stonefang\", windup); StartCoroutine(StonefangEruptionRoutine(player, target, windup));"
+  },
+  {
+    "file": "DragonsAltar.CombatRuntime.cs",
+    "line": 1848,
+    "source": "public static void PlayClip(Player player, string clip, float windup, bool hold)"
+  },
+  {
+    "file": "DragonsAltar.CombatRuntime.cs",
+    "line": 1874,
+    "source": "public static void PlaySpinClip(Player player, float seconds, float turn)"
+  },
+  {
+    "file": "DragonsAltar.CombatRuntime.cs",
+    "line": 1889,
+    "source": "public static void PlayClip(Player player, string clip, float windup)"
+  },
+  {
+    "file": "DragonsAltar.CombatRuntime.cs",
+    "line": 1891,
+    "source": "PlayClip(player, clip, windup, false);"
+  },
+  {
+    "file": "DragonsAltar.CombatRuntime.cs",
+    "line": 1894,
+    "source": "public static void ClipImpact(Player player)"
+  },
+  {
+    "file": "DragonsAltar.CombatRuntime.cs",
+    "line": 1901,
+    "source": "public static void ClipStop(Player player, float blend)"
+  },
+  {
+    "file": "AlbedosCustomClasses.GuardianAngel.cs",
+    "line": 170,
+    "source": "DragonCombat.PlayClip(player, \"cleric_rise\", 0.6f);   // v0.25.13: rises back from the brink"
+  },
+  {
+    "file": "DragonsAltar.Ranger.cs",
+    "line": 578,
+    "source": "DragonCombat.PlayClip(player, \"rg_power\", 0.1f);   // snap draw, strong recoil"
+  },
+  {
+    "file": "DragonsAltar.Ranger.cs",
+    "line": 631,
+    "source": "if (flip) DragonCombat.PlayClip(player, \"rg_tumble\", 0.02f);   // v0.25.13: tucked flip, draw upside down, loose"
+  },
+  {
+    "file": "DragonsAltar.Ranger.cs",
+    "line": 739,
+    "source": "DragonCombat.PlayClip(player, \"rg_trap\", 0.15f);"
+  },
+  {
+    "file": "DragonsAltar.Ranger.cs",
+    "line": 819,
+    "source": "DragonCombat.PlayClip(player, \"rg_spin\", 0.1f);   // spin-loose"
+  },
+  {
+    "file": "DragonsAltar.Ranger.cs",
+    "line": 925,
+    "source": "DragonCombat.PlayClip(player, \"rg_dive\", 0.08f);"
+  },
+  {
+    "file": "DragonsAltar.Ranger.cs",
+    "line": 976,
+    "source": "DragonCombat.PlayClip(player, \"rg_backflip\", 0.05f);"
+  },
+  {
+    "file": "DragonsAltar.Ranger.cs",
+    "line": 988,
+    "source": "DragonCombat.PlayClip(player, \"rg_hover\", 0.25f, true);   // aimed down while hovering"
+  },
+  {
+    "file": "DragonsAltar.Ranger.cs",
+    "line": 1021,
+    "source": "DragonCombat.ClipStop(player, 0.3f);"
+  },
+  {
+    "file": "DragonsAltar.Ranger.cs",
+    "line": 1031,
+    "source": "DragonCombat.PlayClip(player, \"rg_trick\", 0.1f);   // flicked trick shot"
+  },
+  {
+    "file": "DragonsAltar.Ranger.cs",
+    "line": 1100,
+    "source": "DragonCombat.PlaySpinClip(player, duration, 0.5f);   // two turns a second inside the leaf storm"
+  },
+  {
+    "file": "DragonsAltar.Ranger.cs",
+    "line": 1268,
+    "source": "DragonCombat.PlayClip(player, \"rg_tailwind\", 0.2f);"
+  },
+  {
+    "file": "DragonsAltar.Ranger.cs",
+    "line": 1903,
+    "source": "DragonCombat.PlayClip(player, \"rg_ballista\", 0.35f, true);   // crouched heavy draw while charging"
+  },
+  {
+    "file": "DragonsAltar.Ranger.cs",
+    "line": 1927,
+    "source": "DragonCombat.ClipImpact(player);   // release: siege recoil"
+  },
+  {
+    "file": "DragonsAltar.Ranger.cs",
+    "line": 1961,
+    "source": "DragonCombat.PlayClip(player, \"rg_sky\", 0.15f);   // loose into the sky"
+  },
+  {
+    "file": "DragonsAltar.Ranger.cs",
+    "line": 2012,
+    "source": "DragonCombat.PlayClip(player, \"rg_kneel\", 0.15f);   // kneeling shot"
+  },
+  {
+    "file": "DragonsAltar.Ranger.cs",
+    "line": 2079,
+    "source": "DragonCombat.PlayClip(player, \"rg_heavy\", 0.12f);   // heavy kick-back"
+  },
+  {
+    "file": "DragonsAltar.Ranger.cs",
+    "line": 2189,
+    "source": "DragonCombat.PlayClip(player, v % 2 == 0 ? \"rg_split_a\" : \"rg_split_b\", 0.06f);   // alternating sweep per volley"
+  },
+  {
+    "file": "DragonsAltar.Ranger.cs",
+    "line": 2258,
+    "source": "DragonCombat.PlayClip(player, \"rg_starfall\", Mathf.Max(0.2f, channel));"
+  },
+  {
+    "file": "DragonsAltar.Ranger.cs",
+    "line": 2313,
+    "source": "DragonCombat.PlayClip(player, \"rg_vigil\", 0.15f);"
+  },
+  {
+    "file": "DragonsAltar.Sorcerer.cs",
+    "line": 809,
+    "source": "DragonCombat.PlayClip(player, \"sorc_flame\", windup);"
+  },
+  {
+    "file": "DragonsAltar.Sorcerer.cs",
+    "line": 835,
+    "source": "DragonCombat.PlayClip(player, \"sorc_glacial\", windup);"
+  },
+  {
+    "file": "DragonsAltar.Sorcerer.cs",
+    "line": 870,
+    "source": "DragonCombat.PlayClip(player, \"sorc_stonefang\", windup);"
+  },
+  {
+    "file": "DragonsAltar.Sorcerer.cs",
+    "line": 1058,
+    "source": "DragonCombat.PlayClip(player, \"wiz_gravity\", windup);"
+  },
+  {
+    "file": "DragonsAltar.Sorcerer.cs",
+    "line": 1126,
+    "source": "DragonCombat.PlayClip(player, \"wiz_greatblade\", windup);"
+  },
+  {
+    "file": "DragonsAltar.Sorcerer.cs",
+    "line": 1154,
+    "source": "DragonCombat.PlayClip(player, \"wiz_greatblade\", windup);"
+  },
+  {
+    "file": "DragonsAltar.Sorcerer.cs",
+    "line": 1160,
+    "source": "if (slam > 0) DragonCombat.PlayClip(player, \"wiz_greatblade_slam\", 0.2f);"
+  },
+  {
+    "file": "DragonsAltar.Sorcerer.cs",
+    "line": 1173,
+    "source": "DragonCombat.PlayClip(player, \"wiz_nova\", windup);"
+  },
+  {
+    "file": "DragonsAltar.Sorcerer.cs",
+    "line": 1234,
+    "source": "DragonCombat.PlayClip(player, \"wiz_meteor\", Mathf.Max(0.25f, windup), true);"
+  },
+  {
+    "file": "DragonsAltar.Sorcerer.cs",
+    "line": 1271,
+    "source": "DragonCombat.ClipImpact(player);   // release: drag the sky down"
+  },
+  {
+    "file": "DragonsAltar.Sorcerer.cs",
+    "line": 1326,
+    "source": "DragonCombat.PlayClip(player, ascended ? \"wiz_railcannon_hold\" : \"wiz_railcannon\", windup, ascended);"
+  },
+  {
+    "file": "DragonsAltar.Sorcerer.cs",
+    "line": 1378,
+    "source": "DragonCombat.PlayClip(player, \"wiz_railcannon\", 0.05f);   // last kick, then rest"
+  },
+  {
+    "file": "DragonsAltar.Sorcerer.cs",
+    "line": 1400,
+    "source": "DragonCombat.PlayClip(player, \"wiz_cataclysm\", Mathf.Max(0.3f, minWindup), true);"
+  },
+  {
+    "file": "DragonsAltar.Sorcerer.cs",
+    "line": 1418,
+    "source": "DragonCombat.ClipImpact(player);"
+  },
+  {
+    "file": "DragonsAltar.Sorcerer.cs",
+    "line": 1451,
+    "source": "DragonCombat.PlayClip(player, \"sorc_glacial_asc\", windup);"
+  },
+  {
+    "file": "DragonsAltar.Sorcerer.cs",
+    "line": 1495,
+    "source": "DragonCombat.PlayClip(player, \"wiz_clockwork\", 0.12f);"
+  },
+  {
+    "file": "DragonsAltar.Sorcerer.cs",
+    "line": 1516,
+    "source": "DragonCombat.PlayClip(player, \"hw_rift_echo\", 0.1f);"
+  },
+  {
+    "file": "DragonsAltar.Sorcerer.cs",
+    "line": 1530,
+    "source": "DragonCombat.PlayClip(player, \"hw_afterimage\", 0.1f);"
+  },
+  {
+    "file": "DragonsAltar.Sorcerer.cs",
+    "line": 1720,
+    "source": "DragonCombat.PlayClip(player, \"hw_voidstep\", 0.06f);"
+  },
+  {
+    "file": "DragonsAltar.Sorcerer.cs",
+    "line": 2370,
+    "source": "DragonCombat.PlayClip(player, \"hw_command\", 0.1f);"
+  },
+  {
+    "file": "DragonsAltar.Sorcerer.cs",
+    "line": 2384,
+    "source": "DragonCombat.PlayClip(player, \"hw_rift_walker\", 0.12f);   // both hands open: the swords appear"
+  },
+  {
+    "file": "DragonsAltar.Sorcerer.cs",
+    "line": 2396,
+    "source": "DragonCombat.PlayClip(player, \"hw_gravity_blast\", 0.06f);   // both hands thrust: the swords fly"
+  },
+  {
+    "file": "DragonsAltar.Sorcerer.cs",
+    "line": 2480,
+    "source": "DragonCombat.PlayClip(player, _gbRecasts == 1 ? \"hw_rupture\" : \"hw_command\", 0.08f);"
+  },
+  {
+    "file": "DragonsAltar.Sorcerer.cs",
+    "line": 2488,
+    "source": "DragonCombat.PlayClip(player, \"hw_gravity_blast\", 0.12f);"
+  },
+  {
+    "file": "DragonsAltar.Sorcerer.cs",
+    "line": 2604,
+    "source": "DragonCombat.PlayClip(player, \"hw_rift_walker\", 0.12f);"
+  },
+  {
+    "file": "DragonsAltar.Sorcerer.cs",
+    "line": 2613,
+    "source": "DragonCombat.PlayClip(player, \"hw_rift_walker\", 0.12f);"
+  },
+  {
+    "file": "DragonsAltar.Sorcerer.cs",
+    "line": 2627,
+    "source": "DragonCombat.PlayClip(player, \"sorc_stonefang_asc\", 0.12f);"
+  },
+  {
+    "file": "DragonsAltar.Sorcerer.cs",
+    "line": 2697,
+    "source": "DragonCombat.PlayClip(player, \"hw_afterimage\", 0.1f);"
+  },
+  {
+    "file": "DragonsAltar.Sorcerer.cs",
+    "line": 2913,
+    "source": "DragonCombat.PlayClip(player, \"hw_rupture\", Mathf.Max(0.1f, _ruptureWindup.Value));"
+  },
+  {
+    "file": "DragonsAltar.Sorcerer.cs",
+    "line": 3137,
+    "source": "DragonCombat.PlayClip(Player.m_localPlayer, \"wiz_overcharge\", 0.12f);"
+  }
+]

@@ -1,3 +1,9 @@
-TEST v0.25.14
-Cast skills of every class in third person: arms and body move smoothly, no shaking / jitter during holds
-(Halfmoon charge, Meteor / Cataclysm charge, Shield Charge, Ballista charge) or quick-shot chains.
+TEST v0.25.15
+1. Shield Charge: the legs RUN during the charge (no sliding idle). Shield ahead, weapon low behind, torso
+   leaned in. Left Click Bash = shield shove + lunge, then recover. Charging into a wall still treadmills.
+2. Frenzied Charge: braced lunge wind up, then running legs under the dash.
+3. Electric Smite + Bonecrusher: crouch, horizontal barrel roll in the air, unwind, superhero landing exactly when
+   the damage lands (also from a cliff: the falling pose holds until the ground). The weapon reappears after ~0.5 s.
+4. LEGS: if knees bend backwards or thighs move the wrong way, set [Runtime] LegMotionScale_v02515 = -1 in F8 and
+   tell me (legs are new; this is their first calibration).
+5. Unchained Fury / Overcharge / Bless Thy Sinners during a skill animation: the skill animation is not cut.

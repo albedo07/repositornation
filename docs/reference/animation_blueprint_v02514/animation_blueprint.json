@@ -1,0 +1,2661 @@
+{
+  "schema_version": "1.0",
+  "project": "Immortal Heroes",
+  "baseline": "Immortal_Heroes_v0.25.14_Smooth_Motions.zip",
+  "baseline_sha256": "13af9963bba9ebe0a27d705cabe6954b9bba53b310314f275a98039344f024a1",
+  "date": "2026-10-05",
+  "status": "Design proposal only; no game source changed or in-game validation performed.",
+  "coverage": {
+    "active_skills_ultimates_graces": 68,
+    "motion_families": 20,
+    "scope_excludes": "Unimplemented Kali kits; no invented assignments. Passive/weapon actions described in the TXT."
+  },
+  "authority": "Current executable skill behavior/config owns mechanics. Family and skill descriptions define proposed presentation. Text takes precedence over incidental sketch details.",
+  "families": [
+    {
+      "id": "ANIM_01",
+      "name": "Olympic Hero",
+      "purpose": "A near-horizontal aerial barrel roll into a main-hand superhero landing. The same performance reads holy or brutal through VFX and weight, not different body choreography.",
+      "key_poses": [
+        "Load: compress knees, coil hips and shoulders, main elbow chambered; shield stays close.",
+        "Launch: extend legs through the existing jump, then incline the torso almost parallel to ground.",
+        "Roll: rotate once around the head-to-feet axis while horizontal; knees loosely tucked, head locates the landing area.",
+        "Unwind: complete the turn, unfold legs and bring main fist down; the hand remains above ground.",
+        "Impact: main fist contacts, opposite foot plants forward, same-side knee folds behind; elbow stays slightly bent.",
+        "Recover: hold weight briefly, push through forward foot, lift fist and blend to current combat/locomotion pose."
+      ],
+      "timing": "Event-driven. Preserve current takeoff delay and physical ascent/hang/descent. Distribute the visual roll over ascent and apex; complete it before final contact preparation. Descent may be arbitrarily longer on a cliff. Suggested cosmetic contact settle 0.08–0.12s; recovery 0.20–0.35s, cancelable when existing input rules permit. These are proposed visual timings, not new locks.",
+      "body_layer": "Full body plus visual-root orientation; gameplay rigidbody retains all translation/collision authority.",
+      "variants": "Holy: Electric Smite, same roll and fist impact. Brutal: Bonecrusher, slightly deeper compression and heavier settle, same timing contract. No second jump for its Ascended aftershock.",
+      "synchronization": "GROUND_CONTACT is authoritative. Pre-position the landing pose so the contact key coincides with the existing damage callback. Play 16 ground trails for Smite, physical dust/shock for Bonecrusher. Delayed aftershocks use world events after the player has recovered.",
+      "cautions": "Requires explicit knees/feet and contact support, absent from the current ten-bone clip vocabulary. Never fire on an aerial timer. With equipped weapons, use a reversible render-only stow/visibility profile for the main weapon if literal fist contact is required; never unequip or alter stats. Shield stays in the off hand. If stowing is unavailable, show a grip-compatible hand-led impact and flag it for review rather than passing a blade through the ground. Low ceilings use a compressed/no-roll safety variant without changing hit timing."
+    },
+    {
+      "id": "ANIM_02",
+      "name": "Sky Command",
+      "purpose": "One shared call-and-lower motion for distant sky summons and overhead bombardment.",
+      "key_poses": [
+        "Gather: main hand or casting implement crosses the sternum; gaze confirms the remote target.",
+        "Call: lift the main arm overhead, off arm balances or keeps a shield close.",
+        "Hold: keep the raised silhouette quiet, with slight breathing only; track legal aim.",
+        "Release: pull the arm down and point toward the target.",
+        "Recover: return to guard while the summoned object continues independently."
+      ],
+      "timing": "Fit gather/call into the existing scaled wind-up: roughly 0–35% gather, 35–80% lift, 80–100% direct/release. A charged version inserts a hold before release; charge and wind-up keep their current overlap. Do not add travel time to the caster lock. Instant applications use a short release-first upper-body gesture.",
+      "body_layer": "Upper body by default; planted leg variant only while existing movement restrictions apply.",
+      "variants": "One-hand + shield; two-hand staff; unarmed palm; charged two-arm lift; large ultimate reach. All use the same event order. Relics share the same actual cast style, not just similar titles.",
+      "synchronization": "CAST_RELEASE starts or commits the summon. WORLD_IMPACT happens later at the target and owns collision/damage/pulse start. Barrage ticks do not require repeated caster motions.",
+      "cautions": "Goddess, Lightning and Holy Relics descend remotely in this build: the caster must not look as if manually planting them at their feet. Never aim a vertical lightning strike from the caster hand. Preserve indoor-safe spawn height and drop duration. Late hold release is input driven, not a fixed animation timer."
+    },
+    {
+      "id": "ANIM_03",
+      "name": "Wavecaller",
+      "purpose": "A short gather-and-open gesture for radial healing, buffs, barriers and self-centered bursts.",
+      "key_poses": [
+        "Gather: main hand near sternum, shoulders draw inward slightly.",
+        "Open: lift chest and open the main forearm outward; free off hand follows or shield stays guarded.",
+        "Pulse: a clear outward opening signals the radial wave centered on the correct source.",
+        "Recover: hands settle without making the character kneel or stop walking."
+      ],
+      "timing": "For instant skills, the effect occurs at accepted input; start the visual at its open/pulse key and use 0.15–0.30s nonblocking follow-through. Wind-up skills can use the full gather phase. Suggested recovery 0.15–0.25s, interruptible. Effect duration does not become animation duration.",
+      "body_layer": "Upper-body additive; locomotion and aiming continue wherever current mechanics allow.",
+      "variants": "Blessing: soft raised palm. Barrier: protective forearms open. Frost: stronger compression and sharp outward snap. Command salute: brief brow/weapon salute feeds the same opening for Knight’s Guidance and Hawk’s Vigil. These are hand-profile variants, not changes to pulse shape.",
+      "synchronization": "BUFF_APPLY / HEAL_APPLY / NOVA_RELEASE occur once at their existing callback. An allied/relic source remains there even though the caster performs the gesture. Persistent aura ticks and expiration bursts are independent.",
+      "cautions": "Self waves are 360-degree radial rings, not forward beams. Do not force full-body recovery on instant heals. Damage or healing events are never duplicated because two arms open. Shield/staff/bow remains attached to its original hand."
+    },
+    {
+      "id": "ANIM_04",
+      "name": "War Cry",
+      "purpose": "A compact chest-led rally with a larger deliberate version and a small automatic reaction.",
+      "key_poses": [
+        "Gather: elbows bend inward and torso compresses slightly.",
+        "Open: shoulders spread and chest rises over balanced hips.",
+        "Roar: head lifts modestly and fists/weapon widen.",
+        "Recover: return to the current stance without overshooting or trembling."
+      ],
+      "timing": "Battlecry uses a brief visible release at actual buff application, then 0.25–0.45s cosmetic settle. Automatic Fury/Overcharge uses at most a 0.10–0.20s additive accent, or VFX only during a conflicting action.",
+      "body_layer": "Upper-body additive by default; full stance only when idle and permitted.",
+      "variants": "Mercenary: grounded fist clench and roar. Archmage: arms open and energy breath. Automatic proc: shoulder/chest accent only.",
+      "synchronization": "PROC_GRANTED and BUFF_APPLY must not wait for the visible pose. An automatic proc cannot replace an active skill clip or alter its scheduled impact.",
+      "cautions": "Do not reintroduce the oscillation removed in v0.25.14. No camera shake baked into bones. No forced attack interruption, stun or root movement for an automatic trait."
+    },
+    {
+      "id": "ANIM_05",
+      "name": "Arc Cutter",
+      "purpose": "A reusable coil–cut–follow sequence whose plane and sequence count match the skill.",
+      "key_poses": [
+        "Coil: weight settles, weapon chambers to the chosen side, head stays on aim.",
+        "Cut: hips lead and shoulders follow as the weapon crosses the intended plane.",
+        "Follow: blade finishes past the target line, elbows remain plausible.",
+        "Reset: return through a short guard or chain directly into the next chamber."
+      ],
+      "timing": "The cut crosses its release plane at each existing attack callback. For repeated waves, reuse alternating cuts at the existing cadence, blending from current pose instead of returning to idle. Charged variants hold in coil and release only when the current skill allows.",
+      "body_layer": "Upper body with a limited stance layer; translation remains owned by gameplay.",
+      "variants": "Horizontal: Heavy Slash/Moonlight/Halfmoon. Opposing diagonals: Grand Cross’s two cuts. Fan: Crescent Cleave emits several remote cleaves from one broad sweep. Heavy finishing cut: increased amplitude, not a free extra hit.",
+      "synchronization": "CUT_RELEASE emits the intended projectile/wave or activates the melee snapshot. One fan can emit many projectiles. Afterimages are effect events, not necessarily additional physical swings.",
+      "cautions": "The current warrior_heavy pose is diagonal while its lore calls it horizontal: use horizontal here. Moonlight’s horizontal wave should not be represented as an unrelated vertical slam merely because the existing finisher clip does that. Do not count every VFX trail as a new attack."
+    },
+    {
+      "id": "ANIM_06",
+      "name": "Earthbreaker",
+      "purpose": "A shared grounded power-stroke family with separately authored descending and rising paths.",
+      "key_poses": [
+        "Load: bend knees and set weapon close to the body.",
+        "Prepare: descending version raises overhead; rising version draws low behind the hip.",
+        "Drive: transfer weight as weapon crosses down or up through the target plane.",
+        "Release: ground fissure/astral blade/wave starts along the authoritative aim.",
+        "Recover: unload the pose and return to guard or next slam."
+      ],
+      "timing": "Use the existing wind-up W and release at its end. Repeated slams get one drive per real slam event. Suggested cosmetic settle 0.15–0.30s; no additional charge stage.",
+      "body_layer": "Full upper body; stance layer only when movement is already committed.",
+      "variants": "Downstroke: Seismic Guillotine / Astral Greatblade. Rising stroke: Impact Wave. Rising is a separately authored motion variant, NOT reverse playback of the downstroke: grips and balance must make sense.",
+      "synchronization": "STROKE_RELEASE starts the traveling ground effect; endpoint impact belongs to the effect. Greatblade aligns to crosshair aim, not an outdated torso facing.",
+      "cautions": "Do not turn Seismic Guillotine into a falling guillotine prop. Do not make Impact Wave a downward stomp. A giant spectral blade can exaggerate weapon size without stretching the player skeleton."
+    },
+    {
+      "id": "ANIM_07",
+      "name": "Ground Seal",
+      "purpose": "A reusable low weight shift for a grounded command, stomp, or trap placement.",
+      "key_poses": [
+        "Load: transfer weight to support leg, keep eyes on valid target.",
+        "Lower: bend both knees with a modest torso hinge.",
+        "Contact: foot stamps, staff butt presses, or free hand reaches down according to profile.",
+        "Recover: rise through legs; do not pop the whole model upward."
+      ],
+      "timing": "Contact occurs at the real stomp/placement/cast callback. If an effect is immediate, begin at a shortened contact pose rather than postponing the effect. Follow-through 0.15–0.30s is cosmetic. Remote persistence does not require repeated stamping.",
+      "body_layer": "Leg-aware full body for planted casts; mobile upper-body command variant for Horizon Walker’s instant Stonefang.",
+      "variants": "Stomp = foot contact. Stonefang = staff/palm command, effect at aimed ground. Snare = small careful placement, not an impact explosion. They share lowering/recovery, but have distinct contact limbs.",
+      "synchronization": "LOCAL_CONTACT authorizes the visual stomp/placement cue only. REMOTE_ERUPTION stays at the aimed location. Subsequent shocks/ticks run independently from the original center.",
+      "cautions": "No chest-through-knees bend to fake a crouch. Snare may be targeted remotely in code: show a placing/dispatching gesture without moving the player to the target. Acrobat airborne casting uses a wrist command instead of forcing ground contact."
+    },
+    {
+      "id": "ANIM_08",
+      "name": "Flash Draw",
+      "purpose": "A short sword command that causes several cuts at a remote point.",
+      "key_poses": [
+        "Ready: main hand draws toward the opposite hip, blade safely angled.",
+        "Draw: a fast compact outward cut, head tracking the remote aim.",
+        "Release: remote slash sphere appears; torso does not teleport there.",
+        "Reset: controlled return to hip guard or next cast."
+      ],
+      "timing": "Respect the charge/recast buffer. For immediate release, start at the draw key and spend 0.15–0.25s on cosmetic recovery. No mandatory resheathing delay between charges.",
+      "body_layer": "Upper-body additive with optional low stance while stationary.",
+      "variants": "Bare blade at hip, two-handed grip, or virtual-hilt command when the held item differs. A physical scabbard is optional, not required equipment.",
+      "synchronization": "DRAW_RELEASE creates the one authorized remote cut event. Its internal simultaneous cuts or Ascended extra cut remain effect logic.",
+      "cautions": "Do not make Blade Storm a player-centered tornado. Do not create actual sheath/equip operations to support the pose. One cast consumes only its existing charge."
+    },
+    {
+      "id": "ANIM_09",
+      "name": "Cyclone",
+      "purpose": "A grounded yaw rotation with interchangeable entry, loop and exit.",
+      "key_poses": [
+        "Coil: hips load opposite the intended turn, weapon close.",
+        "Turn: pivot supporting feet and sweep the active arm/weapon out.",
+        "Loop: continue continuous yaw with a stable head/torso silhouette.",
+        "Exit: decelerate into the next legal guard without unwinding backward."
+      ],
+      "timing": "One-turn mode maps to a single attack sweep. Two-turn mode maps to two existing swing events and their gap. Loop mode runs for the channel duration and exits at the current stop callback. Visual RPM is cosmetic; damage ticks keep their existing independent schedule.",
+      "body_layer": "Full body with footwork; visual yaw only. Gameplay movement, capsule orientation and aim are not spun involuntarily.",
+      "variants": "Steel: Circle Swing/Whirlwind. Enlarged sword: Eclipse. Unarmed/bow-safe wind: Furious Winds. Finisher: Ascended Halfmoon release.",
+      "synchronization": "SWEEP_RELEASE is explicit for each one-shot; CHANNEL_TICK belongs to gameplay during loops; CHANNEL_END may invoke the existing final sweep. Reflection window stays attached to the actual Eclipse event.",
+      "cautions": "Do not pivot a running character’s feet as if glued to one point. Do not add a circle-spin wind-up to an instant projectile. Handle final rotation as accumulated turns, then neutralize visually without a backwards 360-degree reset."
+    },
+    {
+      "id": "ANIM_10",
+      "name": "Vanguard",
+      "purpose": "A low forward drive sharing leg/torso motion while hand profiles distinguish shield bash from sword thrust.",
+      "key_poses": [
+        "Brace: lower center of mass and keep head above lead shoulder.",
+        "Commit: active implement points forward; torso leans into travel.",
+        "Drive: short running/dashing posture that tracks legal steering.",
+        "Finish: shield shoves forward or sword finishes the thrust.",
+        "Recover: weight comes back over the feet."
+      ],
+      "timing": "Enter within the existing wind-up or immediately for instant Shield Charge. Hold the drive while the actual dash runs. End at distance/collision/manual bash callbacks, not an animation timer.",
+      "body_layer": "Full body, movement supplied exclusively by the current charge controller.",
+      "variants": "Shield profile: off-hand shield leads, main weapon behind. Thrust profile: main-hand weapon points forward with off hand guiding when free. Never share the same arm pose blindly.",
+      "synchronization": "DASH_START, DASH_CONTACT and BASH/THRUST_END are separate. Continuous charge hit ticks are not additional arm thrusts.",
+      "cautions": "Shield Charge retains its non-Ghost collision, steering and distance budget. Frenzied Charge retains its own traversal rules. Sharing visuals must never copy collision rules or invulnerability from one skill to another."
+    },
+    {
+      "id": "ANIM_11",
+      "name": "Comet Dive",
+      "purpose": "A streamlined head-leading travel pose with a safe exit.",
+      "key_poses": [
+        "Align: look along travel direction and pull limbs into a narrow silhouette.",
+        "Dive: chest/head lead with arms protecting forward or swept behind according to equipment.",
+        "Brake: unfold legs and begin rotating upright only as needed at travel end.",
+        "Land/continue: compress if grounded, otherwise blend to airborne locomotion."
+      ],
+      "timing": "Fit to the current movement duration. Angel Comet has its own ascent then dive; Swallow Dive is a short aimed dash. Swallow’s airborne exit must not wait for landing to finish the cast.",
+      "body_layer": "Full-body orientation driven by path direction, translation controlled by gameplay.",
+      "variants": "Angel: dramatic ascent into downward comet. Swallow: quick near-horizontal or aim-direction dive. Share streamline and exit modules, not the whole trajectory.",
+      "synchronization": "DIVE_END / WORLD_CONTACT drive their respective effects. A delayed wind slash is a separate path effect, not another dive.",
+      "cautions": "Keep Angel Comet distinct from Olympic Hero’s axial spin. Do not drive the head into terrain; hands/weapon guard lead and hips rotate on landing. Preserve Swallow’s momentum, charges and airborne support."
+    },
+    {
+      "id": "ANIM_12",
+      "name": "Power Pitch",
+      "purpose": "One torso-coil and release family for thrown or batted magical projectiles.",
+      "key_poses": [
+        "Load: main elbow/weapon chambers behind shoulder or side.",
+        "Drive: hips rotate first and chest follows.",
+        "Release: main arm extends through the launch direction.",
+        "Follow: arm finishes across body then resets."
+      ],
+      "timing": "Release matches the projectile spawn callback at the end of the current wind-up. Returning projectiles get a separate short call/catch gesture at actual return, not a replay of the throw.",
+      "body_layer": "Upper body with mild stance; no unrequested forward step displacement.",
+      "variants": "Overarm pitch: Judgement Hammer. Sideways bat strike: Punishing Bomb. Both share coil and follow-through, but require different arm paths. Hammer return adds a catch overlay.",
+      "synchronization": "PROJECTILE_RELEASE starts flight; PROJECTILE_CONTACT triggers impact; RETURN_CONTACT triggers catch only if return really succeeds.",
+      "cautions": "Do not throw away the equipped weapon or change inventory. Summoned hammer/bomb is a separate object. Batted bomb retains its ballistic falloff and first-contact explosion; hammer retains its own straight spinning flight."
+    },
+    {
+      "id": "ANIM_13",
+      "name": "Pulse Drive",
+      "purpose": "A compact chamber-and-push that reads as punch, cone blast, targeted blessing or orb launch.",
+      "key_poses": [
+        "Chamber: main elbow close to ribs/shoulder; off hand guards.",
+        "Drive: main hand/implement moves forward toward the aim.",
+        "Release: fist/palm reaches the visual emission plane.",
+        "Reset: retract while maintaining aim and legal locomotion."
+      ],
+      "timing": "Wind-up attacks use the full chamber. Instant casts start at release and follow through; they do not wait 0.1s for the hand. Usually 0.15–0.25s cosmetic follow-through.",
+      "body_layer": "Upper-body additive; no automatic dash.",
+      "variants": "Fist: Impact Punch. Palm/staff cone: Zap/Flame. Two-hand orb: Gravity Blast. Gentle directed palm: Ascended Holy Wave to ally.",
+      "synchronization": "PUNCH_CONTACT or CAST_RELEASE maps to the existing gameplay event. Cone originates in front of caster; orb continues independently; directed heal affects selected ally.",
+      "cautions": "Same arm motion does not mean same hitbox. Zap is horizontal; Righteous Strike is a sky effect and uses Sky Command. Never add a lingering melee hitbox to magical gestures."
+    },
+    {
+      "id": "ANIM_14",
+      "name": "Rift Conductor",
+      "purpose": "Short mobile command gestures for effects that operate independently of the caster.",
+      "key_poses": [
+        "Indicate: head and available hand/weapon sight the target.",
+        "Command: one short point, pinch, outward fan or inward pull.",
+        "Release: acknowledge creation/activation without holding the caster in place.",
+        "Continue: blend back into the already running movement/attack."
+      ],
+      "timing": "Immediate variants are zero-wind-up release-first overlays. Gravity Dominion may use its existing deliberate wind-up with the inward-pull variant. Delayed ground detonation time is not caster wind-up. A two-stage input keeps its actual arming versus firing distinction.",
+      "body_layer": "Upper-body additive, lower-body stride preserved; if a shot already owns the arms, reduce gesture to wrist/head/VFX rather than interrupt firing.",
+      "variants": "Open/fan = swords, copies, portals. Point = dispatch. Pinch = detonate/stop. Pull = Gravity Dominion. Closing palm = dismiss a relic. These are explicit variants, not one ambiguous pose.",
+      "synchronization": "COMMAND_ACCEPTED, VOLLEY_ARMED, SHOT_RELEASE, PORTAL_PLACED, ORB_STOP, ORB_DETONATE and TARGET_DETONATION are separate signals.",
+      "cautions": "Phalanx recast arms the volley; do not make the release gesture fire it early. Rift Echo fires behind the enemy, not from the caster hand. Arcane Rupture detonates after the target delay while caster stays mobile. World ticks/copies do not force repeated player gestures."
+    },
+    {
+      "id": "ANIM_15",
+      "name": "Ghost Step",
+      "purpose": "A teleport transition that preserves the motion already underway.",
+      "key_poses": [
+        "Before: sample the current stride, attack, aim and equipment pose.",
+        "Depart: very small directional lean or VFX-only disappearance.",
+        "Arrive: restore the same phase at the destination.",
+        "Continue: carry on without a forced idle, stumble or landing."
+      ],
+      "timing": "Teleport happens at the existing callback. Suggested cosmetic fade/lean 0.06–0.12s, but never delays transport. There is no interpolated run between endpoints.",
+      "body_layer": "Non-owning transition overlay; preserve any higher-priority cast/attack state and lower-body phase.",
+      "variants": "Void Step; Rift Walker traversal. Portal placement itself uses Rift Conductor.",
+      "synchronization": "TELEPORT_COMMIT moves gameplay root exactly once; disappearance/reappearance follow it. Featherfall/fall-state reset stays in the existing mechanic.",
+      "cautions": "Do not reset animation to idle midattack. Do not translate through walls visually like a dash. Preserve current momentum policy and ground/air exit behavior. No new i-frames."
+    },
+    {
+      "id": "ANIM_16",
+      "name": "Siege Caster",
+      "purpose": "A braced aim/charge hold with a controlled magical release.",
+      "key_poses": [
+        "Brace: staff settles toward crosshair, elbows maintain equipment grip.",
+        "Hold: shoulders load behind implement, stable stance or moving aim layer.",
+        "Fire: short recoil behind the beam/shot, head remains on aim.",
+        "Settle: return to firing posture or neutral depending on channel state."
+      ],
+      "timing": "Normal Railcannon uses existing wind-up then one shot. Ascended beam uses one entry, sustained hold, and one release exit; do not replay the entire recoil every damage tick. Normal charged staff uses its existing charge/release rules.",
+      "body_layer": "Upper body over locomotion where staff charging is mobile; committed leg profile only for an already restricted cast.",
+      "variants": "Single beam; steered sustained beam; charged staff projectile; dual-staff compatibility uses two separate grips.",
+      "synchronization": "CHARGE_START, SHOT_RELEASE, BEAM_START, BEAM_END are explicit. Beam direction follows current aim; recoil is cosmetic and does not modify projectile falloff.",
+      "cautions": "Do not invent a mechanical cannon. A spell beam and a normal ballistic staff shot use the same bracing concept but different gameplay projectile types. Overcharge accelerates wind-up via existing scaling, not arbitrary shortening of the whole skill."
+    },
+    {
+      "id": "ANIM_17",
+      "name": "Deadeye Draw",
+      "purpose": "A common bow/crossbow aim–release family. This animation name is separate from Bowmaster’s Deadeye mastery.",
+      "key_poses": [
+        "Aim: bow remains in left hand and sight line stays toward crosshair.",
+        "Draw/hold: right fingers at string/cheek; crossbow profile braces its stock instead.",
+        "Loose: right fingers release, left arm stays extended; crossbow trigger profile has no phantom string draw.",
+        "Reset: small string-hand recovery into the next legal shot."
+      ],
+      "timing": "Instant shots start at loose or use the current aim pose; no extra draw delay. Charged Ballista holds until input release. Repeated volleys fit the exact existing interval with no added reset lock. Cosmetic recoil comes from one owner only.",
+      "body_layer": "Upper-body firing layer; planted leg/kneeling variant only if allowed by existing cast restrictions.",
+      "variants": "Snap; charged siege draw; hip trick-shot; low braced pin; heavy explosive recoil; alternating fan volleys; bow versus crossbow equipment profiles.",
+      "synchronization": "SHOT_RELEASE spawns the projectile or resolves the current volley. Ricochet/cluster/bounce impacts do not trigger extra caster releases.",
+      "cautions": "Do not call the animation when reloading/equipment would invalidate the skill. Preserve Ranger’s measured quick-shot timing and avoid restoring the doubled recoil removed in v0.25.14. Crossbow Bowmaster skills require a real compatible arm pose."
+    },
+    {
+      "id": "ANIM_18",
+      "name": "Rebound Shot",
+      "purpose": "A true backwards somersault while retreating, with a forward-facing aerial release.",
+      "key_poses": [
+        "Load: compress knees while aiming toward the threat.",
+        "Flip: spring straight backward, tuck legs and rotate around the left-to-right body axis.",
+        "Apex shot: bow stays in left hand; sight and release toward original target during the existing midair event.",
+        "Land: extend legs and return facing the threat."
+      ],
+      "timing": "Current shared BackFlip uses 0.3s travel; apex event near 0.15s. Preserve those mechanics. Do not stretch to a cinematic 1s flip. Use broad readable key poses and a tightly compressed draw transition.",
+      "body_layer": "Full body; shared movement path supplied by current BackFlip routine.",
+      "variants": "Tumble Shot and Gale Volley share the exact core. Ascended Gale adds a second firing accent after the first, not another jump.",
+      "synchronization": "APEX_RELEASE fires the fan once. Second fan follows its existing event even if the body is already landing. Invulnerability remains controlled by gameplay.",
+      "cautions": "Not Olympic Hero: this rotation is a backflip, not a long-axis horizontal barrel roll. Keep bow from intersecting torso during tuck. Collision shortening must not suppress the shot event or duplicate it."
+    },
+    {
+      "id": "ANIM_19",
+      "name": "Sky Archer",
+      "purpose": "A shared raised-bow release and bombardment support family with a separate airborne hover module.",
+      "key_poses": [
+        "Raise: bow inclines toward sky or target below according to variant.",
+        "Draw: right hand anchors string, left elbow stabilizes.",
+        "Loose: release one initiating shot or the current repeated volley.",
+        "Recover/hover: lower bow after ground cast, or maintain the aerial aim loop while hovering."
+      ],
+      "timing": "Arrow Rain’s initiation uses its current instant acceptance; Starfall fits the actual channel then releases. Skyfall uses its existing 0.5s ascent and hover duration. Repeated hover gestures follow actual shot events, not every cosmetic falling arrow.",
+      "body_layer": "Grounded upper body for sky release; full body only for Skyfall’s existing ascent/hover/descent.",
+      "variants": "Upward command: Arrow Rain/Starfall. Downward hover fire: Skyfall after its own backflip ascent. Bowmaster crossbow profile tilts/braces the crossbow instead of drawing a nonexistent string.",
+      "synchronization": "SKY_RELEASE starts remote rain; CHANNEL_COMPLETE starts Starfall bombardment; HOVER_SHOT follows current periodic shots. Remote impact ticks continue independently after recovery.",
+      "cautions": "Sharing sky effects does not justify replacing an archer with a mage hand-wave. Skyfall steering applies only where current Ascended mechanics allow. Landing recovery happens only on actual ground contact; no premature aerial kneel."
+    },
+    {
+      "id": "ANIM_20",
+      "name": "Phoenix Rise",
+      "purpose": "A restrained survival-proc recovery accent that reads as being restored without acting like a knockdown.",
+      "key_poses": [
+        "Brace: brief shoulder/chest compression, retaining the current support pose.",
+        "Rise: torso straightens without moving the gameplay root.",
+        "Restore: a small opening and light accent show the save.",
+        "Continue: immediately resume the current movement/attack state."
+      ],
+      "timing": "Automatic save applies immediately. Proposed additive visual length 0.20–0.40s only while it does not interrupt an action; otherwise show VFX only. Never add a full stand-up cinematic.",
+      "body_layer": "Low-priority upper-body additive reaction; no new control lock.",
+      "variants": "Bless Thy Sinners / Guardian Angel survival trigger in the current code.",
+      "synchronization": "SURVIVAL_PROC is authoritative and can preempt purely cosmetic idle styling, not gameplay skills. Do not replay it per heal tick.",
+      "cautions": "Keep distinct from resurrecting a dead player. Do not add falling, kneeling or a delayed recovery requirement. Competing damage reactions and active casts take the defined priority; never start another root owner."
+    }
+  ],
+  "skills": [
+    {
+      "class_name": "Warrior",
+      "skill_id": "heavy_slash",
+      "family_ids": [
+        "ANIM_05"
+      ],
+      "variant": "Horizontal heavy cut",
+      "current_intention": "A short-range heavy horizontal strike with Broken Bones.",
+      "proposed_action": "Set the weapon beside the rear hip, coil shoulders, then drive one broad horizontal cut. Keep the weapon plane aligned with the actual attack rather than the existing diagonal pose.",
+      "event_contract": "Cross the strike plane when the existing melee damage snapshot runs. Preserve current wind-up scaling, equipment checks and input locks.",
+      "ascended_difference": "Mercenary Ascension: stronger, longer-reaching strike and on-hit Hyper Armor. Broaden the follow-through; do not add a combo, extra strike or unconditional armor grant.",
+      "current_clip_names": [
+        "warrior_heavy",
+        "merc_heavy_asc"
+      ],
+      "skill_name": "Heavy Slash",
+      "role": "Skill",
+      "class_internal_id": "Warrior",
+      "family_names": [
+        "Arc Cutter"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 3141,
+          "source": "DragonCombat.PlayClip(player, \"merc_heavy_asc\", windup);"
+        },
+        {
+          "file": "AlbedosCustomClasses.Skills.cs",
+          "line": 615,
+          "source": "DragonCombat.PlayClip(player, \"warrior_heavy\", windup);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Warrior",
+      "skill_id": "impact_wave",
+      "family_ids": [
+        "ANIM_06"
+      ],
+      "variant": "Rising stroke",
+      "current_intention": "Launch a ground-following shockwave along the aimed path.",
+      "proposed_action": "Lower the blade or club near the rear hip, sink through the knees and cut upward through the ground-facing release line. Let the torso open as the wave leaves.",
+      "event_contract": "STROKE_RELEASE starts the wave. Terrain following, travel and target hits remain in the projectile routine.",
+      "ascended_difference": "Sword Master Ascension adds the returning path aftershock. One initial body stroke only; the aftershock is a world effect, not another swing.",
+      "current_clip_names": [
+        "warrior_impact_wave"
+      ],
+      "skill_name": "Impact Wave",
+      "role": "Skill",
+      "class_internal_id": "Warrior",
+      "family_names": [
+        "Earthbreaker"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 2472,
+          "source": "DragonCombat.PlayClip(player, \"warrior_impact_wave\", windup);"
+        },
+        {
+          "file": "AlbedosCustomClasses.Skills.cs",
+          "line": 652,
+          "source": "DragonCombat.PlayClip(player, \"warrior_impact_wave\", windup);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Warrior",
+      "skill_id": "impact_punch",
+      "family_ids": [
+        "ANIM_13"
+      ],
+      "variant": "Fist drive",
+      "current_intention": "A brief close-range punch that stuns eligible Small enemies.",
+      "proposed_action": "Tuck the main elbow, turn the shoulder forward and punch straight through the target plane. Off hand protects the chest; feet do not slide forward.",
+      "event_contract": "PUNCH_CONTACT at the existing post-wind-up hit. Use a render-only weapon accommodation if necessary; no inventory or hitbox changes.",
+      "ascended_difference": "No dedicated Ascended version in the current kit.",
+      "current_clip_names": [
+        "warrior_punch"
+      ],
+      "skill_name": "Impact Punch",
+      "role": "Skill",
+      "class_internal_id": "Warrior",
+      "family_names": [
+        "Pulse Drive"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "AlbedosCustomClasses.Skills.cs",
+          "line": 713,
+          "source": "DragonCombat.PlayClip(player, \"warrior_punch\", windup);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Sword Master",
+      "skill_id": "moonlight_splitter",
+      "family_ids": [
+        "ANIM_05"
+      ],
+      "variant": "Alternating horizontal waves",
+      "current_intention": "Repeated forward crescent waves; the caster actively releases each main wave.",
+      "proposed_action": "Alternate short horizontal cuts without returning to idle. For the large final wave, settle into a deeper side chamber, briefly hold, then drive a wider horizontal finish.",
+      "event_contract": "Each actual main-wave spawn receives one CUT_RELEASE. Use current per-wave intervals and final wind-up; do not reuse the same full wind-up before every cut.",
+      "ascended_difference": "Four fast waves, a larger fifth, then its afterimage in this build. The afterimage repeats the effect silhouette without making an extra damage-owning player swing.",
+      "current_clip_names": [
+        "sm_slash_a",
+        "sm_slash_b",
+        "sm_moon_finisher"
+      ],
+      "skill_name": "Moonlight Splitter",
+      "role": "Skill",
+      "class_internal_id": "Sword Master",
+      "family_names": [
+        "Arc Cutter"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 1393,
+          "source": "DragonCombat.PlayClip(player, slash % 2 == 0 ? \"sm_slash_a\" : \"sm_slash_b\", 0.1f);"
+        },
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 1987,
+          "source": "DragonCombat.PlayClip(player, wave % 2 == 0 ? \"sm_slash_a\" : \"sm_slash_b\", 0.08f);"
+        },
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 1994,
+          "source": "DragonCombat.PlayClip(player, \"sm_moon_finisher\", finisherWindup);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Sword Master",
+      "skill_id": "crescent_cleave",
+      "family_ids": [
+        "ANIM_05"
+      ],
+      "variant": "Fan sweep",
+      "current_intention": "A single cast dispatches a fan of upright traveling cleaves.",
+      "proposed_action": "Coil into a broad side sweep, extending the main hand toward the center of the fan. Add a small second wrist/shoulder accent for the delayed gap-filling fan.",
+      "event_contract": "First and second fan-release callbacks own their cleave counts. Thirteen projectiles do not mean thirteen full-body swings.",
+      "ascended_difference": "Seven initial cleaves and six gap-fill cleaves, with fire trails and Burn. The trails continue independently; preserve current delay and burn logic.",
+      "current_clip_names": [
+        "sm_crescent"
+      ],
+      "skill_name": "Crescent Cleave",
+      "role": "Skill",
+      "class_internal_id": "Sword Master",
+      "family_names": [
+        "Arc Cutter"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 1475,
+          "source": "DragonCombat.PlayClip(player, \"sm_crescent\", windup);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Sword Master",
+      "skill_id": "blade_storm",
+      "family_ids": [
+        "ANIM_08"
+      ],
+      "variant": "Remote draw command",
+      "current_intention": "Spend a charge to create a sphere of cuts at the aimed location.",
+      "proposed_action": "Bring the blade near the opposite hip, make one quick outward draw and finish in a narrow guard. Remote cuts answer the gesture; the player stays where they are.",
+      "event_contract": "One DRAW_RELEASE per accepted cast/charge. Do not create a persistent player-centered spinning hitbox or require a real sheath.",
+      "ascended_difference": "More charges and an extra remote cut per cast. Reuse exactly the same body action.",
+      "current_clip_names": [
+        "sm_blade_storm"
+      ],
+      "skill_name": "Blade Storm",
+      "role": "Skill",
+      "class_internal_id": "Sword Master",
+      "family_names": [
+        "Flash Draw"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 1576,
+          "source": "DragonCombat.PlayClip(player, \"sm_blade_storm\", 0.12f);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Sword Master",
+      "skill_id": "frenzied_charge",
+      "family_ids": [
+        "ANIM_10"
+      ],
+      "variant": "Sword thrust",
+      "current_intention": "A committed forward thrust dash.",
+      "proposed_action": "Pull the sword near the ribs with point aimed forward, lean into the dash, then extend through the thrust. Recover from the actual endpoint with knees absorbing momentum.",
+      "event_contract": "Preserve existing wind-up, dash path, collision policy and attack cancellation. The thrust endpoint is not inferred from clip length.",
+      "ascended_difference": "Shorter wind-up, greater distance and width. Time-scale the entry and hold the drive; no added leap or spinning finisher.",
+      "current_clip_names": [
+        "sm_thrust"
+      ],
+      "skill_name": "Frenzied Charge",
+      "role": "Skill",
+      "class_internal_id": "Sword Master",
+      "family_names": [
+        "Vanguard"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 2170,
+          "source": "DragonCombat.PlayClip(player, \"sm_thrust\", windup);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Sword Master",
+      "skill_id": "eclipse",
+      "family_ids": [
+        "ANIM_09"
+      ],
+      "variant": "Single great sweep",
+      "current_intention": "An enlarged magical blade cuts all around the caster.",
+      "proposed_action": "Coil across the body and pivot through one full horizontal sweep, keeping the enlarged spectral blade outside the torso. Finish facing the legal combat direction.",
+      "event_contract": "Bind the sweep to the existing radial hit event. Cosmetic blade arc does not add repeated contacts.",
+      "ascended_difference": "Larger radius and an eligible-projectile reflection window. Tie the visible defensive arc to that exact existing window.",
+      "current_clip_names": [
+        "sm_eclipse"
+      ],
+      "skill_name": "Eclipse",
+      "role": "Skill",
+      "class_internal_id": "Sword Master",
+      "family_names": [
+        "Cyclone"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 2312,
+          "source": "DragonCombat.PlayClip(player, \"sm_eclipse\", windup);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Sword Master",
+      "skill_id": "halfmoon_slash",
+      "family_ids": [
+        "ANIM_05",
+        "ANIM_09"
+      ],
+      "variant": "Paired cuts, optional held spin finish",
+      "current_intention": "Two scheduled large slashes; current Ascension adds an input-controlled finisher.",
+      "proposed_action": "Perform the current paired horizontal cuts. In Ascension, settle into the existing pulled-back stance; when the permitted Left Click arrives, flow into a strong spin cut and release the large wave.",
+      "event_contract": "Preserve both scheduled slash events, stance eligibility, timeout/cancel and separate finisher input. Do not automatically fire the optional finisher.",
+      "ascended_difference": "Current build uses a held stance and large Free Aim Ghost wave, not the earlier three slow persistent laser proposal. Match current code.",
+      "current_clip_names": [
+        "sm_halfmoon",
+        "sm_halfmoon_2",
+        "sm_halfmoon_stance",
+        "sm_halfmoon_finisher"
+      ],
+      "skill_name": "Halfmoon Slash",
+      "role": "Ultimate",
+      "class_internal_id": "Sword Master",
+      "family_names": [
+        "Arc Cutter",
+        "Cyclone"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 2390,
+          "source": "DragonCombat.PlayClip(player, \"sm_halfmoon_2\", 0.1f);"
+        },
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 2397,
+          "source": "DragonCombat.PlayClip(player, \"sm_halfmoon_stance\", pull, true);"
+        },
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 2421,
+          "source": "DragonCombat.PlayClip(player, \"sm_halfmoon_finisher\", swing);"
+        },
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 3432,
+          "source": "DragonCombat.PlayClip(player, \"sm_halfmoon\", ascWindup);"
+        },
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 3438,
+          "source": "DragonCombat.PlayClip(player, \"sm_halfmoon\", windup);"
+        },
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 3466,
+          "source": "DragonCombat.PlayClip(player, \"sm_halfmoon_2\", 0.1f);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Sword Master",
+      "skill_id": "knights_guidance",
+      "family_ids": [
+        "ANIM_03"
+      ],
+      "variant": "Command salute",
+      "current_intention": "A radial party mobility/stamina Grace.",
+      "proposed_action": "Briefly salute with the free hand or weapon, then open the forearm to send the blessing outward. Stay upright and ready to move.",
+      "event_contract": "BUFF_APPLY remains immediate at its current callback. Long buff duration does not hold the salute.",
+      "ascended_difference": "No separate Ascended Grace in the current kit.",
+      "current_clip_names": [
+        "sm_guidance"
+      ],
+      "skill_name": "Knight's Guidance",
+      "role": "Grace",
+      "class_internal_id": "Sword Master",
+      "family_names": [
+        "Wavecaller"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 2444,
+          "source": "DragonCombat.PlayClip(player, \"sm_guidance\", 0.15f);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Mercenary",
+      "skill_id": "stomp",
+      "family_ids": [
+        "ANIM_07"
+      ],
+      "variant": "Foot stamp",
+      "current_intention": "A local stomp followed by outward ground shocks.",
+      "proposed_action": "Shift onto the supporting leg, raise the striking knee modestly and stamp down hard. Let the knees and shoulders settle once while the shock travels away.",
+      "event_contract": "First stomp impact aligns with FOOT_CONTACT. Later shocks remain centered on their original world position, not the player after moving away.",
+      "ascended_difference": "A third wider impact is an effect-only continuation. No three stomps or additional locks.",
+      "current_clip_names": [
+        "merc_stomp"
+      ],
+      "skill_name": "Stomp",
+      "role": "Skill",
+      "class_internal_id": "Mercenary",
+      "family_names": [
+        "Ground Seal"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 3529,
+          "source": "DragonCombat.PlayClip(player, \"merc_stomp\", windup);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Mercenary",
+      "skill_id": "circle_swing",
+      "family_ids": [
+        "ANIM_09"
+      ],
+      "variant": "Mobile wind-up sweep",
+      "current_intention": "A full-circle weapon swing with movement during preparation.",
+      "proposed_action": "Carry the weapon across the rear shoulder while walking, then pivot through the swing. Blend the upper-body coil over locomotion until the actual sweep.",
+      "event_contract": "Preserve full permitted walking speed during wind-up. Each actual swing gets its existing radial hit; visual rotation does not add hits.",
+      "ascended_difference": "Two consecutive full swings. Chain directly into the second with its existing gap; launch eligibility remains damage/status logic.",
+      "current_clip_names": [
+        "merc_circle",
+        "merc_circle_2"
+      ],
+      "skill_name": "Circle Swing",
+      "role": "Skill",
+      "class_internal_id": "Mercenary",
+      "family_names": [
+        "Cyclone"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 2835,
+          "source": "DragonCombat.PlayClip(player, \"merc_circle_2\", Mathf.Max(0.05f, _circleAscGap.Value));"
+        },
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 3067,
+          "source": "DragonCombat.PlayClip(player, \"merc_circle_2\", 0.08f);   // final sweep"
+        },
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 3619,
+          "source": "DragonCombat.PlayClip(player, \"merc_circle\", windup);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Mercenary",
+      "skill_id": "bonecrusher",
+      "family_ids": [
+        "ANIM_01"
+      ],
+      "variant": "Brutal Olympic Hero",
+      "current_intention": "Leap and land with a heavy radial impact.",
+      "proposed_action": "Use the same horizontal aerial roll and main-hand superhero landing as Electric Smite. Give the final compression a heavier physical weight; use dust, fractures and ground shock instead of lightning.",
+      "event_contract": "Ground contact, not roll completion, authorizes impact. Preserve the current jump steering and landing routine. Keep the fist above ground until contact.",
+      "ascended_difference": "One delayed ground shock after landing. Reuse the impact settle; do not force a second jump or replace the resumed attack with merc_aftershock.",
+      "current_clip_names": [
+        "air_overhead",
+        "land_crash",
+        "merc_aftershock"
+      ],
+      "skill_name": "Bonecrusher",
+      "role": "Skill",
+      "class_internal_id": "Mercenary",
+      "family_names": [
+        "Olympic Hero"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 2870,
+          "source": "DragonCombat.PlayClip(player, \"land_crash\", 0.1f);"
+        },
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 2887,
+          "source": "DragonCombat.PlayClip(player, \"merc_aftershock\", Mathf.Max(0.1f, _boneAscShockDelay.Value));"
+        },
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 3581,
+          "source": "DragonCombat.PlayClip(player, \"air_overhead\", 0.2f, true);"
+        },
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 4633,
+          "source": "DragonCombat.PlayClip(player, \"air_overhead\", 0.25f, true);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Mercenary",
+      "skill_id": "seismic_guillotine",
+      "family_ids": [
+        "ANIM_06"
+      ],
+      "variant": "Descending fissure stroke",
+      "current_intention": "A weapon-driven ground fissure ending in an explosion.",
+      "proposed_action": "Lift the weapon over the main shoulder, set the hips and slam down along the aim line. Keep the visual impact near the caster while the fissure travels to the endpoint.",
+      "event_contract": "STROKE_RELEASE starts the line. The distant endpoint explosion follows the existing effect timing; no second caster hit.",
+      "ascended_difference": "Longer travel and stronger endpoint/control effects. Same motion, current scaled timings.",
+      "current_clip_names": [
+        "merc_seismic"
+      ],
+      "skill_name": "Seismic Guillotine",
+      "role": "Skill",
+      "class_internal_id": "Mercenary",
+      "family_names": [
+        "Earthbreaker"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 3690,
+          "source": "DragonCombat.PlayClip(player, \"merc_seismic\", 0.28f);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Mercenary",
+      "skill_id": "punishing_bomb",
+      "family_ids": [
+        "ANIM_12"
+      ],
+      "variant": "Bat launch",
+      "current_intention": "Bat a bomb into flight; it bursts on first physical contact.",
+      "proposed_action": "Stage a summoned bomb near the strike path, coil as for a bat swing and sweep the held implement through the launch plane. The bomb departs in the aimed direction.",
+      "event_contract": "Projectile spawn/release uses the existing cast callback. First collision, gravity and explosion remain projectile-owned; no extra melee swing damage.",
+      "ascended_difference": "Larger explosion and persistent ground fire. Same single bat motion; fire ticks do not replay the swing.",
+      "current_clip_names": [
+        "merc_bomb"
+      ],
+      "skill_name": "Punishing Bomb",
+      "role": "Skill",
+      "class_internal_id": "Mercenary",
+      "family_names": [
+        "Power Pitch"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 2906,
+          "source": "DragonCombat.PlayClip(player, \"merc_bomb\", windup);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Mercenary",
+      "skill_id": "whirlwind",
+      "family_ids": [
+        "ANIM_09"
+      ],
+      "variant": "Continuous weapon spin",
+      "current_intention": "A sustained spinning melee attack.",
+      "proposed_action": "Enter with a tight coil, extend weapons into a stable repeated spin and decelerate into a sweep at exit where supported. Keep turn count continuous rather than snapping backward.",
+      "event_contract": "Spin loop follows actual active duration. Damage ticks are independent of frame rate/number of visual revolutions. End early on the existing cancellation rules.",
+      "ascended_difference": "Longer channel, Hyper Armor and a final sweep built by actual spin time. Final sweep visual occurs only when the existing mechanic grants it.",
+      "current_clip_names": [
+        "PlaySpinClip",
+        "merc_circle_2"
+      ],
+      "skill_name": "Whirlwind",
+      "role": "Ultimate",
+      "class_internal_id": "Mercenary",
+      "family_names": [
+        "Cyclone"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 2835,
+          "source": "DragonCombat.PlayClip(player, \"merc_circle_2\", Mathf.Max(0.05f, _circleAscGap.Value));"
+        },
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 3027,
+          "source": "DragonCombat.PlaySpinClip(player, maxTime, 0.3f);   // v0.25.8: tornado spin, faster turns"
+        },
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 3067,
+          "source": "DragonCombat.PlayClip(player, \"merc_circle_2\", 0.08f);   // final sweep"
+        },
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 3941,
+          "source": "DragonCombat.PlaySpinClip(player, duration, 0.4f);   // v0.25.8: arms out, one turn every 0.4s"
+        },
+        {
+          "file": "DragonsAltar.CombatRuntime.cs",
+          "line": 1874,
+          "source": "public static void PlaySpinClip(Player player, float seconds, float turn)"
+        },
+        {
+          "file": "DragonsAltar.Ranger.cs",
+          "line": 1100,
+          "source": "DragonCombat.PlaySpinClip(player, duration, 0.5f);   // two turns a second inside the leaf storm"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Mercenary",
+      "skill_id": "battlecry",
+      "family_ids": [
+        "ANIM_04"
+      ],
+      "variant": "Deliberate roar",
+      "current_intention": "A radial damage Grace for allies.",
+      "proposed_action": "Compress the chest, draw elbows inward, then spread shoulders and roar with weapon held safely away. Return to combat stance without repeated shaking.",
+      "event_contract": "BUFF_APPLY at current acceptance; visual follow-through cannot delay allies receiving it.",
+      "ascended_difference": "No separate Ascended Grace. The smaller Fury proc variant must not hijack an active cast.",
+      "current_clip_names": [
+        "merc_roar"
+      ],
+      "skill_name": "Battlecry",
+      "role": "Grace",
+      "class_internal_id": "Mercenary",
+      "family_names": [
+        "War Cry"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 2767,
+          "source": "DragonCombat.PlayClip(player, \"merc_roar\", 0.35f);"
+        },
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 3080,
+          "source": "DragonCombat.PlayClip(player, \"merc_roar\", 0.35f);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Cleric",
+      "skill_id": "lightning_zap",
+      "family_ids": [
+        "ANIM_13"
+      ],
+      "variant": "Palm cone",
+      "current_intention": "Release a forward cone of lightning that applies the current Zap mechanics.",
+      "proposed_action": "Snap the main palm forward from a short elbow chamber. Show lightning expanding forward in a cone, with the shield staying defensive.",
+      "event_contract": "Current damage/effect is immediate even though the pose has a small lead-in. Use release-first alignment; retain the existing short skill lock rather than adding another wind-up.",
+      "ascended_difference": "No dedicated class-skill Ascension in the current branches. Existing Zap interactions remain unchanged.",
+      "current_clip_names": [
+        "cleric_zap"
+      ],
+      "skill_name": "Lightning Zap",
+      "role": "Skill",
+      "class_internal_id": "Cleric",
+      "family_names": [
+        "Pulse Drive"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "AlbedosCustomClasses.Skills.cs",
+          "line": 783,
+          "source": "DragonCombat.PlayClip(player, \"cleric_zap\", 0.12f);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Cleric",
+      "skill_id": "righteous_strike",
+      "family_ids": [
+        "ANIM_02"
+      ],
+      "variant": "Single sky strike",
+      "current_intention": "Call vertical holy lightning onto the aimed ground.",
+      "proposed_action": "Lift the main hand above the head and drag it down toward the target. The bolt descends at the remote point, not horizontally from the hand.",
+      "event_contract": "CAST_RELEASE commits the strike after current wind-up. Any trail/follow-up events remain in their current world routines.",
+      "ascended_difference": "Paladin class Ascension uses the larger strike/trail treatment. Keep one grounded call gesture; do not borrow Electric Smite’s leap.",
+      "current_clip_names": [
+        "cleric_rs",
+        "cleric_rs_asc"
+      ],
+      "skill_name": "Righteous Strike",
+      "role": "Skill",
+      "class_internal_id": "Cleric",
+      "family_names": [
+        "Sky Command"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 4808,
+          "source": "DragonCombat.PlayClip(player, \"cleric_rs_asc\", windup);"
+        },
+        {
+          "file": "AlbedosCustomClasses.Skills.cs",
+          "line": 817,
+          "source": "DragonCombat.PlayClip(player, \"cleric_rs\", windup);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Cleric",
+      "skill_id": "holy_wave",
+      "family_ids": [
+        "ANIM_03",
+        "ANIM_13"
+      ],
+      "variant": "Self wave / directed ally blessing",
+      "current_intention": "A radial heal with an Ascended ally-target option.",
+      "proposed_action": "Normal: chest gather into an open palm and radial wave. Ascended targeted use: reach a gentle palm toward the chosen ally, then recover; self fallback retains Wavecaller.",
+      "event_contract": "Healing occurs at the current callback. Correct the caster animation to that event; do not delay instant healing or move the effect center to the hand.",
+      "ascended_difference": "Priest class Ascension switches the applicable targeted gesture/source behavior. It is the same underlying Cleric identity, not a separately styled base-class tree.",
+      "current_clip_names": [
+        "cleric_wave",
+        "cleric_wave_ally"
+      ],
+      "skill_name": "Holy Wave",
+      "role": "Skill",
+      "class_internal_id": "Cleric",
+      "family_names": [
+        "Wavecaller",
+        "Pulse Drive"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 9715,
+          "source": "DragonCombat.PlayClip(player, \"cleric_wave_ally\", 0.15f);"
+        },
+        {
+          "file": "AlbedosCustomClasses.Skills.cs",
+          "line": 847,
+          "source": "DragonCombat.PlayClip(player, \"cleric_wave\", 0.15f);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Paladin",
+      "skill_id": "goddess_relic",
+      "family_ids": [
+        "ANIM_02"
+      ],
+      "variant": "Relic call",
+      "current_intention": "Summon a large holy Cross that descends onto the remote target.",
+      "proposed_action": "Use the shared Sky Command: gather at chest, raise main hand, then direct it down toward the placement point. Recover while the Cross is falling.",
+      "event_contract": "Separate cast release, falling-object arrival and ground impact. Keep the existing indoor-safe height and drop-time calculation.",
+      "ascended_difference": "Use the same cast with the current Ascended relic effects. Additional world effects do not require a new animation.",
+      "current_clip_names": [
+        "cleric_goddess"
+      ],
+      "skill_name": "Goddess Relic",
+      "role": "Skill",
+      "class_internal_id": "Paladin",
+      "family_names": [
+        "Sky Command"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 3978,
+          "source": "DragonCombat.PlayClip(player, \"cleric_goddess\", windup);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Paladin",
+      "skill_id": "judgement_hammer",
+      "family_ids": [
+        "ANIM_12"
+      ],
+      "variant": "Overarm pitch + return catch",
+      "current_intention": "Hurl a growing holy hammer; Ascension enables its return.",
+      "proposed_action": "Coil the main shoulder, pitch the summoned hammer overarm and follow across the chest. On actual return, open the hand toward it and absorb a small catch recoil.",
+      "event_contract": "PROJECTILE_RELEASE and RETURN_CONTACT are separate. Only catch if it really returns. Do not remove the equipped weapon from inventory.",
+      "ascended_difference": "Adds a return/catch overlay, not a second throwing cast or guaranteed catch on interrupted/failed returns.",
+      "current_clip_names": [
+        "cleric_hammer",
+        "cleric_hammer_call"
+      ],
+      "skill_name": "Judgement Hammer",
+      "role": "Skill",
+      "class_internal_id": "Paladin",
+      "family_names": [
+        "Power Pitch"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 4880,
+          "source": "DragonCombat.PlayClip(player, \"cleric_hammer\", windup);"
+        },
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 4942,
+          "source": "DragonCombat.PlayClip(player, \"cleric_hammer_call\", 0.2f, true);   // hand out, calling it back"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Paladin",
+      "skill_id": "shield_charge",
+      "family_ids": [
+        "ANIM_10"
+      ],
+      "variant": "Shield-first drive",
+      "current_intention": "Charge with the shield forward, retaining current steering and bash handling.",
+      "proposed_action": "Lower the hips, put the off-hand shield ahead of the chest and hold the main weapon behind the shield rim. Drive continuously; finish with a short shield shove when the real bash occurs.",
+      "event_contract": "Align entry to charge start, looping posture to actual movement, and bash to its separate event. Retain existing collision and distance budget.",
+      "ascended_difference": "Current enhanced effects use the same drive and bash phases. No borrowed invulnerability or Ghost collision from sword movement.",
+      "current_clip_names": [
+        "cleric_charge"
+      ],
+      "skill_name": "Shield Charge",
+      "role": "Skill",
+      "class_internal_id": "Paladin",
+      "family_names": [
+        "Vanguard"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 4120,
+          "source": "DragonCombat.PlayClip(player, \"cleric_charge\", 0.15f, true);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Paladin",
+      "skill_id": "fallen_angel",
+      "family_ids": [
+        "ANIM_11"
+      ],
+      "variant": "Angel ascent and comet dive",
+      "current_intention": "Angel Comet rises and then drives down toward the target.",
+      "proposed_action": "Open into the current ascent, align torso along the dive and streamline the limbs. At real contact, rotate hips under the torso and brace the main hand/guard safely.",
+      "event_contract": "Ascent, dive start and ground contact follow the movement routine. Landing pose must already be prepared when damage occurs.",
+      "ascended_difference": "Holy ground fire after impact needs no prolonged landing hold. Keep this head-leading dive distinct from Olympic Hero’s long-axis roll.",
+      "current_clip_names": [
+        "cleric_angel_rise",
+        "cleric_land"
+      ],
+      "skill_name": "Angel Comet",
+      "role": "Skill",
+      "class_internal_id": "Paladin",
+      "family_names": [
+        "Comet Dive"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 4644,
+          "source": "DragonCombat.PlayClip(player, \"cleric_land\", 0.1f);"
+        },
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 5077,
+          "source": "DragonCombat.PlayClip(player, \"cleric_angel_rise\", Mathf.Max(0.6f, _angelWindupTotal.Value) * 0.62f);"
+        },
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 5146,
+          "source": "DragonCombat.PlayClip(player, \"cleric_land\", 0.1f);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Paladin",
+      "skill_id": "ray_of_hope",
+      "family_ids": [
+        "ANIM_03"
+      ],
+      "variant": "Restorative opening",
+      "current_intention": "A radial restorative/empowering wave that also affects enemies.",
+      "proposed_action": "Raise the main palm softly, then open the arm outward from the chest with a clear protective silhouette. Preserve shield grip and combat readiness.",
+      "event_contract": "One radial application at the current callback, with healing/damage/status handling left intact. No forward beam despite the name Ray.",
+      "ascended_difference": "Barrier/cleanse treatment uses the same gesture and stronger effect accent; no new channel.",
+      "current_clip_names": [
+        "cleric_ray"
+      ],
+      "skill_name": "Ray of Hope",
+      "role": "Skill",
+      "class_internal_id": "Paladin",
+      "family_names": [
+        "Wavecaller"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 4065,
+          "source": "DragonCombat.PlayClip(player, \"cleric_ray\", 0.15f);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Paladin",
+      "skill_id": "electric_smite",
+      "family_ids": [
+        "ANIM_01"
+      ],
+      "variant": "Holy Olympic Hero",
+      "current_intention": "Leap and slam down, sending sixteen lightning trails over the ground.",
+      "proposed_action": "Compress, launch, tilt almost horizontal and rotate once around the head-to-feet axis. Unwind before contact; main fist hits first in a superhero landing with opposite foot forward.",
+      "event_contract": "Actual GROUND_CONTACT synchronizes fist, impact cue and trail launch. Preserve sixteen ground trails and their shared hit rules; no timer-driven premature impact.",
+      "ascended_difference": "Storm effects after landing remain world effects. Same complete Olympic Hero motion for normal and Ascended; no repeated fist impacts per lightning tick.",
+      "current_clip_names": [
+        "air_overhead",
+        "cleric_land"
+      ],
+      "skill_name": "Electric Smite",
+      "role": "Ultimate",
+      "class_internal_id": "Paladin",
+      "family_names": [
+        "Olympic Hero"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 3581,
+          "source": "DragonCombat.PlayClip(player, \"air_overhead\", 0.2f, true);"
+        },
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 4633,
+          "source": "DragonCombat.PlayClip(player, \"air_overhead\", 0.25f, true);"
+        },
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 4644,
+          "source": "DragonCombat.PlayClip(player, \"cleric_land\", 0.1f);"
+        },
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 5146,
+          "source": "DragonCombat.PlayClip(player, \"cleric_land\", 0.1f);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Paladin",
+      "skill_id": "heavens_light",
+      "family_ids": [
+        "ANIM_03"
+      ],
+      "variant": "Protective blessing",
+      "current_intention": "A radial defense/equipment-mobility Grace.",
+      "proposed_action": "Cross the available forearm toward the chest then open into a protective blessing. A shield can rise slightly as the wave expands.",
+      "event_contract": "BUFF_APPLY remains the single current event. Long defense duration does not hold the animation.",
+      "ascended_difference": "No separate Ascended Grace.",
+      "current_clip_names": [
+        "cleric_light"
+      ],
+      "skill_name": "Heaven's Light",
+      "role": "Grace",
+      "class_internal_id": "Paladin",
+      "family_names": [
+        "Wavecaller"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 11686,
+          "source": "DragonCombat.PlayClip(player, \"cleric_light\", 0.15f);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Priest",
+      "skill_id": "lightning_relic",
+      "family_ids": [
+        "ANIM_02",
+        "ANIM_14"
+      ],
+      "variant": "Relic call / dismiss",
+      "current_intention": "A falling remote Cross becomes a persistent offensive relic.",
+      "proposed_action": "Use exactly Goddess Relic’s Sky Command with the appropriate equipment profile. For a dismiss/relinquish recast, close the palm using Rift Conductor instead of replaying a summon.",
+      "event_contract": "Release, fall, placement and recurring pulse are separate. Pulses cannot restart the caster animation; keep the existing replacement/recast logic.",
+      "ascended_difference": "Enhanced relic behavior changes the world effect only. Shared relic combinations stay current; this pass does not redesign Sanctified interactions.",
+      "current_clip_names": [
+        "cleric_relic"
+      ],
+      "skill_name": "Lightning Relic",
+      "role": "Skill",
+      "class_internal_id": "Priest",
+      "family_names": [
+        "Sky Command",
+        "Rift Conductor"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 5426,
+          "source": "DragonCombat.PlayClip(player, \"cleric_relic\", windup);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Priest",
+      "skill_id": "holy_relic",
+      "family_ids": [
+        "ANIM_02",
+        "ANIM_14"
+      ],
+      "variant": "Relic call / dismiss",
+      "current_intention": "A remote restorative Cross descends and supports nearby allies.",
+      "proposed_action": "Use the same Sky Command pose, timing structure and equipment rules as Goddess/Lightning Relic. Make the effect warmer and gentler, not the body choreography unrelated.",
+      "event_contract": "The implementation summons from above despite planting language in some descriptions. Do not animate manually pushing a Cross into the caster’s ground.",
+      "ascended_difference": "Enhanced support and paired-relic effects run independently. Recast dismissal uses the same short closing palm as Lightning Relic.",
+      "current_clip_names": [
+        "cleric_holy_relic"
+      ],
+      "skill_name": "Holy Relic",
+      "role": "Skill",
+      "class_internal_id": "Priest",
+      "family_names": [
+        "Sky Command",
+        "Rift Conductor"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 5594,
+          "source": "DragonCombat.PlayClip(player, \"cleric_holy_relic\", windup);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Priest",
+      "skill_id": "divine_intervention",
+      "family_ids": [
+        "ANIM_03"
+      ],
+      "variant": "Remote-source blessing",
+      "current_intention": "A holy burst around the caster or an aimed relic.",
+      "proposed_action": "Gather and open the main hand while looking toward the chosen source. Keep the body at the caster position; the wave originates at the actual source.",
+      "event_contract": "CAST_RELEASE activates the existing selected-source burst. A distant relic target does not teleport the caster or require a projectile from the hand.",
+      "ascended_difference": "Additional relic-source coverage needs effect duplication only, not multiple full-body gestures.",
+      "current_clip_names": [
+        "cleric_intervention"
+      ],
+      "skill_name": "Divine Intervention",
+      "role": "Skill",
+      "class_internal_id": "Priest",
+      "family_names": [
+        "Wavecaller"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 5738,
+          "source": "DragonCombat.PlayClip(player, \"cleric_intervention\", windup);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Priest",
+      "skill_id": "grand_cross",
+      "family_ids": [
+        "ANIM_05"
+      ],
+      "variant": "Opposed diagonal cuts",
+      "current_intention": "Two crossing slashes create a traveling radiant X.",
+      "proposed_action": "Cut diagonally across the torso, reverse through a short chamber, then cut along the opposite diagonal. Let the two spectral planes form the X beyond the hands.",
+      "event_contract": "Use both existing slash timings and the current X projectile spawn logic. Keep the held implement coherent through both grips.",
+      "ascended_difference": "Enlargement/other current projectile changes preserve the two-cut performance. Do not restore an obsolete endpoint explosion.",
+      "current_clip_names": [
+        "cleric_cross_1",
+        "cleric_cross_2"
+      ],
+      "skill_name": "Grand Cross",
+      "role": "Skill",
+      "class_internal_id": "Priest",
+      "family_names": [
+        "Arc Cutter"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 5830,
+          "source": "DragonCombat.PlayClip(player, \"cleric_cross_1\", firstSlash);"
+        },
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 5837,
+          "source": "DragonCombat.PlayClip(player, \"cleric_cross_2\", secondSlash);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Priest",
+      "skill_id": "heavens_judgement",
+      "family_ids": [
+        "ANIM_02"
+      ],
+      "variant": "Barrage command",
+      "current_intention": "Holy beams strike around the caster or an aimed relic source.",
+      "proposed_action": "Raise the main hand with an open palm and pull it down decisively toward the chosen area. Recover while the barrage continues.",
+      "event_contract": "One initiating CAST_RELEASE; later beam impacts and final effects remain remote callbacks. Retain original area source selection.",
+      "ascended_difference": "The additional final column is a world event. Do not interrupt a later player action with another forced sky call.",
+      "current_clip_names": [
+        "cleric_judgement"
+      ],
+      "skill_name": "Heaven's Judgement",
+      "role": "Skill",
+      "class_internal_id": "Priest",
+      "family_names": [
+        "Sky Command"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 5942,
+          "source": "DragonCombat.PlayClip(player, \"cleric_judgement\", windup);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Priest",
+      "skill_id": "lightning_tempest",
+      "family_ids": [
+        "ANIM_02"
+      ],
+      "variant": "Grand storm call",
+      "current_intention": "Create a sustained storm field with repeated lightning effects.",
+      "proposed_action": "Use the large Sky Command variant: wider reach and a stronger downward command, followed by immediate legal recovery.",
+      "event_contract": "Storm creation is the release event. Repeated bolts do not require holding both arms overhead for the whole field duration.",
+      "ascended_difference": "A following/moving storm changes field tracking, not caster locomotion or posture duration.",
+      "current_clip_names": [
+        "cleric_tempest"
+      ],
+      "skill_name": "Lightning Tempest",
+      "role": "Ultimate",
+      "class_internal_id": "Priest",
+      "family_names": [
+        "Sky Command"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 6067,
+          "source": "DragonCombat.PlayClip(player, \"cleric_tempest\", windup);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Priest",
+      "skill_id": "grand_sigil",
+      "family_ids": [
+        "ANIM_03"
+      ],
+      "variant": "Barrier opening",
+      "current_intention": "Heaven’s Crucible wraps allies in a persistent barrier.",
+      "proposed_action": "Gather forearms near the chest and open outward into a protective dome cue. Finish in the same combat-ready guard as Heaven’s Light.",
+      "event_contract": "Barrier creation follows the existing wind-up/application. Breaking or refreshing a barrier is not a new caster animation unless there is a real recast.",
+      "ascended_difference": "No separate Ascended Grace. Preserve internal ID grand_sigil.",
+      "current_clip_names": [
+        "cleric_crucible"
+      ],
+      "skill_name": "Heaven's Crucible",
+      "role": "Grace",
+      "class_internal_id": "Priest",
+      "family_names": [
+        "Wavecaller"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 6142,
+          "source": "DragonCombat.PlayClip(player, \"cleric_crucible\", windup);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Sorcerer",
+      "skill_id": "flame_burst",
+      "family_ids": [
+        "ANIM_13"
+      ],
+      "variant": "Fire cone",
+      "current_intention": "A short forward cone of fire.",
+      "proposed_action": "Chamber the casting arm or staff slightly, then push directly toward the crosshair. Keep the cone forward and the off hand available for the current equipment.",
+      "event_contract": "Use the actual branch’s scaled wind-up, including zero-wind-up Horizon Walker. Immediate variants begin at release; preserve existing input restrictions.",
+      "ascended_difference": "No dedicated Ascended class-skill version.",
+      "current_clip_names": [
+        "sorc_flame"
+      ],
+      "skill_name": "Flame Burst",
+      "role": "Skill",
+      "class_internal_id": "Sorcerer",
+      "family_names": [
+        "Pulse Drive"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "AlbedosCustomClasses.Skills.cs",
+          "line": 885,
+          "source": "DragonCombat.PlayClip(player, \"sorc_flame\", 0.12f);"
+        },
+        {
+          "file": "DragonsAltar.Sorcerer.cs",
+          "line": 809,
+          "source": "DragonCombat.PlayClip(player, \"sorc_flame\", windup);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Sorcerer",
+      "skill_id": "glacial_descent",
+      "family_ids": [
+        "ANIM_02"
+      ],
+      "variant": "Ice sky call",
+      "current_intention": "Drop an ice impact onto aimed ground.",
+      "proposed_action": "Lift the staff or main palm, hold a compact overhead silhouette, then direct the falling ice onto the target. The caster does not slam their own feet.",
+      "event_contract": "Fit to existing scaled cast timing and remote impact callback. Zero-wind-up branch uses a short release-first command.",
+      "ascended_difference": "Archmage Ascension enlarges the impact and central effect. Same gesture with a weightier release accent; no extra cast.",
+      "current_clip_names": [
+        "sorc_glacial",
+        "sorc_glacial_asc"
+      ],
+      "skill_name": "Glacial Descent",
+      "role": "Skill",
+      "class_internal_id": "Sorcerer",
+      "family_names": [
+        "Sky Command"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "AlbedosCustomClasses.Skills.cs",
+          "line": 898,
+          "source": "float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _glacialWindup.Value)); DragonCombat.LockSkill(player, windup); DragonCombat.PlayClip(player, \"sorc_glacial\", windup); StartCoroutine(GlacialDescentRoutine(player, target, windup));"
+        },
+        {
+          "file": "DragonsAltar.Sorcerer.cs",
+          "line": 835,
+          "source": "DragonCombat.PlayClip(player, \"sorc_glacial\", windup);"
+        },
+        {
+          "file": "DragonsAltar.Sorcerer.cs",
+          "line": 1451,
+          "source": "DragonCombat.PlayClip(player, \"sorc_glacial_asc\", windup);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Sorcerer",
+      "skill_id": "stonefang_eruption",
+      "family_ids": [
+        "ANIM_07",
+        "ANIM_14"
+      ],
+      "variant": "Ground command / mobile dispatch",
+      "current_intention": "Raise damaging stone fangs at aimed ground.",
+      "proposed_action": "Base planted version: lower center of mass and press staff butt or palm downward to command the eruption. Horizon Walker: use only a quick downward wrist command while retaining stride/air pose.",
+      "event_contract": "Remote eruption remains at the aimed point. Do not force the caster to that location or add a ground-contact requirement to an airborne-legal cast.",
+      "ascended_difference": "Persistent spikes keep ticking after the initial command. They do not repeatedly stamp the caster or hold them in place.",
+      "current_clip_names": [
+        "sorc_stonefang",
+        "sorc_stonefang_asc"
+      ],
+      "skill_name": "Stonefang Eruption",
+      "role": "Skill",
+      "class_internal_id": "Sorcerer",
+      "family_names": [
+        "Ground Seal",
+        "Rift Conductor"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "AlbedosCustomClasses.Skills.cs",
+          "line": 914,
+          "source": "const string id = \"Sorcerer.StonefangEruption\"; if (!BeginCastEitr(player, id, _stoneCooldown.Value, _stoneEitr.Value)) return; float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _stoneWindup.Value)); DragonCombat.LockSkill(player, windup); DragonCombat.PlayClip(player, \"sorc_stonefang\", windup); StartCoroutine(StonefangEruptionRoutine(player, target, windup));"
+        },
+        {
+          "file": "DragonsAltar.Sorcerer.cs",
+          "line": 870,
+          "source": "DragonCombat.PlayClip(player, \"sorc_stonefang\", windup);"
+        },
+        {
+          "file": "DragonsAltar.Sorcerer.cs",
+          "line": 2627,
+          "source": "DragonCombat.PlayClip(player, \"sorc_stonefang_asc\", 0.12f);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Archmage",
+      "skill_id": "meteor_fall",
+      "family_ids": [
+        "ANIM_02"
+      ],
+      "variant": "Charged sky call",
+      "current_intention": "Hold to strengthen a meteor aimed at the ground.",
+      "proposed_action": "Gather, lift the implement high and hold a quiet call pose while aim remains adjustable. Pull down at release, then recover as the meteor falls.",
+      "event_contract": "Charge begins alongside the current wind-up. Maintain hold until actual release/cancel, including time spent at maximum charge; do not use the pose driver’s fixed hold timeout as the release signal.",
+      "ascended_difference": "Small follow-up meteors are automatic world events, including the larger count at full charge. No extra body casts per meteor.",
+      "current_clip_names": [
+        "wiz_meteor"
+      ],
+      "skill_name": "Meteor Fall",
+      "role": "Skill",
+      "class_internal_id": "Wizard",
+      "family_names": [
+        "Sky Command"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "DragonsAltar.Sorcerer.cs",
+          "line": 1234,
+          "source": "DragonCombat.PlayClip(player, \"wiz_meteor\", Mathf.Max(0.25f, windup), true);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Archmage",
+      "skill_id": "gravity_dominion",
+      "family_ids": [
+        "ANIM_14"
+      ],
+      "variant": "Deliberate gravity pull",
+      "current_intention": "Create a remote persistent gravitational field.",
+      "proposed_action": "Reach toward the target, spread the fingers around an imagined sphere and pull the hand inward as the field establishes. Settle while the field continues.",
+      "event_contract": "Keep the actual wind-up. Field pulse and pull ticks are independent of caster hand motion; preserve the selected world center.",
+      "ascended_difference": "Larger, longer field and ending explosion. The final explosion does not force a delayed arm-clench during another skill.",
+      "current_clip_names": [
+        "wiz_gravity"
+      ],
+      "skill_name": "Gravity Dominion",
+      "role": "Skill",
+      "class_internal_id": "Wizard",
+      "family_names": [
+        "Rift Conductor"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "DragonsAltar.Sorcerer.cs",
+          "line": 1058,
+          "source": "DragonCombat.PlayClip(player, \"wiz_gravity\", windup);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Archmage",
+      "skill_id": "astral_railcannon",
+      "family_ids": [
+        "ANIM_16"
+      ],
+      "variant": "Braced beam",
+      "current_intention": "Assemble and fire an aimed magical beam.",
+      "proposed_action": "Brace the implement along the crosshair, shoulders behind the emission line. Release with restrained recoil; sustained version holds that aim posture and follows permitted aim changes.",
+      "event_contract": "Normal: one SHOT_RELEASE. Ascended: BEAM_START, continuous current aiming/damage logic, then BEAM_END. No recoil on every damage tick.",
+      "ascended_difference": "Four-second steerable beam in the current build. One entry and exit; interruption must clear hold/root ownership without firing an extra final beam.",
+      "current_clip_names": [
+        "wiz_railcannon",
+        "wiz_railcannon_hold"
+      ],
+      "skill_name": "Astral Railcannon",
+      "role": "Skill",
+      "class_internal_id": "Wizard",
+      "family_names": [
+        "Siege Caster"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "DragonsAltar.Sorcerer.cs",
+          "line": 1326,
+          "source": "DragonCombat.PlayClip(player, ascended ? \"wiz_railcannon_hold\" : \"wiz_railcannon\", windup, ascended);"
+        },
+        {
+          "file": "DragonsAltar.Sorcerer.cs",
+          "line": 1378,
+          "source": "DragonCombat.PlayClip(player, \"wiz_railcannon\", 0.05f);   // last kick, then rest"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Archmage",
+      "skill_id": "astral_greatblade",
+      "family_ids": [
+        "ANIM_06"
+      ],
+      "variant": "Repeated spectral downstroke",
+      "current_intention": "Slam a giant astral blade along the current aim.",
+      "proposed_action": "Raise the casting implement as if taking the weight of a giant sword, then drive downward. Recoil into a ready overhead chamber for the next real slam.",
+      "event_contract": "Each authoritative slam gets one aligned STROKE_RELEASE. Re-aim according to existing code. Correct any pose starting after the slam rather than delaying the hit.",
+      "ascended_difference": "Three slams, no charge. Existing old altar wording about charging is stale; do not restore charging from it.",
+      "current_clip_names": [
+        "wiz_greatblade",
+        "wiz_greatblade_slam"
+      ],
+      "skill_name": "Astral Greatblade",
+      "role": "Skill",
+      "class_internal_id": "Wizard",
+      "family_names": [
+        "Earthbreaker"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "DragonsAltar.Sorcerer.cs",
+          "line": 1126,
+          "source": "DragonCombat.PlayClip(player, \"wiz_greatblade\", windup);"
+        },
+        {
+          "file": "DragonsAltar.Sorcerer.cs",
+          "line": 1154,
+          "source": "DragonCombat.PlayClip(player, \"wiz_greatblade\", windup);"
+        },
+        {
+          "file": "DragonsAltar.Sorcerer.cs",
+          "line": 1160,
+          "source": "if (slam > 0) DragonCombat.PlayClip(player, \"wiz_greatblade_slam\", 0.2f);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Archmage",
+      "skill_id": "frost_nova",
+      "family_ids": [
+        "ANIM_03"
+      ],
+      "variant": "Frost opening",
+      "current_intention": "Release a radial frost burst around the caster.",
+      "proposed_action": "Compress the chest and elbows, then sharply open both available arms with a stable stance. Show a circular frost release, not a aimed cone.",
+      "event_contract": "NOVA_RELEASE follows current scaled wind-up. Persistent aura ticks and final burst remain separate from the caster pose.",
+      "ascended_difference": "Frost Aura lasts independently, then explodes. Do not hold a six-second open-arm pose or reintroduce the removed shaking.",
+      "current_clip_names": [
+        "wiz_nova"
+      ],
+      "skill_name": "Frost Nova",
+      "role": "Skill",
+      "class_internal_id": "Wizard",
+      "family_names": [
+        "Wavecaller"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "DragonsAltar.Sorcerer.cs",
+          "line": 1173,
+          "source": "DragonCombat.PlayClip(player, \"wiz_nova\", windup);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Archmage",
+      "skill_id": "elemental_cataclysm",
+      "family_ids": [
+        "ANIM_02"
+      ],
+      "variant": "Grand charged command",
+      "current_intention": "Charge a large targeted elemental area attack.",
+      "proposed_action": "Lift both available arms/implement into the widest Sky Command silhouette, hold calmly while charge builds and drive downward when released.",
+      "event_contract": "Preserve existing minimum wind-up, charge overlap and release input. Target detonation is a world event, not a requirement for the caster to hit the ground.",
+      "ascended_difference": "Second bombardment at the original area is automatic. Same one cast; no Overcharge refund or added gesture.",
+      "current_clip_names": [
+        "wiz_cataclysm"
+      ],
+      "skill_name": "Elemental Cataclysm",
+      "role": "Ultimate",
+      "class_internal_id": "Wizard",
+      "family_names": [
+        "Sky Command"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "DragonsAltar.Sorcerer.cs",
+          "line": 1400,
+          "source": "DragonCombat.PlayClip(player, \"wiz_cataclysm\", Mathf.Max(0.3f, minWindup), true);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Archmage",
+      "skill_id": "clockwork",
+      "family_ids": [
+        "ANIM_03"
+      ],
+      "variant": "Clockwork wrist insert",
+      "current_intention": "A radial skill/cooldown Grace.",
+      "proposed_action": "Turn the free wrist as if setting a small clock, then open the forearm into the shared blessing pulse. Keep this insert short and equipment-compatible.",
+      "event_contract": "BUFF_APPLY remains immediate at its current callback. No cast-time penalty for the decorative clock gesture.",
+      "ascended_difference": "No separate Ascended Grace.",
+      "current_clip_names": [
+        "wiz_clockwork"
+      ],
+      "skill_name": "Clockwork",
+      "role": "Grace",
+      "class_internal_id": "Wizard",
+      "family_names": [
+        "Wavecaller"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "DragonsAltar.Sorcerer.cs",
+          "line": 1495,
+          "source": "DragonCombat.PlayClip(player, \"wiz_clockwork\", 0.12f);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Horizon Walker",
+      "skill_id": "arcane_phalanx",
+      "family_ids": [
+        "ANIM_14"
+      ],
+      "variant": "Open / arm / dispatch",
+      "current_intention": "Summon hovering swords, fire individually, or arm and launch a full volley.",
+      "proposed_action": "Open the available hand to array the swords. For individual releases use a small finger/implement accent only when arms are free. Recast uses a distinct closing/pointing command to arm the volley.",
+      "event_contract": "Keep summon, recast-to-arm and the next fresh Mouse1-to-fire separate. Do not launch on the recast itself or let cosmetics consume normal weapon input.",
+      "ascended_difference": "Eight swords and impact spears for the full volley. Spears are a remote effect; no player ground-stomp or four additional attacks.",
+      "current_clip_names": [
+        "hw_command",
+        "hw_rift_walker",
+        "hw_gravity_blast"
+      ],
+      "skill_name": "Arcane Phalanx",
+      "role": "Skill",
+      "class_internal_id": "Spellcaster",
+      "family_names": [
+        "Rift Conductor"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "DragonsAltar.Sorcerer.cs",
+          "line": 2370,
+          "source": "DragonCombat.PlayClip(player, \"hw_command\", 0.1f);"
+        },
+        {
+          "file": "DragonsAltar.Sorcerer.cs",
+          "line": 2384,
+          "source": "DragonCombat.PlayClip(player, \"hw_rift_walker\", 0.12f);   // both hands open: the swords appear"
+        },
+        {
+          "file": "DragonsAltar.Sorcerer.cs",
+          "line": 2396,
+          "source": "DragonCombat.PlayClip(player, \"hw_gravity_blast\", 0.06f);   // both hands thrust: the swords fly"
+        },
+        {
+          "file": "DragonsAltar.Sorcerer.cs",
+          "line": 2480,
+          "source": "DragonCombat.PlayClip(player, _gbRecasts == 1 ? \"hw_rupture\" : \"hw_command\", 0.08f);"
+        },
+        {
+          "file": "DragonsAltar.Sorcerer.cs",
+          "line": 2488,
+          "source": "DragonCombat.PlayClip(player, \"hw_gravity_blast\", 0.12f);"
+        },
+        {
+          "file": "DragonsAltar.Sorcerer.cs",
+          "line": 2604,
+          "source": "DragonCombat.PlayClip(player, \"hw_rift_walker\", 0.12f);"
+        },
+        {
+          "file": "DragonsAltar.Sorcerer.cs",
+          "line": 2613,
+          "source": "DragonCombat.PlayClip(player, \"hw_rift_walker\", 0.12f);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Horizon Walker",
+      "skill_id": "afterimage_arsenal",
+      "family_ids": [
+        "ANIM_14"
+      ],
+      "variant": "Copy fan",
+      "current_intention": "Create spectral copies that reproduce supported attacks.",
+      "proposed_action": "Flick the free hand outward to leave or summon a copy, while retaining the current stride and aim. A hold-all input uses the same open-hand finish once its actual summon event occurs.",
+      "event_contract": "Keep individual summon timers, hold behavior and clone lifetime logic. Clone attacks use their own mirrored weapon poses; they never retrigger the player’s summon gesture.",
+      "ascended_difference": "Current Ascended copies follow and mirror supported weapon attacks. Do not implement the earlier proposed all-skill copying as part of an animation pass.",
+      "current_clip_names": [
+        "hw_afterimage"
+      ],
+      "skill_name": "Afterimage Arsenal",
+      "role": "Skill",
+      "class_internal_id": "Spellcaster",
+      "family_names": [
+        "Rift Conductor"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "DragonsAltar.Sorcerer.cs",
+          "line": 1530,
+          "source": "DragonCombat.PlayClip(player, \"hw_afterimage\", 0.1f);"
+        },
+        {
+          "file": "DragonsAltar.Sorcerer.cs",
+          "line": 2697,
+          "source": "DragonCombat.PlayClip(player, \"hw_afterimage\", 0.1f);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Horizon Walker",
+      "skill_id": "void_step",
+      "family_ids": [
+        "ANIM_15"
+      ],
+      "variant": "Pose-preserving blink",
+      "current_intention": "Teleport without stopping the action underway.",
+      "proposed_action": "Keep the current shooting/stride pose, add a tiny directional lean or just disappearance VFX, and reappear in the same action phase.",
+      "event_contract": "Teleport commits at the existing callback. No anticipatory crouch, recovery lock or travel interpolation. Preserve current featherfall and momentum policy.",
+      "ascended_difference": "Two charges and retained momentum. Reuse the same transition; no damaging departure rift.",
+      "current_clip_names": [
+        "hw_voidstep"
+      ],
+      "skill_name": "Void Step",
+      "role": "Skill",
+      "class_internal_id": "Spellcaster",
+      "family_names": [
+        "Ghost Step"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "DragonsAltar.Sorcerer.cs",
+          "line": 1720,
+          "source": "DragonCombat.PlayClip(player, \"hw_voidstep\", 0.06f);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Horizon Walker",
+      "skill_id": "rift_echo",
+      "family_ids": [
+        "ANIM_14"
+      ],
+      "variant": "Remote echo command",
+      "current_intention": "Open rifts behind the target that echo attacks.",
+      "proposed_action": "Indicate the target with a brief finger or implement tip movement, then continue firing. Rifts open behind the target, not as barrels attached to the player’s hands.",
+      "event_contract": "One accepted command, independent echo timing afterward. If both hands are firing, use a head/wrist/VFX-only accent to avoid interrupting the weapon animation.",
+      "ascended_difference": "Current build opens three rifts; it is not merely the older cadence-change proposal. No three separate caster gestures.",
+      "current_clip_names": [
+        "hw_rift_echo"
+      ],
+      "skill_name": "Rift Echo",
+      "role": "Skill",
+      "class_internal_id": "Spellcaster",
+      "family_names": [
+        "Rift Conductor"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "DragonsAltar.Sorcerer.cs",
+          "line": 1516,
+          "source": "DragonCombat.PlayClip(player, \"hw_rift_echo\", 0.1f);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Horizon Walker",
+      "skill_id": "gravity_blast",
+      "family_ids": [
+        "ANIM_13",
+        "ANIM_14"
+      ],
+      "variant": "Orb push / stop / collapse",
+      "current_intention": "Launch a traveling gravity orb with current recast controls.",
+      "proposed_action": "Push the orb out with Pulse Drive. Use an open stopping hand for its stop command and a compact pinch for a detonation command where supported.",
+      "event_contract": "Keep initial cast and each recast state separate. Do not collapse the orb early because the launch animation ended.",
+      "ascended_difference": "Longer travel and stronger stop burst follow current branch logic. Reuse the command states without inventing or removing recast inputs.",
+      "current_clip_names": [
+        "hw_gravity_blast",
+        "hw_rupture",
+        "hw_command"
+      ],
+      "skill_name": "Gravity Blast",
+      "role": "Skill",
+      "class_internal_id": "Spellcaster",
+      "family_names": [
+        "Pulse Drive",
+        "Rift Conductor"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "DragonsAltar.Sorcerer.cs",
+          "line": 2370,
+          "source": "DragonCombat.PlayClip(player, \"hw_command\", 0.1f);"
+        },
+        {
+          "file": "DragonsAltar.Sorcerer.cs",
+          "line": 2396,
+          "source": "DragonCombat.PlayClip(player, \"hw_gravity_blast\", 0.06f);   // both hands thrust: the swords fly"
+        },
+        {
+          "file": "DragonsAltar.Sorcerer.cs",
+          "line": 2480,
+          "source": "DragonCombat.PlayClip(player, _gbRecasts == 1 ? \"hw_rupture\" : \"hw_command\", 0.08f);"
+        },
+        {
+          "file": "DragonsAltar.Sorcerer.cs",
+          "line": 2488,
+          "source": "DragonCombat.PlayClip(player, \"hw_gravity_blast\", 0.12f);"
+        },
+        {
+          "file": "DragonsAltar.Sorcerer.cs",
+          "line": 2913,
+          "source": "DragonCombat.PlayClip(player, \"hw_rupture\", Mathf.Max(0.1f, _ruptureWindup.Value));"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Horizon Walker",
+      "skill_id": "arcane_rupture",
+      "family_ids": [
+        "ANIM_14"
+      ],
+      "variant": "Remote point command",
+      "current_intention": "Spend a charge to trigger a delayed rupture at aimed ground while moving.",
+      "proposed_action": "Snap the available wrist toward the selected point and continue locomotion. Let the target telegraph build independently before the explosion.",
+      "event_contract": "COMMAND_ACCEPTED occurs now; TARGET_DETONATION follows its existing delay. That delay is not a full-body caster wind-up or root lock.",
+      "ascended_difference": "More charges and stronger explosions use the same gesture. Preserve recast buffer; no queued gesture spam during target delays.",
+      "current_clip_names": [
+        "hw_rupture"
+      ],
+      "skill_name": "Arcane Rupture",
+      "role": "Ultimate",
+      "class_internal_id": "Spellcaster",
+      "family_names": [
+        "Rift Conductor"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "DragonsAltar.Sorcerer.cs",
+          "line": 2480,
+          "source": "DragonCombat.PlayClip(player, _gbRecasts == 1 ? \"hw_rupture\" : \"hw_command\", 0.08f);"
+        },
+        {
+          "file": "DragonsAltar.Sorcerer.cs",
+          "line": 2913,
+          "source": "DragonCombat.PlayClip(player, \"hw_rupture\", Mathf.Max(0.1f, _ruptureWindup.Value));"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Horizon Walker",
+      "skill_id": "rift_walker",
+      "family_ids": [
+        "ANIM_14",
+        "ANIM_15"
+      ],
+      "variant": "Portal placement + traversal",
+      "current_intention": "Place two linked portals and traverse with the existing interaction.",
+      "proposed_action": "Open the available hand toward each placement point using Rift Conductor. Traversal uses Ghost Step, preserving the walking/attack phase through the transition.",
+      "event_contract": "PORTAL_A, PORTAL_B and TELEPORT_COMMIT are distinct. Do not teleport immediately on placing the second portal or change the E interaction.",
+      "ascended_difference": "No separate Ascended Grace. Portals stay visually independent of the short caster gesture.",
+      "current_clip_names": [
+        "hw_rift_walker"
+      ],
+      "skill_name": "Rift Walker",
+      "role": "Grace",
+      "class_internal_id": "Spellcaster",
+      "family_names": [
+        "Rift Conductor",
+        "Ghost Step"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "DragonsAltar.Sorcerer.cs",
+          "line": 2384,
+          "source": "DragonCombat.PlayClip(player, \"hw_rift_walker\", 0.12f);   // both hands open: the swords appear"
+        },
+        {
+          "file": "DragonsAltar.Sorcerer.cs",
+          "line": 2604,
+          "source": "DragonCombat.PlayClip(player, \"hw_rift_walker\", 0.12f);"
+        },
+        {
+          "file": "DragonsAltar.Sorcerer.cs",
+          "line": 2613,
+          "source": "DragonCombat.PlayClip(player, \"hw_rift_walker\", 0.12f);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Ranger",
+      "skill_id": "piercing_arrow",
+      "family_ids": [
+        "ANIM_17"
+      ],
+      "variant": "Snap power shot",
+      "current_intention": "A straight piercing arrow with current first-hit control.",
+      "proposed_action": "Use a clean forward aim and sharp string release, left bow arm stable. Retain one recoil source and quickly return the right hand toward its next legal draw.",
+      "event_contract": "Current projectile starts immediately. Begin at loose rather than adding a new draw delay; impacts remain arrow-owned.",
+      "ascended_difference": "Longer range, widening flight and Expose use the same shot. The growth does not stretch the bow or caster.",
+      "current_clip_names": [
+        "rg_power"
+      ],
+      "skill_name": "Piercing Arrow",
+      "role": "Skill",
+      "class_internal_id": "Ranger",
+      "family_names": [
+        "Deadeye Draw"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "DragonsAltar.Ranger.cs",
+          "line": 578,
+          "source": "DragonCombat.PlayClip(player, \"rg_power\", 0.1f);   // snap draw, strong recoil"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Ranger",
+      "skill_id": "tumble_shot",
+      "family_ids": [
+        "ANIM_18"
+      ],
+      "variant": "Backflip fan",
+      "current_intention": "Retreat in a backflip and shoot a forward fan at the apex.",
+      "proposed_action": "Compress, spring backward and tuck into a true backward somersault. Keep the bow in the left hand; fire toward the threat at the existing apex event and extend legs to land.",
+      "event_contract": "Current shared travel is about 0.3s and apex about 0.15s. Align visual phase to movement instead of slowing gameplay for a longer flourish.",
+      "ascended_difference": "Wider fan, cooldown reset conditions and departure gust do not add another flip or a second damage-owning release.",
+      "current_clip_names": [
+        "rg_tumble"
+      ],
+      "skill_name": "Tumble Shot",
+      "role": "Skill",
+      "class_internal_id": "Ranger",
+      "family_names": [
+        "Rebound Shot"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "DragonsAltar.Ranger.cs",
+          "line": 631,
+          "source": "if (flip) DragonCombat.PlayClip(player, \"rg_tumble\", 0.02f);   // v0.25.13: tucked flip, draw upside down, loose"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Ranger",
+      "skill_id": "snare_trap",
+      "family_ids": [
+        "ANIM_07"
+      ],
+      "variant": "Careful placement",
+      "current_intention": "Place a ground snare at the selected valid location.",
+      "proposed_action": "Lower through the knees, briefly dispatch/place with the free hand and rise. Use a wrist-only command when casting in the air as Acrobat.",
+      "event_contract": "TRAP_PLACED matches current placement; activation by an enemy is a later world event. Do not move the player to a remote target.",
+      "ascended_difference": "No dedicated Ascended version in the current kit.",
+      "current_clip_names": [
+        "rg_trap"
+      ],
+      "skill_name": "Snare Trap",
+      "role": "Skill",
+      "class_internal_id": "Ranger",
+      "family_names": [
+        "Ground Seal"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "DragonsAltar.Ranger.cs",
+          "line": 739,
+          "source": "DragonCombat.PlayClip(player, \"rg_trap\", 0.15f);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Acrobat",
+      "skill_id": "gale_volley",
+      "family_ids": [
+        "ANIM_18"
+      ],
+      "variant": "Backflip gale fan",
+      "current_intention": "Spring backward while firing a wide wind-powered arrow fan.",
+      "proposed_action": "Reuse Tumble Shot’s entire Rebound Shot sequence. Different arrow spread, wind and recoil accent communicate the stronger shot.",
+      "event_contract": "Same shared BackFlip movement/apex event contract; preserve collision-shortened travel and current invulnerability timing.",
+      "ascended_difference": "A second arcing fan gets a second short firing accent at its scheduled event, possibly during landing. Never add a second flip.",
+      "current_clip_names": [
+        "rg_tumble"
+      ],
+      "skill_name": "Gale Volley",
+      "role": "Skill",
+      "class_internal_id": "Acrobat",
+      "family_names": [
+        "Rebound Shot"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "DragonsAltar.Ranger.cs",
+          "line": 631,
+          "source": "if (flip) DragonCombat.PlayClip(player, \"rg_tumble\", 0.02f);   // v0.25.13: tucked flip, draw upside down, loose"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Acrobat",
+      "skill_id": "cyclone_arrow",
+      "family_ids": [
+        "ANIM_17",
+        "ANIM_09"
+      ],
+      "variant": "Snap shot with pivot exit",
+      "current_intention": "Fire a slow moving cyclone projectile.",
+      "proposed_action": "Release the arrow immediately from the aim pose. A compact torso/foot pivot can follow as cosmetic recovery where grounded; airborne version keeps the flight pose.",
+      "event_contract": "Do not make the player wait for the existing spin-loose choreography before the projectile appears. Projectile rotation and pulling are independent.",
+      "ascended_difference": "Split cyclones on first catch are effect-only. The caster does not become a sustained whirlwind or fire three new shots.",
+      "current_clip_names": [
+        "rg_spin"
+      ],
+      "skill_name": "Cyclone Arrow",
+      "role": "Skill",
+      "class_internal_id": "Acrobat",
+      "family_names": [
+        "Deadeye Draw",
+        "Cyclone"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "DragonsAltar.Ranger.cs",
+          "line": 819,
+          "source": "DragonCombat.PlayClip(player, \"rg_spin\", 0.1f);   // spin-loose"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Acrobat",
+      "skill_id": "swallow_dive",
+      "family_ids": [
+        "ANIM_11"
+      ],
+      "variant": "Short directional dive",
+      "current_intention": "An aimed dash cuts enemies along its path.",
+      "proposed_action": "Streamline body along aim with bow tight against the torso, then unfold into the exit. Use a grounded compression only when actually landing.",
+      "event_contract": "Match current short dash duration, wall stop and exit velocity. An airborne dash finishes in air; it must not wait for a landing animation.",
+      "ascended_difference": "Three charges and a delayed wind slash along the path. Reuse the dive once per accepted charge; delayed slash is not another dash.",
+      "current_clip_names": [
+        "rg_dive"
+      ],
+      "skill_name": "Swallow Dive",
+      "role": "Skill",
+      "class_internal_id": "Acrobat",
+      "family_names": [
+        "Comet Dive"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "DragonsAltar.Ranger.cs",
+          "line": 925,
+          "source": "DragonCombat.PlayClip(player, \"rg_dive\", 0.08f);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Acrobat",
+      "skill_id": "skyfall_barrage",
+      "family_ids": [
+        "ANIM_18",
+        "ANIM_19"
+      ],
+      "variant": "Backflip ascent into hover fire",
+      "current_intention": "Rise, hover and shoot down into the area below.",
+      "proposed_action": "Use Rebound Shot’s launch/flip module with the existing longer ascent, then settle into Sky Archer’s down-aim hover. Alternate small draw/release accents while hovering.",
+      "event_contract": "Preserve the current ascent, ceiling check and real hover-shot cadence. On hover end, blend to falling before any grounded recovery.",
+      "ascended_difference": "Steer the larger ground circle with permitted aim controls. Do not rotate the whole body through another flip for every shot.",
+      "current_clip_names": [
+        "rg_backflip",
+        "rg_hover"
+      ],
+      "skill_name": "Skyfall Barrage",
+      "role": "Skill",
+      "class_internal_id": "Acrobat",
+      "family_names": [
+        "Rebound Shot",
+        "Sky Archer"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "DragonsAltar.Ranger.cs",
+          "line": 976,
+          "source": "DragonCombat.PlayClip(player, \"rg_backflip\", 0.05f);"
+        },
+        {
+          "file": "DragonsAltar.Ranger.cs",
+          "line": 988,
+          "source": "DragonCombat.PlayClip(player, \"rg_hover\", 0.25f, true);   // aimed down while hovering"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Acrobat",
+      "skill_id": "ricochet_arrow",
+      "family_ids": [
+        "ANIM_17"
+      ],
+      "variant": "Compact trick shot",
+      "current_intention": "One arrow bounces through multiple targets.",
+      "proposed_action": "Angle the shoulders into a relaxed side-on trick-shot silhouette, loose one clean arrow and reset. Keep the grip mechanically plausible rather than tossing the bow.",
+      "event_contract": "One SHOT_RELEASE. All bounces and damage escalation are projectile logic, not separate player shots.",
+      "ascended_difference": "More bounces and a final explosion add no caster actions.",
+      "current_clip_names": [
+        "rg_trick"
+      ],
+      "skill_name": "Ricochet Arrow",
+      "role": "Skill",
+      "class_internal_id": "Acrobat",
+      "family_names": [
+        "Deadeye Draw"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "DragonsAltar.Ranger.cs",
+          "line": 1031,
+          "source": "DragonCombat.PlayClip(player, \"rg_trick\", 0.1f);   // flicked trick shot"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Acrobat",
+      "skill_id": "furious_winds",
+      "family_ids": [
+        "ANIM_09"
+      ],
+      "variant": "Wind-arm spin",
+      "current_intention": "Maintain a leaf storm/barrier while spinning.",
+      "proposed_action": "Use Cyclone’s continuous body rotation with bow held close or safely extended, keeping a stable center rather than flailing the arms. Exit into a readable open sweep.",
+      "event_contract": "Loop only for the actual active duration. Leaves, barrier checks and damage ticks remain independent of visual turns.",
+      "ascended_difference": "Larger field/duration and final gale use the existing end event; no extra rooted flourish after movement is allowed.",
+      "current_clip_names": [
+        "PlaySpinClip"
+      ],
+      "skill_name": "Furious Winds",
+      "role": "Ultimate",
+      "class_internal_id": "Acrobat",
+      "family_names": [
+        "Cyclone"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 3027,
+          "source": "DragonCombat.PlaySpinClip(player, maxTime, 0.3f);   // v0.25.8: tornado spin, faster turns"
+        },
+        {
+          "file": "AlbedosCustomClasses.Advanced.cs",
+          "line": 3941,
+          "source": "DragonCombat.PlaySpinClip(player, duration, 0.4f);   // v0.25.8: arms out, one turn every 0.4s"
+        },
+        {
+          "file": "DragonsAltar.CombatRuntime.cs",
+          "line": 1874,
+          "source": "public static void PlaySpinClip(Player player, float seconds, float turn)"
+        },
+        {
+          "file": "DragonsAltar.Ranger.cs",
+          "line": 1100,
+          "source": "DragonCombat.PlaySpinClip(player, duration, 0.5f);   // two turns a second inside the leaf storm"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Acrobat",
+      "skill_id": "tailwind",
+      "family_ids": [
+        "ANIM_03"
+      ],
+      "variant": "Wind blessing",
+      "current_intention": "A radial movement/jump/fall-protection Grace.",
+      "proposed_action": "Lift the free forearm as if catching an updraft, then open outward into the shared wave. Keep the bow in the left hand.",
+      "event_contract": "Buff applies at the current callback. No repeated bobbing or shaking throughout the buff.",
+      "ascended_difference": "No separate Ascended Grace.",
+      "current_clip_names": [
+        "rg_tailwind"
+      ],
+      "skill_name": "Tailwind",
+      "role": "Grace",
+      "class_internal_id": "Acrobat",
+      "family_names": [
+        "Wavecaller"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "DragonsAltar.Ranger.cs",
+          "line": 1268,
+          "source": "DragonCombat.PlayClip(player, \"rg_tailwind\", 0.2f);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Bowmaster",
+      "skill_id": "ballista_shot",
+      "family_ids": [
+        "ANIM_17"
+      ],
+      "variant": "Siege draw",
+      "current_intention": "Hold a powerful piercing bow or crossbow shot.",
+      "proposed_action": "Set a wide stable firing posture, draw and hold with controlled breathing. Release with one heavy shoulder recoil, then return to aim. Crossbow uses a braced trigger profile.",
+      "event_contract": "Charge and fire follow current hold/release input. Holding at maximum charge must not be auto-released by the pose driver timeout.",
+      "ascended_difference": "Full-charge pierce explosions remain target events. They do not trigger repeated recoil or new projectiles from the caster.",
+      "current_clip_names": [
+        "rg_ballista"
+      ],
+      "skill_name": "Ballista Shot",
+      "role": "Skill",
+      "class_internal_id": "Bowmaster",
+      "family_names": [
+        "Deadeye Draw"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "DragonsAltar.Ranger.cs",
+          "line": 1903,
+          "source": "DragonCombat.PlayClip(player, \"rg_ballista\", 0.35f, true);   // crouched heavy draw while charging"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Bowmaster",
+      "skill_id": "arrow_rain",
+      "family_ids": [
+        "ANIM_19"
+      ],
+      "variant": "Upward release",
+      "current_intention": "Initiate an arrow bombardment over the selected area.",
+      "proposed_action": "Angle the bow or crossbow skyward, show the initiating release and lower back to normal aim. Start at the release key for the current instant cast.",
+      "event_contract": "One SKY_RELEASE creates the field. Falling arrows and damage ticks continue after the caster recovers.",
+      "ascended_difference": "Frozen-arrow effects change the bombardment, not caster choreography.",
+      "current_clip_names": [
+        "rg_sky"
+      ],
+      "skill_name": "Arrow Rain",
+      "role": "Skill",
+      "class_internal_id": "Bowmaster",
+      "family_names": [
+        "Sky Archer"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "DragonsAltar.Ranger.cs",
+          "line": 1961,
+          "source": "DragonCombat.PlayClip(player, \"rg_sky\", 0.15f);   // loose into the sky"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Bowmaster",
+      "skill_id": "pinning_shot",
+      "family_ids": [
+        "ANIM_17"
+      ],
+      "variant": "Low brace",
+      "current_intention": "A precise immobilizing/control arrow with current target rules.",
+      "proposed_action": "Sink slightly at the knees while keeping the weapon level and loose one deliberate shot. A full kneel is optional only if it fits current restrictions and real leg support exists.",
+      "event_contract": "Current release is immediate. Do not delay firing until a cinematic kneel finishes or invent an extra stationary lock.",
+      "ascended_difference": "Additional nearby targets are effect handling, not three full player shots.",
+      "current_clip_names": [
+        "rg_kneel"
+      ],
+      "skill_name": "Pinning Shot",
+      "role": "Skill",
+      "class_internal_id": "Bowmaster",
+      "family_names": [
+        "Deadeye Draw"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "DragonsAltar.Ranger.cs",
+          "line": 2012,
+          "source": "DragonCombat.PlayClip(player, \"rg_kneel\", 0.15f);   // kneeling shot"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Bowmaster",
+      "skill_id": "explosive_arrow",
+      "family_ids": [
+        "ANIM_17"
+      ],
+      "variant": "Heavy snap release",
+      "current_intention": "Fire one projectile that explodes on impact.",
+      "proposed_action": "Brace the weapon, loose sharply and absorb a small shoulder kick. Recover without letting the bow arm collapse or the crossbow float from its stock grip.",
+      "event_contract": "One SHOT_RELEASE and later PROJECTILE_CONTACT. Only one recoil owner; no camera/bone double recoil.",
+      "ascended_difference": "Ground fire and cluster bombs are remote continuations. Do not make the player throw additional bombs.",
+      "current_clip_names": [
+        "rg_heavy"
+      ],
+      "skill_name": "Explosive Arrow",
+      "role": "Skill",
+      "class_internal_id": "Bowmaster",
+      "family_names": [
+        "Deadeye Draw"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "DragonsAltar.Ranger.cs",
+          "line": 2079,
+          "source": "DragonCombat.PlayClip(player, \"rg_heavy\", 0.12f);   // heavy kick-back"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Bowmaster",
+      "skill_id": "splitting_arrow",
+      "family_ids": [
+        "ANIM_17"
+      ],
+      "variant": "Alternating fan volleys",
+      "current_intention": "A planted rapid volley sequence aimed through a cone.",
+      "proposed_action": "Hold a stable lower stance and alternate small torso aim sweeps and string-hand resets. Chain releases directly without returning to idle.",
+      "event_contract": "One release accent per existing volley callback. Preserve its current planted movement restriction and exact interval, including fast Ascended cadence.",
+      "ascended_difference": "Five rapid volleys and stacking Burn. Time-compress the draw/reset, not the projectile count or cadence.",
+      "current_clip_names": [
+        "rg_split_a",
+        "rg_split_b"
+      ],
+      "skill_name": "Splitting Arrow",
+      "role": "Skill",
+      "class_internal_id": "Bowmaster",
+      "family_names": [
+        "Deadeye Draw"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "DragonsAltar.Ranger.cs",
+          "line": 2189,
+          "source": "DragonCombat.PlayClip(player, v % 2 == 0 ? \"rg_split_a\" : \"rg_split_b\", 0.06f);   // alternating sweep per volley"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Bowmaster",
+      "skill_id": "starfall_volley",
+      "family_ids": [
+        "ANIM_19"
+      ],
+      "variant": "Channeled sky barrage",
+      "current_intention": "Channel to call a large arrow bombardment.",
+      "proposed_action": "Raise the weapon toward the sky, hold a deliberate charge silhouette during the existing channel, then loose and return to guard while arrows fall.",
+      "event_contract": "CHANNEL_COMPLETE initiates the remote bombardment. Do not play one full actor shot per decorative falling arrow or per enemy damaged.",
+      "ascended_difference": "Final giant arrow follows the existing world-event schedule. Add a remote emphasis; do not force an unrelated later player cast.",
+      "current_clip_names": [
+        "rg_starfall"
+      ],
+      "skill_name": "Starfall Volley",
+      "role": "Ultimate",
+      "class_internal_id": "Bowmaster",
+      "family_names": [
+        "Sky Archer"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "DragonsAltar.Ranger.cs",
+          "line": 2258,
+          "source": "DragonCombat.PlayClip(player, \"rg_starfall\", Mathf.Max(0.2f, channel));"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    },
+    {
+      "class_name": "Bowmaster",
+      "skill_id": "hawks_vigil",
+      "family_ids": [
+        "ANIM_03"
+      ],
+      "variant": "Watchful salute",
+      "current_intention": "Reveal surrounding enemies and buff allied aim.",
+      "proposed_action": "Briefly shade/salute near the brow with the free hand, then open outward in a restrained Wavecaller pulse. Keep the weapon in its correct grip.",
+      "event_contract": "Buff/reveal snapshot remains immediate. Ongoing enemy outlines do not hold the player scanning or suppress normal attacks.",
+      "ascended_difference": "No separate Ascended Grace.",
+      "current_clip_names": [
+        "rg_vigil"
+      ],
+      "skill_name": "Hawk's Vigil",
+      "role": "Grace",
+      "class_internal_id": "Bowmaster",
+      "family_names": [
+        "Wavecaller"
+      ],
+      "source_animation_calls": [
+        {
+          "file": "DragonsAltar.Ranger.cs",
+          "line": 2313,
+          "source": "DragonCombat.PlayClip(player, \"rg_vigil\", 0.15f);"
+        }
+      ],
+      "source_note": "Clip-call evidence can include another skill sharing this preset; trace the executing skill path before editing."
+    }
+  ],
+  "global_specification_file": "START_HERE_ANIMATION_BLUEPRINT.txt",
+  "storyboards": [
+    {
+      "file": "storyboards/01_olympic_hero.jpg",
+      "title": "Olympic Hero — six key poses"
+    },
+    {
+      "file": "storyboards/02_casting_families.jpg",
+      "title": "Casting families"
+    },
+    {
+      "file": "storyboards/03_martial_families.jpg",
+      "title": "Martial families"
+    },
+    {
+      "file": "storyboards/04_momentum_families.jpg",
+      "title": "Momentum families"
+    },
+    {
+      "file": "storyboards/05_ranged_families.jpg",
+      "title": "Ranged families"
+    },
+    {
+      "file": "storyboards/06_transitions_reactions.jpg",
+      "title": "Transitions and reactions"
+    }
+  ]
+}

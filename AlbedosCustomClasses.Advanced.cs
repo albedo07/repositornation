@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.14";
+        public const string ModVersion = "0.25.15";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -2230,6 +2230,7 @@ namespace AlbedosCustomClassesAdvanced
             List<Collider> ignored = FrenzyIgnoreCreatures(player, capsule, distance + width + 4f);
             int ground = IhSolidMask();
             bool falling = false;
+            DragonCombat.ForceRun(player, true);   // v0.25.15 Vanguard thrust: run legs under the dash
             try
             {
                 while (moved < distance && player != null && !player.IsDead() && body != null)
@@ -2280,6 +2281,7 @@ namespace AlbedosCustomClassesAdvanced
             finally
             {
                 _frenzyActive = false;
+                DragonCombat.ForceRun(player, false);
                 FrenzyRestoreCollisions(capsule, ignored);
             }
             if (player == null || player.IsDead()) yield break;
@@ -2764,7 +2766,7 @@ namespace AlbedosCustomClassesAdvanced
             DragonCombat.ShowStatus(player, "fury", "fury", "Unchained Fury", Mathf.Max(0.5f, _furyDurationV.Value), 0);
             if (player != null)
             {
-                DragonCombat.PlayClip(player, "merc_roar", 0.35f);
+                DragonCombat.PlayAccent(player, "merc_roar", 0.35f);   // v0.25.15 Fury = low-priority accent
                 if (_enableVfx.Value)
                     StartCoroutine(AnimateAura(player, new Color(1f, 0.22f, 0.08f, 0.92f), Mathf.Max(0.5f, _furyDurationV.Value)));
             }
@@ -2867,7 +2869,7 @@ namespace AlbedosCustomClassesAdvanced
             ShowMessage("Bonecrusher");
             yield return StartCoroutine(AcrobaticJumpUntilLanding(player, takeoffDelay, Mathf.Max(1.5f, _boneWindup.Value)));
             if (player == null || player.IsDead()) yield break;
-            DragonCombat.PlayClip(player, "land_crash", 0.1f);
+            OlympicLanding(player, 0.6f);
             Vector3 center = player.transform.position;
             float radius = Mathf.Max(0.5f, DragonCombat.M(_boneRadius.Value));
             List<Character> targets = GetSphereTargets(player, center, radius);
@@ -3578,7 +3580,7 @@ namespace AlbedosCustomClassesAdvanced
 
             float takeoffDelay = 0.08f;
             DragonCombat.LockSkill(player, takeoffDelay);
-            DragonCombat.PlayClip(player, "air_overhead", 0.2f, true);
+            DragonCombat.PlayClip(player, "olympic_hero_brutal", takeoffDelay + 0.75f * Mathf.Max(1.5f, _boneWindup.Value), true); // v0.25.15 Olympic Hero
             StartCoroutine(BonecrusherRoutineV(player, takeoffDelay));
         }
 
@@ -4118,6 +4120,7 @@ namespace AlbedosCustomClassesAdvanced
         {
             ShowMessage("Shield Charge");
             DragonCombat.PlayClip(player, "cleric_charge", 0.15f, true);
+            DragonCombat.ForceRun(player, true);   // v0.25.15 Vanguard: real running legs while the charge moves
             Vector3 forward = player.GetLookDir();
             forward.y = 0f;
             if (forward.sqrMagnitude < 0.01f) forward = player.transform.forward;
@@ -4210,6 +4213,7 @@ namespace AlbedosCustomClassesAdvanced
                 // v0.25.7: no Bash -> the charge pose blends back to rest (Bash already took the impact).
                 DragonSkillClipDriver clip = player == null ? null : player.GetComponent<DragonSkillClipDriver>();
                 if (clip != null && clip.IsHolding) DragonCombat.ClipStop(player, 0.25f);
+                DragonCombat.ForceRun(player, false);
                 EndShieldCharge();
             }
         }
@@ -4332,6 +4336,7 @@ namespace AlbedosCustomClassesAdvanced
 
         private void ShieldChargeBash(Player player, Vector3 forward)
         {
+            DragonCombat.ForceRun(player, false);
             DragonCombat.ClipImpact(player);
             if (player == null || player.IsDead()) return;
             ShowMessage("Shield Bash");
@@ -4630,8 +4635,16 @@ namespace AlbedosCustomClassesAdvanced
 
             float takeoffDelay = 0.08f;
             DragonCombat.LockSkill(player, takeoffDelay);
-            DragonCombat.PlayClip(player, "air_overhead", 0.25f, true);
+            DragonCombat.PlayClip(player, "olympic_hero", takeoffDelay + 0.75f * Mathf.Max(1.5f, _divineWindup.Value), true); // v0.25.15 Olympic Hero
             StartCoroutine(ElectricSmiteRoutine(player, takeoffDelay));
+        }
+
+        // v0.25.15 Olympic Hero GROUND_CONTACT: the held roll lands (superhero fist landing); the main weapon
+        // is hidden render-only while the fist is on the ground.
+        private void OlympicLanding(Player player, float stowSeconds)
+        {
+            if (!DragonCombat.ClipImpactIfHolding(player)) DragonCombat.PlayClip(player, "olympic_land", 0.05f);
+            DragonCombat.StowMainWeapon(player, stowSeconds);
         }
 
         private IEnumerator ElectricSmiteRoutine(Player player, float takeoffDelay)
@@ -4641,7 +4654,7 @@ namespace AlbedosCustomClassesAdvanced
             if (player == null || player.IsDead())
                 yield break;
 
-            DragonCombat.PlayClip(player, "cleric_land", 0.1f);
+            OlympicLanding(player, 0.45f);
             Vector3 point = player.transform.position;
             float radius = Mathf.Max(1f, DragonCombat.M(_divineRadius.Value));
             List<Character> targets = GetSphereTargets(player, point, radius);
@@ -9805,7 +9818,7 @@ namespace AlbedosCustomClassesAdvanced
             if (GetCooldownRemaining(id) > 0f)
                 return;
             SetPriestCooldownNow(id, _shockwaveCooldown.Value);
-            DragonCombat.PlayClip(player, "cleric_parry_burst", 0.06f);
+            DragonCombat.PlayAccent(player, "cleric_parry_burst", 0.06f);
 
             Vector3 center = player.transform.position;
             float radius = Mathf.Max(1f, DragonCombat.M(_shockwaveRadius.Value));

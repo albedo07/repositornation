@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Dragon's Altar - Sorcerer Advancements";
-        public const string ModVersion = "0.25.14";
+        public const string ModVersion = "0.25.15";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -3134,7 +3134,7 @@ namespace DragonsAltarSorcerer
                 _overchargeUntil = Time.time + Mathf.Max(0.5f, _ocDuration.Value);
                 _overchargeLockedUntil = _overchargeUntil + Mathf.Max(0f, _ocBuffer.Value);
                 ShowMessage("OVERCHARGE");
-                DragonCombat.PlayClip(Player.m_localPlayer, "wiz_overcharge", 0.12f);
+                DragonCombat.PlayAccent(Player.m_localPlayer, "wiz_overcharge", 0.12f);
             }
         }
 
