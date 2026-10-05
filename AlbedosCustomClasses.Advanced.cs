@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.16";
+        public const string ModVersion = "0.25.17";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -5156,7 +5156,7 @@ namespace AlbedosCustomClassesAdvanced
             ResetFallDamageState(player);
             body.velocity = Vector3.zero;
             DragonCombat.LockSkill(player, 0.35f);
-            DragonCombat.PlayClip(player, "cleric_land", 0.1f);
+            DragonCombat.PlayClip(player, "cleric_land", 0.05f);   // v0.25.17 landing pose lands with the damage
 
             Vector3 point = player.transform.position;
             float radius = Mathf.Max(1f, DragonCombat.M(_angelRadius.Value));

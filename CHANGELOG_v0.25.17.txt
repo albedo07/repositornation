@@ -1,0 +1,21 @@
+IMMORTAL HEROES v0.25.17 - MARTIAL FAMILIES (Animation Blueprint, part C)
+
+- ARC CUTTER (coil -> cut -> follow -> reset, horizontal plane, wide stance with real legs):
+  Heavy Slash is now a HORIZONTAL heavy cut (was diagonal), Mercenary Ascended Heavy Slash bigger still;
+  Moonlight Splitter waves alternate forehand / backhand without going back to idle; the Ascended Moonlight
+  finisher is a deeper side chamber + wide horizontal drive (no more vertical slam); Halfmoon paired cuts;
+  Crescent Cleave = one broad sweep + a small wrist accent for the delayed fan; Grand Cross keeps its X and
+  gets a planted stance.
+- EARTHBREAKER: Seismic Guillotine and Astral Greatblade = load, raise overhead, drive down into a lunge;
+  Greatblade's repeated slams re-chamber overhead between slams; Impact Wave = its own RISING stroke from low
+  behind the hip (not a reversed slam).
+- GROUND SEAL: Stomp = right knee raised, hard foot stamp, both knees settle; Stonefang = staff butt pressed into
+  the ground with the free palm commanding the eruption (Horizon Walker's instant Stonefang = quick wrist flick
+  only); Snare Trap = kneel through the legs and set it by hand.
+- FLASH DRAW (Blade Storm): hand to the opposite hip, one fast outward draw toward the remote cuts, back to the
+  hip guard; low stance, you never move.
+- CYCLONE (Whirlwind, Furious Winds, Eclipse, Circle Swing, Halfmoon finisher, Cyclone Arrow): coil first, spins
+  stand on a wide pivot stance, and continuous spins always finish on a whole turn (no snap / backward unwind).
+- COMET DIVE: Angel Comet rises with tucked legs and dives streamlined (legs together, toes pointed); the
+  landing pose now lands WITH the damage: hips under the torso, shield and weapon guarding, never head first.
+  Swallow Dive streamlined the same way.

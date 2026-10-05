@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.16";
+        public const string ModVersion = "0.25.17";
 
         internal static DragonCombatPlugin Instance;
 
@@ -2032,12 +2032,14 @@ namespace DragonsAltarCombat
         {
             List<DragonClipKey> k = new List<DragonClipKey>();
             k.Add(K(-1f));
-            k.Add(K(0f).Sp(8f, 0f, 0f).Ch(4f, 0f, 0f).RA(-85f, 0f, -75f).RF(-10f, 0f, 0f).LA(-85f, 0f, 75f).LF(-10f, 0f, 0f).Rot(4f, 0f, 0f).Off(0f, -0.05f, 0f));
+            k.Add(K(-0.5f).Sp(10f, -30f, 0f).Ch(4f, -16f, 0f).RA(-30f, 0f, -40f).RF(-30f, 0f, 0f).LA(-30f, 0f, 30f).LF(-40f, 0f, 0f).Off(0f, -0.08f, 0f).LL(0.2f, 0.12f, 0.35f, 0f).RL(0.15f, 0.12f, 0.35f, 0f));   // coil
+            k.Add(K(0f).Sp(8f, 0f, 0f).Ch(4f, 0f, 0f).RA(-85f, 0f, -75f).RF(-10f, 0f, 0f).LA(-85f, 0f, 75f).LF(-10f, 0f, 0f).Rot(4f, 0f, 0f).Off(0f, -0.05f, 0f).LL(0.12f, 0.14f, 0.25f, 0f).RL(0.1f, 0.14f, 0.25f, 0f));
             float t = 0f, yaw = 0f, q = Mathf.Max(0.08f, turn) * 0.25f;
-            while (t < seconds)
+            // v0.25.17: whole turns only, so the exit never snaps or unwinds backward.
+            while (t < seconds || yaw % 360f != 0f)
             {
                 t += q; yaw += 90f;
-                k.Add(K(t).Sp(8f, 0f, 0f).Ch(4f, 0f, 0f).RA(-85f, 0f, -75f).RF(-10f, 0f, 0f).LA(-85f, 0f, 75f).LF(-10f, 0f, 0f).Rot(4f, yaw, 0f).Off(0f, -0.05f, 0f).Linear());
+                k.Add(K(t).Sp(8f, 0f, 0f).Ch(4f, 0f, 0f).RA(-85f, 0f, -75f).RF(-10f, 0f, 0f).LA(-85f, 0f, 75f).LF(-10f, 0f, 0f).Rot(4f, yaw, 0f).Off(0f, -0.05f, 0f).LL(0.12f, 0.14f, 0.25f, 0f).RL(0.1f, 0.14f, 0.25f, 0f).Linear());
             }
             k.Add(K(t + 0.3f).Rot(0f, yaw, 0f));
             PlayClipKeys(player, k.ToArray(), 0.12f);
@@ -2177,6 +2179,136 @@ namespace DragonsAltarCombat
             BuildTraitClips(c);
             BuildBlueprintClips(c);
             BuildBlueprintB(c);
+            BuildBlueprintC(c);
+        }
+
+        // ------------------------------------------------------------------ v0.25.17 Blueprint part C
+        // Wide fighting stance under a cut / sweep (both knees soft, feet apart).
+        private static DragonClipKey Stance(DragonClipKey k, float depth)
+        {
+            return k.LL(0.18f * depth, 0.12f, 0.3f * depth, 0f).RL(0.05f * depth, 0.12f, 0.28f * depth, 0f);
+        }
+
+        // ANIM_05 ARC CUTTER, horizontal plane: coil (blade beside the rear hip, hips loaded, head on aim) ->
+        // cut (hips lead, shoulders follow, blade crosses at shoulder height) -> follow past the target line ->
+        // reset. back = backhand from the left hip to the right. heavy = more amplitude + deeper stance, with a
+        // short held coil. hold = seconds the follow pose is kept.
+        private static DragonClipKey[] ArcCutter(bool back, float heavy, int prof, float hold)
+        {
+            float sg = back ? -1f : 1f;
+            float a = 1f + 0.35f * heavy;
+            DragonClipKey coil = Stance(K(-0.5f).Sp(10f * a, -40f * sg * a, 0f).Ch(4f, -22f * sg * a, 0f).Hd(0f, 28f * sg, 0f).Off(0f, -0.1f * a, 0f), a);
+            if (!back) coil = coil.RA(10f, -20f, -55f).RF(-25f, 0f, 0f);
+            else coil = coil.RA(-60f, 0f, 40f).RF(-95f, 0f, 0f);
+            coil = OffHand(coil, prof, 0);
+            DragonClipKey cut = Stance(K(0f).Hp(0f, 10f * sg, 0f).Sp(8f, 30f * sg * a, 0f).Ch(4f, 18f * sg * a, 0f).Hd(0f, -12f * sg, 0f).RA(-88f, 0f, back ? -30f : 25f).RF(-5f, 0f, 0f).Rot(4f, 12f * sg, 0f).Off(0f, -0.1f * a, 0.05f), a);
+            cut = cut.LL(0.32f * a, 0.12f, 0.35f * a, 0f);
+            cut = OffHand(cut, prof, 2);
+            if (prof == 1 || prof == 3) cut = cut.LA(-30f, 0f, 45f).LF(-20f, 0f, 0f);
+            DragonClipKey follow = cut.Copy(0.12f).Sp(8f, 45f * sg * a, 0f).Ch(4f, 26f * sg * a, 0f).RA(-80f, 0f, back ? -60f : 55f).RF(-15f, 0f, 0f).Rot(4f, 18f * sg, 0f);
+            DragonClipKey reset = OffHand(Stance(K(0.12f + hold + 0.3f).Sp(6f, 0f, 0f).RA(-30f, 0f, -15f).RF(-40f, 0f, 0f).Off(0f, -0.04f, 0f), 0.5f), prof, 0);
+            if (heavy > 0f) return new DragonClipKey[] { K(-1f), coil, coil.Copy(-0.08f), cut, follow, follow.Copy(0.12f + hold), reset, K(0.12f + hold + 0.6f) };
+            return new DragonClipKey[] { K(-1f), coil, cut, follow, follow.Copy(0.12f + hold), reset, K(0.12f + hold + 0.5f) };
+        }
+
+        // ANIM_06 EARTHBREAKER: load (knees bent, weapon close) -> prepare (overhead for the downstroke, low
+        // behind the hip for the rising stroke) -> drive through the target plane -> release -> recover.
+        private static DragonClipKey[] Earthbreaker(bool rising, float hold, bool rechamber)
+        {
+            DragonClipKey load = K(-0.8f).Sp(10f, 0f, 0f).Ch(4f, 0f, 0f).RA(-60f, 0f, 10f).RF(-90f, 0f, 0f).LA(-60f, 0f, -10f).LF(-90f, 0f, 0f).Off(0f, -0.08f, 0f).LL(0.25f, 0.06f, 0.3f, 0f).RL(0.2f, 0.06f, 0.3f, 0f);
+            if (!rising)
+            {
+                DragonClipKey raise = K(-0.3f).Sp(-10f, 0f, 0f).Ch(-8f, 0f, 0f).Hd(-8f, 0f, 0f).RA(-170f, 0f, -5f).RF(-35f, 0f, 0f).LA(-165f, 0f, 8f).LF(-35f, 0f, 0f).Off(0f, 0.02f, 0f).LL(0.15f, 0.1f, 0.1f, 0f).RL(-0.05f, 0.1f, 0.1f, 0f);
+                DragonClipKey drive = K(0f).Sp(38f, 0f, 0f).Ch(16f, 0f, 0f).Hd(14f, 0f, 0f).RA(-35f, 0f, -4f).RF(-4f, 0f, 0f).LA(-35f, 0f, 6f).LF(-4f, 0f, 0f).Off(0f, -0.22f, 0.08f).LL(0.55f, 0.08f, 0.55f, 0f).RL(-0.25f, 0.08f, 0.35f, 0f);
+                if (rechamber) return new DragonClipKey[] { K(-1f), raise, drive, drive.Copy(hold), raise.Copy(hold + 0.35f), K(hold + 0.6f) };
+                DragonClipKey rec = K(hold + 0.3f).Sp(10f, 0f, 0f).RA(-30f, 0f, -10f).RF(-40f, 0f, 0f).LA(-30f, 0f, 10f).LF(-40f, 0f, 0f).Off(0f, -0.05f, 0f).LL(0.1f, 0.05f, 0.12f, 0f).RL(0.05f, 0.05f, 0.1f, 0f);
+                return new DragonClipKey[] { K(-1f), load, raise, drive, drive.Copy(hold), rec, K(hold + 0.6f) };
+            }
+            DragonClipKey low = K(-0.3f).Sp(22f, -24f, 0f).Ch(12f, -12f, 0f).Hd(-6f, 18f, 0f).RA(30f, 0f, -25f).RF(-20f, 0f, 0f).LA(-50f, 10f, 25f).LF(-40f, 0f, 0f).Rot(6f, 0f, 0f).Off(0f, -0.2f, 0f).LL(0.45f, 0.1f, 0.6f, 0f).RL(0.1f, 0.1f, 0.55f, 0f);
+            DragonClipKey up = K(0f).Sp(-12f, 16f, 0f).Ch(-10f, 8f, 0f).Hd(-10f, -4f, 0f).RA(-155f, 0f, -12f).RF(-10f, 0f, 0f).LA(-20f, 0f, 30f).LF(-20f, 0f, 0f).Rot(-4f, 0f, 0f).Off(0f, 0.03f, 0.06f).LL(0.15f, 0.06f, 0.05f, 0f).RL(-0.15f, 0.06f, 0.05f, -0.2f);
+            return new DragonClipKey[] { K(-1f), load.Copy(-0.75f).RA(-20f, 0f, -20f).RF(-60f, 0f, 0f), low, low.Copy(-0.06f), up, up.Copy(hold), K(hold + 0.45f) };
+        }
+
+        private static void BuildBlueprintC(Dictionary<string, DragonClipKey[]> c)
+        {
+            // ARC CUTTER (horizontal). Heavy Slash is now a horizontal heavy cut (blueprint fix).
+            c["warrior_heavy"] = ArcCutter(false, 1f, 3, 0.15f);
+            c["merc_heavy_asc"] = ArcCutter(false, 1.4f, 3, 0.2f);
+            c["sm_slash_a"] = ArcCutter(false, 0f, 3, 0.05f);
+            c["sm_slash_b"] = ArcCutter(true, 0f, 3, 0.05f);
+            c["sm_moon_finisher"] = ArcCutter(false, 1.6f, 3, 0.25f);   // deeper side chamber, wider horizontal drive
+            c["sm_halfmoon"] = ArcCutter(false, 0.6f, 3, 0.1f);
+            c["sm_halfmoon_2"] = ArcCutter(true, 0.6f, 3, 0.1f);
+            // Crescent Cleave fan: one broad sweep + a small wrist/shoulder accent for the delayed second fan.
+            DragonClipKey[] cr = ArcCutter(false, 1f, 3, 0.1f);
+            List<DragonClipKey> crl = new List<DragonClipKey>(cr);
+            DragonClipKey acc = cr[4].Copy(0.32f).RH(-25f, 0f, 0f).Ch(4f, 34f, 0f);
+            crl.Insert(6, acc);
+            crl.Sort(delegate(DragonClipKey x, DragonClipKey y) { return x.T.CompareTo(y.T); });
+            c["sm_crescent"] = crl.ToArray();
+            // Grand Cross (opposed diagonals) keeps its arm paths; a planted stance is added under both cuts.
+            AddStance(c, "cleric_cross_1", 0.8f);
+            AddStance(c, "cleric_cross_2", 0.8f);
+
+            // EARTHBREAKER: descending (Seismic, Greatblade; Greatblade slams re-chamber overhead) / rising (Impact Wave).
+            c["merc_seismic"] = Earthbreaker(false, 0.25f, false);
+            c["wiz_greatblade"] = Earthbreaker(false, 0.3f, false);
+            c["wiz_greatblade_slam"] = Earthbreaker(false, 0.15f, true);
+            c["warrior_impact_wave"] = Earthbreaker(true, 0.3f, false);
+
+            // GROUND SEAL: load onto the support leg, lower through both knees, contact limb per profile, rise.
+            // Stomp = right knee raised then a hard foot stamp (one stamp; the aftershocks run on their own).
+            DragonClipKey stLift = K(-0.45f).Sp(6f, 0f, 0f).Ch(-4f, 0f, 0f).Hd(4f, 0f, 0f).RA(-30f, 0f, -40f).RF(-30f, 0f, 0f).LA(-30f, 0f, 40f).LF(-30f, 0f, 0f).LL(0.05f, 0.04f, 0.15f, 0f).RL(0.75f, 0.05f, 0.95f, 0.1f);
+            DragonClipKey stHit = K(0f).Sp(18f, 0f, 0f).Ch(8f, 0f, 0f).Hd(8f, 0f, 0f).RA(-20f, 0f, -28f).RF(-30f, 0f, 0f).LA(-20f, 0f, 28f).LF(-30f, 0f, 0f).Off(0f, -0.12f, 0f).LL(0.22f, 0.08f, 0.38f, 0f).RL(0.25f, 0.08f, 0.38f, 0f);
+            c["merc_stomp"] = new DragonClipKey[] { K(-1f), stLift, stLift.Copy(-0.1f).RL(0.85f, 0.05f, 1.0f, 0.1f), stHit, stHit.Copy(0.22f), K(0.6f) };
+            // Stonefang (planted): staff butt pressed into the ground, free palm commands the far eruption.
+            DragonClipKey sfLoad = K(-0.6f).Sp(4f, 0f, 0f).Hd(4f, 0f, 0f).RA(-75f, 0f, -10f).RF(-80f, 0f, 0f).LA(-35f, 0f, 20f).LF(-50f, 0f, 0f).LL(0.12f, 0.05f, 0.15f, 0f).RL(-0.04f, 0.05f, 0.1f, 0f);
+            DragonClipKey sfPress = K(0f).Sp(20f, 0f, 0f).Ch(8f, 0f, 0f).Hd(10f, 0f, 0f).RA(-30f, 0f, -10f).RF(-70f, 0f, 0f).LA(-60f, 0f, 20f).LF(-10f, 0f, 0f).LH(30f, 0f, 0f).Off(0f, -0.12f, 0f).LL(0.3f, 0.08f, 0.38f, 0f).RL(0.15f, 0.08f, 0.36f, 0f);
+            c["sorc_stonefang"] = new DragonClipKey[] { K(-1f), sfLoad, sfPress, sfPress.Copy(0.2f), K(0.55f) };
+            // Horizon Walker (mobile, instant): a quick downward wrist command only, no crouch.
+            DragonClipKey sfFlick = K(0f).Hd(8f, 0f, 0f).RA(-55f, 0f, -10f).RF(-35f, 0f, 0f).RH(40f, 0f, 0f);
+            c["sorc_stonefang_asc"] = new DragonClipKey[] { K(-1f), sfFlick.Copy(-0.5f).RH(-20f, 0f, 0f), sfFlick, K(0.3f) };
+            // Snare Trap: careful placement - lower through the knees, free (right) hand sets it, rise.
+            DragonClipKey sn = K(0f).Sp(24f, 0f, 0f).Ch(10f, 0f, 0f).Hd(10f, 0f, 0f).RA(-45f, 0f, -10f).RF(-20f, 0f, 0f).RH(20f, 0f, 0f).LA(-20f, 0f, 15f).LF(-30f, 0f, 0f).Off(0f, -0.22f, 0f).LL(0.45f, 0.06f, 0.6f, 0f).RL(0.25f, 0.06f, 0.75f, 0f);
+            c["rg_trap"] = new DragonClipKey[] { K(-1f), sn, sn.Copy(0.15f), K(0.45f) };
+
+            // FLASH DRAW (Blade Storm): hand to the opposite hip, one fast outward draw toward the remote aim,
+            // reset to the hip guard. Low stance; the player never moves.
+            DragonClipKey fdReady = Stance(K(-0.5f).Sp(10f, 18f, 0f).Ch(4f, 10f, 0f).Hd(0f, -10f, 0f).RA(-40f, 10f, 30f).RF(-95f, 0f, 0f).LA(-20f, 0f, 20f).LF(-70f, 0f, 0f).Off(0f, -0.1f, 0f), 0.8f);
+            DragonClipKey fdDraw = Stance(K(0f).Sp(10f, -26f, 0f).Ch(6f, -14f, 0f).Hd(0f, 6f, 0f).RA(-88f, 0f, -55f).RF(-4f, 0f, 0f).LA(-20f, 0f, 25f).LF(-40f, 0f, 0f).Rot(4f, -8f, 0f).Off(0f, -0.1f, 0.05f), 0.9f);
+            c["sm_blade_storm"] = new DragonClipKey[] { K(-1f), fdReady, fdDraw, fdDraw.Copy(0.1f), fdReady.Copy(0.3f), K(0.5f) };
+
+            // CYCLONE: Eclipse / Circle Swing / Halfmoon finisher / Cyclone Arrow keep their accumulated turn;
+            // the turn now stands on a wide pivot stance (Spin360 adds legs).
+
+            // COMET DIVE (Angel Comet): wings open on the rise (legs tucked), streamlined head-first dive (legs
+            // together, toes pointed), and the landing brakes with hips rotating under the torso and the
+            // shield / weapon guarding first - never head into the ground.
+            c["cleric_angel_rise"] = new DragonClipKey[] {
+                K(-1f),
+                K(-0.5f).Sp(-14f, 0f, 0f).Ch(-12f, 0f, 0f).Hd(-24f, 0f, 0f).RA(30f, 0f, -70f).RF(-10f, 0f, 0f).LA(30f, 0f, 70f).LF(-10f, 0f, 0f).Rot(-10f, 0f, 0f).LL(0.35f, 0f, 0.6f, 0f).RL(0.25f, 0f, 0.7f, 0f),
+                K(0f).Sp(-16f, 0f, 0f).Ch(-14f, 0f, 0f).Hd(-26f, 0f, 0f).RA(35f, 0f, -80f).RF(-8f, 0f, 0f).LA(35f, 0f, 80f).LF(-8f, 0f, 0f).Rot(-12f, 0f, 0f).LL(0.3f, 0f, 0.55f, 0f).RL(0.2f, 0f, 0.65f, 0f),
+                K(0.15f).Sp(10f, 0f, 0f).Ch(8f, 0f, 0f).Hd(-18f, 0f, 0f).RA(-160f, 0f, -10f).LA(-160f, 0f, 10f).Rot(55f, 0f, 0f).LL(-0.1f, -0.05f, 0f, -0.4f).RL(-0.1f, -0.05f, 0f, -0.4f),
+                K(0.45f).Sp(14f, 0f, 0f).Ch(10f, 0f, 0f).Hd(-20f, 0f, 0f).RA(-165f, 0f, -8f).LA(-165f, 0f, 8f).Rot(60f, 0f, 0f).LL(-0.12f, -0.05f, 0f, -0.45f).RL(-0.12f, -0.05f, 0f, -0.45f),
+                K(3.5f).Sp(14f, 0f, 0f).Ch(10f, 0f, 0f).Hd(-20f, 0f, 0f).RA(-165f, 0f, -8f).LA(-165f, 0f, 8f).Rot(60f, 0f, 0f).LL(-0.12f, -0.05f, 0f, -0.45f).RL(-0.12f, -0.05f, 0f, -0.45f)
+            };
+            DragonClipKey cl = K(0f).Sp(26f, 0f, 0f).Ch(12f, 0f, 0f).Hd(-10f, 0f, 0f).RA(-60f, 0f, -20f).RF(-30f, 0f, 0f).LA(-55f, 20f, 20f).LF(-70f, 0f, 0f).Off(0f, -0.3f, 0.04f).LL(0.55f, 0.1f, 0.75f, 0f).RL(0.3f, 0.1f, 0.85f, 0f);
+            c["cleric_land"] = new DragonClipKey[] { K(-1f), cl, cl.Copy(0.25f).Off(0f, -0.28f, 0.04f), K(0.7f) };
+            c["land_crash"] = c["cleric_land"];
+            // Swallow Dive: streamlined along the aim, bow tight to the body, legs together.
+            DragonClipKey sd = K(0f).Sp(10f, 0f, 0f).Ch(6f, 0f, 0f).Hd(-24f, 0f, 0f).RA(40f, 0f, -20f).RF(-20f, 0f, 0f).LA(-30f, 0f, 15f).LF(-90f, 0f, 0f).Rot(70f, 0f, 0f).LL(-0.1f, -0.05f, 0f, -0.4f).RL(-0.1f, -0.05f, 0f, -0.4f);
+            c["rg_dive"] = new DragonClipKey[] { K(-1f), sd, sd.Copy(0.15f), K(0.45f).LL(0.15f, 0f, 0.3f, 0f).RL(0.1f, 0f, 0.3f, 0f), K(0.7f) };
+        }
+
+        private static void AddStance(Dictionary<string, DragonClipKey[]> c, string name, float depth)
+        {
+            DragonClipKey[] keys;
+            if (!c.TryGetValue(name, out keys)) return;
+            for (int i = 0; i < keys.Length; i++)
+            {
+                bool rest = keys[i].B[1] == Vector3.zero && keys[i].B[4] == Vector3.zero;
+                if (!rest) Stance(keys[i], depth);
+            }
         }
 
         // ------------------------------------------------------------------ v0.25.16 Blueprint part B
@@ -2603,6 +2735,8 @@ namespace DragonsAltarCombat
                 k[i] = pose.Copy(start + turn * i / 4f);
                 k[i].R = new Vector3(pose.R.x, pose.R.y + 90f * i, pose.R.z);
                 k[i].Lin = i > 0;
+                // v0.25.17 Cyclone: the turn stands on a wide pivot stance unless the pose has its own legs.
+                if (k[i].L[2] == 0f && k[i].L[6] == 0f) k[i].LL(0.12f, 0.14f, 0.25f, 0f).RL(0.1f, 0.14f, 0.25f, 0f);
             }
             k[5] = K(start + turn + settle).Rot(0f, 360f, 0f);
             return k;
