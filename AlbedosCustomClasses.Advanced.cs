@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.15";
+        public const string ModVersion = "0.25.16";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -2443,7 +2443,7 @@ namespace AlbedosCustomClassesAdvanced
         {
             if (!BeginCast(player, "SwordMaster.KnightsGuidance", _kgCooldown.Value, 0f)) return;
             DragonCombat.LockSkill(player, 0.5f);
-            DragonCombat.PlayClip(player, "sm_guidance", 0.15f);
+            DragonCombat.PlayClip(player, "sm_guidance", 0.06f);   // v0.25.16 release-first
             ShowMessage("Knight's Guidance");
             float radius = Mathf.Max(1f, DragonCombat.M(_kgRadius.Value));
             float duration = Mathf.Max(1f, _kgDuration.Value);
@@ -2766,7 +2766,7 @@ namespace AlbedosCustomClassesAdvanced
             DragonCombat.ShowStatus(player, "fury", "fury", "Unchained Fury", Mathf.Max(0.5f, _furyDurationV.Value), 0);
             if (player != null)
             {
-                DragonCombat.PlayAccent(player, "merc_roar", 0.35f);   // v0.25.15 Fury = low-priority accent
+                DragonCombat.PlayAccent(player, "merc_fury_accent", 0.12f);   // v0.25.15 Fury = low-priority accent
                 if (_enableVfx.Value)
                     StartCoroutine(AnimateAura(player, new Color(1f, 0.22f, 0.08f, 0.92f), Mathf.Max(0.5f, _furyDurationV.Value)));
             }
@@ -4064,7 +4064,7 @@ namespace AlbedosCustomClassesAdvanced
                 return;
             // v0.17.0: instant cast (no channel), 0.5s movement lock, chant animation.
             DragonCombat.LockSkill(player, 0.5f);
-            DragonCombat.PlayClip(player, "cleric_ray", 0.15f);
+            DragonCombat.PlayClip(player, "cleric_ray", 0.06f);   // v0.25.16 release-first
             StartCoroutine(RayOfHopeRoutine(player, 0f));
         }
 
@@ -9725,7 +9725,7 @@ namespace AlbedosCustomClassesAdvanced
             if (!BeginCast(player, "Priest.AscendedHolyWave", IhCfg(sk, "Cleric.Holy Wave", "Cooldown", 8f), IhCfg(sk, "Cleric.Holy Wave", "StaminaCost", 25f)))
                 return;
             DragonCombat.LockSkill(player, 0.5f);
-            DragonCombat.PlayClip(player, "cleric_wave_ally", 0.15f);
+            DragonCombat.PlayClip(player, "cleric_wave_ally", 0.06f);   // v0.25.16 release-first
             ShowMessage("Holy Wave");
             StartCoroutine(AscendedHolyWaveRoutine(player));
         }
@@ -11696,7 +11696,7 @@ namespace AlbedosCustomClassesAdvanced
             if (!BeginCast(player, id, _graceLightCooldown.Value, 0f))
                 return;
             DragonCombat.LockSkill(player, 0.5f);
-            DragonCombat.PlayClip(player, "cleric_light", 0.15f);
+            DragonCombat.PlayClip(player, "cleric_light", 0.06f);   // v0.25.16 release-first
             ShowMessage("Heaven's Light");
 
             float radius = Mathf.Max(1f, DragonCombat.M(_graceLightRadius.Value));

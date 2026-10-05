@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Dragon's Altar - Sorcerer Advancements";
-        public const string ModVersion = "0.25.15";
+        public const string ModVersion = "0.25.16";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1492,7 +1492,7 @@ namespace DragonsAltarSorcerer
         {
             if (!BeginSkill(player, "Wizard.Clockwork", _clockCooldown.Value, 0f)) return;
             DragonCombat.LockSkill(player, 0.5f);
-            DragonCombat.PlayClip(player, "wiz_clockwork", 0.12f);
+            DragonCombat.PlayClip(player, "wiz_clockwork", 0.06f);   // v0.25.16 release-first
             ShowMessage("Clockwork");
             Collider[] hits = Physics.OverlapSphere(player.transform.position, DragonCombat.M(_clockRadius.Value));
             HashSet<Player> allies = new HashSet<Player>();

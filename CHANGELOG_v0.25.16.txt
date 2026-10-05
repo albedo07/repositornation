@@ -1,0 +1,20 @@
+IMMORTAL HEROES v0.25.16 - CASTING FAMILIES (Animation Blueprint, part B)
+
+Every skill below now uses its blueprint family (one shared motion, hand profile per class:
+Cleric shield stays close, Sorcerer off hand balances, Ranger bow held low, Warrior off weapon low).
+
+- SKY COMMAND (call-and-lower): Righteous Strike (+Ascended), Goddess Relic, Lightning Relic, Holy Relic,
+  Heaven's Judgement, Glacial Descent (+Ascended); Lightning Tempest = both arms reach. Gather (hand across the
+  sternum, eyes on the target) -> main arm straight overhead -> pulled down pointing at the target -> guard.
+  Meteor Fall / Elemental Cataclysm hold at the CALL pose while charging and release on your release.
+- WAVECALLER (gather-and-open): Holy Wave, Ray of Hope (blessing palm), Heaven's Light (protective),
+  Divine Intervention (palm toward the source), Heaven's Crucible (barrier forearms), Frost Nova (compressed,
+  sharp outward snap), Clockwork (wrist turn), Knight's Guidance / Hawk's Vigil (brow salute into the opening),
+  Tailwind. Instant skills now react at once (release-first, 0.06 s) with a short follow-through.
+- PULSE DRIVE (chamber-and-push): Lightning Zap / Flame Burst (palm cone), Impact Punch (fist), Ascended Holy
+  Wave on an ally (gentle palm), Gravity Blast (two-hand orb push). Lunge legs under the push.
+- POWER PITCH: Judgement Hammer = overarm pitch (hips first, follow-through across the body; the catch stays
+  its own gesture); Punishing Bomb = sideways bat strike.
+- WAR CRY: Battlecry = gather, chest open, roar, settle (no trembling). Unchained Fury and Overcharge are now
+  tiny chest/shoulder accents and never interrupt a skill.
+- PHOENIX RISE: Bless Thy Sinners' save = short upper-body brace-rise-open accent (no crouch, no lock).

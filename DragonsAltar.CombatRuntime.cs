@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.15";
+        public const string ModVersion = "0.25.16";
 
         internal static DragonCombatPlugin Instance;
 
@@ -2176,6 +2176,174 @@ namespace DragonsAltarCombat
             BuildRangerClips(c);
             BuildTraitClips(c);
             BuildBlueprintClips(c);
+            BuildBlueprintB(c);
+        }
+
+        // ------------------------------------------------------------------ v0.25.16 Blueprint part B
+        // Off-hand profiles: 0 = shield (Cleric: kept close / guarded), 1 = free hand (Sorcerer: balances),
+        // 2 = bow (Ranger: held low in the left hand), 3 = weapon (Warrior: off weapon low).
+        private static DragonClipKey OffHand(DragonClipKey k, int prof, int phase)
+        {
+            // phase 0 = gather/load, 1 = call/open, 2 = release
+            if (prof == 0) return k.LA(-40f, 15f, 15f).LF(-78f, 0f, 0f);
+            if (prof == 2) return k.LA(-30f, 0f, 15f).LF(-30f, 0f, 0f);
+            if (prof == 3) return k.LA(-20f, 0f, 22f).LF(-35f, 0f, 0f);
+            if (phase == 0) return k.LA(-35f, 0f, 20f).LF(-60f, 0f, 0f);
+            if (phase == 1) return k.LA(-40f, 0f, 45f).LF(-15f, 0f, 0f);
+            return k.LA(-25f, 0f, 30f).LF(-20f, 0f, 0f);
+        }
+
+        // ANIM_02 SKY COMMAND: gather (main hand across the sternum, gaze on the far target) -> call (main arm
+        // straight overhead) -> release (pull down and point at the target) -> recover. 0-35% gather,
+        // 35-80% lift, 80-100% direct. Charged = hold at CALL until release. grand = both arms reach.
+        private static DragonClipKey[] SkyCommand(int prof, bool charged, bool grand)
+        {
+            DragonClipKey gather = OffHand(K(-0.65f).Sp(4f, 6f, 0f).Ch(2f, 4f, 0f).Hd(6f, -6f, 0f).RA(-50f, 0f, 25f).RF(-100f, 0f, 0f).RH(-10f, 0f, 0f).LL(0.12f, 0.05f, 0.12f, 0f).RL(-0.08f, 0.05f, 0.12f, 0f), prof, 0);
+            DragonClipKey call = OffHand(K(charged ? 0f : -0.2f).Sp(-6f, 0f, 0f).Ch(-8f, 0f, 0f).Hd(-18f, 0f, 0f).RA(-165f, 0f, -10f).RF(-12f, 0f, 0f).RH(-15f, 0f, 0f).Off(0f, 0.02f, 0f).LL(0.08f, 0.08f, 0.05f, 0f).RL(0f, 0.08f, 0.05f, 0f), prof, 1);
+            if (grand) call = call.LA(-150f, 0f, 22f).LF(-12f, 0f, 0f).Hd(-24f, 0f, 0f).Ch(-12f, 0f, 0f);
+            float rt = charged ? 0.1f : 0f;
+            DragonClipKey rel = OffHand(K(rt).Sp(10f, 10f, 0f).Ch(6f, 6f, 0f).Hd(-4f, -4f, 0f).RA(-95f, 0f, -5f).RF(-4f, 0f, 0f).RH(-10f, 0f, 0f).Off(0f, -0.06f, 0.05f).LL(0.3f, 0f, 0.3f, 0f).RL(-0.2f, 0f, 0.15f, 0f), prof, 2);
+            if (grand) rel = rel.LA(-90f, 0f, 10f).LF(-4f, 0f, 0f);
+            DragonClipKey guard = OffHand(K(rt + 0.55f).Sp(4f, 0f, 0f).RA(-30f, 0f, -10f).RF(-50f, 0f, 0f).LL(0.08f, 0f, 0.1f, 0f).RL(0f, 0f, 0.08f, 0f), prof, 0);
+            if (charged) return new DragonClipKey[] { K(-1f), gather.Copy(-0.6f), call, rel, rel.Copy(rt + 0.25f), guard, K(rt + 0.85f) };
+            return new DragonClipKey[] { K(-1f), gather, call, rel, rel.Copy(0.25f), guard, K(0.85f) };
+        }
+
+        // ANIM_03 WAVECALLER: gather (hand near the sternum, shoulders in) -> open (chest lifts, main forearm
+        // opens outward) -> pulse -> recover 0.2 s, never kneeling. v: 0 blessing palm, 1 barrier forearms,
+        // 2 frost snap, 3 salute, 4 clockwork wrist, 5 remote palm (ally / relic source), 6 protective.
+        private static DragonClipKey[] Wavecaller(int prof, int v)
+        {
+            DragonClipKey gather = OffHand(K(-0.6f).Sp(6f, 0f, 0f).Ch(6f, 0f, 0f).Hd(4f, 0f, 0f).RA(-45f, 0f, 30f).RF(-110f, 0f, 0f).RH(-10f, 0f, 0f), prof, 0);
+            DragonClipKey open = OffHand(K(0f).Sp(-4f, 0f, 0f).Ch(-8f, 0f, 0f).Hd(-6f, 0f, 0f).RA(-80f, 0f, -55f).RF(-15f, 0f, 0f).RH(-25f, 0f, 0f).Off(0f, 0.02f, 0f), prof, 1);
+            if (v == 1)
+            {
+                gather = K(-0.6f).Sp(8f, 0f, 0f).Ch(8f, 0f, 0f).Hd(6f, 0f, 0f).RA(-90f, 0f, 30f).RF(-110f, 0f, 0f).LA(-90f, 0f, -30f).LF(-110f, 0f, 0f).Off(0f, -0.04f, 0f);
+                open = K(0f).Sp(-4f, 0f, 0f).Ch(-10f, 0f, 0f).Hd(-8f, 0f, 0f).RA(-85f, 0f, -60f).RF(-30f, 0f, 0f).LA(-85f, 0f, 60f).LF(-30f, 0f, 0f).Off(0f, 0.03f, 0f).LL(0.05f, 0.1f, 0.05f, 0f).RL(0.05f, 0.1f, 0.05f, 0f);
+            }
+            else if (v == 2)
+            {
+                gather = K(-0.6f).Sp(18f, 0f, 0f).Ch(10f, 0f, 0f).Hd(8f, 0f, 0f).RA(-50f, 0f, 35f).RF(-120f, 0f, 0f).LA(-50f, 0f, -35f).LF(-120f, 0f, 0f).Off(0f, -0.1f, 0f).LL(0.3f, 0f, 0.35f, 0f).RL(0.3f, 0f, 0.35f, 0f);
+                open = K(0f).Sp(-6f, 0f, 0f).Ch(-12f, 0f, 0f).Hd(-10f, 0f, 0f).RA(-60f, 0f, -78f).RF(-5f, 0f, 0f).RH(-30f, 0f, 0f).LA(-60f, 0f, 78f).LF(-5f, 0f, 0f).LH(-30f, 0f, 0f).Off(0f, 0f, 0f).LL(0.08f, 0.18f, 0.12f, 0f).RL(0.08f, 0.18f, 0.12f, 0f);
+            }
+            else if (v == 3)
+            {
+                gather = OffHand(K(-0.6f).Hd(-4f, 0f, 0f).RA(-125f, 0f, 22f).RF(-130f, 0f, 0f).RH(-10f, 0f, 0f), prof, 0);
+                open = OffHand(K(0f).Ch(-8f, 0f, 0f).Hd(-8f, 0f, 0f).RA(-95f, 0f, -50f).RF(-10f, 0f, 0f).RH(-20f, 0f, 0f), prof, 1);
+            }
+            else if (v == 4)
+            {
+                gather = K(-0.6f).Sp(6f, 0f, 0f).Ch(4f, 0f, 0f).Hd(10f, 0f, 0f).RA(-60f, 0f, 30f).RF(-90f, 0f, 0f).RH(0f, 60f, 0f).LA(-60f, 0f, -20f).LF(-80f, 0f, 0f);
+                DragonClipKey turn = gather.Copy(-0.2f).RH(0f, -60f, 0f);
+                open = K(0f).Ch(-8f, 0f, 0f).Hd(-6f, 0f, 0f).RA(-80f, 0f, -55f).RF(-15f, 0f, 0f).RH(-25f, 0f, 0f).LA(-40f, 0f, 45f).LF(-15f, 0f, 0f);
+                return new DragonClipKey[] { K(-1f), gather, turn, open, open.Copy(0.12f).RA(-85f, 0f, -62f), K(0.4f) };
+            }
+            else if (v == 5)
+            {
+                open = OffHand(K(0f).Sp(4f, 0f, 0f).Ch(-2f, 0f, 0f).Hd(-6f, 0f, 0f).RA(-112f, 0f, -15f).RF(-10f, 0f, 0f).RH(-35f, 0f, 0f).Off(0f, 0f, 0.03f), prof, 1);
+            }
+            else if (v == 6)
+            {
+                open = K(0f).Sp(-4f, 0f, 0f).Ch(-10f, 0f, 0f).Hd(-10f, 0f, 0f).RA(-120f, 0f, -40f).RF(-20f, 0f, 0f).RH(-30f, 0f, 0f).LA(-85f, 15f, 35f).LF(-40f, 0f, 0f).Off(0f, 0.03f, 0f);
+            }
+            DragonClipKey pulse = open.Copy(0.12f);
+            pulse.B[4] = pulse.B[4] + new Vector3(-5f, 0f, v == 5 ? 0f : -8f);
+            return new DragonClipKey[] { K(-1f), gather, open, pulse, K(0.4f) };
+        }
+
+        // ANIM_13 PULSE DRIVE: chamber (elbow by the ribs, shoulder back) -> drive -> release (hand on the
+        // emission plane, lunge legs) -> reset. v: 0 palm, 1 fist, 2 two-hand orb, 3 gentle palm.
+        private static DragonClipKey[] PulseDrive(int prof, int v)
+        {
+            bool two = v == 2;
+            DragonClipKey ch = OffHand(K(-0.7f).Sp(6f, -18f, 0f).Ch(4f, -10f, 0f).Hd(0f, 12f, 0f).RA(-35f, 0f, 10f).RF(-120f, 0f, 0f).LL(0.2f, 0f, 0.2f, 0f).RL(-0.1f, 0f, 0.15f, 0f), prof, 0);
+            if (two) ch = ch.Sp(8f, 0f, 0f).Ch(6f, 0f, 0f).Hd(0f, 0f, 0f).RA(-45f, 0f, 25f).RF(-115f, 0f, 0f).LA(-45f, 0f, -25f).LF(-115f, 0f, 0f);
+            DragonClipKey drive = OffHand(K(-0.25f).Sp(8f, 0f, 0f).Ch(4f, 0f, 0f).RA(-75f, 0f, 0f).RF(-60f, 0f, 0f).LL(0.25f, 0f, 0.25f, 0f).RL(-0.15f, 0f, 0.15f, 0f), prof, 1);
+            if (two) drive = drive.LA(-75f, 0f, 0f).LF(-60f, 0f, 0f);
+            float palm = v == 1 ? 0f : (v == 3 ? -20f : -35f);
+            float lunge = v == 3 ? 0.5f : 1f;
+            DragonClipKey rel = OffHand(K(0f).Sp(10f * lunge, two ? 0f : 14f * lunge, 0f).Ch(6f * lunge, two ? 0f : 8f * lunge, 0f).Hd(-4f, two ? 0f : -10f, 0f).RA(-92f, 0f, two ? -8f : -3f).RF(v == 3 ? -15f : -5f, 0f, 0f).RH(palm, 0f, 0f).Off(0f, -0.04f * lunge, 0.06f * lunge).LL(0.3f * lunge, 0f, 0.3f * lunge, 0f).RL(-0.2f * lunge, 0f, 0.15f * lunge, 0f), prof, 2);
+            if (two) rel = rel.LA(-92f, 0f, 8f).LF(-5f, 0f, 0f).LH(palm, 0f, 0f);
+            else if (prof == 1 && v != 1) rel = rel.LA(-20f, 0f, 30f).LF(-45f, 0f, 0f);
+            DragonClipKey reset = OffHand(K(0.35f).Sp(4f, 0f, 0f).RA(-40f, 0f, 10f).RF(-80f, 0f, 0f).LL(0.08f, 0f, 0.08f, 0f), prof, 0);
+            return new DragonClipKey[] { K(-1f), ch, drive, rel, rel.Copy(0.12f), reset, K(0.6f) };
+        }
+
+        // ANIM_12 POWER PITCH: load (weapon/hand chambered behind the shoulder, off arm sights the target)
+        // -> drive (hips first, chest follows) -> release through the launch line -> follow across the body.
+        // bat = sideways bat strike (Punishing Bomb) instead of the overarm pitch (Judgement Hammer).
+        private static DragonClipKey[] PowerPitch(bool bat)
+        {
+            DragonClipKey load, drive, rel, follow;
+            if (!bat)
+            {
+                load = K(-0.6f).Sp(4f, -30f, 0f).Ch(-6f, -16f, 0f).Hd(0f, 25f, 0f).RA(-140f, 0f, -35f).RF(-110f, 0f, 0f).LA(-70f, 0f, 20f).LF(-20f, 0f, 0f).LL(0.25f, 0f, 0.1f, 0f).RL(-0.15f, 0f, 0.25f, 0f);
+                drive = K(-0.15f).Hp(0f, 10f, 0f).Sp(8f, -12f, 0f).Ch(0f, -6f, 0f).Hd(0f, 12f, 0f).RA(-160f, 0f, -15f).RF(-60f, 0f, 0f).LA(-50f, 0f, 25f).LF(-30f, 0f, 0f).LL(0.32f, 0f, 0.2f, 0f).RL(-0.22f, 0f, 0.2f, 0f);
+                rel = K(0f).Hp(0f, 14f, 0f).Sp(22f, 20f, 0f).Ch(10f, 12f, 0f).Hd(-10f, -15f, 0f).RA(-95f, 0f, 0f).RF(-5f, 0f, 0f).RH(-20f, 0f, 0f).LA(-10f, 0f, 30f).LF(-40f, 0f, 0f).Off(0f, -0.05f, 0.08f).LL(0.4f, 0f, 0.3f, 0f).RL(-0.3f, 0f, 0.2f, 0f);
+                follow = K(0.2f).Hp(0f, 16f, 0f).Sp(24f, 28f, 0f).Ch(12f, 16f, 0f).Hd(-8f, -18f, 0f).RA(-40f, 0f, 40f).RF(-30f, 0f, 0f).LA(-5f, 0f, 30f).LF(-40f, 0f, 0f).Off(0f, -0.06f, 0.08f).LL(0.4f, 0f, 0.32f, 0f).RL(-0.3f, 0f, 0.22f, 0f);
+            }
+            else
+            {
+                load = K(-0.55f).Sp(6f, -45f, 0f).Ch(4f, -25f, 0f).Hd(0f, 35f, 0f).RA(-50f, 0f, -60f).RF(-70f, 0f, 0f).LA(-40f, 0f, 25f).LF(-50f, 0f, 0f).Off(0f, -0.06f, 0f).LL(0.2f, 0.08f, 0.25f, 0f).RL(0.05f, 0.08f, 0.3f, 0f);
+                drive = K(-0.12f).Hp(0f, -8f, 0f).Sp(8f, -15f, 0f).Ch(4f, -8f, 0f).Hd(0f, 18f, 0f).RA(-65f, 0f, -55f).RF(-40f, 0f, 0f).LA(-35f, 0f, 25f).LF(-50f, 0f, 0f).Off(0f, -0.06f, 0f).LL(0.25f, 0.08f, 0.25f, 0f).RL(0f, 0.08f, 0.25f, 0f);
+                rel = K(0f).Hp(0f, 12f, 0f).Sp(10f, 32f, 0f).Ch(6f, 18f, 0f).Hd(0f, -20f, 0f).RA(-85f, 0f, -20f).RF(-5f, 0f, 0f).LA(-30f, 0f, 30f).LF(-50f, 0f, 0f).Off(0f, -0.06f, 0.04f).LL(0.3f, 0.08f, 0.25f, 0f).RL(-0.1f, 0.08f, 0.2f, 0f);
+                follow = K(0.2f).Hp(0f, 16f, 0f).Sp(10f, 50f, 0f).Ch(6f, 28f, 0f).Hd(0f, -26f, 0f).RA(-70f, 0f, 40f).RF(-30f, 0f, 0f).LA(-30f, 0f, 30f).LF(-50f, 0f, 0f).Off(0f, -0.05f, 0.04f).LL(0.3f, 0.08f, 0.25f, 0f).RL(-0.1f, 0.08f, 0.2f, 0f);
+            }
+            return new DragonClipKey[] { K(-1f), load, drive, rel, follow, K(0.6f) };
+        }
+
+        private static void BuildBlueprintB(Dictionary<string, DragonClipKey[]> c)
+        {
+            // Sky Command: every remote sky summon / bombardment shares one call-and-lower motion.
+            c["cleric_rs"] = SkyCommand(0, false, false);
+            c["cleric_rs_asc"] = SkyCommand(0, false, false);
+            c["cleric_goddess"] = SkyCommand(0, false, false);
+            c["cleric_relic"] = SkyCommand(0, false, false);
+            c["cleric_holy_relic"] = SkyCommand(0, false, false);
+            c["cleric_judgement"] = SkyCommand(0, false, false);
+            c["cleric_tempest"] = SkyCommand(0, false, true);
+            c["sorc_glacial"] = SkyCommand(1, false, false);
+            c["sorc_glacial_asc"] = SkyCommand(1, false, false);
+            c["wiz_meteor"] = SkyCommand(1, true, false);
+            c["wiz_cataclysm"] = SkyCommand(1, true, true);
+            // Wavecaller: radial heals / buffs / barriers / novas.
+            c["cleric_wave"] = Wavecaller(0, 0);
+            c["cleric_ray"] = Wavecaller(0, 0);
+            c["cleric_light"] = Wavecaller(0, 6);
+            c["cleric_intervention"] = Wavecaller(0, 5);
+            c["cleric_crucible"] = Wavecaller(0, 1);
+            c["wiz_nova"] = Wavecaller(1, 2);
+            c["wiz_clockwork"] = Wavecaller(1, 4);
+            c["sm_guidance"] = Wavecaller(3, 3);
+            c["rg_tailwind"] = Wavecaller(2, 0);
+            c["rg_vigil"] = Wavecaller(2, 3);
+            // Pulse Drive: punches, cones, orbs, directed blessings.
+            c["cleric_zap"] = PulseDrive(0, 0);
+            c["cleric_wave_ally"] = PulseDrive(0, 3);
+            c["sorc_flame"] = PulseDrive(1, 0);
+            c["warrior_punch"] = PulseDrive(3, 1);
+            c["hw_gravity_blast"] = PulseDrive(1, 2);
+            // Power Pitch: thrown / batted summoned projectiles (the hammer catch overlay stays cleric_hammer_call).
+            c["cleric_hammer"] = PowerPitch(false);
+            c["merc_bomb"] = PowerPitch(true);
+            // ANIM_04 WAR CRY: Battlecry = deliberate gather -> open -> roar -> settle (no trembling).
+            DragonClipKey wcOpen = K(0f).Sp(-6f, 0f, 0f).Ch(-14f, 0f, 0f).Hd(-16f, 0f, 0f).RA(-40f, 0f, -60f).RF(-70f, 0f, 0f).LA(-40f, 0f, 60f).LF(-70f, 0f, 0f).Off(0f, 0.02f, 0f).LL(0.1f, 0.12f, 0.15f, 0f).RL(0.1f, 0.12f, 0.15f, 0f);
+            c["merc_roar"] = new DragonClipKey[] {
+                K(-1f),
+                K(-0.6f).Sp(14f, 0f, 0f).Ch(10f, 0f, 0f).Hd(6f, 0f, 0f).RA(-30f, 0f, 20f).RF(-100f, 0f, 0f).LA(-30f, 0f, -20f).LF(-100f, 0f, 0f).Off(0f, -0.06f, 0f).LL(0.25f, 0.05f, 0.25f, 0f).RL(0.25f, 0.05f, 0.25f, 0f),
+                wcOpen, wcOpen.Copy(0.3f).Hd(-12f, 0f, 0f), K(0.7f)
+            };
+            // Automatic procs: shoulder / chest accents only (PlayAccent never interrupts a skill clip).
+            c["merc_fury_accent"] = new DragonClipKey[] { K(-1f), K(0f).Sp(-3f, 0f, 0f).Ch(-8f, 0f, 0f).Hd(-8f, 0f, 0f).RA(-20f, 0f, -25f).LA(-20f, 0f, 25f), K(0.25f) };
+            c["wiz_overcharge"] = new DragonClipKey[] { K(-1f), K(0f).Ch(-8f, 0f, 0f).Hd(-10f, 0f, 0f).RA(-30f, 0f, -45f).RF(-10f, 0f, 0f).LA(-30f, 0f, 45f).LF(-10f, 0f, 0f), K(0.3f) };
+            // ANIM_20 PHOENIX RISE (Bless Thy Sinners): upper-body accent only (brace, rise, small opening),
+            // no root move, no legs, no lock. Survival is applied at once; no knockdown.
+            c["cleric_rise"] = new DragonClipKey[] {
+                K(-1f),
+                K(-0.5f).Sp(6f, 0f, 0f).Ch(8f, 0f, 0f).Hd(6f, 0f, 0f).RA(-15f, 0f, 10f).LA(-15f, 0f, -10f),
+                K(0f).Sp(-3f, 0f, 0f).Ch(-9f, 0f, 0f).Hd(-12f, 0f, 0f).RA(-35f, 0f, -30f).RF(-10f, 0f, 0f).LA(-35f, 0f, 30f).LF(-10f, 0f, 0f),
+                K(0.25f)
+            };
         }
 
         // ------------------------------------------------------------------ v0.25.15 Animation Blueprint (user storyboards)

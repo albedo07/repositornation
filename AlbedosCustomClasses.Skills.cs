@@ -220,7 +220,7 @@ namespace AlbedosCustomClassesSkills
         public static SkillsPlugin Instance;
         public const string ModGuid = "albedo.customclasses.skills";
         public const string ModName = "Dragon's Altar - Starter Skills";
-        public const string ModVersion = "0.25.15";
+        public const string ModVersion = "0.25.16";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";
@@ -780,7 +780,7 @@ namespace AlbedosCustomClassesSkills
                 return;
 
             DragonCombat.LockSkill(player, 0.4f);
-            DragonCombat.PlayClip(player, "cleric_zap", 0.12f);
+            DragonCombat.PlayClip(player, "cleric_zap", 0.06f);   // v0.25.16 release-first
             ShowMessage("Lightning Zap");
 
             Vector3 origin = player.transform.position + Vector3.up * 1.1f;
@@ -844,7 +844,7 @@ namespace AlbedosCustomClassesSkills
 
             // v0.17.0: instant cast, 0.5s movement lock, chant animation.
             DragonCombat.LockSkill(player, 0.5f);
-            DragonCombat.PlayClip(player, "cleric_wave", 0.15f);
+            DragonCombat.PlayClip(player, "cleric_wave", 0.06f);   // v0.25.16 release-first
             ShowMessage("Holy Wave");
             StartCoroutine(HolyWaveRoutine(player));
         }
@@ -882,7 +882,7 @@ namespace AlbedosCustomClassesSkills
             const string id = "Sorcerer.FlameBurst";
             if (!BeginCastEitr(player, id, _flameCooldown.Value, _flameEitr.Value)) return;
             DragonCombat.LockSkill(player, 0.4f);
-            DragonCombat.PlayClip(player, "sorc_flame", 0.12f);
+            DragonCombat.PlayClip(player, "sorc_flame", 0.06f);   // v0.25.16 release-first
             ShowMessage("Flame Burst");
             Vector3 origin = player.transform.position + Vector3.up * 1.1f;
             Vector3 forward = GetCrosshairDirection(player, origin);

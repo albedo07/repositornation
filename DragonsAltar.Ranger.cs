@@ -40,7 +40,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Dragon's Altar - Ranger";
-        public const string ModVersion = "0.25.15";
+        public const string ModVersion = "0.25.16";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -1265,7 +1265,7 @@ namespace DragonsAltarRanger
             if (CooldownRemaining("Acrobat.Tailwind") > 0f) { ShowCooldown("Acrobat.Tailwind"); return; }
             StartCooldown("Acrobat.Tailwind", _twCooldown.Value);
             DragonCombat.LockSkill(player, 0.5f);
-            DragonCombat.PlayClip(player, "rg_tailwind", 0.2f);
+            DragonCombat.PlayClip(player, "rg_tailwind", 0.06f);   // v0.25.16 release-first
             ShowMessage("Tailwind");
             float duration = Mathf.Max(1f, _twDuration.Value);
             HashSet<Player> allies = new HashSet<Player>();
@@ -2310,7 +2310,7 @@ namespace DragonsAltarRanger
             if (CooldownRemaining("Bowmaster.HawksVigil") > 0f) { ShowCooldown("Bowmaster.HawksVigil"); return; }
             StartCooldown("Bowmaster.HawksVigil", _hvCooldown.Value);
             DragonCombat.LockSkill(player, 0.5f);
-            DragonCombat.PlayClip(player, "rg_vigil", 0.15f);
+            DragonCombat.PlayClip(player, "rg_vigil", 0.06f);   // v0.25.16 release-first
             ShowMessage("Hawk's Vigil");
             float duration = Mathf.Max(1f, _hvDuration.Value);
             Collider[] hits = Physics.OverlapSphere(player.transform.position, DragonCombat.M(_hvRadius.Value));

@@ -1,9 +1,9 @@
-TEST v0.25.15
-1. Shield Charge: the legs RUN during the charge (no sliding idle). Shield ahead, weapon low behind, torso
-   leaned in. Left Click Bash = shield shove + lunge, then recover. Charging into a wall still treadmills.
-2. Frenzied Charge: braced lunge wind up, then running legs under the dash.
-3. Electric Smite + Bonecrusher: crouch, horizontal barrel roll in the air, unwind, superhero landing exactly when
-   the damage lands (also from a cliff: the falling pose holds until the ground). The weapon reappears after ~0.5 s.
-4. LEGS: if knees bend backwards or thighs move the wrong way, set [Runtime] LegMotionScale_v02515 = -1 in F8 and
-   tell me (legs are new; this is their first calibration).
-5. Unchained Fury / Overcharge / Bless Thy Sinners during a skill animation: the skill animation is not cut.
+TEST v0.25.16
+1. Relics / Righteous Strike / Glacial / Judgement / Tempest: gather -> arm overhead -> point down at the target.
+2. Meteor Fall / Cataclysm: arm(s) stay raised while charging, pull down on release.
+3. Holy Wave, Ray of Hope, Heaven's Light, Crucible, Frost Nova, Clockwork, Knight's Guidance, Tailwind, Hawk's
+   Vigil: instant reaction, open gesture, no long recovery.
+4. Lightning Zap, Flame Burst, Impact Punch, Gravity Blast: chamber then push toward the aim.
+5. Judgement Hammer overarm throw; Punishing Bomb sideways bat swing.
+6. Battlecry roar; Fury / Overcharge proc = tiny accent only; death-save = small chest lift.
+7. Legs (from v0.25.15): if knees bend wrong, F8 [Runtime] LegMotionScale_v02515 = -1 and tell me.

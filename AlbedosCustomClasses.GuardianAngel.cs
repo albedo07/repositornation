@@ -17,7 +17,7 @@ namespace AlbedosCustomClassesGuardian
     {
         public const string ModGuid = "albedo.customclasses.guardian";
         public const string ModName = "Dragon's Altar - Grand Sigil Survival";
-        public const string ModVersion = "0.25.15";
+        public const string ModVersion = "0.25.16";
 
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -167,7 +167,7 @@ namespace AlbedosCustomClassesGuardian
             DragonCombat.ApplyTimedBuff(player, "Priest.GrandSigilRecovery", Mathf.Max(0.1f, _recoveryDuration.Value), 0f, 0f, 0.50f, 0f, 0f, 0f, false);
             DragonCombat.ApplyStaminaUseCut(player, Mathf.Max(0f, _staminaUseCut.Value) / 100f, Mathf.Max(0.1f, _recoveryDuration.Value));
             StartCoroutine(Recovery(player));
-            DragonCombat.PlayAccent(player, "cleric_rise", 0.6f);   // v0.25.13: rises back from the brink
+            DragonCombat.PlayAccent(player, "cleric_rise", 0.12f);   // v0.25.13: rises back from the brink
 
             if (MessageHud.instance != null)
                 MessageHud.instance.ShowMessage(
