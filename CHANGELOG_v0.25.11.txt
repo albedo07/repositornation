@@ -1,0 +1,15 @@
+IMMORTAL HEROES v0.25.11 - DAMAGE SPLIT AND TOOLTIPS
+
+DAMAGE SPLIT (separate damage numbers per type)
+- Heaven's Will (Paladin, Club + Shield): the Slash and Pierce it adds (50% of Blunt each) are now REAL
+  separate hits: a normal attack shows 3 numbers - Blunt, then Slash, then Pierce (0.06s apart).
+  Each part meets the target's own Slash / Pierce resistance; knockback and status effects come once.
+- Engine: any module can ask for a split (DragonCombat.RequestDamageSplit). Combat Runtime's damage hook now
+  runs after every module's hook, and the split parts are never buffed twice.
+
+VANILLA TOOLTIPS (engine: DragonCombat.RegisterTooltipFilter)
+- Item tooltips can now show Immortal Heroes' real changes.
+- Paladin + Club weapon: "Slash" and "Pierce" lines (50% of the Blunt, same range) tagged Heaven's Will;
+  "(with a Shield)" when no Shield is equipped. Existing higher values are never lowered.
+- Movement speed: items whose penalty a trait removes now show 0% and "(-5% removed: Cleric's Blessing)"
+  (also Warfreak, The Way of the Sword, Wildborn, Heaven's Will armor, Heaven's Light).

@@ -1,4 +1,5 @@
-TEST v0.25.10
-Ranger / Acrobat / Bowmaster: cast every skill (Ascended via F8) in third person.
-Bow arm (left) should point at the target, right hand at the cheek while drawing.
-If an arm bends the wrong way, tell me skill + arm.
+TEST v0.25.11
+1. Paladin with a Club + Shield: hit a Troll -> three numbers per hit (Blunt, Slash, Pierce).
+2. Hover a Club weapon in the inventory as Paladin: Slash / Pierce lines under Blunt (Heaven's Will).
+3. Cleric with a 1H Club / Shield: their Movement speed line shows 0% (... removed: Cleric's Blessing).
+4. Knockback / stagger feel the same as before (one push per swing).

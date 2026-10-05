@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.10";
+        public const string ModVersion = "0.25.11";
 
         internal static DragonCombatPlugin Instance;
 
@@ -172,6 +172,78 @@ namespace DragonsAltarCombat
             return n;
         }
 
+        // v0.25.11 VANILLA TOOLTIPS: every ItemDrop.ItemData.GetTooltip overload gets a postfix that runs the
+        // registered filters (DragonCombat.RegisterTooltipFilter), so Immortal Heroes can show its real changes
+        // on vanilla item tooltips. Built in: movement penalties removed by Blessings / Masteries / Graces.
+        private int PatchItemTooltips()
+        {
+            Type itemType = typeof(ItemDrop.ItemData);
+            HarmonyMethod post = new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("ItemTooltipPostfix", BindingFlags.Static | BindingFlags.NonPublic));
+            int n = 0;
+            MethodInfo[] ms = itemType.GetMethods(BindingFlags.Static | BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            for (int i = 0; i < ms.Length; i++)
+            {
+                if (ms[i].Name != "GetTooltip" || ms[i].ReturnType != typeof(string)) continue;
+                try { PatchWithHarmony(ms[i], null, post); n++; }
+                catch (Exception ex) { Logger.LogWarning("Could not patch ItemData.GetTooltip: " + ex.Message); }
+            }
+            if (n == 0) Logger.LogWarning("ItemData.GetTooltip not found: vanilla tooltips stay unchanged.");
+            return n;
+        }
+
+        private static void ItemTooltipPostfix(object __instance, object[] __args, ref string __result)
+        {
+            try
+            {
+                ItemDrop.ItemData item = null;
+                if (__args != null) for (int i = 0; i < __args.Length && item == null; i++) item = __args[i] as ItemDrop.ItemData;
+                if (item == null) item = __instance as ItemDrop.ItemData;
+                if (item == null || string.IsNullOrEmpty(__result)) return;
+                __result = DragonCombat.FilterItemTooltip(item, __result);
+                __result = MovementTooltip(item, __result);
+            }
+            catch { }
+        }
+
+        private static readonly System.Text.RegularExpressions.Regex MoveLine =
+            new System.Text.RegularExpressions.Regex(@"((?:\$item_movement_modifier|Movement speed):\s*<color=[^>]*>)([+\-]?\d+)(%</color>)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        // Shows the movement penalty this player really gets from the item (0% when a trait removes it).
+        private static string MovementTooltip(ItemDrop.ItemData item, string text)
+        {
+            Player p = Player.m_localPlayer;
+            if (p == null || item.m_shared == null || item.m_shared.m_movementModifier >= 0f) return text;
+            string reason = MovementExemptReason(p, item);
+            if (reason == null) return text;
+            return MoveLine.Replace(text, delegate(System.Text.RegularExpressions.Match m)
+            {
+                return m.Groups[1].Value + "0" + m.Groups[3].Value + " <color=#80D8FF>(" + m.Groups[2].Value + "% removed: " + reason + ")</color>";
+            }, 1);
+        }
+
+        private static bool IsArmorPiece(ItemDrop.ItemData item)
+        {
+            string t = item.m_shared.m_itemType.ToString();
+            return t == "Chest" || t == "Legs" || t == "Helmet" || t == "Shoulder";
+        }
+
+        private static string MovementExemptReason(Player p, ItemDrop.ItemData item)
+        {
+            if (DragonCombat.HasNoEquipmentPenalty(p)) return "Heaven's Light";
+            string adv = DragonCombat.GetAdvancementName(p);
+            string cls = DragonCombat.GetClassName(p);
+            if ((adv == "Mercenary" || adv == "Sword Master") && WeaponMasteryExemptPenalty(item, adv) < 0f)
+                return adv == "Mercenary" ? "Warfreak" : "The Way of the Sword";
+            if (cls == "Ranger" && RangedExemptPenalty(item, adv == "Bowmaster") < 0f) return "Wildborn";
+            if (cls == "Cleric" && Instance != null)
+            {
+                if (Instance.ClericBlessingNoPenalty.Value && ClericExemptPenalty(item) < 0f) return "Cleric's Blessing";
+                if (Instance.HolyTrinityNoArmorPenalty.Value && adv == "Paladin" && IsArmorPiece(item) && DragonCombat.IsHolyTrinityActive(p))
+                    return "Heaven's Will";
+            }
+            return null;
+        }
+
         private static bool HudVitalsPrefix()
         {
             return !DragonCombat.VanillaVitalsHidden;
@@ -242,6 +314,7 @@ namespace DragonsAltarCombat
             count += PatchSetControls();
             count += PatchHudStatusList();
             count += PatchHudVitals();
+            count += PatchItemTooltips();
             count += PatchCheckRun();
             count += PatchInterruptMethod("Stagger");
             count += PatchInterruptMethod("AddStaggerDamage");
@@ -378,7 +451,10 @@ namespace DragonsAltarCombat
 
                     try
                     {
-                        PatchWithHarmony(method, new HarmonyMethod(prefixMethod), new HarmonyMethod(postfixMethod));
+                        // v0.25.11: run after every module's Damage prefix (damage split happens here).
+                        HarmonyMethod damagePrefix = new HarmonyMethod(prefixMethod);
+                        damagePrefix.priority = Priority.Last;
+                        PatchWithHarmony(method, damagePrefix, new HarmonyMethod(postfixMethod));
                         count++;
                     }
                     catch (Exception ex)
@@ -4287,6 +4363,85 @@ namespace DragonsAltarCombat
                    skill == Skills.SkillType.Unarmed || skill == Skills.SkillType.Pickaxes;
         }
 
+        // v0.25.11: modules rewrite vanilla item tooltips (input = the tooltip text, $tokens not yet localized).
+        private static readonly List<Func<ItemDrop.ItemData, string, string>> TooltipFilters = new List<Func<ItemDrop.ItemData, string, string>>();
+
+        public static void RegisterTooltipFilter(Func<ItemDrop.ItemData, string, string> filter)
+        {
+            if (filter != null && !TooltipFilters.Contains(filter)) TooltipFilters.Add(filter);
+        }
+
+        public static string FilterItemTooltip(ItemDrop.ItemData item, string text)
+        {
+            for (int i = 0; i < TooltipFilters.Count; i++)
+            {
+                try { string r = TooltipFilters[i](item, text); if (r != null) text = r; } catch { }
+            }
+            return text;
+        }
+
+        public static bool SplitHitInFlight;
+        private static HitData _splitRequest;
+        private static MethodInfo _memberwiseClone;
+
+        // Called by any module's Damage prefix (which runs before this one): split this hit per damage type.
+        public static void RequestDamageSplit(HitData hit)
+        {
+            _splitRequest = hit;
+        }
+
+        private static void SplitPhysicalTypes(Character target, HitData hit)
+        {
+            float blunt = hit.m_damage.m_blunt, slash = hit.m_damage.m_slash, pierce = hit.m_damage.m_pierce;
+            List<KeyValuePair<string, float>> parts = new List<KeyValuePair<string, float>>();
+            bool kept = false;
+            if (blunt > 0f) kept = true;
+            if (slash > 0f) { if (kept) { parts.Add(new KeyValuePair<string, float>("m_slash", slash)); hit.m_damage.m_slash = 0f; } else kept = true; }
+            if (pierce > 0f) { if (kept) { parts.Add(new KeyValuePair<string, float>("m_pierce", pierce)); hit.m_damage.m_pierce = 0f; } else kept = true; }
+            if (parts.Count == 0 || DragonCombatPlugin.Instance == null) return;
+            List<HitData> hits = new List<HitData>();
+            for (int i = 0; i < parts.Count; i++)
+            {
+                HitData part = CloneHitOnly(hit, parts[i].Key, parts[i].Value);
+                if (part != null) hits.Add(part);
+            }
+            DragonCombatPlugin.Instance.StartCoroutine(DealSplitParts(target, hits));
+        }
+
+        private static HitData CloneHitOnly(HitData hit, string type, float value)
+        {
+            try
+            {
+                if (_memberwiseClone == null) _memberwiseClone = typeof(object).GetMethod("MemberwiseClone", BindingFlags.Instance | BindingFlags.NonPublic);
+                HitData part = _memberwiseClone.Invoke(hit, null) as HitData;
+                if (part == null) return null;
+                FieldInfo df = typeof(HitData).GetField("m_damage", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                object dmg = df.GetValue(part);   // boxed copy of the DamageTypes struct
+                FieldInfo[] fs = dmg.GetType().GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                for (int i = 0; i < fs.Length; i++)
+                    if (fs[i].FieldType == typeof(float)) fs[i].SetValue(dmg, fs[i].Name == type ? value : 0f);
+                df.SetValue(part, dmg);
+                part.m_pushForce = 0f;   // one knockback per swing (the original keeps it)
+                FieldInfo se = typeof(HitData).GetField("m_statusEffectHash", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (se != null && se.FieldType == typeof(int)) se.SetValue(part, 0);
+                return part;
+            }
+            catch { return null; }
+        }
+
+        private static IEnumerator DealSplitParts(Character target, List<HitData> parts)
+        {
+            for (int i = 0; i < parts.Count; i++)
+            {
+                yield return new WaitForSeconds(0.06f);
+                if (target == null || target.IsDead()) yield break;
+                SplitHitInFlight = true;
+                try { target.Damage(parts[i]); }
+                catch { }
+                finally { SplitHitInFlight = false; }
+            }
+        }
+
         public static DamagePatchState BeginDamage(Character target, HitData hit)
         {
             DamagePatchState patchState = new DamagePatchState();
@@ -4300,7 +4455,8 @@ namespace DragonsAltarCombat
             }
 
             Player attacker = hit.GetAttacker() as Player;
-            if (attacker != null)
+            // v0.25.11: split parts of a hit were already fully modified as the original hit.
+            if (attacker != null && !SplitHitInFlight)
             {
                 float outgoingBonus = GetTimedBuffSum(attacker, "AttackDamage");
                 if (outgoingBonus != 0f)
@@ -4358,6 +4514,15 @@ namespace DragonsAltarCombat
 
                 ApplyMasteryFinisher(attacker, hit);
                 ApplyMasteryHeavy(attacker, target, hit);
+            }
+
+            // v0.25.11 damage split: a hit a module asked to split (e.g. Holy Trinity adds Slash + Pierce to a
+            // Blunt mace) keeps its first physical type; every other physical type becomes its own hit a
+            // moment later, so each shows its own damage number and meets the target's own resistance.
+            if (_splitRequest != null && _splitRequest == hit && !SplitHitInFlight)
+            {
+                _splitRequest = null;
+                SplitPhysicalTypes(target, hit);
             }
 
             Player targetPlayer = target as Player;

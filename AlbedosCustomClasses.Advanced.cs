@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.10";
+        public const string ModVersion = "0.25.11";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -8620,8 +8620,71 @@ namespace AlbedosCustomClassesAdvanced
                 Instance.ModifyOutgoingDamage(attacker, __instance, hit);
         }
 
+        // v0.25.11 vanilla item tooltip: Heaven's Will (Holy Trinity) shows the Slash and Pierce a Club weapon
+        // really deals for a Paladin (each = 50% of its Blunt, never lowering existing values).
+        private static readonly System.Text.RegularExpressions.Regex IhTipDamage =
+            new System.Text.RegularExpressions.Regex(@"\n(\$inventory_)?(blunt|slash|pierce):\s*<color=[^>]*>(\d+)</color>(?:\s*<color=[^>]*>\((\d+)-(\d+)\)</color>)?", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        private string IhItemTooltipFilter(ItemDrop.ItemData item, string text)
+        {
+            Player p = Player.m_localPlayer;
+            if (p == null || item == null || item.m_shared == null || item.m_shared.m_skillType != Skills.SkillType.Clubs) return text;
+            if (GetAdvancement(p) != "Paladin") return text;
+            float pct = Mathf.Max(0f, _holyTrinityMinPercent.Value) / 100f;
+            if (pct <= 0f) return text;
+            System.Text.RegularExpressions.MatchCollection ms = IhTipDamage.Matches(text);
+            System.Text.RegularExpressions.Match blunt = null, slash = null, pierce = null;
+            for (int i = 0; i < ms.Count; i++)
+            {
+                string t = ms[i].Groups[2].Value.ToLowerInvariant();
+                if (t == "blunt") blunt = ms[i]; else if (t == "slash") slash = ms[i]; else pierce = ms[i];
+            }
+            if (blunt == null) return text;
+            int b = int.Parse(blunt.Groups[3].Value);
+            bool range = blunt.Groups[4].Success;
+            int bMin = range ? int.Parse(blunt.Groups[4].Value) : b, bMax = range ? int.Parse(blunt.Groups[5].Value) : b;
+            bool token = blunt.Groups[1].Success;   // "$inventory_blunt" (not yet localized) or plain "Blunt"
+            string tag = DragonCombat.IsHolyTrinityActive(p) ? "" : " <color=#9AA4AE>(with a Shield)</color>";
+            string slashLine = IhTipLine(token ? "$inventory_slash" : "Slash", slash, b, bMin, bMax, range, pct, tag);
+            string pierceLine = IhTipLine(token ? "$inventory_pierce" : "Pierce", pierce, b, bMin, bMax, range, pct, tag);
+            // Replace / insert, from the end of the text backwards so indexes stay valid.
+            System.Text.StringBuilder sb = new System.Text.StringBuilder(text);
+            List<KeyValuePair<int, int>> cuts = new List<KeyValuePair<int, int>>();
+            if (slash != null && slashLine != null) cuts.Add(new KeyValuePair<int, int>(slash.Index, slash.Length));
+            if (pierce != null && pierceLine != null) cuts.Add(new KeyValuePair<int, int>(pierce.Index, pierce.Length));
+            cuts.Sort(delegate(KeyValuePair<int, int> x, KeyValuePair<int, int> y) { return y.Key.CompareTo(x.Key); });
+            for (int i = 0; i < cuts.Count; i++)
+            {
+                string line = cuts[i].Key == (slash != null ? slash.Index : -1) ? slashLine : pierceLine;
+                sb.Remove(cuts[i].Key, cuts[i].Value);
+                sb.Insert(cuts[i].Key, line);
+            }
+            string add = (slash == null && slashLine != null ? slashLine : "") + (pierce == null && pierceLine != null ? pierceLine : "");
+            if (add.Length > 0)
+            {
+                int at = blunt.Index + blunt.Length;
+                // the blunt line sits before any slash / pierce line, so its index is unchanged by the replacements
+                sb.Insert(at, add);
+            }
+            return sb.ToString();
+        }
+
+        private static string IhTipLine(string type, System.Text.RegularExpressions.Match existing, int b, int bMin, int bMax, bool range, float pct, string tag)
+        {
+            int v = Mathf.RoundToInt(b * pct), vMin = Mathf.RoundToInt(bMin * pct), vMax = Mathf.RoundToInt(bMax * pct);
+            if (existing != null)
+            {
+                int cur = int.Parse(existing.Groups[3].Value);
+                if (cur >= v) return null;   // never lowered
+            }
+            return "\n" + type + ": <color=orange>" + v + "</color>" + (range ? " <color=yellow>(" + vMin + "-" + vMax + ")</color>" : "")
+                + " <color=#80D8FF>Heaven's Will</color>" + tag;
+        }
+
         private void ModifyOutgoingDamage(Player attacker, Character target, HitData hit)
         {
+            // v0.25.11: split parts (separate Slash / Pierce numbers) were already modified as the original hit.
+            if (DragonCombat.SplitHitInFlight) return;
             string advancement = GetAdvancement(attacker);
 
             // v0.22.4: the old Barbaric +8% Attack Damage is retired (not part of Warfreak).
@@ -8638,6 +8701,8 @@ namespace AlbedosCustomClassesAdvanced
                 float floor = hit.m_damage.m_blunt * Mathf.Max(0f, _holyTrinityMinPercent.Value) / 100f;
                 if (hit.m_damage.m_slash < floor) hit.m_damage.m_slash = floor;
                 if (hit.m_damage.m_pierce < floor) hit.m_damage.m_pierce = floor;
+                // v0.25.11: real separate hits -> three damage numbers (Blunt, Slash, Pierce).
+                DragonCombat.RequestDamageSplit(hit);
             }
 
             if (advancement == "Paladin" && IsPaladinPassive(attacker, "ElementalSavant"))
@@ -11416,6 +11481,7 @@ namespace AlbedosCustomClassesAdvanced
             DragonCombat.TreeHotbarProvider = IhUsesTreeHotbar;
             DragonCombat.TreeSkillKeyHeldProvider = IhSkillKeyHeld;
             DragonCombat.RegisterStackQuery(IhStackQuery);
+            DragonCombat.RegisterTooltipFilter(IhItemTooltipFilter);
             DragonCombat.AscendedProvider = delegate(Player p, string skillId) { return p == Player.m_localPlayer && IsAscendedSkill(skillId); };
         }
 
