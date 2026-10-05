@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Dragon's Altar - Sorcerer Advancements";
-        public const string ModVersion = "0.25.2";
+        public const string ModVersion = "0.25.3";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -3758,14 +3758,24 @@ namespace DragonsAltarSorcerer
             return string.IsNullOrEmpty(result) ? "?" : result;
         }
 
+        // v0.25.3 perf: the type is looked up once (it scanned every loaded assembly on every IMGUI event).
+        private static Type _advancedPluginType;
+        private static bool _advancedPluginSearched;
+
         private bool IsAdvancedSkillbookOpen()
         {
             try
             {
-                Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
-                for (int i = 0; i < assemblies.Length; i++)
+                if (!_advancedPluginSearched)
                 {
-                    Type type = assemblies[i].GetType("AlbedosCustomClassesAdvanced.AdvancedPlugin", false);
+                    _advancedPluginSearched = true;
+                    Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
+                    for (int i = 0; i < assemblies.Length && _advancedPluginType == null; i++)
+                        _advancedPluginType = assemblies[i].GetType("AlbedosCustomClassesAdvanced.AdvancedPlugin", false);
+                }
+                for (int i = 0; i < 1; i++)
+                {
+                    Type type = _advancedPluginType;
                     if (type == null)
                         continue;
                     FieldInfo instanceField = type.GetField("Instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
@@ -3790,11 +3800,10 @@ namespace DragonsAltarSorcerer
 
         private void OnGUI()
         {
-            if (!_showHud.Value || Plugin.IsClassPanelOpen || IsAdvancedSkillbookOpen() || DragonCombat.IsGameplayHudSuppressed())
-                return;
-
             Player player = Player.m_localPlayer;
-            if (player == null || GetClass(player) != "Sorcerer" || DragonCombat.IsTreeHotbarActive(player))
+            if (player == null || !_showHud.Value || GetClass(player) != "Sorcerer" || DragonCombat.IsTreeHotbarActive(player))
+                return;
+            if (Plugin.IsClassPanelOpen || IsAdvancedSkillbookOpen() || DragonCombat.IsGameplayHudSuppressed())
                 return;
 
             EnsureHudStyles();

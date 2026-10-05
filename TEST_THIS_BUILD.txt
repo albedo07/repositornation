@@ -1,6 +1,6 @@
-TEST THIS BUILD - v0.25.2 HUD Fixes
-===================================
-1. Item hotbar untouched; our panel sits right under it (title, HP, STA/EIT, Lv, our buffs).
-2. No vanilla health / stamina / eitr anywhere; vanilla food icons still there.
-3. Open the inventory / map / Esc menu: our panel hides.
-4. Check if the lag is gone (open the Skill Tree too).
+TEST THIS BUILD - v0.25.3 Lean HUD
+==================================
+1. No vanilla health bar (food icons + timers still there).
+2. HUD: no panel background, each bar / buff on its own.
+3. Performance: check FPS in combat and with the Skill Tree open.
+4. Ranger skill motions (Piercing, Cyclone, Ricochet, Arrow Rain, Pinning, Explosive, Tailwind, Vigil).

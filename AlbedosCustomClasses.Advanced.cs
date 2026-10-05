@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.2";
+        public const string ModVersion = "0.25.3";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -7611,6 +7611,17 @@ namespace AlbedosCustomClassesAdvanced
 
         private Type FindTypeByName(string name)
         {
+            Type cachedLookup;
+            if (_typeLookupCache.TryGetValue(name, out cachedLookup)) return cachedLookup;
+            cachedLookup = FindTypeByNameUncached(name);
+            _typeLookupCache[name] = cachedLookup;
+            return cachedLookup;
+        }
+
+        private readonly Dictionary<string, Type> _typeLookupCache = new Dictionary<string, Type>();
+
+        private Type FindTypeByNameUncached(string name)
+        {
             Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
 
             for (int i = 0; i < assemblies.Length; i++)
@@ -12012,60 +12023,65 @@ namespace AlbedosCustomClassesAdvanced
                     Vector3 want = on ? Vector3.zero : Vector3.one;
                     if (t.localScale != want) t.localScale = want;
                 }
+                for (int i = 0; i < _ihDisabledGraphics.Count; i++)
+                {
+                    Behaviour g = _ihDisabledGraphics[i];
+                    if (g != null && g.enabled == on) g.enabled = !on;
+                }
             }
             catch { }
         }
 
-        // Vanilla vitals to hide: every Hud field about health / stamina / eitr (bars, texts, icons,
-        // roots), except anything that holds a food icon or food timer (the food HUD stays).
+        // Vanilla vitals: stamina / eitr roots are scaled to 0. The health bar shares its panel with
+        // the food icons (the bar is drawn from the food segments), so instead of hiding transforms
+        // every UI Graphic of the health panel / bars is switched off EXCEPT the food icons and
+        // food timers (and anything inside them).
+        private readonly List<Behaviour> _ihDisabledGraphics = new List<Behaviour>();
+
         private void IhCollectVanillaVitals(object hud)
         {
             _ihHiddenVanilla.Clear();
-            HashSet<Transform> food = new HashSet<Transform>();
-            FieldInfo[] fields = _ihHudType.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            for (int i = 0; i < _ihDisabledGraphics.Count; i++) if (_ihDisabledGraphics[i] != null) _ihDisabledGraphics[i].enabled = true;
+            _ihDisabledGraphics.Clear();
+            BindingFlags all = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            string[] roots = { "m_staminaBar2Root", "m_eitrBarRoot" };
+            for (int i = 0; i < roots.Length; i++)
+            {
+                FieldInfo f = _ihHudType.GetField(roots[i], all);
+                Transform t = f == null ? null : IhAsTransform(f.GetValue(hud));
+                if (t != null) _ihHiddenVanilla.Add(t);
+            }
+            List<Transform> keep = new List<Transform>();
+            List<Transform> healthRoots = new List<Transform>();
+            FieldInfo[] fields = _ihHudType.GetFields(all);
             for (int i = 0; i < fields.Length; i++)
             {
                 string n = fields[i].Name.ToLowerInvariant();
-                if (!n.Contains("food")) continue;
+                bool foodKeep = n.Contains("food") && (n.Contains("icon") || n.Contains("time"));
+                bool healthPart = n.StartsWith("m_health") || (n.StartsWith("m_food") && !foodKeep);
+                if (!foodKeep && !healthPart) continue;
                 object v = fields[i].GetValue(hud);
+                List<Transform> ts = new List<Transform>();
                 System.Collections.IEnumerable arr = v as System.Collections.IEnumerable;
-                if (arr != null && !(v is string) && !(v is Component) && !(v is GameObject)) { foreach (object e in arr) { Transform t = IhAsTransform(e); if (t != null && (n.Contains("icon") || n.Contains("time"))) food.Add(t); } }
-                else { Transform t = IhAsTransform(v); if (t != null && (n.Contains("icon") || n.Contains("time"))) food.Add(t); }
+                if (arr != null && !(v is string) && !(v is Component) && !(v is GameObject)) { foreach (object e in arr) { Transform t = IhAsTransform(e); if (t != null) ts.Add(t); } }
+                else { Transform t = IhAsTransform(v); if (t != null) ts.Add(t); }
+                if (foodKeep) keep.AddRange(ts); else healthRoots.AddRange(ts);
             }
-            for (int i = 0; i < fields.Length; i++)
+            Type graphic = Type.GetType("UnityEngine.UI.Graphic, UnityEngine.UI");
+            if (graphic == null) return;
+            HashSet<Behaviour> seen = new HashSet<Behaviour>();
+            for (int r = 0; r < healthRoots.Count; r++)
             {
-                string n = fields[i].Name.ToLowerInvariant();
-                if (!(n.StartsWith("m_health") || n.StartsWith("m_stamina") || n.StartsWith("m_eitr"))) continue;
-                if (n.Contains("panel") && n.StartsWith("m_health")) continue;   // the panel also holds the food icons
-                object v = fields[i].GetValue(hud);
-                Transform t = IhAsTransform(v);
-                if (t == null) continue;
-                bool holdsFood = false;
-                foreach (Transform f in food) if (f != null && f.IsChildOf(t)) { holdsFood = true; break; }
-                if (holdsFood)
+                Component[] gs = healthRoots[r].GetComponentsInChildren(graphic, true);
+                for (int i = 0; i < gs.Length; i++)
                 {
-                    // Container shared with food: hide its non-food children only.
-                    for (int c = 0; c < t.childCount; c++)
-                    {
-                        Transform child = t.GetChild(c);
-                        bool foodChild = false;
-                        foreach (Transform f in food) if (f != null && f.IsChildOf(child)) { foodChild = true; break; }
-                        if (!foodChild) _ihHiddenVanilla.Add(child);
-                    }
+                    Behaviour g = gs[i] as Behaviour;
+                    if (g == null || !seen.Add(g)) continue;
+                    bool isFood = false;
+                    for (int k = 0; k < keep.Count; k++) if (keep[k] != null && (g.transform == keep[k] || g.transform.IsChildOf(keep[k]))) { isFood = true; break; }
+                    if (!isFood) _ihDisabledGraphics.Add(g);
                 }
-                else _ihHiddenVanilla.Add(t);
             }
-            // The health panel itself: hide everything in it that is not food (bar, number, icon).
-            FieldInfo panel = _ihHudType.GetField("m_healthPanel", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            Transform hp = panel == null ? null : IhAsTransform(panel.GetValue(hud));
-            if (hp != null)
-                for (int c = 0; c < hp.childCount; c++)
-                {
-                    Transform child = hp.GetChild(c);
-                    bool foodChild = false;
-                    foreach (Transform f in food) if (f != null && (f == child || f.IsChildOf(child))) { foodChild = true; break; }
-                    if (!foodChild && !_ihHiddenVanilla.Contains(child)) _ihHiddenVanilla.Add(child);
-                }
         }
 
         private static Transform IhAsTransform(object v)
@@ -12208,7 +12224,7 @@ namespace AlbedosCustomClassesAdvanced
         private void IhHudStat(Rect row, string label, float labelW, float valueW, float cur, float max, Color fill, float s)
         {
             IhHudShadowLabel(new Rect(row.x, row.y, labelW, row.height), label, _ihHudText);
-            float barH = 10f * s;
+            float barH = 11f * s;
             Rect bar = new Rect(row.x + labelW, row.y + (row.height - barH) * 0.5f, row.width - labelW - valueW, barH);
             IhHudThinBar(bar, max > 0.01f ? cur / max : 0f, fill);
             IhHudShadowLabel(new Rect(bar.xMax, row.y, valueW, row.height), Mathf.CeilToInt(Mathf.Max(0f, cur)).ToString() + " / " + Mathf.CeilToInt(Mathf.Max(0f, max)).ToString(), _ihHudValue);
@@ -12245,7 +12261,7 @@ namespace AlbedosCustomClassesAdvanced
             if (_ihHudMenuOpen) return;
             float s = IhHudScale();
             IhEnsureHudStyles(s);
-            float pad = 9f * s, rowH = 17f * s, gap = 4f * s;
+            float pad = 0f, rowH = 17f * s, gap = 4f * s;
             float w = _ihHotbarFound ? Mathf.Max(300f * s, _ihHotbarRect.width) : 340f * s;
             float x = _ihHotbarFound ? _ihHotbarRect.x : _ihHudX.Value * Screen.height / 1080f;
             float y = _ihHotbarFound ? _ihHotbarRect.yMax + 8f * s : _ihHudY.Value * Screen.height / 1080f;
@@ -12255,12 +12271,8 @@ namespace AlbedosCustomClassesAdvanced
             int perRow = Mathf.Max(1, Mathf.FloorToInt((cw + iconGap) / (icon + iconGap)));
             int rows = _ihHudEffects.Count == 0 ? 0 : (_ihHudEffects.Count + perRow - 1) / perRow;
             float h = pad + 22f * s + gap + (rowH + gap) * 3f + (rows > 0 ? gap + rows * (icon + 17f * s) : 0f) + pad;
+            // v0.25.3: no enclosing background - every element stands on its own (reference style).
             Rect panel = new Rect(x, y, w, h);
-            IhHudFill(panel, new Color(0.05f, 0.055f, 0.06f, 0.78f));
-            IhHudFill(new Rect(panel.x, panel.y, panel.width, 1f), new Color(0.30f, 0.30f, 0.32f, 0.9f));
-            IhHudFill(new Rect(panel.x, panel.yMax - 1f, panel.width, 1f), new Color(0.30f, 0.30f, 0.32f, 0.9f));
-            IhHudFill(new Rect(panel.x, panel.y, 1f, panel.height), new Color(0.30f, 0.30f, 0.32f, 0.9f));
-            IhHudFill(new Rect(panel.xMax - 1f, panel.y, 1f, panel.height), new Color(0.30f, 0.30f, 0.32f, 0.9f));
 
             float cx = panel.x + pad, cy = panel.y + pad;
             IhHudShadowLabel(new Rect(cx, cy, cw, 22f * s), player.GetPlayerName() + "  ·  " + IhCurrentClassName(player).ToUpper(), _ihHudTitle);

@@ -41,7 +41,7 @@ namespace AlbedosCustomClasses
     {
         public const string ModGuid = "albedo.customclasses";
         public const string ModName = "Dragon's Altar";
-        public const string ModVersion = "0.25.2";
+        public const string ModVersion = "0.25.3";
 
         internal const string ClassDataKey = "AlbedoCustomClasses.Class";
         internal const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -517,6 +517,17 @@ namespace AlbedosCustomClasses
         }
 
         private Type FindLoadedType(string typeName)
+        {
+            Type cachedLookup;
+            if (_typeLookupCache.TryGetValue(typeName, out cachedLookup)) return cachedLookup;
+            cachedLookup = FindLoadedTypeUncached(typeName);
+            _typeLookupCache[typeName] = cachedLookup;
+            return cachedLookup;
+        }
+
+        private readonly Dictionary<string, Type> _typeLookupCache = new Dictionary<string, Type>();
+
+        private Type FindLoadedTypeUncached(string typeName)
         {
             Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
 

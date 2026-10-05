@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.2";
+        public const string ModVersion = "0.25.3";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1478,6 +1478,23 @@ namespace DragonsAltarCombat
 
     public static class DragonCombat
     {
+        // v0.25.3 perf: type lookups by name are resolved once (they scanned every loaded assembly
+        // several times per frame for the HUD / UI checks).
+        private static readonly Dictionary<string, Type> TypeCache = new Dictionary<string, Type>();
+
+        public static Type FindTypeCached(string name)
+        {
+            Type found;
+            if (TypeCache.TryGetValue(name, out found)) return found;
+            Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
+            for (int i = 0; i < assemblies.Length && found == null; i++)
+            {
+                try { found = assemblies[i].GetType(name, false); } catch { }
+            }
+            TypeCache[name] = found;
+            return found;
+        }
+
         // ==================================================================================
         // v0.25.0 SKILL BODY MOTIONS: procedural action / gesture for every skill (Dragon Nest /
         // Devil May Cry style): the body (Visual root) leans, crouches, spins and snaps around its
@@ -1636,6 +1653,7 @@ namespace DragonsAltarCombat
                 case "seismic_guillotine": preset = "slam"; duration = 0.7f; break;
                 case "punishing_bomb": preset = "throw"; duration = 0.6f; break;
                 case "battlecry": preset = "roar"; duration = 0.8f; break;
+                case "whirlwind": preset = "double_spin"; duration = 0.8f; break;
                 // Cleric / Paladin / Priest
                 case "lightning_zap": preset = "cast"; duration = 0.4f; break;
                 case "righteous_strike": preset = "slam"; duration = 0.55f; break;
@@ -2155,10 +2173,10 @@ namespace DragonsAltarCombat
         {
             try
             {
-                Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
-                for (int i = 0; i < assemblies.Length; i++)
+                Type cachedType = FindTypeCached("Jotunn.Managers.GUIManager");
+                for (int i = 0; i < 1; i++)
                 {
-                    Type type = assemblies[i].GetType("Jotunn.Managers.GUIManager", false);
+                    Type type = cachedType;
                     if (type == null)
                         continue;
                     MethodInfo method = type.GetMethod("BlockInput", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
@@ -2172,7 +2190,20 @@ namespace DragonsAltarCombat
             }
         }
 
+        // v0.25.3 perf: this walks ~10 UI types by reflection; it was called on every IMGUI event of
+        // every module. The answer is now computed once per frame.
+        private static int _hudSuppressedFrame = -1;
+        private static bool _hudSuppressedValue;
+
         public static bool IsGameplayHudSuppressed()
+        {
+            if (_hudSuppressedFrame == Time.frameCount) return _hudSuppressedValue;
+            _hudSuppressedValue = IsGameplayHudSuppressedUncached();
+            _hudSuppressedFrame = Time.frameCount;
+            return _hudSuppressedValue;
+        }
+
+        private static bool IsGameplayHudSuppressedUncached()
         {
             // IMPORTANT: if a UI exposes a real IsVisible/IsOpen method, that
             // result is authoritative. Do not fall through to a broad root such
@@ -2210,10 +2241,7 @@ namespace DragonsAltarCombat
         {
             try
             {
-                Type type = null;
-                Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
-                for (int a = 0; a < assemblies.Length && type == null; a++)
-                    type = assemblies[a].GetType(typeName, false);
+                Type type = FindTypeCached(typeName);
                 if (type == null)
                     return false;
 
@@ -2294,10 +2322,7 @@ namespace DragonsAltarCombat
         {
             try
             {
-                Type type = null;
-                Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
-                for (int a = 0; a < assemblies.Length && type == null; a++)
-                    type = assemblies[a].GetType("Hud", false);
+                Type type = FindTypeCached("Hud");
                 if (type == null)
                     return false;
 
@@ -2338,10 +2363,10 @@ namespace DragonsAltarCombat
         {
             try
             {
-                Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
-                for (int i = 0; i < assemblies.Length; i++)
+                Type cachedType = FindTypeCached(typeName);
+                for (int i = 0; i < 1; i++)
                 {
-                    Type type = assemblies[i].GetType(typeName, false);
+                    Type type = cachedType;
                     if (type == null)
                         continue;
                     PropertyInfo property = type.GetProperty(propertyName, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
@@ -2361,10 +2386,10 @@ namespace DragonsAltarCombat
         {
             try
             {
-                Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
-                for (int i = 0; i < assemblies.Length; i++)
+                Type cachedType = FindTypeCached(typeName);
+                for (int i = 0; i < 1; i++)
                 {
-                    Type type = assemblies[i].GetType(typeName, false);
+                    Type type = cachedType;
                     if (type == null)
                         continue;
                     FieldInfo instanceField = type.GetField(instanceFieldName, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
@@ -2884,14 +2909,11 @@ namespace DragonsAltarCombat
         {
             try
             {
-                Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
+                Type cachedSkills = FindTypeCached("AlbedosCustomClassesSkills.SkillsPlugin");
 
-                for (int i = 0; i < assemblies.Length; i++)
+                for (int i = 0; i < 1; i++)
                 {
-                    Type type = assemblies[i].GetType(
-                        "AlbedosCustomClassesSkills.SkillsPlugin",
-                        false
-                    );
+                    Type type = cachedSkills;
 
                     if (type == null)
                         continue;
@@ -3130,6 +3152,8 @@ namespace DragonsAltarCombat
                    item.m_shared.m_itemType.ToString() == "Shield";
         }
 
+        private static FieldInfo _moveModField, _hitSkillField;
+
         public static float GetMovementModifier(ItemDrop.ItemData item)
         {
             if (item == null || item.m_shared == null)
@@ -3137,7 +3161,8 @@ namespace DragonsAltarCombat
 
             try
             {
-                FieldInfo field = item.m_shared.GetType().GetField("m_movementModifier", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (_moveModField == null) _moveModField = item.m_shared.GetType().GetField("m_movementModifier", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                FieldInfo field = _moveModField;
                 if (field != null && field.FieldType == typeof(float))
                     return (float)field.GetValue(item.m_shared);
             }
@@ -3979,7 +4004,8 @@ namespace DragonsAltarCombat
         {
             try
             {
-                FieldInfo field = typeof(HitData).GetField("m_skill", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (_hitSkillField == null) _hitSkillField = typeof(HitData).GetField("m_skill", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                FieldInfo field = _hitSkillField;
                 if (field == null)
                     return Skills.SkillType.None;
                 object value = field.GetValue(hit);

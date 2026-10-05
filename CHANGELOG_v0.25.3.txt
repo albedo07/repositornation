@@ -1,0 +1,21 @@
+IMMORTAL HEROES v0.25.3 - Lean HUD
+==================================
+HUD
+- No enclosing background: title, each bar (with its own dark track) and each buff box stand alone,
+  like your reference.
+- Vanilla health bar removed for real: it is drawn from the food segments inside the food panel, so
+  every graphic of the health / food bar is switched off EXCEPT the food icons and food timers.
+
+Performance
+- The "is a menu open?" check (about 10 UI types by reflection, plus several full scans of every
+  loaded assembly) ran on every IMGUI event of every module: now computed once per frame, and all
+  type-by-name lookups are cached (Combat Runtime, Advanced, Core, Sorcerer).
+- Sorcerer HUD checked the skill book by scanning all assemblies on every IMGUI event: cached, and
+  skipped entirely for non-Sorcerers.
+- Movement-modifier and hit-skill reflection cached (called every frame / every hit).
+
+Animations
+- Ranger: Piercing Arrow (draw-shot recoil), Cyclone Arrow (spin-loose), Ricochet Arrow (flicked
+  trick shot), Arrow Rain (loose into the sky), Pinning Shot (kneeling shot), Explosive Arrow (heavy
+  kick-back), Tailwind + Hawk's Vigil (chant). Mercenary Whirlwind: double spin.
+Settings reset to defaults once (Dev Mode OFF).
