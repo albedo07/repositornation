@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.7";
+        public const string ModVersion = "0.25.8";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1517,7 +1517,9 @@ namespace DragonsAltarCombat
         public float T;
         public Vector3[] B = new Vector3[10];
         public Vector3 R, O;
+        public bool Lin;   // linear (constant speed) blend INTO this key: spins
         public DragonClipKey(float t) { T = t; }
+        public DragonClipKey Linear() { Lin = true; return this; }
         public DragonClipKey Hp(float x, float y, float z) { B[0] = new Vector3(x, y, z); return this; }
         public DragonClipKey Sp(float x, float y, float z) { B[1] = new Vector3(x, y, z); return this; }
         public DragonClipKey Ch(float x, float y, float z) { B[2] = new Vector3(x, y, z); return this; }
@@ -1535,7 +1537,7 @@ namespace DragonsAltarCombat
         {
             DragonClipKey k = new DragonClipKey(t);
             for (int i = 0; i < B.Length; i++) k.B[i] = B[i];
-            k.R = R; k.O = O;
+            k.R = R; k.O = O; k.Lin = Lin;
             return k;
         }
     }
@@ -1562,7 +1564,16 @@ namespace DragonsAltarCombat
 
         public void Begin(DragonClipKey[] keys, float windup, bool hold, Transform visual)
         {
-            if (_keys != null) ReleaseRoot();
+            if (_keys != null)
+            {
+                // v0.25.8: chained clips start from the CURRENT pose (no snap back to rest in between).
+                DragonClipKey from = CurrentPose(keys[0].T);
+                ReleaseRoot();
+                DragonClipKey[] copy = new DragonClipKey[keys.Length];
+                Array.Copy(keys, copy, keys.Length);
+                copy[0] = from;
+                keys = copy;
+            }
             _keys = keys;
             _windup = Mathf.Max(0.1f, windup);
             _hold = hold;
@@ -1583,13 +1594,21 @@ namespace DragonsAltarCombat
             if (_impactAt < 0f) _impactAt = Time.time;
         }
 
+        // Current pose as a key; root angles folded to -180..180 so a finished spin never unwinds.
+        private DragonClipKey CurrentPose(float t)
+        {
+            DragonClipKey k = new DragonClipKey(t);
+            for (int i = 0; i < 10; i++) k.B[i] = _b[i];
+            k.R = new Vector3(Mathf.DeltaAngle(0f, _r.x), Mathf.DeltaAngle(0f, _r.y), Mathf.DeltaAngle(0f, _r.z));
+            k.O = _o;
+            return k;
+        }
+
         // Blend from the current pose back to rest (charge ended without its finisher).
         public void Stop(float blend)
         {
             if (_keys == null) return;
-            DragonClipKey from = new DragonClipKey(0f);
-            for (int i = 0; i < 10; i++) from.B[i] = _b[i];
-            from.R = _r; from.O = _o;
+            DragonClipKey from = CurrentPose(0f);
             _keys = new DragonClipKey[] { from, new DragonClipKey(Mathf.Max(0.05f, blend)) };
             _hold = false;
             _start = Time.time - _windup;
@@ -1617,7 +1636,7 @@ namespace DragonsAltarCombat
                 if (t >= k[i].T && t <= k[i + 1].T)
                 {
                     float w = (t - k[i].T) / Mathf.Max(0.0001f, k[i + 1].T - k[i].T);
-                    Set(k[i], k[i + 1], Mathf.SmoothStep(0f, 1f, w));
+                    Set(k[i], k[i + 1], k[i + 1].Lin ? w : Mathf.SmoothStep(0f, 1f, w));
                     return;
                 }
             }
@@ -1739,6 +1758,34 @@ namespace DragonsAltarCombat
             d.Begin(keys, windup, hold, BodyVisual(player));
         }
 
+        // Plays caller-built keys (variable-length clips such as Whirlwind).
+        public static void PlayClipKeys(Player player, DragonClipKey[] keys, float windup)
+        {
+            if (player == null || player != Player.m_localPlayer || keys == null || keys.Length == 0) return;
+            if (DragonCombatPlugin.Instance != null && !DragonCombatPlugin.Instance.EnableSkillAnimations.Value) return;
+            DragonSkillPoseDriver legacy = player.GetComponent<DragonSkillPoseDriver>();
+            if (legacy != null) UnityEngine.Object.Destroy(legacy);
+            DragonSkillClipDriver d = player.GetComponent<DragonSkillClipDriver>();
+            if (d == null) d = player.gameObject.AddComponent<DragonSkillClipDriver>();
+            d.Begin(keys, windup, false, BodyVisual(player));
+        }
+
+        // Continuous spin for `seconds` (one turn every `turn` s), arms out, then settle.
+        public static void PlaySpinClip(Player player, float seconds, float turn)
+        {
+            List<DragonClipKey> k = new List<DragonClipKey>();
+            k.Add(K(-1f));
+            k.Add(K(0f).Sp(8f, 0f, 0f).Ch(4f, 0f, 0f).RA(-85f, 0f, -75f).RF(-10f, 0f, 0f).LA(-85f, 0f, 75f).LF(-10f, 0f, 0f).Rot(4f, 0f, 0f).Off(0f, -0.05f, 0f));
+            float t = 0f, yaw = 0f, q = Mathf.Max(0.08f, turn) * 0.25f;
+            while (t < seconds)
+            {
+                t += q; yaw += 90f;
+                k.Add(K(t).Sp(8f, 0f, 0f).Ch(4f, 0f, 0f).RA(-85f, 0f, -75f).RF(-10f, 0f, 0f).LA(-85f, 0f, 75f).LF(-10f, 0f, 0f).Rot(4f, yaw, 0f).Off(0f, -0.05f, 0f).Linear());
+            }
+            k.Add(K(t + 0.3f).Rot(0f, yaw, 0f));
+            PlayClipKeys(player, k.ToArray(), 0.12f);
+        }
+
         public static void PlayClip(Player player, string clip, float windup)
         {
             PlayClip(player, clip, windup, false);
@@ -1774,6 +1821,182 @@ namespace DragonsAltarCombat
         private static void BuildClips(Dictionary<string, DragonClipKey[]> c)
         {
             BuildClericClips(c);
+            BuildWarriorClips(c);
+        }
+
+        // ------------------------------------------------------------------ Warrior / Sword Master / Mercenary
+        private static DragonClipKey[] Spin360(DragonClipKey pose, float start, float turn, float settle)
+        {
+            DragonClipKey[] k = new DragonClipKey[6];
+            for (int i = 0; i < 5; i++)
+            {
+                k[i] = pose.Copy(start + turn * i / 4f);
+                k[i].R = new Vector3(pose.R.x, pose.R.y + 90f * i, pose.R.z);
+                k[i].Lin = i > 0;
+            }
+            k[5] = K(start + turn + settle).Rot(0f, 360f, 0f);
+            return k;
+        }
+
+        private static DragonClipKey[] Join(params object[] parts)
+        {
+            List<DragonClipKey> all = new List<DragonClipKey>();
+            for (int i = 0; i < parts.Length; i++)
+            {
+                DragonClipKey one = parts[i] as DragonClipKey;
+                if (one != null) { all.Add(one); continue; }
+                DragonClipKey[] many = parts[i] as DragonClipKey[];
+                if (many != null) all.AddRange(many);
+            }
+            return all.ToArray();
+        }
+
+        private static void BuildWarriorClips(Dictionary<string, DragonClipKey[]> c)
+        {
+            // Heavy Slash: weapon raised high over the right shoulder, crushing diagonal cut down to the front-left.
+            DragonClipKey hsUp = K(-0.35f).Sp(-10f, -30f, 0f).Ch(-6f, -16f, 0f).Hd(-4f, 16f, 0f).RA(-160f, 0f, -30f).RF(-60f, 0f, 0f).LA(-60f, 10f, 20f).LF(-40f, 0f, 0f).Rot(-5f, 0f, 0f).Off(0f, -0.04f, 0f);
+            c["warrior_heavy"] = new DragonClipKey[] {
+                K(-1f), hsUp, hsUp.Copy(-0.08f).Sp(-12f, -34f, 0f),
+                K(0f).Sp(28f, 28f, 0f).Ch(12f, 14f, 0f).Hd(6f, -8f, 0f).RA(-40f, 0f, 20f).RF(-5f, 0f, 0f).LA(10f, 0f, 30f).Rot(10f, 8f, 0f).Off(0f, -0.12f, 0.1f),
+                K(0.3f).Sp(25f, 26f, 0f).Ch(10f, 12f, 0f).RA(-36f, 0f, 22f).LA(10f, 0f, 30f).Rot(9f, 8f, 0f).Off(0f, -0.11f, 0.1f),
+                K(0.7f)
+            };
+            // Mercenary Ascended Heavy Slash: weapon wound far back at the waist, one huge horizontal sweep.
+            DragonClipKey mhBack = K(-0.3f).Sp(10f, -48f, 0f).Ch(4f, -26f, 0f).Hd(0f, 30f, 0f).RA(-20f, -40f, -80f).RF(-15f, 0f, 0f).LA(-40f, 20f, 30f).LF(-30f, 0f, 0f).Off(0f, -0.12f, 0f);
+            c["merc_heavy_asc"] = new DragonClipKey[] {
+                K(-1f), mhBack, mhBack.Copy(-0.06f).Sp(12f, -52f, 0f),
+                K(0f).Sp(14f, 48f, 0f).Ch(6f, 26f, 0f).Hd(0f, -20f, 0f).RA(-85f, 0f, 40f).RF(-5f, 0f, 0f).LA(10f, 0f, 35f).Rot(6f, 22f, 0f).Off(0f, -0.1f, 0.08f),
+                K(0.35f).Sp(12f, 50f, 0f).Ch(6f, 26f, 0f).RA(-70f, 0f, 60f).LA(10f, 0f, 35f).Rot(5f, 24f, 0f).Off(0f, -0.09f, 0.08f),
+                K(0.8f)
+            };
+            // Impact Wave: crouch with the blade dragged low behind, then a rising slash that throws the wave.
+            DragonClipKey iwLow = K(-0.3f).Sp(22f, -24f, 0f).Ch(12f, -12f, 0f).RA(30f, 0f, -25f).RF(-20f, 0f, 0f).LA(-50f, 10f, 25f).LF(-40f, 0f, 0f).Rot(8f, 0f, 0f).Off(0f, -0.16f, 0f);
+            c["warrior_impact_wave"] = new DragonClipKey[] {
+                K(-1f), iwLow, iwLow.Copy(-0.06f),
+                K(0f).Sp(-12f, 16f, 0f).Ch(-10f, 8f, 0f).Hd(-10f, 0f, 0f).RA(-155f, 0f, -12f).RF(-10f, 0f, 0f).LA(-20f, 0f, 30f).Rot(-6f, 0f, 0f).Off(0f, 0.05f, 0.06f),
+                K(0.3f).Sp(-10f, 14f, 0f).Ch(-8f, 8f, 0f).RA(-150f, 0f, -12f).LA(-20f, 0f, 30f).Rot(-5f, 0f, 0f).Off(0f, 0.04f, 0.05f),
+                K(0.7f)
+            };
+            // Impact Punch: fist chambered at the hip, guard up, then a full-body straight punch.
+            DragonClipKey ipCh = K(-0.35f).Sp(4f, -30f, 0f).Ch(0f, -16f, 0f).Hd(0f, 18f, 0f).RA(20f, 0f, -15f).RF(-100f, 0f, 0f).LA(-65f, 15f, 15f).LF(-80f, 0f, 0f).Off(0f, -0.06f, -0.04f);
+            c["warrior_punch"] = new DragonClipKey[] {
+                K(-1f), ipCh, ipCh.Copy(-0.05f),
+                K(0f).Sp(10f, 26f, 0f).Ch(6f, 16f, 0f).Hd(0f, -10f, 0f).RA(-88f, -5f, -5f).RF(-4f, 0f, 0f).LA(-30f, 10f, 20f).LF(-90f, 0f, 0f).Rot(7f, 8f, 0f).Off(0f, -0.04f, 0.16f),
+                K(0.22f).Sp(10f, 24f, 0f).Ch(6f, 14f, 0f).RA(-86f, -5f, -5f).RF(-6f, 0f, 0f).LA(-30f, 10f, 20f).LF(-90f, 0f, 0f).Rot(7f, 8f, 0f).Off(0f, -0.04f, 0.15f),
+                K(0.55f)
+            };
+            // Sword Master: ready stance (blade low at the right, crouched), then alternating cuts.
+            c["sm_ready"] = new DragonClipKey[] {
+                K(-1f),
+                K(-0.4f).Sp(12f, -22f, 0f).Ch(6f, -10f, 0f).Hd(0f, 14f, 0f).RA(10f, 0f, -30f).RF(-30f, 0f, 0f).LA(-40f, 10f, 25f).LF(-50f, 0f, 0f).Rot(5f, 0f, 0f).Off(0f, -0.1f, 0f),
+                K(0f).Sp(14f, -24f, 0f).Ch(6f, -12f, 0f).Hd(0f, 14f, 0f).RA(12f, 0f, -32f).RF(-30f, 0f, 0f).LA(-40f, 10f, 25f).LF(-50f, 0f, 0f).Rot(6f, 0f, 0f).Off(0f, -0.12f, 0f),
+                K(0.25f)
+            };
+            DragonClipKey slashAEnd = K(0f).Sp(14f, 26f, 0f).Ch(8f, 14f, 0f).RA(-50f, 0f, 35f).RF(-6f, 0f, 0f).LA(-20f, 0f, 30f).Rot(6f, 12f, 0f).Off(0f, -0.06f, 0.06f);
+            c["sm_slash_a"] = new DragonClipKey[] {
+                K(-1f).Sp(-4f, -26f, 0f).Ch(-4f, -14f, 0f).RA(-125f, 0f, -50f).RF(-30f, 0f, 0f).LA(-30f, 0f, 30f),
+                slashAEnd, slashAEnd.Copy(0.2f), K(0.5f)
+            };
+            DragonClipKey slashBEnd = K(0f).Sp(12f, -28f, 0f).Ch(8f, -14f, 0f).RA(-55f, 0f, -60f).RF(-6f, 0f, 0f).LA(-20f, 0f, 30f).Rot(6f, -12f, 0f).Off(0f, -0.06f, 0.06f);
+            c["sm_slash_b"] = new DragonClipKey[] {
+                K(-1f).Sp(-4f, 26f, 0f).Ch(-4f, 14f, 0f).RA(-130f, 0f, 30f).RF(-40f, 0f, 0f).LA(-30f, 0f, 30f),
+                slashBEnd, slashBEnd.Copy(0.2f), K(0.5f)
+            };
+            // Ascended Moonlight finisher: two-handed blade raised to the sky, colossal vertical cut.
+            DragonClipKey mfUp = K(-0.45f).Sp(-14f, 0f, 0f).Ch(-10f, 0f, 0f).Hd(-16f, 0f, 0f).RA(-168f, 0f, -6f).RF(-25f, 0f, 0f).LA(-160f, 0f, 8f).LF(-30f, 0f, 0f).Off(0f, 0.04f, 0f);
+            c["sm_moon_finisher"] = new DragonClipKey[] {
+                K(-1f), mfUp, mfUp.Copy(-0.08f).Rot(-5f, 0f, 0f),
+                K(0f).Sp(36f, 0f, 0f).Ch(16f, 0f, 0f).Hd(10f, 0f, 0f).RA(-30f, 0f, -4f).RF(-4f, 0f, 0f).LA(-30f, 0f, 6f).LF(-4f, 0f, 0f).Rot(12f, 0f, 0f).Off(0f, -0.18f, 0.08f),
+                K(0.4f).Sp(32f, 0f, 0f).Ch(14f, 0f, 0f).RA(-28f, 0f, -4f).LA(-28f, 0f, 6f).Rot(11f, 0f, 0f).Off(0f, -0.16f, 0.08f),
+                K(0.85f)
+            };
+            // Crescent Cleave: blade pulled back low at the right hip (twisted, crouched), wide sweep to the left.
+            DragonClipKey ccPull = K(-0.35f).Sp(16f, -42f, 0f).Ch(6f, -22f, 0f).Hd(0f, 26f, 0f).RA(25f, -20f, -45f).RF(-20f, 0f, 0f).LA(-45f, 10f, 30f).LF(-40f, 0f, 0f).Off(0f, -0.13f, 0f);
+            c["sm_crescent"] = new DragonClipKey[] {
+                K(-1f), ccPull, ccPull.Copy(-0.06f).Sp(18f, -46f, 0f),
+                K(0f).Sp(8f, 36f, 0f).Ch(4f, 20f, 0f).Hd(0f, -12f, 0f).RA(-85f, 0f, 35f).RF(-4f, 0f, 0f).LA(5f, 0f, 30f).Rot(5f, 15f, 0f).Off(0f, -0.06f, 0.06f),
+                K(0.3f).Sp(8f, 34f, 0f).Ch(4f, 18f, 0f).RA(-75f, 0f, 45f).LA(5f, 0f, 30f).Rot(5f, 15f, 0f).Off(0f, -0.05f, 0.06f),
+                K(0.7f)
+            };
+            // Blade Storm: hand on the hilt at the left hip, a lightning-fast draw, then the blade is sheathed.
+            DragonClipKey bsDraw = K(-0.5f).Sp(10f, 18f, 0f).Ch(4f, 10f, 0f).RA(-40f, 10f, 30f).RF(-95f, 0f, 0f).LA(-20f, 0f, 20f).LF(-70f, 0f, 0f).Off(0f, -0.08f, 0f);
+            DragonClipKey bsCut = K(0f).Sp(10f, -26f, 0f).Ch(6f, -14f, 0f).RA(-85f, 0f, -65f).RF(-4f, 0f, 0f).LA(-20f, 0f, 20f).Rot(4f, -10f, 0f).Off(0f, -0.08f, 0.05f);
+            c["sm_blade_storm"] = new DragonClipKey[] { K(-1f), bsDraw, bsCut, bsCut.Copy(0.12f), bsDraw.Copy(0.32f), K(0.55f) };
+            // Frenzied Charge: blade drawn back for a thrust (free hand guides), then the lunging dash.
+            DragonClipKey fcBack = K(-0.4f).Sp(12f, -30f, 0f).Ch(6f, -16f, 0f).RA(35f, 0f, -20f).RF(-80f, 0f, 0f).LA(-75f, 10f, 15f).LF(-15f, 0f, 0f).Rot(8f, 0f, 0f).Off(0f, -0.1f, -0.05f);
+            DragonClipKey fcThrust = K(0f).Sp(18f, 15f, 0f).Ch(8f, 8f, 0f).Hd(-8f, 0f, 0f).RA(-88f, 0f, -4f).RF(-5f, 0f, 0f).LA(15f, 0f, 30f).Rot(16f, 0f, 0f).Off(0f, -0.08f, 0.1f);
+            c["sm_thrust"] = new DragonClipKey[] { K(-1f), fcBack, fcBack.Copy(-0.08f), fcThrust, fcThrust.Copy(0.4f), K(0.75f) };
+            // Eclipse: blade raised upright before the face swelling with magic, then a full 360 spin slash.
+            DragonClipKey ecUp = K(-0.5f).Ch(-6f, 0f, 0f).Hd(-6f, 0f, 0f).RA(-115f, 0f, -6f).RF(-45f, 0f, 0f).LA(-110f, 0f, 6f).LF(-45f, 0f, 0f).Off(0f, 0.03f, 0f);
+            DragonClipKey ecOut = K(0f).Sp(10f, 0f, 0f).Ch(6f, 0f, 0f).RA(-90f, 0f, -70f).RF(-5f, 0f, 0f).LA(-60f, 0f, 60f).Rot(6f, 0f, 0f).Off(0f, -0.06f, 0f);
+            c["sm_eclipse"] = Join(K(-1f), ecUp, Spin360(ecOut, 0f, 0.36f, 0.35f));
+            // Halfmoon: long trembling pull (blade low behind, crouched), wide release; second slash = backhand.
+            DragonClipKey hmPull = K(-0.75f).Sp(18f, -46f, 0f).Ch(8f, -24f, 0f).Hd(0f, 28f, 0f).RA(25f, -20f, -50f).RF(-20f, 0f, 0f).LA(-45f, 10f, 30f).LF(-40f, 0f, 0f).Rot(6f, 0f, 0f).Off(0f, -0.16f, 0f);
+            DragonClipKey hmRelease = K(0f).Sp(8f, 40f, 0f).Ch(4f, 22f, 0f).Hd(0f, -14f, 0f).RA(-88f, 0f, 38f).RF(-4f, 0f, 0f).LA(5f, 0f, 30f).Rot(6f, 16f, 0f).Off(0f, -0.07f, 0.06f);
+            c["sm_halfmoon"] = new DragonClipKey[] {
+                K(-1f), hmPull,
+                hmPull.Copy(-0.55f).Rot(6f, 0f, 1.5f), hmPull.Copy(-0.4f).Rot(6f, 0f, -1.5f), hmPull.Copy(-0.25f).Rot(6f, 0f, 1.5f), hmPull.Copy(-0.1f).Rot(6f, 0f, -1.5f),
+                hmRelease, hmRelease.Copy(0.45f)
+            };
+            DragonClipKey hm2 = K(0f).Sp(10f, -34f, 0f).Ch(6f, -18f, 0f).Hd(0f, 12f, 0f).RA(-80f, 0f, -60f).RF(-4f, 0f, 0f).LA(5f, 0f, 30f).Rot(6f, -14f, 0f).Off(0f, -0.07f, 0.06f);
+            c["sm_halfmoon_2"] = new DragonClipKey[] { K(-1f), hm2, hm2.Copy(0.25f), K(0.65f) };
+            // Ascended Halfmoon stance (hold until Left Click), then the spinning finisher.
+            c["sm_halfmoon_stance"] = new DragonClipKey[] { K(-1f), hmPull.Copy(0f).Rot(6f, 0f, 0f), K(0.1f) };
+            c["sm_halfmoon_finisher"] = Join(K(-1f), hmPull.Copy(-0.3f), Spin360(hmRelease.Copy(0f), 0f, 0.4f, 0.4f));
+            // Knight's Guidance: blade raised before the face in a salute, then thrust to the sky.
+            c["sm_guidance"] = new DragonClipKey[] {
+                K(-1f),
+                K(0f).Hd(4f, 0f, 0f).RA(-100f, 0f, 10f).RF(-85f, 0f, 0f).LA(-10f, 0f, 20f),
+                K(0.2f).Sp(-6f, 0f, 0f).Ch(-6f, 0f, 0f).Hd(-16f, 0f, 0f).RA(-172f, 0f, -4f).RF(-2f, 0f, 0f).LA(-30f, 0f, 40f).Off(0f, 0.05f, 0f),
+                K(0.45f).Sp(-6f, 0f, 0f).Ch(-6f, 0f, 0f).Hd(-16f, 0f, 0f).RA(-172f, 0f, -4f).LA(-30f, 0f, 40f).Off(0f, 0.05f, 0f),
+                K(0.8f)
+            };
+            // Stomp: everything lifted, crash down, then two aftershock bounces 0.5s apart.
+            DragonClipKey stDown = K(0f).Sp(26f, 0f, 0f).Ch(12f, 0f, 0f).Hd(8f, 0f, 0f).RA(-35f, 0f, -25f).LA(-35f, 0f, 25f).Rot(8f, 0f, 0f).Off(0f, -0.18f, 0f);
+            c["merc_stomp"] = new DragonClipKey[] {
+                K(-1f),
+                K(-0.25f).Sp(-10f, 0f, 0f).Ch(-8f, 0f, 0f).Hd(-8f, 0f, 0f).RA(-130f, 0f, -25f).RF(-30f, 0f, 0f).LA(-130f, 0f, 25f).LF(-30f, 0f, 0f).Off(0f, 0.12f, 0f),
+                stDown,
+                stDown.Copy(0.3f).Off(0f, -0.1f, 0f), stDown.Copy(0.5f).Off(0f, -0.2f, 0f),
+                stDown.Copy(0.8f).Off(0f, -0.1f, 0f), stDown.Copy(1.0f).Off(0f, -0.2f, 0f),
+                K(1.45f)
+            };
+            // Circle Swing: weapon wound far back while walking (the wind up), then a full spin swing.
+            DragonClipKey csWound = K(0f).Sp(8f, -50f, 0f).Ch(4f, -26f, 0f).Hd(0f, 30f, 0f).RA(-20f, -40f, -82f).RF(-20f, 0f, 0f).LA(-30f, 20f, 40f).LF(-30f, 0f, 0f).Off(0f, -0.08f, 0f);
+            DragonClipKey csOut = K(0f).Sp(10f, 10f, 0f).Ch(4f, 6f, 0f).RA(-85f, 0f, -70f).RF(-5f, 0f, 0f).LA(-80f, 0f, 70f).Rot(5f, 0f, 0f).Off(0f, -0.08f, 0f);
+            c["merc_circle"] = Join(K(-1f), csWound.Copy(-0.75f), csWound.Copy(-0.02f), Spin360(csOut, 0f, 0.35f, 0.35f));
+            c["merc_circle_2"] = Join(K(-1f), csWound.Copy(-0.5f), Spin360(csOut, 0f, 0.35f, 0.4f));
+            // Jump attacks (Bonecrusher; Electric Smite uses the same): weapon overhead in the air, crushing landing.
+            c["air_overhead"] = new DragonClipKey[] {
+                K(-1f),
+                K(0f).Sp(-16f, 0f, 0f).Ch(-12f, 0f, 0f).Hd(-16f, 0f, 0f).RA(-168f, 0f, -6f).RF(-40f, 0f, 0f).LA(-160f, 0f, 8f).LF(-40f, 0f, 0f).Rot(-8f, 0f, 0f),
+                K(0.1f)
+            };
+            c["land_crash"] = c["cleric_land"];
+            // Seismic Guillotine: overhead chop straight into the ground (the fissure starts at impact).
+            c["merc_seismic"] = new DragonClipKey[] {
+                K(-1f),
+                K(-0.4f).Sp(-14f, 0f, 0f).Ch(-10f, 0f, 0f).Hd(-10f, 0f, 0f).RA(-172f, 0f, -6f).RF(-30f, 0f, 0f).LA(-162f, 0f, 8f).LF(-30f, 0f, 0f).Rot(-6f, 0f, 0f).Off(0f, 0.06f, 0f),
+                K(0f).Sp(42f, 0f, 0f).Ch(16f, 0f, 0f).Hd(12f, 0f, 0f).RA(-20f, 0f, -4f).RF(-4f, 0f, 0f).LA(-20f, 0f, 6f).LF(-4f, 0f, 0f).Rot(14f, 0f, 0f).Off(0f, -0.2f, 0.1f),
+                K(0.35f).Sp(38f, 0f, 0f).Ch(14f, 0f, 0f).RA(-18f, 0f, -4f).LA(-18f, 0f, 6f).Rot(13f, 0f, 0f).Off(0f, -0.18f, 0.1f),
+                K(0.8f)
+            };
+            // Punishing Bomb: two-handed bat cocked at the right shoulder, full swing through the bomb.
+            DragonClipKey pbCock = K(-0.3f).Sp(4f, -44f, 0f).Ch(0f, -22f, 0f).Hd(0f, 28f, 0f).RA(-100f, -10f, -70f).RF(-90f, 0f, 0f).LA(-80f, 10f, -20f).LF(-90f, 0f, 0f).Off(0f, -0.06f, 0f);
+            c["merc_bomb"] = new DragonClipKey[] {
+                K(-1f), pbCock, pbCock.Copy(-0.05f),
+                K(0f).Sp(8f, 46f, 0f).Ch(4f, 26f, 0f).Hd(0f, -10f, 0f).RA(-90f, 0f, 40f).RF(-10f, 0f, 0f).LA(-80f, 0f, 30f).LF(-30f, 0f, 0f).Rot(5f, 16f, 0f).Off(0f, -0.04f, 0.06f),
+                K(0.25f).Sp(8f, 52f, 0f).Ch(4f, 30f, 0f).RA(-60f, 0f, 70f).LA(-60f, 0f, 50f).Rot(5f, 18f, 0f).Off(0f, -0.04f, 0.06f),
+                K(0.65f)
+            };
+            // Battlecry / Unchained Fury: chest out, arms flexed wide, head thrown back, shaking roar.
+            DragonClipKey roar = K(0f).Sp(-14f, 0f, 0f).Ch(-12f, 0f, 0f).Hd(-22f, 0f, 0f).RA(-40f, 0f, -60f).RF(-95f, 0f, 0f).LA(-40f, 0f, 60f).LF(-95f, 0f, 0f).Off(0f, -0.06f, 0f);
+            c["merc_roar"] = new DragonClipKey[] {
+                K(-1f),
+                K(-0.5f).Sp(14f, 0f, 0f).Ch(8f, 0f, 0f).Hd(10f, 0f, 0f).RA(-30f, 0f, -30f).RF(-60f, 0f, 0f).LA(-30f, 0f, 30f).LF(-60f, 0f, 0f).Off(0f, -0.1f, 0f),
+                roar, roar.Copy(0.1f).Rot(0f, 0f, 2f), roar.Copy(0.2f).Rot(0f, 0f, -2f), roar.Copy(0.3f).Rot(0f, 0f, 2f), roar.Copy(0.4f).Rot(0f, 0f, -2f), roar.Copy(0.55f),
+                K(0.95f)
+            };
         }
 
         // ------------------------------------------------------------------ Cleric / Paladin / Priest
@@ -2180,26 +2403,7 @@ namespace DragonsAltarCombat
             preset = null; duration = 0.5f;
             switch (id)
             {
-                // Warrior
-                case "heavy_slash": preset = "slam"; duration = 0.55f; break;
-                case "impact_wave": preset = "iai"; duration = 0.5f; break;
-                case "impact_punch": preset = "punch"; duration = 0.4f; break;
-                // Sword Master
-                case "moonlight_splitter": preset = "iai"; duration = 0.45f; break;
-                case "crescent_cleave": preset = "sword_pull"; duration = 0.55f; break;
-                case "blade_storm": preset = "cross"; duration = 0.4f; break;
-                case "frenzied_charge": preset = "rush"; duration = 1.0f; break;
-                case "eclipse": preset = "eclipse"; duration = 0.9f; break;
-                case "halfmoon_slash": preset = "charge_release"; duration = 1.1f; break;
-                case "knights_guidance": preset = "raise"; duration = 0.6f; break;
-                // Mercenary
-                case "stomp": preset = "stomp"; duration = 0.45f; break;
-                case "circle_swing": preset = "spin"; duration = 0.5f; break;
-                case "bonecrusher": preset = "uppercut"; duration = 0.6f; break;
-                case "seismic_guillotine": preset = "leap_slam"; duration = 0.8f; break;
-                case "punishing_bomb": preset = "throw"; duration = 0.6f; break;
-                case "battlecry": preset = "roar"; duration = 0.8f; break;
-                case "whirlwind": preset = "double_spin"; duration = 0.8f; break;
+                // Warrior / Sword Master / Mercenary: keyframed clips (PlayClip) at the real wind-up / impact.
                 // Cleric / Paladin / Priest: keyframed clips (PlayClip) at the real wind-up / impact.
                 // Sorcerer / Archmage / Horizon Walker
                 case "flame_burst": preset = "flick"; duration = 0.4f; break;
@@ -2747,6 +2951,17 @@ namespace DragonsAltarCombat
         // every module. The answer is now computed once per frame.
         private static int _hudSuppressedFrame = -1;
         private static bool _hudSuppressedValue;
+
+        // v0.25.8: the HUDs stay up (and draggable) while only the inventory is open.
+        private static int _invOpenFrame = -1;
+        private static bool _invOpenValue;
+        public static bool IsInventoryOpen()
+        {
+            if (_invOpenFrame == Time.frameCount) return _invOpenValue;
+            _invOpenValue = IsReflectedUiVisible("InventoryGui", new string[] { "IsVisible" }, new string[] { "m_inventoryRoot" });
+            _invOpenFrame = Time.frameCount;
+            return _invOpenValue;
+        }
 
         public static bool IsGameplayHudSuppressed()
         {

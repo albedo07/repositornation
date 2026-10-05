@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.7";
+        public const string ModVersion = "0.25.8";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -140,7 +140,7 @@ namespace AlbedosCustomClassesAdvanced
         private ConfigEntry<bool> _enableVfx;
         private ConfigEntry<bool> _showCombatHud;
         private ConfigEntry<bool> _ihHudEnabled;
-        private ConfigEntry<float> _ihHudScale, _ihHudX, _ihHudY, _ihHudBottom, _ihHudPosX, _ihHudPosY;
+        private ConfigEntry<float> _ihHudScale, _ihHudX, _ihHudY, _ihHudBottom, _ihHudPosX, _ihHudPosY, _ihBarPosX, _ihBarPosY;
         private ConfigEntry<bool> _uiColorSpaceCorrection;
         private ConfigEntry<float> _hudScale;
         private ConfigEntry<float> _hudBottomOffset;
@@ -651,6 +651,8 @@ namespace AlbedosCustomClassesAdvanced
             _ihHudBottom = Config.Bind("Immortal HUD", "Bottom", 150f, "Unused since v0.25.5 (drag the HUD instead).");
             _ihHudPosX = Config.Bind("Immortal HUD", "PosX", -1f, "HUD left edge (px at 1080p). -1 = default bottom-left. Set by dragging the HUD while the inventory is open.");
             _ihHudPosY = Config.Bind("Immortal HUD", "PosY", -1f, "HUD top edge (px at 1080p). -1 = default bottom-left.");
+            _ihBarPosX = Config.Bind("Immortal HUD", "SkillBarPosX", -1f, "Skill hotbar left edge (px at 1080p). -1 = default (bottom-left corner, under the stat HUD). Drag it while the inventory is open.");
+            _ihBarPosY = Config.Bind("Immortal HUD", "SkillBarPosY", -1f, "Skill hotbar top edge (px at 1080p). -1 = default.");
             _hudBottomOffset = Config.Bind("Interface", "HudBottomOffset_v0113", 105f, "Bottom margin for the compact RPG skill HUD. Fresh v0.11.3 key avoids stale 330px development offsets.");
             _testingForceCooldowns = Config.Bind("Testing", "ForceCooldowns", false, "Testing mode: force every advancement cooldown to one value.");
             _testingCooldownSeconds = Config.Bind("Testing", "CooldownSeconds", 5f, "Testing cooldown used while ForceCooldowns is enabled.");
@@ -1001,7 +1003,7 @@ namespace AlbedosCustomClassesAdvanced
             _hjAscBeamHeal = Config.Bind("Priest Heavens Judgement Ascended", "BeamHealPercent", 3f, "Each beam heals allies in the circle, % Max HP.");
             _hjAscPillarRadius = Config.Bind("Priest Heavens Judgement Ascended", "PillarRadius", 4f, "Final Pillar of Heaven radius at the centre.");
             _pillarDamage = BindDamage("Priest Heavens Judgement Pillar Damage", 0f, 0f, 0f, 0f, 0f, 120f, 0f, 120f);
-            _tempestAscRadius = Config.Bind("Priest Lightning Tempest Ascended", "Radius", 12f, "Ascended Tempest radius (follows the Priest).");
+            _tempestAscRadius = Config.Bind("Priest Lightning Tempest Ascended", "Radius", 12f, "Ascended Tempest radius (stays where it was cast).");
             _tempestAscDefense = Config.Bind("Priest Lightning Tempest Ascended", "AllyDefensePercent", 20f, "Allies inside: Overall Defense bonus (+ Hyper Armor).");
             _parryEmpowerPercent = Config.Bind("Priest Holy Shockwave", "NextSkillDamagePercent_v0212", 35f, "Every Buckler Parry empowers the next damaging skill by this percent for that entire skill instance.");
 
@@ -1362,14 +1364,14 @@ namespace AlbedosCustomClassesAdvanced
             {
                 float ascWindup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _moonAscWindup.Value));
                 DragonCombat.LockSkill(player, ascWindup + 1.0f);
-                DragonCombat.PlaySkillPose(player, "Moonlight", ascWindup + 1.0f);
+                DragonCombat.PlayClip(player, "sm_ready", ascWindup);
                 StartCoroutine(MoonlightAscendedRoutine(player, ascWindup, Time.time));
                 return;
             }
 
             float windup = DragonCombat.ScaleWindup(player, 1f);
             DragonCombat.LockSkill(player, windup + 1.05f);
-            DragonCombat.PlaySkillPose(player, "Moonlight", windup + 1.10f);
+            DragonCombat.PlayClip(player, "sm_ready", windup);
             StartCoroutine(MoonlightRoutine(player, windup));
         }
 
@@ -1388,7 +1390,7 @@ namespace AlbedosCustomClassesAdvanced
                 if (player == null || player.IsDead() || SmInterrupted(castStart))
                     yield break;
 
-                DragonCombat.PlaySkillPose(player, "Moonlight", 0.32f);
+                DragonCombat.PlayClip(player, slash % 2 == 0 ? "sm_slash_a" : "sm_slash_b", 0.1f);
                 Vector3 origin = player.GetEyePoint() + player.transform.up * -0.25f;
                 Vector3 forward = AlbedoAimUtility.GetProjectileDirection(player, origin);
                 StartCoroutine(GhostSlashWave(player, origin, forward, range, width, DragonCombat.M(_moonSpeed.Value), _moonDamageV, 1f, 1f));
@@ -1470,7 +1472,7 @@ namespace AlbedosCustomClassesAdvanced
 
             float windup = DragonCombat.ScaleWindup(player, 1f);
             DragonCombat.LockSkill(player, windup);
-            DragonCombat.PlaySkillPose(player, "Crescent", windup + 0.10f);
+            DragonCombat.PlayClip(player, "sm_crescent", windup);
             StartCoroutine(CrescentCleaveRoutine(player, windup));
         }
 
@@ -1571,7 +1573,7 @@ namespace AlbedosCustomClassesAdvanced
 
             Vector3 point = GetAimPoint(player, Mathf.Max(1f, DragonCombat.M(_judgementRange.Value)));
             DragonCombat.LockSkill(player, 0.40f);
-            DragonCombat.PlaySkillPose(player, "Moonlight", 0.45f);
+            DragonCombat.PlayClip(player, "sm_blade_storm", 0.12f);
             StartCoroutine(JudgementCutRoutine(player, point));
         }
 
@@ -1982,14 +1984,14 @@ namespace AlbedosCustomClassesAdvanced
             for (int wave = 0; wave < 4; wave++)
             {
                 if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
-                DragonCombat.PlaySkillPose(player, "Moonlight", 0.28f);
+                DragonCombat.PlayClip(player, wave % 2 == 0 ? "sm_slash_a" : "sm_slash_b", 0.08f);
                 Vector3 origin = player.GetEyePoint() + player.transform.up * -0.25f;
                 StartCoroutine(GhostSlashWave(player, origin, AlbedoAimUtility.GetProjectileDirection(player, origin), range, width, DragonCombat.M(_moonSpeed.Value), _moonDamageV, _moonAscWave.Value / 100f, 1f));
                 if (wave < 3) yield return new WaitForSeconds(Mathf.Max(0.05f, _moonAscInterval.Value));
             }
             float finisherWindup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _moonAscFinisherWindup.Value));
             DragonCombat.LockSkill(player, finisherWindup + 0.4f);
-            DragonCombat.PlaySkillPose(player, "Moonlight", finisherWindup + 0.3f);
+            DragonCombat.PlayClip(player, "sm_moon_finisher", finisherWindup);
             if (finisherWindup > 0f) yield return new WaitForSeconds(finisherWindup);
             if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
             Vector3 fo = player.GetEyePoint() + player.transform.up * -0.25f;
@@ -2165,7 +2167,7 @@ namespace AlbedosCustomClassesAdvanced
             bool ascended = IsAscendedSkill("frenzied_charge");
             float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, ascended ? _frenzyAscWindup.Value : _frenzyWindup.Value));
             DragonCombat.LockSkill(player, windup + _frenzyDashTime.Value + 0.1f);
-            DragonCombat.PlaySkillPose(player, "Moonlight", windup + 0.2f);
+            DragonCombat.PlayClip(player, "sm_thrust", windup);
             StartCoroutine(FrenziedChargeRoutine(player, body, capsule, windup, ascended, Time.time));
         }
 
@@ -2307,7 +2309,7 @@ namespace AlbedosCustomClassesAdvanced
             bool ascended = IsAscendedSkill("eclipse");
             float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _eclipseWindup.Value));
             DragonCombat.LockSkill(player, windup + 0.25f);
-            DragonCombat.PlaySkillPose(player, "Halfmoon", windup + 0.3f);
+            DragonCombat.PlayClip(player, "sm_eclipse", windup);
             StartCoroutine(EclipseRoutine(player, windup, ascended));
         }
 
@@ -2385,13 +2387,14 @@ namespace AlbedosCustomClassesAdvanced
                 StartCoroutine(AnimateHalfmoonArc(player.transform.position + Vector3.up * 0.9f, forward, radius));
             yield return new WaitForSeconds(Mathf.Clamp(_halfmoonSecondSlashDelay.Value, 0.10f, 2f));
             if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
+            DragonCombat.PlayClip(player, "sm_halfmoon_2", 0.1f);
             ApplyHalfmoonHit(player, forward, radius, 0.5f);
             if (_enableVfx.Value)
                 StartCoroutine(AnimateHalfmoonArc(player.transform.position + Vector3.up * 1.05f, forward, radius * 0.92f));
 
             float pull = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _halfAscPullBack.Value));
             DragonCombat.LockSkill(player, pull + 0.15f);
-            DragonCombat.PlaySkillPose(player, "Halfmoon", pull + 0.15f);
+            DragonCombat.PlayClip(player, "sm_halfmoon_stance", pull, true);
             if (pull > 0f) yield return new WaitForSeconds(pull);
             if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
 
@@ -2403,19 +2406,19 @@ namespace AlbedosCustomClassesAdvanced
                 if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
                 // Holding the stance: movement and normal attacks stay locked, the camera still aims.
                 DragonCombat.LockSkill(player, 0.12f);
-                DragonCombat.PlaySkillPose(player, "Halfmoon", 0.12f);
                 if (Input.GetMouseButtonDown(0)) { released = true; break; }
                 yield return null;
             }
             if (!released)
             {
                 ShowMessage("The Halfmoon fades");
+                DragonCombat.ClipStop(player, 0.3f);
                 yield break;
             }
 
             float swing = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _halfAscReleaseWindup.Value));
             DragonCombat.LockSkill(player, swing + 0.2f);
-            DragonCombat.PlaySkillPose(player, "CircleSwing", swing + 0.2f);
+            DragonCombat.PlayClip(player, "sm_halfmoon_finisher", swing);
             if (swing > 0f) yield return new WaitForSeconds(swing);
             if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
             Vector3 origin = player.GetEyePoint() + player.transform.up * -0.25f;
@@ -2424,8 +2427,7 @@ namespace AlbedosCustomClassesAdvanced
             float width = radius * 2f * Mathf.Max(1f, _halfAscFinWidthMult.Value);
             float speed = range / Mathf.Max(0.5f, _halfAscTravel.Value);
             ShowMessage("Halfmoon Slash!");
-            // v0.25.1: the Ascended finisher wave is the one with the spin.
-            DragonCombat.PlayBodyMotion(player, "spin", 0.45f);
+            // v0.25.1: the Ascended finisher wave is the one with the spin (in sm_halfmoon_finisher).
             StartCoroutine(GhostSlashWave(player, origin, dir, range, width, speed, _halfmoonDamageV, Mathf.Max(0f, _halfAscFinDamageMult.Value), 3f, true));
         }
 
@@ -2439,7 +2441,7 @@ namespace AlbedosCustomClassesAdvanced
         {
             if (!BeginCast(player, "SwordMaster.KnightsGuidance", _kgCooldown.Value, 0f)) return;
             DragonCombat.LockSkill(player, 0.5f);
-            DragonCombat.PlaySkillPose(player, "Chant", 0.50f);
+            DragonCombat.PlayClip(player, "sm_guidance", 0.15f);
             ShowMessage("Knight's Guidance");
             float radius = Mathf.Max(1f, DragonCombat.M(_kgRadius.Value));
             float duration = Mathf.Max(1f, _kgDuration.Value);
@@ -2467,7 +2469,7 @@ namespace AlbedosCustomClassesAdvanced
             if (!BeginCast(player, "SwordMaster.AscendedImpactWave", IhCfg(sk, "Warrior.Impact Wave", "Cooldown", 8f), IhCfg(sk, "Warrior.Impact Wave", "StaminaCost", 18f))) return;
             float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, IhCfg(sk, "Warrior.Impact Wave", "Windup", 1f)));
             DragonCombat.LockSkill(player, windup);
-            DragonCombat.PlaySkillPose(player, "Uppercut", windup + 0.10f);
+            DragonCombat.PlayClip(player, "warrior_impact_wave", windup);
             StartCoroutine(AscendedImpactWaveRoutine(player, windup, Time.time));
         }
 
@@ -2762,7 +2764,7 @@ namespace AlbedosCustomClassesAdvanced
             DragonCombat.ShowStatus(player, "fury", "fury", "Unchained Fury", Mathf.Max(0.5f, _furyDurationV.Value), 0);
             if (player != null)
             {
-                DragonCombat.PlaySkillPose(player, "Shout", 0.75f);
+                DragonCombat.PlayClip(player, "merc_roar", 0.35f);
                 if (_enableVfx.Value)
                     StartCoroutine(AnimateAura(player, new Color(1f, 0.22f, 0.08f, 0.92f), Mathf.Max(0.5f, _furyDurationV.Value)));
             }
@@ -2830,7 +2832,7 @@ namespace AlbedosCustomClassesAdvanced
             if (!ascended) yield break;
             DragonCombat.GrantHyperArmor(player, _circleAscGap.Value + 0.3f);
             DragonCombat.LockSkill(player, _circleAscGap.Value + 0.1f);
-            DragonCombat.PlaySkillPose(player, "CircleSwing", _circleAscGap.Value + 0.2f);
+            DragonCombat.PlayClip(player, "merc_circle_2", Mathf.Max(0.05f, _circleAscGap.Value));
             yield return new WaitForSeconds(Mathf.Max(0.05f, _circleAscGap.Value));
             if (player == null || player.IsDead()) yield break;
             CircleSwingHit(player, weapon, radius, baseMult * _circleAscSecond.Value / 100f, true);
@@ -2865,7 +2867,7 @@ namespace AlbedosCustomClassesAdvanced
             ShowMessage("Bonecrusher");
             yield return StartCoroutine(AcrobaticJumpUntilLanding(player, takeoffDelay, Mathf.Max(1.5f, _boneWindup.Value)));
             if (player == null || player.IsDead()) yield break;
-            DragonCombat.PlaySkillPose(player, "Slam", 0.35f);
+            DragonCombat.PlayClip(player, "land_crash", 0.1f);
             Vector3 center = player.transform.position;
             float radius = Mathf.Max(0.5f, DragonCombat.M(_boneRadius.Value));
             List<Character> targets = GetSphereTargets(player, center, radius);
@@ -2900,7 +2902,7 @@ namespace AlbedosCustomClassesAdvanced
             if (!BeginCast(player, "Mercenary.PunishingBomb", _bombCooldown.Value, _bombStamina.Value)) return;
             float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _bombWindup.Value));
             DragonCombat.LockSkill(player, windup + 0.1f);
-            DragonCombat.PlaySkillPose(player, "HeavySlash", windup + 0.15f);
+            DragonCombat.PlayClip(player, "merc_bomb", windup);
             StartCoroutine(PunishingBombRoutine(player, windup));
         }
 
@@ -3021,12 +3023,12 @@ namespace AlbedosCustomClassesAdvanced
             float start = Time.time;
             int maxTicks = Mathf.Max(1, Mathf.RoundToInt(maxTime / interval));
             DragonCombat.BeginWhirlwind(player, maxTime);
+            DragonCombat.PlaySpinClip(player, maxTime, 0.3f);   // v0.25.8: tornado spin, faster turns
             for (int tick = 0; tick < maxTicks; tick++)
             {
                 if (player == null || player.IsDead()) { _whirlActive = false; yield break; }
                 if (_whirlStopRequested) break;
                 DragonCombat.GrantHyperArmor(player, interval + 0.1f);
-                DragonCombat.PlaySkillPose(player, "Whirlwind", 0.34f);
                 // v0.23.3 Tornado: pulls every archetype within 4m (weaker on Big / Bosses).
                 float pullRadius = Mathf.Max(0.5f, DragonCombat.M(_whirlAscPullRadius.Value));
                 List<Character> pulled = GetSphereTargets(player, player.transform.position, pullRadius);
@@ -3061,6 +3063,7 @@ namespace AlbedosCustomClassesAdvanced
             // Final sweep scales with the time actually spun; ending early gives a smaller sweep.
             float spun = Mathf.Clamp(Time.time - start, 0f, maxTime);
             float sweep = b * Mathf.Max(0f, _whirlAscSweepPercent.Value) / 100f * spun / maxTime;
+            DragonCombat.PlayClip(player, "merc_circle_2", 0.08f);   // final sweep
             List<Character> swept = GetSphereTargets(player, player.transform.position, Mathf.Max(0.5f, DragonCombat.M(_whirlwindRadius.Value)) + 1f);
             for (int i = 0; i < swept.Count; i++)
                 DealSnapshotDamage(player, swept[i], weapon, sweep, 30f);
@@ -3073,7 +3076,7 @@ namespace AlbedosCustomClassesAdvanced
         {
             if (!BeginCast(player, "Mercenary.Battlecry", _bcCooldown.Value, 0f)) return;
             DragonCombat.LockSkill(player, 0.5f);
-            DragonCombat.PlaySkillPose(player, "Shout", 0.75f);
+            DragonCombat.PlayClip(player, "merc_roar", 0.35f);
             ShowMessage("Battlecry");
             float radius = Mathf.Max(1f, DragonCombat.M(_bcRadius.Value));
             HashSet<Player> allies = new HashSet<Player>();
@@ -3134,7 +3137,7 @@ namespace AlbedosCustomClassesAdvanced
             if (!BeginCast(player, "Mercenary.AscendedHeavySlash", IhCfg(sk, "Warrior.Heavy Slash", "Cooldown", 8f), IhCfg(sk, "Warrior.Heavy Slash", "StaminaCost", 20f))) return;
             float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, IhCfg(sk, "Warrior.Heavy Slash", "Windup", 0.7f)));
             DragonCombat.LockSkill(player, windup);
-            DragonCombat.PlaySkillPose(player, "HeavySlash", windup + 0.10f);
+            DragonCombat.PlayClip(player, "merc_heavy_asc", windup);
             StartCoroutine(AscendedHeavySlashRoutine(player, windup));
         }
 
@@ -3425,13 +3428,13 @@ namespace AlbedosCustomClassesAdvanced
             {
                 float ascWindup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _halfAscWindup.Value));
                 DragonCombat.LockSkill(player, ascWindup + 0.4f);
-                DragonCombat.PlaySkillPose(player, "Halfmoon", ascWindup + 0.3f);
+                DragonCombat.PlayClip(player, "sm_halfmoon", ascWindup);
                 StartCoroutine(HalfmoonAscendedRoutine(player, ascWindup, Time.time));
                 return;
             }
             float windup = DragonCombat.ScaleWindup(player, 2f);
             DragonCombat.LockSkill(player, windup);
-            DragonCombat.PlaySkillPose(player, "Halfmoon", windup + 0.12f);
+            DragonCombat.PlayClip(player, "sm_halfmoon", windup);
             StartCoroutine(HalfmoonRoutine(player, windup));
         }
 
@@ -3459,6 +3462,7 @@ namespace AlbedosCustomClassesAdvanced
             yield return new WaitForSeconds(Mathf.Clamp(_halfmoonSecondSlashDelay.Value, 0.10f, 2f));
             if (player == null || player.IsDead() || SmInterrupted(castStart))
                 yield break;
+            DragonCombat.PlayClip(player, "sm_halfmoon_2", 0.1f);
             ApplyHalfmoonHit(player, forward, radius, 0.5f);
             if (_enableVfx.Value)
                 StartCoroutine(AnimateHalfmoonArc(player.transform.position + Vector3.up * 1.05f, forward, radius * 0.92f));
@@ -3521,7 +3525,7 @@ namespace AlbedosCustomClassesAdvanced
 
             float windup = Mathf.Max(0f, _stompWindup.Value);
             DragonCombat.LockSkill(player, 1f);
-            DragonCombat.PlaySkillPose(player, "Stomp", Mathf.Max(0.65f, windup + 0.15f));
+            DragonCombat.PlayClip(player, "merc_stomp", windup);
             StartCoroutine(StompRoutineV(player, windup));
         }
 
@@ -3573,7 +3577,7 @@ namespace AlbedosCustomClassesAdvanced
 
             float takeoffDelay = 0.08f;
             DragonCombat.LockSkill(player, takeoffDelay);
-            DragonCombat.PlaySkillPose(player, "Slam", 8f);
+            DragonCombat.PlayClip(player, "air_overhead", 0.2f, true);
             StartCoroutine(BonecrusherRoutineV(player, takeoffDelay));
         }
 
@@ -3611,7 +3615,7 @@ namespace AlbedosCustomClassesAdvanced
 
             float windup = Mathf.Max(0.1f, _circleWindup.Value);
             // v0.22.4: normal walking speed during the wind up (no Sprint), Hyper Armor.
-            DragonCombat.PlaySkillPose(player, "CircleSwing", windup + 0.18f);
+            DragonCombat.PlayClip(player, "merc_circle", windup);
             StartCoroutine(CircleSwingRoutineV(player, windup));
         }
 
@@ -3682,7 +3686,7 @@ namespace AlbedosCustomClassesAdvanced
                 return;
 
             DragonCombat.LockSkill(player, 0.45f);
-            DragonCombat.PlaySkillPose(player, "Stomp", 0.55f);
+            DragonCombat.PlayClip(player, "merc_seismic", 0.28f);
             StartCoroutine(SeismicGuillotineRoutine(player));
         }
 
@@ -3933,16 +3937,13 @@ namespace AlbedosCustomClassesAdvanced
             float duration = Mathf.Max(0.5f, _whirlwindDuration.Value);
             float interval = Mathf.Max(0.1f, _whirlwindInterval.Value);
             int ticks = Mathf.Max(1, Mathf.RoundToInt(duration / interval));
+            DragonCombat.PlaySpinClip(player, duration, 0.4f);   // v0.25.8: arms out, one turn every 0.4s
 
             for (int tick = 0; tick < ticks; tick++)
             {
                 if (player == null || player.IsDead())
                     yield break;
 
-                                if (tick % 2 == 0)
-                    DragonCombat.PlaySkillPose(player, "Whirlwind", 0.34f);
-                else
-                    DragonCombat.PlaySkillPose(player, "Whirlwind", 0.34f);
                 List<Character> targets = GetSphereTargets(player, player.transform.position, Mathf.Max(0.5f, DragonCombat.M(_whirlwindRadius.Value)));
                 for (int i = 0; i < targets.Count; i++)
                 {
@@ -4628,7 +4629,7 @@ namespace AlbedosCustomClassesAdvanced
 
             float takeoffDelay = 0.08f;
             DragonCombat.LockSkill(player, takeoffDelay);
-            DragonCombat.PlayClip(player, "cleric_smite_air", 0.25f, true);
+            DragonCombat.PlayClip(player, "air_overhead", 0.25f, true);
             StartCoroutine(ElectricSmiteRoutine(player, takeoffDelay));
         }
 
@@ -6078,8 +6079,8 @@ namespace AlbedosCustomClassesAdvanced
             {
                 if (ascended && player != null && !player.IsDead())
                 {
-                    // Eye of the Storm: follows the Priest; allies inside get Defense + Hyper Armor.
-                    center = player.transform.position;
+                    // Eye of the Storm (v0.25.8: stays where it was cast, never follows the Priest);
+                    // allies inside get Defense + Hyper Armor.
                     List<Player> allies = IhAlliesInRadius(player, center, radius);
                     for (int i = 0; i < allies.Count; i++)
                         DragonCombat.ApplyTimedBuff(allies[i], "Priest.EyeOfTheStorm", interval + 0.6f, 0f, 0f, 0f, Mathf.Clamp(_tempestAscDefense.Value, 0f, 95f) / 100f, 0f, 0f, true);
@@ -6115,8 +6116,7 @@ namespace AlbedosCustomClassesAdvanced
 
             if (ascended && player != null && !player.IsDead())
             {
-                // Heaven's Wrath: every enemy inside takes an instant Zap detonation.
-                center = player.transform.position;
+                // Heaven's Wrath: every enemy inside the storm takes an instant Zap detonation.
                 if (_enableVfx.Value)
                     StartCoroutine(AnimateRing(center + Vector3.up * 0.08f, 0.5f, radius, 0.45f, new Color(1f, 0.40f, 0.36f, 0.95f), 0.14f));
                 List<Character> hit = GetSphereTargets(player, center, radius);
@@ -11707,9 +11707,34 @@ namespace AlbedosCustomClassesAdvanced
             float gap = 6f * scale;
             float graceGap = 16f * scale;
             float totalWidth = size * 7f + gap * 6f + graceGap + size * 1.08f;
-            float x = (Screen.width - totalWidth) * 0.5f;
-            float reserve = Mathf.Clamp(_hudBottomOffset.Value, 70f, 260f) * scale;
-            float y = Screen.height - reserve - size;
+            // v0.25.8: bottom-left corner by default (under the stat HUD, where the vanilla vitals were),
+            // draggable anywhere while the cursor is free (inventory open).
+            Rect bar = IhSkillBarRect();
+            float x = bar.x;
+            float y = bar.y;
+            Event ev = Event.current;
+            Rect grab = new Rect(bar.x - 4f, bar.y - 6f * scale, bar.width + 8f, bar.height + 22f * scale);
+            if (Cursor.visible && !_ihDragging)
+            {
+                float k1080 = Screen.height / 1080f;
+                if (ev.type == EventType.MouseDown && ev.button == 0 && grab.Contains(ev.mousePosition)) { _ihBarDragging = true; _ihBarDragOffset = ev.mousePosition - new Vector2(x, y); ev.Use(); }
+                else if (_ihBarDragging && ev.type == EventType.MouseDrag)
+                {
+                    Vector2 np = ev.mousePosition - _ihBarDragOffset;
+                    _ihBarPosX.Value = Mathf.Round(np.x / k1080);
+                    _ihBarPosY.Value = Mathf.Round(np.y / k1080);
+                    ev.Use();
+                }
+                else if (_ihBarDragging && (ev.type == EventType.MouseUp || ev.rawType == EventType.MouseUp)) { _ihBarDragging = false; try { Config.Save(); } catch { } }
+                if (grab.Contains(ev.mousePosition) && ev.type == EventType.Repaint && _ihHudTiny != null)
+                {
+                    Color c0 = _ihHudTiny.normal.textColor;
+                    _ihHudTiny.normal.textColor = new Color(0.95f, 0.85f, 0.55f, 0.85f);
+                    GUI.Label(new Rect(grab.x, grab.y - 16f * scale, grab.width, 16f * scale), "drag to move", _ihHudTiny);
+                    _ihHudTiny.normal.textColor = c0;
+                }
+            }
+            else if (!Cursor.visible) _ihBarDragging = false;
 
             // v0.25.4: the class name lives on the stat HUD; only Mercenary's Fury gauge stays here.
             string title = "";
@@ -11755,6 +11780,35 @@ namespace AlbedosCustomClassesAdvanced
                     GUI.DrawTexture(new Rect(graceInner.xMax - grace.width * 0.36f, graceInner.yMax - grace.width * 0.36f, grace.width * 0.40f, grace.width * 0.40f), _ihPadlockTex);
                 GUI.Label(new Rect(grace.x - 10f, grace.yMax - 1f, grace.width + 20f, 16f * scale), FormatHotbarBinding(BindGrace), _hudKeyCenterStyle);
             }
+        }
+
+        private bool _ihBarDragging;
+        private Vector2 _ihBarDragOffset;
+
+        // v0.25.8: skill hotbar slot row rect (7 slots + Grace). Default = bottom-left corner.
+        private Rect IhSkillBarRect()
+        {
+            float scale = Mathf.Clamp(_hudScale.Value, 0.65f, 1.45f);
+            float size = 50f * scale;
+            float w = size * 7f + 6f * scale * 6f + 16f * scale + size * 1.08f;
+            float h = size * 1.1f;
+            float k1080 = Screen.height / 1080f;
+            float x = _ihBarPosX.Value >= 0f ? _ihBarPosX.Value * k1080 : 24f * k1080;
+            float y = _ihBarPosY.Value >= 0f ? _ihBarPosY.Value * k1080 : Screen.height - 10f * k1080 - 18f * scale - h;
+            x = Mathf.Clamp(x, 0f, Mathf.Max(0f, Screen.width - w));
+            y = Mathf.Clamp(y, 30f * scale, Mathf.Max(30f * scale, Screen.height - h - 18f * scale));
+            return new Rect(x, y, w, h);
+        }
+
+        // Default stat HUD spot: right above the skill hotbar's DEFAULT place (bottom-left).
+        private Rect IhSkillBarDefaultRect()
+        {
+            float scale = Mathf.Clamp(_hudScale.Value, 0.65f, 1.45f);
+            float size = 50f * scale;
+            float w = size * 7f + 6f * scale * 6f + 16f * scale + size * 1.08f;
+            float h = size * 1.1f;
+            float k1080 = Screen.height / 1080f;
+            return new Rect(24f * k1080, Screen.height - 10f * k1080 - 18f * scale - h, w, h);
         }
 
         private void DrawHudTreeSlot(Player player, Rect rect, string id, int binding, float scale)
@@ -12042,7 +12096,8 @@ namespace AlbedosCustomClassesAdvanced
             if (_ihHudEnabled.Value)
                 DrawImmortalHud(player);
 
-            if (_showCombatHud.Value && !_skillbookOpen && !Plugin.IsClassPanelOpen && !DragonCombat.IsGameplayHudSuppressed())
+            if (_showCombatHud.Value && !_skillbookOpen && !Plugin.IsClassPanelOpen
+                && (!DragonCombat.IsGameplayHudSuppressed() || (DragonCombat.IsInventoryOpen() && !_ihHudMenuOpen)))
                 DrawCombatHud(player);
 
             if (_skillbookOpen)
@@ -12165,9 +12220,117 @@ namespace AlbedosCustomClassesAdvanced
                     GameObject g = _ihVanillaVitals[i];
                     if (g != null && g.activeSelf == on) g.SetActive(!on);
                 }
+                IhLayoutFoodRow(hud, on);
                 IhPlaceFood(on);
             }
             catch { }
+        }
+
+        // v0.25.8: the vanilla food slots (icon + bar + timer per food) are laid out in ONE horizontal
+        // row (vanilla stacks them vertically) so the stat HUD stays thin. Each slot's elements keep
+        // their own offsets; only the whole slot moves. Original positions are restored when off.
+        private Transform _ihFoodContainer;
+        private List<Transform>[] _ihFoodSlots;
+        private readonly Dictionary<Transform, Vector3> _ihFoodOrig = new Dictionary<Transform, Vector3>();
+        private float _ihFoodPitch;
+        private bool _ihFoodLayoutTried;
+        private RectTransform _ihFoodPanelRef;
+
+        private void IhLayoutFoodRow(object hud, bool on)
+        {
+            if (_ihHealthPanel == null || hud == null) return;
+            if (_ihFoodPanelRef != _ihHealthPanel) { _ihFoodPanelRef = _ihHealthPanel; _ihFoodSlots = null; _ihFoodContainer = null; _ihFoodLayoutTried = false; }
+            if (_ihFoodSlots == null && !_ihFoodLayoutTried)
+            {
+                _ihFoodLayoutTried = true;
+                BindingFlags inst = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+                string[] fields = { "m_foodIcons", "m_foodBars", "m_foodTime" };
+                List<Transform>[] elems = null;
+                for (int f = 0; f < fields.Length; f++)
+                {
+                    FieldInfo fi = _ihHudType.GetField(fields[f], inst);
+                    Array arr = fi == null ? null : fi.GetValue(hud) as Array;
+                    if (arr == null) continue;
+                    if (elems == null) { elems = new List<Transform>[arr.Length]; for (int i = 0; i < arr.Length; i++) elems[i] = new List<Transform>(); }
+                    for (int i = 0; i < arr.Length && i < elems.Length; i++)
+                    {
+                        Component c = arr.GetValue(i) as Component;
+                        if (c != null && c.transform.IsChildOf(_ihHealthPanel)) elems[i].Add(c.transform);
+                    }
+                }
+                if (elems == null || elems.Length < 2) return;
+                // Container = lowest common ancestor of every food element.
+                Transform lca = null;
+                for (int i = 0; i < elems.Length; i++)
+                    for (int j = 0; j < elems[i].Count; j++)
+                        lca = lca == null ? elems[i][j].parent : IhCommonAncestor(lca, elems[i][j]);
+                if (lca == null) return;
+                // Per slot: the child of the container holding each element (deduplicated).
+                List<Transform>[] slots = new List<Transform>[elems.Length];
+                Dictionary<Transform, int> owner = new Dictionary<Transform, int>();
+                for (int i = 0; i < elems.Length; i++)
+                {
+                    slots[i] = new List<Transform>();
+                    for (int j = 0; j < elems[i].Count; j++)
+                    {
+                        Transform top = elems[i][j];
+                        while (top != null && top.parent != lca) top = top.parent;
+                        if (top == null) continue;
+                        int prev;
+                        if (owner.TryGetValue(top, out prev) && prev != i) return;   // shared by two slots: leave vanilla
+                        owner[top] = i;
+                        if (!slots[i].Contains(top)) slots[i].Add(top);
+                    }
+                    if (slots[i].Count == 0) return;
+                }
+                // Slot width (container-local) from slot 0's elements, pitch = width + 12%.
+                Vector3[] c4 = new Vector3[4];
+                float minX = float.MaxValue, maxX = float.MinValue;
+                for (int j = 0; j < elems[0].Count; j++)
+                {
+                    RectTransform rt = elems[0][j] as RectTransform;
+                    if (rt == null) continue;
+                    rt.GetWorldCorners(c4);
+                    for (int k = 0; k < 4; k++)
+                    {
+                        float lx = lca.InverseTransformPoint(c4[k]).x;
+                        if (lx < minX) minX = lx;
+                        if (lx > maxX) maxX = lx;
+                    }
+                }
+                if (maxX <= minX) return;
+                _ihFoodPitch = (maxX - minX) * 1.12f;
+                _ihFoodContainer = lca;
+                _ihFoodSlots = slots;
+                _ihFoodOrig.Clear();
+                for (int i = 0; i < slots.Length; i++)
+                    for (int j = 0; j < slots[i].Count; j++)
+                        _ihFoodOrig[slots[i][j]] = slots[i][j].localPosition;
+            }
+            if (_ihFoodSlots == null || _ihFoodContainer == null) return;
+            Vector3 anchor0;
+            if (!_ihFoodOrig.TryGetValue(_ihFoodSlots[0][0], out anchor0)) return;
+            for (int i = 0; i < _ihFoodSlots.Length; i++)
+            {
+                Vector3 anchor;
+                if (!_ihFoodOrig.TryGetValue(_ihFoodSlots[i][0], out anchor)) continue;
+                Vector3 delta = on ? (anchor0 + new Vector3(_ihFoodPitch * i, 0f, 0f)) - anchor : Vector3.zero;
+                for (int j = 0; j < _ihFoodSlots[i].Count; j++)
+                {
+                    Transform t = _ihFoodSlots[i][j];
+                    Vector3 orig;
+                    if (t == null || !_ihFoodOrig.TryGetValue(t, out orig)) continue;
+                    Vector3 want = orig + delta;
+                    if ((t.localPosition - want).sqrMagnitude > 0.0001f) t.localPosition = want;
+                }
+            }
+        }
+
+        private static Transform IhCommonAncestor(Transform a, Transform b)
+        {
+            for (Transform x = a; x != null; x = x.parent)
+                if (b.IsChildOf(x)) return x;
+            return null;
         }
 
         // Keeps the vanilla food icons inside our HUD and our frame right behind them.
@@ -12502,17 +12665,18 @@ namespace AlbedosCustomClassesAdvanced
             float s = IhHudScale();
             IhEnsureHudStyles(s);
 
-            float pad = 18f * s, rowH = 17f * s, gap = 5f * s;
+            // v0.25.8: thin layout: HP / STA + EIT / Lv + EXP, then the vanilla food in one row underneath.
+            float pad = 18f * s, padY = 10f * s, rowH = 16f * s, gap = 4f * s;
             float statsW = 420f * s, statsH = rowH * 3f + gap * 2f;
-            float foodW = _ihFoodFound ? Mathf.Max(30f * s, _ihFoodBounds.width) : 40f * s;
             float foodH = _ihFoodFound ? _ihFoodBounds.height : 0f;
-            float innerH = Mathf.Max(statsH, foodH);
-            float pw = pad + foodW + 18f * s + statsW + pad, ph = 14f * s + innerH + pad * 2f;
+            float foodGap = foodH > 0f ? 6f * s : 0f;
+            float pw = pad + statsW + pad, ph = 17f * s + statsH + foodGap + foodH + padY;
 
-            // Position: saved (drag), default bottom-left where the vanilla health panel sits.
+            // Position: saved (drag), default bottom-left right above the skill hotbar.
             float k1080 = Screen.height / 1080f;
-            float px = _ihHudPosX.Value >= 0f ? _ihHudPosX.Value * k1080 : 24f * k1080;
-            float py = _ihHudPosY.Value >= 0f ? _ihHudPosY.Value * k1080 : Screen.height - 150f * k1080 - ph;
+            Rect barHome = IhSkillBarDefaultRect();
+            float px = _ihHudPosX.Value >= 0f ? _ihHudPosX.Value * k1080 : barHome.x;
+            float py = _ihHudPosY.Value >= 0f ? _ihHudPosY.Value * k1080 : barHome.y - 30f * Mathf.Clamp(_hudScale.Value, 0.65f, 1.45f) - ph;
             px = Mathf.Clamp(px, 0f, Screen.width - pw);
             py = Mathf.Clamp(py, 60f * s, Screen.height - ph);
             Rect panel = new Rect(px, py, pw, ph);
@@ -12521,7 +12685,7 @@ namespace AlbedosCustomClassesAdvanced
             Event e = Event.current;
             if (Cursor.visible)
             {
-                if (e.type == EventType.MouseDown && e.button == 0 && panel.Contains(e.mousePosition)) { _ihDragging = true; _ihDragOffset = e.mousePosition - new Vector2(px, py); e.Use(); }
+                if (e.type == EventType.MouseDown && e.button == 0 && !_ihBarDragging && panel.Contains(e.mousePosition)) { _ihDragging = true; _ihDragOffset = e.mousePosition - new Vector2(px, py); e.Use(); }
                 else if (_ihDragging && e.type == EventType.MouseDrag)
                 {
                     Vector2 np = e.mousePosition - _ihDragOffset;
@@ -12541,9 +12705,10 @@ namespace AlbedosCustomClassesAdvanced
             else _ihDragging = false;
             _ihLastPanel = panel;
 
-            float inTop = panel.y + 14f * s + pad, inMid = inTop + innerH * 0.5f;
-            // Vanilla food goes here (moved by IhPlaceFood, enclosed by the uGUI frame behind it).
-            _ihFoodTarget = new Vector2(panel.x + pad, inMid - foodH * 0.5f);
+            float inTop = panel.y + 17f * s;
+            // Vanilla food goes in one row under the EXP bar (moved by IhPlaceFood, laid out
+            // horizontally by IhLayoutFoodRow, enclosed by the uGUI frame behind it).
+            _ihFoodTarget = new Vector2(panel.x + pad, inTop + statsH + foodGap);
             _ihFoodTargetSet = true;
 
             // Header plaque on the top edge: Name · CLASS.
@@ -12578,15 +12743,24 @@ namespace AlbedosCustomClassesAdvanced
                     IhHudFill(new Rect(ir.xMax - 1f, ir.y, 1f, ir.height), edge);
                     IhDrawSprite(new Rect(ir.x + 3f * s, ir.y + 3f * s, ir.width - 6f * s, ir.height - 6f * s), se.m_icon);
                     IhHudFill(new Rect(ir.x, ir.yMax + 1f, ir.width, 2f * s), new Color(0.30f, 0.78f, 0.30f, 1f));
-                    IhHudShadowLabel(new Rect(ir.x - 14f * s, ir.yMax + 3f * s, ir.width + 28f * s, 18f * s), se.GetIconText(), _ihHudTiny);
+                    // v0.25.8: stacks (e.g. Barrier HP) on the icon AND the timer underneath.
+                    string timer = se.m_ttl > 0f ? Mathf.CeilToInt(Mathf.Max(0f, se.m_ttl - se.m_time)).ToString() + "s" : "";
+                    if (se.Stacks > 0 && timer.Length > 0)
+                    {
+                        TextAnchor a0 = _ihHudTiny.alignment;
+                        _ihHudTiny.alignment = TextAnchor.LowerRight;
+                        IhHudShadowLabel(new Rect(ir.x - 20f * s, ir.y, ir.width + 20f * s, ir.height + 1f * s), se.Stacks.ToString(), _ihHudTiny);
+                        _ihHudTiny.alignment = a0;
+                    }
+                    IhHudShadowLabel(new Rect(ir.x - 14f * s, ir.yMax + 3f * s, ir.width + 28f * s, 18f * s), timer.Length > 0 ? timer : se.GetIconText(), _ihHudTiny);
                     if (ir.Contains(e.mousePosition))
                         IhHudShadowLabel(new Rect(ir.x, ir.y - 18f * s, 260f * s, 16f * s), se.m_name, _ihHudText);
                 }
             }
 
-            // Stats, centred vertically next to the food.
-            float sx = panel.x + pad + foodW + 18f * s, sw = statsW;
-            float sy = inMid - statsH * 0.5f;
+            // Stats (full width), food row underneath.
+            float sx = panel.x + pad, sw = statsW;
+            float sy = inTop;
             IhHudStat(new Rect(sx, sy, sw, rowH), "HP", 34f * s, 74f * s, player.GetHealth(), player.GetMaxHealth(), new Color(0.80f, 0.13f, 0.13f, 1f), s);
             sy += rowH + gap;
             float half = (sw - 10f * s) * 0.5f;
@@ -13980,7 +14154,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "divine_intervention": return "with both Relics up, a Cross Cast fires from both; 250 HP Barrier; enemies are pulled inward";
                 case "grand_cross": return IhNum(Instance._crossAscWidth.Value) + "m wide, travels " + IhNum(Instance._crossAscRange.Value) + "m; every enemy hit is Exposed (" + IhNum(Instance._crossAscExpose.Value) + "s) and takes double Spirit Burn";
                 case "heavens_judgement": return "14m circle, 3s barrage, beams heal allies 3% Max HP, ends with a Pillar of Heaven";
-                case "lightning_tempest": return "follows you, 12m; allies inside get +20% Defense and Hyper Armor; ends by detonating every Zap";
+                case "lightning_tempest": return "12m storm where you cast it; allies inside get +20% Defense and Hyper Armor; ends by detonating every Zap";
             }
             return "";
         }

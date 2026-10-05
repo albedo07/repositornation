@@ -1,6 +1,8 @@
-TEST v0.25.7 (Cleric animations)
-Cast every Cleric / Paladin / Priest skill (and the Ascended versions via F8) in third person.
-Check: strike pose lands on the hit, no twisted / backwards arms, body returns to normal after.
-If an arm bends the wrong way, tell me the skill + which arm (I mirror that axis).
-Shield Charge: hold pose while charging; Left Click Bash = shield shove; no bash = smooth return.
-Angel Comet / Electric Smite: pose held in the air, crash pose on landing.
+TEST v0.25.8
+1. HUD: skill hotbar bottom-left corner, stat HUD right above it; open inventory and drag both; positions saved.
+2. Stat HUD: food icons in one row under the EXP bar, frame encloses them; HUD much thinner.
+3. Barrier (Divine Intervention / Crucible): HP number on the icon + seconds under it.
+4. Ascended Lightning Tempest: storm stays where cast.
+5. Warrior / Sword Master / Mercenary: cast every skill (and Ascended via F8) in third person.
+   Check strikes land on the hit, combos flow without snapping, no backwards arms.
+   Tell me skill + arm if anything bends wrong.

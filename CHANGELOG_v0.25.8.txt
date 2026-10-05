@@ -1,0 +1,35 @@
+IMMORTAL HEROES v0.25.8 - WARRIOR MOTIONS (animation pass 2 of 4) + HUD LAYOUT
+
+HUD
+- Skill hotbar: default = bottom-left corner (no more overlap with the hover text / crosshair area).
+  Draggable anywhere while the inventory is open ([Immortal HUD] SkillBarPosX / SkillBarPosY, -1 = default).
+- Stat HUD: default = right above the skill hotbar (bottom-left, where the vanilla vitals were). Still draggable.
+- Stat HUD is thinner: HP / STA + EIT / Lv + EXP, then the vanilla food in ONE horizontal row under the EXP bar.
+- Both HUDs stay visible while the inventory is open (so you can move them).
+- Buffs with a number (Barrier HP) now show the number on the icon AND the timer under it.
+
+PRIEST
+- Ascended Lightning Tempest no longer follows you: it stays where you cast it (12m), like the normal one.
+
+ANIMATION ENGINE
+- Chained clips continue from the current pose (no snap to rest between combo hits); spins at constant speed.
+
+WARRIOR / SWORD MASTER / MERCENARY (every skill, incl. Ascended)
+- Heavy Slash: weapon over the right shoulder, crushing diagonal cut.  Ascended (Merc): wound back at the waist, huge horizontal sweep.
+- Impact Wave (+ SM Ascended): crouch with the blade dragged low, rising slash.
+- Impact Punch: fist chambered at the hip, full-body straight punch.
+- Moonlight Splitter: low ready stance, then alternating right/left cuts per wave; Ascended finisher = two-handed sky-to-ground cut.
+- Crescent Cleave: blade pulled low behind the right hip, wide sweep to the left (no spin).
+- Blade Storm: hand on the hilt, lightning draw, sheath.
+- Frenzied Charge: drawn-back thrust stance, lunging dash.
+- Eclipse: blade raised before the face, full spin slash.
+- Halfmoon: long trembling pull, wide release, backhand second slash (no spin). Ascended: stance held until
+  Left Click, spinning finisher; no click = smooth return.
+- Knight's Guidance: salute, blade thrust to the sky.
+- Stomp: lift, crash, two aftershock bounces.
+- Circle Swing: weapon wound back while you walk, full spin swing (Ascended second spin).
+- Bonecrusher: weapon overhead through the jump, crash landing (Electric Smite uses the same air pose).
+- Seismic Guillotine: overhead chop into the ground.
+- Punishing Bomb: two-handed bat swing.
+- Whirlwind: arms out, constant spin for the whole duration (Ascended faster + final sweep).
+- Battlecry / Unchained Fury: chest-out roar with a shake.

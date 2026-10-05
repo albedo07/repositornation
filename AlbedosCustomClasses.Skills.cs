@@ -220,7 +220,7 @@ namespace AlbedosCustomClassesSkills
         public static SkillsPlugin Instance;
         public const string ModGuid = "albedo.customclasses.skills";
         public const string ModName = "Dragon's Altar - Starter Skills";
-        public const string ModVersion = "0.25.7";
+        public const string ModVersion = "0.25.8";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";
@@ -612,7 +612,7 @@ namespace AlbedosCustomClassesSkills
 
             float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _heavyWindup.Value));
             DragonCombat.LockSkill(player, windup);
-            DragonCombat.PlaySkillPose(player, "HeavySlash", windup + 0.10f);
+            DragonCombat.PlayClip(player, "warrior_heavy", windup);
             StartCoroutine(HeavySlashRoutine(player, windup));
         }
 
@@ -649,7 +649,7 @@ namespace AlbedosCustomClassesSkills
 
             float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _impactWindup.Value));
             DragonCombat.LockSkill(player, windup);
-            DragonCombat.PlaySkillPose(player, "Uppercut", windup + 0.10f);
+            DragonCombat.PlayClip(player, "warrior_impact_wave", windup);
             StartCoroutine(ImpactWaveRoutine(player, windup));
         }
 
@@ -710,7 +710,7 @@ namespace AlbedosCustomClassesSkills
 
             float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _punchWindup.Value));
             DragonCombat.LockSkill(player, windup);
-            DragonCombat.PlaySkillPose(player, "Punch", windup + 0.10f);
+            DragonCombat.PlayClip(player, "warrior_punch", windup);
             StartCoroutine(ImpactPunchRoutine(player, windup));
         }
 
