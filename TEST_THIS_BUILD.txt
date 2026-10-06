@@ -1,3 +1,6 @@
-TEST v0.25.34 - Buff Tooltips
-1. Cast Tailwind (or any buff), open the inventory so the cursor shows, hover the buff icon: name, type line, numbers.
-2. Barrier: tooltip shows the HP it still absorbs. Deadeye Focus: numbers grow with stacks.
+TEST v0.25.35 - Swing Timing
+1. Heavy Slash, Impact Wave, Moonlight Splitter: slow draw back, fast swing, weapon connects when the hit/wave appears.
+2. Halfmoon = Heavy Slash animation. Crescent = Impact Wave animation; Ascended Crescent = leaping sword special
+   (if your game lacks "sword_secondary" it falls back to the custom pose - tell me).
+3. Frenzied Charge: sword pointed forward the whole dash.
+4. Circle Swing: cannot steer in the wind up; you hop ~1.5 m forward, then spin.

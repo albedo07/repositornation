@@ -1,0 +1,11 @@
+Immortal Heroes v0.25.35 - Swing Timing
+=======================================
+- Vanilla-based skill animations now play in two phases: the wind up (draw back) is slowed down to fill the
+  skill's wind up, then the swing itself plays fast in the last ~0.25 s so the weapon connects exactly when
+  the skill hits. The follow-through after the hit is finished quickly.
+- Moonlight Splitter: the wind up IS the first slash (slow draw, fast cut) - no more frozen raised-sword pose.
+  Slashes 2 and 3 start 0.3 s early so each cut lands on its wave (same 0.5 s spacing). Ascended too.
+- Halfmoon Slash: same animation as Heavy Slash.
+- Crescent Cleave: same animation as Impact Wave. Ascended Crescent Cleave: Valheim's leaping sword special.
+- Frenzied Charge: sword held out in front, point forward, for the whole charge (running legs underneath).
+- Circle Swing: no more steering during the wind up; the crow hop now carries you 1.5 m forward (walls stop it).

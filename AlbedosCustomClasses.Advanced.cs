@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.34";
+        public const string ModVersion = "0.25.35";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1364,14 +1364,14 @@ namespace AlbedosCustomClassesAdvanced
             {
                 float ascWindup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _moonAscWindup.Value));
                 DragonCombat.LockSkill(player, ascWindup + 1.0f);
-                DragonCombat.PlayClip(player, "sm_ready", ascWindup);
+                DragonCombat.PlayClip(player, "sm_slash_a", ascWindup);   // v0.25.35 first slash = the wind up
                 StartCoroutine(MoonlightAscendedRoutine(player, ascWindup, Time.time));
                 return;
             }
 
             float windup = DragonCombat.ScaleWindup(player, 1f);
             DragonCombat.LockSkill(player, windup + 1.05f);
-            DragonCombat.PlayClip(player, "sm_ready", windup);
+            DragonCombat.PlayClip(player, "sm_slash_a", windup);   // v0.25.35 the wind up IS the first slash (slow draw, fast cut)
             StartCoroutine(MoonlightRoutine(player, windup));
         }
 
@@ -1390,13 +1390,19 @@ namespace AlbedosCustomClassesAdvanced
                 if (player == null || player.IsDead() || SmInterrupted(castStart))
                     yield break;
 
-                DragonCombat.PlayClip(player, slash % 2 == 0 ? "sm_slash_a" : "sm_slash_b", 0.1f);
+                // v0.25.35: slash 1 was played by the wind up; later slashes start 0.3 s early so their cut lands on the wave.
+                if (slash > 0)
+                {
+                    DragonCombat.PlayClip(player, slash % 2 == 0 ? "sm_slash_a" : "sm_slash_b", 0.3f);
+                    yield return new WaitForSeconds(0.3f);
+                    if (player == null || player.IsDead() || SmInterrupted(castStart)) yield break;
+                }
                 Vector3 origin = player.GetEyePoint() + player.transform.up * -0.25f;
                 Vector3 forward = AlbedoAimUtility.GetProjectileDirection(player, origin);
                 StartCoroutine(GhostSlashWave(player, origin, forward, range, width, DragonCombat.M(_moonSpeed.Value), _moonDamageV, 1f, 1f));
 
                 if (slash < 2)
-                    yield return new WaitForSeconds(0.5f);
+                    yield return new WaitForSeconds(0.2f);
             }
         }
 
@@ -1472,7 +1478,7 @@ namespace AlbedosCustomClassesAdvanced
 
             float windup = DragonCombat.ScaleWindup(player, 1f);
             DragonCombat.LockSkill(player, windup);
-            DragonCombat.PlayClip(player, "sm_crescent", windup);
+            DragonCombat.PlayClip(player, IsAscendedSkill("crescent_cleave") ? "sm_crescent_asc" : "sm_crescent", windup);   // v0.25.35 Impact Wave anim / Ascended: leaping sword special
             StartCoroutine(CrescentCleaveRoutine(player, windup));
         }
 
@@ -1984,7 +1990,7 @@ namespace AlbedosCustomClassesAdvanced
             for (int wave = 0; wave < 4; wave++)
             {
                 if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
-                DragonCombat.PlayClip(player, wave % 2 == 0 ? "sm_slash_a" : "sm_slash_b", 0.08f);
+                if (wave > 0) DragonCombat.PlayClip(player, wave % 2 == 0 ? "sm_slash_a" : "sm_slash_b", 0.08f);
                 Vector3 origin = player.GetEyePoint() + player.transform.up * -0.25f;
                 StartCoroutine(GhostSlashWave(player, origin, AlbedoAimUtility.GetProjectileDirection(player, origin), range, width, DragonCombat.M(_moonSpeed.Value), _moonDamageV, _moonAscWave.Value / 100f, 1f));
                 if (wave < 3) yield return new WaitForSeconds(Mathf.Max(0.05f, _moonAscInterval.Value));
@@ -2167,7 +2173,7 @@ namespace AlbedosCustomClassesAdvanced
             bool ascended = IsAscendedSkill("frenzied_charge");
             float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, ascended ? _frenzyAscWindup.Value : _frenzyWindup.Value));
             DragonCombat.LockSkill(player, windup + _frenzyDashTime.Value + 0.1f);
-            DragonCombat.PlayClip(player, "sm_thrust", windup);
+            DragonCombat.PlayClip(player, "sm_charge", windup, true);   // v0.25.35 sword out in front for the whole charge
             StartCoroutine(FrenziedChargeRoutine(player, body, capsule, windup, ascended, Time.time));
         }
 
@@ -2215,7 +2221,7 @@ namespace AlbedosCustomClassesAdvanced
         {
             ShowMessage("Frenzied Charge");
             if (windup > 0f) yield return new WaitForSeconds(windup);
-            if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
+            if (player == null || player.IsDead() || SmInterrupted(start)) { if (player != null) DragonCombat.ClipStop(player, 0.2f); yield break; }
             _frenzyActive = true;
             float distance = Mathf.Max(1f, ascended ? DragonCombat.M(_frenzyAscDistance.Value) : DragonCombat.M(_frenzyDistance.Value));
             float width = Mathf.Max(0.5f, DragonCombat.M(_frenzyWidth.Value)) * (ascended ? Mathf.Max(1f, _frenzyAscWidthMult.Value) : 1f);
@@ -2282,6 +2288,7 @@ namespace AlbedosCustomClassesAdvanced
             {
                 _frenzyActive = false;
                 DragonCombat.ForceRun(player, false);
+                DragonCombat.ClipImpact(player);
                 FrenzyRestoreCollisions(capsule, ignored);
             }
             if (player == null || player.IsDead()) yield break;
@@ -2821,9 +2828,10 @@ namespace AlbedosCustomClassesAdvanced
         {
             ShowMessage("Circle Swing");
             if (player == null || player.IsDead()) yield break;
-            // Wind up at normal walking speed (no Sprint), with Hyper Armor.
-            DragonCombat.BeginWhirlwind(player, windup);
+            // v0.25.35 (user): no steering in the wind up any more; the crow hop carries you 1.5 m forward.
+            DragonCombat.LockSkill(player, windup + 0.05f);
             DragonCombat.GrantHyperArmor(player, windup + 0.25f);
+            StartCoroutine(CircleHop(player, windup));
             yield return new WaitForSeconds(windup);
             if (player == null || player.IsDead()) yield break;
             bool ascended = IsAscendedSkill("circle_swing");
@@ -2838,6 +2846,32 @@ namespace AlbedosCustomClassesAdvanced
             yield return new WaitForSeconds(Mathf.Max(0.05f, _circleAscGap.Value));
             if (player == null || player.IsDead()) yield break;
             CircleSwingHit(player, weapon, radius, baseMult * _circleAscSecond.Value / 100f, true);
+        }
+
+        // Crow hop: 1.5 m forward during the hop part of the wind up (24% - 58% of it, matching the clip);
+        // walls stop it, height stays physics-driven.
+        private IEnumerator CircleHop(Player player, float windup)
+        {
+            if (player == null) yield break;
+            Rigidbody body = player.GetComponent<Rigidbody>();
+            Vector3 dir = IhFlatAim(player);
+            float t0 = windup * 0.24f, t1 = windup * 0.58f;
+            float total = DragonCombat.M(1.5f), done = 0f, start = Time.time;
+            int solid = IhSolidMask();
+            while (player != null && !player.IsDead() && Time.time - start < t1 && done < total)
+            {
+                yield return new WaitForFixedUpdate();
+                if (player == null || body == null) yield break;
+                float el = Time.time - start;
+                if (el < t0) continue;
+                float step = Mathf.Min(total - done, total * Time.fixedDeltaTime / Mathf.Max(0.05f, t1 - t0));
+                RaycastHit wall;
+                if (Physics.Raycast(body.position + Vector3.up * 0.6f, dir, out wall, step + 0.4f, solid, QueryTriggerInteraction.Ignore) &&
+                    wall.collider.GetComponentInParent<Character>() == null) yield break;
+                Vector3 next = body.position + dir * step;
+                body.MovePosition(next);
+                done += step;
+            }
         }
 
         private void CircleSwingHit(Player player, DamageSnapshot weapon, float radius, float multiplier, bool launch)

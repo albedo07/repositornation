@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.34";
+        public const string ModVersion = "0.25.35";
 
         internal static DragonCombatPlugin Instance;
 
@@ -73,9 +73,9 @@ namespace DragonsAltarCombat
 
             EnableRuntime = Config.Bind("Runtime", "Enabled", true, "Enable Dragon's Altar combat runtime patches.");
             EnableSkillAnimations = Config.Bind("Runtime", "EnableSkillAnimations", true, "Use Dragon's Altar procedural skill poses. Class skills do not trigger vanilla weapon attacks.");
-            VanillaAnimationMap = Config.Bind("Runtime", "VanillaAnimationMap_v02527",
-                "sm_slash_a=swing_longsword0@0.28;sm_slash_b=swing_longsword1@0.28;sm_blade_storm=swing_longsword2@0.28;sm_halfmoon=swing_longsword2@0.3;sm_halfmoon_2=swing_longsword1@0.3;warrior_h" +
-                "eavy=battleaxe_attack@0.45;merc_heavy_asc=battleaxe_attack@0.45;sm_moon_finisher=battleaxe_attack@0.45;sm_crescent=battleaxe_attack@0.45;merc_bomb=battleaxe_attack@0.45;merc_circle" +
+            VanillaAnimationMap = Config.Bind("Runtime", "VanillaAnimationMap_v02535",
+                "sm_slash_a=swing_longsword0@0.28;sm_slash_b=swing_longsword1@0.28;sm_blade_storm=swing_longsword2@0.28;sm_halfmoon=battlea" + "xe_attack@0.45;sm_halfmoon_2=battleaxe_attack@0.45;warrior_h" +
+                "eavy=battleaxe_attack@0.45;merc_heavy_asc=battleaxe_attack@0.45;sm_moon_finisher=battleaxe_attack@0.45;sm_crescent=swing_sledge@0.55;sm_crescent_asc=sword_secondary@0.5;merc_bomb=battleaxe_attack@0.45;merc_circle" +
                 "=atgeir_secondary@0.45;merc_circle_2=atgeir_secondary@0.4;sm_eclipse=atgeir_secondary@0.45;sm_halfmoon_finisher=atgeir_secondary@0.45;warrior_impact_wave=swing_sledge@0.55;merc_sei" +
                 "smic=swing_sledge@0.55;wiz_greatblade=swing_sledge@0.55;wiz_greatblade_slam=swing_sledge@0.55;warrior_punch=unarmed_attack@0.2;sm_thrust=spear_poke@0.25;cleric_hammer=spear_throw@0" +
                 ".4;cleric_cross_1=swing_longsword0@0.28;cleric_cross_2=swing_longsword1@0.28;cleric_zap=staff_fireball@0.25;sorc_flame=staff_fireball@0.25;hw_gravity_blast=staff_fireball@0.25;cler" +
@@ -1726,6 +1726,8 @@ namespace DragonsAltarCombat
         public float FLh, FRh;
         public DragonClipKey Lift(float left, float right) { FLh = left; FRh = right; return this; }
         public bool NoAim;
+        // v0.25.35 legs belong to the animator (forced run under a charge): no foot planting.
+        public bool NoPlant;
         // Same pose as another key at a new time (holds / shakes).
         public DragonClipKey Copy(float t)
         {
@@ -1797,7 +1799,8 @@ namespace DragonsAltarCombat
         private int _vaLayer = -1, _vaHash;
         private int[] _vaPre;
         private float _vaFiredAt, _vaGuess;
-        private bool _noAim;
+        private bool _noAim, _noPlant;
+        private float _vaLead = 0.3f;
 
         public void Begin(DragonClipKey[] keys, float windup, bool hold, Transform visual)
         {
@@ -1808,6 +1811,8 @@ namespace DragonsAltarCombat
             _vaGuess = Mathf.Max(0.2f, keys[0].VL * 1.8f);
             _vaTrack = false;
             _noAim = keys[0].NoAim;
+            _noPlant = keys[0].NoPlant;
+            _vaLead = Mathf.Max(0.05f, keys[0].VL);
             if (_keys != null)
             {
                 // v0.25.8: chained clips start from the CURRENT pose (no snap back to rest in between).
@@ -2014,8 +2019,19 @@ namespace DragonsAltarCombat
                 else { _vaTrack = false; DragonCombat.SetSkillAnimSpeed(p, 1f, 0f); return; }
                 float norm = info.normalizedTime;
                 if (norm >= 1f) { _vaTrack = false; DragonCombat.SetSkillAnimSpeed(p, 1f, 0f); return; }
-                remain = (1f - Mathf.Max(0f, norm)) * Mathf.Max(0.05f, info.length);
-                float speed = _impactAt >= 0f && Time.time > end + 0.02f ? 6f : Mathf.Clamp(remain / left, 0.3f, 6f);
+                // v0.25.35 two phases (user: slow wind up, then a fast swing timed to the skill): the vanilla
+                // anticipation (everything up to ~0.22 s before its hit frame) is stretched over the wind up, the
+                // swing itself plays fast in the last ~0.25 s so its hit frame lands exactly on the impact;
+                // the recovery after the impact is played out at 6x.
+                float len = Mathf.Max(0.05f, info.length);
+                float hitN = Mathf.Clamp(_vaLead / len, 0.15f, 0.9f);
+                float swingN = Mathf.Clamp((_vaLead - 0.22f) / len, 0f, hitN);
+                float swingDur = Mathf.Min(0.25f, Mathf.Max(0.04f, (end - _vaFiredAt) * 0.45f));
+                float swingAt = end - swingDur;
+                float speed;
+                if (Time.time > end + 0.02f) speed = 6f;
+                else if (Time.time < swingAt) speed = Mathf.Clamp((swingN - norm) * len / Mathf.Max(0.03f, swingAt - Time.time), 0.12f, 6f);
+                else speed = Mathf.Clamp((hitN - norm) * len / Mathf.Max(0.03f, end - Time.time), 0.12f, 6f);
                 DragonCombat.SetSkillAnimSpeed(p, speed, 0.15f);
             }
             catch (Exception) { _vaTrack = false; }
@@ -2205,7 +2221,7 @@ namespace DragonsAltarCombat
 
         private void PlantFeet()
         {
-            bool can = _feetCaptured && _visual != null && DragonCombat.OwnsMotionRoot(_token) && Grounded();
+            bool can = !_noPlant && _feetCaptured && _visual != null && DragonCombat.OwnsMotionRoot(_token) && Grounded();
             float tilt = Mathf.Max(Mathf.Abs(Mathf.DeltaAngle(0f, _r.x)), Mathf.Max(Mathf.Abs(Mathf.DeltaAngle(0f, _r.z)), Mathf.Abs(Mathf.DeltaAngle(0f, _spin))));
             float upright = 1f - Mathf.InverseLerp(25f, 45f, tilt);
             _plantW = Mathf.MoveTowards(_plantW, can ? _env * upright : 0f, Time.deltaTime * 8f);
@@ -3179,6 +3195,12 @@ namespace DragonsAltarCombat
             c["hw_rift_walker"] = SbCommand(1); c["wiz_gravity"] = SbCommand(3);
             c["olympic_hero"] = SbOlympic(false);
             c["olympic_hero_brutal"] = SbOlympic(true);
+            c["sm_crescent_asc"] = c["sm_crescent"];
+            // v0.25.35 Frenzied Charge (user): sword held out in front, point forward, the whole charge.
+            DragonClipKey fcDraw = Ft(K(-0.5f).Sp(6f, -8f, 0f).Hand(0.35f, -0.25f, -0.05f, 0.6f).Wp(0.1f, 0.15f, 1f).Off(0f, -0.06f, 0f), 0.25f, 0.2f);
+            DragonClipKey fcHold = K(0f).Sp(12f, 0f, 0f).Ch(4f, 0f, 0f).Hd(-10f, 0f, 0f).Hand(0.12f, 0.05f, 1f, 0.88f).Wp(0f, 0.05f, 1f);
+            c["sm_charge"] = new DragonClipKey[] { K(-1f), fcDraw, fcHold, fcHold.Copy(0.15f), K(0.4f) };
+            c["sm_charge"][0].NoPlant = true;
             DragonClipKey[] oh = c["olympic_hero"];
             List<DragonClipKey> land = new List<DragonClipKey>();
             land.Add(oh[5].Copy(-1f));
