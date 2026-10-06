@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.44";
+        public const string ModVersion = "0.25.45";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -11638,6 +11638,7 @@ namespace AlbedosCustomClassesAdvanced
             DragonCombat.RegisterStackQuery(IhStackQuery);
             DragonCombat.RegisterTooltipFilter(IhItemTooltipFilter);
             DragonCombat.AscendedProvider = delegate(Player p, string skillId) { return p == Player.m_localPlayer && IsAscendedSkill(skillId); };
+            DragonCombat.ComboWeaponProvider = delegate(Player p, ItemDrop.ItemData w) { return IhComboWeaponFits(p, w); };
         }
 
         // Cleric before Advancement and Cleric -> Paladin use the Skill Tree hotbar.
@@ -11760,6 +11761,21 @@ namespace AlbedosCustomClassesAdvanced
             else return null;
             if (IhWeaponSkillIn(r, ok) || IhWeaponSkillIn(l, ok)) return null;
             return need;
+        }
+
+        // v0.25.45 (user): the 5-hit normal chain only for a class fit for the weapon: Sword Master Swords,
+        // Warrior / Mercenary any melee weapon, Cleric (Paladin / Priest) Maces / Clubs, Kali Knives / Fist weapons.
+        private bool IhComboWeaponFits(Player player, ItemDrop.ItemData w)
+        {
+            if (player == null || w == null) return false;
+            string cls = GetClass(player), adv = GetAdvancement(player);
+            string[] ok;
+            if (adv == "Sword Master") ok = new string[] { "Swords" };
+            else if (cls == "Warrior") ok = new string[] { "Swords", "Axes", "Clubs", "Knives", "Polearms", "Spears", "Unarmed" };
+            else if (cls == "Cleric") ok = new string[] { "Clubs" };
+            else if (cls == "Kali") ok = new string[] { "Knives", "Unarmed" };
+            else return false;
+            return IhWeaponSkillIn(w, ok);
         }
 
         private static bool IhWeaponSkillIn(ItemDrop.ItemData item, string[] ok)

@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.44";
+        public const string ModVersion = "0.25.45";
 
         internal static DragonCombatPlugin Instance;
 
@@ -990,6 +990,9 @@ namespace DragonsAltarCombat
                 if (!IsLocalMeleeAttack(__instance, out p)) return;
                 int levels = (int)_atkLevels.GetValue(__instance);
                 if (levels < 2) return;   // only weapons that already chain (no spears / single heavy hits)
+                // v0.25.45 (user): the 5-hit chain belongs to classes fit for the weapon; everyone else keeps vanilla.
+                ItemDrop.ItemData cw = _atkWeapon == null ? null : _atkWeapon.GetValue(__instance) as ItemDrop.ItemData;
+                if (DragonCombat.ComboWeaponProvider == null || !DragonCombat.ComboWeaponProvider(p, cw)) { _comboHit = -1; return; }
                 int count = Mathf.Min(levels, 3);
                 if (levels > count) _atkLevels.SetValue(__instance, count);
                 string anim = _atkAnim.GetValue(__instance) as string;
@@ -5604,6 +5607,8 @@ namespace DragonsAltarCombat
         // modules without the progression data ask whether a skill is Ascended (Advanced registers both).
         public static Func<string, bool> TreeSkillKeyHeldProvider;
         public static Func<Player, string, bool> AscendedProvider;
+        // v0.25.45: may this player's class chain the given weapon? (Advanced registers it; none = no chains)
+        public static Func<Player, ItemDrop.ItemData, bool> ComboWeaponProvider;
 
         public static bool IsTreeSkillKeyHeld(string skillId)
         {

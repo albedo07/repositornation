@@ -1,5 +1,5 @@
-TEST v0.25.44
-1. Any melee weapon, hold/spam attack: swing 1, 2, 1, 2, 3 (3 = finisher), then 1 s pause. Same with dual wield.
-2. Whirlwind: two hands on the weapon, smooth continuous spin, no vanilla loop jitter.
-3. Ascended Whirlwind: Trolls / bosses within 8 m get dragged into the blades.
-4. Frenzied Charge: animation starts on click, strike pose exactly as the dash begins.
+TEST v0.25.45
+1. Sword Master + sword: 1,2,1,2,3 chain. Sword Master + axe: vanilla chain.
+2. Warrior / Mercenary: chain with any melee weapon.
+3. Cleric / Paladin / Priest + mace: chain; + sword: vanilla.
+4. Sorcerer / Ranger / no class with a melee weapon: vanilla chain.

@@ -1,5 +1,5 @@
 @echo off
-title Immortal Heroes v0.25.44 - Chain Fix
+title Immortal Heroes v0.25.45 - Class Chains
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
 echo.
 pause

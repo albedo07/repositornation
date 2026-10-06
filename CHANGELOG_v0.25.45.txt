@@ -1,0 +1,6 @@
+Immortal Heroes v0.25.45 - Class Chains
+
+- The 5-hit chain (1 > 2 > 1 > 2 > 3 + 1 s lockout) now only works when your class is fit for the weapon:
+  Sword Master = Swords; Warrior / Mercenary = any melee weapon; Cleric / Paladin / Priest = Maces / Clubs;
+  Kali (later) = Knives / Fist weapons. Everyone else (no class, Sorcerer, Ranger, wrong weapon) keeps
+  Valheim's normal chain.
