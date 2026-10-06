@@ -1,5 +1,3 @@
-TEST v0.25.45
-1. Sword Master + sword: 1,2,1,2,3 chain. Sword Master + axe: vanilla chain.
-2. Warrior / Mercenary: chain with any melee weapon.
-3. Cleric / Paladin / Priest + mace: chain; + sword: vanilla.
-4. Sorcerer / Ranger / no class with a melee weapon: vanilla chain.
+TEST v0.25.46
+1. Mercenary + knife or fists: vanilla chain, skills say "requires a melee weapon (no Knives / Fist weapons)".
+2. Mercenary + sword/axe/mace: 1,2,1,2,3 chain + skills work.

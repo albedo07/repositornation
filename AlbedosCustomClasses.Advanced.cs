@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.45";
+        public const string ModVersion = "0.25.46";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -11752,6 +11752,7 @@ namespace AlbedosCustomClassesAdvanced
             ItemDrop.ItemData l = DragonCombat.GetHandItem(player, "m_leftItem");
             string need; string[] ok;
             if (adv == "Sword Master") { need = "a Sword"; ok = new string[] { "Swords" }; }
+            else if (adv == "Mercenary") { need = "a melee weapon (no Knives / Fist weapons)"; ok = new string[] { "Swords", "Axes", "Clubs", "Polearms", "Spears" }; }
             else if (cls == "Warrior") { need = "a melee weapon"; ok = new string[] { "Swords", "Axes", "Clubs", "Knives", "Polearms", "Spears" }; }
             else if (cls == "Cleric") { need = "a Mace / Club or a Staff / Wand"; ok = new string[] { "Clubs", "ElementalMagic", "BloodMagic" }; }
             else if (cls == "Sorcerer") { need = "a Staff or Wand"; ok = new string[] { "ElementalMagic", "BloodMagic" }; }
@@ -11771,6 +11772,7 @@ namespace AlbedosCustomClassesAdvanced
             string cls = GetClass(player), adv = GetAdvancement(player);
             string[] ok;
             if (adv == "Sword Master") ok = new string[] { "Swords" };
+            else if (adv == "Mercenary") ok = new string[] { "Swords", "Axes", "Clubs", "Polearms", "Spears" };   // v0.25.46: no Knives / Fist weapons
             else if (cls == "Warrior") ok = new string[] { "Swords", "Axes", "Clubs", "Knives", "Polearms", "Spears", "Unarmed" };
             else if (cls == "Cleric") ok = new string[] { "Clubs" };
             else if (cls == "Kali") ok = new string[] { "Knives", "Unarmed" };

@@ -1,0 +1,4 @@
+Immortal Heroes v0.25.46 - Merc Weapons
+
+- Mercenary: Knives and Fist weapons no longer count. No 5-hit chain with them, and Mercenary skills need a
+  Sword / Axe / Club / Polearm / Spear. Base Warrior unchanged (any melee weapon).
