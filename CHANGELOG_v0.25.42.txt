@@ -1,0 +1,26 @@
+Immortal Heroes v0.25.42 - Weapons and Chains
+=============================================
+NORMAL ATTACK CHAINS
+- Real 1-2-1-2-3: the first time each swing of a weapon plays, the game remembers which animation it is;
+  the repeated swings (hits 3 and 4) then blend straight into swing 1 and 2, hit 5 is the finisher.
+  (Valheim's animator can only chain 1 -> 2 -> 3 by itself, which is why the old remap looked wrong.)
+- Dual wield: copy DualWield.dll (the DualWield mod by Smoothbrain, from Thunderstore) into
+  BepInEx/plugins/ImmortalHeroesAssets/ - NOT into plugins. Immortal Heroes reads its dual-wield animations from it
+  and uses them while you hold two one-handed weapons (same clip map as the mod). Without the DLL the
+  off-hand still strikes every swing. Log line: "[Immortal Heroes] DualWield animations loaded".
+SKILLS NEED THEIR WEAPON (Graces excepted)
+- Warrior / Mercenary: melee weapon - Sword Master: Sword - Cleric / Paladin / Priest: Mace/Club or Staff/Wand -
+  Sorcerer / Archmage / Horizon Walker: Staff or Wand - Ranger / Bowmaster: Bow or Crossbow - Acrobat: Bow.
+ANIMATIONS
+- Whirlwind: Circle Swing's spin looped continuously (the spin part repeats, no wind up / recovery between turns).
+  [Runtime] WhirlwindLoopStart_v02542 / WhirlwindLoopEnd_v02542 tune the loop points.
+- Shield Charge Hammer Slam: the Axe heavy attack.
+- Frenzied Charge: the Sword heavy attack, its pose held for the whole dash; the dash is now near-instant
+  (0.12 s), then a hail of slashes follows the path: one every 0.2 s, 1 m apart, each hits everything within 1 m.
+- Sky Summon skills (Righteous Strike, Goddess Relic, Relics, Heaven's Judgement, Tempest, Glacial Descent):
+  the Impact Wave animation.
+- Blade Storm: the sheathed blade now rests outside the body (no more sword through the hip).
+- Battlecry roars while moving too (stops you for the wind up).
+ART
+- Cleric and Sorcerer (and their Advancements) skill icons fill the whole frame: the flat navy matte around the
+  art-pack paintings is trimmed before fitting (tree canvases, hotbar icons, Altar icons).

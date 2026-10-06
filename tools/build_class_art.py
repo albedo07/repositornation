@@ -131,8 +131,27 @@ def scene_path(name):
     return p if os.path.exists(p) else os.path.join(RANGER, "backgrounds", name + ".jpg")
 
 
+def trim_matte(img):
+    """v0.25.42 (user): many art-pack icons are a portrait painting on a flat navy matte, so they looked like a
+    small card inside the frame. Crop away the uniform border (colour of the edges) before cover-fitting."""
+    a = np.asarray(img, dtype=np.float64)
+    edge = np.concatenate([a[0], a[-1], a[:, 0], a[:, -1]])
+    bg = np.median(edge, axis=0)
+    diff = np.abs(a - bg).sum(2)
+    rows = np.where((diff > 40).mean(1) > 0.08)[0]
+    cols = np.where((diff > 40).mean(0) > 0.08)[0]
+    if len(rows) < 8 or len(cols) < 8:
+        return img
+    x0, x1, y0, y1 = cols[0], cols[-1] + 1, rows[0], rows[-1] + 1
+    ins = 3
+    x0, y0, x1, y1 = x0 + ins, y0 + ins, x1 - ins, y1 - ins
+    if x1 - x0 < img.width * 0.4 or y1 - y0 < img.height * 0.4:
+        return img
+    return img.crop((x0, y0, x1, y1))
+
+
 def icon_art(sid, w, h, key):
-    src = Image.open(icon_path(sid)).convert("RGB")
+    src = trim_matte(Image.open(icon_path(sid)).convert("RGB"))
     src = grade(src, key)
     # Cover-crop to the opening's aspect (centre), then downscale with a light sharpen.
     sw, sh = src.size

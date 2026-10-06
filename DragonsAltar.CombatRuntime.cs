@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.41";
+        public const string ModVersion = "0.25.42";
 
         internal static DragonCombatPlugin Instance;
 
@@ -73,14 +73,14 @@ namespace DragonsAltarCombat
 
             EnableRuntime = Config.Bind("Runtime", "Enabled", true, "Enable Dragon's Altar combat runtime patches.");
             EnableSkillAnimations = Config.Bind("Runtime", "EnableSkillAnimations", true, "Use Dragon's Altar procedural skill poses. Class skills do not trigger vanilla weapon attacks.");
-            VanillaAnimationMap = Config.Bind("Runtime", "VanillaAnimationMap_v02541",
+            VanillaAnimationMap = Config.Bind("Runtime", "VanillaAnimationMap_v02542",
                 "sm_slash_a=swing_longsword0@0.28;sm_slash_b=swing_longsword1@0.28;sm_halfmoon=battlea" + "xe_attack@0.45;sm_halfmoon_2=battleaxe_attack@0.45;warrior_h" +
-                "eavy=battleaxe_attack@0.45;merc_heavy_asc=battleaxe_attack@0.45;sm_moon_finisher=battleaxe_attack@0.45;sm_crescent=swing_sledge@0.55;sm_crescent_asc=sword_secondary@0.5;cleric_hammer_slam=mace_secondary@0.45;merc_bomb=battleaxe_attack@0.45;merc_circle" +
+                "eavy=battleaxe_attack@0.45;merc_heavy_asc=battleaxe_attack@0.45;sm_moon_finisher=battleaxe_attack@0.45;sm_crescent=swing_sledge@0.55;sm_crescent_asc=sword_secondary@0.5;cleric_hammer_slam=axe_secondary@0.45;merc_bomb=battleaxe_attack@0.45;merc_circle" +
                 "=atgeir_secondary@0.45;merc_circle_2=atgeir_secondary@0.4;sm_eclipse=atgeir_secondary@0.45;sm_halfmoon_finisher=atgeir_secondary@0.45;warrior_impact_wave=swing_sledge@0.55;merc_sei" +
                 "smic=swing_sledge@0.55;wiz_greatblade=swing_sledge@0.55;wiz_greatblade_slam=swing_sledge@0.55;warrior_punch=unarmed_attack@0.2;sm_thrust=spear_poke@0.25;cleric_hammer=spear_throw@0" +
                 ".4;cleric_cross_1=swing_longsword0@0.28;cleric_cross_2=swing_longsword1@0.28;cleric_zap=staff_fireball@0.25;sorc_flame=staff_fireball@0.25;hw_gravity_blast=staff_fireball@0.25;cler" +
-                "ic_rs=staff_summon@0.5;cleric_rs_asc=staff_summon@0.5;cleric_goddess=staff_summon@0.5;cleric_relic=staff_summon@0.5;cleric_holy_relic=staff_summon@0.5;cleric_judgement=staff_summon" +
-                "@0.5;cleric_tempest=staff_summon@0.5;sorc_glacial=staff_summon@0.5;sorc_glacial_asc=staff_summon@0.5;sorc_stonefang=emote_kneel@0.3;cleric_wave=emote_cheer@0.3;cleric_ray=emote_c" +
+                "ic_rs=swing_sledge@0.55;cleric_rs_asc=swing_sledge@0.55;cleric_goddess=swing_sledge@0.55;cleric_relic=swing_sledge@0.55;cleric_holy_relic=swing_sledge@0.55;cleric_judgement=swing_sledge" +
+                "@0.55;cleric_tempest=swing_sledge@0.55;sorc_glacial=swing_sledge@0.55;sorc_glacial_asc=swing_sledge@0.55;sorc_stonefang=emote_kneel@0.3;cleric_wave=emote_cheer@0.3;cleric_ray=emote_c" +
                 "heer@0.3;cleric_light=emote_cheer@0.3;cleric_intervention=emote_cheer@0.3;cleric_crucible=emote_cheer@0.3;cleric_wave_ally=emote_cheer@0.3;wiz_clockwork=emote_cheer@0.3;wiz_n" +
                 "ova=staff_shield@0.3;sm_guidance=emote_cheer@0.3;rg_tailwind=emote_cheer@0.3;rg_vigil=emote_cheer@0.3;merc_roar=emote_roar@0.3;merc_fury_accent=emote_flex@0.2;rg_trap=emote_kneel@0.3;hw_point=emote_point@0.2;hw_command=emote_point@0.2;hw_rift_echo=emote_point@0.2;hw_rupture=emote_po" +
                 "int@0.2;hw_open=emote_point@0.2;hw_stop=emote_point@0.2;hw_pinch=emote_point@0.2;hw_afterimage=emote_point@0.2;hw_rift_walker=emote_point@0.2;wiz_gravity=emote_comehere@0.3;sorc_stone" +
@@ -879,6 +879,7 @@ namespace DragonsAltarCombat
         // game has them. After the 5th hit normal attacks are locked for 1 s.
         // ==================================================================================
         internal ConfigEntry<bool> ComboChainsEnabled;
+        internal ConfigEntry<float> WhirlwindLoopStart, WhirlwindLoopEnd;
         internal ConfigEntry<int> ComboChainLength;
         internal ConfigEntry<float> ComboFinisherLockout;
         private static FieldInfo _atkLevels, _atkLevel, _atkAnim, _atkChar, _atkWeapon, _atkAngle, _atkType;
@@ -909,6 +910,8 @@ namespace DragonsAltarCombat
             ComboChainsEnabled = Config.Bind("Combat", "FiveHitCombos_v02538", true, "Normal melee attacks chain into a 5-hit combo built from the weapon's own vanilla swings.");
             ComboChainLength = Config.Bind("Combat", "ComboLength_v02538", 5, "Hits in the normal attack chain.");
             ComboFinisherLockout = Config.Bind("Combat", "ComboFinisherLockout_v02538", 1f, "Seconds after the last hit of the chain before a new normal attack can start.");
+            WhirlwindLoopStart = Config.Bind("Runtime", "WhirlwindLoopStart_v02542", 0.3f, "Whirlwind: where the looped spin restarts in Valheim's atgeir spin (0-1 of the animation).");
+            WhirlwindLoopEnd = Config.Bind("Runtime", "WhirlwindLoopEnd_v02542", 0.72f, "Whirlwind: where the looped spin jumps back (0-1 of the animation).");
             ComboFields();
             int n = 0;
             BindingFlags all = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
@@ -1015,26 +1018,44 @@ namespace DragonsAltarCombat
 
         // Valheim fires <animation><chain level>; level 3+ does not exist on a 3-swing weapon, so every level is
         // mapped onto the weapon's real swings: finisher = its last swing, the rest cycle the others.
-        private static void ComboTriggerPrefix(object __instance, ref string __0)
+        // v0.25.42 (user: "1-2-1-2-3"): repeats of an earlier swing cannot be reached by trigger (Valheim's
+        // animator only chains 0->1->2), so the state each swing trigger enters is LEARNED the first time it
+        // plays and repeats cross-fade straight into that state. Dual wield swaps in the DualWield mod's clips.
+        private static bool ComboTriggerPrefix(object __instance, ref string __0)
         {
-            if (!_comboInStart || string.IsNullOrEmpty(__0) || string.IsNullOrEmpty(_comboBase)) return;
+            if (!_comboInStart || string.IsNullOrEmpty(__0) || string.IsNullOrEmpty(_comboBase)) return true;
             try
             {
-                if (!__0.StartsWith(_comboBase, StringComparison.Ordinal)) return;
+                if (!__0.StartsWith(_comboBase, StringComparison.Ordinal)) return true;
                 string digits = __0.Substring(_comboBase.Length);
                 int level;
-                if (digits.Length == 0 || !int.TryParse(digits, out level)) return;
+                if (digits.Length == 0 || !int.TryParse(digits, out level)) return true;
                 Component c = __instance as Component;
                 Animator a = c == null ? null : c.GetComponentInChildren<Animator>();
+                Player p = c == null ? null : c.GetComponent<Player>();
+                bool dwClips = _comboDual && DragonDualWield.Apply(p, a, true);
+                if (!_comboDual) DragonDualWield.Apply(p, a, false);
                 string baseName = _comboBase;
-                if (_comboDual && DragonCombat.AnimTriggerCount(a, "dual_knives") >= 2) baseName = "dual_knives";
+                if (_comboDual && !dwClips && DragonCombat.AnimTriggerCount(a, "dual_knives") >= 2) baseName = "dual_knives";
                 int count = DragonCombat.AnimTriggerCount(a, baseName);
-                if (count <= 0) return;
+                if (count <= 0) return true;
                 int levels = Mathf.Clamp(Instance.ComboChainLength.Value, 2, 9);
                 int index = level >= levels - 1 ? count - 1 : (count > 1 ? level % (count - 1) : 0);
-                __0 = baseName + index.ToString();
+                string target = baseName + index.ToString();
+                if (index != level || baseName != _comboBase)
+                {
+                    int hash, layer;
+                    if (a != null && DragonCombat.LearnedState(a, target, out hash, out layer))
+                    {
+                        a.CrossFadeInFixedTime(hash, 0.08f, layer, 0f);
+                        return false;
+                    }
+                }
+                __0 = target;
+                DragonCombat.LearnState(a, target);
             }
             catch (Exception) { }
+            return true;
         }
 
         // DualWield-style off-hand strike: the left weapon swings the same arc mirrored, on every normal hit.
@@ -2848,6 +2869,9 @@ namespace DragonsAltarCombat
 
         public static void PlaySpinClip(Player player, float seconds, float turn, bool twoHand)
         {
+            if (twoHand && DragonCombatPlugin.Instance != null &&
+                DragonVanillaLoop.Play(player, "atgeir_secondary", Mathf.Max(0.3f, seconds), DragonCombatPlugin.Instance.WhirlwindLoopStart.Value, DragonCombatPlugin.Instance.WhirlwindLoopEnd.Value))
+                return;   // v0.25.42 continuous Circle Swing spin
             // v0.25.24 SPAA (storyboard 09 CYCLONE): coil with the weapon across to the left, then turn clockwise
             // with the main arm straight out to the side and the weapon held level, for whole turns only.
             float q = Mathf.Max(0.12f, turn * 0.8f);   // v0.25.26: a whirlwind spins violently and continuously
@@ -3050,6 +3074,56 @@ namespace DragonsAltarCombat
         }
 
         // The animator trigger that really exists for `name` (name, or name + "0" for combo chains), or null.
+        // v0.25.42 state learning: which animator state (layer + full path hash) a trigger leads to.
+        private class StateLearn { public Animator A; public string Name; public int[] Pre; public float At; }
+        private static readonly Dictionary<string, KeyValuePair<int, int>> LearnedStates = new Dictionary<string, KeyValuePair<int, int>>();
+        private static readonly List<StateLearn> PendingLearns = new List<StateLearn>();
+
+        public static bool LearnedState(Animator a, string trigger, out int hash, out int layer)
+        {
+            hash = 0; layer = 0;
+            KeyValuePair<int, int> v;
+            if (a == null || !LearnedStates.TryGetValue(a.GetInstanceID() + ":" + trigger, out v)) return false;
+            layer = v.Key; hash = v.Value;
+            return true;
+        }
+
+        public static void LearnState(Animator a, string trigger)
+        {
+            if (a == null || string.IsNullOrEmpty(trigger)) return;
+            if (LearnedStates.ContainsKey(a.GetInstanceID() + ":" + trigger)) return;
+            try
+            {
+                StateLearn l = new StateLearn();
+                l.A = a; l.Name = trigger; l.At = Time.time;
+                l.Pre = new int[a.layerCount];
+                for (int i = 0; i < l.Pre.Length; i++) l.Pre[i] = a.GetCurrentAnimatorStateInfo(i).fullPathHash;
+                PendingLearns.Add(l);
+            }
+            catch (Exception) { }
+        }
+
+        private static void UpdateLearns()
+        {
+            for (int k = PendingLearns.Count - 1; k >= 0; k--)
+            {
+                StateLearn l = PendingLearns[k];
+                if (l.A == null || Time.time - l.At > 0.6f) { PendingLearns.RemoveAt(k); continue; }
+                try
+                {
+                    for (int i = 0; i < l.Pre.Length && i < l.A.layerCount; i++)
+                    {
+                        AnimatorStateInfo st = l.A.IsInTransition(i) ? l.A.GetNextAnimatorStateInfo(i) : l.A.GetCurrentAnimatorStateInfo(i);
+                        if (st.fullPathHash == l.Pre[i]) continue;
+                        LearnedStates[l.A.GetInstanceID() + ":" + l.Name] = new KeyValuePair<int, int>(i, st.fullPathHash);
+                        PendingLearns.RemoveAt(k);
+                        break;
+                    }
+                }
+                catch (Exception) { PendingLearns.RemoveAt(k); }
+            }
+        }
+
         // Number of consecutive chain triggers <name>0, <name>1, ... the player's animator really has.
         public static int AnimTriggerCount(Animator a, string name)
         {
@@ -3125,7 +3199,7 @@ namespace DragonsAltarCombat
             }
             // v0.25.38 (user): emotes are full-body and freeze the legs; while running use the upper-body
             // custom pose instead so the run animation keeps playing.
-            if (trig.StartsWith("emote", StringComparison.Ordinal))
+            if (trig.StartsWith("emote", StringComparison.Ordinal) && (clip.StartsWith("hw_", StringComparison.Ordinal) || clip == "merc_fury_accent"))
             {
                 Rigidbody rb = player.GetComponent<Rigidbody>();
                 if (rb != null) { Vector3 hv = rb.velocity; hv.y = 0f; if (hv.magnitude > 1.2f) return null; }
@@ -3157,6 +3231,18 @@ namespace DragonsAltarCombat
             k[0].VR = length > 0f ? 1f : 0f;
             k[0].NoAim = true;
             return k;
+        }
+
+        public static string ResolveTriggerName(Animator a, string name) { return ResolveTrigger(a, name); }
+
+        // Fires a Valheim animator trigger by (base) name; false when the game has no such animation.
+        public static bool PlayVanillaTrigger(Player player, string name)
+        {
+            if (player == null) return false;
+            string t = ResolveTrigger(player.GetComponentInChildren<Animator>(), name);
+            if (t == null) return false;
+            FireVanilla(player, t);
+            return true;
         }
 
         public static void StopEmote(Player player)
@@ -3485,11 +3571,11 @@ namespace DragonsAltarCombat
             // v0.25.41 Blade Storm = Vergil's Judgement Cut: crouched iai stance with the blade held back at the
             // left hip (sheathed), a blink-fast draw that ends with the arm out to the right, a held pose,
             // then the slow sheathe back to the hip and a small "click" settle.
-            DragonClipKey jcStance = Ft(K(-0.6f).Sp(14f, -25f, 0f).Ch(4f, -10f, 0f).Hd(-6f, 22f, 0f).Hand(-0.35f, -0.45f, 0.35f, 0.6f).Wp(-0.2f, -0.25f, -1f).Off(0f, -0.12f, 0f), 0.35f, 0.25f);
+            DragonClipKey jcStance = Ft(K(-0.6f).Sp(14f, -25f, 0f).Ch(4f, -10f, 0f).Hd(-6f, 22f, 0f).Hand(-0.38f, -0.42f, 0.45f, 0.62f).Wp(-0.8f, -0.45f, -0.4f).Off(0f, -0.12f, 0f), 0.35f, 0.25f);
             DragonClipKey jcDraw = Ft(K(0f).Sp(10f, 30f, 0f).Ch(4f, 14f, 0f).Hd(-4f, -10f, 0f).Hand(1f, 0.1f, 0.35f, 1f).Wp(1f, 0.05f, 0.2f).Off(0f, -0.1f, 0.06f), 0.4f, 0.25f).Linear();
             DragonClipKey jcHold = jcDraw.Copy(0.18f); jcHold.Lin = false;
             DragonClipKey jcReturn = Ft(K(0.3f).Sp(8f, 10f, 0f).Ch(3f, 4f, 0f).Hand(0.25f, -0.15f, 0.6f, 0.7f).Wp(0.2f, 0f, 1f).Off(0f, -0.08f, 0f), 0.35f, 0.2f);
-            DragonClipKey jcSheathe = Ft(K(0.75f).Sp(6f, -12f, 0f).Ch(2f, -6f, 0f).Hd(-4f, 8f, 0f).Hand(-0.3f, -0.45f, 0.3f, 0.6f).Wp(-0.2f, -0.25f, -1f).Off(0f, -0.06f, 0f), 0.3f, 0.2f);
+            DragonClipKey jcSheathe = Ft(K(0.75f).Sp(6f, -12f, 0f).Ch(2f, -6f, 0f).Hd(-4f, 8f, 0f).Hand(-0.36f, -0.42f, 0.42f, 0.62f).Wp(-0.8f, -0.45f, -0.4f).Off(0f, -0.06f, 0f), 0.3f, 0.2f);
             DragonClipKey jcClick = jcSheathe.Copy(0.83f).Sp(3f, -10f, 0f).Off(0f, -0.03f, 0f);
             c["sm_blade_storm"] = new DragonClipKey[] { K(-1f), jcStance, jcDraw, jcHold, jcReturn, jcSheathe, jcClick, K(1.1f) };
             // v0.25.36 Shield Charge finisher fallback (if the game has no mace_secondary): one-handed overhead
@@ -5960,7 +6046,7 @@ namespace DragonsAltarCombat
         {
             if (player == null) return;
             int id = player.GetInstanceID();
-            SkillAnimSpeed[id] = Mathf.Clamp(multiplier, 0.1f, 6f);
+            SkillAnimSpeed[id] = Mathf.Clamp(multiplier, 0.01f, 6f);
             SkillAnimSpeedUntil[id] = Time.time + Mathf.Max(0f, ttl);
         }
         private static readonly Dictionary<int, float> AttackSpeedSourceUntil = new Dictionary<int, float>();
@@ -6104,7 +6190,9 @@ namespace DragonsAltarCombat
 
             // Valheim owns hit-stop. Never touch zero/near-zero speed.
             // Also forget our last multiplier so recovery starts from fresh vanilla state.
-            if (current <= 0.05f)
+            // v0.25.42: unless the near-zero speed is our own skill freeze (Frenzied Charge pose hold).
+            bool ownFreeze = state.HasOutput && state.LastFactor < 0.05f && Mathf.Abs(current - state.LastOutputSpeed) <= 0.005f;
+            if (current <= 0.05f && !ownFreeze)
             {
                 state.HasOutput = false;
                 state.LastOutputSpeed = current;
@@ -6117,8 +6205,8 @@ namespace DragonsAltarCombat
             // If the animator still carries our exact previous output, strip our
             // old factor first. If vanilla changed the speed, accept it as fresh base.
             if (state.HasOutput &&
-                state.LastFactor > 0.05f &&
-                Mathf.Abs(current - state.LastOutputSpeed) <= 0.01f)
+                state.LastFactor > 0.001f &&
+                Mathf.Abs(current - state.LastOutputSpeed) <= (state.LastFactor < 0.05f ? 0.005f : 0.01f))
             {
                 baseSpeed = current / state.LastFactor;
             }
@@ -6132,9 +6220,9 @@ namespace DragonsAltarCombat
             bool skillTimed = SkillAnimSpeed.TryGetValue(pid, out skillSpeed) && SkillAnimSpeedUntil.TryGetValue(pid, out skillUntil) && Time.time < skillUntil;
             if (skillTimed) factor = skillSpeed;
 
-            factor = Mathf.Max(0.1f, factor);
+            factor = Mathf.Max(skillTimed ? 0.01f : 0.1f, factor);
 
-            float output = Mathf.Clamp(baseSpeed * factor, 0.05f, skillTimed ? 6f : 5f);
+            float output = Mathf.Clamp(baseSpeed * factor, skillTimed ? 0.01f : 0.05f, skillTimed ? 6f : 5f);
 
             animator.speed = output;
             state.HasOutput = true;
@@ -7286,6 +7374,7 @@ namespace DragonsAltarCombat
         public static void RuntimeUpdate()
         {
             float now = Time.time;
+            if (PendingLearns.Count > 0) UpdateLearns();
 
             List<int> removeBuffPlayers = null;
             foreach (KeyValuePair<int, Dictionary<string, TimedBuffState>> outer in TimedBuffs)
@@ -7870,6 +7959,165 @@ namespace DragonsAltarCombat
     }
 
     // Display-only status effect (no gameplay effect): stacks replace the timer text.
+    // v0.25.42 DUAL WIELD CLIPS: the DualWield mod (Smoothbrain) ships its dual-wield attack animations as an
+    // asset bundle embedded in DualWield.dll. If the user drops that DLL into ImmortalHeroesAssets/ (NOT into
+    // plugins), its bundle is read and an AnimatorOverrideController swaps the one-handed attack clips for the
+    // dual-wield ones while two one-handed weapons are held - the same clip map the mod itself uses.
+    public static class DragonDualWield
+    {
+        private static bool _tried;
+        private static Dictionary<string, AnimationClip> _clips;
+        private static readonly Dictionary<int, RuntimeAnimatorController> _original = new Dictionary<int, RuntimeAnimatorController>();
+        private static readonly Dictionary<int, RuntimeAnimatorController> _dual = new Dictionary<int, RuntimeAnimatorController>();
+        private static readonly Dictionary<string, string> Map = new Dictionary<string, string>
+        {
+            { "Attack1", "Attack1" }, { "Attack2", "Attack2" }, { "Attack3", "Attack3" },
+            { "axe_swing", "Attack1" }, { "Axe combo 2", "Attack2" }, { "Axe combo 3", "Attack3" },
+            { "knife_slash0", "Attack1" }, { "knife_slash1", "Attack2" }, { "knife_slash2", "Attack3" },
+            { "fight idle", "DWblock" }, { "Block idle", "DWblock" },
+            { "Sword-Attack-R4", "DWspecial" }, { "Knife JumpAttack", "DWspecial" }, { "MaceAltAttack", "DWspecial" }, { "Axe Secondary Attack", "DWspecial2" }
+        };
+
+        private static void Load()
+        {
+            if (_tried) return;
+            _tried = true;
+            try
+            {
+                // The real DualWield mod already handles everything when it is installed.
+                if (DragonCombat.FindTypeCached("DualWield.DualWield") != null) return;
+                string path = System.IO.Path.Combine(System.IO.Path.Combine(BepInEx.Paths.PluginPath, "ImmortalHeroesAssets"), "DualWield.dll");
+                if (!System.IO.File.Exists(path)) return;
+                System.Reflection.Assembly asm = System.Reflection.Assembly.LoadFile(path);
+                string res = null;
+                string[] names = asm.GetManifestResourceNames();
+                for (int i = 0; i < names.Length; i++) if (names[i].EndsWith("dwanimations", StringComparison.Ordinal)) res = names[i];
+                if (res == null) return;
+                AssetBundle bundle;
+                using (System.IO.Stream st = asm.GetManifestResourceStream(res)) bundle = AssetBundle.LoadFromStream(st);
+                if (bundle == null) return;
+                _clips = new Dictionary<string, AnimationClip>();
+                string[] want = { "Attack1", "Attack2", "Attack3", "DWblock", "DWspecial", "DWspecial2" };
+                for (int i = 0; i < want.Length; i++)
+                {
+                    AnimationClip clip = bundle.LoadAsset<AnimationClip>(want[i]);
+                    if (clip != null) _clips[want[i]] = clip;
+                }
+                if (_clips.Count == 0) _clips = null;
+                else if (DragonCombatPlugin.Instance != null) DragonCombatPlugin.Instance.LogInfo("[Immortal Heroes] DualWield animations loaded: " + _clips.Count);
+            }
+            catch (Exception ex)
+            {
+                _clips = null;
+                if (DragonCombatPlugin.Instance != null) DragonCombatPlugin.Instance.LogInfo("[Immortal Heroes] DualWield.dll could not be read: " + ex.Message);
+            }
+        }
+
+        // dual = true: use the dual-wield controller (returns whether it is available); false: restore.
+        public static bool Apply(Player player, Animator animator, bool dual)
+        {
+            if (player == null || animator == null) return false;
+            int id = animator.GetInstanceID();
+            if (!dual)
+            {
+                RuntimeAnimatorController orig;
+                if (_original.TryGetValue(id, out orig) && animator.runtimeAnimatorController != orig) { animator.runtimeAnimatorController = orig; animator.Update(0f); }
+                return false;
+            }
+            Load();
+            if (_clips == null) return false;
+            try
+            {
+                RuntimeAnimatorController baseCtrl;
+                if (!_original.TryGetValue(id, out baseCtrl)) { baseCtrl = animator.runtimeAnimatorController; _original[id] = baseCtrl; }
+                RuntimeAnimatorController dualCtrl;
+                if (!_dual.TryGetValue(id, out dualCtrl))
+                {
+                    AnimatorOverrideController aoc = new AnimatorOverrideController(baseCtrl);
+                    List<KeyValuePair<AnimationClip, AnimationClip>> list = new List<KeyValuePair<AnimationClip, AnimationClip>>();
+                    AnimationClip[] all = aoc.animationClips;
+                    for (int i = 0; i < all.Length; i++)
+                    {
+                        string key; AnimationClip ext;
+                        if (all[i] != null && Map.TryGetValue(all[i].name, out key) && _clips.TryGetValue(key, out ext))
+                        {
+                            AnimationClip copy = UnityEngine.Object.Instantiate(ext);
+                            copy.name = all[i].name;
+                            list.Add(new KeyValuePair<AnimationClip, AnimationClip>(all[i], copy));
+                        }
+                        else list.Add(new KeyValuePair<AnimationClip, AnimationClip>(all[i], all[i]));
+                    }
+                    aoc.ApplyOverrides(list);
+                    dualCtrl = aoc;
+                    _dual[id] = dualCtrl;
+                }
+                if (animator.runtimeAnimatorController != dualCtrl) { animator.runtimeAnimatorController = dualCtrl; animator.Update(0f); }
+                return true;
+            }
+            catch (Exception) { return false; }
+        }
+    }
+
+    // v0.25.42 (user): Whirlwind = Circle Swing's spin (atgeir_secondary) repeated with no visible cut: once the
+    // spin state is known, every time it reaches the end of the turn it is cross-faded back to the start of the
+    // turn (skipping the wind up and the recovery) until the skill ends.
+    public class DragonVanillaLoop : MonoBehaviour
+    {
+        private Animator _a;
+        private float _end, _startN, _endN, _fired;
+        private string _trigger;
+        private int _layer = -1, _hash;
+        private int[] _pre;
+
+        public static bool Play(Player player, string trigger, float seconds, float startN, float endN)
+        {
+            if (player == null) return false;
+            Animator a = player.GetComponentInChildren<Animator>();
+            string t = DragonCombat.ResolveTriggerName(a, trigger);
+            if (t == null) return false;
+            DragonVanillaLoop l = player.GetComponent<DragonVanillaLoop>();
+            if (l == null) l = player.gameObject.AddComponent<DragonVanillaLoop>();
+            l._a = a; l._trigger = t; l._end = Time.time + Mathf.Max(0.3f, seconds);
+            l._startN = Mathf.Clamp01(startN); l._endN = Mathf.Clamp(endN, l._startN + 0.05f, 1f);
+            l._layer = -1;
+            try
+            {
+                l._pre = new int[a.layerCount];
+                for (int i = 0; i < l._pre.Length; i++) l._pre[i] = a.GetCurrentAnimatorStateInfo(i).fullPathHash;
+            }
+            catch (Exception) { l._pre = new int[0]; }
+            DragonCombat.FireVanilla(player, t);
+            l._fired = Time.time;
+            return true;
+        }
+
+        private void Update()
+        {
+            if (_a == null) { Destroy(this); return; }
+            Character owner = GetComponent<Character>();
+            if (owner == null || owner.IsDead() || Time.time >= _end) { Destroy(this); return; }
+            try
+            {
+                if (_layer < 0)
+                {
+                    for (int i = 0; i < _pre.Length && _layer < 0; i++)
+                    {
+                        AnimatorStateInfo st = _a.IsInTransition(i) ? _a.GetNextAnimatorStateInfo(i) : _a.GetCurrentAnimatorStateInfo(i);
+                        if (st.fullPathHash != _pre[i]) { _layer = i; _hash = st.fullPathHash; }
+                    }
+                    if (_layer < 0 && Time.time - _fired > 0.6f) Destroy(this);
+                    return;
+                }
+                if (_a.IsInTransition(_layer)) return;
+                AnimatorStateInfo cur = _a.GetCurrentAnimatorStateInfo(_layer);
+                bool left = cur.fullPathHash != _hash;
+                float n = cur.normalizedTime - Mathf.Floor(cur.normalizedTime);
+                if (left || n >= _endN) _a.CrossFade(_hash, 0.06f, _layer, _startN);
+            }
+            catch (Exception) { Destroy(this); }
+        }
+    }
+
     public class IhStatusDisplay : StatusEffect
     {
         public int Stacks;

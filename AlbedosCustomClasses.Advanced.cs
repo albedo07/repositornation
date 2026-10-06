@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.41";
+        public const string ModVersion = "0.25.42";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1748,6 +1748,7 @@ namespace AlbedosCustomClassesAdvanced
         private ConfigEntry<int> _crescentAscBurnStacks, _crescentAscTrailMaxTicks, _bladeAscStacks, _halfAscMaxTicks;
         private ConfigEntry<float> _bladeAscFirst, _bladeAscExtra, _bladeAscExtraDelay;
         private ConfigEntry<float> _frenzyCooldown, _frenzyStamina, _frenzyWindup, _frenzyDistance, _frenzyWidth, _frenzyDashTime, _frenzyAfterDelay;
+        private ConfigEntry<float> _frenzyHailInterval, _frenzyHailSpacing, _frenzyHailRadius;
         private ConfigEntry<float> _frenzyAscWindup, _frenzyAscDistance, _frenzyAscWidthMult, _frenzyAscDamage;
         private ConfigEntry<float> _eclipseCooldown, _eclipseStamina, _eclipseWindup, _eclipseRadius, _eclipseBurn, _eclipseBurnDuration, _eclipsePush;
         private ConfigEntry<float> _eclipseAscRadius, _eclipseAscDamage, _eclipseAscReflectWindow;
@@ -1799,7 +1800,10 @@ namespace AlbedosCustomClassesAdvanced
             _frenzyWindup = Config.Bind(f, "Windup", 1.5f, "Pulled-back thrust preparation.");
             _frenzyDistance = Config.Bind(f, "Distance", 8f, "Dash distance in meters.");
             _frenzyWidth = Config.Bind(f, "Width", 2f, "Damage width of the dash.");
-            _frenzyDashTime = Config.Bind(f, "DashTime", 0.35f, "Seconds the dash takes.");
+            _frenzyDashTime = Config.Bind(f, "DashTime_v02542", 0.12f, "Seconds the dash takes (near-instant).");
+            _frenzyHailInterval = Config.Bind(f, "SlashHailInterval_v02542", 0.2f, "Seconds between the slashes that rain down along the dash path.");
+            _frenzyHailSpacing = Config.Bind(f, "SlashHailSpacing_v02542", 1f, "Metres between two slashes along the path.");
+            _frenzyHailRadius = Config.Bind(f, "SlashHailRadius_v02542", 1f, "Radius of each slash (m); every slash damages everything inside it.");
             _frenzyAfterDelay = Config.Bind(f, "AftereffectDelay", 0.25f, "Seconds before the slash aftereffect along the dash path.");
             _frenzyDashDamage = BindDamage("Sword Master Frenzied Charge Damage", 0f, 96f, 0f, 0f, 0f, 0f, 0f, 0f);
             _frenzyAfterDamage = BindDamage("Sword Master Frenzied Charge Aftereffect Damage", 0f, 24f, 0f, 0f, 0f, 0f, 0f, 0f);
@@ -2173,7 +2177,7 @@ namespace AlbedosCustomClassesAdvanced
             bool ascended = IsAscendedSkill("frenzied_charge");
             float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, ascended ? _frenzyAscWindup.Value : _frenzyWindup.Value));
             DragonCombat.LockSkill(player, windup + _frenzyDashTime.Value + 0.1f);
-            DragonCombat.PlayClip(player, "sm_charge", windup, true);   // v0.25.35 sword out in front for the whole charge
+            StartCoroutine(FrenzyPoseRoutine(player, windup));   // v0.25.42 Valheim's sword heavy attack, frozen through the dash
             StartCoroutine(FrenziedChargeRoutine(player, body, capsule, windup, ascended, Time.time));
         }
 
@@ -2236,7 +2240,7 @@ namespace AlbedosCustomClassesAdvanced
             List<Collider> ignored = FrenzyIgnoreCreatures(player, capsule, distance + width + 4f);
             int ground = IhSolidMask();
             bool falling = false;
-            DragonCombat.ForceRun(player, true);   // v0.25.15 Vanguard thrust: run legs under the dash
+            // v0.25.42 (user): the sword heavy-attack pose is held (animator frozen) for the whole near-instant dash.
             try
             {
                 while (moved < distance && player != null && !player.IsDead() && body != null)
@@ -2267,6 +2271,7 @@ namespace AlbedosCustomClassesAdvanced
                     body.MovePosition(next);
                     moved += requested;
                     DragonCombat.LockSkill(player, 0.1f);
+                    DragonCombat.SetSkillAnimSpeed(player, 0.01f, 0.12f);
                     List<Character> targets = GetSphereTargets(player, next + forward * 0.8f + Vector3.up, width * 0.5f + 0.5f);
                     for (int i = 0; i < targets.Count; i++)
                     {
@@ -2295,18 +2300,40 @@ namespace AlbedosCustomClassesAdvanced
             Vector3 endPos = player.transform.position;
             yield return new WaitForSeconds(Mathf.Max(0f, _frenzyAfterDelay.Value));
             if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
-            // Slash aftereffect along the travelled path: each enemy once.
-            Collider[] after = Physics.OverlapCapsule(startPos + Vector3.up, endPos + Vector3.up, width * 0.5f + 0.5f, ~0, QueryTriggerInteraction.Ignore);
-            HashSet<int> afterHit = new HashSet<int>();
-            for (int i = 0; i < after.Length; i++)
+            DragonCombat.SetSkillAnimSpeed(player, 1f, 0f);
+            // v0.25.42 (user): a hail of slashes follows the dash path - one every 0.2 s, 1 m apart, each
+            // damaging everything within 1 m of it.
+            Vector3 path = endPos - startPos;
+            path.y = 0f;
+            float len = path.magnitude;
+            Vector3 dir = len > 0.01f ? path / len : forward;
+            float spacing = Mathf.Max(0.25f, DragonCombat.M(_frenzyHailSpacing.Value));
+            float hailRadius = Mathf.Max(0.25f, DragonCombat.M(_frenzyHailRadius.Value));
+            int count = Mathf.Max(1, Mathf.FloorToInt(len / spacing) + 1);
+            for (int i = 0; i < count; i++)
             {
-                Character target = after[i].GetComponentInParent<Character>();
-                if (target == null || !IsEnemy(player, target) || afterHit.Contains(target.GetInstanceID())) continue;
-                afterHit.Add(target.GetInstanceID());
-                DealDamageScaled(player, target, _frenzyAfterDamage, damage, 2f, false);
+                if (player == null || player.IsDead()) yield break;
+                Vector3 p = startPos + dir * Mathf.Min(len, i * spacing);
+                p.y = Mathf.Lerp(startPos.y, endPos.y, len > 0.01f ? Mathf.Clamp01(i * spacing / len) : 1f);
+                List<Character> hailTargets = GetSphereTargets(player, p + Vector3.up * 0.8f, hailRadius);
+                for (int t = 0; t < hailTargets.Count; t++)
+                    DealDamageScaled(player, hailTargets[t], _frenzyAfterDamage, damage, 2f, false);
+                if (_enableVfx.Value)
+                {
+                    Vector3 side = Vector3.Cross(Vector3.up, dir).normalized * hailRadius * ((i % 2 == 0) ? 1f : -1f);
+                    StartCoroutine(AnimateSeveredHorizonLine(p + Vector3.up * 1.4f + side, p + Vector3.up * 0.2f - side, hailRadius, 0.1f));
+                }
+                if (i + 1 < count) yield return new WaitForSeconds(Mathf.Max(0.05f, _frenzyHailInterval.Value));
             }
-            if (_enableVfx.Value)
-                StartCoroutine(AnimateSeveredHorizonLine(startPos + Vector3.up, endPos + Vector3.up, width, 0.12f));
+        }
+
+        // Plays Valheim's sword heavy attack so its strike pose is reached as the dash begins.
+        private IEnumerator FrenzyPoseRoutine(Player player, float windup)
+        {
+            float lead = 0.45f;
+            if (windup > lead) yield return new WaitForSeconds(windup - lead);
+            if (player == null || player.IsDead()) yield break;
+            DragonCombat.PlayVanillaTrigger(player, "sword_secondary");
         }
 
         // ------------------------------------------------------------------ Eclipse
@@ -11645,6 +11672,13 @@ namespace AlbedosCustomClassesAdvanced
         {
             if (player == null || player.IsDead() || !IhCanCast(player, id))
                 return;
+            // v0.25.42 (user): skills need the class weapon in hand (Graces excepted).
+            string needs = IhWeaponRequirement(player, id);
+            if (needs != null)
+            {
+                ShowMessage(IhSkillName(id) + " requires " + needs);
+                return;
+            }
             // v0.24.0 universal rule: skills can't be cast in mid-air unless stated.
             if (!IhCastableMidAir(player, id) && !IsPlayerGrounded(player))
             {
@@ -11686,6 +11720,37 @@ namespace AlbedosCustomClassesAdvanced
                     _empoweredUntil = Time.time + IhSkillInstanceSeconds(id);
                 }
             }
+        }
+
+        // v0.25.42 weapon rule per class / Advancement. Returns null when the held weapons qualify, else the
+        // weapon text for the message.
+        private string IhWeaponRequirement(Player player, string id)
+        {
+            if (player == null || id == IhGraceFor(player)) return null;
+            string cls = GetClass(player), adv = GetAdvancement(player);
+            ItemDrop.ItemData r = DragonCombat.GetHandItem(player, "m_rightItem");
+            ItemDrop.ItemData l = DragonCombat.GetHandItem(player, "m_leftItem");
+            string need; string[] ok;
+            if (adv == "Sword Master") { need = "a Sword"; ok = new string[] { "Swords" }; }
+            else if (cls == "Warrior") { need = "a melee weapon"; ok = new string[] { "Swords", "Axes", "Clubs", "Knives", "Polearms", "Spears" }; }
+            else if (cls == "Cleric") { need = "a Mace / Club or a Staff / Wand"; ok = new string[] { "Clubs", "ElementalMagic", "BloodMagic" }; }
+            else if (cls == "Sorcerer") { need = "a Staff or Wand"; ok = new string[] { "ElementalMagic", "BloodMagic" }; }
+            else if (adv == "Acrobat") { need = "a Bow"; ok = new string[] { "Bows" }; }
+            else if (cls == "Ranger") { need = "a Bow or Crossbow"; ok = new string[] { "Bows", "Crossbows" }; }
+            else if (cls == "Kali") { need = "Knives or Fist weapons"; ok = new string[] { "Knives", "Unarmed" }; }
+            else return null;
+            if (IhWeaponSkillIn(r, ok) || IhWeaponSkillIn(l, ok)) return null;
+            return need;
+        }
+
+        private static bool IhWeaponSkillIn(ItemDrop.ItemData item, string[] ok)
+        {
+            if (item == null || item.m_shared == null) return false;
+            string type = item.m_shared.m_itemType.ToString();
+            if (type == "Shield" || type == "Torch" || type == "Tool") return false;
+            string skill = item.m_shared.m_skillType.ToString();
+            for (int i = 0; i < ok.Length; i++) if (skill == ok[i]) return true;
+            return false;
         }
 
         private void IhCastSkillNow(Player player, string id)

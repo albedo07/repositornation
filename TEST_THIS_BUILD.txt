@@ -1,4 +1,7 @@
-TEST v0.25.41 - Emotes and Judgement Cut
-1. Battlecry = roar, Snare Trap / Stonefang = kneel then stand up, Gravity Dominion = beckon, Fury (standing) = flex.
-2. Blade Storm: instant draw-cut to the right, pause, slow sheathe to the left hip.
-3. If an emote does not play, send the "Animator triggers" line from BepInEx/LogOutput.log.
+TEST v0.25.42 - Weapons and Chains
+1. Sword: attack 5 times -> swing 1, 2, 1, 2, finisher (the very first chain may still look old while the swings are learned).
+2. Dual wield: put DualWield.dll into BepInEx/plugins/ImmortalHeroesAssets/, two one-handed weapons -> dual-wield swings.
+3. Cast a skill with the wrong weapon -> "<skill> requires ..." message.
+4. Whirlwind: smooth continuous spin. Frenzied Charge: heavy-attack pose, instant dash, slash hail along the path.
+5. Hammer Slam = axe heavy; Sky Summons = Impact Wave anim; Blade Storm blade not through the body.
+6. Skill Tree Cleric / Sorcerer: icons fill their frames.
