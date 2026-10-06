@@ -1,6 +1,9 @@
-TEST v0.25.20
-1. Goddess Relic / Righteous Strike / Holy Wave / Ray of Hope: the weapon points UP when the arm is raised.
-2. Judgement Hammer: hands behind the head (weapon trailing back), then out in front, weapon whipping forward.
-3. Shield Charge: shield up while running; Left Click (or end of charge) = mace smashed down at head height.
-4. Heavy Slash / Moonlight / Crescent / Halfmoon: the RIGHT (main) arm swings, the left arm stays guarded.
-5. Try other items in hand (axe, pickaxe, torch, staff): raised arm = raised item.
+TEST v0.25.21 (with a sword+shield, a 2H weapon, a staff, and a mace+shield)
+1. Every skill: the weapon tip follows the hand; the off hand / shield never flails.
+2. Heavy Slash / Moonlight / Crescent: both hands on the weapon (shield hidden during the swing), left -> right.
+3. Halfmoon: poke pull, sweep; Ascended finisher spins clockwise.
+4. Impact Wave / Seismic: baseball stance, golf U swing. Astral Greatblade: overhead two-handed slam.
+5. Electric Smite / Bonecrusher: fast counter-clockwise roll, hero landing.
+6. Goddess Relic etc.: hand to the sky, then arm out front pointing at the target.
+7. Holy Wave / Ray of Hope / buffs: hand raised. Judgement Hammer: behind-shoulder throw. Punishing Bomb: 2H bat.
+8. Stomp: foot only. Stonefang: hand/weapon to the ground.

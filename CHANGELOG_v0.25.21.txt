@@ -1,0 +1,29 @@
+IMMORTAL HEROES v0.25.21 - ANIMATION GUIDE (user guide + storyboards; overrides earlier animation decisions)
+
+Universal rules (engine):
+- The main-hand item now points wherever the hand points, in EVERY skill animation (raised hand = weapon up,
+  arm out east = tip east). Works with any equipped item (weapon, staff, tool, torch).
+- The off hand and shield stay as Valheim holds them: every skill animation's off-arm motion was removed
+  (Ranger bow arm and the buckler Holy Shockwave keep theirs).
+- TWO-HANDED grip (new): for two-handed attacks the off hand reaches the main weapon's grip (arm IK) and its own
+  item (shield / second weapon) is hidden render-only while it grips, then shown again.
+- No flailing: legs only move where the action needs them (stances, slams, landings, kneels, stomps).
+
+Families (docs/reference/ANIMATION_GUIDE_v02521.txt):
+- BDCA buffs/heals: stand and raise the main hand (Battlecry adds a roar head lift).
+- SSCA sky summons: hand straight to the sky, then the arm ends stretched out in front pointing at the target.
+  Meteor / Cataclysm hold it up while charging.
+- SAA slashes: two hands, sweep LEFT -> RIGHT (Heavy Slash, Moonlight waves + finisher, Crescent, Blade Storm);
+  repeated waves return to the left high and quiet between hits. Halfmoon = CSAA (two-handed poke pull, then the
+  sweep); Ascended Halfmoon finisher = CSAFA (the sweep spins the body clockwise).
+- GAA golf (Impact Wave, Seismic Guillotine): baseball stance, U-shaped swing through the ground.
+- JSAA (Electric Smite, Bonecrusher): fast COUNTER-CLOCKWISE barrel roll with the fist forward, hero landing.
+- FTAA: Impact Punch / Frenzied Charge thrust from the ribs; Shield Charge = shield forward, weapon tucked behind
+  it (the mace head-blow finisher stays).
+- PCA (Zap, Flame Burst, Gravity Blast): elbow tucked, arm extended at the target.
+- TAA (Judgement Hammer): hand behind the shoulder, torso coil, throw, follow-through; catch only on a real return.
+  Punishing Bomb = two-handed bat swing.
+- GCA: Stonefang (hand/weapon to the ground), Stomp (foot only, hands quiet), Snare (placement), mobile flick.
+- SPAA (Circle Swing, Eclipse, Whirlwind, Furious Winds): main arm only, weapon held level, pivoting feet.
+- AFA Railcannon: two hands on the staff along the crosshair, one recoil.
+- RCA (Horizon Walker commands, Gravity Dominion): main-hand point / open / pinch / pull only.

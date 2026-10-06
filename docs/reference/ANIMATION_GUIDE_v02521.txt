@@ -1,0 +1,35 @@
+IMMORTAL HEROES - USER ANIMATION GUIDE (2026-10-06, overrides every earlier animation decision)
+Storyboards: docs/reference/animation_blueprint_v02514/storyboards (follow them meticulously).
+
+DEFAULT WEAPON BEHAVIOURS
+1. Wherever the hand points, the equipped item points (raised hand = weapon up; hand east = tip east). Universal.
+2. The off-hand weapon / shield stays stationary or behaves normally unless stated.
+3. No extra movement that breaks immersion (no flailing left arm, no legs flailing in the air).
+
+ANIMATION NAMES -> code (CombatRuntime BuildGuideClips)
+1 BDCA buff/debuff cast: stand, raise main hand. -> Bdca(): heals, blessings, Clockwork, Frost Nova, Knight's
+  Guidance, Tailwind, Hawk's Vigil; Battlecry = Bdca(roar).
+2 SSCA sky summon: main hand straight up, then arm stretched out IN FRONT pointing ahead / at the ground.
+  -> Ssca(charged): Righteous Strike, Relics, Heaven's Judgement, Tempest, Glacial; Meteor/Cataclysm charged.
+3 SAA slash: main weapon in TWO hands, sweep LEFT -> RIGHT; repeated = non-attacking return to the left between hits.
+  -> SlashKeys(): Heavy Slash, Moonlight waves + finisher, Crescent, Blade Storm, Halfmoon second slash.
+  CSAA charged slash (Halfmoon): two hands pulled back like a hard poke, then the sweep. -> CsaaPull + SlashKeys.
+  CSAFA final (Ascended Halfmoon): last sweep spins the body (left->right = clockwise). -> SlashKeys(spin).
+4 GAA golf: two hands, baseball stance, golf swing = letter U. -> Gaa(): Impact Wave, Seismic Guillotine.
+5 JSAA jump & slam: fast COUNTER-CLOCKWISE spin with the torso horizontal, hero landing. -> OlympicHero().
+6 FTAA forward thrust: hand to ribs, drive straight, retract. Impact Punch stationary, Frenzied Charge through
+  its dash, Shield Charge = shield forward, main weapon tucked behind it. -> Ftaa(), cleric_charge.
+7 PCA projectile cast: elbow near body, extend hand+weapon at the target, quiet off hand. -> Pca(): Zap, Flame
+  Burst, Gravity Blast.
+8 TAA throw: hand behind the shoulder, torso coiled, throw forward, follow-through; returning hammer = catch only
+  on a real return. Punishing Bomb = two-handed batting variant. -> Taa(), cleric_hammer_call, Bat().
+9 GCA ground cast: knees bend, active limb to the ground, contact, rise. Stonefang hand/weapon down, Stomp foot
+  (hands quiet), Snare careful placement, mobile = short downward gesture. -> Gca(v).
+10 SPAA spin: coil, turn with the weapon at one height, settle; feet pivot. -> Spaa(), PlaySpinClip.
+11 AFA aimed firing: grip, aim, hold, fire, one recoil (Railcannon staff two-handed, Ranger bow/crossbow,
+   Arrow Rain/Starfall up, Skyfall hover down).
+12 EMA evasive: backflip (Tumble/Gale), ascent (Skyfall), dive (Angel Comet/Swallow), blink (Void Step/portals).
+13 RCA remote command: main hand points, short command, continue. -> Rca(v): Phalanx, Afterimage, Rift Echo,
+   Rupture, portals, Gravity Dominion (pull).
+14 OSA overhead slam: two hands, lift overhead, drive straight down; repeats re-lift. -> Osa(): Astral Greatblade.
+Two-handed attacks override the quiet off hand: the off-hand item is hidden render-only while it grips.
