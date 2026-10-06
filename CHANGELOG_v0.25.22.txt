@@ -1,0 +1,16 @@
+IMMORTAL HEROES v0.25.22 - PLANTED FEET (user: floating / flailing legs, e.g. Impact Wave)
+
+ROOT CAUSE: skill clips lowered and leaned the whole body, and the leg layer folded the legs by fixed amounts.
+Nothing kept the feet on the ground, so the feet lifted off and the legs looked like a ragdoll mid-jump.
+FIX (engine, every skill):
+- FOOT PLANTING: on the ground, each foot stays where Valheim's own animation puts it (idle / run), turning only
+  with the body (so spins pivot the feet). Every crouch, lean, lunge and slam of a clip is now taken by the knees
+  through real two-bone leg IK. Stances (step forward / back, wider feet) move the planted feet themselves.
+- In the air (Olympic Hero roll, Angel Comet, backflips) the legs are left on Valheim's jump / fall pose: no folding.
+- The old fixed leg folding is off ([Runtime] LegMotionScale_v02522 = 0).
+Pose fixes against the storyboards:
+- Impact Wave / Seismic (GAA): baseball stance with both hands at the RIGHT SHOULDER (weapon up-back), wide side
+  stance, then the golf U swing (was: weapon held straight overhead).
+- Projectile casts (PCA): chamber with the hand up by the shoulder, elbow out, then the arm drives forward.
+- Electric Smite / Bonecrusher: unwind with the fist pointing down; hero landing with the left foot forward and the
+  right foot set far back so the right knee folds near the ground (Angel Comet landing too).

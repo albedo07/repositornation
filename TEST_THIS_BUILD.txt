@@ -1,9 +1,6 @@
-TEST v0.25.21 (with a sword+shield, a 2H weapon, a staff, and a mace+shield)
-1. Every skill: the weapon tip follows the hand; the off hand / shield never flails.
-2. Heavy Slash / Moonlight / Crescent: both hands on the weapon (shield hidden during the swing), left -> right.
-3. Halfmoon: poke pull, sweep; Ascended finisher spins clockwise.
-4. Impact Wave / Seismic: baseball stance, golf U swing. Astral Greatblade: overhead two-handed slam.
-5. Electric Smite / Bonecrusher: fast counter-clockwise roll, hero landing.
-6. Goddess Relic etc.: hand to the sky, then arm out front pointing at the target.
-7. Holy Wave / Ray of Hope / buffs: hand raised. Judgement Hammer: behind-shoulder throw. Punishing Bomb: 2H bat.
-8. Stomp: foot only. Stonefang: hand/weapon to the ground.
+TEST v0.25.22
+1. Every grounded skill: BOTH FEET STAY ON THE GROUND; crouches bend the knees (no lifted / dangling legs).
+2. Impact Wave / Seismic: hands at the right shoulder, side stance, golf swing down and up to the left.
+3. Slashes / Railcannon / Stomp / Stonefang: stance feet planted.
+4. Whirlwind / Circle Swing / Eclipse: feet turn with the body.
+5. Jumps (Electric Smite, Bonecrusher, Angel Comet): normal air legs, hero landing with the right knee low.

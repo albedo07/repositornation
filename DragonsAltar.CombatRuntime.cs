@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.21";
+        public const string ModVersion = "0.25.22";
 
         internal static DragonCombatPlugin Instance;
 
@@ -67,7 +67,7 @@ namespace DragonsAltarCombat
 
             EnableRuntime = Config.Bind("Runtime", "Enabled", true, "Enable Dragon's Altar combat runtime patches.");
             EnableSkillAnimations = Config.Bind("Runtime", "EnableSkillAnimations", true, "Use Dragon's Altar procedural skill poses. Class skills do not trigger vanilla weapon attacks.");
-            LegMotionScale = Config.Bind("Runtime", "LegMotionScale_v02519", 0.5f, "Strength of the procedural leg poses (Unity humanoid muscles). 0 = legs untouched, -1 = inverted (if knees bend the wrong way on your rig).");
+            LegMotionScale = Config.Bind("Runtime", "LegMotionScale_v02522", 0f, "Strength of the procedural leg poses (Unity humanoid muscles). 0 = legs untouched, -1 = inverted (if knees bend the wrong way on your rig).");
             SkySummonDropTime = Config.Bind("Skills", "SkySummonDropTime", 0.18f, "Seconds for a spawned Sky Summon object to slam from its indoor-safe spawn point to the target AFTER the character wind-up finishes.");
             EnableWarfreakDualWield = Config.Bind("Weapon Mastery", "EnableWarfreakDualWield", true, "Warfreak: Mercenary may equip any two one-handed weapons simultaneously. Dedicated combination animations are a later animation pass.");
             EnableDivineStaffShield = Config.Bind("Weapon Mastery", "EnableDivineStaffShield", true, "Divine Duality: Cleric may equip a Staff and Shield together, including before advancement.");
@@ -1925,7 +1925,7 @@ namespace DragonsAltarCombat
                     if (_hasWritten[i] && Quaternion.Angle(cur, _written[i]) < 0.01f) bone.localRotation = _animPose[i];
                     else _animPose[i] = cur;
                 }
-                ApplyLegs(bones);
+                CaptureFeet();
                 for (int i = 0; i < 10; i++)
                 {
                     Transform bone = bones[i];
@@ -1943,7 +1943,117 @@ namespace DragonsAltarCombat
                 _visual.localRotation = DragonCombat.MotionBaseRot * q;
                 _visual.localPosition = DragonCombat.MotionBasePos + (Pivot - q * Pivot) + _o;
             }
-            if (_animator != null && _animator.isHuman) AimHeldItems();
+            if (_animator != null && _animator.isHuman)
+            {
+                PlantFeet();
+                AimHeldItems();
+            }
+        }
+
+        // ---------------------------------------------------------------- v0.25.22 FOOT PLANTING
+        // (user: legs floating / flailing) The old muscle legs folded the legs while the body only crouched a
+        // little, so both feet left the ground. Now the feet stay where Valheim's own animation puts them (they
+        // follow the body's YAW only, so turns pivot the feet), the crouch / lean / lunge of the clip is taken by
+        // the knees through two-bone leg IK, and a clip's stance (LL / RL lift = step forward/back, spread = out)
+        // moves the planted feet. Airborne = legs untouched (vanilla jump / fall).
+        private static readonly HumanBodyBones[] LegChain =
+        {
+            HumanBodyBones.LeftUpperLeg, HumanBodyBones.LeftLowerLeg, HumanBodyBones.LeftFoot,
+            HumanBodyBones.RightUpperLeg, HumanBodyBones.RightLowerLeg, HumanBodyBones.RightFoot
+        };
+        private readonly Transform[] _leg = new Transform[6];
+        private readonly Vector3[] _footLocal = new Vector3[2];
+        private readonly Quaternion[] _footLocalRot = new Quaternion[2];
+        private bool _feetCaptured;
+        private float _plantW;
+        private static MethodInfo _onGroundMethod;
+
+        private void CaptureFeet()
+        {
+            _feetCaptured = false;
+            Transform frame = _visual;
+            if (frame == null) return;
+            for (int i = 0; i < 6; i++)
+            {
+                _leg[i] = _animator.GetBoneTransform(LegChain[i]);
+                if (_leg[i] == null) return;
+                Quaternion cur = _leg[i].localRotation;
+                if (_legHas && Quaternion.Angle(cur, _legWritten[i]) < 0.01f) _leg[i].localRotation = _legAnim[i];
+                else _legAnim[i] = cur;
+            }
+            _legHas = false;
+            _footLocal[0] = frame.InverseTransformPoint(_leg[2].position);
+            _footLocal[1] = frame.InverseTransformPoint(_leg[5].position);
+            _footLocalRot[0] = Quaternion.Inverse(frame.rotation) * _leg[2].rotation;
+            _footLocalRot[1] = Quaternion.Inverse(frame.rotation) * _leg[5].rotation;
+            _feetCaptured = true;
+        }
+
+        private bool Grounded()
+        {
+            if (_owner == null) return false;
+            try
+            {
+                if (_onGroundMethod == null) _onGroundMethod = typeof(Character).GetMethod("IsOnGround", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                return _onGroundMethod != null && (bool)_onGroundMethod.Invoke(_owner, null);
+            }
+            catch (Exception) { return false; }
+        }
+
+        private void PlantFeet()
+        {
+            bool can = _feetCaptured && _visual != null && DragonCombat.OwnsMotionRoot(_token) && Grounded();
+            _plantW = Mathf.MoveTowards(_plantW, can ? _env : 0f, Time.deltaTime * 8f);
+            if (!_feetCaptured || _plantW <= 0.001f || _visual == null) return;
+            try
+            {
+                Transform parent = _visual.parent;
+                Quaternion qy = Quaternion.AngleAxis(_r.y + _spin, Vector3.up);
+                Quaternion baseRot = DragonCombat.MotionBaseRot;
+                Vector3 basePos = DragonCombat.MotionBasePos + (Pivot - qy * Pivot) + new Vector3(_o.x, 0f, _o.z);
+                Quaternion parentRot = parent != null ? parent.rotation : Quaternion.identity;
+                Vector3 pole = parentRot * baseRot * qy * Vector3.forward;
+                for (int f = 0; f < 2; f++)
+                {
+                    Transform a = _leg[f * 3], b = _leg[f * 3 + 1], c = _leg[f * 3 + 2];
+                    float lift = _l[f * 4], spread = _l[f * 4 + 1];
+                    Vector3 step = new Vector3((f == 0 ? -1f : 1f) * spread * 0.5f, 0f, lift * 0.45f);
+                    Vector3 local = basePos + baseRot * (qy * (_footLocal[f] + step));
+                    Vector3 target = parent != null ? parent.TransformPoint(local) : local;
+                    Quaternion footRot = parentRot * baseRot * qy * _footLocalRot[f];
+                    TwoBoneIK(a, b, c, Vector3.Lerp(c.position, target, _plantW), pole, 1f);
+                    c.rotation = Quaternion.Slerp(c.rotation, footRot, _plantW);
+                }
+                for (int i = 0; i < 6; i++) _legWritten[i] = _leg[i].localRotation;
+                _legHas = true;
+            }
+            catch (Exception) { }
+        }
+
+        // Analytic two-bone IK (upper, lower, end) toward t; bends in the current plane, or toward `pole`.
+        private static void TwoBoneIK(Transform ua, Transform la, Transform end, Vector3 t, Vector3 pole, float w)
+        {
+            Vector3 a = ua.position, b = la.position, c = end.position;
+            float lab = (b - a).magnitude, lcb = (c - b).magnitude;
+            if (lab < 0.0001f || lcb < 0.0001f) return;
+            float lat = Mathf.Clamp((t - a).magnitude, 0.01f, lab + lcb - 0.001f);
+            float ac_ab_0 = Mathf.Acos(Mathf.Clamp(Vector3.Dot((c - a).normalized, (b - a).normalized), -1f, 1f));
+            float ba_bc_0 = Mathf.Acos(Mathf.Clamp(Vector3.Dot((a - b).normalized, (c - b).normalized), -1f, 1f));
+            float ac_at_0 = Mathf.Acos(Mathf.Clamp(Vector3.Dot((c - a).normalized, (t - a).normalized), -1f, 1f));
+            float ac_ab_1 = Mathf.Acos(Mathf.Clamp((lcb * lcb - lab * lab - lat * lat) / (-2f * lab * lat), -1f, 1f));
+            float ba_bc_1 = Mathf.Acos(Mathf.Clamp((lat * lat - lab * lab - lcb * lcb) / (-2f * lab * lcb), -1f, 1f));
+            Vector3 axis0 = Vector3.Cross(c - a, b - a);
+            if (axis0.sqrMagnitude < 0.00001f || Vector3.Dot(b - (a + c) * 0.5f, pole) < 0f) axis0 = Vector3.Cross(c - a, pole);
+            if (axis0.sqrMagnitude < 0.000001f) return;
+            axis0.Normalize();
+            Vector3 axis1 = Vector3.Cross(c - a, t - a);
+            Quaternion ag = ua.rotation, bg = la.rotation;
+            Quaternion r0 = Quaternion.AngleAxis((ac_ab_1 - ac_ab_0) * Mathf.Rad2Deg, Quaternion.Inverse(ag) * axis0);
+            Quaternion r1 = Quaternion.AngleAxis((ba_bc_1 - ba_bc_0) * Mathf.Rad2Deg, Quaternion.Inverse(bg) * axis0);
+            Quaternion r2 = axis1.sqrMagnitude > 0.000001f ? Quaternion.AngleAxis(ac_at_0 * Mathf.Rad2Deg, Quaternion.Inverse(ag) * axis1.normalized) : Quaternion.identity;
+            Quaternion ua0 = ua.localRotation, la0 = la.localRotation;
+            ua.localRotation = Quaternion.Slerp(ua0, ua0 * r0 * r2, w);
+            la.localRotation = Quaternion.Slerp(la0, la0 * r1, w);
         }
 
         private void ReleaseRoot()
@@ -2552,7 +2662,7 @@ namespace DragonsAltarCombat
         // bent), then the swing makes a U: down to the ground in front at the impact, up and out to the left.
         private static DragonClipKey[] Gaa(float hold)
         {
-            DragonClipKey stance = K(-0.6f).Sp(10f, -30f, 0f).Ch(4f, -18f, 0f).Hd(0f, 25f, 0f).RA(-150f, 0f, -40f).RF(-100f, 0f, 0f).Off(0f, -0.08f, 0f).LL(0.2f, 0.12f, 0.3f, 0f).RL(0.1f, 0.12f, 0.3f, 0f).Two(-0.12f).Wp(0.15f, 1f, -0.4f);
+            DragonClipKey stance = K(-0.6f).Sp(10f, -30f, 0f).Ch(4f, -18f, 0f).Hd(0f, 25f, 0f).RA(-95f, 0f, -55f).RF(-115f, 0f, 0f).Off(0f, -0.1f, 0f).LL(0.3f, 0.3f, 0.3f, 0f).RL(-0.1f, 0.3f, 0.3f, 0f).Two(-0.12f).Wp(0.1f, 1f, -0.5f);
             DragonClipKey load = stance.Copy(-0.12f).Sp(12f, -36f, 0f).Ch(4f, -20f, 0f).Off(0f, -0.1f, 0f);
             DragonClipKey bottom = K(0f).Sp(30f, 0f, 0f).Ch(12f, 0f, 0f).Hd(8f, 0f, 0f).RA(-22f, 0f, 10f).RF(-5f, 0f, 0f).Off(0f, -0.15f, 0.04f).LL(0.35f, 0.12f, 0.45f, 0f).RL(0.15f, 0.12f, 0.4f, 0f).Two(-0.12f).Linear();
             DragonClipKey up = K(0.14f).Sp(0f, 35f, 0f).Ch(-4f, 20f, 0f).Hd(0f, -10f, 0f).RA(-150f, 0f, 55f).RF(-30f, 0f, 0f).Off(0f, -0.05f, 0.02f).LL(0.15f, 0.12f, 0.2f, 0f).RL(0.05f, 0.12f, 0.15f, 0.1f).Two(-0.12f).Linear();
@@ -2584,7 +2694,7 @@ namespace DragonsAltarCombat
         // PCA - projectile cast: elbow tucked by the body, then hand + weapon extended at the target; short recovery.
         private static DragonClipKey[] Pca()
         {
-            DragonClipKey tuck = K(-0.6f).Sp(4f, -10f, 0f).Ch(2f, -6f, 0f).Hd(0f, 6f, 0f).RA(10f, 0f, -10f).RF(-110f, 0f, 0f);
+            DragonClipKey tuck = K(-0.6f).Sp(4f, -12f, 0f).Ch(2f, -8f, 0f).Hd(0f, 8f, 0f).RA(-45f, 0f, -40f).RF(-120f, 0f, 0f);
             DragonClipKey ext = K(0f).Sp(8f, 10f, 0f).Ch(4f, 6f, 0f).Hd(0f, -4f, 0f).RA(-90f, 0f, -2f).RF(-3f, 0f, 0f).Off(0f, 0f, 0.04f);
             return new DragonClipKey[] { K(-1f), tuck, ext, ext.Copy(0.15f), K(0.45f) };
         }
@@ -2828,7 +2938,7 @@ namespace DragonsAltarCombat
             // tip over into a fully INVERTED head-first dive (legs straight up). Near the ground (ClipImpact) the
             // body flips forward upright into the superhero landing, already set when the damage lands.
             DragonClipKey inv = K(0f).Sp(4f, 0f, 0f).Ch(2f, 0f, 0f).Hd(-10f, 0f, 0f).RA(-172f, 0f, -6f).RF(-4f, 0f, 0f).Rot(165f, 0f, 0f).LL(-0.05f, -0.04f, -0.25f, -0.45f).RL(-0.05f, -0.04f, -0.25f, -0.45f);
-            DragonClipKey hero = K(0.16f).Sp(34f, 0f, 0f).Ch(16f, 0f, 0f).Hd(-30f, 0f, 0f).RA(-45f, 0f, -10f).RF(-12f, 0f, 0f).RH(10f, 0f, 0f).Rot(366f, 0f, 0f).Off(0f, -0.42f, 0.05f).LL(0.75f, 0f, 0.95f, 0.15f).RL(-0.15f, 0f, 1.2f, -0.2f);
+            DragonClipKey hero = K(0.16f).Sp(34f, 0f, 0f).Ch(16f, 0f, 0f).Hd(-30f, 0f, 0f).RA(-45f, 0f, -10f).RF(-12f, 0f, 0f).RH(10f, 0f, 0f).Rot(366f, 0f, 0f).Off(0f, -0.42f, 0.05f).LL(0.75f, 0.15f, 0.95f, 0.15f).RL(-0.8f, 0.15f, 1.2f, -0.2f);
             c["angel_comet"] = new DragonClipKey[] {
                 K(-1f),
                 K(-0.92f).Sp(18f, 0f, 0f).Ch(8f, 0f, 0f).RA(-30f, 0f, -15f).RF(-40f, 0f, 0f).Off(0f, -0.15f, 0f).LL(0.4f, 0f, 0.6f, 0f).RL(0.4f, 0f, 0.6f, 0f),
@@ -3280,10 +3390,10 @@ namespace DragonsAltarCombat
             DragonClipKey roll0 = K(-0.62f).Sp(6f, 0f, 0f).Ch(2f, 0f, 0f).Hd(-38f, 0f, 0f).RA(-165f, 0f, -8f).RF(-8f, 0f, 0f).LA(-25f, 10f, 10f).LF(-40f, 0f, 0f).Rot(72f, 0f, 0f).Off(0f, 0.1f, 0f).LL(0.3f, 0f, 0.55f, 0f).RL(0.2f, 0f, 0.65f, 0f).Sn(25f);
             DragonClipKey roll1 = roll0.Copy(-0.36f).Sn(360f);
             // 4 UNWIND: turn complete, legs unfold (opposite foot forward), fist cocked above - not touching.
-            DragonClipKey poised = K(0f).Sp(14f, 0f, 0f).Ch(8f, 0f, 0f).Hd(-6f, 0f, 0f).RA(-70f, 0f, -18f).RF(-55f, 0f, 0f).LA(-25f, 15f, 12f).LF(-40f, 0f, 0f).Rot(28f, 0f, 0f).LL(0.6f, 0f, 0.45f, 0.1f).RL(-0.3f, 0f, 0.6f, 0f).Sn(360f);
+            DragonClipKey poised = K(0f).Sp(14f, 0f, 0f).Ch(8f, 0f, 0f).Hd(-6f, 0f, 0f).RA(-35f, 0f, -10f).RF(-15f, 0f, 0f).LA(-25f, 15f, 12f).LF(-40f, 0f, 0f).Rot(28f, 0f, 0f).LL(0.6f, 0f, 0.45f, 0.1f).RL(-0.3f, 0f, 0.6f, 0f).Sn(360f);
             // 5 IMPACT: main fist on the ground (elbow slightly bent), left foot planted forward, right knee
             // folded behind near the ground, torso over the fist, head up toward the action.
-            DragonClipKey impact = K(0.08f).Sp(34f, 0f, 0f).Ch(16f, 0f, 0f).Hd(-30f, 0f, 0f).RA(-45f, 0f, -10f).RF(-12f, 0f, 0f).RH(10f, 0f, 0f).LA(-20f, 25f, 15f).LF(-30f, 0f, 0f).Rot(6f, 0f, 0f).Off(0f, -0.42f * d, 0.05f).LL(0.75f, 0f, 0.95f, 0.15f).RL(-0.15f, 0f, 1.2f, -0.2f).Sn(360f);
+            DragonClipKey impact = K(0.08f).Sp(34f, 0f, 0f).Ch(16f, 0f, 0f).Hd(-30f, 0f, 0f).RA(-45f, 0f, -10f).RF(-12f, 0f, 0f).RH(10f, 0f, 0f).LA(-20f, 25f, 15f).LF(-30f, 0f, 0f).Rot(6f, 0f, 0f).Off(0f, -0.42f * d, 0.05f).LL(0.75f, 0.15f, 0.95f, 0.15f).RL(-0.8f, 0.15f, 1.2f, -0.2f).Sn(360f);
             DragonClipKey settle = impact.Copy(brutal ? 0.3f : 0.2f).Off(0f, -0.44f * d, 0.05f);
             // 6 RECOVER: push through the forward foot, fist lifts, back to the combat pose.
             DragonClipKey rec = K(brutal ? 0.58f : 0.45f).Sp(16f, 0f, 0f).Ch(6f, 0f, 0f).Hd(-8f, 0f, 0f).RA(-15f, 0f, -15f).RF(-40f, 0f, 0f).LA(-15f, 10f, 10f).LF(-25f, 0f, 0f).Off(0f, -0.12f, 0f).LL(0.3f, 0f, 0.35f, 0f).RL(0f, 0f, 0.3f, 0f).Sn(360f);
