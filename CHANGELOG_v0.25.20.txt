@@ -1,0 +1,17 @@
+IMMORTAL HEROES v0.25.20 - HELD ITEMS (user feedback on v0.25.19)
+
+- WEAPONS FOLLOW THE HANDS: Valheim kept every held item at its vanilla grip angle, so a raised arm still held the
+  weapon sideways. New held-item layer: each frame the hand turns so the item (weapon, tool, staff, torch, shield,
+  main hand AND off hand) points where the animation wants it. Raised hand = raised weapon automatically for any
+  skill; skills can also aim the item exactly (works with any item: it measures each item's own length axis).
+  Bows (centred grip) keep their vanilla angle.
+- Sky summons and healing spells: weapon/staff pointing straight up when raised; the summon yank points it down
+  at the ground.
+- JUDGEMENT HAMMER (fishing cast): pull-back = both hands BEHIND the head with the weapon trailing back like a rod,
+  throw = hands snap out IN FRONT of the head and the weapon whips forward.
+- SHIELD CHARGE finisher: the shield stays up and the MAIN HAND brings the mace down on the enemy's head (whipped
+  up over the shoulder, smashed down-forward with a lunge). The bash damage itself is unchanged.
+- ATTACKS ARE MAIN-HAND: Heavy Slash (and every horizontal cut) now swings with the main arm (coil out to the side
+  with the blade back, cut across the front, follow through); the off hand keeps its guard. All Warrior / Sword
+  Master / Mercenary attack clips keep only a third of any off-hand motion. Overhead slams (Seismic, Greatblade,
+  Impact Wave) lead with the main hand, the off hand only supports.

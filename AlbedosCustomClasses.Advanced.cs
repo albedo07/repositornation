@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.19";
+        public const string ModVersion = "0.25.20";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -4213,7 +4213,7 @@ namespace AlbedosCustomClassesAdvanced
                 // v0.25.7: no Bash -> the charge pose blends back to rest (Bash already took the impact).
                 DragonSkillClipDriver clip = player == null ? null : player.GetComponent<DragonSkillClipDriver>();
                 if (clip != null && clip.IsHolding) DragonCombat.ClipStop(player, 0.25f);
-                DragonCombat.ForceRun(player, false, false, 0.45f);
+                DragonCombat.ForceRun(player, false, false, 0.7f);
                 EndShieldCharge();
             }
         }
@@ -4336,7 +4336,7 @@ namespace AlbedosCustomClassesAdvanced
 
         private void ShieldChargeBash(Player player, Vector3 forward)
         {
-            DragonCombat.ForceRun(player, false, false, 0.45f);   // shield stays up through the bash
+            DragonCombat.ForceRun(player, false, false, 0.7f);   // shield stays up through the mace blow
             DragonCombat.ClipImpact(player);
             if (player == null || player.IsDead()) return;
             ShowMessage("Shield Bash");

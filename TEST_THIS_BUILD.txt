@@ -1,9 +1,6 @@
-TEST v0.25.19
-1. Goddess Relic / Righteous Strike / Glacial: arm up high, then a hard pull down; shield stays at your side.
-2. Shield Charge: shield up in front while running (legs run, not dangling); Left Click = hard shield bash.
-3. Angel Comet: jump, flip head-first upside down, flip upright right before the ground, superhero landing.
-4. Electric Smite / Bonecrusher: roll is clockwise.
-5. Holy Wave / Ray of Hope / Heaven's Light / Crucible / Divine Intervention: weapon raised straight up.
-6. Judgement Hammer: fishing-cast throw.
-7. General: motions flow smoothly, no pops. If legs still look odd, tell me (F8 [Runtime] LegMotionScale_v02519:
-   0 = off, -1 = inverted).
+TEST v0.25.20
+1. Goddess Relic / Righteous Strike / Holy Wave / Ray of Hope: the weapon points UP when the arm is raised.
+2. Judgement Hammer: hands behind the head (weapon trailing back), then out in front, weapon whipping forward.
+3. Shield Charge: shield up while running; Left Click (or end of charge) = mace smashed down at head height.
+4. Heavy Slash / Moonlight / Crescent / Halfmoon: the RIGHT (main) arm swings, the left arm stays guarded.
+5. Try other items in hand (axe, pickaxe, torch, staff): raised arm = raised item.
