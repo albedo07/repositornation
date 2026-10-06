@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.39";
+        public const string ModVersion = "0.25.40";
 
         internal static DragonCombatPlugin Instance;
 
@@ -73,16 +73,16 @@ namespace DragonsAltarCombat
 
             EnableRuntime = Config.Bind("Runtime", "Enabled", true, "Enable Dragon's Altar combat runtime patches.");
             EnableSkillAnimations = Config.Bind("Runtime", "EnableSkillAnimations", true, "Use Dragon's Altar procedural skill poses. Class skills do not trigger vanilla weapon attacks.");
-            VanillaAnimationMap = Config.Bind("Runtime", "VanillaAnimationMap_v02536",
+            VanillaAnimationMap = Config.Bind("Runtime", "VanillaAnimationMap_v02540",
                 "sm_slash_a=swing_longsword0@0.28;sm_slash_b=swing_longsword1@0.28;sm_blade_storm=swing_longsword2@0.28;sm_halfmoon=battlea" + "xe_attack@0.45;sm_halfmoon_2=battleaxe_attack@0.45;warrior_h" +
                 "eavy=battleaxe_attack@0.45;merc_heavy_asc=battleaxe_attack@0.45;sm_moon_finisher=battleaxe_attack@0.45;sm_crescent=swing_sledge@0.55;sm_crescent_asc=sword_secondary@0.5;cleric_hammer_slam=mace_secondary@0.45;merc_bomb=battleaxe_attack@0.45;merc_circle" +
                 "=atgeir_secondary@0.45;merc_circle_2=atgeir_secondary@0.4;sm_eclipse=atgeir_secondary@0.45;sm_halfmoon_finisher=atgeir_secondary@0.45;warrior_impact_wave=swing_sledge@0.55;merc_sei" +
                 "smic=swing_sledge@0.55;wiz_greatblade=swing_sledge@0.55;wiz_greatblade_slam=swing_sledge@0.55;warrior_punch=unarmed_attack@0.2;sm_thrust=spear_poke@0.25;cleric_hammer=spear_throw@0" +
                 ".4;cleric_cross_1=swing_longsword0@0.28;cleric_cross_2=swing_longsword1@0.28;cleric_zap=staff_fireball@0.25;sorc_flame=staff_fireball@0.25;hw_gravity_blast=staff_fireball@0.25;cler" +
                 "ic_rs=staff_summon@0.5;cleric_rs_asc=staff_summon@0.5;cleric_goddess=staff_summon@0.5;cleric_relic=staff_summon@0.5;cleric_holy_relic=staff_summon@0.5;cleric_judgement=staff_summon" +
-                "@0.5;cleric_tempest=staff_summon@0.5;sorc_glacial=staff_summon@0.5;sorc_glacial_asc=staff_summon@0.5;sorc_stonefang=staff_summon@0.5;cleric_wave=staff_shield@0.3;cleric_ray=staff_s" +
-                "hield@0.3;cleric_light=staff_shield@0.3;cleric_intervention=staff_shield@0.3;cleric_crucible=staff_shield@0.3;cleric_wave_ally=staff_shield@0.3;wiz_clockwork=staff_shield@0.3;wiz_n" +
-                "ova=staff_shield@0.3;sm_guidance=staff_shield@0.3;merc_roar=emote_challenge@0.3;hw_point=emote_point@0.2;hw_command=emote_point@0.2;hw_rift_echo=emote_point@0.2;hw_rupture=emote_po" +
+                "@0.5;cleric_tempest=staff_summon@0.5;sorc_glacial=staff_summon@0.5;sorc_glacial_asc=staff_summon@0.5;sorc_stonefang=staff_summon@0.5;cleric_wave=emote_cheer@0.3;cleric_ray=emote_c" +
+                "heer@0.3;cleric_light=emote_cheer@0.3;cleric_intervention=emote_cheer@0.3;cleric_crucible=emote_cheer@0.3;cleric_wave_ally=emote_cheer@0.3;wiz_clockwork=emote_cheer@0.3;wiz_n" +
+                "ova=staff_shield@0.3;sm_guidance=emote_cheer@0.3;rg_tailwind=emote_cheer@0.3;rg_vigil=emote_cheer@0.3;merc_roar=emote_challenge@0.3;hw_point=emote_point@0.2;hw_command=emote_point@0.2;hw_rift_echo=emote_point@0.2;hw_rupture=emote_po" +
                 "int@0.2;hw_open=emote_point@0.2;hw_stop=emote_point@0.2;hw_pinch=emote_point@0.2;hw_afterimage=emote_point@0.2;hw_rift_walker=emote_point@0.2;wiz_gravity=emote_point@0.2;sorc_stone" +
                 "fang_asc=emote_point@0.2",
                 "Skill clips that play Valheim's own animation (clip=trigger@seconds before impact). Remove an entry to use the custom pose instead. All animator trigger names of your game are written once to the BepInEx log ('[Immortal Heroes] Animator triggers').");
@@ -1923,6 +1923,9 @@ namespace DragonsAltarCombat
         public bool NoAim;
         // v0.25.35 legs belong to the animator (forced run under a charge): no foot planting.
         public bool NoPlant;
+        // v0.25.40 buff raise (copied from the user's approved ChatGPT pass): QL = the off-hand arm is frozen to
+        // the pose it had when the skill began; NoTrack = the vanilla state plays at its natural speed.
+        public bool QL, NoTrack;
         // Same pose as another key at a new time (holds / shakes).
         public DragonClipKey Copy(float t)
         {
@@ -1994,7 +1997,9 @@ namespace DragonsAltarCombat
         private int _vaLayer = -1, _vaHash;
         private int[] _vaPre;
         private float _vaFiredAt, _vaGuess;
-        private bool _noAim, _noPlant;
+        private bool _noAim, _noPlant, _noTrack, _quietLeft, _qlCaptured;
+        private readonly Quaternion[] _qlPose = new Quaternion[4];
+        private static readonly HumanBodyBones[] QlBones = { HumanBodyBones.LeftShoulder, HumanBodyBones.LeftUpperArm, HumanBodyBones.LeftLowerArm, HumanBodyBones.LeftHand };
         private Rigidbody _body;
         private float _vaLead = 0.3f;
 
@@ -2008,6 +2013,9 @@ namespace DragonsAltarCombat
             _vaTrack = false;
             _noAim = keys[0].NoAim;
             _noPlant = keys[0].NoPlant;
+            _noTrack = keys[0].NoTrack;
+            _quietLeft = keys[0].QL;
+            _qlCaptured = false;
             _vaLead = Mathf.Max(0.05f, keys[0].VL);
             if (_keys != null)
             {
@@ -2249,7 +2257,7 @@ namespace DragonsAltarCombat
             if (_animator == null) _animator = GetComponentInChildren<Animator>();
             if (_va != null && Time.time >= _vaAt)
             {
-                if (_vaRepeat <= 0.05f) StartVanillaTracking();
+                if (_vaRepeat <= 0.05f && !_noTrack) StartVanillaTracking();
                 DragonCombat.FireVanilla(_owner as Player, _va);
                 if (_vaRepeat > 0.05f) _vaAt += _vaRepeat; else _va = null;
             }
@@ -2293,7 +2301,22 @@ namespace DragonsAltarCombat
                 PlaceMainHand();
                 PlaceHand(false, _ld, _lr, _lw);
                 AimHeldItems();
+                QuietLeftArm();
             }
+        }
+
+        // v0.25.40: freeze the off-hand arm (shoulder to hand) to its pose at the start of the skill.
+        private void QuietLeftArm()
+        {
+            if (!_quietLeft || _animator == null) return;
+            for (int i = 0; i < QlBones.Length; i++)
+            {
+                Transform b = _animator.GetBoneTransform(QlBones[i]);
+                if (b == null) continue;
+                if (!_qlCaptured) _qlPose[i] = b.localRotation;
+                else b.localRotation = _qlPose[i];
+            }
+            _qlCaptured = true;
         }
 
         // ---------------------------------------------------------------- v0.25.22 FOOT PLANTING
@@ -2785,6 +2808,13 @@ namespace DragonsAltarCombat
             DragonClipKey[] keys = hold ? null : VanillaClip(player, clip, 0f);
             if (keys == null) keys = SkillClip(clip);
             if (keys == null) return;
+            // v0.25.40 (user): buff raises stand still until the wind up is over (no gliding).
+            if (keys[0].VA != null && keys[0].QL)
+            {
+                LockSkill(player, Mathf.Max(0.5f, windup) + 0.05f);
+                Rigidbody rb = player.GetComponent<Rigidbody>();
+                if (rb != null) rb.velocity = new Vector3(0f, rb.velocity.y, 0f);   // stop at once, no slide
+            }
             DragonSkillPoseDriver legacy = player.GetComponent<DragonSkillPoseDriver>();
             if (legacy != null) UnityEngine.Object.Destroy(legacy);
             DragonSkillClipDriver d = player.GetComponent<DragonSkillClipDriver>();
@@ -3058,6 +3088,18 @@ namespace DragonsAltarCombat
 
         // Overlay for a vanilla-animated skill: the vanilla attack does the arms / weapon; we only add a planted
         // stance and a slight lean. length > 0 = sustained (repeat the animation every second).
+        public static bool IsRaiseBuffClip(string clip)
+        {
+            switch (clip)
+            {
+                case "cleric_wave": case "cleric_wave_ally": case "cleric_ray": case "cleric_light":
+                case "cleric_intervention": case "cleric_crucible": case "wiz_clockwork": case "sm_guidance":
+                case "rg_tailwind": case "rg_vigil":
+                    return true;
+            }
+            return false;
+        }
+
         private static DragonClipKey[] VanillaClip(Player player, string clip, float length)
         {
             ParseVanMap();
@@ -3065,6 +3107,16 @@ namespace DragonsAltarCombat
             if (!VanMap.TryGetValue(clip, out m)) return null;
             string trig = ResolveTrigger(player.GetComponentInChildren<Animator>(), m.Key);
             if (trig == null) return null;
+            if (IsRaiseBuffClip(clip))
+            {
+                // v0.25.40 (user): ChatGPT's Holy Wave raise, exactly: Valheim's emote_cheer at natural speed from
+                // the first frame, the off-hand arm held still, no stance / lean / root motion of our own.
+                DragonClipKey q = K(0f);
+                DragonClipKey[] rk = new DragonClipKey[] { K(-1f), q.Copy(-0.50f), q, q.Copy(0.28f), K(0.62f) };
+                for (int i = 0; i < rk.Length; i++) rk[i].QL = true;
+                rk[0].VA = trig; rk[0].VL = m.Value; rk[0].VR = 0f; rk[0].VF = 0f; rk[0].NoAim = true; rk[0].NoTrack = true; rk[0].NoPlant = true;
+                return rk;
+            }
             // v0.25.38 (user): emotes are full-body and freeze the legs; while running use the upper-body
             // custom pose instead so the run animation keeps playing.
             if (trig.StartsWith("emote", StringComparison.Ordinal))

@@ -1,0 +1,8 @@
+Immortal Heroes v0.25.40 - Buff Raise
+=====================================
+- Buff skills now use the Holy Wave raise from the ChatGPT pass you approved (only that, nothing else copied):
+  Valheim's own raise (emote_cheer) at its natural speed from the first frame, off-hand arm held still,
+  no extra lean / stance / root motion.
+- Skills: Holy Wave (+ Ascended ally cast), Ray of Hope, Heaven's Light, Divine Intervention, Heaven's Crucible,
+  Clockwork, Knight's Guidance, Tailwind, Hawk's Vigil. Battlecry (shout) and Frost Nova unchanged.
+- You stand still until the wind up is over (movement locked, at least 0.5 s, momentum stopped) - no gliding.

@@ -1,4 +1,4 @@
-TEST v0.25.39 - Altar Panels
-1. Altar, Warrior: top = Identity + Best For, middle = WARRIOR'S BLESSING, bottom-left skills, click one -> its text bottom-right.
-2. Advancement page (e.g. Sword Master, Priest): middle = MASTERY & GRACE, 6 skills in two columns, names fully readable.
-3. Skill Tree as Paladin: Paladin panel shows the armoured paladin scene; Priest shows the priest scene.
+TEST v0.25.40 - Buff Raise
+1. Holy Wave / Ray of Hope / Heaven's Light / Clockwork / Knight's Guidance / Tailwind / Hawk's Vigil:
+   main arm raised like the ChatGPT Holy Wave, off-hand still, character does not slide.
+2. Cast while running: you stop for the wind up instead of gliding.
