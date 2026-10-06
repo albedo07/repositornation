@@ -1,4 +1,4 @@
-TEST v0.25.40 - Buff Raise
-1. Holy Wave / Ray of Hope / Heaven's Light / Clockwork / Knight's Guidance / Tailwind / Hawk's Vigil:
-   main arm raised like the ChatGPT Holy Wave, off-hand still, character does not slide.
-2. Cast while running: you stop for the wind up instead of gliding.
+TEST v0.25.41 - Emotes and Judgement Cut
+1. Battlecry = roar, Snare Trap / Stonefang = kneel then stand up, Gravity Dominion = beckon, Fury (standing) = flex.
+2. Blade Storm: instant draw-cut to the right, pause, slow sheathe to the left hip.
+3. If an emote does not play, send the "Animator triggers" line from BepInEx/LogOutput.log.

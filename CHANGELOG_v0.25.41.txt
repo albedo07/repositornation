@@ -1,0 +1,12 @@
+Immortal Heroes v0.25.41 - Emotes and Judgement Cut
+===================================================
+EMOTE ANIMATIONS (Valheim's own gestures, natural speed, their own legs)
+- Battlecry: roar (was challenge).
+- Unchained Fury: flex (only when you are standing still; running keeps the run).
+- Snare Trap and Stonefang Eruption: kneel (you stand back up when the skill ends).
+- Gravity Dominion: come-here beckon (was point).
+- You stand still during the wind up of these (at least 0.5 s); Horizon Walker casts and Fury stay mobile.
+- If your game lacks an emote, the skill keeps its previous pose.
+BLADE STORM = JUDGEMENT CUT (Vergil, Devil May Cry)
+- Crouched iai stance with the blade held back at the left hip, a blink-fast draw that ends with the sword arm
+  out to the right, a held beat, then the slow sheathe back to the hip and a small settle (the "click").

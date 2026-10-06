@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.40";
+        public const string ModVersion = "0.25.41";
 
         internal static DragonCombatPlugin Instance;
 
@@ -73,17 +73,17 @@ namespace DragonsAltarCombat
 
             EnableRuntime = Config.Bind("Runtime", "Enabled", true, "Enable Dragon's Altar combat runtime patches.");
             EnableSkillAnimations = Config.Bind("Runtime", "EnableSkillAnimations", true, "Use Dragon's Altar procedural skill poses. Class skills do not trigger vanilla weapon attacks.");
-            VanillaAnimationMap = Config.Bind("Runtime", "VanillaAnimationMap_v02540",
-                "sm_slash_a=swing_longsword0@0.28;sm_slash_b=swing_longsword1@0.28;sm_blade_storm=swing_longsword2@0.28;sm_halfmoon=battlea" + "xe_attack@0.45;sm_halfmoon_2=battleaxe_attack@0.45;warrior_h" +
+            VanillaAnimationMap = Config.Bind("Runtime", "VanillaAnimationMap_v02541",
+                "sm_slash_a=swing_longsword0@0.28;sm_slash_b=swing_longsword1@0.28;sm_halfmoon=battlea" + "xe_attack@0.45;sm_halfmoon_2=battleaxe_attack@0.45;warrior_h" +
                 "eavy=battleaxe_attack@0.45;merc_heavy_asc=battleaxe_attack@0.45;sm_moon_finisher=battleaxe_attack@0.45;sm_crescent=swing_sledge@0.55;sm_crescent_asc=sword_secondary@0.5;cleric_hammer_slam=mace_secondary@0.45;merc_bomb=battleaxe_attack@0.45;merc_circle" +
                 "=atgeir_secondary@0.45;merc_circle_2=atgeir_secondary@0.4;sm_eclipse=atgeir_secondary@0.45;sm_halfmoon_finisher=atgeir_secondary@0.45;warrior_impact_wave=swing_sledge@0.55;merc_sei" +
                 "smic=swing_sledge@0.55;wiz_greatblade=swing_sledge@0.55;wiz_greatblade_slam=swing_sledge@0.55;warrior_punch=unarmed_attack@0.2;sm_thrust=spear_poke@0.25;cleric_hammer=spear_throw@0" +
                 ".4;cleric_cross_1=swing_longsword0@0.28;cleric_cross_2=swing_longsword1@0.28;cleric_zap=staff_fireball@0.25;sorc_flame=staff_fireball@0.25;hw_gravity_blast=staff_fireball@0.25;cler" +
                 "ic_rs=staff_summon@0.5;cleric_rs_asc=staff_summon@0.5;cleric_goddess=staff_summon@0.5;cleric_relic=staff_summon@0.5;cleric_holy_relic=staff_summon@0.5;cleric_judgement=staff_summon" +
-                "@0.5;cleric_tempest=staff_summon@0.5;sorc_glacial=staff_summon@0.5;sorc_glacial_asc=staff_summon@0.5;sorc_stonefang=staff_summon@0.5;cleric_wave=emote_cheer@0.3;cleric_ray=emote_c" +
+                "@0.5;cleric_tempest=staff_summon@0.5;sorc_glacial=staff_summon@0.5;sorc_glacial_asc=staff_summon@0.5;sorc_stonefang=emote_kneel@0.3;cleric_wave=emote_cheer@0.3;cleric_ray=emote_c" +
                 "heer@0.3;cleric_light=emote_cheer@0.3;cleric_intervention=emote_cheer@0.3;cleric_crucible=emote_cheer@0.3;cleric_wave_ally=emote_cheer@0.3;wiz_clockwork=emote_cheer@0.3;wiz_n" +
-                "ova=staff_shield@0.3;sm_guidance=emote_cheer@0.3;rg_tailwind=emote_cheer@0.3;rg_vigil=emote_cheer@0.3;merc_roar=emote_challenge@0.3;hw_point=emote_point@0.2;hw_command=emote_point@0.2;hw_rift_echo=emote_point@0.2;hw_rupture=emote_po" +
-                "int@0.2;hw_open=emote_point@0.2;hw_stop=emote_point@0.2;hw_pinch=emote_point@0.2;hw_afterimage=emote_point@0.2;hw_rift_walker=emote_point@0.2;wiz_gravity=emote_point@0.2;sorc_stone" +
+                "ova=staff_shield@0.3;sm_guidance=emote_cheer@0.3;rg_tailwind=emote_cheer@0.3;rg_vigil=emote_cheer@0.3;merc_roar=emote_roar@0.3;merc_fury_accent=emote_flex@0.2;rg_trap=emote_kneel@0.3;hw_point=emote_point@0.2;hw_command=emote_point@0.2;hw_rift_echo=emote_point@0.2;hw_rupture=emote_po" +
+                "int@0.2;hw_open=emote_point@0.2;hw_stop=emote_point@0.2;hw_pinch=emote_point@0.2;hw_afterimage=emote_point@0.2;hw_rift_walker=emote_point@0.2;wiz_gravity=emote_comehere@0.3;sorc_stone" +
                 "fang_asc=emote_point@0.2",
                 "Skill clips that play Valheim's own animation (clip=trigger@seconds before impact). Remove an entry to use the custom pose instead. All animator trigger names of your game are written once to the BepInEx log ('[Immortal Heroes] Animator triggers').");
             LegMotionScale = Config.Bind("Runtime", "LegMotionScale_v02522", 0f, "Strength of the procedural leg poses (Unity humanoid muscles). 0 = legs untouched, -1 = inverted (if knees bend the wrong way on your rig).");
@@ -1998,6 +1998,7 @@ namespace DragonsAltarCombat
         private int[] _vaPre;
         private float _vaFiredAt, _vaGuess;
         private bool _noAim, _noPlant, _noTrack, _quietLeft, _qlCaptured;
+        private string _vaFiredName;
         private readonly Quaternion[] _qlPose = new Quaternion[4];
         private static readonly HumanBodyBones[] QlBones = { HumanBodyBones.LeftShoulder, HumanBodyBones.LeftUpperArm, HumanBodyBones.LeftLowerArm, HumanBodyBones.LeftHand };
         private Rigidbody _body;
@@ -2248,6 +2249,8 @@ namespace DragonsAltarCombat
             float t = Phase();
             if (t > _keys[_keys.Length - 1].T || (_owner != null && _owner.IsDead()))
             {
+                // v0.25.41: kneel loops in Valheim - stand back up when the skill's clip is over.
+                if (_vaFiredName == "emote_kneel") DragonCombat.StopEmote(_owner as Player);
                 ReleaseRoot();
                 _keys = null;
                 Destroy(this);
@@ -2259,6 +2262,7 @@ namespace DragonsAltarCombat
             {
                 if (_vaRepeat <= 0.05f && !_noTrack) StartVanillaTracking();
                 DragonCombat.FireVanilla(_owner as Player, _va);
+                _vaFiredName = _va;
                 if (_vaRepeat > 0.05f) _vaAt += _vaRepeat; else _va = null;
             }
             if (_vaTrack) TrackVanillaSpeed();
@@ -2809,7 +2813,9 @@ namespace DragonsAltarCombat
             if (keys == null) keys = SkillClip(clip);
             if (keys == null) return;
             // v0.25.40 (user): buff raises stand still until the wind up is over (no gliding).
-            if (keys[0].VA != null && keys[0].QL)
+            bool standEmote = keys[0].VA != null && keys[0].VA.StartsWith("emote", StringComparison.Ordinal) &&
+                              !clip.StartsWith("hw_", StringComparison.Ordinal) && clip != "merc_fury_accent";
+            if (keys[0].VA != null && (keys[0].QL || standEmote))
             {
                 LockSkill(player, Mathf.Max(0.5f, windup) + 0.05f);
                 Rigidbody rb = player.GetComponent<Rigidbody>();
@@ -3146,10 +3152,18 @@ namespace DragonsAltarCombat
             }
             k[0].VA = trig;
             k[0].VL = m.Value;
+            if (trig.StartsWith("emote", StringComparison.Ordinal)) { k[0].NoTrack = true; k[0].NoPlant = true; }   // v0.25.41 emotes: natural speed, their own legs
             if (clip == "merc_circle" && length <= 0f) k[0].VF = 0.62f;   // after the crow hop
             k[0].VR = length > 0f ? 1f : 0f;
             k[0].NoAim = true;
             return k;
+        }
+
+        public static void StopEmote(Player player)
+        {
+            if (player == null) return;
+            string t = ResolveTrigger(player.GetComponentInChildren<Animator>(), "emote_stop");
+            if (t != null) FireVanilla(player, t);
         }
 
         public static void FireVanilla(Player player, string trigger)
@@ -3468,6 +3482,16 @@ namespace DragonsAltarCombat
             c["olympic_hero"] = SbOlympic(false);
             c["olympic_hero_brutal"] = SbOlympic(true);
             c["sm_crescent_asc"] = c["sm_crescent"];
+            // v0.25.41 Blade Storm = Vergil's Judgement Cut: crouched iai stance with the blade held back at the
+            // left hip (sheathed), a blink-fast draw that ends with the arm out to the right, a held pose,
+            // then the slow sheathe back to the hip and a small "click" settle.
+            DragonClipKey jcStance = Ft(K(-0.6f).Sp(14f, -25f, 0f).Ch(4f, -10f, 0f).Hd(-6f, 22f, 0f).Hand(-0.35f, -0.45f, 0.35f, 0.6f).Wp(-0.2f, -0.25f, -1f).Off(0f, -0.12f, 0f), 0.35f, 0.25f);
+            DragonClipKey jcDraw = Ft(K(0f).Sp(10f, 30f, 0f).Ch(4f, 14f, 0f).Hd(-4f, -10f, 0f).Hand(1f, 0.1f, 0.35f, 1f).Wp(1f, 0.05f, 0.2f).Off(0f, -0.1f, 0.06f), 0.4f, 0.25f).Linear();
+            DragonClipKey jcHold = jcDraw.Copy(0.18f); jcHold.Lin = false;
+            DragonClipKey jcReturn = Ft(K(0.3f).Sp(8f, 10f, 0f).Ch(3f, 4f, 0f).Hand(0.25f, -0.15f, 0.6f, 0.7f).Wp(0.2f, 0f, 1f).Off(0f, -0.08f, 0f), 0.35f, 0.2f);
+            DragonClipKey jcSheathe = Ft(K(0.75f).Sp(6f, -12f, 0f).Ch(2f, -6f, 0f).Hd(-4f, 8f, 0f).Hand(-0.3f, -0.45f, 0.3f, 0.6f).Wp(-0.2f, -0.25f, -1f).Off(0f, -0.06f, 0f), 0.3f, 0.2f);
+            DragonClipKey jcClick = jcSheathe.Copy(0.83f).Sp(3f, -10f, 0f).Off(0f, -0.03f, 0f);
+            c["sm_blade_storm"] = new DragonClipKey[] { K(-1f), jcStance, jcDraw, jcHold, jcReturn, jcSheathe, jcClick, K(1.1f) };
             // v0.25.36 Shield Charge finisher fallback (if the game has no mace_secondary): one-handed overhead
             // hammer slam with the main hand, shield arm untouched.
             DragonClipKey hsUp = Ft(K(-0.55f).Sp(-4f, -6f, 0f).Ch(-6f, -4f, 0f).Hd(-10f, 0f, 0f).Hand(0.25f, 1f, -0.15f, 0.95f).Wp(0.05f, 0.6f, -0.8f), 0.3f, 0.15f);
