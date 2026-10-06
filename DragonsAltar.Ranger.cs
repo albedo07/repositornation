@@ -40,7 +40,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Dragon's Altar - Ranger";
-        public const string ModVersion = "0.25.32";
+        public const string ModVersion = "0.25.33";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -715,7 +715,7 @@ namespace DragonsAltarRanger
             float mult = _tsDamage.Value / 100f * DragonCombat.GetSkillPower(player, "tumble_shot");
             int count = Mathf.Max(1, Mathf.RoundToInt(ascended ? _tsAscArrows.Value : _tsArrows.Value));
             bool[] killed = new bool[1];
-            Fan(player, count, _tsFan.Value, DragonCombat.M(_tsRange.Value), 0f, new Color(0.55f, 1f, 0.75f, 1f),
+            FanPierce(player, count, _tsFan.Value, DragonCombat.M(_tsRange.Value), new Color(0.55f, 1f, 0.75f, 1f),
                 delegate(Character enemy)
                 {
                     Deal(player, enemy, d, mult, 6f, false);
@@ -725,7 +725,6 @@ namespace DragonsAltarRanger
                         _cooldowns.Remove("Ranger.TumbleShot");
                         ShowMessage("Tumble Shot - reset");
                     }
-                    return false;
                 });
         }
 
@@ -797,12 +796,11 @@ namespace DragonsAltarRanger
                 if (player == null || player.IsDead()) yield break;
                 RangerArrowDamage d = ArrowDamage(player);
                 float mult = _gvDamage.Value / 100f * DragonCombat.GetSkillPower(player, "gale_volley");
-                Fan(player, Mathf.Max(1, Mathf.RoundToInt(_gvArrows.Value)), _gvFan.Value, DragonCombat.M(_gvRange.Value), f == 0 ? 0f : 8f,
+                FanPierce(player, Mathf.Max(1, Mathf.RoundToInt(_gvArrows.Value)), _gvFan.Value, DragonCombat.M(_gvRange.Value),
                     new Color(0.55f, 1f, 0.90f, 1f),
                     delegate(Character enemy)
                     {
                         Deal(player, enemy, d, mult, DragonCombat.IsSmallEnemy(enemy) ? _gvPush.Value : 4f, false);
-                        return false;
                     });
                 Shoot(player, null);
                 if (f + 1 < fans) yield return new WaitForSeconds(Mathf.Max(0.05f, _gvAscDelay.Value));
@@ -2396,6 +2394,28 @@ namespace DragonsAltarRanger
             float cut = Mathf.Min(_refundLeft, Mathf.Max(0f, _wsRefund.Value));
             _cooldowns[best] = _cooldowns[best] - cut;
             _refundLeft -= cut;
+        }
+
+        // v0.25.33 user (Tumble Shot, Gale Volley): REAL arrows. Every arrow that touches an enemy deals its full
+        // damage (several arrows on one target all count), arrows pierce every enemy without limit and stop only
+        // on terrain / physical objects.
+        private void FanPierce(Player player, int count, float fanDegrees, float range, Color color, Action<Character> onHit)
+        {
+            Vector3 origin = ShotOrigin(player);
+            Vector3 dir = AimDir(player, origin);
+            for (int i = 0; i < count; i++)
+            {
+                float a = count == 1 ? 0f : -fanDegrees * 0.5f + fanDegrees * i / (count - 1);
+                Vector3 shot = (Quaternion.AngleAxis(a, Vector3.up) * dir).normalized;
+                StartCoroutine(ArrowFlight(player, origin, shot, DragonCombat.M(60f), range, DragonCombat.M(0.35f), true, color, 0f,
+                    delegate(Character enemy)
+                    {
+                        if (enemy == null || enemy.IsDead()) return true;
+                        onHit(enemy);
+                        OnSkillHit(player);
+                        return true;
+                    }, null));
+            }
         }
 
         // v0.24.3 universal rule: everyone inside the skill's area is hit; the arrows are cosmetic.

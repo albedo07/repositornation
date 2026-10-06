@@ -1,0 +1,6 @@
+Immortal Heroes v0.25.33 - Piercing Volleys
+===========================================
+- Tumble Shot + Gale Volley: the arrows are real now. Every arrow that hits an enemy deals its full damage
+  (Tumble 70% / Gale 60% per arrow), so a target hit by several arrows takes all of them.
+- Their arrows pierce every enemy with no limit and only stop on terrain / physical objects.
+  (Before: everyone inside the cone took one hit and the arrows were only visual.)

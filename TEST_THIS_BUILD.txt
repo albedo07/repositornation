@@ -1,3 +1,4 @@
-TEST v0.25.32 - Two Hand Whirlwind
-1. Mercenary Whirlwind: two-handed grip on the main weapon, level at the waist, continuous spin.
-2. Acrobat Skyfall Barrage: bow shot on the rise, normal draw pose while hovering, no arm inside the body.
+TEST v0.25.33 - Piercing Volleys
+1. Tumble Shot / Gale Volley point blank at one enemy: several damage numbers (one per arrow that touches it).
+2. Line of enemies: arrows pass through all of them.
+3. Shoot at a wall/rock: arrows stop there, enemies behind it are not hit.
