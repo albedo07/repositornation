@@ -1,0 +1,20 @@
+Immortal Heroes v0.25.27 - Vanilla Base
+=======================================
+Skills now use Valheim's own attack animations as their base wherever a match exists,
+with only a small overlay on top (planted feet, slight lean). No more hand-built arm poses for these.
+
+[Runtime] VanillaAnimationMap_v02527 (clip=trigger@seconds before impact):
+- Slashes (Sword Master slashes, Blade Storm, Halfmoon, Cleric cross) -> swing_longsword0/1/2
+- Heavy sweeps (Heavy Slash, Moonlight finisher, Crescent Cleave, Punishing Bomb) -> battleaxe_attack
+- Spins (Circle Swing, Eclipse, Halfmoon finisher) -> atgeir_secondary
+- Ground slams (Impact Wave, Seismic Guillotine, Astral Greatblade) -> swing_sledge
+- Impact Punch -> unarmed_attack · Vanguard thrust -> spear_poke · Judgement Hammer -> spear_throw
+- Bolts (Lightning Zap, Flame Burst, Gravity Blast) -> staff_fireball
+- Summons (Righteous Strike, Relics, Heaven's Judgement, Tempest, Glacial Descent, Stonefang) -> staff_summon
+- Blessings/buffs (Holy Wave, Ray of Hope, Heaven's Light, Divine Intervention, Crucible, Clockwork, Frost Nova, Knight's Guidance) -> staff_shield
+- Battlecry -> emote_challenge · Horizon Walker commands, Gravity Dominion, Ascended Stonefang -> emote_point
+- Missing trigger in your game = automatic fallback to the custom pose.
+- All animator trigger names are logged once: BepInEx log line "[Immortal Heroes] Animator triggers: ...".
+
+Still custom poses (Valheim has no match): Stomp, Olympic Hero (Bonecrusher / Electric Smite), Angel Comet,
+Shield Charge, Whirlwind / Furious Winds spin, Ranger skills, Meteor / Cataclysm / Railcannon holds, Halfmoon stance, Snare.

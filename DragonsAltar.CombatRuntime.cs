@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.26";
+        public const string ModVersion = "0.25.27";
 
         internal static DragonCombatPlugin Instance;
 
@@ -62,17 +62,30 @@ namespace DragonsAltarCombat
 
         private Harmony _harmony;
 
+        internal void LogInfo(string message)
+        {
+            Logger.LogInfo(message);
+        }
+
         private void Awake()
         {
             Instance = this;
 
             EnableRuntime = Config.Bind("Runtime", "Enabled", true, "Enable Dragon's Altar combat runtime patches.");
             EnableSkillAnimations = Config.Bind("Runtime", "EnableSkillAnimations", true, "Use Dragon's Altar procedural skill poses. Class skills do not trigger vanilla weapon attacks.");
-            VanillaAnimationMap = Config.Bind("Runtime", "VanillaAnimationMap_v02526",
-                "merc_circle=atgeir_secondary@0.45;merc_circle_2=atgeir_secondary@0.4;sm_eclipse=atgeir_secondary@0.45;sm_halfmoon_finisher=atgeir_secondary@0.45;" +
-                "wiz_greatblade=swing_sledge@0.55;wiz_greatblade_slam=swing_sledge@0.55;warrior_punch=unarmed_attack@0.2;sm_thrust=spear_poke@0.25;cleric_hammer=spear_throw@0.4;" +
-                "cleric_zap=staff_fireball@0.25;sorc_flame=staff_fireball@0.25;hw_gravity_blast=staff_fireball@0.25",
-                "Skill clips that play Valheim's own attack animation (clip=trigger@seconds before impact; 'spin' = Whirlwind / Furious Winds, repeated). Remove an entry to use the custom pose instead; any animator trigger name works (e.g. sm_slash_a=swing_longsword1@0.3).");
+            VanillaAnimationMap = Config.Bind("Runtime", "VanillaAnimationMap_v02527",
+                "sm_slash_a=swing_longsword0@0.28;sm_slash_b=swing_longsword1@0.28;sm_blade_storm=swing_longsword2@0.28;sm_halfmoon=swing_longsword2@0.3;sm_halfmoon_2=swing_longsword1@0.3;warrior_h" +
+                "eavy=battleaxe_attack@0.45;merc_heavy_asc=battleaxe_attack@0.45;sm_moon_finisher=battleaxe_attack@0.45;sm_crescent=battleaxe_attack@0.45;merc_bomb=battleaxe_attack@0.45;merc_circle" +
+                "=atgeir_secondary@0.45;merc_circle_2=atgeir_secondary@0.4;sm_eclipse=atgeir_secondary@0.45;sm_halfmoon_finisher=atgeir_secondary@0.45;warrior_impact_wave=swing_sledge@0.55;merc_sei" +
+                "smic=swing_sledge@0.55;wiz_greatblade=swing_sledge@0.55;wiz_greatblade_slam=swing_sledge@0.55;warrior_punch=unarmed_attack@0.2;sm_thrust=spear_poke@0.25;cleric_hammer=spear_throw@0" +
+                ".4;cleric_cross_1=swing_longsword0@0.28;cleric_cross_2=swing_longsword1@0.28;cleric_zap=staff_fireball@0.25;sorc_flame=staff_fireball@0.25;hw_gravity_blast=staff_fireball@0.25;cler" +
+                "ic_rs=staff_summon@0.5;cleric_rs_asc=staff_summon@0.5;cleric_goddess=staff_summon@0.5;cleric_relic=staff_summon@0.5;cleric_holy_relic=staff_summon@0.5;cleric_judgement=staff_summon" +
+                "@0.5;cleric_tempest=staff_summon@0.5;sorc_glacial=staff_summon@0.5;sorc_glacial_asc=staff_summon@0.5;sorc_stonefang=staff_summon@0.5;cleric_wave=staff_shield@0.3;cleric_ray=staff_s" +
+                "hield@0.3;cleric_light=staff_shield@0.3;cleric_intervention=staff_shield@0.3;cleric_crucible=staff_shield@0.3;cleric_wave_ally=staff_shield@0.3;wiz_clockwork=staff_shield@0.3;wiz_n" +
+                "ova=staff_shield@0.3;sm_guidance=staff_shield@0.3;merc_roar=emote_challenge@0.3;hw_point=emote_point@0.2;hw_command=emote_point@0.2;hw_rift_echo=emote_point@0.2;hw_rupture=emote_po" +
+                "int@0.2;hw_open=emote_point@0.2;hw_stop=emote_point@0.2;hw_pinch=emote_point@0.2;hw_afterimage=emote_point@0.2;hw_rift_walker=emote_point@0.2;wiz_gravity=emote_point@0.2;sorc_stone" +
+                "fang_asc=emote_point@0.2",
+                "Skill clips that play Valheim's own animation (clip=trigger@seconds before impact). Remove an entry to use the custom pose instead. All animator trigger names of your game are written once to the BepInEx log ('[Immortal Heroes] Animator triggers').");
             LegMotionScale = Config.Bind("Runtime", "LegMotionScale_v02522", 0f, "Strength of the procedural leg poses (Unity humanoid muscles). 0 = legs untouched, -1 = inverted (if knees bend the wrong way on your rig).");
             SkySummonDropTime = Config.Bind("Skills", "SkySummonDropTime", 0.18f, "Seconds for a spawned Sky Summon object to slam from its indoor-safe spawn point to the target AFTER the character wind-up finishes.");
             EnableWarfreakDualWield = Config.Bind("Weapon Mastery", "EnableWarfreakDualWield", true, "Warfreak: Mercenary may equip any two one-handed weapons simultaneously. Dedicated combination animations are a later animation pass.");
@@ -2682,6 +2695,7 @@ namespace DragonsAltarCombat
         private static readonly Dictionary<string, KeyValuePair<string, float>> VanMap = new Dictionary<string, KeyValuePair<string, float>>();
         private static readonly Dictionary<int, HashSet<string>> AnimTriggers = new Dictionary<int, HashSet<string>>();
         private static MethodInfo _zanimSetTrigger;
+        private static bool _triggersLogged;
 
         private static void ParseVanMap()
         {
@@ -2723,9 +2737,18 @@ namespace DragonsAltarCombat
                 catch (Exception) { }
                 if (set.Count == 0) return null;   // not ready yet: try again next cast
                 AnimTriggers[a.GetInstanceID()] = set;
+                if (!_triggersLogged && DragonCombatPlugin.Instance != null)
+                {
+                    _triggersLogged = true;
+                    List<string> all = new List<string>(set);
+                    all.Sort();
+                    DragonCombatPlugin.Instance.LogInfo("[Immortal Heroes] Animator triggers: " + string.Join(", ", all.ToArray()));
+                }
             }
             if (set.Contains(name)) return name;
             if (set.Contains(name + "0")) return name + "0";
+            string bare = name.TrimEnd('0', '1', '2', '3', '4', '5', '6', '7', '8', '9');
+            if (bare != name && set.Contains(bare)) return bare;
             return null;
         }
 

@@ -1,4 +1,5 @@
-TEST v0.25.26
-1. Heavy Slash: hands in front of the left shoulder (not behind the head), sweep to the right.
-2. Stomp: right knee comes up to hip height, then stamps down.
-3. Whirlwind: non-stop fast spin with the weapon held out.
+TEST v0.25.27 - Vanilla Base
+1. Heavy Slash, Sword Master slashes, Impact Wave, Circle Swing, Lightning Zap, Holy Wave: each should play a real Valheim attack (sword/axe/sledge/atgeir/staff) and look natural.
+2. Damage should land on the vanilla swing's hit moment. If it lands early/late, tune the @seconds number in [Runtime] VanillaAnimationMap_v02527.
+3. Open BepInEx/LogOutput.log, search "Animator triggers", send me that line (I map more skills from it).
+4. Any skill that still looks wrong: name it; delete its entry from the map to compare with the custom pose.
