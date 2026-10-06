@@ -1,0 +1,10 @@
+IMMORTAL HEROES v0.25.26 - ANATOMY
+
+- ARMS FOLLOW HUMAN ANATOMY: a hand reaching across the body now goes IN FRONT of the chest (never behind the head);
+  elbows hang down and slightly out, point down-forward when the hand crosses the chest, up-forward-out when the
+  hand is raised to throw / strike, and back when the hand is pulled back (ribs chamber, bowstring).
+  Heavy Slash / Moonlight: both hands cocked IN FRONT of the left shoulder, then the sweep to the right.
+- STOMP: the weight shifts onto the left leg, the right knee rises to hip height (thigh level, knee bent), then the
+  foot is driven flat into the ground and both knees absorb it (new foot-lift support).
+- WHIRLWIND / FURIOUS WINDS: a continuous, violent spin (one full turn every ~0.3 s, faster when Ascended) with the
+  weapon held out level - no longer a repeated vanilla attack. Circle Swing / Eclipse keep the one-shot vanilla spin.

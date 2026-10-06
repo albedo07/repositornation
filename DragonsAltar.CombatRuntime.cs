@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.25";
+        public const string ModVersion = "0.25.26";
 
         internal static DragonCombatPlugin Instance;
 
@@ -68,8 +68,8 @@ namespace DragonsAltarCombat
 
             EnableRuntime = Config.Bind("Runtime", "Enabled", true, "Enable Dragon's Altar combat runtime patches.");
             EnableSkillAnimations = Config.Bind("Runtime", "EnableSkillAnimations", true, "Use Dragon's Altar procedural skill poses. Class skills do not trigger vanilla weapon attacks.");
-            VanillaAnimationMap = Config.Bind("Runtime", "VanillaAnimationMap_v02525",
-                "spin=atgeir_secondary@0.1;merc_circle=atgeir_secondary@0.45;merc_circle_2=atgeir_secondary@0.4;sm_eclipse=atgeir_secondary@0.45;sm_halfmoon_finisher=atgeir_secondary@0.45;" +
+            VanillaAnimationMap = Config.Bind("Runtime", "VanillaAnimationMap_v02526",
+                "merc_circle=atgeir_secondary@0.45;merc_circle_2=atgeir_secondary@0.4;sm_eclipse=atgeir_secondary@0.45;sm_halfmoon_finisher=atgeir_secondary@0.45;" +
                 "wiz_greatblade=swing_sledge@0.55;wiz_greatblade_slam=swing_sledge@0.55;warrior_punch=unarmed_attack@0.2;sm_thrust=spear_poke@0.25;cleric_hammer=spear_throw@0.4;" +
                 "cleric_zap=staff_fireball@0.25;sorc_flame=staff_fireball@0.25;hw_gravity_blast=staff_fireball@0.25",
                 "Skill clips that play Valheim's own attack animation (clip=trigger@seconds before impact; 'spin' = Whirlwind / Furious Winds, repeated). Remove an entry to use the custom pose instead; any animator trigger name works (e.g. sm_slash_a=swing_longsword1@0.3).");
@@ -1706,6 +1706,9 @@ namespace DragonsAltarCombat
         // weapon, so the universal "weapon follows the forearm" rule stays off.
         public string VA;
         public float VL, VR;
+        // v0.25.26 foot lift (metres above the planted spot): a knee can finally come up (Stomp).
+        public float FLh, FRh;
+        public DragonClipKey Lift(float left, float right) { FLh = left; FRh = right; return this; }
         public bool NoAim;
         // Same pose as another key at a new time (holds / shakes).
         public DragonClipKey Copy(float t)
@@ -1714,7 +1717,7 @@ namespace DragonsAltarCombat
             for (int i = 0; i < B.Length; i++) k.B[i] = B[i];
             for (int i = 0; i < L.Length; i++) k.L[i] = L[i];
             k.R = R; k.O = O; k.Lin = Lin; k.Spin = Spin;
-            k.WD = WD; k.WW = WW; k.SD = SD; k.SW = SW; k.TW = TW; k.TG = TG; k.HD = HD; k.HR = HR; k.HW = HW; k.LD = LD; k.LR = LR; k.LW = LW;
+            k.WD = WD; k.WW = WW; k.SD = SD; k.SW = SW; k.TW = TW; k.TG = TG; k.HD = HD; k.HR = HR; k.HW = HW; k.LD = LD; k.LR = LR; k.LW = LW; k.FLh = FLh; k.FRh = FRh;
             return k;
         }
     }
@@ -1754,7 +1757,7 @@ namespace DragonsAltarCombat
         private readonly float[] _l = new float[8];
         private float _spin;
         private Vector3 _wd, _sd;
-        private float _ww, _sw, _tw, _tg, _env, _hr, _hw, _lr, _lw;
+        private float _ww, _sw, _tw, _tg, _env, _hr, _hw, _lr, _lw, _flh, _frh;
         private Vector3 _hd, _ld;
         // v0.25.15 legs: Unity humanoid muscles (HumanPoseHandler), applied on the animator's real pose.
         private static readonly HumanBodyBones[] LegBones =
@@ -1905,6 +1908,8 @@ namespace DragonsAltarCombat
             _hd = Vector3.Slerp(ha.normalized, hb.normalized, w);
             _hr = a.HW > 0f && b.HW > 0f ? Mathf.Lerp(a.HR, b.HR, w) : (a.HW > 0f ? a.HR : b.HR);
             _lw = Mathf.Lerp(a.LW, b.LW, w);
+            _flh = Mathf.Lerp(a.FLh, b.FLh, w);
+            _frh = Mathf.Lerp(a.FRh, b.FRh, w);
             Vector3 la = a.LW > 0f ? a.LD : b.LD, lb = b.LW > 0f ? b.LD : a.LD;
             _ld = Vector3.Slerp(la.normalized, lb.normalized, w);
             _lr = a.LW > 0f && b.LW > 0f ? Mathf.Lerp(a.LR, b.LR, w) : (a.LW > 0f ? a.LR : b.LR);
@@ -2046,6 +2051,27 @@ namespace DragonsAltarCombat
             catch (Exception) { return false; }
         }
 
+        // v0.25.26 ANATOMY (user: "she is not a contortionist"). A human arm reaching across the body goes IN FRONT
+        // of the chest, never behind it: a target that crosses the midline is pushed forward. Elbows hang down and
+        // a little out; when the hand rises the elbow points forward-out; across the body it points down-forward.
+        private static Vector3 ArmDir(Vector3 dir, bool right)
+        {
+            Vector3 d = dir.sqrMagnitude > 0.0001f ? dir.normalized : Vector3.forward;
+            float side = right ? 1f : -1f;
+            if (d.x * side < 0f) d.z = Mathf.Max(d.z, 0.6f * Mathf.Abs(d.x) + 0.25f);
+            return d.normalized;
+        }
+
+        private static Vector3 ElbowPole(Vector3 d, bool right)
+        {
+            float side = right ? 1f : -1f;
+            float up = Mathf.Clamp01(d.y);
+            if (d.x * side < 0f) return new Vector3(0.15f * side, -1f, 0.35f);   // across the chest: elbow down-forward
+            if (d.y > 0.4f) return new Vector3(0.6f * side, 0.2f, 0.45f);          // raised / throwing: elbow up-forward-out
+            if (d.z < -0.1f) return new Vector3(0.4f * side, -1f, -0.6f);         // hand pulled back (ribs, bowstring): elbow back
+            return new Vector3(0.45f * side, -1f + 1.1f * up, 0.15f + 0.3f * up);
+        }
+
         private void PlaceHand(bool right, Vector3 dir, float reach, float weight)
         {
             float w = Mathf.Clamp01(weight);
@@ -2058,8 +2084,9 @@ namespace DragonsAltarCombat
                 if (ua == null || la == null || hand == null) return;
                 Transform frame = _visual != null ? _visual : transform;
                 float len = (la.position - ua.position).magnitude + (hand.position - la.position).magnitude;
-                Vector3 target = ua.position + frame.rotation * dir.normalized * (len * Mathf.Clamp(reach, 0.25f, 0.999f));
-                Vector3 pole = frame.rotation * new Vector3(right ? 0.5f : -0.5f, -1f, -0.4f);
+                Vector3 d = ArmDir(dir, right);
+                Vector3 target = ua.position + frame.rotation * d * (len * Mathf.Clamp(reach, 0.25f, 0.999f));
+                Vector3 pole = frame.rotation * ElbowPole(d, right);
                 TwoBoneIK(ua, la, hand, target, pole, w);
                 int o = right ? 4 : 7;
                 _written[o] = ua.localRotation; _hasWritten[o] = true;
@@ -2082,8 +2109,9 @@ namespace DragonsAltarCombat
                 if (ua == null || la == null || hand == null) return;
                 Transform frame = _visual != null ? _visual : transform;
                 float len = (la.position - ua.position).magnitude + (hand.position - la.position).magnitude;
-                Vector3 target = ua.position + frame.rotation * _hd.normalized * (len * Mathf.Clamp(_hr, 0.25f, 0.999f));
-                Vector3 pole = frame.rotation * new Vector3(0.5f, -1f, -0.4f);
+                Vector3 d = ArmDir(_hd, true);
+                Vector3 target = ua.position + frame.rotation * d * (len * Mathf.Clamp(_hr, 0.25f, 0.999f));
+                Vector3 pole = frame.rotation * ElbowPole(d, true);
                 TwoBoneIK(ua, la, hand, target, pole, w);
                 _written[4] = ua.localRotation; _hasWritten[4] = true;
                 _written[5] = la.localRotation; _hasWritten[5] = true;
@@ -2114,6 +2142,7 @@ namespace DragonsAltarCombat
                     Vector3 step = new Vector3((f == 0 ? -1f : 1f) * spread * 0.5f, 0f, lift * 0.45f);
                     Vector3 local = basePos + baseRot * (qy * (Vector3.Scale(_visual.localScale, _footLocal[f]) + step));
                     Vector3 target = parent != null ? parent.TransformPoint(local) : local;
+                    target += Vector3.up * Mathf.Max(0f, f == 0 ? _flh : _frh);
                     Quaternion footRot = parentRot * baseRot * qy * _footLocalRot[f];
                     TwoBoneIK(a, b, c, target, pole, _plantW);
                     c.rotation = Quaternion.Slerp(c.rotation, footRot, _plantW);
@@ -2256,7 +2285,7 @@ namespace DragonsAltarCombat
                 if (_tipR != Vector3.zero && HeldItem(true) != null) axis = (rh.TransformPoint(_tipR) - rh.position).normalized;
                 Vector3 t = rh.position + axis * _tg * Mathf.Max(0.2f, transform.lossyScale.y);
                 Transform fr = _visual != null ? _visual : transform;
-                TwoBoneIK(ua, la, lh, t, fr.rotation * new Vector3(-0.5f, -1f, -0.4f), w);
+                TwoBoneIK(ua, la, lh, t, fr.rotation * new Vector3(-0.2f, -1f, 0.35f), w);
                 // the off hand wraps the grip like the main hand
                 lh.rotation = Quaternion.Slerp(lh.rotation, rh.rotation, w * 0.8f);
                 _written[7] = ua.localRotation; _hasWritten[7] = true;
@@ -2480,7 +2509,7 @@ namespace DragonsAltarCombat
         {
             // v0.25.24 SPAA (storyboard 09 CYCLONE): coil with the weapon across to the left, then turn clockwise
             // with the main arm straight out to the side and the weapon held level, for whole turns only.
-            float q = Mathf.Max(0.12f, turn);
+            float q = Mathf.Max(0.12f, turn * 0.8f);   // v0.25.26: a whirlwind spins violently and continuously
             int turns = Mathf.Max(1, Mathf.CeilToInt(Mathf.Max(0.1f, seconds) / q));
             DragonClipKey[] v = VanillaClip(player, "spin", Mathf.Max(0.3f, seconds));
             PlayClipKeys(player, v != null ? v : SbSpin(turns, q), 0.15f);
@@ -2817,9 +2846,9 @@ namespace DragonsAltarCombat
         private static DragonClipKey[] SbSlash(float heavy, float hold, bool spin, bool pull)
         {
             float a = 1f + 0.3f * heavy;
-            DragonClipKey cock = Ft(K(-0.45f).Sp(4f, 18f * a, 0f).Ch(2f, 10f * a, 0f).Hd(0f, -12f, 0f).Hand(-1f, 0.55f, 0.35f, 0.8f).Wp(-0.3f, 0.6f, -0.7f).Two(-0.12f).Off(0f, -0.04f, 0f), 0.2f, 0.1f);
+            DragonClipKey cock = Ft(K(-0.45f).Sp(4f, 18f * a, 0f).Ch(2f, 10f * a, 0f).Hd(0f, -12f, 0f).Hand(-0.8f, 0.35f, 0.6f, 0.6f).Wp(-0.3f, 0.75f, -0.5f).Two(-0.12f).Off(0f, -0.04f, 0f), 0.2f, 0.1f);
             if (pull) cock = Ft(K(-0.45f).Sp(6f, -16f, 0f).Ch(3f, -8f, 0f).Hd(0f, 14f, 0f).Hand(0.25f, -0.75f, -0.25f, 0.7f).Wp(0f, 0f, 1f).Two(-0.12f).Off(0f, -0.06f, -0.03f), 0.3f, 0.2f);
-            DragonClipKey left = Ft(K(-0.12f).Sp(5f, 24f * a, 0f).Ch(3f, 14f * a, 0f).Hd(0f, -16f, 0f).Hand(-1f, -0.05f, 0.55f, 0.95f).Wp(-1f, 0f, 0.35f).Two(-0.12f).Off(0f, -0.05f, 0f), 0.25f, 0.12f);
+            DragonClipKey left = Ft(K(-0.12f).Sp(5f, 24f * a, 0f).Ch(3f, 14f * a, 0f).Hd(0f, -16f, 0f).Hand(-0.85f, -0.05f, 0.6f, 0.95f).Wp(-1f, 0f, 0.35f).Two(-0.12f).Off(0f, -0.05f, 0f), 0.25f, 0.12f);
             DragonClipKey front = Ft(K(0f).Sp(6f, 0f, 0f).Ch(3f, 0f, 0f).Hand(-0.25f, -0.05f, 1f, 0.95f).Wp(0f, 0f, 1f).Two(-0.12f).Off(0f, -0.06f, 0.03f), 0.32f, 0.12f).Linear();
             DragonClipKey right = Ft(K(0.11f).Sp(6f, -24f * a, 0f).Ch(3f, -14f * a, 0f).Hd(0f, 12f, 0f).Hand(1f, 0f, 0.55f, 0.95f).Wp(1f, 0f, -0.2f).Two(-0.12f).Off(0f, -0.06f, 0.03f), 0.32f, 0.12f).Linear();
             if (spin)
@@ -2895,7 +2924,7 @@ namespace DragonsAltarCombat
         // Spin (SPAA): coil with the weapon across the body, then turn holding it level out to the right side.
         private static DragonClipKey SbSpinPose(float t)
         {
-            return Ft(K(t).Sp(5f, 0f, 0f).Hand(1f, 0f, 0.2f, 1f).Wp(1f, 0f, 0.1f).Off(0f, -0.04f, 0f), 0.15f, 0.1f);
+            return Ft(K(t).Sp(5f, 0f, 0f).Hand(1f, -0.05f, 0.35f, 1f).Wp(1f, 0f, 0.3f).Off(0f, -0.04f, 0f), 0.15f, 0.1f);
         }
 
         private static DragonClipKey[] SbSpin(int turns, float turn)
@@ -2919,10 +2948,14 @@ namespace DragonsAltarCombat
         {
             if (v == 1)
             {
-                DragonClipKey lift = K(-0.45f).Sp(3f, 0f, 0f).Hd(4f, 0f, 0f).LL(0f, 0.08f, 0f, 0f).RL(0.25f, 0.08f, 0f, 0f).Off(0f, 0.04f, 0f);
-                DragonClipKey hit = Ft(K(0f).Sp(10f, 0f, 0f).Ch(4f, 0f, 0f).Hd(6f, 0f, 0f).Off(0f, -0.08f, 0f), 0.05f, -0.2f).Linear();
-                DragonClipKey stAfter = hit.Copy(0.22f); stAfter.Lin = false;
-                return new DragonClipKey[] { K(-1f), lift, hit, stAfter, K(0.6f) };
+                // Stomp (anatomy): weight shifts onto the left leg, the right knee rises to hip height (thigh level,
+                // knee bent ~90), torso stays upright, then the foot is driven flat into the ground and both knees
+                // absorb it. Hands quiet.
+                DragonClipKey raise = K(-0.55f).Sp(-3f, 0f, 0f).Hd(6f, 0f, 0f).LL(0f, 0.06f, 0f, 0f).RL(0.25f, 0.1f, 0f, 0f).Lift(0f, 0.38f).Off(0f, 0.02f, 0f);
+                DragonClipKey peak = raise.Copy(-0.15f).Lift(0f, 0.42f);
+                DragonClipKey hit = K(0f).Sp(12f, 0f, 0f).Ch(5f, 0f, 0f).Hd(8f, 0f, 0f).LL(-0.05f, 0.1f, 0f, 0f).RL(0.3f, 0.12f, 0f, 0f).Lift(0f, 0f).Off(0f, -0.1f, 0f).Linear();
+                DragonClipKey stAfter = hit.Copy(0.25f); stAfter.Lin = false;
+                return new DragonClipKey[] { K(-1f), raise, peak, hit, stAfter, K(0.65f) };
             }
             if (v == 2)
             {

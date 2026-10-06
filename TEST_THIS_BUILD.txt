@@ -1,6 +1,4 @@
-TEST v0.25.25
-1. Heavy Slash / Moonlight: hands start over the LEFT shoulder, sweep to the right.
-2. Whirlwind / Circle Swing / Eclipse: Valheim's polearm spin attack.
-3. Astral Greatblade: sledge slam. Impact Punch: punch. Frenzied Charge: spear thrust. Judgement Hammer: spear throw.
-4. Zap / Flame Burst / Gravity Blast: staff cast.
-If one of these still shows the old pose, its Valheim animation name differs: tell me which skill.
+TEST v0.25.26
+1. Heavy Slash: hands in front of the left shoulder (not behind the head), sweep to the right.
+2. Stomp: right knee comes up to hip height, then stamps down.
+3. Whirlwind: non-stop fast spin with the weapon held out.
