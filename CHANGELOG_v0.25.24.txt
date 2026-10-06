@@ -1,0 +1,14 @@
+IMMORTAL HEROES v0.25.24 - SPIN AND BOW POSES
+
+- WHIRLWIND / FURIOUS WINDS (storyboard 09 CYCLONE): they still ran on the old rotation code (arm thrown overhead,
+  barely readable spin). Now: coil with the weapon across to the left, then the body turns clockwise in whole turns
+  with the main arm straight out to the side and the weapon held level; feet pivot with the body; settles facing
+  forward. Circle Swing / Eclipse use the same spin.
+- RANGER (storyboards 17 DEADEYE, 18 REBOUND, 19 SKY ARCHER): every bow skill rebuilt with hand targets: bow arm
+  straight at the target, string hand anchored at the cheek, released back past the ear, side-on torso. Arrow Rain /
+  Starfall aim up at the sky, Skyfall hover aims down, Pinning Shot kneels (right knee low), Swallow Dive streamlines
+  the arms back, backflips tuck the hands to the knees.
+- GRAND CROSS: two diagonal main-hand cuts forming the X (high right -> low left, high left -> low right).
+- Moonlight ready stance = the two-handed cock over the left shoulder; Bonecrusher aftershock = fist pounds again.
+- Procs (Holy Shockwave, Overcharge, Unchained Fury) are torso-only accents; Phoenix Rise opens the main arm a little.
+- Feet are no longer planted while the body is flipped / rolled (backflips, dives) - only when upright.

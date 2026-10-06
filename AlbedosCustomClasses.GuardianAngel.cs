@@ -17,7 +17,7 @@ namespace AlbedosCustomClassesGuardian
     {
         public const string ModGuid = "albedo.customclasses.guardian";
         public const string ModName = "Dragon's Altar - Grand Sigil Survival";
-        public const string ModVersion = "0.25.23";
+        public const string ModVersion = "0.25.24";
 
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 

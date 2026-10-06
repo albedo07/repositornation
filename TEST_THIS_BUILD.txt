@@ -1,4 +1,5 @@
-TEST v0.25.23 - compare each skill with its storyboard frame:
-1. Holy Wave / buffs: hand + weapon straight up.   2. Goddess Relic: up to the sky, then arm out pointing down ahead.
-3. Heavy Slash / Moonlight: two-handed sweep left -> right.   4. Impact Wave: hands at right shoulder, golf U.
-5. Electric Smite: fist forward in the roll, fist on the ground on landing.   6. Feet planted, calm stances.
+TEST v0.25.24
+1. Whirlwind / Circle Swing / Eclipse: arm straight out to the side, weapon level, body spinning in full turns.
+2. Ranger shots: bow arm pointing at the target, string hand at the cheek, then released past the ear.
+3. Arrow Rain / Starfall: bow up at the sky. Pinning: kneel. Tumble Shot: tucked flip.
+4. Grand Cross: two diagonal cuts.
