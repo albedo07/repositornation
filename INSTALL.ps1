@@ -1,7 +1,7 @@
 ﻿$ErrorActionPreference = "Stop"
 
 Write-Host ""
-Write-Host "IMMORTAL HEROES v0.25.42 - WEAPONS AND CHAINS" -ForegroundColor Cyan
+Write-Host "IMMORTAL HEROES v0.25.43 - DUAL WIELD CLIPS" -ForegroundColor Cyan
 Write-Host "Protected build: all 8 DLLs compile in staging before the live profile is touched." -ForegroundColor Gray
 Write-Host ""
 
@@ -354,6 +354,13 @@ try {
             Copy-Item -LiteralPath $liveUiAsset -Destination ($liveUiAsset + ".backup-" + $stamp) -Force
         }
         Copy-Item -LiteralPath (Join-Path $stageAssetDir $asset.Name) -Destination $liveUiAsset -Force
+    }
+    # v0.25.43: DualWield.dll (Smoothbrain's DualWield mod) only supplies its dual-wield animation clips; it is
+    # read from ImmortalHeroesAssets and never loaded as a plugin.
+    $dwSource = Join-Path $uiAssetDir "DualWield.dll"
+    if (Test-Path -LiteralPath $dwSource) {
+        Copy-Item -LiteralPath $dwSource -Destination (Join-Path $liveAssetDir "DualWield.dll") -Force
+        Write-Host "  DualWield animations installed (ImmortalHeroesAssets\DualWield.dll)" -ForegroundColor White
     }
 
     Remove-Item -LiteralPath $stageDir -Recurse -Force -ErrorAction SilentlyContinue

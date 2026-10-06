@@ -1,0 +1,9 @@
+Immortal Heroes v0.25.43 - Dual Wield Clips
+===========================================
+- Ships the DualWield mod's DLL (Smoothbrain, v1.0.12, the package you sent) inside ImmortalHeroesAssets;
+  INSTALL copies it to BepInEx/plugins/ImmortalHeroesAssets/DualWield.dll. It is NOT a plugin there - Immortal
+  Heroes only reads its embedded "dwanimations" bundle and swaps in the dual-wield attack / block clips while
+  you hold two one-handed weapons (Mercenary Warfreak). Do not also install DualWield as a plugin (if you do,
+  the real mod takes over and ours stays off).
+- Log line when it works: "[Immortal Heroes] DualWield animations loaded: 6".
+- No other changes from v0.25.42.

@@ -1,5 +1,5 @@
 @echo off
-title Immortal Heroes v0.25.42 - Weapons and Chains
+title Immortal Heroes v0.25.43 - Dual Wield Clips
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
 echo.
 pause
