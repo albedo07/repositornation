@@ -1,5 +1,5 @@
 @echo off
-title Immortal Heroes v0.25.18 - Ranged and Rift Families
+title Immortal Heroes v0.25.19 - Animation Polish
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
 echo.
 pause

@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.18";
+        public const string ModVersion = "0.25.19";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -4120,7 +4120,7 @@ namespace AlbedosCustomClassesAdvanced
         {
             ShowMessage("Shield Charge");
             DragonCombat.PlayClip(player, "cleric_charge", 0.15f, true);
-            DragonCombat.ForceRun(player, true);   // v0.25.15 Vanguard: real running legs while the charge moves
+            DragonCombat.ForceRun(player, true, true, 0f);   // v0.25.19: real run + Valheim's shield-up block pose
             Vector3 forward = player.GetLookDir();
             forward.y = 0f;
             if (forward.sqrMagnitude < 0.01f) forward = player.transform.forward;
@@ -4213,7 +4213,7 @@ namespace AlbedosCustomClassesAdvanced
                 // v0.25.7: no Bash -> the charge pose blends back to rest (Bash already took the impact).
                 DragonSkillClipDriver clip = player == null ? null : player.GetComponent<DragonSkillClipDriver>();
                 if (clip != null && clip.IsHolding) DragonCombat.ClipStop(player, 0.25f);
-                DragonCombat.ForceRun(player, false);
+                DragonCombat.ForceRun(player, false, false, 0.45f);
                 EndShieldCharge();
             }
         }
@@ -4336,7 +4336,7 @@ namespace AlbedosCustomClassesAdvanced
 
         private void ShieldChargeBash(Player player, Vector3 forward)
         {
-            DragonCombat.ForceRun(player, false);
+            DragonCombat.ForceRun(player, false, false, 0.45f);   // shield stays up through the bash
             DragonCombat.ClipImpact(player);
             if (player == null || player.IsDead()) return;
             ShowMessage("Shield Bash");
@@ -5087,7 +5087,7 @@ namespace AlbedosCustomClassesAdvanced
             if (!BeginCast(player, id, _angelCooldown.Value, _angelStamina.Value))
                 return;
             DragonCombat.LockSkill(player, 0.1f);
-            DragonCombat.PlayClip(player, "cleric_angel_rise", Mathf.Max(0.6f, _angelWindupTotal.Value) * 0.62f);
+            DragonCombat.PlayClip(player, "angel_comet", Mathf.Max(0.6f, _angelWindupTotal.Value) * 0.62f, true);   // v0.25.19 inverted dive + hero landing
             StartCoroutine(FallenAngelRoutine(player, body));
         }
 
@@ -5139,9 +5139,18 @@ namespace AlbedosCustomClassesAdvanced
 
             float diveSpeed = Mathf.Max(3f, height / Mathf.Max(0.1f, total - riseTime - hangTime));
             float safety = Time.time + 10f;
+            bool flipped = false;
             while (player != null && !player.IsDead() && Time.time < safety)
             {
                 body.velocity = forward * 3f + Vector3.down * diveSpeed;
+                // v0.25.19: ~0.17 s before the ground, flip upright into the hero landing.
+                RaycastHit groundHit;
+                if (!flipped && Physics.Raycast(body.position + Vector3.up * 0.3f, Vector3.down, out groundHit, 60f, IhSolidMask(), QueryTriggerInteraction.Ignore) &&
+                    groundHit.distance - 0.3f < diveSpeed * 0.17f)
+                {
+                    flipped = true;
+                    DragonCombat.ClipImpactIfHolding(player);
+                }
                 ResetFallDamageState(player);
                 DragonCombat.LockSkill(player, 0.12f);
                 if (ascended)
@@ -5156,7 +5165,8 @@ namespace AlbedosCustomClassesAdvanced
             ResetFallDamageState(player);
             body.velocity = Vector3.zero;
             DragonCombat.LockSkill(player, 0.35f);
-            DragonCombat.PlayClip(player, "cleric_land", 0.05f);   // v0.25.17 landing pose lands with the damage
+            if (!DragonCombat.ClipImpactIfHolding(player) && !flipped) DragonCombat.PlayClip(player, "olympic_land", 0.05f);
+            DragonCombat.StowMainWeapon(player, 0.5f);   // fist on the ground: weapon hidden render-only
 
             Vector3 point = player.transform.position;
             float radius = Mathf.Max(1f, DragonCombat.M(_angelRadius.Value));

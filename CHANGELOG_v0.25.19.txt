@@ -1,0 +1,24 @@
+IMMORTAL HEROES v0.25.19 - ANIMATION POLISH (user feedback on v0.25.18)
+
+Engine (less clunky / ragdoll):
+- Clips now flow THROUGH their poses (monotone cubic curves) instead of stopping at every key, and never
+  overshoot a hold (no wobble).
+- 0.1 s minimum blend-in again (0.05 s popped).
+- Leg poses toned down: [Runtime] LegMotionScale_v02519 default 0.5.
+- The Cleric shield arm is no longer bent by skill clips (it was flung out sideways); it keeps Valheim's own
+  shield pose.
+
+Skills:
+1. SKY SUMMONS (Righteous Strike, Relics, Heaven's Judgement, Lightning Tempest, Glacial Descent, Meteor Fall,
+   Elemental Cataclysm): weapon raised high to the sky, the fist closes, then it is yanked down hard toward the
+   ground (body crunches, knees dip) as the summon lands. Meteor / Cataclysm hold it up while charging.
+2. SHIELD CHARGE: runs with Valheim's real shield-up block pose (shield in front), torso leaned in, weapon held
+   back; the finish is a hard bash (forearm punched out, left shoulder through, lunge). The legs no longer hang
+   in a falling pose (onGround forced while charging).
+3. ANGEL COMET: crouch, jump with the arm thrown up, wings on the rise, then a fully INVERTED head-first dive
+   (legs straight up); just before the ground the body flips upright into the superhero landing, set when the
+   damage lands. The weapon hides render-only while the fist is on the ground.
+4. OLYMPIC HERO (Electric Smite / Bonecrusher): the barrel roll now spins clockwise.
+5. HEALING / BLESSINGS (Holy Wave, Ray of Hope, Heaven's Light, Divine Intervention, Heaven's Crucible, Ascended
+   Holy Wave on an ally): main-hand weapon raised straight up like a staff, the wave leaves the caster.
+6. JUDGEMENT HAMMER: fishing-rod cast: one hand pulls the weapon back behind the head, then flicks it out forward.

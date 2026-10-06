@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.18";
+        public const string ModVersion = "0.25.19";
 
         internal static DragonCombatPlugin Instance;
 
@@ -67,7 +67,7 @@ namespace DragonsAltarCombat
 
             EnableRuntime = Config.Bind("Runtime", "Enabled", true, "Enable Dragon's Altar combat runtime patches.");
             EnableSkillAnimations = Config.Bind("Runtime", "EnableSkillAnimations", true, "Use Dragon's Altar procedural skill poses. Class skills do not trigger vanilla weapon attacks.");
-            LegMotionScale = Config.Bind("Runtime", "LegMotionScale_v02515", 1f, "Strength of the procedural leg poses (Unity humanoid muscles). 0 = legs untouched, -1 = inverted (if knees bend the wrong way on your rig).");
+            LegMotionScale = Config.Bind("Runtime", "LegMotionScale_v02519", 0.5f, "Strength of the procedural leg poses (Unity humanoid muscles). 0 = legs untouched, -1 = inverted (if knees bend the wrong way on your rig).");
             SkySummonDropTime = Config.Bind("Skills", "SkySummonDropTime", 0.18f, "Seconds for a spawned Sky Summon object to slam from its indoor-safe spawn point to the target AFTER the character wind-up finishes.");
             EnableWarfreakDualWield = Config.Bind("Weapon Mastery", "EnableWarfreakDualWield", true, "Warfreak: Mercenary may equip any two one-handed weapons simultaneously. Dedicated combination animations are a later animation pass.");
             EnableDivineStaffShield = Config.Bind("Weapon Mastery", "EnableDivineStaffShield", true, "Divine Duality: Cleric may equip a Staff and Shield together, including before advancement.");
@@ -256,17 +256,31 @@ namespace DragonsAltarCombat
             Type z = Type.GetType("ZSyncAnimation, assembly_valheim");
             if (z == null) return 0;
             HarmonyMethod pre = new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("ZanimFloatPrefix", BindingFlags.Static | BindingFlags.NonPublic));
+            HarmonyMethod preBool = new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("ZanimBoolPrefix", BindingFlags.Static | BindingFlags.NonPublic));
             int n = 0;
             MethodInfo[] ms = z.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
             for (int i = 0; i < ms.Length; i++)
             {
-                if (ms[i].Name != "SetFloat") continue;
+                if (ms[i].Name != "SetFloat" && ms[i].Name != "SetBool") continue;
                 ParameterInfo[] ps = ms[i].GetParameters();
-                if (ps.Length != 2 || ps[1].ParameterType != typeof(float)) continue;
-                try { PatchWithHarmony(ms[i], pre, null); n++; }
+                if (ps.Length != 2) continue;
+                if (ms[i].Name == "SetFloat" && ps[1].ParameterType != typeof(float)) continue;
+                if (ms[i].Name == "SetBool" && ps[1].ParameterType != typeof(bool)) continue;
+                try { PatchWithHarmony(ms[i], ms[i].Name == "SetBool" ? preBool : pre, null); n++; }
                 catch (Exception ex) { Logger.LogWarning("Could not patch ZSyncAnimation.SetFloat: " + ex.Message); }
             }
             return n;
+        }
+
+        private static void ZanimBoolPrefix(object __instance, object[] __args)
+        {
+            try
+            {
+                if (__args == null || __args.Length < 2) return;
+                bool v = (bool)__args[1];
+                if (DragonCombat.ForceBoolOverride(__instance, __args[0], ref v)) __args[1] = v;
+            }
+            catch { }
         }
 
         private static void ZanimFloatPrefix(object __instance, object[] __args)
@@ -1681,7 +1695,7 @@ namespace DragonsAltarCombat
         {
             if (_owner == null) _owner = GetComponent<Character>();
             if (_owner == null || _owner.IsDead()) { DragonCombat.ForceRun(_owner as Player, false); Destroy(this); return; }
-            DragonCombat.ForceRunTick();
+            if (!DragonCombat.ForceRunTick()) Destroy(this);
         }
     }
 
@@ -1735,7 +1749,7 @@ namespace DragonsAltarCombat
                 keys = copy;
             }
             _keys = keys;
-            _windup = Mathf.Max(0.05f, windup);   // v0.25.15 release-first: instant casts react at once
+            _windup = Mathf.Max(0.1f, windup);   // v0.25.19: 0.1 s minimum blend-in (0.05 popped like a ragdoll)
             _hold = hold;
             _start = Time.time;
             _impactAt = -1f;
@@ -1799,10 +1813,50 @@ namespace DragonsAltarCombat
                 if (t >= k[i].T && t <= k[i + 1].T)
                 {
                     float w = (t - k[i].T) / Mathf.Max(0.0001f, k[i + 1].T - k[i].T);
-                    Set(k[i], k[i + 1], k[i + 1].Lin ? w : Mathf.SmoothStep(0f, 1f, w));
+                    if (k[i + 1].Lin) { Set(k[i], k[i + 1], w); return; }
+                    SetSmooth(i, w);
                     return;
                 }
             }
+        }
+
+        // v0.25.19 POLISH: monotone cubic (Fritsch-Carlson) through the keys instead of an ease-in/ease-out
+        // per segment: the motion flows through the poses (no robotic stop at every key) and never
+        // overshoots a hold or an extreme (no wobble / ragdoll look).
+        private static float Slope(DragonClipKey[] k, int i, int c, Func<DragonClipKey, int, float> v)
+        {
+            int n = k.Length;
+            if (i <= 0 || i >= n - 1 || k[i].Lin || k[i + 1].Lin) return 0f;
+            float d0 = (v(k[i], c) - v(k[i - 1], c)) / Mathf.Max(0.0001f, k[i].T - k[i - 1].T);
+            float d1 = (v(k[i + 1], c) - v(k[i], c)) / Mathf.Max(0.0001f, k[i + 1].T - k[i].T);
+            if (d0 * d1 <= 0f) return 0f;
+            float m = (v(k[i + 1], c) - v(k[i - 1], c)) / Mathf.Max(0.0001f, k[i + 1].T - k[i - 1].T);
+            float lim = 3f * Mathf.Min(Mathf.Abs(d0), Mathf.Abs(d1));
+            return Mathf.Clamp(m, -lim, lim);
+        }
+
+        private static float Cubic(DragonClipKey[] k, int i, float w, int c, Func<DragonClipKey, int, float> v)
+        {
+            float dt = k[i + 1].T - k[i].T;
+            float p0 = v(k[i], c), p1 = v(k[i + 1], c);
+            float m0 = Slope(k, i, c, v) * dt, m1 = Slope(k, i + 1, c, v) * dt;
+            float w2 = w * w, w3 = w2 * w;
+            return (2f * w3 - 3f * w2 + 1f) * p0 + (w3 - 2f * w2 + w) * m0 + (-2f * w3 + 3f * w2) * p1 + (w3 - w2) * m1;
+        }
+
+        private static readonly Func<DragonClipKey, int, float> VBone = delegate(DragonClipKey key, int c) { return key.B[c / 3][c % 3]; };
+        private static readonly Func<DragonClipKey, int, float> VRoot = delegate(DragonClipKey key, int c) { return c < 3 ? key.R[c] : key.O[c - 3]; };
+        private static readonly Func<DragonClipKey, int, float> VLeg = delegate(DragonClipKey key, int c) { return c < 8 ? key.L[c] : key.Spin; };
+
+        private void SetSmooth(int i, float w)
+        {
+            DragonClipKey[] k = _keys;
+            for (int b = 0; b < 10; b++)
+                _b[b] = new Vector3(Cubic(k, i, w, b * 3, VBone), Cubic(k, i, w, b * 3 + 1, VBone), Cubic(k, i, w, b * 3 + 2, VBone));
+            _r = new Vector3(Cubic(k, i, w, 0, VRoot), Cubic(k, i, w, 1, VRoot), Cubic(k, i, w, 2, VRoot));
+            _o = new Vector3(Cubic(k, i, w, 3, VRoot), Cubic(k, i, w, 4, VRoot), Cubic(k, i, w, 5, VRoot));
+            for (int l = 0; l < 8; l++) _l[l] = Cubic(k, i, w, l, VLeg);
+            _spin = Cubic(k, i, w, 8, VLeg);
         }
 
         private void Set(DragonClipKey a, DragonClipKey b, float w)
@@ -2076,20 +2130,39 @@ namespace DragonsAltarCombat
         private static object _forceRunZanim;
         private static Animator _forceRunAnimator;
         private static float _forceRunSpeed;
+        private static bool _forceRunOn;
+        private static float _forceBlockUntil;
         private static readonly int ForwardSpeedHash = Animator.StringToHash("forward_speed");
         private static readonly int SidewaySpeedHash = Animator.StringToHash("sideway_speed");
+        private static readonly int OnGroundHash = Animator.StringToHash("onGround");
+        private static readonly int BlockingHash = Animator.StringToHash("blocking");
 
         public static void ForceRun(Player player, bool on)
+        {
+            ForceRun(player, on, false, 0f);
+        }
+
+        // v0.25.19: block = Valheim's own shield-up pose (animator "blocking") on top of the run, so the shield
+        // really leads (Shield Charge). blockAfter = seconds the shield stays up after the run stops (the Bash).
+        public static void ForceRun(Player player, bool on, bool block, float blockAfter)
         {
             if (player == null || player != Player.m_localPlayer) return;
             DragonForceRun fr = player.GetComponent<DragonForceRun>();
             if (!on)
             {
-                _forceRunZanim = null;
-                _forceRunAnimator = null;
-                if (fr != null) UnityEngine.Object.Destroy(fr);
+                _forceRunOn = false;
+                _forceBlockUntil = blockAfter > 0f && _forceBlockUntil > Time.time ? Time.time + blockAfter : 0f;
+                if (_forceBlockUntil <= 0f)
+                {
+                    if (_forceRunAnimator != null) _forceRunAnimator.SetBool(BlockingHash, false);
+                    _forceRunZanim = null;
+                    _forceRunAnimator = null;
+                    if (fr != null) UnityEngine.Object.Destroy(fr);
+                }
                 return;
             }
+            _forceRunOn = true;
+            _forceBlockUntil = block ? float.MaxValue : 0f;
             if (DragonCombatPlugin.Instance != null && !DragonCombatPlugin.Instance.EnableSkillAnimations.Value) return;
             Component z = null;
             Component[] cs = player.GetComponents<Component>();
@@ -2100,11 +2173,26 @@ namespace DragonsAltarCombat
             if (fr == null) player.gameObject.AddComponent<DragonForceRun>();
         }
 
-        internal static void ForceRunTick()
+        // false = nothing forced any more (the component removes itself).
+        internal static bool ForceRunTick()
         {
-            if (_forceRunAnimator == null) return;
-            _forceRunAnimator.SetFloat(ForwardSpeedHash, _forceRunSpeed);
-            _forceRunAnimator.SetFloat(SidewaySpeedHash, 0f);
+            if (_forceRunAnimator == null) return false;
+            bool block = Time.time < _forceBlockUntil;
+            if (!_forceRunOn && !block)
+            {
+                _forceRunAnimator.SetBool(BlockingHash, false);
+                _forceRunZanim = null;
+                _forceRunAnimator = null;
+                return false;
+            }
+            if (_forceRunOn)
+            {
+                _forceRunAnimator.SetFloat(ForwardSpeedHash, _forceRunSpeed);
+                _forceRunAnimator.SetFloat(SidewaySpeedHash, 0f);
+                _forceRunAnimator.SetBool(OnGroundHash, true);
+            }
+            _forceRunAnimator.SetBool(BlockingHash, block);
+            return true;
         }
 
         // ZSyncAnimation.SetFloat prefix body: true = the value was replaced.
@@ -2113,8 +2201,21 @@ namespace DragonsAltarCombat
             if (_forceRunZanim == null || !ReferenceEquals(zanim, _forceRunZanim)) return false;
             bool forward = key is int ? (int)key == ForwardSpeedHash : (key as string) == "forward_speed";
             bool side = key is int ? (int)key == SidewaySpeedHash : (key as string) == "sideway_speed";
+            if (!_forceRunOn) return false;
             if (forward) { value = _forceRunSpeed; return true; }
             if (side) { value = 0f; return true; }
+            return false;
+        }
+
+        // ZSyncAnimation.SetBool prefix body: onGround stays true while a run is forced (kinematic moves made
+        // Valheim play the falling legs), blocking stays on while the shield pose is forced.
+        internal static bool ForceBoolOverride(object zanim, object key, ref bool value)
+        {
+            if (_forceRunZanim == null || !ReferenceEquals(zanim, _forceRunZanim)) return false;
+            bool ground = key is int ? (int)key == OnGroundHash : (key as string) == "onGround";
+            bool blocking = key is int ? (int)key == BlockingHash : (key as string) == "blocking";
+            if (ground && _forceRunOn) { value = true; return true; }
+            if (blocking && Time.time < _forceBlockUntil) { value = true; return true; }
             return false;
         }
 
@@ -2181,6 +2282,100 @@ namespace DragonsAltarCombat
             BuildBlueprintB(c);
             BuildBlueprintC(c);
             BuildBlueprintD(c);
+            BuildPolishClips(c);
+        }
+
+        // ------------------------------------------------------------------ v0.25.19 user polish
+        // SKY SUMMON: weapon raised high to the sky, the fist closes on what is up there, then it is yanked
+        // down hard toward the ground in front (the summon lands at the target). Charged = hold up high.
+        private static DragonClipKey[] SkySummon(bool charged, bool twoArms)
+        {
+            DragonClipKey lift = K(-0.6f).Ch(-2f, 0f, 0f).Hd(-6f, 0f, 0f).RA(-110f, 0f, -12f).RF(-50f, 0f, 0f).LL(0.06f, 0.04f, 0.08f, 0f).RL(0f, 0.04f, 0.06f, 0f);
+            DragonClipKey up = K(charged ? 0f : -0.16f).Sp(-6f, 0f, 0f).Ch(-10f, 0f, 0f).Hd(-22f, 0f, 0f).RA(-172f, 0f, -6f).RF(-6f, 0f, 0f).RH(-10f, 0f, 0f).Off(0f, 0.03f, 0f);
+            DragonClipKey grab = up.Copy(charged ? 0.04f : -0.06f).RH(20f, 0f, 0f).RF(-14f, 0f, 0f);
+            float y = charged ? 0.14f : 0f;
+            DragonClipKey yank = K(y).Sp(22f, 6f, 0f).Ch(12f, 4f, 0f).Hd(10f, 0f, 0f).RA(-35f, 0f, -8f).RF(-75f, 0f, 0f).RH(10f, 0f, 0f).Off(0f, -0.12f, 0.04f).LL(0.25f, 0.06f, 0.35f, 0f).RL(0.15f, 0.06f, 0.3f, 0f).Linear();
+            if (twoArms)
+            {
+                lift = lift.LA(-110f, 0f, 12f).LF(-50f, 0f, 0f);
+                up = up.LA(-172f, 0f, 6f).LF(-6f, 0f, 0f).LH(-10f, 0f, 0f);
+                grab = grab.LA(-172f, 0f, 6f).LF(-14f, 0f, 0f).LH(20f, 0f, 0f);
+                yank = yank.LA(-35f, 0f, 8f).LF(-75f, 0f, 0f).LH(10f, 0f, 0f);
+            }
+            DragonClipKey press = yank.Copy(y + 0.22f).Sp(24f, 6f, 0f).Off(0f, -0.13f, 0.04f);
+            press.Lin = false;
+            if (charged) return new DragonClipKey[] { K(-1f), lift, up, grab, yank, press, K(y + 0.75f) };
+            return new DragonClipKey[] { K(-1f), lift, up, grab, yank, press, K(0.7f) };
+        }
+
+        // HEALING / BLESSING: main-hand weapon raised straight up like a staff; the wave leaves the caster.
+        private static DragonClipKey[] RaiseHeal()
+        {
+            DragonClipKey top = K(0f).Sp(-3f, 0f, 0f).Ch(-6f, 0f, 0f).Hd(-12f, 0f, 0f).RA(-172f, 0f, -6f).RF(-6f, 0f, 0f).Off(0f, 0.02f, 0f);
+            return new DragonClipKey[] { K(-1f), K(-0.5f).Ch(-2f, 0f, 0f).Hd(-4f, 0f, 0f).RA(-120f, 0f, -12f).RF(-45f, 0f, 0f), top, top.Copy(0.3f), K(0.7f) };
+        }
+
+        // THROW = fishing cast: one hand pulls the "rod" back behind the head, then flicks it out forward.
+        private static DragonClipKey[] FishingCast()
+        {
+            DragonClipKey load = K(-0.55f).Sp(-4f, -8f, 0f).Ch(-6f, -6f, 0f).Hd(0f, 6f, 0f).RA(-150f, 0f, -12f).RF(-115f, 0f, 0f).Rot(-3f, 0f, 0f).LL(0.1f, 0.03f, 0.1f, 0f);
+            DragonClipKey cock = K(-0.12f).Sp(-6f, -10f, 0f).Ch(-8f, -10f, 0f).Hd(0f, 8f, 0f).RA(-160f, 0f, -10f).RF(-125f, 0f, 0f).Rot(-5f, 0f, 0f).LL(0.12f, 0.03f, 0.12f, 0f);
+            DragonClipKey cast = K(0f).Sp(10f, 8f, 0f).Ch(8f, 6f, 0f).Hd(4f, -4f, 0f).RA(-110f, 0f, -6f).RF(-12f, 0f, 0f).RH(-15f, 0f, 0f).Rot(4f, 0f, 0f).LL(0.2f, 0.03f, 0.2f, 0f).RL(-0.08f, 0.03f, 0.1f, 0f).Linear();
+            DragonClipKey follow = K(0.15f).Sp(14f, 10f, 0f).Ch(10f, 8f, 0f).Hd(4f, -4f, 0f).RA(-85f, 0f, -4f).RF(-6f, 0f, 0f).RH(-25f, 0f, 0f).Rot(5f, 0f, 0f).LL(0.22f, 0.03f, 0.22f, 0f).RL(-0.08f, 0.03f, 0.1f, 0f);
+            return new DragonClipKey[] { K(-1f), load, cock, cast, follow, follow.Copy(0.35f), K(0.75f) };
+        }
+
+        private static void BuildPolishClips(Dictionary<string, DragonClipKey[]> c)
+        {
+            // 1. Sky summons (Cleric relics / strikes / storms, Glacial; Meteor / Cataclysm charged).
+            c["cleric_rs"] = SkySummon(false, false);
+            c["cleric_rs_asc"] = SkySummon(false, false);
+            c["cleric_goddess"] = SkySummon(false, false);
+            c["cleric_relic"] = SkySummon(false, false);
+            c["cleric_holy_relic"] = SkySummon(false, false);
+            c["cleric_judgement"] = SkySummon(false, false);
+            c["cleric_tempest"] = SkySummon(false, false);
+            c["sorc_glacial"] = SkySummon(false, false);
+            c["sorc_glacial_asc"] = SkySummon(false, false);
+            c["wiz_meteor"] = SkySummon(true, false);
+            c["wiz_cataclysm"] = SkySummon(true, true);
+
+            // 2. Shield Charge on Valheim's real block pose (shield in front) + run: lean in, weapon held back,
+            // then a hard shield bash (forearm punched out, left shoulder through, lunge).
+            DragonClipKey scBrace = K(-0.5f).Sp(14f, 0f, 0f).Ch(6f, 0f, 0f).Hd(-10f, 0f, 0f).RA(20f, 0f, -10f).RF(-30f, 0f, 0f).Off(0f, -0.08f, 0f).LL(0.25f, 0.04f, 0.35f, 0f).RL(0f, 0.04f, 0.3f, 0f);
+            DragonClipKey scDrive = K(0f).Sp(18f, -6f, 0f).Ch(8f, -6f, 0f).Hd(-18f, 0f, 0f).RA(30f, 0f, -12f).RF(-25f, 0f, 0f).Rot(12f, 0f, 0f);
+            DragonClipKey scBash = K(0.07f).Sp(22f, -24f, 0f).Ch(12f, -16f, 0f).Hd(-16f, 10f, 0f).LA(-15f, 0f, 0f).LF(40f, 0f, 0f).RA(35f, 0f, -14f).RF(-25f, 0f, 0f).Rot(16f, 0f, 0f).Off(0f, -0.12f, 0.3f).LL(0.45f, 0.04f, 0.45f, 0f).RL(-0.3f, 0.04f, 0.2f, 0f).Linear();
+            DragonClipKey scHold = scBash.Copy(0.22f);
+            scHold.Lin = false;
+            DragonClipKey scRec = K(0.5f).Sp(6f, 0f, 0f).Off(0f, -0.04f, 0f).LL(0.1f, 0.03f, 0.12f, 0f).RL(0f, 0.03f, 0.1f, 0f);
+            c["cleric_charge"] = new DragonClipKey[] { K(-1f), scBrace, scDrive, scBash, scHold, scRec, K(0.8f) };
+
+            // 3. Angel Comet (hold until near the ground): crouch, jump with the arm thrown up, wings on the rise,
+            // tip over into a fully INVERTED head-first dive (legs straight up). Near the ground (ClipImpact) the
+            // body flips forward upright into the superhero landing, already set when the damage lands.
+            DragonClipKey inv = K(0f).Sp(4f, 0f, 0f).Ch(2f, 0f, 0f).Hd(-10f, 0f, 0f).RA(-172f, 0f, -6f).RF(-4f, 0f, 0f).Rot(165f, 0f, 0f).LL(-0.05f, -0.04f, -0.25f, -0.45f).RL(-0.05f, -0.04f, -0.25f, -0.45f);
+            DragonClipKey hero = K(0.16f).Sp(34f, 0f, 0f).Ch(16f, 0f, 0f).Hd(-30f, 0f, 0f).RA(-45f, 0f, -10f).RF(-12f, 0f, 0f).RH(10f, 0f, 0f).Rot(366f, 0f, 0f).Off(0f, -0.42f, 0.05f).LL(0.75f, 0f, 0.95f, 0.15f).RL(-0.15f, 0f, 1.2f, -0.2f);
+            c["angel_comet"] = new DragonClipKey[] {
+                K(-1f),
+                K(-0.92f).Sp(18f, 0f, 0f).Ch(8f, 0f, 0f).RA(-30f, 0f, -15f).RF(-40f, 0f, 0f).Off(0f, -0.15f, 0f).LL(0.4f, 0f, 0.6f, 0f).RL(0.4f, 0f, 0.6f, 0f),
+                K(-0.75f).Sp(-10f, 0f, 0f).Ch(-10f, 0f, 0f).Hd(-20f, 0f, 0f).RA(-160f, 0f, -15f).RF(-10f, 0f, 0f).Rot(-6f, 0f, 0f).LL(-0.05f, 0f, -0.2f, -0.4f).RL(-0.05f, 0f, -0.2f, -0.4f),
+                K(-0.35f).Sp(-14f, 0f, 0f).Ch(-12f, 0f, 0f).Hd(-24f, 0f, 0f).RA(20f, 0f, -70f).RF(-10f, 0f, 0f).Rot(-10f, 0f, 0f).LL(0.3f, 0f, 0.55f, 0f).RL(0.2f, 0f, 0.65f, 0f),
+                K(-0.1f).Hd(-20f, 0f, 0f).RA(-170f, 0f, -8f).RF(-6f, 0f, 0f).Rot(70f, 0f, 0f).LL(-0.05f, -0.04f, -0.2f, -0.4f).RL(-0.05f, -0.04f, -0.2f, -0.4f),
+                inv, hero, hero.Copy(0.4f).Off(0f, -0.44f, 0.05f),
+                K(0.7f).Sp(16f, 0f, 0f).Ch(6f, 0f, 0f).Hd(-8f, 0f, 0f).RA(-15f, 0f, -15f).RF(-40f, 0f, 0f).Rot(360f, 0f, 0f).Off(0f, -0.12f, 0f).LL(0.3f, 0f, 0.35f, 0f).RL(0f, 0f, 0.3f, 0f),
+                K(1.0f).Rot(360f, 0f, 0f)
+            };
+
+            // 5. Healing / blessing spells: main-hand weapon raised like a staff.
+            c["cleric_wave"] = RaiseHeal();
+            c["cleric_ray"] = RaiseHeal();
+            c["cleric_light"] = RaiseHeal();
+            c["cleric_intervention"] = RaiseHeal();
+            c["cleric_crucible"] = RaiseHeal();
+            c["cleric_wave_ally"] = RaiseHeal();
+
+            // 6. Throws: fishing-rod cast (Judgement Hammer).
+            c["cleric_hammer"] = FishingCast();
         }
 
         // ------------------------------------------------------------------ v0.25.18 Blueprint part D
@@ -2405,7 +2600,7 @@ namespace DragonsAltarCombat
         private static DragonClipKey OffHand(DragonClipKey k, int prof, int phase)
         {
             // phase 0 = gather/load, 1 = call/open, 2 = release
-            if (prof == 0) return k.LA(-40f, 15f, 15f).LF(-78f, 0f, 0f);
+            if (prof == 0) return k;   // v0.25.19: shield arm stays on Valheim's own pose (offsets flung it out)
             if (prof == 2) return k.LA(-30f, 0f, 15f).LF(-30f, 0f, 0f);
             if (prof == 3) return k.LA(-20f, 0f, 22f).LF(-35f, 0f, 0f);
             if (phase == 0) return k.LA(-35f, 0f, 20f).LF(-60f, 0f, 0f);
@@ -2602,21 +2797,21 @@ namespace DragonsAltarCombat
         {
             float d = brutal ? 1.15f : 1f;   // brutal: deeper compression, heavier settle
             // 1 LOAD: knees compressed, hips/shoulders coiled, main elbow chambered, shield close.
-            DragonClipKey load = K(-0.93f).Sp(22f * d, -8f, 0f).Ch(10f, -6f, 0f).Hd(-14f, 0f, 0f).RA(-25f, 0f, -30f).RF(-115f, 0f, 0f).LA(-55f, 20f, 12f).LF(-85f, 0f, 0f).Off(0f, -0.22f * d, 0f).LL(0.45f * d, 0f, 0.7f * d, 0f).RL(0.45f * d, 0f, 0.7f * d, 0f);
+            DragonClipKey load = K(-0.93f).Sp(22f * d, -8f, 0f).Ch(10f, -6f, 0f).Hd(-14f, 0f, 0f).RA(-25f, 0f, -30f).RF(-115f, 0f, 0f).LA(-25f, 10f, 10f).LF(-35f, 0f, 0f).Off(0f, -0.22f * d, 0f).LL(0.45f * d, 0f, 0.7f * d, 0f).RL(0.45f * d, 0f, 0.7f * d, 0f);
             // 2 LAUNCH: legs extend through the jump, torso inclines almost parallel to the ground.
-            DragonClipKey launch = K(-0.72f).Sp(6f, 0f, 0f).Ch(2f, 0f, 0f).Hd(-40f, 0f, 0f).RA(-35f, 0f, -20f).RF(-120f, 0f, 0f).LA(-50f, 20f, 10f).LF(-90f, 0f, 0f).Rot(70f, 0f, 0f).Off(0f, 0.1f, 0f).LL(-0.1f, 0f, 0.05f, -0.3f).RL(-0.1f, 0f, 0.05f, -0.3f);
-            // 3 ROLL: one full turn around the head-to-feet axis while horizontal, knees loosely tucked.
-            DragonClipKey roll0 = K(-0.6f).Sp(6f, 0f, 0f).Ch(2f, 0f, 0f).Hd(-38f, 0f, 0f).RA(-35f, 0f, -18f).RF(-120f, 0f, 0f).LA(-50f, 22f, 10f).LF(-90f, 0f, 0f).Rot(72f, 0f, 0f).Off(0f, 0.1f, 0f).LL(0.3f, 0f, 0.55f, 0f).RL(0.2f, 0f, 0.65f, 0f).Sn(25f);
-            DragonClipKey roll1 = roll0.Copy(-0.22f).Sn(360f);
+            DragonClipKey launch = K(-0.72f).Sp(6f, 0f, 0f).Ch(2f, 0f, 0f).Hd(-40f, 0f, 0f).RA(-35f, 0f, -20f).RF(-120f, 0f, 0f).LA(-25f, 10f, 10f).LF(-40f, 0f, 0f).Rot(70f, 0f, 0f).Off(0f, 0.1f, 0f).LL(-0.1f, 0f, 0.05f, -0.3f).RL(-0.1f, 0f, 0.05f, -0.3f);
+            // 3 ROLL (clockwise, v0.25.19): one full turn around the head-to-feet axis while horizontal, knees loosely tucked.
+            DragonClipKey roll0 = K(-0.6f).Sp(6f, 0f, 0f).Ch(2f, 0f, 0f).Hd(-38f, 0f, 0f).RA(-35f, 0f, -18f).RF(-120f, 0f, 0f).LA(-25f, 10f, 10f).LF(-40f, 0f, 0f).Rot(72f, 0f, 0f).Off(0f, 0.1f, 0f).LL(0.3f, 0f, 0.55f, 0f).RL(0.2f, 0f, 0.65f, 0f).Sn(-25f);
+            DragonClipKey roll1 = roll0.Copy(-0.22f).Sn(-360f);
             // 4 UNWIND: turn complete, legs unfold (opposite foot forward), fist cocked above - not touching.
-            DragonClipKey poised = K(0f).Sp(14f, 0f, 0f).Ch(8f, 0f, 0f).Hd(-6f, 0f, 0f).RA(-70f, 0f, -18f).RF(-55f, 0f, 0f).LA(-45f, 22f, 14f).LF(-85f, 0f, 0f).Rot(28f, 0f, 0f).LL(0.6f, 0f, 0.45f, 0.1f).RL(-0.3f, 0f, 0.6f, 0f).Sn(360f);
+            DragonClipKey poised = K(0f).Sp(14f, 0f, 0f).Ch(8f, 0f, 0f).Hd(-6f, 0f, 0f).RA(-70f, 0f, -18f).RF(-55f, 0f, 0f).LA(-25f, 15f, 12f).LF(-40f, 0f, 0f).Rot(28f, 0f, 0f).LL(0.6f, 0f, 0.45f, 0.1f).RL(-0.3f, 0f, 0.6f, 0f).Sn(-360f);
             // 5 IMPACT: main fist on the ground (elbow slightly bent), left foot planted forward, right knee
             // folded behind near the ground, torso over the fist, head up toward the action.
-            DragonClipKey impact = K(0.08f).Sp(34f, 0f, 0f).Ch(16f, 0f, 0f).Hd(-30f, 0f, 0f).RA(-45f, 0f, -10f).RF(-12f, 0f, 0f).RH(10f, 0f, 0f).LA(-40f, 25f, 15f).LF(-80f, 0f, 0f).Rot(6f, 0f, 0f).Off(0f, -0.42f * d, 0.05f).LL(0.75f, 0f, 0.95f, 0.15f).RL(-0.15f, 0f, 1.2f, -0.2f).Sn(360f);
+            DragonClipKey impact = K(0.08f).Sp(34f, 0f, 0f).Ch(16f, 0f, 0f).Hd(-30f, 0f, 0f).RA(-45f, 0f, -10f).RF(-12f, 0f, 0f).RH(10f, 0f, 0f).LA(-20f, 25f, 15f).LF(-30f, 0f, 0f).Rot(6f, 0f, 0f).Off(0f, -0.42f * d, 0.05f).LL(0.75f, 0f, 0.95f, 0.15f).RL(-0.15f, 0f, 1.2f, -0.2f).Sn(-360f);
             DragonClipKey settle = impact.Copy(brutal ? 0.3f : 0.2f).Off(0f, -0.44f * d, 0.05f);
             // 6 RECOVER: push through the forward foot, fist lifts, back to the combat pose.
-            DragonClipKey rec = K(brutal ? 0.58f : 0.45f).Sp(16f, 0f, 0f).Ch(6f, 0f, 0f).Hd(-8f, 0f, 0f).RA(-15f, 0f, -15f).RF(-40f, 0f, 0f).LA(-45f, 20f, 15f).LF(-80f, 0f, 0f).Off(0f, -0.12f, 0f).LL(0.3f, 0f, 0.35f, 0f).RL(0f, 0f, 0.3f, 0f).Sn(360f);
-            return new DragonClipKey[] { K(-1f), load, launch, roll0, roll1, poised, impact, settle, rec, K(brutal ? 0.9f : 0.75f).Sn(360f) };
+            DragonClipKey rec = K(brutal ? 0.58f : 0.45f).Sp(16f, 0f, 0f).Ch(6f, 0f, 0f).Hd(-8f, 0f, 0f).RA(-15f, 0f, -15f).RF(-40f, 0f, 0f).LA(-15f, 10f, 10f).LF(-25f, 0f, 0f).Off(0f, -0.12f, 0f).LL(0.3f, 0f, 0.35f, 0f).RL(0f, 0f, 0.3f, 0f).Sn(-360f);
+            return new DragonClipKey[] { K(-1f), load, launch, roll0, roll1, poised, impact, settle, rec, K(brutal ? 0.9f : 0.75f).Sn(-360f) };
         }
 
         // ------------------------------------------------------------------ v0.25.13 traits / Ascended extras
