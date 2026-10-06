@@ -1,0 +1,4 @@
+Immortal Heroes v0.25.28 - Circle Skip
+======================================
+- Circle Swing wind up: one-leg skip first (hop off the left foot, right knee driven up, land), then Valheim's atgeir spin as before.
+  Skip runs in the first ~45% of the 1.5 s wind up. Ascended second sweep unchanged.

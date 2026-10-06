@@ -1,5 +1,5 @@
 @echo off
-title Immortal Heroes v0.25.27 - Vanilla Base
+title Immortal Heroes v0.25.28 - Circle Skip
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
 echo.
 pause

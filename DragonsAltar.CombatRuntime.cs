@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.27";
+        public const string ModVersion = "0.25.28";
 
         internal static DragonCombatPlugin Instance;
 
@@ -2766,6 +2766,20 @@ namespace DragonsAltarCombat
                 k = new DragonClipKey[] { K(-1f), Ft(K(0f).Off(0f, -0.03f, 0f), 0.15f, 0.1f), Ft(K(length).Off(0f, -0.03f, 0f), 0.15f, 0.1f), K(length + 0.3f) };
             else
                 k = new DragonClipKey[] { K(-1f), Ft(K(-0.3f).Sp(3f, 0f, 0f), 0.15f, 0.08f), Ft(K(0f).Sp(6f, 0f, 0f).Off(0f, -0.03f, 0.03f), 0.22f, 0.1f), Ft(K(0.35f).Sp(4f, 0f, 0f).Off(0f, -0.02f, 0.02f), 0.2f, 0.1f), K(0.75f) };
+            if (clip == "merc_circle" && length <= 0f)
+            {
+                // v0.25.28 Circle Swing wind up: one-leg skip (hop off the left foot, right knee driven up), then the vanilla spin.
+                k = new DragonClipKey[] {
+                    K(-1f),
+                    Ft(K(-0.88f).Sp(4f, 0f, 0f).Off(0f, -0.06f, 0f), 0.12f, 0.08f),
+                    K(-0.76f).Sp(-2f, 0f, 0f).RL(0.45f, 0.05f, 0f, 0f).Lift(0.1f, 0.34f).Off(0f, 0.14f, 0.06f),
+                    K(-0.66f).Sp(1f, 0f, 0f).RL(0.5f, 0.05f, 0f, 0f).Lift(0.02f, 0.28f).Off(0f, 0.04f, 0.1f),
+                    Ft(K(-0.56f).Sp(5f, 0f, 0f).Off(0f, -0.06f, 0.1f), 0.2f, 0.1f).Lift(0f, 0f),
+                    Ft(K(-0.3f).Sp(3f, 0f, 0f).Off(0f, -0.02f, 0.1f), 0.15f, 0.08f),
+                    Ft(K(0f).Sp(6f, 0f, 0f).Off(0f, -0.03f, 0.1f), 0.22f, 0.1f),
+                    Ft(K(0.35f).Sp(4f, 0f, 0f).Off(0f, -0.02f, 0.06f), 0.2f, 0.1f),
+                    K(0.75f) };
+            }
             k[0].VA = trig;
             k[0].VL = m.Value;
             k[0].VR = length > 0f ? 1f : 0f;

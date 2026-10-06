@@ -1,5 +1,2 @@
-TEST v0.25.27 - Vanilla Base
-1. Heavy Slash, Sword Master slashes, Impact Wave, Circle Swing, Lightning Zap, Holy Wave: each should play a real Valheim attack (sword/axe/sledge/atgeir/staff) and look natural.
-2. Damage should land on the vanilla swing's hit moment. If it lands early/late, tune the @seconds number in [Runtime] VanillaAnimationMap_v02527.
-3. Open BepInEx/LogOutput.log, search "Animator triggers", send me that line (I map more skills from it).
-4. Any skill that still looks wrong: name it; delete its entry from the map to compare with the custom pose.
+TEST v0.25.28 - Circle Skip
+1. Mercenary Circle Swing: during the wind up you hop on one leg (right knee up), land, then the spin plays and hits as before.
