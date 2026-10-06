@@ -1,0 +1,4 @@
+Immortal Heroes v0.25.37 - Tooltip Fit
+======================================
+- Buff tooltips no longer clip: text never wraps, the box is sized from the measured text (name, type line,
+  every number line), with even padding.

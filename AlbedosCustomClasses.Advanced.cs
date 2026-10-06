@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.36";
+        public const string ModVersion = "0.25.37";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -12714,6 +12714,8 @@ namespace AlbedosCustomClassesAdvanced
             _ihHudTiny.fontSize = Mathf.RoundToInt(11f * s);
         }
 
+        private GUIStyle _ihTipTitle, _ihTipLine;
+
         private void IhHudShadowLabel(Rect r, string text, GUIStyle style)
         {
             Color c = style.normal.textColor;
@@ -12937,30 +12939,49 @@ namespace AlbedosCustomClassesAdvanced
                 {
                     string detail = string.IsNullOrEmpty(hoverSe.Detail) ? "" : hoverSe.Detail.Replace("{stacks}", hoverSe.Stacks.ToString());
                     string[] lines = detail.Length > 0 ? detail.Split('\n') : new string[0];
-                    float lineH = 17f * s, tipW = 150f * s;
-                    tipW = Mathf.Max(tipW, _ihHudText.CalcSize(new GUIContent(hoverSe.m_name)).x + 16f * s);
-                    for (int li = 0; li < lines.Length; li++) tipW = Mathf.Max(tipW, _ihHudTiny.CalcSize(new GUIContent(lines[li])).x + 16f * s);
-                    float tipH = 8f * s + lineH * (1 + lines.Length) + 4f * s;
+                    // v0.25.37: own no-wrap styles, size measured from the real text (lines were wrapping and
+                    // spilling below the box).
+                    if (_ihTipTitle == null)
+                    {
+                        _ihTipTitle = new GUIStyle(_ihHudTitle);
+                        _ihTipLine = new GUIStyle(_ihHudText);
+                        _ihTipTitle.wordWrap = false; _ihTipLine.wordWrap = false;
+                        _ihTipTitle.clipping = TextClipping.Overflow; _ihTipLine.clipping = TextClipping.Overflow;
+                        _ihTipTitle.alignment = TextAnchor.UpperLeft; _ihTipLine.alignment = TextAnchor.UpperLeft;
+                        _ihTipTitle.padding = new RectOffset(0, 0, 0, 0); _ihTipLine.padding = new RectOffset(0, 0, 0, 0);
+                        _ihTipTitle.margin = new RectOffset(0, 0, 0, 0); _ihTipLine.margin = new RectOffset(0, 0, 0, 0);
+                    }
+                    _ihTipTitle.fontSize = Mathf.RoundToInt(13f * s);
+                    _ihTipLine.fontSize = Mathf.RoundToInt(12f * s);
+                    float tipPad = 9f * s;
+                    Vector2 titleSize = _ihTipTitle.CalcSize(new GUIContent(hoverSe.m_name));
+                    float tipW = titleSize.x;
+                    float[] lineHs = new float[lines.Length];
+                    float bodyH = 0f;
+                    for (int li = 0; li < lines.Length; li++)
+                    {
+                        Vector2 ls = _ihTipLine.CalcSize(new GUIContent(lines[li]));
+                        tipW = Mathf.Max(tipW, ls.x);
+                        lineHs[li] = ls.y + 2f * s;
+                        bodyH += lineHs[li];
+                    }
+                    tipW += tipPad * 2f + 4f * s;
+                    float tipH = tipPad + titleSize.y + 4f * s + bodyH + tipPad;
                     Rect tip = new Rect(Mathf.Clamp(e.mousePosition.x - tipW * 0.5f, 4f, Screen.width - tipW - 4f), Mathf.Max(4f, by - tipH - 8f * s), tipW, tipH);
                     Color gold = new Color(0.78f, 0.62f, 0.32f, 1f);
                     IhHudFill(tip, new Color(0.03f, 0.04f, 0.07f, 0.94f));
                     IhHudFill(new Rect(tip.x, tip.y, tip.width, 1f), gold);
                     IhHudFill(new Rect(tip.x, tip.yMax - 1f, tip.width, 1f), gold);
                     IhHudFill(new Rect(tip.x, tip.y, 1f, tip.height), gold);
-                    IhHudFill(new Rect(tip.xMax - 1f, tip.y, 1f, tip.height), gold);
-                    Color c0 = _ihHudText.normal.textColor;
-                    _ihHudText.normal.textColor = new Color(0.97f, 0.88f, 0.66f, 1f);
-                    IhHudShadowLabel(new Rect(tip.x + 8f * s, tip.y + 4f * s, tip.width - 16f * s, lineH), hoverSe.m_name, _ihHudText);
-                    _ihHudText.normal.textColor = c0;
+                    IhHudFill(new Rect(tip.x + tip.width - 1f, tip.y, 1f, tip.height), gold);
+                    _ihTipTitle.normal.textColor = new Color(0.97f, 0.88f, 0.66f, 1f);
+                    IhHudShadowLabel(new Rect(tip.x + tipPad, tip.y + tipPad, tip.width - tipPad * 2f, titleSize.y), hoverSe.m_name, _ihTipTitle);
+                    float ly = tip.y + tipPad + titleSize.y + 4f * s;
                     for (int li = 0; li < lines.Length; li++)
                     {
-                        Color c1 = _ihHudTiny.normal.textColor;
-                        if (li == 0) _ihHudTiny.normal.textColor = new Color(1f, 0.85f, 0.35f, 1f);
-                        TextAnchor a1 = _ihHudTiny.alignment;
-                        _ihHudTiny.alignment = TextAnchor.MiddleLeft;
-                        IhHudShadowLabel(new Rect(tip.x + 8f * s, tip.y + 4f * s + lineH * (li + 1), tip.width - 16f * s, lineH), lines[li], _ihHudTiny);
-                        _ihHudTiny.alignment = a1;
-                        _ihHudTiny.normal.textColor = c1;
+                        _ihTipLine.normal.textColor = li == 0 ? new Color(1f, 0.85f, 0.35f, 1f) : new Color(0.93f, 0.91f, 0.86f, 1f);
+                        IhHudShadowLabel(new Rect(tip.x + tipPad, ly, tip.width - tipPad * 2f, lineHs[li]), lines[li], _ihTipLine);
+                        ly += lineHs[li];
                     }
                 }
             }
