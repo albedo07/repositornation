@@ -40,7 +40,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Dragon's Altar - Ranger";
-        public const string ModVersion = "0.25.31";
+        public const string ModVersion = "0.25.32";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -973,7 +973,7 @@ namespace DragonsAltarRanger
             RaycastHit ceiling;
             if (Physics.Raycast(start + Vector3.up, Vector3.up, out ceiling, DragonCombat.M(_sbHeight.Value), SolidMask(), QueryTriggerInteraction.Ignore))
                 top = start + Vector3.up * Mathf.Max(0f, ceiling.distance - 1.5f);
-            DragonCombat.PlayClip(player, "rg_backflip", 0.05f);
+            DragonCombat.PlayClip(player, "rg_shot", 0.1f);   // v0.25.32 normal bow shot on the way up
             float t = 0f;
             while (t < 0.5f && player != null)
             {
@@ -1097,7 +1097,7 @@ namespace DragonsAltarRanger
             Dictionary<int, float> held = new Dictionary<int, float>();
             DragonCombat.GrantHyperArmor(player, duration + 0.3f);
             DragonCombat.LockSkill(player, duration);
-            DragonCombat.PlaySpinClip(player, duration, 0.5f);   // two turns a second inside the leaf storm
+            DragonCombat.PlaySpinClip(player, duration, 0.5f, false);   // two turns a second inside the leaf storm
             GameObject storm = _enableVfx.Value ? CreateLeafStorm(player.transform.position, radius) : null;
             RangerArrowDamage d = ArrowDamage(player);
             float power = DragonCombat.GetSkillPower(player, "furious_winds");

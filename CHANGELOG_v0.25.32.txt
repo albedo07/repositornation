@@ -1,0 +1,7 @@
+Immortal Heroes v0.25.32 - Two Hand Whirlwind
+=============================================
+- Whirlwind (normal + Ascended): both hands on the main weapon at waist height, weapon level and out to the
+  right, spinning continuously (an endless atgeir spin). Off-hand item hidden while gripping.
+- Skyfall Barrage: normal bow shot on the way up (no backflip), and the hover is the normal bow draw pose
+  (upright, string hand at the cheek) - the arm no longer clips through the body.
+- Furious Winds keeps its one-handed spin (bow).

@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.31";
+        public const string ModVersion = "0.25.32";
 
         internal static DragonCombatPlugin Instance;
 
@@ -2590,12 +2590,17 @@ namespace DragonsAltarCombat
         // Continuous spin for `seconds` (one turn every `turn` s), arms out, then settle.
         public static void PlaySpinClip(Player player, float seconds, float turn)
         {
+            PlaySpinClip(player, seconds, turn, true);
+        }
+
+        public static void PlaySpinClip(Player player, float seconds, float turn, bool twoHand)
+        {
             // v0.25.24 SPAA (storyboard 09 CYCLONE): coil with the weapon across to the left, then turn clockwise
             // with the main arm straight out to the side and the weapon held level, for whole turns only.
             float q = Mathf.Max(0.12f, turn * 0.8f);   // v0.25.26: a whirlwind spins violently and continuously
             int turns = Mathf.Max(1, Mathf.CeilToInt(Mathf.Max(0.1f, seconds) / q));
             DragonClipKey[] v = VanillaClip(player, "spin", Mathf.Max(0.3f, seconds));
-            PlayClipKeys(player, v != null ? v : SbSpin(turns, q), 0.15f);
+            PlayClipKeys(player, v != null ? v : SbSpin(turns, q, twoHand), 0.15f);
         }
 
 
@@ -3036,17 +3041,30 @@ namespace DragonsAltarCombat
             return Ft(K(t).Sp(5f, 0f, 0f).Hand(1f, -0.05f, 0.35f, 1f).Wp(1f, 0f, 0.3f).Off(0f, -0.04f, 0f), 0.15f, 0.1f);
         }
 
+        // v0.25.32 user: Whirlwind = atgeir spin made continuous. Both hands on the main weapon at waist height,
+        // weapon level and sticking out to the right; the left hand grips the shaft nearer the body.
+        private static DragonClipKey SbSpinPoseTwo(float t)
+        {
+            return Ft(K(t).Sp(8f, 0f, 0f).Ch(2f, 0f, 0f).Hand(0.55f, -0.2f, 0.6f, 0.85f).Wp(1f, -0.05f, 0.25f).Two(-0.3f).Off(0f, -0.06f, 0f), 0.2f, 0.12f);
+        }
+
         private static DragonClipKey[] SbSpin(int turns, float turn)
+        {
+            return SbSpin(turns, turn, false);
+        }
+
+        private static DragonClipKey[] SbSpin(int turns, float turn, bool two)
         {
             List<DragonClipKey> k = new List<DragonClipKey>();
             k.Add(K(-1f));
-            k.Add(Ft(K(-0.5f).Sp(6f, 24f, 0f).Ch(3f, 12f, 0f).Hd(0f, -14f, 0f).Hand(-0.6f, 0f, 0.6f, 0.7f).Wp(-1f, 0f, 0f).Off(0f, -0.05f, 0f), 0.2f, 0.1f));
-            k.Add(SbSpinPose(0f));
+            if (two) k.Add(Ft(K(-0.5f).Sp(8f, 24f, 0f).Ch(3f, 12f, 0f).Hd(0f, -14f, 0f).Hand(-0.45f, -0.15f, 0.6f, 0.75f).Wp(-1f, -0.05f, 0.2f).Two(-0.3f).Off(0f, -0.06f, 0f), 0.2f, 0.12f));
+            else k.Add(Ft(K(-0.5f).Sp(6f, 24f, 0f).Ch(3f, 12f, 0f).Hd(0f, -14f, 0f).Hand(-0.6f, 0f, 0.6f, 0.7f).Wp(-1f, 0f, 0f).Off(0f, -0.05f, 0f), 0.2f, 0.1f));
+            k.Add(two ? SbSpinPoseTwo(0f) : SbSpinPose(0f));
             float t = 0f, yaw = 0f, q = turn * 0.25f;
             for (int i = 0; i < turns * 4; i++)
             {
                 t += q; yaw += 90f;
-                k.Add(SbSpinPose(t).Rot(0f, yaw, 0f).Linear());
+                k.Add((two ? SbSpinPoseTwo(t) : SbSpinPose(t)).Rot(0f, yaw, 0f).Linear());
             }
             k.Add(K(t + 0.35f).Rot(0f, yaw, 0f));
             return k.ToArray();
@@ -3229,7 +3247,8 @@ namespace DragonsAltarCombat
             c["rg_split_b"] = new DragonClipKey[] { K(-1f), Ft(RgDraw(-0.5f).Sp(4f, -4f, 0f).Off(0f, -0.06f, 0f), 0.3f, 0.15f), Ft(RgLoose(0f).Sp(4f, -36f, 0f).Off(0f, -0.06f, 0f), 0.3f, 0.15f), Ft(RgDraw(0.3f).Sp(4f, -20f, 0f).Off(0f, -0.06f, 0f), 0.3f, 0.15f), K(0.6f) };
             c["rg_sky"] = new DragonClipKey[] { K(-1f), RgSky(-0.5f, false), RgSky(-0.05f, false), RgSky(0f, true), RgSky(0.2f, true), K(0.6f) };
             c["rg_starfall"] = new DragonClipKey[] { K(-1f), RgSky(-0.8f, false), RgSky(-0.05f, false), RgSky(0f, true), K(0.45f) };
-            DragonClipKey hov = K(0f).Hd(20f, 20f, 0f).Sp(2f, -18f, 0f).LHand(0f, -0.65f, 0.75f, 1f).Hand(-0.45f, -0.25f, 0.3f, 0.4f).Rot(30f, 0f, 0f);
+            // v0.25.32 user: Skyfall hover = a normal bow shot pose (upright, string hand at the cheek, no arm through the body).
+            DragonClipKey hov = RgDraw(0f).Hd(14f, 20f, 0f);
             c["rg_hover"] = new DragonClipKey[] { K(-1f), hov, K(0.3f) };
             c["rg_spin"] = Join(K(-1f), RgDraw(-0.3f), Spin360(RgDraw(0f), 0f, 0.4f, 0.0f), RgLoose(0.45f), K(0.75f));
             // v0.25.31 user: Cyclone Arrow = a normal bow shot (no body spin).

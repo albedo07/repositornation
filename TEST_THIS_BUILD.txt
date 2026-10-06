@@ -1,2 +1,3 @@
-TEST v0.25.31 - Cyclone Shot
-1. Acrobat Cyclone Arrow: plain bow shot, no body spin; the cyclone flies as before.
+TEST v0.25.32 - Two Hand Whirlwind
+1. Mercenary Whirlwind: two-handed grip on the main weapon, level at the waist, continuous spin.
+2. Acrobat Skyfall Barrage: bow shot on the rise, normal draw pose while hovering, no arm inside the body.
