@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.43";
+        public const string ModVersion = "0.25.44";
 
         internal static DragonCombatPlugin Instance;
 
@@ -881,7 +881,7 @@ namespace DragonsAltarCombat
         internal ConfigEntry<bool> ComboChainsEnabled;
         internal ConfigEntry<float> WhirlwindLoopStart, WhirlwindLoopEnd;
         internal ConfigEntry<int> ComboChainLength;
-        internal ConfigEntry<float> ComboFinisherLockout;
+        internal ConfigEntry<float> ComboFinisherLockout, ComboContinueWindow;
         private static FieldInfo _atkLevels, _atkLevel, _atkAnim, _atkChar, _atkWeapon, _atkAngle, _atkType;
         private static MethodInfo _atkMelee;
         private static bool _comboInStart, _comboDual;
@@ -910,6 +910,7 @@ namespace DragonsAltarCombat
             ComboChainsEnabled = Config.Bind("Combat", "FiveHitCombos_v02538", true, "Normal melee attacks chain into a 5-hit combo built from the weapon's own vanilla swings.");
             ComboChainLength = Config.Bind("Combat", "ComboLength_v02538", 5, "Hits in the normal attack chain.");
             ComboFinisherLockout = Config.Bind("Combat", "ComboFinisherLockout_v02538", 1f, "Seconds after the last hit of the chain before a new normal attack can start.");
+            ComboContinueWindow = Config.Bind("Combat", "ComboContinueWindow_v02544", 0.4f, "Seconds after a swing ends in which the next normal attack continues the chain (1-2-1-2-3) instead of starting over.");
             WhirlwindLoopStart = Config.Bind("Runtime", "WhirlwindLoopStart_v02542", 0.3f, "Whirlwind: where the looped spin restarts in Valheim's atgeir spin (0-1 of the animation).");
             WhirlwindLoopEnd = Config.Bind("Runtime", "WhirlwindLoopEnd_v02542", 0.72f, "Whirlwind: where the looped spin jumps back (0-1 of the animation).");
             ComboFields();
@@ -964,7 +965,22 @@ namespace DragonsAltarCombat
             return l != null && r != null && l != r && DragonCombat.IsOneHandedWeapon(l) && DragonCombat.IsOneHandedWeapon(r);
         }
 
-        private static void ComboStartPrefix(Attack __instance)
+        // v0.25.44 (user: "1st > 2nd > 1st > 2nd > 3rd"): our own chain counter picks the swing of every hit
+        // (0,1,0,1,2) and forces it like GooCombatOverhaul does (level preset, previousAttack = null,
+        // timeSinceLastAttack = 0), the weapon keeps its native swings (4-swing weapons are capped at 3 so the
+        // 3rd swing stays the finisher with Valheim's last-hit bonus). Hit 3 (swing 1 after swing 2) cross-fades
+        // into the learned swing-1 state because Valheim's animator only chains forward.
+        private static int _comboHit = -1, _comboSwing, _comboPrevSwing = -1, _comboCount;
+        private static FieldInfo _atkNext;
+
+        private static int ComboSwingFor(int hit, int count, int length)
+        {
+            if (count <= 1) return 0;
+            if (hit >= length - 1) return count - 1;
+            return count > 2 ? hit % 2 : 0;
+        }
+
+        private static void ComboStartPrefix(Attack __instance, ref Attack previousAttack, ref float timeSinceLastAttack)
         {
             _comboInStart = false;
             try
@@ -974,8 +990,21 @@ namespace DragonsAltarCombat
                 if (!IsLocalMeleeAttack(__instance, out p)) return;
                 int levels = (int)_atkLevels.GetValue(__instance);
                 if (levels < 2) return;   // only weapons that already chain (no spears / single heavy hits)
-                _atkLevels.SetValue(__instance, Mathf.Clamp(Instance.ComboChainLength.Value, 2, 9));
-                _comboBase = _atkAnim.GetValue(__instance) as string;
+                int count = Mathf.Min(levels, 3);
+                if (levels > count) _atkLevels.SetValue(__instance, count);
+                string anim = _atkAnim.GetValue(__instance) as string;
+                int length = Mathf.Clamp(Instance.ComboChainLength.Value, 2, 9);
+                string prevAnim = previousAttack == null ? null : _atkAnim.GetValue(previousAttack) as string;
+                bool cont = _comboHit >= 0 && previousAttack != null && prevAnim == anim && anim == _comboBase
+                    && timeSinceLastAttack <= Mathf.Max(0.05f, Instance.ComboContinueWindow.Value) && _comboHit < length - 1;
+                _comboPrevSwing = cont ? _comboSwing : -1;
+                _comboHit = cont ? _comboHit + 1 : 0;
+                _comboCount = count;
+                _comboSwing = ComboSwingFor(_comboHit, count, length);
+                _atkLevel.SetValue(__instance, _comboSwing);
+                previousAttack = null;
+                timeSinceLastAttack = 0f;
+                _comboBase = anim;
                 _comboDual = IsDualWielding(p);
                 _comboInStart = true;
             }
@@ -986,14 +1015,18 @@ namespace DragonsAltarCombat
         {
             bool was = _comboInStart;
             _comboInStart = false;
-            if (!was || !__result) return;
+            if (!was) return;
+            if (!__result) { _comboHit = -1; return; }
             try
             {
-                int levels = (int)_atkLevels.GetValue(__instance);
-                int level = (int)_atkLevel.GetValue(__instance);
-                if (levels >= 2 && level == levels - 1)
+                _atkLevel.SetValue(__instance, _comboSwing);
+                if (_atkNext == null) _atkNext = typeof(Attack).GetField("m_nextAttackChainLevel", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (_atkNext != null) _atkNext.SetValue(__instance, Mathf.Min(_comboSwing + 1, _comboCount - 1));
+                int length = Mathf.Clamp(Instance.ComboChainLength.Value, 2, 9);
+                if (_comboHit >= length - 1)
                 {
                     _comboFinisher = __instance;
+                    _comboHit = -1;
                     // safety net in case Stop never reports (interrupted swing)
                     _comboLockUntil = Mathf.Max(_comboLockUntil, Time.time + 1.6f + Mathf.Max(0f, Instance.ComboFinisherLockout.Value));
                 }
@@ -1016,11 +1049,8 @@ namespace DragonsAltarCombat
             return false;
         }
 
-        // Valheim fires <animation><chain level>; level 3+ does not exist on a 3-swing weapon, so every level is
-        // mapped onto the weapon's real swings: finisher = its last swing, the rest cycle the others.
-        // v0.25.42 (user: "1-2-1-2-3"): repeats of an earlier swing cannot be reached by trigger (Valheim's
-        // animator only chains 0->1->2), so the state each swing trigger enters is LEARNED the first time it
-        // plays and repeats cross-fade straight into that state. Dual wield swaps in the DualWield mod's clips.
+        // The swing trigger Valheim fires inside Attack.Start is rewritten to our swing. A backwards step
+        // (swing 1 after swing 2) cannot be reached by trigger, so it cross-fades into the learned state.
         private static bool ComboTriggerPrefix(object __instance, ref string __0)
         {
             if (!_comboInStart || string.IsNullOrEmpty(__0) || string.IsNullOrEmpty(_comboBase)) return true;
@@ -1039,16 +1069,23 @@ namespace DragonsAltarCombat
                 if (_comboDual && !dwClips && DragonCombat.AnimTriggerCount(a, "dual_knives") >= 2) baseName = "dual_knives";
                 int count = DragonCombat.AnimTriggerCount(a, baseName);
                 if (count <= 0) return true;
-                int levels = Mathf.Clamp(Instance.ComboChainLength.Value, 2, 9);
-                int index = level >= levels - 1 ? count - 1 : (count > 1 ? level % (count - 1) : 0);
+                int index = Mathf.Clamp(_comboSwing, 0, count - 1);
+                if (_comboHit >= Mathf.Clamp(Instance.ComboChainLength.Value, 2, 9) - 1) index = count - 1;
                 string target = baseName + index.ToString();
-                if (index != level || baseName != _comboBase)
+                if (a != null)
                 {
-                    int hash, layer;
-                    if (a != null && DragonCombat.LearnedState(a, target, out hash, out layer))
+                    for (int i = 0; i < count; i++) a.ResetTrigger(baseName + i.ToString());
+                    if (_comboPrevSwing >= 0 && index <= _comboPrevSwing)
                     {
-                        a.CrossFadeInFixedTime(hash, 0.08f, layer, 0f);
-                        return false;
+                        int hash, layer;
+                        if (DragonCombat.LearnedState(a, target, out hash, out layer))
+                        {
+                            a.CrossFadeInFixedTime(hash, 0.1f, layer, 0f);
+                            return false;
+                        }
+                        int sh = Animator.StringToHash(target);
+                        for (int li = 0; li < a.layerCount; li++)
+                            if (a.HasState(li, sh)) { a.CrossFadeInFixedTime(sh, 0.1f, li, 0f); return false; }
                     }
                 }
                 __0 = target;
@@ -2869,9 +2906,16 @@ namespace DragonsAltarCombat
 
         public static void PlaySpinClip(Player player, float seconds, float turn, bool twoHand)
         {
-            if (twoHand && DragonCombatPlugin.Instance != null &&
-                DragonVanillaLoop.Play(player, "atgeir_secondary", Mathf.Max(0.3f, seconds), DragonCombatPlugin.Instance.WhirlwindLoopStart.Value, DragonCombatPlugin.Instance.WhirlwindLoopEnd.Value))
-                return;   // v0.25.42 continuous Circle Swing spin
+            // v0.25.44 (user): our own continuous spin, no vanilla loop. Modelled on Valheim's heavy atgeir sweep
+            // (weapon two-handed, level at waist height, arms long, knees bent, chest over the hips) and on the
+            // DualWield mod's spins: the hips lead each turn and the blade trails flat around the body.
+            if (twoHand)
+            {
+                float tq = Mathf.Max(0.18f, turn);
+                int tt = Mathf.Max(1, Mathf.CeilToInt(Mathf.Max(0.1f, seconds) / tq));
+                PlayClipKeys(player, SbSpin(tt, tq, true), 0.12f);
+                return;
+            }
             // v0.25.24 SPAA (storyboard 09 CYCLONE): coil with the weapon across to the left, then turn clockwise
             // with the main arm straight out to the side and the weapon held level, for whole turns only.
             float q = Mathf.Max(0.12f, turn * 0.8f);   // v0.25.26: a whirlwind spins violently and continuously
@@ -3111,8 +3155,15 @@ namespace DragonsAltarCombat
                 if (l.A == null || Time.time - l.At > 0.6f) { PendingLearns.RemoveAt(k); continue; }
                 try
                 {
+                    // v0.25.44: wait until the animator consumed the trigger, then take the layer that is
+                    // transitioning into a new state (the attack layer), not one that merely changed by movement.
+                    if (l.A.GetBool(l.Name)) continue;
+                    int pick = -1;
+                    for (int i = 0; i < l.Pre.Length && i < l.A.layerCount; i++)
+                        if (l.A.IsInTransition(i) && l.A.GetNextAnimatorStateInfo(i).fullPathHash != l.Pre[i]) { pick = i; break; }
                     for (int i = 0; i < l.Pre.Length && i < l.A.layerCount; i++)
                     {
+                        if (pick >= 0 && i != pick) continue;
                         AnimatorStateInfo st = l.A.IsInTransition(i) ? l.A.GetNextAnimatorStateInfo(i) : l.A.GetCurrentAnimatorStateInfo(i);
                         if (st.fullPathHash == l.Pre[i]) continue;
                         LearnedStates[l.A.GetInstanceID() + ":" + l.Name] = new KeyValuePair<int, int>(i, st.fullPathHash);
@@ -3433,7 +3484,9 @@ namespace DragonsAltarCombat
         // weapon level and sticking out to the right; the left hand grips the shaft nearer the body.
         private static DragonClipKey SbSpinPoseTwo(float t)
         {
-            return Ft(K(t).Sp(8f, 0f, 0f).Ch(2f, 0f, 0f).Hand(0.55f, -0.2f, 0.6f, 0.85f).Wp(1f, -0.05f, 0.25f).Two(-0.3f).Off(0f, -0.06f, 0f), 0.2f, 0.12f);
+            // v0.25.44 heavy atgeir sweep held through the turn: forward lean, low hips, both hands out at waist
+            // height on the right, blade level and long, head turned into the spin.
+            return Ft(K(t).Sp(14f, 8f, 0f).Ch(4f, 4f, 0f).Hd(-8f, -12f, 0f).Hand(0.75f, -0.32f, 0.5f, 1f).Wp(1f, -0.06f, 0.05f).Two(-0.35f).Off(0f, -0.14f, 0f), 0.28f, 0.16f);
         }
 
         private static DragonClipKey[] SbSpin(int turns, float turn)
@@ -3445,14 +3498,14 @@ namespace DragonsAltarCombat
         {
             List<DragonClipKey> k = new List<DragonClipKey>();
             k.Add(K(-1f));
-            if (two) k.Add(Ft(K(-0.5f).Sp(8f, 24f, 0f).Ch(3f, 12f, 0f).Hd(0f, -14f, 0f).Hand(-0.45f, -0.15f, 0.6f, 0.75f).Wp(-1f, -0.05f, 0.2f).Two(-0.3f).Off(0f, -0.06f, 0f), 0.2f, 0.12f));
+            if (two) k.Add(Ft(K(-0.5f).Sp(12f, 30f, 0f).Ch(4f, 14f, 0f).Hd(0f, -16f, 0f).Hand(-0.55f, -0.3f, 0.45f, 0.85f).Wp(-1f, -0.08f, -0.2f).Two(-0.3f).Off(0f, -0.12f, 0f), 0.28f, 0.16f));   // coil: blade low across the left hip
             else k.Add(Ft(K(-0.5f).Sp(6f, 24f, 0f).Ch(3f, 12f, 0f).Hd(0f, -14f, 0f).Hand(-0.6f, 0f, 0.6f, 0.7f).Wp(-1f, 0f, 0f).Off(0f, -0.05f, 0f), 0.2f, 0.1f));
             k.Add(two ? SbSpinPoseTwo(0f) : SbSpinPose(0f));
             float t = 0f, yaw = 0f, q = turn * 0.25f;
             for (int i = 0; i < turns * 4; i++)
             {
                 t += q; yaw += 90f;
-                k.Add((two ? SbSpinPoseTwo(t) : SbSpinPose(t)).Rot(0f, yaw, 0f).Linear());
+                k.Add((two ? SbSpinPoseTwo(t).Rot(5f, yaw, 0f) : SbSpinPose(t).Rot(0f, yaw, 0f)).Linear());
             }
             k.Add(K(t + 0.35f).Rot(0f, yaw, 0f));
             return k.ToArray();

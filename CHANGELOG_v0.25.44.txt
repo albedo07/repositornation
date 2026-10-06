@@ -1,0 +1,12 @@
+Immortal Heroes v0.25.44 - Chain Fix
+
+- Normal melee chain rebuilt: our own hit counter forces every swing (like GooCombatOverhaul does):
+  1st > 2nd > 1st > 2nd > 3rd for every melee weapon (dual wield too). The 3rd swing is the finisher
+  (Valheim's last-hit bonus), then 1 s lockout. Next attack within 0.4 s of a swing continues the chain
+  ([Combat] ComboContinueWindow_v02544). The backwards step (2nd -> 1st) cross-fades into the 1st swing state.
+- Whirlwind (normal + Ascended): own continuous two-handed spin modelled on the heavy atgeir sweep
+  (blade level at waist height, both hands, low hips, forward lean); the vanilla loop is gone.
+- Ascended Whirlwind tornado: drags EVERY archetype (Small, Big, Boss) in, 8 m radius, 5 m/s
+  (position-driven, stops just inside the blades). Keys *_v02544.
+- Frenzied Charge: the sword heavy attack starts the moment the skill is clicked; its speed is scaled
+  so the strike lands exactly when the dash begins.

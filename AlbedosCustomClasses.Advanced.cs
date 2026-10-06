@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.43";
+        public const string ModVersion = "0.25.44";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -2328,12 +2328,14 @@ namespace AlbedosCustomClassesAdvanced
         }
 
         // Plays Valheim's sword heavy attack so its strike pose is reached as the dash begins.
+        // v0.25.44 (user: the animation starts the moment the skill is clicked): fired at once, its speed is
+        // scaled so the strike frame (~0.45 s natural) lands exactly when the wind up ends.
         private IEnumerator FrenzyPoseRoutine(Player player, float windup)
         {
-            float lead = 0.45f;
-            if (windup > lead) yield return new WaitForSeconds(windup - lead);
+            const float lead = 0.45f;
             if (player == null || player.IsDead()) yield break;
             DragonCombat.PlayVanillaTrigger(player, "sword_secondary");
+            if (windup > 0.02f) DragonCombat.SetSkillAnimSpeed(player, lead / windup, windup);
         }
 
         // ------------------------------------------------------------------ Eclipse
@@ -2746,10 +2748,11 @@ namespace AlbedosCustomClassesAdvanced
 
             const string wa = "Mercenary Whirlwind Ascended";
             _whirlAscDuration = Config.Bind(wa, "Duration", 8f, "Maximum spin time.");
-            _whirlAscPullRadius = Config.Bind(wa, "TornadoPullRadius", 4f, "Tornado: every enemy within this radius is pulled in (the blades still hit at Whirlwind Radius).");
-            _whirlAscPull = Config.Bind(wa, "TornadoPullStrength", 6f, "Pull impulse per 0.5s on Small enemies.");
-            _whirlAscPullBig = Config.Bind(wa, "TornadoBigPullPercent", 40f, "Big enemies are pulled at this strength.");
-            _whirlAscPullBoss = Config.Bind(wa, "TornadoBossPullPercent", 20f, "Bosses are pulled at this strength.");
+            // v0.25.44 (user): stronger suck that drags every archetype (Small, Big, Boss) into the blades.
+            _whirlAscPullRadius = Config.Bind(wa, "TornadoPullRadius_v02544", 8f, "Tornado: every enemy within this radius is dragged in (the blades still hit at Whirlwind Radius).");
+            _whirlAscPull = Config.Bind(wa, "TornadoPullSpeed_v02544", 5f, "Drag speed toward the Mercenary in m/s (Small enemies).");
+            _whirlAscPullBig = Config.Bind(wa, "TornadoBigPullPercent_v02544", 100f, "Big enemies are dragged at this % of the speed.");
+            _whirlAscPullBoss = Config.Bind(wa, "TornadoBossPullPercent_v02544", 100f, "Bosses are dragged at this % of the speed.");
             _whirlAscTickPercent = Config.Bind(wa, "TickPercent", 7.5f, "Each 0.5s hit (% of the whole normal Whirlwind).");
             _whirlAscSweepPercent = Config.Bind(wa, "FinalSweepPercent", 60f, "Final sweep (% of the whole normal Whirlwind) x spin time / max time. Recast to end early.");
 
@@ -3093,17 +3096,15 @@ namespace AlbedosCustomClassesAdvanced
                 if (player == null || player.IsDead()) { _whirlActive = false; yield break; }
                 if (_whirlStopRequested) break;
                 DragonCombat.GrantHyperArmor(player, interval + 0.1f);
-                // v0.23.3 Tornado: pulls every archetype within 4m (weaker on Big / Bosses).
+                // v0.25.44 Tornado: every archetype within the pull radius is dragged toward the Mercenary
+                // (position-driven, so heavy creatures cannot out-walk it), stopping just inside the blades.
                 float pullRadius = Mathf.Max(0.5f, DragonCombat.M(_whirlAscPullRadius.Value));
                 List<Character> pulled = GetSphereTargets(player, player.transform.position, pullRadius);
                 for (int i = 0; i < pulled.Count; i++)
                 {
                     Character enemy = pulled[i];
-                    float strength = _whirlAscPull.Value * (enemy.IsBoss() ? _whirlAscPullBoss.Value / 100f : DragonCombat.IsSmallEnemy(enemy) ? 1f : _whirlAscPullBig.Value / 100f);
-                    Rigidbody body = enemy.GetComponent<Rigidbody>();
-                    Vector3 toward = player.transform.position - enemy.transform.position;
-                    toward.y = 0f;
-                    if (body != null && toward.sqrMagnitude > 0.3f) body.AddForce(toward.normalized * strength, ForceMode.VelocityChange);
+                    float speed = DragonCombat.M(_whirlAscPull.Value) * (enemy.IsBoss() ? _whirlAscPullBoss.Value / 100f : DragonCombat.IsSmallEnemy(enemy) ? 1f : _whirlAscPullBig.Value / 100f);
+                    if (speed > 0.01f) StartCoroutine(TornadoDrag(player, enemy, interval, speed, Mathf.Max(0.8f, DragonCombat.M(_whirlwindRadius.Value) * 0.5f)));
                 }
                 if (_enableVfx.Value)
                     for (int ring = 0; ring < 5; ring++)
@@ -3133,6 +3134,24 @@ namespace AlbedosCustomClassesAdvanced
                 DealSnapshotDamage(player, swept[i], weapon, sweep, 30f);
             if (_enableVfx.Value)
                 StartCoroutine(AnimateRing(player.transform.position + Vector3.up * 0.9f, 0.5f, Mathf.Max(0.5f, DragonCombat.M(_whirlwindRadius.Value)) + 1.5f, 0.4f, new Color(1f, 0.80f, 0.35f, 0.95f), 0.18f));
+        }
+
+        private IEnumerator TornadoDrag(Player player, Character enemy, float seconds, float speed, float stopDistance)
+        {
+            float end = Time.time + seconds;
+            while (Time.time < end)
+            {
+                yield return new WaitForFixedUpdate();
+                if (player == null || enemy == null || enemy.IsDead()) yield break;
+                Vector3 to = player.transform.position - enemy.transform.position;
+                to.y = 0f;
+                float d = to.magnitude;
+                if (d <= stopDistance) yield break;
+                Vector3 step = to / d * Mathf.Min(d - stopDistance, speed * Time.fixedDeltaTime);
+                Rigidbody rb = enemy.GetComponent<Rigidbody>();
+                if (rb != null) rb.MovePosition(rb.position + step);
+                else enemy.transform.position += step;
+            }
         }
 
         // ------------------------------------------------------------------ Battlecry (Grace)

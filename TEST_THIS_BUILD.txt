@@ -1,4 +1,5 @@
-TEST v0.25.43 - Dual Wield Clips
-1. Run INSTALL; check BepInEx/plugins/ImmortalHeroesAssets/DualWield.dll exists (NOT in plugins itself).
-2. Mercenary with two one-handed weapons: attack -> dual-wield swings (5-hit chain), off-hand hits.
-3. LogOutput.log: "DualWield animations loaded".
+TEST v0.25.44
+1. Any melee weapon, hold/spam attack: swing 1, 2, 1, 2, 3 (3 = finisher), then 1 s pause. Same with dual wield.
+2. Whirlwind: two hands on the weapon, smooth continuous spin, no vanilla loop jitter.
+3. Ascended Whirlwind: Trolls / bosses within 8 m get dragged into the blades.
+4. Frenzied Charge: animation starts on click, strike pose exactly as the dash begins.

@@ -1,7 +1,7 @@
 ﻿$ErrorActionPreference = "Stop"
 
 Write-Host ""
-Write-Host "IMMORTAL HEROES v0.25.43 - DUAL WIELD CLIPS" -ForegroundColor Cyan
+Write-Host "IMMORTAL HEROES v0.25.44 - CHAIN FIX" -ForegroundColor Cyan
 Write-Host "Protected build: all 8 DLLs compile in staging before the live profile is touched." -ForegroundColor Gray
 Write-Host ""
 
