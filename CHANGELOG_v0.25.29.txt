@@ -1,0 +1,4 @@
+Immortal Heroes v0.25.29 - Crow Hop
+===================================
+- Circle Swing wind up is now a thrower's crow hop (like skipping a stone): turn side-on, hop on the RIGHT leg
+  with the left knee up and the right arm cocked back, stride the left foot forward and plant, then uncoil into the spin.

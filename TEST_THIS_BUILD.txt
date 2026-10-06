@@ -1,2 +1,2 @@
-TEST v0.25.28 - Circle Skip
-1. Mercenary Circle Swing: during the wind up you hop on one leg (right knee up), land, then the spin plays and hits as before.
+TEST v0.25.29 - Crow Hop
+1. Mercenary Circle Swing: wind up = side-on hop on the right leg, right arm cocked back, left foot strides and plants, then the spin hits as before.
