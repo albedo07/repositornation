@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.29";
+        public const string ModVersion = "0.25.30";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1719,6 +1719,9 @@ namespace DragonsAltarCombat
         // weapon, so the universal "weapon follows the forearm" rule stays off.
         public string VA;
         public float VL, VR;
+        // v0.25.30 fraction of the wind up at which a one-shot vanilla animation starts (0 = at once); it is then
+        // sped up / slowed down so it ENDS exactly when the wind up ends.
+        public float VF;
         // v0.25.26 foot lift (metres above the planted spot): a knee can finally come up (Stomp).
         public float FLh, FRh;
         public DragonClipKey Lift(float left, float right) { FLh = left; FRh = right; return this; }
@@ -1790,6 +1793,10 @@ namespace DragonsAltarCombat
 
         private string _va;
         private float _vaAt, _vaRepeat;
+        private bool _vaTrack;
+        private int _vaLayer = -1, _vaHash;
+        private int[] _vaPre;
+        private float _vaFiredAt, _vaGuess;
         private bool _noAim;
 
         public void Begin(DragonClipKey[] keys, float windup, bool hold, Transform visual)
@@ -1797,6 +1804,9 @@ namespace DragonsAltarCombat
             _va = keys[0].VA;
             _vaRepeat = keys[0].VR;
             _vaAt = Time.time + Mathf.Max(0f, windup - keys[0].VL);
+            if (_va != null && _vaRepeat <= 0.05f) _vaAt = Time.time + Mathf.Max(0.1f, windup) * Mathf.Clamp01(keys[0].VF);
+            _vaGuess = Mathf.Max(0.2f, keys[0].VL * 1.8f);
+            _vaTrack = false;
             _noAim = keys[0].NoAim;
             if (_keys != null)
             {
@@ -1953,6 +1963,64 @@ namespace DragonsAltarCombat
             SetItems(a, b, w);
         }
 
+        // v0.25.30 user: the vanilla animation must stop when the wind up stops. Remember every layer's state,
+        // find the layer that switched after the trigger, then drive the animator speed each frame so the
+        // remaining part of that state ends exactly at the impact (closed loop: slow wind ups play slower,
+        // short ones faster, 0.3x - 6x). After the impact anything left is played out at full 6x.
+        private void StartVanillaTracking()
+        {
+            _vaTrack = false;
+            if (_animator == null) return;
+            try
+            {
+                int n = _animator.layerCount;
+                _vaPre = new int[n];
+                for (int l = 0; l < n; l++) _vaPre[l] = _animator.GetCurrentAnimatorStateInfo(l).fullPathHash;
+                _vaLayer = -1;
+                _vaFiredAt = Time.time;
+                _vaTrack = true;
+            }
+            catch (Exception) { }
+        }
+
+        private void TrackVanillaSpeed()
+        {
+            Player p = _owner as Player;
+            if (p == null || _animator == null || _vaPre == null) { _vaTrack = false; return; }
+            try
+            {
+                float end = _impactAt >= 0f ? _impactAt : _start + _windup;
+                float left = Mathf.Max(0.08f, end - Time.time);
+                float remain;
+                if (_vaLayer < 0)
+                {
+                    for (int l = 0; l < _vaPre.Length && _vaLayer < 0; l++)
+                    {
+                        AnimatorStateInfo st = _animator.IsInTransition(l) ? _animator.GetNextAnimatorStateInfo(l) : _animator.GetCurrentAnimatorStateInfo(l);
+                        if (st.fullPathHash != _vaPre[l]) { _vaLayer = l; _vaHash = st.fullPathHash; }
+                    }
+                    if (_vaLayer < 0)
+                    {
+                        if (Time.time - _vaFiredAt > 0.5f) { _vaTrack = false; return; }
+                        remain = Mathf.Max(0f, _vaGuess - (Time.time - _vaFiredAt));
+                        DragonCombat.SetSkillAnimSpeed(p, Mathf.Clamp(remain / left, 0.3f, 6f), 0.15f);
+                        return;
+                    }
+                }
+                AnimatorStateInfo cur = _animator.GetCurrentAnimatorStateInfo(_vaLayer);
+                AnimatorStateInfo info;
+                if (cur.fullPathHash == _vaHash) info = cur;
+                else if (_animator.IsInTransition(_vaLayer) && _animator.GetNextAnimatorStateInfo(_vaLayer).fullPathHash == _vaHash) info = _animator.GetNextAnimatorStateInfo(_vaLayer);
+                else { _vaTrack = false; DragonCombat.SetSkillAnimSpeed(p, 1f, 0f); return; }
+                float norm = info.normalizedTime;
+                if (norm >= 1f) { _vaTrack = false; DragonCombat.SetSkillAnimSpeed(p, 1f, 0f); return; }
+                remain = (1f - Mathf.Max(0f, norm)) * Mathf.Max(0.05f, info.length);
+                float speed = _impactAt >= 0f && Time.time > end + 0.02f ? 6f : Mathf.Clamp(remain / left, 0.3f, 6f);
+                DragonCombat.SetSkillAnimSpeed(p, speed, 0.15f);
+            }
+            catch (Exception) { _vaTrack = false; }
+        }
+
         private void LateUpdate()
         {
             if (_keys == null || _keys.Length == 0) { Destroy(this); return; }
@@ -1966,12 +2034,14 @@ namespace DragonsAltarCombat
                 return;
             }
             Sample(t);
+            if (_animator == null) _animator = GetComponentInChildren<Animator>();
             if (_va != null && Time.time >= _vaAt)
             {
+                if (_vaRepeat <= 0.05f) StartVanillaTracking();
                 DragonCombat.FireVanilla(_owner as Player, _va);
                 if (_vaRepeat > 0.05f) _vaAt += _vaRepeat; else _va = null;
             }
-            if (_animator == null) _animator = GetComponentInChildren<Animator>();
+            if (_vaTrack) TrackVanillaSpeed();
             if (_animator != null && _animator.isHuman)
             {
                 // v0.25.14: the animator does not rewrite every bone every frame (physics-rate / culled
@@ -2783,6 +2853,7 @@ namespace DragonsAltarCombat
             }
             k[0].VA = trig;
             k[0].VL = m.Value;
+            if (clip == "merc_circle" && length <= 0f) k[0].VF = 0.62f;   // after the crow hop
             k[0].VR = length > 0f ? 1f : 0f;
             k[0].NoAim = true;
             return k;
@@ -3028,9 +3099,11 @@ namespace DragonsAltarCombat
         {
             float d = brutal ? 1.15f : 1f;
             DragonClipKey load = Ft(K(-0.93f).Sp(16f * d, -10f, 0f).Ch(6f, -6f, 0f).Hd(-12f, 0f, 0f).Hand(0.45f, 0.1f, -0.45f, 0.6f).Off(0f, -0.15f * d, 0f), 0.2f, 0.1f);
-            DragonClipKey launch = K(-0.72f).Sp(4f, 0f, 0f).Hd(-35f, 0f, 0f).Hand(0.05f, 0.9f, 0.45f, 1f).Rot(70f, 0f, 0f).Off(0f, 0.08f, 0f);
-            DragonClipKey roll0 = launch.Copy(-0.62f).Rot(72f, 0f, 0f).Sn(25f);
-            DragonClipKey roll1 = launch.Copy(-0.36f).Rot(72f, 0f, 0f).Sn(360f);
+            // v0.25.30 user: no superman pose. In the air the body leans only diagonally (~38 deg), the main arm is
+            // flared a little out to the side and the weapon is carried up (not pointed ahead).
+            DragonClipKey launch = K(-0.72f).Sp(6f, 0f, 0f).Hd(-18f, 0f, 0f).Hand(0.8f, -0.1f, 0.2f, 0.85f).Wp(0.3f, 0.9f, -0.15f).Rot(38f, 0f, 0f).Off(0f, 0.08f, 0f);
+            DragonClipKey roll0 = launch.Copy(-0.62f).Rot(40f, 0f, 0f).Sn(25f);
+            DragonClipKey roll1 = launch.Copy(-0.36f).Rot(40f, 0f, 0f).Sn(360f);
             DragonClipKey poised = K(0f).Sp(12f, 0f, 0f).Ch(6f, 0f, 0f).Hd(-8f, 0f, 0f).Hand(0.1f, -0.8f, 0.45f, 0.95f).Rot(28f, 0f, 0f).Sn(360f);
             DragonClipKey impact = Ft(K(0.08f).Sp(30f, 0f, 0f).Ch(14f, 0f, 0f).Hd(-28f, 0f, 0f).Hand(0.05f, -1f, 0.35f, 0.97f).Rot(6f, 0f, 0f).Off(0f, -0.38f * d, 0.05f).Sn(360f), 0.75f, 0.8f);
             DragonClipKey settle = impact.Copy(brutal ? 0.3f : 0.2f).Off(0f, -0.4f * d, 0.05f);
@@ -5527,6 +5600,17 @@ namespace DragonsAltarCombat
         private static readonly Dictionary<int, float> ExplicitHyperArmorUntil = new Dictionary<int, float>();
         private static readonly Dictionary<int, float> HitHyperArmorUntil = new Dictionary<int, float>();
         private static readonly Dictionary<int, float> AttackSpeedSource = new Dictionary<int, float>();
+        private static readonly Dictionary<int, float> SkillAnimSpeed = new Dictionary<int, float>();
+        private static readonly Dictionary<int, float> SkillAnimSpeedUntil = new Dictionary<int, float>();
+
+        // v0.25.30 skill animation timing: overrides the animator speed factor while a skill's vanilla animation plays.
+        public static void SetSkillAnimSpeed(Player player, float multiplier, float ttl)
+        {
+            if (player == null) return;
+            int id = player.GetInstanceID();
+            SkillAnimSpeed[id] = Mathf.Clamp(multiplier, 0.1f, 6f);
+            SkillAnimSpeedUntil[id] = Time.time + Mathf.Max(0f, ttl);
+        }
         private static readonly Dictionary<int, float> AttackSpeedSourceUntil = new Dictionary<int, float>();
         private static readonly Dictionary<int, float> StaminaRegenBlockedUntil = new Dictionary<int, float>();
         private static readonly Dictionary<int, float> EitrRegenBlockedUntil = new Dictionary<int, float>();
@@ -5691,10 +5775,14 @@ namespace DragonsAltarCombat
 
             if (player.InAttack())
                 factor = GetAttackSpeedMultiplier(player);
+            float skillSpeed, skillUntil;
+            int pid = player.GetInstanceID();
+            bool skillTimed = SkillAnimSpeed.TryGetValue(pid, out skillSpeed) && SkillAnimSpeedUntil.TryGetValue(pid, out skillUntil) && Time.time < skillUntil;
+            if (skillTimed) factor = skillSpeed;
 
             factor = Mathf.Max(0.1f, factor);
 
-            float output = Mathf.Clamp(baseSpeed * factor, 0.05f, 5f);
+            float output = Mathf.Clamp(baseSpeed * factor, 0.05f, skillTimed ? 6f : 5f);
 
             animator.speed = output;
             state.HasOutput = true;

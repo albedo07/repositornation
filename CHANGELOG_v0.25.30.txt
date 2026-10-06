@@ -1,0 +1,8 @@
+Immortal Heroes v0.25.30 - Wind Up Timing
+=========================================
+- Vanilla-based skill animations now START with the wind up and END exactly when the wind up ends.
+  The game measures the playing animation every frame and speeds it up or slows it down to fit
+  (0.3x - 6x). Short wind ups play it faster, long ones slower. Anything left after the impact is finished at 6x.
+  Circle Swing: crow hop first, then the spin fills the rest of the wind up.
+- Jump and Slam (Olympic Hero: Bonecrusher / Electric Smite): no more superman pose. The body leans only
+  diagonally (~38 deg) in the air, the main arm is flared a little to the side and the weapon is carried up, not pointed.
