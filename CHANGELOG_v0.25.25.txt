@@ -1,0 +1,15 @@
+IMMORTAL HEROES v0.25.25 - VANILLA LAYER
+
+- HEAVY SLASH ARMS FIX (and every hand-target pose): the arm solver twisted the arm when it started nearly straight
+  (arm hanging at the side), so the hand never reached its target - Heavy Slash stayed on the right. New solver
+  places the elbow exactly and always puts the hand on the target. Slashes now really start with both hands cocked
+  over the LEFT shoulder, sweep across the front and finish on the right (legs kept as they were).
+- VANILLA ANIMATION LAYER (user idea): skills that match a Valheim attack now play Valheim's own animation, timed so
+  its hit lands on the skill's impact, with only a planted stance / slight lean added on top:
+    Whirlwind / Furious Winds (repeated), Circle Swing, Eclipse, Ascended Halfmoon finisher = polearm spin attack
+    Astral Greatblade (+ repeated slams) = sledge overhead slam
+    Impact Punch = unarmed punch;  Frenzied Charge = spear thrust;  Judgement Hammer = spear throw
+    Lightning Zap / Flame Burst / Gravity Blast = staff cast
+  If an animation does not exist in your game version, that skill automatically keeps its custom pose.
+- F8 [Runtime] VanillaAnimationMap_v02525: which skill uses which Valheim animation (clip=trigger@seconds). Remove an
+  entry to go back to the custom pose, or add one (e.g. sm_slash_a=swing_longsword1@0.3) to try another vanilla swing.

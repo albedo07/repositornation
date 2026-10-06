@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.24";
+        public const string ModVersion = "0.25.25";
 
         internal static DragonCombatPlugin Instance;
 
@@ -48,6 +48,7 @@ namespace DragonsAltarCombat
         internal ConfigEntry<float> MasteryComboSpeedPerStage;
         internal ConfigEntry<bool> EnableSkillAnimations;
         internal ConfigEntry<float> LegMotionScale;
+        internal ConfigEntry<string> VanillaAnimationMap;
         internal ConfigEntry<float> SkySummonDropTime;
         internal ConfigEntry<bool> EnableWarfreakDualWield;
         internal ConfigEntry<bool> EnableDivineStaffShield;
@@ -67,6 +68,11 @@ namespace DragonsAltarCombat
 
             EnableRuntime = Config.Bind("Runtime", "Enabled", true, "Enable Dragon's Altar combat runtime patches.");
             EnableSkillAnimations = Config.Bind("Runtime", "EnableSkillAnimations", true, "Use Dragon's Altar procedural skill poses. Class skills do not trigger vanilla weapon attacks.");
+            VanillaAnimationMap = Config.Bind("Runtime", "VanillaAnimationMap_v02525",
+                "spin=atgeir_secondary@0.1;merc_circle=atgeir_secondary@0.45;merc_circle_2=atgeir_secondary@0.4;sm_eclipse=atgeir_secondary@0.45;sm_halfmoon_finisher=atgeir_secondary@0.45;" +
+                "wiz_greatblade=swing_sledge@0.55;wiz_greatblade_slam=swing_sledge@0.55;warrior_punch=unarmed_attack@0.2;sm_thrust=spear_poke@0.25;cleric_hammer=spear_throw@0.4;" +
+                "cleric_zap=staff_fireball@0.25;sorc_flame=staff_fireball@0.25;hw_gravity_blast=staff_fireball@0.25",
+                "Skill clips that play Valheim's own attack animation (clip=trigger@seconds before impact; 'spin' = Whirlwind / Furious Winds, repeated). Remove an entry to use the custom pose instead; any animator trigger name works (e.g. sm_slash_a=swing_longsword1@0.3).");
             LegMotionScale = Config.Bind("Runtime", "LegMotionScale_v02522", 0f, "Strength of the procedural leg poses (Unity humanoid muscles). 0 = legs untouched, -1 = inverted (if knees bend the wrong way on your rig).");
             SkySummonDropTime = Config.Bind("Skills", "SkySummonDropTime", 0.18f, "Seconds for a spawned Sky Summon object to slam from its indoor-safe spawn point to the target AFTER the character wind-up finishes.");
             EnableWarfreakDualWield = Config.Bind("Weapon Mastery", "EnableWarfreakDualWield", true, "Warfreak: Mercenary may equip any two one-handed weapons simultaneously. Dedicated combination animations are a later animation pass.");
@@ -1695,6 +1701,12 @@ namespace DragonsAltarCombat
         public Vector3 LD;
         public float LR, LW;
         public DragonClipKey LHand(float x, float y, float z, float reach) { LD = new Vector3(x, y, z); LR = reach; LW = 1f; return this; }
+        // v0.25.25 VANILLA LAYER (first key only): Valheim attack animation `VA` fired `VL` seconds before the
+        // impact (VR > 0 = repeat every VR seconds while the clip runs); NoAim = the vanilla animation holds the
+        // weapon, so the universal "weapon follows the forearm" rule stays off.
+        public string VA;
+        public float VL, VR;
+        public bool NoAim;
         // Same pose as another key at a new time (holds / shakes).
         public DragonClipKey Copy(float t)
         {
@@ -1760,8 +1772,16 @@ namespace DragonsAltarCombat
         private readonly Quaternion[] _written = new Quaternion[10];
         private readonly bool[] _hasWritten = new bool[10];
 
+        private string _va;
+        private float _vaAt, _vaRepeat;
+        private bool _noAim;
+
         public void Begin(DragonClipKey[] keys, float windup, bool hold, Transform visual)
         {
+            _va = keys[0].VA;
+            _vaRepeat = keys[0].VR;
+            _vaAt = Time.time + Mathf.Max(0f, windup - keys[0].VL);
+            _noAim = keys[0].NoAim;
             if (_keys != null)
             {
                 // v0.25.8: chained clips start from the CURRENT pose (no snap back to rest in between).
@@ -1928,6 +1948,11 @@ namespace DragonsAltarCombat
                 return;
             }
             Sample(t);
+            if (_va != null && Time.time >= _vaAt)
+            {
+                DragonCombat.FireVanilla(_owner as Player, _va);
+                if (_vaRepeat > 0.05f) _vaAt += _vaRepeat; else _va = null;
+            }
             if (_animator == null) _animator = GetComponentInChildren<Animator>();
             if (_animator != null && _animator.isHuman)
             {
@@ -2035,7 +2060,7 @@ namespace DragonsAltarCombat
                 float len = (la.position - ua.position).magnitude + (hand.position - la.position).magnitude;
                 Vector3 target = ua.position + frame.rotation * dir.normalized * (len * Mathf.Clamp(reach, 0.25f, 0.999f));
                 Vector3 pole = frame.rotation * new Vector3(right ? 0.5f : -0.5f, -1f, -0.4f);
-                TwoBoneIK(ua, la, hand, Vector3.Lerp(hand.position, target, w), pole, 1f);
+                TwoBoneIK(ua, la, hand, target, pole, w);
                 int o = right ? 4 : 7;
                 _written[o] = ua.localRotation; _hasWritten[o] = true;
                 _written[o + 1] = la.localRotation; _hasWritten[o + 1] = true;
@@ -2059,7 +2084,7 @@ namespace DragonsAltarCombat
                 float len = (la.position - ua.position).magnitude + (hand.position - la.position).magnitude;
                 Vector3 target = ua.position + frame.rotation * _hd.normalized * (len * Mathf.Clamp(_hr, 0.25f, 0.999f));
                 Vector3 pole = frame.rotation * new Vector3(0.5f, -1f, -0.4f);
-                TwoBoneIK(ua, la, hand, Vector3.Lerp(hand.position, target, w), pole, 1f);
+                TwoBoneIK(ua, la, hand, target, pole, w);
                 _written[4] = ua.localRotation; _hasWritten[4] = true;
                 _written[5] = la.localRotation; _hasWritten[5] = true;
                 _written[6] = hand.localRotation; _hasWritten[6] = true;
@@ -2090,7 +2115,7 @@ namespace DragonsAltarCombat
                     Vector3 local = basePos + baseRot * (qy * (Vector3.Scale(_visual.localScale, _footLocal[f]) + step));
                     Vector3 target = parent != null ? parent.TransformPoint(local) : local;
                     Quaternion footRot = parentRot * baseRot * qy * _footLocalRot[f];
-                    TwoBoneIK(a, b, c, Vector3.Lerp(c.position, target, _plantW), pole, 1f);
+                    TwoBoneIK(a, b, c, target, pole, _plantW);
                     c.rotation = Quaternion.Slerp(c.rotation, footRot, _plantW);
                 }
                 for (int i = 0; i < 6; i++) _legWritten[i] = _leg[i].localRotation;
@@ -2100,30 +2125,39 @@ namespace DragonsAltarCombat
         }
 
         // Analytic two-bone IK (upper, lower, end) toward t; bends in the current plane, or toward `pole`.
+        // v0.25.25 positional two-bone IK (replaces the angle solver, which twisted the limb when it started
+        // nearly straight - e.g. Heavy Slash's hand never reached the left side). The middle joint is placed
+        // exactly (toward `pole`), the upper bone is aimed at it, the lower bone at the target, then the result is
+        // blended by w. Always lands the end on the target when it is in reach.
         private static void TwoBoneIK(Transform ua, Transform la, Transform end, Vector3 t, Vector3 pole, float w)
         {
+            if (w <= 0.001f) return;
             Vector3 a = ua.position, b = la.position, c = end.position;
             float lab = (b - a).magnitude, lcb = (c - b).magnitude;
             if (lab < 0.0001f || lcb < 0.0001f) return;
-            float lat = Mathf.Clamp((t - a).magnitude, 0.01f, lab + lcb - 0.001f);
-            float ac_ab_0 = Mathf.Acos(Mathf.Clamp(Vector3.Dot((c - a).normalized, (b - a).normalized), -1f, 1f));
-            float ba_bc_0 = Mathf.Acos(Mathf.Clamp(Vector3.Dot((a - b).normalized, (c - b).normalized), -1f, 1f));
-            float ac_at_0 = Mathf.Acos(Mathf.Clamp(Vector3.Dot((c - a).normalized, (t - a).normalized), -1f, 1f));
-            float ac_ab_1 = Mathf.Acos(Mathf.Clamp((lcb * lcb - lab * lab - lat * lat) / (-2f * lab * lat), -1f, 1f));
-            float ba_bc_1 = Mathf.Acos(Mathf.Clamp((lat * lat - lab * lab - lcb * lcb) / (-2f * lab * lcb), -1f, 1f));
-            Vector3 axis0 = Vector3.Cross(c - a, b - a);
-            if (axis0.sqrMagnitude < 0.00001f || Vector3.Dot(b - (a + c) * 0.5f, pole) < 0f) axis0 = Vector3.Cross(c - a, pole);
-            if (axis0.sqrMagnitude < 0.000001f) return;
-            axis0.Normalize();
-            Vector3 axis1 = Vector3.Cross(c - a, t - a);
-            Quaternion ag = ua.rotation, bg = la.rotation;
-            Quaternion r0 = Quaternion.AngleAxis((ac_ab_1 - ac_ab_0) * Mathf.Rad2Deg, Quaternion.Inverse(ag) * axis0);
-            Quaternion r1 = Quaternion.AngleAxis((ba_bc_1 - ba_bc_0) * Mathf.Rad2Deg, Quaternion.Inverse(bg) * axis0);
-            Quaternion r2 = axis1.sqrMagnitude > 0.000001f ? Quaternion.AngleAxis(ac_at_0 * Mathf.Rad2Deg, Quaternion.Inverse(ag) * axis1.normalized) : Quaternion.identity;
+            Vector3 toT = t - a;
+            float d = Mathf.Clamp(toT.magnitude, Mathf.Abs(lab - lcb) + 0.001f, lab + lcb - 0.001f);
+            Vector3 dir = toT.sqrMagnitude > 0.000001f ? toT.normalized : (c - a).normalized;
+            float x = (lab * lab - lcb * lcb + d * d) / (2f * d);
+            float h = Mathf.Sqrt(Mathf.Max(0f, lab * lab - x * x));
+            Vector3 side = pole - dir * Vector3.Dot(pole, dir);
+            if (side.sqrMagnitude < 0.000001f) side = (b - a) - dir * Vector3.Dot(b - a, dir);
+            if (side.sqrMagnitude < 0.000001f) side = Vector3.Cross(dir, Vector3.right);
+            side.Normalize();
+            Vector3 elbow = a + dir * x + side * h;
+            Vector3 hand = a + dir * d;
             Quaternion ua0 = ua.localRotation, la0 = la.localRotation;
-            ua.localRotation = Quaternion.Slerp(ua0, ua0 * r0 * r2, w);
-            la.localRotation = Quaternion.Slerp(la0, la0 * r1, w);
+            ua.rotation = Quaternion.FromToRotation(b - a, elbow - a) * ua.rotation;
+            Vector3 b1 = la.position, c1 = end.position;
+            la.rotation = Quaternion.FromToRotation(c1 - b1, hand - b1) * la.rotation;
+            if (w < 0.999f)
+            {
+                Quaternion ua1 = ua.localRotation, la1 = la.localRotation;
+                ua.localRotation = Quaternion.Slerp(ua0, ua1, w);
+                la.localRotation = Quaternion.Slerp(la0, la1, w);
+            }
         }
+
 
         private void ReleaseRoot()
         {
@@ -2221,26 +2255,8 @@ namespace DragonsAltarCombat
                 Vector3 axis = (_visual != null ? _visual : transform).forward;
                 if (_tipR != Vector3.zero && HeldItem(true) != null) axis = (rh.TransformPoint(_tipR) - rh.position).normalized;
                 Vector3 t = rh.position + axis * _tg * Mathf.Max(0.2f, transform.lossyScale.y);
-                Vector3 a = ua.position, b = la.position, c = lh.position;
-                float lab = (b - a).magnitude, lcb = (c - b).magnitude;
-                if (lab < 0.0001f || lcb < 0.0001f) return;
-                float lat = Mathf.Clamp((t - a).magnitude, 0.01f, lab + lcb - 0.01f);
-                float ac_ab_0 = Mathf.Acos(Mathf.Clamp(Vector3.Dot((c - a).normalized, (b - a).normalized), -1f, 1f));
-                float ba_bc_0 = Mathf.Acos(Mathf.Clamp(Vector3.Dot((a - b).normalized, (c - b).normalized), -1f, 1f));
-                float ac_at_0 = Mathf.Acos(Mathf.Clamp(Vector3.Dot((c - a).normalized, (t - a).normalized), -1f, 1f));
-                float ac_ab_1 = Mathf.Acos(Mathf.Clamp((lcb * lcb - lab * lab - lat * lat) / (-2f * lab * lat), -1f, 1f));
-                float ba_bc_1 = Mathf.Acos(Mathf.Clamp((lat * lat - lab * lab - lcb * lcb) / (-2f * lab * lcb), -1f, 1f));
-                Vector3 axis0 = Vector3.Cross(c - a, b - a);
-                if (axis0.sqrMagnitude < 0.000001f) axis0 = Vector3.Cross(c - a, -(_visual != null ? _visual : transform).up);
-                axis0.Normalize();
-                Vector3 axis1 = Vector3.Cross(c - a, t - a);
-                Quaternion ag = ua.rotation, bg = la.rotation;
-                Quaternion r0 = Quaternion.AngleAxis((ac_ab_1 - ac_ab_0) * Mathf.Rad2Deg, Quaternion.Inverse(ag) * axis0);
-                Quaternion r1 = Quaternion.AngleAxis((ba_bc_1 - ba_bc_0) * Mathf.Rad2Deg, Quaternion.Inverse(bg) * axis0);
-                Quaternion r2 = axis1.sqrMagnitude > 0.000001f ? Quaternion.AngleAxis(ac_at_0 * Mathf.Rad2Deg, Quaternion.Inverse(ag) * axis1.normalized) : Quaternion.identity;
-                Quaternion ua0 = ua.localRotation, la0 = la.localRotation;
-                ua.localRotation = Quaternion.Slerp(ua0, ua0 * r0 * r2, w);
-                la.localRotation = Quaternion.Slerp(la0, la0 * r1, w);
+                Transform fr = _visual != null ? _visual : transform;
+                TwoBoneIK(ua, la, lh, t, fr.rotation * new Vector3(-0.5f, -1f, -0.4f), w);
                 // the off hand wraps the grip like the main hand
                 lh.rotation = Quaternion.Slerp(lh.rotation, rh.rotation, w * 0.8f);
                 _written[7] = ua.localRotation; _hasWritten[7] = true;
@@ -2284,7 +2300,7 @@ namespace DragonsAltarCombat
                 else
                 {
                     if (!right && _shieldL) return;
-                    w = raise;   // universal rule: the item continues the forearm (envelope = clip in/out)
+                    w = _noAim ? 0f : raise;   // universal rule: the item continues the forearm (envelope = clip in/out)
                     if (w <= 0.001f || along == Vector3.zero) return;
                     want = along;
                 }
@@ -2437,7 +2453,8 @@ namespace DragonsAltarCombat
         {
             if (player == null || player != Player.m_localPlayer || string.IsNullOrEmpty(clip)) return;
             if (DragonCombatPlugin.Instance != null && !DragonCombatPlugin.Instance.EnableSkillAnimations.Value) return;
-            DragonClipKey[] keys = SkillClip(clip);
+            DragonClipKey[] keys = hold ? null : VanillaClip(player, clip, 0f);
+            if (keys == null) keys = SkillClip(clip);
             if (keys == null) return;
             DragonSkillPoseDriver legacy = player.GetComponent<DragonSkillPoseDriver>();
             if (legacy != null) UnityEngine.Object.Destroy(legacy);
@@ -2465,7 +2482,8 @@ namespace DragonsAltarCombat
             // with the main arm straight out to the side and the weapon held level, for whole turns only.
             float q = Mathf.Max(0.12f, turn);
             int turns = Mathf.Max(1, Mathf.CeilToInt(Mathf.Max(0.1f, seconds) / q));
-            PlayClipKeys(player, SbSpin(turns, q), 0.15f);
+            DragonClipKey[] v = VanillaClip(player, "spin", Mathf.Max(0.3f, seconds));
+            PlayClipKeys(player, v != null ? v : SbSpin(turns, q), 0.15f);
         }
 
 
@@ -2630,6 +2648,98 @@ namespace DragonsAltarCombat
 
         public static bool HasClip(string clip) { return SkillClip(clip) != null; }
 
+        // ---------------------------------------------------------------- v0.25.25 vanilla animation layer
+        private static string _vanMapSrc;
+        private static readonly Dictionary<string, KeyValuePair<string, float>> VanMap = new Dictionary<string, KeyValuePair<string, float>>();
+        private static readonly Dictionary<int, HashSet<string>> AnimTriggers = new Dictionary<int, HashSet<string>>();
+        private static MethodInfo _zanimSetTrigger;
+
+        private static void ParseVanMap()
+        {
+            string src = DragonCombatPlugin.Instance != null && DragonCombatPlugin.Instance.VanillaAnimationMap != null ? DragonCombatPlugin.Instance.VanillaAnimationMap.Value : "";
+            if (src == _vanMapSrc) return;
+            _vanMapSrc = src;
+            VanMap.Clear();
+            string[] parts = (src ?? "").Split(';');
+            for (int i = 0; i < parts.Length; i++)
+            {
+                string e = parts[i].Trim();
+                int eq = e.IndexOf('=');
+                if (eq <= 0) continue;
+                string clip = e.Substring(0, eq).Trim(), trig = e.Substring(eq + 1).Trim();
+                float lead = 0.3f;
+                int at = trig.IndexOf('@');
+                if (at > 0)
+                {
+                    float.TryParse(trig.Substring(at + 1).Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out lead);
+                    trig = trig.Substring(0, at).Trim();
+                }
+                if (clip.Length > 0 && trig.Length > 0) VanMap[clip] = new KeyValuePair<string, float>(trig, lead);
+            }
+        }
+
+        // The animator trigger that really exists for `name` (name, or name + "0" for combo chains), or null.
+        private static string ResolveTrigger(Animator a, string name)
+        {
+            if (a == null || string.IsNullOrEmpty(name)) return null;
+            HashSet<string> set;
+            if (!AnimTriggers.TryGetValue(a.GetInstanceID(), out set))
+            {
+                set = new HashSet<string>();
+                try
+                {
+                    AnimatorControllerParameter[] ps = a.parameters;
+                    for (int i = 0; i < ps.Length; i++) if (ps[i].type == AnimatorControllerParameterType.Trigger) set.Add(ps[i].name);
+                }
+                catch (Exception) { }
+                if (set.Count == 0) return null;   // not ready yet: try again next cast
+                AnimTriggers[a.GetInstanceID()] = set;
+            }
+            if (set.Contains(name)) return name;
+            if (set.Contains(name + "0")) return name + "0";
+            return null;
+        }
+
+        // Overlay for a vanilla-animated skill: the vanilla attack does the arms / weapon; we only add a planted
+        // stance and a slight lean. length > 0 = sustained (repeat the animation every second).
+        private static DragonClipKey[] VanillaClip(Player player, string clip, float length)
+        {
+            ParseVanMap();
+            KeyValuePair<string, float> m;
+            if (!VanMap.TryGetValue(clip, out m)) return null;
+            string trig = ResolveTrigger(player.GetComponentInChildren<Animator>(), m.Key);
+            if (trig == null) return null;
+            DragonClipKey[] k;
+            if (length > 0f)
+                k = new DragonClipKey[] { K(-1f), Ft(K(0f).Off(0f, -0.03f, 0f), 0.15f, 0.1f), Ft(K(length).Off(0f, -0.03f, 0f), 0.15f, 0.1f), K(length + 0.3f) };
+            else
+                k = new DragonClipKey[] { K(-1f), Ft(K(-0.3f).Sp(3f, 0f, 0f), 0.15f, 0.08f), Ft(K(0f).Sp(6f, 0f, 0f).Off(0f, -0.03f, 0.03f), 0.22f, 0.1f), Ft(K(0.35f).Sp(4f, 0f, 0f).Off(0f, -0.02f, 0.02f), 0.2f, 0.1f), K(0.75f) };
+            k[0].VA = trig;
+            k[0].VL = m.Value;
+            k[0].VR = length > 0f ? 1f : 0f;
+            k[0].NoAim = true;
+            return k;
+        }
+
+        public static void FireVanilla(Player player, string trigger)
+        {
+            if (player == null || string.IsNullOrEmpty(trigger)) return;
+            try
+            {
+                Component z = null;
+                Component[] cs = player.GetComponents<Component>();
+                for (int i = 0; i < cs.Length; i++) if (cs[i] != null && cs[i].GetType().Name == "ZSyncAnimation") { z = cs[i]; break; }
+                if (z != null)
+                {
+                    if (_zanimSetTrigger == null) _zanimSetTrigger = z.GetType().GetMethod("SetTrigger", new Type[] { typeof(string) });
+                    if (_zanimSetTrigger != null) { _zanimSetTrigger.Invoke(z, new object[] { trigger }); return; }
+                }
+                Animator a = player.GetComponentInChildren<Animator>();
+                if (a != null) a.SetTrigger(trigger);
+            }
+            catch (Exception) { }
+        }
+
         private static Dictionary<string, DragonClipKey[]> _clips;
 
         private static DragonClipKey K(float t) { return new DragonClipKey(t); }
@@ -2707,11 +2817,11 @@ namespace DragonsAltarCombat
         private static DragonClipKey[] SbSlash(float heavy, float hold, bool spin, bool pull)
         {
             float a = 1f + 0.3f * heavy;
-            DragonClipKey cock = Ft(K(-0.45f).Sp(4f, 18f * a, 0f).Ch(2f, 10f * a, 0f).Hd(0f, -12f, 0f).Hand(-0.6f, 0.45f, 0.4f, 0.65f).Wp(-0.3f, 0.6f, -0.7f).Two(-0.12f).Off(0f, -0.04f, 0f), 0.2f, 0.1f);
+            DragonClipKey cock = Ft(K(-0.45f).Sp(4f, 18f * a, 0f).Ch(2f, 10f * a, 0f).Hd(0f, -12f, 0f).Hand(-1f, 0.55f, 0.35f, 0.8f).Wp(-0.3f, 0.6f, -0.7f).Two(-0.12f).Off(0f, -0.04f, 0f), 0.2f, 0.1f);
             if (pull) cock = Ft(K(-0.45f).Sp(6f, -16f, 0f).Ch(3f, -8f, 0f).Hd(0f, 14f, 0f).Hand(0.25f, -0.75f, -0.25f, 0.7f).Wp(0f, 0f, 1f).Two(-0.12f).Off(0f, -0.06f, -0.03f), 0.3f, 0.2f);
-            DragonClipKey left = Ft(K(-0.12f).Sp(5f, 24f * a, 0f).Ch(3f, 14f * a, 0f).Hd(0f, -16f, 0f).Hand(-0.75f, 0f, 0.65f, 0.9f).Wp(-1f, 0f, 0.35f).Two(-0.12f).Off(0f, -0.05f, 0f), 0.25f, 0.12f);
-            DragonClipKey front = Ft(K(0f).Sp(6f, 0f, 0f).Ch(3f, 0f, 0f).Hand(-0.15f, -0.05f, 1f, 0.95f).Wp(0f, 0f, 1f).Two(-0.12f).Off(0f, -0.06f, 0.03f), 0.32f, 0.12f).Linear();
-            DragonClipKey right = Ft(K(0.11f).Sp(6f, -24f * a, 0f).Ch(3f, -14f * a, 0f).Hd(0f, 12f, 0f).Hand(0.7f, 0f, 0.7f, 0.95f).Wp(1f, 0f, -0.2f).Two(-0.12f).Off(0f, -0.06f, 0.03f), 0.32f, 0.12f).Linear();
+            DragonClipKey left = Ft(K(-0.12f).Sp(5f, 24f * a, 0f).Ch(3f, 14f * a, 0f).Hd(0f, -16f, 0f).Hand(-1f, -0.05f, 0.55f, 0.95f).Wp(-1f, 0f, 0.35f).Two(-0.12f).Off(0f, -0.05f, 0f), 0.25f, 0.12f);
+            DragonClipKey front = Ft(K(0f).Sp(6f, 0f, 0f).Ch(3f, 0f, 0f).Hand(-0.25f, -0.05f, 1f, 0.95f).Wp(0f, 0f, 1f).Two(-0.12f).Off(0f, -0.06f, 0.03f), 0.32f, 0.12f).Linear();
+            DragonClipKey right = Ft(K(0.11f).Sp(6f, -24f * a, 0f).Ch(3f, -14f * a, 0f).Hd(0f, 12f, 0f).Hand(1f, 0f, 0.55f, 0.95f).Wp(1f, 0f, -0.2f).Two(-0.12f).Off(0f, -0.06f, 0.03f), 0.32f, 0.12f).Linear();
             if (spin)
             {
                 front = front.Rot(0f, 90f, 0f);

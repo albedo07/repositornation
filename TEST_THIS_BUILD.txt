@@ -1,5 +1,6 @@
-TEST v0.25.24
-1. Whirlwind / Circle Swing / Eclipse: arm straight out to the side, weapon level, body spinning in full turns.
-2. Ranger shots: bow arm pointing at the target, string hand at the cheek, then released past the ear.
-3. Arrow Rain / Starfall: bow up at the sky. Pinning: kneel. Tumble Shot: tucked flip.
-4. Grand Cross: two diagonal cuts.
+TEST v0.25.25
+1. Heavy Slash / Moonlight: hands start over the LEFT shoulder, sweep to the right.
+2. Whirlwind / Circle Swing / Eclipse: Valheim's polearm spin attack.
+3. Astral Greatblade: sledge slam. Impact Punch: punch. Frenzied Charge: spear thrust. Judgement Hammer: spear throw.
+4. Zap / Flame Burst / Gravity Blast: staff cast.
+If one of these still shows the old pose, its Valheim animation name differs: tell me which skill.
