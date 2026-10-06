@@ -1,5 +1,5 @@
 @echo off
-title Immortal Heroes v0.25.22 - Planted Feet
+title Immortal Heroes v0.25.23 - Storyboard Rebuild
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
 echo.
 pause

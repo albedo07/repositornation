@@ -1,0 +1,29 @@
+IMMORTAL HEROES v0.25.23 - STORYBOARD REBUILD (built only from the storyboards + the user's animation guide)
+
+Why the old poses looked wrong: every arm pose was a guessed bone rotation stacked on top of Valheim's own animation,
+so the hand never landed where the storyboard puts it.
+New engine:
+- HAND TARGETS: each storyboard frame places the main hand at an exact spot relative to the shoulder (straight up,
+  out in front, at the left shoulder, behind the shoulder, by the ribs, down at the ground...) and arm IK puts it
+  there, whatever the rig's bone axes are. The weapon points where the hand points; two-handed moves put the off hand
+  on the grip (its own item hidden while gripping).
+- Feet stay planted (scale-correct now); stances are shallower and calmer.
+Families (storyboard / guide):
+- BDCA (heals, buffs, Battlecry): main hand straight up, weapon up.
+- SSCA (relics, strikes, Glacial, Meteor, Cataclysm): hand at the chest -> straight up to the sky -> arm out in
+  front, weapon pointing at the ground ahead.
+- SAA / CSAA / CSAFA (Heavy Slash, Moonlight, Crescent, Blade Storm, Halfmoon): two hands, cocked over the left
+  shoulder -> out left -> across the front -> out right (Halfmoon starts from the poke pull at the right hip;
+  Ascended finisher spins clockwise).
+- GAA (Impact Wave, Seismic): hands at the right shoulder (baseball), U through the ground, finish high left.
+- OSA (Astral Greatblade): two hands straight up, straight down.
+- JSAA (Electric Smite, Bonecrusher): fist cocked back + crouch, fist forward launch, counter-clockwise roll, fist down,
+  fist on the ground with the left foot forward and the right knee low, recover.
+- FTAA (Impact Punch, Frenzied Charge): hand at the ribs -> straight at the target. Shield Charge: shield up, weapon
+  tucked behind it, mace whipped up and smashed down at head height.
+- PCA (Zap, Flame Burst, Gravity Blast): hand up by the shoulder -> arm straight at the target.
+- TAA (Judgement Hammer): hand behind the shoulder, coil, throw forward, follow across. Punishing Bomb: two-handed bat.
+- GCA (Stonefang, Stomp, Snare): hand + weapon down at the ground / foot stamp / low placement.
+- SPAA (Circle Swing, Eclipse): weapon held level out to the side while turning.
+- AFA (Railcannon): two hands on the staff along the aim.  RCA (Horizon Walker): point / open / pinch / pull.
+- Angel Comet: arm thrown up on the jump, wings, inverted dive with the arm leading, hero landing.

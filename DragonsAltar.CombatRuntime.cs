@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.22";
+        public const string ModVersion = "0.25.23";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1685,6 +1685,12 @@ namespace DragonsAltarCombat
         // (negative = toward the pommel); the off-hand item is hidden render-only meanwhile.
         public float TW, TG;
         public DragonClipKey Two(float grip) { TW = 1f; TG = grip; return this; }
+        // v0.25.23 HAND TARGETS (storyboard poses): the main hand is placed by arm IK at `reach` (0..1 of the arm's
+        // length) along a direction from the RIGHT SHOULDER in the body frame (x right, y up, z forward). Rig-axis
+        // independent: "hand straight up" is always straight up.
+        public Vector3 HD;
+        public float HR, HW;
+        public DragonClipKey Hand(float x, float y, float z, float reach) { HD = new Vector3(x, y, z); HR = reach; HW = 1f; return this; }
         // Same pose as another key at a new time (holds / shakes).
         public DragonClipKey Copy(float t)
         {
@@ -1692,7 +1698,7 @@ namespace DragonsAltarCombat
             for (int i = 0; i < B.Length; i++) k.B[i] = B[i];
             for (int i = 0; i < L.Length; i++) k.L[i] = L[i];
             k.R = R; k.O = O; k.Lin = Lin; k.Spin = Spin;
-            k.WD = WD; k.WW = WW; k.SD = SD; k.SW = SW; k.TW = TW; k.TG = TG;
+            k.WD = WD; k.WW = WW; k.SD = SD; k.SW = SW; k.TW = TW; k.TG = TG; k.HD = HD; k.HR = HR; k.HW = HW;
             return k;
         }
     }
@@ -1732,7 +1738,8 @@ namespace DragonsAltarCombat
         private readonly float[] _l = new float[8];
         private float _spin;
         private Vector3 _wd, _sd;
-        private float _ww, _sw, _tw, _tg, _env;
+        private float _ww, _sw, _tw, _tg, _env, _hr, _hw;
+        private Vector3 _hd;
         // v0.25.15 legs: Unity humanoid muscles (HumanPoseHandler), applied on the animator's real pose.
         private static readonly HumanBodyBones[] LegBones =
         {
@@ -1869,6 +1876,10 @@ namespace DragonsAltarCombat
             _ww = Mathf.Lerp(a.WW, b.WW, w);
             _sw = Mathf.Lerp(a.SW, b.SW, w);
             _tw = Mathf.Lerp(a.TW, b.TW, w);
+            _hw = Mathf.Lerp(a.HW, b.HW, w);
+            Vector3 ha = a.HW > 0f ? a.HD : b.HD, hb = b.HW > 0f ? b.HD : a.HD;
+            _hd = Vector3.Slerp(ha.normalized, hb.normalized, w);
+            _hr = a.HW > 0f && b.HW > 0f ? Mathf.Lerp(a.HR, b.HR, w) : (a.HW > 0f ? a.HR : b.HR);
             _tg = a.TW > 0f && b.TW > 0f ? Mathf.Lerp(a.TG, b.TG, w) : (a.TW > 0f ? a.TG : b.TG);
             _wd = Vector3.Slerp(a.WW > 0f ? a.WD : b.WD, b.WW > 0f ? b.WD : a.WD, w);
             _sd = Vector3.Slerp(a.SW > 0f ? a.SD : b.SD, b.SW > 0f ? b.SD : a.SD, w);
@@ -1946,6 +1957,7 @@ namespace DragonsAltarCombat
             if (_animator != null && _animator.isHuman)
             {
                 PlantFeet();
+                PlaceMainHand();
                 AimHeldItems();
             }
         }
@@ -2000,6 +2012,29 @@ namespace DragonsAltarCombat
             catch (Exception) { return false; }
         }
 
+        // Main hand to its storyboard target (arm IK from the right shoulder; elbow hangs down / out / back).
+        private void PlaceMainHand()
+        {
+            float w = Mathf.Clamp01(_hw);
+            if (w <= 0.001f || _hd.sqrMagnitude < 0.0001f) return;
+            try
+            {
+                Transform ua = _animator.GetBoneTransform(HumanBodyBones.RightUpperArm);
+                Transform la = _animator.GetBoneTransform(HumanBodyBones.RightLowerArm);
+                Transform hand = _animator.GetBoneTransform(HumanBodyBones.RightHand);
+                if (ua == null || la == null || hand == null) return;
+                Transform frame = _visual != null ? _visual : transform;
+                float len = (la.position - ua.position).magnitude + (hand.position - la.position).magnitude;
+                Vector3 target = ua.position + frame.rotation * _hd.normalized * (len * Mathf.Clamp(_hr, 0.25f, 0.999f));
+                Vector3 pole = frame.rotation * new Vector3(0.5f, -1f, -0.4f);
+                TwoBoneIK(ua, la, hand, Vector3.Lerp(hand.position, target, w), pole, 1f);
+                _written[4] = ua.localRotation; _hasWritten[4] = true;
+                _written[5] = la.localRotation; _hasWritten[5] = true;
+                _written[6] = hand.localRotation; _hasWritten[6] = true;
+            }
+            catch (Exception) { }
+        }
+
         private void PlantFeet()
         {
             bool can = _feetCaptured && _visual != null && DragonCombat.OwnsMotionRoot(_token) && Grounded();
@@ -2018,7 +2053,7 @@ namespace DragonsAltarCombat
                     Transform a = _leg[f * 3], b = _leg[f * 3 + 1], c = _leg[f * 3 + 2];
                     float lift = _l[f * 4], spread = _l[f * 4 + 1];
                     Vector3 step = new Vector3((f == 0 ? -1f : 1f) * spread * 0.5f, 0f, lift * 0.45f);
-                    Vector3 local = basePos + baseRot * (qy * (_footLocal[f] + step));
+                    Vector3 local = basePos + baseRot * (qy * (Vector3.Scale(_visual.localScale, _footLocal[f]) + step));
                     Vector3 target = parent != null ? parent.TransformPoint(local) : local;
                     Quaternion footRot = parentRot * baseRot * qy * _footLocalRot[f];
                     TwoBoneIK(a, b, c, Vector3.Lerp(c.position, target, _plantW), pole, 1f);
@@ -2592,6 +2627,281 @@ namespace DragonsAltarCombat
             BuildBlueprintD(c);
             BuildPolishClips(c);
             BuildGuideClips(c);
+            BuildStoryboardClips(c);
+        }
+
+        // ================================================================================== v0.25.23
+        // STORYBOARD REBUILD (user: "just the storyboard and what I said"). Every frame of the storyboards is a
+        // HAND PLACEMENT from the right shoulder (Hand: direction in the body frame x right / y up / z forward,
+        // reach 0..1), the weapon direction (Wp), the two-handed grip (Two), a small torso turn / bend, the
+        // body drop (Off.y) and the planted feet (Ft: front foot forward, back foot back, metres via LL/RL).
+        // ==================================================================================
+        private static DragonClipKey Ft(DragonClipKey k, float front, float back)
+        {
+            // left foot `front` forward, right foot `back` behind (in LL/RL units: x0.45 m), feet a bit apart
+            return k.LL(front, 0.12f, 0f, 0f).RL(-back, 0.12f, 0f, 0f);
+        }
+
+        private static DragonClipKey[] SbBdca(bool roar)
+        {
+            DragonClipKey lift = K(-0.5f).Hd(-4f, 0f, 0f).Hand(0.15f, 0.55f, 0.5f, 0.75f);
+            DragonClipKey top = K(0f).Ch(roar ? -12f : -5f, 0f, 0f).Hd(roar ? -24f : -12f, 0f, 0f).Hand(0.08f, 1f, 0.08f, 1f).Wp(0.05f, 1f, 0.05f);
+            return new DragonClipKey[] { K(-1f), lift, top, top.Copy(0.35f), K(0.75f) };
+        }
+
+        private static DragonClipKey[] SbSsca(bool charged)
+        {
+            DragonClipKey gather = K(-0.65f).Hd(4f, 0f, 0f).Hand(-0.45f, -0.25f, 0.8f, 0.5f);
+            DragonClipKey sky = K(charged ? 0f : -0.2f).Ch(-6f, 0f, 0f).Hd(-20f, 0f, 0f).Hand(0.05f, 1f, 0.05f, 1f).Wp(0.03f, 1f, 0.05f);
+            float r = charged ? 0.14f : 0f;
+            DragonClipKey point = Ft(K(r).Sp(8f, 6f, 0f).Ch(4f, 4f, 0f).Hd(6f, -4f, 0f).Hand(0f, -0.3f, 1f, 1f).Wp(0f, -0.45f, 1f).Off(0f, -0.03f, 0.03f), 0.25f, 0.1f);
+            if (charged) return new DragonClipKey[] { K(-1f), gather.Copy(-0.6f), sky, point, point.Copy(r + 0.3f), K(r + 0.8f) };
+            return new DragonClipKey[] { K(-1f), gather, sky, point, point.Copy(0.3f), K(0.8f) };
+        }
+
+        // Two-handed horizontal slash, LEFT -> RIGHT (cocked high over the left shoulder between hits).
+        private static DragonClipKey[] SbSlash(float heavy, float hold, bool spin, bool pull)
+        {
+            float a = 1f + 0.3f * heavy;
+            DragonClipKey cock = Ft(K(-0.45f).Sp(4f, 18f * a, 0f).Ch(2f, 10f * a, 0f).Hd(0f, -12f, 0f).Hand(-0.6f, 0.45f, 0.4f, 0.65f).Wp(-0.3f, 0.6f, -0.7f).Two(-0.12f).Off(0f, -0.04f, 0f), 0.2f, 0.1f);
+            if (pull) cock = Ft(K(-0.45f).Sp(6f, -16f, 0f).Ch(3f, -8f, 0f).Hd(0f, 14f, 0f).Hand(0.25f, -0.75f, -0.25f, 0.7f).Wp(0f, 0f, 1f).Two(-0.12f).Off(0f, -0.06f, -0.03f), 0.3f, 0.2f);
+            DragonClipKey left = Ft(K(-0.12f).Sp(5f, 24f * a, 0f).Ch(3f, 14f * a, 0f).Hd(0f, -16f, 0f).Hand(-0.75f, 0f, 0.65f, 0.9f).Wp(-1f, 0f, 0.35f).Two(-0.12f).Off(0f, -0.05f, 0f), 0.25f, 0.12f);
+            DragonClipKey front = Ft(K(0f).Sp(6f, 0f, 0f).Ch(3f, 0f, 0f).Hand(-0.15f, -0.05f, 1f, 0.95f).Wp(0f, 0f, 1f).Two(-0.12f).Off(0f, -0.06f, 0.03f), 0.32f, 0.12f).Linear();
+            DragonClipKey right = Ft(K(0.11f).Sp(6f, -24f * a, 0f).Ch(3f, -14f * a, 0f).Hd(0f, 12f, 0f).Hand(0.7f, 0f, 0.7f, 0.95f).Wp(1f, 0f, -0.2f).Two(-0.12f).Off(0f, -0.06f, 0.03f), 0.32f, 0.12f).Linear();
+            if (spin)
+            {
+                front = front.Rot(0f, 90f, 0f);
+                DragonClipKey r2 = right.Copy(0.11f).Rot(0f, 180f, 0f); r2.Lin = true;
+                DragonClipKey r3 = right.Copy(0.22f).Rot(0f, 270f, 0f); r3.Lin = true;
+                DragonClipKey r4 = right.Copy(0.33f).Rot(0f, 360f, 0f); r4.Lin = true;
+                DragonClipKey sh = right.Copy(0.33f + hold).Rot(0f, 360f, 0f); sh.Lin = false;
+                return new DragonClipKey[] { K(-1f), cock, left, front, r2, r3, r4, sh, K(0.33f + hold + 0.45f).Rot(0f, 360f, 0f) };
+            }
+            DragonClipKey after = right.Copy(0.11f + hold); after.Lin = false;
+            return new DragonClipKey[] { K(-1f), cock, left, front, right, after, K(0.11f + hold + 0.45f) };
+        }
+
+        // Golf (GAA): baseball stance with the hands at the right shoulder, then a U through the ground to the left.
+        private static DragonClipKey[] SbGolf(float hold)
+        {
+            DragonClipKey stance = Ft(K(-0.6f).Sp(6f, -24f, 0f).Ch(2f, -12f, 0f).Hd(0f, 20f, 0f).Hand(0.15f, 0.35f, -0.15f, 0.35f).Wp(0.25f, 0.8f, -0.55f).Two(-0.12f).Off(0f, -0.06f, 0f), 0.3f, 0.15f);
+            DragonClipKey load = stance.Copy(-0.12f).Sp(8f, -30f, 0f).Ch(3f, -15f, 0f);
+            DragonClipKey bottom = Ft(K(0f).Sp(22f, 0f, 0f).Ch(8f, 0f, 0f).Hd(6f, 0f, 0f).Hand(-0.2f, -0.9f, 0.35f, 1f).Wp(0f, -0.85f, 0.55f).Two(-0.12f).Off(0f, -0.1f, 0.03f), 0.32f, 0.15f).Linear();
+            DragonClipKey up = Ft(K(0.14f).Sp(0f, 28f, 0f).Ch(-3f, 15f, 0f).Hd(0f, -10f, 0f).Hand(-0.8f, 0.5f, 0.3f, 0.95f).Wp(-0.6f, 0.7f, -0.3f).Two(-0.12f).Off(0f, -0.04f, 0.02f), 0.32f, 0.15f).Linear();
+            DragonClipKey after = up.Copy(0.14f + hold); after.Lin = false;
+            return new DragonClipKey[] { K(-1f), stance, load, bottom, up, after, K(0.14f + hold + 0.5f) };
+        }
+
+        // Overhead slam (OSA): two hands straight up, then straight down in front.
+        private static DragonClipKey[] SbSlam(float hold, bool rechamber)
+        {
+            DragonClipKey lift = Ft(K(-0.4f).Ch(-5f, 0f, 0f).Hd(-8f, 0f, 0f).Hand(-0.15f, 1f, 0.1f, 0.95f).Wp(0f, 1f, -0.2f).Two(-0.12f), 0.2f, 0.1f);
+            DragonClipKey down = Ft(K(0f).Sp(24f, 0f, 0f).Ch(10f, 0f, 0f).Hd(8f, 0f, 0f).Hand(-0.15f, -0.55f, 0.8f, 1f).Wp(0f, -0.7f, 0.7f).Two(-0.12f).Off(0f, -0.12f, 0.04f), 0.3f, 0.12f).Linear();
+            DragonClipKey after = down.Copy(hold); after.Lin = false;
+            if (rechamber) return new DragonClipKey[] { K(-1f), lift, down, after, lift.Copy(hold + 0.3f), K(hold + 0.55f) };
+            return new DragonClipKey[] { K(-1f), lift, down, after, K(hold + 0.6f) };
+        }
+
+        // Forward thrust (FTAA): hand to the ribs, then straight at the target, retract.
+        private static DragonClipKey[] SbThrust(float hold)
+        {
+            DragonClipKey ribs = Ft(K(-0.45f).Sp(4f, -12f, 0f).Ch(2f, -6f, 0f).Hd(0f, 8f, 0f).Hand(0.1f, -0.55f, -0.2f, 0.45f).Wp(0f, 0f, 1f), 0.15f, 0.1f);
+            DragonClipKey drive = Ft(K(0f).Sp(8f, 10f, 0f).Ch(3f, 6f, 0f).Hd(0f, -5f, 0f).Hand(0f, -0.05f, 1f, 1f).Wp(0f, 0f, 1f).Off(0f, -0.03f, 0.08f), 0.35f, 0.15f).Linear();
+            DragonClipKey after = drive.Copy(hold); after.Lin = false;
+            return new DragonClipKey[] { K(-1f), ribs, ribs.Copy(-0.08f), drive, after, ribs.Copy(hold + 0.25f), K(hold + 0.55f) };
+        }
+
+        // Projectile cast (PCA): hand drawn up by the shoulder, then the arm drives straight at the target.
+        private static DragonClipKey[] SbCast()
+        {
+            DragonClipKey ch = K(-0.6f).Sp(3f, -10f, 0f).Ch(2f, -6f, 0f).Hd(0f, 6f, 0f).Hand(0.35f, 0.25f, -0.15f, 0.35f);
+            DragonClipKey ext = Ft(K(0f).Sp(5f, 8f, 0f).Ch(3f, 5f, 0f).Hd(0f, -4f, 0f).Hand(0f, 0f, 1f, 1f).Wp(0f, 0f, 1f), 0.2f, 0.1f);
+            return new DragonClipKey[] { K(-1f), ch, ext, ext.Copy(0.15f), K(0.45f) };
+        }
+
+        // Throw (TAA): hand behind the shoulder, torso coiled, throw forward, follow-through across the body.
+        private static DragonClipKey[] SbThrow()
+        {
+            DragonClipKey back = Ft(K(-0.55f).Sp(-2f, -24f, 0f).Ch(-4f, -14f, 0f).Hd(0f, 22f, 0f).Hand(0.2f, 0.55f, -0.65f, 0.6f).Wp(0.1f, 0.5f, -1f), 0.25f, 0.1f);
+            DragonClipKey coil = back.Copy(-0.12f).Sp(-3f, -30f, 0f).Ch(-5f, -18f, 0f);
+            DragonClipKey thr = Ft(K(0f).Sp(10f, 12f, 0f).Ch(6f, 8f, 0f).Hd(0f, -5f, 0f).Hand(0f, 0.15f, 1f, 1f).Wp(0f, 0.2f, 1f).Off(0f, -0.02f, 0.05f), 0.3f, 0.12f).Linear();
+            DragonClipKey follow = Ft(K(0.18f).Sp(14f, 20f, 0f).Ch(8f, 12f, 0f).Hd(0f, -8f, 0f).Hand(-0.55f, -0.5f, 0.65f, 0.95f).Wp(-0.4f, -0.4f, 1f).Off(0f, -0.03f, 0.05f), 0.3f, 0.12f);
+            return new DragonClipKey[] { K(-1f), back, coil, thr, follow, follow.Copy(0.35f), K(0.75f) };
+        }
+
+        // Bat (Punishing Bomb): two hands, cocked behind the right shoulder, level sweep, over the left shoulder.
+        private static DragonClipKey[] SbBat()
+        {
+            DragonClipKey cock = Ft(K(-0.55f).Sp(6f, -28f, 0f).Ch(3f, -15f, 0f).Hd(0f, 24f, 0f).Hand(0.25f, 0.3f, -0.3f, 0.4f).Wp(0.35f, 0.7f, -0.6f).Two(-0.12f).Off(0f, -0.05f, 0f), 0.3f, 0.15f);
+            DragonClipKey swing = Ft(K(0f).Sp(6f, 8f, 0f).Ch(3f, 5f, 0f).Hand(-0.1f, -0.1f, 1f, 0.95f).Wp(0f, 0f, 1f).Two(-0.12f).Off(0f, -0.05f, 0.03f), 0.32f, 0.12f).Linear();
+            DragonClipKey follow = Ft(K(0.15f).Sp(4f, 30f, 0f).Ch(2f, 16f, 0f).Hd(0f, -10f, 0f).Hand(-0.75f, 0.45f, 0.2f, 0.85f).Wp(-0.7f, 0.6f, -0.4f).Two(-0.12f).Off(0f, -0.04f, 0.03f), 0.32f, 0.12f);
+            return new DragonClipKey[] { K(-1f), cock, cock.Copy(-0.1f), swing, follow, follow.Copy(0.35f), K(0.75f) };
+        }
+
+        // Spin (SPAA): coil with the weapon across the body, then turn holding it level out to the right side.
+        private static DragonClipKey SbSpinPose(float t)
+        {
+            return Ft(K(t).Sp(5f, 0f, 0f).Hand(1f, 0f, 0.2f, 1f).Wp(1f, 0f, 0.1f).Off(0f, -0.04f, 0f), 0.15f, 0.1f);
+        }
+
+        private static DragonClipKey[] SbSpin(int turns, float turn)
+        {
+            List<DragonClipKey> k = new List<DragonClipKey>();
+            k.Add(K(-1f));
+            k.Add(Ft(K(-0.5f).Sp(6f, 24f, 0f).Ch(3f, 12f, 0f).Hd(0f, -14f, 0f).Hand(-0.6f, 0f, 0.6f, 0.7f).Wp(-1f, 0f, 0f).Off(0f, -0.05f, 0f), 0.2f, 0.1f));
+            k.Add(SbSpinPose(0f));
+            float t = 0f, yaw = 0f, q = turn * 0.25f;
+            for (int i = 0; i < turns * 4; i++)
+            {
+                t += q; yaw += 90f;
+                k.Add(SbSpinPose(t).Rot(0f, yaw, 0f).Linear());
+            }
+            k.Add(K(t + 0.35f).Rot(0f, yaw, 0f));
+            return k.ToArray();
+        }
+
+        // Ground cast (GCA). v 0 Stonefang (hand + weapon down at the ground), 1 Stomp (foot only), 2 Snare, 3 mobile flick.
+        private static DragonClipKey[] SbGround(int v)
+        {
+            if (v == 1)
+            {
+                DragonClipKey lift = K(-0.45f).Sp(3f, 0f, 0f).Hd(4f, 0f, 0f).LL(0f, 0.08f, 0f, 0f).RL(0.25f, 0.08f, 0f, 0f).Off(0f, 0.04f, 0f);
+                DragonClipKey hit = Ft(K(0f).Sp(10f, 0f, 0f).Ch(4f, 0f, 0f).Hd(6f, 0f, 0f).Off(0f, -0.08f, 0f), 0.05f, -0.2f).Linear();
+                DragonClipKey stAfter = hit.Copy(0.22f); stAfter.Lin = false;
+                return new DragonClipKey[] { K(-1f), lift, hit, stAfter, K(0.6f) };
+            }
+            if (v == 2)
+            {
+                DragonClipKey sn = Ft(K(0f).Sp(18f, 0f, 0f).Ch(8f, 0f, 0f).Hd(8f, 0f, 0f).Hand(0f, -0.9f, 0.45f, 1f).Off(0f, -0.18f, 0f), 0.35f, 0.2f);
+                return new DragonClipKey[] { K(-1f), sn, sn.Copy(0.15f), K(0.45f) };
+            }
+            if (v == 3)
+            {
+                DragonClipKey f = K(0f).Hd(6f, 0f, 0f).Hand(0f, -0.5f, 0.85f, 0.9f).Wp(0f, -0.6f, 0.8f);
+                return new DragonClipKey[] { K(-1f), K(-0.5f).Hand(0.1f, 0f, 0.8f, 0.7f), f, f.Copy(0.12f), K(0.35f) };
+            }
+            DragonClipKey load = K(-0.6f).Hd(4f, 0f, 0f).Hand(0.1f, 0.1f, 0.7f, 0.6f).Wp(0f, 0.4f, 1f);
+            DragonClipKey press = Ft(K(0f).Sp(14f, 0f, 0f).Ch(6f, 0f, 0f).Hd(8f, 0f, 0f).Hand(0f, -0.8f, 0.6f, 1f).Wp(0f, -0.9f, 0.4f).Off(0f, -0.1f, 0f), 0.25f, 0.12f).Linear();
+            DragonClipKey after = press.Copy(0.2f); after.Lin = false;
+            return new DragonClipKey[] { K(-1f), load, press, after, K(0.6f) };
+        }
+
+        // Remote command (RCA): main hand points at the target; v 1 open palm, 2 pinch, 3 pull.
+        private static DragonClipKey[] SbCommand(int v)
+        {
+            DragonClipKey pt = K(0f).Sp(0f, 8f, 0f).Ch(0f, 4f, 0f).Hd(0f, -4f, 0f).Hand(0f, 0f, 1f, 1f).Wp(0f, 0f, 1f);
+            if (v == 1) pt = pt.RH(-30f, 0f, 0f);
+            if (v == 2) pt = pt.RH(25f, 0f, 0f).Hand(0f, 0f, 1f, 0.85f);
+            if (v == 3) pt = pt.Hand(0.1f, -0.1f, 1f, 0.45f);
+            return new DragonClipKey[] { K(-1f), K(-0.4f).Hand(0.2f, -0.2f, 0.8f, 0.7f), pt, pt.Copy(0.15f), K(0.45f) };
+        }
+
+        // Olympic Hero (JSAA, storyboard 01): load fist cocked back + crouch, launch fist forward, fast counter-
+        // clockwise barrel roll, unwind fist down, main-hand impact (fist on the ground, left foot forward, right
+        // knee low behind), recover to guard. Hold at the poised fall until the real landing.
+        private static DragonClipKey[] SbOlympic(bool brutal)
+        {
+            float d = brutal ? 1.15f : 1f;
+            DragonClipKey load = Ft(K(-0.93f).Sp(16f * d, -10f, 0f).Ch(6f, -6f, 0f).Hd(-12f, 0f, 0f).Hand(0.45f, 0.1f, -0.45f, 0.6f).Off(0f, -0.15f * d, 0f), 0.2f, 0.1f);
+            DragonClipKey launch = K(-0.72f).Sp(4f, 0f, 0f).Hd(-35f, 0f, 0f).Hand(0.05f, 0.9f, 0.45f, 1f).Rot(70f, 0f, 0f).Off(0f, 0.08f, 0f);
+            DragonClipKey roll0 = launch.Copy(-0.62f).Rot(72f, 0f, 0f).Sn(25f);
+            DragonClipKey roll1 = launch.Copy(-0.36f).Rot(72f, 0f, 0f).Sn(360f);
+            DragonClipKey poised = K(0f).Sp(12f, 0f, 0f).Ch(6f, 0f, 0f).Hd(-8f, 0f, 0f).Hand(0.1f, -0.8f, 0.45f, 0.95f).Rot(28f, 0f, 0f).Sn(360f);
+            DragonClipKey impact = Ft(K(0.08f).Sp(30f, 0f, 0f).Ch(14f, 0f, 0f).Hd(-28f, 0f, 0f).Hand(0.05f, -1f, 0.35f, 0.97f).Rot(6f, 0f, 0f).Off(0f, -0.38f * d, 0.05f).Sn(360f), 0.75f, 0.8f);
+            DragonClipKey settle = impact.Copy(brutal ? 0.3f : 0.2f).Off(0f, -0.4f * d, 0.05f);
+            DragonClipKey rec = Ft(K(brutal ? 0.58f : 0.45f).Sp(8f, 0f, 0f).Hd(-6f, 0f, 0f).Hand(0.35f, -0.45f, 0.35f, 0.6f).Off(0f, -0.06f, 0f).Sn(360f), 0.3f, 0.2f);
+            return new DragonClipKey[] { K(-1f), load, launch, roll0, roll1, poised, impact, settle, rec, K(brutal ? 0.9f : 0.75f).Sn(360f) };
+        }
+
+        private static void BuildStoryboardClips(Dictionary<string, DragonClipKey[]> c)
+        {
+            string[] bdca = { "cleric_wave", "cleric_ray", "cleric_light", "cleric_intervention", "cleric_crucible", "cleric_wave_ally", "wiz_clockwork", "wiz_nova", "sm_guidance", "rg_tailwind", "rg_vigil" };
+            for (int i = 0; i < bdca.Length; i++) c[bdca[i]] = SbBdca(false);
+            c["merc_roar"] = SbBdca(true);
+            string[] ssca = { "cleric_rs", "cleric_rs_asc", "cleric_goddess", "cleric_relic", "cleric_holy_relic", "cleric_judgement", "cleric_tempest", "sorc_glacial", "sorc_glacial_asc" };
+            for (int i = 0; i < ssca.Length; i++) c[ssca[i]] = SbSsca(false);
+            c["wiz_meteor"] = SbSsca(true);
+            c["wiz_cataclysm"] = SbSsca(true);
+            c["warrior_heavy"] = SbSlash(1f, 0.15f, false, false);
+            c["merc_heavy_asc"] = SbSlash(1.3f, 0.2f, false, false);
+            c["sm_slash_a"] = SbSlash(0f, 0.04f, false, false);
+            c["sm_slash_b"] = SbSlash(0f, 0.04f, false, false);
+            c["sm_moon_finisher"] = SbSlash(1.3f, 0.25f, false, false);
+            c["sm_crescent"] = SbSlash(1f, 0.15f, false, false);
+            c["sm_blade_storm"] = SbSlash(0f, 0.1f, false, false);
+            c["sm_halfmoon"] = SbSlash(0.6f, 0.1f, false, true);
+            c["sm_halfmoon_2"] = SbSlash(0.6f, 0.1f, false, false);
+            DragonClipKey[] pullHold = SbSlash(0.6f, 0.1f, false, true);
+            c["sm_halfmoon_stance"] = new DragonClipKey[] { K(-1f), pullHold[1].Copy(0f), K(0.15f) };
+            c["sm_halfmoon_finisher"] = SbSlash(1.2f, 0.15f, true, true);
+            c["warrior_impact_wave"] = SbGolf(0.25f);
+            c["merc_seismic"] = SbGolf(0.25f);
+            c["wiz_greatblade"] = SbSlam(0.25f, false);
+            c["wiz_greatblade_slam"] = SbSlam(0.15f, true);
+            c["warrior_punch"] = SbThrust(0.15f);
+            c["sm_thrust"] = SbThrust(0.4f);
+            c["cleric_zap"] = SbCast();
+            c["sorc_flame"] = SbCast();
+            c["hw_gravity_blast"] = SbCast();
+            c["cleric_hammer"] = SbThrow();
+            DragonClipKey catchK = K(0.08f).Hand(0.1f, 0.05f, 1f, 0.8f).Off(0f, -0.02f, -0.04f);
+            c["cleric_hammer_call"] = new DragonClipKey[] { K(-1f), K(0f), catchK, catchK.Copy(0.2f), K(0.5f) };
+            c["merc_bomb"] = SbBat();
+            c["sorc_stonefang"] = SbGround(0);
+            c["merc_stomp"] = SbGround(1);
+            c["rg_trap"] = SbGround(2);
+            c["sorc_stonefang_asc"] = SbGround(3);
+            c["merc_circle"] = SbSpin(1, 0.4f);
+            c["merc_circle_2"] = SbSpin(1, 0.35f);
+            c["sm_eclipse"] = SbSpin(1, 0.4f);
+            DragonClipKey br = Ft(K(-0.6f).Sp(6f, -20f, 0f).Ch(3f, -10f, 0f).Hd(0f, 18f, 0f).Hand(-0.1f, 0f, 1f, 0.85f).Wp(0f, 0f, 1f).Two(0.35f).Off(0f, -0.05f, 0f), 0.3f, 0.15f);
+            DragonClipKey fire = br.Copy(0f).Off(0f, -0.05f, -0.06f).Hand(-0.1f, 0.05f, 1f, 0.75f);
+            c["wiz_railcannon"] = new DragonClipKey[] { K(-1f), br, br.Copy(-0.1f), fire, br.Copy(0.25f), K(0.6f) };
+            c["wiz_railcannon_hold"] = new DragonClipKey[] { K(-1f), br, br.Copy(0f), K(0.25f) };
+            c["hw_point"] = SbCommand(0); c["hw_command"] = SbCommand(0); c["hw_rift_echo"] = SbCommand(0); c["hw_rupture"] = SbCommand(2);
+            c["hw_open"] = SbCommand(1); c["hw_stop"] = SbCommand(1); c["hw_pinch"] = SbCommand(2); c["hw_afterimage"] = SbCommand(1);
+            c["hw_rift_walker"] = SbCommand(1); c["wiz_gravity"] = SbCommand(3);
+            c["olympic_hero"] = SbOlympic(false);
+            c["olympic_hero_brutal"] = SbOlympic(true);
+            DragonClipKey[] oh = c["olympic_hero"];
+            List<DragonClipKey> land = new List<DragonClipKey>();
+            land.Add(oh[5].Copy(-1f));
+            for (int i = 6; i < oh.Length; i++) land.Add(oh[i]);
+            c["olympic_land"] = land.ToArray();
+
+            // Shield Charge (FTAA shield variant): shield up (Valheim block pose), weapon tucked behind it; the
+            // finisher whips the mace up and smashes it down at head height.
+            DragonClipKey scBrace = Ft(K(-0.5f).Sp(10f, 0f, 0f).Ch(4f, 0f, 0f).Hd(-8f, 0f, 0f).Hand(-0.3f, -0.4f, 0.45f, 0.55f).Wp(0.15f, 0.85f, 0.25f).Off(0f, -0.05f, 0f), 0.2f, 0.1f);
+            DragonClipKey scDrive = K(0f).Sp(14f, -4f, 0f).Ch(6f, -4f, 0f).Hd(-14f, 0f, 0f).Hand(-0.3f, -0.4f, 0.45f, 0.55f).Wp(0.15f, 0.85f, 0.25f).Rot(10f, 0f, 0f);
+            DragonClipKey scRaise = K(0.07f).Sp(3f, -14f, 0f).Ch(-4f, -8f, 0f).Hd(-8f, 8f, 0f).Hand(0.15f, 1f, -0.25f, 0.95f).Wp(0.1f, 0.4f, -1f).Rot(4f, 0f, 0f);
+            DragonClipKey scSmash = Ft(K(0.17f).Sp(20f, 16f, 0f).Ch(10f, 10f, 0f).Hd(-12f, -8f, 0f).Hand(0f, 0.05f, 1f, 1f).Wp(0f, -0.3f, 1f).Rot(10f, 4f, 0f).Off(0f, -0.08f, 0.18f), 0.35f, 0.15f).Linear();
+            DragonClipKey scHold = scSmash.Copy(0.32f); scHold.Lin = false;
+            DragonClipKey scRec = K(0.62f).Sp(4f, 0f, 0f).Hand(0.3f, -0.6f, 0.3f, 0.55f).Off(0f, -0.02f, 0f);
+            c["cleric_charge"] = new DragonClipKey[] { K(-1f), scBrace, scDrive, scRaise, scSmash, scHold, scRec, K(0.95f) };
+
+            // Angel Comet (EMA dive): crouch, jump with the arm thrown up, wings on the rise, tip over into an
+            // inverted head-first dive (arm leading to the ground), flip upright into the hero landing.
+            DragonClipKey inv = K(0f).Sp(3f, 0f, 0f).Hd(-10f, 0f, 0f).Hand(0f, 1f, 0.1f, 1f).Rot(165f, 0f, 0f);
+            DragonClipKey hero = Ft(K(0.16f).Sp(30f, 0f, 0f).Ch(14f, 0f, 0f).Hd(-28f, 0f, 0f).Hand(0.05f, -1f, 0.35f, 0.97f).Rot(366f, 0f, 0f).Off(0f, -0.38f, 0.05f), 0.75f, 0.8f);
+            c["angel_comet"] = new DragonClipKey[] {
+                K(-1f),
+                Ft(K(-0.92f).Sp(14f, 0f, 0f).Ch(6f, 0f, 0f).Hand(0.3f, -0.6f, 0.3f, 0.55f).Off(0f, -0.12f, 0f), 0.15f, 0.1f),
+                K(-0.75f).Ch(-8f, 0f, 0f).Hd(-20f, 0f, 0f).Hand(0.05f, 1f, 0.1f, 1f).Rot(-6f, 0f, 0f),
+                K(-0.35f).Sp(-10f, 0f, 0f).Ch(-10f, 0f, 0f).Hd(-24f, 0f, 0f).Hand(1f, 0.2f, -0.3f, 1f).Rot(-10f, 0f, 0f),
+                K(-0.1f).Hd(-20f, 0f, 0f).Hand(0f, 1f, 0.2f, 1f).Rot(70f, 0f, 0f),
+                inv, hero, hero.Copy(0.4f).Off(0f, -0.4f, 0.05f),
+                Ft(K(0.7f).Sp(8f, 0f, 0f).Hd(-6f, 0f, 0f).Hand(0.35f, -0.45f, 0.35f, 0.6f).Rot(360f, 0f, 0f).Off(0f, -0.06f, 0f), 0.3f, 0.2f),
+                K(1.0f).Rot(360f, 0f, 0f)
+            };
+
+            // No euler arm offsets on the main arm where a hand target drives it (no double bending).
+            HashSet<DragonClipKey> seen = new HashSet<DragonClipKey>();
+            foreach (KeyValuePair<string, DragonClipKey[]> kv in c)
+                for (int i = 0; i < kv.Value.Length; i++)
+                {
+                    DragonClipKey k = kv.Value[i];
+                    if (k.HW > 0f && seen.Add(k)) { k.B[4] = Vector3.zero; k.B[5] = Vector3.zero; }
+                }
         }
 
         // ================================================================================== v0.25.21
