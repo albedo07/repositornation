@@ -1,9 +1,4 @@
-TEST v0.25.38 - Combo Chains
-1. Sword / axe / club / knife / two-hander: hold attack -> 5 swings, the 5th is the finisher; then ~1 s before you can attack again.
-2. Mercenary with two one-handed weapons: off-hand also deals damage every swing. If the dual-knife animation exists you see both arms swing.
-3. Bonecrusher: in the air the legs don't walk; WASD still steers.
-4. Elemental Cataclysm: "Elemental Cataclysm n/6" prompts while holding.
-5. Ascended Astral Greatblade: 3 big wind-up slams.  Halfmoon: one swing.
-6. Horizon Walker casting while running: legs keep running.
-7. Skyfall: arrows from the bow, leaning body, slow 2 m sink.  Furious Winds: faster pushback.
-8. Altar: no PASSIVE box; Warrior's Blessing text in the overview.
+TEST v0.25.39 - Altar Panels
+1. Altar, Warrior: top = Identity + Best For, middle = WARRIOR'S BLESSING, bottom-left skills, click one -> its text bottom-right.
+2. Advancement page (e.g. Sword Master, Priest): middle = MASTERY & GRACE, 6 skills in two columns, names fully readable.
+3. Skill Tree as Paladin: Paladin panel shows the armoured paladin scene; Priest shows the priest scene.

@@ -41,7 +41,7 @@ namespace AlbedosCustomClasses
     {
         public const string ModGuid = "albedo.customclasses";
         public const string ModName = "Dragon's Altar";
-        public const string ModVersion = "0.25.38";
+        public const string ModVersion = "0.25.39";
 
         internal const string ClassDataKey = "AlbedoCustomClasses.Class";
         internal const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -785,6 +785,8 @@ namespace AlbedosCustomClasses
         }
         private Transform _altarBaseSkillFooter, _altarAdvSkillFooter;
         private Text _altarBaseMechanics, _altarAdvMechanics;
+        private Text _altarBaseBlessing, _altarAdvBlessing, _altarBaseBlessingLabel, _altarAdvBlessingLabel;
+        private ScrollRect _altarBaseBlessingScroll, _altarAdvBlessingScroll;
         private ScrollRect _altarBaseMechanicsScroll, _altarAdvMechanicsScroll;
         private readonly List<Button> _altarBaseSkillButtons = new List<Button>();
         private readonly List<Button> _altarAdvSkillButtons = new List<Button>();
@@ -835,22 +837,57 @@ namespace AlbedosCustomClasses
             return description.Substring(0, mechanics).TrimEnd() + (tail < 0 ? "" : "\n\n" + description.Substring(tail));
         }
 
+        // v0.25.39 (user): the overview keeps IDENTITY + BEST FOR; every section in between (Blessing, Mastery,
+        // Grace) goes to the middle panel. One section -> its own title becomes the panel title.
+        private static void AltarSplit(string description, bool advancement, out string overview, out string header, out string body)
+        {
+            overview = description; header = advancement ? "MASTERY & GRACE" : "BLESSING"; body = string.Empty;
+            if (string.IsNullOrEmpty(description)) return;
+            string[] parts = description.Split(new string[] { "<b>" }, StringSplitOptions.RemoveEmptyEntries);
+            System.Text.StringBuilder ov = new System.Text.StringBuilder();
+            List<string> mids = new List<string>();
+            for (int i = 0; i < parts.Length; i++)
+            {
+                string part = "<b>" + parts[i].TrimEnd();
+                int close = part.IndexOf("</b>", StringComparison.Ordinal);
+                string title = close > 3 ? part.Substring(3, close - 3).Trim() : string.Empty;
+                if (title == "IDENTITY" || title == "BEST FOR") { if (ov.Length > 0) ov.Append("\n\n"); ov.Append(part); }
+                else if (title == "CORE MECHANICS" || title == "MECHANICS" || title == "PLAYSTYLE") continue;
+                else mids.Add(part);
+            }
+            if (ov.Length > 0) overview = ov.ToString();
+            if (mids.Count == 1)
+            {
+                string only = mids[0];
+                int close = only.IndexOf("</b>", StringComparison.Ordinal);
+                header = only.Substring(3, close - 3).Trim();
+                body = only.Substring(close + 4).Trim();
+            }
+            else body = string.Join("\n\n", mids.ToArray());
+        }
+
         private void BuildAltarSkillDetails(Transform parent, bool advancement)
         {
             Text overview;
             ScrollRect overviewScroll = AltarTextScroll(parent,"ClassOverview",new Vector2(215f,110f),new Vector2(520f,120f),out overview);
             AltarRule(parent,215f,38f,520f,1f);
-            CreateWrappedText(parent,"MECHANICS",new Vector2(215f,20f),500f,26f,19,new Color(0.40f,0.20f,0.08f,1f),true,TextAnchor.MiddleLeft);
-            Text mechanics;
-            ScrollRect mechanicsScroll = AltarTextScroll(parent,"SelectedSkillMechanics",new Vector2(215f,-60f),new Vector2(520f,126f),out mechanics);
+            // v0.25.39 (user): middle panel = Blessing (Mastery & Grace on the Advancement page); the clicked
+            // skill's description lives bottom right, next to the skill list. Every text is its own scroll view.
+            Text blessingLabel = CreateWrappedText(parent,"BLESSING",new Vector2(215f,20f),500f,26f,19,new Color(0.40f,0.20f,0.08f,1f),true,TextAnchor.MiddleLeft);
+            blessingLabel.resizeTextForBestFit = true; blessingLabel.resizeTextMinSize = 12; blessingLabel.resizeTextMaxSize = 19;
+            Text blessing;
+            ScrollRect blessingScroll = AltarTextScroll(parent,"BlessingText",new Vector2(215f,-60f),new Vector2(520f,126f),out blessing);
             Transform footer = AltarRect("SkillFooter",parent,Vector2.zero,new Vector2(1040f,900f));
             AltarRule(footer,215f,-133f,520f,1f);
+            AltarRule(footer,214f,-222f,1f,172f);
             AltarRule(footer,215f,-313f,520f,1f);
-            // v0.25.38 (user): no PASSIVE column - the Blessing / Mastery / Grace text sits in the overview
-            // between IDENTITY and BEST FOR; the skill list uses the full width.
             CreateWrappedText(footer,"SKILLS",new Vector2(85f,-150f),240f,28f,20,new Color(0.40f,0.20f,0.08f,1f),true,TextAnchor.MiddleLeft);
-            if (advancement) { _advDetailBody=overview; _altarAdvScroll=overviewScroll; _altarAdvMechanics=mechanics; _altarAdvMechanicsScroll=mechanicsScroll; _altarAdvSkillFooter=footer; }
-            else { _baseDetailBody=overview; _altarBaseScroll=overviewScroll; _altarBaseMechanics=mechanics; _altarBaseMechanicsScroll=mechanicsScroll; _altarBaseSkillFooter=footer; }
+            CreateWrappedText(footer,"SKILL",new Vector2(347f,-150f),246f,28f,20,new Color(0.40f,0.20f,0.08f,1f),true,TextAnchor.MiddleLeft);
+            Text mechanics;
+            ScrollRect mechanicsScroll = AltarTextScroll(footer,"SelectedSkillMechanics",new Vector2(347f,-237f),new Vector2(250f,138f),out mechanics);
+            mechanics.fontSize = 14;
+            if (advancement) { _advDetailBody=overview; _altarAdvScroll=overviewScroll; _altarAdvMechanics=mechanics; _altarAdvMechanicsScroll=mechanicsScroll; _altarAdvSkillFooter=footer; _altarAdvBlessing=blessing; _altarAdvBlessingLabel=blessingLabel; _altarAdvBlessingScroll=blessingScroll; }
+            else { _baseDetailBody=overview; _altarBaseScroll=overviewScroll; _altarBaseMechanics=mechanics; _altarBaseMechanicsScroll=mechanicsScroll; _altarBaseSkillFooter=footer; _altarBaseBlessing=blessing; _altarBaseBlessingLabel=blessingLabel; _altarBaseBlessingScroll=blessingScroll; }
         }
 
         private Sprite AltarSkillIcon(string id)
@@ -888,12 +925,13 @@ namespace AlbedosCustomClasses
             if(old!=null) { old.gameObject.SetActive(false); Destroy(old.gameObject); }
             Transform group=AltarRect("SkillChoices",footer,Vector2.zero,new Vector2(1040f,900f));
             AltarSkillEntry[] skills=AltarSkillEntries(className,false);
+            mechanics.text="<i>Click a skill to read what it does.</i>";
             bool twoColumns=skills.Length>3;
             for(int i=0;i<skills.Length;i++)
             {
                 int row=twoColumns ? i/2 : i, col=twoColumns ? i%2 : 0;
-                float x=twoColumns ? 85f+col*262f : 215f;
-                CreateAltarSkillChoice(group,skills[i],new Vector2(x,-186f-row*43f),twoColumns ? 255f : 520f,mechanics,scroll,buttons);
+                float x=twoColumns ? 22f+col*127f : 84f;
+                CreateAltarSkillChoice(group,skills[i],new Vector2(x,-186f-row*43f),twoColumns ? 124f : 250f,mechanics,scroll,buttons);
             }
         }
 
@@ -907,7 +945,9 @@ namespace AlbedosCustomClasses
             Image tile=AltarImage("SkillIcon",row.transform,new Vector2(-width/2f+(largeIcon ? 27f : 17f),0f),new Vector2(largeIcon ? 48f : 30f,largeIcon ? 48f : 30f),icon,icon==null ? new Color(0.08f,0.15f,0.26f,1f) : Color.white,false);
             Outline outline=tile.gameObject.AddComponent<Outline>(); outline.effectColor=AltarGold; outline.effectDistance=new Vector2(1f,-1f);
             if(icon==null) CreateWrappedText(tile.transform,entry.Name.Substring(0,1),Vector2.zero,28f,28f,19,AltarGold,true,TextAnchor.MiddleCenter);
-            CreateWrappedText(row.transform,entry.Name,new Vector2(largeIcon ? 28f : 18f,0f),width-(largeIcon ? 60f : 40f),largeIcon ? 66f : 40f,width>200f ? 15 : 13,AltarInk,false,TextAnchor.MiddleLeft);
+            Text nameText=CreateWrappedText(row.transform,entry.Name,new Vector2(largeIcon ? 28f : 18f,0f),width-(largeIcon ? 60f : 40f),largeIcon ? 66f : 40f,width>200f ? 15 : 13,AltarInk,false,TextAnchor.MiddleLeft);
+            // v0.25.39: long names shrink to fit their row instead of being cut.
+            nameText.resizeTextForBestFit=true; nameText.resizeTextMinSize=9; nameText.resizeTextMaxSize=width>200f ? 15 : 13;
             buttons.Add(button);
             button.onClick.AddListener(delegate {
                 // Inspection only: no casts, tier changes, class selection or save writes.
@@ -1168,7 +1208,14 @@ namespace AlbedosCustomClasses
                 _baseDetailRole.color = AltarGold;
             }
             if (_baseDetailBody != null)
-                _baseDetailBody.text = AltarOverview(GetBaseClassDescription(_focusedBaseClass));
+            {
+                string ov, hd, bd;
+                AltarSplit(GetBaseClassDescription(_focusedBaseClass), false, out ov, out hd, out bd);
+                _baseDetailBody.text = ov;
+                if (_altarBaseBlessing != null) _altarBaseBlessing.text = bd;
+                if (_altarBaseBlessingLabel != null) _altarBaseBlessingLabel.text = hd;
+                if (_altarBaseBlessingScroll != null) _altarBaseBlessingScroll.verticalNormalizedPosition = 1f;
+            }
             RefreshAltarSkillFooter(_focusedBaseClass, false);
             if (_chooseBaseButtonText != null)
                 _chooseBaseButtonText.text = "Choose " + _focusedBaseClass;
@@ -1234,7 +1281,14 @@ namespace AlbedosCustomClasses
                 _advDetailRole.color = AltarGold;
             }
             if (_advDetailBody != null)
-                _advDetailBody.text = AltarOverview(GetAdvancementDescription(advancementName));
+            {
+                string ov, hd, bd;
+                AltarSplit(GetAdvancementDescription(advancementName), true, out ov, out hd, out bd);
+                _advDetailBody.text = ov;
+                if (_altarAdvBlessing != null) _altarAdvBlessing.text = bd;
+                if (_altarAdvBlessingLabel != null) _altarAdvBlessingLabel.text = hd;
+                if (_altarAdvBlessingScroll != null) _altarAdvBlessingScroll.verticalNormalizedPosition = 1f;
+            }
             RefreshAltarSkillFooter(advancementName, true);
 
             Player player = Player.m_localPlayer;

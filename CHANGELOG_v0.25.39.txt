@@ -1,0 +1,11 @@
+Immortal Heroes v0.25.39 - Altar Panels
+=======================================
+ALTAR (layout approved from the preview)
+- Top panel: IDENTITY + BEST FOR.
+- Middle panel: the Blessing (Base Class page) / Mastery & Grace (Advancement page); a single section uses its own
+  name as the panel title (e.g. WARRIOR'S BLESSING).
+- Bottom: SKILLS list on the left (one column for 3 skills, two columns for 6), the clicked skill's description
+  in the new SKILL panel on the right. Every text area scrolls, long skill names shrink to fit (no overlap).
+SKILL TREE ART
+- Paladin panel now uses the Paladin scene from the art pack (washed in the Paladin rose), like the Priest panel
+  uses the Priest scene. Cleric panel unchanged. Both Paladin backdrops (before / after Advancement) updated.

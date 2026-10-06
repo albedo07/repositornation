@@ -87,8 +87,8 @@ GRADES = {
     "bowmaster": ([(8, 12, 4), (70, 96, 30), (196, 220, 110), (255, 250, 220)], 0.35),
 }
 # Panel hue per identity (degrees) for the background re-hue and the wash tint.
-SATS = {"priest": 0.45}
-HUES = {"ranger": 115, "acrobat": 170, "bowmaster": 95, "priest": 145, "warrior": 358, "swordmaster": 214, "mercenary": 14, "sorcerer": 276, "archmage": 284, "horizonwalker": 262}
+SATS = {"priest": 0.45, "paladin": 0.55}
+HUES = {"paladin": 352, "ranger": 115, "acrobat": 170, "bowmaster": 95, "priest": 145, "warrior": 358, "swordmaster": 214, "mercenary": 14, "sorcerer": 276, "archmage": 284, "horizonwalker": 262}
 
 
 def category(sid):
@@ -502,10 +502,12 @@ def main():
             write_icon(sid, akey)
         print("wrote", name)
 
-    # Cleric. Paladin keeps its painted panels; the game repairs Zap's frame itself at load.
+    # Cleric. v0.25.39 (user): the Paladin panel gets the paladin scene (rose kingdom wash) like the Priest
+    # panel got the priest scene; the Cleric panel stays as painted. The game repairs Zap's frame at load.
     _, pc, pa, pu, pg = CLERIC_KITS[0]
     for name in ("Cleric_Paladin_PreAdvance.png", "Cleric_Paladin_Reference.png"):
-        img = finish_header(Image.open(os.path.join(KEEP, name)).convert("RGBA"))
+        src = repair_lz(Image.open(os.path.join(KEEP, name)).convert("RGB"))
+        img = finish_header(build_background(src, None, "paladin", None, "paladin"))
         fill_tree(img, pc, pa, pu, pg, "cleric", "cleric")
         img.save(os.path.join(A, name))
         if preview and name.endswith("PreAdvance.png"):
