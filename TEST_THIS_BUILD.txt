@@ -1,3 +1,3 @@
-TEST v0.25.46
-1. Mercenary + knife or fists: vanilla chain, skills say "requires a melee weapon (no Knives / Fist weapons)".
-2. Mercenary + sword/axe/mace: 1,2,1,2,3 chain + skills work.
+TEST v0.25.47
+1. Warrior (no AC) + knife or fists: vanilla chain, skills say "requires a melee weapon (no Knives / Fist weapons)".
+2. Warrior + sword/axe/mace: 1,2,1,2,3 chain + skills work.

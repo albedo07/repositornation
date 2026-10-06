@@ -1,0 +1,4 @@
+Immortal Heroes v0.25.47 - Warrior Weapons
+
+- Warrior (and every Warrior AC): Knives and Fist weapons no longer count. No 5-hit chain with them, and Warrior
+  skills need a Sword / Axe / Club / Polearm / Spear.
