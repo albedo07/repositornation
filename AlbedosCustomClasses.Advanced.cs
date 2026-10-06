@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.35";
+        public const string ModVersion = "0.25.36";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1300,7 +1300,7 @@ namespace AlbedosCustomClassesAdvanced
                 else if (advancement == "Paladin")
                 {
                     // M4+6 only STARTS Shield Charge. It is never a recast button.
-                    // Left Click is the dedicated manual Shield Bash input while charging.
+                    // Left Click is the dedicated manual Hammer Slam input while charging.
                     if (!_shieldChargeActive && IhCanCast(player, "shield_charge"))
                         CastShieldCharge(player);
                 }
@@ -4167,6 +4167,9 @@ namespace AlbedosCustomClassesAdvanced
             Dictionary<int, float> nextHitAt = new Dictionary<int, float>();
             Dictionary<int, int> persistentHitCount = new Dictionary<int, int>();
             bool bigTargetReachedCap = false;
+            // v0.25.36: Left Click edge read from the held state (GetMouseButtonDown is often missed inside
+            // FixedUpdate steps, so the click did nothing).
+            bool lmbWasHeld = Input.GetMouseButton(0);
             try
             {
                 while (player != null && player == Player.m_localPlayer && !player.IsDead() &&
@@ -4174,9 +4177,12 @@ namespace AlbedosCustomClassesAdvanced
                 {
                     // Physical blockers stop position but do not pause the 15m skill budget.
                     // Charging into a wall therefore behaves like running on a treadmill.
-                    // Dedicated manual finisher: Left Click triggers Shield Bash.
+                    // Dedicated manual finisher: Left Click triggers the Hammer Slam.
                     // Pressing M4+6 again does nothing while Shield Charge is active.
-                    if (Input.GetMouseButtonDown(0))
+                    bool lmbHeld = Input.GetMouseButton(0);
+                    bool lmbPressed = lmbHeld && !lmbWasHeld;
+                    lmbWasHeld = lmbHeld;
+                    if (lmbPressed)
                     {
                         ShieldChargeBash(player, forward);
                         break;
@@ -4221,7 +4227,7 @@ namespace AlbedosCustomClassesAdvanced
 
                         // Small enemies may be run over for the whole 15m.
                         // Big/Boss targets cap at four Persistent Damage ticks,
-                        // then the charge converts immediately into Shield Bash.
+                        // then the charge converts immediately into the Hammer Slam.
                         if (!DragonCombat.IsSmallEnemy(target))
                         {
                             int count = 0;
@@ -4247,7 +4253,7 @@ namespace AlbedosCustomClassesAdvanced
                 // v0.25.7: no Bash -> the charge pose blends back to rest (Bash already took the impact).
                 DragonSkillClipDriver clip = player == null ? null : player.GetComponent<DragonSkillClipDriver>();
                 if (clip != null && clip.IsHolding) DragonCombat.ClipStop(player, 0.25f);
-                DragonCombat.ForceRun(player, false, false, 0.7f);
+                DragonCombat.ForceRun(player, false, false, 0f);   // v0.25.36 no lingering block pose over the hammer slam
                 EndShieldCharge();
             }
         }
@@ -4368,12 +4374,30 @@ namespace AlbedosCustomClassesAdvanced
             _shieldChargeActive = false;
         }
 
+        // v0.25.36 (user): the finisher is a strong HAMMER SLAM with the main-hand weapon (not a shield bash):
+        // the charge stops, the hammer goes up and comes down hard; the hit lands on the slam.
         private void ShieldChargeBash(Player player, Vector3 forward)
         {
-            DragonCombat.ForceRun(player, false, false, 0.7f);   // shield stays up through the mace blow
-            DragonCombat.ClipImpact(player);
             if (player == null || player.IsDead()) return;
-            ShowMessage("Shield Bash");
+            DragonCombat.ForceRun(player, false, false, 0f);
+            DragonCombat.ClipStop(player, 0.05f);
+            float slam = 0.4f;
+            DragonCombat.LockSkill(player, slam + 0.35f);
+            DragonCombat.PlayClip(player, "cleric_hammer_slam", slam);
+            StartCoroutine(ShieldChargeSlamRoutine(player, forward, slam));
+        }
+
+        private IEnumerator ShieldChargeSlamRoutine(Player player, Vector3 forward, float slam)
+        {
+            yield return new WaitForSeconds(slam);
+            if (player == null || player.IsDead()) yield break;
+            ShieldChargeSlamHit(player, forward);
+        }
+
+        private void ShieldChargeSlamHit(Player player, Vector3 forward)
+        {
+            if (player == null || player.IsDead()) return;
+            ShowMessage("Hammer Slam");
             bool ascended = IsAscendedSkill("shield_charge");
             float radius = Mathf.Max(0.5f, ascended ? DragonCombat.M(_chargeAscBashRadius.Value) : DragonCombat.M(_shieldChargeRadius.Value));
             float halfAngle = Mathf.Clamp(_chargeAscBashAngle.Value, 10f, 360f) * 0.5f;
@@ -10856,13 +10880,13 @@ namespace AlbedosCustomClassesAdvanced
                     b.Append(IhLine("Hitbox", IhNum(ascended ? _chargeAscHitRadius.Value : _shieldChargeRadius.Value) + "m"));
                     if (ascended)
                     {
-                        b.Append(IhLine("Shield Bash", "Left Click, " + IhNum(_chargeAscBashRadius.Value) + "m cone, " + IhNum(_chargeAscBashAngle.Value) + "°"));
+                        b.Append(IhLine("Hammer Slam", "Left Click, " + IhNum(_chargeAscBashRadius.Value) + "m cone, " + IhNum(_chargeAscBashAngle.Value) + "°"));
                         b.Append(IhLine("Inflicts", "Stun (Big enemies too)"));
                         b.Append(IhLine("Gain", "Hyper Armor while charging"));
                     }
                     else
                     {
-                        b.Append(IhLine("Shield Bash", "Left Click while charging"));
+                        b.Append(IhLine("Hammer Slam", "Left Click while charging"));
                     }
                     IhCosts(b, _shieldChargeStamina.Value, "Instant", _shieldChargeCooldown.Value);
                     break;
@@ -11257,7 +11281,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "judgement_hammer": return ascended
                     ? "Hurl a hammer of judgement that grows with every meter, then returns to the hand that threw it."
                     : "Hurl a hammer of judgement that grows heavier with every meter it flies, crushing all in its path.";
-                case "shield_charge": return "Raise your shield and charge forward, trampling everyone who dares stand in your path.";
+                case "shield_charge": return "Raise your shield and charge forward, trampling everyone who dares stand in your path, then bring your hammer down in a crushing slam.";
                 case "fallen_angel": return ascended
                     ? "Leap to the heavens and fall like a burning star. The ground you strike catches holy fire."
                     : "Leap to the heavens, then crash upon your enemies like a blazing comet.";
@@ -16124,7 +16148,7 @@ namespace AlbedosCustomClassesAdvanced
                 if (advancement == "Mercenary")
                     DrawBookCard(new Rect(500f, 283f, 445f, 82f), "Circle Swing", "M4 + 6", "1.5s steerable heavy wind-up with only 0.5m total shuffle. 7m radius, 1.75x held-weapon damage, force-Stuns Small/Big/Boss; uninterruptable Hyper Armor.");
                 else if (advancement == "Paladin")
-                    DrawBookCard(new Rect(500f, 283f, 445f, 82f), "Shield Charge", "M4 + 6", "Steerable physical 15m charge. Big/Boss cap: 4 persistent ticks, then Bash.");
+                    DrawBookCard(new Rect(500f, 283f, 445f, 82f), "Shield Charge", "M4 + 6", "Steerable physical 15m charge. Big/Boss cap: 4 persistent ticks, then Hammer Slam.");
                 else if (advancement == "Sword Master")
                     DrawBookCard(new Rect(500f, 283f, 445f, 82f), "Judgement Cut", "M4 + 6", "4 stacks. Ground PAC / Target PAC / Free Aim within 15m. Each cast creates a 4m sphere with 3 pure Slash cuts resolving instantly and simultaneously; each spent stack independently recharges in 12s, with a 0.5s buffer between activations.");
                 else if (advancement == "Priest")

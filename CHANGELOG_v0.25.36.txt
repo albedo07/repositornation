@@ -1,0 +1,7 @@
+Immortal Heroes v0.25.36 - Hammer Slam
+======================================
+- Shield Charge finisher is now a HAMMER SLAM with your main-hand weapon (was a shield bash):
+  the charge stops, the hammer goes up and comes down hard (Valheim's club heavy attack), damage on the slam (0.4 s).
+- Left Click during the charge now reliably triggers the slam (the click was often missed before).
+- The charge still ends in the slam on its own at full distance / after 4 hits on a Big or Boss.
+- No leftover shield-up pose over the slam. Tooltip lines say "Hammer Slam".

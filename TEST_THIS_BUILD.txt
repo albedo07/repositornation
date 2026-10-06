@@ -1,6 +1,4 @@
-TEST v0.25.35 - Swing Timing
-1. Heavy Slash, Impact Wave, Moonlight Splitter: slow draw back, fast swing, weapon connects when the hit/wave appears.
-2. Halfmoon = Heavy Slash animation. Crescent = Impact Wave animation; Ascended Crescent = leaping sword special
-   (if your game lacks "sword_secondary" it falls back to the custom pose - tell me).
-3. Frenzied Charge: sword pointed forward the whole dash.
-4. Circle Swing: cannot steer in the wind up; you hop ~1.5 m forward, then spin.
+TEST v0.25.36 - Hammer Slam
+1. Shield Charge, Left Click mid-charge: charge stops, overhead hammer slam, hit lands on the slam.
+2. Let the charge run out: same hammer slam at the end.
+3. If no club animation plays (custom pose instead), send me the "Animator triggers" log line.
