@@ -1,4 +1,3 @@
-TEST v0.25.33 - Piercing Volleys
-1. Tumble Shot / Gale Volley point blank at one enemy: several damage numbers (one per arrow that touches it).
-2. Line of enemies: arrows pass through all of them.
-3. Shoot at a wall/rock: arrows stop there, enemies behind it are not hit.
+TEST v0.25.34 - Buff Tooltips
+1. Cast Tailwind (or any buff), open the inventory so the cursor shows, hover the buff icon: name, type line, numbers.
+2. Barrier: tooltip shows the HP it still absorbs. Deadeye Focus: numbers grow with stacks.

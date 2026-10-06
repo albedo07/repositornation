@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.33";
+        public const string ModVersion = "0.25.34";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -2763,7 +2763,7 @@ namespace AlbedosCustomClassesAdvanced
             _mercFuryUntil = Time.time + Mathf.Max(0.5f, _furyDurationV.Value);
             _mercFuryCooldownUntil = _mercFuryUntil + Mathf.Max(0f, _furyLockoutV.Value);
             _mercFuryEndAnnounced = false;
-            DragonCombat.ShowStatus(player, "fury", "fury", "Unchained Fury", Mathf.Max(0.5f, _furyDurationV.Value), 0);
+            DragonCombat.ShowStatus(player, "fury", "fury", "Unchained Fury", Mathf.Max(0.5f, _furyDurationV.Value), 0, "Attack Buff\nMercenary skills are empowered (bigger and stronger)\nFury cannot build again for " + Mathf.RoundToInt(_furyLockoutV.Value).ToString() + "s after it ends");
             if (player != null)
             {
                 DragonCombat.PlayAccent(player, "merc_fury_accent", 0.12f);   // v0.25.15 Fury = low-priority accent
@@ -6190,7 +6190,7 @@ namespace AlbedosCustomClassesAdvanced
                 state.Armor = Mathf.Max(0f, armor);
                 state.EndTime = Time.time + Mathf.Max(1f, _grandBarrierDuration.Value);
                 _barriers[ally.GetInstanceID()] = state;
-                DragonCombat.ShowStatus(ally, "barrier", "barrier", "Barrier", state.EndTime - Time.time, Mathf.CeilToInt(state.HP));
+                DragonCombat.ShowStatus(ally, "barrier", "barrier", "Barrier", state.EndTime - Time.time, Mathf.CeilToInt(state.HP), "Defense Buff\nAbsorbs the next {stacks} damage");
 
                 if (_enableVfx.Value)
                     StartCoroutine(BarrierVisual(ally));
@@ -6503,7 +6503,7 @@ namespace AlbedosCustomClassesAdvanced
             state.HP = Mathf.Max(state.HP, Mathf.Max(1f, hp));
             state.Armor = Mathf.Max(state.Armor, Mathf.Max(0f, armor));
             state.EndTime = Mathf.Max(state.EndTime, Time.time + Mathf.Max(0.5f, duration));
-            DragonCombat.ShowStatus(ally, "barrier", "barrier", "Barrier", state.EndTime - Time.time, Mathf.CeilToInt(state.HP));
+            DragonCombat.ShowStatus(ally, "barrier", "barrier", "Barrier", state.EndTime - Time.time, Mathf.CeilToInt(state.HP), "Defense Buff\nAbsorbs the next {stacks} damage");
             if (_enableVfx.Value)
                 StartCoroutine(BarrierVisual(ally));
         }
@@ -8778,7 +8778,7 @@ namespace AlbedosCustomClassesAdvanced
                     barrier.HP -= effective;
                     ScaleDamage(hit, 0f);
                     _barriers[id] = barrier;
-                    DragonCombat.ShowStatus(target as Player, "barrier", "barrier", "Barrier", barrier.EndTime - Time.time, Mathf.Max(1, Mathf.CeilToInt(barrier.HP)));
+                    DragonCombat.ShowStatus(target as Player, "barrier", "barrier", "Barrier", barrier.EndTime - Time.time, Mathf.Max(1, Mathf.CeilToInt(barrier.HP)), "Defense Buff\nAbsorbs the next {stacks} damage");
                 }
                 else
                 {
@@ -12848,6 +12848,7 @@ namespace AlbedosCustomClassesAdvanced
             {
                 float rowW = count * icon + (count - 1) * iconGap;
                 float bx = panel.center.x - rowW * 0.5f, by = plaque.y - 6f * s - 20f * s - icon;
+                IhStatusDisplay hoverSe = null;
                 for (int i = 0; i < count; i++)
                 {
                     IhStatusDisplay se = _ihHudEffects[i] as IhStatusDisplay;
@@ -12871,8 +12872,38 @@ namespace AlbedosCustomClassesAdvanced
                         _ihHudTiny.alignment = a0;
                     }
                     IhHudShadowLabel(new Rect(ir.x - 14f * s, ir.yMax + 3f * s, ir.width + 28f * s, 18f * s), timer.Length > 0 ? timer : se.GetIconText(), _ihHudTiny);
-                    if (ir.Contains(e.mousePosition))
-                        IhHudShadowLabel(new Rect(ir.x, ir.y - 18f * s, 260f * s, 16f * s), se.m_name, _ihHudText);
+                    if (ir.Contains(e.mousePosition)) hoverSe = se;
+                }
+                // v0.25.34 buff tooltip: name, buff type, every number (above the row, kept on screen).
+                if (hoverSe != null)
+                {
+                    string detail = string.IsNullOrEmpty(hoverSe.Detail) ? "" : hoverSe.Detail.Replace("{stacks}", hoverSe.Stacks.ToString());
+                    string[] lines = detail.Length > 0 ? detail.Split('\n') : new string[0];
+                    float lineH = 17f * s, tipW = 150f * s;
+                    tipW = Mathf.Max(tipW, _ihHudText.CalcSize(new GUIContent(hoverSe.m_name)).x + 16f * s);
+                    for (int li = 0; li < lines.Length; li++) tipW = Mathf.Max(tipW, _ihHudTiny.CalcSize(new GUIContent(lines[li])).x + 16f * s);
+                    float tipH = 8f * s + lineH * (1 + lines.Length) + 4f * s;
+                    Rect tip = new Rect(Mathf.Clamp(e.mousePosition.x - tipW * 0.5f, 4f, Screen.width - tipW - 4f), Mathf.Max(4f, by - tipH - 8f * s), tipW, tipH);
+                    Color gold = new Color(0.78f, 0.62f, 0.32f, 1f);
+                    IhHudFill(tip, new Color(0.03f, 0.04f, 0.07f, 0.94f));
+                    IhHudFill(new Rect(tip.x, tip.y, tip.width, 1f), gold);
+                    IhHudFill(new Rect(tip.x, tip.yMax - 1f, tip.width, 1f), gold);
+                    IhHudFill(new Rect(tip.x, tip.y, 1f, tip.height), gold);
+                    IhHudFill(new Rect(tip.xMax - 1f, tip.y, 1f, tip.height), gold);
+                    Color c0 = _ihHudText.normal.textColor;
+                    _ihHudText.normal.textColor = new Color(0.97f, 0.88f, 0.66f, 1f);
+                    IhHudShadowLabel(new Rect(tip.x + 8f * s, tip.y + 4f * s, tip.width - 16f * s, lineH), hoverSe.m_name, _ihHudText);
+                    _ihHudText.normal.textColor = c0;
+                    for (int li = 0; li < lines.Length; li++)
+                    {
+                        Color c1 = _ihHudTiny.normal.textColor;
+                        if (li == 0) _ihHudTiny.normal.textColor = new Color(1f, 0.85f, 0.35f, 1f);
+                        TextAnchor a1 = _ihHudTiny.alignment;
+                        _ihHudTiny.alignment = TextAnchor.MiddleLeft;
+                        IhHudShadowLabel(new Rect(tip.x + 8f * s, tip.y + 4f * s + lineH * (li + 1), tip.width - 16f * s, lineH), lines[li], _ihHudTiny);
+                        _ihHudTiny.alignment = a1;
+                        _ihHudTiny.normal.textColor = c1;
+                    }
                 }
             }
 

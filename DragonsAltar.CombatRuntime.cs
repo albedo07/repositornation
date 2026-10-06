@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.33";
+        public const string ModVersion = "0.25.34";
 
         internal static DragonCombatPlugin Instance;
 
@@ -4880,6 +4880,11 @@ namespace DragonsAltarCombat
 
         public static void ShowStatus(Player player, string key, string icon, string label, float seconds, int stacks)
         {
+            ShowStatus(player, key, icon, label, seconds, stacks, null);
+        }
+
+        public static void ShowStatus(Player player, string key, string icon, string label, float seconds, int stacks, string detail)
+        {
             try
             {
                 if (player == null || player != Player.m_localPlayer || string.IsNullOrEmpty(key)) return;
@@ -4895,6 +4900,7 @@ namespace DragonsAltarCombat
                     existing.m_ttl = seconds;
                     SetStatusTime(existing, 0f);
                     existing.Stacks = stacks;
+                    if (detail != null) existing.Detail = detail;
                     return;
                 }
                 // v0.25.2 perf: no re-add while the same buff is refreshed every frame.
@@ -4904,6 +4910,7 @@ namespace DragonsAltarCombat
                 se.m_tooltip = label;
                 se.m_ttl = seconds;
                 se.Stacks = stacks;
+                se.Detail = detail;
                 se.m_icon = StatusSprite(icon);
                 MethodInfo[] methods = seman.GetType().GetMethods(BindingFlags.Instance | BindingFlags.Public);
                 for (int i = 0; i < methods.Length; i++)
@@ -5180,7 +5187,8 @@ namespace DragonsAltarCombat
             ClockworkUntil[id] = Time.time + Mathf.Max(0.1f, seconds);
             ClockworkDamage[id] = Mathf.Max(0f, skillDamageBonus);
             ClockworkCooldown[id] = Mathf.Clamp(cooldownMultiplier, 0f, 1f);
-            ShowStatus(player, "clockwork", "clockwork", "Clockwork", seconds, 0);
+            ShowStatus(player, "clockwork", "clockwork", "Clockwork", seconds, 0,
+                "Attack Buff\n" + BuffPct(Mathf.Max(0f, skillDamageBonus), "Skill Damage") + "\nSkill cooldowns that start now: -" + Mathf.RoundToInt((1f - Mathf.Clamp01(cooldownMultiplier)) * 100f).ToString() + "%");
         }
 
         public static bool IsClockworkActive(Player player)
@@ -5726,7 +5734,7 @@ namespace DragonsAltarCombat
             if (player == null)
                 return;
             ExplicitHyperArmorUntil[player.GetInstanceID()] = Time.time + Mathf.Max(0f, duration);
-            if (duration >= 1f) ShowStatus(player, "hyper_armor", "hyper_armor", "Hyper Armor", duration, 0);
+            if (duration >= 1f) ShowStatus(player, "hyper_armor", "hyper_armor", "Hyper Armor", duration, 0, "Defense Buff\nNo stagger or knockback from hits");
         }
 
         public static bool HasHyperArmor(Character character)
@@ -5855,6 +5863,30 @@ namespace DragonsAltarCombat
             return Mathf.Max(0.1f, factor);
         }
 
+        // v0.25.34 buff tooltip text: type (biggest share) + every non-zero bonus as its own line.
+        public static string BuffPct(float fraction, string what)
+        {
+            int p = Mathf.RoundToInt(fraction * 100f);
+            return (p >= 0 ? "+" : "") + p.ToString() + "% " + what;
+        }
+
+        private static string TimedBuffDetail(float damage, float speed, float move, float defense, float stamina, float eitr, bool hyper)
+        {
+            string type = "Buff";
+            float atk = Mathf.Abs(damage) + Mathf.Abs(speed), def = Mathf.Abs(defense) + (hyper ? 0.01f : 0f), mob = Mathf.Abs(move), sus = Mathf.Abs(stamina) + Mathf.Abs(eitr);
+            float best = Mathf.Max(Mathf.Max(atk, def), Mathf.Max(mob, sus));
+            if (best > 0f) type = best == atk ? "Attack Buff" : best == def ? "Defense Buff" : best == mob ? "Movement Buff" : "Recovery Buff";
+            System.Text.StringBuilder b = new System.Text.StringBuilder(type);
+            if (Mathf.Abs(damage) > 0.0001f) b.Append("\n").Append(BuffPct(damage, "Attack Damage"));
+            if (Mathf.Abs(speed) > 0.0001f) b.Append("\n").Append(BuffPct(speed, "Attack Speed"));
+            if (Mathf.Abs(defense) > 0.0001f) b.Append("\n").Append(BuffPct(defense, "Defense"));
+            if (Mathf.Abs(move) > 0.0001f) b.Append("\n").Append(BuffPct(move, "Movement Speed"));
+            if (Mathf.Abs(stamina) > 0.0001f) b.Append("\n").Append(BuffPct(stamina, "Stamina Regen"));
+            if (Mathf.Abs(eitr) > 0.0001f) b.Append("\n").Append(BuffPct(eitr, "Eitr Regen"));
+            if (hyper) b.Append("\nHyper Armor (no stagger or knockback)");
+            return b.ToString();
+        }
+
         public static void ApplyTimedBuff(Player player, float duration, float attackDamageBonus, float attackSpeedBonus, float moveSpeedBonus, float defenseBonus, float staminaRegenBonus, float eitrRegenBonus, bool hyperArmor)
         {
             ApplyTimedBuff(player, "Generic", duration, attackDamageBonus, attackSpeedBonus, moveSpeedBonus, defenseBonus, staminaRegenBonus, eitrRegenBonus, hyperArmor);
@@ -5870,7 +5902,8 @@ namespace DragonsAltarCombat
 
             string statusIcon, statusLabel;
             TimedBuffLook(source, attackDamageBonus, attackSpeedBonus, moveSpeedBonus, defenseBonus, staminaRegenBonus, eitrRegenBonus, hyperArmor, out statusIcon, out statusLabel);
-            if (duration >= 1f) ShowStatus(player, "buff_" + source, statusIcon, statusLabel, duration, 0);
+            if (duration >= 1f) ShowStatus(player, "buff_" + source, statusIcon, statusLabel, duration, 0,
+                TimedBuffDetail(attackDamageBonus, attackSpeedBonus, moveSpeedBonus, defenseBonus, staminaRegenBonus, eitrRegenBonus, hyperArmor));
 
             TimedBuffState state = new TimedBuffState();
             state.EndTime = Time.time + Mathf.Max(0.1f, duration);
@@ -7517,6 +7550,8 @@ namespace DragonsAltarCombat
     public class IhStatusDisplay : StatusEffect
     {
         public int Stacks;
+        // v0.25.34 hover tooltip: first line = buff type ("Attack Buff"...), then the numbers; {stacks} = Stacks.
+        public string Detail;
 
         // v0.25.9: StatusEffect.m_time is protected in Valheim; outside code reads the time left here.
         public float Remaining()

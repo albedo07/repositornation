@@ -40,7 +40,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Dragon's Altar - Ranger";
-        public const string ModVersion = "0.25.33";
+        public const string ModVersion = "0.25.34";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -1839,7 +1839,7 @@ namespace DragonsAltarRanger
             if (stacks != _focusShown)
             {
                 // v0.24.3: Focus shows as a buff with its stack count.
-                if (stacks > 0) DragonCombat.ShowStatus(player, "focus", "focus", "Deadeye Focus", 0f, stacks);
+                if (stacks > 0) DragonCombat.ShowStatus(player, "focus", "focus", "Deadeye Focus", 0f, stacks, "Attack Buff\n+" + Mathf.RoundToInt(stacks * _deFocusDamage.Value).ToString() + "% Arrow Damage\n+" + Mathf.RoundToInt(stacks * _deFocusRange.Value).ToString() + "% Arrow Range\nStand still to build (max " + Mathf.RoundToInt(_deFocusMax.Value).ToString() + "), moving drains it");
                 else DragonCombat.ClearStatus(player, "focus");
                 if (stacks >= Mathf.RoundToInt(max) && max > 0f) ShowMessage("Deadeye - Focus " + stacks + "/" + Mathf.RoundToInt(max));
                 _focusShown = stacks;
@@ -2326,7 +2326,7 @@ namespace DragonsAltarRanger
         // v0.24.3: enemies in range glow red (instead of floating markers) while Hawk's Vigil lasts.
         private IEnumerator VigilMarks(Player player, float duration)
         {
-            DragonCombat.ShowStatus(player, "hawks_vigil", "vigil", "Hawk's Vigil", duration, 0);
+            DragonCombat.ShowStatus(player, "hawks_vigil", "vigil", "Hawk's Vigil", duration, 0, "Attack Buff\n+" + Mathf.RoundToInt(_hvRanged.Value).ToString() + "% Ranged Damage (you and allies within " + Mathf.RoundToInt(_hvRadius.Value).ToString() + "m)\nEnemies within " + Mathf.RoundToInt(_hvReveal.Value).ToString() + "m are marked");
             float end = Time.time + duration;
             HashSet<Character> lit = new HashSet<Character>();
             while (Time.time < end && player != null && !player.IsDead())

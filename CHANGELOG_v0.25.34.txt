@@ -1,0 +1,7 @@
+Immortal Heroes v0.25.34 - Buff Tooltips
+========================================
+- Hovering a buff icon above the HUD shows a tooltip: buff name, buff type (Attack / Defense / Movement /
+  Recovery Buff) and every number, e.g. "+30% Attack Damage", "+50% Movement Speed", "+40% Defense".
+- Covered: every timed skill buff (Tailwind, Heaven's Light, Knight's Guidance, Battlecry, Holy Relic,
+  Divine Intervention, Ray of Hope...), Hyper Armor, Clockwork (Skill Damage + cooldown cut), Barrier
+  (damage it still absorbs), Unchained Fury, Deadeye Focus (damage/range per stack), Hawk's Vigil.
