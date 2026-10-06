@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.37";
+        public const string ModVersion = "0.25.38";
 
         internal static DragonCombatPlugin Instance;
 
@@ -396,6 +396,7 @@ namespace DragonsAltarCombat
             count += PatchFloatRefSEMan("ModifyEitrRegen", "EitrRegenPrefix");
             count += PatchAttackGetStamina();
             count += PatchAttackStart();
+            count += PatchComboChains();
             count += PatchEquipmentMovement();
             count += PatchUseStamina();
             count += PatchBlockAttack();
@@ -868,6 +869,200 @@ namespace DragonsAltarCombat
                 }
             }
             return count;
+        }
+
+        // ==================================================================================
+        // v0.25.38 COMBO CHAINS (user): every chained melee weapon gets a 5-hit chain built from its own vanilla
+        // swings (a 3-swing weapon plays 0,1,0,1 then its finisher 2; the finisher keeps Valheim's last-hit
+        // damage bonus). Dual wield (Mercenary, two one-handed weapons): the off-hand weapon strikes on every
+        // swing (mirrored sweep, like the DualWield mod) and the chain uses Valheim's dual-knife swings when the
+        // game has them. After the 5th hit normal attacks are locked for 1 s.
+        // ==================================================================================
+        internal ConfigEntry<bool> ComboChainsEnabled;
+        internal ConfigEntry<int> ComboChainLength;
+        internal ConfigEntry<float> ComboFinisherLockout;
+        private static FieldInfo _atkLevels, _atkLevel, _atkAnim, _atkChar, _atkWeapon, _atkAngle, _atkType;
+        private static MethodInfo _atkMelee;
+        private static bool _comboInStart, _comboDual;
+        private static string _comboBase;
+        private static object _comboFinisher;
+        private static float _comboLockUntil;
+        private static bool _offhandSwing;
+
+        private static void ComboFields()
+        {
+            if (_atkLevels != null) return;
+            Type t = typeof(Attack);
+            BindingFlags f = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            _atkLevels = t.GetField("m_attackChainLevels", f);
+            _atkLevel = t.GetField("m_currentAttackCainLevel", f);
+            _atkAnim = t.GetField("m_attackAnimation", f);
+            _atkChar = t.GetField("m_character", f);
+            _atkWeapon = t.GetField("m_weapon", f);
+            _atkAngle = t.GetField("m_attackAngle", f);
+            _atkType = t.GetField("m_attackType", f);
+            _atkMelee = t.GetMethod("DoMeleeAttack", f, null, Type.EmptyTypes, null);
+        }
+
+        private int PatchComboChains()
+        {
+            ComboChainsEnabled = Config.Bind("Combat", "FiveHitCombos_v02538", true, "Normal melee attacks chain into a 5-hit combo built from the weapon's own vanilla swings.");
+            ComboChainLength = Config.Bind("Combat", "ComboLength_v02538", 5, "Hits in the normal attack chain.");
+            ComboFinisherLockout = Config.Bind("Combat", "ComboFinisherLockout_v02538", 1f, "Seconds after the last hit of the chain before a new normal attack can start.");
+            ComboFields();
+            int n = 0;
+            BindingFlags all = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            MethodInfo[] am = typeof(Attack).GetMethods(all);
+            for (int i = 0; i < am.Length; i++)
+            {
+                try
+                {
+                    if (am[i].Name == "Start" && am[i].ReturnType == typeof(bool))
+                    { PatchWithHarmony(am[i], new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("ComboStartPrefix", BindingFlags.Static | BindingFlags.NonPublic)), new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("ComboStartPostfix", BindingFlags.Static | BindingFlags.NonPublic))); n++; }
+                    else if (am[i].Name == "Stop" && am[i].GetParameters().Length == 0)
+                    { PatchWithHarmony(am[i], null, new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("ComboStopPostfix", BindingFlags.Static | BindingFlags.NonPublic))); n++; }
+                    else if (am[i].Name == "OnAttackTrigger" && am[i].GetParameters().Length == 0)
+                    { PatchWithHarmony(am[i], new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("OffhandTriggerPrefix", BindingFlags.Static | BindingFlags.NonPublic)), null); n++; }
+                }
+                catch (Exception ex) { Logger.LogWarning("Combo chain patch " + am[i].Name + ": " + ex.Message); }
+            }
+            MethodInfo[] hm = typeof(Humanoid).GetMethods(all);
+            for (int i = 0; i < hm.Length; i++)
+            {
+                if (hm[i].Name != "StartAttack" || hm[i].ReturnType != typeof(bool)) continue;
+                try { PatchWithHarmony(hm[i], new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("ComboLockPrefix", BindingFlags.Static | BindingFlags.NonPublic)), null); n++; }
+                catch (Exception ex) { Logger.LogWarning("Combo lock patch: " + ex.Message); }
+            }
+            Type z = Type.GetType("ZSyncAnimation, assembly_valheim");
+            MethodInfo st = z == null ? null : z.GetMethod("SetTrigger", all, null, new Type[] { typeof(string) }, null);
+            if (st != null)
+            {
+                try { PatchWithHarmony(st, new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("ComboTriggerPrefix", BindingFlags.Static | BindingFlags.NonPublic)), null); n++; }
+                catch (Exception ex) { Logger.LogWarning("Combo trigger patch: " + ex.Message); }
+            }
+            return n;
+        }
+
+        private static bool IsLocalMeleeAttack(object attack, out Player player)
+        {
+            player = null;
+            if (attack == null || _atkChar == null) return false;
+            player = _atkChar.GetValue(attack) as Player;
+            if (player == null || player != Player.m_localPlayer) return false;
+            object type = _atkType == null ? null : _atkType.GetValue(attack);
+            string ts = type == null ? "" : type.ToString();
+            return ts == "Horizontal" || ts == "Vertical";
+        }
+
+        private static bool IsDualWielding(Player p)
+        {
+            ItemDrop.ItemData l = DragonCombat.GetHandItem(p, "m_leftItem");
+            ItemDrop.ItemData r = DragonCombat.GetHandItem(p, "m_rightItem");
+            return l != null && r != null && l != r && DragonCombat.IsOneHandedWeapon(l) && DragonCombat.IsOneHandedWeapon(r);
+        }
+
+        private static void ComboStartPrefix(Attack __instance)
+        {
+            _comboInStart = false;
+            try
+            {
+                if (Instance == null || !Instance.ComboChainsEnabled.Value) return;
+                Player p;
+                if (!IsLocalMeleeAttack(__instance, out p)) return;
+                int levels = (int)_atkLevels.GetValue(__instance);
+                if (levels < 2) return;   // only weapons that already chain (no spears / single heavy hits)
+                _atkLevels.SetValue(__instance, Mathf.Clamp(Instance.ComboChainLength.Value, 2, 9));
+                _comboBase = _atkAnim.GetValue(__instance) as string;
+                _comboDual = IsDualWielding(p);
+                _comboInStart = true;
+            }
+            catch (Exception) { _comboInStart = false; }
+        }
+
+        private static void ComboStartPostfix(Attack __instance, bool __result)
+        {
+            bool was = _comboInStart;
+            _comboInStart = false;
+            if (!was || !__result) return;
+            try
+            {
+                int levels = (int)_atkLevels.GetValue(__instance);
+                int level = (int)_atkLevel.GetValue(__instance);
+                if (levels >= 2 && level == levels - 1)
+                {
+                    _comboFinisher = __instance;
+                    // safety net in case Stop never reports (interrupted swing)
+                    _comboLockUntil = Mathf.Max(_comboLockUntil, Time.time + 1.6f + Mathf.Max(0f, Instance.ComboFinisherLockout.Value));
+                }
+            }
+            catch (Exception) { }
+        }
+
+        private static void ComboStopPostfix(Attack __instance)
+        {
+            if (__instance == null || !ReferenceEquals(__instance, _comboFinisher)) return;
+            _comboFinisher = null;
+            _comboLockUntil = Time.time + Mathf.Max(0f, Instance == null ? 1f : Instance.ComboFinisherLockout.Value);
+        }
+
+        private static bool ComboLockPrefix(Humanoid __instance, ref bool __result)
+        {
+            if (__instance == null || __instance != Player.m_localPlayer) return true;
+            if (Time.time >= _comboLockUntil) return true;
+            __result = false;
+            return false;
+        }
+
+        // Valheim fires <animation><chain level>; level 3+ does not exist on a 3-swing weapon, so every level is
+        // mapped onto the weapon's real swings: finisher = its last swing, the rest cycle the others.
+        private static void ComboTriggerPrefix(object __instance, ref string __0)
+        {
+            if (!_comboInStart || string.IsNullOrEmpty(__0) || string.IsNullOrEmpty(_comboBase)) return;
+            try
+            {
+                if (!__0.StartsWith(_comboBase, StringComparison.Ordinal)) return;
+                string digits = __0.Substring(_comboBase.Length);
+                int level;
+                if (digits.Length == 0 || !int.TryParse(digits, out level)) return;
+                Component c = __instance as Component;
+                Animator a = c == null ? null : c.GetComponentInChildren<Animator>();
+                string baseName = _comboBase;
+                if (_comboDual && DragonCombat.AnimTriggerCount(a, "dual_knives") >= 2) baseName = "dual_knives";
+                int count = DragonCombat.AnimTriggerCount(a, baseName);
+                if (count <= 0) return;
+                int levels = Mathf.Clamp(Instance.ComboChainLength.Value, 2, 9);
+                int index = level >= levels - 1 ? count - 1 : (count > 1 ? level % (count - 1) : 0);
+                __0 = baseName + index.ToString();
+            }
+            catch (Exception) { }
+        }
+
+        // DualWield-style off-hand strike: the left weapon swings the same arc mirrored, on every normal hit.
+        private static void OffhandTriggerPrefix(Attack __instance)
+        {
+            if (_offhandSwing || _atkMelee == null) return;
+            try
+            {
+                Player p;
+                if (!IsLocalMeleeAttack(__instance, out p) || !IsDualWielding(p)) return;
+                ItemDrop.ItemData left = DragonCombat.GetHandItem(p, "m_leftItem");
+                object weapon = _atkWeapon.GetValue(__instance);
+                float angle = (float)_atkAngle.GetValue(__instance);
+                _offhandSwing = true;
+                try
+                {
+                    _atkWeapon.SetValue(__instance, left);
+                    _atkAngle.SetValue(__instance, -angle);
+                    _atkMelee.Invoke(__instance, null);
+                }
+                finally
+                {
+                    _atkWeapon.SetValue(__instance, weapon);
+                    _atkAngle.SetValue(__instance, angle);
+                    _offhandSwing = false;
+                }
+            }
+            catch (Exception) { _offhandSwing = false; }
         }
 
         private int PatchAttackStart()
@@ -1800,6 +1995,7 @@ namespace DragonsAltarCombat
         private int[] _vaPre;
         private float _vaFiredAt, _vaGuess;
         private bool _noAim, _noPlant;
+        private Rigidbody _body;
         private float _vaLead = 0.3f;
 
         public void Begin(DragonClipKey[] keys, float windup, bool hold, Transform visual)
@@ -2221,7 +2417,12 @@ namespace DragonsAltarCombat
 
         private void PlantFeet()
         {
-            bool can = !_noPlant && _feetCaptured && _visual != null && DragonCombat.OwnsMotionRoot(_token) && Grounded();
+            // v0.25.38 (user): casting while running keeps the run - no foot planting while the body really
+            // moves (planted feet on a moving body looked like gliding).
+            if (_body == null && _owner != null) _body = _owner.GetComponent<Rigidbody>();
+            bool moving = false;
+            if (_body != null) { Vector3 hv = _body.velocity; hv.y = 0f; moving = hv.magnitude > 1.2f; }
+            bool can = !_noPlant && !moving && _feetCaptured && _visual != null && DragonCombat.OwnsMotionRoot(_token) && Grounded();
             float tilt = Mathf.Max(Mathf.Abs(Mathf.DeltaAngle(0f, _r.x)), Mathf.Max(Mathf.Abs(Mathf.DeltaAngle(0f, _r.z)), Mathf.Abs(Mathf.DeltaAngle(0f, _spin))));
             float upright = 1f - Mathf.InverseLerp(25f, 45f, tilt);
             _plantW = Mathf.MoveTowards(_plantW, can ? _env * upright : 0f, Time.deltaTime * 8f);
@@ -2813,6 +3014,18 @@ namespace DragonsAltarCombat
         }
 
         // The animator trigger that really exists for `name` (name, or name + "0" for combo chains), or null.
+        // Number of consecutive chain triggers <name>0, <name>1, ... the player's animator really has.
+        public static int AnimTriggerCount(Animator a, string name)
+        {
+            if (a == null || string.IsNullOrEmpty(name)) return 0;
+            ResolveTrigger(a, name);
+            HashSet<string> set;
+            if (!AnimTriggers.TryGetValue(a.GetInstanceID(), out set)) return 0;
+            int n = 0;
+            while (n < 10 && set.Contains(name + n.ToString())) n++;
+            return n;
+        }
+
         private static string ResolveTrigger(Animator a, string name)
         {
             if (a == null || string.IsNullOrEmpty(name)) return null;
@@ -2852,6 +3065,13 @@ namespace DragonsAltarCombat
             if (!VanMap.TryGetValue(clip, out m)) return null;
             string trig = ResolveTrigger(player.GetComponentInChildren<Animator>(), m.Key);
             if (trig == null) return null;
+            // v0.25.38 (user): emotes are full-body and freeze the legs; while running use the upper-body
+            // custom pose instead so the run animation keeps playing.
+            if (trig.StartsWith("emote", StringComparison.Ordinal))
+            {
+                Rigidbody rb = player.GetComponent<Rigidbody>();
+                if (rb != null) { Vector3 hv = rb.velocity; hv.y = 0f; if (hv.magnitude > 1.2f) return null; }
+            }
             DragonClipKey[] k;
             if (length > 0f)
                 k = new DragonClipKey[] { K(-1f), Ft(K(0f).Off(0f, -0.03f, 0f), 0.15f, 0.1f), Ft(K(length).Off(0f, -0.03f, 0f), 0.15f, 0.1f), K(length + 0.3f) };
@@ -3275,7 +3495,7 @@ namespace DragonsAltarCombat
             c["rg_sky"] = new DragonClipKey[] { K(-1f), RgSky(-0.5f, false), RgSky(-0.05f, false), RgSky(0f, true), RgSky(0.2f, true), K(0.6f) };
             c["rg_starfall"] = new DragonClipKey[] { K(-1f), RgSky(-0.8f, false), RgSky(-0.05f, false), RgSky(0f, true), K(0.45f) };
             // v0.25.32 user: Skyfall hover = a normal bow shot pose (upright, string hand at the cheek, no arm through the body).
-            DragonClipKey hov = RgDraw(0f).Hd(14f, 20f, 0f);
+            DragonClipKey hov = RgDraw(0f).Hd(10f, 20f, 0f).Rot(24f, 0f, 0f);   // v0.25.38 leaning over the target zone
             c["rg_hover"] = new DragonClipKey[] { K(-1f), hov, K(0.3f) };
             c["rg_spin"] = Join(K(-1f), RgDraw(-0.3f), Spin360(RgDraw(0f), 0f, 0.4f, 0.0f), RgLoose(0.45f), K(0.75f));
             // v0.25.31 user: Cyclone Arrow = a normal bow shot (no body spin).

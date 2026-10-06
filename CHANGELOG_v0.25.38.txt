@@ -1,0 +1,20 @@
+Immortal Heroes v0.25.38 - Combo Chains
+=======================================
+NORMAL ATTACKS
+- Every chained melee weapon now has a 5-hit chain built from its own vanilla swings
+  (3-swing weapons: swing 1, 2, 1, 2, then the weapon's finisher; the finisher keeps Valheim's last-hit bonus).
+- After the 5th hit, normal attacks are locked for 1 s (no spamming).
+- Dual wield (Mercenary, two one-handed weapons): the off-hand weapon strikes on every swing (mirrored arc, like
+  the DualWield mod), and the chain uses Valheim's dual-knife swings when your game has them.
+  [Combat] FiveHitCombos_v02538 / ComboLength_v02538 / ComboFinisherLockout_v02538.
+SKILLS
+- Bonecrusher / Electric Smite jump: no walking in the air (no walk animation fighting the jump); steer with WASD.
+- Elemental Cataclysm: on-screen stack prompt while charging (like Meteor Fall).
+- Ascended Astral Greatblade: slams 2 and 3 get the same big wind up as the first.
+- Halfmoon Slash: one slash animation only (the second hit is the afterimage).
+- Casting while running keeps the running legs (no gliding); emote-based casts use the upper-body pose while moving.
+- Skyfall Barrage: arrows come from the bow, body leans over the target zone, you sink 2 m over the hover.
+- Furious Winds pushback: Small 3 s, Big / Boss 5 s.
+ALTAR
+- Preview: PASSIVE column removed (Blessing / Mastery / Grace are in the text between Identity and Best For);
+  Warrior, Sword Master and Mercenary now have that section. Skill list uses the full width.

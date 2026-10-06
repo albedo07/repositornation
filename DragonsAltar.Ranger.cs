@@ -40,7 +40,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Dragon's Altar - Ranger";
-        public const string ModVersion = "0.25.37";
+        public const string ModVersion = "0.25.38";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -230,8 +230,8 @@ namespace DragonsAltarRanger
             _fwDuration = Config.Bind(fw, "Duration", 3f, "Seconds; you stand in the storm.");
             _fwRadius = Config.Bind(fw, "Radius", 10f, "Attack radius (m): every enemy inside is cut.");
             _fwBarrier = Config.Bind(fw, "BarrierRadius", 7f, "Wind barrier (m): enemies can't come closer and are slowly pushed out to it; enemy projectiles inside are blown away.");
-            _fwSmallPush = Config.Bind(fw, "SmallPushSeconds", 5f, "A Small enemy 1m from you reaches the barrier after this long.");
-            _fwBigPush = Config.Bind(fw, "BigPushSeconds", 8f, "Big enemies and Bosses: same, slower.");
+            _fwSmallPush = Config.Bind(fw, "SmallPushSeconds_v02538", 3f, "A Small enemy 1m from you reaches the barrier after this long.");
+            _fwBigPush = Config.Bind(fw, "BigPushSeconds_v02538", 5f, "Big enemies and Bosses: same, slower.");
             _fwInterval = Config.Bind(fw, "TickInterval", 0.25f, "Seconds between leaf cuts.");
             _fwSlash = Config.Bind(fw, "SlashPercent", 25f, "Each tick: % of your Ranger damage as Slash to every enemy at the barrier.");
             _fwDot = Config.Bind(fw, "SpiritDotPercentPerStack", 4f, "Spirit DoT per stack every 0.5s (% of your Ranger damage). Every tick adds a stack.");
@@ -987,8 +987,12 @@ namespace DragonsAltarRanger
             float nextTick = 0f;
             RangerArrowDamage d = ArrowDamage(player);
             float mult = _sbDamage.Value / 100f * DragonCombat.GetSkillPower(player, "skyfall_barrage");
+            // v0.25.38 (user): sink slowly (2 m over the whole hover) so it never looks like floating.
+            float hoverStart = Time.time, hoverLen = Mathf.Max(0.2f, _sbDuration.Value);
+            Vector3 hoverTop = top;
             while (Time.time < end && player != null && !player.IsDead())
             {
+                top = hoverTop - Vector3.up * DragonCombat.M(2f) * Mathf.Clamp01((Time.time - hoverStart) / hoverLen);
                 player.transform.position = top;
                 if (body != null) { body.position = top; body.velocity = Vector3.zero; }
                 if (ascended)
@@ -1007,7 +1011,7 @@ namespace DragonsAltarRanger
                         {
                             Vector2 r = UnityEngine.Random.insideUnitCircle * radius;
                             Vector3 ground = point + new Vector3(r.x, 0f, r.y);
-                            LineVfx(top, ground, new Color(0.55f, 1f, 0.80f, 0.9f), 0.06f, 0.15f);
+                            LineVfx(ShotOrigin(player), ground, new Color(0.55f, 1f, 0.80f, 0.9f), 0.06f, 0.15f);   // v0.25.38 from the bow
                         }
                         StartCoroutine(RingVfx(point, radius, new Color(0.55f, 1f, 0.80f, 0.7f), Mathf.Max(0.05f, _sbInterval.Value)));
                     }

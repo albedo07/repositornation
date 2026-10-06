@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.37";
+        public const string ModVersion = "0.25.38";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -3499,7 +3499,7 @@ namespace AlbedosCustomClassesAdvanced
             yield return new WaitForSeconds(Mathf.Clamp(_halfmoonSecondSlashDelay.Value, 0.10f, 2f));
             if (player == null || player.IsDead() || SmInterrupted(castStart))
                 yield break;
-            DragonCombat.PlayClip(player, "sm_halfmoon_2", 0.1f);
+            // v0.25.38 (user): one slash only - the second hit is the afterimage, no second swing.
             ApplyHalfmoonHit(player, forward, radius, 0.5f);
             if (_enableVfx.Value)
                 StartCoroutine(AnimateHalfmoonArc(player.transform.position + Vector3.up * 1.05f, forward, radius * 0.92f));
@@ -5295,6 +5295,24 @@ namespace AlbedosCustomClassesAdvanced
             }
         }
 
+        // Air steering for jump slams: movement keys relative to the camera, at 80% run speed.
+        private Vector3 IhAirSteer(Player player)
+        {
+            float f = 0f, r = 0f;
+            if (GetShieldChargeButton("Forward", KeyCode.W)) f += 1f;
+            if (GetShieldChargeButton("Backward", KeyCode.S)) f -= 1f;
+            if (GetShieldChargeButton("Right", KeyCode.D)) r += 1f;
+            if (GetShieldChargeButton("Left", KeyCode.A)) r -= 1f;
+            if (Mathf.Abs(f) + Mathf.Abs(r) < 0.01f) return Vector3.zero;
+            Vector3 fwd = player.GetLookDir();
+            fwd.y = 0f;
+            if (fwd.sqrMagnitude < 0.01f) fwd = player.transform.forward;
+            fwd.Normalize();
+            Vector3 right = new Vector3(fwd.z, 0f, -fwd.x);
+            Vector3 dir = fwd * f + right * r;
+            return dir.normalized * Mathf.Max(1f, player.m_runSpeed) * 0.8f;
+        }
+
         private IEnumerator AcrobaticJumpUntilLanding(Player player, float takeoffDelay, float flatAirTime)
         {
             if (takeoffDelay > 0f)
@@ -5320,16 +5338,18 @@ namespace AlbedosCustomClassesAdvanced
             // Guaranteed cinematic takeoff. We directly drive only the Y axis while
             // Valheim keeps normal horizontal movement, so the player can steer during ascent.
             // This avoids the previous bug where Valheim immediately cancelled the velocity launch.
-            DragonCombat.BeginMobileCast(player, ascentDuration + hangDuration + 0.10f, false);
+            // v0.25.38 (user): no walking in the air - the movement input is locked (so no walk animation
+            // fights the jump clip) and the jump is steered here from the movement keys instead.
             while (player != null && !player.IsDead())
             {
                 float elapsed = Time.time - ascentStart;
                 if (elapsed >= ascentDuration)
                     break;
 
+                DragonCombat.LockSkill(player, 0.12f);
                 float t = Mathf.Clamp01(elapsed / Mathf.Max(0.05f, ascentDuration));
                 float eased = Mathf.Sin(t * Mathf.PI * 0.5f);
-                Vector3 pos = body.position;
+                Vector3 pos = body.position + IhAirSteer(player) * Time.fixedDeltaTime;
                 float desiredY = Mathf.Lerp(startY, peakY, eased);
                 body.MovePosition(new Vector3(pos.x, desiredY, pos.z));
                 Vector3 v = body.velocity;
@@ -5343,7 +5363,8 @@ namespace AlbedosCustomClassesAdvanced
             float hangEnd = Time.time + hangDuration;
             while (player != null && !player.IsDead() && Time.time < hangEnd)
             {
-                Vector3 pos = body.position;
+                DragonCombat.LockSkill(player, 0.12f);
+                Vector3 pos = body.position + IhAirSteer(player) * Time.fixedDeltaTime;
                 body.MovePosition(new Vector3(pos.x, peakY, pos.z));
                 Vector3 v = body.velocity;
                 v.y = 0f;

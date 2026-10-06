@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Dragon's Altar - Sorcerer Advancements";
-        public const string ModVersion = "0.25.37";
+        public const string ModVersion = "0.25.38";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1157,9 +1157,16 @@ namespace DragonsAltarSorcerer
             {
                 if (player == null || player.IsDead()) yield break;
                 DragonCombat.LockSkill(player, Mathf.Max(0.1f, _gbAscGap.Value) + 0.3f);
-                if (slam > 0) DragonCombat.PlayClip(player, "wiz_greatblade_slam", 0.2f);
+                if (slam > 0)
+                {
+                    // v0.25.38 (user): slams 2 and 3 get the same big wind up as the first (raise, then slam),
+                    // filling the gap between slams instead of a quick 0.2 s chop.
+                    float gap = Mathf.Max(0.1f, _gbAscGap.Value);
+                    DragonCombat.PlayClip(player, "wiz_greatblade", gap);
+                    yield return new WaitForSeconds(gap);
+                    if (player == null || player.IsDead()) yield break;
+                }
                 GreatbladeSlam(player, _gbAscPercent.Value / 100f);
-                if (slam < 2) yield return new WaitForSeconds(Mathf.Max(0.1f, _gbAscGap.Value));
             }
         }
 
@@ -1397,6 +1404,7 @@ namespace DragonsAltarSorcerer
             float elapsed = 0f;
             bool holding = true;
             float nextMarker = 0f;
+            int ccShown = 0;
             DragonCombat.PlayClip(player, "wiz_cataclysm", Mathf.Max(0.3f, minWindup), true);
             while (player != null && !player.IsDead() && (elapsed < minWindup || holding))
             {
@@ -1406,6 +1414,14 @@ namespace DragonsAltarSorcerer
                 if (holding && SkillKeyHeld(player, "elemental_cataclysm", _skill9.Value)) charge = Mathf.Min(max, elapsed);
                 else holding = false;
                 _cataclysmCharge01 = charge / max;
+                // v0.25.38 (user): on-screen stack prompt like Meteor Fall (one stack per charge second).
+                int ccMax = Mathf.Max(2, Mathf.RoundToInt(_cataclysmCharge.Value));
+                int ccNow = Mathf.FloorToInt(_cataclysmCharge01 * ccMax + 0.001f);
+                if (holding && ccNow > ccShown)
+                {
+                    ccShown = ccNow;
+                    ShowMessage("Elemental Cataclysm " + ccNow + "/" + ccMax + (ccNow >= ccMax ? " - release to strike where you aim" : ""));
+                }
                 // v0.23.6: hold as long as you like at full charge; it lands where you aim on release.
                 Vector3 aimNow;
                 if (holding && AlbedoAimUtility.TryGetPhysicalTarget(player, DragonCombat.M(_cataclysmRange.Value), out aimNow)) target = aimNow;

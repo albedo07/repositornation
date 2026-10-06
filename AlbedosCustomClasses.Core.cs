@@ -41,7 +41,7 @@ namespace AlbedosCustomClasses
     {
         public const string ModGuid = "albedo.customclasses";
         public const string ModName = "Dragon's Altar";
-        public const string ModVersion = "0.25.37";
+        public const string ModVersion = "0.25.38";
 
         internal const string ClassDataKey = "AlbedoCustomClasses.Class";
         internal const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -845,10 +845,10 @@ namespace AlbedosCustomClasses
             ScrollRect mechanicsScroll = AltarTextScroll(parent,"SelectedSkillMechanics",new Vector2(215f,-60f),new Vector2(520f,126f),out mechanics);
             Transform footer = AltarRect("SkillFooter",parent,Vector2.zero,new Vector2(1040f,900f));
             AltarRule(footer,215f,-133f,520f,1f);
-            AltarRule(footer,310f,-222f,1f,174f);
             AltarRule(footer,215f,-313f,520f,1f);
+            // v0.25.38 (user): no PASSIVE column - the Blessing / Mastery / Grace text sits in the overview
+            // between IDENTITY and BEST FOR; the skill list uses the full width.
             CreateWrappedText(footer,"SKILLS",new Vector2(85f,-150f),240f,28f,20,new Color(0.40f,0.20f,0.08f,1f),true,TextAnchor.MiddleLeft);
-            CreateWrappedText(footer,"PASSIVE",new Vector2(397f,-150f),146f,28f,20,new Color(0.40f,0.20f,0.08f,1f),true,TextAnchor.MiddleCenter);
             if (advancement) { _advDetailBody=overview; _altarAdvScroll=overviewScroll; _altarAdvMechanics=mechanics; _altarAdvMechanicsScroll=mechanicsScroll; _altarAdvSkillFooter=footer; }
             else { _baseDetailBody=overview; _altarBaseScroll=overviewScroll; _altarBaseMechanics=mechanics; _altarBaseMechanicsScroll=mechanicsScroll; _altarBaseSkillFooter=footer; }
         }
@@ -888,16 +888,13 @@ namespace AlbedosCustomClasses
             if(old!=null) { old.gameObject.SetActive(false); Destroy(old.gameObject); }
             Transform group=AltarRect("SkillChoices",footer,Vector2.zero,new Vector2(1040f,900f));
             AltarSkillEntry[] skills=AltarSkillEntries(className,false);
-            AltarSkillEntry[] passives=AltarSkillEntries(className,true);
             bool twoColumns=skills.Length>3;
             for(int i=0;i<skills.Length;i++)
             {
                 int row=twoColumns ? i/2 : i, col=twoColumns ? i%2 : 0;
-                float x=twoColumns ? 40f+col*175f : 126f;
-                CreateAltarSkillChoice(group,skills[i],new Vector2(x,-186f-row*43f),twoColumns ? 172f : 345f,mechanics,scroll,buttons);
+                float x=twoColumns ? 85f+col*262f : 215f;
+                CreateAltarSkillChoice(group,skills[i],new Vector2(x,-186f-row*43f),twoColumns ? 255f : 520f,mechanics,scroll,buttons);
             }
-            for(int i=0;i<passives.Length;i++)
-                CreateAltarSkillChoice(group,passives[i],new Vector2(397f,(passives.Length==1 ? -199f : -186f)-i*43f),160f,mechanics,scroll,buttons,passives.Length==1);
         }
 
         private void CreateAltarSkillChoice(Transform parent, AltarSkillEntry entry, Vector2 position, float width, Text mechanics, ScrollRect scroll, List<Button> buttons, bool largeIcon = false)
@@ -1396,7 +1393,7 @@ namespace AlbedosCustomClasses
         {
             if (className == "Warrior")
             {
-                return "<b>IDENTITY</b>\nWarrior is the direct melee front-liner: simple to understand, difficult to bully, and built to stay close while forcing enemies to respect physical pressure.\n\n<b>CORE MECHANICS</b>\nHyper Armor protects the Warrior from interruption by ordinary hits below the class threshold. Heavy Slash punishes with Broken Bones, Impact Wave controls a line in front of you, and Impact Punch gives fast close-range Blunt pressure plus Small-enemy Stun.\n\n<b>PLAYSTYLE</b>\nBest for players who want to commit to melee, trade confidently, control space with physical attacks, and later specialize into speed or overwhelming AoE.";
+                return "<b>IDENTITY</b>\nWarrior is the direct melee front-liner: simple to understand, difficult to bully, and built to stay close while forcing enemies to respect physical pressure.\n\n<b>WARRIOR'S BLESSING</b>\nHyper Armor: hits below 30% of your Max HP never interrupt you. Parry is doubled. +20 Run and +20 Jump.\n\n<b>BEST FOR</b>\nPlayers who want to commit to melee, trade confidently and control space with physical attacks, then specialize into speed (Sword Master) or overwhelming AoE (Mercenary).";
             }
             if (className == "Cleric")
             {
@@ -1419,11 +1416,11 @@ namespace AlbedosCustomClasses
         {
             if (advancementName == "Sword Master")
             {
-                return "<b>IDENTITY</b>\nSword Master turns Warrior into a high-tempo sword specialist built around fast attacks, broad spirit slashes and precise burst windows.\n\n<b>MECHANICS</b>\nMoonlight Splitter fires three extra-wide Ghost slashes across the full 50m. Crescent Cleave spreads five large ground cleaves across a 120° cone for 20m. Blade Storm stores four spatial slash spheres, Frenzied Charge dashes through the line and Eclipse sweeps everything around you. The Way of the Sword: with exactly one Sword, +20 Sword, +50% Attack Speed and no Sword movement penalty.\n\n<b>BEST FOR</b>\nAggressive players who want flashy sword pressure, ranged melee, charge management and a fast combo rhythm rather than tanking through everything.";
+                return "<b>IDENTITY</b>\nSword Master turns Warrior into a high-tempo sword specialist built around fast attacks, broad spirit slashes and precise burst windows.\n\n<b>THE WAY OF THE SWORD (MASTERY)</b>\nWith exactly one Sword: +20 Sword, +50% Attack Speed and no Sword movement penalty. Blocking or dodging cancels the rest of a skill sequence.\n\n<b>KNIGHT'S GUIDANCE (GRACE)</b>\nYou and allies within 10m move 1.5x faster, regenerate Stamina 40% faster and use 30% less Stamina for 3 minutes.\n\n<b>BEST FOR</b>\nAggressive players who want flashy sword pressure, ranged melee, charge management and a fast combo rhythm rather than tanking through everything.";
             }
             if (advancementName == "Mercenary")
             {
-                return "<b>IDENTITY</b>\nMercenary is the brutal battlefield controller: heavy physical attacks, violent displacement and huge close-range pressure.\n\n<b>MECHANICS</b>\nWarfreak: dual-wield any two one-handed physical weapons, +10 Sword, Axe and Clubs, +50% Attack Speed with two one-handed or a two-handed physical weapon, no physical weapon movement penalty and +30% Armor. Every hit builds Fury; at 100 Unchained Fury erupts for 20s. Stomp, Circle Swing, Bonecrusher, Seismic Guillotine, Punishing Bomb and Whirlwind control the crowd.\n\n<b>BEST FOR</b>\nPlayers who enjoy crowd control, displacement, huge AoEs, mixed-weapon brutality and chaotic close-range pressure.";
+                return "<b>IDENTITY</b>\nMercenary is the brutal battlefield controller: heavy physical attacks, violent displacement and huge close-range pressure.\n\n<b>WARFREAK (MASTERY)</b>\nDual-wield any two one-handed physical weapons. +10 Sword, Axe and Clubs, +50% Attack Speed with two one-handed or a two-handed physical weapon, no physical weapon movement penalty and +30% Armor. Every hit builds Fury; at 100 Unchained Fury erupts for 20s.\n\n<b>BATTLECRY (GRACE)</b>\nYou and nearby allies deal +15% damage to creatures for 1 minute and +25% damage to trees, rocks and ore for 3 minutes.\n\n<b>BEST FOR</b>\nPlayers who enjoy crowd control, displacement, huge AoEs, mixed-weapon brutality and chaotic close-range pressure.";
             }
             if (advancementName == "Paladin")
             {
