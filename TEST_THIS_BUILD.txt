@@ -1,4 +1,2 @@
-TEST v0.25.30 - Wind Up Timing
-1. Heavy Slash, Impact Wave, Lightning Zap, Holy Wave, Circle Swing, Seismic: the animation should finish when the hit lands, with no leftover swing afterwards.
-2. Long wind up skills: the vanilla swing plays slower and still ends on the hit.
-3. Bonecrusher / Electric Smite jump: diagonal body in the air, arm slightly out, weapon up (not pointing forward).
+TEST v0.25.31 - Cyclone Shot
+1. Acrobat Cyclone Arrow: plain bow shot, no body spin; the cyclone flies as before.

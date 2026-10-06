@@ -1,0 +1,4 @@
+Immortal Heroes v0.25.31 - Cyclone Shot
+=======================================
+- Cyclone Arrow: the character no longer spins. Normal bow shot (draw, loose, short follow-through, feet planted).
+  The cyclone itself is unchanged.

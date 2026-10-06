@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.30";
+        public const string ModVersion = "0.25.31";
 
         internal static DragonCombatPlugin Instance;
 
@@ -3232,6 +3232,8 @@ namespace DragonsAltarCombat
             DragonClipKey hov = K(0f).Hd(20f, 20f, 0f).Sp(2f, -18f, 0f).LHand(0f, -0.65f, 0.75f, 1f).Hand(-0.45f, -0.25f, 0.3f, 0.4f).Rot(30f, 0f, 0f);
             c["rg_hover"] = new DragonClipKey[] { K(-1f), hov, K(0.3f) };
             c["rg_spin"] = Join(K(-1f), RgDraw(-0.3f), Spin360(RgDraw(0f), 0f, 0.4f, 0.0f), RgLoose(0.45f), K(0.75f));
+            // v0.25.31 user: Cyclone Arrow = a normal bow shot (no body spin).
+            c["rg_shot"] = new DragonClipKey[] { K(-1f), Ft(RgDraw(-0.6f), 0.25f, 0.15f), Ft(RgDraw(-0.05f), 0.25f, 0.15f), Ft(RgLoose(0f), 0.25f, 0.15f), Ft(RgLoose(0.25f), 0.25f, 0.15f), K(0.55f) };
             DragonClipKey sd = K(0f).Hd(-24f, 0f, 0f).Hand(0.2f, -0.6f, -0.8f, 1f).LHand(-0.2f, -0.6f, -0.8f, 1f).Rot(70f, 0f, 0f);
             c["rg_dive"] = new DragonClipKey[] { K(-1f), sd, sd.Copy(0.15f), K(0.45f) };
             DragonClipKey tk = K(0f).Sp(20f, 0f, 0f).Ch(10f, 0f, 0f).Hand(0f, -0.5f, 0.6f, 0.6f).LHand(0f, -0.5f, 0.6f, 0.6f);

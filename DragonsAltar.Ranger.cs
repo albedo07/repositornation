@@ -40,7 +40,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Dragon's Altar - Ranger";
-        public const string ModVersion = "0.25.30";
+        public const string ModVersion = "0.25.31";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -816,7 +816,7 @@ namespace DragonsAltarRanger
             if (!BeginSkill(player, "Acrobat.CycloneArrow", _cyCooldown.Value, _cyStamina.Value)) return;
             Vector3 origin = ShotOrigin(player);
             Vector3 dir = AimDir(player, origin);
-            DragonCombat.PlayClip(player, "rg_spin", 0.1f);   // spin-loose
+            DragonCombat.PlayClip(player, "rg_shot", 0.1f);   // v0.25.31 normal bow shot, no spin
             Shoot(player, "Cyclone Arrow");
             bool ascended = DragonCombat.IsSkillAscended(player, "cyclone_arrow");
             StartCoroutine(CycloneRoutine(player, origin, dir, DragonCombat.M(_cyRange.Value), Mathf.Max(0.2f, _cyTravel.Value), DragonCombat.M(_cyRadius.Value), 1f, ascended));
