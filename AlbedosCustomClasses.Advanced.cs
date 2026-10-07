@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.66";
+        public const string ModVersion = "0.25.67";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -3799,7 +3799,7 @@ namespace AlbedosCustomClassesAdvanced
             {
                 // v0.25.65 (user: Halfmoon is an ultimate - big): a huge bright crescent swept out in front of you
                 Vector3 hf = forward; hf.y = 0f; float hr = radius; Vector3 hp = player.transform.position + Vector3.up * 1.1f + (hf.sqrMagnitude > 0.001f ? hf.normalized : player.transform.forward) * hr * 0.6f;
-                DragonCombat.RunVfx(delegate { DragonVfx.CrescentFlash(hp, hf, DragonVfx.Steel, hr * 0.95f, Mathf.Max(0.5f, hr * 0.11f), 0f, 0.45f, 0.45f, 0.15f); DragonVfx.Shake(hp, 25f, 1f); });
+                DragonCombat.RunVfx(delegate { DragonVfx.CrescentFlash(hp, hf, DragonVfx.Steel, hr * 0.95f, Mathf.Max(0.6f, hr * 0.16f), 0f, 0.45f, 0.45f, 0.15f); DragonVfx.Shake(hp, 25f, 1f); });
             }
             List<Character> targets = GetFrontalTargets(player, player.transform.position + Vector3.up * 0.8f, forward, radius, 170f);
             for (int i = 0; i < targets.Count; i++)

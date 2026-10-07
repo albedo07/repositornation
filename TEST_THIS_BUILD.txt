@@ -1,9 +1,4 @@
-TEST v0.25.66
-1. Skyfall Barrage / Goddess Relic / Meteor: aim at a tree or rock -> the target lands on the ground behind it, never on the tree.
-2. Stomp / Bonecrusher on a slope or hilltop: the rings, scorch and spikes lie on the ground (no floating flat disc).
-3. Sword Master chain: no attack speed burst on the 5th hit, no "Finisher" message.
-4. Sword Master vs Troll (weak hits): not pushed back. Test on a server too.
-5. Moonlight Splitter, Crescent Cleave, Halfmoon Slash: thick, glowing light-blue crescents clearly visible from behind and from the side.
-6. Frenzied Charge: bigger slashes along the path (3 m).
-7. Whirlwind: visible blade circle spinning around you; Ascended stops with the spin.
-8. Horizon Walker / Archmage with a staff: Movement 0% in the tooltip and full speed. Base Warrior with an axe: same.
+TEST v0.25.67
+1. Goddess Relic / Meteor / Skyfall: aim directly at a Troll -> lands at the Troll's feet. Aim at a tree -> lands on the ground behind it.
+2. Mercenary dual wield: swing a full chain twice. The second chain should feel like a one-handed sword plus 50%, not 200%+. One-handed and two-handed should be unchanged.
+3. Moonlight Splitter / Crescent Cleave / Halfmoon: a crescent-shaped light-blue wave with a white edge (Getsuga Tenshou), not a flat sheet.

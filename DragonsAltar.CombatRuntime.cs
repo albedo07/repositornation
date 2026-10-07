@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.66";
+        public const string ModVersion = "0.25.67";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1129,8 +1129,18 @@ namespace DragonsAltarCombat
                     // swing (a greatsword stays heavier than a one-handed sword); attack speed bonuses then scale that
                     // base speed (+50% = 1.5x), they no longer collapse every weapon onto one interval.
                     float target = Instance.ComboFixedInterval.Value ? Mathf.Max(0.2f, Instance.ComboSwingSeconds.Value) : ChainAverage(anim, dualNow, length, natNow);
-                    chainF = Mathf.Clamp(natNow / Mathf.Max(0.2f, target), 0.6f, 3f);
+                    // v0.25.67 (user: dual wield attacked like the Flash): the dual wield clips are short knife-speed
+                    // swings that also strike with BOTH weapons. A dual swing now lasts at least as long as the same
+                    // weapon's one-handed swing (or ComboSwingSeconds before that is known); Warfreak's +50% then
+                    // applies on top like for any other weapon.
+                    if (dualNow)
+                    {
+                        float oneHand = ChainAverage(anim, false, length, -1f);
+                        target = Mathf.Max(target, oneHand > 0.2f ? oneHand : Mathf.Max(0.2f, Instance.ComboSwingSeconds.Value));
+                    }
+                    chainF = Mathf.Clamp(natNow / Mathf.Max(0.2f, target), dualNow ? 0.25f : 0.6f, 3f);
                 }
+                else if (dualNow) chainF = 0.6f;   // v0.25.67: not measured yet - start slower than the raw dual clips
                 _comboStartAnim = anim;
                 DragonCombat.SetChainSpeed(p, chainF, 3f);
                 _chainPrevSpeed = DragonCombat.GetAttackSpeedMultiplier(p) * chainF;
@@ -10530,25 +10540,74 @@ namespace DragonsAltarCombat
         public static void CrescentBlade(Transform parent, Color c, float radius, float width, float roll)
         {
             if (!Enabled || parent == null) return;
-            // v0.25.65 (user: the slashes were invisible): a vivid, opaque blue crescent (alpha-blended body that
-            // reads in daylight) with an additive white-hot core. Horizontal blades are tilted up toward the camera;
-            // vertical blades get a second crossed blade so they read from behind as well as from the side.
-            Color body = Color.Lerp(c, new Color(0.25f, 0.55f, 1f, 1f), 0.4f); body.a = 0.85f;
-            Color core = Color.Lerp(c, Color.white, 0.8f); core.a = 1f;
-            Quaternion[] planes = Mathf.Abs(roll) < 1f
-                ? new Quaternion[] { Quaternion.Euler(-30f, 0f, 0f) }
-                : new Quaternion[] { Quaternion.identity, Quaternion.Euler(0f, 60f, 0f) };
-            // v0.25.66 (user: still invisible): built from camera-facing LineRenderer arcs (the same renderer as the
-            // Lightning Trails, which reads in game) - a wide light-blue glow, a thick light-blue body and a white core,
-            // tapered to needle tips. Flat crescent meshes vanished edge-on.
-            Color glow = Color.Lerp(c, new Color(0.45f, 0.80f, 1f, 1f), 0.5f); glow.a = 0.9f;
-            Color bodyL = Color.Lerp(c, new Color(0.62f, 0.88f, 1f, 1f), 0.5f); bodyL.a = 0.95f;
-            for (int i = 0; i < planes.Length; i++)
+            // v0.25.67 (user: "do you know what a Getsuga Tenshou is?"): a solid crescent wave of energy that FACES the
+            // camera - it lies across the travel direction (plane perpendicular to the carrier's forward), thick in the
+            // middle, razor tips swept back. Layers: soft light-blue halo, light-blue blade body, white-hot edge.
+            // roll 0 = horizontal slash (tips left/right), roll 90 = vertical slash (tips up/down).
+            float span = Mathf.Max(1f, radius * 1.9f);
+            float thick = Mathf.Max(0.3f, width * 1.6f);
+            Color halo = Color.Lerp(c, new Color(0.40f, 0.78f, 1f, 1f), 0.6f); halo.a = 0.75f;
+            Color body = Color.Lerp(c, new Color(0.72f, 0.93f, 1f, 1f), 0.55f); body.a = 0.92f;
+            Color edge = Color.Lerp(c, Color.white, 0.9f); edge.a = 1f;
+            GetsugaLayer(parent, halo, span * 1.06f, thick * 2.3f, roll, 0f, Mat(LineTex(), true));
+            GetsugaLayer(parent, body, span, thick, roll, 0f, Mat(BladeTex(), false));
+            GetsugaLayer(parent, edge, span * 0.97f, thick * 0.42f, roll, thick * 0.22f, Mat(BladeTex(), true));
+        }
+
+        private static Texture2D _bladeTex;
+        private static Texture2D BladeTex()
+        {
+            // v = 0 inner (concave) edge, 1 = outer cutting edge: solid body with crisp edges and a brighter rim.
+            if (_bladeTex == null) _bladeTex = MakeTex(16, 64, delegate(float u, float v)
             {
-                CrescentArc(parent, glow, radius, width * 4.5f, roll, 84f, planes[i], true);
-                CrescentArc(parent, bodyL, radius, width * 2.6f, roll, 82f, planes[i], false);
-                CrescentArc(parent, core, radius, width * 1.1f, roll, 80f, planes[i], true);
+                float a = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(v / 0.14f)) * Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((1f - v) / 0.08f));
+                return Mathf.Clamp01(a * (0.78f + 0.22f * v));
+            }, TextureWrapMode.Clamp);
+            return _bladeTex;
+        }
+
+        private static void GetsugaLayer(Transform parent, Color col, float span, float thick, float roll, float outerShift, Material mat)
+        {
+            if (mat == null) return;
+            GameObject go = new GameObject("IH_Getsuga");
+            go.transform.SetParent(parent, false);
+            go.transform.localRotation = Quaternion.AngleAxis(roll, Vector3.forward);
+            const int n = 40;
+            float w = span * 0.5f, sag = span * 0.22f, sweep = span * 0.2f;
+            Vector3[] v = new Vector3[(n + 1) * 2];
+            Vector2[] uv = new Vector2[v.Length];
+            Color[] cols = new Color[v.Length];
+            for (int i = 0; i <= n; i++)
+            {
+                float t = Mathf.Lerp(-1f, 1f, (float)i / n);
+                float y = sag * (1f - t * t) - sag * 0.5f;
+                Vector2 nrm = new Vector2(2f * sag * t, w).normalized;   // outward (convex side) normal in the blade plane
+                float th = thick * Mathf.Pow(Mathf.Max(0f, 1f - t * t), 0.75f) + thick * 0.02f;
+                float z = -sweep * t * t;
+                Vector3 mid = new Vector3(w * t, y, z) + new Vector3(nrm.x, nrm.y, 0f) * outerShift;
+                v[i * 2] = mid - new Vector3(nrm.x, nrm.y, 0f) * th * 0.35f;
+                v[i * 2 + 1] = mid + new Vector3(nrm.x, nrm.y, 0f) * th * 0.65f;
+                float u = (float)i / n;
+                uv[i * 2] = new Vector2(u, 0f); uv[i * 2 + 1] = new Vector2(u, 1f);
+                Color k = col; k.a = col.a * (1f - Mathf.Pow(Mathf.Abs(t), 6f));
+                cols[i * 2] = k; cols[i * 2 + 1] = k;
             }
+            int[] tri = new int[n * 12];
+            for (int i = 0; i < n; i++)
+            {
+                int a = i * 2, k = i * 12;
+                tri[k] = a; tri[k + 1] = a + 2; tri[k + 2] = a + 1; tri[k + 3] = a + 1; tri[k + 4] = a + 2; tri[k + 5] = a + 3;
+                tri[k + 6] = a; tri[k + 7] = a + 1; tri[k + 8] = a + 2; tri[k + 9] = a + 1; tri[k + 10] = a + 3; tri[k + 11] = a + 2;
+            }
+            Mesh mesh = new Mesh();
+            mesh.vertices = v; mesh.uv = uv; mesh.colors = cols; mesh.triangles = tri;
+            mesh.RecalculateBounds();
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            MeshRenderer r = go.AddComponent<MeshRenderer>();
+            r.sharedMaterial = mat;
+            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            r.receiveShadows = false;
+            go.AddComponent<DragonMeshOwner>().Mesh = mesh;
         }
 
         private static void CrescentArc(Transform parent, Color col, float radius, float width, float roll, float span, Quaternion plane, bool additive)

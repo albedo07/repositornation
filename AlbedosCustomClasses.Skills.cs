@@ -116,24 +116,26 @@ namespace AlbedosCustomClassesSkills
         {
             point = Vector3.zero;
 
-            RaycastHit hit;
+            Vector3 hitPoint;
 
-            if (!TryGetFirstSurfaceHit(player, out hit))
+            if (!TryGetFirstSurfaceHit(player, out hitPoint))
                 return false;
 
             float maxRange = Mathf.Max(0.1f, range);
-            float distanceFromPlayer = Vector3.Distance(player.transform.position, hit.point);
+            float distanceFromPlayer = Vector3.Distance(player.transform.position, hitPoint);
 
             if (distanceFromPlayer > maxRange)
                 return false;
 
-            point = hit.point;
+            point = hitPoint;
             return true;
         }
 
-        private static bool TryGetFirstSurfaceHit(Player player, out RaycastHit worldHit)
+        // v0.25.67 smart targeting (user): aiming straight at a creature targets the ground UNDER it (never on top
+        // of it, never the terrain behind it); otherwise the first terrain / Structure the crosshair meets.
+        private static bool TryGetFirstSurfaceHit(Player player, out Vector3 worldPoint)
         {
-            worldHit = new RaycastHit();
+            worldPoint = Vector3.zero;
             if (player == null)
                 return false;
             Vector3 rayOrigin;
@@ -160,12 +162,20 @@ namespace AlbedosCustomClassesSkills
                 Collider collider = hits[i].collider;
                 if (collider == null || collider.isTrigger || IsLocalPlayerCollider(player, collider))
                     continue;
-                if (collider.GetComponentInParent<Character>() != null)
-                    continue;
+                Character creature = collider.GetComponentInParent<Character>();
+                if (creature != null)
+                {
+                    if (creature is Player || creature.IsDead())
+                        continue;
+                    Vector3 feet = creature.transform.position;
+                    float gy;
+                    worldPoint = DragonCombat.TryGroundY(feet, 3f, 30f, out gy) ? new Vector3(feet.x, gy, feet.z) : feet;
+                    return true;
+                }
                 // v0.25.66 universal rule: only terrain or Structures; the aim passes through trees, rocks, logs.
                 if (!DragonCombat.IsTerrainOrStructure(collider))
                     continue;
-                worldHit = hits[i];
+                worldPoint = hits[i].point;
                 return true;
             }
             return false;
@@ -223,7 +233,7 @@ namespace AlbedosCustomClassesSkills
         public static SkillsPlugin Instance;
         public const string ModGuid = "albedo.customclasses.skills";
         public const string ModName = "Dragon's Altar - Starter Skills";
-        public const string ModVersion = "0.25.66";
+        public const string ModVersion = "0.25.67";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";

@@ -1,0 +1,10 @@
+Immortal Heroes v0.25.67 - Getsuga and Smart Aim
+
+- Sky Summon smart targeting (all ground-targeted skills): aiming straight at a creature drops the skill on the ground UNDER it (never on top of it, never on the terrain behind it). Otherwise the aim still only accepts terrain and Structures.
+- Dual wield attack speed fixed: dual wield swings now last at least as long as the same weapon's one-handed swing. Before that is measured, they start at 0.6x speed. Warfreak's +50% applies on top like for any other weapon. The raw dual wield clips are short knife-speed swings that also hit with both weapons. One-handed and two-handed chains are unchanged.
+- Getsuga Tenshou crescents: Moonlight Splitter, Crescent Cleave and Halfmoon Slash are now solid crescent waves facing the camera.
+  - Thick in the middle, razor tips swept back.
+  - A light-blue blade body, a white-hot cutting edge and a soft light-blue halo.
+  - They replace the giant flat sheets.
+  - Halfmoon's crescent is the thickest.
+- HUD restyle: options preview only (docs/previews/PREVIEW_v0.25.67_HUD_Options.png). Nothing changed in game yet.
