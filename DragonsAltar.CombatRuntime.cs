@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.75";
+        public const string ModVersion = "0.25.76";
 
         internal static DragonCombatPlugin Instance;
 
@@ -4014,13 +4014,14 @@ namespace DragonsAltarCombat
             // head with the weapon pointing at the sky and STAYS there (no waving) for the whole flight; the slam
             // to the ground only happens on the real landing (the clip holds at T=0 until ClipImpact).
             DragonClipKey launch = K(-0.72f).Sp(-4f, 0f, 0f).Ch(-4f, 0f, 0f).Hd(-14f, 0f, 0f).Hand(0.22f, 1f, 0.05f, 1f).Wp(0.05f, 1f, -0.15f).Rot(4f, 0f, 0f).Off(0f, 0.06f, 0f);
-            DragonClipKey raise0 = launch.Copy(-0.5f).Hand(0.2f, 1f, 0.08f, 1f);
-            DragonClipKey raise1 = launch.Copy(-0.25f).Sp(-2f, 0f, 0f).Hand(0.2f, 1f, 0.08f, 1f);
-            DragonClipKey poised = K(0f).Sp(4f, 0f, 0f).Ch(-2f, 0f, 0f).Hd(-12f, 0f, 0f).Hand(0.2f, 1f, 0.1f, 1f).Wp(0.05f, 1f, -0.1f).Rot(6f, 0f, 0f);
-            DragonClipKey impact = Ft(K(0.1f).Sp(30f, 0f, 0f).Ch(14f, 0f, 0f).Hd(-28f, 0f, 0f).Hand(0.05f, -1f, 0.35f, 0.97f).Wp(0f, -0.8f, 0.6f).Rot(6f, 0f, 0f).Off(0f, -0.38f * d, 0.05f), 0.75f, 0.8f).Linear();
+            // v0.25.76 (user): the barrel roll stays - the body rolls once while the arm stays raised overhead.
+            DragonClipKey raise0 = launch.Copy(-0.6f).Rot(14f, 0f, 0f).Sn(30f).Hand(0.2f, 1f, 0.08f, 1f);
+            DragonClipKey raise1 = launch.Copy(-0.32f).Rot(14f, 0f, 0f).Sn(360f).Hand(0.2f, 1f, 0.08f, 1f);
+            DragonClipKey poised = K(0f).Sp(4f, 0f, 0f).Ch(-2f, 0f, 0f).Hd(-12f, 0f, 0f).Hand(0.2f, 1f, 0.1f, 1f).Wp(0.05f, 1f, -0.1f).Rot(6f, 0f, 0f).Sn(360f);
+            DragonClipKey impact = Ft(K(0.1f).Sp(30f, 0f, 0f).Ch(14f, 0f, 0f).Hd(-28f, 0f, 0f).Hand(0.05f, -1f, 0.35f, 0.97f).Wp(0f, -0.8f, 0.6f).Rot(6f, 0f, 0f).Off(0f, -0.38f * d, 0.05f).Sn(360f), 0.75f, 0.8f).Linear();
             DragonClipKey settle = impact.Copy(brutal ? 0.3f : 0.22f).Off(0f, -0.4f * d, 0.05f); settle.Lin = false;
-            DragonClipKey rec = Ft(K(brutal ? 0.58f : 0.45f).Sp(8f, 0f, 0f).Hd(-6f, 0f, 0f).Hand(0.35f, -0.45f, 0.35f, 0.6f).Off(0f, -0.06f, 0f), 0.3f, 0.2f);
-            return new DragonClipKey[] { K(-1f), load, launch, raise0, raise1, poised, impact, settle, rec, K(brutal ? 0.9f : 0.75f) };
+            DragonClipKey rec = Ft(K(brutal ? 0.58f : 0.45f).Sp(8f, 0f, 0f).Hd(-6f, 0f, 0f).Hand(0.35f, -0.45f, 0.35f, 0.6f).Off(0f, -0.06f, 0f).Sn(360f), 0.3f, 0.2f);
+            return new DragonClipKey[] { K(-1f), load, launch, raise0, raise1, poised, impact, settle, rec, K(brutal ? 0.9f : 0.75f).Sn(360f) };
         }
 
         private static void BuildStoryboardClips(Dictionary<string, DragonClipKey[]> c)

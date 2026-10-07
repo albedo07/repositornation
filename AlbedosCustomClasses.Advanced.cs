@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.75";
+        public const string ModVersion = "0.25.76";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -749,7 +749,7 @@ namespace AlbedosCustomClassesAdvanced
 
             _boneCooldown = Config.Bind("Mercenary Bonecrusher", "Cooldown", 16f, "Seconds.");
             _boneStamina = Config.Bind("Mercenary Bonecrusher", "StaminaCost", 34f, "Stamina cost.");
-            _boneWindup = Config.Bind("Mercenary Bonecrusher", "Windup", 2f, "Target flat-ground air sequence: about 2 seconds from takeoff to landing. Cliff falls extend until physical landing.");
+            _boneWindup = Config.Bind("Mercenary Bonecrusher", "Windup_v02576", 1f, "v0.25.76 (user): 1s. Target flat-ground air sequence: about 1 second from takeoff to landing. Cliff falls extend until physical landing.");
             _boneRadius = Config.Bind("Mercenary Bonecrusher", "Radius", 7f, "AoE radius (normal and Ascended).");
             _boneDamage = BindDamage("Mercenary Bonecrusher Damage", 70f, 0f, 0f, 0f, 0f, 0f, 0f, 0f);
 
@@ -867,7 +867,7 @@ namespace AlbedosCustomClassesAdvanced
             _divineFireDot = Config.Bind("Paladin Electric Smite", "FireDotPerSecond_v02512", 18f, "Fire Burn damage per second (first tick; universal stacking burns ramp it up).");
             _divineSpiritDot = Config.Bind("Paladin Electric Smite", "SpiritDotPerSecond_v02512", 24f, "Spirit Burn damage per second (first tick; universal stacking burns ramp it up).");
             _divineSpiritDuration = Config.Bind("Paladin Electric Smite", "SpiritDotDuration", 6f, "Default DoT duration.");
-            _divineWindup = Config.Bind("Paladin Electric Smite", "Windup", 2f, "Target flat-ground air sequence: about 2 seconds from takeoff to landing. Cliff falls extend until physical landing.");
+            _divineWindup = Config.Bind("Paladin Electric Smite", "Windup_v02576", 1f, "v0.25.76 (user): 1s. Target flat-ground air sequence: about 1 second from takeoff to landing. Cliff falls extend until physical landing.");
             _divineTrailRange = Config.Bind("Paladin Electric Smite", "TrailRangeMeters_v0109", 10f, "Sixteen Ground Projectile trails spread in all directions for 10m.");
             _divineTrailTravelTime = Config.Bind("Paladin Electric Smite", "TrailTravelTimeSeconds_v0109", 3f, "Ground Projectile travel time to the full 10m radius.");
             _divineTrailPersistentTick = Config.Bind("Paladin Electric Smite", "TrailPersistentHitInterval", 0.5f, "Persistent Damage interval while an enemy remains in any Electric Smite trail.");
@@ -991,7 +991,7 @@ namespace AlbedosCustomClassesAdvanced
             _ahwLowHp = Config.Bind("Priest Holy Wave Ascended", "LowHealthPercent", 30f, "Allies below this % HP get double the instant heal.");
             _ahwAllyRange = Config.Bind("Priest Holy Wave Ascended", "AllyCastRange", 30f, "Aim at an ally within this range to cast the wave on them (no wind up).");
             _diHealAtMax = Config.Bind("Priest Divine Intervention", "HealPercentAtMaxTier", 50f, "Heal at Tier 5 (% Max HP); scales evenly from HealPercent at Tier 0.");
-            _angelWindupTotal = Config.Bind("Paladin Fallen Angel", "WindUpTime_v0211", 2.5f, "Angel Comet: total seconds from the jump to the dive landing.");
+            _angelWindupTotal = Config.Bind("Paladin Fallen Angel", "WindUpTime_v02576", 2f, "Angel Comet: total seconds from the jump to the dive landing.");
             _relicAscRadius = Config.Bind("Priest Relics Ascended", "Radius", 14f, "Ascended Lightning / Holy Relic pulse radius.");
             _relicAscChainRange = Config.Bind("Priest Relics Ascended", "LightningChainRange", 6f, "Ascended Lightning Relic: each pulse arcs to up to 3 more enemies this far past its radius.");
             _relicAscBlastRadius = Config.Bind("Priest Relics Ascended", "LightningEndBlastRadius", 8f, "Ascended Lightning Relic: blast radius when the Cross ends.");
@@ -3132,7 +3132,7 @@ namespace AlbedosCustomClassesAdvanced
         private IEnumerator BonecrusherRoutineV(Player player, float takeoffDelay)
         {
             ShowMessage("Bonecrusher");
-            yield return StartCoroutine(AcrobaticJumpUntilLanding(player, takeoffDelay, Mathf.Max(1.5f, _boneWindup.Value)));
+            yield return StartCoroutine(AcrobaticJumpUntilLanding(player, takeoffDelay, Mathf.Max(1f, _boneWindup.Value)));
             if (player == null || player.IsDead()) yield break;
             OlympicLanding(player, 0.6f);
             Vector3 center = player.transform.position;
@@ -3917,14 +3917,14 @@ namespace AlbedosCustomClassesAdvanced
 
             float takeoffDelay = 0.08f;
             DragonCombat.LockSkill(player, takeoffDelay);
-            DragonCombat.PlayClip(player, "olympic_hero_brutal", takeoffDelay + 0.75f * Mathf.Max(1.5f, _boneWindup.Value), true); // v0.25.15 Olympic Hero
+            DragonCombat.PlayClip(player, "olympic_hero_brutal", takeoffDelay + 0.75f * Mathf.Max(1f, _boneWindup.Value), true); // v0.25.15 Olympic Hero
             StartCoroutine(BonecrusherRoutineV(player, takeoffDelay));
         }
 
         private IEnumerator BonecrusherRoutine(Player player, float takeoffDelay)
         {
             ShowMessage("Bonecrusher");
-            yield return StartCoroutine(AcrobaticJumpUntilLanding(player, takeoffDelay, Mathf.Max(1.5f, _boneWindup.Value)));
+            yield return StartCoroutine(AcrobaticJumpUntilLanding(player, takeoffDelay, Mathf.Max(1f, _boneWindup.Value)));
             if (player == null || player.IsDead())
                 yield break;
 
@@ -5257,7 +5257,7 @@ namespace AlbedosCustomClassesAdvanced
 
             float takeoffDelay = 0.08f;
             DragonCombat.LockSkill(player, takeoffDelay);
-            DragonCombat.PlayClip(player, "olympic_hero", takeoffDelay + 0.75f * Mathf.Max(1.5f, _divineWindup.Value), true); // v0.25.15 Olympic Hero
+            DragonCombat.PlayClip(player, "olympic_hero", takeoffDelay + 0.75f * Mathf.Max(1f, _divineWindup.Value), true); // v0.25.15 Olympic Hero
             StartCoroutine(ElectricSmiteRoutine(player, takeoffDelay));
         }
 
@@ -5272,7 +5272,7 @@ namespace AlbedosCustomClassesAdvanced
         private IEnumerator ElectricSmiteRoutine(Player player, float takeoffDelay)
         {
             ShowMessage("Electric Smite");
-            yield return StartCoroutine(AcrobaticJumpUntilLanding(player, takeoffDelay, Mathf.Max(1.5f, _divineWindup.Value)));
+            yield return StartCoroutine(AcrobaticJumpUntilLanding(player, takeoffDelay, Mathf.Max(1f, _divineWindup.Value)));
             if (player == null || player.IsDead())
                 yield break;
 
@@ -5916,7 +5916,7 @@ namespace AlbedosCustomClassesAdvanced
             StartCoroutine(IhCreatureGhost(player, 30f)); // v0.22.6: jump slams land on terrain, never on a creature
 
             float height = Mathf.Clamp(_acrobaticJumpHeight.Value, 1.5f, 3.0f);
-            float targetAir = Mathf.Max(1.5f, flatAirTime);
+            float targetAir = Mathf.Max(1f, flatAirTime);
             float ascentDuration = targetAir * 0.55f;
             float hangDuration = targetAir * 0.20f;
             float startY = body.position.y;

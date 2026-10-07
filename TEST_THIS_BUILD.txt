@@ -1,7 +1,3 @@
-TEST v0.25.75
-1. Electric Smite / Bonecrusher: arm straight up in the air, no roll, and the slam only on landing.
-2. Cast any skill: no circle on the ground under you any more.
-3. Glacial Descent (normal + Ascended): a diamond of ice falls point first and shatters. Ascended hits 10 m, with the core at 5 m.
-4. Gravity Dominion: a black hole floats in the middle for the whole duration.
-5. Astral Greatblade: the blade grows out of the staff, follows the lift and the slam, then fades. Tell me if it points the wrong way with your staff.
-6. Meteor Fall: a burning boulder instead of a red ball. Arcane Phalanx: real swords.
+TEST v0.25.76
+1. Electric Smite / Bonecrusher: a 1 s jump with one roll, arm raised overhead, slam on landing.
+2. Angel Comet: the whole jump + dive takes 2 s.

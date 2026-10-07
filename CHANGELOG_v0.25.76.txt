@@ -1,0 +1,8 @@
+Immortal Heroes v0.25.76 - Roll Back In
+
+ANIMATION
+- Jump slams (Electric Smite, Bonecrusher): the barrel roll is back.
+  - The body rolls once in the air while the main arm stays raised straight overhead.
+  - The slam still only plays on the real landing.
+- Electric Smite and Bonecrusher wind up (jump to landing on flat ground): 2 s -> 1 s, so the animation flows better.
+- Angel Comet wind up: 2.5 s -> 2.0 s.
