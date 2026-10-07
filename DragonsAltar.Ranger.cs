@@ -40,7 +40,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Dragon's Altar - Ranger";
-        public const string ModVersion = "0.25.52";
+        public const string ModVersion = "0.25.53";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -557,6 +557,13 @@ namespace DragonsAltarRanger
             // v0.25.2 perf: gear rules 5x per second, not every frame.
             if (ranger && Time.time >= _nextGearCheck) { _nextGearCheck = Time.time + 0.2f; UpdateForbiddenGear(player, acrobat); }
             if (ranger) UpdateQuickShotSpeed(player);
+            if (_splitRooted)
+            {
+                DragonCombat.LockSkill(player, 0.15f);
+                if (_windowFire != null) FaceTowards(player, player.transform.position + FlatAim(player));   // turn with the aim
+                Rigidbody rb = player.GetComponent<Rigidbody>();
+                if (rb != null) { Vector3 v = rb.velocity; if (v.x * v.x + v.z * v.z > 0.01f) rb.velocity = new Vector3(0f, v.y, 0f); }
+            }
             UpdateFocus(player, ranger && GetAdvancement(player) == "Bowmaster");
             UpdateLoadedCrossbow(player, ranger && GetAdvancement(player) == "Bowmaster");
             UpdateTraps(player);
@@ -1817,6 +1824,7 @@ namespace DragonsAltarRanger
 
         private void CloseShotWindow(bool cancelled)
         {
+            _splitRooted = false;
             if (cancelled && _windowName != null) ShowMessage(_windowName + " cancelled");
             _windowFire = null;
             _windowName = null;
@@ -2687,6 +2695,9 @@ namespace DragonsAltarRanger
         // enemy, Bosses included).
         private float _splitWindowUntil;
         private bool _splitBusy;
+        // v0.25.53 (user): rooted for the WHOLE skill, windows included; only cancelling (or the last shot /
+        // the window running out) frees you.
+        private bool _splitRooted;
 
         private void CastSplittingArrow(Player player)
         {
@@ -2700,6 +2711,7 @@ namespace DragonsAltarRanger
         {
             ShowMessage("Splitting Arrow");
             _splitBusy = true;
+            _splitRooted = true;
             int volleys = Mathf.Max(1, Mathf.RoundToInt(ascended ? _saAscVolleys.Value : _saVolleys.Value));
             float interval = Mathf.Max(0.05f, _saInterval.Value);
             DragonCombat.LockSkill(player, (volleys - 1) * interval + 0.3f);
@@ -2740,14 +2752,15 @@ namespace DragonsAltarRanger
                 if (v + 1 < volleys) yield return new WaitForSeconds(interval);
             }
             _splitBusy = false;
-            if (player == null || player.IsDead()) yield break;
-            // v0.25.52 (user): rooted for the spread shots; free to move and aim inside the shot window.
+            if (player == null || player.IsDead()) { _splitRooted = false; yield break; }
+            // v0.25.53 (user): rooted for the whole skill; aim (camera) and Left Click / Right Click in the window.
             OpenShotWindow("Great Arrow", _saWindow.Value, delegate(Player p) { FireGreatArrow(p, ascended); });
         }
 
         private void FireGreatArrow(Player player, bool ascended)
         {
             if (player == null || player.IsDead()) return;
+            _splitRooted = ascended;   // Ascended stays rooted through the sky arrow window
             RangerArrowDamage d = ArrowDamage(player);
             float power = DragonCombat.GetSkillPower(player, "splitting_arrow");
             float mult = _saBigPercent.Value / 100f * power;
@@ -2766,6 +2779,7 @@ namespace DragonsAltarRanger
                 }, null));
             if (_enableVfx.Value) LineVfx(origin, origin + dir * range, new Color(0.85f, 1f, 0.65f, 0.6f), width * 0.5f, 0.25f);
             if (ascended) StartCoroutine(SkyWindowAfter(player, range));
+            else _splitRooted = false;
         }
 
         // Ascended: 0.5s after the great arrow, the sky arrow window opens (Left Click: a bow shot straight up,
@@ -2773,9 +2787,10 @@ namespace DragonsAltarRanger
         private IEnumerator SkyWindowAfter(Player player, float range)
         {
             yield return new WaitForSeconds(0.5f);
-            if (player == null || player.IsDead()) yield break;
+            if (player == null || player.IsDead()) { _splitRooted = false; yield break; }
             OpenShotWindow("Sky Arrow", _saWindow.Value, delegate(Player p)
             {
+                _splitRooted = false;
                 Vector3 point;
                 Vector3 o = ShotOrigin(p);
                 if (!AlbedoAimUtility.TryGetPhysicalTarget(p, range, out point)) point = GroundAt(o + AimDir(p, o) * Mathf.Min(range, DragonCombat.M(20f)));

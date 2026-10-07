@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.52";
+        public const string ModVersion = "0.25.53";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -11188,7 +11188,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "splitting_arrow":
                     b.Append(IhLine("Damage", IhBowPct(IhR("Bowmaster Splitting Arrow", "VolleyPercent_v0242", 120f), power) + " per spread shot to every enemy in the cone"));
                     b.Append(IhLine("Spread Shots", IhNum(ascended ? IhR("Bowmaster Splitting Arrow Ascended", "Volleys", 3f) : IhR("Bowmaster Splitting Arrow", "Volleys", 2f)) + ", " + IhNum(IhR("Bowmaster Splitting Arrow", "VolleyInterval", 0.5f)) + "s apart, " + IhNum(IhR("Bowmaster Splitting Arrow", "Range_v0242", 25f)) + "m, " + IhNum(IhR("Bowmaster Splitting Arrow", "ConeDegrees_v0242", 120f)) + "° cone"));
-                    b.Append(IhLine("Great Arrow", "Left Click within " + IhNum(IhR("Bowmaster Splitting Arrow", "GreatArrowWindow", 3f)) + "s (Right Click cancels), move and aim freely: " + IhNum(IhR("Bowmaster Splitting Arrow", "GreatArrowWidth", 4f)) + "m wide, " + IhBowPct(IhR("Bowmaster Splitting Arrow", "GreatArrowPercent", 380f), power) + ", pierces"));
+                    b.Append(IhLine("Great Arrow", "Left Click within " + IhNum(IhR("Bowmaster Splitting Arrow", "GreatArrowWindow", 3f)) + "s (Right Click cancels), rooted until done or cancelled: " + IhNum(IhR("Bowmaster Splitting Arrow", "GreatArrowWidth", 4f)) + "m wide, " + IhBowPct(IhR("Bowmaster Splitting Arrow", "GreatArrowPercent", 380f), power) + ", pierces"));
                     if (ascended) b.Append(IhLine("Sky Arrow", IhBowPct(IhR("Bowmaster Splitting Arrow Ascended", "SkyArrowPercent", 320f), power) + " Blunt + Pierce, " + IhNum(IhR("Bowmaster Splitting Arrow Ascended", "SkyArrowRadius", 4f)) + "m at your aim, Stuns every enemy (Bosses too); its own Left Click window opens 0.5s after the great arrow"));
                     IhCosts(b, IhR("Bowmaster Splitting Arrow", "StaminaCost", 25f), "Instant", IhR("Bowmaster Splitting Arrow", "Cooldown", 10f));
                     break;

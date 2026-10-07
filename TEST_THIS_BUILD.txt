@@ -1,6 +1,3 @@
-TEST v0.25.52
-1. Somersault: backflip 5m away.
-2. Skyfall Ascended over uneven ground / under trees: slam always on the ground.
-3. Furious Winds Ascended: WASD walks, Shift does not sprint.
-4. Explosive: explosive shot -> 0.5s -> sky shot -> clusters. Ascended charge: 1s sky wind up, clusters on every blast.
-5. Splitting: 2 (3 Asc) spreads rooted -> move + Left Click great arrow / Right Click cancel; Asc: sky arrow window after 0.5s.
+TEST v0.25.53
+1. Splitting Arrow: WASD does nothing from cast until the great arrow (normal) / sky arrow (Ascended) is shot or the window is cancelled with Right Click.
+2. Body turns with the camera while a window is open.

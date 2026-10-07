@@ -1,0 +1,3 @@
+Immortal Heroes v0.25.53 - Rooted Splitting
+
+- Splitting Arrow (normal + Ascended): you stay rooted for the whole skill, shot windows included. Aim with the camera (the body turns with it), Left Click shoots, Right Click cancels - cancelling, the last shot or the window running out frees you.
