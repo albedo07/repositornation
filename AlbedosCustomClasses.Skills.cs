@@ -220,7 +220,7 @@ namespace AlbedosCustomClassesSkills
         public static SkillsPlugin Instance;
         public const string ModGuid = "albedo.customclasses.skills";
         public const string ModName = "Dragon's Altar - Starter Skills";
-        public const string ModVersion = "0.25.58";
+        public const string ModVersion = "0.25.59";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";
@@ -1070,6 +1070,7 @@ namespace AlbedosCustomClassesSkills
 
         private IEnumerator AnimateSlashArc(Vector3 center, Vector3 forward, float radius, float angle, Color color)
         {
+            if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.SlashArc(center, forward, radius, angle, color, Mathf.Max(0.5f, radius * 0.25f), 0.45f, 0f); });   // v0.25.59 skin
             GameObject obj = new GameObject("DragonsAltarSlashArc");
             LineRenderer line = obj.AddComponent<LineRenderer>();
             line.useWorldSpace = true;

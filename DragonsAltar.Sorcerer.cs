@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Dragon's Altar - Sorcerer Advancements";
-        public const string ModVersion = "0.25.58";
+        public const string ModVersion = "0.25.59";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1155,6 +1155,7 @@ namespace DragonsAltarSorcerer
             if (_enableVfx.Value)
             {
                 StartCoroutine(GreatbladeVfx(player.transform.position, forward, range, width));
+                { Vector3 gbo = player.transform.position + Vector3.up * 0.4f, gbf = forward; float gbr = range, gbw = width; DragonCombat.RunVfx(delegate { DragonVfx.SlashArc(gbo, gbf, Mathf.Max(3f, gbr * 0.6f), 150f, new Color(0.80f, 0.45f, 1f, 1f), Mathf.Max(0.8f, gbw * 0.6f), 0.6f, -90f); }); }   // v0.25.59 the astral blade's arc
                 Vector3 ga = player.transform.position, gb = player.transform.position + forward * range; float gw = width;
                 DragonCombat.RunVfx(delegate
                 {

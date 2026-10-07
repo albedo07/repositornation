@@ -1,7 +1,5 @@
-TEST v0.25.58 (VFX detail: Warrior, Sorcerer, Ranger)
-1. Mercenary: Stomp, Circle Swing (normal + Ascended), Bonecrusher, Seismic Guillotine scar, Punishing Bomb, Ascended Whirlwind funnel.
-2. Sword Master / Warrior: Heavy Slash, Impact Wave scar, Impact Punch, Blade Storm, Frenzied Charge hail, Eclipse.
-3. Archmage: Meteor Fall, Cataclysm, Gravity Dominion vortex, Greatblade scar, Railcannon kick, Frost Nova (+ aura), Clockwork.
-4. Horizon Walker: Gravity Blast vortex + explosion, Arcane Rupture, Void Step.
-5. Ranger: Somersault slam, Skyfall Ascended slam, Ballista (0 vs 3 stacks), Explosive Arrow, Splitting (great + sky arrow), Starfall, Snare, Swallow Dive, Arrow Rain.
-6. FPS check in a big fight (F8 [Visuals] ParticleDensity lowers everything).
+TEST v0.25.59
+1. Normal chain (Sword Master sword, Warrior/Merc axe/club, Cleric club): 1-2-1-2-3 at ~0.6 s each, no freeze on hits, no pause between hit 2 and 3. The first chain after loading may run at natural speed (timings are measured live).
+2. Mercenary dual wield: smooth chain, off-hand trail visible, no double freeze.
+3. VFX: fewer/softer flashes; ground rings, scorch marks, smoke, light columns, slash ribbons on the skills listed in the changelog.
+4. If anything is too dim: F8 [Visuals] LightIntensity_v02559 / ParticleDensity_v02559.

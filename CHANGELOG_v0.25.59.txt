@@ -1,0 +1,28 @@
+Immortal Heroes v0.25.59 - Flowing Chains (normal attack chain + dual wield fixes, VFX skin pass)
+
+NORMAL ATTACK COMBO CHAIN (NACC)
+- No more hit-stop: Valheim froze your swing for 0.15 s on EVERY hit (that was the "stuck in the enemy" feel).
+  Your melee swings now flow straight through enemies. [Combat] MeleeHitStop_v02559 = on brings it back.
+- Interval: 0.6 s per swing for all 5 hits, finisher included ([Combat] ComboSwingSeconds_v02559); class attack
+  speed bonuses still make it faster. Swing lengths are measured per hit (the finisher start -> end).
+- The pause between hit 2 and hit 3 is gone: when the chain steps back to swing 1 it now cross-fades into it
+  22% in (past its rest-pose wind up) so it flows out of swing 2 ([Combat] ComboRepeatOffset_v02559,
+  ComboBlendSeconds_v02559).
+
+DUAL WIELD (Mercenary)
+- Root cause of the extra clunk: every hit froze the swing twice (main + off-hand hit) - gone with the hit-stop fix.
+- The dual-wield animation set is now swapped in/out between attacks (on equip), never inside a swing trigger
+  (swapping mid-chain reset the animator).
+- Off-hand hit lands on the first target it meets (like the DualWield mod); off-hand weapon trail now shows.
+
+VFX - TONED DOWN + SKIN
+- Flashes / lights at 45% ([Visuals] LightIntensity_v02559), particle density 0.7 ([Visuals] ParticleDensity_v02559),
+  glow particles slightly softer.
+- New skin layer (generated textures, no asset files):
+  - Glowing ground rings painted on the terrain under every shockwave + a soft glow disc.
+  - Scorched / broken ground decal that lingers after heavy hits, rolling smoke puffs.
+  - Solid light columns (crossed textured planes) inside every pillar (crosses, Knight's Guidance, Clockwork, sky strikes...).
+  - Slash ribbons: a crescent of light sweeps left -> right with each slash (Heavy Slash, Halfmoon / Circle Swing,
+    Crescent Cleave overhead cut, Judgement Cut, Frenzied hail, Eclipse rings, Whirlwind, Astral Greatblade chop,
+    Flame Burst).
+  - Dust and clouds are soft smoke puffs instead of glow dots; feathers are real feather shapes that tumble.

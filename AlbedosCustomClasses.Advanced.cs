@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.58";
+        public const string ModVersion = "0.25.59";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1690,7 +1690,7 @@ namespace AlbedosCustomClassesAdvanced
 
         private IEnumerator AnimateJudgementSphereCut(Vector3 center, float radius, int slash)
         {
-            DragonCombat.RunVfx(delegate { DragonVfx.Burst(center, new Color(0.45f, 0.78f, 1f, 1f), 30, 9f, 0.25f, 0.4f, 0f); DragonVfx.Flash(center, new Color(0.45f, 0.78f, 1f, 1f), 4f, radius * 2f, 0.3f); DragonVfx.SlashStreaks(center, new Color(0.55f, 0.82f, 1f, 1f), radius, 6, 0.3f); });
+            DragonCombat.RunVfx(delegate { DragonVfx.Burst(center, new Color(0.45f, 0.78f, 1f, 1f), 30, 9f, 0.25f, 0.4f, 0f); DragonVfx.Flash(center, new Color(0.45f, 0.78f, 1f, 1f), 4f, radius * 2f, 0.3f); DragonVfx.SlashStreaks(center, new Color(0.55f, 0.82f, 1f, 1f), radius, 6, 0.3f); DragonVfx.SlashArc(center, UnityEngine.Random.onUnitSphere, radius, 220f, new Color(0.55f, 0.82f, 1f, 1f), radius * 0.18f, 0.35f, UnityEngine.Random.Range(-70f, 70f)); });
             Vector3 axisA = Vector3.right;
             Vector3 axisB = Vector3.forward;
             if (slash == 1)
@@ -2096,6 +2096,11 @@ namespace AlbedosCustomClassesAdvanced
             float range = Mathf.Max(1f, DragonCombat.M(_crescentRange.Value));
             float width = Mathf.Max(0.25f, DragonCombat.M(_crescentSlashWidth.Value));
             float height = Mathf.Max(1f, DragonCombat.M(_crescentSlashHeight.Value));
+            if (_enableVfx.Value)
+            {
+                Vector3 co = origin + Vector3.up * 0.3f, cf = forward; float ch = height; Color ccol = ascended ? new Color(1f, 0.50f, 0.18f, 1f) : new Color(0.55f, 0.82f, 1f, 1f);
+                DragonCombat.RunVfx(delegate { DragonVfx.SlashArc(co, cf, Mathf.Max(1.5f, ch * 0.7f), 150f, ccol, Mathf.Max(0.5f, ch * 0.18f), 0.5f, -90f); });   // v0.25.59 the overhead cut that launches the wave
+            }
             float travelTime = Mathf.Max(0.20f, _crescentTravelTime.Value);
             forward.y = 0f;
             if (forward.sqrMagnitude < 0.01f) forward = player.transform.forward;
@@ -2342,7 +2347,7 @@ namespace AlbedosCustomClassesAdvanced
                     Vector3 side = Vector3.Cross(Vector3.up, dir).normalized * hailRadius * ((i % 2 == 0) ? 1f : -1f);
                     StartCoroutine(AnimateSeveredHorizonLine(p + Vector3.up * 1.4f + side, p + Vector3.up * 0.2f - side, hailRadius, 0.1f));
                     Vector3 hp = p + Vector3.up * 0.8f; float hr = hailRadius;
-                    DragonCombat.RunVfx(delegate { DragonVfx.SlashStreaks(hp, new Color(0.55f, 0.82f, 1f, 1f), hr * 1.4f, 3, 0.25f); DragonVfx.Burst(hp, new Color(0.45f, 0.78f, 1f, 1f), 10, 6f, 0.2f, 0.3f, 0f); });   // v0.25.58
+                    DragonCombat.RunVfx(delegate { DragonVfx.SlashStreaks(hp, new Color(0.55f, 0.82f, 1f, 1f), hr * 1.4f, 3, 0.25f); DragonVfx.SlashArc(hp, UnityEngine.Random.onUnitSphere, hr * 1.2f, 160f, new Color(0.55f, 0.82f, 1f, 1f), hr * 0.3f, 0.3f, UnityEngine.Random.Range(-60f, 60f)); DragonVfx.Burst(hp, new Color(0.45f, 0.78f, 1f, 1f), 10, 6f, 0.2f, 0.3f, 0f); });   // v0.25.58
                 }
                 if (i + 1 < count) yield return new WaitForSeconds(Mathf.Max(0.05f, _frenzyHailInterval.Value));
             }
@@ -2399,6 +2404,8 @@ namespace AlbedosCustomClassesAdvanced
                 DragonCombat.RunVfx(delegate
                 {
                     DragonVfx.SlashStreaks(ep + Vector3.up * 1.2f, new Color(0.62f, 0.50f, 1f, 1f), er, 14, 0.45f);   // v0.25.58 eclipse cuts
+                    DragonVfx.SlashArc(ep + Vector3.up * 1f, Vector3.forward, er * 0.9f, 360f, new Color(0.62f, 0.50f, 1f, 1f), er * 0.15f, 0.55f, 0f);   // v0.25.59
+                    DragonVfx.SlashArc(ep + Vector3.up * 1.4f, Vector3.right, er * 0.7f, 360f, new Color(0.80f, 0.85f, 1f, 1f), er * 0.1f, 0.5f, 12f);
                     DragonVfx.Burst(ep + Vector3.up * 1f, new Color(0.55f, 0.40f, 0.95f, 1f), 70, 12f, 0.3f, 0.6f, 0f);
                     DragonVfx.Flash(ep + Vector3.up * 1.5f, new Color(0.62f, 0.50f, 1f, 1f), 8f, er * 2.5f, 0.5f);
                     DragonVfx.DustRing(ep, er);
@@ -3203,7 +3210,7 @@ namespace AlbedosCustomClassesAdvanced
                     DealSnapshotDamage(player, targets[i], weapon, tickMult, 14f);
                     if (tick % 2 == 0) GainMercenaryFuryFromSkillHit(player);
                 }
-                if (_enableVfx.Value && tick % 2 == 0) { Vector3 wp = player.transform.position; float ww = Mathf.Max(0.5f, DragonCombat.M(_whirlwindRadius.Value)); DragonCombat.RunVfx(delegate { DragonVfx.DustRing(wp, ww); DragonVfx.SlashStreaks(wp + Vector3.up * 1f, DragonVfx.Fire, ww, 4, 0.25f); }); }
+                if (_enableVfx.Value && tick % 2 == 0) { Vector3 wp = player.transform.position; float ww = Mathf.Max(0.5f, DragonCombat.M(_whirlwindRadius.Value)); DragonCombat.RunVfx(delegate { DragonVfx.DustRing(wp, ww); DragonVfx.SlashStreaks(wp + Vector3.up * 1f, DragonVfx.Fire, ww, 4, 0.25f); DragonVfx.SlashArc(wp + Vector3.up * 0.9f, UnityEngine.Random.onUnitSphere, ww, 360f, DragonVfx.Fire, ww * 0.2f, 0.35f, UnityEngine.Random.Range(-10f, 10f)); }); }
                 if (_enableVfx.Value)
                     StartCoroutine(AnimateRing(player.transform.position + Vector3.up * 0.9f, 0.4f, Mathf.Max(0.5f, DragonCombat.M(_whirlwindRadius.Value)), Mathf.Min(0.32f, interval), new Color(1f, 0.62f, 0.22f, 0.75f), 0.10f));
                 yield return new WaitForSeconds(interval);
@@ -9445,6 +9452,14 @@ namespace AlbedosCustomClassesAdvanced
         }
         private IEnumerator AnimateHalfmoonArc(Vector3 center, Vector3 forward, float radius)
         {
+            if (_enableVfx.Value)
+            {
+                // v0.25.59 skin: the blade's crescent of light (ember for Mercenary, steel blue for Sword Master)
+                Vector3 hc = center, hf = forward; float hr = radius;
+                Player lp = Player.m_localPlayer;
+                Color hcol = lp != null && DragonCombat.GetAdvancementName(lp) == "Mercenary" ? new Color(1f, 0.55f, 0.20f, 1f) : new Color(0.55f, 0.82f, 1f, 1f);
+                DragonCombat.RunVfx(delegate { DragonVfx.SlashArc(hc, hf, hr, 170f, hcol, Mathf.Max(0.5f, hr * 0.25f), 0.45f, 0f); });
+            }
             if (IhLocalRichVfx())
                 DragonCombat.RunVfx(delegate
                 {
