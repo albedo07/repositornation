@@ -40,7 +40,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Dragon's Altar - Ranger";
-        public const string ModVersion = "0.25.60";
+        public const string ModVersion = "0.25.61";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -783,6 +783,7 @@ namespace DragonsAltarRanger
             Vector3 dir = AimDir(player, origin);
             DragonCombat.PlayClip(player, "rg_power", 0.1f);   // snap draw, strong recoil
             Shoot(player, "Piercing Arrow");
+            if (_enableVfx.Value) { Vector3 po = origin, pd = dir; DragonCombat.RunVfx(delegate { DragonVfx.AirRing(po + pd * 0.8f, pd, DragonVfx.Wind, 0.8f, 0.25f); DragonVfx.AirRing(po + pd * 2f, pd, DragonVfx.Wind, 1.2f, 0.35f); }); }   // v0.25.61 sonic rings
             bool first = true;
             float endWidth = DragonCombat.M(Mathf.Max(0.3f, _paAscWidth.Value));
             StartCoroutine(ArrowFlight(player, origin, dir, DragonCombat.M(_paSpeed.Value), range, DragonCombat.M(0.35f), true,
@@ -1093,6 +1094,7 @@ namespace DragonsAltarRanger
         {
             GameObject obj = new GameObject("RangerTornado");
             obj.transform.position = pos;
+            if (_enableVfx.Value) { GameObject tob = obj; float tr = radius; DragonCombat.RunVfx(delegate { DragonVfx.Vortex(tob.transform, tob.transform.position + Vector3.up, DragonVfx.Wind, tr * 1.3f, 12f); DragonVfx.TrailWhile(tob.transform, new Color(0.55f, 0.50f, 0.42f, 0.6f), tr, delegate { return tob != null; }); }); }   // v0.25.61 debris funnel
             const int rings = 9;
             for (int k = 0; k < rings; k++)
             {
@@ -3609,6 +3611,7 @@ namespace DragonsAltarRanger
             Material m = VfxMaterial(Color.white);
             if (m != null) line.material = m;
             Destroy(obj, Mathf.Max(0.05f, life));
+            DragonCombat.RunVfx(delegate { DragonVfx.Streak(a, b, color, Mathf.Max(0.04f, width * 0.6f), Mathf.Max(0.12f, life * 1.6f)); });   // v0.25.61 glowing arrow streak
             if (width >= 0.05f) DragonCombat.RunVfx(delegate { DragonVfx.Burst(b + Vector3.up * 0.15f, color, Mathf.RoundToInt(4 + width * 20f), 3f + width * 6f, 0.15f + width * 0.5f, 0.3f, 0.6f); });   // impact sparks
         }
 

@@ -1,4 +1,8 @@
-TEST v0.25.60
-1. Electric Smite (Paladin Ultimate): 16 lightning bolts crawl out along the ground, follow slopes, fade into scars.
-2. Ascended Righteous Strike: 12 faster ground bolts.
-3. FPS with both at once (F8 [Visuals] LightIntensity_v02559 0 removes the head lights).
+TEST v0.25.61
+1. Impact Wave (normal + Ascended): wall of force + rock shards rising behind it.
+2. Moonlight Splitter / Halfmoon / Crescent Cleave: crescent blades travel WITH the waves.
+3. Seismic Guillotine, Stomp, Bonecrusher: rock spikes. Punishing Bomb / Meteor: fireballs.
+4. Flame Burst flames, Glacial / Frost Nova ice spikes, Stonefang rock spikes.
+5. Railcannon rail + rings, Greatblade sky streak, sigils on Gravity Dominion / Rupture / Clockwork.
+6. Ranger arrow streaks, Piercing Arrow rings, Cyclone funnel.
+7. Rock spikes are lit (Standard shader); if they look flat-coloured the game stripped that shader - tell me.

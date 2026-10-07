@@ -1,0 +1,32 @@
+Immortal Heroes v0.25.61 - Signature VFX (every class: the skill's own shape, at the Lightning Trail level)
+
+NEW BUILDING BLOCKS
+- Rock / ice spikes that burst out of the ground, hold, then sink back (lit rock, translucent glowing ice).
+- Moving wave crest (a curved wall of force), standing crescent blades that ride slash waves, vertical sonic rings,
+  rotating rune circles on the ground, soft glowing streaks / energy rails, real flame cones and fireballs
+  (flame-shaped particles going white -> orange -> red -> smoke).
+- All bolts (Lightning Zap, sky strikes...) now have soft edges and a white-hot core.
+
+WARRIOR
+- Impact Wave (normal + Ascended): a glowing wall of force rolls across the ground and rows of rock shards heave up
+  behind it, leaving a scar. Impact Punch: two sonic rings blast forward.
+- Moonlight Splitter / Halfmoon waves: a crescent blade of light rides each wave (the glow used to stay at the
+  start point - fixed, it now travels with the wave).
+- Crescent Cleave: a standing crescent travels along the ground (ember when Ascended).
+- Seismic Guillotine: rock spikes split up along the fissure, a ring of spikes at the rupture.
+- Stomp (first stamp) / Bonecrusher: the ground erupts in a ring of rock. Punishing Bomb: a real ball of fire.
+  Battlecry: sonic rings roar out of you.
+
+SORCERER
+- Flame Burst: real flames rush out in the cone. Glacial Descent (+ Ascended): a field of ice spikes and a giant
+  central shard. Frost Nova: a ring of ice spikes (Ascended blast: a bigger one). Stonefang (+ Ascended): rock spikes.
+- Meteor Fall: fireball + molten rocks. Cataclysm: fireball + ice spikes + an arcane sigil.
+- Astral Railcannon: a thick energy rail with rings of force along it. Astral Greatblade: the blade itself streaks
+  down from the sky, rock shards split along its cut.
+- Gravity Dominion / Arcane Rupture / Clockwork: rotating sigils on the ground. Arcane beams glow softly.
+
+RANGER
+- Every arrow line is a glowing streak; Piercing Arrow fires two sonic rings; Cyclone's tornado pulls in a
+  debris funnel.
+
+Toned-down defaults from v0.25.59 stay ([Visuals] LightIntensity_v02559 / ParticleDensity_v02559). Visual only.

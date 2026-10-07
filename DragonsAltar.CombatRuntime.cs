@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.60";
+        public const string ModVersion = "0.25.61";
 
         internal static DragonCombatPlugin Instance;
 
@@ -8469,6 +8469,7 @@ namespace DragonsAltarCombat
         public bool Stopped;
         public Color BoltCore, BoltGlow;
         public Func<bool> Keep;
+        private bool _hadFollow;
 
         private void Update()
         {
@@ -8480,8 +8481,14 @@ namespace DragonsAltarCombat
                 if (on) { Life = Age + 1.2f; StopEmitAt = -1f; }
                 else { Keep = null; StopEmitAt = Age; Life = Age + 1.2f; }
             }
-            if (Follow != null) transform.position = Follow.position + FollowOffset;
-            else if (FollowOffset.sqrMagnitude < 0f) { }
+            if (Follow != null) { _hadFollow = true; transform.position = Follow.position + FollowOffset; }
+            else if (_hadFollow)
+            {
+                // v0.25.61: the thing it followed is gone (tornado, orb) - stop emitting and fade out
+                _hadFollow = false;
+                if (StopEmitAt < 0f || StopEmitAt > Age) StopEmitAt = Age;
+                Life = Mathf.Min(Life, Age + 1.2f);
+            }
             if (FlashLight != null)
             {
                 float k = Age <= LightHold ? 1f : 1f - Mathf.Clamp01((Age - LightHold) / Mathf.Max(0.01f, Life - LightHold));
@@ -8769,6 +8776,51 @@ namespace DragonsAltarCombat
         }
     }
 
+    // v0.25.61 signature VFX: a rock / ice spike that bursts out of the ground, holds, then sinks back.
+    public class DragonSpike : MonoBehaviour
+    {
+        public float Height = 1f, Rise = 0.12f, Hold = 0.5f, Sink = 0.4f, Age;
+        public Vector3 Base;
+        private void Update()
+        {
+            Age += Time.deltaTime;
+            float k;
+            if (Age < Rise) { float t = Age / Rise; k = 1f - (1f - t) * (1f - t); }
+            else if (Age < Rise + Hold) k = 1f;
+            else k = 1f - Mathf.Clamp01((Age - Rise - Hold) / Mathf.Max(0.01f, Sink));
+            transform.position = Base - transform.up * Height * (1f - k) * 1.05f;
+            if (Age >= Rise + Hold + Sink) Destroy(gameObject);
+        }
+    }
+
+    // v0.25.61: a moving wall of light / force (Impact Wave crest, wave fronts). Curved vertical strip, moved by
+    // its owner; Finish() fades it out.
+    public class DragonCrest : MonoBehaviour
+    {
+        public Mesh Mesh;
+        public Color Color = Color.white;
+        public float FadeLen = 0.3f, Age, MaxLife = 10f;
+        private float _fade = -1f;
+        private Color[] _cols;
+        public void Finish(float fade) { if (_fade < 0f) { _fade = 0f; FadeLen = Mathf.Max(0.05f, fade); } }
+        private void Update()
+        {
+            Age += Time.deltaTime;
+            if (_fade < 0f && Age >= MaxLife) Finish(0.3f);
+            float k = Mathf.Clamp01(Age / 0.08f);
+            if (_fade >= 0f) { _fade += Time.deltaTime; k *= 1f - Mathf.Clamp01(_fade / FadeLen); if (_fade >= FadeLen) { Destroy(gameObject); return; } }
+            float flick = 0.85f + 0.15f * Mathf.Sin(Age * 40f);
+            if (Mesh != null)
+            {
+                if (_cols == null) _cols = new Color[Mesh.vertexCount];
+                Color c = Color; c.a = Color.a * k * flick;
+                for (int i = 0; i < _cols.Length; i++) _cols[i] = c;
+                Mesh.colors = _cols;
+            }
+        }
+        private void OnDestroy() { if (Mesh != null) Destroy(Mesh); }
+    }
+
     public static class DragonVfx
     {
         private static Material _add, _alpha;
@@ -8998,7 +9050,8 @@ namespace DragonsAltarCombat
             line.startWidth = Mathf.Max(0.02f, width);
             line.endWidth = Mathf.Max(0.02f, width * 0.7f);
             line.numCapVertices = 2;
-            Material m = Additive();
+            Material m = Mat(LineTex(), true);   // v0.25.61 soft-edged bolts
+            if (m == null) m = Additive();
             if (m != null) line.sharedMaterial = m;
             return line;
         }
@@ -9744,6 +9797,281 @@ namespace DragonsAltarCombat
                 b.HeadLight = l;
             }
             return b;
+        }
+
+        // ------------------------------------------------------------------ v0.25.61 signature layer
+        private static Texture2D _flameTex;
+        private static readonly Dictionary<int, Material> _solidMats = new Dictionary<int, Material>();
+        public static readonly Color Rock = new Color(0.36f, 0.31f, 0.27f, 1f);
+        public static readonly Color Ice = new Color(0.62f, 0.90f, 1f, 0.85f);
+        public static readonly Color Arcane = new Color(0.72f, 0.36f, 1f, 1f);
+        public static readonly Color Ember = new Color(1f, 0.55f, 0.20f, 1f);
+        public static readonly Color Steel = new Color(0.55f, 0.82f, 1f, 1f);
+        public static readonly Color Wind = new Color(0.62f, 1f, 0.85f, 1f);
+
+        // Flame tongue: bright bottom, ragged top (fire particles).
+        private static Texture2D FlameTex()
+        {
+            if (_flameTex == null) _flameTex = MakeTex(64, 64, delegate(float u, float v)
+            {
+                float x = (u - 0.5f) * 2f;
+                float w = Mathf.Lerp(0.85f, 0.15f, v) * (0.8f + 0.4f * Fbm(u * 5f, v * 3f, 31));
+                float body = Mathf.Clamp01(1f - Mathf.Abs(x) / Mathf.Max(0.05f, w));
+                return body * Mathf.Clamp01(v * 6f) * Mathf.Pow(1f - v, 0.5f);
+            }, TextureWrapMode.Clamp);
+            return _flameTex;
+        }
+
+        // Solid (lit when possible) material for rocks / ice.
+        public static Material SolidMat(Color c)
+        {
+            int key = Mathf.RoundToInt(c.r * 255f) | (Mathf.RoundToInt(c.g * 255f) << 8) | (Mathf.RoundToInt(c.b * 255f) << 16) | (Mathf.RoundToInt(c.a * 15f) << 24);
+            Material m;
+            if (_solidMats.TryGetValue(key, out m) && m != null) return m;
+            bool clear = c.a < 0.99f;
+            Shader s = clear ? Shader.Find("Sprites/Default") : Shader.Find("Standard");
+            if (s == null) s = Shader.Find("Sprites/Default");
+            if (s == null) return null;
+            m = new Material(s);
+            m.color = c;
+            if (!clear && m.HasProperty("_Glossiness")) m.SetFloat("_Glossiness", 0.15f);
+            _solidMats[key] = m;
+            return m;
+        }
+
+        // A jagged spike bursting out of the ground (rock or ice), tilted outward from `away`.
+        public static void Spike(Vector3 pos, Color c, float height, float radius, float hold, Vector3 away)
+        {
+            if (!Enabled) return;
+            Vector3 g = GroundPoint(pos);
+            Vector3 tilt = away; tilt.y = 0f;
+            Quaternion rot = Quaternion.Euler(0f, UnityEngine.Random.Range(0f, 360f), 0f);
+            if (tilt.sqrMagnitude > 0.001f) rot = Quaternion.AngleAxis(UnityEngine.Random.Range(10f, 28f), Vector3.Cross(Vector3.up, tilt.normalized)) * rot;
+            else rot = Quaternion.Euler(UnityEngine.Random.Range(-12f, 12f), 0f, UnityEngine.Random.Range(-12f, 12f)) * rot;
+            GameObject root = new GameObject("IH_Spike");
+            root.transform.position = g;
+            root.transform.rotation = rot;
+            Material mat = SolidMat(c);
+            for (int i = 0; i < 2; i++)
+            {
+                GameObject shard = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                Collider col = shard.GetComponent<Collider>();
+                if (col != null) UnityEngine.Object.Destroy(col);
+                shard.transform.SetParent(root.transform, false);
+                float h = height * (i == 0 ? 1f : 0.55f);
+                float r = radius * (i == 0 ? 1f : 0.6f);
+                // a cube rotated 45 deg and stretched reads as a faceted shard; the second is a smaller leaning chip
+                shard.transform.localScale = new Vector3(r, h, r * 0.8f);
+                shard.transform.localRotation = Quaternion.Euler(i == 0 ? 0f : 18f, 45f + i * 30f, i == 0 ? 6f : -14f);
+                shard.transform.localPosition = new Vector3(i == 0 ? 0f : r * 0.7f, h * 0.45f, 0f);
+                Renderer rr = shard.GetComponent<Renderer>();
+                if (rr != null && mat != null) { rr.sharedMaterial = mat; rr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; }
+            }
+            root.transform.position = g - root.transform.up * height * 1.05f;   // starts buried, bursts out
+            DragonSpike sp = root.AddComponent<DragonSpike>();
+            sp.Base = g;
+            sp.Height = height;
+            sp.Hold = Mathf.Max(0f, hold);
+            if (c.a < 0.99f) AttachGlow(root.transform, new Color(0.75f, 0.95f, 1f, 1f), radius * 0.6f, 10f, 0f);
+        }
+
+        // A ring of spikes around a point (Frost Nova, Stonefang, landings).
+        public static void SpikeRing(Vector3 center, Color c, float radius, int count, float height, float hold)
+        {
+            if (!Enabled) return;
+            count = Mathf.Max(3, Mathf.RoundToInt(count * Mathf.Clamp(Amount, 0.5f, 1.5f)));
+            for (int i = 0; i < count; i++)
+            {
+                float a = (i + UnityEngine.Random.Range(-0.3f, 0.3f)) / count * Mathf.PI * 2f;
+                Vector3 d = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                float rr = radius * UnityEngine.Random.Range(0.55f, 1f);
+                Spike(center + d * rr, c, height * UnityEngine.Random.Range(0.6f, 1.1f), height * 0.28f, hold, d);
+            }
+        }
+
+        // A vertical ring of force facing `normal` (punches, launches, sonic booms).
+        public static void AirRing(Vector3 pos, Vector3 normal, Color c, float radius, float seconds)
+        {
+            if (!Enabled) return;
+            if (normal.sqrMagnitude < 0.001f) normal = Vector3.forward;
+            Quaternion rot = Quaternion.FromToRotation(Vector3.up, normal.normalized);
+            Color rc = c; rc.a = 0.85f;
+            DragonMeshFx ring = MeshFx(pos, rot, true, Mat(RingTex(), true), rc, seconds);
+            if (ring != null) { ring.ScaleFrom = Vector3.one * radius * 0.3f; ring.ScaleTo = Vector3.one * radius * 2f; ring.ScaleTime = seconds; }
+        }
+
+        // Rotating rune circle on the ground (Clockwork, Gravity Dominion, Rupture, traps).
+        public static void Glyph(Vector3 pos, Color c, float radius, float seconds, float spin)
+        {
+            if (!Enabled) return;
+            Vector3 g = GroundPoint(pos) + Vector3.up * 0.08f;
+            Color gc = c; gc.a = 0.8f;
+            DragonMeshFx a = MeshFx(g, Quaternion.identity, true, Mat(RingTex(), true), gc, seconds);
+            if (a != null) { a.FadeIn = 0.2f; a.Hold = seconds * 0.6f; a.ScaleFrom = Vector3.one * radius * 1.7f; a.ScaleTo = Vector3.one * radius * 2.05f; a.ScaleTime = 0.3f; a.Spin = spin; }
+            DragonMeshFx b = MeshFx(g + Vector3.up * 0.01f, Quaternion.identity, true, Mat(RingTex(), true), gc, seconds);
+            if (b != null) { b.FadeIn = 0.25f; b.Hold = seconds * 0.6f; b.ScaleFrom = Vector3.one * radius * 1.1f; b.ScaleTo = Vector3.one * radius * 1.25f; b.ScaleTime = 0.3f; b.Spin = -spin * 1.6f; }
+            Color dc = c; dc.a = 0.3f;
+            DragonMeshFx d = MeshFx(g + Vector3.up * 0.02f, Quaternion.identity, true, Mat(Glow(), true), dc, seconds);
+            if (d != null) { d.FadeIn = 0.2f; d.Hold = seconds * 0.6f; d.ScaleFrom = d.ScaleTo = Vector3.one * radius * 2f; }
+        }
+
+        // Soft glowing streak a -> b that fades (arrows, rails, blades from the sky).
+        public static void Streak(Vector3 a, Vector3 b, Color c, float width, float seconds)
+        {
+            if (!Enabled) return;
+            DragonVfxLife l = Host(a, Mathf.Max(0.05f, seconds), "streak");
+            LineRenderer glow = SoftLine(l.transform, width * 3.5f);
+            LineRenderer core = SoftLine(l.transform, width);
+            glow.positionCount = 2; glow.SetPosition(0, a); glow.SetPosition(1, b);
+            core.positionCount = 2; core.SetPosition(0, a); core.SetPosition(1, b);
+            l.gameObject.AddComponent<DragonCrackFade>().Lines = new LineRenderer[] { glow, core };
+            DragonCrackFade f = l.GetComponent<DragonCrackFade>();
+            f.Color = Color.Lerp(c, Color.white, 0.25f);
+            f.Life = seconds;
+        }
+
+        // Thick energy rail with rings of force along it (Railcannon, beams).
+        public static void Rail(Vector3 a, Vector3 b, Color c, float width, float seconds)
+        {
+            if (!Enabled) return;
+            Streak(a, b, c, width, seconds);
+            Streak(a, b, Color.white, width * 0.35f, seconds * 0.8f);
+            Vector3 d = b - a;
+            float len = d.magnitude;
+            if (len < 0.5f) return;
+            int n = Mathf.Clamp(Mathf.RoundToInt(len / 4f), 1, 8);
+            for (int i = 1; i <= n; i++) AirRing(a + d * (i / (n + 1f)), d, c, width * 1.6f, 0.3f + i * 0.03f);
+        }
+
+        // Real flames rushing out in a cone.
+        public static void FlameCone(Vector3 origin, Vector3 dir, float range, float angle, float seconds)
+        {
+            if (!Enabled) return;
+            if (dir.sqrMagnitude < 0.001f) dir = Vector3.forward;
+            DragonVfxLife l = Host(origin, seconds + 1.2f, "flames");
+            l.transform.rotation = Quaternion.LookRotation(dir.normalized);
+            float life = 0.55f;
+            float speed = range / life;
+            ParticleSystem ps = Particles(l.transform, new Color(1f, 0.62f, 0.18f, 1f), 0, 260f, seconds, life, speed * 0.7f, speed, 0.6f, 1.3f + range * 0.06f, -0.15f,
+                ParticleSystemShapeType.Cone, 0.25f, Vector3.zero, false, true);
+            ParticleSystem.ShapeModule sh = ps.shape;
+            sh.angle = Mathf.Clamp(angle * 0.5f, 5f, 80f);
+            FireLook(ps);
+            l.StopEmitAt = seconds;
+            l.Systems = new ParticleSystem[] { ps };
+            Smoke(origin + dir.normalized * range * 0.6f, new Color(0.25f, 0.22f, 0.2f, 0.45f), range * 0.3f, 1.6f, 6);
+        }
+
+        private static void FireLook(ParticleSystem ps)
+        {
+            Material m = Mat(FlameTex(), true);
+            if (m != null) ps.GetComponent<ParticleSystemRenderer>().sharedMaterial = m;
+            ParticleSystem.MainModule main = ps.main;
+            main.startRotation = new ParticleSystem.MinMaxCurve(-0.4f, 0.4f);
+            ParticleSystem.ColorOverLifetimeModule col = ps.colorOverLifetime;
+            Gradient g = new Gradient();
+            g.SetKeys(new GradientColorKey[] { new GradientColorKey(new Color(1f, 0.95f, 0.7f), 0f), new GradientColorKey(new Color(1f, 0.55f, 0.12f), 0.35f), new GradientColorKey(new Color(0.75f, 0.15f, 0.05f), 0.8f), new GradientColorKey(new Color(0.2f, 0.1f, 0.08f), 1f) },
+                      new GradientAlphaKey[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(1f, 0.1f), new GradientAlphaKey(0.6f, 0.7f), new GradientAlphaKey(0f, 1f) });
+            col.color = new ParticleSystem.MinMaxGradient(g);
+            ParticleSystem.SizeOverLifetimeModule sol = ps.sizeOverLifetime;
+            sol.size = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(new Keyframe(0f, 0.4f), new Keyframe(0.3f, 1f), new Keyframe(1f, 1.3f)));
+        }
+
+        // A ball of fire: flame core, smoke column, embers, scorch.
+        public static void FireBlast(Vector3 pos, float radius)
+        {
+            if (!Enabled) return;
+            radius = Mathf.Max(0.8f, radius);
+            DragonVfxLife l = Host(pos + Vector3.up * 0.4f, 2.5f, "fireblast");
+            ParticleSystem ps = Particles(l.transform, new Color(1f, 0.6f, 0.2f, 1f), Mathf.RoundToInt(40 + radius * 10f), 0f, 0.1f, 0.7f, radius * 0.8f, radius * 1.6f, radius * 0.4f, radius * 0.9f, -0.3f,
+                ParticleSystemShapeType.Sphere, radius * 0.3f, Vector3.zero, false, true);
+            FireLook(ps);
+            Smoke(pos + Vector3.up * radius * 0.5f, new Color(0.18f, 0.15f, 0.13f, 0.6f), radius, 2.6f, Mathf.RoundToInt(8 + radius * 1.5f));
+            Embers(pos, Fire, radius * 0.8f, 1.2f, 80f);
+            Scorch(pos, radius * 0.6f, 7f);
+        }
+
+        // A vertical curved wall of force that the caller moves (Impact Wave crest). width = across the path.
+        public static DragonCrest Crest(Color c, float width, float height, float maxLife)
+        {
+            if (!Enabled) return null;
+            GameObject go = new GameObject("IH_Crest");
+            Mesh m = new Mesh();
+            const int n = 12;
+            Vector3[] v = new Vector3[(n + 1) * 2];
+            Vector2[] uv = new Vector2[v.Length];
+            int[] tri = new int[n * 12];
+            for (int i = 0; i <= n; i++)
+            {
+                float t = (float)i / n;
+                float x = (t - 0.5f) * width;
+                float z = -Mathf.Pow(Mathf.Abs(t - 0.5f) * 2f, 2f) * width * 0.25f;   // edges trail behind the centre
+                float h = height * (0.55f + 0.45f * Mathf.Sin(t * Mathf.PI));
+                v[i * 2] = new Vector3(x, 0f, z);
+                v[i * 2 + 1] = new Vector3(x, h, z - height * 0.15f);
+                uv[i * 2] = new Vector2(t, 0f);
+                uv[i * 2 + 1] = new Vector2(t, 1f);
+            }
+            for (int i = 0; i < n; i++)
+            {
+                int a = i * 2, k = i * 12;
+                tri[k] = a; tri[k + 1] = a + 1; tri[k + 2] = a + 2; tri[k + 3] = a + 2; tri[k + 4] = a + 1; tri[k + 5] = a + 3;
+                tri[k + 6] = a; tri[k + 7] = a + 2; tri[k + 8] = a + 1; tri[k + 9] = a + 2; tri[k + 10] = a + 3; tri[k + 11] = a + 1;
+            }
+            m.vertices = v; m.uv = uv; m.triangles = tri;
+            m.colors = new Color[v.Length];
+            m.RecalculateBounds();
+            go.AddComponent<MeshFilter>().sharedMesh = m;
+            MeshRenderer r = go.AddComponent<MeshRenderer>();
+            r.sharedMaterial = Mat(BeamTex(), true);
+            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            DragonCrest cr = go.AddComponent<DragonCrest>();
+            cr.Mesh = m;
+            cr.Color = Color.Lerp(c, Color.white, 0.2f);
+            cr.MaxLife = Mathf.Max(0.3f, maxLife);
+            return cr;
+        }
+
+        // A static crescent blade of light parented to a moving object (Moonlight / Crescent / Halfmoon waves).
+        // roll 90 = vertical blade.
+        public static void CrescentBlade(Transform parent, Color c, float radius, float width, float roll)
+        {
+            if (!Enabled || parent == null) return;
+            GameObject go = new GameObject("IH_CrescentBlade");
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = Vector3.back * radius * 0.6f;
+            go.transform.localRotation = Quaternion.AngleAxis(roll, Vector3.forward);
+            Mesh mesh = new Mesh();
+            const int n = 24;
+            Vector3[] v = new Vector3[(n + 1) * 2];
+            Vector2[] uv = new Vector2[v.Length];
+            Color[] col = new Color[v.Length];
+            int[] tri = new int[n * 12];
+            Color cc = Color.Lerp(c, Color.white, 0.25f);
+            for (int i = 0; i <= n; i++)
+            {
+                float t = (float)i / n;
+                float a = Mathf.Lerp(-75f, 75f, t) * Mathf.Deg2Rad;
+                Vector3 d = new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a));
+                float w = width * Mathf.Sin(t * Mathf.PI);
+                v[i * 2] = d * (radius - w);
+                v[i * 2 + 1] = d * radius;
+                uv[i * 2] = new Vector2(t, 0f); uv[i * 2 + 1] = new Vector2(t, 1f);
+                Color k = cc; k.a = 0.95f;
+                col[i * 2] = k; col[i * 2 + 1] = k;
+            }
+            for (int i = 0; i < n; i++)
+            {
+                int a = i * 2, k = i * 12;
+                tri[k] = a; tri[k + 1] = a + 2; tri[k + 2] = a + 1; tri[k + 3] = a + 1; tri[k + 4] = a + 2; tri[k + 5] = a + 3;
+                tri[k + 6] = a; tri[k + 7] = a + 1; tri[k + 8] = a + 2; tri[k + 9] = a + 1; tri[k + 10] = a + 3; tri[k + 11] = a + 2;
+            }
+            mesh.vertices = v; mesh.uv = uv; mesh.colors = col; mesh.triangles = tri;
+            mesh.RecalculateBounds();
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            MeshRenderer r = go.AddComponent<MeshRenderer>();
+            r.sharedMaterial = Mat(StreakTex(), true);
+            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         }
 
         // ------------------------------------------------------------------ themed presets

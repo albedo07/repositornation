@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.60";
+        public const string ModVersion = "0.25.61";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1425,7 +1425,8 @@ namespace AlbedosCustomClassesAdvanced
             {
                 visual = new GameObject("DragonsAltarMoonlightGhost");
                 GameObject ghostVis = visual;
-                DragonCombat.RunVfx(delegate { DragonVfx.AttachGlow(ghostVis.transform, new Color(0.45f, 0.78f, 1f, 1f), 0.5f, 70f, 5f); });   // v0.25.55
+                float gw1 = width;
+                DragonCombat.RunVfx(delegate { DragonVfx.AttachGlow(ghostVis.transform, new Color(0.45f, 0.78f, 1f, 1f), 0.5f, 70f, 5f); DragonVfx.CrescentBlade(ghostVis.transform, DragonVfx.Steel, gw1 * 0.55f, gw1 * 0.16f, 0f); });   // v0.25.55 / v0.25.61 crescent blade
                 line = visual.AddComponent<LineRenderer>();
                 line.useWorldSpace = true;
                 line.positionCount = 2;
@@ -1462,6 +1463,8 @@ namespace AlbedosCustomClassesAdvanced
                 {
                     line.SetPosition(0, center - right * width * 0.5f);
                     line.SetPosition(1, center + right * width * 0.5f);
+                    line.transform.position = center;   // v0.25.61 the glow / blade ride the wave (they stayed at the origin)
+                    line.transform.rotation = Quaternion.LookRotation(forward, Vector3.up);
                 }
 
                 // Ghost projectile: terrain and structures do not shorten its full configured range.
@@ -2039,7 +2042,8 @@ namespace AlbedosCustomClassesAdvanced
             {
                 visual = new GameObject("DragonsAltarMoonlightGhost");
                 GameObject ghostVis2 = visual;
-                DragonCombat.RunVfx(delegate { DragonVfx.AttachGlow(ghostVis2.transform, new Color(0.45f, 0.78f, 1f, 1f), 0.5f * heightScale, 70f, 5f); });   // v0.25.55
+                float gw2 = width; Color gcol = halfmoon ? new Color(0.70f, 0.95f, 1f, 1f) : DragonVfx.Steel;
+                DragonCombat.RunVfx(delegate { DragonVfx.AttachGlow(ghostVis2.transform, new Color(0.45f, 0.78f, 1f, 1f), 0.5f * heightScale, 70f, 5f); DragonVfx.CrescentBlade(ghostVis2.transform, gcol, gw2 * 0.55f, gw2 * 0.16f * heightScale, 0f); });   // v0.25.55 / v0.25.61
                 line = visual.AddComponent<LineRenderer>();
                 line.useWorldSpace = true;
                 line.positionCount = 2;
@@ -2073,6 +2077,8 @@ namespace AlbedosCustomClassesAdvanced
                 {
                     line.SetPosition(0, center - right * width * 0.5f);
                     line.SetPosition(1, center + right * width * 0.5f);
+                    line.transform.position = center;   // v0.25.61 the glow / blade ride the wave (they stayed at the origin)
+                    line.transform.rotation = Quaternion.LookRotation(forward, Vector3.up);
                 }
                 yield return null;
             }
@@ -2110,6 +2116,15 @@ namespace AlbedosCustomClassesAdvanced
             int groundMask = LayerMask.GetMask("Default", "static_solid", "Default_small", "piece_nonsolid", "terrain", "vehicle", "piece", "viewblock");
             float elapsed = 0f, lastTrail = -1f;
             float d = IhDamageSum(_crescentDamageV) * IhSkillPower(player, "crescent_cleave");
+            GameObject ccBlade = null;
+            if (_enableVfx.Value)
+            {
+                ccBlade = new GameObject("IH_CrescentWave");
+                ccBlade.transform.position = origin;
+                ccBlade.transform.rotation = Quaternion.LookRotation(forward, Vector3.up);
+                GameObject ccb = ccBlade; float cch = height; Color ccc = ascended ? DragonVfx.Ember : DragonVfx.Steel;
+                DragonCombat.RunVfx(delegate { DragonVfx.CrescentBlade(ccb.transform, ccc, cch * 0.55f, Mathf.Max(0.4f, cch * 0.14f), 90f); DragonVfx.AttachGlow(ccb.transform, ccc, cch * 0.3f, 40f, 4f); });   // v0.25.61 a standing crescent travels
+            }
             while (elapsed <= travelTime && player != null)
             {
                 float t = Mathf.Clamp01(elapsed / travelTime);
@@ -2117,6 +2132,7 @@ namespace AlbedosCustomClassesAdvanced
                 RaycastHit ground;
                 if (Physics.Raycast(point + Vector3.up * 5f, Vector3.down, out ground, 12f, groundMask)) point = ground.point;
                 Vector3 center = point + Vector3.up * (height * 0.5f);
+                if (ccBlade != null) ccBlade.transform.position = center;
                 Collider[] hits = Physics.OverlapBox(center, new Vector3(width * 0.5f, height * 0.5f, 1.25f), Quaternion.LookRotation(forward, Vector3.up));
                 for (int i = 0; i < hits.Length; i++)
                 {
@@ -2152,6 +2168,7 @@ namespace AlbedosCustomClassesAdvanced
                 elapsed += Time.deltaTime;
                 yield return null;
             }
+            if (ccBlade != null) Destroy(ccBlade);
             if (cast != null) cast.Running--;
         }
 
@@ -2565,6 +2582,9 @@ namespace AlbedosCustomClassesAdvanced
             int solid = IhSolidMask();
             HashSet<int> waveHit = new HashSet<int>();
             float elapsed = 0f, reached = 0.5f;
+            DragonCrest aiwCrest = null;
+            float aiwNext = 0.6f;
+            if (_enableVfx.Value) { float aiwT = travel, aiwW = width; DragonCombat.RunVfx(delegate { aiwCrest = DragonVfx.Crest(new Color(1f, 0.62f, 0.22f, 1f), aiwW * 1.1f, 2.2f, aiwT + 1f); }); }   // v0.25.61
             while (elapsed <= travel && player != null)
             {
                 float dist = Mathf.Lerp(0.5f, length, Mathf.Clamp01(elapsed / travel));
@@ -2584,11 +2604,23 @@ namespace AlbedosCustomClassesAdvanced
                     waveHit.Add(target.GetInstanceID());
                     DealDamageScaled(player, target, _impactAscDamage, 1f, 16f, false);
                 }
-                if (_enableVfx.Value)
+                if (aiwCrest != null)
+                {
+                    aiwCrest.transform.position = probe - Vector3.up * 0.15f;
+                    aiwCrest.transform.rotation = Quaternion.LookRotation(forward, Vector3.up);
+                    if (dist >= aiwNext)
+                    {
+                        aiwNext = dist + 1f;
+                        Vector3 aSide = Vector3.Cross(Vector3.up, forward), aP = probe, aF = forward; float aW = width;
+                        DragonCombat.RunVfx(delegate { for (int k = -1; k <= 1; k++) DragonVfx.Spike(aP + aSide * k * aW * 0.32f - aF * 0.4f, DragonVfx.Rock, UnityEngine.Random.Range(1f, 1.7f), 0.4f, 0.35f, aF + aSide * k * 0.6f); });
+                    }
+                }
+                else if (_enableVfx.Value)
                     StartCoroutine(AnimateRing(probe, 0.12f, Mathf.Max(0.35f, width * 0.55f), 0.18f, new Color(1f, 0.62f, 0.20f, 0.78f), 0.05f));
                 elapsed += Time.deltaTime;
                 yield return null;
             }
+            if (aiwCrest != null) aiwCrest.Finish(0.3f);
             if (_enableVfx.Value) { Vector3 s0 = origin, s1 = origin + forward * reached; float sw2 = width; DragonCombat.RunVfx(delegate { DragonVfx.CrackLine(s0, s1, DragonVfx.Fire, Mathf.Clamp(sw2 * 0.2f, 0.3f, 0.9f), 4f); }); }   // v0.25.58 scar along the wave
             // Aftershock: from the cast position back along the travelled path, 3m sections.
             float section = Mathf.Max(0.5f, DragonCombat.M(_iwAscSection.Value));
@@ -2905,7 +2937,7 @@ namespace AlbedosCustomClassesAdvanced
             {
                 StartCoroutine(AnimateRing(center + Vector3.up * 0.08f, Mathf.Max(0.4f, innerVisual), radius, 0.55f, new Color(0.95f, 0.58f, 0.22f, 1f), 0.16f));
                 Vector3 sc = center; float sr = radius; bool firstStamp = innerVisual <= 0.01f;
-                DragonCombat.RunVfx(delegate { DragonVfx.GroundImpact(sc, DragonVfx.Fire, sr, firstStamp ? 1.4f : 0.8f); });   // v0.25.58
+                DragonCombat.RunVfx(delegate { DragonVfx.GroundImpact(sc, DragonVfx.Fire, sr, firstStamp ? 1.4f : 0.8f); if (firstStamp) DragonVfx.SpikeRing(sc, DragonVfx.Rock, sr * 0.7f, 6, 0.9f, 0.3f); });   // v0.25.58 / v0.25.61
             }
         }
 
@@ -3014,7 +3046,7 @@ namespace AlbedosCustomClassesAdvanced
             {
                 StartCoroutine(AnimateRing(center + Vector3.up * 0.08f, 0.3f, radius, 0.55f, new Color(1f, 0.46f, 0.16f, 1f), 0.17f));
                 Vector3 bc = center; float br = radius;
-                DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(bc, DragonVfx.Fire, br, 2.2f); DragonVfx.Debris(bc, new Color(0.42f, 0.36f, 0.30f, 1f), 14, 10f, 0.4f, 2.6f); });   // v0.25.58
+                DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(bc, DragonVfx.Fire, br, 2.2f); DragonVfx.Debris(bc, new Color(0.42f, 0.36f, 0.30f, 1f), 14, 10f, 0.4f, 2.6f); DragonVfx.SpikeRing(bc, DragonVfx.Rock, br * 0.6f, 10, 1.6f, 0.8f); });   // v0.25.58
             }
             if (!IsAscendedSkill("bonecrusher")) yield break;
             // Ascended: a ground shock 0.5s later (50%), no second jump.
@@ -3129,6 +3161,7 @@ namespace AlbedosCustomClassesAdvanced
                     DragonVfx.Burst(impact + Vector3.up * 0.4f, new Color(0.35f, 0.30f, 0.26f, 0.7f), 40, 4f, 1.2f, 1.6f, -0.1f);
                     DragonVfx.Vanilla(new string[] { "vfx_FireballHit", "fx_fireball_staff_explosion", "vfx_fireball_hit" }, impact, Quaternion.identity, 1.5f, 4f);
                     DragonVfx.GroundImpact(impact, DragonVfx.Fire, radius, 2f);   // v0.25.58
+                    DragonVfx.FireBlast(impact, radius * 0.7f);   // v0.25.61 a real ball of fire
                     DragonVfx.Flash(impact + Vector3.up, DragonVfx.Fire, 10f, radius * 3f, 0.6f);
                     if (ascended) DragonVfx.Embers(impact, DragonVfx.Fire, radius * 0.8f, Mathf.Max(0.5f, _bombAscFireSeconds.Value), 60f);
                 });
@@ -3258,7 +3291,7 @@ namespace AlbedosCustomClassesAdvanced
             DragonCombat.LockSkill(player, 0.5f);
             DragonCombat.PlayClip(player, "merc_roar", 0.35f);
             ShowMessage("Battlecry");
-            if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.Shockwave(player.transform.position, new Color(1f, 0.45f, 0.14f, 1f), Mathf.Max(1f, DragonCombat.M(_bcRadius.Value)), 0.6f); DragonVfx.Burst(player.transform.position + Vector3.up * 1.6f, new Color(1f, 0.45f, 0.14f, 1f), 50, 6f, 0.3f, 0.7f, -0.3f); });
+            if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.Shockwave(player.transform.position, new Color(1f, 0.45f, 0.14f, 1f), Mathf.Max(1f, DragonCombat.M(_bcRadius.Value)), 0.6f); DragonVfx.Burst(player.transform.position + Vector3.up * 1.6f, new Color(1f, 0.45f, 0.14f, 1f), 50, 6f, 0.3f, 0.7f, -0.3f); DragonVfx.AirRing(player.transform.position + Vector3.up * 1.5f, player.transform.forward, new Color(1f, 0.55f, 0.2f, 1f), 2.5f, 0.4f); DragonVfx.AirRing(player.transform.position + Vector3.up * 1.5f, player.transform.forward, new Color(1f, 0.75f, 0.4f, 1f), 4f, 0.6f); });   // v0.25.61 the roar
             float radius = Mathf.Max(1f, DragonCombat.M(_bcRadius.Value));
             HashSet<Player> allies = new HashSet<Player>();
             allies.Add(player);
@@ -3963,6 +3996,8 @@ namespace AlbedosCustomClassesAdvanced
                     {
                         DragonVfx.CrackLine(sa, sb, DragonVfx.Fire, Mathf.Clamp(sw * 0.25f, 0.25f, 0.8f), 4f);   // v0.25.58 the fissure tears open
                         if (rock) DragonVfx.Debris(sb, new Color(0.42f, 0.36f, 0.30f, 1f), 4, 6f, 0.3f, 1.8f);
+                        Vector3 sside = Vector3.Cross(Vector3.up, sb - sa);
+                        DragonVfx.Spike(sb + sside.normalized * UnityEngine.Random.Range(-0.6f, 0.6f), DragonVfx.Rock, UnityEngine.Random.Range(1.1f, 1.9f), 0.45f, 0.5f, sside * (rock ? 1f : -1f));   // v0.25.61 the earth splits upward
                         DragonVfx.Burst(sb + Vector3.up * 0.2f, new Color(0.50f, 0.44f, 0.36f, 0.6f), 8, 3f, 0.6f, 0.8f, 0.3f);
                     });
                     lastScar = shockPoint;
@@ -3999,7 +4034,7 @@ namespace AlbedosCustomClassesAdvanced
             {
                 StartCoroutine(AnimateRing(rupturePoint + Vector3.up * 0.08f, width * 0.5f, endRadius, 0.46f, new Color(1f, 0.52f, 0.18f, 0.95f), 0.16f));
                 Vector3 rp = rupturePoint; float rr = endRadius;
-                DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(rp, DragonVfx.Fire, rr, 1.8f); DragonVfx.Pillar(rp, DragonVfx.Fire, rr * 0.3f, 6f, 0.4f); });   // v0.25.58
+                DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(rp, DragonVfx.Fire, rr, 1.8f); DragonVfx.Pillar(rp, DragonVfx.Fire, rr * 0.3f, 6f, 0.4f); DragonVfx.SpikeRing(rp, DragonVfx.Rock, rr * 0.7f, 9, 2.4f, 0.9f); });   // v0.25.58
             }
         }
 
