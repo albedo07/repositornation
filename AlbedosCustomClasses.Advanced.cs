@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.68";
+        public const string ModVersion = "0.25.69";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -140,7 +140,7 @@ namespace AlbedosCustomClassesAdvanced
         private ConfigEntry<bool> _enableVfx;
         private ConfigEntry<bool> _showCombatHud;
         private ConfigEntry<bool> _ihHudEnabled;
-        private ConfigEntry<float> _ihHudScale, _ihHudX, _ihHudY, _ihHudBottom, _ihHudPosX, _ihHudPosY, _ihBarPosX, _ihBarPosY, _ihHudArtWidth;
+        private ConfigEntry<float> _ihHudScale, _ihHudX, _ihHudY, _ihHudBottom, _ihHudPosX, _ihHudPosY, _ihBarPosX, _ihBarPosY, _ihHudArtWidth, _ihHudScaleX, _ihHudScaleY, _ihBarScaleX, _ihBarScaleY;
         private ConfigEntry<bool> _ihHudArt;
         private ConfigEntry<bool> _uiColorSpaceCorrection;
         private ConfigEntry<float> _hudScale;
@@ -653,7 +653,11 @@ namespace AlbedosCustomClassesAdvanced
             _ihHudPosX = Config.Bind("Immortal HUD", "PosX", -1f, "HUD left edge (px at 1080p). -1 = default bottom-left. Set by dragging the HUD while the inventory is open.");
             _ihHudPosY = Config.Bind("Immortal HUD", "PosY", -1f, "HUD top edge (px at 1080p). -1 = default bottom-left.");
             _ihHudArt = Config.Bind("Immortal HUD", "FrameStyle_v02568", true, "v0.25.68: the painted Class frames (one design per Base Class, coloured per Advancement Class). Off = the old thin HUD.");
-            _ihHudArtWidth = Config.Bind("Immortal HUD", "FrameWidth_v02568", 600f, "Width of the painted Class frame (px at 1080p, before Scale).");
+            _ihHudArtWidth = Config.Bind("Immortal HUD", "FrameWidth_v02569", 430f, "Width of the painted Class frame (px at 1080p, before Scale).");
+            _ihHudScaleX = Config.Bind("Immortal HUD", "StatHudWidthScale", 1f, "Stat HUD width stretch. In game: hover the HUD with the inventory open, Shift + mouse wheel.");
+            _ihHudScaleY = Config.Bind("Immortal HUD", "StatHudHeightScale", 1f, "Stat HUD height stretch. In game: Ctrl + mouse wheel over the HUD (inventory open).");
+            _ihBarScaleX = Config.Bind("Immortal HUD", "SkillBarWidthScale", 1f, "Skill hotbar width stretch. In game: Shift + mouse wheel over the hotbar (inventory open).");
+            _ihBarScaleY = Config.Bind("Immortal HUD", "SkillBarHeightScale", 1f, "Skill hotbar height stretch. In game: Ctrl + mouse wheel over the hotbar (inventory open).");
             _ihBarPosX = Config.Bind("Immortal HUD", "SkillBarPosX", -1f, "Skill hotbar left edge (px at 1080p). -1 = default (bottom-left corner, under the stat HUD). Drag it while the inventory is open.");
             _ihBarPosY = Config.Bind("Immortal HUD", "SkillBarPosY", -1f, "Skill hotbar top edge (px at 1080p). -1 = default.");
             _hudBottomOffset = Config.Bind("Interface", "HudBottomOffset_v0113", 105f, "Bottom margin for the compact RPG skill HUD. Fresh v0.11.3 key avoids stale 330px development offsets.");
@@ -2633,7 +2637,8 @@ namespace AlbedosCustomClassesAdvanced
             DragonCombat.LockSkill(player, 0.5f);
             DragonCombat.PlayClip(player, "sm_guidance", 0.06f);   // v0.25.16 release-first
             ShowMessage("Knight's Guidance");
-            if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.Pillar(player.transform.position, new Color(0.45f, 0.78f, 1f, 1f), 1.2f, 12f, 0.8f); DragonVfx.Shockwave(player.transform.position, new Color(0.45f, 0.78f, 1f, 1f), Mathf.Max(1f, DragonCombat.M(_kgRadius.Value)), 0.7f); });
+            // v0.25.69 (user: the Grace was too bright): a dim, thin column + a plain ring (no ground glow disc).
+            if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.Pillar(player.transform.position, new Color(0.20f, 0.38f, 0.60f, 0.55f), 0.6f, 7f, 0.6f); DragonVfx.AreaRing(player.transform.position, new Color(0.30f, 0.55f, 0.85f, 0.45f), Mathf.Max(1f, DragonCombat.M(_kgRadius.Value)), 0.7f); });
             float radius = Mathf.Max(1f, DragonCombat.M(_kgRadius.Value));
             float duration = Mathf.Max(1f, _kgDuration.Value);
             HashSet<Player> allies = new HashSet<Player>();
@@ -12700,7 +12705,8 @@ namespace AlbedosCustomClassesAdvanced
             float x = bar.x;
             float y = bar.y;
             Event ev = Event.current;
-            Rect grab = new Rect(bar.x - 4f, bar.y - 6f * scale, bar.width + 8f, bar.height + 22f * scale);
+            float bsx = Mathf.Clamp(_ihBarScaleX.Value, 0.25f, 4f), bsy = Mathf.Clamp(_ihBarScaleY.Value, 0.25f, 4f);
+            Rect grab = new Rect(bar.x - 4f, bar.y - 6f * scale, (bar.width + 8f) * bsx, (bar.height + 22f) * bsy);
             if (Cursor.visible && !_ihDragging)
             {
                 float k1080 = Screen.height / 1080f;
@@ -12717,11 +12723,16 @@ namespace AlbedosCustomClassesAdvanced
                 {
                     Color c0 = _ihHudTiny.normal.textColor;
                     _ihHudTiny.normal.textColor = new Color(0.95f, 0.85f, 0.55f, 0.85f);
-                    GUI.Label(new Rect(grab.x, grab.y - 16f * scale, grab.width, 16f * scale), "drag to move", _ihHudTiny);
+                    GUI.Label(new Rect(grab.x, grab.y - 16f * scale, grab.width, 16f * scale), "drag to move  ·  wheel size  ·  Shift width  ·  Ctrl height", _ihHudTiny);
                     _ihHudTiny.normal.textColor = c0;
                 }
             }
             else if (!Cursor.visible) _ihBarDragging = false;
+            if (Cursor.visible && !_ihDragging) IhHudScaleGestures(grab, _ihBarScaleX, _ihBarScaleY);
+            Matrix4x4 barM0 = GUI.matrix;
+            GUI.matrix = barM0 * IhScaleAbout(x, y, bsx, bsy);
+            try
+            {
 
             // v0.25.4: the class name lives on the stat HUD; only Mercenary's Fury gauge stays here.
             string title = "";
@@ -12767,6 +12778,38 @@ namespace AlbedosCustomClassesAdvanced
                     GUI.DrawTexture(new Rect(graceInner.xMax - grace.width * 0.36f, graceInner.yMax - grace.width * 0.36f, grace.width * 0.40f, grace.width * 0.40f), _ihPadlockTex);
                 GUI.Label(new Rect(grace.x - 10f, grace.yMax - 1f, grace.width + 20f, 16f * scale), FormatHotbarBinding(BindGrace), _hudKeyCenterStyle);
             }
+            }
+            finally { GUI.matrix = barM0; }
+        }
+
+        private bool _ihArtActive;
+
+        private static Matrix4x4 IhScaleAbout(float x, float y, float sx, float sy)
+        {
+            return Matrix4x4.TRS(new Vector3(x, y, 0f), Quaternion.identity, Vector3.one) * Matrix4x4.Scale(new Vector3(sx, sy, 1f)) * Matrix4x4.TRS(new Vector3(-x, -y, 0f), Quaternion.identity, Vector3.one);
+        }
+
+        // v0.25.69 (user: every HUD can be resized in every dimension): with the cursor free (inventory open) and the
+        // mouse over the HUD: wheel = size, Shift + wheel = width only, Ctrl + wheel = height only, middle click = reset.
+        private void IhHudScaleGestures(Rect screenRect, ConfigEntry<float> sx, ConfigEntry<float> sy)
+        {
+            Event e = Event.current;
+            if (e == null || !Cursor.visible || !screenRect.Contains(e.mousePosition)) return;
+            if (e.type == EventType.ScrollWheel)
+            {
+                float f = e.delta.y < 0f ? 1.05f : 1f / 1.05f;
+                bool wide = e.shift, tall = e.control;
+                if (!tall) sx.Value = Mathf.Clamp(sx.Value * f, 0.25f, 4f);
+                if (!wide) sy.Value = Mathf.Clamp(sy.Value * f, 0.25f, 4f);
+                e.Use();
+                try { Config.Save(); } catch { }
+            }
+            else if (e.type == EventType.MouseDown && e.button == 2)
+            {
+                sx.Value = 1f; sy.Value = 1f;
+                e.Use();
+                try { Config.Save(); } catch { }
+            }
         }
 
         private bool _ihBarDragging;
@@ -12782,8 +12825,10 @@ namespace AlbedosCustomClassesAdvanced
             float k1080 = Screen.height / 1080f;
             float x = _ihBarPosX.Value >= 0f ? _ihBarPosX.Value * k1080 : 24f * k1080;
             float y = _ihBarPosY.Value >= 0f ? _ihBarPosY.Value * k1080 : Screen.height - 10f * k1080 - 18f * scale - h;
-            x = Mathf.Clamp(x, 0f, Mathf.Max(0f, Screen.width - w));
-            y = Mathf.Clamp(y, 30f * scale, Mathf.Max(30f * scale, Screen.height - h - 18f * scale));
+            float bsx = Mathf.Clamp(_ihBarScaleX.Value, 0.25f, 4f), bsy = Mathf.Clamp(_ihBarScaleY.Value, 0.25f, 4f);
+            if (_ihBarPosY.Value < 0f) y = Screen.height - 10f * k1080 - (18f * scale + h) * bsy;
+            x = Mathf.Clamp(x, 0f, Mathf.Max(0f, Screen.width - w * bsx));
+            y = Mathf.Clamp(y, 30f * scale, Mathf.Max(30f * scale, Screen.height - (h + 18f * scale) * bsy));
             return new Rect(x, y, w, h);
         }
 
@@ -13403,7 +13448,7 @@ namespace AlbedosCustomClassesAdvanced
             }
             if (_ihFrameBg != null)
             {
-                bool show = _ihPanelVisible;
+                bool show = _ihPanelVisible && !_ihArtActive;   // v0.25.69: the painted frame needs no backdrop
                 if (_ihFrameBg.activeSelf != show) _ihFrameBg.SetActive(show);
                 if (!show) return;
                 if (_ihFrameBg.transform.parent != _ihHealthPanel.parent) _ihFrameBg.transform.SetParent(_ihHealthPanel.parent, false);
@@ -13897,15 +13942,20 @@ namespace AlbedosCustomClassesAdvanced
             Rect barHome = IhSkillBarDefaultRect();
             float px = _ihHudPosX.Value >= 0f ? _ihHudPosX.Value * k1080 : barHome.x;
             float py = _ihHudPosY.Value >= 0f ? _ihHudPosY.Value * k1080 : barHome.y - 30f * Mathf.Clamp(_hudScale.Value, 0.65f, 1.45f) - ph;
-            px = Mathf.Clamp(px, 0f, Screen.width - pw);
-            py = Mathf.Clamp(py, 60f * s, Screen.height - ph);
+            // v0.25.69: free dimensional scaling (wheel = size, Shift = width, Ctrl = height, middle click = reset).
+            float hsx = Mathf.Clamp(_ihHudScaleX.Value, 0.25f, 4f), hsy = Mathf.Clamp(_ihHudScaleY.Value, 0.25f, 4f);
+            if (_ihHudPosY.Value < 0f) py = barHome.y - 30f * Mathf.Clamp(_hudScale.Value, 0.65f, 1.45f) - ph * hsy;
+            px = Mathf.Clamp(px, 0f, Mathf.Max(0f, Screen.width - pw * hsx));
+            py = Mathf.Clamp(py, 60f * s, Mathf.Max(60f * s, Screen.height - ph * hsy));
             Rect panel = new Rect(px, py, pw, ph);
+            Rect screenPanel = new Rect(px, py, pw * hsx, ph * hsy);
+            _ihArtActive = art != null;
 
             // Drag anywhere on the panel while the cursor is free (inventory open); saved on release.
             Event e = Event.current;
             if (Cursor.visible)
             {
-                if (e.type == EventType.MouseDown && e.button == 0 && !_ihBarDragging && panel.Contains(e.mousePosition)) { _ihDragging = true; _ihDragOffset = e.mousePosition - new Vector2(px, py); e.Use(); }
+                if (e.type == EventType.MouseDown && e.button == 0 && !_ihBarDragging && screenPanel.Contains(e.mousePosition)) { _ihDragging = true; _ihDragOffset = e.mousePosition - new Vector2(px, py); e.Use(); }
                 else if (_ihDragging && e.type == EventType.MouseDrag)
                 {
                     Vector2 np = e.mousePosition - _ihDragOffset;
@@ -13914,16 +13964,21 @@ namespace AlbedosCustomClassesAdvanced
                     e.Use();
                 }
                 else if (_ihDragging && (e.type == EventType.MouseUp || e.rawType == EventType.MouseUp)) { _ihDragging = false; try { Config.Save(); } catch { } }
-                if (panel.Contains(e.mousePosition) && e.type == EventType.Repaint)
+                if (screenPanel.Contains(e.mousePosition) && e.type == EventType.Repaint)
                 {
                     Color c0 = _ihHudTiny.normal.textColor;
                     _ihHudTiny.normal.textColor = new Color(0.95f, 0.85f, 0.55f, 0.85f);
-                    GUI.Label(new Rect(panel.x, panel.yMax + 2f * s, panel.width, 16f * s), "drag to move", _ihHudTiny);
+                    GUI.Label(new Rect(screenPanel.x, screenPanel.yMax + 2f * s, screenPanel.width, 16f * s), "drag to move  ·  wheel size  ·  Shift width  ·  Ctrl height", _ihHudTiny);
                     _ihHudTiny.normal.textColor = c0;
                 }
             }
             else _ihDragging = false;
-            _ihLastPanel = panel;
+            IhHudScaleGestures(screenPanel, _ihHudScaleX, _ihHudScaleY);
+            _ihLastPanel = screenPanel;
+            Matrix4x4 hudM0 = GUI.matrix;
+            GUI.matrix = hudM0 * IhScaleAbout(px, py, hsx, hsy);
+            try
+            {
 
             float inTop = panel.y + 17f * s;
             // Vanilla food goes in one row under the EXP bar (moved by IhPlaceFood, laid out
@@ -14080,6 +14135,8 @@ namespace AlbedosCustomClassesAdvanced
                 _ihHudText.normal.textColor = c0;
                 fx += fIcon + 48f * s;
             }
+            }
+            finally { GUI.matrix = hudM0; }
         }
 
         private bool _ttShow;

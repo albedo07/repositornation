@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.68";
+        public const string ModVersion = "0.25.69";
 
         internal static DragonCombatPlugin Instance;
 
@@ -3643,14 +3643,15 @@ namespace DragonsAltarCombat
                 k = new DragonClipKey[] { K(-1f), Ft(K(-0.3f).Sp(3f, 0f, 0f), 0.15f, 0.08f), Ft(K(0f).Sp(6f, 0f, 0f).Off(0f, -0.03f, 0.03f), 0.22f, 0.1f), Ft(K(0.35f).Sp(4f, 0f, 0f).Off(0f, -0.02f, 0.02f), 0.2f, 0.1f), K(0.75f) };
             if (clip == "merc_circle" && length <= 0f)
             {
+                // v0.25.69 (user): the off hand braces in front of the chest (shield up / Mercenary off-hand weapon held close).
                 // v0.25.29 Circle Swing wind up = crow hop (thrower's skip): turn side-on, hop on the RIGHT leg with the left
                 // knee up and the right arm cocked back, stride the left foot forward and plant, then uncoil into the vanilla spin.
                 k = new DragonClipKey[] {
                     K(-1f),
-                    Ft(K(-0.86f).Rot(0f, 30f, 0f).Sp(3f, 0f, 0f).Off(0f, -0.06f, 0f), 0.1f, 0.1f).Hand(0.55f, 0.1f, -0.45f, 0.8f),
-                    K(-0.72f).Rot(0f, 65f, 0f).Sp(-5f, 0f, 0f).LL(0.35f, 0.05f, 0f, 0f).Lift(0.32f, 0.1f).Off(0f, 0.12f, 0.08f).Hand(0.5f, 0.45f, -0.85f, 0.95f),
-                    K(-0.56f).Rot(0f, 65f, 0f).Sp(-4f, 0f, 0f).LL(0.45f, 0.05f, 0f, 0f).Lift(0.26f, 0f).Off(0f, 0.01f, 0.14f).Hand(0.5f, 0.5f, -0.9f, 0.95f),
-                    K(-0.42f).Rot(0f, 55f, 0f).Sp(4f, 0f, 0f).LL(0.7f, 0.15f, 0f, 0f).RL(-0.3f, 0.12f, 0f, 0f).Lift(0f, 0f).Off(0f, -0.07f, 0.2f).Hand(0.5f, 0.45f, -0.85f, 0.95f),
+                    Ft(K(-0.86f).Rot(0f, 30f, 0f).Sp(3f, 0f, 0f).Off(0f, -0.06f, 0f), 0.1f, 0.1f).Hand(0.55f, 0.1f, -0.45f, 0.8f).LHand(0.45f, -0.2f, 0.85f, 0.5f),
+                    K(-0.72f).Rot(0f, 65f, 0f).Sp(-5f, 0f, 0f).LL(0.35f, 0.05f, 0f, 0f).Lift(0.32f, 0.1f).Off(0f, 0.12f, 0.08f).Hand(0.5f, 0.45f, -0.85f, 0.95f).LHand(0.45f, -0.2f, 0.85f, 0.5f),
+                    K(-0.56f).Rot(0f, 65f, 0f).Sp(-4f, 0f, 0f).LL(0.45f, 0.05f, 0f, 0f).Lift(0.26f, 0f).Off(0f, 0.01f, 0.14f).Hand(0.5f, 0.5f, -0.9f, 0.95f).LHand(0.45f, -0.2f, 0.85f, 0.5f),
+                    K(-0.42f).Rot(0f, 55f, 0f).Sp(4f, 0f, 0f).LL(0.7f, 0.15f, 0f, 0f).RL(-0.3f, 0.12f, 0f, 0f).Lift(0f, 0f).Off(0f, -0.07f, 0.2f).Hand(0.5f, 0.45f, -0.85f, 0.95f).LHand(0.45f, -0.2f, 0.85f, 0.5f),
                     Ft(K(-0.25f).Rot(0f, 20f, 0f).Sp(6f, 0f, 0f).Off(0f, -0.05f, 0.2f), 0.6f, 0.25f),
                     Ft(K(0f).Sp(6f, 0f, 0f).Off(0f, -0.03f, 0.18f), 0.4f, 0.15f),
                     Ft(K(0.35f).Sp(4f, 0f, 0f).Off(0f, -0.02f, 0.1f), 0.25f, 0.1f),
@@ -3970,10 +3971,11 @@ namespace DragonsAltarCombat
                 // v0.25.63 (user): exaggerated - the knee comes up past the hip, both arms flare out and up like the
                 // roar emote, then the foot is driven down with the chest thrown forward and the arms flung wide.
                 DragonClipKey raise = K(-0.55f).Sp(-8f, 0f, 0f).Ch(-6f, 0f, 0f).Hd(-6f, 0f, 0f).LL(0f, 0.06f, 0f, 0f).RL(0.35f, 0.1f, 0f, 0f).Lift(0f, 0.62f).Off(0f, 0.04f, 0f)
-                    .Hand(0.75f, 0.45f, 0.05f, 0.92f).LHand(-0.75f, 0.45f, 0.05f, 0.92f);
-                DragonClipKey peak = raise.Copy(-0.15f).Lift(0f, 0.7f).Hand(0.8f, 0.55f, -0.05f, 0.95f).LHand(-0.8f, 0.55f, -0.05f, 0.95f);
+                    .Hand(0.55f, -0.6f, -0.05f, 0.62f).LHand(-0.55f, -0.6f, -0.05f, 0.62f);
+                // v0.25.69 (user: flare = chicken wings, not arms stretched out): elbows bent and pushed out, hands at the hips.
+                DragonClipKey peak = raise.Copy(-0.15f).Lift(0f, 0.7f).Hand(0.6f, -0.55f, -0.12f, 0.6f).LHand(-0.6f, -0.55f, -0.12f, 0.6f);
                 DragonClipKey hit = K(0f).Sp(20f, 0f, 0f).Ch(10f, 0f, 0f).Hd(-12f, 0f, 0f).LL(-0.05f, 0.12f, 0f, 0f).RL(0.35f, 0.14f, 0f, 0f).Lift(0f, 0f).Off(0f, -0.16f, 0f)
-                    .Hand(0.9f, -0.2f, 0.3f, 0.97f).LHand(-0.9f, -0.2f, 0.3f, 0.97f).Linear();
+                    .Hand(0.62f, -0.7f, 0.08f, 0.66f).LHand(-0.62f, -0.7f, 0.08f, 0.66f).Linear();
                 DragonClipKey stAfter = hit.Copy(0.3f); stAfter.Lin = false;
                 return new DragonClipKey[] { K(-1f), raise, peak, hit, stAfter, K(0.65f) };
             }
@@ -10540,18 +10542,25 @@ namespace DragonsAltarCombat
         public static void CrescentBlade(Transform parent, Color c, float radius, float width, float roll)
         {
             if (!Enabled || parent == null) return;
-            // v0.25.67 (user: "do you know what a Getsuga Tenshou is?"): a solid crescent wave of energy that FACES the
-            // camera - it lies across the travel direction (plane perpendicular to the carrier's forward), thick in the
-            // middle, razor tips swept back. Layers: soft light-blue halo, light-blue blade body, white-hot edge.
-            // roll 0 = horizontal slash (tips left/right), roll 90 = vertical slash (tips up/down).
+            // v0.25.67 (user: "do you know what a Getsuga Tenshou is?"): a solid crescent wave of energy.
+            // v0.25.69 (user: sleek, sharp, dangerous; the cutting edge must face where it travels): the crescent lies in the
+            // plane of the cut with its convex edge LEADING (tips swept back), tilted 25 deg toward the camera so it reads
+            // from behind; thin razor body, tight halo, white cutting edge on the leading side.
+            // roll 0 = horizontal slash, roll 90 = vertical slash (two blades 14 deg apart so it reads from behind too).
             float span = Mathf.Max(1f, radius * 1.9f);
-            float thick = Mathf.Max(0.3f, width * 1.6f);
-            Color halo = Color.Lerp(c, new Color(0.40f, 0.78f, 1f, 1f), 0.6f); halo.a = 0.75f;
-            Color body = Color.Lerp(c, new Color(0.72f, 0.93f, 1f, 1f), 0.55f); body.a = 0.92f;
-            Color edge = Color.Lerp(c, Color.white, 0.9f); edge.a = 1f;
-            GetsugaLayer(parent, halo, span * 1.06f, thick * 2.3f, roll, 0f, Mat(LineTex(), true));
-            GetsugaLayer(parent, body, span, thick, roll, 0f, Mat(BladeTex(), false));
-            GetsugaLayer(parent, edge, span * 0.97f, thick * 0.42f, roll, thick * 0.22f, Mat(BladeTex(), true));
+            float thick = Mathf.Max(0.2f, width * 0.85f);
+            Color halo = Color.Lerp(c, new Color(0.40f, 0.78f, 1f, 1f), 0.6f); halo.a = 0.35f;
+            Color body = Color.Lerp(c, new Color(0.62f, 0.88f, 1f, 1f), 0.5f); body.a = 0.92f;
+            Color edge = Color.Lerp(c, Color.white, 0.92f); edge.a = 1f;
+            bool vertical = Mathf.Abs(roll) >= 1f;
+            float[] yaws = vertical ? new float[] { -14f, 14f } : new float[] { 0f };
+            for (int i = 0; i < yaws.Length; i++)
+            {
+                Quaternion q = Quaternion.Euler(0f, yaws[i], 0f) * Quaternion.AngleAxis(roll, Vector3.forward) * Quaternion.Euler(vertical ? 90f : 65f, 0f, 0f);
+                GetsugaLayer(parent, halo, span * 1.03f, thick * 1.5f, q, 0f, Mat(LineTex(), true));
+                GetsugaLayer(parent, body, span, thick, q, 0f, Mat(BladeTex(), false));
+                GetsugaLayer(parent, edge, span * 0.98f, thick * 0.26f, q, thick * 0.32f, Mat(BladeTex(), true));
+            }
         }
 
         private static Texture2D _bladeTex;
@@ -10560,20 +10569,21 @@ namespace DragonsAltarCombat
             // v = 0 inner (concave) edge, 1 = outer cutting edge: solid body with crisp edges and a brighter rim.
             if (_bladeTex == null) _bladeTex = MakeTex(16, 64, delegate(float u, float v)
             {
-                float a = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(v / 0.14f)) * Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((1f - v) / 0.08f));
-                return Mathf.Clamp01(a * (0.78f + 0.22f * v));
+                // v0.25.69 sharp: hard edges, brightest along the cutting (outer) edge
+                float a = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(v / 0.06f)) * Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((1f - v) / 0.035f));
+                return Mathf.Clamp01(a * (0.7f + 0.3f * v * v));
             }, TextureWrapMode.Clamp);
             return _bladeTex;
         }
 
-        private static void GetsugaLayer(Transform parent, Color col, float span, float thick, float roll, float outerShift, Material mat)
+        private static void GetsugaLayer(Transform parent, Color col, float span, float thick, Quaternion rot, float outerShift, Material mat)
         {
             if (mat == null) return;
             GameObject go = new GameObject("IH_Getsuga");
             go.transform.SetParent(parent, false);
-            go.transform.localRotation = Quaternion.AngleAxis(roll, Vector3.forward);
+            go.transform.localRotation = rot;
             const int n = 40;
-            float w = span * 0.5f, sag = span * 0.22f, sweep = span * 0.2f;
+            float w = span * 0.5f, sag = span * 0.24f, sweep = span * 0.04f;
             Vector3[] v = new Vector3[(n + 1) * 2];
             Vector2[] uv = new Vector2[v.Length];
             Color[] cols = new Color[v.Length];
@@ -10582,7 +10592,7 @@ namespace DragonsAltarCombat
                 float t = Mathf.Lerp(-1f, 1f, (float)i / n);
                 float y = sag * (1f - t * t) - sag * 0.5f;
                 Vector2 nrm = new Vector2(2f * sag * t, w).normalized;   // outward (convex side) normal in the blade plane
-                float th = thick * Mathf.Pow(Mathf.Max(0f, 1f - t * t), 0.75f) + thick * 0.02f;
+                float th = thick * Mathf.Pow(Mathf.Max(0f, 1f - t * t), 1.1f) + thick * 0.01f;
                 float z = -sweep * t * t;
                 Vector3 mid = new Vector3(w * t, y, z) + new Vector3(nrm.x, nrm.y, 0f) * outerShift;
                 v[i * 2] = mid - new Vector3(nrm.x, nrm.y, 0f) * th * 0.35f;

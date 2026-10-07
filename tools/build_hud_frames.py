@@ -184,7 +184,8 @@ def compose(base, ac, target, values=(1.0, 0.82, 0.55, 0.62)):
     img = to_pil(rgb, base["alpha"])
     d = ImageDraw.Draw(img)
     g = base["g"]
-    for st, f in zip(base["strips"], values):
+    for i, (st, f) in enumerate(zip(base["strips"], values)):
+        st = dict(st); st["img"] = bar_colour(st["img"], i)
         s = stretch_strip(st, f)
         if s: img.alpha_composite(s, (st["x0"], st["y0"]))
     d = ImageDraw.Draw(img)
@@ -237,7 +238,7 @@ def export(asset_dir):
             img.save(os.path.join(asset_dir, "HUD_Frame_" + (AC_KEYS.get(ac, ac)) + ".png"))
         lines = ["# v0.25.68 HUD layout for " + cls + " (frame texture pixels, origin top-left)", "size %d %d" % size]
         for i, st in enumerate(base["strips"]):
-            sim = to_pil(st["img"], st["alpha"])
+            sim = to_pil(bar_colour(st["img"], i), st["alpha"])
             sim = sim.resize((max(4, sc(sim.width)), max(4, sc(sim.height))), Image.LANCZOS)
             sim.save(os.path.join(asset_dir, "HUD_Bar_%s_%d.png" % (cls, i)))
             lines.append("bar %d %d %d %d %d %d" % (i, sc(st["x0"] - cx0), sc(st["y0"] - cy0), sim.width, sim.height, sc(st["xmax"] - cx0)))
@@ -252,6 +253,18 @@ def export(asset_dir):
         lines.append("buffs %d %d" % (sc((bars[0][3] + bars[0][5]) / 2 - cx0), sc(bars[0][1] - 22 - cy0)))
         open(os.path.join(asset_dir, "HUD_Layout_%s.txt" % cls), "w").write("\n".join(lines) + "\n")
         print("exported", cls, size)
+
+# v0.25.69 (user): Stamina stays YELLOW and Eitr PURPLE like the vanilla / old HUD bars (the paintings had lime / cyan).
+BAR_HUE = {1: (21, 1.15, 1.0), 2: (134, 0.95, 0.95)}
+
+def bar_colour(bgr, i):
+    if i not in BAR_HUE: return bgr
+    th, sm, vm = BAR_HUE[i]
+    hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV).astype(float)
+    hsv[..., 0] = th
+    hsv[..., 1] = np.clip(hsv[..., 1] * sm, 0, 255)
+    hsv[..., 2] = np.clip(hsv[..., 2] * vm, 0, 255)
+    return cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2BGR)
 
 def greyscale(base):
     hsv = cv2.cvtColor(base["rgb"], cv2.COLOR_BGR2HSV).astype(float)

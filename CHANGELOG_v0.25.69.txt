@@ -1,0 +1,22 @@
+Immortal Heroes v0.25.69 - Sharp Edges
+
+HUD
+- The painted stat HUD is smaller by default: 430 px wide at 1080p (key FrameWidth_v02569).
+- The old dark backdrop behind the HUD is gone when the painted frame is shown.
+- Stamina is yellow and Eitr is purple again, like the old bars.
+- Both HUDs (stat HUD and skill hotbar) can now be resized freely. Open the inventory, hover a HUD, then:
+  - mouse wheel = bigger / smaller
+  - Shift + wheel = wider / narrower
+  - Ctrl + wheel = taller / shorter
+  - middle click = reset
+  - The values are saved in [Immortal HUD]: StatHudWidthScale, StatHudHeightScale, SkillBarWidthScale and SkillBarHeightScale.
+
+VFX / animation
+- Getsuga Tenshou crescents (Moonlight Splitter, Crescent Cleave, Halfmoon Slash):
+  - The cutting edge now leads in the travel direction, with the tips swept back.
+  - Sleeker and sharper: a thin razor body, a tight halo and a white cutting edge.
+  - Horizontal slashes lie in the cut plane, tilted toward the camera.
+  - Vertical slashes stand upright, as two blades 14 degrees apart, so they read from behind.
+- Knight's Guidance (Grace): toned down. A dim, thin column and a plain ring, with no ground glow.
+- Circle Swing crow hop: the off hand braces in front of the chest. This covers a shield or the Mercenary's off-hand weapon.
+- Stomp: chicken-wing flare. The elbows are bent and pushed out, with the hands at the hips, instead of arms stretched wide.
