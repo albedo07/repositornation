@@ -40,7 +40,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Dragon's Altar - Ranger";
-        public const string ModVersion = "0.25.55";
+        public const string ModVersion = "0.25.56";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -1116,6 +1116,16 @@ namespace DragonsAltarRanger
                     line.SetPosition(i, new Vector3(Mathf.Cos(a) * r, 0.2f + h * height, Mathf.Sin(a) * r));
                 }
             }
+            DragonCombat.RunVfx(delegate
+            {
+                for (int lv = 0; lv < 3; lv++)
+                {
+                    GameObject g = new GameObject("tornadoGlow" + lv);
+                    g.transform.SetParent(obj.transform, false);
+                    g.transform.localPosition = new Vector3(0f, height * (0.15f + 0.35f * lv), 0f);
+                    DragonVfx.AttachGlow(g.transform, color, radius * (0.45f + 0.25f * lv), 60f, lv == 1 ? radius * 2.5f : 0f);
+                }
+            });
             return obj;
         }
 
@@ -1611,6 +1621,13 @@ namespace DragonsAltarRanger
                     line.SetPosition(i, new Vector3(Mathf.Cos(a) * r, 0.3f + k * 0.45f, Mathf.Sin(a) * r));
                 }
             }
+            DragonCombat.RunVfx(delegate
+            {
+                GameObject g = new GameObject("leafGlow");
+                g.transform.SetParent(obj.transform, false);
+                g.transform.localPosition = new Vector3(0f, 1.2f, 0f);
+                DragonVfx.AttachGlow(g.transform, new Color(0.50f, 1f, 0.45f, 1f), radius * 0.8f, 120f, radius * 1.5f);
+            });
             return obj;
         }
 
@@ -2635,6 +2652,13 @@ namespace DragonsAltarRanger
             {
                 StartCoroutine(RingVfx(at, radius, new Color(1f, 0.55f, 0.20f, 1f), 0.6f));
                 StartCoroutine(RingVfx(at, radius * 0.5f, new Color(1f, 0.85f, 0.40f, 1f), 0.35f));
+                Vector3 exAt = at;
+                DragonCombat.RunVfx(delegate
+                {
+                    DragonVfx.Burst(exAt + Vector3.up * 0.6f, new Color(1f, 0.5f, 0.15f, 1f), 70, 11f, 0.4f, 0.8f, 0.6f);
+                    DragonVfx.Burst(exAt + Vector3.up * 0.4f, new Color(0.32f, 0.28f, 0.25f, 0.6f), 35, 3f, 1.2f, 1.5f, -0.1f);
+                    DragonVfx.Vanilla(new string[] { "vfx_FireballHit", "fx_fireball_staff_explosion" }, exAt, Quaternion.identity, 1.2f, 4f);
+                });
             }
         }
 
@@ -2880,6 +2904,12 @@ namespace DragonsAltarRanger
 
         private void StarVfx(Vector3 at, float radius, float width)
         {
+            DragonCombat.RunVfx(delegate
+            {
+                Color sc = new Color(0.85f, 1f, 0.70f, 1f);
+                if (width >= 1f) DragonVfx.Pillar(at, sc, Mathf.Max(1f, radius * 0.25f), DragonCombat.M(25f), 0.7f);
+                DragonVfx.Burst(at + Vector3.up * 0.3f, sc, Mathf.RoundToInt(10 + width * 30f), 5f + width * 4f, 0.25f, 0.5f, 0.4f);
+            });
             LineVfx(at + Vector3.up * DragonCombat.M(25f), at, new Color(0.85f, 1f, 0.70f, 1f), width, 0.25f);
             StartCoroutine(RingVfx(at, radius, new Color(0.85f, 1f, 0.70f, 0.9f), 0.3f));
         }
@@ -3526,6 +3556,8 @@ namespace DragonsAltarRanger
             line.endColor = color;
             Material m = VfxMaterial(Color.white);
             if (m != null) line.material = m;
+            // v0.25.55 VFX pass 4: every skill arrow leaves a glowing wind trail.
+            DragonCombat.RunVfx(delegate { DragonVfx.TrailWhile(obj.transform, color, 0.14f, delegate { return obj != null; }); });
             return obj;
         }
 
@@ -3544,6 +3576,7 @@ namespace DragonsAltarRanger
             Material m = VfxMaterial(Color.white);
             if (m != null) line.material = m;
             Destroy(obj, Mathf.Max(0.05f, life));
+            if (width >= 0.05f) DragonCombat.RunVfx(delegate { DragonVfx.Burst(b + Vector3.up * 0.15f, color, Mathf.RoundToInt(4 + width * 20f), 3f + width * 6f, 0.15f + width * 0.5f, 0.3f, 0.6f); });   // impact sparks
         }
 
         private GameObject CreateSpinRing(Vector3 pos, float radius, Color color)
@@ -3571,6 +3604,7 @@ namespace DragonsAltarRanger
                     line.SetPosition(i, new Vector3(Mathf.Cos(a) * r, -0.6f + k * 0.6f, Mathf.Sin(a) * r));
                 }
             }
+            DragonCombat.RunVfx(delegate { DragonVfx.AttachGlow(obj.transform, color, radius * 0.7f, 50f + radius * 15f, radius * 2f); });
             return obj;
         }
 
@@ -3594,11 +3628,17 @@ namespace DragonsAltarRanger
                 float a = (float)i / 32f * Mathf.PI * 2f;
                 line.SetPosition(i, new Vector3(Mathf.Cos(a) * radius, 0.06f, Mathf.Sin(a) * radius));
             }
+            DragonCombat.RunVfx(delegate { DragonVfx.AttachGlow(obj.transform, c, radius * 0.6f, 8f, 0f); });
             return obj;
         }
 
         private IEnumerator RingVfx(Vector3 center, float radius, Color color, float duration)
         {
+            if (radius >= DragonCombat.M(1.5f) && duration <= 0.8f)
+            {
+                Color rc = color; rc.a = 1f;
+                DragonCombat.RunVfx(delegate { DragonVfx.Shockwave(center, rc, radius, Mathf.Max(0.25f, duration)); });
+            }
             GameObject obj = new GameObject("RangerRingVfx");
             LineRenderer line = obj.AddComponent<LineRenderer>();
             line.useWorldSpace = true;

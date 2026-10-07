@@ -1,0 +1,13 @@
+Immortal Heroes v0.25.56 - Sorcerer and Ranger VFX
+
+VFX PASS 3 - SORCERER / ARCHMAGE / HORIZON WALKER
+- Every orb (Meteor Fall, Cataclysm, arcane bolts, Gravity Blast...) glows, lights the ground and leaves a trail.
+- Every explosion: shockwave, spark burst, smoke. Beams (Railcannon, Rift Echo...) shed energy along their length
+  and flash where they land. Phalanx swords and rifts glow; Glacial ice falls with a frost trail.
+- Flame Burst: a real cone of fire. Glacial Descent: frost shockwave + ice shards. Stonefang: rock dust + quake.
+
+VFX PASS 4 - RANGER / ACROBAT / BOWMASTER
+- Every skill arrow leaves a glowing trail; volley streaks spark where they land.
+- Impact rings (Somersault slam, Explosive Arrow, clusters, Starfall, Pinning explosions...) throw shockwaves.
+- Explosive Arrow: fiery burst + smoke. Starfall: arrows of light; the Ascended giant arrow = a pillar.
+- Cyclone / tornado / Furious Winds leaf storm glow with swirling particles; Snare Traps glimmer.

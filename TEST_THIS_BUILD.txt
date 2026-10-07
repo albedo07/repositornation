@@ -1,5 +1,4 @@
-TEST v0.25.55
-1. Shield Charge -> Left Click: Hammer Slam, you can move right after the hit.
-2. Chain: do one full chain, then a second: hits 1-4 evenly spaced (0.8s, faster with attack-speed bonuses), finisher longest.
-3. Spam attack while casting skills: no normal attack comes out of a skill.
-4. Warrior / Sword Master / Mercenary skills: particles, sparks, lights on every skill.
+TEST v0.25.56
+1. Sorcerer (Archmage / Horizon Walker): orbs glow + trail, explosions, beams, Flame Burst cone, Glacial, Stonefang.
+2. Ranger (Acrobat / Bowmaster): arrow trails, impact sparks, shockwaves, Explosive fire, Starfall, Cyclone / Furious Winds.
+3. FPS check in big fights; [Visuals] ParticleDensity lowers everything.

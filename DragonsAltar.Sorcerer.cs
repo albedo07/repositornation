@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Dragon's Altar - Sorcerer Advancements";
-        public const string ModVersion = "0.25.55";
+        public const string ModVersion = "0.25.56";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -2578,6 +2578,12 @@ namespace DragonsAltarSorcerer
         // with shock rings racing out to the radius.
         private IEnumerator ExplosionVfx(Vector3 center, float radius, Color color)
         {
+            DragonCombat.RunVfx(delegate
+            {
+                DragonVfx.Shockwave(center, color, radius, 0.45f);
+                DragonVfx.Burst(center + Vector3.up * 0.5f, color, Mathf.RoundToInt(40 + radius * 8f), 8f + radius, 0.4f, 0.8f, 0.3f);
+                DragonVfx.Burst(center + Vector3.up * 0.4f, new Color(0.30f, 0.26f, 0.32f, 0.6f), 30, 3f, 1.2f, 1.5f, -0.1f);
+            });
             GameObject flash = CreateOrb(center, radius * 0.3f, color);
             for (int i = 0; i < 3; i++)
                 StartCoroutine(RingVfx(center + Vector3.up * (0.3f + i * 0.9f), radius * (0.7f + 0.15f * i), new Color(color.r, color.g, color.b, 0.9f - 0.2f * i), 0.35f + 0.1f * i));
@@ -3478,6 +3484,14 @@ namespace DragonsAltarSorcerer
 
         private void CreateBeam(Vector3 start, Vector3 end, Color color, float width, float lifetime)
         {
+            DragonCombat.RunVfx(delegate
+            {
+                float len = Vector3.Distance(start, end);
+                int n = Mathf.Clamp(Mathf.RoundToInt(len / 2.5f), 1, 16);
+                for (int i = 0; i <= n; i++)
+                    DragonVfx.Burst(Vector3.Lerp(start, end, (float)i / n), color, Mathf.RoundToInt(4 + width * 10f), 1.5f + width * 2f, Mathf.Max(0.12f, width * 0.6f), 0.35f, 0f);
+                DragonVfx.Flash(end, color, 2f + width * 4f, 4f + width * 6f, Mathf.Max(0.2f, lifetime));
+            });
             GameObject obj = new GameObject("DragonsAltarArcaneBeam");
             LineRenderer line = obj.AddComponent<LineRenderer>();
             line.useWorldSpace = true;
@@ -3523,6 +3537,14 @@ namespace DragonsAltarSorcerer
                     float a = (float)i / 32f * Mathf.PI * 2f;
                     line.SetPosition(i, new Vector3(Mathf.Cos(a) * 1.15f, 1.35f + Mathf.Sin(a) * 1.35f, 0f));
                 }
+                GameObject riftObj = root;
+                DragonCombat.RunVfx(delegate
+                {
+                    GameObject g = new GameObject("riftGlow");
+                    g.transform.SetParent(riftObj.transform, false);
+                    g.transform.localPosition = new Vector3(0f, 1.35f, 0f);
+                    DragonVfx.AttachGlow(g.transform, new Color(0.75f, 0.25f, 1f, 1f), 1.1f, 60f, 6f);
+                });
             }
             return root;
         }
@@ -3559,6 +3581,7 @@ namespace DragonsAltarSorcerer
             line.SetPosition(0, new Vector3(0f, 0f, -0.75f));
             line.SetPosition(1, new Vector3(0f, 0f, 0.55f));
             line.SetPosition(2, new Vector3(0f, 0f, 0.95f));
+            DragonCombat.RunVfx(delegate { DragonVfx.AttachGlow(obj.transform, new Color(0.75f, 0.30f, 1f, 1f), 0.3f, 25f, 2.5f); });
             return obj;
         }
 
@@ -3577,6 +3600,12 @@ namespace DragonsAltarSorcerer
                 if (shader != null) r.material = new Material(shader);
                 r.material.color = color;
             }
+            // v0.25.55 VFX pass 3: every Sorcerer orb (meteors, arcane bolts, gravity orbs) glows, lights up and trails.
+            DragonCombat.RunVfx(delegate
+            {
+                DragonVfx.AttachGlow(obj.transform, Color.Lerp(color, Color.white, 0.25f), Mathf.Max(0.15f, size * 0.6f), 40f + size * 30f, Mathf.Max(3f, size * 4f));
+                DragonVfx.TrailWhile(obj.transform, color, Mathf.Max(0.15f, size * 0.45f), delegate { return obj != null && obj.activeInHierarchy; });
+            });
             return obj;
         }
 
@@ -3590,6 +3619,7 @@ namespace DragonsAltarSorcerer
             Collider c = obj.GetComponent<Collider>(); if (c != null) Destroy(c);
             Renderer r = obj.GetComponent<Renderer>();
             if (r != null) { Shader s = Shader.Find("Sprites/Default"); if (s != null) r.material = new Material(s); r.material.color = new Color(0.55f, 0.90f, 1f, 0.78f); }
+            DragonCombat.RunVfx(delegate { DragonVfx.AttachGlow(obj.transform, new Color(0.65f, 0.92f, 1f, 1f), radius * 0.7f, 50f, 6f); DragonVfx.TrailWhile(obj.transform, new Color(0.75f, 0.95f, 1f, 1f), radius * 0.5f, delegate { return obj != null; }); });
             return obj;
         }
 

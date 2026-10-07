@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.55";
+        public const string ModVersion = "0.25.56";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -8054,7 +8054,7 @@ namespace AlbedosCustomClassesAdvanced
             Player p = Player.m_localPlayer;
             if (p == null) return false;
             string c = GetClass(p);
-            return c == "Cleric" || c == "Warrior";
+            return c == "Cleric" || c == "Warrior" || c == "Sorcerer" || c == "Ranger";
         }
 
         private bool IhLocalCleric()
