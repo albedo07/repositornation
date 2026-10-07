@@ -1,0 +1,11 @@
+# v0.25.68 HUD layout for Sorcerer (frame texture pixels, origin top-left)
+size 796 381
+bar 0 342 73 368 26 708
+bar 1 354 108 263 20 710
+bar 2 356 142 232 26 712
+bar 3 338 176 202 28 710
+name 80 220 125 23
+food 0 385 299 22 404 316
+food 1 465 299 22 484 316
+food 2 545 299 22 564 316
+buffs 517 63

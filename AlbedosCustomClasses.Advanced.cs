@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.67";
+        public const string ModVersion = "0.25.68";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -140,7 +140,8 @@ namespace AlbedosCustomClassesAdvanced
         private ConfigEntry<bool> _enableVfx;
         private ConfigEntry<bool> _showCombatHud;
         private ConfigEntry<bool> _ihHudEnabled;
-        private ConfigEntry<float> _ihHudScale, _ihHudX, _ihHudY, _ihHudBottom, _ihHudPosX, _ihHudPosY, _ihBarPosX, _ihBarPosY;
+        private ConfigEntry<float> _ihHudScale, _ihHudX, _ihHudY, _ihHudBottom, _ihHudPosX, _ihHudPosY, _ihBarPosX, _ihBarPosY, _ihHudArtWidth;
+        private ConfigEntry<bool> _ihHudArt;
         private ConfigEntry<bool> _uiColorSpaceCorrection;
         private ConfigEntry<float> _hudScale;
         private ConfigEntry<float> _hudBottomOffset;
@@ -651,6 +652,8 @@ namespace AlbedosCustomClassesAdvanced
             _ihHudBottom = Config.Bind("Immortal HUD", "Bottom", 150f, "Unused since v0.25.5 (drag the HUD instead).");
             _ihHudPosX = Config.Bind("Immortal HUD", "PosX", -1f, "HUD left edge (px at 1080p). -1 = default bottom-left. Set by dragging the HUD while the inventory is open.");
             _ihHudPosY = Config.Bind("Immortal HUD", "PosY", -1f, "HUD top edge (px at 1080p). -1 = default bottom-left.");
+            _ihHudArt = Config.Bind("Immortal HUD", "FrameStyle_v02568", true, "v0.25.68: the painted Class frames (one design per Base Class, coloured per Advancement Class). Off = the old thin HUD.");
+            _ihHudArtWidth = Config.Bind("Immortal HUD", "FrameWidth_v02568", 600f, "Width of the painted Class frame (px at 1080p, before Scale).");
             _ihBarPosX = Config.Bind("Immortal HUD", "SkillBarPosX", -1f, "Skill hotbar left edge (px at 1080p). -1 = default (bottom-left corner, under the stat HUD). Drag it while the inventory is open.");
             _ihBarPosY = Config.Bind("Immortal HUD", "SkillBarPosY", -1f, "Skill hotbar top edge (px at 1080p). -1 = default.");
             _hudBottomOffset = Config.Bind("Interface", "HudBottomOffset_v0113", 105f, "Bottom margin for the compact RPG skill HUD. Fresh v0.11.3 key avoids stale 330px development offsets.");
@@ -13664,6 +13667,207 @@ namespace AlbedosCustomClassesAdvanced
         private bool _ihDragging;
         private Vector2 _ihDragOffset;
 
+        // ------------------------------------------------------------------ v0.25.68 painted Class frames
+        // The user's four Base Class paintings (docs/source_art/hud_frames, tools/build_hud_frames.py): one frame
+        // texture per Advancement Class (HUD_Frame_<AC>.png), the painted bar fills (HUD_Bar_<Class>_<i>.png, 3-slice
+        // stretched to the value) and HUD_Layout_<Class>.txt with every live element in frame-texture pixels.
+        private sealed class IhHudLayout
+        {
+            public float W, H, BuffX, BuffY;
+            public float[] BarX = new float[4], BarY = new float[4], BarW = new float[4], BarH = new float[4], BarMax = new float[4];
+            public Texture2D[] BarTex = new Texture2D[4];
+            public Rect Name;
+            public bool HasValues;
+            public Vector2[] Value = new Vector2[4];
+            public Vector2[] FoodC = new Vector2[3], FoodT = new Vector2[3];
+            public float[] FoodR = new float[3];
+            public string Class;
+        }
+
+        private readonly Dictionary<string, IhHudLayout> _ihHudLayouts = new Dictionary<string, IhHudLayout>();
+        private readonly Dictionary<string, Texture2D> _ihHudFrames = new Dictionary<string, Texture2D>();
+        private readonly HashSet<string> _ihHudMissing = new HashSet<string>();
+        private Texture2D _ihHudFrameNow;
+        private GUIStyle _ihArtName, _ihArtValue, _ihArtSmall;
+
+        private string IhReadUiText(string fileName)
+        {
+            try
+            {
+                string path = Paths.PluginPath + "/ImmortalHeroesAssets/" + fileName;
+                Type fileType = typeof(object).Assembly.GetType("System.IO.File");
+                if (fileType == null) return null;
+                MethodInfo exists = fileType.GetMethod("Exists", BindingFlags.Public | BindingFlags.Static, null, new Type[] { typeof(string) }, null);
+                MethodInfo read = fileType.GetMethod("ReadAllText", BindingFlags.Public | BindingFlags.Static, null, new Type[] { typeof(string) }, null);
+                if (exists == null || read == null || !(bool)exists.Invoke(null, new object[] { path })) return null;
+                return read.Invoke(null, new object[] { path }) as string;
+            }
+            catch (Exception ex) { Logger.LogWarning("HUD layout read failed: " + ex.Message); return null; }
+        }
+
+        private static float IhF(string[] parts, int i)
+        {
+            float v;
+            return i < parts.Length && float.TryParse(parts[i], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out v) ? v : 0f;
+        }
+
+        private IhHudLayout IhLoadHudLayout(string cls)
+        {
+            IhHudLayout l;
+            if (_ihHudLayouts.TryGetValue(cls, out l)) return l;
+            l = null;
+            string text = IhReadUiText("HUD_Layout_" + cls + ".txt");
+            if (text != null)
+            {
+                l = new IhHudLayout();
+                l.Class = cls;
+                string[] lines = text.Split('\n');
+                for (int i = 0; i < lines.Length; i++)
+                {
+                    string[] p = lines[i].Trim().Split(' ');
+                    if (p.Length < 2 || p[0].StartsWith("#")) continue;
+                    if (p[0] == "size") { l.W = IhF(p, 1); l.H = IhF(p, 2); }
+                    else if (p[0] == "bar") { int b = (int)IhF(p, 1); if (b >= 0 && b < 4) { l.BarX[b] = IhF(p, 2); l.BarY[b] = IhF(p, 3); l.BarW[b] = IhF(p, 4); l.BarH[b] = IhF(p, 5); l.BarMax[b] = IhF(p, 6); } }
+                    else if (p[0] == "name") l.Name = new Rect(IhF(p, 1), IhF(p, 2), IhF(p, 3), IhF(p, 4));
+                    else if (p[0] == "value") { int b = (int)IhF(p, 1); if (b >= 0 && b < 4) { l.Value[b] = new Vector2(IhF(p, 2), IhF(p, 3)); l.HasValues = true; } }
+                    else if (p[0] == "food") { int f = (int)IhF(p, 1); if (f >= 0 && f < 3) { l.FoodC[f] = new Vector2(IhF(p, 2), IhF(p, 3)); l.FoodR[f] = IhF(p, 4); l.FoodT[f] = new Vector2(IhF(p, 5), IhF(p, 6)); } }
+                    else if (p[0] == "buffs") { l.BuffX = IhF(p, 1); l.BuffY = IhF(p, 2); }
+                }
+                for (int b = 0; b < 4; b++) l.BarTex[b] = LoadUiPng("HUD_Bar_" + cls + "_" + b + ".png");
+                if (l.W <= 0f || l.H <= 0f) l = null;
+            }
+            _ihHudLayouts[cls] = l;
+            return l;
+        }
+
+        private Texture2D IhHudFrameTex(string key)
+        {
+            Texture2D t;
+            if (_ihHudFrames.TryGetValue(key, out t)) return t;
+            if (_ihHudMissing.Contains(key)) return null;
+            t = LoadUiPng("HUD_Frame_" + key + ".png");
+            if (t == null) { _ihHudMissing.Add(key); return null; }
+            // keep only the frame in use (+ the one before it) so switching class never leaks textures
+            if (_ihHudFrames.Count > 1)
+            {
+                List<string> drop = new List<string>();
+                foreach (KeyValuePair<string, Texture2D> kv in _ihHudFrames) if (kv.Value != _ihHudFrameNow) drop.Add(kv.Key);
+                for (int i = 0; i < drop.Count; i++) { Texture2D d = _ihHudFrames[drop[i]]; _ihHudFrames.Remove(drop[i]); if (d != null) Destroy(d); }
+            }
+            _ihHudFrames[key] = t;
+            return t;
+        }
+
+        private IhHudLayout IhPrepareHudArt(Player player)
+        {
+            string cls = GetClass(player), adv = GetAdvancement(player);
+            string layoutClass = cls == "Cleric" || cls == "Sorcerer" || cls == "Ranger" ? cls : "Warrior";
+            IhHudLayout l = IhLoadHudLayout(layoutClass);
+            if (l == null) return null;
+            string key = !string.IsNullOrEmpty(adv) ? adv.Replace(" ", "") : (string.IsNullOrEmpty(cls) || layoutClass != cls ? "None" : cls);
+            Texture2D t = IhHudFrameTex(key);
+            if (t == null && key != layoutClass) t = IhHudFrameTex(layoutClass == cls ? cls : "None");
+            if (t == null) return null;
+            _ihHudFrameNow = t;
+            return l;
+        }
+
+        // Painted fill strip, ends kept, middle stretched, cut to the value.
+        private void IhDrawArtBar(Rect panel, IhHudLayout l, int i, float k, float frac)
+        {
+            Texture2D tex = l.BarTex[i];
+            if (tex == null) return;
+            frac = Mathf.Clamp01(frac);
+            float full = Mathf.Max(1f, l.BarMax[i] - l.BarX[i]);
+            float len = full * frac;
+            if (len < 2f) return;
+            float tw = tex.width, th = tex.height;
+            float cap = Mathf.Min(th * 1.1f, tw / 3f, len * 0.5f);
+            float x = panel.x + l.BarX[i] * k, y = panel.y + l.BarY[i] * k, h = l.BarH[i] * k;
+            GUI.DrawTextureWithTexCoords(new Rect(x, y, cap * k, h), tex, new Rect(0f, 0f, cap / tw, 1f));
+            float mid = len - 2f * cap;
+            if (mid > 0f) GUI.DrawTextureWithTexCoords(new Rect(x + cap * k, y, mid * k, h), tex, new Rect(cap / tw, 0f, (tw - 2f * cap) / tw, 1f));
+            GUI.DrawTextureWithTexCoords(new Rect(x + (len - cap) * k, y, cap * k, h), tex, new Rect((tw - cap) / tw, 0f, cap / tw, 1f));
+        }
+
+        private static string IhVal(float cur, float max)
+        {
+            return Mathf.CeilToInt(Mathf.Max(0f, cur)).ToString() + " / " + Mathf.CeilToInt(Mathf.Max(0f, max)).ToString();
+        }
+
+        private void IhDrawArtHud(Player player, IhHudLayout l, Rect panel, float k, float s)
+        {
+            if (Event.current.type != EventType.Repaint) return;
+            if (_ihArtName == null)
+            {
+                _ihArtName = new GUIStyle(_ihHudTitle); _ihArtName.alignment = TextAnchor.MiddleCenter; _ihArtName.wordWrap = false; _ihArtName.clipping = TextClipping.Overflow;
+                _ihArtValue = new GUIStyle(_ihHudValue); _ihArtValue.alignment = TextAnchor.MiddleRight; _ihArtValue.wordWrap = false; _ihArtValue.clipping = TextClipping.Overflow;
+                _ihArtSmall = new GUIStyle(_ihHudTiny); _ihArtSmall.alignment = TextAnchor.MiddleCenter; _ihArtSmall.wordWrap = false; _ihArtSmall.clipping = TextClipping.Overflow;
+            }
+            GUI.DrawTexture(panel, _ihHudFrameNow, ScaleMode.StretchToFill, true);
+            float hp = player.GetHealth(), hpMax = Mathf.Max(1f, player.GetMaxHealth());
+            float st = player.GetStamina(), stMax = Mathf.Max(1f, player.GetMaxStamina());
+            float ei = IhCallFloat(player, "GetEitr"), eiMax = IhCallFloat(player, "GetMaxEitr");
+            float xp = 0f;   // EXP placeholder until the XP system exists
+            float[] cur = { hp, st, ei, xp }, max = { hpMax, stMax, eiMax, 1f };
+            for (int i = 0; i < 4; i++) IhDrawArtBar(panel, l, i, k, max[i] > 0f ? cur[i] / max[i] : 0f);
+
+            // values: the Warrior painting has its own value column; the others get small numbers at the bar's end
+            for (int i = 0; i < 3; i++)
+            {
+                if (l.HasValues)
+                {
+                    _ihArtValue.fontSize = Mathf.Max(8, Mathf.RoundToInt(15f * k));
+                    _ihArtValue.normal.textColor = new Color(0.93f, 0.90f, 0.84f, 1f);
+                    IhHudShadowLabel(new Rect(panel.x + l.Value[i].x * k - 220f * k, panel.y + l.Value[i].y * k - 12f * k, 220f * k, 24f * k), IhVal(cur[i], max[i]), _ihArtValue);
+                }
+                else
+                {
+                    _ihArtValue.fontSize = Mathf.Max(7, Mathf.RoundToInt(Mathf.Min(12f, Mathf.Min(l.BarH[0], Mathf.Min(l.BarH[1], l.BarH[2])) * 0.62f) * k));
+                    _ihArtValue.normal.textColor = new Color(0.95f, 0.93f, 0.88f, 0.95f);
+                    float cy = panel.y + (l.BarY[i] + l.BarH[i] * 0.5f) * k;
+                    IhHudShadowLabel(new Rect(panel.x + (l.BarMax[i] - 160f) * k, cy - 10f * k, 150f * k, 20f * k), IhVal(cur[i], max[i]), _ihArtValue);
+                }
+            }
+            // level on the EXP bar
+            _ihArtSmall.fontSize = Mathf.Max(7, Mathf.RoundToInt(Mathf.Min(12f, l.BarH[3] * 0.62f) * k));
+            _ihArtSmall.normal.textColor = new Color(0.98f, 0.92f, 0.70f, 1f);
+            float ey = panel.y + (l.BarY[3] + l.BarH[3] * 0.5f) * k;
+            IhHudShadowLabel(new Rect(panel.x + l.BarX[3] * k, ey - 10f * k, (l.BarMax[3] - l.BarX[3]) * k, 20f * k), "Lv " + IhGetLevel(player).ToString(), _ihArtSmall);
+
+            // class name on the painted plate (shrinks to fit)
+            string name = IhCurrentClassName(player).ToUpper();
+            Rect nr = new Rect(panel.x + l.Name.x * k, panel.y + l.Name.y * k, l.Name.width * k, l.Name.height * k);
+            int fs = Mathf.Max(7, Mathf.RoundToInt(15f * k));
+            _ihArtName.fontSize = fs;
+            while (fs > 7 && _ihArtName.CalcSize(new GUIContent(name)).x > nr.width - 6f * k) { fs--; _ihArtName.fontSize = fs; }
+            _ihArtName.normal.textColor = new Color(0.95f, 0.90f, 0.78f, 1f);
+            IhHudShadowLabel(nr, name, _ihArtName);
+
+            // food: icon in the painted slot, time left where the painting had its count
+            for (int i = 0; i < 3 && i < _ihHudFoods.Count; i++)
+            {
+                object food = _ihHudFoods[i];
+                float r = l.FoodR[i] * k * 0.86f;
+                Rect fr = new Rect(panel.x + l.FoodC[i].x * k - r, panel.y + l.FoodC[i].y * k - r, r * 2f, r * 2f);
+                object item = IhField(food, "m_item");
+                Sprite sp = null;
+                try
+                {
+                    if (item != null && _ihFoodIcon == null) _ihFoodIcon = item.GetType().GetMethod("GetIcon", Type.EmptyTypes);
+                    sp = _ihFoodIcon == null || item == null ? null : _ihFoodIcon.Invoke(item, null) as Sprite;
+                }
+                catch { }
+                IhDrawSprite(fr, sp);
+                object t = IhField(food, "m_time");
+                float secs = t is float ? (float)t : 0f;
+                string label = secs >= 60f ? Mathf.CeilToInt(secs / 60f).ToString() + "m" : Mathf.CeilToInt(secs).ToString() + "s";
+                _ihArtSmall.fontSize = Mathf.Max(8, Mathf.RoundToInt(13f * k));
+                _ihArtSmall.normal.textColor = secs < 60f ? new Color(1f, 0.45f, 0.35f, 1f) : new Color(0.95f, 0.92f, 0.86f, 1f);
+                IhHudShadowLabel(new Rect(panel.x + l.FoodT[i].x * k - 30f * k, panel.y + l.FoodT[i].y * k - 11f * k, 60f * k, 22f * k), label, _ihArtSmall);
+            }
+        }
+
         private void DrawImmortalHud(Player player)
         {
             IhGatherHudFrame(player);
@@ -13679,6 +13883,14 @@ namespace AlbedosCustomClassesAdvanced
             float foodH = _ihHudFoods.Count > 0 ? 24f * s : 0f;
             float foodGap = foodH > 0f ? 6f * s : 0f;
             float pw = pad + statsW + pad, ph = 17f * s + statsH + foodGap + foodH + padY;
+            // v0.25.68: the painted Class frame replaces the thin panel (same data, drag, buffs and food).
+            IhHudLayout art = _ihHudArt.Value ? IhPrepareHudArt(player) : null;
+            float ak = 1f;
+            if (art != null)
+            {
+                ak = Mathf.Max(0.2f, _ihHudArtWidth.Value) * s / art.W;
+                pw = art.W * ak; ph = art.H * ak;
+            }
 
             // Position: saved (drag), default bottom-left right above the skill hotbar.
             float k1080 = Screen.height / 1080f;
@@ -13719,17 +13931,28 @@ namespace AlbedosCustomClassesAdvanced
             _ihFoodTarget = new Vector2(panel.x + pad, inTop + statsH + foodGap);
             _ihFoodTargetSet = true;
 
-            // Header plaque on the top edge: Name · CLASS.
-            string title = player.GetPlayerName() + "  ·  " + IhCurrentClassName(player).ToUpper();
-            float tw = Mathf.Max(200f * s, _ihHudTitle.CalcSize(new GUIContent(title)).x + 60f * s);
-            Rect plaque = new Rect(panel.center.x - tw * 0.5f, panel.y - 15f * s, tw, 30f * s);
-            if (_ihHudPlaqueTex != null) IhDrawNineSlice(plaque, _ihHudPlaqueTex, 34f, s * 0.5f);
-            Color tc = _ihHudTitle.normal.textColor;
-            _ihHudTitle.normal.textColor = new Color(0.97f, 0.88f, 0.66f, 1f);
-            _ihHudTitle.alignment = TextAnchor.MiddleCenter;
-            IhHudShadowLabel(plaque, title, _ihHudTitle);
-            _ihHudTitle.alignment = TextAnchor.MiddleLeft;
-            _ihHudTitle.normal.textColor = tc;
+            float buffCx = panel.center.x, buffBottom;
+            if (art != null)
+            {
+                IhDrawArtHud(player, art, panel, ak, s);
+                buffCx = panel.x + art.BuffX * ak;
+                buffBottom = panel.y + art.BuffY * ak;
+            }
+            else
+            {
+                // Header plaque on the top edge: Name · CLASS.
+                string title = player.GetPlayerName() + "  ·  " + IhCurrentClassName(player).ToUpper();
+                float tw = Mathf.Max(200f * s, _ihHudTitle.CalcSize(new GUIContent(title)).x + 60f * s);
+                Rect plaque = new Rect(panel.center.x - tw * 0.5f, panel.y - 15f * s, tw, 30f * s);
+                if (_ihHudPlaqueTex != null) IhDrawNineSlice(plaque, _ihHudPlaqueTex, 34f, s * 0.5f);
+                Color tc = _ihHudTitle.normal.textColor;
+                _ihHudTitle.normal.textColor = new Color(0.97f, 0.88f, 0.66f, 1f);
+                _ihHudTitle.alignment = TextAnchor.MiddleCenter;
+                IhHudShadowLabel(plaque, title, _ihHudTitle);
+                _ihHudTitle.alignment = TextAnchor.MiddleLeft;
+                _ihHudTitle.normal.textColor = tc;
+                buffBottom = plaque.y - 6f * s;
+            }
 
             // Buffs / debuffs: one centred row on top of the HUD (timer fully visible under each).
             float icon = 28f * s, iconGap = 12f * s;
@@ -13737,7 +13960,7 @@ namespace AlbedosCustomClassesAdvanced
             if (count > 0)
             {
                 float rowW = count * icon + (count - 1) * iconGap;
-                float bx = panel.center.x - rowW * 0.5f, by = plaque.y - 6f * s - 20f * s - icon;
+                float bx = buffCx - rowW * 0.5f, by = buffBottom - 20f * s - icon;
                 IhStatusDisplay hoverSe = null;
                 for (int i = 0; i < count; i++)
                 {
@@ -13815,6 +14038,8 @@ namespace AlbedosCustomClassesAdvanced
                     }
                 }
             }
+
+            if (art != null) return;
 
             // Stats (full width), food row underneath.
             float sx = panel.x + pad, sw = statsW;

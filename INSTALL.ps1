@@ -1,7 +1,7 @@
 ﻿$ErrorActionPreference = "Stop"
 
 Write-Host ""
-Write-Host "IMMORTAL HEROES v0.25.67 - GETSUGA AND SMART AIM" -ForegroundColor Cyan
+Write-Host "IMMORTAL HEROES v0.25.68 - CLASS FRAMES" -ForegroundColor Cyan
 Write-Host "Protected build: all 8 DLLs compile in staging before the live profile is touched." -ForegroundColor Gray
 Write-Host ""
 
@@ -354,6 +354,10 @@ try {
             Copy-Item -LiteralPath $liveUiAsset -Destination ($liveUiAsset + ".backup-" + $stamp) -Force
         }
         Copy-Item -LiteralPath (Join-Path $stageAssetDir $asset.Name) -Destination $liveUiAsset -Force
+    }
+    # v0.25.68: painted HUD frame layouts (text files read by the HUD).
+    foreach ($layout in (Get-ChildItem -LiteralPath $uiAssetDir -File -Filter "HUD_Layout_*.txt")) {
+        Copy-Item -LiteralPath $layout.FullName -Destination (Join-Path $liveAssetDir $layout.Name) -Force
     }
     # v0.25.43: DualWield.dll (Smoothbrain's DualWield mod) only supplies its dual-wield animation clips; it is
     # read from ImmortalHeroesAssets and never loaded as a plugin.

@@ -1,4 +1,6 @@
-TEST v0.25.67
-1. Goddess Relic / Meteor / Skyfall: aim directly at a Troll -> lands at the Troll's feet. Aim at a tree -> lands on the ground behind it.
-2. Mercenary dual wield: swing a full chain twice. The second chain should feel like a one-handed sword plus 50%, not 200%+. One-handed and two-handed should be unchanged.
-3. Moonlight Splitter / Crescent Cleave / Halfmoon: a crescent-shaped light-blue wave with a white edge (Getsuga Tenshou), not a flat sheet.
+TEST v0.25.68
+1. Each Class / Advancement Class shows its painted frame in its colour (use /ih class, /ih advance).
+2. Take damage, sprint, use Eitr: the bars move and the numbers update.
+3. Eat 1-3 foods: the icons appear in the slots with their minutes left.
+4. Get a buff (Battlecry, Hyper Armor...): the icon row sits above the frame and the hover tooltip still works.
+5. Open the inventory and drag the HUD: the position is saved. With FrameStyle_v02568 off, the old HUD is back.

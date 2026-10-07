@@ -1,0 +1,11 @@
+# v0.25.68 HUD layout for Cleric (frame texture pixels, origin top-left)
+size 809 326
+bar 0 320 83 399 28 718
+bar 1 334 124 360 26 718
+bar 2 331 164 362 22 718
+bar 3 324 200 242 27 718
+name 92 234 90 22
+food 0 372 282 23 427 282
+food 1 498 282 23 552 282
+food 2 625 282 24 679 282
+buffs 519 74

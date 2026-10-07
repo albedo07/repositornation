@@ -214,7 +214,56 @@ def buffs_at(img, bb):
         img.alpha_composite(ic, (bx + 4, y + 4))
         text(d, (bx + 36, y + 100), ["12s", "45s", "1m", "8s"][i], 24)
 
+AC_KEYS = {"Warrior": "Warrior", "Sword Master": "SwordMaster", "Mercenary": "Mercenary", "Cleric": "Cleric", "Paladin": "Paladin",
+           "Priest": "Priest", "Sorcerer": "Sorcerer", "Archmage": "Wizard", "Horizon Walker": "Spellcaster", "Ranger": "Ranger",
+           "Acrobat": "Acrobat", "Bowmaster": "Bowmaster"}
+EXPORT_SCALE = 0.5
+
+def export(asset_dir):
+    """In-game assets: HUD_Frame_<AC>.png (cleaned + recoloured, cropped, 50%), HUD_Bar_<Class>_<i>.png (painted fills)
+    and HUD_Layout_<Class>.txt (every live element in frame-texture pixels)."""
+    k = EXPORT_SCALE
+    for cls in ["Warrior", "Cleric", "Sorcerer", "Ranger"]:
+        base = build(cls)
+        g = base["g"]
+        ys, xs = np.nonzero(base["alpha"] > 8)
+        cx0, cy0, cx1, cy1 = max(0, xs.min() - 4), max(0, ys.min() - 4), xs.max() + 5, ys.max() + 5
+        def sc(v): return int(round(v * k))
+        size = (sc(cx1 - cx0), sc(cy1 - cy0))
+        targets = list(ACS[cls])
+        if cls == "Warrior": targets.append(("None", (0, 0.0, 0.85)))
+        for ac, target in targets:
+            img = to_pil(recolor(base, target) if ac != "None" else greyscale(base), base["alpha"]).crop((cx0, cy0, cx1, cy1)).resize(size, Image.LANCZOS)
+            img.save(os.path.join(asset_dir, "HUD_Frame_" + (AC_KEYS.get(ac, ac)) + ".png"))
+        lines = ["# v0.25.68 HUD layout for " + cls + " (frame texture pixels, origin top-left)", "size %d %d" % size]
+        for i, st in enumerate(base["strips"]):
+            sim = to_pil(st["img"], st["alpha"])
+            sim = sim.resize((max(4, sc(sim.width)), max(4, sc(sim.height))), Image.LANCZOS)
+            sim.save(os.path.join(asset_dir, "HUD_Bar_%s_%d.png" % (cls, i)))
+            lines.append("bar %d %d %d %d %d %d" % (i, sc(st["x0"] - cx0), sc(st["y0"] - cy0), sim.width, sim.height, sc(st["xmax"] - cx0)))
+        x0, y0, x1, y1 = g["name"]
+        lines.append("name %d %d %d %d" % (sc(x0 - cx0), sc(y0 - cy0), sc(x1 - x0), sc(y1 - y0)))
+        if g["values"]:
+            for i, (key, by0, by1, *_r) in enumerate(g["bars"]):
+                lines.append("value %d %d %d" % (i, sc(g["value_x"] - cx0), sc((by0 + by1) / 2 - cy0)))
+        for i, ((c, r), t) in enumerate(zip(g["food"], g["food_text"])):
+            lines.append("food %d %d %d %d %d %d" % (i, sc(c[0] - cx0), sc(c[1] - cy0), sc(r), sc(t[0] - cx0), sc(t[1] - cy0)))
+        bars = g["bars"]
+        lines.append("buffs %d %d" % (sc((bars[0][3] + bars[0][5]) / 2 - cx0), sc(bars[0][1] - 22 - cy0)))
+        open(os.path.join(asset_dir, "HUD_Layout_%s.txt" % cls), "w").write("\n".join(lines) + "\n")
+        print("exported", cls, size)
+
+def greyscale(base):
+    hsv = cv2.cvtColor(base["rgb"], cv2.COLOR_BGR2HSV).astype(float)
+    acc = hue_mask(hsv.astype(np.uint8), base["g"]["accent"], 45, 30) & ~base["keep"]
+    acc = cv2.GaussianBlur(acc.astype(float), (5, 5), 0)[..., None]
+    grey = cv2.cvtColor(cv2.cvtColor(base["rgb"], cv2.COLOR_BGR2GRAY), cv2.COLOR_GRAY2BGR).astype(float) * 0.85
+    return (base["rgb"] * (1 - acc) + grey * acc).astype(np.uint8)
+
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "--export":
+        export(sys.argv[2] if len(sys.argv) > 2 else os.path.join(ROOT, "ImmortalHeroesAssets"))
+        return
     out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "docs", "previews", "PREVIEW_v0.25.68_HUD_Frames.png")
     asset_dir = sys.argv[2] if len(sys.argv) > 2 else None
     rows = []

@@ -1,0 +1,27 @@
+Immortal Heroes v0.25.68 - Class Frames
+
+HUD (your four designs, built in game)
+- The stat HUD now uses your four Base Class paintings as the frame: Warrior, Cleric, Sorcerer and Ranger.
+- Each Advancement Class gets its own colour:
+  - Warrior red, Sword Master blue, Mercenary orange
+  - Cleric gold, Paladin rose, Priest emerald
+  - Sorcerer purple, Archmage indigo, Horizon Walker teal
+  - Ranger green, Acrobat jade, Bowmaster amber
+  - Characters without a Class get a grey Warrior frame.
+- Live parts on the painted frame:
+  - HP, Stamina, Eitr and EXP use the painted bar fills, stretched to the current value.
+  - Values: the Warrior frame uses its own value column; the other frames show small numbers at the end of each bar.
+  - The level is shown on the EXP bar. EXP is still a placeholder until the XP system exists, so the bar stays empty.
+  - The Class / Advancement Class name sits on the painted plate.
+  - Food (up to 3) shows the item icon in the painted slot and the time left where the painting had its count. It turns red under 60 s.
+  - Buffs and debuffs sit in a row above the HUD, with the same tooltips as before.
+- Behaviour is unchanged:
+  - Drag the HUD with the inventory open. The saved position still applies.
+  - It is hidden in the same menus.
+  - The vanilla bars stay hidden.
+  - The skill hotbar is untouched.
+- New settings in [Immortal HUD]:
+  - FrameStyle_v02568 (on). Turn it off to get the old thin HUD back.
+  - FrameWidth_v02568 (600 px at 1080p; Scale still applies).
+- If an asset is missing, the HUD falls back to the old thin HUD automatically.
+- Assets: HUD_Frame_<AC>.png, HUD_Bar_<Class>_<0-3>.png and HUD_Layout_<Class>.txt, built by tools/build_hud_frames.py from docs/source_art/hud_frames. INSTALL now also copies the HUD_Layout_*.txt files.
