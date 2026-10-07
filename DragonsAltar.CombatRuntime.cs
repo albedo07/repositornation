@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.69";
+        public const string ModVersion = "0.25.70";
 
         internal static DragonCombatPlugin Instance;
 
@@ -3643,18 +3643,19 @@ namespace DragonsAltarCombat
                 k = new DragonClipKey[] { K(-1f), Ft(K(-0.3f).Sp(3f, 0f, 0f), 0.15f, 0.08f), Ft(K(0f).Sp(6f, 0f, 0f).Off(0f, -0.03f, 0.03f), 0.22f, 0.1f), Ft(K(0.35f).Sp(4f, 0f, 0f).Off(0f, -0.02f, 0.02f), 0.2f, 0.1f), K(0.75f) };
             if (clip == "merc_circle" && length <= 0f)
             {
-                // v0.25.69 (user): the off hand braces in front of the chest (shield up / Mercenary off-hand weapon held close).
+                // v0.25.70 (user): the hop is a violent baseball-bat load: BOTH hands together on the weapon, cocked at the right
+                // shoulder through the whole hop, then the two-handed uncoil into the spin.
                 // v0.25.29 Circle Swing wind up = crow hop (thrower's skip): turn side-on, hop on the RIGHT leg with the left
                 // knee up and the right arm cocked back, stride the left foot forward and plant, then uncoil into the vanilla spin.
                 k = new DragonClipKey[] {
                     K(-1f),
-                    Ft(K(-0.86f).Rot(0f, 30f, 0f).Sp(3f, 0f, 0f).Off(0f, -0.06f, 0f), 0.1f, 0.1f).Hand(0.55f, 0.1f, -0.45f, 0.8f).LHand(0.45f, -0.2f, 0.85f, 0.5f),
-                    K(-0.72f).Rot(0f, 65f, 0f).Sp(-5f, 0f, 0f).LL(0.35f, 0.05f, 0f, 0f).Lift(0.32f, 0.1f).Off(0f, 0.12f, 0.08f).Hand(0.5f, 0.45f, -0.85f, 0.95f).LHand(0.45f, -0.2f, 0.85f, 0.5f),
-                    K(-0.56f).Rot(0f, 65f, 0f).Sp(-4f, 0f, 0f).LL(0.45f, 0.05f, 0f, 0f).Lift(0.26f, 0f).Off(0f, 0.01f, 0.14f).Hand(0.5f, 0.5f, -0.9f, 0.95f).LHand(0.45f, -0.2f, 0.85f, 0.5f),
-                    K(-0.42f).Rot(0f, 55f, 0f).Sp(4f, 0f, 0f).LL(0.7f, 0.15f, 0f, 0f).RL(-0.3f, 0.12f, 0f, 0f).Lift(0f, 0f).Off(0f, -0.07f, 0.2f).Hand(0.5f, 0.45f, -0.85f, 0.95f).LHand(0.45f, -0.2f, 0.85f, 0.5f),
-                    Ft(K(-0.25f).Rot(0f, 20f, 0f).Sp(6f, 0f, 0f).Off(0f, -0.05f, 0.2f), 0.6f, 0.25f),
-                    Ft(K(0f).Sp(6f, 0f, 0f).Off(0f, -0.03f, 0.18f), 0.4f, 0.15f),
-                    Ft(K(0.35f).Sp(4f, 0f, 0f).Off(0f, -0.02f, 0.1f), 0.25f, 0.1f),
+                    Ft(K(-0.86f).Rot(0f, 30f, 0f).Sp(3f, 0f, 0f).Off(0f, -0.06f, 0f), 0.1f, 0.1f).Hand(0.25f, 0.35f, -0.4f, 0.45f).Wp(0.35f, 0.7f, -0.6f).Two(-0.12f),
+                    K(-0.72f).Rot(0f, 65f, 0f).Sp(-5f, 0f, 0f).LL(0.35f, 0.05f, 0f, 0f).Lift(0.32f, 0.1f).Off(0f, 0.12f, 0.08f).Hand(0.25f, 0.35f, -0.4f, 0.45f).Wp(0.35f, 0.7f, -0.6f).Two(-0.12f),
+                    K(-0.56f).Rot(0f, 65f, 0f).Sp(-4f, 0f, 0f).LL(0.45f, 0.05f, 0f, 0f).Lift(0.26f, 0f).Off(0f, 0.01f, 0.14f).Hand(0.25f, 0.35f, -0.4f, 0.45f).Wp(0.35f, 0.7f, -0.6f).Two(-0.12f),
+                    K(-0.42f).Rot(0f, 55f, 0f).Sp(4f, 0f, 0f).LL(0.7f, 0.15f, 0f, 0f).RL(-0.3f, 0.12f, 0f, 0f).Lift(0f, 0f).Off(0f, -0.07f, 0.2f).Hand(0.25f, 0.35f, -0.4f, 0.45f).Wp(0.35f, 0.7f, -0.6f).Two(-0.12f),
+                    Ft(K(-0.25f).Rot(0f, 20f, 0f).Sp(6f, 0f, 0f).Off(0f, -0.05f, 0.2f).Two(-0.12f), 0.6f, 0.25f),
+                    Ft(K(0f).Sp(6f, 0f, 0f).Off(0f, -0.03f, 0.18f).Two(-0.12f), 0.4f, 0.15f),
+                    Ft(K(0.35f).Sp(4f, 0f, 0f).Off(0f, -0.02f, 0.1f).Two(-0.12f), 0.25f, 0.1f),
                     K(0.75f) };
             }
             k[0].VA = trig;
@@ -4016,13 +4017,15 @@ namespace DragonsAltarCombat
             // flared a little out to the side and the weapon is carried up (not pointed ahead).
             // v0.25.63 (user): both arms flared wide in the air.
             // v0.25.65 (user): arms only slightly out (the wide T-flare looked goofy).
-            DragonClipKey launch = K(-0.72f).Sp(5f, 0f, 0f).Ch(-4f, 0f, 0f).Hd(-18f, 0f, 0f).Hand(0.6f, -0.05f, 0.25f, 0.85f).LHand(-0.55f, -0.15f, 0.25f, 0.8f).Wp(0.35f, 0.85f, -0.1f).Rot(32f, 0f, 0f).Off(0f, 0.08f, 0f);
+            // v0.25.70 (user): the off hand BRACES in front of the chest the whole jump (shield up, or the Mercenary's
+            // off-hand weapon held close) instead of hanging out to the side.
+            DragonClipKey launch = K(-0.72f).Sp(5f, 0f, 0f).Ch(-4f, 0f, 0f).Hd(-18f, 0f, 0f).Hand(0.6f, -0.05f, 0.25f, 0.85f).LHand(0.4f, -0.2f, 0.9f, 0.5f).Wp(0.35f, 0.85f, -0.1f).Rot(32f, 0f, 0f).Off(0f, 0.08f, 0f);
             DragonClipKey roll0 = launch.Copy(-0.62f).Rot(40f, 0f, 0f).Sn(25f);
             DragonClipKey roll1 = launch.Copy(-0.36f).Rot(40f, 0f, 0f).Sn(360f);
             // v0.25.65: falling = weapon cocked overhead for the smash (Angel Comet style), arms not spread.
-            DragonClipKey poised = K(0f).Sp(-4f, 0f, 0f).Ch(-6f, 0f, 0f).Hd(-14f, 0f, 0f).Hand(0.2f, 0.95f, -0.1f, 0.95f).LHand(-0.45f, -0.2f, 0.3f, 0.75f).Wp(0.1f, 0.6f, -0.8f).Rot(14f, 0f, 0f).Sn(360f);
+            DragonClipKey poised = K(0f).Sp(-4f, 0f, 0f).Ch(-6f, 0f, 0f).Hd(-14f, 0f, 0f).Hand(0.2f, 0.95f, -0.1f, 0.95f).LHand(0.4f, -0.2f, 0.9f, 0.5f).Wp(0.1f, 0.6f, -0.8f).Rot(14f, 0f, 0f).Sn(360f);
             // Smash: the weapon is driven into the ground in front, deep hero kneel (front knee forward, back knee low).
-            DragonClipKey impact = Ft(K(0.08f).Sp(34f, 0f, 0f).Ch(16f, 0f, 0f).Hd(-26f, 0f, 0f).Hand(0.05f, -0.95f, 0.5f, 0.99f).Wp(0f, -1f, 0.45f).LHand(-0.5f, -0.35f, 0.15f, 0.8f).Rot(8f, 0f, 0f).Off(0f, -0.48f * d, 0.06f).Sn(360f).Linear(), 0.8f, 0.9f);
+            DragonClipKey impact = Ft(K(0.08f).Sp(34f, 0f, 0f).Ch(16f, 0f, 0f).Hd(-26f, 0f, 0f).Hand(0.05f, -0.95f, 0.5f, 0.99f).Wp(0f, -1f, 0.45f).LHand(0.3f, -0.4f, 0.85f, 0.55f).Rot(8f, 0f, 0f).Off(0f, -0.48f * d, 0.06f).Sn(360f).Linear(), 0.8f, 0.9f);
             DragonClipKey settle = impact.Copy(brutal ? 0.32f : 0.24f).Off(0f, -0.5f * d, 0.06f); settle.Lin = false;
             DragonClipKey rec = Ft(K(brutal ? 0.58f : 0.45f).Sp(8f, 0f, 0f).Hd(-6f, 0f, 0f).Hand(0.35f, -0.45f, 0.35f, 0.6f).Off(0f, -0.06f, 0f).Sn(360f), 0.3f, 0.2f);
             return new DragonClipKey[] { K(-1f), load, launch, roll0, roll1, poised, impact, settle, rec, K(brutal ? 0.9f : 0.75f).Sn(360f) };

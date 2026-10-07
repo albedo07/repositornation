@@ -1,0 +1,8 @@
+Immortal Heroes v0.25.70 - Bat Swing
+
+- Olympic Hero (Electric Smite / Bonecrusher jump slam): the off hand now braces in front of the chest for the whole jump. That is the shield held up, or the Mercenary's off-hand weapon held close, instead of hanging out to the side. This includes the landing smash.
+- Circle Swing: the crow hop is now a violent baseball-bat load.
+  - Both hands grip the weapon together, cocked at the right shoulder through the hop.
+  - The two-handed grip carries on as you uncoil into the spin.
+  - The off-hand item (shield or second weapon) is hidden while both hands are on the weapon.
+  - The v0.25.69 shield brace on the hop is replaced.
