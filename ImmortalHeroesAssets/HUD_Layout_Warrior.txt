@@ -1,9 +1,9 @@
 # v0.25.73 HUD layout for Warrior (frame texture pixels, origin top-left)
 size 796 296
-bar 0 274 55 351 30 624
-bar 1 300 89 338 28 465
-bar 2 472 89 339 28 638
-bar 3 290 126 216 24 632
+bar 0 193 55 351 30 624
+bar 1 193 89 338 28 412
+bar 2 418 89 339 28 638
+bar 3 193 126 216 24 632
 split 1
 name 146 22 135 23
 value 0 726 70

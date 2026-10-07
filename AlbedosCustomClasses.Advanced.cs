@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.73";
+        public const string ModVersion = "0.25.74";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -13877,21 +13877,27 @@ namespace AlbedosCustomClassesAdvanced
                 Rect v3 = new Rect(panel.x + l.Value[3].x * k - 260f * k, panel.y + l.Value[3].y * k - 14f * k, 260f * k, 28f * k);
                 IhHudOutlineLabel(v3, "Lv " + IhGetLevel(player).ToString(), _ihArtValue, new Color(0.98f, 0.92f, 0.70f, 1f));
             }
-            else
+            // v0.25.74 (user): the painted icon/label column is gone; each bar (or half) carries its name on the left
+            // and its number on the right (Warrior keeps its painted value column, so only the names go in its bars).
+            string[] names = { "HP", l.Split ? "STAMINA" : "STA", "EITR", "EXP" };
+            for (int i = 0; i < 4; i++)
             {
-                _ihArtValue.alignment = TextAnchor.MiddleCenter;
-                for (int i = 0; i < 4; i++)
-                {
-                    float bh = Mathf.Max(l.BarH[i], 22f);
-                    _ihArtValue.fontSize = Mathf.Max(12, Mathf.RoundToInt(Mathf.Min(19f, bh * 0.78f) * k));
-                    float cy = panel.y + (l.BarY[i] + l.BarH[i] * 0.5f) * k;
-                    float bx0 = l.BarX[i], bx1 = l.BarMax[i];
-                    if (i == 0 || i == 3) { bx0 = Mathf.Min(l.BarX[0], l.BarX[i]); }
-                    Rect r = new Rect(panel.x + bx0 * k, cy - 14f * k, (bx1 - bx0) * k, 28f * k);
-                    if (i == 3) IhHudOutlineLabel(r, "Lv " + IhGetLevel(player).ToString(), _ihArtValue, new Color(0.98f, 0.92f, 0.70f, 1f));
-                    else if (i == 2 && !l.Split && eiMax <= 0f) continue;
-                    else IhHudOutlineLabel(r, l.Split && i > 0 ? Mathf.CeilToInt(Mathf.Max(0f, cur[i])).ToString() : IhVal(cur[i], max[i]), _ihArtValue, txt);
-                }
+                if (i == 2 && !l.Split && eiMax <= 0f) continue;
+                float bh = Mathf.Max(l.BarH[i], 22f);
+                int fs2 = Mathf.Max(12, Mathf.RoundToInt(Mathf.Min(19f, bh * 0.78f) * k));
+                float cy = panel.y + (l.BarY[i] + l.BarH[i] * 0.5f) * k;
+                float pad = 10f * k;
+                Rect r = new Rect(panel.x + l.BarX[i] * k + pad, cy - 14f * k, (l.BarMax[i] - l.BarX[i]) * k - pad * 2f, 28f * k);
+                _ihArtValue.fontSize = fs2;
+                _ihArtValue.alignment = TextAnchor.MiddleLeft;
+                IhHudOutlineLabel(r, names[i], _ihArtValue, txt);
+                if (l.HasValues) continue;
+                _ihArtValue.alignment = TextAnchor.MiddleRight;
+                string val;
+                if (i == 3) val = "Lv " + IhGetLevel(player).ToString();
+                else if (l.Split && i > 0) val = Mathf.CeilToInt(Mathf.Max(0f, cur[i])).ToString();
+                else val = IhVal(cur[i], max[i]);
+                IhHudOutlineLabel(r, val, _ihArtValue, i == 3 ? new Color(0.98f, 0.92f, 0.70f, 1f) : txt);
             }
 
             // class name on the painted plate (shrinks to fit)

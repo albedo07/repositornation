@@ -111,6 +111,7 @@ def build(cls):
             x, y = c; rr = g["food_digit_r"]
             text_erase((x - rr, y - rr - 4, x + rr, y + rr + 4), 80, 110)
     clean = cv2.inpaint(bgr, erase, 6, cv2.INPAINT_TELEA) if erase.any() else bgr
+    clean = remove_label_column(g, clean, strips)
     # alpha: background-like pixels connected to the border become transparent (soft by distance)
     bg = np.median(np.concatenate([bgr_src[:20, :20].reshape(-1, 3), bgr_src[-20:, -20:].reshape(-1, 3), bgr_src[:20, -20:].reshape(-1, 3), bgr_src[-20:, :20].reshape(-1, 3)]), axis=0)
     diff = np.abs(bgr_src.astype(int) - bg).max(axis=2)
@@ -132,6 +133,27 @@ def build(cls):
     if g.get("cut"):
         rgb, a, keep = cut_eitr_row(g, rgb, a, keep, strips, profile)
     return dict(g=g, rgb=rgb, alpha=a, strips=strips, keep=keep)
+
+# v0.25.74 (user): the painted label column (stat icon + HP / STAMINA / EXP text) goes away; the names are drawn
+# INSIDE the bars. The bar block is uniform horizontally, so the column is rebuilt from bar-area columns right of it
+# (troughs + row separators), feathered into the left border, and every bar starts at the old column's left edge.
+def remove_label_column(g, img, strips):
+    kx0, ky0, kx1, ky1 = g["keep"][0]
+    lx0 = kx0 + g.get("label_pad", 0)
+    x1 = min(st["x0"] for st in strips) + 3
+    w = x1 - lx0
+    sx = x1 + 24
+    y0, y1 = ky0 - 6, ky1 + 6
+    out = img.astype(float)
+    src = img[y0:y1, sx:sx + w].astype(float)
+    wgt = np.ones(w)
+    f = 8
+    for i in range(f):
+        wgt[i] = (i + 1) / (f + 1.0)
+    out[y0:y1, lx0:x1] = out[y0:y1, lx0:x1] * (1 - wgt[None, :, None]) + src * wgt[None, :, None]
+    for st in strips:
+        st["x0"] = lx0 + 4
+    return out.astype(np.uint8)
 
 # v0.25.73 (user): Stamina and Eitr share ONE bar line split in two. The painted Eitr row is cut out: everything right of
 # the bar column below the Stamina row (plus the food tray) moves up by one row height; a divider is painted at the
@@ -247,6 +269,16 @@ def compose(base, ac, target, values=(1.0, 0.82, 0.55, 0.62)):
         for i, ((key, y0, y1, *_), s) in enumerate(zip(g["bars"], nums)):
             if sp and i == 2: continue
             text(d, (g["value_x"], cut_shift(g, g["value_x"], (y0 + y1) // 2) if sp else (y0 + y1) // 2), s, 30, anchor="rm")
+    # v0.25.74 names inside the bars (game draws the same)
+    for i, st in enumerate(base["strips"]):
+        x0, y0, xmax = st["x0"], st["y0"], st["xmax"]
+        h = st["img"].shape[0]
+        if sp and i == 1: xmax = sp[0] - sp[1]
+        if sp and i == 2: x0, y0, xmax, h = sp[0] + sp[1], s1["y0"], s1["xmax"], s1["img"].shape[0]
+        cy = y0 + h // 2
+        text(d, (x0 + 18, cy), ["HP", "STAMINA", "EITR", "EXP"][i], 24, anchor="lm")
+        if not g["values"]:
+            text(d, (xmax - 18, cy), ["720 / 720", "123", "55", "Lv 12"][i], 24, anchor="rm")
     x0, y0, x1, y1 = g["name"]
     ny = cut_shift(g, (x0 + x1) // 2, (y0 + y1) // 2) if sp else (y0 + y1) // 2
     text(d, ((x0 + x1) // 2, ny), ac.upper(), 30, maxw=(x1 - x0) - 30)

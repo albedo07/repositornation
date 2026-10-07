@@ -1,0 +1,9 @@
+Immortal Heroes v0.25.74 - Bar Labels
+
+HUD (all classes)
+- The painted icon + label column next to the bars (HP / Stamina / EXP) is removed from every frame.
+  - It no longer fit now that Stamina and Eitr share one bar line.
+- The bars now start right next to the medallion, so they are longer.
+- Each bar shows its name inside, on the left: HP, STAMINA, EITR, EXP.
+  - Cleric, Sorcerer and Ranger: the number sits on the right of the same bar or half. The EXP bar shows your level.
+  - Warrior keeps its painted number column on the right.
