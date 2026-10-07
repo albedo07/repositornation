@@ -1,5 +1,5 @@
 @echo off
-title Immortal Heroes v0.25.62 - Signature VFX Fix
+title Immortal Heroes v0.25.63 - Smash and Crescents
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
 echo.
 pause

@@ -1,10 +1,9 @@
-TEST v0.25.62
-0. INSTALL must finish all 9 steps (v0.25.61 stopped at [2/9]).
-Then everything from v0.25.61:
-1. Impact Wave (normal + Ascended): wall of force + rock shards rising behind it.
-2. Moonlight Splitter / Halfmoon / Crescent Cleave: crescent blades travel WITH the waves.
-3. Seismic Guillotine, Stomp, Bonecrusher: rock spikes. Punishing Bomb / Meteor: fireballs.
-4. Flame Burst flames, Glacial / Frost Nova ice spikes, Stonefang rock spikes.
-5. Railcannon rail + rings, Greatblade sky streak, sigils on Gravity Dominion / Rupture / Clockwork.
-6. Ranger arrow streaks, Piercing Arrow rings, Cyclone funnel. Lightning Trails crawl on the ground (v0.25.60).
-7. Rock spikes are lit (Standard shader); if they look flat-coloured tell me.
+TEST v0.25.63
+1. NACC: Sword Master with a 1H sword vs a 2H sword - same rhythm (~0.6 s per hit, both sped up by Sword Master).
+   Mercenary: dual wield chain, then a single 1H weapon chain - neither too fast nor crawling. (The very first chain
+   with a new weapon runs at natural speed while it is measured.)
+2. Block / parry as Warrior or Mercenary: no pushback slide.
+3. Bonecrusher / Electric Smite: face your aim in the air, arms flared, weapon smash + deep kneel on landing.
+4. Stomp: high knee, arms flared like the roar.
+5. Lightning Trails: short bolts crawling outward, no full lines from the centre.
+6. Moonlight / Halfmoon thin crescents; Crescent Cleave half underground with rocks; no line rings anywhere.

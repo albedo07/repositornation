@@ -1,0 +1,39 @@
+Immortal Heroes v0.25.63 - Smash and Crescents
+
+NORMAL ATTACK CHAIN (NACC)
+- ROOT CAUSE of the uneven speeds: the chain timer assumed one constant speed for each swing, but Valheim's own
+  per-weapon speed changes and the recovery frames made the estimate wrong by a different amount per weapon
+  (greatsword vs one-handed sword, dual vs single). It now measures the speed the animation REALLY played at,
+  so every weapon lands on the same 0.6 s rhythm (class attack speed on top).
+- Dual wield and one-handed swings are timed separately (same trigger names, different clips - sharing them
+  made one-handed swings crawl after dual wielding and dual wield too fast at first). Switching between them
+  starts a fresh chain. Slowest allowed swing raised (no more ~1 s crawls).
+
+HYPER ARMOR
+- Blocking and parrying are covered: Warriors (Sword Master + Mercenary) and anyone with active Hyper Armor
+  take no pushback and no slide from a blocked / parried hit.
+
+JUMP SLAMS (Bonecrusher, Electric Smite)
+- You always face where you aim in the air; WASD only steers, it never turns you.
+- Both arms flare out wide in the air.
+- Landing = a real smash: Valheim's axe heavy attack fires just before touchdown so the weapon hits the ground on
+  contact, with a deep hero kneel (hips dropped, wide stance). No more fist tap / hidden weapon.
+
+STOMP
+- Knee raised past the hip, both arms flared out and up like the roar emote, then the foot is driven down with the
+  chest thrown forward and arms flung wide.
+
+LIGHTNING TRAILS (Electric Smite, Ascended Righteous Strike)
+- Each trail is now a short (~1.2 m) bolt crawling along the ground; the tail is cut behind it instead of one
+  continuous line from the impact. Thinner glow, tighter jitter, fizzles out at the end.
+
+SIGNATURE / SLASH VFX
+- Moonlight Splitter / Halfmoon waves: thin moon-crescent blades (needle tips, white-hot core, soft glow), like the
+  Dragon Nest magic slash reference.
+- Crescent Cleave: the crescent's centre rides at ground level - half of it is underground, it tears up out of the
+  earth with rocks wrenched up on both sides as it travels.
+- Slash ribbons are crisper (sharp bright edge, faint wake).
+- Placeholders removed while the effects are on: every old line ring (Warrior, Cleric, Sorcerer, Ranger rings
+  become real shockwaves, spark bursts or textured glowing circles on the ground), the straight bar under
+  Moonlight / Halfmoon, the line crescent under Crescent Cleave, the line arcs under slashes, Blade Storm's line
+  circles, Frenzied Charge's flat cuts, arcane beam lines and Ranger arrow lines (all glowing streaks now).

@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Dragon's Altar - Sorcerer Advancements";
-        public const string ModVersion = "0.25.62";
+        public const string ModVersion = "0.25.63";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -3597,6 +3597,7 @@ namespace DragonsAltarSorcerer
                 DragonVfx.Flash(end, color, 2f + width * 4f, 4f + width * 6f, Mathf.Max(0.2f, lifetime));
                 DragonVfx.Streak(start, end, color, Mathf.Max(0.08f, width * 0.8f), Mathf.Max(0.2f, lifetime + 0.15f));   // v0.25.61 soft glowing beam
             });
+            if (DragonVfx.Enabled) return;   // v0.25.63 the glowing streak replaces the flat line
             GameObject obj = new GameObject("DragonsAltarArcaneBeam");
             LineRenderer line = obj.AddComponent<LineRenderer>();
             line.useWorldSpace = true;
@@ -3779,6 +3780,13 @@ namespace DragonsAltarSorcerer
 
         private IEnumerator RingVfx(Vector3 center, float radius, Color color, float duration)
         {
+            if (DragonVfx.Enabled)
+            {
+                // v0.25.63: textured glowing circle instead of the line placeholder
+                Color rc = color; rc.a = 1f;
+                DragonCombat.RunVfx(delegate { DragonVfx.AreaRing(center, rc, radius, Mathf.Max(0.15f, duration)); });
+                yield break;
+            }
             GameObject obj = new GameObject("SorcererRingVfx");
             LineRenderer line = obj.AddComponent<LineRenderer>();
             line.useWorldSpace = true;

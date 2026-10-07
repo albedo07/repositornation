@@ -220,7 +220,7 @@ namespace AlbedosCustomClassesSkills
         public static SkillsPlugin Instance;
         public const string ModGuid = "albedo.customclasses.skills";
         public const string ModName = "Dragon's Altar - Starter Skills";
-        public const string ModVersion = "0.25.62";
+        public const string ModVersion = "0.25.63";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";
@@ -1093,6 +1093,7 @@ namespace AlbedosCustomClassesSkills
         private IEnumerator AnimateSlashArc(Vector3 center, Vector3 forward, float radius, float angle, Color color)
         {
             if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.SlashArc(center, forward, radius, angle, color, Mathf.Max(0.5f, radius * 0.25f), 0.45f, 0f); });   // v0.25.59 skin
+            if (_enableVfx.Value && DragonVfx.Enabled) yield break;   // v0.25.63 no line placeholder
             GameObject obj = new GameObject("DragonsAltarSlashArc");
             LineRenderer line = obj.AddComponent<LineRenderer>();
             line.useWorldSpace = true;
@@ -1413,6 +1414,13 @@ namespace AlbedosCustomClassesSkills
         {
             if (delay > 0f)
                 yield return new WaitForSeconds(delay);
+            if (_enableVfx.Value && DragonVfx.Enabled)
+            {
+                // v0.25.63: real shockwave / textured ground ring instead of the line placeholder
+                bool wave = endRadius >= 1.5f && duration >= 0.25f;
+                DragonCombat.RunVfx(delegate { if (wave) DragonVfx.Shockwave(center, color, endRadius, duration); else DragonVfx.GroundRing(center, color, Mathf.Max(0.5f, endRadius), Mathf.Max(0.15f, duration)); });
+                yield break;
+            }
 
             GameObject ringObject = new GameObject("AlbedoAbilityRing");
             LineRenderer line = ringObject.AddComponent<LineRenderer>();

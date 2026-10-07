@@ -40,7 +40,7 @@ namespace DragonsAltarDevTools
     {
         public const string ModGuid = "albedo.customclasses.devtools";
         public const string ModName = "Dragon's Altar - Developer Tools";
-        public const string ModVersion = "0.25.62";
+        public const string ModVersion = "0.25.63";
 
         public static DeveloperToolsPlugin Instance;
 

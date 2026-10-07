@@ -40,7 +40,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Dragon's Altar - Ranger";
-        public const string ModVersion = "0.25.62";
+        public const string ModVersion = "0.25.63";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -3598,6 +3598,13 @@ namespace DragonsAltarRanger
 
         private void LineVfx(Vector3 a, Vector3 b, Color color, float width, float life)
         {
+            if (DragonVfx.Enabled)
+            {
+                // v0.25.63: glowing streak + impact sparks only (the flat line placeholder is gone)
+                DragonCombat.RunVfx(delegate { DragonVfx.Streak(a, b, color, Mathf.Max(0.04f, width * 0.6f), Mathf.Max(0.12f, life * 1.6f)); });
+                if (width >= 0.05f) DragonCombat.RunVfx(delegate { DragonVfx.Burst(b + Vector3.up * 0.15f, color, Mathf.RoundToInt(4 + width * 20f), 3f + width * 6f, 0.15f + width * 0.5f, 0.3f, 0.6f); });
+                return;
+            }
             GameObject obj = new GameObject("RangerStreak");
             LineRenderer line = obj.AddComponent<LineRenderer>();
             line.useWorldSpace = true;
@@ -3670,10 +3677,13 @@ namespace DragonsAltarRanger
 
         private IEnumerator RingVfx(Vector3 center, float radius, Color color, float duration)
         {
-            if (radius >= DragonCombat.M(1.5f) && duration <= 0.8f)
+            if (DragonVfx.Enabled)
             {
+                // v0.25.63: real shockwave for impacts, textured ground circle for markers - no line placeholder
                 Color rc = color; rc.a = 1f;
-                DragonCombat.RunVfx(delegate { DragonVfx.Shockwave(center, rc, radius, Mathf.Max(0.25f, duration)); });
+                bool wave = radius >= DragonCombat.M(1.5f) && duration <= 0.8f;
+                DragonCombat.RunVfx(delegate { if (wave) DragonVfx.Shockwave(center, rc, radius, Mathf.Max(0.25f, duration)); else DragonVfx.AreaRing(center, rc, radius, Mathf.Max(0.15f, duration)); });
+                yield break;
             }
             GameObject obj = new GameObject("RangerRingVfx");
             LineRenderer line = obj.AddComponent<LineRenderer>();

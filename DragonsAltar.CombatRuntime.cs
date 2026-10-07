@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.62";
+        public const string ModVersion = "0.25.63";
 
         internal static DragonCombatPlugin Instance;
 
@@ -400,6 +400,12 @@ namespace DragonsAltarCombat
             count += PatchEquipmentMovement();
             count += PatchUseStamina();
             count += PatchBlockAttack();
+            foreach (MethodInfo rm in typeof(Character).GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+            {
+                if (rm.Name != "AddRootMotion") continue;
+                try { PatchWithHarmony(rm, new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("RootMotionPrefix", BindingFlags.Static | BindingFlags.NonPublic)), null); count++; }
+                catch (Exception ex) { Logger.LogWarning("Root motion patch: " + ex.Message); }
+            }
             count += PatchEquipItem();
             count += PatchHotbarUse();
 
@@ -689,13 +695,17 @@ namespace DragonsAltarCombat
             return count;
         }
 
-        private static void BlockAttackPrefix(object __instance, ref BlockPatchState __state)
+        private static void BlockAttackPrefix(object __instance, object[] __args, ref BlockPatchState __state)
         {
             __state = new BlockPatchState();
             try
             {
                 Player player = __instance as Player;
                 if (player == null || player != Player.m_localPlayer) return;
+                // v0.25.63 (user): Hyper Armor covers blocking and parrying too - Warriors (whose Blessing IS Hyper
+                // Armor) and anyone under an active Hyper Armor take no pushback / slide from a blocked hit.
+                __state.HyperBlock = DragonCombat.GetClassName(player) == "Warrior" || DragonCombat.HasHyperArmor(player);
+                if (__state.HyperBlock) ZeroPush(__args);
                 ItemDrop.ItemData blocker = DragonCombat.GetHandItem(player, "m_leftItem");
                 if (!DragonCombat.IsShield(blocker)) blocker = player.GetCurrentWeapon();
                 if (blocker == null || blocker.m_shared == null) return;
@@ -736,9 +746,20 @@ namespace DragonsAltarCombat
             return field;
         }
 
-        private static void BlockAttackPostfix(BlockPatchState __state, bool __result, object __instance)
+        private static void ZeroPush(object[] args)
+        {
+            if (args == null) return;
+            for (int i = 0; i < args.Length; i++) { HitData h = args[i] as HitData; if (h != null) h.m_pushForce = 0f; }
+        }
+
+        private static void BlockAttackPostfix(BlockPatchState __state, bool __result, object __instance, object[] __args)
         {
             RestoreBlockState(__state);
+            if (__result && __state.HyperBlock)
+            {
+                ZeroPush(__args);
+                DragonCombat.BlockHyperUntil = Time.time + 0.8f;
+            }
             // A successful block that started inside the parry window = a Buckler Parry.
             if (__result && __state.BucklerParryWindow && DragonCombat.BucklerParryHandler != null)
             {
@@ -1030,6 +1051,14 @@ namespace DragonsAltarCombat
 
         private static float _comboLastEnd = -10f, _comboLastStart = -10f, _chainPrevSpeed = 1f;
         private static string _comboStartAnim;
+        private static float _comboClockStart;
+
+        // v0.25.63: dual wield plays different clips under the SAME trigger names, so its swing lengths are kept
+        // apart from one-handed ones (sharing them made one-hand swings crawl after dual wielding and vice versa).
+        private static string ChainKey(string anim, bool dual, int hit)
+        {
+            return (dual ? "dw|" : "1h|") + anim + ":" + hit.ToString();
+        }
         private static readonly Dictionary<string, float> _chainNatural = new Dictionary<string, float>();
 
         private static void ComboStartPrefix(Attack __instance, Humanoid character, ItemDrop.ItemData weapon, ref Attack previousAttack, ref float timeSinceLastAttack)
@@ -1052,7 +1081,7 @@ namespace DragonsAltarCombat
                 // our own timer: the next attack continues the chain when it starts while the previous swing is
                 // still running (queued chain) or within the window after it ended.
                 bool prevRunning = previousAttack != null && _comboLastEnd < 0f && Time.time - _comboLastStart < 2.5f;
-                bool cont = _comboHit >= 0 && prevAnim == anim && anim == _comboBase && _comboHit < length - 1
+                bool cont = _comboHit >= 0 && prevAnim == anim && anim == _comboBase && _comboHit < length - 1 && IsDualWielding(p) == _comboDual
                     && (prevRunning || Time.time - _comboLastEnd <= Mathf.Max(0.05f, Instance.ComboContinueWindow.Value));
                 // v0.25.55 (user): every swing of the chain takes the same time (ComboSwingSeconds, 0.8s at no
                 // attack-speed bonus), the finisher keeps its natural (longest) length. Each swing's natural time is
@@ -1064,20 +1093,22 @@ namespace DragonsAltarCombat
                 if (cont)
                 {
                     float measured = Time.time - _comboLastStart;
-                    string mk = anim + ":" + _comboHit.ToString();
-                    float nat = measured * Mathf.Max(0.05f, _chainPrevSpeed);
+                    string mk = ChainKey(anim, _comboDual, _comboHit);
+                    float nat = DragonCombat.ChainNaturalClock - _comboClockStart;
                     float old;
                     if (measured > 0.15f && (!_chainNatural.TryGetValue(mk, out old) || nat < old)) _chainNatural[mk] = nat;
                 }
                 float chainF = 1f;
                 float natNow;
-                if (_chainNatural.TryGetValue(anim + ":" + nextHit.ToString(), out natNow))
-                    chainF = Mathf.Clamp(natNow / Mathf.Max(0.2f, Instance.ComboSwingSeconds.Value), 0.4f, 3f);
+                bool dualNow = IsDualWielding(p);
+                if (_chainNatural.TryGetValue(ChainKey(anim, dualNow, nextHit), out natNow))
+                    chainF = Mathf.Clamp(natNow / Mathf.Max(0.2f, Instance.ComboSwingSeconds.Value), 0.6f, 3f);
                 _comboStartAnim = anim;
                 DragonCombat.SetChainSpeed(p, chainF, 3f);
                 _chainPrevSpeed = DragonCombat.GetAttackSpeedMultiplier(p) * chainF;
                 _comboLastEnd = -1f;
                 _comboLastStart = Time.time;
+                _comboClockStart = DragonCombat.ChainNaturalClock;
                 _comboPrevSwing = cont ? _comboSwing : -1;
                 _comboHit = cont ? _comboHit + 1 : 0;
                 _comboCount = count;
@@ -1128,8 +1159,8 @@ namespace DragonsAltarCombat
                 float measured = Time.time - _comboLastStart;
                 if (Instance != null && measured > 0.15f && !string.IsNullOrEmpty(_comboStartAnim))
                 {
-                    string fk = _comboStartAnim + ":" + (Mathf.Clamp(Instance.ComboChainLength.Value, 2, 9) - 1).ToString();
-                    float nat = measured * Mathf.Max(0.05f, _chainPrevSpeed), old;
+                    string fk = ChainKey(_comboStartAnim, _comboDual, Mathf.Clamp(Instance.ComboChainLength.Value, 2, 9) - 1);
+                    float nat = DragonCombat.ChainNaturalClock - _comboClockStart, old;
                     if (!_chainNatural.TryGetValue(fk, out old) || nat < old) _chainNatural[fk] = nat;
                 }
             }
@@ -1433,7 +1464,21 @@ namespace DragonsAltarCombat
 
         private static bool InterruptPrefix(Character __instance)
         {
+            if (__instance != null && __instance == Player.m_localPlayer && Time.time < DragonCombat.BlockHyperUntil) return false;
             return !DragonCombat.HasHyperArmor(__instance);
+        }
+
+        // v0.25.63: the blocked-hit reaction animation slides the player back with root motion; under Hyper Armor
+        // that slide is dropped (attack lunges are untouched).
+        private static bool RootMotionPrefix(Character __instance)
+        {
+            try
+            {
+                if (__instance == null || __instance != Player.m_localPlayer || Time.time >= DragonCombat.BlockHyperUntil) return true;
+                Humanoid h = __instance as Humanoid;
+                return h != null && h.InAttack();
+            }
+            catch (Exception) { return true; }
         }
 
         private static void DamagePrefix(Character __instance, object[] __args, ref DamagePatchState __state)
@@ -1850,6 +1895,7 @@ namespace DragonsAltarCombat
         public float OriginalForce;
         public float OriginalPower;
         public bool BucklerParryWindow;
+        public bool HyperBlock;
     }
 
     internal class AnimatorSpeedRuntimeState
@@ -3722,10 +3768,14 @@ namespace DragonsAltarCombat
                 // Stomp (anatomy): weight shifts onto the left leg, the right knee rises to hip height (thigh level,
                 // knee bent ~90), torso stays upright, then the foot is driven flat into the ground and both knees
                 // absorb it. Hands quiet.
-                DragonClipKey raise = K(-0.55f).Sp(-3f, 0f, 0f).Hd(6f, 0f, 0f).LL(0f, 0.06f, 0f, 0f).RL(0.25f, 0.1f, 0f, 0f).Lift(0f, 0.38f).Off(0f, 0.02f, 0f);
-                DragonClipKey peak = raise.Copy(-0.15f).Lift(0f, 0.42f);
-                DragonClipKey hit = K(0f).Sp(12f, 0f, 0f).Ch(5f, 0f, 0f).Hd(8f, 0f, 0f).LL(-0.05f, 0.1f, 0f, 0f).RL(0.3f, 0.12f, 0f, 0f).Lift(0f, 0f).Off(0f, -0.1f, 0f).Linear();
-                DragonClipKey stAfter = hit.Copy(0.25f); stAfter.Lin = false;
+                // v0.25.63 (user): exaggerated - the knee comes up past the hip, both arms flare out and up like the
+                // roar emote, then the foot is driven down with the chest thrown forward and the arms flung wide.
+                DragonClipKey raise = K(-0.55f).Sp(-8f, 0f, 0f).Ch(-6f, 0f, 0f).Hd(-6f, 0f, 0f).LL(0f, 0.06f, 0f, 0f).RL(0.35f, 0.1f, 0f, 0f).Lift(0f, 0.62f).Off(0f, 0.04f, 0f)
+                    .Hand(0.75f, 0.45f, 0.05f, 0.92f).LHand(-0.75f, 0.45f, 0.05f, 0.92f);
+                DragonClipKey peak = raise.Copy(-0.15f).Lift(0f, 0.7f).Hand(0.8f, 0.55f, -0.05f, 0.95f).LHand(-0.8f, 0.55f, -0.05f, 0.95f);
+                DragonClipKey hit = K(0f).Sp(20f, 0f, 0f).Ch(10f, 0f, 0f).Hd(-12f, 0f, 0f).LL(-0.05f, 0.12f, 0f, 0f).RL(0.35f, 0.14f, 0f, 0f).Lift(0f, 0f).Off(0f, -0.16f, 0f)
+                    .Hand(0.9f, -0.2f, 0.3f, 0.97f).LHand(-0.9f, -0.2f, 0.3f, 0.97f).Linear();
+                DragonClipKey stAfter = hit.Copy(0.3f); stAfter.Lin = false;
                 return new DragonClipKey[] { K(-1f), raise, peak, hit, stAfter, K(0.65f) };
             }
             if (v == 2)
@@ -3763,10 +3813,11 @@ namespace DragonsAltarCombat
             DragonClipKey load = Ft(K(-0.93f).Sp(16f * d, -10f, 0f).Ch(6f, -6f, 0f).Hd(-12f, 0f, 0f).Hand(0.45f, 0.1f, -0.45f, 0.6f).Off(0f, -0.15f * d, 0f), 0.2f, 0.1f);
             // v0.25.30 user: no superman pose. In the air the body leans only diagonally (~38 deg), the main arm is
             // flared a little out to the side and the weapon is carried up (not pointed ahead).
-            DragonClipKey launch = K(-0.72f).Sp(6f, 0f, 0f).Hd(-18f, 0f, 0f).Hand(0.8f, -0.1f, 0.2f, 0.85f).Wp(0.3f, 0.9f, -0.15f).Rot(38f, 0f, 0f).Off(0f, 0.08f, 0f);
+            // v0.25.63 (user): both arms flared wide in the air.
+            DragonClipKey launch = K(-0.72f).Sp(4f, 0f, 0f).Ch(-6f, 0f, 0f).Hd(-18f, 0f, 0f).Hand(0.95f, 0.25f, 0.05f, 0.95f).LHand(-0.95f, 0.25f, 0.05f, 0.95f).Wp(0.4f, 0.9f, -0.1f).Rot(32f, 0f, 0f).Off(0f, 0.08f, 0f);
             DragonClipKey roll0 = launch.Copy(-0.62f).Rot(40f, 0f, 0f).Sn(25f);
             DragonClipKey roll1 = launch.Copy(-0.36f).Rot(40f, 0f, 0f).Sn(360f);
-            DragonClipKey poised = K(0f).Sp(12f, 0f, 0f).Ch(6f, 0f, 0f).Hd(-8f, 0f, 0f).Hand(0.1f, -0.8f, 0.45f, 0.95f).Rot(28f, 0f, 0f).Sn(360f);
+            DragonClipKey poised = K(0f).Sp(4f, 0f, 0f).Ch(-4f, 0f, 0f).Hd(-12f, 0f, 0f).Hand(0.9f, 0.4f, 0f, 0.95f).LHand(-0.9f, 0.4f, 0f, 0.95f).Wp(0.3f, 1f, 0f).Rot(20f, 0f, 0f).Sn(360f);
             DragonClipKey impact = Ft(K(0.08f).Sp(30f, 0f, 0f).Ch(14f, 0f, 0f).Hd(-28f, 0f, 0f).Hand(0.05f, -1f, 0.35f, 0.97f).Rot(6f, 0f, 0f).Off(0f, -0.38f * d, 0.05f).Sn(360f), 0.75f, 0.8f);
             DragonClipKey settle = impact.Copy(brutal ? 0.3f : 0.2f).Off(0f, -0.4f * d, 0.05f);
             DragonClipKey rec = Ft(K(brutal ? 0.58f : 0.45f).Sp(8f, 0f, 0f).Hd(-6f, 0f, 0f).Hand(0.35f, -0.45f, 0.35f, 0.6f).Off(0f, -0.06f, 0f).Sn(360f), 0.3f, 0.2f);
@@ -3823,6 +3874,12 @@ namespace DragonsAltarCombat
             c["hw_rift_walker"] = SbCommand(1); c["wiz_gravity"] = SbCommand(3);
             c["olympic_hero"] = SbOlympic(false);
             c["olympic_hero_brutal"] = SbOlympic(true);
+            // v0.25.63 jump-slam landing on top of Valheim's axe heavy smash: a deep hero kneel (hips dropped, chest
+            // over the weapon, wide stance, front knee forward, back knee low), held, then up. Arms belong to the
+            // vanilla smash (no hand keys).
+            DragonClipKey kneel = Ft(K(0f).Sp(30f, 0f, 0f).Ch(12f, 0f, 0f).Hd(-18f, 0f, 0f).Off(0f, -0.55f, 0.08f), 0.9f, 1.05f);
+            c["slam_kneel"] = new DragonClipKey[] { K(-1f), kneel, kneel.Copy(0.4f).Off(0f, -0.58f, 0.08f), K(0.85f) };
+            c["slam_kneel"][0].NoAim = true;
             c["sm_crescent_asc"] = c["sm_crescent"];
             c["sm_crescent_asc2"] = c["sm_crescent"];   // v0.25.51 follow-up swing (custom fallback)
             // v0.25.41 Blade Storm = Vergil's Judgement Cut: crouched iai stance with the blade held back at the
@@ -6405,6 +6462,8 @@ namespace DragonsAltarCombat
             if (duration >= 1f) ShowStatus(player, "hyper_armor", "hyper_armor", "Hyper Armor", duration, 0, "Defense Buff\nNo stagger or knockback from hits");
         }
 
+        public static float BlockHyperUntil = -1f;
+
         public static bool HasHyperArmor(Character character)
         {
             Player player = character as Player;
@@ -6483,12 +6542,24 @@ namespace DragonsAltarCombat
 
             float output = Mathf.Clamp(baseSpeed * factor, skillTimed ? 0.01f : 0.05f, skillTimed ? 6f : 5f);
 
+            // v0.25.63 chain clock: natural time = real time x the factor WE actually applied (whatever Valheim's own
+            // base speed is), integrated per call - the chain timer no longer assumes one constant factor per swing.
+            if (player == Player.m_localPlayer)
+            {
+                float nowT = Time.time;
+                float dtc = Mathf.Clamp(nowT - _chainClockLast, 0f, 0.1f);
+                ChainNaturalClock += dtc * (baseSpeed > 0.05f ? output / baseSpeed : 1f);
+                _chainClockLast = nowT;
+            }
+
             animator.speed = output;
             state.HasOutput = true;
             state.LastFactor = factor;
             state.LastOutputSpeed = output;
         }
 
+        public static float ChainNaturalClock;
+        private static float _chainClockLast;
         private static readonly Dictionary<int, float> ChainSpeed = new Dictionary<int, float>();
         private static readonly Dictionary<int, float> ChainSpeedUntil = new Dictionary<int, float>();
 
@@ -8680,7 +8751,7 @@ namespace DragonsAltarCombat
         public Light HeadLight;
         public readonly List<Vector3> Pts = new List<Vector3>();
         public Color Color = Color.white;
-        public float Width = 0.15f, MaxLife = 10f;
+        public float Width = 0.15f, MaxLife = 10f, TailLength = 1.2f;
         private float _age, _next, _fadeAge, _fadeLen = 0.45f, _nextArc;
         private bool _done;
         private Vector3[] _buf = new Vector3[0];
@@ -8688,7 +8759,17 @@ namespace DragonsAltarCombat
         public void Add(Vector3 p)
         {
             if (_done) return;
-            if (Pts.Count == 0 || (Pts[Pts.Count - 1] - p).sqrMagnitude > 0.16f) Pts.Add(p);
+            if (Pts.Count == 0 || (Pts[Pts.Count - 1] - p).sqrMagnitude > 0.04f) Pts.Add(p);
+            // v0.25.63 (user): a short bolt (~1 m) CRAWLING along the ground - the tail is cut behind the head,
+            // the path is never one continuous line from the impact.
+            while (Pts.Count > 2 && TailLength > 0f && PathLength() > TailLength) Pts.RemoveAt(0);
+        }
+
+        private float PathLength()
+        {
+            float l = 0f;
+            for (int i = 1; i < Pts.Count; i++) l += Vector3.Distance(Pts[i - 1], Pts[i]);
+            return l;
         }
 
         public void Finish(float fade)
@@ -8696,11 +8777,11 @@ namespace DragonsAltarCombat
             if (_done) return;
             _done = true;
             _fadeLen = Mathf.Max(0.1f, fade);
-            if (Pts.Count >= 2)
+            if (Pts.Count >= 1)
             {
-                Vector3 a = Pts[0], b = Pts[Pts.Count - 1];
-                Color sc = Color.Lerp(Color, Color.white, 0.2f);
-                DragonCombat.RunVfx(delegate { DragonVfx.CrackLine(a, b, sc, Width * 1.6f, 2.5f); });
+                Vector3 b = Pts[Pts.Count - 1];
+                Color sc = Color;
+                DragonCombat.RunVfx(delegate { DragonVfx.Burst(b + Vector3.up * 0.15f, sc, 10, 4f, 0.14f, 0.3f, 0.5f); });   // fizzles out at the end
             }
         }
 
@@ -8757,8 +8838,8 @@ namespace DragonsAltarCombat
             {
                 Vector3 dir = (i < n - 1 ? Pts[i + 1] - Pts[i] : Pts[i] - Pts[i - 1]); dir.y = 0f;
                 Vector3 side = Vector3.Cross(Vector3.up, dir.sqrMagnitude > 0.0001f ? dir.normalized : Vector3.forward);
-                _buf[i * 2] = i == 0 ? Pts[0] + Vector3.up * 0.1f : Jit(Pts[i], side, Width * 2.2f);
-                if (i < n - 1) _buf[i * 2 + 1] = Jit((Pts[i] + Pts[i + 1]) * 0.5f, side, Width * 3.2f);
+                _buf[i * 2] = Jit(Pts[i], side, Width * 1.2f);
+                if (i < n - 1) _buf[i * 2 + 1] = Jit((Pts[i] + Pts[i + 1]) * 0.5f, side, Width * 1.8f);
             }
             // per-point SetPosition: SetPositions has a Span overload the game's compiler cannot resolve (v0.25.62)
             Glow.positionCount = m;
@@ -8772,8 +8853,8 @@ namespace DragonsAltarCombat
                 Vector3 d = Quaternion.Euler(0f, UnityEngine.Random.Range(-70f, 70f), 0f) * (Pts[n - 1] - Pts[0]).normalized;
                 Fork.positionCount = 3;
                 Fork.SetPosition(0, o);
-                Fork.SetPosition(1, o + d * UnityEngine.Random.Range(0.4f, 0.8f) + Vector3.up * 0.1f + Vector3.Cross(Vector3.up, d) * UnityEngine.Random.Range(-0.3f, 0.3f));
-                Fork.SetPosition(2, o + d * UnityEngine.Random.Range(0.9f, 1.5f) + Vector3.up * 0.05f);
+                Fork.SetPosition(1, o + d * UnityEngine.Random.Range(0.15f, 0.3f) + Vector3.up * 0.08f + Vector3.Cross(Vector3.up, d) * UnityEngine.Random.Range(-0.12f, 0.12f));
+                Fork.SetPosition(2, o + d * UnityEngine.Random.Range(0.35f, 0.55f) + Vector3.up * 0.04f);
             }
         }
     }
@@ -8820,6 +8901,13 @@ namespace DragonsAltarCombat
                 Mesh.colors = _cols;
             }
         }
+        private void OnDestroy() { if (Mesh != null) Destroy(Mesh); }
+    }
+
+    // Destroys a generated mesh together with its object.
+    public class DragonMeshOwner : MonoBehaviour
+    {
+        public Mesh Mesh;
         private void OnDestroy() { if (Mesh != null) Destroy(Mesh); }
     }
 
@@ -9573,8 +9661,8 @@ namespace DragonsAltarCombat
             if (_streakTex == null) _streakTex = MakeTex(64, 64, delegate(float u, float v)
             {
                 // v = 0 inner edge, 1 = blade edge: bright cutting edge with a soft wake behind it
-                float edge = Mathf.Exp(-Mathf.Pow((v - 0.85f) / 0.09f, 2f));
-                float wake = Mathf.Clamp01(v) * 0.45f * (0.7f + 0.3f * Noise(u * 10f, v * 3f, 17));
+                float edge = Mathf.Exp(-Mathf.Pow((v - 0.82f) / 0.06f, 2f)) + Mathf.Exp(-Mathf.Pow((v - 0.82f) / 0.16f, 2f)) * 0.35f;
+                float wake = Mathf.Clamp01(v) * 0.2f * (0.7f + 0.3f * Noise(u * 10f, v * 3f, 17));
                 return Mathf.Clamp01(edge + wake);
             }, TextureWrapMode.Clamp);
             return _streakTex;
@@ -9662,6 +9750,17 @@ namespace DragonsAltarCombat
             Color gc = Color.Lerp(c, Color.white, 0.2f); gc.a = 0.55f;
             DragonMeshFx disc = MeshFx(g + Vector3.up * 0.01f, yaw, true, Mat(Glow(), true), gc, seconds * 0.8f + 0.1f);
             if (disc != null) { disc.ScaleFrom = Vector3.one * radius * 0.8f; disc.ScaleTo = Vector3.one * radius * 1.6f; disc.ScaleTime = seconds * 0.5f; }
+        }
+
+        // v0.25.63: a fixed-size glowing circle on the ground (area markers / telegraphs; replaces line rings).
+        public static void AreaRing(Vector3 pos, Color c, float radius, float seconds)
+        {
+            if (!Enabled) return;
+            radius = Mathf.Max(0.3f, radius);
+            Vector3 g = GroundPoint(pos) + Vector3.up * 0.07f;
+            Color rc = c; rc.a = Mathf.Clamp01(c.a) * 0.85f;
+            DragonMeshFx ring = MeshFx(g, Quaternion.identity, true, Mat(RingTex(), true), rc, Mathf.Max(0.15f, seconds));
+            if (ring != null) { ring.FadeIn = Mathf.Min(0.12f, seconds * 0.3f); ring.Hold = seconds * 0.5f; ring.ScaleFrom = ring.ScaleTo = Vector3.one * radius * 2.05f; }
         }
 
         // Burnt / broken ground that lingers after a heavy hit.
@@ -9783,7 +9882,7 @@ namespace DragonsAltarCombat
             b.Color = c;
             b.Width = Mathf.Max(0.05f, width);
             b.MaxLife = Mathf.Max(0.5f, maxLife);
-            b.Glow = SoftLine(go.transform, width * 5f);
+            b.Glow = SoftLine(go.transform, width * 3f);
             b.Core = SoftLine(go.transform, width * 1.4f);
             b.Fork = SoftLine(go.transform, width * 1.6f);
             if (LightScale > 0.05f)
@@ -10039,28 +10138,38 @@ namespace DragonsAltarCombat
         public static void CrescentBlade(Transform parent, Color c, float radius, float width, float roll)
         {
             if (!Enabled || parent == null) return;
+            // v0.25.63 (user ref: Dragon Nest magic slash): a thin moon crescent - tapered tips, a white-hot core
+            // and a soft coloured glow around it.
+            Color glow = c; glow.a = 0.55f;
+            Color core = Color.Lerp(c, Color.white, 0.75f); core.a = 1f;
+            CrescentLayer(parent, glow, radius, width * 2.6f, roll, 82f);
+            CrescentLayer(parent, core, radius, width, roll, 80f);
+        }
+
+        private static void CrescentLayer(Transform parent, Color col, float radius, float width, float roll, float span)
+        {
             GameObject go = new GameObject("IH_CrescentBlade");
             go.transform.SetParent(parent, false);
-            go.transform.localPosition = Vector3.back * radius * 0.6f;
+            go.transform.localPosition = Vector3.back * radius * 0.75f;
             go.transform.localRotation = Quaternion.AngleAxis(roll, Vector3.forward);
             Mesh mesh = new Mesh();
-            const int n = 24;
+            const int n = 32;
             Vector3[] v = new Vector3[(n + 1) * 2];
             Vector2[] uv = new Vector2[v.Length];
-            Color[] col = new Color[v.Length];
+            Color[] cols = new Color[v.Length];
             int[] tri = new int[n * 12];
-            Color cc = Color.Lerp(c, Color.white, 0.25f);
             for (int i = 0; i <= n; i++)
             {
                 float t = (float)i / n;
-                float a = Mathf.Lerp(-75f, 75f, t) * Mathf.Deg2Rad;
+                float a = Mathf.Lerp(-span, span, t) * Mathf.Deg2Rad;
                 Vector3 d = new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a));
-                float w = width * Mathf.Sin(t * Mathf.PI);
-                v[i * 2] = d * (radius - w);
-                v[i * 2 + 1] = d * radius;
+                // crescent: thickest in the middle, needle-thin tips; the band is centred on the arc
+                float w = width * Mathf.Pow(Mathf.Sin(t * Mathf.PI), 0.8f) + width * 0.04f;
+                v[i * 2] = d * (radius - w * 0.5f);
+                v[i * 2 + 1] = d * (radius + w * 0.5f);
                 uv[i * 2] = new Vector2(t, 0f); uv[i * 2 + 1] = new Vector2(t, 1f);
-                Color k = cc; k.a = 0.95f;
-                col[i * 2] = k; col[i * 2 + 1] = k;
+                Color k = col; k.a = col.a * Mathf.Clamp01(Mathf.Sin(t * Mathf.PI) * 1.6f);
+                cols[i * 2] = k; cols[i * 2 + 1] = k;
             }
             for (int i = 0; i < n; i++)
             {
@@ -10068,12 +10177,13 @@ namespace DragonsAltarCombat
                 tri[k] = a; tri[k + 1] = a + 2; tri[k + 2] = a + 1; tri[k + 3] = a + 1; tri[k + 4] = a + 2; tri[k + 5] = a + 3;
                 tri[k + 6] = a; tri[k + 7] = a + 1; tri[k + 8] = a + 2; tri[k + 9] = a + 1; tri[k + 10] = a + 3; tri[k + 11] = a + 2;
             }
-            mesh.vertices = v; mesh.uv = uv; mesh.colors = col; mesh.triangles = tri;
+            mesh.vertices = v; mesh.uv = uv; mesh.colors = cols; mesh.triangles = tri;
             mesh.RecalculateBounds();
             go.AddComponent<MeshFilter>().sharedMesh = mesh;
             MeshRenderer r = go.AddComponent<MeshRenderer>();
-            r.sharedMaterial = Mat(StreakTex(), true);
+            r.sharedMaterial = Mat(LineTex(), true);
             r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            go.AddComponent<DragonMeshOwner>().Mesh = mesh;
         }
 
         // ------------------------------------------------------------------ themed presets
