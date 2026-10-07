@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.48";
+        public const string ModVersion = "0.25.49";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -3297,7 +3297,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "seismic_guillotine":
                     b.Append(IhLine("Damage", IhNum(_seismicDamageMultiplier.Value * power * 100f) + "% weapon damage" + (ascended ? ", endpoint " + IhNum(_seismicAscEndpoint.Value) + "%" : "")));
                     b.Append(IhLine("Range", IhNum(ascended ? _seismicAscRange.Value : _seismicRange.Value) + "m, endpoint " + IhNum(_seismicEndRadius.Value) + "m"));
-                    if (ascended) b.Append(IhLine("Inflicts", "Cripple " + IhNum(_seismicAscSlow.Value) + "s at the endpoint"));
+                    if (ascended) b.Append(IhLine("Inflicts", "3 fissures; Cripple " + IhNum(_seismicAscSlow.Value) + "s at the endpoint"));
                     IhCosts(b, _seismicStamina.Value, "0.3s", _seismicCooldown.Value);
                     break;
                 case "punishing_bomb":
@@ -3805,7 +3805,8 @@ namespace AlbedosCustomClassesAdvanced
 
             StartCoroutine(SeismicFissure(player, origin, forward, range, width, shockSpeed, weapon, multiplier, sharedHits, true));
 
-            if (fury)
+            // v0.25.49 (user): the Ascended Seismic Guillotine always sends out 3 fissures (Fury makes it Ascended too).
+            if (fury || seismicAscended)
             {
                 Vector3 left = Quaternion.AngleAxis(-25f, Vector3.up) * forward;
                 Vector3 right = Quaternion.AngleAxis(25f, Vector3.up) * forward;
@@ -4812,6 +4813,9 @@ namespace AlbedosCustomClassesAdvanced
                 }
             }
             if (_ascendedCache.Contains(skillId))
+                return true;
+            // v0.25.49 (user): during Unchained Fury every Mercenary skill plays its Ascended version.
+            if (IsUnchainedFuryActive() && IsMercenaryFurySkill(skillId))
                 return true;
             // v0.18.0: real Ascensions saved on the character (Righteous Strike Ascends with Advancement).
             return IhIsAscended(Player.m_localPlayer, skillId);
@@ -7656,6 +7660,17 @@ namespace AlbedosCustomClassesAdvanced
             StartCoroutine(BarbaricTauntRoutine(player));
         }
 
+        private static bool IsMercenaryFurySkill(string id)
+        {
+            switch (id)
+            {
+                case "heavy_slash": case "stomp": case "circle_swing": case "bonecrusher":
+                case "seismic_guillotine": case "punishing_bomb": case "whirlwind":
+                    return true;
+            }
+            return false;
+        }
+
         private bool IsUnchainedFuryActive()
         {
             return Time.time < _mercFuryUntil;
@@ -10413,7 +10428,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "cyclone_arrow": return "Cyclone Arrow";
                 case "swallow_dive": return "Swallow Dive";
                 case "skyfall_barrage": return "Skyfall Barrage";
-                case "ricochet_arrow": return "Ricochet Arrow";
+                case "ricochet_arrow": return "Somersault Dance";
                 case "furious_winds": return "Furious Winds";
                 case "tailwind": return "Tailwind";
                 case "ballista_shot": return "Ballista Shot";
@@ -11090,12 +11105,18 @@ namespace AlbedosCustomClassesAdvanced
                     b.Append(IhLine("Damage", IhBowPct(IhR("Acrobat Gale Volley", "DamagePercent", 60f), power) + " per arrow"));
                     b.Append(IhLine("Arrows", IhNum(IhR("Acrobat Gale Volley", "Arrows", 7f)) + " in a " + IhNum(IhR("Acrobat Gale Volley", "FanDegrees", 60f)) + "° fan" + (ascended ? ", two fans" : "")));
                     b.Append(IhLine("Effect", "Swift " + IhNum(IhR("Acrobat Gale Volley", "LeapDistance_v0242", 2f)) + "m leap back in 0.3s, " + IhNum(IhR("Ranger Blessing", "BackJumpIFrames", 0.5f)) + "s i-frames, knocks back Small enemies"));
+                    if (ascended) b.Append(IhLine("Charges", IhNum(IhR("Acrobat Gale Volley Ascended", "Charges", 3f)) + ", each on the cooldown"));
                     IhCosts(b, IhR("Acrobat Gale Volley", "StaminaCost", 22f), "Instant", IhR("Acrobat Gale Volley", "Cooldown", 9f));
                     break;
                 case "cyclone_arrow":
                     b.Append(IhLine("Damage", IhBowPct(IhR("Acrobat Cyclone Arrow", "DamagePercent", 35f), power) + " every " + IhNum(IhR("Acrobat Cyclone Arrow", "HitInterval", 0.3f)) + "s"));
-                    b.Append(IhLine("Range", IhNum(IhR("Acrobat Cyclone Arrow", "Range", 30f)) + "m in " + IhNum(IhR("Acrobat Cyclone Arrow", "TravelTime_v0250", 6f)) + "s, Free Aim"));
-                    b.Append(IhLine("Radius", IhNum(IhR("Acrobat Cyclone Arrow", "Radius_v0250", 4f)) + "m, pulls Small enemies" + (ascended ? "; splits into " + IhNum(IhR("Acrobat Cyclone Arrow Ascended", "Splits", 3f)) + " on its first hit" : "")));
+                    b.Append(IhLine("Range", IhNum(IhR("Acrobat Cyclone Arrow", "Range", 30f)) + "m in " + IhNum(IhR("Acrobat Cyclone Arrow", "TravelTime_v0250", 9f)) + "s, Free Aim"));
+                    if (ascended)
+                    {
+                        b.Append(IhLine("Radius", IhNum(IhR("Acrobat Cyclone Arrow", "Radius_v0250", 4f) + IhR("Acrobat Cyclone Arrow Ascended", "ExtraRadius", 2f)) + "m tornado, sucks in Small and Big enemies"));
+                        b.Append(IhLine("Inflicts", "Frost " + IhNum(IhR("Acrobat Cyclone Arrow Ascended", "FrostSeconds", 3f)) + "s, Bosses included"));
+                    }
+                    else b.Append(IhLine("Radius", IhNum(IhR("Acrobat Cyclone Arrow", "Radius_v0250", 4f)) + "m, pulls Small enemies"));
                     IhCosts(b, IhR("Acrobat Cyclone Arrow", "StaminaCost", 25f), "Instant", IhR("Acrobat Cyclone Arrow", "Cooldown", 12f));
                     break;
                 case "swallow_dive":
@@ -11105,15 +11126,23 @@ namespace AlbedosCustomClassesAdvanced
                     b.Append(IhLine("Stamina Cost", IhNum(IhR("Acrobat Swallow Dive", "StaminaCost", 15f))));
                     break;
                 case "skyfall_barrage":
-                    b.Append(IhLine("Damage", IhBowPct(IhR("Acrobat Skyfall Barrage", "TickPercent", 30f), power) + " every " + IhNum(IhR("Acrobat Skyfall Barrage", "TickInterval", 0.25f)) + "s for " + IhNum(IhR("Acrobat Skyfall Barrage", "BarrageDuration", 2f)) + "s"));
+                    b.Append(IhLine("Damage", IhBowPct(IhR("Acrobat Skyfall Barrage", "TickPercent", 30f), power) + " per shot, " + IhNum(ascended ? IhR("Acrobat Skyfall Barrage Ascended", "Shots", 12f) : IhR("Acrobat Skyfall Barrage", "Shots", 10f)) + " shots, " + IhNum(IhR("Acrobat Skyfall Barrage", "TickInterval", 0.25f)) + "s apart"));
                     b.Append(IhLine("Radius", IhNum(ascended ? IhR("Acrobat Skyfall Barrage Ascended", "Radius", 14f) : IhR("Acrobat Skyfall Barrage", "Radius", 10f)) + "m, Ground PAC " + IhNum(IhR("Acrobat Skyfall Barrage", "Range", 35f)) + "m"));
                     b.Append(IhLine("Effect", "Leap " + IhNum(IhR("Acrobat Skyfall Barrage", "JumpHeight", 15f)) + "m up and hover; no fall damage"));
+                    if (ascended)
+                    {
+                        b.Append(IhLine("Slam", IhBowPct(IhR("Acrobat Skyfall Barrage Ascended", "SlamPercent", 220f), power) + " Blunt, " + IhNum(IhR("Acrobat Skyfall Barrage Ascended", "SlamRadius", 6f)) + "m, Stun (Small, Big), Cripple Bosses, then a 2m backflip"));
+                        b.Append(IhLine("Charges", IhNum(IhR("Acrobat Skyfall Barrage Ascended", "Charges", 2f)) + ", each on the cooldown"));
+                    }
                     IhCosts(b, IhR("Acrobat Skyfall Barrage", "StaminaCost", 30f), "0.5s", IhR("Acrobat Skyfall Barrage", "Cooldown", 16f));
                     break;
                 case "ricochet_arrow":
-                    b.Append(IhLine("Damage", IhBowPct(IhR("Acrobat Ricochet Arrow", "DamagePercent", 80f), power) + ", +" + IhNum(IhR("Acrobat Ricochet Arrow", "BounceBonusPercent", 10f)) + "% per bounce"));
-                    b.Append(IhLine("Bounces", IhNum(ascended ? IhR("Acrobat Ricochet Arrow Ascended", "Bounces", 10f) : IhR("Acrobat Ricochet Arrow", "Bounces", 6f)) + " within " + IhNum(IhR("Acrobat Ricochet Arrow", "BounceRange", 10f)) + "m"));
-                    IhCosts(b, IhR("Acrobat Ricochet Arrow", "StaminaCost", 20f), "Instant", IhR("Acrobat Ricochet Arrow", "Cooldown", 10f));
+                    b.Append(IhLine("Damage", IhBowPct(IhR("Acrobat Somersault Dance", "DamagePercent", 260f), power) + " Blunt"));
+                    b.Append(IhLine("Radius", IhNum(IhR("Acrobat Somersault Dance", "Radius", 4f)) + "m, Ground PAC " + IhNum(IhR("Acrobat Somersault Dance", "Range", 5f)) + "m"));
+                    b.Append(IhLine("Inflicts", "Stun (Small, Big)"));
+                    b.Append(IhLine("Flips", IhNum(IhR("Acrobat Somersault Dance", "FrontFlipHeight", 3f)) + "m front flip (" + IhNum(IhR("Acrobat Somersault Dance", "FrontFlipSeconds", 0.5f)) + "s), backflip " + IhNum(ascended ? IhR("Acrobat Somersault Dance Ascended", "BackFlipHeight", 3f) : IhR("Acrobat Somersault Dance", "BackFlipHeight", 2f)) + "m up, " + IhNum(IhR("Acrobat Somersault Dance", "BackFlipDistance", 2f)) + "m away"));
+                    if (ascended) b.Append(IhLine("Volley", IhBowPct(IhR("Acrobat Somersault Dance Ascended", "VolleyPercent", 160f), power) + " Pierce, three " + IhNum(IhR("Acrobat Somersault Dance Ascended", "VolleyCircleRadius", 3f)) + "m circles side by side at your aim; then you fall, no fall damage"));
+                    IhCosts(b, IhR("Acrobat Somersault Dance", "StaminaCost", 22f), IhNum(IhR("Acrobat Somersault Dance", "FrontFlipSeconds", 0.5f)) + "s", IhR("Acrobat Somersault Dance", "Cooldown", 10f));
                     break;
                 case "furious_winds":
                     b.Append(IhLine("Damage", IhBowPct(IhR("Acrobat Furious Winds", "SlashPercent", 25f), power) + " Slash every " + IhNum(IhR("Acrobat Furious Winds", "TickInterval", 0.25f)) + "s"));
@@ -11124,41 +11153,44 @@ namespace AlbedosCustomClassesAdvanced
                     IhCosts(b, IhR("Acrobat Furious Winds", "StaminaCost", 40f), "Instant", IhR("Acrobat Furious Winds", "Cooldown", 90f));
                     break;
                 case "ballista_shot":
-                    b.Append(IhLine("Damage", IhBowPct(IhR("Bowmaster Ballista Shot", "DamagePercent", 200f), power) + ", +" + IhNum(IhR("Bowmaster Ballista Shot", "DamagePerStackPercent", 40f)) + "% per stack"));
+                    b.Append(IhLine("Damage", IhBowPct(IhR("Bowmaster Ballista Shot", "DamagePercent", 300f), power) + ", +" + IhNum(IhR("Bowmaster Ballista Shot", "DamagePerStackPercent", 60f)) + "% per stack"));
                     b.Append(IhLine("Charge", "Hold: 3 stacks, 1 per second; +" + IhNum(IhR("Bowmaster Ballista Shot", "WidthPerStack", 1f)) + "m width each; hold at max to keep aiming"));
                     b.Append(IhLine("Range", IhNum(IhR("Bowmaster Ballista Shot", "Range", 60f)) + "m Laser Projectile, pierces, knocks back Small, staggers Big"));
                     if (ascended) b.Append(IhLine("Full Charge", "every enemy pierced erupts (" + IhNum(IhR("Bowmaster Ballista Shot Ascended", "ShockwaveRadius_v0242", 5f)) + "m, " + IhNum(IhR("Bowmaster Ballista Shot Ascended", "ShockwavePercent", 60f)) + "% of the shot)"));
                     IhCosts(b, IhR("Bowmaster Ballista Shot", "StaminaCost", 30f), "Hold", IhR("Bowmaster Ballista Shot", "Cooldown", 14f));
                     break;
                 case "arrow_rain":
-                    b.Append(IhLine("Damage", IhBowPct(IhR("Bowmaster Arrow Rain", "DamagePercent", 25f), power) + " every " + IhNum(IhR("Bowmaster Arrow Rain", "HitInterval", 0.4f)) + "s for " + IhNum(IhR("Bowmaster Arrow Rain", "Duration", 4f)) + "s"));
+                    b.Append(IhLine("Damage", IhBowPct(IhR("Bowmaster Arrow Rain", "DamagePercent", 40f), power) + " every " + IhNum(IhR("Bowmaster Arrow Rain", "HitInterval", 0.4f)) + "s for " + IhNum(IhR("Bowmaster Arrow Rain", "Duration", 4f)) + "s"));
                     b.Append(IhLine("Radius", IhNum(ascended ? IhR("Bowmaster Arrow Rain Ascended", "Radius", 8f) : IhR("Bowmaster Arrow Rain", "Radius_v0243", 6f)) + "m, Ground PAC " + IhNum(IhR("Bowmaster Arrow Rain", "Range", 45f)) + "m"));
                     b.Append(IhLine("Inflicts", "Cripple " + IhNum(IhR("Bowmaster Arrow Rain", "CrippleDuration", 2f)) + "s" + (ascended ? ", Freeze every " + IhNum(IhR("Bowmaster Arrow Rain Ascended", "HitsToFreeze", 3f)) + " hits" : "")));
+                    b.Append(IhLine("Charges", IhNum(ascended ? IhR("Bowmaster Arrow Rain Ascended", "Charges", 3f) : IhR("Bowmaster Arrow Rain", "Charges", 2f)) + ", each on the cooldown"));
                     IhCosts(b, IhR("Bowmaster Arrow Rain", "StaminaCost", 30f), "Instant", IhR("Bowmaster Arrow Rain", "Cooldown", 16f));
                     break;
                 case "pinning_shot":
-                    b.Append(IhLine("Damage", IhBowPct(IhR("Bowmaster Pinning Shot", "DamagePercent", 150f), power)));
+                    b.Append(IhLine("Damage", IhBowPct(IhR("Bowmaster Pinning Shot", "DamagePercent", 240f), power)));
                     b.Append(IhLine("Area", IhNum(IhR("Bowmaster Pinning Shot", "Range_v0243", 30f)) + "m, " + IhNum(IhR("Bowmaster Pinning Shot", "ConeDegrees", 40f)) + "° cone, everyone inside is hit"));
                     b.Append(IhLine("Pin", IhNum(IhR("Bowmaster Pinning Shot", "SmallPinSeconds", 4f)) + "s Small, " + IhNum(IhR("Bowmaster Pinning Shot", "BigPinSeconds_v0243", 2.5f)) + "s Big + Cripple, Bosses Crippled"));
                     b.Append(IhLine("Pinned", "+" + IhNum(IhR("Bowmaster Pinning Shot", "PinnedSkillDamagePercent", 25f)) + "% damage from your skills" + (ascended ? "; chains to " + IhNum(IhR("Bowmaster Pinning Shot Ascended", "ChainTargets", 2f)) + " nearby enemies" : "")));
+                    if (ascended) b.Append(IhLine("Ascended", "Exposed while pinned, then explodes (" + IhNum(IhR("Bowmaster Pinning Shot Ascended", "ExplodeRadius", 3f)) + "m, " + IhNum(IhR("Bowmaster Pinning Shot Ascended", "ExplodePercent", 180f)) + "%) and stays Exposed " + IhNum(IhR("Bowmaster Pinning Shot Ascended", "ExposeAfterSeconds", 6f)) + "s"));
                     IhCosts(b, IhR("Bowmaster Pinning Shot", "StaminaCost", 20f), "Instant", IhR("Bowmaster Pinning Shot", "Cooldown", 12f));
                     break;
                 case "explosive_arrow":
-                    b.Append(IhLine("Damage", IhBowPct(IhR("Bowmaster Explosive Arrow", "DamagePercent", 180f), power) + " Fire + Blunt"));
-                    b.Append(IhLine("Radius", IhNum(IhR("Bowmaster Explosive Arrow", "Radius_v0243", 5f)) + "m" + (ascended ? "; then " + IhNum(IhR("Bowmaster Explosive Arrow Ascended", "ClusterBombs", 6f)) + " cluster bombs (" + IhNum(IhR("Bowmaster Explosive Arrow Ascended", "ClusterPercent", 40f)) + "% each)" : "")));
-                    b.Append(IhLine("Inflicts", "Fire Burn " + IhNum(IhR("Bowmaster Explosive Arrow", "FireBurnDuration", 4f)) + "s, Stun (Small)" + (ascended ? "; burning field " + IhNum(IhR("Bowmaster Explosive Arrow Ascended", "FireFieldSeconds", 3f)) + "s" : "")));
-                    IhCosts(b, IhR("Bowmaster Explosive Arrow", "StaminaCost", 22f), "Instant", IhR("Bowmaster Explosive Arrow", "Cooldown", 12f));
+                    b.Append(IhLine("Damage", IhBowPct(IhR("Bowmaster Explosive Arrow", "DamagePercent", 320f), power) + " Fire + Blunt, " + IhNum(IhR("Bowmaster Explosive Arrow", "Radius_v0243", 5f)) + "m, " + IhNum(IhR("Bowmaster Explosive Arrow", "Range", 30f)) + "m"));
+                    b.Append(IhLine("Cluster Bombs", "three " + IhNum(ascended ? IhR("Bowmaster Explosive Arrow Ascended", "ClusterRadius", 4f) : IhR("Bowmaster Explosive Arrow", "ClusterRadius", 3f)) + "m circles (" + IhBowPct(IhR("Bowmaster Explosive Arrow", "ClusterPercent", 140f), power) + "), " + (ascended ? "1" : IhNum(IhR("Bowmaster Explosive Arrow", "ClusterDelay", 0.5f))) + "s after the blast" + (ascended ? ", leave burning ground " + IhNum(IhR("Bowmaster Explosive Arrow Ascended", "FireFieldSeconds", 4f)) + "s" : "")));
+                    if (ascended) b.Append(IhLine("Charge", "Hold up to " + IhNum(IhR("Bowmaster Explosive Arrow Ascended", "ChargeSeconds", 3f)) + "s: +1 shot per second, +" + IhNum(IhR("Bowmaster Explosive Arrow Ascended", "DamagePerStackPercent", 25f)) + "% damage per stack"));
+                    b.Append(IhLine("Inflicts", "Fire Burn " + IhNum(IhR("Bowmaster Explosive Arrow", "FireBurnDuration", 4f)) + "s, Stun (Small)"));
+                    IhCosts(b, IhR("Bowmaster Explosive Arrow", "StaminaCost", 22f), ascended ? "Hold" : "Instant", IhR("Bowmaster Explosive Arrow", "Cooldown", 12f));
                     break;
                 case "splitting_arrow":
-                    b.Append(IhLine("Damage", IhBowPct(IhR("Bowmaster Splitting Arrow", "VolleyPercent_v0242", 90f), power) + " per volley to every enemy in the cone"));
-                    b.Append(IhLine("Volleys", IhNum(ascended ? IhR("Bowmaster Splitting Arrow Ascended", "Volleys", 5f) : IhR("Bowmaster Splitting Arrow", "Volleys", 3f)) + " x " + IhNum(IhR("Bowmaster Splitting Arrow", "ArrowsPerVolley", 5f)) + " arrows, " + IhNum(ascended ? IhR("Bowmaster Splitting Arrow Ascended", "VolleyInterval", 0.25f) : IhR("Bowmaster Splitting Arrow", "VolleyInterval", 0.5f)) + "s apart, standing still"));
-                    b.Append(IhLine("Area", IhNum(IhR("Bowmaster Splitting Arrow", "Range_v0242", 15f)) + "m, " + IhNum(IhR("Bowmaster Splitting Arrow", "ConeDegrees_v0242", 120f)) + "° cone, arrows pass through"));
-                    if (ascended) b.Append(IhLine("Inflicts", "Fire Burn, a stack per hit (" + IhNum(IhR("Bowmaster Splitting Arrow Ascended", "FireDotPercentPerStack", 6f)) + "% per stack), " + IhNum(IhR("Bowmaster Splitting Arrow Ascended", "FireDotDuration", 6f)) + "s, refreshed"));
+                    b.Append(IhLine("Damage", IhBowPct(IhR("Bowmaster Splitting Arrow", "VolleyPercent_v0242", 120f), power) + " per spread shot to every enemy in the cone"));
+                    b.Append(IhLine("Spread Shots", IhNum(ascended ? IhR("Bowmaster Splitting Arrow Ascended", "Volleys", 3f) : IhR("Bowmaster Splitting Arrow", "Volleys", 2f)) + ", " + IhNum(IhR("Bowmaster Splitting Arrow", "VolleyInterval", 0.5f)) + "s apart, " + IhNum(IhR("Bowmaster Splitting Arrow", "Range_v0242", 25f)) + "m, " + IhNum(IhR("Bowmaster Splitting Arrow", "ConeDegrees_v0242", 120f)) + "° cone"));
+                    b.Append(IhLine("Great Arrow", "press again within " + IhNum(IhR("Bowmaster Splitting Arrow", "GreatArrowWindow", 3f)) + "s: " + IhNum(IhR("Bowmaster Splitting Arrow", "GreatArrowWidth", 4f)) + "m wide, " + IhBowPct(IhR("Bowmaster Splitting Arrow", "GreatArrowPercent", 380f), power) + ", pierces"));
+                    if (ascended) b.Append(IhLine("Sky Arrow", IhBowPct(IhR("Bowmaster Splitting Arrow Ascended", "SkyArrowPercent", 320f), power) + " Blunt + Pierce, " + IhNum(IhR("Bowmaster Splitting Arrow Ascended", "SkyArrowRadius", 4f)) + "m at your aim, Stuns every enemy (Bosses too)"));
                     IhCosts(b, IhR("Bowmaster Splitting Arrow", "StaminaCost", 25f), "Instant", IhR("Bowmaster Splitting Arrow", "Cooldown", 10f));
                     break;
                 case "starfall_volley":
-                    b.Append(IhLine("Damage", IhBowPct(IhR("Bowmaster Starfall Volley", "TickPercent_v0242", 45f), power) + " to EVERY enemy in the area every " + IhNum(IhR("Bowmaster Starfall Volley", "HitInterval", 0.5f)) + "s for " + IhNum(IhR("Bowmaster Starfall Volley", "Duration_v0243", 8f)) + "s"));
-                    b.Append(IhLine("Area", IhNum(IhR("Bowmaster Starfall Volley", "Radius_v0243", 12f)) + "m Ground PAC" + (ascended ? "; ends with a giant arrow (" + IhNum(IhR("Bowmaster Starfall Volley Ascended", "FinalArrowPercent", 300f)) + "% to every enemy)" : "")));
+                    b.Append(IhLine("Damage", IhBowPct(IhR("Bowmaster Starfall Volley", "TickPercent_v0242", 65f), power) + " to EVERY enemy in the area every " + IhNum(IhR("Bowmaster Starfall Volley", "HitInterval", 0.5f)) + "s for " + IhNum(IhR("Bowmaster Starfall Volley", "Duration_v0243", 8f)) + "s"));
+                    b.Append(IhLine("Area", IhNum(IhR("Bowmaster Starfall Volley", "Radius_v0243", 12f)) + "m Ground PAC" + (ascended ? "; ends with a giant arrow (" + IhNum(IhR("Bowmaster Starfall Volley Ascended", "FinalArrowPercent", 450f)) + "% to every enemy)" : "")));
                     IhCosts(b, IhR("Bowmaster Starfall Volley", "StaminaCost", 45f), IhNum(IhR("Bowmaster Starfall Volley", "ChannelSeconds", 2f)) + "s channel", IhR("Bowmaster Starfall Volley", "Cooldown", 150f));
                     break;
                 case "hawks_vigil":
@@ -11168,7 +11200,7 @@ namespace AlbedosCustomClassesAdvanced
                     b.Append(IhLine("Cooldown", IhNum(IhR("Bowmaster Hawks Vigil", "Cooldown", 600f) / 60f) + " min"));
                     break;
                 case "tailwind":
-                    b.Append(IhLine("Effect", "+" + IhNum(IhR("Acrobat Tailwind", "MoveSpeedPercent", 50f)) + "% Move Speed, +" + IhNum(IhR("Acrobat Tailwind", "JumpSkillBonus", 30f)) + " Jump, no fall damage"));
+                    b.Append(IhLine("Effect", "+" + IhNum(IhR("Acrobat Tailwind", "MoveSpeedPercent", 60f)) + "% Move Speed, no movement penalties (encumbrance stays), +" + IhNum(IhR("Acrobat Tailwind", "JumpSkillBonus", 30f)) + " Jump, no fall damage"));
                     b.Append(IhLine("Radius", IhNum(IhR("Acrobat Tailwind", "Radius", 10f)) + "m (snapshot)"));
                     b.Append(IhLine("Duration", IhNum(IhR("Acrobat Tailwind", "Duration", 120f) / 60f) + " min"));
                     b.Append(IhLine("Cooldown", IhNum(IhR("Acrobat Tailwind", "Cooldown", 600f) / 60f) + " min"));
@@ -11403,14 +11435,14 @@ namespace AlbedosCustomClassesAdvanced
                 case "cyclone_arrow": return "A slow, spinning arrow of wind that drags small foes along its path.";
                 case "swallow_dive": return "Dash through the enemy line as a gust of wind, cutting everything you pass.";
                 case "skyfall_barrage": return "Leap high into the sky and rain arrows on the ground below.";
-                case "ricochet_arrow": return "An arrow that bounces from foe to foe, hitting harder each time.";
+                case "ricochet_arrow": return "Front flip high into the air and slam the ground with your foot, then backflip out of reach.";
                 case "furious_winds": return "A whirlwind of magical leaves shields you and shreds every foe that comes near.";
-                case "tailwind": return "Wind lifts you and your allies: faster feet, higher jumps and no fall damage.";
+                case "tailwind": return "Wind lifts you and your allies: much faster feet, no movement penalties, higher jumps and no fall damage.";
                 case "ballista_shot": return "Hold to draw a siege-strength arrow that blasts through the enemy line.";
                 case "arrow_rain": return "Darken the sky over your aim with a crippling volley.";
                 case "pinning_shot": return "Nail your target to the ground and leave it open to your next shots.";
-                case "explosive_arrow": return "An arrow that bursts into flame on impact.";
-                case "splitting_arrow": return "Plant your feet and loose volley after volley into a wide cone.";
+                case "explosive_arrow": return "An arrow that bursts into flame on impact, followed by a carpet of cluster bombs.";
+                case "splitting_arrow": return "Two spread shots into a wide cone, then one great arrow that tears through the line.";
                 case "starfall_volley": return "Call giant arrows down from the heavens across the battlefield.";
                 case "hawks_vigil": return "Reveal every enemy around you and sharpen your allies' aim.";
             }
@@ -11444,7 +11476,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "stomp": return "a third impact at 15m (40%)";
                 case "circle_swing": return "9m, two swings (90% + 60%), Hyper Armor, launches";
                 case "bonecrusher": return "the landing is followed by a ground shock (50%)";
-                case "seismic_guillotine": return "25m, endpoint 140% and slows";
+                case "seismic_guillotine": return "3 fissures, 25m, endpoint 140% and slows";
                 case "punishing_bomb": return "12m, 6s ground fire and stacking Burn";
                 case "whirlwind": return "8s with Hyper Armor and a final sweep";
                 case "glacial_descent": return "8m; the central 3m deals 135% and Freezes";
@@ -11464,17 +11496,17 @@ namespace AlbedosCustomClassesAdvanced
                 // v0.24.0 Ranger
                 case "tumble_shot": return "5 arrows; a kill resets the cooldown; leaves a 4m gust that Cripples";
                 case "piercing_arrow": return "60m, the arrow widens as it flies and Exposes";
-                case "gale_volley": return "a second fan arcs over the first";
-                case "cyclone_arrow": return "splits into 3 smaller cyclones when it first catches an enemy";
+                case "gale_volley": return "3 charges; a second fan arcs over the first";
+                case "cyclone_arrow": return "a tall tornado 2m wider that sucks in Small and Big enemies and Frosts everything";
                 case "swallow_dive": return "3 charges; each dash leaves a wind slash that hits again after 0.5s";
-                case "skyfall_barrage": return "14m circle that you steer while hovering";
-                case "ricochet_arrow": return "10 bounces; the last one explodes (4m)";
+                case "skyfall_barrage": return "2 charges, 12 shots in a 14m circle you steer, then a slam and a backflip";
+                case "ricochet_arrow": return "a 3m backflip that looses a volley of three 3m circles, then you fall";
                 case "furious_winds": return "5s, 14m (10m barrier), ends in a gale that launches Small enemies";
                 case "ballista_shot": return "at full charge every enemy it pierces erupts (5m, 60%)";
-                case "arrow_rain": return "frozen arrows: every 3rd hit Freezes";
-                case "pinning_shot": return "also pins 2 nearby enemies";
-                case "explosive_arrow": return "a 5m burning field for 3s and 6 cluster bombs after the blast";
-                case "splitting_arrow": return "5 volleys 0.25s apart, each hit stacks a Fire Burn";
+                case "arrow_rain": return "3 charges; frozen arrows: every 3rd hit Freezes";
+                case "pinning_shot": return "pinned enemies are Exposed, then explode and stay Exposed 6s; pins 2 more";
+                case "explosive_arrow": return "hold up to 3s for more shots; 4m clusters that leave burning ground";
+                case "splitting_arrow": return "3 spread shots; a giant sky arrow follows the great arrow and Stuns everything";
                 case "starfall_volley": return "ends with a giant arrow: 300% to every enemy in the area";
             }
             return "";

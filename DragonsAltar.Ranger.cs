@@ -40,7 +40,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Dragon's Altar - Ranger";
-        public const string ModVersion = "0.25.48";
+        public const string ModVersion = "0.25.49";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -56,7 +56,7 @@ namespace DragonsAltarRanger
         private ConfigEntry<float> _testingCooldown;
 
         // Wildborn (Ranger's Blessing)
-        private ConfigEntry<float> _rgIFrames, _wbCharged, _wbInterval, _wbFinisherDelay, _wsFallReduction, _wsStaminaUse, _arAscRadius, _eaAscClusters, _eaAscClusterRadius, _eaAscClusterPercent, _psCone;
+        private ConfigEntry<float> _rgIFrames, _wbCharged, _wbInterval, _wbFinisherDelay, _wsFallReduction, _wsStaminaUse, _arAscRadius, _eaAscClusterRadius, _psCone;
         private ConfigEntry<float> _wbBows, _wbDodge, _wbFall, _wbDrawSpeed, _wbBowPercent, _wbAmmoPercent, _wbFullStack, _wbChainBonus, _wbChainReset, _wbQuickStamina;
         // Class skills
         private ConfigEntry<float> _paCooldown, _paStamina, _paDamage, _paRange, _paSpeed, _paCripple;
@@ -69,10 +69,18 @@ namespace DragonsAltarRanger
         // Acrobat skills
         private ConfigEntry<float> _gvCooldown, _gvStamina, _gvDamage, _gvArrows, _gvFan, _gvLeap, _gvRange, _gvPush, _gvAscDelay;
         private ConfigEntry<float> _cyCooldown, _cyStamina, _cyDamage, _cyRange, _cyTravel, _cyRadius, _cyInterval, _cyPull;
-        private ConfigEntry<float> _cyAscSplits, _cyAscRange, _cyAscTravel, _cyAscRadius;
         private ConfigEntry<float> _sdCharges, _sdRecharge, _sdStamina, _sdDamage, _sdDistance, _sdRadius, _sdAscCharges, _sdAscDelay, _sdAscPercent;
         private ConfigEntry<float> _sbCooldown, _sbStamina, _sbDamage, _sbRange, _sbHeight, _sbRadius, _sbDuration, _sbInterval, _sbAscRadius;
-        private ConfigEntry<float> _rcCooldown, _rcStamina, _rcDamage, _rcRange, _rcBounces, _rcBounceRange, _rcBonus, _rcAscBounces, _rcAscBlast, _rcAscBlastPercent;
+        // v0.25.49 Somersault Dance (replaces Ricochet Arrow; id stays ricochet_arrow)
+        private ConfigEntry<float> _ssCooldown, _ssStamina, _ssDamage, _ssRange, _ssRadius, _ssFlipHeight, _ssFlipTime, _ssBackHeight, _ssBackDistance, _ssBackTime;
+        private ConfigEntry<float> _ssAscBackHeight, _ssAscVolleyRadius, _ssAscVolleyPercent, _ssAscVolleyRange;
+        // v0.25.49 Ranger rework values
+        private ConfigEntry<float> _cyAscWider, _cyAscPullSpeed, _cyAscFrost, _cyAscHeight;
+        private ConfigEntry<float> _sbShots, _sbAscShots, _sbAscCharges, _sbAscSlamPercent, _sbAscSlamRadius, _sbAscCripple;
+        private ConfigEntry<float> _gvAscCharges, _arCharges, _arAscCharges;
+        private ConfigEntry<float> _psAscExplodeRadius, _psAscExplodePercent, _psAscExposeAfter;
+        private ConfigEntry<float> _eaClusterRadius, _eaClusterPercent, _eaClusterDelay, _eaAscCharge, _eaAscStackPercent, _eaAscShotGap;
+        private ConfigEntry<float> _saBigWidth, _saBigPercent, _saBigRange, _saWindow, _saAscSkyRadius, _saAscSkyPercent;
         private ConfigEntry<float> _fwBarrier, _fwSmallPush, _fwBigPush, _fwAscBarrier;
         private ConfigEntry<float> _fwCooldown, _fwStamina, _fwDuration, _fwRadius, _fwInterval, _fwSlash, _fwDot, _fwDotDuration, _fwAscDuration, _fwAscRadius, _fwAscBurst;
         private ConfigEntry<float> _twCooldown, _twDuration, _twRadius, _twMove, _twJump;
@@ -83,7 +91,7 @@ namespace DragonsAltarRanger
         private ConfigEntry<float> _arCooldown, _arStamina, _arDamage, _arRange, _arRadius, _arDuration, _arInterval, _arCripple, _arAscFreezeHits, _arAscFreeze;
         private ConfigEntry<float> _psCooldown, _psStamina, _psDamage, _psRange, _psSmall, _psBig, _psBonus, _psAscChains, _psAscChainRange;
         private ConfigEntry<float> _eaCooldown, _eaStamina, _eaDamage, _eaRange, _eaRadius, _eaBurn, _eaBurnDuration, _eaAscField, _eaAscFieldPercent;
-        private ConfigEntry<float> _saCooldown, _saStamina, _saDamage, _saRange, _saSplits, _saCone, _saVolleys, _saInterval, _saAscVolleys, _saAscInterval, _saAscBurn, _saAscBurnDuration;
+        private ConfigEntry<float> _saCooldown, _saStamina, _saDamage, _saRange, _saSplits, _saCone, _saVolleys, _saInterval, _saAscVolleys;
         private ConfigEntry<float> _sfTick;
         private ConfigEntry<float> _sfCooldown, _sfStamina, _sfRange, _sfRadius, _sfChannel, _sfDuration, _sfInterval, _sfImpact, _sfDamage, _sfAscRadius, _sfAscDamage;
 
@@ -172,21 +180,22 @@ namespace DragonsAltarRanger
             _gvRange = Config.Bind(gv, "Range", 35f, "Arrow range (m).");
             _gvPush = Config.Bind(gv, "SmallKnockback", 25f, "Push force on Small enemies.");
             _gvAscDelay = Config.Bind("Acrobat Gale Volley Ascended", "SecondFanDelay", 0.25f, "A second fan arcs over the first.");
+            _gvAscCharges = Config.Bind("Acrobat Gale Volley Ascended", "Charges", 3f, "v0.25.49: charges, each recharging on the normal cooldown.");
 
             const string cy = "Acrobat Cyclone Arrow";
             _cyCooldown = Config.Bind(cy, "Cooldown", 12f, "Seconds.");
             _cyStamina = Config.Bind(cy, "StaminaCost", 25f, "Stamina.");
             _cyDamage = Config.Bind(cy, "DamagePercent", 35f, "Per hit.");
             _cyRange = Config.Bind(cy, "Range", 30f, "Laser Projectile range (m).");
-            _cyTravel = Config.Bind(cy, "TravelTime_v0250", 6f, "Seconds to cover the range (slow, so enemies take several ticks).");
+            _cyTravel = Config.Bind(cy, "TravelTime_v0250", 9f, "Seconds to cover the range (slow, so enemies take several ticks).");
             _cyRadius = Config.Bind(cy, "Radius_v0250", 4f, "Pull / hit radius (m).");
             _cyInterval = Config.Bind(cy, "HitInterval", 0.3f, "Seconds.");
             _cyPull = Config.Bind(cy, "PullStrength", 6f, "Pull on Small enemies.");
             const string cya = "Acrobat Cyclone Arrow Ascended";
-            _cyAscSplits = Config.Bind(cya, "Splits", 3f, "Smaller cyclones split off when it first catches an enemy.");
-            _cyAscRange = Config.Bind(cya, "SplitRange", 10f, "m.");
-            _cyAscTravel = Config.Bind(cya, "SplitTravelTime", 1.5f, "Seconds.");
-            _cyAscRadius = Config.Bind(cya, "SplitRadius", 2f, "m.");
+            _cyAscWider = Config.Bind(cya, "ExtraRadius", 2f, "v0.25.49: the tornado is this much wider (m).");
+            _cyAscPullSpeed = Config.Bind(cya, "PullSpeed", 4f, "Small and Big enemies are dragged into the tornado at this speed (m/s); Bosses are not moved.");
+            _cyAscFrost = Config.Bind(cya, "FrostSeconds", 3f, "Frost on every enemy hit, Bosses included (refreshed per hit).");
+            _cyAscHeight = Config.Bind(cya, "TornadoHeight", 7f, "Visual height of the tornado (m).");
 
             const string sd = "Acrobat Swallow Dive";
             _sdCharges = Config.Bind(sd, "Charges", 2f, "Charges.");
@@ -207,22 +216,32 @@ namespace DragonsAltarRanger
             _sbRange = Config.Bind(sb, "Range", 35f, "Ground PAC range (m).");
             _sbHeight = Config.Bind(sb, "JumpHeight", 15f, "m.");
             _sbRadius = Config.Bind(sb, "Radius", 10f, "m.");
-            _sbDuration = Config.Bind(sb, "BarrageDuration", 2f, "Seconds hovering.");
+            _sbDuration = Config.Bind(sb, "BarrageDuration", 2f, "Retired v0.25.49: the hover lasts Shots x TickInterval.");
+            _sbShots = Config.Bind(sb, "Shots", 10f, "v0.25.49: shots fired while hovering (one per tick).");
             _sbInterval = Config.Bind(sb, "TickInterval", 0.25f, "Seconds.");
             _sbAscRadius = Config.Bind("Acrobat Skyfall Barrage Ascended", "Radius", 14f, "m; the circle follows your aim while you hover.");
+            _sbAscShots = Config.Bind("Acrobat Skyfall Barrage Ascended", "Shots", 12f, "Shots while hovering.");
+            _sbAscCharges = Config.Bind("Acrobat Skyfall Barrage Ascended", "Charges", 2f, "Charges, each recharging on the normal cooldown.");
+            _sbAscSlamPercent = Config.Bind("Acrobat Skyfall Barrage Ascended", "SlamPercent", 220f, "Then you slam straight down: Blunt to every enemy around you.");
+            _sbAscSlamRadius = Config.Bind("Acrobat Skyfall Barrage Ascended", "SlamRadius", 6f, "m. Stuns Small and Big, Cripples Bosses; then a 2m backflip.");
+            _sbAscCripple = Config.Bind("Acrobat Skyfall Barrage Ascended", "BossCrippleSeconds", 3f, "Seconds.");
 
-            const string rc = "Acrobat Ricochet Arrow";
-            _rcCooldown = Config.Bind(rc, "Cooldown", 10f, "Seconds.");
-            _rcStamina = Config.Bind(rc, "StaminaCost", 20f, "Stamina.");
-            _rcDamage = Config.Bind(rc, "DamagePercent", 80f, "First hit.");
-            _rcRange = Config.Bind(rc, "Range", 40f, "m.");
-            _rcBounces = Config.Bind(rc, "Bounces", 6f, "Enemies after the first.");
-            _rcBounceRange = Config.Bind(rc, "BounceRange", 10f, "m.");
-            _rcBonus = Config.Bind(rc, "BounceBonusPercent", 10f, "+damage per bounce.");
-            const string rca = "Acrobat Ricochet Arrow Ascended";
-            _rcAscBounces = Config.Bind(rca, "Bounces", 10f, "Enemies after the first.");
-            _rcAscBlast = Config.Bind(rca, "FinalBlastRadius", 4f, "m.");
-            _rcAscBlastPercent = Config.Bind(rca, "FinalBlastPercent", 100f, "%.");
+            const string ss = "Acrobat Somersault Dance";
+            _ssCooldown = Config.Bind(ss, "Cooldown", 10f, "Seconds.");
+            _ssStamina = Config.Bind(ss, "StaminaCost", 22f, "Stamina.");
+            _ssDamage = Config.Bind(ss, "DamagePercent", 260f, "Foot slam: Blunt to every enemy in the radius.");
+            _ssRange = Config.Bind(ss, "Range", 5f, "Ground PAC: farthest landing spot (m).");
+            _ssRadius = Config.Bind(ss, "Radius", 4f, "Slam radius (m). Stuns Small and Big enemies.");
+            _ssFlipHeight = Config.Bind(ss, "FrontFlipHeight", 3f, "Front flip height (m).");
+            _ssFlipTime = Config.Bind(ss, "FrontFlipSeconds", 0.5f, "Always this long, whatever the distance.");
+            _ssBackHeight = Config.Bind(ss, "BackFlipHeight", 2f, "Backflip height (m).");
+            _ssBackDistance = Config.Bind(ss, "BackFlipDistance", 2f, "Backflip distance from the landing spot (m).");
+            _ssBackTime = Config.Bind(ss, "BackFlipSeconds", 0.5f, "Seconds.");
+            const string ssa = "Acrobat Somersault Dance Ascended";
+            _ssAscBackHeight = Config.Bind(ssa, "BackFlipHeight", 3f, "The backflip goes this high, then you loose a volley and descend (no fall damage).");
+            _ssAscVolleyRadius = Config.Bind(ssa, "VolleyCircleRadius", 3f, "Three circles side by side (OOO), this radius each (m).");
+            _ssAscVolleyPercent = Config.Bind(ssa, "VolleyPercent", 160f, "Pierce to every enemy in a circle.");
+            _ssAscVolleyRange = Config.Bind(ssa, "VolleyRange", 30f, "The volley lands at your aim within this range (m).");
 
             const string fw = "Acrobat Furious Winds";
             _fwCooldown = Config.Bind(fw, "Cooldown", 90f, "Seconds.");
@@ -246,7 +265,7 @@ namespace DragonsAltarRanger
             _twCooldown = Config.Bind(tw, "Cooldown", 600f, "Seconds (Grace, free).");
             _twDuration = Config.Bind(tw, "Duration", 120f, "Seconds.");
             _twRadius = Config.Bind(tw, "Radius", 10f, "Snapshot radius (m).");
-            _twMove = Config.Bind(tw, "MoveSpeedPercent", 50f, "+Move Speed.");
+            _twMove = Config.Bind(tw, "MoveSpeedPercent", 60f, "+Move Speed (of your current speed). Also removes every movement penalty except encumbrance.");
             _twJump = Config.Bind(tw, "JumpSkillBonus", 30f, "+Jump skill. No fall damage.");
 
             const string de = "Bowmaster Deadeye";
@@ -264,17 +283,19 @@ namespace DragonsAltarRanger
             const string bs = "Bowmaster Ballista Shot";
             _bsCooldown = Config.Bind(bs, "Cooldown", 14f, "Seconds.");
             _bsStamina = Config.Bind(bs, "StaminaCost", 30f, "Stamina.");
-            _bsDamage = Config.Bind(bs, "DamagePercent", 200f, "Uncharged shot.");
-            _bsStack = Config.Bind(bs, "DamagePerStackPercent", 40f, "+damage per charge stack (3 stacks, 1 per second; hold past max to keep aiming).");
+            _bsDamage = Config.Bind(bs, "DamagePercent", 300f, "Uncharged shot.");
+            _bsStack = Config.Bind(bs, "DamagePerStackPercent", 60f, "+damage per charge stack (3 stacks, 1 per second; hold past max to keep aiming).");
             _bsRange = Config.Bind(bs, "Range", 60f, "Laser Projectile range (m).");
             _bsWidth = Config.Bind(bs, "Width", 1f, "m.");
             _bsWidthStack = Config.Bind(bs, "WidthPerStack", 1f, "m per stack.");
             _bsAscLine = Config.Bind("Bowmaster Ballista Shot Ascended", "ShockwaveRadius_v0242", 5f, "Fully charged: every enemy it pierces erupts in a shockwave of this radius (m).");
             _bsAscLinePercent = Config.Bind("Bowmaster Ballista Shot Ascended", "ShockwavePercent", 60f, "% of the shot to everything around the pierced enemy.");
             const string ar = "Bowmaster Arrow Rain";
-            _arCooldown = Config.Bind(ar, "Cooldown", 16f, "Seconds.");
+            _arCooldown = Config.Bind(ar, "Cooldown", 16f, "Seconds per charge.");
+            _arCharges = Config.Bind(ar, "Charges", 2f, "v0.25.49: charges.");
+            _arAscCharges = Config.Bind("Bowmaster Arrow Rain Ascended", "Charges", 3f, "Charges.");
             _arStamina = Config.Bind(ar, "StaminaCost", 30f, "Stamina.");
-            _arDamage = Config.Bind(ar, "DamagePercent", 25f, "Per hit.");
+            _arDamage = Config.Bind(ar, "DamagePercent", 40f, "Per hit.");
             _arRange = Config.Bind(ar, "Range", 45f, "Ground PAC range (m).");
             _arRadius = Config.Bind(ar, "Radius_v0243", 6f, "m.");
             _arAscRadius = Config.Bind("Bowmaster Arrow Rain Ascended", "Radius", 8f, "m.");
@@ -286,7 +307,7 @@ namespace DragonsAltarRanger
             const string ps = "Bowmaster Pinning Shot";
             _psCooldown = Config.Bind(ps, "Cooldown", 12f, "Seconds.");
             _psStamina = Config.Bind(ps, "StaminaCost", 20f, "Stamina.");
-            _psDamage = Config.Bind(ps, "DamagePercent", 150f, "%.");
+            _psDamage = Config.Bind(ps, "DamagePercent", 240f, "%.");
             _psRange = Config.Bind(ps, "Range_v0243", 30f, "Cone range (m).");
             _psSmall = Config.Bind(ps, "SmallPinSeconds", 4f, "Small enemies are nailed in place.");
             _psBig = Config.Bind(ps, "BigPinSeconds_v0243", 2.5f, "Big enemies are nailed in place too (+ Cripple); Bosses are only Crippled.");
@@ -294,33 +315,44 @@ namespace DragonsAltarRanger
             _psBonus = Config.Bind(ps, "PinnedSkillDamagePercent", 25f, "Pinned targets take more damage from your skills.");
             _psAscChains = Config.Bind("Bowmaster Pinning Shot Ascended", "ChainTargets", 2f, "Also pins this many nearby enemies.");
             _psAscChainRange = Config.Bind("Bowmaster Pinning Shot Ascended", "ChainRange", 6f, "m.");
+            _psAscExplodeRadius = Config.Bind("Bowmaster Pinning Shot Ascended", "ExplodeRadius", 3f, "v0.25.49: pinned enemies are Exposed while pinned and explode when the pin ends (m).");
+            _psAscExplodePercent = Config.Bind("Bowmaster Pinning Shot Ascended", "ExplodePercent", 180f, "% to everything in the explosion.");
+            _psAscExposeAfter = Config.Bind("Bowmaster Pinning Shot Ascended", "ExposeAfterSeconds", 6f, "The explosion leaves them Exposed this long.");
             const string ea = "Bowmaster Explosive Arrow";
             _eaCooldown = Config.Bind(ea, "Cooldown", 12f, "Seconds.");
             _eaStamina = Config.Bind(ea, "StaminaCost", 22f, "Stamina.");
-            _eaDamage = Config.Bind(ea, "DamagePercent", 180f, "Blast, Fire + Blunt.");
-            _eaRange = Config.Bind(ea, "Range", 50f, "m.");
-            _eaRadius = Config.Bind(ea, "Radius_v0243", 5f, "m (the Ascended burning field uses the same radius).");
-            _eaAscClusters = Config.Bind("Bowmaster Explosive Arrow Ascended", "ClusterBombs", 6f, "After the blast, cluster bombs burst around it.");
-            _eaAscClusterRadius = Config.Bind("Bowmaster Explosive Arrow Ascended", "ClusterRadius", 2.5f, "Each cluster blast (m).");
-            _eaAscClusterPercent = Config.Bind("Bowmaster Explosive Arrow Ascended", "ClusterPercent", 40f, "% of the main blast per cluster bomb.");
+            _eaDamage = Config.Bind(ea, "DamagePercent", 320f, "Blast, Fire + Blunt.");
+            _eaRange = Config.Bind(ea, "Range", 30f, "m.");
+            _eaRadius = Config.Bind(ea, "Radius_v0243", 5f, "Blast radius (m).");
             _eaBurn = Config.Bind(ea, "FireBurnPercent", 10f, "Fire Burn per 0.5s tick (% of the blast).");
             _eaBurnDuration = Config.Bind(ea, "FireBurnDuration", 4f, "Seconds.");
-            _eaAscField = Config.Bind("Bowmaster Explosive Arrow Ascended", "FireFieldSeconds", 3f, "A burning field stays.");
-            _eaAscFieldPercent = Config.Bind("Bowmaster Explosive Arrow Ascended", "FireFieldPercent", 20f, "Every 0.5s.");
+            _eaClusterRadius = Config.Bind(ea, "ClusterRadius", 3f, "v0.25.49: then cluster arrow bombs land on the blast: three circles side by side (OOO), this radius each (m).");
+            _eaClusterPercent = Config.Bind(ea, "ClusterPercent", 140f, "% Fire + Blunt per cluster circle.");
+            _eaClusterDelay = Config.Bind(ea, "ClusterDelay", 0.5f, "Seconds after the blast.");
+            const string eaa = "Bowmaster Explosive Arrow Ascended";
+            _eaAscCharge = Config.Bind(eaa, "ChargeSeconds", 3f, "Hold to charge: one extra explosive shot per second (re-aimed as each is loosed).");
+            _eaAscStackPercent = Config.Bind(eaa, "DamagePerStackPercent", 25f, "Every shot is this much stronger per stack.");
+            _eaAscShotGap = Config.Bind(eaa, "ShotInterval", 0.25f, "Seconds between the charged shots.");
+            _eaAscClusterRadius = Config.Bind(eaa, "ClusterRadius", 4f, "Cluster circles (m), 1s after each blast, leaving burning ground.");
+            _eaAscField = Config.Bind(eaa, "FireFieldSeconds", 4f, "Burning ground lifetime.");
+            _eaAscFieldPercent = Config.Bind(eaa, "FireFieldPercent", 20f, "Burning ground: % of the cluster every 0.5s.");
             const string sa = "Bowmaster Splitting Arrow";
             _saCooldown = Config.Bind(sa, "Cooldown", 10f, "Seconds.");
             _saStamina = Config.Bind(sa, "StaminaCost", 25f, "Stamina.");
-            _saDamage = Config.Bind(sa, "VolleyPercent_v0242", 90f, "Each volley hits every enemy in the cone for this %.");
-            _saRange = Config.Bind(sa, "Range_v0242", 15f, "Cone range (m).");
-            _saSplits = Config.Bind(sa, "ArrowsPerVolley", 5f, "Arrows per volley (they pass through everything in the cone).");
-            _saCone = Config.Bind(sa, "ConeDegrees_v0242", 120f, "Cone (same as Crescent Cleave).");
-            _saVolleys = Config.Bind(sa, "Volleys", 3f, "You stand still and loose this many volleys.");
-            _saInterval = Config.Bind(sa, "VolleyInterval", 0.5f, "Seconds between volleys.");
+            _saDamage = Config.Bind(sa, "VolleyPercent_v0242", 120f, "Each spread shot hits every enemy in the cone for this %.");
+            _saRange = Config.Bind(sa, "Range_v0242", 25f, "Cone range (m).");
+            _saSplits = Config.Bind(sa, "ArrowsPerVolley", 5f, "Arrows per spread shot.");
+            _saCone = Config.Bind(sa, "ConeDegrees_v0242", 120f, "Cone.");
+            _saVolleys = Config.Bind(sa, "Volleys", 2f, "v0.25.49: spread shots before the great arrow.");
+            _saInterval = Config.Bind(sa, "VolleyInterval", 0.5f, "Seconds between spread shots.");
+            _saWindow = Config.Bind(sa, "GreatArrowWindow", 3f, "After the spread shots, press the skill again within this many seconds to loose the great arrow.");
+            _saBigWidth = Config.Bind(sa, "GreatArrowWidth", 4f, "Great arrow width (m), Laser Projectile, pierces.");
+            _saBigPercent = Config.Bind(sa, "GreatArrowPercent", 380f, "%.");
+            _saBigRange = Config.Bind(sa, "GreatArrowRange", 40f, "m.");
             const string saa = "Bowmaster Splitting Arrow Ascended";
-            _saAscVolleys = Config.Bind(saa, "Volleys", 5f, "Volleys.");
-            _saAscInterval = Config.Bind(saa, "VolleyInterval", 0.25f, "Seconds between volleys.");
-            _saAscBurn = Config.Bind(saa, "FireDotPercentPerStack", 6f, "Fire DoT per stack every 0.5s (% of your Ranger damage). Every volley that hits adds a stack.");
-            _saAscBurnDuration = Config.Bind(saa, "FireDotDuration", 6f, "Seconds, refreshed on every hit.");
+            _saAscVolleys = Config.Bind(saa, "Volleys", 3f, "Spread shots.");
+            _saAscSkyRadius = Config.Bind(saa, "SkyArrowRadius", 4f, "After the great arrow, a giant arrow falls from the sky at your aim (m).");
+            _saAscSkyPercent = Config.Bind(saa, "SkyArrowPercent", 320f, "Blunt + Pierce; Stuns every enemy, Bosses included.");
             const string sf = "Bowmaster Starfall Volley";
             _sfCooldown = Config.Bind(sf, "Cooldown", 150f, "Seconds.");
             _sfStamina = Config.Bind(sf, "StaminaCost", 45f, "Stamina.");
@@ -331,9 +363,9 @@ namespace DragonsAltarRanger
             _sfInterval = Config.Bind(sf, "Interval", 0.25f, "A falling arrow (cosmetic) every...");
             _sfImpact = Config.Bind(sf, "ImpactRadius", 4f, "Cosmetic impact ring (m).");
             _sfTick = Config.Bind(sf, "HitInterval", 0.5f, "Every this often, EVERY enemy in the area is hit.");
-            _sfDamage = Config.Bind(sf, "TickPercent_v0242", 45f, "% per hit.");
+            _sfDamage = Config.Bind(sf, "TickPercent_v0242", 65f, "% per hit.");
             _sfAscRadius = Config.Bind("Bowmaster Starfall Volley Ascended", "Radius", 12f, "Area of the final giant arrow (m).");
-            _sfAscDamage = Config.Bind("Bowmaster Starfall Volley Ascended", "FinalArrowPercent", 300f, "% to every enemy in the area.");
+            _sfAscDamage = Config.Bind("Bowmaster Starfall Volley Ascended", "FinalArrowPercent", 450f, "% to every enemy in the area.");
 
             DragonCombat.RegisterSkillModule(CastFromTree, CooldownForTree);
             DragonCombat.RegisterStackQuery(StackQuery);
@@ -381,18 +413,18 @@ namespace DragonsAltarRanger
                 case "piercing_arrow": return CooldownRemaining("Ranger.PiercingArrow");
                 case "tumble_shot": return CooldownRemaining("Ranger.TumbleShot");
                 case "snare_trap": return CooldownRemaining("Ranger.SnareTrap");
-                case "gale_volley": return CooldownRemaining("Acrobat.GaleVolley");
+                case "gale_volley": return ChargeCooldown(Player.m_localPlayer, "gale_volley");
                 case "cyclone_arrow": return CooldownRemaining("Acrobat.CycloneArrow");
                 case "swallow_dive": return DiveCharges() > 0 ? 0f : Mathf.Max(0f, _diveNextCharge - Time.time);
-                case "skyfall_barrage": return CooldownRemaining("Acrobat.SkyfallBarrage");
+                case "skyfall_barrage": return _skyfallActive ? 0f : ChargeCooldown(Player.m_localPlayer, "skyfall_barrage");
                 case "ricochet_arrow": return CooldownRemaining("Acrobat.RicochetArrow");
                 case "furious_winds": return CooldownRemaining("Acrobat.FuriousWinds");
                 case "tailwind": return CooldownRemaining("Acrobat.Tailwind");
                 case "ballista_shot": return _ballistaCharging ? 0f : CooldownRemaining("Bowmaster.BallistaShot");
-                case "arrow_rain": return CooldownRemaining("Bowmaster.ArrowRain");
+                case "arrow_rain": return ChargeCooldown(Player.m_localPlayer, "arrow_rain");
                 case "pinning_shot": return CooldownRemaining("Bowmaster.PinningShot");
-                case "explosive_arrow": return CooldownRemaining("Bowmaster.ExplosiveArrow");
-                case "splitting_arrow": return CooldownRemaining("Bowmaster.SplittingArrow");
+                case "explosive_arrow": return _exCharging ? 0f : CooldownRemaining("Bowmaster.ExplosiveArrow");
+                case "splitting_arrow": return Time.time < _splitWindowUntil ? 0f : CooldownRemaining("Bowmaster.SplittingArrow");
                 case "starfall_volley": return CooldownRemaining("Bowmaster.StarfallVolley");
                 case "hawks_vigil": return CooldownRemaining("Bowmaster.HawksVigil");
             }
@@ -408,6 +440,24 @@ namespace DragonsAltarRanger
                 max = 3;
                 ready = _ballistaStacks;
                 next = -Mathf.Max(0.01f, _ballistaStacks >= 3 ? 0.01f : (_ballistaNextStack - Time.time));
+                return true;
+            }
+            if (id == "explosive_arrow" && _exCharging)
+            {
+                max = Mathf.Max(1, Mathf.RoundToInt(_eaAscCharge.Value));
+                ready = _exStacks;
+                next = -Mathf.Max(0.01f, _exStacks >= max ? 0.01f : (_exNextStack - Time.time));
+                return true;
+            }
+            if (id == "gale_volley" || id == "skyfall_barrage" || id == "arrow_rain")
+            {
+                Player cp = Player.m_localPlayer;
+                if (cp == null || GetClass(cp) != "Ranger") return false;
+                max = ChargeMaxFor(cp, id);
+                if (max <= 1) return false;
+                RgCharge c = ChargeState(cp, id);
+                ready = c.Count;
+                next = c.Count < max ? Mathf.Max(0f, c.Next - Time.time) : 0f;
                 return true;
             }
             if (id != "swallow_dive") return false;
@@ -563,6 +613,124 @@ namespace DragonsAltarRanger
             }
             catch { }
             return Input.GetKeyDown(KeyCode.Space);
+        }
+
+        // ------------------------------------------------------------------ v0.25.49 charges
+        // Gale Volley (Ascended 3), Skyfall Barrage (Ascended 2), Arrow Rain (2, Ascended 3): every charge
+        // recharges on the skill's normal cooldown, one after another.
+        private class RgCharge { public int Count = -1; public float Next; public float Recharge = 1f; }
+        private readonly Dictionary<string, RgCharge> _rgCharges = new Dictionary<string, RgCharge>();
+
+        private int ChargeMaxFor(Player player, string skill)
+        {
+            if (player == null) return 1;
+            bool asc = DragonCombat.IsSkillAscended(player, skill);
+            float n = 1f;
+            if (skill == "gale_volley") n = asc ? _gvAscCharges.Value : 1f;
+            else if (skill == "skyfall_barrage") n = asc ? _sbAscCharges.Value : 1f;
+            else if (skill == "arrow_rain") n = asc ? _arAscCharges.Value : _arCharges.Value;
+            return Mathf.Max(1, Mathf.RoundToInt(n));
+        }
+
+        private RgCharge ChargeState(Player player, string skill)
+        {
+            RgCharge c;
+            if (!_rgCharges.TryGetValue(skill, out c)) { c = new RgCharge(); _rgCharges[skill] = c; }
+            int max = ChargeMaxFor(player, skill);
+            if (c.Count < 0 || (c.Count < max && c.Next <= 0f)) c.Count = max;
+            if (c.Count > max) c.Count = max;
+            while (c.Count < max && c.Next > 0f && Time.time >= c.Next)
+            {
+                c.Count++;
+                c.Next = c.Count < max ? c.Next + c.Recharge : 0f;
+            }
+            if (c.Count >= max) c.Next = 0f;
+            return c;
+        }
+
+        private float ChargeCooldown(Player player, string skill)
+        {
+            if (player == null) return 0f;
+            RgCharge c = ChargeState(player, skill);
+            return c.Count > 0 ? 0f : Mathf.Max(0f, c.Next - Time.time);
+        }
+
+        private bool BeginCharged(Player player, string skill, string key, float cooldown, float stamina)
+        {
+            RgCharge c = ChargeState(player, skill);
+            if (c.Count <= 0) { ShowMessage("Recharging " + Mathf.Max(0f, c.Next - Time.time).ToString("0.0") + "s"); return false; }
+            if (GetStamina(player) < stamina) { ShowMessage("Not enough stamina"); return false; }
+            UseStamina(player, stamina);
+            c.Recharge = Mathf.Max(0.1f, RechargeSeconds(player, key, cooldown));
+            if (c.Next <= 0f) c.Next = Time.time + c.Recharge;
+            c.Count--;
+            MarkSkillCast(player);
+            int max = ChargeMaxFor(player, skill);
+            if (max > 1) ShowMessage(DragonCombatSkillName(skill) + " (" + c.Count + "/" + max + ")");
+            return true;
+        }
+
+        private static string DragonCombatSkillName(string skill)
+        {
+            switch (skill)
+            {
+                case "gale_volley": return "Gale Volley";
+                case "skyfall_barrage": return "Skyfall Barrage";
+                case "arrow_rain": return "Arrow Rain";
+            }
+            return skill;
+        }
+
+        // v0.25.49 kinematic flip from a to b: a parabola peaking `height` above the higher end (0 = end at b,
+        // e.g. at an apex), over `seconds`; the body turns one full somersault (+1 forward, -1 backward).
+        private IEnumerator ArcFlip(Player player, Vector3 a, Vector3 b, float height, float seconds, int flipDir)
+        {
+            if (player == null) yield break;
+            Rigidbody body = player.GetComponent<Rigidbody>();
+            _noFallUntilGrounded[player.GetInstanceID()] = true;
+            if (flipDir != 0)
+                StartCoroutine(PoseMotion(player, seconds, delegate(float k)
+                {
+                    float e = k * k * (3f - 2f * k);
+                    return Quaternion.AngleAxis(360f * flipDir * e, Vector3.right);
+                }, null));
+            float top = Mathf.Max(a.y, b.y) + Mathf.Max(0f, height);
+            float mid = (a.y + b.y) * 0.5f;
+            float t = 0f;
+            while (t < seconds && player != null && !player.IsDead())
+            {
+                t += Time.fixedDeltaTime;
+                float k = Mathf.Clamp01(t / Mathf.Max(0.05f, seconds));
+                Vector3 p = Vector3.Lerp(a, b, k);
+                p.y = Mathf.Lerp(a.y, b.y, k) + (height > 0f ? 4f * (top - mid) * k * (1f - k) : 0f);
+                if (k < 0.95f) p.y = Mathf.Max(p.y, GroundAt(p).y);
+                player.transform.position = p;
+                if (body != null) { body.position = p; body.velocity = Vector3.zero; }
+                yield return new WaitForFixedUpdate();
+            }
+            if (player != null) ResetFloatField(player, "m_maxAirAltitude", player.transform.position.y);
+        }
+
+        // Clamped flat point `meters` from `from` toward `dir`, stopped short of walls, on the ground.
+        private Vector3 FlatPoint(Vector3 from, Vector3 dir, float meters)
+        {
+            dir.y = 0f;
+            if (dir.sqrMagnitude < 0.001f) return GroundAt(from);
+            dir.Normalize();
+            RaycastHit wall;
+            if (Physics.Raycast(from + Vector3.up * 0.8f, dir, out wall, meters + 0.4f, SolidMask(), QueryTriggerInteraction.Ignore) &&
+                wall.collider.GetComponentInParent<Character>() == null)
+                meters = Mathf.Max(0f, wall.distance - 0.5f);
+            return GroundAt(from + dir * meters);
+        }
+
+        // Three circles side by side (OOO) across the aim, centred on `center`.
+        private Vector3[] RowOfThree(Vector3 center, Vector3 aim, float radius)
+        {
+            aim.y = 0f;
+            if (aim.sqrMagnitude < 0.001f) aim = Vector3.forward;
+            Vector3 right = Vector3.Cross(Vector3.up, aim.normalized).normalized;
+            return new Vector3[] { GroundAt(center - right * radius * 2f), GroundAt(center), GroundAt(center + right * radius * 2f) };
         }
 
         // ------------------------------------------------------------------ Piercing Arrow
@@ -780,7 +948,7 @@ namespace DragonsAltarRanger
         private void CastGaleVolley(Player player)
         {
             if (!RequireBow(player)) return;
-            if (!BeginSkill(player, "Acrobat.GaleVolley", _gvCooldown.Value, _gvStamina.Value)) return;
+            if (!BeginCharged(player, "gale_volley", "Acrobat.GaleVolley", _gvCooldown.Value, _gvStamina.Value)) return;
             StartCoroutine(GaleRoutine(player, DragonCombat.IsSkillAscended(player, "gale_volley")));
         }
 
@@ -817,16 +985,23 @@ namespace DragonsAltarRanger
             DragonCombat.PlayClip(player, "rg_shot", 0.1f);   // v0.25.31 normal bow shot, no spin
             Shoot(player, "Cyclone Arrow");
             bool ascended = DragonCombat.IsSkillAscended(player, "cyclone_arrow");
-            StartCoroutine(CycloneRoutine(player, origin, dir, DragonCombat.M(_cyRange.Value), Mathf.Max(0.2f, _cyTravel.Value), DragonCombat.M(_cyRadius.Value), 1f, ascended));
+            float radius = DragonCombat.M(_cyRadius.Value + (ascended ? Mathf.Max(0f, _cyAscWider.Value) : 0f));
+            StartCoroutine(CycloneRoutine(player, origin, dir, DragonCombat.M(_cyRange.Value), Mathf.Max(0.2f, _cyTravel.Value), radius, ascended));
         }
 
-        private IEnumerator CycloneRoutine(Player player, Vector3 pos, Vector3 dir, float range, float travel, float radius, float scale, bool split)
+        // v0.25.49: slower; Ascended = a tall tornado 2m wider that drags Small and Big enemies in while it
+        // moves and Frosts everything it hits (Bosses too).
+        private IEnumerator CycloneRoutine(Player player, Vector3 pos, Vector3 dir, float range, float travel, float radius, bool ascended)
         {
-            GameObject vfx = _enableVfx.Value ? CreateSpinRing(pos, radius, new Color(0.55f, 1f, 0.90f, 0.9f)) : null;
+            GameObject vfx = null;
+            if (_enableVfx.Value)
+                vfx = ascended ? CreateTornado(pos, radius, DragonCombat.M(Mathf.Max(1f, _cyAscHeight.Value)), new Color(0.70f, 0.95f, 1f, 0.9f))
+                               : CreateSpinRing(pos, radius, new Color(0.55f, 1f, 0.90f, 0.9f));
             float speed = range / travel;
             float traveled = 0f, nextHit = 0f;
             RangerArrowDamage d = ArrowDamage(player);
-            float mult = _cyDamage.Value / 100f * scale * DragonCombat.GetSkillPower(player, "cyclone_arrow");
+            float mult = _cyDamage.Value / 100f * DragonCombat.GetSkillPower(player, "cyclone_arrow");
+            float drag = DragonCombat.M(Mathf.Max(0f, _cyAscPullSpeed.Value));
             while (traveled < range && player != null && !player.IsDead())
             {
                 float step = speed * Time.deltaTime;
@@ -835,7 +1010,29 @@ namespace DragonsAltarRanger
                     break;
                 pos += dir * step;
                 traveled += step;
-                if (vfx != null) { vfx.transform.position = pos; vfx.transform.Rotate(0f, 720f * Time.deltaTime, 0f, Space.World); }
+                if (vfx != null)
+                {
+                    Vector3 vp = ascended ? GroundAt(pos) : pos;
+                    vfx.transform.position = vp;
+                    vfx.transform.Rotate(0f, 720f * Time.deltaTime, 0f, Space.World);
+                }
+                if (ascended)
+                {
+                    // the tornado sucks Small and Big enemies toward its axis (position-driven, smooth)
+                    List<Character> inside = GetSphereTargets(player, pos, radius + DragonCombat.M(2f));
+                    for (int i = 0; i < inside.Count; i++)
+                    {
+                        Character e = inside[i];
+                        if (IsBossTarget(e)) continue;
+                        Vector3 to = pos - e.transform.position;
+                        to.y = 0f;
+                        float dist = to.magnitude;
+                        if (dist < 0.6f) continue;
+                        Vector3 move = to / dist * Mathf.Min(dist - 0.5f, (drag + speed) * Time.deltaTime);
+                        Rigidbody rb = e.GetComponent<Rigidbody>();
+                        if (rb != null) rb.MovePosition(rb.position + move); else e.transform.position += move;
+                    }
+                }
                 if (Time.time >= nextHit)
                 {
                     nextHit = Time.time + Mathf.Max(0.1f, _cyInterval.Value);
@@ -843,15 +1040,9 @@ namespace DragonsAltarRanger
                     for (int i = 0; i < hits.Count; i++)
                     {
                         Deal(player, hits[i], d, mult, 0f, false);
-                        if (DragonCombat.IsSmallEnemy(hits[i])) PullToward(hits[i], pos, _cyPull.Value);
+                        if (ascended) DragonCombat.ApplyFrost(hits[i], Mathf.Max(0.5f, _cyAscFrost.Value));
+                        else if (DragonCombat.IsSmallEnemy(hits[i])) PullToward(hits[i], pos, _cyPull.Value);
                         OnSkillHit(player);
-                    }
-                    // v0.24.2 Ascended: it splits the moment it first catches an enemy (passing-through
-                    // skills trigger their after-effect on hit, never at the end of their range).
-                    if (split && hits.Count > 0)
-                    {
-                        split = false;
-                        SpawnCycloneSplits(player, pos, dir);
                     }
                 }
                 yield return null;
@@ -859,16 +1050,35 @@ namespace DragonsAltarRanger
             if (vfx != null) Destroy(vfx);
         }
 
-        private void SpawnCycloneSplits(Player player, Vector3 pos, Vector3 dir)
+        // A tall funnel of wind rings, narrow at the ground and wide at the top.
+        private GameObject CreateTornado(Vector3 pos, float radius, float height, Color color)
         {
-            if (player == null || player.IsDead()) return;
-            int n = Mathf.Max(1, Mathf.RoundToInt(_cyAscSplits.Value));
-            for (int i = 0; i < n; i++)
+            GameObject obj = new GameObject("RangerTornado");
+            obj.transform.position = pos;
+            const int rings = 9;
+            for (int k = 0; k < rings; k++)
             {
-                float a = n == 1 ? 0f : -30f + 60f * i / (n - 1);
-                Vector3 sdir = Quaternion.AngleAxis(a, Vector3.up) * dir;
-                StartCoroutine(CycloneRoutine(player, pos, sdir, DragonCombat.M(_cyAscRange.Value), Mathf.Max(0.2f, _cyAscTravel.Value), DragonCombat.M(_cyAscRadius.Value), 0.6f, false));
+                float h = (float)k / (rings - 1);
+                GameObject ring = new GameObject("Ring" + k);
+                ring.transform.SetParent(obj.transform, false);
+                LineRenderer line = ring.AddComponent<LineRenderer>();
+                line.useWorldSpace = false;
+                line.positionCount = 28;
+                line.startWidth = 0.12f;
+                line.endWidth = 0.03f;
+                Color c = new Color(color.r, color.g, color.b, color.a * (1f - 0.5f * h));
+                line.startColor = c;
+                line.endColor = new Color(color.r, color.g, color.b, 0.05f);
+                Material m = VfxMaterial(Color.white);
+                if (m != null) line.material = m;
+                float r = radius * (0.35f + 0.65f * h);
+                for (int i = 0; i < 28; i++)
+                {
+                    float a = (float)i / 28f * Mathf.PI * 1.7f + k * 0.9f;
+                    line.SetPosition(i, new Vector3(Mathf.Cos(a) * r, 0.2f + h * height, Mathf.Sin(a) * r));
+                }
             }
+            return obj;
         }
 
         // ------------------------------------------------------------------ Swallow Dive
@@ -949,23 +1159,30 @@ namespace DragonsAltarRanger
         }
 
         // ------------------------------------------------------------------ Skyfall Barrage
+        private bool _skyfallActive;
+
         private void CastSkyfallBarrage(Player player)
         {
+            if (_skyfallActive) return;
             if (!RequireBow(player)) return;
             Vector3 point;
             if (!AlbedoAimUtility.TryGetPhysicalTarget(player, DragonCombat.M(_sbRange.Value), out point)) { ShowMessage("Aim at the ground"); return; }
-            if (!BeginSkill(player, "Acrobat.SkyfallBarrage", _sbCooldown.Value, _sbStamina.Value)) return;
+            if (!BeginCharged(player, "skyfall_barrage", "Acrobat.SkyfallBarrage", _sbCooldown.Value, _sbStamina.Value)) return;
             StartCoroutine(SkyfallRoutine(player, point, DragonCombat.IsSkillAscended(player, "skyfall_barrage")));
         }
 
+        // v0.25.49: 10 shots (Ascended 12, then a Blunt slam straight down + a 2m backflip; 2 charges).
         private IEnumerator SkyfallRoutine(Player player, Vector3 point, bool ascended)
         {
             ShowMessage("Skyfall Barrage");
+            _skyfallActive = true;
             Rigidbody body = player.GetComponent<Rigidbody>();
             int id = player.GetInstanceID();
             _noFallUntilGrounded[id] = true;
             _hovering = true;
-            DragonCombat.LockSkill(player, 0.5f + _sbDuration.Value);
+            int shots = Mathf.Max(1, Mathf.RoundToInt(ascended ? _sbAscShots.Value : _sbShots.Value));
+            float interval = Mathf.Max(0.05f, _sbInterval.Value);
+            DragonCombat.LockSkill(player, 0.5f + shots * interval + (ascended ? 1.2f : 0f));
             Vector3 start = player.transform.position;
             Vector3 top = start + Vector3.up * DragonCombat.M(_sbHeight.Value);
             RaycastHit ceiling;
@@ -982,15 +1199,15 @@ namespace DragonsAltarRanger
                 yield return new WaitForFixedUpdate();
             }
             float radius = DragonCombat.M(ascended ? _sbAscRadius.Value : _sbRadius.Value);
-            float end = Time.time + Mathf.Max(0.2f, _sbDuration.Value);
             DragonCombat.PlayClip(player, "rg_hover", 0.25f, true);   // aimed down while hovering
-            float nextTick = 0f;
             RangerArrowDamage d = ArrowDamage(player);
             float mult = _sbDamage.Value / 100f * DragonCombat.GetSkillPower(player, "skyfall_barrage");
             // v0.25.38 (user): sink slowly (2 m over the whole hover) so it never looks like floating.
-            float hoverStart = Time.time, hoverLen = Mathf.Max(0.2f, _sbDuration.Value);
+            float hoverStart = Time.time, hoverLen = shots * interval;
             Vector3 hoverTop = top;
-            while (Time.time < end && player != null && !player.IsDead())
+            int fired = 0;
+            float nextTick = 0f;
+            while (fired < shots && player != null && !player.IsDead())
             {
                 top = hoverTop - Vector3.up * DragonCombat.M(2f) * Mathf.Clamp01((Time.time - hoverStart) / hoverLen);
                 player.transform.position = top;
@@ -1002,7 +1219,8 @@ namespace DragonsAltarRanger
                 }
                 if (Time.time >= nextTick)
                 {
-                    nextTick = Time.time + Mathf.Max(0.05f, _sbInterval.Value);
+                    nextTick = Time.time + interval;
+                    fired++;
                     List<Character> hits = GetSphereTargets(player, point, radius);
                     for (int i = 0; i < hits.Count; i++) { Deal(player, hits[i], d, mult, 2f, false); OnSkillHit(player); }
                     if (_enableVfx.Value)
@@ -1013,67 +1231,160 @@ namespace DragonsAltarRanger
                             Vector3 ground = point + new Vector3(r.x, 0f, r.y);
                             LineVfx(ShotOrigin(player), ground, new Color(0.55f, 1f, 0.80f, 0.9f), 0.06f, 0.15f);   // v0.25.38 from the bow
                         }
-                        StartCoroutine(RingVfx(point, radius, new Color(0.55f, 1f, 0.80f, 0.7f), Mathf.Max(0.05f, _sbInterval.Value)));
+                        StartCoroutine(RingVfx(point, radius, new Color(0.55f, 1f, 0.80f, 0.7f), interval));
                     }
                     Shoot(player, null);
                 }
                 yield return new WaitForFixedUpdate();
             }
+            DragonCombat.ClipStop(player, 0.2f);
+            if (ascended && player != null && !player.IsDead())
+            {
+                // Ascended finisher: slam straight down (0.3s), Blunt around you, then a 2m backflip.
+                Vector3 from = player.transform.position;
+                Vector3 land = GroundAt(from);
+                DragonCombat.PlayClip(player, "rg_dive", 0.08f);
+                t = 0f;
+                while (t < 0.3f && player != null)
+                {
+                    t += Time.fixedDeltaTime;
+                    float k = Mathf.Clamp01(t / 0.3f);
+                    Vector3 p = Vector3.Lerp(from, land, k * k);
+                    player.transform.position = p;
+                    if (body != null) { body.position = p; body.velocity = Vector3.zero; }
+                    yield return new WaitForFixedUpdate();
+                }
+                if (player != null && !player.IsDead())
+                {
+                    float slamR = DragonCombat.M(Mathf.Max(0.5f, _sbAscSlamRadius.Value));
+                    RangerArrowDamage blunt = new RangerArrowDamage();
+                    blunt.Blunt = d.Total();
+                    float slam = _sbAscSlamPercent.Value / 100f * DragonCombat.GetSkillPower(player, "skyfall_barrage");
+                    List<Character> hits = GetSphereTargets(player, land, slamR);
+                    for (int i = 0; i < hits.Count; i++)
+                    {
+                        Deal(player, hits[i], blunt, slam, 20f, true);
+                        if (IsBossTarget(hits[i])) DragonCombat.ApplyCripple(hits[i], _sbAscCripple.Value);
+                        else DragonCombat.Stun(hits[i], land);
+                        OnSkillHit(player);
+                    }
+                    if (_enableVfx.Value) { StartCoroutine(RingVfx(land, slamR, new Color(0.85f, 1f, 0.80f, 1f), 0.5f)); StartCoroutine(RingVfx(land, slamR * 0.5f, new Color(1f, 1f, 1f, 1f), 0.3f)); }
+                    Vector3 away = FlatPoint(land, -player.transform.forward, DragonCombat.M(2f));
+                    yield return StartCoroutine(ArcFlip(player, land, away, DragonCombat.M(1.5f), 0.5f, -1));
+                }
+            }
             _hovering = false;
-            DragonCombat.ClipStop(player, 0.3f);
+            _skyfallActive = false;
         }
 
-        // ------------------------------------------------------------------ Ricochet Arrow
+        // ------------------------------------------------------------------ Somersault Dance (id ricochet_arrow)
+        // v0.25.49 (user, replaces Ricochet Arrow): front flip 3m up onto a spot within 5m (always 0.5s), slam
+        // the ground with your foot (Blunt, 4m, Stuns Small + Big), then backflip 2m up / 2m away (0.5s).
+        // Ascended: the backflip goes 3m up and, instead of landing, you loose a volley of three 3m circles
+        // side by side (OOO) at your aim, then fall normally (no fall damage).
+        private bool _somersaultActive;
+
         private void CastRicochetArrow(Player player)
         {
-            if (!RequireBow(player)) return;
-            Character first = AimedEnemy(player, DragonCombat.M(_rcRange.Value));
-            if (first == null) { ShowMessage("No target in sight"); return; }
-            if (!BeginSkill(player, "Acrobat.RicochetArrow", _rcCooldown.Value, _rcStamina.Value)) return;
-            DragonCombat.PlayClip(player, "rg_trick", 0.1f);   // flicked trick shot
-            Shoot(player, "Ricochet Arrow");
-            StartCoroutine(RicochetRoutine(player, first, DragonCombat.IsSkillAscended(player, "ricochet_arrow")));
+            if (_somersaultActive) return;
+            if (!BeginSkill(player, "Acrobat.RicochetArrow", _ssCooldown.Value, _ssStamina.Value)) return;
+            StartCoroutine(SomersaultRoutine(player, DragonCombat.IsSkillAscended(player, "ricochet_arrow")));
         }
 
-        private IEnumerator RicochetRoutine(Player player, Character target, bool ascended)
+        private IEnumerator SomersaultRoutine(Player player, bool ascended)
         {
-            RangerArrowDamage d = ArrowDamage(player);
-            float baseMult = _rcDamage.Value / 100f * DragonCombat.GetSkillPower(player, "ricochet_arrow");
-            int bounces = Mathf.Max(0, Mathf.RoundToInt(ascended ? _rcAscBounces.Value : _rcBounces.Value));
-            HashSet<int> hit = new HashSet<int>();
-            Vector3 from = ShotOrigin(player);
-            for (int i = 0; i <= bounces && target != null && player != null; i++)
+            _somersaultActive = true;
+            _hovering = true;
+            ShowMessage("Somersault Dance");
+            Vector3 start = player.transform.position;
+            float maxRange = DragonCombat.M(Mathf.Max(0.5f, _ssRange.Value));
+            Vector3 aim;
+            Vector3 dir = FlatAim(player);
+            float dist = maxRange;
+            if (AlbedoAimUtility.TryGetPhysicalTarget(player, DragonCombat.M(40f), out aim))
             {
-                Vector3 to = target.transform.position + Vector3.up;
-                if (_enableVfx.Value) LineVfx(from, to, new Color(0.55f, 1f, 0.90f, 1f), 0.07f, 0.18f);
-                yield return new WaitForSeconds(Mathf.Clamp(Vector3.Distance(from, to) / DragonCombat.M(60f), 0.03f, 0.25f));
-                if (target == null || target.IsDead()) break;
-                Deal(player, target, d, baseMult * (1f + _rcBonus.Value / 100f * i), 4f, false);
-                OnSkillHit(player);
-                hit.Add(target.GetInstanceID());
-                from = to;
-                Character next = null;
-                float best = DragonCombat.M(_rcBounceRange.Value);
-                List<Character> near = GetSphereTargets(player, target.transform.position, best);
-                for (int k = 0; k < near.Count; k++)
-                {
-                    if (hit.Contains(near[k].GetInstanceID())) continue;
-                    float dist = Vector3.Distance(near[k].transform.position, target.transform.position);
-                    if (dist < best) { best = dist; next = near[k]; }
-                }
-                if (next == null || i == bounces)
-                {
-                    if (ascended)
-                    {
-                        float blast = DragonCombat.M(_rcAscBlast.Value);
-                        List<Character> boom = GetSphereTargets(player, to, blast);
-                        for (int k = 0; k < boom.Count; k++) Deal(player, boom[k], d, baseMult * _rcAscBlastPercent.Value / 100f, 8f, false);
-                        if (_enableVfx.Value) StartCoroutine(RingVfx(to, blast, new Color(0.85f, 1f, 0.95f, 1f), 0.5f));
-                    }
-                    break;
-                }
-                target = next;
+                Vector3 off = aim - start;
+                off.y = 0f;
+                if (off.sqrMagnitude > 0.04f) { dir = off.normalized; dist = Mathf.Min(maxRange, off.magnitude); }
             }
+            Vector3 land = FlatPoint(start, dir, dist);
+            float flipTime = Mathf.Max(0.1f, _ssFlipTime.Value);
+            float backTime = Mathf.Max(0.1f, _ssBackTime.Value);
+            DragonCombat.LockSkill(player, flipTime + backTime + 0.4f);
+            GrantIFrames(player, flipTime);
+            FaceTowards(player, land);
+            yield return StartCoroutine(ArcFlip(player, start, land, DragonCombat.M(Mathf.Max(0.5f, _ssFlipHeight.Value)), flipTime, 1));
+            if (player == null || player.IsDead()) { _somersaultActive = false; _hovering = false; yield break; }
+            // foot slam
+            float radius = DragonCombat.M(Mathf.Max(0.5f, _ssRadius.Value));
+            RangerArrowDamage d = ArrowDamage(player);
+            RangerArrowDamage blunt = new RangerArrowDamage();
+            blunt.Blunt = d.Total();
+            float mult = _ssDamage.Value / 100f * DragonCombat.GetSkillPower(player, "ricochet_arrow");
+            DragonCombat.PlayClip(player, "merc_stomp", 0.05f);
+            List<Character> hits = GetSphereTargets(player, land, radius);
+            for (int i = 0; i < hits.Count; i++)
+            {
+                Deal(player, hits[i], blunt, mult, 15f, true);
+                DragonCombat.Stun(hits[i], land);   // Small + Big (Bosses are never stunned)
+                OnSkillHit(player);
+            }
+            if (_enableVfx.Value)
+            {
+                StartCoroutine(RingVfx(land, radius, new Color(0.55f, 1f, 0.90f, 1f), 0.5f));
+                StartCoroutine(RingVfx(land, radius * 0.45f, new Color(1f, 1f, 1f, 1f), 0.3f));
+            }
+            yield return new WaitForSeconds(0.08f);
+            if (player == null || player.IsDead()) { _somersaultActive = false; _hovering = false; yield break; }
+            Vector3 back = -player.transform.forward;
+            Vector3 away = FlatPoint(land, back, DragonCombat.M(Mathf.Max(0f, _ssBackDistance.Value)));
+            GrantIFrames(player, backTime);
+            if (!ascended)
+            {
+                yield return StartCoroutine(ArcFlip(player, land, away, DragonCombat.M(Mathf.Max(0.3f, _ssBackHeight.Value)), backTime, -1));
+            }
+            else
+            {
+                // flip back up to the apex, loose the OOO volley, then fall like anyone would
+                Vector3 apex = away + Vector3.up * DragonCombat.M(Mathf.Max(0.5f, _ssAscBackHeight.Value));
+                yield return StartCoroutine(ArcFlip(player, land, apex, 0f, backTime, -1));
+                if (player != null && !player.IsDead())
+                {
+                    Vector3 center;
+                    if (!AlbedoAimUtility.TryGetPhysicalTarget(player, DragonCombat.M(_ssAscVolleyRange.Value), out center)) center = land;
+                    float vr = DragonCombat.M(Mathf.Max(0.5f, _ssAscVolleyRadius.Value));
+                    Vector3[] circles = RowOfThree(center, center - player.transform.position, vr);
+                    DragonCombat.PlayClip(player, "rg_shot", 0.06f);
+                    Shoot(player, null);
+                    RangerArrowDamage pierce = new RangerArrowDamage();
+                    pierce.Pierce = d.Total();
+                    float vm = _ssAscVolleyPercent.Value / 100f * DragonCombat.GetSkillPower(player, "ricochet_arrow");
+                    HashSet<int> done = new HashSet<int>();
+                    for (int c = 0; c < circles.Length; c++)
+                    {
+                        List<Character> inC = GetSphereTargets(player, circles[c], vr);
+                        for (int i = 0; i < inC.Count; i++)
+                        {
+                            if (!done.Add(inC[i].GetInstanceID())) continue;
+                            Deal(player, inC[i], pierce, vm, 4f, false);
+                            OnSkillHit(player);
+                        }
+                        if (_enableVfx.Value)
+                        {
+                            for (int k = 0; k < 4; k++)
+                            {
+                                Vector2 r = UnityEngine.Random.insideUnitCircle * vr;
+                                LineVfx(ShotOrigin(player), circles[c] + new Vector3(r.x, 0f, r.y), new Color(0.55f, 1f, 0.90f, 0.95f), 0.06f, 0.2f);
+                            }
+                            StartCoroutine(RingVfx(circles[c], vr, new Color(0.55f, 1f, 0.90f, 0.9f), 0.5f));
+                        }
+                    }
+                    Rigidbody body = player.GetComponent<Rigidbody>();
+                    if (body != null) body.velocity = Vector3.zero;   // release: fall normally, no fall damage
+                }
+            }
+            _hovering = false;
+            _somersaultActive = false;
         }
 
         // ------------------------------------------------------------------ Furious Winds (Ultimate)
@@ -1281,6 +1592,7 @@ namespace DragonsAltarRanger
             foreach (Player ally in allies)
             {
                 DragonCombat.ApplyTimedBuff(ally, "Acrobat.Tailwind", duration, 0f, 0f, Mathf.Max(0f, _twMove.Value) / 100f, 0f, 0f, 0f, false);
+                DragonCombat.GrantNoEquipmentPenalty(ally, duration);   // v0.25.49: every movement penalty off (not encumbrance)
                 _tailwindUntil[ally.GetInstanceID()] = Time.time + duration;
             }
             if (_enableVfx.Value) StartCoroutine(RingVfx(player.transform.position, DragonCombat.M(_twRadius.Value), new Color(0.55f, 1f, 0.90f, 0.95f), 0.9f));
@@ -1959,7 +2271,7 @@ namespace DragonsAltarRanger
             if (!RequireRangedForBowmaster(player)) return;
             Vector3 point;
             if (!AlbedoAimUtility.TryGetPhysicalTarget(player, DragonCombat.M(_arRange.Value) * FocusRangeMultiplier(player), out point)) { ShowMessage("Aim at the ground"); return; }
-            if (!BeginSkill(player, "Bowmaster.ArrowRain", _arCooldown.Value, _arStamina.Value)) return;
+            if (!BeginCharged(player, "arrow_rain", "Bowmaster.ArrowRain", _arCooldown.Value, _arStamina.Value)) return;
             DragonCombat.PlayClip(player, "rg_sky", 0.15f);   // loose into the sky
             Shoot(player, "Arrow Rain");
             StartCoroutine(ArrowRainRoutine(player, point, DragonCombat.IsSkillAscended(player, "arrow_rain")));
@@ -2007,18 +2319,21 @@ namespace DragonsAltarRanger
         // ------------------------------------------------------------------ Pinning Shot (Lv24)
         // v0.24.3: 3 arrows in a 30m cone; everyone inside the cone is hit and pinned (the arrows are
         // cosmetic). Small and Big are nailed in place, Bosses Crippled.
+        // v0.25.49 Ascended: pinned enemies are Exposed while pinned, then explode (3m) when the pin ends,
+        // which leaves them Exposed 6s more.
         private void CastPinningShot(Player player)
         {
             if (!RequireRangedForBowmaster(player)) return;
             if (!BeginSkill(player, "Bowmaster.PinningShot", _psCooldown.Value, _psStamina.Value)) return;
             DragonCombat.PlayClip(player, "rg_kneel", 0.15f);   // kneeling shot
             Shoot(player, "Pinning Shot");
+            bool ascended = DragonCombat.IsSkillAscended(player, "pinning_shot");
             RangerArrowDamage d = ArrowDamage(player);
             float mult = _psDamage.Value / 100f * DragonCombat.GetSkillPower(player, "pinning_shot");
             float range = DragonCombat.M(_psRange.Value) * FocusRangeMultiplier(player);
             List<Character> hits = ConeArea(player, 3, Mathf.Clamp(_psCone.Value, 1f, 179f), range, new Color(0.75f, 1f, 0.55f, 1f));
-            for (int i = 0; i < hits.Count; i++) Pin(player, hits[i], d, mult);
-            if (DragonCombat.IsSkillAscended(player, "pinning_shot"))
+            for (int i = 0; i < hits.Count; i++) Pin(player, hits[i], d, mult, ascended);
+            if (ascended)
             {
                 int chains = Mathf.RoundToInt(_psAscChains.Value);
                 for (int h = 0; h < hits.Count && chains > 0; h++)
@@ -2028,23 +2343,56 @@ namespace DragonsAltarRanger
                     {
                         if (hits.Contains(near[i])) continue;
                         if (_enableVfx.Value) LineVfx(hits[h].transform.position + Vector3.up, near[i].transform.position + Vector3.up, new Color(0.85f, 1f, 0.70f, 1f), 0.05f, 0.25f);
-                        Pin(player, near[i], d, mult * 0.5f);
+                        Pin(player, near[i], d, mult * 0.5f, true);
                         chains--;
                     }
                 }
             }
         }
 
-        private void Pin(Player player, Character target, RangerArrowDamage d, float mult)
+        private void Pin(Player player, Character target, RangerArrowDamage d, float mult, bool ascended)
         {
             Deal(player, target, d, mult, 0f, false);
             OnSkillHit(player);
-            if (IsBossTarget(target)) { DragonCombat.ApplyCripple(target, _psBig.Value + 2f); return; }
-            bool small = DragonCombat.IsSmallEnemy(target);
-            float seconds = small ? _psSmall.Value : _psBig.Value;
-            if (!small) DragonCombat.ApplyCripple(target, seconds + 2f);
-            _pinnedUntil[target.GetInstanceID()] = Time.time + seconds;
-            StartCoroutine(PinRoutine(target, seconds));
+            float seconds;
+            if (IsBossTarget(target))
+            {
+                seconds = _psBig.Value + 2f;
+                DragonCombat.ApplyCripple(target, seconds);
+            }
+            else
+            {
+                bool small = DragonCombat.IsSmallEnemy(target);
+                seconds = small ? _psSmall.Value : _psBig.Value;
+                if (!small) DragonCombat.ApplyCripple(target, seconds + 2f);
+                _pinnedUntil[target.GetInstanceID()] = Time.time + seconds;
+                StartCoroutine(PinRoutine(target, seconds));
+            }
+            if (ascended)
+            {
+                DragonCombat.ApplyExpose(target, seconds);
+                StartCoroutine(PinExplode(player, target, seconds, d, mult));
+            }
+        }
+
+        private IEnumerator PinExplode(Player player, Character target, float seconds, RangerArrowDamage d, float mult)
+        {
+            yield return new WaitForSeconds(Mathf.Max(0.1f, seconds));
+            if (player == null || target == null || target.IsDead()) yield break;
+            Vector3 at = target.transform.position;
+            float radius = DragonCombat.M(Mathf.Max(0.5f, _psAscExplodeRadius.Value));
+            RangerArrowDamage blast = new RangerArrowDamage();
+            blast.Fire = d.Total() * 0.5f;
+            blast.Blunt = d.Total() * 0.5f;
+            float m = _psAscExplodePercent.Value / 100f * DragonCombat.GetSkillPower(player, "pinning_shot");
+            List<Character> hits = GetSphereTargets(player, at, radius);
+            for (int i = 0; i < hits.Count; i++) { Deal(player, hits[i], blast, m, 8f, false); OnSkillHit(player); }
+            if (!target.IsDead()) DragonCombat.ApplyExpose(target, Mathf.Max(0.5f, _psAscExposeAfter.Value));
+            if (_enableVfx.Value)
+            {
+                StartCoroutine(RingVfx(at, radius, new Color(1f, 0.70f, 0.30f, 1f), 0.5f));
+                StartCoroutine(RingVfx(at, radius * 0.5f, new Color(1f, 1f, 0.80f, 1f), 0.3f));
+            }
         }
 
         private IEnumerator PinRoutine(Character target, float seconds)
@@ -2072,21 +2420,78 @@ namespace DragonsAltarRanger
         }
 
         // ------------------------------------------------------------------ Explosive Arrow (Lv32)
+        // v0.25.49 (user): an explosive shot (30m), then 0.5s later cluster arrow bombs land on the blast as
+        // three 3m circles side by side (OOO). Ascended: hold up to 3s, one extra explosive shot per second
+        // (re-aimed as each is loosed), every shot stronger per stack; clusters are 4m, land 1s after their
+        // blast and leave burning ground.
+        private bool _exCharging;
+        private int _exStacks;
+        private float _exNextStack;
+
         private void CastExplosiveArrow(Player player)
         {
+            if (_exCharging) return;
             if (!RequireRangedForBowmaster(player)) return;
+            if (DragonCombat.IsSkillAscended(player, "explosive_arrow"))
+            {
+                if (CooldownRemaining("Bowmaster.ExplosiveArrow") > 0f) { ShowCooldown("Bowmaster.ExplosiveArrow"); return; }
+                if (GetStamina(player) < _eaStamina.Value) { ShowMessage("Not enough stamina"); return; }
+                UseStamina(player, _eaStamina.Value);
+                MarkSkillCast(player);
+                StartCoroutine(ExplosiveChargeRoutine(player));
+                return;
+            }
             if (!BeginSkill(player, "Bowmaster.ExplosiveArrow", _eaCooldown.Value, _eaStamina.Value)) return;
-            Vector3 origin = ShotOrigin(player);
-            Vector3 dir = AimDir(player, origin);
-            DragonCombat.PlayClip(player, "rg_heavy", 0.12f);   // heavy kick-back
-            Shoot(player, "Explosive Arrow");
-            bool ascended = DragonCombat.IsSkillAscended(player, "explosive_arrow");
-            StartCoroutine(ArrowFlight(player, origin, dir, DragonCombat.M(70f), DragonCombat.M(_eaRange.Value) * FocusRangeMultiplier(player), DragonCombat.M(0.35f), false,
-                new Color(1f, 0.55f, 0.25f, 1f), 0f, delegate(Character enemy) { return false; },
-                delegate(Vector3 at) { Explode(player, at, ascended); }));
+            FireExplosive(player, 1f, false, "Explosive Arrow");
         }
 
-        private void Explode(Player player, Vector3 at, bool ascended)
+        private IEnumerator ExplosiveChargeRoutine(Player player)
+        {
+            _exCharging = true;
+            _exStacks = 0;
+            _exNextStack = Time.time + 1f;
+            int maxStacks = Mathf.Max(1, Mathf.RoundToInt(_eaAscCharge.Value));
+            ShowMessage("Explosive Arrow - hold to charge");
+            DragonCombat.PlayClip(player, "rg_ballista", 0.35f, true);   // heavy draw while charging
+            float started = Time.time;
+            while (player != null && !player.IsDead() && (DragonCombat.IsTreeSkillKeyHeld("explosive_arrow") || Time.time - started < 0.15f))
+            {
+                DragonCombat.LockSkill(player, 0.15f);
+                if (_exStacks < maxStacks && Time.time >= _exNextStack)
+                {
+                    _exStacks++;
+                    _exNextStack = Time.time + 1f;
+                    ShowMessage("Explosive Arrow " + _exStacks + "/" + maxStacks + (_exStacks >= maxStacks ? " - release to fire" : ""));
+                }
+                yield return null;
+            }
+            _exCharging = false;
+            if (player == null || player.IsDead()) yield break;
+            StartCooldown("Bowmaster.ExplosiveArrow", _eaCooldown.Value);
+            DragonCombat.ClipImpact(player);
+            int stacks = _exStacks;
+            float scale = 1f + stacks * Mathf.Max(0f, _eaAscStackPercent.Value) / 100f;
+            int shots = 1 + stacks;
+            DragonCombat.LockSkill(player, shots * Mathf.Max(0.05f, _eaAscShotGap.Value) + 0.2f);
+            for (int i = 0; i < shots && player != null && !player.IsDead(); i++)
+            {
+                FireExplosive(player, scale, true, i == 0 ? "Explosive Arrow x" + shots : null);
+                if (i + 1 < shots) yield return new WaitForSeconds(Mathf.Max(0.05f, _eaAscShotGap.Value));
+            }
+        }
+
+        private void FireExplosive(Player player, float scale, bool ascended, string message)
+        {
+            Vector3 origin = ShotOrigin(player);
+            Vector3 dir = AimDir(player, origin);
+            DragonCombat.PlayClip(player, "rg_heavy", 0.08f);   // heavy kick-back
+            Shoot(player, message);
+            StartCoroutine(ArrowFlight(player, origin, dir, DragonCombat.M(70f), DragonCombat.M(_eaRange.Value) * FocusRangeMultiplier(player), DragonCombat.M(0.35f), false,
+                new Color(1f, 0.55f, 0.25f, 1f), 0f, delegate(Character enemy) { return false; },
+                delegate(Vector3 at) { Explode(player, at, dir, scale, ascended); }));
+        }
+
+        private void Explode(Player player, Vector3 at, Vector3 dir, float scale, bool ascended)
         {
             if (player == null) return;
             float radius = DragonCombat.M(_eaRadius.Value);
@@ -2095,7 +2500,8 @@ namespace DragonsAltarRanger
             RangerArrowDamage blast = new RangerArrowDamage();
             blast.Fire = total * 0.5f;
             blast.Blunt = total * 0.5f;
-            float mult = _eaDamage.Value / 100f * DragonCombat.GetSkillPower(player, "explosive_arrow");
+            float power = DragonCombat.GetSkillPower(player, "explosive_arrow");
+            float mult = _eaDamage.Value / 100f * power * scale;
             List<Character> hits = GetSphereTargets(player, at, radius);
             for (int i = 0; i < hits.Count; i++)
             {
@@ -2104,28 +2510,45 @@ namespace DragonsAltarRanger
                 if (DragonCombat.IsSmallEnemy(hits[i])) DragonCombat.Stun(hits[i], at);
                 StartCoroutine(BurnRoutine(player, hits[i], total * mult * Mathf.Max(0f, _eaBurn.Value) / 100f, _eaBurnDuration.Value));
             }
-            if (_enableVfx.Value) StartCoroutine(RingVfx(at, radius, new Color(1f, 0.55f, 0.20f, 1f), 0.6f));
-            if (ascended)
+            if (_enableVfx.Value)
             {
-                StartCoroutine(FireFieldRoutine(player, at, radius, total * mult * Mathf.Max(0f, _eaAscFieldPercent.Value) / 100f));
-                StartCoroutine(ClusterRoutine(player, at, radius, blast, mult * Mathf.Max(0f, _eaAscClusterPercent.Value) / 100f));
+                StartCoroutine(RingVfx(at, radius, new Color(1f, 0.55f, 0.20f, 1f), 0.6f));
+                StartCoroutine(RingVfx(at, radius * 0.5f, new Color(1f, 0.85f, 0.40f, 1f), 0.35f));
             }
+            StartCoroutine(ClusterRoutine(player, at, dir, blast, _eaClusterPercent.Value / 100f * power * scale, ascended));
         }
 
-        // Ascended: cluster bombs scatter from the blast and burst around it 0.35s later.
-        private IEnumerator ClusterRoutine(Player player, Vector3 at, float radius, RangerArrowDamage blast, float mult)
+        // Cluster arrow bombs: three circles side by side (OOO) across the shot, on the blast.
+        private IEnumerator ClusterRoutine(Player player, Vector3 at, Vector3 dir, RangerArrowDamage blast, float mult, bool ascended)
         {
-            yield return new WaitForSeconds(0.35f);
-            int n = Mathf.Max(1, Mathf.RoundToInt(_eaAscClusters.Value));
-            float r = DragonCombat.M(Mathf.Max(0.5f, _eaAscClusterRadius.Value));
-            for (int i = 0; i < n && player != null; i++)
+            float r = DragonCombat.M(Mathf.Max(0.5f, ascended ? _eaAscClusterRadius.Value : _eaClusterRadius.Value));
+            Vector3[] circles = RowOfThree(GroundAt(at), dir, r);
+            float delay = ascended ? 1f : Mathf.Max(0f, _eaClusterDelay.Value);
+            if (_enableVfx.Value)
+                for (int c = 0; c < circles.Length; c++) StartCoroutine(RingVfx(circles[c], r, new Color(1f, 0.45f, 0.15f, 0.45f), delay));
+            yield return new WaitForSeconds(delay);
+            if (player == null) yield break;
+            HashSet<int> done = new HashSet<int>();
+            for (int c = 0; c < circles.Length; c++)
             {
-                float a = (i + 0.5f) / n * Mathf.PI * 2f;
-                Vector3 p = GroundAt(at + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * radius * 0.75f);
-                List<Character> hits = GetSphereTargets(player, p, r);
-                for (int k = 0; k < hits.Count; k++) Deal(player, hits[k], blast, mult, 6f, false);
-                if (_enableVfx.Value) StartCoroutine(RingVfx(p, r, new Color(1f, 0.55f, 0.20f, 1f), 0.4f));
-                yield return new WaitForSeconds(0.06f);
+                List<Character> hits = GetSphereTargets(player, circles[c], r);
+                for (int k = 0; k < hits.Count; k++)
+                {
+                    if (!done.Add(hits[k].GetInstanceID())) continue;
+                    Deal(player, hits[k], blast, mult, 6f, false);
+                    OnSkillHit(player);
+                }
+                if (_enableVfx.Value)
+                {
+                    for (int k = 0; k < 3; k++)
+                    {
+                        Vector2 o = UnityEngine.Random.insideUnitCircle * r * 0.8f;
+                        Vector3 g = circles[c] + new Vector3(o.x, 0f, o.y);
+                        LineVfx(g + Vector3.up * DragonCombat.M(10f) + new Vector3(0.8f, 0f, 0.8f), g, new Color(1f, 0.55f, 0.20f, 1f), 0.08f, 0.2f);
+                    }
+                    StartCoroutine(RingVfx(circles[c], r, new Color(1f, 0.55f, 0.20f, 1f), 0.45f));
+                }
+                if (ascended) StartCoroutine(FireFieldRoutine(player, circles[c], r, blast.Fire * 2f * mult * Mathf.Max(0f, _eaAscFieldPercent.Value) / 100f));
             }
         }
 
@@ -2152,14 +2575,21 @@ namespace DragonsAltarRanger
         }
 
         // ------------------------------------------------------------------ Splitting Arrow (Lv32)
-        // v0.24.2 (user design): stand still and loose 5-arrow volleys into a 120 degree cone, 15m.
-        // The arrows pass through everything: each volley hits every enemy in the cone.
-        // Ascended: 5 volleys 0.25s apart, each hit adds a stack of a Fire DoT (6s, refreshed).
-        private readonly Dictionary<int, int> _saStacks = new Dictionary<int, int>();
-        private readonly Dictionary<int, float> _saStackUntil = new Dictionary<int, float>();
+        // v0.25.49 (user): two spread shots 0.5s apart (25m, 120 degree cone, every enemy inside is hit), then a
+        // 3s window: press again to loose one great 4m-wide piercing arrow. Ascended: three spread shots, and
+        // after the great arrow a giant arrow falls from the sky at your aim (4m, Blunt + Pierce, Stuns every
+        // enemy, Bosses included).
+        private float _splitWindowUntil;
+        private bool _splitAscended;
 
         private void CastSplittingArrow(Player player)
         {
+            if (Time.time < _splitWindowUntil)
+            {
+                _splitWindowUntil = 0f;
+                FireGreatArrow(player, _splitAscended);
+                return;
+            }
             if (!RequireRangedForBowmaster(player)) return;
             if (!BeginSkill(player, "Bowmaster.SplittingArrow", _saCooldown.Value, _saStamina.Value)) return;
             StartCoroutine(SplittingRoutine(player, DragonCombat.IsSkillAscended(player, "splitting_arrow")));
@@ -2169,14 +2599,13 @@ namespace DragonsAltarRanger
         {
             ShowMessage("Splitting Arrow");
             int volleys = Mathf.Max(1, Mathf.RoundToInt(ascended ? _saAscVolleys.Value : _saVolleys.Value));
-            float interval = Mathf.Max(0.05f, ascended ? _saAscInterval.Value : _saInterval.Value);
-            DragonCombat.LockSkill(player, volleys * interval + 0.2f);
+            float interval = Mathf.Max(0.05f, _saInterval.Value);
+            DragonCombat.LockSkill(player, (volleys - 1) * interval + 0.3f);
             RangerArrowDamage d = ArrowDamage(player);
             float mult = _saDamage.Value / 100f * DragonCombat.GetSkillPower(player, "splitting_arrow");
             float range = DragonCombat.M(_saRange.Value) * FocusRangeMultiplier(player);
             float cone = Mathf.Clamp(_saCone.Value, 1f, 359f);
             int arrows = Mathf.Max(1, Mathf.RoundToInt(_saSplits.Value));
-            bool burning = false;
             for (int v = 0; v < volleys && player != null && !player.IsDead(); v++)
             {
                 Rigidbody body = player.GetComponent<Rigidbody>();
@@ -2194,7 +2623,7 @@ namespace DragonsAltarRanger
                     {
                         float a = arrows == 1 ? 0f : -cone * 0.5f + cone * i / (arrows - 1);
                         Vector3 sdir = Quaternion.AngleAxis(a, Vector3.up) * flat;
-                        LineVfx(origin, origin + sdir * range, ascended ? new Color(1f, 0.65f, 0.30f, 0.95f) : new Color(0.75f, 1f, 0.55f, 0.95f), 0.07f, 0.2f);
+                        LineVfx(origin, origin + sdir * range, new Color(0.75f, 1f, 0.55f, 0.95f), 0.07f, 0.2f);
                     }
                 List<Character> all = GetSphereTargets(player, player.transform.position, range);
                 for (int i = 0; i < all.Count; i++)
@@ -2205,41 +2634,69 @@ namespace DragonsAltarRanger
                     if (to.sqrMagnitude > 0.25f && Vector3.Angle(flat, to) > cone * 0.5f) continue;
                     Deal(player, enemy, d, mult, 4f, false);
                     OnSkillHit(player);
-                    if (ascended)
-                    {
-                        int id = enemy.GetInstanceID();
-                        int stacks;
-                        _saStacks.TryGetValue(id, out stacks);
-                        _saStacks[id] = stacks + 1;
-                        _saStackUntil[id] = Time.time + Mathf.Max(0.5f, _saAscBurnDuration.Value);
-                        burning = true;
-                    }
                 }
                 if (v + 1 < volleys) yield return new WaitForSeconds(interval);
             }
-            if (burning && !_saBurnRunning && player != null) StartCoroutine(SplitBurnRoutine(player, ArrowDamage(player).Total() * DragonCombat.GetSkillPower(player, "splitting_arrow")));
+            if (player == null || player.IsDead()) yield break;
+            _splitAscended = ascended;
+            _splitWindowUntil = Time.time + Mathf.Max(0.5f, _saWindow.Value);
+            ShowMessage("Splitting Arrow - press again for the great arrow");
         }
 
-        private bool _saBurnRunning;
-
-        private IEnumerator SplitBurnRoutine(Player player, float baseDamage)
+        private void FireGreatArrow(Player player, bool ascended)
         {
-            _saBurnRunning = true;
-            while (_saStacks.Count > 0 && player != null)
-            {
-                yield return new WaitForSeconds(0.5f);
-                List<int> expired = new List<int>();
-                foreach (KeyValuePair<int, int> pair in _saStacks)
+            if (player == null || player.IsDead()) return;
+            RangerArrowDamage d = ArrowDamage(player);
+            float power = DragonCombat.GetSkillPower(player, "splitting_arrow");
+            float mult = _saBigPercent.Value / 100f * power;
+            float width = DragonCombat.M(Mathf.Max(0.5f, _saBigWidth.Value));
+            float range = DragonCombat.M(_saBigRange.Value) * FocusRangeMultiplier(player);
+            Vector3 origin = ShotOrigin(player);
+            Vector3 dir = AimDir(player, origin);
+            DragonCombat.PlayClip(player, "rg_power", 0.08f);   // snap draw, strong recoil
+            Shoot(player, "GREAT ARROW");
+            StartCoroutine(ArrowFlight(player, origin, dir, DragonCombat.M(80f), range, width * 0.5f, true, new Color(0.80f, 1f, 0.60f, 1f), 0f,
+                delegate(Character enemy)
                 {
-                    float until;
-                    if (!_saStackUntil.TryGetValue(pair.Key, out until) || Time.time >= until) { expired.Add(pair.Key); continue; }
-                    Character target = FindCharacter(pair.Key);
-                    if (target == null || target.IsDead()) { expired.Add(pair.Key); continue; }
-                    DragonCombat.ApplyFireBurnTick(player, target, baseDamage * Mathf.Max(0f, _saAscBurn.Value) / 100f * pair.Value);
-                }
-                for (int i = 0; i < expired.Count; i++) { _saStacks.Remove(expired[i]); _saStackUntil.Remove(expired[i]); }
+                    Deal(player, enemy, d, mult, DragonCombat.IsSmallEnemy(enemy) ? 25f : 6f, true);
+                    OnSkillHit(player);
+                    return true;
+                }, null));
+            if (_enableVfx.Value) LineVfx(origin, origin + dir * range, new Color(0.85f, 1f, 0.65f, 0.6f), width * 0.5f, 0.25f);
+            if (ascended)
+            {
+                Vector3 point;
+                if (!AlbedoAimUtility.TryGetPhysicalTarget(player, range, out point)) point = GroundAt(origin + dir * Mathf.Min(range, DragonCombat.M(20f)));
+                StartCoroutine(SkyArrowRoutine(player, point, d, power));
             }
-            _saBurnRunning = false;
+        }
+
+        private IEnumerator SkyArrowRoutine(Player player, Vector3 point, RangerArrowDamage d, float power)
+        {
+            float radius = DragonCombat.M(Mathf.Max(0.5f, _saAscSkyRadius.Value));
+            if (_enableVfx.Value) StartCoroutine(RingVfx(point, radius, new Color(0.85f, 1f, 0.70f, 0.5f), 0.5f));
+            yield return new WaitForSeconds(0.5f);
+            if (player == null) yield break;
+            if (_enableVfx.Value)
+            {
+                LineVfx(point + Vector3.up * DragonCombat.M(30f), point, new Color(0.90f, 1f, 0.75f, 1f), 1.2f, 0.3f);
+                StartCoroutine(RingVfx(point, radius, new Color(0.90f, 1f, 0.75f, 1f), 0.5f));
+                StartCoroutine(RingVfx(point, radius * 0.5f, new Color(1f, 1f, 1f, 1f), 0.3f));
+            }
+            RangerArrowDamage sky = new RangerArrowDamage();
+            sky.Blunt = d.Total() * 0.5f;
+            sky.Pierce = d.Total() * 0.5f;
+            float mult = _saAscSkyPercent.Value / 100f * power;
+            List<Character> hits = GetSphereTargets(player, point, radius);
+            for (int i = 0; i < hits.Count; i++)
+            {
+                Deal(player, hits[i], sky, mult, 10f, true);
+                OnSkillHit(player);
+                // Stuns every archetype - the user's explicit exception to the "Bosses are never stunned" rule.
+                Vector3 away = hits[i].transform.position - point;
+                if (away.sqrMagnitude < 0.01f) away = Vector3.forward;
+                try { hits[i].Stagger(away.normalized); } catch { }
+            }
         }
 
         // ------------------------------------------------------------------ Starfall Volley (Ultimate)

@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.48";
+        public const string ModVersion = "0.25.49";
 
         internal static DragonCombatPlugin Instance;
 
@@ -253,7 +253,7 @@ namespace DragonsAltarCombat
 
         private static string MovementExemptReason(Player p, ItemDrop.ItemData item)
         {
-            if (DragonCombat.HasNoEquipmentPenalty(p)) return "Heaven's Light";
+            if (DragonCombat.HasNoEquipmentPenalty(p)) return DragonCombat.GetClassName(p) == "Ranger" ? "Tailwind" : "Heaven's Light";
             string adv = DragonCombat.GetAdvancementName(p);
             string cls = DragonCombat.GetClassName(p);
             if ((adv == "Mercenary" || adv == "Sword Master") && WeaponMasteryExemptPenalty(item, adv) < 0f)
@@ -2330,10 +2330,19 @@ namespace DragonsAltarCombat
             if (_keys == null || _keys.Length == 0) { Destroy(this); return; }
             if (_owner == null) _owner = GetComponent<Character>();
             float t = Phase();
-            if (t > _keys[_keys.Length - 1].T || (_owner != null && _owner.IsDead()))
+            // v0.25.49 (user: gliding with the arm still raised): our emotes are fired as raw triggers, so
+            // Valheim never cancels them when you walk. A raise ends the moment you move after the lock.
+            bool movedOut = false;
+            if (_vaFiredName == "emote_cheer" && _owner is Player && !DragonCombat.IsSkillLocked((Player)_owner))
+            {
+                Rigidbody orb = _owner.GetComponent<Rigidbody>();
+                if (orb != null && new Vector3(orb.velocity.x, 0f, orb.velocity.z).magnitude > 0.8f) movedOut = true;
+            }
+            if (movedOut || t > _keys[_keys.Length - 1].T || (_owner != null && _owner.IsDead()))
             {
                 // v0.25.41: kneel loops in Valheim - stand back up when the skill's clip is over.
-                if (_vaFiredName == "emote_kneel") DragonCombat.StopEmote(_owner as Player);
+                // v0.25.49: every emote a skill fired is stopped when its clip ends.
+                if (_vaFiredName != null && _vaFiredName.StartsWith("emote", StringComparison.Ordinal)) DragonCombat.StopEmote(_owner as Player);
                 ReleaseRoot();
                 _keys = null;
                 Destroy(this);
@@ -2903,6 +2912,7 @@ namespace DragonsAltarCombat
                 LockSkill(player, Mathf.Max(0.5f, windup) + 0.05f);
                 Rigidbody rb = player.GetComponent<Rigidbody>();
                 if (rb != null) rb.velocity = new Vector3(0f, rb.velocity.y, 0f);   // stop at once, no slide
+                if (keys[0].QL) SetSkillAnimSpeed(player, 1.8f, Mathf.Max(0.5f, windup) + 0.3f);   // v0.25.49 faster raise
             }
             DragonSkillPoseDriver legacy = player.GetComponent<DragonSkillPoseDriver>();
             if (legacy != null) UnityEngine.Object.Destroy(legacy);
@@ -3268,7 +3278,7 @@ namespace DragonsAltarCombat
                 // v0.25.40 (user): ChatGPT's Holy Wave raise, exactly: Valheim's emote_cheer at natural speed from
                 // the first frame, the off-hand arm held still, no stance / lean / root motion of our own.
                 DragonClipKey q = K(0f);
-                DragonClipKey[] rk = new DragonClipKey[] { K(-1f), q.Copy(-0.50f), q, q.Copy(0.28f), K(0.62f) };
+                DragonClipKey[] rk = new DragonClipKey[] { K(-1f), q.Copy(-0.50f), q, q.Copy(0.12f), K(0.3f) };   // v0.25.49 shorter tail
                 for (int i = 0; i < rk.Length; i++) rk[i].QL = true;
                 rk[0].VA = trig; rk[0].VL = m.Value; rk[0].VR = 0f; rk[0].VF = 0f; rk[0].NoAim = true; rk[0].NoTrack = true; rk[0].NoPlant = true;
                 return rk;

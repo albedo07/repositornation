@@ -1,0 +1,30 @@
+Immortal Heroes v0.25.49 - Ranger Rework
+
+ACROBAT
+- Ricochet Arrow -> SOMERSAULT DANCE: front flip 3m up onto a spot within 5m (always 0.5s), foot slam
+  (260% Blunt, 4m, Stuns Small + Big), backflip 2m up / 2m away (0.5s). Ascended: the backflip goes 3m up,
+  you loose a volley of three 3m circles side by side (OOO) at your aim, then fall normally (no fall damage).
+- Cyclone Arrow: travels slower (30m in 9s). Ascended: a tall tornado 2m wider that sucks Small and Big
+  enemies in while it moves and Frosts everything it hits, Bosses included (replaces the split).
+- Skyfall Barrage: 10 shots. Ascended: 12 shots, then a Blunt slam straight down (6m, Stuns Small + Big,
+  Cripples Bosses) and a 2m backflip; 2 charges (each on the normal cooldown).
+- Gale Volley Ascended: 3 charges (second fan kept).
+- Tailwind: +60% Move Speed and every movement penalty removed (encumbrance stays).
+
+BOWMASTER (much more damage)
+- Ballista 300% (+60%/stack), Arrow Rain 40%/hit, Pinning 240%, Explosive 320%, Starfall 65%/hit + 450% final.
+- Arrow Rain: 2 charges (Ascended 3).
+- Pinning Shot Ascended: pinned enemies are Exposed while pinned, then explode (3m, 180%) and stay Exposed 6s.
+- Splitting Arrow: 2 spread shots 0.5s apart (25m), then press again within 3s for a great 4m-wide piercing
+  arrow (380%). Ascended: 3 spread shots, and after the great arrow a giant sky arrow falls at your aim
+  (4m, Blunt + Pierce, Stuns every enemy, Bosses included).
+- Explosive Arrow: 30m shot (320%), then 0.5s later cluster arrow bombs land on the blast: three 3m circles
+  side by side. Ascended: hold up to 3s, +1 explosive shot per second (re-aimed as each is loosed), +25%
+  damage per stack; clusters are 4m, land 1s after their blast and leave burning ground.
+
+FIXES
+- Raised-arm buff animation (Tailwind, Hawk's Vigil and every other buff raise) is faster and stops the
+  moment you move after the cast - no more gliding with the arm up. Every emote a skill starts is stopped
+  when its animation ends.
+- Mercenary: Unchained Fury now makes EVERY Mercenary skill its Ascended version while it lasts.
+- Seismic Guillotine Ascended: 3 fissures (was only during Fury).

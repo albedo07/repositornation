@@ -1,5 +1,10 @@
-TEST v0.25.48
-1. Sword Master / Warrior + sword, hold attack: 1st swing, 2nd swing, 1st swing, 2nd swing, overhead, 1 s pause.
-2. No class + two axes equipped: off-hand axe unequips, message "Only a Mercenary can dual wield".
-3. Mercenary + two axes: stays dual wielded, chain works.
-4. No class + sword: normal vanilla 3-hit chain.
+TEST v0.25.49
+1. Somersault Dance (Acrobat slot of Ricochet): front flip onto aim within 5m, slam, backflip away. Ascended: volley OOO then fall.
+2. Cyclone Ascended: tall tornado, drags enemies, Frost on bosses.
+3. Skyfall: 10 shots; Ascended 12 + slam + backflip, 2 charges (HUD counter).
+4. Gale Ascended 3 charges; Arrow Rain 2 (Ascended 3) charges.
+5. Splitting: 2 spreads, press again within 3s = great arrow; Ascended + sky arrow stuns.
+6. Explosive: blast then OOO clusters 0.5s later; Ascended: hold 3s = 4 shots, clusters 1s + burning ground.
+7. Pinning Ascended: Exposed while pinned, explodes at pin end.
+8. Tailwind / Hawk's Vigil: arm raise ends when you start moving.
+9. Mercenary in Fury: all skills Ascended; Seismic Ascended = 3 fissures.
