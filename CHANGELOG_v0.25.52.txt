@@ -1,0 +1,13 @@
+Immortal Heroes v0.25.52 - Ranger Windows
+
+- Somersault Dance: backflip lands 5m from the slam spot (was 2m).
+- Skyfall Barrage Ascended: the slam drops onto the first terrain / physical object below you (creatures
+  ignored), never in mid-air; fall speed scales with the height.
+- Furious Winds Ascended: you can walk inside the storm (no sprint). Normal stays rooted.
+- Explosive Arrow: 0.5s after the explosive shot you loose a bow shot straight at the sky (its own animation)
+  and the cluster bombs come down on the blast. Ascended: that sky shot has a 1s wind up and drops clusters on
+  every blast of the charge.
+- Splitting Arrow: rooted during the spread shots. Then a 3s window - move and aim freely, Left Click looses the
+  great arrow, Right Click cancels. Ascended: 0.5s after the great arrow a second window opens for the sky arrow
+  (Left Click = bow shot at the sky, the giant arrow falls on your aim 0.4s later).
+- UNIVERSAL RULE: every follow-up shot window = Left Click to shoot, Right Click to cancel (no recast).

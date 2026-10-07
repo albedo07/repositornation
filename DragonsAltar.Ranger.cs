@@ -40,7 +40,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Dragon's Altar - Ranger";
-        public const string ModVersion = "0.25.51";
+        public const string ModVersion = "0.25.52";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -235,7 +235,7 @@ namespace DragonsAltarRanger
             _ssFlipHeight = Config.Bind(ss, "FrontFlipHeight", 3f, "Front flip height (m).");
             _ssFlipTime = Config.Bind(ss, "FrontFlipSeconds", 0.5f, "Always this long, whatever the distance.");
             _ssBackHeight = Config.Bind(ss, "BackFlipHeight", 2f, "Backflip height (m).");
-            _ssBackDistance = Config.Bind(ss, "BackFlipDistance", 2f, "Backflip distance from the landing spot (m).");
+            _ssBackDistance = Config.Bind(ss, "BackFlipDistance_v02552", 5f, "Backflip distance from the landing spot (m).");
             _ssBackTime = Config.Bind(ss, "BackFlipSeconds", 0.5f, "Seconds.");
             const string ssa = "Acrobat Somersault Dance Ascended";
             _ssAscBackHeight = Config.Bind(ssa, "BackFlipHeight", 3f, "The backflip goes this high, then you loose a volley and descend (no fall damage).");
@@ -424,7 +424,7 @@ namespace DragonsAltarRanger
                 case "arrow_rain": return ChargeCooldown(Player.m_localPlayer, "arrow_rain");
                 case "pinning_shot": return CooldownRemaining("Bowmaster.PinningShot");
                 case "explosive_arrow": return _exCharging ? 0f : CooldownRemaining("Bowmaster.ExplosiveArrow");
-                case "splitting_arrow": return Time.time < _splitWindowUntil ? 0f : CooldownRemaining("Bowmaster.SplittingArrow");
+                case "splitting_arrow": return CooldownRemaining("Bowmaster.SplittingArrow");
                 case "starfall_volley": return CooldownRemaining("Bowmaster.StarfallVolley");
                 case "hawks_vigil": return CooldownRemaining("Bowmaster.HawksVigil");
             }
@@ -709,6 +709,37 @@ namespace DragonsAltarRanger
                 yield return new WaitForFixedUpdate();
             }
             if (player != null) ResetFloatField(player, "m_maxAirAltitude", player.transform.position.y);
+        }
+
+        // First terrain / building surface straight below (creatures are ignored), up to 200m down.
+        private Vector3 SolidBelow(Player player, Vector3 from)
+        {
+            RaycastHit[] hits = Physics.RaycastAll(from + Vector3.up * 0.5f, Vector3.down, 200f, SolidMask(), QueryTriggerInteraction.Ignore);
+            Array.Sort(hits, delegate(RaycastHit a, RaycastHit b) { return a.distance.CompareTo(b.distance); });
+            for (int i = 0; i < hits.Length; i++)
+            {
+                Collider c = hits[i].collider;
+                if (c == null || IsPlayerCollider(player, c) || c.GetComponentInParent<Character>() != null) continue;
+                return hits[i].point + Vector3.up * 0.05f;
+            }
+            float h;
+            if (ZoneSystemHeight(from, out h)) return new Vector3(from.x, h, from.z);
+            return GroundAt(from);
+        }
+
+        private static bool ZoneSystemHeight(Vector3 p, out float height)
+        {
+            height = p.y;
+            try
+            {
+                Type z = Type.GetType("ZoneSystem, assembly_valheim");
+                object inst = z == null ? null : (z.GetProperty("instance", BindingFlags.Static | BindingFlags.Public) != null ? z.GetProperty("instance", BindingFlags.Static | BindingFlags.Public).GetValue(null, null) : (z.GetField("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic) == null ? null : z.GetField("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic).GetValue(null)));
+                MethodInfo m = z == null ? null : z.GetMethod("GetGroundHeight", BindingFlags.Instance | BindingFlags.Public, null, new Type[] { typeof(Vector3) }, null);
+                if (inst == null || m == null) return false;
+                height = Convert.ToSingle(m.Invoke(inst, new object[] { p }));
+                return true;
+            }
+            catch { return false; }
         }
 
         // Clamped flat point `meters` from `from` toward `dir`, stopped short of walls, on the ground.
@@ -1241,14 +1272,16 @@ namespace DragonsAltarRanger
             if (ascended && player != null && !player.IsDead())
             {
                 // Ascended finisher: slam straight down (0.3s), Blunt around you, then a 2m backflip.
+                // v0.25.52 (user): the slam lands on terrain or a physical object, never in the air or on a creature.
                 Vector3 from = player.transform.position;
-                Vector3 land = GroundAt(from);
+                Vector3 land = SolidBelow(player, from);
+                float dropTime = Mathf.Clamp((from.y - land.y) / DragonCombat.M(45f), 0.15f, 0.6f);
                 DragonCombat.PlayClip(player, "rg_dive", 0.08f);
                 t = 0f;
-                while (t < 0.3f && player != null)
+                while (t < dropTime && player != null)
                 {
                     t += Time.fixedDeltaTime;
-                    float k = Mathf.Clamp01(t / 0.3f);
+                    float k = Mathf.Clamp01(t / dropTime);
                     Vector3 p = Vector3.Lerp(from, land, k * k);
                     player.transform.position = p;
                     if (body != null) { body.position = p; body.velocity = Vector3.zero; }
@@ -1409,7 +1442,9 @@ namespace DragonsAltarRanger
             float barrier = Mathf.Min(radius, DragonCombat.M(ascended ? _fwAscBarrier.Value : _fwBarrier.Value));
             Dictionary<int, float> held = new Dictionary<int, float>();
             DragonCombat.GrantHyperArmor(player, duration + 0.3f);
-            DragonCombat.LockSkill(player, duration);
+            // v0.25.52 (user): Ascended - walk inside the storm (no sprint); normal stays rooted.
+            if (ascended) DragonCombat.BeginMobileCast(player, duration, false);
+            else DragonCombat.LockSkill(player, duration);
             DragonCombat.PlaySpinClip(player, duration, 0.5f, false);   // two turns a second inside the leaf storm
             GameObject storm = _enableVfx.Value ? CreateLeafStorm(player.transform.position, radius) : null;
             RangerArrowDamage d = ArrowDamage(player);
@@ -1710,6 +1745,25 @@ namespace DragonsAltarRanger
         private void RangerControls(Player player, ref bool attack, ref bool attackHold, ref bool block, ref bool blockHold)
         {
             if (player != Player.m_localPlayer || GetClass(player) != "Ranger") { RestoreBowDraw(); return; }
+            // v0.25.52 (user): follow-up shot windows - Left Click fires, Right Click cancels.
+            if (_windowFire != null)
+            {
+                if (Time.time > _windowUntil || player.IsDead()) CloseShotWindow(false);
+                else
+                {
+                    bool lmb = attack;
+                    bool cancel = block || blockHold;
+                    attack = false; attackHold = false; block = false; blockHold = false;
+                    if (lmb)
+                    {
+                        Action<Player> fire = _windowFire;
+                        CloseShotWindow(false);
+                        fire(player);
+                    }
+                    else if (cancel) CloseShotWindow(true);
+                    return;
+                }
+            }
             bool rmb = block || blockHold;
             block = false;
             blockHold = false;
@@ -1743,6 +1797,29 @@ namespace DragonsAltarRanger
             // v0.24.3: quick shots every 0.5s; the 4th (finisher) adds 1s before the next one.
             if (Time.time < _nextQuickShot || Time.time < _skillCastUntil) { attack = false; attackHold = false; }
             else if (attack || attackHold) _qsPressedAt = Time.time;
+        }
+
+        // v0.25.52 universal follow-up shot window (Splitting Arrow's great arrow and sky arrow): aim freely and
+        // move; Left Click fires, Right Click cancels, it closes by itself when the time runs out.
+        private Action<Player> _windowFire;
+        private string _windowName;
+        private float _windowUntil;
+
+        private void OpenShotWindow(string name, float seconds, Action<Player> fire)
+        {
+            _windowName = name;
+            _windowUntil = Time.time + Mathf.Max(0.3f, seconds);
+            _windowFire = fire;
+            _charging = false;
+            _releasePending = false;
+            ShowMessage(name + ": Left Click to shoot, Right Click to cancel (" + Mathf.Max(0.3f, seconds).ToString("0") + "s)");
+        }
+
+        private void CloseShotWindow(bool cancelled)
+        {
+            if (cancelled && _windowName != null) ShowMessage(_windowName + " cancelled");
+            _windowFire = null;
+            _windowName = null;
         }
 
         private static MethodInfo _inAttackMethod;
@@ -2442,7 +2519,7 @@ namespace DragonsAltarRanger
                 return;
             }
             if (!BeginSkill(player, "Bowmaster.ExplosiveArrow", _eaCooldown.Value, _eaStamina.Value)) return;
-            FireExplosive(player, 1f, false, "Explosive Arrow");
+            StartCoroutine(ExplosiveSequence(player, 1, 1f, false));
         }
 
         private IEnumerator ExplosiveChargeRoutine(Player player)
@@ -2472,15 +2549,52 @@ namespace DragonsAltarRanger
             int stacks = _exStacks;
             float scale = 1f + stacks * Mathf.Max(0f, _eaAscStackPercent.Value) / 100f;
             int shots = 1 + stacks;
-            DragonCombat.LockSkill(player, shots * Mathf.Max(0.05f, _eaAscShotGap.Value) + 0.2f);
-            for (int i = 0; i < shots && player != null && !player.IsDead(); i++)
-            {
-                FireExplosive(player, scale, true, i == 0 ? "Explosive Arrow x" + shots : null);
-                if (i + 1 < shots) yield return new WaitForSeconds(Mathf.Max(0.05f, _eaAscShotGap.Value));
-            }
+            yield return StartCoroutine(ExplosiveSequence(player, shots, scale, true));
         }
 
-        private void FireExplosive(Player player, float scale, bool ascended, string message)
+        // v0.25.52 (user): the explosive shot(s), then 0.5s later a bow shot straight at the sky (its own
+        // animation) that brings the cluster arrow bombs down on every blast. Ascended: 1s wind up on that shot.
+        private IEnumerator ExplosiveSequence(Player player, int shots, float scale, bool ascended)
+        {
+            List<Vector3> points = new List<Vector3>();
+            List<Vector3> dirs = new List<Vector3>();
+            float gap = Mathf.Max(0.05f, _eaAscShotGap.Value);
+            DragonCombat.LockSkill(player, (shots - 1) * gap + 0.4f);
+            for (int i = 0; i < shots && player != null && !player.IsDead(); i++)
+            {
+                FireExplosive(player, scale, ascended, i == 0 ? (shots > 1 ? "Explosive Arrow x" + shots : "Explosive Arrow") : null, points, dirs);
+                if (i + 1 < shots) yield return new WaitForSeconds(gap);
+            }
+            float lastShot = Time.time;
+            while (player != null && !player.IsDead() && (Time.time < lastShot + Mathf.Max(0f, _eaClusterDelay.Value) || (points.Count < shots && Time.time < lastShot + 1.5f)))
+                yield return null;
+            if (player == null || player.IsDead() || points.Count == 0) yield break;
+            float windup = ascended ? 1f : 0.1f;
+            DragonCombat.LockSkill(player, windup + 0.35f);
+            DragonCombat.PlayClip(player, "rg_sky", windup);   // bow pointed at the sky
+            yield return new WaitForSeconds(windup);
+            if (player == null || player.IsDead()) yield break;
+            Vector3 o = ShotOrigin(player);
+            Shoot(player, "Cluster Bombs");
+            if (_enableVfx.Value) LineVfx(o, o + Vector3.up * DragonCombat.M(25f), new Color(1f, 0.55f, 0.20f, 1f), 0.12f, 0.25f);
+            RangerArrowDamage d = ArrowDamage(player);
+            RangerArrowDamage blast = new RangerArrowDamage();
+            blast.Fire = d.Total() * 0.5f;
+            blast.Blunt = d.Total() * 0.5f;
+            float mult = _eaClusterPercent.Value / 100f * DragonCombat.GetSkillPower(player, "explosive_arrow") * scale;
+            float r = DragonCombat.M(Mathf.Max(0.5f, ascended ? _eaAscClusterRadius.Value : _eaClusterRadius.Value));
+            if (_enableVfx.Value)
+                for (int p = 0; p < points.Count; p++)
+                {
+                    Vector3[] marks = RowOfThree(GroundAt(points[p]), dirs[p], r);
+                    for (int c = 0; c < marks.Length; c++) StartCoroutine(RingVfx(marks[c], r, new Color(1f, 0.45f, 0.15f, 0.45f), 0.3f));
+                }
+            yield return new WaitForSeconds(0.3f);   // the bombs fall
+            if (player == null) yield break;
+            for (int p = 0; p < points.Count; p++) ClusterHit(player, points[p], dirs[p], blast, mult, r, ascended);
+        }
+
+        private void FireExplosive(Player player, float scale, bool ascended, string message, List<Vector3> points, List<Vector3> dirs)
         {
             Vector3 origin = ShotOrigin(player);
             Vector3 dir = AimDir(player, origin);
@@ -2488,10 +2602,10 @@ namespace DragonsAltarRanger
             Shoot(player, message);
             StartCoroutine(ArrowFlight(player, origin, dir, DragonCombat.M(70f), DragonCombat.M(_eaRange.Value) * FocusRangeMultiplier(player), DragonCombat.M(0.35f), false,
                 new Color(1f, 0.55f, 0.25f, 1f), 0f, delegate(Character enemy) { return false; },
-                delegate(Vector3 at) { Explode(player, at, dir, scale, ascended); }));
+                delegate(Vector3 at) { Explode(player, at, scale); points.Add(at); dirs.Add(dir); }));
         }
 
-        private void Explode(Player player, Vector3 at, Vector3 dir, float scale, bool ascended)
+        private void Explode(Player player, Vector3 at, float scale)
         {
             if (player == null) return;
             float radius = DragonCombat.M(_eaRadius.Value);
@@ -2500,8 +2614,7 @@ namespace DragonsAltarRanger
             RangerArrowDamage blast = new RangerArrowDamage();
             blast.Fire = total * 0.5f;
             blast.Blunt = total * 0.5f;
-            float power = DragonCombat.GetSkillPower(player, "explosive_arrow");
-            float mult = _eaDamage.Value / 100f * power * scale;
+            float mult = _eaDamage.Value / 100f * DragonCombat.GetSkillPower(player, "explosive_arrow") * scale;
             List<Character> hits = GetSphereTargets(player, at, radius);
             for (int i = 0; i < hits.Count; i++)
             {
@@ -2515,19 +2628,12 @@ namespace DragonsAltarRanger
                 StartCoroutine(RingVfx(at, radius, new Color(1f, 0.55f, 0.20f, 1f), 0.6f));
                 StartCoroutine(RingVfx(at, radius * 0.5f, new Color(1f, 0.85f, 0.40f, 1f), 0.35f));
             }
-            StartCoroutine(ClusterRoutine(player, at, dir, blast, _eaClusterPercent.Value / 100f * power * scale, ascended));
         }
 
         // Cluster arrow bombs: three circles side by side (OOO) across the shot, on the blast.
-        private IEnumerator ClusterRoutine(Player player, Vector3 at, Vector3 dir, RangerArrowDamage blast, float mult, bool ascended)
+        private void ClusterHit(Player player, Vector3 at, Vector3 dir, RangerArrowDamage blast, float mult, float r, bool ascended)
         {
-            float r = DragonCombat.M(Mathf.Max(0.5f, ascended ? _eaAscClusterRadius.Value : _eaClusterRadius.Value));
             Vector3[] circles = RowOfThree(GroundAt(at), dir, r);
-            float delay = ascended ? 1f : Mathf.Max(0f, _eaClusterDelay.Value);
-            if (_enableVfx.Value)
-                for (int c = 0; c < circles.Length; c++) StartCoroutine(RingVfx(circles[c], r, new Color(1f, 0.45f, 0.15f, 0.45f), delay));
-            yield return new WaitForSeconds(delay);
-            if (player == null) yield break;
             HashSet<int> done = new HashSet<int>();
             for (int c = 0; c < circles.Length; c++)
             {
@@ -2580,16 +2686,11 @@ namespace DragonsAltarRanger
         // after the great arrow a giant arrow falls from the sky at your aim (4m, Blunt + Pierce, Stuns every
         // enemy, Bosses included).
         private float _splitWindowUntil;
-        private bool _splitAscended;
+        private bool _splitBusy;
 
         private void CastSplittingArrow(Player player)
         {
-            if (Time.time < _splitWindowUntil)
-            {
-                _splitWindowUntil = 0f;
-                FireGreatArrow(player, _splitAscended);
-                return;
-            }
+            if (_windowFire != null || _splitBusy) return;
             if (!RequireRangedForBowmaster(player)) return;
             if (!BeginSkill(player, "Bowmaster.SplittingArrow", _saCooldown.Value, _saStamina.Value)) return;
             StartCoroutine(SplittingRoutine(player, DragonCombat.IsSkillAscended(player, "splitting_arrow")));
@@ -2598,6 +2699,7 @@ namespace DragonsAltarRanger
         private IEnumerator SplittingRoutine(Player player, bool ascended)
         {
             ShowMessage("Splitting Arrow");
+            _splitBusy = true;
             int volleys = Mathf.Max(1, Mathf.RoundToInt(ascended ? _saAscVolleys.Value : _saVolleys.Value));
             float interval = Mathf.Max(0.05f, _saInterval.Value);
             DragonCombat.LockSkill(player, (volleys - 1) * interval + 0.3f);
@@ -2637,10 +2739,10 @@ namespace DragonsAltarRanger
                 }
                 if (v + 1 < volleys) yield return new WaitForSeconds(interval);
             }
+            _splitBusy = false;
             if (player == null || player.IsDead()) yield break;
-            _splitAscended = ascended;
-            _splitWindowUntil = Time.time + Mathf.Max(0.5f, _saWindow.Value);
-            ShowMessage("Splitting Arrow - press again for the great arrow");
+            // v0.25.52 (user): rooted for the spread shots; free to move and aim inside the shot window.
+            OpenShotWindow("Great Arrow", _saWindow.Value, delegate(Player p) { FireGreatArrow(p, ascended); });
         }
 
         private void FireGreatArrow(Player player, bool ascended)
@@ -2663,19 +2765,33 @@ namespace DragonsAltarRanger
                     return true;
                 }, null));
             if (_enableVfx.Value) LineVfx(origin, origin + dir * range, new Color(0.85f, 1f, 0.65f, 0.6f), width * 0.5f, 0.25f);
-            if (ascended)
+            if (ascended) StartCoroutine(SkyWindowAfter(player, range));
+        }
+
+        // Ascended: 0.5s after the great arrow, the sky arrow window opens (Left Click: a bow shot straight up,
+        // the giant arrow falls on your aim).
+        private IEnumerator SkyWindowAfter(Player player, float range)
+        {
+            yield return new WaitForSeconds(0.5f);
+            if (player == null || player.IsDead()) yield break;
+            OpenShotWindow("Sky Arrow", _saWindow.Value, delegate(Player p)
             {
                 Vector3 point;
-                if (!AlbedoAimUtility.TryGetPhysicalTarget(player, range, out point)) point = GroundAt(origin + dir * Mathf.Min(range, DragonCombat.M(20f)));
-                StartCoroutine(SkyArrowRoutine(player, point, d, power));
-            }
+                Vector3 o = ShotOrigin(p);
+                if (!AlbedoAimUtility.TryGetPhysicalTarget(p, range, out point)) point = GroundAt(o + AimDir(p, o) * Mathf.Min(range, DragonCombat.M(20f)));
+                DragonCombat.LockSkill(p, 0.4f);
+                DragonCombat.PlayClip(p, "rg_sky", 0.08f);   // vanilla bow shot pointed at the sky
+                Shoot(p, "SKY ARROW");
+                if (_enableVfx.Value) LineVfx(o, o + Vector3.up * DragonCombat.M(25f), new Color(0.90f, 1f, 0.75f, 1f), 0.15f, 0.25f);
+                StartCoroutine(SkyArrowRoutine(p, point, ArrowDamage(p), DragonCombat.GetSkillPower(p, "splitting_arrow")));
+            });
         }
 
         private IEnumerator SkyArrowRoutine(Player player, Vector3 point, RangerArrowDamage d, float power)
         {
             float radius = DragonCombat.M(Mathf.Max(0.5f, _saAscSkyRadius.Value));
-            if (_enableVfx.Value) StartCoroutine(RingVfx(point, radius, new Color(0.85f, 1f, 0.70f, 0.5f), 0.5f));
-            yield return new WaitForSeconds(0.5f);
+            if (_enableVfx.Value) StartCoroutine(RingVfx(point, radius, new Color(0.85f, 1f, 0.70f, 0.5f), 0.4f));
+            yield return new WaitForSeconds(0.4f);
             if (player == null) yield break;
             if (_enableVfx.Value)
             {

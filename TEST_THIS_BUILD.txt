@@ -1,2 +1,6 @@
-TEST v0.25.51
-1. Ascended Crescent Cleave: Impact Wave swing -> first fan, then a second swing -> second fan.
+TEST v0.25.52
+1. Somersault: backflip 5m away.
+2. Skyfall Ascended over uneven ground / under trees: slam always on the ground.
+3. Furious Winds Ascended: WASD walks, Shift does not sprint.
+4. Explosive: explosive shot -> 0.5s -> sky shot -> clusters. Ascended charge: 1s sky wind up, clusters on every blast.
+5. Splitting: 2 (3 Asc) spreads rooted -> move + Left Click great arrow / Right Click cancel; Asc: sky arrow window after 0.5s.

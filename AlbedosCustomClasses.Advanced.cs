@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.51";
+        public const string ModVersion = "0.25.52";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -11144,7 +11144,7 @@ namespace AlbedosCustomClassesAdvanced
                     b.Append(IhLine("Damage", IhBowPct(IhR("Acrobat Somersault Dance", "DamagePercent", 260f), power) + " Blunt"));
                     b.Append(IhLine("Radius", IhNum(IhR("Acrobat Somersault Dance", "Radius", 4f)) + "m, Ground PAC " + IhNum(IhR("Acrobat Somersault Dance", "Range", 5f)) + "m"));
                     b.Append(IhLine("Inflicts", "Stun (Small, Big)"));
-                    b.Append(IhLine("Flips", IhNum(IhR("Acrobat Somersault Dance", "FrontFlipHeight", 3f)) + "m front flip (" + IhNum(IhR("Acrobat Somersault Dance", "FrontFlipSeconds", 0.5f)) + "s), backflip " + IhNum(ascended ? IhR("Acrobat Somersault Dance Ascended", "BackFlipHeight", 3f) : IhR("Acrobat Somersault Dance", "BackFlipHeight", 2f)) + "m up, " + IhNum(IhR("Acrobat Somersault Dance", "BackFlipDistance", 2f)) + "m away"));
+                    b.Append(IhLine("Flips", IhNum(IhR("Acrobat Somersault Dance", "FrontFlipHeight", 3f)) + "m front flip (" + IhNum(IhR("Acrobat Somersault Dance", "FrontFlipSeconds", 0.5f)) + "s), backflip " + IhNum(ascended ? IhR("Acrobat Somersault Dance Ascended", "BackFlipHeight", 3f) : IhR("Acrobat Somersault Dance", "BackFlipHeight", 2f)) + "m up, " + IhNum(IhR("Acrobat Somersault Dance", "BackFlipDistance_v02552", 5f)) + "m away"));
                     if (ascended) b.Append(IhLine("Volley", IhBowPct(IhR("Acrobat Somersault Dance Ascended", "VolleyPercent", 160f), power) + " Pierce, three " + IhNum(IhR("Acrobat Somersault Dance Ascended", "VolleyCircleRadius", 3f)) + "m circles side by side at your aim; then you fall, no fall damage"));
                     IhCosts(b, IhR("Acrobat Somersault Dance", "StaminaCost", 22f), IhNum(IhR("Acrobat Somersault Dance", "FrontFlipSeconds", 0.5f)) + "s", IhR("Acrobat Somersault Dance", "Cooldown", 10f));
                     break;
@@ -11188,8 +11188,8 @@ namespace AlbedosCustomClassesAdvanced
                 case "splitting_arrow":
                     b.Append(IhLine("Damage", IhBowPct(IhR("Bowmaster Splitting Arrow", "VolleyPercent_v0242", 120f), power) + " per spread shot to every enemy in the cone"));
                     b.Append(IhLine("Spread Shots", IhNum(ascended ? IhR("Bowmaster Splitting Arrow Ascended", "Volleys", 3f) : IhR("Bowmaster Splitting Arrow", "Volleys", 2f)) + ", " + IhNum(IhR("Bowmaster Splitting Arrow", "VolleyInterval", 0.5f)) + "s apart, " + IhNum(IhR("Bowmaster Splitting Arrow", "Range_v0242", 25f)) + "m, " + IhNum(IhR("Bowmaster Splitting Arrow", "ConeDegrees_v0242", 120f)) + "° cone"));
-                    b.Append(IhLine("Great Arrow", "press again within " + IhNum(IhR("Bowmaster Splitting Arrow", "GreatArrowWindow", 3f)) + "s: " + IhNum(IhR("Bowmaster Splitting Arrow", "GreatArrowWidth", 4f)) + "m wide, " + IhBowPct(IhR("Bowmaster Splitting Arrow", "GreatArrowPercent", 380f), power) + ", pierces"));
-                    if (ascended) b.Append(IhLine("Sky Arrow", IhBowPct(IhR("Bowmaster Splitting Arrow Ascended", "SkyArrowPercent", 320f), power) + " Blunt + Pierce, " + IhNum(IhR("Bowmaster Splitting Arrow Ascended", "SkyArrowRadius", 4f)) + "m at your aim, Stuns every enemy (Bosses too)"));
+                    b.Append(IhLine("Great Arrow", "Left Click within " + IhNum(IhR("Bowmaster Splitting Arrow", "GreatArrowWindow", 3f)) + "s (Right Click cancels), move and aim freely: " + IhNum(IhR("Bowmaster Splitting Arrow", "GreatArrowWidth", 4f)) + "m wide, " + IhBowPct(IhR("Bowmaster Splitting Arrow", "GreatArrowPercent", 380f), power) + ", pierces"));
+                    if (ascended) b.Append(IhLine("Sky Arrow", IhBowPct(IhR("Bowmaster Splitting Arrow Ascended", "SkyArrowPercent", 320f), power) + " Blunt + Pierce, " + IhNum(IhR("Bowmaster Splitting Arrow Ascended", "SkyArrowRadius", 4f)) + "m at your aim, Stuns every enemy (Bosses too); its own Left Click window opens 0.5s after the great arrow"));
                     IhCosts(b, IhR("Bowmaster Splitting Arrow", "StaminaCost", 25f), "Instant", IhR("Bowmaster Splitting Arrow", "Cooldown", 10f));
                     break;
                 case "starfall_volley":
