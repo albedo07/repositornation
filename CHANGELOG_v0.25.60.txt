@@ -1,0 +1,9 @@
+Immortal Heroes v0.25.60 - Ground Lightning
+
+LIGHTNING TRAILS (Electric Smite's 16 trails, Ascended Righteous Strike's 12 trails)
+- Real lightning now crawls along the ground with each trail: a jagged, flickering bolt (soft glow + white-hot
+  core) that follows the terrain from the impact to the trail's head, re-forking every 0.05 s, never sinking into
+  the ground. The tail dims, the head crackles with sparks and carries a small light, a fork snaps off the bolt
+  now and then, and when the trail ends the bolt fades and leaves a scorched scar on the ground.
+- Replaces the old little rings drawn every frame (they stay as the fallback with [Visuals] EnhancedSkillVfx off).
+- Visual only: damage, range and timing unchanged.

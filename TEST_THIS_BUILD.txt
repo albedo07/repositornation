@@ -1,5 +1,4 @@
-TEST v0.25.59
-1. Normal chain (Sword Master sword, Warrior/Merc axe/club, Cleric club): 1-2-1-2-3 at ~0.6 s each, no freeze on hits, no pause between hit 2 and 3. The first chain after loading may run at natural speed (timings are measured live).
-2. Mercenary dual wield: smooth chain, off-hand trail visible, no double freeze.
-3. VFX: fewer/softer flashes; ground rings, scorch marks, smoke, light columns, slash ribbons on the skills listed in the changelog.
-4. If anything is too dim: F8 [Visuals] LightIntensity_v02559 / ParticleDensity_v02559.
+TEST v0.25.60
+1. Electric Smite (Paladin Ultimate): 16 lightning bolts crawl out along the ground, follow slopes, fade into scars.
+2. Ascended Righteous Strike: 12 faster ground bolts.
+3. FPS with both at once (F8 [Visuals] LightIntensity_v02559 0 removes the head lights).

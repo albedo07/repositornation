@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.59";
+        public const string ModVersion = "0.25.60";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -5128,12 +5128,17 @@ namespace AlbedosCustomClassesAdvanced
                 forward = Vector3.forward;
             forward.Normalize();
             int groundMask = LayerMask.GetMask("Default", "static_solid", "Default_small", "piece_nonsolid", "terrain", "vehicle", "piece", "viewblock");
+            DragonGroundBolt crawl = null;
+            if (_enableVfx.Value) { float tl = travelTime; DragonCombat.RunVfx(delegate { crawl = DragonVfx.GroundLightning(DragonVfx.Storm, 0.12f, tl + 1f); }); }   // v0.25.60 real ground lightning
 
             float elapsed = 0f;
             while (elapsed <= travelTime)
             {
                 if (player == null || player.IsDead())
+                {
+                    if (crawl != null) crawl.Finish(0.3f);
                     yield break;
+                }
 
                 float t = Mathf.Clamp01(elapsed / Mathf.Max(0.05f, travelTime));
                 Vector3 projected = origin + forward * (range * t);
@@ -5156,16 +5161,15 @@ namespace AlbedosCustomClassesAdvanced
                         RefreshSpiritBurn(player, target, spiritDps, Mathf.Max(0.1f, spiritDuration));
                     }
 
-                    if (_enableVfx.Value)
-                    {
+                    if (crawl != null) crawl.Add(point);
+                    else if (_enableVfx.Value)
                         StartCoroutine(AnimateRing(point + Vector3.up * 0.06f, 0.12f, DragonCombat.M(0.80f), 0.20f, new Color(0.62f, 0.86f, 1f, 0.82f), 0.05f));
-                        DragonCombat.RunVfx(delegate { DragonVfx.Burst(point + Vector3.up * 0.2f, DragonVfx.Storm, 8, 5f, 0.18f, 0.35f, 0.5f); });   // v0.25.54 crackling trail
-                    }
                 }
 
                 elapsed += Time.deltaTime;
                 yield return null;
             }
+            if (crawl != null) crawl.Finish(0.45f);
         }
 
         private void CastAscendedRighteousStrike(Player player)
@@ -7147,11 +7151,17 @@ namespace AlbedosCustomClassesAdvanced
                 "viewblock"
             );
 
+            DragonGroundBolt crawl = null;
+            if (_enableVfx.Value) { float tl = travelTime; DragonCombat.RunVfx(delegate { crawl = DragonVfx.GroundLightning(DragonVfx.Storm, 0.14f, tl + 1f); }); }   // v0.25.60 real ground lightning
+
             float elapsed = 0f;
             while (elapsed <= travelTime)
             {
                 if (player == null || player.IsDead())
+                {
+                    if (crawl != null) crawl.Finish(0.3f);
                     yield break;
+                }
 
                 float t = Mathf.Clamp01(elapsed / Mathf.Max(0.05f, travelTime));
                 Vector3 projected = origin + forward * (range * t);
@@ -7192,7 +7202,8 @@ namespace AlbedosCustomClassesAdvanced
                     RefreshSpiritBurn(player, target, _divineSpiritDot.Value, Mathf.Max(0.1f, _divineSpiritDuration.Value));
                 }
 
-                if (_enableVfx.Value)
+                if (crawl != null) crawl.Add(point);
+                else if (_enableVfx.Value)
                 {
                     StartCoroutine(AnimateRing(
                         point + Vector3.up * 0.06f,
@@ -7207,6 +7218,7 @@ namespace AlbedosCustomClassesAdvanced
                 elapsed += Time.deltaTime;
                 yield return null;
             }
+            if (crawl != null) crawl.Finish(0.45f);
         }
 
         private List<Character> GetFrontalTargets(Player player, Vector3 origin, Vector3 forward, float range, float angle)

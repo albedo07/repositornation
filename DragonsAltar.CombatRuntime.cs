@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.59";
+        public const string ModVersion = "0.25.60";
 
         internal static DragonCombatPlugin Instance;
 
@@ -8664,6 +8664,111 @@ namespace DragonsAltarCombat
         private void OnDestroy() { if (_mesh != null) Destroy(_mesh); }
     }
 
+    // v0.25.60: lightning that crawls along the ground (Lightning Trails). The path is the list of ground
+    // points the trail has reached; every 0.05 s it is re-jagged sideways (never into the ground), the tail
+    // dims, the head crackles with small arcs, and when the trail ends it fades leaving a scorched scar.
+    public class DragonGroundBolt : MonoBehaviour
+    {
+        public LineRenderer Glow, Core, Fork;
+        public Light HeadLight;
+        public readonly List<Vector3> Pts = new List<Vector3>();
+        public Color Color = Color.white;
+        public float Width = 0.15f, MaxLife = 10f;
+        private float _age, _next, _fadeAge, _fadeLen = 0.45f, _nextArc;
+        private bool _done;
+        private Vector3[] _buf = new Vector3[0];
+
+        public void Add(Vector3 p)
+        {
+            if (_done) return;
+            if (Pts.Count == 0 || (Pts[Pts.Count - 1] - p).sqrMagnitude > 0.16f) Pts.Add(p);
+        }
+
+        public void Finish(float fade)
+        {
+            if (_done) return;
+            _done = true;
+            _fadeLen = Mathf.Max(0.1f, fade);
+            if (Pts.Count >= 2)
+            {
+                Vector3 a = Pts[0], b = Pts[Pts.Count - 1];
+                Color sc = Color.Lerp(Color, Color.white, 0.2f);
+                DragonCombat.RunVfx(delegate { DragonVfx.CrackLine(a, b, sc, Width * 1.6f, 2.5f); });
+            }
+        }
+
+        private void Update()
+        {
+            _age += Time.deltaTime;
+            if (!_done && _age >= MaxLife) Finish(0.4f);
+            if (_done)
+            {
+                _fadeAge += Time.deltaTime;
+                if (_fadeAge >= _fadeLen) { Destroy(gameObject); return; }
+            }
+            if (Time.time >= _next) { _next = Time.time + 0.05f; Rebuild(); }
+            float k = _done ? 1f - _fadeAge / _fadeLen : 1f;
+            float flick = UnityEngine.Random.Range(0.65f, 1f) * k;
+            Paint(Glow, Color, 0.55f * flick);
+            Paint(Core, new Color(0.92f, 0.97f, 1f, 1f), flick);
+            Paint(Fork, Color, 0.8f * flick);
+            if (HeadLight != null && Pts.Count > 0)
+            {
+                HeadLight.transform.position = Pts[Pts.Count - 1] + Vector3.up * 0.5f;
+                HeadLight.intensity = 1.6f * DragonVfx.LightScale * flick;
+            }
+            if (!_done && Pts.Count > 0 && Time.time >= _nextArc)
+            {
+                _nextArc = Time.time + UnityEngine.Random.Range(0.08f, 0.16f);
+                Vector3 head = Pts[Pts.Count - 1];
+                Color hc = Color;
+                DragonCombat.RunVfx(delegate { DragonVfx.Burst(head + Vector3.up * 0.1f, hc, 5, 4f, 0.12f, 0.25f, 0.6f); });
+            }
+        }
+
+        private static void Paint(LineRenderer l, Color c, float a)
+        {
+            if (l == null) return;
+            Gradient g = new Gradient();
+            g.SetKeys(new GradientColorKey[] { new GradientColorKey(c, 0f), new GradientColorKey(c, 1f) },
+                      new GradientAlphaKey[] { new GradientAlphaKey(a * 0.25f, 0f), new GradientAlphaKey(a * 0.8f, 0.6f), new GradientAlphaKey(a, 1f) });
+            l.colorGradient = g;
+        }
+
+        private Vector3 Jit(Vector3 p, Vector3 side, float amount)
+        {
+            return p + side * UnityEngine.Random.Range(-amount, amount) + Vector3.up * UnityEngine.Random.Range(0.06f, 0.22f);
+        }
+
+        private void Rebuild()
+        {
+            int n = Pts.Count;
+            if (n < 2) { if (Glow != null) Glow.positionCount = 0; if (Core != null) Core.positionCount = 0; if (Fork != null) Fork.positionCount = 0; return; }
+            int m = n * 2 - 1;
+            if (_buf.Length != m) _buf = new Vector3[m];
+            for (int i = 0; i < n; i++)
+            {
+                Vector3 dir = (i < n - 1 ? Pts[i + 1] - Pts[i] : Pts[i] - Pts[i - 1]); dir.y = 0f;
+                Vector3 side = Vector3.Cross(Vector3.up, dir.sqrMagnitude > 0.0001f ? dir.normalized : Vector3.forward);
+                _buf[i * 2] = i == 0 ? Pts[0] + Vector3.up * 0.1f : Jit(Pts[i], side, Width * 2.2f);
+                if (i < n - 1) _buf[i * 2 + 1] = Jit((Pts[i] + Pts[i + 1]) * 0.5f, side, Width * 3.2f);
+            }
+            Glow.positionCount = m; Glow.SetPositions(_buf);
+            Core.positionCount = m; Core.SetPositions(_buf);
+            if (Fork != null)
+            {
+                // one short fork off a random point
+                int at = UnityEngine.Random.Range(0, m);
+                Vector3 o = _buf[at];
+                Vector3 d = Quaternion.Euler(0f, UnityEngine.Random.Range(-70f, 70f), 0f) * (Pts[n - 1] - Pts[0]).normalized;
+                Fork.positionCount = 3;
+                Fork.SetPosition(0, o);
+                Fork.SetPosition(1, o + d * UnityEngine.Random.Range(0.4f, 0.8f) + Vector3.up * 0.1f + Vector3.Cross(Vector3.up, d) * UnityEngine.Random.Range(-0.3f, 0.3f));
+                Fork.SetPosition(2, o + d * UnityEngine.Random.Range(0.9f, 1.5f) + Vector3.up * 0.05f);
+            }
+        }
+    }
+
     public static class DragonVfx
     {
         private static Material _add, _alpha;
@@ -9583,6 +9688,62 @@ namespace DragonsAltarCombat
             ParticleSystem.RotationOverLifetimeModule rot = ps.rotationOverLifetime;
             rot.enabled = true;
             rot.z = new ParticleSystem.MinMaxCurve(-1.5f, 1.5f);
+        }
+
+        private static Texture2D _lineTex;
+
+        // Soft line across its width, flat along its length (ribbons drawn with LineRenderers).
+        private static Texture2D LineTex()
+        {
+            if (_lineTex == null) _lineTex = MakeTex(16, 32, delegate(float u, float v)
+            {
+                return Mathf.Exp(-Mathf.Pow((v - 0.5f) / 0.22f, 2f)) * 0.75f + Mathf.Exp(-Mathf.Pow((v - 0.5f) / 0.07f, 2f)) * 0.4f;
+            }, TextureWrapMode.Clamp);
+            return _lineTex;
+        }
+
+        private static LineRenderer SoftLine(Transform parent, float width)
+        {
+            GameObject go = new GameObject("line");
+            go.transform.SetParent(parent, false);
+            LineRenderer line = go.AddComponent<LineRenderer>();
+            line.useWorldSpace = true;
+            line.positionCount = 0;
+            line.widthMultiplier = Mathf.Max(0.02f, width);
+            line.numCapVertices = 2;
+            line.numCornerVertices = 1;
+            line.textureMode = LineTextureMode.Stretch;
+            Material m = Mat(LineTex(), true);
+            if (m != null) line.sharedMaterial = m;
+            line.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            return line;
+        }
+
+        // Lightning crawling along the ground; feed it points with Add() as the trail advances, then Finish().
+        public static DragonGroundBolt GroundLightning(Color c, float width, float maxLife)
+        {
+            if (!Enabled) return null;
+            GameObject go = new GameObject("IH_GroundBolt");
+            DragonGroundBolt b = go.AddComponent<DragonGroundBolt>();
+            b.Color = c;
+            b.Width = Mathf.Max(0.05f, width);
+            b.MaxLife = Mathf.Max(0.5f, maxLife);
+            b.Glow = SoftLine(go.transform, width * 5f);
+            b.Core = SoftLine(go.transform, width * 1.4f);
+            b.Fork = SoftLine(go.transform, width * 1.6f);
+            if (LightScale > 0.05f)
+            {
+                GameObject lg = new GameObject("head");
+                lg.transform.SetParent(go.transform, false);
+                Light l = lg.AddComponent<Light>();
+                l.type = LightType.Point;
+                l.color = c;
+                l.range = 3f;
+                l.intensity = 0f;
+                l.shadows = LightShadows.None;
+                b.HeadLight = l;
+            }
+            return b;
         }
 
         // ------------------------------------------------------------------ themed presets
