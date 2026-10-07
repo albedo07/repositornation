@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.77";
+        public const string ModVersion = "0.25.78";
 
         internal static DragonCombatPlugin Instance;
 
@@ -34,6 +34,7 @@ namespace DragonsAltarCombat
         internal ConfigEntry<float> ZapDamage;
         internal ConfigEntry<bool> BurnsUseCurrentHpPercent;
         internal ConfigEntry<float> BurnRampPercent, BurnRampMax;
+        internal ConfigEntry<float> BulwarkArc, BulwarkRadius;
         internal ConfigEntry<float> FireBurnCurrentHpPercent;
         internal ConfigEntry<float> SpiritBurnMultiplier;
         internal ConfigEntry<float> MinimumBurnTick;
@@ -109,6 +110,8 @@ namespace DragonsAltarCombat
             CharacterHeightMeters = Config.Bind("Measurement", "CharacterHeightMeters", 0.5f, "v0.22.5 ruler (user rule): your character's height counts as this many meters. Every range, radius, width, length and travel speed in every config is in these meters.");
             UnitsPerMeterOverride = Config.Bind("Measurement", "UnitsPerMeterOverride", 1.5f, "Unity units per config meter. 1.5 = the confirmed in-game ruler (user, v0.23.3). 0 = automatic from character height / CharacterHeightMeters.");
             ZapDamage = Config.Bind("Debuffs", "ZapLightningDamage", 25f, "Testing/default lightning damage for Zap because the framework does not specify an amount.");
+            BulwarkArc = Config.Bind("Paladin Holy Bulwark", "TowerBlockArcDegrees_v02578", 300f, "Paladin Mastery with a Tower Shield: hits coming from inside this arc (centred on your facing) are blockable. Vanilla blocks only the front half (180).");
+            BulwarkRadius = Config.Bind("Paladin Holy Bulwark", "ForceFieldRadius_v02578", 2f, "Radius (m) of the holy force field shown in front of you while blocking with a Tower Shield.");
             BurnRampPercent = Config.Bind("Damage Over Time", "StackingBurnPercentPerTick_v02512", 20f, "Universal: every consecutive Fire Burn / Spirit Burn tick on the same target deals this much MORE than the previous one (percent of the base tick). Resets when the burn stops.");
             BurnRampMax = Config.Bind("Damage Over Time", "StackingBurnMaxMultiplier_v02512", 4f, "Cap for the stacking burn (x base tick damage).");
             BurnsUseCurrentHpPercent = Config.Bind("Damage Over Time", "LegacyBurnsUseCurrentHpPercent_v0212", false, "Legacy: burns now deal the skill's own burn damage. True = old 3% CURRENT HP burns.");
@@ -418,6 +421,15 @@ namespace DragonsAltarCombat
             }
             count += PatchEquipItem();
             count += PatchHotbarUse();
+            // v0.25.78 Ray of Hope: debuff immunity blocks new debuff status effects.
+            Type semanType = DragonCombat.FindTypeCached("SEMan");
+            if (semanType != null)
+                foreach (MethodInfo am in semanType.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+                {
+                    if (am.Name != "AddStatusEffect") continue;
+                    try { PatchWithHarmony(am, new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("SeAddPrefix", BindingFlags.Static | BindingFlags.NonPublic)), null); count++; }
+                    catch (Exception ex) { Logger.LogWarning("AddStatusEffect patch: " + ex.Message); }
+                }
 
             Logger.LogInfo("Combat Runtime hooks installed: " + count);
         }
@@ -731,6 +743,9 @@ namespace DragonsAltarCombat
                     __state.ParryField = SetTemporaryBlockMultiplier(blocker.m_shared, "m_timedBlockBonus", 2f, out __state.OriginalParry);
                     __state.BucklerParryWindow = DragonCombat.IsInParryWindow(player);
                 }
+                // v0.25.78 Holy Bulwark (Paladin Mastery + Tower Shield): the block covers 3x the area.
+                if (DragonCombat.GetAdvancementName(player) == "Paladin" && DragonCombat.IsTowerShield(blocker))
+                    DragonCombat.HolyBulwarkWiden(player, __args);
                 if (DragonCombat.GetClassName(player) == "Cleric" && DragonCombat.IsShield(blocker))
                 {
                     // Shield Weapon Mastery: every shield gets 1.5x Block Force AND Block Power.
@@ -1516,6 +1531,23 @@ namespace DragonsAltarCombat
 
         // v0.25.63: the blocked-hit reaction animation slides the player back with root motion; under Hyper Armor
         // that slide is dropped (attack lunges are untouched).
+        private static bool SeAddPrefix(object __instance, object[] __args)
+        {
+            try
+            {
+                if (!DragonCombat.AnyDebuffImmunity || __args == null || __args.Length == 0) return true;
+                Character ch = DragonCombat.SemanOwner(__instance);
+                if (ch == null || !DragonCombat.IsDebuffImmune(ch)) return true;
+                string name = null;
+                StatusEffect se = __args[0] as StatusEffect;
+                if (se != null) name = se.name;
+                else if (__args[0] is int) name = DragonCombat.StatusNameFromHash((int)__args[0]);
+                if (name != null && DragonCombat.IsDebuffEffectName(name)) return false;
+            }
+            catch (Exception) { }
+            return true;
+        }
+
         private static void RpcDamagePrefix(Character __instance, object[] __args)
         {
             try
@@ -6111,6 +6143,7 @@ namespace DragonsAltarCombat
         // Bosses are never frozen, only slowed by bossSlow.
         public static void Freeze(Character target, float seconds, float bossSlow)
         {
+            if (IsDebuffImmune(target)) return;
             if (target == null || target.IsDead()) return;
             DragonCrippleController controller = target.GetComponent<DragonCrippleController>();
             if (controller == null) controller = target.gameObject.AddComponent<DragonCrippleController>();
@@ -6876,8 +6909,13 @@ namespace DragonsAltarCombat
 
             string statusIcon, statusLabel;
             TimedBuffLook(source, attackDamageBonus, attackSpeedBonus, moveSpeedBonus, defenseBonus, staminaRegenBonus, eitrRegenBonus, hyperArmor, out statusIcon, out statusLabel);
-            if (duration >= 1f) ShowStatus(player, "buff_" + source, statusIcon, statusLabel, duration, 0,
-                TimedBuffDetail(attackDamageBonus, attackSpeedBonus, moveSpeedBonus, defenseBonus, staminaRegenBonus, eitrRegenBonus, hyperArmor));
+            if (duration >= 1f)
+            {
+                string det = TimedBuffDetail(attackDamageBonus, attackSpeedBonus, moveSpeedBonus, defenseBonus, staminaRegenBonus, eitrRegenBonus, hyperArmor);
+                string note;
+                if (BuffNotes.TryGetValue(source, out note) && !string.IsNullOrEmpty(note)) det += "\n" + note;
+                ShowStatus(player, "buff_" + source, statusIcon, statusLabel, duration, 0, det);
+            }
 
             TimedBuffState state = new TimedBuffState();
             state.EndTime = Time.time + Mathf.Max(0.1f, duration);
@@ -6980,6 +7018,7 @@ namespace DragonsAltarCombat
 
         public static void ApplyExpose(Character target, float duration)
         {
+            if (IsDebuffImmune(target)) return;
             DebuffState state = GetDebuffState(target);
             if (state == null)
                 return;
@@ -6997,6 +7036,7 @@ namespace DragonsAltarCombat
 
         public static void ApplyCripple(Character target, float duration)
         {
+            if (IsDebuffImmune(target)) return;
             DebuffState state = GetDebuffState(target);
             if (state == null)
                 return;
@@ -7015,6 +7055,7 @@ namespace DragonsAltarCombat
 
         public static void ApplyFrost(Character target, float duration)
         {
+            if (IsDebuffImmune(target)) return;
             DebuffState state = GetDebuffState(target);
             if (state == null) return;
             float resolved = ResolveDuration(duration);
@@ -7091,6 +7132,7 @@ namespace DragonsAltarCombat
 
         public static void Stun(Character target, Vector3 fromPoint)
         {
+            if (IsDebuffImmune(target)) return;
             if (target == null || target.IsDead() || target.IsBoss()) // Bosses are never stunned (global rule)
                 return;
             Vector3 dir = target.transform.position - fromPoint;
@@ -8005,9 +8047,171 @@ namespace DragonsAltarCombat
             catch (Exception) { }
         }
 
+        // ------------------------------------------------------------------ v0.25.78
+        // Buff tooltip notes (user: "put everything"): extra effect lines per timed-buff source, appended to the
+        // hover tooltip (stamina use cuts, no movement penalty, skill bonuses... anything ApplyTimedBuff can't carry).
+        private static readonly Dictionary<string, string> BuffNotes = new Dictionary<string, string>();
+        public static void SetBuffNote(string source, string note)
+        {
+            if (source == null) return;
+            if (string.IsNullOrEmpty(note)) BuffNotes.Remove(source); else BuffNotes[source] = note;
+        }
+
+        // Ray of Hope: debuff cleanse + immunity.
+        private static readonly Dictionary<int, float> DebuffImmuneUntil = new Dictionary<int, float>();
+        public static bool AnyDebuffImmunity { get { return DebuffImmuneUntil.Count > 0; } }
+        private static readonly string[] DebuffWords = { "burn", "frost", "poison", "lightning", "spirit", "smoke", "wet", "tared", "slime", "slow", "weak", "bleed", "curse", "corrupt", "rot", "shock", "stagger", "expose", "cripple" };
+        public static bool IsDebuffEffectName(string name)
+        {
+            if (string.IsNullOrEmpty(name) || name.StartsWith("IH_", StringComparison.Ordinal)) return false;
+            string n = name.ToLowerInvariant();
+            if (n.Contains("freezing") || n.Contains("cold")) return false;   // weather, re-applied by the environment
+            for (int i = 0; i < DebuffWords.Length; i++) if (n.Contains(DebuffWords[i])) return true;
+            return false;
+        }
+
+        public static bool IsDebuffImmune(Character c)
+        {
+            if (c == null || DebuffImmuneUntil.Count == 0) return false;
+            float until;
+            if (!DebuffImmuneUntil.TryGetValue(c.GetInstanceID(), out until)) return false;
+            if (Time.time < until) return true;
+            DebuffImmuneUntil.Remove(c.GetInstanceID());
+            return false;
+        }
+
+        public static void GrantDebuffImmunity(Player p, float seconds)
+        {
+            if (p == null || seconds <= 0f) return;
+            DebuffImmuneUntil[p.GetInstanceID()] = Time.time + seconds;
+            ShowStatus(p, "purity", "purity", "Purity", seconds, 0, "Defense Buff\nImmune to every debuff:\nBurning, Poison, Frost, Shock, Spirit Burn,\nWet, Smoked, Tar, Slow, Stun, Expose, Cripple\nAll debuffs were removed when it started");
+            Player pv = p;
+            RunVfx(delegate { DragonVfx.Aura(pv.transform, pv.transform.position, new Color(1f, 0.92f, 0.6f, 1f), 0.5f, seconds, 10f, 0.8f); });
+        }
+
+        private static FieldInfo _semanChar;
+        public static Character SemanOwner(object seman)
+        {
+            if (seman == null) return null;
+            if (_semanChar == null) _semanChar = seman.GetType().GetField("m_character", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            return _semanChar == null ? null : _semanChar.GetValue(seman) as Character;
+        }
+
+        private static MethodInfo _odbGetSe;
+        private static object OdbInstance()
+        {
+            Type t = FindTypeCached("ObjectDB");
+            if (t == null) return null;
+            PropertyInfo pi = t.GetProperty("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+            if (pi != null) return pi.GetValue(null, null);
+            FieldInfo fi = t.GetField("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic) ?? t.GetField("m_instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+            return fi == null ? null : fi.GetValue(null);
+        }
+
+        public static string StatusNameFromHash(int hash)
+        {
+            try
+            {
+                object db = OdbInstance();
+                if (db == null) return null;
+                if (_odbGetSe == null) _odbGetSe = db.GetType().GetMethod("GetStatusEffect", new Type[] { typeof(int) });
+                StatusEffect se = _odbGetSe == null ? null : _odbGetSe.Invoke(db, new object[] { hash }) as StatusEffect;
+                return se == null ? null : se.name;
+            }
+            catch (Exception) { return null; }
+        }
+
+        public static void CleanseDebuffs(Character c)
+        {
+            if (c == null) return;
+            DebuffState st;
+            if (Debuffs.TryGetValue(c.GetInstanceID(), out st) && st != null)
+            {
+                st.ExposeUntil = 0f; st.BrokenBonesUntil = 0f; st.CrippleUntil = 0f; st.FrostUntil = 0f; st.ZapPending = false;
+            }
+            try
+            {
+                object seman = c.GetSEMan();
+                if (seman == null) return;
+                MethodInfo get = seman.GetType().GetMethod("GetStatusEffects", Type.EmptyTypes);
+                System.Collections.IList list = get == null ? null : get.Invoke(seman, null) as System.Collections.IList;
+                if (list == null) return;
+                MethodInfo remove = seman.GetType().GetMethod("RemoveStatusEffect", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new Type[] { typeof(int), typeof(bool) }, null);
+                if (remove == null) return;
+                List<string> names = new List<string>();
+                for (int i = 0; i < list.Count; i++) { StatusEffect se = list[i] as StatusEffect; if (se != null && !(se is IhStatusDisplay) && IsDebuffEffectName(se.name)) names.Add(se.name); }
+                for (int i = 0; i < names.Count; i++) remove.Invoke(seman, new object[] { StableHash(names[i]), false });
+            }
+            catch (Exception) { }
+        }
+
+        // Holy Bulwark: hits from inside the Tower Shield arc are turned into frontal hits so the block catches them.
+        public static void HolyBulwarkWiden(Player player, object[] args)
+        {
+            if (player == null || args == null) return;
+            HitData hit = null; Character attacker = null;
+            for (int i = 0; i < args.Length; i++) { if (hit == null) hit = args[i] as HitData; if (attacker == null) attacker = args[i] as Character; }
+            if (hit == null) return;
+            DragonCombatPlugin plugin = DragonCombatPlugin.Instance;
+            float arc = plugin == null || plugin.BulwarkArc == null ? 300f : Mathf.Clamp(plugin.BulwarkArc.Value, 0f, 360f);
+            Vector3 fwd = player.transform.forward; fwd.y = 0f; fwd.Normalize();
+            Vector3 src = attacker != null ? attacker.transform.position : hit.m_point - hit.m_dir * 3f;
+            Vector3 to = src - player.transform.position; to.y = 0f;
+            if (to.sqrMagnitude < 0.0001f) return;
+            if (Vector3.Dot(to.normalized, fwd) < Mathf.Cos(arc * 0.5f * Mathf.Deg2Rad)) return;
+            Vector3 d = hit.m_dir;
+            if (Vector3.Dot(d, fwd) > -0.1f)
+            {
+                d = -fwd; d.y = hit.m_dir.y * 0.5f;
+                hit.m_dir = d.normalized;
+            }
+            _bulwarkFlashAt = Time.time;
+            Vector3 fp = player.transform.position + Vector3.up * 1f + to.normalized * 1.2f;
+            RunVfx(delegate { DragonVfx.Burst(fp, new Color(1f, 0.92f, 0.6f, 1f), 18, 5f, 0.15f, 0.4f, 0.2f); DragonVfx.Flash(fp, new Color(1f, 0.9f, 0.6f, 1f), 1.5f, 4f, 0.15f); });
+        }
+
+        private static float _bulwarkFlashAt = -10f;
+        private static GameObject _bulwark;
+        private static float _bulwarkAlpha;
+        public static float BulwarkFlashAt { get { return _bulwarkFlashAt; } }
+
+        // The holy force field shown in front of a Paladin blocking with a Tower Shield (fades in / out).
+        private static void UpdateHolyBulwark(Player p)
+        {
+            bool on = false;
+            try
+            {
+                if (p != null && !p.IsDead() && GetAdvancementName(p) == "Paladin" && p.IsBlocking())
+                {
+                    ItemDrop.ItemData sh = GetHandItem(p, "m_leftItem");
+                    on = IsShield(sh) && IsTowerShield(sh);
+                }
+            }
+            catch (Exception) { on = false; }
+            _bulwarkAlpha = Mathf.MoveTowards(_bulwarkAlpha, on ? 1f : 0f, Time.deltaTime * 6f);
+            if (_bulwarkAlpha <= 0.001f)
+            {
+                if (_bulwark != null) { UnityEngine.Object.Destroy(_bulwark); _bulwark = null; }
+                return;
+            }
+            if (_bulwark == null)
+            {
+                DragonCombatPlugin plugin = DragonCombatPlugin.Instance;
+                float r = plugin == null || plugin.BulwarkRadius == null ? 2f : Mathf.Max(0.5f, plugin.BulwarkRadius.Value);
+                _bulwark = DragonVfx.HolyDome(r);
+                if (_bulwark == null) return;
+            }
+            _bulwark.transform.position = p.transform.position + Vector3.up * 0.05f;
+            Vector3 f = p.transform.forward; f.y = 0f;
+            if (f.sqrMagnitude > 0.001f) _bulwark.transform.rotation = Quaternion.LookRotation(f.normalized, Vector3.up);
+            float flash = Mathf.Clamp01(1f - (Time.time - _bulwarkFlashAt) / 0.25f);
+            DragonVfx.SetDomeAlpha(_bulwark, _bulwarkAlpha * (0.75f + 0.25f * Mathf.Sin(Time.time * 4f)) + flash * 0.8f);
+        }
+
         public static void RuntimeUpdate()
         {
             float now = Time.time;
+            if (Player.m_localPlayer != null || _bulwark != null) UpdateHolyBulwark(Player.m_localPlayer);
             if (PendingLearns.Count > 0) UpdateLearns();
             if (now >= _nextDualCheck) { _nextDualCheck = now + 0.5f; EnforceDualWieldOwner(Player.m_localPlayer); DragonCombatPlugin.SyncDualController(Player.m_localPlayer); }
 
@@ -11486,6 +11690,60 @@ namespace DragonsAltarCombat
             rot.Speed = new Vector3(260f, 40f, 90f);
         }
 
+        // v0.25.78 Holy Bulwark: a white-gold force field curving around your front (shell of a half dome).
+        public static GameObject HolyDome(float radius)
+        {
+            if (!Enabled) return null;
+            GameObject root = new GameObject("IH_HolyBulwark");
+            int na = 28, ne = 12;
+            List<Vector3> v = new List<Vector3>();
+            List<Color> cs = new List<Color>();
+            List<int> t = new List<int>();
+            for (int j = 0; j <= ne; j++)
+            {
+                float el = Mathf.Lerp(-8f, 82f, (float)j / ne) * Mathf.Deg2Rad;
+                for (int i = 0; i <= na; i++)
+                {
+                    float az = Mathf.Lerp(-105f, 105f, (float)i / na) * Mathf.Deg2Rad;
+                    v.Add(new Vector3(Mathf.Sin(az) * Mathf.Cos(el), Mathf.Sin(el), Mathf.Cos(az) * Mathf.Cos(el)) * radius + Vector3.up * 0.1f);
+                    float edgeA = 1f - Mathf.Abs((float)i / na * 2f - 1f);           // 0 at the side edges
+                    float rim = Mathf.Pow(1f - edgeA, 3f) * 0.7f + Mathf.Pow((float)j / ne, 4f) * 0.4f;
+                    float lattice = 0.12f * Mathf.Max(0f, Mathf.Sin(i * 1.6f)) * Mathf.Max(0f, Mathf.Sin(j * 1.6f + 0.8f));
+                    float fadeSide = Mathf.SmoothStep(0f, 1f, edgeA * 4f);
+                    float fadeTop = Mathf.SmoothStep(0f, 1f, (1f - (float)j / ne) * 3f);
+                    Color c = Color.Lerp(new Color(1f, 0.86f, 0.5f, 1f), new Color(1f, 1f, 0.92f, 1f), rim);
+                    c.a = Mathf.Clamp01((0.10f + rim * 0.5f + lattice) * fadeSide * fadeTop);
+                    cs.Add(c);
+                }
+            }
+            for (int j = 0; j < ne; j++)
+                for (int i = 0; i < na; i++)
+                {
+                    int a = j * (na + 1) + i, b = a + 1, c = a + na + 1, d = c + 1;
+                    t.Add(a); t.Add(c); t.Add(b); t.Add(b); t.Add(c); t.Add(d);
+                    t.Add(a); t.Add(b); t.Add(c); t.Add(b); t.Add(d); t.Add(c);
+                }
+            Mesh m = new Mesh();
+            m.vertices = v.ToArray(); m.colors = cs.ToArray(); m.triangles = t.ToArray();
+            Vector2[] uv = new Vector2[v.Count]; for (int i = 0; i < uv.Length; i++) uv[i] = new Vector2(0.5f, 0.5f);
+            m.uv = uv;
+            m.RecalculateBounds();
+            MeshObject("glow", m, Mat(WhiteTex(), true), root.transform);
+            DragonDome dd = root.AddComponent<DragonDome>();
+            dd.Mesh = m; dd.Base = cs.ToArray();
+            Light l = root.AddComponent<Light>();
+            l.type = LightType.Point; l.color = new Color(1f, 0.88f, 0.6f, 1f); l.range = radius * 2.2f; l.intensity = 0f; l.shadows = LightShadows.None;
+            dd.Light = l;
+            return root;
+        }
+
+        public static void SetDomeAlpha(GameObject dome, float a)
+        {
+            if (dome == null) return;
+            DragonDome dd = dome.GetComponent<DragonDome>();
+            if (dd != null) dd.SetAlpha(a);
+        }
+
         public static void CastFlare(Player p, bool big)
         {
             if (!Enabled || p == null) return;
@@ -11584,5 +11842,24 @@ namespace DragonsAltarCombat
             Scaler.localScale = new Vector3(xy, xy, Mathf.Max(0.01f, z));
             if (_age >= Life + 0.35f) Destroy(gameObject);
         }
+    }
+    public class DragonDome : MonoBehaviour
+    {
+        public Mesh Mesh;
+        public Color[] Base;
+        public Light Light;
+        private float _last = -1f;
+        private Color[] _buf;
+        public void SetAlpha(float a)
+        {
+            a = Mathf.Clamp(a, 0f, 1.8f);
+            if (Light != null) Light.intensity = 1.2f * a * DragonVfx.LightScale;
+            if (Mesh == null || Base == null || Mathf.Abs(a - _last) < 0.02f) return;
+            _last = a;
+            if (_buf == null || _buf.Length != Base.Length) _buf = new Color[Base.Length];
+            for (int i = 0; i < Base.Length; i++) { Color c = Base[i]; c.a = Mathf.Clamp01(c.a * a); _buf[i] = c; }
+            Mesh.colors = _buf;
+        }
+        private void OnDestroy() { if (Mesh != null) Destroy(Mesh); }
     }
 }

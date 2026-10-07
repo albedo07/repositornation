@@ -17,7 +17,7 @@ namespace AlbedosCustomClassesGuardian
     {
         public const string ModGuid = "albedo.customclasses.guardian";
         public const string ModName = "Dragon's Altar - Grand Sigil Survival";
-        public const string ModVersion = "0.25.77";
+        public const string ModVersion = "0.25.78";
 
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -164,6 +164,7 @@ namespace AlbedosCustomClassesGuardian
                 StartCoroutine(GrandSigilVisual(player));
 
             // Framework: +50% Movement Speed and -70% Stamina Usage for the 6s emergency window.
+            DragonCombat.SetBuffNote("Priest.GrandSigilRecovery", "-" + Mathf.RoundToInt(_staminaUseCut.Value).ToString() + "% Stamina used by every action\nRecovering 50% of Max HP over " + Mathf.RoundToInt(_recoveryDuration.Value).ToString() + "s");
             DragonCombat.ApplyTimedBuff(player, "Priest.GrandSigilRecovery", Mathf.Max(0.1f, _recoveryDuration.Value), 0f, 0f, 0.50f, 0f, 0f, 0f, false);
             DragonCombat.ApplyStaminaUseCut(player, Mathf.Max(0f, _staminaUseCut.Value) / 100f, Mathf.Max(0.1f, _recoveryDuration.Value));
             StartCoroutine(Recovery(player));

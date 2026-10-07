@@ -1,7 +1,6 @@
-TEST v0.25.77
-1. Ascended Astral Greatblade: all 3 slams show a full lift + slam (no skipping).
-2. Moonlight Splitter / Halfmoon / Crescent Cleave: the crescent's edge points where it flies, not at the camera. Crescent Cleave = one blade. Check the wake trails.
-3. Electric Smite: no white light column. Same for every Ultimate / Grace.
-4. Jump slams: diagonal lean in the air. Stomp: chicken wings.
-5. HUD (Mercenary and every other class): STAMINA / EITR labels and numbers never overlap; try very large stamina values.
-6. Mercenary attack speed bonus is now +25%.
+TEST v0.25.78
+1. Ray of Hope while Burning / Poisoned / Wet: every debuff is removed and Purity shows for 12 s; new debuffs don't stick.
+   Note: on a server, the immunity only protects the caster for now (allies get the cleanse).
+2. Ascended Ray of Hope: enemies burn (fire + spirit, growing fast) for 8 s; you heal 7% Max HP per second for 6 s.
+3. Paladin + Tower Shield: block, and a gold force field appears in front of you. Hits from the sides are blocked too.
+4. Hover every buff icon (Battlecry, Knight's Guidance, Heaven's Light, Tailwind, Fury, ...): every effect is listed. Battlecry shows a separate Labor icon.

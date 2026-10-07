@@ -40,7 +40,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Dragon's Altar - Ranger";
-        public const string ModVersion = "0.25.77";
+        public const string ModVersion = "0.25.78";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -1675,6 +1675,7 @@ namespace DragonsAltarRanger
                 Player ally = hits[i].GetComponentInParent<Player>();
                 if (ally != null) allies.Add(ally);
             }
+            DragonCombat.SetBuffNote("Acrobat.Tailwind", "+" + Mathf.RoundToInt(_twJump.Value).ToString() + " Jump\nNo movement penalty from equipment\nNo fall damage");
             foreach (Player ally in allies)
             {
                 DragonCombat.ApplyTimedBuff(ally, "Acrobat.Tailwind", duration, 0f, 0f, Mathf.Max(0f, _twMove.Value) / 100f, 0f, 0f, 0f, false);

@@ -199,6 +199,19 @@ def i_portal(d, c):  # Phase Flow
     d.ellipse([118, 118, 138, 138], fill=(240, 220, 255))
 
 
+def i_purity(d, c):  # Ray of Hope debuff immunity: holy shield with a cross
+    shield(d, c, 128, 128, 84, 104)
+    d.rectangle([118, 70, 138, 186], fill=(255, 252, 235))
+    d.rectangle([90, 104, 166, 124], fill=(255, 252, 235))
+
+
+def i_labor(d, c):  # Battlecry gathering bonus: crossed pickaxe and axe
+    d.line([(70, 200), (186, 70)], fill=(120, 80, 45), width=16)
+    d.line([(186, 200), (70, 70)], fill=(120, 80, 45), width=16)
+    d.polygon([(150, 52), (214, 84), (196, 100), (160, 84), (128, 92)], fill=c)
+    d.polygon([(50, 58), (98, 70), (92, 112), (56, 104)], fill=c)
+
+
 ICONS = [
     ("hyper_armor", (255, 140, 40), i_hyper), ("barrier", (255, 214, 60), i_barrier),
     ("defense", (120, 160, 220), i_defense), ("damage", (235, 60, 50), i_damage),
@@ -212,7 +225,8 @@ ICONS = [
     ("relic", (90, 220, 200), i_relic), ("wings", (235, 245, 255), i_wings),
     ("storm", (80, 140, 255), i_storm), ("parry", (190, 200, 215), i_parry),
     ("heart", (250, 110, 150), i_heart), ("wind", (150, 245, 210), i_wind),
-    ("portal", (130, 80, 255), i_portal),
+    ("portal", (130, 80, 255), i_portal), ("purity", (255, 226, 140), i_purity),
+    ("labor", (210, 170, 110), i_labor),
 ]
 
 

@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.77";
+        public const string ModVersion = "0.25.78";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -283,7 +283,7 @@ namespace AlbedosCustomClassesAdvanced
         private ConfigEntry<float> _rayWindup;
         private ConfigEntry<float> _rayHealPercent;
         private ConfigEntry<float> _rayDamageBuff;
-        private ConfigEntry<float> _rayBuffDuration;
+        private ConfigEntry<float> _rayBuffDuration, _rayImmunity, _rayAscBurnDps, _rayAscBurnSeconds, _rayAscBurnRamp, _rayAscRegenPct, _rayAscRegenSeconds;
         private ConfigEntry<float> _rayRadius;
         private ConfigEntry<float> _raySpiritBurnDuration;
         private ConfigEntry<float> _shieldChargeCooldown;
@@ -824,6 +824,7 @@ namespace AlbedosCustomClassesAdvanced
             _rayHealPercent = Config.Bind("Paladin Ray of Hope", "HealPercent", 30f, "Heal 30 percent max HP.");
             _rayDamageBuff = Config.Bind("Paladin Ray of Hope", "AttackDamageBonusPercent", 30f, "Attack Damage Bonus.");
             _rayBuffDuration = Config.Bind("Paladin Ray of Hope", "BuffDuration", 12f, "Buff duration.");
+            _rayImmunity = Config.Bind("Paladin Ray of Hope", "DebuffImmunitySeconds_v02578", 12f, "v0.25.78 (user): Ray of Hope removes every debuff and grants debuff immunity for this long.");
             _rayRadius = Config.Bind("Paladin Ray of Hope", "Radius", 7f, "Wave radius.");
             _raySpiritBurnDuration = Config.Bind("Paladin Ray of Hope", "SpiritBurnDuration", 8f, "Enemy Spirit Burn duration.");
             _shieldChargeCooldown = Config.Bind("Paladin Shield Charge", "Cooldown", 18f, "Seconds.");
@@ -885,6 +886,12 @@ namespace AlbedosCustomClassesAdvanced
             _goddessAscDamage = BindDamage("Paladin Goddess Relic Ascended Damage", 120f, 0f, 0f, 0f, 0f, 60f, 0f, 0f);
 
             _rayAscBarrier = Config.Bind("Paladin Ray of Hope Ascended", "BarrierHP", 150f, "Barrier HP granted to allies in the wave.");
+            const string ra = "Paladin Ray of Hope Ascended";
+            _rayAscBurnDps = Config.Bind(ra, "BurnDamagePerSecond_v02578", 20f, "v0.25.78 (user): enemies in the wave burn with Fire AND Spirit, this much per second each (first tick, x Tier power).");
+            _rayAscBurnSeconds = Config.Bind(ra, "BurnSeconds_v02578", 8f, "Fire + Spirit Burn duration.");
+            _rayAscBurnRamp = Config.Bind(ra, "BurnExtraStackingPercent_v02578", 25f, "Stronger stacking: every tick adds this much more on top of the universal burn ramp (cap 4x).");
+            _rayAscRegenPct = Config.Bind(ra, "RegenPercentPerSecond_v02578", 7f, "Allies regenerate this % of their Max HP every second.");
+            _rayAscRegenSeconds = Config.Bind(ra, "RegenSeconds_v02578", 6f, "Regeneration duration.");
             _rayAscBarrierDuration = Config.Bind("Paladin Ray of Hope Ascended", "BarrierDuration", 12f, "Barrier duration.");
 
             _hammerCooldown = Config.Bind("Paladin Judgement Hammer", "Cooldown", 16f, "Seconds.");
@@ -2649,6 +2656,7 @@ namespace AlbedosCustomClassesAdvanced
                 Player ally = hits[i].GetComponentInParent<Player>();
                 if (ally != null) allies.Add(ally);
             }
+            DragonCombat.SetBuffNote("SwordMaster.KnightsGuidance", "-" + IhNum(_kgStaminaCut.Value) + "% Stamina used by every action");
             foreach (Player ally in allies)
             {
                 DragonCombat.ApplyTimedBuff(ally, "SwordMaster.KnightsGuidance", duration, 0f, 0f, Mathf.Max(0f, _kgMove.Value) / 100f, 0f, Mathf.Max(0f, _kgRegen.Value) / 100f, 0f, false);
@@ -2980,7 +2988,7 @@ namespace AlbedosCustomClassesAdvanced
             _mercFuryUntil = Time.time + Mathf.Max(0.5f, _furyDurationV.Value);
             _mercFuryCooldownUntil = _mercFuryUntil + Mathf.Max(0f, _furyLockoutV.Value);
             _mercFuryEndAnnounced = false;
-            DragonCombat.ShowStatus(player, "fury", "fury", "Unchained Fury", Mathf.Max(0.5f, _furyDurationV.Value), 0, "Attack Buff\nMercenary skills are empowered (bigger and stronger)\nFury cannot build again for " + Mathf.RoundToInt(_furyLockoutV.Value).ToString() + "s after it ends");
+            DragonCombat.ShowStatus(player, "fury", "fury", "Unchained Fury", Mathf.Max(0.5f, _furyDurationV.Value), 0, "Attack Buff\nEvery Mercenary skill uses its Ascended version (bigger and stronger)\nFury cannot build again for " + Mathf.RoundToInt(_furyLockoutV.Value).ToString() + "s after it ends");
             if (player != null)
             {
                 DragonCombat.PlayAccent(player, "merc_fury_accent", 0.12f);   // v0.25.15 Fury = low-priority accent
@@ -3414,6 +3422,10 @@ namespace AlbedosCustomClassesAdvanced
                 Player ally = hits[i].GetComponentInParent<Player>();
                 if (ally != null) allies.Add(ally);
             }
+            // v0.25.78 (user: tooltips show EVERYTHING): the creature bonus and the labor bonus are listed on their icons.
+            DragonCombat.SetBuffNote("Mercenary.Battlecry", "Applies to your hits on creatures (you and allies within " + IhNum(_bcRadius.Value) + "m)");
+            DragonCombat.ShowStatus(player, "battlecry_labor", "labor", "Battlecry - Labor", Mathf.Max(1f, _bcEnvDuration.Value), 0,
+                "Labor Buff\n+" + IhNum(_bcEnvBonus.Value) + "% damage to trees, logs, rocks, ore and other destructible objects\n(your own tool and weapon hits)");
             foreach (Player ally in allies)
                 DragonCombat.ApplyTimedBuff(ally, "Mercenary.Battlecry", Mathf.Max(1f, _bcCreatureDuration.Value), Mathf.Max(0f, _bcCreatureBonus.Value) / 100f, 0f, 0f, 0f, 0f, 0f, false);
             // Environment bonus: this client's own tool / weapon hits on trees, rocks, ore, objects.
@@ -4680,15 +4692,52 @@ namespace AlbedosCustomClassesAdvanced
                 allies.Add(ally);
                 Heal(ally, ally.GetMaxHealth() * healPercent);
                 DragonCombat.ApplyTimedBuff(ally, "Paladin.RayOfHope", Mathf.Max(0.1f, _rayBuffDuration.Value), Mathf.Max(0f, _rayDamageBuff.Value) / 100f, 0f, 0f, 0f, 0f, 0f, false);
+                // v0.25.78 (user): every Ray of Hope removes all debuffs and makes the ally immune to debuffs.
+                CleanseAilments(ally);
+                DragonCombat.CleanseDebuffs(ally);
+                DragonCombat.GrantDebuffImmunity(ally, Mathf.Max(0f, _rayImmunity.Value));
                 if (ascended)
                 {
-                    CleanseAilments(ally);
                     GrantPriestBarrier(ally, Mathf.Max(1f, _rayAscBarrier.Value), 0f, Mathf.Max(0.5f, _rayAscBarrierDuration.Value));
+                    StartCoroutine(RayHopeRegen(ally));   // v0.25.78 (user): 7% Max HP per second for 6s
                 }
             }
             List<Character> enemies = GetSphereTargets(player, player.transform.position, radius);
-            for (int i = 0; i < enemies.Count; i++) RefreshSpiritBurn(player, enemies[i], 1f, Mathf.Max(0.1f, _raySpiritBurnDuration.Value));
+            for (int i = 0; i < enemies.Count; i++)
+            {
+                RefreshSpiritBurn(player, enemies[i], 1f, Mathf.Max(0.1f, _raySpiritBurnDuration.Value));
+                if (ascended) StartCoroutine(RayHopeBurn(player, enemies[i]));   // v0.25.78 Fire + Spirit, stronger stacking
+            }
             if (_enableVfx.Value) StartCoroutine(AnimateRing(player.transform.position + Vector3.up * 0.12f, 0.6f, radius, 0.8f, new Color(1f, 0.93f, 0.52f, 0.95f), 0.11f));
+        }
+
+        // v0.25.78 Ascended Ray of Hope: Fire + Spirit Burn for 8s; every tick stacks harder than the universal ramp.
+        private IEnumerator RayHopeBurn(Player player, Character enemy)
+        {
+            float end = Time.time + Mathf.Max(0.5f, _rayAscBurnSeconds.Value);
+            float perTick = Mathf.Max(0f, _rayAscBurnDps.Value) * 0.5f * IhSkillPower(player, "ray_of_hope");
+            int n = 0;
+            while (Time.time < end && player != null && enemy != null && !enemy.IsDead())
+            {
+                float extra = Mathf.Min(4f, 1f + Mathf.Max(0f, _rayAscBurnRamp.Value) / 100f * n);
+                DragonCombat.ApplyFireBurnTick(player, enemy, perTick * extra);
+                DragonCombat.ApplySpiritBurnTick(player, enemy, perTick * extra);
+                n++;
+                yield return new WaitForSeconds(0.5f);
+            }
+        }
+
+        private IEnumerator RayHopeRegen(Player ally)
+        {
+            float secs = Mathf.Max(1f, _rayAscRegenSeconds.Value);
+            float pct = Mathf.Max(0f, _rayAscRegenPct.Value);
+            DragonCombat.ShowStatus(ally, "ray_regen", "heart", "Hope's Mending", secs, 0, "Recovery Buff\nRegenerate " + IhNum(pct) + "% of your Max HP every second (" + IhNum(pct * secs) + "% in total)");
+            for (int t = 0; t < Mathf.RoundToInt(secs); t++)
+            {
+                yield return new WaitForSeconds(1f);
+                if (ally == null || ally.IsDead()) yield break;
+                Heal(ally, ally.GetMaxHealth() * pct / 100f);
+            }
         }
 
         private void CastShieldCharge(Player player)
@@ -10607,6 +10656,7 @@ namespace AlbedosCustomClassesAdvanced
 
             // Every parry: Hyper Armor. v0.23.8: the empowered-skill buff is granted once, kept
             // until a skill uses it (one prompt), then "Priest.HolyParry" blocks it for 25s.
+            DragonCombat.SetBuffNote("Priest.BucklerParry", "Your next damaging skill deals +" + IhNum(_parryEmpowerPercent.Value) + "% damage (one empower at a time, 25s cooldown)");
             DragonCombat.ApplyTimedBuff(player, "Priest.BucklerParry", Mathf.Max(0.1f, _parryHyperArmorSeconds.Value), 0f, 0f, 0f, 0f, 0f, 0f, true);
             if (!_parryEmpowerPending && GetCooldownRemaining("Priest.HolyParry") <= 0f)
             {
@@ -11641,8 +11691,11 @@ namespace AlbedosCustomClassesAdvanced
                     if (ascended)
                     {
                         b.Append(IhLine("Gain", IhNum(_rayAscBarrier.Value) + " HP Barrier, " + IhNum(_rayAscBarrierDuration.Value) + "s"));
-                        b.Append(IhLine("Cleanse", "Burn, Poison, Frost"));
+                        b.Append(IhLine("Regeneration", IhNum(_rayAscRegenPct.Value) + "% of Max HP per second, " + IhNum(_rayAscRegenSeconds.Value) + "s"));
+                        b.Append(IhLine("Inflicts", "Fire Burn + Spirit Burn " + IhNum(_rayAscBurnDps.Value * power) + "/s each, " + IhNum(_rayAscBurnSeconds.Value) + "s, stacks +" + IhNum(_rayAscBurnRamp.Value) + "% harder per tick"));
                     }
+                    b.Append(IhLine("Cleanse", "Every debuff"));
+                    b.Append(IhLine("Gain", "Debuff immunity, " + IhNum(_rayImmunity.Value) + "s"));
                     b.Append(IhLine("Buff", IhNum(_rayDamageBuff.Value) + "% Attack Damage, " + IhNum(_rayBuffDuration.Value) + "s"));
                     b.Append(IhLine("Inflicts", "Spirit Burn, " + IhNum(_raySpiritBurnDuration.Value) + "s"));
                     IhCosts(b, _rayStamina.Value, "Instant", _rayCooldown.Value);
@@ -12035,8 +12088,8 @@ namespace AlbedosCustomClassesAdvanced
                     ? "Leap to the heavens and fall like a burning star. The ground you strike catches holy fire."
                     : "Leap to the heavens, then crash upon your enemies like a blazing comet.";
                 case "ray_of_hope": return ascended
-                    ? "Unleash a radial wave that heals, shields and purifies you and every ally it touches, while searing the wicked."
-                    : "Unleash a radial wave that heals and empowers you and every ally it touches, while searing the wicked.";
+                    ? "Unleash a radial wave that heals, shields, mends and purifies you and every ally it touches - removing every debuff and warding them against new ones - while the wicked burn in holy fire."
+                    : "Unleash a radial wave that heals, empowers and purifies you and every ally it touches - removing every debuff and warding them against new ones - while searing the wicked.";
                 case "electric_smite": return ascended
                     ? "Rise into the storm and strike the earth. Lightning races outward, and a thunderstorm rages where you land."
                     : "Rise into the storm and strike the earth with the fury of the heavens, sending lightning racing outward.";
@@ -12598,6 +12651,7 @@ namespace AlbedosCustomClassesAdvanced
                 if (ally != null)
                     allies.Add(ally);
             }
+            DragonCombat.SetBuffNote("Paladin.HeavensLight", "No movement penalty from equipment (armor, shields, weapons)");
             foreach (Player ally in allies)
             {
                 DragonCombat.ApplyTimedBuff(ally, "Paladin.HeavensLight", duration, 0f, 0f, 0f, Mathf.Max(0f, _graceLightDefense.Value) / 100f, 0f, 0f, false);
@@ -17497,7 +17551,7 @@ namespace AlbedosCustomClassesAdvanced
 
             if (advancement == "Paladin")
             {
-                return "Heaven's Will: +10% Magic Damage. With a Club-type weapon and a Shield, +15 Clubs, no Armor movement penalty, and Slash / Pierce at least 50% of Blunt.";
+                return "Heaven's Will: +10% Magic Damage. With a Club-type weapon and a Shield, +15 Clubs, no Armor movement penalty, and Slash / Pierce at least 50% of Blunt. Holy Bulwark: with a Tower Shield your block covers 3x the area (hits from the front and sides, 300 degrees) and a holy force field shields your front while you block.";
             }
 
             if (advancement == "Priest")

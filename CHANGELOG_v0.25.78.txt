@@ -1,0 +1,24 @@
+Immortal Heroes v0.25.78 - Holy Bulwark
+
+PALADIN
+- Ray of Hope (every version): removes every debuff from you and each ally it touches, then grants debuff immunity for 12 s.
+  - Covered debuffs: Burning, Poison, Frost, Shock, Spirit Burn, Wet, Smoked, Tar, Slow, Stun, Expose, Cripple.
+  - Shows as a new "Purity" buff icon.
+- Ascended Ray of Hope: the cleanse moved to the normal version; Ascended now adds:
+  - Fire Burn + Spirit Burn on every enemy in the wave for 8 s (20/s each). These stack harder than normal burns: +25% per tick on top of the usual burn ramp.
+  - Hope's Mending: allies regenerate 7% of their Max HP every second for 6 s.
+  - The 150 HP Barrier stays.
+- Holy Bulwark (added to Heaven's Will, the Paladin Mastery):
+  - With a Tower Shield your block covers 3x the area: hits from the front and the sides are blocked (300 degrees, only directly behind you gets through).
+  - While you block with a Tower Shield, a white-gold holy force field (2 m) curves around your front, pulses softly and flashes on every hit it catches.
+
+BUFF / DEBUFF TOOLTIPS (hover the icons)
+- Every buff now lists everything it does:
+  - Battlecry: a second icon, "Battlecry - Labor", shows the +25% damage to trees, logs, rocks and ore for 3 min. The creature buff says it only applies to hits on creatures.
+  - Knight's Guidance: -30% Stamina use.
+  - Heaven's Light: no equipment movement penalty.
+  - Tailwind: +30 Jump, no equipment movement penalty, no fall damage.
+  - Bless Thy Sinners recovery: -70% Stamina use, 50% Max HP recovered over 6 s.
+  - Buckler Parry: your next damaging skill deals +35%.
+  - Unchained Fury: every Mercenary skill uses its Ascended version.
+  - Purity and Hope's Mending: new icons with their full effects.
