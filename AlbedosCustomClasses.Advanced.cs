@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.53";
+        public const string ModVersion = "0.25.54";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -4204,6 +4204,7 @@ namespace AlbedosCustomClassesAdvanced
         private IEnumerator ShieldChargeRoutine(Player player, Rigidbody body, CapsuleCollider capsule)
         {
             ShowMessage("Shield Charge");
+            if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.TrailWhile(player.transform, DragonVfx.Holy, 0.6f, delegate { return _shieldChargeActive && player != null; }); });
             DragonCombat.PlayClip(player, "cleric_charge", 0.15f, true);
             DragonCombat.ForceRun(player, true, true, 0f);   // v0.25.19: real run + Valheim's shield-up block pose
             Vector3 forward = player.GetLookDir();
@@ -4590,6 +4591,7 @@ namespace AlbedosCustomClassesAdvanced
             head.SetPosition(0, new Vector3(-2.8f, 1.8f, 0f));
             head.SetPosition(1, new Vector3(2.8f, 1.8f, 0f));
             if (shader != null) head.material = new Material(shader);
+            DragonCombat.RunVfx(delegate { DragonVfx.AttachGlow(root.transform, color, 1.4f, 45f, 7f); });
             return root;
         }
 
@@ -4908,7 +4910,10 @@ namespace AlbedosCustomClassesAdvanced
                     }
 
                     if (_enableVfx.Value)
+                    {
                         StartCoroutine(AnimateRing(point + Vector3.up * 0.06f, 0.12f, DragonCombat.M(0.80f), 0.20f, new Color(0.62f, 0.86f, 1f, 0.82f), 0.05f));
+                        DragonCombat.RunVfx(delegate { DragonVfx.Burst(point + Vector3.up * 0.2f, DragonVfx.Storm, 8, 5f, 0.18f, 0.35f, 0.5f); });   // v0.25.54 crackling trail
+                    }
                 }
 
                 elapsed += Time.deltaTime;
@@ -5217,6 +5222,7 @@ namespace AlbedosCustomClassesAdvanced
             StartCoroutine(IhCreatureGhost(player, 30f)); // v0.22.6: the dive lands on terrain, never on a Troll's head
             // v0.21.1: jump + nose-dive take WindUpTime (2.5s) in total.
             float total = Mathf.Max(0.6f, _angelWindupTotal.Value);
+            if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.Trail(player.transform, DragonVfx.Holy, 0.9f, total + 0.2f); DragonVfx.Burst(player.transform.position, DragonVfx.HolyWhite, 40, 6f, 0.3f, 0.8f, 0.2f); });
             float riseTime = total * 0.56f;
             float hangTime = total * 0.06f;
             float height = Mathf.Max(1f, DragonCombat.M(_angelJumpHeight.Value));
@@ -5293,6 +5299,12 @@ namespace AlbedosCustomClassesAdvanced
             {
                 CreateLightning(point, new Color(1f, 0.92f, 0.62f, 1f), 0.3f);
                 StartCoroutine(AnimateRing(point + Vector3.up * 0.08f, 0.4f, radius, 0.55f, new Color(1f, 0.88f, 0.48f, 1f), 0.16f));
+                DragonCombat.RunVfx(delegate
+                {
+                    DragonVfx.Pillar(point, DragonVfx.Holy, Mathf.Max(1f, radius * 0.3f), 18f, 0.7f);
+                    DragonVfx.Burst(point + Vector3.up * 0.5f, DragonVfx.HolyWhite, 90, 14f, 0.35f, 1.1f, 0.4f);
+                    DragonVfx.Vanilla(new string[] { "vfx_GodExplosion", "fx_eikthyr_stomp", "fx_DvergerMage_Nova_ring" }, point, Quaternion.identity, 1f, 4f);
+                });
             }
 
             if (ascended)
@@ -6643,6 +6655,21 @@ namespace AlbedosCustomClassesAdvanced
 
         private void CreateTemporaryBeam(Vector3 start, Vector3 end, Color color, float width, float lifetime)
         {
+            if (DragonVfx.Enabled)
+            {
+                // v0.25.54: sky beams become light pillars, chains become lightning.
+                Vector3 d = start - end;
+                bool sky = d.y > 2f && new Vector2(d.x, d.z).magnitude < d.y * 0.5f;
+                if (sky && width >= 0.2f)
+                    DragonCombat.RunVfx(delegate
+                    {
+                        DragonVfx.Pillar(end, color, Mathf.Max(0.4f, width * 1.3f), d.y, Mathf.Max(0.3f, lifetime + 0.2f));
+                        DragonVfx.Burst(end + Vector3.up * 0.3f, color, Mathf.RoundToInt(20 + width * 30f), 5f + width * 4f, 0.25f, 0.7f, -0.1f);
+                    });
+                else
+                    DragonCombat.RunVfx(delegate { DragonVfx.Bolt(start, end, color, Mathf.Max(0.1f, width), Mathf.Max(0.15f, lifetime + 0.1f)); });
+                return;
+            }
             GameObject obj = new GameObject("DragonsAltarPriestBeam");
             LineRenderer line = obj.AddComponent<LineRenderer>();
             line.useWorldSpace = true;
@@ -7359,6 +7386,7 @@ namespace AlbedosCustomClassesAdvanced
         {
             if (target == null || amount <= 0f)
                 return;
+            if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.Heal(target, DragonVfx.Holy); });
 
             try
             {
@@ -7982,6 +8010,12 @@ namespace AlbedosCustomClassesAdvanced
 
             for (int i = 0; i < removeBarriers.Count; i++)
                 _barriers.Remove(removeBarriers[i]);
+        }
+
+        private bool IhLocalCleric()
+        {
+            Player p = Player.m_localPlayer;
+            return p != null && GetClass(p) == "Cleric";
         }
 
         private string GetClass(Player player)
@@ -9178,6 +9212,9 @@ namespace AlbedosCustomClassesAdvanced
 
         private IEnumerator AnimateRing(Vector3 center, float startRadius, float endRadius, float duration, Color color, float width)
         {
+            // v0.25.54: Cleric skills get a real particle shockwave + light on every expanding ring.
+            if (_enableVfx.Value && endRadius >= 1.5f && endRadius - startRadius > 0.4f && IhLocalCleric())
+                DragonCombat.RunVfx(delegate { DragonVfx.Shockwave(center, color, endRadius, duration); });
             GameObject obj = new GameObject("AlbedoAdvancedRing");
             LineRenderer line = obj.AddComponent<LineRenderer>();
             line.useWorldSpace = true;
@@ -9319,6 +9356,15 @@ namespace AlbedosCustomClassesAdvanced
                 light.shadows = LightShadows.None;
             }
 
+            if (visible && DragonVfx.Enabled)
+            {
+                DragonCombat.RunVfx(delegate
+                {
+                    DragonVfx.AttachGlow(root.transform, color, Mathf.Max(0.5f, width * 0.35f), 18f + width * 6f, 0f);
+                    DragonVfx.Pillar(center, color, Mathf.Max(0.5f, width * 0.25f), Mathf.Max(6f, height * 2f), 0.5f);
+                });
+            }
+
             return root;
         }
 
@@ -9388,6 +9434,13 @@ namespace AlbedosCustomClassesAdvanced
 
         private void CreateLightning(Vector3 point, Color color, float lifetime)
         {
+            if (DragonVfx.Enabled)
+            {
+                // v0.25.54: real jagged, flickering bolt from the sky with sparks and a flash.
+                Vector3 sky = point + Vector3.up * 11f + new Vector3(UnityEngine.Random.Range(-1.2f, 1.2f), 0f, UnityEngine.Random.Range(-1.2f, 1.2f));
+                DragonCombat.RunVfx(delegate { DragonVfx.Bolt(sky, point, color, 0.3f, Mathf.Max(0.2f, lifetime + 0.15f)); });
+                return;
+            }
             GameObject obj = new GameObject("AlbedoAdvancedLightning");
             LineRenderer line = obj.AddComponent<LineRenderer>();
             line.useWorldSpace = true;
@@ -11943,6 +11996,7 @@ namespace AlbedosCustomClassesAdvanced
             if (_enableVfx.Value)
             {
                 StartCoroutine(AnimateRing(player.transform.position + Vector3.up * 0.10f, 0.6f, radius, 0.9f, new Color(1f, 0.86f, 0.42f, 0.95f), 0.10f));
+                DragonCombat.RunVfx(delegate { DragonVfx.Pillar(player.transform.position, DragonVfx.HolyWhite, 1.4f, 14f, 0.9f); DragonVfx.Aura(player.transform, player.transform.position, DragonVfx.Holy, 0.9f, 1.5f, 50f, 1.5f); });
                 StartCoroutine(AnimateRing(player.transform.position + Vector3.up * 0.16f, 0.4f, radius * 0.6f, 0.7f, new Color(1f, 0.97f, 0.80f, 0.85f), 0.05f));
             }
         }

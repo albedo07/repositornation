@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.53";
+        public const string ModVersion = "0.25.54";
 
         internal static DragonCombatPlugin Instance;
 
@@ -882,6 +882,8 @@ namespace DragonsAltarCombat
         internal ConfigEntry<float> WhirlwindLoopStart, WhirlwindLoopEnd;
         internal ConfigEntry<int> ComboChainLength;
         internal ConfigEntry<float> ComboFinisherLockout, ComboContinueWindow;
+        internal ConfigEntry<bool> EnhancedVfx;
+        internal ConfigEntry<float> VfxDensity;
         private static FieldInfo _atkLevels, _atkLevel, _atkAnim, _atkChar, _atkWeapon, _atkAngle, _atkType;
         private static MethodInfo _atkMelee;
         private static bool _comboInStart, _comboDual;
@@ -910,6 +912,8 @@ namespace DragonsAltarCombat
             ComboChainsEnabled = Config.Bind("Combat", "FiveHitCombos_v02538", true, "Normal melee attacks chain into a 5-hit combo built from the weapon's own vanilla swings.");
             ComboChainLength = Config.Bind("Combat", "ComboLength_v02538", 5, "Hits in the normal attack chain.");
             ComboFinisherLockout = Config.Bind("Combat", "ComboFinisherLockout_v02538", 1f, "Seconds after the last hit of the chain before a new normal attack can start.");
+            EnhancedVfx = Config.Bind("Visuals", "EnhancedSkillVfx_v02554", true, "Real particle / light / lightning effects on skills (v0.25.54). Off = the old line drawings only.");
+            VfxDensity = Config.Bind("Visuals", "ParticleDensity", 1f, "Particle amount multiplier for skill effects (0.1 - 3).");
             ComboContinueWindow = Config.Bind("Combat", "ComboContinueWindow_v02544", 0.4f, "Seconds after a swing ends in which the next normal attack continues the chain (1-2-1-2-3) instead of starting over.");
             WhirlwindLoopStart = Config.Bind("Runtime", "WhirlwindLoopStart_v02542", 0.3f, "Whirlwind: where the looped spin restarts in Valheim's atgeir spin (0-1 of the animation).");
             WhirlwindLoopEnd = Config.Bind("Runtime", "WhirlwindLoopEnd_v02542", 0.72f, "Whirlwind: where the looped spin jumps back (0-1 of the animation).");
@@ -2851,6 +2855,14 @@ namespace DragonsAltarCombat
         // v0.25.3 perf: type lookups by name are resolved once (they scanned every loaded assembly
         // several times per frame for the HUD / UI checks).
         private static readonly Dictionary<string, Type> TypeCache = new Dictionary<string, Type>();
+
+        // v0.25.54: runs a visual effect; a failure in an effect never interrupts the skill that called it.
+        public static void RunVfx(Action fx)
+        {
+            if (fx == null || !DragonVfx.Enabled) return;
+            try { fx(); }
+            catch (Exception ex) { if (DragonCombatPlugin.Instance != null) DragonCombatPlugin.Instance.LogInfo("[Immortal Heroes] VFX error: " + ex.Message); }
+        }
 
         public static Type FindTypeCached(string name)
         {
@@ -8254,6 +8266,480 @@ namespace DragonsAltarCombat
             if (Stacks > 0) return Stacks.ToString();
             if (m_ttl <= 0f) return "";
             return Mathf.CeilToInt(Mathf.Max(0f, m_ttl - m_time)).ToString() + "s";
+        }
+    }
+}
+
+namespace DragonsAltarCombat
+{
+    // ==================================================================================
+    // v0.25.54 SKILL VFX LIBRARY (user: skills must come to life, not prototype drawings). Every module can call
+    // these. Real ParticleSystems (soft additive glow sprites generated at runtime), point-light flashes, jagged
+    // flickering lightning, light pillars, shockwaves, auras that follow a target, and Valheim's own effect
+    // prefabs (looked up by name in ZNetScene, network-free ones only). All objects clean themselves up.
+    // ==================================================================================
+    public class DragonVfxLife : MonoBehaviour
+    {
+        public float Life = 1f, Age;
+        public Light FlashLight;
+        public float LightPeak, LightHold;
+        public Transform Follow;
+        public Vector3 FollowOffset;
+        public LineRenderer[] Bolts;
+        public Vector3 BoltA, BoltB;
+        public float BoltJitter, NextFlicker, BoltWidth;
+        public float StopEmitAt = -1f;
+        public ParticleSystem[] Systems;
+        public bool Stopped;
+        public Color BoltCore, BoltGlow;
+        public Func<bool> Keep;
+
+        private void Update()
+        {
+            Age += Time.deltaTime;
+            if (Keep != null)
+            {
+                bool on = false;
+                try { on = Keep(); } catch (Exception) { }
+                if (on) { Life = Age + 1.2f; StopEmitAt = -1f; }
+                else { Keep = null; StopEmitAt = Age; Life = Age + 1.2f; }
+            }
+            if (Follow != null) transform.position = Follow.position + FollowOffset;
+            else if (FollowOffset.sqrMagnitude < 0f) { }
+            if (FlashLight != null)
+            {
+                float k = Age <= LightHold ? 1f : 1f - Mathf.Clamp01((Age - LightHold) / Mathf.Max(0.01f, Life - LightHold));
+                FlashLight.intensity = LightPeak * k * k;
+            }
+            if (Bolts != null)
+            {
+                float fade = 1f - Mathf.Clamp01(Age / Mathf.Max(0.01f, Life));
+                if (Time.time >= NextFlicker)
+                {
+                    NextFlicker = Time.time + 0.045f;
+                    for (int i = 0; i < Bolts.Length; i++) DragonVfx.Jag(Bolts[i], BoltA, BoltB, BoltJitter * (i == 0 ? 1f : 0.7f));
+                }
+                for (int i = 0; i < Bolts.Length; i++)
+                {
+                    if (Bolts[i] == null) continue;
+                    Color c = i == 0 ? BoltGlow : BoltCore;
+                    c.a *= fade;
+                    Bolts[i].startColor = c;
+                    Bolts[i].endColor = c;
+                }
+            }
+            if (!Stopped && StopEmitAt >= 0f && Age >= StopEmitAt && Systems != null)
+            {
+                Stopped = true;
+                for (int i = 0; i < Systems.Length; i++) if (Systems[i] != null) Systems[i].Stop(true, ParticleSystemStopBehavior.StopEmitting);
+            }
+            if (Age >= Life) Destroy(gameObject);
+        }
+    }
+
+    public static class DragonVfx
+    {
+        private static Material _add, _alpha;
+        private static Texture2D _glow;
+        private static bool _catalogLogged;
+
+        public static bool Enabled
+        {
+            get { return DragonCombatPlugin.Instance == null || DragonCombatPlugin.Instance.EnhancedVfx == null || DragonCombatPlugin.Instance.EnhancedVfx.Value; }
+        }
+
+        public static float Amount
+        {
+            get { return DragonCombatPlugin.Instance == null || DragonCombatPlugin.Instance.VfxDensity == null ? 1f : Mathf.Clamp(DragonCombatPlugin.Instance.VfxDensity.Value, 0.1f, 3f); }
+        }
+
+        private static Texture2D Glow()
+        {
+            if (_glow != null) return _glow;
+            const int n = 64;
+            _glow = new Texture2D(n, n, TextureFormat.RGBA32, false);
+            _glow.wrapMode = TextureWrapMode.Clamp;
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    float dx = (x + 0.5f) / n * 2f - 1f, dy = (y + 0.5f) / n * 2f - 1f;
+                    float d = Mathf.Sqrt(dx * dx + dy * dy);
+                    float a = Mathf.Clamp01(1f - d);
+                    a = a * a * (0.55f + 0.45f * Mathf.Clamp01(1f - d * 2.2f) * 2f);
+                    _glow.SetPixel(x, y, new Color(1f, 1f, 1f, Mathf.Clamp01(a)));
+                }
+            _glow.Apply();
+            return _glow;
+        }
+
+        // Additive glow material (falls back to alpha-blended Sprites/Default when the game strips the shaders).
+        public static Material Additive()
+        {
+            if (_add != null) return _add;
+            string[] names = { "Legacy Shaders/Particles/Additive", "Particles/Additive", "Mobile/Particles/Additive", "Legacy Shaders/Particles/Additive (Soft)", "Sprites/Default" };
+            Shader s = null;
+            for (int i = 0; i < names.Length && s == null; i++) s = Shader.Find(names[i]);
+            if (s == null) return null;
+            _add = new Material(s);
+            _add.mainTexture = Glow();
+            return _add;
+        }
+
+        public static Material Alpha()
+        {
+            if (_alpha != null) return _alpha;
+            Shader s = Shader.Find("Sprites/Default");
+            if (s == null) return Additive();
+            _alpha = new Material(s);
+            _alpha.mainTexture = Glow();
+            return _alpha;
+        }
+
+        private static DragonVfxLife Host(Vector3 pos, float life, string name)
+        {
+            GameObject go = new GameObject("IH_Vfx_" + name);
+            go.transform.position = pos;
+            DragonVfxLife l = go.AddComponent<DragonVfxLife>();
+            l.Life = Mathf.Max(0.05f, life);
+            return l;
+        }
+
+        // One configured particle system on its own child object.
+        public static ParticleSystem Particles(Transform parent, Color c, int burst, float rate, float emitSeconds, float life, float speedMin, float speedMax,
+            float sizeMin, float sizeMax, float gravity, ParticleSystemShapeType shape, float radius, Vector3 shapeEuler, bool stretch, bool additive)
+        {
+            GameObject go = new GameObject("ps");
+            go.transform.SetParent(parent, false);
+            ParticleSystem ps = go.AddComponent<ParticleSystem>();
+            ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            ParticleSystem.MainModule main = ps.main;
+            main.duration = Mathf.Max(0.05f, emitSeconds);
+            main.loop = false;
+            main.playOnAwake = false;
+            main.startLifetime = new ParticleSystem.MinMaxCurve(life * 0.6f, life);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(speedMin, speedMax);
+            main.startSize = new ParticleSystem.MinMaxCurve(sizeMin, sizeMax);
+            Color c2 = Color.Lerp(c, Color.white, 0.45f);
+            c2.a = c.a;
+            main.startColor = new ParticleSystem.MinMaxGradient(c, c2);
+            main.gravityModifier = gravity;
+            main.simulationSpace = ParticleSystemSimulationSpace.World;
+            main.maxParticles = 1200;
+            main.scalingMode = ParticleSystemScalingMode.Hierarchy;
+            ParticleSystem.EmissionModule em = ps.emission;
+            em.enabled = true;
+            em.rateOverTime = rate * Amount;
+            int b = Mathf.Max(0, Mathf.RoundToInt(burst * Amount));
+            if (b > 0) em.SetBursts(new ParticleSystem.Burst[] { new ParticleSystem.Burst(0f, (short)Mathf.Min(b, 30000)) });
+            else em.SetBursts(new ParticleSystem.Burst[0]);
+            ParticleSystem.ShapeModule sh = ps.shape;
+            sh.enabled = true;
+            sh.shapeType = shape;
+            sh.radius = Mathf.Max(0.01f, radius);
+            sh.rotation = shapeEuler;
+            if (shape == ParticleSystemShapeType.Cone) sh.angle = 4f;
+            ParticleSystem.ColorOverLifetimeModule col = ps.colorOverLifetime;
+            col.enabled = true;
+            Gradient g = new Gradient();
+            g.SetKeys(new GradientColorKey[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
+                      new GradientAlphaKey[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(1f, 0.08f), new GradientAlphaKey(0.7f, 0.6f), new GradientAlphaKey(0f, 1f) });
+            col.color = new ParticleSystem.MinMaxGradient(g);
+            ParticleSystem.SizeOverLifetimeModule sol = ps.sizeOverLifetime;
+            sol.enabled = true;
+            sol.size = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(new Keyframe(0f, 0.6f), new Keyframe(0.15f, 1f), new Keyframe(1f, 0.25f)));
+            ParticleSystemRenderer r = go.GetComponent<ParticleSystemRenderer>();
+            Material m = additive ? Additive() : Alpha();
+            if (m != null) r.sharedMaterial = m;
+            if (stretch)
+            {
+                r.renderMode = ParticleSystemRenderMode.Stretch;
+                r.lengthScale = 2.5f;
+                r.velocityScale = 0.06f;
+            }
+            ps.Play(true);
+            return ps;
+        }
+
+        public static void Flash(Vector3 pos, Color c, float intensity, float range, float seconds)
+        {
+            if (!Enabled) return;
+            DragonVfxLife l = Host(pos, seconds, "flash");
+            Light light = l.gameObject.AddComponent<Light>();
+            light.type = LightType.Point;
+            light.color = c;
+            light.range = Mathf.Max(1f, range);
+            light.intensity = intensity;
+            light.shadows = LightShadows.None;
+            l.FlashLight = light;
+            l.LightPeak = intensity;
+            l.LightHold = seconds * 0.15f;
+        }
+
+        // Burst of glowing motes in all directions (impact sparks / holy embers).
+        public static void Burst(Vector3 pos, Color c, int count, float speed, float size, float life, float gravity)
+        {
+            if (!Enabled) return;
+            DragonVfxLife l = Host(pos, life + 0.3f, "burst");
+            Particles(l.transform, c, count, 0f, 0.1f, life, speed * 0.4f, speed, size * 0.5f, size, gravity, ParticleSystemShapeType.Sphere, 0.2f, Vector3.zero, speed > 6f, true);
+        }
+
+        // Expanding ground shockwave: a ring of glow particles racing outward + an inner dust flash + light.
+        public static void Shockwave(Vector3 pos, Color c, float radius, float seconds)
+        {
+            if (!Enabled) return;
+            radius = Mathf.Max(0.5f, radius);
+            seconds = Mathf.Clamp(seconds, 0.15f, 2f);
+            DragonVfxLife l = Host(pos + Vector3.up * 0.15f, seconds + 0.5f, "shock");
+            int n = Mathf.Clamp(Mathf.RoundToInt(radius * 18f), 40, 420);
+            float speed = radius / seconds;
+            Particles(l.transform, c, n, 0f, 0.05f, seconds, speed * 0.85f, speed, 0.35f + radius * 0.03f, 0.7f + radius * 0.05f, 0f,
+                ParticleSystemShapeType.Circle, 0.25f, new Vector3(90f, 0f, 0f), true, true);
+            Color dust = Color.Lerp(c, Color.white, 0.6f);
+            dust.a = 0.5f;
+            Particles(l.transform, dust, Mathf.RoundToInt(n * 0.35f), 0f, 0.05f, seconds * 1.4f, speed * 0.25f, speed * 0.55f, 0.6f, 1.4f, -0.05f,
+                ParticleSystemShapeType.Circle, 0.3f, new Vector3(90f, 0f, 0f), false, true);
+            Flash(pos + Vector3.up * 1.2f, c, 4f + radius * 0.25f, radius * 1.6f, seconds + 0.25f);
+        }
+
+        // Column of light: rising streaks + a bright core + flash.
+        public static void Pillar(Vector3 pos, Color c, float radius, float height, float seconds)
+        {
+            if (!Enabled) return;
+            radius = Mathf.Max(0.3f, radius);
+            DragonVfxLife l = Host(pos, seconds + 0.8f, "pillar");
+            float life = Mathf.Clamp(seconds * 0.6f, 0.3f, 1.2f);
+            float speed = Mathf.Max(4f, height / life);
+            // Cone pointing up (shape +Z rotated onto +Y): streaks rise from a disc of the pillar's radius.
+            Particles(l.transform, c, Mathf.RoundToInt(30 + radius * 20f), 60f * radius, seconds, life, speed * 0.6f, speed, 0.25f, 0.6f, 0f,
+                ParticleSystemShapeType.Cone, radius * 0.6f, new Vector3(-90f, 0f, 0f), true, true);
+            Color core = Color.Lerp(c, Color.white, 0.7f);
+            Particles(l.transform, core, 6, 14f, seconds, life * 0.8f, speed * 0.9f, speed * 1.1f, radius * 1.2f, radius * 1.8f, 0f,
+                ParticleSystemShapeType.Cone, radius * 0.1f, new Vector3(-90f, 0f, 0f), true, true);
+            l.StopEmitAt = seconds;
+            l.Systems = l.GetComponentsInChildren<ParticleSystem>();
+            Flash(pos + Vector3.up * 2f, c, 6f + radius, 8f + radius * 3f, seconds + 0.4f);
+        }
+
+        // Jagged, flickering lightning bolt (glow + core), sparks and a flash where it lands.
+        public static void Bolt(Vector3 a, Vector3 b, Color glow, float width, float seconds)
+        {
+            if (!Enabled) return;
+            DragonVfxLife l = Host(b, Mathf.Max(0.08f, seconds), "bolt");
+            LineRenderer outer = BoltLine(l.transform, width * 2.6f);
+            LineRenderer inner = BoltLine(l.transform, width * 0.8f);
+            l.Bolts = new LineRenderer[] { outer, inner };
+            l.BoltA = a; l.BoltB = b;
+            l.BoltJitter = Mathf.Clamp(Vector3.Distance(a, b) * 0.06f, 0.15f, 1.4f);
+            Color g = glow; g.a = 0.55f;
+            l.BoltGlow = g;
+            l.BoltCore = new Color(0.95f, 0.98f, 1f, 1f);
+            Jag(outer, a, b, l.BoltJitter);
+            Jag(inner, a, b, l.BoltJitter * 0.7f);
+            Burst(b, glow, 26, 9f, 0.18f, 0.45f, 0.6f);
+            Flash(b + Vector3.up * 0.8f, glow, 5f, 9f, seconds + 0.2f);
+            // a couple of short branches
+            for (int i = 0; i < 2; i++)
+            {
+                Vector3 mid = Vector3.Lerp(a, b, UnityEngine.Random.Range(0.35f, 0.75f));
+                Vector3 end = mid + new Vector3(UnityEngine.Random.Range(-1f, 1f), UnityEngine.Random.Range(-1.2f, -0.2f), UnityEngine.Random.Range(-1f, 1f)) * Vector3.Distance(a, b) * 0.18f;
+                DragonVfxLife br = Host(end, Mathf.Max(0.06f, seconds * 0.6f), "branch");
+                LineRenderer bl = BoltLine(br.transform, width * 0.6f);
+                br.Bolts = new LineRenderer[] { bl };
+                br.BoltA = mid; br.BoltB = end; br.BoltJitter = l.BoltJitter * 0.5f;
+                br.BoltGlow = l.BoltCore; br.BoltCore = l.BoltCore;
+                Jag(bl, mid, end, br.BoltJitter);
+            }
+        }
+
+        private static LineRenderer BoltLine(Transform parent, float width)
+        {
+            GameObject go = new GameObject("line");
+            go.transform.SetParent(parent, false);
+            LineRenderer line = go.AddComponent<LineRenderer>();
+            line.useWorldSpace = true;
+            line.positionCount = 14;
+            line.startWidth = Mathf.Max(0.02f, width);
+            line.endWidth = Mathf.Max(0.02f, width * 0.7f);
+            line.numCapVertices = 2;
+            Material m = Additive();
+            if (m != null) line.sharedMaterial = m;
+            return line;
+        }
+
+        public static void Jag(LineRenderer line, Vector3 a, Vector3 b, float jitter)
+        {
+            if (line == null) return;
+            int n = line.positionCount;
+            Vector3 dir = b - a;
+            Vector3 side = Vector3.Cross(dir.normalized, Vector3.up);
+            if (side.sqrMagnitude < 0.01f) side = Vector3.right;
+            side.Normalize();
+            Vector3 side2 = Vector3.Cross(dir.normalized, side).normalized;
+            for (int i = 0; i < n; i++)
+            {
+                float t = (float)i / (n - 1);
+                Vector3 p = Vector3.Lerp(a, b, t);
+                if (i > 0 && i < n - 1)
+                {
+                    float env = Mathf.Sin(t * Mathf.PI);
+                    p += side * UnityEngine.Random.Range(-jitter, jitter) * env + side2 * UnityEngine.Random.Range(-jitter, jitter) * env;
+                }
+                line.SetPosition(i, p);
+            }
+        }
+
+        // Looping motes around a point or following a transform (relics, buffs, hammers, comets).
+        public static GameObject Aura(Transform follow, Vector3 pos, Color c, float radius, float seconds, float rate, float rise)
+        {
+            if (!Enabled) return null;
+            DragonVfxLife l = Host(follow != null ? follow.position : pos, seconds + 1.2f, "aura");
+            l.Follow = follow;
+            Particles(l.transform, c, 0, rate, seconds, 1.0f, rise * 0.5f, rise, 0.12f, 0.35f, -0.05f,
+                ParticleSystemShapeType.Sphere, Mathf.Max(0.1f, radius), Vector3.zero, false, true);
+            l.StopEmitAt = seconds;
+            l.Systems = l.GetComponentsInChildren<ParticleSystem>();
+            return l.gameObject;
+        }
+
+        // Particle trail behind a moving transform (charges, dives, thrown hammers).
+        public static GameObject Trail(Transform follow, Color c, float size, float seconds)
+        {
+            if (!Enabled || follow == null) return null;
+            DragonVfxLife l = Host(follow.position, seconds + 1f, "trail");
+            l.Follow = follow;
+            l.FollowOffset = Vector3.up * 0.9f;
+            Particles(l.transform, c, 0, 90f, seconds, 0.6f, 0f, 0.6f, size * 0.5f, size, 0f, ParticleSystemShapeType.Sphere, size * 0.6f, Vector3.zero, false, true);
+            l.StopEmitAt = seconds;
+            l.Systems = l.GetComponentsInChildren<ParticleSystem>();
+            return l.gameObject;
+        }
+
+        // Trail that keeps emitting while keep() is true (charges, dives).
+        public static GameObject TrailWhile(Transform follow, Color c, float size, Func<bool> keep)
+        {
+            GameObject go = Trail(follow, c, size, 1f);
+            if (go == null) return null;
+            DragonVfxLife l = go.GetComponent<DragonVfxLife>();
+            ParticleSystem[] ps = go.GetComponentsInChildren<ParticleSystem>();
+            for (int i = 0; i < ps.Length; i++) { ParticleSystem.MainModule m = ps[i].main; m.loop = true; }
+            l.Keep = keep;
+            return go;
+        }
+
+        // Looping glow motes + a soft light parented to an object (relic crosses, hammers); dies with it.
+        public static void AttachGlow(Transform parent, Color c, float radius, float rate, float lightRange)
+        {
+            if (!Enabled || parent == null) return;
+            GameObject go = new GameObject("IH_Glow");
+            go.transform.SetParent(parent, false);
+            ParticleSystem ps = Particles(go.transform, c, 0, rate, 1f, 1.1f, 0.2f, 1.2f, 0.12f, 0.4f, -0.05f,
+                ParticleSystemShapeType.Sphere, Mathf.Max(0.1f, radius), Vector3.zero, false, true);
+            ParticleSystem.MainModule m = ps.main;
+            m.loop = true;
+            if (lightRange > 0f)
+            {
+                Light light = go.AddComponent<Light>();
+                light.type = LightType.Point;
+                light.color = c;
+                light.range = lightRange;
+                light.intensity = 2.2f;
+                light.shadows = LightShadows.None;
+            }
+        }
+
+        // Holy healing sparkle on a character: rising golden motes + a soft light.
+        public static void Heal(Character target, Color c)
+        {
+            if (!Enabled || target == null) return;
+            Aura(target.transform, target.transform.position, c, 0.6f, 0.6f, 60f, 1.6f);
+            Flash(target.transform.position + Vector3.up, c, 2.5f, 4f, 0.6f);
+        }
+
+        // Valheim's own effect prefab (first name that exists). Only prefabs without a ZNetView are spawned.
+        public static GameObject Vanilla(string[] names, Vector3 pos, Quaternion rot, float scale, float life)
+        {
+            if (!Enabled || names == null) return null;
+            try
+            {
+                Type zns = DragonCombat.FindTypeCached("ZNetScene");
+                if (zns == null) return null;
+                object inst = null;
+                PropertyInfo ip = zns.GetProperty("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                if (ip != null) inst = ip.GetValue(null, null);
+                if (inst == null)
+                {
+                    FieldInfo f = zns.GetField("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (f == null) f = zns.GetField("s_instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (f != null) inst = f.GetValue(null);
+                }
+                if (inst == null) return null;
+                LogCatalog(inst);
+                MethodInfo get = zns.GetMethod("GetPrefab", BindingFlags.Instance | BindingFlags.Public, null, new Type[] { typeof(string) }, null);
+                if (get == null) return null;
+                Type znv = DragonCombat.FindTypeCached("ZNetView");
+                for (int i = 0; i < names.Length; i++)
+                {
+                    GameObject prefab = get.Invoke(inst, new object[] { names[i] }) as GameObject;
+                    if (prefab == null) continue;
+                    if (znv != null && prefab.GetComponentInChildren(znv, true) != null) continue;
+                    GameObject go = UnityEngine.Object.Instantiate(prefab, pos, rot);
+                    if (scale > 0f && Mathf.Abs(scale - 1f) > 0.01f) go.transform.localScale = prefab.transform.localScale * scale;
+                    UnityEngine.Object.Destroy(go, Mathf.Max(0.5f, life));
+                    return go;
+                }
+            }
+            catch (Exception) { }
+            return null;
+        }
+
+        // Writes every fx_/vfx_ prefab name to the log once, so effects can be picked by name later.
+        private static void LogCatalog(object znetScene)
+        {
+            if (_catalogLogged) return;
+            _catalogLogged = true;
+            try
+            {
+                FieldInfo f = znetScene.GetType().GetField("m_prefabs", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                List<GameObject> list = f == null ? null : f.GetValue(znetScene) as List<GameObject>;
+                if (list == null) return;
+                System.Text.StringBuilder sb = new System.Text.StringBuilder();
+                for (int i = 0; i < list.Count; i++)
+                {
+                    if (list[i] == null) continue;
+                    string n = list[i].name;
+                    if (n.StartsWith("fx_", StringComparison.OrdinalIgnoreCase) || n.StartsWith("vfx_", StringComparison.OrdinalIgnoreCase))
+                    { if (sb.Length > 0) sb.Append(", "); sb.Append(n); }
+                }
+                if (DragonCombatPlugin.Instance != null) DragonCombatPlugin.Instance.LogInfo("[Immortal Heroes] Effect prefabs: " + sb.ToString());
+            }
+            catch (Exception) { }
+        }
+
+        // ------------------------------------------------------------------ themed presets
+        public static readonly Color Holy = new Color(1f, 0.84f, 0.42f, 1f);
+        public static readonly Color HolyWhite = new Color(1f, 0.96f, 0.82f, 1f);
+        public static readonly Color Storm = new Color(0.45f, 0.78f, 1f, 1f);
+        public static readonly Color Spirit = new Color(0.70f, 1f, 0.95f, 1f);
+        public static readonly Color Fire = new Color(1f, 0.52f, 0.18f, 1f);
+
+        public static void HolyImpact(Vector3 pos, float radius)
+        {
+            Shockwave(pos, Holy, radius, 0.45f);
+            Burst(pos + Vector3.up * 0.4f, HolyWhite, Mathf.RoundToInt(24 + radius * 6f), 6f + radius, 0.25f, 0.8f, -0.2f);
+            Vanilla(new string[] { "fx_DvergerMage_Support_start", "vfx_HealthUpgrade", "fx_guardstone_activate" }, pos, Quaternion.identity, 1f, 3f);
+        }
+
+        public static void LightningImpact(Vector3 pos, float radius)
+        {
+            Shockwave(pos, Storm, radius, 0.3f);
+            Burst(pos + Vector3.up * 0.3f, Storm, Mathf.RoundToInt(30 + radius * 6f), 10f + radius, 0.2f, 0.5f, 0.8f);
+            Vanilla(new string[] { "fx_himminafl_aoe", "fx_himminafl_hit", "fx_Lightning", "vfx_lightning" }, pos, Quaternion.identity, Mathf.Clamp(radius / 4f, 0.6f, 3f), 3f);
+        }
+
+        public static void SkyStrike(Vector3 ground, Color c, float radius, float height)
+        {
+            Bolt(ground + Vector3.up * height + new Vector3(UnityEngine.Random.Range(-1f, 1f), 0f, UnityEngine.Random.Range(-1f, 1f)), ground, c, 0.35f + radius * 0.04f, 0.35f);
+            LightningImpact(ground, radius);
         }
     }
 }

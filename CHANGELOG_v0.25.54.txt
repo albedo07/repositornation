@@ -1,0 +1,21 @@
+Immortal Heroes v0.25.54 - Cleric VFX
+
+NEW VFX ENGINE (DragonVfx, usable by every class): real particle systems with soft glow sprites, point-light
+flashes, jagged flickering lightning with branches, light pillars, ground shockwaves, auras that follow a target,
+trails, healing sparkles, and Valheim's own effect prefabs when they exist. [Visuals] EnhancedSkillVfx_v02554
+(on/off) and ParticleDensity (0.1 - 3). A VFX error can never break a skill.
+
+CLERIC / PALADIN / PRIEST come to life:
+- Lightning Zap: a fan of real flickering bolts with sparks and flashes.
+- Righteous Strike (normal + Ascended): a thick bolt from the sky, cracking lightning shockwave, holy sparks.
+- Holy Wave: a golden wave of light rolls out, motes rise around you, every healed ally sparkles.
+- Every expanding Cleric ring (Goddess Relic, Ray of Hope, Shield Charge slam, Electric Smite, Angel Comet,
+  relic pulses, Divine Intervention, Grand Cross, Heaven's Judgement, Lightning Tempest, Heaven's Light...)
+  now also throws a particle shockwave + light flash in its colour.
+- All Paladin/Priest sky lightning = real bolts; sky beams (Heaven's Judgement) = light pillars; relic chains =
+  lightning arcs.
+- Relic crosses and the Judgement Hammer glow and shed motes while they exist; crosses land with a pillar.
+- Electric Smite trails crackle with sparks.
+- Shield Charge leaves a holy trail; Angel Comet streaks a comet trail and lands with a pillar of light,
+  a spark burst and (if the game has it) Valheim's god explosion.
+- Heaven's Light: pillar of light + golden aura. Every heal (any Cleric skill) sparkles on the target.

@@ -1,3 +1,6 @@
-TEST v0.25.53
-1. Splitting Arrow: WASD does nothing from cast until the great arrow (normal) / sky arrow (Ascended) is shot or the window is cancelled with Right Click.
-2. Body turns with the camera while a window is open.
+TEST v0.25.54 (Cleric / Paladin / Priest)
+1. Cast every Cleric skill: particles, light flashes, real lightning bolts, pillars.
+2. Check FPS during Lightning Tempest / Heaven's Judgement; lower [Visuals] ParticleDensity if needed.
+3. Please send BepInEx/LogOutput.log once: it lists Valheim's effect prefabs ("[Immortal Heroes] Effect prefabs: ...")
+   so the next passes can use more of the game's own effects.
+4. [Visuals] EnhancedSkillVfx_v02554 = false brings back the old line drawings.
