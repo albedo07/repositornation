@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.54";
+        public const string ModVersion = "0.25.55";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1424,6 +1424,8 @@ namespace AlbedosCustomClassesAdvanced
             if (_enableVfx.Value)
             {
                 visual = new GameObject("DragonsAltarMoonlightGhost");
+                GameObject ghostVis = visual;
+                DragonCombat.RunVfx(delegate { DragonVfx.AttachGlow(ghostVis.transform, new Color(0.45f, 0.78f, 1f, 1f), 0.5f, 70f, 5f); });   // v0.25.55
                 line = visual.AddComponent<LineRenderer>();
                 line.useWorldSpace = true;
                 line.positionCount = 2;
@@ -1688,6 +1690,7 @@ namespace AlbedosCustomClassesAdvanced
 
         private IEnumerator AnimateJudgementSphereCut(Vector3 center, float radius, int slash)
         {
+            DragonCombat.RunVfx(delegate { DragonVfx.Burst(center, new Color(0.45f, 0.78f, 1f, 1f), 30, 9f, 0.25f, 0.4f, 0f); DragonVfx.Flash(center, new Color(0.45f, 0.78f, 1f, 1f), 4f, radius * 2f, 0.3f); });
             Vector3 axisA = Vector3.right;
             Vector3 axisB = Vector3.forward;
             if (slash == 1)
@@ -2035,6 +2038,8 @@ namespace AlbedosCustomClassesAdvanced
             if (_enableVfx.Value)
             {
                 visual = new GameObject("DragonsAltarMoonlightGhost");
+                GameObject ghostVis2 = visual;
+                DragonCombat.RunVfx(delegate { DragonVfx.AttachGlow(ghostVis2.transform, new Color(0.45f, 0.78f, 1f, 1f), 0.5f * heightScale, 70f, 5f); });   // v0.25.55
                 line = visual.AddComponent<LineRenderer>();
                 line.useWorldSpace = true;
                 line.positionCount = 2;
@@ -2129,7 +2134,16 @@ namespace AlbedosCustomClassesAdvanced
                     cast.Points.Add(point);
                     cast.Times.Add(Time.time);
                 }
-                if (_enableVfx.Value) CreateCrescentVerticalSlashVisual(point, forward, width, height, 0.10f);
+                if (_enableVfx.Value)
+                {
+                    CreateCrescentVerticalSlashVisual(point, forward, width, height, 0.10f);
+                    if (elapsed - lastTrail >= 0f && Time.frameCount % 4 == 0)
+                    {
+                        Vector3 sp = point + Vector3.up * (height * 0.5f);
+                        Color cc = ascended ? new Color(1f, 0.45f, 0.14f, 1f) : new Color(0.45f, 0.78f, 1f, 1f);
+                        DragonCombat.RunVfx(delegate { DragonVfx.Burst(sp, cc, 8, 3f, 0.35f, 0.45f, -0.3f); });
+                    }
+                }
                 elapsed += Time.deltaTime;
                 yield return null;
             }
@@ -2231,6 +2245,7 @@ namespace AlbedosCustomClassesAdvanced
             if (windup > 0f) yield return new WaitForSeconds(windup);
             if (player == null || player.IsDead() || SmInterrupted(start)) { if (player != null) DragonCombat.ClipStop(player, 0.2f); yield break; }
             _frenzyActive = true;
+            if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.TrailWhile(player.transform, new Color(0.45f, 0.78f, 1f, 1f), 0.5f, delegate { return _frenzyActive && player != null; }); });
             float distance = Mathf.Max(1f, ascended ? DragonCombat.M(_frenzyAscDistance.Value) : DragonCombat.M(_frenzyDistance.Value));
             float width = Mathf.Max(0.5f, DragonCombat.M(_frenzyWidth.Value)) * (ascended ? Mathf.Max(1f, _frenzyAscWidthMult.Value) : 1f);
             float damage = ascended ? Mathf.Max(0f, _frenzyAscDamage.Value) / 100f : 1f;
@@ -2485,6 +2500,7 @@ namespace AlbedosCustomClassesAdvanced
             DragonCombat.LockSkill(player, 0.5f);
             DragonCombat.PlayClip(player, "sm_guidance", 0.06f);   // v0.25.16 release-first
             ShowMessage("Knight's Guidance");
+            if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.Pillar(player.transform.position, new Color(0.45f, 0.78f, 1f, 1f), 1.2f, 12f, 0.8f); DragonVfx.Shockwave(player.transform.position, new Color(0.45f, 0.78f, 1f, 1f), Mathf.Max(1f, DragonCombat.M(_kgRadius.Value)), 0.7f); });
             float radius = Mathf.Max(1f, DragonCombat.M(_kgRadius.Value));
             float duration = Mathf.Max(1f, _kgDuration.Value);
             HashSet<Player> allies = new HashSet<Player>();
@@ -2809,7 +2825,16 @@ namespace AlbedosCustomClassesAdvanced
             {
                 DragonCombat.PlayAccent(player, "merc_fury_accent", 0.12f);   // v0.25.15 Fury = low-priority accent
                 if (_enableVfx.Value)
+                {
                     StartCoroutine(AnimateAura(player, new Color(1f, 0.22f, 0.08f, 0.92f), Mathf.Max(0.5f, _furyDurationV.Value)));
+                    Player fp = player;
+                    DragonCombat.RunVfx(delegate
+                    {
+                        DragonVfx.Aura(fp.transform, fp.transform.position, new Color(1f, 0.28f, 0.08f, 1f), 0.7f, Mathf.Max(0.5f, _furyDurationV.Value), 45f, 1.6f);
+                        DragonVfx.Burst(fp.transform.position + Vector3.up, new Color(1f, 0.35f, 0.1f, 1f), 70, 8f, 0.35f, 0.8f, -0.2f);
+                        DragonVfx.Flash(fp.transform.position + Vector3.up, new Color(1f, 0.3f, 0.1f, 1f), 6f, 10f, 0.6f);
+                    });
+                }
             }
             ShowMessage("UNCHAINED FURY");
         }
@@ -2998,6 +3023,8 @@ namespace AlbedosCustomClassesAdvanced
                 Renderer r = bomb.GetComponent<Renderer>();
                 Shader shader = Shader.Find("Sprites/Default");
                 if (r != null && shader != null) { r.material = new Material(shader); r.material.color = new Color(0.20f, 0.14f, 0.10f, 1f); }
+                GameObject bombVis = bomb;
+                DragonCombat.RunVfx(delegate { DragonVfx.AttachGlow(bombVis.transform, new Color(1f, 0.45f, 0.14f, 1f), 0.25f, 60f, 4f); });   // v0.25.55 burning fuse
             }
             Vector3 pos = origin;
             Vector3 impact = pos;
@@ -3053,6 +3080,12 @@ namespace AlbedosCustomClassesAdvanced
             {
                 StartCoroutine(AnimateRing(impact + Vector3.up * 0.1f, 0.4f, radius, 0.5f, new Color(1f, 0.48f, 0.14f, 1f), 0.22f));
                 StartCoroutine(AnimateRing(impact + Vector3.up * 1.2f, 0.3f, radius * 0.7f, 0.35f, new Color(1f, 0.80f, 0.40f, 0.9f), 0.14f));
+                DragonCombat.RunVfx(delegate
+                {
+                    DragonVfx.Burst(impact + Vector3.up * 0.6f, new Color(1f, 0.45f, 0.14f, 1f), 80, 12f, 0.4f, 0.9f, 0.6f);
+                    DragonVfx.Burst(impact + Vector3.up * 0.4f, new Color(0.35f, 0.30f, 0.26f, 0.7f), 40, 4f, 1.2f, 1.6f, -0.1f);
+                    DragonVfx.Vanilla(new string[] { "vfx_FireballHit", "fx_fireball_staff_explosion", "vfx_fireball_hit" }, impact, Quaternion.identity, 1.5f, 4f);
+                });
             }
             if (ascended)
                 StartCoroutine(PunishingBombFireRoutine(player, impact, radius, explosion));
@@ -3165,6 +3198,7 @@ namespace AlbedosCustomClassesAdvanced
             DragonCombat.LockSkill(player, 0.5f);
             DragonCombat.PlayClip(player, "merc_roar", 0.35f);
             ShowMessage("Battlecry");
+            if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.Shockwave(player.transform.position, new Color(1f, 0.45f, 0.14f, 1f), Mathf.Max(1f, DragonCombat.M(_bcRadius.Value)), 0.6f); DragonVfx.Burst(player.transform.position + Vector3.up * 1.6f, new Color(1f, 0.45f, 0.14f, 1f), 50, 6f, 0.3f, 0.7f, -0.3f); });
             float radius = Mathf.Max(1f, DragonCombat.M(_bcRadius.Value));
             HashSet<Player> allies = new HashSet<Player>();
             allies.Add(player);
@@ -4434,7 +4468,7 @@ namespace AlbedosCustomClassesAdvanced
             DragonCombat.ForceRun(player, false, false, 0f);
             DragonCombat.ClipStop(player, 0.05f);
             float slam = 0.4f;
-            DragonCombat.LockSkill(player, slam + 0.35f);
+            DragonCombat.LockSkill(player, slam + 0.15f);   // v0.25.55: free right after the slam
             DragonCombat.PlayClip(player, "cleric_hammer_slam", slam);
             StartCoroutine(ShieldChargeSlamRoutine(player, forward, slam));
         }
@@ -4444,6 +4478,8 @@ namespace AlbedosCustomClassesAdvanced
             yield return new WaitForSeconds(slam);
             if (player == null || player.IsDead()) yield break;
             ShieldChargeSlamHit(player, forward);
+            // v0.25.55 (user: the slam animation kept going long after the hit): rush the rest of the heavy swing.
+            DragonCombat.SetSkillAnimSpeed(player, 6f, 0.35f);
         }
 
         private void ShieldChargeSlamHit(Player player, Vector3 forward)
@@ -8012,6 +8048,15 @@ namespace AlbedosCustomClassesAdvanced
                 _barriers.Remove(removeBarriers[i]);
         }
 
+        // v0.25.55: classes whose skills already use the new VFX engine (pass 1 Cleric, pass 2 Warrior).
+        private bool IhLocalRichVfx()
+        {
+            Player p = Player.m_localPlayer;
+            if (p == null) return false;
+            string c = GetClass(p);
+            return c == "Cleric" || c == "Warrior";
+        }
+
         private bool IhLocalCleric()
         {
             Player p = Player.m_localPlayer;
@@ -9170,6 +9215,14 @@ namespace AlbedosCustomClassesAdvanced
         }
         private IEnumerator AnimateHalfmoonArc(Vector3 center, Vector3 forward, float radius)
         {
+            if (IhLocalRichVfx())
+                DragonCombat.RunVfx(delegate
+                {
+                    Vector3 fw = forward; fw.y = 0f; if (fw.sqrMagnitude < 0.01f) fw = Vector3.forward; fw.Normalize();
+                    for (int k = -2; k <= 2; k++)
+                        DragonVfx.Burst(center + Quaternion.AngleAxis(k * 30f, Vector3.up) * fw * radius * 0.8f, new Color(0.45f, 0.78f, 1f, 1f), 12, 4f, 0.3f, 0.4f, 0f);
+                    DragonVfx.Flash(center, new Color(0.45f, 0.78f, 1f, 1f), 3f, radius * 1.5f, 0.3f);
+                });
             GameObject obj = new GameObject("AlbedoHalfmoon");
             LineRenderer line = obj.AddComponent<LineRenderer>();
             line.useWorldSpace = true;
@@ -9213,8 +9266,12 @@ namespace AlbedosCustomClassesAdvanced
         private IEnumerator AnimateRing(Vector3 center, float startRadius, float endRadius, float duration, Color color, float width)
         {
             // v0.25.54: Cleric skills get a real particle shockwave + light on every expanding ring.
-            if (_enableVfx.Value && endRadius >= 1.5f && endRadius - startRadius > 0.4f && IhLocalCleric())
-                DragonCombat.RunVfx(delegate { DragonVfx.Shockwave(center, color, endRadius, duration); });
+            if (_enableVfx.Value && endRadius >= 1.5f && endRadius - startRadius > 0.4f && IhLocalRichVfx())
+                DragonCombat.RunVfx(delegate
+                {
+                    if (duration < 0.25f) DragonVfx.Burst(center + Vector3.up * 0.2f, color, 16, endRadius * 4f, 0.3f, 0.35f, 0.4f);   // quick ticks: cheap sparks, no light
+                    else DragonVfx.Shockwave(center, color, endRadius, duration);
+                });
             GameObject obj = new GameObject("AlbedoAdvancedRing");
             LineRenderer line = obj.AddComponent<LineRenderer>();
             line.useWorldSpace = true;

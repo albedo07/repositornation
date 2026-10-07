@@ -220,7 +220,7 @@ namespace AlbedosCustomClassesSkills
         public static SkillsPlugin Instance;
         public const string ModGuid = "albedo.customclasses.skills";
         public const string ModName = "Dragon's Altar - Starter Skills";
-        public const string ModVersion = "0.25.54";
+        public const string ModVersion = "0.25.55";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";
@@ -638,7 +638,17 @@ namespace AlbedosCustomClassesSkills
             }
 
             if (_enableVfx.Value)
+            {
                 StartCoroutine(AnimateSlashArc(player.transform.position + Vector3.up * 1.0f, forward, range, angle, new Color(1f, 0.58f, 0.18f, 1f)));
+                // v0.25.55 VFX: sparks fly off the arc of the heavy slash
+                Vector3 hsC = player.transform.position + Vector3.up;
+                Vector3 hsF = forward; hsF.y = 0f; if (hsF.sqrMagnitude < 0.01f) hsF = Vector3.forward; hsF.Normalize();
+                DragonCombat.RunVfx(delegate
+                {
+                    for (int k = -2; k <= 2; k++) DragonVfx.Burst(hsC + Quaternion.AngleAxis(k * angle * 0.2f, Vector3.up) * hsF * range * 0.85f, new Color(1f, 0.62f, 0.22f, 1f), 14, 6f, 0.25f, 0.4f, 0.6f);
+                    DragonVfx.Flash(hsC + hsF * range * 0.5f, new Color(1f, 0.62f, 0.22f, 1f), 3f, range * 1.5f, 0.3f);
+                });
+            }
         }
 
         private void CastImpactWave(Player player)
@@ -695,7 +705,18 @@ namespace AlbedosCustomClassesSkills
                 }
 
                 if (_enableVfx.Value)
+                {
                     StartCoroutine(AnimateRing(probe, 0.12f, Mathf.Max(0.35f, width * 0.55f), 0.18f, new Color(1f, 0.62f, 0.20f, 0.78f), 0.05f, 0f));
+                    if (Time.frameCount % 3 == 0)
+                    {
+                        Vector3 iwP = probe;
+                        DragonCombat.RunVfx(delegate
+                        {
+                            DragonVfx.Burst(iwP + Vector3.up * 0.2f, new Color(1f, 0.62f, 0.22f, 1f), 10, 6f, 0.3f, 0.4f, 1.2f);
+                            DragonVfx.Burst(iwP, new Color(0.45f, 0.38f, 0.30f, 0.6f), 6, 2.5f, 0.8f, 0.9f, -0.05f);   // dust
+                        });
+                    }
+                }
 
                 elapsed += Time.deltaTime;
                 yield return null;
@@ -744,7 +765,11 @@ namespace AlbedosCustomClassesSkills
             }
 
             if (_enableVfx.Value)
+            {
                 StartCoroutine(AnimateRing(player.transform.position + forward * range + Vector3.up * 0.08f, 0.2f, width, 0.24f, new Color(1f, 0.78f, 0.30f, 0.92f), 0.09f, 0f));
+                Vector3 ipP = player.transform.position + forward * range + Vector3.up * 1f;
+                DragonCombat.RunVfx(delegate { DragonVfx.Burst(ipP, new Color(1f, 0.62f, 0.22f, 1f), 36, 9f, 0.3f, 0.5f, 0.3f); DragonVfx.Flash(ipP, new Color(1f, 0.62f, 0.22f, 1f), 4f, 6f, 0.3f); });
+            }
         }
 
         // v0.18.1: entry point for the Skill Tree hotbar (Advanced module).

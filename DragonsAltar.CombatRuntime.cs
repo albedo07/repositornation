@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.54";
+        public const string ModVersion = "0.25.55";
 
         internal static DragonCombatPlugin Instance;
 
@@ -881,7 +881,7 @@ namespace DragonsAltarCombat
         internal ConfigEntry<bool> ComboChainsEnabled;
         internal ConfigEntry<float> WhirlwindLoopStart, WhirlwindLoopEnd;
         internal ConfigEntry<int> ComboChainLength;
-        internal ConfigEntry<float> ComboFinisherLockout, ComboContinueWindow;
+        internal ConfigEntry<float> ComboFinisherLockout, ComboContinueWindow, ComboSwingSeconds;
         internal ConfigEntry<bool> EnhancedVfx;
         internal ConfigEntry<float> VfxDensity;
         private static FieldInfo _atkLevels, _atkLevel, _atkAnim, _atkChar, _atkWeapon, _atkAngle, _atkType;
@@ -914,6 +914,7 @@ namespace DragonsAltarCombat
             ComboFinisherLockout = Config.Bind("Combat", "ComboFinisherLockout_v02538", 1f, "Seconds after the last hit of the chain before a new normal attack can start.");
             EnhancedVfx = Config.Bind("Visuals", "EnhancedSkillVfx_v02554", true, "Real particle / light / lightning effects on skills (v0.25.54). Off = the old line drawings only.");
             VfxDensity = Config.Bind("Visuals", "ParticleDensity", 1f, "Particle amount multiplier for skill effects (0.1 - 3).");
+            ComboSwingSeconds = Config.Bind("Combat", "ComboSwingSeconds_v02555", 0.8f, "Normal attack chain: seconds per swing (hits 1-4) with no attack-speed bonus; class attack speed bonuses shorten it. The finisher keeps its natural length.");
             ComboContinueWindow = Config.Bind("Combat", "ComboContinueWindow_v02544", 0.4f, "Seconds after a swing ends in which the next normal attack continues the chain (1-2-1-2-3) instead of starting over.");
             WhirlwindLoopStart = Config.Bind("Runtime", "WhirlwindLoopStart_v02542", 0.3f, "Whirlwind: where the looped spin restarts in Valheim's atgeir spin (0-1 of the animation).");
             WhirlwindLoopEnd = Config.Bind("Runtime", "WhirlwindLoopEnd_v02542", 0.72f, "Whirlwind: where the looped spin jumps back (0-1 of the animation).");
@@ -937,6 +938,12 @@ namespace DragonsAltarCombat
             MethodInfo[] hm = typeof(Humanoid).GetMethods(all);
             for (int i = 0; i < hm.Length; i++)
             {
+                if (hm[i].Name == "OnAttackTrigger" && hm[i].GetParameters().Length == 0)
+                {
+                    try { PatchWithHarmony(hm[i], new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("SkillAnimTriggerPrefix", BindingFlags.Static | BindingFlags.NonPublic)), null); n++; }
+                    catch (Exception ex) { Logger.LogWarning("Skill anim trigger patch: " + ex.Message); }
+                    continue;
+                }
                 if (hm[i].Name != "StartAttack" || hm[i].ReturnType != typeof(bool)) continue;
                 try { PatchWithHarmony(hm[i], new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("ComboLockPrefix", BindingFlags.Static | BindingFlags.NonPublic)), null); n++; }
                 catch (Exception ex) { Logger.LogWarning("Combo lock patch: " + ex.Message); }
@@ -998,7 +1005,8 @@ namespace DragonsAltarCombat
             return count > 2 ? hit % 2 : 0;
         }
 
-        private static float _comboLastEnd = -10f, _comboLastStart = -10f;
+        private static float _comboLastEnd = -10f, _comboLastStart = -10f, _chainPrevSpeed = 1f;
+        private static readonly Dictionary<string, float> _chainNatural = new Dictionary<string, float>();
 
         private static void ComboStartPrefix(Attack __instance, Humanoid character, ItemDrop.ItemData weapon, ref Attack previousAttack, ref float timeSinceLastAttack)
         {
@@ -1022,6 +1030,27 @@ namespace DragonsAltarCombat
                 bool prevRunning = previousAttack != null && _comboLastEnd < 0f && Time.time - _comboLastStart < 2.5f;
                 bool cont = _comboHit >= 0 && prevAnim == anim && anim == _comboBase && _comboHit < length - 1
                     && (prevRunning || Time.time - _comboLastEnd <= Mathf.Max(0.05f, Instance.ComboContinueWindow.Value));
+                // v0.25.55 (user): every swing of the chain takes the same time (ComboSwingSeconds, 0.8s at no
+                // attack-speed bonus), the finisher keeps its natural (longest) length. Each swing's natural time is
+                // measured live (start -> next start, at the speed it played), so the slow backwards step
+                // (swing 2 -> swing 1) is sped up like any other.
+                if (cont && _comboHit > 0)
+                {
+                    float measured = Time.time - _comboLastStart;
+                    string mk = anim + ":" + (_comboHit - 1).ToString();
+                    float nat = measured * Mathf.Max(0.05f, _chainPrevSpeed);
+                    float old;
+                    if (measured > 0.15f && (!_chainNatural.TryGetValue(mk, out old) || nat < old)) _chainNatural[mk] = nat;
+                }
+                float chainF = 1f;
+                if (_comboHit < length - 1)
+                {
+                    float natNow;
+                    if (_chainNatural.TryGetValue(anim + ":" + _comboHit.ToString(), out natNow))
+                        chainF = Mathf.Clamp(natNow / Mathf.Max(0.2f, Instance.ComboSwingSeconds.Value), 0.4f, 3f);
+                }
+                DragonCombat.SetChainSpeed(p, chainF, 3f);
+                _chainPrevSpeed = DragonCombat.GetAttackSpeedMultiplier(p) * chainF;
                 _comboLastEnd = -1f;
                 _comboLastStart = Time.time;
                 _comboPrevSwing = cont ? _comboSwing : -1;
@@ -1038,8 +1067,9 @@ namespace DragonsAltarCombat
             catch (Exception) { _comboInStart = false; }
         }
 
-        private static void ComboStartPostfix(Attack __instance, bool __result)
+        private static void ComboStartPostfix(Attack __instance, bool __result, Humanoid character)
         {
+            if (__result && character != null && character == Player.m_localPlayer) DragonCombat.SkillAnimAttackBlockUntil = 0f;
             bool was = _comboInStart;
             _comboInStart = false;
             if (!was) return;
@@ -1070,9 +1100,16 @@ namespace DragonsAltarCombat
             _comboLockUntil = Time.time + Mathf.Max(0f, Instance == null ? 1f : Instance.ComboFinisherLockout.Value);
         }
 
+        private static bool SkillAnimTriggerPrefix(Humanoid __instance)
+        {
+            return __instance == null || __instance != Player.m_localPlayer || Time.time >= DragonCombat.SkillAnimAttackBlockUntil;
+        }
+
         private static bool ComboLockPrefix(Humanoid __instance, ref bool __result)
         {
             if (__instance == null || __instance != Player.m_localPlayer) return true;
+            // v0.25.55: no normal attack while a skill holds the player (no attack sneaking out of a skill).
+            if (DragonCombat.IsSkillLocked((Player)__instance)) { __result = false; return false; }
             if (Time.time >= _comboLockUntil) return true;
             __result = false;
             return false;
@@ -3350,9 +3387,27 @@ namespace DragonsAltarCombat
             if (t != null) FireVanilla(player, t);
         }
 
+        // v0.25.55 (user: a normal attack sometimes follows a skill): a skill's vanilla animation fires attack
+        // events; Valheim would run them on the last normal Attack still stored on the player. Clear it and
+        // ignore attack events until a new normal attack really starts.
+        public static float SkillAnimAttackBlockUntil;
+
+        public static void BlockSkillAnimAttack(Player player, float seconds)
+        {
+            if (player == null || player != Player.m_localPlayer) return;
+            SkillAnimAttackBlockUntil = Mathf.Max(SkillAnimAttackBlockUntil, Time.time + Mathf.Max(0.1f, seconds));
+            try
+            {
+                FieldInfo f = typeof(Humanoid).GetField("m_currentAttack", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (f != null) f.SetValue(player, null);
+            }
+            catch (Exception) { }
+        }
+
         public static void FireVanilla(Player player, string trigger)
         {
             if (player == null || string.IsNullOrEmpty(trigger)) return;
+            if (!trigger.StartsWith("emote", StringComparison.Ordinal)) BlockSkillAnimAttack(player, 2.5f);
             try
             {
                 Component z = null;
@@ -6317,7 +6372,7 @@ namespace DragonsAltarCombat
             float factor = 1f;
 
             if (player.InAttack())
-                factor = GetAttackSpeedMultiplier(player);
+                factor = GetAttackSpeedMultiplier(player) * ChainSpeedFor(player);
             float skillSpeed, skillUntil;
             int pid = player.GetInstanceID();
             bool skillTimed = SkillAnimSpeed.TryGetValue(pid, out skillSpeed) && SkillAnimSpeedUntil.TryGetValue(pid, out skillUntil) && Time.time < skillUntil;
@@ -6331,6 +6386,26 @@ namespace DragonsAltarCombat
             state.HasOutput = true;
             state.LastFactor = factor;
             state.LastOutputSpeed = output;
+        }
+
+        private static readonly Dictionary<int, float> ChainSpeed = new Dictionary<int, float>();
+        private static readonly Dictionary<int, float> ChainSpeedUntil = new Dictionary<int, float>();
+
+        public static void SetChainSpeed(Player player, float multiplier, float ttl)
+        {
+            if (player == null) return;
+            int id = player.GetInstanceID();
+            ChainSpeed[id] = Mathf.Clamp(multiplier, 0.2f, 4f);
+            ChainSpeedUntil[id] = Time.time + Mathf.Max(0.05f, ttl);
+        }
+
+        public static float ChainSpeedFor(Player player)
+        {
+            if (player == null) return 1f;
+            int id = player.GetInstanceID();
+            float v, until;
+            if (ChainSpeed.TryGetValue(id, out v) && ChainSpeedUntil.TryGetValue(id, out until) && Time.time < until) return v;
+            return 1f;
         }
 
         public static void SetAttackSpeedSource(Player player, float multiplier, float ttl)

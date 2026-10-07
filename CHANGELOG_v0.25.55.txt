@@ -1,0 +1,21 @@
+Immortal Heroes v0.25.55 - Warrior VFX
+
+FIXES
+- Hammer Slam (Shield Charge finisher): you are free 0.15s after the hit and the rest of the heavy swing is
+  rushed - no more standing locked after the skill is done.
+- Normal attack chain: every swing (hits 1-4) now takes the same time, [Combat] ComboSwingSeconds_v02555 =
+  0.8s with no attack-speed bonus; class attack-speed bonuses (Sword Master, Mercenary...) shorten it from
+  there. The finisher keeps its natural, longest swing. Each swing's natural time is learned live during your
+  first full chain with a weapon, so the slow backwards step (2nd -> 1st swing) is evened out from then on.
+- A normal attack can no longer follow a skill: skill animations ignore attack events until a new normal attack
+  really starts, the last normal attack is cleared when a skill animation starts, and normal attacks can't
+  start while a skill is holding you.
+
+WARRIOR VFX (pass 2, same engine as the Cleric)
+- Every expanding Warrior ring (Stomp, Bonecrusher, Circle Swing, Eclipse, Halfmoon, Whirlwind sweeps, Seismic
+  rupture, Punishing Bomb...) throws a particle shockwave + light; quick tick rings throw sparks.
+- Heavy Slash: sparks fly off the arc. Impact Wave: sparks + dust run along the wave. Impact Punch: spark burst.
+- Moonlight Splitter waves glow and shed blue light; Crescent Cleave cleaves stream sparks (ember when Ascended).
+- Blade Storm cuts flash; Halfmoon arcs spark; Frenzied Charge leaves a blue trail.
+- Punishing Bomb: burning fuse, fiery explosion with smoke. Unchained Fury: ember aura + burst.
+- Knight's Guidance: pillar of blue light + wave. Battlecry: ember shockwave + burst.

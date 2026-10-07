@@ -1,6 +1,5 @@
-TEST v0.25.54 (Cleric / Paladin / Priest)
-1. Cast every Cleric skill: particles, light flashes, real lightning bolts, pillars.
-2. Check FPS during Lightning Tempest / Heaven's Judgement; lower [Visuals] ParticleDensity if needed.
-3. Please send BepInEx/LogOutput.log once: it lists Valheim's effect prefabs ("[Immortal Heroes] Effect prefabs: ...")
-   so the next passes can use more of the game's own effects.
-4. [Visuals] EnhancedSkillVfx_v02554 = false brings back the old line drawings.
+TEST v0.25.55
+1. Shield Charge -> Left Click: Hammer Slam, you can move right after the hit.
+2. Chain: do one full chain, then a second: hits 1-4 evenly spaced (0.8s, faster with attack-speed bonuses), finisher longest.
+3. Spam attack while casting skills: no normal attack comes out of a skill.
+4. Warrior / Sword Master / Mercenary skills: particles, sparks, lights on every skill.
