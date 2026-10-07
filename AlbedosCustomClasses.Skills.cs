@@ -233,7 +233,7 @@ namespace AlbedosCustomClassesSkills
         public static SkillsPlugin Instance;
         public const string ModGuid = "albedo.customclasses.skills";
         public const string ModName = "Dragon's Altar - Starter Skills";
-        public const string ModVersion = "0.25.74";
+        public const string ModVersion = "0.25.75";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";
@@ -990,14 +990,15 @@ namespace AlbedosCustomClassesSkills
         {
             ShowMessage("Glacial Descent"); if (windup > 0f) yield return new WaitForSeconds(windup); if (player == null || player.IsDead()) yield break;
             Vector3 start = DragonCombat.GetIndoorSafeSkyPoint(target, 10f); GameObject chunk = null;
-            if (_enableVfx.Value) { chunk = GameObject.CreatePrimitive(PrimitiveType.Cube); chunk.name = "DragonsAltarGlacialDescent"; chunk.transform.position = start; chunk.transform.localScale = new Vector3(4.8f, 3.6f, 4.8f); chunk.transform.rotation = Quaternion.Euler(18f, 28f, 12f); Collider c = chunk.GetComponent<Collider>(); if (c != null) Destroy(c); Renderer r = chunk.GetComponent<Renderer>(); if (r != null) { Shader s = Shader.Find("Sprites/Default"); if (s != null) r.material = new Material(s); if (r.material != null) r.material.color = new Color(0.48f, 0.86f, 1f, 0.86f); } }
-            float elapsed = 0f; while (elapsed < 0.45f) { float t = Mathf.Clamp01(elapsed / 0.45f); if (chunk != null) { chunk.transform.position = Vector3.Lerp(start, target + Vector3.up * 1.4f, t); chunk.transform.Rotate(new Vector3(38f, 22f, 17f) * Time.deltaTime); } elapsed += Time.deltaTime; yield return null; } if (chunk != null) Destroy(chunk);
+            if (_enableVfx.Value && DragonVfx.Enabled) { try { chunk = DragonVfx.IceDiamond(start, Mathf.Max(2f, DragonCombat.M(_glacialRadius.Value) * 0.9f)); } catch (Exception) { chunk = null; } }   // v0.25.75 diamond of ice
+            if (_enableVfx.Value && chunk == null) { chunk = GameObject.CreatePrimitive(PrimitiveType.Cube); chunk.name = "DragonsAltarGlacialDescent"; chunk.transform.position = start; chunk.transform.localScale = new Vector3(4.8f, 3.6f, 4.8f); chunk.transform.rotation = Quaternion.Euler(18f, 28f, 12f); Collider c = chunk.GetComponent<Collider>(); if (c != null) Destroy(c); Renderer r = chunk.GetComponent<Renderer>(); if (r != null) { Shader s = Shader.Find("Sprites/Default"); if (s != null) r.material = new Material(s); if (r.material != null) r.material.color = new Color(0.48f, 0.86f, 1f, 0.86f); } }
+            float elapsed = 0f; while (elapsed < 0.45f) { float t = Mathf.Clamp01(elapsed / 0.45f); if (chunk != null) { chunk.transform.position = Vector3.Lerp(start, target + Vector3.up * 1.4f, t); if (chunk.name != "IH_IceDiamond") chunk.transform.Rotate(new Vector3(38f, 22f, 17f) * Time.deltaTime); } elapsed += Time.deltaTime; yield return null; } if (chunk != null) Destroy(chunk);
             float radius = Mathf.Max(0.5f, DragonCombat.M(_glacialRadius.Value)); List<Character> targets = GetSphereTargets(player, target, radius); for (int i = 0; i < targets.Count; i++) { DealDamage(player, targets[i], _glacialDamage, 18f); DragonCombat.ApplyFrost(targets[i], Mathf.Max(0.1f, _glacialFrostDuration.Value)); }
             if (_enableVfx.Value)
             {
                 StartCoroutine(AnimateRing(target + Vector3.up * 0.08f, 0.4f, radius, 0.55f, new Color(0.50f, 0.90f, 1f, 0.95f), 0.14f, 0f));
                 Vector3 gt = target; float gr = radius;
-                DragonCombat.RunVfx(delegate { DragonVfx.Shockwave(gt, new Color(0.55f, 0.90f, 1f, 1f), gr, 0.5f); DragonVfx.Burst(gt + Vector3.up * 0.6f, new Color(0.85f, 0.97f, 1f, 1f), 60, 9f, 0.3f, 0.9f, 0.8f); DragonVfx.IceBurst(gt, gr); DragonVfx.Shake(gt, 25f, 1.2f); DragonVfx.DustRing(gt, gr); DragonVfx.SpikeRing(gt, DragonVfx.Ice, gr * 0.75f, 9, 1.7f, 1.8f); DragonVfx.Spike(gt, DragonVfx.Ice, 2.4f, 0.8f, 1.8f, Vector3.zero); });   // v0.25.61 ice spikes
+                DragonCombat.RunVfx(delegate { DragonVfx.ShatterIce(gt, gr); DragonVfx.Shockwave(gt, new Color(0.55f, 0.90f, 1f, 1f), gr, 0.5f); DragonVfx.Burst(gt + Vector3.up * 0.6f, new Color(0.85f, 0.97f, 1f, 1f), 60, 9f, 0.3f, 0.9f, 0.8f); DragonVfx.IceBurst(gt, gr); DragonVfx.Shake(gt, 25f, 1.2f); DragonVfx.DustRing(gt, gr); DragonVfx.SpikeRing(gt, DragonVfx.Ice, gr * 0.75f, 9, 1.7f, 1.8f); DragonVfx.Spike(gt, DragonVfx.Ice, 2.4f, 0.8f, 1.8f, Vector3.zero); });   // v0.25.61 ice spikes
             }
         }
 

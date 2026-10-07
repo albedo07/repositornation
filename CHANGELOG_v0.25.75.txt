@@ -1,0 +1,22 @@
+Immortal Heroes v0.25.75 - Diamond and Black Hole
+
+ANIMATION
+- Jump slams (Electric Smite, Bonecrusher): no more barrel roll.
+  - The main arm goes straight up over your head, like the start of the Wave emote, and stays there for the whole flight. It does not wave.
+  - The slam into the ground only happens once you are really on the ground.
+
+ARCHMAGE / SORCERER
+- Glacial Descent: a huge cut diamond of ice drops from the sky, point first and slowly spinning, with frost streaming behind it. It shatters into ice shards on impact.
+  - Ascended: 5 m core (bigger hit + Freeze) and a 10 m outer radius (was 3 m / 8 m).
+- Gravity Dominion: a black hole hangs in the middle of the well while it lasts, then collapses at the end.
+  - Pitch-black core with a shimmering edge and two spinning glowing disks around it.
+- Astral Greatblade: the blade no longer drops from the sky.
+  - A giant astral greatsword grows out of your staff during the wind up (the staff is its hilt).
+  - The blade follows your hands as you heave it overhead and slam it down along your aim.
+  - Ascended: the same blade stays for all three slams.
+- Meteor Fall / Elemental Cataclysm: the meteor is a tumbling boulder with glowing molten cracks, wrapped in fire and leaving a burning tail.
+- Arcane Phalanx: the swords are real spectral swords (blade, guard, grip) instead of glowing lines.
+
+VFX
+- Removed the rune circle that appeared on the ground under you whenever a skill started.
+- Removed the ground ring under a Judgement Mark (the sigil over the head stays).

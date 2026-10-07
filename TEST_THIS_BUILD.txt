@@ -1,3 +1,7 @@
-TEST v0.25.74
-1. HUD, every class and AC: there is no icon / label column left of the bars, and the frame has no smudges where it was.
-2. HP, STAMINA, EITR and EXP show inside their bars and stay readable while each bar fills and empties.
+TEST v0.25.75
+1. Electric Smite / Bonecrusher: arm straight up in the air, no roll, and the slam only on landing.
+2. Cast any skill: no circle on the ground under you any more.
+3. Glacial Descent (normal + Ascended): a diamond of ice falls point first and shatters. Ascended hits 10 m, with the core at 5 m.
+4. Gravity Dominion: a black hole floats in the middle for the whole duration.
+5. Astral Greatblade: the blade grows out of the staff, follows the lift and the slam, then fades. Tell me if it points the wrong way with your staff.
+6. Meteor Fall: a burning boulder instead of a red ball. Arcane Phalanx: real swords.

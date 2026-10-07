@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.74";
+        public const string ModVersion = "0.25.75";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -12061,12 +12061,12 @@ namespace AlbedosCustomClassesAdvanced
                 case "battlecry": return "A war cry that drives you and your allies to hit harder, in battle and at work.";
                 // v0.22.0 Sorcerer
                 case "flame_burst": return "A cone of fire bursts from your hands, setting every foe ablaze.";
-                case "glacial_descent": return "Drop a massive chunk of ice onto your aim, freezing the ground around it.";
+                case "glacial_descent": return "Drop a massive diamond of ice from the sky onto your aim, freezing the ground around it.";
                 case "stonefang_eruption": return "Jagged stone fangs erupt at your aim, piercing and crippling all above them.";
                 case "meteor_fall": return "Call a meteor down on your aim. Hold to make it bigger.";
-                case "gravity_dominion": return "Seize gravity at your aim: small foes are dragged in, every enemy is exposed.";
+                case "gravity_dominion": return "Open a black hole at your aim: small foes are dragged in, every enemy is exposed.";
                 case "astral_railcannon": return "Assemble an astral cannon and fire a devastating beam across the battlefield.";
-                case "astral_greatblade": return "Summon an astral greatsword and slam it down along your aim.";
+                case "astral_greatblade": return "Grow an astral greatsword out of your staff, heave it overhead and slam it down along your aim.";
                 case "frost_nova": return "Release a freezing nova around you.";
                 case "elemental_cataclysm": return "Unleash every element at once on your aim. Hold to strengthen it.";
                 case "clockwork": return "Bend time for you and your allies: stronger skills and faster cooldowns.";
@@ -12129,7 +12129,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "seismic_guillotine": return "3 fissures, 25m, endpoint 140% and slows";
                 case "punishing_bomb": return "12m, 6s ground fire and stacking Burn";
                 case "whirlwind": return "8s with Hyper Armor and a final sweep";
-                case "glacial_descent": return "8m; the central 3m deals 135% and Freezes";
+                case "glacial_descent": return "10m; the central 5m deals 135% and Freezes";
                 case "meteor_fall": return "3 smaller meteors follow (5 at full charge)";
                 case "gravity_dominion": return "10m for 7s, pulls Big too, ends in an explosion";
                 case "astral_railcannon": return "a steerable 4s beam";

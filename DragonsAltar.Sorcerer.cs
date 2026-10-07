@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Dragon's Altar - Sorcerer Advancements";
-        public const string ModVersion = "0.25.74";
+        public const string ModVersion = "0.25.75";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -857,7 +857,7 @@ namespace DragonsAltarSorcerer
                 Deal(player, targets[i], 22f, 0f, 0f, 0f, 36f, 0f, 0f, 0f, 12f, false);
                 DragonCombat.ApplyFrost(targets[i], 6f);
             }
-            if (_enableVfx.Value) StartCoroutine(RingVfx(target, DragonCombat.M(_iceRadius.Value), new Color(0.55f, 0.90f, 1f, 0.95f), 0.7f));
+            if (_enableVfx.Value) { StartCoroutine(RingVfx(target, DragonCombat.M(_iceRadius.Value), new Color(0.55f, 0.90f, 1f, 0.95f), 0.7f)); Vector3 st = target; float sr = DragonCombat.M(_iceRadius.Value); DragonCombat.RunVfx(delegate { DragonVfx.ShatterIce(st, sr); DragonVfx.IceBurst(st, sr); }); }
             ShowMessage("Glacial Descent");
         }
 
@@ -980,8 +980,8 @@ namespace DragonsAltarSorcerer
             _clockSkillDamage = Config.Bind(k, "SkillDamagePercent", 30f, "+Skill Damage.");
             _clockCdr = Config.Bind(k, "CooldownReductionPercent", 50f, "Non-Grace cooldowns that START while active are this much shorter.");
             const string ga = "Wizard Glacial Descent Ascended";
-            _gdAscRadius = Config.Bind(ga, "Radius", 8f, "Ascended radius.");
-            _gdAscCore = Config.Bind(ga, "CoreRadius", 3f, "Central radius: bigger hit + Freeze.");
+            _gdAscRadius = Config.Bind(ga, "Radius_v02575", 10f, "Ascended radius (v0.25.75: 10m).");
+            _gdAscCore = Config.Bind(ga, "CoreRadius_v02575", 5f, "Central radius: bigger hit + Freeze (v0.25.75: 5m).");
             _gdAscCoreDamage = Config.Bind(ga, "CoreDamagePercent", 135f, "Damage inside the core.");
             _gdAscFreeze = Config.Bind(ga, "FreezeDuration", 1.5f, "Freeze inside the core.");
             _gdAscBossSlow = Config.Bind(ga, "BossSlowPercent", 15f, "Bosses are slowed instead of Frozen.");
@@ -1074,9 +1074,7 @@ namespace DragonsAltarSorcerer
                 DragonCombat.RunVfx(delegate
                 {
                     DragonVfx.Vortex(null, gc + Vector3.up * 1.2f, new Color(0.62f, 0.25f, 1f, 1f), gr, gd);   // v0.25.58 everything is sucked into the well
-                    DragonVfx.Aura(null, gc + Vector3.up * 1.2f, new Color(0.25f, 0.05f, 0.45f, 0.9f), 0.8f, gd, 40f, 0.3f);
-                    DragonVfx.Flash(gc + Vector3.up * 1.2f, new Color(0.62f, 0.25f, 1f, 1f), 3f, gr * 1.5f, gd);
-                    DragonVfx.Glyph(gc, new Color(0.55f, 0.20f, 0.95f, 1f), gr, gd, 70f);   // v0.25.61 gravity well sigil
+                    DragonVfx.BlackHole(gc, gr, gd);   // v0.25.75 (user): a black hole hangs in the middle of the well
                 });
             }
             while (Time.time < end && player != null)
@@ -1136,9 +1134,21 @@ namespace DragonsAltarSorcerer
             float windup = ScaleWindup(player, Mathf.Max(0f, _bladeWindup.Value));
             DragonCombat.LockSkill(player, windup + 0.3f);
             DragonCombat.PlayClip(player, "wiz_greatblade", windup);
+            SummonStaffBlade(player, windup, windup + 0.45f);
             if (windup > 0f) yield return new WaitForSeconds(windup);
             if (player == null || player.IsDead()) yield break;
             GreatbladeSlam(player, 1f);
+        }
+
+        // v0.25.75 (user, Elden Ring style): the Astral Greatblade grows out of the staff (the staff is its hilt)
+        // during the lift, and the Archmage slams it down; it is not dropped from the sky any more.
+        private void SummonStaffBlade(Player player, float windup, float life)
+        {
+            if (!_enableVfx.Value) return;
+            Player p = player;
+            float len = Mathf.Clamp(DragonCombat.M(_bladeRange.Value) * 0.75f, 4f, 13f), wid = Mathf.Max(0.6f, DragonCombat.M(_bladeWidth.Value) * 0.55f);
+            float grow = Mathf.Max(0.15f, windup * 0.45f);
+            DragonCombat.RunVfx(delegate { DragonVfx.StaffBlade(p, len, wid, new Color(0.62f, 0.45f, 1f, 1f), life, grow); });
         }
 
         private void GreatbladeSlam(Player player, float multiplier)
@@ -1156,13 +1166,12 @@ namespace DragonsAltarSorcerer
             }
             if (_enableVfx.Value)
             {
-                StartCoroutine(GreatbladeVfx(player.transform.position, forward, range, width));
+                if (!DragonVfx.Enabled) StartCoroutine(GreatbladeVfx(player.transform.position, forward, range, width));
                 { Vector3 gbo = player.transform.position + Vector3.up * 0.4f, gbf = forward; float gbr = range, gbw = width; DragonCombat.RunVfx(delegate { DragonVfx.SlashArc(gbo, gbf, Mathf.Max(3f, gbr * 0.6f), 150f, new Color(0.80f, 0.45f, 1f, 1f), Mathf.Max(0.8f, gbw * 0.6f), 0.6f, -90f); }); }   // v0.25.59 the astral blade's arc
                 Vector3 ga = player.transform.position, gb = player.transform.position + forward * range; float gw = width;
                 DragonCombat.RunVfx(delegate
                 {
                     DragonVfx.CrackLine(ga, gb, new Color(0.80f, 0.40f, 1f, 1f), Mathf.Clamp(gw * 0.35f, 0.4f, 1.4f), 4f);   // v0.25.58 the blade splits the ground
-                    DragonVfx.Streak(ga + Vector3.up * 7f, gb + Vector3.up * 0.2f, DragonVfx.Arcane, Mathf.Max(0.5f, gw * 0.5f), 0.5f);   // v0.25.61 the astral blade itself
                     for (int k = 1; k <= 4; k++) { Vector3 gp = Vector3.Lerp(ga, gb, k / 4.5f); DragonVfx.Spike(gp + Vector3.Cross(Vector3.up, gb - ga).normalized * gw * 0.4f, new Color(0.30f, 0.22f, 0.32f, 1f), 1.3f, 0.4f, 0.6f, Vector3.Cross(Vector3.up, gb - ga)); DragonVfx.Spike(gp - Vector3.Cross(Vector3.up, gb - ga).normalized * gw * 0.4f, new Color(0.30f, 0.22f, 0.32f, 1f), 1.3f, 0.4f, 0.6f, -Vector3.Cross(Vector3.up, gb - ga)); }
                     DragonVfx.HeavyLanding(Vector3.Lerp(ga, gb, 0.6f), new Color(0.75f, 0.30f, 1f, 1f), Mathf.Max(2f, gw * 1.5f), 2f);
                     for (int k = 1; k <= 4; k++) DragonVfx.Burst(Vector3.Lerp(ga, gb, k / 4f) + Vector3.up * 0.4f, new Color(0.85f, 0.55f, 1f, 1f), 20, 7f, 0.3f, 0.5f, 0.4f);
@@ -1177,6 +1186,7 @@ namespace DragonsAltarSorcerer
             // you cannot move while the three slams happen
             DragonCombat.LockSkill(player, windup + 2f * Mathf.Max(0.1f, _gbAscGap.Value) + 0.4f);
             DragonCombat.PlayClip(player, "wiz_greatblade", windup);
+            SummonStaffBlade(player, windup, windup + 2f * Mathf.Max(0.1f, _gbAscGap.Value) + 0.45f);
             if (windup > 0f) yield return new WaitForSeconds(windup);
             for (int slam = 0; slam < 3; slam++)
             {
@@ -1341,7 +1351,9 @@ namespace DragonsAltarSorcerer
         private IEnumerator MeteorImpact(Player player, Vector3 target, float radius, float multiplier, float size)
         {
             Vector3 sky = DragonCombat.GetIndoorSafeSkyPoint(target, 12f);
-            GameObject meteor = _enableVfx.Value ? CreateOrb(sky, size, new Color(1f, 0.20f, 0.02f, 1f)) : null;
+            GameObject meteor = null;
+            if (_enableVfx.Value && DragonVfx.Enabled) { try { meteor = DragonVfx.MeteorRock(sky, size); } catch (Exception) { meteor = null; } }   // v0.25.75 a real burning boulder
+            if (_enableVfx.Value && meteor == null) meteor = CreateOrb(sky, size, new Color(1f, 0.20f, 0.02f, 1f));
             if (meteor != null) { GameObject mv = meteor; DragonCombat.RunVfx(delegate { DragonVfx.TrailWhile(mv.transform, new Color(0.35f, 0.30f, 0.28f, 0.7f), size * 1.2f, delegate { return mv != null; }); }); }   // v0.25.58 smoke tail
             float drop = 0.45f;
             float e = 0f;
@@ -1560,7 +1572,7 @@ namespace DragonsAltarSorcerer
             float radius = DragonCombat.M(_gdAscRadius.Value);
             float core = DragonCombat.M(_gdAscCore.Value);
             Vector3 sky = DragonCombat.GetIndoorSafeSkyPoint(target, 12f);
-            GameObject chunk = _enableVfx.Value ? CreateIceChunk(sky, radius * 0.6f) : null;
+            GameObject chunk = _enableVfx.Value ? CreateIceChunk(sky, DragonVfx.Enabled ? core * 1.3f : radius * 0.6f) : null;
             float e = 0f;
             while (e < 0.45f)
             {
@@ -1586,7 +1598,7 @@ namespace DragonsAltarSorcerer
                 StartCoroutine(RingVfx(target, radius, new Color(0.50f, 0.90f, 1f, 0.95f), 0.6f));
                 StartCoroutine(RingVfx(target, core, new Color(0.85f, 0.98f, 1f, 1f), 0.8f));
                 Vector3 it = target; float ir = radius;
-                DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(it, new Color(0.60f, 0.92f, 1f, 1f), ir, 2f); DragonVfx.IceBurst(it, ir); DragonVfx.SpikeRing(it, DragonVfx.Ice, ir * 0.8f, 12, 2.4f, 2f); DragonVfx.Spike(it, DragonVfx.Ice, 3.5f, 1.1f, 2f, Vector3.zero); });   // v0.25.58
+                float ic = core; DragonCombat.RunVfx(delegate { DragonVfx.ShatterIce(it, ic * 1.3f); DragonVfx.HeavyLanding(it, new Color(0.60f, 0.92f, 1f, 1f), ir, 2f); DragonVfx.IceBurst(it, ir); DragonVfx.SpikeRing(it, DragonVfx.Ice, ir * 0.8f, 12, 2.4f, 2f); DragonVfx.Spike(it, DragonVfx.Ice, 3.5f, 1.1f, 2f, Vector3.zero); });   // v0.25.58
             }
         }
 
@@ -3688,6 +3700,11 @@ namespace DragonsAltarSorcerer
             line.SetPosition(0, new Vector3(0f, 0f, -0.75f));
             line.SetPosition(1, new Vector3(0f, 0f, 0.55f));
             line.SetPosition(2, new Vector3(0f, 0f, 0.95f));
+            if (DragonVfx.Enabled)
+            {
+                // v0.25.75: a real spectral sword (point along +Z like the old line)
+                try { DragonVfx.SpectralSword(obj.transform, 1.7f, new Color(0.72f, 0.38f, 1f, 1f)); line.enabled = false; } catch (Exception) { line.enabled = true; }
+            }
             DragonCombat.RunVfx(delegate { DragonVfx.AttachGlow(obj.transform, new Color(0.75f, 0.30f, 1f, 1f), 0.3f, 25f, 2.5f); });
             return obj;
         }
@@ -3718,6 +3735,12 @@ namespace DragonsAltarSorcerer
 
         private GameObject CreateIceChunk(Vector3 pos, float radius)
         {
+            if (DragonVfx.Enabled)
+            {
+                GameObject gem = null;
+                try { gem = DragonVfx.IceDiamond(pos, Mathf.Max(2f, radius)); } catch (Exception) { gem = null; }   // v0.25.75 diamond of ice
+                if (gem != null) return gem;
+            }
             GameObject obj = GameObject.CreatePrimitive(PrimitiveType.Cube);
             obj.name = "GlacialDescentChunk";
             obj.transform.position = pos;

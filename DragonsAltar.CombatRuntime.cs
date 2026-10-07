@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.74";
+        public const string ModVersion = "0.25.75";
 
         internal static DragonCombatPlugin Instance;
 
@@ -4010,14 +4010,17 @@ namespace DragonsAltarCombat
             DragonClipKey load = Ft(K(-0.93f).Sp(16f * d, -10f, 0f).Ch(6f, -6f, 0f).Hd(-12f, 0f, 0f).Hand(0.45f, 0.1f, -0.45f, 0.6f).Off(0f, -0.15f * d, 0f), 0.2f, 0.1f);
             // v0.25.30 user: no superman pose. In the air the body leans only diagonally (~38 deg), the main arm is
             // flared a little out to the side and the weapon is carried up (not pointed ahead).
-            DragonClipKey launch = K(-0.72f).Sp(6f, 0f, 0f).Hd(-18f, 0f, 0f).Hand(0.8f, -0.1f, 0.2f, 0.85f).Wp(0.3f, 0.9f, -0.15f).Rot(38f, 0f, 0f).Off(0f, 0.08f, 0f);
-            DragonClipKey roll0 = launch.Copy(-0.62f).Rot(40f, 0f, 0f).Sn(25f);
-            DragonClipKey roll1 = launch.Copy(-0.36f).Rot(40f, 0f, 0f).Sn(360f);
-            DragonClipKey poised = K(0f).Sp(12f, 0f, 0f).Ch(6f, 0f, 0f).Hd(-8f, 0f, 0f).Hand(0.1f, -0.8f, 0.45f, 0.95f).Rot(28f, 0f, 0f).Sn(360f);
-            DragonClipKey impact = Ft(K(0.08f).Sp(30f, 0f, 0f).Ch(14f, 0f, 0f).Hd(-28f, 0f, 0f).Hand(0.05f, -1f, 0.35f, 0.97f).Rot(6f, 0f, 0f).Off(0f, -0.38f * d, 0.05f).Sn(360f), 0.75f, 0.8f);
-            DragonClipKey settle = impact.Copy(brutal ? 0.3f : 0.2f).Off(0f, -0.4f * d, 0.05f);
-            DragonClipKey rec = Ft(K(brutal ? 0.58f : 0.45f).Sp(8f, 0f, 0f).Hd(-6f, 0f, 0f).Hand(0.35f, -0.45f, 0.35f, 0.6f).Off(0f, -0.06f, 0f).Sn(360f), 0.3f, 0.2f);
-            return new DragonClipKey[] { K(-1f), load, launch, roll0, roll1, poised, impact, settle, rec, K(brutal ? 0.9f : 0.75f).Sn(360f) };
+            // v0.25.75 (user): no barrel roll. Like the Wave emote's raise, the main arm goes straight up over the
+            // head with the weapon pointing at the sky and STAYS there (no waving) for the whole flight; the slam
+            // to the ground only happens on the real landing (the clip holds at T=0 until ClipImpact).
+            DragonClipKey launch = K(-0.72f).Sp(-4f, 0f, 0f).Ch(-4f, 0f, 0f).Hd(-14f, 0f, 0f).Hand(0.22f, 1f, 0.05f, 1f).Wp(0.05f, 1f, -0.15f).Rot(4f, 0f, 0f).Off(0f, 0.06f, 0f);
+            DragonClipKey raise0 = launch.Copy(-0.5f).Hand(0.2f, 1f, 0.08f, 1f);
+            DragonClipKey raise1 = launch.Copy(-0.25f).Sp(-2f, 0f, 0f).Hand(0.2f, 1f, 0.08f, 1f);
+            DragonClipKey poised = K(0f).Sp(4f, 0f, 0f).Ch(-2f, 0f, 0f).Hd(-12f, 0f, 0f).Hand(0.2f, 1f, 0.1f, 1f).Wp(0.05f, 1f, -0.1f).Rot(6f, 0f, 0f);
+            DragonClipKey impact = Ft(K(0.1f).Sp(30f, 0f, 0f).Ch(14f, 0f, 0f).Hd(-28f, 0f, 0f).Hand(0.05f, -1f, 0.35f, 0.97f).Wp(0f, -0.8f, 0.6f).Rot(6f, 0f, 0f).Off(0f, -0.38f * d, 0.05f), 0.75f, 0.8f).Linear();
+            DragonClipKey settle = impact.Copy(brutal ? 0.3f : 0.22f).Off(0f, -0.4f * d, 0.05f); settle.Lin = false;
+            DragonClipKey rec = Ft(K(brutal ? 0.58f : 0.45f).Sp(8f, 0f, 0f).Hd(-6f, 0f, 0f).Hand(0.35f, -0.45f, 0.35f, 0.6f).Off(0f, -0.06f, 0f), 0.3f, 0.2f);
+            return new DragonClipKey[] { K(-1f), load, launch, raise0, raise1, poised, impact, settle, rec, K(brutal ? 0.9f : 0.75f) };
         }
 
         private static void BuildStoryboardClips(Dictionary<string, DragonClipKey[]> c)
@@ -11024,7 +11027,6 @@ namespace DragonsAltarCombat
                     if (!StatusGate(t, kind, seconds)) return;
                     // Judgement Mark: a rose-gold sigil of motes hovering over the head
                     StatusAura(t, new Color(1f, 0.6f, 0.7f, 1f), seconds, 1.15f, w * 0.5f, 22f, 0.1f);
-                    Glyph(t.transform.position, new Color(1f, 0.6f, 0.7f, 0.55f), Mathf.Clamp(w * 1.8f, 1f, 4f), 0.8f, 160f);
                     break;
                 case "sanctified":
                     if (!StatusGate(t, kind, seconds)) return;
@@ -11051,13 +11053,357 @@ namespace DragonsAltarCombat
             StatusAura(p, new Color(1f, 0.82f, 0.35f, 1f), Mathf.Min(seconds, 20f), 0.55f, 0.45f, 12f, 0.5f);
         }
 
+        // ------------------------------------------------------------------ v0.25.75 solid spell objects
+        private static Texture2D _whiteTex;
+        private static Texture2D WhiteTex()
+        {
+            if (_whiteTex == null) _whiteTex = MakeTex(4, 4, delegate(float u, float v) { return 1f; }, TextureWrapMode.Clamp);
+            return _whiteTex;
+        }
+
+        // Flat-shaded mesh: every triangle gets its own vertices, coloured by a fixed key light so facets read
+        // even with the unlit Sprites/Default shader (vertex colours carry the shading).
+        private static Mesh FacetMesh(List<Vector3> v, List<int> tri, Color c, float rim)
+        {
+            Vector3 key = new Vector3(0.35f, 0.8f, -0.45f).normalized;
+            Vector3[] vv = new Vector3[tri.Count];
+            Color[] cc = new Color[tri.Count];
+            int[] tt = new int[tri.Count];
+            Vector2[] uv = new Vector2[tri.Count];
+            for (int i = 0; i + 2 < tri.Count; i += 3)
+            {
+                Vector3 a = v[tri[i]], b = v[tri[i + 1]], d = v[tri[i + 2]];
+                Vector3 n = Vector3.Cross(b - a, d - a).normalized;
+                float lit = 0.45f + 0.55f * Mathf.Max(0f, Vector3.Dot(n, key)) + rim * Mathf.Pow(1f - Mathf.Abs(n.y), 3f);
+                Color fc = new Color(Mathf.Clamp01(c.r * lit), Mathf.Clamp01(c.g * lit), Mathf.Clamp01(c.b * lit), c.a);
+                for (int k = 0; k < 3; k++) { vv[i + k] = v[tri[i + k]]; cc[i + k] = fc; tt[i + k] = i + k; uv[i + k] = new Vector2(0.5f, 0.5f); }
+            }
+            Mesh m = new Mesh();
+            m.vertices = vv; m.colors = cc; m.triangles = tt; m.uv = uv;
+            m.RecalculateNormals();
+            m.RecalculateBounds();
+            return m;
+        }
+
+        private static GameObject MeshObject(string name, Mesh mesh, Material mat, Transform parent)
+        {
+            GameObject go = new GameObject(name);
+            if (parent != null) go.transform.SetParent(parent, false);
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            MeshRenderer r = go.AddComponent<MeshRenderer>();
+            r.sharedMaterial = mat;
+            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            r.receiveShadows = false;
+            return go;
+        }
+
+        private static Material _clearMat;
+        private static Material ClearMat()
+        {
+            if (_clearMat == null) { Shader s = Shader.Find("Sprites/Default"); if (s != null) _clearMat = new Material(s); }
+            return _clearMat;
+        }
+
+        // Cut-gem diamond (crown + girdle + pavilion), point DOWN. Size = girdle diameter.
+        private static Mesh DiamondMesh(float height, float width, Color c)
+        {
+            List<Vector3> v = new List<Vector3>();
+            List<int> t = new List<int>();
+            int n = 8;
+            float rG = width * 0.5f, rC = width * 0.3f, yC = height * 0.26f, yT = height * 0.3f, yB = -height * 0.7f;
+            v.Add(new Vector3(0f, yT, 0f));   // 0 table centre
+            for (int i = 0; i < n; i++) { float a = (i + 0.5f) / n * Mathf.PI * 2f; v.Add(new Vector3(Mathf.Cos(a) * rC, yC, Mathf.Sin(a) * rC)); }   // 1..8 crown
+            for (int i = 0; i < n; i++) { float a = (float)i / n * Mathf.PI * 2f; v.Add(new Vector3(Mathf.Cos(a) * rG, 0f, Mathf.Sin(a) * rG)); }   // 9..16 girdle
+            v.Add(new Vector3(0f, yB, 0f));   // 17 culet
+            for (int i = 0; i < n; i++)
+            {
+                int c0 = 1 + i, c1 = 1 + (i + 1) % n, g0 = 9 + i, g1 = 9 + (i + 1) % n;
+                t.Add(0); t.Add(c1); t.Add(c0);                       // table
+                t.Add(c0); t.Add(g1); t.Add(g0);                      // crown facets
+                t.Add(c0); t.Add(c1); t.Add(g1);
+                t.Add(17); t.Add(g0); t.Add(g1);                      // pavilion
+            }
+            // double-sided: add the reversed triangles so the inner facets show through the translucent ice
+            int count = t.Count;
+            for (int i = 0; i < count; i += 3) { t.Add(t[i]); t.Add(t[i + 2]); t.Add(t[i + 1]); }
+            return FacetMesh(v, t, c, 0.35f);
+        }
+
+        // Glacial Descent: a huge cut diamond of ice, point down, spinning slowly, frost streaming behind it.
+        public static GameObject IceDiamond(Vector3 pos, float size)
+        {
+            if (!Enabled) return null;
+            GameObject root = new GameObject("IH_IceDiamond");
+            root.transform.position = pos;
+            float h = size * 1.35f, w = size * 0.8f;
+            MeshObject("body", DiamondMesh(h, w, new Color(0.70f, 0.93f, 1f, 0.78f)), ClearMat(), root.transform);
+            GameObject core = MeshObject("core", DiamondMesh(h * 0.55f, w * 0.55f, new Color(0.85f, 0.97f, 1f, 0.55f)), Mat(WhiteTex(), true), root.transform);
+            core.transform.localPosition = new Vector3(0f, -h * 0.05f, 0f);
+            DragonRotate rot = root.AddComponent<DragonRotate>();
+            rot.Speed = new Vector3(0f, 55f, 0f);
+            AttachGlow(root.transform, new Color(0.70f, 0.94f, 1f, 1f), w * 0.45f, 50f, Mathf.Max(6f, size * 1.6f));
+            Transform tr = root.transform;
+            GameObject keep = root;
+            TrailWhile(tr, new Color(0.80f, 0.96f, 1f, 1f), Mathf.Max(0.5f, w * 0.35f), delegate { return keep != null; });
+            return root;
+        }
+
+        // The diamond hits: it shatters into ice shards.
+        public static void ShatterIce(Vector3 pos, float size)
+        {
+            if (!Enabled) return;
+            Debris(pos + Vector3.up * 0.6f, new Color(0.72f, 0.94f, 1f, 1f), Mathf.RoundToInt(16 * Mathf.Clamp(Amount, 0.5f, 1.5f)), 6f + size, Mathf.Clamp(size * 0.09f, 0.18f, 0.6f), 1.8f);
+            Burst(pos + Vector3.up * 0.8f, new Color(0.85f, 0.98f, 1f, 1f), Mathf.RoundToInt(50 * Amount), 7f + size, 0.25f, 0.8f, 0.9f);
+            Flash(pos + Vector3.up, new Color(0.65f, 0.92f, 1f, 1f), 4f, 6f + size * 2f, 0.4f);
+        }
+
+        // Gravity Dominion: a black hole hanging over the well - a pitch-black core, a shimmering event-horizon
+        // rim and two tilted accretion disks spiralling around it.
+        public static GameObject BlackHole(Vector3 ground, float radius, float seconds)
+        {
+            if (!Enabled) return null;
+            float core = Mathf.Clamp(radius * 0.14f, 0.7f, 2.2f);
+            GameObject root = new GameObject("IH_BlackHole");
+            root.transform.position = ground + Vector3.up * (core * 1.9f + 0.4f);
+            GameObject ball = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            Collider col = ball.GetComponent<Collider>(); if (col != null) UnityEngine.Object.Destroy(col);
+            ball.transform.SetParent(root.transform, false);
+            ball.transform.localScale = Vector3.one * core * 2f;
+            Renderer br = ball.GetComponent<Renderer>();
+            Material dark = SolidMat(new Color(0.01f, 0f, 0.02f, 1f));
+            if (br != null && dark != null) { br.sharedMaterial = dark; br.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; }
+            for (int d = 0; d < 2; d++)
+            {
+                GameObject disk = MeshObject("disk", DiskMesh(core * 1.2f, core * (d == 0 ? 3.2f : 2.4f), d), Mat(WhiteTex(), true), root.transform);
+                disk.transform.localRotation = Quaternion.Euler(d == 0 ? 18f : -28f, 0f, d == 0 ? 6f : 14f);
+                DragonRotate r = disk.AddComponent<DragonRotate>();
+                r.Speed = new Vector3(0f, d == 0 ? 160f : -220f, 0f);
+            }
+            // event horizon: purple-white motes clinging to the surface
+            ParticleSystem rim = Particles(root.transform, new Color(0.75f, 0.45f, 1f, 1f), 0, 80f * Amount, seconds, 0.35f, 0f, 0.15f, core * 0.12f, core * 0.25f, 0f,
+                ParticleSystemShapeType.Sphere, core * 1.05f, Vector3.zero, false, true);
+            ParticleSystem.ShapeModule sh = rim.shape; sh.radiusThickness = 0f;
+            Light l = root.AddComponent<Light>();
+            l.type = LightType.Point; l.color = new Color(0.6f, 0.25f, 1f, 1f); l.range = radius * 1.2f; l.intensity = 2.4f * LightScale; l.shadows = LightShadows.None;
+            DragonBlackHole bh = root.AddComponent<DragonBlackHole>();
+            bh.Life = seconds;
+            return root;
+        }
+
+        // Accretion disk: annulus, hot white-orange inside, violet outside, broken into swirling bands.
+        private static Mesh DiskMesh(float r0, float r1, int seed)
+        {
+            int n = 64, rings = 4;
+            List<Vector3> v = new List<Vector3>();
+            List<Color> cs = new List<Color>();
+            List<int> t = new List<int>();
+            for (int j = 0; j <= rings; j++)
+            {
+                float f = (float)j / rings;
+                float r = Mathf.Lerp(r0, r1, f);
+                for (int i = 0; i <= n; i++)
+                {
+                    float a = (float)i / n * Mathf.PI * 2f + f * 1.6f;
+                    v.Add(new Vector3(Mathf.Cos(a) * r, 0f, Mathf.Sin(a) * r));
+                    float band = 0.55f + 0.45f * Mathf.Sin(i * 0.9f + seed * 2.1f + j * 1.7f) * Mathf.Sin(i * 0.23f + seed);
+                    Color hot = new Color(1f, 0.85f, 0.6f, 1f), cold = new Color(0.55f, 0.2f, 1f, 1f);
+                    Color c = Color.Lerp(hot, cold, Mathf.Pow(f, 0.6f));
+                    c.a = Mathf.Clamp01(band * (1f - f) * (j == 0 ? 0.3f : 1f) * 0.9f);
+                    cs.Add(c);
+                }
+            }
+            for (int j = 0; j < rings; j++)
+                for (int i = 0; i < n; i++)
+                {
+                    int a = j * (n + 1) + i, b = a + 1, c = a + n + 1, d = c + 1;
+                    t.Add(a); t.Add(c); t.Add(b); t.Add(b); t.Add(c); t.Add(d);
+                    t.Add(a); t.Add(b); t.Add(c); t.Add(b); t.Add(d); t.Add(c);
+                }
+            Mesh m = new Mesh();
+            m.vertices = v.ToArray(); m.colors = cs.ToArray(); m.triangles = t.ToArray();
+            Vector2[] uv = new Vector2[v.Count]; for (int i = 0; i < uv.Length; i++) uv[i] = new Vector2(0.5f, 0.5f);
+            m.uv = uv;
+            m.RecalculateBounds();
+            return m;
+        }
+
+        // Astral Greatblade: a giant blade of starlight grows OUT OF THE STAFF (the staff is its hilt), follows the
+        // hand through the lift and the slam, then fades. Blade along the held item's axis.
+        private static FieldInfo _bladeVisRight;
+        public static GameObject StaffBlade(Player p, float length, float width, Color c, float life, float grow)
+        {
+            if (!Enabled || p == null) return null;
+            Animator an = p.GetComponentInChildren<Animator>();
+            Transform hand = an == null ? null : an.GetBoneTransform(HumanBodyBones.RightHand);
+            if (hand == null) return null;
+            Vector3 dir = p.transform.up, tip = hand.position + p.transform.up * 0.9f;
+            try
+            {
+                Component vis = null;
+                Component[] comps = p.GetComponentsInChildren<Component>();
+                for (int i = 0; i < comps.Length; i++) if (comps[i] != null && comps[i].GetType().Name == "VisEquipment") { vis = comps[i]; break; }
+                if (vis != null && _bladeVisRight == null) _bladeVisRight = vis.GetType().GetField("m_rightItemInstance", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                GameObject item = vis == null || _bladeVisRight == null ? null : _bladeVisRight.GetValue(vis) as GameObject;
+                if (item != null)
+                {
+                    Renderer[] rs = item.GetComponentsInChildren<Renderer>();
+                    bool any = false; Bounds b = new Bounds();
+                    for (int i = 0; i < rs.Length; i++)
+                    {
+                        if (rs[i] == null || rs[i] is ParticleSystemRenderer) continue;
+                        if (!any) { b = rs[i].bounds; any = true; } else b.Encapsulate(rs[i].bounds);
+                    }
+                    if (any)
+                    {
+                        Vector3 off = b.center - hand.position;
+                        if (off.magnitude > 0.1f)
+                        {
+                            dir = off.normalized;
+                            tip = hand.position + dir * Mathf.Clamp(off.magnitude * 2f, 0.3f, 2.5f);
+                        }
+                    }
+                }
+            }
+            catch (Exception) { }
+            GameObject root = new GameObject("IH_StaffBlade");
+            root.transform.position = tip;
+            Vector3 upRef = Mathf.Abs(Vector3.Dot(dir, p.transform.right)) > 0.9f ? p.transform.forward : p.transform.right;
+            root.transform.rotation = Quaternion.LookRotation(dir, upRef);
+            root.transform.SetParent(hand, true);
+            GameObject scaler = new GameObject("grow");
+            scaler.transform.SetParent(root.transform, false);
+            Color body = c; body.a = 0.72f;
+            MeshObject("blade", BladeMesh(length, width, width * 0.13f, body, false), ClearMat(), scaler.transform);
+            Color halo = Color.Lerp(c, Color.white, 0.35f); halo.a = 0.4f;
+            MeshObject("halo", BladeMesh(length * 1.03f, width * 1.35f, width * 0.3f, halo, true), Mat(WhiteTex(), true), scaler.transform);
+            // guard: a bar of light where the staff becomes the blade
+            GameObject guard = MeshObject("guard", BladeMesh(width * 1.8f, width * 0.35f, width * 0.2f, halo, true), Mat(WhiteTex(), true), root.transform);
+            guard.transform.localRotation = Quaternion.Euler(0f, 90f, 0f);
+            guard.transform.localPosition = new Vector3(-width * 0.9f, 0f, 0f);
+            for (int k = 1; k <= 3; k++)
+            {
+                GameObject g = new GameObject("glow");
+                g.transform.SetParent(scaler.transform, false);
+                g.transform.localPosition = new Vector3(0f, 0f, length * (k * 0.27f));
+                AttachGlow(g.transform, Color.Lerp(c, Color.white, 0.4f), width * 0.5f, 18f, k == 2 ? Mathf.Max(5f, length * 0.6f) : 0f);
+            }
+            Burst(tip, Color.Lerp(c, Color.white, 0.4f), Mathf.RoundToInt(30 * Amount), 4f, 0.15f, 0.5f, -0.5f);
+            DragonGrowBlade gb = root.AddComponent<DragonGrowBlade>();
+            gb.Scaler = scaler.transform;
+            gb.Grow = Mathf.Max(0.05f, grow);
+            gb.Life = Mathf.Max(gb.Grow + 0.1f, life);
+            return root;
+        }
+
+        // Blade along +Z: diamond cross-section, wide near the base, long taper to the point.
+        private static Mesh BladeMesh(float length, float width, float thick, Color c, bool soft)
+        {
+            float[] z = { 0f, 0.07f, 0.8f, 1f };
+            float[] wf = { 0.55f, 1f, 0.82f, 0f };
+            List<Vector3> v = new List<Vector3>();
+            List<int> t = new List<int>();
+            for (int i = 0; i < z.Length; i++)
+            {
+                float hw = width * 0.5f * wf[i], ht = thick * 0.5f * Mathf.Max(0.05f, wf[i]);
+                float zz = z[i] * length;
+                v.Add(new Vector3(hw, 0f, zz)); v.Add(new Vector3(0f, ht, zz)); v.Add(new Vector3(-hw, 0f, zz)); v.Add(new Vector3(0f, -ht, zz));
+            }
+            for (int i = 0; i < z.Length - 1; i++)
+                for (int k = 0; k < 4; k++)
+                {
+                    int a = i * 4 + k, b = i * 4 + (k + 1) % 4, cc = a + 4, d = b + 4;
+                    t.Add(a); t.Add(cc); t.Add(b); t.Add(b); t.Add(cc); t.Add(d);
+                }
+            t.Add(0); t.Add(1); t.Add(2); t.Add(0); t.Add(2); t.Add(3);
+            if (soft) { int count = t.Count; for (int i = 0; i < count; i += 3) { t.Add(t[i]); t.Add(t[i + 2]); t.Add(t[i + 1]); } }
+            return FacetMesh(v, t, c, 0.6f);
+        }
+
+        // v0.25.75 Meteor Fall / Cataclysm: a tumbling faceted boulder of basalt with molten seams, wrapped in fire.
+        public static GameObject MeteorRock(Vector3 pos, float size)
+        {
+            if (!Enabled) return null;
+            GameObject root = new GameObject("IH_Meteor");
+            root.transform.position = pos;
+            int lat = 6, lon = 9;
+            float r = Mathf.Max(0.3f, size * 0.55f);
+            List<Vector3> v = new List<Vector3>();
+            List<int> t = new List<int>();
+            System.Random rng = new System.Random(UnityEngine.Random.Range(0, 100000));
+            v.Add(new Vector3(0f, r * 0.9f, 0f));
+            for (int j = 1; j < lat; j++)
+            {
+                float th = Mathf.PI * j / lat;
+                for (int i = 0; i < lon; i++)
+                {
+                    float ph = Mathf.PI * 2f * i / lon + j * 0.35f;
+                    float jr = r * (0.78f + 0.36f * (float)rng.NextDouble());
+                    v.Add(new Vector3(Mathf.Sin(th) * Mathf.Cos(ph) * jr, Mathf.Cos(th) * jr, Mathf.Sin(th) * Mathf.Sin(ph) * jr));
+                }
+            }
+            v.Add(new Vector3(0f, -r * 0.85f, 0f));
+            int bottom = v.Count - 1;
+            for (int i = 0; i < lon; i++) { t.Add(0); t.Add(1 + (i + 1) % lon); t.Add(1 + i); }
+            for (int j = 0; j < lat - 2; j++)
+                for (int i = 0; i < lon; i++)
+                {
+                    int a = 1 + j * lon + i, b = 1 + j * lon + (i + 1) % lon, c = a + lon, d = b + lon;
+                    t.Add(a); t.Add(b); t.Add(c); t.Add(b); t.Add(d); t.Add(c);
+                }
+            int last = 1 + (lat - 2) * lon;
+            for (int i = 0; i < lon; i++) { t.Add(bottom); t.Add(last + i); t.Add(last + (i + 1) % lon); }
+            Mesh rock = FacetMesh(v, t, new Color(0.30f, 0.24f, 0.22f, 1f), 0.1f);
+            // molten seams: some facets glow ember-hot
+            Color[] cs = rock.colors;
+            for (int i = 0; i + 2 < cs.Length; i += 3)
+            {
+                if (rng.NextDouble() < 0.28)
+                {
+                    Color hot = Color.Lerp(new Color(1f, 0.35f, 0.05f, 1f), new Color(1f, 0.75f, 0.3f, 1f), (float)rng.NextDouble());
+                    cs[i] = hot; cs[i + 1] = hot; cs[i + 2] = hot;
+                }
+            }
+            rock.colors = cs;
+            MeshObject("rock", rock, ClearMat(), root.transform);
+            DragonRotate rot = root.AddComponent<DragonRotate>();
+            rot.Speed = new Vector3(70f, 110f, 40f);
+            // fire shell + ember light, and a burning tail
+            GameObject shell = new GameObject("fire");
+            shell.transform.SetParent(root.transform, false);
+            ParticleSystem ps = Particles(shell.transform, new Color(1f, 0.45f, 0.1f, 1f), 0, 140f * Amount, 1f, 0.45f, 0.5f, 2f, r * 0.35f, r * 0.8f, -0.8f,
+                ParticleSystemShapeType.Sphere, r * 0.9f, Vector3.zero, false, true);
+            ParticleSystem.MainModule mm = ps.main; mm.loop = true; mm.simulationSpace = ParticleSystemSimulationSpace.World;
+            AttachGlow(root.transform, new Color(1f, 0.5f, 0.15f, 1f), r, 30f, Mathf.Max(6f, size * 4f));
+            GameObject keep = root;
+            TrailWhile(root.transform, new Color(1f, 0.42f, 0.08f, 1f), Mathf.Max(0.4f, r * 1.4f), delegate { return keep != null; });
+            return root;
+        }
+
+        // v0.25.75 Arcane Phalanx: a real spectral sword (blade, guard, grip, pommel) instead of a line.
+        public static void SpectralSword(Transform parent, float length, Color c)
+        {
+            if (!Enabled || parent == null) return;
+            float w = length * 0.14f;
+            Color body = c; body.a = 0.8f;
+            Color halo = Color.Lerp(c, Color.white, 0.4f); halo.a = 0.45f;
+            GameObject blade = MeshObject("blade", BladeMesh(length * 0.72f, w, w * 0.18f, body, false), ClearMat(), parent);
+            blade.transform.localPosition = new Vector3(0f, 0f, -length * 0.25f + length * 0.2f);
+            GameObject glow = MeshObject("halo", BladeMesh(length * 0.74f, w * 1.6f, w * 0.4f, halo, true), Mat(WhiteTex(), true), parent);
+            glow.transform.localPosition = blade.transform.localPosition;
+            GameObject guard = MeshObject("guard", BladeMesh(w * 2.6f, w * 0.5f, w * 0.3f, halo, true), Mat(WhiteTex(), true), parent);
+            guard.transform.localRotation = Quaternion.Euler(0f, 90f, 0f);
+            guard.transform.localPosition = new Vector3(-w * 1.3f, 0f, blade.transform.localPosition.z);
+            GameObject grip = MeshObject("grip", BladeMesh(length * 0.22f, w * 0.35f, w * 0.35f, body, false), ClearMat(), parent);
+            grip.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
+            grip.transform.localPosition = blade.transform.localPosition;
+        }
+
         public static void CastFlare(Player p, bool big)
         {
             if (!Enabled || p == null) return;
             Color c = ClassColor(p);
             Vector3 pos = p.transform.position;
-            Color g = c; g.a = 0.6f;
-            Glyph(pos, g, big ? 3.2f : 1.4f, big ? 1.4f : 0.7f, big ? 120f : 200f);
+            // v0.25.75 (user): no rune circle on the ground when a skill starts.
             Burst(pos + Vector3.up * 0.2f, Color.Lerp(c, Color.white, 0.3f), Mathf.RoundToInt((big ? 40 : 14) * Amount), big ? 3.5f : 2f, 0.12f, 0.7f, -1.2f);
             Flash(pos + Vector3.up * 1.1f, c, big ? 3f : 1.2f, big ? 8f : 4f, big ? 0.6f : 0.3f);
             if (big)
@@ -11105,6 +11451,51 @@ namespace DragonsAltarCombat
         {
             Bolt(ground + Vector3.up * height + new Vector3(UnityEngine.Random.Range(-1f, 1f), 0f, UnityEngine.Random.Range(-1f, 1f)), ground, c, 0.35f + radius * 0.04f, 0.35f);
             LightningImpact(ground, radius);
+        }
+    }
+    // v0.25.75 helpers
+    public class DragonRotate : MonoBehaviour
+    {
+        public Vector3 Speed;
+        private void Update() { transform.Rotate(Speed * Time.deltaTime, Space.Self); }
+    }
+
+    public class DragonBlackHole : MonoBehaviour
+    {
+        public float Life = 3f;
+        private float _age;
+        private Vector3 _scale;
+        private Light _light;
+        private void Start() { _scale = transform.localScale; _light = GetComponent<Light>(); transform.localScale = _scale * 0.05f; }
+        private void Update()
+        {
+            _age += Time.deltaTime;
+            float k;
+            if (_age < 0.35f) k = Mathf.SmoothStep(0.05f, 1f, _age / 0.35f);
+            else if (_age < Life) k = 1f + 0.04f * Mathf.Sin(_age * 9f);
+            else k = Mathf.Lerp(1f, 0f, (_age - Life) / 0.3f);
+            transform.localScale = _scale * Mathf.Max(0.001f, k);
+            if (_light != null) _light.intensity = Mathf.Max(0f, k) * 2.4f * DragonVfx.LightScale;
+            if (_age >= Life + 0.3f) Destroy(gameObject);
+        }
+    }
+
+    public class DragonGrowBlade : MonoBehaviour
+    {
+        public Transform Scaler;
+        public float Grow = 0.4f, Life = 1.5f;
+        private float _age;
+        private void Update()
+        {
+            _age += Time.deltaTime;
+            if (Scaler == null) { Destroy(gameObject); return; }
+            float z;
+            if (_age < Grow) { float t = _age / Grow; z = 1f - (1f - t) * (1f - t) * (1f - t); }
+            else if (_age < Life) z = 1f;
+            else z = Mathf.Clamp01(1f - (_age - Life) / 0.35f);
+            float xy = _age < Life ? 1f : Mathf.Max(0.05f, z);
+            Scaler.localScale = new Vector3(xy, xy, Mathf.Max(0.01f, z));
+            if (_age >= Life + 0.35f) Destroy(gameObject);
         }
     }
 }
