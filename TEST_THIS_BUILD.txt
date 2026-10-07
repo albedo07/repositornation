@@ -1,9 +1,5 @@
-TEST v0.25.63
-1. NACC: Sword Master with a 1H sword vs a 2H sword - same rhythm (~0.6 s per hit, both sped up by Sword Master).
-   Mercenary: dual wield chain, then a single 1H weapon chain - neither too fast nor crawling. (The very first chain
-   with a new weapon runs at natural speed while it is measured.)
-2. Block / parry as Warrior or Mercenary: no pushback slide.
-3. Bonecrusher / Electric Smite: face your aim in the air, arms flared, weapon smash + deep kneel on landing.
-4. Stomp: high knee, arms flared like the roar.
-5. Lightning Trails: short bolts crawling outward, no full lines from the centre.
-6. Moonlight / Halfmoon thin crescents; Crescent Cleave half underground with rocks; no line rings anywhere.
+TEST v0.25.64
+1. Goddess Relic (normal + Ascended): Celtic relic cross - gold frame, ivory inlay, diamond tips, gold ring, centre boss; lands tilted and planted.
+2. Priest Lightning Relic / Holy Relic: same cross model.
+3. If the cross looks flat / unlit (no metal shine), the game stripped the Standard shader - tell me.
+(Everything from v0.25.63 still applies: NACC rhythm, block Hyper Armor, jump-slam smash, crescents, short Lightning Trails.)

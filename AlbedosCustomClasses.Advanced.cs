@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.63";
+        public const string ModVersion = "0.25.64";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -4332,56 +4332,140 @@ namespace AlbedosCustomClassesAdvanced
         // crossing and a soft additive glow around every beam (the old thin lines stay as the bright core).
         private static Material _ihCrossMat;
 
+        // v0.25.64 (user ref: Dragon Nest Paladin Relic): an ornate Celtic cross - gold frame beams with an ivory
+        // inlay down their faces, flared diamond tips on the three upper arms, a pointed foot, a solid gold ring
+        // through the arms around the crossing (with an ivory inner band) and a glowing boss at the centre.
+        private static Material _ihIvoryMat;
+        private static readonly Dictionary<string, Mesh> _ihTorus = new Dictionary<string, Mesh>();
+
         private void IhBuildSolidCross(Transform root, Color color, float height, float width, float thick)
         {
+            Shader lit = Shader.Find("Standard");
             if (_ihCrossMat == null)
             {
-                Shader lit = Shader.Find("Standard");
                 Shader sh = lit != null ? lit : Shader.Find("Sprites/Default");
                 if (sh == null) return;
                 _ihCrossMat = new Material(sh);
                 if (lit != null)
                 {
-                    _ihCrossMat.SetFloat("_Metallic", 0.85f);
-                    _ihCrossMat.SetFloat("_Glossiness", 0.7f);
+                    _ihCrossMat.SetFloat("_Metallic", 0.9f);
+                    _ihCrossMat.SetFloat("_Glossiness", 0.72f);
                     _ihCrossMat.EnableKeyword("_EMISSION");
                 }
             }
-            Material m = new Material(_ihCrossMat);
-            Color gold = Color.Lerp(color, new Color(1f, 0.86f, 0.45f, 1f), 0.5f);
-            m.color = gold;
-            if (m.HasProperty("_EmissionColor")) m.SetColor("_EmissionColor", gold * 0.55f);
+            if (_ihIvoryMat == null)
+            {
+                Shader sh = lit != null ? lit : Shader.Find("Sprites/Default");
+                if (sh == null) return;
+                _ihIvoryMat = new Material(sh);
+                if (lit != null)
+                {
+                    _ihIvoryMat.SetFloat("_Metallic", 0.15f);
+                    _ihIvoryMat.SetFloat("_Glossiness", 0.55f);
+                    _ihIvoryMat.EnableKeyword("_EMISSION");
+                }
+            }
+            Material gold = new Material(_ihCrossMat);
+            Color g = Color.Lerp(color, new Color(1f, 0.80f, 0.38f, 1f), 0.65f);
+            gold.color = g;
+            if (gold.HasProperty("_EmissionColor")) gold.SetColor("_EmissionColor", g * 0.35f);
+            Material ivory = new Material(_ihIvoryMat);
+            Color iv = new Color(0.98f, 0.93f, 0.80f, 1f);
+            ivory.color = iv;
+            if (ivory.HasProperty("_EmissionColor")) ivory.SetColor("_EmissionColor", Color.Lerp(iv, color, 0.25f) * 0.45f);
+
             float armY = height * 0.12f;
-            IhCrossBlock(root, m, new Vector3(0f, 0f, 0f), new Vector3(thick, height, thick * 0.8f));
-            IhCrossBlock(root, m, new Vector3(0f, armY, 0f), new Vector3(width, thick, thick * 0.8f));
-            // stepped caps on the three upper ends + a heavier foot
-            float cap = thick * 1.45f;
-            IhCrossBlock(root, m, new Vector3(0f, height * 0.5f - cap * 0.4f, 0f), new Vector3(cap, cap * 0.8f, cap * 0.9f));
-            IhCrossBlock(root, m, new Vector3(-width * 0.5f + cap * 0.4f, armY, 0f), new Vector3(cap * 0.8f, cap, cap * 0.9f));
-            IhCrossBlock(root, m, new Vector3(width * 0.5f - cap * 0.4f, armY, 0f), new Vector3(cap * 0.8f, cap, cap * 0.9f));
-            IhCrossBlock(root, m, new Vector3(0f, -height * 0.5f + cap * 0.6f, 0f), new Vector3(cap * 1.2f, cap * 1.2f, cap * 1.05f));
-            // halo ring at the crossing
-            GameObject halo = new GameObject("halo");
-            halo.transform.SetParent(root, false);
-            halo.transform.localPosition = new Vector3(0f, armY, 0f);
-            LineRenderer ring = halo.AddComponent<LineRenderer>();
-            ring.useWorldSpace = false;
-            ring.loop = true;
-            ring.positionCount = 40;
-            ring.startWidth = thick * 0.35f;
-            ring.endWidth = thick * 0.35f;
-            Material add = DragonVfx.Additive();
-            if (add != null) ring.sharedMaterial = add;
-            Color hc = Color.Lerp(color, Color.white, 0.35f);
-            ring.startColor = hc; ring.endColor = hc;
-            float rr = Mathf.Max(thick * 2f, width * 0.24f);
-            for (int i = 0; i < 40; i++) { float a = i / 40f * Mathf.PI * 2f; ring.SetPosition(i, new Vector3(Mathf.Cos(a) * rr, Mathf.Sin(a) * rr, -thick * 0.45f)); }
-            // soft glow along the beams
-            IhCrossGlow(root, color, new Vector3(0f, -height * 0.5f, 0f), new Vector3(0f, height * 0.5f, 0f), thick * 2.6f);
-            IhCrossGlow(root, color, new Vector3(-width * 0.5f, armY, 0f), new Vector3(width * 0.5f, armY, 0f), thick * 2.6f);
+            float t = thick;
+            float d = t * 0.8f;
+            float topY = height * 0.5f;
+            float footY = -height * 0.5f;
+            float half = width * 0.5f;
+            // shaft + arm: gold frame, ivory inlay standing proud on both faces
+            IhCrossBlock(root, gold, new Vector3(0f, (topY - t * 0.8f + footY + t * 1.2f) * 0.5f, 0f), new Vector3(t, (topY - t * 0.8f) - (footY + t * 1.2f), d));
+            IhCrossBlock(root, ivory, new Vector3(0f, (topY - t * 0.9f + footY + t * 1.3f) * 0.5f, 0f), new Vector3(t * 0.5f, (topY - t * 0.9f) - (footY + t * 1.3f), d * 1.18f));
+            IhCrossBlock(root, gold, new Vector3(0f, armY, 0f), new Vector3((half - t * 0.8f) * 2f, t, d));
+            IhCrossBlock(root, ivory, new Vector3(0f, armY, 0f), new Vector3((half - t * 0.9f) * 2f, t * 0.5f, d * 1.18f));
+            // flared diamond tips (gold) with an ivory core
+            IhCrossDiamond(root, gold, ivory, new Vector3(0f, topY - t * 0.7f, 0f), t * 1.45f, d);
+            IhCrossDiamond(root, gold, ivory, new Vector3(-half + t * 0.7f, armY, 0f), t * 1.45f, d);
+            IhCrossDiamond(root, gold, ivory, new Vector3(half - t * 0.7f, armY, 0f), t * 1.45f, d);
+            // pointed foot: a long diamond driven into the ground
+            GameObject foot = IhCrossBlock(root, gold, new Vector3(0f, footY + t * 1.1f, 0f), new Vector3(t * 0.95f, t * 0.95f, d * 0.95f));
+            foot.transform.localRotation = Quaternion.Euler(0f, 0f, 45f);
+            foot.transform.localScale = new Vector3(t * 0.75f, t * 1.9f, d * 0.95f);
+            // collar where the foot meets the shaft
+            IhCrossBlock(root, gold, new Vector3(0f, footY + t * 2.4f, 0f), new Vector3(t * 1.5f, t * 0.35f, d * 1.25f));
+            // the ring: solid gold torus through the arms + an ivory inner band
+            float rr = Mathf.Clamp(width * 0.3f, t * 2.2f, height * 0.3f);
+            IhTorus(root, gold, new Vector3(0f, armY, 0f), rr, t * 0.3f);
+            IhTorus(root, ivory, new Vector3(0f, armY, 0f), rr * 0.86f, t * 0.12f);
+            // glowing boss at the crossing
+            GameObject boss = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            Collider bc = boss.GetComponent<Collider>();
+            if (bc != null) Destroy(bc);
+            boss.transform.SetParent(root, false);
+            boss.transform.localPosition = new Vector3(0f, armY, 0f);
+            boss.transform.localScale = new Vector3(t * 1.1f, t * 1.1f, d * 1.5f);
+            Renderer brr = boss.GetComponent<Renderer>();
+            if (brr != null) brr.sharedMaterial = ivory;
+            // soft holy glow along the beams (light, not a glare)
+            Color gl = color; gl.a = 0.6f;
+            IhCrossGlow(root, gl, new Vector3(0f, footY, 0f), new Vector3(0f, topY, 0f), t * 2.2f);
+            IhCrossGlow(root, gl, new Vector3(-half, armY, 0f), new Vector3(half, armY, 0f), t * 2.2f);
         }
 
-        private void IhCrossBlock(Transform root, Material m, Vector3 localPos, Vector3 size)
+        private void IhCrossDiamond(Transform root, Material gold, Material ivory, Vector3 pos, float size, float depth)
+        {
+            GameObject a = IhCrossBlock(root, gold, pos, new Vector3(size, size, depth * 1.05f));
+            a.transform.localRotation = Quaternion.Euler(0f, 0f, 45f);
+            GameObject b = IhCrossBlock(root, ivory, pos, new Vector3(size * 0.55f, size * 0.55f, depth * 1.22f));
+            b.transform.localRotation = Quaternion.Euler(0f, 0f, 45f);
+        }
+
+        private void IhTorus(Transform root, Material m, Vector3 pos, float radius, float tube)
+        {
+            string key = radius.ToString("0.00") + "|" + tube.ToString("0.000");
+            Mesh mesh;
+            if (!_ihTorus.TryGetValue(key, out mesh) || mesh == null)
+            {
+                const int seg = 40, side = 10;
+                Vector3[] v = new Vector3[(seg + 1) * (side + 1)];
+                Vector3[] nrm = new Vector3[v.Length];
+                int[] tri = new int[seg * side * 6];
+                for (int i = 0; i <= seg; i++)
+                {
+                    float a = (float)i / seg * Mathf.PI * 2f;
+                    Vector3 c = new Vector3(Mathf.Cos(a), Mathf.Sin(a), 0f);
+                    for (int j = 0; j <= side; j++)
+                    {
+                        float b = (float)j / side * Mathf.PI * 2f;
+                        Vector3 n = c * Mathf.Cos(b) + Vector3.forward * Mathf.Sin(b);
+                        v[i * (side + 1) + j] = c * radius + n * tube;
+                        nrm[i * (side + 1) + j] = n;
+                    }
+                }
+                int k = 0;
+                for (int i = 0; i < seg; i++)
+                    for (int j = 0; j < side; j++)
+                    {
+                        int p0 = i * (side + 1) + j, p1 = p0 + side + 1;
+                        tri[k++] = p0; tri[k++] = p1; tri[k++] = p0 + 1;
+                        tri[k++] = p0 + 1; tri[k++] = p1; tri[k++] = p1 + 1;
+                    }
+                mesh = new Mesh();
+                mesh.vertices = v; mesh.normals = nrm; mesh.triangles = tri;
+                mesh.RecalculateBounds();
+                _ihTorus[key] = mesh;
+            }
+            GameObject go = new GameObject("relicRing");
+            go.transform.SetParent(root, false);
+            go.transform.localPosition = pos;
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            MeshRenderer r = go.AddComponent<MeshRenderer>();
+            r.sharedMaterial = m;
+        }
+
+        private GameObject IhCrossBlock(Transform root, Material m, Vector3 localPos, Vector3 size)
         {
             GameObject b = GameObject.CreatePrimitive(PrimitiveType.Cube);
             b.name = "crossBlock";
@@ -4393,6 +4477,7 @@ namespace AlbedosCustomClassesAdvanced
             b.transform.localScale = size;
             Renderer r = b.GetComponent<Renderer>();
             if (r != null) r.sharedMaterial = m;
+            return b;
         }
 
         private void IhCrossGlow(Transform root, Color color, Vector3 a, Vector3 b, float width)
@@ -4406,7 +4491,7 @@ namespace AlbedosCustomClassesAdvanced
             line.endWidth = width;
             Material add = DragonVfx.Additive();
             if (add != null) line.sharedMaterial = add;
-            Color c = color; c.a = 0.35f;
+            Color c = color; c.a = Mathf.Min(0.35f, color.a);
             line.startColor = c; line.endColor = c;
             line.SetPosition(0, a);
             line.SetPosition(1, b);
@@ -9751,7 +9836,7 @@ namespace AlbedosCustomClassesAdvanced
             horizontalCollider.isTrigger = false;
             horizontalCollider.enabled = false;
 
-            if (visible)
+            if (visible && !DragonVfx.Enabled)   // v0.25.64 the line cross is only the fallback now
             {
                 Shader shader = Shader.Find("Sprites/Default");
 

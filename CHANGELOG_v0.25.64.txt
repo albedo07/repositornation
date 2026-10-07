@@ -1,0 +1,12 @@
+Immortal Heroes v0.25.64 - Paladin Relic
+
+GODDESS RELIC (and the Priest's relic crosses that share the model)
+- New design after the Dragon Nest Paladin Relic: an ornate Celtic cross.
+  - Gold frame beams (polished metal) with an ivory inlay standing proud down the faces of the shaft and arm.
+  - Flared diamond tips on the top and both arms (gold with an ivory core).
+  - A long pointed foot with a gold collar, driven into the ground (still the tilted "Pisa" landing).
+  - A solid gold ring through the arms around the crossing, with a thin ivory inner band.
+  - A glowing ivory boss at the centre, soft holy glow along the beams.
+- The old line-drawn cross and its extra point light under the solid model are gone (fallback only with
+  [Visuals] EnhancedSkillVfx off).
+- Visual only: size, hitbox, damage and timing unchanged.
