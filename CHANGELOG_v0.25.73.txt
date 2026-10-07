@@ -1,0 +1,26 @@
+Immortal Heroes v0.25.73 - Split Bars
+
+ANIMATIONS
+- Every animation is back to the v0.25.62 state, the one before the recent changes.
+  - Reverted: Stomp, Olympic Hero / jump slams (Smite, Bonecrusher), the Circle Swing crow hop and the landing kneel.
+- Kept: the recast cancel for Whirlwind, Furious Winds and Starfall Volley, and every VFX.
+
+HUD
+- Stamina and Eitr now share one bar line, split into two halves.
+  - Stamina is the yellow left half, Eitr the purple right half, with a painted divider in the middle.
+  - The old Eitr row is cut out of all four class frames, so the HUD is one row shorter. EXP and food move up.
+- The numbers are bigger, with a black outline that stays readable on any bar colour.
+  - Warrior: the value column shows HP, then "Stamina | Eitr" in yellow and purple, then your level.
+  - Cleric, Sorcerer and Ranger: each bar or half shows its number in the middle, and the level is on the EXP bar.
+
+VFX - STATUS VISUALS (all classes)
+- Stun: golden stars circle over the head.
+- Frost: an icy rime coat with drifting snow for as long as it lasts.
+  - Freeze also cracks out an ice shell with a flash.
+- Expose: crimson shards fall off the chest while it lasts.
+- Cripple: a dark violet haze around the feet.
+- Fire Burn / Spirit Burn: each tick licks flames (fire orange or holy white-gold) off the target.
+- Judgement Mark: a rose-gold sigil hovers over the head, with a spinning ground ring.
+- Sanctified ally: emerald motes rise around them.
+- Hyper Armor: a golden shimmer on you while it lasts.
+- Re-applying an effect never stacks extra visuals, and everything turns off with [Visuals] EnhancedSkillVfx.

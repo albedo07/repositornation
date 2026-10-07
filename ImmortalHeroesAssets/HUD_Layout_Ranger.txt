@@ -1,11 +1,12 @@
-# v0.25.68 HUD layout for Ranger (frame texture pixels, origin top-left)
-size 782 308
+# v0.25.73 HUD layout for Ranger (frame texture pixels, origin top-left)
+size 782 274
 bar 0 265 42 354 25 673
-bar 1 290 80 258 16 673
-bar 2 274 110 264 20 673
-bar 3 261 142 253 25 668
-name 192 180 145 20
-food 0 326 262 21 364 258
-food 1 446 262 20 484 258
-food 2 569 262 21 608 258
+bar 1 290 80 258 16 478
+bar 2 485 80 264 16 673
+bar 3 261 108 253 25 668
+split 1
+name 192 146 145 20
+food 0 326 228 21 364 224
+food 1 446 228 20 484 224
+food 2 569 228 21 608 224
 buffs 466 32

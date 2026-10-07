@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.72";
+        public const string ModVersion = "0.25.73";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -5263,13 +5263,10 @@ namespace AlbedosCustomClassesAdvanced
 
         // v0.25.15 Olympic Hero GROUND_CONTACT: the held roll lands (superhero fist landing); the main weapon
         // is hidden render-only while the fist is on the ground.
-        // v0.25.63 (user): hero landing = the weapon SMASHES the ground (Valheim's axe heavy attack, fired just
-        // before contact) with a deep kneel on top; no more fist touch / hidden weapon.
         private void OlympicLanding(Player player, float stowSeconds)
         {
-            if (player == null) return;
-            if (!_ihSlamFired) { _ihSlamFired = true; if (!DragonCombat.ClipImpactIfHolding(player)) DragonCombat.PlayClip(player, "olympic_land", 0.05f); }
-            DragonCombat.LockSkill(player, 0.55f);
+            if (!DragonCombat.ClipImpactIfHolding(player)) DragonCombat.PlayClip(player, "olympic_land", 0.05f);
+            DragonCombat.StowMainWeapon(player, stowSeconds);
         }
 
         private IEnumerator ElectricSmiteRoutine(Player player, float takeoffDelay)
@@ -5887,29 +5884,6 @@ namespace AlbedosCustomClassesAdvanced
         }
 
         // Air steering for jump slams: movement keys relative to the camera, at 80% run speed.
-        private bool _ihSlamFired;
-
-        // v0.25.63 (user): in a jump slam the body always faces where you aim (WASD only steers, it never turns you).
-        private void IhFaceLook(Player player, Rigidbody body)
-        {
-            if (player == null) return;
-            Vector3 look = player.GetLookDir();
-            look.y = 0f;
-            if (look.sqrMagnitude < 0.01f) return;
-            Quaternion r = Quaternion.LookRotation(look.normalized, Vector3.up);
-            player.transform.rotation = r;
-            if (body != null) body.rotation = r;
-        }
-
-        private void IhFireSlam(Player player)
-        {
-            if (_ihSlamFired || player == null) return;
-            _ihSlamFired = true;
-            DragonCombat.ClipStop(player, 0.08f);
-            DragonCombat.FireVanilla(player, "axe_secondary");
-            DragonCombat.SetSkillAnimSpeed(player, 1.7f, 0.9f);
-        }
-
         private Vector3 IhAirSteer(Player player)
         {
             float f = 0f, r = 0f;
@@ -5966,7 +5940,6 @@ namespace AlbedosCustomClassesAdvanced
                 Vector3 pos = body.position + IhAirSteer(player) * Time.fixedDeltaTime;
                 float desiredY = Mathf.Lerp(startY, peakY, eased);
                 body.MovePosition(new Vector3(pos.x, desiredY, pos.z));
-                IhFaceLook(player, body);
                 Vector3 v = body.velocity;
                 v.y = Mathf.Max(0f, (peakY - desiredY) / Mathf.Max(0.05f, ascentDuration - elapsed));
                 body.velocity = v;
@@ -5981,7 +5954,6 @@ namespace AlbedosCustomClassesAdvanced
                 DragonCombat.LockSkill(player, 0.12f);
                 Vector3 pos = body.position + IhAirSteer(player) * Time.fixedDeltaTime;
                 body.MovePosition(new Vector3(pos.x, peakY, pos.z));
-                IhFaceLook(player, body);
                 Vector3 v = body.velocity;
                 v.y = 0f;
                 body.velocity = v;
@@ -5998,25 +5970,10 @@ namespace AlbedosCustomClassesAdvanced
             body.velocity = releaseVelocity;
 
             float landingSafety = Time.time + 30f;
-            _ihSlamFired = false;
             while (player != null && !player.IsDead() && Time.time < landingSafety)
             {
                 ResetFallDamageState(player);
                 DragonCombat.LockSkill(player, 0.12f);
-                IhFaceLook(player, body);
-                // v0.25.65 (user: Angel Comet's landing is the reference): ~0.17 s before the ground the held air pose
-                // swings into the smash so the weapon meets the ground on contact (no separate vanilla attack).
-                if (!_ihSlamFired)
-                {
-                    float fall = Mathf.Max(2f, -body.velocity.y);
-                    RaycastHit gh;
-                    if (Physics.Raycast(body.position + Vector3.up * 0.3f, Vector3.down, out gh, 0.3f + fall * 0.17f, IhSolidMask(), QueryTriggerInteraction.Ignore)
-                        && gh.collider.GetComponentInParent<Character>() == null)
-                    {
-                        _ihSlamFired = true;
-                        DragonCombat.ClipImpactIfHolding(player);
-                    }
-                }
 
                 if (IsPlayerGrounded(player) && body.velocity.y <= 0.25f)
                     break;
@@ -9622,6 +9579,8 @@ namespace AlbedosCustomClassesAdvanced
                 fresh.Source = source;
                 fresh.EndTime = Time.time + Mathf.Max(0.1f, _judgementMarkDuration.Value);
                 _judgementMarks[id] = fresh;
+                float markSecs = Mathf.Max(0.1f, _judgementMarkDuration.Value);
+                DragonCombat.RunVfx(delegate { DragonVfx.Status(target, "judgement", markSecs); });
             }
         }
 
@@ -10547,6 +10506,8 @@ namespace AlbedosCustomClassesAdvanced
                 return;
             }
             _sanctifiedUntil[id] = Time.time + Mathf.Max(0.5f, _sanctifiedDuration.Value);
+            float sanctSecs = Mathf.Max(0.5f, _sanctifiedDuration.Value);
+            DragonCombat.RunVfx(delegate { DragonVfx.Status(ally, "sanctified", sanctSecs); });
         }
 
         private List<Player> IhAlliesInRadius(Player caster, Vector3 center, float radius)
@@ -13616,6 +13577,20 @@ namespace AlbedosCustomClassesAdvanced
 
         private GUIStyle _ihTipTitle, _ihTipLine;
 
+        // Black 8-direction outline (+ soft drop) so numbers read on any bar colour.
+        private void IhHudOutlineLabel(Rect r, string text, GUIStyle style, Color c)
+        {
+            float o = Mathf.Max(1f, style.fontSize / 12f);
+            style.normal.textColor = new Color(0f, 0f, 0f, 0.55f);
+            GUI.Label(new Rect(r.x + o * 1.5f, r.y + o * 1.5f, r.width, r.height), text, style);
+            style.normal.textColor = new Color(0f, 0f, 0f, 0.95f);
+            for (int dx = -1; dx <= 1; dx++)
+                for (int dy = -1; dy <= 1; dy++)
+                    if (dx != 0 || dy != 0) GUI.Label(new Rect(r.x + dx * o, r.y + dy * o, r.width, r.height), text, style);
+            style.normal.textColor = c;
+            GUI.Label(r, text, style);
+        }
+
         private void IhHudShadowLabel(Rect r, string text, GUIStyle style)
         {
             Color c = style.normal.textColor;
@@ -13744,7 +13719,7 @@ namespace AlbedosCustomClassesAdvanced
             public float[] BarX = new float[4], BarY = new float[4], BarW = new float[4], BarH = new float[4], BarMax = new float[4];
             public Texture2D[] BarTex = new Texture2D[4];
             public Rect Name;
-            public bool HasValues;
+            public bool HasValues, Split;
             public Vector2[] Value = new Vector2[4];
             public Vector2[] FoodC = new Vector2[3], FoodT = new Vector2[3];
             public float[] FoodR = new float[3];
@@ -13799,6 +13774,7 @@ namespace AlbedosCustomClassesAdvanced
                     else if (p[0] == "value") { int b = (int)IhF(p, 1); if (b >= 0 && b < 4) { l.Value[b] = new Vector2(IhF(p, 2), IhF(p, 3)); l.HasValues = true; } }
                     else if (p[0] == "food") { int f = (int)IhF(p, 1); if (f >= 0 && f < 3) { l.FoodC[f] = new Vector2(IhF(p, 2), IhF(p, 3)); l.FoodR[f] = IhF(p, 4); l.FoodT[f] = new Vector2(IhF(p, 5), IhF(p, 6)); } }
                     else if (p[0] == "buffs") { l.BuffX = IhF(p, 1); l.BuffY = IhF(p, 2); }
+                    else if (p[0] == "split") l.Split = IhF(p, 1) > 0f;
                 }
                 for (int b = 0; b < 4; b++) l.BarTex[b] = LoadUiPng("HUD_Bar_" + cls + "_" + b + ".png");
                 if (l.W <= 0f || l.H <= 0f) l = null;
@@ -13879,28 +13855,44 @@ namespace AlbedosCustomClassesAdvanced
             float[] cur = { hp, st, ei, xp }, max = { hpMax, stMax, eiMax, 1f };
             for (int i = 0; i < 4; i++) IhDrawArtBar(panel, l, i, k, max[i] > 0f ? cur[i] / max[i] : 0f);
 
-            // values: the Warrior painting has its own value column; the others get small numbers at the bar's end
-            for (int i = 0; i < 3; i++)
+            // v0.25.73 (user: "can't see shit"): bigger numbers with a black outline. Stamina | Eitr share one bar line
+            // (split layout): Stamina left half, Eitr right half, each with its own number.
+            Color txt = new Color(0.97f, 0.95f, 0.90f, 1f);
+            Color stc = new Color(1f, 0.86f, 0.32f, 1f).linear, eic = new Color(0.80f, 0.62f, 1f, 1f).linear;
+            if (l.HasValues)
             {
-                if (l.HasValues)
+                _ihArtValue.alignment = TextAnchor.MiddleRight;
+                _ihArtValue.fontSize = Mathf.Max(12, Mathf.RoundToInt(20f * k));
+                Rect v0 = new Rect(panel.x + l.Value[0].x * k - 260f * k, panel.y + l.Value[0].y * k - 14f * k, 260f * k, 28f * k);
+                IhHudOutlineLabel(v0, IhVal(cur[0], max[0]), _ihArtValue, txt);
+                Rect v1 = new Rect(panel.x + l.Value[1].x * k - 260f * k, panel.y + l.Value[1].y * k - 14f * k, 260f * k, 28f * k);
+                if (l.Split)
                 {
-                    _ihArtValue.fontSize = Mathf.Max(8, Mathf.RoundToInt(15f * k));
-                    _ihArtValue.normal.textColor = new Color(0.93f, 0.90f, 0.84f, 1f);
-                    IhHudShadowLabel(new Rect(panel.x + l.Value[i].x * k - 220f * k, panel.y + l.Value[i].y * k - 12f * k, 220f * k, 24f * k), IhVal(cur[i], max[i]), _ihArtValue);
+                    string es = Mathf.CeilToInt(Mathf.Max(0f, ei)).ToString(), ss = Mathf.CeilToInt(Mathf.Max(0f, st)).ToString() + "  |  ";
+                    float ew = _ihArtValue.CalcSize(new GUIContent(es)).x;
+                    IhHudOutlineLabel(v1, es, _ihArtValue, eic);
+                    IhHudOutlineLabel(new Rect(v1.x, v1.y, v1.width - ew, v1.height), ss, _ihArtValue, stc);
                 }
-                else
+                else IhHudOutlineLabel(v1, IhVal(cur[1], max[1]), _ihArtValue, txt);
+                Rect v3 = new Rect(panel.x + l.Value[3].x * k - 260f * k, panel.y + l.Value[3].y * k - 14f * k, 260f * k, 28f * k);
+                IhHudOutlineLabel(v3, "Lv " + IhGetLevel(player).ToString(), _ihArtValue, new Color(0.98f, 0.92f, 0.70f, 1f));
+            }
+            else
+            {
+                _ihArtValue.alignment = TextAnchor.MiddleCenter;
+                for (int i = 0; i < 4; i++)
                 {
-                    _ihArtValue.fontSize = Mathf.Max(7, Mathf.RoundToInt(Mathf.Min(12f, Mathf.Min(l.BarH[0], Mathf.Min(l.BarH[1], l.BarH[2])) * 0.62f) * k));
-                    _ihArtValue.normal.textColor = new Color(0.95f, 0.93f, 0.88f, 0.95f);
+                    float bh = Mathf.Max(l.BarH[i], 22f);
+                    _ihArtValue.fontSize = Mathf.Max(12, Mathf.RoundToInt(Mathf.Min(19f, bh * 0.78f) * k));
                     float cy = panel.y + (l.BarY[i] + l.BarH[i] * 0.5f) * k;
-                    IhHudShadowLabel(new Rect(panel.x + (l.BarMax[i] - 160f) * k, cy - 10f * k, 150f * k, 20f * k), IhVal(cur[i], max[i]), _ihArtValue);
+                    float bx0 = l.BarX[i], bx1 = l.BarMax[i];
+                    if (i == 0 || i == 3) { bx0 = Mathf.Min(l.BarX[0], l.BarX[i]); }
+                    Rect r = new Rect(panel.x + bx0 * k, cy - 14f * k, (bx1 - bx0) * k, 28f * k);
+                    if (i == 3) IhHudOutlineLabel(r, "Lv " + IhGetLevel(player).ToString(), _ihArtValue, new Color(0.98f, 0.92f, 0.70f, 1f));
+                    else if (i == 2 && !l.Split && eiMax <= 0f) continue;
+                    else IhHudOutlineLabel(r, l.Split && i > 0 ? Mathf.CeilToInt(Mathf.Max(0f, cur[i])).ToString() : IhVal(cur[i], max[i]), _ihArtValue, txt);
                 }
             }
-            // level on the EXP bar
-            _ihArtSmall.fontSize = Mathf.Max(7, Mathf.RoundToInt(Mathf.Min(12f, l.BarH[3] * 0.62f) * k));
-            _ihArtSmall.normal.textColor = new Color(0.98f, 0.92f, 0.70f, 1f);
-            float ey = panel.y + (l.BarY[3] + l.BarH[3] * 0.5f) * k;
-            IhHudShadowLabel(new Rect(panel.x + l.BarX[3] * k, ey - 10f * k, (l.BarMax[3] - l.BarX[3]) * k, 20f * k), "Lv " + IhGetLevel(player).ToString(), _ihArtSmall);
 
             // class name on the painted plate (shrinks to fit)
             string name = IhCurrentClassName(player).ToUpper();

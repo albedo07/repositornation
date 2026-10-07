@@ -19,22 +19,22 @@ CLASSES = {
     values=(1292, 245, 1500, 505), value_x=1490,
     name=(330, 176, 600, 222),
     food=[((752, 640), 50), ((968, 640), 50), ((1185, 640), 50)], food_text=[(808, 688), (1024, 688), (1240, 688)], food_digit_r=15,
-    keep=[(420, 230, 600, 510)]),
+    keep=[(420, 230, 600, 510)], cut=(374, 443, 432, 340, 545)),
  "Ranger": dict(file="ranger", accent=[(30, 85)],
     bars=[("red", 238, 282, 580, 1292, 1400), ("lime", 304, 352, 580, 1156, 1400), ("blue", 372, 420, 580, 1136, 1400), ("gold", 440, 488, 580, 1082, 1390)], trough=(1150, 1370), tip=6,
     values=None, name=(440, 512, 730, 552),
     food=[((708, 675), 42), ((950, 675), 40), ((1195, 675), 42)], food_text=[(784, 667), (1026, 667), (1272, 667)], food_digit_r=17,
-    keep=[(430, 232, 500, 492)]),
+    keep=[(430, 232, 500, 492)], cut=(362, 430, 410, 280, 595)),
  "Sorcerer": dict(file="sorcerer", accent=[(112, 165)],
     bars=[("red", 230, 282, 700, 1462, 1458), ("lime", 298, 352, 700, 1290, 1462), ("blue", 366, 420, 700, 1226, 1465), ("gold", 436, 492, 700, 1124, 1462)], trough=(1150, 1440), tip=10,
     values=None, name=(205, 522, 455, 568),
     food=[((815, 680), 44), ((975, 680), 44), ((1135, 680), 44)], food_text=[(853, 713), (1013, 713), (1173, 713)], food_digit_r=14,
-    keep=[(520, 225, 610, 495)]),
+    keep=[(520, 225, 610, 495)], cut=(358, 428, 515, 420, 590)),
  "Cleric": dict(file="cleric", accent=[(12, 34)],
     bars=[("red", 278, 330, 660, 1452, 1448), ("lime", 357, 405, 660, 1400, 1450), ("blue", 434, 484, 660, 1400, 1450), ("gold", 506, 560, 660, 1146, 1450)], trough=(1240, 1440), tip=22,
     values=None, name=(200, 578, 380, 622),
     food=[((760, 672), 46), ((1012, 672), 46), ((1266, 672), 48)], food_text=[(870, 672), (1120, 672), (1374, 672)], food_digit_r=0,
-    keep=[(470, 270, 560, 570)], food_erase=[(815, 650, 925, 695), (1065, 650, 1175, 695), (1318, 650, 1430, 695)]),
+    keep=[(470, 270, 560, 570)], food_erase=[(815, 650, 925, 695), (1065, 650, 1175, 695), (1318, 650, 1430, 695)], cut=(420, 494, 470, 410, 628)),
 }
 # Advancement Class colours (target hue in OpenCV 0-180, saturation multiplier, value multiplier)
 ACS = {
@@ -128,7 +128,52 @@ def build(cls):
     keep = np.zeros((H, W), bool)
     for (x0, y0, x1, y1) in g["keep"]: keep[y0:y1, x0:x1] = True
     for key, y0, y1, x0, x1, xmax in g["bars"]: keep[y0:y1, x0:xmax + 10] = True
-    return dict(g=g, rgb=rgb.astype(np.uint8), alpha=a.astype(np.uint8), strips=strips, keep=keep)
+    rgb = rgb.astype(np.uint8); a = a.astype(np.uint8)
+    if g.get("cut"):
+        rgb, a, keep = cut_eitr_row(g, rgb, a, keep, strips, profile)
+    return dict(g=g, rgb=rgb, alpha=a, strips=strips, keep=keep)
+
+# v0.25.73 (user): Stamina and Eitr share ONE bar line split in two. The painted Eitr row is cut out: everything right of
+# the bar column below the Stamina row (plus the food tray) moves up by one row height; a divider is painted at the
+# middle of the Stamina trough. cut = (row y0, row y1, column x, food left, food top) in painting pixels.
+def cut_shift(g, x, y):
+    y0, y1, xs, fl, ft = g["cut"]
+    return y - (y1 - y0) if (y >= y0 and x >= xs) or (y >= ft and x >= fl) else y
+
+def cut_eitr_row(g, rgb, a, keep, strips, profile):
+    y0, y1, xs, fl, ft = g["cut"]
+    bh = y1 - y0
+    H, W = a.shape
+    S = np.zeros((H, W), bool); S[y0:, xs:] = True; S[ft:, fl:] = True
+    img = np.dstack([rgb[..., ::-1], a])
+    A = img.copy(); A[S] = 0
+    src = img.copy(); src[~S] = 0; src[y0:y1, xs:] = 0
+    B = np.zeros_like(img); B[:H - bh] = src[bh:]
+    pa = Image.fromarray(A, "RGBA"); pa.alpha_composite(Image.fromarray(B, "RGBA"))
+    out = np.array(pa)
+    k2 = keep.copy(); k2[S] = False
+    ks = keep & S; ks[y0:y1, xs:] = False
+    k2[:H - bh] |= ks[bh:]
+    # strips: EXP moves up, Eitr takes the right half of the Stamina row
+    s1 = strips[1]
+    strips[3]["y0"] -= bh
+    gk, gy0, gy1, gx0, gx1, gxm = g["bars"][1]
+    full0, full1 = s1["x0"], s1["xmax"]
+    mid = (full0 + full1) // 2
+    gap = 7
+    g["split"] = (mid, gap)
+    # divider: dark slot in the trough with lighter rims
+    ty0, ty1 = s1["y0"] + 1, s1["y0"] + s1["img"].shape[0] - 1
+    rgbo = out[..., :3][..., ::-1].copy()
+    dark = profile.min(axis=0)
+    for x in range(mid - gap + 2, mid + gap - 1):
+        t = abs(x - mid) / float(gap)
+        col = dark * (0.35 + 0.4 * t)
+        rgbo[ty0:ty1, x] = col.astype(np.uint8)
+    rim = np.array([120, 170, 200], float)   # BGR warm gold
+    for x in (mid - gap + 1, mid + gap - 1):
+        rgbo[ty0:ty1, x] = (rgbo[ty0:ty1, x].astype(float) * 0.4 + rim * 0.6).astype(np.uint8)
+    return rgbo, out[..., 3].copy(), k2
 
 def recolor(base, target):
     if target is None: return base["rgb"]
@@ -184,19 +229,30 @@ def compose(base, ac, target, values=(1.0, 0.82, 0.55, 0.62)):
     img = to_pil(rgb, base["alpha"])
     d = ImageDraw.Draw(img)
     g = base["g"]
+    sp = g.get("split")
+    s1 = base["strips"][1]
     for i, (st, f) in enumerate(zip(base["strips"], values)):
         st = dict(st); st["img"] = bar_colour(st["img"], i)
+        if sp and i == 1: st["xmax"] = sp[0] - sp[1]
+        if sp and i == 2:
+            h1 = s1["img"].shape[0]
+            st["img"] = cv2.resize(st["img"], (st["img"].shape[1], h1)); st["alpha"] = cv2.resize(st["alpha"], (st["alpha"].shape[1], h1))
+            st["x0"], st["y0"], st["xmax"] = sp[0] + sp[1], s1["y0"], s1["xmax"]
         s = stretch_strip(st, f)
         if s: img.alpha_composite(s, (st["x0"], st["y0"]))
     d = ImageDraw.Draw(img)
     if g["values"]:
         nums = ["720 / 720", "123 / 150", "55 / 100", "1,240 / 2,000"]
-        for (key, y0, y1, *_), s in zip(g["bars"], nums):
-            text(d, (g["value_x"], (y0 + y1) // 2), s, 30, anchor="rm")
+        if sp: nums[1] = "123 | 55"
+        for i, ((key, y0, y1, *_), s) in enumerate(zip(g["bars"], nums)):
+            if sp and i == 2: continue
+            text(d, (g["value_x"], cut_shift(g, g["value_x"], (y0 + y1) // 2) if sp else (y0 + y1) // 2), s, 30, anchor="rm")
     x0, y0, x1, y1 = g["name"]
-    text(d, ((x0 + x1) // 2, (y0 + y1) // 2), ac.upper(), 30, maxw=(x1 - x0) - 30)
+    ny = cut_shift(g, (x0 + x1) // 2, (y0 + y1) // 2) if sp else (y0 + y1) // 2
+    text(d, ((x0 + x1) // 2, ny), ac.upper(), 30, maxw=(x1 - x0) - 30)
     icons = food_icons()
     for i, ((c, r), t) in enumerate(zip(g["food"], g["food_text"])):
+        if sp: t = (t[0], cut_shift(g, c[0], t[1])); c = (c[0], cut_shift(g, c[0], c[1]))
         ic = icons[i].resize((2 * r - 6, 2 * r - 6), Image.LANCZOS)
         img.alpha_composite(ic, (c[0] - r + 3, c[1] - r + 3))
         text(d, t, ["27m", "17m", "9m"][i], 26 if g["food_digit_r"] else 30, anchor="mm")
@@ -236,19 +292,33 @@ def export(asset_dir):
         for ac, target in targets:
             img = to_pil(recolor(base, target) if ac != "None" else greyscale(base), base["alpha"]).crop((cx0, cy0, cx1, cy1)).resize(size, Image.LANCZOS)
             img.save(os.path.join(asset_dir, "HUD_Frame_" + (AC_KEYS.get(ac, ac)) + ".png"))
-        lines = ["# v0.25.68 HUD layout for " + cls + " (frame texture pixels, origin top-left)", "size %d %d" % size]
+        lines = ["# v0.25.73 HUD layout for " + cls + " (frame texture pixels, origin top-left)", "size %d %d" % size]
+        sp = g.get("split")
+        sh = (lambda x, y: cut_shift(g, x, y)) if g.get("cut") else (lambda x, y: y)
+        s1 = base["strips"][1]
+        h1 = s1["img"].shape[0]
         for i, st in enumerate(base["strips"]):
             sim = to_pil(bar_colour(st["img"], i), st["alpha"])
+            x0, y0, xmax = st["x0"], st["y0"], st["xmax"]
+            if sp and i == 1: xmax = sp[0] - sp[1]
+            if sp and i == 2:
+                sim = sim.resize((sim.width, h1), Image.LANCZOS)
+                x0, y0, xmax = sp[0] + sp[1], s1["y0"], s1["xmax"]
             sim = sim.resize((max(4, sc(sim.width)), max(4, sc(sim.height))), Image.LANCZOS)
             sim.save(os.path.join(asset_dir, "HUD_Bar_%s_%d.png" % (cls, i)))
-            lines.append("bar %d %d %d %d %d %d" % (i, sc(st["x0"] - cx0), sc(st["y0"] - cy0), sim.width, sim.height, sc(st["xmax"] - cx0)))
+            lines.append("bar %d %d %d %d %d %d" % (i, sc(x0 - cx0), sc(y0 - cy0), sim.width, sim.height, sc(xmax - cx0)))
+        if sp: lines.append("split 1")
         x0, y0, x1, y1 = g["name"]
-        lines.append("name %d %d %d %d" % (sc(x0 - cx0), sc(y0 - cy0), sc(x1 - x0), sc(y1 - y0)))
+        ny = sh((x0 + x1) // 2, y0)
+        lines.append("name %d %d %d %d" % (sc(x0 - cx0), sc(ny - cy0), sc(x1 - x0), sc(y1 - y0)))
         if g["values"]:
             for i, (key, by0, by1, *_r) in enumerate(g["bars"]):
-                lines.append("value %d %d %d" % (i, sc(g["value_x"] - cx0), sc((by0 + by1) / 2 - cy0)))
+                if sp and i == 2: continue
+                vy = (by0 + by1) / 2
+                vy = sh(g["value_x"], vy)
+                lines.append("value %d %d %d" % (i, sc(g["value_x"] - cx0), sc(vy - cy0)))
         for i, ((c, r), t) in enumerate(zip(g["food"], g["food_text"])):
-            lines.append("food %d %d %d %d %d %d" % (i, sc(c[0] - cx0), sc(c[1] - cy0), sc(r), sc(t[0] - cx0), sc(t[1] - cy0)))
+            lines.append("food %d %d %d %d %d %d" % (i, sc(c[0] - cx0), sc(sh(c[0], c[1]) - cy0), sc(r), sc(t[0] - cx0), sc(sh(c[0], t[1]) - cy0)))
         bars = g["bars"]
         lines.append("buffs %d %d" % (sc((bars[0][3] + bars[0][5]) / 2 - cx0), sc(bars[0][1] - 22 - cy0)))
         open(os.path.join(asset_dir, "HUD_Layout_%s.txt" % cls), "w").write("\n".join(lines) + "\n")

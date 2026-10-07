@@ -1,15 +1,15 @@
-# v0.25.68 HUD layout for Warrior (frame texture pixels, origin top-left)
-size 796 326
+# v0.25.73 HUD layout for Warrior (frame texture pixels, origin top-left)
+size 796 296
 bar 0 274 55 351 30 624
-bar 1 300 89 338 28 638
-bar 2 300 123 339 29 638
-bar 3 290 160 216 24 632
+bar 1 300 89 338 28 465
+bar 2 472 89 339 28 638
+bar 3 290 126 216 24 632
+split 1
 name 146 22 135 23
 value 0 726 70
 value 1 726 104
-value 2 726 138
-value 3 726 174
-food 0 357 254 25 385 278
-food 1 465 254 25 493 278
-food 2 574 254 25 601 278
+value 3 726 139
+food 0 357 220 25 385 244
+food 1 465 220 25 493 244
+food 2 574 220 25 601 244
 buffs 449 46

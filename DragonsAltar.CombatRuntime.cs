@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.72";
+        public const string ModVersion = "0.25.73";
 
         internal static DragonCombatPlugin Instance;
 
@@ -3645,19 +3645,17 @@ namespace DragonsAltarCombat
                 k = new DragonClipKey[] { K(-1f), Ft(K(-0.3f).Sp(3f, 0f, 0f), 0.15f, 0.08f), Ft(K(0f).Sp(6f, 0f, 0f).Off(0f, -0.03f, 0.03f), 0.22f, 0.1f), Ft(K(0.35f).Sp(4f, 0f, 0f).Off(0f, -0.02f, 0.02f), 0.2f, 0.1f), K(0.75f) };
             if (clip == "merc_circle" && length <= 0f)
             {
-                // v0.25.70 (user): the hop is a violent baseball-bat load: BOTH hands together on the weapon, cocked at the right
-                // shoulder through the whole hop, then the two-handed uncoil into the spin.
                 // v0.25.29 Circle Swing wind up = crow hop (thrower's skip): turn side-on, hop on the RIGHT leg with the left
                 // knee up and the right arm cocked back, stride the left foot forward and plant, then uncoil into the vanilla spin.
                 k = new DragonClipKey[] {
                     K(-1f),
-                    Ft(K(-0.86f).Rot(0f, 30f, 0f).Sp(3f, 0f, 0f).Off(0f, -0.06f, 0f), 0.1f, 0.1f).Hand(0.25f, 0.35f, -0.4f, 0.45f).Wp(0.35f, 0.7f, -0.6f).Two(-0.12f),
-                    K(-0.72f).Rot(0f, 65f, 0f).Sp(-5f, 0f, 0f).LL(0.35f, 0.05f, 0f, 0f).Lift(0.32f, 0.1f).Off(0f, 0.12f, 0.08f).Hand(0.25f, 0.35f, -0.4f, 0.45f).Wp(0.35f, 0.7f, -0.6f).Two(-0.12f),
-                    K(-0.56f).Rot(0f, 65f, 0f).Sp(-4f, 0f, 0f).LL(0.45f, 0.05f, 0f, 0f).Lift(0.26f, 0f).Off(0f, 0.01f, 0.14f).Hand(0.25f, 0.35f, -0.4f, 0.45f).Wp(0.35f, 0.7f, -0.6f).Two(-0.12f),
-                    K(-0.42f).Rot(0f, 55f, 0f).Sp(4f, 0f, 0f).LL(0.7f, 0.15f, 0f, 0f).RL(-0.3f, 0.12f, 0f, 0f).Lift(0f, 0f).Off(0f, -0.07f, 0.2f).Hand(0.25f, 0.35f, -0.4f, 0.45f).Wp(0.35f, 0.7f, -0.6f).Two(-0.12f),
-                    Ft(K(-0.25f).Rot(0f, 20f, 0f).Sp(6f, 0f, 0f).Off(0f, -0.05f, 0.2f).Two(-0.12f), 0.6f, 0.25f),
-                    Ft(K(0f).Sp(6f, 0f, 0f).Off(0f, -0.03f, 0.18f).Two(-0.12f), 0.4f, 0.15f),
-                    Ft(K(0.35f).Sp(4f, 0f, 0f).Off(0f, -0.02f, 0.1f).Two(-0.12f), 0.25f, 0.1f),
+                    Ft(K(-0.86f).Rot(0f, 30f, 0f).Sp(3f, 0f, 0f).Off(0f, -0.06f, 0f), 0.1f, 0.1f).Hand(0.55f, 0.1f, -0.45f, 0.8f),
+                    K(-0.72f).Rot(0f, 65f, 0f).Sp(-5f, 0f, 0f).LL(0.35f, 0.05f, 0f, 0f).Lift(0.32f, 0.1f).Off(0f, 0.12f, 0.08f).Hand(0.5f, 0.45f, -0.85f, 0.95f),
+                    K(-0.56f).Rot(0f, 65f, 0f).Sp(-4f, 0f, 0f).LL(0.45f, 0.05f, 0f, 0f).Lift(0.26f, 0f).Off(0f, 0.01f, 0.14f).Hand(0.5f, 0.5f, -0.9f, 0.95f),
+                    K(-0.42f).Rot(0f, 55f, 0f).Sp(4f, 0f, 0f).LL(0.7f, 0.15f, 0f, 0f).RL(-0.3f, 0.12f, 0f, 0f).Lift(0f, 0f).Off(0f, -0.07f, 0.2f).Hand(0.5f, 0.45f, -0.85f, 0.95f),
+                    Ft(K(-0.25f).Rot(0f, 20f, 0f).Sp(6f, 0f, 0f).Off(0f, -0.05f, 0.2f), 0.6f, 0.25f),
+                    Ft(K(0f).Sp(6f, 0f, 0f).Off(0f, -0.03f, 0.18f), 0.4f, 0.15f),
+                    Ft(K(0.35f).Sp(4f, 0f, 0f).Off(0f, -0.02f, 0.1f), 0.25f, 0.1f),
                     K(0.75f) };
             }
             k[0].VA = trig;
@@ -3971,15 +3969,10 @@ namespace DragonsAltarCombat
                 // Stomp (anatomy): weight shifts onto the left leg, the right knee rises to hip height (thigh level,
                 // knee bent ~90), torso stays upright, then the foot is driven flat into the ground and both knees
                 // absorb it. Hands quiet.
-                // v0.25.63 (user): exaggerated - the knee comes up past the hip, both arms flare out and up like the
-                // roar emote, then the foot is driven down with the chest thrown forward and the arms flung wide.
-                DragonClipKey raise = K(-0.55f).Sp(-8f, 0f, 0f).Ch(-6f, 0f, 0f).Hd(-6f, 0f, 0f).LL(0f, 0.06f, 0f, 0f).RL(0.35f, 0.1f, 0f, 0f).Lift(0f, 0.62f).Off(0f, 0.04f, 0f)
-                    .Hand(0.55f, -0.6f, -0.05f, 0.62f).LHand(-0.55f, -0.6f, -0.05f, 0.62f);
-                // v0.25.69 (user: flare = chicken wings, not arms stretched out): elbows bent and pushed out, hands at the hips.
-                DragonClipKey peak = raise.Copy(-0.15f).Lift(0f, 0.7f).Hand(0.6f, -0.55f, -0.12f, 0.6f).LHand(-0.6f, -0.55f, -0.12f, 0.6f);
-                DragonClipKey hit = K(0f).Sp(20f, 0f, 0f).Ch(10f, 0f, 0f).Hd(-12f, 0f, 0f).LL(-0.05f, 0.12f, 0f, 0f).RL(0.35f, 0.14f, 0f, 0f).Lift(0f, 0f).Off(0f, -0.16f, 0f)
-                    .Hand(0.62f, -0.7f, 0.08f, 0.66f).LHand(-0.62f, -0.7f, 0.08f, 0.66f).Linear();
-                DragonClipKey stAfter = hit.Copy(0.3f); stAfter.Lin = false;
+                DragonClipKey raise = K(-0.55f).Sp(-3f, 0f, 0f).Hd(6f, 0f, 0f).LL(0f, 0.06f, 0f, 0f).RL(0.25f, 0.1f, 0f, 0f).Lift(0f, 0.38f).Off(0f, 0.02f, 0f);
+                DragonClipKey peak = raise.Copy(-0.15f).Lift(0f, 0.42f);
+                DragonClipKey hit = K(0f).Sp(12f, 0f, 0f).Ch(5f, 0f, 0f).Hd(8f, 0f, 0f).LL(-0.05f, 0.1f, 0f, 0f).RL(0.3f, 0.12f, 0f, 0f).Lift(0f, 0f).Off(0f, -0.1f, 0f).Linear();
+                DragonClipKey stAfter = hit.Copy(0.25f); stAfter.Lin = false;
                 return new DragonClipKey[] { K(-1f), raise, peak, hit, stAfter, K(0.65f) };
             }
             if (v == 2)
@@ -4017,18 +4010,12 @@ namespace DragonsAltarCombat
             DragonClipKey load = Ft(K(-0.93f).Sp(16f * d, -10f, 0f).Ch(6f, -6f, 0f).Hd(-12f, 0f, 0f).Hand(0.45f, 0.1f, -0.45f, 0.6f).Off(0f, -0.15f * d, 0f), 0.2f, 0.1f);
             // v0.25.30 user: no superman pose. In the air the body leans only diagonally (~38 deg), the main arm is
             // flared a little out to the side and the weapon is carried up (not pointed ahead).
-            // v0.25.63 (user): both arms flared wide in the air.
-            // v0.25.65 (user): arms only slightly out (the wide T-flare looked goofy).
-            // v0.25.70 (user): the off hand BRACES in front of the chest the whole jump (shield up, or the Mercenary's
-            // off-hand weapon held close) instead of hanging out to the side.
-            DragonClipKey launch = K(-0.72f).Sp(5f, 0f, 0f).Ch(-4f, 0f, 0f).Hd(-18f, 0f, 0f).Hand(0.6f, -0.05f, 0.25f, 0.85f).LHand(0.4f, -0.2f, 0.9f, 0.5f).Wp(0.35f, 0.85f, -0.1f).Rot(32f, 0f, 0f).Off(0f, 0.08f, 0f);
+            DragonClipKey launch = K(-0.72f).Sp(6f, 0f, 0f).Hd(-18f, 0f, 0f).Hand(0.8f, -0.1f, 0.2f, 0.85f).Wp(0.3f, 0.9f, -0.15f).Rot(38f, 0f, 0f).Off(0f, 0.08f, 0f);
             DragonClipKey roll0 = launch.Copy(-0.62f).Rot(40f, 0f, 0f).Sn(25f);
             DragonClipKey roll1 = launch.Copy(-0.36f).Rot(40f, 0f, 0f).Sn(360f);
-            // v0.25.65: falling = weapon cocked overhead for the smash (Angel Comet style), arms not spread.
-            DragonClipKey poised = K(0f).Sp(-4f, 0f, 0f).Ch(-6f, 0f, 0f).Hd(-14f, 0f, 0f).Hand(0.2f, 0.95f, -0.1f, 0.95f).LHand(0.4f, -0.2f, 0.9f, 0.5f).Wp(0.1f, 0.6f, -0.8f).Rot(14f, 0f, 0f).Sn(360f);
-            // Smash: the weapon is driven into the ground in front, deep hero kneel (front knee forward, back knee low).
-            DragonClipKey impact = Ft(K(0.08f).Sp(34f, 0f, 0f).Ch(16f, 0f, 0f).Hd(-26f, 0f, 0f).Hand(0.05f, -0.95f, 0.5f, 0.99f).Wp(0f, -1f, 0.45f).LHand(0.3f, -0.4f, 0.85f, 0.55f).Rot(8f, 0f, 0f).Off(0f, -0.48f * d, 0.06f).Sn(360f).Linear(), 0.8f, 0.9f);
-            DragonClipKey settle = impact.Copy(brutal ? 0.32f : 0.24f).Off(0f, -0.5f * d, 0.06f); settle.Lin = false;
+            DragonClipKey poised = K(0f).Sp(12f, 0f, 0f).Ch(6f, 0f, 0f).Hd(-8f, 0f, 0f).Hand(0.1f, -0.8f, 0.45f, 0.95f).Rot(28f, 0f, 0f).Sn(360f);
+            DragonClipKey impact = Ft(K(0.08f).Sp(30f, 0f, 0f).Ch(14f, 0f, 0f).Hd(-28f, 0f, 0f).Hand(0.05f, -1f, 0.35f, 0.97f).Rot(6f, 0f, 0f).Off(0f, -0.38f * d, 0.05f).Sn(360f), 0.75f, 0.8f);
+            DragonClipKey settle = impact.Copy(brutal ? 0.3f : 0.2f).Off(0f, -0.4f * d, 0.05f);
             DragonClipKey rec = Ft(K(brutal ? 0.58f : 0.45f).Sp(8f, 0f, 0f).Hd(-6f, 0f, 0f).Hand(0.35f, -0.45f, 0.35f, 0.6f).Off(0f, -0.06f, 0f).Sn(360f), 0.3f, 0.2f);
             return new DragonClipKey[] { K(-1f), load, launch, roll0, roll1, poised, impact, settle, rec, K(brutal ? 0.9f : 0.75f).Sn(360f) };
         }
@@ -4083,32 +4070,26 @@ namespace DragonsAltarCombat
             c["hw_rift_walker"] = SbCommand(1); c["wiz_gravity"] = SbCommand(3);
             c["olympic_hero"] = SbOlympic(false);
             c["olympic_hero_brutal"] = SbOlympic(true);
-            // v0.25.63 jump-slam landing on top of Valheim's axe heavy smash: a deep hero kneel (hips dropped, chest
-            // over the weapon, wide stance, front knee forward, back knee low), held, then up. Arms belong to the
-            // vanilla smash (no hand keys).
-            DragonClipKey kneel = Ft(K(0f).Sp(30f, 0f, 0f).Ch(12f, 0f, 0f).Hd(-18f, 0f, 0f).LHand(0.15f, -0.85f, 0.5f, 0.7f).Off(0f, -0.55f, 0.08f), 0.9f, 1.05f);   // v0.25.71 off hand braced over the front knee
-            c["slam_kneel"] = new DragonClipKey[] { K(-1f), kneel, kneel.Copy(0.4f).Off(0f, -0.58f, 0.08f), K(0.85f) };
-            c["slam_kneel"][0].NoAim = true;
             c["sm_crescent_asc"] = c["sm_crescent"];
             c["sm_crescent_asc2"] = c["sm_crescent"];   // v0.25.51 follow-up swing (custom fallback)
             // v0.25.41 Blade Storm = Vergil's Judgement Cut: crouched iai stance with the blade held back at the
             // left hip (sheathed), a blink-fast draw that ends with the arm out to the right, a held pose,
             // then the slow sheathe back to the hip and a small "click" settle.
-            DragonClipKey jcStance = Ft(K(-0.6f).Sp(14f, -25f, 0f).Ch(4f, -10f, 0f).Hd(-6f, 22f, 0f).Hand(-0.38f, -0.42f, 0.45f, 0.62f).Wp(-0.8f, -0.45f, -0.4f).LHand(0.25f, -0.95f, 0.2f, 0.72f).Off(0f, -0.12f, 0f), 0.35f, 0.25f);
-            DragonClipKey jcDraw = Ft(K(0f).Sp(10f, 30f, 0f).Ch(4f, 14f, 0f).Hd(-4f, -10f, 0f).Hand(1f, 0.1f, 0.35f, 1f).Wp(1f, 0.05f, 0.2f).LHand(0.25f, -0.95f, 0.2f, 0.72f).Off(0f, -0.1f, 0.06f), 0.4f, 0.25f).Linear();
+            DragonClipKey jcStance = Ft(K(-0.6f).Sp(14f, -25f, 0f).Ch(4f, -10f, 0f).Hd(-6f, 22f, 0f).Hand(-0.38f, -0.42f, 0.45f, 0.62f).Wp(-0.8f, -0.45f, -0.4f).Off(0f, -0.12f, 0f), 0.35f, 0.25f);
+            DragonClipKey jcDraw = Ft(K(0f).Sp(10f, 30f, 0f).Ch(4f, 14f, 0f).Hd(-4f, -10f, 0f).Hand(1f, 0.1f, 0.35f, 1f).Wp(1f, 0.05f, 0.2f).Off(0f, -0.1f, 0.06f), 0.4f, 0.25f).Linear();
             DragonClipKey jcHold = jcDraw.Copy(0.18f); jcHold.Lin = false;
-            DragonClipKey jcReturn = Ft(K(0.3f).Sp(8f, 10f, 0f).Ch(3f, 4f, 0f).Hand(0.25f, -0.15f, 0.6f, 0.7f).Wp(0.2f, 0f, 1f).LHand(0.25f, -0.95f, 0.2f, 0.72f).Off(0f, -0.08f, 0f), 0.35f, 0.2f);
-            DragonClipKey jcSheathe = Ft(K(0.75f).Sp(6f, -12f, 0f).Ch(2f, -6f, 0f).Hd(-4f, 8f, 0f).Hand(-0.36f, -0.42f, 0.42f, 0.62f).Wp(-0.8f, -0.45f, -0.4f).LHand(0.25f, -0.95f, 0.2f, 0.72f).Off(0f, -0.06f, 0f), 0.3f, 0.2f);
+            DragonClipKey jcReturn = Ft(K(0.3f).Sp(8f, 10f, 0f).Ch(3f, 4f, 0f).Hand(0.25f, -0.15f, 0.6f, 0.7f).Wp(0.2f, 0f, 1f).Off(0f, -0.08f, 0f), 0.35f, 0.2f);
+            DragonClipKey jcSheathe = Ft(K(0.75f).Sp(6f, -12f, 0f).Ch(2f, -6f, 0f).Hd(-4f, 8f, 0f).Hand(-0.36f, -0.42f, 0.42f, 0.62f).Wp(-0.8f, -0.45f, -0.4f).Off(0f, -0.06f, 0f), 0.3f, 0.2f);
             DragonClipKey jcClick = jcSheathe.Copy(0.83f).Sp(3f, -10f, 0f).Off(0f, -0.03f, 0f);
             c["sm_blade_storm"] = new DragonClipKey[] { K(-1f), jcStance, jcDraw, jcHold, jcReturn, jcSheathe, jcClick, K(1.1f) };
             // v0.25.36 Shield Charge finisher fallback (if the game has no mace_secondary): one-handed overhead
             // hammer slam with the main hand, shield arm untouched.
-            DragonClipKey hsUp = Ft(K(-0.55f).Sp(-4f, -6f, 0f).Ch(-6f, -4f, 0f).Hd(-10f, 0f, 0f).Hand(0.25f, 1f, -0.15f, 0.95f).Wp(0.05f, 0.6f, -0.8f).LHand(0.4f, -0.2f, 0.9f, 0.5f), 0.3f, 0.15f);
-            DragonClipKey hsDown = Ft(K(0f).Sp(22f, 4f, 0f).Ch(10f, 2f, 0f).Hd(6f, 0f, 0f).Hand(0.05f, -0.5f, 0.85f, 1f).Wp(0f, -0.75f, 0.65f).LHand(0.3f, -0.4f, 0.85f, 0.55f).Off(0f, -0.12f, 0.06f), 0.4f, 0.15f).Linear();
+            DragonClipKey hsUp = Ft(K(-0.55f).Sp(-4f, -6f, 0f).Ch(-6f, -4f, 0f).Hd(-10f, 0f, 0f).Hand(0.25f, 1f, -0.15f, 0.95f).Wp(0.05f, 0.6f, -0.8f), 0.3f, 0.15f);
+            DragonClipKey hsDown = Ft(K(0f).Sp(22f, 4f, 0f).Ch(10f, 2f, 0f).Hd(6f, 0f, 0f).Hand(0.05f, -0.5f, 0.85f, 1f).Wp(0f, -0.75f, 0.65f).Off(0f, -0.12f, 0.06f), 0.4f, 0.15f).Linear();
             c["cleric_hammer_slam"] = new DragonClipKey[] { K(-1f), hsUp, hsUp.Copy(-0.15f), hsDown, hsDown.Copy(0.2f), K(0.6f) };
             // v0.25.35 Frenzied Charge (user): sword held out in front, point forward, the whole charge.
             DragonClipKey fcDraw = Ft(K(-0.5f).Sp(6f, -8f, 0f).Hand(0.35f, -0.25f, -0.05f, 0.6f).Wp(0.1f, 0.15f, 1f).Off(0f, -0.06f, 0f), 0.25f, 0.2f);
-            DragonClipKey fcHold = K(0f).Sp(12f, 0f, 0f).Ch(4f, 0f, 0f).Hd(-10f, 0f, 0f).Hand(0.12f, 0.05f, 1f, 0.88f).Wp(0f, 0.05f, 1f).LHand(0.4f, -0.2f, 0.9f, 0.5f);
+            DragonClipKey fcHold = K(0f).Sp(12f, 0f, 0f).Ch(4f, 0f, 0f).Hd(-10f, 0f, 0f).Hand(0.12f, 0.05f, 1f, 0.88f).Wp(0f, 0.05f, 1f);
             c["sm_charge"] = new DragonClipKey[] { K(-1f), fcDraw, fcHold, fcHold.Copy(0.15f), K(0.4f) };
             c["sm_charge"][0].NoPlant = true;
             DragonClipKey[] oh = c["olympic_hero"];
@@ -4129,16 +4110,14 @@ namespace DragonsAltarCombat
 
             // Angel Comet (EMA dive): crouch, jump with the arm thrown up, wings on the rise, tip over into an
             // inverted head-first dive (arm leading to the ground), flip upright into the hero landing.
-            // v0.25.71: the off hand (shield / Mercenary off-hand weapon) braces in front of the chest in the air, the same
-            // rule as Olympic Hero, and rests over the front knee in the landing.
-            DragonClipKey inv = K(0f).Sp(3f, 0f, 0f).Hd(-10f, 0f, 0f).Hand(0f, 1f, 0.1f, 1f).LHand(0.4f, -0.2f, 0.9f, 0.5f).Rot(165f, 0f, 0f);
-            DragonClipKey hero = Ft(K(0.16f).Sp(30f, 0f, 0f).Ch(14f, 0f, 0f).Hd(-28f, 0f, 0f).Hand(0.05f, -1f, 0.35f, 0.97f).LHand(0.15f, -0.85f, 0.5f, 0.7f).Rot(366f, 0f, 0f).Off(0f, -0.38f, 0.05f), 0.75f, 0.8f);
+            DragonClipKey inv = K(0f).Sp(3f, 0f, 0f).Hd(-10f, 0f, 0f).Hand(0f, 1f, 0.1f, 1f).Rot(165f, 0f, 0f);
+            DragonClipKey hero = Ft(K(0.16f).Sp(30f, 0f, 0f).Ch(14f, 0f, 0f).Hd(-28f, 0f, 0f).Hand(0.05f, -1f, 0.35f, 0.97f).Rot(366f, 0f, 0f).Off(0f, -0.38f, 0.05f), 0.75f, 0.8f);
             c["angel_comet"] = new DragonClipKey[] {
                 K(-1f),
                 Ft(K(-0.92f).Sp(14f, 0f, 0f).Ch(6f, 0f, 0f).Hand(0.3f, -0.6f, 0.3f, 0.55f).Off(0f, -0.12f, 0f), 0.15f, 0.1f),
-                K(-0.75f).Ch(-8f, 0f, 0f).Hd(-20f, 0f, 0f).Hand(0.05f, 1f, 0.1f, 1f).LHand(0.4f, -0.2f, 0.9f, 0.5f).Rot(-6f, 0f, 0f),
-                K(-0.35f).Sp(-10f, 0f, 0f).Ch(-10f, 0f, 0f).Hd(-24f, 0f, 0f).Hand(1f, 0.2f, -0.3f, 1f).LHand(0.4f, -0.2f, 0.9f, 0.5f).Rot(-10f, 0f, 0f),
-                K(-0.1f).Hd(-20f, 0f, 0f).Hand(0f, 1f, 0.2f, 1f).LHand(0.4f, -0.2f, 0.9f, 0.5f).Rot(70f, 0f, 0f),
+                K(-0.75f).Ch(-8f, 0f, 0f).Hd(-20f, 0f, 0f).Hand(0.05f, 1f, 0.1f, 1f).Rot(-6f, 0f, 0f),
+                K(-0.35f).Sp(-10f, 0f, 0f).Ch(-10f, 0f, 0f).Hd(-24f, 0f, 0f).Hand(1f, 0.2f, -0.3f, 1f).Rot(-10f, 0f, 0f),
+                K(-0.1f).Hd(-20f, 0f, 0f).Hand(0f, 1f, 0.2f, 1f).Rot(70f, 0f, 0f),
                 inv, hero, hero.Copy(0.4f).Off(0f, -0.4f, 0.05f),
                 Ft(K(0.7f).Sp(8f, 0f, 0f).Hd(-6f, 0f, 0f).Hand(0.35f, -0.45f, 0.35f, 0.6f).Rot(360f, 0f, 0f).Off(0f, -0.06f, 0f), 0.3f, 0.2f),
                 K(1.0f).Rot(360f, 0f, 0f)
@@ -6106,6 +6085,7 @@ namespace DragonsAltarCombat
                 return;
             }
             Stun(target, target.transform.position - target.transform.forward);
+            RunVfx(delegate { DragonVfx.Status(target, "freeze", seconds); });
             controller.Apply(target, 0.02f, Mathf.Max(0.1f, seconds));
             ApplyFrost(target, Mathf.Max(0.1f, seconds));
         }
@@ -6670,6 +6650,7 @@ namespace DragonsAltarCombat
             if (player == null)
                 return;
             ExplicitHyperArmorUntil[player.GetInstanceID()] = Time.time + Mathf.Max(0f, duration);
+            if (duration >= 1f) RunVfx(delegate { DragonVfx.HyperShimmer(player, duration); });
             if (duration >= 1f) ShowStatus(player, "hyper_armor", "hyper_armor", "Hyper Armor", duration, 0, "Defense Buff\nNo stagger or knockback from hits");
         }
 
@@ -6968,6 +6949,7 @@ namespace DragonsAltarCombat
             if (state == null)
                 return;
             state.ExposeUntil = Time.time + ResolveDuration(duration);
+            RunVfx(delegate { DragonVfx.Status(target, "expose", ResolveDuration(duration)); });
         }
 
         public static void ApplyBrokenBones(Character target, float duration)
@@ -6986,6 +6968,7 @@ namespace DragonsAltarCombat
 
             float resolved = ResolveDuration(duration);
             state.CrippleUntil = Time.time + resolved;
+            RunVfx(delegate { DragonVfx.Status(target, "cripple", resolved); });
 
             DragonCrippleController controller = target.GetComponent<DragonCrippleController>();
             if (controller == null)
@@ -7001,6 +6984,7 @@ namespace DragonsAltarCombat
             if (state == null) return;
             float resolved = ResolveDuration(duration);
             state.FrostUntil = Time.time + resolved;
+            RunVfx(delegate { DragonVfx.Status(target, "frost", resolved); });
             DragonFrostController controller = target.GetComponent<DragonFrostController>();
             if (controller == null) controller = target.gameObject.AddComponent<DragonFrostController>();
             float slow = DragonCombatPlugin.Instance == null ? 0.30f : Mathf.Clamp01(DragonCombatPlugin.Instance.FrostMovementSlow.Value / 100f);
@@ -7078,6 +7062,7 @@ namespace DragonsAltarCombat
             if (dir.sqrMagnitude < 0.01f)
                 dir = Vector3.forward;
             target.Stagger(dir.normalized);
+            DragonCombat.RunVfx(delegate { DragonVfx.Status(target, "stun", 1.4f); });
         }
 
         public static bool IsSmallEnemy(Character target)
@@ -7442,12 +7427,14 @@ namespace DragonsAltarCombat
         {
             float amount = ResolveBurnTickDamage(target, damage, true) * GetSorcererMagicDamageMultiplier(attacker) * BurnRamp(target, true);
             ApplyNativeDelayedDamage(attacker, target, "AddSpiritDamage", amount, true);
+            if (amount > 0f) RunVfx(delegate { DragonVfx.Status(target, "spiritburn", 0.5f); });
         }
 
         public static void ApplyFireBurnTick(Player attacker, Character target, float damage)
         {
             float amount = ResolveBurnTickDamage(target, damage, false) * GetSorcererMagicDamageMultiplier(attacker) * BurnRamp(target, false);
             ApplyNativeDelayedDamage(attacker, target, "AddFireDamage", amount, false);
+            if (amount > 0f) RunVfx(delegate { DragonVfx.Status(target, "fireburn", 0.5f); });
         }
 
         private static float ResolveBurnTickDamage(Character target, float fallbackDamage, bool spirit)
@@ -10964,6 +10951,104 @@ namespace DragonsAltarCombat
                     Flash(pos, new Color(1f, 0.9f, 0.6f, 1f), 1.4f, 3f + size, 0.2f);
                     break;
             }
+        }
+
+        // v0.25.73 STATUS VISUALS: what a debuff/buff does is visible on the character for as long as it lasts.
+        // One aura per (character, kind) at a time; re-applying while it still shows does not stack new ones.
+        private static readonly Dictionary<string, float> _statusUntil = new Dictionary<string, float>();
+
+        private static float BodyHeight(Character t)
+        {
+            float h = 1.8f;
+            try { Collider col = t.GetCollider(); if (col != null) h = Mathf.Clamp(col.bounds.size.y, 0.6f, 8f); } catch (Exception) { }
+            return h;
+        }
+
+        private static bool StatusGate(Character t, string kind, float seconds)
+        {
+            if (!Enabled || t == null || t.IsDead()) return false;
+            string key = t.GetInstanceID().ToString() + kind;
+            float until;
+            if (_statusUntil.TryGetValue(key, out until) && Time.time < until) return false;
+            if (_statusUntil.Count > 600) _statusUntil.Clear();
+            _statusUntil[key] = Time.time + Mathf.Max(0.2f, seconds * 0.85f);
+            return true;
+        }
+
+        private static void StatusAura(Character t, Color c, float seconds, float heightFrac, float radius, float rate, float rise)
+        {
+            GameObject go = Aura(t.transform, t.transform.position, c, radius, seconds, rate * Amount, rise);
+            if (go == null) return;
+            DragonVfxLife l = go.GetComponent<DragonVfxLife>();
+            if (l != null) l.FollowOffset = Vector3.up * BodyHeight(t) * heightFrac;
+        }
+
+        // kind: stun, frost, freeze, expose, cripple, fireburn, spiritburn
+        public static void Status(Character t, string kind, float seconds)
+        {
+            if (!Enabled || t == null) return;
+            seconds = Mathf.Clamp(seconds, 0.3f, 8f);
+            float h = BodyHeight(t);
+            float w = Mathf.Clamp(h * 0.3f, 0.35f, 2.5f);
+            switch (kind)
+            {
+                case "stun":
+                    if (!StatusGate(t, kind, 1.4f)) return;
+                    // dazed halo of golden stars circling over the head
+                    StatusAura(t, new Color(1f, 0.92f, 0.45f, 1f), 1.4f, 1.08f, w * 0.7f, 40f, 0.05f);
+                    Burst(t.transform.position + Vector3.up * h * 1.05f, new Color(1f, 0.95f, 0.6f, 1f), Mathf.RoundToInt(10 * Amount), 2.5f, 0.12f, 0.4f, 0.2f);
+                    break;
+                case "frost":
+                case "freeze":
+                    if (!StatusGate(t, "frost", seconds)) return;
+                    // rime coat: icy motes clinging to the body, snow drifting down; a freeze also cracks out a shell
+                    StatusAura(t, new Color(0.75f, 0.93f, 1f, 1f), seconds, 0.5f, w, 26f, -0.25f);
+                    if (kind == "freeze")
+                    {
+                        IceBurst(t.transform.position, Mathf.Clamp(w * 1.4f, 0.8f, 3f));
+                        Flash(t.transform.position + Vector3.up * h * 0.5f, new Color(0.6f, 0.9f, 1f, 1f), 1.6f, 4f, 0.4f);
+                    }
+                    break;
+                case "expose":
+                    if (!StatusGate(t, kind, seconds)) return;
+                    // broken guard: crimson shards falling off the chest
+                    StatusAura(t, new Color(1f, 0.25f, 0.2f, 1f), seconds, 0.6f, w * 0.8f, 14f, -0.6f);
+                    Burst(t.transform.position + Vector3.up * h * 0.6f, new Color(1f, 0.35f, 0.25f, 1f), Mathf.RoundToInt(12 * Amount), 3.5f, 0.14f, 0.45f, 1f);
+                    break;
+                case "cripple":
+                    if (!StatusGate(t, kind, seconds)) return;
+                    // heavy legs: dark violet haze around the feet
+                    StatusAura(t, new Color(0.55f, 0.3f, 0.75f, 1f), seconds, 0.08f, w, 18f, 0.15f);
+                    break;
+                case "judgement":
+                    if (!StatusGate(t, kind, seconds)) return;
+                    // Judgement Mark: a rose-gold sigil of motes hovering over the head
+                    StatusAura(t, new Color(1f, 0.6f, 0.7f, 1f), seconds, 1.15f, w * 0.5f, 22f, 0.1f);
+                    Glyph(t.transform.position, new Color(1f, 0.6f, 0.7f, 0.55f), Mathf.Clamp(w * 1.8f, 1f, 4f), 0.8f, 160f);
+                    break;
+                case "sanctified":
+                    if (!StatusGate(t, kind, seconds)) return;
+                    // Sanctified ally: soft emerald-gold motes rising around the body
+                    StatusAura(t, new Color(0.65f, 1f, 0.7f, 1f), seconds, 0.45f, w, 14f, 0.7f);
+                    break;
+                case "fireburn":
+                    if (!StatusGate(t, kind, 0.5f)) return;
+                    Embers(t.transform.position + Vector3.up * h * 0.4f, new Color(1f, 0.5f, 0.12f, 1f), w, 0.55f, 40f * Amount);
+                    Flash(t.transform.position + Vector3.up * h * 0.5f, new Color(1f, 0.45f, 0.15f, 1f), 0.9f, 2.5f + w, 0.25f);
+                    break;
+                case "spiritburn":
+                    if (!StatusGate(t, kind, 0.5f)) return;
+                    Embers(t.transform.position + Vector3.up * h * 0.4f, new Color(1f, 0.95f, 0.75f, 1f), w, 0.55f, 34f * Amount);
+                    Flash(t.transform.position + Vector3.up * h * 0.5f, new Color(1f, 0.9f, 0.6f, 1f), 0.8f, 2.5f + w, 0.25f);
+                    break;
+            }
+        }
+
+        // Hyper Armor: a steady golden shimmer on the player while it lasts.
+        public static void HyperShimmer(Player p, float seconds)
+        {
+            if (!Enabled || p == null || !StatusGate(p, "hyper", seconds)) return;
+            StatusAura(p, new Color(1f, 0.82f, 0.35f, 1f), Mathf.Min(seconds, 20f), 0.55f, 0.45f, 12f, 0.5f);
         }
 
         public static void CastFlare(Player p, bool big)

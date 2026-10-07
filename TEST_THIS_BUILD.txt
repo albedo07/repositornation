@@ -1,5 +1,6 @@
-TEST v0.25.72
-1. Cast any skill: a coloured rune circle appears under you. An Ultimate or Grace gives a big circle, a light column and a shake.
-2. Skills with a wind up (Heavy Slash, Meteor, Ballista charge...): the weapon hand glows during the wind up.
-3. Hit enemies with fire / lightning / frost / spirit / physical skills: each damage type shows its own impact effect.
-4. Performance: big fights with DoTs should not spam effects (one spark per enemy every 0.15 s).
+TEST v0.25.73
+1. HUD, every class: Stamina (left) and Eitr (right) share one bar. Spend stamina, then eitr: each half moves on its own.
+2. Are the numbers readable now? Try it in a bright scene and in a dark one.
+3. Animations should look exactly like v0.25.62: Stomp, Smite / Bonecrusher jump slams, Circle Swing.
+4. Stun, freeze, expose and burn an enemy: each one shows its own effect on the target.
+5. Paladin: an Ascended Righteous Strike puts a sigil over the head. Priest: Sanctify shows green motes on the ally.
