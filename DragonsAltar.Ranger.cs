@@ -40,7 +40,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Dragon's Altar - Ranger";
-        public const string ModVersion = "0.25.76";
+        public const string ModVersion = "0.25.77";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -2888,7 +2888,7 @@ namespace DragonsAltarRanger
                 StartCoroutine(RingVfx(point, radius, new Color(0.90f, 1f, 0.75f, 1f), 0.5f));
                 StartCoroutine(RingVfx(point, radius * 0.5f, new Color(1f, 1f, 1f, 1f), 0.3f));
                 Vector3 sp = point; float spr = radius;
-                DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(sp, new Color(0.85f, 1f, 0.70f, 1f), spr, 2.2f); DragonVfx.Pillar(sp, new Color(0.90f, 1f, 0.75f, 1f), spr * 0.3f, 12f, 0.5f); });   // v0.25.58
+                DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(sp, new Color(0.85f, 1f, 0.70f, 1f), spr, 2.2f); });   // v0.25.58
             }
             RangerArrowDamage sky = new RangerArrowDamage();
             sky.Blunt = d.Total() * 0.5f;
@@ -2962,7 +2962,7 @@ namespace DragonsAltarRanger
             DragonCombat.RunVfx(delegate
             {
                 Color sc = new Color(0.85f, 1f, 0.70f, 1f);
-                if (width >= 1f) { DragonVfx.Pillar(at, sc, Mathf.Max(1f, radius * 0.25f), DragonCombat.M(25f), 0.7f); DragonVfx.HeavyLanding(at, sc, radius, 2.5f); }   // v0.25.58 finale
+                if (width >= 1f) { DragonVfx.HeavyLanding(at, sc, radius, 2.5f); }   // v0.25.58 finale
                 else if (UnityEngine.Random.value < 0.3f) DragonVfx.Cracks(at, sc, 1.5f, 4, 1.5f);
                 DragonVfx.Burst(at + Vector3.up * 0.3f, sc, Mathf.RoundToInt(10 + width * 30f), 5f + width * 4f, 0.25f, 0.5f, 0.4f);
             });

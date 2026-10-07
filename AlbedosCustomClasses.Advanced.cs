@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.76";
+        public const string ModVersion = "0.25.77";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -2638,7 +2638,7 @@ namespace AlbedosCustomClassesAdvanced
             DragonCombat.PlayClip(player, "sm_guidance", 0.06f);   // v0.25.16 release-first
             ShowMessage("Knight's Guidance");
             // v0.25.69 (user: the Grace was too bright): a dim, thin column + a plain ring (no ground glow disc).
-            if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.Pillar(player.transform.position, new Color(0.20f, 0.38f, 0.60f, 0.55f), 0.6f, 7f, 0.6f); DragonVfx.AreaRing(player.transform.position, new Color(0.30f, 0.55f, 0.85f, 0.45f), Mathf.Max(1f, DragonCombat.M(_kgRadius.Value)), 0.7f); });
+            if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.AreaRing(player.transform.position, new Color(0.30f, 0.55f, 0.85f, 0.45f), Mathf.Max(1f, DragonCombat.M(_kgRadius.Value)), 0.7f); });
             float radius = Mathf.Max(1f, DragonCombat.M(_kgRadius.Value));
             float duration = Mathf.Max(1f, _kgDuration.Value);
             HashSet<Player> allies = new HashSet<Player>();
@@ -2879,7 +2879,7 @@ namespace AlbedosCustomClassesAdvanced
         {
             const string w = "Mercenary Weapon Mastery - Warfreak";
             _warfreakSkillBonus = Config.Bind(w, "SwordAxeClubsBonus_v0224", 10f, "+Sword, Axe and Clubs skill (effective cap 100).");
-            _warfreakAttackSpeed = Config.Bind(w, "AttackSpeedPercent_v0224", 50f, "+Attack Speed with two one-handed or one two-handed physical weapon.");
+            _warfreakAttackSpeed = Config.Bind(w, "AttackSpeedPercent_v02577", 25f, "v0.25.77 (user): 25%. +Attack Speed with two one-handed or one two-handed physical weapon.");
             _warfreakArmor = Config.Bind(w, "ArmorPercent_v0224", 30f, "+% of current Armor.");
             const string f = "Mercenary Unchained Fury";
             _furyDurationV = Config.Bind(f, "Duration_v0224", 20f, "Unchained Fury lasts this long once Fury reaches 100 (automatic).");
@@ -3204,7 +3204,7 @@ namespace AlbedosCustomClassesAdvanced
                 Shader shader = Shader.Find("Sprites/Default");
                 if (r != null && shader != null) { r.material = new Material(shader); r.material.color = new Color(0.20f, 0.14f, 0.10f, 1f); }
                 GameObject bombVis = bomb;
-                DragonCombat.RunVfx(delegate { DragonVfx.AttachGlow(bombVis.transform, new Color(1f, 0.45f, 0.14f, 1f), 0.25f, 60f, 4f); });   // v0.25.55 burning fuse
+                DragonCombat.RunVfx(delegate { DragonVfx.BombLook(bombVis); DragonVfx.AttachGlow(bombVis.transform, new Color(1f, 0.45f, 0.14f, 1f), 0.25f, 60f, 4f); });   // v0.25.55 burning fuse, v0.25.77 iron bomb
             }
             Vector3 pos = origin;
             Vector3 impact = pos;
@@ -4623,7 +4623,7 @@ namespace AlbedosCustomClassesAdvanced
             DragonCombat.RunVfx(delegate
             {
                 DragonVfx.HeavyLanding(ground, DragonVfx.Holy, radius, shake);
-                DragonVfx.Pillar(ground, DragonVfx.HolyWhite, Mathf.Max(0.8f, height * 0.12f), height * 2.5f, 0.6f);
+                
                 DragonVfx.Flash(ground + Vector3.up * height * 0.5f, DragonVfx.Holy, 9f, radius * 3f, 1.2f);
                 DragonVfx.Aura(null, ground, DragonVfx.Holy, Mathf.Max(0.6f, radius * 0.25f), 3f, 30f, 1.4f);   // embers rising round the foot
                 DragonVfx.Vanilla(new string[] { "fx_eikthyr_stomp", "fx_DvergerMage_Nova_ring", "vfx_GodExplosion" }, ground, Quaternion.identity, Mathf.Clamp(radius / 5f, 0.8f, 3f), 4f);
@@ -5821,7 +5821,7 @@ namespace AlbedosCustomClassesAdvanced
                 StartCoroutine(AnimateRing(point + Vector3.up * 0.08f, 0.4f, radius, 0.55f, new Color(1f, 0.88f, 0.48f, 1f), 0.16f));
                 DragonCombat.RunVfx(delegate
                 {
-                    DragonVfx.Pillar(point, DragonVfx.Holy, Mathf.Max(1f, radius * 0.3f), 18f, 0.7f);
+                    
                     DragonVfx.HeavyLanding(point, DragonVfx.Holy, radius, 2.5f);   // v0.25.57
                     DragonVfx.Feathers(point, DragonVfx.HolyWhite, radius * 0.7f, 1.5f, 40f);
                     DragonVfx.Burst(point + Vector3.up * 0.5f, DragonVfx.HolyWhite, 90, 14f, 0.35f, 1.1f, 0.4f);
@@ -6459,7 +6459,7 @@ namespace AlbedosCustomClassesAdvanced
 
             if (_enableVfx.Value)
                 StartCoroutine(AnimateRing(center + Vector3.up * 0.08f, 0.8f, radius, 0.65f, new Color(1f, 0.92f, 0.48f, 0.95f), 0.13f));
-                { Vector3 diC = center; float diR = radius; DragonCombat.RunVfx(delegate { DragonVfx.Pillar(diC, DragonVfx.HolyWhite, 1.6f, 16f, 1f); DragonVfx.Feathers(diC, DragonVfx.HolyWhite, diR * 0.7f, 2.5f, 45f); }); }
+                { Vector3 diC = center; float diR = radius; DragonCombat.RunVfx(delegate { DragonVfx.Feathers(diC, DragonVfx.HolyWhite, diR * 0.7f, 2.5f, 45f); }); }
 
             List<Character> enemies = GetSphereTargets(player, center, radius);
             for (int i = 0; i < enemies.Count; i++)
@@ -9952,7 +9952,7 @@ namespace AlbedosCustomClassesAdvanced
                 DragonCombat.RunVfx(delegate
                 {
                     DragonVfx.AttachGlow(root.transform, color, Mathf.Max(0.5f, width * 0.35f), 18f + width * 6f, 0f);
-                    DragonVfx.Pillar(center, color, Mathf.Max(0.5f, width * 0.25f), Mathf.Max(6f, height * 2f), 0.5f);
+                    
                 });
             }
 
@@ -12606,7 +12606,7 @@ namespace AlbedosCustomClassesAdvanced
             if (_enableVfx.Value)
             {
                 StartCoroutine(AnimateRing(player.transform.position + Vector3.up * 0.10f, 0.6f, radius, 0.9f, new Color(1f, 0.86f, 0.42f, 0.95f), 0.10f));
-                DragonCombat.RunVfx(delegate { DragonVfx.Pillar(player.transform.position, DragonVfx.HolyWhite, 1.4f, 14f, 0.9f); DragonVfx.Aura(player.transform, player.transform.position, DragonVfx.Holy, 0.9f, 1.5f, 50f, 1.5f); DragonVfx.Feathers(player.transform.position, DragonVfx.HolyWhite, radius * 0.6f, 2f, 35f); });
+                DragonCombat.RunVfx(delegate { DragonVfx.Aura(player.transform, player.transform.position, DragonVfx.Holy, 0.9f, 1.5f, 50f, 1.5f); DragonVfx.Feathers(player.transform.position, DragonVfx.HolyWhite, radius * 0.6f, 2f, 35f); });
                 StartCoroutine(AnimateRing(player.transform.position + Vector3.up * 0.16f, 0.4f, radius * 0.6f, 0.7f, new Color(1f, 0.97f, 0.80f, 0.85f), 0.05f));
             }
         }
@@ -13862,7 +13862,17 @@ namespace AlbedosCustomClassesAdvanced
             if (l.HasValues)
             {
                 _ihArtValue.alignment = TextAnchor.MiddleRight;
-                _ihArtValue.fontSize = Mathf.Max(12, Mathf.RoundToInt(20f * k));
+                // v0.25.77: the value column box ends where the bars end; shrink the font so the widest entry fits
+                float boxW = Mathf.Max(30f, (l.Value[0].x - Mathf.Max(l.BarMax[0], Mathf.Max(l.BarMax[2], l.BarMax[3])) - 8f) * k);
+                string w0 = IhVal(cur[0], max[0]), w1 = l.Split ? Mathf.CeilToInt(Mathf.Max(0f, st)).ToString() + "  |  " + Mathf.CeilToInt(Mathf.Max(0f, ei)).ToString() : IhVal(cur[1], max[1]);
+                int vfs = Mathf.Max(12, Mathf.RoundToInt(20f * k));
+                while (vfs > 8)
+                {
+                    _ihArtValue.fontSize = vfs;
+                    if (Mathf.Max(_ihArtValue.CalcSize(new GUIContent(w0)).x, _ihArtValue.CalcSize(new GUIContent(w1)).x) <= boxW) break;
+                    vfs--;
+                }
+                _ihArtValue.fontSize = vfs;
                 Rect v0 = new Rect(panel.x + l.Value[0].x * k - 260f * k, panel.y + l.Value[0].y * k - 14f * k, 260f * k, 28f * k);
                 IhHudOutlineLabel(v0, IhVal(cur[0], max[0]), _ihArtValue, txt);
                 Rect v1 = new Rect(panel.x + l.Value[1].x * k - 260f * k, panel.y + l.Value[1].y * k - 14f * k, 260f * k, 28f * k);
@@ -13880,6 +13890,7 @@ namespace AlbedosCustomClassesAdvanced
             // v0.25.74 (user): the painted icon/label column is gone; each bar (or half) carries its name on the left
             // and its number on the right (Warrior keeps its painted value column, so only the names go in its bars).
             string[] names = { "HP", l.Split ? "STAMINA" : "STA", "EITR", "EXP" };
+            string[] shortNames = { "HP", "STA", "EIT", "EXP" };
             for (int i = 0; i < 4; i++)
             {
                 if (i == 2 && !l.Split && eiMax <= 0f) continue;
@@ -13888,15 +13899,35 @@ namespace AlbedosCustomClassesAdvanced
                 float cy = panel.y + (l.BarY[i] + l.BarH[i] * 0.5f) * k;
                 float pad = 10f * k;
                 Rect r = new Rect(panel.x + l.BarX[i] * k + pad, cy - 14f * k, (l.BarMax[i] - l.BarX[i]) * k - pad * 2f, 28f * k);
-                _ihArtValue.fontSize = fs2;
-                _ihArtValue.alignment = TextAnchor.MiddleLeft;
-                IhHudOutlineLabel(r, names[i], _ihArtValue, txt);
-                if (l.HasValues) continue;
+                string val = null;
+                if (!l.HasValues)
+                {
+                    if (i == 3) val = "Lv " + IhGetLevel(player).ToString();
+                    else if (l.Split && i > 0) val = Mathf.CeilToInt(Mathf.Max(0f, cur[i])).ToString();
+                    else val = IhVal(cur[i], max[i]);
+                }
+                // v0.25.77 (user: STAMINA ran into the Eitr half): name + number must fit inside their own bar / half
+                // with a gap. Shrink the font (min 9), then fall back to the short name, then drop the name.
+                string nm = names[i];
+                float gap = 8f * k;
+                int lfs = fs2;
+                for (int tries = 0; tries < 40; tries++)
+                {
+                    _ihArtValue.fontSize = lfs;
+                    float need = _ihArtValue.CalcSize(new GUIContent(nm)).x + (val == null ? 0f : _ihArtValue.CalcSize(new GUIContent(val)).x + gap);
+                    if (need <= r.width) break;
+                    if (lfs > 9) { lfs--; continue; }
+                    if (nm != shortNames[i]) { nm = shortNames[i]; lfs = fs2; continue; }
+                    nm = null; break;
+                }
+                _ihArtValue.fontSize = lfs;
+                if (nm != null)
+                {
+                    _ihArtValue.alignment = TextAnchor.MiddleLeft;
+                    IhHudOutlineLabel(r, nm, _ihArtValue, txt);
+                }
+                if (val == null) continue;
                 _ihArtValue.alignment = TextAnchor.MiddleRight;
-                string val;
-                if (i == 3) val = "Lv " + IhGetLevel(player).ToString();
-                else if (l.Split && i > 0) val = Mathf.CeilToInt(Mathf.Max(0f, cur[i])).ToString();
-                else val = IhVal(cur[i], max[i]);
                 IhHudOutlineLabel(r, val, _ihArtValue, i == 3 ? new Color(0.98f, 0.92f, 0.70f, 1f) : txt);
             }
 
@@ -15484,7 +15515,7 @@ namespace AlbedosCustomClassesAdvanced
             switch (ac)
             {
                 case "Sword Master": return "+20 Sword (effective cap 100), +50% Sword Attack Speed, no Sword movement penalty. Blocking or Dodging stops the rest of a Sword Master skill.";
-                case "Mercenary": return "Dual-wield any two one-handed physical weapons. Hyper Armor unless a single hit deals 60% of your Max HP or more. +10 Sword, Axe and Clubs (cap 100). +50% Attack Speed with two one-handed or a two-handed physical weapon. No physical weapon movement penalty. +30% Armor and stronger aggro. Unchained Fury: +1 Fury per melee hit, +3 per enemy hit by a skill; at 100 it triggers for 20s (3 min lockout).";
+                case "Mercenary": return "Dual-wield any two one-handed physical weapons. Hyper Armor unless a single hit deals 60% of your Max HP or more. +10 Sword, Axe and Clubs (cap 100). +25% Attack Speed with two one-handed or a two-handed physical weapon. No physical weapon movement penalty. +30% Armor and stronger aggro. Unchained Fury: +1 Fury per melee hit, +3 per enemy hit by a skill; at 100 it triggers for 20s (3 min lockout).";
                 case "Wizard": return "Charged Staff attacks (Mouse2 + Mouse1): up to 3 stacks, 1 per second, 1 Eitr per 0.1s. Stack 1 doubles the size, Stacks 2-3 add damage. Overcharge: after 300 Eitr spent, 12s of +40% wind-up speed, +40% Eitr Regen and +40% Magic Damage.";
                 case "Spellcaster": return "Staff / Wand attack interval -50%, Eitr use -50%, +20% Eitr Regen, normal Staff / Wand damage -50%. No skill wind-ups, no Staff / Wand movement penalty. Dual Gun Staves fire together and are 100% accurate.";
                 case "Acrobat": return "A second jump in mid-air. Dodge costs 50% less Stamina, all Stamina use -35%. Fall damage -75% and a fall never kills you (1 HP). Every Ranger skill can be cast in the air. Each enemy hit by your skills takes 1s off your shortest running cooldown (up to 3s per cast). Cannot wield Crossbows.";

@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.76";
+        public const string ModVersion = "0.25.77";
 
         internal static DragonCombatPlugin Instance;
 
@@ -2354,6 +2354,11 @@ namespace DragonsAltarCombat
         private bool _vaTrack;
         private int _vaLayer = -1, _vaHash;
         private int[] _vaPre;
+        private string _vaTrigger;
+        // v0.25.77 (user: repeated skill swings skipped their animation): the state each vanilla trigger enters is
+        // learned (layer, hash). Firing the same trigger while that state is still playing restarts it with a
+        // short cross-fade (the NACC method) instead of a trigger the animator would swallow.
+        private static readonly Dictionary<string, int[]> _vaLearned = new Dictionary<string, int[]>();
         private float _vaFiredAt, _vaGuess;
         private bool _noAim, _noPlant, _noTrack, _quietLeft, _qlCaptured;
         private string _vaFiredName;
@@ -2551,6 +2556,26 @@ namespace DragonsAltarCombat
             catch (Exception) { }
         }
 
+        private bool RestartVanilla(string trigger)
+        {
+            int[] lv;
+            if (_animator == null || trigger.StartsWith("emote", StringComparison.Ordinal) || !_vaLearned.TryGetValue(trigger, out lv)) return false;
+            try
+            {
+                if (lv[0] >= _animator.layerCount) return false;
+                bool inIt = _animator.GetCurrentAnimatorStateInfo(lv[0]).fullPathHash == lv[1]
+                    || (_animator.IsInTransition(lv[0]) && _animator.GetNextAnimatorStateInfo(lv[0]).fullPathHash == lv[1]);
+                if (!inIt) return false;
+                Player p = _owner as Player;
+                if (p != null) DragonCombat.BlockSkillAnimAttack(p, 2.5f);
+                _animator.ResetTrigger(trigger);
+                _animator.CrossFadeInFixedTime(lv[1], 0.08f, lv[0], 0f);
+                if (_vaTrack) { _vaLayer = lv[0]; _vaHash = lv[1]; _vaFiredAt = Time.time; }
+                return true;
+            }
+            catch (Exception) { return false; }
+        }
+
         private void TrackVanillaSpeed()
         {
             Player p = _owner as Player;
@@ -2565,7 +2590,7 @@ namespace DragonsAltarCombat
                     for (int l = 0; l < _vaPre.Length && _vaLayer < 0; l++)
                     {
                         AnimatorStateInfo st = _animator.IsInTransition(l) ? _animator.GetNextAnimatorStateInfo(l) : _animator.GetCurrentAnimatorStateInfo(l);
-                        if (st.fullPathHash != _vaPre[l]) { _vaLayer = l; _vaHash = st.fullPathHash; }
+                        if (st.fullPathHash != _vaPre[l]) { _vaLayer = l; _vaHash = st.fullPathHash; if (_vaTrigger != null) _vaLearned[_vaTrigger] = new int[] { l, _vaHash }; }
                     }
                     if (_vaLayer < 0)
                     {
@@ -2627,8 +2652,9 @@ namespace DragonsAltarCombat
             if (_animator == null) _animator = GetComponentInChildren<Animator>();
             if (_va != null && Time.time >= _vaAt)
             {
+                _vaTrigger = _va;
                 if (_vaRepeat <= 0.05f && !_noTrack) StartVanillaTracking();
-                DragonCombat.FireVanilla(_owner as Player, _va);
+                if (!RestartVanilla(_va)) DragonCombat.FireVanilla(_owner as Player, _va);
                 _vaFiredName = _va;
                 if (_vaRepeat > 0.05f) _vaAt += _vaRepeat; else _va = null;
             }
@@ -3969,10 +3995,15 @@ namespace DragonsAltarCombat
                 // Stomp (anatomy): weight shifts onto the left leg, the right knee rises to hip height (thigh level,
                 // knee bent ~90), torso stays upright, then the foot is driven flat into the ground and both knees
                 // absorb it. Hands quiet.
-                DragonClipKey raise = K(-0.55f).Sp(-3f, 0f, 0f).Hd(6f, 0f, 0f).LL(0f, 0.06f, 0f, 0f).RL(0.25f, 0.1f, 0f, 0f).Lift(0f, 0.38f).Off(0f, 0.02f, 0f);
-                DragonClipKey peak = raise.Copy(-0.15f).Lift(0f, 0.42f);
-                DragonClipKey hit = K(0f).Sp(12f, 0f, 0f).Ch(5f, 0f, 0f).Hd(8f, 0f, 0f).LL(-0.05f, 0.1f, 0f, 0f).RL(0.3f, 0.12f, 0f, 0f).Lift(0f, 0f).Off(0f, -0.1f, 0f).Linear();
-                DragonClipKey stAfter = hit.Copy(0.25f); stAfter.Lin = false;
+                // v0.25.63 (user): exaggerated - the knee comes up past the hip, both arms flare out and up like the
+                // roar emote, then the foot is driven down with the chest thrown forward and the arms flung wide.
+                DragonClipKey raise = K(-0.55f).Sp(-8f, 0f, 0f).Ch(-6f, 0f, 0f).Hd(-6f, 0f, 0f).LL(0f, 0.06f, 0f, 0f).RL(0.35f, 0.1f, 0f, 0f).Lift(0f, 0.62f).Off(0f, 0.04f, 0f)
+                    .Hand(0.55f, -0.6f, -0.05f, 0.62f).LHand(-0.55f, -0.6f, -0.05f, 0.62f);
+                // v0.25.69 (user: flare = chicken wings, not arms stretched out): elbows bent and pushed out, hands at the hips.
+                DragonClipKey peak = raise.Copy(-0.15f).Lift(0f, 0.7f).Hand(0.6f, -0.55f, -0.12f, 0.6f).LHand(-0.6f, -0.55f, -0.12f, 0.6f);
+                DragonClipKey hit = K(0f).Sp(20f, 0f, 0f).Ch(10f, 0f, 0f).Hd(-12f, 0f, 0f).LL(-0.05f, 0.12f, 0f, 0f).RL(0.35f, 0.14f, 0f, 0f).Lift(0f, 0f).Off(0f, -0.16f, 0f)
+                    .Hand(0.62f, -0.7f, 0.08f, 0.66f).LHand(-0.62f, -0.7f, 0.08f, 0.66f).Linear();
+                DragonClipKey stAfter = hit.Copy(0.3f); stAfter.Lin = false;
                 return new DragonClipKey[] { K(-1f), raise, peak, hit, stAfter, K(0.65f) };
             }
             if (v == 2)
@@ -4013,11 +4044,11 @@ namespace DragonsAltarCombat
             // v0.25.75 (user): no barrel roll. Like the Wave emote's raise, the main arm goes straight up over the
             // head with the weapon pointing at the sky and STAYS there (no waving) for the whole flight; the slam
             // to the ground only happens on the real landing (the clip holds at T=0 until ClipImpact).
-            DragonClipKey launch = K(-0.72f).Sp(-4f, 0f, 0f).Ch(-4f, 0f, 0f).Hd(-14f, 0f, 0f).Hand(0.22f, 1f, 0.05f, 1f).Wp(0.05f, 1f, -0.15f).Rot(4f, 0f, 0f).Off(0f, 0.06f, 0f);
+            DragonClipKey launch = K(-0.72f).Sp(-4f, 0f, 0f).Ch(-4f, 0f, 0f).Hd(-14f, 0f, 0f).Hand(0.22f, 1f, 0.05f, 1f).Wp(0.05f, 1f, -0.15f).Rot(26f, 0f, 0f).Off(0f, 0.06f, 0f);   // v0.25.77 diagonal torso in the air
             // v0.25.76 (user): the barrel roll stays - the body rolls once while the arm stays raised overhead.
-            DragonClipKey raise0 = launch.Copy(-0.6f).Rot(14f, 0f, 0f).Sn(30f).Hand(0.2f, 1f, 0.08f, 1f);
-            DragonClipKey raise1 = launch.Copy(-0.32f).Rot(14f, 0f, 0f).Sn(360f).Hand(0.2f, 1f, 0.08f, 1f);
-            DragonClipKey poised = K(0f).Sp(4f, 0f, 0f).Ch(-2f, 0f, 0f).Hd(-12f, 0f, 0f).Hand(0.2f, 1f, 0.1f, 1f).Wp(0.05f, 1f, -0.1f).Rot(6f, 0f, 0f).Sn(360f);
+            DragonClipKey raise0 = launch.Copy(-0.6f).Rot(30f, 0f, 0f).Sn(30f).Hand(0.2f, 1f, 0.08f, 1f);
+            DragonClipKey raise1 = launch.Copy(-0.32f).Rot(30f, 0f, 0f).Sn(360f).Hand(0.2f, 1f, 0.08f, 1f);
+            DragonClipKey poised = K(0f).Sp(4f, 0f, 0f).Ch(-2f, 0f, 0f).Hd(-12f, 0f, 0f).Hand(0.2f, 1f, 0.1f, 1f).Wp(0.05f, 1f, -0.1f).Rot(24f, 0f, 0f).Sn(360f);
             DragonClipKey impact = Ft(K(0.1f).Sp(30f, 0f, 0f).Ch(14f, 0f, 0f).Hd(-28f, 0f, 0f).Hand(0.05f, -1f, 0.35f, 0.97f).Wp(0f, -0.8f, 0.6f).Rot(6f, 0f, 0f).Off(0f, -0.38f * d, 0.05f).Sn(360f), 0.75f, 0.8f).Linear();
             DragonClipKey settle = impact.Copy(brutal ? 0.3f : 0.22f).Off(0f, -0.4f * d, 0.05f); settle.Lin = false;
             DragonClipKey rec = Ft(K(brutal ? 0.58f : 0.45f).Sp(8f, 0f, 0f).Hd(-6f, 0f, 0f).Hand(0.35f, -0.45f, 0.35f, 0.6f).Off(0f, -0.06f, 0f).Sn(360f), 0.3f, 0.2f);
@@ -10556,15 +10587,46 @@ namespace DragonsAltarCombat
             Color halo = Color.Lerp(c, new Color(0.40f, 0.78f, 1f, 1f), 0.6f); halo.a = 0.35f;
             Color body = Color.Lerp(c, new Color(0.62f, 0.88f, 1f, 1f), 0.5f); body.a = 0.92f;
             Color edge = Color.Lerp(c, Color.white, 0.92f); edge.a = 1f;
-            bool vertical = Mathf.Abs(roll) >= 1f;
-            float[] yaws = vertical ? new float[] { -14f, 14f } : new float[] { 0f };
-            for (int i = 0; i < yaws.Length; i++)
-            {
-                Quaternion q = Quaternion.Euler(0f, yaws[i], 0f) * Quaternion.AngleAxis(roll, Vector3.forward) * Quaternion.Euler(vertical ? 90f : 65f, 0f, 0f);
-                GetsugaLayer(parent, halo, span * 1.03f, thick * 1.5f, q, 0f, Mat(LineTex(), true));
-                GetsugaLayer(parent, body, span, thick, q, 0f, Mat(BladeTex(), false));
-                GetsugaLayer(parent, edge, span * 0.98f, thick * 0.26f, q, thick * 0.32f, Mat(BladeTex(), true));
-            }
+            // v0.25.77 (user: "stop giving me the facing-the-camera shit"): the blade lies EXACTLY in the plane of its cut,
+            // convex edge leading in the travel direction - no tilt toward the camera, no second blade. Vertical slashes
+            // (Crescent Cleave) are one slightly thicker blade. Wake trails stream back from the apex and both tips.
+            bool vertical = Mathf.Abs(roll) >= 60f;
+            if (vertical) thick *= 1.35f;
+            Quaternion q = Quaternion.AngleAxis(roll, Vector3.forward) * Quaternion.Euler(90f, 0f, 0f);
+            GetsugaLayer(parent, halo, span * 1.03f, thick * 1.5f, q, 0f, Mat(LineTex(), true));
+            GetsugaLayer(parent, body, span, thick, q, 0f, Mat(BladeTex(), false));
+            GetsugaLayer(parent, edge, span * 0.98f, thick * 0.26f, q, thick * 0.32f, Mat(BladeTex(), true));
+            float w = span * 0.5f, sag = span * 0.24f;
+            Color wake = Color.Lerp(c, new Color(0.55f, 0.85f, 1f, 1f), 0.5f); wake.a = 0.55f;
+            BladeWake(parent, q * new Vector3(0f, sag * 0.5f, 0f), wake, thick * 1.1f);
+            BladeWake(parent, q * new Vector3(-w * 0.92f, -sag * 0.35f, -span * 0.03f), wake, thick * 0.45f);
+            BladeWake(parent, q * new Vector3(w * 0.92f, -sag * 0.35f, -span * 0.03f), wake, thick * 0.45f);
+        }
+
+        // A short glowing wake left behind a moving blade point (only shows while the carrier travels).
+        private static void BladeWake(Transform parent, Vector3 local, Color c, float width)
+        {
+            Material m = Mat(LineTex(), true);
+            if (m == null) return;
+            GameObject go = new GameObject("IH_BladeWake");
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = local;
+            TrailRenderer tr = go.AddComponent<TrailRenderer>();
+            tr.time = 0.28f;
+            tr.minVertexDistance = 0.08f;
+            tr.widthMultiplier = Mathf.Max(0.05f, width);
+            AnimationCurve wc = new AnimationCurve();
+            wc.AddKey(0f, 1f); wc.AddKey(1f, 0f);
+            tr.widthCurve = wc;
+            Gradient g = new Gradient();
+            Color c0 = c; Color c1 = c; c1.a = 0f;
+            g.SetKeys(new GradientColorKey[] { new GradientColorKey(c0, 0f), new GradientColorKey(c1, 1f) },
+                      new GradientAlphaKey[] { new GradientAlphaKey(c.a, 0f), new GradientAlphaKey(0f, 1f) });
+            tr.colorGradient = g;
+            tr.sharedMaterial = m;
+            tr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            tr.receiveShadows = false;
+            tr.numCapVertices = 2;
         }
 
         private static Texture2D _bladeTex;
@@ -11399,6 +11461,31 @@ namespace DragonsAltarCombat
             grip.transform.localPosition = blade.transform.localPosition;
         }
 
+        // v0.25.77 Punishing Bomb: a black iron bomb with a brass fuse cap and a spitting fuse, tumbling in flight.
+        public static void BombLook(GameObject bomb)
+        {
+            if (!Enabled || bomb == null) return;
+            Renderer r = bomb.GetComponent<Renderer>();
+            Material iron = SolidMat(new Color(0.12f, 0.11f, 0.12f, 1f));
+            if (r != null && iron != null) r.sharedMaterial = iron;
+            GameObject cap = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            Collider cc = cap.GetComponent<Collider>(); if (cc != null) UnityEngine.Object.Destroy(cc);
+            cap.transform.SetParent(bomb.transform, false);
+            cap.transform.localPosition = new Vector3(0f, 0.5f, 0f);
+            cap.transform.localScale = new Vector3(0.32f, 0.08f, 0.32f);
+            Renderer crr = cap.GetComponent<Renderer>();
+            Material brass = SolidMat(new Color(0.62f, 0.46f, 0.20f, 1f));
+            if (crr != null && brass != null) crr.sharedMaterial = brass;
+            GameObject fuse = new GameObject("fuse");
+            fuse.transform.SetParent(bomb.transform, false);
+            fuse.transform.localPosition = new Vector3(0f, 0.62f, 0f);
+            ParticleSystem ps = Particles(fuse.transform, new Color(1f, 0.75f, 0.3f, 1f), 0, 90f * Amount, 1f, 0.25f, 1.5f, 3.5f, 0.04f, 0.09f, 0.6f,
+                ParticleSystemShapeType.Sphere, 0.05f, Vector3.zero, true, true);
+            ParticleSystem.MainModule mm = ps.main; mm.loop = true; mm.simulationSpace = ParticleSystemSimulationSpace.World;
+            DragonRotate rot = bomb.AddComponent<DragonRotate>();
+            rot.Speed = new Vector3(260f, 40f, 90f);
+        }
+
         public static void CastFlare(Player p, bool big)
         {
             if (!Enabled || p == null) return;
@@ -11409,8 +11496,7 @@ namespace DragonsAltarCombat
             Flash(pos + Vector3.up * 1.1f, c, big ? 3f : 1.2f, big ? 8f : 4f, big ? 0.6f : 0.3f);
             if (big)
             {
-                Color pc = c; pc.a = 0.55f;
-                Pillar(pos, pc, 0.8f, 9f, 0.7f);
+                // v0.25.77 (user): no light column on cast
                 Shake(pos, 20f, 0.6f);
             }
         }

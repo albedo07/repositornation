@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Dragon's Altar - Sorcerer Advancements";
-        public const string ModVersion = "0.25.76";
+        public const string ModVersion = "0.25.77";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1184,16 +1184,21 @@ namespace DragonsAltarSorcerer
             ShowMessage("Astral Greatblade");
             float windup = ScaleWindup(player, Mathf.Max(0f, _gbAscWindup.Value));
             // you cannot move while the three slams happen
-            DragonCombat.LockSkill(player, windup + 2f * Mathf.Max(0.1f, _gbAscGap.Value) + 0.4f);
+            // v0.25.77 (user): repeated slams skipped their animation - each slam now gets a short recovery
+            // (the previous swing finishes) before the next lift starts, like the NACC intervals.
+            float recover = 0.35f;
+            DragonCombat.LockSkill(player, windup + 2f * (Mathf.Max(0.1f, _gbAscGap.Value) + recover) + 0.4f);
             DragonCombat.PlayClip(player, "wiz_greatblade", windup);
-            SummonStaffBlade(player, windup, windup + 2f * Mathf.Max(0.1f, _gbAscGap.Value) + 0.45f);
+            SummonStaffBlade(player, windup, windup + 2f * (Mathf.Max(0.1f, _gbAscGap.Value) + recover) + 0.45f);
             if (windup > 0f) yield return new WaitForSeconds(windup);
             for (int slam = 0; slam < 3; slam++)
             {
                 if (player == null || player.IsDead()) yield break;
-                DragonCombat.LockSkill(player, Mathf.Max(0.1f, _gbAscGap.Value) + 0.3f);
+                DragonCombat.LockSkill(player, Mathf.Max(0.1f, _gbAscGap.Value) + recover + 0.3f);
                 if (slam > 0)
                 {
+                    yield return new WaitForSeconds(recover);
+                    if (player == null || player.IsDead()) yield break;
                     // v0.25.38 (user): slams 2 and 3 get the same big wind up as the first (raise, then slam),
                     // filling the gap between slams instead of a quick 0.2 s chop.
                     float gap = Mathf.Max(0.1f, _gbAscGap.Value);
@@ -1623,7 +1628,7 @@ namespace DragonsAltarSorcerer
             {
                 StartCoroutine(RingVfx(player.transform.position, DragonCombat.M(_clockRadius.Value), new Color(1f, 0.82f, 0.35f, 0.95f), 0.8f));
                 Vector3 kp = player.transform.position; float kr = DragonCombat.M(_clockRadius.Value);
-                DragonCombat.RunVfx(delegate { DragonVfx.Pillar(kp, new Color(1f, 0.82f, 0.35f, 1f), 1.2f, 12f, 0.8f); DragonVfx.Shockwave(kp, new Color(1f, 0.82f, 0.35f, 1f), kr, 0.7f); DragonVfx.Vortex(null, kp + Vector3.up, new Color(1f, 0.90f, 0.55f, 1f), 2.5f, 0.8f); DragonVfx.Glyph(kp, new Color(1f, 0.82f, 0.35f, 1f), kr * 0.6f, 2.5f, 120f); });   // v0.25.58 / v0.25.61 clock face
+                DragonCombat.RunVfx(delegate { DragonVfx.Shockwave(kp, new Color(1f, 0.82f, 0.35f, 1f), kr, 0.7f); DragonVfx.Vortex(null, kp + Vector3.up, new Color(1f, 0.90f, 0.55f, 1f), 2.5f, 0.8f); DragonVfx.Glyph(kp, new Color(1f, 0.82f, 0.35f, 1f), kr * 0.6f, 2.5f, 120f); });   // v0.25.58 / v0.25.61 clock face
             }
         }
 
@@ -3760,6 +3765,7 @@ namespace DragonsAltarSorcerer
 
         private void CreateStoneSpikes(Vector3 center, float radius)
         {
+            if (DragonVfx.Enabled) { Vector3 sc = center; float sr = radius; DragonCombat.RunVfx(delegate { DragonVfx.SpikeRing(sc, DragonVfx.Rock, sr * 0.65f, 10, 3f, 0.6f); }); return; }   // v0.25.77 rock spikes
             for (int i = 0; i < 10; i++)
             {
                 float a = (float)i / 10f * Mathf.PI * 2f;

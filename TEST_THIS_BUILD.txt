@@ -1,3 +1,7 @@
-TEST v0.25.76
-1. Electric Smite / Bonecrusher: a 1 s jump with one roll, arm raised overhead, slam on landing.
-2. Angel Comet: the whole jump + dive takes 2 s.
+TEST v0.25.77
+1. Ascended Astral Greatblade: all 3 slams show a full lift + slam (no skipping).
+2. Moonlight Splitter / Halfmoon / Crescent Cleave: the crescent's edge points where it flies, not at the camera. Crescent Cleave = one blade. Check the wake trails.
+3. Electric Smite: no white light column. Same for every Ultimate / Grace.
+4. Jump slams: diagonal lean in the air. Stomp: chicken wings.
+5. HUD (Mercenary and every other class): STAMINA / EITR labels and numbers never overlap; try very large stamina values.
+6. Mercenary attack speed bonus is now +25%.

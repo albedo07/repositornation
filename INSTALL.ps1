@@ -1,7 +1,7 @@
 ﻿$ErrorActionPreference = "Stop"
 
 Write-Host ""
-Write-Host "IMMORTAL HEROES v0.25.76 - ROLL BACK IN" -ForegroundColor Cyan
+Write-Host "IMMORTAL HEROES v0.25.77 - EDGE FIRST" -ForegroundColor Cyan
 Write-Host "Protected build: all 8 DLLs compile in staging before the live profile is touched." -ForegroundColor Gray
 Write-Host ""
 

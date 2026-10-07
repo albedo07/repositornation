@@ -1,0 +1,35 @@
+Immortal Heroes v0.25.77 - Edge First
+
+ANIMATION
+- Repeated skill swings no longer skip their animation.
+  - When a skill fires the same Valheim swing while the previous one is still playing, the swing now restarts from the beginning instead of being silently ignored. This uses the same method as the normal attack chains and applies to every skill.
+  - Ascended Astral Greatblade: each slam now gets a 0.35 s recovery before the next lift, so all three slams play in full.
+- Jump slams (Electric Smite, Bonecrusher): the torso now leans diagonally in the air while the arm stays raised and you roll.
+- Stomp: the chicken-wing arms are back (hands at the hips, elbows pushed out, knee up high).
+
+MERCENARY
+- Warfreak attack speed: +50% -> +25%.
+
+VFX
+- Removed the glowing light column ("ray of sunshine") from every skill:
+  - the Ultimate / Grace cast
+  - Electric Smite
+  - Heaven's Light
+  - Knight's Guidance
+  - Angel Comet landing
+  - Divine Intervention
+  - the relic cross landings
+  - Clockwork
+  - the Skyfall slam
+  - the Starfall finale
+- Crescents (Moonlight Splitter, Halfmoon Slash, Crescent Cleave, Eclipse slashes):
+  - The blade now lies exactly in the plane of its cut, with its cutting edge leading where it travels. It is no longer tilted toward the camera.
+  - Crescent Cleave is one slightly thicker blade instead of two.
+  - Getsuga polish: glowing wake trails stream back from the blade's centre and both tips while it flies.
+- Punishing Bomb: a black iron bomb with a brass cap and a spitting fuse, tumbling in flight.
+- Stonefang Eruption: real rock spikes burst from the ground instead of grey cubes.
+
+HUD
+- STAMINA no longer runs into the Eitr half.
+  - Every bar name + number now fits inside its own bar or half: the font shrinks, then switches to the short name (STA / EIT), and the name is dropped only if even that doesn't fit.
+  - Warrior's value column also shrinks its font so big numbers never spill into the bars.

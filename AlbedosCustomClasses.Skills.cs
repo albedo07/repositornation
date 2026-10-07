@@ -233,7 +233,7 @@ namespace AlbedosCustomClassesSkills
         public static SkillsPlugin Instance;
         public const string ModGuid = "albedo.customclasses.skills";
         public const string ModName = "Dragon's Altar - Starter Skills";
-        public const string ModVersion = "0.25.76";
+        public const string ModVersion = "0.25.77";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";
@@ -1017,6 +1017,7 @@ namespace AlbedosCustomClassesSkills
 
         private IEnumerator AnimateStoneSpike(Vector3 point, float duration)
         {
+            if (DragonVfx.Enabled) { Vector3 sp = point; float sd = duration; DragonCombat.RunVfx(delegate { DragonVfx.Spike(sp, DragonVfx.Rock, 3.4f, 0.75f, sd + 0.22f, Vector3.zero); }); yield break; }   // v0.25.77 rock spike, not a cube
             GameObject spike = GameObject.CreatePrimitive(PrimitiveType.Cube); spike.name = "DragonsAltarStonefangSpike"; spike.transform.position = point + Vector3.down * 2f; spike.transform.localScale = new Vector3(0.75f,3.4f,0.75f); spike.transform.rotation = Quaternion.Euler(0f,UnityEngine.Random.Range(0f,360f),12f); Collider c = spike.GetComponent<Collider>(); if (c != null) Destroy(c); Renderer r = spike.GetComponent<Renderer>(); if (r != null) { Shader s = Shader.Find("Sprites/Default"); if (s != null) r.material = new Material(s); if (r.material != null) r.material.color = new Color(0.42f,0.34f,0.27f,0.94f); } float e = 0f; float safe = Mathf.Max(0.12f,duration); while (e < safe) { float t = Mathf.Clamp01(e/safe); spike.transform.position = Vector3.Lerp(point+Vector3.down*2f, point+Vector3.up*1.3f,t); e += Time.deltaTime; yield return null; } yield return new WaitForSeconds(0.22f); Destroy(spike);
         }
 
