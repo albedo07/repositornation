@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Dragon's Altar - Sorcerer Advancements";
-        public const string ModVersion = "0.25.64";
+        public const string ModVersion = "0.25.65";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -701,6 +701,7 @@ namespace DragonsAltarSorcerer
             if (_phalanxVolleyArmed && Input.GetKeyDown(KeyCode.Mouse0))
             {
                 _phalanxVolleyArmed = false;
+                DragonCombat.SwallowAttackInput(player, 0.4f);   // v0.25.65
                 LaunchAllPhalanx(player);
             }
 

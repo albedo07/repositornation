@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.64";
+        public const string ModVersion = "0.25.65";
 
         internal static DragonCombatPlugin Instance;
 
@@ -903,7 +903,7 @@ namespace DragonsAltarCombat
         internal ConfigEntry<float> WhirlwindLoopStart, WhirlwindLoopEnd;
         internal ConfigEntry<int> ComboChainLength;
         internal ConfigEntry<float> ComboFinisherLockout, ComboContinueWindow, ComboSwingSeconds, ComboRepeatOffset, ComboBlend;
-        internal ConfigEntry<bool> MeleeHitStop;
+        internal ConfigEntry<bool> MeleeHitStop, ComboFixedInterval;
         internal ConfigEntry<bool> EnhancedVfx;
         internal ConfigEntry<float> VfxDensity, VfxLight;
         private static FieldInfo _atkLevels, _atkLevel, _atkAnim, _atkChar, _atkWeapon, _atkAngle, _atkType;
@@ -941,6 +941,7 @@ namespace DragonsAltarCombat
             ComboSwingSeconds = Config.Bind("Combat", "ComboSwingSeconds_v02559", 0.6f, "Normal attack chain: seconds per swing for ALL 5 hits (finisher included) with no attack-speed bonus; class attack speed bonuses shorten it.");
             ComboRepeatOffset = Config.Bind("Combat", "ComboRepeatOffset_v02559", 0.22f, "When the chain steps back to an earlier swing (hit 3 = swing 1 again), it starts this far into that swing (0-0.5 of the animation) so it flows out of the previous swing instead of restarting from the rest pose.");
             ComboBlend = Config.Bind("Combat", "ComboBlendSeconds_v02559", 0.12f, "Cross-fade time between chained swings.");
+            ComboFixedInterval = Config.Bind("Combat", "ComboFixedInterval_v02565", false, "On = every weapon's chain uses ComboSwingSeconds per hit (all weapons equally fast). Off = each weapon keeps its own speed (its average swing), with even intervals inside the chain; attack speed bonuses multiply it.");
             MeleeHitStop = Config.Bind("Combat", "MeleeHitStop_v02559", false, "Valheim's hit-stop (the swing freezes 0.15 s on every hit) for YOUR melee hits. Off = swings flow through enemies without stopping.");
             ComboContinueWindow = Config.Bind("Combat", "ComboContinueWindow_v02544", 0.4f, "Seconds after a swing ends in which the next normal attack continues the chain (1-2-1-2-3) instead of starting over.");
             WhirlwindLoopStart = Config.Bind("Runtime", "WhirlwindLoopStart_v02542", 0.3f, "Whirlwind: where the looped spin restarts in Valheim's atgeir spin (0-1 of the animation).");
@@ -1055,6 +1056,17 @@ namespace DragonsAltarCombat
 
         // v0.25.63: dual wield plays different clips under the SAME trigger names, so its swing lengths are kept
         // apart from one-handed ones (sharing them made one-hand swings crawl after dual wielding and vice versa).
+        private static float ChainAverage(string anim, bool dual, int length, float fallback)
+        {
+            float sum = 0f; int n = 0;
+            for (int i = 0; i < length; i++)
+            {
+                float v;
+                if (_chainNatural.TryGetValue(ChainKey(anim, dual, i), out v)) { sum += v; n++; }
+            }
+            return n > 0 ? sum / n : fallback;
+        }
+
         private static string ChainKey(string anim, bool dual, int hit)
         {
             return (dual ? "dw|" : "1h|") + anim + ":" + hit.ToString();
@@ -1102,7 +1114,13 @@ namespace DragonsAltarCombat
                 float natNow;
                 bool dualNow = IsDualWielding(p);
                 if (_chainNatural.TryGetValue(ChainKey(anim, dualNow, nextHit), out natNow))
-                    chainF = Mathf.Clamp(natNow / Mathf.Max(0.2f, Instance.ComboSwingSeconds.Value), 0.6f, 3f);
+                {
+                    // v0.25.65 (user): intervals stay EVEN inside the chain, but the beat is the weapon's own average
+                    // swing (a greatsword stays heavier than a one-handed sword); attack speed bonuses then scale that
+                    // base speed (+50% = 1.5x), they no longer collapse every weapon onto one interval.
+                    float target = Instance.ComboFixedInterval.Value ? Mathf.Max(0.2f, Instance.ComboSwingSeconds.Value) : ChainAverage(anim, dualNow, length, natNow);
+                    chainF = Mathf.Clamp(natNow / Mathf.Max(0.2f, target), 0.6f, 3f);
+                }
                 _comboStartAnim = anim;
                 DragonCombat.SetChainSpeed(p, chainF, 3f);
                 _chainPrevSpeed = DragonCombat.GetAttackSpeedMultiplier(p) * chainF;
@@ -1383,8 +1401,16 @@ namespace DragonsAltarCombat
                 catch { }
             }
 
+            if (__instance == Player.m_localPlayer && Time.time < DragonCombat.AttackSwallowUntil)
+            {
+                // v0.25.65: the click belonged to a skill - never let it become a (queued) basic attack
+                attack = false; attackHold = false; secondaryAttack = false; secondaryAttackHold = false;
+                DragonCombat.ClearAttackQueue(__instance);
+            }
+
             if (DragonCombat.IsSkillLocked(__instance))
             {
+                DragonCombat.ClearAttackQueue(__instance);
                 movedir = Vector3.zero;
                 attack = false;
                 attackHold = false;
@@ -3543,12 +3569,61 @@ namespace DragonsAltarCombat
         {
             if (player == null || player != Player.m_localPlayer) return;
             SkillAnimAttackBlockUntil = Mathf.Max(SkillAnimAttackBlockUntil, Time.time + Mathf.Max(0.1f, seconds));
+            CancelCurrentAttack(player);
+        }
+
+        // v0.25.65: a skill takes over -> the running normal attack is properly aborted (a looping Gun Staff /
+        // hold attack used to stay stuck in its fire pose when only m_currentAttack was cleared) and Valheim's
+        // queued attack input is dropped, so the click that cast / finished a skill never fires a basic attack.
+        public static float AttackSwallowUntil;
+        private static FieldInfo _curAttackField;
+
+        public static void CancelCurrentAttack(Player player)
+        {
+            if (player == null) return;
             try
             {
-                FieldInfo f = typeof(Humanoid).GetField("m_currentAttack", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (f != null) f.SetValue(player, null);
+                if (_curAttackField == null) _curAttackField = typeof(Humanoid).GetField("m_currentAttack", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                object atk = _curAttackField == null ? null : _curAttackField.GetValue(player);
+                if (atk != null)
+                {
+                    MethodInfo abort = atk.GetType().GetMethod("Abort", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+                    if (abort == null) abort = atk.GetType().GetMethod("Stop", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+                    if (abort != null) { try { abort.Invoke(atk, null); } catch (Exception) { } }
+                }
+                if (_curAttackField != null) _curAttackField.SetValue(player, null);
             }
             catch (Exception) { }
+            ClearAttackQueue(player);
+        }
+
+        public static void ClearAttackQueue(Player player)
+        {
+            if (player == null) return;
+            BindingFlags f = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            string[] floats = { "m_queuedAttackTimer", "m_queuedSecondAttackTimer" };
+            string[] bools = { "m_attack", "m_attackHold", "m_secondaryAttack", "m_secondaryAttackHold" };
+            for (int i = 0; i < floats.Length; i++) { FieldInfo fi = FindField(player.GetType(), floats[i], f); if (fi != null && fi.FieldType == typeof(float)) fi.SetValue(player, 0f); }
+            for (int i = 0; i < bools.Length; i++) { FieldInfo fi = FindField(player.GetType(), bools[i], f); if (fi != null && fi.FieldType == typeof(bool)) fi.SetValue(player, false); }
+        }
+
+        private static readonly Dictionary<string, FieldInfo> _fieldCache = new Dictionary<string, FieldInfo>();
+        private static FieldInfo FindField(Type t, string name, BindingFlags f)
+        {
+            string key = t.FullName + "." + name;
+            FieldInfo fi;
+            if (_fieldCache.TryGetValue(key, out fi)) return fi;
+            for (Type c = t; c != null && fi == null; c = c.BaseType) fi = c.GetField(name, f | BindingFlags.DeclaredOnly);
+            _fieldCache[key] = fi;
+            return fi;
+        }
+
+        // Swallow the attack buttons for a moment (the click belonged to a skill).
+        public static void SwallowAttackInput(Player player, float seconds)
+        {
+            if (player == null || player != Player.m_localPlayer) return;
+            AttackSwallowUntil = Mathf.Max(AttackSwallowUntil, Time.time + Mathf.Max(0.05f, seconds));
+            CancelCurrentAttack(player);
         }
 
         public static void FireVanilla(Player player, string trigger)
@@ -3814,12 +3889,15 @@ namespace DragonsAltarCombat
             // v0.25.30 user: no superman pose. In the air the body leans only diagonally (~38 deg), the main arm is
             // flared a little out to the side and the weapon is carried up (not pointed ahead).
             // v0.25.63 (user): both arms flared wide in the air.
-            DragonClipKey launch = K(-0.72f).Sp(4f, 0f, 0f).Ch(-6f, 0f, 0f).Hd(-18f, 0f, 0f).Hand(0.95f, 0.25f, 0.05f, 0.95f).LHand(-0.95f, 0.25f, 0.05f, 0.95f).Wp(0.4f, 0.9f, -0.1f).Rot(32f, 0f, 0f).Off(0f, 0.08f, 0f);
+            // v0.25.65 (user): arms only slightly out (the wide T-flare looked goofy).
+            DragonClipKey launch = K(-0.72f).Sp(5f, 0f, 0f).Ch(-4f, 0f, 0f).Hd(-18f, 0f, 0f).Hand(0.6f, -0.05f, 0.25f, 0.85f).LHand(-0.55f, -0.15f, 0.25f, 0.8f).Wp(0.35f, 0.85f, -0.1f).Rot(32f, 0f, 0f).Off(0f, 0.08f, 0f);
             DragonClipKey roll0 = launch.Copy(-0.62f).Rot(40f, 0f, 0f).Sn(25f);
             DragonClipKey roll1 = launch.Copy(-0.36f).Rot(40f, 0f, 0f).Sn(360f);
-            DragonClipKey poised = K(0f).Sp(4f, 0f, 0f).Ch(-4f, 0f, 0f).Hd(-12f, 0f, 0f).Hand(0.9f, 0.4f, 0f, 0.95f).LHand(-0.9f, 0.4f, 0f, 0.95f).Wp(0.3f, 1f, 0f).Rot(20f, 0f, 0f).Sn(360f);
-            DragonClipKey impact = Ft(K(0.08f).Sp(30f, 0f, 0f).Ch(14f, 0f, 0f).Hd(-28f, 0f, 0f).Hand(0.05f, -1f, 0.35f, 0.97f).Rot(6f, 0f, 0f).Off(0f, -0.38f * d, 0.05f).Sn(360f), 0.75f, 0.8f);
-            DragonClipKey settle = impact.Copy(brutal ? 0.3f : 0.2f).Off(0f, -0.4f * d, 0.05f);
+            // v0.25.65: falling = weapon cocked overhead for the smash (Angel Comet style), arms not spread.
+            DragonClipKey poised = K(0f).Sp(-4f, 0f, 0f).Ch(-6f, 0f, 0f).Hd(-14f, 0f, 0f).Hand(0.2f, 0.95f, -0.1f, 0.95f).LHand(-0.45f, -0.2f, 0.3f, 0.75f).Wp(0.1f, 0.6f, -0.8f).Rot(14f, 0f, 0f).Sn(360f);
+            // Smash: the weapon is driven into the ground in front, deep hero kneel (front knee forward, back knee low).
+            DragonClipKey impact = Ft(K(0.08f).Sp(34f, 0f, 0f).Ch(16f, 0f, 0f).Hd(-26f, 0f, 0f).Hand(0.05f, -0.95f, 0.5f, 0.99f).Wp(0f, -1f, 0.45f).LHand(-0.5f, -0.35f, 0.15f, 0.8f).Rot(8f, 0f, 0f).Off(0f, -0.48f * d, 0.06f).Sn(360f).Linear(), 0.8f, 0.9f);
+            DragonClipKey settle = impact.Copy(brutal ? 0.32f : 0.24f).Off(0f, -0.5f * d, 0.06f); settle.Lin = false;
             DragonClipKey rec = Ft(K(brutal ? 0.58f : 0.45f).Sp(8f, 0f, 0f).Hd(-6f, 0f, 0f).Hand(0.35f, -0.45f, 0.35f, 0.6f).Off(0f, -0.06f, 0f).Sn(360f), 0.3f, 0.2f);
             return new DragonClipKey[] { K(-1f), load, launch, roll0, roll1, poised, impact, settle, rec, K(brutal ? 0.9f : 0.75f).Sn(360f) };
         }
@@ -8904,6 +8982,78 @@ namespace DragonsAltarCombat
         private void OnDestroy() { if (Mesh != null) Destroy(Mesh); }
     }
 
+    // v0.25.65: holds, then fades every child mesh's vertex colours out and destroys the object (crescent flashes).
+    public class DragonFadeOut : MonoBehaviour
+    {
+        public float Hold = 0.3f, Fade = 0.3f, Grow = 0f;
+        private float _age;
+        private MeshFilter[] _mf;
+        private Color[][] _base;
+        private Vector3 _scale;
+        private void Start()
+        {
+            _mf = GetComponentsInChildren<MeshFilter>();
+            _base = new Color[_mf.Length][];
+            for (int i = 0; i < _mf.Length; i++) _base[i] = _mf[i].sharedMesh != null ? _mf[i].sharedMesh.colors : new Color[0];
+            _scale = transform.localScale;
+        }
+        private void Update()
+        {
+            _age += Time.deltaTime;
+            if (Grow != 0f) transform.localScale = _scale * (1f + Grow * Mathf.Clamp01(_age / (Hold + Fade)));
+            if (_age > Hold && _mf != null)
+            {
+                float k = 1f - Mathf.Clamp01((_age - Hold) / Mathf.Max(0.01f, Fade));
+                for (int i = 0; i < _mf.Length; i++)
+                {
+                    if (_mf[i] == null || _mf[i].sharedMesh == null || _base[i].Length == 0) continue;
+                    Color[] c = new Color[_base[i].Length];
+                    for (int j = 0; j < c.Length; j++) { c[j] = _base[i][j]; c[j].a *= k; }
+                    _mf[i].sharedMesh.colors = c;
+                }
+            }
+            if (_age >= Hold + Fade) Destroy(gameObject);
+        }
+    }
+
+    // v0.25.65 Judgement Cut sphere: a faded, distorted-looking dome that pops in, holds while the cuts land,
+    // then collapses inward and fades (material colour, never the shared built-in sphere mesh).
+    public class DragonSphereFx : MonoBehaviour
+    {
+        public Renderer[] Rends;
+        public Color[] Cols;
+        public float Radius = 3f, PopIn = 0.08f, Hold = 0.6f, Out = 0.25f;
+        private float _age;
+        private void Update()
+        {
+            _age += Time.deltaTime;
+            float s, a;
+            if (_age < PopIn) { float t = _age / PopIn; s = Mathf.Lerp(0.2f, 1.05f, t); a = t; }
+            else if (_age < PopIn + Hold) { s = 1.05f - 0.05f * ((_age - PopIn) / Hold); a = 1f; }
+            else { float t = Mathf.Clamp01((_age - PopIn - Hold) / Out); s = Mathf.Lerp(1f, 0.6f, t); a = 1f - t; }
+            transform.localScale = Vector3.one * Radius * 2f * s;
+            if (Rends != null)
+                for (int i = 0; i < Rends.Length; i++)
+                    if (Rends[i] != null) { Color c = Cols[i]; c.a *= a; Rends[i].material.color = c; }
+            if (_age >= PopIn + Hold + Out) Destroy(gameObject);
+        }
+    }
+
+    // v0.25.65: a planted arrow stays, then sinks into the ground and is removed.
+    public class DragonPlanted : MonoBehaviour
+    {
+        public float Life = 3f, Sink = 0.5f;
+        private float _age;
+        private Vector3 _start;
+        private void Start() { _start = transform.position; }
+        private void Update()
+        {
+            _age += Time.deltaTime;
+            if (_age > Life) transform.position = _start + transform.forward * Sink * Mathf.Clamp01((_age - Life) / 0.6f);
+            if (_age > Life + 0.6f) Destroy(gameObject);
+        }
+    }
+
     // Destroys a generated mesh together with its object.
     public class DragonMeshOwner : MonoBehaviour
     {
@@ -9821,6 +9971,12 @@ namespace DragonsAltarCombat
             MeshRenderer r = go.AddComponent<MeshRenderer>();
             r.sharedMaterial = Mat(StreakTex(), true);
             r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            GameObject body = new GameObject("body");
+            body.transform.SetParent(go.transform, false);
+            body.AddComponent<MeshFilter>().sharedMesh = mesh;
+            MeshRenderer br = body.AddComponent<MeshRenderer>();
+            br.sharedMaterial = Mat(StreakTex(), false);   // v0.25.65 opaque-ish body so the arc reads in daylight
+            br.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             DragonSlashArc a = go.AddComponent<DragonSlashArc>();
             a.Radius = Mathf.Max(0.5f, radius);
             a.Arc = Mathf.Clamp(arcDeg, 20f, 360f);
@@ -10138,20 +10294,74 @@ namespace DragonsAltarCombat
         public static void CrescentBlade(Transform parent, Color c, float radius, float width, float roll)
         {
             if (!Enabled || parent == null) return;
-            // v0.25.63 (user ref: Dragon Nest magic slash): a thin moon crescent - tapered tips, a white-hot core
-            // and a soft coloured glow around it.
-            Color glow = c; glow.a = 0.55f;
-            Color core = Color.Lerp(c, Color.white, 0.75f); core.a = 1f;
-            CrescentLayer(parent, glow, radius, width * 2.6f, roll, 82f);
-            CrescentLayer(parent, core, radius, width, roll, 80f);
+            // v0.25.65 (user: the slashes were invisible): a vivid, opaque blue crescent (alpha-blended body that
+            // reads in daylight) with an additive white-hot core. Horizontal blades are tilted up toward the camera;
+            // vertical blades get a second crossed blade so they read from behind as well as from the side.
+            Color body = Color.Lerp(c, new Color(0.25f, 0.55f, 1f, 1f), 0.4f); body.a = 0.85f;
+            Color core = Color.Lerp(c, Color.white, 0.8f); core.a = 1f;
+            Quaternion[] planes = Mathf.Abs(roll) < 1f
+                ? new Quaternion[] { Quaternion.Euler(-30f, 0f, 0f) }
+                : new Quaternion[] { Quaternion.identity, Quaternion.Euler(0f, 60f, 0f) };
+            for (int i = 0; i < planes.Length; i++)
+            {
+                CrescentLayer(parent, body, radius, width * 2.4f, roll, 82f, planes[i], false);
+                CrescentLayer(parent, core, radius, width * 0.9f, roll, 80f, planes[i], true);
+            }
         }
 
-        private static void CrescentLayer(Transform parent, Color col, float radius, float width, float roll, float span)
+        // Vergil's Judgement Cut: a pale, faded sphere over the area (outer veil + darker core), cuts flash inside.
+        public static void JudgementSphere(Vector3 center, float radius, float hold)
+        {
+            if (!Enabled) return;
+            Shader sh = Shader.Find("Sprites/Default");
+            if (sh == null) return;
+            GameObject root = new GameObject("IH_JudgementSphere");
+            root.transform.position = center;
+            Color[] cols = { new Color(0.62f, 0.78f, 1f, 0.22f), new Color(0.08f, 0.10f, 0.20f, 0.28f) };
+            float[] sizes = { 1f, 0.82f };
+            Renderer[] rends = new Renderer[2];
+            for (int i = 0; i < 2; i++)
+            {
+                GameObject s = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                Collider c = s.GetComponent<Collider>();
+                if (c != null) UnityEngine.Object.Destroy(c);
+                s.transform.SetParent(root.transform, false);
+                s.transform.localScale = Vector3.one * sizes[i];
+                Renderer r = s.GetComponent<Renderer>();
+                r.material = new Material(sh);
+                r.material.color = cols[i];
+                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                rends[i] = r;
+            }
+            DragonSphereFx fx = root.AddComponent<DragonSphereFx>();
+            fx.Rends = rends; fx.Cols = cols; fx.Radius = Mathf.Max(0.5f, radius); fx.Hold = Mathf.Max(0.1f, hold);
+            // the rim glows faintly + a soft light inside
+            Color rim = new Color(0.70f, 0.85f, 1f, 0.6f);
+            DragonMeshFx ring = MeshFx(center, Quaternion.LookRotation(Vector3.up), true, Mat(RingTex(), true), rim, hold + 0.35f);
+            if (ring != null) { ring.ScaleFrom = Vector3.one * radius * 2.2f; ring.ScaleTo = Vector3.one * radius * 2.05f; ring.ScaleTime = 0.1f; }
+            Flash(center, new Color(0.55f, 0.75f, 1f, 1f), 3f, radius * 2f, hold + 0.3f);
+        }
+
+        // A standing crescent that appears, holds and fades (big swings: Halfmoon, Eclipse afterimage slashes).
+        public static GameObject CrescentFlash(Vector3 pos, Vector3 forward, Color c, float radius, float width, float roll, float hold, float fade, float grow)
+        {
+            if (!Enabled) return null;
+            Vector3 f = forward; if (f.sqrMagnitude < 0.001f) f = Vector3.forward;
+            GameObject go = new GameObject("IH_CrescentFlash");
+            go.transform.position = pos;
+            go.transform.rotation = Quaternion.LookRotation(f.normalized, Vector3.up);
+            CrescentBlade(go.transform, c, radius, width, roll);
+            DragonFadeOut fo = go.AddComponent<DragonFadeOut>();
+            fo.Hold = hold; fo.Fade = fade; fo.Grow = grow;
+            return go;
+        }
+
+        private static void CrescentLayer(Transform parent, Color col, float radius, float width, float roll, float span, Quaternion plane, bool additive)
         {
             GameObject go = new GameObject("IH_CrescentBlade");
             go.transform.SetParent(parent, false);
-            go.transform.localPosition = Vector3.back * radius * 0.75f;
-            go.transform.localRotation = Quaternion.AngleAxis(roll, Vector3.forward);
+            go.transform.localRotation = plane * Quaternion.AngleAxis(roll, Vector3.forward);
+            go.transform.localPosition = go.transform.localRotation * (Vector3.back * radius * 0.75f);
             Mesh mesh = new Mesh();
             const int n = 32;
             Vector3[] v = new Vector3[(n + 1) * 2];
@@ -10181,9 +10391,94 @@ namespace DragonsAltarCombat
             mesh.RecalculateBounds();
             go.AddComponent<MeshFilter>().sharedMesh = mesh;
             MeshRenderer r = go.AddComponent<MeshRenderer>();
-            r.sharedMaterial = Mat(LineTex(), true);
+            r.sharedMaterial = Mat(LineTex(), additive);
             r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             go.AddComponent<DragonMeshOwner>().Mesh = mesh;
+        }
+
+        // ------------------------------------------------------------------ v0.25.65 planted arrows + wind dome
+        private static readonly Queue<GameObject> _planted = new Queue<GameObject>();
+
+        // A real arrow stuck in the ground (Ranger volleys / big shots): wooden shaft, steel head, white fletching,
+        // driven in along its flight direction with the head buried. Big arrows (length >= 2.5) also glow.
+        public static GameObject PlantedArrow(Vector3 ground, Vector3 dir, float length, Color glow, float life)
+        {
+            if (!Enabled) return null;
+            if (dir.sqrMagnitude < 0.001f) dir = Vector3.down;
+            dir.Normalize();
+            if (dir.y > -0.25f) { dir.y = -0.25f; dir.Normalize(); }   // always angled INTO the ground
+            length = Mathf.Max(0.5f, length);
+            while (_planted.Count > 0 && (_planted.Count >= 90 || _planted.Peek() == null)) { GameObject old = _planted.Dequeue(); if (old != null) UnityEngine.Object.Destroy(old); }
+            GameObject root = new GameObject("IH_PlantedArrow");
+            root.transform.position = ground + dir * length * 0.28f;
+            root.transform.rotation = Quaternion.LookRotation(dir) * Quaternion.Euler(0f, 0f, UnityEngine.Random.Range(0f, 90f));
+            float s = length;
+            Material wood = SolidMat(new Color(0.40f, 0.27f, 0.15f, 1f));
+            Material steel = SolidMat(new Color(0.55f, 0.56f, 0.60f, 1f));
+            Material fletch = SolidMat(new Color(0.88f, 0.88f, 0.82f, 1f));
+            ArrowPart(root.transform, PrimitiveType.Cylinder, wood, new Vector3(0f, 0f, -s * 0.5f), Quaternion.Euler(90f, 0f, 0f), new Vector3(0.028f * s, s * 0.5f, 0.028f * s));
+            ArrowPart(root.transform, PrimitiveType.Cube, steel, new Vector3(0f, 0f, -0.07f * s), Quaternion.Euler(0f, 0f, 45f), new Vector3(0.06f * s, 0.06f * s, 0.16f * s));
+            ArrowPart(root.transform, PrimitiveType.Cube, fletch, new Vector3(0f, 0f, -s * 0.9f), Quaternion.identity, new Vector3(0.006f * s, 0.075f * s, 0.16f * s));
+            ArrowPart(root.transform, PrimitiveType.Cube, fletch, new Vector3(0f, 0f, -s * 0.9f), Quaternion.Euler(0f, 0f, 90f), new Vector3(0.006f * s, 0.075f * s, 0.16f * s));
+            if (length >= 2.5f)
+            {
+                AttachGlow(root.transform, glow, length * 0.12f, 14f, 0f);
+                Burst(ground + Vector3.up * 0.3f, glow, 30, 6f, 0.25f, 0.5f, 0.5f);
+                DustRing(ground, length * 0.5f);
+                Cracks(ground, glow, length * 0.45f, 6, 3f);
+            }
+            else Burst(ground + Vector3.up * 0.1f, new Color(0.5f, 0.44f, 0.36f, 0.6f), 5, 2f, 0.25f, 0.4f, 0.6f);   // a puff of dirt
+            DragonPlanted p = root.AddComponent<DragonPlanted>();
+            p.Life = Mathf.Max(0.5f, life);
+            p.Sink = length * 0.6f;
+            _planted.Enqueue(root);
+            return root;
+        }
+
+        private static void ArrowPart(Transform root, PrimitiveType type, Material m, Vector3 pos, Quaternion rot, Vector3 scale)
+        {
+            GameObject g = GameObject.CreatePrimitive(type);
+            Collider c = g.GetComponent<Collider>();
+            if (c != null) UnityEngine.Object.Destroy(c);
+            g.transform.SetParent(root, false);
+            g.transform.localPosition = pos;
+            g.transform.localRotation = rot;
+            g.transform.localScale = scale;
+            Renderer r = g.GetComponent<Renderer>();
+            if (r != null && m != null) { r.sharedMaterial = m; r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; }
+        }
+
+        // Neji's Rotation for Furious Winds: a spinning dome of green wind (veil + tilted crescent rings).
+        public static void WindDome(Transform parent, Color c, float radius)
+        {
+            if (!Enabled || parent == null) return;
+            Shader sh = Shader.Find("Sprites/Default");
+            if (sh != null)
+            {
+                GameObject s = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                Collider col = s.GetComponent<Collider>();
+                if (col != null) UnityEngine.Object.Destroy(col);
+                s.transform.SetParent(parent, false);
+                s.transform.localPosition = Vector3.up * radius * 0.15f;
+                s.transform.localScale = new Vector3(radius * 2f, radius * 1.5f, radius * 2f);
+                Renderer r = s.GetComponent<Renderer>();
+                r.material = new Material(sh);
+                Color veil = c; veil.a = 0.16f;
+                r.material.color = veil;
+                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            }
+            Color body = c; body.a = 0.7f;
+            Color core = Color.Lerp(c, Color.white, 0.6f); core.a = 1f;
+            float[] tilts = { 0f, 35f, -35f, 70f };
+            for (int i = 0; i < tilts.Length; i++)
+            {
+                GameObject ring = new GameObject("windRing");
+                ring.transform.SetParent(parent, false);
+                ring.transform.localPosition = Vector3.up * (0.4f + i * 0.35f);
+                ring.transform.localRotation = Quaternion.Euler(tilts[i], i * 47f, 0f);
+                CrescentLayer(ring.transform, body, radius * (0.85f - i * 0.08f), radius * 0.12f, 0f, 170f, Quaternion.identity, false);
+                CrescentLayer(ring.transform, core, radius * (0.85f - i * 0.08f), radius * 0.04f, 0f, 165f, Quaternion.identity, true);
+            }
         }
 
         // ------------------------------------------------------------------ themed presets

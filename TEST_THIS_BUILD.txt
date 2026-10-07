@@ -1,5 +1,8 @@
-TEST v0.25.64
-1. Goddess Relic (normal + Ascended): Celtic relic cross - gold frame, ivory inlay, diamond tips, gold ring, centre boss; lands tilted and planted.
-2. Priest Lightning Relic / Holy Relic: same cross model.
-3. If the cross looks flat / unlit (no metal shine), the game stripped the Standard shader - tell me.
-(Everything from v0.25.63 still applies: NACC rhythm, block Hyper Armor, jump-slam smash, crescents, short Lightning Trails.)
+TEST v0.25.65
+1. Shield Charge -> Left Click Hammer Slam with a Staff: no fireball afterwards. Spam skills while attacking: no basic attack leaks.
+2. Gun Staff: hold fire, cast Gravity Blast -> not stuck in the fire pose.
+3. Bonecrusher / Electric Smite: small arm spread, weapon overhead while falling, smash into a kneel on contact (no second attack).
+4. Sword Master: 1H sword vs Krom - Krom slower, both with even chain intervals; Mastery +50% speeds both.
+5. Moonlight / Halfmoon / Crescent Cleave crescents clearly visible; Halfmoon big crescent per slash.
+6. Blade Storm faded sphere; Eclipse afterimage slashes (+ Ascended spiral and second afterimage).
+7. Ranger: arrows stuck in the ground after volleys, big arrows after sky shots; Furious Winds green dome; Skyfall 20 m aim + Ascended leap slam at your aim; Somersault lands on terrain, Ascended volley at the slam.

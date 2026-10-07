@@ -40,7 +40,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Dragon's Altar - Ranger";
-        public const string ModVersion = "0.25.64";
+        public const string ModVersion = "0.25.65";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -213,7 +213,7 @@ namespace DragonsAltarRanger
             _sbCooldown = Config.Bind(sb, "Cooldown", 16f, "Seconds.");
             _sbStamina = Config.Bind(sb, "StaminaCost", 30f, "Stamina.");
             _sbDamage = Config.Bind(sb, "TickPercent", 30f, "Per tick, every enemy in the circle.");
-            _sbRange = Config.Bind(sb, "Range", 35f, "Ground PAC range (m).");
+            _sbRange = Config.Bind(sb, "Range_v02565", 20f, "Ground PAC range (m). The Ascended slam leaps onto your last aimed point.");
             _sbHeight = Config.Bind(sb, "JumpHeight", 15f, "m.");
             _sbRadius = Config.Bind(sb, "Radius", 10f, "m.");
             _sbDuration = Config.Bind(sb, "BarrageDuration", 2f, "Retired v0.25.49: the hover lasts Shots x TickInterval.");
@@ -1297,9 +1297,11 @@ namespace DragonsAltarRanger
             {
                 // Ascended finisher: slam straight down (0.3s), Blunt around you, then a 2m backflip.
                 // v0.25.52 (user): the slam lands on terrain or a physical object, never in the air or on a creature.
+                // v0.25.65 (user): a long diving leap onto the point you LAST AIMED at (Acrobat) - still terrain only.
                 Vector3 from = player.transform.position;
-                Vector3 land = SolidBelow(player, from);
-                float dropTime = Mathf.Clamp((from.y - land.y) / DragonCombat.M(45f), 0.15f, 0.6f);
+                Vector3 land = SolidBelow(player, point + Vector3.up * 2f);
+                FaceTowards(player, land);
+                float dropTime = Mathf.Clamp(Vector3.Distance(from, land) / DragonCombat.M(40f), 0.2f, 0.9f);
                 DragonCombat.PlayClip(player, "rg_dive", 0.08f);
                 t = 0f;
                 while (t < dropTime && player != null)
@@ -1409,8 +1411,8 @@ namespace DragonsAltarRanger
                 yield return StartCoroutine(ArcFlip(player, land, apex, 0f, backTime, -1));
                 if (player != null && !player.IsDead())
                 {
-                    Vector3 center;
-                    if (!AlbedoAimUtility.TryGetPhysicalTarget(player, DragonCombat.M(_ssAscVolleyRange.Value), out center)) center = land;
+                    // v0.25.65 (user): the volley lands where you slammed, not wherever you aim
+                    Vector3 center = land;
                     float vr = DragonCombat.M(Mathf.Max(0.5f, _ssAscVolleyRadius.Value));
                     Vector3[] circles = RowOfThree(center, center - player.transform.position, vr);
                     DragonCombat.PlayClip(player, "rg_shot", 0.06f);
@@ -1473,6 +1475,7 @@ namespace DragonsAltarRanger
             else DragonCombat.LockSkill(player, duration);
             DragonCombat.PlaySpinClip(player, duration, 0.5f, false);   // two turns a second inside the leaf storm
             GameObject storm = _enableVfx.Value ? CreateLeafStorm(player.transform.position, radius) : null;
+            if (storm != null) { GameObject st = storm; float br = barrier; DragonCombat.RunVfx(delegate { DragonVfx.WindDome(st.transform, new Color(0.45f, 1f, 0.6f, 1f), Mathf.Max(1.5f, br)); }); }   // v0.25.65 Neji's Rotation
             RangerArrowDamage d = ArrowDamage(player);
             float power = DragonCombat.GetSkillPower(player, "furious_winds");
             float slash = Mathf.Max(0f, _fwSlash.Value) / 100f * power * d.Total();
@@ -3140,6 +3143,11 @@ namespace DragonsAltarRanger
                     {
                         stop = true;
                         pos += dir * hits[i].distance;
+                        if (_enableVfx.Value)
+                        {
+                            Vector3 pp = pos, pdir = dir; float plen = radius >= 0.5f ? 2.5f + radius * 3f : 1f; Color pcol = color;
+                            DragonCombat.RunVfx(delegate { DragonVfx.PlantedArrow(pp, pdir, plen, pcol, plen >= 2.5f ? 5f : 3f); });   // v0.25.65 stuck where it struck
+                        }
                     }
                 }
                 if (!stop) { pos += dir * step; traveled += step; }
@@ -3198,12 +3206,18 @@ namespace DragonsAltarRanger
             if (to.sqrMagnitude > 0.01f) player.transform.rotation = Quaternion.LookRotation(to.normalized);
         }
 
+        // v0.25.65: terrain / buildings only - creatures are never "ground" (landings, volleys, planted arrows).
         private Vector3 GroundAt(Vector3 point)
         {
-            RaycastHit hit;
-            if (Physics.Raycast(point + Vector3.up * 6f, Vector3.down, out hit, 20f, SolidMask(), QueryTriggerInteraction.Ignore))
-                return hit.point + Vector3.up * 0.1f;
-            return point;
+            RaycastHit[] hits = Physics.RaycastAll(point + Vector3.up * 6f, Vector3.down, 20f, SolidMask(), QueryTriggerInteraction.Ignore);
+            float best = float.MaxValue; Vector3 res = point; bool found = false;
+            for (int i = 0; i < hits.Length; i++)
+            {
+                Collider c = hits[i].collider;
+                if (c == null || c.GetComponentInParent<Character>() != null) continue;
+                if (hits[i].distance < best) { best = hits[i].distance; res = hits[i].point + Vector3.up * 0.1f; found = true; }
+            }
+            return found ? res : point;
         }
 
         private List<Character> PathTargets(Player player, Vector3 a, Vector3 b, float radius)
@@ -3603,6 +3617,15 @@ namespace DragonsAltarRanger
                 // v0.25.63: glowing streak + impact sparks only (the flat line placeholder is gone)
                 DragonCombat.RunVfx(delegate { DragonVfx.Streak(a, b, color, Mathf.Max(0.04f, width * 0.6f), Mathf.Max(0.12f, life * 1.6f)); });
                 if (width >= 0.05f) DragonCombat.RunVfx(delegate { DragonVfx.Burst(b + Vector3.up * 0.15f, color, Mathf.RoundToInt(4 + width * 20f), 3f + width * 6f, 0.15f + width * 0.5f, 0.3f, 0.6f); });
+                // v0.25.65 (user): the arrows are REAL - every streak that ends on the ground leaves an arrow stuck in it
+                // (big shots leave a big arrow, like the Relics)
+                Vector3 g = GroundAt(b);
+                bool big = width >= 1f;
+                if (Mathf.Abs(g.y - b.y) < 0.9f && (big || UnityEngine.Random.value < 0.45f))
+                {
+                    Vector3 pd = b - a; Color pc = color; pc.a = 1f;
+                    DragonCombat.RunVfx(delegate { DragonVfx.PlantedArrow(g, pd, big ? 3f + width * 2f : UnityEngine.Random.Range(0.85f, 1.05f), pc, big ? 5f : 3f); });
+                }
                 return;
             }
             GameObject obj = new GameObject("RangerStreak");

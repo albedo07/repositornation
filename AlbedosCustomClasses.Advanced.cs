@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.64";
+        public const string ModVersion = "0.25.65";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1426,7 +1426,7 @@ namespace AlbedosCustomClassesAdvanced
                 visual = new GameObject("DragonsAltarMoonlightGhost");
                 GameObject ghostVis = visual;
                 float gw1 = width;
-                DragonCombat.RunVfx(delegate { DragonVfx.AttachGlow(ghostVis.transform, new Color(0.45f, 0.78f, 1f, 1f), 0.4f, 45f, 3f); DragonVfx.CrescentBlade(ghostVis.transform, DragonVfx.Steel, gw1 * 0.55f, gw1 * 0.09f, 0f); });   // v0.25.55 / v0.25.63 moon crescent
+                DragonCombat.RunVfx(delegate { DragonVfx.AttachGlow(ghostVis.transform, new Color(0.45f, 0.78f, 1f, 1f), 0.4f, 12f, 3f); DragonVfx.CrescentBlade(ghostVis.transform, DragonVfx.Steel, gw1 * 0.6f, gw1 * 0.14f, 0f); });   // v0.25.55 / v0.25.63 moon crescent
                 if (!DragonVfx.Enabled) line = visual.AddComponent<LineRenderer>();
                 if (line != null) {
                 line.useWorldSpace = true;
@@ -1626,7 +1626,10 @@ namespace AlbedosCustomClassesAdvanced
                 }
 
                 if (_enableVfx.Value)
+                {
+                    if (slash == 0) { Vector3 jp = point; float jr = radius; DragonCombat.RunVfx(delegate { DragonVfx.JudgementSphere(jp, jr, 0.55f); }); }   // v0.25.65 Vergil's faded sphere
                     StartCoroutine(AnimateJudgementSphereCut(point, radius, slash));
+                }
             }
 
             // Ascended: one extra cut (25% of a whole activation), no stack, never repeats.
@@ -1767,7 +1770,7 @@ namespace AlbedosCustomClassesAdvanced
         private ConfigEntry<float> _frenzyHailInterval, _frenzyHailSpacing, _frenzyHailRadius;
         private ConfigEntry<float> _frenzyAscWindup, _frenzyAscDistance, _frenzyAscWidthMult, _frenzyAscDamage;
         private ConfigEntry<float> _eclipseCooldown, _eclipseStamina, _eclipseWindup, _eclipseRadius, _eclipseBurn, _eclipseBurnDuration, _eclipsePush;
-        private ConfigEntry<float> _eclipseAscRadius, _eclipseAscDamage, _eclipseAscReflectWindow;
+        private ConfigEntry<float> _eclipseAscRadius, _eclipseAscDamage, _eclipseAscReflectWindow, _eclipseAfterDelay, _eclipseAfterPercent, _eclipseAscSpiralPercent;
         private ConfigEntry<float> _halfAscWindup, _halfAscRange, _halfAscTravel, _halfAscGap, _halfAscTick, _halfAscMain, _halfAscSecondary, _halfAscWidth;
         private ConfigEntry<float> _halfAscPullBack, _halfAscWindow, _halfAscReleaseWindup, _halfAscFinWidthMult, _halfAscFinDamageMult;
         private ConfigEntry<float> _kgRadius, _kgDuration, _kgCooldown, _kgMove, _kgRegen, _kgStaminaCut;
@@ -1842,6 +1845,9 @@ namespace AlbedosCustomClassesAdvanced
             _eclipseAscRadius = Config.Bind(ea, "Radius", 8f, "Ascended radius.");
             _eclipseAscDamage = Config.Bind(ea, "DamagePercent", 110f, "Ascended damage (% of normal).");
             _eclipseAscReflectWindow = Config.Bind(ea, "ReflectWindow", 0.5f, "Seconds of projectile reflection, centred on the slash.");
+            _eclipseAfterDelay = Config.Bind(e, "AfterimageDelay_v02565", 0.35f, "Seconds after the spin before the afterimage slashes.");
+            _eclipseAfterPercent = Config.Bind(e, "AfterimagePercent_v02565", 60f, "Afterimage slashes: damage (% of the spin) to everything in the radius.");
+            _eclipseAscSpiralPercent = Config.Bind(ea, "SpiralAfterimagePercent_v02565", 60f, "Ascended: the second afterimage after the upward spiral (% of the spin).");
 
             _halfmoonDamageV = BindDamage("Sword Master Halfmoon Damage v0223", 0f, 107f, 0f, 0f, 0f, 0f, 0f, 53f);
             _halfmoonSpiritDotV = Config.Bind("Sword Master Halfmoon Slash", "SpiritDotPerSecond_v0223", 6f, "Spirit Burn damage per second (10s).");
@@ -2049,7 +2055,7 @@ namespace AlbedosCustomClassesAdvanced
                 visual = new GameObject("DragonsAltarMoonlightGhost");
                 GameObject ghostVis2 = visual;
                 float gw2 = width; Color gcol = halfmoon ? new Color(0.70f, 0.95f, 1f, 1f) : DragonVfx.Steel;
-                DragonCombat.RunVfx(delegate { DragonVfx.AttachGlow(ghostVis2.transform, new Color(0.45f, 0.78f, 1f, 1f), 0.4f * heightScale, 45f, 3f); DragonVfx.CrescentBlade(ghostVis2.transform, gcol, gw2 * 0.55f, gw2 * 0.09f * heightScale, 0f); });   // v0.25.55 / v0.25.63 moon crescent
+                DragonCombat.RunVfx(delegate { DragonVfx.AttachGlow(ghostVis2.transform, new Color(0.45f, 0.78f, 1f, 1f), 0.4f * heightScale, 12f, 3f); DragonVfx.CrescentBlade(ghostVis2.transform, gcol, gw2 * 0.6f, gw2 * 0.14f * heightScale, 0f); });   // v0.25.55 / v0.25.63 moon crescent
                 if (!DragonVfx.Enabled) line = visual.AddComponent<LineRenderer>();
                 if (line != null) {
                 line.useWorldSpace = true;
@@ -2459,6 +2465,65 @@ namespace AlbedosCustomClassesAdvanced
                     DragonVfx.Shake(ep, 25f + er, 1.4f);
                 });
             }
+            StartCoroutine(EclipseAfterimageRoutine(player, radius, damage, ascended));   // v0.25.65 afterimage slashes (damage, always)
+        }
+
+        // v0.25.65 (user): after the spin an afterimage of the blade cuts around you - a hail of slashes in the whole
+        // radius (like Frenzied Charge's, but as a ring), hitting everything inside once. Ascended: the slashes then
+        // spiral upward around you and a second afterimage hails down. Same radius as Eclipse.
+        private IEnumerator EclipseAfterimageRoutine(Player player, float radius, float spinMult, bool ascended)
+        {
+            yield return new WaitForSeconds(Mathf.Max(0f, _eclipseAfterDelay.Value));
+            if (player == null || player.IsDead()) yield break;
+            yield return StartCoroutine(EclipseSlashHail(player, radius, spinMult * Mathf.Max(0f, _eclipseAfterPercent.Value) / 100f, 0f));
+            if (!ascended || player == null || player.IsDead()) yield break;
+            // spiral of crescents rising around you
+            Color vio = new Color(0.62f, 0.50f, 1f, 1f);
+            for (int i = 0; i < 10; i++)
+            {
+                if (player == null || player.IsDead()) yield break;
+                if (_enableVfx.Value)
+                {
+                    float a = i * 72f;
+                    Vector3 dir = Quaternion.Euler(0f, a, 0f) * Vector3.forward;
+                    Vector3 pos = player.transform.position + Vector3.up * (0.3f + i * 0.45f) + dir * radius * 0.45f;
+                    Vector3 tang = Vector3.Cross(Vector3.up, dir);
+                    float rr = radius;
+                    DragonCombat.RunVfx(delegate { DragonVfx.CrescentFlash(pos, tang, vio, rr * 0.35f, Mathf.Max(0.2f, rr * 0.035f), -35f, 0.15f, 0.25f, 0.1f); });
+                }
+                yield return new WaitForSeconds(0.045f);
+            }
+            yield return new WaitForSeconds(0.15f);
+            if (player == null || player.IsDead()) yield break;
+            yield return StartCoroutine(EclipseSlashHail(player, radius, spinMult * Mathf.Max(0f, _eclipseAscSpiralPercent.Value) / 100f, 1.5f));
+        }
+
+        private IEnumerator EclipseSlashHail(Player player, float radius, float multiplier, float lift)
+        {
+            Vector3 c = player.transform.position;
+            if (_enableVfx.Value)
+            {
+                Color vio = new Color(0.62f, 0.50f, 1f, 1f);
+                for (int i = 0; i < 12; i++)
+                {
+                    Vector2 rp = UnityEngine.Random.insideUnitCircle * radius * 0.85f;
+                    Vector3 p = c + new Vector3(rp.x, 0.9f + lift * UnityEngine.Random.value, rp.y);
+                    Vector3 f = UnityEngine.Random.onUnitSphere; f.y = 0f;
+                    float rr = radius;
+                    DragonCombat.RunVfx(delegate
+                    {
+                        DragonVfx.CrescentFlash(p, f, vio, rr * 0.22f, Mathf.Max(0.15f, rr * 0.03f), UnityEngine.Random.Range(-70f, 70f), 0.08f, 0.22f, 0.15f);
+                        DragonVfx.SlashStreaks(p, Color.Lerp(vio, Color.white, 0.4f), rr * 0.25f, 2, 0.2f);
+                    });
+                    yield return new WaitForSeconds(0.03f);
+                }
+                Vector3 cc = c; float cr = radius;
+                DragonCombat.RunVfx(delegate { DragonVfx.Burst(cc + Vector3.up, vio, 40, 10f, 0.25f, 0.4f, 0f); DragonVfx.Shake(cc, 20f, 0.8f); });
+            }
+            if (player == null || player.IsDead()) yield break;
+            List<Character> targets = GetSphereTargets(player, c + Vector3.up * 0.8f, radius);
+            for (int i = 0; i < targets.Count; i++)
+                DealDamageScaled(player, targets[i], _eclipseDamage, multiplier, 0f, false);
         }
 
         // Ascended: hostile projectiles near you fly back at their shooter, keeping their own damage.
@@ -2528,7 +2593,7 @@ namespace AlbedosCustomClassesAdvanced
                 if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
                 // Holding the stance: movement and normal attacks stay locked, the camera still aims.
                 DragonCombat.LockSkill(player, 0.12f);
-                if (Input.GetMouseButtonDown(0)) { released = true; break; }
+                if (Input.GetMouseButtonDown(0)) { released = true; DragonCombat.SwallowAttackInput(player, 0.6f); break; }
                 yield return null;
             }
             if (!released)
@@ -2745,6 +2810,8 @@ namespace AlbedosCustomClassesAdvanced
                     b.Append(IhLine("Damage", IhDamage(_eclipseDamage, power * (ascended ? _eclipseAscDamage.Value / 100f : 1f))));
                     b.Append(IhLine("Radius", IhNum(ascended ? _eclipseAscRadius.Value : _eclipseRadius.Value) + "m, 360 degrees"));
                     b.Append(IhLine("Inflicts", "Spirit Burn " + IhNum(_eclipseBurn.Value) + "/s, " + IhNum(_eclipseBurnDuration.Value) + "s, knockback"));
+                    b.Append(IhLine("Afterimage", "slashes the whole radius " + IhNum(_eclipseAfterDelay.Value) + "s later, " + IhNum(_eclipseAfterPercent.Value) + "% Damage"));
+                    if (ascended) b.Append(IhLine("Spiral", "rising crescents, then a second afterimage, " + IhNum(_eclipseAscSpiralPercent.Value) + "% Damage"));
                     if (ascended) b.Append(IhLine("Reflects", "enemy projectiles for " + IhNum(_eclipseAscReflectWindow.Value) + "s"));
                     IhCosts(b, _eclipseStamina.Value, IhNum(_eclipseWindup.Value) + "s", _eclipseCooldown.Value);
                     break;
@@ -3721,6 +3788,12 @@ namespace AlbedosCustomClassesAdvanced
 
         private void ApplyHalfmoonHit(Player player, Vector3 forward, float radius, float multiplier)
         {
+            if (_enableVfx.Value)
+            {
+                // v0.25.65 (user: Halfmoon is an ultimate - big): a huge bright crescent swept out in front of you
+                Vector3 hf = forward; hf.y = 0f; float hr = radius; Vector3 hp = player.transform.position + Vector3.up * 1.1f + (hf.sqrMagnitude > 0.001f ? hf.normalized : player.transform.forward) * hr * 0.6f;
+                DragonCombat.RunVfx(delegate { DragonVfx.CrescentFlash(hp, hf, DragonVfx.Steel, hr * 0.95f, Mathf.Max(0.35f, hr * 0.07f), 0f, 0.35f, 0.4f, 0.15f); DragonVfx.Shake(hp, 25f, 1f); });
+            }
             List<Character> targets = GetFrontalTargets(player, player.transform.position + Vector3.up * 0.8f, forward, radius, 170f);
             for (int i = 0; i < targets.Count; i++)
             {
@@ -4637,6 +4710,7 @@ namespace AlbedosCustomClassesAdvanced
                     lmbWasHeld = lmbHeld;
                     if (lmbPressed)
                     {
+                        DragonCombat.SwallowAttackInput(player, 0.9f);   // v0.25.65 the click is the slam, not a basic attack
                         ShieldChargeBash(player, forward);
                         break;
                     }
@@ -5161,8 +5235,7 @@ namespace AlbedosCustomClassesAdvanced
         private void OlympicLanding(Player player, float stowSeconds)
         {
             if (player == null) return;
-            if (!_ihSlamFired) IhFireSlam(player);
-            DragonCombat.PlayClip(player, "slam_kneel", 0.05f);
+            if (!_ihSlamFired) { _ihSlamFired = true; if (!DragonCombat.ClipImpactIfHolding(player)) DragonCombat.PlayClip(player, "olympic_land", 0.05f); }
             DragonCombat.LockSkill(player, 0.55f);
         }
 
@@ -5898,15 +5971,18 @@ namespace AlbedosCustomClassesAdvanced
                 ResetFallDamageState(player);
                 DragonCombat.LockSkill(player, 0.12f);
                 IhFaceLook(player, body);
-                // v0.25.63 (user): the landing is a real smash - Valheim's axe heavy attack is fired just before the
-                // ground so its strike lands on contact (the custom air pose hands over to it).
+                // v0.25.65 (user: Angel Comet's landing is the reference): ~0.17 s before the ground the held air pose
+                // swings into the smash so the weapon meets the ground on contact (no separate vanilla attack).
                 if (!_ihSlamFired)
                 {
                     float fall = Mathf.Max(2f, -body.velocity.y);
                     RaycastHit gh;
-                    if (Physics.Raycast(body.position + Vector3.up * 0.3f, Vector3.down, out gh, 0.3f + fall * 0.32f, IhSolidMask(), QueryTriggerInteraction.Ignore)
+                    if (Physics.Raycast(body.position + Vector3.up * 0.3f, Vector3.down, out gh, 0.3f + fall * 0.17f, IhSolidMask(), QueryTriggerInteraction.Ignore)
                         && gh.collider.GetComponentInParent<Character>() == null)
-                        IhFireSlam(player);
+                    {
+                        _ihSlamFired = true;
+                        DragonCombat.ClipImpactIfHolding(player);
+                    }
                 }
 
                 if (IsPlayerGrounded(player) && body.velocity.y <= 0.25f)
@@ -12050,7 +12126,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "crescent_cleave": return "13 cleaves in two fans, burning fire trails and stacking Burn";
                 case "blade_storm": return "6 stacks; each cast adds an extra cut (25%)";
                 case "frenzied_charge": return "0.5s wind up, 12m, double width, 115% damage";
-                case "eclipse": return "8m, 110%, reflects enemy projectiles";
+                case "eclipse": return "8m, 110%, reflects enemy projectiles, a rising spiral of crescents and a second afterimage";
                 case "halfmoon_slash": return "after the two slashes, hold the stance and Left Click to release a huge Free Aim Ghost wave (3x damage, 1.5x width, 30m)";
                 case "heavy_slash": return "5m reach, 140% damage, 2s Hyper Armor on hit";
                 case "stomp": return "a third impact at 15m (40%)";
@@ -12328,6 +12404,14 @@ namespace AlbedosCustomClassesAdvanced
             bool chargingBefore = readyBefore >= 0 && nextStack < 0f;
             float staBefore = player.GetStamina(), eitBefore = IhCallFloat(player, "GetEitr");
             IhCastSkillNow(player, id);
+            {
+                // v0.25.65: a skill that really started takes over from any normal attack (aborted, queue dropped)
+                int ra2 = -1, mx2; float nx2;
+                if (readyBefore >= 0 && !DragonCombat.TryGetSkillStacks(id, out ra2, out mx2, out nx2)) ra2 = -1;
+                bool began = (cdBefore <= 0f && IhCooldown(player, id) > 0f) || (readyBefore >= 0 && ra2 >= 0 && ra2 < readyBefore)
+                    || (cdBefore <= 0f && (player.GetStamina() < staBefore - 0.5f || IhCallFloat(player, "GetEitr") < eitBefore - 0.5f));
+                if (began) DragonCombat.SwallowAttackInput(player, 0.35f);
+            }
             // v0.25.0: the skill's body motion plays only when it really started (cooldown started or
             // a charge was spent). Ranger animates its own skills.
             if (GetClass(player) != "Ranger")

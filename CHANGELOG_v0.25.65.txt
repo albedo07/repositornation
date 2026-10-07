@@ -1,0 +1,41 @@
+Immortal Heroes v0.25.65 - Afterimages and Arrows
+
+NO MORE BASIC ATTACKS OUT OF SKILLS (scan of every skill click)
+- ROOT CAUSE: the click that finished a skill (e.g. Shield Charge's Hammer Slam) was also queued by Valheim as a
+  normal attack and fired after the skill (the Staff fireball). Every skill that really starts now aborts the running
+  attack and drops Valheim's queued attack input; the clicks that drive skills (Shield Charge slam, Halfmoon release,
+  Arcane Phalanx volley) are swallowed; nothing queues while a skill holds you.
+- Gun Staff stuck in its fire pose after Gravity Blast: skills used to only forget the running attack; it is now
+  properly aborted (looping / hold attacks end cleanly).
+
+JUMP SLAMS (Bonecrusher, Electric Smite) - back to the earlier direction, polished like Angel Comet
+- Removed the vanilla axe-heavy attack (it played as a separate attack after landing) and the wide arm flare.
+- In the air: arms only slightly out, then the weapon is cocked overhead while falling; ~0.17 s before the ground it
+  swings into the smash (same timing trick as Angel Comet) - weapon driven into the ground, deep hero kneel.
+- You still face your aim in the air; WASD only steers.
+
+ATTACK SPEED (Masteries)
+- Bonuses now scale each weapon's OWN speed (+50% = 1.5x its base), instead of squeezing every weapon onto one
+  interval - a greatsword (Krom) stays heavier than a one-handed sword. Intervals inside the 1-2-1-2-3 chain stay
+  even (the beat = the weapon's average swing). [Combat] ComboFixedInterval_v02565 = on brings back the fixed 0.6 s.
+
+SWORD MASTER
+- Moonlight Splitter / Halfmoon / Crescent Cleave: the crescents were nearly invisible (flat or edge-on to the camera,
+  additive only). Now vivid opaque blue crescents with a white-hot core: horizontal ones tilt toward the camera,
+  vertical ones (Crescent Cleave) are doubled so they read from behind and from the side. Less particle "fly" noise.
+- Halfmoon Slash (Ultimate): a huge bright crescent sweeps out in front of you with every slash.
+- Blade Storm: Vergil's Judgement Cut - a faded, pale sphere pops over the area (darker core, glowing rim), the
+  cuts flash inside it, then it collapses.
+- Eclipse (stronger): after the spin, an afterimage of the blade hails slashes through the whole radius (60% of the
+  spin to everything inside). Ascended: the crescents then spiral upward around you and a second afterimage hails
+  down (60%). Same radius as Eclipse. Tooltip updated.
+
+RANGER
+- Real arrows: every volley / rain / barrage arrow that lands leaves an arrow stuck in the ground (wooden shaft,
+  steel head, fletching), arrows that hit a wall stay in it, and the big shots (sky arrow, Starfall finale, great
+  arrows) leave a BIG glowing arrow planted like the Relics. They sink away after a few seconds.
+- Furious Winds: a spinning dome of green wind around you (Neji's Rotation).
+- Skyfall Barrage: aim range 20 m. Ascended: the finishing slam is a long diving leap onto the point you last aimed
+  at (terrain only).
+- Somersault Dance: always lands on terrain / buildings, never on a creature. Ascended: the arrow volley lands where
+  you slammed (no more aiming it anywhere).
