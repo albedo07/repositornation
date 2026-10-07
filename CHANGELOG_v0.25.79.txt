@@ -1,0 +1,12 @@
+Immortal Heroes v0.25.79 - Comet Aftershock
+
+PALADIN
+- Ascended Angel Comet (works like Stomp now):
+  - 0.5 s after the landing, an aftershock rolls out 1.5x wider than the impact and hits just as hard (same damage, Broken Bones, Stun).
+  - The burning ground uses the original impact radius.
+
+Also contains everything from v0.25.78 Holy Bulwark:
+- Ray of Hope cleanses every debuff and grants 12 s debuff immunity.
+- Ascended Ray of Hope adds Fire + Spirit burns (8 s, stronger stacking) and 7% Max HP regen per second for 6 s.
+- Paladin Tower Shield: blocks hits from the front and sides (300 degrees) behind a holy force field.
+- Buff tooltips list every effect (Battlecry Labor icon and more).

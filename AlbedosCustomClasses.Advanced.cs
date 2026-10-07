@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.78";
+        public const string ModVersion = "0.25.79";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -5881,13 +5881,36 @@ namespace AlbedosCustomClassesAdvanced
             if (ascended)
             {
                 DragonCombat.GrantHyperArmor(player, Mathf.Max(0f, _angelHyperAfter.Value));
-                StartCoroutine(FallenAngelBurnRingRoutine(player, point));
+                StartCoroutine(FallenAngelBurnRingRoutine(player, point, radius));
+                StartCoroutine(AngelAftershock(player, point, radius * 1.5f));
             }
         }
 
-        private IEnumerator FallenAngelBurnRingRoutine(Player player, Vector3 center)
+        // v0.25.78 (user, like Stomp): Ascended Angel Comet - 0.5s after the landing an aftershock 1.5x the impact
+        // radius hits just as hard (same damage, Broken Bones, Stun).
+        private IEnumerator AngelAftershock(Player player, Vector3 point, float radius)
         {
-            float radius = Mathf.Max(1f, DragonCombat.M(_angelRingRadius.Value));
+            yield return new WaitForSeconds(0.5f);
+            if (player == null) yield break;
+            List<Character> targets = GetSphereTargets(player, point, radius);
+            for (int i = 0; i < targets.Count; i++)
+            {
+                DealDamage(player, targets[i], _angelDamage, 30f, true);
+                DragonCombat.ApplyBrokenBones(targets[i], Mathf.Max(0.1f, _angelBrokenBones.Value));
+                DragonCombat.Stun(targets[i], point);
+            }
+            if (_enableVfx.Value)
+            {
+                StartCoroutine(AnimateRing(point + Vector3.up * 0.08f, 0.4f, radius, 0.55f, new Color(1f, 0.88f, 0.48f, 1f), 0.16f));
+                Vector3 ap = point; float ar = radius;
+                DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(ap, DragonVfx.Holy, ar, 2f); DragonVfx.SpikeRing(ap, DragonVfx.Rock, ar * 0.85f, 12, 1.8f, 1f); DragonVfx.Shake(ap, 30f, 1.2f); });
+            }
+        }
+
+        // v0.25.78 (user): the burning ground uses the original impact radius.
+        private IEnumerator FallenAngelBurnRingRoutine(Player player, Vector3 center, float ringRadius)
+        {
+            float radius = Mathf.Max(1f, ringRadius);
             float end = Time.time + Mathf.Max(0.5f, _angelRingDuration.Value);
             float burn = Mathf.Max(0.1f, _angelBurnDuration.Value);
             while (Time.time < end && player != null)
@@ -11679,7 +11702,8 @@ namespace AlbedosCustomClassesAdvanced
                     b.Append(IhLine("Inflicts", "Stun, Broken Bones " + IhNum(_angelBrokenBones.Value) + "s"));
                     if (ascended)
                     {
-                        b.Append(IhLine("Burning Ring", IhNum(_angelRingRadius.Value) + "m, " + IhNum(_angelRingDuration.Value) + "s"));
+                        b.Append(IhLine("Aftershock", IhNum(_angelRadius.Value * 1.5f) + "m after 0.5s, same damage, Broken Bones + Stun"));
+                        b.Append(IhLine("Burning Ring", IhNum(_angelRadius.Value) + "m, " + IhNum(_angelRingDuration.Value) + "s"));
                         b.Append(IhLine("Ring Burn", "Fire Burn " + IhNum(_angelFireDot.Value) + "/s, Spirit Burn " + IhNum(_angelSpiritDot.Value) + "/s, " + IhNum(_angelBurnDuration.Value) + "s"));
                         b.Append(IhLine("Gain", "Hyper Armor, dive + " + IhNum(_angelHyperAfter.Value) + "s"));
                     }
@@ -12085,7 +12109,7 @@ namespace AlbedosCustomClassesAdvanced
                     : "Hurl a hammer of judgement that grows heavier with every meter it flies, crushing all in its path.";
                 case "shield_charge": return "Raise your shield and charge forward, trampling everyone who dares stand in your path, then bring your hammer down in a crushing slam.";
                 case "fallen_angel": return ascended
-                    ? "Leap to the heavens and fall like a burning star. The ground you strike catches holy fire."
+                    ? "Leap to the heavens and fall like a burning star. The ground you strike catches holy fire, and an aftershock rolls out half again as wide."
                     : "Leap to the heavens, then crash upon your enemies like a blazing comet.";
                 case "ray_of_hope": return ascended
                     ? "Unleash a radial wave that heals, shields, mends and purifies you and every ally it touches - removing every debuff and warding them against new ones - while the wicked burn in holy fire."
