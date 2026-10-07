@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.65";
+        public const string ModVersion = "0.25.66";
 
         internal static DragonCombatPlugin Instance;
 
@@ -259,6 +259,9 @@ namespace DragonsAltarCombat
             if ((adv == "Mercenary" || adv == "Sword Master") && WeaponMasteryExemptPenalty(item, adv) < 0f)
                 return adv == "Mercenary" ? "Warfreak" : "The Way of the Sword";
             if (cls == "Ranger" && RangedExemptPenalty(item, adv == "Bowmaster") < 0f) return "Wildborn";
+            if (cls == "Sorcerer" && ClassFitExemptPenalty(item, cls) < 0f)
+                return adv == "Spellcaster" ? "Yin and Yang" : (adv == "Wizard" ? "Archmage" : "Warlock");
+            if (cls == "Warrior" && adv != "Mercenary" && adv != "Sword Master" && ClassFitExemptPenalty(item, cls) < 0f) return "Warrior's Blessing";
             if (cls == "Cleric" && Instance != null)
             {
                 if (Instance.ClericBlessingNoPenalty.Value && ClericExemptPenalty(item) < 0f) return "Cleric's Blessing";
@@ -405,6 +408,13 @@ namespace DragonsAltarCombat
                 if (rm.Name != "AddRootMotion") continue;
                 try { PatchWithHarmony(rm, new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("RootMotionPrefix", BindingFlags.Static | BindingFlags.NonPublic)), null); count++; }
                 catch (Exception ex) { Logger.LogWarning("Root motion patch: " + ex.Message); }
+            }
+            // v0.25.66: Hyper Armor evaluated on the receiving client (servers run the attacker's Damage elsewhere).
+            foreach (MethodInfo rd in typeof(Character).GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+            {
+                if (rd.Name != "RPC_Damage") continue;
+                try { PatchWithHarmony(rd, new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("RpcDamagePrefix", BindingFlags.Static | BindingFlags.NonPublic)), null); count++; }
+                catch (Exception ex) { Logger.LogWarning("RPC_Damage patch: " + ex.Message); }
             }
             count += PatchEquipItem();
             count += PatchHotbarUse();
@@ -1496,6 +1506,21 @@ namespace DragonsAltarCombat
 
         // v0.25.63: the blocked-hit reaction animation slides the player back with root motion; under Hyper Armor
         // that slide is dropped (attack lunges are untouched).
+        private static void RpcDamagePrefix(Character __instance, object[] __args)
+        {
+            try
+            {
+                Player p = __instance as Player;
+                if (p == null || p != Player.m_localPlayer || __args == null) return;
+                for (int i = 0; i < __args.Length; i++)
+                {
+                    HitData hit = __args[i] as HitData;
+                    if (hit != null) { DragonCombat.EvaluateIncomingHyper(p, hit); return; }
+                }
+            }
+            catch (Exception) { }
+        }
+
         private static bool RootMotionPrefix(Character __instance)
         {
             try
@@ -1593,7 +1618,21 @@ namespace DragonsAltarCombat
                     __result = 0f;
                 return;
             }
-            if (DragonCombat.GetClassName(__instance) != "Cleric")
+            // v0.25.66 (user): every class moves freely with its fitting weapons.
+            // Sorcerer + all its ACs: Staves, Wands and Gun Staves. Base Warrior: its melee weapons.
+            string cls66 = DragonCombat.GetClassName(__instance);
+            if (cls66 == "Sorcerer" || cls66 == "Warrior")
+            {
+                ItemDrop.ItemData r66 = DragonCombat.GetHandItem(__instance, "m_rightItem");
+                ItemDrop.ItemData l66 = DragonCombat.GetHandItem(__instance, "m_leftItem");
+                __result -= ClassFitExemptPenalty(r66, cls66);
+                if (l66 != r66)
+                    __result -= ClassFitExemptPenalty(l66, cls66);
+                if (__result > 0f)
+                    __result = 0f;
+                return;
+            }
+            if (cls66 != "Cleric")
                 return;
 
             // v0.20.8 Cleric's Blessing: no penalty from Shields, Staves and one-handed Club weapons.
@@ -1642,6 +1681,18 @@ namespace DragonsAltarCombat
                 : (s == Skills.SkillType.Swords || s == Skills.SkillType.Axes || s == Skills.SkillType.Clubs ||
                    s == Skills.SkillType.Knives || s == Skills.SkillType.Polearms || s == Skills.SkillType.Spears);
             return exempt ? NegativeModifier(item) : 0f;
+        }
+
+        private static float ClassFitExemptPenalty(ItemDrop.ItemData item, string cls)
+        {
+            if (item == null || item.m_shared == null)
+                return 0f;
+            if (cls == "Sorcerer")
+                return DragonCombat.IsMagicWeapon(item) ? NegativeModifier(item) : 0f;
+            Skills.SkillType s = item.m_shared.m_skillType;
+            bool fit = s == Skills.SkillType.Swords || s == Skills.SkillType.Axes || s == Skills.SkillType.Clubs ||
+                       s == Skills.SkillType.Polearms || s == Skills.SkillType.Spears;
+            return fit ? NegativeModifier(item) : 0f;
         }
 
         private static float ClericExemptPenalty(ItemDrop.ItemData item)
@@ -3072,6 +3123,69 @@ namespace DragonsAltarCombat
             if (fx == null || !DragonVfx.Enabled) return;
             try { fx(); }
             catch (Exception ex) { if (DragonCombatPlugin.Instance != null) DragonCombatPlugin.Instance.LogInfo("[Immortal Heroes] VFX error: " + ex.Message); }
+        }
+
+        // v0.25.66 UNIVERSAL RULE (user): "Physical Objects" = environmental objects (trees, rocks, logs, bushes);
+        // "Structures" = man-made objects (build pieces, ruins, dungeons). Ground-targeted skills aim only at
+        // terrain or Structures, and everything they do to the ground follows the terrain Y level.
+        private static int _terrainLayer = -2;
+        private static readonly string[] GroundTypes = { "Heightmap", "TerrainModifier" };
+        private static readonly string[] StructureTypes = { "Piece", "WearNTear" };
+        private static readonly string[] EnvironmentTypes = { "TreeBase", "TreeLog", "MineRock", "MineRock5", "Destructible", "Pickable", "StaticPhysics" };
+        private static readonly string[] SiteTypes = { "Room", "DungeonGenerator", "Location" };
+
+        private static bool HasParentOfType(Collider c, string[] names)
+        {
+            for (int i = 0; i < names.Length; i++)
+            {
+                Type t = FindTypeCached(names[i]);
+                if (t != null && c.GetComponentInParent(t) != null) return true;
+            }
+            return false;
+        }
+
+        public static bool IsTerrainOrStructure(Collider c)
+        {
+            if (c == null || c.isTrigger) return false;
+            try
+            {
+                if (_terrainLayer == -2) _terrainLayer = LayerMask.NameToLayer("terrain");
+                if (_terrainLayer >= 0 && c.gameObject.layer == _terrainLayer) return true;
+                if (c is TerrainCollider) return true;
+                if (c.GetComponentInParent<Character>() != null) return false;
+                if (HasParentOfType(c, GroundTypes) || HasParentOfType(c, StructureTypes)) return true;
+                if (HasParentOfType(c, EnvironmentTypes)) return false;
+                return HasParentOfType(c, SiteTypes);
+            }
+            catch (Exception) { return false; }
+        }
+
+        private static int _groundMask;
+        public static int GroundMask()
+        {
+            if (_groundMask == 0) _groundMask = LayerMask.GetMask("terrain", "Default", "static_solid", "Default_small", "piece", "vehicle");
+            return _groundMask;
+        }
+
+        // Ground (terrain / Structure) height under a point; environmental objects are passed through.
+        public static bool TryGroundY(Vector3 pos, float above, float depth, out float y)
+        {
+            y = pos.y;
+            RaycastHit[] hits = Physics.RaycastAll(pos + Vector3.up * above, Vector3.down, above + depth, GroundMask(), QueryTriggerInteraction.Ignore);
+            if (hits == null || hits.Length == 0) return false;
+            // the surface nearest the reference height wins (a floor under a roof, the slope under a cliff edge)
+            float best = float.MaxValue;
+            bool found = false;
+            for (int i = 0; i < hits.Length; i++)
+            {
+                if (!IsTerrainOrStructure(hits[i].collider)) continue;
+                float d = Mathf.Abs(hits[i].point.y - pos.y);
+                if (d >= best) continue;
+                best = d;
+                y = hits[i].point.y;
+                found = true;
+            }
+            return found;
         }
 
         public static Type FindTypeCached(string name)
@@ -6682,22 +6796,8 @@ namespace DragonsAltarCombat
             float buffBonus = GetTimedBuffSum(player, "AttackSpeed");
             factor *= Mathf.Max(0.1f, 1f + buffBonus);
 
-            if (DragonCombatPlugin.Instance != null && DragonCombatPlugin.Instance.MasteryComboStyleEnabled.Value)
-            {
-                int stage = GetMasteryComboStage(player);
-                if (stage > 1)
-                {
-                    float perStage = Mathf.Max(0f, DragonCombatPlugin.Instance.MasteryComboSpeedPerStage.Value) / 100f;
-                    factor *= 1f + perStage * (float)(stage - 1);
-                }
-            }
-
-            float heavyUntil;
-            if (MasteryHeavyUntil.TryGetValue(id, out heavyUntil) && Time.time < heavyUntil)
-            {
-                float heavyBonus = DragonCombatPlugin.Instance == null ? 0.10f : Mathf.Max(0f, DragonCombatPlugin.Instance.MasteryHeavyAttackSpeedBonus.Value / 100f);
-                factor *= 1f + heavyBonus;
-            }
+            // v0.25.66 (user): the old Weapon Mastery combo speed-up per chain stage (it burst at the "Finisher")
+            // and the post-heavy speed bonus are gone - only real attack speed sources remain.
 
             return Mathf.Max(0.1f, factor);
         }
@@ -7659,7 +7759,7 @@ namespace DragonsAltarCombat
                     }
                 }
 
-                ApplyMasteryFinisher(attacker, hit);
+                // v0.25.66 (user): Mastery Finisher damage bonus removed
                 ApplyMasteryHeavy(attacker, target, hit);
             }
 
@@ -7679,12 +7779,27 @@ namespace DragonsAltarCombat
                 if (defenseBonus != 0f)
                     hit.m_damage.Modify(Mathf.Max(0f, 1f - defenseBonus));
 
+                EvaluateIncomingHyper(targetPlayer, hit);
+            }
+
+            DebuffState state;
+            if (!Debuffs.TryGetValue(target.GetInstanceID(), out state))
+                return patchState;
+            return ContinueDebuffs(target, hit, patchState, state);
+        }
+
+        // v0.25.66 (user: a Troll chipping 8 of 125 HP still pushed the Sword Master): Warrior Hyper Armor is decided
+        // by the damage you would really TAKE (after your armor), and it is evaluated on YOUR client too (RPC_Damage),
+        // because on a server the attacker's Damage() runs on another machine. Hyper Armor = immovable.
+        public static void EvaluateIncomingHyper(Player targetPlayer, HitData hit)
+        {
+            if (targetPlayer == null || hit == null) return;
                 if (GetClass(targetPlayer) == "Warrior")
                 {
                     bool merc = GetAdvancement(targetPlayer) == "Mercenary";
                     float threshold = DragonCombatPlugin.Instance == null ? (merc ? 0.60f : 0.30f)
                         : Mathf.Clamp01((merc ? DragonCombatPlugin.Instance.MercenaryHyperArmorThreshold.Value : DragonCombatPlugin.Instance.WarriorHyperArmorThreshold.Value) / 100f);
-                    float raw = Mathf.Max(0f, hit.GetTotalDamage());
+                    float raw = TakenDamageEstimate(targetPlayer, hit);
                     // v0.24.4: decided by the FIRST hit of an attacker's attack only (follow-up hits within
                     // 1s keep that decision); damage is never accumulated.
                     Character source = hit.GetAttacker();
@@ -7693,7 +7808,7 @@ namespace DragonsAltarCombat
                     bool grant;
                     if (!HyperFirstHitLast.TryGetValue(key, out last) || Time.time - last > 1f || !HyperFirstHitGrant.TryGetValue(key, out grant))
                     {
-                        grant = raw > 0f && raw < targetPlayer.GetMaxHealth() * threshold;
+                        grant = raw < targetPlayer.GetMaxHealth() * threshold;
                         if (HyperFirstHitLast.Count > 256) { HyperFirstHitLast.Clear(); HyperFirstHitGrant.Clear(); }
                         HyperFirstHitGrant[key] = grant;
                     }
@@ -7706,11 +7821,29 @@ namespace DragonsAltarCombat
                 // on top of the ApplyPushback / Stagger prefixes).
                 if (HasHyperArmor(targetPlayer))
                     hit.m_pushForce = 0f;
-            }
+        }
 
-            DebuffState state;
-            if (!Debuffs.TryGetValue(target.GetInstanceID(), out state))
-                return patchState;
+        private static MethodInfo _hitClone, _hitApplyArmor, _bodyArmor;
+
+        private static float TakenDamageEstimate(Player p, HitData hit)
+        {
+            float raw = Mathf.Max(0f, hit.GetTotalDamage());
+            try
+            {
+                if (_hitClone == null) _hitClone = typeof(HitData).GetMethod("Clone", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+                if (_hitApplyArmor == null) _hitApplyArmor = typeof(HitData).GetMethod("ApplyArmor", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new Type[] { typeof(float) }, null);
+                if (_bodyArmor == null) _bodyArmor = typeof(Player).GetMethod("GetBodyArmor", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+                if (_hitClone == null || _hitApplyArmor == null || _bodyArmor == null) return raw;
+                HitData c = _hitClone.Invoke(hit, null) as HitData;
+                if (c == null) return raw;
+                _hitApplyArmor.Invoke(c, new object[] { Convert.ToSingle(_bodyArmor.Invoke(p, null)) });
+                return Mathf.Max(0f, c.GetTotalDamage());
+            }
+            catch (Exception) { return raw; }
+        }
+
+        private static DamagePatchState ContinueDebuffs(Character target, HitData hit, DamagePatchState patchState, DebuffState state)
+        {
 
             bool expose = Time.time < state.ExposeUntil;
             bool broken = Time.time < state.BrokenBonesUntil;
@@ -8060,17 +8193,7 @@ namespace DragonsAltarCombat
             state.LastAttackTime = Time.time;
             state.SkillType = skill;
 
-            if (state.Stage == 5)
-            {
-                state.FinisherAttackStartedAt = Time.time;
-                state.FinisherUntil = Time.time + 1.25f;
-
-                if (MessageHud.instance != null)
-                    MessageHud.instance.ShowMessage(MessageHud.MessageType.TopLeft, "Weapon Mastery: Finisher");
-
-                if (DragonCombatPlugin.Instance != null)
-                    DragonCombatPlugin.Instance.StartCoroutine(MasteryFinisherVisual(player));
-            }
+            // v0.25.66 (user): no "Weapon Mastery: Finisher" - the last hit of a chain is simply Valheim's own last swing.
         }
 
         private static IEnumerator MasteryFinisherVisual(Player player)
@@ -8727,7 +8850,102 @@ namespace DragonsAltarCombat
         public float Life = 1f, Age, FadeIn = 0.06f, Hold;
         public Vector3 ScaleFrom = Vector3.one, ScaleTo = Vector3.one;
         public float ScaleTime = 0.3f, Spin;
+        public bool Conform;   // v0.25.66: flat ground decal follows the terrain / Structure height under every vertex
         private Color[] _cols;
+        private const int Cells = 16, HN = 9;
+        private float[] _hf;
+        private float _ext, _lift;
+        private Vector3 _center;
+        private Vector3[] _gv;
+        private Vector3 _lastScale;
+        private Quaternion _lastRot;
+
+        private void Start()
+        {
+            if (!Conform || Mesh == null) return;
+            try { BuildConform(); } catch (Exception) { _hf = null; }
+        }
+
+        private void BuildConform()
+        {
+            _center = transform.position;
+            _ext = Mathf.Max(Mathf.Max(ScaleFrom.x, ScaleTo.x), Mathf.Max(ScaleFrom.z, ScaleTo.z)) * 0.5f * 1.05f;
+            if (_ext < 1.2f) return;
+            float cy;
+            if (!DragonCombat.TryGroundY(_center, 6f, 30f, out cy)) return;
+            _lift = _center.y - cy;
+            // flat ground: five probes within 12 cm -> keep the plain quad
+            bool flat = true;
+            float[] px = { -1f, 1f, -1f, 1f }, pz = { -1f, -1f, 1f, 1f };
+            for (int i = 0; i < 4 && flat; i++)
+            {
+                float y;
+                if (DragonCombat.TryGroundY(new Vector3(_center.x + px[i] * _ext * 0.7f, cy, _center.z + pz[i] * _ext * 0.7f), 12f, 40f, out y) && Mathf.Abs(y - cy) > 0.12f) flat = false;
+            }
+            if (flat) return;
+            _hf = new float[HN * HN];
+            for (int j = 0; j < HN; j++)
+                for (int i = 0; i < HN; i++)
+                {
+                    float x = _center.x - _ext + 2f * _ext * i / (HN - 1), z = _center.z - _ext + 2f * _ext * j / (HN - 1);
+                    float y;
+                    _hf[j * HN + i] = DragonCombat.TryGroundY(new Vector3(x, cy, z), 12f, 40f, out y) ? y : cy;
+                }
+            int n = Cells + 1;
+            _gv = new Vector3[n * n];
+            Vector2[] uv = new Vector2[n * n];
+            for (int j = 0; j < n; j++)
+                for (int i = 0; i < n; i++)
+                {
+                    _gv[j * n + i] = new Vector3(i / (float)Cells - 0.5f, 0f, j / (float)Cells - 0.5f);
+                    uv[j * n + i] = new Vector2(i / (float)Cells, j / (float)Cells);
+                }
+            int[] tri = new int[Cells * Cells * 12];
+            int k = 0;
+            for (int j = 0; j < Cells; j++)
+                for (int i = 0; i < Cells; i++)
+                {
+                    int a = j * n + i, b = a + 1, c = a + n, d = c + 1;
+                    tri[k++] = a; tri[k++] = c; tri[k++] = b; tri[k++] = b; tri[k++] = c; tri[k++] = d;
+                    tri[k++] = a; tri[k++] = b; tri[k++] = c; tri[k++] = b; tri[k++] = d; tri[k++] = c;
+                }
+            Mesh.Clear();
+            Mesh.vertices = (Vector3[])_gv.Clone();
+            Mesh.uv = uv;
+            Mesh.colors = new Color[n * n];
+            Mesh.triangles = tri;
+            _lastScale = Vector3.zero;
+        }
+
+        private float SampleH(float wx, float wz)
+        {
+            float fx = Mathf.Clamp((wx - _center.x + _ext) / (2f * _ext) * (HN - 1), 0f, HN - 1.001f);
+            float fz = Mathf.Clamp((wz - _center.z + _ext) / (2f * _ext) * (HN - 1), 0f, HN - 1.001f);
+            int ix = (int)fx, iz = (int)fz;
+            float tx = fx - ix, tz = fz - iz;
+            float h0 = Mathf.Lerp(_hf[iz * HN + ix], _hf[iz * HN + ix + 1], tx);
+            float h1 = Mathf.Lerp(_hf[(iz + 1) * HN + ix], _hf[(iz + 1) * HN + ix + 1], tx);
+            return Mathf.Lerp(h0, h1, tz);
+        }
+
+        private void UpdateConform()
+        {
+            Vector3 sc = transform.localScale;
+            Quaternion rot = transform.rotation;
+            if (sc == _lastScale && rot == _lastRot) return;
+            _lastScale = sc; _lastRot = rot;
+            float sy = Mathf.Max(0.01f, Mathf.Abs(sc.y));
+            Vector3 pos = transform.position;
+            Vector3[] v = new Vector3[_gv.Length];
+            for (int i = 0; i < _gv.Length; i++)
+            {
+                Vector3 w = rot * new Vector3(_gv[i].x * sc.x, 0f, _gv[i].z * sc.z);
+                float h = SampleH(pos.x + w.x, pos.z + w.z) + _lift;
+                v[i] = new Vector3(_gv[i].x, (h - pos.y) / sy, _gv[i].z);
+            }
+            Mesh.vertices = v;
+            Mesh.RecalculateBounds();
+        }
 
         private void Update()
         {
@@ -8736,6 +8954,7 @@ namespace DragonsAltarCombat
             float e = 1f - (1f - t) * (1f - t) * (1f - t);
             transform.localScale = Vector3.LerpUnclamped(ScaleFrom, ScaleTo, e);
             if (Spin != 0f) transform.Rotate(Vector3.up, Spin * Time.deltaTime, Space.Self);
+            if (_hf != null && Mesh != null) UpdateConform();
             float k = Age < FadeIn ? Age / Mathf.Max(0.01f, FadeIn) : 1f - Mathf.Clamp01((Age - FadeIn - Hold) / Mathf.Max(0.01f, Life - FadeIn - Hold));
             if (Mesh != null)
             {
@@ -8989,9 +9208,14 @@ namespace DragonsAltarCombat
         private float _age;
         private MeshFilter[] _mf;
         private Color[][] _base;
+        private LineRenderer[] _lr;
+        private Color[] _lrBase;
         private Vector3 _scale;
         private void Start()
         {
+            _lr = GetComponentsInChildren<LineRenderer>();
+            _lrBase = new Color[_lr.Length];
+            for (int i = 0; i < _lr.Length; i++) _lrBase[i] = _lr[i].startColor;
             _mf = GetComponentsInChildren<MeshFilter>();
             _base = new Color[_mf.Length][];
             for (int i = 0; i < _mf.Length; i++) _base[i] = _mf[i].sharedMesh != null ? _mf[i].sharedMesh.colors : new Color[0];
@@ -9004,6 +9228,12 @@ namespace DragonsAltarCombat
             if (_age > Hold && _mf != null)
             {
                 float k = 1f - Mathf.Clamp01((_age - Hold) / Mathf.Max(0.01f, Fade));
+                for (int i = 0; _lr != null && i < _lr.Length; i++)
+                {
+                    if (_lr[i] == null) continue;
+                    Color lc = _lrBase[i]; lc.a *= k;
+                    _lr[i].startColor = lc; _lr[i].endColor = lc;
+                }
                 for (int i = 0; i < _mf.Length; i++)
                 {
                     if (_mf[i] == null || _mf[i].sharedMesh == null || _base[i].Length == 0) continue;
@@ -9055,6 +9285,12 @@ namespace DragonsAltarCombat
     }
 
     // Destroys a generated mesh together with its object.
+    public class DragonSpinner : MonoBehaviour
+    {
+        public float DegPerSecond = 900f;
+        private void Update() { transform.Rotate(Vector3.up, DegPerSecond * Time.deltaTime, Space.Self); }
+    }
+
     public class DragonMeshOwner : MonoBehaviour
     {
         public Mesh Mesh;
@@ -9502,8 +9738,7 @@ namespace DragonsAltarCombat
                 {
                     float t = (float)k / (n - 1);
                     Vector3 p = center + dir * len * t + side * (k == 0 ? 0f : UnityEngine.Random.Range(-0.35f, 0.35f) * radius * 0.12f);
-                    RaycastHit hit;
-                    if (Physics.Raycast(p + Vector3.up * 2f, Vector3.down, out hit, 5f, LayerMask.GetMask("terrain", "Default", "static_solid", "piece"), QueryTriggerInteraction.Ignore)) p = hit.point;
+                    p = GroundPoint(p);   // v0.25.66 terrain / Structures
                     line.SetPosition(k, p + Vector3.up * 0.04f);
                 }
                 lines.Add(line);
@@ -9643,8 +9878,7 @@ namespace DragonsAltarCombat
             {
                 float t = (float)k / (n - 1);
                 Vector3 p = Vector3.Lerp(a, b, t) + side * UnityEngine.Random.Range(-0.25f, 0.25f) * width * 2f;
-                RaycastHit hit;
-                if (Physics.Raycast(p + Vector3.up * 3f, Vector3.down, out hit, 8f, mask, QueryTriggerInteraction.Ignore)) p = hit.point;
+                p = GroundPoint(p);   // v0.25.66 terrain / Structures
                 line.SetPosition(k, p + Vector3.up * 0.04f);
             }
             DragonCrackFade fade = l.gameObject.AddComponent<DragonCrackFade>();
@@ -9881,6 +10115,8 @@ namespace DragonsAltarCombat
 
         public static Vector3 GroundPoint(Vector3 pos)
         {
+            float gy;
+            if (DragonCombat.TryGroundY(pos, 12f, 40f, out gy)) return new Vector3(pos.x, gy, pos.z);   // v0.25.66 terrain / Structures
             RaycastHit hit;
             if (Physics.Raycast(pos + Vector3.up * 2f, Vector3.down, out hit, 6f, LayerMask.GetMask("terrain", "Default", "static_solid", "piece"), QueryTriggerInteraction.Ignore))
                 return hit.point;
@@ -9895,10 +10131,10 @@ namespace DragonsAltarCombat
             Vector3 g = GroundPoint(pos) + Vector3.up * 0.07f;
             Quaternion yaw = Quaternion.Euler(0f, UnityEngine.Random.Range(0f, 360f), 0f);
             Color rc = c; rc.a = 0.9f;
-            DragonMeshFx ring = MeshFx(g, yaw, true, Mat(RingTex(), true), rc, seconds + 0.15f);
+            DragonMeshFx ring = MeshFx(g, yaw, true, Mat(RingTex(), true), rc, seconds + 0.15f); if (ring != null) ring.Conform = true;
             if (ring != null) { ring.ScaleFrom = Vector3.one * radius * 0.4f; ring.ScaleTo = Vector3.one * radius * 2.05f; ring.ScaleTime = seconds; }
             Color gc = Color.Lerp(c, Color.white, 0.2f); gc.a = 0.55f;
-            DragonMeshFx disc = MeshFx(g + Vector3.up * 0.01f, yaw, true, Mat(Glow(), true), gc, seconds * 0.8f + 0.1f);
+            DragonMeshFx disc = MeshFx(g + Vector3.up * 0.01f, yaw, true, Mat(Glow(), true), gc, seconds * 0.8f + 0.1f); if (disc != null) disc.Conform = true;
             if (disc != null) { disc.ScaleFrom = Vector3.one * radius * 0.8f; disc.ScaleTo = Vector3.one * radius * 1.6f; disc.ScaleTime = seconds * 0.5f; }
         }
 
@@ -9909,7 +10145,7 @@ namespace DragonsAltarCombat
             radius = Mathf.Max(0.3f, radius);
             Vector3 g = GroundPoint(pos) + Vector3.up * 0.07f;
             Color rc = c; rc.a = Mathf.Clamp01(c.a) * 0.85f;
-            DragonMeshFx ring = MeshFx(g, Quaternion.identity, true, Mat(RingTex(), true), rc, Mathf.Max(0.15f, seconds));
+            DragonMeshFx ring = MeshFx(g, Quaternion.identity, true, Mat(RingTex(), true), rc, Mathf.Max(0.15f, seconds)); if (ring != null) ring.Conform = true;
             if (ring != null) { ring.FadeIn = Mathf.Min(0.12f, seconds * 0.3f); ring.Hold = seconds * 0.5f; ring.ScaleFrom = ring.ScaleTo = Vector3.one * radius * 2.05f; }
         }
 
@@ -9918,7 +10154,7 @@ namespace DragonsAltarCombat
         {
             if (!Enabled) return;
             Vector3 g = GroundPoint(pos) + Vector3.up * 0.05f;
-            DragonMeshFx s = MeshFx(g, Quaternion.Euler(0f, UnityEngine.Random.Range(0f, 360f), 0f), true, Mat(ScorchTex(), false), new Color(0.08f, 0.06f, 0.05f, 0.75f), seconds);
+            DragonMeshFx s = MeshFx(g, Quaternion.Euler(0f, UnityEngine.Random.Range(0f, 360f), 0f), true, Mat(ScorchTex(), false), new Color(0.08f, 0.06f, 0.05f, 0.75f), seconds); if (s != null) s.Conform = true;
             if (s != null) { s.FadeIn = 0.05f; s.Hold = seconds * 0.6f; s.ScaleFrom = Vector3.one * radius * 1.6f; s.ScaleTo = Vector3.one * radius * 2f; s.ScaleTime = 0.25f; }
         }
 
@@ -10163,12 +10399,12 @@ namespace DragonsAltarCombat
             if (!Enabled) return;
             Vector3 g = GroundPoint(pos) + Vector3.up * 0.08f;
             Color gc = c; gc.a = 0.8f;
-            DragonMeshFx a = MeshFx(g, Quaternion.identity, true, Mat(RingTex(), true), gc, seconds);
+            DragonMeshFx a = MeshFx(g, Quaternion.identity, true, Mat(RingTex(), true), gc, seconds); if (a != null) a.Conform = true;
             if (a != null) { a.FadeIn = 0.2f; a.Hold = seconds * 0.6f; a.ScaleFrom = Vector3.one * radius * 1.7f; a.ScaleTo = Vector3.one * radius * 2.05f; a.ScaleTime = 0.3f; a.Spin = spin; }
-            DragonMeshFx b = MeshFx(g + Vector3.up * 0.01f, Quaternion.identity, true, Mat(RingTex(), true), gc, seconds);
+            DragonMeshFx b = MeshFx(g + Vector3.up * 0.01f, Quaternion.identity, true, Mat(RingTex(), true), gc, seconds); if (b != null) b.Conform = true;
             if (b != null) { b.FadeIn = 0.25f; b.Hold = seconds * 0.6f; b.ScaleFrom = Vector3.one * radius * 1.1f; b.ScaleTo = Vector3.one * radius * 1.25f; b.ScaleTime = 0.3f; b.Spin = -spin * 1.6f; }
             Color dc = c; dc.a = 0.3f;
-            DragonMeshFx d = MeshFx(g + Vector3.up * 0.02f, Quaternion.identity, true, Mat(Glow(), true), dc, seconds);
+            DragonMeshFx d = MeshFx(g + Vector3.up * 0.02f, Quaternion.identity, true, Mat(Glow(), true), dc, seconds); if (d != null) d.Conform = true;
             if (d != null) { d.FadeIn = 0.2f; d.Hold = seconds * 0.6f; d.ScaleFrom = d.ScaleTo = Vector3.one * radius * 2f; }
         }
 
@@ -10302,11 +10538,81 @@ namespace DragonsAltarCombat
             Quaternion[] planes = Mathf.Abs(roll) < 1f
                 ? new Quaternion[] { Quaternion.Euler(-30f, 0f, 0f) }
                 : new Quaternion[] { Quaternion.identity, Quaternion.Euler(0f, 60f, 0f) };
+            // v0.25.66 (user: still invisible): built from camera-facing LineRenderer arcs (the same renderer as the
+            // Lightning Trails, which reads in game) - a wide light-blue glow, a thick light-blue body and a white core,
+            // tapered to needle tips. Flat crescent meshes vanished edge-on.
+            Color glow = Color.Lerp(c, new Color(0.45f, 0.80f, 1f, 1f), 0.5f); glow.a = 0.9f;
+            Color bodyL = Color.Lerp(c, new Color(0.62f, 0.88f, 1f, 1f), 0.5f); bodyL.a = 0.95f;
             for (int i = 0; i < planes.Length; i++)
             {
-                CrescentLayer(parent, body, radius, width * 2.4f, roll, 82f, planes[i], false);
-                CrescentLayer(parent, core, radius, width * 0.9f, roll, 80f, planes[i], true);
+                CrescentArc(parent, glow, radius, width * 4.5f, roll, 84f, planes[i], true);
+                CrescentArc(parent, bodyL, radius, width * 2.6f, roll, 82f, planes[i], false);
+                CrescentArc(parent, core, radius, width * 1.1f, roll, 80f, planes[i], true);
             }
+        }
+
+        private static void CrescentArc(Transform parent, Color col, float radius, float width, float roll, float span, Quaternion plane, bool additive)
+        {
+            CrescentArc(parent, col, radius, width, roll, span, plane, additive, 0.75f);
+        }
+
+        private static void CrescentArc(Transform parent, Color col, float radius, float width, float roll, float span, Quaternion plane, bool additive, float back)
+        {
+            GameObject go = new GameObject("IH_CrescentArc");
+            go.transform.SetParent(parent, false);
+            go.transform.localRotation = plane * Quaternion.AngleAxis(roll, Vector3.forward);
+            go.transform.localPosition = go.transform.localRotation * (Vector3.back * radius * back);
+            LineRenderer line = go.AddComponent<LineRenderer>();
+            line.useWorldSpace = false;
+            const int n = 24;
+            line.positionCount = n + 1;
+            for (int i = 0; i <= n; i++)
+            {
+                float a = Mathf.Lerp(-span, span, (float)i / n) * Mathf.Deg2Rad;
+                line.SetPosition(i, new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a)) * radius);
+            }
+            AnimationCurve curve = new AnimationCurve();
+            for (int i = 0; i <= 8; i++)
+            {
+                float t = i / 8f;
+                curve.AddKey(t, Mathf.Pow(Mathf.Sin(t * Mathf.PI), 0.7f) + 0.04f);
+            }
+            line.widthCurve = curve;
+            line.widthMultiplier = Mathf.Max(0.05f, width);
+            line.numCapVertices = 2;
+            line.numCornerVertices = 2;
+            line.textureMode = LineTextureMode.Stretch;
+            Material m = Mat(LineTex(), additive);
+            if (m != null) line.sharedMaterial = m;
+            line.startColor = col;
+            line.endColor = col;
+            line.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            line.receiveShadows = false;
+        }
+
+        // v0.25.66 (user: Whirlwind needs an obvious circular slash): two glowing blade crescents sweeping around
+        // the spinner at chest height, one full turn every turnSeconds, for the whole channel; fade at the end.
+        public static GameObject SpinSlash(Transform follow, Color c, float radius, float width, float seconds, float turnSeconds)
+        {
+            if (!Enabled || follow == null) return null;
+            GameObject go = new GameObject("IH_SpinSlash");
+            go.transform.SetParent(follow, false);
+            go.transform.localPosition = Vector3.up * 1.0f;
+            Color glow = c; glow.a = 0.85f;
+            Color body = Color.Lerp(c, Color.white, 0.35f); body.a = 0.9f;
+            Color core = Color.Lerp(c, Color.white, 0.85f); core.a = 1f;
+            for (int k = 0; k < 2; k++)
+            {
+                Quaternion half = Quaternion.Euler(0f, k * 180f, 0f);
+                CrescentArc(go.transform, glow, radius, width * 3.5f, 0f, 75f, half, true, 0f);
+                CrescentArc(go.transform, body, radius, width * 1.8f, 0f, 70f, half, false, 0f);
+                CrescentArc(go.transform, core, radius, width * 0.7f, 0f, 66f, half, true, 0f);
+            }
+            DragonSpinner sp = go.AddComponent<DragonSpinner>();
+            sp.DegPerSecond = 360f / Mathf.Max(0.1f, turnSeconds);
+            DragonFadeOut fo = go.AddComponent<DragonFadeOut>();
+            fo.Hold = Mathf.Max(0.05f, seconds); fo.Fade = 0.25f;
+            return go;
         }
 
         // Vergil's Judgement Cut: a pale, faded sphere over the area (outer veil + darker core), cuts flash inside.

@@ -110,8 +110,8 @@ namespace AlbedosCustomClassesSkills
             return false;
         }
 
-        // v0.22.6 rule: Sky Summon / Ground PAC targets are terrain or physical objects, never a
-        // creature (the crosshair ray passes through creatures to the surface behind them).
+        // v0.22.6 rule: Sky Summon / Ground PAC targets are never a creature (the crosshair ray passes through
+        // creatures to the surface behind them). v0.25.66: only terrain or Structures, never trees / rocks.
         public static bool TryGetPhysicalTarget(Player player, float range, out Vector3 point)
         {
             point = Vector3.zero;
@@ -161,6 +161,9 @@ namespace AlbedosCustomClassesSkills
                 if (collider == null || collider.isTrigger || IsLocalPlayerCollider(player, collider))
                     continue;
                 if (collider.GetComponentInParent<Character>() != null)
+                    continue;
+                // v0.25.66 universal rule: only terrain or Structures; the aim passes through trees, rocks, logs.
+                if (!DragonCombat.IsTerrainOrStructure(collider))
                     continue;
                 worldHit = hits[i];
                 return true;
@@ -220,7 +223,7 @@ namespace AlbedosCustomClassesSkills
         public static SkillsPlugin Instance;
         public const string ModGuid = "albedo.customclasses.skills";
         public const string ModName = "Dragon's Altar - Starter Skills";
-        public const string ModVersion = "0.25.65";
+        public const string ModVersion = "0.25.66";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";

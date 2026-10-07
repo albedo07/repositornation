@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.65";
+        public const string ModVersion = "0.25.66";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1822,7 +1822,7 @@ namespace AlbedosCustomClassesAdvanced
             _frenzyDashTime = Config.Bind(f, "DashTime_v02542", 0.12f, "Seconds the dash takes (near-instant).");
             _frenzyHailInterval = Config.Bind(f, "SlashHailInterval_v02542", 0.2f, "Seconds between the slashes that rain down along the dash path.");
             _frenzyHailSpacing = Config.Bind(f, "SlashHailSpacing_v02542", 1f, "Metres between two slashes along the path.");
-            _frenzyHailRadius = Config.Bind(f, "SlashHailRadius_v02542", 1f, "Radius of each slash (m); every slash damages everything inside it.");
+            _frenzyHailRadius = Config.Bind(f, "SlashHailRadius_v02566", 3f, "Radius of each slash (m); every slash damages everything inside it (v0.25.66: +2 m).");
             _frenzyAfterDelay = Config.Bind(f, "AftereffectDelay", 0.25f, "Seconds before the slash aftereffect along the dash path.");
             _frenzyDashDamage = BindDamage("Sword Master Frenzied Charge Damage", 0f, 96f, 0f, 0f, 0f, 0f, 0f, 0f);
             _frenzyAfterDamage = BindDamage("Sword Master Frenzied Charge Aftereffect Damage", 0f, 24f, 0f, 0f, 0f, 0f, 0f, 0f);
@@ -3313,6 +3313,12 @@ namespace AlbedosCustomClassesAdvanced
                     DragonVfx.TrailWhile(wt, new Color(1f, 0.62f, 0.22f, 0.8f), 1.2f, delegate { return _whirlActive && wt != null; });
                 });   // v0.25.58 dust funnel
             }
+            GameObject spinFx = null;
+            if (_enableVfx.Value)
+            {
+                Transform st = player.transform; float sr = Mathf.Max(0.5f, DragonCombat.M(_whirlwindRadius.Value)) * 0.85f; float sd = maxTime;
+                DragonCombat.RunVfx(delegate { spinFx = DragonVfx.SpinSlash(st, new Color(1f, 0.62f, 0.22f, 1f), sr, Mathf.Max(0.25f, sr * 0.09f), sd, 0.3f); });   // v0.25.66 circular slash
+            }
             for (int tick = 0; tick < maxTicks; tick++)
             {
                 if (player == null || player.IsDead()) { _whirlActive = false; yield break; }
@@ -3346,6 +3352,7 @@ namespace AlbedosCustomClassesAdvanced
                 yield return new WaitForSeconds(interval);
             }
             _whirlActive = false;
+            if (spinFx != null) Destroy(spinFx);
             DragonCombat.BeginWhirlwind(player, 0.05f);
             if (player == null || player.IsDead()) yield break;
             // Final sweep scales with the time actually spun; ending early gives a smaller sweep.
@@ -3792,7 +3799,7 @@ namespace AlbedosCustomClassesAdvanced
             {
                 // v0.25.65 (user: Halfmoon is an ultimate - big): a huge bright crescent swept out in front of you
                 Vector3 hf = forward; hf.y = 0f; float hr = radius; Vector3 hp = player.transform.position + Vector3.up * 1.1f + (hf.sqrMagnitude > 0.001f ? hf.normalized : player.transform.forward) * hr * 0.6f;
-                DragonCombat.RunVfx(delegate { DragonVfx.CrescentFlash(hp, hf, DragonVfx.Steel, hr * 0.95f, Mathf.Max(0.35f, hr * 0.07f), 0f, 0.35f, 0.4f, 0.15f); DragonVfx.Shake(hp, 25f, 1f); });
+                DragonCombat.RunVfx(delegate { DragonVfx.CrescentFlash(hp, hf, DragonVfx.Steel, hr * 0.95f, Mathf.Max(0.5f, hr * 0.11f), 0f, 0.45f, 0.45f, 0.15f); DragonVfx.Shake(hp, 25f, 1f); });
             }
             List<Character> targets = GetFrontalTargets(player, player.transform.position + Vector3.up * 0.8f, forward, radius, 170f);
             for (int i = 0; i < targets.Count; i++)
@@ -4280,6 +4287,11 @@ namespace AlbedosCustomClassesAdvanced
             float interval = Mathf.Max(0.1f, _whirlwindInterval.Value);
             int ticks = Mathf.Max(1, Mathf.RoundToInt(duration / interval));
             DragonCombat.PlaySpinClip(player, duration, 0.4f);   // v0.25.8: arms out, one turn every 0.4s
+            if (_enableVfx.Value)
+            {
+                Transform wt0 = player.transform; float wr0 = Mathf.Max(0.5f, DragonCombat.M(_whirlwindRadius.Value)) * 0.85f; float wd0 = duration;
+                DragonCombat.RunVfx(delegate { DragonVfx.SpinSlash(wt0, new Color(1f, 0.62f, 0.22f, 1f), wr0, Mathf.Max(0.25f, wr0 * 0.09f), wd0, 0.4f); });   // v0.25.66 circular slash
+            }
 
             for (int tick = 0; tick < ticks; tick++)
             {

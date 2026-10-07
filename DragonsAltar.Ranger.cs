@@ -40,7 +40,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Dragon's Altar - Ranger";
-        public const string ModVersion = "0.25.65";
+        public const string ModVersion = "0.25.66";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -727,6 +727,7 @@ namespace DragonsAltarRanger
             {
                 Collider c = hits[i].collider;
                 if (c == null || IsPlayerCollider(player, c) || c.GetComponentInParent<Character>() != null) continue;
+                if (!DragonCombat.IsTerrainOrStructure(c)) continue;   // v0.25.66: never a tree / rock
                 return hits[i].point + Vector3.up * 0.05f;
             }
             float h;
@@ -3214,7 +3215,7 @@ namespace DragonsAltarRanger
             for (int i = 0; i < hits.Length; i++)
             {
                 Collider c = hits[i].collider;
-                if (c == null || c.GetComponentInParent<Character>() != null) continue;
+                if (c == null || c.GetComponentInParent<Character>() != null || !DragonCombat.IsTerrainOrStructure(c)) continue;   // v0.25.66
                 if (hits[i].distance < best) { best = hits[i].distance; res = hits[i].point + Vector3.up * 0.1f; found = true; }
             }
             return found ? res : point;

@@ -1,0 +1,18 @@
+Immortal Heroes v0.25.66 - Terrain and Slashes
+
+UNIVERSAL RULES
+- Physical Objects = environmental objects (trees, rocks, logs, bushes). Structures = man-made objects (build pieces, ruins, dungeons).
+- Ground-targeted skills (Skyfall Barrage, Ground PACs, Sky Summons...) aim only at terrain or Structures: the aim passes through trees and rocks.
+- Everything a skill does to the ground follows the terrain Y level: ground rings, area circles, scorch marks, glyphs, cracks and spikes hug slopes instead of floating flat.
+- Every class moves freely with its fitting weapons: Sorcerer, Archmage and Horizon Walker have no staff, wand or gun staff movement penalty. Base Warrior has none with Swords, Axes, Clubs, Polearms or Spears. Existing exemptions stay as they were (Sword Master, Mercenary, Cleric, Ranger).
+
+COMBAT
+- Weapon Mastery Finisher removed: no attack speed burst and no finisher stage. The stronger last hit is Valheim's own.
+- Hyper Armor = immovable.
+  - Warrior and Sword Master: the 30% threshold uses the damage you would really take after your armor.
+  - Hyper Armor is now also checked on your own client (RPC_Damage), so a weak Troll hit no longer pushes you on servers.
+
+VISUALS
+- Moonlight Splitter, Crescent Cleave and Halfmoon Slash crescents are now thick, glowing light-blue blades built from camera-facing lines, the same renderer as the Lightning Trails. Halfmoon is the biggest and thickest.
+- Frenzied Charge slashes are 2 m bigger (radius 3 m, damage area too).
+- Whirlwind (normal and Ascended): two glowing blade crescents sweep around you at chest height for the whole spin.
