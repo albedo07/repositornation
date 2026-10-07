@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Dragon's Altar - Sorcerer Advancements";
-        public const string ModVersion = "0.25.57";
+        public const string ModVersion = "0.25.58";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1067,6 +1067,16 @@ namespace DragonsAltarSorcerer
             float duration = ascended ? _gvAscDuration.Value : _gravityDuration.Value;
             float tick = Mathf.Max(0.2f, _gravityTick.Value);
             float end = Time.time + Mathf.Max(0.5f, duration);
+            if (_enableVfx.Value)
+            {
+                Vector3 gc = center; float gr = radius, gd = Mathf.Max(0.5f, duration);
+                DragonCombat.RunVfx(delegate
+                {
+                    DragonVfx.Vortex(null, gc + Vector3.up * 1.2f, new Color(0.62f, 0.25f, 1f, 1f), gr, gd);   // v0.25.58 everything is sucked into the well
+                    DragonVfx.Aura(null, gc + Vector3.up * 1.2f, new Color(0.25f, 0.05f, 0.45f, 0.9f), 0.8f, gd, 40f, 0.3f);
+                    DragonVfx.Flash(gc + Vector3.up * 1.2f, new Color(0.62f, 0.25f, 1f, 1f), 3f, gr * 1.5f, gd);
+                });
+            }
             while (Time.time < end && player != null)
             {
                 List<Character> targets = GetSphereTargets(player, center, radius);
@@ -1099,7 +1109,7 @@ namespace DragonsAltarSorcerer
                 }
                 else if (!IsBoss(enemy)) DragonCombat.Freeze(enemy, _gvAscStun.Value, 0f);
             }
-            if (_enableVfx.Value) { StartCoroutine(RingVfx(center, radius, new Color(0.75f, 0.30f, 1f, 1f), 0.6f)); CreateLightningBurst(center, radius); }
+            if (_enableVfx.Value) { StartCoroutine(RingVfx(center, radius, new Color(0.75f, 0.30f, 1f, 1f), 0.6f)); CreateLightningBurst(center, radius); Vector3 bc = center; float br = radius; DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(bc, new Color(0.75f, 0.30f, 1f, 1f), br, 1.8f); }); }
         }
 
         // ------------------------------------------------------------------ Astral Greatblade
@@ -1142,7 +1152,17 @@ namespace DragonsAltarSorcerer
                 StartCoroutine(BurnRoutine(player, targets[i], true, _bladeBurnSeconds.Value, burn));
                 DragonCombat.Stun(targets[i], player.transform.position);
             }
-            if (_enableVfx.Value) StartCoroutine(GreatbladeVfx(player.transform.position, forward, range, width));
+            if (_enableVfx.Value)
+            {
+                StartCoroutine(GreatbladeVfx(player.transform.position, forward, range, width));
+                Vector3 ga = player.transform.position, gb = player.transform.position + forward * range; float gw = width;
+                DragonCombat.RunVfx(delegate
+                {
+                    DragonVfx.CrackLine(ga, gb, new Color(0.80f, 0.40f, 1f, 1f), Mathf.Clamp(gw * 0.35f, 0.4f, 1.4f), 4f);   // v0.25.58 the blade splits the ground
+                    DragonVfx.HeavyLanding(Vector3.Lerp(ga, gb, 0.6f), new Color(0.75f, 0.30f, 1f, 1f), Mathf.Max(2f, gw * 1.5f), 2f);
+                    for (int k = 1; k <= 4; k++) DragonVfx.Burst(Vector3.Lerp(ga, gb, k / 4f) + Vector3.up * 0.4f, new Color(0.85f, 0.55f, 1f, 1f), 20, 7f, 0.3f, 0.5f, 0.4f);
+                });
+            }
         }
 
         private IEnumerator AscendedGreatbladeRoutine(Player player)
@@ -1196,7 +1216,12 @@ namespace DragonsAltarSorcerer
                 if (DragonCombat.IsSmallEnemy(enemy)) DragonCombat.Stun(enemy, player.transform.position);
                 else if (!IsBoss(enemy)) { ForceStagger(enemy, player.transform.position); DragonCombat.ApplyCripple(enemy, 3f); }
             }
-            if (_enableVfx.Value) StartCoroutine(RingVfx(player.transform.position, radius, new Color(0.48f, 0.90f, 1f, 0.95f), 0.8f));
+            if (_enableVfx.Value)
+            {
+                StartCoroutine(RingVfx(player.transform.position, radius, new Color(0.48f, 0.90f, 1f, 0.95f), 0.8f));
+                Vector3 np = player.transform.position; float nr = radius;
+                DragonCombat.RunVfx(delegate { DragonVfx.Shockwave(np, new Color(0.60f, 0.92f, 1f, 1f), nr, 0.5f); DragonVfx.IceBurst(np, nr); DragonVfx.Shake(np, 25f, 1.2f); DragonVfx.Flash(np + Vector3.up, new Color(0.60f, 0.92f, 1f, 1f), 6f, nr * 2f, 0.5f); });   // v0.25.58
+            }
         }
 
         // Ascended: a 10m Frost Aura on the Wizard (12 ticks), then an explosion that Freezes.
@@ -1216,7 +1241,12 @@ namespace DragonsAltarSorcerer
                     DealWiz(player, targets[i], _novaDmg, _fnAscTickPercent.Value / 100f, "frost_nova", 0f, false);
                     DragonCombat.ApplyFrost(targets[i], Mathf.Max(1f, gap * 2f));
                 }
-                if (_enableVfx.Value) StartCoroutine(RingVfx(player.transform.position, radius, new Color(0.55f, 0.92f, 1f, 0.55f), gap));
+                if (_enableVfx.Value)
+                {
+                    StartCoroutine(RingVfx(player.transform.position, radius, new Color(0.55f, 0.92f, 1f, 0.55f), gap));
+                    Transform ft = player.transform; float fr = radius, fg = gap;
+                    DragonCombat.RunVfx(delegate { DragonVfx.Aura(ft, ft.position, new Color(0.75f, 0.95f, 1f, 0.9f), fr * 0.6f, fg, 50f, 0.6f); });   // v0.25.58 snow whirling in the aura
+                }
                 yield return new WaitForSeconds(gap);
             }
             if (player == null || player.IsDead()) yield break;
@@ -1226,7 +1256,12 @@ namespace DragonsAltarSorcerer
                 DealWiz(player, hit[i], _novaDmg, _fnAscBlast.Value / 100f, "frost_nova", 18f, false);
                 DragonCombat.Freeze(hit[i], _fnAscFreeze.Value, _fnAscBossSlow.Value / 100f);
             }
-            if (_enableVfx.Value) StartCoroutine(RingVfx(player.transform.position, radius, new Color(0.70f, 0.97f, 1f, 1f), 0.8f));
+            if (_enableVfx.Value)
+            {
+                StartCoroutine(RingVfx(player.transform.position, radius, new Color(0.70f, 0.97f, 1f, 1f), 0.8f));
+                Vector3 ap = player.transform.position; float ar = radius;
+                DragonCombat.RunVfx(delegate { DragonVfx.Shockwave(ap, new Color(0.70f, 0.97f, 1f, 1f), ar, 0.55f); DragonVfx.IceBurst(ap, ar); DragonVfx.Debris(ap, new Color(0.70f, 0.92f, 1f, 1f), 16, 10f, 0.45f, 2.5f); DragonVfx.Shake(ap, 30f, 1.8f); });   // v0.25.58
+            }
         }
 
         // ------------------------------------------------------------------ Meteor Fall
@@ -1302,6 +1337,7 @@ namespace DragonsAltarSorcerer
         {
             Vector3 sky = DragonCombat.GetIndoorSafeSkyPoint(target, 12f);
             GameObject meteor = _enableVfx.Value ? CreateOrb(sky, size, new Color(1f, 0.20f, 0.02f, 1f)) : null;
+            if (meteor != null) { GameObject mv = meteor; DragonCombat.RunVfx(delegate { DragonVfx.TrailWhile(mv.transform, new Color(0.35f, 0.30f, 0.28f, 0.7f), size * 1.2f, delegate { return mv != null; }); }); }   // v0.25.58 smoke tail
             float drop = 0.45f;
             float e = 0f;
             while (e < drop)
@@ -1320,7 +1356,18 @@ namespace DragonsAltarSorcerer
                 StartCoroutine(BurnRoutine(player, targets[i], false, _meteorBurnSeconds.Value, burn));
                 ForceStagger(targets[i], target);
             }
-            if (_enableVfx.Value) StartCoroutine(RingVfx(target, radius, new Color(1f, 0.22f, 0.02f, 1f), 0.75f));
+            if (_enableVfx.Value)
+            {
+                StartCoroutine(RingVfx(target, radius, new Color(1f, 0.22f, 0.02f, 1f), 0.75f));
+                Vector3 mt = target; float mr = radius;
+                DragonCombat.RunVfx(delegate
+                {
+                    DragonVfx.HeavyLanding(mt, new Color(1f, 0.40f, 0.08f, 1f), mr, Mathf.Clamp(mr * 0.4f, 1f, 3f));   // v0.25.58 the meteor really lands
+                    DragonVfx.Pillar(mt, new Color(1f, 0.45f, 0.10f, 1f), mr * 0.35f, 8f, 0.5f);
+                    DragonVfx.Embers(mt, new Color(1f, 0.40f, 0.08f, 1f), mr * 0.8f, Mathf.Max(1f, _meteorBurnSeconds.Value), 50f);
+                    DragonVfx.Vanilla(new string[] { "vfx_FireballHit", "fx_fireball_staff_explosion" }, mt, Quaternion.identity, Mathf.Clamp(mr / 3f, 1f, 3f), 4f);
+                });
+            }
         }
 
         // ------------------------------------------------------------------ Astral Railcannon
@@ -1361,7 +1408,24 @@ namespace DragonsAltarSorcerer
             for (int i = 0; i < targets.Count; i++)
                 DealMagicWeaponDamage(player, targets[i], damage, m);
             if (_enableVfx.Value)
+            {
                 CreateBeam(origin, origin + forward * range, new Color(0.86f, 0.50f, 1f, 0.98f), width * 0.55f, beamLife);
+                // v0.25.58: where the rail meets the world it gouges a scar; the shot itself kicks the camera
+                Vector3 ro = origin, rf = forward; float rr = range, rw = width; bool big = beamLife > 0.3f;
+                DragonCombat.RunVfx(delegate
+                {
+                    Vector3 endP = ro + rf * rr;
+                    RaycastHit wall;
+                    if (Physics.Raycast(ro, rf, out wall, rr, LayerMask.GetMask("Default", "static_solid", "piece", "terrain"), QueryTriggerInteraction.Ignore)) endP = wall.point;
+                    DragonVfx.Burst(endP, new Color(0.86f, 0.50f, 1f, 1f), big ? 60 : 12, big ? 12f : 6f, 0.3f, 0.5f, 0.4f);
+                    if (big)
+                    {
+                        DragonVfx.Shake(ro, 20f, 1.5f);
+                        DragonVfx.Cracks(endP, new Color(0.86f, 0.50f, 1f, 1f), rw * 2f, 8, 3f);
+                        DragonVfx.Burst(ro + rf * 1.5f, new Color(1f, 0.85f, 1f, 1f), 40, 10f, 0.25f, 0.3f, 0f);
+                    }
+                });
+            }
         }
 
         // Ascended: a steerable beam for up to 4s (20 ticks x 9% of the normal shot); releasing ends it.
@@ -1453,6 +1517,15 @@ namespace DragonsAltarSorcerer
             {
                 StartCoroutine(RingVfx(target, radius, new Color(1f, 0.35f, 0.05f, 1f), 1f));
                 CreateLightningBurst(target, radius);
+                Vector3 ct = target; float cr = radius;
+                DragonCombat.RunVfx(delegate
+                {
+                    DragonVfx.HeavyLanding(ct, new Color(1f, 0.40f, 0.08f, 1f), cr, 3f);   // v0.25.58 the sky falls
+                    DragonVfx.Pillar(ct, new Color(0.80f, 0.40f, 1f, 1f), cr * 0.4f, 16f, 0.8f);
+                    DragonVfx.IceBurst(ct + new Vector3(cr * 0.3f, 0f, 0f), cr * 0.5f);
+                    DragonVfx.Embers(ct, new Color(1f, 0.40f, 0.08f, 1f), cr * 0.8f, 3f, 80f);
+                    DragonVfx.StormCloud(ct, cr, 14f, 2f);
+                });
             }
         }
 
@@ -1500,6 +1573,8 @@ namespace DragonsAltarSorcerer
             {
                 StartCoroutine(RingVfx(target, radius, new Color(0.50f, 0.90f, 1f, 0.95f), 0.6f));
                 StartCoroutine(RingVfx(target, core, new Color(0.85f, 0.98f, 1f, 1f), 0.8f));
+                Vector3 it = target; float ir = radius;
+                DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(it, new Color(0.60f, 0.92f, 1f, 1f), ir, 2f); DragonVfx.IceBurst(it, ir); });   // v0.25.58
             }
         }
 
@@ -1520,7 +1595,12 @@ namespace DragonsAltarSorcerer
             }
             foreach (Player ally in allies)
                 DragonCombat.GrantClockwork(ally, _clockDuration.Value, _clockSkillDamage.Value / 100f, 1f - Mathf.Clamp01(_clockCdr.Value / 100f));
-            if (_enableVfx.Value) StartCoroutine(RingVfx(player.transform.position, DragonCombat.M(_clockRadius.Value), new Color(1f, 0.82f, 0.35f, 0.95f), 0.8f));
+            if (_enableVfx.Value)
+            {
+                StartCoroutine(RingVfx(player.transform.position, DragonCombat.M(_clockRadius.Value), new Color(1f, 0.82f, 0.35f, 0.95f), 0.8f));
+                Vector3 kp = player.transform.position; float kr = DragonCombat.M(_clockRadius.Value);
+                DragonCombat.RunVfx(delegate { DragonVfx.Pillar(kp, new Color(1f, 0.82f, 0.35f, 1f), 1.2f, 12f, 0.8f); DragonVfx.Shockwave(kp, new Color(1f, 0.82f, 0.35f, 1f), kr, 0.7f); DragonVfx.Vortex(null, kp + Vector3.up, new Color(1f, 0.90f, 0.55f, 1f), 2.5f, 0.8f); });   // v0.25.58
+            }
         }
 
         private void CastRiftEcho(Player player)
@@ -1741,7 +1821,12 @@ namespace DragonsAltarSorcerer
             // inherit the pre-teleport altitude and deal fall damage on landing.
             ApplyFeatherFall(player);
             TriggerPhaseFlow(player);
-            if (_enableVfx.Value) StartCoroutine(RingVfx(dest, 1.6f, new Color(0.58f, 0.12f, 1f, 0.95f), 0.35f));
+            if (_enableVfx.Value)
+            {
+                StartCoroutine(RingVfx(dest, 1.6f, new Color(0.58f, 0.12f, 1f, 0.95f), 0.35f));
+                Vector3 vd = dest;
+                DragonCombat.RunVfx(delegate { DragonVfx.Burst(vd + Vector3.up, new Color(0.58f, 0.12f, 1f, 1f), 40, 7f, 0.25f, 0.4f, 0f); DragonVfx.Flash(vd + Vector3.up, new Color(0.62f, 0.25f, 1f, 1f), 4f, 6f, 0.3f); });   // v0.25.58
+            }
             ShowMessage((airborne ? "Void Step - Free Aim / Feather Falling" : "Void Step") + (max > 1 ? " (" + _voidCharges + "/" + max + ")" : ""));
         }
 
@@ -1966,7 +2051,11 @@ namespace DragonsAltarSorcerer
             }
 
             if (_enableVfx.Value)
+            {
                 StartCoroutine(RingVfx(impact + Vector3.up * 0.08f, radius, new Color(0.78f, 0.34f, 1f, 0.95f), 0.55f));
+                Vector3 ci = impact; float cr2 = radius;
+                DragonCombat.RunVfx(delegate { DragonVfx.Burst(ci + Vector3.up * 0.3f, new Color(0.78f, 0.34f, 1f, 1f), Mathf.RoundToInt(20 + cr2 * 8f), 7f + cr2, 0.3f, 0.5f, 0.3f); if (cr2 >= 2.5f) DragonVfx.GroundImpact(ci, new Color(0.78f, 0.34f, 1f, 1f), cr2, 1f); });   // v0.25.58
+            }
             if (orb != null)
                 Destroy(orb);
         }
@@ -2520,6 +2609,7 @@ namespace DragonsAltarSorcerer
             float tick = Mathf.Max(0.1f, _gbTick.Value);
             int solid = LayerMask.GetMask("Default", "static_solid", "Default_small", "piece", "terrain", "vehicle");
             GameObject orb = _enableVfx.Value ? CreateOrb(origin, DragonCombat.M(_gbOrbSize.Value), new Color(0.18f, 0.02f, 0.30f, 0.92f)) : null;
+            if (orb != null) { Transform ot = orb.transform; float vr = radius, vl = life + 2f; DragonCombat.RunVfx(delegate { DragonVfx.Vortex(ot, ot.position, new Color(0.62f, 0.25f, 1f, 1f), vr, vl); }); }   // v0.25.58 the orb drinks the light
             Vector3 pos = origin;
             bool moving = true;
             float elapsed = 0f;
@@ -2583,6 +2673,8 @@ namespace DragonsAltarSorcerer
                 DragonVfx.Shockwave(center, color, radius, 0.45f);
                 DragonVfx.Burst(center + Vector3.up * 0.5f, color, Mathf.RoundToInt(40 + radius * 8f), 8f + radius, 0.4f, 0.8f, 0.3f);
                 DragonVfx.Burst(center + Vector3.up * 0.4f, new Color(0.30f, 0.26f, 0.32f, 0.6f), 30, 3f, 1.2f, 1.5f, -0.1f);
+                DragonVfx.GroundImpact(center, color, radius, 1.6f);   // v0.25.58
+                DragonVfx.Flash(center + Vector3.up, color, 8f, radius * 3f, 0.5f);
             });
             GameObject flash = CreateOrb(center, radius * 0.3f, color);
             for (int i = 0; i < 3; i++)
@@ -2662,7 +2754,7 @@ namespace DragonsAltarSorcerer
                 if (DragonCombat.IsSmallEnemy(enemy)) DragonCombat.Stun(enemy, target);
                 if (!IsBoss(enemy)) DragonCombat.ApplyCripple(enemy, 6f);
             }
-            if (_enableVfx.Value) CreateStoneSpikes(target, radius);
+            if (_enableVfx.Value) { CreateStoneSpikes(target, radius); Vector3 sft = target; float sfr = radius; DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(sft, new Color(0.85f, 0.60f, 0.30f, 1f), sfr, 2f); }); }   // v0.25.58
             int ticks = Mathf.Max(1, Mathf.RoundToInt(_saAscDuration.Value / 0.5f));
             for (int t = 0; t < ticks; t++)
             {
@@ -2671,7 +2763,7 @@ namespace DragonsAltarSorcerer
                 List<Character> inside = GetSphereTargets(player, target, radius);
                 for (int i = 0; i < inside.Count; i++)
                     DealWiz(player, inside[i], _stoneAscDmg, _saAscTickPercent.Value / 100f, "stonefang_eruption", 0f, false);
-                if (_enableVfx.Value && t % 2 == 1) CreateStoneSpikes(target, radius);
+                if (_enableVfx.Value && t % 2 == 1) { CreateStoneSpikes(target, radius); Vector3 sft2 = target; float sfr2 = radius; DragonCombat.RunVfx(delegate { DragonVfx.Debris(sft2, new Color(0.45f, 0.38f, 0.30f, 1f), 6, 6f, 0.3f, 1.8f); DragonVfx.Shake(sft2, 20f, 0.6f); }); }
             }
         }
 
@@ -2939,6 +3031,7 @@ namespace DragonsAltarSorcerer
         private IEnumerator RuptureRoutine(Player player, Vector3 target)
         {
             if (_enableVfx.Value) StartCoroutine(RingVfx(target, DragonCombat.M(_ruptureRadius.Value), new Color(0.58f, 0.10f, 0.95f, 0.70f), _ruptureWindup.Value));
+            if (_enableVfx.Value) { Vector3 rv = target; float rvr = DragonCombat.M(_ruptureRadius.Value), rvt = Mathf.Max(0.1f, _ruptureWindup.Value); DragonCombat.RunVfx(delegate { DragonVfx.Vortex(null, rv + Vector3.up * 0.6f, new Color(0.58f, 0.10f, 0.95f, 1f), rvr, rvt); }); }   // v0.25.58
             yield return new WaitForSeconds(Mathf.Max(0.1f, _ruptureWindup.Value));
             List<Character> targets = GetSphereTargets(player, target, DragonCombat.M(_ruptureRadius.Value));
             for (int i = 0; i < targets.Count; i++)
@@ -2969,7 +3062,7 @@ namespace DragonsAltarSorcerer
                     else state.StunCycleHits--;
                 }
             }
-            if (_enableVfx.Value) CreateLightningBurst(target, DragonCombat.M(_ruptureRadius.Value));
+            if (_enableVfx.Value) { CreateLightningBurst(target, DragonCombat.M(_ruptureRadius.Value)); Vector3 rx = target; float rxr = DragonCombat.M(_ruptureRadius.Value); DragonCombat.RunVfx(delegate { DragonVfx.GroundImpact(rx, new Color(0.62f, 0.20f, 1f, 1f), rxr, 1.2f); }); }   // v0.25.58
         }
 
         private void ActivateTwinRift(Player player)

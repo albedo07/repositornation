@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.57";
+        public const string ModVersion = "0.25.58";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1690,7 +1690,7 @@ namespace AlbedosCustomClassesAdvanced
 
         private IEnumerator AnimateJudgementSphereCut(Vector3 center, float radius, int slash)
         {
-            DragonCombat.RunVfx(delegate { DragonVfx.Burst(center, new Color(0.45f, 0.78f, 1f, 1f), 30, 9f, 0.25f, 0.4f, 0f); DragonVfx.Flash(center, new Color(0.45f, 0.78f, 1f, 1f), 4f, radius * 2f, 0.3f); });
+            DragonCombat.RunVfx(delegate { DragonVfx.Burst(center, new Color(0.45f, 0.78f, 1f, 1f), 30, 9f, 0.25f, 0.4f, 0f); DragonVfx.Flash(center, new Color(0.45f, 0.78f, 1f, 1f), 4f, radius * 2f, 0.3f); DragonVfx.SlashStreaks(center, new Color(0.55f, 0.82f, 1f, 1f), radius, 6, 0.3f); });
             Vector3 axisA = Vector3.right;
             Vector3 axisB = Vector3.forward;
             if (slash == 1)
@@ -2341,6 +2341,8 @@ namespace AlbedosCustomClassesAdvanced
                 {
                     Vector3 side = Vector3.Cross(Vector3.up, dir).normalized * hailRadius * ((i % 2 == 0) ? 1f : -1f);
                     StartCoroutine(AnimateSeveredHorizonLine(p + Vector3.up * 1.4f + side, p + Vector3.up * 0.2f - side, hailRadius, 0.1f));
+                    Vector3 hp = p + Vector3.up * 0.8f; float hr = hailRadius;
+                    DragonCombat.RunVfx(delegate { DragonVfx.SlashStreaks(hp, new Color(0.55f, 0.82f, 1f, 1f), hr * 1.4f, 3, 0.25f); DragonVfx.Burst(hp, new Color(0.45f, 0.78f, 1f, 1f), 10, 6f, 0.2f, 0.3f, 0f); });   // v0.25.58
                 }
                 if (i + 1 < count) yield return new WaitForSeconds(Mathf.Max(0.05f, _frenzyHailInterval.Value));
             }
@@ -2393,6 +2395,15 @@ namespace AlbedosCustomClassesAdvanced
             {
                 StartCoroutine(AnimateRing(player.transform.position + Vector3.up * 0.9f, 0.6f, radius, 0.32f, new Color(0.70f, 0.86f, 1f, 0.95f), 0.20f));
                 StartCoroutine(AnimateRing(player.transform.position + Vector3.up * 1.2f, 0.4f, radius * 0.92f, 0.38f, new Color(0.55f, 0.40f, 0.95f, 0.85f), 0.12f));
+                Vector3 ep = player.transform.position; float er = radius;
+                DragonCombat.RunVfx(delegate
+                {
+                    DragonVfx.SlashStreaks(ep + Vector3.up * 1.2f, new Color(0.62f, 0.50f, 1f, 1f), er, 14, 0.45f);   // v0.25.58 eclipse cuts
+                    DragonVfx.Burst(ep + Vector3.up * 1f, new Color(0.55f, 0.40f, 0.95f, 1f), 70, 12f, 0.3f, 0.6f, 0f);
+                    DragonVfx.Flash(ep + Vector3.up * 1.5f, new Color(0.62f, 0.50f, 1f, 1f), 8f, er * 2.5f, 0.5f);
+                    DragonVfx.DustRing(ep, er);
+                    DragonVfx.Shake(ep, 25f + er, 1.4f);
+                });
             }
         }
 
@@ -2571,6 +2582,7 @@ namespace AlbedosCustomClassesAdvanced
                 elapsed += Time.deltaTime;
                 yield return null;
             }
+            if (_enableVfx.Value) { Vector3 s0 = origin, s1 = origin + forward * reached; float sw2 = width; DragonCombat.RunVfx(delegate { DragonVfx.CrackLine(s0, s1, DragonVfx.Fire, Mathf.Clamp(sw2 * 0.2f, 0.3f, 0.9f), 4f); }); }   // v0.25.58 scar along the wave
             // Aftershock: from the cast position back along the travelled path, 3m sections.
             float section = Mathf.Max(0.5f, DragonCombat.M(_iwAscSection.Value));
             HashSet<int> shockHit = new HashSet<int>();
@@ -2589,7 +2601,11 @@ namespace AlbedosCustomClassesAdvanced
                     DealDamageScaled(player, target, _impactAscDamage, Mathf.Max(0f, _iwAscAftershock.Value) / 100f, 10f, false);
                 }
                 if (_enableVfx.Value)
+                {
                     StartCoroutine(AnimateRing(c, 0.2f, Mathf.Max(0.6f, width * 0.7f), 0.25f, new Color(1f, 0.74f, 0.32f, 0.85f), 0.07f));
+                    Vector3 ic = c; float iw = width;
+                    DragonCombat.RunVfx(delegate { DragonVfx.GroundImpact(ic, DragonVfx.Fire, Mathf.Max(0.8f, iw * 0.6f), 0.7f); });   // v0.25.58
+                }
                 yield return new WaitForSeconds(Mathf.Max(0.02f, _iwAscSectionGap.Value));
             }
         }
@@ -2879,7 +2895,11 @@ namespace AlbedosCustomClassesAdvanced
                     DragonCombat.Stun(targets[i], center);
             }
             if (_enableVfx.Value)
+            {
                 StartCoroutine(AnimateRing(center + Vector3.up * 0.08f, Mathf.Max(0.4f, innerVisual), radius, 0.55f, new Color(0.95f, 0.58f, 0.22f, 1f), 0.16f));
+                Vector3 sc = center; float sr = radius; bool firstStamp = innerVisual <= 0.01f;
+                DragonCombat.RunVfx(delegate { DragonVfx.GroundImpact(sc, DragonVfx.Fire, sr, firstStamp ? 1.4f : 0.8f); });   // v0.25.58
+            }
         }
 
         // ------------------------------------------------------------------ Circle Swing
@@ -2953,6 +2973,14 @@ namespace AlbedosCustomClassesAdvanced
             {
                 StartCoroutine(AnimateRing(center + Vector3.up * 0.10f, 0.6f, radius, 0.65f, new Color(1f, 0.56f, 0.18f, 1f), 0.20f));
                 StartCoroutine(AnimateHalfmoonArc(center + Vector3.up * 1.0f, FlatForward(player), radius * 0.95f));
+                Vector3 cc = center; float cr = radius; bool cl = launch;
+                DragonCombat.RunVfx(delegate
+                {
+                    DragonVfx.DustRing(cc, cr);
+                    DragonVfx.SlashStreaks(cc + Vector3.up * 1f, DragonVfx.Fire, cr * 0.8f, 8, 0.35f);
+                    DragonVfx.Shake(cc, 20f + cr, cl ? 1.2f : 0.6f);
+                    if (cl) DragonVfx.Debris(cc, new Color(0.42f, 0.36f, 0.30f, 1f), 10, 7f, 0.25f, 2f);
+                });   // v0.25.58
             }
         }
 
@@ -2976,7 +3004,11 @@ namespace AlbedosCustomClassesAdvanced
                 GainMercenaryFuryFromSkillHit(player);
             }
             if (_enableVfx.Value)
+            {
                 StartCoroutine(AnimateRing(center + Vector3.up * 0.08f, 0.3f, radius, 0.55f, new Color(1f, 0.46f, 0.16f, 1f), 0.17f));
+                Vector3 bc = center; float br = radius;
+                DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(bc, DragonVfx.Fire, br, 2.2f); DragonVfx.Debris(bc, new Color(0.42f, 0.36f, 0.30f, 1f), 14, 10f, 0.4f, 2.6f); });   // v0.25.58
+            }
             if (!IsAscendedSkill("bonecrusher")) yield break;
             // Ascended: a ground shock 0.5s later (50%), no second jump.
             DragonCombat.PlayClip(player, "merc_aftershock", Mathf.Max(0.1f, _boneAscShockDelay.Value));
@@ -2989,7 +3021,11 @@ namespace AlbedosCustomClassesAdvanced
                 GainMercenaryFuryFromSkillHit(player);
             }
             if (_enableVfx.Value)
+            {
                 StartCoroutine(AnimateRing(center + Vector3.up * 0.06f, radius * 0.4f, radius, 0.45f, new Color(0.95f, 0.66f, 0.30f, 0.95f), 0.12f));
+                Vector3 ac = center; float ar = radius;
+                DragonCombat.RunVfx(delegate { DragonVfx.GroundImpact(ac, DragonVfx.Fire, ar, 1.2f); });   // v0.25.58
+            }
         }
 
         // ------------------------------------------------------------------ Punishing Bomb
@@ -3085,6 +3121,9 @@ namespace AlbedosCustomClassesAdvanced
                     DragonVfx.Burst(impact + Vector3.up * 0.6f, new Color(1f, 0.45f, 0.14f, 1f), 80, 12f, 0.4f, 0.9f, 0.6f);
                     DragonVfx.Burst(impact + Vector3.up * 0.4f, new Color(0.35f, 0.30f, 0.26f, 0.7f), 40, 4f, 1.2f, 1.6f, -0.1f);
                     DragonVfx.Vanilla(new string[] { "vfx_FireballHit", "fx_fireball_staff_explosion", "vfx_fireball_hit" }, impact, Quaternion.identity, 1.5f, 4f);
+                    DragonVfx.GroundImpact(impact, DragonVfx.Fire, radius, 2f);   // v0.25.58
+                    DragonVfx.Flash(impact + Vector3.up, DragonVfx.Fire, 10f, radius * 3f, 0.6f);
+                    if (ascended) DragonVfx.Embers(impact, DragonVfx.Fire, radius * 0.8f, Mathf.Max(0.5f, _bombAscFireSeconds.Value), 60f);
                 });
             }
             if (ascended)
@@ -3128,6 +3167,15 @@ namespace AlbedosCustomClassesAdvanced
             int maxTicks = Mathf.Max(1, Mathf.RoundToInt(maxTime / interval));
             DragonCombat.BeginWhirlwind(player, maxTime);
             DragonCombat.PlaySpinClip(player, maxTime, 0.3f);   // v0.25.8: tornado spin, faster turns
+            if (_enableVfx.Value)
+            {
+                Transform wt = player.transform; float wr = Mathf.Max(0.5f, DragonCombat.M(_whirlAscPullRadius.Value));
+                DragonCombat.RunVfx(delegate
+                {
+                    DragonVfx.Vortex(wt, wt.position, new Color(0.62f, 0.56f, 0.48f, 0.6f), wr, maxTime);
+                    DragonVfx.TrailWhile(wt, new Color(1f, 0.62f, 0.22f, 0.8f), 1.2f, delegate { return _whirlActive && wt != null; });
+                });   // v0.25.58 dust funnel
+            }
             for (int tick = 0; tick < maxTicks; tick++)
             {
                 if (player == null || player.IsDead()) { _whirlActive = false; yield break; }
@@ -3155,6 +3203,7 @@ namespace AlbedosCustomClassesAdvanced
                     DealSnapshotDamage(player, targets[i], weapon, tickMult, 14f);
                     if (tick % 2 == 0) GainMercenaryFuryFromSkillHit(player);
                 }
+                if (_enableVfx.Value && tick % 2 == 0) { Vector3 wp = player.transform.position; float ww = Mathf.Max(0.5f, DragonCombat.M(_whirlwindRadius.Value)); DragonCombat.RunVfx(delegate { DragonVfx.DustRing(wp, ww); DragonVfx.SlashStreaks(wp + Vector3.up * 1f, DragonVfx.Fire, ww, 4, 0.25f); }); }
                 if (_enableVfx.Value)
                     StartCoroutine(AnimateRing(player.transform.position + Vector3.up * 0.9f, 0.4f, Mathf.Max(0.5f, DragonCombat.M(_whirlwindRadius.Value)), Mathf.Min(0.32f, interval), new Color(1f, 0.62f, 0.22f, 0.75f), 0.10f));
                 yield return new WaitForSeconds(interval);
@@ -3170,7 +3219,11 @@ namespace AlbedosCustomClassesAdvanced
             for (int i = 0; i < swept.Count; i++)
                 DealSnapshotDamage(player, swept[i], weapon, sweep, 30f);
             if (_enableVfx.Value)
+            {
                 StartCoroutine(AnimateRing(player.transform.position + Vector3.up * 0.9f, 0.5f, Mathf.Max(0.5f, DragonCombat.M(_whirlwindRadius.Value)) + 1.5f, 0.4f, new Color(1f, 0.80f, 0.35f, 0.95f), 0.18f));
+                Vector3 fp = player.transform.position; float fr = Mathf.Max(0.5f, DragonCombat.M(_whirlwindRadius.Value)) + 1.5f;
+                DragonCombat.RunVfx(delegate { DragonVfx.GroundImpact(fp, DragonVfx.Fire, fr, 1.3f); DragonVfx.SlashStreaks(fp + Vector3.up, DragonVfx.Fire, fr, 10, 0.4f); });   // v0.25.58
+            }
         }
 
         private IEnumerator TornadoDrag(Player player, Character enemy, float seconds, float speed, float stopDistance)
@@ -3866,6 +3919,7 @@ namespace AlbedosCustomClassesAdvanced
             float shockRadius = baseShockRadius * (IsUnchainedFuryActive() ? 1.75f : 1f);
             int shockCount = Mathf.FloorToInt(Mathf.Max(0f, range) / shockSpacing + 0.0001f);
             float elapsed = 0f;
+            Vector3 lastScar = GetSeismicGroundPoint(origin, groundMask);
 
             for (int shockIndex = 1; shockIndex <= shockCount; shockIndex++)
             {
@@ -3895,7 +3949,17 @@ namespace AlbedosCustomClassesAdvanced
                 }
 
                 if (_enableVfx.Value)
+                {
                     StartCoroutine(AnimateRing(shockPoint + Vector3.up * 0.05f, 0.35f, shockRadius, 0.16f, new Color(0.95f, 0.42f, 0.16f, 0.85f), 0.06f));
+                    Vector3 sa = lastScar, sb = shockPoint; float sw = width; bool rock = shockIndex % 2 == 0;
+                    DragonCombat.RunVfx(delegate
+                    {
+                        DragonVfx.CrackLine(sa, sb, DragonVfx.Fire, Mathf.Clamp(sw * 0.25f, 0.25f, 0.8f), 4f);   // v0.25.58 the fissure tears open
+                        if (rock) DragonVfx.Debris(sb, new Color(0.42f, 0.36f, 0.30f, 1f), 4, 6f, 0.3f, 1.8f);
+                        DragonVfx.Burst(sb + Vector3.up * 0.2f, new Color(0.50f, 0.44f, 0.36f, 0.6f), 8, 3f, 0.6f, 0.8f, 0.3f);
+                    });
+                    lastScar = shockPoint;
+                }
             }
 
             float ruptureTime = Mathf.Max(0f, range) / safeSpeed;
@@ -3925,7 +3989,11 @@ namespace AlbedosCustomClassesAdvanced
                     endTargets[i].Stagger(forward);
             }
             if (_enableVfx.Value)
+            {
                 StartCoroutine(AnimateRing(rupturePoint + Vector3.up * 0.08f, width * 0.5f, endRadius, 0.46f, new Color(1f, 0.52f, 0.18f, 0.95f), 0.16f));
+                Vector3 rp = rupturePoint; float rr = endRadius;
+                DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(rp, DragonVfx.Fire, rr, 1.8f); DragonVfx.Pillar(rp, DragonVfx.Fire, rr * 0.3f, 6f, 0.4f); });   // v0.25.58
+            }
         }
 
         private Vector3 GetSeismicGroundPoint(Vector3 projected, int groundMask)

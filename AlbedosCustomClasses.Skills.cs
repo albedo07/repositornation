@@ -220,7 +220,7 @@ namespace AlbedosCustomClassesSkills
         public static SkillsPlugin Instance;
         public const string ModGuid = "albedo.customclasses.skills";
         public const string ModName = "Dragon's Altar - Starter Skills";
-        public const string ModVersion = "0.25.57";
+        public const string ModVersion = "0.25.58";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";
@@ -647,6 +647,8 @@ namespace AlbedosCustomClassesSkills
                 {
                     for (int k = -2; k <= 2; k++) DragonVfx.Burst(hsC + Quaternion.AngleAxis(k * angle * 0.2f, Vector3.up) * hsF * range * 0.85f, new Color(1f, 0.62f, 0.22f, 1f), 14, 6f, 0.25f, 0.4f, 0.6f);
                     DragonVfx.Flash(hsC + hsF * range * 0.5f, new Color(1f, 0.62f, 0.22f, 1f), 3f, range * 1.5f, 0.3f);
+                    DragonVfx.SlashStreaks(hsC + hsF * range * 0.5f, new Color(1f, 0.62f, 0.22f, 1f), range * 0.6f, 5, 0.3f);   // v0.25.58
+                    DragonVfx.Shake(hsC, 15f, 0.6f);
                 });
             }
         }
@@ -685,6 +687,11 @@ namespace AlbedosCustomClassesSkills
             HashSet<Character> damaged = new HashSet<Character>();
             float elapsed = 0f;
             int mask = LayerMask.GetMask("Default", "static_solid", "Default_small", "piece_nonsolid", "terrain", "vehicle", "piece", "viewblock");
+            if (_enableVfx.Value)
+            {
+                Vector3 iwA = origin, iwB = origin + forward * length; float iwW = width;
+                DragonCombat.RunVfx(delegate { DragonVfx.CrackLine(iwA, iwB, new Color(1f, 0.62f, 0.22f, 1f), Mathf.Clamp(iwW * 0.2f, 0.3f, 0.9f), travel + 3.5f); DragonVfx.Shake(iwA, 15f, 0.7f); });   // v0.25.58 the wave scars the ground
+            }
 
             while (elapsed <= travel)
             {
@@ -768,7 +775,7 @@ namespace AlbedosCustomClassesSkills
             {
                 StartCoroutine(AnimateRing(player.transform.position + forward * range + Vector3.up * 0.08f, 0.2f, width, 0.24f, new Color(1f, 0.78f, 0.30f, 0.92f), 0.09f, 0f));
                 Vector3 ipP = player.transform.position + forward * range + Vector3.up * 1f;
-                DragonCombat.RunVfx(delegate { DragonVfx.Burst(ipP, new Color(1f, 0.62f, 0.22f, 1f), 36, 9f, 0.3f, 0.5f, 0.3f); DragonVfx.Flash(ipP, new Color(1f, 0.62f, 0.22f, 1f), 4f, 6f, 0.3f); });
+                DragonCombat.RunVfx(delegate { DragonVfx.Burst(ipP, new Color(1f, 0.62f, 0.22f, 1f), 36, 9f, 0.3f, 0.5f, 0.3f); DragonVfx.Flash(ipP, new Color(1f, 0.62f, 0.22f, 1f), 4f, 6f, 0.3f); DragonVfx.Shake(ipP, 15f, 0.8f); DragonVfx.Shockwave(ipP - Vector3.up * 0.9f, new Color(1f, 0.70f, 0.30f, 1f), 2f, 0.25f); });
             }
         }
 
@@ -932,6 +939,7 @@ namespace AlbedosCustomClassesSkills
                 {
                     for (int k = 1; k <= 5; k++) DragonVfx.Burst(fo + ff * fr * k / 5f, new Color(1f, 0.38f, 0.08f, 1f), 14 + k * 4, 2f + k, 0.4f + k * 0.12f, 0.5f, -0.4f);
                     DragonVfx.Flash(fo + ff * fr * 0.5f, new Color(1f, 0.45f, 0.1f, 1f), 5f, fr * 1.4f, 0.4f);
+                    DragonVfx.Embers(fo + ff * fr * 0.6f - Vector3.up * 0.8f, new Color(1f, 0.45f, 0.1f, 1f), fr * 0.35f, 0.8f, 50f);   // v0.25.58 scorched ground
                 });
             }
         }
@@ -954,7 +962,7 @@ namespace AlbedosCustomClassesSkills
             {
                 StartCoroutine(AnimateRing(target + Vector3.up * 0.08f, 0.4f, radius, 0.55f, new Color(0.50f, 0.90f, 1f, 0.95f), 0.14f, 0f));
                 Vector3 gt = target; float gr = radius;
-                DragonCombat.RunVfx(delegate { DragonVfx.Shockwave(gt, new Color(0.55f, 0.90f, 1f, 1f), gr, 0.5f); DragonVfx.Burst(gt + Vector3.up * 0.6f, new Color(0.85f, 0.97f, 1f, 1f), 60, 9f, 0.3f, 0.9f, 0.8f); });
+                DragonCombat.RunVfx(delegate { DragonVfx.Shockwave(gt, new Color(0.55f, 0.90f, 1f, 1f), gr, 0.5f); DragonVfx.Burst(gt + Vector3.up * 0.6f, new Color(0.85f, 0.97f, 1f, 1f), 60, 9f, 0.3f, 0.9f, 0.8f); DragonVfx.IceBurst(gt, gr); DragonVfx.Shake(gt, 25f, 1.2f); DragonVfx.DustRing(gt, gr); });
             }
         }
 
@@ -968,7 +976,7 @@ namespace AlbedosCustomClassesSkills
         {
             ShowMessage("Stonefang Eruption"); if (windup > 0f) yield return new WaitForSeconds(windup); if (player == null || player.IsDead()) yield break; float radius = Mathf.Max(0.5f, DragonCombat.M(_stoneRadius.Value)); List<Character> targets = GetSphereTargets(player, target, radius);
             for (int i = 0; i < targets.Count; i++) { Character enemy = targets[i]; DealDamage(player, enemy, _stoneDamage, 20f); if (DragonCombat.IsSmallEnemy(enemy)) DragonCombat.Stun(enemy, player.transform.position); if (!enemy.IsBoss()) DragonCombat.ApplyCripple(enemy, Mathf.Max(0.1f, _stoneCrippleDuration.Value)); }
-            if (_enableVfx.Value) { for (int i = 0; i < 9; i++) { float a = ((float)i / 9f) * Mathf.PI * 2f; float d = i == 0 ? 0f : radius * (0.35f + 0.55f * ((float)(i % 3) / 2f)); StartCoroutine(AnimateStoneSpike(target + new Vector3(Mathf.Cos(a)*d, 0.1f, Mathf.Sin(a)*d), 0.30f + 0.04f*i)); } StartCoroutine(AnimateRing(target + Vector3.up*0.06f, 0.3f, radius, 0.45f, new Color(0.62f,0.48f,0.32f,0.90f),0.12f,0f)); Vector3 st = target; float sr = radius; DragonCombat.RunVfx(delegate { DragonVfx.Shockwave(st, new Color(0.70f, 0.55f, 0.35f, 1f), sr, 0.45f); DragonVfx.Burst(st + Vector3.up * 0.4f, new Color(0.45f, 0.36f, 0.26f, 0.85f), 70, 8f, 0.5f, 1.1f, 1.2f); }); }
+            if (_enableVfx.Value) { for (int i = 0; i < 9; i++) { float a = ((float)i / 9f) * Mathf.PI * 2f; float d = i == 0 ? 0f : radius * (0.35f + 0.55f * ((float)(i % 3) / 2f)); StartCoroutine(AnimateStoneSpike(target + new Vector3(Mathf.Cos(a)*d, 0.1f, Mathf.Sin(a)*d), 0.30f + 0.04f*i)); } StartCoroutine(AnimateRing(target + Vector3.up*0.06f, 0.3f, radius, 0.45f, new Color(0.62f,0.48f,0.32f,0.90f),0.12f,0f)); Vector3 st = target; float sr = radius; DragonCombat.RunVfx(delegate { DragonVfx.Shockwave(st, new Color(0.70f, 0.55f, 0.35f, 1f), sr, 0.45f); DragonVfx.Burst(st + Vector3.up * 0.4f, new Color(0.45f, 0.36f, 0.26f, 0.85f), 70, 8f, 0.5f, 1.1f, 1.2f); DragonVfx.GroundImpact(st, new Color(0.85f, 0.60f, 0.30f, 1f), sr, 1.4f); }); }
         }
 
         private IEnumerator AnimateStoneSpike(Vector3 point, float duration)

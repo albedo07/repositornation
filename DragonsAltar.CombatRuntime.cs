@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.57";
+        public const string ModVersion = "0.25.58";
 
         internal static DragonCombatPlugin Instance;
 
@@ -8980,6 +8980,97 @@ namespace DragonsAltarCombat
             l.Systems = l.GetComponentsInChildren<ParticleSystem>();
         }
 
+        // Bright blade streaks cutting through a sphere (Blade Storm, slash hails): thin additive lines that flash
+        // and fade, each a random chord through the centre.
+        public static void SlashStreaks(Vector3 center, Color c, float radius, int count, float seconds)
+        {
+            if (!Enabled) return;
+            DragonVfxLife l = Host(center, seconds, "slashes");
+            List<LineRenderer> lines = new List<LineRenderer>();
+            for (int i = 0; i < count; i++)
+            {
+                Vector3 dir = UnityEngine.Random.onUnitSphere;
+                dir.y *= 0.5f;
+                dir.Normalize();
+                Vector3 off = UnityEngine.Random.insideUnitSphere * radius * 0.3f;
+                GameObject go = new GameObject("slash");
+                go.transform.SetParent(l.transform, false);
+                LineRenderer line = go.AddComponent<LineRenderer>();
+                line.useWorldSpace = true;
+                line.positionCount = 3;
+                line.startWidth = 0.02f;
+                line.endWidth = 0.02f;
+                line.widthCurve = new AnimationCurve(new Keyframe(0f, 0f), new Keyframe(0.5f, 1f), new Keyframe(1f, 0f));
+                line.widthMultiplier = 0.12f + radius * 0.03f;
+                Material m = Additive();
+                if (m != null) line.sharedMaterial = m;
+                line.SetPosition(0, center + off - dir * radius);
+                line.SetPosition(1, center + off);
+                line.SetPosition(2, center + off + dir * radius);
+                lines.Add(line);
+            }
+            DragonCrackFade fade = l.gameObject.AddComponent<DragonCrackFade>();
+            fade.Lines = lines.ToArray();
+            fade.Color = Color.Lerp(c, Color.white, 0.4f);
+            fade.Life = seconds;
+        }
+
+        // A straight scar torn along the ground (wave paths, fissures, blade drags).
+        public static void CrackLine(Vector3 a, Vector3 b, Color c, float width, float seconds)
+        {
+            if (!Enabled) return;
+            DragonVfxLife l = Host(a, seconds, "scar");
+            GameObject go = new GameObject("scar");
+            go.transform.SetParent(l.transform, false);
+            LineRenderer line = go.AddComponent<LineRenderer>();
+            line.useWorldSpace = true;
+            int n = Mathf.Clamp(Mathf.RoundToInt(Vector3.Distance(a, b) / 0.8f), 3, 40);
+            line.positionCount = n;
+            line.startWidth = width;
+            line.endWidth = width * 0.3f;
+            Material m = Additive();
+            if (m != null) line.sharedMaterial = m;
+            Vector3 dir = b - a; dir.y = 0f;
+            Vector3 side = Vector3.Cross(Vector3.up, dir.normalized);
+            int mask = LayerMask.GetMask("terrain", "Default", "static_solid", "piece");
+            for (int k = 0; k < n; k++)
+            {
+                float t = (float)k / (n - 1);
+                Vector3 p = Vector3.Lerp(a, b, t) + side * UnityEngine.Random.Range(-0.25f, 0.25f) * width * 2f;
+                RaycastHit hit;
+                if (Physics.Raycast(p + Vector3.up * 3f, Vector3.down, out hit, 8f, mask, QueryTriggerInteraction.Ignore)) p = hit.point;
+                line.SetPosition(k, p + Vector3.up * 0.04f);
+            }
+            DragonCrackFade fade = l.gameObject.AddComponent<DragonCrackFade>();
+            fade.Lines = new LineRenderer[] { line };
+            fade.Color = c;
+            fade.Life = seconds;
+        }
+
+        // Particles sucked inward toward a point (gravity orbs, black holes, pulls).
+        public static GameObject Vortex(Transform follow, Vector3 pos, Color c, float radius, float seconds)
+        {
+            if (!Enabled) return null;
+            DragonVfxLife l = Host(follow != null ? follow.position : pos, seconds + 1f, "vortex");
+            l.Follow = follow;
+            float life = 0.8f;
+            ParticleSystem ps = Particles(l.transform, c, 0, 90f + radius * 20f, seconds, life, -radius / life * 1.1f, -radius / life * 0.8f, 0.1f, 0.3f, 0f,
+                ParticleSystemShapeType.Sphere, radius, Vector3.zero, true, true);
+            ParticleSystem.ShapeModule sh = ps.shape;
+            sh.radiusThickness = 0.05f;   // spawn on the shell, fly to the centre
+            l.StopEmitAt = seconds;
+            l.Systems = new ParticleSystem[] { ps };
+            return l.gameObject;
+        }
+
+        // Ice shards / crystals thrown out of an impact.
+        public static void IceBurst(Vector3 pos, float radius)
+        {
+            Debris(pos, new Color(0.70f, 0.92f, 1f, 1f), Mathf.RoundToInt(8 + radius * 2f), 6f + radius * 0.5f, 0.3f, 2.2f);
+            Burst(pos + Vector3.up * 0.4f, new Color(0.85f, 0.97f, 1f, 1f), Mathf.RoundToInt(40 + radius * 8f), 8f + radius, 0.3f, 0.9f, 0.6f);
+            Cracks(pos, new Color(0.55f, 0.88f, 1f, 1f), radius * 0.8f, 8, 3f);
+        }
+
         // The full "something heavy hit the ground" package.
         public static void HeavyLanding(Vector3 pos, Color c, float radius, float shake)
         {
@@ -8989,6 +9080,27 @@ namespace DragonsAltarCombat
             Debris(pos, new Color(0.42f, 0.36f, 0.30f, 1f), Mathf.RoundToInt(10 + radius * 2f), 6f + radius * 0.6f, 0.25f + radius * 0.02f, 2.5f);
             Burst(pos + Vector3.up * 0.4f, Color.Lerp(c, Color.white, 0.5f), Mathf.RoundToInt(40 + radius * 8f), 9f + radius, 0.3f, 0.8f, 0.5f);
             Shake(pos, 25f + radius * 2f, shake);
+        }
+
+        // v0.25.58 ground hit without the shockwave ring (the caller already draws one): dust, cracks, rocks, sparks, shake.
+        public static void GroundImpact(Vector3 pos, Color c, float radius, float shake)
+        {
+            DustRing(pos, radius);
+            Cracks(pos, c, radius * 0.75f, 7, 3f);
+            Debris(pos, new Color(0.42f, 0.36f, 0.30f, 1f), Mathf.RoundToInt(6 + radius * 1.5f), 5f + radius * 0.5f, 0.22f + radius * 0.02f, 2.2f);
+            Burst(pos + Vector3.up * 0.4f, Color.Lerp(c, Color.white, 0.4f), Mathf.RoundToInt(25 + radius * 6f), 8f + radius, 0.28f, 0.7f, 0.5f);
+            if (shake > 0f) Shake(pos, 20f + radius * 2f, shake);
+        }
+
+        // Rising embers / sparks over an area for a while (burning ground, auras).
+        public static void Embers(Vector3 pos, Color c, float radius, float seconds, float rate)
+        {
+            if (!Enabled) return;
+            DragonVfxLife l = Host(pos, seconds + 1.5f, "embers");
+            Particles(l.transform, c, 0, rate, seconds, 1.2f, 0.6f, 2.2f, 0.1f, 0.3f, -0.3f,
+                ParticleSystemShapeType.Circle, Mathf.Max(0.3f, radius), new Vector3(90f, 0f, 0f), false, true);
+            l.StopEmitAt = seconds;
+            l.Systems = l.GetComponentsInChildren<ParticleSystem>();
         }
 
         // ------------------------------------------------------------------ themed presets

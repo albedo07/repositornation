@@ -1,5 +1,5 @@
 @echo off
-title Immortal Heroes v0.25.57 - Cleric Details
+title Immortal Heroes v0.25.58 - Detail Pass
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
 echo.
 pause

@@ -1,0 +1,44 @@
+Immortal Heroes v0.25.58 - Detail Pass (VFX detail passes 2-4: Warrior, Sorcerer, Ranger)
+
+NEW EFFECT PIECES (shared engine)
+- Slash streaks (blade light cutting through an area), ground scars (CrackLine: a glowing tear along a path),
+  vortex (particles sucked into a point), ice burst (ice shards + frost cracks), ground impact (dust ring, cracks,
+  rocks, sparks, camera shake), rising embers (burning ground).
+
+WARRIOR / SWORD MASTER / MERCENARY
+- Heavy Slash: blade streaks + small rumble. Impact Wave (normal + Ascended): the wave scars the ground along its
+  path; Ascended aftershock sections throw up dust and rocks. Impact Punch: shockwave + shake.
+- Blade Storm cuts, Frenzied Charge slash hail, Eclipse: slash streaks; Eclipse also flashes, rolls dust and shakes.
+- Stomp: every impact cracks the ground, throws rocks and shakes (first stamp hardest).
+- Circle Swing: dust ring + slash streaks; the launching second swing throws debris and shakes harder.
+- Bonecrusher: full heavy landing with extra rocks; Ascended aftershock cracks the ground again.
+- Seismic Guillotine: the fissure tears a glowing scar along the ground shock by shock, rocks pop out, the final
+  rupture is a heavy landing with a burst of fire.
+- Punishing Bomb: cracks, rocks, flash, heavy shake; Ascended leaves embers burning on the ground.
+- Ascended Whirlwind: a dust funnel sucked into you, fiery trail, dust + streaks every other tick, a heavy final sweep.
+
+SORCERER / ARCHMAGE / HORIZON WALKER
+- Flame Burst scorches the ground (embers). Glacial Descent (+ Ascended): ice shards, frost cracks, shake.
+  Stonefang (+ Ascended): cracks, rocks, rumble.
+- Meteor Fall: smoke tail on the meteor, heavy landing + fire pillar + burning embers.
+- Elemental Cataclysm: the sky falls - heavy landing, arcane pillar, ice shards, embers, storm cloud.
+- Gravity Dominion: a vortex pulls light into the well for its whole duration; Ascended end blast = heavy landing.
+- Astral Greatblade: the blade splits the ground (scar + heavy impact + sparks along the blade).
+- Astral Railcannon: camera kick, muzzle burst, impact cracks where the rail hits (normal shot).
+- Frost Nova: shockwave, ice burst, shake; Ascended aura whirls snow, final blast throws ice chunks.
+- Clockwork: golden pillar + shockwave + inward swirl.
+- Horizon Walker: Gravity Blast orb drinks light (vortex) and its explosion cracks the ground; Arcane Rupture
+  swirls inward before it blows; Void Step arrival burst; charged staff impacts sparkle (big ones crack the ground).
+
+RANGER / ACROBAT / BOWMASTER
+- Somersault Dance foot slam and Ascended Skyfall slam: heavy landings.
+- Swallow Dive: wind wake along the dive. Snare Trap: burst + inward swirl + dust when sprung.
+- Ascended Furious Winds final burst: ground impact + wind streaks.
+- Ballista Shot: siege launch (muzzle burst, rings along the shot, shake and dust grow with stacks); Ascended
+  shockwave impacts.
+- Arrow Rain: arrows kick up dirt. Explosive Arrow / clusters / Pinning explosion: cracks, rocks, flash, shake;
+  Ascended fire field burns with embers.
+- Splitting Arrow: great arrow launch rings + kick; Ascended sky arrow lands as a heavy impact with a pillar.
+- Starfall Volley: stars crack the ground; the Ascended finale is a heavy landing.
+
+All effects are visual only (no damage / timing changes). [Visuals] EnhancedSkillVfx_v02554 off = old visuals.

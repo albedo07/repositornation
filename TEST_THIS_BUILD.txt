@@ -1,5 +1,7 @@
-TEST v0.25.57 (Cleric / Paladin / Priest)
-1. Goddess Relic (normal + Ascended): cross falls tilted, buries its foot, leans like Pisa, cracks / dust / rocks / shake; sinks away at the end.
-2. Lightning Relic / Holy Relic: same planted lean + impact.
-3. Righteous Strike, Electric Smite, Angel Comet, Judgement Hammer (wall hit), Hammer Slam: cracks, debris, shake.
-4. Grand Cross core + trail, Lightning Tempest storm cloud, feathers on Holy Wave / Heaven's Light / Divine Intervention.
+TEST v0.25.58 (VFX detail: Warrior, Sorcerer, Ranger)
+1. Mercenary: Stomp, Circle Swing (normal + Ascended), Bonecrusher, Seismic Guillotine scar, Punishing Bomb, Ascended Whirlwind funnel.
+2. Sword Master / Warrior: Heavy Slash, Impact Wave scar, Impact Punch, Blade Storm, Frenzied Charge hail, Eclipse.
+3. Archmage: Meteor Fall, Cataclysm, Gravity Dominion vortex, Greatblade scar, Railcannon kick, Frost Nova (+ aura), Clockwork.
+4. Horizon Walker: Gravity Blast vortex + explosion, Arcane Rupture, Void Step.
+5. Ranger: Somersault slam, Skyfall Ascended slam, Ballista (0 vs 3 stacks), Explosive Arrow, Splitting (great + sky arrow), Starfall, Snare, Swallow Dive, Arrow Rain.
+6. FPS check in a big fight (F8 [Visuals] ParticleDensity lowers everything).

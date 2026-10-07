@@ -40,7 +40,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Dragon's Altar - Ranger";
-        public const string ModVersion = "0.25.57";
+        public const string ModVersion = "0.25.58";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -969,7 +969,7 @@ namespace DragonsAltarRanger
                     if (DragonCombat.IsSmallEnemy(enemy)) DragonCombat.Stun(enemy, trap.Position);
                     DragonCombat.ApplyCripple(enemy, _snCripple.Value);
                 }
-                if (_enableVfx.Value) StartCoroutine(RingVfx(trap.Position, DragonCombat.M(_snTrigger.Value), new Color(0.85f, 0.95f, 0.45f, 1f), 0.5f));
+                if (_enableVfx.Value) { StartCoroutine(RingVfx(trap.Position, DragonCombat.M(_snTrigger.Value), new Color(0.85f, 0.95f, 0.45f, 1f), 0.5f)); Vector3 tp = trap.Position; float tr = DragonCombat.M(_snTrigger.Value); DragonCombat.RunVfx(delegate { DragonVfx.Burst(tp + Vector3.up * 0.3f, new Color(0.85f, 0.95f, 0.45f, 1f), 40, 7f, 0.25f, 0.5f, 0.6f); DragonVfx.Vortex(null, tp + Vector3.up * 0.5f, new Color(0.60f, 0.90f, 0.35f, 1f), tr, 0.6f); DragonVfx.DustRing(tp, tr); }); }   // v0.25.58
                 ShowMessage("Snare Trap sprung");
                 RemoveTrap(i);
             }
@@ -1195,7 +1195,12 @@ namespace DragonsAltarRanger
             List<Character> hits = PathTargets(player, start, end, DragonCombat.M(_sdRadius.Value));
             RangerArrowDamage d = ArrowDamage(player);
             for (int i = 0; i < hits.Count; i++) { Deal(player, hits[i], d, mult, 4f, false); OnSkillHit(player); }
-            if (_enableVfx.Value) LineVfx(start + Vector3.up, end + Vector3.up, new Color(0.55f, 1f, 0.90f, 0.95f), 0.25f, 0.35f);
+            if (_enableVfx.Value)
+            {
+                LineVfx(start + Vector3.up, end + Vector3.up, new Color(0.55f, 1f, 0.90f, 0.95f), 0.25f, 0.35f);
+                Vector3 da = start + Vector3.up, db = end + Vector3.up;
+                DragonCombat.RunVfx(delegate { for (int k = 0; k <= 4; k++) DragonVfx.Burst(Vector3.Lerp(da, db, k / 4f), new Color(0.55f, 1f, 0.90f, 1f), 10, 3f, 0.25f, 0.5f, -0.2f); DragonVfx.Flash(db, new Color(0.55f, 1f, 0.90f, 1f), 3f, 5f, 0.3f); });   // v0.25.58 wind wake
+            }
             if (ascended)
             {
                 yield return new WaitForSeconds(Mathf.Max(0.05f, _sdAscDelay.Value));
@@ -1318,7 +1323,7 @@ namespace DragonsAltarRanger
                         else DragonCombat.Stun(hits[i], land);
                         OnSkillHit(player);
                     }
-                    if (_enableVfx.Value) { StartCoroutine(RingVfx(land, slamR, new Color(0.85f, 1f, 0.80f, 1f), 0.5f)); StartCoroutine(RingVfx(land, slamR * 0.5f, new Color(1f, 1f, 1f, 1f), 0.3f)); }
+                    if (_enableVfx.Value) { StartCoroutine(RingVfx(land, slamR, new Color(0.85f, 1f, 0.80f, 1f), 0.5f)); StartCoroutine(RingVfx(land, slamR * 0.5f, new Color(1f, 1f, 1f, 1f), 0.3f)); Vector3 sl = land; float slr = slamR; DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(sl, new Color(0.70f, 1f, 0.80f, 1f), slr, 2f); }); }   // v0.25.58
                     Vector3 away = FlatPoint(land, -player.transform.forward, DragonCombat.M(2f));
                     yield return StartCoroutine(ArcFlip(player, land, away, DragonCombat.M(1.5f), 0.5f, -1));
                 }
@@ -1383,6 +1388,8 @@ namespace DragonsAltarRanger
             {
                 StartCoroutine(RingVfx(land, radius, new Color(0.55f, 1f, 0.90f, 1f), 0.5f));
                 StartCoroutine(RingVfx(land, radius * 0.45f, new Color(1f, 1f, 1f, 1f), 0.3f));
+                Vector3 sm = land; float smr = radius;
+                DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(sm, new Color(0.55f, 1f, 0.90f, 1f), smr, 1.6f); });   // v0.25.58
             }
             yield return new WaitForSeconds(0.08f);
             if (player == null || player.IsDead()) { _somersaultActive = false; _hovering = false; yield break; }
@@ -1540,7 +1547,7 @@ namespace DragonsAltarRanger
                     Deal(player, burst[i], d, _fwAscBurst.Value / 100f * power, DragonCombat.IsSmallEnemy(burst[i]) ? 40f : 8f, false);
                     if (DragonCombat.IsSmallEnemy(burst[i])) Launch(burst[i], 9f);
                 }
-                if (_enableVfx.Value) StartCoroutine(RingVfx(player.transform.position, radius, new Color(0.55f, 1f, 0.70f, 1f), 0.8f));
+                if (_enableVfx.Value) { StartCoroutine(RingVfx(player.transform.position, radius, new Color(0.55f, 1f, 0.70f, 1f), 0.8f)); Vector3 fw = player.transform.position; float fwr = radius; DragonCombat.RunVfx(delegate { DragonVfx.GroundImpact(fw, new Color(0.55f, 1f, 0.70f, 1f), fwr, 1.4f); DragonVfx.SlashStreaks(fw + Vector3.up, new Color(0.55f, 1f, 0.70f, 1f), fwr, 10, 0.4f); }); }   // v0.25.58
             }
             // The DoT keeps ticking after the storm until each enemy's 6s run out.
             StartCoroutine(FuriousDotAfter(player, ArrowDamage(player).Total() * power));
@@ -2350,7 +2357,19 @@ namespace DragonsAltarRanger
                     if (ascended && stacks >= 3) BallistaShockwave(player, enemy, d, mult * _bsAscLinePercent.Value / 100f);
                     return true;
                 }, null));
-            if (_enableVfx.Value) LineVfx(origin, origin + dir * range, new Color(0.80f, 1f, 0.60f, 0.6f), width * 0.6f, 0.25f);
+            if (_enableVfx.Value)
+            {
+                LineVfx(origin, origin + dir * range, new Color(0.80f, 1f, 0.60f, 0.6f), width * 0.6f, 0.25f);
+                Vector3 bo = origin, bd = dir; float bw = width; int bs = stacks; Vector3 bf = player.transform.position;
+                DragonCombat.RunVfx(delegate
+                {
+                    DragonVfx.Burst(bo + bd, new Color(0.85f, 1f, 0.65f, 1f), 30 + bs * 20, 10f + bs * 3f, 0.3f, 0.35f, 0f);   // v0.25.58 siege launch
+                    DragonVfx.Flash(bo + bd, new Color(0.85f, 1f, 0.65f, 1f), 4f + bs * 2f, 8f, 0.3f);
+                    DragonVfx.Shake(bo, 15f, 0.5f + bs * 0.4f);
+                    if (bs > 0) DragonVfx.DustRing(bf, 1.5f + bs);
+                    for (int k = 1; k <= 3; k++) DragonVfx.Shockwave(bo + bd * (k * 1.5f), new Color(0.85f, 1f, 0.65f, 0.8f), Mathf.Max(0.5f, bw * 0.6f), 0.2f);
+                });
+            }
         }
 
         private void BallistaShockwave(Player player, Character source, RangerArrowDamage d, float mult)
@@ -2364,7 +2383,7 @@ namespace DragonsAltarRanger
                 if (hits[i] == source) continue;
                 Deal(player, hits[i], d, mult, 10f, false);
             }
-            if (_enableVfx.Value) StartCoroutine(RingVfx(at, radius, new Color(0.85f, 1f, 0.70f, 0.9f), 0.4f));
+            if (_enableVfx.Value) { StartCoroutine(RingVfx(at, radius, new Color(0.85f, 1f, 0.70f, 0.9f), 0.4f)); Vector3 ba = at; float bar = radius; DragonCombat.RunVfx(delegate { DragonVfx.GroundImpact(ba, new Color(0.85f, 1f, 0.70f, 1f), bar, 0.8f); }); }   // v0.25.58
         }
 
         // ------------------------------------------------------------------ Arrow Rain (Signature)
@@ -2413,6 +2432,8 @@ namespace DragonsAltarRanger
                         LineVfx(g + Vector3.up * DragonCombat.M(9f) + new Vector3(0.6f, 0f, 0.6f), g, c, 0.05f, 0.18f);
                     }
                     StartCoroutine(RingVfx(point, radius, c, Mathf.Max(0.05f, _arInterval.Value)));
+                    Vector3 ap = point; float arr = radius; Color ac = c;
+                    DragonCombat.RunVfx(delegate { for (int k = 0; k < 5; k++) { Vector2 q = UnityEngine.Random.insideUnitCircle * arr; DragonVfx.Burst(ap + new Vector3(q.x, 0.2f, q.y), new Color(0.50f, 0.44f, 0.36f, 0.6f), 6, 2.5f, 0.5f, 0.7f, 0.4f); DragonVfx.Burst(ap + new Vector3(q.x, 0.1f, q.y), ac, 5, 4f, 0.15f, 0.25f, 0.6f); } });   // v0.25.58 arrows kick up dirt
                 }
                 yield return new WaitForSeconds(Mathf.Max(0.1f, _arInterval.Value));
             }
@@ -2494,6 +2515,8 @@ namespace DragonsAltarRanger
             {
                 StartCoroutine(RingVfx(at, radius, new Color(1f, 0.70f, 0.30f, 1f), 0.5f));
                 StartCoroutine(RingVfx(at, radius * 0.5f, new Color(1f, 1f, 0.80f, 1f), 0.3f));
+                Vector3 pe = at; float per = radius;
+                DragonCombat.RunVfx(delegate { DragonVfx.GroundImpact(pe, DragonVfx.Fire, per, 1.2f); DragonVfx.Flash(pe + Vector3.up, DragonVfx.Fire, 6f, per * 2.5f, 0.4f); });   // v0.25.58
             }
         }
 
@@ -2658,6 +2681,8 @@ namespace DragonsAltarRanger
                     DragonVfx.Burst(exAt + Vector3.up * 0.6f, new Color(1f, 0.5f, 0.15f, 1f), 70, 11f, 0.4f, 0.8f, 0.6f);
                     DragonVfx.Burst(exAt + Vector3.up * 0.4f, new Color(0.32f, 0.28f, 0.25f, 0.6f), 35, 3f, 1.2f, 1.5f, -0.1f);
                     DragonVfx.Vanilla(new string[] { "vfx_FireballHit", "fx_fireball_staff_explosion" }, exAt, Quaternion.identity, 1.2f, 4f);
+                    DragonVfx.GroundImpact(exAt, DragonVfx.Fire, radius, 1.4f);   // v0.25.58
+                    DragonVfx.Flash(exAt + Vector3.up, DragonVfx.Fire, 8f, radius * 3f, 0.45f);
                 });
             }
         }
@@ -2705,7 +2730,7 @@ namespace DragonsAltarRanger
             float end = Time.time + Mathf.Max(0.5f, _eaAscField.Value);
             while (Time.time < end && player != null)
             {
-                if (_enableVfx.Value) StartCoroutine(RingVfx(at, radius * 0.9f, new Color(1f, 0.40f, 0.10f, 0.8f), 0.5f));
+                if (_enableVfx.Value) { StartCoroutine(RingVfx(at, radius * 0.9f, new Color(1f, 0.40f, 0.10f, 0.8f), 0.5f)); Vector3 ff = at; float ffr = radius; DragonCombat.RunVfx(delegate { DragonVfx.Embers(ff, DragonVfx.Fire, ffr * 0.8f, 0.5f, 60f); }); }
                 List<Character> inside = GetSphereTargets(player, at, radius);
                 for (int i = 0; i < inside.Count; i++) DragonCombat.ApplyFireBurnTick(player, inside[i], perTick);
                 yield return new WaitForSeconds(0.5f);
@@ -2801,7 +2826,12 @@ namespace DragonsAltarRanger
                     OnSkillHit(player);
                     return true;
                 }, null));
-            if (_enableVfx.Value) LineVfx(origin, origin + dir * range, new Color(0.85f, 1f, 0.65f, 0.6f), width * 0.5f, 0.25f);
+            if (_enableVfx.Value)
+            {
+                LineVfx(origin, origin + dir * range, new Color(0.85f, 1f, 0.65f, 0.6f), width * 0.5f, 0.25f);
+                Vector3 go = origin, gd = dir; float gw = width;
+                DragonCombat.RunVfx(delegate { DragonVfx.Burst(go + gd, new Color(0.85f, 1f, 0.65f, 1f), 60, 12f, 0.3f, 0.35f, 0f); DragonVfx.Shake(go, 15f, 1.2f); for (int k = 1; k <= 3; k++) DragonVfx.Shockwave(go + gd * (k * 1.5f), new Color(0.85f, 1f, 0.65f, 0.8f), Mathf.Max(0.6f, gw * 0.6f), 0.2f); });   // v0.25.58
+            }
             if (ascended) StartCoroutine(SkyWindowAfter(player, range));
             else _splitRooted = false;
         }
@@ -2837,6 +2867,8 @@ namespace DragonsAltarRanger
                 LineVfx(point + Vector3.up * DragonCombat.M(30f), point, new Color(0.90f, 1f, 0.75f, 1f), 1.2f, 0.3f);
                 StartCoroutine(RingVfx(point, radius, new Color(0.90f, 1f, 0.75f, 1f), 0.5f));
                 StartCoroutine(RingVfx(point, radius * 0.5f, new Color(1f, 1f, 1f, 1f), 0.3f));
+                Vector3 sp = point; float spr = radius;
+                DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(sp, new Color(0.85f, 1f, 0.70f, 1f), spr, 2.2f); DragonVfx.Pillar(sp, new Color(0.90f, 1f, 0.75f, 1f), spr * 0.3f, 12f, 0.5f); });   // v0.25.58
             }
             RangerArrowDamage sky = new RangerArrowDamage();
             sky.Blunt = d.Total() * 0.5f;
@@ -2907,7 +2939,8 @@ namespace DragonsAltarRanger
             DragonCombat.RunVfx(delegate
             {
                 Color sc = new Color(0.85f, 1f, 0.70f, 1f);
-                if (width >= 1f) DragonVfx.Pillar(at, sc, Mathf.Max(1f, radius * 0.25f), DragonCombat.M(25f), 0.7f);
+                if (width >= 1f) { DragonVfx.Pillar(at, sc, Mathf.Max(1f, radius * 0.25f), DragonCombat.M(25f), 0.7f); DragonVfx.HeavyLanding(at, sc, radius, 2.5f); }   // v0.25.58 finale
+                else if (UnityEngine.Random.value < 0.3f) DragonVfx.Cracks(at, sc, 1.5f, 4, 1.5f);
                 DragonVfx.Burst(at + Vector3.up * 0.3f, sc, Mathf.RoundToInt(10 + width * 30f), 5f + width * 4f, 0.25f, 0.5f, 0.4f);
             });
             LineVfx(at + Vector3.up * DragonCombat.M(25f), at, new Color(0.85f, 1f, 0.70f, 1f), width, 0.25f);
