@@ -1,8 +1,10 @@
-TEST v0.25.61
+TEST v0.25.62
+0. INSTALL must finish all 9 steps (v0.25.61 stopped at [2/9]).
+Then everything from v0.25.61:
 1. Impact Wave (normal + Ascended): wall of force + rock shards rising behind it.
 2. Moonlight Splitter / Halfmoon / Crescent Cleave: crescent blades travel WITH the waves.
 3. Seismic Guillotine, Stomp, Bonecrusher: rock spikes. Punishing Bomb / Meteor: fireballs.
 4. Flame Burst flames, Glacial / Frost Nova ice spikes, Stonefang rock spikes.
 5. Railcannon rail + rings, Greatblade sky streak, sigils on Gravity Dominion / Rupture / Clockwork.
-6. Ranger arrow streaks, Piercing Arrow rings, Cyclone funnel.
-7. Rock spikes are lit (Standard shader); if they look flat-coloured the game stripped that shader - tell me.
+6. Ranger arrow streaks, Piercing Arrow rings, Cyclone funnel. Lightning Trails crawl on the ground (v0.25.60).
+7. Rock spikes are lit (Standard shader); if they look flat-coloured tell me.

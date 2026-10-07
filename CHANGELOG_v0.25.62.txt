@@ -1,0 +1,8 @@
+Immortal Heroes v0.25.62 - Signature VFX Fix (hotfix for v0.25.61 install failure)
+
+- FIX: [2/9] Combat Runtime failed to compile on install ("System.ReadOnlySpan ... not referenced"):
+  the new ground-lightning code called LineRenderer.SetPositions, whose newer Span overload Windows PowerShell's
+  compiler cannot resolve. It now sets each point one by one. Nothing else changed - everything from v0.25.61
+  (Signature VFX) is included.
+- The pre-release check now rejects SetPositions / GetPositions / LoadImage calls so this cannot ship again.
+- The 'velocity is obsolete' and 'Empty switch block' lines in the install log are harmless warnings.

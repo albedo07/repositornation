@@ -31,7 +31,7 @@ cp "$ROOT/AlbedosCustomClasses.Core.cs" "$WORK/head/AlbedosCustomClasses.Core.cs
 for d in base head; do
   (cd "$WORK/$d" && mcs -langversion:5 -target:library $REFS -out:core.dll AlbedosCustomClasses.Core.cs "$WORK/StubsCore.cs" "$ROOT/tools/compile_check/StubsCore.cs" > core.log 2>&1 || true)
 done
-python3 - "$WORK" <<'PY'
+python3 - "$WORK" "$ROOT" <<'PY'
 import re, sys
 w = sys.argv[1]
 def load(p):
@@ -44,6 +44,14 @@ b, h = load(w + '/base/mcs.log'), load(w + '/head/mcs.log')
 for k, v in load(w + '/base/core.log').items(): b.setdefault(k, []).extend(v)
 for k, v in load(w + '/head/core.log').items(): h.setdefault(k, []).extend(v)
 bad = [(k, v) for k, v in h.items() if k not in b]
+# APIs whose modern overloads use System.ReadOnlySpan<T>: Windows PowerShell Add-Type cannot resolve them (v0.25.62).
+import glob
+import os
+for f in sorted(glob.glob(os.path.join(sys.argv[2], '*.cs'))):
+    for n, line in enumerate(open(f, encoding='utf-8', errors='ignore'), 1):
+        code = line.split('//')[0]
+        for api in ('.SetPositions(', '.LoadImage(', '.GetPositions('):
+            if api in code: bad.append((('SPAN', 'Add-Type cannot resolve ' + api.strip('.(') + ' (Span overload)'), [os.path.basename(f) + ':' + str(n)]))
 for k, v in bad: print('NEW ERROR', k[0], k[1], 'lines', v)
 print('COMPILE CHECK', 'FAILED' if bad else 'PASSED', '(%d new signatures)' % len(bad))
 sys.exit(1 if bad else 0)

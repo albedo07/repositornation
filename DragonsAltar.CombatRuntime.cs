@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.61";
+        public const string ModVersion = "0.25.62";
 
         internal static DragonCombatPlugin Instance;
 
@@ -8760,8 +8760,10 @@ namespace DragonsAltarCombat
                 _buf[i * 2] = i == 0 ? Pts[0] + Vector3.up * 0.1f : Jit(Pts[i], side, Width * 2.2f);
                 if (i < n - 1) _buf[i * 2 + 1] = Jit((Pts[i] + Pts[i + 1]) * 0.5f, side, Width * 3.2f);
             }
-            Glow.positionCount = m; Glow.SetPositions(_buf);
-            Core.positionCount = m; Core.SetPositions(_buf);
+            // per-point SetPosition: SetPositions has a Span overload the game's compiler cannot resolve (v0.25.62)
+            Glow.positionCount = m;
+            Core.positionCount = m;
+            for (int i = 0; i < m; i++) { Glow.SetPosition(i, _buf[i]); Core.SetPosition(i, _buf[i]); }
             if (Fork != null)
             {
                 // one short fork off a random point
