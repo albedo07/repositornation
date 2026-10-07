@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.50";
+        public const string ModVersion = "0.25.51";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1535,7 +1535,11 @@ namespace AlbedosCustomClassesAdvanced
                     StartCoroutine(CrescentCleaveWave(player, origin, Quaternion.AngleAxis(a, Vector3.up) * baseForward, _crescentAscFirst.Value / 100f, cast, true));
                 }
                 StartCoroutine(CrescentFireTrailRoutine(player, cast));
-                yield return new WaitForSeconds(Mathf.Max(0f, _crescentAscSecondDelay.Value));
+                // v0.25.51 (user): the second set gets its own follow-up swing, timed to land with it.
+                float second = Mathf.Max(0.2f, _crescentAscSecondDelay.Value);
+                DragonCombat.LockSkill(player, second + 0.1f);
+                DragonCombat.PlayClip(player, "sm_crescent_asc2", second);
+                yield return new WaitForSeconds(second);
                 if (player == null || player.IsDead() || SmInterrupted(castStart))
                     yield break;
                 for (int i = 0; i < 6; i++)
@@ -1778,7 +1782,7 @@ namespace AlbedosCustomClassesAdvanced
             const string ca = "Sword Master Crescent Cleave Ascended";
             _crescentAscFirst = Config.Bind(ca, "FirstFanDamagePercent", 45f, "7 cleaves, each this % of a normal cleave.");
             _crescentAscSecond = Config.Bind(ca, "SecondFanDamagePercent", 30f, "6 cleaves between the first ones, each this % of a normal cleave.");
-            _crescentAscSecondDelay = Config.Bind(ca, "SecondFanDelay", 0.3f, "Seconds after the first fan.");
+            _crescentAscSecondDelay = Config.Bind(ca, "SecondFanDelay_v02551", 0.5f, "Seconds after the first fan; a follow-up swing plays over this gap.");
             _crescentAscTrailTime = Config.Bind(ca, "FireTrailSeconds", 4f, "How long every cleave's fire trail stays.");
             _crescentAscTrailPercent = Config.Bind(ca, "FireTrailDamagePercent", 10f, "Fire trail hit every 0.5s (% of a normal cleave), one shared timer per target.");
             _crescentAscTrailMaxTicks = Config.Bind(ca, "FireTrailMaxHits", 8, "Maximum fire trail hits per target per cast.");

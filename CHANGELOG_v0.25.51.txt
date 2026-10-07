@@ -1,0 +1,3 @@
+Immortal Heroes v0.25.51 - Crescent Follow Up
+
+- Ascended Crescent Cleave: the second set of cleaves now has its own follow-up swing (Valheim sword swing 2), timed to land with it. The second set comes 0.5s after the first (was 0.3s) so the swing fits.

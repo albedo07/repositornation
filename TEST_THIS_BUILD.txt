@@ -1,3 +1,2 @@
-TEST v0.25.50
-1. Crescent Cleave normal + Ascended: same animation as Impact Wave, wave timed to the swing.
-2. The cleaves travel visibly slower (5.5s for 20m).
+TEST v0.25.51
+1. Ascended Crescent Cleave: Impact Wave swing -> first fan, then a second swing -> second fan.

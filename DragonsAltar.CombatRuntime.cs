@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.50";
+        public const string ModVersion = "0.25.51";
 
         internal static DragonCombatPlugin Instance;
 
@@ -73,9 +73,9 @@ namespace DragonsAltarCombat
 
             EnableRuntime = Config.Bind("Runtime", "Enabled", true, "Enable Dragon's Altar combat runtime patches.");
             EnableSkillAnimations = Config.Bind("Runtime", "EnableSkillAnimations", true, "Use Dragon's Altar procedural skill poses. Class skills do not trigger vanilla weapon attacks.");
-            VanillaAnimationMap = Config.Bind("Runtime", "VanillaAnimationMap_v02550",
+            VanillaAnimationMap = Config.Bind("Runtime", "VanillaAnimationMap_v02551",
                 "sm_slash_a=swing_longsword0@0.28;sm_slash_b=swing_longsword1@0.28;sm_halfmoon=battlea" + "xe_attack@0.45;sm_halfmoon_2=battleaxe_attack@0.45;warrior_h" +
-                "eavy=battleaxe_attack@0.45;merc_heavy_asc=battleaxe_attack@0.45;sm_moon_finisher=battleaxe_attack@0.45;sm_crescent=swing_sledge@0.55;sm_crescent_asc=swing_sledge@0.55;cleric_hammer_slam=axe_secondary@0.45;merc_bomb=battleaxe_attack@0.45;merc_circle" +
+                "eavy=battleaxe_attack@0.45;merc_heavy_asc=battleaxe_attack@0.45;sm_moon_finisher=battleaxe_attack@0.45;sm_crescent=swing_sledge@0.55;sm_crescent_asc=swing_sledge@0.55;sm_crescent_asc2=swing_longsword1@0.3;cleric_hammer_slam=axe_secondary@0.45;merc_bomb=battleaxe_attack@0.45;merc_circle" +
                 "=atgeir_secondary@0.45;merc_circle_2=atgeir_secondary@0.4;sm_eclipse=atgeir_secondary@0.45;sm_halfmoon_finisher=atgeir_secondary@0.45;warrior_impact_wave=swing_sledge@0.55;merc_sei" +
                 "smic=swing_sledge@0.55;wiz_greatblade=swing_sledge@0.55;wiz_greatblade_slam=swing_sledge@0.55;warrior_punch=unarmed_attack@0.2;sm_thrust=spear_poke@0.25;cleric_hammer=spear_throw@0" +
                 ".4;cleric_cross_1=swing_longsword0@0.28;cleric_cross_2=swing_longsword1@0.28;cleric_zap=staff_fireball@0.25;sorc_flame=staff_fireball@0.25;hw_gravity_blast=staff_fireball@0.25;cler" +
@@ -3656,6 +3656,7 @@ namespace DragonsAltarCombat
             c["olympic_hero"] = SbOlympic(false);
             c["olympic_hero_brutal"] = SbOlympic(true);
             c["sm_crescent_asc"] = c["sm_crescent"];
+            c["sm_crescent_asc2"] = c["sm_crescent"];   // v0.25.51 follow-up swing (custom fallback)
             // v0.25.41 Blade Storm = Vergil's Judgement Cut: crouched iai stance with the blade held back at the
             // left hip (sheathed), a blink-fast draw that ends with the arm out to the right, a held pose,
             // then the slow sheathe back to the hip and a small "click" settle.
