@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.70";
+        public const string ModVersion = "0.25.71";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -3361,6 +3361,7 @@ namespace AlbedosCustomClassesAdvanced
             }
             _whirlActive = false;
             if (spinFx != null) Destroy(spinFx);
+            if (_whirlStopRequested) DragonCombat.ClipStop(player, 0.1f);
             DragonCombat.BeginWhirlwind(player, 0.05f);
             if (player == null || player.IsDead()) yield break;
             // Final sweep scales with the time actually spun; ending early gives a smaller sweep.
@@ -4295,16 +4296,27 @@ namespace AlbedosCustomClassesAdvanced
             float interval = Mathf.Max(0.1f, _whirlwindInterval.Value);
             int ticks = Mathf.Max(1, Mathf.RoundToInt(duration / interval));
             DragonCombat.PlaySpinClip(player, duration, 0.4f);   // v0.25.8: arms out, one turn every 0.4s
+            _whirlActive = true;
+            _whirlStopRequested = false;
             if (_enableVfx.Value)
             {
                 Transform wt0 = player.transform; float wr0 = Mathf.Max(0.5f, DragonCombat.M(_whirlwindRadius.Value)) * 0.85f; float wd0 = duration;
                 DragonCombat.RunVfx(delegate { DragonVfx.SpinSlash(wt0, new Color(1f, 0.62f, 0.22f, 1f), wr0, Mathf.Max(0.25f, wr0 * 0.09f), wd0, 0.4f); });   // v0.25.66 circular slash
             }
 
+            GameObject spinFxN = null;
             for (int tick = 0; tick < ticks; tick++)
             {
                 if (player == null || player.IsDead())
-                    yield break;
+                    { _whirlActive = false; yield break; }
+                if (_whirlStopRequested)
+                {
+                    // recast: stop spinning now (movement, spin pose and the blade circle end together)
+                    DragonCombat.BeginWhirlwind(player, 0.05f);
+                    DragonCombat.ClipStop(player, 0.15f);
+                    foreach (Transform ch in player.transform) if (ch != null && ch.name == "IH_SpinSlash") Destroy(ch.gameObject);
+                    break;
+                }
 
                 List<Character> targets = GetSphereTargets(player, player.transform.position, Mathf.Max(0.5f, DragonCombat.M(_whirlwindRadius.Value)));
                 for (int i = 0; i < targets.Count; i++)
@@ -4319,6 +4331,7 @@ namespace AlbedosCustomClassesAdvanced
 
                 yield return new WaitForSeconds(interval);
             }
+            _whirlActive = false;
         }
 
         private void CastGoddessRelic(Player player)
@@ -12580,7 +12593,8 @@ namespace AlbedosCustomClassesAdvanced
                 case "seismic_guillotine": CastSeismicGuillotine(player); break;
                 case "whirlwind":
                     // Ascended: recast while spinning ends it early with a proportional final sweep.
-                    if (_whirlActive && IsAscendedSkill("whirlwind")) { _whirlStopRequested = true; break; }
+                    // v0.25.71 (user): every channel can be cancelled by recasting - the normal spin too.
+                    if (_whirlActive) { _whirlStopRequested = true; break; }
                     CastWhirlwind(player);
                     break;
                 case "punishing_bomb": CastPunishingBomb(player); break;

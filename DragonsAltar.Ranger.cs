@@ -40,7 +40,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Dragon's Altar - Ranger";
-        public const string ModVersion = "0.25.70";
+        public const string ModVersion = "0.25.71";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -1457,8 +1457,12 @@ namespace DragonsAltarRanger
         private readonly Dictionary<int, float> _fwStackUntil = new Dictionary<int, float>();
         private static Type _projectileType;
 
+        // v0.25.71 (user): every channel / duration skill is cancelled by recasting it.
+        private bool _fwActive, _fwStop, _sfActive, _sfStop;
+
         private void CastFuriousWinds(Player player)
         {
+            if (_fwActive) { _fwStop = true; return; }
             if (!BeginSkill(player, "Acrobat.FuriousWinds", _fwCooldown.Value, _fwStamina.Value)) return;
             StartCoroutine(FuriousWindsRoutine(player, DragonCombat.IsSkillAscended(player, "furious_winds")));
         }
@@ -1481,7 +1485,8 @@ namespace DragonsAltarRanger
             float power = DragonCombat.GetSkillPower(player, "furious_winds");
             float slash = Mathf.Max(0f, _fwSlash.Value) / 100f * power * d.Total();
             float end = Time.time + duration, nextTick = 0f, nextDot = Time.time + 0.5f;
-            while (Time.time < end && player != null && !player.IsDead())
+            _fwActive = true; _fwStop = false;
+            while (Time.time < end && player != null && !player.IsDead() && !_fwStop)
             {
                 Vector3 c = player.transform.position;
                 if (storm != null) { storm.transform.position = c; storm.transform.Rotate(0f, 540f * Time.deltaTime, 0f, Space.World); }
@@ -1544,7 +1549,16 @@ namespace DragonsAltarRanger
                 if (Time.time >= nextDot) { nextDot = Time.time + 0.5f; FuriousDotTick(player, d.Total() * power); }
                 yield return null;
             }
+            _fwActive = false;
             if (storm != null) Destroy(storm);
+            if (_fwStop && player != null)
+            {
+                // recast: the storm ends now - free to move, spin pose and Hyper Armor end with it
+                DragonCombat.LockSkill(player, 0f);
+                DragonCombat.BeginMobileCast(player, 0.05f, true);
+                DragonCombat.ClipStop(player, 0.15f);
+                DragonCombat.GrantHyperArmor(player, 0.1f);
+            }
             if (player != null && !player.IsDead() && ascended)
             {
                 List<Character> burst = GetSphereTargets(player, player.transform.position, radius + DragonCombat.M(1.5f));
@@ -2895,10 +2909,12 @@ namespace DragonsAltarRanger
         // ------------------------------------------------------------------ Starfall Volley (Ultimate)
         private void CastStarfallVolley(Player player)
         {
+            if (_sfActive) { _sfStop = true; return; }   // v0.25.71 recast = call off the barrage
             if (!RequireRangedForBowmaster(player)) return;
             Vector3 point;
             if (!AlbedoAimUtility.TryGetPhysicalTarget(player, DragonCombat.M(_sfRange.Value) * FocusRangeMultiplier(player), out point)) { ShowMessage("Aim at the ground"); return; }
             if (!BeginSkill(player, "Bowmaster.StarfallVolley", _sfCooldown.Value, _sfStamina.Value)) return;
+            _sfActive = true; _sfStop = false;
             StartCoroutine(StarfallRoutine(player, point, DragonCombat.IsSkillAscended(player, "starfall_volley")));
         }
 
@@ -2911,14 +2927,14 @@ namespace DragonsAltarRanger
             float radius = DragonCombat.M(_sfRadius.Value);
             if (_enableVfx.Value) StartCoroutine(RingVfx(point, radius, new Color(0.80f, 1f, 0.60f, 0.8f), channel + _sfDuration.Value));
             yield return new WaitForSeconds(channel);
-            if (player == null || player.IsDead()) yield break;
+            if (player == null || player.IsDead()) { _sfActive = false; yield break; }
             RangerArrowDamage d = ArrowDamage(player);
             float mult = _sfDamage.Value / 100f * DragonCombat.GetSkillPower(player, "starfall_volley");
             float impact = DragonCombat.M(_sfImpact.Value);
             float end = Time.time + Mathf.Max(0.5f, _sfDuration.Value);
             float nextTick = 0f;
             // v0.24.2: every tick hits EVERY enemy in the 20m area; the falling arrows are cosmetic.
-            while (Time.time < end && player != null)
+            while (Time.time < end && player != null && !_sfStop)
             {
                 if (Time.time >= nextTick)
                 {
@@ -2932,7 +2948,8 @@ namespace DragonsAltarRanger
                 }
                 yield return new WaitForSeconds(Mathf.Max(0.05f, _sfInterval.Value));
             }
-            if (ascended && player != null)
+            _sfActive = false;
+            if (ascended && player != null && !_sfStop)
             {
                 yield return new WaitForSeconds(0.3f);
                 if (_enableVfx.Value) StarVfx(GroundAt(point), DragonCombat.M(_sfAscRadius.Value), 1.5f);

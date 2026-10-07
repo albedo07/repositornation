@@ -1,3 +1,7 @@
-TEST v0.25.70
-1. Electric Smite / Bonecrusher: in the air, the shield (or the Merc off-hand weapon) is braced in front of the chest, not flung out.
-2. Circle Swing: the hop has both hands on the weapon, cocked like a baseball bat, then a two-handed spin.
+TEST v0.25.71
+1. Whirlwind: start it, press it again -> it stops at once and you can walk normally.
+2. Furious Winds: start it, press it again -> the storm ends at once and you are free to move.
+3. Starfall Volley: press it again during the barrage -> the arrows stop.
+4. Angel Comet: the shield is braced in front during the jump and dive.
+5. Blade Storm: the off hand is at the left hip, like holding a scabbard.
+6. Frenzied Charge: the off hand is braced in front.

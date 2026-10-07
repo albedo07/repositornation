@@ -1,0 +1,14 @@
+Immortal Heroes v0.25.71 - Recast and Brace
+
+RECAST TO CANCEL (universal rule for channels and duration skills)
+- Whirlwind (normal and Ascended): press it again to stop spinning. Movement, the spin pose and the blade circle end at once. The Ascended version keeps its proportional final sweep.
+- Furious Winds (normal and Ascended): press it again to end the storm. You are free to move at once. The Ascended end burst still fires.
+- Starfall Volley: press it again to call off the barrage. The Ascended finale is skipped when you cancel.
+
+ANIMATIONS - off-hand brace pass (same rule as Olympic Hero)
+The off hand (shield, or the Mercenary's off-hand weapon) no longer hangs loose in these custom moves:
+- Angel Comet: braced in front of the chest through the rise, the inverted dive and the flip. In the hero landing it rests over the front knee.
+- Jump-slam landing kneel: the off hand rests over the front knee.
+- Frenzied Charge: the off hand is braced in front while the point drives forward.
+- Blade Storm (Judgement Cut): the off hand holds the scabbard at the left hip through the iai stance, the draw and the sheathe.
+- Hammer Slam fallback (used only if the game lacks mace_secondary): the shield is braced low in front during the overhead slam.

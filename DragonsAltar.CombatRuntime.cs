@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.70";
+        public const string ModVersion = "0.25.71";
 
         internal static DragonCombatPlugin Instance;
 
@@ -4084,7 +4084,7 @@ namespace DragonsAltarCombat
             // v0.25.63 jump-slam landing on top of Valheim's axe heavy smash: a deep hero kneel (hips dropped, chest
             // over the weapon, wide stance, front knee forward, back knee low), held, then up. Arms belong to the
             // vanilla smash (no hand keys).
-            DragonClipKey kneel = Ft(K(0f).Sp(30f, 0f, 0f).Ch(12f, 0f, 0f).Hd(-18f, 0f, 0f).Off(0f, -0.55f, 0.08f), 0.9f, 1.05f);
+            DragonClipKey kneel = Ft(K(0f).Sp(30f, 0f, 0f).Ch(12f, 0f, 0f).Hd(-18f, 0f, 0f).LHand(0.15f, -0.85f, 0.5f, 0.7f).Off(0f, -0.55f, 0.08f), 0.9f, 1.05f);   // v0.25.71 off hand braced over the front knee
             c["slam_kneel"] = new DragonClipKey[] { K(-1f), kneel, kneel.Copy(0.4f).Off(0f, -0.58f, 0.08f), K(0.85f) };
             c["slam_kneel"][0].NoAim = true;
             c["sm_crescent_asc"] = c["sm_crescent"];
@@ -4092,21 +4092,21 @@ namespace DragonsAltarCombat
             // v0.25.41 Blade Storm = Vergil's Judgement Cut: crouched iai stance with the blade held back at the
             // left hip (sheathed), a blink-fast draw that ends with the arm out to the right, a held pose,
             // then the slow sheathe back to the hip and a small "click" settle.
-            DragonClipKey jcStance = Ft(K(-0.6f).Sp(14f, -25f, 0f).Ch(4f, -10f, 0f).Hd(-6f, 22f, 0f).Hand(-0.38f, -0.42f, 0.45f, 0.62f).Wp(-0.8f, -0.45f, -0.4f).Off(0f, -0.12f, 0f), 0.35f, 0.25f);
-            DragonClipKey jcDraw = Ft(K(0f).Sp(10f, 30f, 0f).Ch(4f, 14f, 0f).Hd(-4f, -10f, 0f).Hand(1f, 0.1f, 0.35f, 1f).Wp(1f, 0.05f, 0.2f).Off(0f, -0.1f, 0.06f), 0.4f, 0.25f).Linear();
+            DragonClipKey jcStance = Ft(K(-0.6f).Sp(14f, -25f, 0f).Ch(4f, -10f, 0f).Hd(-6f, 22f, 0f).Hand(-0.38f, -0.42f, 0.45f, 0.62f).Wp(-0.8f, -0.45f, -0.4f).LHand(0.25f, -0.95f, 0.2f, 0.72f).Off(0f, -0.12f, 0f), 0.35f, 0.25f);
+            DragonClipKey jcDraw = Ft(K(0f).Sp(10f, 30f, 0f).Ch(4f, 14f, 0f).Hd(-4f, -10f, 0f).Hand(1f, 0.1f, 0.35f, 1f).Wp(1f, 0.05f, 0.2f).LHand(0.25f, -0.95f, 0.2f, 0.72f).Off(0f, -0.1f, 0.06f), 0.4f, 0.25f).Linear();
             DragonClipKey jcHold = jcDraw.Copy(0.18f); jcHold.Lin = false;
-            DragonClipKey jcReturn = Ft(K(0.3f).Sp(8f, 10f, 0f).Ch(3f, 4f, 0f).Hand(0.25f, -0.15f, 0.6f, 0.7f).Wp(0.2f, 0f, 1f).Off(0f, -0.08f, 0f), 0.35f, 0.2f);
-            DragonClipKey jcSheathe = Ft(K(0.75f).Sp(6f, -12f, 0f).Ch(2f, -6f, 0f).Hd(-4f, 8f, 0f).Hand(-0.36f, -0.42f, 0.42f, 0.62f).Wp(-0.8f, -0.45f, -0.4f).Off(0f, -0.06f, 0f), 0.3f, 0.2f);
+            DragonClipKey jcReturn = Ft(K(0.3f).Sp(8f, 10f, 0f).Ch(3f, 4f, 0f).Hand(0.25f, -0.15f, 0.6f, 0.7f).Wp(0.2f, 0f, 1f).LHand(0.25f, -0.95f, 0.2f, 0.72f).Off(0f, -0.08f, 0f), 0.35f, 0.2f);
+            DragonClipKey jcSheathe = Ft(K(0.75f).Sp(6f, -12f, 0f).Ch(2f, -6f, 0f).Hd(-4f, 8f, 0f).Hand(-0.36f, -0.42f, 0.42f, 0.62f).Wp(-0.8f, -0.45f, -0.4f).LHand(0.25f, -0.95f, 0.2f, 0.72f).Off(0f, -0.06f, 0f), 0.3f, 0.2f);
             DragonClipKey jcClick = jcSheathe.Copy(0.83f).Sp(3f, -10f, 0f).Off(0f, -0.03f, 0f);
             c["sm_blade_storm"] = new DragonClipKey[] { K(-1f), jcStance, jcDraw, jcHold, jcReturn, jcSheathe, jcClick, K(1.1f) };
             // v0.25.36 Shield Charge finisher fallback (if the game has no mace_secondary): one-handed overhead
             // hammer slam with the main hand, shield arm untouched.
-            DragonClipKey hsUp = Ft(K(-0.55f).Sp(-4f, -6f, 0f).Ch(-6f, -4f, 0f).Hd(-10f, 0f, 0f).Hand(0.25f, 1f, -0.15f, 0.95f).Wp(0.05f, 0.6f, -0.8f), 0.3f, 0.15f);
-            DragonClipKey hsDown = Ft(K(0f).Sp(22f, 4f, 0f).Ch(10f, 2f, 0f).Hd(6f, 0f, 0f).Hand(0.05f, -0.5f, 0.85f, 1f).Wp(0f, -0.75f, 0.65f).Off(0f, -0.12f, 0.06f), 0.4f, 0.15f).Linear();
+            DragonClipKey hsUp = Ft(K(-0.55f).Sp(-4f, -6f, 0f).Ch(-6f, -4f, 0f).Hd(-10f, 0f, 0f).Hand(0.25f, 1f, -0.15f, 0.95f).Wp(0.05f, 0.6f, -0.8f).LHand(0.4f, -0.2f, 0.9f, 0.5f), 0.3f, 0.15f);
+            DragonClipKey hsDown = Ft(K(0f).Sp(22f, 4f, 0f).Ch(10f, 2f, 0f).Hd(6f, 0f, 0f).Hand(0.05f, -0.5f, 0.85f, 1f).Wp(0f, -0.75f, 0.65f).LHand(0.3f, -0.4f, 0.85f, 0.55f).Off(0f, -0.12f, 0.06f), 0.4f, 0.15f).Linear();
             c["cleric_hammer_slam"] = new DragonClipKey[] { K(-1f), hsUp, hsUp.Copy(-0.15f), hsDown, hsDown.Copy(0.2f), K(0.6f) };
             // v0.25.35 Frenzied Charge (user): sword held out in front, point forward, the whole charge.
             DragonClipKey fcDraw = Ft(K(-0.5f).Sp(6f, -8f, 0f).Hand(0.35f, -0.25f, -0.05f, 0.6f).Wp(0.1f, 0.15f, 1f).Off(0f, -0.06f, 0f), 0.25f, 0.2f);
-            DragonClipKey fcHold = K(0f).Sp(12f, 0f, 0f).Ch(4f, 0f, 0f).Hd(-10f, 0f, 0f).Hand(0.12f, 0.05f, 1f, 0.88f).Wp(0f, 0.05f, 1f);
+            DragonClipKey fcHold = K(0f).Sp(12f, 0f, 0f).Ch(4f, 0f, 0f).Hd(-10f, 0f, 0f).Hand(0.12f, 0.05f, 1f, 0.88f).Wp(0f, 0.05f, 1f).LHand(0.4f, -0.2f, 0.9f, 0.5f);
             c["sm_charge"] = new DragonClipKey[] { K(-1f), fcDraw, fcHold, fcHold.Copy(0.15f), K(0.4f) };
             c["sm_charge"][0].NoPlant = true;
             DragonClipKey[] oh = c["olympic_hero"];
@@ -4127,14 +4127,16 @@ namespace DragonsAltarCombat
 
             // Angel Comet (EMA dive): crouch, jump with the arm thrown up, wings on the rise, tip over into an
             // inverted head-first dive (arm leading to the ground), flip upright into the hero landing.
-            DragonClipKey inv = K(0f).Sp(3f, 0f, 0f).Hd(-10f, 0f, 0f).Hand(0f, 1f, 0.1f, 1f).Rot(165f, 0f, 0f);
-            DragonClipKey hero = Ft(K(0.16f).Sp(30f, 0f, 0f).Ch(14f, 0f, 0f).Hd(-28f, 0f, 0f).Hand(0.05f, -1f, 0.35f, 0.97f).Rot(366f, 0f, 0f).Off(0f, -0.38f, 0.05f), 0.75f, 0.8f);
+            // v0.25.71: the off hand (shield / Mercenary off-hand weapon) braces in front of the chest in the air, the same
+            // rule as Olympic Hero, and rests over the front knee in the landing.
+            DragonClipKey inv = K(0f).Sp(3f, 0f, 0f).Hd(-10f, 0f, 0f).Hand(0f, 1f, 0.1f, 1f).LHand(0.4f, -0.2f, 0.9f, 0.5f).Rot(165f, 0f, 0f);
+            DragonClipKey hero = Ft(K(0.16f).Sp(30f, 0f, 0f).Ch(14f, 0f, 0f).Hd(-28f, 0f, 0f).Hand(0.05f, -1f, 0.35f, 0.97f).LHand(0.15f, -0.85f, 0.5f, 0.7f).Rot(366f, 0f, 0f).Off(0f, -0.38f, 0.05f), 0.75f, 0.8f);
             c["angel_comet"] = new DragonClipKey[] {
                 K(-1f),
                 Ft(K(-0.92f).Sp(14f, 0f, 0f).Ch(6f, 0f, 0f).Hand(0.3f, -0.6f, 0.3f, 0.55f).Off(0f, -0.12f, 0f), 0.15f, 0.1f),
-                K(-0.75f).Ch(-8f, 0f, 0f).Hd(-20f, 0f, 0f).Hand(0.05f, 1f, 0.1f, 1f).Rot(-6f, 0f, 0f),
-                K(-0.35f).Sp(-10f, 0f, 0f).Ch(-10f, 0f, 0f).Hd(-24f, 0f, 0f).Hand(1f, 0.2f, -0.3f, 1f).Rot(-10f, 0f, 0f),
-                K(-0.1f).Hd(-20f, 0f, 0f).Hand(0f, 1f, 0.2f, 1f).Rot(70f, 0f, 0f),
+                K(-0.75f).Ch(-8f, 0f, 0f).Hd(-20f, 0f, 0f).Hand(0.05f, 1f, 0.1f, 1f).LHand(0.4f, -0.2f, 0.9f, 0.5f).Rot(-6f, 0f, 0f),
+                K(-0.35f).Sp(-10f, 0f, 0f).Ch(-10f, 0f, 0f).Hd(-24f, 0f, 0f).Hand(1f, 0.2f, -0.3f, 1f).LHand(0.4f, -0.2f, 0.9f, 0.5f).Rot(-10f, 0f, 0f),
+                K(-0.1f).Hd(-20f, 0f, 0f).Hand(0f, 1f, 0.2f, 1f).LHand(0.4f, -0.2f, 0.9f, 0.5f).Rot(70f, 0f, 0f),
                 inv, hero, hero.Copy(0.4f).Off(0f, -0.4f, 0.05f),
                 Ft(K(0.7f).Sp(8f, 0f, 0f).Hd(-6f, 0f, 0f).Hand(0.35f, -0.45f, 0.35f, 0.6f).Rot(360f, 0f, 0f).Off(0f, -0.06f, 0f), 0.3f, 0.2f),
                 K(1.0f).Rot(360f, 0f, 0f)
