@@ -1,0 +1,4 @@
+Immortal Heroes v0.25.50 - Crescent Fix
+
+- Crescent Cleave (Ascended too) uses the Impact Wave animation again (the Ascended version had the slow sword heavy attack).
+- Crescent Cleave travels slower: 20m in 5.5s (was 4s).

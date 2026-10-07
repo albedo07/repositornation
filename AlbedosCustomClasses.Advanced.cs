@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.49";
+        public const string ModVersion = "0.25.50";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -669,7 +669,7 @@ namespace AlbedosCustomClassesAdvanced
             _crescentCooldown = Config.Bind("Sword Master Crescent Cleave", "Cooldown", 14f, "Seconds.");
             _crescentStamina = Config.Bind("Sword Master Crescent Cleave", "StaminaCost", 30f, "Stamina cost.");
             _crescentRange = Config.Bind("Sword Master Crescent Cleave", "RangeMeters_v0109", 20f, "Authoritative v0.10.9 travel distance. Fresh key prevents old 15m configs from overriding the 20m specification.");
-            _crescentTravelTime = Config.Bind("Sword Master Crescent Cleave", "TravelTimeSeconds_v0109", 4f, "Authoritative v0.10.9 travel time. 20m over 4s preserves the previous 5m-per-second wave speed.");
+            _crescentTravelTime = Config.Bind("Sword Master Crescent Cleave", "TravelTimeSeconds_v0109", 5.5f, "Travel time: 20m over 5.5s (v0.25.50, slower).");
             _crescentSlashWidth = Config.Bind("Sword Master Crescent Cleave", "SlashWidth", 1f, "Width in meters of EACH vertical travelling slash hitbox.");
             _crescentSlashHeight = Config.Bind("Sword Master Crescent Cleave", "SlashHeight", 6.4f, "Doubled vertical cleave height.");
             _crescentSpreadAngle = Config.Bind("Sword Master Crescent Cleave", "ConeSpreadDegrees_v0109", 120f, "Very wide cone matching the supplied second-cone reference: 120 degrees total spread, with the center slash travelling straight ahead.");
@@ -1478,7 +1478,7 @@ namespace AlbedosCustomClassesAdvanced
 
             float windup = DragonCombat.ScaleWindup(player, 1f);
             DragonCombat.LockSkill(player, windup);
-            DragonCombat.PlayClip(player, IsAscendedSkill("crescent_cleave") ? "sm_crescent_asc" : "sm_crescent", windup);   // v0.25.35 Impact Wave anim / Ascended: leaping sword special
+            DragonCombat.PlayClip(player, IsAscendedSkill("crescent_cleave") ? "sm_crescent_asc" : "sm_crescent", windup);   // v0.25.50 both = Impact Wave anim
             StartCoroutine(CrescentCleaveRoutine(player, windup));
         }
 
