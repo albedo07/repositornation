@@ -1,3 +1,5 @@
-TEST v0.25.47
-1. Warrior (no AC) + knife or fists: vanilla chain, skills say "requires a melee weapon (no Knives / Fist weapons)".
-2. Warrior + sword/axe/mace: 1,2,1,2,3 chain + skills work.
+TEST v0.25.48
+1. Sword Master / Warrior + sword, hold attack: 1st swing, 2nd swing, 1st swing, 2nd swing, overhead, 1 s pause.
+2. No class + two axes equipped: off-hand axe unequips, message "Only a Mercenary can dual wield".
+3. Mercenary + two axes: stays dual wielded, chain works.
+4. No class + sword: normal vanilla 3-hit chain.

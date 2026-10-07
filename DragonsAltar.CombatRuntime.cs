@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.47";
+        public const string ModVersion = "0.25.48";
 
         internal static DragonCombatPlugin Instance;
 
@@ -958,8 +958,22 @@ namespace DragonsAltarCombat
             return ts == "Horizontal" || ts == "Vertical";
         }
 
+        // v0.25.48 ROOT CAUSE of the chain never working: Attack.Start is called on a fresh clone whose
+        // m_character / m_weapon are only filled INSIDE Start, so the old prefix always saw null and bailed.
+        // The prefix now reads Start's own `character` / `weapon` arguments.
+        private static bool IsLocalMeleeStart(Attack attack, Humanoid character, out Player player)
+        {
+            player = character as Player;
+            if (attack == null || player == null || player != Player.m_localPlayer) return false;
+            object type = _atkType == null ? null : _atkType.GetValue(attack);
+            string ts = type == null ? "" : type.ToString();
+            return ts == "Horizontal" || ts == "Vertical";
+        }
+
         private static bool IsDualWielding(Player p)
         {
+            // v0.25.48: dual wield belongs to the Mercenary only.
+            if (p == null || DragonCombat.GetAdvancementName(p) != "Mercenary") return false;
             ItemDrop.ItemData l = DragonCombat.GetHandItem(p, "m_leftItem");
             ItemDrop.ItemData r = DragonCombat.GetHandItem(p, "m_rightItem");
             return l != null && r != null && l != r && DragonCombat.IsOneHandedWeapon(l) && DragonCombat.IsOneHandedWeapon(r);
@@ -980,26 +994,32 @@ namespace DragonsAltarCombat
             return count > 2 ? hit % 2 : 0;
         }
 
-        private static void ComboStartPrefix(Attack __instance, ref Attack previousAttack, ref float timeSinceLastAttack)
+        private static float _comboLastEnd = -10f, _comboLastStart = -10f;
+
+        private static void ComboStartPrefix(Attack __instance, Humanoid character, ItemDrop.ItemData weapon, ref Attack previousAttack, ref float timeSinceLastAttack)
         {
             _comboInStart = false;
             try
             {
                 if (Instance == null || !Instance.ComboChainsEnabled.Value) return;
                 Player p;
-                if (!IsLocalMeleeAttack(__instance, out p)) return;
+                if (!IsLocalMeleeStart(__instance, character, out p)) return;
                 int levels = (int)_atkLevels.GetValue(__instance);
                 if (levels < 2) return;   // only weapons that already chain (no spears / single heavy hits)
                 // v0.25.45 (user): the 5-hit chain belongs to classes fit for the weapon; everyone else keeps vanilla.
-                ItemDrop.ItemData cw = _atkWeapon == null ? null : _atkWeapon.GetValue(__instance) as ItemDrop.ItemData;
-                if (DragonCombat.ComboWeaponProvider == null || !DragonCombat.ComboWeaponProvider(p, cw)) { _comboHit = -1; return; }
+                if (DragonCombat.ComboWeaponProvider == null || !DragonCombat.ComboWeaponProvider(p, weapon)) { _comboHit = -1; return; }
                 int count = Mathf.Min(levels, 3);
                 if (levels > count) _atkLevels.SetValue(__instance, count);
                 string anim = _atkAnim.GetValue(__instance) as string;
                 int length = Mathf.Clamp(Instance.ComboChainLength.Value, 2, 9);
                 string prevAnim = previousAttack == null ? null : _atkAnim.GetValue(previousAttack) as string;
-                bool cont = _comboHit >= 0 && previousAttack != null && prevAnim == anim && anim == _comboBase
-                    && timeSinceLastAttack <= Mathf.Max(0.05f, Instance.ComboContinueWindow.Value) && _comboHit < length - 1;
+                // our own timer: the next attack continues the chain when it starts while the previous swing is
+                // still running (queued chain) or within the window after it ended.
+                bool prevRunning = previousAttack != null && _comboLastEnd < 0f && Time.time - _comboLastStart < 2.5f;
+                bool cont = _comboHit >= 0 && prevAnim == anim && anim == _comboBase && _comboHit < length - 1
+                    && (prevRunning || Time.time - _comboLastEnd <= Mathf.Max(0.05f, Instance.ComboContinueWindow.Value));
+                _comboLastEnd = -1f;
+                _comboLastStart = Time.time;
                 _comboPrevSwing = cont ? _comboSwing : -1;
                 _comboHit = cont ? _comboHit + 1 : 0;
                 _comboCount = count;
@@ -1039,6 +1059,8 @@ namespace DragonsAltarCombat
 
         private static void ComboStopPostfix(Attack __instance)
         {
+            Player sp;
+            if (IsLocalMeleeAttack(__instance, out sp) && _comboLastEnd < 0f) _comboLastEnd = Time.time;
             if (__instance == null || !ReferenceEquals(__instance, _comboFinisher)) return;
             _comboFinisher = null;
             _comboLockUntil = Time.time + Mathf.Max(0f, Instance == null ? 1f : Instance.ComboFinisherLockout.Value);
@@ -7429,10 +7451,37 @@ namespace DragonsAltarCombat
             return state;
         }
 
+        // v0.25.48 (user: dual wielding with no class): two one-handed weapons stay equipped only for a
+        // Mercenary (two Gun Staves only for Horizon Walker). Anyone else - e.g. after a class reset - gets the
+        // off-hand weapon unequipped.
+        private static float _nextDualCheck;
+
+        private static void EnforceDualWieldOwner(Player p)
+        {
+            if (p == null || p.IsDead()) return;
+            try
+            {
+                ItemDrop.ItemData l = GetHandItem(p, "m_leftItem");
+                ItemDrop.ItemData r = GetHandItem(p, "m_rightItem");
+                if (l == null || r == null || l == r) return;
+                string adv = GetAdvancementName(p);
+                bool dualMelee = IsOneHandedWeapon(l) && IsOneHandedWeapon(r) && !IsGunStaff(l);
+                bool dualGun = IsGunStaff(l) && IsGunStaff(r);
+                if ((dualMelee && adv != "Mercenary") || (dualGun && adv != "Spellcaster"))
+                {
+                    p.UnequipItem(l, true);
+                    if (MessageHud.instance != null)
+                        MessageHud.instance.ShowMessage(MessageHud.MessageType.Center, dualGun ? "Only a Horizon Walker can dual wield Gun Staves" : "Only a Mercenary can dual wield");
+                }
+            }
+            catch (Exception) { }
+        }
+
         public static void RuntimeUpdate()
         {
             float now = Time.time;
             if (PendingLearns.Count > 0) UpdateLearns();
+            if (now >= _nextDualCheck) { _nextDualCheck = now + 0.5f; EnforceDualWieldOwner(Player.m_localPlayer); }
 
             List<int> removeBuffPlayers = null;
             foreach (KeyValuePair<int, Dictionary<string, TimedBuffState>> outer in TimedBuffs)

@@ -1,0 +1,10 @@
+Immortal Heroes v0.25.48 - Real Chains
+
+- ROOT CAUSE FIX: the 5-hit chain code never ran in-game. It checked the attack's owner and weapon in
+  Attack.Start's prefix, but Valheim only fills those INSIDE Start (the attack is a fresh copy), so every
+  check saw "nobody" and fell back to vanilla. It now reads Start's own character/weapon arguments.
+  Chain = swing 1 > swing 2 > swing 1 > swing 2 > swing 3 (overhead finisher), then 1 s pause.
+  Continue window = 0.4 s after a swing ends (own timer, not Valheim's).
+- Dual wield is Mercenary-only: anyone else holding two one-handed weapons (e.g. after a class reset)
+  gets the off-hand weapon unequipped with a message; off-hand strikes / dual clips only for Mercenary.
+  Two Gun Staves: Horizon Walker only.
