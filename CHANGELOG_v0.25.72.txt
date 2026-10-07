@@ -1,0 +1,18 @@
+Immortal Heroes v0.25.72 - Living Skills
+
+UNIVERSAL VFX LAYER - added on top of every skill's own effects, for every class:
+- Hit sparks: every enemy a skill hits gets an impact effect shaped by the hit's main damage type. Bigger hits give bigger sparks.
+  - Slash: white-hot cut streaks
+  - Blunt: dust puff and chips, plus a small shake on heavy hits
+  - Pierce: a sharp spray
+  - Fire: an ember spray and flare
+  - Frost: crystal shards
+  - Lightning: arcs jumping off the target
+  - Poison: a green bubbling puff
+  - Spirit: rising holy motes
+  - At most one effect per enemy every 0.15 s, so DoTs and multi-hits don't flood the screen.
+- Activation circle: when a skill really starts, a spinning rune circle in your Class colour appears under you, with a flash and rising motes.
+  - Ultimates and Graces get a bigger circle, a light column and a short screen shake.
+  - Class colours: Warrior red, Sword Master blue, Mercenary orange, Cleric gold, Paladin rose, Priest emerald, Sorcerer violet, Archmage indigo, Horizon Walker teal, Ranger green, Acrobat jade, Bowmaster amber.
+- Weapon charge: your weapon hand glows in the Class colour through every real wind up and every held charge.
+- Everything follows [Visuals] EnhancedSkillVfx / ParticleDensity and turns off with them.

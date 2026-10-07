@@ -1,7 +1,5 @@
-TEST v0.25.71
-1. Whirlwind: start it, press it again -> it stops at once and you can walk normally.
-2. Furious Winds: start it, press it again -> the storm ends at once and you are free to move.
-3. Starfall Volley: press it again during the barrage -> the arrows stop.
-4. Angel Comet: the shield is braced in front during the jump and dive.
-5. Blade Storm: the off hand is at the left hip, like holding a scabbard.
-6. Frenzied Charge: the off hand is braced in front.
+TEST v0.25.72
+1. Cast any skill: a coloured rune circle appears under you. An Ultimate or Grace gives a big circle, a light column and a shake.
+2. Skills with a wind up (Heavy Slash, Meteor, Ballista charge...): the weapon hand glows during the wind up.
+3. Hit enemies with fire / lightning / frost / spirit / physical skills: each damage type shows its own impact effect.
+4. Performance: big fights with DoTs should not spam effects (one spark per enemy every 0.15 s).

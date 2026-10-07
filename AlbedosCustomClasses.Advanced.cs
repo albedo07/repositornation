@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.71";
+        public const string ModVersion = "0.25.72";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -12444,6 +12444,14 @@ namespace AlbedosCustomClassesAdvanced
                 bool began = (cdBefore <= 0f && IhCooldown(player, id) > 0f) || (readyBefore >= 0 && ra2 >= 0 && ra2 < readyBefore)
                     || (cdBefore <= 0f && (player.GetStamina() < staBefore - 0.5f || IhCallFloat(player, "GetEitr") < eitBefore - 0.5f));
                 if (began) DragonCombat.SwallowAttackInput(player, 0.35f);
+                // v0.25.72 activation rune circle under the caster (bigger + light column for Ultimates and Graces)
+                if (began && _enableVfx.Value)
+                {
+                    IhKit fk = IhPlayerKit(player);
+                    bool big = (fk != null && fk.Ultimate == id) || IhGraceFor(player) == id;
+                    Player fp = player;
+                    DragonCombat.RunVfx(delegate { DragonVfx.CastFlare(fp, big); });
+                }
             }
             // v0.25.0: the skill's body motion plays only when it really started (cooldown started or
             // a charge was spent). Ranger animates its own skills.

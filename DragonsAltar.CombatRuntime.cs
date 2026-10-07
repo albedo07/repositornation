@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.71";
+        public const string ModVersion = "0.25.72";
 
         internal static DragonCombatPlugin Instance;
 
@@ -3250,6 +3250,8 @@ namespace DragonsAltarCombat
             DragonClipKey[] keys = hold ? null : VanillaClip(player, clip, 0f);
             if (keys == null) keys = SkillClip(clip);
             if (keys == null) return;
+            // v0.25.72: the weapon hand glows in the Class colour through every real wind up / hold
+            if (windup >= 0.3f || hold) { Player wp = player; float ws = hold ? 3f : windup + 0.25f; RunVfx(delegate { DragonVfx.WeaponCharge(wp, ws); }); }
             // v0.25.40 (user): buff raises stand still until the wind up is over (no gliding).
             bool standEmote = keys[0].VA != null && keys[0].VA.StartsWith("emote", StringComparison.Ordinal) &&
                               !clip.StartsWith("hw_", StringComparison.Ordinal) && clip != "merc_fury_accent";
@@ -7722,6 +7724,12 @@ namespace DragonsAltarCombat
             // v0.25.11: split parts of a hit were already fully modified as the original hit.
             if (attacker != null && !SplitHitInFlight)
             {
+                // v0.25.72 universal hit sparks for every skill hit on a creature (skill hits carry no weapon skill)
+                if (attacker == Player.m_localPlayer && !(target is Player) && ReadHitSkill(hit) == Skills.SkillType.None)
+                {
+                    Character impTarget = target; HitData impHit = hit;
+                    RunVfx(delegate { DragonVfx.HitImpact(impTarget, impHit); });
+                }
                 float outgoingBonus = GetTimedBuffSum(attacker, "AttackDamage");
                 if (outgoingBonus != 0f)
                     hit.m_damage.Modify(Mathf.Max(0f, 1f + outgoingBonus));
@@ -10862,6 +10870,132 @@ namespace DragonsAltarCombat
         }
 
         // ------------------------------------------------------------------ themed presets
+        // ------------------------------------------------------------------ v0.25.72 universal VFX layer
+        // (user: "go all out with the VFX"): every skill now gets, on top of its own effects,
+        //  - HitImpact: a hit spark on every enemy a skill hits, shaped by the hit's main damage type,
+        //  - CastFlare: an activation rune circle under the caster when a skill really starts (bigger for
+        //    Ultimates / Graces, with a light column and a short shake),
+        //  - WeaponCharge: the weapon hand glows in the Class colour through every wind up / hold.
+        private static readonly Dictionary<int, float> _impactNext = new Dictionary<int, float>();
+
+        public static Color ClassColor(Player p)
+        {
+            string cls = p == null ? "" : DragonCombat.GetClassName(p), ac = p == null ? "" : DragonCombat.GetAdvancementName(p);
+            switch (ac)
+            {
+                case "Sword Master": return new Color(0.30f, 0.62f, 1f, 1f);
+                case "Mercenary": return new Color(1f, 0.45f, 0.14f, 1f);
+                case "Paladin": return new Color(1f, 0.55f, 0.66f, 1f);
+                case "Priest": return new Color(0.35f, 0.95f, 0.62f, 1f);
+                case "Wizard": return new Color(0.45f, 0.52f, 1f, 1f);
+                case "Spellcaster": return new Color(0.25f, 0.92f, 0.95f, 1f);
+                case "Acrobat": return new Color(0.45f, 1f, 0.75f, 1f);
+                case "Bowmaster": return new Color(1f, 0.72f, 0.28f, 1f);
+            }
+            switch (cls)
+            {
+                case "Warrior": return new Color(1f, 0.30f, 0.26f, 1f);
+                case "Cleric": return new Color(1f, 0.84f, 0.42f, 1f);
+                case "Sorcerer": return new Color(0.72f, 0.40f, 1f, 1f);
+                case "Ranger": return new Color(0.55f, 0.90f, 0.35f, 1f);
+            }
+            return new Color(0.85f, 0.85f, 0.9f, 1f);
+        }
+
+        public static void HitImpact(Character target, HitData hit)
+        {
+            if (!Enabled || target == null || hit == null) return;
+            int id = target.GetInstanceID();
+            float next;
+            if (_impactNext.TryGetValue(id, out next) && Time.time < next) return;
+            if (_impactNext.Count > 400) _impactNext.Clear();
+            _impactNext[id] = Time.time + 0.15f;
+            float sl = hit.m_damage.m_slash, bl = hit.m_damage.m_blunt, pi = hit.m_damage.m_pierce, fi = hit.m_damage.m_fire,
+                  fr = hit.m_damage.m_frost, li = hit.m_damage.m_lightning, po = hit.m_damage.m_poison, sp = hit.m_damage.m_spirit;
+            float total = Mathf.Max(0.01f, bl + sl + pi + fi + fr + li + po + sp);
+            if (total < 0.5f) return;
+            Vector3 pos = target.transform.position + Vector3.up * 1.0f;
+            float size = Mathf.Clamp(Mathf.Sqrt(total) * 0.12f, 0.5f, 2.2f);   // bigger hits, bigger sparks
+            float best = sl; int kind = 0;
+            if (bl > best) { best = bl; kind = 1; }
+            if (pi > best) { best = pi; kind = 2; }
+            if (fi > best) { best = fi; kind = 3; }
+            if (fr > best) { best = fr; kind = 4; }
+            if (li > best) { best = li; kind = 5; }
+            if (po > best) { best = po; kind = 6; }
+            if (sp > best) { best = sp; kind = 7; }
+            int n = Mathf.RoundToInt(12f * size * Amount);
+            switch (kind)
+            {
+                case 0:   // slash: white-hot cut streaks
+                    SlashStreaks(pos, new Color(1f, 0.95f, 0.85f, 1f), 0.7f * size, 2, 0.18f);
+                    Burst(pos, new Color(1f, 0.9f, 0.7f, 1f), n, 7f, 0.12f, 0.35f, 0.6f);
+                    break;
+                case 1:   // blunt: dust puff + rock chips
+                    Burst(pos, new Color(0.85f, 0.78f, 0.65f, 1f), n, 4f, 0.25f, 0.5f, 0.8f);
+                    Smoke(pos - Vector3.up * 0.5f, new Color(0.55f, 0.5f, 0.45f, 0.45f), 0.6f * size, 0.8f, 4);
+                    if (size > 1.4f) Shake(pos, 12f, 0.4f);
+                    break;
+                case 2:   // pierce: a short sharp spray straight through
+                    Burst(pos, new Color(1f, 0.95f, 0.8f, 1f), n, 10f, 0.08f, 0.25f, 0.2f);
+                    break;
+                case 3:   // fire: ember spray + flare
+                    Burst(pos, new Color(1f, 0.55f, 0.15f, 1f), n + 6, 6f, 0.2f, 0.6f, -0.4f);
+                    Flash(pos, new Color(1f, 0.5f, 0.2f, 1f), 1.6f, 3f + size, 0.25f);
+                    break;
+                case 4:   // frost: crystal shards
+                    Burst(pos, new Color(0.8f, 0.95f, 1f, 1f), n, 6f, 0.15f, 0.5f, 1.2f);
+                    Debris(pos, new Color(0.7f, 0.92f, 1f, 1f), Mathf.Max(2, Mathf.RoundToInt(2 * size)), 4f, 0.08f, 1.2f);
+                    break;
+                case 5:   // lightning: arcs jumping off the target
+                    for (int i = 0; i < 2; i++)
+                    {
+                        Vector3 o = UnityEngine.Random.onUnitSphere * (0.9f + size * 0.4f);
+                        Bolt(pos, pos + o, new Color(0.55f, 0.9f, 1f, 1f), 0.06f, 0.15f);
+                    }
+                    Flash(pos, new Color(0.55f, 0.85f, 1f, 1f), 1.8f, 3f + size, 0.15f);
+                    break;
+                case 6:   // poison: green bubbling puff
+                    Smoke(pos, new Color(0.45f, 0.85f, 0.3f, 0.5f), 0.5f * size, 1f, 5);
+                    Burst(pos, new Color(0.6f, 1f, 0.35f, 1f), n, 2.5f, 0.15f, 0.8f, -0.3f);
+                    break;
+                default:  // spirit: holy motes rising + soft ring
+                    Burst(pos, new Color(1f, 0.93f, 0.7f, 1f), n, 4f, 0.15f, 0.7f, -0.6f);
+                    Flash(pos, new Color(1f, 0.9f, 0.6f, 1f), 1.4f, 3f + size, 0.2f);
+                    break;
+            }
+        }
+
+        public static void CastFlare(Player p, bool big)
+        {
+            if (!Enabled || p == null) return;
+            Color c = ClassColor(p);
+            Vector3 pos = p.transform.position;
+            Color g = c; g.a = 0.6f;
+            Glyph(pos, g, big ? 3.2f : 1.4f, big ? 1.4f : 0.7f, big ? 120f : 200f);
+            Burst(pos + Vector3.up * 0.2f, Color.Lerp(c, Color.white, 0.3f), Mathf.RoundToInt((big ? 40 : 14) * Amount), big ? 3.5f : 2f, 0.12f, 0.7f, -1.2f);
+            Flash(pos + Vector3.up * 1.1f, c, big ? 3f : 1.2f, big ? 8f : 4f, big ? 0.6f : 0.3f);
+            if (big)
+            {
+                Color pc = c; pc.a = 0.55f;
+                Pillar(pos, pc, 0.8f, 9f, 0.7f);
+                Shake(pos, 20f, 0.6f);
+            }
+        }
+
+        public static void WeaponCharge(Player p, float seconds)
+        {
+            if (!Enabled || p == null || seconds <= 0.05f) return;
+            Animator a = p.GetComponentInChildren<Animator>();
+            Transform hand = a == null ? null : a.GetBoneTransform(HumanBodyBones.RightHand);
+            if (hand == null) return;
+            GameObject go = new GameObject("IH_WeaponCharge");
+            go.transform.SetParent(hand, false);
+            Color c = ClassColor(p);
+            AttachGlow(go.transform, c, 0.18f, 45f * Amount, 2.5f);
+            UnityEngine.Object.Destroy(go, Mathf.Min(seconds, 4f) + 0.2f);
+        }
+
         public static readonly Color Holy = new Color(1f, 0.84f, 0.42f, 1f);
         public static readonly Color HolyWhite = new Color(1f, 0.96f, 0.82f, 1f);
         public static readonly Color Storm = new Color(0.45f, 0.78f, 1f, 1f);
