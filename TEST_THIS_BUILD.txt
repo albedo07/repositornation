@@ -1,4 +1,5 @@
-TEST v0.25.56
-1. Sorcerer (Archmage / Horizon Walker): orbs glow + trail, explosions, beams, Flame Burst cone, Glacial, Stonefang.
-2. Ranger (Acrobat / Bowmaster): arrow trails, impact sparks, shockwaves, Explosive fire, Starfall, Cyclone / Furious Winds.
-3. FPS check in big fights; [Visuals] ParticleDensity lowers everything.
+TEST v0.25.57 (Cleric / Paladin / Priest)
+1. Goddess Relic (normal + Ascended): cross falls tilted, buries its foot, leans like Pisa, cracks / dust / rocks / shake; sinks away at the end.
+2. Lightning Relic / Holy Relic: same planted lean + impact.
+3. Righteous Strike, Electric Smite, Angel Comet, Judgement Hammer (wall hit), Hammer Slam: cracks, debris, shake.
+4. Grand Cross core + trail, Lightning Tempest storm cloud, feathers on Holy Wave / Heaven's Light / Divine Intervention.

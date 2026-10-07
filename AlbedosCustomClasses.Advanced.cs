@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.56";
+        public const string ModVersion = "0.25.57";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -4114,8 +4114,13 @@ namespace AlbedosCustomClassesAdvanced
             float crossWidth = Mathf.Max(0.5f, DragonCombat.M(_goddessCrossWidth.Value)) * sizeMultiplier;
             float radius = Mathf.Max(1f, ascended ? DragonCombat.M(_goddessAscRadius.Value) : DragonCombat.M(_goddessRadiusV17.Value));
 
-            Vector3 finalCenter = GetGroundedCrossCenter(target, crossHeight);
-            Vector3 skyPoint = DragonCombat.GetIndoorSafeSkyPoint(finalCenter, Mathf.Max(7f, crossHeight + 2f));
+            // v0.25.57 (user: the giant cross must LAND and stay planted, leaning a little like the tower of Pisa):
+            // it plunges in along its own tilted axis, buries its foot in the ground and stays there.
+            Vector3 finalCenter;
+            Quaternion crossRot;
+            IhCrossLandingPose(target, crossHeight, player.transform.position, 0.14f, out finalCenter, out crossRot);
+            float fallDist = Mathf.Max(7f, crossHeight + 2f) + crossHeight * 0.5f;
+            Vector3 skyPoint = finalCenter + crossRot * Vector3.up * fallDist;
             GameObject cross = CreateCross(
                 skyPoint,
                 new Color(1f, 0.82f, 0.35f, 1f),
@@ -4124,6 +4129,8 @@ namespace AlbedosCustomClassesAdvanced
                 0.12f * sizeMultiplier,
                 _enableVfx.Value
             );
+            if (cross != null) cross.transform.rotation = crossRot;
+            if (cross != null && _enableVfx.Value) { GameObject fallingCross = cross; DragonCombat.RunVfx(delegate { DragonVfx.TrailWhile(fallingCross.transform, DragonVfx.Holy, 0.9f * sizeMultiplier, delegate { return fallingCross != null && fallingCross.transform.position.y > finalCenter.y + 0.2f; }); }); }
 
             float fallTime = DragonCombat.GetSkySummonDropTime();
             float elapsed = 0f;
@@ -4138,10 +4145,7 @@ namespace AlbedosCustomClassesAdvanced
             if (cross != null)
             {
                 cross.transform.position = finalCenter;
-                Vector3 toCaster = player.transform.position - finalCenter;
-                toCaster.y = 0f;
-                if (toCaster.sqrMagnitude > 0.01f)
-                    cross.transform.rotation = Quaternion.LookRotation(toCaster.normalized, Vector3.up);
+                cross.transform.rotation = crossRot;
                 SetCrossPhysical(cross, true);
             }
 
@@ -4149,6 +4153,7 @@ namespace AlbedosCustomClassesAdvanced
             {
                 CreateLightning(target, new Color(0.62f, 0.88f, 1f, 1f), 0.32f);
                 StartCoroutine(AnimateRing(target + Vector3.up * 0.08f, 0.3f, radius, 0.55f, new Color(1f, 0.82f, 0.35f, 0.92f), 0.12f));
+                IhCrossImpactVfx(target, radius, crossHeight, ascended ? 2.2f : 1.4f);
             }
 
             List<Character> targets = GetSphereTargets(player, target, radius);
@@ -4173,7 +4178,137 @@ namespace AlbedosCustomClassesAdvanced
                 }
             }
             if (cross != null)
-                Destroy(cross, 3.0f);
+                StartCoroutine(IhSinkCross(cross, 3.5f, crossHeight * 0.6f, 0.8f));
+        }
+
+        // v0.25.57: the cross is a real object now - solid gilded beams with stepped end caps, a halo ring at the
+        // crossing and a soft additive glow around every beam (the old thin lines stay as the bright core).
+        private static Material _ihCrossMat;
+
+        private void IhBuildSolidCross(Transform root, Color color, float height, float width, float thick)
+        {
+            if (_ihCrossMat == null)
+            {
+                Shader lit = Shader.Find("Standard");
+                Shader sh = lit != null ? lit : Shader.Find("Sprites/Default");
+                if (sh == null) return;
+                _ihCrossMat = new Material(sh);
+                if (lit != null)
+                {
+                    _ihCrossMat.SetFloat("_Metallic", 0.85f);
+                    _ihCrossMat.SetFloat("_Glossiness", 0.7f);
+                    _ihCrossMat.EnableKeyword("_EMISSION");
+                }
+            }
+            Material m = new Material(_ihCrossMat);
+            Color gold = Color.Lerp(color, new Color(1f, 0.86f, 0.45f, 1f), 0.5f);
+            m.color = gold;
+            if (m.HasProperty("_EmissionColor")) m.SetColor("_EmissionColor", gold * 0.55f);
+            float armY = height * 0.12f;
+            IhCrossBlock(root, m, new Vector3(0f, 0f, 0f), new Vector3(thick, height, thick * 0.8f));
+            IhCrossBlock(root, m, new Vector3(0f, armY, 0f), new Vector3(width, thick, thick * 0.8f));
+            // stepped caps on the three upper ends + a heavier foot
+            float cap = thick * 1.45f;
+            IhCrossBlock(root, m, new Vector3(0f, height * 0.5f - cap * 0.4f, 0f), new Vector3(cap, cap * 0.8f, cap * 0.9f));
+            IhCrossBlock(root, m, new Vector3(-width * 0.5f + cap * 0.4f, armY, 0f), new Vector3(cap * 0.8f, cap, cap * 0.9f));
+            IhCrossBlock(root, m, new Vector3(width * 0.5f - cap * 0.4f, armY, 0f), new Vector3(cap * 0.8f, cap, cap * 0.9f));
+            IhCrossBlock(root, m, new Vector3(0f, -height * 0.5f + cap * 0.6f, 0f), new Vector3(cap * 1.2f, cap * 1.2f, cap * 1.05f));
+            // halo ring at the crossing
+            GameObject halo = new GameObject("halo");
+            halo.transform.SetParent(root, false);
+            halo.transform.localPosition = new Vector3(0f, armY, 0f);
+            LineRenderer ring = halo.AddComponent<LineRenderer>();
+            ring.useWorldSpace = false;
+            ring.loop = true;
+            ring.positionCount = 40;
+            ring.startWidth = thick * 0.35f;
+            ring.endWidth = thick * 0.35f;
+            Material add = DragonVfx.Additive();
+            if (add != null) ring.sharedMaterial = add;
+            Color hc = Color.Lerp(color, Color.white, 0.35f);
+            ring.startColor = hc; ring.endColor = hc;
+            float rr = Mathf.Max(thick * 2f, width * 0.24f);
+            for (int i = 0; i < 40; i++) { float a = i / 40f * Mathf.PI * 2f; ring.SetPosition(i, new Vector3(Mathf.Cos(a) * rr, Mathf.Sin(a) * rr, -thick * 0.45f)); }
+            // soft glow along the beams
+            IhCrossGlow(root, color, new Vector3(0f, -height * 0.5f, 0f), new Vector3(0f, height * 0.5f, 0f), thick * 2.6f);
+            IhCrossGlow(root, color, new Vector3(-width * 0.5f, armY, 0f), new Vector3(width * 0.5f, armY, 0f), thick * 2.6f);
+        }
+
+        private void IhCrossBlock(Transform root, Material m, Vector3 localPos, Vector3 size)
+        {
+            GameObject b = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            b.name = "crossBlock";
+            Collider c = b.GetComponent<Collider>();
+            if (c != null) Destroy(c);
+            b.transform.SetParent(root, false);
+            b.transform.localPosition = localPos;
+            b.transform.localRotation = Quaternion.identity;
+            b.transform.localScale = size;
+            Renderer r = b.GetComponent<Renderer>();
+            if (r != null) r.sharedMaterial = m;
+        }
+
+        private void IhCrossGlow(Transform root, Color color, Vector3 a, Vector3 b, float width)
+        {
+            GameObject g = new GameObject("crossGlow");
+            g.transform.SetParent(root, false);
+            LineRenderer line = g.AddComponent<LineRenderer>();
+            line.useWorldSpace = false;
+            line.positionCount = 2;
+            line.startWidth = width;
+            line.endWidth = width;
+            Material add = DragonVfx.Additive();
+            if (add != null) line.sharedMaterial = add;
+            Color c = color; c.a = 0.35f;
+            line.startColor = c; line.endColor = c;
+            line.SetPosition(0, a);
+            line.SetPosition(1, b);
+        }
+
+        // v0.25.57 Pisa lean: faces the caster, top tilted ~10-14 degrees away from them with a slight side lean,
+        // foot buried `sink` (fraction of the height) into the ground.
+        private void IhCrossLandingPose(Vector3 ground, float height, Vector3 casterPos, float sink, out Vector3 center, out Quaternion rot)
+        {
+            Vector3 to = casterPos - ground;
+            to.y = 0f;
+            if (to.sqrMagnitude < 0.01f) to = Vector3.forward;
+            Quaternion face = Quaternion.LookRotation(to.normalized, Vector3.up);
+            float lean = UnityEngine.Random.Range(10f, 14f);
+            float side = UnityEngine.Random.Range(-5f, 5f);
+            rot = face * Quaternion.Euler(-lean, 0f, side);
+            Vector3 foot = ground - Vector3.up * height * Mathf.Clamp01(sink);
+            center = foot + rot * Vector3.up * (height * 0.5f);
+        }
+
+        private void IhCrossImpactVfx(Vector3 ground, float radius, float height, float shake)
+        {
+            DragonCombat.RunVfx(delegate
+            {
+                DragonVfx.HeavyLanding(ground, DragonVfx.Holy, radius, shake);
+                DragonVfx.Pillar(ground, DragonVfx.HolyWhite, Mathf.Max(0.8f, height * 0.12f), height * 2.5f, 0.6f);
+                DragonVfx.Flash(ground + Vector3.up * height * 0.5f, DragonVfx.Holy, 9f, radius * 3f, 1.2f);
+                DragonVfx.Aura(null, ground, DragonVfx.Holy, Mathf.Max(0.6f, radius * 0.25f), 3f, 30f, 1.4f);   // embers rising round the foot
+                DragonVfx.Vanilla(new string[] { "fx_eikthyr_stomp", "fx_DvergerMage_Nova_ring", "vfx_GodExplosion" }, ground, Quaternion.identity, Mathf.Clamp(radius / 5f, 0.8f, 3f), 4f);
+            });
+        }
+
+        // The cross slowly sinks back into the earth, then disappears.
+        private IEnumerator IhSinkCross(GameObject cross, float wait, float depth, float seconds)
+        {
+            yield return new WaitForSeconds(wait);
+            if (cross == null) yield break;
+            SetCrossPhysical(cross, false);
+            Vector3 from = cross.transform.position;
+            Vector3 to = from - Vector3.up * depth;
+            float t = 0f;
+            while (t < seconds && cross != null)
+            {
+                t += Time.deltaTime;
+                float k = t / seconds;
+                cross.transform.position = Vector3.Lerp(from, to, k * k);
+                yield return null;
+            }
+            if (cross != null) Destroy(cross);
         }
 
         private void CastRayOfHope(Player player)
@@ -4478,6 +4613,7 @@ namespace AlbedosCustomClassesAdvanced
             yield return new WaitForSeconds(slam);
             if (player == null || player.IsDead()) yield break;
             ShieldChargeSlamHit(player, forward);
+            if (_enableVfx.Value) { Vector3 sp = player.transform.position + forward * 1.6f; DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(sp, DragonVfx.Holy, 3.5f, 1.3f); }); }   // v0.25.57
             // v0.25.55 (user: the slam animation kept going long after the hit): rush the rest of the heavy swing.
             DragonCombat.SetSkillAnimSpeed(player, 6f, 0.35f);
         }
@@ -5094,9 +5230,14 @@ namespace AlbedosCustomClassesAdvanced
                 Vector3 center = HammerCenter(pos, height);
                 UpdateHammerVisual(hammer, center, dir, spin, height, width);
                 HammerHits(player, center, HammerHitRadius(height), damageMultiplier, nextHitAt, ascended);
+                // v0.25.57: the spinning hammer tears up the ground beneath it
+                if (_enableVfx.Value && Time.frameCount % 5 == 0) { Vector3 hp = pos; float hw = width; DragonCombat.RunVfx(delegate { DragonVfx.Burst(hp, new Color(0.50f, 0.44f, 0.36f, 0.6f), 6, 3f, 0.5f + hw * 0.1f, 0.8f, 0.5f); DragonVfx.Burst(hp + Vector3.up * 0.3f, DragonVfx.Holy, 6, 4f, 0.25f, 0.4f, 0.4f); }); }
 
                 if (blocked)
+                {
+                    if (_enableVfx.Value) { Vector3 bp = pos; float bh = height; DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(bp, DragonVfx.Holy, Mathf.Max(2f, bh), 1.4f); }); }
                     break;
+                }
                 yield return null;
             }
 
@@ -5338,6 +5479,8 @@ namespace AlbedosCustomClassesAdvanced
                 DragonCombat.RunVfx(delegate
                 {
                     DragonVfx.Pillar(point, DragonVfx.Holy, Mathf.Max(1f, radius * 0.3f), 18f, 0.7f);
+                    DragonVfx.HeavyLanding(point, DragonVfx.Holy, radius, 2.5f);   // v0.25.57
+                    DragonVfx.Feathers(point, DragonVfx.HolyWhite, radius * 0.7f, 1.5f, 40f);
                     DragonVfx.Burst(point + Vector3.up * 0.5f, DragonVfx.HolyWhite, 90, 14f, 0.35f, 1.1f, 0.4f);
                     DragonVfx.Vanilla(new string[] { "vfx_GodExplosion", "fx_eikthyr_stomp", "fx_DvergerMage_Nova_ring" }, point, Quaternion.identity, 1f, 4f);
                 });
@@ -5649,8 +5792,10 @@ namespace AlbedosCustomClassesAdvanced
             bool ascended = IsAscendedSkill("lightning_relic");
             float radius = Mathf.Max(1f, ascended ? DragonCombat.M(_relicAscRadius.Value) : DragonCombat.M(_lightningRelicRadius.Value));
             const float crossHeight = 4.2f;
-            Vector3 finalCenter = GetGroundedCrossCenter(target, crossHeight);
-            Vector3 sky = DragonCombat.GetIndoorSafeSkyPoint(finalCenter, 5f);
+            Vector3 finalCenter;
+            Quaternion relicRot;
+            IhCrossLandingPose(target, crossHeight, player.transform.position, 0.1f, out finalCenter, out relicRot);   // v0.25.57 planted, leaning
+            Vector3 sky = finalCenter + relicRot * Vector3.up * 6f;
             GameObject cross = CreateCross(
                 sky,
                 new Color(0.55f, 0.88f, 1f, 1f),
@@ -5659,6 +5804,7 @@ namespace AlbedosCustomClassesAdvanced
                 0.09f,
                 _enableVfx.Value
             );
+            if (cross != null) cross.transform.rotation = relicRot;
 
             float drop = DragonCombat.GetSkySummonDropTime();
             float e = 0f;
@@ -5685,6 +5831,7 @@ namespace AlbedosCustomClassesAdvanced
                 cross.transform.position = finalCenter;
                 SetCrossPhysical(cross, true);
             }
+            if (_enableVfx.Value) IhCrossImpactVfx(target, Mathf.Max(2f, radius * 0.6f), crossHeight, 0.8f);   // v0.25.57
 
             PriestRelicState relic = RegisterPriestRelic(
                 cross,
@@ -5819,8 +5966,10 @@ namespace AlbedosCustomClassesAdvanced
             // Ascended: buffs 30% instead of 20% (same ratio for every buff).
             float buffScale = ascended ? Mathf.Max(0f, _holyRelicAscBuff.Value) / 20f : 1f;
             const float crossHeight = 4.2f;
-            Vector3 finalCenter = GetGroundedCrossCenter(target, crossHeight);
-            Vector3 sky = DragonCombat.GetIndoorSafeSkyPoint(finalCenter, 5f);
+            Vector3 finalCenter;
+            Quaternion relicRot;
+            IhCrossLandingPose(target, crossHeight, player.transform.position, 0.1f, out finalCenter, out relicRot);   // v0.25.57 planted, leaning
+            Vector3 sky = finalCenter + relicRot * Vector3.up * 6f;
             GameObject cross = CreateCross(
                 sky,
                 new Color(1f, 0.90f, 0.45f, 1f),
@@ -5829,6 +5978,7 @@ namespace AlbedosCustomClassesAdvanced
                 0.10f,
                 _enableVfx.Value
             );
+            if (cross != null) cross.transform.rotation = relicRot;
 
             float drop = DragonCombat.GetSkySummonDropTime();
             float e = 0f;
@@ -5855,6 +6005,7 @@ namespace AlbedosCustomClassesAdvanced
                 cross.transform.position = finalCenter;
                 SetCrossPhysical(cross, true);
             }
+            if (_enableVfx.Value) IhCrossImpactVfx(target, Mathf.Max(2f, radius * 0.6f), crossHeight, 0.8f);   // v0.25.57
 
             PriestRelicState relic = RegisterPriestRelic(
                 cross,
@@ -5965,6 +6116,7 @@ namespace AlbedosCustomClassesAdvanced
 
             if (_enableVfx.Value)
                 StartCoroutine(AnimateRing(center + Vector3.up * 0.08f, 0.8f, radius, 0.65f, new Color(1f, 0.92f, 0.48f, 0.95f), 0.13f));
+                { Vector3 diC = center; float diR = radius; DragonCombat.RunVfx(delegate { DragonVfx.Pillar(diC, DragonVfx.HolyWhite, 1.6f, 16f, 1f); DragonVfx.Feathers(diC, DragonVfx.HolyWhite, diR * 0.7f, 2.5f, 45f); }); }
 
             List<Character> enemies = GetSphereTargets(player, center, radius);
             for (int i = 0; i < enemies.Count; i++)
@@ -6064,6 +6216,13 @@ namespace AlbedosCustomClassesAdvanced
                 visualRoot = new GameObject("DragonsAltarGrandCross");
                 slashA = CreatePriestPersistentLine(visualRoot.transform, "GrandCrossSlashA", new Color(0.36f, 0.82f, 1f, 0.98f), 0.42f);
                 slashB = CreatePriestPersistentLine(visualRoot.transform, "GrandCrossSlashB", new Color(0.72f, 0.94f, 1f, 0.98f), 0.42f);
+                // v0.25.57: a blazing core rides the cross, trailing light
+                GameObject gcRoot = visualRoot;
+                DragonCombat.RunVfx(delegate
+                {
+                    DragonVfx.AttachGlow(gcRoot.transform, new Color(0.55f, 0.88f, 1f, 1f), Mathf.Max(0.8f, width * 0.25f), 140f, width * 1.5f);
+                    DragonVfx.TrailWhile(gcRoot.transform, new Color(0.70f, 0.94f, 1f, 1f), Mathf.Max(0.6f, width * 0.2f), delegate { return gcRoot != null; });
+                });
             }
 
             Dictionary<int, float> nextHitAt = new Dictionary<int, float>();
@@ -6080,6 +6239,7 @@ namespace AlbedosCustomClassesAdvanced
                 float halfWidth = width * 0.5f;
                 float halfHeight = height * 0.5f;
 
+                if (visualRoot != null) visualRoot.transform.position = center;
                 if (slashA != null)
                 {
                     slashA.SetPosition(0, center - right * halfWidth - crossUp * halfHeight);
@@ -6284,6 +6444,7 @@ namespace AlbedosCustomClassesAdvanced
             float radius = Mathf.Max(1f, ascended ? DragonCombat.M(_tempestAscRadius.Value) : DragonCombat.M(_tempestRadius.Value));
             int maxStrikes = Mathf.Clamp(_tempestMaxStrikes.Value, 1, 7);
             float elapsed = 0f;
+            if (_enableVfx.Value) { Vector3 tc = center; float tr = radius, td = duration; DragonCombat.RunVfx(delegate { DragonVfx.StormCloud(tc, tr, 12f, td); }); }   // v0.25.57
 
             while (elapsed < duration)
             {
@@ -6700,6 +6861,7 @@ namespace AlbedosCustomClassesAdvanced
                     DragonCombat.RunVfx(delegate
                     {
                         DragonVfx.Pillar(end, color, Mathf.Max(0.4f, width * 1.3f), d.y, Mathf.Max(0.3f, lifetime + 0.2f));
+                        if (width >= 1f) { DragonVfx.Cracks(end, color, width * 4f, 10, 3f); DragonVfx.Shake(end, 30f, 1.5f); DragonVfx.DustRing(end, width * 4f); }
                         DragonVfx.Burst(end + Vector3.up * 0.3f, color, Mathf.RoundToInt(20 + width * 30f), 5f + width * 4f, 0.25f, 0.7f, -0.1f);
                     });
                 else
@@ -9414,6 +9576,9 @@ namespace AlbedosCustomClassesAdvanced
             }
 
             if (visible && DragonVfx.Enabled)
+                DragonCombat.RunVfx(delegate { IhBuildSolidCross(root.transform, color, height, width, Mathf.Max(physicalThickness, height * 0.085f)); });   // v0.25.57 solid sculpted cross
+
+            if (visible && DragonVfx.Enabled)
             {
                 DragonCombat.RunVfx(delegate
                 {
@@ -12053,7 +12218,7 @@ namespace AlbedosCustomClassesAdvanced
             if (_enableVfx.Value)
             {
                 StartCoroutine(AnimateRing(player.transform.position + Vector3.up * 0.10f, 0.6f, radius, 0.9f, new Color(1f, 0.86f, 0.42f, 0.95f), 0.10f));
-                DragonCombat.RunVfx(delegate { DragonVfx.Pillar(player.transform.position, DragonVfx.HolyWhite, 1.4f, 14f, 0.9f); DragonVfx.Aura(player.transform, player.transform.position, DragonVfx.Holy, 0.9f, 1.5f, 50f, 1.5f); });
+                DragonCombat.RunVfx(delegate { DragonVfx.Pillar(player.transform.position, DragonVfx.HolyWhite, 1.4f, 14f, 0.9f); DragonVfx.Aura(player.transform, player.transform.position, DragonVfx.Holy, 0.9f, 1.5f, 50f, 1.5f); DragonVfx.Feathers(player.transform.position, DragonVfx.HolyWhite, radius * 0.6f, 2f, 35f); });
                 StartCoroutine(AnimateRing(player.transform.position + Vector3.up * 0.16f, 0.4f, radius * 0.6f, 0.7f, new Color(1f, 0.97f, 0.80f, 0.85f), 0.05f));
             }
         }

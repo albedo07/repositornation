@@ -220,7 +220,7 @@ namespace AlbedosCustomClassesSkills
         public static SkillsPlugin Instance;
         public const string ModGuid = "albedo.customclasses.skills";
         public const string ModName = "Dragon's Altar - Starter Skills";
-        public const string ModVersion = "0.25.56";
+        public const string ModVersion = "0.25.57";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";
@@ -884,6 +884,7 @@ namespace AlbedosCustomClassesSkills
                 {
                     DragonVfx.Shockwave(caster.transform.position, DragonVfx.Holy, hr, 0.75f);
                     DragonVfx.Aura(caster.transform, caster.transform.position, DragonVfx.HolyWhite, 0.8f, 1.2f, 70f, 2f);
+                    DragonVfx.Feathers(caster.transform.position, DragonVfx.HolyWhite, hr * 0.6f, 1.5f, 30f);   // v0.25.57
                     DragonVfx.Vanilla(new string[] { "fx_DvergerMage_Support_start", "vfx_HealthUpgrade" }, caster.transform.position, Quaternion.identity, 1f, 3f);
                 });
                 StartCoroutine(AnimateRing(caster.transform.position + Vector3.up * 0.10f, 0.6f, Mathf.Max(1f, DragonCombat.M(_holyRadius.Value)), 0.75f, new Color(1f, 0.82f, 0.32f, 0.95f), 0.085f, 0f));
@@ -1125,6 +1126,9 @@ namespace AlbedosCustomClassesSkills
                     {
                         DragonVfx.LightningImpact(end, radius);
                         DragonVfx.Burst(end + Vector3.up * 0.4f, DragonVfx.Holy, 30, 7f, 0.3f, 0.8f, -0.2f);
+                        DragonVfx.Cracks(end, DragonVfx.Storm, radius, 8, 2.5f);   // v0.25.57 scorched cracks + rumble
+                        DragonVfx.Debris(end, new Color(0.40f, 0.36f, 0.32f, 1f), 10, 6f, 0.25f, 2f);
+                        DragonVfx.Shake(end, 25f, 1.2f);
                     }
                 });
                 StartCoroutine(AnimateRing(end + Vector3.up * 0.08f, 0.2f, Mathf.Max(0.4f, radius), 0.30f, new Color(0.55f, 0.84f, 1f, 0.92f), 0.07f, 0f));
@@ -1343,7 +1347,7 @@ namespace AlbedosCustomClassesSkills
         private void PlaySmiteVfx(Vector3 point, float radius)
         {
             if (DragonVfx.Enabled)
-                DragonCombat.RunVfx(delegate { DragonVfx.SkyStrike(point, DragonVfx.Storm, radius, 14f); DragonVfx.Shockwave(point, DragonVfx.Holy, radius * 0.7f, 0.35f); });
+                DragonCombat.RunVfx(delegate { DragonVfx.SkyStrike(point, DragonVfx.Storm, radius, 14f); DragonVfx.Shockwave(point, DragonVfx.Holy, radius * 0.7f, 0.35f); DragonVfx.HeavyLanding(point, DragonVfx.Storm, radius, 2f); });
             GameObject flash = new GameObject("DragonsAltarLegacyLightning");
             LineRenderer line = flash.AddComponent<LineRenderer>();
             line.useWorldSpace = true;

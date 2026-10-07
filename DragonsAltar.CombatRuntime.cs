@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.56";
+        public const string ModVersion = "0.25.57";
 
         internal static DragonCombatPlugin Instance;
 
@@ -8412,6 +8412,56 @@ namespace DragonsAltarCombat
         }
     }
 
+    public class DragonCrackFade : MonoBehaviour
+    {
+        public LineRenderer[] Lines;
+        public Color Color;
+        public float Life = 3f, Age;
+        private void Update()
+        {
+            Age += Time.deltaTime;
+            float k = Age < 0.15f ? Age / 0.15f : 1f - Mathf.Clamp01((Age - 0.15f) / Mathf.Max(0.1f, Life - 0.15f));
+            if (Lines == null) return;
+            for (int i = 0; i < Lines.Length; i++)
+            {
+                if (Lines[i] == null) continue;
+                Color a = Color; a.a = k;
+                Color b = Color; b.a = k * 0.3f;
+                Lines[i].startColor = a;
+                Lines[i].endColor = b;
+            }
+        }
+    }
+
+    public class DragonDebris : MonoBehaviour
+    {
+        public Vector3 Velocity, Spin;
+        public float Life = 2f, Age;
+        private bool _landed;
+        private Vector3 _baseScale;
+        private void Start() { _baseScale = transform.localScale; }
+        private void Update()
+        {
+            float dt = Time.deltaTime;
+            Age += dt;
+            if (!_landed)
+            {
+                Velocity += Physics.gravity * dt;
+                Vector3 next = transform.position + Velocity * dt;
+                RaycastHit hit;
+                if (Velocity.y < 0f && Physics.Raycast(transform.position, Vector3.down, out hit, Mathf.Max(0.2f, -Velocity.y * dt + 0.1f), LayerMask.GetMask("terrain", "Default", "static_solid", "piece"), QueryTriggerInteraction.Ignore))
+                {
+                    if (Velocity.y < -4f) { Velocity = new Vector3(Velocity.x * 0.4f, -Velocity.y * 0.3f, Velocity.z * 0.4f); Spin *= 0.4f; }
+                    else { _landed = true; next = hit.point + Vector3.up * transform.localScale.y * 0.3f; }
+                }
+                transform.position = next;
+                transform.Rotate(Spin * dt, Space.World);
+            }
+            if (Age > Life * 0.7f) transform.localScale = _baseScale * Mathf.Clamp01(1f - (Age - Life * 0.7f) / (Life * 0.3f));
+            if (Age >= Life) Destroy(gameObject);
+        }
+    }
+
     public static class DragonVfx
     {
         private static Material _add, _alpha;
@@ -8788,6 +8838,157 @@ namespace DragonsAltarCombat
                 if (DragonCombatPlugin.Instance != null) DragonCombatPlugin.Instance.LogInfo("[Immortal Heroes] Effect prefabs: " + sb.ToString());
             }
             catch (Exception) { }
+        }
+
+        // ------------------------------------------------------------------ v0.25.57 detail layer
+        // Camera shake near `pos` (Valheim's own GameCamera.AddShake).
+        public static void Shake(Vector3 pos, float range, float strength)
+        {
+            if (!Enabled) return;
+            try
+            {
+                Type gc = DragonCombat.FindTypeCached("GameCamera");
+                if (gc == null) return;
+                object inst = null;
+                FieldInfo f = gc.GetField("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                if (f != null) inst = f.GetValue(null);
+                if (inst == null) { PropertyInfo pi = gc.GetProperty("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic); if (pi != null) inst = pi.GetValue(null, null); }
+                if (inst == null) return;
+                MethodInfo m = gc.GetMethod("AddShake", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (m == null) return;
+                ParameterInfo[] ps = m.GetParameters();
+                object[] args = new object[ps.Length];
+                for (int i = 0; i < ps.Length; i++)
+                {
+                    Type t = ps[i].ParameterType;
+                    if (t == typeof(Vector3)) args[i] = pos;
+                    else if (t == typeof(float)) args[i] = i == 1 ? range : strength;
+                    else if (t == typeof(bool)) args[i] = false;
+                    else args[i] = t.IsValueType ? Activator.CreateInstance(t) : null;
+                }
+                m.Invoke(inst, args);
+            }
+            catch (Exception) { }
+        }
+
+        // Glowing jagged cracks radiating from an impact, fading out.
+        public static void Cracks(Vector3 center, Color c, float radius, int count, float seconds)
+        {
+            if (!Enabled) return;
+            DragonVfxLife l = Host(center, seconds, "cracks");
+            List<LineRenderer> lines = new List<LineRenderer>();
+            for (int i = 0; i < count; i++)
+            {
+                float a = (i + UnityEngine.Random.Range(-0.3f, 0.3f)) / count * Mathf.PI * 2f;
+                Vector3 dir = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                float len = radius * UnityEngine.Random.Range(0.55f, 1f);
+                GameObject go = new GameObject("crack");
+                go.transform.SetParent(l.transform, false);
+                LineRenderer line = go.AddComponent<LineRenderer>();
+                line.useWorldSpace = true;
+                int n = 9;
+                line.positionCount = n;
+                line.startWidth = 0.22f + radius * 0.02f;
+                line.endWidth = 0.03f;
+                Material m = Additive();
+                if (m != null) line.sharedMaterial = m;
+                Vector3 side = Vector3.Cross(Vector3.up, dir);
+                for (int k = 0; k < n; k++)
+                {
+                    float t = (float)k / (n - 1);
+                    Vector3 p = center + dir * len * t + side * (k == 0 ? 0f : UnityEngine.Random.Range(-0.35f, 0.35f) * radius * 0.12f);
+                    RaycastHit hit;
+                    if (Physics.Raycast(p + Vector3.up * 2f, Vector3.down, out hit, 5f, LayerMask.GetMask("terrain", "Default", "static_solid", "piece"), QueryTriggerInteraction.Ignore)) p = hit.point;
+                    line.SetPosition(k, p + Vector3.up * 0.04f);
+                }
+                lines.Add(line);
+            }
+            DragonCrackFade fade = l.gameObject.AddComponent<DragonCrackFade>();
+            fade.Lines = lines.ToArray();
+            fade.Color = c;
+            fade.Life = seconds;
+        }
+
+        // Chunks of earth thrown out of an impact: real little rocks that arc, bounce once and sink away.
+        public static void Debris(Vector3 center, Color c, int count, float speed, float size, float seconds)
+        {
+            if (!Enabled) return;
+            Shader sh = Shader.Find("Sprites/Default");
+            count = Mathf.Clamp(Mathf.RoundToInt(count * Amount), 1, 60);
+            for (int i = 0; i < count; i++)
+            {
+                GameObject rock = GameObject.CreatePrimitive(i % 3 == 0 ? PrimitiveType.Cube : PrimitiveType.Sphere);
+                rock.name = "IH_Debris";
+                Collider col = rock.GetComponent<Collider>();
+                if (col != null) UnityEngine.Object.Destroy(col);
+                Renderer r = rock.GetComponent<Renderer>();
+                if (r != null && sh != null)
+                {
+                    r.material = new Material(sh);
+                    float shade = UnityEngine.Random.Range(0.7f, 1.1f);
+                    r.material.color = new Color(c.r * shade, c.g * shade, c.b * shade, 1f);
+                    r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                }
+                float sz = size * UnityEngine.Random.Range(0.5f, 1.2f);
+                rock.transform.localScale = new Vector3(sz, sz * UnityEngine.Random.Range(0.6f, 1f), sz);
+                rock.transform.position = center + Vector3.up * 0.3f;
+                rock.transform.rotation = UnityEngine.Random.rotation;
+                DragonDebris d = rock.AddComponent<DragonDebris>();
+                Vector2 dir = UnityEngine.Random.insideUnitCircle.normalized;
+                float sp = speed * UnityEngine.Random.Range(0.4f, 1f);
+                d.Velocity = new Vector3(dir.x * sp, speed * UnityEngine.Random.Range(0.6f, 1.3f), dir.y * sp);
+                d.Spin = UnityEngine.Random.insideUnitSphere * 540f;
+                d.Life = seconds * UnityEngine.Random.Range(0.8f, 1.2f);
+            }
+        }
+
+        // Soft feathers / embers drifting down over an area.
+        public static void Feathers(Vector3 center, Color c, float radius, float seconds, float rate)
+        {
+            if (!Enabled) return;
+            DragonVfxLife l = Host(center + Vector3.up * 6f, seconds + 3f, "feathers");
+            ParticleSystem ps = Particles(l.transform, c, 0, rate, seconds, 3f, 0f, 0.4f, 0.12f, 0.3f, 0.06f,
+                ParticleSystemShapeType.Circle, radius, new Vector3(90f, 0f, 0f), false, false);
+            ParticleSystem.NoiseModule nz = ps.noise;
+            nz.enabled = true;
+            nz.strength = 0.8f;
+            nz.frequency = 0.6f;
+            l.StopEmitAt = seconds;
+            l.Systems = new ParticleSystem[] { ps };
+        }
+
+        // A ring of dust rolling out along the ground.
+        public static void DustRing(Vector3 pos, float radius)
+        {
+            if (!Enabled) return;
+            DragonVfxLife l = Host(pos + Vector3.up * 0.2f, 2.5f, "dust");
+            Color dust = new Color(0.55f, 0.48f, 0.40f, 0.55f);
+            Particles(l.transform, dust, Mathf.RoundToInt(40 + radius * 10f), 0f, 0.05f, 1.6f, radius * 0.8f, radius * 1.4f, 0.8f, 1.8f, -0.03f,
+                ParticleSystemShapeType.Circle, 0.5f, new Vector3(90f, 0f, 0f), false, false);
+        }
+
+        // A dark, churning storm cloud hanging over an area, flickering from inside.
+        public static void StormCloud(Vector3 ground, float radius, float height, float seconds)
+        {
+            if (!Enabled) return;
+            DragonVfxLife l = Host(ground + Vector3.up * height, seconds + 2f, "storm");
+            Particles(l.transform, new Color(0.18f, 0.20f, 0.26f, 0.75f), 30, 25f, seconds, 2.5f, 0.1f, 0.6f, radius * 0.35f, radius * 0.6f, 0f,
+                ParticleSystemShapeType.Circle, radius, new Vector3(90f, 0f, 0f), false, false);
+            Particles(l.transform, Storm, 0, 6f, seconds, 0.25f, 0f, 0.1f, radius * 0.3f, radius * 0.5f, 0f,
+                ParticleSystemShapeType.Circle, radius * 0.8f, new Vector3(90f, 0f, 0f), false, true);
+            l.StopEmitAt = seconds;
+            l.Systems = l.GetComponentsInChildren<ParticleSystem>();
+        }
+
+        // The full "something heavy hit the ground" package.
+        public static void HeavyLanding(Vector3 pos, Color c, float radius, float shake)
+        {
+            Shockwave(pos, c, radius, 0.5f);
+            DustRing(pos, radius);
+            Cracks(pos, c, radius * 0.8f, 9, 3.5f);
+            Debris(pos, new Color(0.42f, 0.36f, 0.30f, 1f), Mathf.RoundToInt(10 + radius * 2f), 6f + radius * 0.6f, 0.25f + radius * 0.02f, 2.5f);
+            Burst(pos + Vector3.up * 0.4f, Color.Lerp(c, Color.white, 0.5f), Mathf.RoundToInt(40 + radius * 8f), 9f + radius, 0.3f, 0.8f, 0.5f);
+            Shake(pos, 25f + radius * 2f, shake);
         }
 
         // ------------------------------------------------------------------ themed presets

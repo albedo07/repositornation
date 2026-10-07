@@ -1,0 +1,21 @@
+Immortal Heroes v0.25.57 - Cleric Details (VFX detail pass 1 of 4: Cleric > Warrior > Sorcerer > Ranger)
+
+THE CROSS (Goddess Relic, Lightning Relic, Holy Relic)
+- A real sculpted cross: solid gilded beams (metallic + glowing when the game has the Standard shader), stepped
+  end caps, a heavier foot, a halo ring where the beams cross and a soft glow around every beam.
+- It plunges from the sky along its own tilted axis, leaving a trail of light, and stays PLANTED: foot buried in
+  the ground, leaning 10-14 degrees away from you (tower of Pisa), with a small random side lean.
+- Landing: camera shake, ground shockwave, rolling dust ring, glowing cracks, chunks of earth flying out and
+  bouncing, a pillar of light, embers rising round its foot. Goddess Relic's cross sinks back into the earth
+  when it ends.
+
+MORE CLERIC DETAIL
+- Righteous Strike: scorched cracks, rocks thrown up, camera rumble.
+- Electric Smite: full heavy landing (cracks, dust, debris, shake).
+- Angel Comet: heavy landing + feathers drifting down.
+- Judgement Hammer: tears up dust and sparks under it while it flies; hitting a wall = heavy impact.
+- Hammer Slam (Shield Charge): heavy impact with cracks and debris.
+- Grand Cross: a blazing core rides the cross with a light trail.
+- Lightning Tempest: a dark storm cloud churns and flickers over the area.
+- Holy Wave, Heaven's Light, Divine Intervention: feathers of light drift down; Divine Intervention also raises a
+  pillar of light. Heaven's Judgement's final pillar cracks the ground and shakes the camera.
