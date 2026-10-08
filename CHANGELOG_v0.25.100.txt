@@ -1,0 +1,5 @@
+Immortal Heroes v0.25.100 - Outstretched
+Base: v0.25.99.
+
+- Jump and Slam (Bonecrusher / Electric Smite air pose): main hand stretched OUTWARD to the side,
+  elbow only slightly bent, weapon following the arm. Nothing else changed.

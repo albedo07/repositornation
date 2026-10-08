@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.99";
+        public const string ModVersion = "0.25.100";
 
         internal static DragonCombatPlugin Instance;
 
@@ -4345,7 +4345,8 @@ namespace DragonsAltarCombat
             // AIR: left fist in a bent chest/face-height boxing guard; right fist
             // and weapon cocked high and slightly right, ready for the bonk.
             DragonClipKey launch = K(-0.72f).Sp(-4f, 0f, 0f).Ch(-4f, 0f, 0f).Hd(-14f, 0f, 0f)
-                .Hand(0.30f, 1f, 0.14f, 0.79f).Wp(0.28f, 1f, 0.14f)
+                .Hand(1f, 0.35f, 0.1f, 0.92f).Wp(1f, 0.45f, 0.1f)   // v0.25.100 (user): main arm stretched OUTWARD, elbow only slightly bent
+               
                 .LHand(-0.17f, 0.83f, 0.57f, 0.69f)
                 .Rot(45f, 0f, 0f).Off(0f, 0.06f, 0f);
             DragonClipKey roll0 = launch.Copy(-0.6f).Rot(62f, 0f, 0f).Sn(30f);
