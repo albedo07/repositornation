@@ -1,0 +1,12 @@
+Immortal Heroes v0.25.105 - Counter Spin
+Base: v0.25.104. Only Circle Swing (Mercenary).
+
+- Circle Swing mechanics back to the pre-rework skill (its own wind up, crow hop, radius, damage,
+  Ascended second launching hit); the Home Run Cleave rework (2.5x / 6.5 m / own configs) is removed.
+  Only the combat animation stays: crow hop + batting stance + violent counter-clockwise spin.
+- Spin goes ONE way: the side-on turn is never unwound, the spin continues from it to a full 360 and
+  ends there (no turning back). Burst of speed: the whole turn in 0.28 s, then follow-through + recovery.
+- Ascended follow-up = COUNTER SPIN: after the counter-clockwise spin finishes, a short coil and one
+  violent clockwise 360 (0.26 s); the second hit lands on it (same total gap as before).
+- VFX: a full 360 ember blade arc + embers on each spin (the counter spin's arc mirrored), on top of the
+  existing ring / streaks / dust / shake / debris.

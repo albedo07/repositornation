@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.104";
+        public const string ModVersion = "0.25.105";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -3331,8 +3331,14 @@ namespace AlbedosCustomClassesAdvanced
             if (!ascended) yield break;
             DragonCombat.GrantHyperArmor(player, _circleAscGap.Value + 0.3f);
             DragonCombat.LockSkill(player, _circleAscGap.Value + 0.1f);
-            DragonCombat.PlayClip(player, "merc_circle_2", Mathf.Max(0.05f, _circleAscGap.Value));
-            yield return new WaitForSeconds(Mathf.Max(0.05f, _circleAscGap.Value));
+            // v0.25.105 (user): the counter-clockwise spin finishes first (0.28 s), then the clockwise COUNTER spin
+            // winds up over the rest of the gap; the second hit lands on its spin start (same total gap as before).
+            float gapAll = Mathf.Max(0.05f, _circleAscGap.Value);
+            float ccw = Mathf.Min(0.28f, gapAll * 0.6f);
+            yield return new WaitForSeconds(ccw);
+            if (player == null || player.IsDead()) yield break;
+            DragonCombat.PlayClip(player, "merc_homerun_cw", Mathf.Max(0.05f, gapAll - ccw));
+            yield return new WaitForSeconds(Mathf.Max(0.05f, gapAll - ccw));
             if (player == null || player.IsDead()) yield break;
             CircleSwingHit(player, weapon, radius, baseMult * _circleAscSecond.Value / 100f, true);
         }
@@ -3388,6 +3394,9 @@ namespace AlbedosCustomClassesAdvanced
                 {
                     DragonVfx.DustRing(cc, cr);
                     DragonVfx.SlashStreaks(cc + Vector3.up * 1f, DragonVfx.Fire, cr * 0.8f, 8, 0.35f);
+                    // v0.25.105 the violent spin itself: a full 360 blade arc at waist/chest height (counter spin mirrored)
+                    DragonVfx.SlashArc(cc + Vector3.up * 1.05f, Vector3.forward, cr * 0.9f, 360f, new Color(1f, 0.55f, 0.20f, 1f), Mathf.Max(0.5f, cr * 0.18f), 0.3f, cl ? 180f : 0f);
+                    DragonVfx.Embers(cc + Vector3.up * 0.9f, DragonVfx.Fire, cr * 0.6f, 0.6f, 40f);
                     DragonVfx.Shake(cc, 20f + cr, cl ? 1.2f : 0.6f);
                     if (cl) DragonVfx.Debris(cc, new Color(0.42f, 0.36f, 0.30f, 1f), 10, 7f, 0.25f, 2f);
                 });   // v0.25.58
@@ -4296,97 +4305,11 @@ namespace AlbedosCustomClassesAdvanced
             if (!BeginCast(player, id, _circleCooldown.Value, _circleStamina.Value))
                 return;
 
-            // v0.25.102 (user): Circle Swing plays the Home Run Cleave (crow hop + bat load + 360 spin).
-            CastHomeRunCleave(player);
-        }
-
-        // ------------------------------------------------------------------ Home Run Cleave (merc_homerun)
-        private ConfigEntry<float> _hrWindup, _hrMult, _hrRadius, _hrHop, _hrPush;
-
-        private void CastHomeRunCleave(Player player)
-        {
-            const string hs = "Mercenary Home Run Cleave";
-            if (_hrWindup == null)
-            {
-                _hrWindup = Config.Bind(hs, "Windup_v025102", 0.45f, "Crow hop + bat load (s). The strike frame is the end of it.");
-                _hrMult = Config.Bind(hs, "WeaponDamageMultiplier_v025102", 2.5f, "Weapon damage x this on the strike frame.");
-                _hrRadius = Config.Bind(hs, "Radius_v025102", 6.5f, "Sphere radius around the player (m).");
-                _hrHop = Config.Bind(hs, "HopDistance_v025102", 1.5f, "Crow hop forward distance (m).");
-                _hrPush = Config.Bind(hs, "PushForce_v025102", 80f, "Knockback on Small and Big enemies (Bosses: none).");
-            }
-            float windup = Mathf.Clamp(_hrWindup.Value, 0.1f, 2f);
-            IhFaceSkillAim(player);
-            DragonCombat.LockSkill(player, windup + 0.45f);          // full lock: hop + spin
-            DragonCombat.GrantHyperArmor(player, windup + 0.45f);
+            float windup = Mathf.Max(0.1f, _circleWindup.Value);
+            // v0.25.105 (user): the pre-rework Circle Swing mechanics, animated with the Home Run Cleave clip
+            // (crow hop + bat load + violent counter-clockwise spin).
             DragonCombat.PlayClip(player, "merc_homerun", windup);
-            StartCoroutine(HomeRunHop(player, windup));
-            StartCoroutine(HomeRunRoutine(player, windup));
-        }
-
-        private IEnumerator HomeRunRoutine(Player player, float windup)
-        {
-            ShowMessage("Circle Swing");
-            float start = Time.time;
-            yield return new WaitForSeconds(windup);
-            if (player == null || player.IsDead()) yield break;
-            // strike frame: one snapshot of the weapon, everyone in the sphere
-            bool ascended = IsAscendedSkill("circle_swing");
-            DamageSnapshot weapon = GetWeaponDamage(player);
-            float radius = Mathf.Max(0.5f, DragonCombat.M(_hrRadius.Value));
-            Vector3 center = player.transform.position;
-            List<Character> targets = GetSphereTargets(player, center, radius);
-            for (int i = 0; i < targets.Count; i++)
-            {
-                Character target = targets[i];
-                if (target == null) continue;
-                bool boss = target.IsBoss();
-                DealSnapshotDamage(player, target, weapon, Mathf.Max(0f, _hrMult.Value), boss ? 0f : Mathf.Max(0f, _hrPush.Value), !boss);
-                if (!boss) ForceStagger(target, player);
-                GainMercenaryFuryFromSkillHit(player);
-            }
-            if (_enableVfx.Value)
-            {
-                Vector3 vc = center + Vector3.up * 1f; Vector3 vf = IhFlatAim(player); float vr = radius;
-                DragonCombat.RunVfx(delegate { DragonVfx.SlashArc(vc, vf, vr * 0.9f, 360f, new Color(1f, 0.55f, 0.20f, 1f), Mathf.Max(0.5f, vr * 0.2f), 0.4f, 0f); DragonVfx.Shake(vc, 20f, 0.8f); });
-            }
-            if (!ascended) yield break;
-            // Ascended keeps its second (launching) sweep after the spin.
-            yield return new WaitForSeconds(0.4f);
-            if (player == null || player.IsDead()) yield break;
-            float gap = Mathf.Max(0.05f, _circleAscGap.Value);
-            DragonCombat.GrantHyperArmor(player, gap + 0.3f);
-            DragonCombat.LockSkill(player, gap + 0.1f);
-            DragonCombat.PlayClip(player, "merc_circle_2", gap);
-            yield return new WaitForSeconds(gap);
-            if (player == null || player.IsDead()) yield break;
-            CircleSwingHit(player, weapon, Mathf.Max(0.5f, DragonCombat.M(_circleAscRadius.Value)), Mathf.Max(0f, _circleDamageMultiplier.Value) * _circleAscSecond.Value / 100f, true);
-        }
-
-        // Crow hop: an upward pulse at the start, then a kinematic 1.5 m forward carry over the first 70% of
-        // the wind up. Every step is swept against walls / structures (Rigidbody.SweepTest + a chest-height ray),
-        // creatures never block it; the carry stops at the first solid.
-        private IEnumerator HomeRunHop(Player player, float windup)
-        {
-            if (player == null) yield break;
-            Rigidbody body = player.GetComponent<Rigidbody>();
-            if (body == null) yield break;
-            Vector3 dir = IhFlatAim(player);
-            float total = DragonCombat.M(Mathf.Clamp(_hrHop.Value, 0f, 4f)), done = 0f, start = Time.time, carry = windup * 0.7f;
-            int solid = IhSolidMask();
-            Vector3 v = body.velocity;
-            body.velocity = new Vector3(0f, Mathf.Max(v.y, 3f), 0f);   // the hop's lift; gravity brings it down
-            while (player != null && !player.IsDead() && Time.time - start < carry && done < total)
-            {
-                yield return new WaitForFixedUpdate();
-                if (player == null || body == null) yield break;
-                float step = Mathf.Min(total - done, total * Time.fixedDeltaTime / Mathf.Max(0.05f, carry));
-                RaycastHit hit;
-                if (body.SweepTest(dir, out hit, step + 0.1f, QueryTriggerInteraction.Ignore) && hit.collider.GetComponentInParent<Character>() == null) yield break;
-                if (Physics.Raycast(body.position + Vector3.up * 0.6f, dir, out hit, step + 0.4f, solid, QueryTriggerInteraction.Ignore) &&
-                    hit.collider.GetComponentInParent<Character>() == null) yield break;
-                body.MovePosition(body.position + dir * step);
-                done += step;
-            }
+            StartCoroutine(CircleSwingRoutineV(player, windup));
         }
 
         private IEnumerator CircleSwingRoutine(Player player, float windup)

@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.104";
+        public const string ModVersion = "0.25.105";
 
         internal static DragonCombatPlugin Instance;
 
@@ -4489,11 +4489,26 @@ namespace DragonsAltarCombat
                     .LL(0.4f, 0.12f, 0f, 0f).RL(-0.2f, 0.1f, 0f, 0f).Lift(0f, 0f).Off(0f, -0.05f, 0f)
                     .Hand(0.25f, 0.65f, 0.90f, 0.60f).Wp(0.35f, 0.8f, -0.5f).Two(-0.14f).TwoPole(-0.2f, -0.4f, 1f, 0.16f);
                 hrPlant.EP = new Vector3(0.9f, 0.25f, -0.35f); hrPlant.EW = 1f; hrPlant.EM = true;
-                DragonClipKey hrStrike = K(0f).Rot(0f, 0f, 0f).Sp(6f, 4f, 0f).Ch(0f, 8f, 0f).Off(0f, -0.06f, 0f)
+                // v0.25.105 (user): ONE direction only - the side-on turn (+60) is never unwound; the spin continues
+                // counter-clockwise from it (+300) so the body finishes a full 360 and that IS the new start (the root
+                // is released at 360 = 0, no turn back). Violent burst: the whole turn in 0.28 s, then a short
+                // follow-through hold and recovery.
+                DragonClipKey hrStrike = K(0f).Rot(0f, 60f, 0f).Sp(6f, 4f, 0f).Ch(0f, 8f, 0f).Off(0f, -0.06f, 0f)
                     .Hand(0.45f, -0.05f, 1.1f, 0.92f).Wp(1f, 0f, 0.3f).Two(-0.2f).TwoPole(-0.2f, -0.4f, 1f, 0.16f).Sn(0f).Linear();
-                DragonClipKey hrMid = hrStrike.Copy(0.2f).Sn(180f);
-                DragonClipKey hrEnd = hrStrike.Copy(0.4f).Sn(360f); hrEnd.Lin = false;
-                c["merc_homerun"] = new DragonClipKey[] { K(-1f), hrLoad, hrPlant, hrStrike, hrMid, hrEnd, K(0.7f) };
+                DragonClipKey hrMid = hrStrike.Copy(0.12f).Sn(150f);
+                DragonClipKey hrEnd = hrStrike.Copy(0.28f).Sn(300f); hrEnd.Lin = false;
+                DragonClipKey hrFollow = hrEnd.Copy(0.45f).Sp(2f, 0f, 0f).Ch(0f, 0f, 0f);
+                c["merc_homerun"] = new DragonClipKey[] { K(-1f), hrLoad, hrPlant, hrStrike, hrMid, hrEnd, hrFollow, K(0.75f).Rot(0f, 60f, 0f).Sn(300f) };
+                // v0.25.105 Ascended follow-up: the COUNTER spin - a short coil the other way, then one violent
+                // clockwise turn (negative Sn) in 0.26 s, ending on a full -360 (= the new start, no turn back).
+                // Same cleared two-hand strike grip as above.
+                DragonClipKey cwLoad = K(-0.6f).Rot(0f, -40f, 0f).Sp(4f, 8f, 0f).Ch(0f, 12f, 0f).Off(0f, -0.06f, 0f)
+                    .Hand(0.45f, -0.05f, 1.1f, 0.92f).Wp(1f, 0f, 0.3f).Two(-0.2f).TwoPole(-0.2f, -0.4f, 1f, 0.16f);
+                DragonClipKey cwStrike = cwLoad.Copy(0f).Sp(6f, -4f, 0f).Ch(0f, -8f, 0f).Sn(0f).Linear();
+                DragonClipKey cwMid = cwStrike.Copy(0.13f).Sn(-160f);
+                DragonClipKey cwEnd = cwStrike.Copy(0.26f).Sn(-320f); cwEnd.Lin = false;
+                DragonClipKey cwFollow = cwEnd.Copy(0.42f).Sp(2f, 0f, 0f).Ch(0f, 0f, 0f);
+                c["merc_homerun_cw"] = new DragonClipKey[] { K(-1f), cwLoad, cwStrike, cwMid, cwEnd, cwFollow, K(0.72f).Rot(0f, -40f, 0f).Sn(-320f) };
             }
             c["rg_trap"] = SbGround(2);
             c["sorc_stonefang_asc"] = SbGround(3);
