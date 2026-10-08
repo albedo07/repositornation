@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.98";
+        public const string ModVersion = "0.25.99";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1105,11 +1105,20 @@ namespace DragonsAltarCombat
             {
                 if (Instance == null || !Instance.ComboChainsEnabled.Value) return;
                 Player p;
-                if (!IsLocalMeleeStart(__instance, character, out p)) return;
+                if (!IsLocalMeleeStart(__instance, character, out p))
+                {
+                    // v0.25.99: any other local attack (heavy / area / ranged) also resets the chain speed.
+                    Player lp = character as Player;
+                    if (lp != null && lp == Player.m_localPlayer) { _comboHit = -1; DragonCombat.SetChainSpeed(lp, 1f, 0.05f); }
+                    return;
+                }
                 int levels = (int)_atkLevels.GetValue(__instance);
-                if (levels < 2) return;   // only weapons that already chain (no spears / single heavy hits)
+                // v0.25.99 FIX (user: dual-wield Axe heavy attack stuck in slow motion): a heavy / single-hit attack
+                // inherited the last chain swing's speed (dual chains run down to 0.25x for 3 s). Every attack that
+                // is not part of our chain plays at normal speed and breaks the chain.
+                if (levels < 2) { _comboHit = -1; DragonCombat.SetChainSpeed(p, 1f, 0.05f); return; }   // only weapons that already chain (no spears / single heavy hits)
                 // v0.25.45 (user): the 5-hit chain belongs to classes fit for the weapon; everyone else keeps vanilla.
-                if (DragonCombat.ComboWeaponProvider == null || !DragonCombat.ComboWeaponProvider(p, weapon)) { _comboHit = -1; return; }
+                if (DragonCombat.ComboWeaponProvider == null || !DragonCombat.ComboWeaponProvider(p, weapon)) { _comboHit = -1; DragonCombat.SetChainSpeed(p, 1f, 0.05f); return; }
                 int count = Mathf.Min(levels, 3);
                 if (levels > count) _atkLevels.SetValue(__instance, count);
                 string anim = _atkAnim.GetValue(__instance) as string;

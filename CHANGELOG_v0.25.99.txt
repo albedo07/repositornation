@@ -1,0 +1,6 @@
+Immortal Heroes v0.25.99 - Heavy Unstuck
+Base: v0.25.98 (anchor v0.25.97).
+
+- FIX: dual-wield (Axe) heavy attack stuck in slow motion. The heavy attack inherited the last chain
+  swing's speed (dual chains slow down to 0.25x, held for 3 s). Every attack outside the 5-hit chain
+  (heavy, area, ranged, unfit weapons) now plays at normal speed and resets the chain.
