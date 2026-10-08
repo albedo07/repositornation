@@ -1,0 +1,7 @@
+Immortal Heroes v0.25.97 - Moonlord
+Base: v0.25.96. VFX only, Moonlight Splitter (+Ascended). No mechanics changed.
+
+- Moonlord-style waves: large pale lunar crescent (icy blue-violet rim + white core), a fainter echo
+  crescent trailing behind, moon-dust sparkle trail, cold moonlight glow.
+- Moon shards + flash on every enemy hit; the wave dissolves into moon dust at the end of its range.
+- Halfmoon's waves keep their own look.

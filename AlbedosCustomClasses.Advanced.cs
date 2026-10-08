@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.96";
+        public const string ModVersion = "0.25.97";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -2137,7 +2137,27 @@ namespace AlbedosCustomClassesAdvanced
                 visual = new GameObject("DragonsAltarMoonlightGhost");
                 GameObject ghostVis2 = visual;
                 float gw2 = width; Color gcol = halfmoon ? new Color(0.70f, 0.95f, 1f, 1f) : DragonVfx.Steel;
-                DragonCombat.RunVfx(delegate { DragonVfx.AttachGlow(ghostVis2.transform, new Color(0.45f, 0.78f, 1f, 1f), 0.4f * heightScale, 12f, 3f); DragonVfx.CrescentBlade(ghostVis2.transform, gcol, gw2 * 0.6f, gw2 * 0.14f * heightScale, 0f); });   // v0.25.55 / v0.25.63 moon crescent
+                if (halfmoon)
+                    DragonCombat.RunVfx(delegate { DragonVfx.AttachGlow(ghostVis2.transform, new Color(0.45f, 0.78f, 1f, 1f), 0.4f * heightScale, 12f, 3f); DragonVfx.CrescentBlade(ghostVis2.transform, gcol, gw2 * 0.6f, gw2 * 0.14f * heightScale, 0f); });   // v0.25.55 / v0.25.63 moon crescent
+                else
+                {
+                    // v0.25.97 (user): Moonlord's Moonlight Splitter look - a large pale lunar crescent (white core,
+                    // icy blue-violet rim), a fainter echo crescent trailing behind it, moon-dust sparkles streaming
+                    // off it and a cold moonlight glow.
+                    Color moonCore = new Color(0.86f, 0.93f, 1f, 1f), moonRim = new Color(0.55f, 0.62f, 1f, 1f);
+                    float hs = heightScale;
+                    DragonCombat.RunVfx(delegate
+                    {
+                        DragonVfx.AttachGlow(ghostVis2.transform, moonRim, 0.55f * hs, 22f, 4.5f);
+                        DragonVfx.CrescentBlade(ghostVis2.transform, moonRim, gw2 * 0.72f, gw2 * 0.20f * hs, 0f);
+                        DragonVfx.CrescentBlade(ghostVis2.transform, moonCore, gw2 * 0.62f, gw2 * 0.10f * hs, 0f);
+                        GameObject echo = new GameObject("IH_MoonEcho");
+                        echo.transform.SetParent(ghostVis2.transform, false);
+                        echo.transform.localPosition = new Vector3(0f, 0f, -0.9f * hs);
+                        DragonVfx.CrescentBlade(echo.transform, new Color(0.45f, 0.50f, 0.95f, 0.55f), gw2 * 0.55f, gw2 * 0.08f * hs, 0f);
+                        DragonVfx.TrailWhile(ghostVis2.transform, moonCore, 0.18f * hs, delegate { return ghostVis2 != null; });
+                    });
+                }
                 if (!DragonVfx.Enabled) line = visual.AddComponent<LineRenderer>();
                 if (line != null) {
                 line.useWorldSpace = true;
@@ -2164,6 +2184,7 @@ namespace AlbedosCustomClassesAdvanced
                     hitTargets.Add(target);
                     // Afterimage has no additional slash animation; stun accompanies its projectile hit.
                     if (stunSmallBig && !target.IsBoss()) DragonCombat.Stun(target, center);
+                    if (!halfmoon && _enableVfx.Value) { Vector3 mh = center; DragonCombat.RunVfx(delegate { DragonVfx.Burst(mh, new Color(0.80f, 0.88f, 1f, 1f), 14, 7f, 0.22f, 0.35f, 0f); DragonVfx.Flash(mh, new Color(0.55f, 0.62f, 1f, 1f), 2f, 4f, 0.15f); }); }   // v0.25.97 moon shards on hit
                     DealDamageScaled(player, target, damage, multiplier, 8f, false);
                     if (halfmoon)
                     {
@@ -2183,7 +2204,11 @@ namespace AlbedosCustomClassesAdvanced
                 }
                 yield return null;
             }
-            if (visual != null) Destroy(visual);
+            if (visual != null)
+            {
+                if (!halfmoon && DragonVfx.Enabled) { Vector3 mend = visual.transform.position; float mw = width; DragonCombat.RunVfx(delegate { DragonVfx.Burst(mend, new Color(0.70f, 0.78f, 1f, 1f), 18, 4f, 0.25f, 0.6f, -0.5f); DragonVfx.Flash(mend, new Color(0.55f, 0.62f, 1f, 1f), 1.5f, mw, 0.25f); }); }   // v0.25.97 dissolves into moon dust
+                Destroy(visual);
+            }
         }
 
         // ------------------------------------------------------------------ Crescent Cleave
