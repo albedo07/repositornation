@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.92";
+        public const string ModVersion = "0.25.93";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1388,7 +1388,7 @@ namespace AlbedosCustomClassesAdvanced
         // v0.25.89: the same natural-speed longsword NACC 1-2-1 chain drives the three waves.
         // Each hit follows its own actual vanilla attack instead of restarting the arms every 0.08s.
         private const float SmSwordContact = 0.16f; // v0.25.91 faster Moonlight / Crescent follow-up swings (longsword contact 0.28 s -> 1.75x)
-        private const float SmSwordCycle = 0.50f;
+        private const float SmSwordCycle = 0.40f; // v0.25.93 (user) every Moonlight GT exactly 0.4 s apart
         private const float SmHeavyContact = 0.45f;
 
         private void CastMoonlightSplitter(Player player)
@@ -1511,7 +1511,7 @@ namespace AlbedosCustomClassesAdvanced
                 return;
 
             IhFaceSkillAim(player);
-            float windup = 0.42f; // v0.25.91 faster overhead (sledge contact 0.55 s played at ~1.3x, constant speed)
+            float windup = 0.30f; // v0.25.93 (user) quick overhead smash: sledge sped up (~3x, constant) so it lands with the GTs
             DragonCombat.LockSkill(player, windup + (IsAscendedSkill("crescent_cleave") ? 1.0f : 0.25f));
             DragonCombat.PlayClip(player, IsAscendedSkill("crescent_cleave") ? "sm_crescent_asc" : "sm_crescent", windup);
             StartCoroutine(CrescentCleaveRoutine(player, windup));
@@ -2087,9 +2087,10 @@ namespace AlbedosCustomClassesAdvanced
                 }
             }
             // 5th: one complete Heavy Slash at unchanged vanilla playback rate.
-            DragonCombat.LockSkill(player, SmHeavyContact + 0.45f);
-            DragonCombat.PlayClip(player, "sm_moon_finisher", SmHeavyContact);
-            yield return new WaitForSeconds(SmHeavyContact);
+            // v0.25.93: the 5th keeps the 0.4 s rhythm too (heavy swing sped up to hit after SmSwordContact).
+            DragonCombat.LockSkill(player, SmSwordContact + 0.45f);
+            DragonCombat.PlayClip(player, "sm_moon_finisher", SmSwordContact);
+            yield return new WaitForSeconds(SmSwordContact);
             if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
             IhFaceSkillAim(player);
             Vector3 fo = player.GetEyePoint() - player.transform.up * 0.25f;
@@ -4078,7 +4079,7 @@ namespace AlbedosCustomClassesAdvanced
             for (int i = 0; i < count; i++)
             {
                 if (player == null || player.IsDead() || SmInterrupted(castStart)) yield break;
-                float a = Mathf.Min(85f, -85f + (i * spacing / Mathf.Max(0.01f, radius)) * Mathf.Rad2Deg);
+                float a = Mathf.Max(-85f, 85f - (i * spacing / Mathf.Max(0.01f, radius)) * Mathf.Rad2Deg);   // v0.25.93 (user) right -> left, with the sword
                 Vector3 direction = Quaternion.AngleAxis(a, Vector3.up) * forward;
                 // v0.25.92 (user): the follow-up follows the SLASH (sword height along its arc), not the ground,
                 // and looks like Frenzied Charge's slash hail.
@@ -10341,7 +10342,7 @@ namespace AlbedosCustomClassesAdvanced
                 Vector3 hc = center, hf = forward; float hr = radius;
                 Player lp = Player.m_localPlayer;
                 Color hcol = lp != null && DragonCombat.GetAdvancementName(lp) == "Mercenary" ? new Color(1f, 0.55f, 0.20f, 1f) : new Color(0.55f, 0.82f, 1f, 1f);
-                DragonCombat.RunVfx(delegate { DragonVfx.SlashArc(hc, hf, hr, 170f, hcol, Mathf.Max(0.5f, hr * 0.25f), 0.45f, 0f); });
+                DragonCombat.RunVfx(delegate { DragonVfx.SlashArc(hc, hf, hr, 170f, hcol, Mathf.Max(0.5f, hr * 0.25f), 0.45f, 180f);   // v0.25.93 right -> left like the swing });
             }
             if (IhLocalRichVfx())
                 DragonCombat.RunVfx(delegate

@@ -1,0 +1,10 @@
+Immortal Heroes v0.25.93 - Sword Rhythm
+Base: v0.25.92. Only Sword Master Moonlight / Crescent / Halfmoon.
+
+- Moonlight Splitter (+Ascended): every GT exactly 0.4 s apart, incl. the Ascended 5th Heavy Slash.
+  Each swing is sped up (constant, ~1.75x longsword / ~2.8x heavy) so its hit lands on its GT.
+- Crescent Cleave (+Ascended): quick overhead smash - the sledge swing is played ~3x (constant) and
+  hits at 0.3 s together with the GTs; Ascended second fan follows 0.5 s later with its own swing.
+  (Sledge contact frame corrected to 0.9 s native: the old 0.55 made it fire during the wind up.)
+- Halfmoon Slash (+Ascended): slash + follow-up cuts + arc now go RIGHT -> LEFT, same as the swing.
+- Engine: constant-speed swing cap 2.5x -> 4x. Animation map key -> VanillaAnimationMap_v02593.
