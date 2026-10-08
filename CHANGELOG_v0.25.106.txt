@@ -1,0 +1,14 @@
+Immortal Heroes v0.25.106 - Animation Studio
+Base: v0.25.105 + ChatGPT's Animation Studio Alpha 4 (merged onto 0.25.105; nothing else changed).
+
+- F9 Animation Studio, rebuilt for beginners (see ANIMATION_STUDIO_HOW_TO.txt):
+  - Coloured drag dots on your character: right hand, left hand, right elbow, weapon tip, head,
+    chest, whole body. Hover = what it does; drag = pose it; numbers update live.
+  - PLAY PREVIEW (whole motion, loops) and APPLY TO GAME (save + use in combat now).
+  - REVERT TO ORIGINAL, UNDO, RESET, LOAD MY LAST CAST; FRONT / SIDE / TURN views.
+  - Frame buttons labelled Wind-up / HIT / After; every number in plain words
+    (left/right, down/up, back/front, bend/turn/tilt) and shown on the character instantly.
+  - Limits: arm reach from dots 0.25-0.95 (never locked straight), head turn +-70 / nod +-45,
+    chest +-45, body lean +-60.
+- Circle Swing entries now point at the real clips (merc_homerun, merc_homerun_cw).
+- Two-hand grip: the Studio's grip-pole (GP) and the clip TwoPole both supported; TwoPole wins.

@@ -1,6 +1,7 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Reflection;
 using BepInEx;
 using BepInEx.Configuration;
@@ -15,7 +16,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.105";
+        public const string ModVersion = "0.25.106";
 
         internal static DragonCombatPlugin Instance;
 
@@ -66,6 +67,11 @@ namespace DragonsAltarCombat
         internal void LogInfo(string message)
         {
             Logger.LogInfo(message);
+        }
+
+        internal void LogWarning(string message)
+        {
+            Logger.LogWarning(message);
         }
 
         private void Awake()
@@ -147,6 +153,9 @@ namespace DragonsAltarCombat
             {
                 Logger.LogError("Combat Runtime patch setup failed. Other Dragon's Altar DLLs remain isolated. " + ex);
             }
+            // Optional developer UI must never prevent Combat Runtime from initializing.
+            try { gameObject.AddComponent<DragonAnimationEditor>(); }
+            catch (Exception ex) { Logger.LogWarning("Optional animation editor unavailable: " + ex.Message); }
         }
 
         private void Update()
@@ -2262,6 +2271,7 @@ namespace DragonsAltarCombat
     //   forearm x- = bend the elbow. spine/chest x+ = bend forward, y- = twist the right shoulder back.
     //   head x- = look up. Root R.x+ = whole body leans forward; O = body offset (y down < 0).
     // ==================================================================================
+    [Serializable]
     public class DragonClipKey
     {
         public float T;
@@ -2272,6 +2282,7 @@ namespace DragonsAltarCombat
         public float[] L = new float[8];
         public float Spin;   // v0.25.15 axial roll around the body's own head-to-feet axis (degrees)
         public bool Lin;   // linear (constant speed) blend INTO this key: spins
+        public DragonClipKey() { } // Unity JSON deserialization
         public DragonClipKey(float t) { T = t; }
         public DragonClipKey Linear() { Lin = true; return this; }
         public DragonClipKey Hp(float x, float y, float z) { B[0] = new Vector3(x, y, z); return this; }
@@ -2298,6 +2309,10 @@ namespace DragonsAltarCombat
         // v0.25.21 two-handed grip: the off hand reaches the main weapon (arm IK) `grip` metres along its axis
         // (negative = toward the pommel); the off-hand item is hidden render-only meanwhile.
         public float TW, TG;
+        // Editor-only optional pole for the off-hand's two-hand weapon grip.
+        // GW=0 preserves the original v0.25.101 off-hand IK exactly.
+        public Vector3 GP;
+        public float GW;
         public DragonClipKey Two(float grip) { TW = 1f; TG = grip; return this; }
         // v0.25.23 HAND TARGETS (storyboard poses): the main hand is placed by arm IK at `reach` (0..1 of the arm's
         // length) along a direction from the RIGHT SHOULDER in the body frame (x right, y up, z forward). Rig-axis
@@ -2352,7 +2367,7 @@ namespace DragonsAltarCombat
             for (int i = 0; i < B.Length; i++) k.B[i] = B[i];
             for (int i = 0; i < L.Length; i++) k.L[i] = L[i];
             k.R = R; k.O = O; k.Lin = Lin; k.Spin = Spin;
-            k.WD = WD; k.WW = WW; k.SD = SD; k.SW = SW; k.TW = TW; k.TG = TG; k.HD = HD; k.HR = HR; k.HW = HW; k.LD = LD; k.LR = LR; k.LW = LW; k.FLh = FLh; k.FRh = FRh; k.EP = EP; k.EW = EW; k.EM = EM; k.TP = TP; k.TPW = TPW; k.TPC = TPC;
+            k.WD = WD; k.WW = WW; k.SD = SD; k.SW = SW; k.TW = TW; k.TG = TG; k.GP = GP; k.GW = GW; k.HD = HD; k.HR = HR; k.HW = HW; k.LD = LD; k.LR = LR; k.LW = LW; k.FLh = FLh; k.FRh = FRh; k.EP = EP; k.EW = EW; k.EM = EM; k.TP = TP; k.TPW = TPW; k.TPC = TPC;
             return k;
         }
     }
@@ -2386,6 +2401,13 @@ namespace DragonsAltarCombat
         private DragonClipKey[] _keys;
         private float _start, _windup, _impactAt = -1f, _holdLimit;
         private bool _hold;
+        // Editor preview samples keyframes directly; it never fires skills, damage, or vanilla triggers.
+        private bool _editorPreview;
+        private bool _editorStandalone;
+        private Quaternion _editorBaseRot;
+        private Vector3 _editorBasePos;
+        private float _editorTime;
+        public bool EditorPreviewActive { get { return _editorPreview; } }
         // v0.25.88 JSAA touchdown anticipation: only Bonecrusher / Electric Smite.
         // Gameplay still decides the actual impact. These fields only drive visuals.
         private bool _jsaaLanding;
@@ -2399,8 +2421,8 @@ namespace DragonsAltarCombat
         private Vector3 _wd, _sd;
         private float _ww, _sw, _tw, _tg, _env, _hr, _hw, _lr, _lw, _flh, _frh;
         private bool _highKnee;
-        private Vector3 _hd, _ld, _ep, _tp;
-        private float _tpw, _tpc;
+        private Vector3 _hd, _ld, _ep, _tp, _gp;
+        private float _tpw, _tpc, _gw;
         private float _ew;
         private bool _em;
         // v0.25.15 legs: Unity humanoid muscles (HumanPoseHandler), applied on the animator's real pose.
@@ -2455,6 +2477,7 @@ namespace DragonsAltarCombat
 
         public void Begin(DragonClipKey[] keys, float windup, bool hold, Transform visual, string clipName = null)
         {
+            _editorPreview = false;
             ReleaseBow(false);
             _jsaaLanding = clipName == "olympic_hero" || clipName == "olympic_hero_brutal";
             _highKnee = clipName == "merc_stomp";   // v0.25.101 vertical-shin knee raise (Stomp only)
@@ -2488,6 +2511,8 @@ namespace DragonsAltarCombat
                 copy[0] = from;
                 keys = copy;
             }
+            // Preserve the exact sequence handed to the real driver, including chained-start pose.
+            if (!string.IsNullOrEmpty(clipName)) DragonAnimationEditor.RecordDriverClip(clipName, keys);
             _keys = keys;
             _windup = Mathf.Max(0.1f, windup);   // v0.25.19: 0.1 s minimum blend-in (0.05 popped like a ragdoll)
             _hold = hold;
@@ -2499,10 +2524,68 @@ namespace DragonsAltarCombat
             _token = DragonCombat.ClaimMotionRoot(_visual);
         }
 
+        public void BeginEditor(DragonClipKey[] keys, Transform visual, string clipName)
+        {
+            if (keys == null || keys.Length == 0) return;
+            ReleaseBow(false);
+            ReleaseRoot();
+            _keys = keys;
+            _visual = visual;
+            _editorStandalone = GetComponent<Player>() == null;
+            if (_editorStandalone && _visual != null)
+            {
+                _editorBaseRot = _visual.localRotation;
+                _editorBasePos = _visual.localPosition;
+            }
+            _editorPreview = true;
+            _editorTime = keys[0].T;
+            _jsaaLanding = false;
+            _highKnee = clipName == "merc_stomp";
+            _va = null; _vaTrack = false; _vaFiredName = null;
+            _bowTrig = null; _bowBool = null; _bowFired = true;
+            _noAim = keys[0].NoAim; _noPlant = keys[0].NoPlant; _noTrack = true;
+            _quietLeft = keys[0].QL; _qlCaptured = false;
+            _impactAt = -1f; _hold = false;
+            if (_animator == null) _animator = GetComponentInChildren<Animator>();
+            if (_animator != null && _editorStandalone)
+            {
+                _animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+                // When a real skill relies on Valheim's animation trigger, play that
+                // trigger on the clone only. The timeline still controls the custom pose overlay.
+                if (!string.IsNullOrEmpty(keys[0].VA))
+                {
+                    try { _animator.SetTrigger(keys[0].VA); } catch (Exception) { }
+                }
+            }
+            _token = _editorStandalone ? -1 : DragonCombat.ClaimMotionRoot(_visual);
+        }
+
+        public void EditorSample(DragonClipKey[] keys, float time)
+        {
+            if (!_editorPreview || keys == null || keys.Length == 0) return;
+            _keys = keys;
+            _editorTime = Mathf.Clamp(time, keys[0].T, keys[keys.Length - 1].T);
+        }
+
+        public void EndEditor() { EndEditor(true); }
+
+        public void EndEditor(bool removeComponent)
+        {
+            if (!_editorPreview) return;
+            _editorPreview = false;
+            ReleaseRoot();
+            _keys = null;
+            SetLeftHidden(false);
+            // Switching clips inside IMGUI happens before Unity's end-of-frame Destroy.
+            // Reuse the component for the next selection; destroying it here caused a
+            // short-lived preview that disappeared immediately after changing skills.
+            if (removeComponent) Destroy(this);
+        }
+
         public bool IsHolding { get { return _keys != null && _hold && _impactAt < 0f; } }
         public bool IsPlaying { get { return _keys != null; } }
         // v0.25.80 one skill at a time: busy through the wind up / hold and a short beat after the impact.
-        public bool IsBusy { get { if (_keys == null) return false; return Phase() < 0.25f; } }
+        public bool IsBusy { get { if (_editorPreview || _keys == null) return false; return Phase() < 0.25f; } }
 
         public void Impact()
         {
@@ -2598,6 +2681,8 @@ namespace DragonsAltarCombat
             _ww = Mathf.Lerp(a.WW, b.WW, w);
             _sw = Mathf.Lerp(a.SW, b.SW, w);
             _tw = Mathf.Lerp(a.TW, b.TW, w);
+            _gw = Mathf.Lerp(a.GW, b.GW, w);
+            _gp = a.GW > 0f ? a.GP : b.GP;
             _hw = Mathf.Lerp(a.HW, b.HW, w);
             Vector3 ha = a.HW > 0f ? a.HD : b.HD, hb = b.HW > 0f ? b.HD : a.HD;
             _hd = Vector3.Slerp(ha.normalized, hb.normalized, w);
@@ -2745,7 +2830,7 @@ namespace DragonsAltarCombat
         {
             if (_keys == null || _keys.Length == 0) { Destroy(this); return; }
             if (_owner == null) _owner = GetComponent<Character>();
-            float t = Phase();
+            float t = _editorPreview ? _editorTime : Phase();
             // v0.25.49 (user: gliding with the arm still raised): our emotes are fired as raw triggers, so
             // Valheim never cancels them when you walk. A raise ends the moment you move after the lock.
             bool movedOut = false;
@@ -2816,11 +2901,11 @@ namespace DragonsAltarCombat
                     _hasWritten[i] = true;
                 }
             }
-            if (_visual != null && DragonCombat.OwnsMotionRoot(_token))
+            if (_visual != null && (_editorStandalone || DragonCombat.OwnsMotionRoot(_token)))
             {
                 Quaternion q = Quaternion.Euler(_r) * Quaternion.AngleAxis(_spin, Vector3.up);
-                _visual.localRotation = DragonCombat.MotionBaseRot * q;
-                _visual.localPosition = DragonCombat.MotionBasePos + (Pivot - q * Pivot) + _o;
+                _visual.localRotation = (_editorStandalone ? _editorBaseRot : DragonCombat.MotionBaseRot) * q;
+                _visual.localPosition = (_editorStandalone ? _editorBasePos : DragonCombat.MotionBasePos) + (Pivot - q * Pivot) + _o;
             }
             if (_animator != null && _animator.isHuman)
             {
@@ -2918,6 +3003,7 @@ namespace DragonsAltarCombat
 
         private bool Grounded()
         {
+            if (_editorStandalone) return true; // preview stand-in stays grounded without a Character component
             if (_owner == null) return false;
             try
             {
@@ -3015,7 +3101,7 @@ namespace DragonsAltarCombat
             // terrain hit. Plant its touchdown feet even during that brief slide,
             // otherwise it looks like the legs stay standing under the kneel.
             bool jsaaContact = _jsaaLanding && _impactAt >= 0f && Time.time - _impactAt < 0.45f;
-            bool can = !_noPlant && (!moving || jsaaContact) && _feetCaptured && _visual != null && DragonCombat.OwnsMotionRoot(_token) && Grounded();
+            bool can = !_noPlant && (!moving || jsaaContact) && _feetCaptured && _visual != null && (_editorStandalone || DragonCombat.OwnsMotionRoot(_token)) && Grounded();
             float tilt = Mathf.Max(Mathf.Abs(Mathf.DeltaAngle(0f, _r.x)), Mathf.Max(Mathf.Abs(Mathf.DeltaAngle(0f, _r.z)), Mathf.Abs(Mathf.DeltaAngle(0f, _spin))));
             float upright = 1f - Mathf.InverseLerp(25f, 45f, tilt);
             // JSAA touches down already kneeling. Don't spend another 0.125s slowly
@@ -3029,8 +3115,8 @@ namespace DragonsAltarCombat
             {
                 Transform parent = _visual.parent;
                 Quaternion qy = Quaternion.AngleAxis(_r.y + _spin, Vector3.up);
-                Quaternion baseRot = DragonCombat.MotionBaseRot;
-                Vector3 basePos = DragonCombat.MotionBasePos + (Pivot - qy * Pivot) + new Vector3(_o.x, 0f, _o.z);
+                Quaternion baseRot = _editorStandalone ? _editorBaseRot : DragonCombat.MotionBaseRot;
+                Vector3 basePos = (_editorStandalone ? _editorBasePos : DragonCombat.MotionBasePos) + (Pivot - qy * Pivot) + new Vector3(_o.x, 0f, _o.z);
                 Quaternion parentRot = parent != null ? parent.rotation : Quaternion.identity;
                 Vector3 pole = parentRot * baseRot * qy * Vector3.forward;
                 for (int f = 0; f < 2; f++)
@@ -3118,7 +3204,14 @@ namespace DragonsAltarCombat
 
         private void ReleaseRoot()
         {
-            if (_visual != null) DragonCombat.ReleaseMotionRoot(_token, _visual);
+            if (_visual == null) return;
+            if (_editorStandalone)
+            {
+                _visual.localPosition = _editorBasePos;
+                _visual.localRotation = _editorBaseRot;
+                return;
+            }
+            DragonCombat.ReleaseMotionRoot(_token, _visual);
         }
 
         // ---------------------------------------------------------------- v0.25.20 HELD ITEMS
@@ -3214,6 +3307,8 @@ namespace DragonsAltarCombat
                 Vector3 t = rh.position + axis * _tg * Mathf.Max(0.2f, transform.lossyScale.y);
                 Transform fr = _visual != null ? _visual : transform;
                 Vector3 offPole = new Vector3(-0.2f, -1f, 0.35f);
+                // Animation Studio grip pole (GP) when set; the clip's own TwoPole wins over it.
+                if (_gw > 0.001f && _gp.sqrMagnitude > 0.0001f) offPole = Vector3.Slerp(offPole.normalized, _gp.normalized, Mathf.Clamp01(_gw));
                 if (_tpw > 0.01f)
                 {
                     offPole = Vector3.Slerp(offPole.normalized, _tp.normalized, Mathf.Clamp01(_tpw));
@@ -3499,9 +3594,19 @@ namespace DragonsAltarCombat
         {
             if (player == null || player != Player.m_localPlayer || string.IsNullOrEmpty(clip)) return;
             if (DragonCombatPlugin.Instance != null && !DragonCombatPlugin.Instance.EnableSkillAnimations.Value) return;
-            DragonClipKey[] keys = HorizonWalkerMoving(player) ? MovingCastClip() : BowClip(player, clip);   // v0.25.85 Ranger bow layer, v0.25.86 HW moving casts
-            if (keys == null && !hold) keys = VanillaClip(player, clip, 0f);
-            if (keys == null) keys = SkillClip(clip);
+            string animationSource = "Saved combat override";
+            DragonClipKey[] keys = DragonAnimationEditor.ExplicitCombatOverride(clip);
+            if (keys == null)
+            {
+                animationSource = "Movement/bow special variant";
+                keys = HorizonWalkerMoving(player) ? MovingCastClip() : BowClip(player, clip);
+            }
+            if (keys == null && !hold)
+            {
+                animationSource = "Vanilla animator + custom pose overlay";
+                keys = VanillaClip(player, clip, 0f);
+            }
+            if (keys == null) { animationSource = "Custom skill keyframes"; keys = SkillClip(clip); }
             if (keys == null) return;
             // v0.25.72: the weapon hand glows in the Class colour through every real wind up / hold
             // v0.25.85 (user): no weapon charge orb / flare
@@ -3523,11 +3628,13 @@ namespace DragonsAltarCombat
             if (legacy != null) UnityEngine.Object.Destroy(legacy);
             DragonSkillClipDriver d = player.GetComponent<DragonSkillClipDriver>();
             if (d == null) d = player.gameObject.AddComponent<DragonSkillClipDriver>();
+            // Record the keys ACTUALLY selected for this cast, not a guessed preset.
+            DragonAnimationEditor.RecordCombatClip(clip, keys, animationSource);
             d.Begin(keys, windup, hold, BodyVisual(player), clip);
         }
 
         // Plays caller-built keys (variable-length clips such as Whirlwind).
-        public static void PlayClipKeys(Player player, DragonClipKey[] keys, float windup)
+        public static void PlayClipKeys(Player player, DragonClipKey[] keys, float windup, string editorClipId = null)
         {
             if (player == null || player != Player.m_localPlayer || keys == null || keys.Length == 0) return;
             if (DragonCombatPlugin.Instance != null && !DragonCombatPlugin.Instance.EnableSkillAnimations.Value) return;
@@ -3535,6 +3642,8 @@ namespace DragonsAltarCombat
             if (legacy != null) UnityEngine.Object.Destroy(legacy);
             DragonSkillClipDriver d = player.GetComponent<DragonSkillClipDriver>();
             if (d == null) d = player.gameObject.AddComponent<DragonSkillClipDriver>();
+            if (!string.IsNullOrEmpty(editorClipId))
+                DragonAnimationEditor.RecordCombatClip(editorClipId, keys, "Dynamically built combat animation");
             d.Begin(keys, windup, false, BodyVisual(player));
         }
 
@@ -3553,7 +3662,20 @@ namespace DragonsAltarCombat
             {
                 float tq = Mathf.Max(0.18f, turn);
                 int tt = Mathf.Max(1, Mathf.CeilToInt(Mathf.Max(0.1f, seconds) / tq));
-                PlayClipKeys(player, SbSpin(tt, tq, true), 0.12f);
+                DragonClipKey[] editedWhirlwind = DragonAnimationEditor.ExplicitCombatOverride("merc_whirlwind_editor");
+                if (editedWhirlwind != null && editedWhirlwind.Length >= 2)
+                {
+                    // Scale only post-impact timing. Negative timestamps are fractions of wind-up.
+                    // Damage, duration and gameplay hit ticks remain controlled by the original skill.
+                    float sourceEnd = Mathf.Max(0.1f, editedWhirlwind[editedWhirlwind.Length - 1].T);
+                    float desiredEnd = tt * tq + 0.35f;
+                    float scale = desiredEnd / sourceEnd;
+                    for (int i = 0; i < editedWhirlwind.Length; i++)
+                        if (editedWhirlwind[i].T > 0f) editedWhirlwind[i].T *= scale;
+                    PlayClipKeys(player, editedWhirlwind, 0.12f, "merc_whirlwind_editor");
+                    return;
+                }
+                PlayClipKeys(player, SbSpin(tt, tq, true), 0.12f, "merc_whirlwind_editor");
                 return;
             }
             // v0.25.24 SPAA (storyboard 09 CYCLONE): coil with the weapon across to the left, then turn clockwise
@@ -3561,7 +3683,8 @@ namespace DragonsAltarCombat
             float q = Mathf.Max(0.12f, turn * 0.8f);   // v0.25.26: a whirlwind spins violently and continuously
             int turns = Mathf.Max(1, Mathf.CeilToInt(Mathf.Max(0.1f, seconds) / q));
             DragonClipKey[] v = VanillaClip(player, "spin", Mathf.Max(0.3f, seconds));
-            PlayClipKeys(player, v != null ? v : SbSpin(turns, q, twoHand), 0.15f);
+            PlayClipKeys(player, v != null ? v : SbSpin(turns, q, twoHand), 0.15f,
+                twoHand ? "merc_whirlwind_editor" : null);
         }
 
 
@@ -4155,6 +4278,20 @@ namespace DragonsAltarCombat
             return _clips.TryGetValue(name, out keys) ? keys : null;
         }
 
+        public static string[] EditorClipNames()
+        {
+            if (_clips == null) SkillClip("merc_circle");
+            List<string> names = new List<string>(_clips.Keys);
+            names.Sort(StringComparer.OrdinalIgnoreCase);
+            return names.ToArray();
+        }
+
+        public static DragonClipKey[] EditorBaseClip(string name)
+        {
+            DragonClipKey[] keys = SkillClip(name);
+            return keys == null ? null : DragonAnimationEditor.Clone(keys);
+        }
+
         private static void BuildClips(Dictionary<string, DragonClipKey[]> c)
         {
             BuildClericClips(c);
@@ -4169,6 +4306,9 @@ namespace DragonsAltarCombat
             BuildPolishClips(c);
             BuildGuideClips(c);
             BuildStoryboardClips(c);
+            // Developer-editable full-length visual template for Mercenary Whirlwind.
+            // Normal Whirlwind remains dynamically generated unless a saved editor override is opted into.
+            c["merc_whirlwind_editor"] = SbSpin(8, 0.4f, true);
         }
 
         // ================================================================================== v0.25.23
@@ -6013,6 +6153,8 @@ namespace DragonsAltarCombat
             if (player == null || player != Player.m_localPlayer || DragonCombatPlugin.Instance == null || string.IsNullOrEmpty(preset)) return;
             DragonCombatPlugin.Instance.StartCoroutine(BodyMotionRoutine(player, preset, Mathf.Max(0.1f, duration)));
         }
+
+        public static Transform EditorBodyVisual(Player player) { return BodyVisual(player); }
 
         private static Transform BodyVisual(Player player)
         {
@@ -12978,4 +13120,1020 @@ namespace DragonsAltarCombat
             if (Age >= Life + Fade) Destroy(gameObject);
         }
     }
+    // Stage 1: in-game animation editor. Deliberately no Harmony patches and no save-ID changes.
+    // F9 editor is independent of F8 dev settings. Only an explicitly enabled saved preset
+    // can replace a normal combat clip. Editor previews never trigger gameplay attacks.
+    [Serializable]
+    internal class DragonAnimationRecord
+    {
+        public string Clip;
+        public DragonClipKey[] Keys;
+    }
+
+    public class DragonAnimationEditor : MonoBehaviour
+    {
+        private static readonly Dictionary<string, DragonClipKey[]> Overrides = new Dictionary<string, DragonClipKey[]>(StringComparer.Ordinal);
+        private static readonly Dictionary<string, DragonClipKey[]> LastCombatClips = new Dictionary<string, DragonClipKey[]>(StringComparer.Ordinal);
+        private static readonly Dictionary<string, string> LastCombatSources = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        // Called only by the real combat runtime, AFTER it has selected the live clip.
+        // This is passive instrumentation: it never changes the attack, damage or timing.
+        public static void RecordCombatClip(string clip, DragonClipKey[] keys, string source)
+        {
+            if (keys == null || keys.Length < 2 || FindSkill(clip) == null) return;
+            LastCombatClips[clip] = Clone(keys);
+            LastCombatSources[clip] = source;
+        }
+        public static void RecordDriverClip(string clip, DragonClipKey[] keys)
+        {
+            if (keys == null || keys.Length < 2 || FindSkill(clip) == null) return;
+            string source;
+            if (!LastCombatSources.TryGetValue(clip, out source)) source = "Runtime driver animation";
+            RecordCombatClip(clip, keys, source);
+        }
+
+        // Warrior bloodline ONLY. These IDs reference animation CLIPS, not separate gameplay skills.
+        // Multiple entries for a named skill expose its normal, ascended and follow-up phases.
+        private sealed class SkillAnimation
+        {
+            public readonly string Id, Group, Skill, Phase;
+            public SkillAnimation(string id, string group, string skill, string phase)
+            { Id = id; Group = group; Skill = skill; Phase = phase; }
+            public string Display { get { return Skill + (string.IsNullOrEmpty(Phase) ? "" : " - " + Phase); } }
+        }
+        private static readonly SkillAnimation[] WarriorAnimations = {
+            new SkillAnimation("warrior_heavy", "WARRIOR", "Heavy Slash", "Normal swing"),
+            new SkillAnimation("warrior_impact_wave", "WARRIOR", "Impact Wave", "Normal / Ascended cast"),
+            new SkillAnimation("warrior_punch", "WARRIOR", "Impact Punch", "Attack motion"),
+            new SkillAnimation("sm_slash_a", "SWORD MASTER", "Moonlight Splitter", "Swing A"),
+            new SkillAnimation("sm_slash_b", "SWORD MASTER", "Moonlight Splitter", "Swing B"),
+            new SkillAnimation("sm_moon_finisher", "SWORD MASTER", "Moonlight Splitter", "Ascended finisher"),
+            new SkillAnimation("sm_crescent", "SWORD MASTER", "Crescent Cleave", "Normal"),
+            new SkillAnimation("sm_crescent_asc", "SWORD MASTER", "Crescent Cleave", "Ascended first swing"),
+            new SkillAnimation("sm_crescent_asc2", "SWORD MASTER", "Crescent Cleave", "Ascended follow-up"),
+            new SkillAnimation("sm_blade_storm", "SWORD MASTER", "Blade Storm", "Draw / cuts"),
+            new SkillAnimation("sm_eclipse", "SWORD MASTER", "Eclipse", "Spin"),
+            new SkillAnimation("sm_halfmoon", "SWORD MASTER", "Halfmoon Slash", "Primary swing"),
+            new SkillAnimation("sm_halfmoon_stance", "SWORD MASTER", "Halfmoon Slash", "Ascended held stance"),
+            new SkillAnimation("sm_guidance", "SWORD MASTER", "Knight's Guidance", "Buff animation"),
+            new SkillAnimation("merc_heavy_asc", "MERCENARY", "Heavy Slash", "Ascended swing"),
+            new SkillAnimation("merc_stomp", "MERCENARY", "Stomp", "Stomp / impact"),
+            new SkillAnimation("olympic_hero_brutal", "MERCENARY", "Bonecrusher", "Jump / slam"),
+            new SkillAnimation("merc_homerun", "MERCENARY", "Circle Swing", "Crow hop + spin"),
+            new SkillAnimation("merc_homerun_cw", "MERCENARY", "Circle Swing", "Ascended counter spin"),
+            new SkillAnimation("merc_seismic", "MERCENARY", "Seismic Guillotine", "Attack motion"),
+            new SkillAnimation("merc_bomb", "MERCENARY", "Punishing Bomb", "Bat swing"),
+            new SkillAnimation("merc_whirlwind_editor", "MERCENARY", "Whirlwind", "Full spinning animation"),
+            new SkillAnimation("merc_roar", "MERCENARY", "Battlecry / Unchained Fury", "Roar"),
+            new SkillAnimation("merc_fury_accent", "MERCENARY", "Unchained Fury", "Fury accent")
+        };
+        private static SkillAnimation FindSkill(string id)
+        {
+            for (int i = 0; i < WarriorAnimations.Length; i++)
+                if (WarriorAnimations[i].Id == id) return WarriorAnimations[i];
+            return null;
+        }
+        private static string Friendly(string id)
+        {
+            SkillAnimation a = FindSkill(id);
+            return a == null ? id : a.Display;
+        }
+        private static readonly string[] BoneNames = { "Hips", "Spine", "Chest", "Head", "Right upper arm", "Right forearm", "Right hand", "Left upper arm", "Left forearm", "Left hand" };
+        private static readonly string[] Categories = { "Body", "Arm bones", "Hands & elbows", "Weapon & legs" };
+        private ConfigEntry<bool> _combatEnabled;
+        private ConfigEntry<KeyCode> _hotkey;
+        private readonly List<DragonClipKey> _work = new List<DragonClipKey>();
+        private readonly Stack<string> _undo = new Stack<string>();
+        private DragonClipKey[] _previewKeys;
+        private DragonClipKey[] _sessionBaseKeys;
+        private string[] _names = new string[0];
+        private string _clip = "";
+        private string _pendingClip;
+        private string _filter = "";
+        private readonly Dictionary<string, string> _numericDrafts = new Dictionary<string, string>();
+        private int _numberIndex;
+        private bool _autoPreview = true;
+        private string _message = "Choose a Warrior skill. Preview your equipped character on the left.";
+        private string _sourceTag = "Built-in clip (not yet verified against a live cast)";
+        private int _keyIndex, _tab;
+        private float _time = -0.5f, _speed = 1f;
+        private bool _open, _playing, _previewing, _dirty;
+        private bool _wasCursorVisible;
+        private CursorLockMode _wasCursorLock;
+        private Rect _rect = new Rect(0f, 0f, 1280f, 720f);
+        private Vector2 _clipScroll, _editorScroll;
+        private DragonSkillClipDriver _driver;
+        private GameObject _previewRig, _previewAvatar, _previewCameraObject, _previewLightObject;
+        private Camera _portraitCamera;
+        private RenderTexture _portrait;
+        private float _portraitYaw = 0f;
+        private float _portraitDistance = 4.6f;
+        private float _portraitHeight = 1.2f;
+        private const int PortraitLayer = 30;
+
+        private static string Folder { get { return Path.Combine(Paths.ConfigPath, "ImmortalHeroesAnimationPresets"); } }
+        private static string ClipPath(string clip) { return Path.Combine(Folder, clip + ".json"); }
+
+        private void Awake()
+        {
+            _hotkey = DragonCombatPlugin.Instance.Config.Bind("Animation Editor", "ToggleKey", KeyCode.F9, "Open the in-game animation editor.");
+            _combatEnabled = DragonCombatPlugin.Instance.Config.Bind("Animation Editor", "EnableSavedOverridesInCombat", false, "Opt-in only. Replace skills' normal visuals with your saved animation presets, never their damage logic.");
+            List<string> available = new List<string>();
+            for (int i = 0; i < WarriorAnimations.Length; i++)
+                if (DragonCombat.EditorBaseClip(WarriorAnimations[i].Id) != null)
+                    available.Add(WarriorAnimations[i].Id);
+            _names = available.ToArray();
+            if (_combatEnabled.Value) ReloadOverrides();
+            DragonCombatPlugin.Instance.LogInfo("Immortal Heroes Animation Editor ready (F9). Saved combat overrides: " + _combatEnabled.Value);
+        }
+
+        public static DragonClipKey[] Clone(DragonClipKey[] keys)
+        {
+            if (keys == null) return null;
+            DragonClipKey[] result = new DragonClipKey[keys.Length];
+            for (int i = 0; i < keys.Length; i++)
+            {
+                DragonClipKey a = keys[i];
+                DragonClipKey b = a.Copy(a.T);
+                b.VA = a.VA; b.VL = a.VL; b.VR = a.VR; b.VF = a.VF;
+                b.NoAim = a.NoAim; b.NoPlant = a.NoPlant; b.QL = a.QL; b.NoTrack = a.NoTrack;
+                b.BowTrig = a.BowTrig; b.BowBool = a.BowBool; b.ConstSpeed = a.ConstSpeed;
+                result[i] = b;
+            }
+            return result;
+        }
+
+        public static DragonClipKey[] ExplicitCombatOverride(string clip)
+        {
+            DragonCombatPlugin plugin = DragonCombatPlugin.Instance;
+            if (plugin == null) return null;
+            DragonAnimationEditor editor = plugin.GetComponent<DragonAnimationEditor>();
+            if (editor == null || editor._combatEnabled == null || !editor._combatEnabled.Value) return null;
+            DragonClipKey[] keys;
+            return Overrides.TryGetValue(clip, out keys) ? Clone(keys) : null;
+        }
+
+        private static bool Valid(DragonAnimationRecord data, string clip)
+        {
+            if (data == null || data.Clip != clip || data.Keys == null || data.Keys.Length < 2 || data.Keys.Length > 128) return false;
+            float last = float.NegativeInfinity;
+            for (int i = 0; i < data.Keys.Length; i++)
+            {
+                DragonClipKey key = data.Keys[i];
+                if (key == null || key.B == null || key.B.Length != 10 || key.L == null || key.L.Length != 8 ||
+                    float.IsNaN(key.T) || float.IsInfinity(key.T) || key.T <= last || key.T < -20f || key.T > 60f) return false;
+                last = key.T;
+            }
+            return true;
+        }
+
+        private static DragonClipKey[] ReadPreset(string clip)
+        {
+            try
+            {
+                if (!File.Exists(ClipPath(clip))) return null;
+                DragonAnimationRecord data = JsonUtility.FromJson<DragonAnimationRecord>(File.ReadAllText(ClipPath(clip)));
+                return Valid(data, clip) ? data.Keys : null;
+            }
+            catch (Exception e)
+            {
+                DragonCombatPlugin.Instance.LogWarning("Animation preset load failed for " + clip + ": " + e.Message);
+                return null;
+            }
+        }
+
+        private void ReloadOverrides()
+        {
+            Overrides.Clear();
+            for (int i = 0; i < _names.Length; i++)
+            {
+                DragonClipKey[] keys = ReadPreset(_names[i]);
+                if (keys != null) Overrides[_names[i]] = keys;
+            }
+        }
+
+        private string Snapshot() { return JsonUtility.ToJson(new DragonAnimationRecord { Clip = _clip, Keys = _work.ToArray() }); }
+        private void Restore(string json)
+        {
+            DragonAnimationRecord data = JsonUtility.FromJson<DragonAnimationRecord>(json);
+            if (!Valid(data, _clip)) { _message = "Undo failed: invalid saved state"; return; }
+            _numericDrafts.Clear();
+            _work.Clear(); _work.AddRange(data.Keys);
+            _keyIndex = Mathf.Clamp(_keyIndex, 0, _work.Count - 1);
+            _dirty = true;
+            RefreshPreview();
+        }
+
+        private void Select(string clip)
+        {
+            if (_dirty && _clip.Length > 0 && _clip != clip)
+            {
+                _pendingClip = clip;
+                _message = "UNSAVED pose edits! Save, or click DISCARD & SWITCH to lose them.";
+                return;
+            }
+            _pendingClip = null;
+            StopPreview(true);
+            _autoPreview = true;
+            _clip = clip;
+            _numericDrafts.Clear();
+            _undo.Clear();
+            _work.Clear();
+            DragonClipKey[] saved = ReadPreset(clip);
+            DragonClipKey[] live;
+            bool hasLive = LastCombatClips.TryGetValue(clip, out live);
+            DragonClipKey[] baseKeys = saved ?? (hasLive ? live :
+                clip == "merc_whirlwind_editor" ? null : DragonCombat.EditorBaseClip(clip));
+            _sessionBaseKeys = Clone(baseKeys);
+            if (baseKeys != null) _work.AddRange(Clone(baseKeys));
+            _sourceTag = saved != null ? "YOUR SAVED JSON" : hasLive ? "LAST REAL CAST: " + LastCombatSources[clip] : "BUILT-IN FALLBACK (cast skill once, then load real cast)";
+            _keyIndex = Mathf.Clamp(_work.Count / 2, 0, Mathf.Max(0, _work.Count - 1));
+            _time = _work.Count > 0 ? _work[_keyIndex].T : 0f;
+            _dirty = false;
+            _message = saved != null ? "Loaded your saved JSON. Use LOAD LAST REAL CAST to compare with gameplay." :
+                hasLive ? "Loaded exactly the last keyframes used by combat." :
+                "No live cast recorded yet. Close F9, use this skill once, then reopen F9 and click LOAD LAST REAL CAST.";
+            RefreshPreview();
+        }
+
+        private void RefreshPreview()
+        {
+            _previewKeys = Clone(_work.ToArray());
+            if (_previewing && _driver != null && _driver.EditorPreviewActive) _driver.EditorSample(_previewKeys, _time);
+            else if (_open && _autoPreview && _clip.Length > 0) StartPreview();
+        }
+
+        private static void SetPortraitLayer(Transform root)
+        {
+            if (root == null) return;
+            root.gameObject.layer = PortraitLayer;
+            for (int i = 0; i < root.childCount; i++) SetPortraitLayer(root.GetChild(i));
+        }
+
+        private void DestroyPortrait()
+        {
+            if (_portraitCamera != null) _portraitCamera.targetTexture = null;
+            _portraitCamera = null;
+            if (_previewCameraObject != null) Destroy(_previewCameraObject);
+            if (_previewLightObject != null) Destroy(_previewLightObject);
+            if (_previewRig != null) Destroy(_previewRig);
+            if (_portrait != null) { _portrait.Release(); Destroy(_portrait); }
+            _previewCameraObject = null; _previewLightObject = null;
+            _previewRig = null; _previewAvatar = null; _portrait = null;
+        }
+
+        private bool BuildPortrait(Player player)
+        {
+            DestroyPortrait();
+            if (player == null) { _message = "Enter a world first to copy your character."; return false; }
+            Transform original = DragonCombat.EditorBodyVisual(player);
+            if (original == null) { _message = "Couldn't find your character model."; return false; }
+            try
+            {
+                _previewRig = new GameObject("IH EDITOR ONLY - PREVIEW RIG");
+                _previewRig.transform.position = player.transform.position + new Vector3(0f, -2500f, 0f);
+                _previewAvatar = Instantiate(original.gameObject);
+                _previewAvatar.name = "IH PREVIEW - equipped visual snapshot";
+                _previewAvatar.transform.SetParent(_previewRig.transform, false);
+                // Clone is strictly visual. Prevent duplicated equipment/gameplay scripts,
+                // hitboxes, network state, particles and player logic from running.
+                foreach (MonoBehaviour b in _previewAvatar.GetComponentsInChildren<MonoBehaviour>(true))
+                    if (b != null) b.enabled = false;
+                foreach (Collider c in _previewAvatar.GetComponentsInChildren<Collider>(true))
+                    if (c != null) c.enabled = false;
+                foreach (Rigidbody rb in _previewAvatar.GetComponentsInChildren<Rigidbody>(true))
+                    if (rb != null) { rb.isKinematic = true; rb.detectCollisions = false; }
+                foreach (ParticleSystem ps in _previewAvatar.GetComponentsInChildren<ParticleSystem>(true))
+                    if (ps != null) ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                SetPortraitLayer(_previewRig.transform);
+                Animator animator = _previewAvatar.GetComponentInChildren<Animator>(true);
+                if (animator == null || !animator.isHuman)
+                { _message = "Equipped visual clone has no humanoid Animator. Preview unavailable."; DestroyPortrait(); return false; }
+                animator.enabled = true;
+                animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+                animator.applyRootMotion = false;
+                foreach (SkinnedMeshRenderer sk in _previewAvatar.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+                    if (sk != null) sk.updateWhenOffscreen = true;
+
+                _portrait = new RenderTexture(672, 960, 16, RenderTextureFormat.ARGB32);
+                _portrait.name = "IH animation editor isolated portrait";
+                _portrait.Create();
+                _previewCameraObject = new GameObject("IH EDITOR ONLY - CAMERA");
+                _portraitCamera = _previewCameraObject.AddComponent<Camera>();
+                _portraitCamera.targetTexture = _portrait;
+                _portraitCamera.cullingMask = 1 << PortraitLayer;
+                _portraitCamera.clearFlags = CameraClearFlags.SolidColor;
+                _portraitCamera.backgroundColor = new Color(0.075f, 0.085f, 0.11f, 1f);
+                _portraitCamera.fieldOfView = 32f;
+                _portraitCamera.nearClipPlane = 0.05f;
+                _portraitCamera.farClipPlane = 40f;
+                _portraitCamera.depth = -20f;
+                _previewLightObject = new GameObject("IH EDITOR ONLY - LIGHT");
+                Light lamp = _previewLightObject.AddComponent<Light>();
+                lamp.type = LightType.Directional;
+                lamp.color = new Color(1f, 0.96f, 0.9f);
+                lamp.intensity = 1.7f;
+                lamp.cullingMask = 1 << PortraitLayer;
+                lamp.transform.rotation = Quaternion.Euler(45f, -40f, 0f);
+                PointPortraitCamera();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _message = "Character mirror could not be created: " + ex.Message;
+                DestroyPortrait();
+                return false;
+            }
+        }
+
+        private void PointPortraitCamera()
+        {
+            if (_portraitCamera == null || _previewRig == null) return;
+            Vector3 center = _previewRig.transform.position + new Vector3(0f, _portraitHeight, 0f);
+            Vector3 offset = Quaternion.Euler(0f, _portraitYaw, 0f) * new Vector3(0f, 0f, _portraitDistance);
+            _portraitCamera.transform.position = center + offset;
+            _portraitCamera.transform.LookAt(center);
+        }
+
+        private void LoadLastCast()
+        {
+            DragonClipKey[] actual;
+            if (!LastCombatClips.TryGetValue(_clip, out actual))
+            {
+                _message = "No REAL CAST recorded. Close F9, cast the selected skill, then reopen F9.";
+                return;
+            }
+            if (_dirty) _undo.Push(Snapshot());
+            _work.Clear(); _work.AddRange(Clone(actual));
+            _sessionBaseKeys = Clone(actual);
+            _numericDrafts.Clear();
+            _keyIndex = Mathf.Clamp(_work.Count / 2, 0, _work.Count - 1);
+            _time = _work[_keyIndex].T;
+            _playing = false;
+            _dirty = true; // requires explicit save if user wants to keep capture as preset
+            _sourceTag = "LAST REAL CAST: " + LastCombatSources[_clip];
+            _message = "Real combat keyframes loaded. Review the full timeline, then SAVE if wanted.";
+            StopPreview(true);
+            _autoPreview = true;
+            RefreshPreview();
+        }
+
+        private void StartPreview()
+        {
+            Player player = Player.m_localPlayer;
+            if (player == null || _previewKeys == null || _previewKeys.Length < 2)
+            {
+                _message = "Enter a world and choose a valid clip before previewing.";
+                return;
+            }
+            if (_previewAvatar == null && !BuildPortrait(player)) return;
+            if (_previewAvatar == null) return;
+            DragonSkillClipDriver existing = _previewAvatar.GetComponent<DragonSkillClipDriver>();
+            if (existing == null) existing = _previewAvatar.AddComponent<DragonSkillClipDriver>();
+            _driver = existing;
+            _driver.BeginEditor(_previewKeys, _previewAvatar.transform, _clip);
+            _driver.EditorSample(_previewKeys, _time);
+            _previewing = true;
+            _message = "MIRROR ON. Edit a slider or number and look at the character in the MIDDLE column.";
+        }
+
+        private void StopPreview(bool keepDriver = false)
+        {
+            _playing = false;
+            _previewing = false;
+            if (_driver != null && _driver.EditorPreviewActive) _driver.EndEditor(!keepDriver);
+            _driver = null;
+            _autoPreview = false;
+        }
+
+        private void Toggle()
+        {
+            _open = !_open;
+            if (_open)
+            {
+                _autoPreview = true;
+                _wasCursorVisible = Cursor.visible;
+                _wasCursorLock = Cursor.lockState;
+                Cursor.visible = true;
+                Cursor.lockState = CursorLockMode.None;
+                DragonCombat.SetUiInputBlocked(true);
+                if (_work.Count == 0 && _names.Length > 0) Select(_names[0]);
+                else if (_work.Count > 0) RefreshPreview();
+                _rect = new Rect(0f, 0f, Screen.width, Screen.height);
+            }
+            else
+            {
+                StopPreview();
+                DestroyPortrait();
+                DragonCombat.SetUiInputBlocked(false);
+                Cursor.visible = _wasCursorVisible;
+                Cursor.lockState = _wasCursorLock;
+            }
+        }
+
+        private void Update()
+        {
+            if (_hotkey != null && Input.GetKeyDown(_hotkey.Value)) Toggle();
+            if (!_open) return;
+            if (Input.GetKeyDown(KeyCode.Escape)) { Toggle(); return; }
+            if (_playing && _work.Count > 1)
+            {
+                _time += Time.unscaledDeltaTime * _speed;
+                if (_time > _work[_work.Count - 1].T) _time = _work[0].T;
+            }
+            if (_previewing)
+            {
+                if (_driver == null || !_driver.EditorPreviewActive) { _previewing = false; _playing = false; _message = "Skill animation interrupted preview. Click Preview again."; }
+                else _driver.EditorSample(_previewKeys, _time);
+            }
+        }
+
+        private void OnDestroy() { StopPreview(); DestroyPortrait(); if (_open) { DragonCombat.SetUiInputBlocked(false); Cursor.visible = _wasCursorVisible; Cursor.lockState = _wasCursorLock; } }
+
+        private void Save()
+        {
+            if (_work.Count < 2 || string.IsNullOrEmpty(_clip)) return;
+            DragonAnimationRecord data = new DragonAnimationRecord { Clip = _clip, Keys = Clone(_work.ToArray()) };
+            if (!Valid(data, _clip)) { _message = "Cannot save: keyframe times must be strictly increasing."; return; }
+            try
+            {
+                Directory.CreateDirectory(Folder);
+                string path = ClipPath(_clip);
+                // Existing presets are backed up; built-in clip code is never overwritten.
+                if (File.Exists(path)) File.Copy(path, path + ".bak", true);
+                File.WriteAllText(path, JsonUtility.ToJson(data, true));
+                if (_combatEnabled.Value) Overrides[_clip] = Clone(data.Keys);
+                _dirty = false;
+                _message = "Saved: " + _clip + ".json (combat " + (_combatEnabled.Value ? "ON" : "OFF") + ")";
+            }
+            catch (Exception e) { _message = "Save failed: " + e.Message; }
+        }
+
+        private void ResetClip()
+        {
+            DragonClipKey[] baseKeys = _sessionBaseKeys;
+            if (baseKeys == null) return;
+            _undo.Push(Snapshot());
+            _numericDrafts.Clear();
+            _work.Clear(); _work.AddRange(baseKeys);
+            _keyIndex = Mathf.Clamp(_keyIndex, 0, _work.Count - 1);
+            _time = _work[_keyIndex].T;
+            _dirty = true;
+            RefreshPreview();
+            _message = "Restored originally loaded frames in editor (click SAVE CHANGES to keep).";
+        }
+
+        private void InsertKey()
+        {
+            if (_work.Count >= 128 || _keyIndex >= _work.Count - 1) return;
+            float a = _work[_keyIndex].T, b = _work[_keyIndex + 1].T;
+            if (b - a < 0.002f) return;
+            _undo.Push(Snapshot());
+            DragonClipKey key = Clone(new DragonClipKey[]{_work[_keyIndex]})[0];
+            key.T = (a + b) / 2f;
+            _numericDrafts.Clear();
+            _work.Insert(_keyIndex + 1, key);
+            _keyIndex++; _time = key.T; _dirty = true;
+            RefreshPreview();
+        }
+
+        private void DeleteKey()
+        {
+            if (_work.Count <= 2) return;
+            _undo.Push(Snapshot());
+            _numericDrafts.Clear();
+            _work.RemoveAt(_keyIndex);
+            _keyIndex = Mathf.Clamp(_keyIndex, 0, _work.Count - 1);
+            _time = _work[_keyIndex].T; _dirty = true;
+            RefreshPreview();
+        }
+
+        private void OnGUI()
+        {
+            if (!_open) return;
+            _rect = new Rect(0f, 0f, Screen.width, Screen.height);
+            GUI.Box(_rect, "");
+            _rect = GUI.Window(987241, _rect, DrawWindow, "IMMORTAL HEROES | WARRIOR ANIMATION STUDIO (F9)");
+        }
+
+        // ---------------------------------------------------------------- v0.25.106 FRIENDLY STUDIO
+        // Drag dots on the mirror (joint handles), live numbers, PREVIEW (whole motion) and APPLY (use in game).
+        private const int HNone = -1, HRHand = 0, HLHand = 1, HRElbow = 2, HWeapon = 3, HHead = 4, HChest = 5, HBody = 6;
+        private static readonly string[] HandleNames = { "Right hand", "Left hand", "Right elbow", "Weapon tip", "Head", "Chest", "Whole body" };
+        private static readonly string[] HandleHelp = {
+            "Drag to move the RIGHT HAND. The arm follows (IK).",
+            "Drag to move the LEFT HAND. (Not used while the two-hand grip is on.)",
+            "Drag to choose where the RIGHT ELBOW points.",
+            "Drag to point the WEAPON.",
+            "Drag left/right to turn the HEAD, up/down to nod.",
+            "Drag left/right to twist the CHEST, up/down to bend.",
+            "Drag left/right to turn the WHOLE BODY, up/down to lean." };
+        private static readonly Color[] HandleColors = {
+            new Color(1f, 0.35f, 0.3f), new Color(0.35f, 0.7f, 1f), new Color(1f, 0.75f, 0.25f), new Color(1f, 1f, 1f),
+            new Color(0.75f, 0.45f, 1f), new Color(0.4f, 1f, 0.5f), new Color(1f, 0.55f, 0.85f) };
+        private int _drag = HNone, _hover = HNone, _selHandle = HNone;
+        private Vector2 _dragLast;
+        private Texture2D _dot;
+        private Rect _portraitDraw;
+        private Vector2[] _handleGui = new Vector2[7];
+        private bool[] _handleOn = new bool[7];
+
+        private Texture2D Dot()
+        {
+            if (_dot != null) return _dot;
+            _dot = new Texture2D(32, 32, TextureFormat.ARGB32, false);
+            for (int y = 0; y < 32; y++)
+                for (int x = 0; x < 32; x++)
+                {
+                    float d = Vector2.Distance(new Vector2(x + 0.5f, y + 0.5f), new Vector2(16f, 16f));
+                    float a = d < 11f ? 1f : d < 15f ? 1f - (d - 11f) / 4f : 0f;
+                    float edge = d > 9f && d < 12f ? 0f : 1f;   // dark ring around a light core
+                    _dot.SetPixel(x, y, new Color(edge, edge, edge, a));
+                }
+            _dot.Apply();
+            return _dot;
+        }
+
+        private Transform PBone(HumanBodyBones b)
+        {
+            if (_previewAvatar == null) return null;
+            Animator an = _previewAvatar.GetComponentInChildren<Animator>();
+            return an != null ? an.GetBoneTransform(b) : null;
+        }
+
+        private Quaternion PFrame() { return _previewAvatar != null ? _previewAvatar.transform.rotation : Quaternion.identity; }
+
+        private Vector3 HandleWorld(int h, out bool ok)
+        {
+            ok = false;
+            Transform t = null;
+            if (h == HRHand) t = PBone(HumanBodyBones.RightHand);
+            else if (h == HLHand) t = PBone(HumanBodyBones.LeftHand);
+            else if (h == HRElbow) t = PBone(HumanBodyBones.RightLowerArm);
+            else if (h == HHead) t = PBone(HumanBodyBones.Head);
+            else if (h == HChest) t = PBone(HumanBodyBones.Chest);
+            else if (h == HBody) t = PBone(HumanBodyBones.Hips);
+            else if (h == HWeapon)
+            {
+                Transform hand = PBone(HumanBodyBones.RightHand), fore = PBone(HumanBodyBones.RightLowerArm);
+                if (hand == null || fore == null) return Vector3.zero;
+                DragonClipKey k = _work.Count > 0 ? _work[_keyIndex] : null;
+                Vector3 dir = (k != null && k.WW > 0.01f && k.WD.sqrMagnitude > 0.0001f) ? PFrame() * k.WD.normalized : (hand.position - fore.position).normalized;
+                ok = true;
+                return hand.position + dir * 0.55f;
+            }
+            if (t == null) return Vector3.zero;
+            ok = true;
+            Vector3 p = t.position;
+            if (h == HHead) p += PFrame() * Vector3.up * 0.12f;
+            return p;
+        }
+
+        // GUI point inside the drawn mirror -> camera ray (the mirror is a RenderTexture drawn ScaleToFit).
+        private bool GuiRay(Vector2 gui, out Ray ray)
+        {
+            ray = new Ray();
+            if (_portraitCamera == null || _portraitDraw.width < 2f) return false;
+            float u = (gui.x - _portraitDraw.x) / _portraitDraw.width;
+            float v = 1f - (gui.y - _portraitDraw.y) / _portraitDraw.height;
+            ray = _portraitCamera.ViewportPointToRay(new Vector3(u, v, 0f));
+            return true;
+        }
+
+        private void UpdateHandleScreen()
+        {
+            for (int h = 0; h < 7; h++)
+            {
+                bool ok;
+                Vector3 w = HandleWorld(h, out ok);
+                _handleOn[h] = false;
+                if (!ok || _portraitCamera == null) continue;
+                Vector3 vp = _portraitCamera.WorldToViewportPoint(w);
+                if (vp.z <= 0f || vp.x < 0f || vp.x > 1f || vp.y < 0f || vp.y > 1f) continue;
+                _handleGui[h] = new Vector2(_portraitDraw.x + vp.x * _portraitDraw.width, _portraitDraw.y + (1f - vp.y) * _portraitDraw.height);
+                _handleOn[h] = true;
+            }
+        }
+
+        private void HandleMouse()
+        {
+            Event e = Event.current;
+            if (e == null || _work.Count < 2 || !_previewing) return;
+            Vector2 m = e.mousePosition;
+            _hover = HNone;
+            float best = 14f;
+            for (int h = 0; h < 7; h++)
+            {
+                if (!_handleOn[h]) continue;
+                float d = Vector2.Distance(m, _handleGui[h]);
+                if (d < best) { best = d; _hover = h; }
+            }
+            if (e.type == EventType.MouseDown && e.button == 0 && _hover != HNone)
+            {
+                _drag = _hover; _selHandle = _hover; _dragLast = m;
+                _undo.Push(Snapshot());
+                _playing = false; _time = _work[_keyIndex].T;
+                e.Use();
+            }
+            else if (e.type == EventType.MouseDrag && _drag != HNone)
+            {
+                DragTo(_drag, m, m - _dragLast);
+                _dragLast = m;
+                _dirty = true;
+                RefreshPreview();
+                e.Use();
+            }
+            else if (e.type == EventType.MouseUp && _drag != HNone)
+            {
+                _drag = HNone;
+                _message = "Moved " + HandleNames[_selHandle] + " on frame " + (_keyIndex + 1) + ". PREVIEW to watch it, APPLY to use it in the game.";
+                e.Use();
+            }
+        }
+
+        private void DragTo(int h, Vector2 mouse, Vector2 delta)
+        {
+            DragonClipKey k = _work[_keyIndex];
+            Quaternion inv = Quaternion.Inverse(PFrame());
+            if (h == HHead || h == HChest || h == HBody)
+            {
+                // anatomy limits: head +-70 turn / +-45 nod, chest +-45, whole body +-180 turn / +-60 lean
+                int b = h == HHead ? 3 : 2;
+                if (h == HBody)
+                {
+                    k.R = new Vector3(Mathf.Clamp(k.R.x + delta.y * 0.4f, -60f, 60f), Mathf.Repeat(k.R.y + delta.x * 0.5f + 180f, 360f) - 180f, k.R.z);
+                    return;
+                }
+                float yawLim = h == HHead ? 70f : 45f, pitchLim = 45f;
+                Vector3 v = k.B[b];
+                k.B[b] = new Vector3(Mathf.Clamp(v.x + delta.y * 0.4f, -pitchLim, pitchLim), Mathf.Clamp(v.y + delta.x * 0.4f, -yawLim, yawLim), v.z);
+                return;
+            }
+            bool ok;
+            Vector3 cur = HandleWorld(h, out ok);
+            Ray ray;
+            if (!ok || !GuiRay(mouse, out ray)) return;
+            // move on the plane that faces the camera through the handle (what you see is what you get)
+            Plane plane = new Plane(-_portraitCamera.transform.forward, cur);
+            float enter;
+            if (!plane.Raycast(ray, out enter)) return;
+            Vector3 p = ray.GetPoint(enter);
+            if (h == HRHand || h == HLHand || h == HRElbow)
+            {
+                bool right = h != HLHand;
+                Transform ua = PBone(right ? HumanBodyBones.RightUpperArm : HumanBodyBones.LeftUpperArm);
+                Transform la = PBone(right ? HumanBodyBones.RightLowerArm : HumanBodyBones.LeftLowerArm);
+                Transform hd = PBone(right ? HumanBodyBones.RightHand : HumanBodyBones.LeftHand);
+                if (ua == null || la == null || hd == null) return;
+                float len = (la.position - ua.position).magnitude + (hd.position - la.position).magnitude;
+                Vector3 local = inv * (p - ua.position);
+                if (local.sqrMagnitude < 0.0001f) return;
+                if (h == HRElbow) { k.EP = local.normalized; k.EW = 1f; k.EM = true; return; }
+                // reach clamp 0.25..0.95: the arm never locks straight or folds into the shoulder
+                float reach = Mathf.Clamp(local.magnitude / Mathf.Max(0.05f, len), 0.25f, 0.95f);
+                if (right) { k.HD = local.normalized; k.HR = reach; k.HW = 1f; }
+                else { k.LD = local.normalized; k.LR = reach; k.LW = 1f; if (k.TW > 0.01f) _message = "Left hand is held by the TWO-HAND GRIP on this frame. Set grip weight 0 (Weapon & Legs) to move it freely."; }
+                return;
+            }
+            if (h == HWeapon)
+            {
+                Transform hand = PBone(HumanBodyBones.RightHand);
+                if (hand == null) return;
+                Vector3 d = inv * (p - hand.position);
+                if (d.sqrMagnitude > 0.0001f) { k.WD = d.normalized; k.WW = 1f; }
+            }
+        }
+
+        private void DrawHandles()
+        {
+            if (Event.current.type != EventType.Repaint || !_previewing) return;
+            Texture2D dot = Dot();
+            for (int h = 0; h < 7; h++)
+            {
+                if (!_handleOn[h]) continue;
+                float size = (h == _hover || h == _drag) ? 26f : 18f;
+                Color c = HandleColors[h];
+                GUI.color = (h == _selHandle) ? c : new Color(c.r, c.g, c.b, 0.85f);
+                GUI.DrawTexture(new Rect(_handleGui[h].x - size / 2f, _handleGui[h].y - size / 2f, size, size), dot);
+            }
+            GUI.color = Color.white;
+            if (_hover != HNone && _drag == HNone)
+            {
+                Vector2 p = _handleGui[_hover];
+                GUI.Box(new Rect(p.x + 14f, p.y - 10f, 210f, 40f), HandleNames[_hover] + "\n" + HandleHelp[_hover]);
+            }
+        }
+
+        // Live numbers of the selected joint, in plain words.
+        private void DrawJointReadout(DragonClipKey k)
+        {
+            if (_selHandle == HNone) { GUILayout.Label("Tip: click and drag a coloured DOT on your character to pose it."); return; }
+            string s = HandleNames[_selHandle] + ":  ";
+            if (_selHandle == HRHand) s += Dir(k.HD) + "   reach " + k.HR.ToString("0.00");
+            else if (_selHandle == HLHand) s += Dir(k.LD) + "   reach " + k.LR.ToString("0.00");
+            else if (_selHandle == HRElbow) s += "points " + Dir(k.EP);
+            else if (_selHandle == HWeapon) s += "points " + Dir(k.WD);
+            else if (_selHandle == HHead) s += "nod " + k.B[3].x.ToString("0") + "   turn " + k.B[3].y.ToString("0");
+            else if (_selHandle == HChest) s += "bend " + k.B[2].x.ToString("0") + "   twist " + k.B[2].y.ToString("0");
+            else s += "lean " + k.R.x.ToString("0") + "   turn " + k.R.y.ToString("0");
+            GUILayout.Label(s);
+        }
+
+        private static string Dir(Vector3 d)
+        {
+            return "right " + d.x.ToString("+0.00;-0.00") + "  up " + d.y.ToString("+0.00;-0.00") + "  front " + d.z.ToString("+0.00;-0.00");
+        }
+
+        private void PreviewWhole()
+        {
+            if (_work.Count < 2) return;
+            if (!_previewing) { _autoPreview = true; StartPreview(); }
+            _time = _work[0].T;
+            _playing = true;
+            _message = "PREVIEW: playing the whole motion (loops). Click STOP to pose again.";
+        }
+
+        private void Apply()
+        {
+            Save();
+            if (!File.Exists(ClipPath(_clip))) return;   // save failed (message already set)
+            if (!_combatEnabled.Value) { _combatEnabled.Value = true; DragonCombatPlugin.Instance.Config.Save(); ReloadOverrides(); }
+            Overrides[_clip] = Clone(_work.ToArray());
+            _message = "APPLIED! Your character now uses this animation in the game. REVERT puts the original back.";
+        }
+
+        private void Revert()
+        {
+            try
+            {
+                string path = ClipPath(_clip);
+                if (File.Exists(path)) { File.Copy(path, path + ".bak", true); File.Delete(path); }
+            }
+            catch (Exception e) { _message = "Revert failed: " + e.Message; return; }
+            Overrides.Remove(_clip);
+            _dirty = false;
+            string c = _clip; _clip = ""; Select(c);
+            _message = "Original animation restored for " + Friendly(c) + " (your version was kept as .json.bak).";
+        }
+
+        private void DrawWindow(int window)
+        {
+            GUILayout.BeginVertical();
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("HOW TO:  1) pick a skill on the left   2) pick a FRAME   3) drag the coloured DOTS on your character   4) PREVIEW   5) APPLY");
+            GUILayout.FlexibleSpace();
+            if (GUILayout.Button("CLOSE (F9)", GUILayout.Width(110), GUILayout.Height(26))) Toggle();
+            GUILayout.EndHorizontal();
+            GUILayout.Space(4f);
+            GUILayout.BeginHorizontal();
+
+            // LEFT: skills
+            GUILayout.BeginVertical(GUI.skin.box, GUILayout.Width(Mathf.Max(200f, Screen.width * 0.17f)));
+            GUILayout.Label("1) CHOOSE A SKILL");
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("Search", GUILayout.Width(50));
+            _filter = GUILayout.TextField(_filter);
+            GUILayout.EndHorizontal();
+            _clipScroll = GUILayout.BeginScrollView(_clipScroll, GUILayout.ExpandHeight(true));
+            string lastGroup = "";
+            for (int i = 0; i < _names.Length; i++)
+            {
+                string name = _names[i];
+                SkillAnimation meta = FindSkill(name);
+                if (meta == null) continue;
+                if (!string.IsNullOrEmpty(_filter) && (meta.Display + " " + meta.Group).IndexOf(_filter, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                if (meta.Group != lastGroup) { GUILayout.Space(6f); GUILayout.Label("-- " + meta.Group + " --"); lastGroup = meta.Group; }
+                bool applied = Overrides.ContainsKey(name) && _combatEnabled.Value;
+                if (GUILayout.Button((name == _clip ? "> " : "") + meta.Display + (applied ? "  [APPLIED]" : ""), GUILayout.MinHeight(30f))) Select(name);
+            }
+            GUILayout.EndScrollView();
+            if (!string.IsNullOrEmpty(_pendingClip) && GUILayout.Button("DISCARD CHANGES & SWITCH", GUILayout.Height(28f)))
+            { string chosen = _pendingClip; _dirty = false; Select(chosen); }
+            GUILayout.EndVertical();
+
+            // MIDDLE: character + dots
+            GUILayout.BeginVertical(GUI.skin.box, GUILayout.Width(Mathf.Max(280f, Screen.width * 0.36f)));
+            GUILayout.Label("3) YOUR CHARACTER - drag the coloured dots");
+            Rect area = GUILayoutUtility.GetRect(200f, Mathf.Max(250f, Screen.height - 270f), GUILayout.ExpandWidth(true), GUILayout.ExpandHeight(true));
+            GUI.Box(area, "");
+            if (_portrait != null && _portrait.IsCreated())
+            {
+                float aspect = (float)_portrait.width / Mathf.Max(1f, _portrait.height);
+                float w = area.width, hgt = area.width / aspect;
+                if (hgt > area.height) { hgt = area.height; w = hgt * aspect; }
+                _portraitDraw = new Rect(area.x + (area.width - w) / 2f, area.y + (area.height - hgt) / 2f, w, hgt);
+                GUI.DrawTexture(_portraitDraw, _portrait, ScaleMode.StretchToFill, false);
+                UpdateHandleScreen();
+                HandleMouse();
+                DrawHandles();
+            }
+            else GUI.Label(new Rect(area.x + 12f, area.y + 15f, area.width - 24f, 85f), "No character shown. Enter a world and click REFRESH LOOK.");
+            GUILayout.BeginHorizontal();
+            for (int h = 0; h < 7; h++)
+            {
+                GUI.color = HandleColors[h];
+                GUILayout.Label("(o) " + HandleNames[h], GUILayout.ExpandWidth(false));
+            }
+            GUI.color = Color.white;
+            GUILayout.EndHorizontal();
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("< TURN", GUILayout.Height(26f))) { _portraitYaw -= 30f; PointPortraitCamera(); }
+            if (GUILayout.Button("FRONT", GUILayout.Height(26f))) { _portraitYaw = 0f; PointPortraitCamera(); }
+            if (GUILayout.Button("SIDE", GUILayout.Height(26f))) { _portraitYaw = 90f; PointPortraitCamera(); }
+            if (GUILayout.Button("TURN >", GUILayout.Height(26f))) { _portraitYaw += 30f; PointPortraitCamera(); }
+            if (GUILayout.Button("REFRESH LOOK", GUILayout.Height(26f)))
+            { StopPreview(true); if (BuildPortrait(Player.m_localPlayer)) { _autoPreview = true; StartPreview(); } }
+            GUILayout.EndHorizontal();
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("Zoom", GUILayout.Width(40f));
+            _portraitDistance = GUILayout.HorizontalSlider(_portraitDistance, 2.1f, 7f);
+            GUILayout.Label("Height", GUILayout.Width(46f));
+            _portraitHeight = GUILayout.HorizontalSlider(_portraitHeight, 0.5f, 1.8f);
+            GUILayout.EndHorizontal();
+            PointPortraitCamera();
+            GUILayout.EndVertical();
+
+            // RIGHT: controls
+            GUILayout.BeginVertical(GUI.skin.box, GUILayout.ExpandWidth(true));
+            GUILayout.Label(Friendly(_clip) + (_dirty ? "   (changed, not applied yet)" : ""));
+            if (_work.Count >= 2)
+            {
+                GUILayout.BeginHorizontal();
+                if (GUILayout.Button(_playing ? "STOP PREVIEW" : "PLAY PREVIEW (whole motion)", GUILayout.Height(36f))) { if (_playing) _playing = false; else PreviewWhole(); }
+                if (GUILayout.Button("APPLY TO GAME", GUILayout.Height(36f))) Apply();
+                GUILayout.EndHorizontal();
+                GUILayout.BeginHorizontal();
+                if (GUILayout.Button("UNDO", GUILayout.Height(26f)) && _undo.Count > 0) Restore(_undo.Pop());
+                if (GUILayout.Button("RESET (this session)", GUILayout.Height(26f))) ResetClip();
+                if (GUILayout.Button("REVERT TO ORIGINAL", GUILayout.Height(26f))) Revert();
+                if (GUILayout.Button("LOAD MY LAST CAST", GUILayout.Height(26f))) LoadLastCast();
+                GUILayout.EndHorizontal();
+                GUILayout.BeginHorizontal();
+                GUILayout.Label("Preview speed", GUILayout.Width(95));
+                _speed = GUILayout.HorizontalSlider(_speed, 0.1f, 2f, GUILayout.Width(120));
+                GUILayout.Label(_speed.ToString("0.0") + "x", GUILayout.Width(40));
+                GUILayout.EndHorizontal();
+
+                GUILayout.Label("2) PICK A FRAME   (Wind-up = before the hit,  HIT = the moment it strikes,  After = follow-through)");
+                GUILayout.BeginHorizontal();
+                for (int i = 0; i < _work.Count; i++)
+                {
+                    float t = _work[i].T;
+                    string tag = t < 0f ? "Wind-up" : Mathf.Approximately(t, 0f) ? "HIT" : "After";
+                    if (GUILayout.Toggle(i == _keyIndex, (i + 1) + " " + tag, GUI.skin.button, GUILayout.MinWidth(60f), GUILayout.Height(28f)) && i != _keyIndex)
+                    { _keyIndex = i; _time = t; _playing = false; _numericDrafts.Clear(); RefreshPreview(); }
+                }
+                GUILayout.EndHorizontal();
+                GUILayout.BeginHorizontal();
+                GUILayout.Label("Scrub", GUILayout.Width(45));
+                float newT = GUILayout.HorizontalSlider(_time, _work[0].T, _work[_work.Count - 1].T);
+                if (!Mathf.Approximately(newT, _time)) { _time = newT; _playing = false; }
+                if (GUILayout.Button("+ ADD FRAME", GUILayout.Width(100))) InsertKey();
+                if (GUILayout.Button("- REMOVE", GUILayout.Width(85))) DeleteKey();
+                GUILayout.EndHorizontal();
+
+                DragonClipKey k = _work[_keyIndex];
+                GUILayout.Space(4f);
+                DrawJointReadout(k);
+                GUILayout.Space(4f);
+                GUILayout.Label("EXACT NUMBERS (optional) - every change shows on the character right away");
+                GUILayout.BeginHorizontal();
+                for (int i = 0; i < Categories.Length; i++) if (GUILayout.Toggle(_tab == i, Categories[i], GUI.skin.button)) _tab = i;
+                GUILayout.EndHorizontal();
+                _editorScroll = GUILayout.BeginScrollView(_editorScroll, GUILayout.ExpandHeight(true));
+                string before = Snapshot();
+                _numberIndex = 0;
+                GUI.changed = false;
+                float minKeyT = _keyIndex > 0 ? _work[_keyIndex - 1].T + 0.01f : -10f;
+                float maxKeyT = _keyIndex + 1 < _work.Count ? _work[_keyIndex + 1].T - 0.01f : 20f;
+                if (maxKeyT >= minKeyT)
+                {
+                    float kt = Scalar("When this frame happens", k.T, minKeyT, maxKeyT);
+                    if (!Mathf.Approximately(kt, k.T)) { k.T = kt; _time = kt; _playing = false; }
+                }
+                k.Lin = GUILayout.Toggle(k.Lin, "Move into this frame at a constant speed (for fast spins)");
+                if (_tab == 0)
+                {
+                    k.R = Vec("Whole body", k.R, -180f, 180f, "lean fwd/back", "turn left/right", "tilt sideways");
+                    k.O = Vec("Whole body position", k.O, -0.8f, 0.8f, "left/right", "down/up", "back/front");
+                    k.Spin = Scalar("Spin around (degrees, + = counter-clockwise)", k.Spin, -720f, 720f);
+                    for (int i = 0; i < 4; i++) k.B[i] = Vec(BoneNames[i], k.B[i], -180f, 180f, "bend", "turn", "tilt");
+                }
+                else if (_tab == 1)
+                {
+                    GUILayout.Label("Bone rotations in degrees. Small steps (5-15) look most natural.");
+                    for (int i = 4; i < 10; i++) k.B[i] = Vec(BoneNames[i], k.B[i], -180f, 180f, "bend", "turn", "tilt");
+                }
+                else if (_tab == 2)
+                {
+                    GUILayout.Label("Same values the RED / BLUE / ORANGE dots change. Strength 0 = not used on this frame.");
+                    k.HD = Vec("Right hand position", k.HD, -1f, 1f, "left/right", "down/up", "back/front");
+                    k.HR = Scalar("Right arm stretch (0.25 bent - 1 straight)", k.HR, 0.25f, 0.999f);
+                    k.HW = Scalar("Right hand strength", k.HW, 0f, 1f);
+                    k.LD = Vec("Left hand position", k.LD, -1f, 1f, "left/right", "down/up", "back/front");
+                    k.LR = Scalar("Left arm stretch (0.25 bent - 1 straight)", k.LR, 0.25f, 0.999f);
+                    k.LW = Scalar("Left hand strength", k.LW, 0f, 1f);
+                    k.EP = Vec("Right elbow points", k.EP, -1f, 1f, "left/right", "down/up", "back/front");
+                    k.EW = Scalar("Elbow strength", k.EW, 0f, 1f);
+                    k.GP = Vec("Two-hand grip: left elbow points", k.GP, -1f, 1f, "left/right", "down/up", "back/front");
+                    k.GW = Scalar("Left elbow strength (grip)", k.GW, 0f, 1f);
+                }
+                else
+                {
+                    k.WD = Vec("Weapon points", k.WD, -1f, 1f, "left/right", "down/up", "back/front");
+                    k.WW = Scalar("Weapon aim strength", k.WW, 0f, 1f);
+                    k.SD = Vec("Off-hand item points", k.SD, -1f, 1f, "left/right", "down/up", "back/front");
+                    k.SW = Scalar("Off-hand item strength", k.SW, 0f, 1f);
+                    k.TW = Scalar("Two-hand grip (0 off - 1 on)", k.TW, 0f, 1f);
+                    k.TG = Scalar("Left hand distance along the handle", k.TG, -0.6f, 0.6f);
+                    k.FLh = Scalar("Left foot lift", k.FLh, 0f, 1f);
+                    k.FRh = Scalar("Right foot lift", k.FRh, 0f, 1f);
+                    for (int i = 0; i < 8; i++) if (i % 4 < 2) k.L[i] = Scalar((i < 4 ? "Left" : "Right") + " foot " + (i % 4 == 0 ? "step fwd/back" : "step out"), k.L[i], -1f, 1f);
+                }
+                GUILayout.EndScrollView();
+                if (GUI.changed && before != Snapshot())
+                {
+                    if (_undo.Count >= 35) { string[] arr = _undo.ToArray(); _undo.Clear(); for (int i = Mathf.Min(33, arr.Length - 1); i >= 0; i--) _undo.Push(arr[i]); }
+                    _undo.Push(before);
+                    _dirty = true;
+                    _playing = false;
+                    _time = _work[_keyIndex].T;
+                    RefreshPreview();
+                }
+            }
+            else GUILayout.Label("This skill has no frames yet. Close F9, use the skill once in the game, reopen F9 and click LOAD MY LAST CAST.");
+            bool next = GUILayout.Toggle(_combatEnabled.Value, " Use my APPLIED animations in the game");
+            if (next != _combatEnabled.Value)
+            {
+                _combatEnabled.Value = next;
+                DragonCombatPlugin.Instance.Config.Save();
+                if (next) ReloadOverrides(); else Overrides.Clear();
+                _message = next ? "Your applied animations are ON in the game." : "Original animations everywhere (your files are kept).";
+            }
+            GUILayout.Label(_message);
+            GUILayout.EndVertical();
+            GUILayout.EndHorizontal();
+            GUILayout.EndVertical();
+        }
+
+        private Vector3 Vec(string label, Vector3 vec, float low, float high, string xn, string yn, string zn)
+        {
+            GUILayout.Label(label);
+            vec.x = Scalar("   " + xn, vec.x, low, high);
+            vec.y = Scalar("   " + yn, vec.y, low, high);
+            vec.z = Scalar("   " + zn, vec.z, low, high);
+            return vec;
+        }
+
+        // Exact numeric input synchronized with sliders, including negatives and decimals.
+        // While focused, keep temporary typing such as "-" and "0." intact.
+        private float ExactBox(string id, float value, float min, float max)
+        {
+            bool wasFocused = GUI.GetNameOfFocusedControl() == id;
+            string draft;
+            if (!wasFocused || !_numericDrafts.TryGetValue(id, out draft))
+                draft = value.ToString("0.######", System.Globalization.CultureInfo.InvariantCulture);
+            GUI.SetNextControlName(id);
+            string input = GUILayout.TextField(draft, GUILayout.Width(90));
+            if (GUI.GetNameOfFocusedControl() == id)
+            {
+                _numericDrafts[id] = input;
+                float typed;
+                if (float.TryParse(input, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out typed) &&
+                    !float.IsNaN(typed) && !float.IsInfinity(typed))
+                {
+                    float accepted = Mathf.Clamp(typed, min, max);
+                    if (!Mathf.Approximately(accepted, value)) { value = accepted; GUI.changed = true; }
+                }
+            }
+            else _numericDrafts.Remove(id);
+            return value;
+        }
+        private float Scalar(string name, float value, float min, float max)
+        {
+            string id = "IHAnim_" + _clip + "_" + _keyIndex + "_" + _tab + "_" + (_numberIndex++);
+            GUILayout.BeginHorizontal();
+            GUILayout.Label(name, GUILayout.Width(220));
+            float slide = GUILayout.HorizontalSlider(value, min, max, GUILayout.MinWidth(85));
+            if (!Mathf.Approximately(slide, value))
+            {
+                value = slide;
+                _numericDrafts[id] = value.ToString("0.######", System.Globalization.CultureInfo.InvariantCulture);
+                GUI.changed = true;
+            }
+            value = ExactBox(id, value, min, max);
+            GUILayout.EndHorizontal();
+            return value;
+        }
+        private Vector3 Vector(string label, Vector3 vec, float low, float high)
+        {
+            GUILayout.Label(label + " | X = tilt, Y = turn, Z = roll (bone axes depend on skeleton)");
+            vec.x = Scalar("   X", vec.x, low, high);
+            vec.y = Scalar("   Y", vec.y, low, high);
+            vec.z = Scalar("   Z", vec.z, low, high);
+            return vec;
+        }
+    }
+
 }
