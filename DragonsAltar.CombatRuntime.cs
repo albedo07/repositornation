@@ -16,7 +16,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.106";
+        public const string ModVersion = "0.25.107";
 
         internal static DragonCombatPlugin Instance;
 
@@ -2313,6 +2313,10 @@ namespace DragonsAltarCombat
         // GW=0 preserves the original v0.25.101 off-hand IK exactly.
         public Vector3 GP;
         public float GW;
+        // v0.25.107 Animation Studio channels (all 0 = no effect, so every built-in clip is unchanged):
+        // left elbow pole, knee poles (L/R) and foot offsets (L/R, body frame metres) for the planted legs.
+        public Vector3 LEP, KPL, KPR, FOL, FOR;
+        public float LEW, KPW, FOW;
         public DragonClipKey Two(float grip) { TW = 1f; TG = grip; return this; }
         // v0.25.23 HAND TARGETS (storyboard poses): the main hand is placed by arm IK at `reach` (0..1 of the arm's
         // length) along a direction from the RIGHT SHOULDER in the body frame (x right, y up, z forward). Rig-axis
@@ -2367,7 +2371,7 @@ namespace DragonsAltarCombat
             for (int i = 0; i < B.Length; i++) k.B[i] = B[i];
             for (int i = 0; i < L.Length; i++) k.L[i] = L[i];
             k.R = R; k.O = O; k.Lin = Lin; k.Spin = Spin;
-            k.WD = WD; k.WW = WW; k.SD = SD; k.SW = SW; k.TW = TW; k.TG = TG; k.GP = GP; k.GW = GW; k.HD = HD; k.HR = HR; k.HW = HW; k.LD = LD; k.LR = LR; k.LW = LW; k.FLh = FLh; k.FRh = FRh; k.EP = EP; k.EW = EW; k.EM = EM; k.TP = TP; k.TPW = TPW; k.TPC = TPC;
+            k.WD = WD; k.WW = WW; k.SD = SD; k.SW = SW; k.TW = TW; k.TG = TG; k.GP = GP; k.GW = GW; k.HD = HD; k.HR = HR; k.HW = HW; k.LD = LD; k.LR = LR; k.LW = LW; k.FLh = FLh; k.FRh = FRh; k.EP = EP; k.EW = EW; k.EM = EM; k.TP = TP; k.TPW = TPW; k.TPC = TPC; k.LEP = LEP; k.LEW = LEW; k.KPL = KPL; k.KPR = KPR; k.KPW = KPW; k.FOL = FOL; k.FOR = FOR; k.FOW = FOW;
             return k;
         }
     }
@@ -2423,6 +2427,8 @@ namespace DragonsAltarCombat
         private bool _highKnee;
         private Vector3 _hd, _ld, _ep, _tp, _gp;
         private float _tpw, _tpc, _gw;
+        private Vector3 _lep, _kpl, _kpr, _fol, _for;
+        private float _lew, _kpw, _fow;
         private float _ew;
         private bool _em;
         // v0.25.15 legs: Unity humanoid muscles (HumanPoseHandler), applied on the animator's real pose.
@@ -2682,6 +2688,14 @@ namespace DragonsAltarCombat
             _sw = Mathf.Lerp(a.SW, b.SW, w);
             _tw = Mathf.Lerp(a.TW, b.TW, w);
             _gw = Mathf.Lerp(a.GW, b.GW, w);
+            _lew = Mathf.Lerp(a.LEW, b.LEW, w);
+            _lep = Vector3.Slerp((a.LEW > 0f ? a.LEP : b.LEP).normalized, (b.LEW > 0f ? b.LEP : a.LEP).normalized, w);
+            _kpw = Mathf.Lerp(a.KPW, b.KPW, w);
+            _kpl = Vector3.Slerp((a.KPW > 0f ? a.KPL : b.KPL).normalized, (b.KPW > 0f ? b.KPL : a.KPL).normalized, w);
+            _kpr = Vector3.Slerp((a.KPW > 0f ? a.KPR : b.KPR).normalized, (b.KPW > 0f ? b.KPR : a.KPR).normalized, w);
+            _fow = Mathf.Lerp(a.FOW, b.FOW, w);
+            _fol = Vector3.Lerp(a.FOW > 0f ? a.FOL : Vector3.zero, b.FOW > 0f ? b.FOL : Vector3.zero, w);
+            _for = Vector3.Lerp(a.FOW > 0f ? a.FOR : Vector3.zero, b.FOW > 0f ? b.FOR : Vector3.zero, w);
             _gp = a.GW > 0f ? a.GP : b.GP;
             _hw = Mathf.Lerp(a.HW, b.HW, w);
             Vector3 ha = a.HW > 0f ? a.HD : b.HD, hb = b.HW > 0f ? b.HD : a.HD;
@@ -3037,6 +3051,7 @@ namespace DragonsAltarCombat
         private Vector3 PoleFor(Vector3 d, bool right)
         {
             Vector3 p = ElbowPole(d, right);
+            if (!right && _lew > 0.01f && _lep.sqrMagnitude > 0.0001f) return Vector3.Slerp(p.normalized, _lep.normalized, Mathf.Clamp01(_lew));   // v0.25.107 Studio left elbow
             if (_ew <= 0.01f || (!right && _em)) return p;
             Vector3 e = _ep; if (!right) e.x = -e.x;
             return Vector3.Slerp(p.normalized, e.normalized, Mathf.Clamp01(_ew));
@@ -3151,6 +3166,8 @@ namespace DragonsAltarCombat
                     // fold DOWN toward the floor, not forward like a standing squat.
                     // Left knee bends UP over the forward-planted foot.
                     Vector3 kneePole = pole;
+                    if (_fow > 0.001f) target += parentRot * baseRot * qy * (f == 0 ? _fol : _for) * Mathf.Clamp01(_fow);   // v0.25.107 Studio foot offset
+                    if (_kpw > 0.001f) { Vector3 kp = f == 0 ? _kpl : _kpr; if (kp.sqrMagnitude > 0.0001f) kneePole = Vector3.Slerp(kneePole.normalized, (parentRot * baseRot * qy * kp).normalized, Mathf.Clamp01(_kpw)); }
                     if (_jsaaLanding && _impactAt >= 0f)
                     {
                         Vector3 localPole = f == 0
@@ -3228,6 +3245,14 @@ namespace DragonsAltarCombat
 
         private GameObject HeldItem(bool right)
         {
+            if (_editorStandalone && _vis == null && _animator != null)
+            {
+                // v0.25.107 Studio clone: VisEquipment stays on the real player root, so find the item under the
+                // hand's attach transform ("RightHand_Attach" / "LeftHand_Attach").
+                Transform hand = _animator.GetBoneTransform(right ? HumanBodyBones.RightHand : HumanBodyBones.LeftHand);
+                Transform found = hand == null ? null : FindAttach(hand);
+                return found != null && found.childCount > 0 ? found.GetChild(0).gameObject : null;
+            }
             if (_vis == null)
             {
                 Component[] cs = GetComponentsInChildren<Component>();
@@ -3239,6 +3264,37 @@ namespace DragonsAltarCombat
             }
             FieldInfo fi = right ? _visRight : _visLeft;
             return fi == null ? null : fi.GetValue(_vis) as GameObject;
+        }
+
+        private static Transform FindAttach(Transform t)
+        {
+            for (int i = 0; i < t.childCount; i++)
+            {
+                Transform c = t.GetChild(i);
+                if (c.name.IndexOf("Attach", StringComparison.OrdinalIgnoreCase) >= 0) return c;
+                Transform deeper = FindAttach(c);
+                if (deeper != null) return deeper;
+            }
+            return null;
+        }
+
+        // v0.25.107 Studio: world position of the held item's tip (false if no item in that hand).
+        public bool EditorItemTip(bool right, out Vector3 tip)
+        {
+            tip = Vector3.zero;
+            try
+            {
+                if (_animator == null) _animator = GetComponentInChildren<Animator>();
+                if (_animator == null) return false;
+                GameObject item = HeldItem(right);
+                Transform hand = _animator.GetBoneTransform(right ? HumanBodyBones.RightHand : HumanBodyBones.LeftHand);
+                if (item == null || hand == null) return false;
+                Vector3 local;
+                if (!ItemTip(item, hand, out local)) return false;
+                tip = hand.TransformPoint(local);
+                return true;
+            }
+            catch (Exception) { return false; }
         }
 
         private static bool ItemTip(GameObject item, Transform hand, out Vector3 tipLocal)
@@ -13356,8 +13412,10 @@ namespace DragonsAltarCombat
             RefreshPreview();
         }
 
+        private int _editFrame = -1;
         private void RefreshPreview()
         {
+            _editFrame = Time.frameCount;   // the clone shows this edit only after the next LateUpdate
             _previewKeys = Clone(_work.ToArray());
             if (_previewing && _driver != null && _driver.EditorPreviewActive) _driver.EditorSample(_previewKeys, _time);
             else if (_open && _autoPreview && _clip.Length > 0) StartPreview();
@@ -13616,27 +13674,58 @@ namespace DragonsAltarCombat
             _rect = GUI.Window(987241, _rect, DrawWindow, "IMMORTAL HEROES | WARRIOR ANIMATION STUDIO (F9)");
         }
 
-        // ---------------------------------------------------------------- v0.25.106 FRIENDLY STUDIO
-        // Drag dots on the mirror (joint handles), live numbers, PREVIEW (whole motion) and APPLY (use in game).
-        private const int HNone = -1, HRHand = 0, HLHand = 1, HRElbow = 2, HWeapon = 3, HHead = 4, HChest = 5, HBody = 6;
-        private static readonly string[] HandleNames = { "Right hand", "Left hand", "Right elbow", "Weapon tip", "Head", "Chest", "Whole body" };
+        // ---------------------------------------------------------------- v0.25.107 FULL-BODY STUDIO
+        // A drag dot on every joint, weapon dots that move the real weapon (also the off-hand / dual wield one),
+        // pose presets, and a body shell that refuses any edit that pushes an arm into the torso or head.
+        private const int HNone = -1;
+        private const int HRShoulder = 0, HRElbow = 1, HRHand = 2, HRWeapon = 3, HLShoulder = 4, HLElbow = 5, HLHand = 6, HLWeapon = 7,
+            HHead = 8, HChest = 9, HSpine = 10, HHips = 11, HBody = 12, HLKnee = 13, HRKnee = 14, HLAnkle = 15, HRAnkle = 16;
+        private const int HCount = 17;
+        private static readonly string[] HandleNames = {
+            "Right shoulder", "Right elbow", "Right hand", "Right weapon", "Left shoulder", "Left elbow", "Left hand", "Left weapon / shield",
+            "Head", "Chest", "Torso (spine)", "Hips", "Whole body", "Left knee", "Right knee", "Left ankle", "Right ankle" };
         private static readonly string[] HandleHelp = {
-            "Drag to move the RIGHT HAND. The arm follows (IK).",
-            "Drag to move the LEFT HAND. (Not used while the two-hand grip is on.)",
-            "Drag to choose where the RIGHT ELBOW points.",
-            "Drag to point the WEAPON.",
-            "Drag left/right to turn the HEAD, up/down to nod.",
-            "Drag left/right to twist the CHEST, up/down to bend.",
-            "Drag left/right to turn the WHOLE BODY, up/down to lean." };
-        private static readonly Color[] HandleColors = {
-            new Color(1f, 0.35f, 0.3f), new Color(0.35f, 0.7f, 1f), new Color(1f, 0.75f, 0.25f), new Color(1f, 1f, 1f),
-            new Color(0.75f, 0.45f, 1f), new Color(0.4f, 1f, 0.5f), new Color(1f, 0.55f, 0.85f) };
+            "Drag to swing the whole right arm around the shoulder.",
+            "Drag to choose where the right elbow points.",
+            "Drag to move the right hand (the arm follows).",
+            "Drag to point the right-hand weapon.",
+            "Drag to swing the whole left arm around the shoulder.",
+            "Drag to choose where the left elbow points.",
+            "Drag to move the left hand. With a two-hand grip it slides along the handle.",
+            "Drag to point the left-hand weapon or shield (dual wield).",
+            "Sideways = turn the head, up/down = nod.",
+            "Sideways = twist the chest, up/down = bend it.",
+            "Sideways = twist the torso, up/down = bend it.",
+            "Sideways = turn the hips, up/down = tilt them.",
+            "Sideways = turn the whole body, up/down = lean it.",
+            "Drag to choose where the left knee points.",
+            "Drag to choose where the right knee points.",
+            "Drag to move the left foot (up = lift it).",
+            "Drag to move the right foot (up = lift it)." };
+        private static readonly Color CRight = new Color(1f, 0.38f, 0.32f), CLeft = new Color(0.35f, 0.68f, 1f), CTorso = new Color(0.45f, 1f, 0.5f),
+            CLegs = new Color(1f, 0.82f, 0.25f), CWeapon = new Color(1f, 1f, 1f), CBody = new Color(1f, 0.55f, 0.85f);
+        private static Color HandleColor(int h)
+        {
+            if (h == HRWeapon || h == HLWeapon) return CWeapon;
+            if (h <= HRHand) return CRight;
+            if (h <= HLHand) return CLeft;
+            if (h == HBody) return CBody;
+            if (h <= HHips) return CTorso;
+            return CLegs;
+        }
         private int _drag = HNone, _hover = HNone, _selHandle = HNone;
         private Vector2 _dragLast;
-        private Texture2D _dot;
+        private Texture2D _dot, _pip;
         private Rect _portraitDraw;
-        private Vector2[] _handleGui = new Vector2[7];
-        private bool[] _handleOn = new bool[7];
+        private readonly Vector2[] _handleGui = new Vector2[HCount];
+        private readonly bool[] _handleOn = new bool[HCount];
+        private string _tipText;
+        private Vector2 _tipAt;
+        private bool _shellGuard = true, _shellShow = true;
+        private float _shellDepth, _safeDepth;
+        private string _safeKey;
+        private int _safeIndex = -1;
+        private string _clipboard;
 
         private Texture2D Dot()
         {
@@ -13647,11 +13736,21 @@ namespace DragonsAltarCombat
                 {
                     float d = Vector2.Distance(new Vector2(x + 0.5f, y + 0.5f), new Vector2(16f, 16f));
                     float a = d < 11f ? 1f : d < 15f ? 1f - (d - 11f) / 4f : 0f;
-                    float edge = d > 9f && d < 12f ? 0f : 1f;   // dark ring around a light core
+                    float edge = d > 9f && d < 12f ? 0f : 1f;
                     _dot.SetPixel(x, y, new Color(edge, edge, edge, a));
                 }
             _dot.Apply();
             return _dot;
+        }
+
+        private Texture2D Pip()
+        {
+            if (_pip != null) return _pip;
+            _pip = new Texture2D(8, 8, TextureFormat.ARGB32, false);
+            for (int y = 0; y < 8; y++) for (int x = 0; x < 8; x++)
+                _pip.SetPixel(x, y, new Color(1f, 1f, 1f, Vector2.Distance(new Vector2(x + 0.5f, y + 0.5f), new Vector2(4f, 4f)) < 3.2f ? 1f : 0f));
+            _pip.Apply();
+            return _pip;
         }
 
         private Transform PBone(HumanBodyBones b)
@@ -13662,34 +13761,61 @@ namespace DragonsAltarCombat
         }
 
         private Quaternion PFrame() { return _previewAvatar != null ? _previewAvatar.transform.rotation : Quaternion.identity; }
+        private float PScale() { return _previewAvatar != null ? Mathf.Max(0.2f, _previewAvatar.transform.lossyScale.y) : 1f; }
+
+        private bool WeaponTip(bool right, out Vector3 tip)
+        {
+            tip = Vector3.zero;
+            if (_driver != null && _driver.EditorItemTip(right, out tip)) return true;
+            Transform hand = PBone(right ? HumanBodyBones.RightHand : HumanBodyBones.LeftHand);
+            Transform fore = PBone(right ? HumanBodyBones.RightLowerArm : HumanBodyBones.LeftLowerArm);
+            if (hand == null || fore == null) return false;
+            tip = hand.position + (hand.position - fore.position).normalized * 0.55f;   // empty hand: a pointer along the forearm
+            return true;
+        }
 
         private Vector3 HandleWorld(int h, out bool ok)
         {
             ok = false;
             Transform t = null;
-            if (h == HRHand) t = PBone(HumanBodyBones.RightHand);
-            else if (h == HLHand) t = PBone(HumanBodyBones.LeftHand);
-            else if (h == HRElbow) t = PBone(HumanBodyBones.RightLowerArm);
-            else if (h == HHead) t = PBone(HumanBodyBones.Head);
-            else if (h == HChest) t = PBone(HumanBodyBones.Chest);
-            else if (h == HBody) t = PBone(HumanBodyBones.Hips);
-            else if (h == HWeapon)
+            switch (h)
             {
-                Transform hand = PBone(HumanBodyBones.RightHand), fore = PBone(HumanBodyBones.RightLowerArm);
-                if (hand == null || fore == null) return Vector3.zero;
-                DragonClipKey k = _work.Count > 0 ? _work[_keyIndex] : null;
-                Vector3 dir = (k != null && k.WW > 0.01f && k.WD.sqrMagnitude > 0.0001f) ? PFrame() * k.WD.normalized : (hand.position - fore.position).normalized;
-                ok = true;
-                return hand.position + dir * 0.55f;
+                case HRShoulder: t = PBone(HumanBodyBones.RightUpperArm); break;
+                case HRElbow: t = PBone(HumanBodyBones.RightLowerArm); break;
+                case HRHand: t = PBone(HumanBodyBones.RightHand); break;
+                case HLShoulder: t = PBone(HumanBodyBones.LeftUpperArm); break;
+                case HLElbow: t = PBone(HumanBodyBones.LeftLowerArm); break;
+                case HLHand: t = PBone(HumanBodyBones.LeftHand); break;
+                case HHead: t = PBone(HumanBodyBones.Head); break;
+                case HChest: t = PBone(HumanBodyBones.Chest); break;
+                case HSpine: t = PBone(HumanBodyBones.Spine); break;
+                case HHips: t = PBone(HumanBodyBones.Hips); break;
+                case HLKnee: t = PBone(HumanBodyBones.LeftLowerLeg); break;
+                case HRKnee: t = PBone(HumanBodyBones.RightLowerLeg); break;
+                case HLAnkle: t = PBone(HumanBodyBones.LeftFoot); break;
+                case HRAnkle: t = PBone(HumanBodyBones.RightFoot); break;
+                case HRWeapon: case HLWeapon:
+                {
+                    Vector3 tip;
+                    ok = WeaponTip(h == HRWeapon, out tip);
+                    return tip;
+                }
+                case HBody:
+                {
+                    Transform lf = PBone(HumanBodyBones.LeftFoot), rf = PBone(HumanBodyBones.RightFoot);
+                    if (lf == null || rf == null) return Vector3.zero;
+                    ok = true;
+                    return (lf.position + rf.position) * 0.5f + PFrame() * Vector3.forward * 0.25f * PScale();
+                }
             }
             if (t == null) return Vector3.zero;
             ok = true;
             Vector3 p = t.position;
-            if (h == HHead) p += PFrame() * Vector3.up * 0.12f;
+            if (h == HHead) p += PFrame() * Vector3.up * 0.12f * PScale();
+            if (h == HSpine) p += PFrame() * Vector3.forward * 0.08f * PScale();   // nudged off the chest dot
             return p;
         }
 
-        // GUI point inside the drawn mirror -> camera ray (the mirror is a RenderTexture drawn ScaleToFit).
         private bool GuiRay(Vector2 gui, out Ray ray)
         {
             ray = new Ray();
@@ -13700,19 +13826,128 @@ namespace DragonsAltarCombat
             return true;
         }
 
+        private bool ToGui(Vector3 w, out Vector2 g)
+        {
+            g = Vector2.zero;
+            if (_portraitCamera == null) return false;
+            Vector3 vp = _portraitCamera.WorldToViewportPoint(w);
+            if (vp.z <= 0f || vp.x < 0f || vp.x > 1f || vp.y < 0f || vp.y > 1f) return false;
+            g = new Vector2(_portraitDraw.x + vp.x * _portraitDraw.width, _portraitDraw.y + (1f - vp.y) * _portraitDraw.height);
+            return true;
+        }
+
         private void UpdateHandleScreen()
         {
-            for (int h = 0; h < 7; h++)
+            for (int h = 0; h < HCount; h++)
             {
                 bool ok;
                 Vector3 w = HandleWorld(h, out ok);
-                _handleOn[h] = false;
-                if (!ok || _portraitCamera == null) continue;
-                Vector3 vp = _portraitCamera.WorldToViewportPoint(w);
-                if (vp.z <= 0f || vp.x < 0f || vp.x > 1f || vp.y < 0f || vp.y > 1f) continue;
-                _handleGui[h] = new Vector2(_portraitDraw.x + vp.x * _portraitDraw.width, _portraitDraw.y + (1f - vp.y) * _portraitDraw.height);
-                _handleOn[h] = true;
+                _handleOn[h] = ok && ToGui(w, out _handleGui[h]);
             }
+        }
+
+        // ---- BODY SHELL: torso capsule (hips -> neck) + head sphere, sized from the shoulder width.
+        private bool Shell(out Vector3 a, out Vector3 b, out float r, out Vector3 head, out float hr)
+        {
+            a = b = head = Vector3.zero; r = hr = 0f;
+            Transform hips = PBone(HumanBodyBones.Hips), chest = PBone(HumanBodyBones.Chest), hd = PBone(HumanBodyBones.Head);
+            Transform ru = PBone(HumanBodyBones.RightUpperArm), lu = PBone(HumanBodyBones.LeftUpperArm);
+            if (hips == null || chest == null || hd == null || ru == null || lu == null) return false;
+            float sw = Vector3.Distance(ru.position, lu.position);
+            Vector3 up = (hd.position - hips.position).normalized;
+            a = hips.position + up * sw * 0.15f;
+            b = hd.position - up * sw * 0.35f;
+            r = sw * 0.30f;
+            head = hd.position + up * sw * 0.22f;
+            hr = sw * 0.27f;
+            return true;
+        }
+
+        private static float SegDepth(Vector3 p, Vector3 q, Vector3 a, Vector3 b, float r)
+        {
+            float worst = -9f;
+            for (int i = 0; i <= 8; i++)
+            {
+                Vector3 x = Vector3.Lerp(p, q, i / 8f);
+                Vector3 ab = b - a;
+                float t = Mathf.Clamp01(Vector3.Dot(x - a, ab) / Mathf.Max(0.0001f, ab.sqrMagnitude));
+                worst = Mathf.Max(worst, r - Vector3.Distance(x, a + ab * t));
+            }
+            return worst;
+        }
+
+        // How deep (m) any arm part / weapon handle sits inside the shell right now (<= 0 = clear).
+        private float ShellDepthNow()
+        {
+            Vector3 a, b, head; float r, hr;
+            if (!Shell(out a, out b, out r, out head, out hr)) return 0f;
+            float worst = -9f;
+            for (int side = 0; side < 2; side++)
+            {
+                Transform ua = PBone(side == 0 ? HumanBodyBones.RightUpperArm : HumanBodyBones.LeftUpperArm);
+                Transform la = PBone(side == 0 ? HumanBodyBones.RightLowerArm : HumanBodyBones.LeftLowerArm);
+                Transform hd = PBone(side == 0 ? HumanBodyBones.RightHand : HumanBodyBones.LeftHand);
+                if (ua == null || la == null || hd == null) continue;
+                Vector3 s0 = Vector3.Lerp(ua.position, la.position, 0.35f);   // the shoulder joint itself sits on the shell edge
+                worst = Mathf.Max(worst, SegDepth(s0, la.position, a, b, r));
+                worst = Mathf.Max(worst, SegDepth(la.position, hd.position, a, b, r));
+                worst = Mathf.Max(worst, SegDepth(s0, la.position, head, head, hr));
+                worst = Mathf.Max(worst, SegDepth(la.position, hd.position, head, head, hr));
+            }
+            return worst;
+        }
+
+        private void DrawShell(bool bad)
+        {
+            Vector3 a, b, head; float r, hr;
+            if (!_shellShow || Event.current.type != EventType.Repaint || !Shell(out a, out b, out r, out head, out hr)) return;
+            Texture2D pip = Pip();
+            GUI.color = bad ? new Color(1f, 0.2f, 0.2f, 0.9f) : new Color(0.6f, 1f, 0.9f, 0.45f);
+            Vector3 axis = (b - a).normalized;
+            Vector3 side = Vector3.Cross(axis, PFrame() * Vector3.forward).normalized;
+            Vector3 fwd = Vector3.Cross(side, axis).normalized;
+            for (int ring = 0; ring <= 4; ring++)
+            {
+                Vector3 c = Vector3.Lerp(a, b, ring / 4f);
+                for (int i = 0; i < 20; i++)
+                {
+                    float ang = i * Mathf.PI * 2f / 20f;
+                    Vector2 g;
+                    if (ToGui(c + (side * Mathf.Cos(ang) + fwd * Mathf.Sin(ang)) * r, out g)) GUI.DrawTexture(new Rect(g.x - 2f, g.y - 2f, 4f, 4f), pip);
+                }
+            }
+            for (int i = 0; i < 24; i++)
+            {
+                float ang = i * Mathf.PI * 2f / 24f;
+                Vector2 g;
+                Vector3 camRight = _portraitCamera.transform.right, camUp = _portraitCamera.transform.up;
+                if (ToGui(head + (camRight * Mathf.Cos(ang) + camUp * Mathf.Sin(ang)) * hr, out g)) GUI.DrawTexture(new Rect(g.x - 2f, g.y - 2f, 4f, 4f), pip);
+            }
+            GUI.color = Color.white;
+        }
+
+        // Called on Repaint, after the driver posed the clone this frame: an edit that pushed an arm deeper
+        // into the shell is undone (the frame snaps back to its last safe state).
+        private void GuardShell()
+        {
+            if (_work.Count < 2 || _playing || !_previewing || Time.frameCount <= _editFrame) return;
+            _shellDepth = ShellDepthNow();
+            DragonClipKey k = _work[_keyIndex];
+            if (_safeIndex != _keyIndex || _safeKey == null || !Mathf.Approximately(_time, k.T))
+            {
+                if (Mathf.Approximately(_time, k.T)) { _safeIndex = _keyIndex; _safeKey = JsonUtility.ToJson(k); _safeDepth = _shellDepth; }
+                return;
+            }
+            if (!_shellGuard || _shellDepth <= Mathf.Max(0.005f, _safeDepth + 0.005f))
+            {
+                _safeKey = JsonUtility.ToJson(k); _safeDepth = Mathf.Min(_safeDepth, Mathf.Max(0f, _shellDepth));
+                if (_shellDepth <= 0f) _safeDepth = 0f;
+                return;
+            }
+            JsonUtility.FromJsonOverwrite(_safeKey, k);
+            _drag = HNone;
+            _message = "BLOCKED: that would push the arm/hand inside the body. Move it outside the outline.";
+            RefreshPreview();
         }
 
         private void HandleMouse()
@@ -13720,13 +13955,16 @@ namespace DragonsAltarCombat
             Event e = Event.current;
             if (e == null || _work.Count < 2 || !_previewing) return;
             Vector2 m = e.mousePosition;
-            _hover = HNone;
-            float best = 14f;
-            for (int h = 0; h < 7; h++)
+            if (_drag == HNone)
             {
-                if (!_handleOn[h]) continue;
-                float d = Vector2.Distance(m, _handleGui[h]);
-                if (d < best) { best = d; _hover = h; }
+                _hover = HNone;
+                float best = 13f;
+                for (int h = 0; h < HCount; h++)
+                {
+                    if (!_handleOn[h]) continue;
+                    float d = Vector2.Distance(m, _handleGui[h]);
+                    if (d < best) { best = d; _hover = h; }
+                }
             }
             if (e.type == EventType.MouseDown && e.button == 0 && _hover != HNone)
             {
@@ -13746,41 +13984,58 @@ namespace DragonsAltarCombat
             else if (e.type == EventType.MouseUp && _drag != HNone)
             {
                 _drag = HNone;
-                _message = "Moved " + HandleNames[_selHandle] + " on frame " + (_keyIndex + 1) + ". PREVIEW to watch it, APPLY to use it in the game.";
+                _message = "Moved " + HandleNames[_selHandle] + " on frame " + (_keyIndex + 1) + ". PLAY PREVIEW to watch it, APPLY to use it.";
                 e.Use();
             }
+        }
+
+        private static Vector3 Rotate(Vector3 d, float yaw, float pitch)
+        {
+            Vector3 v = Quaternion.AngleAxis(yaw, Vector3.up) * d;
+            Vector3 right = Vector3.Cross(Vector3.up, v);
+            if (right.sqrMagnitude < 0.0001f) right = Vector3.right;
+            return (Quaternion.AngleAxis(pitch, right.normalized) * v).normalized;
         }
 
         private void DragTo(int h, Vector2 mouse, Vector2 delta)
         {
             DragonClipKey k = _work[_keyIndex];
             Quaternion inv = Quaternion.Inverse(PFrame());
-            if (h == HHead || h == HChest || h == HBody)
+            // rotations (human limits): head turn 70 / nod 45, chest 45, torso 40, hips 30, body turn 180 / lean 60
+            if (h == HHead || h == HChest || h == HSpine || h == HHips)
             {
-                // anatomy limits: head +-70 turn / +-45 nod, chest +-45, whole body +-180 turn / +-60 lean
-                int b = h == HHead ? 3 : 2;
-                if (h == HBody)
-                {
-                    k.R = new Vector3(Mathf.Clamp(k.R.x + delta.y * 0.4f, -60f, 60f), Mathf.Repeat(k.R.y + delta.x * 0.5f + 180f, 360f) - 180f, k.R.z);
-                    return;
-                }
-                float yawLim = h == HHead ? 70f : 45f, pitchLim = 45f;
+                int b = h == HHead ? 3 : h == HChest ? 2 : h == HSpine ? 1 : 0;
+                float yl = h == HHead ? 70f : h == HChest ? 45f : h == HSpine ? 40f : 30f;
+                float pl = h == HHead ? 45f : h == HHips ? 30f : 45f;
                 Vector3 v = k.B[b];
-                k.B[b] = new Vector3(Mathf.Clamp(v.x + delta.y * 0.4f, -pitchLim, pitchLim), Mathf.Clamp(v.y + delta.x * 0.4f, -yawLim, yawLim), v.z);
+                k.B[b] = new Vector3(Mathf.Clamp(v.x + delta.y * 0.4f, -pl, pl), Mathf.Clamp(v.y + delta.x * 0.4f, -yl, yl), v.z);
+                return;
+            }
+            if (h == HBody)
+            {
+                k.R = new Vector3(Mathf.Clamp(k.R.x + delta.y * 0.4f, -60f, 60f), Mathf.Repeat(k.R.y + delta.x * 0.5f + 180f, 360f) - 180f, k.R.z);
+                return;
+            }
+            if (h == HRShoulder || h == HLShoulder)
+            {
+                bool rs = h == HRShoulder;
+                Vector3 cur = rs ? (k.HW > 0.01f ? k.HD : new Vector3(0.3f, -1f, 0.1f)) : (k.LW > 0.01f ? k.LD : new Vector3(-0.3f, -1f, 0.1f));
+                Vector3 nd = Rotate(cur.normalized, delta.x * 0.5f, delta.y * 0.5f);
+                if (rs) { k.HD = nd; if (k.HW < 0.01f) k.HR = 0.75f; k.HW = 1f; }
+                else { k.LD = nd; if (k.LW < 0.01f) k.LR = 0.75f; k.LW = 1f; }
                 return;
             }
             bool ok;
-            Vector3 cur = HandleWorld(h, out ok);
+            Vector3 handleNow = HandleWorld(h, out ok);
             Ray ray;
             if (!ok || !GuiRay(mouse, out ray)) return;
-            // move on the plane that faces the camera through the handle (what you see is what you get)
-            Plane plane = new Plane(-_portraitCamera.transform.forward, cur);
+            Plane plane = new Plane(-_portraitCamera.transform.forward, handleNow);
             float enter;
             if (!plane.Raycast(ray, out enter)) return;
             Vector3 p = ray.GetPoint(enter);
-            if (h == HRHand || h == HLHand || h == HRElbow)
+            if (h == HRHand || h == HLHand || h == HRElbow || h == HLElbow)
             {
-                bool right = h != HLHand;
+                bool right = h == HRHand || h == HRElbow;
                 Transform ua = PBone(right ? HumanBodyBones.RightUpperArm : HumanBodyBones.LeftUpperArm);
                 Transform la = PBone(right ? HumanBodyBones.RightLowerArm : HumanBodyBones.LeftLowerArm);
                 Transform hd = PBone(right ? HumanBodyBones.RightHand : HumanBodyBones.LeftHand);
@@ -13789,18 +14044,60 @@ namespace DragonsAltarCombat
                 Vector3 local = inv * (p - ua.position);
                 if (local.sqrMagnitude < 0.0001f) return;
                 if (h == HRElbow) { k.EP = local.normalized; k.EW = 1f; k.EM = true; return; }
-                // reach clamp 0.25..0.95: the arm never locks straight or folds into the shoulder
-                float reach = Mathf.Clamp(local.magnitude / Mathf.Max(0.05f, len), 0.25f, 0.95f);
+                if (h == HLElbow)
+                {
+                    if (k.TW > 0.01f) { k.GP = local.normalized; k.GW = 1f; }   // two-hand grip: the grip's own elbow pole
+                    else { k.LEP = local.normalized; k.LEW = 1f; }
+                    return;
+                }
+                if (h == HLHand && k.TW > 0.01f)
+                {
+                    // two-hand grip: the left hand slides along the handle
+                    Vector3 tip;
+                    if (!WeaponTip(true, out tip)) return;
+                    Vector3 axis = (tip - hd.position);
+                    Transform rh = PBone(HumanBodyBones.RightHand);
+                    if (rh == null || axis.sqrMagnitude < 0.0001f) return;
+                    axis = (tip - rh.position).normalized;
+                    k.TG = Mathf.Clamp(Vector3.Dot(p - rh.position, axis) / PScale(), -0.6f, 0.6f);
+                    return;
+                }
+                float reach = Mathf.Clamp(local.magnitude / Mathf.Max(0.05f, len), 0.25f, 0.95f);   // never locked straight
                 if (right) { k.HD = local.normalized; k.HR = reach; k.HW = 1f; }
-                else { k.LD = local.normalized; k.LR = reach; k.LW = 1f; if (k.TW > 0.01f) _message = "Left hand is held by the TWO-HAND GRIP on this frame. Set grip weight 0 (Weapon & Legs) to move it freely."; }
+                else { k.LD = local.normalized; k.LR = reach; k.LW = 1f; }
                 return;
             }
-            if (h == HWeapon)
+            if (h == HRWeapon || h == HLWeapon)
             {
-                Transform hand = PBone(HumanBodyBones.RightHand);
+                Transform hand = PBone(h == HRWeapon ? HumanBodyBones.RightHand : HumanBodyBones.LeftHand);
                 if (hand == null) return;
                 Vector3 d = inv * (p - hand.position);
-                if (d.sqrMagnitude > 0.0001f) { k.WD = d.normalized; k.WW = 1f; }
+                if (d.sqrMagnitude < 0.0001f) return;
+                if (h == HRWeapon) { k.WD = d.normalized; k.WW = 1f; }
+                else { k.SD = d.normalized; k.SW = 1f; }
+                return;
+            }
+            if (h == HLKnee || h == HRKnee)
+            {
+                Transform hip = PBone(h == HLKnee ? HumanBodyBones.LeftUpperLeg : HumanBodyBones.RightUpperLeg);
+                if (hip == null) return;
+                Vector3 d = inv * (p - hip.position);
+                if (d.sqrMagnitude < 0.0001f) return;
+                if (h == HLKnee) k.KPL = d.normalized; else k.KPR = d.normalized;
+                if (k.KPW < 0.01f) { if (h == HLKnee) k.KPR = new Vector3(0f, 0f, 1f); else k.KPL = new Vector3(0f, 0f, 1f); }
+                k.KPW = 1f;
+                return;
+            }
+            if (h == HLAnkle || h == HRAnkle)
+            {
+                Vector3 step = inv * (p - handleNow) / PScale();
+                Vector3 cur = k.FOW > 0.01f ? (h == HLAnkle ? k.FOL : k.FOR) : Vector3.zero;
+                Vector3 nv = cur + step;
+                nv.y = Mathf.Clamp(nv.y, 0f, 0.7f);   // feet never go under the ground
+                nv = Vector3.ClampMagnitude(nv, 0.8f);
+                if (k.FOW < 0.01f) { k.FOL = Vector3.zero; k.FOR = Vector3.zero; }
+                if (h == HLAnkle) k.FOL = nv; else k.FOR = nv;
+                k.FOW = 1f;
             }
         }
 
@@ -13808,40 +14105,99 @@ namespace DragonsAltarCombat
         {
             if (Event.current.type != EventType.Repaint || !_previewing) return;
             Texture2D dot = Dot();
-            for (int h = 0; h < 7; h++)
+            for (int h = 0; h < HCount; h++)
             {
                 if (!_handleOn[h]) continue;
-                float size = (h == _hover || h == _drag) ? 26f : 18f;
-                Color c = HandleColors[h];
+                float size = (h == _hover || h == _drag) ? 24f : (h == HRWeapon || h == HLWeapon ? 18f : 15f);
+                Color c = HandleColor(h);
                 GUI.color = (h == _selHandle) ? c : new Color(c.r, c.g, c.b, 0.85f);
                 GUI.DrawTexture(new Rect(_handleGui[h].x - size / 2f, _handleGui[h].y - size / 2f, size, size), dot);
             }
             GUI.color = Color.white;
-            if (_hover != HNone && _drag == HNone)
-            {
-                Vector2 p = _handleGui[_hover];
-                GUI.Box(new Rect(p.x + 14f, p.y - 10f, 210f, 40f), HandleNames[_hover] + "\n" + HandleHelp[_hover]);
-            }
+            _tipText = null;
+            if (_hover != HNone && _drag == HNone) { _tipText = HandleNames[_hover] + "\n" + HandleHelp[_hover]; _tipAt = _handleGui[_hover]; }
         }
 
-        // Live numbers of the selected joint, in plain words.
+        // Tooltip drawn last, sized to its text and kept inside the window.
+        private void DrawTooltip()
+        {
+            if (string.IsNullOrEmpty(_tipText) || Event.current.type != EventType.Repaint) return;
+            GUIStyle st = new GUIStyle(GUI.skin.box);
+            st.alignment = TextAnchor.UpperLeft; st.wordWrap = false; st.padding = new RectOffset(8, 8, 6, 6);
+            Vector2 size = st.CalcSize(new GUIContent(_tipText));
+            float x = _tipAt.x + 16f, y = _tipAt.y - size.y - 6f;
+            if (x + size.x > _rect.width - 6f) x = _tipAt.x - size.x - 16f;
+            if (y < 24f) y = _tipAt.y + 16f;
+            x = Mathf.Clamp(x, 4f, Mathf.Max(4f, _rect.width - size.x - 4f));
+            y = Mathf.Clamp(y, 22f, Mathf.Max(22f, _rect.height - size.y - 4f));
+            GUI.Box(new Rect(x, y, size.x, size.y), _tipText, st);
+        }
+
         private void DrawJointReadout(DragonClipKey k)
         {
-            if (_selHandle == HNone) { GUILayout.Label("Tip: click and drag a coloured DOT on your character to pose it."); return; }
+            if (_selHandle == HNone) { GUILayout.Label("Tip: click and drag any coloured DOT on your character to pose it."); return; }
             string s = HandleNames[_selHandle] + ":  ";
-            if (_selHandle == HRHand) s += Dir(k.HD) + "   reach " + k.HR.ToString("0.00");
-            else if (_selHandle == HLHand) s += Dir(k.LD) + "   reach " + k.LR.ToString("0.00");
-            else if (_selHandle == HRElbow) s += "points " + Dir(k.EP);
-            else if (_selHandle == HWeapon) s += "points " + Dir(k.WD);
-            else if (_selHandle == HHead) s += "nod " + k.B[3].x.ToString("0") + "   turn " + k.B[3].y.ToString("0");
-            else if (_selHandle == HChest) s += "bend " + k.B[2].x.ToString("0") + "   twist " + k.B[2].y.ToString("0");
-            else s += "lean " + k.R.x.ToString("0") + "   turn " + k.R.y.ToString("0");
+            switch (_selHandle)
+            {
+                case HRShoulder: case HRHand: s += Dir(k.HD) + "   stretch " + k.HR.ToString("0.00"); break;
+                case HLShoulder: case HLHand: s += k.TW > 0.01f ? "on the handle at " + k.TG.ToString("0.00") : Dir(k.LD) + "   stretch " + k.LR.ToString("0.00"); break;
+                case HRElbow: s += "points " + Dir(k.EP); break;
+                case HLElbow: s += "points " + Dir(k.TW > 0.01f ? k.GP : k.LEP); break;
+                case HRWeapon: s += "points " + Dir(k.WD); break;
+                case HLWeapon: s += "points " + Dir(k.SD); break;
+                case HHead: s += "nod " + k.B[3].x.ToString("0") + "   turn " + k.B[3].y.ToString("0"); break;
+                case HChest: s += "bend " + k.B[2].x.ToString("0") + "   twist " + k.B[2].y.ToString("0"); break;
+                case HSpine: s += "bend " + k.B[1].x.ToString("0") + "   twist " + k.B[1].y.ToString("0"); break;
+                case HHips: s += "tilt " + k.B[0].x.ToString("0") + "   turn " + k.B[0].y.ToString("0"); break;
+                case HLKnee: s += "points " + Dir(k.KPL); break;
+                case HRKnee: s += "points " + Dir(k.KPR); break;
+                case HLAnkle: s += "moved " + Dir(k.FOL); break;
+                case HRAnkle: s += "moved " + Dir(k.FOR); break;
+                default: s += "lean " + k.R.x.ToString("0") + "   turn " + k.R.y.ToString("0"); break;
+            }
             GUILayout.Label(s);
         }
 
         private static string Dir(Vector3 d)
         {
             return "right " + d.x.ToString("+0.00;-0.00") + "  up " + d.y.ToString("+0.00;-0.00") + "  front " + d.z.ToString("+0.00;-0.00");
+        }
+
+        // ---- PRESETS (applied to the selected frame; every joint stays editable afterwards)
+        private static readonly string[] PresetNames = {
+            "Two hands on one weapon", "Two-hand overhead", "Let go of the 2nd hand", "Guard (both hands up)",
+            "Dual wield ready", "Mirror right -> left", "Arms relaxed", "Wide planted stance", "Legs normal",
+            "Copy frame", "Paste frame" };
+        private void ApplyPreset(int i)
+        {
+            if (_work.Count < 2) return;
+            DragonClipKey k = _work[_keyIndex];
+            if (i == 10) { if (_clipboard == null) { _message = "Nothing copied yet."; return; } _undo.Push(Snapshot()); float t0 = k.T; JsonUtility.FromJsonOverwrite(_clipboard, k); k.T = t0; }
+            else if (i == 9) { _clipboard = JsonUtility.ToJson(k); _message = "Frame copied. Pick another frame and click Paste frame."; return; }
+            else
+            {
+                _undo.Push(Snapshot());
+                switch (i)
+                {
+                    case 0: k.HD = new Vector3(0.25f, 0.1f, 1f).normalized; k.HR = 0.6f; k.HW = 1f; k.WD = new Vector3(0f, 0.6f, 1f).normalized; k.WW = 1f;
+                        k.TW = 1f; k.TG = -0.14f; k.GP = new Vector3(-0.2f, -0.4f, 1f).normalized; k.GW = 1f; k.LW = 0f; break;
+                    case 1: k.HD = new Vector3(0.15f, 1f, 0.25f).normalized; k.HR = 0.85f; k.HW = 1f; k.WD = new Vector3(0f, 1f, -0.3f).normalized; k.WW = 1f;
+                        k.TW = 1f; k.TG = -0.14f; k.GP = new Vector3(-0.3f, 0.2f, 1f).normalized; k.GW = 1f; k.LW = 0f; break;
+                    case 2: k.TW = 0f; k.GW = 0f; break;
+                    case 3: k.HD = new Vector3(0.35f, 0.15f, 0.8f).normalized; k.HR = 0.55f; k.HW = 1f; k.LD = new Vector3(-0.35f, 0.2f, 0.8f).normalized; k.LR = 0.5f; k.LW = 1f;
+                        k.WD = new Vector3(0f, 0.7f, 0.7f).normalized; k.WW = 1f; k.TW = 0f; break;
+                    case 4: k.HD = new Vector3(0.45f, -0.1f, 0.8f).normalized; k.HR = 0.6f; k.HW = 1f; k.LD = new Vector3(-0.45f, -0.1f, 0.8f).normalized; k.LR = 0.6f; k.LW = 1f;
+                        k.WD = new Vector3(0.2f, 0.6f, 0.8f).normalized; k.WW = 1f; k.SD = new Vector3(-0.2f, 0.6f, 0.8f).normalized; k.SW = 1f; k.TW = 0f; break;
+                    case 5: k.LD = new Vector3(-k.HD.x, k.HD.y, k.HD.z); k.LR = k.HR; k.LW = k.HW; k.LEP = new Vector3(-k.EP.x, k.EP.y, k.EP.z); k.LEW = k.EW;
+                        k.SD = new Vector3(-k.WD.x, k.WD.y, k.WD.z); k.SW = k.WW; k.B[7] = new Vector3(k.B[4].x, -k.B[4].y, -k.B[4].z); k.B[8] = new Vector3(k.B[5].x, -k.B[5].y, -k.B[5].z); k.B[9] = new Vector3(k.B[6].x, -k.B[6].y, -k.B[6].z); break;
+                    case 6: k.HW = 0f; k.LW = 0f; k.EW = 0f; k.LEW = 0f; k.WW = 0f; k.SW = 0f; k.TW = 0f; k.GW = 0f; for (int b = 4; b < 10; b++) k.B[b] = Vector3.zero; break;
+                    case 7: k.FOL = new Vector3(-0.15f, 0f, 0.2f); k.FOR = new Vector3(0.15f, 0f, -0.25f); k.FOW = 1f; k.KPL = new Vector3(-0.2f, 0f, 1f); k.KPR = new Vector3(0.2f, 0f, 1f); k.KPW = 1f; break;
+                    case 8: k.FOW = 0f; k.KPW = 0f; k.FLh = 0f; k.FRh = 0f; for (int l = 0; l < 8; l++) k.L[l] = 0f; break;
+                }
+            }
+            _dirty = true; _playing = false; _time = k.T; _numericDrafts.Clear();
+            RefreshPreview();
+            if (i != 9) _message = "Preset '" + PresetNames[i] + "' put on frame " + (_keyIndex + 1) + ". Every dot still works on top of it.";
         }
 
         private void PreviewWhole()
@@ -13925,16 +14281,24 @@ namespace DragonsAltarCombat
                 GUI.DrawTexture(_portraitDraw, _portrait, ScaleMode.StretchToFill, false);
                 UpdateHandleScreen();
                 HandleMouse();
+                if (Event.current.type == EventType.Repaint) GuardShell();
+                DrawShell(_shellDepth > 0.005f);
                 DrawHandles();
             }
             else GUI.Label(new Rect(area.x + 12f, area.y + 15f, area.width - 24f, 85f), "No character shown. Enter a world and click REFRESH LOOK.");
             GUILayout.BeginHorizontal();
-            for (int h = 0; h < 7; h++)
-            {
-                GUI.color = HandleColors[h];
-                GUILayout.Label("(o) " + HandleNames[h], GUILayout.ExpandWidth(false));
-            }
+            GUI.color = CRight; GUILayout.Label("(o) right arm", GUILayout.ExpandWidth(false));
+            GUI.color = CLeft; GUILayout.Label("(o) left arm", GUILayout.ExpandWidth(false));
+            GUI.color = CWeapon; GUILayout.Label("(o) weapons", GUILayout.ExpandWidth(false));
+            GUI.color = CTorso; GUILayout.Label("(o) head/torso", GUILayout.ExpandWidth(false));
+            GUI.color = CBody; GUILayout.Label("(o) whole body", GUILayout.ExpandWidth(false));
+            GUI.color = CLegs; GUILayout.Label("(o) legs", GUILayout.ExpandWidth(false));
             GUI.color = Color.white;
+            GUILayout.EndHorizontal();
+            GUILayout.BeginHorizontal();
+            _shellShow = GUILayout.Toggle(_shellShow, " Show body outline", GUILayout.ExpandWidth(false));
+            _shellGuard = GUILayout.Toggle(_shellGuard, " Block moves that go inside the body", GUILayout.ExpandWidth(false));
+            if (_shellDepth > 0.005f) { GUI.color = new Color(1f, 0.4f, 0.4f); GUILayout.Label("  CLIPPING " + (_shellDepth * 100f).ToString("0") + " cm"); GUI.color = Color.white; }
             GUILayout.EndHorizontal();
             GUILayout.BeginHorizontal();
             if (GUILayout.Button("< TURN", GUILayout.Height(26f))) { _portraitYaw -= 30f; PointPortraitCamera(); }
@@ -13993,6 +14357,15 @@ namespace DragonsAltarCombat
                 GUILayout.EndHorizontal();
 
                 DragonClipKey k = _work[_keyIndex];
+                GUILayout.Label("POSE PRESETS (put on this frame, then fine-tune with the dots)");
+                for (int row = 0; row < 3; row++)
+                {
+                    GUILayout.BeginHorizontal();
+                    for (int pi = row * 4; pi < Mathf.Min(PresetNames.Length, row * 4 + 4); pi++)
+                        if (GUILayout.Button(PresetNames[pi], GUILayout.Height(24f))) ApplyPreset(pi);
+                    GUILayout.EndHorizontal();
+                }
+                k = _work[_keyIndex];
                 GUILayout.Space(4f);
                 DrawJointReadout(k);
                 GUILayout.Space(4f);
@@ -14035,6 +14408,8 @@ namespace DragonsAltarCombat
                     k.LW = Scalar("Left hand strength", k.LW, 0f, 1f);
                     k.EP = Vec("Right elbow points", k.EP, -1f, 1f, "left/right", "down/up", "back/front");
                     k.EW = Scalar("Elbow strength", k.EW, 0f, 1f);
+                    k.LEP = Vec("Left elbow points", k.LEP, -1f, 1f, "left/right", "down/up", "back/front");
+                    k.LEW = Scalar("Left elbow strength", k.LEW, 0f, 1f);
                     k.GP = Vec("Two-hand grip: left elbow points", k.GP, -1f, 1f, "left/right", "down/up", "back/front");
                     k.GW = Scalar("Left elbow strength (grip)", k.GW, 0f, 1f);
                 }
@@ -14046,6 +14421,12 @@ namespace DragonsAltarCombat
                     k.SW = Scalar("Off-hand item strength", k.SW, 0f, 1f);
                     k.TW = Scalar("Two-hand grip (0 off - 1 on)", k.TW, 0f, 1f);
                     k.TG = Scalar("Left hand distance along the handle", k.TG, -0.6f, 0.6f);
+                    k.FOL = Vec("Left foot moved", k.FOL, -0.8f, 0.8f, "left/right", "up", "back/front");
+                    k.FOR = Vec("Right foot moved", k.FOR, -0.8f, 0.8f, "left/right", "up", "back/front");
+                    k.FOW = Scalar("Foot move strength", k.FOW, 0f, 1f);
+                    k.KPL = Vec("Left knee points", k.KPL, -1f, 1f, "left/right", "down/up", "back/front");
+                    k.KPR = Vec("Right knee points", k.KPR, -1f, 1f, "left/right", "down/up", "back/front");
+                    k.KPW = Scalar("Knee strength", k.KPW, 0f, 1f);
                     k.FLh = Scalar("Left foot lift", k.FLh, 0f, 1f);
                     k.FRh = Scalar("Right foot lift", k.FRh, 0f, 1f);
                     for (int i = 0; i < 8; i++) if (i % 4 < 2) k.L[i] = Scalar((i < 4 ? "Left" : "Right") + " foot " + (i % 4 == 0 ? "step fwd/back" : "step out"), k.L[i], -1f, 1f);
@@ -14074,6 +14455,7 @@ namespace DragonsAltarCombat
             GUILayout.EndVertical();
             GUILayout.EndHorizontal();
             GUILayout.EndVertical();
+            DrawTooltip();
         }
 
         private Vector3 Vec(string label, Vector3 vec, float low, float high, string xn, string yn, string zn)

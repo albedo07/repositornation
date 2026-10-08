@@ -1,0 +1,14 @@
+Immortal Heroes v0.25.107 - Full Body Studio
+Base: v0.25.106. Only the F9 Animation Studio (+ new optional animation channels that default to OFF).
+
+- 17 drag dots: right/left shoulder, elbow, hand, weapon; head, chest, torso, hips, whole body;
+  left/right knee and ankle.
+- Weapon dots move the REAL weapon: the Studio copy had no equipment component, so weapons never
+  followed - items are now found under the hand attach points. Left weapon dot = dual wield / shield.
+- Two-hand grip: left hand slides along the handle, left elbow uses the grip's own elbow direction.
+- New channels (0 = unchanged for every existing animation): left elbow direction, knee directions,
+  foot moves (feet never below the ground).
+- Pose presets row + Copy / Paste frame.
+- Body outline (torso capsule + head) drawn on the character; edits that push an arm/hand deeper
+  inside it are undone automatically (toggle). Live "CLIPPING n cm" warning.
+- Dot tooltips sized to their text and kept on screen.

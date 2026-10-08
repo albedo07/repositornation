@@ -1,5 +1,5 @@
 @echo off
-title Immortal Heroes v0.25.106 - Animation Studio
+title Immortal Heroes v0.25.107 - Full Body Studio
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
 echo.
 pause
