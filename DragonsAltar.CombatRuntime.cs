@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.81";
+        public const string ModVersion = "0.25.82";
 
         internal static DragonCombatPlugin Instance;
 
@@ -11916,6 +11916,178 @@ namespace DragonsAltarCombat
             return m;
         }
 
+        // v0.25.82 WARRIOR HERO OBJECTS -----------------------------------------------------------------
+        private static Mesh ColoredMesh(List<Vector3> v, List<Color> c, List<int> t)
+        {
+            Mesh m = new Mesh();
+            m.vertices = v.ToArray(); m.colors = c.ToArray(); m.triangles = t.ToArray();
+            Vector2[] uv = new Vector2[v.Count]; for (int i = 0; i < uv.Length; i++) uv[i] = new Vector2(0.5f, 0.5f);
+            m.uv = uv;
+            m.RecalculateBounds();
+            return m;
+        }
+
+        // Eclipse: a black sun with a blazing violet corona (spiky rays) and a white-hot rim, hovering over you,
+        // always facing the camera; it swells in, pulses, then collapses.
+        public static GameObject EclipseSun(Vector3 pos, float radius, float seconds)
+        {
+            if (!Enabled) return null;
+            GameObject root = new GameObject("IH_EclipseSun");
+            root.transform.position = pos;
+            root.transform.localScale = Vector3.one * radius;
+            int n = 64;
+            // black core (alpha)
+            List<Vector3> v = new List<Vector3>(); List<Color> c = new List<Color>(); List<int> t = new List<int>();
+            v.Add(Vector3.zero); c.Add(new Color(0.02f, 0f, 0.05f, 1f));
+            for (int i = 0; i < n; i++) { float a = (float)i / n * Mathf.PI * 2f; v.Add(new Vector3(Mathf.Cos(a), Mathf.Sin(a), 0f)); c.Add(new Color(0.05f, 0.01f, 0.10f, 1f)); }
+            for (int i = 0; i < n; i++) { t.Add(0); t.Add(1 + i); t.Add(1 + (i + 1) % n); }
+            MeshObject("core", ColoredMesh(v, c, t), ClearMat(), root.transform);
+            // corona with rays (additive)
+            v = new List<Vector3>(); c = new List<Color>(); t = new List<int>();
+            System.Random rng = new System.Random(7);
+            for (int i = 0; i < n; i++)
+            {
+                float a = (float)i / n * Mathf.PI * 2f;
+                Vector3 d = new Vector3(Mathf.Cos(a), Mathf.Sin(a), 0f);
+                float ray = 1.45f + 0.9f * Mathf.Pow(Mathf.Abs(Mathf.Sin(a * 4f + 0.4f)), 10f) + 0.25f * (float)rng.NextDouble();
+                v.Add(d * 0.98f); c.Add(new Color(0.78f, 0.62f, 1f, 1f));
+                v.Add(d * 1.12f); c.Add(new Color(0.62f, 0.42f, 1f, 0.85f));
+                v.Add(d * ray); c.Add(new Color(0.35f, 0.15f, 0.9f, 0f));
+            }
+            for (int i = 0; i < n; i++)
+            {
+                int a0 = i * 3, b0 = ((i + 1) % n) * 3;
+                for (int k = 0; k < 2; k++) { t.Add(a0 + k); t.Add(a0 + k + 1); t.Add(b0 + k); t.Add(b0 + k); t.Add(a0 + k + 1); t.Add(b0 + k + 1); }
+            }
+            MeshObject("corona", ColoredMesh(v, c, t), Mat(WhiteTex(), true), root.transform);
+            // white-hot rim
+            v = new List<Vector3>(); c = new List<Color>(); t = new List<int>();
+            for (int i = 0; i < n; i++)
+            {
+                float a = (float)i / n * Mathf.PI * 2f; Vector3 d = new Vector3(Mathf.Cos(a), Mathf.Sin(a), 0f);
+                v.Add(d * 0.97f); c.Add(new Color(1f, 0.95f, 1f, 1f));
+                v.Add(d * 1.04f); c.Add(new Color(0.9f, 0.8f, 1f, 0.6f));
+            }
+            for (int i = 0; i < n; i++) { int a0 = i * 2, b0 = ((i + 1) % n) * 2; t.Add(a0); t.Add(a0 + 1); t.Add(b0); t.Add(b0); t.Add(a0 + 1); t.Add(b0 + 1); }
+            MeshObject("rim", ColoredMesh(v, c, t), Mat(WhiteTex(), true), root.transform);
+            root.AddComponent<DragonFaceCamera>();
+            DragonPop pop = root.AddComponent<DragonPop>();
+            pop.Grow = 0.25f; pop.Life = Mathf.Max(0.3f, seconds); pop.Fade = 0.3f; pop.Pulse = 0.05f;
+            Light l = root.AddComponent<Light>();
+            l.type = LightType.Point; l.color = new Color(0.62f, 0.45f, 1f, 1f); l.range = radius * 8f; l.intensity = 1.6f * LightScale; l.shadows = LightShadows.None;
+            return root;
+        }
+
+        // Seismic Guillotine: a giant ember-forged guillotine blade drops out of the sky onto the rupture and bites
+        // into the ground (slanted molten edge, weight block on top), then sinks away.
+        public static void GuillotineDrop(Vector3 ground, Vector3 forward, float size)
+        {
+            if (!Enabled) return;
+            forward.y = 0f; if (forward.sqrMagnitude < 0.01f) forward = Vector3.forward; forward.Normalize();
+            GameObject root = new GameObject("IH_Guillotine");
+            Vector3 side = Vector3.Cross(Vector3.up, forward);
+            root.transform.rotation = Quaternion.LookRotation(side, Vector3.up);   // blade plane = local XY contains the fissure line
+            root.transform.localScale = Vector3.one * size;
+            int n = 10; float th = 0.05f;
+            List<Vector3> v = new List<Vector3>(); List<int> t = new List<int>();
+            for (int i = 0; i <= n; i++)
+            {
+                float x = -0.5f + (float)i / n;
+                float yb = -0.5f + 0.32f * (x + 0.5f);   // slanted cutting edge
+                v.Add(new Vector3(x, 0.45f, th)); v.Add(new Vector3(x, 0.45f, -th)); v.Add(new Vector3(x, yb, 0f));
+            }
+            for (int i = 0; i < n; i++)
+            {
+                int a = i * 3, b = (i + 1) * 3;
+                t.Add(a); t.Add(a + 2); t.Add(b); t.Add(b); t.Add(a + 2); t.Add(b + 2);             // front face
+                t.Add(a + 1); t.Add(b + 1); t.Add(a + 2); t.Add(b + 1); t.Add(b + 2); t.Add(a + 2); // back face
+                t.Add(a); t.Add(b); t.Add(a + 1); t.Add(b); t.Add(b + 1); t.Add(a + 1);             // top
+            }
+            Tube(v, t, new Vector3(-0.56f, 0.53f, 0f), new Vector3(0.56f, 0.53f, 0f), Vector3.up, Vector3.forward, 0.09f, 0.12f, 0.09f, 0.12f, 4);   // weight block
+            MeshObject("blade", FacetMesh(v, t, new Color(0.30f, 0.27f, 0.26f, 1f), 0.5f), ClearMat(), root.transform);
+            // molten edge (additive band along the cutting edge, both sides)
+            List<Vector3> ev = new List<Vector3>(); List<Color> ec = new List<Color>(); List<int> et = new List<int>();
+            for (int i = 0; i <= n; i++)
+            {
+                float x = -0.5f + (float)i / n, yb = -0.5f + 0.32f * (x + 0.5f);
+                ev.Add(new Vector3(x, yb - 0.01f, 0f)); ec.Add(new Color(1f, 0.85f, 0.45f, 1f));
+                ev.Add(new Vector3(x, yb + 0.12f, 0f)); ec.Add(new Color(1f, 0.35f, 0.05f, 0f));
+            }
+            for (int i = 0; i < n; i++) { int a = i * 2, b = a + 2; et.Add(a); et.Add(a + 1); et.Add(b); et.Add(b); et.Add(a + 1); et.Add(b + 1); }
+            DoubleSide(et);
+            GameObject edge = MeshObject("edge", ColoredMesh(ev, ec, et), Mat(WhiteTex(), true), root.transform);
+            edge.transform.localScale = new Vector3(1f, 1f, 1f);
+            AttachGlow(root.transform, Fire, size * 0.15f, 25f, size * 1.5f);
+            DragonPop pop = root.AddComponent<DragonPop>();
+            pop.From = ground + Vector3.up * (size * 3f + 8f);
+            pop.To = ground + Vector3.up * (size * 0.25f);   // edge buried ~25%
+            pop.Move = 0.18f; pop.EaseIn = true; pop.Life = 0.9f; pop.Fade = 0.35f; pop.Sink = size * 0.8f;
+            root.transform.position = pop.From;
+            TrailWhile(root.transform, new Color(1f, 0.5f, 0.15f, 1f), size * 0.3f, delegate { return pop != null && pop.Age < pop.Move; });
+        }
+
+        // Impact Punch: a giant spectral fist (palm, four knuckles, curled fingers, thumb) punches forward and bursts.
+        public static void SpectralFist(Vector3 from, Vector3 forward, float distance, float size, Color c)
+        {
+            if (!Enabled) return;
+            if (forward.sqrMagnitude < 0.01f) forward = Vector3.forward;
+            forward.Normalize();
+            GameObject root = new GameObject("IH_SpectralFist");
+            root.transform.rotation = Quaternion.LookRotation(forward, Vector3.up);
+            root.transform.localScale = Vector3.one * size;
+            List<Vector3> v = new List<Vector3>(); List<int> t = new List<int>();
+            Tube(v, t, new Vector3(0f, 0f, -0.6f), new Vector3(0f, 0f, 0.25f), Vector3.right, Vector3.up, 0.42f, 0.30f, 0.50f, 0.36f, 6);   // back of the hand + wrist
+            for (int k = 0; k < 4; k++)
+            {
+                float x = -0.33f + k * 0.22f;
+                Tube(v, t, new Vector3(x, 0.12f, 0.2f), new Vector3(x, 0.10f, 0.52f), Vector3.right, Vector3.up, 0.11f, 0.13f, 0.10f, 0.12f, 6);   // knuckles
+                Tube(v, t, new Vector3(x, -0.02f, 0.5f), new Vector3(x, -0.22f, 0.42f), Vector3.right, Vector3.forward, 0.1f, 0.1f, 0.09f, 0.09f, 6); // curled fingers
+            }
+            Tube(v, t, new Vector3(-0.45f, -0.18f, 0.05f), new Vector3(-0.05f, -0.26f, 0.42f), Vector3.up, Vector3.forward, 0.11f, 0.12f, 0.09f, 0.1f, 6);   // thumb
+            Color body = c; body.a = 0.7f;
+            Color halo = Color.Lerp(c, Color.white, 0.35f); halo.a = 0.25f;
+            MeshObject("fist", FacetMesh(v, t, body, 0.8f), ClearMat(), root.transform);
+            GameObject h = MeshObject("halo", FacetMesh(v, new List<int>(t), halo, 0.3f), Mat(WhiteTex(), true), root.transform);
+            h.transform.localScale = Vector3.one * 1.18f;
+            AttachGlow(root.transform, c, size * 0.3f, 50f, size * 2.5f);
+            DragonPop pop = root.AddComponent<DragonPop>();
+            pop.From = from; pop.To = from + forward * distance;
+            pop.Move = 0.14f; pop.Grow = 0.08f; pop.Life = 0.22f; pop.Fade = 0.18f;
+            root.transform.position = from;
+            TrailWhile(root.transform, c, size * 0.6f, delegate { return pop != null && pop.Age < pop.Life; });
+        }
+
+        // Knight's Guidance: dim spectral wings unfold from your back (two fans of light feathers), then fold away.
+        public static void SpiritWings(Transform follow, Color c, float seconds)
+        {
+            if (!Enabled || follow == null) return;
+            GameObject root = new GameObject("IH_SpiritWings");
+            root.transform.SetParent(follow, false);
+            root.transform.localPosition = new Vector3(0f, 1.35f, -0.25f);
+            Color body = c; body.a = 0.38f;
+            Color core = Color.Lerp(c, Color.white, 0.6f); core.a = 0.5f;
+            for (int side = -1; side <= 1; side += 2)
+            {
+                GameObject wing = new GameObject(side < 0 ? "wingL" : "wingR");
+                wing.transform.SetParent(root.transform, false);
+                for (int f = 0; f < 7; f++)
+                {
+                    float ang = 15f + f * 17f;                       // fan from up-out to down-out
+                    float len = 1.5f - Mathf.Abs(f - 2.5f) * 0.12f;
+                    GameObject feather = new GameObject("f");
+                    feather.transform.SetParent(wing.transform, false);
+                    float e = (60f - ang) * Mathf.Deg2Rad;            // +45 deg (up-out) .. -57 deg (down-out)
+                    Vector3 d = new Vector3(side * Mathf.Cos(e), Mathf.Sin(e), -0.25f);
+                    feather.transform.localRotation = Quaternion.LookRotation(d, Vector3.forward);   // flat in the back plane
+                    MeshObject("b", BladeMesh(len, 0.32f, 0.04f, body, true), Mat(WhiteTex(), true), feather.transform);
+                    MeshObject("c", BladeMesh(len * 0.95f, 0.06f, 0.02f, core, true), Mat(WhiteTex(), true), feather.transform);
+                }
+            }
+            DragonPop pop = root.AddComponent<DragonPop>();
+            pop.Grow = 0.35f; pop.Life = Mathf.Max(0.5f, seconds); pop.Fade = 0.45f;
+            Feathers(follow.position + Vector3.up * 1.3f, c, 1.2f, 0.8f, 30f);
+        }
+
         // v0.25.80 Rift Walker portal: a standing oval of swirling void (dark core, spiral bands) with a blazing rim.
         public static void RiftPortal(Transform parent, Vector3 centre, float rx, float ry)
         {
@@ -12087,5 +12259,53 @@ namespace DragonsAltarCombat
             Mesh.colors = _buf;
         }
         private void OnDestroy() { if (Mesh != null) Destroy(Mesh); }
+    }
+    // v0.25.82: always faces the camera (billboard).
+    public class DragonFaceCamera : MonoBehaviour
+    {
+        private void LateUpdate()
+        {
+            Camera cam = Camera.main;
+            if (cam != null) transform.rotation = Quaternion.LookRotation(cam.transform.forward, cam.transform.up);
+        }
+    }
+
+    // v0.25.82: generic life of a hero object: optional move From -> To (EaseIn = accelerating, like a falling blade),
+    // scale pop-in (Grow), optional pulse, then shrink (or Sink into the ground) over Fade and destroy.
+    public class DragonPop : MonoBehaviour
+    {
+        public Vector3 From, To;
+        public float Move, Grow, Life = 1f, Fade = 0.3f, Pulse, Sink;
+        public bool EaseIn;
+        public float Age;
+        private Vector3 _scale;
+        private bool _moves;
+        private void Start()
+        {
+            _scale = transform.localScale;
+            _moves = Move > 0f;
+            if (Grow > 0f) transform.localScale = _scale * 0.05f;
+        }
+        private void Update()
+        {
+            Age += Time.deltaTime;
+            if (_moves)
+            {
+                float m = Mathf.Clamp01(Age / Move);
+                m = EaseIn ? m * m : 1f - (1f - m) * (1f - m);
+                transform.position = Vector3.Lerp(From, To, m);
+            }
+            float k = 1f;
+            if (Grow > 0f && Age < Grow) k = Mathf.SmoothStep(0.05f, 1f, Age / Grow);
+            else if (Age < Life) k = 1f + Pulse * Mathf.Sin(Age * 9f);
+            else
+            {
+                float f = Mathf.Clamp01((Age - Life) / Mathf.Max(0.01f, Fade));
+                if (Sink > 0f) { transform.position = To - Vector3.up * Sink * f * f; k = 1f; }
+                else k = 1f - f;
+            }
+            transform.localScale = _scale * Mathf.Max(0.001f, k);
+            if (Age >= Life + Fade) Destroy(gameObject);
+        }
     }
 }

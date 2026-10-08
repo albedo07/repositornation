@@ -1,4 +1,5 @@
-TEST v0.25.81
-1. Judgement Hammer (normal + Ascended return): 3D gold/ivory warhammer flipping and growing, gold ribbons from both faces.
-2. Grand Cross (normal + Ascended): two crossed light blades flying forward, ribbons from the tips.
-3. Heaven's Crucible / Ascended Ray of Hope: faceted gold crystal shell around the player, fades when the Barrier ends.
+TEST v0.25.82
+1. Eclipse (normal + Ascended): black sun with violet corona above you, faces the camera, collapses after ~1.5 s.
+2. Seismic Guillotine (normal, Ascended, Fury): guillotine blade drops on the main fissure's rupture point, edge along the fissure.
+3. Impact Punch: spectral fist flies forward over the punch range.
+4. Knight's Guidance: wings unfold on your back (not too bright), fold away after ~2 s.

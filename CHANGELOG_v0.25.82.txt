@@ -1,0 +1,9 @@
+Immortal Heroes v0.25.82 - Warrior Relics (VFX hero-object pass 2 of 4: Warrior)
+
+VFX
+- Eclipse: a black sun with a blazing violet corona and a white-hot rim rises above you during the spin, pulses, then collapses.
+- Seismic Guillotine: a giant ember-forged guillotine blade (slanted molten edge, weight block) drops out of the sky onto the rupture, bites into the ground, then sinks away.
+- Impact Punch: a giant spectral fist (knuckles, curled fingers, thumb) shoots forward and bursts at the end of the punch.
+- Knight's Guidance: dim spectral wings unfold from your back for ~2 s with a few drifting feathers.
+
+Visual only: no damage, timing or hitbox changes.

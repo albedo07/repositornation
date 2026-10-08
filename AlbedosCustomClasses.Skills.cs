@@ -233,7 +233,7 @@ namespace AlbedosCustomClassesSkills
         public static SkillsPlugin Instance;
         public const string ModGuid = "albedo.customclasses.skills";
         public const string ModName = "Dragon's Altar - Starter Skills";
-        public const string ModVersion = "0.25.81";
+        public const string ModVersion = "0.25.82";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";
@@ -808,6 +808,8 @@ namespace AlbedosCustomClassesSkills
                 StartCoroutine(AnimateRing(player.transform.position + forward * range + Vector3.up * 0.08f, 0.2f, width, 0.24f, new Color(1f, 0.78f, 0.30f, 0.92f), 0.09f, 0f));
                 Vector3 ipP = player.transform.position + forward * range + Vector3.up * 1f;
                 Vector3 ipF = forward;
+                Vector3 ipO = player.transform.position + Vector3.up * 1.1f + forward * 0.6f; float ipD = Mathf.Max(0.5f, range - 0.6f), ipS = Mathf.Clamp(width * 0.45f, 0.8f, 2.5f);
+                DragonCombat.RunVfx(delegate { DragonVfx.SpectralFist(ipO, ipF, ipD, ipS, new Color(1f, 0.66f, 0.26f, 1f)); });   // v0.25.82 the spectral fist
                 DragonCombat.RunVfx(delegate { DragonVfx.Burst(ipP, new Color(1f, 0.62f, 0.22f, 1f), 36, 9f, 0.3f, 0.5f, 0.3f); DragonVfx.Flash(ipP, new Color(1f, 0.62f, 0.22f, 1f), 4f, 6f, 0.3f); DragonVfx.Shake(ipP, 15f, 0.8f); DragonVfx.Shockwave(ipP - Vector3.up * 0.9f, new Color(1f, 0.70f, 0.30f, 1f), 2f, 0.25f); DragonVfx.AirRing(ipP, ipF, new Color(1f, 0.70f, 0.30f, 1f), 1.6f, 0.25f); DragonVfx.AirRing(ipP + ipF * 0.8f, ipF, new Color(1f, 0.85f, 0.55f, 1f), 2.4f, 0.35f); });   // v0.25.61 sonic rings
             }
         }

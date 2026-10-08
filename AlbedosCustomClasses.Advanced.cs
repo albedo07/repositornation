@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.81";
+        public const string ModVersion = "0.25.82";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -2477,6 +2477,7 @@ namespace AlbedosCustomClassesAdvanced
                     DragonVfx.Flash(ep + Vector3.up * 1.5f, new Color(0.62f, 0.50f, 1f, 1f), 8f, er * 2.5f, 0.5f);
                     DragonVfx.DustRing(ep, er);
                     DragonVfx.Shake(ep, 25f + er, 1.4f);
+                    DragonVfx.EclipseSun(ep + Vector3.up * (2.6f + er * 0.15f), Mathf.Clamp(er * 0.22f, 0.8f, 3f), 1.3f);   // v0.25.82 the black sun
                 });
             }
             StartCoroutine(EclipseAfterimageRoutine(player, radius, damage, ascended));   // v0.25.65 afterimage slashes (damage, always)
@@ -2645,7 +2646,7 @@ namespace AlbedosCustomClassesAdvanced
             DragonCombat.PlayClip(player, "sm_guidance", 0.06f);   // v0.25.16 release-first
             ShowMessage("Knight's Guidance");
             // v0.25.69 (user: the Grace was too bright): a dim, thin column + a plain ring (no ground glow disc).
-            if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.AreaRing(player.transform.position, new Color(0.30f, 0.55f, 0.85f, 0.45f), Mathf.Max(1f, DragonCombat.M(_kgRadius.Value)), 0.7f); });
+            if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.AreaRing(player.transform.position, new Color(0.30f, 0.55f, 0.85f, 0.45f), Mathf.Max(1f, DragonCombat.M(_kgRadius.Value)), 0.7f); DragonVfx.SpiritWings(player.transform, new Color(0.55f, 0.80f, 1f, 1f), 2.2f); });   // v0.25.82 spectral wings
             float radius = Mathf.Max(1f, DragonCombat.M(_kgRadius.Value));
             float duration = Mathf.Max(1f, _kgDuration.Value);
             HashSet<Player> allies = new HashSet<Player>();
@@ -4171,7 +4172,8 @@ namespace AlbedosCustomClassesAdvanced
             if (_enableVfx.Value)
             {
                 StartCoroutine(AnimateRing(rupturePoint + Vector3.up * 0.08f, width * 0.5f, endRadius, 0.46f, new Color(1f, 0.52f, 0.18f, 0.95f), 0.16f));
-                Vector3 rp = rupturePoint; float rr = endRadius;
+                Vector3 rp = rupturePoint; float rr = endRadius; Vector3 gf = forward;
+                DragonCombat.RunVfx(delegate { DragonVfx.GuillotineDrop(rp, gf, Mathf.Clamp(rr * 1.1f, 2.5f, 9f)); });   // v0.25.82 the guillotine falls
                 DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(rp, DragonVfx.Fire, rr, 1.8f); DragonVfx.Pillar(rp, DragonVfx.Fire, rr * 0.3f, 6f, 0.4f); DragonVfx.SpikeRing(rp, DragonVfx.Rock, rr * 0.7f, 9, 2.4f, 0.9f); });   // v0.25.58
             }
         }
