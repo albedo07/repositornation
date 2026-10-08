@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.103";
+        public const string ModVersion = "0.25.104";
 
         internal static DragonCombatPlugin Instance;
 
@@ -2317,6 +2317,11 @@ namespace DragonsAltarCombat
         // v0.25.86 main-hand-only chicken wing (Bonecrusher / Electric Smite flight; the off hand stays as it is)
         public bool EM;
         public DragonClipKey WingMain() { EP = new Vector3(0.6f, -0.4f, -0.7f); EW = 1f; EM = true; return this; }
+        // v0.25.104 two-hand grip off-hand elbow pole (body frame) + chest clearance, per clip. Unset (TPW 0) = the
+        // old fixed pole and no clearance, so every other clip keeps its exact IK.
+        public Vector3 TP;
+        public float TPW, TPC;
+        public DragonClipKey TwoPole(float x, float y, float z, float chestClear) { TP = new Vector3(x, y, z); TPW = 1f; TPC = chestClear; return this; }
         // v0.25.25 VANILLA LAYER (first key only): Valheim attack animation `VA` fired `VL` seconds before the
         // impact (VR > 0 = repeat every VR seconds while the clip runs); NoAim = the vanilla animation holds the
         // weapon, so the universal "weapon follows the forearm" rule stays off.
@@ -2347,7 +2352,7 @@ namespace DragonsAltarCombat
             for (int i = 0; i < B.Length; i++) k.B[i] = B[i];
             for (int i = 0; i < L.Length; i++) k.L[i] = L[i];
             k.R = R; k.O = O; k.Lin = Lin; k.Spin = Spin;
-            k.WD = WD; k.WW = WW; k.SD = SD; k.SW = SW; k.TW = TW; k.TG = TG; k.HD = HD; k.HR = HR; k.HW = HW; k.LD = LD; k.LR = LR; k.LW = LW; k.FLh = FLh; k.FRh = FRh; k.EP = EP; k.EW = EW; k.EM = EM;
+            k.WD = WD; k.WW = WW; k.SD = SD; k.SW = SW; k.TW = TW; k.TG = TG; k.HD = HD; k.HR = HR; k.HW = HW; k.LD = LD; k.LR = LR; k.LW = LW; k.FLh = FLh; k.FRh = FRh; k.EP = EP; k.EW = EW; k.EM = EM; k.TP = TP; k.TPW = TPW; k.TPC = TPC;
             return k;
         }
     }
@@ -2394,7 +2399,8 @@ namespace DragonsAltarCombat
         private Vector3 _wd, _sd;
         private float _ww, _sw, _tw, _tg, _env, _hr, _hw, _lr, _lw, _flh, _frh;
         private bool _highKnee;
-        private Vector3 _hd, _ld, _ep;
+        private Vector3 _hd, _ld, _ep, _tp;
+        private float _tpw, _tpc;
         private float _ew;
         private bool _em;
         // v0.25.15 legs: Unity humanoid muscles (HumanPoseHandler), applied on the animator's real pose.
@@ -2600,6 +2606,9 @@ namespace DragonsAltarCombat
             _ew = Mathf.Lerp(a.EW, b.EW, w);
             _ep = a.EW > 0f ? a.EP : b.EP;
             _em = a.EW > 0f ? a.EM : b.EM;
+            _tpw = Mathf.Lerp(a.TPW, b.TPW, w);
+            _tp = a.TPW > 0f ? a.TP : b.TP;
+            _tpc = a.TPW > 0f ? a.TPC : b.TPC;
             _flh = Mathf.Lerp(a.FLh, b.FLh, w);
             _frh = Mathf.Lerp(a.FRh, b.FRh, w);
             Vector3 la = a.LW > 0f ? a.LD : b.LD, lb = b.LW > 0f ? b.LD : a.LD;
@@ -3204,7 +3213,24 @@ namespace DragonsAltarCombat
                 if (_tipR != Vector3.zero && HeldItem(true) != null) axis = (rh.TransformPoint(_tipR) - rh.position).normalized;
                 Vector3 t = rh.position + axis * _tg * Mathf.Max(0.2f, transform.lossyScale.y);
                 Transform fr = _visual != null ? _visual : transform;
-                TwoBoneIK(ua, la, lh, t, fr.rotation * new Vector3(-0.2f, -1f, 0.35f), w);
+                Vector3 offPole = new Vector3(-0.2f, -1f, 0.35f);
+                if (_tpw > 0.01f)
+                {
+                    offPole = Vector3.Slerp(offPole.normalized, _tp.normalized, Mathf.Clamp01(_tpw));
+                    // v0.25.104 chest clearance (only clips that set TwoPole): the off-hand target is kept at least
+                    // _tpc (x character scale) IN FRONT of the chest bone along the body forward, so the off arm
+                    // crosses in front of the ribs instead of through them.
+                    Transform chest = _animator.GetBoneTransform(HumanBodyBones.Chest);
+                    if (chest == null) chest = _animator.GetBoneTransform(HumanBodyBones.Spine);
+                    if (chest != null && _tpc > 0f)
+                    {
+                        Vector3 fwd = fr.forward;
+                        float need = _tpc * Mathf.Max(0.2f, transform.lossyScale.y) * Mathf.Clamp01(_tpw);
+                        float ahead = Vector3.Dot(t - chest.position, fwd);
+                        if (ahead < need) t += fwd * (need - ahead);
+                    }
+                }
+                TwoBoneIK(ua, la, lh, t, fr.rotation * offPole, w);
                 // the off hand wraps the grip like the main hand
                 lh.rotation = Quaternion.Slerp(lh.rotation, rh.rotation, w * 0.8f);
                 _written[7] = ua.localRotation; _hasWritten[7] = true;
@@ -4438,23 +4464,33 @@ namespace DragonsAltarCombat
             // Joint safety: every Hand reach <= 0.95 (elbows never locked / hyper-extended), loaded hands stay on the
             // right side behind the shoulder plane (x > 0, z < 0) so nothing crosses the torso, knee lift <= 0.55.
             {
-                // v0.25.103 (user: forearms + handle clipped through the head/neck): the bat load sits OUT at the
+                // v0.25.104 (user: arms/elbows still clipped): ROOT CAUSE = the v0.25.103 grip sat 0.8 lateral right of the
+                // right shoulder, so TwoHandGrip stretched the LEFT arm straight across the chest at shoulder height
+                // (its fixed pole) - the left upper arm cut ~14 cm into the torso and still missed the grip by 6 cm.
+                // Batting stance now: both hands together just in FRONT of the right shoulder and a bit above it
+                // (Hand 0.25,0.70,0.90 reach 0.6 -> ~0.34 from the head), bat up and back over the right shoulder,
+                // back (right) elbow up/out/back (EP), front (left) elbow down-forward in front of the ribs
+                // (TwoPole) with a 0.16 chest clearance. Checked offline with arm IK + torso/head/neck proxies on
+                // every key and 9 interpolated poses per segment: no segment inside the proxies, grip reached.
+                // Torso: chest/spine y- twists the right shoulder BACK (driver axis notes) = backswing coil -15/-18,
+                // unwinding to +8 at the strike (v0.25.103 had the sign reversed).
+                // (old note) v0.25.103 (user: forearms + handle clipped through the head/neck): the bat load sits OUT at the
                 // right shoulder, not behind the neck. Hand target = mostly lateral (x 0.8) at shoulder height,
                 // barely behind the shoulder plane (z -0.12), reach 0.62 -> the grip stays ~0.35+ m from the head.
                 // Shoulder clearance (no clavicle channel in the driver): chest rolled slightly FORWARD (Ch x +6)
                 // so the shoulders come forward of the neck, and the main elbow pole flares OUT and down (EP) so
                 // the forearm opens away from the neck instead of folding inward. The handle points up-back AWAY
                 // from the head (Wp x 0.6). Two-hand grip kept; the off hand follows the handle.
-                DragonClipKey hrLoad = K(-0.75f).Rot(0f, 60f, 0f).Sp(-6f, 0f, 0f).Ch(6f, 10f, 0f).Hd(0f, -20f, 0f)
+                DragonClipKey hrLoad = K(-0.75f).Rot(0f, 60f, 0f).Sp(-6f, -8f, 0f).Ch(6f, -15f, 0f).Hd(0f, -20f, 0f)
                     .RL(0f, 0.05f, 0f, 0f).Lift(0.55f, 0f).Off(0f, 0.10f, 0f)
-                    .Hand(0.80f, 0.10f, -0.12f, 0.62f).Wp(0.6f, 0.7f, -0.38f).Two(-0.12f);
-                hrLoad.EP = new Vector3(0.85f, -0.45f, -0.15f); hrLoad.EW = 1f; hrLoad.EM = true;
-                DragonClipKey hrPlant = K(-0.2f).Rot(0f, 60f, 0f).Sp(4f, 0f, 0f).Ch(6f, 12f, 0f).Hd(0f, -24f, 0f)
+                    .Hand(0.25f, 0.70f, 0.90f, 0.60f).Wp(0.35f, 0.8f, -0.5f).Two(-0.14f).TwoPole(-0.2f, -0.4f, 1f, 0.16f);
+                hrLoad.EP = new Vector3(0.9f, 0.25f, -0.35f); hrLoad.EW = 1f; hrLoad.EM = true;
+                DragonClipKey hrPlant = K(-0.2f).Rot(0f, 60f, 0f).Sp(4f, -10f, 0f).Ch(6f, -18f, 0f).Hd(0f, -24f, 0f)
                     .LL(0.4f, 0.12f, 0f, 0f).RL(-0.2f, 0.1f, 0f, 0f).Lift(0f, 0f).Off(0f, -0.05f, 0f)
-                    .Hand(0.80f, 0.10f, -0.15f, 0.62f).Wp(0.6f, 0.7f, -0.40f).Two(-0.12f);
-                hrPlant.EP = new Vector3(0.85f, -0.45f, -0.15f); hrPlant.EW = 1f; hrPlant.EM = true;
-                DragonClipKey hrStrike = K(0f).Rot(0f, 0f, 0f).Sp(6f, 0f, 0f).Ch(0f, -8f, 0f).Off(0f, -0.06f, 0f)
-                    .Hand(0.55f, -0.05f, 0.75f, 0.95f).Wp(1f, 0f, 0.3f).Two(-0.2f).Sn(0f).Linear();
+                    .Hand(0.25f, 0.65f, 0.90f, 0.60f).Wp(0.35f, 0.8f, -0.5f).Two(-0.14f).TwoPole(-0.2f, -0.4f, 1f, 0.16f);
+                hrPlant.EP = new Vector3(0.9f, 0.25f, -0.35f); hrPlant.EW = 1f; hrPlant.EM = true;
+                DragonClipKey hrStrike = K(0f).Rot(0f, 0f, 0f).Sp(6f, 4f, 0f).Ch(0f, 8f, 0f).Off(0f, -0.06f, 0f)
+                    .Hand(0.45f, -0.05f, 1.1f, 0.92f).Wp(1f, 0f, 0.3f).Two(-0.2f).TwoPole(-0.2f, -0.4f, 1f, 0.16f).Sn(0f).Linear();
                 DragonClipKey hrMid = hrStrike.Copy(0.2f).Sn(180f);
                 DragonClipKey hrEnd = hrStrike.Copy(0.4f).Sn(360f); hrEnd.Lin = false;
                 c["merc_homerun"] = new DragonClipKey[] { K(-1f), hrLoad, hrPlant, hrStrike, hrMid, hrEnd, K(0.7f) };

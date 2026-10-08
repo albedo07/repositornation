@@ -1,0 +1,15 @@
+Immortal Heroes v0.25.104 - Batting Stance
+Base: v0.25.103 (anchors v0.25.97 / v0.25.100 untouched). Only Home Run Cleave (Circle Swing) arm IK.
+
+ROOT CAUSE: the v0.25.103 grip sat far right of the right shoulder; the two-hand grip IK then stretched
+the LEFT arm straight across the chest at shoulder height (fixed off-hand elbow pole) -> left upper arm
+~14 cm inside the torso, and it still could not reach the grip.
+
+- New batting stance: both hands together just in front of / above the right shoulder (~0.34 from the
+  head), bat up and back over the right shoulder, back (right) elbow up/out/back, front (left) elbow
+  down-forward in front of the ribs.
+- New per-clip off-hand pole + chest clearance (TwoPole); only merc_homerun sets it, every other clip
+  keeps the old fixed pole and no clearance.
+- Torso coil fixed: chest/spine twist the right shoulder BACK for the backswing (sign was reversed),
+  unwinding at the strike.
+- Crow hop, 360 spin, damage, timing unchanged.
