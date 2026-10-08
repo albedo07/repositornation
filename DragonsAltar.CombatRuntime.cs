@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.82";
+        public const string ModVersion = "0.25.83";
 
         internal static DragonCombatPlugin Instance;
 
@@ -12086,6 +12086,64 @@ namespace DragonsAltarCombat
             DragonPop pop = root.AddComponent<DragonPop>();
             pop.Grow = 0.35f; pop.Life = Mathf.Max(0.5f, seconds); pop.Fade = 0.45f;
             Feathers(follow.position + Vector3.up * 1.3f, c, 1.2f, 0.8f, 30f);
+        }
+
+        // v0.25.83 SORCERER HERO OBJECTS ---------------------------------------------------------------
+        // Flat annulus in local XZ (radius 0.5 scale) broken into glowing rune dashes.
+        private static Mesh RuneBandMesh(Color c, int segments, float inner, float outer)
+        {
+            List<Vector3> v = new List<Vector3>(); List<Color> cs = new List<Color>(); List<int> t = new List<int>();
+            int n = segments * 4;
+            for (int i = 0; i <= n; i++)
+            {
+                float a = (float)i / n * Mathf.PI * 2f;
+                bool lit = (i / 2) % 2 == 0;
+                Color k = c; k.a = lit ? c.a : c.a * 0.25f;
+                Vector3 d = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                v.Add(d * inner); cs.Add(k);
+                v.Add(d * outer); cs.Add(k);
+            }
+            for (int i = 0; i < n; i++) { int a = i * 2, b = a + 2; t.Add(a); t.Add(a + 1); t.Add(b); t.Add(b); t.Add(a + 1); t.Add(b + 1); }
+            DoubleSide(t);
+            return ColoredMesh(v, cs, t);
+        }
+
+        // Turns a primitive sphere orb into an arcane energy orb: faceted crystal shell (keeps the orb's material,
+        // so callers can still tint/fade it), a white-hot core and two rune bands spinning on different axes.
+        // Dark orbs (Gravity Blast) get a black core and violet bands instead.
+        public static void EnergyOrb(GameObject orb, Color c, bool full)
+        {
+            if (!Enabled || orb == null) return;
+            MeshFilter mf = orb.GetComponent<MeshFilter>();
+            if (mf != null) mf.sharedMesh = GeodesicShell(new Color(1f, 1f, 1f, 1f));
+            if (!full) return;
+            bool dark = c.grayscale < 0.2f;
+            Color band = dark ? new Color(0.70f, 0.40f, 1f, 0.9f) : Color.Lerp(c, Color.white, 0.35f);
+            band.a = 0.9f;
+            GameObject core = MeshObject("core", GeodesicShell(dark ? new Color(0.02f, 0f, 0.05f, 1f) : new Color(1f, 0.97f, 1f, 0.9f)), dark ? ClearMat() : Mat(WhiteTex(), true), orb.transform);
+            core.transform.localScale = Vector3.one * 0.55f;
+            for (int k = 0; k < 2; k++)
+            {
+                GameObject pivot = new GameObject("bandPivot");
+                pivot.transform.SetParent(orb.transform, false);
+                pivot.transform.localRotation = Quaternion.Euler(k == 0 ? 20f : 75f, k * 60f, k == 0 ? -15f : 30f);
+                GameObject ring = MeshObject("band", RuneBandMesh(band, 8, 0.62f, 0.72f), Mat(WhiteTex(), true), pivot.transform);
+                ring.AddComponent<DragonRotate>().Speed = new Vector3(0f, k == 0 ? 220f : -160f, 0f);
+            }
+        }
+
+        // Arcane lightning burst: real jagged bolts from the sky with branches, instead of straight lines.
+        public static void ArcaneBoltRain(Vector3 center, float radius, int count)
+        {
+            if (!Enabled) return;
+            for (int i = 0; i < count; i++)
+            {
+                float a = (float)i / count * Mathf.PI * 2f + UnityEngine.Random.Range(-0.2f, 0.2f);
+                Vector3 p = GroundPoint(center + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * radius * UnityEngine.Random.Range(0.45f, 0.8f));
+                Color col = i % 2 == 0 ? new Color(0.72f, 0.36f, 1f, 1f) : new Color(0.50f, 0.85f, 1f, 1f);
+                Bolt(p + Vector3.up * 11f + new Vector3(UnityEngine.Random.Range(-1f, 1f), 0f, UnityEngine.Random.Range(-1f, 1f)), p, col, 0.22f, 0.3f);
+                Burst(p + Vector3.up * 0.2f, col, 10, 5f, 0.2f, 0.35f, 0f);
+            }
         }
 
         // v0.25.80 Rift Walker portal: a standing oval of swirling void (dark core, spiral bands) with a blazing rim.

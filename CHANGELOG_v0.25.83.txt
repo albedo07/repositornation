@@ -1,0 +1,9 @@
+Immortal Heroes v0.25.83 - Arcane Cores (VFX hero-object pass 3 of 4: Sorcerer)
+
+VFX
+- Every Sorcerer orb (Archmage charged staff shots, Horizon Walker Rift Echo bolts, Gravity Blast orb, meteor fallback) is now an arcane energy orb: faceted crystal shell, white-hot core and two rune bands spinning on different axes. Gravity Blast keeps a black core with violet bands.
+- Explosion flashes use the faceted shell too.
+- Arcane lightning bursts (Wizard / Horizon Walker blasts, Arcane Rupture) are now real jagged bolts with branches and sparks instead of straight lines.
+- Afterimage Arsenal (normal): the afterimage is now a frozen astral copy of your real character (pose, armour, weapon) instead of capsule shapes.
+
+Visual only: no damage, timing or hitbox changes.

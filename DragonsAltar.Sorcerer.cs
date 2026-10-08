@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Dragon's Altar - Sorcerer Advancements";
-        public const string ModVersion = "0.25.82";
+        public const string ModVersion = "0.25.83";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1674,7 +1674,12 @@ namespace DragonsAltarSorcerer
             root.transform.position = position;
             root.transform.rotation = rotation;
 
-            if (_enableVfx.Value)
+            if (_enableVfx.Value && DragonVfx.Enabled)
+            {
+                AttachGhostSnapshot(Player.m_localPlayer, root);   // v0.25.83 a frozen astral copy of you instead of capsules
+                StartCoroutine(RingVfx(position + Vector3.up * 0.05f, 1.15f, new Color(0.64f, 0.16f, 1f, 0.72f), 0.45f));
+            }
+            else if (_enableVfx.Value)
             {
                 CreateAfterimagePart(root.transform, PrimitiveType.Capsule, new Vector3(0f, 1.0f, 0f), new Vector3(0.52f, 0.90f, 0.42f));
                 CreateAfterimagePart(root.transform, PrimitiveType.Sphere, new Vector3(0f, 2.05f, 0f), new Vector3(0.42f, 0.42f, 0.42f));
@@ -2705,7 +2710,7 @@ namespace DragonsAltarSorcerer
                 DragonVfx.GroundImpact(center, color, radius, 1.6f);   // v0.25.58
                 DragonVfx.Flash(center + Vector3.up, color, 8f, radius * 3f, 0.5f);
             });
-            GameObject flash = CreateOrb(center, radius * 0.3f, color);
+            GameObject flash = CreateOrb(center, radius * 0.3f, color, false);
             for (int i = 0; i < 3; i++)
                 StartCoroutine(RingVfx(center + Vector3.up * (0.3f + i * 0.9f), radius * (0.7f + 0.15f * i), new Color(color.r, color.g, color.b, 0.9f - 0.2f * i), 0.35f + 0.1f * i));
             float t = 0f;
@@ -2897,6 +2902,37 @@ namespace DragonsAltarSorcerer
                 _mimicBones[i] = copy.GetComponentsInChildren<Transform>(true);
             }
             _mimicNextEquipCheck = Time.time + 0.5f;
+        }
+
+        // v0.25.83: Afterimage Arsenal's afterimage = a frozen astral copy of your real character (pose, gear) instead
+        // of capsules. Same copy method as the Astral twins (copied while inactive, stripped to renderers).
+        private void AttachGhostSnapshot(Player player, GameObject root)
+        {
+            if (player == null || root == null) return;
+            Transform src = FindPlayerVisual(player);
+            if (src == null) return;
+            if (_mimicMaterial == null)
+            {
+                Shader shader = Shader.Find("Sprites/Default");
+                _mimicMaterial = shader != null ? new Material(shader) : null;
+                if (_mimicMaterial != null) _mimicMaterial.color = new Color(0.58f, 0.30f, 1f, 0.42f);
+            }
+            GameObject copy = null;
+            bool wasActive = src.gameObject.activeSelf;
+            try
+            {
+                src.gameObject.SetActive(false);
+                copy = (GameObject)Instantiate(src.gameObject, src.position, src.rotation);
+            }
+            catch (Exception) { copy = null; }
+            finally { src.gameObject.SetActive(wasActive); }
+            if (copy == null) return;
+            copy.name = "SpellcasterAfterimageGhost";
+            StripToVisual(copy);
+            copy.transform.SetParent(root.transform, true);
+            copy.SetActive(true);
+            GameObject keep = copy;
+            DragonCombat.RunVfx(delegate { DragonVfx.AttachGlow(keep.transform, new Color(0.62f, 0.30f, 1f, 1f), 0.5f, 18f, 3f); });
         }
 
         // Keep only transforms + renderers; every renderer becomes the astral ghost material.
@@ -3717,6 +3753,11 @@ namespace DragonsAltarSorcerer
 
         private GameObject CreateOrb(Vector3 pos, float size, Color color)
         {
+            return CreateOrb(pos, size, color, true);
+        }
+
+        private GameObject CreateOrb(Vector3 pos, float size, Color color, bool hero)
+        {
             GameObject obj = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             obj.name = "ArcaneProjectile";
             obj.transform.position = pos;
@@ -3733,6 +3774,7 @@ namespace DragonsAltarSorcerer
             // v0.25.55 VFX pass 3: every Sorcerer orb (meteors, arcane bolts, gravity orbs) glows, lights up and trails.
             DragonCombat.RunVfx(delegate
             {
+                DragonVfx.EnergyOrb(obj, color, hero);   // v0.25.83 crystal shell + core + rune bands
                 DragonVfx.AttachGlow(obj.transform, Color.Lerp(color, Color.white, 0.25f), Mathf.Max(0.15f, size * 0.6f), 40f + size * 30f, Mathf.Max(3f, size * 4f));
                 DragonVfx.TrailWhile(obj.transform, color, Mathf.Max(0.15f, size * 0.45f), delegate { return obj != null && obj.activeInHierarchy; });
             });
@@ -3839,6 +3881,7 @@ namespace DragonsAltarSorcerer
 
         private void CreateLightningBurst(Vector3 center, float radius)
         {
+            if (DragonVfx.Enabled) { Vector3 lc = center; float lr = radius; DragonCombat.RunVfx(delegate { DragonVfx.ArcaneBoltRain(lc, lr, 8); }); return; }   // v0.25.83 jagged bolts
             for (int i = 0; i < 8; i++)
             {
                 float a = (float)i / 8f * Mathf.PI * 2f;

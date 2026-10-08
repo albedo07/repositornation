@@ -1,5 +1,4 @@
-TEST v0.25.82
-1. Eclipse (normal + Ascended): black sun with violet corona above you, faces the camera, collapses after ~1.5 s.
-2. Seismic Guillotine (normal, Ascended, Fury): guillotine blade drops on the main fissure's rupture point, edge along the fissure.
-3. Impact Punch: spectral fist flies forward over the punch range.
-4. Knight's Guidance: wings unfold on your back (not too bright), fold away after ~2 s.
+TEST v0.25.83
+1. Archmage charged staff shot, Rift Echo, Gravity Blast: orbs show a crystal shell, bright core and two spinning rune bands (Gravity Blast: black core).
+2. Arcane Rupture / Sorcerer blasts: jagged bolts from the sky.
+3. Afterimage Arsenal (normal): a translucent violet copy of your character stays where you cast it.
