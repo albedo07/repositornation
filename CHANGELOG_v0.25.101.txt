@@ -1,0 +1,8 @@
+Immortal Heroes v0.25.101 - Northpaw Stomp
+Base: ANCHOR v0.25.100. Only the Stomp animation.
+
+- Stomp now raises the LEFT knee to hip/torso height, shin vertical straight under the knee (no quad
+  stretch), then stamps. Clamps: hip flexion max 95 deg, foot never below the ground, thigh kept on its
+  own side (never into the torso).
+- Only DragonsAltar.CombatRuntime.cs changed: SbGround(1) Stomp keys + the lifted-foot target inside
+  PlantFeet (Stomp clip only). Harmony patches / hooks / other clips untouched.
