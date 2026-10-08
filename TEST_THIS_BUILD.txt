@@ -1,4 +1,5 @@
-TEST v0.25.83
-1. Archmage charged staff shot, Rift Echo, Gravity Blast: orbs show a crystal shell, bright core and two spinning rune bands (Gravity Blast: black core).
-2. Arcane Rupture / Sorcerer blasts: jagged bolts from the sky.
-3. Afterimage Arsenal (normal): a translucent violet copy of your character stays where you cast it.
+TEST v0.25.84
+1. Ranger skills that fire arrows (Ballista, Pinning, Explosive, Splitting, Cyclone...): 3D spirit arrows with fletching.
+2. Cyclone Arrow + Ascended tornado: spinning wind funnels.
+3. Furious Winds: leaves orbiting you.
+4. Snare Trap: rope loop + stakes on the ground until it triggers.

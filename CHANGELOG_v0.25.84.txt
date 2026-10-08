@@ -1,0 +1,10 @@
+Immortal Heroes v0.25.84 - Wild Arsenal (VFX hero-object pass 4 of 4: Ranger)
+
+VFX
+- Every Ranger skill arrow is now a real glowing spirit arrow (broadhead, shaft, three fletches, soft halo) instead of a line.
+- Cyclone Arrow and the Ascended Cyclone tornado are now spiral wind funnels: two counter-rotating streaked layers of wind instead of ring lines.
+- Furious Winds: real leaves whirl around you on three tilted orbits instead of curved lines.
+- Snare Trap is now a hunter's snare on the ground: rope noose loop, wooden stakes leaning out, and a faint green rune band.
+
+All four hero-object passes are done: no skill in any class still uses line or primitive placeholders while VFX are on.
+Visual only: no damage, timing or hitbox changes.

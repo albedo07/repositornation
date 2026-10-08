@@ -40,7 +40,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Dragon's Altar - Ranger";
-        public const string ModVersion = "0.25.83";
+        public const string ModVersion = "0.25.84";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -1097,7 +1097,8 @@ namespace DragonsAltarRanger
             obj.transform.position = pos;
             if (_enableVfx.Value) { GameObject tob = obj; float tr = radius; DragonCombat.RunVfx(delegate { DragonVfx.Vortex(tob.transform, tob.transform.position + Vector3.up, DragonVfx.Wind, tr * 1.3f, 12f); DragonVfx.TrailWhile(tob.transform, new Color(0.55f, 0.50f, 0.42f, 0.6f), tr, delegate { return tob != null; }); }); }   // v0.25.61 debris funnel
             const int rings = 9;
-            for (int k = 0; k < rings; k++)
+            if (_enableVfx.Value && DragonVfx.Enabled) { GameObject wf = obj; float wr = radius, wh = height; Color wc = color; DragonCombat.RunVfx(delegate { DragonVfx.WindFunnel(wf.transform, new Vector3(0f, 0.2f, 0f), wr * 0.35f, wr, wh, wc); }); }   // v0.25.84 spiral wind funnel
+            for (int k = 0; k < rings && !(_enableVfx.Value && DragonVfx.Enabled); k++)
             {
                 float h = (float)k / (rings - 1);
                 GameObject ring = new GameObject("Ring" + k);
@@ -1627,7 +1628,8 @@ namespace DragonsAltarRanger
             GameObject obj = new GameObject("RangerFuriousWinds");
             obj.transform.position = pos;
             Color[] colors = { new Color(0.45f, 0.95f, 0.45f, 0.9f), new Color(0.70f, 1f, 0.55f, 0.8f), new Color(0.40f, 0.85f, 0.70f, 0.8f) };
-            for (int k = 0; k < 6; k++)
+            if (DragonVfx.Enabled) { GameObject lo = obj; float lr = radius; DragonCombat.RunVfx(delegate { DragonVfx.LeafOrbit(lo.transform, lr); }); }   // v0.25.84 real whirling leaves
+            for (int k = 0; k < 6 && !DragonVfx.Enabled; k++)
             {
                 GameObject ring = new GameObject("Leaves" + k);
                 ring.transform.SetParent(obj.transform, false);
@@ -3626,6 +3628,7 @@ namespace DragonsAltarRanger
             if (m != null) line.material = m;
             // v0.25.55 VFX pass 4: every skill arrow leaves a glowing wind trail.
             DragonCombat.RunVfx(delegate { DragonVfx.TrailWhile(obj.transform, color, 0.14f, delegate { return obj != null; }); });
+            if (DragonVfx.Enabled) { LineRenderer al = line; DragonCombat.RunVfx(delegate { DragonVfx.SpiritArrow(obj.transform, color, 0.9f); al.enabled = false; }); }   // v0.25.84 a real spirit arrow
             return obj;
         }
 
@@ -3668,7 +3671,8 @@ namespace DragonsAltarRanger
         {
             GameObject obj = new GameObject("RangerCyclone");
             obj.transform.position = pos;
-            for (int k = 0; k < 3; k++)
+            if (DragonVfx.Enabled) { GameObject cf = obj; float cr = radius; Color cc = color; DragonCombat.RunVfx(delegate { DragonVfx.WindFunnel(cf.transform, new Vector3(0f, -0.6f, 0f), cr * 0.45f, cr * 0.95f, 1.2f, cc); }); }   // v0.25.84
+            for (int k = 0; k < 3 && !DragonVfx.Enabled; k++)
             {
                 GameObject ring = new GameObject("Ring" + k);
                 ring.transform.SetParent(obj.transform, false);
@@ -3697,6 +3701,12 @@ namespace DragonsAltarRanger
         {
             GameObject obj = new GameObject("RangerSnare");
             obj.transform.position = pos;
+            if (DragonVfx.Enabled)
+            {
+                GameObject so = obj; float sr = radius;
+                DragonCombat.RunVfx(delegate { DragonVfx.SnareTrap(so.transform, sr); DragonVfx.AttachGlow(so.transform, new Color(0.85f, 0.95f, 0.45f, 0.55f), sr * 0.6f, 8f, 0f); });   // v0.25.84 rope noose + stakes
+                return obj;
+            }
             LineRenderer line = obj.AddComponent<LineRenderer>();
             line.useWorldSpace = false;
             line.loop = true;

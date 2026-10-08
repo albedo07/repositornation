@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.83";
+        public const string ModVersion = "0.25.84";
 
         internal static DragonCombatPlugin Instance;
 
@@ -12144,6 +12144,137 @@ namespace DragonsAltarCombat
                 Bolt(p + Vector3.up * 11f + new Vector3(UnityEngine.Random.Range(-1f, 1f), 0f, UnityEngine.Random.Range(-1f, 1f)), p, col, 0.22f, 0.3f);
                 Burst(p + Vector3.up * 0.2f, col, 10, 5f, 0.2f, 0.35f, 0f);
             }
+        }
+
+        // v0.25.84 RANGER HERO OBJECTS -----------------------------------------------------------------
+        // Skill arrow: a glowing spirit arrow pointing +Z with the head at the origin (faceted head, shaft, 3 fletches).
+        public static void SpiritArrow(Transform parent, Color c, float length)
+        {
+            if (!Enabled || parent == null) return;
+            List<Vector3> v = new List<Vector3>(); List<int> t = new List<int>();
+            Tube(v, t, new Vector3(0f, 0f, -length), new Vector3(0f, 0f, -length * 0.12f), Vector3.right, Vector3.up, 0.018f, 0.018f, 0.018f, 0.018f, 5);   // shaft
+            Mesh shaft = FacetMesh(v, t, new Color(0.92f, 0.86f, 0.70f, 1f), 0.3f);
+            MeshObject("shaft", shaft, ClearMat(), parent);
+            v = new List<Vector3>(); t = new List<int>();
+            Tube(v, t, new Vector3(0f, 0f, -length * 0.14f), new Vector3(0f, 0f, 0f), Vector3.right, Vector3.up, 0.06f, 0.025f, 0.002f, 0.002f, 4);   // broadhead
+            Color head = Color.Lerp(c, Color.white, 0.5f); head.a = 1f;
+            MeshObject("head", FacetMesh(v, t, head, 0.8f), ClearMat(), parent);
+            Color fl = c; fl.a = 0.85f;
+            for (int k = 0; k < 3; k++)
+            {
+                GameObject f = new GameObject("fletch");
+                f.transform.SetParent(parent, false);
+                f.transform.localRotation = Quaternion.AngleAxis(k * 120f, Vector3.forward);
+                List<Vector3> fv = new List<Vector3> { new Vector3(0f, 0.015f, -length * 0.98f), new Vector3(0f, 0.09f, -length * 0.95f), new Vector3(0f, 0.015f, -length * 0.72f) };
+                List<int> ft = new List<int> { 0, 1, 2 };
+                DoubleSide(ft);
+                MeshObject("v", FacetMesh(fv, ft, fl, 0.2f), Mat(WhiteTex(), true), f.transform);
+            }
+            Color halo = c; halo.a = 0.3f;
+            v = new List<Vector3>(); t = new List<int>();
+            Tube(v, t, new Vector3(0f, 0f, -length * 0.5f), new Vector3(0f, 0f, 0.05f), Vector3.right, Vector3.up, 0.07f, 0.07f, 0.02f, 0.02f, 6);
+            DoubleSide(t);
+            MeshObject("halo", FacetMesh(v, t, halo, 0.1f), Mat(WhiteTex(), true), parent);
+        }
+
+        // Spiral wind funnel (radius r0 at the bottom -> r1 at the top), two counter-rotating additive layers with
+        // streaked bands. Used by the Cyclone tornado and the Cyclone Arrow.
+        private static Mesh FunnelMesh(float r0, float r1, float height, float twist, Color c, int bands)
+        {
+            int n = 40, h = 14;
+            List<Vector3> v = new List<Vector3>(); List<Color> cs = new List<Color>(); List<int> t = new List<int>();
+            for (int j = 0; j <= h; j++)
+            {
+                float y = (float)j / h;
+                float r = Mathf.Lerp(r0, r1, Mathf.Pow(y, 0.8f));
+                float fade = Mathf.SmoothStep(0f, 1f, y * 5f) * Mathf.SmoothStep(0f, 1f, (1f - y) * 4f);
+                for (int i = 0; i <= n; i++)
+                {
+                    float a = (float)i / n * Mathf.PI * 2f + y * twist;
+                    v.Add(new Vector3(Mathf.Cos(a) * r, y * height, Mathf.Sin(a) * r));
+                    float stripe = Mathf.Pow(Mathf.Max(0f, Mathf.Sin((float)i / n * Mathf.PI * 2f * bands - y * 6f)), 3f);
+                    Color k = c; k.a = c.a * (0.12f + 0.88f * stripe) * fade;
+                    cs.Add(k);
+                }
+            }
+            for (int j = 0; j < h; j++)
+                for (int i = 0; i < n; i++)
+                {
+                    int a = j * (n + 1) + i, b = a + 1, cc = a + n + 1, d = cc + 1;
+                    t.Add(a); t.Add(cc); t.Add(b); t.Add(b); t.Add(cc); t.Add(d);
+                }
+            DoubleSide(t);
+            return ColoredMesh(v, cs, t);
+        }
+
+        public static void WindFunnel(Transform parent, Vector3 localBase, float r0, float r1, float height, Color c)
+        {
+            if (!Enabled || parent == null) return;
+            Color outer = c; outer.a = 0.55f;
+            Color inner = Color.Lerp(c, Color.white, 0.4f); inner.a = 0.45f;
+            GameObject a = MeshObject("funnelA", FunnelMesh(r0, r1, height, 4f, outer, 4), Mat(WhiteTex(), true), parent);
+            a.transform.localPosition = localBase;
+            a.AddComponent<DragonRotate>().Speed = new Vector3(0f, -320f, 0f);
+            GameObject b = MeshObject("funnelB", FunnelMesh(r0 * 0.6f, r1 * 0.7f, height * 0.95f, -3f, inner, 3), Mat(WhiteTex(), true), parent);
+            b.transform.localPosition = localBase;
+            b.AddComponent<DragonRotate>().Speed = new Vector3(0f, -480f, 0f);
+        }
+
+        // Furious Winds: real leaves (green lens blades) whirling around you on three tilted orbits.
+        public static void LeafOrbit(Transform parent, float radius)
+        {
+            if (!Enabled || parent == null) return;
+            Color[] cols = { new Color(0.40f, 0.80f, 0.30f, 0.95f), new Color(0.62f, 0.90f, 0.35f, 0.95f), new Color(0.85f, 0.75f, 0.30f, 0.95f) };
+            System.Random rng = new System.Random(3);
+            for (int k = 0; k < 3; k++)
+            {
+                GameObject pivot = new GameObject("leafOrbit");
+                pivot.transform.SetParent(parent, false);
+                pivot.transform.localPosition = new Vector3(0f, 0.6f + k * 0.7f, 0f);
+                pivot.transform.localRotation = Quaternion.Euler(k * 7f - 7f, 0f, k * 5f);
+                pivot.AddComponent<DragonRotate>().Speed = new Vector3(0f, 260f + k * 70f, 0f);
+                float r = radius * (0.6f + 0.15f * k);
+                for (int i = 0; i < 10; i++)
+                {
+                    float a = (i + (float)rng.NextDouble() * 0.6f) / 10f * 360f;
+                    GameObject leaf = MeshObject("leaf", LensMesh(0.32f, 0.16f, 0.02f, cols[(i + k) % 3], true), ClearMat(), pivot.transform);
+                    leaf.transform.localPosition = Quaternion.Euler(0f, a, 0f) * Vector3.forward * r + Vector3.up * ((float)rng.NextDouble() - 0.5f) * 0.6f;
+                    leaf.transform.localRotation = Quaternion.Euler((float)rng.NextDouble() * 360f, a, (float)rng.NextDouble() * 360f);
+                    leaf.AddComponent<DragonRotate>().Speed = new Vector3(400f, 0f, 250f);
+                }
+            }
+        }
+
+        // Snare Trap: a real hunter's snare - a rope noose loop on the ground, wooden stakes leaning out around it,
+        // and a faint green rune band so it stays readable.
+        public static void SnareTrap(Transform parent, float radius)
+        {
+            if (!Enabled || parent == null) return;
+            List<Vector3> v = new List<Vector3>(); List<int> t = new List<int>();
+            int n = 18;
+            float rr = radius * 0.8f;
+            for (int i = 0; i < n; i++)
+            {
+                float a0 = (float)i / n * Mathf.PI * 2f, a1 = (float)(i + 1) / n * Mathf.PI * 2f;
+                Vector3 p0 = new Vector3(Mathf.Cos(a0) * rr, 0.06f, Mathf.Sin(a0) * rr), p1 = new Vector3(Mathf.Cos(a1) * rr, 0.06f, Mathf.Sin(a1) * rr);
+                Vector3 dir = (p1 - p0).normalized; Vector3 side = Vector3.Cross(Vector3.up, dir);
+                Tube(v, t, p0, p1, Vector3.up, side, 0.05f, 0.05f, 0.05f, 0.05f, 5);
+            }
+            MeshObject("rope", FacetMesh(v, t, new Color(0.62f, 0.50f, 0.32f, 1f), 0.3f), ClearMat(), parent);
+            v = new List<Vector3>(); t = new List<int>();
+            for (int i = 0; i < 6; i++)
+            {
+                float a = (i + 0.5f) / 6f * Mathf.PI * 2f;
+                Vector3 d = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                Vector3 baseP = d * radius * 0.95f;
+                Vector3 top = baseP + d * 0.25f + Vector3.up * 0.65f;
+                Tube(v, t, baseP, top, Vector3.Cross(Vector3.up, d), d, 0.06f, 0.06f, 0.01f, 0.01f, 5);
+            }
+            MeshObject("stakes", FacetMesh(v, t, new Color(0.42f, 0.30f, 0.18f, 1f), 0.4f), ClearMat(), parent);
+            GameObject band = MeshObject("rune", RuneBandMesh(new Color(0.75f, 1f, 0.45f, 0.5f), 10, 0.9f, 1f), Mat(WhiteTex(), true), parent);
+            band.transform.localPosition = new Vector3(0f, 0.05f, 0f);
+            band.transform.localScale = Vector3.one * radius;
+            band.AddComponent<DragonRotate>().Speed = new Vector3(0f, 25f, 0f);
         }
 
         // v0.25.80 Rift Walker portal: a standing oval of swirling void (dark core, spiral bands) with a blazing rim.
