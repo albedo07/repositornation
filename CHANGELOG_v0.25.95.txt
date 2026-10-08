@@ -1,0 +1,9 @@
+Immortal Heroes v0.25.95 - Violent Halfmoon
+Base: v0.25.94. Only Halfmoon Slash (+Ascended).
+
+- No movement until the ENTIRE skill is finished (swing + every follow-up cut; Ascended also the stance
+  and the final GT swing).
+- Swing as fast as Heavy Slash's: hits 0.25 s after the cast (was 0.45 s), battleaxe swing ~2.6x.
+- Ascended: the follow-up cuts run on their own; the Left Click window for the final GT opens right
+  when the swing ANIMATION ends (~0.4 s after the cast), not after the cuts. The final GT swing is
+  equally fast.

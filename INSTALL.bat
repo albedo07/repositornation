@@ -1,5 +1,5 @@
 @echo off
-title Immortal Heroes v0.25.94 - Swing First
+title Immortal Heroes v0.25.95 - Violent Halfmoon
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
 echo.
 pause

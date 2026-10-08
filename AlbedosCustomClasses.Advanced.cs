@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.94";
+        public const string ModVersion = "0.25.95";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1390,6 +1390,9 @@ namespace AlbedosCustomClassesAdvanced
         private const float SmSwordContact = 0.16f; // v0.25.91 faster Moonlight / Crescent follow-up swings (longsword contact 0.28 s -> 1.75x)
         private const float SmSwordCycle = 0.40f; // v0.25.93 (user) every Moonlight GT exactly 0.4 s apart
         private const float SmHeavyContact = 0.45f;
+        // v0.25.95 (user): Halfmoon swings as fast as Heavy Slash's swing (battleaxe 0.45 s native -> ~2.6x).
+        private const float HmContact = 0.25f;
+        private const float HmSwingEnd = 0.40f;   // contact + the fast recovery = end of the swing animation
 
         private void CastMoonlightSplitter(Player player)
         {
@@ -2783,12 +2786,16 @@ namespace AlbedosCustomClassesAdvanced
             if (_enableVfx.Value)
                 StartCoroutine(AnimateHalfmoonArc(player.transform.position + Vector3.up * 0.9f, forward, radius));
             // v0.25.92 (user): Ascended keeps the normal Halfmoon rework (slash-hail follow-up) before the stance.
-            yield return StartCoroutine(HalfmoonTravelingCuts(player, forward, radius, start));
+            // v0.25.95 (user): the cuts run on their own; the finisher window opens as soon as the SWING
+            // ANIMATION ends, not when the cuts finish. Rooted for the whole skill.
+            StartCoroutine(HalfmoonTravelingCuts(player, forward, radius, start));
+            DragonCombat.LockSkill(player, HmCutsSeconds() + 0.3f);
+            yield return new WaitForSeconds(HmSwingEnd - HmContact);
             if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
             // Follow-up is a held stance, not another automatic attack. The final GT
             // only comes out when the player presses Left Click within the window.
-            float pull = Mathf.Max(0.25f, _halfAscPullBack.Value);
-            DragonCombat.LockSkill(player, pull + 0.15f);
+            float pull = 0.05f;   // v0.25.95 stance immediately after the swing
+            DragonCombat.LockSkill(player, Mathf.Max(pull + 0.15f, HmCutsSeconds()));
             DragonCombat.PlayClip(player, "sm_halfmoon_stance", pull, true);
             if (pull > 0f) yield return new WaitForSeconds(pull);
             if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
@@ -2812,8 +2819,8 @@ namespace AlbedosCustomClassesAdvanced
             }
 
             IhFaceSkillAim(player);
-            float swing = SmHeavyContact;
-            DragonCombat.LockSkill(player, swing + 0.2f);
+            float swing = HmContact;
+            DragonCombat.LockSkill(player, HmSwingEnd + 0.15f);
             DragonCombat.PlayClip(player, "sm_halfmoon", swing);
             if (swing > 0f) yield return new WaitForSeconds(swing);
             if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
@@ -2825,6 +2832,12 @@ namespace AlbedosCustomClassesAdvanced
             ShowMessage("Halfmoon Slash!");
             // v0.25.1: the Ascended finisher wave is the one with the spin (in sm_halfmoon_finisher).
             StartCoroutine(GhostSlashWave(player, origin, dir, range, width, speed, _halfmoonDamageV, Mathf.Max(0f, _halfAscFinDamageMult.Value), 3f, true));
+        }
+
+        private float HmCutsSeconds()
+        {
+            int count = Mathf.Max(2, Mathf.FloorToInt(HalfmoonRadius() * 170f * Mathf.Deg2Rad / 2f) + 1);
+            return count * 0.06f;
         }
 
         private float HalfmoonRadius()
@@ -3042,7 +3055,7 @@ namespace AlbedosCustomClassesAdvanced
                         b.Append(IhLine("Width", IhNum(_halfmoonWidth.Value) + "m, frontal; ground cuts 2m radius / 2m spacing"));
                     }
                     b.Append(IhLine("Inflicts", "Stun, Spirit Burn " + IhNum(_halfmoonSpiritDotV.Value) + "/s, " + IhNum(_halfmoonSpiritDuration.Value) + "s"));
-                    IhCosts(b, _halfmoonStamina.Value, IhNum(SmHeavyContact) + "s heavy hit", _halfmoonCooldown.Value);
+                    IhCosts(b, _halfmoonStamina.Value, IhNum(HmContact) + "s heavy hit", _halfmoonCooldown.Value);
                     break;
                 case "knights_guidance":
                     b.Append(IhLine("Buff", "+" + IhNum(_kgMove.Value) + "% Movement Speed, +" + IhNum(_kgRegen.Value) + "% Stamina Regen, -" + IhNum(_kgStaminaCut.Value) + "% Stamina use"));
@@ -4035,15 +4048,15 @@ namespace AlbedosCustomClassesAdvanced
             if (IsAscendedSkill("halfmoon_slash"))
             {
                 IhFaceSkillAim(player);
-                float ascWindup = SmHeavyContact;
-                DragonCombat.LockSkill(player, ascWindup + 0.4f);
+                float ascWindup = HmContact;
+                DragonCombat.LockSkill(player, ascWindup + HmCutsSeconds() + 0.4f);
                 DragonCombat.PlayClip(player, "sm_halfmoon", ascWindup);
                 StartCoroutine(HalfmoonAscendedRoutine(player, ascWindup, Time.time));
                 return;
             }
             IhFaceSkillAim(player);
-            float windup = SmHeavyContact;
-            DragonCombat.LockSkill(player, windup + 0.3f);
+            float windup = HmContact;
+            DragonCombat.LockSkill(player, windup + HmCutsSeconds() + 0.3f);   // v0.25.95 rooted for the WHOLE skill
             DragonCombat.PlayClip(player, "sm_halfmoon", windup);
             StartCoroutine(HalfmoonRoutine(player, windup));
         }
