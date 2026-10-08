@@ -1,0 +1,8 @@
+Immortal Heroes v0.25.92 - Halfmoon Hail
+Base: v0.25.91 Swift Moonlight. Only Halfmoon Slash changed.
+
+- Halfmoon follow-up: the chain of 2m cuts now looks like Frenzied Charge's slash hail
+  (slash streaks, slash arcs, bursts) and follows the SLASH at sword height along its 170 deg arc,
+  no longer laid on the ground.
+- Ascended Halfmoon: keeps the rework - slash, then the same slash-hail follow-up, then the
+  held stance + Left Click giant wave (it is the upgraded skill, not a different one).

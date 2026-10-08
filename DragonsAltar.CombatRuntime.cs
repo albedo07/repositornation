@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.80";
+        public const string ModVersion = "0.25.92";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1445,10 +1445,11 @@ namespace DragonsAltarCombat
 
             if (DragonCombat.IsSkillLocked(__instance))
             {
+                bool keepHold = DragonCombat.SkillBowHoldActive && attackHold;   // v0.25.86 charged bow skills = the vanilla draw hold
                 DragonCombat.ClearAttackQueue(__instance);
                 movedir = Vector3.zero;
                 attack = false;
-                attackHold = false;
+                attackHold = keepHold;
                 secondaryAttack = false;
                 secondaryAttackHold = false;
                 block = false;
@@ -2299,6 +2300,14 @@ namespace DragonsAltarCombat
         public Vector3 LD;
         public float LR, LW;
         public DragonClipKey LHand(float x, float y, float z, float reach) { LD = new Vector3(x, y, z); LR = reach; LW = 1f; return this; }
+        // v0.25.85 elbow pole override (both arms, mirrored for the left): Wing() = chicken wing - the upper arm is
+        // raised out to the side, elbow out/back, so the forearm can point FORWARD.
+        public Vector3 EP;
+        public float EW;
+        public DragonClipKey Wing() { EP = new Vector3(0.6f, -0.4f, -0.7f); EW = 1f; EM = false; return this; }
+        // v0.25.86 main-hand-only chicken wing (Bonecrusher / Electric Smite flight; the off hand stays as it is)
+        public bool EM;
+        public DragonClipKey WingMain() { EP = new Vector3(0.6f, -0.4f, -0.7f); EW = 1f; EM = true; return this; }
         // v0.25.25 VANILLA LAYER (first key only): Valheim attack animation `VA` fired `VL` seconds before the
         // impact (VR > 0 = repeat every VR seconds while the clip runs); NoAim = the vanilla animation holds the
         // weapon, so the universal "weapon follows the forearm" rule stays off.
@@ -2316,6 +2325,12 @@ namespace DragonsAltarCombat
         // v0.25.40 buff raise (copied from the user's approved ChatGPT pass): QL = the off-hand arm is frozen to
         // the pose it had when the skill began; NoTrack = the vanilla state plays at its natural speed.
         public bool QL, NoTrack;
+        // v0.25.85 Ranger vanilla bow layer: the equipped bow's own draw bool is held through the wind up / hold and
+        // its own attack trigger fires at the impact (release).
+        public string BowTrig, BowBool;
+        // v0.25.86 constant-speed vanilla timing (Sword Master): one steady speed per swing (hit frame on the impact),
+        // no stretched anticipation, no 6x recovery.
+        public bool ConstSpeed;
         // Same pose as another key at a new time (holds / shakes).
         public DragonClipKey Copy(float t)
         {
@@ -2323,7 +2338,7 @@ namespace DragonsAltarCombat
             for (int i = 0; i < B.Length; i++) k.B[i] = B[i];
             for (int i = 0; i < L.Length; i++) k.L[i] = L[i];
             k.R = R; k.O = O; k.Lin = Lin; k.Spin = Spin;
-            k.WD = WD; k.WW = WW; k.SD = SD; k.SW = SW; k.TW = TW; k.TG = TG; k.HD = HD; k.HR = HR; k.HW = HW; k.LD = LD; k.LR = LR; k.LW = LW; k.FLh = FLh; k.FRh = FRh;
+            k.WD = WD; k.WW = WW; k.SD = SD; k.SW = SW; k.TW = TW; k.TG = TG; k.HD = HD; k.HR = HR; k.HW = HW; k.LD = LD; k.LR = LR; k.LW = LW; k.FLh = FLh; k.FRh = FRh; k.EP = EP; k.EW = EW; k.EM = EM;
             return k;
         }
     }
@@ -2357,6 +2372,11 @@ namespace DragonsAltarCombat
         private DragonClipKey[] _keys;
         private float _start, _windup, _impactAt = -1f, _holdLimit;
         private bool _hold;
+        // v0.25.88 JSAA touchdown anticipation: only Bonecrusher / Electric Smite.
+        // Gameplay still decides the actual impact. These fields only drive visuals.
+        private bool _jsaaLanding;
+        private float _jsaaApproach;
+        private readonly RaycastHit[] _jsaaGroundHits = new RaycastHit[16];
         private int _token;
         private Vector3[] _b = new Vector3[10];
         private Vector3 _r, _o;
@@ -2364,7 +2384,9 @@ namespace DragonsAltarCombat
         private float _spin;
         private Vector3 _wd, _sd;
         private float _ww, _sw, _tw, _tg, _env, _hr, _hw, _lr, _lw, _flh, _frh;
-        private Vector3 _hd, _ld;
+        private Vector3 _hd, _ld, _ep;
+        private float _ew;
+        private bool _em;
         // v0.25.15 legs: Unity humanoid muscles (HumanPoseHandler), applied on the animator's real pose.
         private static readonly HumanBodyBones[] LegBones =
         {
@@ -2399,8 +2421,31 @@ namespace DragonsAltarCombat
         private Rigidbody _body;
         private float _vaLead = 0.3f;
 
-        public void Begin(DragonClipKey[] keys, float windup, bool hold, Transform visual)
+        private string _bowTrig, _bowBool;
+        private bool _bowFired;
+        private bool _constSpeed;
+        private float _constK;
+        private float _constWindup;
+
+        private void ReleaseBow(bool fire)
         {
+            if (_bowBool == null && _bowTrig == null) return;
+            Player p = _owner as Player;
+            if (p == null) p = GetComponent<Player>();
+            if (_bowBool != null) DragonCombat.SetBowAim(p, _bowBool, false);
+            if (fire && _bowTrig != null) DragonCombat.FireVanilla(p, _bowTrig);
+            _bowBool = null; _bowTrig = null;
+        }
+
+        public void Begin(DragonClipKey[] keys, float windup, bool hold, Transform visual, string clipName = null)
+        {
+            ReleaseBow(false);
+            _jsaaLanding = clipName == "olympic_hero" || clipName == "olympic_hero_brutal";
+            _jsaaApproach = 0f;
+            _bowTrig = keys[0].BowTrig;
+            _bowBool = keys[0].BowBool;
+            _bowFired = false;
+            if (_bowBool != null) DragonCombat.SetBowAim(GetComponent<Player>(), _bowBool, true);
             _va = keys[0].VA;
             _vaRepeat = keys[0].VR;
             _vaAt = Time.time + Mathf.Max(0f, windup - keys[0].VL);
@@ -2410,6 +2455,9 @@ namespace DragonsAltarCombat
             _noAim = keys[0].NoAim;
             _noPlant = keys[0].NoPlant;
             _noTrack = keys[0].NoTrack;
+            _constSpeed = keys[0].ConstSpeed;
+            _constK = 0f;
+            _constWindup = windup;
             _quietLeft = keys[0].QL;
             _qlCaptured = false;
             _vaLead = Mathf.Max(0.05f, keys[0].VL);
@@ -2538,6 +2586,9 @@ namespace DragonsAltarCombat
             _hd = Vector3.Slerp(ha.normalized, hb.normalized, w);
             _hr = a.HW > 0f && b.HW > 0f ? Mathf.Lerp(a.HR, b.HR, w) : (a.HW > 0f ? a.HR : b.HR);
             _lw = Mathf.Lerp(a.LW, b.LW, w);
+            _ew = Mathf.Lerp(a.EW, b.EW, w);
+            _ep = a.EW > 0f ? a.EP : b.EP;
+            _em = a.EW > 0f ? a.EM : b.EM;
             _flh = Mathf.Lerp(a.FLh, b.FLh, w);
             _frh = Mathf.Lerp(a.FRh, b.FRh, w);
             Vector3 la = a.LW > 0f ? a.LD : b.LD, lb = b.LW > 0f ? b.LD : a.LD;
@@ -2597,14 +2648,17 @@ namespace DragonsAltarCombat
             try
             {
                 if (lv[0] >= _animator.layerCount) return false;
-                bool inIt = _animator.GetCurrentAnimatorStateInfo(lv[0]).fullPathHash == lv[1]
-                    || (_animator.IsInTransition(lv[0]) && _animator.GetNextAnimatorStateInfo(lv[0]).fullPathHash == lv[1]);
+                AnimatorStateInfo cs = _animator.GetCurrentAnimatorStateInfo(lv[0]);
+                bool inIt = (cs.fullPathHash == lv[1] && !cs.loop)   // v0.25.86: also when finishing (Ascended Greatblade 2nd slam)
+                    || (_animator.IsInTransition(lv[0]) && _animator.GetNextAnimatorStateInfo(lv[0]).fullPathHash == lv[1] && !_animator.GetNextAnimatorStateInfo(lv[0]).loop);
+                // v0.25.85 ROOT CAUSE of lost skill swings: a looping state (run / idle) learned while moving made every
+                // later cast cross-fade into run/idle instead of firing the swing. Only a non-looping swing restarts.
                 if (!inIt) return false;
                 Player p = _owner as Player;
                 if (p != null) DragonCombat.BlockSkillAnimAttack(p, 2.5f);
                 _animator.ResetTrigger(trigger);
                 _animator.CrossFadeInFixedTime(lv[1], 0.08f, lv[0], 0f);
-                if (_vaTrack) { _vaLayer = lv[0]; _vaHash = lv[1]; _vaFiredAt = Time.time; }
+                if (_vaTrack) { _vaLayer = lv[0]; _vaHash = lv[1]; _vaFiredAt = Time.time; _constK = 0f; }
                 return true;
             }
             catch (Exception) { return false; }
@@ -2614,6 +2668,8 @@ namespace DragonsAltarCombat
         {
             Player p = _owner as Player;
             if (p == null || _animator == null || _vaPre == null) { _vaTrack = false; return; }
+            // v0.25.86: a skill can hold the vanilla swing (jump slams falling further than planned)
+            if (Time.time < DragonCombat.VanillaPauseUntil) { DragonCombat.SetSkillAnimSpeed(p, 0.02f, 0.12f); return; }
             try
             {
                 float end = _impactAt >= 0f ? _impactAt : _start + _windup;
@@ -2624,7 +2680,7 @@ namespace DragonsAltarCombat
                     for (int l = 0; l < _vaPre.Length && _vaLayer < 0; l++)
                     {
                         AnimatorStateInfo st = _animator.IsInTransition(l) ? _animator.GetNextAnimatorStateInfo(l) : _animator.GetCurrentAnimatorStateInfo(l);
-                        if (st.fullPathHash != _vaPre[l]) { _vaLayer = l; _vaHash = st.fullPathHash; if (_vaTrigger != null) _vaLearned[_vaTrigger] = new int[] { l, _vaHash }; }
+                        if (st.fullPathHash != _vaPre[l] && !st.loop) { _vaLayer = l; _vaHash = st.fullPathHash; if (_vaTrigger != null) _vaLearned[_vaTrigger] = new int[] { l, _vaHash }; }   // v0.25.85 never a looping (locomotion) state
                     }
                     if (_vaLayer < 0)
                     {
@@ -2641,6 +2697,12 @@ namespace DragonsAltarCombat
                 else { _vaTrack = false; DragonCombat.SetSkillAnimSpeed(p, 1f, 0f); return; }
                 float norm = info.normalizedTime;
                 if (norm >= 1f) { _vaTrack = false; DragonCombat.SetSkillAnimSpeed(p, 1f, 0f); return; }
+                if (_constSpeed)
+                {
+                    if (_constK <= 0f) _constK = Mathf.Clamp(_vaLead / Mathf.Max(0.05f, _constWindup), 1f, 2.5f); // v0.25.91 one stable speed per swing so the vanilla contact frame lands on the skill hit (never slower than native).
+                    DragonCombat.SetSkillAnimSpeed(p, _constK, 0.15f);
+                    return;
+                }
                 // v0.25.35 two phases (user: slow wind up, then a fast swing timed to the skill): the vanilla
                 // anticipation (everything up to ~0.22 s before its hit frame) is stretched over the wind up, the
                 // swing itself plays fast in the last ~0.25 s so its hit frame lands exactly on the impact;
@@ -2683,7 +2745,21 @@ namespace DragonsAltarCombat
                 return;
             }
             Sample(t);
+            // The original JSAA did not enter its kneel until AFTER the physical landing.
+            // Blend toward touchdown while the character is descending near solid terrain;
+            // on the contact frame the complete pose is already in place.
+            if (_jsaaLanding && _keys.Length > 6)
+            {
+                if (_impactAt >= 0f && t <= _keys[6].T)
+                    Set(_keys[5], _keys[6], 1f);
+                else if (_impactAt < 0f && _hold)
+                {
+                    float approach = JsaLandingApproach();
+                    if (approach > 0.001f) Set(_keys[5], _keys[6], approach);
+                }
+            }
             if (_animator == null) _animator = GetComponentInChildren<Animator>();
+            if (!_bowFired && (_bowTrig != null || _bowBool != null) && t >= -0.02f) { _bowFired = true; ReleaseBow(true); }
             if (_va != null && Time.time >= _vaAt)
             {
                 _vaTrigger = _va;
@@ -2734,6 +2810,37 @@ namespace DragonsAltarCombat
                 AimHeldItems();
                 QuietLeftArm();
             }
+        }
+
+        // v0.25.88 JSAA ONLY: physically anticipate the superhero kneel in the final
+        // ~1.4 metres of descent. Do not emit impacts or move the character rigidbody.
+        // RaycastNonAlloc ignores our own capsule, creatures, walls and triggers; a
+        // drop off a cliff continues to hold the airborne guard until real terrain.
+        private float JsaLandingApproach()
+        {
+            if (_body == null && _owner != null) _body = _owner.GetComponent<Rigidbody>();
+            if (_body == null || _owner == null || _body.velocity.y > -0.25f)
+            {
+                _jsaaApproach = Mathf.MoveTowards(_jsaaApproach, 0f, Time.deltaTime * 12f);
+                return _jsaaApproach;
+            }
+            float groundGap = float.MaxValue;
+            Vector3 origin = _owner.transform.position + Vector3.up * 0.65f;
+            int n = Physics.RaycastNonAlloc(origin, Vector3.down, _jsaaGroundHits, 2.5f,
+                ~0, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < n; i++)
+            {
+                RaycastHit h = _jsaaGroundHits[i];
+                if (h.collider == null || h.normal.y < 0.55f) continue;
+                if (h.collider.GetComponentInParent<Character>() != null) continue;
+                float gap = _owner.transform.position.y - h.point.y;
+                if (gap >= -0.15f && gap < groundGap) groundGap = gap;
+            }
+            float aim = groundGap < float.MaxValue
+                ? Mathf.SmoothStep(0f, 1f, 1f - Mathf.InverseLerp(0.12f, 1.45f, groundGap))
+                : 0f;
+            _jsaaApproach = Mathf.MoveTowards(_jsaaApproach, aim, Time.deltaTime * 14f);
+            return _jsaaApproach;
         }
 
         // v0.25.40: freeze the off-hand arm (shoulder to hand) to its pose at the start of the skill.
@@ -2821,6 +2928,14 @@ namespace DragonsAltarCombat
             return new Vector3(0.45f * side, -1f + 1.1f * up, 0.15f + 0.3f * up);
         }
 
+        private Vector3 PoleFor(Vector3 d, bool right)
+        {
+            Vector3 p = ElbowPole(d, right);
+            if (_ew <= 0.01f || (!right && _em)) return p;
+            Vector3 e = _ep; if (!right) e.x = -e.x;
+            return Vector3.Slerp(p.normalized, e.normalized, Mathf.Clamp01(_ew));
+        }
+
         private void PlaceHand(bool right, Vector3 dir, float reach, float weight)
         {
             float w = Mathf.Clamp01(weight);
@@ -2835,7 +2950,7 @@ namespace DragonsAltarCombat
                 float len = (la.position - ua.position).magnitude + (hand.position - la.position).magnitude;
                 Vector3 d = ArmDir(dir, right);
                 Vector3 target = ua.position + frame.rotation * d * (len * Mathf.Clamp(reach, 0.25f, 0.999f));
-                Vector3 pole = frame.rotation * ElbowPole(d, right);
+                Vector3 pole = frame.rotation * PoleFor(d, right);
                 TwoBoneIK(ua, la, hand, target, pole, w);
                 int o = right ? 4 : 7;
                 _written[o] = ua.localRotation; _hasWritten[o] = true;
@@ -2860,7 +2975,7 @@ namespace DragonsAltarCombat
                 float len = (la.position - ua.position).magnitude + (hand.position - la.position).magnitude;
                 Vector3 d = ArmDir(_hd, true);
                 Vector3 target = ua.position + frame.rotation * d * (len * Mathf.Clamp(_hr, 0.25f, 0.999f));
-                Vector3 pole = frame.rotation * ElbowPole(d, true);
+                Vector3 pole = frame.rotation * PoleFor(d, true);
                 TwoBoneIK(ua, la, hand, target, pole, w);
                 _written[4] = ua.localRotation; _hasWritten[4] = true;
                 _written[5] = la.localRotation; _hasWritten[5] = true;
@@ -2876,10 +2991,19 @@ namespace DragonsAltarCombat
             if (_body == null && _owner != null) _body = _owner.GetComponent<Rigidbody>();
             bool moving = false;
             if (_body != null) { Vector3 hv = _body.velocity; hv.y = 0f; moving = hv.magnitude > 1.2f; }
-            bool can = !_noPlant && !moving && _feetCaptured && _visual != null && DragonCombat.OwnsMotionRoot(_token) && Grounded();
+            // A jump slam can retain horizontal momentum for a moment after its
+            // terrain hit. Plant its touchdown feet even during that brief slide,
+            // otherwise it looks like the legs stay standing under the kneel.
+            bool jsaaContact = _jsaaLanding && _impactAt >= 0f && Time.time - _impactAt < 0.45f;
+            bool can = !_noPlant && (!moving || jsaaContact) && _feetCaptured && _visual != null && DragonCombat.OwnsMotionRoot(_token) && Grounded();
             float tilt = Mathf.Max(Mathf.Abs(Mathf.DeltaAngle(0f, _r.x)), Mathf.Max(Mathf.Abs(Mathf.DeltaAngle(0f, _r.z)), Mathf.Abs(Mathf.DeltaAngle(0f, _spin))));
             float upright = 1f - Mathf.InverseLerp(25f, 45f, tilt);
-            _plantW = Mathf.MoveTowards(_plantW, can ? _env * upright : 0f, Time.deltaTime * 8f);
+            // JSAA touches down already kneeling. Don't spend another 0.125s slowly
+            // activating the planted legs AFTER the impact (other clips unchanged).
+            if (_jsaaLanding && _impactAt >= 0f && can && upright > 0.95f)
+                _plantW = _env;
+            else
+                _plantW = Mathf.MoveTowards(_plantW, can ? _env * upright : 0f, Time.deltaTime * 8f);
             if (!_feetCaptured || _plantW <= 0.001f || _visual == null) return;
             try
             {
@@ -2898,7 +3022,18 @@ namespace DragonsAltarCombat
                     Vector3 target = parent != null ? parent.TransformPoint(local) : local;
                     target += Vector3.up * Mathf.Max(0f, f == 0 ? _flh : _frh);
                     Quaternion footRot = parentRot * baseRot * qy * _footLocalRot[f];
-                    TwoBoneIK(a, b, c, target, pole, _plantW);
+                    // With the right foot trailing behind, the right knee has to
+                    // fold DOWN toward the floor, not forward like a standing squat.
+                    // Left knee bends UP over the forward-planted foot.
+                    Vector3 kneePole = pole;
+                    if (_jsaaLanding && _impactAt >= 0f)
+                    {
+                        Vector3 localPole = f == 0
+                            ? new Vector3(-0.06f, 0.25f, 1f)
+                            : new Vector3(0.08f, -1f, 0.34f);
+                        kneePole = (parentRot * baseRot * qy * localPole).normalized;
+                    }
+                    TwoBoneIK(a, b, c, target, kneePole, _plantW);
                     c.rotation = Quaternion.Slerp(c.rotation, footRot, _plantW);
                 }
                 for (int i = 0; i < 6; i++) _legWritten[i] = _leg[i].localRotation;
@@ -3170,6 +3305,7 @@ namespace DragonsAltarCombat
 
         private void OnDestroy()
         {
+            ReleaseBow(false);
             if (_keys != null) ReleaseRoot();
             SetLeftHidden(false);
             IDisposable d = _hph as IDisposable;
@@ -3307,14 +3443,19 @@ namespace DragonsAltarCombat
         {
             if (player == null || player != Player.m_localPlayer || string.IsNullOrEmpty(clip)) return;
             if (DragonCombatPlugin.Instance != null && !DragonCombatPlugin.Instance.EnableSkillAnimations.Value) return;
-            DragonClipKey[] keys = hold ? null : VanillaClip(player, clip, 0f);
+            DragonClipKey[] keys = HorizonWalkerMoving(player) ? MovingCastClip() : BowClip(player, clip);   // v0.25.85 Ranger bow layer, v0.25.86 HW moving casts
+            if (keys == null && !hold) keys = VanillaClip(player, clip, 0f);
             if (keys == null) keys = SkillClip(clip);
             if (keys == null) return;
             // v0.25.72: the weapon hand glows in the Class colour through every real wind up / hold
-            if (windup >= 0.3f || hold) { Player wp = player; float ws = hold ? 3f : windup + 0.25f; RunVfx(delegate { DragonVfx.WeaponCharge(wp, ws); }); }
+            // v0.25.85 (user): no weapon charge orb / flare
+            if (false && (windup >= 0.3f || hold)) { Player wp = player; float ws = hold ? 3f : windup + 0.25f; RunVfx(delegate { DragonVfx.WeaponCharge(wp, ws); }); }
             // v0.25.40 (user): buff raises stand still until the wind up is over (no gliding).
             bool standEmote = keys[0].VA != null && keys[0].VA.StartsWith("emote", StringComparison.Ordinal) &&
                               !clip.StartsWith("hw_", StringComparison.Ordinal) && clip != "merc_fury_accent";
+            // v0.25.86 (user: Heaven's Crucible lost its animation): long wind-up raises start late enough that the raise
+            // is still up when the skill lands (it used to finish ~1s before the Barrier appeared).
+            if (keys[0].QL && windup > 0.8f) keys[0].VF = Mathf.Clamp01(1f - 0.75f / windup);
             if (keys[0].VA != null && (keys[0].QL || standEmote))
             {
                 LockSkill(player, Mathf.Max(0.5f, windup) + 0.05f);
@@ -3326,7 +3467,7 @@ namespace DragonsAltarCombat
             if (legacy != null) UnityEngine.Object.Destroy(legacy);
             DragonSkillClipDriver d = player.GetComponent<DragonSkillClipDriver>();
             if (d == null) d = player.gameObject.AddComponent<DragonSkillClipDriver>();
-            d.Begin(keys, windup, hold, BodyVisual(player));
+            d.Begin(keys, windup, hold, BodyVisual(player), clip);
         }
 
         // Plays caller-built keys (variable-length clips such as Whirlwind).
@@ -3375,6 +3516,12 @@ namespace DragonsAltarCombat
 
         // v0.25.15: automatic procs (Fury, Overcharge, death-save, parry burst) are low-priority accents:
         // they never replace a skill clip that is playing.
+        // v0.25.86 (user: "Charge = Hold"): while a charged bow skill charges, the Ranger controls hold the bow's REAL
+        // vanilla draw (attackHold); the skill cancels the vanilla shot before it fires its own.
+        public static float SkillBowHoldUntil;
+        public static float VanillaPauseUntil;   // v0.25.86 freezes the playing vanilla skill swing (refresh every frame)
+        public static bool SkillBowHoldActive { get { return Time.time < SkillBowHoldUntil; } }
+
         public static bool ClipBusy(Player player)
         {
             if (player == null) return false;
@@ -3485,8 +3632,95 @@ namespace DragonsAltarCombat
 
         // ZSyncAnimation.SetBool prefix body: onGround stays true while a run is forced (kinematic moves made
         // Valheim play the falling legs), blocking stays on while the shield pose is forced.
+        // v0.25.85 forced bow draw (Ranger vanilla bow layer).
+        private static object _bowAimZanim;
+        private static string _bowAimName;
+        private static int _bowAimHash;
+        private static bool _bowAimOn;
+
+        public static void SetBowAim(Player p, string name, bool on)
+        {
+            if (p == null || string.IsNullOrEmpty(name)) return;
+            try
+            {
+                Component z = null;
+                Component[] cs = p.GetComponents<Component>();
+                for (int i = 0; i < cs.Length; i++) if (cs[i] != null && cs[i].GetType().Name == "ZSyncAnimation") { z = cs[i]; break; }
+                _bowAimZanim = z; _bowAimName = name; _bowAimHash = Animator.StringToHash(name); _bowAimOn = on;
+                Animator a = p.GetComponentInChildren<Animator>();
+                if (a != null) a.SetBool(name, on);
+            }
+            catch (Exception) { }
+        }
+
+        // The equipped bow / crossbow's own animations (attack trigger + draw bool), resolved on this animator.
+        private static bool BowAnims(Player p, out string trig, out string draw)
+        {
+            trig = null; draw = null;
+            try
+            {
+                ItemDrop.ItemData w = GetHandItem(p, "m_leftItem");
+                if (w == null || w.m_shared == null) w = GetHandItem(p, "m_rightItem");
+                if (w == null || w.m_shared == null) return false;
+                object atk = w.m_shared.GetType().GetField("m_attack").GetValue(w.m_shared);
+                if (atk == null) return false;
+                FieldInfo fa = atk.GetType().GetField("m_attackAnimation"), fd = atk.GetType().GetField("m_drawAnimationState"), fb = atk.GetType().GetField("m_bowDraw");
+                string an = fa == null ? null : fa.GetValue(atk) as string;
+                string dn = fd == null ? null : fd.GetValue(atk) as string;
+                if (string.IsNullOrEmpty(an) || an.IndexOf("bow", StringComparison.OrdinalIgnoreCase) < 0) return false;
+                Animator a = p.GetComponentInChildren<Animator>();
+                trig = ResolveTrigger(a, an);
+                if (trig == null) return false;
+                // a real draw bow (item type Bow) - not m_bowDraw, which Wildborn's quick shots toggle at runtime
+                FieldInfo ft = w.m_shared.GetType().GetField("m_itemType");
+                object itype = ft == null ? null : ft.GetValue(w.m_shared);
+                bool drawBow = itype != null && itype.ToString() == "Bow";
+                if (drawBow && !string.IsNullOrEmpty(dn) && a != null)
+                {
+                    AnimatorControllerParameter[] ps = a.parameters;
+                    for (int i = 0; i < ps.Length; i++) if (ps[i].type == AnimatorControllerParameterType.Bool && ps[i].name == dn) { draw = dn; break; }
+                }
+                return true;
+            }
+            catch (Exception) { return false; }
+        }
+
+        // Ranger shots that play the vanilla bow draw + release (user): pitch 1 = aim up (Sky shots), -1 = down (hover).
+        private static int BowShotPitch(string clip, out bool isShot)
+        {
+            isShot = true;
+            switch (clip)
+            {
+                case "rg_sky": case "rg_starfall": return 1;
+                case "rg_hover": return -1;
+                case "rg_shot": case "rg_power": case "rg_heavy": case "rg_ballista": case "rg_kneel":
+                case "rg_split_a": case "rg_split_b": return 0;   // v0.25.86 Splitting volleys: vanilla bow, no custom sweep (arm clipped)
+            }
+            isShot = false;
+            return 0;
+        }
+
+        private static DragonClipKey[] BowClip(Player player, string clip)
+        {
+            bool isShot;
+            int pitch = BowShotPitch(clip, out isShot);
+            if (!isShot) return null;
+            string trig, draw;
+            if (!BowAnims(player, out trig, out draw)) return null;
+            if (clip == "rg_ballista") draw = null;   // v0.25.86 charged shots use the real vanilla draw hold (SkillBowHold)
+            DragonClipKey pose = K(0f);
+            if (pitch > 0) pose.Hd(-32f, 0f, 0f);       // v0.25.86 (user): Sky shots = the vanilla bow action, only the head looks up (no back bend)
+            else if (pitch < 0) pose.Sp(12f, 0f, 0f).Ch(22f, 0f, 0f).Hd(16f, 0f, 0f);     // aimed down from the air
+            DragonClipKey[] k = new DragonClipKey[] { K(-1f), pose.Copy(-0.6f), pose, pose.Copy(0.3f), K(0.6f) };
+            k[0].NoAim = true; k[0].NoTrack = true;
+            k[0].BowTrig = null; k[0].BowBool = draw;   // the release (bow_fire) is fired by the Ranger's own Shoot() at every shot
+            return k;
+        }
+
         internal static bool ForceBoolOverride(object zanim, object key, ref bool value)
         {
+            if (_bowAimOn && _bowAimZanim != null && ReferenceEquals(zanim, _bowAimZanim) &&
+                (key is int ? (int)key == _bowAimHash : (key as string) == _bowAimName)) { value = true; return true; }
             if (_forceRunZanim == null || !ReferenceEquals(zanim, _forceRunZanim)) return false;
             bool ground = key is int ? (int)key == OnGroundHash : (key as string) == "onGround";
             bool blocking = key is int ? (int)key == BlockingHash : (key as string) == "blocking";
@@ -3669,6 +3903,19 @@ namespace DragonsAltarCombat
 
         // Overlay for a vanilla-animated skill: the vanilla attack does the arms / weapon; we only add a planted
         // stance and a slight lean. length > 0 = sustained (repeat the animation every second).
+        // v0.25.86 (user: the Sword Master animations were broken / super sped up): calm constant-speed swings.
+        public static bool IsConstSpeedClip(string clip)
+        {
+            switch (clip)
+            {
+                case "sm_slash_a": case "sm_slash_b": case "sm_moon_finisher":
+                case "sm_crescent": case "sm_crescent_asc": case "sm_crescent_asc2":
+                case "sm_halfmoon": case "sm_halfmoon_2":
+                    return true;
+            }
+            return false;
+        }
+
         public static bool IsRaiseBuffClip(string clip)
         {
             switch (clip)
@@ -3716,11 +3963,11 @@ namespace DragonsAltarCombat
                 // knee up and the right arm cocked back, stride the left foot forward and plant, then uncoil into the vanilla spin.
                 k = new DragonClipKey[] {
                     K(-1f),
-                    Ft(K(-0.86f).Rot(0f, 30f, 0f).Sp(3f, 0f, 0f).Off(0f, -0.06f, 0f), 0.1f, 0.1f).Hand(0.55f, 0.1f, -0.45f, 0.8f),
-                    K(-0.72f).Rot(0f, 65f, 0f).Sp(-5f, 0f, 0f).LL(0.35f, 0.05f, 0f, 0f).Lift(0.32f, 0.1f).Off(0f, 0.12f, 0.08f).Hand(0.5f, 0.45f, -0.85f, 0.95f),
-                    K(-0.56f).Rot(0f, 65f, 0f).Sp(-4f, 0f, 0f).LL(0.45f, 0.05f, 0f, 0f).Lift(0.26f, 0f).Off(0f, 0.01f, 0.14f).Hand(0.5f, 0.5f, -0.9f, 0.95f),
-                    K(-0.42f).Rot(0f, 55f, 0f).Sp(4f, 0f, 0f).LL(0.7f, 0.15f, 0f, 0f).RL(-0.3f, 0.12f, 0f, 0f).Lift(0f, 0f).Off(0f, -0.07f, 0.2f).Hand(0.5f, 0.45f, -0.85f, 0.95f),
-                    Ft(K(-0.25f).Rot(0f, 20f, 0f).Sp(6f, 0f, 0f).Off(0f, -0.05f, 0.2f), 0.6f, 0.25f),
+                    Ft(K(-0.93f).Rot(0f, 30f, 0f).Sp(3f, 0f, 0f).Off(0f, -0.06f, 0f), 0.1f, 0.1f).Hand(0.55f, 0.1f, -0.45f, 0.8f),
+                    K(-0.85f).Rot(0f, 65f, 0f).Sp(-5f, 0f, 0f).LL(0.35f, 0.05f, 0f, 0f).Lift(0.32f, 0.1f).Off(0f, 0.12f, 0.08f).Hand(0.5f, 0.45f, -0.85f, 0.95f),
+                    K(-0.76f).Rot(0f, 65f, 0f).Sp(-4f, 0f, 0f).LL(0.45f, 0.05f, 0f, 0f).Lift(0.26f, 0f).Off(0f, 0.01f, 0.14f).Hand(0.5f, 0.5f, -0.9f, 0.95f),
+                    K(-0.66f).Rot(0f, 55f, 0f).Sp(4f, 0f, 0f).LL(0.7f, 0.15f, 0f, 0f).RL(-0.3f, 0.12f, 0f, 0f).Lift(0f, 0f).Off(0f, -0.07f, 0.2f).Hand(0.5f, 0.45f, -0.85f, 0.95f),
+                    Ft(K(-0.52f).Rot(0f, 20f, 0f).Sp(6f, 0f, 0f).Off(0f, -0.05f, 0.2f), 0.6f, 0.25f),
                     Ft(K(0f).Sp(6f, 0f, 0f).Off(0f, -0.03f, 0.18f), 0.4f, 0.15f),
                     Ft(K(0.35f).Sp(4f, 0f, 0f).Off(0f, -0.02f, 0.1f), 0.25f, 0.1f),
                     K(0.75f) };
@@ -3728,7 +3975,9 @@ namespace DragonsAltarCombat
             k[0].VA = trig;
             k[0].VL = m.Value;
             if (trig.StartsWith("emote", StringComparison.Ordinal)) { k[0].NoTrack = true; k[0].NoPlant = true; }   // v0.25.41 emotes: natural speed, their own legs
-            if (clip == "merc_circle" && length <= 0f) k[0].VF = 0.62f;   // after the crow hop
+            if (clip == "merc_circle" && length <= 0f) k[0].VF = 0.4f;   // after the crow hop (v0.25.86: quicker hop, slower spin)
+            if (clip == "wiz_nova") k[0].NoTrack = true;
+            if (IsConstSpeedClip(clip)) k[0].ConstSpeed = true;   // v0.25.85 (user): Frost Nova's staff raise at natural speed, never fast-forwarded
             k[0].VR = length > 0f ? 1f : 0f;
             k[0].NoAim = true;
             return k;
@@ -4039,11 +4288,11 @@ namespace DragonsAltarCombat
                 // v0.25.63 (user): exaggerated - the knee comes up past the hip, both arms flare out and up like the
                 // roar emote, then the foot is driven down with the chest thrown forward and the arms flung wide.
                 DragonClipKey raise = K(-0.55f).Sp(-8f, 0f, 0f).Ch(-6f, 0f, 0f).Hd(-6f, 0f, 0f).LL(0f, 0.06f, 0f, 0f).RL(0.35f, 0.1f, 0f, 0f).Lift(0f, 0.62f).Off(0f, 0.04f, 0f)
-                    .Hand(0.55f, -0.6f, -0.05f, 0.62f).LHand(-0.55f, -0.6f, -0.05f, 0.62f);
+                    .Hand(0.62f, -0.32f, 0.66f, 0.64f).LHand(-0.62f, -0.32f, 0.66f, 0.64f).Wing();   // v0.25.85 chicken wing: upper arms raised out, forearms forward
                 // v0.25.69 (user: flare = chicken wings, not arms stretched out): elbows bent and pushed out, hands at the hips.
-                DragonClipKey peak = raise.Copy(-0.15f).Lift(0f, 0.7f).Hand(0.6f, -0.55f, -0.12f, 0.6f).LHand(-0.6f, -0.55f, -0.12f, 0.6f);
+                DragonClipKey peak = raise.Copy(-0.15f).Lift(0f, 0.7f).Hand(0.65f, -0.3f, 0.68f, 0.66f).LHand(-0.65f, -0.3f, 0.68f, 0.66f).Wing();
                 DragonClipKey hit = K(0f).Sp(20f, 0f, 0f).Ch(10f, 0f, 0f).Hd(-12f, 0f, 0f).LL(-0.05f, 0.12f, 0f, 0f).RL(0.35f, 0.14f, 0f, 0f).Lift(0f, 0f).Off(0f, -0.16f, 0f)
-                    .Hand(0.62f, -0.7f, 0.08f, 0.66f).LHand(-0.62f, -0.7f, 0.08f, 0.66f).Linear();
+                    .Hand(0.6f, -0.45f, 0.62f, 0.68f).LHand(-0.6f, -0.45f, 0.62f, 0.68f).Wing().Linear();
                 DragonClipKey stAfter = hit.Copy(0.3f); stAfter.Lin = false;
                 return new DragonClipKey[] { K(-1f), raise, peak, hit, stAfter, K(0.65f) };
             }
@@ -4073,27 +4322,42 @@ namespace DragonsAltarCombat
             return new DragonClipKey[] { K(-1f), K(-0.4f).Hand(0.2f, -0.2f, 0.8f, 0.7f), pt, pt.Copy(0.15f), K(0.45f) };
         }
 
-        // Olympic Hero (JSAA, storyboard 01): load fist cocked back + crouch, launch fist forward, fast counter-
-        // clockwise barrel roll, unwind fist down, main-hand impact (fist on the ground, left foot forward, right
-        // knee low behind), recover to guard. Hold at the poised fall until the real landing.
+        // v0.25.88 JSAA ONLY (Bonecrusher + Electric Smite): retain the approved
+        // airborne boxing guard and hammer wind-up. Touchdown is visually prepared
+        // during the last part of the fall, NOT started after contact. The held
+        // Phase=0 pose still remains airborne during long/cliff descents; only
+        // JsaLandingApproach() moves it into the landing as terrain approaches.
         private static DragonClipKey[] SbOlympic(bool brutal)
         {
             float d = brutal ? 1.15f : 1f;
-            DragonClipKey load = Ft(K(-0.93f).Sp(16f * d, -10f, 0f).Ch(6f, -6f, 0f).Hd(-12f, 0f, 0f).Hand(0.45f, 0.1f, -0.45f, 0.6f).Off(0f, -0.15f * d, 0f), 0.2f, 0.1f);
-            // v0.25.30 user: no superman pose. In the air the body leans only diagonally (~38 deg), the main arm is
-            // flared a little out to the side and the weapon is carried up (not pointed ahead).
-            // v0.25.75 (user): no barrel roll. Like the Wave emote's raise, the main arm goes straight up over the
-            // head with the weapon pointing at the sky and STAYS there (no waving) for the whole flight; the slam
-            // to the ground only happens on the real landing (the clip holds at T=0 until ClipImpact).
-            DragonClipKey launch = K(-0.72f).Sp(-4f, 0f, 0f).Ch(-4f, 0f, 0f).Hd(-14f, 0f, 0f).Hand(0.22f, 1f, 0.05f, 1f).Wp(0.05f, 1f, -0.15f).Rot(26f, 0f, 0f).Off(0f, 0.06f, 0f);   // v0.25.77 diagonal torso in the air
-            // v0.25.76 (user): the barrel roll stays - the body rolls once while the arm stays raised overhead.
-            DragonClipKey raise0 = launch.Copy(-0.6f).Rot(30f, 0f, 0f).Sn(30f).Hand(0.2f, 1f, 0.08f, 1f);
-            DragonClipKey raise1 = launch.Copy(-0.32f).Rot(30f, 0f, 0f).Sn(360f).Hand(0.2f, 1f, 0.08f, 1f);
-            DragonClipKey poised = K(0f).Sp(4f, 0f, 0f).Ch(-2f, 0f, 0f).Hd(-12f, 0f, 0f).Hand(0.2f, 1f, 0.1f, 1f).Wp(0.05f, 1f, -0.1f).Rot(24f, 0f, 0f).Sn(360f);
-            DragonClipKey impact = Ft(K(0.1f).Sp(30f, 0f, 0f).Ch(14f, 0f, 0f).Hd(-28f, 0f, 0f).Hand(0.05f, -1f, 0.35f, 0.97f).Wp(0f, -0.8f, 0.6f).Rot(6f, 0f, 0f).Off(0f, -0.38f * d, 0.05f).Sn(360f), 0.75f, 0.8f).Linear();
-            DragonClipKey settle = impact.Copy(brutal ? 0.3f : 0.22f).Off(0f, -0.4f * d, 0.05f); settle.Lin = false;
-            DragonClipKey rec = Ft(K(brutal ? 0.58f : 0.45f).Sp(8f, 0f, 0f).Hd(-6f, 0f, 0f).Hand(0.35f, -0.45f, 0.35f, 0.6f).Off(0f, -0.06f, 0f).Sn(360f), 0.3f, 0.2f);
-            return new DragonClipKey[] { K(-1f), load, launch, raise0, raise1, poised, impact, settle, rec, K(brutal ? 0.9f : 0.75f).Sn(360f) };
+            DragonClipKey load = Ft(K(-0.93f).Sp(16f * d, -10f, 0f).Ch(6f, -6f, 0f).Hd(-12f, 0f, 0f)
+                .Hand(0.45f, 0.1f, -0.45f, 0.6f).Off(0f, -0.15f * d, 0f), 0.2f, 0.1f);
+
+            // AIR: left fist in a bent chest/face-height boxing guard; right fist
+            // and weapon cocked high and slightly right, ready for the bonk.
+            DragonClipKey launch = K(-0.72f).Sp(-4f, 0f, 0f).Ch(-4f, 0f, 0f).Hd(-14f, 0f, 0f)
+                .Hand(0.30f, 1f, 0.14f, 0.79f).Wp(0.28f, 1f, 0.14f)
+                .LHand(-0.17f, 0.83f, 0.57f, 0.69f)
+                .Rot(45f, 0f, 0f).Off(0f, 0.06f, 0f);
+            DragonClipKey roll0 = launch.Copy(-0.6f).Rot(62f, 0f, 0f).Sn(30f);
+            DragonClipKey roll1 = launch.Copy(-0.32f).Rot(62f, 0f, 0f).Sn(360f);
+            DragonClipKey poised = launch.Copy(0f).Rot(55f, 0f, 0f).Sn(360f);
+
+            // One continuous movement into a fully formed kneel AT impact:
+            // left foot forward/knee up, right knee low and behind, left arm
+            // stretched straight left, right hand slamming straight down.
+            DragonClipKey impact = Ft(K(0.01f).Sp(32f, 0f, 0f).Ch(16f, 0f, 0f).Hd(-22f, 0f, 0f)
+                .Hand(0.08f, -1f, 0.30f, 0.95f).Wp(0.08f, -1f, 0.23f)
+                .LHand(-1f, -0.08f, 0.16f, 0.97f)
+                .Rot(6f, 0f, 0f).Off(0f, -0.50f * d, 0.06f).Sn(360f), 0.88f, 0.88f).Linear();
+            // Hold the actual impact silhouette long enough for the player to
+            // SEE it during VFX, then rise (no second preparatory attack).
+            DragonClipKey settle = impact.Copy(brutal ? 0.43f : 0.35f).Off(0f, -0.51f * d, 0.06f);
+            settle.Lin = false;
+            DragonClipKey rec = Ft(K(brutal ? 0.77f : 0.68f).Sp(8f, 0f, 0f).Hd(-6f, 0f, 0f)
+                .Hand(0.35f, -0.45f, 0.35f, 0.6f).Off(0f, -0.06f, 0f).Sn(360f), 0.3f, 0.2f);
+            return new DragonClipKey[] { K(-1f), load, launch, roll0, roll1, poised,
+                impact, settle, rec, K(brutal ? 1.07f : 0.95f).Sn(360f) };
         }
 
         private static void BuildStoryboardClips(Dictionary<string, DragonClipKey[]> c)
@@ -4114,8 +4378,13 @@ namespace DragonsAltarCombat
             c["sm_blade_storm"] = SbSlash(0f, 0.1f, false, false);
             c["sm_halfmoon"] = SbSlash(0.6f, 0.1f, false, true);
             c["sm_halfmoon_2"] = SbSlash(0.6f, 0.1f, false, false);
-            DragonClipKey[] pullHold = SbSlash(0.6f, 0.1f, false, true);
-            c["sm_halfmoon_stance"] = new DragonClipKey[] { K(-1f), pullHold[1].Copy(0f), K(0.15f) };
+            // v0.25.86 (user: arm clipping into the body in the last stance): no two-handed grip behind the hip - the sword is
+            // held low and forward on the right, one-handed, the off hand braced in front of the chest.
+            // v0.25.89: modest, anatomy-safe finisher anticipation. The vanilla grip owns BOTH arms;
+            // only a little torso coil / knee flex is layered so no wrists fold through the rib cage.
+            DragonClipKey hmStance = Ft(K(0f).Sp(5f, -10f, 0f).Ch(2f, -5f, 0f)
+                .Off(0f, -0.045f, 0f), 0.2f, 0.15f);
+            c["sm_halfmoon_stance"] = new DragonClipKey[] { K(-1f), hmStance, hmStance.Copy(0.15f), K(0.35f) };
             c["sm_halfmoon_finisher"] = SbSlash(1.2f, 0.15f, true, true);
             c["warrior_impact_wave"] = SbGolf(0.25f);
             c["merc_seismic"] = SbGolf(0.25f);
@@ -4170,7 +4439,7 @@ namespace DragonsAltarCombat
             c["sm_charge"][0].NoPlant = true;
             DragonClipKey[] oh = c["olympic_hero"];
             List<DragonClipKey> land = new List<DragonClipKey>();
-            land.Add(oh[5].Copy(-1f));
+            land.Add(oh[6].Copy(-1f));
             for (int i = 6; i < oh.Length; i++) land.Add(oh[i]);
             c["olympic_land"] = land.ToArray();
 
@@ -5052,7 +5321,7 @@ namespace DragonsAltarCombat
             // Fallback landing when nothing was holding (only the contact + recovery part).
             DragonClipKey[] oh = c["olympic_hero"];
             List<DragonClipKey> land = new List<DragonClipKey>();
-            land.Add(oh[5].Copy(-1f));
+            land.Add(oh[6].Copy(-1f));
             for (int i = 6; i < oh.Length; i++) land.Add(oh[i]);
             c["olympic_land"] = land.ToArray();
         }
@@ -6703,7 +6972,32 @@ namespace DragonsAltarCombat
         {
             if (player == null)
                 return;
+            // v0.25.86 (user): a Horizon Walker casts EVERY skill on the move and never stops (momentum, sprint kept).
+            if (duration > 0f && GetAdvancementName(player) == "Spellcaster")
+            {
+                BeginMobileCast(player, duration, true);
+                return;
+            }
             SkillLockUntil[player.GetInstanceID()] = Time.time + Mathf.Max(0f, duration);
+        }
+
+        // v0.25.86 Horizon Walker casting while moving: the casting hand rises forward (staff up), upper body only,
+        // legs keep running.
+        private static bool HorizonWalkerMoving(Player player)
+        {
+            if (player == null || GetAdvancementName(player) != "Spellcaster") return false;
+            Rigidbody rb = player.GetComponent<Rigidbody>();
+            if (rb == null) return false;
+            Vector3 v = rb.velocity; v.y = 0f;
+            return v.magnitude > 1.2f;
+        }
+
+        private static DragonClipKey[] MovingCastClip()
+        {
+            DragonClipKey up = K(0f).Hand(0.3f, 0.75f, 0.6f, 0.95f).Hd(-6f, 0f, 0f);
+            DragonClipKey[] k = new DragonClipKey[] { K(-1f), up.Copy(-0.45f), up, up.Copy(0.22f), K(0.55f) };
+            k[0].NoPlant = true;
+            return k;
         }
 
         public static bool IsSkillLocked(Player player)
@@ -7792,6 +8086,12 @@ namespace DragonsAltarCombat
             {
                 try { IncomingHitFilters[f](target, hit); } catch { }
             }
+            // v0.25.85 launch fall rule (after the module filters, so Acrobat / Wildborn reductions stack on top).
+            if (target is Player && LaunchFalls.Count > 0 && IsFallHit(hit))
+            {
+                float lf = LaunchFallFactor((Player)target);
+                if (lf < 1f) hit.m_damage.Modify(lf);
+            }
 
             Player attacker = hit.GetAttacker() as Player;
             // v0.25.11: split parts of a hit were already fully modified as the original hit.
@@ -8056,6 +8356,77 @@ namespace DragonsAltarCombat
             catch (Exception) { }
         }
 
+        // ------------------------------------------------------------------ v0.25.85 LAUNCH FALL RULE (user, universal)
+        // Every skill that sends you up protects you from fall damage: none for a fall up to 2x the launch height H,
+        // then 75% / 50% / 25% less damage for falls up to 3H / 4H / 5H, full damage beyond (H = 5m: 10m free,
+        // 15m -75%, 20m -50%, 25m -25%, 30m+ full). H = the real rise (peak - launch), at least the skill's height.
+        private class LaunchFallState { public float LaunchY, PeakY, MinRise, LandedAt = -1f, Granted; }
+        private static readonly Dictionary<int, LaunchFallState> LaunchFalls = new Dictionary<int, LaunchFallState>();
+        private static MethodInfo _lfGround;
+
+        public static void GrantLaunchFall(Player p, float riseMeters)
+        {
+            if (p == null) return;
+            LaunchFallState st;
+            float y = p.transform.position.y;
+            if (!LaunchFalls.TryGetValue(p.GetInstanceID(), out st) || st == null || st.LandedAt >= 0f)
+            {
+                st = new LaunchFallState();
+                st.LaunchY = y; st.PeakY = y;
+                LaunchFalls[p.GetInstanceID()] = st;
+            }
+            st.MinRise = Mathf.Max(st.MinRise, M(Mathf.Max(0f, riseMeters)));
+            st.Granted = Time.time;
+            st.LandedAt = -1f;
+        }
+
+        private static void UpdateLaunchFalls()
+        {
+            if (LaunchFalls.Count == 0) return;
+            Player p = Player.m_localPlayer;
+            List<int> drop = null;
+            foreach (KeyValuePair<int, LaunchFallState> kv in LaunchFalls)
+            {
+                LaunchFallState st = kv.Value;
+                if (p == null || kv.Key != p.GetInstanceID() || st == null) { if (drop == null) drop = new List<int>(); drop.Add(kv.Key); continue; }
+                float y = p.transform.position.y;
+                if (y > st.PeakY) st.PeakY = y;
+                bool grounded = false;
+                try { if (_lfGround == null) _lfGround = typeof(Character).GetMethod("IsOnGround", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic); grounded = _lfGround != null && (bool)_lfGround.Invoke(p, null); } catch (Exception) { }
+                if (grounded && Time.time - st.Granted > 0.4f && st.LandedAt < 0f) st.LandedAt = Time.time;
+                if (st.LandedAt >= 0f && Time.time - st.LandedAt > 0.4f) { if (drop == null) drop = new List<int>(); drop.Add(kv.Key); }
+                else if (Time.time - st.Granted > 60f) { if (drop == null) drop = new List<int>(); drop.Add(kv.Key); }
+            }
+            if (drop != null) for (int i = 0; i < drop.Count; i++) LaunchFalls.Remove(drop[i]);
+        }
+
+        // Fraction of the fall damage that is still taken (1 = untouched).
+        private static float LaunchFallFactor(Player p)
+        {
+            LaunchFallState st;
+            if (p == null || !LaunchFalls.TryGetValue(p.GetInstanceID(), out st) || st == null) return 1f;
+            float h = Mathf.Max(st.MinRise, st.PeakY - st.LaunchY);
+            if (h <= 0.05f) return 1f;
+            float fall = Mathf.Max(0f, st.PeakY - p.transform.position.y);
+            if (fall <= 2f * h) return 0f;
+            if (fall <= 3f * h) return 0.25f;
+            if (fall <= 4f * h) return 0.5f;
+            if (fall <= 5f * h) return 0.75f;
+            return 1f;
+        }
+
+        private static FieldInfo _hitTypeField;
+        public static bool IsFallHit(HitData hit)
+        {
+            try
+            {
+                if (_hitTypeField == null) _hitTypeField = typeof(HitData).GetField("m_hitType", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                object v = _hitTypeField == null ? null : _hitTypeField.GetValue(hit);
+                return v != null && v.ToString() == "Fall";
+            }
+            catch (Exception) { return false; }
+        }
+
         // ------------------------------------------------------------------ v0.25.78
         // Buff tooltip notes (user: "put everything"): extra effect lines per timed-buff source, appended to the
         // hover tooltip (stamina use cuts, no movement penalty, skill bonuses... anything ApplyTimedBuff can't carry).
@@ -8222,6 +8593,7 @@ namespace DragonsAltarCombat
             float now = Time.time;
             if (Player.m_localPlayer != null || _bulwark != null) UpdateHolyBulwark(Player.m_localPlayer);
             if (PendingLearns.Count > 0) UpdateLearns();
+            UpdateLaunchFalls();
             if (now >= _nextDualCheck) { _nextDualCheck = now + 0.5f; EnforceDualWieldOwner(Player.m_localPlayer); DragonCombatPlugin.SyncDualController(Player.m_localPlayer); }
 
             List<int> removeBuffPlayers = null;
@@ -11753,6 +12125,530 @@ namespace DragonsAltarCombat
             if (dd != null) dd.SetAlpha(a);
         }
 
+        // v0.25.81 solid-object helpers ------------------------------------------------------------
+        // Faceted tube from a to b (n sides) with elliptical radii (ru along u, rw along w) at each end; capped.
+        private static void Tube(List<Vector3> v, List<int> t, Vector3 a, Vector3 b, Vector3 u, Vector3 w, float ru0, float rw0, float ru1, float rw1, int n)
+        {
+            int s = v.Count;
+            for (int i = 0; i < n; i++) { float ang = (i + 0.5f) / n * Mathf.PI * 2f; v.Add(a + u * Mathf.Cos(ang) * ru0 + w * Mathf.Sin(ang) * rw0); }
+            for (int i = 0; i < n; i++) { float ang = (i + 0.5f) / n * Mathf.PI * 2f; v.Add(b + u * Mathf.Cos(ang) * ru1 + w * Mathf.Sin(ang) * rw1); }
+            v.Add(a); v.Add(b);
+            int ca = s + 2 * n, cb = ca + 1;
+            for (int i = 0; i < n; i++)
+            {
+                int p0 = s + i, p1 = s + (i + 1) % n, q0 = p0 + n, q1 = p1 + n;
+                t.Add(p0); t.Add(q0); t.Add(p1); t.Add(p1); t.Add(q0); t.Add(q1);
+                t.Add(ca); t.Add(p0); t.Add(p1);
+                t.Add(cb); t.Add(q1); t.Add(q0);
+            }
+        }
+
+        private static void DoubleSide(List<int> t)
+        {
+            int count = t.Count;
+            for (int i = 0; i < count; i += 3) { t.Add(t[i]); t.Add(t[i + 2]); t.Add(t[i + 1]); }
+        }
+
+        // Judgement Hammer: a holy warhammer in UNIT space (haft along Y -0.5..0.5, head across X -0.5..0.5 at the top,
+        // depth along Z -0.5..0.5). The caller scales the returned child to (width, height, depth) every frame.
+        // Gold head with ivory striking faces, ivory haft with gold bands, gold pommel gem, a radiant halo shell and
+        // light ribbons from both striking faces (they draw arcs while it flips).
+        public static GameObject HolyWarhammer(Transform parent)
+        {
+            if (!Enabled || parent == null) return null;
+            GameObject unit = new GameObject("IH_Warhammer");
+            unit.transform.SetParent(parent, false);
+            Color gold = new Color(1f, 0.80f, 0.34f, 1f), ivory = new Color(1f, 0.96f, 0.86f, 1f), deep = new Color(0.78f, 0.55f, 0.20f, 1f);
+            Vector3 X = Vector3.right, Y = Vector3.up, Z = Vector3.forward;
+
+            List<Vector3> v = new List<Vector3>(); List<int> t = new List<int>();
+            Tube(v, t, new Vector3(0f, -0.44f, 0f), new Vector3(0f, 0.28f, 0f), X, Z, 0.07f, 0.11f, 0.07f, 0.11f, 8);   // haft
+            Mesh haft = FacetMesh(v, t, ivory, 0.3f);
+            MeshObject("haft", haft, ClearMat(), unit.transform);
+
+            v = new List<Vector3>(); t = new List<int>();
+            Tube(v, t, new Vector3(0f, -0.50f, 0f), new Vector3(0f, -0.44f, 0f), X, Z, 0.04f, 0.06f, 0.13f, 0.20f, 8);    // pommel
+            Tube(v, t, new Vector3(0f, -0.20f, 0f), new Vector3(0f, -0.15f, 0f), X, Z, 0.10f, 0.16f, 0.10f, 0.16f, 8);    // grip band
+            Tube(v, t, new Vector3(0f, 0.10f, 0f), new Vector3(0f, 0.16f, 0f), X, Z, 0.10f, 0.16f, 0.10f, 0.16f, 8);      // upper band
+            Tube(v, t, new Vector3(0f, 0.16f, 0f), new Vector3(0f, 0.29f, 0f), X, Z, 0.08f, 0.13f, 0.16f, 0.30f, 8);      // collar flare
+            MeshObject("gold", FacetMesh(v, t, gold, 0.5f), ClearMat(), unit.transform);
+
+            v = new List<Vector3>(); t = new List<int>();
+            Tube(v, t, new Vector3(-0.36f, 0.39f, 0f), new Vector3(0.36f, 0.39f, 0f), Y, Z, 0.10f, 0.42f, 0.10f, 0.42f, 8);   // head block
+            Tube(v, t, new Vector3(0f, 0.49f, 0f), new Vector3(0f, 0.56f, 0f), X, Z, 0.12f, 0.22f, 0.02f, 0.03f, 4);          // crown spike
+            MeshObject("head", FacetMesh(v, t, gold, 0.6f), ClearMat(), unit.transform);
+
+            v = new List<Vector3>(); t = new List<int>();
+            Tube(v, t, new Vector3(-0.36f, 0.39f, 0f), new Vector3(-0.50f, 0.39f, 0f), Y, Z, 0.12f, 0.50f, 0.105f, 0.44f, 8);  // left face
+            Tube(v, t, new Vector3(0.36f, 0.39f, 0f), new Vector3(0.50f, 0.39f, 0f), Y, Z, 0.12f, 0.50f, 0.105f, 0.44f, 8);    // right face
+            Tube(v, t, new Vector3(0f, 0.39f, 0.40f), new Vector3(0f, 0.39f, 0.50f), X, Y, 0.09f, 0.06f, 0.03f, 0.02f, 4);     // front sigil stud
+            Tube(v, t, new Vector3(0f, 0.39f, -0.40f), new Vector3(0f, 0.39f, -0.50f), X, Y, 0.09f, 0.06f, 0.03f, 0.02f, 4);   // back sigil stud
+            MeshObject("faces", FacetMesh(v, t, ivory, 0.4f), ClearMat(), unit.transform);
+
+            // radiant halo around the head (additive, soft, double-sided)
+            v = new List<Vector3>(); t = new List<int>();
+            Tube(v, t, new Vector3(-0.56f, 0.39f, 0f), new Vector3(0.56f, 0.39f, 0f), Y, Z, 0.17f, 0.62f, 0.17f, 0.62f, 10);
+            DoubleSide(t);
+            Color halo = new Color(1f, 0.85f, 0.45f, 0.22f);
+            MeshObject("halo", FacetMesh(v, t, halo, 0.2f), Mat(WhiteTex(), true), unit.transform);
+            v = new List<Vector3>(); t = new List<int>();
+            Tube(v, t, new Vector3(0f, -0.48f, 0f), new Vector3(0f, 0.30f, 0f), X, Z, 0.13f, 0.2f, 0.13f, 0.2f, 8);
+            DoubleSide(t);
+            MeshObject("haftGlow", FacetMesh(v, t, new Color(1f, 0.9f, 0.6f, 0.12f), 0.2f), Mat(WhiteTex(), true), unit.transform);
+
+            // light ribbons from both striking faces + a holy gleam at the crown
+            GameObject keep = unit;
+            for (int side = -1; side <= 1; side += 2)
+            {
+                GameObject tip = new GameObject(side < 0 ? "tipL" : "tipR");
+                tip.transform.SetParent(unit.transform, false);
+                tip.transform.localPosition = new Vector3(0.5f * side, 0.39f, 0f);
+                TrailWhile(tip.transform, new Color(1f, 0.88f, 0.50f, 1f), 0.45f, delegate { return keep != null; });
+            }
+            return unit;
+        }
+
+        // Double-pointed lens blade along local X (centre at the origin), flat in local XY, thin in Z.
+        private static Mesh LensMesh(float length, float width, float thick, Color c, bool soft)
+        {
+            float[] x = { -0.5f, -0.38f, -0.12f, 0f, 0.12f, 0.38f, 0.5f };
+            float[] wf = { 0f, 0.55f, 0.92f, 1f, 0.92f, 0.55f, 0f };
+            List<Vector3> v = new List<Vector3>(); List<int> t = new List<int>();
+            for (int i = 0; i < x.Length; i++)
+            {
+                float hw = width * 0.5f * wf[i], ht = thick * 0.5f * Mathf.Max(0.05f, wf[i]), xx = x[i] * length;
+                v.Add(new Vector3(xx, hw, 0f)); v.Add(new Vector3(xx, 0f, ht)); v.Add(new Vector3(xx, -hw, 0f)); v.Add(new Vector3(xx, 0f, -ht));
+            }
+            for (int i = 0; i < x.Length - 1; i++)
+                for (int k = 0; k < 4; k++)
+                {
+                    int a = i * 4 + k, b = i * 4 + (k + 1) % 4, cc = a + 4, d = b + 4;
+                    t.Add(a); t.Add(b); t.Add(cc); t.Add(b); t.Add(d); t.Add(cc);
+                }
+            if (soft) DoubleSide(t);
+            return FacetMesh(v, t, c, 0.6f);
+        }
+
+        // Grand Cross: one holy light blade (lens) with a white-hot core and a soft halo, lying along local X of `parent`
+        // rotated by `rollDeg` around local Z. Both tips leave light ribbons as the cross travels.
+        public static void LightBlade(Transform parent, float length, float width, float rollDeg, Color c)
+        {
+            if (!Enabled || parent == null) return;
+            GameObject root = new GameObject("IH_LightBlade");
+            root.transform.SetParent(parent, false);
+            root.transform.localRotation = Quaternion.AngleAxis(rollDeg, Vector3.forward);
+            Color body = c; body.a = 0.75f;
+            Color halo = Color.Lerp(c, Color.white, 0.3f); halo.a = 0.30f;
+            Color core = new Color(1f, 1f, 1f, 0.9f);
+            MeshObject("body", LensMesh(length, width, width * 0.25f, body, true), ClearMat(), root.transform);
+            MeshObject("halo", LensMesh(length * 1.06f, width * 2.2f, width * 0.6f, halo, true), Mat(WhiteTex(), true), root.transform);
+            MeshObject("core", LensMesh(length * 0.92f, width * 0.32f, width * 0.12f, core, true), Mat(WhiteTex(), true), root.transform);
+            GameObject keep = root;
+            for (int side = -1; side <= 1; side += 2)
+            {
+                GameObject tip = new GameObject("tip");
+                tip.transform.SetParent(root.transform, false);
+                tip.transform.localPosition = new Vector3(length * 0.46f * side, 0f, 0f);
+                TrailWhile(tip.transform, Color.Lerp(c, Color.white, 0.35f), Mathf.Max(0.3f, width * 0.6f), delegate { return keep != null; });
+            }
+        }
+
+        // Barrier: a geodesic crystal shell (subdivided icosahedron, radius 0.5 like the primitive sphere) with lit
+        // facets and brighter lattice rims, so the Barrier reads as a faceted holy shield, not a plain bubble.
+        public static Mesh GeodesicShell(Color c)
+        {
+            float p = (1f + Mathf.Sqrt(5f)) * 0.5f;
+            List<Vector3> v = new List<Vector3>
+            {
+                new Vector3(-1, p, 0), new Vector3(1, p, 0), new Vector3(-1, -p, 0), new Vector3(1, -p, 0),
+                new Vector3(0, -1, p), new Vector3(0, 1, p), new Vector3(0, -1, -p), new Vector3(0, 1, -p),
+                new Vector3(p, 0, -1), new Vector3(p, 0, 1), new Vector3(-p, 0, -1), new Vector3(-p, 0, 1)
+            };
+            int[] f = { 0,11,5, 0,5,1, 0,1,7, 0,7,10, 0,10,11, 1,5,9, 5,11,4, 11,10,2, 10,7,6, 7,1,8,
+                        3,9,4, 3,4,2, 3,2,6, 3,6,8, 3,8,9, 4,9,5, 2,4,11, 6,2,10, 8,6,7, 9,8,1 };
+            for (int i = 0; i < v.Count; i++) v[i] = v[i].normalized * 0.5f;
+            List<int> t = new List<int>();
+            for (int i = 0; i < f.Length; i += 3)
+            {
+                Vector3 a = v[f[i]], b = v[f[i + 1]], d = v[f[i + 2]];
+                Vector3 ab = ((a + b) * 0.5f).normalized * 0.5f, bd = ((b + d) * 0.5f).normalized * 0.5f, da = ((d + a) * 0.5f).normalized * 0.5f;
+                int s = v.Count; v.Add(ab); v.Add(bd); v.Add(da);
+                t.Add(f[i]); t.Add(s); t.Add(s + 2);
+                t.Add(s); t.Add(f[i + 1]); t.Add(s + 1);
+                t.Add(s + 2); t.Add(s + 1); t.Add(f[i + 2]);
+                t.Add(s); t.Add(s + 1); t.Add(s + 2);
+            }
+            DoubleSide(t);
+            Mesh m = FacetMesh(v, t, c, 0.9f);
+            // lattice: every third facet a touch brighter, so the shell sparkles as it turns
+            Color[] cs = m.colors;
+            for (int i = 0; i + 2 < cs.Length; i += 3)
+                if ((i / 3) % 3 == 0) { Color k = Color.Lerp(cs[i], Color.white, 0.45f); k.a = cs[i].a; cs[i] = k; cs[i + 1] = k; cs[i + 2] = k; }
+            m.colors = cs;
+            return m;
+        }
+
+        // v0.25.82 WARRIOR HERO OBJECTS -----------------------------------------------------------------
+        private static Mesh ColoredMesh(List<Vector3> v, List<Color> c, List<int> t)
+        {
+            Mesh m = new Mesh();
+            m.vertices = v.ToArray(); m.colors = c.ToArray(); m.triangles = t.ToArray();
+            Vector2[] uv = new Vector2[v.Count]; for (int i = 0; i < uv.Length; i++) uv[i] = new Vector2(0.5f, 0.5f);
+            m.uv = uv;
+            m.RecalculateBounds();
+            return m;
+        }
+
+        // Eclipse: a black sun with a blazing violet corona (spiky rays) and a white-hot rim, hovering over you,
+        // always facing the camera; it swells in, pulses, then collapses.
+        public static GameObject EclipseSun(Vector3 pos, float radius, float seconds)
+        {
+            if (!Enabled) return null;
+            GameObject root = new GameObject("IH_EclipseSun");
+            root.transform.position = pos;
+            root.transform.localScale = Vector3.one * radius;
+            int n = 64;
+            // black core (alpha)
+            List<Vector3> v = new List<Vector3>(); List<Color> c = new List<Color>(); List<int> t = new List<int>();
+            v.Add(Vector3.zero); c.Add(new Color(0.02f, 0f, 0.05f, 1f));
+            for (int i = 0; i < n; i++) { float a = (float)i / n * Mathf.PI * 2f; v.Add(new Vector3(Mathf.Cos(a), Mathf.Sin(a), 0f)); c.Add(new Color(0.05f, 0.01f, 0.10f, 1f)); }
+            for (int i = 0; i < n; i++) { t.Add(0); t.Add(1 + i); t.Add(1 + (i + 1) % n); }
+            MeshObject("core", ColoredMesh(v, c, t), ClearMat(), root.transform);
+            // corona with rays (additive)
+            v = new List<Vector3>(); c = new List<Color>(); t = new List<int>();
+            System.Random rng = new System.Random(7);
+            for (int i = 0; i < n; i++)
+            {
+                float a = (float)i / n * Mathf.PI * 2f;
+                Vector3 d = new Vector3(Mathf.Cos(a), Mathf.Sin(a), 0f);
+                float ray = 1.45f + 0.9f * Mathf.Pow(Mathf.Abs(Mathf.Sin(a * 4f + 0.4f)), 10f) + 0.25f * (float)rng.NextDouble();
+                v.Add(d * 0.98f); c.Add(new Color(0.78f, 0.62f, 1f, 1f));
+                v.Add(d * 1.12f); c.Add(new Color(0.62f, 0.42f, 1f, 0.85f));
+                v.Add(d * ray); c.Add(new Color(0.35f, 0.15f, 0.9f, 0f));
+            }
+            for (int i = 0; i < n; i++)
+            {
+                int a0 = i * 3, b0 = ((i + 1) % n) * 3;
+                for (int k = 0; k < 2; k++) { t.Add(a0 + k); t.Add(a0 + k + 1); t.Add(b0 + k); t.Add(b0 + k); t.Add(a0 + k + 1); t.Add(b0 + k + 1); }
+            }
+            MeshObject("corona", ColoredMesh(v, c, t), Mat(WhiteTex(), true), root.transform);
+            // white-hot rim
+            v = new List<Vector3>(); c = new List<Color>(); t = new List<int>();
+            for (int i = 0; i < n; i++)
+            {
+                float a = (float)i / n * Mathf.PI * 2f; Vector3 d = new Vector3(Mathf.Cos(a), Mathf.Sin(a), 0f);
+                v.Add(d * 0.97f); c.Add(new Color(1f, 0.95f, 1f, 1f));
+                v.Add(d * 1.04f); c.Add(new Color(0.9f, 0.8f, 1f, 0.6f));
+            }
+            for (int i = 0; i < n; i++) { int a0 = i * 2, b0 = ((i + 1) % n) * 2; t.Add(a0); t.Add(a0 + 1); t.Add(b0); t.Add(b0); t.Add(a0 + 1); t.Add(b0 + 1); }
+            MeshObject("rim", ColoredMesh(v, c, t), Mat(WhiteTex(), true), root.transform);
+            root.AddComponent<DragonFaceCamera>();
+            DragonPop pop = root.AddComponent<DragonPop>();
+            pop.Grow = 0.25f; pop.Life = Mathf.Max(0.3f, seconds); pop.Fade = 0.3f; pop.Pulse = 0.05f;
+            Light l = root.AddComponent<Light>();
+            l.type = LightType.Point; l.color = new Color(0.62f, 0.45f, 1f, 1f); l.range = radius * 8f; l.intensity = 1.6f * LightScale; l.shadows = LightShadows.None;
+            return root;
+        }
+
+        // Seismic Guillotine: a giant ember-forged guillotine blade drops out of the sky onto the rupture and bites
+        // into the ground (slanted molten edge, weight block on top), then sinks away.
+        public static void GuillotineDrop(Vector3 ground, Vector3 forward, float size)
+        {
+            if (!Enabled) return;
+            forward.y = 0f; if (forward.sqrMagnitude < 0.01f) forward = Vector3.forward; forward.Normalize();
+            GameObject root = new GameObject("IH_Guillotine");
+            Vector3 side = Vector3.Cross(Vector3.up, forward);
+            root.transform.rotation = Quaternion.LookRotation(side, Vector3.up);   // blade plane = local XY contains the fissure line
+            root.transform.localScale = Vector3.one * size;
+            int n = 10; float th = 0.05f;
+            List<Vector3> v = new List<Vector3>(); List<int> t = new List<int>();
+            for (int i = 0; i <= n; i++)
+            {
+                float x = -0.5f + (float)i / n;
+                float yb = -0.5f + 0.32f * (x + 0.5f);   // slanted cutting edge
+                v.Add(new Vector3(x, 0.45f, th)); v.Add(new Vector3(x, 0.45f, -th)); v.Add(new Vector3(x, yb, 0f));
+            }
+            for (int i = 0; i < n; i++)
+            {
+                int a = i * 3, b = (i + 1) * 3;
+                t.Add(a); t.Add(a + 2); t.Add(b); t.Add(b); t.Add(a + 2); t.Add(b + 2);             // front face
+                t.Add(a + 1); t.Add(b + 1); t.Add(a + 2); t.Add(b + 1); t.Add(b + 2); t.Add(a + 2); // back face
+                t.Add(a); t.Add(b); t.Add(a + 1); t.Add(b); t.Add(b + 1); t.Add(a + 1);             // top
+            }
+            Tube(v, t, new Vector3(-0.56f, 0.53f, 0f), new Vector3(0.56f, 0.53f, 0f), Vector3.up, Vector3.forward, 0.09f, 0.12f, 0.09f, 0.12f, 4);   // weight block
+            MeshObject("blade", FacetMesh(v, t, new Color(0.30f, 0.27f, 0.26f, 1f), 0.5f), ClearMat(), root.transform);
+            // molten edge (additive band along the cutting edge, both sides)
+            List<Vector3> ev = new List<Vector3>(); List<Color> ec = new List<Color>(); List<int> et = new List<int>();
+            for (int i = 0; i <= n; i++)
+            {
+                float x = -0.5f + (float)i / n, yb = -0.5f + 0.32f * (x + 0.5f);
+                ev.Add(new Vector3(x, yb - 0.01f, 0f)); ec.Add(new Color(1f, 0.85f, 0.45f, 1f));
+                ev.Add(new Vector3(x, yb + 0.12f, 0f)); ec.Add(new Color(1f, 0.35f, 0.05f, 0f));
+            }
+            for (int i = 0; i < n; i++) { int a = i * 2, b = a + 2; et.Add(a); et.Add(a + 1); et.Add(b); et.Add(b); et.Add(a + 1); et.Add(b + 1); }
+            DoubleSide(et);
+            GameObject edge = MeshObject("edge", ColoredMesh(ev, ec, et), Mat(WhiteTex(), true), root.transform);
+            edge.transform.localScale = new Vector3(1f, 1f, 1f);
+            AttachGlow(root.transform, Fire, size * 0.15f, 25f, size * 1.5f);
+            DragonPop pop = root.AddComponent<DragonPop>();
+            pop.From = ground + Vector3.up * (size * 3f + 8f);
+            pop.To = ground + Vector3.up * (size * 0.25f);   // edge buried ~25%
+            pop.Move = 0.18f; pop.EaseIn = true; pop.Life = 0.9f; pop.Fade = 0.35f; pop.Sink = size * 0.8f;
+            root.transform.position = pop.From;
+            TrailWhile(root.transform, new Color(1f, 0.5f, 0.15f, 1f), size * 0.3f, delegate { return pop != null && pop.Age < pop.Move; });
+        }
+
+        // Impact Punch: a giant spectral fist (palm, four knuckles, curled fingers, thumb) punches forward and bursts.
+        public static void SpectralFist(Vector3 from, Vector3 forward, float distance, float size, Color c)
+        {
+            if (!Enabled) return;
+            if (forward.sqrMagnitude < 0.01f) forward = Vector3.forward;
+            forward.Normalize();
+            GameObject root = new GameObject("IH_SpectralFist");
+            root.transform.rotation = Quaternion.LookRotation(forward, Vector3.up);
+            root.transform.localScale = Vector3.one * size;
+            List<Vector3> v = new List<Vector3>(); List<int> t = new List<int>();
+            Tube(v, t, new Vector3(0f, 0f, -0.6f), new Vector3(0f, 0f, 0.25f), Vector3.right, Vector3.up, 0.42f, 0.30f, 0.50f, 0.36f, 6);   // back of the hand + wrist
+            for (int k = 0; k < 4; k++)
+            {
+                float x = -0.33f + k * 0.22f;
+                Tube(v, t, new Vector3(x, 0.12f, 0.2f), new Vector3(x, 0.10f, 0.52f), Vector3.right, Vector3.up, 0.11f, 0.13f, 0.10f, 0.12f, 6);   // knuckles
+                Tube(v, t, new Vector3(x, -0.02f, 0.5f), new Vector3(x, -0.22f, 0.42f), Vector3.right, Vector3.forward, 0.1f, 0.1f, 0.09f, 0.09f, 6); // curled fingers
+            }
+            Tube(v, t, new Vector3(-0.45f, -0.18f, 0.05f), new Vector3(-0.05f, -0.26f, 0.42f), Vector3.up, Vector3.forward, 0.11f, 0.12f, 0.09f, 0.1f, 6);   // thumb
+            Color body = c; body.a = 0.7f;
+            Color halo = Color.Lerp(c, Color.white, 0.35f); halo.a = 0.25f;
+            MeshObject("fist", FacetMesh(v, t, body, 0.8f), ClearMat(), root.transform);
+            GameObject h = MeshObject("halo", FacetMesh(v, new List<int>(t), halo, 0.3f), Mat(WhiteTex(), true), root.transform);
+            h.transform.localScale = Vector3.one * 1.18f;
+            AttachGlow(root.transform, c, size * 0.3f, 50f, size * 2.5f);
+            DragonPop pop = root.AddComponent<DragonPop>();
+            pop.From = from; pop.To = from + forward * distance;
+            pop.Move = 0.14f; pop.Grow = 0.08f; pop.Life = 0.22f; pop.Fade = 0.18f;
+            root.transform.position = from;
+            TrailWhile(root.transform, c, size * 0.6f, delegate { return pop != null && pop.Age < pop.Life; });
+        }
+
+        // Knight's Guidance: dim spectral wings unfold from your back (two fans of light feathers), then fold away.
+        public static void SpiritWings(Transform follow, Color c, float seconds)
+        {
+            if (!Enabled || follow == null) return;
+            GameObject root = new GameObject("IH_SpiritWings");
+            root.transform.SetParent(follow, false);
+            root.transform.localPosition = new Vector3(0f, 1.35f, -0.25f);
+            Color body = c; body.a = 0.38f;
+            Color core = Color.Lerp(c, Color.white, 0.6f); core.a = 0.5f;
+            for (int side = -1; side <= 1; side += 2)
+            {
+                GameObject wing = new GameObject(side < 0 ? "wingL" : "wingR");
+                wing.transform.SetParent(root.transform, false);
+                for (int f = 0; f < 7; f++)
+                {
+                    float ang = 15f + f * 17f;                       // fan from up-out to down-out
+                    float len = 1.5f - Mathf.Abs(f - 2.5f) * 0.12f;
+                    GameObject feather = new GameObject("f");
+                    feather.transform.SetParent(wing.transform, false);
+                    float e = (60f - ang) * Mathf.Deg2Rad;            // +45 deg (up-out) .. -57 deg (down-out)
+                    Vector3 d = new Vector3(side * Mathf.Cos(e), Mathf.Sin(e), -0.25f);
+                    feather.transform.localRotation = Quaternion.LookRotation(d, Vector3.forward);   // flat in the back plane
+                    MeshObject("b", BladeMesh(len, 0.32f, 0.04f, body, true), Mat(WhiteTex(), true), feather.transform);
+                    MeshObject("c", BladeMesh(len * 0.95f, 0.06f, 0.02f, core, true), Mat(WhiteTex(), true), feather.transform);
+                }
+            }
+            DragonPop pop = root.AddComponent<DragonPop>();
+            pop.Grow = 0.35f; pop.Life = Mathf.Max(0.5f, seconds); pop.Fade = 0.45f;
+            Feathers(follow.position + Vector3.up * 1.3f, c, 1.2f, 0.8f, 30f);
+        }
+
+        // v0.25.83 SORCERER HERO OBJECTS ---------------------------------------------------------------
+        // Flat annulus in local XZ (radius 0.5 scale) broken into glowing rune dashes.
+        private static Mesh RuneBandMesh(Color c, int segments, float inner, float outer)
+        {
+            List<Vector3> v = new List<Vector3>(); List<Color> cs = new List<Color>(); List<int> t = new List<int>();
+            int n = segments * 4;
+            for (int i = 0; i <= n; i++)
+            {
+                float a = (float)i / n * Mathf.PI * 2f;
+                bool lit = (i / 2) % 2 == 0;
+                Color k = c; k.a = lit ? c.a : c.a * 0.25f;
+                Vector3 d = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                v.Add(d * inner); cs.Add(k);
+                v.Add(d * outer); cs.Add(k);
+            }
+            for (int i = 0; i < n; i++) { int a = i * 2, b = a + 2; t.Add(a); t.Add(a + 1); t.Add(b); t.Add(b); t.Add(a + 1); t.Add(b + 1); }
+            DoubleSide(t);
+            return ColoredMesh(v, cs, t);
+        }
+
+        // Turns a primitive sphere orb into an arcane energy orb: faceted crystal shell (keeps the orb's material,
+        // so callers can still tint/fade it), a white-hot core and two rune bands spinning on different axes.
+        // Dark orbs (Gravity Blast) get a black core and violet bands instead.
+        public static void EnergyOrb(GameObject orb, Color c, bool full)
+        {
+            if (!Enabled || orb == null) return;
+            MeshFilter mf = orb.GetComponent<MeshFilter>();
+            if (mf != null) mf.sharedMesh = GeodesicShell(new Color(1f, 1f, 1f, 1f));
+            if (!full) return;
+            bool dark = c.grayscale < 0.2f;
+            Color band = dark ? new Color(0.70f, 0.40f, 1f, 0.9f) : Color.Lerp(c, Color.white, 0.35f);
+            band.a = 0.9f;
+            GameObject core = MeshObject("core", GeodesicShell(dark ? new Color(0.02f, 0f, 0.05f, 1f) : new Color(1f, 0.97f, 1f, 0.9f)), dark ? ClearMat() : Mat(WhiteTex(), true), orb.transform);
+            core.transform.localScale = Vector3.one * 0.55f;
+            for (int k = 0; k < 2; k++)
+            {
+                GameObject pivot = new GameObject("bandPivot");
+                pivot.transform.SetParent(orb.transform, false);
+                pivot.transform.localRotation = Quaternion.Euler(k == 0 ? 20f : 75f, k * 60f, k == 0 ? -15f : 30f);
+                GameObject ring = MeshObject("band", RuneBandMesh(band, 8, 0.62f, 0.72f), Mat(WhiteTex(), true), pivot.transform);
+                ring.AddComponent<DragonRotate>().Speed = new Vector3(0f, k == 0 ? 220f : -160f, 0f);
+            }
+        }
+
+        // Arcane lightning burst: real jagged bolts from the sky with branches, instead of straight lines.
+        public static void ArcaneBoltRain(Vector3 center, float radius, int count)
+        {
+            if (!Enabled) return;
+            for (int i = 0; i < count; i++)
+            {
+                float a = (float)i / count * Mathf.PI * 2f + UnityEngine.Random.Range(-0.2f, 0.2f);
+                Vector3 p = GroundPoint(center + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * radius * UnityEngine.Random.Range(0.45f, 0.8f));
+                Color col = i % 2 == 0 ? new Color(0.72f, 0.36f, 1f, 1f) : new Color(0.50f, 0.85f, 1f, 1f);
+                Bolt(p + Vector3.up * 11f + new Vector3(UnityEngine.Random.Range(-1f, 1f), 0f, UnityEngine.Random.Range(-1f, 1f)), p, col, 0.22f, 0.3f);
+                Burst(p + Vector3.up * 0.2f, col, 10, 5f, 0.2f, 0.35f, 0f);
+            }
+        }
+
+        // v0.25.84 RANGER HERO OBJECTS -----------------------------------------------------------------
+        // Skill arrow: a glowing spirit arrow pointing +Z with the head at the origin (faceted head, shaft, 3 fletches).
+        public static void SpiritArrow(Transform parent, Color c, float length)
+        {
+            if (!Enabled || parent == null) return;
+            List<Vector3> v = new List<Vector3>(); List<int> t = new List<int>();
+            Tube(v, t, new Vector3(0f, 0f, -length), new Vector3(0f, 0f, -length * 0.12f), Vector3.right, Vector3.up, 0.018f, 0.018f, 0.018f, 0.018f, 5);   // shaft
+            Mesh shaft = FacetMesh(v, t, new Color(0.92f, 0.86f, 0.70f, 1f), 0.3f);
+            MeshObject("shaft", shaft, ClearMat(), parent);
+            v = new List<Vector3>(); t = new List<int>();
+            Tube(v, t, new Vector3(0f, 0f, -length * 0.14f), new Vector3(0f, 0f, 0f), Vector3.right, Vector3.up, 0.06f, 0.025f, 0.002f, 0.002f, 4);   // broadhead
+            Color head = Color.Lerp(c, Color.white, 0.5f); head.a = 1f;
+            MeshObject("head", FacetMesh(v, t, head, 0.8f), ClearMat(), parent);
+            Color fl = c; fl.a = 0.85f;
+            for (int k = 0; k < 3; k++)
+            {
+                GameObject f = new GameObject("fletch");
+                f.transform.SetParent(parent, false);
+                f.transform.localRotation = Quaternion.AngleAxis(k * 120f, Vector3.forward);
+                List<Vector3> fv = new List<Vector3> { new Vector3(0f, 0.015f, -length * 0.98f), new Vector3(0f, 0.09f, -length * 0.95f), new Vector3(0f, 0.015f, -length * 0.72f) };
+                List<int> ft = new List<int> { 0, 1, 2 };
+                DoubleSide(ft);
+                MeshObject("v", FacetMesh(fv, ft, fl, 0.2f), Mat(WhiteTex(), true), f.transform);
+            }
+            Color halo = c; halo.a = 0.3f;
+            v = new List<Vector3>(); t = new List<int>();
+            Tube(v, t, new Vector3(0f, 0f, -length * 0.5f), new Vector3(0f, 0f, 0.05f), Vector3.right, Vector3.up, 0.07f, 0.07f, 0.02f, 0.02f, 6);
+            DoubleSide(t);
+            MeshObject("halo", FacetMesh(v, t, halo, 0.1f), Mat(WhiteTex(), true), parent);
+        }
+
+        // Spiral wind funnel (radius r0 at the bottom -> r1 at the top), two counter-rotating additive layers with
+        // streaked bands. Used by the Cyclone tornado and the Cyclone Arrow.
+        private static Mesh FunnelMesh(float r0, float r1, float height, float twist, Color c, int bands)
+        {
+            int n = 40, h = 14;
+            List<Vector3> v = new List<Vector3>(); List<Color> cs = new List<Color>(); List<int> t = new List<int>();
+            for (int j = 0; j <= h; j++)
+            {
+                float y = (float)j / h;
+                float r = Mathf.Lerp(r0, r1, Mathf.Pow(y, 0.8f));
+                float fade = Mathf.SmoothStep(0f, 1f, y * 5f) * Mathf.SmoothStep(0f, 1f, (1f - y) * 4f);
+                for (int i = 0; i <= n; i++)
+                {
+                    float a = (float)i / n * Mathf.PI * 2f + y * twist;
+                    v.Add(new Vector3(Mathf.Cos(a) * r, y * height, Mathf.Sin(a) * r));
+                    float stripe = Mathf.Pow(Mathf.Max(0f, Mathf.Sin((float)i / n * Mathf.PI * 2f * bands - y * 6f)), 3f);
+                    Color k = c; k.a = c.a * (0.12f + 0.88f * stripe) * fade;
+                    cs.Add(k);
+                }
+            }
+            for (int j = 0; j < h; j++)
+                for (int i = 0; i < n; i++)
+                {
+                    int a = j * (n + 1) + i, b = a + 1, cc = a + n + 1, d = cc + 1;
+                    t.Add(a); t.Add(cc); t.Add(b); t.Add(b); t.Add(cc); t.Add(d);
+                }
+            DoubleSide(t);
+            return ColoredMesh(v, cs, t);
+        }
+
+        public static void WindFunnel(Transform parent, Vector3 localBase, float r0, float r1, float height, Color c)
+        {
+            if (!Enabled || parent == null) return;
+            Color outer = c; outer.a = 0.55f;
+            Color inner = Color.Lerp(c, Color.white, 0.4f); inner.a = 0.45f;
+            GameObject a = MeshObject("funnelA", FunnelMesh(r0, r1, height, 4f, outer, 4), Mat(WhiteTex(), true), parent);
+            a.transform.localPosition = localBase;
+            a.AddComponent<DragonRotate>().Speed = new Vector3(0f, -320f, 0f);
+            GameObject b = MeshObject("funnelB", FunnelMesh(r0 * 0.6f, r1 * 0.7f, height * 0.95f, -3f, inner, 3), Mat(WhiteTex(), true), parent);
+            b.transform.localPosition = localBase;
+            b.AddComponent<DragonRotate>().Speed = new Vector3(0f, -480f, 0f);
+        }
+
+        // Furious Winds: real leaves (green lens blades) whirling around you on three tilted orbits.
+        public static void LeafOrbit(Transform parent, float radius)
+        {
+            if (!Enabled || parent == null) return;
+            Color[] cols = { new Color(0.40f, 0.80f, 0.30f, 0.95f), new Color(0.62f, 0.90f, 0.35f, 0.95f), new Color(0.85f, 0.75f, 0.30f, 0.95f) };
+            System.Random rng = new System.Random(3);
+            for (int k = 0; k < 3; k++)
+            {
+                GameObject pivot = new GameObject("leafOrbit");
+                pivot.transform.SetParent(parent, false);
+                pivot.transform.localPosition = new Vector3(0f, 0.6f + k * 0.7f, 0f);
+                pivot.transform.localRotation = Quaternion.Euler(k * 7f - 7f, 0f, k * 5f);
+                pivot.AddComponent<DragonRotate>().Speed = new Vector3(0f, 260f + k * 70f, 0f);
+                float r = radius * (0.6f + 0.15f * k);
+                for (int i = 0; i < 10; i++)
+                {
+                    float a = (i + (float)rng.NextDouble() * 0.6f) / 10f * 360f;
+                    GameObject leaf = MeshObject("leaf", LensMesh(0.32f, 0.16f, 0.02f, cols[(i + k) % 3], true), ClearMat(), pivot.transform);
+                    leaf.transform.localPosition = Quaternion.Euler(0f, a, 0f) * Vector3.forward * r + Vector3.up * ((float)rng.NextDouble() - 0.5f) * 0.6f;
+                    leaf.transform.localRotation = Quaternion.Euler((float)rng.NextDouble() * 360f, a, (float)rng.NextDouble() * 360f);
+                    leaf.AddComponent<DragonRotate>().Speed = new Vector3(400f, 0f, 250f);
+                }
+            }
+        }
+
+        // Snare Trap: a real hunter's snare - a rope noose loop on the ground, wooden stakes leaning out around it,
+        // and a faint green rune band so it stays readable.
+        public static void SnareTrap(Transform parent, float radius)
+        {
+            if (!Enabled || parent == null) return;
+            List<Vector3> v = new List<Vector3>(); List<int> t = new List<int>();
+            int n = 18;
+            float rr = radius * 0.8f;
+            for (int i = 0; i < n; i++)
+            {
+                float a0 = (float)i / n * Mathf.PI * 2f, a1 = (float)(i + 1) / n * Mathf.PI * 2f;
+                Vector3 p0 = new Vector3(Mathf.Cos(a0) * rr, 0.06f, Mathf.Sin(a0) * rr), p1 = new Vector3(Mathf.Cos(a1) * rr, 0.06f, Mathf.Sin(a1) * rr);
+                Vector3 dir = (p1 - p0).normalized; Vector3 side = Vector3.Cross(Vector3.up, dir);
+                Tube(v, t, p0, p1, Vector3.up, side, 0.05f, 0.05f, 0.05f, 0.05f, 5);
+            }
+            MeshObject("rope", FacetMesh(v, t, new Color(0.62f, 0.50f, 0.32f, 1f), 0.3f), ClearMat(), parent);
+            v = new List<Vector3>(); t = new List<int>();
+            for (int i = 0; i < 6; i++)
+            {
+                float a = (i + 0.5f) / 6f * Mathf.PI * 2f;
+                Vector3 d = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                Vector3 baseP = d * radius * 0.95f;
+                Vector3 top = baseP + d * 0.25f + Vector3.up * 0.65f;
+                Tube(v, t, baseP, top, Vector3.Cross(Vector3.up, d), d, 0.06f, 0.06f, 0.01f, 0.01f, 5);
+            }
+            MeshObject("stakes", FacetMesh(v, t, new Color(0.42f, 0.30f, 0.18f, 1f), 0.4f), ClearMat(), parent);
+            GameObject band = MeshObject("rune", RuneBandMesh(new Color(0.75f, 1f, 0.45f, 0.5f), 10, 0.9f, 1f), Mat(WhiteTex(), true), parent);
+            band.transform.localPosition = new Vector3(0f, 0.05f, 0f);
+            band.transform.localScale = Vector3.one * radius;
+            band.AddComponent<DragonRotate>().Speed = new Vector3(0f, 25f, 0f);
+        }
+
         // v0.25.80 Rift Walker portal: a standing oval of swirling void (dark core, spiral bands) with a blazing rim.
         public static void RiftPortal(Transform parent, Vector3 centre, float rx, float ry)
         {
@@ -11924,5 +12820,53 @@ namespace DragonsAltarCombat
             Mesh.colors = _buf;
         }
         private void OnDestroy() { if (Mesh != null) Destroy(Mesh); }
+    }
+    // v0.25.82: always faces the camera (billboard).
+    public class DragonFaceCamera : MonoBehaviour
+    {
+        private void LateUpdate()
+        {
+            Camera cam = Camera.main;
+            if (cam != null) transform.rotation = Quaternion.LookRotation(cam.transform.forward, cam.transform.up);
+        }
+    }
+
+    // v0.25.82: generic life of a hero object: optional move From -> To (EaseIn = accelerating, like a falling blade),
+    // scale pop-in (Grow), optional pulse, then shrink (or Sink into the ground) over Fade and destroy.
+    public class DragonPop : MonoBehaviour
+    {
+        public Vector3 From, To;
+        public float Move, Grow, Life = 1f, Fade = 0.3f, Pulse, Sink;
+        public bool EaseIn;
+        public float Age;
+        private Vector3 _scale;
+        private bool _moves;
+        private void Start()
+        {
+            _scale = transform.localScale;
+            _moves = Move > 0f;
+            if (Grow > 0f) transform.localScale = _scale * 0.05f;
+        }
+        private void Update()
+        {
+            Age += Time.deltaTime;
+            if (_moves)
+            {
+                float m = Mathf.Clamp01(Age / Move);
+                m = EaseIn ? m * m : 1f - (1f - m) * (1f - m);
+                transform.position = Vector3.Lerp(From, To, m);
+            }
+            float k = 1f;
+            if (Grow > 0f && Age < Grow) k = Mathf.SmoothStep(0.05f, 1f, Age / Grow);
+            else if (Age < Life) k = 1f + Pulse * Mathf.Sin(Age * 9f);
+            else
+            {
+                float f = Mathf.Clamp01((Age - Life) / Mathf.Max(0.01f, Fade));
+                if (Sink > 0f) { transform.position = To - Vector3.up * Sink * f * f; k = 1f; }
+                else k = 1f - f;
+            }
+            transform.localScale = _scale * Mathf.Max(0.001f, k);
+            if (Age >= Life + Fade) Destroy(gameObject);
+        }
     }
 }

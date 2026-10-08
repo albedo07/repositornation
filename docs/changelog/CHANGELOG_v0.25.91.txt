@@ -1,0 +1,12 @@
+Immortal Heroes v0.25.91 - Swift Moonlight
+Base: v0.25.90. Only Sword Master Moonlight Splitter + Crescent Cleave swing timing changed.
+Jump slams, Slam animations, damage, cooldowns and all other classes untouched.
+
+- Moonlight Splitter (normal + Ascended): each sword swing hits 0.16 s after it starts (was 0.22 s).
+  The vanilla longsword swing plays at a constant ~1.75x so its contact frame lands on the ghost wave.
+  Waves stay 0.5 s apart; the Ascended 5th Heavy Slash is unchanged.
+- Crescent Cleave: the overhead swing hits at 0.42 s (was 0.55 s), sledge played at a constant ~1.3x.
+- Ascended Crescent second fan: the backswing (contact 0.30 s native) now plays at ~1.9x so it lands
+  with the second fan (it was slower than the hit before). Fans stay 0.5 s apart.
+- Engine: constant-speed Sword Master clips pick ONE playback speed per swing = native contact / skill
+  contact (never below 1x), instead of a fixed 1.25x for Moonlight only. Halfmoon keeps 1x.
