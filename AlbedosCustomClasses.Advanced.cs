@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.97";
+        public const string ModVersion = "0.25.98";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -2138,7 +2138,7 @@ namespace AlbedosCustomClassesAdvanced
                 GameObject ghostVis2 = visual;
                 float gw2 = width; Color gcol = halfmoon ? new Color(0.70f, 0.95f, 1f, 1f) : DragonVfx.Steel;
                 if (halfmoon)
-                    DragonCombat.RunVfx(delegate { DragonVfx.AttachGlow(ghostVis2.transform, new Color(0.45f, 0.78f, 1f, 1f), 0.4f * heightScale, 12f, 3f); DragonVfx.CrescentBlade(ghostVis2.transform, gcol, gw2 * 0.6f, gw2 * 0.14f * heightScale, 0f); });   // v0.25.55 / v0.25.63 moon crescent
+                    DragonCombat.RunVfx(delegate { DragonVfx.AttachGlow(ghostVis2.transform, new Color(0.45f, 0.78f, 1f, 1f), 0.4f * heightScale, 12f, 3f); DragonVfx.CrescentBlade(ghostVis2.transform, gcol, gw2 * 0.6f, gw2 * 0.14f * heightScale, 0f); DragonVfx.TrailWhile(ghostVis2.transform, new Color(0.80f, 0.95f, 1f, 1f), 0.22f * heightScale, delegate { return ghostVis2 != null; }); });   // v0.25.55 / v0.25.63 moon crescent; v0.25.98 sparkle trail
                 else
                 {
                     // v0.25.97 (user): Moonlord's Moonlight Splitter look - a large pale lunar crescent (white core,
@@ -2184,7 +2184,7 @@ namespace AlbedosCustomClassesAdvanced
                     hitTargets.Add(target);
                     // Afterimage has no additional slash animation; stun accompanies its projectile hit.
                     if (stunSmallBig && !target.IsBoss()) DragonCombat.Stun(target, center);
-                    if (!halfmoon && _enableVfx.Value) { Vector3 mh = center; DragonCombat.RunVfx(delegate { DragonVfx.Burst(mh, new Color(0.80f, 0.88f, 1f, 1f), 14, 7f, 0.22f, 0.35f, 0f); DragonVfx.Flash(mh, new Color(0.55f, 0.62f, 1f, 1f), 2f, 4f, 0.15f); }); }   // v0.25.97 moon shards on hit
+                    if (_enableVfx.Value) { Vector3 mh = center; DragonCombat.RunVfx(delegate { DragonVfx.Burst(mh, new Color(0.80f, 0.88f, 1f, 1f), 14, 7f, 0.22f, 0.35f, 0f); DragonVfx.Flash(mh, new Color(0.55f, 0.62f, 1f, 1f), 2f, 4f, 0.15f); }); }   // v0.25.97 moon shards on hit
                     DealDamageScaled(player, target, damage, multiplier, 8f, false);
                     if (halfmoon)
                     {
@@ -2206,7 +2206,7 @@ namespace AlbedosCustomClassesAdvanced
             }
             if (visual != null)
             {
-                if (!halfmoon && DragonVfx.Enabled) { Vector3 mend = visual.transform.position; float mw = width; DragonCombat.RunVfx(delegate { DragonVfx.Burst(mend, new Color(0.70f, 0.78f, 1f, 1f), 18, 4f, 0.25f, 0.6f, -0.5f); DragonVfx.Flash(mend, new Color(0.55f, 0.62f, 1f, 1f), 1.5f, mw, 0.25f); }); }   // v0.25.97 dissolves into moon dust
+                if (DragonVfx.Enabled) { Vector3 mend = visual.transform.position; float mw = width; DragonCombat.RunVfx(delegate { DragonVfx.Burst(mend, new Color(0.70f, 0.78f, 1f, 1f), 18, 4f, 0.25f, 0.6f, -0.5f); DragonVfx.Flash(mend, new Color(0.55f, 0.62f, 1f, 1f), 1.5f, mw, 0.25f); }); }   // v0.25.97 dissolves into moon dust
                 Destroy(visual);
             }
         }

@@ -1,0 +1,5 @@
+Immortal Heroes v0.25.98 - Moon Polish
+Base: ANCHOR v0.25.97. VFX only.
+
+- Halfmoon waves (Ascended final GT) get the Moonlight polish: sparkle trail, moon shards + flash on
+  every hit, dissolve into moon dust at the end. Halfmoon keeps its own crescent colours.
