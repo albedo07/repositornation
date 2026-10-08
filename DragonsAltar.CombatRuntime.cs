@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.80";
+        public const string ModVersion = "0.25.81";
 
         internal static DragonCombatPlugin Instance;
 
@@ -11751,6 +11751,169 @@ namespace DragonsAltarCombat
             if (dome == null) return;
             DragonDome dd = dome.GetComponent<DragonDome>();
             if (dd != null) dd.SetAlpha(a);
+        }
+
+        // v0.25.81 solid-object helpers ------------------------------------------------------------
+        // Faceted tube from a to b (n sides) with elliptical radii (ru along u, rw along w) at each end; capped.
+        private static void Tube(List<Vector3> v, List<int> t, Vector3 a, Vector3 b, Vector3 u, Vector3 w, float ru0, float rw0, float ru1, float rw1, int n)
+        {
+            int s = v.Count;
+            for (int i = 0; i < n; i++) { float ang = (i + 0.5f) / n * Mathf.PI * 2f; v.Add(a + u * Mathf.Cos(ang) * ru0 + w * Mathf.Sin(ang) * rw0); }
+            for (int i = 0; i < n; i++) { float ang = (i + 0.5f) / n * Mathf.PI * 2f; v.Add(b + u * Mathf.Cos(ang) * ru1 + w * Mathf.Sin(ang) * rw1); }
+            v.Add(a); v.Add(b);
+            int ca = s + 2 * n, cb = ca + 1;
+            for (int i = 0; i < n; i++)
+            {
+                int p0 = s + i, p1 = s + (i + 1) % n, q0 = p0 + n, q1 = p1 + n;
+                t.Add(p0); t.Add(q0); t.Add(p1); t.Add(p1); t.Add(q0); t.Add(q1);
+                t.Add(ca); t.Add(p0); t.Add(p1);
+                t.Add(cb); t.Add(q1); t.Add(q0);
+            }
+        }
+
+        private static void DoubleSide(List<int> t)
+        {
+            int count = t.Count;
+            for (int i = 0; i < count; i += 3) { t.Add(t[i]); t.Add(t[i + 2]); t.Add(t[i + 1]); }
+        }
+
+        // Judgement Hammer: a holy warhammer in UNIT space (haft along Y -0.5..0.5, head across X -0.5..0.5 at the top,
+        // depth along Z -0.5..0.5). The caller scales the returned child to (width, height, depth) every frame.
+        // Gold head with ivory striking faces, ivory haft with gold bands, gold pommel gem, a radiant halo shell and
+        // light ribbons from both striking faces (they draw arcs while it flips).
+        public static GameObject HolyWarhammer(Transform parent)
+        {
+            if (!Enabled || parent == null) return null;
+            GameObject unit = new GameObject("IH_Warhammer");
+            unit.transform.SetParent(parent, false);
+            Color gold = new Color(1f, 0.80f, 0.34f, 1f), ivory = new Color(1f, 0.96f, 0.86f, 1f), deep = new Color(0.78f, 0.55f, 0.20f, 1f);
+            Vector3 X = Vector3.right, Y = Vector3.up, Z = Vector3.forward;
+
+            List<Vector3> v = new List<Vector3>(); List<int> t = new List<int>();
+            Tube(v, t, new Vector3(0f, -0.44f, 0f), new Vector3(0f, 0.28f, 0f), X, Z, 0.07f, 0.11f, 0.07f, 0.11f, 8);   // haft
+            Mesh haft = FacetMesh(v, t, ivory, 0.3f);
+            MeshObject("haft", haft, ClearMat(), unit.transform);
+
+            v = new List<Vector3>(); t = new List<int>();
+            Tube(v, t, new Vector3(0f, -0.50f, 0f), new Vector3(0f, -0.44f, 0f), X, Z, 0.04f, 0.06f, 0.13f, 0.20f, 8);    // pommel
+            Tube(v, t, new Vector3(0f, -0.20f, 0f), new Vector3(0f, -0.15f, 0f), X, Z, 0.10f, 0.16f, 0.10f, 0.16f, 8);    // grip band
+            Tube(v, t, new Vector3(0f, 0.10f, 0f), new Vector3(0f, 0.16f, 0f), X, Z, 0.10f, 0.16f, 0.10f, 0.16f, 8);      // upper band
+            Tube(v, t, new Vector3(0f, 0.16f, 0f), new Vector3(0f, 0.29f, 0f), X, Z, 0.08f, 0.13f, 0.16f, 0.30f, 8);      // collar flare
+            MeshObject("gold", FacetMesh(v, t, gold, 0.5f), ClearMat(), unit.transform);
+
+            v = new List<Vector3>(); t = new List<int>();
+            Tube(v, t, new Vector3(-0.36f, 0.39f, 0f), new Vector3(0.36f, 0.39f, 0f), Y, Z, 0.10f, 0.42f, 0.10f, 0.42f, 8);   // head block
+            Tube(v, t, new Vector3(0f, 0.49f, 0f), new Vector3(0f, 0.56f, 0f), X, Z, 0.12f, 0.22f, 0.02f, 0.03f, 4);          // crown spike
+            MeshObject("head", FacetMesh(v, t, gold, 0.6f), ClearMat(), unit.transform);
+
+            v = new List<Vector3>(); t = new List<int>();
+            Tube(v, t, new Vector3(-0.36f, 0.39f, 0f), new Vector3(-0.50f, 0.39f, 0f), Y, Z, 0.12f, 0.50f, 0.105f, 0.44f, 8);  // left face
+            Tube(v, t, new Vector3(0.36f, 0.39f, 0f), new Vector3(0.50f, 0.39f, 0f), Y, Z, 0.12f, 0.50f, 0.105f, 0.44f, 8);    // right face
+            Tube(v, t, new Vector3(0f, 0.39f, 0.40f), new Vector3(0f, 0.39f, 0.50f), X, Y, 0.09f, 0.06f, 0.03f, 0.02f, 4);     // front sigil stud
+            Tube(v, t, new Vector3(0f, 0.39f, -0.40f), new Vector3(0f, 0.39f, -0.50f), X, Y, 0.09f, 0.06f, 0.03f, 0.02f, 4);   // back sigil stud
+            MeshObject("faces", FacetMesh(v, t, ivory, 0.4f), ClearMat(), unit.transform);
+
+            // radiant halo around the head (additive, soft, double-sided)
+            v = new List<Vector3>(); t = new List<int>();
+            Tube(v, t, new Vector3(-0.56f, 0.39f, 0f), new Vector3(0.56f, 0.39f, 0f), Y, Z, 0.17f, 0.62f, 0.17f, 0.62f, 10);
+            DoubleSide(t);
+            Color halo = new Color(1f, 0.85f, 0.45f, 0.22f);
+            MeshObject("halo", FacetMesh(v, t, halo, 0.2f), Mat(WhiteTex(), true), unit.transform);
+            v = new List<Vector3>(); t = new List<int>();
+            Tube(v, t, new Vector3(0f, -0.48f, 0f), new Vector3(0f, 0.30f, 0f), X, Z, 0.13f, 0.2f, 0.13f, 0.2f, 8);
+            DoubleSide(t);
+            MeshObject("haftGlow", FacetMesh(v, t, new Color(1f, 0.9f, 0.6f, 0.12f), 0.2f), Mat(WhiteTex(), true), unit.transform);
+
+            // light ribbons from both striking faces + a holy gleam at the crown
+            GameObject keep = unit;
+            for (int side = -1; side <= 1; side += 2)
+            {
+                GameObject tip = new GameObject(side < 0 ? "tipL" : "tipR");
+                tip.transform.SetParent(unit.transform, false);
+                tip.transform.localPosition = new Vector3(0.5f * side, 0.39f, 0f);
+                TrailWhile(tip.transform, new Color(1f, 0.88f, 0.50f, 1f), 0.45f, delegate { return keep != null; });
+            }
+            return unit;
+        }
+
+        // Double-pointed lens blade along local X (centre at the origin), flat in local XY, thin in Z.
+        private static Mesh LensMesh(float length, float width, float thick, Color c, bool soft)
+        {
+            float[] x = { -0.5f, -0.38f, -0.12f, 0f, 0.12f, 0.38f, 0.5f };
+            float[] wf = { 0f, 0.55f, 0.92f, 1f, 0.92f, 0.55f, 0f };
+            List<Vector3> v = new List<Vector3>(); List<int> t = new List<int>();
+            for (int i = 0; i < x.Length; i++)
+            {
+                float hw = width * 0.5f * wf[i], ht = thick * 0.5f * Mathf.Max(0.05f, wf[i]), xx = x[i] * length;
+                v.Add(new Vector3(xx, hw, 0f)); v.Add(new Vector3(xx, 0f, ht)); v.Add(new Vector3(xx, -hw, 0f)); v.Add(new Vector3(xx, 0f, -ht));
+            }
+            for (int i = 0; i < x.Length - 1; i++)
+                for (int k = 0; k < 4; k++)
+                {
+                    int a = i * 4 + k, b = i * 4 + (k + 1) % 4, cc = a + 4, d = b + 4;
+                    t.Add(a); t.Add(b); t.Add(cc); t.Add(b); t.Add(d); t.Add(cc);
+                }
+            if (soft) DoubleSide(t);
+            return FacetMesh(v, t, c, 0.6f);
+        }
+
+        // Grand Cross: one holy light blade (lens) with a white-hot core and a soft halo, lying along local X of `parent`
+        // rotated by `rollDeg` around local Z. Both tips leave light ribbons as the cross travels.
+        public static void LightBlade(Transform parent, float length, float width, float rollDeg, Color c)
+        {
+            if (!Enabled || parent == null) return;
+            GameObject root = new GameObject("IH_LightBlade");
+            root.transform.SetParent(parent, false);
+            root.transform.localRotation = Quaternion.AngleAxis(rollDeg, Vector3.forward);
+            Color body = c; body.a = 0.75f;
+            Color halo = Color.Lerp(c, Color.white, 0.3f); halo.a = 0.30f;
+            Color core = new Color(1f, 1f, 1f, 0.9f);
+            MeshObject("body", LensMesh(length, width, width * 0.25f, body, true), ClearMat(), root.transform);
+            MeshObject("halo", LensMesh(length * 1.06f, width * 2.2f, width * 0.6f, halo, true), Mat(WhiteTex(), true), root.transform);
+            MeshObject("core", LensMesh(length * 0.92f, width * 0.32f, width * 0.12f, core, true), Mat(WhiteTex(), true), root.transform);
+            GameObject keep = root;
+            for (int side = -1; side <= 1; side += 2)
+            {
+                GameObject tip = new GameObject("tip");
+                tip.transform.SetParent(root.transform, false);
+                tip.transform.localPosition = new Vector3(length * 0.46f * side, 0f, 0f);
+                TrailWhile(tip.transform, Color.Lerp(c, Color.white, 0.35f), Mathf.Max(0.3f, width * 0.6f), delegate { return keep != null; });
+            }
+        }
+
+        // Barrier: a geodesic crystal shell (subdivided icosahedron, radius 0.5 like the primitive sphere) with lit
+        // facets and brighter lattice rims, so the Barrier reads as a faceted holy shield, not a plain bubble.
+        public static Mesh GeodesicShell(Color c)
+        {
+            float p = (1f + Mathf.Sqrt(5f)) * 0.5f;
+            List<Vector3> v = new List<Vector3>
+            {
+                new Vector3(-1, p, 0), new Vector3(1, p, 0), new Vector3(-1, -p, 0), new Vector3(1, -p, 0),
+                new Vector3(0, -1, p), new Vector3(0, 1, p), new Vector3(0, -1, -p), new Vector3(0, 1, -p),
+                new Vector3(p, 0, -1), new Vector3(p, 0, 1), new Vector3(-p, 0, -1), new Vector3(-p, 0, 1)
+            };
+            int[] f = { 0,11,5, 0,5,1, 0,1,7, 0,7,10, 0,10,11, 1,5,9, 5,11,4, 11,10,2, 10,7,6, 7,1,8,
+                        3,9,4, 3,4,2, 3,2,6, 3,6,8, 3,8,9, 4,9,5, 2,4,11, 6,2,10, 8,6,7, 9,8,1 };
+            for (int i = 0; i < v.Count; i++) v[i] = v[i].normalized * 0.5f;
+            List<int> t = new List<int>();
+            for (int i = 0; i < f.Length; i += 3)
+            {
+                Vector3 a = v[f[i]], b = v[f[i + 1]], d = v[f[i + 2]];
+                Vector3 ab = ((a + b) * 0.5f).normalized * 0.5f, bd = ((b + d) * 0.5f).normalized * 0.5f, da = ((d + a) * 0.5f).normalized * 0.5f;
+                int s = v.Count; v.Add(ab); v.Add(bd); v.Add(da);
+                t.Add(f[i]); t.Add(s); t.Add(s + 2);
+                t.Add(s); t.Add(f[i + 1]); t.Add(s + 1);
+                t.Add(s + 2); t.Add(s + 1); t.Add(f[i + 2]);
+                t.Add(s); t.Add(s + 1); t.Add(s + 2);
+            }
+            DoubleSide(t);
+            Mesh m = FacetMesh(v, t, c, 0.9f);
+            // lattice: every third facet a touch brighter, so the shell sparkles as it turns
+            Color[] cs = m.colors;
+            for (int i = 0; i + 2 < cs.Length; i += 3)
+                if ((i / 3) % 3 == 0) { Color k = Color.Lerp(cs[i], Color.white, 0.45f); k.a = cs[i].a; cs[i] = k; cs[i + 1] = k; cs[i + 2] = k; }
+            m.colors = cs;
+            return m;
         }
 
         // v0.25.80 Rift Walker portal: a standing oval of swirling void (dark core, spiral bands) with a blazing rim.

@@ -1,5 +1,4 @@
-TEST v0.25.80
-1. Mash several skills at once (any Class, incl. Archmage): only the first one casts; the others work once it has finished.
-2. Recasts still work: Whirlwind / Furious Winds / Starfall cancel, Meteor / Ballista charge release, Gravity Blast recast, Halfmoon follow-up, Shield Charge slam click.
-3. Warrior HUD: numbers inside the bars, no empty value column, bars reach the end caps.
-4. Rift Walker: portals look like swirling void ovals.
+TEST v0.25.81
+1. Judgement Hammer (normal + Ascended return): 3D gold/ivory warhammer flipping and growing, gold ribbons from both faces.
+2. Grand Cross (normal + Ascended): two crossed light blades flying forward, ribbons from the tips.
+3. Heaven's Crucible / Ascended Ray of Hope: faceted gold crystal shell around the player, fades when the Barrier ends.

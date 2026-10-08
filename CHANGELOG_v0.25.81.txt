@@ -1,0 +1,8 @@
+Immortal Heroes v0.25.81 - Holy Arsenal (VFX hero-object pass 1 of 4: Cleric)
+
+VFX
+- Judgement Hammer is now a real holy warhammer: gold head with ivory striking faces, ivory haft with gold bands, pommel gem, a radiant halo, and light ribbons from both faces that draw arcs as it flips. It still grows in flight exactly as before.
+- Grand Cross is now two crossed blades of holy light (blue-white lens blades, white-hot cores, soft halo) with ribbons streaming from all four tips, instead of two flat lines.
+- Barrier orb (Heaven's Crucible, Ascended Ray of Hope, Priest barriers) is now a faceted golden crystal shell that slowly turns and sparkles, instead of a plain bubble.
+
+Visual only: no damage, timing or hitbox changes.

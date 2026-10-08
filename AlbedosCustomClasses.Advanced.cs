@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.80";
+        public const string ModVersion = "0.25.81";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -5124,6 +5124,13 @@ namespace AlbedosCustomClassesAdvanced
             root.transform.position = center;
             if (!_enableVfx.Value)
                 return root;
+            if (DragonVfx.Enabled)
+            {
+                // v0.25.81: a real holy warhammer (gold head, ivory faces + haft, halo, light ribbons) instead of two lines
+                GameObject hroot = root;
+                DragonCombat.RunVfx(delegate { DragonVfx.HolyWarhammer(hroot.transform); DragonVfx.AttachGlow(hroot.transform, color, 1.4f, 45f, 7f); });
+                return root;
+            }
 
             Shader shader = Shader.Find("Sprites/Default");
             GameObject shaftObj = new GameObject("shaft");
@@ -5718,6 +5725,9 @@ namespace AlbedosCustomClassesAdvanced
             // Real meters: shaft along local Y, head across local X (width), head on top.
             float half = height * 0.5f;
             float headThick = height * 0.22f;
+            Transform unitT = hammer.transform.Find("IH_Warhammer");
+            if (unitT != null)
+                unitT.localScale = new Vector3(Mathf.Max(0.1f, width), Mathf.Max(0.1f, height), Mathf.Max(0.1f, width * 0.45f));   // v0.25.81
             Transform shaftT = hammer.transform.Find("shaft");
             Transform headT = hammer.transform.Find("head");
             LineRenderer shaft = shaftT == null ? null : shaftT.GetComponent<LineRenderer>();
@@ -6629,8 +6639,25 @@ namespace AlbedosCustomClassesAdvanced
             if (_enableVfx.Value)
             {
                 visualRoot = new GameObject("DragonsAltarGrandCross");
-                slashA = CreatePriestPersistentLine(visualRoot.transform, "GrandCrossSlashA", new Color(0.36f, 0.82f, 1f, 0.98f), 0.42f);
-                slashB = CreatePriestPersistentLine(visualRoot.transform, "GrandCrossSlashB", new Color(0.72f, 0.94f, 1f, 0.98f), 0.42f);
+                if (DragonVfx.Enabled)
+                {
+                    // v0.25.81: two crossed blades of holy light (lens blades, white-hot cores, tip ribbons) instead of two lines
+                    visualRoot.transform.rotation = Quaternion.LookRotation(forward, crossUp);
+                    float diag = 2f * Mathf.Sqrt(width * width * 0.25f + height * height * 0.25f);
+                    float ang = Mathf.Atan2(height, width) * Mathf.Rad2Deg;
+                    float bw = Mathf.Max(0.35f, width * 0.07f);
+                    GameObject vr = visualRoot;
+                    DragonCombat.RunVfx(delegate
+                    {
+                        DragonVfx.LightBlade(vr.transform, diag, bw, ang, new Color(0.36f, 0.82f, 1f, 1f));
+                        DragonVfx.LightBlade(vr.transform, diag, bw, -ang, new Color(0.72f, 0.94f, 1f, 1f));
+                    });
+                }
+                else
+                {
+                    slashA = CreatePriestPersistentLine(visualRoot.transform, "GrandCrossSlashA", new Color(0.36f, 0.82f, 1f, 0.98f), 0.42f);
+                    slashB = CreatePriestPersistentLine(visualRoot.transform, "GrandCrossSlashB", new Color(0.72f, 0.94f, 1f, 0.98f), 0.42f);
+                }
                 // v0.25.57: a blazing core rides the cross, trailing light
                 GameObject gcRoot = visualRoot;
                 DragonCombat.RunVfx(delegate
@@ -10164,6 +10191,18 @@ namespace AlbedosCustomClassesAdvanced
             if (coreCol != null) Destroy(coreCol);
             core.transform.SetParent(orb.transform, false);
             core.transform.localScale = Vector3.one * 0.94f;
+            if (DragonVfx.Enabled)
+            {
+                // v0.25.81: faceted geodesic crystal shell instead of the plain sphere (alpha still driven by mat.color)
+                Mesh shell = null;
+                DragonCombat.RunVfx(delegate { shell = DragonVfx.GeodesicShell(new Color(1f, 0.9f, 0.55f, 1f)); });
+                MeshFilter mf = orb.GetComponent<MeshFilter>();
+                if (shell != null && mf != null)
+                {
+                    mf.sharedMesh = shell;
+                    orb.AddComponent<DragonRotate>().Speed = new Vector3(0f, 18f, 0f);
+                }
+            }
             Renderer coreR = core.GetComponent<Renderer>();
             Material coreMat = null;
             if (coreR != null && shader != null)
