@@ -1,0 +1,13 @@
+Immortal Heroes v0.25.102 - Home Run Cleave
+Base: v0.25.101 (anchor v0.25.100).
+
+Circle Swing now plays HOME RUN CLEAVE (clip "merc_homerun"):
+- Wind up 0.45 s: faces the aim, turned side-on; crow hop (upward pulse + 1.5 m forward carry, swept
+  against walls/structures, creatures never block); left knee high, right leg supporting; both hands
+  loaded behind the right shoulder like a heavy bat. Full skill lock + Hyper Armor.
+- Strike 0.45-0.85 s: one violent 360 deg counter-clockwise spin, two-handed grip, weapon level at
+  waist/chest height.
+- Damage on the strike frame: weapon snapshot x 2.5, 6.5 m sphere around you; Small and Big enemies
+  get knockback (80) + stagger, Bosses only damage.
+- Ascended keeps its second launching sweep after the spin.
+- Config [Mercenary Home Run Cleave]: Windup / WeaponDamageMultiplier / Radius / HopDistance / PushForce.

@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.101";
+        public const string ModVersion = "0.25.102";
 
         internal static DragonCombatPlugin Instance;
 
@@ -4432,6 +4432,24 @@ namespace DragonsAltarCombat
             c["merc_bomb"] = SbBat();
             c["sorc_stonefang"] = SbGround(0);
             c["merc_stomp"] = SbGround(1);
+            // v0.25.102 (user) HOME RUN CLEAVE (Circle Swing): wind up 0.45 s = crow hop side-on, left knee high,
+            // both hands loaded behind the right shoulder like a heavy bat; impact (T 0) = uncoil into ONE violent
+            // 360 deg counter-clockwise turn (positive Sn) over 0.4 s, two-handed grip, weapon level at waist/chest.
+            // Joint safety: every Hand reach <= 0.95 (elbows never locked / hyper-extended), loaded hands stay on the
+            // right side behind the shoulder plane (x > 0, z < 0) so nothing crosses the torso, knee lift <= 0.55.
+            {
+                DragonClipKey hrLoad = K(-0.75f).Rot(0f, 60f, 0f).Sp(-6f, 0f, 0f).Ch(-4f, 10f, 0f).Hd(0f, -20f, 0f)
+                    .RL(0f, 0.05f, 0f, 0f).Lift(0.55f, 0f).Off(0f, 0.10f, 0f)
+                    .Hand(0.30f, 0.35f, -0.35f, 0.5f).Wp(0.3f, 0.75f, -0.6f).Two(-0.12f);
+                DragonClipKey hrPlant = K(-0.2f).Rot(0f, 60f, 0f).Sp(4f, 0f, 0f).Ch(0f, 12f, 0f).Hd(0f, -24f, 0f)
+                    .LL(0.4f, 0.12f, 0f, 0f).RL(-0.2f, 0.1f, 0f, 0f).Lift(0f, 0f).Off(0f, -0.05f, 0f)
+                    .Hand(0.30f, 0.35f, -0.40f, 0.5f).Wp(0.3f, 0.75f, -0.6f).Two(-0.12f);
+                DragonClipKey hrStrike = K(0f).Rot(0f, 0f, 0f).Sp(6f, 0f, 0f).Ch(0f, -8f, 0f).Off(0f, -0.06f, 0f)
+                    .Hand(0.55f, -0.05f, 0.75f, 0.95f).Wp(1f, 0f, 0.3f).Two(-0.2f).Sn(0f).Linear();
+                DragonClipKey hrMid = hrStrike.Copy(0.2f).Sn(180f);
+                DragonClipKey hrEnd = hrStrike.Copy(0.4f).Sn(360f); hrEnd.Lin = false;
+                c["merc_homerun"] = new DragonClipKey[] { K(-1f), hrLoad, hrPlant, hrStrike, hrMid, hrEnd, K(0.7f) };
+            }
             c["rg_trap"] = SbGround(2);
             c["sorc_stonefang_asc"] = SbGround(3);
             c["merc_circle"] = SbSpin(1, 0.4f);
