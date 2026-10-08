@@ -231,14 +231,25 @@ def skyfall_barrage():
 
 
 def ricochet_arrow():
+    # v0.25.85 Somersault Dance (id stays ricochet_arrow): a looping front-flip arc that ends in a foot slam on
+    # the ground (impact star + shock ring), with the Ascended OOO volley circles beside it.
     im = base("acrobat", 520, 160, 300, vignette=0.85)
     L = Light()
-    pts = [(70, 620), (300, 200), (450, 560), (640, 170)]
+    cx, cy, r = 384, 300, 210
+    pts = []
+    for k in range(0, 61):
+        a = math.radians(200 - k * 5.4)          # 200 deg -> -124 deg: almost a full loop, clockwise
+        pts.append((cx + math.cos(a) * r, cy - math.sin(a) * r))
     for i in range(len(pts) - 1):
-        L.line([pts[i], pts[i + 1]], TEAL, 9)
-    for p in pts[1:-1]:
-        star(L, p[0], p[1], 70, WHITE)
-    arrow(L, 560, 330, 690, 120, WHITE, w=10, head=1.2, trail=False)
+        L.line([pts[i], pts[i + 1]], TEAL, 12)
+        L.line([pts[i], pts[i + 1]], WHITE, 4)
+    ex, ey = pts[-1]
+    arrow(L, ex, ey, 384, 600, WHITE, w=12, head=1.3, trail=False)
+    star(L, 384, 620, 120, WHITE)
+    ring(L, 384, 640, 300, TEAL, 10)
+    ring(L, 384, 640, 190, (170, 255, 230), 6)
+    for x in (150, 384, 618):
+        ring(L, x, 715, 95, (120, 230, 200), 5, squash=0.3)
     return L.apply(im)
 
 

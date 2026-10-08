@@ -40,7 +40,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Dragon's Altar - Ranger";
-        public const string ModVersion = "0.25.84";
+        public const string ModVersion = "0.25.85";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -195,7 +195,7 @@ namespace DragonsAltarRanger
             _cyAscWider = Config.Bind(cya, "ExtraRadius", 2f, "v0.25.49: the tornado is this much wider (m).");
             _cyAscPullSpeed = Config.Bind(cya, "PullSpeed", 4f, "Small and Big enemies are dragged into the tornado at this speed (m/s); Bosses are not moved.");
             _cyAscFrost = Config.Bind(cya, "FrostSeconds", 3f, "Frost on every enemy hit, Bosses included (refreshed per hit).");
-            _cyAscHeight = Config.Bind(cya, "TornadoHeight", 7f, "Visual height of the tornado (m).");
+            _cyAscHeight = Config.Bind(cya, "TornadoHeight_v02585", 9f, "Visual height of the tornado (m) (v0.25.85: a tad taller).");
 
             const string sd = "Acrobat Swallow Dive";
             _sdCharges = Config.Bind(sd, "Charges", 2f, "Charges.");
@@ -246,7 +246,7 @@ namespace DragonsAltarRanger
             const string fw = "Acrobat Furious Winds";
             _fwCooldown = Config.Bind(fw, "Cooldown", 90f, "Seconds.");
             _fwStamina = Config.Bind(fw, "StaminaCost", 40f, "Stamina.");
-            _fwDuration = Config.Bind(fw, "Duration", 3f, "Seconds; you stand in the storm.");
+            _fwDuration = Config.Bind(fw, "Duration_v02585", 5f, "Seconds; you stand in the storm (recast to cancel).");
             _fwRadius = Config.Bind(fw, "Radius", 10f, "Attack radius (m): every enemy inside is cut.");
             _fwBarrier = Config.Bind(fw, "BarrierRadius", 7f, "Wind barrier (m): enemies can't come closer and are slowly pushed out to it; enemy projectiles inside are blown away.");
             _fwSmallPush = Config.Bind(fw, "SmallPushSeconds_v02538", 3f, "A Small enemy 1m from you reaches the barrier after this long.");
@@ -256,7 +256,7 @@ namespace DragonsAltarRanger
             _fwDot = Config.Bind(fw, "SpiritDotPercentPerStack", 4f, "Spirit DoT per stack every 0.5s (% of your Ranger damage). Every tick adds a stack.");
             _fwDotDuration = Config.Bind(fw, "SpiritDotDuration", 6f, "Seconds, refreshed on every hit.");
             const string fwa = "Acrobat Furious Winds Ascended";
-            _fwAscDuration = Config.Bind(fwa, "Duration", 5f, "Seconds.");
+            _fwAscDuration = Config.Bind(fwa, "Duration_v02585", 8f, "Seconds (recast to cancel).");
             _fwAscRadius = Config.Bind(fwa, "Radius", 14f, "Attack radius (m).");
             _fwAscBarrier = Config.Bind(fwa, "BarrierRadius", 10f, "Wind barrier (m).");
             _fwAscBurst = Config.Bind(fwa, "FinalGalePercent", 150f, "The storm ends in a gale that launches Small enemies.");
@@ -546,10 +546,22 @@ namespace DragonsAltarRanger
         }
 
         // ------------------------------------------------------------------ per-frame
+        // v0.25.85 UNIVERSAL RULE (user): a channel that ends in a follow-up attack (Skyfall Ascended slam, Starfall
+        // Ascended finale, Furious Winds Ascended gale) - Left Click fires the follow-up at once. Clicks are latched in
+        // Update so coroutines on physics / timed waits never miss them; only clicks after the channel began count.
+        private float _lmbLatchAt = -10f;
+        private bool FollowUpClick(float channelStart)
+        {
+            if (_lmbLatchAt <= channelStart) return false;
+            _lmbLatchAt = -10f;
+            return true;
+        }
+
         private void Update()
         {
             Player player = Player.m_localPlayer;
             if (player == null || player.IsDead()) return;
+            if (Input.GetMouseButtonDown(0) && !Cursor.visible) _lmbLatchAt = Time.time;
             bool ranger = GetClass(player) == "Ranger";
             bool acrobat = ranger && GetAdvancement(player) == "Acrobat";
             UpdateDodgeCost(player, acrobat);
@@ -714,6 +726,26 @@ namespace DragonsAltarRanger
                 player.transform.position = p;
                 if (body != null) { body.position = p; body.velocity = Vector3.zero; }
                 yield return new WaitForFixedUpdate();
+            }
+            if (player != null) ResetFloatField(player, "m_maxAirAltitude", player.transform.position.y);
+        }
+
+        private IEnumerator SomersaultDive(Player player)
+        {
+            Rigidbody body = player.GetComponent<Rigidbody>();
+            _noFallUntilGrounded[player.GetInstanceID()] = true;
+            float v = DragonCombat.M(8f), safety = Time.time + 8f;
+            while (player != null && !player.IsDead() && Time.time < safety)
+            {
+                yield return new WaitForFixedUpdate();
+                Vector3 p = player.transform.position;
+                Vector3 below = SolidBelow(player, p);
+                v = Mathf.Min(v + DragonCombat.M(70f) * Time.fixedDeltaTime, DragonCombat.M(45f));
+                float step = v * Time.fixedDeltaTime;
+                if (p.y - below.y <= step + 0.05f) { p.y = below.y; player.transform.position = p; if (body != null) { body.position = p; body.velocity = Vector3.zero; } break; }
+                p.y -= step;
+                player.transform.position = p;
+                if (body != null) { body.position = p; body.velocity = Vector3.zero; }
             }
             if (player != null) ResetFloatField(player, "m_maxAirAltitude", player.transform.position.y);
         }
@@ -1261,11 +1293,13 @@ namespace DragonsAltarRanger
             float mult = _sbDamage.Value / 100f * DragonCombat.GetSkillPower(player, "skyfall_barrage");
             // v0.25.38 (user): sink slowly (2 m over the whole hover) so it never looks like floating.
             float hoverStart = Time.time, hoverLen = shots * interval;
+            float followFrom = Time.time;
             Vector3 hoverTop = top;
             int fired = 0;
             float nextTick = 0f;
             while (fired < shots && player != null && !player.IsDead())
             {
+                if (ascended && FollowUpClick(followFrom)) { DragonCombat.SwallowAttackInput(player, 0.4f); break; }   // v0.25.85 slam now
                 top = hoverTop - Vector3.up * DragonCombat.M(2f) * Mathf.Clamp01((Time.time - hoverStart) / hoverLen);
                 player.transform.position = top;
                 if (body != null) { body.position = top; body.velocity = Vector3.zero; }
@@ -1376,6 +1410,18 @@ namespace DragonsAltarRanger
             FaceTowards(player, land);
             yield return StartCoroutine(ArcFlip(player, start, land, DragonCombat.M(Mathf.Max(0.5f, _ssFlipHeight.Value)), flipTime, 1));
             if (player == null || player.IsDead()) { _somersaultActive = false; _hovering = false; yield break; }
+            // v0.25.85 (user): never slam the air - while you touch no terrain / Structure you keep falling (a fast
+            // dive) until you do; the slam happens where you really land.
+            {
+                Vector3 below = SolidBelow(player, player.transform.position);
+                if (player.transform.position.y - below.y > 0.6f)
+                {
+                    yield return StartCoroutine(SomersaultDive(player));
+                    if (player == null || player.IsDead()) { _somersaultActive = false; _hovering = false; yield break; }
+                    DragonCombat.LockSkill(player, backTime + 0.4f);
+                }
+                land = player.transform.position;
+            }
             // foot slam
             float radius = DragonCombat.M(Mathf.Max(0.5f, _ssRadius.Value));
             RangerArrowDamage d = ArrowDamage(player);
@@ -1487,8 +1533,10 @@ namespace DragonsAltarRanger
             float slash = Mathf.Max(0f, _fwSlash.Value) / 100f * power * d.Total();
             float end = Time.time + duration, nextTick = 0f, nextDot = Time.time + 0.5f;
             _fwActive = true; _fwStop = false;
+            float fwFollow = Time.time;
             while (Time.time < end && player != null && !player.IsDead() && !_fwStop)
             {
+                if (ascended && FollowUpClick(fwFollow)) { DragonCombat.SwallowAttackInput(player, 0.4f); _fwStop = true; break; }   // v0.25.85 the final gale now
                 Vector3 c = player.transform.position;
                 if (storm != null) { storm.transform.position = c; storm.transform.Rotate(0f, 540f * Time.deltaTime, 0f, Space.World); }
                 // v0.24.2 wind barrier: enemies never get closer than they are; inside the barrier they
@@ -2936,9 +2984,11 @@ namespace DragonsAltarRanger
             float impact = DragonCombat.M(_sfImpact.Value);
             float end = Time.time + Mathf.Max(0.5f, _sfDuration.Value);
             float nextTick = 0f;
+            float sfFollow = Time.time;
             // v0.24.2: every tick hits EVERY enemy in the 20m area; the falling arrows are cosmetic.
             while (Time.time < end && player != null && !_sfStop)
             {
+                if (ascended && FollowUpClick(sfFollow)) { DragonCombat.SwallowAttackInput(player, 0.4f); break; }   // v0.25.85 the finale now
                 if (Time.time >= nextTick)
                 {
                     nextTick = Time.time + Mathf.Max(0.1f, _sfTick.Value);
@@ -2955,7 +3005,7 @@ namespace DragonsAltarRanger
             if (ascended && player != null && !_sfStop)
             {
                 yield return new WaitForSeconds(0.3f);
-                if (_enableVfx.Value) StarVfx(GroundAt(point), DragonCombat.M(_sfAscRadius.Value), 1.5f);
+                if (_enableVfx.Value) StarVfx(GroundAt(point), DragonCombat.M(_sfAscRadius.Value), 4f);   // v0.25.85 (user): the final arrow is BIG (visual only)
                 StarHitAll(player, point, DragonCombat.M(_sfAscRadius.Value), d, _sfAscDamage.Value / 100f * DragonCombat.GetSkillPower(player, "starfall_volley"));
             }
         }
@@ -3166,7 +3216,7 @@ namespace DragonsAltarRanger
                         pos += dir * hits[i].distance;
                         if (_enableVfx.Value)
                         {
-                            Vector3 pp = pos, pdir = dir; float plen = radius >= 0.5f ? 2.5f + radius * 3f : 1f; Color pcol = color;
+                            Vector3 pp = pos, pdir = dir; float plen = radius >= DragonCombat.M(0.9f) ? 2.5f + radius * 3f : UnityEngine.Random.Range(0.85f, 1.05f); Color pcol = color;   // v0.25.85 big only for real big shots (meters, not units)
                             DragonCombat.RunVfx(delegate { DragonVfx.PlantedArrow(pp, pdir, plen, pcol, plen >= 2.5f ? 5f : 3f); });   // v0.25.65 stuck where it struck
                         }
                     }
@@ -3671,7 +3721,7 @@ namespace DragonsAltarRanger
         {
             GameObject obj = new GameObject("RangerCyclone");
             obj.transform.position = pos;
-            if (DragonVfx.Enabled) { GameObject cf = obj; float cr = radius; Color cc = color; DragonCombat.RunVfx(delegate { DragonVfx.WindFunnel(cf.transform, new Vector3(0f, -0.6f, 0f), cr * 0.45f, cr * 0.95f, 1.2f, cc); }); }   // v0.25.84
+            if (DragonVfx.Enabled) { GameObject cf = obj; float cr = radius; Color cc = color; DragonCombat.RunVfx(delegate { DragonVfx.WindFunnel(cf.transform, new Vector3(0f, -1.4f, 0f), cr * 0.45f, cr * 0.95f, 3.2f, cc); }); }   // v0.25.84, v0.25.85 (user) taller
             for (int k = 0; k < 3 && !DragonVfx.Enabled; k++)
             {
                 GameObject ring = new GameObject("Ring" + k);

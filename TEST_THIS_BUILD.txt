@@ -1,5 +1,26 @@
-TEST v0.25.84
-1. Ranger skills that fire arrows (Ballista, Pinning, Explosive, Splitting, Cyclone...): 3D spirit arrows with fletching.
-2. Cyclone Arrow + Ascended tornado: spinning wind funnels.
-3. Furious Winds: leaves orbiting you.
-4. Snare Trap: rope loop + stakes on the ground until it triggers.
+TEST v0.25.85 (anchor candidate)
+1. Moonlight Splitter, Heavy Slash, Halfmoon, Crescent, Grand Cross slashes: cast standing AND while running, several
+   times in a row - the swing must play every time.
+2. Afterimage Arsenal while running: no sit / odd pose. Normal: copy stays put and moves with you; 2 charges.
+3. Eclipse: no orb. Ascended: you and nearby Small/Big enemies spiral 4m up; landing from up to 10m = no damage.
+4. Blade Storm on Yagluth: lands on him.
+5. Stomp: chicken wings (elbows out and up, forearms forward). Jump slams: body near horizontal in the air.
+6. Warfreak: sword+sword or 2H = faster; sword+axe = no bonus.
+7. Gravity Dominion: Trolls / Bjorn dragged in (Ascended), Bosses crippled. Gravity Blast drags Small in.
+8. Frost Nova: full staff raise. Arcane Rupture: Expose on hit.
+9. Tumble Shot / Gale Volley into a cliff: normal-size arrows only.
+10. Cyclone taller; Furious Winds 5s / 8s; Somersault from 20m up: you dive to the ground, then slam.
+11. Skyfall Ascended: Left Click while hovering = slam now; hover pose = bow aimed down. Starfall / Furious Winds
+    Ascended + Merc Ascended Whirlwind: Left Click = follow-up now. Starfall final arrow big.
+12. Ranger skill shots: vanilla bow draw/release; Sky shots aim up.
+13. No cast flare / hand orb on any skill.
+
+REGRESSION SCAN vs v0.25.84 (everything this pass touched; anything else unchanged by design):
+- CombatRuntime: clip driver (RestartVanilla learning, Wing elbow pole, bow layer), PlayClip (bow clip first, no
+  WeaponCharge), Stomp + jump-slam keys, wiz_nova NoTrack, launch fall rule (BeginDamage fall hits only).
+- Advanced: IhCastSkill (no CastFlare), Eclipse Ascended, Blade Storm aim, Warfreak check, jump-slam fall grant,
+  Ascended Whirlwind Left Click, tooltips.
+- Sorcerer: Gravity Dominion / Gravity Blast pulls, Afterimage Arsenal (charges, live copies, copy method also
+  used by the Ascended twins), Arcane Rupture Expose.
+- Ranger: planted arrow size, Cyclone height, Furious Winds durations, Somersault dive, Left Click follow-ups,
+  Starfall final arrow size.

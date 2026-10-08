@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.84";
+        public const string ModVersion = "0.25.85";
 
         internal static DragonCombatPlugin Instance;
 
@@ -2299,6 +2299,11 @@ namespace DragonsAltarCombat
         public Vector3 LD;
         public float LR, LW;
         public DragonClipKey LHand(float x, float y, float z, float reach) { LD = new Vector3(x, y, z); LR = reach; LW = 1f; return this; }
+        // v0.25.85 elbow pole override (both arms, mirrored for the left): Wing() = chicken wing - the upper arm is
+        // raised out to the side, elbow out/back, so the forearm can point FORWARD.
+        public Vector3 EP;
+        public float EW;
+        public DragonClipKey Wing() { EP = new Vector3(0.6f, -0.4f, -0.7f); EW = 1f; return this; }
         // v0.25.25 VANILLA LAYER (first key only): Valheim attack animation `VA` fired `VL` seconds before the
         // impact (VR > 0 = repeat every VR seconds while the clip runs); NoAim = the vanilla animation holds the
         // weapon, so the universal "weapon follows the forearm" rule stays off.
@@ -2316,6 +2321,9 @@ namespace DragonsAltarCombat
         // v0.25.40 buff raise (copied from the user's approved ChatGPT pass): QL = the off-hand arm is frozen to
         // the pose it had when the skill began; NoTrack = the vanilla state plays at its natural speed.
         public bool QL, NoTrack;
+        // v0.25.85 Ranger vanilla bow layer: the equipped bow's own draw bool is held through the wind up / hold and
+        // its own attack trigger fires at the impact (release).
+        public string BowTrig, BowBool;
         // Same pose as another key at a new time (holds / shakes).
         public DragonClipKey Copy(float t)
         {
@@ -2323,7 +2331,7 @@ namespace DragonsAltarCombat
             for (int i = 0; i < B.Length; i++) k.B[i] = B[i];
             for (int i = 0; i < L.Length; i++) k.L[i] = L[i];
             k.R = R; k.O = O; k.Lin = Lin; k.Spin = Spin;
-            k.WD = WD; k.WW = WW; k.SD = SD; k.SW = SW; k.TW = TW; k.TG = TG; k.HD = HD; k.HR = HR; k.HW = HW; k.LD = LD; k.LR = LR; k.LW = LW; k.FLh = FLh; k.FRh = FRh;
+            k.WD = WD; k.WW = WW; k.SD = SD; k.SW = SW; k.TW = TW; k.TG = TG; k.HD = HD; k.HR = HR; k.HW = HW; k.LD = LD; k.LR = LR; k.LW = LW; k.FLh = FLh; k.FRh = FRh; k.EP = EP; k.EW = EW;
             return k;
         }
     }
@@ -2364,7 +2372,8 @@ namespace DragonsAltarCombat
         private float _spin;
         private Vector3 _wd, _sd;
         private float _ww, _sw, _tw, _tg, _env, _hr, _hw, _lr, _lw, _flh, _frh;
-        private Vector3 _hd, _ld;
+        private Vector3 _hd, _ld, _ep;
+        private float _ew;
         // v0.25.15 legs: Unity humanoid muscles (HumanPoseHandler), applied on the animator's real pose.
         private static readonly HumanBodyBones[] LegBones =
         {
@@ -2399,8 +2408,26 @@ namespace DragonsAltarCombat
         private Rigidbody _body;
         private float _vaLead = 0.3f;
 
+        private string _bowTrig, _bowBool;
+        private bool _bowFired;
+
+        private void ReleaseBow(bool fire)
+        {
+            if (_bowBool == null && _bowTrig == null) return;
+            Player p = _owner as Player;
+            if (p == null) p = GetComponent<Player>();
+            if (_bowBool != null) DragonCombat.SetBowAim(p, _bowBool, false);
+            if (fire && _bowTrig != null) DragonCombat.FireVanilla(p, _bowTrig);
+            _bowBool = null; _bowTrig = null;
+        }
+
         public void Begin(DragonClipKey[] keys, float windup, bool hold, Transform visual)
         {
+            ReleaseBow(false);
+            _bowTrig = keys[0].BowTrig;
+            _bowBool = keys[0].BowBool;
+            _bowFired = false;
+            if (_bowBool != null) DragonCombat.SetBowAim(GetComponent<Player>(), _bowBool, true);
             _va = keys[0].VA;
             _vaRepeat = keys[0].VR;
             _vaAt = Time.time + Mathf.Max(0f, windup - keys[0].VL);
@@ -2538,6 +2565,8 @@ namespace DragonsAltarCombat
             _hd = Vector3.Slerp(ha.normalized, hb.normalized, w);
             _hr = a.HW > 0f && b.HW > 0f ? Mathf.Lerp(a.HR, b.HR, w) : (a.HW > 0f ? a.HR : b.HR);
             _lw = Mathf.Lerp(a.LW, b.LW, w);
+            _ew = Mathf.Lerp(a.EW, b.EW, w);
+            _ep = a.EW > 0f ? a.EP : b.EP;
             _flh = Mathf.Lerp(a.FLh, b.FLh, w);
             _frh = Mathf.Lerp(a.FRh, b.FRh, w);
             Vector3 la = a.LW > 0f ? a.LD : b.LD, lb = b.LW > 0f ? b.LD : a.LD;
@@ -2597,8 +2626,11 @@ namespace DragonsAltarCombat
             try
             {
                 if (lv[0] >= _animator.layerCount) return false;
-                bool inIt = _animator.GetCurrentAnimatorStateInfo(lv[0]).fullPathHash == lv[1]
-                    || (_animator.IsInTransition(lv[0]) && _animator.GetNextAnimatorStateInfo(lv[0]).fullPathHash == lv[1]);
+                AnimatorStateInfo cs = _animator.GetCurrentAnimatorStateInfo(lv[0]);
+                bool inIt = (cs.fullPathHash == lv[1] && !cs.loop && cs.normalizedTime < 0.97f)
+                    || (_animator.IsInTransition(lv[0]) && _animator.GetNextAnimatorStateInfo(lv[0]).fullPathHash == lv[1] && !_animator.GetNextAnimatorStateInfo(lv[0]).loop);
+                // v0.25.85 ROOT CAUSE of lost skill swings: a looping state (run / idle) learned while moving made every
+                // later cast cross-fade into run/idle instead of firing the swing. Only a non-looping swing restarts.
                 if (!inIt) return false;
                 Player p = _owner as Player;
                 if (p != null) DragonCombat.BlockSkillAnimAttack(p, 2.5f);
@@ -2624,7 +2656,7 @@ namespace DragonsAltarCombat
                     for (int l = 0; l < _vaPre.Length && _vaLayer < 0; l++)
                     {
                         AnimatorStateInfo st = _animator.IsInTransition(l) ? _animator.GetNextAnimatorStateInfo(l) : _animator.GetCurrentAnimatorStateInfo(l);
-                        if (st.fullPathHash != _vaPre[l]) { _vaLayer = l; _vaHash = st.fullPathHash; if (_vaTrigger != null) _vaLearned[_vaTrigger] = new int[] { l, _vaHash }; }
+                        if (st.fullPathHash != _vaPre[l] && !st.loop) { _vaLayer = l; _vaHash = st.fullPathHash; if (_vaTrigger != null) _vaLearned[_vaTrigger] = new int[] { l, _vaHash }; }   // v0.25.85 never a looping (locomotion) state
                     }
                     if (_vaLayer < 0)
                     {
@@ -2684,6 +2716,7 @@ namespace DragonsAltarCombat
             }
             Sample(t);
             if (_animator == null) _animator = GetComponentInChildren<Animator>();
+            if (!_bowFired && (_bowTrig != null || _bowBool != null) && t >= -0.02f) { _bowFired = true; ReleaseBow(true); }
             if (_va != null && Time.time >= _vaAt)
             {
                 _vaTrigger = _va;
@@ -2821,6 +2854,14 @@ namespace DragonsAltarCombat
             return new Vector3(0.45f * side, -1f + 1.1f * up, 0.15f + 0.3f * up);
         }
 
+        private Vector3 PoleFor(Vector3 d, bool right)
+        {
+            Vector3 p = ElbowPole(d, right);
+            if (_ew <= 0.01f) return p;
+            Vector3 e = _ep; if (!right) e.x = -e.x;
+            return Vector3.Slerp(p.normalized, e.normalized, Mathf.Clamp01(_ew));
+        }
+
         private void PlaceHand(bool right, Vector3 dir, float reach, float weight)
         {
             float w = Mathf.Clamp01(weight);
@@ -2835,7 +2876,7 @@ namespace DragonsAltarCombat
                 float len = (la.position - ua.position).magnitude + (hand.position - la.position).magnitude;
                 Vector3 d = ArmDir(dir, right);
                 Vector3 target = ua.position + frame.rotation * d * (len * Mathf.Clamp(reach, 0.25f, 0.999f));
-                Vector3 pole = frame.rotation * ElbowPole(d, right);
+                Vector3 pole = frame.rotation * PoleFor(d, right);
                 TwoBoneIK(ua, la, hand, target, pole, w);
                 int o = right ? 4 : 7;
                 _written[o] = ua.localRotation; _hasWritten[o] = true;
@@ -2860,7 +2901,7 @@ namespace DragonsAltarCombat
                 float len = (la.position - ua.position).magnitude + (hand.position - la.position).magnitude;
                 Vector3 d = ArmDir(_hd, true);
                 Vector3 target = ua.position + frame.rotation * d * (len * Mathf.Clamp(_hr, 0.25f, 0.999f));
-                Vector3 pole = frame.rotation * ElbowPole(d, true);
+                Vector3 pole = frame.rotation * PoleFor(d, true);
                 TwoBoneIK(ua, la, hand, target, pole, w);
                 _written[4] = ua.localRotation; _hasWritten[4] = true;
                 _written[5] = la.localRotation; _hasWritten[5] = true;
@@ -3170,6 +3211,7 @@ namespace DragonsAltarCombat
 
         private void OnDestroy()
         {
+            ReleaseBow(false);
             if (_keys != null) ReleaseRoot();
             SetLeftHidden(false);
             IDisposable d = _hph as IDisposable;
@@ -3307,11 +3349,13 @@ namespace DragonsAltarCombat
         {
             if (player == null || player != Player.m_localPlayer || string.IsNullOrEmpty(clip)) return;
             if (DragonCombatPlugin.Instance != null && !DragonCombatPlugin.Instance.EnableSkillAnimations.Value) return;
-            DragonClipKey[] keys = hold ? null : VanillaClip(player, clip, 0f);
+            DragonClipKey[] keys = BowClip(player, clip);   // v0.25.85 (user): Ranger shots = Valheim's own bow animation
+            if (keys == null && !hold) keys = VanillaClip(player, clip, 0f);
             if (keys == null) keys = SkillClip(clip);
             if (keys == null) return;
             // v0.25.72: the weapon hand glows in the Class colour through every real wind up / hold
-            if (windup >= 0.3f || hold) { Player wp = player; float ws = hold ? 3f : windup + 0.25f; RunVfx(delegate { DragonVfx.WeaponCharge(wp, ws); }); }
+            // v0.25.85 (user): no weapon charge orb / flare
+            if (false && (windup >= 0.3f || hold)) { Player wp = player; float ws = hold ? 3f : windup + 0.25f; RunVfx(delegate { DragonVfx.WeaponCharge(wp, ws); }); }
             // v0.25.40 (user): buff raises stand still until the wind up is over (no gliding).
             bool standEmote = keys[0].VA != null && keys[0].VA.StartsWith("emote", StringComparison.Ordinal) &&
                               !clip.StartsWith("hw_", StringComparison.Ordinal) && clip != "merc_fury_accent";
@@ -3485,8 +3529,93 @@ namespace DragonsAltarCombat
 
         // ZSyncAnimation.SetBool prefix body: onGround stays true while a run is forced (kinematic moves made
         // Valheim play the falling legs), blocking stays on while the shield pose is forced.
+        // v0.25.85 forced bow draw (Ranger vanilla bow layer).
+        private static object _bowAimZanim;
+        private static string _bowAimName;
+        private static int _bowAimHash;
+        private static bool _bowAimOn;
+
+        public static void SetBowAim(Player p, string name, bool on)
+        {
+            if (p == null || string.IsNullOrEmpty(name)) return;
+            try
+            {
+                Component z = null;
+                Component[] cs = p.GetComponents<Component>();
+                for (int i = 0; i < cs.Length; i++) if (cs[i] != null && cs[i].GetType().Name == "ZSyncAnimation") { z = cs[i]; break; }
+                _bowAimZanim = z; _bowAimName = name; _bowAimHash = Animator.StringToHash(name); _bowAimOn = on;
+                Animator a = p.GetComponentInChildren<Animator>();
+                if (a != null) a.SetBool(name, on);
+            }
+            catch (Exception) { }
+        }
+
+        // The equipped bow / crossbow's own animations (attack trigger + draw bool), resolved on this animator.
+        private static bool BowAnims(Player p, out string trig, out string draw)
+        {
+            trig = null; draw = null;
+            try
+            {
+                ItemDrop.ItemData w = GetHandItem(p, "m_leftItem");
+                if (w == null || w.m_shared == null) w = GetHandItem(p, "m_rightItem");
+                if (w == null || w.m_shared == null) return false;
+                object atk = w.m_shared.GetType().GetField("m_attack").GetValue(w.m_shared);
+                if (atk == null) return false;
+                FieldInfo fa = atk.GetType().GetField("m_attackAnimation"), fd = atk.GetType().GetField("m_drawAnimationState"), fb = atk.GetType().GetField("m_bowDraw");
+                string an = fa == null ? null : fa.GetValue(atk) as string;
+                string dn = fd == null ? null : fd.GetValue(atk) as string;
+                if (string.IsNullOrEmpty(an) || an.IndexOf("bow", StringComparison.OrdinalIgnoreCase) < 0) return false;
+                Animator a = p.GetComponentInChildren<Animator>();
+                trig = ResolveTrigger(a, an);
+                if (trig == null) return false;
+                // a real draw bow (item type Bow) - not m_bowDraw, which Wildborn's quick shots toggle at runtime
+                FieldInfo ft = w.m_shared.GetType().GetField("m_itemType");
+                object itype = ft == null ? null : ft.GetValue(w.m_shared);
+                bool drawBow = itype != null && itype.ToString() == "Bow";
+                if (drawBow && !string.IsNullOrEmpty(dn) && a != null)
+                {
+                    AnimatorControllerParameter[] ps = a.parameters;
+                    for (int i = 0; i < ps.Length; i++) if (ps[i].type == AnimatorControllerParameterType.Bool && ps[i].name == dn) { draw = dn; break; }
+                }
+                return true;
+            }
+            catch (Exception) { return false; }
+        }
+
+        // Ranger shots that play the vanilla bow draw + release (user): pitch 1 = aim up (Sky shots), -1 = down (hover).
+        private static int BowShotPitch(string clip, out bool isShot)
+        {
+            isShot = true;
+            switch (clip)
+            {
+                case "rg_sky": case "rg_starfall": return 1;
+                case "rg_hover": return -1;
+                case "rg_shot": case "rg_power": case "rg_heavy": case "rg_ballista": case "rg_kneel": return 0;
+            }
+            isShot = false;
+            return 0;
+        }
+
+        private static DragonClipKey[] BowClip(Player player, string clip)
+        {
+            bool isShot;
+            int pitch = BowShotPitch(clip, out isShot);
+            if (!isShot) return null;
+            string trig, draw;
+            if (!BowAnims(player, out trig, out draw)) return null;
+            DragonClipKey pose = K(0f);
+            if (pitch > 0) pose.Sp(-10f, 0f, 0f).Ch(-28f, 0f, 0f).Hd(-18f, 0f, 0f);       // bow raised at the sky
+            else if (pitch < 0) pose.Sp(12f, 0f, 0f).Ch(22f, 0f, 0f).Hd(16f, 0f, 0f);     // aimed down from the air
+            DragonClipKey[] k = new DragonClipKey[] { K(-1f), pose.Copy(-0.6f), pose, pose.Copy(0.3f), K(0.6f) };
+            k[0].NoAim = true; k[0].NoTrack = true;
+            k[0].BowTrig = null; k[0].BowBool = draw;   // the release (bow_fire) is fired by the Ranger's own Shoot() at every shot
+            return k;
+        }
+
         internal static bool ForceBoolOverride(object zanim, object key, ref bool value)
         {
+            if (_bowAimOn && _bowAimZanim != null && ReferenceEquals(zanim, _bowAimZanim) &&
+                (key is int ? (int)key == _bowAimHash : (key as string) == _bowAimName)) { value = true; return true; }
             if (_forceRunZanim == null || !ReferenceEquals(zanim, _forceRunZanim)) return false;
             bool ground = key is int ? (int)key == OnGroundHash : (key as string) == "onGround";
             bool blocking = key is int ? (int)key == BlockingHash : (key as string) == "blocking";
@@ -3729,6 +3858,7 @@ namespace DragonsAltarCombat
             k[0].VL = m.Value;
             if (trig.StartsWith("emote", StringComparison.Ordinal)) { k[0].NoTrack = true; k[0].NoPlant = true; }   // v0.25.41 emotes: natural speed, their own legs
             if (clip == "merc_circle" && length <= 0f) k[0].VF = 0.62f;   // after the crow hop
+            if (clip == "wiz_nova") k[0].NoTrack = true;   // v0.25.85 (user): Frost Nova's staff raise at natural speed, never fast-forwarded
             k[0].VR = length > 0f ? 1f : 0f;
             k[0].NoAim = true;
             return k;
@@ -4039,11 +4169,11 @@ namespace DragonsAltarCombat
                 // v0.25.63 (user): exaggerated - the knee comes up past the hip, both arms flare out and up like the
                 // roar emote, then the foot is driven down with the chest thrown forward and the arms flung wide.
                 DragonClipKey raise = K(-0.55f).Sp(-8f, 0f, 0f).Ch(-6f, 0f, 0f).Hd(-6f, 0f, 0f).LL(0f, 0.06f, 0f, 0f).RL(0.35f, 0.1f, 0f, 0f).Lift(0f, 0.62f).Off(0f, 0.04f, 0f)
-                    .Hand(0.55f, -0.6f, -0.05f, 0.62f).LHand(-0.55f, -0.6f, -0.05f, 0.62f);
+                    .Hand(0.62f, -0.32f, 0.66f, 0.64f).LHand(-0.62f, -0.32f, 0.66f, 0.64f).Wing();   // v0.25.85 chicken wing: upper arms raised out, forearms forward
                 // v0.25.69 (user: flare = chicken wings, not arms stretched out): elbows bent and pushed out, hands at the hips.
-                DragonClipKey peak = raise.Copy(-0.15f).Lift(0f, 0.7f).Hand(0.6f, -0.55f, -0.12f, 0.6f).LHand(-0.6f, -0.55f, -0.12f, 0.6f);
+                DragonClipKey peak = raise.Copy(-0.15f).Lift(0f, 0.7f).Hand(0.65f, -0.3f, 0.68f, 0.66f).LHand(-0.65f, -0.3f, 0.68f, 0.66f).Wing();
                 DragonClipKey hit = K(0f).Sp(20f, 0f, 0f).Ch(10f, 0f, 0f).Hd(-12f, 0f, 0f).LL(-0.05f, 0.12f, 0f, 0f).RL(0.35f, 0.14f, 0f, 0f).Lift(0f, 0f).Off(0f, -0.16f, 0f)
-                    .Hand(0.62f, -0.7f, 0.08f, 0.66f).LHand(-0.62f, -0.7f, 0.08f, 0.66f).Linear();
+                    .Hand(0.6f, -0.45f, 0.62f, 0.68f).LHand(-0.6f, -0.45f, 0.62f, 0.68f).Wing().Linear();
                 DragonClipKey stAfter = hit.Copy(0.3f); stAfter.Lin = false;
                 return new DragonClipKey[] { K(-1f), raise, peak, hit, stAfter, K(0.65f) };
             }
@@ -4085,11 +4215,11 @@ namespace DragonsAltarCombat
             // v0.25.75 (user): no barrel roll. Like the Wave emote's raise, the main arm goes straight up over the
             // head with the weapon pointing at the sky and STAYS there (no waving) for the whole flight; the slam
             // to the ground only happens on the real landing (the clip holds at T=0 until ClipImpact).
-            DragonClipKey launch = K(-0.72f).Sp(-4f, 0f, 0f).Ch(-4f, 0f, 0f).Hd(-14f, 0f, 0f).Hand(0.22f, 1f, 0.05f, 1f).Wp(0.05f, 1f, -0.15f).Rot(26f, 0f, 0f).Off(0f, 0.06f, 0f);   // v0.25.77 diagonal torso in the air
+            DragonClipKey launch = K(-0.72f).Sp(-4f, 0f, 0f).Ch(-4f, 0f, 0f).Hd(-14f, 0f, 0f).Hand(0.22f, 1f, 0.05f, 1f).Wp(0.05f, 1f, -0.15f).Rot(45f, 0f, 0f).Off(0f, 0.06f, 0f);   // v0.25.77 diagonal torso in the air, v0.25.85 (user) tilted closer to lying
             // v0.25.76 (user): the barrel roll stays - the body rolls once while the arm stays raised overhead.
-            DragonClipKey raise0 = launch.Copy(-0.6f).Rot(30f, 0f, 0f).Sn(30f).Hand(0.2f, 1f, 0.08f, 1f);
-            DragonClipKey raise1 = launch.Copy(-0.32f).Rot(30f, 0f, 0f).Sn(360f).Hand(0.2f, 1f, 0.08f, 1f);
-            DragonClipKey poised = K(0f).Sp(4f, 0f, 0f).Ch(-2f, 0f, 0f).Hd(-12f, 0f, 0f).Hand(0.2f, 1f, 0.1f, 1f).Wp(0.05f, 1f, -0.1f).Rot(24f, 0f, 0f).Sn(360f);
+            DragonClipKey raise0 = launch.Copy(-0.6f).Rot(62f, 0f, 0f).Sn(30f).Hand(0.2f, 1f, 0.08f, 1f);
+            DragonClipKey raise1 = launch.Copy(-0.32f).Rot(62f, 0f, 0f).Sn(360f).Hand(0.2f, 1f, 0.08f, 1f);
+            DragonClipKey poised = K(0f).Sp(4f, 0f, 0f).Ch(-2f, 0f, 0f).Hd(-12f, 0f, 0f).Hand(0.2f, 1f, 0.1f, 1f).Wp(0.05f, 1f, -0.1f).Rot(55f, 0f, 0f).Sn(360f);
             DragonClipKey impact = Ft(K(0.1f).Sp(30f, 0f, 0f).Ch(14f, 0f, 0f).Hd(-28f, 0f, 0f).Hand(0.05f, -1f, 0.35f, 0.97f).Wp(0f, -0.8f, 0.6f).Rot(6f, 0f, 0f).Off(0f, -0.38f * d, 0.05f).Sn(360f), 0.75f, 0.8f).Linear();
             DragonClipKey settle = impact.Copy(brutal ? 0.3f : 0.22f).Off(0f, -0.4f * d, 0.05f); settle.Lin = false;
             DragonClipKey rec = Ft(K(brutal ? 0.58f : 0.45f).Sp(8f, 0f, 0f).Hd(-6f, 0f, 0f).Hand(0.35f, -0.45f, 0.35f, 0.6f).Off(0f, -0.06f, 0f).Sn(360f), 0.3f, 0.2f);
@@ -7792,6 +7922,12 @@ namespace DragonsAltarCombat
             {
                 try { IncomingHitFilters[f](target, hit); } catch { }
             }
+            // v0.25.85 launch fall rule (after the module filters, so Acrobat / Wildborn reductions stack on top).
+            if (target is Player && LaunchFalls.Count > 0 && IsFallHit(hit))
+            {
+                float lf = LaunchFallFactor((Player)target);
+                if (lf < 1f) hit.m_damage.Modify(lf);
+            }
 
             Player attacker = hit.GetAttacker() as Player;
             // v0.25.11: split parts of a hit were already fully modified as the original hit.
@@ -8056,6 +8192,77 @@ namespace DragonsAltarCombat
             catch (Exception) { }
         }
 
+        // ------------------------------------------------------------------ v0.25.85 LAUNCH FALL RULE (user, universal)
+        // Every skill that sends you up protects you from fall damage: none for a fall up to 2x the launch height H,
+        // then 75% / 50% / 25% less damage for falls up to 3H / 4H / 5H, full damage beyond (H = 5m: 10m free,
+        // 15m -75%, 20m -50%, 25m -25%, 30m+ full). H = the real rise (peak - launch), at least the skill's height.
+        private class LaunchFallState { public float LaunchY, PeakY, MinRise, LandedAt = -1f, Granted; }
+        private static readonly Dictionary<int, LaunchFallState> LaunchFalls = new Dictionary<int, LaunchFallState>();
+        private static MethodInfo _lfGround;
+
+        public static void GrantLaunchFall(Player p, float riseMeters)
+        {
+            if (p == null) return;
+            LaunchFallState st;
+            float y = p.transform.position.y;
+            if (!LaunchFalls.TryGetValue(p.GetInstanceID(), out st) || st == null || st.LandedAt >= 0f)
+            {
+                st = new LaunchFallState();
+                st.LaunchY = y; st.PeakY = y;
+                LaunchFalls[p.GetInstanceID()] = st;
+            }
+            st.MinRise = Mathf.Max(st.MinRise, M(Mathf.Max(0f, riseMeters)));
+            st.Granted = Time.time;
+            st.LandedAt = -1f;
+        }
+
+        private static void UpdateLaunchFalls()
+        {
+            if (LaunchFalls.Count == 0) return;
+            Player p = Player.m_localPlayer;
+            List<int> drop = null;
+            foreach (KeyValuePair<int, LaunchFallState> kv in LaunchFalls)
+            {
+                LaunchFallState st = kv.Value;
+                if (p == null || kv.Key != p.GetInstanceID() || st == null) { if (drop == null) drop = new List<int>(); drop.Add(kv.Key); continue; }
+                float y = p.transform.position.y;
+                if (y > st.PeakY) st.PeakY = y;
+                bool grounded = false;
+                try { if (_lfGround == null) _lfGround = typeof(Character).GetMethod("IsOnGround", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic); grounded = _lfGround != null && (bool)_lfGround.Invoke(p, null); } catch (Exception) { }
+                if (grounded && Time.time - st.Granted > 0.4f && st.LandedAt < 0f) st.LandedAt = Time.time;
+                if (st.LandedAt >= 0f && Time.time - st.LandedAt > 0.4f) { if (drop == null) drop = new List<int>(); drop.Add(kv.Key); }
+                else if (Time.time - st.Granted > 60f) { if (drop == null) drop = new List<int>(); drop.Add(kv.Key); }
+            }
+            if (drop != null) for (int i = 0; i < drop.Count; i++) LaunchFalls.Remove(drop[i]);
+        }
+
+        // Fraction of the fall damage that is still taken (1 = untouched).
+        private static float LaunchFallFactor(Player p)
+        {
+            LaunchFallState st;
+            if (p == null || !LaunchFalls.TryGetValue(p.GetInstanceID(), out st) || st == null) return 1f;
+            float h = Mathf.Max(st.MinRise, st.PeakY - st.LaunchY);
+            if (h <= 0.05f) return 1f;
+            float fall = Mathf.Max(0f, st.PeakY - p.transform.position.y);
+            if (fall <= 2f * h) return 0f;
+            if (fall <= 3f * h) return 0.25f;
+            if (fall <= 4f * h) return 0.5f;
+            if (fall <= 5f * h) return 0.75f;
+            return 1f;
+        }
+
+        private static FieldInfo _hitTypeField;
+        public static bool IsFallHit(HitData hit)
+        {
+            try
+            {
+                if (_hitTypeField == null) _hitTypeField = typeof(HitData).GetField("m_hitType", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                object v = _hitTypeField == null ? null : _hitTypeField.GetValue(hit);
+                return v != null && v.ToString() == "Fall";
+            }
+            catch (Exception) { return false; }
+        }
+
         // ------------------------------------------------------------------ v0.25.78
         // Buff tooltip notes (user: "put everything"): extra effect lines per timed-buff source, appended to the
         // hover tooltip (stamina use cuts, no movement penalty, skill bonuses... anything ApplyTimedBuff can't carry).
@@ -8222,6 +8429,7 @@ namespace DragonsAltarCombat
             float now = Time.time;
             if (Player.m_localPlayer != null || _bulwark != null) UpdateHolyBulwark(Player.m_localPlayer);
             if (PendingLearns.Count > 0) UpdateLearns();
+            UpdateLaunchFalls();
             if (now >= _nextDualCheck) { _nextDualCheck = now + 0.5f; EnforceDualWieldOwner(Player.m_localPlayer); DragonCombatPlugin.SyncDualController(Player.m_localPlayer); }
 
             List<int> removeBuffPlayers = null;

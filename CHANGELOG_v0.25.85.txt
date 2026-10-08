@@ -1,0 +1,54 @@
+Immortal Heroes v0.25.85 - Anchor Candidate
+
+ROOT-CAUSE FIXES
+- Lost skill swings (Moonlight Splitter, Heavy Slash and every other skill that plays a vanilla swing): the v0.25.77
+  "repeat swing" helper could learn your RUN / IDLE state when you cast while moving; after that every cast
+  cross-faded into run/idle instead of swinging. It now only ever learns and restarts real (non-looping) swings.
+- Afterimage Arsenal forcing a sit / odd pose when cast while moving (also the Ascended twins): the copy of you was
+  made by switching your character's model off and on, which reset your animator mid-move. Copies are now made
+  without touching your model at all.
+- Tumble Shot / Gale Volley left giant arrows in walls: the "big arrow" test used raw units instead of meters, so
+  every normal fan arrow counted as big. Normal arrows now stick as normal arrows.
+
+UNIVERSAL RULES
+- Launch fall rule: every skill that sends you up protects you from fall damage: nothing for a fall up to 2x the
+  launch height, then 75% / 50% / 25% less for each further launch height, full damage beyond (5m launch: 10m free,
+  15m -75%, 20m -50%, 25m -25%, 30m+ full). Used by Ascended Eclipse and the jump slams (Electric Smite, Bonecrusher:
+  H = the real jump height).
+- Channel + follow-up: Left Click fires the follow-up at once - Skyfall Barrage Ascended (slam), Starfall Volley
+  Ascended (giant arrow), Furious Winds Ascended (final gale), Mercenary Ascended Whirlwind (final sweep).
+- No cast flare / weapon charge orb on skills any more (the skills' own particles stay).
+
+WARRIOR
+- Eclipse: the black sun orb is gone (a violent 360 swing only).
+- Eclipse Ascended rework: after the spin you launch and spiral 4m up, dragging Small and Big enemies up with you
+  (never Bosses); the second afterimage hits at the top. No fall damage unless you fall more than 10m.
+- Blade Storm: aiming at a creature (even a huge boss like Yagluth) puts the storm ON it, not behind it.
+- Stomp: real chicken wings - upper arms raised out to the sides, forearms pointing forward.
+- Jump slams (Electric Smite / Bonecrusher): body tilted much closer to lying down in the air (about 60 degrees).
+- Warfreak: the dual-wield attack speed bonus needs two one-handed weapons of the SAME type (sword + sword, axe + axe);
+  two-handed physical weapons keep the bonus. Single-item dual weapons (e.g. Therzie's Warfare) are two-handed items,
+  so they count through the two-handed rule - no loophole.
+
+SORCERER
+- Gravity Dominion: the pull was an impulse Valheim's own movement erased. The well now really drags enemies in the
+  whole time: Small (6 m/s); Ascended also Big - Trolls, Bjorn... (5 m/s) - and Bosses (1.2 m/s). Big AND Bosses are
+  Crippled every pulse (Bosses were never crippled before).
+- Gravity Blast: same fix - a real drag toward the orb (Small; Ascended Big 40% / Bosses 20%).
+- Frost Nova: the staff raise plays at natural speed (no fast-forward).
+- Afterimage Arsenal (normal): the afterimage is a LIVE copy of you - it moves as you move but stays where you cast it
+  (floats if cast in the air). 2 charges.
+- Arcane Rupture (every version): Expose 8s on every hit.
+
+RANGER
+- Charged / skill shots use Valheim's own bow draw + release; Sky shots aim the bow up, Skyfall's hover aims down
+  (fixes the broken hover pose).
+- Cyclone Arrow taller; Ascended tornado a tad taller (9m).
+- Furious Winds: 5s normal, 8s Ascended (recast still cancels).
+- Somersault Dance: from high in the air you dive until you touch terrain / a structure, then slam there.
+- Somersault Dance has its own icon now (flip loop + ground slam).
+- Starfall Volley Ascended: the final arrow is big (visual only).
+
+TOOLTIPS
+- Updated for everything above (Eclipse, Gravity Dominion / Blast, Afterimage Arsenal, Arcane Rupture incl. its Stun,
+  Furious Winds durations, Skyfall / Starfall / Furious Winds Left Click, Somersault landing, Warfreak).

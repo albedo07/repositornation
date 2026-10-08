@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Dragon's Altar - Sorcerer Advancements";
-        public const string ModVersion = "0.25.84";
+        public const string ModVersion = "0.25.85";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -270,7 +270,14 @@ namespace DragonsAltarSorcerer
         private ConfigEntry<float> _afterimageCooldown;
         private ConfigEntry<float> _afterimageEitr;
         private ConfigEntry<float> _afterimageDuration;
-        private ConfigEntry<int> _afterimageMax;
+        private ConfigEntry<int> _afterimageMax, _aaChargesCfg;
+        private ConfigEntry<float> _ruptureExpose, _gbPullSpeed;
+        private int _aaCharges = -1;
+        private float _aaNextCharge;
+        // v0.25.85 normal Afterimage Arsenal = live ghosts (they replay your pose every frame) that stay where cast.
+        private readonly Dictionary<GameObject, Transform[]> _aaGhosts = new Dictionary<GameObject, Transform[]>();
+        private Transform[] _aaSourceBones;
+        private float _aaSourceCheck;
         private ConfigEntry<float> _afterimageDamageMultiplier;
         private ConfigEntry<float> _gunStaffFireRateMultiplier;
         private ConfigEntry<float> _dualGunStaffAttackSpeedMultiplier;
@@ -405,6 +412,7 @@ namespace DragonsAltarSorcerer
             _ruptureMaxCharges = Config.Bind("Spellcaster Arcane Rupture", "MaxCharges", 3, "Ultimate charge count.");
             _ruptureRecharge = Config.Bind("Spellcaster Arcane Rupture", "RechargeSeconds", 20f, "Recharge time per spent charge.");
             _ruptureRadius = Config.Bind("Spellcaster Arcane Rupture", "Radius", 10f, "Literal 10m radius.");
+            _ruptureExpose = Config.Bind("Spellcaster Arcane Rupture", "ExposeSeconds_v02585", 8f, "Every Arcane Rupture hit Exposes for this long (normal and Ascended).");
             _ruptureRange = Config.Bind("Spellcaster Arcane Rupture", "CastRange", 50f, "Ground PAC range.");
             _ruptureWindup = Config.Bind("Spellcaster Arcane Rupture", "LocationWindup", 1f, "The spell location winds up; caster stays mobile and may sprint.");
             _ruptureBuffer = Config.Bind("Spellcaster Arcane Rupture", "ActivationBufferSeconds", 0.5f, "Minimum delay between consecutive Arcane Rupture charge activations.");
@@ -420,6 +428,7 @@ namespace DragonsAltarSorcerer
             _afterimageEitr = Config.Bind("Spellcaster Afterimage Arsenal", "EitrCost", 50f, "Eitr cost before Spellcaster reduction.");
             _afterimageDuration = Config.Bind("Spellcaster Afterimage Arsenal", "Duration", 16f, "Afterimage window (normal and Ascended).");
             _afterimageMax = Config.Bind("Spellcaster Afterimage Arsenal", "MaxAfterimages", 3, "Maximum active afterimages.");
+            _aaChargesCfg = Config.Bind("Spellcaster Afterimage Arsenal", "Charges_v02585", 2, "Normal Afterimage Arsenal charges (each recharges on the cooldown).");
             _afterimageDamageMultiplier = Config.Bind("Spellcaster Afterimage Arsenal", "DamageMultiplier", 1f, "Each afterimage shot = 100% of your attack.");
             _gunStaffFireRateMultiplier = Config.Bind("Spellcaster Gun Staff", "SingleAttackSpeedMultiplier_v0123", 1.5f, "Single Staff/Wand baseline: +50% Attack Speed. Rapid Gun Staff cooldown uses the same 1.5x target.");
             _dualGunStaffAttackSpeedMultiplier = Config.Bind("Spellcaster Gun Staff", "DualAttackSpeedMultiplier_v0123", 2f, "Dual Gun Staves baseline: +100% Attack Speed. Example: 0.50s cadence becomes 0.25s.");
@@ -714,6 +723,8 @@ namespace DragonsAltarSorcerer
                 UpdateSpellcasterHeldFire(player);
                 UpdateCloneHold(player);
                 UpdateVoidCharges(player);
+                UpdateAaCharges(player);
+                UpdateAaGhosts(player);
                 if (player.IsDead()) ClearClones();
             }
             else
@@ -903,7 +914,7 @@ namespace DragonsAltarSorcerer
         }
 
         private WizDamage _gravityDmg, _bladeDmg, _novaDmg, _meteorDmg, _cataclysmDmg, _glacialAscDmg;
-        private ConfigEntry<float> _gravityWindup, _gravityTick, _gravityPull, _gravityExpose, _gravityCripple;
+        private ConfigEntry<float> _gravityWindup, _gravityTick, _gravityPull, _gravityExpose, _gravityCripple, _gravityPullSpeed, _gvAscBigSpeed, _gvAscBossSpeed;
         private ConfigEntry<float> _bladeWindup, _bladeBurnPercent, _bladeBurnSeconds;
         private ConfigEntry<float> _novaWindup, _novaFrost;
         private ConfigEntry<float> _meteorWindup, _meteorBurnPercent, _meteorBurnSeconds;
@@ -940,7 +951,8 @@ namespace DragonsAltarSorcerer
             const string g = "Wizard Gravity Dominion";
             _gravityWindup = Config.Bind(g, "Windup", 1f, "Wind up.");
             _gravityTick = Config.Bind(g, "HitInterval", 1f, "Seconds between pulses.");
-            _gravityPull = Config.Bind(g, "PullStrength", 7f, "Pull impulse on Small enemies per pulse.");
+            _gravityPull = Config.Bind(g, "PullStrength", 7f, "Legacy (v0.25.85: the pull is a continuous drag, see PullSpeed_v02585).");
+            _gravityPullSpeed = Config.Bind(g, "PullSpeed_v02585", 6f, "Small enemies are dragged into the well at this speed (m/s), the whole time they are inside.");
             _gravityExpose = Config.Bind(g, "ExposeDuration", 5f, "Expose (refreshed while inside).");
             _gravityCripple = Config.Bind(g, "CrippleDuration", 2f, "Cripple on Big enemies (refreshed while inside).");
             _gravityDmg = BindWizDamage("Wizard Gravity Dominion Damage", 0f, 0f, 0f, 0f, 0f, 14f, 0f, 14f);
@@ -1000,7 +1012,9 @@ namespace DragonsAltarSorcerer
             _gvAscRadius = Config.Bind(gva, "Radius", 10f, "Ascended radius.");
             _gvAscDuration = Config.Bind(gva, "Duration", 7f, "Seconds.");
             _gvAscBig = Config.Bind(gva, "BigPullPercent", 40f, "Pull strength on Big enemies.");
-            _gvAscBoss = Config.Bind(gva, "BossPullPercent", 20f, "Pull strength on Bosses.");
+            _gvAscBoss = Config.Bind(gva, "BossPullPercent", 20f, "Legacy.");
+            _gvAscBigSpeed = Config.Bind(gva, "BigPullSpeed_v02585", 5f, "Ascended: Big enemies (Trolls, Bjorn...) are dragged in at this speed (m/s).");
+            _gvAscBossSpeed = Config.Bind(gva, "BossPullSpeed_v02585", 1.2f, "Ascended: Bosses are dragged in at this speed (m/s) (universal rule: 20% of the Small pull).");
             _gvAscBlast = Config.Bind(gva, "EndBlastPercent", 25f, "End explosion: % of the normal skill's full damage.");
             _gvAscStun = Config.Bind(gva, "BigStunSeconds", 1.5f, "End explosion Stuns Big (Small are launched).");
             const string ra = "Wizard Astral Railcannon Ascended";
@@ -1077,6 +1091,10 @@ namespace DragonsAltarSorcerer
                     DragonVfx.BlackHole(gc, gr, gd);   // v0.25.75 (user): a black hole hangs in the middle of the well
                 });
             }
+            // v0.25.85 (user: the pull was weak): Valheim rewrites creature velocity every physics step, so pulse
+            // impulses barely moved anyone. The well now DRAGS (position, every physics step) the whole time:
+            // Small always; Ascended also Big (Trolls, Bjorn...) and Bosses (slower). Big + Bosses are Crippled.
+            StartCoroutine(GravityDrag(player, center, radius, end, ascended));
             while (Time.time < end && player != null)
             {
                 List<Character> targets = GetSphereTargets(player, center, radius);
@@ -1085,10 +1103,7 @@ namespace DragonsAltarSorcerer
                     Character enemy = targets[i];
                     DragonCombat.ApplyExpose(enemy, _gravityExpose.Value);
                     bool small = DragonCombat.IsSmallEnemy(enemy);
-                    bool boss = IsBoss(enemy);
-                    if (small) PullToward(enemy, center, _gravityPull.Value);
-                    else if (ascended) PullToward(enemy, center, _gravityPull.Value * (boss ? _gvAscBoss.Value : _gvAscBig.Value) / 100f);
-                    if (!small && !boss) DragonCombat.ApplyCripple(enemy, _gravityCripple.Value);
+                    if (!small) DragonCombat.ApplyCripple(enemy, Mathf.Max(_gravityCripple.Value, tick + 0.5f));
                     DealWiz(player, enemy, _gravityDmg, 1f, "gravity_dominion", 2f, false);
                 }
                 if (_enableVfx.Value) StartCoroutine(RingVfx(center, radius, new Color(0.45f, 0.12f, 0.75f, 0.85f), Mathf.Min(0.85f, tick)));
@@ -1647,10 +1662,14 @@ namespace DragonsAltarSorcerer
         private void CastAfterimageArsenal(Player player)
         {
             if (IsSpellAscended(player, "afterimage_arsenal")) { CastAscendedAfterimage(player); return; }
-            if (!BeginSkill(player, "Spellcaster.AfterimageArsenal", _afterimageCooldown.Value, _afterimageEitr.Value))
-                return;
+            // v0.25.85 (user): 2 charges; a second cast adds another afterimage (oldest goes past MaxAfterimages).
+            UpdateAaCharges(player);
+            if (_aaCharges <= 0) { ShowCooldown("Spellcaster.AfterimageArsenal"); return; }
+            if (!SpendEitr(player, _afterimageEitr.Value)) { ShowMessage("Not enough Eitr"); return; }
+            if (_aaCharges >= AaMaxCharges()) _aaNextCharge = Time.time + AaCooldown(player);
+            _aaCharges--;
+            _cooldowns["Spellcaster.AfterimageArsenal"] = _aaCharges > 0 ? 0f : _aaNextCharge;
             _afterimageUntil = Time.time + Mathf.Max(1f, _afterimageDuration.Value);
-            ClearAfterimages();
             SpawnAfterimage(player.transform.position, player.transform.rotation);
             DragonCombat.PlayClip(player, "hw_afterimage", 0.1f);
             ShowMessage("Afterimage Arsenal ACTIVE");
@@ -1676,7 +1695,7 @@ namespace DragonsAltarSorcerer
 
             if (_enableVfx.Value && DragonVfx.Enabled)
             {
-                AttachGhostSnapshot(Player.m_localPlayer, root);   // v0.25.83 a frozen astral copy of you instead of capsules
+                AttachGhostSnapshot(Player.m_localPlayer, root);   // v0.25.85 a LIVE astral copy of you (replays your pose, stays here)
                 StartCoroutine(RingVfx(position + Vector3.up * 0.05f, 1.15f, new Color(0.64f, 0.16f, 1f, 0.72f), 0.45f));
             }
             else if (_enableVfx.Value)
@@ -2458,7 +2477,8 @@ namespace DragonsAltarSorcerer
             _gbTravel = Config.Bind(g, "TravelTime", 4f, "Seconds to travel the range.");
             _gbRadius = Config.Bind(g, "Radius", 5f, "Damage / pull radius around the orb.");
             _gbTick = Config.Bind(g, "HitInterval", 0.5f, "Persistent damage interval.");
-            _gbPull = Config.Bind(g, "PullStrength", 2.5f, "Slow pull of Small enemies toward the orb per tick.");
+            _gbPull = Config.Bind(g, "PullStrength", 2.5f, "Legacy (v0.25.85: continuous drag, see PullSpeed_v02585).");
+            _gbPullSpeed = Config.Bind(g, "PullSpeed_v02585", 3f, "Small enemies are dragged toward the orb at this speed (m/s) while inside. Ascended: Big at BigPullPercent, Bosses at BossPullPercent of it.");
             _gbCripple = Config.Bind(g, "CrippleDuration", 3f, "Big and Boss: Cripple, refreshed on every hit.");
             _gbOrbSize = Config.Bind(g, "OrbSize", 2.5f, "Orb diameter (about a Greydwarf Brute).");
             _gravityBlastDmg = BindWizDamage("Spellcaster Gravity Blast Damage", 0f, 16f, 16f, 0f, 0f, 0f, 0f, 0f);
@@ -2649,6 +2669,7 @@ namespace DragonsAltarSorcerer
             float elapsed = 0f;
             float nextTick = 0f;
             bool detonated = false;
+            List<Character> gbDrag = new List<Character>();
             while (elapsed < life && player != null)
             {
                 if (scale >= 1f && _gbRecasts >= 1) moving = false;
@@ -2666,22 +2687,33 @@ namespace DragonsAltarSorcerer
                     else pos += dir * step;
                     if (orb != null) orb.transform.position = pos;
                 }
+                // v0.25.85: the pull is a continuous drag toward the orb (impulses were wiped by Valheim's own movement)
+                for (int gi = 0; gi < gbDrag.Count; gi++)
+                {
+                    Character ge = gbDrag[gi];
+                    if (ge == null || ge.IsDead()) continue;
+                    bool gs = DragonCombat.IsSmallEnemy(ge);
+                    float gsp = _gbPullSpeed.Value * (gs ? 1f : (!ascended ? 0f : (IsBoss(ge) ? _gbAscBoss.Value : _gbAscBig.Value) / 100f));
+                    if (gsp <= 0f) continue;
+                    Vector3 gto = pos - ge.transform.position; gto.y = 0f;
+                    float gd = gto.magnitude;
+                    if (gd <= DragonCombat.M(0.6f)) continue;
+                    Vector3 gstep = gto / gd * Mathf.Min(gd - DragonCombat.M(0.6f), DragonCombat.M(gsp) * Time.deltaTime);
+                    Rigidbody grb = ge.GetComponent<Rigidbody>();
+                    if (grb != null) grb.MovePosition(grb.position + gstep); else ge.transform.position += gstep;
+                }
                 if (elapsed >= nextTick)
                 {
                     nextTick = elapsed + tick;
                     List<Character> targets = GetSphereTargets(player, pos, radius);
+                    gbDrag = targets;
                     for (int i = 0; i < targets.Count; i++)
                     {
                         Character enemy = targets[i];
                         DealWiz(player, enemy, _gravityBlastDmg, scale, "gravity_blast", 0f, false);
                         bool small = DragonCombat.IsSmallEnemy(enemy);
                         bool boss = IsBoss(enemy);
-                        if (small) PullToward(enemy, pos, _gbPull.Value);
-                        else
-                        {
-                            DragonCombat.ApplyCripple(enemy, _gbCripple.Value);
-                            if (ascended) PullToward(enemy, pos, _gbPull.Value * (boss ? _gbAscBoss.Value : _gbAscBig.Value) / 100f);
-                        }
+                        if (!small) DragonCombat.ApplyCripple(enemy, _gbCripple.Value);   // Big + Bosses (refreshed per hit)
                     }
                     if (_enableVfx.Value) StartCoroutine(RingVfx(pos, radius, new Color(0.40f, 0.10f, 0.70f, 0.55f), Mathf.Min(0.4f, tick)));
                 }
@@ -2807,6 +2839,55 @@ namespace DragonsAltarSorcerer
             return IsSpellAscended(player, "void_step") ? Mathf.Max(1, _vsAscCharges.Value) : 1;
         }
 
+        private int AaMaxCharges() { return Mathf.Max(1, _aaChargesCfg.Value); }
+
+        private float AaCooldown(Player player)
+        {
+            return Mathf.Max(0.1f, _testingForceCooldowns.Value ? _testingCooldown.Value : DragonCombat.ScaleCooldown(player, "Spellcaster.AfterimageArsenal", _afterimageCooldown.Value));
+        }
+
+        private void UpdateAaCharges(Player player)
+        {
+            int max = AaMaxCharges();
+            if (_aaCharges < 0 || _aaCharges > max) _aaCharges = max;
+            if (_aaCharges < max && Time.time >= _aaNextCharge)
+            {
+                _aaCharges++;
+                if (_aaCharges < max) _aaNextCharge = Time.time + AaCooldown(player);
+            }
+            if (player != null && !IsSpellAscended(player, "afterimage_arsenal"))
+                _cooldowns["Spellcaster.AfterimageArsenal"] = _aaCharges > 0 ? 0f : _aaNextCharge;
+        }
+
+        // Every ghost copies your live pose (all bones except its own root, so it stays where it was cast).
+        private void UpdateAaGhosts(Player player)
+        {
+            if (_aaGhosts.Count == 0) return;
+            List<GameObject> dead = null;
+            foreach (KeyValuePair<GameObject, Transform[]> kv in _aaGhosts) if (kv.Key == null) { if (dead == null) dead = new List<GameObject>(); dead.Add(kv.Key); }
+            if (dead != null) for (int i = 0; i < dead.Count; i++) _aaGhosts.Remove(dead[i]);
+            if (_aaGhosts.Count == 0 || player == null) return;
+            if (_aaSourceBones == null || Time.time >= _aaSourceCheck)
+            {
+                _aaSourceCheck = Time.time + 0.5f;
+                Transform src = FindPlayerVisual(player);
+                _aaSourceBones = src == null ? null : src.GetComponentsInChildren<Transform>(true);
+            }
+            Transform[] sb = _aaSourceBones;
+            if (sb == null) return;
+            foreach (KeyValuePair<GameObject, Transform[]> kv in _aaGhosts)
+            {
+                Transform[] gb = kv.Value;
+                if (gb == null || gb.Length != sb.Length) continue;   // gear changed since the cast: that ghost holds its pose
+                for (int k = 1; k < sb.Length; k++)
+                {
+                    if (sb[k] == null || gb[k] == null) continue;
+                    gb[k].localPosition = sb[k].localPosition;
+                    gb[k].localRotation = sb[k].localRotation;
+                }
+            }
+        }
+
         private void UpdateVoidCharges(Player player)
         {
             int max = VoidMaxCharges(player);
@@ -2882,21 +2963,9 @@ namespace DragonsAltarSorcerer
             }
             for (int i = 0; i < 3; i++)
             {
-                GameObject copy = null;
-                bool wasActive = _mimicSource.gameObject.activeSelf;
-                try
-                {
-                    // Copy while inactive so none of the player's scripts wake up on the twin.
-                    _mimicSource.gameObject.SetActive(false);
-                    copy = Instantiate(_mimicSource.gameObject);
-                }
-                finally
-                {
-                    _mimicSource.gameObject.SetActive(wasActive);
-                }
+                GameObject copy = MakeGhostCopy(_mimicSource);
                 if (copy == null) continue;
                 copy.name = "HorizonWalkerAstralTwin";
-                StripToVisual(copy);
                 copy.SetActive(true);
                 _clones[i] = copy;
                 _mimicBones[i] = copy.GetComponentsInChildren<Transform>(true);
@@ -2917,22 +2986,36 @@ namespace DragonsAltarSorcerer
                 _mimicMaterial = shader != null ? new Material(shader) : null;
                 if (_mimicMaterial != null) _mimicMaterial.color = new Color(0.58f, 0.30f, 1f, 0.42f);
             }
-            GameObject copy = null;
-            bool wasActive = src.gameObject.activeSelf;
-            try
-            {
-                src.gameObject.SetActive(false);
-                copy = (GameObject)Instantiate(src.gameObject, src.position, src.rotation);
-            }
-            catch (Exception) { copy = null; }
-            finally { src.gameObject.SetActive(wasActive); }
+            GameObject copy = MakeGhostCopy(src);
             if (copy == null) return;
             copy.name = "SpellcasterAfterimageGhost";
-            StripToVisual(copy);
             copy.transform.SetParent(root.transform, true);
             copy.SetActive(true);
+            _aaGhosts[copy] = copy.GetComponentsInChildren<Transform>(true);
             GameObject keep = copy;
             DragonCombat.RunVfx(delegate { DragonVfx.AttachGlow(keep.transform, new Color(0.62f, 0.30f, 1f, 1f), 0.5f, 18f, 3f); });
+        }
+
+        // v0.25.85 ROOT CAUSE of the forced "sit" pose (user): the copy used to be made by switching YOUR Visual off
+        // and on, which resets your animator mid-move. Now the copy is instantiated under an INACTIVE holder (nothing
+        // on it wakes up, your Visual is never touched), stripped to renderers, then detached.
+        private static GameObject _ghostHolder;
+        private GameObject MakeGhostCopy(Transform src)
+        {
+            if (src == null) return null;
+            try
+            {
+                if (_ghostHolder == null) { _ghostHolder = new GameObject("IH_GhostHolder"); _ghostHolder.SetActive(false); DontDestroyOnLoad(_ghostHolder); }
+                GameObject copy = (GameObject)Instantiate(src.gameObject, _ghostHolder.transform);
+                copy.transform.position = src.position;
+                copy.transform.rotation = src.rotation;
+                copy.transform.localScale = src.lossyScale;
+                StripToVisual(copy);
+                copy.SetActive(false);
+                copy.transform.SetParent(null, true);
+                return copy;
+            }
+            catch (Exception) { return null; }
         }
 
         // Keep only transforms + renderers; every renderer becomes the astral ghost material.
@@ -3114,6 +3197,7 @@ namespace DragonsAltarSorcerer
                 if (state.DamageStack >= 3) state.DamageStack = 0;
                 float asc = IsSpellAscended(player, "arcane_rupture") ? _ruAscDamage.Value / 100f : 1f;
                 DealWiz(player, enemy, _ruptureDmg, mult * asc, "arcane_rupture", 16f, false);
+                DragonCombat.ApplyExpose(enemy, Mathf.Max(0.1f, _ruptureExpose.Value));   // v0.25.85 (user): every Rupture Exposes (normal + Ascended)
 
 
                 if (DragonCombat.IsSmallEnemy(enemy)) DragonCombat.Stun(enemy, target);
@@ -3180,6 +3264,13 @@ namespace DragonsAltarSorcerer
             {
                 case "arcane_rupture":
                     ready = _ruptureCharges; max = RuptureMax(); next = GetRuptureNextRecharge();
+                    return true;
+                case "afterimage_arsenal":
+                    if (IsSpellAscended(player, "afterimage_arsenal")) return false;
+                    max = AaMaxCharges();
+                    if (max <= 1) return false;
+                    ready = Mathf.Max(0, _aaCharges < 0 ? max : _aaCharges);
+                    next = ready < max ? Mathf.Max(0f, _aaNextCharge - Time.time) : 0f;
                     return true;
                 case "void_step":
                     max = VoidMaxCharges(player);
@@ -3462,6 +3553,33 @@ namespace DragonsAltarSorcerer
             }
             catch { }
             return false;
+        }
+
+        private IEnumerator GravityDrag(Player player, Vector3 center, float radius, float end, bool ascended)
+        {
+            float stop = DragonCombat.M(0.8f);
+            List<Character> targets = new List<Character>();
+            float rescan = 0f;
+            while (Time.time < end && player != null)
+            {
+                yield return new WaitForFixedUpdate();
+                if (Time.time >= rescan) { rescan = Time.time + 0.25f; targets = GetSphereTargets(player, center, radius); }
+                for (int i = 0; i < targets.Count; i++)
+                {
+                    Character e = targets[i];
+                    if (e == null || e.IsDead()) continue;
+                    bool small = DragonCombat.IsSmallEnemy(e);
+                    bool boss = IsBoss(e);
+                    float speed = small ? _gravityPullSpeed.Value : (!ascended ? 0f : (boss ? _gvAscBossSpeed.Value : _gvAscBigSpeed.Value));
+                    if (speed <= 0f) continue;
+                    Vector3 to = center - e.transform.position; to.y = 0f;
+                    float d = to.magnitude;
+                    if (d <= stop) continue;
+                    Vector3 step = to / d * Mathf.Min(d - stop, DragonCombat.M(speed) * Time.fixedDeltaTime);
+                    Rigidbody rb = e.GetComponent<Rigidbody>();
+                    if (rb != null) rb.MovePosition(rb.position + step); else e.transform.position += step;
+                }
+            }
         }
 
         private void PullToward(Character target, Vector3 center, float strength)
