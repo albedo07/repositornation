@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.95";
+        public const string ModVersion = "0.25.96";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1390,6 +1390,9 @@ namespace AlbedosCustomClassesAdvanced
         private const float SmSwordContact = 0.16f; // v0.25.91 faster Moonlight / Crescent follow-up swings (longsword contact 0.28 s -> 1.75x)
         private const float SmSwordCycle = 0.40f; // v0.25.93 (user) every Moonlight GT exactly 0.4 s apart
         private const float SmHeavyContact = 0.45f;
+        // v0.25.96 (user): Ascended Moonlight GTs 0.2 s apart (swings at the 4x speed cap).
+        private const float SmAscCycle = 0.20f;
+        private const float SmAscContact = 0.12f;
         // v0.25.95 (user): Halfmoon swings as fast as Heavy Slash's swing (battleaxe 0.45 s native -> ~2.6x).
         private const float HmContact = 0.25f;
         private const float HmSwingEnd = 0.40f;   // contact + the fast recovery = end of the swing animation
@@ -2079,21 +2082,21 @@ namespace AlbedosCustomClassesAdvanced
                     AlbedoAimUtility.GetProjectileDirection(player, origin), range, width,
                     speed, _moonDamageV, _moonAscWave.Value / 100f, 1f));
                 // The 4th is also a normal sword hit. The 5th gets its own heavy animation.
-                yield return new WaitForSeconds(SmSwordCycle - SmSwordContact);
+                yield return new WaitForSeconds(SmAscCycle - SmAscContact);
                 if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
                 IhFaceSkillAim(player);
-                DragonCombat.LockSkill(player, SmSwordCycle + 0.15f);
+                DragonCombat.LockSkill(player, SmAscCycle + 0.15f);
                 if (wave < 3)
                 {
-                    DragonCombat.PlayClip(player, (wave + 1) % 2 == 0 ? "sm_slash_a" : "sm_slash_b", SmSwordContact);
-                    yield return new WaitForSeconds(SmSwordContact);
+                    DragonCombat.PlayClip(player, (wave + 1) % 2 == 0 ? "sm_slash_a" : "sm_slash_b", SmAscContact);
+                    yield return new WaitForSeconds(SmAscContact);
                 }
             }
             // 5th: one complete Heavy Slash at unchanged vanilla playback rate.
-            // v0.25.93: the 5th keeps the 0.4 s rhythm too (heavy swing sped up to hit after SmSwordContact).
-            DragonCombat.LockSkill(player, SmSwordContact + 0.45f);
-            DragonCombat.PlayClip(player, "sm_moon_finisher", SmSwordContact);
-            yield return new WaitForSeconds(SmSwordContact);
+            // v0.25.93: the 5th keeps the 0.4 s rhythm too (heavy swing sped up to hit after SmAscContact).
+            DragonCombat.LockSkill(player, SmAscContact + 0.45f);
+            DragonCombat.PlayClip(player, "sm_moon_finisher", SmAscContact);
+            yield return new WaitForSeconds(SmAscContact);
             if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
             IhFaceSkillAim(player);
             Vector3 fo = player.GetEyePoint() - player.transform.up * 0.25f;

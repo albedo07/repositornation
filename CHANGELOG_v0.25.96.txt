@@ -1,0 +1,5 @@
+Immortal Heroes v0.25.96 - Rapid Moonlight
+Base: v0.25.95. Only Ascended Moonlight Splitter.
+
+- Ascended Moonlight Splitter: every GT 0.2 s apart (was 0.4 s), incl. the 5th Heavy Slash GT.
+  Swings play at the 4x speed cap. Normal Moonlight stays 0.4 s.
