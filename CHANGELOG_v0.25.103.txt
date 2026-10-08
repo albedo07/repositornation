@@ -1,0 +1,8 @@
+Immortal Heroes v0.25.103 - Clear Swing
+Base: v0.25.102. Only the Home Run Cleave wind-up keys (merc_homerun load + plant).
+
+- No more arms / handle through the head: the bat load sits OUT at the right shoulder (hand target
+  lateral, shoulder height, barely behind the shoulder plane, reach 0.62 -> grip ~0.35 m+ from the head).
+- Shoulder clearance: chest rolled slightly forward so the shoulders come in front of the neck; main elbow
+  pole flared outward/down so the forearm opens away from the neck. Handle points up-back away from the head.
+- Spin, damage, hop, timings unchanged.

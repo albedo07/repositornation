@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.102";
+        public const string ModVersion = "0.25.103";
 
         internal static DragonCombatPlugin Instance;
 
@@ -4438,12 +4438,21 @@ namespace DragonsAltarCombat
             // Joint safety: every Hand reach <= 0.95 (elbows never locked / hyper-extended), loaded hands stay on the
             // right side behind the shoulder plane (x > 0, z < 0) so nothing crosses the torso, knee lift <= 0.55.
             {
-                DragonClipKey hrLoad = K(-0.75f).Rot(0f, 60f, 0f).Sp(-6f, 0f, 0f).Ch(-4f, 10f, 0f).Hd(0f, -20f, 0f)
+                // v0.25.103 (user: forearms + handle clipped through the head/neck): the bat load sits OUT at the
+                // right shoulder, not behind the neck. Hand target = mostly lateral (x 0.8) at shoulder height,
+                // barely behind the shoulder plane (z -0.12), reach 0.62 -> the grip stays ~0.35+ m from the head.
+                // Shoulder clearance (no clavicle channel in the driver): chest rolled slightly FORWARD (Ch x +6)
+                // so the shoulders come forward of the neck, and the main elbow pole flares OUT and down (EP) so
+                // the forearm opens away from the neck instead of folding inward. The handle points up-back AWAY
+                // from the head (Wp x 0.6). Two-hand grip kept; the off hand follows the handle.
+                DragonClipKey hrLoad = K(-0.75f).Rot(0f, 60f, 0f).Sp(-6f, 0f, 0f).Ch(6f, 10f, 0f).Hd(0f, -20f, 0f)
                     .RL(0f, 0.05f, 0f, 0f).Lift(0.55f, 0f).Off(0f, 0.10f, 0f)
-                    .Hand(0.30f, 0.35f, -0.35f, 0.5f).Wp(0.3f, 0.75f, -0.6f).Two(-0.12f);
-                DragonClipKey hrPlant = K(-0.2f).Rot(0f, 60f, 0f).Sp(4f, 0f, 0f).Ch(0f, 12f, 0f).Hd(0f, -24f, 0f)
+                    .Hand(0.80f, 0.10f, -0.12f, 0.62f).Wp(0.6f, 0.7f, -0.38f).Two(-0.12f);
+                hrLoad.EP = new Vector3(0.85f, -0.45f, -0.15f); hrLoad.EW = 1f; hrLoad.EM = true;
+                DragonClipKey hrPlant = K(-0.2f).Rot(0f, 60f, 0f).Sp(4f, 0f, 0f).Ch(6f, 12f, 0f).Hd(0f, -24f, 0f)
                     .LL(0.4f, 0.12f, 0f, 0f).RL(-0.2f, 0.1f, 0f, 0f).Lift(0f, 0f).Off(0f, -0.05f, 0f)
-                    .Hand(0.30f, 0.35f, -0.40f, 0.5f).Wp(0.3f, 0.75f, -0.6f).Two(-0.12f);
+                    .Hand(0.80f, 0.10f, -0.15f, 0.62f).Wp(0.6f, 0.7f, -0.40f).Two(-0.12f);
+                hrPlant.EP = new Vector3(0.85f, -0.45f, -0.15f); hrPlant.EW = 1f; hrPlant.EM = true;
                 DragonClipKey hrStrike = K(0f).Rot(0f, 0f, 0f).Sp(6f, 0f, 0f).Ch(0f, -8f, 0f).Off(0f, -0.06f, 0f)
                     .Hand(0.55f, -0.05f, 0.75f, 0.95f).Wp(1f, 0f, 0.3f).Two(-0.2f).Sn(0f).Linear();
                 DragonClipKey hrMid = hrStrike.Copy(0.2f).Sn(180f);

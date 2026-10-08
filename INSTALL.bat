@@ -1,5 +1,5 @@
 @echo off
-title Immortal Heroes v0.25.102 - Home Run Cleave
+title Immortal Heroes v0.25.103 - Clear Swing
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
 echo.
 pause
