@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.93";
+        public const string ModVersion = "0.25.94";
 
         internal static DragonCombatPlugin Instance;
 
@@ -2699,7 +2699,7 @@ namespace DragonsAltarCombat
                 if (norm >= 1f) { _vaTrack = false; DragonCombat.SetSkillAnimSpeed(p, 1f, 0f); return; }
                 if (_constSpeed)
                 {
-                    if (_constK <= 0f) _constK = Mathf.Clamp(_vaLead / Mathf.Max(0.05f, _constWindup), 1f, 4f); // v0.25.91 one stable speed per swing so the vanilla contact frame lands on the skill hit (never slower than native).
+                    if (_constK <= 0f) _constK = Mathf.Clamp(_vaLead / Mathf.Max(0.05f, _constWindup - 0.08f), 1f, 4f); // v0.25.94 (user) the swing's hit frame lands ~0.08 s BEFORE the GTs release: animation first, then the waves // v0.25.91 one stable speed per swing so the vanilla contact frame lands on the skill hit (never slower than native).
                     DragonCombat.SetSkillAnimSpeed(p, _constK, 0.15f);
                     return;
                 }

@@ -1,0 +1,7 @@
+Immortal Heroes v0.25.94 - Swing First
+Base: v0.25.93 (which failed to compile).
+
+- FIX: v0.25.93 compile error (Advanced.cs, Halfmoon arc VFX line: a comment swallowed the closing "});").
+- Sword Master swings (Moonlight, Crescent, Halfmoon): the sword's hit frame now lands ~0.08 s BEFORE
+  the GTs / waves release - the swing finishes, then the waves go out. Rest of v0.25.93 unchanged
+  (Moonlight 0.4 s per GT, quick Crescent overhead, Halfmoon right -> left).

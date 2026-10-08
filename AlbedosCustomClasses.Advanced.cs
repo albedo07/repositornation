@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.93";
+        public const string ModVersion = "0.25.94";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -10342,7 +10342,7 @@ namespace AlbedosCustomClassesAdvanced
                 Vector3 hc = center, hf = forward; float hr = radius;
                 Player lp = Player.m_localPlayer;
                 Color hcol = lp != null && DragonCombat.GetAdvancementName(lp) == "Mercenary" ? new Color(1f, 0.55f, 0.20f, 1f) : new Color(0.55f, 0.82f, 1f, 1f);
-                DragonCombat.RunVfx(delegate { DragonVfx.SlashArc(hc, hf, hr, 170f, hcol, Mathf.Max(0.5f, hr * 0.25f), 0.45f, 180f);   // v0.25.93 right -> left like the swing });
+                DragonCombat.RunVfx(delegate { DragonVfx.SlashArc(hc, hf, hr, 170f, hcol, Mathf.Max(0.5f, hr * 0.25f), 0.45f, 180f); });   // v0.25.93 right -> left like the swing
             }
             if (IhLocalRichVfx())
                 DragonCombat.RunVfx(delegate
