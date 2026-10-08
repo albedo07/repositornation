@@ -1,26 +1,26 @@
-TEST v0.25.85 (anchor candidate)
-1. Moonlight Splitter, Heavy Slash, Halfmoon, Crescent, Grand Cross slashes: cast standing AND while running, several
-   times in a row - the swing must play every time.
-2. Afterimage Arsenal while running: no sit / odd pose. Normal: copy stays put and moves with you; 2 charges.
-3. Eclipse: no orb. Ascended: you and nearby Small/Big enemies spiral 4m up; landing from up to 10m = no damage.
-4. Blade Storm on Yagluth: lands on him.
-5. Stomp: chicken wings (elbows out and up, forearms forward). Jump slams: body near horizontal in the air.
-6. Warfreak: sword+sword or 2H = faster; sword+axe = no bonus.
-7. Gravity Dominion: Trolls / Bjorn dragged in (Ascended), Bosses crippled. Gravity Blast drags Small in.
-8. Frost Nova: full staff raise. Arcane Rupture: Expose on hit.
-9. Tumble Shot / Gale Volley into a cliff: normal-size arrows only.
-10. Cyclone taller; Furious Winds 5s / 8s; Somersault from 20m up: you dive to the ground, then slam.
-11. Skyfall Ascended: Left Click while hovering = slam now; hover pose = bow aimed down. Starfall / Furious Winds
-    Ascended + Merc Ascended Whirlwind: Left Click = follow-up now. Starfall final arrow big.
-12. Ranger skill shots: vanilla bow draw/release; Sky shots aim up.
-13. No cast flare / hand orb on any skill.
+TEST v0.25.86
+BOWMASTER  1. Ballista + Explosive charge: real vanilla bow draw while held, no extra vanilla arrow on release.
+           2. Splitting Arrow: vanilla bow shots, no arm in the body.  3. Sky shots: head looks up, no back bend.
+ARCHMAGE   4. Ascended Greatblade: all 3 slams animate.  5. Frost Nova Asc: blast, then frozen ground 6s (stand in it).
+HORIZON W. 6. Arcane Phantom name; swap weapons with phantoms out - they keep moving.  7. Rift Echo: purple glow.
+           8. Phalanx Asc: spears from the ground.  9. Cast every skill while sprinting: no stop.
+           10. Dual Gun Staves: ~2x fire rate, Eitr drains faster; holster: 2 staves on the back.
+PALADIN    11. Shield Charge slam instant; Ascended: jump slam + lightning, off a ledge it holds until landing.
+PRIEST     12. Relics: plain upright cross.  13. Grand Cross: crossed sharp slashes.  14. Heaven's Judgement beams
+           tall; Ascended final explosion.  15. Crucible raise visible.  16. Tempest Asc meteors (Blunt + Fire Burn).
+SWORD M.   17. Moonlight / Crescent / Halfmoon swings: smooth, not sped up, chained 1-2-1-2.  18. Halfmoon Asc stance.
+           19. Frenzied Asc explosion wave.  20. Eclipse Asc: instant suck-in (Bosses too), spiral 0.5s later.
+MERCENARY  21. Damage taken during skills -25% / Whirlwind -35%.  22. Circle Swing slower spin.
+           23. Bonecrusher + Electric Smite: same jump/slam, main-hand chicken wing.  24. Seismic Asc 3 explosions,
+           no guillotine.  25. Bomb Asc cluster.  26. Whirlwind Asc tornado.
 
-REGRESSION SCAN vs v0.25.84 (everything this pass touched; anything else unchanged by design):
-- CombatRuntime: clip driver (RestartVanilla learning, Wing elbow pole, bow layer), PlayClip (bow clip first, no
-  WeaponCharge), Stomp + jump-slam keys, wiz_nova NoTrack, launch fall rule (BeginDamage fall hits only).
-- Advanced: IhCastSkill (no CastFlare), Eclipse Ascended, Blade Storm aim, Warfreak check, jump-slam fall grant,
-  Ascended Whirlwind Left Click, tooltips.
-- Sorcerer: Gravity Dominion / Gravity Blast pulls, Afterimage Arsenal (charges, live copies, copy method also
-  used by the Ascended twins), Arcane Rupture Expose.
-- Ranger: planted arrow size, Cyclone height, Furious Winds durations, Somersault dive, Left Click follow-ups,
-  Starfall final arrow size.
+REGRESSION SCAN vs v0.25.85 (anchor: Acrobat untouched)
+- CombatRuntime: clip driver (RestartVanilla near-end restart, constant-speed swings for sm_slash/crescent/halfmoon/
+  moon_finisher, vanilla pause, main-hand Wing, bow clip: split clips + head-only sky pitch, Ballista no forced bool),
+  PlayClip (HW moving cast clip, long raise timing), LockSkill (Horizon Walker = mobile cast), SetControls lock keeps
+  the bow hold, Circle Swing hop keys, Stomp unchanged (Wing explicit), SbOlympic air arm, Halfmoon stance.
+- Advanced: Shield Charge slam/jump slam, Grand Cross, relic cross + pose, Heaven's Judgement VFX, Tempest meteors,
+  Frenzied wave, Eclipse suck/gap, Merc guard filter, Seismic, Bomb cluster, Whirlwind tornado, Electric Smite clip,
+  CircleHop timing, tooltips/texts.
+- Sorcerer: Frost Nova Ascended, Gravity texts, Arcane Phantom (name, rebuild), Rift Echo glow, Phalanx spears,
+  Gun Staff dual speed, holster.  Ranger: Ballista/Explosive vanilla hold only.  Core/DevTools: texts.

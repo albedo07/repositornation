@@ -40,7 +40,7 @@ namespace DragonsAltarDevTools
     {
         public const string ModGuid = "albedo.customclasses.devtools";
         public const string ModName = "Dragon's Altar - Developer Tools";
-        public const string ModVersion = "0.25.85";
+        public const string ModVersion = "0.25.86";
 
         public static DeveloperToolsPlugin Instance;
 
@@ -488,7 +488,8 @@ namespace DragonsAltarDevTools
                        .Replace("Heavens ", "Heaven's ")
                        .Replace("Judgement Cut", "Blade Storm")
                        .Replace("Knights Guidance", "Knight's Guidance")
-                       .Replace("Mercenary Weapon Mastery - Warfreak", "Mercenary Warfreak");
+                       .Replace("Mercenary Weapon Mastery - Warfreak", "Mercenary Warfreak")
+                       .Replace("Afterimage Arsenal", "Arcane Phantom");   // v0.25.86 rename
             // v0.23.3 display names (config sections keep their ids).
             if (text.StartsWith("Spellcaster", StringComparison.Ordinal)) text = "Horizon Walker" + text.Substring(11);
             if (text.StartsWith("Wizard", StringComparison.Ordinal)) text = "Archmage" + text.Substring(6);

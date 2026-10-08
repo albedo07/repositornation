@@ -40,7 +40,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Dragon's Altar - Ranger";
-        public const string ModVersion = "0.25.85";
+        public const string ModVersion = "0.25.86";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -1866,10 +1866,19 @@ namespace DragonsAltarRanger
                     return;
                 }
             }
+            ItemDrop.ItemData weapon = GetCurrentWeapon(player);
+            if (DragonCombat.SkillBowHoldActive && IsBow(weapon))
+            {
+                // v0.25.86 a charged skill holds the vanilla draw (Ballista / Explosive charge)
+                SetBowDraw(weapon, true);
+                attack = false; attackHold = true; block = false; blockHold = false;
+                _skillDrew = true;
+                return;
+            }
+            if (_skillDrew) { _skillDrew = false; CancelDraw(player, weapon); }
             bool rmb = block || blockHold;
             block = false;
             blockHold = false;
-            ItemDrop.ItemData weapon = GetCurrentWeapon(player);
             if (!IsBow(weapon)) { _charging = false; RestoreBowDraw(); return; }   // Crossbows: vanilla Left Click
             if (_releasePending)
             {
@@ -1903,6 +1912,15 @@ namespace DragonsAltarRanger
 
         // v0.25.52 universal follow-up shot window (Splitting Arrow's great arrow and sky arrow): aim freely and
         // move; Left Click fires, Right Click cancels, it closes by itself when the time runs out.
+        private bool _skillDrew;
+
+        // Ends a skill's vanilla draw without letting Valheim loose its own arrow.
+        private void EndSkillDraw(Player player)
+        {
+            DragonCombat.SkillBowHoldUntil = 0f;
+            if (_skillDrew && player != null) { _skillDrew = false; CancelDraw(player, GetCurrentWeapon(player)); }
+        }
+
         private Action<Player> _windowFire;
         private string _windowName;
         private float _windowUntil;
@@ -2399,6 +2417,7 @@ namespace DragonsAltarRanger
             while (player != null && !player.IsDead() && (DragonCombat.IsTreeSkillKeyHeld("ballista_shot") || Time.time - started < 0.15f))
             {
                 DragonCombat.LockSkill(player, 0.15f);
+                DragonCombat.SkillBowHoldUntil = Time.time + 0.25f;
                 if (_ballistaStacks < 3 && Time.time >= _ballistaNextStack)
                 {
                     _ballistaStacks++;
@@ -2408,6 +2427,7 @@ namespace DragonsAltarRanger
                 yield return null;
             }
             _ballistaCharging = false;
+            EndSkillDraw(player);
             if (player == null || player.IsDead()) yield break;
             StartCooldown("Bowmaster.BallistaShot", _bsCooldown.Value);
             int stacks = _ballistaStacks;
@@ -2653,6 +2673,7 @@ namespace DragonsAltarRanger
             while (player != null && !player.IsDead() && (DragonCombat.IsTreeSkillKeyHeld("explosive_arrow") || Time.time - started < 0.15f))
             {
                 DragonCombat.LockSkill(player, 0.15f);
+                DragonCombat.SkillBowHoldUntil = Time.time + 0.25f;
                 if (_exStacks < maxStacks && Time.time >= _exNextStack)
                 {
                     _exStacks++;
@@ -2662,6 +2683,7 @@ namespace DragonsAltarRanger
                 yield return null;
             }
             _exCharging = false;
+            EndSkillDraw(player);
             if (player == null || player.IsDead()) yield break;
             StartCooldown("Bowmaster.ExplosiveArrow", _eaCooldown.Value);
             DragonCombat.ClipImpact(player);

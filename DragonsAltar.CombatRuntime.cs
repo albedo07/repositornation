@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.85";
+        public const string ModVersion = "0.25.86";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1445,10 +1445,11 @@ namespace DragonsAltarCombat
 
             if (DragonCombat.IsSkillLocked(__instance))
             {
+                bool keepHold = DragonCombat.SkillBowHoldActive && attackHold;   // v0.25.86 charged bow skills = the vanilla draw hold
                 DragonCombat.ClearAttackQueue(__instance);
                 movedir = Vector3.zero;
                 attack = false;
-                attackHold = false;
+                attackHold = keepHold;
                 secondaryAttack = false;
                 secondaryAttackHold = false;
                 block = false;
@@ -2303,7 +2304,10 @@ namespace DragonsAltarCombat
         // raised out to the side, elbow out/back, so the forearm can point FORWARD.
         public Vector3 EP;
         public float EW;
-        public DragonClipKey Wing() { EP = new Vector3(0.6f, -0.4f, -0.7f); EW = 1f; return this; }
+        public DragonClipKey Wing() { EP = new Vector3(0.6f, -0.4f, -0.7f); EW = 1f; EM = false; return this; }
+        // v0.25.86 main-hand-only chicken wing (Bonecrusher / Electric Smite flight; the off hand stays as it is)
+        public bool EM;
+        public DragonClipKey WingMain() { EP = new Vector3(0.6f, -0.4f, -0.7f); EW = 1f; EM = true; return this; }
         // v0.25.25 VANILLA LAYER (first key only): Valheim attack animation `VA` fired `VL` seconds before the
         // impact (VR > 0 = repeat every VR seconds while the clip runs); NoAim = the vanilla animation holds the
         // weapon, so the universal "weapon follows the forearm" rule stays off.
@@ -2324,6 +2328,9 @@ namespace DragonsAltarCombat
         // v0.25.85 Ranger vanilla bow layer: the equipped bow's own draw bool is held through the wind up / hold and
         // its own attack trigger fires at the impact (release).
         public string BowTrig, BowBool;
+        // v0.25.86 constant-speed vanilla timing (Sword Master): one steady speed per swing (hit frame on the impact),
+        // no stretched anticipation, no 6x recovery.
+        public bool ConstSpeed;
         // Same pose as another key at a new time (holds / shakes).
         public DragonClipKey Copy(float t)
         {
@@ -2331,7 +2338,7 @@ namespace DragonsAltarCombat
             for (int i = 0; i < B.Length; i++) k.B[i] = B[i];
             for (int i = 0; i < L.Length; i++) k.L[i] = L[i];
             k.R = R; k.O = O; k.Lin = Lin; k.Spin = Spin;
-            k.WD = WD; k.WW = WW; k.SD = SD; k.SW = SW; k.TW = TW; k.TG = TG; k.HD = HD; k.HR = HR; k.HW = HW; k.LD = LD; k.LR = LR; k.LW = LW; k.FLh = FLh; k.FRh = FRh; k.EP = EP; k.EW = EW;
+            k.WD = WD; k.WW = WW; k.SD = SD; k.SW = SW; k.TW = TW; k.TG = TG; k.HD = HD; k.HR = HR; k.HW = HW; k.LD = LD; k.LR = LR; k.LW = LW; k.FLh = FLh; k.FRh = FRh; k.EP = EP; k.EW = EW; k.EM = EM;
             return k;
         }
     }
@@ -2374,6 +2381,7 @@ namespace DragonsAltarCombat
         private float _ww, _sw, _tw, _tg, _env, _hr, _hw, _lr, _lw, _flh, _frh;
         private Vector3 _hd, _ld, _ep;
         private float _ew;
+        private bool _em;
         // v0.25.15 legs: Unity humanoid muscles (HumanPoseHandler), applied on the animator's real pose.
         private static readonly HumanBodyBones[] LegBones =
         {
@@ -2410,6 +2418,8 @@ namespace DragonsAltarCombat
 
         private string _bowTrig, _bowBool;
         private bool _bowFired;
+        private bool _constSpeed;
+        private float _constK;
 
         private void ReleaseBow(bool fire)
         {
@@ -2437,6 +2447,8 @@ namespace DragonsAltarCombat
             _noAim = keys[0].NoAim;
             _noPlant = keys[0].NoPlant;
             _noTrack = keys[0].NoTrack;
+            _constSpeed = keys[0].ConstSpeed;
+            _constK = 0f;
             _quietLeft = keys[0].QL;
             _qlCaptured = false;
             _vaLead = Mathf.Max(0.05f, keys[0].VL);
@@ -2567,6 +2579,7 @@ namespace DragonsAltarCombat
             _lw = Mathf.Lerp(a.LW, b.LW, w);
             _ew = Mathf.Lerp(a.EW, b.EW, w);
             _ep = a.EW > 0f ? a.EP : b.EP;
+            _em = a.EW > 0f ? a.EM : b.EM;
             _flh = Mathf.Lerp(a.FLh, b.FLh, w);
             _frh = Mathf.Lerp(a.FRh, b.FRh, w);
             Vector3 la = a.LW > 0f ? a.LD : b.LD, lb = b.LW > 0f ? b.LD : a.LD;
@@ -2627,7 +2640,7 @@ namespace DragonsAltarCombat
             {
                 if (lv[0] >= _animator.layerCount) return false;
                 AnimatorStateInfo cs = _animator.GetCurrentAnimatorStateInfo(lv[0]);
-                bool inIt = (cs.fullPathHash == lv[1] && !cs.loop && cs.normalizedTime < 0.97f)
+                bool inIt = (cs.fullPathHash == lv[1] && !cs.loop)   // v0.25.86: also when finishing (Ascended Greatblade 2nd slam)
                     || (_animator.IsInTransition(lv[0]) && _animator.GetNextAnimatorStateInfo(lv[0]).fullPathHash == lv[1] && !_animator.GetNextAnimatorStateInfo(lv[0]).loop);
                 // v0.25.85 ROOT CAUSE of lost skill swings: a looping state (run / idle) learned while moving made every
                 // later cast cross-fade into run/idle instead of firing the swing. Only a non-looping swing restarts.
@@ -2636,7 +2649,7 @@ namespace DragonsAltarCombat
                 if (p != null) DragonCombat.BlockSkillAnimAttack(p, 2.5f);
                 _animator.ResetTrigger(trigger);
                 _animator.CrossFadeInFixedTime(lv[1], 0.08f, lv[0], 0f);
-                if (_vaTrack) { _vaLayer = lv[0]; _vaHash = lv[1]; _vaFiredAt = Time.time; }
+                if (_vaTrack) { _vaLayer = lv[0]; _vaHash = lv[1]; _vaFiredAt = Time.time; _constK = 0f; }
                 return true;
             }
             catch (Exception) { return false; }
@@ -2646,6 +2659,8 @@ namespace DragonsAltarCombat
         {
             Player p = _owner as Player;
             if (p == null || _animator == null || _vaPre == null) { _vaTrack = false; return; }
+            // v0.25.86: a skill can hold the vanilla swing (jump slams falling further than planned)
+            if (Time.time < DragonCombat.VanillaPauseUntil) { DragonCombat.SetSkillAnimSpeed(p, 0.02f, 0.12f); return; }
             try
             {
                 float end = _impactAt >= 0f ? _impactAt : _start + _windup;
@@ -2673,6 +2688,12 @@ namespace DragonsAltarCombat
                 else { _vaTrack = false; DragonCombat.SetSkillAnimSpeed(p, 1f, 0f); return; }
                 float norm = info.normalizedTime;
                 if (norm >= 1f) { _vaTrack = false; DragonCombat.SetSkillAnimSpeed(p, 1f, 0f); return; }
+                if (_constSpeed)
+                {
+                    if (_constK <= 0f) _constK = Mathf.Clamp(_vaLead / Mathf.Max(0.05f, end - _vaFiredAt), 0.6f, 2.2f);
+                    DragonCombat.SetSkillAnimSpeed(p, _constK, 0.15f);
+                    return;
+                }
                 // v0.25.35 two phases (user: slow wind up, then a fast swing timed to the skill): the vanilla
                 // anticipation (everything up to ~0.22 s before its hit frame) is stretched over the wind up, the
                 // swing itself plays fast in the last ~0.25 s so its hit frame lands exactly on the impact;
@@ -2857,7 +2878,7 @@ namespace DragonsAltarCombat
         private Vector3 PoleFor(Vector3 d, bool right)
         {
             Vector3 p = ElbowPole(d, right);
-            if (_ew <= 0.01f) return p;
+            if (_ew <= 0.01f || (!right && _em)) return p;
             Vector3 e = _ep; if (!right) e.x = -e.x;
             return Vector3.Slerp(p.normalized, e.normalized, Mathf.Clamp01(_ew));
         }
@@ -3349,7 +3370,7 @@ namespace DragonsAltarCombat
         {
             if (player == null || player != Player.m_localPlayer || string.IsNullOrEmpty(clip)) return;
             if (DragonCombatPlugin.Instance != null && !DragonCombatPlugin.Instance.EnableSkillAnimations.Value) return;
-            DragonClipKey[] keys = BowClip(player, clip);   // v0.25.85 (user): Ranger shots = Valheim's own bow animation
+            DragonClipKey[] keys = HorizonWalkerMoving(player) ? MovingCastClip() : BowClip(player, clip);   // v0.25.85 Ranger bow layer, v0.25.86 HW moving casts
             if (keys == null && !hold) keys = VanillaClip(player, clip, 0f);
             if (keys == null) keys = SkillClip(clip);
             if (keys == null) return;
@@ -3359,6 +3380,9 @@ namespace DragonsAltarCombat
             // v0.25.40 (user): buff raises stand still until the wind up is over (no gliding).
             bool standEmote = keys[0].VA != null && keys[0].VA.StartsWith("emote", StringComparison.Ordinal) &&
                               !clip.StartsWith("hw_", StringComparison.Ordinal) && clip != "merc_fury_accent";
+            // v0.25.86 (user: Heaven's Crucible lost its animation): long wind-up raises start late enough that the raise
+            // is still up when the skill lands (it used to finish ~1s before the Barrier appeared).
+            if (keys[0].QL && windup > 0.8f) keys[0].VF = Mathf.Clamp01(1f - 0.75f / windup);
             if (keys[0].VA != null && (keys[0].QL || standEmote))
             {
                 LockSkill(player, Mathf.Max(0.5f, windup) + 0.05f);
@@ -3419,6 +3443,12 @@ namespace DragonsAltarCombat
 
         // v0.25.15: automatic procs (Fury, Overcharge, death-save, parry burst) are low-priority accents:
         // they never replace a skill clip that is playing.
+        // v0.25.86 (user: "Charge = Hold"): while a charged bow skill charges, the Ranger controls hold the bow's REAL
+        // vanilla draw (attackHold); the skill cancels the vanilla shot before it fires its own.
+        public static float SkillBowHoldUntil;
+        public static float VanillaPauseUntil;   // v0.25.86 freezes the playing vanilla skill swing (refresh every frame)
+        public static bool SkillBowHoldActive { get { return Time.time < SkillBowHoldUntil; } }
+
         public static bool ClipBusy(Player player)
         {
             if (player == null) return false;
@@ -3590,7 +3620,8 @@ namespace DragonsAltarCombat
             {
                 case "rg_sky": case "rg_starfall": return 1;
                 case "rg_hover": return -1;
-                case "rg_shot": case "rg_power": case "rg_heavy": case "rg_ballista": case "rg_kneel": return 0;
+                case "rg_shot": case "rg_power": case "rg_heavy": case "rg_ballista": case "rg_kneel":
+                case "rg_split_a": case "rg_split_b": return 0;   // v0.25.86 Splitting volleys: vanilla bow, no custom sweep (arm clipped)
             }
             isShot = false;
             return 0;
@@ -3603,8 +3634,9 @@ namespace DragonsAltarCombat
             if (!isShot) return null;
             string trig, draw;
             if (!BowAnims(player, out trig, out draw)) return null;
+            if (clip == "rg_ballista") draw = null;   // v0.25.86 charged shots use the real vanilla draw hold (SkillBowHold)
             DragonClipKey pose = K(0f);
-            if (pitch > 0) pose.Sp(-10f, 0f, 0f).Ch(-28f, 0f, 0f).Hd(-18f, 0f, 0f);       // bow raised at the sky
+            if (pitch > 0) pose.Hd(-32f, 0f, 0f);       // v0.25.86 (user): Sky shots = the vanilla bow action, only the head looks up (no back bend)
             else if (pitch < 0) pose.Sp(12f, 0f, 0f).Ch(22f, 0f, 0f).Hd(16f, 0f, 0f);     // aimed down from the air
             DragonClipKey[] k = new DragonClipKey[] { K(-1f), pose.Copy(-0.6f), pose, pose.Copy(0.3f), K(0.6f) };
             k[0].NoAim = true; k[0].NoTrack = true;
@@ -3798,6 +3830,19 @@ namespace DragonsAltarCombat
 
         // Overlay for a vanilla-animated skill: the vanilla attack does the arms / weapon; we only add a planted
         // stance and a slight lean. length > 0 = sustained (repeat the animation every second).
+        // v0.25.86 (user: the Sword Master animations were broken / super sped up): calm constant-speed swings.
+        public static bool IsConstSpeedClip(string clip)
+        {
+            switch (clip)
+            {
+                case "sm_slash_a": case "sm_slash_b": case "sm_moon_finisher":
+                case "sm_crescent": case "sm_crescent_asc": case "sm_crescent_asc2":
+                case "sm_halfmoon": case "sm_halfmoon_2":
+                    return true;
+            }
+            return false;
+        }
+
         public static bool IsRaiseBuffClip(string clip)
         {
             switch (clip)
@@ -3845,11 +3890,11 @@ namespace DragonsAltarCombat
                 // knee up and the right arm cocked back, stride the left foot forward and plant, then uncoil into the vanilla spin.
                 k = new DragonClipKey[] {
                     K(-1f),
-                    Ft(K(-0.86f).Rot(0f, 30f, 0f).Sp(3f, 0f, 0f).Off(0f, -0.06f, 0f), 0.1f, 0.1f).Hand(0.55f, 0.1f, -0.45f, 0.8f),
-                    K(-0.72f).Rot(0f, 65f, 0f).Sp(-5f, 0f, 0f).LL(0.35f, 0.05f, 0f, 0f).Lift(0.32f, 0.1f).Off(0f, 0.12f, 0.08f).Hand(0.5f, 0.45f, -0.85f, 0.95f),
-                    K(-0.56f).Rot(0f, 65f, 0f).Sp(-4f, 0f, 0f).LL(0.45f, 0.05f, 0f, 0f).Lift(0.26f, 0f).Off(0f, 0.01f, 0.14f).Hand(0.5f, 0.5f, -0.9f, 0.95f),
-                    K(-0.42f).Rot(0f, 55f, 0f).Sp(4f, 0f, 0f).LL(0.7f, 0.15f, 0f, 0f).RL(-0.3f, 0.12f, 0f, 0f).Lift(0f, 0f).Off(0f, -0.07f, 0.2f).Hand(0.5f, 0.45f, -0.85f, 0.95f),
-                    Ft(K(-0.25f).Rot(0f, 20f, 0f).Sp(6f, 0f, 0f).Off(0f, -0.05f, 0.2f), 0.6f, 0.25f),
+                    Ft(K(-0.93f).Rot(0f, 30f, 0f).Sp(3f, 0f, 0f).Off(0f, -0.06f, 0f), 0.1f, 0.1f).Hand(0.55f, 0.1f, -0.45f, 0.8f),
+                    K(-0.85f).Rot(0f, 65f, 0f).Sp(-5f, 0f, 0f).LL(0.35f, 0.05f, 0f, 0f).Lift(0.32f, 0.1f).Off(0f, 0.12f, 0.08f).Hand(0.5f, 0.45f, -0.85f, 0.95f),
+                    K(-0.76f).Rot(0f, 65f, 0f).Sp(-4f, 0f, 0f).LL(0.45f, 0.05f, 0f, 0f).Lift(0.26f, 0f).Off(0f, 0.01f, 0.14f).Hand(0.5f, 0.5f, -0.9f, 0.95f),
+                    K(-0.66f).Rot(0f, 55f, 0f).Sp(4f, 0f, 0f).LL(0.7f, 0.15f, 0f, 0f).RL(-0.3f, 0.12f, 0f, 0f).Lift(0f, 0f).Off(0f, -0.07f, 0.2f).Hand(0.5f, 0.45f, -0.85f, 0.95f),
+                    Ft(K(-0.52f).Rot(0f, 20f, 0f).Sp(6f, 0f, 0f).Off(0f, -0.05f, 0.2f), 0.6f, 0.25f),
                     Ft(K(0f).Sp(6f, 0f, 0f).Off(0f, -0.03f, 0.18f), 0.4f, 0.15f),
                     Ft(K(0.35f).Sp(4f, 0f, 0f).Off(0f, -0.02f, 0.1f), 0.25f, 0.1f),
                     K(0.75f) };
@@ -3857,8 +3902,9 @@ namespace DragonsAltarCombat
             k[0].VA = trig;
             k[0].VL = m.Value;
             if (trig.StartsWith("emote", StringComparison.Ordinal)) { k[0].NoTrack = true; k[0].NoPlant = true; }   // v0.25.41 emotes: natural speed, their own legs
-            if (clip == "merc_circle" && length <= 0f) k[0].VF = 0.62f;   // after the crow hop
-            if (clip == "wiz_nova") k[0].NoTrack = true;   // v0.25.85 (user): Frost Nova's staff raise at natural speed, never fast-forwarded
+            if (clip == "merc_circle" && length <= 0f) k[0].VF = 0.4f;   // after the crow hop (v0.25.86: quicker hop, slower spin)
+            if (clip == "wiz_nova") k[0].NoTrack = true;
+            if (IsConstSpeedClip(clip)) k[0].ConstSpeed = true;   // v0.25.85 (user): Frost Nova's staff raise at natural speed, never fast-forwarded
             k[0].VR = length > 0f ? 1f : 0f;
             k[0].NoAim = true;
             return k;
@@ -4215,11 +4261,13 @@ namespace DragonsAltarCombat
             // v0.25.75 (user): no barrel roll. Like the Wave emote's raise, the main arm goes straight up over the
             // head with the weapon pointing at the sky and STAYS there (no waving) for the whole flight; the slam
             // to the ground only happens on the real landing (the clip holds at T=0 until ClipImpact).
-            DragonClipKey launch = K(-0.72f).Sp(-4f, 0f, 0f).Ch(-4f, 0f, 0f).Hd(-14f, 0f, 0f).Hand(0.22f, 1f, 0.05f, 1f).Wp(0.05f, 1f, -0.15f).Rot(45f, 0f, 0f).Off(0f, 0.06f, 0f);   // v0.25.77 diagonal torso in the air, v0.25.85 (user) tilted closer to lying
+            // v0.25.86 (user): main hand = the Stomp chicken wing in the air (upper arm raised out, forearm forward);
+            // the off hand is left as it is.
+            DragonClipKey launch = K(-0.72f).Sp(-4f, 0f, 0f).Ch(-4f, 0f, 0f).Hd(-14f, 0f, 0f).Hand(0.65f, -0.3f, 0.68f, 0.66f).WingMain().Rot(45f, 0f, 0f).Off(0f, 0.06f, 0f);   // v0.25.77 diagonal torso in the air, v0.25.85 (user) tilted closer to lying
             // v0.25.76 (user): the barrel roll stays - the body rolls once while the arm stays raised overhead.
-            DragonClipKey raise0 = launch.Copy(-0.6f).Rot(62f, 0f, 0f).Sn(30f).Hand(0.2f, 1f, 0.08f, 1f);
-            DragonClipKey raise1 = launch.Copy(-0.32f).Rot(62f, 0f, 0f).Sn(360f).Hand(0.2f, 1f, 0.08f, 1f);
-            DragonClipKey poised = K(0f).Sp(4f, 0f, 0f).Ch(-2f, 0f, 0f).Hd(-12f, 0f, 0f).Hand(0.2f, 1f, 0.1f, 1f).Wp(0.05f, 1f, -0.1f).Rot(55f, 0f, 0f).Sn(360f);
+            DragonClipKey raise0 = launch.Copy(-0.6f).Rot(62f, 0f, 0f).Sn(30f);
+            DragonClipKey raise1 = launch.Copy(-0.32f).Rot(62f, 0f, 0f).Sn(360f);
+            DragonClipKey poised = K(0f).Sp(4f, 0f, 0f).Ch(-2f, 0f, 0f).Hd(-12f, 0f, 0f).Hand(0.65f, -0.3f, 0.68f, 0.66f).WingMain().Rot(55f, 0f, 0f).Sn(360f);
             DragonClipKey impact = Ft(K(0.1f).Sp(30f, 0f, 0f).Ch(14f, 0f, 0f).Hd(-28f, 0f, 0f).Hand(0.05f, -1f, 0.35f, 0.97f).Wp(0f, -0.8f, 0.6f).Rot(6f, 0f, 0f).Off(0f, -0.38f * d, 0.05f).Sn(360f), 0.75f, 0.8f).Linear();
             DragonClipKey settle = impact.Copy(brutal ? 0.3f : 0.22f).Off(0f, -0.4f * d, 0.05f); settle.Lin = false;
             DragonClipKey rec = Ft(K(brutal ? 0.58f : 0.45f).Sp(8f, 0f, 0f).Hd(-6f, 0f, 0f).Hand(0.35f, -0.45f, 0.35f, 0.6f).Off(0f, -0.06f, 0f).Sn(360f), 0.3f, 0.2f);
@@ -4244,8 +4292,10 @@ namespace DragonsAltarCombat
             c["sm_blade_storm"] = SbSlash(0f, 0.1f, false, false);
             c["sm_halfmoon"] = SbSlash(0.6f, 0.1f, false, true);
             c["sm_halfmoon_2"] = SbSlash(0.6f, 0.1f, false, false);
-            DragonClipKey[] pullHold = SbSlash(0.6f, 0.1f, false, true);
-            c["sm_halfmoon_stance"] = new DragonClipKey[] { K(-1f), pullHold[1].Copy(0f), K(0.15f) };
+            // v0.25.86 (user: arm clipping into the body in the last stance): no two-handed grip behind the hip - the sword is
+            // held low and forward on the right, one-handed, the off hand braced in front of the chest.
+            DragonClipKey hmStance = Ft(K(0f).Sp(8f, -18f, 0f).Ch(4f, -10f, 0f).Hd(0f, 12f, 0f).Hand(0.6f, -0.45f, 0.4f, 0.78f).Wp(0.35f, -0.3f, 0.9f).LHand(0.4f, -0.2f, 0.9f, 0.5f).Off(0f, -0.06f, 0f), 0.3f, 0.2f);
+            c["sm_halfmoon_stance"] = new DragonClipKey[] { K(-1f), hmStance, K(0.15f) };
             c["sm_halfmoon_finisher"] = SbSlash(1.2f, 0.15f, true, true);
             c["warrior_impact_wave"] = SbGolf(0.25f);
             c["merc_seismic"] = SbGolf(0.25f);
@@ -6833,7 +6883,32 @@ namespace DragonsAltarCombat
         {
             if (player == null)
                 return;
+            // v0.25.86 (user): a Horizon Walker casts EVERY skill on the move and never stops (momentum, sprint kept).
+            if (duration > 0f && GetAdvancementName(player) == "Spellcaster")
+            {
+                BeginMobileCast(player, duration, true);
+                return;
+            }
             SkillLockUntil[player.GetInstanceID()] = Time.time + Mathf.Max(0f, duration);
+        }
+
+        // v0.25.86 Horizon Walker casting while moving: the casting hand rises forward (staff up), upper body only,
+        // legs keep running.
+        private static bool HorizonWalkerMoving(Player player)
+        {
+            if (player == null || GetAdvancementName(player) != "Spellcaster") return false;
+            Rigidbody rb = player.GetComponent<Rigidbody>();
+            if (rb == null) return false;
+            Vector3 v = rb.velocity; v.y = 0f;
+            return v.magnitude > 1.2f;
+        }
+
+        private static DragonClipKey[] MovingCastClip()
+        {
+            DragonClipKey up = K(0f).Hand(0.3f, 0.75f, 0.6f, 0.95f).Hd(-6f, 0f, 0f);
+            DragonClipKey[] k = new DragonClipKey[] { K(-1f), up.Copy(-0.45f), up, up.Copy(0.22f), K(0.55f) };
+            k[0].NoPlant = true;
+            return k;
         }
 
         public static bool IsSkillLocked(Player player)

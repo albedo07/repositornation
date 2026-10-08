@@ -1,0 +1,56 @@
+Immortal Heroes v0.25.86 - Class by Class (your full QA list)
+
+ANCHORS
+- Acrobat (v0.25.85) is locked as the anchor: nothing Acrobat changed in this build.
+
+BOWMASTER
+- Ballista Shot (and Explosive Arrow's charge): Charge = Hold. While charging you hold the bow's REAL vanilla draw;
+  on release the vanilla shot is cancelled and the skill fires.
+- Splitting Arrow: vanilla bow actions (the custom sweep pose that clipped the arm into the body is gone).
+- Sky shots: the plain vanilla bow action, only the head looks up (no backward bend).
+
+ARCHMAGE
+- Ascended Astral Greatblade: the 2nd (and 3rd) slam animation plays again (a v0.25.85 safety check refused to
+  restart a swing that was finishing).
+- Frost Nova Ascended rework: the initial blast, then the frost stays ON THE GROUND for 6s where you cast it;
+  everyone standing on it is Frosted and takes the tick damage. No aura following you.
+- Gravity Dominion Ascended: drags EVERY Big enemy (wording fixed; it already worked on all Big enemies).
+
+HORIZON WALKER
+- Afterimage Arsenal is now called ARCANE PHANTOM (skill, messages, Altar, F8).
+- Arcane Phantom: phantoms rebuild with your new gear when you swap weapons and keep moving with you.
+- Rift Echo: you glow a soft purple while it is active.
+- Arcane Phalanx Ascended: the Astral Spears burst out of the terrain / structure under the impact, never in the air.
+- Every Horizon Walker skill is cast on the move: you never stop, sprint and momentum are kept; while moving the
+  cast is a raised hand (upper body only).
+- Dual Gun Staves: fire twice as fast as one (each shot costs its Eitr, so Eitr drains faster).
+- Dual Gun Staves holstered: both staves show on your back (crossed).
+
+PALADIN
+- Hammer Slam (after Shield Charge): instant.
+- Ascended: a JUMPING Hammer Slam (same animation) with a Lightning Strike (Lightning damage, same radius). 0.5s from
+  jump to slam; if you are still falling, the slam is held until you touch terrain or a structure.
+
+PRIEST
+- Holy / Lightning Relic: back to the plain sculpted cross (no ring / circle), standing upright when planted.
+- Grand Cross: two sharp Getsuga magic slashes crossed into an X, cutting edges leading.
+- Heaven's Judgement: bigger beams coming down from high in the sky; Ascended's last big beam explodes (visual only).
+- Heaven's Crucible: the raise is timed with the Barrier again (it used to finish ~1s before the Barrier appeared).
+- Lightning Tempest Ascended: meteors fall into the storm too - Blunt + Fire Burn 3s (refreshed per hit).
+
+SWORD MASTER
+- Moonlight Splitter (+Ascended), Crescent Cleave (+Ascended), Halfmoon: the vanilla swings now play at ONE calm
+  speed timed to the skill (no stretched wind up, no 6x fast-forward afterwards). Moonlight keeps the NACC 1-2-1-2 swings.
+- Halfmoon Ascended: the last stance no longer clips the arm into the body (sword low and forward, off hand braced).
+- Frenzied Charge Ascended: a wave of small explosions (2m, every 2m) races along the dash, faster than the slashes.
+- Eclipse Ascended: everyone (Small, Big, Bosses) is sucked into the middle almost at once; 0.5s after the swing you
+  spiral up with Small and Big enemies (Bosses stay down).
+
+MERCENARY
+- Warfreak (Mastery): while doing a skill you take 25% less damage (35% during the Ultimate), on top of Hyper Armor.
+- Circle Swing: quicker crow hop, slower spin.
+- Bonecrusher + Electric Smite: main-hand chicken wing in the air (off hand unchanged); Electric Smite now uses
+  Bonecrusher's jump + slam, so both are identical.
+- Seismic Guillotine Ascended: all 3 fissures end in an explosion; the falling guillotine is gone.
+- Punishing Bomb Ascended: a cluster of small explosions goes off in the radius right after the blast.
+- Whirlwind Ascended: a big tornado (like Cyclone Arrow's, larger) spins around you.

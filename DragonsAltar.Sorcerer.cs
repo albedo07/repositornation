@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Dragon's Altar - Sorcerer Advancements";
-        public const string ModVersion = "0.25.85";
+        public const string ModVersion = "0.25.86";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -638,6 +638,144 @@ namespace DragonsAltarSorcerer
             RestoreGunStaffTimings();
         }
 
+        // v0.25.86 (user): Rift Echo indicator - you glow a soft purple while it is active (a live translucent shell of
+        // your own body, 2% larger, synced after the animator every frame).
+        private GameObject _reGlow;
+        private Transform[] _reGlowBones, _reGlowSrc;
+        private Transform _reGlowRoot;
+        private Material _reGlowMat;
+
+        // v0.25.86 (user): holstered dual Gun Staves show BOTH staves on your back (crossed), like Smoothbrain's DualWield.
+        private GameObject _backStaff2;
+        private object _backStaff2Item;
+        private static FieldInfo _veRightBack, _veLeftBack, _hHiddenLeft, _hHiddenRight, _idDrop;
+
+        private void UpdateDualStaffHolster(Player player)
+        {
+            bool want = false;
+            try
+            {
+                if (player != null && !player.IsDead() && GetAdvancement(player) == "Spellcaster")
+                {
+                    if (_hHiddenLeft == null) { _hHiddenLeft = typeof(Humanoid).GetField("m_hiddenLeftItem", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic); _hHiddenRight = typeof(Humanoid).GetField("m_hiddenRightItem", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic); }
+                    ItemDrop.ItemData hl = _hHiddenLeft == null ? null : _hHiddenLeft.GetValue(player) as ItemDrop.ItemData;
+                    ItemDrop.ItemData hr = _hHiddenRight == null ? null : _hHiddenRight.GetValue(player) as ItemDrop.ItemData;
+                    if (hl != null && hr != null && hl != hr && DragonCombat.IsGunStaff(hl) && DragonCombat.IsGunStaff(hr))
+                    {
+                        Component ve = null;
+                        Component[] cs = player.GetComponents<Component>();
+                        for (int i = 0; i < cs.Length; i++) if (cs[i] != null && cs[i].GetType().Name == "VisEquipment") { ve = cs[i]; break; }
+                        if (ve != null)
+                        {
+                            if (_veRightBack == null) { _veRightBack = ve.GetType().GetField("m_rightBackItemInstance", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic); _veLeftBack = ve.GetType().GetField("m_leftBackItemInstance", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic); }
+                            GameObject rb = _veRightBack == null ? null : _veRightBack.GetValue(ve) as GameObject;
+                            GameObject lb = _veLeftBack == null ? null : _veLeftBack.GetValue(ve) as GameObject;
+                            if (rb != null)
+                            {
+                                want = true;
+                                Quaternion cross = Quaternion.AngleAxis(-38f, player.transform.forward);
+                                if (lb != null && Vector3.Distance(lb.transform.position, rb.transform.position) < 0.35f)
+                                {
+                                    // Valheim attached the second staff on the same spot: turn it into an X.
+                                    lb.transform.rotation = cross * rb.transform.rotation;
+                                    lb.transform.position = rb.transform.position + player.transform.forward * -0.03f;
+                                    if (_backStaff2 != null) { Destroy(_backStaff2); _backStaff2 = null; }
+                                }
+                                else if (lb == null)
+                                {
+                                    // No back slot for the second staff: show its own model crossed over the first.
+                                    if (_backStaff2 == null || _backStaff2Item != (object)hl)
+                                    {
+                                        if (_backStaff2 != null) Destroy(_backStaff2);
+                                        _backStaff2 = null;
+                                        if (_idDrop == null) _idDrop = typeof(ItemDrop.ItemData).GetField("m_dropPrefab", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                                        GameObject drop = _idDrop == null ? null : _idDrop.GetValue(hl) as GameObject;
+                                        Transform att = drop == null ? null : drop.transform.Find("attach");
+                                        if (att != null)
+                                        {
+                                            _backStaff2 = (GameObject)Instantiate(att.gameObject, rb.transform.parent);
+                                            _backStaff2.name = "IH_BackStaff2";
+                                            foreach (Collider c in _backStaff2.GetComponentsInChildren<Collider>(true)) Destroy(c);
+                                            _backStaff2Item = hl;
+                                        }
+                                    }
+                                    if (_backStaff2 != null)
+                                    {
+                                        _backStaff2.transform.localScale = rb.transform.localScale;
+                                        _backStaff2.transform.rotation = cross * rb.transform.rotation;
+                                        _backStaff2.transform.position = rb.transform.position + player.transform.forward * -0.03f;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception) { want = false; }
+            if (!want && _backStaff2 != null) { Destroy(_backStaff2); _backStaff2 = null; _backStaff2Item = null; }
+        }
+
+        private void LateUpdate()
+        {
+            UpdateDualStaffHolster(Player.m_localPlayer);
+            Player player = Player.m_localPlayer;
+            bool on = player != null && !player.IsDead() && Time.time < _riftEchoUntil && _enableVfx.Value;
+            if (!on) { if (_reGlow != null) { Destroy(_reGlow); _reGlow = null; } return; }
+            try
+            {
+                Transform src = FindPlayerVisual(player);
+                if (src == null) return;
+                if (_reGlow == null || _reGlowRoot != src || _reGlowSrc == null || _reGlowBones == null)
+                {
+                    BuildRiftGlow(src);
+                    if (_reGlow == null) return;
+                }
+                if (_reGlowSrc.Length != _reGlowBones.Length || Time.frameCount % 30 == 0 && src.GetComponentsInChildren<Transform>(true).Length != _reGlowSrc.Length)
+                {
+                    BuildRiftGlow(src);
+                    if (_reGlow == null) return;
+                }
+                _reGlow.transform.position = src.position;
+                _reGlow.transform.rotation = src.rotation;
+                _reGlow.transform.localScale = src.lossyScale * 1.02f;
+                for (int k = 1; k < _reGlowSrc.Length; k++)
+                {
+                    if (_reGlowSrc[k] == null || _reGlowBones[k] == null) continue;
+                    _reGlowBones[k].localPosition = _reGlowSrc[k].localPosition;
+                    _reGlowBones[k].localRotation = _reGlowSrc[k].localRotation;
+                }
+                if (_reGlowMat != null)
+                {
+                    float pulse = 0.16f + 0.05f * Mathf.Sin(Time.time * 3f);
+                    _reGlowMat.color = new Color(0.62f, 0.28f, 1f, pulse);
+                }
+            }
+            catch (Exception) { }
+        }
+
+        private void BuildRiftGlow(Transform src)
+        {
+            if (_reGlow != null) Destroy(_reGlow);
+            _reGlow = null;
+            if (_reGlowMat == null) { Shader sh = Shader.Find("Sprites/Default"); if (sh != null) _reGlowMat = new Material(sh); }
+            GameObject copy = MakeGhostCopy(src);
+            if (copy == null) return;
+            copy.name = "HorizonWalkerRiftEchoGlow";
+            Renderer[] rs = copy.GetComponentsInChildren<Renderer>(true);
+            for (int i = 0; i < rs.Length; i++)
+            {
+                if (rs[i] == null || _reGlowMat == null) continue;
+                Material[] mats = new Material[Mathf.Max(1, rs[i].sharedMaterials.Length)];
+                for (int m = 0; m < mats.Length; m++) mats[m] = _reGlowMat;
+                rs[i].sharedMaterials = mats;
+            }
+            copy.SetActive(true);
+            _reGlow = copy;
+            _reGlowRoot = src;
+            _reGlowSrc = src.GetComponentsInChildren<Transform>(true);
+            _reGlowBones = copy.GetComponentsInChildren<Transform>(true);
+        }
+
         private void Update()
         {
             UpdateRuptureCharges();
@@ -696,6 +834,9 @@ namespace DragonsAltarSorcerer
 
                 if (Time.time < _phaseFlowUntil)
                     speed *= 1.133333f;
+                // v0.25.86 (user: two staves fired no faster than one): dual Gun Staves fire faster by the dual multiplier
+                // (the rapid-fire cadence follows the attack speed, not m_attackCooldown); every shot still costs its Eitr.
+                if (dualGunStaff) speed *= Mathf.Max(1f, _dualGunStaffAttackSpeedMultiplier.Value);
 
                 if (IsHoldingMagicWeapon(player))
                     DragonCombat.SetAttackSpeedSource(player, speed, 0.30f);
@@ -1013,7 +1154,7 @@ namespace DragonsAltarSorcerer
             _gvAscDuration = Config.Bind(gva, "Duration", 7f, "Seconds.");
             _gvAscBig = Config.Bind(gva, "BigPullPercent", 40f, "Pull strength on Big enemies.");
             _gvAscBoss = Config.Bind(gva, "BossPullPercent", 20f, "Legacy.");
-            _gvAscBigSpeed = Config.Bind(gva, "BigPullSpeed_v02585", 5f, "Ascended: Big enemies (Trolls, Bjorn...) are dragged in at this speed (m/s).");
+            _gvAscBigSpeed = Config.Bind(gva, "BigPullSpeed_v02585", 5f, "Ascended: EVERY Big enemy (Trolls, Bjorn, Abominations...) is dragged in at this speed (m/s).");
             _gvAscBossSpeed = Config.Bind(gva, "BossPullSpeed_v02585", 1.2f, "Ascended: Bosses are dragged in at this speed (m/s) (universal rule: 20% of the Small pull).");
             _gvAscBlast = Config.Bind(gva, "EndBlastPercent", 25f, "End explosion: % of the normal skill's full damage.");
             _gvAscStun = Config.Bind(gva, "BigStunSeconds", 1.5f, "End explosion Stuns Big (Small are launched).");
@@ -1027,8 +1168,8 @@ namespace DragonsAltarSorcerer
             _gbAscGap = Config.Bind(ba, "SlamInterval", 1f, "Seconds between the three slams.");
             _gbAscPercent = Config.Bind(ba, "SlamPercent", 70f, "Each slam: % of the uncharged slam (re-aimed at the crosshair).");
             const string na = "Wizard Frost Nova Ascended";
-            _fnAscDuration = Config.Bind(na, "AuraDuration", 6f, "Frost Aura on the Wizard (12 ticks).");
-            _fnAscTickPercent = Config.Bind(na, "TickPercent", 8f, "Each aura tick: % of the normal Nova.");
+            _fnAscDuration = Config.Bind(na, "AuraDuration", 6f, "v0.25.86: seconds the frost stays on the ground after the blast (12 ticks).");
+            _fnAscTickPercent = Config.Bind(na, "TickPercent", 8f, "Each frozen-ground tick: % of the normal Nova (+ Frost) to everyone standing on it.");
             _fnAscBlast = Config.Bind(na, "ExplosionPercent", 44f, "Final explosion: % of the normal Nova.");
             _fnAscFreeze = Config.Bind(na, "FreezeDuration", 2f, "Explosion Freezes Small and Big.");
             _fnAscBossSlow = Config.Bind(na, "BossSlowPercent", 15f, "Bosses are slowed instead of Frozen.");
@@ -1259,43 +1400,39 @@ namespace DragonsAltarSorcerer
             }
         }
 
-        // Ascended: a 10m Frost Aura on the Wizard (12 ticks), then an explosion that Freezes.
+        // v0.25.86 (user) Ascended: the initial blast (the normal Frost Nova), then the frost stays ON THE GROUND where you
+        // cast it for AuraDuration (6s): everyone standing on it takes the tick damage and is Frosted. No aura on you.
         private IEnumerator FrostAuraRoutine(Player player, float windup)
         {
-            ShowMessage("Frost Nova - Frost Aura");
-            if (windup > 0f) yield return new WaitForSeconds(windup);
+            ShowMessage("Frost Nova - Frozen Ground");
+            yield return StartCoroutine(FrostNovaRoutine(player, windup));
+            if (player == null || player.IsDead()) yield break;
             float radius = DragonCombat.M(_novaRadius.Value);
+            Vector3 center = player.transform.position;
+            float duration = Mathf.Max(0.5f, _fnAscDuration.Value);
             int ticks = 12;
-            float gap = Mathf.Max(0.1f, _fnAscDuration.Value / ticks);
+            float gap = duration / ticks;
+            if (_enableVfx.Value)
+            {
+                Vector3 gc = center; float gr = radius, gd = duration;
+                DragonCombat.RunVfx(delegate { DragonVfx.AreaRing(gc, new Color(0.70f, 0.95f, 1f, 0.9f), gr, gd); DragonVfx.SpikeRing(gc, DragonVfx.Ice, gr * 0.55f, 10, 1.1f, gd); });
+            }
             for (int t = 0; t < ticks; t++)
             {
                 if (player == null || player.IsDead()) yield break;
-                List<Character> targets = GetSphereTargets(player, player.transform.position, radius);
+                List<Character> targets = GetSphereTargets(player, center, radius);
                 for (int i = 0; i < targets.Count; i++)
                 {
+                    if (Mathf.Abs(targets[i].transform.position.y - center.y) > DragonCombat.M(2.5f)) continue;   // standing on it, not flying over
                     DealWiz(player, targets[i], _novaDmg, _fnAscTickPercent.Value / 100f, "frost_nova", 0f, false);
                     DragonCombat.ApplyFrost(targets[i], Mathf.Max(1f, gap * 2f));
                 }
                 if (_enableVfx.Value)
                 {
-                    StartCoroutine(RingVfx(player.transform.position, radius, new Color(0.55f, 0.92f, 1f, 0.55f), gap));
-                    Transform ft = player.transform; float fr = radius, fg = gap;
-                    DragonCombat.RunVfx(delegate { DragonVfx.Aura(ft, ft.position, new Color(0.75f, 0.95f, 1f, 0.9f), fr * 0.6f, fg, 50f, 0.6f); });   // v0.25.58 snow whirling in the aura
+                    Vector3 fc = center; float fr = radius;
+                    DragonCombat.RunVfx(delegate { DragonVfx.Burst(fc + Vector3.up * 0.2f, new Color(0.80f, 0.96f, 1f, 1f), 24, 2.5f, 0.25f, 0.8f, -0.1f); DragonVfx.Smoke(fc, new Color(0.85f, 0.95f, 1f, 0.5f), fr * 0.8f, 0.9f, 3); });
                 }
                 yield return new WaitForSeconds(gap);
-            }
-            if (player == null || player.IsDead()) yield break;
-            List<Character> hit = GetSphereTargets(player, player.transform.position, radius);
-            for (int i = 0; i < hit.Count; i++)
-            {
-                DealWiz(player, hit[i], _novaDmg, _fnAscBlast.Value / 100f, "frost_nova", 18f, false);
-                DragonCombat.Freeze(hit[i], _fnAscFreeze.Value, _fnAscBossSlow.Value / 100f);
-            }
-            if (_enableVfx.Value)
-            {
-                StartCoroutine(RingVfx(player.transform.position, radius, new Color(0.70f, 0.97f, 1f, 1f), 0.8f));
-                Vector3 ap = player.transform.position; float ar = radius;
-                DragonCombat.RunVfx(delegate { DragonVfx.Shockwave(ap, new Color(0.70f, 0.97f, 1f, 1f), ar, 0.55f); DragonVfx.IceBurst(ap, ar); DragonVfx.Debris(ap, new Color(0.70f, 0.92f, 1f, 1f), 16, 10f, 0.45f, 2.5f); DragonVfx.Shake(ap, 30f, 1.8f); DragonVfx.SpikeRing(ap, DragonVfx.Ice, ar * 0.9f, 18, 2.4f, 2f); });   // v0.25.58
             }
         }
 
@@ -1672,7 +1809,7 @@ namespace DragonsAltarSorcerer
             _afterimageUntil = Time.time + Mathf.Max(1f, _afterimageDuration.Value);
             SpawnAfterimage(player.transform.position, player.transform.rotation);
             DragonCombat.PlayClip(player, "hw_afterimage", 0.1f);
-            ShowMessage("Afterimage Arsenal ACTIVE");
+            ShowMessage("Arcane Phantom ACTIVE");
         }
 
         private void SpawnAfterimage(Vector3 position, Quaternion rotation)
@@ -2536,7 +2673,7 @@ namespace DragonsAltarSorcerer
             int count = Mathf.Max(1, ascended ? _paAscCount.Value : _phalanxCountV.Value);
             _phalanxSwordPercent = ascended ? _paAscPercent.Value / 100f : 1f;
             _phalanxSpearArmed = false;
-            DragonCombat.BeginMobileCast(player, 0.3f, false);
+            DragonCombat.BeginMobileCast(player, 0.3f, true);   // v0.25.86 HW keeps sprint
             for (int i = 0; i < count; i++) _phalanxSwords.Add(CreateArcaneSword(player.transform.position));
             _nextPhalanxLaunch = Time.time + 0.15f;
             _phalanxExpireAt = Time.time + Mathf.Max(1f, _phalanxLifetime.Value); // swords stay 16s
@@ -2617,12 +2754,21 @@ namespace DragonsAltarSorcerer
             for (int i = 0; i < targets.Count; i++)
                 DealWiz(player, targets[i], _phalanxDmg, swordPercent * _paAscSpearPercent.Value / 100f, "arcane_phalanx", 14f, true);
             if (!_enableVfx.Value) return;
-            StartCoroutine(RingVfx(point, radius, new Color(0.72f, 0.40f, 1f, 1f), 0.5f));
-            for (int i = 0; i < 4; i++) // four cosmetic spears
+            // v0.25.86 (user): the spears always burst out of the terrain / structure under the impact, never in mid-air.
+            float gy;
+            Vector3 ground = DragonCombat.TryGroundY(point, 3f, 40f, out gy) ? new Vector3(point.x, gy, point.z) : point;
+            StartCoroutine(RingVfx(ground, radius, new Color(0.72f, 0.40f, 1f, 1f), 0.5f));
+            for (int i = 0; i < 6; i++) // cosmetic spears from the ground
             {
-                float a = i * Mathf.PI * 0.5f + 0.4f;
-                Vector3 p = point + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * radius * 0.45f;
-                CreateBeam(p - Vector3.up * 0.5f, p + Vector3.up * 4.5f, new Color(0.80f, 0.55f, 1f, 1f), 0.35f, 0.6f);
+                float a = i * Mathf.PI / 3f + 0.4f;
+                Vector3 p = ground + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * radius * (i % 2 == 0 ? 0.35f : 0.6f);
+                float pg;
+                if (DragonCombat.TryGroundY(p, 3f, 40f, out pg)) p.y = pg;
+                Vector3 tilt = (p - ground); tilt.y = 0f;
+                Vector3 top = p + Vector3.up * 4.5f + tilt.normalized * 0.8f;
+                CreateBeam(p - Vector3.up * 0.3f, top, new Color(0.80f, 0.55f, 1f, 1f), 0.35f, 0.6f);
+                Vector3 sp = p; Vector3 away = tilt;
+                DragonCombat.RunVfx(delegate { DragonVfx.Spike(sp, DragonVfx.Arcane, 3.2f, 0.35f, 0.5f, away); });
             }
         }
 
@@ -2643,7 +2789,7 @@ namespace DragonsAltarSorcerer
             if (!BeginSkill(player, "Spellcaster.GravityBlast", _gbCooldown.Value, _gbEitr.Value)) return;
             _gbOrbActive = true;
             _gbRecasts = 0;
-            DragonCombat.BeginMobileCast(player, 0.3f, false);
+            DragonCombat.BeginMobileCast(player, 0.3f, true);   // v0.25.86 HW keeps sprint
             DragonCombat.PlayClip(player, "hw_gravity_blast", 0.12f);
             Vector3 origin = player.GetEyePoint() + player.transform.forward * 1.2f;
             Vector3 dir = AlbedoAimUtility.GetProjectileDirection(player, origin);
@@ -2803,7 +2949,7 @@ namespace DragonsAltarSorcerer
             Vector3 target;
             if (!AlbedoAimUtility.TryGetPhysicalTarget(player, DragonCombat.M(_saAscRange.Value), out target)) { ShowMessage("Aim at a physical target"); return; }
             if (!BeginSkill(player, "Sorcerer.StonefangEruption", _saAscCooldown.Value, _saAscEitr.Value)) return;
-            DragonCombat.BeginMobileCast(player, 0.3f, false); // Spellcaster: no wind up
+            DragonCombat.BeginMobileCast(player, 0.3f, true);   // v0.25.86 HW keeps sprint // Spellcaster: no wind up
             DragonCombat.PlayClip(player, "sorc_stonefang_asc", 0.12f);
             StartCoroutine(AscendedStonefangRoutine(player, target));
         }
@@ -2875,10 +3021,39 @@ namespace DragonsAltarSorcerer
             }
             Transform[] sb = _aaSourceBones;
             if (sb == null) return;
+            // v0.25.86 (user: the phantoms froze after a weapon swap): gear changed -> rebuild that phantom with the new
+            // gear at the same spot (like the Ascended twins), then it keeps moving with you.
+            List<GameObject> stale = null;
+            foreach (KeyValuePair<GameObject, Transform[]> kv in _aaGhosts)
+                if (kv.Value == null || kv.Value.Length != sb.Length) { if (stale == null) stale = new List<GameObject>(); stale.Add(kv.Key); }
+            if (stale != null)
+            {
+                Transform src = FindPlayerVisual(player);
+                for (int i = 0; i < stale.Count; i++)
+                {
+                    GameObject old = stale[i];
+                    _aaGhosts.Remove(old);
+                    if (old == null || src == null) continue;
+                    GameObject copy = MakeGhostCopy(src);
+                    if (copy != null)
+                    {
+                        copy.name = old.name;
+                        copy.transform.SetParent(old.transform.parent, false);
+                        copy.transform.position = old.transform.position;
+                        copy.transform.rotation = old.transform.rotation;
+                        copy.SetActive(true);
+                        _aaGhosts[copy] = copy.GetComponentsInChildren<Transform>(true);
+                    }
+                    Destroy(old);
+                }
+                _aaSourceBones = src == null ? null : src.GetComponentsInChildren<Transform>(true);
+                sb = _aaSourceBones;
+                if (sb == null) return;
+            }
             foreach (KeyValuePair<GameObject, Transform[]> kv in _aaGhosts)
             {
                 Transform[] gb = kv.Value;
-                if (gb == null || gb.Length != sb.Length) continue;   // gear changed since the cast: that ghost holds its pose
+                if (gb == null || gb.Length != sb.Length) continue;
                 for (int k = 1; k < sb.Length; k++)
                 {
                     if (sb[k] == null || gb[k] == null) continue;
@@ -2924,7 +3099,7 @@ namespace DragonsAltarSorcerer
             _mimicUntil = Time.time + Mathf.Max(1f, _afterimageDuration.Value);
             BuildAstralMimics(player);
             DragonCombat.PlayClip(player, "hw_afterimage", 0.1f);
-            ShowMessage("Afterimage Arsenal - 3 Astral twins");
+            ShowMessage("Arcane Phantom - 3 Astral twins");
         }
 
         // v0.23.6 Astral twins: a purple ghost copy of YOUR model (armour, shield, weapons, both Gun
@@ -4195,7 +4370,7 @@ namespace DragonsAltarSorcerer
                 names.Add("Rift Echo"); cooldowns.Add(CooldownRemaining("Spellcaster.RiftEcho"));
                 names.Add("Void Step"); cooldowns.Add(CooldownRemaining("Spellcaster.VoidStep"));
                 names.Add("Arcane Phalanx"); cooldowns.Add(CooldownRemaining("Spellcaster.ArcanePhalanx"));
-                names.Add("Afterimage Arsenal"); cooldowns.Add(CooldownRemaining("Spellcaster.AfterimageArsenal"));
+                names.Add("Arcane Phantom"); cooldowns.Add(CooldownRemaining("Spellcaster.AfterimageArsenal"));
                 names.Add("Arcane Rupture"); cooldowns.Add(GetRuptureNextRecharge());
             }
 
