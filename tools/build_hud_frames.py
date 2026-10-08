@@ -15,7 +15,9 @@ HUE = {"red": [(0, 12), (165, 180)], "lime": [(25, 50)], "blue": [(85, 118)], "g
 # bars: (hue key, y band, search x0, x1, x max of the channel)
 CLASSES = {
  "Warrior": dict(file="warrior", accent=[(0, 12), (165, 180)],
-    bars=[("red", 245, 300, 590, 1286, 1282), ("lime", 313, 367, 590, 1314, 1310), ("blue", 381, 435, 590, 1314, 1310), ("gold", 451, 507, 590, 1052, 1300)], trough=(1100, 1280), tip=6,
+    # v0.25.80 (user: Warrior like every Class - numbers inside the bars): the painted value column is cleaned and
+    # the bars run on to the end caps (trough repainted up to xmax via trough_to_xmax).
+    bars=[("red", 245, 300, 590, 1286, 1478), ("lime", 313, 367, 590, 1314, 1494), ("blue", 381, 435, 590, 1314, 1494), ("gold", 451, 507, 590, 1052, 1504)], trough=(1100, 1280), tip=6, trough_to_xmax=True, values_inside=True,
     values=(1292, 245, 1500, 505), value_x=1490,
     name=(330, 176, 600, 222),
     food=[((752, 640), 50), ((968, 640), 50), ((1185, 640), 50)], food_text=[(808, 688), (1024, 688), (1240, 688)], food_digit_r=15,
@@ -83,6 +85,7 @@ def build(cls):
         # paint the empty trough over the fill (+ its glow tip), feathered at the ends
         ry0, ry1 = by0 - 4, by1 + 5
         rx0, rx1 = bx0 - 4, min(W - 1, bx1 + g["tip"] + 8)
+        if g.get("trough_to_xmax"): rx1 = max(rx1, min(W - 1, xmax + 4))
         hgt = ry1 - ry0
         prof = cv2.resize(profile[None, :, :].astype(np.float32), (hgt, 1), interpolation=cv2.INTER_LINEAR)[0]
         block = np.repeat(prof[:, None, :], rx1 - rx0, axis=1)
@@ -263,7 +266,7 @@ def compose(base, ac, target, values=(1.0, 0.82, 0.55, 0.62)):
         s = stretch_strip(st, f)
         if s: img.alpha_composite(s, (st["x0"], st["y0"]))
     d = ImageDraw.Draw(img)
-    if g["values"]:
+    if g["values"] and not g.get("values_inside"):
         nums = ["720 / 720", "123 / 150", "55 / 100", "1,240 / 2,000"]
         if sp: nums[1] = "123 | 55"
         for i, ((key, y0, y1, *_), s) in enumerate(zip(g["bars"], nums)):
@@ -277,7 +280,7 @@ def compose(base, ac, target, values=(1.0, 0.82, 0.55, 0.62)):
         if sp and i == 2: x0, y0, xmax, h = sp[0] + sp[1], s1["y0"], s1["xmax"], s1["img"].shape[0]
         cy = y0 + h // 2
         text(d, (x0 + 18, cy), ["HP", "STAMINA", "EITR", "EXP"][i], 24, anchor="lm")
-        if not g["values"]:
+        if not g["values"] or g.get("values_inside"):
             text(d, (xmax - 18, cy), ["720 / 720", "123", "55", "Lv 12"][i], 24, anchor="rm")
     x0, y0, x1, y1 = g["name"]
     ny = cut_shift(g, (x0 + x1) // 2, (y0 + y1) // 2) if sp else (y0 + y1) // 2
@@ -343,7 +346,7 @@ def export(asset_dir):
         x0, y0, x1, y1 = g["name"]
         ny = sh((x0 + x1) // 2, y0)
         lines.append("name %d %d %d %d" % (sc(x0 - cx0), sc(ny - cy0), sc(x1 - x0), sc(y1 - y0)))
-        if g["values"]:
+        if g["values"] and not g.get("values_inside"):
             for i, (key, by0, by1, *_r) in enumerate(g["bars"]):
                 if sp and i == 2: continue
                 vy = (by0 + by1) / 2

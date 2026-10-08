@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.79";
+        public const string ModVersion = "0.25.80";
 
         internal static DragonCombatPlugin Instance;
 
@@ -2436,6 +2436,8 @@ namespace DragonsAltarCombat
 
         public bool IsHolding { get { return _keys != null && _hold && _impactAt < 0f; } }
         public bool IsPlaying { get { return _keys != null; } }
+        // v0.25.80 one skill at a time: busy through the wind up / hold and a short beat after the impact.
+        public bool IsBusy { get { if (_keys == null) return false; return Phase() < 0.25f; } }
 
         public void Impact()
         {
@@ -3373,6 +3375,13 @@ namespace DragonsAltarCombat
 
         // v0.25.15: automatic procs (Fury, Overcharge, death-save, parry burst) are low-priority accents:
         // they never replace a skill clip that is playing.
+        public static bool ClipBusy(Player player)
+        {
+            if (player == null) return false;
+            DragonSkillClipDriver d = player.GetComponent<DragonSkillClipDriver>();
+            return d != null && d.IsBusy;
+        }
+
         public static void PlayAccent(Player player, string clip, float windup)
         {
             if (player == null) return;
@@ -11742,6 +11751,60 @@ namespace DragonsAltarCombat
             if (dome == null) return;
             DragonDome dd = dome.GetComponent<DragonDome>();
             if (dd != null) dd.SetAlpha(a);
+        }
+
+        // v0.25.80 Rift Walker portal: a standing oval of swirling void (dark core, spiral bands) with a blazing rim.
+        public static void RiftPortal(Transform parent, Vector3 centre, float rx, float ry)
+        {
+            if (!Enabled || parent == null) return;
+            GameObject root = new GameObject("IH_RiftPortal");
+            root.transform.SetParent(parent, false);
+            root.transform.localPosition = centre;
+            root.transform.localScale = new Vector3(rx, ry, 1f);
+            GameObject swirl = MeshObject("swirl", SwirlDisk(false), ClearMat(), root.transform);
+            DragonRotate r1 = swirl.AddComponent<DragonRotate>(); r1.Speed = new Vector3(0f, 0f, 90f);
+            GameObject glow = MeshObject("glow", SwirlDisk(true), Mat(WhiteTex(), true), root.transform);
+            DragonRotate r2 = glow.AddComponent<DragonRotate>(); r2.Speed = new Vector3(0f, 0f, -150f);
+            ParticleSystem ps = Particles(root.transform, new Color(0.85f, 0.45f, 1f, 1f), 0, 60f * Amount, 1f, 0.6f, 0.2f, 0.8f, 0.04f, 0.12f, 0f,
+                ParticleSystemShapeType.Circle, 1f, new Vector3(0f, 0f, 0f), false, true);
+            ParticleSystem.MainModule mm = ps.main; mm.loop = true;
+            ParticleSystem.ShapeModule sh = ps.shape; sh.radiusThickness = 0.05f; sh.rotation = new Vector3(0f, 0f, 0f);
+        }
+
+        // Unit disk in XY (radius 1): spiral arms; rim = bright edge ring only (additive), else dark void body.
+        private static Mesh SwirlDisk(bool rim)
+        {
+            int na = 48, nr = 6;
+            List<Vector3> v = new List<Vector3>();
+            List<Color> cs = new List<Color>();
+            List<int> t = new List<int>();
+            for (int j = 0; j <= nr; j++)
+            {
+                float f = (float)j / nr;
+                for (int i = 0; i <= na; i++)
+                {
+                    float a = (float)i / na * Mathf.PI * 2f;
+                    float tw = a + f * 2.4f;   // spiral twist
+                    v.Add(new Vector3(Mathf.Cos(a) * f, Mathf.Sin(a) * f, 0f));
+                    float arm = 0.5f + 0.5f * Mathf.Sin(tw * 3f);
+                    Color c;
+                    if (rim) { c = Color.Lerp(new Color(0.75f, 0.3f, 1f, 1f), new Color(1f, 0.85f, 1f, 1f), f); c.a = Mathf.Pow(f, 6f) * 0.95f + arm * f * 0.15f; }
+                    else { c = Color.Lerp(new Color(0.03f, 0f, 0.08f, 1f), new Color(0.35f, 0.08f, 0.6f, 1f), arm * f); c.a = Mathf.Lerp(0.92f, 0.55f, f); }
+                    cs.Add(c);
+                }
+            }
+            for (int j = 0; j < nr; j++)
+                for (int i = 0; i < na; i++)
+                {
+                    int a = j * (na + 1) + i, b = a + 1, c = a + na + 1, d = c + 1;
+                    t.Add(a); t.Add(c); t.Add(b); t.Add(b); t.Add(c); t.Add(d);
+                    t.Add(a); t.Add(b); t.Add(c); t.Add(b); t.Add(d); t.Add(c);
+                }
+            Mesh m = new Mesh();
+            m.vertices = v.ToArray(); m.colors = cs.ToArray(); m.triangles = t.ToArray();
+            Vector2[] uv = new Vector2[v.Count]; for (int i = 0; i < uv.Length; i++) uv[i] = new Vector2(0.5f, 0.5f);
+            m.uv = uv; m.RecalculateBounds();
+            return m;
         }
 
         public static void CastFlare(Player p, bool big)

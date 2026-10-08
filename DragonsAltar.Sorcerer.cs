@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Dragon's Altar - Sorcerer Advancements";
-        public const string ModVersion = "0.25.79";
+        public const string ModVersion = "0.25.80";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -3662,6 +3662,7 @@ namespace DragonsAltarSorcerer
                     line.SetPosition(i, new Vector3(Mathf.Cos(a) * 1.15f, 1.35f + Mathf.Sin(a) * 1.35f, 0f));
                 }
                 GameObject riftObj = root;
+                if (DragonVfx.Enabled) { try { DragonVfx.RiftPortal(root.transform, new Vector3(0f, 1.35f, 0f), 1.15f, 1.35f); line.enabled = false; } catch (Exception) { line.enabled = true; } }   // v0.25.80 swirling void portal
                 DragonCombat.RunVfx(delegate
                 {
                     GameObject g = new GameObject("riftGlow");

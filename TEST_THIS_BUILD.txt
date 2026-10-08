@@ -1,7 +1,5 @@
-TEST v0.25.79
-1. Ray of Hope while Burning / Poisoned / Wet: every debuff is removed and Purity shows for 12 s; new debuffs don't stick.
-   Note: on a server, the immunity only protects the caster for now (allies get the cleanse).
-2. Ascended Ray of Hope: enemies burn (fire + spirit, growing fast) for 8 s; you heal 7% Max HP per second for 6 s.
-3. Paladin + Tower Shield: block, and a gold force field appears in front of you. Hits from the sides are blocked too.
-4. Hover every buff icon (Battlecry, Knight's Guidance, Heaven's Light, Tailwind, Fury, ...): every effect is listed. Battlecry shows a separate Labor icon.
-5. Ascended Angel Comet: landing hit, then 0.5 s later a 1.5x wider aftershock with the same damage; burning ground = impact radius.
+TEST v0.25.80
+1. Mash several skills at once (any Class, incl. Archmage): only the first one casts; the others work once it has finished.
+2. Recasts still work: Whirlwind / Furious Winds / Starfall cancel, Meteor / Ballista charge release, Gravity Blast recast, Halfmoon follow-up, Shield Charge slam click.
+3. Warrior HUD: numbers inside the bars, no empty value column, bars reach the end caps.
+4. Rift Walker: portals look like swirling void ovals.

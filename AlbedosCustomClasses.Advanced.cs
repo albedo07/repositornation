@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.79";
+        public const string ModVersion = "0.25.80";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -12447,9 +12447,28 @@ namespace AlbedosCustomClassesAdvanced
                 IhCastSkill(player, IhGraceFor(player));
         }
 
+        // v0.25.80 (user): no multi-casting for any Class - one skill at a time, and it must finish (wind up / hold /
+        // its swing) before another can start. Pressing the SAME skill again stays allowed (recasts, releases,
+        // follow-up windows, channel cancels).
+        private string _ihCastId;
+        private float _ihCastAt = -10f, _ihBusyMsgAt = -10f;
+        private bool IhSkillBusy(Player player, string id)
+        {
+            if (id == _ihCastId && Time.time - _ihCastAt < 120f) return false;
+            bool busy = Time.time - _ihCastAt < 0.45f || DragonCombat.IsSkillLocked(player) || DragonCombat.ClipBusy(player);
+            if (busy && Time.time - _ihBusyMsgAt > 1f && !string.IsNullOrEmpty(_ihCastId))
+            {
+                _ihBusyMsgAt = Time.time;
+                ShowMessage(IhSkillName(_ihCastId) + " is still going");
+            }
+            return busy;
+        }
+
         private void IhCastSkill(Player player, string id)
         {
             if (player == null || player.IsDead() || !IhCanCast(player, id))
+                return;
+            if (IhSkillBusy(player, id))
                 return;
             // v0.25.42 (user): skills need the class weapon in hand (Graces excepted).
             string needs = IhWeaponRequirement(player, id);
@@ -12482,6 +12501,7 @@ namespace AlbedosCustomClassesAdvanced
                 bool began = (cdBefore <= 0f && IhCooldown(player, id) > 0f) || (readyBefore >= 0 && ra2 >= 0 && ra2 < readyBefore)
                     || (cdBefore <= 0f && (player.GetStamina() < staBefore - 0.5f || IhCallFloat(player, "GetEitr") < eitBefore - 0.5f));
                 if (began) DragonCombat.SwallowAttackInput(player, 0.35f);
+                if (began) { _ihCastId = id; _ihCastAt = Time.time; }
                 // v0.25.72 activation rune circle under the caster (bigger + light column for Ultimates and Graces)
                 if (began && _enableVfx.Value)
                 {
@@ -12503,6 +12523,7 @@ namespace AlbedosCustomClassesAdvanced
                 if (!started && cdBefore <= 0f && (player.GetStamina() < staBefore - 0.5f || IhCallFloat(player, "GetEitr") < eitBefore - 0.5f)) started = true;
                 string motion; float motionTime;
                 if (started && DragonCombat.SkillMotion(id, out motion, out motionTime)) DragonCombat.PlayBodyMotion(player, motion, motionTime);
+                if (started) { _ihCastId = id; _ihCastAt = Time.time; }   // charges that began count as a cast too
             }
             if (tryEmpower && !relicBefore)
             {
