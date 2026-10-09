@@ -16,7 +16,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.109";
+        public const string ModVersion = "0.25.110";
 
         internal static DragonCombatPlugin Instance;
 
@@ -13448,9 +13448,11 @@ namespace DragonsAltarCombat
         }
 
         private int _editFrame = -1;
+        private bool _guardPending;
         private void RefreshPreview()
         {
             _editFrame = Time.frameCount;   // the clone shows this edit only after the next LateUpdate
+            _guardPending = true;
             _previewKeys = Clone(_work.ToArray());
             if (_previewing && _driver != null && _driver.EditorPreviewActive) _driver.EditorSample(_previewKeys, _time);
             else if (_open && _autoPreview && _clip.Length > 0) StartPreview();
@@ -13980,21 +13982,26 @@ namespace DragonsAltarCombat
             if (_work.Count < 2 || _playing || !_previewing || Time.frameCount <= _editFrame) return;
             _shellDepth = ShellDepthNow();
             DragonClipKey k = _work[_keyIndex];
-            if (_safeIndex != _keyIndex || _safeKey == null || !Mathf.Approximately(_time, k.T))
+            bool onKey = Mathf.Approximately(_time, k.T);
+            if (_safeIndex != _keyIndex || _safeKey == null || !onKey)
             {
-                if (Mathf.Approximately(_time, k.T)) { _safeIndex = _keyIndex; _safeKey = JsonUtility.ToJson(k); _safeDepth = _shellDepth; }
+                if (onKey) { _safeIndex = _keyIndex; _safeKey = JsonUtility.ToJson(k); _safeDepth = Mathf.Max(0f, _shellDepth); }
+                _guardPending = false;
                 return;
             }
-            if (!_shellGuard || _shellDepth <= Mathf.Max(0.005f, _safeDepth + 0.005f))
+            if (!_guardPending) return;   // v0.25.110: judged once per edit (the old every-frame revert made the menu flicker)
+            _guardPending = false;
+            if (!_shellGuard || _shellDepth <= _safeDepth + 0.01f)
             {
-                _safeKey = JsonUtility.ToJson(k); _safeDepth = Mathf.Min(_safeDepth, Mathf.Max(0f, _shellDepth));
-                if (_shellDepth <= 0f) _safeDepth = 0f;
+                _safeKey = JsonUtility.ToJson(k);
+                _safeDepth = Mathf.Max(0f, Mathf.Min(_safeDepth, _shellDepth));
                 return;
             }
+            // undo only this last step; the drag keeps going so you can move the other way
             JsonUtility.FromJsonOverwrite(_safeKey, k);
-            _drag = HNone;
-            _message = "BLOCKED: that would push the arm/hand inside the body. Move it outside the outline.";
-            RefreshPreview();
+            _message = "BLOCKED: that step would push the arm/hand inside the body. Move it outside the outline.";
+            _previewKeys = Clone(_work.ToArray());
+            if (_driver != null && _driver.EditorPreviewActive) _driver.EditorSample(_previewKeys, _time);
         }
 
         private void HandleMouse()
@@ -14291,6 +14298,7 @@ namespace DragonsAltarCombat
             }
             _dirty = true; _playing = false; _time = k.T; _numericDrafts.Clear();
             RefreshPreview();
+            _safeKey = null;   // a preset is accepted as the new starting point
             if (i != 8) _message = "'" + PresetNames[i] + "' put on frame " + (_keyIndex + 1) + ". Every dot still works on top of it.";
         }
 
@@ -14300,11 +14308,16 @@ namespace DragonsAltarCombat
             for (int l = 0; l < 8; l++) k.L[l] = 0f;
         }
 
+        // v0.25.110 (user's reference = holding Krom): both fists stacked on ONE handle in front of the stomach,
+        // on the body's centre line and a hand's width away from it; the handle stands up, the left hand sits BELOW
+        // the right on the grip; both elbows bent and out to the sides.
         private static void GripOn(DragonClipKey k)
         {
-            if (k.HW < 0.01f) { k.HD = new Vector3(0.25f, 0.1f, 1f).normalized; k.HR = 0.6f; k.HW = 1f; }
-            k.TW = 1f; k.TG = -0.14f;
-            if (k.GW < 0.01f) { k.GP = new Vector3(-0.2f, -0.4f, 1f).normalized; k.GW = 1f; }
+            k.HD = new Vector3(-0.45f, -0.6f, 0.75f).normalized; k.HR = 0.68f; k.HW = 1f;   // from the right shoulder to the centre front
+            k.EP = new Vector3(1f, -0.35f, 0.15f).normalized; k.EW = 1f; k.EM = true;        // right elbow out to the side
+            k.WD = new Vector3(0f, 1f, 0.2f).normalized; k.WW = 1f;                           // blade up
+            k.TW = 1f; k.TG = -0.13f;                                                         // left fist just below the right one
+            k.GP = new Vector3(-1f, -0.35f, 0.15f).normalized; k.GW = 1f;                    // left elbow out to the side
             k.LW = 0f;
         }
 
@@ -14387,7 +14400,7 @@ namespace DragonsAltarCombat
                 // a two-handed weapon: both hands on it in every frame of this animation (each joint still editable)
                 _undo.Push(Snapshot());
                 for (int f = 0; f < _work.Count; f++) GripOn(_work[f]);
-                _dirty = true; RefreshPreview();
+                _dirty = true; RefreshPreview(); _safeKey = null;
                 _message = LoadoutNames[i] + ": both hands now hold it on every frame. Drag the dots to fine-tune.";
             }
             else if (i == 3) _message = "Axe + Axe: drag the two WHITE dots to point each axe.";

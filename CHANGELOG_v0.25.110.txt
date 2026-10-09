@@ -1,0 +1,9 @@
+Immortal Heroes v0.25.110 - Krom Grip
+Base: v0.25.109. Only the F9 Animation Studio.
+
+- Two hands on the weapon (and Krom / Battleaxe / Atgeir model weapons) = your reference pose: both
+  fists stacked on ONE handle in front of the stomach on the centre line, a hand's width from the body,
+  handle/blade standing up, left fist just below the right, both elbows bent and out to the sides.
+- FIX hands stuck + menu flickering in the grip: the body-outline guard re-checked and undid the pose
+  EVERY frame. It now judges each edit once, undoes only that one step and lets the drag continue.
+  Presets / model weapons are accepted as the new starting point.
