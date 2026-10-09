@@ -1,0 +1,3 @@
+Aethelborn Ascended v0.25.118 - Body Barrier
+- New DragonArmGuard: while any skill animation plays (Mixamo clip or skill pose), elbows, forearms and hands that would go inside the torso are pushed back to its surface. Runs last, after every other animation step.
+- F8 / config [Runtime] ArmBodyGuard_v025118 (on/off) and ArmGuardTorsoWidth_v025118 (barrier size, 1 = measured from the shoulders).

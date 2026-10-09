@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.117";
+        public const string ModVersion = "0.25.118";
 
         internal static DragonCombatPlugin Instance;
 
@@ -48,6 +48,8 @@ namespace DragonsAltarCombat
         internal ConfigEntry<bool> MasteryComboStyleEnabled;
         internal ConfigEntry<float> MasteryComboSpeedPerStage;
         internal ConfigEntry<bool> EnableSkillAnimations;
+        internal ConfigEntry<bool> ArmBodyGuard;
+        internal ConfigEntry<float> ArmGuardWidth;
         internal ConfigEntry<float> LegMotionScale;
         internal ConfigEntry<string> VanillaAnimationMap;
         internal ConfigEntry<float> SkySummonDropTime;
@@ -73,6 +75,8 @@ namespace DragonsAltarCombat
             Instance = this;
 
             EnableRuntime = Config.Bind("Runtime", "Enabled", true, "Enable Dragon's Altar combat runtime patches.");
+            ArmBodyGuard = Config.Bind("Runtime", "ArmBodyGuard_v025118", true, "Body barrier for skill animations: an elbow, forearm or hand that would go inside the torso is pushed back out to its surface.");
+            ArmGuardWidth = Config.Bind("Runtime", "ArmGuardTorsoWidth_v025118", 1f, "Size of the torso barrier (1 = measured from the shoulders; raise it if arms still sink in, lower it if they float away from the body).");
             EnableSkillAnimations = Config.Bind("Runtime", "EnableSkillAnimations", true, "Use Dragon's Altar procedural skill poses. Class skills do not trigger vanilla weapon attacks.");
             VanillaAnimationMap = Config.Bind("Runtime", "VanillaAnimationMap_v02593",
                 "sm_slash_a=swing_longsword0@0.28;sm_slash_b=swing_longsword1@0.28;sm_halfmoon=battlea" + "xe_attack@0.45;sm_halfmoon_2=battleaxe_attack@0.45;warrior_h" +
@@ -3498,6 +3502,7 @@ namespace DragonsAltarCombat
             DragonSkillClipDriver d = player.GetComponent<DragonSkillClipDriver>();
             if (d == null) d = player.gameObject.AddComponent<DragonSkillClipDriver>();
             d.Begin(keys, windup, hold, BodyVisual(player), clip);
+            DragonArmGuard.Attach(player);
         }
 
         // Plays caller-built keys (variable-length clips such as Whirlwind).
@@ -9260,6 +9265,7 @@ namespace DragonsAltarCombat
             DragonMixamoPlayer p = an.GetComponent<DragonMixamoPlayer>();
             if (p == null) p = an.gameObject.AddComponent<DragonMixamoPlayer>();
             p.Begin(an, clip, from, to, speed, fadeIn, fadeOut);
+            DragonArmGuard.Attach(player);
             return true;
         }
     }
@@ -9310,6 +9316,8 @@ namespace DragonsAltarCombat
             if (_stopping && _age - _stopAt >= _fadeOut) Kill();
         }
 
+        public bool Live { get { return _live; } }
+
         private void Kill()
         {
             if (_live && _graph.IsValid()) _graph.Destroy();
@@ -9317,6 +9325,117 @@ namespace DragonsAltarCombat
         }
 
         private void OnDestroy() { Kill(); }
+    }
+
+    // v0.25.118 BODY BARRIER (user: arms must never go inside the body). Runs after every other
+    // animation step (Animator, Mixamo output, clip driver IK) while a skill animation plays. The torso
+    // is an elliptic cylinder from the hips to the neck, sized from the shoulder width. Any elbow / mid
+    // upper arm sample inside it turns the upper arm so it sits on the surface; any hand / mid forearm
+    // sample inside turns the forearm about the elbow. Joint twist limits come from the Humanoid avatar.
+    [DefaultExecutionOrder(32000)]
+    public class DragonArmGuard : MonoBehaviour
+    {
+        private Animator _an;
+        private Player _player;
+        private DragonMixamoPlayer _mx;
+
+        public static void Attach(Player player)
+        {
+            if (player == null || DragonCombatPlugin.Instance == null || !DragonCombatPlugin.Instance.ArmBodyGuard.Value) return;
+            if (player.GetComponent<DragonArmGuard>() == null) player.gameObject.AddComponent<DragonArmGuard>();
+        }
+
+        private void LateUpdate()
+        {
+            if (DragonCombatPlugin.Instance == null || !DragonCombatPlugin.Instance.ArmBodyGuard.Value) return;
+            if (_player == null) _player = GetComponent<Player>();
+            if (_an == null) _an = GetComponentInChildren<Animator>();
+            if (_an == null || !_an.isHuman) return;
+            if (_mx == null) _mx = _an.GetComponent<DragonMixamoPlayer>();
+            bool active = (_mx != null && _mx.Live) || GetComponent<DragonSkillClipDriver>() != null;
+            if (!active) return;
+            Apply(_an, Mathf.Max(0.3f, DragonCombatPlugin.Instance.ArmGuardWidth.Value));
+        }
+
+        private static void Apply(Animator an, float scale)
+        {
+            Transform hips = an.GetBoneTransform(HumanBodyBones.Hips);
+            Transform neck = an.GetBoneTransform(HumanBodyBones.Neck);
+            Transform lua = an.GetBoneTransform(HumanBodyBones.LeftUpperArm);
+            Transform rua = an.GetBoneTransform(HumanBodyBones.RightUpperArm);
+            if (hips == null || neck == null || lua == null || rua == null) return;
+            Vector3 a = hips.position;
+            Vector3 up = neck.position - a;
+            float len = up.magnitude;
+            if (len < 0.05f) return;
+            up /= len;
+            Vector3 across = rua.position - lua.position;
+            float halfW = across.magnitude * 0.5f;
+            Vector3 side = Vector3.ProjectOnPlane(across, up);
+            if (side.sqrMagnitude < 1e-6f) return;
+            side.Normalize();
+            Vector3 fwd = Vector3.Cross(side, up);
+            Torso t = new Torso();
+            t.A = a; t.Up = up; t.Len = len; t.Side = side; t.Fwd = fwd;
+            t.Rx = halfW * 0.78f * scale; t.Rz = halfW * 0.6f * scale;
+            for (int pass = 0; pass < 2; pass++)
+            {
+                Arm(an, t, true);
+                Arm(an, t, false);
+            }
+        }
+
+        private struct Torso { public Vector3 A, Up, Side, Fwd; public float Len, Rx, Rz; }
+
+        private static void Arm(Animator an, Torso t, bool right)
+        {
+            Transform ua = an.GetBoneTransform(right ? HumanBodyBones.RightUpperArm : HumanBodyBones.LeftUpperArm);
+            Transform la = an.GetBoneTransform(right ? HumanBodyBones.RightLowerArm : HumanBodyBones.LeftLowerArm);
+            Transform hand = an.GetBoneTransform(right ? HumanBodyBones.RightHand : HumanBodyBones.LeftHand);
+            if (ua == null || la == null || hand == null) return;
+            float sideSign = right ? 1f : -1f;
+            // upper arm: elbow and the middle of the upper arm
+            PushBone(ua, ua.position, la.position, t, sideSign);
+            // forearm: wrist and the middle of the forearm (the held weapon follows the hand)
+            PushBone(la, la.position, hand.position, t, sideSign);
+        }
+
+        // Turns 'bone' (pivot at 'joint') so the deepest sample on joint->end leaves the torso.
+        private static void PushBone(Transform bone, Vector3 joint, Vector3 end, Torso t, float sideSign)
+        {
+            float best = 1f;
+            Vector3 bestP = end, bestOut = end;
+            for (int i = 1; i <= 2; i++)
+            {
+                Vector3 p = Vector3.Lerp(joint, end, i * 0.5f);
+                float depth;
+                Vector3 outside;
+                if (Inside(p, t, sideSign, out depth, out outside) && depth < best) { best = depth; bestP = p; bestOut = outside; }
+            }
+            if (best >= 1f) return;
+            Vector3 from = bestP - joint, to = bestOut - joint;
+            if (from.sqrMagnitude < 1e-6f || to.sqrMagnitude < 1e-6f) return;
+            bone.rotation = Quaternion.FromToRotation(from, to) * bone.rotation;
+        }
+
+        // depth = normalised elliptic radius (< 1 = inside); outside = the point pushed to the surface.
+        private static bool Inside(Vector3 p, Torso t, float sideSign, out float depth, out Vector3 outside)
+        {
+            depth = 1f; outside = p;
+            Vector3 local = p - t.A;
+            float h = Vector3.Dot(local, t.Up);
+            if (h < -0.05f * t.Len || h > t.Len * 0.95f) return false;
+            float x = Vector3.Dot(local, t.Side), z = Vector3.Dot(local, t.Fwd);
+            float d = Mathf.Sqrt((x / t.Rx) * (x / t.Rx) + (z / t.Rz) * (z / t.Rz));
+            if (d >= 1f) return false;
+            depth = d;
+            float k = 1.06f;
+            Vector3 radial;
+            if (d < 0.05f) radial = t.Side * (t.Rx * k * sideSign);
+            else radial = (t.Side * x + t.Fwd * z) * (k / d);
+            outside = t.A + t.Up * h + radial;
+            return true;
+        }
     }
 
     public static class DragonDualWield
