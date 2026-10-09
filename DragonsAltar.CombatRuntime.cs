@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.116";
+        public const string ModVersion = "0.25.117";
 
         internal static DragonCombatPlugin Instance;
 
@@ -9212,7 +9212,7 @@ namespace DragonsAltarCombat
     // plugins), its bundle is read and an AnimatorOverrideController swaps the one-handed attack clips for the
     // dual-wield ones while two one-handed weapons are held - the same clip map the mod itself uses.
     // ---------------------------------------------------------------- v0.25.111 MIXAMO CLIPS
-    // Real animation clips (Mixamo FBX -> Unity Humanoid -> Asset Bundle 'immortalheroes_anims' in
+    // Real animation clips (Mixamo FBX -> Unity Humanoid -> Asset Bundle 'aethelborn_anims' in
     // ImmortalHeroesAssets). A clip is played on the player's own Animator through a Playables output that is
     // blended over Valheim's controller (fade in / out), between two clip times at a chosen speed, so its hit
     // frame lands on the skill's damage. Root motion is baked into the pose in Unity, so the clip never moves
@@ -9228,7 +9228,8 @@ namespace DragonsAltarCombat
             _tried = true;
             try
             {
-                string path = Paths.PluginPath + "/ImmortalHeroesAssets/immortalheroes_anims";
+                string path = Paths.PluginPath + "/ImmortalHeroesAssets/aethelborn_anims";
+                if (!System.IO.File.Exists(path)) path = Paths.PluginPath + "/ImmortalHeroesAssets/immortalheroes_anims";
                 if (!System.IO.File.Exists(path)) { DragonCombatPlugin.Instance.LogInfo("Mixamo clips: no bundle at " + path + " (old animations used)."); return; }
                 AssetBundle bundle = AssetBundle.LoadFromFile(path);
                 if (bundle == null) { DragonCombatPlugin.Instance.LogInfo("Mixamo clips: bundle failed to load (built with a different Unity version?)."); return; }

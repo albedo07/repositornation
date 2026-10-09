@@ -1,21 +1,21 @@
-// Immortal Heroes - one-click Mixamo -> Valheim animation bundle builder (Unity 2022.3, Editor only).
-// Put this file in Assets/Editor/ and the Mixamo FBX files in Assets/IHAnims/.
-// Menu: Immortal Heroes > Build Animation Bundle  -> IHBuild/immortalheroes_anims (copy it to ImmortalHeroesAssets).
+// Aethelborn Ascended - one-click Mixamo -> Valheim animation bundle builder (Unity 2022.3, Editor only).
+// Put this file in Assets/Editor/ and the Mixamo FBX files in Assets/AAanims/.
+// Menu: Aethelborn Ascended > Build Animation Bundle  -> AABuild/aethelborn_anims (copy it to ImmortalHeroesAssets).
 using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
 
-public static class IHAnimBuilder
+public static class AAAnimBuilder
 {
-    const string Folder = "Assets/IHAnims";
-    const string Bundle = "immortalheroes_anims";
+    const string Folder = "Assets/AAanims";
+    const string Bundle = "aethelborn_anims";
 
-    [MenuItem("Immortal Heroes/Build Animation Bundle")]
+    [MenuItem("Aethelborn Ascended/Build Animation Bundle")]
     public static void Build()
     {
-        if (!AssetDatabase.IsValidFolder(Folder)) { EditorUtility.DisplayDialog("Immortal Heroes", "Make a folder Assets/IHAnims and put the Mixamo .fbx files in it.", "OK"); return; }
+        if (!AssetDatabase.IsValidFolder(Folder)) { EditorUtility.DisplayDialog("Aethelborn Ascended", "Make a folder Assets/AAanims and put the Mixamo .fbx files in it.", "OK"); return; }
         int n = 0;
         foreach (string guid in AssetDatabase.FindAssets("t:Model", new[] { Folder }))
         {
@@ -52,10 +52,10 @@ public static class IHAnimBuilder
             imp.SaveAndReimport();
             n++;
         }
-        Directory.CreateDirectory("IHBuild");
-        BuildPipeline.BuildAssetBundles("IHBuild", BuildAssetBundleOptions.None, BuildTarget.StandaloneWindows64);
-        EditorUtility.RevealInFinder(Path.Combine("IHBuild", Bundle));
-        EditorUtility.DisplayDialog("Immortal Heroes", n + " animations built.\nCopy IHBuild/" + Bundle + " into BepInEx/plugins/ImmortalHeroesAssets.", "OK");
+        Directory.CreateDirectory("AABuild");
+        BuildPipeline.BuildAssetBundles("AABuild", BuildAssetBundleOptions.None, BuildTarget.StandaloneWindows64);
+        EditorUtility.RevealInFinder(Path.Combine("AABuild", Bundle));
+        EditorUtility.DisplayDialog("Aethelborn Ascended", n + " animations built.\nCopy AABuild/" + Bundle + " into BepInEx/plugins/ImmortalHeroesAssets.", "OK");
     }
 
     // "standing melee attack 360 high" -> "melee_attack_360_high"

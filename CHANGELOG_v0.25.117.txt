@@ -1,0 +1,3 @@
+Aethelborn Ascended v0.25.117 - AA Anims
+- Unity builder renamed AAAnimBuilder.cs: FBX folder Assets/AAanims, menu Aethelborn Ascended > Build Animation Bundle, output AABuild/aethelborn_anims.
+- Game loads ImmortalHeroesAssets/aethelborn_anims (old immortalheroes_anims still accepted).

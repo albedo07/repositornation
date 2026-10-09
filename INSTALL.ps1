@@ -1,7 +1,7 @@
 ﻿$ErrorActionPreference = "Stop"
 
 Write-Host ""
-Write-Host "AETHELBORN ASCENDED v0.25.116 - ALTAR OF BLESSINGS" -ForegroundColor Cyan
+Write-Host "AETHELBORN ASCENDED v0.25.117 - AA ANIMS" -ForegroundColor Cyan
 Write-Host "Protected build: all 8 DLLs compile in staging before the live profile is touched." -ForegroundColor Gray
 Write-Host ""
 
