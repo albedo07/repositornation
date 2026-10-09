@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.132";
+        public const string ModVersion = "0.25.133";
 
         internal static DragonCombatPlugin Instance;
 
@@ -91,6 +91,76 @@ namespace DragonsAltarCombat
                 "int@0.2;hw_open=emote_point@0.2;hw_stop=emote_point@0.2;hw_pinch=emote_point@0.2;hw_afterimage=emote_point@0.2;hw_rift_walker=emote_point@0.2;wiz_gravity=emote_comehere@0.3;sorc_stone" +
                 "fang_asc=emote_point@0.2",
                 "Skill clips that play Valheim's own animation (clip=trigger@seconds before impact). Remove an entry to use the custom pose instead. All animator trigger names of your game are written once to the BepInEx log ('[Immortal Heroes] Animator triggers').");
+            // v0.25.133 (user): every skill animation can be tuned - where Valheim's animation starts (skip its
+            // anticipation / stitch to the previous move) and where it is cut (blends back out). Wind up times stay in
+            // each skill's own section.
+            string[] tuning = new string[] {
+                "sm_slash_a|Sword Master Moonlight Splitter Animation|Slash 1",
+                "sm_slash_b|Sword Master Moonlight Splitter Animation|Slash 2",
+                "sm_moon_finisher|Sword Master Moonlight Splitter Animation|Finisher",
+                "sm_halfmoon|Sword Master Halfmoon Slash Animation|Slash 1",
+                "sm_halfmoon_2|Sword Master Halfmoon Slash Animation|Slash 2",
+                "sm_halfmoon_finisher|Sword Master Halfmoon Slash Animation|Finisher",
+                "sm_crescent|Sword Master Crescent Cleave Animation|",
+                "sm_crescent_asc|Sword Master Crescent Cleave Animation|Ascended",
+                "sm_crescent_asc2|Sword Master Crescent Cleave Animation|Ascended Fan 2",
+                "sm_eclipse|Sword Master Eclipse Animation|",
+                "sm_guidance|Sword Master Knights Guidance Animation|",
+                "warrior_heavy|Warrior Heavy Slash Animation|",
+                "warrior_impact_wave|Warrior Impact Wave Animation|",
+                "warrior_punch|Warrior Impact Punch Animation|",
+                "merc_heavy_asc|Mercenary Heavy Slash Animation|Ascended",
+                "merc_bomb|Mercenary Punishing Bomb Animation|",
+                "merc_seismic|Mercenary Seismic Guillotine Animation|",
+                "merc_roar|Mercenary Battlecry Animation|",
+                "merc_fury_accent|Mercenary Fury Animation|",
+                "cleric_zap|Cleric Lightning Zap Animation|",
+                "cleric_rs|Cleric Righteous Strike Animation|",
+                "cleric_rs_asc|Cleric Righteous Strike Animation|Ascended",
+                "cleric_wave|Cleric Holy Wave Animation|",
+                "cleric_wave_ally|Cleric Holy Wave Animation|Ally",
+                "cleric_goddess|Paladin Goddess Relic Animation|",
+                "cleric_hammer|Paladin Judgement Hammer Animation|",
+                "cleric_hammer_slam|Paladin Shield Charge Animation|Hammer Slam",
+                "cleric_ray|Paladin Ray of Hope Animation|",
+                "cleric_light|Paladin Heavens Light Animation|",
+                "cleric_relic|Priest Lightning Relic Animation|",
+                "cleric_holy_relic|Priest Holy Relic Animation|",
+                "cleric_intervention|Priest Divine Intervention Animation|",
+                "cleric_cross_1|Priest Grand Cross Animation|Cross 1",
+                "cleric_cross_2|Priest Grand Cross Animation|Cross 2",
+                "cleric_judgement|Priest Heavens Judgement Animation|",
+                "cleric_tempest|Priest Lightning Tempest Animation|",
+                "cleric_crucible|Priest Heavens Crucible Animation|",
+                "sorc_flame|Sorcerer Flame Burst Animation|",
+                "sorc_glacial|Sorcerer Glacial Descent Animation|",
+                "sorc_glacial_asc|Sorcerer Glacial Descent Animation|Ascended",
+                "sorc_stonefang|Sorcerer Stonefang Eruption Animation|",
+                "sorc_stonefang_asc|Sorcerer Stonefang Eruption Animation|Ascended",
+                "wiz_greatblade|Wizard Astral Greatblade Animation|",
+                "wiz_greatblade_slam|Wizard Astral Greatblade Animation|Slams 2-3",
+                "wiz_gravity|Wizard Gravity Dominion Animation|",
+                "wiz_nova|Wizard Frost Nova Animation|",
+                "wiz_clockwork|Wizard Clockwork Animation|",
+                "hw_command|Spellcaster Arcane Phalanx Animation|",
+                "hw_point|Spellcaster Arcane Phalanx Animation|Launch",
+                "hw_rift_echo|Spellcaster Rift Echo Animation|",
+                "hw_rupture|Spellcaster Arcane Rupture Animation|",
+                "hw_gravity_blast|Spellcaster Gravity Blast Animation|",
+                "hw_afterimage|Spellcaster Afterimage Arsenal Animation|Ascended",
+                "hw_rift_walker|Spellcaster Rift Walker Animation|",
+                "rg_tailwind|Acrobat Tailwind Animation|",
+                "rg_vigil|Bowmaster Hawks Vigil Animation|",
+                "rg_trap|Ranger Snare Trap Animation|"
+            };
+            for (int t = 0; t < tuning.Length; t++)
+            {
+                string[] f = tuning[t].Split('|');
+                string pre = f[2].Length > 0 ? f[2] + " " : "";
+                ConfigEntry<float> a = Config.Bind(f[1], pre + "AnimStartPercent_v025133", 0f, new ConfigDescription((f[2].Length > 0 ? f[2] + ": " : "") + "the animation starts at this % (skips the beginning; 0 = from the start).", new AcceptableValueRange<float>(0f, 95f)));
+                ConfigEntry<float> b = Config.Bind(f[1], pre + "AnimEndPercent_v025133", 100f, new ConfigDescription((f[2].Length > 0 ? f[2] + ": " : "") + "the animation is cut at this % and blends back (100 = plays to the end).", new AcceptableValueRange<float>(5f, 100f)));
+                DragonCombat.AnimTuningEntries[f[0]] = new ConfigEntry<float>[] { a, b };
+            }
             LegMotionScale = Config.Bind("Runtime", "LegMotionScale_v02522", 0f, "Strength of the procedural leg poses (Unity humanoid muscles). 0 = legs untouched, -1 = inverted (if knees bend the wrong way on your rig).");
             SkySummonDropTime = Config.Bind("Skills", "SkySummonDropTime", 0.18f, "Seconds for a spawned Sky Summon object to slam from its indoor-safe spawn point to the target AFTER the character wind-up finishes.");
             EnableWarfreakDualWield = Config.Bind("Weapon Mastery", "EnableWarfreakDualWield", true, "Warfreak: Mercenary may equip any two one-handed weapons simultaneously. Dedicated combination animations are a later animation pass.");
@@ -2440,6 +2510,8 @@ namespace DragonsAltarCombat
         private bool _bowFired;
         private bool _constSpeed;
         private float _constK;
+        private float _vaStartN, _vaEndN = 1f;   // v0.25.133 tuning
+        private bool _vaJumped, _vaCut;
         private float _constWindup;
 
         private void ReleaseBow(bool fire)
@@ -2464,6 +2536,8 @@ namespace DragonsAltarCombat
             if (_bowBool != null) DragonCombat.SetBowAim(GetComponent<Player>(), _bowBool, true);
             _va = keys[0].VA;
             _vaRepeat = keys[0].VR;
+            DragonCombat.AnimTuning(clipName, out _vaStartN, out _vaEndN);
+            _vaJumped = false; _vaCut = false;
             _vaAt = Time.time + Mathf.Max(0f, windup - keys[0].VL);
             if (_va != null && _vaRepeat <= 0.05f) _vaAt = Time.time + Mathf.Max(0.1f, windup) * Mathf.Clamp01(keys[0].VF);
             _vaGuess = Mathf.Max(0.2f, keys[0].VL * 1.8f);
@@ -2702,7 +2776,7 @@ namespace DragonsAltarCombat
                     {
                         if (Time.time - _vaFiredAt > 0.5f) { _vaTrack = false; return; }
                         remain = Mathf.Max(0f, _vaGuess - (Time.time - _vaFiredAt));
-                        DragonCombat.SetSkillAnimSpeed(p, Mathf.Clamp(remain / left, 0.3f, 6f), 0.15f);
+                        if (!_noTrack) DragonCombat.SetSkillAnimSpeed(p, Mathf.Clamp(remain / left, 0.3f, 6f), 0.15f);
                         return;
                     }
                 }
@@ -2712,7 +2786,16 @@ namespace DragonsAltarCombat
                 else if (_animator.IsInTransition(_vaLayer) && _animator.GetNextAnimatorStateInfo(_vaLayer).fullPathHash == _vaHash) info = _animator.GetNextAnimatorStateInfo(_vaLayer);
                 else { _vaTrack = false; DragonCombat.SetSkillAnimSpeed(p, 1f, 0f); return; }
                 float norm = info.normalizedTime;
+                // v0.25.133 tuning: start the animation later / cut it earlier (blend back to what played before)
+                if (!_vaJumped && _vaStartN > 0.001f && norm < _vaStartN) { _vaJumped = true; _animator.CrossFade(_vaHash, 0.05f, _vaLayer, _vaStartN); return; }
+                if (!_vaCut && _vaEndN < 0.999f && norm >= _vaEndN)
+                {
+                    _vaCut = true; _vaTrack = false; DragonCombat.SetSkillAnimSpeed(p, 1f, 0f);
+                    _animator.CrossFade(_vaPre[_vaLayer], 0.25f, _vaLayer);
+                    return;
+                }
                 if (norm >= 1f) { _vaTrack = false; DragonCombat.SetSkillAnimSpeed(p, 1f, 0f); return; }
+                if (_noTrack) return;   // v0.25.133 emotes: tuning only, natural speed
                 if (_constSpeed)
                 {
                     if (_constK <= 0f) _constK = Mathf.Clamp(_vaLead / Mathf.Max(0.05f, _constWindup - 0.08f), 1f, 4f); // v0.25.94 (user) the swing's hit frame lands ~0.08 s BEFORE the GTs release: animation first, then the waves // v0.25.91 one stable speed per swing so the vanilla contact frame lands on the skill hit (never slower than native).
@@ -2779,7 +2862,7 @@ namespace DragonsAltarCombat
             if (_va != null && Time.time >= _vaAt)
             {
                 _vaTrigger = _va;
-                if (_vaRepeat <= 0.05f && !_noTrack) StartVanillaTracking();
+                if (_vaRepeat <= 0.05f && (!_noTrack || _vaStartN > 0.001f || _vaEndN < 0.999f)) StartVanillaTracking();   // v0.25.133 tuned emotes too
                 if (!RestartVanilla(_va)) DragonCombat.FireVanilla(_owner as Player, _va);
                 _vaFiredName = _va;
                 if (_vaRepeat > 0.05f) _vaAt += _vaRepeat; else _va = null;
@@ -3351,6 +3434,18 @@ namespace DragonsAltarCombat
 
     public static class DragonCombat
     {
+        // v0.25.133 per-clip animation tuning (start / end % of the vanilla animation)
+        public static readonly Dictionary<string, ConfigEntry<float>[]> AnimTuningEntries = new Dictionary<string, ConfigEntry<float>[]>();
+        public static void AnimTuning(string clip, out float start, out float end)
+        {
+            start = 0f; end = 1f;
+            ConfigEntry<float>[] e;
+            if (clip == null || !AnimTuningEntries.TryGetValue(clip, out e)) return;
+            start = Mathf.Clamp(e[0].Value, 0f, 95f) / 100f;
+            end = Mathf.Clamp(e[1].Value, 5f, 100f) / 100f;
+            if (end <= start + 0.05f) end = Mathf.Min(1f, start + 0.05f);
+        }
+
         // v0.25.4: set by the Immortal HUD; blocks Hud.UpdateHealth / Stamina / Eitr / Food.
         public static bool VanillaVitalsHidden;
 

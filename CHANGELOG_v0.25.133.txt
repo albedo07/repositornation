@@ -1,0 +1,5 @@
+v0.25.133 - Animation Tuning
+- Ascended Circle Swing Eruption: centre 5 m in front of you (you stand at its edge). [Mercenary Circle Swing Ascended] EruptionDistance_v025133.
+- Every skill that plays a Valheim animation gets two sliders in F8, section "<Class/AC> <Skill> Animation":
+  AnimStartPercent (start later / stitch) and AnimEndPercent (cut earlier, blends back). Multi-part skills have one pair
+  per part (e.g. Moonlight Slash 1 / Slash 2 / Finisher). Wind up times stay in each skill's own section.

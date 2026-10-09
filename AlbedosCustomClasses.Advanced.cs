@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.132";
+        public const string ModVersion = "0.25.133";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -223,7 +223,7 @@ namespace AlbedosCustomClassesAdvanced
         private ConfigEntry<float> _circleCooldown;
         private ConfigEntry<float> _circleStamina;
         private ConfigEntry<float> _circleWindup;
-        private ConfigEntry<float> _circleEruptRadius, _circleEruptPercent, _circleAxeStart1, _circleAxeStart2;
+        private ConfigEntry<float> _circleEruptRadius, _circleEruptPercent, _circleAxeStart1, _circleAxeStart2, _circleEruptDistance;
         private ConfigEntry<float> _circleRadius;
         private ConfigEntry<float> _circleDamageMultiplier;
         private ConfigEntry<float> _circleWindupTravel;
@@ -3153,6 +3153,7 @@ namespace AlbedosCustomClassesAdvanced
             _circleAscGap = Config.Bind(ca, "SwingInterval", 0.5f, "Seconds between the two swings.");
             _circleEruptRadius = Config.Bind(ca, "EruptionRadius_v025128", 7f, "Ascended 2nd attack: eruption radius in front (m).");
             _circleEruptPercent = Config.Bind(ca, "EruptionPercent_v025128", 100f, "Ascended 2nd attack: eruption damage (% of a normal swing).");
+            _circleEruptDistance = Config.Bind(ca, "EruptionDistance_v025133", 5f, "Ascended 2nd attack: the eruption's centre is this far in front of you (m).");
 
             _boneDamageV = BindDamage("Mercenary Bonecrusher Damage v0224", 150f, 0f, 0f, 0f, 0f, 0f, 0f, 0f);
             const string ba = "Mercenary Bonecrusher Ascended";
@@ -3631,7 +3632,7 @@ namespace AlbedosCustomClassesAdvanced
             fwd.Normalize();
             float r = Mathf.Max(1f, DragonCombat.M(_circleEruptRadius.Value));
             int groundMask = LayerMask.GetMask("Default", "static_solid", "Default_small", "piece_nonsolid", "terrain", "vehicle", "piece", "viewblock");
-            Vector3 p = GetSeismicGroundPoint(player.transform.position + fwd * r * 0.5f, groundMask);
+            Vector3 p = GetSeismicGroundPoint(player.transform.position + fwd * Mathf.Max(0f, DragonCombat.M(_circleEruptDistance.Value)), groundMask);   // v0.25.133 centre 5 m ahead
             List<Character> targets = GetSphereTargets(player, p, r);
             for (int i = 0; i < targets.Count; i++)
             {

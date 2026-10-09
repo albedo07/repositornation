@@ -1,3 +1,3 @@
-TEST (v0.25.132)
-1. Bonecrusher / Electric Smite: you stay in the centre of the explosion (no slide forward on landing).
-2. Circle Swing: no shift forward after the HopSkip; same look as your tuned settings.
+TEST (v0.25.133)
+1. Ascended Circle Swing: the eruption centre is ~5 m ahead.
+2. F8 -> any class tab -> "... Animation" sections: change Start / End %, cast the skill, the animation starts later / is cut.
