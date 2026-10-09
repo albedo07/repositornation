@@ -1,0 +1,4 @@
+Aethelborn Ascended v0.25.121 - Coiled Spin
+- Circle Swing: hop removed (no crow hop clip, no 1.5 m hop). The axe 360 spin fills the whole 1.5 s wind up: its coil (weapon drawn back, body wound up) is held slowly while rooted, then the spin plays fast and its hit lands on the damage.
+- Clips chained back to back keep full weight (no flicker to vanilla between coil and spin).
+- Without the bundle: old crow hop as before.

@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.120";
+        public const string ModVersion = "0.25.121";
 
         internal static DragonCombatPlugin Instance;
 
@@ -9336,6 +9336,8 @@ namespace DragonsAltarCombat
 
         public void Begin(Animator an, AnimationClip clip, float from, float to, float speed, float fadeIn, float fadeOut)
         {
+            // v0.25.121: chaining a clip onto a playing one keeps full weight (no blend back to vanilla in between)
+            bool chained = _live && !_stopping;
             Kill();
             _graph = UnityEngine.Playables.PlayableGraph.Create("IH Mixamo " + clip.name);
             _graph.SetTimeUpdateMode(UnityEngine.Playables.DirectorUpdateMode.GameTime);
@@ -9350,7 +9352,7 @@ namespace DragonsAltarCombat
             _to = Mathf.Max(from + 0.05f, Mathf.Min(to, clip.length));
             _fadeIn = Mathf.Max(0.01f, fadeIn);
             _fadeOut = Mathf.Max(0.01f, fadeOut);
-            _age = 0f; _stopping = false; _live = true;
+            _age = chained ? _fadeIn : 0f; _stopping = false; _live = true;
         }
 
         private void Update()

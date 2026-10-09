@@ -1,3 +1,3 @@
-Aethelborn Ascended - TEST THIS BUILD (v0.25.120)
-1. Circle Swing (normal + Ascended): no shaking, no teleport, crow hop then spin.
-2. Arms: none inside the chest, no arm stuck behind the back.
+Aethelborn Ascended - TEST THIS BUILD (v0.25.121)
+1. Circle Swing: slow coil for about 1 s, then a violent counter-clockwise spin, hit when the axe comes round. No hop, no snap between coil and spin.
+2. Ascended: second spin the other way.

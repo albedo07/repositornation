@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.120";
+        public const string ModVersion = "0.25.121";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -3317,24 +3317,29 @@ namespace AlbedosCustomClassesAdvanced
         {
             ShowMessage("Circle Swing");
             if (player == null || player.IsDead()) yield break;
-            // v0.25.35 (user): no steering in the wind up any more; the crow hop carries you 1.5 m forward.
+            // v0.25.35 (user): no steering in the wind up (rooted).
             DragonCombat.LockSkill(player, windup + 0.05f);
             DragonCombat.GrantHyperArmor(player, windup + 0.25f);
-            StartCoroutine(CircleHop(player, windup));
-            // v0.25.111 MIXAMO TEST: 'melee_attack_360_high_mirror' (counter-clockwise) takes over from the crow hop
-            // so its hit frame (1.067 s) lands on the damage. Played 0.2 s -> 1.2 s of the clip: the full turn only,
-            // the clip's own overshoot and turn-back after 1.2 s are cut. No bundle = the old animation.
-            float mxLead = (MxSpinHit - MxSpinFrom) / MxSpinSpeed;
-            bool mx = windup > mxLead && DragonMixamo.Has(MxCircleClip);
+            // v0.25.121 (user: drop the hop): the axe pack 360 (mirrored = counter-clockwise) fills the whole wind up.
+            // Its own coil (0 -> 0.27 s, weapon drawn back) is stretched slowly over the wind up while you stand rooted,
+            // then the spin plays fast so its hit frame (1.067 s) lands on the damage. Cut at 1.2 s (no turn-back).
+            bool mx = DragonMixamo.Has(MxCircleClip);
             if (mx)
             {
-                yield return new WaitForSeconds(windup - mxLead);
-                if (player == null || player.IsDead()) yield break;
+                float spin = (MxSpinHit - MxCoilTo) / MxSpinSpeed;
+                float coil = Mathf.Max(0.05f, windup - spin);
                 DragonCombat.ClipStop(player, 0.05f);
-                DragonMixamo.Play(player, MxCircleClip, MxSpinFrom, MxSpinTo, MxSpinSpeed, 0.08f, 0.25f);
-                yield return new WaitForSeconds(mxLead);
+                DragonMixamo.Play(player, MxCircleClip, 0f, MxCoilTo, Mathf.Clamp(MxCoilTo / coil, 0.1f, 6f), 0.12f, 0.3f);
+                yield return new WaitForSeconds(coil);
+                if (player == null || player.IsDead()) yield break;
+                DragonMixamo.Play(player, MxCircleClip, MxCoilTo, MxSpinTo, MxSpinSpeed, 0.05f, 0.25f);
+                yield return new WaitForSeconds(spin);
             }
-            else yield return new WaitForSeconds(windup);
+            else
+            {
+                StartCoroutine(CircleHop(player, windup));
+                yield return new WaitForSeconds(windup);
+            }
             if (player == null || player.IsDead()) yield break;
             bool ascended = IsAscendedSkill("circle_swing");
             float radius = Mathf.Max(0.5f, ascended ? DragonCombat.M(_circleAscRadius.Value) : DragonCombat.M(_circleRadius.Value));
@@ -3359,7 +3364,7 @@ namespace AlbedosCustomClassesAdvanced
 
         // v0.25.111 Mixamo 'standing melee attack 360 high' (Pro Melee Axe Pack, 30 fps): turn runs f8-f36, hit f32.
         private const string MxCircleClip = "melee_attack_360_high_mirror", MxCounterClip = "melee_attack_360_high";
-        private const float MxSpinFrom = 0.2f, MxSpinTo = 1.2f, MxSpinHit = 1.067f, MxSpinSpeed = 1.5f;
+        private const float MxSpinFrom = 0.2f, MxSpinTo = 1.2f, MxSpinHit = 1.067f, MxSpinSpeed = 1.5f, MxCoilTo = 0.27f;
 
         // Crow hop: 1.5 m forward during the hop part of the wind up (24% - 58% of it, matching the clip);
         // walls stop it, height stays physics-driven.
@@ -4322,7 +4327,7 @@ namespace AlbedosCustomClassesAdvanced
 
             float windup = Mathf.Max(0.1f, _circleWindup.Value);
             // v0.22.4: normal walking speed during the wind up (no Sprint), Hyper Armor.
-            DragonCombat.PlayClip(player, "merc_circle", windup);
+            if (!DragonMixamo.Has(MxCircleClip)) DragonCombat.PlayClip(player, "merc_circle", windup);   // v0.25.121: no crow hop with the Mixamo spin
             StartCoroutine(CircleSwingRoutineV(player, windup));
         }
 
