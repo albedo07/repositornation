@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.134";
+        public const string ModVersion = "0.25.135";
 
         internal static DragonCombatPlugin Instance;
 
@@ -2513,6 +2513,7 @@ namespace DragonsAltarCombat
         private float _constK;
         private float _vaStartN, _vaEndN = 1f;   // v0.25.133 tuning
         private bool _vaJumped, _vaCut;
+        private float _uniK;   // v0.25.135 the one speed of the current vanilla animation
         private float _constWindup;
 
         private void ReleaseBow(bool fire)
@@ -2728,6 +2729,7 @@ namespace DragonsAltarCombat
                 _vaLayer = -1;
                 _vaFiredAt = Time.time;
                 _vaTrack = true;
+                _uniK = 0f;
             }
             catch (Exception) { }
         }
@@ -2749,7 +2751,7 @@ namespace DragonsAltarCombat
                 if (p != null) DragonCombat.BlockSkillAnimAttack(p, 2.5f);
                 _animator.ResetTrigger(trigger);
                 _animator.CrossFadeInFixedTime(lv[1], 0.08f, lv[0], 0f);
-                if (_vaTrack) { _vaLayer = lv[0]; _vaHash = lv[1]; _vaFiredAt = Time.time; _constK = 0f; }
+                if (_vaTrack) { _vaLayer = lv[0]; _vaHash = lv[1]; _vaFiredAt = Time.time; _constK = 0f; _uniK = 0f; }
                 return true;
             }
             catch (Exception) { return false; }
@@ -2788,7 +2790,7 @@ namespace DragonsAltarCombat
                 else { _vaTrack = false; DragonCombat.SetSkillAnimSpeed(p, 1f, 0f); return; }
                 float norm = info.normalizedTime;
                 // v0.25.133 tuning: start the animation later / cut it earlier (blend back to what played before)
-                if (!_vaJumped && _vaStartN > 0.001f && norm < _vaStartN) { _vaJumped = true; _animator.CrossFade(_vaHash, 0.05f, _vaLayer, _vaStartN); return; }
+                if (!_vaJumped && _vaStartN > 0.001f && norm < _vaStartN) { _vaJumped = true; _uniK = 0f; _animator.CrossFade(_vaHash, 0.05f, _vaLayer, _vaStartN); return; }
                 if (!_vaCut && _vaEndN < 0.999f && norm >= _vaEndN)
                 {
                     _vaCut = true; _vaTrack = false; DragonCombat.SetSkillAnimSpeed(p, 1f, 0f);
@@ -2803,20 +2805,17 @@ namespace DragonsAltarCombat
                     DragonCombat.SetSkillAnimSpeed(p, _constK, 0.15f);
                     return;
                 }
-                // v0.25.35 two phases (user: slow wind up, then a fast swing timed to the skill): the vanilla
-                // anticipation (everything up to ~0.22 s before its hit frame) is stretched over the wind up, the
-                // swing itself plays fast in the last ~0.25 s so its hit frame lands exactly on the impact;
-                // the recovery after the impact is played out at 6x.
-                float len = Mathf.Max(0.05f, info.length);
-                float hitN = Mathf.Clamp(_vaLead / len, 0.15f, 0.9f);
-                float swingN = Mathf.Clamp((_vaLead - 0.22f) / len, 0f, hitN);
-                float swingDur = Mathf.Min(0.25f, Mathf.Max(0.04f, (end - _vaFiredAt) * 0.45f));
-                float swingAt = end - swingDur;
-                float speed;
-                if (Time.time > end + 0.02f) speed = 6f;
-                else if (Time.time < swingAt) speed = Mathf.Clamp((swingN - norm) * len / Mathf.Max(0.03f, swingAt - Time.time), 0.12f, 6f);
-                else speed = Mathf.Clamp((hitN - norm) * len / Mathf.Max(0.03f, end - Time.time), 0.12f, 6f);
-                DragonCombat.SetSkillAnimSpeed(p, speed, 0.15f);
+                // v0.25.135 ONE SMOOTH MOTION (user, every skill): one constant speed for the whole animation, set
+                // once when it starts so its hit frame lands on the impact, then the follow-through + recovery play out
+                // to 100% at that SAME speed (no slow wind up / fast swing / 6x recovery any more). End % still cuts.
+                if (_uniK <= 0f)
+                {
+                    float len = Mathf.Max(0.05f, info.length);
+                    float hitN = Mathf.Clamp(_vaLead / len, 0.05f, 0.95f);
+                    float leftNat = Mathf.Max(0.02f, (hitN - norm) * len);
+                    _uniK = norm >= hitN ? 1f : Mathf.Clamp(leftNat / left, 0.25f, 4f);
+                }
+                DragonCombat.SetSkillAnimSpeed(p, _uniK, 0.15f);
             }
             catch (Exception) { _vaTrack = false; }
         }

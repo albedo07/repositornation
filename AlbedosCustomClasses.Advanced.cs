@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.134";
+        public const string ModVersion = "0.25.135";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1128,6 +1128,7 @@ namespace AlbedosCustomClassesAdvanced
 
             _sharedCrossCastRange = Config.Bind("Targeting", "SharedCrossGroundPACRange", 35f, "Shared cross-selection range used by Priest Cross Cast skills and physical Cross targeting.");
             _acrobaticAscentLift = Config.Bind("Acrobatic Jump Skills", "LegacyAscentHangAcceleration", 4f, "Legacy compatibility value. v0.10.8 uses a guaranteed scripted ascent so Valheim cannot cancel the jump at takeoff.");
+            _jsEndPct = Config.Bind("Acrobatic Jump Skills", "SlamAnimEndPercent_v025135", 100f, new ConfigDescription("Bonecrusher / Electric Smite: the run-jump-attack plays to this % of its animation after the slam (100 = the full recovery; you stay rooted until it ends).", new AcceptableValueRange<float>(48f, 100f)));
             _acrobaticJumpHeight = Config.Bind("Acrobatic Jump Skills", "JumpHeight", 2f, "Guaranteed cinematic jump height above the takeoff point before committed descent.");
 
             // v0.10.0 scale migration: known old defaults only.
@@ -3609,6 +3610,8 @@ namespace AlbedosCustomClassesAdvanced
         private const string MxJumpSlam = "melee_run_jump_attack";
         private const float MxSlamHold = 1.72f;   // 99%: the strike is down, the weapon a hand above the ground
         private bool _jsActive, _jsUsed;
+        private ConfigEntry<float> _jsEndPct;
+        private const float MxJumpSlamLength = 3.65f;   // 'melee run jump attack' clip length (111 frames @30)
 
         private bool IhJumpSlamStart(Player player, float takeoff, float airSeconds)
         {
@@ -3626,11 +3629,26 @@ namespace AlbedosCustomClassesAdvanced
             return true;
         }
 
+        // v0.25.135 keeps the player rooted while a recovery animation plays out
+        private IEnumerator IhHoldRoot(Player player, float seconds)
+        {
+            float until = Time.time + seconds;
+            while (player != null && !player.IsDead() && Time.time < until)
+            {
+                DragonCombat.LockSkill(player, 0.15f);
+                yield return null;
+            }
+        }
+
         private bool IhJumpSlamLand(Player player)
         {
             if (!_jsActive) return false;
             _jsActive = false;
-            DragonMixamo.PlayWarp(player, MxJumpSlam, new float[] { 0f, 0.06f, 0.55f }, new float[] { MxSlamHold, 1.76f, 2.10f }, 0.05f, 0.35f, false);
+            // v0.25.135 (user: every CA executes 100%): after the slam the recovery plays at natural speed to the end %
+            float endClip = Mathf.Max(1.80f, MxJumpSlamLength * Mathf.Clamp(_jsEndPct == null ? 100f : _jsEndPct.Value, 48f, 100f) / 100f);
+            float rec = endClip - 1.76f;
+            DragonMixamo.PlayWarp(player, MxJumpSlam, new float[] { 0f, 0.06f, 0.06f + rec }, new float[] { MxSlamHold, 1.76f, endClip }, 0.05f, 0.3f, false);
+            StartCoroutine(IhHoldRoot(player, 0.06f + rec));
             DragonMixamo.SetGroundReach(player, MxSlamHold, 1.76f, 2.05f);   // v0.25.130 the weapon head meets the terrain
             return true;
         }
@@ -5779,7 +5797,7 @@ namespace AlbedosCustomClassesAdvanced
             ShieldChargeSlamHit(player, forward);
             if (_enableVfx.Value) { Vector3 sp = player.transform.position + forward * 1.6f; DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(sp, DragonVfx.Holy, 3.5f, 1.3f); }); }   // v0.25.57
             // v0.25.55 (user: the slam animation kept going long after the hit): rush the rest of the heavy swing.
-            DragonCombat.SetSkillAnimSpeed(player, 6f, 0.35f);
+            // v0.25.135 (user): no recovery rush - the swing plays out at its one speed (cut it with End % in F8)
         }
 
         // v0.25.86 (user) Ascended: a JUMPING Hammer Slam (same animation) with a Lightning Strike. 0.5s from jump to slam,
@@ -5849,7 +5867,7 @@ namespace AlbedosCustomClassesAdvanced
                 Vector3 lp = c; float lr = radius;
                 DragonCombat.RunVfx(delegate { DragonVfx.SkyStrike(lp, DragonVfx.Storm, lr, 16f); DragonVfx.HeavyLanding(lp, DragonVfx.Holy, lr * 0.6f, 1.6f); });
             }
-            DragonCombat.SetSkillAnimSpeed(player, 6f, 0.35f);
+            // v0.25.135 (user): no recovery rush - the swing plays out at its one speed (cut it with End % in F8)
         }
 
         private void ShieldChargeSlamHit(Player player, Vector3 forward)

@@ -1,0 +1,5 @@
+v0.25.135 - One Smooth Motion
+- EVERY skill animation (Valheim-based) now plays at ONE constant speed, set when it starts so its hit lands on the
+  skill's impact, and runs to 100% at that same speed. Removed: slow stretched wind up + fast last-0.25 s swing +
+  6x recovery (all skills), and the 6x post-hit rush on Shield Charge's slams. Circle Swing unchanged.
+- Fine-tune per skill in F8 "<Skill> Animation" (Start % / End %) and each skill's Windup.
