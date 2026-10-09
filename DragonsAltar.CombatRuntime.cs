@@ -9224,28 +9224,121 @@ namespace DragonsAltarCombat
     // the character: the skill code keeps owning movement. No bundle = the old animation plays (fallback).
     public static class DragonMixamo
     {
-        private static bool _tried;
         private static Dictionary<string, AnimationClip> _clips;
+        private static float _nextTry = -1f;
+        private static string _status = "not loaded yet";
+        private static bool _statusShown;
+
+        // v0.25.125 ROOT CAUSE FIX: the clips never loaded in-game (every Circle Swing so far was the old procedural
+        // fallback). Now: the bundle is searched everywhere it can sensibly be (plugins/ImmortalHeroesAssets, next to
+        // this DLL, anywhere under BepInEx/plugins), clips are read both ways (LoadAllAssets and per-asset sub-assets)
+        // and the result is shown ON SCREEN the first time a skill asks, so nobody has to dig through the log.
+        public static string Status { get { Load(); return _status; } }
+        public static int Count { get { Load(); return _clips == null ? 0 : _clips.Count; } }
 
         private static void Load()
         {
-            if (_tried) return;
-            _tried = true;
+            if (_clips != null) return;
+            if (Time.realtimeSinceStartup < _nextTry) return;
+            _nextTry = Time.realtimeSinceStartup + 10f;   // missing file: look again in 10 s (user may copy it in while playing)
             try
             {
-                string path = Paths.PluginPath + "/ImmortalHeroesAssets/aethelborn_anims";
-                if (!System.IO.File.Exists(path)) path = Paths.PluginPath + "/ImmortalHeroesAssets/immortalheroes_anims";
-                if (!System.IO.File.Exists(path)) { DragonCombatPlugin.Instance.LogInfo("Mixamo clips: no bundle at " + path + " (old animations used)."); return; }
+                string path = FindBundle();
+                if (path == null)
+                {
+                    _status = "Aethelborn animations NOT FOUND - put 'aethelborn_anims' (from Unity AABuild) into " + System.IO.Path.Combine(System.IO.Path.Combine(Paths.PluginPath, "ImmortalHeroesAssets"), "aethelborn_anims");
+                    Log(_status);
+                    return;
+                }
                 AssetBundle bundle = AssetBundle.LoadFromFile(path);
-                if (bundle == null) { DragonCombatPlugin.Instance.LogInfo("Mixamo clips: bundle failed to load (built with a different Unity version?)."); return; }
-                _clips = new Dictionary<string, AnimationClip>(StringComparer.OrdinalIgnoreCase);
-                AnimationClip[] all = bundle.LoadAllAssets<AnimationClip>();
-                List<string> names = new List<string>();
-                for (int i = 0; i < all.Length; i++)
-                    if (all[i] != null && !all[i].name.StartsWith("__preview__", StringComparison.Ordinal)) { _clips[all[i].name] = all[i]; names.Add(all[i].name); }
-                DragonCombatPlugin.Instance.LogInfo("Mixamo clips loaded (" + names.Count + "): " + string.Join(", ", names.ToArray()));
+                if (bundle == null)
+                {
+                    _status = "Aethelborn animations FAILED to load (" + path + "). Valheim runs Unity " + Application.unityVersion + " - build the bundle with that exact Unity version.";
+                    Log(_status);
+                    _nextTry = float.MaxValue;
+                    return;
+                }
+                Dictionary<string, AnimationClip> clips = new Dictionary<string, AnimationClip>(StringComparer.OrdinalIgnoreCase);
+                AddClips(clips, bundle.LoadAllAssets<AnimationClip>());
+                string[] assets = bundle.GetAllAssetNames();
+                for (int i = 0; i < assets.Length; i++)
+                {
+                    try { AddClips(clips, bundle.LoadAssetWithSubAssets<AnimationClip>(assets[i])); } catch (Exception) { }
+                }
+                if (clips.Count == 0)
+                {
+                    _status = "Aethelborn animations: bundle found but it holds NO clips (" + assets.Length + " assets). Rebuild it with AAAnimBuilder.";
+                    Log(_status);
+                    _nextTry = float.MaxValue;
+                    return;
+                }
+                _clips = clips;
+                List<string> names = new List<string>(clips.Keys);
+                names.Sort(StringComparer.Ordinal);
+                _status = "Aethelborn animations loaded: " + clips.Count + " clips";
+                Log(_status + " from " + path + " (Unity " + Application.unityVersion + "): " + string.Join(", ", names.ToArray()));
             }
-            catch (Exception e) { DragonCombatPlugin.Instance.LogInfo("Mixamo clips: " + e.Message); }
+            catch (Exception e)
+            {
+                _status = "Aethelborn animations error: " + e.Message;
+                Log(_status);
+            }
+        }
+
+        private static void AddClips(Dictionary<string, AnimationClip> into, AnimationClip[] found)
+        {
+            if (found == null) return;
+            for (int i = 0; i < found.Length; i++)
+            {
+                AnimationClip c = found[i];
+                if (c == null || c.name.StartsWith("__preview__", StringComparison.Ordinal)) continue;
+                into[c.name] = c;
+            }
+        }
+
+        private static string FindBundle()
+        {
+            string[] names = new string[] { "aethelborn_anims", "immortalheroes_anims" };
+            List<string> dirs = new List<string>();
+            dirs.Add(System.IO.Path.Combine(Paths.PluginPath, "ImmortalHeroesAssets"));
+            try
+            {
+                string here = System.IO.Path.GetDirectoryName(typeof(DragonMixamo).Assembly.Location);
+                if (!string.IsNullOrEmpty(here)) { dirs.Add(System.IO.Path.Combine(here, "ImmortalHeroesAssets")); dirs.Add(here); }
+            }
+            catch (Exception) { }
+            dirs.Add(Paths.PluginPath);
+            for (int d = 0; d < dirs.Count; d++)
+                for (int n = 0; n < names.Length; n++)
+                {
+                    string p = System.IO.Path.Combine(dirs[d], names[n]);
+                    if (System.IO.File.Exists(p)) return p;
+                }
+            for (int n = 0; n < names.Length; n++)
+            {
+                try
+                {
+                    string[] hits = System.IO.Directory.GetFiles(Paths.PluginPath, names[n], System.IO.SearchOption.AllDirectories);
+                    if (hits.Length > 0) return hits[0];
+                }
+                catch (Exception) { }
+            }
+            return null;
+        }
+
+        private static void Log(string s)
+        {
+            if (DragonCombatPlugin.Instance != null) DragonCombatPlugin.Instance.LogInfo("[Mixamo] " + s);
+            else Debug.Log("[Mixamo] " + s);
+        }
+
+        // Shown once per session on screen (top left) the first time a skill looks for its animation.
+        public static void ShowStatusOnce()
+        {
+            if (_statusShown) return;
+            Load();
+            _statusShown = true;
+            try { if (MessageHud.instance != null) MessageHud.instance.ShowMessage(MessageHud.MessageType.TopLeft, _status); } catch (Exception) { }
         }
 
         public static bool Has(string name)
@@ -9253,8 +9346,8 @@ namespace DragonsAltarCombat
             return Resolve(name) != null;
         }
 
-        // v0.25.122: exact name, else a clip whose name ENDS with it (Mixamo files keep prefixes like
-        // "x_bot_baseball_pitching"); mirror and non-mirror never match each other.
+        // Exact name, else a clip whose name ENDS with it (Mixamo files keep prefixes like "x_bot_..."); mirror and
+        // non-mirror never match each other.
         private static AnimationClip Resolve(string name)
         {
             Load();
@@ -9273,171 +9366,214 @@ namespace DragonsAltarCombat
         // Plays clip time 'from' -> 'to' at 'speed'; returns false (nothing happens) when the clip is missing.
         public static bool Play(Player player, string name, float from, float to, float speed, float fadeIn, float fadeOut)
         {
-            return Play(player, name, from, to, speed, fadeIn, fadeOut, false);
+            return Play(player, name, from, to, speed, fadeIn, fadeOut, true);
         }
 
-        // v0.25.123 inPlace: the clip's horizontal travel (baked into the pose) is taken out of the hips, so the
-        // body never drifts away from the player and never snaps back.
         public static bool Play(Player player, string name, float from, float to, float speed, float fadeIn, float fadeOut, bool inPlace)
         {
-            return PlayLayered(player, name, from, to, speed, fadeIn, fadeOut, inPlace, null, 0f);
+            float s = Mathf.Clamp(speed, 0.05f, 8f);
+            return PlayWarp(player, name, new float[] { 0f, Mathf.Max(0.02f, (to - from) / s) }, new float[] { from, to }, fadeIn, fadeOut, false);
         }
 
-        // v0.25.123 upper-body layer: 'upperName' (held at 'upperTime') drives head + arms + hands while 'name'
-        // drives hips, spine and legs - e.g. a pitcher's leg kick with a two-handed weapon grip.
-        public static bool PlayLayered(Player player, string name, float from, float to, float speed, float fadeIn, float fadeOut, bool inPlace, string upperName, float upperTime)
+        // v0.25.125 TIME WARP: realTimes[i] (seconds after the call) -> clipTimes[i] (seconds in the clip), linear in
+        // between, so the skill decides exactly when every part of the move happens (slow anticipation, fast strike,
+        // hit frame ON the damage). Holds the last clip time, then fades out to the Animator.
+        // transferRoot: the clip's own forward travel (baked into the pose) moves the real player body; the hips are
+        // pinned to the body otherwise (no drifting away from the collider, no snap back). Only for clips started at
+        // their beginning (clipTimes[0] ~ 0).
+        public static bool PlayWarp(Player player, string name, float[] realTimes, float[] clipTimes, float fadeIn, float fadeOut, bool transferRoot)
         {
+            ShowStatusOnce();
             AnimationClip clip = Resolve(name);
-            if (player == null || clip == null) return false;
-            AnimationClip upper = string.IsNullOrEmpty(upperName) ? null : Resolve(upperName);
+            if (player == null || clip == null || realTimes == null || clipTimes == null || realTimes.Length < 2 || realTimes.Length != clipTimes.Length) return false;
             Animator an = player.GetComponentInChildren<Animator>();
             if (an == null || !an.isHuman) return false;
             DragonMixamoPlayer p = an.GetComponent<DragonMixamoPlayer>();
             if (p == null) p = an.gameObject.AddComponent<DragonMixamoPlayer>();
-            p.Begin(an, clip, from, to, speed, fadeIn, fadeOut, inPlace, upper, upperTime);
+            p.Begin(player, an, clip, realTimes, clipTimes, fadeIn, fadeOut, transferRoot && clipTimes[0] < 0.05f);
             DragonArmGuard.Attach(player);
             return true;
         }
+
+        public static void Stop(Player player, float fadeOut)
+        {
+            if (player == null) return;
+            Animator an = player.GetComponentInChildren<Animator>();
+            DragonMixamoPlayer p = an != null ? an.GetComponent<DragonMixamoPlayer>() : null;
+            if (p != null) p.StopNow(fadeOut);
+        }
     }
 
-    // v0.25.123: one PlayableGraph per character. A clip started while another still plays is added to the SAME
-    // graph and cross-faded in (mixer, old branch keeps moving) - one continuous motion, no seam, no snap to
-    // vanilla in between. Holds the last frame of the current clip and fades out to the Animator.
+    // v0.25.125: one PlayableGraph per character. A clip started while another still plays is added to the SAME graph
+    // and cross-faded in (mixer; the old branch keeps moving at natural speed) - one continuous motion, no seam.
+    // Hips are pinned to where the vanilla pose had them (body-relative), plus the transferred travel lead, so a
+    // clip started mid-way never jumps the body and a spin turns around the character's own centre.
     [DefaultExecutionOrder(31000)]
     public class DragonMixamoPlayer : MonoBehaviour
     {
-        private static AvatarMask _upperMask;
         private UnityEngine.Playables.PlayableGraph _graph;
         private UnityEngine.Animations.AnimationPlayableOutput _output;
         private UnityEngine.Animations.AnimationClipPlayable _clip;
         private UnityEngine.Playables.Playable _root;
         private UnityEngine.Animations.AnimationMixerPlayable _xmix;
-        private bool _live, _stopping, _mixing, _inPlace, _hipStartSet;
-        private float _to, _fadeIn, _fadeOut, _age, _stopAt;
+        private bool _live, _stopping, _mixing, _restSet, _transfer;
+        private float _fadeIn, _fadeOut, _age, _stopAt, _w, _mixAge;
+        private float[] _wr, _wc;
         private Transform _hips, _body;
-        private Vector3 _hipStart;
+        private Rigidbody _rb;
+        private Vector3 _rest, _bodyStart, _want;
 
         public bool Live { get { return _live; } }
 
-        private static AvatarMask UpperMask()
-        {
-            if (_upperMask != null) return _upperMask;
-            _upperMask = new AvatarMask();
-            for (int i = 0; i < (int)AvatarMaskBodyPart.LastBodyPart; i++)
-            {
-                AvatarMaskBodyPart part = (AvatarMaskBodyPart)i;
-                bool on = part == AvatarMaskBodyPart.Head || part == AvatarMaskBodyPart.LeftArm || part == AvatarMaskBodyPart.RightArm
-                    || part == AvatarMaskBodyPart.LeftFingers || part == AvatarMaskBodyPart.RightFingers
-                    || part == AvatarMaskBodyPart.LeftHandIK || part == AvatarMaskBodyPart.RightHandIK;
-                _upperMask.SetHumanoidBodyPartActive(part, on);
-            }
-            return _upperMask;
-        }
-
-        public void Begin(Animator an, AnimationClip clip, float from, float to, float speed, float fadeIn, float fadeOut, bool inPlace, AnimationClip upper, float upperTime)
+        public void Begin(Player player, Animator an, AnimationClip clip, float[] realTimes, float[] clipTimes, float fadeIn, float fadeOut, bool transfer)
         {
             bool chained = _live && !_stopping && _graph.IsValid();
+            _body = player.transform;
+            _rb = player.GetComponent<Rigidbody>();
+            _hips = an.GetBoneTransform(HumanBodyBones.Hips);
             if (!chained)
             {
                 Kill();
-                _graph = UnityEngine.Playables.PlayableGraph.Create("IH Mixamo");
+                _graph = UnityEngine.Playables.PlayableGraph.Create("Aethelborn Mixamo");
                 _graph.SetTimeUpdateMode(UnityEngine.Playables.DirectorUpdateMode.GameTime);
-                _output = UnityEngine.Animations.AnimationPlayableOutput.Create(_graph, "IH Mixamo", an);
+                _output = UnityEngine.Animations.AnimationPlayableOutput.Create(_graph, "Aethelborn Mixamo", an);
+                // rest = where the vanilla pose has the hips relative to the body (last evaluated frame)
+                _restSet = false;
+                if (_hips != null && _body != null) { _rest = _body.InverseTransformPoint(_hips.position); _rest.y = 0f; _restSet = true; }
             }
-            _clip = UnityEngine.Animations.AnimationClipPlayable.Create(_graph, clip);
-            _clip.SetApplyFootIK(true);
-            UnityEngine.Playables.PlayableExtensions.SetTime(_clip, Mathf.Max(0f, from));
-            UnityEngine.Playables.PlayableExtensions.SetSpeed(_clip, Mathf.Clamp(speed, 0.1f, 6f));
-            UnityEngine.Playables.Playable node = _clip;
-            if (upper != null)
+            else
             {
-                UnityEngine.Animations.AnimationClipPlayable up = UnityEngine.Animations.AnimationClipPlayable.Create(_graph, upper);
-                UnityEngine.Playables.PlayableExtensions.SetTime(up, Mathf.Max(0f, upperTime));
-                UnityEngine.Playables.PlayableExtensions.SetSpeed(up, 0.0);
-                UnityEngine.Animations.AnimationLayerMixerPlayable layers = UnityEngine.Animations.AnimationLayerMixerPlayable.Create(_graph, 2);
-                _graph.Connect(_clip, 0, layers, 0);
-                _graph.Connect(up, 0, layers, 1);
-                UnityEngine.Playables.PlayableExtensions.SetInputWeight(layers, 0, 1f);
-                UnityEngine.Playables.PlayableExtensions.SetInputWeight(layers, 1, 1f);
-                layers.SetLayerMaskFromAvatarMask(1, UpperMask());
-                node = layers;
+                // the outgoing clip keeps moving naturally while the new one fades in
+                UnityEngine.Playables.PlayableExtensions.SetSpeed(_clip, 1.0);
             }
+            UnityEngine.Animations.AnimationClipPlayable cp = UnityEngine.Animations.AnimationClipPlayable.Create(_graph, clip);
+            cp.SetApplyFootIK(true);
+            UnityEngine.Playables.PlayableExtensions.SetTime(cp, Mathf.Max(0f, clipTimes[0]));
+            UnityEngine.Playables.PlayableExtensions.SetSpeed(cp, 0.0);   // time is driven by the warp
             _mixing = false;
             if (chained)
             {
                 _xmix = UnityEngine.Animations.AnimationMixerPlayable.Create(_graph, 2);
                 _graph.Connect(_root, 0, _xmix, 0);
-                _graph.Connect(node, 0, _xmix, 1);
+                _graph.Connect(cp, 0, _xmix, 1);
                 UnityEngine.Playables.PlayableExtensions.SetInputWeight(_xmix, 0, 1f);
                 UnityEngine.Playables.PlayableExtensions.SetInputWeight(_xmix, 1, 0f);
                 _root = _xmix;
                 UnityEngine.Playables.PlayableOutputExtensions.SetSourcePlayable(_output, _root);
                 UnityEngine.Playables.PlayableOutputExtensions.SetWeight(_output, 1f);
-                _mixing = true;
+                _mixing = true; _mixAge = 0f;
             }
             else
             {
-                _root = node;
+                _root = cp;
                 UnityEngine.Playables.PlayableOutputExtensions.SetSourcePlayable(_output, _root);
                 UnityEngine.Playables.PlayableOutputExtensions.SetWeight(_output, 0f);
                 _graph.Play();
             }
-            _to = Mathf.Max(from + 0.05f, Mathf.Min(to, clip.length));
+            _clip = cp;
+            _wr = (float[])realTimes.Clone(); _wc = (float[])clipTimes.Clone();
+            for (int i = 0; i < _wc.Length; i++) _wc[i] = Mathf.Clamp(_wc[i], 0f, clip.length);
             _fadeIn = Mathf.Max(0.01f, fadeIn);
             _fadeOut = Mathf.Max(0.01f, fadeOut);
+            if (!chained) _w = 0f;
             _age = 0f; _stopping = false; _live = true;
-            _inPlace = inPlace; _hipStartSet = false;
-            _hips = an.GetBoneTransform(HumanBodyBones.Hips);
-            _body = an.transform;
+            _transfer = transfer && !chained && _rb != null;
+            if (_transfer) { _bodyStart = _rb.position; _want = Vector3.zero; }
         }
+
+        public void StopNow(float fadeOut)
+        {
+            if (!_live || _stopping) return;
+            _fadeOut = Mathf.Max(0.01f, fadeOut);
+            _stopping = true; _stopAt = _age;
+        }
+
+        private float Warp(float age)
+        {
+            if (age <= _wr[0]) return _wc[0];
+            for (int i = 1; i < _wr.Length; i++)
+                if (age <= _wr[i])
+                {
+                    float span = Mathf.Max(0.0001f, _wr[i] - _wr[i - 1]);
+                    return Mathf.Lerp(_wc[i - 1], _wc[i], (age - _wr[i - 1]) / span);
+                }
+            return _wc[_wc.Length - 1];
+        }
+
+        private static float Ease(float x) { x = Mathf.Clamp01(x); return x * x * (3f - 2f * x); }
 
         private void Update()
         {
             if (!_live) return;
             if (!_graph.IsValid()) { _live = false; return; }
             _age += Time.deltaTime;
-            double t = UnityEngine.Playables.PlayableExtensions.GetTime(_clip);
-            if (t >= _to && !_stopping)
-            {
-                // hold the last frame (never play the clip's own settle-back) while fading out
-                UnityEngine.Playables.PlayableExtensions.SetSpeed(_clip, 0.0);
-                UnityEngine.Playables.PlayableExtensions.SetTime(_clip, _to);
-                _stopping = true; _stopAt = _age;
-            }
-            float x = Mathf.Clamp01(_age / _fadeIn);
-            x = x * x * (3f - 2f * x);   // ease in/out: no visible start or end of the blend
+            UnityEngine.Playables.PlayableExtensions.SetTime(_clip, Warp(_age));
+            if (!_stopping && _age >= _wr[_wr.Length - 1]) { _stopping = true; _stopAt = _age; }
             if (_mixing)
             {
+                _mixAge += Time.deltaTime;
+                float x = Ease(_mixAge / _fadeIn);
                 UnityEngine.Playables.PlayableExtensions.SetInputWeight(_xmix, 0, 1f - x);
                 UnityEngine.Playables.PlayableExtensions.SetInputWeight(_xmix, 1, x);
                 if (x >= 1f) _mixing = false;
+                _w = 1f;
             }
-            float w = (_mixing || _age >= _fadeIn) ? 1f : x;
-            if (_stopping)
-            {
-                float y = Mathf.Clamp01((_age - _stopAt) / _fadeOut);
-                w *= 1f - y * y * (3f - 2f * y);
-            }
+            else if (_w < 1f && !_stopping) _w = Ease(_age / _fadeIn);
+            float w = _w;
+            if (_stopping) w *= 1f - Ease((_age - _stopAt) / _fadeOut);
             UnityEngine.Playables.PlayableOutputExtensions.SetWeight(_output, w);
+            _wOut = w;
             if (_stopping && _age - _stopAt >= _fadeOut) Kill();
         }
 
-        // In place: the hips keep their horizontal spot (relative to the body) from the start of this clip.
+        private float _wOut;
+
+        // Hips pin (+ travel lead) after the Animator wrote the pose; ArmGuard (32000) runs after this.
         private void LateUpdate()
         {
-            if (!_live || !_inPlace || _hips == null || _body == null) return;
+            if (!_live || _hips == null || _body == null || !_restSet) return;
             Vector3 local = _body.InverseTransformPoint(_hips.position);
-            local.y = 0f;
-            if (!_hipStartSet) { _hipStart = local; _hipStartSet = true; return; }
-            Vector3 back = _body.TransformVector(local - _hipStart);
-            back.y = 0f;
-            _hips.position -= back;
+            float y = local.y;
+            Vector3 flat = new Vector3(local.x, 0f, local.z);
+            Vector3 target = _rest;
+            if (_transfer && !_stopping)
+            {
+                Vector3 drift = flat - _rest;                      // clip travel so far (body frame)
+                Vector3 moved = _body.InverseTransformDirection(_rb.position - _bodyStart);
+                moved.y = 0f;
+                _want = drift;
+                target = _rest + Vector3.ClampMagnitude(drift - moved, 0.35f);
+            }
+            Vector3 corr = target - flat;
+            _hips.position += _body.TransformVector(corr) * _wOut;
+        }
+
+        // The body follows the clip's travel (walls stop it); the hips lead it by at most 0.35 m.
+        private void FixedUpdate()
+        {
+            if (!_live || !_transfer || _stopping || _rb == null || _body == null) return;
+            Vector3 moved = _body.InverseTransformDirection(_rb.position - _bodyStart);
+            moved.y = 0f;
+            Vector3 step = _body.TransformDirection(_want - moved);
+            step.y = 0f;
+            float len = step.magnitude;
+            float max = 12f * Time.fixedDeltaTime;
+            if (len < 0.001f) return;
+            if (len > max) { step *= max / len; len = max; }
+            RaycastHit[] hits = Physics.RaycastAll(_rb.position + Vector3.up * 0.6f, step / len, len + 0.35f, ~0, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < hits.Length; i++)
+            {
+                Collider c = hits[i].collider;
+                if (c == null || c.transform.IsChildOf(_body) || c.GetComponentInParent<Character>() != null) continue;
+                return;   // wall / tree / rock: the body stops, the hips lead stays capped
+            }
+            _rb.MovePosition(_rb.position + step);
         }
 
         private void Kill()
         {
             if (_graph.IsValid()) _graph.Destroy();
-            _live = false; _mixing = false;
+            _live = false; _mixing = false; _stopping = false;
         }
 
         private void OnDestroy() { Kill(); }

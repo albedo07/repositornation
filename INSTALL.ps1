@@ -367,6 +367,35 @@ try {
         Write-Host "  DualWield animations installed (ImmortalHeroesAssets\DualWield.dll)" -ForegroundColor White
     }
 
+    # v0.25.125: Mixamo animation bundle (aethelborn_anims). Until now it had to be copied by hand into the GAME's
+    # plugins\ImmortalHeroesAssets folder - easy to put in the wrong folder, and then the old animations play.
+    # Now the installer takes it from this zip folder or, if newer, straight from the Unity build output
+    # (<your profile>\<Unity project>\AABuild\aethelborn_anims).
+    $animName = "aethelborn_anims"
+    $animCandidates = @()
+    $animLocal = Join-Path $uiAssetDir $animName
+    if (Test-Path -LiteralPath $animLocal) { $animCandidates += Get-Item -LiteralPath $animLocal }
+    foreach ($pattern in @("$env:USERPROFILE\*\AABuild\$animName", "$env:USERPROFILE\*\*\AABuild\$animName", "$env:USERPROFILE\*\*\*\AABuild\$animName")) {
+        $animCandidates += @(Get-ChildItem -Path $pattern -File -ErrorAction SilentlyContinue)
+    }
+    $animLive = Join-Path $liveAssetDir $animName
+    $animBest = $animCandidates | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if ($animBest) {
+        $copyAnim = $true
+        if (Test-Path -LiteralPath $animLive) {
+            $liveAnim = Get-Item -LiteralPath $animLive
+            if ($liveAnim.LastWriteTime -ge $animBest.LastWriteTime -and $liveAnim.Length -eq $animBest.Length) { $copyAnim = $false }
+        }
+        if ($copyAnim) { Copy-Item -LiteralPath $animBest.FullName -Destination $animLive -Force }
+        Write-Host ("  Animations: " + $animLive + "  (" + [math]::Round((Get-Item -LiteralPath $animLive).Length / 1MB, 1) + " MB, from " + $animBest.FullName + ")") -ForegroundColor White
+    }
+    elseif (Test-Path -LiteralPath $animLive) {
+        Write-Host ("  Animations: " + $animLive + " (already installed)") -ForegroundColor White
+    }
+    else {
+        Write-Host "  Animations: aethelborn_anims NOT found - build it in Unity (Aethelborn Ascended > Build Animation Bundle), then run INSTALL again." -ForegroundColor Yellow
+    }
+
     Remove-Item -LiteralPath $stageDir -Recurse -Force -ErrorAction SilentlyContinue
     Write-Host ""
     Write-Host "SUCCESS" -ForegroundColor Green

@@ -3329,6 +3329,23 @@ namespace AlbedosCustomClassesAdvanced
             // ARMS already hold the spin's own two-handed start grip (upper-body layer) - so at the plant only the
             // legs and hips blend (0.25 s, eased) into the spin; the grip never changes. Spin travel is held in place.
             // Missing clips: the axe spin (v0.25.122) and then the crow hop.
+            // v0.25.125: the main path = Great Sword Pack 'great sword high spin attack' as ONE clip, time-warped to the
+            // wind up: a short guard settle, the stepping/knee-lift approach and the overhead two-handed load stretched
+            // over the wind up, then the full 360 sweep played FAST so its hardest sweep lands on the damage. Its forward
+            // step-in is real movement (walls stop it), the hips never drift off the body.
+            bool hs = DragonMixamo.Has(MxSpinA);
+            if (hs)
+            {
+                DragonCombat.ClipStop(player, 0.05f);
+                float[] wr, wc;
+                CircleSwingWarp(windup, out wr, out wc);
+                DragonMixamo.PlayWarp(player, MxSpinA, wr, wc, 0.12f, 0.35f, true);
+                Logger.LogInfo("[Circle Swing] animation: " + MxSpinA + " (time-warped to " + windup.ToString("0.00") + " s)");
+                yield return new WaitForSeconds(windup);
+                if (player == null || player.IsDead()) yield break;
+                StartCoroutine(CircleSwingAfterSpin(player));
+                yield break;
+            }
             bool gs = DragonMixamo.Has(MxTwoHandSpin);
             bool mx = gs || DragonMixamo.Has(MxCircleClip);
             Logger.LogInfo("[Circle Swing] animation: " + (gs ? "great sword 2H spin (" + MxTwoHandSpin + ")" : mx ? "axe spin (" + MxCircleClip + ")" : "no Mixamo clip found -> old crow hop"));
@@ -3396,6 +3413,45 @@ namespace AlbedosCustomClassesAdvanced
         // 'Baseball Strike' (batter): load ends 0.9 s, contact 1.3 s, swing done 1.6 s (+186 deg).
         private const string MxPitchClip = "baseball_pitching", MxBatClip = "baseball_strike_mirror";
         private const float MxPitchFrom = 0.35f, MxPitchTo = 1.65f, MxBatFrom = 0.9f, MxBatHit = 1.3f, MxBatTo = 1.6f;
+        // v0.25.125 'great sword high spin attack' (Great Sword Pack, 30 fps, two hands on the hilt, counter-clockwise
+        // +455 deg): guard f0-3, step + knee lift 0.1-0.5 s, overhead two-handed load 0.55-0.88 s, 360 sweep
+        // 0.88-1.15 s (blade hardest ~1.03 s), unwinds after ~1.2 s (cut at 1.10).
+        private const string MxSpinA = "great_sword_high_spin_attack";
+        private const float MxSpinAHold = 0.02f, MxSpinALoadEnd = 0.88f, MxSpinAHit = 1.03f, MxSpinAEnd = 1.10f, MxSpinASpeed = 1.2f, MxSpinALoad = 0.55f;
+
+        private static void CircleSwingWarp(float windup, out float[] wr, out float[] wc)
+        {
+            float spin = (MxSpinAHit - MxSpinALoadEnd) / MxSpinASpeed;
+            float w = Mathf.Max(0.35f, windup);
+            float hold = Mathf.Min(0.12f, w * 0.08f);
+            float approachEnd = Mathf.Max(hold + 0.1f, w - spin);
+            float follow = (MxSpinAEnd - MxSpinAHit) / MxSpinASpeed;
+            wr = new float[] { 0f, hold, approachEnd, w, w + follow };
+            wc = new float[] { 0f, MxSpinAHold, MxSpinALoadEnd, MxSpinAHit, MxSpinAEnd };
+        }
+
+        // Hit + Ascended counter spin (mirrored clip from its overhead load, cross-faded, hips pinned).
+        private IEnumerator CircleSwingAfterSpin(Player player)
+        {
+            bool ascended = IsAscendedSkill("circle_swing");
+            float radius = Mathf.Max(0.5f, ascended ? DragonCombat.M(_circleAscRadius.Value) : DragonCombat.M(_circleRadius.Value));
+            float baseMult = Mathf.Max(0f, _circleDamageMultiplier.Value);
+            DamageSnapshot weapon = GetWeaponDamage(player);
+            CircleSwingHit(player, weapon, radius, baseMult * (ascended ? _circleAscFirst.Value / 100f : 1f), false);
+            if (!ascended) yield break;
+            DragonCombat.GrantHyperArmor(player, _circleAscGap.Value + 0.3f);
+            DragonCombat.LockSkill(player, _circleAscGap.Value + 0.1f);
+            float gap = Mathf.Max(0.15f, _circleAscGap.Value);
+            float spin = (MxSpinAHit - MxSpinALoadEnd) / MxSpinASpeed;
+            float follow = (MxSpinAEnd - MxSpinAHit) / MxSpinASpeed;
+            DragonMixamo.PlayWarp(player, MxSpinA + "_mirror",
+                new float[] { 0f, Mathf.Max(0.05f, gap - spin), gap, gap + follow },
+                new float[] { MxSpinALoad, MxSpinALoadEnd, MxSpinAHit, MxSpinAEnd }, 0.2f, 0.35f, false);
+            yield return new WaitForSeconds(gap);
+            if (player == null || player.IsDead()) yield break;
+            CircleSwingHit(player, weapon, radius, baseMult * _circleAscSecond.Value / 100f, true);
+        }
+
         // v0.25.123 Great Sword Pack 'great sword slash (4)' (30 fps, two hands on the hilt): full turn 0 -> 0.8 s
         // (-391 deg, mirrored = counter-clockwise), blade fastest 0.7 s, settles back after 0.9 s (cut there).
         private const string MxTwoHandSpin = "great_sword_slash_4_mirror", MxTwoHandSpinBack = "great_sword_slash_4";
@@ -4362,7 +4418,9 @@ namespace AlbedosCustomClassesAdvanced
 
             float windup = Mathf.Max(0.1f, _circleWindup.Value);
             // v0.22.4: normal walking speed during the wind up (no Sprint), Hyper Armor.
-            if (!DragonMixamo.Has(MxCircleClip)) DragonCombat.PlayClip(player, "merc_circle", windup);   // v0.25.121: no crow hop with the Mixamo spin
+            DragonMixamo.ShowStatusOnce();   // v0.25.125: on screen once - "loaded: N clips" or exactly why not
+            if (!DragonMixamo.Has(MxSpinA) && !DragonMixamo.Has(MxTwoHandSpin) && !DragonMixamo.Has(MxCircleClip))
+                DragonCombat.PlayClip(player, "merc_circle", windup);   // old procedural crow hop only without any Mixamo clip   // v0.25.121: no crow hop with the Mixamo spin
             StartCoroutine(CircleSwingRoutineV(player, windup));
         }
 
