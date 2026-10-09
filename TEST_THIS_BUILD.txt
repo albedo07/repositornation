@@ -1,4 +1,4 @@
-TEST (v0.25.126)
-1. Install. Cast Circle Swing (normal + Ascended) with a 2H weapon.
-2. Expect: leap + two-handed double spin, no teleport. F5 log: "[Circle Swing] animation: great_sword_jump_attack".
-3. Report: still shaking? spin speed too fast/slow?
+TEST (v0.25.127)
+1. Circle Swing (normal + Ascended), 2H weapon: leap ~2 m forward, land, big two-handed swing on the hit.
+2. F5 log: "[Circle Swing] animation: great_sword_jump_attack -> great_sword_slash_4_mirror".
+3. Report: seam at the landing? speed? shaking?

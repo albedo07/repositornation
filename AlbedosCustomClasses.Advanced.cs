@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.126";
+        public const string ModVersion = "0.25.127";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -3333,24 +3333,26 @@ namespace AlbedosCustomClassesAdvanced
             // wind up: a short guard settle, the stepping/knee-lift approach and the overhead two-handed load stretched
             // over the wind up, then the full 360 sweep played FAST so its hardest sweep lands on the damage. Its forward
             // step-in is real movement (walls stop it), the hips never drift off the body.
-            // v0.25.126 (user: not violent, teleporting + shaking): main path = 'great sword jump attack' (leaping
-            // two-handed DOUBLE spin, 738 deg) as one time-warped clip; Ascended's 2nd hit lands on the 2nd turn of the
-            // same clip (no mirror seam). No root transfer anywhere (it caused the teleport); the hips stay pinned.
-            if (DragonMixamo.Has(MxJump))
+            // v0.25.127 (user: leap 2 m forward like a skip, then REALLY swing, faster): 'great sword jump attack'
+            // only for its leap + first airborne turn (0 -> 1.0 s, lands facing front again, 2 m real forward travel),
+            // cross-faded into 'great sword slash (4)' mirrored (same turn direction, full-body two-handed swing,
+            // hit 0.7 s) on the damage. Ascended 2nd hit = the unmirrored slash (counter swing). No root transfer.
+            if (DragonMixamo.Has(MxJump) && DragonMixamo.Has(MxTwoHandSpin))
             {
                 DragonCombat.ClipStop(player, 0.05f);
-                bool asc = IsAscendedSkill("circle_swing");
-                float w = Mathf.Max(0.35f, windup);
-                float jgap = Mathf.Max(0.15f, _circleAscGap.Value);
-                float[] wr = asc ? new float[] { 0f, w * 0.15f, w, w + jgap, w + jgap + 0.3f }
-                                 : new float[] { 0f, w * 0.15f, w, w + 0.6f };
-                float[] wc = asc ? new float[] { 0f, MxJumpLoad, MxJumpHit, MxJumpHit2, MxJumpEnd }
-                                 : new float[] { 0f, MxJumpLoad, MxJumpHit, MxJumpEnd };
-                DragonMixamo.PlayWarp(player, MxJump, wr, wc, 0.12f, 0.35f, false);
-                Logger.LogInfo("[Circle Swing] animation: " + MxJump + (asc ? " (Ascended double)" : "") + " windup " + windup.ToString("0.00"));
-                yield return new WaitForSeconds(windup);
+                float w = Mathf.Max(0.5f, windup);
+                float jr = w * 0.6f, sr = w - jr, fade = Mathf.Min(0.14f, sr * 0.4f);
+                DragonMixamo.PlayWarp(player, MxJump, new float[] { 0f, jr, jr + 0.2f }, new float[] { 0f, MxJumpLand, MxJumpLand + 0.1f }, 0.08f, 0.2f, false);
+                StartCoroutine(CircleLeap(player, jr * 0.08f, jr * 0.92f, MxJumpTravel));
+                Logger.LogInfo("[Circle Swing] animation: " + MxJump + " -> " + MxTwoHandSpin + " windup " + windup.ToString("0.00"));
+                yield return new WaitForSeconds(Mathf.Max(0f, jr - fade));
                 if (player == null || player.IsDead()) yield break;
-                StartCoroutine(CircleSwingAfterSpin(player, true));
+                float follow = (MxTwoHandTo - MxTwoHandHit) / 1.5f;
+                DragonMixamo.PlayWarp(player, MxTwoHandSpin, new float[] { 0f, sr + fade, sr + fade + follow },
+                    new float[] { 0f, MxTwoHandHit, MxTwoHandTo }, fade, 0.3f, false);
+                yield return new WaitForSeconds(sr + fade);
+                if (player == null || player.IsDead()) yield break;
+                StartCoroutine(CircleSwingAfterSpin(player, 2));
                 yield break;
             }
             bool hs = DragonMixamo.Has(MxSpinA);
@@ -3363,7 +3365,7 @@ namespace AlbedosCustomClassesAdvanced
                 Logger.LogInfo("[Circle Swing] animation: " + MxSpinA + " (time-warped to " + windup.ToString("0.00") + " s)");
                 yield return new WaitForSeconds(windup);
                 if (player == null || player.IsDead()) yield break;
-                StartCoroutine(CircleSwingAfterSpin(player, false));
+                StartCoroutine(CircleSwingAfterSpin(player, 0));
                 yield break;
             }
             bool gs = DragonMixamo.Has(MxTwoHandSpin);
@@ -3438,9 +3440,10 @@ namespace AlbedosCustomClassesAdvanced
         // 0.88-1.15 s (blade hardest ~1.03 s), unwinds after ~1.2 s (cut at 1.10).
         private const string MxSpinA = "great_sword_high_spin_attack";
         // v0.25.126 'great sword jump attack' (30 fps, 2.2 s, +738 deg, airborne ~10 frames): load to 0.2 s,
-        // first turn hardest ~1.03 s, second turn ~1.6 s, settled 1.9 s.
+        // first turn 0 -> 1.0 s (airborne 0.6-0.9 s), second turn 1.0 -> 2.0 s.
         private const string MxJump = "great_sword_jump_attack";
-        private const float MxJumpLoad = 0.2f, MxJumpHit = 1.03f, MxJumpHit2 = 1.6f, MxJumpEnd = 1.9f;
+        // v0.25.127: leap + first turn only; lands at ~0.95 s, facing front again at 1.0 s (hips 1.95 m forward).
+        private const float MxJumpLand = 1.0f, MxJumpTravel = 2f;
         private const float MxSpinAHold = 0.02f, MxSpinALoadEnd = 0.88f, MxSpinAHit = 1.03f, MxSpinAEnd = 1.10f, MxSpinASpeed = 1.2f, MxSpinALoad = 0.55f;
 
         private static void CircleSwingWarp(float windup, out float[] wr, out float[] wc)
@@ -3455,7 +3458,7 @@ namespace AlbedosCustomClassesAdvanced
         }
 
         // Hit + Ascended counter spin (mirrored clip from its overhead load, cross-faded, hips pinned).
-        private IEnumerator CircleSwingAfterSpin(Player player, bool sameClip)
+        private IEnumerator CircleSwingAfterSpin(Player player, int second)
         {
             bool ascended = IsAscendedSkill("circle_swing");
             float radius = Mathf.Max(0.5f, ascended ? DragonCombat.M(_circleAscRadius.Value) : DragonCombat.M(_circleRadius.Value));
@@ -3468,7 +3471,10 @@ namespace AlbedosCustomClassesAdvanced
             float gap = Mathf.Max(0.15f, _circleAscGap.Value);
             float spin = (MxSpinAHit - MxSpinALoadEnd) / MxSpinASpeed;
             float follow = (MxSpinAEnd - MxSpinAHit) / MxSpinASpeed;
-            if (!sameClip)
+            if (second == 2)
+                DragonMixamo.PlayWarp(player, MxTwoHandSpinBack, new float[] { 0f, gap, gap + (MxTwoHandTo - MxTwoHandHit) / 1.5f },
+                    new float[] { 0f, MxTwoHandHit, MxTwoHandTo }, 0.12f, 0.3f, false);
+            else
             DragonMixamo.PlayWarp(player, MxSpinA + "_mirror",
                 new float[] { 0f, Mathf.Max(0.05f, gap - spin), gap, gap + follow },
                 new float[] { MxSpinALoad, MxSpinALoadEnd, MxSpinAHit, MxSpinAEnd }, 0.2f, 0.35f, false);
@@ -3484,6 +3490,31 @@ namespace AlbedosCustomClassesAdvanced
 
         // Crow hop: 1.5 m forward during the hop part of the wind up (24% - 58% of it, matching the clip);
         // walls stop it, height stays physics-driven.
+        // v0.25.127 leap: 'meters' forward between t0 and t1 (eased), walls stop it, creatures ignored.
+        private IEnumerator CircleLeap(Player player, float t0, float t1, float meters)
+        {
+            if (player == null) yield break;
+            Rigidbody body = player.GetComponent<Rigidbody>();
+            if (body == null) yield break;
+            Vector3 dir = IhFlatAim(player);
+            float total = DragonCombat.M(meters), done = 0f, start = Time.time, span = Mathf.Max(0.05f, t1 - t0);
+            int solid = IhSolidMask();
+            while (player != null && !player.IsDead() && done < total - 0.001f)
+            {
+                yield return new WaitForFixedUpdate();
+                if (player == null || body == null) yield break;
+                float x = Mathf.Clamp01((Time.time - start - t0) / span);
+                float want = total * x * x * (3f - 2f * x);
+                float step = want - done;
+                if (step <= 0f) { if (x >= 1f) yield break; continue; }
+                RaycastHit wall;
+                if (Physics.Raycast(body.position + Vector3.up * 0.6f, dir, out wall, step + 0.4f, solid, QueryTriggerInteraction.Ignore) &&
+                    wall.collider.GetComponentInParent<Character>() == null) yield break;
+                body.MovePosition(body.position + dir * step);
+                done += step;
+            }
+        }
+
         private IEnumerator CircleHop(Player player, float windup)
         {
             if (player == null) yield break;

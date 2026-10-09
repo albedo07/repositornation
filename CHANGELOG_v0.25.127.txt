@@ -1,0 +1,4 @@
+v0.25.127 - Leap and Slash
+- Circle Swing: jump attack leap + first airborne turn only (60% of the wind up), real 2 m forward leap (eased, walls stop it).
+- Then cross-fades into the two-handed full-body 'great sword slash (4)' swing (same direction), hit on the damage.
+- Ascended 2nd hit = counter swing (unmirrored slash 4). Faster overall (old second jump turn = the "block" look removed).
