@@ -1,3 +1,3 @@
-TEST (v0.25.135)
-1. Any skill: the animation moves at one steady speed start to finish (no slow-mo then snap, no fast-forward recovery).
-2. Multi-swing skills (Moonlight etc.): if a swing is cut by the next, raise that skill's interval or lower its End %.
+TEST (v0.25.136)
+1. F8 -> e.g. Warrior Heavy Slash Animation -> AnimTriggerPercent 100: the swing fully plays, the skill fires at its end.
+2. Set 50: the skill fires halfway through the animation.

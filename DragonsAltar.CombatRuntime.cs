@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.135";
+        public const string ModVersion = "0.25.136";
 
         internal static DragonCombatPlugin Instance;
 
@@ -160,7 +160,8 @@ namespace DragonsAltarCombat
                 string pre = f[2].Length > 0 ? f[2] + " " : "";
                 ConfigEntry<float> a = Config.Bind(f[1], pre + "AnimStartPercent_v025133", 0f, new ConfigDescription((f[2].Length > 0 ? f[2] + ": " : "") + "the animation starts at this % (skips the beginning; 0 = from the start).", new AcceptableValueRange<float>(0f, 95f)));
                 ConfigEntry<float> b = Config.Bind(f[1], pre + "AnimEndPercent_v025133", 100f, new ConfigDescription((f[2].Length > 0 ? f[2] + ": " : "") + "the animation is cut at this % and blends back (100 = plays to the end).", new AcceptableValueRange<float>(5f, 100f)));
-                DragonCombat.AnimTuningEntries[f[0]] = new ConfigEntry<float>[] { a, b };
+                ConfigEntry<float> c = Config.Bind(f[1], pre + "AnimTriggerPercent_v025136", 0f, new ConfigDescription((f[2].Length > 0 ? f[2] + ": " : "") + "the skill goes off when the animation reaches this % (0 = its own hit frame, 100 = when it has fully played). The animation speed adapts so this point lands on the skill's wind up end.", new AcceptableValueRange<float>(0f, 100f)));
+                DragonCombat.AnimTuningEntries[f[0]] = new ConfigEntry<float>[] { a, b, c };
             }
             LegMotionScale = Config.Bind("Runtime", "LegMotionScale_v02522", 0f, "Strength of the procedural leg poses (Unity humanoid muscles). 0 = legs untouched, -1 = inverted (if knees bend the wrong way on your rig).");
             SkySummonDropTime = Config.Bind("Skills", "SkySummonDropTime", 0.18f, "Seconds for a spawned Sky Summon object to slam from its indoor-safe spawn point to the target AFTER the character wind-up finishes.");
@@ -2514,6 +2515,7 @@ namespace DragonsAltarCombat
         private float _vaStartN, _vaEndN = 1f;   // v0.25.133 tuning
         private bool _vaJumped, _vaCut;
         private float _uniK;   // v0.25.135 the one speed of the current vanilla animation
+        private float _vaTrigN;   // v0.25.136 configured activation point (0 = own hit frame)
         private float _constWindup;
 
         private void ReleaseBow(bool fire)
@@ -2538,7 +2540,7 @@ namespace DragonsAltarCombat
             if (_bowBool != null) DragonCombat.SetBowAim(GetComponent<Player>(), _bowBool, true);
             _va = keys[0].VA;
             _vaRepeat = keys[0].VR;
-            DragonCombat.AnimTuning(clipName, out _vaStartN, out _vaEndN);
+            DragonCombat.AnimTuning(clipName, out _vaStartN, out _vaEndN, out _vaTrigN);
             _vaJumped = false; _vaCut = false;
             _vaAt = Time.time + Mathf.Max(0f, windup - keys[0].VL);
             if (_va != null && _vaRepeat <= 0.05f) _vaAt = Time.time + Mathf.Max(0.1f, windup) * Mathf.Clamp01(keys[0].VF);
@@ -2798,7 +2800,7 @@ namespace DragonsAltarCombat
                     return;
                 }
                 if (norm >= 1f) { _vaTrack = false; DragonCombat.SetSkillAnimSpeed(p, 1f, 0f); return; }
-                if (_noTrack) return;   // v0.25.133 emotes: tuning only, natural speed
+                if (_noTrack && _vaTrigN <= 0.001f) return;   // v0.25.133 emotes: natural speed unless a trigger % is set
                 if (_constSpeed)
                 {
                     if (_constK <= 0f) _constK = Mathf.Clamp(_vaLead / Mathf.Max(0.05f, _constWindup - 0.08f), 1f, 4f); // v0.25.94 (user) the swing's hit frame lands ~0.08 s BEFORE the GTs release: animation first, then the waves // v0.25.91 one stable speed per swing so the vanilla contact frame lands on the skill hit (never slower than native).
@@ -2811,7 +2813,7 @@ namespace DragonsAltarCombat
                 if (_uniK <= 0f)
                 {
                     float len = Mathf.Max(0.05f, info.length);
-                    float hitN = Mathf.Clamp(_vaLead / len, 0.05f, 0.95f);
+                    float hitN = _vaTrigN > 0.001f ? Mathf.Clamp(_vaTrigN, 0.02f, 1f) : Mathf.Clamp(_vaLead / len, 0.05f, 0.95f);   // v0.25.136 trigger %
                     float leftNat = Mathf.Max(0.02f, (hitN - norm) * len);
                     _uniK = norm >= hitN ? 1f : Mathf.Clamp(leftNat / left, 0.25f, 4f);
                 }
@@ -2862,7 +2864,7 @@ namespace DragonsAltarCombat
             if (_va != null && Time.time >= _vaAt)
             {
                 _vaTrigger = _va;
-                if (_vaRepeat <= 0.05f && (!_noTrack || _vaStartN > 0.001f || _vaEndN < 0.999f)) StartVanillaTracking();   // v0.25.133 tuned emotes too
+                if (_vaRepeat <= 0.05f && (!_noTrack || _vaStartN > 0.001f || _vaEndN < 0.999f || _vaTrigN > 0.001f)) StartVanillaTracking();   // v0.25.133 tuned emotes too
                 if (!RestartVanilla(_va)) DragonCombat.FireVanilla(_owner as Player, _va);
                 _vaFiredName = _va;
                 if (_vaRepeat > 0.05f) _vaAt += _vaRepeat; else _va = null;
@@ -3438,7 +3440,16 @@ namespace DragonsAltarCombat
         public static readonly Dictionary<string, ConfigEntry<float>[]> AnimTuningEntries = new Dictionary<string, ConfigEntry<float>[]>();
         public static void AnimTuning(string clip, out float start, out float end)
         {
-            start = 0f; end = 1f;
+            float trig;
+            AnimTuning(clip, out start, out end, out trig);
+        }
+
+        // v0.25.136 trigger: fraction of the animation that lands on the skill's activation (0 = the clip's own hit frame)
+        public static void AnimTuning(string clip, out float start, out float end, out float trigger)
+        {
+            start = 0f; end = 1f; trigger = 0f;
+            ConfigEntry<float>[] te;
+            if (clip != null && AnimTuningEntries.TryGetValue(clip, out te) && te.Length > 2) trigger = Mathf.Clamp(te[2].Value, 0f, 100f) / 100f;
             ConfigEntry<float>[] e;
             if (clip == null || !AnimTuningEntries.TryGetValue(clip, out e)) return;
             start = Mathf.Clamp(e[0].Value, 0f, 95f) / 100f;

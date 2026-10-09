@@ -1,0 +1,4 @@
+v0.25.136 - Trigger Percent
+- Every "<Skill> Animation" section gets AnimTriggerPercent: the skill goes off when its animation reaches this %
+  (0 = the animation's own hit frame = default, 100 = after it has fully played). The one constant animation speed
+  adapts so that point lands exactly on the skill's activation. Works for emotes too when set.

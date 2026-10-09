@@ -1,5 +1,5 @@
 @echo off
-title Immortal Heroes v0.25.135 - One Smooth Motion
+title Immortal Heroes v0.25.136 - Trigger Percent
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
 echo.
 pause
