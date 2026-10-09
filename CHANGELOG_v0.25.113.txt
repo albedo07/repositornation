@@ -1,0 +1,5 @@
+Immortal Heroes v0.25.113 - Mixamo Test Fix 2
+Base: v0.25.112.
+
+- FIX compile error [2/9] Combat Runtime: DragonCombatPlugin has no LogWarning (now LogInfo).
+- Verified with the repo compile check (mcs, C# 5, against anchor v0.25.100): 0 new errors.
