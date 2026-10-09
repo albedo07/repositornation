@@ -1,0 +1,8 @@
+v0.25.131 - Stitched
+- Circle Swing STITCH: battleaxe swing 1 is started under the HopSkip and jumped to 30% of its animation, where its
+  weapon meets the HopSkip's raised weapon -> one Jumping Heavy Swing. Tunable: [Mercenary Circle Swing]
+  AxeSwing1StartPercent_v025131 (30) / AxeSwing2StartPercent_v025131 (0, Ascended 2nd swing). Chain speed accounts
+  for the skipped part.
+- Jump slams: the CA plays to 99% (strike down, weapon a hand above the ground) and HOLDS there for any fall height;
+  the last 1% + the skill happen only on contact with terrain / a structure (no more searching / glitching).
+- Slam ground reach: spine bends up to 60 deg, the weapon head bites 6 cm into the ground (only when near it).

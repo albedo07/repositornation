@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.130";
+        public const string ModVersion = "0.25.131";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -223,7 +223,7 @@ namespace AlbedosCustomClassesAdvanced
         private ConfigEntry<float> _circleCooldown;
         private ConfigEntry<float> _circleStamina;
         private ConfigEntry<float> _circleWindup;
-        private ConfigEntry<float> _circleEruptRadius, _circleEruptPercent;
+        private ConfigEntry<float> _circleEruptRadius, _circleEruptPercent, _circleAxeStart1, _circleAxeStart2;
         private ConfigEntry<float> _circleRadius;
         private ConfigEntry<float> _circleDamageMultiplier;
         private ConfigEntry<float> _circleWindupTravel;
@@ -757,6 +757,8 @@ namespace AlbedosCustomClassesAdvanced
             _circleCooldown = Config.Bind("Mercenary Circle Swing", "Cooldown", 16f, "Seconds.");
             _circleStamina = Config.Bind("Mercenary Circle Swing", "StaminaCost", 36f, "Stamina cost.");
             _circleWindup = Config.Bind("Mercenary Circle Swing", "Windup", 1.5f, "Heavy steerable wind-up before the violent circular swing.");
+            _circleAxeStart1 = Config.Bind("Mercenary Circle Swing", "AxeSwing1StartPercent_v025131", 30f, "Chain stitch: the battleaxe swing after the HopSkip starts at this % of its animation (where the two weapon positions meet).");
+            _circleAxeStart2 = Config.Bind("Mercenary Circle Swing", "AxeSwing2StartPercent_v025131", 0f, "Chain stitch (Ascended): the 2nd battleaxe swing starts at this % of its animation.");
             _circleRadius = Config.Bind("Mercenary Circle Swing", "Radius", 7f, "True 7m center-to-edge radius.");
             _circleDamageMultiplier = Config.Bind("Mercenary Circle Swing", "WeaponDamageMultiplier", 1.75f, "Significant burst: multiplier applied to the held weapon damage/elements.");
             _circleWindupTravel = Config.Bind("Mercenary Circle Swing", "WindupTravel", 0.5f, "Maximum steerable movement distance during the wind-up.");
@@ -3506,7 +3508,7 @@ namespace AlbedosCustomClassesAdvanced
         }
 
         // Plays one vanilla swing at speed s until its natural time reaches 'until' (hit or chain point).
-        private IEnumerator CsSwing(Player player, string trig, float s, AnimationClip skip, float until, bool hitMark, System.Action<AnimationClip> done)
+        private IEnumerator CsSwing(Player player, string trig, float s, AnimationClip skip, float until, bool hitMark, float startNorm, System.Action<AnimationClip> done)
         {
             Animator an = player.GetComponentInChildren<Animator>();
             float[] tm = CsTiming(trig);
@@ -3520,7 +3522,17 @@ namespace AlbedosCustomClassesAdvanced
                 if (clip == null && Time.time - t0 < 0.5f)
                 {
                     clip = CsFindClip(an, skip, out layer);
-                    if (clip != null) { CsLearn(trig, clip); tm = CsTiming(trig); if (hitMark) target = tm[0]; }
+                    if (clip != null)
+                    {
+                        CsLearn(trig, clip); tm = CsTiming(trig); if (hitMark) target = tm[0];
+                        if (startNorm > 0.001f)
+                        {
+                            // v0.25.131 stitch: jump straight to where this swing's weapon meets the previous link's
+                            float sn = Mathf.Min(startNorm, Mathf.Max(0f, tm[0] / Mathf.Max(0.05f, tm[2]) - 0.08f));
+                            AnimatorStateInfo st = an.IsInTransition(layer) ? an.GetNextAnimatorStateInfo(layer) : an.GetCurrentAnimatorStateInfo(layer);
+                            an.CrossFade(st.fullPathHash, 0.05f, layer, sn);
+                        }
+                    }
                 }
                 float nt = clip != null ? CsClipTime(an, layer, clip) : (Time.time - t0) * s;
                 if (nt < 0f || nt >= target) break;
@@ -3537,20 +3549,26 @@ namespace AlbedosCustomClassesAdvanced
             string axe1 = DragonCombat.ResolveTriggerName(an, "battleaxe_attack0"), axe2 = DragonCombat.ResolveTriggerName(an, "battleaxe_attack1");
             float[] t1 = CsTiming(axe1);
             float hopNat = CsHopEnd - MxJumpFrom;
-            float s = Mathf.Clamp((hopNat + t1[0]) / Mathf.Max(0.3f, windup), 0.7f, 2.5f);   // ONE speed for the chain
+            float st1 = Mathf.Clamp01(_circleAxeStart1.Value / 100f), st2 = Mathf.Clamp01(_circleAxeStart2.Value / 100f);
+            float axe1Nat = Mathf.Max(0.1f, t1[0] - Mathf.Min(st1, Mathf.Max(0f, t1[0] / t1[2] - 0.08f)) * t1[2]);   // swing left from the stitch to the hit
+            float s = Mathf.Clamp((hopNat + axe1Nat) / Mathf.Max(0.3f, windup), 0.7f, 2.5f);   // ONE speed for the chain
             DragonCombat.LockSkill(player, hopNat / s + 0.3f);
             DragonMixamo.PlayWarp(player, MxJump, new float[] { 0f, hopNat / s, (hopNat + 0.15f) / s },
                 new float[] { MxJumpFrom, CsHopEnd, CsHopEnd + 0.15f }, 0.08f, 0.3f, false);
             StartCoroutine(CircleLeap(player, 0.1f / s, 0.9f / s, MxJumpTravel));
             Logger.LogInfo("[Circle Swing] chain: HopSkip -> " + axe1 + (asc ? " -> " + axe2 : "") + " at " + s.ToString("0.00") + "x");
             float t0 = Time.time;
-            while (Time.time - t0 < hopNat / s) { if (player == null || player.IsDead()) yield break; DragonCombat.LockSkill(player, 0.25f); yield return null; }
-            // HopSkip has landed and finished its turn: the swing starts as it fades (vanilla-chain overlap).
-            DragonMixamo.Stop(player, 0.15f / s);
-            AnimationClip c1 = null;
+            // v0.25.131 STITCH (user): the swing is started under the HopSkip ~0.12 s before its end and jumped to the
+            // point where its weapon meets the HopSkip's (AxeSwing1StartPercent), so at the hand-over both show the same
+            // pose: a Jumping Heavy Swing, not a jump and then a swing.
+            float lead = Mathf.Min(0.12f, hopNat / s * 0.3f);
+            while (Time.time - t0 < hopNat / s - lead) { if (player == null || player.IsDead()) yield break; DragonCombat.LockSkill(player, 0.25f); yield return null; }
+            AnimationClip c1 = null; bool done1 = false;
             if (axe1 != null) DragonCombat.FireVanilla(player, axe1);
-            yield return StartCoroutine(CsSwing(player, axe1, s, null, 0f, true, delegate(AnimationClip c) { c1 = c; }));
-            if (player == null || player.IsDead()) yield break;
+            StartCoroutine(CsSwing(player, axe1, s, null, 0f, true, st1, delegate(AnimationClip c) { c1 = c; done1 = true; }));
+            while (Time.time - t0 < hopNat / s) { if (player == null || player.IsDead()) yield break; yield return null; }
+            DragonMixamo.Stop(player, 0.12f);
+            while (!done1) { if (player == null || player.IsDead()) yield break; yield return null; }
             float radius = Mathf.Max(0.5f, asc ? DragonCombat.M(_circleAscRadius.Value) : DragonCombat.M(_circleRadius.Value));
             float baseMult = Mathf.Max(0f, _circleDamageMultiplier.Value);
             DamageSnapshot weapon = GetWeaponDamage(player);
@@ -3562,10 +3580,10 @@ namespace AlbedosCustomClassesAdvanced
                 yield break;
             }
             DragonCombat.GrantHyperArmor(player, 2f);
-            yield return StartCoroutine(CsSwing(player, axe1, s, null, CsTiming(axe1)[1], false, null));   // follow-through to the chain point
+            yield return StartCoroutine(CsSwing(player, axe1, s, null, CsTiming(axe1)[1], false, 0f, null));   // follow-through to the chain point
             if (player == null || player.IsDead()) yield break;
             if (axe2 != null) DragonCombat.FireVanilla(player, axe2);
-            yield return StartCoroutine(CsSwing(player, axe2, s, c1, 0f, true, null));
+            yield return StartCoroutine(CsSwing(player, axe2, s, c1, 0f, true, st2, null));
             if (player == null || player.IsDead()) yield break;
             CircleEruption(player, weapon, baseMult * Mathf.Max(0f, _circleEruptPercent.Value) / 100f);
             float[] e2 = CsTiming(axe2);
@@ -3577,6 +3595,7 @@ namespace AlbedosCustomClassesAdvanced
         // the overhead slam (1.50 -> 1.75 s) starts ~0.2 s before ground contact, then the recovery. The physics
         // jump owns the height (the clip's own rise is cut off the hips).
         private const string MxJumpSlam = "melee_run_jump_attack";
+        private const float MxSlamHold = 1.72f;   // 99%: the strike is down, the weapon a hand above the ground
         private bool _jsActive, _jsUsed;
 
         private bool IhJumpSlamStart(Player player, float takeoff, float airSeconds)
@@ -3585,35 +3604,22 @@ namespace AlbedosCustomClassesAdvanced
             if (!DragonMixamo.Has(MxJumpSlam)) return false;
             DragonCombat.ClipStop(player, 0.05f);
             DragonMixamo.SetNoRise(player, true);
-            if (!DragonMixamo.PlayWarp(player, MxJumpSlam, new float[] { 0f, takeoff, takeoff + Mathf.Max(0.3f, airSeconds) },
-                new float[] { 0.80f, 0.95f, 1.50f }, 0.08f, 0.35f, false)) return false;
+            // v0.25.131 (user): the CA plays to 99% (the weapon just above the ground) and HOLDS there however long the
+            // fall is; the last 1% + the skill only happen on contact with terrain / a structure.
+            float air = Mathf.Max(0.3f, airSeconds);
+            if (!DragonMixamo.PlayWarp(player, MxJumpSlam, new float[] { 0f, takeoff, takeoff + air * 0.6f, takeoff + air },
+                new float[] { 0.80f, 0.95f, 1.50f, MxSlamHold }, 0.08f, 0.35f, false)) return false;
             _jsActive = true; _jsUsed = true;
             Logger.LogInfo("[Jump Slam] animation: " + MxJumpSlam);
             return true;
-        }
-
-        private static int _groundProbeMask = -1;
-        private float IhGroundDistance(Player player, Vector3 from)
-        {
-            if (_groundProbeMask == -1) _groundProbeMask = LayerMask.GetMask("Default", "static_solid", "Default_small", "terrain", "piece", "vehicle");
-            RaycastHit[] hits = Physics.RaycastAll(from + Vector3.up * 0.3f, Vector3.down, 200f, _groundProbeMask, QueryTriggerInteraction.Ignore);
-            float best = -1f;
-            for (int i = 0; i < hits.Length; i++)
-            {
-                Collider c = hits[i].collider;
-                if (c == null || c.transform.IsChildOf(player.transform) || c.GetComponentInParent<Character>() != null) continue;
-                float d = hits[i].distance - 0.3f;
-                if (best < 0f || d < best) best = d;
-            }
-            return best;
         }
 
         private bool IhJumpSlamLand(Player player)
         {
             if (!_jsActive) return false;
             _jsActive = false;
-            DragonMixamo.PlayWarp(player, MxJumpSlam, new float[] { 0f, 0.2f, 0.65f }, new float[] { 1.50f, 1.75f, 2.10f }, 0.1f, 0.35f, false);
-            DragonMixamo.SetGroundReach(player, 1.62f, 1.76f, 2.05f);   // v0.25.130 the weapon head meets the terrain
+            DragonMixamo.PlayWarp(player, MxJumpSlam, new float[] { 0f, 0.06f, 0.55f }, new float[] { MxSlamHold, 1.76f, 2.10f }, 0.05f, 0.35f, false);
+            DragonMixamo.SetGroundReach(player, MxSlamHold, 1.76f, 2.05f);   // v0.25.130 the weapon head meets the terrain
             return true;
         }
 
@@ -6888,14 +6894,6 @@ namespace AlbedosCustomClassesAdvanced
             {
                 ResetFallDamageState(player);
                 DragonCombat.LockSkill(player, 0.12f);
-                if (_jsActive)
-                {
-                    // v0.25.130 the slam starts ~0.2 s before contact: nearest terrain / structure below (own body and
-                    // creatures ignored, any fall height)
-                    float jsDist = IhGroundDistance(player, body.position);
-                    if (jsDist >= 0f && jsDist < Mathf.Max(2f, -body.velocity.y) * 0.2f)
-                        IhJumpSlamLand(player);
-                }
                 if (IsPlayerGrounded(player) && body.velocity.y <= 0.25f)
                     break;
 

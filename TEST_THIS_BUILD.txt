@@ -1,5 +1,5 @@
-TEST (v0.25.130)
-1. Cast Circle Swing (Ascended) TWICE: the 1st cast learns the battleaxe timings (F5: "[Circle Swing] learned ..."),
-   the 2nd is the real test: HopSkip full, axe 1 full right->left swing, axe 2 full, eruption on axe 2's hit.
-2. Bonecrusher / Electric Smite: weapon head touches the ground on the slam; long falls slam on contact.
-3. Send the F5 "learned" lines if a swing still looks cut.
+TEST (v0.25.131)
+1. Circle Swing: HopSkip landing -> swing must continue from the same weapon position (no snap). If it still snaps,
+   tune F8 Mercenary Circle Swing AxeSwing1StartPercent (e.g. 20 / 40) and tell me the best value.
+2. Bonecrusher / Electric Smite off a cliff: strike pose held while falling, finishes + damage only on landing;
+   weapon head visibly in the ground.

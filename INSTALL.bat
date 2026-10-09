@@ -1,5 +1,5 @@
 @echo off
-title Immortal Heroes v0.25.130 - Full Swings
+title Immortal Heroes v0.25.131 - Stitched
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
 echo.
 pause

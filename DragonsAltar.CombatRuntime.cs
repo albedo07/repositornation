@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.130";
+        public const string ModVersion = "0.25.131";
 
         internal static DragonCombatPlugin Instance;
 
@@ -9504,14 +9504,14 @@ namespace DragonsAltarCombat
                 if (c == null || c.transform.IsChildOf(_body) || c.GetComponentInParent<Character>() != null) continue;
                 if (hits[i].point.y > gy) gy = hits[i].point.y;
             }
-            if (float.IsNegativeInfinity(gy) || tip.y <= gy + 0.03f) return;
+            if (float.IsNegativeInfinity(gy) || tip.y <= gy - 0.06f || tip.y - gy > 2.5f) return;   // v0.25.131 only near the ground
             Vector3 fwd = _body.forward; fwd.y = 0f; fwd.Normalize();
             Vector3 v = tip - spine.position;
             float f = Vector3.Dot(v, fwd), u = v.y, R = Mathf.Sqrt(f * f + u * u);
             if (R < 0.2f || f < 0.05f) return;
-            float want = Mathf.Clamp((gy + 0.03f - spine.position.y) / R, -1f, 1f);
+            float want = Mathf.Clamp((gy - 0.06f - spine.position.y) / R, -1f, 1f);   // v0.25.131 the head bites into the ground
             float delta = Mathf.Atan2(u, f) * Mathf.Rad2Deg - Mathf.Asin(want) * Mathf.Rad2Deg;
-            delta = Mathf.Clamp(delta, 0f, 45f) * w;
+            delta = Mathf.Clamp(delta, 0f, 60f) * w;
             spine.rotation = Quaternion.AngleAxis(delta, _body.right) * spine.rotation;
         }
 
