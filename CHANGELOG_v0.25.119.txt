@@ -1,0 +1,5 @@
+Aethelborn Ascended v0.25.119 - Hop Spin
+- Circle Swing = Great Sword Pack "great sword high spin attack" (step + knee-lift hop, two-hand load, counter-clockwise spin) from the click; its hit frame (1.03 s) lands on the damage, cut at 1.1 s. Its forward travel now moves the real body (walls stop it) instead of the old 1.5 m CircleHop.
+- Ascended counter spin = the mirrored clip from its load (0.5 s), sped to the 2nd hit.
+- Without the new clip in the bundle: v0.25.118 behaviour.
+- DragonMixamo.Play(..., transferRoot): clip travel -> real movement, no snap-back.

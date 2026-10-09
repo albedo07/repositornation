@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.118";
+        public const string ModVersion = "0.25.119";
 
         internal static DragonCombatPlugin Instance;
 
@@ -9257,6 +9257,13 @@ namespace DragonsAltarCombat
         // Plays clip time 'from' -> 'to' at 'speed'; returns false (nothing happens) when the clip is missing.
         public static bool Play(Player player, string name, float from, float to, float speed, float fadeIn, float fadeOut)
         {
+            return Play(player, name, from, to, speed, fadeIn, fadeOut, false);
+        }
+
+        // v0.25.119 transferRoot: the clip's own travel (baked into the pose) moves the real player instead of
+        // sliding the body away from its collider and snapping back at the end.
+        public static bool Play(Player player, string name, float from, float to, float speed, float fadeIn, float fadeOut, bool transferRoot)
+        {
             Load();
             AnimationClip clip;
             if (player == null || _clips == null || !_clips.TryGetValue(name, out clip)) return false;
@@ -9265,13 +9272,60 @@ namespace DragonsAltarCombat
             DragonMixamoPlayer p = an.GetComponent<DragonMixamoPlayer>();
             if (p == null) p = an.gameObject.AddComponent<DragonMixamoPlayer>();
             p.Begin(an, clip, from, to, speed, fadeIn, fadeOut);
+            p.SetRootTransfer(transferRoot ? player : null);
             DragonArmGuard.Attach(player);
             return true;
         }
     }
 
+    [DefaultExecutionOrder(31000)]
     public class DragonMixamoPlayer : MonoBehaviour
     {
+        private Player _xferPlayer;
+        private Transform _hips;
+        private Vector3 _hipStart, _moved;
+        private bool _hipStartSet;
+
+        public void SetRootTransfer(Player player)
+        {
+            _xferPlayer = player;
+            _hipStartSet = false;
+            _moved = Vector3.zero;
+            Animator an = GetComponent<Animator>();
+            _hips = an != null && an.isHuman ? an.GetBoneTransform(HumanBodyBones.Hips) : null;
+        }
+
+        // The pose drifts by the clip's travel; we take the horizontal drift out of the hips and walk the real
+        // body by the same amount (walls stop it). Fading out, the drift shrinks back to 0 on its own while
+        // the body stays where it got to.
+        private void LateUpdate()
+        {
+            if (!_live || _xferPlayer == null || _hips == null) return;
+            Transform root = _xferPlayer.transform;
+            Vector3 local = root.InverseTransformPoint(_hips.position);
+            local.y = 0f;
+            if (!_hipStartSet) { _hipStart = local; _hipStartSet = true; }
+            Vector3 drift = local - _hipStart;
+            if (!_stopping)
+            {
+                Vector3 step = root.TransformVector(drift - _moved);
+                step.y = 0f;
+                Rigidbody body = _xferPlayer.GetComponent<Rigidbody>();
+                if (body != null && step.sqrMagnitude > 1e-6f)
+                {
+                    float len = step.magnitude;
+                    RaycastHit wall;
+                    bool blocked = Physics.Raycast(body.position + Vector3.up * 0.6f, step / len, out wall, len + 0.35f, ~0, QueryTriggerInteraction.Ignore)
+                        && wall.collider.GetComponentInParent<Character>() == null && !wall.collider.transform.IsChildOf(root);
+                    if (!blocked) body.MovePosition(body.position + step);
+                    _moved = drift;
+                }
+            }
+            Vector3 back = root.TransformVector(drift);
+            back.y = 0f;
+            _hips.position -= back;
+        }
+
         private UnityEngine.Playables.PlayableGraph _graph;
         private UnityEngine.Animations.AnimationPlayableOutput _output;
         private UnityEngine.Animations.AnimationClipPlayable _clip;

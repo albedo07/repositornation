@@ -1,4 +1,5 @@
-Aethelborn Ascended - TEST THIS BUILD (v0.25.118)
-1. Mercenary Circle Swing (normal + Ascended): arms must stay outside the body.
-2. Other skills with arms across the chest (Heavy Slash, Blade Storm, Whirlwind): no arm inside the torso.
-3. If arms still sink in: raise ArmGuardTorsoWidth_v025118 to 1.2; if they look pushed away: 0.85.
+Aethelborn Ascended - TEST THIS BUILD (v0.25.119)
+1. Rebuild the bundle with the Great Sword + Pro Sword and Shield FBX in Assets/AAanims, copy aethelborn_anims.
+2. Mercenary Circle Swing: hop -> load -> spin, hit when the spin lands, no slide/snap back at the end.
+3. Ascended: second spin the other way.
+4. Arms stay outside the body (barrier).
