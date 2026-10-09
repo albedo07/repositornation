@@ -1,0 +1,6 @@
+Aethelborn Ascended v0.25.123 - Two Hand Spin
+- Circle Swing spin = Great Sword Pack "great sword slash (4)" mirrored: a two-handed counter-clockwise 360 (fits 2H weapons and dual 1H).
+- Seamless wind up: the pitcher leg kick drives only hips + legs while the arms already hold the spin's two-handed start grip (upper-body layer). At the plant only legs/hips blend into the spin (0.25 s, eased), the grip never changes.
+- Mixamo player rebuilt: one graph per character, chained clips cross-fade inside it while the old one keeps moving (no frozen frame, no snap), eased blends, in-place option holds the clip travel (no drift / snap-back, no body teleport).
+- Ascended 2nd hit: batter swing back the other way, longer eased cross-fade, in place.
+- Fallbacks: no great sword clip = v0.25.122 axe spin; no clips = crow hop.

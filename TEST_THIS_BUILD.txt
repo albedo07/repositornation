@@ -1,4 +1,5 @@
-Aethelborn Ascended - TEST THIS BUILD (v0.25.122)
-1. Put Baseball Pitching + Baseball Strike FBX in Assets/AAanims, rebuild, copy aethelborn_anims.
-2. Circle Swing: leg kick -> plant -> spin in one smooth motion, no pop at the plant.
-3. Ascended: batter swing back the other way on the second hit.
+Aethelborn Ascended - TEST THIS BUILD (v0.25.123)
+1. Bundle needs: great sword slash (4) (Great Sword Pack), Baseball Pitching, Baseball Strike. Rebuild + copy aethelborn_anims.
+2. Circle Swing with a 2H weapon and with dual 1H: leg kick with both hands on the weapon -> plant -> two-handed 360. Look for any visible pop at the plant.
+3. No drifting / snapping back after the spin.
+4. Ascended: batter swing the other way.

@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.122";
+        public const string ModVersion = "0.25.123";
 
         internal static DragonCombatPlugin Instance;
 
@@ -9276,124 +9276,119 @@ namespace DragonsAltarCombat
             return Play(player, name, from, to, speed, fadeIn, fadeOut, false);
         }
 
-        // v0.25.119 transferRoot: the clip's own travel (baked into the pose) moves the real player instead of
-        // sliding the body away from its collider and snapping back at the end.
-        public static bool Play(Player player, string name, float from, float to, float speed, float fadeIn, float fadeOut, bool transferRoot)
+        // v0.25.123 inPlace: the clip's horizontal travel (baked into the pose) is taken out of the hips, so the
+        // body never drifts away from the player and never snaps back.
+        public static bool Play(Player player, string name, float from, float to, float speed, float fadeIn, float fadeOut, bool inPlace)
         {
-            Load();
-            AnimationClip clip;
-            clip = Resolve(name);
+            return PlayLayered(player, name, from, to, speed, fadeIn, fadeOut, inPlace, null, 0f);
+        }
+
+        // v0.25.123 upper-body layer: 'upperName' (held at 'upperTime') drives head + arms + hands while 'name'
+        // drives hips, spine and legs - e.g. a pitcher's leg kick with a two-handed weapon grip.
+        public static bool PlayLayered(Player player, string name, float from, float to, float speed, float fadeIn, float fadeOut, bool inPlace, string upperName, float upperTime)
+        {
+            AnimationClip clip = Resolve(name);
             if (player == null || clip == null) return false;
+            AnimationClip upper = string.IsNullOrEmpty(upperName) ? null : Resolve(upperName);
             Animator an = player.GetComponentInChildren<Animator>();
             if (an == null || !an.isHuman) return false;
             DragonMixamoPlayer p = an.GetComponent<DragonMixamoPlayer>();
             if (p == null) p = an.gameObject.AddComponent<DragonMixamoPlayer>();
-            p.Begin(an, clip, from, to, speed, fadeIn, fadeOut);
-            p.SetRootTransfer(transferRoot ? player : null);
+            p.Begin(an, clip, from, to, speed, fadeIn, fadeOut, inPlace, upper, upperTime);
             DragonArmGuard.Attach(player);
             return true;
         }
     }
 
+    // v0.25.123: one PlayableGraph per character. A clip started while another still plays is added to the SAME
+    // graph and cross-faded in (mixer, old branch keeps moving) - one continuous motion, no seam, no snap to
+    // vanilla in between. Holds the last frame of the current clip and fades out to the Animator.
     [DefaultExecutionOrder(31000)]
     public class DragonMixamoPlayer : MonoBehaviour
     {
-        public static bool RootTransferEnabled = false;
-        private Player _xferPlayer;
-        private Transform _hips;
-        private Vector3 _hipStart, _moved;
-        private bool _hipStartSet;
-
-        public void SetRootTransfer(Player player)
-        {
-            _xferPlayer = player;
-            _hipStartSet = false;
-            _moved = Vector3.zero;
-            Animator an = GetComponent<Animator>();
-            _hips = an != null && an.isHuman ? an.GetBoneTransform(HumanBodyBones.Hips) : null;
-        }
-
-        // The pose drifts by the clip's travel; we take the horizontal drift out of the hips and walk the real
-        // body by the same amount (walls stop it). Fading out, the drift shrinks back to 0 on its own while
-        // the body stays where it got to.
-        private void LateUpdate()
-        {
-            if (!_live || _xferPlayer == null || _hips == null) return;
-            if (!RootTransferEnabled) return;   // v0.25.120: off (shaking / teleporting in-game)
-            Transform root = _xferPlayer.transform;
-            Vector3 local = root.InverseTransformPoint(_hips.position);
-            local.y = 0f;
-            if (!_hipStartSet) { _hipStart = local; _hipStartSet = true; }
-            Vector3 drift = local - _hipStart;
-            if (!_stopping)
-            {
-                Vector3 step = root.TransformVector(drift - _moved);
-                step.y = 0f;
-                Rigidbody body = _xferPlayer.GetComponent<Rigidbody>();
-                if (body != null && step.sqrMagnitude > 1e-6f)
-                {
-                    float len = step.magnitude;
-                    RaycastHit wall;
-                    bool blocked = Physics.Raycast(body.position + Vector3.up * 0.6f, step / len, out wall, len + 0.35f, ~0, QueryTriggerInteraction.Ignore)
-                        && wall.collider.GetComponentInParent<Character>() == null && !wall.collider.transform.IsChildOf(root);
-                    if (!blocked) body.MovePosition(body.position + step);
-                    _moved = drift;
-                }
-            }
-            Vector3 back = root.TransformVector(drift);
-            back.y = 0f;
-            _hips.position -= back;
-        }
-
+        private static AvatarMask _upperMask;
         private UnityEngine.Playables.PlayableGraph _graph;
         private UnityEngine.Animations.AnimationPlayableOutput _output;
         private UnityEngine.Animations.AnimationClipPlayable _clip;
-        private bool _live, _stopping, _mixing;
-        private AnimationClip _asset;
-        private UnityEngine.Animations.AnimationClipPlayable _prev;
-        private UnityEngine.Animations.AnimationMixerPlayable _mixer;
+        private UnityEngine.Playables.Playable _root;
+        private UnityEngine.Animations.AnimationMixerPlayable _xmix;
+        private bool _live, _stopping, _mixing, _inPlace, _hipStartSet;
         private float _to, _fadeIn, _fadeOut, _age, _stopAt;
+        private Transform _hips, _body;
+        private Vector3 _hipStart;
 
-        public void Begin(Animator an, AnimationClip clip, float from, float to, float speed, float fadeIn, float fadeOut)
+        public bool Live { get { return _live; } }
+
+        private static AvatarMask UpperMask()
         {
-            // v0.25.121: chaining a clip onto a playing one keeps full weight (no blend back to vanilla in between)
-            bool chained = _live && !_stopping;
-            // v0.25.122: a chained clip CROSS-FADES from the previous clip's current pose (mixer) over fadeIn,
-            // so two clips join into one motion (pitching load -> axe spin) without a pop.
-            AnimationClip prevAsset = chained ? _asset : null;
-            double prevTime = chained && _graph.IsValid() ? UnityEngine.Playables.PlayableExtensions.GetTime(_clip) : 0.0;
-            Kill();
-            _asset = clip;
-            _graph = UnityEngine.Playables.PlayableGraph.Create("IH Mixamo " + clip.name);
-            _graph.SetTimeUpdateMode(UnityEngine.Playables.DirectorUpdateMode.GameTime);
-            _output = UnityEngine.Animations.AnimationPlayableOutput.Create(_graph, "IH Mixamo", an);
+            if (_upperMask != null) return _upperMask;
+            _upperMask = new AvatarMask();
+            for (int i = 0; i < (int)AvatarMaskBodyPart.LastBodyPart; i++)
+            {
+                AvatarMaskBodyPart part = (AvatarMaskBodyPart)i;
+                bool on = part == AvatarMaskBodyPart.Head || part == AvatarMaskBodyPart.LeftArm || part == AvatarMaskBodyPart.RightArm
+                    || part == AvatarMaskBodyPart.LeftFingers || part == AvatarMaskBodyPart.RightFingers
+                    || part == AvatarMaskBodyPart.LeftHandIK || part == AvatarMaskBodyPart.RightHandIK;
+                _upperMask.SetHumanoidBodyPartActive(part, on);
+            }
+            return _upperMask;
+        }
+
+        public void Begin(Animator an, AnimationClip clip, float from, float to, float speed, float fadeIn, float fadeOut, bool inPlace, AnimationClip upper, float upperTime)
+        {
+            bool chained = _live && !_stopping && _graph.IsValid();
+            if (!chained)
+            {
+                Kill();
+                _graph = UnityEngine.Playables.PlayableGraph.Create("IH Mixamo");
+                _graph.SetTimeUpdateMode(UnityEngine.Playables.DirectorUpdateMode.GameTime);
+                _output = UnityEngine.Animations.AnimationPlayableOutput.Create(_graph, "IH Mixamo", an);
+            }
             _clip = UnityEngine.Animations.AnimationClipPlayable.Create(_graph, clip);
             _clip.SetApplyFootIK(true);
             UnityEngine.Playables.PlayableExtensions.SetTime(_clip, Mathf.Max(0f, from));
             UnityEngine.Playables.PlayableExtensions.SetSpeed(_clip, Mathf.Clamp(speed, 0.1f, 6f));
-            _mixing = false;
-            if (prevAsset != null)
+            UnityEngine.Playables.Playable node = _clip;
+            if (upper != null)
             {
-                _prev = UnityEngine.Animations.AnimationClipPlayable.Create(_graph, prevAsset);
-                _prev.SetApplyFootIK(true);
-                UnityEngine.Playables.PlayableExtensions.SetTime(_prev, prevTime);
-                UnityEngine.Playables.PlayableExtensions.SetSpeed(_prev, 0.0);
-                _mixer = UnityEngine.Animations.AnimationMixerPlayable.Create(_graph, 2);
-                _graph.Connect(_prev, 0, _mixer, 0);
-                _graph.Connect(_clip, 0, _mixer, 1);
-                UnityEngine.Playables.PlayableExtensions.SetInputWeight(_mixer, 0, 1f);
-                UnityEngine.Playables.PlayableExtensions.SetInputWeight(_mixer, 1, 0f);
-                UnityEngine.Playables.PlayableOutputExtensions.SetSourcePlayable(_output, _mixer);
+                UnityEngine.Animations.AnimationClipPlayable up = UnityEngine.Animations.AnimationClipPlayable.Create(_graph, upper);
+                UnityEngine.Playables.PlayableExtensions.SetTime(up, Mathf.Max(0f, upperTime));
+                UnityEngine.Playables.PlayableExtensions.SetSpeed(up, 0.0);
+                UnityEngine.Animations.AnimationLayerMixerPlayable layers = UnityEngine.Animations.AnimationLayerMixerPlayable.Create(_graph, 2);
+                _graph.Connect(_clip, 0, layers, 0);
+                _graph.Connect(up, 0, layers, 1);
+                UnityEngine.Playables.PlayableExtensions.SetInputWeight(layers, 0, 1f);
+                UnityEngine.Playables.PlayableExtensions.SetInputWeight(layers, 1, 1f);
+                layers.SetLayerMaskFromAvatarMask(1, UpperMask());
+                node = layers;
+            }
+            _mixing = false;
+            if (chained)
+            {
+                _xmix = UnityEngine.Animations.AnimationMixerPlayable.Create(_graph, 2);
+                _graph.Connect(_root, 0, _xmix, 0);
+                _graph.Connect(node, 0, _xmix, 1);
+                UnityEngine.Playables.PlayableExtensions.SetInputWeight(_xmix, 0, 1f);
+                UnityEngine.Playables.PlayableExtensions.SetInputWeight(_xmix, 1, 0f);
+                _root = _xmix;
+                UnityEngine.Playables.PlayableOutputExtensions.SetSourcePlayable(_output, _root);
+                UnityEngine.Playables.PlayableOutputExtensions.SetWeight(_output, 1f);
                 _mixing = true;
             }
-            else UnityEngine.Playables.PlayableOutputExtensions.SetSourcePlayable(_output, _clip);
-            UnityEngine.Playables.PlayableOutputExtensions.SetWeight(_output, 0f);
-            _graph.Play();
+            else
+            {
+                _root = node;
+                UnityEngine.Playables.PlayableOutputExtensions.SetSourcePlayable(_output, _root);
+                UnityEngine.Playables.PlayableOutputExtensions.SetWeight(_output, 0f);
+                _graph.Play();
+            }
             _to = Mathf.Max(from + 0.05f, Mathf.Min(to, clip.length));
             _fadeIn = Mathf.Max(0.01f, fadeIn);
             _fadeOut = Mathf.Max(0.01f, fadeOut);
             _age = 0f; _stopping = false; _live = true;
-            if (chained) UnityEngine.Playables.PlayableOutputExtensions.SetWeight(_output, 1f);
+            _inPlace = inPlace; _hipStartSet = false;
+            _hips = an.GetBoneTransform(HumanBodyBones.Hips);
+            _body = an.transform;
         }
 
         private void Update()
@@ -9409,25 +9404,40 @@ namespace DragonsAltarCombat
                 UnityEngine.Playables.PlayableExtensions.SetTime(_clip, _to);
                 _stopping = true; _stopAt = _age;
             }
+            float x = Mathf.Clamp01(_age / _fadeIn);
+            x = x * x * (3f - 2f * x);   // ease in/out: no visible start or end of the blend
             if (_mixing)
             {
-                float x = Mathf.Clamp01(_age / _fadeIn);
-                UnityEngine.Playables.PlayableExtensions.SetInputWeight(_mixer, 0, 1f - x);
-                UnityEngine.Playables.PlayableExtensions.SetInputWeight(_mixer, 1, x);
+                UnityEngine.Playables.PlayableExtensions.SetInputWeight(_xmix, 0, 1f - x);
+                UnityEngine.Playables.PlayableExtensions.SetInputWeight(_xmix, 1, x);
                 if (x >= 1f) _mixing = false;
             }
-            float w = _mixing || _age >= _fadeIn ? 1f : Mathf.Clamp01(_age / _fadeIn);
-            if (_stopping) w *= 1f - Mathf.Clamp01((_age - _stopAt) / _fadeOut);
+            float w = (_mixing || _age >= _fadeIn) ? 1f : x;
+            if (_stopping)
+            {
+                float y = Mathf.Clamp01((_age - _stopAt) / _fadeOut);
+                w *= 1f - y * y * (3f - 2f * y);
+            }
             UnityEngine.Playables.PlayableOutputExtensions.SetWeight(_output, w);
             if (_stopping && _age - _stopAt >= _fadeOut) Kill();
         }
 
-        public bool Live { get { return _live; } }
+        // In place: the hips keep their horizontal spot (relative to the body) from the start of this clip.
+        private void LateUpdate()
+        {
+            if (!_live || !_inPlace || _hips == null || _body == null) return;
+            Vector3 local = _body.InverseTransformPoint(_hips.position);
+            local.y = 0f;
+            if (!_hipStartSet) { _hipStart = local; _hipStartSet = true; return; }
+            Vector3 back = _body.TransformVector(local - _hipStart);
+            back.y = 0f;
+            _hips.position -= back;
+        }
 
         private void Kill()
         {
-            if (_live && _graph.IsValid()) _graph.Destroy();
-            _live = false;
+            if (_graph.IsValid()) _graph.Destroy();
+            _live = false; _mixing = false;
         }
 
         private void OnDestroy() { Kill(); }
