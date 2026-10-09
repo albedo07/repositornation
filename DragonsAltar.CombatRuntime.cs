@@ -16,7 +16,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.107";
+        public const string ModVersion = "0.25.108";
 
         internal static DragonCombatPlugin Instance;
 
@@ -2412,6 +2412,7 @@ namespace DragonsAltarCombat
         private Vector3 _editorBasePos;
         private float _editorTime;
         public bool EditorPreviewActive { get { return _editorPreview; } }
+        public bool EditorFull;
         // v0.25.88 JSAA touchdown anticipation: only Bonecrusher / Electric Smite.
         // Gameplay still decides the actual impact. These fields only drive visuals.
         private bool _jsaaLanding;
@@ -2640,6 +2641,9 @@ namespace DragonsAltarCombat
             _env = 1f;
             if (n > 1 && t < k[1].T) _env = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(k[0].T, k[1].T, t));
             if (n > 2 && t > k[n - 2].T) _env = Mathf.Min(_env, 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(k[n - 2].T, k[n - 1].T, t)));
+            // v0.25.108 Studio posing: the first / last frame used to have 0 weight (blend in/out), so weapon aim,
+            // grip and legs did nothing there. While posing (not playing) every frame is shown at full weight.
+            if (_editorPreview && EditorFull) _env = 1f;
             if (t <= k[0].T) { Set(k[0], k[0], 0f); return; }
             if (t >= k[n - 1].T) { Set(k[n - 1], k[n - 1], 0f); return; }
             for (int i = 0; i < n - 1; i++)
@@ -3116,7 +3120,8 @@ namespace DragonsAltarCombat
             // terrain hit. Plant its touchdown feet even during that brief slide,
             // otherwise it looks like the legs stay standing under the kneel.
             bool jsaaContact = _jsaaLanding && _impactAt >= 0f && Time.time - _impactAt < 0.45f;
-            bool can = !_noPlant && (!moving || jsaaContact) && _feetCaptured && _visual != null && (_editorStandalone || DragonCombat.OwnsMotionRoot(_token)) && Grounded();
+            // v0.25.108: the Studio copy always plants (vanilla-based clips set NoPlant, which froze the legs there).
+            bool can = (_editorStandalone || !_noPlant) && (!moving || jsaaContact) && _feetCaptured && _visual != null && (_editorStandalone || DragonCombat.OwnsMotionRoot(_token)) && Grounded();
             float tilt = Mathf.Max(Mathf.Abs(Mathf.DeltaAngle(0f, _r.x)), Mathf.Max(Mathf.Abs(Mathf.DeltaAngle(0f, _r.z)), Mathf.Abs(Mathf.DeltaAngle(0f, _spin))));
             float upright = 1f - Mathf.InverseLerp(25f, 45f, tilt);
             // JSAA touches down already kneeling. Don't spend another 0.125s slowly
@@ -3251,7 +3256,17 @@ namespace DragonsAltarCombat
                 // hand's attach transform ("RightHand_Attach" / "LeftHand_Attach").
                 Transform hand = _animator.GetBoneTransform(right ? HumanBodyBones.RightHand : HumanBodyBones.LeftHand);
                 Transform found = hand == null ? null : FindAttach(hand);
-                return found != null && found.childCount > 0 ? found.GetChild(0).gameObject : null;
+                if (found != null)
+                    for (int i = 0; i < found.childCount; i++) if (found.GetChild(i).gameObject.activeSelf) return found.GetChild(i).gameObject;
+                // v0.25.108 fallback: the first active child of the hand that carries a (non-skinned) mesh = the item
+                if (hand != null)
+                    for (int i = 0; i < hand.childCount; i++)
+                    {
+                        Transform c = hand.GetChild(i);
+                        if (!c.gameObject.activeSelf) continue;
+                        if (c.GetComponentInChildren<MeshRenderer>() != null) return c.gameObject;
+                    }
+                return null;
             }
             if (_vis == null)
             {
@@ -3276,6 +3291,26 @@ namespace DragonsAltarCombat
                 if (deeper != null) return deeper;
             }
             return null;
+        }
+
+        // v0.25.108 Studio: where foot f (0 left, 1 right) stands before the Studio foot move, and the frame the
+        // move is expressed in (offset world = frame * FO).
+        public bool EditorFootBase(int f, out Vector3 world, out Quaternion frame)
+        {
+            world = Vector3.zero; frame = Quaternion.identity;
+            if (!_feetCaptured || _visual == null) return false;
+            Transform parent = _visual.parent;
+            Quaternion qy = Quaternion.AngleAxis(_r.y + _spin, Vector3.up);
+            Quaternion baseRot = _editorStandalone ? _editorBaseRot : DragonCombat.MotionBaseRot;
+            Vector3 basePos = (_editorStandalone ? _editorBasePos : DragonCombat.MotionBasePos) + (Pivot - qy * Pivot) + new Vector3(_o.x, 0f, _o.z);
+            float lift = _l[f * 4], spread = _l[f * 4 + 1];
+            Vector3 step = new Vector3((f == 0 ? -1f : 1f) * spread * 0.5f, 0f, lift * 0.45f);
+            Vector3 local = basePos + baseRot * (qy * (Vector3.Scale(_visual.localScale, _footLocal[f]) + step));
+            world = parent != null ? parent.TransformPoint(local) : local;
+            world += Vector3.up * Mathf.Max(0f, f == 0 ? _flh : _frh);
+            Quaternion parentRot = parent != null ? parent.rotation : Quaternion.identity;
+            frame = parentRot * baseRot * qy;
+            return true;
         }
 
         // v0.25.107 Studio: world position of the held item's tip (false if no item in that hand).
@@ -13464,6 +13499,7 @@ namespace DragonsAltarCombat
                 foreach (ParticleSystem ps in _previewAvatar.GetComponentsInChildren<ParticleSystem>(true))
                     if (ps != null) ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
                 SetPortraitLayer(_previewRig.transform);
+                _spawned.Clear(); _hiddenGear.Clear();
                 Animator animator = _previewAvatar.GetComponentInChildren<Animator>(true);
                 if (animator == null || !animator.isHuman)
                 { _message = "Equipped visual clone has no humanoid Animator. Preview unavailable."; DestroyPortrait(); return false; }
@@ -13494,6 +13530,7 @@ namespace DragonsAltarCombat
                 lamp.cullingMask = 1 << PortraitLayer;
                 lamp.transform.rotation = Quaternion.Euler(45f, -40f, 0f);
                 PointPortraitCamera();
+                ApplyLoadout();
                 return true;
             }
             catch (Exception ex)
@@ -13599,6 +13636,7 @@ namespace DragonsAltarCombat
                 _time += Time.unscaledDeltaTime * _speed;
                 if (_time > _work[_work.Count - 1].T) _time = _work[0].T;
             }
+            if (_driver != null) _driver.EditorFull = !_playing;
             if (_previewing)
             {
                 if (_driver == null || !_driver.EditorPreviewActive) { _previewing = false; _playing = false; _message = "Skill animation interrupted preview. Click Preview again."; }
@@ -14077,26 +14115,41 @@ namespace DragonsAltarCombat
                 else { k.SD = d.normalized; k.SW = 1f; }
                 return;
             }
-            if (h == HLKnee || h == HRKnee)
+            if (h == HLKnee || h == HRKnee || h == HLAnkle || h == HRAnkle)
             {
-                Transform hip = PBone(h == HLKnee ? HumanBodyBones.LeftUpperLeg : HumanBodyBones.RightUpperLeg);
-                if (hip == null) return;
-                Vector3 d = inv * (p - hip.position);
-                if (d.sqrMagnitude < 0.0001f) return;
-                if (h == HLKnee) k.KPL = d.normalized; else k.KPR = d.normalized;
-                if (k.KPW < 0.01f) { if (h == HLKnee) k.KPR = new Vector3(0f, 0f, 1f); else k.KPL = new Vector3(0f, 0f, 1f); }
-                k.KPW = 1f;
-                return;
-            }
-            if (h == HLAnkle || h == HRAnkle)
-            {
-                Vector3 step = inv * (p - handleNow) / PScale();
-                Vector3 cur = k.FOW > 0.01f ? (h == HLAnkle ? k.FOL : k.FOR) : Vector3.zero;
-                Vector3 nv = cur + step;
-                nv.y = Mathf.Clamp(nv.y, 0f, 0.7f);   // feet never go under the ground
-                nv = Vector3.ClampMagnitude(nv, 0.8f);
+                // v0.25.108 legs follow in real time: the dot is where the knee / foot GOES; the foot target is
+                // solved from it and the two-bone leg IK bends the whole leg.
+                int f = (h == HLKnee || h == HLAnkle) ? 0 : 1;
+                Vector3 baseFoot; Quaternion fr;
+                if (_driver == null || !_driver.EditorFootBase(f, out baseFoot, out fr)) { _message = "Legs not ready yet - wait a moment and try again."; return; }
+                Quaternion finv = Quaternion.Inverse(fr);
+                Vector3 foot;
+                if (h == HLKnee || h == HRKnee)
+                {
+                    Transform hip = PBone(f == 0 ? HumanBodyBones.LeftUpperLeg : HumanBodyBones.RightUpperLeg);
+                    Transform knee = PBone(f == 0 ? HumanBodyBones.LeftLowerLeg : HumanBodyBones.RightLowerLeg);
+                    Transform ank = PBone(f == 0 ? HumanBodyBones.LeftFoot : HumanBodyBones.RightFoot);
+                    if (hip == null || knee == null || ank == null) return;
+                    float thigh = Vector3.Distance(hip.position, knee.position), shin = Vector3.Distance(knee.position, ank.position);
+                    Vector3 toKnee = p - hip.position;
+                    if (toKnee.sqrMagnitude < 0.0001f) return;
+                    // hip flexion limit: the knee can come up to a bit above hip height, never behind the body
+                    Vector3 kl = finv * toKnee.normalized;
+                    kl.y = Mathf.Clamp(kl.y, -1f, 0.25f);
+                    kl.z = Mathf.Max(kl.z, -0.35f);
+                    Vector3 kneeAt = hip.position + (fr * kl.normalized) * thigh;
+                    foot = kneeAt + Vector3.down * shin;   // shin hangs straight under the knee
+                    Vector3 kp = finv * (kneeAt - hip.position);
+                    if (f == 0) k.KPL = kp.normalized; else k.KPR = kp.normalized;
+                    if (k.KPW < 0.01f) { if (f == 0) k.KPR = new Vector3(0f, 0f, 1f); else k.KPL = new Vector3(0f, 0f, 1f); }
+                    k.KPW = 1f;
+                }
+                else foot = p;
+                Vector3 off = finv * (foot - baseFoot);
+                off.y = Mathf.Clamp(off.y, 0f, 0.9f);   // feet never go below the ground
+                off = Vector3.ClampMagnitude(off, 1f);
                 if (k.FOW < 0.01f) { k.FOL = Vector3.zero; k.FOR = Vector3.zero; }
-                if (h == HLAnkle) k.FOL = nv; else k.FOR = nv;
+                if (f == 0) k.FOL = off; else k.FOR = off;
                 k.FOW = 1f;
             }
         }
@@ -14163,41 +14216,149 @@ namespace DragonsAltarCombat
             return "right " + d.x.ToString("+0.00;-0.00") + "  up " + d.y.ToString("+0.00;-0.00") + "  front " + d.z.ToString("+0.00;-0.00");
         }
 
-        // ---- PRESETS (applied to the selected frame; every joint stays editable afterwards)
+        // ---- BODY PRESETS (put on the selected frame; every dot still works on top of them)
         private static readonly string[] PresetNames = {
-            "Two hands on one weapon", "Two-hand overhead", "Let go of the 2nd hand", "Guard (both hands up)",
-            "Dual wield ready", "Mirror right -> left", "Arms relaxed", "Wide planted stance", "Legs normal",
-            "Copy frame", "Paste frame" };
+            "Stand straight", "Crouch", "Jump (mid-air)", "Sprint (mid-stride)", "Two hands on the weapon", "Let go of the 2nd hand",
+            "Arms relaxed", "Mirror right -> left", "Copy frame", "Paste frame" };
         private void ApplyPreset(int i)
         {
             if (_work.Count < 2) return;
             DragonClipKey k = _work[_keyIndex];
-            if (i == 10) { if (_clipboard == null) { _message = "Nothing copied yet."; return; } _undo.Push(Snapshot()); float t0 = k.T; JsonUtility.FromJsonOverwrite(_clipboard, k); k.T = t0; }
-            else if (i == 9) { _clipboard = JsonUtility.ToJson(k); _message = "Frame copied. Pick another frame and click Paste frame."; return; }
-            else
+            if (i == 8) { _clipboard = JsonUtility.ToJson(k); _message = "Frame copied. Pick another frame and click Paste frame."; return; }
+            _undo.Push(Snapshot());
+            if (i == 9) { if (_clipboard == null) { _message = "Nothing copied yet."; return; } float t0 = k.T; JsonUtility.FromJsonOverwrite(_clipboard, k); k.T = t0; }
+            else if (i == 0) { k.R = Vector3.zero; k.O = Vector3.zero; for (int b = 0; b < 4; b++) k.B[b] = Vector3.zero; LegsNormal(k); }
+            else if (i == 1)
+            {   // crouch: hips drop, feet stay planted, knees bend forward, slight lean
+                k.R = new Vector3(10f, k.R.y, 0f); k.O = new Vector3(0f, -0.35f, 0.05f); k.B[1] = new Vector3(10f, 0f, 0f);
+                LegsNormal(k); k.KPL = new Vector3(-0.15f, 0f, 1f); k.KPR = new Vector3(0.15f, 0f, 1f); k.KPW = 1f;
+            }
+            else if (i == 2)
+            {   // the peak of a jump: body up, both feet tucked up under it, knees forward
+                k.R = new Vector3(6f, k.R.y, 0f); k.O = new Vector3(0f, 0.6f, 0f); k.B[1] = new Vector3(8f, 0f, 0f);
+                LegsNormal(k); k.FOL = new Vector3(-0.03f, 0.85f, 0.18f); k.FOR = new Vector3(0.03f, 0.65f, -0.12f); k.FOW = 1f;
+                k.KPL = new Vector3(0f, 0f, 1f); k.KPR = new Vector3(0f, 0f, 1f); k.KPW = 1f;
+            }
+            else if (i == 3)
+            {   // sprint mid-stride: lean in, left knee driving up, right leg pushing back, arms opposite
+                k.R = new Vector3(14f, k.R.y, 0f); k.O = new Vector3(0f, 0.04f, 0f); k.B[1] = new Vector3(6f, 0f, 0f);
+                LegsNormal(k); k.FOL = new Vector3(0f, 0.3f, 0.35f); k.FOR = new Vector3(0f, 0.12f, -0.45f); k.FOW = 1f;
+                k.KPL = new Vector3(0f, 0f, 1f); k.KPR = new Vector3(0f, -0.2f, 1f); k.KPW = 1f;
+                k.HD = new Vector3(0.2f, -0.35f, -0.9f).normalized; k.HR = 0.7f; k.HW = 1f;
+                k.LD = new Vector3(-0.15f, -0.2f, 1f).normalized; k.LR = 0.55f; k.LW = 1f; k.TW = 0f;
+            }
+            else if (i == 4) { GripOn(k); }
+            else if (i == 5) { k.TW = 0f; k.GW = 0f; }
+            else if (i == 6) { k.HW = 0f; k.LW = 0f; k.EW = 0f; k.LEW = 0f; k.WW = 0f; k.SW = 0f; k.TW = 0f; k.GW = 0f; for (int b = 4; b < 10; b++) k.B[b] = Vector3.zero; }
+            else if (i == 7)
             {
-                _undo.Push(Snapshot());
-                switch (i)
-                {
-                    case 0: k.HD = new Vector3(0.25f, 0.1f, 1f).normalized; k.HR = 0.6f; k.HW = 1f; k.WD = new Vector3(0f, 0.6f, 1f).normalized; k.WW = 1f;
-                        k.TW = 1f; k.TG = -0.14f; k.GP = new Vector3(-0.2f, -0.4f, 1f).normalized; k.GW = 1f; k.LW = 0f; break;
-                    case 1: k.HD = new Vector3(0.15f, 1f, 0.25f).normalized; k.HR = 0.85f; k.HW = 1f; k.WD = new Vector3(0f, 1f, -0.3f).normalized; k.WW = 1f;
-                        k.TW = 1f; k.TG = -0.14f; k.GP = new Vector3(-0.3f, 0.2f, 1f).normalized; k.GW = 1f; k.LW = 0f; break;
-                    case 2: k.TW = 0f; k.GW = 0f; break;
-                    case 3: k.HD = new Vector3(0.35f, 0.15f, 0.8f).normalized; k.HR = 0.55f; k.HW = 1f; k.LD = new Vector3(-0.35f, 0.2f, 0.8f).normalized; k.LR = 0.5f; k.LW = 1f;
-                        k.WD = new Vector3(0f, 0.7f, 0.7f).normalized; k.WW = 1f; k.TW = 0f; break;
-                    case 4: k.HD = new Vector3(0.45f, -0.1f, 0.8f).normalized; k.HR = 0.6f; k.HW = 1f; k.LD = new Vector3(-0.45f, -0.1f, 0.8f).normalized; k.LR = 0.6f; k.LW = 1f;
-                        k.WD = new Vector3(0.2f, 0.6f, 0.8f).normalized; k.WW = 1f; k.SD = new Vector3(-0.2f, 0.6f, 0.8f).normalized; k.SW = 1f; k.TW = 0f; break;
-                    case 5: k.LD = new Vector3(-k.HD.x, k.HD.y, k.HD.z); k.LR = k.HR; k.LW = k.HW; k.LEP = new Vector3(-k.EP.x, k.EP.y, k.EP.z); k.LEW = k.EW;
-                        k.SD = new Vector3(-k.WD.x, k.WD.y, k.WD.z); k.SW = k.WW; k.B[7] = new Vector3(k.B[4].x, -k.B[4].y, -k.B[4].z); k.B[8] = new Vector3(k.B[5].x, -k.B[5].y, -k.B[5].z); k.B[9] = new Vector3(k.B[6].x, -k.B[6].y, -k.B[6].z); break;
-                    case 6: k.HW = 0f; k.LW = 0f; k.EW = 0f; k.LEW = 0f; k.WW = 0f; k.SW = 0f; k.TW = 0f; k.GW = 0f; for (int b = 4; b < 10; b++) k.B[b] = Vector3.zero; break;
-                    case 7: k.FOL = new Vector3(-0.15f, 0f, 0.2f); k.FOR = new Vector3(0.15f, 0f, -0.25f); k.FOW = 1f; k.KPL = new Vector3(-0.2f, 0f, 1f); k.KPR = new Vector3(0.2f, 0f, 1f); k.KPW = 1f; break;
-                    case 8: k.FOW = 0f; k.KPW = 0f; k.FLh = 0f; k.FRh = 0f; for (int l = 0; l < 8; l++) k.L[l] = 0f; break;
-                }
+                k.LD = new Vector3(-k.HD.x, k.HD.y, k.HD.z); k.LR = k.HR; k.LW = k.HW; k.LEP = new Vector3(-k.EP.x, k.EP.y, k.EP.z); k.LEW = k.EW;
+                k.SD = new Vector3(-k.WD.x, k.WD.y, k.WD.z); k.SW = k.WW;
+                k.B[7] = new Vector3(k.B[4].x, -k.B[4].y, -k.B[4].z); k.B[8] = new Vector3(k.B[5].x, -k.B[5].y, -k.B[5].z); k.B[9] = new Vector3(k.B[6].x, -k.B[6].y, -k.B[6].z);
             }
             _dirty = true; _playing = false; _time = k.T; _numericDrafts.Clear();
             RefreshPreview();
-            if (i != 9) _message = "Preset '" + PresetNames[i] + "' put on frame " + (_keyIndex + 1) + ". Every dot still works on top of it.";
+            if (i != 8) _message = "'" + PresetNames[i] + "' put on frame " + (_keyIndex + 1) + ". Every dot still works on top of it.";
+        }
+
+        private static void LegsNormal(DragonClipKey k)
+        {
+            k.FOW = 0f; k.KPW = 0f; k.FLh = 0f; k.FRh = 0f; k.FOL = Vector3.zero; k.FOR = Vector3.zero;
+            for (int l = 0; l < 8; l++) k.L[l] = 0f;
+        }
+
+        private static void GripOn(DragonClipKey k)
+        {
+            if (k.HW < 0.01f) { k.HD = new Vector3(0.25f, 0.1f, 1f).normalized; k.HR = 0.6f; k.HW = 1f; }
+            k.TW = 1f; k.TG = -0.14f;
+            if (k.GW < 0.01f) { k.GP = new Vector3(-0.2f, -0.4f, 1f).normalized; k.GW = 1f; }
+            k.LW = 0f;
+        }
+
+        // ---- MODEL WEAPONS (Studio copy only, nothing in your real inventory changes)
+        private static readonly string[] LoadoutNames = { "My gear", "Krom (two hands)", "Iron sword", "Axe + Axe (dual wield)", "Battleaxe (two hands)", "Mace + shield", "Atgeir (two hands)", "Unarmed" };
+        private static readonly string[][] LoadoutItems = {
+            null, new string[] { "THSwordKrom", null }, new string[] { "SwordIron", null }, new string[] { "AxeIron", "AxeIron" },
+            new string[] { "Battleaxe", null }, new string[] { "MaceIron", "ShieldBanded" }, new string[] { "AtgeirIron", null }, new string[] { null, null } };
+        private static readonly bool[] LoadoutTwoHand = { false, true, false, false, true, false, true, false };
+        private int _loadout;
+        private readonly List<GameObject> _spawned = new List<GameObject>();
+        private readonly List<GameObject> _hiddenGear = new List<GameObject>();
+
+        private static GameObject ZPrefab(string name)
+        {
+            try
+            {
+                Type zns = DragonCombat.FindTypeCached("ZNetScene");
+                if (zns == null) return null;
+                object inst = null;
+                PropertyInfo ip = zns.GetProperty("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                if (ip != null) inst = ip.GetValue(null, null);
+                if (inst == null) { FieldInfo f = zns.GetField("s_instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic); if (f != null) inst = f.GetValue(null); }
+                if (inst == null) return null;
+                MethodInfo get = zns.GetMethod("GetPrefab", BindingFlags.Instance | BindingFlags.Public, null, new Type[] { typeof(string) }, null);
+                return get == null ? null : get.Invoke(inst, new object[] { name }) as GameObject;
+            }
+            catch (Exception) { return null; }
+        }
+
+        private Transform HandAttach(bool right)
+        {
+            Transform hand = PBone(right ? HumanBodyBones.RightHand : HumanBodyBones.LeftHand);
+            if (hand == null) return null;
+            Transform[] all = hand.GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < all.Length; i++) if (all[i] != hand && all[i].name.IndexOf("Attach", StringComparison.OrdinalIgnoreCase) >= 0) return all[i];
+            return hand;
+        }
+
+        private void ApplyLoadout()
+        {
+            for (int i = 0; i < _spawned.Count; i++) if (_spawned[i] != null) Destroy(_spawned[i]);
+            _spawned.Clear();
+            for (int i = 0; i < _hiddenGear.Count; i++) if (_hiddenGear[i] != null) _hiddenGear[i].SetActive(true);
+            _hiddenGear.Clear();
+            if (_previewAvatar == null || _loadout == 0) return;
+            string[] items = LoadoutItems[_loadout];
+            for (int side = 0; side < 2; side++)
+            {
+                Transform att = HandAttach(side == 0);
+                if (att == null) continue;
+                // hide what the copy is really holding in that hand (only on the copy)
+                for (int c = 0; c < att.childCount; c++)
+                {
+                    GameObject g = att.GetChild(c).gameObject;
+                    if (g.activeSelf && (att.name.IndexOf("Attach", StringComparison.OrdinalIgnoreCase) >= 0 || g.GetComponentInChildren<MeshRenderer>() != null)) { g.SetActive(false); _hiddenGear.Add(g); }
+                }
+                string name = items[side];
+                if (string.IsNullOrEmpty(name)) continue;
+                GameObject prefab = ZPrefab(name);
+                Transform model = prefab == null ? null : prefab.transform.Find("attach");
+                if (model == null) { _message = "Model weapon '" + name + "' not found in this game version."; continue; }
+                GameObject go = (GameObject)Instantiate(model.gameObject, att);
+                go.transform.localPosition = Vector3.zero; go.transform.localRotation = Quaternion.identity;
+                go.name = "IH STUDIO MODEL " + name;
+                foreach (Collider col in go.GetComponentsInChildren<Collider>(true)) Destroy(col);
+                foreach (MonoBehaviour mb in go.GetComponentsInChildren<MonoBehaviour>(true)) if (mb != null) mb.enabled = false;
+                foreach (Rigidbody rb in go.GetComponentsInChildren<Rigidbody>(true)) { rb.isKinematic = true; rb.detectCollisions = false; }
+                SetPortraitLayer(go.transform);
+                _spawned.Add(go);
+            }
+        }
+
+        private void PickLoadout(int i)
+        {
+            _loadout = i;
+            ApplyLoadout();
+            if (LoadoutTwoHand[i] && _work.Count >= 2)
+            {
+                // a two-handed weapon: both hands on it in every frame of this animation (each joint still editable)
+                _undo.Push(Snapshot());
+                for (int f = 0; f < _work.Count; f++) GripOn(_work[f]);
+                _dirty = true; RefreshPreview();
+                _message = LoadoutNames[i] + ": both hands now hold it on every frame. Drag the dots to fine-tune.";
+            }
+            else if (i == 3) _message = "Axe + Axe: drag the two WHITE dots to point each axe.";
+            else _message = "Model weapon: " + LoadoutNames[i] + " (only on this copy).";
         }
 
         private void PreviewWhole()
@@ -14295,6 +14456,14 @@ namespace DragonsAltarCombat
             GUI.color = CLegs; GUILayout.Label("(o) legs", GUILayout.ExpandWidth(false));
             GUI.color = Color.white;
             GUILayout.EndHorizontal();
+            GUILayout.Label("MODEL WEAPON (on this copy only):");
+            for (int row = 0; row < 2; row++)
+            {
+                GUILayout.BeginHorizontal();
+                for (int li = row * 4; li < Mathf.Min(LoadoutNames.Length, row * 4 + 4); li++)
+                    if (GUILayout.Toggle(_loadout == li, LoadoutNames[li], GUI.skin.button, GUILayout.Height(24f)) && _loadout != li) PickLoadout(li);
+                GUILayout.EndHorizontal();
+            }
             GUILayout.BeginHorizontal();
             _shellShow = GUILayout.Toggle(_shellShow, " Show body outline", GUILayout.ExpandWidth(false));
             _shellGuard = GUILayout.Toggle(_shellGuard, " Block moves that go inside the body", GUILayout.ExpandWidth(false));
@@ -14357,7 +14526,7 @@ namespace DragonsAltarCombat
                 GUILayout.EndHorizontal();
 
                 DragonClipKey k = _work[_keyIndex];
-                GUILayout.Label("POSE PRESETS (put on this frame, then fine-tune with the dots)");
+                GUILayout.Label("BODY PRESETS (put on this frame, then fine-tune with the dots)");
                 for (int row = 0; row < 3; row++)
                 {
                     GUILayout.BeginHorizontal();

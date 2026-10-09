@@ -19,9 +19,14 @@ Nothing changes in your real game until you press APPLY TO GAME.
    Hover a dot to see what it does. The line under the frames shows its numbers live.
    The faint rings = BODY OUTLINE. With "Block moves that go inside the body" on, any move that
    pushes an arm or hand into the torso/head is undone (rings turn red + message).
-   POSE PRESETS: Two hands on one weapon, Two-hand overhead, Let go of the 2nd hand, Guard,
-   Dual wield ready, Mirror right -> left, Arms relaxed, Wide planted stance, Legs normal,
-   Copy / Paste frame. They set the selected frame; every dot still works on top.
+   MODEL WEAPON (middle column): My gear, Krom (two hands), Iron sword, Axe + Axe (dual wield),
+   Battleaxe (two hands), Mace + shield, Atgeir (two hands), Unarmed. Only the copy changes.
+   Two-handed ones put both hands on the weapon in every frame of the animation.
+   BODY PRESETS: Stand straight, Crouch, Jump (mid-air), Sprint (mid-stride), Two hands on the weapon,
+   Let go of the 2nd hand, Arms relaxed, Mirror right -> left, Copy / Paste frame.
+   Jump = the body is lifted and the feet tucked up: use it on the frames where the skill is in the air.
+   KNEE dot = put the knee where you want it (the shin hangs under it, the whole leg follows).
+   ANKLE dot = put the foot where you want it (up = lift).
 4) PLAY PREVIEW plays the whole motion in a loop. STOP to pose again.
 5) APPLY TO GAME saves it and your character uses it in combat right away.
 

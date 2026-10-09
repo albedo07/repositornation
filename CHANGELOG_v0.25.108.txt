@@ -1,0 +1,19 @@
+Immortal Heroes v0.25.108 - Live Studio
+Base: v0.25.107. Only the F9 Animation Studio and its preview copy (combat animations unchanged).
+
+FIXES (why the dots did not move things)
+- The first and last frame of every animation had 0 blend weight, so weapon aim, two-hand grip and
+  legs did nothing there. While posing every frame is now shown at full weight.
+- Legs on skills built on Valheim's own swing were frozen (NoPlant); the Studio copy always plants now.
+- Knee dot = WHERE the knee goes: the foot is solved under it, the whole leg bends with it (hip limit:
+  knee up to a bit above hip height). Ankle dot = where the foot goes (never below the ground).
+- Weapon dots: the held item is now found on the copy even without an attach point, so the WHITE dot
+  sits on the real weapon tip and the weapon turns with it.
+
+NEW
+- MODEL WEAPON loadout on the copy only: My gear, Krom (two hands), Iron sword, Axe + Axe (dual wield),
+  Battleaxe (two hands), Mace + shield, Atgeir (two hands), Unarmed. Two-handed weapons put both hands
+  on the weapon in every frame (all joints still editable).
+- BODY PRESETS: Stand straight, Crouch, Jump (mid-air), Sprint (mid-stride), Two hands on the weapon,
+  Let go of the 2nd hand, Arms relaxed, Mirror right -> left, Copy / Paste frame.
+  (Overhead / guard / dual-ready / wide-stance presets removed.)
