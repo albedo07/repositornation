@@ -16,7 +16,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.108";
+        public const string ModVersion = "0.25.109";
 
         internal static DragonCombatPlugin Instance;
 
@@ -13717,11 +13717,11 @@ namespace DragonsAltarCombat
         // pose presets, and a body shell that refuses any edit that pushes an arm into the torso or head.
         private const int HNone = -1;
         private const int HRShoulder = 0, HRElbow = 1, HRHand = 2, HRWeapon = 3, HLShoulder = 4, HLElbow = 5, HLHand = 6, HLWeapon = 7,
-            HHead = 8, HChest = 9, HSpine = 10, HHips = 11, HBody = 12, HLKnee = 13, HRKnee = 14, HLAnkle = 15, HRAnkle = 16;
-        private const int HCount = 17;
+            HHead = 8, HChest = 9, HSpine = 10, HHips = 11, HBody = 12, HLKnee = 13, HRKnee = 14, HLAnkle = 15, HRAnkle = 16, HRotate = 17;
+        private const int HCount = 18;
         private static readonly string[] HandleNames = {
             "Right shoulder", "Right elbow", "Right hand", "Right weapon", "Left shoulder", "Left elbow", "Left hand", "Left weapon / shield",
-            "Head", "Chest", "Torso (spine)", "Hips", "Whole body", "Left knee", "Right knee", "Left ankle", "Right ankle" };
+            "Head", "Chest", "Torso (spine)", "Hips", "Whole body", "Left knee", "Right knee", "Left ankle", "Right ankle", "ROTATE / FLIP" };
         private static readonly string[] HandleHelp = {
             "Drag to swing the whole right arm around the shoulder.",
             "Drag to choose where the right elbow points.",
@@ -13739,11 +13739,13 @@ namespace DragonsAltarCombat
             "Drag to choose where the left knee points.",
             "Drag to choose where the right knee points.",
             "Drag to move the left foot (up = lift it).",
-            "Drag to move the right foot (up = lift it)." };
+            "Drag to move the right foot (up = lift it).",
+            "Drag in ANY direction to rotate the whole character - even upside down (flips, acrobatics)." };
         private static readonly Color CRight = new Color(1f, 0.38f, 0.32f), CLeft = new Color(0.35f, 0.68f, 1f), CTorso = new Color(0.45f, 1f, 0.5f),
-            CLegs = new Color(1f, 0.82f, 0.25f), CWeapon = new Color(1f, 1f, 1f), CBody = new Color(1f, 0.55f, 0.85f);
+            CLegs = new Color(1f, 0.82f, 0.25f), CWeapon = new Color(1f, 1f, 1f), CBody = new Color(1f, 0.55f, 0.85f), CRotate = new Color(1f, 0.5f, 0.1f);
         private static Color HandleColor(int h)
         {
+            if (h == HRotate) return CRotate;
             if (h == HRWeapon || h == HLWeapon) return CWeapon;
             if (h <= HRHand) return CRight;
             if (h <= HLHand) return CLeft;
@@ -13837,6 +13839,13 @@ namespace DragonsAltarCombat
                     Vector3 tip;
                     ok = WeaponTip(h == HRWeapon, out tip);
                     return tip;
+                }
+                case HRotate:
+                {
+                    Transform hp = PBone(HumanBodyBones.Hips);
+                    if (hp == null || _portraitCamera == null) return Vector3.zero;
+                    ok = true;
+                    return hp.position + _portraitCamera.transform.right * 0.55f * PScale();   // beside the body
                 }
                 case HBody:
                 {
@@ -14027,6 +14036,8 @@ namespace DragonsAltarCombat
             }
         }
 
+        private static float Fold(float a) { return Mathf.Repeat(a + 180f, 360f) - 180f; }
+
         private static Vector3 Rotate(Vector3 d, float yaw, float pitch)
         {
             Vector3 v = Quaternion.AngleAxis(yaw, Vector3.up) * d;
@@ -14047,6 +14058,19 @@ namespace DragonsAltarCombat
                 float pl = h == HHead ? 45f : h == HHips ? 30f : 45f;
                 Vector3 v = k.B[b];
                 k.B[b] = new Vector3(Mathf.Clamp(v.x + delta.y * 0.4f, -pl, pl), Mathf.Clamp(v.y + delta.x * 0.4f, -yl, yl), v.z);
+                return;
+            }
+            if (h == HRotate)
+            {
+                // free trackball rotation around the body centre (camera axes), any angle incl. upside down
+                if (_previewAvatar == null || _portraitCamera == null) return;
+                Quaternion curQ = Quaternion.Euler(k.R) * Quaternion.AngleAxis(k.Spin, Vector3.up);
+                Quaternion baseW = _previewAvatar.transform.rotation * Quaternion.Inverse(curQ);
+                Quaternion w = _previewAvatar.transform.rotation;
+                w = Quaternion.AngleAxis(-delta.x * 0.6f, _portraitCamera.transform.up) * Quaternion.AngleAxis(-delta.y * 0.6f, _portraitCamera.transform.right) * w;
+                Quaternion nq = Quaternion.Inverse(baseW) * w * Quaternion.Inverse(Quaternion.AngleAxis(k.Spin, Vector3.up));
+                Vector3 e = nq.eulerAngles;
+                k.R = new Vector3(Fold(e.x), Fold(e.y), Fold(e.z));
                 return;
             }
             if (h == HBody)
@@ -14206,6 +14230,7 @@ namespace DragonsAltarCombat
                 case HRKnee: s += "points " + Dir(k.KPR); break;
                 case HLAnkle: s += "moved " + Dir(k.FOL); break;
                 case HRAnkle: s += "moved " + Dir(k.FOR); break;
+                case HRotate: s += "pitch " + k.R.x.ToString("0") + "   turn " + k.R.y.ToString("0") + "   roll " + k.R.z.ToString("0") + "   (+ spin " + k.Spin.ToString("0") + ")"; break;
                 default: s += "lean " + k.R.x.ToString("0") + "   turn " + k.R.y.ToString("0"); break;
             }
             GUILayout.Label(s);
@@ -14218,8 +14243,8 @@ namespace DragonsAltarCombat
 
         // ---- BODY PRESETS (put on the selected frame; every dot still works on top of them)
         private static readonly string[] PresetNames = {
-            "Stand straight", "Crouch", "Jump (mid-air)", "Sprint (mid-stride)", "Two hands on the weapon", "Let go of the 2nd hand",
-            "Arms relaxed", "Mirror right -> left", "Copy frame", "Paste frame" };
+            "Stand straight", "Crouch (jump prep)", "Jump (mid-air)", "Sprint (mid-stride)", "Two hands on the weapon", "Let go of the 2nd hand",
+            "Arms relaxed", "Mirror right -> left", "Copy frame", "Paste frame", "Flip forward 90", "Upside down", "Lie on the side", "Rotation reset" };
         private void ApplyPreset(int i)
         {
             if (_work.Count < 2) return;
@@ -14229,9 +14254,13 @@ namespace DragonsAltarCombat
             if (i == 9) { if (_clipboard == null) { _message = "Nothing copied yet."; return; } float t0 = k.T; JsonUtility.FromJsonOverwrite(_clipboard, k); k.T = t0; }
             else if (i == 0) { k.R = Vector3.zero; k.O = Vector3.zero; for (int b = 0; b < 4; b++) k.B[b] = Vector3.zero; LegsNormal(k); }
             else if (i == 1)
-            {   // crouch: hips drop, feet stay planted, knees bend forward, slight lean
-                k.R = new Vector3(10f, k.R.y, 0f); k.O = new Vector3(0f, -0.35f, 0.05f); k.B[1] = new Vector3(10f, 0f, 0f);
-                LegsNormal(k); k.KPL = new Vector3(-0.15f, 0f, 1f); k.KPR = new Vector3(0.15f, 0f, 1f); k.KPW = 1f;
+            {   // crouch = loading a jump: ONLY the hips and legs change - hands, chest, head and weapon stay
+                // exactly as they are. Hips drop and sit slightly back, feet stay planted a little apart,
+                // knees bend forward over the toes (the spring for an aerial move).
+                k.O = new Vector3(k.O.x, -0.42f, k.O.z - 0.06f);
+                k.FOW = 1f; k.FOL = new Vector3(-0.06f, 0f, 0.04f); k.FOR = new Vector3(0.06f, 0f, -0.04f);
+                k.FLh = 0f; k.FRh = 0f;
+                k.KPL = new Vector3(-0.12f, 0f, 1f); k.KPR = new Vector3(0.12f, 0f, 1f); k.KPW = 1f;
             }
             else if (i == 2)
             {   // the peak of a jump: body up, both feet tucked up under it, knees forward
@@ -14248,6 +14277,10 @@ namespace DragonsAltarCombat
                 k.LD = new Vector3(-0.15f, -0.2f, 1f).normalized; k.LR = 0.55f; k.LW = 1f; k.TW = 0f;
             }
             else if (i == 4) { GripOn(k); }
+            else if (i == 10) { k.R = new Vector3(Fold(k.R.x + 90f), k.R.y, k.R.z); }
+            else if (i == 11) { k.R = new Vector3(180f, k.R.y, 0f); LegsNormal(k); }
+            else if (i == 12) { k.R = new Vector3(0f, k.R.y, 90f); }
+            else if (i == 13) { k.R = new Vector3(0f, k.R.y, 0f); }
             else if (i == 5) { k.TW = 0f; k.GW = 0f; }
             else if (i == 6) { k.HW = 0f; k.LW = 0f; k.EW = 0f; k.LEW = 0f; k.WW = 0f; k.SW = 0f; k.TW = 0f; k.GW = 0f; for (int b = 4; b < 10; b++) k.B[b] = Vector3.zero; }
             else if (i == 7)
@@ -14527,7 +14560,7 @@ namespace DragonsAltarCombat
 
                 DragonClipKey k = _work[_keyIndex];
                 GUILayout.Label("BODY PRESETS (put on this frame, then fine-tune with the dots)");
-                for (int row = 0; row < 3; row++)
+                for (int row = 0; row < 4; row++)
                 {
                     GUILayout.BeginHorizontal();
                     for (int pi = row * 4; pi < Mathf.Min(PresetNames.Length, row * 4 + 4); pi++)

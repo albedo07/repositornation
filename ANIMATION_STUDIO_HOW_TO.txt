@@ -22,8 +22,10 @@ Nothing changes in your real game until you press APPLY TO GAME.
    MODEL WEAPON (middle column): My gear, Krom (two hands), Iron sword, Axe + Axe (dual wield),
    Battleaxe (two hands), Mace + shield, Atgeir (two hands), Unarmed. Only the copy changes.
    Two-handed ones put both hands on the weapon in every frame of the animation.
-   BODY PRESETS: Stand straight, Crouch, Jump (mid-air), Sprint (mid-stride), Two hands on the weapon,
-   Let go of the 2nd hand, Arms relaxed, Mirror right -> left, Copy / Paste frame.
+   ORANGE dot beside the body = ROTATE / FLIP: drag any direction, any angle (even upside down).
+   BODY PRESETS: Stand straight, Crouch (jump prep: ONLY hips + legs move), Jump (mid-air), Sprint (mid-stride), Two hands on the weapon,
+   Let go of the 2nd hand, Arms relaxed, Mirror right -> left, Copy / Paste frame,
+   Flip forward 90, Upside down, Lie on the side, Rotation reset.
    Jump = the body is lifted and the feet tucked up: use it on the frames where the skill is in the air.
    KNEE dot = put the knee where you want it (the shin hangs under it, the whole leg follows).
    ANKLE dot = put the foot where you want it (up = lift).

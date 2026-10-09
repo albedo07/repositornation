@@ -1,0 +1,10 @@
+Immortal Heroes v0.25.109 - Flip Studio
+Base: v0.25.108. Only the F9 Animation Studio.
+
+- Crouch (jump prep): ONLY the hips and legs change - hands, chest, head and weapon stay as they are;
+  hips drop and sit back, feet planted a little apart, knees bend forward over the toes.
+- New ORANGE 'ROTATE / FLIP' dot beside the body: drag in any direction to rotate the whole character
+  any way (free trackball around the body centre, even upside down) for acrobatic / gymnastic moves.
+- Presets: Flip forward 90, Upside down, Lie on the side, Rotation reset.
+- Tip: for a full flip across frames, use the Spin value or several frames (big angle jumps between
+  two frames can take the short way round).
