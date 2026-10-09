@@ -1,0 +1,5 @@
+Aethelborn Ascended v0.25.122 - Pitch and Swing
+- Circle Swing wind up = Baseball Pitching leg kick (side-on, front knee high, stride + plant), cross-faded at the plant into the axe 360 counter-clockwise spin; hit on the spin.
+- Ascended second hit = Baseball Strike (batter swing) mirrored, back the other way, cross-faded out of the spin, contact on the 2nd hit.
+- Mixamo player: chained clips now CROSS-FADE pose to pose (mixer), and clip names match by ending (x_bot_baseball_pitching works).
+- Missing clips fall back to v0.25.121.

@@ -1,3 +1,4 @@
-Aethelborn Ascended - TEST THIS BUILD (v0.25.121)
-1. Circle Swing: slow coil for about 1 s, then a violent counter-clockwise spin, hit when the axe comes round. No hop, no snap between coil and spin.
-2. Ascended: second spin the other way.
+Aethelborn Ascended - TEST THIS BUILD (v0.25.122)
+1. Put Baseball Pitching + Baseball Strike FBX in Assets/AAanims, rebuild, copy aethelborn_anims.
+2. Circle Swing: leg kick -> plant -> spin in one smooth motion, no pop at the plant.
+3. Ascended: batter swing back the other way on the second hit.

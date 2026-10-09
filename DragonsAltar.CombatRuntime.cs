@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.121";
+        public const string ModVersion = "0.25.122";
 
         internal static DragonCombatPlugin Instance;
 
@@ -9250,8 +9250,24 @@ namespace DragonsAltarCombat
 
         public static bool Has(string name)
         {
+            return Resolve(name) != null;
+        }
+
+        // v0.25.122: exact name, else a clip whose name ENDS with it (Mixamo files keep prefixes like
+        // "x_bot_baseball_pitching"); mirror and non-mirror never match each other.
+        private static AnimationClip Resolve(string name)
+        {
             Load();
-            return _clips != null && _clips.ContainsKey(name);
+            if (_clips == null || string.IsNullOrEmpty(name)) return null;
+            AnimationClip c;
+            if (_clips.TryGetValue(name, out c)) return c;
+            bool wantMirror = name.EndsWith("_mirror", StringComparison.Ordinal);
+            foreach (KeyValuePair<string, AnimationClip> kv in _clips)
+            {
+                string k = kv.Key.ToLowerInvariant();
+                if (k.EndsWith(name, StringComparison.Ordinal) && k.EndsWith("_mirror", StringComparison.Ordinal) == wantMirror) return kv.Value;
+            }
+            return null;
         }
 
         // Plays clip time 'from' -> 'to' at 'speed'; returns false (nothing happens) when the clip is missing.
@@ -9266,7 +9282,8 @@ namespace DragonsAltarCombat
         {
             Load();
             AnimationClip clip;
-            if (player == null || _clips == null || !_clips.TryGetValue(name, out clip)) return false;
+            clip = Resolve(name);
+            if (player == null || clip == null) return false;
             Animator an = player.GetComponentInChildren<Animator>();
             if (an == null || !an.isHuman) return false;
             DragonMixamoPlayer p = an.GetComponent<DragonMixamoPlayer>();
@@ -9331,14 +9348,22 @@ namespace DragonsAltarCombat
         private UnityEngine.Playables.PlayableGraph _graph;
         private UnityEngine.Animations.AnimationPlayableOutput _output;
         private UnityEngine.Animations.AnimationClipPlayable _clip;
-        private bool _live, _stopping;
+        private bool _live, _stopping, _mixing;
+        private AnimationClip _asset;
+        private UnityEngine.Animations.AnimationClipPlayable _prev;
+        private UnityEngine.Animations.AnimationMixerPlayable _mixer;
         private float _to, _fadeIn, _fadeOut, _age, _stopAt;
 
         public void Begin(Animator an, AnimationClip clip, float from, float to, float speed, float fadeIn, float fadeOut)
         {
             // v0.25.121: chaining a clip onto a playing one keeps full weight (no blend back to vanilla in between)
             bool chained = _live && !_stopping;
+            // v0.25.122: a chained clip CROSS-FADES from the previous clip's current pose (mixer) over fadeIn,
+            // so two clips join into one motion (pitching load -> axe spin) without a pop.
+            AnimationClip prevAsset = chained ? _asset : null;
+            double prevTime = chained && _graph.IsValid() ? UnityEngine.Playables.PlayableExtensions.GetTime(_clip) : 0.0;
             Kill();
+            _asset = clip;
             _graph = UnityEngine.Playables.PlayableGraph.Create("IH Mixamo " + clip.name);
             _graph.SetTimeUpdateMode(UnityEngine.Playables.DirectorUpdateMode.GameTime);
             _output = UnityEngine.Animations.AnimationPlayableOutput.Create(_graph, "IH Mixamo", an);
@@ -9346,13 +9371,29 @@ namespace DragonsAltarCombat
             _clip.SetApplyFootIK(true);
             UnityEngine.Playables.PlayableExtensions.SetTime(_clip, Mathf.Max(0f, from));
             UnityEngine.Playables.PlayableExtensions.SetSpeed(_clip, Mathf.Clamp(speed, 0.1f, 6f));
-            UnityEngine.Playables.PlayableOutputExtensions.SetSourcePlayable(_output, _clip);
+            _mixing = false;
+            if (prevAsset != null)
+            {
+                _prev = UnityEngine.Animations.AnimationClipPlayable.Create(_graph, prevAsset);
+                _prev.SetApplyFootIK(true);
+                UnityEngine.Playables.PlayableExtensions.SetTime(_prev, prevTime);
+                UnityEngine.Playables.PlayableExtensions.SetSpeed(_prev, 0.0);
+                _mixer = UnityEngine.Animations.AnimationMixerPlayable.Create(_graph, 2);
+                _graph.Connect(_prev, 0, _mixer, 0);
+                _graph.Connect(_clip, 0, _mixer, 1);
+                UnityEngine.Playables.PlayableExtensions.SetInputWeight(_mixer, 0, 1f);
+                UnityEngine.Playables.PlayableExtensions.SetInputWeight(_mixer, 1, 0f);
+                UnityEngine.Playables.PlayableOutputExtensions.SetSourcePlayable(_output, _mixer);
+                _mixing = true;
+            }
+            else UnityEngine.Playables.PlayableOutputExtensions.SetSourcePlayable(_output, _clip);
             UnityEngine.Playables.PlayableOutputExtensions.SetWeight(_output, 0f);
             _graph.Play();
             _to = Mathf.Max(from + 0.05f, Mathf.Min(to, clip.length));
             _fadeIn = Mathf.Max(0.01f, fadeIn);
             _fadeOut = Mathf.Max(0.01f, fadeOut);
-            _age = chained ? _fadeIn : 0f; _stopping = false; _live = true;
+            _age = 0f; _stopping = false; _live = true;
+            if (chained) UnityEngine.Playables.PlayableOutputExtensions.SetWeight(_output, 1f);
         }
 
         private void Update()
@@ -9368,7 +9409,14 @@ namespace DragonsAltarCombat
                 UnityEngine.Playables.PlayableExtensions.SetTime(_clip, _to);
                 _stopping = true; _stopAt = _age;
             }
-            float w = Mathf.Clamp01(_age / _fadeIn);
+            if (_mixing)
+            {
+                float x = Mathf.Clamp01(_age / _fadeIn);
+                UnityEngine.Playables.PlayableExtensions.SetInputWeight(_mixer, 0, 1f - x);
+                UnityEngine.Playables.PlayableExtensions.SetInputWeight(_mixer, 1, x);
+                if (x >= 1f) _mixing = false;
+            }
+            float w = _mixing || _age >= _fadeIn ? 1f : Mathf.Clamp01(_age / _fadeIn);
             if (_stopping) w *= 1f - Mathf.Clamp01((_age - _stopAt) / _fadeOut);
             UnityEngine.Playables.PlayableOutputExtensions.SetWeight(_output, w);
             if (_stopping && _age - _stopAt >= _fadeOut) Kill();

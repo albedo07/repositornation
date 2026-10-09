@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.121";
+        public const string ModVersion = "0.25.122";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -3329,10 +3329,16 @@ namespace AlbedosCustomClassesAdvanced
                 float spin = (MxSpinHit - MxCoilTo) / MxSpinSpeed;
                 float coil = Mathf.Max(0.05f, windup - spin);
                 DragonCombat.ClipStop(player, 0.05f);
-                DragonMixamo.Play(player, MxCircleClip, 0f, MxCoilTo, Mathf.Clamp(MxCoilTo / coil, 0.1f, 6f), 0.12f, 0.3f);
+                // v0.25.122 (user's Baseball Pitching): the wind up is the pitcher's leg kick - turn side-on, lift the
+                // front knee high, stride and plant - then the plant cross-fades (0.15 s) into the axe spin's coil, so
+                // the planted hips open straight into the counter-clockwise 360. No pitching clip = v0.25.121 coil.
+                if (DragonMixamo.Has(MxPitchClip))
+                    DragonMixamo.Play(player, MxPitchClip, MxPitchFrom, MxPitchTo, Mathf.Clamp((MxPitchTo - MxPitchFrom) / coil, 0.3f, 4f), 0.12f, 0.3f);
+                else
+                    DragonMixamo.Play(player, MxCircleClip, 0f, MxCoilTo, Mathf.Clamp(MxCoilTo / coil, 0.1f, 6f), 0.12f, 0.3f);
                 yield return new WaitForSeconds(coil);
                 if (player == null || player.IsDead()) yield break;
-                DragonMixamo.Play(player, MxCircleClip, MxCoilTo, MxSpinTo, MxSpinSpeed, 0.05f, 0.25f);
+                DragonMixamo.Play(player, MxCircleClip, MxCoilTo, MxSpinTo, MxSpinSpeed, 0.15f, 0.25f);
                 yield return new WaitForSeconds(spin);
             }
             else
@@ -3352,7 +3358,11 @@ namespace AlbedosCustomClassesAdvanced
             float gap = Mathf.Max(0.05f, _circleAscGap.Value);
             // v0.25.111 MIXAMO TEST: the Ascended counter spin = the same clip un-mirrored (clockwise), sped up so its
             // hit frame lands on the second hit.
-            if (DragonMixamo.Has(MxCounterClip))
+            // v0.25.122 (user's Baseball Strike): the Ascended second hit = a batter's swing back the other way
+            // (mirrored = clockwise), cross-faded out of the spin's end, its contact (1.3 s) on the second hit.
+            if (DragonMixamo.Has(MxBatClip))
+                DragonMixamo.Play(player, MxBatClip, MxBatFrom, MxBatTo, Mathf.Clamp((MxBatHit - MxBatFrom) / gap, 0.3f, 4f), 0.12f, 0.3f);
+            else if (DragonMixamo.Has(MxCounterClip))
             {
                 DragonMixamo.Play(player, MxCounterClip, MxSpinFrom, MxSpinTo, (MxSpinHit - MxSpinFrom) / gap, 0.06f, 0.25f);
             }
@@ -3365,6 +3375,10 @@ namespace AlbedosCustomClassesAdvanced
         // v0.25.111 Mixamo 'standing melee attack 360 high' (Pro Melee Axe Pack, 30 fps): turn runs f8-f36, hit f32.
         private const string MxCircleClip = "melee_attack_360_high_mirror", MxCounterClip = "melee_attack_360_high";
         private const float MxSpinFrom = 0.2f, MxSpinTo = 1.2f, MxSpinHit = 1.067f, MxSpinSpeed = 1.5f, MxCoilTo = 0.27f;
+        // v0.25.122 Mixamo 'Baseball Pitching' (30 fps): leg kick 0.35-1.0 s (knee 0.5 m), stride + plant 1.65 s.
+        // 'Baseball Strike' (batter): load ends 0.9 s, contact 1.3 s, swing done 1.6 s (+186 deg).
+        private const string MxPitchClip = "baseball_pitching", MxBatClip = "baseball_strike_mirror";
+        private const float MxPitchFrom = 0.35f, MxPitchTo = 1.65f, MxBatFrom = 0.9f, MxBatHit = 1.3f, MxBatTo = 1.6f;
 
         // Crow hop: 1.5 m forward during the hop part of the wind up (24% - 58% of it, matching the clip);
         // walls stop it, height stays physics-driven.
