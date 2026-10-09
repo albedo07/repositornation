@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.137";
+        public const string ModVersion = "0.25.138";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -636,7 +636,7 @@ namespace AlbedosCustomClassesAdvanced
             for (int i = 0; i < 7; i++)
             {
                 string slot = "Slot" + (i + 1).ToString();
-                _hotbarSlotKeys[i] = Config.Bind("Hotbar", slot, KeyCode.Alpha1 + i, "Key for numbered hotbar slot " + (i + 1).ToString() + ".");
+                _hotbarSlotKeys[i] = Config.Bind("Hotbar", slot, i == 5 ? KeyCode.Q : (i == 6 ? KeyCode.E : KeyCode.Alpha1 + i), "Key for numbered hotbar slot " + (i + 1).ToString() + ".");
                 _hotbarSlotMods[i] = Config.Bind("Hotbar", slot + "Modifier", KeyCode.Mouse3, "Hold-modifier for slot " + (i + 1).ToString() + " (Mouse3 = M4). None = single key.");
             }
             _hotbarSlotKeys[BindGrace] = Config.Bind("Hotbar", "GraceKey", KeyCode.R, "Key for the Grace slot.");
@@ -651,16 +651,16 @@ namespace AlbedosCustomClassesAdvanced
             _ihHudX = Config.Bind("Immortal HUD", "X_v0254", 24f, "Left margin (px at 1080p).");
             _ihHudY = Config.Bind("Immortal HUD", "Y", 96f, "Unused since v0.25.4 (the HUD sits bottom-left).");
             _ihHudBottom = Config.Bind("Immortal HUD", "Bottom", 150f, "Unused since v0.25.5 (drag the HUD instead).");
-            _ihHudPosX = Config.Bind("Immortal HUD", "PosX", -1f, "HUD left edge (px at 1080p). -1 = default bottom-left. Set by dragging the HUD while the inventory is open.");
-            _ihHudPosY = Config.Bind("Immortal HUD", "PosY", -1f, "HUD top edge (px at 1080p). -1 = default bottom-left.");
+            _ihHudPosX = Config.Bind("Immortal HUD", "PosX", 2f, "HUD left edge (px at 1080p). -1 = default bottom-left. Set by dragging the HUD while the inventory is open.");
+            _ihHudPosY = Config.Bind("Immortal HUD", "PosY", 803f, "HUD top edge (px at 1080p). -1 = default bottom-left.");
             _ihHudArt = Config.Bind("Immortal HUD", "FrameStyle_v02568", true, "v0.25.68: the painted Class frames (one design per Base Class, coloured per Advancement Class). Off = the old thin HUD.");
             _ihHudArtWidth = Config.Bind("Immortal HUD", "FrameWidth_v02569", 430f, "Width of the painted Class frame (px at 1080p, before Scale).");
-            _ihHudScaleX = Config.Bind("Immortal HUD", "StatHudWidthScale", 1f, "Stat HUD width stretch. In game: hover the HUD with the inventory open, Shift + mouse wheel.");
-            _ihHudScaleY = Config.Bind("Immortal HUD", "StatHudHeightScale", 1f, "Stat HUD height stretch. In game: Ctrl + mouse wheel over the HUD (inventory open).");
+            _ihHudScaleX = Config.Bind("Immortal HUD", "StatHudWidthScale", 1.1025f, "Stat HUD width stretch. In game: hover the HUD with the inventory open, Shift + mouse wheel.");
+            _ihHudScaleY = Config.Bind("Immortal HUD", "StatHudHeightScale", 1.05f, "Stat HUD height stretch. In game: Ctrl + mouse wheel over the HUD (inventory open).");
             _ihBarScaleX = Config.Bind("Immortal HUD", "SkillBarWidthScale", 1f, "Skill hotbar width stretch. In game: Shift + mouse wheel over the hotbar (inventory open).");
             _ihBarScaleY = Config.Bind("Immortal HUD", "SkillBarHeightScale", 1f, "Skill hotbar height stretch. In game: Ctrl + mouse wheel over the hotbar (inventory open).");
-            _ihBarPosX = Config.Bind("Immortal HUD", "SkillBarPosX", -1f, "Skill hotbar left edge (px at 1080p). -1 = default (bottom-left corner, under the stat HUD). Drag it while the inventory is open.");
-            _ihBarPosY = Config.Bind("Immortal HUD", "SkillBarPosY", -1f, "Skill hotbar top edge (px at 1080p). -1 = default.");
+            _ihBarPosX = Config.Bind("Immortal HUD", "SkillBarPosX", 27f, "Skill hotbar left edge (px at 1080p). -1 = default (bottom-left corner, under the stat HUD). Drag it while the inventory is open.");
+            _ihBarPosY = Config.Bind("Immortal HUD", "SkillBarPosY", 1004f, "Skill hotbar top edge (px at 1080p). -1 = default.");
             _hudBottomOffset = Config.Bind("Interface", "HudBottomOffset_v0113", 105f, "Bottom margin for the compact RPG skill HUD. Fresh v0.11.3 key avoids stale 330px development offsets.");
             _testingForceCooldowns = Config.Bind("Testing", "ForceCooldowns", false, "Testing mode: force every advancement cooldown to one value.");
             _testingCooldownSeconds = Config.Bind("Testing", "CooldownSeconds", 5f, "Testing cooldown used while ForceCooldowns is enabled.");
@@ -687,7 +687,7 @@ namespace AlbedosCustomClassesAdvanced
             _judgementCooldown = Config.Bind("Sword Master Judgement Cut", "RechargeSecondsPerStack", 12f, "Independent recharge time for each of the four stacks.");
             _judgementStamina = Config.Bind("Sword Master Judgement Cut", "StaminaCost", 18f, "Stamina cost per stack activation.");
             _judgementRange = Config.Bind("Sword Master Judgement Cut", "CastRange", 15f, "Maximum Ground PAC / Target PAC / Free Aim cast range.");
-            _judgementRadius = Config.Bind("Sword Master Judgement Cut", "Radius", 4f, "Sphere radius around the chosen cast point.");
+            _judgementRadius = Config.Bind("Sword Master Judgement Cut", "Radius", 3f, "Sphere radius around the chosen cast point.");
             _judgementSlashDamage = Config.Bind("Sword Master Judgement Cut", "SlashDamagePerCut", 24f, "Pure Slash damage dealt by each of the three cuts. No Spirit, DoT or debuff.");
             _judgementBuffer = Config.Bind("Sword Master Judgement Cut", "ActivationBufferSeconds", 0.5f, "Minimum delay between charge activations. Independent stack recharge remains 12 seconds per spent stack.");
 
@@ -835,7 +835,7 @@ namespace AlbedosCustomClassesAdvanced
             _shieldChargeDistance = Config.Bind("Paladin Shield Charge", "Distance", 15f, "Literal 15m charge.");
             _shieldChargeSpeedMultiplier = Config.Bind("Paladin Shield Charge", "MovementSpeedMultiplier", 1.5f, "1.5x current run speed.");
             _shieldChargeRadius = Config.Bind("Paladin Shield Charge", "BashRadius", 4f, "4m frontal attack radius.");
-            _shieldChargePersistentTick = Config.Bind("Paladin Shield Charge", "PersistentHitInterval", 0.5f, "Persistent Damage interval.");
+            _shieldChargePersistentTick = Config.Bind("Paladin Shield Charge", "PersistentHitInterval", 0.2f, "Persistent Damage interval.");
             _shieldChargeDamage = BindDamage("Paladin Shield Charge Damage", 42f, 0f, 0f, 0f, 0f, 28f, 0f, 0f);
 
             _verdictCooldown = Config.Bind("Paladin Divine Verdict", "Cooldown", 22f, "Seconds.");
@@ -860,7 +860,7 @@ namespace AlbedosCustomClassesAdvanced
             _judgementMarkDuration = Config.Bind("Paladin Judgement Mark", "Duration", 8f, "How long a Lightning Zap or Goddess Relic Judgement Mark remains.");
             _judgementMarkedMultiplier = Config.Bind("Paladin Judgement Mark", "MarkedHitMultiplier", 1.5f, "Damage multiplier when hitting a marked enemy.");
             _judgementCrossMultiplier = Config.Bind("Paladin Judgement Mark", "CrossMarkMultiplier", 2f, "Damage multiplier when the opposite marking source hits a marked enemy.");
-            _judgementDetonationLightning = Config.Bind("Paladin Judgement Mark", "DetonationLightningDamage", 35f, "Bonus Lightning damage from Judgement Detonation.");
+            _judgementDetonationLightning = Config.Bind("Paladin Judgement Mark", "DetonationLightningDamage", 60f, "Bonus Lightning damage from Judgement Detonation.");
             _judgementDetonationSpirit = Config.Bind("Paladin Judgement Mark", "DetonationSpiritDamage", 35f, "Bonus Spirit damage from Judgement Detonation.");
             _judgementCrippleDuration = Config.Bind("Paladin Judgement Mark", "CrippleDuration", 6f, "Cripple duration caused by a marked non-Lightning hit.");
 
@@ -899,7 +899,7 @@ namespace AlbedosCustomClassesAdvanced
 
             _hammerCooldown = Config.Bind("Paladin Judgement Hammer", "Cooldown", 16f, "Seconds.");
             _hammerStamina = Config.Bind("Paladin Judgement Hammer", "StaminaCost", 32f, "Stamina cost.");
-            _hammerWindup = Config.Bind("Paladin Judgement Hammer", "Windup", 1f, "Framework default wind-up (no wind-up specified).");
+            _hammerWindup = Config.Bind("Paladin Judgement Hammer", "Windup", 0.3f, "Framework default wind-up (no wind-up specified).");
             _hammerRange = Config.Bind("Paladin Judgement Hammer", "Range", 20f, "Free Aim Laser Projectile range.");
             _hammerTravelTime = Config.Bind("Paladin Judgement Hammer", "TravelTime", 1.5f, "Seconds to travel the full range.");
             _hammerBaseRadius = Config.Bind("Paladin Judgement Hammer", "BaseHitRadius", 0.9f, "Minimum hit radius.");
@@ -907,7 +907,7 @@ namespace AlbedosCustomClassesAdvanced
             _hammerStartHeight = Config.Bind("Paladin Judgement Hammer", "StartHeight_v0172", 2.5f, "Meters tall at launch (about a Greydwarf Brute).");
             _hammerStartWidth = Config.Bind("Paladin Judgement Hammer", "StartWidth_v0172", 0.8f, "Meters wide at launch.");
             _hammerGrowthInterval = Config.Bind("Paladin Judgement Hammer", "GrowthInterval_v0172", 0.2f, "Seconds between size growth steps.");
-            _hammerHeightPerStep = Config.Bind("Paladin Judgement Hammer", "HeightPerStep_v0172", 0.7f, "Meters of height per growth step (20m flight = ~7.4m tall).");
+            _hammerHeightPerStep = Config.Bind("Paladin Judgement Hammer", "HeightPerStep_v0172", 0.3f, "Meters of height per growth step (20m flight = ~7.4m tall).");
             _hammerWidthPerStep = Config.Bind("Paladin Judgement Hammer", "WidthPerStep_v0172", 0.17f, "Meters of width per growth step (20m flight = ~2m wide).");
             _hammerMaxHeight = Config.Bind("Paladin Judgement Hammer", "LegacyMaxHeight_v0172", 8f, "Size cap (meters tall).");
             _hammerMaxWidth = Config.Bind("Paladin Judgement Hammer", "LegacyMaxWidth_v0172", 2f, "Size cap (meters wide).");
@@ -915,9 +915,9 @@ namespace AlbedosCustomClassesAdvanced
             _hammerAscMaxHeight = Config.Bind("Paladin Judgement Hammer Ascended", "LegacyMaxHeight_v0172", 10f, "Ascended size cap (meters tall). Keeps growing on the return flight up to this.");
             _hammerAscMaxWidth = Config.Bind("Paladin Judgement Hammer Ascended", "LegacyMaxWidth_v0172", 3f, "Ascended size cap (meters wide).");
             _hammerAscWidthPerStep = Config.Bind("Paladin Judgement Hammer Ascended", "WidthPerStep_v0172", 0.2f, "Ascended meters of width per growth step.");
-            _hammerDamageCap = Config.Bind("Paladin Judgement Hammer", "MaxDamageMultiplier_v0212", 5f, "Damage growth stops at this multiplier. The hammer itself keeps growing (no size cap).");
-            _hammerDamagePerStep = Config.Bind("Paladin Judgement Hammer", "DamageGrowthPerStep", 0.3f, "+0.3x damage per step (Framework doc).");
-            _hammerTick = Config.Bind("Paladin Judgement Hammer", "PersistentHitInterval", 0.5f, "Persistent Damage interval per enemy.");
+            _hammerDamageCap = Config.Bind("Paladin Judgement Hammer", "MaxDamageMultiplier_v0212", 3f, "Damage growth stops at this multiplier. The hammer itself keeps growing (no size cap).");
+            _hammerDamagePerStep = Config.Bind("Paladin Judgement Hammer", "DamageGrowthPerStep", 0.2f, "+0.2x damage per step (Framework doc).");
+            _hammerTick = Config.Bind("Paladin Judgement Hammer", "PersistentHitInterval", 0.3f, "Persistent Damage interval per enemy.");
             _hammerCrippleDuration = Config.Bind("Paladin Judgement Hammer", "CrippleDuration", 6f, "Cripple duration.");
             _hammerCatchCooldownCut = Config.Bind("Paladin Judgement Hammer Ascended", "CatchCooldownCutPercent", 30f, "Catching the returning hammer cuts its cooldown by this percent.");
             _hammerDamage = BindDamage("Paladin Judgement Hammer Damage", 40f, 0f, 0f, 0f, 0f, 22f, 0f, 0f);
@@ -1033,7 +1033,7 @@ namespace AlbedosCustomClassesAdvanced
 
             _lightningRelicCooldown = Config.Bind("Priest Lightning Relic", "Cooldown", 14f, "Cooldown starts only after the active Relic is relinquished or its 16s lifetime ends.");
             _lightningRelicStamina = Config.Bind("Priest Lightning Relic", "StaminaCost", 30f, "Stamina cost.");
-            _lightningRelicRadius = Config.Bind("Priest Lightning Relic", "Radius", 7f, "Pulse radius in literal meters.");
+            _lightningRelicRadius = Config.Bind("Priest Lightning Relic", "Radius", 10f, "Pulse radius in literal meters.");
             _lightningRelicRange = Config.Bind("Priest Lightning Relic", "Range", 35f, "Ground PAC cast distance in literal meters. Works indoors.");
             _lightningRelicDuration = Config.Bind("Priest Lightning Relic", "Duration", 16f, "Active lifetime before cooldown begins.");
             _lightningRelicInterval = Config.Bind("Priest Lightning Relic", "HitInterval", 1f, "Pulse interval.");
@@ -1043,7 +1043,7 @@ namespace AlbedosCustomClassesAdvanced
 
             _holyRelicCooldown = Config.Bind("Priest Holy Relic", "Cooldown", 18f, "Cooldown starts only after the active Relic is relinquished or its 16s lifetime ends.");
             _holyRelicStamina = Config.Bind("Priest Holy Relic", "StaminaCost", 40f, "Stamina cost.");
-            _holyRelicRadius = Config.Bind("Priest Holy Relic", "Radius", 7f, "Pulse radius in literal meters.");
+            _holyRelicRadius = Config.Bind("Priest Holy Relic", "Radius", 10f, "Pulse radius in literal meters.");
             _holyRelicRange = Config.Bind("Priest Holy Relic", "Range", 35f, "Ground PAC cast distance in literal meters.");
             _holyRelicDuration = Config.Bind("Priest Holy Relic", "Duration", 16f, "Active lifetime before cooldown begins.");
             _holyRelicInterval = Config.Bind("Priest Holy Relic", "PulseInterval", 2f, "Holy Relic keeps the existing 2s pulse interval.");
@@ -1120,7 +1120,7 @@ namespace AlbedosCustomClassesAdvanced
             _grandRadius = Config.Bind("Priest Grand Sigil", "ActiveRadius_v0208", 10f, "Allies within this radius at cast get their own Barrier.");
             _grandBarrierHp = Config.Bind("Priest Grand Sigil", "BarrierHP_v0208", 250f, "Barrier hit points.");
             _grandBarrierDuration = Config.Bind("Priest Grand Sigil", "BarrierDuration_v0208", 16f, "Barrier lasts this long or until broken.");
-            _grandWindup = Config.Bind("Priest Grand Sigil", "ActiveWindup", 1.5f, "Framework active windup.");
+            _grandWindup = Config.Bind("Priest Grand Sigil", "ActiveWindup", 0.5f, "Framework active windup.");
 
             _defaultPaladinVitality = Config.Bind("Passive Choices", "LegacyPaladinVitalityDefault", "Health", "Legacy Heart of Glory setting retained for config compatibility.");
             _defaultPaladinOffense = Config.Bind("Passive Choices", "LegacyPaladinOffenseDefault", "Martial", "Legacy Heart of Glory setting retained for config compatibility.");
@@ -1834,22 +1834,22 @@ namespace AlbedosCustomClassesAdvanced
 
             _moonDamageV = BindDamage("Sword Master Moonlight Damage v0223", 0f, 45f, 0f, 0f, 0f, 0f, 0f, 25f);
             const string mla = "Sword Master Moonlight Splitter Animation", hla = "Sword Master Halfmoon Slash Animation";
-            _smLead = Config.Bind(mla, "SlashWindup_v025134", 0.16f, "Wind up of each slash: click / previous slash -> the swing's hit (also Crescent's Ascended 2nd fan swing).");
+            _smLead = Config.Bind(mla, "SlashWindup_v025134", 0.2f, "Wind up of each slash: click / previous slash -> the swing's hit (also Crescent's Ascended 2nd fan swing).");
             _smCycle = Config.Bind(mla, "SlashInterval_v025134", 0.40f, "Time between the Ghost waves (even interval).");
-            _smAscLead = Config.Bind(mla, "AscendedSlashWindup_v025134", 0.12f, "Ascended: wind up of each slash (and the finisher).");
+            _smAscLead = Config.Bind(mla, "AscendedSlashWindup_v025134", 0.2f, "Ascended: wind up of each slash (and the finisher).");
             _smAscCycle = Config.Bind(mla, "AscendedSlashInterval_v025134", 0.20f, "Ascended: time between the waves (even interval).");
             _hmLead = Config.Bind(hla, "SwingWindup_v025134", 0.25f, "Wind up of each Halfmoon swing (click -> hit).");
             _hmEnd = Config.Bind(hla, "SwingLength_v025134", 0.40f, "Whole swing incl. recovery; the next swing starts after it (even interval).");
             const string cla = "Sword Master Crescent Cleave Animation";
             _crWindup = Config.Bind(cla, "Windup_v025137", 0.30f, "Click -> the overhead smash hits and the crescents are released (s).");
-            _crAscWindup = Config.Bind(cla, "AscendedWindup_v025137", 0.30f, "Ascended: click -> first fan (s).");
-            _crFan2Windup = Config.Bind(cla, "AscendedFan2SwingWindup_v025137", 0.16f, "Ascended: the 2nd fan's own swing, start -> hit (s). The 2nd fan comes 'Second Fan Delay' after the first.");
+            _crAscWindup = Config.Bind(cla, "AscendedWindup_v025137", 0.5f, "Ascended: click -> first fan (s).");
+            _crFan2Windup = Config.Bind(cla, "AscendedFan2SwingWindup_v025137", 0.35f, "Ascended: the 2nd fan's own swing, start -> hit (s). The 2nd fan comes 'Second Fan Delay' after the first.");
             _mlFinWindup = Config.Bind(mla, "AscendedFinisherWindup_v025137", 0.12f, "Ascended 5th (big) wave: its heavy swing, start -> release (s).");
-            _mlFinSpeed = Config.Bind(mla, "AscendedFinisherSpeedPercent_v025137", 85f, "Ascended 5th wave travel speed (% of a normal wave).");
-            _mlAfterDelay = Config.Bind(mla, "AscendedAfterimageDelay_v025137", 0.30f, new ConfigDescription("Ascended afterimage: seconds AFTER the 5th wave. Negative = the afterimage goes FIRST and the 5th wave follows that many seconds later.", new AcceptableValueRange<float>(-1.5f, 2f)));
+            _mlFinSpeed = Config.Bind(mla, "AscendedFinisherSpeedPercent_v025137", 30f, "Ascended 5th wave travel speed (% of a normal wave).");
+            _mlAfterDelay = Config.Bind(mla, "AscendedAfterimageDelay_v025137", 0.2f, new ConfigDescription("Ascended afterimage: seconds AFTER the 5th wave. Negative = the afterimage goes FIRST and the 5th wave follows that many seconds later.", new AcceptableValueRange<float>(-1.5f, 2f)));
             _mlAfterSpeed = Config.Bind(mla, "AscendedAfterimageSpeedPercent_v025137", 250f, "Ascended afterimage travel speed (% of a normal wave).");
             _hmStanceTime = Config.Bind(hla, "AscendedStanceSheatheSeconds_v025137", 0.6f, "Ascended: after the slashes the sword is sheathed into an iai stance over this time and held through the Left Click window.");
-            _seismicWindupV = Config.Bind("Mercenary Seismic Guillotine Animation", "Windup_v025137", 0.28f, "Click -> the overhead chop hits and the fissure starts (s).");
+            _seismicWindupV = Config.Bind("Mercenary Seismic Guillotine Animation", "Windup_v025137", 0.5f, "Click -> the overhead chop hits and the fissure starts (s).");
             _bladeDrawWindup = Config.Bind("Sword Master Blade Storm Animation", "DrawWindup_v025137", 0.12f, "The iai draw animation's wind up (s); the cuts keep their own timing.");
             const string ma = "Sword Master Moonlight Splitter Ascended";
             _moonAscWindup = Config.Bind(ma, "Windup", 0.5f, "Legacy value; natural vanilla sword attack timing now controls the first wave.");
@@ -1873,7 +1873,7 @@ namespace AlbedosCustomClassesAdvanced
             _crescentAscBurnStacks = Config.Bind(ca, "BurnMaxStacks", 5, "Maximum Burn stacks.");
             _crescentAscBurnGap = Config.Bind(ca, "BurnStackInterval", 0.3f, "At most one new stack per target this often.");
 
-            _bladeCutDamage = Config.Bind("Sword Master Judgement Cut", "SlashDamagePerCut_v0223", 20f, "Blade Storm: Slash damage of each of the three cuts.");
+            _bladeCutDamage = Config.Bind("Sword Master Judgement Cut", "SlashDamagePerCut_v0223", 30f, "Blade Storm: Slash damage of each of the three cuts.");
             const string ba = "Sword Master Blade Storm Ascended";
             _bladeAscStacks = Config.Bind(ba, "Stacks", 6, "Stored stacks (normal 4).");
             _bladeAscFirst = Config.Bind(ba, "CutDamagePercent", 85f, "Each of the three cuts (% of a normal cut).");
@@ -1918,10 +1918,10 @@ namespace AlbedosCustomClassesAdvanced
             _eclipseAscReflectWindow = Config.Bind(ea, "ReflectWindow", 0.5f, "Seconds of projectile reflection, centred on the slash.");
             _eclipseAfterDelay = Config.Bind(e, "AfterimageDelay_v02565", 0.35f, "Seconds after the spin before the afterimage slashes.");
             _eclipseAfterPercent = Config.Bind(e, "AfterimagePercent_v02565", 60f, "Afterimage slashes: damage (% of the spin) to everything in the radius.");
-            _eclipseAscSpiralPercent = Config.Bind(ea, "SpiralAfterimagePercent_v02565", 60f, "Ascended: the second afterimage after the upward spiral (% of the spin).");
-            _eclipseAscRise = Config.Bind(ea, "LaunchHeight_v02585", 4f, "Ascended (v0.25.85): after the spin you launch and spiral this high (m) above the ground, dragging Small and Big enemies in the radius up with you.");
-            _eclipseAscRiseTime = Config.Bind(ea, "LaunchTime_v02585", 0.55f, "Ascended: seconds of the spiralling launch.");
-            _eclipseAscSpiralGap = Config.Bind(ea, "SpinToSpiralSeconds_v02586", 0.5f, "Ascended: seconds between the 360 swing and the spiral launch (enemies are sucked to the middle in the first 0.3s).");
+            _eclipseAscSpiralPercent = Config.Bind(ea, "SpiralAfterimagePercent_v02565", 150f, "Ascended: the second afterimage after the upward spiral (% of the spin).");
+            _eclipseAscRise = Config.Bind(ea, "LaunchHeight_v02585", 5f, "Ascended (v0.25.85): after the spin you launch and spiral this high (m) above the ground, dragging Small and Big enemies in the radius up with you.");
+            _eclipseAscRiseTime = Config.Bind(ea, "LaunchTime_v02585", 0f, "Ascended: seconds of the spiralling launch.");
+            _eclipseAscSpiralGap = Config.Bind(ea, "SpinToSpiralSeconds_v02586", 0.3f, "Ascended: seconds between the 360 swing and the spiral launch (enemies are sucked to the middle in the first 0.3s).");
 
             _halfmoonDamageV = BindDamage("Sword Master Halfmoon Damage v0223", 0f, 107f, 0f, 0f, 0f, 0f, 0f, 53f);
             _halfmoonSpiritDotV = Config.Bind("Sword Master Halfmoon Slash", "SpiritDotPerSecond_v0223", 6f, "Spirit Burn damage per second (10s).");
@@ -2871,18 +2871,19 @@ namespace AlbedosCustomClassesAdvanced
                 DragonCombat.ClipStop(player, 0.1f);
                 float sh = Mathf.Max(0.1f, _hmStanceTime.Value);
                 DragonMixamo.PlayWarp(player, HmSheathClip, new float[] { 0f, sh }, new float[] { 0f, HmSheathEnd }, 0.12f, 0.15f, false);
+                DragonMixamo.SetHold(player, true);   // v0.25.138 the stance holds its last frame through the window
                 pull = Mathf.Min(sh, 0.3f);
             }
             else DragonCombat.PlayClip(player, "sm_halfmoon_stance", pull, true);
             if (pull > 0f) yield return new WaitForSeconds(pull);
-            if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
+            if (player == null || player.IsDead() || SmInterrupted(start)) { if (hmSheath && player != null) DragonMixamo.Stop(player, 0.2f); yield break; }
 
             ShowMessage("Left Click: release the Halfmoon");
             float until = Time.time + Mathf.Max(0.2f, _halfAscWindow.Value);
             bool released = false;
             while (Time.time < until)
             {
-                if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
+                if (player == null || player.IsDead() || SmInterrupted(start)) { if (hmSheath && player != null) DragonMixamo.Stop(player, 0.2f); yield break; }   // v0.25.138 held stance ends
                 // Holding the stance: movement and normal attacks stay locked, the camera still aims.
                 DragonCombat.LockSkill(player, 0.12f);
                 if (Input.GetMouseButtonDown(0)) { released = true; DragonCombat.SwallowAttackInput(player, 0.6f); break; }
@@ -3217,7 +3218,7 @@ namespace AlbedosCustomClassesAdvanced
             _bombCooldown = Config.Bind(b, "Cooldown", 20f, "Seconds.");
             _bombStamina = Config.Bind(b, "StaminaCost", 32f, "Stamina cost.");
             _bombWindup = Config.Bind(b, "Windup", 0.5f, "Bat-swing throw.");
-            _bombSpeed = Config.Bind(b, "ThrowSpeed", 22f, "Launch speed (ballistic, falls with gravity).");
+            _bombSpeed = Config.Bind(b, "ThrowSpeed", 35f, "Launch speed (ballistic, falls with gravity).");
             _bombRadius = Config.Bind(b, "Radius", 7f, "Explosion radius.");
             _bombWeaponMultiplier = Config.Bind(b, "WeaponDamageMultiplier", 2f, "Explosion = 200% of your current basic attack (held weapon) damage.");
             _bombBurnPercent = Config.Bind(b, "BurnPercent", 2f, "Burn: % of the explosion damage every 0.5s.");
@@ -3660,6 +3661,7 @@ namespace AlbedosCustomClassesAdvanced
             float air = Mathf.Max(0.3f, airSeconds);
             if (!DragonMixamo.PlayWarp(player, MxJumpSlam, new float[] { 0f, takeoff, takeoff + air * 0.6f, takeoff + air },
                 new float[] { 0.80f, 0.95f, 1.50f, MxSlamHold }, 0.08f, 0.35f, false)) return false;
+            DragonMixamo.SetHold(player, true);   // v0.25.138 really HOLD 99% (the warp used to fade out and die mid-fall)
             _jsActive = true; _jsUsed = true;
             Logger.LogInfo("[Jump Slam] animation: " + MxJumpSlam);
             return true;
@@ -4241,7 +4243,7 @@ namespace AlbedosCustomClassesAdvanced
         {
             const string sk = "albedo.customclasses.skills";
             if (!BeginCast(player, "Mercenary.AscendedHeavySlash", IhCfg(sk, "Warrior.Heavy Slash", "Cooldown", 8f), IhCfg(sk, "Warrior.Heavy Slash", "StaminaCost", 20f))) return;
-            float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, IhCfg(sk, "Warrior.Heavy Slash", "Windup", 0.7f)));
+            float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, IhCfg(sk, "Warrior.Heavy Slash", "Windup", 0.6f)));
             DragonCombat.LockSkill(player, windup);
             DragonCombat.PlayClip(player, "merc_heavy_asc", windup);
             StartCoroutine(AscendedHeavySlashRoutine(player, windup));
@@ -4290,7 +4292,7 @@ namespace AlbedosCustomClassesAdvanced
                         b.Append(IhLine("Reach", IhNum(IhCfg(sk, "Warrior.Heavy Slash", "Range", 3.5f)) + "m"));
                     }
                     b.Append(IhLine("Inflicts", "Broken Bones, 6s"));
-                    IhCosts(b, IhCfg(sk, "Warrior.Heavy Slash", "StaminaCost", 20f), IhNum(IhCfg(sk, "Warrior.Heavy Slash", "Windup", 0.7f)) + "s", IhCfg(sk, "Warrior.Heavy Slash", "Cooldown", 8f));
+                    IhCosts(b, IhCfg(sk, "Warrior.Heavy Slash", "StaminaCost", 20f), IhNum(IhCfg(sk, "Warrior.Heavy Slash", "Windup", 0.6f)) + "s", IhCfg(sk, "Warrior.Heavy Slash", "Cooldown", 8f));
                     break;
                 case "impact_punch":
                     b.Append(IhLine("Damage", IhSkillsDamage("Warrior.Impact Punch.Damage v0224", power)));
@@ -5852,7 +5854,7 @@ namespace AlbedosCustomClassesAdvanced
             ShieldChargeSlamHit(player, forward);
             if (_enableVfx.Value) { Vector3 sp = player.transform.position + forward * 1.6f; DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(sp, DragonVfx.Holy, 3.5f, 1.3f); }); }   // v0.25.57
             // v0.25.55 (user: the slam animation kept going long after the hit): rush the rest of the heavy swing.
-            DragonCombat.SetSkillAnimSpeed(player, 6f, 0.35f);   // v0.25.137 restored (non-Warrior classes keep their earlier timing)
+            // v0.25.138 (user: one smooth motion for every class): no 6x rush after the slam
         }
 
         // v0.25.86 (user) Ascended: a JUMPING Hammer Slam (same animation) with a Lightning Strike. 0.5s from jump to slam,
@@ -5922,7 +5924,7 @@ namespace AlbedosCustomClassesAdvanced
                 Vector3 lp = c; float lr = radius;
                 DragonCombat.RunVfx(delegate { DragonVfx.SkyStrike(lp, DragonVfx.Storm, lr, 16f); DragonVfx.HeavyLanding(lp, DragonVfx.Holy, lr * 0.6f, 1.6f); });
             }
-            DragonCombat.SetSkillAnimSpeed(player, 6f, 0.35f);   // v0.25.137 restored (non-Warrior classes keep their earlier timing)
+            // v0.25.138 (user: one smooth motion for every class): no 6x rush after the slam
         }
 
         private void ShieldChargeSlamHit(Player player, Vector3 forward)

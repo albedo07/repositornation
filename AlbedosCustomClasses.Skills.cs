@@ -233,7 +233,7 @@ namespace AlbedosCustomClassesSkills
         public static SkillsPlugin Instance;
         public const string ModGuid = "albedo.customclasses.skills";
         public const string ModName = "Aethelborn Ascended - Starter Skills";
-        public const string ModVersion = "0.25.137";
+        public const string ModVersion = "0.25.138";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";
@@ -345,7 +345,7 @@ namespace AlbedosCustomClassesSkills
 
             _heavyCooldown = Config.Bind("Warrior.Heavy Slash", "Cooldown", 8f, "Seconds. Testing override is applied while ForceCooldowns is enabled.");
             _heavyStamina = Config.Bind("Warrior.Heavy Slash", "StaminaCost", 20f, "Stamina cost.");
-            _heavyWindup = Config.Bind("Warrior.Heavy Slash", "Windup", 0.7f, "Base windup before Attack Speed modifiers.");
+            _heavyWindup = Config.Bind("Warrior.Heavy Slash", "Windup", 0.6f, "Base windup before Attack Speed modifiers.");
             _heavyRange = Config.Bind("Warrior.Heavy Slash", "Range", 3.5f, "Literal Valheim-meter reach. Heavy Slash has no exact framework distance, so 3.5m remains the prototype default.");
             _heavyAngle = Config.Bind("Warrior.Heavy Slash", "ArcDegrees", 120f, "Horizontal slash arc.");
             _heavyDamage = BindDamage("Warrior.Heavy Slash.Damage v0224", 0f, 100f, 0f, 0f, 0f, 0f, 0f, 0f);

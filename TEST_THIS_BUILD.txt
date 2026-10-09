@@ -1,5 +1,12 @@
-TEST (v0.25.137)
-1. Crescent Cleave Ascended: Second Fan Delay 2 -> the 2nd fan comes 2 s later. Windup sliders change the smash.
-2. Moonlight Ascended: AfterimageDelay -0.3 -> afterimage first, then the big 5th wave.
-3. Halfmoon Ascended: sword sheathed into an iai stance during the 3 s window, release draws out of it.
-4. Bonecrusher / Electric Smite: you stay exactly on the landing spot (also after long falls).
+v0.25.138 - Smooth Hold
+
+1. Bonecrusher / Electric Smite from flat ground and off a ledge: the slam pose holds through the fall, the
+   landing comes straight out of it, you land where you touched down (no forward jump, no pose pop).
+2. Halfmoon Ascended: sheathe stance holds through the Left Click window, release draws from it.
+3. Cleric / Sorcerer / Ranger skills: each animation one constant speed start to finish (no fast -> slow).
+   Righteous Strike / Goddess Relic / Relics: Trigger % now changes when the skill fires.
+4. Holy Wave / Ray of Hope / Heaven's Light: the raised hand plays fully at one speed, not cut.
+5. Shield Charge slam: no sudden 6x after the hit.
+6. F8 -> DEFAULT on one setting: returns your tuned value.
+
+Verified here: compile check (stubbed) + C# 5 parse only. Needs in-game testing for all of the above.

@@ -1,0 +1,31 @@
+Aethelborn Ascended v0.25.138 - Smooth Hold
+
+RUN JUMP SLAM (Bonecrusher / Electric Smite)
+- ROOT CAUSE of the teleport + glitch: the "hold at 99%" never held. The Mixamo player faded the slam out at its
+  last key and killed it mid-fall, so the landing restarted from scratch (new hip anchor taken from the falling
+  pose, clip rise no longer cut). Now the warp really HOLDS the last frame (DragonMixamo.SetHold) until the
+  landing chains straight out of it - same anchor, same pose, landing spot pinned as before.
+- Halfmoon Ascended sheathe stance uses the same hold (ends on release / window end / interrupt).
+
+ONE SMOOTH MOTION FOR EVERY CLASS
+- The Warrior one-speed engine now runs for Cleric, Sorcerer and Ranger clips too (no slow wind up / fast swing /
+  6x recovery). Your Trigger % settings now also work for non-Warrior skills (the old timing ignored them).
+- New: after a skill's clip ends, its vanilla animation keeps the SAME speed until 100% (it used to drop back to
+  1x in the follow-through = fast first, slow at the end). End % still cuts.
+- Shield Charge Hammer Slam (normal + Ascended): 6x rush after the hit removed.
+
+BUFF RAISE (main hand up: Holy Wave, Ray of Hope, Heaven's Light, DI, Crucible, Clockwork, KG, Tailwind, Vigil)
+- Plays 100% at one speed (1.8x held from the first to the last frame; the speed used to expire mid-raise).
+- One-shot emotes (cheer, roar, flex, point, come here) are no longer cut when the skill's clip ends. Kneel still
+  stands up; moving after the lock still ends the raise.
+
+DEFAULTS = YOUR CONFIG
+- Hotbar Slot6 Q / Slot7 E; HUD positions + scales; Punishing Bomb ThrowSpeed 35; Seismic wind up 0.5; Judgement
+  Hammer Windup 0.3 / HeightPerStep 0.3 / MaxDamage 3x / Growth 0.2 / Tick 0.3; Judgement Mark detonation 60;
+  Shield Charge tick 0.2; Grand Sigil wind up 0.5; Holy + Lightning Relic radius 10; Crescent Asc wind up 0.5 /
+  Fan 2 0.35; Eclipse Asc spiral 150% / height 5 / time 0 / gap 0.3; Judgement Cut radius 3 / 30 per cut;
+  Moonlight slash wind ups 0.2 / finisher speed 30% / afterimage 0.2; Heavy Slash wind up 0.6; every Animation
+  Start / End / Trigger % you set (Righteous Strike, Goddess Relic, Judgement Hammer, Hammer Slam, Relics,
+  Tempest, Heavy Slash Asc, Bomb, Seismic, Moonlight finisher, Impact Wave).
+- NOT made defaults (testing only): Dev Mode / ForceCooldowns, Testing AscendedSkills.
+- Your existing .cfg keeps its values (no reset this pass); F8 DEFAULT now restores these.

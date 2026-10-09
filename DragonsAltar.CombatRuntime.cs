@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.137";
+        public const string ModVersion = "0.25.138";
 
         internal static DragonCombatPlugin Instance;
 
@@ -97,7 +97,7 @@ namespace DragonsAltarCombat
             string[] tuning = new string[] {
                 "sm_slash_a|Sword Master Moonlight Splitter Animation|Slash 1",
                 "sm_slash_b|Sword Master Moonlight Splitter Animation|Slash 2",
-                "sm_moon_finisher|Sword Master Moonlight Splitter Animation|Finisher",
+                "sm_moon_finisher|Sword Master Moonlight Splitter Animation|Finisher|0,100,50",
                 "sm_halfmoon|Sword Master Halfmoon Slash Animation|Slash 1",
                 "sm_halfmoon_2|Sword Master Halfmoon Slash Animation|Slash 2",
                 "sm_halfmoon_finisher|Sword Master Halfmoon Slash Animation|Finisher",
@@ -108,30 +108,30 @@ namespace DragonsAltarCombat
                 "sm_frenzied|Sword Master Frenzied Charge Animation|",
                 "sm_guidance|Sword Master Knights Guidance Animation|",
                 "warrior_heavy|Warrior Heavy Slash Animation|",
-                "warrior_impact_wave|Warrior Impact Wave Animation|",
+                "warrior_impact_wave|Warrior Impact Wave Animation||0,90,90",
                 "warrior_punch|Warrior Impact Punch Animation|",
-                "merc_heavy_asc|Mercenary Heavy Slash Animation|Ascended",
-                "merc_bomb|Mercenary Punishing Bomb Animation|",
-                "merc_seismic|Mercenary Seismic Guillotine Animation|",
+                "merc_heavy_asc|Mercenary Heavy Slash Animation|Ascended|0,100,60",
+                "merc_bomb|Mercenary Punishing Bomb Animation||0,100,100",
+                "merc_seismic|Mercenary Seismic Guillotine Animation||0,100,100",
                 "merc_roar|Mercenary Battlecry Animation|",
                 "merc_fury_accent|Mercenary Fury Animation|",
                 "cleric_zap|Cleric Lightning Zap Animation|",
-                "cleric_rs|Cleric Righteous Strike Animation|",
-                "cleric_rs_asc|Cleric Righteous Strike Animation|Ascended",
+                "cleric_rs|Cleric Righteous Strike Animation||40,100,100",
+                "cleric_rs_asc|Cleric Righteous Strike Animation|Ascended|40,100,100",
                 "cleric_wave|Cleric Holy Wave Animation|",
                 "cleric_wave_ally|Cleric Holy Wave Animation|Ally",
-                "cleric_goddess|Paladin Goddess Relic Animation|",
-                "cleric_hammer|Paladin Judgement Hammer Animation|",
-                "cleric_hammer_slam|Paladin Shield Charge Animation|Hammer Slam",
+                "cleric_goddess|Paladin Goddess Relic Animation||40,100,90",
+                "cleric_hammer|Paladin Judgement Hammer Animation||45,100,100",
+                "cleric_hammer_slam|Paladin Shield Charge Animation|Hammer Slam|45,100,100",
                 "cleric_ray|Paladin Ray of Hope Animation|",
                 "cleric_light|Paladin Heavens Light Animation|",
-                "cleric_relic|Priest Lightning Relic Animation|",
-                "cleric_holy_relic|Priest Holy Relic Animation|",
+                "cleric_relic|Priest Lightning Relic Animation||40,100,100",
+                "cleric_holy_relic|Priest Holy Relic Animation||30,100,100",
                 "cleric_intervention|Priest Divine Intervention Animation|",
                 "cleric_cross_1|Priest Grand Cross Animation|Cross 1",
                 "cleric_cross_2|Priest Grand Cross Animation|Cross 2",
                 "cleric_judgement|Priest Heavens Judgement Animation|",
-                "cleric_tempest|Priest Lightning Tempest Animation|",
+                "cleric_tempest|Priest Lightning Tempest Animation||30,100,90",
                 "cleric_crucible|Priest Heavens Crucible Animation|",
                 "sorc_flame|Sorcerer Flame Burst Animation|",
                 "sorc_glacial|Sorcerer Glacial Descent Animation|",
@@ -158,9 +158,12 @@ namespace DragonsAltarCombat
             {
                 string[] f = tuning[t].Split('|');
                 string pre = f[2].Length > 0 ? f[2] + " " : "";
-                ConfigEntry<float> a = Config.Bind(f[1], pre + "AnimStartPercent_v025133", 0f, new ConfigDescription((f[2].Length > 0 ? f[2] + ": " : "") + "the animation starts at this % (skips the beginning; 0 = from the start).", new AcceptableValueRange<float>(0f, 95f)));
-                ConfigEntry<float> b = Config.Bind(f[1], pre + "AnimEndPercent_v025133", 100f, new ConfigDescription((f[2].Length > 0 ? f[2] + ": " : "") + "the animation is cut at this % and blends back (100 = plays to the end).", new AcceptableValueRange<float>(5f, 100f)));
-                ConfigEntry<float> c = Config.Bind(f[1], pre + "AnimTriggerPercent_v025136", 0f, new ConfigDescription((f[2].Length > 0 ? f[2] + ": " : "") + "the skill goes off when the animation reaches this % (0 = its own hit frame, 100 = when it has fully played). The animation speed adapts so this point lands on the skill's wind up end.", new AcceptableValueRange<float>(0f, 100f)));
+                // v0.25.138 optional 4th field "start,end,trigger" = the user's tuned defaults
+                float d0 = 0f, d1 = 100f, d2 = 0f;
+                if (f.Length > 3) { string[] dv = f[3].Split(','); d0 = float.Parse(dv[0], System.Globalization.CultureInfo.InvariantCulture); d1 = float.Parse(dv[1], System.Globalization.CultureInfo.InvariantCulture); d2 = float.Parse(dv[2], System.Globalization.CultureInfo.InvariantCulture); }
+                ConfigEntry<float> a = Config.Bind(f[1], pre + "AnimStartPercent_v025133", d0, new ConfigDescription((f[2].Length > 0 ? f[2] + ": " : "") + "the animation starts at this % (skips the beginning; 0 = from the start).", new AcceptableValueRange<float>(0f, 95f)));
+                ConfigEntry<float> b = Config.Bind(f[1], pre + "AnimEndPercent_v025133", d1, new ConfigDescription((f[2].Length > 0 ? f[2] + ": " : "") + "the animation is cut at this % and blends back (100 = plays to the end).", new AcceptableValueRange<float>(5f, 100f)));
+                ConfigEntry<float> c = Config.Bind(f[1], pre + "AnimTriggerPercent_v025136", d2, new ConfigDescription((f[2].Length > 0 ? f[2] + ": " : "") + "the skill goes off when the animation reaches this % (0 = its own hit frame, 100 = when it has fully played). The animation speed adapts so this point lands on the skill's wind up end.", new AcceptableValueRange<float>(0f, 100f)));
                 DragonCombat.AnimTuningEntries[f[0]] = new ConfigEntry<float>[] { a, b, c };
             }
             LegMotionScale = Config.Bind("Runtime", "LegMotionScale_v02522", 0f, "Strength of the procedural leg poses (Unity humanoid muscles). 0 = legs untouched, -1 = inverted (if knees bend the wrong way on your rig).");
@@ -2516,8 +2519,9 @@ namespace DragonsAltarCombat
         private bool _vaJumped, _vaCut;
         private float _uniK;   // v0.25.135 the one speed of the current vanilla animation
         private float _vaTrigN;   // v0.25.136 configured activation point (0 = own hit frame)
-        private bool _uniform;   // v0.25.137 Warrior-group clips only
+        private bool _uniform;   // v0.25.138 every clip (was Warrior-group only)
         private float _constWindup;
+        public const float RaiseSpeed = 1.8f;   // v0.25.49 faster buff raise
 
         private void ReleaseBow(bool fire)
         {
@@ -2542,9 +2546,10 @@ namespace DragonsAltarCombat
             _va = keys[0].VA;
             _vaRepeat = keys[0].VR;
             DragonCombat.AnimTuning(clipName, out _vaStartN, out _vaEndN, out _vaTrigN);
-            // v0.25.137 (user): the one-speed engine is Warrior / Sword Master / Mercenary only; every other class is back
-            // on its earlier timing (stretched wind up, fast swing on the impact, 6x recovery).
-            _uniform = clipName != null && (clipName.StartsWith("warrior_", StringComparison.Ordinal) || clipName.StartsWith("sm_", StringComparison.Ordinal) || clipName.StartsWith("merc_", StringComparison.Ordinal));
+            // v0.25.138 (user: every CA as smooth as the Warrior ones): the one-speed engine for EVERY class.
+            _uniform = true;
+            DragonVanillaTail tail = GetComponent<DragonVanillaTail>();
+            if (tail != null) Destroy(tail);
             _vaJumped = false; _vaCut = false;
             _vaAt = Time.time + Mathf.Max(0f, windup - keys[0].VL);
             if (_va != null && _vaRepeat <= 0.05f) _vaAt = Time.time + Mathf.Max(0.1f, windup) * Mathf.Clamp01(keys[0].VF);
@@ -2785,7 +2790,8 @@ namespace DragonsAltarCombat
                     {
                         if (Time.time - _vaFiredAt > 0.5f) { _vaTrack = false; return; }
                         remain = Mathf.Max(0f, _vaGuess - (Time.time - _vaFiredAt));
-                        if (!_noTrack) DragonCombat.SetSkillAnimSpeed(p, Mathf.Clamp(remain / left, 0.3f, 6f), 0.15f);
+                        if (_quietLeft) DragonCombat.SetSkillAnimSpeed(p, RaiseSpeed, 0.15f);   // v0.25.138 one speed for the raise
+                        else if (!_noTrack) DragonCombat.SetSkillAnimSpeed(p, Mathf.Clamp(remain / left, 0.3f, 6f), 0.15f);
                         return;
                     }
                 }
@@ -2804,6 +2810,7 @@ namespace DragonsAltarCombat
                     return;
                 }
                 if (norm >= 1f) { _vaTrack = false; DragonCombat.SetSkillAnimSpeed(p, 1f, 0f); return; }
+                if (_quietLeft && _vaTrigN <= 0.001f) { DragonCombat.SetSkillAnimSpeed(p, RaiseSpeed, 0.15f); return; }   // v0.25.138 the raise plays 100% at one speed
                 if (_noTrack && _vaTrigN <= 0.001f) return;   // v0.25.133 emotes: natural speed unless a trigger % is set
                 if (_constSpeed)
                 {
@@ -2858,8 +2865,21 @@ namespace DragonsAltarCombat
             if (movedOut || t > _keys[_keys.Length - 1].T || (_owner != null && _owner.IsDead()))
             {
                 // v0.25.41: kneel loops in Valheim - stand back up when the skill's clip is over.
-                // v0.25.49: every emote a skill fired is stopped when its clip ends.
-                if (_vaFiredName != null && _vaFiredName.StartsWith("emote", StringComparison.Ordinal)) DragonCombat.StopEmote(_owner as Player);
+                // v0.25.138 (user: the buff raise never played 100%): one-shot emotes (cheer, roar, flex, point...) play out
+                // on their own; only the looping kneel, a move-out or death stop them.
+                bool dead = _owner != null && _owner.IsDead();
+                if (_vaFiredName != null && _vaFiredName.StartsWith("emote", StringComparison.Ordinal) && (movedOut || dead || _vaFiredName.Contains("kneel")))
+                {
+                    DragonCombat.StopEmote(_owner as Player);
+                    if (_owner is Player) DragonCombat.SetSkillAnimSpeed((Player)_owner, 1f, 0f);
+                }
+                else if (!dead && _vaTrack && _vaLayer >= 0 && _animator != null && _vaPre != null && _vaLayer < _vaPre.Length)
+                {
+                    // v0.25.138 ONE SPEED TO 100%: the clip's keys are over but its vanilla animation is not - keep the same
+                    // speed until it ends (it used to drop back to 1x mid-follow-through: fast first, slow at the end).
+                    float k = _quietLeft ? RaiseSpeed : (_constK > 0f ? _constK : _uniK);
+                    if (k > 0f) DragonVanillaTail.Run(_owner as Player, _animator, _vaLayer, _vaHash, k, _vaCut ? 1f : _vaEndN, _vaPre[_vaLayer]);
+                }
                 ReleaseRoot();
                 _keys = null;
                 Destroy(this);
@@ -2884,7 +2904,7 @@ namespace DragonsAltarCombat
             if (_va != null && Time.time >= _vaAt)
             {
                 _vaTrigger = _va;
-                if (_vaRepeat <= 0.05f && (!_noTrack || _vaStartN > 0.001f || _vaEndN < 0.999f || _vaTrigN > 0.001f)) StartVanillaTracking();   // v0.25.133 tuned emotes too
+                if (_vaRepeat <= 0.05f && (!_noTrack || _quietLeft || _vaStartN > 0.001f || _vaEndN < 0.999f || _vaTrigN > 0.001f)) StartVanillaTracking();   // v0.25.133 tuned emotes too
                 if (!RestartVanilla(_va)) DragonCombat.FireVanilla(_owner as Player, _va);
                 _vaFiredName = _va;
                 if (_vaRepeat > 0.05f) _vaAt += _vaRepeat; else _va = null;
@@ -3622,7 +3642,7 @@ namespace DragonsAltarCombat
                 LockSkill(player, Mathf.Max(0.5f, windup) + 0.05f);
                 Rigidbody rb = player.GetComponent<Rigidbody>();
                 if (rb != null) rb.velocity = new Vector3(0f, rb.velocity.y, 0f);   // stop at once, no slide
-                if (keys[0].QL) SetSkillAnimSpeed(player, 1.8f, Mathf.Max(0.5f, windup) + 0.3f);   // v0.25.49 faster raise
+                // v0.25.138: the raise speed (1.8x) is held by the clip driver from the emote's first to its last frame
             }
             DragonSkillPoseDriver legacy = player.GetComponent<DragonSkillPoseDriver>();
             if (legacy != null) UnityEngine.Object.Destroy(legacy);
@@ -7115,6 +7135,15 @@ namespace DragonsAltarCombat
         private static readonly Dictionary<int, float> SkillAnimSpeedUntil = new Dictionary<int, float>();
 
         // v0.25.30 skill animation timing: overrides the animator speed factor while a skill's vanilla animation plays.
+        // v0.25.138: drops the override only if it is still the given one (another skill may have set its own since).
+        public static void ReleaseSkillAnimSpeed(Player player, float multiplier)
+        {
+            if (player == null) return;
+            int id = player.GetInstanceID();
+            float cur;
+            if (SkillAnimSpeed.TryGetValue(id, out cur) && Mathf.Abs(cur - Mathf.Clamp(multiplier, 0.01f, 6f)) < 0.0001f) SkillAnimSpeedUntil[id] = Time.time;
+        }
+
         public static void SetSkillAnimSpeed(Player player, float multiplier, float ttl)
         {
             if (player == null) return;
@@ -9604,6 +9633,16 @@ namespace DragonsAltarCombat
             p.SetReach(item == null ? null : item.GetComponentsInChildren<Renderer>(), from, peak, to);
         }
 
+        // v0.25.138: the current warp HOLDS its last frame (no fade out) until the next PlayWarp chains from it or
+        // Stop is called (safety: 8 s). Set right after PlayWarp.
+        public static void SetHold(Player player, bool on)
+        {
+            if (player == null) return;
+            Animator an = player.GetComponentInChildren<Animator>();
+            DragonMixamoPlayer p = an != null ? an.GetComponent<DragonMixamoPlayer>() : null;
+            if (p != null) p.HoldEnd = on;
+        }
+
         public static float LiveUntil;   // v0.25.132 set while a Mixamo clip drives the local player
 
         public static void Stop(Player player, float fadeOut)
@@ -9612,6 +9651,47 @@ namespace DragonsAltarCombat
             Animator an = player.GetComponentInChildren<Animator>();
             DragonMixamoPlayer p = an != null ? an.GetComponent<DragonMixamoPlayer>() : null;
             if (p != null) p.StopNow(fadeOut);
+        }
+    }
+
+    // v0.25.138: keeps a skill's vanilla animation at its one speed after the clip driver's keys are over, until the
+    // state ends (100%), its End % cuts it, or anything else takes the layer. Then the speed is released.
+    public class DragonVanillaTail : MonoBehaviour
+    {
+        private Player _p;
+        private Animator _an;
+        private int _layer, _hash, _pre;
+        private float _k, _endN, _until;
+
+        public static void Run(Player p, Animator an, int layer, int hash, float k, float endN, int pre)
+        {
+            if (p == null || an == null) return;
+            DragonVanillaTail t = p.GetComponent<DragonVanillaTail>();
+            if (t == null) t = p.gameObject.AddComponent<DragonVanillaTail>();
+            t._p = p; t._an = an; t._layer = layer; t._hash = hash; t._k = k; t._endN = endN; t._pre = pre;
+            t._until = Time.time + 8f;
+            DragonCombat.SetSkillAnimSpeed(p, k, 0.15f);
+        }
+
+        private void Done(bool reset)
+        {
+            if (reset && _p != null) DragonCombat.ReleaseSkillAnimSpeed(_p, _k);
+            Destroy(this);
+        }
+
+        private void LateUpdate()
+        {
+            if (_p == null || _an == null || _p.IsDead() || Time.time > _until || _layer >= _an.layerCount) { Done(true); return; }
+            try
+            {
+                if (_an.IsInTransition(_layer) && _an.GetNextAnimatorStateInfo(_layer).fullPathHash != _hash) { Done(true); return; }
+                AnimatorStateInfo st = _an.GetCurrentAnimatorStateInfo(_layer);
+                if (st.fullPathHash != _hash) { Done(true); return; }
+                if (_endN < 0.999f && st.normalizedTime >= _endN) { Done(true); _an.CrossFade(_pre, 0.25f, _layer); return; }
+                if (st.normalizedTime >= 1f) { Done(true); return; }
+                DragonCombat.SetSkillAnimSpeed(_p, _k, 0.15f);
+            }
+            catch (Exception) { Done(true); }
         }
     }
 
@@ -9636,6 +9716,7 @@ namespace DragonsAltarCombat
 
         public bool Live { get { return _live; } }
         public bool NoRise;
+        public bool HoldEnd;   // v0.25.138
         private float _restY;
         private Renderer[] _reachR;
         private float _reachFrom, _reachPeak, _reachTo;
@@ -9739,7 +9820,7 @@ namespace DragonsAltarCombat
             _fadeIn = Mathf.Max(0.01f, fadeIn);
             _fadeOut = Mathf.Max(0.01f, fadeOut);
             if (!chained) _w = 0f;
-            _age = 0f; _stopping = false; _live = true;
+            _age = 0f; _stopping = false; _live = true; HoldEnd = false;
             _transfer = transfer && !chained && _rb != null;
             if (_transfer) { _bodyStart = _rb.position; _want = Vector3.zero; }
         }
@@ -9772,7 +9853,7 @@ namespace DragonsAltarCombat
             if (_body != null && _body == (Player.m_localPlayer != null ? Player.m_localPlayer.transform : null)) DragonMixamo.LiveUntil = Time.time + 0.1f;
             _age += Time.deltaTime;
             UnityEngine.Playables.PlayableExtensions.SetTime(_clip, Warp(_age));
-            if (!_stopping && _age >= _wr[_wr.Length - 1]) { _stopping = true; _stopAt = _age; }
+            if (!_stopping && _age >= _wr[_wr.Length - 1] && (!HoldEnd || _age >= _wr[_wr.Length - 1] + 8f)) { _stopping = true; _stopAt = _age; }
             if (_mixing)
             {
                 _mixAge += Time.deltaTime;
