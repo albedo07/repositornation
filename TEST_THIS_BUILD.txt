@@ -1,3 +1,5 @@
-TEST (v0.25.136)
-1. F8 -> e.g. Warrior Heavy Slash Animation -> AnimTriggerPercent 100: the swing fully plays, the skill fires at its end.
-2. Set 50: the skill fires halfway through the animation.
+TEST (v0.25.137)
+1. Crescent Cleave Ascended: Second Fan Delay 2 -> the 2nd fan comes 2 s later. Windup sliders change the smash.
+2. Moonlight Ascended: AfterimageDelay -0.3 -> afterimage first, then the big 5th wave.
+3. Halfmoon Ascended: sword sheathed into an iai stance during the 3 s window, release draws out of it.
+4. Bonecrusher / Electric Smite: you stay exactly on the landing spot (also after long falls).

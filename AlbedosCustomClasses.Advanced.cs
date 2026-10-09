@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.136";
+        public const string ModVersion = "0.25.137";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1394,6 +1394,8 @@ namespace AlbedosCustomClassesAdvanced
         // v0.25.134 (user: wind ups + even intervals tunable): these timings are F8 settings now, section
         // "Sword Master Moonlight Splitter Animation" / "Sword Master Halfmoon Slash Animation" (defaults = the old values).
         private ConfigEntry<float> _smLead, _smCycle, _smAscLead, _smAscCycle, _hmLead, _hmEnd;
+        // v0.25.137 (user: every Sword Master timing on a slider)
+        private ConfigEntry<float> _crWindup, _crAscWindup, _crFan2Windup, _mlFinWindup, _mlFinSpeed, _mlAfterDelay, _mlAfterSpeed, _hmStanceTime, _seismicWindupV, _bladeDrawWindup;
         private float SmSwordContact { get { return _smLead == null ? 0.16f : Mathf.Max(0.03f, _smLead.Value); } }   // v0.25.91 faster Moonlight / Crescent follow-up swings (longsword contact 0.28 s -> 1.75x)
         private float SmSwordCycle { get { return _smCycle == null ? 0.40f : Mathf.Max(SmSwordContact + 0.02f, _smCycle.Value); } }   // v0.25.93 (user) every Moonlight GT exactly 0.4 s apart
         private const float SmHeavyContact = 0.45f;
@@ -1524,7 +1526,7 @@ namespace AlbedosCustomClassesAdvanced
                 return;
 
             IhFaceSkillAim(player);
-            float windup = 0.30f; // v0.25.93 (user) quick overhead smash: sledge sped up (~3x, constant) so it lands with the GTs
+            float windup = Mathf.Max(0.05f, IsAscendedSkill("crescent_cleave") ? _crAscWindup.Value : _crWindup.Value); // v0.25.137 F8 (was 0.30 fixed)
             DragonCombat.LockSkill(player, windup + (IsAscendedSkill("crescent_cleave") ? 1.0f : 0.25f));
             DragonCombat.PlayClip(player, IsAscendedSkill("crescent_cleave") ? "sm_crescent_asc" : "sm_crescent", windup);
             StartCoroutine(CrescentCleaveRoutine(player, windup));
@@ -1585,13 +1587,14 @@ namespace AlbedosCustomClassesAdvanced
                 }
                 StartCoroutine(CrescentFireTrailRoutine(player, cast));
                 // v0.25.51 (user): the second set gets its own follow-up swing, timed to land with it.
-                float second = 0.50f; // First and second fan releases are exactly 0.5s apart.
-                // Let the overhead attack finish its strike before starting the rising backswing.
-                yield return new WaitForSeconds(second - SmSwordContact);
+                // v0.25.137 (user: Second Fan Delay did nothing - it was hardcoded 0.5): the F8 delay + its own swing wind up.
+                float second = Mathf.Max(0.05f, _crescentAscSecondDelay.Value);
+                float f2 = Mathf.Clamp(_crFan2Windup.Value, 0.03f, second);
+                yield return new WaitForSeconds(second - f2);
                 if (player == null || player.IsDead() || SmInterrupted(castStart)) yield break;
                 IhFaceSkillAim(player);
-                DragonCombat.PlayClip(player, "sm_crescent_asc2", SmSwordContact);
-                yield return new WaitForSeconds(SmSwordContact);
+                DragonCombat.PlayClip(player, "sm_crescent_asc2", f2);
+                yield return new WaitForSeconds(f2);
                 if (player == null || player.IsDead() || SmInterrupted(castStart))
                     yield break;
                 for (int i = 0; i < 6; i++)
@@ -1639,7 +1642,7 @@ namespace AlbedosCustomClassesAdvanced
             // (centre of its body), even huge ones; otherwise the usual aim point.
             if (!IhAimedCreaturePoint(player, jRange, out point)) point = GetAimPoint(player, jRange);
             DragonCombat.LockSkill(player, 0.40f);
-            DragonCombat.PlayClip(player, "sm_blade_storm", 0.12f);
+            DragonCombat.PlayClip(player, "sm_blade_storm", Mathf.Max(0.03f, _bladeDrawWindup.Value));
             StartCoroutine(JudgementCutRoutine(player, point));
         }
 
@@ -1837,6 +1840,17 @@ namespace AlbedosCustomClassesAdvanced
             _smAscCycle = Config.Bind(mla, "AscendedSlashInterval_v025134", 0.20f, "Ascended: time between the waves (even interval).");
             _hmLead = Config.Bind(hla, "SwingWindup_v025134", 0.25f, "Wind up of each Halfmoon swing (click -> hit).");
             _hmEnd = Config.Bind(hla, "SwingLength_v025134", 0.40f, "Whole swing incl. recovery; the next swing starts after it (even interval).");
+            const string cla = "Sword Master Crescent Cleave Animation";
+            _crWindup = Config.Bind(cla, "Windup_v025137", 0.30f, "Click -> the overhead smash hits and the crescents are released (s).");
+            _crAscWindup = Config.Bind(cla, "AscendedWindup_v025137", 0.30f, "Ascended: click -> first fan (s).");
+            _crFan2Windup = Config.Bind(cla, "AscendedFan2SwingWindup_v025137", 0.16f, "Ascended: the 2nd fan's own swing, start -> hit (s). The 2nd fan comes 'Second Fan Delay' after the first.");
+            _mlFinWindup = Config.Bind(mla, "AscendedFinisherWindup_v025137", 0.12f, "Ascended 5th (big) wave: its heavy swing, start -> release (s).");
+            _mlFinSpeed = Config.Bind(mla, "AscendedFinisherSpeedPercent_v025137", 85f, "Ascended 5th wave travel speed (% of a normal wave).");
+            _mlAfterDelay = Config.Bind(mla, "AscendedAfterimageDelay_v025137", 0.30f, new ConfigDescription("Ascended afterimage: seconds AFTER the 5th wave. Negative = the afterimage goes FIRST and the 5th wave follows that many seconds later.", new AcceptableValueRange<float>(-1.5f, 2f)));
+            _mlAfterSpeed = Config.Bind(mla, "AscendedAfterimageSpeedPercent_v025137", 250f, "Ascended afterimage travel speed (% of a normal wave).");
+            _hmStanceTime = Config.Bind(hla, "AscendedStanceSheatheSeconds_v025137", 0.6f, "Ascended: after the slashes the sword is sheathed into an iai stance over this time and held through the Left Click window.");
+            _seismicWindupV = Config.Bind("Mercenary Seismic Guillotine Animation", "Windup_v025137", 0.28f, "Click -> the overhead chop hits and the fissure starts (s).");
+            _bladeDrawWindup = Config.Bind("Sword Master Blade Storm Animation", "DrawWindup_v025137", 0.12f, "The iai draw animation's wind up (s); the cuts keep their own timing.");
             const string ma = "Sword Master Moonlight Splitter Ascended";
             _moonAscWindup = Config.Bind(ma, "Windup", 0.5f, "Legacy value; natural vanilla sword attack timing now controls the first wave.");
             _moonAscInterval = Config.Bind(ma, "WaveInterval", 0.3f, "Legacy value; natural vanilla longsword cycles now space waves 1-4.");
@@ -2108,21 +2122,28 @@ namespace AlbedosCustomClassesAdvanced
             }
             // 5th: one complete Heavy Slash at unchanged vanilla playback rate.
             // v0.25.93: the 5th keeps the 0.4 s rhythm too (heavy swing sped up to hit after SmAscContact).
-            DragonCombat.LockSkill(player, SmAscContact + 0.45f);
-            DragonCombat.PlayClip(player, "sm_moon_finisher", SmAscContact);
-            yield return new WaitForSeconds(SmAscContact);
+            // v0.25.137 (user): the 5th wave and the afterimage have their own wind up / speed / order in F8.
+            float finW = Mathf.Max(0.03f, _mlFinWindup.Value);
+            float afterD = _mlAfterDelay.Value;
+            DragonCombat.LockSkill(player, finW + Mathf.Abs(afterD) + 0.45f);
+            DragonCombat.PlayClip(player, "sm_moon_finisher", finW);
+            yield return new WaitForSeconds(finW);
             if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
             IhFaceSkillAim(player);
             Vector3 fo = player.GetEyePoint() - player.transform.up * 0.25f;
             Vector3 fd = AlbedoAimUtility.GetProjectileDirection(player, fo);
-            // The finisher is 2x WIDTH and slightly slower than the opening four.
-            StartCoroutine(GhostSlashWave(player, fo, fd, range, width * 2f,
-                speed * 0.85f, _moonDamageV, _moonAscFinisher.Value / 100f, 2f));
-            yield return new WaitForSeconds(0.30f);
-            if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
-            // Narrower ghost afterimage races past the large wave. Only it applies stun (never bosses).
-            StartCoroutine(GhostSlashWave(player, fo, fd, range, width,
-                speed * 2.5f, _moonDamageV, _moonAscAfter.Value / 100f, 1f, false, true));
+            float finSpeed = speed * Mathf.Max(0.05f, _mlFinSpeed.Value / 100f), afterSpeed = speed * Mathf.Max(0.05f, _mlAfterSpeed.Value / 100f);
+            for (int part = 0; part < 2; part++)
+            {
+                bool afterNow = afterD < 0f ? part == 0 : part == 1;
+                if (part == 1 && Mathf.Abs(afterD) > 0f) { yield return new WaitForSeconds(Mathf.Abs(afterD)); if (player == null || player.IsDead() || SmInterrupted(start)) yield break; }
+                if (afterNow)
+                    // Narrower ghost afterimage. Only it applies stun (never bosses).
+                    StartCoroutine(GhostSlashWave(player, fo, fd, range, width, afterSpeed, _moonDamageV, _moonAscAfter.Value / 100f, 1f, false, true));
+                else
+                    // The finisher is 2x WIDTH.
+                    StartCoroutine(GhostSlashWave(player, fo, fd, range, width * 2f, finSpeed, _moonDamageV, _moonAscFinisher.Value / 100f, 2f));
+            }
         }
 
         // Ghost laser wave: passes terrain (Ghost), pierces enemies, each enemy hit once per wave.
@@ -2818,6 +2839,9 @@ namespace AlbedosCustomClassesAdvanced
         // ------------------------------------------------------------------ Halfmoon Slash (Ascended)
         // v0.22.5: the normal two slashes, then pull back and hold the stance; Left Click within the
         // window releases a huge Free Aim Ghost wave (Getsuga): 1.5x width, 3x damage, 30m in 5s.
+        private const string HmSheathClip = "sheath_sword_1";
+        private const float HmSheathEnd = 1.25f;   // 'sheath sword 1' (1.3 s): sword home at the hip
+
         private IEnumerator HalfmoonAscendedRoutine(Player player, float windup, float start)
         {
             ShowMessage("Halfmoon Slash");
@@ -2839,7 +2863,17 @@ namespace AlbedosCustomClassesAdvanced
             // only comes out when the player presses Left Click within the window.
             float pull = 0.05f;   // v0.25.95 stance immediately after the swing
             DragonCombat.LockSkill(player, Mathf.Max(pull + 0.15f, HmCutsSeconds()));
-            DragonCombat.PlayClip(player, "sm_halfmoon_stance", pull, true);
+            // v0.25.137 (user): iai stance = Mixamo 'sheath sword 1', sheathed over AscendedStanceSheatheSeconds and held
+            // (last frame) through the window; custom stance clip if the bundle lacks it.
+            bool hmSheath = DragonMixamo.Has(HmSheathClip);
+            if (hmSheath)
+            {
+                DragonCombat.ClipStop(player, 0.1f);
+                float sh = Mathf.Max(0.1f, _hmStanceTime.Value);
+                DragonMixamo.PlayWarp(player, HmSheathClip, new float[] { 0f, sh }, new float[] { 0f, HmSheathEnd }, 0.12f, 0.15f, false);
+                pull = Mathf.Min(sh, 0.3f);
+            }
+            else DragonCombat.PlayClip(player, "sm_halfmoon_stance", pull, true);
             if (pull > 0f) yield return new WaitForSeconds(pull);
             if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
 
@@ -2858,8 +2892,10 @@ namespace AlbedosCustomClassesAdvanced
             {
                 ShowMessage("The Halfmoon fades");
                 DragonCombat.ClipStop(player, 0.3f);
+                if (hmSheath) DragonMixamo.Stop(player, 0.3f);
                 yield break;
             }
+            if (hmSheath) DragonMixamo.Stop(player, 0.1f);   // the release swing draws straight out of the sheathe
 
             IhFaceSkillAim(player);
             float swing = HmContact;
@@ -3629,6 +3665,23 @@ namespace AlbedosCustomClassesAdvanced
             return true;
         }
 
+        // v0.25.137 (user: pushed metres off the landing spot): the landing spot is an anchor - the body is held there
+        // (horizontal velocity zeroed, XZ pinned) for the whole slam + recovery.
+        private IEnumerator IhAnchorBody(Player player, float seconds)
+        {
+            Rigidbody body = player == null ? null : player.GetComponent<Rigidbody>();
+            if (body == null) yield break;
+            Vector3 anchor = body.position;
+            float until = Time.time + seconds;
+            while (player != null && !player.IsDead() && body != null && Time.time < until)
+            {
+                Vector3 p = body.position;
+                if (Mathf.Abs(p.x - anchor.x) > 0.001f || Mathf.Abs(p.z - anchor.z) > 0.001f) body.position = new Vector3(anchor.x, p.y, anchor.z);
+                Vector3 v = body.velocity; body.velocity = new Vector3(0f, v.y, 0f);
+                yield return new WaitForFixedUpdate();
+            }
+        }
+
         // v0.25.135 keeps the player rooted while a recovery animation plays out
         private IEnumerator IhHoldRoot(Player player, float seconds)
         {
@@ -3649,6 +3702,7 @@ namespace AlbedosCustomClassesAdvanced
             float rec = endClip - 1.76f;
             DragonMixamo.PlayWarp(player, MxJumpSlam, new float[] { 0f, 0.06f, 0.06f + rec }, new float[] { MxSlamHold, 1.76f, endClip }, 0.05f, 0.3f, false);
             StartCoroutine(IhHoldRoot(player, 0.06f + rec));
+            StartCoroutine(IhAnchorBody(player, 0.06f + rec + 0.2f));   // v0.25.137 you stay exactly where you landed
             DragonMixamo.SetGroundReach(player, MxSlamHold, 1.76f, 2.05f);   // v0.25.130 the weapon head meets the terrain
             return true;
         }
@@ -4783,15 +4837,16 @@ namespace AlbedosCustomClassesAdvanced
             if (!BeginCast(player, id, _seismicCooldown.Value, _seismicStamina.Value))
                 return;
 
-            DragonCombat.LockSkill(player, 0.45f);
-            DragonCombat.PlayClip(player, "merc_seismic", 0.28f);
+            float sw = Mathf.Max(0.05f, _seismicWindupV.Value);   // v0.25.137 F8
+            DragonCombat.LockSkill(player, sw + 0.17f);
+            DragonCombat.PlayClip(player, "merc_seismic", sw);
             StartCoroutine(SeismicGuillotineRoutine(player));
         }
 
         private IEnumerator SeismicGuillotineRoutine(Player player)
         {
             ShowMessage(IsUnchainedFuryActive() ? "Seismic Guillotine - UNCHAINED" : "Seismic Guillotine");
-            yield return new WaitForSeconds(0.28f);
+            yield return new WaitForSeconds(Mathf.Max(0.05f, _seismicWindupV.Value));
             if (player == null || player.IsDead())
                 yield break;
 
@@ -5797,7 +5852,7 @@ namespace AlbedosCustomClassesAdvanced
             ShieldChargeSlamHit(player, forward);
             if (_enableVfx.Value) { Vector3 sp = player.transform.position + forward * 1.6f; DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(sp, DragonVfx.Holy, 3.5f, 1.3f); }); }   // v0.25.57
             // v0.25.55 (user: the slam animation kept going long after the hit): rush the rest of the heavy swing.
-            // v0.25.135 (user): no recovery rush - the swing plays out at its one speed (cut it with End % in F8)
+            DragonCombat.SetSkillAnimSpeed(player, 6f, 0.35f);   // v0.25.137 restored (non-Warrior classes keep their earlier timing)
         }
 
         // v0.25.86 (user) Ascended: a JUMPING Hammer Slam (same animation) with a Lightning Strike. 0.5s from jump to slam,
@@ -5867,7 +5922,7 @@ namespace AlbedosCustomClassesAdvanced
                 Vector3 lp = c; float lr = radius;
                 DragonCombat.RunVfx(delegate { DragonVfx.SkyStrike(lp, DragonVfx.Storm, lr, 16f); DragonVfx.HeavyLanding(lp, DragonVfx.Holy, lr * 0.6f, 1.6f); });
             }
-            // v0.25.135 (user): no recovery rush - the swing plays out at its one speed (cut it with End % in F8)
+            DragonCombat.SetSkillAnimSpeed(player, 6f, 0.35f);   // v0.25.137 restored (non-Warrior classes keep their earlier timing)
         }
 
         private void ShieldChargeSlamHit(Player player, Vector3 forward)

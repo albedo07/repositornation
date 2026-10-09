@@ -1,0 +1,10 @@
+v0.25.137 - Sword Master Sliders
+- FIX Crescent Cleave: wind up and Ascended Second Fan Delay were hardcoded (0.30 / 0.50) - the F8 values now work.
+  New (Sword Master Crescent Cleave Animation): Windup, AscendedWindup, AscendedFan2SwingWindup.
+- Moonlight Ascended (Moonlight Splitter Animation): AscendedFinisherWindup, AscendedFinisherSpeedPercent,
+  AscendedAfterimageDelay (negative = afterimage FIRST), AscendedAfterimageSpeedPercent.
+- Halfmoon Ascended: iai stance = Mixamo 'sheath sword 1' held through the Left Click window (AscendedStanceSheatheSeconds).
+- New wind up sliders: Seismic Guillotine Windup, Blade Storm DrawWindup.
+- Jump slams (Bonecrusher / Electric Smite): the landing spot is anchored for the whole slam + recovery (no push).
+- Cleric / Sorcerer / Ranger: animation timing back to how it was before v0.25.135 (incl. Shield Charge slam rush);
+  the one-speed engine stays for Warrior / Sword Master / Mercenary only.

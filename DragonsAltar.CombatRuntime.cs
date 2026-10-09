@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.136";
+        public const string ModVersion = "0.25.137";
 
         internal static DragonCombatPlugin Instance;
 
@@ -2516,6 +2516,7 @@ namespace DragonsAltarCombat
         private bool _vaJumped, _vaCut;
         private float _uniK;   // v0.25.135 the one speed of the current vanilla animation
         private float _vaTrigN;   // v0.25.136 configured activation point (0 = own hit frame)
+        private bool _uniform;   // v0.25.137 Warrior-group clips only
         private float _constWindup;
 
         private void ReleaseBow(bool fire)
@@ -2541,6 +2542,9 @@ namespace DragonsAltarCombat
             _va = keys[0].VA;
             _vaRepeat = keys[0].VR;
             DragonCombat.AnimTuning(clipName, out _vaStartN, out _vaEndN, out _vaTrigN);
+            // v0.25.137 (user): the one-speed engine is Warrior / Sword Master / Mercenary only; every other class is back
+            // on its earlier timing (stretched wind up, fast swing on the impact, 6x recovery).
+            _uniform = clipName != null && (clipName.StartsWith("warrior_", StringComparison.Ordinal) || clipName.StartsWith("sm_", StringComparison.Ordinal) || clipName.StartsWith("merc_", StringComparison.Ordinal));
             _vaJumped = false; _vaCut = false;
             _vaAt = Time.time + Mathf.Max(0f, windup - keys[0].VL);
             if (_va != null && _vaRepeat <= 0.05f) _vaAt = Time.time + Mathf.Max(0.1f, windup) * Mathf.Clamp01(keys[0].VF);
@@ -2810,6 +2814,22 @@ namespace DragonsAltarCombat
                 // v0.25.135 ONE SMOOTH MOTION (user, every skill): one constant speed for the whole animation, set
                 // once when it starts so its hit frame lands on the impact, then the follow-through + recovery play out
                 // to 100% at that SAME speed (no slow wind up / fast swing / 6x recovery any more). End % still cuts.
+                if (!_uniform)
+                {
+                    // v0.25.35 two phases (restored v0.25.137 for every non-Warrior class): anticipation stretched over the
+                    // wind up, the swing fast in the last ~0.25 s so its hit frame lands on the impact, recovery at 6x.
+                    float len0 = Mathf.Max(0.05f, info.length);
+                    float hitN0 = Mathf.Clamp(_vaLead / len0, 0.15f, 0.9f);
+                    float swingN = Mathf.Clamp((_vaLead - 0.22f) / len0, 0f, hitN0);
+                    float swingDur = Mathf.Min(0.25f, Mathf.Max(0.04f, (end - _vaFiredAt) * 0.45f));
+                    float swingAt = end - swingDur;
+                    float speed;
+                    if (Time.time > end + 0.02f) speed = 6f;
+                    else if (Time.time < swingAt) speed = Mathf.Clamp((swingN - norm) * len0 / Mathf.Max(0.03f, swingAt - Time.time), 0.12f, 6f);
+                    else speed = Mathf.Clamp((hitN0 - norm) * len0 / Mathf.Max(0.03f, end - Time.time), 0.12f, 6f);
+                    DragonCombat.SetSkillAnimSpeed(p, speed, 0.15f);
+                    return;
+                }
                 if (_uniK <= 0f)
                 {
                     float len = Mathf.Max(0.05f, info.length);
