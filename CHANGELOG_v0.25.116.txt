@@ -1,0 +1,3 @@
+Aethelborn Ascended v0.25.116 - Altar of Blessings
+- Dragon's Altar renamed Altar of Blessings (build menu name + description, hover text, Altar title, skill tree hints).
+- Prefab id Albedo_ClassShrine unchanged: altars already built stay in your world.

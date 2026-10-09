@@ -41,7 +41,7 @@ namespace AlbedosCustomClasses
     {
         public const string ModGuid = "albedo.customclasses";
         public const string ModName = "Aethelborn Ascended - Altar";
-        public const string ModVersion = "0.25.115";
+        public const string ModVersion = "0.25.116";
 
         internal const string ClassDataKey = "AlbedoCustomClasses.Class";
         internal const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -158,8 +158,8 @@ namespace AlbedosCustomClasses
             {
                 PieceConfig config = new PieceConfig
                 {
-                    Name = "Dragon's Altar",
-                    Description = "An ancient dragon altar where adventurers choose their class path.",
+                    Name = "Altar of Blessings",
+                    Description = "An ancient altar that grants its Blessings: here the Aethelborn choose their Class.",
                     PieceTable = PieceTables.Hammer,
                     Category = "Class",
                     Usage = new string[]
@@ -758,7 +758,7 @@ namespace AlbedosCustomClasses
             Button blank = backdrop.gameObject.AddComponent<Button>();
             blank.transition = Selectable.Transition.None;
             blank.onClick.AddListener(ClearAltarSelection);
-            CreateWrappedText(_classPanel.transform, "DRAGON'S ALTAR", new Vector2(0f, 342f), 690f, 44f, 34, AltarGold, true, TextAnchor.MiddleCenter);
+            CreateWrappedText(_classPanel.transform, "ALTAR OF BLESSINGS", new Vector2(0f, 342f), 690f, 44f, 34, AltarGold, true, TextAnchor.MiddleCenter);
             _altarSubtitle = CreateWrappedText(_classPanel.transform, "AETHELBORN ASCENDED  •  CLASS SELECTION", new Vector2(0f, 318f), 690f, 24f, 15, AltarGold, false, TextAnchor.MiddleCenter);
             AltarButton(_classPanel.transform, "Reset", new Vector2(-440f, 402f), new Vector2(116f, 40f), ResetClassSelection);
             AltarButton(_classPanel.transform, "Close", new Vector2(440f, 402f), new Vector2(116f, 40f), CloseClassPanel);
@@ -1859,7 +1859,7 @@ namespace AlbedosCustomClasses
 
         public string GetHoverName()
         {
-            return "Dragon's Altar";
+            return "Altar of Blessings";
         }
 
         public string GetHoverText()
@@ -1868,13 +1868,13 @@ namespace AlbedosCustomClasses
             string advancement = Plugin.GetSelectedAdvancement(Player.m_localPlayer);
 
             if (string.IsNullOrEmpty(selected))
-                return "Dragon's Altar\n[<color=yellow><b>$KEY_Use</b></color>] Choose class";
+                return "Altar of Blessings\n[<color=yellow><b>$KEY_Use</b></color>] Choose class";
 
             string path = selected;
             if (!string.IsNullOrEmpty(advancement))
                 path += " > " + advancement;
 
-            return "Dragon's Altar\nCurrent path: " + path +
+            return "Altar of Blessings\nCurrent path: " + path +
                    "\n[<color=yellow><b>$KEY_Use</b></color>] Open";
         }
 

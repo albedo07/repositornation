@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.115";
+        public const string ModVersion = "0.25.116";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -18028,7 +18028,7 @@ namespace AlbedosCustomClassesAdvanced
             }
             else
             {
-                GUI.Label(new Rect(30f, 120f, 900f, 80f), "Choose a class at Dragon's Altar first.", _bookHeaderStyle);
+                GUI.Label(new Rect(30f, 120f, 900f, 80f), "Choose a class at the Altar of Blessings first.", _bookHeaderStyle);
             }
 
             if (string.IsNullOrEmpty(advancement))
@@ -18043,7 +18043,7 @@ namespace AlbedosCustomClassesAdvanced
 
                 GUI.Label(
                     new Rect(520f, 230f, 405f, 110f),
-                    "Use Dragon's Altar and choose one of your base-class advancements to unlock its additional active skills and advanced passive.",
+                    "Use the Altar of Blessings and choose one of your base-class advancements to unlock its additional active skills and advanced passive.",
                     _bookTextStyle
                 );
             }

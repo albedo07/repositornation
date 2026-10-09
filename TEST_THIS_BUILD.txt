@@ -1,5 +1,6 @@
-Aethelborn Ascended - TEST THIS BUILD (v0.25.115)
+Aethelborn Ascended - TEST THIS BUILD (v0.25.116)
 2. Log must show: "Mixamo clips loaded (N)".
 3. Mercenary: Circle Swing (normal + Ascended). Check spin, hit timing, left hand on the handle.
 4. Stomp still on the left leg (anchor check).
 5. Altar / Skill Tree / F8 show AETHELBORN ASCENDED and the titles fit.
+6. Altar shows ALTAR OF BLESSINGS (hammer menu, hover, title fits); old altars still there.

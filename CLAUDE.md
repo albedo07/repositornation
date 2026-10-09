@@ -1,5 +1,6 @@
 # Aethelborn Ascended (formerly Immortal Heroes) — Valheim BepInEx Mod
-- NAME (user, 2026-10-09): display name = **Aethelborn Ascended** (v0.25.115). Internal ids stay: GUIDs, config sections, `ImmortalHeroes.*` save keys, ImmortalHeroesAssets, zip names may use Aethelborn_Ascended_vX.zip.
+- NAME (user, 2026-10-09): display name = **Aethelborn Ascended** (v0.25.115).
+- ALTAR (user, 2026-10-09): Dragon's Altar display name = **Altar of Blessings** (v0.25.116; prefab Albedo_ClassShrine kept). New altar design = later, as an Asset Bundle model. Internal ids stay: GUIDs, config sections, `ImmortalHeroes.*` save keys, ImmortalHeroesAssets, zip names may use Aethelborn_Ascended_vX.zip.
 
 ## Working rules
 - User wants short responses and real execution, not long explanations.
