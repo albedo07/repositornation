@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.133";
+        public const string ModVersion = "0.25.134";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1390,15 +1390,18 @@ namespace AlbedosCustomClassesAdvanced
 
         // v0.25.89: the same natural-speed longsword NACC 1-2-1 chain drives the three waves.
         // Each hit follows its own actual vanilla attack instead of restarting the arms every 0.08s.
-        private const float SmSwordContact = 0.16f; // v0.25.91 faster Moonlight / Crescent follow-up swings (longsword contact 0.28 s -> 1.75x)
-        private const float SmSwordCycle = 0.40f; // v0.25.93 (user) every Moonlight GT exactly 0.4 s apart
+        // v0.25.134 (user: wind ups + even intervals tunable): these timings are F8 settings now, section
+        // "Sword Master Moonlight Splitter Animation" / "Sword Master Halfmoon Slash Animation" (defaults = the old values).
+        private ConfigEntry<float> _smLead, _smCycle, _smAscLead, _smAscCycle, _hmLead, _hmEnd;
+        private float SmSwordContact { get { return _smLead == null ? 0.16f : Mathf.Max(0.03f, _smLead.Value); } }   // v0.25.91 faster Moonlight / Crescent follow-up swings (longsword contact 0.28 s -> 1.75x)
+        private float SmSwordCycle { get { return _smCycle == null ? 0.40f : Mathf.Max(SmSwordContact + 0.02f, _smCycle.Value); } }   // v0.25.93 (user) every Moonlight GT exactly 0.4 s apart
         private const float SmHeavyContact = 0.45f;
         // v0.25.96 (user): Ascended Moonlight GTs 0.2 s apart (swings at the 4x speed cap).
-        private const float SmAscCycle = 0.20f;
-        private const float SmAscContact = 0.12f;
+        private float SmAscContact { get { return _smAscLead == null ? 0.12f : Mathf.Max(0.03f, _smAscLead.Value); } }
+        private float SmAscCycle { get { return _smAscCycle == null ? 0.20f : Mathf.Max(SmAscContact + 0.02f, _smAscCycle.Value); } }
         // v0.25.95 (user): Halfmoon swings as fast as Heavy Slash's swing (battleaxe 0.45 s native -> ~2.6x).
-        private const float HmContact = 0.25f;
-        private const float HmSwingEnd = 0.40f;   // contact + the fast recovery = end of the swing animation
+        private float HmContact { get { return _hmLead == null ? 0.25f : Mathf.Max(0.03f, _hmLead.Value); } }
+        private float HmSwingEnd { get { return _hmEnd == null ? 0.40f : Mathf.Max(HmContact + 0.02f, _hmEnd.Value); } }   // contact + the fast recovery = end of the swing animation
 
         private void CastMoonlightSplitter(Player player)
         {
@@ -1826,6 +1829,13 @@ namespace AlbedosCustomClassesAdvanced
             _wotsAttackSpeed = Config.Bind(m, "WayOfTheSwordAttackSpeedPercent_v0223", 50f, "The Way of the Sword: +Attack Speed while exactly one Sword is equipped.");
 
             _moonDamageV = BindDamage("Sword Master Moonlight Damage v0223", 0f, 45f, 0f, 0f, 0f, 0f, 0f, 25f);
+            const string mla = "Sword Master Moonlight Splitter Animation", hla = "Sword Master Halfmoon Slash Animation";
+            _smLead = Config.Bind(mla, "SlashWindup_v025134", 0.16f, "Wind up of each slash: click / previous slash -> the swing's hit (also Crescent's Ascended 2nd fan swing).");
+            _smCycle = Config.Bind(mla, "SlashInterval_v025134", 0.40f, "Time between the Ghost waves (even interval).");
+            _smAscLead = Config.Bind(mla, "AscendedSlashWindup_v025134", 0.12f, "Ascended: wind up of each slash (and the finisher).");
+            _smAscCycle = Config.Bind(mla, "AscendedSlashInterval_v025134", 0.20f, "Ascended: time between the waves (even interval).");
+            _hmLead = Config.Bind(hla, "SwingWindup_v025134", 0.25f, "Wind up of each Halfmoon swing (click -> hit).");
+            _hmEnd = Config.Bind(hla, "SwingLength_v025134", 0.40f, "Whole swing incl. recovery; the next swing starts after it (even interval).");
             const string ma = "Sword Master Moonlight Splitter Ascended";
             _moonAscWindup = Config.Bind(ma, "Windup", 0.5f, "Legacy value; natural vanilla sword attack timing now controls the first wave.");
             _moonAscInterval = Config.Bind(ma, "WaveInterval", 0.3f, "Legacy value; natural vanilla longsword cycles now space waves 1-4.");
@@ -2551,6 +2561,7 @@ namespace AlbedosCustomClassesAdvanced
             const float lead = 0.45f;
             if (player == null || player.IsDead()) yield break;
             DragonCombat.PlayVanillaTrigger(player, "sword_secondary");
+            DragonCombat.TuneVanilla(player, "sm_frenzied");   // v0.25.134 Start / End % from F8
             if (windup > 0.02f) DragonCombat.SetSkillAnimSpeed(player, lead / windup, windup);
         }
 

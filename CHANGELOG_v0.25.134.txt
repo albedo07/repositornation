@@ -1,0 +1,5 @@
+v0.25.134 - Sword Master Timing
+- Sword Master hardcoded timings are F8 settings now (defaults = old values):
+  Moonlight Splitter Animation: SlashWindup 0.16, SlashInterval 0.40, AscendedSlashWindup 0.12, AscendedSlashInterval 0.20
+  (SlashWindup also drives Crescent's Ascended 2nd-fan swing); Halfmoon Slash Animation: SwingWindup 0.25, SwingLength 0.40.
+- Frenzied Charge swing gets AnimStartPercent / AnimEndPercent (Sword Master Frenzied Charge Animation).

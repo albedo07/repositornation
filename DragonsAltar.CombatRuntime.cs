@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.133";
+        public const string ModVersion = "0.25.134";
 
         internal static DragonCombatPlugin Instance;
 
@@ -105,6 +105,7 @@ namespace DragonsAltarCombat
                 "sm_crescent_asc|Sword Master Crescent Cleave Animation|Ascended",
                 "sm_crescent_asc2|Sword Master Crescent Cleave Animation|Ascended Fan 2",
                 "sm_eclipse|Sword Master Eclipse Animation|",
+                "sm_frenzied|Sword Master Frenzied Charge Animation|",
                 "sm_guidance|Sword Master Knights Guidance Animation|",
                 "warrior_heavy|Warrior Heavy Slash Animation|",
                 "warrior_impact_wave|Warrior Impact Wave Animation|",
@@ -4123,6 +4124,50 @@ namespace DragonsAltarCombat
         public static string ResolveTriggerName(Animator a, string name) { return ResolveTrigger(a, name); }
 
         // Fires a Valheim animator trigger by (base) name; false when the game has no such animation.
+        // v0.25.134: Start / End % tuning for vanilla swings fired directly (not through PlayClip). Call right after the
+        // trigger: watches for the new state, jumps it to its start % and cuts it at its end % (blends back).
+        public static void TuneVanilla(Player player, string clipKey)
+        {
+            float st, en;
+            AnimTuning(clipKey, out st, out en);
+            if (player == null || DragonCombatPlugin.Instance == null || (st <= 0.001f && en >= 0.999f)) return;
+            DragonCombatPlugin.Instance.StartCoroutine(TuneVanillaRoutine(player, st, en));
+        }
+
+        private static IEnumerator TuneVanillaRoutine(Player player, float st, float en)
+        {
+            Animator an = player == null ? null : player.GetComponentInChildren<Animator>();
+            if (an == null) yield break;
+            int n = an.layerCount;
+            int[] pre = new int[n];
+            for (int l = 0; l < n; l++) pre[l] = an.GetCurrentAnimatorStateInfo(l).fullPathHash;
+            int layer = -1, hash = 0;
+            float t0 = Time.time;
+            while (layer < 0 && Time.time - t0 < 0.5f)
+            {
+                yield return null;
+                if (an == null) yield break;
+                for (int l = 0; l < n && layer < 0; l++)
+                {
+                    AnimatorStateInfo s = an.IsInTransition(l) ? an.GetNextAnimatorStateInfo(l) : an.GetCurrentAnimatorStateInfo(l);
+                    if (s.fullPathHash != pre[l] && !s.loop) { layer = l; hash = s.fullPathHash; }
+                }
+            }
+            if (layer < 0) yield break;
+            if (st > 0.001f) an.CrossFade(hash, 0.05f, layer, st);
+            while (an != null && Time.time - t0 < 6f)
+            {
+                yield return null;
+                if (an == null) yield break;
+                AnimatorStateInfo cur = an.GetCurrentAnimatorStateInfo(layer);
+                AnimatorStateInfo info;
+                if (cur.fullPathHash == hash) info = cur;
+                else if (an.IsInTransition(layer) && an.GetNextAnimatorStateInfo(layer).fullPathHash == hash) info = an.GetNextAnimatorStateInfo(layer);
+                else yield break;
+                if (info.normalizedTime >= en) { if (en < 0.999f) an.CrossFade(pre[layer], 0.25f, layer); yield break; }
+            }
+        }
+
         public static bool PlayVanillaTrigger(Player player, string name)
         {
             if (player == null) return false;

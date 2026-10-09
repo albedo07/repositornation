@@ -1,3 +1,3 @@
-TEST (v0.25.133)
-1. Ascended Circle Swing: the eruption centre is ~5 m ahead.
-2. F8 -> any class tab -> "... Animation" sections: change Start / End %, cast the skill, the animation starts later / is cut.
+TEST (v0.25.134)
+1. F8 -> Warrior -> Sword Master: "Moonlight Splitter Animation" / "Halfmoon Slash Animation" / "Frenzied Charge Animation".
+2. Change SlashInterval / SlashWindup, cast Moonlight: waves re-time evenly.
