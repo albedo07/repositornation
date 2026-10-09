@@ -1,0 +1,6 @@
+Immortal Heroes v0.25.112 - Mixamo Test Fix
+Base: v0.25.111.
+
+- FIX compile error [2/9] Combat Runtime: 'File' does not exist (the anchor's CombatRuntime has no
+  System.IO import; now System.IO.File). Everything else = v0.25.111 (Mixamo loader + Circle Swing test).
+- The 'velocity is obsolete' / 'Empty switch block' lines are harmless WARNINGS (they were there before).

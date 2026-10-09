@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.111";
+        public const string ModVersion = "0.25.112";
 
         internal static DragonCombatPlugin Instance;
 
@@ -9208,7 +9208,7 @@ namespace DragonsAltarCombat
             try
             {
                 string path = Paths.PluginPath + "/ImmortalHeroesAssets/immortalheroes_anims";
-                if (!File.Exists(path)) { DragonCombatPlugin.Instance.LogInfo("Mixamo clips: no bundle at " + path + " (old animations used)."); return; }
+                if (!System.IO.File.Exists(path)) { DragonCombatPlugin.Instance.LogInfo("Mixamo clips: no bundle at " + path + " (old animations used)."); return; }
                 AssetBundle bundle = AssetBundle.LoadFromFile(path);
                 if (bundle == null) { DragonCombatPlugin.Instance.LogWarning("Mixamo clips: bundle failed to load (built with a different Unity version?)."); return; }
                 _clips = new Dictionary<string, AnimationClip>(StringComparer.OrdinalIgnoreCase);
