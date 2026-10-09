@@ -1,3 +1,4 @@
-TEST (v0.25.125)
-1. Rebuild bundle in Unity (new AAAnimBuilder.cs) or run INSTALL (finds AABuild).
-2. Cast Circle Swing: top-left message must say "loaded: N clips". If not, send that message.
+TEST (v0.25.126)
+1. Install. Cast Circle Swing (normal + Ascended) with a 2H weapon.
+2. Expect: leap + two-handed double spin, no teleport. F5 log: "[Circle Swing] animation: great_sword_jump_attack".
+3. Report: still shaking? spin speed too fast/slow?

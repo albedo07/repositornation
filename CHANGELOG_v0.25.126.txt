@@ -1,0 +1,4 @@
+v0.25.126 - Jump Spin
+- Circle Swing = Mixamo 'great sword jump attack' (leaping two-handed double spin, 738 deg), time-warped to the wind up.
+- Ascended 2nd hit lands on the 2nd turn of the same clip (no mirror seam).
+- Root travel transfer OFF everywhere (caused the teleporting/shaking); hips stay pinned in place.
