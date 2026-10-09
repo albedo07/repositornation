@@ -164,8 +164,8 @@ namespace DragonsAltarSorcerer
     public class SorcererPlugin : BaseUnityPlugin
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
-        public const string ModName = "Dragon's Altar - Sorcerer Advancements";
-        public const string ModVersion = "0.25.114";
+        public const string ModName = "Aethelborn Ascended - Sorcerer Advancements";
+        public const string ModVersion = "0.25.115";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";

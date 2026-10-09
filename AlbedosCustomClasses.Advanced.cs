@@ -115,8 +115,8 @@ namespace AlbedosCustomClassesAdvanced
     public class AdvancedPlugin : BaseUnityPlugin
     {
         public const string ModGuid = "albedo.customclasses.advanced";
-        public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.114";
+        public const string ModName = "Aethelborn Ascended - Advancements";
+        public const string ModVersion = "0.25.115";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -11796,7 +11796,7 @@ namespace AlbedosCustomClassesAdvanced
             _ihCommandRegistered = true;
             try
             {
-                new Terminal.ConsoleCommand("ih", "Immortal Heroes: /ih [player] level|xp|classtierpoints|actierpoints|resetskill|class|advance|ascend|info",
+                new Terminal.ConsoleCommand("ih", "Aethelborn Ascended: /ih [player] level|xp|classtierpoints|actierpoints|resetskill|class|advance|ascend|info",
                     new Terminal.ConsoleEvent(IhOnCommand));
             }
             catch (Exception ex)
@@ -11861,7 +11861,7 @@ namespace AlbedosCustomClassesAdvanced
             }
             catch (Exception ex)
             {
-                notes.Add("Immortal Heroes command failed: " + ex.Message);
+                notes.Add("Aethelborn Ascended command failed: " + ex.Message);
             }
             for (int i = 0; i < notes.Count; i++)
             {
@@ -11880,12 +11880,12 @@ namespace AlbedosCustomClassesAdvanced
                 t.RemoveAt(0);
             if (player == null)
             {
-                notes.Add("Immortal Heroes: no local player.");
+                notes.Add("Aethelborn Ascended: no local player.");
                 return;
             }
             if (!IhIsAdminOrSolo())
             {
-                notes.Add("Immortal Heroes: /ih is for admins on servers.");
+                notes.Add("Aethelborn Ascended: /ih is for admins on servers.");
                 return;
             }
 
@@ -11895,7 +11895,7 @@ namespace AlbedosCustomClassesAdvanced
                 string name = t[0];
                 if (!string.Equals(name, player.GetPlayerName(), StringComparison.OrdinalIgnoreCase))
                 {
-                    notes.Add("Immortal Heroes: other players come with server sync. Use /ih <command> on yourself for now.");
+                    notes.Add("Aethelborn Ascended: other players come with server sync. Use /ih <command> on yourself for now.");
                     return;
                 }
                 t.RemoveAt(0);
@@ -17473,7 +17473,7 @@ namespace AlbedosCustomClassesAdvanced
             GUI.DrawTexture(new Rect(cx + 22f, 47f, 36f, 2f), _treeGoldTex);
             GUI.color = Color.white;
 
-            GUI.Label(new Rect(34f, 17f, 410f, 38f), "IMMORTAL HEROES", _treeTitleStyle);
+            GUI.Label(new Rect(34f, 17f, 410f, 38f), "AETHELBORN ASCENDED", _treeTitleStyle);
             GUI.Label(new Rect(36f, 49f, 410f, 20f), "SKILL TREE  •  UI PROTOTYPE", _treeTinyLeftStyle);
         }
 
@@ -17814,7 +17814,7 @@ namespace AlbedosCustomClassesAdvanced
 
         private void DrawPrototypeUnavailable(string className, string advancement)
         {
-            GUI.Label(new Rect(70f, 125f, 1040f, 45f), "IMMORTAL HEROES SKILL TREE FRAMEWORK", _treeHeaderStyle);
+            GUI.Label(new Rect(70f, 125f, 1040f, 45f), "AETHELBORN ASCENDED SKILL TREE FRAMEWORK", _treeHeaderStyle);
             GUI.Label(new Rect(70f, 182f, 1040f, 72f),
                 "v0.14.5 ships the reference-asset tree for Cleric → Paladin. Choose Cleric at the Altar to preview the tree before Advancement, or choose Paladin to view it as your active Advancement tree.",
                 _treeTooltipBodyStyle);

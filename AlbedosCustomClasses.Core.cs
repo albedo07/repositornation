@@ -40,8 +40,8 @@ namespace AlbedosCustomClasses
     public class Plugin : BaseUnityPlugin
     {
         public const string ModGuid = "albedo.customclasses";
-        public const string ModName = "Dragon's Altar";
-        public const string ModVersion = "0.25.114";
+        public const string ModName = "Aethelborn Ascended - Altar";
+        public const string ModVersion = "0.25.115";
 
         internal const string ClassDataKey = "AlbedoCustomClasses.Class";
         internal const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -759,7 +759,7 @@ namespace AlbedosCustomClasses
             blank.transition = Selectable.Transition.None;
             blank.onClick.AddListener(ClearAltarSelection);
             CreateWrappedText(_classPanel.transform, "DRAGON'S ALTAR", new Vector2(0f, 342f), 690f, 44f, 34, AltarGold, true, TextAnchor.MiddleCenter);
-            _altarSubtitle = CreateWrappedText(_classPanel.transform, "IMMORTAL HEROES  •  CLASS SELECTION", new Vector2(0f, 318f), 690f, 24f, 15, AltarGold, false, TextAnchor.MiddleCenter);
+            _altarSubtitle = CreateWrappedText(_classPanel.transform, "AETHELBORN ASCENDED  •  CLASS SELECTION", new Vector2(0f, 318f), 690f, 24f, 15, AltarGold, false, TextAnchor.MiddleCenter);
             AltarButton(_classPanel.transform, "Reset", new Vector2(-440f, 402f), new Vector2(116f, 40f), ResetClassSelection);
             AltarButton(_classPanel.transform, "Close", new Vector2(440f, 402f), new Vector2(116f, 40f), CloseClassPanel);
             _currentClassText = CreateWrappedText(_classPanel.transform, "Base class: None", new Vector2(-135f, 285f), 260f, 27f, 18, AltarInk, true, TextAnchor.MiddleCenter);
@@ -767,7 +767,7 @@ namespace AlbedosCustomClasses
             BuildBaseClassPage();
             BuildAdvancementPage();
             BuildConfirmationPanel();
-            CreateWrappedText(_classPanel.transform, "IMMORTAL HEROES", new Vector2(0f, -421f), 600f, 24f, 13, AltarGold, false, TextAnchor.MiddleCenter);
+            CreateWrappedText(_classPanel.transform, "AETHELBORN ASCENDED", new Vector2(0f, -421f), 600f, 24f, 13, AltarGold, false, TextAnchor.MiddleCenter);
             FitAltarToCanvas();
             ShowBaseClassPage();
             _classPanel.SetActive(false);
@@ -1231,7 +1231,7 @@ namespace AlbedosCustomClasses
         private void ShowBaseClassPage()
         {
             _classUiPage = 0;
-            if (_altarSubtitle != null) _altarSubtitle.text = "IMMORTAL HEROES  •  CLASS SELECTION";
+            if (_altarSubtitle != null) _altarSubtitle.text = "AETHELBORN ASCENDED  •  CLASS SELECTION";
             if (_confirmationPanel != null)
                 _confirmationPanel.SetActive(false);
             if (_baseClassPage != null)
@@ -1244,7 +1244,7 @@ namespace AlbedosCustomClasses
         private void ShowAdvancementPage()
         {
             _classUiPage = 1;
-            if (_altarSubtitle != null) _altarSubtitle.text = "IMMORTAL HEROES  •  ADVANCEMENT SELECTION";
+            if (_altarSubtitle != null) _altarSubtitle.text = "AETHELBORN ASCENDED  •  ADVANCEMENT SELECTION";
             if (_confirmationPanel != null)
                 _confirmationPanel.SetActive(false);
             if (_baseClassPage != null)

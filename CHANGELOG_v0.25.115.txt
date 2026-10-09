@@ -1,0 +1,3 @@
+Aethelborn Ascended v0.25.115 - New Name (base v0.25.114 Mixamo on Northpaw)
+- Mod renamed to Aethelborn Ascended: Altar subtitles, skill tree title, F8 config window, /ih messages, BepInEx plugin names, installer banner.
+- Unchanged on purpose: plugin GUIDs, config files/sections, save-data keys (ImmortalHeroes.*), asset folder ImmortalHeroesAssets -> existing characters and settings keep working.

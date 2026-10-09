@@ -39,8 +39,8 @@ namespace DragonsAltarDevTools
     public class DeveloperToolsPlugin : BaseUnityPlugin
     {
         public const string ModGuid = "albedo.customclasses.devtools";
-        public const string ModName = "Dragon's Altar - Developer Tools";
-        public const string ModVersion = "0.25.114";
+        public const string ModName = "Aethelborn Ascended - Developer Tools";
+        public const string ModVersion = "0.25.115";
 
         public static DeveloperToolsPlugin Instance;
 
@@ -875,7 +875,7 @@ namespace DragonsAltarDevTools
             EnsureStyles();
             Color old = GUI.color;
             GUI.color = Color.white;
-            _windowRect = GUI.Window(990011, _windowRect, DrawWindow, "IMMORTAL HEROES - CONFIG");
+            _windowRect = GUI.Window(990011, _windowRect, DrawWindow, "AETHELBORN ASCENDED - CONFIG");
             GUI.color = old;
         }
 
@@ -883,7 +883,7 @@ namespace DragonsAltarDevTools
         {
             GUI.DrawTexture(new Rect(0f, 22f, _windowRect.width, _windowRect.height - 22f), _panelTexture);
 
-            GUI.Label(new Rect(22f, 30f, 340f, 28f), "Immortal Heroes Config", _titleStyle);
+            GUI.Label(new Rect(22f, 30f, 340f, 28f), "Aethelborn Ascended Config", _titleStyle);
             string saveState = _dirtyFiles.Count > 0 ? (_autoSave.Value ? "Saving..." : "Unsaved changes") : "All changes saved";
             if (Time.unscaledTime < _statusUntil)
                 saveState = _status;

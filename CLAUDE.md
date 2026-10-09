@@ -1,4 +1,5 @@
-# Immortal Heroes — Valheim BepInEx Mod
+# Aethelborn Ascended (formerly Immortal Heroes) — Valheim BepInEx Mod
+- NAME (user, 2026-10-09): display name = **Aethelborn Ascended** (v0.25.115). Internal ids stay: GUIDs, config sections, `ImmortalHeroes.*` save keys, ImmortalHeroesAssets, zip names may use Aethelborn_Ascended_vX.zip.
 
 ## Working rules
 - User wants short responses and real execution, not long explanations.

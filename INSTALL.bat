@@ -1,5 +1,5 @@
 @echo off
-title Immortal Heroes v0.25.114 - Mixamo on Northpaw
+title Aethelborn Ascended v0.25.115 - New Name
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
 echo.
 pause

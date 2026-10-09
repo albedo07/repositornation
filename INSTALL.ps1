@@ -1,7 +1,7 @@
 ﻿$ErrorActionPreference = "Stop"
 
 Write-Host ""
-Write-Host "IMMORTAL HEROES v0.25.114 - MIXAMO ON NORTHPAW" -ForegroundColor Cyan
+Write-Host "AETHELBORN ASCENDED v0.25.115 - NEW NAME" -ForegroundColor Cyan
 Write-Host "Protected build: all 8 DLLs compile in staging before the live profile is touched." -ForegroundColor Gray
 Write-Host ""
 
