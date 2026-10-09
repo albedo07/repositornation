@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.119";
+        public const string ModVersion = "0.25.120";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -3320,19 +3320,6 @@ namespace AlbedosCustomClassesAdvanced
             // v0.25.35 (user): no steering in the wind up any more; the crow hop carries you 1.5 m forward.
             DragonCombat.LockSkill(player, windup + 0.05f);
             DragonCombat.GrantHyperArmor(player, windup + 0.25f);
-            // v0.25.119 (user's Great Sword Pack): 'great sword high spin attack' = step + knee-lift hop, two-hand
-            // load, counter-clockwise spin; hit frame f31 (1.03 s). Played from the click so the hit lands on the
-            // damage, cut at 1.1 s (383 deg, before its overshoot), its forward travel moves the real body.
-            if (DragonMixamo.Has(MxHopSpinClip))
-            {
-                DragonCombat.ClipStop(player, 0.05f);
-                DragonMixamo.Play(player, MxHopSpinClip, 0f, MxHopSpinTo, Mathf.Clamp(MxHopSpinHit / Mathf.Max(0.05f, windup), 0.5f, 3f), 0.1f, 0.3f, true);
-                DragonCombat.PlayClip(player, "mx_grip", 0.05f);
-                yield return new WaitForSeconds(windup);
-                if (player == null || player.IsDead()) yield break;
-                CircleSwingFinish(player);
-                yield break;
-            }
             StartCoroutine(CircleHop(player, windup));
             // v0.25.111 MIXAMO TEST: 'melee_attack_360_high_mirror' (counter-clockwise) takes over from the crow hop
             // so its hit frame (1.067 s) lands on the damage. Played 0.2 s -> 1.2 s of the clip: the full turn only,
@@ -3345,7 +3332,6 @@ namespace AlbedosCustomClassesAdvanced
                 if (player == null || player.IsDead()) yield break;
                 DragonCombat.ClipStop(player, 0.05f);
                 DragonMixamo.Play(player, MxCircleClip, MxSpinFrom, MxSpinTo, MxSpinSpeed, 0.08f, 0.25f);
-                DragonCombat.PlayClip(player, "mx_grip", 0.05f);
                 yield return new WaitForSeconds(mxLead);
             }
             else yield return new WaitForSeconds(windup);
@@ -3364,43 +3350,12 @@ namespace AlbedosCustomClassesAdvanced
             if (DragonMixamo.Has(MxCounterClip))
             {
                 DragonMixamo.Play(player, MxCounterClip, MxSpinFrom, MxSpinTo, (MxSpinHit - MxSpinFrom) / gap, 0.06f, 0.25f);
-                DragonCombat.PlayClip(player, "mx_grip", 0.05f);
             }
             else DragonCombat.PlayClip(player, "merc_circle_2", gap);
             yield return new WaitForSeconds(gap);
             if (player == null || player.IsDead()) yield break;
             CircleSwingHit(player, weapon, radius, baseMult * _circleAscSecond.Value / 100f, true);
         }
-
-        private void CircleSwingFinish(Player player)
-        {
-            StartCoroutine(CircleSwingAfterHop(player));
-        }
-
-        // Hit + Ascended counter spin for the v0.25.119 hop spin (same damage rules as CircleSwingRoutineV).
-        private IEnumerator CircleSwingAfterHop(Player player)
-        {
-            bool ascended = IsAscendedSkill("circle_swing");
-            float radius = Mathf.Max(0.5f, ascended ? DragonCombat.M(_circleAscRadius.Value) : DragonCombat.M(_circleRadius.Value));
-            float baseMult = Mathf.Max(0f, _circleDamageMultiplier.Value);
-            DamageSnapshot weapon = GetWeaponDamage(player);
-            CircleSwingHit(player, weapon, radius, baseMult * (ascended ? _circleAscFirst.Value / 100f : 1f), false);
-            if (!ascended) yield break;
-            DragonCombat.GrantHyperArmor(player, _circleAscGap.Value + 0.3f);
-            DragonCombat.LockSkill(player, _circleAscGap.Value + 0.1f);
-            float gap = Mathf.Max(0.05f, _circleAscGap.Value);
-            // counter spin = the mirrored clip (clockwise) from its load (0.5 s), sped so its hit lands on the 2nd hit
-            if (!DragonMixamo.Play(player, MxHopSpinClip + "_mirror", MxHopSpinLoad, MxHopSpinTo, (MxHopSpinHit - MxHopSpinLoad) / gap, 0.06f, 0.3f, true))
-                DragonCombat.PlayClip(player, "merc_circle_2", gap);
-            else DragonCombat.PlayClip(player, "mx_grip", 0.05f);
-            yield return new WaitForSeconds(gap);
-            if (player == null || player.IsDead()) yield break;
-            CircleSwingHit(player, weapon, radius, baseMult * _circleAscSecond.Value / 100f, true);
-        }
-
-        // v0.25.119 Great Sword Pack 'great sword high spin attack' (30 fps): hop f0-f12, load f15-f26, spin hit f31.
-        private const string MxHopSpinClip = "great_sword_high_spin_attack";
-        private const float MxHopSpinHit = 1.03f, MxHopSpinTo = 1.1f, MxHopSpinLoad = 0.5f;
 
         // v0.25.111 Mixamo 'standing melee attack 360 high' (Pro Melee Axe Pack, 30 fps): turn runs f8-f36, hit f32.
         private const string MxCircleClip = "melee_attack_360_high_mirror", MxCounterClip = "melee_attack_360_high";

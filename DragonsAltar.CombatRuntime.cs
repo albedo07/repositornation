@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.119";
+        public const string ModVersion = "0.25.120";
 
         internal static DragonCombatPlugin Instance;
 
@@ -9281,6 +9281,7 @@ namespace DragonsAltarCombat
     [DefaultExecutionOrder(31000)]
     public class DragonMixamoPlayer : MonoBehaviour
     {
+        public static bool RootTransferEnabled = false;
         private Player _xferPlayer;
         private Transform _hips;
         private Vector3 _hipStart, _moved;
@@ -9301,6 +9302,7 @@ namespace DragonsAltarCombat
         private void LateUpdate()
         {
             if (!_live || _xferPlayer == null || _hips == null) return;
+            if (!RootTransferEnabled) return;   // v0.25.120: off (shaking / teleporting in-game)
             Transform root = _xferPlayer.transform;
             Vector3 local = root.InverseTransformPoint(_hips.position);
             local.y = 0f;
@@ -9483,9 +9485,15 @@ namespace DragonsAltarCombat
             float d = Mathf.Sqrt((x / t.Rx) * (x / t.Rx) + (z / t.Rz) * (z / t.Rz));
             if (d >= 1f) return false;
             depth = d;
+            // v0.25.120: a fixed escape direction per case (no flipping between frames = no shaking): an arm that
+            // crossed the body's midline goes to the FRONT of the chest, otherwise out to its own side/front surface.
             float k = 1.06f;
             Vector3 radial;
-            if (d < 0.05f) radial = t.Side * (t.Rx * k * sideSign);
+            if (x * sideSign < 0.15f * t.Rx)
+            {
+                float zf = t.Rz * k * Mathf.Sqrt(Mathf.Max(0.05f, 1f - (x / t.Rx) * (x / t.Rx)));
+                radial = t.Side * x + t.Fwd * Mathf.Max(zf, z);
+            }
             else radial = (t.Side * x + t.Fwd * z) * (k / d);
             outside = t.A + t.Up * h + radial;
             return true;

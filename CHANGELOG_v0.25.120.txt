@@ -1,0 +1,5 @@
+Aethelborn Ascended v0.25.120 - Steady Spin
+- Shaking / teleporting fixed: the v0.25.119 root transfer (hips shifted every frame + body moved a frame later) is off.
+- Circle Swing: the great-sword "high spin" walk-in is gone (it was a strut, not a skip). Back to the anchor crow hop (1.5 m hop) + the axe pack 360 spin; Ascended counter spin unchanged.
+- mx_grip (left hand IK on top of the Mixamo clip) removed: it fought the clip and pulled the arm behind the back.
+- Body barrier: fixed escape direction (an arm across the midline goes to the FRONT of the chest), so it never flips side to side between frames.
