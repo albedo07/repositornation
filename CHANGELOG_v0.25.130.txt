@@ -1,0 +1,7 @@
+v0.25.130 - Full Swings
+- Circle Swing chain: every CA plays out fully before the next starts. HopSkip 0.05 -> 1.05 s (full turn + landing);
+  each battleaxe swing runs to its REAL hit frame / chain point, read from the vanilla clip's own animation events
+  (learned on the first cast, cached). One speed for the whole chain, raised so hit 1 lands at the wind up end.
+  Damage fires when the swing really hits. Same smooth crossfades as v0.25.129.
+- Jump slams: the spine bends forward on the slam until the weapon head touches the terrain.
+- Jump slams: landing probe = nearest terrain/structure below (own body + creatures ignored, any fall height).

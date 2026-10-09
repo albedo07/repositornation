@@ -1,4 +1,5 @@
-TEST (v0.25.129)
-1. Circle Swing normal + Ascended: one flowing chain (HopSkip -> axe 1 -> axe 2 + eruption). F5: "[Circle Swing] chain: ...".
-2. Bonecrusher + Electric Smite: run-jump slam, weapon overhead in the air, slam on landing. F5: "[Jump Slam] animation".
-3. Report: seams, speed, floating/sinking body during the jump.
+TEST (v0.25.130)
+1. Cast Circle Swing (Ascended) TWICE: the 1st cast learns the battleaxe timings (F5: "[Circle Swing] learned ..."),
+   the 2nd is the real test: HopSkip full, axe 1 full right->left swing, axe 2 full, eruption on axe 2's hit.
+2. Bonecrusher / Electric Smite: weapon head touches the ground on the slam; long falls slam on contact.
+3. Send the F5 "learned" lines if a swing still looks cut.

@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.129";
+        public const string ModVersion = "0.25.130";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -3436,41 +3436,140 @@ namespace AlbedosCustomClassesAdvanced
         // v0.25.127: leap + first turn only; lands at ~0.95 s, facing front again at 1.0 s (hips 1.95 m forward).
         private const float MxJumpLand = 0.95f, MxJumpTravel = 2f, MxJumpFrom = 0.05f;
 
-        // v0.25.129 natural chain timings (s at 1x): HopSkip from 0.05 to its landing 0.95, the next link starts
-        // 0.15 before the landing (follow-through overlap); vanilla battleaxe swing start -> hit 0.45; battleaxe
-        // attack 2 starts 0.05 after attack 1's hit.
-        private const float CsHopOverlap = 0.15f, CsAxeLead = 0.45f, CsAxeStep = 0.05f;
+        // v0.25.130 (user: every CA must play out FULLY, then chain): HopSkip plays 0.05 -> 1.05 s (the full first turn
+        // and the landing), the battleaxe swings play up to their real hit frame and their real chain point, read from
+        // the vanilla clips' own animation events (learned on the first cast, cached). One speed s for the whole chain
+        // so the first hit lands on the wind up end; damage fires when the swing really reaches its hit frame.
+        private const float CsHopEnd = 1.05f;
+        private static readonly Dictionary<string, float[]> _csTiming = new Dictionary<string, float[]>();   // trigger -> {hit, chain, len}
+
+        private static float[] CsTiming(string trig)
+        {
+            float[] t;
+            if (trig != null && _csTiming.TryGetValue(trig, out t)) return t;
+            return new float[] { 0.85f, 1.15f, 1.6f };   // first cast guess, replaced by the clip's events
+        }
+
+        // Finds the clip the trigger started (an attack clip that is not 'skip') and reads its events.
+        private AnimationClip CsFindClip(Animator an, AnimationClip skip, out int layer)
+        {
+            layer = -1;
+            if (an == null) return null;
+            for (int l = 0; l < an.layerCount; l++)
+            {
+                AnimatorClipInfo[] ci = an.IsInTransition(l) ? an.GetNextAnimatorClipInfo(l) : an.GetCurrentAnimatorClipInfo(l);
+                for (int i = 0; i < ci.Length; i++)
+                {
+                    AnimationClip c = ci[i].clip;
+                    if (c == null || c == skip) continue;
+                    AnimationEvent[] ev = c.events;
+                    for (int e = 0; e < ev.Length; e++)
+                        if (ev[e].functionName.IndexOf("Attack", StringComparison.OrdinalIgnoreCase) >= 0 || ev[e].functionName == "Hit")
+                        { layer = l; return c; }
+                }
+            }
+            return null;
+        }
+
+        private void CsLearn(string trig, AnimationClip c)
+        {
+            if (trig == null || c == null || _csTiming.ContainsKey(trig)) return;
+            float hit = -1f, chain = -1f;
+            string log = "";
+            AnimationEvent[] ev = c.events;
+            for (int e = 0; e < ev.Length; e++)
+            {
+                string fn = ev[e].functionName;
+                log += " " + fn + "@" + ev[e].time.ToString("0.00");
+                if (hit < 0f && (fn == "OnAttackTrigger" || fn == "Hit")) hit = ev[e].time;
+                if (chain < 0f && fn.IndexOf("Chain", StringComparison.OrdinalIgnoreCase) >= 0) chain = ev[e].time;
+            }
+            if (hit < 0f) for (int e = 0; e < ev.Length && hit < 0f; e++) if (ev[e].functionName.IndexOf("Attack", StringComparison.OrdinalIgnoreCase) >= 0) hit = ev[e].time;
+            if (hit < 0f) hit = c.length * 0.5f;
+            if (chain <= hit) chain = hit + (c.length - hit) * 0.4f;
+            _csTiming[trig] = new float[] { hit, chain, c.length };
+            Logger.LogInfo("[Circle Swing] learned " + trig + " = " + c.name + " len " + c.length.ToString("0.00") + " hit " + hit.ToString("0.00") + " chain " + chain.ToString("0.00") + " events:" + log);
+        }
+
+        // Natural time (s at 1x) of the swing in 'layer' playing clip 'c', or -1 if it no longer plays.
+        private static float CsClipTime(Animator an, int layer, AnimationClip c)
+        {
+            if (an == null || layer < 0 || c == null) return -1f;
+            AnimatorClipInfo[] cur = an.GetCurrentAnimatorClipInfo(layer);
+            for (int i = 0; i < cur.Length; i++) if (cur[i].clip == c) return Mathf.Min(an.GetCurrentAnimatorStateInfo(layer).normalizedTime, 1f) * c.length;
+            if (an.IsInTransition(layer))
+            {
+                AnimatorClipInfo[] nx = an.GetNextAnimatorClipInfo(layer);
+                for (int i = 0; i < nx.Length; i++) if (nx[i].clip == c) return an.GetNextAnimatorStateInfo(layer).normalizedTime * c.length;
+            }
+            return -1f;
+        }
+
+        // Plays one vanilla swing at speed s until its natural time reaches 'until' (hit or chain point).
+        private IEnumerator CsSwing(Player player, string trig, float s, AnimationClip skip, float until, bool hitMark, System.Action<AnimationClip> done)
+        {
+            Animator an = player.GetComponentInChildren<Animator>();
+            float[] tm = CsTiming(trig);
+            float target = hitMark ? tm[0] : until;
+            float t0 = Time.time;
+            AnimationClip clip = null; int layer = -1;
+            while (player != null && !player.IsDead())
+            {
+                DragonCombat.SetSkillAnimSpeed(player, s, 0.25f);
+                DragonCombat.LockSkill(player, 0.25f);
+                if (clip == null && Time.time - t0 < 0.5f)
+                {
+                    clip = CsFindClip(an, skip, out layer);
+                    if (clip != null) { CsLearn(trig, clip); tm = CsTiming(trig); if (hitMark) target = tm[0]; }
+                }
+                float nt = clip != null ? CsClipTime(an, layer, clip) : (Time.time - t0) * s;
+                if (nt < 0f || nt >= target) break;
+                if (Time.time - t0 > target / s + 1f) break;   // safety
+                yield return null;
+            }
+            if (done != null) done(clip);
+        }
 
         private IEnumerator CircleSwingChain(Player player, float windup)
         {
             bool asc = IsAscendedSkill("circle_swing");
-            float hopNat = MxJumpLand - MxJumpFrom;
-            float s = Mathf.Clamp((hopNat - CsHopOverlap + CsAxeLead) / Mathf.Max(0.3f, windup), 0.5f, 2f);   // one speed for the chain
-            float tAxe = (hopNat - CsHopOverlap) / s, hit1 = tAxe + CsAxeLead / s;
-            float hit2 = hit1 + (CsAxeStep + CsAxeLead) / s;
-            DragonCombat.LockSkill(player, (asc ? hit2 : hit1) + 0.2f);
-            DragonMixamo.PlayWarp(player, MxJump, new float[] { 0f, hopNat / s, (hopNat + 0.2f) / s },
-                new float[] { MxJumpFrom, MxJumpLand, MxJumpLand + 0.2f }, 0.08f, 0.3f, false);
-            StartCoroutine(CircleLeap(player, hopNat * 0.1f / s, hopNat * 0.9f / s, MxJumpTravel));
             Animator an = player.GetComponentInChildren<Animator>();
             string axe1 = DragonCombat.ResolveTriggerName(an, "battleaxe_attack0"), axe2 = DragonCombat.ResolveTriggerName(an, "battleaxe_attack1");
-            Logger.LogInfo("[Circle Swing] chain: HopSkip -> " + axe1 + (asc ? " -> " + axe2 : "") + " at " + s.ToString("0.00") + "x, hits " + hit1.ToString("0.00") + (asc ? " / " + hit2.ToString("0.00") : "") + " s");
+            float[] t1 = CsTiming(axe1);
+            float hopNat = CsHopEnd - MxJumpFrom;
+            float s = Mathf.Clamp((hopNat + t1[0]) / Mathf.Max(0.3f, windup), 0.7f, 2.5f);   // ONE speed for the chain
+            DragonCombat.LockSkill(player, hopNat / s + 0.3f);
+            DragonMixamo.PlayWarp(player, MxJump, new float[] { 0f, hopNat / s, (hopNat + 0.15f) / s },
+                new float[] { MxJumpFrom, CsHopEnd, CsHopEnd + 0.15f }, 0.08f, 0.3f, false);
+            StartCoroutine(CircleLeap(player, 0.1f / s, 0.9f / s, MxJumpTravel));
+            Logger.LogInfo("[Circle Swing] chain: HopSkip -> " + axe1 + (asc ? " -> " + axe2 : "") + " at " + s.ToString("0.00") + "x");
             float t0 = Time.time;
-            while (Time.time - t0 < tAxe) { if (player == null || player.IsDead()) yield break; yield return null; }
-            DragonMixamo.Stop(player, (CsHopOverlap + 0.12f) / s);   // HopSkip lands while the swing already rises
+            while (Time.time - t0 < hopNat / s) { if (player == null || player.IsDead()) yield break; DragonCombat.LockSkill(player, 0.25f); yield return null; }
+            // HopSkip has landed and finished its turn: the swing starts as it fades (vanilla-chain overlap).
+            DragonMixamo.Stop(player, 0.15f / s);
+            AnimationClip c1 = null;
             if (axe1 != null) DragonCombat.FireVanilla(player, axe1);
-            DragonCombat.SetSkillAnimSpeed(player, s, (asc ? hit2 : hit1) - tAxe + 0.35f / s);
-            while (Time.time - t0 < hit1) { if (player == null || player.IsDead()) yield break; yield return null; }
+            yield return StartCoroutine(CsSwing(player, axe1, s, null, 0f, true, delegate(AnimationClip c) { c1 = c; }));
+            if (player == null || player.IsDead()) yield break;
             float radius = Mathf.Max(0.5f, asc ? DragonCombat.M(_circleAscRadius.Value) : DragonCombat.M(_circleRadius.Value));
             float baseMult = Mathf.Max(0f, _circleDamageMultiplier.Value);
             DamageSnapshot weapon = GetWeaponDamage(player);
             CircleSwingHit(player, weapon, radius, baseMult * (asc ? _circleAscFirst.Value / 100f : 1f), false);
-            if (!asc) yield break;
-            DragonCombat.GrantHyperArmor(player, hit2 - hit1 + 0.3f);
-            while (Time.time - t0 < hit1 + CsAxeStep / s) { if (player == null || player.IsDead()) yield break; yield return null; }
+            if (!asc)
+            {
+                float[] e1 = CsTiming(axe1);
+                DragonCombat.SetSkillAnimSpeed(player, s, Mathf.Max(0.1f, (e1[2] - e1[0]) / s));   // the swing plays out
+                yield break;
+            }
+            DragonCombat.GrantHyperArmor(player, 2f);
+            yield return StartCoroutine(CsSwing(player, axe1, s, null, CsTiming(axe1)[1], false, null));   // follow-through to the chain point
+            if (player == null || player.IsDead()) yield break;
             if (axe2 != null) DragonCombat.FireVanilla(player, axe2);
-            while (Time.time - t0 < hit2) { if (player == null || player.IsDead()) yield break; yield return null; }
+            yield return StartCoroutine(CsSwing(player, axe2, s, c1, 0f, true, null));
+            if (player == null || player.IsDead()) yield break;
             CircleEruption(player, weapon, baseMult * Mathf.Max(0f, _circleEruptPercent.Value) / 100f);
+            float[] e2 = CsTiming(axe2);
+            DragonCombat.SetSkillAnimSpeed(player, s, Mathf.Max(0.1f, (e2[2] - e2[0]) / s));
         }
 
         // v0.25.129 Jump slams (Bonecrusher, Electric Smite) = Axe Pack 'melee run jump attack': crouch + spring
@@ -3493,11 +3592,28 @@ namespace AlbedosCustomClassesAdvanced
             return true;
         }
 
+        private static int _groundProbeMask = -1;
+        private float IhGroundDistance(Player player, Vector3 from)
+        {
+            if (_groundProbeMask == -1) _groundProbeMask = LayerMask.GetMask("Default", "static_solid", "Default_small", "terrain", "piece", "vehicle");
+            RaycastHit[] hits = Physics.RaycastAll(from + Vector3.up * 0.3f, Vector3.down, 200f, _groundProbeMask, QueryTriggerInteraction.Ignore);
+            float best = -1f;
+            for (int i = 0; i < hits.Length; i++)
+            {
+                Collider c = hits[i].collider;
+                if (c == null || c.transform.IsChildOf(player.transform) || c.GetComponentInParent<Character>() != null) continue;
+                float d = hits[i].distance - 0.3f;
+                if (best < 0f || d < best) best = d;
+            }
+            return best;
+        }
+
         private bool IhJumpSlamLand(Player player)
         {
             if (!_jsActive) return false;
             _jsActive = false;
-            DragonMixamo.PlayWarp(player, MxJumpSlam, new float[] { 0f, 0.2f, 0.55f }, new float[] { 1.50f, 1.75f, 2.10f }, 0.1f, 0.35f, false);
+            DragonMixamo.PlayWarp(player, MxJumpSlam, new float[] { 0f, 0.2f, 0.65f }, new float[] { 1.50f, 1.75f, 2.10f }, 0.1f, 0.35f, false);
+            DragonMixamo.SetGroundReach(player, 1.62f, 1.76f, 2.05f);   // v0.25.130 the weapon head meets the terrain
             return true;
         }
 
@@ -6774,9 +6890,10 @@ namespace AlbedosCustomClassesAdvanced
                 DragonCombat.LockSkill(player, 0.12f);
                 if (_jsActive)
                 {
-                    RaycastHit jsGround;   // v0.25.129 the slam starts ~0.2 s before contact
-                    if (Physics.Raycast(body.position + Vector3.up * 0.3f, Vector3.down, out jsGround, 60f, IhSolidMask(), QueryTriggerInteraction.Ignore) &&
-                        jsGround.distance - 0.3f < Mathf.Max(2f, -body.velocity.y) * 0.2f)
+                    // v0.25.130 the slam starts ~0.2 s before contact: nearest terrain / structure below (own body and
+                    // creatures ignored, any fall height)
+                    float jsDist = IhGroundDistance(player, body.position);
+                    if (jsDist >= 0f && jsDist < Mathf.Max(2f, -body.velocity.y) * 0.2f)
                         IhJumpSlamLand(player);
                 }
                 if (IsPlayerGrounded(player) && body.velocity.y <= 0.25f)

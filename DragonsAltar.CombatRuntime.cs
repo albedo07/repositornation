@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.129";
+        public const string ModVersion = "0.25.130";
 
         internal static DragonCombatPlugin Instance;
 
@@ -9413,6 +9413,26 @@ namespace DragonsAltarCombat
             p.NoRise = on;
         }
 
+        // v0.25.130 jump slams: between clip times from..to (full at peak..to) the spine bends forward so the main
+        // weapon's head reaches the terrain under it.
+        public static void SetGroundReach(Player player, float from, float peak, float to)
+        {
+            if (player == null) return;
+            Animator an = player.GetComponentInChildren<Animator>();
+            DragonMixamoPlayer p = an != null ? an.GetComponent<DragonMixamoPlayer>() : null;
+            if (p == null) return;
+            GameObject item = null;
+            Component[] cs = player.GetComponentsInChildren<Component>();
+            for (int i = 0; i < cs.Length; i++)
+                if (cs[i] != null && cs[i].GetType().Name == "VisEquipment")
+                {
+                    FieldInfo f = cs[i].GetType().GetField("m_rightItemInstance", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    item = f == null ? null : f.GetValue(cs[i]) as GameObject;
+                    break;
+                }
+            p.SetReach(item == null ? null : item.GetComponentsInChildren<Renderer>(), from, peak, to);
+        }
+
         public static void Stop(Player player, float fadeOut)
         {
             if (player == null) return;
@@ -9444,6 +9464,56 @@ namespace DragonsAltarCombat
         public bool Live { get { return _live; } }
         public bool NoRise;
         private float _restY;
+        private Renderer[] _reachR;
+        private float _reachFrom, _reachPeak, _reachTo;
+        private static int _reachMask = -1;
+
+        public void SetReach(Renderer[] rs, float from, float peak, float to)
+        {
+            _reachR = rs; _reachFrom = from; _reachPeak = Mathf.Max(from + 0.01f, peak); _reachTo = Mathf.Max(_reachPeak + 0.01f, to);
+        }
+
+        // v0.25.130 bend the spine forward (around the body's right axis) until the weapon head touches the ground.
+        private void GroundReach(Animator an)
+        {
+            if (_reachR == null || _reachR.Length == 0 || !UnityEngine.Playables.PlayableExtensions.IsValid(_clip)) return;
+            float ct = (float)UnityEngine.Playables.PlayableExtensions.GetTime(_clip);
+            if (ct <= _reachFrom || ct >= _reachTo + 0.15f) { if (ct >= _reachTo + 0.15f) _reachR = null; return; }
+            float w = ct < _reachPeak ? Mathf.InverseLerp(_reachFrom, _reachPeak, ct) : 1f - Mathf.Clamp01((ct - _reachTo) / 0.15f);
+            w = w * w * (3f - 2f * w) * _wOut;
+            Transform spine = an.GetBoneTransform(HumanBodyBones.Spine), hand = an.GetBoneTransform(HumanBodyBones.RightHand);
+            if (spine == null || hand == null || w <= 0.001f) return;
+            bool any = false; Bounds b = new Bounds();
+            for (int i = 0; i < _reachR.Length; i++)
+            {
+                if (_reachR[i] == null || !_reachR[i].enabled) continue;
+                if (!any) { b = _reachR[i].bounds; any = true; } else b.Encapsulate(_reachR[i].bounds);
+            }
+            if (!any) return;
+            Vector3 dir = b.center - hand.position;
+            if (dir.sqrMagnitude < 0.0001f) return;
+            dir.Normalize();
+            Vector3 e = b.extents;
+            Vector3 tip = b.center + dir * (Mathf.Abs(dir.x) * e.x + Mathf.Abs(dir.y) * e.y + Mathf.Abs(dir.z) * e.z);
+            if (_reachMask == -1) _reachMask = LayerMask.GetMask("Default", "static_solid", "Default_small", "terrain", "piece", "vehicle");
+            RaycastHit[] hits = Physics.RaycastAll(tip + Vector3.up * 2f, Vector3.down, 5f, _reachMask, QueryTriggerInteraction.Ignore);
+            float gy = float.NegativeInfinity;
+            for (int i = 0; i < hits.Length; i++)
+            {
+                Collider c = hits[i].collider;
+                if (c == null || c.transform.IsChildOf(_body) || c.GetComponentInParent<Character>() != null) continue;
+                if (hits[i].point.y > gy) gy = hits[i].point.y;
+            }
+            if (float.IsNegativeInfinity(gy) || tip.y <= gy + 0.03f) return;
+            Vector3 fwd = _body.forward; fwd.y = 0f; fwd.Normalize();
+            Vector3 v = tip - spine.position;
+            float f = Vector3.Dot(v, fwd), u = v.y, R = Mathf.Sqrt(f * f + u * u);
+            if (R < 0.2f || f < 0.05f) return;
+            float want = Mathf.Clamp((gy + 0.03f - spine.position.y) / R, -1f, 1f);
+            float delta = Mathf.Atan2(u, f) * Mathf.Rad2Deg - Mathf.Asin(want) * Mathf.Rad2Deg;
+            delta = Mathf.Clamp(delta, 0f, 45f) * w;
+            spine.rotation = Quaternion.AngleAxis(delta, _body.right) * spine.rotation;
+        }
 
         public void Begin(Player player, Animator an, AnimationClip clip, float[] realTimes, float[] clipTimes, float fadeIn, float fadeOut, bool transfer)
         {
@@ -9567,6 +9637,7 @@ namespace DragonsAltarCombat
             Vector3 corr = target - flat;
             if (NoRise && y > _restY) corr.y = _restY - y;   // v0.25.129 no double jump height
             _hips.position += _body.TransformVector(corr) * _wOut;
+            if (_reachR != null) GroundReach(_hips.GetComponentInParent<Animator>());
         }
 
         // The body follows the clip's travel (walls stop it); the hips lead it by at most 0.35 m.
