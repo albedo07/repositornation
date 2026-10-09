@@ -1,0 +1,4 @@
+v0.25.132 - Stay Landed
+- FIX: Mixamo clip travel (Run Jump Attack ~4.3 m, HopSkip ~2 m) reached the body as animator root motion and pushed
+  you forward on landing. Root motion is now ignored while a Mixamo clip plays: you stay exactly where you land.
+- Circle Swing defaults: Windup 1.0 s, AxeSwing1StartPercent 80 (user-tuned).

@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Aethelborn Ascended - Sorcerer Advancements";
-        public const string ModVersion = "0.25.131";
+        public const string ModVersion = "0.25.132";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";

@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.131";
+        public const string ModVersion = "0.25.132";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -756,8 +756,8 @@ namespace AlbedosCustomClassesAdvanced
 
             _circleCooldown = Config.Bind("Mercenary Circle Swing", "Cooldown", 16f, "Seconds.");
             _circleStamina = Config.Bind("Mercenary Circle Swing", "StaminaCost", 36f, "Stamina cost.");
-            _circleWindup = Config.Bind("Mercenary Circle Swing", "Windup", 1.5f, "Heavy steerable wind-up before the violent circular swing.");
-            _circleAxeStart1 = Config.Bind("Mercenary Circle Swing", "AxeSwing1StartPercent_v025131", 30f, "Chain stitch: the battleaxe swing after the HopSkip starts at this % of its animation (where the two weapon positions meet).");
+            _circleWindup = Config.Bind("Mercenary Circle Swing", "Windup", 1f, "Heavy steerable wind-up before the violent circular swing.");
+            _circleAxeStart1 = Config.Bind("Mercenary Circle Swing", "AxeSwing1StartPercent_v025131", 80f, "Chain stitch: the battleaxe swing after the HopSkip starts at this % of its animation (where the two weapon positions meet).");
             _circleAxeStart2 = Config.Bind("Mercenary Circle Swing", "AxeSwing2StartPercent_v025131", 0f, "Chain stitch (Ascended): the 2nd battleaxe swing starts at this % of its animation.");
             _circleRadius = Config.Bind("Mercenary Circle Swing", "Radius", 7f, "True 7m center-to-edge radius.");
             _circleDamageMultiplier = Config.Bind("Mercenary Circle Swing", "WeaponDamageMultiplier", 1.75f, "Significant burst: multiplier applied to the held weapon damage/elements.");

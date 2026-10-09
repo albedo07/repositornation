@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.131";
+        public const string ModVersion = "0.25.132";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1581,6 +1581,7 @@ namespace DragonsAltarCombat
         {
             try
             {
+                if (__instance != null && __instance == Player.m_localPlayer && Time.time < DragonMixamo.LiveUntil) return false;   // v0.25.132 Mixamo clip travel never moves the body (you stay where you land)
                 if (__instance == null || __instance != Player.m_localPlayer || Time.time >= DragonCombat.BlockHyperUntil) return true;
                 Humanoid h = __instance as Humanoid;
                 return h != null && h.InAttack();
@@ -9433,6 +9434,8 @@ namespace DragonsAltarCombat
             p.SetReach(item == null ? null : item.GetComponentsInChildren<Renderer>(), from, peak, to);
         }
 
+        public static float LiveUntil;   // v0.25.132 set while a Mixamo clip drives the local player
+
         public static void Stop(Player player, float fadeOut)
         {
             if (player == null) return;
@@ -9596,6 +9599,7 @@ namespace DragonsAltarCombat
         {
             if (!_live) return;
             if (!_graph.IsValid()) { _live = false; return; }
+            if (_body != null && _body == (Player.m_localPlayer != null ? Player.m_localPlayer.transform : null)) DragonMixamo.LiveUntil = Time.time + 0.1f;
             _age += Time.deltaTime;
             UnityEngine.Playables.PlayableExtensions.SetTime(_clip, Warp(_age));
             if (!_stopping && _age >= _wr[_wr.Length - 1]) { _stopping = true; _stopAt = _age; }
