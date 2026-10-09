@@ -1,7 +1,7 @@
 ﻿$ErrorActionPreference = "Stop"
 
 Write-Host ""
-Write-Host "AETHELBORN ASCENDED v0.25.123 - TWO HAND SPIN" -ForegroundColor Cyan
+Write-Host "AETHELBORN ASCENDED v0.25.124 - NO BASEBALL" -ForegroundColor Cyan
 Write-Host "Protected build: all 8 DLLs compile in staging before the live profile is touched." -ForegroundColor Gray
 Write-Host ""
 

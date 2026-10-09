@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.123";
+        public const string ModVersion = "0.25.124";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -3331,14 +3331,15 @@ namespace AlbedosCustomClassesAdvanced
             // Missing clips: the axe spin (v0.25.122) and then the crow hop.
             bool gs = DragonMixamo.Has(MxTwoHandSpin);
             bool mx = gs || DragonMixamo.Has(MxCircleClip);
+            Logger.LogInfo("[Circle Swing] animation: " + (gs ? "great sword 2H spin (" + MxTwoHandSpin + ")" : mx ? "axe spin (" + MxCircleClip + ")" : "no Mixamo clip found -> old crow hop"));
             if (gs)
             {
                 float spin = MxTwoHandHit / MxTwoHandSpeed;
                 float coil = Mathf.Max(0.05f, windup - spin);
                 DragonCombat.ClipStop(player, 0.05f);
-                bool pitch = DragonMixamo.Has(MxPitchClip) &&
-                    DragonMixamo.PlayLayered(player, MxPitchClip, MxPitchFrom, MxPitchTo, Mathf.Clamp((MxPitchTo - MxPitchFrom) / coil, 0.3f, 4f), 0.2f, 0.3f, true, MxTwoHandSpin, 0f);
-                if (!pitch) DragonMixamo.Play(player, MxTwoHandSpin, 0f, 0.3f, Mathf.Clamp(0.05f / coil, 0.1f, 1f), 0.2f, 0.3f, true);   // creep through the 2H guard
+                // v0.25.124 (user: the baseball clips look like a kid with a bat): no baseball any more. The wind up
+                // holds the spin's own two-handed guard (creeping into the turn), then the 360 plays fast.
+                DragonMixamo.Play(player, MxTwoHandSpin, 0f, 0.3f, Mathf.Clamp(0.06f / coil, 0.05f, 1f), 0.2f, 0.3f, true);
                 yield return new WaitForSeconds(coil);
                 if (player == null || player.IsDead()) yield break;
                 DragonMixamo.Play(player, MxTwoHandSpin, 0f, MxTwoHandTo, MxTwoHandSpeed, 0.25f, 0.3f, true);
@@ -3349,10 +3350,7 @@ namespace AlbedosCustomClassesAdvanced
                 float spin = (MxSpinHit - MxCoilTo) / MxSpinSpeed;
                 float coil = Mathf.Max(0.05f, windup - spin);
                 DragonCombat.ClipStop(player, 0.05f);
-                if (DragonMixamo.Has(MxPitchClip))
-                    DragonMixamo.Play(player, MxPitchClip, MxPitchFrom, MxPitchTo, Mathf.Clamp((MxPitchTo - MxPitchFrom) / coil, 0.3f, 4f), 0.12f, 0.3f);
-                else
-                    DragonMixamo.Play(player, MxCircleClip, 0f, MxCoilTo, Mathf.Clamp(MxCoilTo / coil, 0.1f, 6f), 0.12f, 0.3f);
+                DragonMixamo.Play(player, MxCircleClip, 0f, MxCoilTo, Mathf.Clamp(MxCoilTo / coil, 0.1f, 6f), 0.12f, 0.3f);
                 yield return new WaitForSeconds(coil);
                 if (player == null || player.IsDead()) yield break;
                 DragonMixamo.Play(player, MxCircleClip, MxCoilTo, MxSpinTo, MxSpinSpeed, 0.15f, 0.25f);
@@ -3377,8 +3375,10 @@ namespace AlbedosCustomClassesAdvanced
             // hit frame lands on the second hit.
             // v0.25.122 (user's Baseball Strike): the Ascended second hit = a batter's swing back the other way
             // (mirrored = clockwise), cross-faded out of the spin's end, its contact (1.3 s) on the second hit.
-            if (DragonMixamo.Has(MxBatClip))
-                DragonMixamo.Play(player, MxBatClip, MxBatFrom, MxBatTo, Mathf.Clamp((MxBatHit - MxBatFrom) / gap, 0.3f, 4f), 0.22f, 0.35f, true);
+            // v0.25.124: Ascended second hit = the same two-handed great sword spin un-mirrored (clockwise, back the
+            // other way), sped so its blade passes on the second hit.
+            if (DragonMixamo.Has(MxTwoHandSpinBack))
+                DragonMixamo.Play(player, MxTwoHandSpinBack, 0f, MxTwoHandTo, Mathf.Clamp(MxTwoHandHit / gap, 0.5f, 4f), 0.18f, 0.35f, true);
             else if (DragonMixamo.Has(MxCounterClip))
             {
                 DragonMixamo.Play(player, MxCounterClip, MxSpinFrom, MxSpinTo, (MxSpinHit - MxSpinFrom) / gap, 0.06f, 0.25f);
@@ -3398,8 +3398,8 @@ namespace AlbedosCustomClassesAdvanced
         private const float MxPitchFrom = 0.35f, MxPitchTo = 1.65f, MxBatFrom = 0.9f, MxBatHit = 1.3f, MxBatTo = 1.6f;
         // v0.25.123 Great Sword Pack 'great sword slash (4)' (30 fps, two hands on the hilt): full turn 0 -> 0.8 s
         // (-391 deg, mirrored = counter-clockwise), blade fastest 0.7 s, settles back after 0.9 s (cut there).
-        private const string MxTwoHandSpin = "great_sword_slash_4_mirror";
-        private const float MxTwoHandHit = 0.7f, MxTwoHandTo = 0.85f, MxTwoHandSpeed = 1.4f;
+        private const string MxTwoHandSpin = "great_sword_slash_4_mirror", MxTwoHandSpinBack = "great_sword_slash_4";
+        private const float MxTwoHandHit = 0.7f, MxTwoHandTo = 0.85f, MxTwoHandSpeed = 1.6f;
 
         // Crow hop: 1.5 m forward during the hop part of the wind up (24% - 58% of it, matching the clip);
         // walls stop it, height stays physics-driven.

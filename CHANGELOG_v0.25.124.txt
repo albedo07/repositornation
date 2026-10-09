@@ -1,0 +1,5 @@
+Aethelborn Ascended v0.25.124 - No Baseball
+- Baseball Pitching / Strike removed from Circle Swing (looked like a kid with a bat).
+- Wind up = the great sword two-handed guard, then a FAST two-handed 360 (1.6x).
+- Ascended 2nd hit = the same great sword spin back the other way (clockwise).
+- BepInEx log now says which Circle Swing animation ran: "[Circle Swing] animation: ...".
