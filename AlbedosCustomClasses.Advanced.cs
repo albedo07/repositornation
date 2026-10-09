@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Dragon's Altar - Advancements";
-        public const string ModVersion = "0.25.110";
+        public const string ModVersion = "0.25.111";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -3321,7 +3321,21 @@ namespace AlbedosCustomClassesAdvanced
             DragonCombat.LockSkill(player, windup + 0.05f);
             DragonCombat.GrantHyperArmor(player, windup + 0.25f);
             StartCoroutine(CircleHop(player, windup));
-            yield return new WaitForSeconds(windup);
+            // v0.25.111 MIXAMO TEST: 'melee_attack_360_high_mirror' (counter-clockwise) takes over from the crow hop
+            // so its hit frame (1.067 s) lands on the damage. Played 0.2 s -> 1.2 s of the clip: the full turn only,
+            // the clip's own overshoot and turn-back after 1.2 s are cut. No bundle = the old animation.
+            float mxLead = (MxSpinHit - MxSpinFrom) / MxSpinSpeed;
+            bool mx = windup > mxLead && DragonMixamo.Has(MxCircleClip);
+            if (mx)
+            {
+                yield return new WaitForSeconds(windup - mxLead);
+                if (player == null || player.IsDead()) yield break;
+                DragonCombat.ClipStop(player, 0.05f);
+                DragonMixamo.Play(player, MxCircleClip, MxSpinFrom, MxSpinTo, MxSpinSpeed, 0.08f, 0.25f);
+                DragonCombat.PlayClip(player, "mx_grip", 0.05f);
+                yield return new WaitForSeconds(mxLead);
+            }
+            else yield return new WaitForSeconds(windup);
             if (player == null || player.IsDead()) yield break;
             bool ascended = IsAscendedSkill("circle_swing");
             float radius = Mathf.Max(0.5f, ascended ? DragonCombat.M(_circleAscRadius.Value) : DragonCombat.M(_circleRadius.Value));
@@ -3331,17 +3345,23 @@ namespace AlbedosCustomClassesAdvanced
             if (!ascended) yield break;
             DragonCombat.GrantHyperArmor(player, _circleAscGap.Value + 0.3f);
             DragonCombat.LockSkill(player, _circleAscGap.Value + 0.1f);
-            // v0.25.105 (user): the counter-clockwise spin finishes first (0.28 s), then the clockwise COUNTER spin
-            // winds up over the rest of the gap; the second hit lands on its spin start (same total gap as before).
-            float gapAll = Mathf.Max(0.05f, _circleAscGap.Value);
-            float ccw = Mathf.Min(0.28f, gapAll * 0.6f);
-            yield return new WaitForSeconds(ccw);
-            if (player == null || player.IsDead()) yield break;
-            DragonCombat.PlayClip(player, "merc_homerun_cw", Mathf.Max(0.05f, gapAll - ccw));
-            yield return new WaitForSeconds(Mathf.Max(0.05f, gapAll - ccw));
+            float gap = Mathf.Max(0.05f, _circleAscGap.Value);
+            // v0.25.111 MIXAMO TEST: the Ascended counter spin = the same clip un-mirrored (clockwise), sped up so its
+            // hit frame lands on the second hit.
+            if (DragonMixamo.Has(MxCounterClip))
+            {
+                DragonMixamo.Play(player, MxCounterClip, MxSpinFrom, MxSpinTo, (MxSpinHit - MxSpinFrom) / gap, 0.06f, 0.25f);
+                DragonCombat.PlayClip(player, "mx_grip", 0.05f);
+            }
+            else DragonCombat.PlayClip(player, "merc_circle_2", gap);
+            yield return new WaitForSeconds(gap);
             if (player == null || player.IsDead()) yield break;
             CircleSwingHit(player, weapon, radius, baseMult * _circleAscSecond.Value / 100f, true);
         }
+
+        // v0.25.111 Mixamo 'standing melee attack 360 high' (Pro Melee Axe Pack, 30 fps): turn runs f8-f36, hit f32.
+        private const string MxCircleClip = "melee_attack_360_high_mirror", MxCounterClip = "melee_attack_360_high";
+        private const float MxSpinFrom = 0.2f, MxSpinTo = 1.2f, MxSpinHit = 1.067f, MxSpinSpeed = 1.5f;
 
         // Crow hop: 1.5 m forward during the hop part of the wind up (24% - 58% of it, matching the clip);
         // walls stop it, height stays physics-driven.
@@ -3394,9 +3414,6 @@ namespace AlbedosCustomClassesAdvanced
                 {
                     DragonVfx.DustRing(cc, cr);
                     DragonVfx.SlashStreaks(cc + Vector3.up * 1f, DragonVfx.Fire, cr * 0.8f, 8, 0.35f);
-                    // v0.25.105 the violent spin itself: a full 360 blade arc at waist/chest height (counter spin mirrored)
-                    DragonVfx.SlashArc(cc + Vector3.up * 1.05f, Vector3.forward, cr * 0.9f, 360f, new Color(1f, 0.55f, 0.20f, 1f), Mathf.Max(0.5f, cr * 0.18f), 0.3f, cl ? 180f : 0f);
-                    DragonVfx.Embers(cc + Vector3.up * 0.9f, DragonVfx.Fire, cr * 0.6f, 0.6f, 40f);
                     DragonVfx.Shake(cc, 20f + cr, cl ? 1.2f : 0.6f);
                     if (cl) DragonVfx.Debris(cc, new Color(0.42f, 0.36f, 0.30f, 1f), 10, 7f, 0.25f, 2f);
                 });   // v0.25.58
@@ -4306,9 +4323,8 @@ namespace AlbedosCustomClassesAdvanced
                 return;
 
             float windup = Mathf.Max(0.1f, _circleWindup.Value);
-            // v0.25.105 (user): the pre-rework Circle Swing mechanics, animated with the Home Run Cleave clip
-            // (crow hop + bat load + violent counter-clockwise spin).
-            DragonCombat.PlayClip(player, "merc_homerun", windup);
+            // v0.22.4: normal walking speed during the wind up (no Sprint), Hyper Armor.
+            DragonCombat.PlayClip(player, "merc_circle", windup);
             StartCoroutine(CircleSwingRoutineV(player, windup));
         }
 

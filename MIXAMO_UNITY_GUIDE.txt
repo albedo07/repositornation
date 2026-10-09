@@ -1,0 +1,36 @@
+IMMORTAL HEROES - MIXAMO ANIMATIONS INTO VALHEIM (one time setup, ~20 min)
+=========================================================================
+What you get: real Mixamo animations on your character. This build tests ONE skill:
+CIRCLE SWING = "standing melee attack 360 high" (mirrored = counter-clockwise),
+ASCENDED follow-up = the same clip clockwise (counter spin). Both hands on the weapon.
+Without the bundle the game simply uses the old animations.
+
+1) INSTALL UNITY (free)
+   - Install Unity Hub: https://unity.com/download
+   - In Unity Hub > Installs > Install Editor > Archive / "2022.3" LTS. Valheim uses Unity 2022.3,
+     so pick a 2022.3.x version (if you can, the same one: right click valheim.exe > Properties >
+     Details > File version).
+   - Module to tick: "Windows Build Support (Mono)" (usually already included).
+
+2) MAKE A PROJECT
+   - Unity Hub > Projects > New project > "3D (Built-In Render Pipeline)" (NOT URP/HDRP).
+     Name it IH_Animations. Create.
+
+3) ADD THE FILES (drag & drop into the Project window at the bottom)
+   - Create folder Assets/Editor  -> put IHAnimBuilder.cs in it (from tools/unity in this ZIP).
+   - Create folder Assets/IHAnims -> put your Mixamo .fbx files in it (the whole Pro Melee Axe Pack
+     is fine; X Bot.fbx can stay out).
+
+4) BUILD
+   - Top menu: Immortal Heroes > Build Animation Bundle. Wait until the "animations built" message.
+   - A folder opens with the file  immortalheroes_anims  (no extension).
+
+5) COPY INTO THE GAME
+   - Copy immortalheroes_anims into  BepInEx/plugins/ImmortalHeroesAssets/
+   - Start Valheim. LogOutput.log shows "Mixamo clips loaded (N): ..." - send me that line if anything
+     looks wrong.
+
+6) TEST
+   - Mercenary > Circle Swing (and Ascended). Tell me what you see.
+   - Every clip is also built mirrored (name + "_mirror"), so later we can use any of the 47 for
+     any skill without rebuilding.

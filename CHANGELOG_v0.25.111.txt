@@ -1,0 +1,13 @@
+Immortal Heroes v0.25.111 - Mixamo Test
+Base: ANCHOR v0.25.100 Outstretched (v0.25.101-0.25.110 incl. the F9 Animation Studio are NOT in this build).
+
+- NEW: real Mixamo animations. Loader for the Unity Asset Bundle 'immortalheroes_anims' in
+  ImmortalHeroesAssets (see MIXAMO_UNITY_GUIDE.txt + tools/unity/IHAnimBuilder.cs, one click in Unity).
+  Clips play on your own character over Valheim's animator (fade in/out), between chosen clip times at a
+  chosen speed so the clip's hit frame lands on the skill's damage. Root motion is baked into the pose,
+  so the skill code keeps owning movement.
+- TEST SKILL - Circle Swing (Mercenary): crow hop as before, then 'melee attack 360 high' MIRRORED
+  (counter-clockwise spin) with its hit frame on the damage; cut right after the full turn (the clip's own
+  overshoot / turn-back is never played). Both hands on the weapon (left hand placed on the handle).
+  Ascended follow-up = the same clip clockwise = counter spin, sped up to the 2nd hit.
+- No bundle installed = exactly the anchor's animations.
