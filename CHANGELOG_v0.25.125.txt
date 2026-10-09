@@ -1,0 +1,7 @@
+Aethelborn Ascended v0.25.125 - Animations Found
+ROOT CAUSE: the Mixamo bundle never loaded in game, so every Circle Swing was the old procedural fallback (bat-load crow hop).
+- Loader searches plugins/ImmortalHeroesAssets, next to the DLL and all of BepInEx/plugins; retries every 10 s; reads clips two ways.
+- On screen (top left) the first time: "Aethelborn animations loaded: N clips" or exactly why not (path / Unity version / empty bundle).
+- INSTALL copies aethelborn_anims from the zip folder or straight from your Unity AABuild folder.
+- Unity builder copies the bundle into Valheim itself (Steam folder or "Set Valheim Folder") and reports broken humanoid imports.
+- Circle Swing = "great sword high spin attack": step-in with knee lift, two-handed overhead load, FAST full 360; hit on the sweep; step-in travel is real movement. Ascended = mirrored spin back.

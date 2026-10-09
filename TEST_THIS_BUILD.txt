@@ -1,3 +1,3 @@
-Aethelborn Ascended - TEST THIS BUILD (v0.25.124)
-1. Cast Circle Swing once, then open BepInEx/LogOutput.log and send the lines "Mixamo clips loaded (...)" and "[Circle Swing] animation: ...".
-2. Two-handed guard -> fast 360; Ascended spins back the other way.
+TEST (v0.25.125)
+1. Rebuild bundle in Unity (new AAAnimBuilder.cs) or run INSTALL (finds AABuild).
+2. Cast Circle Swing: top-left message must say "loaded: N clips". If not, send that message.
