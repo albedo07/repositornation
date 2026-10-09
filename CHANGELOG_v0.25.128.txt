@@ -1,0 +1,5 @@
+v0.25.128 - HopSkip Eruption
+- Circle Swing = ONE movement: Perfect HopSkip (Mixamo jump attack leap + airborne turn, 2 m forward) -> vanilla Battleaxe attack 1.
+  The battleaxe swing starts under the HopSkip before the landing; the HopSkip fades out (0.22 s) into it; hit frame on the damage.
+- Ascended: Battleaxe attack 2 right after (SwingInterval 0.5 s) = Circle Swing Eruption: Seismic-style explosion in front,
+  radius 7 m (EruptionRadius_v025128), 100% of a swing (EruptionPercent_v025128), launches Small, staggers Big.

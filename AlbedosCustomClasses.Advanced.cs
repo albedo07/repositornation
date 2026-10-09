@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.127";
+        public const string ModVersion = "0.25.128";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -223,6 +223,7 @@ namespace AlbedosCustomClassesAdvanced
         private ConfigEntry<float> _circleCooldown;
         private ConfigEntry<float> _circleStamina;
         private ConfigEntry<float> _circleWindup;
+        private ConfigEntry<float> _circleEruptRadius, _circleEruptPercent;
         private ConfigEntry<float> _circleRadius;
         private ConfigEntry<float> _circleDamageMultiplier;
         private ConfigEntry<float> _circleWindupTravel;
@@ -3148,6 +3149,8 @@ namespace AlbedosCustomClassesAdvanced
             _circleAscFirst = Config.Bind(ca, "FirstSwingPercent", 90f, "First swing (% of a normal swing).");
             _circleAscSecond = Config.Bind(ca, "SecondSwingPercent", 60f, "Second swing (% of a normal swing); launches Small high, Big lower.");
             _circleAscGap = Config.Bind(ca, "SwingInterval", 0.5f, "Seconds between the two swings.");
+            _circleEruptRadius = Config.Bind(ca, "EruptionRadius_v025128", 7f, "Ascended 2nd attack: eruption radius in front (m).");
+            _circleEruptPercent = Config.Bind(ca, "EruptionPercent_v025128", 100f, "Ascended 2nd attack: eruption damage (% of a normal swing).");
 
             _boneDamageV = BindDamage("Mercenary Bonecrusher Damage v0224", 150f, 0f, 0f, 0f, 0f, 0f, 0f, 0f);
             const string ba = "Mercenary Bonecrusher Ascended";
@@ -3333,26 +3336,25 @@ namespace AlbedosCustomClassesAdvanced
             // wind up: a short guard settle, the stepping/knee-lift approach and the overhead two-handed load stretched
             // over the wind up, then the full 360 sweep played FAST so its hardest sweep lands on the damage. Its forward
             // step-in is real movement (walls stop it), the hips never drift off the body.
-            // v0.25.127 (user: leap 2 m forward like a skip, then REALLY swing, faster): 'great sword jump attack'
-            // only for its leap + first airborne turn (0 -> 1.0 s, lands facing front again, 2 m real forward travel),
-            // cross-faded into 'great sword slash (4)' mirrored (same turn direction, full-body two-handed swing,
-            // hit 0.7 s) on the damage. Ascended 2nd hit = the unmirrored slash (counter swing). No root transfer.
-            if (DragonMixamo.Has(MxJump) && DragonMixamo.Has(MxTwoHandSpin))
+            // v0.25.128 (user: ONE movement = HopSkip + Battleaxe attack 1 (+ attack 2 -> Ascended eruption)):
+            // the Mixamo 'great sword jump attack' leap + airborne turn (the Perfect HopSkip, 2 m forward) lands with
+            // the weapon high; the vanilla battleaxe swing is triggered UNDER it before the landing so its anticipation
+            // is already running while the HopSkip fades out (0.22 s) into it - its hit frame lands on the damage.
+            if (DragonMixamo.Has(MxJump))
             {
                 DragonCombat.ClipStop(player, 0.05f);
-                float w = Mathf.Max(0.5f, windup);
-                float jr = w * 0.6f, sr = w - jr, fade = Mathf.Min(0.14f, sr * 0.4f);
-                DragonMixamo.PlayWarp(player, MxJump, new float[] { 0f, jr, jr + 0.2f }, new float[] { 0f, MxJumpLand, MxJumpLand + 0.1f }, 0.08f, 0.2f, false);
-                StartCoroutine(CircleLeap(player, jr * 0.08f, jr * 0.92f, MxJumpTravel));
-                Logger.LogInfo("[Circle Swing] animation: " + MxJump + " -> " + MxTwoHandSpin + " windup " + windup.ToString("0.00"));
-                yield return new WaitForSeconds(Mathf.Max(0f, jr - fade));
+                float w = Mathf.Max(0.8f, windup);
+                float swing = Mathf.Min(0.55f, w * 0.45f);          // vanilla battleaxe wind up -> hit at w
+                float hopEnd = w - swing + 0.1f;                    // HopSkip lands, then fades into the swing
+                DragonMixamo.PlayWarp(player, MxJump, new float[] { 0f, hopEnd }, new float[] { MxJumpFrom, MxJumpLand }, 0.08f, 0.22f, false);
+                StartCoroutine(CircleLeap(player, hopEnd * 0.1f, hopEnd * 0.9f, MxJumpTravel));
+                Logger.LogInfo("[Circle Swing] animation: HopSkip (" + MxJump + ") -> battleaxe attack 1, windup " + windup.ToString("0.00"));
+                yield return new WaitForSeconds(w - swing);
                 if (player == null || player.IsDead()) yield break;
-                float follow = (MxTwoHandTo - MxTwoHandHit) / 1.5f;
-                DragonMixamo.PlayWarp(player, MxTwoHandSpin, new float[] { 0f, sr + fade, sr + fade + follow },
-                    new float[] { 0f, MxTwoHandHit, MxTwoHandTo }, fade, 0.3f, false);
-                yield return new WaitForSeconds(sr + fade);
+                DragonCombat.PlayClip(player, "merc_cs1", swing);
+                yield return new WaitForSeconds(swing);
                 if (player == null || player.IsDead()) yield break;
-                StartCoroutine(CircleSwingAfterSpin(player, 2));
+                StartCoroutine(CircleSwingAfterSpin(player, 3));
                 yield break;
             }
             bool hs = DragonMixamo.Has(MxSpinA);
@@ -3443,7 +3445,35 @@ namespace AlbedosCustomClassesAdvanced
         // first turn 0 -> 1.0 s (airborne 0.6-0.9 s), second turn 1.0 -> 2.0 s.
         private const string MxJump = "great_sword_jump_attack";
         // v0.25.127: leap + first turn only; lands at ~0.95 s, facing front again at 1.0 s (hips 1.95 m forward).
-        private const float MxJumpLand = 1.0f, MxJumpTravel = 2f;
+        private const float MxJumpLand = 0.95f, MxJumpTravel = 2f, MxJumpFrom = 0.05f;
+
+        // v0.25.128 Ascended Circle Swing 2nd attack: Seismic-style eruption in front (radius 7 m).
+        private void CircleEruption(Player player, DamageSnapshot weapon, float multiplier)
+        {
+            Vector3 fwd = player.transform.forward; fwd.y = 0f;
+            if (fwd.sqrMagnitude < 0.001f) fwd = Vector3.forward;
+            fwd.Normalize();
+            float r = Mathf.Max(1f, DragonCombat.M(_circleEruptRadius.Value));
+            int groundMask = LayerMask.GetMask("Default", "static_solid", "Default_small", "piece_nonsolid", "terrain", "vehicle", "piece", "viewblock");
+            Vector3 p = GetSeismicGroundPoint(player.transform.position + fwd * r * 0.5f, groundMask);
+            List<Character> targets = GetSphereTargets(player, p, r);
+            for (int i = 0; i < targets.Count; i++)
+            {
+                DealSnapshotDamage(player, targets[i], weapon, multiplier, 44f, false);
+                GainMercenaryFuryFromSkillHit(player);
+                if (DragonCombat.IsSmallEnemy(targets[i]))
+                    ApplyMercenaryDisplacement(targets[i], fwd * 2.2f + Vector3.up * 7f);
+                else if (!targets[i].IsBoss())
+                    targets[i].Stagger(fwd);
+            }
+            if (_enableVfx.Value)
+            {
+                StartCoroutine(AnimateRing(p + Vector3.up * 0.08f, 0.5f, r, 0.46f, new Color(1f, 0.52f, 0.18f, 0.95f), 0.16f));
+                Vector3 rp = p; float rr = r;
+                DragonCombat.RunVfx(delegate { DragonVfx.FireBlast(rp, rr); });
+                DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(rp, DragonVfx.Fire, rr, 1.8f); DragonVfx.Pillar(rp, DragonVfx.Fire, rr * 0.3f, 6f, 0.4f); DragonVfx.SpikeRing(rp, DragonVfx.Rock, rr * 0.7f, 9, 2.4f, 0.9f); });
+            }
+        }
         private const float MxSpinAHold = 0.02f, MxSpinALoadEnd = 0.88f, MxSpinAHit = 1.03f, MxSpinAEnd = 1.10f, MxSpinASpeed = 1.2f, MxSpinALoad = 0.55f;
 
         private static void CircleSwingWarp(float windup, out float[] wr, out float[] wc)
@@ -3471,6 +3501,15 @@ namespace AlbedosCustomClassesAdvanced
             float gap = Mathf.Max(0.15f, _circleAscGap.Value);
             float spin = (MxSpinAHit - MxSpinALoadEnd) / MxSpinASpeed;
             float follow = (MxSpinAEnd - MxSpinAHit) / MxSpinASpeed;
+            if (second == 3)
+            {
+                // v0.25.128 Ascended: battleaxe attack 2 straight out of attack 1, its hit = the Circle Swing Eruption.
+                DragonCombat.PlayClip(player, "merc_cs2", gap);
+                yield return new WaitForSeconds(gap);
+                if (player == null || player.IsDead()) yield break;
+                CircleEruption(player, weapon, baseMult * Mathf.Max(0f, _circleEruptPercent.Value) / 100f);
+                yield break;
+            }
             if (second == 2)
                 DragonMixamo.PlayWarp(player, MxTwoHandSpinBack, new float[] { 0f, gap, gap + (MxTwoHandTo - MxTwoHandHit) / 1.5f },
                     new float[] { 0f, MxTwoHandHit, MxTwoHandTo }, 0.12f, 0.3f, false);

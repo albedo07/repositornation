@@ -1,4 +1,4 @@
-TEST (v0.25.127)
-1. Circle Swing (normal + Ascended), 2H weapon: leap ~2 m forward, land, big two-handed swing on the hit.
-2. F5 log: "[Circle Swing] animation: great_sword_jump_attack -> great_sword_slash_4_mirror".
-3. Report: seam at the landing? speed? shaking?
+TEST (v0.25.128)
+1. Circle Swing: HopSkip lands straight into the battleaxe swing (one motion, no pause/snap?).
+2. Ascended: 0.5 s later battleaxe attack 2 + 7 m eruption in front.
+3. F5 log: "[Circle Swing] animation: HopSkip ... -> battleaxe attack 1".

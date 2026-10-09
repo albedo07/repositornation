@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.127";
+        public const string ModVersion = "0.25.128";
 
         internal static DragonCombatPlugin Instance;
 
@@ -3967,7 +3967,13 @@ namespace DragonsAltarCombat
         {
             ParseVanMap();
             KeyValuePair<string, float> m;
-            if (!VanMap.TryGetValue(clip, out m)) return null;
+            if (!VanMap.TryGetValue(clip, out m))
+            {
+                // v0.25.128 Circle Swing = Battleaxe attack 1 / attack 2 (built in, independent of the config map)
+                if (clip == "merc_cs1") m = new KeyValuePair<string, float>("battleaxe_attack0", 0.45f);
+                else if (clip == "merc_cs2") m = new KeyValuePair<string, float>("battleaxe_attack1", 0.45f);
+                else return null;
+            }
             string trig = ResolveTrigger(player.GetComponentInChildren<Animator>(), m.Key);
             if (trig == null) return null;
             if (IsRaiseBuffClip(clip))
