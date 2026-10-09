@@ -1,14 +1,4 @@
-Immortal Heroes v0.25.89 — TEST ORDER (compare against v0.25.88)
-
-1) Bonecrusher ASCENDED: perform ONE jump and ONE touchdown, then confirm the delayed shock hits WITHOUT restarting the animation/pose. Record from side for 1 full second after impact.
-2) Electric Smite normal/Ascended: face aim direction at takeoff; one slam, only lightning storm/trails after landing. Do NOT change the established aerial/kneeling animation.
-3) Moonlight Splitter NORMAL: 3 natural longsword actions (first/second/first) and precisely one Ghost wave at each visible hit. No sudden animation-speed changes. Inspect with weapon and empty off-hand.
-4) Moonlight Splitter ASCENDED: 4 equally paced normal slashes, fifth Heavy Slash releases 1.5x width slow Ghost wave. 0.3s later a regular-width, much faster Ghost wave passes it. Small/Big enemies hit by fast wave stagger/stun, bosses do not. Close-range targets may be reached by the heavy wave before the delayed afterimage; verify this case rather than assuming stun precedes every heavy hit.
-5) Crescent Cleave NORMAL: one overhead smash; waves launch with the strike, no rushed snap.
-6) Crescent Cleave ASCENDED: same overhead primary, then one natural backswing for second fan, projectile effects unchanged.
-7) Halfmoon NORMAL: one natural heavy; the secondary 50% wave afterimage does not play another arm swing.
-8) Halfmoon ASCENDED: two natural heavies with consistent timing; restrained stance stays clean during the click window; final big Free Aim wave plays one heavy action, no spin/snapping/clipping.
-9) Aim-facing: cast JSAA, Moonlight, Crescent, Halfmoon with crosshair 45-90 degrees away from character facing. Check character turns toward aim; no pitch or camera jerk.
-10) Regression: Acrobat anchor (v0.25.85), combat/VFX, all other skills, default HUD, save IDs, installer.
-
-No in-game compile or playtest was possible in this environment. Share failed step + screenshot/video if any issue remains.
+1. Build + copy immortalheroes_anims (MIXAMO_UNITY_GUIDE.txt).
+2. Log must show: "Mixamo clips loaded (N)".
+3. Mercenary: Circle Swing (normal + Ascended). Check spin, hit timing, left hand on the handle.
+4. Stomp still on the left leg (anchor check).

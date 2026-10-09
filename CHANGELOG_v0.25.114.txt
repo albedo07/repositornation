@@ -1,0 +1,5 @@
+Immortal Heroes v0.25.114 - Mixamo on Northpaw
+Base: v0.25.101 Northpaw Stomp (new anchor, left-leg Stomp kept).
+- Re-added the Mixamo test: bundle loader (ImmortalHeroesAssets/immortalheroes_anims), Playables player, mx_grip.
+- Mercenary Circle Swing = Mixamo "360 high" (mirrored); Ascended counter spin = unmirrored.
+- WITHOUT the bundle nothing changes (old animations play). Build it with MIXAMO_UNITY_GUIDE.txt.

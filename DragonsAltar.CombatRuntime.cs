@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.113";
+        public const string ModVersion = "0.25.114";
 
         internal static DragonCombatPlugin Instance;
 
@@ -2393,6 +2393,7 @@ namespace DragonsAltarCombat
         private float _spin;
         private Vector3 _wd, _sd;
         private float _ww, _sw, _tw, _tg, _env, _hr, _hw, _lr, _lw, _flh, _frh;
+        private bool _highKnee;
         private Vector3 _hd, _ld, _ep;
         private float _ew;
         private bool _em;
@@ -2450,6 +2451,7 @@ namespace DragonsAltarCombat
         {
             ReleaseBow(false);
             _jsaaLanding = clipName == "olympic_hero" || clipName == "olympic_hero_brutal";
+            _highKnee = clipName == "merc_stomp";   // v0.25.101 vertical-shin knee raise (Stomp only)
             _jsaaApproach = 0f;
             _bowTrig = keys[0].BowTrig;
             _bowBool = keys[0].BowBool;
@@ -3029,7 +3031,26 @@ namespace DragonsAltarCombat
                     Vector3 step = new Vector3((f == 0 ? -1f : 1f) * spread * 0.5f, 0f, lift * 0.45f);
                     Vector3 local = basePos + baseRot * (qy * (Vector3.Scale(_visual.localScale, _footLocal[f]) + step));
                     Vector3 target = parent != null ? parent.TransformPoint(local) : local;
-                    target += Vector3.up * Mathf.Max(0f, f == 0 ? _flh : _frh);
+                    float liftH = Mathf.Max(0f, f == 0 ? _flh : _frh);
+                    // v0.25.101 (user): a raised knee = high-knee pose with the SHIN VERTICAL under the knee (no quad
+                    // stretch). Lift 0..0.6 maps to thigh flexion 0..90 deg (clamped to 95 = realistic hip limit, knee
+                    // flexion = the same angle), the foot sits straight below the knee, never under the ground, and
+                    // keeps the vanilla foot's side offset so the thigh never crosses into the torso.
+                    if (liftH > 0.01f && _highKnee && !_jsaaLanding)
+                    {
+                        Vector3 hip = a.position;
+                        float thigh = (b.position - a.position).magnitude, shin = (c.position - b.position).magnitude;
+                        Vector3 fwd = pole; fwd.y = 0f; fwd = fwd.sqrMagnitude > 0.0001f ? fwd.normalized : Vector3.forward;
+                        Vector3 sideOff = target - hip; sideOff -= fwd * Vector3.Dot(sideOff, fwd); sideOff.y = 0f;
+                        float sideMax = thigh * 0.35f;
+                        if (sideOff.magnitude > sideMax) sideOff = sideOff.normalized * sideMax;
+                        float flex = Mathf.Clamp(Mathf.Clamp01(liftH / 0.6f) * 90f, 0f, 95f) * Mathf.Deg2Rad;
+                        Vector3 knee = hip + sideOff + (Vector3.down * Mathf.Cos(flex) + fwd * Mathf.Sin(flex)) * thigh;
+                        Vector3 foot = knee + Vector3.down * shin;
+                        foot.y = Mathf.Max(foot.y, target.y);
+                        target = foot;
+                    }
+                    else target += Vector3.up * liftH;
                     Quaternion footRot = parentRot * baseRot * qy * _footLocalRot[f];
                     // With the right foot trailing behind, the right knee has to
                     // fold DOWN toward the floor, not forward like a standing squat.
@@ -4296,11 +4317,11 @@ namespace DragonsAltarCombat
                 // absorb it. Hands quiet.
                 // v0.25.63 (user): exaggerated - the knee comes up past the hip, both arms flare out and up like the
                 // roar emote, then the foot is driven down with the chest thrown forward and the arms flung wide.
-                DragonClipKey raise = K(-0.55f).Sp(-8f, 0f, 0f).Ch(-6f, 0f, 0f).Hd(-6f, 0f, 0f).LL(0f, 0.06f, 0f, 0f).RL(0.35f, 0.1f, 0f, 0f).Lift(0f, 0.62f).Off(0f, 0.04f, 0f)
+                DragonClipKey raise = K(-0.55f).Sp(-8f, 0f, 0f).Ch(-6f, 0f, 0f).Hd(-6f, 0f, 0f).LL(0.35f, 0.1f, 0f, 0f).RL(0f, 0.06f, 0f, 0f).Lift(0.62f, 0f).Off(0f, 0.04f, 0f)
                     .Hand(0.62f, -0.32f, 0.66f, 0.64f).LHand(-0.62f, -0.32f, 0.66f, 0.64f).Wing();   // v0.25.85 chicken wing: upper arms raised out, forearms forward
                 // v0.25.69 (user: flare = chicken wings, not arms stretched out): elbows bent and pushed out, hands at the hips.
-                DragonClipKey peak = raise.Copy(-0.15f).Lift(0f, 0.7f).Hand(0.65f, -0.3f, 0.68f, 0.66f).LHand(-0.65f, -0.3f, 0.68f, 0.66f).Wing();
-                DragonClipKey hit = K(0f).Sp(20f, 0f, 0f).Ch(10f, 0f, 0f).Hd(-12f, 0f, 0f).LL(-0.05f, 0.12f, 0f, 0f).RL(0.35f, 0.14f, 0f, 0f).Lift(0f, 0f).Off(0f, -0.16f, 0f)
+                DragonClipKey peak = raise.Copy(-0.15f).Lift(0.6f, 0f).Hand(0.65f, -0.3f, 0.68f, 0.66f).LHand(-0.65f, -0.3f, 0.68f, 0.66f).Wing();
+                DragonClipKey hit = K(0f).Sp(20f, 0f, 0f).Ch(10f, 0f, 0f).Hd(-12f, 0f, 0f).LL(0.35f, 0.14f, 0f, 0f).RL(-0.05f, 0.12f, 0f, 0f).Lift(0f, 0f).Off(0f, -0.16f, 0f)
                     .Hand(0.6f, -0.45f, 0.62f, 0.68f).LHand(-0.6f, -0.45f, 0.62f, 0.68f).Wing().Linear();
                 DragonClipKey stAfter = hit.Copy(0.3f); stAfter.Lin = false;
                 return new DragonClipKey[] { K(-1f), raise, peak, hit, stAfter, K(0.65f) };
