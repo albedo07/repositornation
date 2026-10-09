@@ -1,0 +1,7 @@
+v0.25.129 - Chain Combos
+- CHAIN RULE: a skill's combat animations play like a normal-attack chain combo - ONE playback speed for every link
+  (natural length of the whole chain / the time it has), each link starts in the previous one's follow-through.
+- Circle Swing = 2-hit chain: HopSkip (2 m leap) -> Battleaxe attack 1 (hit = Circle Swing damage at the wind up end).
+- Ascended = 3-hit chain: + Battleaxe attack 2 -> Eruption (interval follows the same chain speed, ~0.6 s at default).
+- Jump slams (Bonecrusher, Electric Smite) = Axe Pack 'melee run jump attack': spring, airborne with the weapon raised,
+  overhead slam starting ~0.2 s before ground contact, recovery. Real jump height only (clip rise cut off the hips).

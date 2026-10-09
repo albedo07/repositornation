@@ -1,4 +1,4 @@
-TEST (v0.25.128)
-1. Circle Swing: HopSkip lands straight into the battleaxe swing (one motion, no pause/snap?).
-2. Ascended: 0.5 s later battleaxe attack 2 + 7 m eruption in front.
-3. F5 log: "[Circle Swing] animation: HopSkip ... -> battleaxe attack 1".
+TEST (v0.25.129)
+1. Circle Swing normal + Ascended: one flowing chain (HopSkip -> axe 1 -> axe 2 + eruption). F5: "[Circle Swing] chain: ...".
+2. Bonecrusher + Electric Smite: run-jump slam, weapon overhead in the air, slam on landing. F5: "[Jump Slam] animation".
+3. Report: seams, speed, floating/sinking body during the jump.

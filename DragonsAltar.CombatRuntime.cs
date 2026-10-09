@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.128";
+        public const string ModVersion = "0.25.129";
 
         internal static DragonCombatPlugin Instance;
 
@@ -9401,6 +9401,18 @@ namespace DragonsAltarCombat
             return true;
         }
 
+        // v0.25.129: jump slams - the real (physics) jump owns the height, so a clip's own rise is clipped off the hips
+        // (crouches stay). Set before PlayWarp; cleared when that motion has faded out.
+        public static void SetNoRise(Player player, bool on)
+        {
+            if (player == null) return;
+            Animator an = player.GetComponentInChildren<Animator>();
+            if (an == null) return;
+            DragonMixamoPlayer p = an.GetComponent<DragonMixamoPlayer>();
+            if (p == null) p = an.gameObject.AddComponent<DragonMixamoPlayer>();
+            p.NoRise = on;
+        }
+
         public static void Stop(Player player, float fadeOut)
         {
             if (player == null) return;
@@ -9430,6 +9442,8 @@ namespace DragonsAltarCombat
         private Vector3 _rest, _bodyStart, _want;
 
         public bool Live { get { return _live; } }
+        public bool NoRise;
+        private float _restY;
 
         public void Begin(Player player, Animator an, AnimationClip clip, float[] realTimes, float[] clipTimes, float fadeIn, float fadeOut, bool transfer)
         {
@@ -9445,7 +9459,7 @@ namespace DragonsAltarCombat
                 _output = UnityEngine.Animations.AnimationPlayableOutput.Create(_graph, "Aethelborn Mixamo", an);
                 // rest = where the vanilla pose has the hips relative to the body (last evaluated frame)
                 _restSet = false;
-                if (_hips != null && _body != null) { _rest = _body.InverseTransformPoint(_hips.position); _rest.y = 0f; _restSet = true; }
+                if (_hips != null && _body != null) { _rest = _body.InverseTransformPoint(_hips.position); _restY = _rest.y; _rest.y = 0f; _restSet = true; }
             }
             else
             {
@@ -9529,7 +9543,7 @@ namespace DragonsAltarCombat
             if (_stopping) w *= 1f - Ease((_age - _stopAt) / _fadeOut);
             UnityEngine.Playables.PlayableOutputExtensions.SetWeight(_output, w);
             _wOut = w;
-            if (_stopping && _age - _stopAt >= _fadeOut) Kill();
+            if (_stopping && _age - _stopAt >= _fadeOut) { Kill(); NoRise = false; }
         }
 
         private float _wOut;
@@ -9551,6 +9565,7 @@ namespace DragonsAltarCombat
                 target = _rest + Vector3.ClampMagnitude(drift - moved, 0.35f);
             }
             Vector3 corr = target - flat;
+            if (NoRise && y > _restY) corr.y = _restY - y;   // v0.25.129 no double jump height
             _hips.position += _body.TransformVector(corr) * _wOut;
         }
 

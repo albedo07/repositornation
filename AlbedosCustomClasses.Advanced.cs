@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.128";
+        public const string ModVersion = "0.25.129";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -3336,25 +3336,14 @@ namespace AlbedosCustomClassesAdvanced
             // wind up: a short guard settle, the stepping/knee-lift approach and the overhead two-handed load stretched
             // over the wind up, then the full 360 sweep played FAST so its hardest sweep lands on the damage. Its forward
             // step-in is real movement (walls stop it), the hips never drift off the body.
-            // v0.25.128 (user: ONE movement = HopSkip + Battleaxe attack 1 (+ attack 2 -> Ascended eruption)):
-            // the Mixamo 'great sword jump attack' leap + airborne turn (the Perfect HopSkip, 2 m forward) lands with
-            // the weapon high; the vanilla battleaxe swing is triggered UNDER it before the landing so its anticipation
-            // is already running while the HopSkip fades out (0.22 s) into it - its hit frame lands on the damage.
+            // v0.25.129 CHAIN RULE (user): the skill's combat animations play like a normal-attack chain combo -
+            // HopSkip = chain hit 1, Battleaxe attack 1 = chain hit 2 (Ascended: Battleaxe attack 2 = hit 3, the
+            // Eruption). ONE playback speed for every link (natural length of the whole chain / the time it has),
+            // each link starts in the previous one's follow-through like a vanilla chain swing.
             if (DragonMixamo.Has(MxJump))
             {
                 DragonCombat.ClipStop(player, 0.05f);
-                float w = Mathf.Max(0.8f, windup);
-                float swing = Mathf.Min(0.55f, w * 0.45f);          // vanilla battleaxe wind up -> hit at w
-                float hopEnd = w - swing + 0.1f;                    // HopSkip lands, then fades into the swing
-                DragonMixamo.PlayWarp(player, MxJump, new float[] { 0f, hopEnd }, new float[] { MxJumpFrom, MxJumpLand }, 0.08f, 0.22f, false);
-                StartCoroutine(CircleLeap(player, hopEnd * 0.1f, hopEnd * 0.9f, MxJumpTravel));
-                Logger.LogInfo("[Circle Swing] animation: HopSkip (" + MxJump + ") -> battleaxe attack 1, windup " + windup.ToString("0.00"));
-                yield return new WaitForSeconds(w - swing);
-                if (player == null || player.IsDead()) yield break;
-                DragonCombat.PlayClip(player, "merc_cs1", swing);
-                yield return new WaitForSeconds(swing);
-                if (player == null || player.IsDead()) yield break;
-                StartCoroutine(CircleSwingAfterSpin(player, 3));
+                StartCoroutine(CircleSwingChain(player, windup));
                 yield break;
             }
             bool hs = DragonMixamo.Has(MxSpinA);
@@ -3447,6 +3436,71 @@ namespace AlbedosCustomClassesAdvanced
         // v0.25.127: leap + first turn only; lands at ~0.95 s, facing front again at 1.0 s (hips 1.95 m forward).
         private const float MxJumpLand = 0.95f, MxJumpTravel = 2f, MxJumpFrom = 0.05f;
 
+        // v0.25.129 natural chain timings (s at 1x): HopSkip from 0.05 to its landing 0.95, the next link starts
+        // 0.15 before the landing (follow-through overlap); vanilla battleaxe swing start -> hit 0.45; battleaxe
+        // attack 2 starts 0.05 after attack 1's hit.
+        private const float CsHopOverlap = 0.15f, CsAxeLead = 0.45f, CsAxeStep = 0.05f;
+
+        private IEnumerator CircleSwingChain(Player player, float windup)
+        {
+            bool asc = IsAscendedSkill("circle_swing");
+            float hopNat = MxJumpLand - MxJumpFrom;
+            float s = Mathf.Clamp((hopNat - CsHopOverlap + CsAxeLead) / Mathf.Max(0.3f, windup), 0.5f, 2f);   // one speed for the chain
+            float tAxe = (hopNat - CsHopOverlap) / s, hit1 = tAxe + CsAxeLead / s;
+            float hit2 = hit1 + (CsAxeStep + CsAxeLead) / s;
+            DragonCombat.LockSkill(player, (asc ? hit2 : hit1) + 0.2f);
+            DragonMixamo.PlayWarp(player, MxJump, new float[] { 0f, hopNat / s, (hopNat + 0.2f) / s },
+                new float[] { MxJumpFrom, MxJumpLand, MxJumpLand + 0.2f }, 0.08f, 0.3f, false);
+            StartCoroutine(CircleLeap(player, hopNat * 0.1f / s, hopNat * 0.9f / s, MxJumpTravel));
+            Animator an = player.GetComponentInChildren<Animator>();
+            string axe1 = DragonCombat.ResolveTriggerName(an, "battleaxe_attack0"), axe2 = DragonCombat.ResolveTriggerName(an, "battleaxe_attack1");
+            Logger.LogInfo("[Circle Swing] chain: HopSkip -> " + axe1 + (asc ? " -> " + axe2 : "") + " at " + s.ToString("0.00") + "x, hits " + hit1.ToString("0.00") + (asc ? " / " + hit2.ToString("0.00") : "") + " s");
+            float t0 = Time.time;
+            while (Time.time - t0 < tAxe) { if (player == null || player.IsDead()) yield break; yield return null; }
+            DragonMixamo.Stop(player, (CsHopOverlap + 0.12f) / s);   // HopSkip lands while the swing already rises
+            if (axe1 != null) DragonCombat.FireVanilla(player, axe1);
+            DragonCombat.SetSkillAnimSpeed(player, s, (asc ? hit2 : hit1) - tAxe + 0.35f / s);
+            while (Time.time - t0 < hit1) { if (player == null || player.IsDead()) yield break; yield return null; }
+            float radius = Mathf.Max(0.5f, asc ? DragonCombat.M(_circleAscRadius.Value) : DragonCombat.M(_circleRadius.Value));
+            float baseMult = Mathf.Max(0f, _circleDamageMultiplier.Value);
+            DamageSnapshot weapon = GetWeaponDamage(player);
+            CircleSwingHit(player, weapon, radius, baseMult * (asc ? _circleAscFirst.Value / 100f : 1f), false);
+            if (!asc) yield break;
+            DragonCombat.GrantHyperArmor(player, hit2 - hit1 + 0.3f);
+            while (Time.time - t0 < hit1 + CsAxeStep / s) { if (player == null || player.IsDead()) yield break; yield return null; }
+            if (axe2 != null) DragonCombat.FireVanilla(player, axe2);
+            while (Time.time - t0 < hit2) { if (player == null || player.IsDead()) yield break; yield return null; }
+            CircleEruption(player, weapon, baseMult * Mathf.Max(0f, _circleEruptPercent.Value) / 100f);
+        }
+
+        // v0.25.129 Jump slams (Bonecrusher, Electric Smite) = Axe Pack 'melee run jump attack': crouch + spring
+        // (0.80 -> 0.95 s) on takeoff, airborne with the weapon raised (0.95 -> 1.50 s, held if the fall is longer),
+        // the overhead slam (1.50 -> 1.75 s) starts ~0.2 s before ground contact, then the recovery. The physics
+        // jump owns the height (the clip's own rise is cut off the hips).
+        private const string MxJumpSlam = "melee_run_jump_attack";
+        private bool _jsActive, _jsUsed;
+
+        private bool IhJumpSlamStart(Player player, float takeoff, float airSeconds)
+        {
+            _jsActive = false; _jsUsed = false;
+            if (!DragonMixamo.Has(MxJumpSlam)) return false;
+            DragonCombat.ClipStop(player, 0.05f);
+            DragonMixamo.SetNoRise(player, true);
+            if (!DragonMixamo.PlayWarp(player, MxJumpSlam, new float[] { 0f, takeoff, takeoff + Mathf.Max(0.3f, airSeconds) },
+                new float[] { 0.80f, 0.95f, 1.50f }, 0.08f, 0.35f, false)) return false;
+            _jsActive = true; _jsUsed = true;
+            Logger.LogInfo("[Jump Slam] animation: " + MxJumpSlam);
+            return true;
+        }
+
+        private bool IhJumpSlamLand(Player player)
+        {
+            if (!_jsActive) return false;
+            _jsActive = false;
+            DragonMixamo.PlayWarp(player, MxJumpSlam, new float[] { 0f, 0.2f, 0.55f }, new float[] { 1.50f, 1.75f, 2.10f }, 0.1f, 0.35f, false);
+            return true;
+        }
+
         // v0.25.128 Ascended Circle Swing 2nd attack: Seismic-style eruption in front (radius 7 m).
         private void CircleEruption(Player player, DamageSnapshot weapon, float multiplier)
         {
@@ -3501,15 +3555,6 @@ namespace AlbedosCustomClassesAdvanced
             float gap = Mathf.Max(0.15f, _circleAscGap.Value);
             float spin = (MxSpinAHit - MxSpinALoadEnd) / MxSpinASpeed;
             float follow = (MxSpinAEnd - MxSpinAHit) / MxSpinASpeed;
-            if (second == 3)
-            {
-                // v0.25.128 Ascended: battleaxe attack 2 straight out of attack 1, its hit = the Circle Swing Eruption.
-                DragonCombat.PlayClip(player, "merc_cs2", gap);
-                yield return new WaitForSeconds(gap);
-                if (player == null || player.IsDead()) yield break;
-                CircleEruption(player, weapon, baseMult * Mathf.Max(0f, _circleEruptPercent.Value) / 100f);
-                yield break;
-            }
             if (second == 2)
                 DragonMixamo.PlayWarp(player, MxTwoHandSpinBack, new float[] { 0f, gap, gap + (MxTwoHandTo - MxTwoHandHit) / 1.5f },
                     new float[] { 0f, MxTwoHandHit, MxTwoHandTo }, 0.12f, 0.3f, false);
@@ -4475,7 +4520,8 @@ namespace AlbedosCustomClassesAdvanced
             IhFaceSkillAim(player);
             float takeoffDelay = 0.08f;
             DragonCombat.LockSkill(player, takeoffDelay);
-            DragonCombat.PlayClip(player, "olympic_hero_brutal", takeoffDelay + 0.75f * Mathf.Max(1f, _boneWindup.Value), true); // v0.25.15 Olympic Hero
+            if (!IhJumpSlamStart(player, takeoffDelay, 0.75f * Mathf.Max(1f, _boneWindup.Value) + 0.35f))
+                DragonCombat.PlayClip(player, "olympic_hero_brutal", takeoffDelay + 0.75f * Mathf.Max(1f, _boneWindup.Value), true); // v0.25.15 Olympic Hero
             StartCoroutine(BonecrusherRoutineV(player, takeoffDelay));
         }
 
@@ -5980,7 +6026,8 @@ namespace AlbedosCustomClassesAdvanced
             IhFaceSkillAim(player);
             float takeoffDelay = 0.08f;
             DragonCombat.LockSkill(player, takeoffDelay);
-            DragonCombat.PlayClip(player, "olympic_hero_brutal", takeoffDelay + 0.75f * Mathf.Max(1f, _divineWindup.Value), true); // v0.25.86 (user): the same jump + slam as Bonecrusher
+            if (!IhJumpSlamStart(player, takeoffDelay, 0.75f * Mathf.Max(1f, _divineWindup.Value) + 0.35f))
+                DragonCombat.PlayClip(player, "olympic_hero_brutal", takeoffDelay + 0.75f * Mathf.Max(1f, _divineWindup.Value), true); // v0.25.86 (user): the same jump + slam as Bonecrusher
             StartCoroutine(ElectricSmiteRoutine(player, takeoffDelay));
         }
 
@@ -5988,6 +6035,7 @@ namespace AlbedosCustomClassesAdvanced
         // is hidden render-only while the fist is on the ground.
         private void OlympicLanding(Player player, float stowSeconds)
         {
+            if (_jsUsed) { _jsUsed = false; IhJumpSlamLand(player); return; }   // v0.25.129 Mixamo slam keeps the weapon
             if (!DragonCombat.ClipImpactIfHolding(player)) DragonCombat.PlayClip(player, "olympic_land", 0.05f);
             DragonCombat.StowMainWeapon(player, stowSeconds);
         }
@@ -6724,7 +6772,13 @@ namespace AlbedosCustomClassesAdvanced
             {
                 ResetFallDamageState(player);
                 DragonCombat.LockSkill(player, 0.12f);
-
+                if (_jsActive)
+                {
+                    RaycastHit jsGround;   // v0.25.129 the slam starts ~0.2 s before contact
+                    if (Physics.Raycast(body.position + Vector3.up * 0.3f, Vector3.down, out jsGround, 60f, IhSolidMask(), QueryTriggerInteraction.Ignore) &&
+                        jsGround.distance - 0.3f < Mathf.Max(2f, -body.velocity.y) * 0.2f)
+                        IhJumpSlamLand(player);
+                }
                 if (IsPlayerGrounded(player) && body.velocity.y <= 0.25f)
                     break;
 
