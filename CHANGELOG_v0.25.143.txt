@@ -1,0 +1,2 @@
+Aethelborn Ascended v0.25.143 - Merc Message
+- 2HDW rejection message (base classes, equip attempt and unequip on returning to a base class) now reads "Only a Mercenary can dual wield", matching the two-weapon dual-wield message. Nothing else changed from v0.25.142.

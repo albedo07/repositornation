@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.142";
+        public const string ModVersion = "0.25.143";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1977,7 +1977,7 @@ namespace DragonsAltarCombat
             {
                 __result = false;
                 if (MessageHud.instance != null)
-                    MessageHud.instance.ShowMessage(MessageHud.MessageType.Center, "Only an advanced class can wield dual weapons");
+                    MessageHud.instance.ShowMessage(MessageHud.MessageType.Center, "Only a Mercenary can dual wield");
                 return false;
             }
 
@@ -9228,7 +9228,7 @@ namespace DragonsAltarCombat
                 {
                     p.UnequipItem(paired, true);
                     if (MessageHud.instance != null)
-                        MessageHud.instance.ShowMessage(MessageHud.MessageType.Center, "Only an advanced class can wield dual weapons");
+                        MessageHud.instance.ShowMessage(MessageHud.MessageType.Center, "Only a Mercenary can dual wield");
                     return;
                 }
                 if (l == null || r == null || l == r) return;

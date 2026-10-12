@@ -1,7 +1,7 @@
 ﻿$ErrorActionPreference = "Stop"
 
 Write-Host ""
-Write-Host "IMMORTAL HEROES v0.25.142 - PAIRED CHAINS" -ForegroundColor Cyan
+Write-Host "IMMORTAL HEROES v0.25.143 - MERC MESSAGE" -ForegroundColor Cyan
 Write-Host "All 10 DLLs compile in staging before the live profile is touched." -ForegroundColor Gray
 Write-Host ""
 
