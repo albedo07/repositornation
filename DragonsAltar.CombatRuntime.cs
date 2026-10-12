@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.138";
+        public const string ModVersion = "0.25.139";
 
         internal static DragonCombatPlugin Instance;
 
@@ -437,6 +437,9 @@ namespace DragonsAltarCombat
         {
             if (_harmony == null || original == null)
                 return;
+            // v0.25.139: our patches run FIRST (prefixes) and LAST (postfixes) - Aethelborn has the final say over other mods.
+            if (prefix != null && prefix.priority < 0) prefix.priority = Priority.First;
+            if (postfix != null && postfix.priority < 0) postfix.priority = Priority.Last;
 
             MethodInfo[] methods = typeof(Harmony).GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 
@@ -1178,6 +1181,22 @@ namespace DragonsAltarCombat
             return count > 2 ? hit % 2 : 0;
         }
 
+        // v0.25.139: dual-wield chain rules (dual speed keys, dual timing) also apply to two-handed paired weapons.
+        private static bool UsesDualChain(Player p)
+        {
+            return p != null && (IsDualWielding(p) || DragonCombat.IsPairedWeapon(DragonCombat.GetHandItem(p, "m_rightItem")));
+        }
+
+        private static readonly HashSet<string> _pairedLogged = new HashSet<string>();
+        private static void LogPairedOnce(ItemDrop.ItemData w, int levels, Attack at)
+        {
+            string key = w.m_shared.m_name;
+            if (!_pairedLogged.Add(key) || DragonCombatPlugin.Instance == null) return;
+            DragonCombatPlugin.Instance.Logger.LogInfo("[NACC] paired weapon: " + key + " prefab=" + (w.m_dropPrefab != null ? w.m_dropPrefab.name : "?") +
+                " skill=" + w.m_shared.m_skillType + " anim=" + w.m_shared.m_attack.m_attackAnimation + " secondary=" +
+                (w.m_shared.m_secondaryAttack != null ? w.m_shared.m_secondaryAttack.m_attackAnimation : "-") + " chainLevels=" + levels);
+        }
+
         private static float _comboLastEnd = -10f, _comboLastStart = -10f, _chainPrevSpeed = 1f;
         private static string _comboStartAnim;
         private static float _comboClockStart;
@@ -1220,6 +1239,11 @@ namespace DragonsAltarCombat
                     !string.Equals(_atkAnim.GetValue(__instance) as string, weapon.m_shared.m_attack.m_attackAnimation, StringComparison.Ordinal))
                 { _comboHit = -1; DragonCombat.SetChainSpeed(p, 1f, 0.05f); return; }
                 int levels = (int)_atkLevels.GetValue(__instance);
+                if (DragonCombat.IsPairedWeapon(weapon))
+                {
+                    LogPairedOnce(weapon, levels, __instance);
+                    if (levels < 2) { levels = 3; _atkLevels.SetValue(__instance, levels); }   // v0.25.139 our chain overrides theirs (heavy attack untouched)
+                }
                 // v0.25.99 FIX (user: dual-wield Axe heavy attack stuck in slow motion): a heavy / single-hit attack
                 // inherited the last chain swing's speed (dual chains run down to 0.25x for 3 s). Every attack that
                 // is not part of our chain plays at normal speed and breaks the chain.
@@ -1234,7 +1258,7 @@ namespace DragonsAltarCombat
                 // our own timer: the next attack continues the chain when it starts while the previous swing is
                 // still running (queued chain) or within the window after it ended.
                 bool prevRunning = previousAttack != null && _comboLastEnd < 0f && Time.time - _comboLastStart < 2.5f;
-                bool cont = _comboHit >= 0 && prevAnim == anim && anim == _comboBase && _comboHit < length - 1 && IsDualWielding(p) == _comboDual
+                bool cont = _comboHit >= 0 && prevAnim == anim && anim == _comboBase && _comboHit < length - 1 && UsesDualChain(p) == _comboDual
                     && (prevRunning || Time.time - _comboLastEnd <= Mathf.Max(0.05f, Instance.ComboContinueWindow.Value));
                 // v0.25.55 (user): every swing of the chain takes the same time (ComboSwingSeconds, 0.8s at no
                 // attack-speed bonus), the finisher keeps its natural (longest) length. Each swing's natural time is
@@ -1253,7 +1277,7 @@ namespace DragonsAltarCombat
                 }
                 float chainF = 1f;
                 float natNow;
-                bool dualNow = IsDualWielding(p);
+                bool dualNow = UsesDualChain(p);
                 if (_chainNatural.TryGetValue(ChainKey(anim, dualNow, nextHit), out natNow))
                 {
                     // v0.25.65 (user): intervals stay EVEN inside the chain, but the beat is the weapon's own average
@@ -1286,7 +1310,7 @@ namespace DragonsAltarCombat
                 previousAttack = null;
                 timeSinceLastAttack = 0f;
                 _comboBase = anim;
-                _comboDual = IsDualWielding(p);
+                _comboDual = UsesDualChain(p);
                 _comboInStart = true;
             }
             catch (Exception) { _comboInStart = false; }
@@ -1400,7 +1424,7 @@ namespace DragonsAltarCombat
                 bool dwClips = !nativePair && _comboDual && DragonDualWield.Apply(p, a, true);
                 if (!nativePair && !_comboDual) DragonDualWield.Apply(p, a, false);
                 string baseName = _comboBase;
-                if (_comboDual && !dwClips && DragonCombat.AnimTriggerCount(a, "dual_knives") >= 2) baseName = "dual_knives";
+                if (_comboDual && !nativePair && !dwClips && DragonCombat.AnimTriggerCount(a, "dual_knives") >= 2) baseName = "dual_knives";
                 int count = DragonCombat.AnimTriggerCount(a, baseName);
                 if (count <= 0) return true;
                 int index = Mathf.Clamp(_comboSwing, 0, count - 1);
@@ -3755,11 +3779,8 @@ namespace DragonsAltarCombat
             if (player == null || player != Player.m_localPlayer || string.IsNullOrEmpty(clip)) return;
             CheckAnimationClass(player);
             // Non-charging Sky Summons lock their target at cast time; never turn them during the delay.
-            bool fixedSkySummon = clip == "sorc_glacial" || clip == "sorc_glacial_asc" ||
-                clip == "cleric_goddess" || clip == "cleric_relic" || clip == "cleric_holy_relic" ||
-                clip == "cleric_judgement" || clip == "cleric_tempest" || clip == "cleric_crucible" ||
-                clip == "rg_sky" || clip == "rg_starfall" || clip == "cleric_hammer_call";
-            if (!fixedSkySummon && clip != "olympic_hero_brutal") FollowAimForWindup(player, windup);
+            // v0.25.139 (user): every skill with a wind up of 1 s or more faces the crosshair (Sky Summons included).
+            if (clip != "olympic_hero_brutal") FollowAimForWindup(player, windup);
             if (DragonCombatPlugin.Instance != null && !DragonCombatPlugin.Instance.EnableSkillAnimations.Value) return;
             DragonClipKey[] keys = HorizonWalkerMoving(player) ? MovingCastClip() : BowClip(player, clip);   // v0.25.85 Ranger bow layer, v0.25.86 HW moving casts
             if (!hold && (clip == "warrior_impact_wave" || clip == "sm_crescent" || clip == "sm_crescent_asc"))
@@ -4110,20 +4131,37 @@ namespace DragonsAltarCombat
         private static bool _triggersLogged;
         private static readonly Dictionary<string, string> ExternalTriggers = new Dictionary<string, string>();
         private static readonly Dictionary<string, RuntimeAnimatorController> ExternalControllers = new Dictionary<string, RuntimeAnimatorController>();
+        private static List<IDictionary> _extManagers = new List<IDictionary>();
+        private static float _extScanAt;
         private static bool ExternalTrigger(string name, out string trigger)
         {
             if (ExternalTriggers.TryGetValue(name, out trigger)) return true;
-            Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
-            for (int i = 0; i < assemblies.Length; i++)
+            // v0.25.139: the Warfare / Wizardry controller tables are found once (rescanned every 5 s while none is
+            // known) instead of scanning every loaded assembly on each call.
+            if (_extManagers.Count == 0 && Time.realtimeSinceStartup >= _extScanAt)
             {
-                string assemblyName = assemblies[i].GetName().Name;
-                if (assemblyName != "Warfare" && assemblyName != "Wizardry") continue;
+                _extScanAt = Time.realtimeSinceStartup + 5f;
+                Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
+                for (int i = 0; i < assemblies.Length; i++)
+                {
+                    string assemblyName = assemblies[i].GetName().Name;
+                    if (assemblyName != "Warfare" && assemblyName != "Wizardry") continue;
+                    try
+                    {
+                        Type manager = assemblies[i].GetType("KG_Managers.AnimationReplaceManager");
+                        FieldInfo field = manager == null ? null : AccessTools.Field(manager, "Controllers");
+                        IDictionary controllers = field == null ? null : field.GetValue(null) as IDictionary;
+                        if (controllers != null) _extManagers.Add(controllers);
+                    }
+                    catch (Exception) { }
+                }
+            }
+            for (int i = 0; i < _extManagers.Count; i++)
+            {
                 try
                 {
-                    Type manager = assemblies[i].GetType("KG_Managers.AnimationReplaceManager");
-                    FieldInfo field = manager == null ? null : AccessTools.Field(manager, "Controllers");
-                    IDictionary controllers = field == null ? null : field.GetValue(null) as IDictionary;
-                    if (controllers == null || !controllers.Contains(name)) continue;
+                    IDictionary controllers = _extManagers[i];
+                    if (!controllers.Contains(name)) continue;
                     trigger = ((KeyValuePair<RuntimeAnimatorController, string>)controllers[name]).Value;
                     ExternalTriggers[name] = trigger;
                     ExternalControllers[name] = ((KeyValuePair<RuntimeAnimatorController, string>)controllers[name]).Key;
@@ -4132,6 +4170,10 @@ namespace DragonsAltarCombat
                 catch (Exception) { }
             }
             trigger = null; return false;
+        }
+        public static bool IsExternalAnimation(string name)
+        {
+            string t; return !string.IsNullOrEmpty(name) && (ExternalTrigger(name, out t) || ExternalTrigger(name + "0", out t));
         }
         public static string AnimatorTriggerName(string name)
         {
@@ -8441,7 +8483,16 @@ namespace DragonsAltarCombat
             if (item == null || item.m_shared == null || item.m_shared.m_attack == null) return false;
             if (item.m_shared.m_itemType.ToString() != "TwoHandedWeapon") return false;
             string animation = item.m_shared.m_attack.m_attackAnimation ?? "";
-            return animation.StartsWith("dual", StringComparison.OrdinalIgnoreCase);
+            if (animation.StartsWith("dual", StringComparison.OrdinalIgnoreCase)) return true;
+            // v0.25.139 (user): every two-handed DUAL-WIELD weapon of Therzie's Warfare (Scimitar Swords, Hellblade Cleavers...)
+            // counts like Smoothbrain's Dual Wield: custom Warfare animation, or "dual" in the item's name.
+            Skills.SkillType skill = item.m_shared.m_skillType;
+            if (skill != Skills.SkillType.Swords && skill != Skills.SkillType.Axes && skill != Skills.SkillType.Clubs &&
+                skill != Skills.SkillType.Knives && skill != Skills.SkillType.Polearms && skill != Skills.SkillType.Spears) return false;
+            string prefab = item.m_dropPrefab != null ? item.m_dropPrefab.name : "";
+            if (prefab.IndexOf("dual", StringComparison.OrdinalIgnoreCase) >= 0 || prefab.IndexOf("scimitar", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                prefab.IndexOf("cleaver", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            return IsExternalAnimation(animation);
         }
 
         public static bool IsTherzieStaff(ItemDrop.ItemData item)
@@ -10378,9 +10429,16 @@ namespace DragonsAltarCombat
             w = w * w * (3f - 2f * w) * _wOut;
             Transform spine = an.GetBoneTransform(HumanBodyBones.Spine), hand = an.GetBoneTransform(HumanBodyBones.RightHand);
             if (spine == null || hand == null || w <= 0.001f) return;
+            // v0.25.139 JITTER ROOT CAUSE: the player's Animator is not re-evaluated on every rendered frame, so the bend was
+            // applied again on top of itself each frame (the spine kept rotating until the next animator tick) and the weapon
+            // probe measured the already-bent pose. A spine that still holds what we wrote last frame is restored first.
+            if (_spineT == spine && _spineHas && Quaternion.Angle(spine.localRotation, _spineWritten) < 0.01f) spine.localRotation = _spineBase;
+            else _spineBase = spine.localRotation;
+            _spineT = spine; _spineHas = true; _spineWritten = spine.localRotation;
             if (_reachLocked)
             {
                 spine.rotation = Quaternion.AngleAxis(_reachAngle * w, _body.right) * spine.rotation;
+                _spineWritten = spine.localRotation;
                 return;
             }
             bool any = false; Bounds b = new Bounds();
@@ -10422,13 +10480,18 @@ namespace DragonsAltarCombat
             _reachAngle = Mathf.Clamp(delta, 0f, 60f);
             if (ct >= _reachPeak) _reachLocked = true;
             spine.rotation = Quaternion.AngleAxis(_reachAngle * w, _body.right) * spine.rotation;
+            _spineWritten = spine.localRotation;
         }
+
+        private Transform _spineT;
+        private Quaternion _spineBase, _spineWritten;
+        private bool _spineHas;
 
         public void Begin(Player player, Animator an, AnimationClip clip, float[] realTimes, float[] clipTimes, float fadeIn, float fadeOut, bool transfer, bool stableLanding, bool keepOutgoingTempo = false)
         {
             DragonCombat.CheckAnimationClass(player);
             bool chained = _live && !_stopping && _graph.IsValid();
-            _reachR = null; _reachAngle = 0f; _reachLocked = false;
+            _reachR = null; _reachAngle = 0f; _reachLocked = false; _spineHas = false;
             if (clip != _sourceClip) NoRise = false;
             _body = player.transform;
             _rb = player.GetComponent<Rigidbody>();
@@ -10603,7 +10666,7 @@ namespace DragonsAltarCombat
         private void Kill()
         {
             if (_graph.IsValid()) _graph.Destroy();
-            _reachR = null; _reachAngle = 0f; _reachLocked = false;
+            _reachR = null; _reachAngle = 0f; _reachLocked = false; _spineHas = false;
             _live = false; _mixing = false; _stopping = false;
         }
 

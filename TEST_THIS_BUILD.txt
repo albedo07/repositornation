@@ -1,12 +1,7 @@
-v0.25.138 - Smooth Hold
-
-1. Bonecrusher / Electric Smite from flat ground and off a ledge: the slam pose holds through the fall, the
-   landing comes straight out of it, you land where you touched down (no forward jump, no pose pop).
-2. Halfmoon Ascended: sheathe stance holds through the Left Click window, release draws from it.
-3. Cleric / Sorcerer / Ranger skills: each animation one constant speed start to finish (no fast -> slow).
-   Righteous Strike / Goddess Relic / Relics: Trigger % now changes when the skill fires.
-4. Holy Wave / Ray of Hope / Heaven's Light: the raised hand plays fully at one speed, not cut.
-5. Shield Charge slam: no sudden 6x after the hit.
-6. F8 -> DEFAULT on one setting: returns your tuned value.
-
-Verified here: compile check (stubbed) + C# 5 parse only. Needs in-game testing for all of the above.
+v0.25.139 - Face Aim
+1. Ascended Astral Greatblade: turn the camera between slams - body + blade follow the aim every slam.
+2. Any 1 s+ wind up skill (Relics, Glacial, Hammer...): body turns to the crosshair during the wind up.
+3. Scimitar Swords / Hellblade Cleavers: normal attacks follow our chain (even intervals), heavy attack unchanged. Check LogOutput for "[NACC] paired weapon".
+4. Bonecrusher / Electric Smite: land with no shaking.
+5. Ascended Splitting Arrow great arrow: no arrow planted in you.
+Verified here: compile check + C#5 parse only. Needs in-game testing.

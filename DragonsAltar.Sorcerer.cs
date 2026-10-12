@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Aethelborn Ascended - Sorcerer Advancements";
-        public const string ModVersion = "0.25.138";
+        public const string ModVersion = "0.25.139";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -519,6 +519,9 @@ namespace DragonsAltarSorcerer
 
         private void PatchWithHarmony(MethodBase original, HarmonyMethod prefix, HarmonyMethod postfix)
         {
+            // v0.25.139: our patches run FIRST (prefixes) and LAST (postfixes) - Aethelborn has the final say over other mods.
+            if (prefix != null && prefix.priority < 0) prefix.priority = Priority.First;
+            if (postfix != null && postfix.priority < 0) postfix.priority = Priority.Last;
             MethodInfo[] methods = typeof(Harmony).GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
             for (int i = 0; i < methods.Length; i++)
             {
@@ -1382,7 +1385,8 @@ namespace DragonsAltarSorcerer
             bool chainedClip = DragonMixamo.PlaySource(player, slamClip, 0f, slamClip == null ? contact : slamClip.length,
                 windup * (slamClip == null ? contact : slamClip.length) / Mathf.Max(0.03f, contact), 0.12f, false, "wiz_greatblade_asc");
             if (!chainedClip) DragonCombat.PlayClip(player, "wiz_greatblade", windup);
-            DragonCombat.FollowAimForWindup(player, windup);
+            // v0.25.139 (user: the slams went where the camera was, not where the body faced): follow the aim through all 3 slams
+            DragonCombat.FollowAimForWindup(player, Mathf.Max(1f, windup + 2f * (gap + recover) + recover));
             SummonStaffBlade(player, windup, windup + 2f * (gap + recover) + 0.45f);
             if (windup > 0f) yield return new WaitForSeconds(windup);
 
@@ -1849,6 +1853,7 @@ namespace DragonsAltarSorcerer
             if (!BeginSkill(player, "Spellcaster.RiftEcho", _riftEchoCooldown.Value, _riftEchoEitr.Value))
                 return;
             _riftEchoUntil = Time.time + Mathf.Max(1f, _riftEchoDuration.Value);
+            DragonCombat.FollowAimForWindup(player, Mathf.Max(1f, _riftEchoDuration.Value));   // v0.25.139 successive rifts follow the aim
             DragonCombat.BeginMobileCast(player, 0.30f, true);
             DragonCombat.PlayClip(player, "hw_rift_echo", 0.1f);
             ShowMessage("Rift Echo ACTIVE");
@@ -2752,6 +2757,7 @@ namespace DragonsAltarSorcerer
             _phalanxSwords.Clear();
             // Ascended: all 8 launched together arm one Astral Spear eruption on the first impact.
             _phalanxSpearArmed = IsSpellAscended(player, "arcane_phalanx") && copy.Count >= Mathf.Max(1, _paAscCount.Value);
+            DragonCombat.FaceAimNow(player);   // v0.25.139 the volley goes where the body faces
             for (int i = 0; i < copy.Count; i++) LaunchSword(player, copy[i], DragonCombat.StunAttack(_stunPhalanxShot + i + 1));
             _stunPhalanxShot += copy.Count;
             DragonCombat.PlayClip(player, "hw_point", 0.06f);   // v0.25.18 Rift Conductor: dispatch point
@@ -3921,7 +3927,7 @@ namespace DragonsAltarSorcerer
             Transform t = collider.transform;
             if (t == player.transform || t.IsChildOf(player.transform)) return true;
             Character c = collider.GetComponentInParent<Character>();
-            return c == player;
+            return c is Player;   // v0.25.139: every player is a ghost to skill projectiles / aim
         }
 
         private void TeleportPlayer(Player player, Vector3 destination)

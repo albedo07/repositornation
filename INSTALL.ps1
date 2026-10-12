@@ -1,7 +1,7 @@
 ﻿$ErrorActionPreference = "Stop"
 
 Write-Host ""
-Write-Host "AETHELBORN ASCENDED v0.25.138r - EXP ALPHA 3" -ForegroundColor Cyan
+Write-Host "IMMORTAL HEROES v0.25.139 - FACE AIM" -ForegroundColor Cyan
 Write-Host "All 10 DLLs compile in staging before the live profile is touched." -ForegroundColor Gray
 Write-Host ""
 

@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.138";
+        public const string ModVersion = "0.25.139";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -9891,6 +9891,9 @@ namespace AlbedosCustomClassesAdvanced
         {
             if (_harmony == null || original == null)
                 return;
+            // v0.25.139: our patches run FIRST (prefixes) and LAST (postfixes) - Aethelborn has the final say over other mods.
+            if (prefix != null && prefix.priority < 0) prefix.priority = Priority.First;
+            if (postfix != null && postfix.priority < 0) postfix.priority = Priority.Last;
 
             MethodInfo[] methods = typeof(Harmony).GetMethods(
                 BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic

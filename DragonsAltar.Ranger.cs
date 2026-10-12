@@ -41,7 +41,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Aethelborn Ascended - Ranger";
-        public const string ModVersion = "0.25.138";
+        public const string ModVersion = "0.25.139";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -1815,6 +1815,8 @@ namespace DragonsAltarRanger
             if (original == null) { Logger.LogWarning("Ranger: patch target missing for " + (prefix ?? postfix)); return; }
             HarmonyMethod pre = prefix == null ? null : new HarmonyMethod(typeof(RangerPlugin).GetMethod(prefix, BindingFlags.Static | BindingFlags.NonPublic));
             HarmonyMethod post = postfix == null ? null : new HarmonyMethod(typeof(RangerPlugin).GetMethod(postfix, BindingFlags.Static | BindingFlags.NonPublic));
+            if (pre != null && pre.priority < 0) pre.priority = Priority.First;   // v0.25.139 our patches run first / last
+            if (post != null && post.priority < 0) post.priority = Priority.Last;
             MethodInfo[] methods = typeof(Harmony).GetMethods(BindingFlags.Instance | BindingFlags.Public);
             for (int i = 0; i < methods.Length; i++)
             {
@@ -3246,8 +3248,17 @@ namespace DragonsAltarRanger
                     }
                     else if (IsSolid(c))
                     {
+                        float solidDist = hits[i].distance;
+                        if (r > 0.4f)
+                        {
+                            // v0.25.139: a fat arrow's sphere always overlaps the ground at the shooter's feet (distance 0) and
+                            // planted itself in the player. Solids are tested by the arrow's centre line only.
+                            RaycastHit centre;
+                            if (!c.Raycast(new Ray(pos, dir), out centre, step + 0.05f) || centre.distance <= 0.001f) continue;
+                            solidDist = centre.distance;
+                        }
                         stop = true;
-                        pos += dir * hits[i].distance;
+                        pos += dir * solidDist;
                         if (_enableVfx.Value)
                         {
                             Vector3 pp = pos, pdir = dir; float plen = radius >= DragonCombat.M(0.9f) ? 2.5f + radius * 3f : UnityEngine.Random.Range(0.85f, 1.05f); Color pcol = color;   // v0.25.85 big only for real big shots (meters, not units)
@@ -3501,7 +3512,7 @@ namespace DragonsAltarRanger
             if (player == null || collider == null) return false;
             Transform t = collider.transform;
             if (t == player.transform || t.IsChildOf(player.transform)) return true;
-            return collider.GetComponentInParent<Character>() == player;
+            return collider.GetComponentInParent<Character>() is Player;   // v0.25.139: every player is a ghost to skill projectiles / aim
         }
 
         private static bool IsSolid(Collider c)

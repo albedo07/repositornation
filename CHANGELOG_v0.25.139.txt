@@ -1,0 +1,22 @@
+Aethelborn Ascended v0.25.139 - Face Aim   (baseline: user anchor v0.25.138v)
+
+1. FACE THE AIM
+- Every skill with a wind up >= 1 s now turns to the crosshair until its hit (Sky Summons included).
+- Ascended Astral Greatblade follows the aim through all 3 slams (they used to go where the camera pointed, the body stayed behind).
+- Rift Echo follows the aim for its whole duration; Phalanx Volley faces the aim on release.
+
+2. PAIRED 2H WEAPONS (Warfare Scimitar Swords, Hellblade Cleavers...)
+- Counted as paired when 2H + prefab/anim contains "dual" / "scimitar" / "cleaver" or its animation is registered by Warfare / Wizardry.
+- They use the DUAL WIELD NACC rules (dual timing keys) and our chain always applies (chain levels forced to 3 if the weapon has fewer). Heavy attack untouched.
+- Log line "[NACC] paired weapon: ..." prints once per weapon (prefab, skill, animations, chain levels). If a weapon still misbehaves send me that line.
+
+3. RUN JUMP SLAM JITTER (root cause)
+- The ground-reach spine bend was re-applied on top of itself every rendered frame (the Animator does not rewrite the spine every frame) and the weapon probe measured the already-bent pose = violent shaking while looking for terrain. The spine is now restored to the animator pose before each bend (same guard idea as the clip driver).
+
+4. PLAYERS ARE GHOSTS TO SKILLS
+- Ranger + Sorcerer skill projectiles / aim casts ignore EVERY player's colliders, not only yours.
+- Fat arrows (Splitting Arrow's great arrow, Ballista...): the sphere always overlapped the ground at your feet and "hit" it at distance 0, planting a giant arrow inside you. Solids are now tested by the arrow's centre line only.
+
+5. OUR MOD ON TOP
+- All our Harmony patches (CombatRuntime, Advanced, Sorcerer, Ranger) now run FIRST (prefixes) / LAST (postfixes) unless a priority was set explicitly.
+- Warfare / Wizardry animation-table lookup cached (was a scan of every loaded assembly per call).

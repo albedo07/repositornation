@@ -1,5 +1,5 @@
 @echo off
-title Aethelborn Ascended v0.25.138r - EXP Alpha 3
+title Immortal Heroes v0.25.139 - Face Aim
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
 echo.
 pause
