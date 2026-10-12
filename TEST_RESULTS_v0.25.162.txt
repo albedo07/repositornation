@@ -1,0 +1,5 @@
+v0.25.162 Bound Route - test results (no game here)
+- mcs --parse -langversion:5 DragonsAltar.CombatRuntime.cs: OK
+- tools/compile_check/check.sh 3029660: PASSED (0 new signatures)
+- tools/tests/nacc_handoff (logic model): ALL PASS, new cases: nested emote inside the routed call untouched, heavy trigger at same depth untouched, same name on another ZSyncAnimation untouched, carrier restored once, route ends with its own SetTrigger, later skill/emote trigger keeps its controller.
+- NOT verified: in-game behaviour (needs your test).

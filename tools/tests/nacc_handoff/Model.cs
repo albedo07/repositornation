@@ -236,6 +236,29 @@ static class T
                 Check(statei == kv.Value && !held, kv.Key + " own state restored on release (heavy / skill / idle)");
             }
         }
+        // v0.25.162: route bound to ONE SetTrigger invocation (depth + zanim + exact name); others untouched, never renamed
+        {
+            string ours = "paired", foreign = "warfare";
+            string rTrig = null; object rZ = null; int rDepth = -1, depth = 0; bool rDone = false; string ctrl = ours;
+            object me = new object(), other = new object();
+            Func<object, string, bool> owns = (z, n) => rTrig != null && !rDone && rDepth == depth && ReferenceEquals(z, rZ) && n == rTrig;
+            Action<object, string> rpc = (z, n) => { if (owns(z, n) && ctrl != ours) ctrl = ours; /* body */ if (owns(z, n)) { rDone = true; } };
+            // routed swing: SetTrigger(swing_axe1) -> RPC inside, unrelated nested SetTrigger(emote) from a foreign hook
+            depth++; rTrig = "swing_axe1"; rZ = me; rDepth = depth; rDone = false;
+            ctrl = foreign;
+            depth++; string nestedName = "emote_wave"; bool nestedTouched = owns(me, nestedName); depth--;   // nested call, deeper
+            Check(!nestedTouched, "nested emote trigger inside the routed call passes untouched");
+            Check(!owns(me, "battleaxe_secondary"), "heavy attack trigger at the same depth is not the route");
+            Check(!owns(other, "swing_axe1"), "same name on another ZSyncAnimation (remote RPC) untouched");
+            rpc(me, "swing_axe1");
+            Check(ctrl == ours && rDone, "routed carrier trigger restored on our controller");
+            Check(!owns(me, "swing_axe1"), "route consumed once (repeat RPC not re-handled)");
+            rTrig = null; rZ = null; rDepth = -1; depth--;   // SetTrigger postfix at its own depth
+            Check(depth == 0 && rTrig == null, "route ends with its own SetTrigger invocation");
+            // later skill / emote triggers in the same frame: no route
+            ctrl = foreign; rpc(me, "emote_cheer");
+            Check(ctrl == foreign, "skill/emote trigger after the swing keeps whatever controller it found");
+        }
         Console.WriteLine(fails == 0 ? "ALL PASS" : fails + " FAILED");
         Environment.Exit(fails == 0 ? 0 : 1);
     }

@@ -1,0 +1,5 @@
+v0.25.162 Bound Route (CombatRuntime.cs only; the v0.25.161 OneHanded-state fix is unchanged)
+- 2HDW trigger route is bound to the ONE routed swing invocation: the SetTrigger call depth it was routed at, its ZSyncAnimation and its exact carrier trigger name (swing_axe0-2). The old animator + frame window is gone.
+- RPC_SetTrigger prefix/postfix only act on that invocation's own carrier trigger (restore our paired controller if swapped). Trigger names are never rewritten any more.
+- Unrelated triggers (skills, emotes, heavy attacks, nested SetTrigger calls from other hooks, remote players' RPCs, a later trigger in the same frame) pass untouched and cannot consume the route.
+- The route ends in the postfix of its own SetTrigger call (re-asserts the carrier only if the controller was swapped and RPC_SetTrigger never handled it).

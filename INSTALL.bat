@@ -1,5 +1,5 @@
 @echo off
-title Immortal Heroes v0.25.161 - Animation State
+title Immortal Heroes v0.25.162 - Bound Route
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
 echo.
 pause
