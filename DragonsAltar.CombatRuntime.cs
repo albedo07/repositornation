@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.160";
+        public const string ModVersion = "0.25.161";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1774,6 +1774,7 @@ namespace DragonsAltarCombat
                     }
                 }
                 bool routed = nativePair && _comboCarrier != null && DragonDualWield.PairedActive(a);   // v0.25.142 2HDW plays SBDW's clips
+                if (routed) DragonDualWield.HoldOneHandedState(p);   // v0.25.161 SBDW's own animator state (see HoldOneHandedState)
                 bool dwClips = !nativePair && _comboDual && DragonDualWield.Apply(p, a, true);
                 if (!nativePair && !_comboDual) DragonDualWield.Apply(p, a, false);
                 string baseName = routed ? _comboCarrier : _comboBase;
@@ -1834,7 +1835,7 @@ namespace DragonsAltarCombat
                 bool pairedNow = DragonCombat.IsPairedWeapon(pr) && DragonCombat.ComboWeaponProvider != null && DragonCombat.ComboWeaponProvider(p, pr);
                 if (DragonDualWield.PairedActive(a))
                 {
-                    if (!pairedNow || Time.time - _comboLastEnd > 1f) DragonDualWield.ApplyPaired(a, false);
+                    if (!pairedNow || Time.time - _comboLastEnd > 1f) DragonDualWield.ReleasePaired(p);   // v0.25.161 also restores the weapon's animation state
                     else return;   // mid-chain: never let the two-weapon restore below swap the controller away
                 }
                 DragonDualWield.Apply(p, a, IsDualWielding(p));
@@ -11624,6 +11625,53 @@ namespace DragonsAltarCombat
             if (player == null) return;
             Animator a = player.GetComponentInChildren<Animator>();
             if (a != null && PairedActive(a)) ApplyPaired(a, false);
+            RestoreAnimState(player);
+        }
+
+        // v0.25.161 ROOT CAUSE (assembly_valheim + Warfare bundle): Humanoid.SetupAnimationState puts the animator in the weapon's
+        // AnimationState (statef / statei). Therzie's scimitar + demonic axe = DualAxes (15), paired knives = Knives (11); SBDW's
+        // one-handed weapons = OneHanded (1). The player controller's swing states are selected by that state, so the SBDW carrier
+        // swing (swing_axe0-2) never runs in the DualAxes / Knives state - the native dualaxes / dual_knives sets do. A routed 2HDW
+        // primary swing therefore holds OneHanded - exactly the state SBDW plays in - and the weapon's own state comes back when the
+        // paired chain is released (idle, heavy attack, skill takeover, weapon / class change). Valheim only re-applies the state on
+        // equipment changes (SetupEquipment), so the hold is not fought every frame.
+        private static bool _stateHeld;
+        private static Component _stateZanim;
+        private static MethodInfo _zSetFloat, _zSetInt, _setupState;
+
+        private static Component ZanimOf(Player p)
+        {
+            Component[] cs = p.GetComponents<Component>();
+            for (int i = 0; i < cs.Length; i++) if (cs[i] != null && cs[i].GetType().Name == "ZSyncAnimation") return cs[i];
+            return null;
+        }
+
+        public static void HoldOneHandedState(Player p)
+        {
+            if (p == null) return;
+            try
+            {
+                Component z = ZanimOf(p);
+                if (z == null) return;
+                if (_zSetFloat == null) _zSetFloat = z.GetType().GetMethod("SetFloat", new Type[] { typeof(string), typeof(float) });
+                if (_zSetInt == null) _zSetInt = z.GetType().GetMethod("SetInt", new Type[] { typeof(string), typeof(int) });
+                if (_zSetFloat != null) _zSetFloat.Invoke(z, new object[] { "statef", 1f });   // AnimationState.OneHanded
+                if (_zSetInt != null) _zSetInt.Invoke(z, new object[] { "statei", 1 });
+                _stateHeld = true; _stateZanim = z;
+            }
+            catch (Exception) { }
+        }
+
+        public static void RestoreAnimState(Player p)
+        {
+            if (!_stateHeld || p == null) return;
+            _stateHeld = false; _stateZanim = null;
+            try
+            {
+                if (_setupState == null) _setupState = typeof(Humanoid).GetMethod("SetupAnimationState", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+                if (_setupState != null) _setupState.Invoke(p, null);   // Valheim's own: back to the equipped weapon's state
+            }
+            catch (Exception) { }
         }
 
         // dual = true: use the dual-wield controller (returns whether it is available); false: restore.

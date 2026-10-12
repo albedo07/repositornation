@@ -11,3 +11,4 @@ v0.25.157: scimitar, Hellblade cleaver, paired knives (Mercenary): 1-2-1-2-3, th
 v0.25.158: scimitar / Hellblade cleaver / paired knives (Mercenary) with Warfare loaded: every swing = SBDW clips, 1-2-1-2-3, skills between swings. A blocked swing + "WARNING [2HDW] ... attack rejected" means repair failed (send the line). Heavy attack native.
 v0.25.159: if "controller replaced before trigger" shows in the log, that click must cost nothing and the chain must not advance.
 v0.25.160: scimitar / Hellblade cleaver / paired knives (Mercenary): primary chain must look and time exactly like SBDW. Send the "[2HDW] trigger path:" lines from LogOutput.log.
+v0.25.161: scimitar / Hellblade cleaver / paired knives: primary chain = SBDW look + timing; heavy native; stance returns after the chain.

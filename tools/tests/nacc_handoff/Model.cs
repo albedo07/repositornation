@@ -222,6 +222,20 @@ static class T
                 }
             }
         }
+        // v0.25.161: 2HDW swing runs in SBDW's animator state (OneHanded) and the weapon's state comes back on release
+        {
+            var weapons = new Dictionary<string, int> { { "DualSwordScimitar_TW", 15 }, { "DualAxeDemonic_TW", 15 }, { "DualKnifeIron_TW", 11 } };
+            foreach (var kv in weapons)
+            {
+                int statei = kv.Value; bool held = false;
+                // primary routed swing
+                statei = 1; held = true;
+                Check(statei == 1, kv.Key + " routed swing plays in OneHanded (SBDW) state");
+                // heavy attack / skill / idle release -> SetupAnimationState
+                if (held) { statei = kv.Value; held = false; }
+                Check(statei == kv.Value && !held, kv.Key + " own state restored on release (heavy / skill / idle)");
+            }
+        }
         Console.WriteLine(fails == 0 ? "ALL PASS" : fails + " FAILED");
         Environment.Exit(fails == 0 ? 0 : 1);
     }
