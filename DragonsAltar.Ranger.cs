@@ -41,7 +41,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Aethelborn Ascended - Ranger";
-        public const string ModVersion = "0.25.145";
+        public const string ModVersion = "0.25.146";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -1325,7 +1325,7 @@ namespace DragonsAltarRanger
                             Vector3 ground = point + new Vector3(r.x, 0f, r.y);
                             LineVfx(ShotOrigin(player), ground, new Color(0.55f, 1f, 0.80f, 0.9f), 0.06f, 0.15f);   // v0.25.38 from the bow
                         }
-                        StartCoroutine(RingVfx(point, radius, new Color(0.55f, 1f, 0.80f, 0.7f), interval));
+                        StartCoroutine(GuideVfx(point, radius, new Color(0.55f, 1f, 0.80f, 0.7f), interval));
                     }
                     Shoot(player, null);
                 }
@@ -2532,7 +2532,7 @@ namespace DragonsAltarRanger
                         Vector3 g = point + new Vector3(r.x, 0f, r.y);
                         LineVfx(g + Vector3.up * DragonCombat.M(9f) + new Vector3(0.6f, 0f, 0.6f), g, c, 0.05f, 0.18f);
                     }
-                    StartCoroutine(RingVfx(point, radius, c, Mathf.Max(0.05f, _arInterval.Value)));
+                    StartCoroutine(GuideVfx(point, radius, c, Mathf.Max(0.05f, _arInterval.Value)));
                     Vector3 ap = point; float arr = radius; Color ac = c;
                     DragonCombat.RunVfx(delegate { for (int k = 0; k < 5; k++) { Vector2 q = UnityEngine.Random.insideUnitCircle * arr; DragonVfx.Burst(ap + new Vector3(q.x, 0.2f, q.y), new Color(0.50f, 0.44f, 0.36f, 0.6f), 6, 2.5f, 0.5f, 0.7f, 0.4f); DragonVfx.Burst(ap + new Vector3(q.x, 0.1f, q.y), ac, 5, 4f, 0.15f, 0.25f, 0.6f); } });   // v0.25.58 arrows kick up dirt
                 }
@@ -2739,7 +2739,7 @@ namespace DragonsAltarRanger
                 for (int p = 0; p < points.Count; p++)
                 {
                     Vector3[] marks = RowOfThree(GroundAt(points[p]), dirs[p], r);
-                    for (int c = 0; c < marks.Length; c++) StartCoroutine(RingVfx(marks[c], r, new Color(1f, 0.45f, 0.15f, 0.45f), 0.3f));
+                    for (int c = 0; c < marks.Length; c++) StartCoroutine(GuideVfx(marks[c], r, new Color(1f, 0.45f, 0.15f, 0.45f), 0.3f));
                 }
             yield return new WaitForSeconds(0.3f);   // the bombs fall
             if (player == null) yield break;
@@ -3010,7 +3010,7 @@ namespace DragonsAltarRanger
             DragonCombat.LockSkill(player, channel);
             DragonCombat.PlayClip(player, "rg_starfall", Mathf.Max(0.2f, channel));
             float radius = DragonCombat.M(_sfRadius.Value);
-            if (_enableVfx.Value) StartCoroutine(RingVfx(point, radius, new Color(0.80f, 1f, 0.60f, 0.8f), channel + _sfDuration.Value));
+            if (_enableVfx.Value) StartCoroutine(GuideVfx(point, radius, new Color(0.80f, 1f, 0.60f, 0.8f), channel + _sfDuration.Value));
             yield return new WaitForSeconds(channel);
             if (player == null || player.IsDead()) { _sfActive = false; yield break; }
             RangerArrowDamage d = ArrowDamage(player);
@@ -3818,6 +3818,18 @@ namespace DragonsAltarRanger
             }
             DragonCombat.RunVfx(delegate { DragonVfx.AttachGlow(obj.transform, c, radius * 0.6f, 8f, 0f); });
             return obj;
+        }
+
+        // v0.25.146: required targeting guide (Starfall area) - thin faint ground ring, gated by [Visuals] ShowTargetingGuides
+        private IEnumerator GuideVfx(Vector3 center, float radius, Color color, float duration)
+        {
+            if (DragonVfx.Enabled)
+            {
+                Color gc = color;
+                DragonCombat.RunVfx(delegate { DragonVfx.AreaRing(center, gc, radius, Mathf.Max(0.1f, duration)); });
+                yield break;
+            }
+            yield return StartCoroutine(RingVfx(center, radius, color, duration));
         }
 
         private IEnumerator RingVfx(Vector3 center, float radius, Color color, float duration)

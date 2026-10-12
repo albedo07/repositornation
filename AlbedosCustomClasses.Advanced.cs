@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.145";
+        public const string ModVersion = "0.25.146";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -693,8 +693,8 @@ namespace AlbedosCustomClassesAdvanced
             _judgementCooldown = Config.Bind("Sword Master Judgement Cut", "RechargeSecondsPerStack", 12f, "Independent recharge time for each of the four stacks.");
             _judgementStamina = Config.Bind("Sword Master Judgement Cut", "StaminaCost", 18f, "Stamina cost per stack activation.");
             _judgementRange = Config.Bind("Sword Master Judgement Cut", "CastRange", 15f, "Maximum Ground PAC / Target PAC / Free Aim cast range.");
-            _judgementRadius = Config.Bind("Sword Master Judgement Cut", "Radius", 3f, "Normal: damage radius of each of the 2 spheres (m).");
-            _bladeAreaRadius = Config.Bind("Sword Master Judgement Cut", "SpawnAreaRadius_v025145", 5f, "Normal: the 2 spheres appear at random inside this radius (m) around the point locked at cast time.");
+            _judgementRadius = Config.Bind("Sword Master Judgement Cut", "SphereRadius_v025146", 2f, "Normal: damage radius of each of the 2 spheres (m).");
+            _bladeAreaRadius = Config.Bind("Sword Master Judgement Cut", "SpawnAreaRadius_v025146", 3f, "Normal: the 2 spheres appear at random inside this radius (m) around the point locked at cast time.");
             _bladeInterval = Config.Bind("Sword Master Judgement Cut", "SphereIntervalSeconds_v025145", 0.5f, "Normal: seconds between activation and sphere 1, and between spheres (0.5 / 1.0).");
             _bladeCripple = Config.Bind("Sword Master Judgement Cut", "CrippleSeconds_v025145", 6f, "Normal: Cripple duration applied by each sphere (s).");
             _judgementSlashDamage = Config.Bind("Sword Master Judgement Cut", "SlashDamagePerCut", 24f, "Pure Slash damage dealt by each of the three cuts. No Spirit, DoT or debuff.");
@@ -1253,6 +1253,7 @@ namespace AlbedosCustomClassesAdvanced
 
         private void Update()
         {
+            RegisterCleavePullRpc();
             UpdateRefreshingDots();
             if (Input.GetMouseButtonDown(0) && !Cursor.visible) _ihLmbLatchAt = Time.time;
 
@@ -1678,7 +1679,7 @@ namespace AlbedosCustomClassesAdvanced
             // v0.25.85 (user: aiming at Yagluth put the storm behind him): a creature under the crosshair is the target
             // (centre of its body), even huge ones; otherwise the usual aim point.
             if (!IhAimedCreaturePoint(player, jRange, out point)) point = GetAimPoint(player, jRange);
-            DragonCombat.LockSkill(player, 0.40f);
+            DragonCombat.LockSkill(player, Mathf.Max(0.40f, _bladeDrawWindup.Value));
             DragonCombat.PlayClip(player, "sm_blade_storm", Mathf.Max(0.03f, _bladeDrawWindup.Value));
             StartCoroutine(JudgementCutRoutine(player, point));
         }
@@ -1902,7 +1903,7 @@ namespace AlbedosCustomClassesAdvanced
             _hmAscEnd = Config.Bind(hlaAsc, "FirstSwingEnd_v025138d", _hmEnd.Value, "Ascended first swing: animation end (independent of Normal).");
             _hmPoseTime = Config.Bind(hlaAsc, "FinisherPoseClipSeconds_v025138d", 0.48f, new ConfigDescription("Krom heavy-attack hold pose (normalized fraction, 0.48 = 48% into its motion).", new AcceptableValueRange<float>(0.05f, 0.95f)));
             _seismicWindupV = Config.Bind("Mercenary Seismic Guillotine Animation", "Windup_v025137", 0.5f, "Click -> the overhead chop hits and the fissure starts (s).");
-            _bladeDrawWindup = Config.Bind("Sword Master Blade Storm Animation", "DrawWindup_v025137", 0.12f, "The iai draw animation's wind up (s); the cuts keep their own timing.");
+            _bladeDrawWindup = Config.Bind("Sword Master Blade Storm Animation", "DrawWindup_v025146", 0.5f, "The iai draw animation's wind up (s); the cuts keep their own timing.");
             const string ma = "Sword Master Moonlight Splitter Ascended";
             _moonAscWindup = Config.Bind(ma, "Windup", 0.5f, "Legacy value; natural vanilla sword attack timing now controls the first wave.");
             _moonAscInterval = Config.Bind(ma, "WaveInterval", 0.3f, "Legacy value; natural vanilla longsword cycles now space waves 1-4.");
@@ -1936,8 +1937,8 @@ namespace AlbedosCustomClassesAdvanced
             _bladeAscStacks = Config.Bind(ba, "Stacks", 6, "Stored stacks (normal 4).");
             _bladeAscFirst = Config.Bind(ba, "CutDamagePercent", 85f, "Each of the three cuts (% of a normal cut).");
             _bladeAscExtra = Config.Bind(ba, "ExtraCutDamagePercent", 25f, "Part of the total damage budget (% of a full normal activation, added to CutDamagePercent x 3); the budget is split over the 4 spheres x 3 hits.");
-            _bladeAscSphereRadius = Config.Bind(ba, "SphereRadius_v025145", 4f, "Ascended: damage radius of each of the 4 spheres (m).");
-            _bladeAscAreaRadius = Config.Bind(ba, "SpawnAreaRadius_v025145", 7f, "Ascended: the 4 spheres appear at random inside this radius (m) around the point locked at cast time.");
+            _bladeAscSphereRadius = Config.Bind(ba, "SphereRadius_v025146", 2f, "Ascended: damage radius of each of the 4 spheres (m).");
+            _bladeAscAreaRadius = Config.Bind(ba, "SpawnAreaRadius_v025146", 3f, "Ascended: the 4 spheres appear at random inside this radius (m) around the point locked at cast time.");
             _bladeAscInterval = Config.Bind(ba, "SphereIntervalSeconds_v025145", 0.5f, "Ascended: seconds between activation and sphere 1, and between spheres (0.5 / 1.0 / 1.5 / 2.0).");
             _bladeAscCripple = Config.Bind(ba, "CrippleSeconds_v025145", 6f, "Ascended: Cripple duration applied by each sphere (s).");
 
@@ -2454,13 +2455,68 @@ namespace AlbedosCustomClassesAdvanced
             if (speed <= 0f) return;
             try
             {
+                // v0.25.146: a remotely owned enemy is moved by its owner - forward the pull instead of dropping it
                 ZNetView nv = target.GetComponent<ZNetView>();
-                if (nv != null && nv.IsValid() && !nv.IsOwner()) return;
+                if (nv != null && nv.IsValid() && !nv.IsOwner())
+                {
+                    ForwardCleavePull(nv, wavePoint, solidMask, DragonCombat.M(speed) * Time.deltaTime);
+                    return;
+                }
+                CleavePullStep(target, wavePoint, solidMask, DragonCombat.M(speed) * Time.deltaTime);
+            }
+            catch (Exception) { }
+        }
+
+        private const string CleavePullRpc = "Aethelborn_CleavePull";
+        private ZRoutedRpc _cleavePullRpcReg;
+
+        private void RegisterCleavePullRpc()
+        {
+            if (ZRoutedRpc.instance == null || _cleavePullRpcReg == ZRoutedRpc.instance) return;
+            ZRoutedRpc.instance.Register<ZPackage>(CleavePullRpc, new Action<long, ZPackage>(ReceiveCleavePull));
+            _cleavePullRpcReg = ZRoutedRpc.instance;
+        }
+
+        private void ForwardCleavePull(ZNetView nv, Vector3 wavePoint, int solidMask, float step)
+        {
+            RegisterCleavePullRpc();
+            ZDO zdo = nv.GetZDO();
+            if (ZRoutedRpc.instance == null || zdo == null) return;
+            ZPackage pkg = new ZPackage();
+            pkg.Write(zdo.m_uid);
+            pkg.Write(wavePoint.x); pkg.Write(wavePoint.y); pkg.Write(wavePoint.z);
+            pkg.Write(solidMask);
+            pkg.Write(step);
+            ZRoutedRpc.instance.InvokeRoutedRPC(zdo.GetOwner(), CleavePullRpc, pkg);
+        }
+
+        private void ReceiveCleavePull(long sender, ZPackage pkg)
+        {
+            try
+            {
+                ZDOID id = pkg.ReadZDOID();
+                Vector3 wp = new Vector3(pkg.ReadSingle(), pkg.ReadSingle(), pkg.ReadSingle());
+                int mask = pkg.ReadInt();
+                float step = pkg.ReadSingle();
+                GameObject go = ZNetScene.instance != null ? ZNetScene.instance.FindInstance(id) : null;
+                Character c = go != null ? go.GetComponent<Character>() : null;
+                if (c == null || c.IsDead()) return;
+                ZNetView nv = c.GetComponent<ZNetView>();
+                if (nv == null || !nv.IsValid() || !nv.IsOwner()) return;
+                CleavePullStep(c, wp, mask, Mathf.Min(step, 2f));
+            }
+            catch (Exception) { }
+        }
+
+        private void CleavePullStep(Character target, Vector3 wavePoint, int solidMask, float stepLength)
+        {
+            try
+            {
                 Vector3 to = wavePoint - target.transform.position;
                 to.y = 0f;
                 float dist = to.magnitude;
                 const float stopGap = 0.5f, skin = 0.12f;
-                float want = Mathf.Min(DragonCombat.M(speed) * Time.deltaTime, dist - stopGap);
+                float want = Mathf.Min(stepLength, dist - stopGap);
                 if (want <= 0.001f) return;
                 Vector3 dir = to / dist;
                 Collider col = target.GetCollider();

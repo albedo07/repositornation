@@ -1,6 +1,5 @@
-v0.25.145 - Blade Storm Overhaul
-1. Horizon Walker: cannot equip two Gun Staves (unequipped + message); single Gun Staff fires as before; Mercenary cannot dual Gun Staves; Mercenary SBDW / 2HDW still work.
-2. Blade Storm normal (2 spheres 0.5/1.0 s, 5 m area, 3 m spheres) and Ascended (4 spheres 0.5-2.0 s, 7 m area, 4 m spheres): aim at enemy / structure / terrain / empty ground; each sphere 3 Slash hits + 6 s Cripple; you can move right after the draw.
-3. Crescent Cleave normal + Ascended: nearby enemies drift toward the wave (small > big > boss), no wall clipping, no extra pull with 7 overlapping waves; Ascended fire trails vanish after 2 s.
-4. VFX calmer; F8 > Visuals > Show Targeting Guides toggles the thin faint Meteor/Cataclysm guide outlines.
-Verified here: compile check (stubbed) + C# 5 parse only.
+v0.25.146 test:
+1. Blade Storm: draw ~0.5 s before first sphere; spheres land within 3 m of the aimed point, 2 m radius (normal 2, Ascended 4).
+2. Starfall / Arrow Rain / Explosive: ground ring marker visible; hidden when Show Targeting Guides is off.
+3. Multiplayer: Crescent Cleave pulls enemies owned by the other player.
+4. Altar: Horizon Walker summary has no dual Gun Staff text.

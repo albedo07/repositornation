@@ -41,7 +41,7 @@ namespace AlbedosCustomClasses
     {
         public const string ModGuid = "albedo.customclasses";
         public const string ModName = "Aethelborn Ascended - Altar";
-        public const string ModVersion = "0.25.145";
+        public const string ModVersion = "0.25.146";
 
         internal const string ClassDataKey = "AlbedoCustomClasses.Class";
         internal const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1505,7 +1505,7 @@ namespace AlbedosCustomClasses
             if (advancementName == "Acrobat") return "<b>SKILLS</b>  Gale Volley  |  Cyclone Arrow  |  Swallow Dive  |  Skyfall Barrage  |  Somersault Dance  |  Furious Winds (Ultimate)\n<b>MASTERY</b>  Windstep  |  <b>GRACE</b>  Tailwind";
             if (advancementName == "Bowmaster") return "<b>SKILLS</b>  Ballista Shot  |  Arrow Rain  |  Pinning Shot  |  Explosive Arrow  |  Splitting Arrow  |  Starfall Volley (Ultimate)\n<b>MASTERY</b>  Deadeye  |  <b>GRACE</b>  Hawk's Vigil";
             if (advancementName == "Wizard") return "<b>SKILLS</b>  Meteor Fall  |  Gravity Dominion  |  Astral Railcannon  |  Astral Greatblade  |  Frost Nova  |  Elemental Cataclysm (Ultimate)\n<b>MASTERY</b>  Archmage  |  <b>GRACE</b>  Clockwork";
-            return "<b>SKILLS</b>  Rift Echo  |  Void Step  |  Arcane Phalanx  |  Arcane Phantom  |  Arcane Rupture (Ultimate)\n<b>PASSIVE</b>  Riftwalker / Phase Flow + dual Gun Staff mastery";
+            return "<b>SKILLS</b>  Rift Echo  |  Void Step  |  Arcane Phalanx  |  Arcane Phantom  |  Arcane Rupture (Ultimate)\n<b>PASSIVE</b>  Riftwalker / Phase Flow";
         }
 
         internal void OpenClassPanel()

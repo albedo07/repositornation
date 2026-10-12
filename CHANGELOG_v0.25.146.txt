@@ -1,0 +1,5 @@
+v0.25.146 Blade Storm Fixes
+- Blade Storm (normal + Ascended): CA wind-up now 0.5 s (DrawWindup_v025146, movement lock follows it); spawn area 3 m, sphere radius 2 m (new keys *_v025146 so old cfg values don't override).
+- Starfall / Arrow Rain / Explosive marks / Skyfall-style area markers: required targeting guide restored (Ranger GuideVfx, thin ring, follows Show Targeting Guides).
+- Crescent pull: remotely owned enemies are now pulled by their owner (routed RPC Aethelborn_CleavePull), no longer skipped.
+- Removed leftover "dual Gun Staff mastery" wording (Horizon Walker summary).
