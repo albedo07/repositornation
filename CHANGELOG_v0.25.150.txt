@@ -1,0 +1,19 @@
+v0.25.150 VFX Polish (visual only; no config keys / defaults changed, saved settings untouched)
+Shared VFX layer (applies to every skill, Normal + Ascended):
+- Particles: internal restraint x0.7 on every burst/rate, additive alpha 0.8 -> 0.65, max 600 per system.
+- Overlap budget: >24 particle systems in one frame -> later ones at 50%, >48 -> 25% (stacked casts stay readable).
+- Flashes: peak cap 2.5 -> 1.5, <= 0.25 s, <= 5 m; at most 4 flashes per 0.25 s.
+- Camera shake: half strength, range <= 25 m, one shake per 0.2 s.
+- Attached glows: light 1.2 -> 0.7, range <= 3 m; weapon charge glow subtler.
+- Shockwaves: fewer motes (9/m, 20-150), lighter dust; expanding ground ring alpha 0.5 -> 0.35, inner glow 0.18 -> 0.08.
+- Heavy landings / ground impacts: fewer cracks, rocks and sparks.
+- Light beams alpha 0.85 -> 0.6. Persistent lights (Black Hole, Eclipse sun, ground-lightning head, holy flicker) dimmed, Eclipse light range capped 18 m.
+- Hit impacts: one per target per 0.2 s, smaller sparks, softer fire/lightning/spirit flares, blunt shake only on big hits.
+- Status: no light flash on every Fire/Spirit Burn tick; freeze flash softer.
+- Cast flare shake (Ultimate / Grace) 0.6 -> 0.4. Holy / Lightning impact presets fewer motes.
+Decorative radius outlines:
+- Rune circles (Glyph: Clockwork, Arcane Rupture wind-up) are now faint guides, hidden by Show Targeting Guides.
+- Elemental Cataclysm impact: rune circle + light column removed; Meteor Fall + Punishing Bomb impact light columns removed. Fewer embers on both.
+Guides:
+- Sorcerer guides (Meteor / Cataclysm charge markers) now also show with Enhanced VFX OFF (legacy ring) and obey Show Targeting Guides in both modes, like Ranger.
+- Attacks never use the guide path: hiding guides only hides AreaRing / Glyph outlines.

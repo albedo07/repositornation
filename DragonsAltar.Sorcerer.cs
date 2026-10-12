@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Aethelborn Ascended - Sorcerer Advancements";
-        public const string ModVersion = "0.25.149";
+        public const string ModVersion = "0.25.150";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1520,8 +1520,7 @@ namespace DragonsAltarSorcerer
                     DragonVfx.HeavyLanding(mt, new Color(1f, 0.40f, 0.08f, 1f), mr, Mathf.Clamp(mr * 0.4f, 1f, 3f));   // v0.25.58 the meteor really lands
                     DragonVfx.FireBlast(mt, mr * 0.8f);   // v0.25.61
                     DragonVfx.SpikeRing(mt, new Color(0.22f, 0.16f, 0.13f, 1f), mr * 0.8f, 8, 1.4f, 1.2f);
-                    DragonVfx.Pillar(mt, new Color(1f, 0.45f, 0.10f, 1f), mr * 0.35f, 8f, 0.5f);
-                    DragonVfx.Embers(mt, new Color(1f, 0.40f, 0.08f, 1f), mr * 0.8f, Mathf.Max(1f, _meteorBurnSeconds.Value), 50f);
+                    DragonVfx.Embers(mt, new Color(1f, 0.40f, 0.08f, 1f), mr * 0.8f, Mathf.Max(1f, _meteorBurnSeconds.Value), 30f);   // v0.25.150 no light column, fewer embers
                     DragonVfx.Vanilla(new string[] { "vfx_FireballHit", "fx_fireball_staff_explosion" }, mt, Quaternion.identity, Mathf.Clamp(mr / 3f, 1f, 3f), 4f);
                 });
             }
@@ -1686,12 +1685,10 @@ namespace DragonsAltarSorcerer
                 DragonCombat.RunVfx(delegate
                 {
                     DragonVfx.HeavyLanding(ct, new Color(1f, 0.40f, 0.08f, 1f), cr, 3f);   // v0.25.58 the sky falls
-                    DragonVfx.Pillar(ct, new Color(0.80f, 0.40f, 1f, 1f), cr * 0.4f, 16f, 0.8f);
                     DragonVfx.IceBurst(ct + new Vector3(cr * 0.3f, 0f, 0f), cr * 0.5f);
                     DragonVfx.FireBlast(ct, cr * 0.7f);   // v0.25.61
                     DragonVfx.SpikeRing(ct, DragonVfx.Ice, cr * 0.9f, 10, 2.2f, 1.5f);
-                    DragonVfx.Glyph(ct, DragonVfx.Arcane, cr, 2f, 40f);
-                    DragonVfx.Embers(ct, new Color(1f, 0.40f, 0.08f, 1f), cr * 0.8f, 3f, 80f);
+                    DragonVfx.Embers(ct, new Color(1f, 0.40f, 0.08f, 1f), cr * 0.8f, 3f, 45f);   // v0.25.150 Cataclysm: no rune circle / light column, fewer embers
                     DragonVfx.StormCloud(ct, cr, 14f, 2f);
                 });
             }
@@ -4147,7 +4144,8 @@ namespace DragonsAltarSorcerer
         // v0.25.145: targeting / charging guide = a thin, very faint outline (hidden by [Visuals] ShowTargetingGuides).
         private IEnumerator GuideVfx(Vector3 center, float radius, Color color, float duration)
         {
-            if (!DragonVfx.Enabled) yield break;
+            if (!DragonVfx.Guides) yield break;   // v0.25.150: one toggle for both VFX modes
+            if (!DragonVfx.Enabled) { yield return StartCoroutine(RingVfx(center, radius, color, duration)); yield break; }   // legacy line ring when Enhanced VFX is off
             Color rc = color; rc.a = 1f;
             DragonCombat.RunVfx(delegate { DragonVfx.AreaRing(center, rc, radius, Mathf.Max(0.15f, duration)); });
         }

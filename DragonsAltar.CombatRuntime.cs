@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.149";
+        public const string ModVersion = "0.25.150";
 
         internal static DragonCombatPlugin Instance;
 
@@ -11486,7 +11486,7 @@ namespace DragonsAltarCombat
             if (HeadLight != null && Pts.Count > 0)
             {
                 HeadLight.transform.position = Pts[Pts.Count - 1] + Vector3.up * 0.5f;
-                HeadLight.intensity = 1.6f * DragonVfx.LightScale * flick;
+                HeadLight.intensity = 1.0f * DragonVfx.LightScale * flick;
             }
             if (!_done && Pts.Count > 0 && Time.time >= _nextArc)
             {
@@ -11746,6 +11746,20 @@ namespace DragonsAltarCombat
             return _alpha;
         }
 
+        // v0.25.150 VFX POLISH: one internal restraint on every particle system + a per-frame budget so overlapping
+        // casts never stack into screen clutter (the user's density / light settings still apply on top).
+        private const float Restraint = 0.7f;
+        private static int _psFrame = -1, _psCount;
+        private static float PolishBudget()
+        {
+            if (_psFrame != Time.frameCount) { _psFrame = Time.frameCount; _psCount = 0; }
+            _psCount++;
+            return _psCount <= 24 ? 1f : _psCount <= 48 ? 0.5f : 0.25f;
+        }
+        private static readonly float[] _flashAt = new float[4];
+        private static int _flashIdx;
+        private static float _shakeNext;
+
         private static DragonVfxLife Host(Vector3 pos, float life, string name)
         {
             GameObject go = new GameObject("IH_Vfx_" + name);
@@ -11759,7 +11773,8 @@ namespace DragonsAltarCombat
         public static ParticleSystem Particles(Transform parent, Color c, int burst, float rate, float emitSeconds, float life, float speedMin, float speedMax,
             float sizeMin, float sizeMax, float gravity, ParticleSystemShapeType shape, float radius, Vector3 shapeEuler, bool stretch, bool additive)
         {
-            if (additive) c.a *= 0.8f;   // v0.25.59 toned down
+            if (additive) c.a *= 0.65f;   // v0.25.150 Valheim-style restraint (was 0.8)
+            float budget = PolishBudget();   // v0.25.150: overlapping casts share one particle budget per frame
             GameObject go = new GameObject("ps");
             go.transform.SetParent(parent, false);
             ParticleSystem ps = go.AddComponent<ParticleSystem>();
@@ -11776,12 +11791,12 @@ namespace DragonsAltarCombat
             main.startColor = new ParticleSystem.MinMaxGradient(c, c2);
             main.gravityModifier = gravity;
             main.simulationSpace = ParticleSystemSimulationSpace.World;
-            main.maxParticles = 1200;
+            main.maxParticles = 600;
             main.scalingMode = ParticleSystemScalingMode.Hierarchy;
             ParticleSystem.EmissionModule em = ps.emission;
             em.enabled = true;
-            em.rateOverTime = rate * Amount;
-            int b = Mathf.Max(0, Mathf.RoundToInt(burst * Amount));
+            em.rateOverTime = rate * Amount * Restraint * budget;
+            int b = Mathf.Max(0, Mathf.RoundToInt(burst * Amount * Restraint * budget));
             if (b > 0) em.SetBursts(new ParticleSystem.Burst[] { new ParticleSystem.Burst(0f, (short)Mathf.Min(b, 30000)) });
             else em.SetBursts(new ParticleSystem.Burst[0]);
             ParticleSystem.ShapeModule sh = ps.shape;
@@ -11816,10 +11831,14 @@ namespace DragonsAltarCombat
         {
             if (!Enabled) return;
             // v0.25.145 restrained: no bright flares - capped peak, short, small range
-            intensity = Mathf.Min(intensity, 2.5f) * LightScale;
-            seconds = Mathf.Min(seconds, 0.3f);
-            range = Mathf.Min(range, 6f);
+            intensity = Mathf.Min(intensity, 1.5f) * LightScale;   // v0.25.150 (was 2.5 / 0.3 s / 6 m)
+            seconds = Mathf.Min(seconds, 0.25f);
+            range = Mathf.Min(range, 5f);
             if (intensity <= 0.05f) return;
+            // v0.25.150: at most 4 flashes per 0.25 s, so overlapping casts never strobe
+            if (Time.time - _flashAt[_flashIdx] < 0.25f) return;
+            _flashAt[_flashIdx] = Time.time;
+            _flashIdx = (_flashIdx + 1) % _flashAt.Length;
             DragonVfxLife l = Host(pos, seconds, "flash");
             Light light = l.gameObject.AddComponent<Light>();
             light.type = LightType.Point;
@@ -11848,14 +11867,14 @@ namespace DragonsAltarCombat
             radius = Mathf.Max(0.5f, radius);
             seconds = Mathf.Clamp(seconds, 0.15f, 2f);
             DragonVfxLife l = Host(pos + Vector3.up * 0.15f, seconds + 0.5f, "shock");
-            int n = Mathf.Clamp(Mathf.RoundToInt(radius * 12f), 30, 260);
+            int n = Mathf.Clamp(Mathf.RoundToInt(radius * 9f), 20, 150);   // v0.25.150 (was 12/r, 30-260)
             GroundRing(pos, c, radius, seconds);   // v0.25.59 skin
             float speed = radius / seconds;
             Particles(l.transform, c, n, 0f, 0.05f, seconds, speed * 0.85f, speed, 0.35f + radius * 0.03f, 0.7f + radius * 0.05f, 0f,
                 ParticleSystemShapeType.Circle, 0.25f, new Vector3(90f, 0f, 0f), true, true);
             Color dust = Color.Lerp(c, Color.white, 0.6f);
             dust.a = 0.5f;
-            Particles(l.transform, dust, Mathf.RoundToInt(n * 0.35f), 0f, 0.05f, seconds * 1.4f, speed * 0.25f, speed * 0.55f, 0.6f, 1.4f, -0.05f,
+            Particles(l.transform, dust, Mathf.RoundToInt(n * 0.25f), 0f, 0.05f, seconds * 1.4f, speed * 0.25f, speed * 0.55f, 0.6f, 1.4f, -0.05f,
                 ParticleSystemShapeType.Circle, 0.3f, new Vector3(90f, 0f, 0f), false, true);
             Flash(pos + Vector3.up * 1.2f, c, 4f + radius * 0.25f, radius * 1.6f, seconds + 0.25f);
         }
@@ -12003,8 +12022,8 @@ namespace DragonsAltarCombat
                 Light light = go.AddComponent<Light>();
                 light.type = LightType.Point;
                 light.color = c;
-                light.range = lightRange;
-                light.intensity = 1.2f * LightScale;
+                light.range = Mathf.Min(lightRange, 3f);   // v0.25.150
+                light.intensity = 0.7f * LightScale;
                 light.shadows = LightShadows.None;
             }
         }
@@ -12082,6 +12101,11 @@ namespace DragonsAltarCombat
         public static void Shake(Vector3 pos, float range, float strength)
         {
             if (!Enabled) return;
+            // v0.25.150: half strength, one shake per 0.2 s (overlapping impacts no longer stack)
+            if (Time.time < _shakeNext) return;
+            _shakeNext = Time.time + 0.2f;
+            strength *= 0.5f;
+            range = Mathf.Min(range, 25f);
             try
             {
                 Type gc = DragonCombat.FindTypeCached("GameCamera");
@@ -12312,9 +12336,9 @@ namespace DragonsAltarCombat
         {
             Shockwave(pos, c, radius, 0.5f);
             DustRing(pos, radius);
-            Cracks(pos, c, radius * 0.8f, 9, 3.5f);
-            Debris(pos, new Color(0.42f, 0.36f, 0.30f, 1f), Mathf.RoundToInt(10 + radius * 2f), 6f + radius * 0.6f, 0.25f + radius * 0.02f, 2.5f);
-            Burst(pos + Vector3.up * 0.4f, Color.Lerp(c, Color.white, 0.5f), Mathf.RoundToInt(40 + radius * 8f), 9f + radius, 0.3f, 0.8f, 0.5f);
+            Cracks(pos, c, radius * 0.8f, 7, 3.5f);   // v0.25.150 fewer cracks / rocks / sparks
+            Debris(pos, new Color(0.42f, 0.36f, 0.30f, 1f), Mathf.RoundToInt(6 + radius * 1.2f), 6f + radius * 0.6f, 0.25f + radius * 0.02f, 2.5f);
+            Burst(pos + Vector3.up * 0.4f, Color.Lerp(c, Color.white, 0.35f), Mathf.RoundToInt(24 + radius * 5f), 9f + radius, 0.28f, 0.7f, 0.5f);
             Shake(pos, 25f + radius * 2f, shake);
             Scorch(pos, radius * 0.55f, 6f);   // v0.25.59 skin
             Smoke(pos, new Color(0.45f, 0.40f, 0.35f, 0.55f), radius, 2.2f, Mathf.RoundToInt(6 + radius));
@@ -12324,9 +12348,9 @@ namespace DragonsAltarCombat
         public static void GroundImpact(Vector3 pos, Color c, float radius, float shake)
         {
             DustRing(pos, radius);
-            Cracks(pos, c, radius * 0.75f, 7, 3f);
-            Debris(pos, new Color(0.42f, 0.36f, 0.30f, 1f), Mathf.RoundToInt(6 + radius * 1.5f), 5f + radius * 0.5f, 0.22f + radius * 0.02f, 2.2f);
-            Burst(pos + Vector3.up * 0.4f, Color.Lerp(c, Color.white, 0.4f), Mathf.RoundToInt(25 + radius * 6f), 8f + radius, 0.28f, 0.7f, 0.5f);
+            Cracks(pos, c, radius * 0.75f, 6, 3f);   // v0.25.150
+            Debris(pos, new Color(0.42f, 0.36f, 0.30f, 1f), Mathf.RoundToInt(4 + radius), 5f + radius * 0.5f, 0.22f + radius * 0.02f, 2.2f);
+            Burst(pos + Vector3.up * 0.4f, Color.Lerp(c, Color.white, 0.3f), Mathf.RoundToInt(16 + radius * 4f), 8f + radius, 0.26f, 0.6f, 0.5f);
             if (shake > 0f) Shake(pos, 20f + radius * 2f, shake);
             Scorch(pos, radius * 0.45f, 5f);   // v0.25.59 skin
             Smoke(pos, new Color(0.45f, 0.40f, 0.35f, 0.5f), radius * 0.8f, 2f, Mathf.RoundToInt(4 + radius * 0.8f));
@@ -12538,10 +12562,10 @@ namespace DragonsAltarCombat
             radius = Mathf.Max(0.5f, radius);
             Vector3 g = GroundPoint(pos) + Vector3.up * 0.07f;
             Quaternion yaw = Quaternion.Euler(0f, UnityEngine.Random.Range(0f, 360f), 0f);
-            Color rc = c; rc.a = 0.5f;
+            Color rc = c; rc.a = 0.35f;   // v0.25.150 (was 0.5)
             DragonMeshFx ring = MeshFx(g, yaw, true, Mat(RingTex(), true), rc, seconds + 0.15f); if (ring != null) ring.Conform = true;
             if (ring != null) { ring.ScaleFrom = Vector3.one * radius * 0.4f; ring.ScaleTo = Vector3.one * radius * 2.05f; ring.ScaleTime = seconds; }
-            Color gc = Color.Lerp(c, Color.white, 0.2f); gc.a = 0.18f;
+            Color gc = Color.Lerp(c, Color.white, 0.2f); gc.a = 0.08f;   // v0.25.150 (was 0.18)
             DragonMeshFx disc = MeshFx(g + Vector3.up * 0.01f, yaw, true, Mat(Glow(), true), gc, seconds * 0.8f + 0.1f); if (disc != null) disc.Conform = true;
             if (disc != null) { disc.ScaleFrom = Vector3.one * radius * 0.8f; disc.ScaleTo = Vector3.one * radius * 1.6f; disc.ScaleTime = seconds * 0.5f; }
         }
@@ -12571,7 +12595,7 @@ namespace DragonsAltarCombat
         public static void Beam(Vector3 pos, Color c, float radius, float height, float seconds)
         {
             if (!Enabled) return;
-            Color bc = Color.Lerp(c, Color.white, 0.25f); bc.a = 0.85f;
+            Color bc = Color.Lerp(c, Color.white, 0.25f); bc.a = 0.6f;   // v0.25.150 (was 0.85)
             for (int i = 0; i < 2; i++)
             {
                 DragonMeshFx b = MeshFx(pos, Quaternion.Euler(0f, i * 90f + 20f, 0f), false, Mat(BeamTex(), true), bc, seconds);
@@ -12805,14 +12829,15 @@ namespace DragonsAltarCombat
         // Rotating rune circle on the ground (Clockwork, Gravity Dominion, Rupture, traps).
         public static void Glyph(Vector3 pos, Color c, float radius, float seconds, float spin)
         {
-            if (!Enabled) return;
+            // v0.25.150: rune circles are radius telegraphs, not attacks -> faint and hidden with [Visuals] ShowTargetingGuides
+            if (!Enabled || !Guides) return;
             Vector3 g = GroundPoint(pos) + Vector3.up * 0.08f;
-            Color gc = c; gc.a = 0.8f;
+            Color gc = c; gc.a = 0.22f;
             DragonMeshFx a = MeshFx(g, Quaternion.identity, true, Mat(RingTex(), true), gc, seconds); if (a != null) a.Conform = true;
             if (a != null) { a.FadeIn = 0.2f; a.Hold = seconds * 0.6f; a.ScaleFrom = Vector3.one * radius * 1.7f; a.ScaleTo = Vector3.one * radius * 2.05f; a.ScaleTime = 0.3f; a.Spin = spin; }
             DragonMeshFx b = MeshFx(g + Vector3.up * 0.01f, Quaternion.identity, true, Mat(RingTex(), true), gc, seconds); if (b != null) b.Conform = true;
             if (b != null) { b.FadeIn = 0.25f; b.Hold = seconds * 0.6f; b.ScaleFrom = Vector3.one * radius * 1.1f; b.ScaleTo = Vector3.one * radius * 1.25f; b.ScaleTime = 0.3f; b.Spin = -spin * 1.6f; }
-            Color dc = c; dc.a = 0.3f;
+            Color dc = c; dc.a = 0.06f;
             DragonMeshFx d = MeshFx(g + Vector3.up * 0.02f, Quaternion.identity, true, Mat(Glow(), true), dc, seconds); if (d != null) d.Conform = true;
             if (d != null) { d.FadeIn = 0.2f; d.Hold = seconds * 0.6f; d.ScaleFrom = d.ScaleTo = Vector3.one * radius * 2f; }
         }
@@ -13324,13 +13349,13 @@ namespace DragonsAltarCombat
             float next;
             if (_impactNext.TryGetValue(id, out next) && Time.time < next) return;
             if (_impactNext.Count > 400) _impactNext.Clear();
-            _impactNext[id] = Time.time + 0.15f;
+            _impactNext[id] = Time.time + 0.2f;   // v0.25.150 (was 0.15)
             float sl = hit.m_damage.m_slash, bl = hit.m_damage.m_blunt, pi = hit.m_damage.m_pierce, fi = hit.m_damage.m_fire,
                   fr = hit.m_damage.m_frost, li = hit.m_damage.m_lightning, po = hit.m_damage.m_poison, sp = hit.m_damage.m_spirit;
             float total = Mathf.Max(0.01f, bl + sl + pi + fi + fr + li + po + sp);
             if (total < 0.5f) return;
             Vector3 pos = target.transform.position + Vector3.up * 1.0f;
-            float size = Mathf.Clamp(Mathf.Sqrt(total) * 0.12f, 0.5f, 2.2f);   // bigger hits, bigger sparks
+            float size = Mathf.Clamp(Mathf.Sqrt(total) * 0.11f, 0.5f, 1.8f);   // bigger hits, bigger sparks (v0.25.150 cap 1.8)
             float best = sl; int kind = 0;
             if (bl > best) { best = bl; kind = 1; }
             if (pi > best) { best = pi; kind = 2; }
@@ -13339,7 +13364,7 @@ namespace DragonsAltarCombat
             if (li > best) { best = li; kind = 5; }
             if (po > best) { best = po; kind = 6; }
             if (sp > best) { best = sp; kind = 7; }
-            int n = Mathf.RoundToInt(12f * size * Amount);
+            int n = Mathf.RoundToInt(9f * size * Amount);
             switch (kind)
             {
                 case 0:   // slash: white-hot cut streaks
@@ -13349,14 +13374,14 @@ namespace DragonsAltarCombat
                 case 1:   // blunt: dust puff + rock chips
                     Burst(pos, new Color(0.85f, 0.78f, 0.65f, 1f), n, 4f, 0.25f, 0.5f, 0.8f);
                     Smoke(pos - Vector3.up * 0.5f, new Color(0.55f, 0.5f, 0.45f, 0.45f), 0.6f * size, 0.8f, 4);
-                    if (size > 1.4f) Shake(pos, 12f, 0.4f);
+                    if (size > 1.6f) Shake(pos, 12f, 0.4f);
                     break;
                 case 2:   // pierce: a short sharp spray straight through
                     Burst(pos, new Color(1f, 0.95f, 0.8f, 1f), n, 10f, 0.08f, 0.25f, 0.2f);
                     break;
                 case 3:   // fire: ember spray + flare
                     Burst(pos, new Color(1f, 0.55f, 0.15f, 1f), n + 6, 6f, 0.2f, 0.6f, -0.4f);
-                    Flash(pos, new Color(1f, 0.5f, 0.2f, 1f), 1.6f, 3f + size, 0.25f);
+                    Flash(pos, new Color(1f, 0.5f, 0.2f, 1f), 1.0f, 2.5f + size, 0.2f);
                     break;
                 case 4:   // frost: crystal shards
                     Burst(pos, new Color(0.8f, 0.95f, 1f, 1f), n, 6f, 0.15f, 0.5f, 1.2f);
@@ -13368,7 +13393,7 @@ namespace DragonsAltarCombat
                         Vector3 o = UnityEngine.Random.onUnitSphere * (0.9f + size * 0.4f);
                         Bolt(pos, pos + o, new Color(0.55f, 0.9f, 1f, 1f), 0.06f, 0.15f);
                     }
-                    Flash(pos, new Color(0.55f, 0.85f, 1f, 1f), 1.8f, 3f + size, 0.15f);
+                    Flash(pos, new Color(0.55f, 0.85f, 1f, 1f), 1.1f, 2.5f + size, 0.15f);
                     break;
                 case 6:   // poison: green bubbling puff
                     Smoke(pos, new Color(0.45f, 0.85f, 0.3f, 0.5f), 0.5f * size, 1f, 5);
@@ -13376,7 +13401,7 @@ namespace DragonsAltarCombat
                     break;
                 default:  // spirit: holy motes rising + soft ring
                     Burst(pos, new Color(1f, 0.93f, 0.7f, 1f), n, 4f, 0.15f, 0.7f, -0.6f);
-                    Flash(pos, new Color(1f, 0.9f, 0.6f, 1f), 1.4f, 3f + size, 0.2f);
+                    Flash(pos, new Color(1f, 0.9f, 0.6f, 1f), 0.9f, 2.5f + size, 0.18f);
                     break;
             }
         }
@@ -13434,7 +13459,7 @@ namespace DragonsAltarCombat
                     if (kind == "freeze")
                     {
                         IceBurst(t.transform.position, Mathf.Clamp(w * 1.4f, 0.8f, 3f));
-                        Flash(t.transform.position + Vector3.up * h * 0.5f, new Color(0.6f, 0.9f, 1f, 1f), 1.6f, 4f, 0.4f);
+                        Flash(t.transform.position + Vector3.up * h * 0.5f, new Color(0.6f, 0.9f, 1f, 1f), 1.0f, 3f, 0.25f);
                     }
                     break;
                 case "expose":
@@ -13461,12 +13486,11 @@ namespace DragonsAltarCombat
                 case "fireburn":
                     if (!StatusGate(t, kind, 0.5f)) return;
                     Embers(t.transform.position + Vector3.up * h * 0.4f, new Color(1f, 0.5f, 0.12f, 1f), w, 0.55f, 40f * Amount);
-                    Flash(t.transform.position + Vector3.up * h * 0.5f, new Color(1f, 0.45f, 0.15f, 1f), 0.9f, 2.5f + w, 0.25f);
+                    // v0.25.150: no light flash on every burn tick (embers carry it)
                     break;
                 case "spiritburn":
                     if (!StatusGate(t, kind, 0.5f)) return;
                     Embers(t.transform.position + Vector3.up * h * 0.4f, new Color(1f, 0.95f, 0.75f, 1f), w, 0.55f, 34f * Amount);
-                    Flash(t.transform.position + Vector3.up * h * 0.5f, new Color(1f, 0.9f, 0.6f, 1f), 0.8f, 2.5f + w, 0.25f);
                     break;
             }
         }
@@ -13609,7 +13633,7 @@ namespace DragonsAltarCombat
                 ParticleSystemShapeType.Sphere, core * 1.05f, Vector3.zero, false, true);
             ParticleSystem.ShapeModule sh = rim.shape; sh.radiusThickness = 0f;
             Light l = root.AddComponent<Light>();
-            l.type = LightType.Point; l.color = new Color(0.6f, 0.25f, 1f, 1f); l.range = radius * 1.2f; l.intensity = 2.4f * LightScale; l.shadows = LightShadows.None;
+            l.type = LightType.Point; l.color = new Color(0.6f, 0.25f, 1f, 1f); l.range = radius * 1.2f; l.intensity = 1.4f * LightScale; l.shadows = LightShadows.None;
             DragonBlackHole bh = root.AddComponent<DragonBlackHole>();
             bh.Life = seconds;
             return root;
@@ -14110,7 +14134,7 @@ namespace DragonsAltarCombat
             DragonPop pop = root.AddComponent<DragonPop>();
             pop.Grow = 0.25f; pop.Life = Mathf.Max(0.3f, seconds); pop.Fade = 0.3f; pop.Pulse = 0.05f;
             Light l = root.AddComponent<Light>();
-            l.type = LightType.Point; l.color = new Color(0.62f, 0.45f, 1f, 1f); l.range = radius * 8f; l.intensity = 1.6f * LightScale; l.shadows = LightShadows.None;
+            l.type = LightType.Point; l.color = new Color(0.62f, 0.45f, 1f, 1f); l.range = Mathf.Min(radius * 4f, 18f); l.intensity = 1.0f * LightScale; l.shadows = LightShadows.None;
             return root;
         }
 
@@ -14477,7 +14501,7 @@ namespace DragonsAltarCombat
             if (big)
             {
                 // v0.25.77 (user): no light column on cast
-                Shake(pos, 20f, 0.6f);
+                Shake(pos, 20f, 0.4f);   // v0.25.150
             }
         }
 
@@ -14490,7 +14514,7 @@ namespace DragonsAltarCombat
             GameObject go = new GameObject("IH_WeaponCharge");
             go.transform.SetParent(hand, false);
             Color c = ClassColor(p);
-            AttachGlow(go.transform, c, 0.18f, 45f * Amount, 2.5f);
+            AttachGlow(go.transform, c, 0.16f, 30f * Amount, 1.5f);   // v0.25.150 subtler weapon charge
             UnityEngine.Object.Destroy(go, Mathf.Min(seconds, 4f) + 0.2f);
         }
 
@@ -14503,14 +14527,14 @@ namespace DragonsAltarCombat
         public static void HolyImpact(Vector3 pos, float radius)
         {
             Shockwave(pos, Holy, radius, 0.45f);
-            Burst(pos + Vector3.up * 0.4f, HolyWhite, Mathf.RoundToInt(24 + radius * 6f), 6f + radius, 0.25f, 0.8f, -0.2f);
+            Burst(pos + Vector3.up * 0.4f, HolyWhite, Mathf.RoundToInt(16 + radius * 4f), 6f + radius, 0.22f, 0.7f, -0.2f);
             Vanilla(new string[] { "fx_DvergerMage_Support_start", "vfx_HealthUpgrade", "fx_guardstone_activate" }, pos, Quaternion.identity, 1f, 3f);
         }
 
         public static void LightningImpact(Vector3 pos, float radius)
         {
             Shockwave(pos, Storm, radius, 0.3f);
-            Burst(pos + Vector3.up * 0.3f, Storm, Mathf.RoundToInt(30 + radius * 6f), 10f + radius, 0.2f, 0.5f, 0.8f);
+            Burst(pos + Vector3.up * 0.3f, Storm, Mathf.RoundToInt(18 + radius * 4f), 10f + radius, 0.18f, 0.45f, 0.8f);
             Vanilla(new string[] { "fx_himminafl_aoe", "fx_himminafl_hit", "fx_Lightning", "vfx_lightning" }, pos, Quaternion.identity, Mathf.Clamp(radius / 4f, 0.6f, 3f), 3f);
         }
 
@@ -14542,7 +14566,7 @@ namespace DragonsAltarCombat
             else if (_age < Life) k = 1f + 0.04f * Mathf.Sin(_age * 9f);
             else k = Mathf.Lerp(1f, 0f, (_age - Life) / 0.3f);
             transform.localScale = _scale * Mathf.Max(0.001f, k);
-            if (_light != null) _light.intensity = Mathf.Max(0f, k) * 2.4f * DragonVfx.LightScale;
+            if (_light != null) _light.intensity = Mathf.Max(0f, k) * 1.4f * DragonVfx.LightScale;
             if (_age >= Life + 0.3f) Destroy(gameObject);
         }
     }

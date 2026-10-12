@@ -1,5 +1,5 @@
 @echo off
-title Immortal Heroes v0.25.149 - Pull Remainder
+title Immortal Heroes v0.25.150 - VFX Polish
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
 echo.
 pause
