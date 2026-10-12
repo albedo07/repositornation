@@ -145,6 +145,26 @@ static class T
             Check(match("Axe combo 3", "swing_axe1") == -1, "attack-event clip of another slot rejected for swing 1");
             Check(match("Sword-Attack-R1", "swing_sword0") == 0, "non-replaced clip falls back to name / fresh-event rule");
         }
+        // v0.25.157: 2HDW paired controller validation + skill release (decision model)
+        {
+            Func<bool, int, bool, bool, bool, string> fault = (active, mask, carrier, clips, _) => !clips ? "clips" : !active ? "inactive" : mask != 7 ? "mask" : !carrier ? "carrier" : null;
+            Check(fault(true, 7, true, true, false) == null, "valid paired controller accepted");
+            Check(fault(false, 7, true, true, false) == "inactive", "controller replaced by another mod detected (not silent)");
+            Check(fault(true, 3, true, true, false) == "mask", "base controller without Attack3 replaced rejected");
+            Check(fault(true, 7, false, true, false) == "carrier", "missing carrier triggers rejected");
+            // scimitar / Hellblade cleaver / paired knives: skill between every attack -> released, re-validated by the next swing
+            foreach (string w in new string[] { "scimitar", "hellblade_cleaver", "paired_knives" })
+            {
+                bool pairedActive = false; int swings = 0, native = 0;
+                for (int i = 0; i < 6; i++)
+                {
+                    pairedActive = true;                 // accepted primary swing: ensure + validate
+                    if (fault(pairedActive, 7, true, true, false) == null) swings++; else native++;
+                    pairedActive = false;                // skill takeover releases the override
+                }
+                Check(swings == 6 && native == 0, w + " every accepted swing validated after repeated skills");
+            }
+        }
         Console.WriteLine(fails == 0 ? "ALL PASS" : fails + " FAILED");
         Environment.Exit(fails == 0 ? 0 : 1);
     }

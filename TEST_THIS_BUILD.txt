@@ -7,3 +7,4 @@ v0.25.155 Handoff Guards - in-game checks (plus v0.25.154 list)
 6. Frenzied Charge: start/end % trim works; cast a skill or attack mid-trim -> the trim stops, no stray CrossFade.
 7. SBDW + 2HDW chains: the 2 -> 1 backward step still flows (learned state). Report weapon type if it stutters.
 v0.25.156: spam Mouse1 fast with 1H, SBDW, 2HDW: chain 1-2-1-2-3 and the 2->1 step unchanged; no wrong-swing flicker.
+v0.25.157: scimitar, Hellblade cleaver, paired knives (Mercenary): 1-2-1-2-3, then repeat with a skill between every swing. Check LogOutput.log for "WARNING [2HDW]" (must be absent). Heavy attack (Mouse2) native.

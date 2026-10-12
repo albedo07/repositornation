@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.156";
+        public const string ModVersion = "0.25.157";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1053,6 +1053,9 @@ namespace DragonsAltarCombat
             if (p == null || p != Player.m_localPlayer) return;
             ResetNaccChain(p);
             if (_comboFinisher != null) { _comboFinisher = null; _comboLockUntil = _comboLockBefore; }
+            // v0.25.157: a skill's vanilla animation must run on the vanilla controller, not on SBDW's replaced Attack1-3 clips. The 2HDW
+            // override is released here (only if it is ours) and re-applied + validated by the next accepted primary swing.
+            DragonDualWield.ReleasePaired(p);
         }
 
         // Counters / timing / speed of the running chain (the finisher lockout is NOT touched here).
@@ -1060,6 +1063,7 @@ namespace DragonsAltarCombat
         {
             DragonCombat.NaccGen++;
             _comboHit = -1; _comboSwing = 0; _comboPrevSwing = -1; _comboLastEnd = -1f; _comboInStart = false;
+            _comboCarrier = null;
             DragonCombat.SetChainSpeed(p, 1f, 0.05f);
             DragonCombat.CancelStateLearning(p);
         }
@@ -1352,12 +1356,9 @@ namespace DragonsAltarCombat
                 if (DragonCombat.IsPairedWeapon(weapon))
                 {
                     Animator pa = p.GetComponentInChildren<Animator>();
-                    if (DragonDualWield.ApplyPaired(pa, true))
-                    {
-                        string carrier = DragonCombat.PairedCarrier(pa);
-                        if (carrier != null) { _comboCarrier = carrier; keyAnim = carrier; }
-                        else DragonDualWield.ApplyPaired(pa, false);
-                    }
+                    string carrier;
+                    if (DragonDualWield.EnsurePaired(pa, out carrier, "attack start")) { _comboCarrier = carrier; keyAnim = carrier; }
+                    else DragonDualWield.ApplyPaired(pa, false);   // invalid: back to the animator's own controller (logged, not silent)
                 }
                 int length = Mathf.Clamp(Instance.ComboChainLength.Value, 2, 9);
                 string prevAnim = previousAttack == null ? null : _atkAnim.GetValue(previousAttack) as string;
@@ -1547,6 +1548,14 @@ namespace DragonsAltarCombat
                 Animator a = c == null ? null : c.GetComponentInChildren<Animator>();
                 Player p = c == null ? null : c.GetComponent<Player>();
                 bool nativePair = DragonCombat.IsPairedWeapon(DragonCombat.GetHandItem(p, "m_rightItem"));
+                // v0.25.157: the paired controller is re-validated right before the swing trigger fires. Another mod (Warfare's animation
+                // replace manager) can swap the controller between Attack.Start and this trigger: re-assert ours once, or log and play native.
+                if (nativePair && _comboCarrier != null && !DragonDualWield.PairedActive(a))
+                {
+                    string foreign = a == null || a.runtimeAnimatorController == null ? "none" : a.runtimeAnimatorController.name;
+                    string c2;
+                    if (DragonDualWield.EnsurePaired(a, out c2, "controller replaced before trigger (by '" + foreign + "')")) _comboCarrier = c2; else _comboCarrier = null;
+                }
                 bool routed = nativePair && _comboCarrier != null && DragonDualWield.PairedActive(a);   // v0.25.142 2HDW plays SBDW's clips
                 bool dwClips = !nativePair && _comboDual && DragonDualWield.Apply(p, a, true);
                 if (!nativePair && !_comboDual) DragonDualWield.Apply(p, a, false);
@@ -11134,6 +11143,41 @@ namespace DragonsAltarCombat
         private static readonly Dictionary<int, RuntimeAnimatorController> _pairedBase = new Dictionary<int, RuntimeAnimatorController>();
         private static readonly Dictionary<int, RuntimeAnimatorController> _pairedCtrl = new Dictionary<int, RuntimeAnimatorController>();
         private static readonly Dictionary<int, RuntimeAnimatorController> _pairedByBase = new Dictionary<int, RuntimeAnimatorController>();
+        private static readonly Dictionary<int, int> _pairedMask = new Dictionary<int, int>();   // controller id -> bit0..2 = Attack1..3 really replaced
+        private static readonly HashSet<string> _pairedLogged = new HashSet<string>();
+
+        // v0.25.157: the paired (2HDW) override is only valid when it is the animator's CURRENT controller, replaced Attack1-3 of the
+        // base controller, and exposes the carrier swing triggers. Returns null when valid, else the reason.
+        public static string PairedFault(Animator a, out string carrier)
+        {
+            carrier = null;
+            if (a == null) return "no animator";
+            if (_pairedClips == null) return "SBDW clips not loaded (DualWield.dll / dwanimations bundle missing)";
+            if (!PairedActive(a)) return "paired controller is not active (animator runs '" + (a.runtimeAnimatorController == null ? "none" : a.runtimeAnimatorController.name) + "')";
+            int mask;
+            if (!_pairedMask.TryGetValue(a.runtimeAnimatorController.GetInstanceID(), out mask) || mask != 7)
+                return "base controller '" + (a.runtimeAnimatorController == null ? "?" : a.runtimeAnimatorController.name) + "' lacks the clips SBDW replaces (Attack1-3 mask " + mask + ")";
+            carrier = DragonCombat.PairedCarrier(a);
+            return carrier == null ? "no swing_axe / axe_swing x3 triggers on the paired controller" : null;
+        }
+
+        // Applies (when needed) and validates the paired controller. false = invalid; reason logged once + shown once, never silent.
+        public static bool EnsurePaired(Animator a, out string carrier, string where)
+        {
+            carrier = null;
+            if (a == null) return false;
+            if (!PairedActive(a)) ApplyPaired(a, true);
+            string fault = PairedFault(a, out carrier);
+            if (fault == null) return true;
+            carrier = null;
+            string key = where + ":" + fault;
+            if (_pairedLogged.Add(key) && DragonCombatPlugin.Instance != null)
+            {
+                DragonCombatPlugin.Instance.LogInfo("[Immortal Heroes] WARNING [2HDW] " + where + ": native animation used - " + fault);
+                try { if (MessageHud.instance != null) MessageHud.instance.ShowMessage(MessageHud.MessageType.TopLeft, "2HDW: native swing (" + fault + ") - see LogOutput.log"); } catch (Exception) { }
+            }
+            return false;
+        }
 
         private static void LoadPaired()
         {
@@ -11225,6 +11269,7 @@ namespace DragonsAltarCombat
                     AnimatorOverrideController aoc = new AnimatorOverrideController(baseCtrl);
                     List<KeyValuePair<AnimationClip, AnimationClip>> list = new List<KeyValuePair<AnimationClip, AnimationClip>>();
                     AnimationClip[] all = aoc.animationClips;
+                    int mask = 0;
                     for (int i = 0; i < all.Length; i++)
                     {
                         string key; AnimationClip ext;
@@ -11233,12 +11278,14 @@ namespace DragonsAltarCombat
                             AnimationClip copy = UnityEngine.Object.Instantiate(ext);
                             copy.name = all[i].name;
                             list.Add(new KeyValuePair<AnimationClip, AnimationClip>(all[i], copy));
+                            if (key == "Attack1") mask |= 1; else if (key == "Attack2") mask |= 2; else if (key == "Attack3") mask |= 4;
                         }
                         else list.Add(new KeyValuePair<AnimationClip, AnimationClip>(all[i], all[i]));
                     }
                     aoc.ApplyOverrides(list);
                     ctrl = aoc;
                     _pairedByBase[current.GetInstanceID()] = ctrl;
+                    _pairedMask[ctrl.GetInstanceID()] = mask;
                 }
                 _pairedBase[id] = current;
                 _pairedCtrl[id] = ctrl;
