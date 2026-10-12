@@ -1,0 +1,29 @@
+PASS 0 old finally-pattern leaks on stopped coroutine - live GO +1 (expected leak = confirms the review)
+     (leaked by the OLD pattern: materials=1; baseline for the rest)
+PASS 1a guide alive before expiry - GO=1 Alive=1 materials=1
+PASS 1b expired: GO + material freed - GO=0 Alive=0 materials=0
+PASS 2 repeated charging 60 s (300 guides) - peak live=2 final GO=0 Alive=0 materials=0
+PASS 3 host gone mid-life: guide still expires - mid=1 end Alive=0 materials=0
+PASS 4 destroyed early: OnDestroy runs, count back to 0 - before=2 after=0 materials=0
+PASS 5 flood capped at 40, all freed - cap=40 end Alive=0 GO=0 materials=0
+
+SLIDER MODEL (mirrors LimitSpawned arithmetic; vanilla light 3.0, 100 particles/burst, budget 1 -> 0.25):
+density  light | burst(b=1) burst(b=.25) | light intensity
+  0.10   0.00 |       7.0          1.8 |     0.00  (disabled)
+  0.10   0.15 |       7.0          1.8 |     0.18
+  0.10   1.00 |       7.0          1.8 |     1.20
+  0.10   2.00 |       7.0          1.8 |     2.40
+  0.35   0.00 |      24.5          6.1 |     0.00  (disabled)
+  0.35   0.15 |      24.5          6.1 |     0.18
+  0.35   1.00 |      24.5          6.1 |     1.20
+  0.35   2.00 |      24.5          6.1 |     2.40
+  1.00   0.00 |      70.0         17.5 |     0.00  (disabled)
+  1.00   0.15 |      70.0         17.5 |     0.18
+  1.00   1.00 |      70.0         17.5 |     1.20
+  1.00   2.00 |      70.0         17.5 |     2.40
+  3.00   0.00 |     210.0         52.5 |     0.00  (disabled)
+  3.00   0.15 |     210.0         52.5 |     0.18
+  3.00   1.00 |     210.0         52.5 |     1.20
+  3.00   2.00 |     210.0         52.5 |     2.40
+
+ALL PASS

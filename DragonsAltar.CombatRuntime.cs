@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.152";
+        public const string ModVersion = "0.25.153";
 
         internal static DragonCombatPlugin Instance;
 
@@ -11112,6 +11112,48 @@ namespace DragonsAltarCombat
     // flickering lightning, light pillars, shockwaves, auras that follow a target, and Valheim's own effect
     // prefabs (looked up by name in ZNetScene, network-free ones only). All objects clean themselves up.
     // ==================================================================================
+    // v0.25.153: legacy (Enhanced VFX OFF) targeting-guide line with its OWN lifetime. Unity does not run an iterator's
+    // finally block when a coroutine is stopped or its host is destroyed, so the guide expires by itself (Update) and
+    // frees the material it created in OnDestroy - whatever happens to the coroutine / plugin that spawned it.
+    public class DragonGuideLife : MonoBehaviour
+    {
+        public static int Alive;
+        public float Until;
+        public Material Owned;
+
+        public static void Spawn(Vector3 center, float radius, Color color, float duration)
+        {
+            if (Alive >= 40) return;   // repeated charging can never pile up guides
+            GameObject go = new GameObject("IH_GuideLine");
+            LineRenderer gl = go.AddComponent<LineRenderer>();
+            gl.useWorldSpace = true;
+            gl.loop = true;
+            gl.positionCount = 48;
+            gl.startWidth = 0.04f;
+            gl.endWidth = 0.04f;
+            Color gcol = color; gcol.a = Mathf.Min(0.22f, Mathf.Clamp01(color.a) * 0.3f);
+            gl.startColor = gcol;
+            gl.endColor = gcol;
+            DragonGuideLife life = go.AddComponent<DragonGuideLife>();
+            Shader sh = Shader.Find("Sprites/Default");
+            if (sh != null) { life.Owned = new Material(sh); gl.material = life.Owned; }
+            for (int i = 0; i < 48; i++)
+            {
+                float a = (float)i / 48f * Mathf.PI * 2f;
+                gl.SetPosition(i, center + new Vector3(Mathf.Cos(a) * radius, 0.08f, Mathf.Sin(a) * radius));
+            }
+            life.Until = Time.time + Mathf.Max(0.1f, duration);
+        }
+
+        private void Awake() { Alive++; }
+        private void Update() { if (Time.time >= Until) Destroy(gameObject); }
+        private void OnDestroy()
+        {
+            Alive--;
+            if (Owned != null) { Destroy(Owned); Owned = null; }
+        }
+    }
+
     public class DragonVfxLife : MonoBehaviour
     {
         public float Life = 1f, Age;

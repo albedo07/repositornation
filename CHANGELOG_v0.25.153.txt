@@ -1,0 +1,4 @@
+v0.25.153 Guide Lifetime (visual only; no config keys / defaults changed)
+- Legacy (Enhanced VFX OFF) Sorcerer + Ranger targeting guides no longer depend on their coroutine for cleanup (Unity does not run an iterator's finally when a coroutine is stopped or its host destroyed). New DragonGuideLife component on the guide object: expires by itself (Update) and destroys the material it created in OnDestroy. At most 40 guides alive; repeated charging cannot pile up.
+- GuideVfx (Sorcerer + Ranger) just spawns it; Show Targeting Guides still gates it.
+- Test results (mock-Unity harness, tools/tests/guide_lifetime) in TEST_RESULTS_v0.25.153.txt.

@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Aethelborn Ascended - Sorcerer Advancements";
-        public const string ModVersion = "0.25.152";
+        public const string ModVersion = "0.25.153";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -4147,35 +4147,7 @@ namespace DragonsAltarSorcerer
             if (!DragonVfx.Guides) yield break;   // v0.25.150: one toggle for both VFX modes
             if (!DragonVfx.Enabled)
             {
-            // v0.25.151: Enhanced VFX OFF -> the same faint guide, as a thin low-alpha line (not the thick legacy ring)
-            GameObject gobj = new GameObject("SorcererGuideLine");
-            LineRenderer gl = gobj.AddComponent<LineRenderer>();
-            gl.useWorldSpace = true;
-            gl.loop = true;
-            gl.positionCount = 48;
-            gl.startWidth = 0.04f;
-            gl.endWidth = 0.04f;
-            Color gcol = color; gcol.a = Mathf.Min(0.22f, Mathf.Clamp01(color.a) * 0.3f);
-            gl.startColor = gcol;
-            gl.endColor = gcol;
-            Shader gsh = Shader.Find("Sprites/Default");
-            Material gmat = gsh != null ? new Material(gsh) : null;   // owned by this guide: destroyed with it
-            if (gmat != null) gl.material = gmat;
-            try
-            {
-                for (int gi = 0; gi < 48; gi++)
-                {
-                    float ga = (float)gi / 48f * Mathf.PI * 2f;
-                    gl.SetPosition(gi, center + new Vector3(Mathf.Cos(ga) * radius, 0.08f, Mathf.Sin(ga) * radius));
-                }
-                yield return new WaitForSeconds(Mathf.Max(0.1f, duration));
-            }
-            finally
-            {
-                // runs on expiry AND when the coroutine is stopped / interrupted
-                if (gobj != null) Destroy(gobj);
-                if (gmat != null) Destroy(gmat);
-            }
+                DragonGuideLife.Spawn(center, radius, color, duration);   // v0.25.153 self-owned lifetime (see DragonGuideLife)
                 yield break;
             }
             Color rc = color; rc.a = 1f;
