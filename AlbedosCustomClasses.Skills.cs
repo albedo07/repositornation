@@ -41,9 +41,8 @@ namespace AlbedosCustomClassesSkills
             if (attached != null && attached.gameObject == player.gameObject)
                 return true;
 
-            Character character = collider.GetComponentInParent<Character>();
-
-            return character == player;
+            // v0.25.141: the crosshair ray passes through every player, not only the caster
+            return collider.GetComponentInParent<Player>() != null;
         }
 
         private static bool TryGetFirstCrosshairHit(Player player, out RaycastHit worldHit)
@@ -233,7 +232,7 @@ namespace AlbedosCustomClassesSkills
         public static SkillsPlugin Instance;
         public const string ModGuid = "albedo.customclasses.skills";
         public const string ModName = "Aethelborn Ascended - Starter Skills";
-        public const string ModVersion = "0.25.140";
+        public const string ModVersion = "0.25.141";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";

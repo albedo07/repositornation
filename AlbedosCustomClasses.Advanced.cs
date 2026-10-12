@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.140";
+        public const string ModVersion = "0.25.141";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -3962,7 +3962,7 @@ namespace AlbedosCustomClassesAdvanced
                 if (Physics.SphereCast(pos, 0.3f, step.normalized, out hit, step.magnitude, ~0, QueryTriggerInteraction.Ignore))
                 {
                     Character c = hit.collider.GetComponentInParent<Character>();
-                    if (c != player && (c == null || IsEnemy(player, c) || ((1 << hit.collider.gameObject.layer) & solid) != 0))
+                    if (!(c is Player) && (c == null || IsEnemy(player, c) || ((1 << hit.collider.gameObject.layer) & solid) != 0))
                     {
                         impact = hit.point;
                         exploded = true;

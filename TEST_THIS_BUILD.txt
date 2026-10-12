@@ -1,7 +1,5 @@
-v0.25.140 - Committed Casts
-1. Ascended Astral Greatblade: turn the camera between slams - body + blade follow the aim every slam.
-2. Any 1 s+ wind up skill (Relics, Glacial, Hammer...): body turns to the crosshair during the wind up.
-3. Scimitar Swords / Hellblade Cleavers: normal attacks follow our chain (even intervals), heavy attack unchanged. Check LogOutput for "[NACC] paired weapon".
-4. Bonecrusher / Electric Smite: land with no shaking.
-5. Ascended Splitting Arrow great arrow: no arrow planted in you.
-Verified here: compile check + C#5 parse only. Needs in-game testing.
+v0.25.141 - Ghost Players
+1. Ascended Splitting Arrow great arrow at head level: passes through you and other players, still hits enemies and walls/terrain.
+2. Scimitar Swords / Hellblade Cleavers / paired knives: NACC chain, heavy unchanged. If not, send the "[NACC] two-handed weapon" log lines.
+3. Ordinary two-handed weapons unchanged.
+Verified here: compile check + C#5 parse only.

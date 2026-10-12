@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.140";
+        public const string ModVersion = "0.25.141";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1191,8 +1191,8 @@ namespace DragonsAltarCombat
         private static void LogPairedOnce(ItemDrop.ItemData w, int levels, Attack at)
         {
             string key = w.m_shared.m_name;
-            if (!_pairedLogged.Add(key) || DragonCombatPlugin.Instance == null) return;
-            DragonCombatPlugin.Instance.Logger.LogInfo("[NACC] paired weapon: " + key + " prefab=" + (w.m_dropPrefab != null ? w.m_dropPrefab.name : "?") +
+            if (w.m_shared.m_itemType.ToString() != "TwoHandedWeapon" || !_pairedLogged.Add(key) || DragonCombatPlugin.Instance == null) return;
+            DragonCombatPlugin.Instance.Logger.LogInfo("[NACC] two-handed weapon (paired=" + DragonCombat.IsPairedWeapon(w) + "): " + key + " prefab=" + (w.m_dropPrefab != null ? w.m_dropPrefab.name : "?") +
                 " skill=" + w.m_shared.m_skillType + " anim=" + w.m_shared.m_attack.m_attackAnimation + " secondary=" +
                 (w.m_shared.m_secondaryAttack != null ? w.m_shared.m_secondaryAttack.m_attackAnimation : "-") + " chainLevels=" + levels);
         }
@@ -1239,11 +1239,7 @@ namespace DragonsAltarCombat
                     !string.Equals(_atkAnim.GetValue(__instance) as string, weapon.m_shared.m_attack.m_attackAnimation, StringComparison.Ordinal))
                 { _comboHit = -1; DragonCombat.SetChainSpeed(p, 1f, 0.05f); return; }
                 int levels = (int)_atkLevels.GetValue(__instance);
-                if (DragonCombat.IsPairedWeapon(weapon))
-                {
-                    LogPairedOnce(weapon, levels, __instance);
-                    if (levels < 2) { levels = 3; _atkLevels.SetValue(__instance, levels); }   // v0.25.139 our chain overrides theirs (heavy attack untouched)
-                }
+                LogPairedOnce(weapon, levels, __instance);   // v0.25.141 one diagnostic line per two-handed weapon
                 // v0.25.99 FIX (user: dual-wield Axe heavy attack stuck in slow motion): a heavy / single-hit attack
                 // inherited the last chain swing's speed (dual chains run down to 0.25x for 3 s). Every attack that
                 // is not part of our chain plays at normal speed and breaks the chain.
@@ -8488,16 +8484,9 @@ namespace DragonsAltarCombat
             if (item == null || item.m_shared == null || item.m_shared.m_attack == null) return false;
             if (item.m_shared.m_itemType.ToString() != "TwoHandedWeapon") return false;
             string animation = item.m_shared.m_attack.m_attackAnimation ?? "";
-            if (animation.StartsWith("dual", StringComparison.OrdinalIgnoreCase)) return true;
-            // v0.25.139 (user): every two-handed DUAL-WIELD weapon of Therzie's Warfare (Scimitar Swords, Hellblade Cleavers...)
-            // counts like Smoothbrain's Dual Wield: custom Warfare animation, or "dual" in the item's name.
-            Skills.SkillType skill = item.m_shared.m_skillType;
-            if (skill != Skills.SkillType.Swords && skill != Skills.SkillType.Axes && skill != Skills.SkillType.Clubs &&
-                skill != Skills.SkillType.Knives && skill != Skills.SkillType.Polearms && skill != Skills.SkillType.Spears) return false;
-            string prefab = item.m_dropPrefab != null ? item.m_dropPrefab.name : "";
-            if (prefab.IndexOf("dual", StringComparison.OrdinalIgnoreCase) >= 0 || prefab.IndexOf("scimitar", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                prefab.IndexOf("cleaver", StringComparison.OrdinalIgnoreCase) >= 0) return true;
-            return IsExternalAnimation(animation);
+            // v0.25.141: attack metadata only - a native paired item is two-handed and its PRIMARY attack animation is a "dual*" set.
+            // An external (Warfare / Wizardry) animation registration alone does not make a weapon paired.
+            return animation.StartsWith("dual", StringComparison.OrdinalIgnoreCase);
         }
 
         public static bool IsTherzieStaff(ItemDrop.ItemData item)

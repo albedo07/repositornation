@@ -41,7 +41,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Aethelborn Ascended - Ranger";
-        public const string ModVersion = "0.25.140";
+        public const string ModVersion = "0.25.141";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -3248,17 +3248,12 @@ namespace DragonsAltarRanger
                     }
                     else if (IsSolid(c))
                     {
-                        float solidDist = hits[i].distance;
-                        if (r > 0.4f)
-                        {
-                            // v0.25.139: a fat arrow's sphere always overlaps the ground at the shooter's feet (distance 0) and
-                            // planted itself in the player. Solids are tested by the arrow's centre line only.
-                            RaycastHit centre;
-                            if (!c.Raycast(new Ray(pos, dir), out centre, step + 0.05f) || centre.distance <= 0.001f) continue;
-                            solidDist = centre.distance;
-                        }
+                        // v0.25.141 launch overlap only: a fat arrow's sphere starts inside the ground at the shooter's feet
+                        // (SphereCast reports distance 0). Those initial overlaps are ignored while the arrow clears the launch
+                        // zone; every later contact (terrain, walls, structures) stops it normally.
+                        if (hits[i].distance <= 0.001f && r > 0.4f && traveled < r * 2f + 1f) continue;
                         stop = true;
-                        pos += dir * solidDist;
+                        pos += dir * hits[i].distance;
                         if (_enableVfx.Value)
                         {
                             Vector3 pp = pos, pdir = dir; float plen = radius >= DragonCombat.M(0.9f) ? 2.5f + radius * 3f : UnityEngine.Random.Range(0.85f, 1.05f); Color pcol = color;   // v0.25.85 big only for real big shots (meters, not units)
@@ -3512,7 +3507,7 @@ namespace DragonsAltarRanger
             if (player == null || collider == null) return false;
             Transform t = collider.transform;
             if (t == player.transform || t.IsChildOf(player.transform)) return true;
-            return collider.GetComponentInParent<Character>() is Player;   // v0.25.139: every player is a ghost to skill projectiles / aim
+            return collider.GetComponentInParent<Player>() != null;   // v0.25.141: the caster and every other player (any child collider) are ghosts to offensive skills
         }
 
         private static bool IsSolid(Collider c)

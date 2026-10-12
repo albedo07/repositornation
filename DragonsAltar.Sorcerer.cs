@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Aethelborn Ascended - Sorcerer Advancements";
-        public const string ModVersion = "0.25.140";
+        public const string ModVersion = "0.25.141";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -3926,8 +3926,7 @@ namespace DragonsAltarSorcerer
             if (player == null || collider == null) return false;
             Transform t = collider.transform;
             if (t == player.transform || t.IsChildOf(player.transform)) return true;
-            Character c = collider.GetComponentInParent<Character>();
-            return c is Player;   // v0.25.139: every player is a ghost to skill projectiles / aim
+            return collider.GetComponentInParent<Player>() != null;   // v0.25.141: the caster and every other player (any child collider) are ghosts to offensive skills
         }
 
         private void TeleportPlayer(Player player, Vector3 destination)
