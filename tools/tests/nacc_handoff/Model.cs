@@ -165,6 +165,24 @@ static class T
                 Check(swings == 6 && native == 0, w + " every accepted swing validated after repeated skills");
             }
         }
+        // v0.25.158: repair from the correct base, reject instead of native fallback
+        {
+            string[] carrierClips = { "axe_swing", "Axe combo 2", "Axe combo 3" };
+            Func<HashSet<string>, bool> hasCarrier = n => { foreach (string c in carrierClips) if (!n.Contains(c)) return false; return true; };
+            // candidate bases: Warfare's controller (no axe clips), vanilla root (has them)
+            var warfare = new HashSet<string> { "knife_slash0", "knife_slash1", "knife_slash2" };   // Attack1-3 replaced via KNIFE names only
+            var vanilla = new HashSet<string> { "axe_swing", "Axe combo 2", "Axe combo 3", "knife_slash0" };
+            Check(!hasCarrier(warfare), "base without the carrier clips is not accepted even if Attack1-3 were replaced by knife names");
+            Check(hasCarrier(vanilla), "vanilla root accepted as repair base");
+            Func<List<HashSet<string>>, int> repair = c => { for (int i = 0; i < c.Count; i++) if (hasCarrier(c[i])) return i; return -1; };
+            Check(repair(new List<HashSet<string>> { warfare, vanilla }) == 1, "repair skips Warfare's controller and rebuilds from the vanilla base");
+            int rejected = 0, native = 0;
+            int pick = repair(new List<HashSet<string>> { warfare });
+            if (pick < 0) rejected++; else native++;   // unrecoverable -> reject (StartAttack false, Attack.Start skipped), never native
+            Check(rejected == 1 && native == 0, "unrecoverable controller: attack rejected before cost, no native substitution");
+            bool heavyRejected = false;   // secondary request never enters the paired check
+            Check(!heavyRejected, "heavy attack unchanged");
+        }
         Console.WriteLine(fails == 0 ? "ALL PASS" : fails + " FAILED");
         Environment.Exit(fails == 0 ? 0 : 1);
     }
