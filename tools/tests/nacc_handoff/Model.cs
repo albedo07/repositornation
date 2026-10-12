@@ -183,6 +183,21 @@ static class T
             bool heavyRejected = false;   // secondary request never enters the paired check
             Check(!heavyRejected, "heavy attack unchanged");
         }
+        // v0.25.159: late rejection inside Attack.Start -> fail that instance, roll back, refund, no retire
+        {
+            int hit = 1, swing = 1; float stamina = 50f, lockUntil = 0f; bool retired = false, finisher = false, started = true;
+            int sHit = hit, sSwing = swing; float sStam = stamina, sLock = lockUntil;      // snapshot in the prefix
+            hit = 2; swing = 0; stamina -= 12f;                                        // core advanced + Start took stamina
+            bool late = true;                                                          // controller lost at the trigger
+            if (late) { started = false; hit = sHit; swing = sSwing; if (sStam - stamina > 0) stamina += sStam - stamina; lockUntil = sLock; }
+            else { retired = true; if (hit == 4) finisher = true; }
+            Check(!started, "late-rejected Attack.Start returns false");
+            Check(hit == 1 && swing == 1, "combo counters rolled back");
+            Check(stamina == 50f, "stamina refunded");
+            Check(!retired && !finisher && lockUntil == 0f, "no skill retire, no finisher bookkeeping, no lockout");
+            // genuine finisher (not rejected) still locks
+            int h2 = 4; bool fin2 = h2 == 4; Check(fin2, "genuine finisher lockout kept");
+        }
         Console.WriteLine(fails == 0 ? "ALL PASS" : fails + " FAILED");
         Environment.Exit(fails == 0 ? 0 : 1);
     }

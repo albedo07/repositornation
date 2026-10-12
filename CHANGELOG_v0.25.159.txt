@@ -1,0 +1,4 @@
+v0.25.159 Late Reject (2HDW attack bookkeeping only; heavy attacks, genuine finisher lockouts, SBDW timing untouched)
+- When the paired controller is lost INSIDE Attack.Start (between the start check and the swing trigger) and repair fails, that exact Attack instance is marked (`_lateRejected`), its native trigger is swallowed, and ComboStartPostfix (now `ref __result`) turns Start's result into false, so Humanoid.StartAttack assigns nothing.
+- The instance is stopped (Abort/Stop on that object only - the player's previous attack is no longer cancelled), then every combo field the attempt touched is rolled back from a snapshot taken in ComboStartPrefix (hit/swing/prev/count, timing, chain speed, base/carrier/dual, finisher + lockout) and the stamina / Eitr Start already took is refunded.
+- A late-rejected attempt skips all success-side effects: no skill-animation retire, no SkillAnimAttackBlock reset, no finisher bookkeeping, no lockout.

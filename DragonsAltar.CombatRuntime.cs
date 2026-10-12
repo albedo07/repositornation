@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.158";
+        public const string ModVersion = "0.25.159";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1313,10 +1313,79 @@ namespace DragonsAltarCombat
 
         // v0.25.158: a 2HDW primary swing whose SBDW controller cannot be made valid is REJECTED here (Attack.Start skipped, so no stamina,
         // no trigger, no combo advance) - the native animation is never substituted. Heavy attacks never set the flag.
+        // v0.25.159 LATE REJECTION. The trigger fires INSIDE Attack.Start; if the paired controller cannot be restored there, that exact
+        // Attack instance is marked, Start's result is turned into false (Humanoid.StartAttack then assigns nothing), the instance is
+        // stopped, every combo field the attempt touched is rolled back and the attack cost Start already took is refunded.
+        private static Attack _lateRejected;
+        private class ComboSnap
+        {
+            public int Hit, Swing, Prev, Count, Gen; public float LastEnd, LastStart, ClockStart, PrevSpeed, LockUntil, LockBefore, ChainSpeed, Stamina, Eitr;
+            public string StartAnim, Base, Carrier; public bool Dual; public object Finisher;
+        }
+        private static ComboSnap _snap;
+
+        private static float CallFloat(Player p, string method)
+        {
+            try
+            {
+                MethodInfo m = typeof(Player).GetMethod(method, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+                return m == null ? 0f : (float)m.Invoke(p, null);
+            }
+            catch (Exception) { return 0f; }
+        }
+
+        private static void CallAdd(Player p, string method, float v)
+        {
+            try
+            {
+                MethodInfo m = typeof(Player).GetMethod(method, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new Type[] { typeof(float) }, null);
+                if (m != null) m.Invoke(p, new object[] { v });
+            }
+            catch (Exception) { }
+        }
+
+        private static ComboSnap TakeSnap(Player p)
+        {
+            ComboSnap c = new ComboSnap();
+            c.Hit = _comboHit; c.Swing = _comboSwing; c.Prev = _comboPrevSwing; c.Count = _comboCount; c.Gen = _comboGen;
+            c.LastEnd = _comboLastEnd; c.LastStart = _comboLastStart; c.ClockStart = _comboClockStart; c.PrevSpeed = _chainPrevSpeed;
+            c.LockUntil = _comboLockUntil; c.LockBefore = _comboLockBefore; c.StartAnim = _comboStartAnim; c.Base = _comboBase;
+            c.Carrier = _comboCarrier; c.Dual = _comboDual; c.Finisher = _comboFinisher;
+            c.ChainSpeed = DragonCombat.ChainSpeedFor(p);
+            c.Stamina = p.GetStamina(); c.Eitr = CallFloat(p, "GetEitr");
+            return c;
+        }
+
+        private static void RollBack(Player p, ComboSnap c)
+        {
+            _comboHit = c.Hit; _comboSwing = c.Swing; _comboPrevSwing = c.Prev; _comboCount = c.Count; _comboGen = c.Gen;
+            _comboLastEnd = c.LastEnd; _comboLastStart = c.LastStart; _comboClockStart = c.ClockStart; _chainPrevSpeed = c.PrevSpeed;
+            _comboLockUntil = c.LockUntil; _comboLockBefore = c.LockBefore; _comboStartAnim = c.StartAnim; _comboBase = c.Base;
+            _comboCarrier = c.Carrier; _comboDual = c.Dual; _comboFinisher = c.Finisher;
+            DragonCombat.SetChainSpeed(p, c.ChainSpeed, c.ChainSpeed == 1f ? 0.05f : 0.5f);
+            // refund whatever Attack.Start already took
+            float st = c.Stamina - p.GetStamina(); if (st > 0.001f) CallAdd(p, "AddStamina", st);
+            float et = c.Eitr - CallFloat(p, "GetEitr"); if (et > 0.001f) CallAdd(p, "AddEitr", et);
+        }
+
+        private static void StopAttackInstance(Attack a)
+        {
+            try
+            {
+                MethodInfo m = a.GetType().GetMethod("Abort", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+                if (m == null) m = a.GetType().GetMethod("Stop", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+                if (m != null) m.Invoke(a, null);
+            }
+            catch (Exception) { }
+        }
+
         private static bool _comboReject;
         private static bool ComboStartPrefix(Attack __instance, Humanoid character, ItemDrop.ItemData weapon, ref Attack previousAttack, ref float timeSinceLastAttack, ref bool __result)
         {
             _comboReject = false;
+            _lateRejected = null;
+            Player sp = character as Player;
+            _snap = sp != null && sp == Player.m_localPlayer ? TakeSnap(sp) : null;
             ComboStartCore(__instance, character, weapon, ref previousAttack, ref timeSinceLastAttack);
             if (!_comboReject) return true;
             _comboReject = false; _comboInStart = false;
@@ -1437,8 +1506,22 @@ namespace DragonsAltarCombat
             catch (Exception) { _comboInStart = false; }
         }
 
-        private static void ComboStartPostfix(Attack __instance, bool __result, Humanoid character)
+        private static void ComboStartPostfix(Attack __instance, ref bool __result, Humanoid character)
         {
+            // v0.25.159: this exact Attack was rejected inside Start (paired controller lost at trigger time): fail it, stop it, roll the
+            // attempt back and skip every success-side effect below (skill retire, finisher bookkeeping, lockout).
+            if (_lateRejected != null && ReferenceEquals(__instance, _lateRejected))
+            {
+                _lateRejected = null;
+                _comboInStart = false;
+                __result = false;
+                StopAttackInstance(__instance);
+                Player lp = character as Player;
+                if (lp != null && _snap != null) RollBack(lp, _snap);   // after Stop: its postfix must not leave a stale end time
+                _snap = null;
+                return;
+            }
+            _snap = null;
             if (__result && character != null && character == Player.m_localPlayer) DragonCombat.SkillAnimAttackBlockUntil = 0f;
             // v0.25.154: an ACCEPTED melee normal attack retires the skill animation drivers it supersedes (damage / VFX the
             // skill already cast keep running - only the animation side stops). Failed starts retire nothing.
@@ -1588,9 +1671,9 @@ namespace DragonsAltarCombat
                     if (DragonDualWield.EnsurePaired(a, out c2, "controller replaced before trigger (by '" + foreign + "')")) _comboCarrier = c2;
                     else
                     {
-                        // Attack.Start already ran: stop this swing instead of letting the native paired animation play.
-                        _comboCarrier = null;
-                        if (p != null) DragonCombat.CancelCurrentAttack(p);
+                        // Attack.Start is running: mark THIS Attack instance as rejected (ComboStartPostfix fails + rolls it back) and
+                        // swallow the native trigger. m_currentAttack is not assigned yet - never cancel the player's previous attack here.
+                        _lateRejected = DragonCombat.NaccAttack as Attack;
                         return false;
                     }
                 }
