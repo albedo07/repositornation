@@ -1,0 +1,12 @@
+v0.25.154 - what was verified
+VERIFIED HERE
+- tools/compile_check/check.sh 3029660: PASSED (0 new signatures); mcs --parse -langversion:5 on DragonsAltar.CombatRuntime.cs: OK.
+- tools/tests/nacc_handoff (LOGIC MODEL of the new decisions - same rules, NOT the shipped code, no Unity/Valheim): ALL PASS, run for 1H, SBDW, 2HDW:
+  five-hit order 0,1,0,1,2 + finisher lockout; 7x rapid skill -> NACC -> strike 2 -> skill (counters/chain speed/learning reset, driver+tail+skill speed retired, next NACC = strike 1);
+  learning cancelled by takeover / controller change; locomotion + skill clips never learned, valid swing learned;
+  finisher cut by a skill leaves no lockout, completed finisher lockout preserved;
+  jump + click from idle and after strikes 1-5: rejected, queue cleared, counters reset, landing combo = 1-2-1-2-3; jump right after a skill; heavy attack airborne not rejected.
+NOT VERIFIED (needs Valheim)
+- Real animator states: that IsSwingState accepts the real swing clips of 1H / SBDW (DualWield bundle) / 2HDW (carrier) and rejects locomotion; if a dual swing is not learned the old HasState fallback still applies - check log/feel of the backward step (swing 2 -> 1).
+- Airborne threshold (IsOnGround + m_lastGroundTouch > 0.06 s) on slopes/stairs/bumps: no false rejections; jump + Mouse1 within the first frames after takeoff.
+- Rapid Alpha1-7 -> NACC -> skill with each weapon type; Circle Swing / RJS still cast and jump; heavy attack mid-air still works.

@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.153";
+        public const string ModVersion = "0.25.154";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1041,8 +1041,95 @@ namespace DragonsAltarCombat
         private static bool _comboInStart, _comboDual;
         private static string _comboBase, _comboCarrier;
         private static object _comboFinisher;
-        private static float _comboLockUntil;
+        private static float _comboLockUntil, _comboLockBefore;
+        private static int _comboGen;       // v0.25.154 NaccGen the running chain swing started under
         private static bool _offhandSwing;
+
+        // v0.25.154 skill <-> NACC handoff. A skill takeover drops everything the interrupted chain was still doing (counters,
+        // timing, speed trim, pending state learning). A finisher that really finished keeps its lockout; one the skill cut
+        // short does not lock the next normal attack. Idempotent, local player only.
+        internal static void ResetNaccForSkill(Player p)
+        {
+            if (p == null || p != Player.m_localPlayer) return;
+            ResetNaccChain(p);
+            if (_comboFinisher != null) { _comboFinisher = null; _comboLockUntil = _comboLockBefore; }
+        }
+
+        // Counters / timing / speed of the running chain (the finisher lockout is NOT touched here).
+        private static void ResetNaccChain(Player p)
+        {
+            DragonCombat.NaccGen++;
+            _comboHit = -1; _comboSwing = 0; _comboPrevSwing = -1; _comboLastEnd = -1f; _comboInStart = false;
+            DragonCombat.SetChainSpeed(p, 1f, 0.05f);
+            DragonCombat.CancelStateLearning(p);
+        }
+
+        private static readonly Dictionary<string, MethodInfo> _charBoolCache = new Dictionary<string, MethodInfo>();
+        private static FieldInfo _lastGroundTouch;
+        private static bool CharBool(Character c, string name)
+        {
+            try
+            {
+                MethodInfo m;
+                if (!_charBoolCache.TryGetValue(name, out m))
+                {
+                    m = typeof(Character).GetMethod(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+                    _charBoolCache[name] = m;
+                }
+                return m != null && m.ReturnType == typeof(bool) && (bool)m.Invoke(c, null);
+            }
+            catch (Exception) { return false; }
+        }
+
+        // Off the ground: no ground contact, or no contact for more than a few physics steps (bumps do not count).
+        // Swimming / attached / riding are not "airborne".
+        internal static bool IsAirborne(Player p)
+        {
+            if (p == null) return false;
+            if (CharBool(p, "IsSwimming") || CharBool(p, "IsAttached") || CharBool(p, "IsRiding") || CharBool(p, "IsOnLadder")) return false;
+            if (!CharBool(p, "IsOnGround")) return true;
+            try
+            {
+                if (_lastGroundTouch == null) _lastGroundTouch = typeof(Character).GetField("m_lastGroundTouch", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (_lastGroundTouch != null && _lastGroundTouch.FieldType == typeof(float) && (float)_lastGroundTouch.GetValue(p) > 0.06f) return true;
+            }
+            catch (Exception) { }
+            return false;
+        }
+
+        // The request is a NACC primary swing: chained melee primary attack of a weapon the class is fit for.
+        // Heavy (secondary) attacks, ranged / magic attacks and skills are never NACC.
+        private static bool IsNaccPrimaryRequest(Player p, object[] args)
+        {
+            try
+            {
+                if (Instance == null || !Instance.ComboChainsEnabled.Value || _atkLevels == null || _atkType == null) return false;
+                if (args != null && args.Length > 1 && args[1] is bool && (bool)args[1]) return false;
+                ItemDrop.ItemData w = p.GetCurrentWeapon();
+                if (w == null || w.m_shared == null || w.m_shared.m_attack == null) return false;
+                object type = _atkType.GetValue(w.m_shared.m_attack);
+                string ts = type == null ? "" : type.ToString();
+                if (ts != "Horizontal" && ts != "Vertical") return false;
+                if ((int)_atkLevels.GetValue(w.m_shared.m_attack) < 2) return false;
+                return DragonCombat.ComboWeaponProvider != null && DragonCombat.ComboWeaponProvider(p, w);
+            }
+            catch (Exception) { return false; }
+        }
+
+        // Takeoff: the interrupted chain is forgotten (landing starts at strike one) and the queued primary click is dropped.
+        // Finisher lockouts are kept. Runs for every takeoff, jump skills included - it only touches NACC state.
+        private static bool _wasAirborne;
+        internal static void UpdateNaccAirborne(Player p)
+        {
+            if (p == null) { _wasAirborne = false; return; }
+            bool air = IsAirborne(p);
+            if (air && !_wasAirborne)
+            {
+                ResetNaccChain(p);
+                DragonCombat.ClearQueuedPrimary(p);
+            }
+            _wasAirborne = air;
+        }
         private static FieldInfo _atkHitPoint;
 
         private static void ComboFields()
@@ -1329,6 +1416,7 @@ namespace DragonsAltarCombat
                 timeSinceLastAttack = 0f;
                 _comboBase = anim;
                 _comboDual = UsesDualChain(p);
+                _comboGen = DragonCombat.NaccGen;
                 _comboInStart = true;
             }
             catch (Exception) { _comboInStart = false; }
@@ -1337,6 +1425,10 @@ namespace DragonsAltarCombat
         private static void ComboStartPostfix(Attack __instance, bool __result, Humanoid character)
         {
             if (__result && character != null && character == Player.m_localPlayer) DragonCombat.SkillAnimAttackBlockUntil = 0f;
+            // v0.25.154: an ACCEPTED melee normal attack retires the skill animation drivers it supersedes (damage / VFX the
+            // skill already cast keep running - only the animation side stops). Failed starts retire nothing.
+            Player rp;
+            if (__result && IsLocalMeleeStart(__instance, character, out rp)) DragonCombat.RetireSkillAnimations(rp);
             bool was = _comboInStart;
             _comboInStart = false;
             if (!was) return;
@@ -1349,6 +1441,7 @@ namespace DragonsAltarCombat
                 int length = Mathf.Clamp(Instance.ComboChainLength.Value, 2, 9);
                 if (_comboHit >= length - 1)
                 {
+                    _comboLockBefore = _comboLockUntil;
                     _comboFinisher = __instance;
                     _comboHit = -1;
                     // safety net in case Stop never reports (interrupted swing)
@@ -1368,7 +1461,8 @@ namespace DragonsAltarCombat
             {
                 // finisher length: start -> stop at the speed it played (min of what we have seen)
                 float measured = Time.time - _comboLastStart;
-                if (Instance != null && measured > 0.15f && !string.IsNullOrEmpty(_comboStartAnim))
+                // v0.25.154: a swing a skill / takeoff cut short is not a natural length - never measure it.
+                if (Instance != null && measured > 0.15f && !string.IsNullOrEmpty(_comboStartAnim) && _comboGen == DragonCombat.NaccGen)
                 {
                     string fk = ChainKey(_comboStartAnim, _comboDual, Mathf.Clamp(Instance.ComboChainLength.Value, 2, 9) - 1);
                     float nat = DragonCombat.ChainNaturalClock - _comboClockStart, old;
@@ -1384,22 +1478,35 @@ namespace DragonsAltarCombat
             return __instance == null || __instance != Player.m_localPlayer || Time.time >= DragonCombat.SkillAnimAttackBlockUntil;
         }
 
-        private static bool ComboLockPrefix(Humanoid __instance, ref bool __result)
+        private static bool ComboLockPrefix(Humanoid __instance, ref bool __result, object[] __args)
         {
             if (__instance == null || __instance != Player.m_localPlayer) return true;
             // v0.25.55: no normal attack while a skill holds the player (no attack sneaking out of a skill).
             if (DragonCombat.IsSkillLocked((Player)__instance)) { __result = false; return false; }
+            // v0.25.154: no airborne NACC. Rejected here, before any combo state moves or a trigger fires, and the
+            // attack is NOT handed to vanilla (return false). Heavy attacks and non-NACC weapons are untouched.
+            Player lp = (Player)__instance;
+            if (IsAirborne(lp) && IsNaccPrimaryRequest(lp, __args))
+            {
+                ResetNaccChain(lp);
+                DragonCombat.ClearQueuedPrimary(lp);
+                __result = false;
+                return false;
+            }
             if (Time.time >= _comboLockUntil) return true;
             __result = false;
             return false;
         }
 
-        private static readonly Dictionary<string, KeyValuePair<int, int>> BaseComboStates = new Dictionary<string, KeyValuePair<int, int>>();
+        internal static readonly Dictionary<string, KeyValuePair<int, int>> BaseComboStates = new Dictionary<string, KeyValuePair<int, int>>();
 
         // Capture the outgoing attack, not a locomotion transition observed after a trigger.
         private static void CaptureBaseComboState(Animator a, string trigger)
         {
             if (a == null) return;
+            DragonCombat.CheckController(a);   // v0.25.154 states captured under another controller are dropped
+            Player cp = Player.m_localPlayer;
+            if (cp == null || !cp.InAttack() || DragonCombat.SkillOwnsAnimator(cp)) return;   // never capture a skill CA / locomotion state
             float best = 0f;
             for (int layer = 0; layer < a.layerCount; layer++)
             {
@@ -2560,6 +2667,7 @@ namespace DragonsAltarCombat
         private float _jsaaApproach;
         private readonly RaycastHit[] _jsaaGroundHits = new RaycastHit[16];
         private int _token;
+        private int _gen;   // v0.25.154 DragonCombat.SkillAnimGen this clip started under; a newer value = a normal attack took over
         private Vector3[] _b = new Vector3[10];
         private Vector3 _r, _o;
         private readonly float[] _l = new float[8];
@@ -2684,6 +2792,7 @@ namespace DragonsAltarCombat
             _visual = visual;
             if (_animator == null) _animator = GetComponentInChildren<Animator>();
             _token = DragonCombat.ClaimMotionRoot(_visual);
+            _gen = DragonCombat.SkillAnimGen;
         }
 
         public bool IsHolding { get { return _keys != null && _hold && _impactAt < 0f; } }
@@ -2975,6 +3084,7 @@ namespace DragonsAltarCombat
         private void LateUpdate()
         {
             if (_keys == null || _keys.Length == 0) { Destroy(this); return; }
+            if (_gen != DragonCombat.SkillAnimGen) { CancelAnimation(); return; }   // v0.25.154 superseded by a normal attack
             if (_owner == null) _owner = GetComponent<Character>();
             float t = Phase();
             // v0.25.49 (user: gliding with the arm still raised): our emotes are fired as raw triggers, so
@@ -3777,6 +3887,7 @@ namespace DragonsAltarCombat
         {
             if (player == null || player != Player.m_localPlayer || string.IsNullOrEmpty(clip)) return;
             CheckAnimationClass(player);
+            SkillTakeover(player);   // v0.25.154
             // Non-charging Sky Summons lock their target at cast time; never turn them during the delay.
             // v0.25.139 (user): every skill with a wind up of 1 s or more faces the crosshair (Sky Summons included).
             // v0.25.140 (user): Sky Summons and Angel Comet are committed - the aim is locked at cast, the body never follows the crosshair.
@@ -4193,6 +4304,7 @@ namespace DragonsAltarCombat
             CheckAnimationController(animator);
         }
 
+        internal static void CheckController(Animator a) { CheckAnimationController(a); }
         private static readonly Dictionary<int, RuntimeAnimatorController> TriggerControllers = new Dictionary<int, RuntimeAnimatorController>();
         private static void CheckAnimationController(Animator a)
         {
@@ -4206,6 +4318,9 @@ namespace DragonsAltarCombat
             List<string> stale = new List<string>();
             foreach (string key in LearnedStates.Keys) if (key.StartsWith(prefix, StringComparison.Ordinal)) stale.Add(key);
             for (int i = 0; i < stale.Count; i++) LearnedStates.Remove(stale[i]);
+            stale.Clear();
+            foreach (string key in DragonCombatPlugin.BaseComboStates.Keys) if (key.StartsWith(prefix, StringComparison.Ordinal)) stale.Add(key);
+            for (int i = 0; i < stale.Count; i++) DragonCombatPlugin.BaseComboStates.Remove(stale[i]);   // v0.25.154 captured under the old controller
             PendingLearns.RemoveAll(delegate(StateLearn learn) { return learn.A == a; });
         }
 
@@ -4235,7 +4350,7 @@ namespace DragonsAltarCombat
 
         // The animator trigger that really exists for `name` (name, or name + "0" for combo chains), or null.
         // v0.25.42 state learning: which animator state (layer + full path hash) a trigger leads to.
-        private class StateLearn { public Animator A; public string Name; public int[] Pre; public float At; }
+        private class StateLearn { public Animator A; public string Name; public int[] Pre; public float At; public int Gen; public RuntimeAnimatorController Ctrl; }
         private static readonly Dictionary<string, KeyValuePair<int, int>> LearnedStates = new Dictionary<string, KeyValuePair<int, int>>();
         private static readonly List<StateLearn> PendingLearns = new List<StateLearn>();
 
@@ -4257,12 +4372,55 @@ namespace DragonsAltarCombat
             try
             {
                 StateLearn l = new StateLearn();
-                l.A = a; l.Name = trigger; l.At = Time.time;
+                l.A = a; l.Name = trigger; l.At = Time.time; l.Gen = NaccGen; l.Ctrl = a.runtimeAnimatorController;
                 l.Pre = new int[a.layerCount];
                 for (int i = 0; i < l.Pre.Length; i++) l.Pre[i] = a.GetCurrentAnimatorStateInfo(i).fullPathHash;
                 PendingLearns.Add(l);
             }
             catch (Exception) { }
+        }
+
+        // A skill animation (clip driver / Mixamo / vanilla skill trigger / skill lock) owns the animator right now.
+        public static bool SkillOwnsAnimator(Player p)
+        {
+            if (p == null) return false;
+            if (Time.time < SkillAnimAttackBlockUntil || Time.time < DragonMixamo.LiveUntil) return true;
+            return IsSkillLocked(p) || ClipBusy(p);
+        }
+
+        private static readonly string[] NotSwingWords = { "idle", "walk", "run", "jog", "sprint", "crouch", "sneak", "swim", "jump", "fall", "land", "dodge", "roll", "emote", "equip", "unequip", "block", "stagger", "hit", "death", "sit", "sleep", "cast", "kneel", "mixamo", "skill" };
+
+        // The normal-attack clip check: the state is not looping, the player really is in a melee attack, and its clip is an
+        // attack clip (attack / hit animation event, or the clip is named after the swing) and not a locomotion / skill clip.
+        public static bool IsSwingState(Animator a, int layer, AnimatorStateInfo st, string trigger)
+        {
+            try
+            {
+                if (a == null || st.loop) return false;
+                Player p = Player.m_localPlayer;
+                if (p == null || !p.InAttack()) return false;
+                bool next = a.IsInTransition(layer) && a.GetNextAnimatorStateInfo(layer).fullPathHash == st.fullPathHash;
+                AnimatorClipInfo[] clips = next ? a.GetNextAnimatorClipInfo(layer) : a.GetCurrentAnimatorClipInfo(layer);
+                bool plain = false;
+                for (int i = 0; i < clips.Length; i++)
+                {
+                    AnimationClip c = clips[i].clip;
+                    if (c == null || c.isLooping) continue;
+                    string cn = (c.name ?? "").ToLowerInvariant();
+                    bool bad = false;
+                    for (int w = 0; w < NotSwingWords.Length && !bad; w++)
+                        if (cn.Contains(NotSwingWords[w]) && !cn.Contains("attack") && !cn.Contains("swing")) bad = true;
+                    if (bad) continue;
+                    AnimationEvent[] ev = c.events;
+                    for (int e = 0; e < ev.Length; e++)
+                        if (ev[e].functionName == "OnAttackTrigger" || ev[e].functionName == "Hit") return true;
+                    if (cn.Contains("attack") || cn.Contains("swing") || cn.Contains("slash") || cn.Contains("strike")) return true;
+                    plain = true;   // not locomotion / skill, but no event and no attack name (e.g. a bundle's dual wield clip)
+                }
+                return plain;
+            }
+            catch (Exception) { }
+            return false;
         }
 
         private static void UpdateLearns()
@@ -4271,6 +4429,8 @@ namespace DragonsAltarCombat
             {
                 StateLearn l = PendingLearns[k];
                 if (l.A == null || Time.time - l.At > 0.6f) { PendingLearns.RemoveAt(k); continue; }
+                // v0.25.154: superseded (skill takeover / takeoff) or the controller changed -> dead, never learned.
+                if (l.Gen != NaccGen || l.Ctrl != l.A.runtimeAnimatorController || SkillOwnsAnimator(Player.m_localPlayer)) { PendingLearns.RemoveAt(k); continue; }
                 try
                 {
                     // v0.25.44: wait until the animator consumed the trigger, then take the layer that is
@@ -4286,6 +4446,8 @@ namespace DragonsAltarCombat
                         if (pick >= 0 && i != pick) continue;
                         AnimatorStateInfo st = l.A.IsInTransition(i) ? l.A.GetNextAnimatorStateInfo(i) : l.A.GetCurrentAnimatorStateInfo(i);
                         if (st.fullPathHash == l.Pre[i]) continue;
+                        // v0.25.154: only a validated swing state is cached (see IsSwingState); a locomotion / skill / looping state is dropped.
+                        if (!IsSwingState(l.A, i, st, l.Name)) { PendingLearns.RemoveAt(k); break; }
                         LearnedStates[l.A.GetInstanceID() + ":" + l.Name] = new KeyValuePair<int, int>(i, st.fullPathHash);
                         PendingLearns.RemoveAt(k);
                         break;
@@ -4505,9 +4667,61 @@ namespace DragonsAltarCombat
         // ignore attack events until a new normal attack really starts.
         public static float SkillAnimAttackBlockUntil;
 
+        // v0.25.154 ANIMATION OWNERSHIP. Two generation tokens, one per direction of the handoff:
+        //  - NaccGen: bumped when a skill (or a takeoff) takes over from the normal attack chain. State learning, swing
+        //    timing and the chain trim captured under an older value are dead (UpdateLearns, ComboStopPostfix).
+        //  - SkillAnimGen: bumped when a normal attack is accepted. Skill clip drivers, vanilla tails and loops started
+        //    under an older value retire themselves; the damage / VFX coroutines the skill already started are untouched.
+        public static int NaccGen, SkillAnimGen;
+
+        // A skill takes over: the interrupted chain is reset (counters, timing, chain speed, pending state learning). Must run
+        // BEFORE the running attack is aborted so a finisher the skill cut short does not leave its lockout behind.
+        public static void SkillTakeover(Player player)
+        {
+            if (player == null || player != Player.m_localPlayer) return;
+            DragonCombatPlugin.ResetNaccForSkill(player);
+        }
+
+        // A normal attack is accepted: skill animation drivers that are still playing are retired before NACC owns the animator.
+        public static void RetireSkillAnimations(Player player)
+        {
+            if (player == null || player != Player.m_localPlayer) return;
+            SkillAnimGen++;
+            Animator animator = player.GetComponentInChildren<Animator>();
+            DragonSkillClipDriver driver = player.GetComponent<DragonSkillClipDriver>();
+            bool wasPlaying = driver != null && driver.IsPlaying;
+            if (driver != null) driver.CancelAnimation();
+            DragonMixamoPlayer source = animator == null ? null : animator.GetComponent<DragonMixamoPlayer>();
+            if (source != null && source.Live) source.CancelAnimation();
+            DragonVanillaTail tail = player.GetComponent<DragonVanillaTail>();
+            if (tail != null) { tail.enabled = false; UnityEngine.Object.Destroy(tail); }
+            DragonVanillaLoop loop = player.GetComponent<DragonVanillaLoop>();
+            if (loop != null) { loop.enabled = false; UnityEngine.Object.Destroy(loop); }
+            VanillaPauseUntil = 0f; SkillBowHoldUntil = 0f; DragonMixamo.LiveUntil = 0f;
+            _aimWindupUntil = 0f;
+            if (wasPlaying) ForceRun(player, false);
+            SetSkillAnimSpeed(player, 1f, 0f);   // the skill's speed override must never time the swing
+        }
+
+        // Pending state learning of the local animator is dropped (a skill owns it now / the chain was cut).
+        public static void CancelStateLearning(Player player)
+        {
+            Animator a = player == null ? null : player.GetComponentInChildren<Animator>();
+            PendingLearns.RemoveAll(delegate(StateLearn learn) { return learn.A == null || learn.A == a; });
+        }
+
+        // The queued primary click only (heavy / secondary input is left alone).
+        public static void ClearQueuedPrimary(Player player)
+        {
+            if (player == null) return;
+            FieldInfo fi = FindField(player.GetType(), "m_queuedAttackTimer", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (fi != null && fi.FieldType == typeof(float)) fi.SetValue(player, 0f);
+        }
+
         public static void BlockSkillAnimAttack(Player player, float seconds)
         {
             if (player == null || player != Player.m_localPlayer) return;
+            SkillTakeover(player);
             SkillAnimAttackBlockUntil = Mathf.Max(SkillAnimAttackBlockUntil, Time.time + Mathf.Max(0.1f, seconds));
             CancelCurrentAttack(player);
         }
@@ -4562,6 +4776,7 @@ namespace DragonsAltarCombat
         public static void SwallowAttackInput(Player player, float seconds)
         {
             if (player == null || player != Player.m_localPlayer) return;
+            SkillTakeover(player);
             AttackSwallowUntil = Mathf.Max(AttackSwallowUntil, Time.time + Mathf.Max(0.05f, seconds));
             CancelCurrentAttack(player);
         }
@@ -9469,6 +9684,7 @@ namespace DragonsAltarCombat
         public static void RuntimeUpdate()
         {
             CheckAnimationClass(Player.m_localPlayer);
+            DragonCombatPlugin.UpdateNaccAirborne(Player.m_localPlayer);   // v0.25.154 takeoff forgets the interrupted chain
             float now = Time.time;
             if (_aimWindupPlayer == Player.m_localPlayer && now < _aimWindupUntil)
                 FaceAimNow(_aimWindupPlayer);
@@ -10374,12 +10590,14 @@ namespace DragonsAltarCombat
         private Animator _an;
         private int _layer, _hash, _pre;
         private float _k, _endN, _until;
+        private int _gen;   // v0.25.154
 
         public static void Run(Player p, Animator an, int layer, int hash, float k, float endN, int pre)
         {
             if (p == null || an == null) return;
             DragonVanillaTail t = p.GetComponent<DragonVanillaTail>();
             if (t == null) t = p.gameObject.AddComponent<DragonVanillaTail>();
+            t._gen = DragonCombat.SkillAnimGen;
             t._p = p; t._an = an; t._layer = layer; t._hash = hash; t._k = k; t._endN = endN; t._pre = pre;
             t._until = Time.time + 8f;
             DragonCombat.SetSkillAnimSpeed(p, k, 0.15f);
@@ -10393,7 +10611,7 @@ namespace DragonsAltarCombat
 
         private void LateUpdate()
         {
-            if (_p == null || _an == null || _p.IsDead() || Time.time > _until || _layer >= _an.layerCount) { Done(true); return; }
+            if (_p == null || _an == null || _p.IsDead() || Time.time > _until || _layer >= _an.layerCount || _gen != DragonCombat.SkillAnimGen) { Done(true); return; }
             try
             {
                 if (_an.IsInTransition(_layer) && _an.GetNextAnimatorStateInfo(_layer).fullPathHash != _hash) { Done(true); return; }
@@ -11032,6 +11250,7 @@ namespace DragonsAltarCombat
         private string _trigger;
         private int _layer = -1, _hash;
         private int[] _pre;
+        private int _gen;   // v0.25.154
 
         public static bool Play(Player player, string trigger, float seconds, float startN, float endN)
         {
@@ -11041,6 +11260,7 @@ namespace DragonsAltarCombat
             if (t == null) return false;
             DragonVanillaLoop l = player.GetComponent<DragonVanillaLoop>();
             if (l == null) l = player.gameObject.AddComponent<DragonVanillaLoop>();
+            l._gen = DragonCombat.SkillAnimGen;
             l._a = a; l._trigger = t; l._end = Time.time + Mathf.Max(0.3f, seconds);
             l._startN = Mathf.Clamp01(startN); l._endN = Mathf.Clamp(endN, l._startN + 0.05f, 1f);
             l._layer = -1;
@@ -11059,7 +11279,7 @@ namespace DragonsAltarCombat
         {
             if (_a == null) { Destroy(this); return; }
             Character owner = GetComponent<Character>();
-            if (owner == null || owner.IsDead() || Time.time >= _end) { Destroy(this); return; }
+            if (owner == null || owner.IsDead() || Time.time >= _end || _gen != DragonCombat.SkillAnimGen) { Destroy(this); return; }
             try
             {
                 if (_layer < 0)
