@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.154";
+        public const string ModVersion = "0.25.155";
 
         internal static DragonCombatPlugin Instance;
 
@@ -3888,6 +3888,7 @@ namespace DragonsAltarCombat
             if (player == null || player != Player.m_localPlayer || string.IsNullOrEmpty(clip)) return;
             CheckAnimationClass(player);
             SkillTakeover(player);   // v0.25.154
+            AnimActivation++;
             // Non-charging Sky Summons lock their target at cast time; never turn them during the delay.
             // v0.25.139 (user): every skill with a wind up of 1 s or more faces the crosshair (Sky Summons included).
             // v0.25.140 (user): Sky Summons and Angel Comet are committed - the aim is locked at cast, the body never follows the crosshair.
@@ -4350,7 +4351,7 @@ namespace DragonsAltarCombat
 
         // The animator trigger that really exists for `name` (name, or name + "0" for combo chains), or null.
         // v0.25.42 state learning: which animator state (layer + full path hash) a trigger leads to.
-        private class StateLearn { public Animator A; public string Name; public int[] Pre; public float At; public int Gen; public RuntimeAnimatorController Ctrl; }
+        private class StateLearn { public Animator A; public string Name; public int[] Pre; public float At; public int Gen; public RuntimeAnimatorController Ctrl; public bool Paired; }
         private static readonly Dictionary<string, KeyValuePair<int, int>> LearnedStates = new Dictionary<string, KeyValuePair<int, int>>();
         private static readonly List<StateLearn> PendingLearns = new List<StateLearn>();
 
@@ -4372,7 +4373,7 @@ namespace DragonsAltarCombat
             try
             {
                 StateLearn l = new StateLearn();
-                l.A = a; l.Name = trigger; l.At = Time.time; l.Gen = NaccGen; l.Ctrl = a.runtimeAnimatorController;
+                l.A = a; l.Name = trigger; l.At = Time.time; l.Gen = NaccGen; l.Ctrl = a.runtimeAnimatorController; l.Paired = DragonDualWield.PairedActive(a);
                 l.Pre = new int[a.layerCount];
                 for (int i = 0; i < l.Pre.Length; i++) l.Pre[i] = a.GetCurrentAnimatorStateInfo(i).fullPathHash;
                 PendingLearns.Add(l);
@@ -4390,34 +4391,43 @@ namespace DragonsAltarCombat
 
         private static readonly string[] NotSwingWords = { "idle", "walk", "run", "jog", "sprint", "crouch", "sneak", "swim", "jump", "fall", "land", "dodge", "roll", "emote", "equip", "unequip", "block", "stagger", "hit", "death", "sit", "sleep", "cast", "kneel", "mixamo", "skill" };
 
-        // The normal-attack clip check: the state is not looping, the player really is in a melee attack, and its clip is an
-        // attack clip (attack / hit animation event, or the clip is named after the swing) and not a locomotion / skill clip.
+        // The requested swing's state check. `trigger` is the swing trigger the animator just consumed (for SBDW / 2HDW it is
+        // already the carrier trigger of the active override controller). The state is accepted for THAT trigger only when:
+        //  - not looping, the player is in a melee attack, and no clip of it is locomotion / skill named;
+        //  - its state name is the trigger (or the trigger the external Warfare / Wizardry table maps it to), or - for a
+        //    renamed override state - one of its clips carries an attack event;
+        //  - no OTHER trigger of this controller already owns that (layer, state) - one state is never two swings.
+        // Anything else is left unlearned (the HasState fallback in ComboTriggerPrefix still applies).
         public static bool IsSwingState(Animator a, int layer, AnimatorStateInfo st, string trigger)
         {
             try
             {
-                if (a == null || st.loop) return false;
+                if (a == null || st.loop || string.IsNullOrEmpty(trigger)) return false;
                 Player p = Player.m_localPlayer;
                 if (p == null || !p.InAttack()) return false;
+                string mapped;
+                bool named = st.IsName(trigger) || (ExternalTrigger(trigger, out mapped) && !string.IsNullOrEmpty(mapped) && st.IsName(mapped));
                 bool next = a.IsInTransition(layer) && a.GetNextAnimatorStateInfo(layer).fullPathHash == st.fullPathHash;
                 AnimatorClipInfo[] clips = next ? a.GetNextAnimatorClipInfo(layer) : a.GetCurrentAnimatorClipInfo(layer);
-                bool plain = false;
+                bool evented = false, bad = false, any = false;
                 for (int i = 0; i < clips.Length; i++)
                 {
                     AnimationClip c = clips[i].clip;
-                    if (c == null || c.isLooping) continue;
+                    if (c == null) continue;
+                    any = true;
+                    if (c.isLooping) { bad = true; continue; }
                     string cn = (c.name ?? "").ToLowerInvariant();
-                    bool bad = false;
-                    for (int w = 0; w < NotSwingWords.Length && !bad; w++)
-                        if (cn.Contains(NotSwingWords[w]) && !cn.Contains("attack") && !cn.Contains("swing")) bad = true;
-                    if (bad) continue;
+                    for (int w = 0; w < NotSwingWords.Length; w++)
+                        if (cn.Contains(NotSwingWords[w]) && !cn.Contains("attack") && !cn.Contains("swing")) { bad = true; break; }
                     AnimationEvent[] ev = c.events;
                     for (int e = 0; e < ev.Length; e++)
-                        if (ev[e].functionName == "OnAttackTrigger" || ev[e].functionName == "Hit") return true;
-                    if (cn.Contains("attack") || cn.Contains("swing") || cn.Contains("slash") || cn.Contains("strike")) return true;
-                    plain = true;   // not locomotion / skill, but no event and no attack name (e.g. a bundle's dual wield clip)
+                        if (ev[e].functionName == "OnAttackTrigger" || ev[e].functionName == "Hit") evented = true;
                 }
-                return plain;
+                if (!any || bad || (!named && !evented)) return false;
+                string prefix = a.GetInstanceID() + ":";
+                foreach (KeyValuePair<string, KeyValuePair<int, int>> kv in LearnedStates)
+                    if (kv.Key.StartsWith(prefix, StringComparison.Ordinal) && kv.Key != prefix + trigger && kv.Value.Key == layer && kv.Value.Value == st.fullPathHash) return false;
+                return true;
             }
             catch (Exception) { }
             return false;
@@ -4447,7 +4457,7 @@ namespace DragonsAltarCombat
                         AnimatorStateInfo st = l.A.IsInTransition(i) ? l.A.GetNextAnimatorStateInfo(i) : l.A.GetCurrentAnimatorStateInfo(i);
                         if (st.fullPathHash == l.Pre[i]) continue;
                         // v0.25.154: only a validated swing state is cached (see IsSwingState); a locomotion / skill / looping state is dropped.
-                        if (!IsSwingState(l.A, i, st, l.Name)) { PendingLearns.RemoveAt(k); break; }
+                        if (l.Paired != DragonDualWield.PairedActive(l.A) || !IsSwingState(l.A, i, st, l.Name)) { PendingLearns.RemoveAt(k); break; }
                         LearnedStates[l.A.GetInstanceID() + ":" + l.Name] = new KeyValuePair<int, int>(i, st.fullPathHash);
                         PendingLearns.RemoveAt(k);
                         break;
@@ -4609,13 +4619,16 @@ namespace DragonsAltarCombat
             float st, en;
             AnimTuning(clipKey, out st, out en);
             if (player == null || DragonCombatPlugin.Instance == null || (st <= 0.001f && en >= 0.999f)) return;
-            DragonCombatPlugin.Instance.StartCoroutine(TuneVanillaRoutine(player, st, en));
+            DragonCombatPlugin.Instance.StartCoroutine(TuneVanillaRoutine(player, st, en, AnimActivation));
         }
 
-        private static IEnumerator TuneVanillaRoutine(Player player, float st, float en)
+        // v0.25.154: the routine owns the animator only while its activation is the newest (a later skill animation or an
+        // accepted normal attack bumps AnimActivation) and the controller it started under is still the animator's.
+        private static IEnumerator TuneVanillaRoutine(Player player, float st, float en, int gen)
         {
             Animator an = player == null ? null : player.GetComponentInChildren<Animator>();
             if (an == null) yield break;
+            RuntimeAnimatorController ctrl = an.runtimeAnimatorController;
             int n = an.layerCount;
             int[] pre = new int[n];
             for (int l = 0; l < n; l++) pre[l] = an.GetCurrentAnimatorStateInfo(l).fullPathHash;
@@ -4624,19 +4637,19 @@ namespace DragonsAltarCombat
             while (layer < 0 && Time.time - t0 < 0.5f)
             {
                 yield return null;
-                if (an == null) yield break;
+                if (an == null || gen != AnimActivation || an.runtimeAnimatorController != ctrl) yield break;
                 for (int l = 0; l < n && layer < 0; l++)
                 {
                     AnimatorStateInfo s = an.IsInTransition(l) ? an.GetNextAnimatorStateInfo(l) : an.GetCurrentAnimatorStateInfo(l);
                     if (s.fullPathHash != pre[l] && !s.loop) { layer = l; hash = s.fullPathHash; }
                 }
             }
-            if (layer < 0) yield break;
+            if (layer < 0 || gen != AnimActivation || an.runtimeAnimatorController != ctrl) yield break;
             if (st > 0.001f) an.CrossFade(hash, 0.05f, layer, st);
             while (an != null && Time.time - t0 < 6f)
             {
                 yield return null;
-                if (an == null) yield break;
+                if (an == null || gen != AnimActivation || an.runtimeAnimatorController != ctrl) yield break;
                 AnimatorStateInfo cur = an.GetCurrentAnimatorStateInfo(layer);
                 AnimatorStateInfo info;
                 if (cur.fullPathHash == hash) info = cur;
@@ -4672,7 +4685,7 @@ namespace DragonsAltarCombat
         //    timing and the chain trim captured under an older value are dead (UpdateLearns, ComboStopPostfix).
         //  - SkillAnimGen: bumped when a normal attack is accepted. Skill clip drivers, vanilla tails and loops started
         //    under an older value retire themselves; the damage / VFX coroutines the skill already started are untouched.
-        public static int NaccGen, SkillAnimGen;
+        public static int NaccGen, SkillAnimGen, AnimActivation;   // AnimActivation: bumped by every new skill animation (PlayClip / FireVanilla) and every accepted normal attack
 
         // A skill takes over: the interrupted chain is reset (counters, timing, chain speed, pending state learning). Must run
         // BEFORE the running attack is aborted so a finisher the skill cut short does not leave its lockout behind.
@@ -4686,7 +4699,7 @@ namespace DragonsAltarCombat
         public static void RetireSkillAnimations(Player player)
         {
             if (player == null || player != Player.m_localPlayer) return;
-            SkillAnimGen++;
+            SkillAnimGen++; AnimActivation++;
             Animator animator = player.GetComponentInChildren<Animator>();
             DragonSkillClipDriver driver = player.GetComponent<DragonSkillClipDriver>();
             bool wasPlaying = driver != null && driver.IsPlaying;
@@ -4785,6 +4798,7 @@ namespace DragonsAltarCombat
         {
             if (player == null || string.IsNullOrEmpty(trigger)) return;
             if (!trigger.StartsWith("emote", StringComparison.Ordinal)) BlockSkillAnimAttack(player, 2.5f);
+            AnimActivation++;
             try
             {
                 Component z = null;

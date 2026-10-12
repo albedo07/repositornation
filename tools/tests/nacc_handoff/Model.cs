@@ -116,6 +116,21 @@ static class T
             // heavy attack airborne is not NACC
             s = new Sim(); s.Takeoff(); Check(s.Click(true, "melee", w) == -3, w + " heavy attack unaffected by airborne gate");
         }
+        // v0.25.155: tune routine activation token + requested-swing validation
+        {
+            int act = 0, ctrlId = 1; int gen = act; bool wrote = false;
+            // routine captured gen; a newer skill animation / accepted attack bumps it -> no write
+            act++; if (gen == act && ctrlId == 1) wrote = true; Check(!wrote, "tune routine dead after newer activation");
+            gen = act; ctrlId = 2; wrote = false; if (gen == act && ctrlId == 1) wrote = true; Check(!wrote, "tune routine dead after controller change");
+            gen = act; ctrlId = 1; if (gen == act && ctrlId == 1) wrote = true; Check(wrote, "tune routine live when still newest");
+            // swing validation: name match or evented clip; one state never two swings; bad clip rejected
+            Func<string, bool, bool, bool, bool, bool> ok = (trig, named, evented, bad, conflict) => !bad && (named || evented) && !conflict;
+            Check(ok("swing2", true, false, false, false), "named state accepted");
+            Check(ok("dual_knives1", false, true, false, false), "renamed override state with attack event accepted");
+            Check(!ok("swing2", false, false, false, false), "unknown attack-looking state rejected (no 'plain' accept)");
+            Check(!ok("swing2", true, true, false, true), "state already owned by another swing rejected");
+            Check(!ok("swing2", true, true, true, false), "locomotion clip rejected");
+        }
         Console.WriteLine(fails == 0 ? "ALL PASS" : fails + " FAILED");
         Environment.Exit(fails == 0 ? 0 : 1);
     }

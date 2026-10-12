@@ -1,6 +1,8 @@
-v0.25.154 NACC Handoff - in-game checks
+v0.25.155 Handoff Guards - in-game checks (plus v0.25.154 list)
 1. One-handed, SBDW and 2HDW: spam Alpha1-7 and Mouse1 alternately. Every NACC after a skill starts at strike 1; no leftover skill pose / speed; chain stays 1-2-1-2-3; skill damage/VFX still fire.
 2. Hit 2 -> skill -> NACC: strike 1 again. Strike 5 (finisher) -> lockout still applies; finisher cut by a skill -> no lockout.
 3. Jump + Mouse1: from idle, after each of strikes 1-5, right after a skill: nothing swings in the air, no vanilla attack, landing -> 1-2-1-2-3. Hold Mouse1 across a jump: first swing after landing is strike 1.
 4. Heavy attack (Mouse2/hold) in the air and on the ground unchanged. Circle Swing and RJS jump normally.
 5. Walk over bumps/stairs with Mouse1 held: no dropped swings.
+6. Frenzied Charge: start/end % trim works; cast a skill or attack mid-trim -> the trim stops, no stray CrossFade.
+7. SBDW + 2HDW chains: the 2 -> 1 backward step still flows (learned state). Report weapon type if it stutters.
