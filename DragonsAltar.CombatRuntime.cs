@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.144";
+        public const string ModVersion = "0.25.145";
 
         internal static DragonCombatPlugin Instance;
 
@@ -55,7 +55,6 @@ namespace DragonsAltarCombat
         internal ConfigEntry<float> SkySummonDropTime;
         internal ConfigEntry<bool> EnableWarfreakDualWield;
         internal ConfigEntry<bool> EnableDivineStaffShield;
-        internal ConfigEntry<bool> EnableSpellcasterDualGunStaves;
         internal ConfigEntry<bool> RemoveDivineEquipmentMovementPenalty;
         internal ConfigEntry<bool> ClericBlessingNoPenalty;
         internal ConfigEntry<bool> HolyTrinityNoArmorPenalty;
@@ -194,7 +193,6 @@ namespace DragonsAltarCombat
             SkySummonDropTime = Config.Bind("Skills", "SkySummonDropTime", 0.18f, "Seconds for a spawned Sky Summon object to slam from its indoor-safe spawn point to the target AFTER the character wind-up finishes.");
             EnableWarfreakDualWield = Config.Bind("Weapon Mastery", "EnableWarfreakDualWield", true, "Warfreak: Mercenary may equip any two one-handed weapons simultaneously. Dedicated combination animations are a later animation pass.");
             EnableDivineStaffShield = Config.Bind("Weapon Mastery", "EnableDivineStaffShield", true, "Divine Duality: Cleric may equip a Staff and Shield together, including before advancement.");
-            EnableSpellcasterDualGunStaves = Config.Bind("Weapon Mastery", "EnableSpellcasterDualGunStaves", true, "Allow Spellcaster to equip two rapid-fire Gun Staves. The Sorcerer module handles cadence and accuracy without a synthetic off-hand projectile.");
             RemoveDivineEquipmentMovementPenalty = Config.Bind("Weapon Mastery", "LegacyRemoveDivineEquipmentMovementPenalty", false, "Legacy option retained for config compatibility. Cleric no longer gets a blanket equipment movement-penalty removal.");
             ClericBlessingNoPenalty = Config.Bind("Cleric Blessing", "NoShieldStaffClubMovementPenalty", true, "Cleric's Blessing: Shields, Staves and one-handed Club weapons have no movement penalty (two-handed Clubs excluded).");
             HolyTrinityNoArmorPenalty = Config.Bind("Paladin Holy Trinity", "NoArmorMovementPenalty", true, "Holy Trinity (Club-type melee weapon + any Shield): Armor has no movement penalty.");
@@ -1037,6 +1035,7 @@ namespace DragonsAltarCombat
         internal ConfigEntry<bool> MeleeHitStop, ComboFixedInterval;
         internal ConfigEntry<bool> EnhancedVfx;
         internal ConfigEntry<float> VfxDensity, VfxLight;
+        internal ConfigEntry<bool> ShowGuides;
         private static FieldInfo _atkLevels, _atkLevel, _atkAnim, _atkChar, _atkWeapon, _atkAngle, _atkType;
         private static MethodInfo _atkMelee;
         private static bool _comboInStart, _comboDual;
@@ -1066,9 +1065,10 @@ namespace DragonsAltarCombat
             ComboChainsEnabled = Config.Bind("Combat", "FiveHitCombos_v02538", true, "Normal melee attacks chain into a 5-hit combo built from the weapon's own vanilla swings.");
             ComboChainLength = Config.Bind("Combat", "ComboLength_v02538", 5, "Hits in the normal attack chain.");
             ComboFinisherLockout = Config.Bind("Combat", "ComboFinisherLockout_v02538", 1f, "Seconds after the last hit of the chain before a new normal attack can start.");
+            ShowGuides = Config.Bind("Visuals", "ShowTargetingGuides", true, "Thin, very faint outlines for targeting / charging guides. Off hides ONLY those outlines (never skill geometry, damage areas or other UI).");
             EnhancedVfx = Config.Bind("Visuals", "EnhancedSkillVfx_v02554", true, "Real particle / light / lightning effects on skills (v0.25.54). Off = the old line drawings only.");
-            VfxDensity = Config.Bind("Visuals", "ParticleDensity_v02559", 0.7f, "Particle amount multiplier for skill effects (0.1 - 3).");
-            VfxLight = Config.Bind("Visuals", "LightIntensity_v02559", 0.45f, "Brightness of the flashes / point lights skills create (0 = none, 1 = the old v0.25.54-58 look).");
+            VfxDensity = Config.Bind("Visuals", "ParticleDensity_v025145", 0.35f, "Particle amount multiplier for skill effects (0.1 - 3). v0.25.145: restrained default.");
+            VfxLight = Config.Bind("Visuals", "LightIntensity_v025145", 0.15f, "Brightness of the flashes / point lights skills create (0 = none, 1 = the old v0.25.54-58 look).");
             ComboSwingSeconds = Config.Bind("Combat", "ComboSwingSeconds_v02559", 0.6f, "Normal attack chain: seconds per swing for ALL 5 hits (finisher included) with no attack-speed bonus; class attack speed bonuses shorten it.");
             ComboRepeatOffset = Config.Bind("Combat", "ComboRepeatOffset_v02559", 0.22f, "When the chain steps back to an earlier swing (hit 3 = swing 1 again), it starts this far into that swing (0-0.5 of the animation) so it flows out of the previous swing instead of restarting from the rest pose.");
             ComboBlend = Config.Bind("Combat", "ComboBlendSeconds_v02559", 0.12f, "Cross-fade time between chained swings.");
@@ -1985,13 +1985,13 @@ namespace DragonsAltarCombat
             ItemDrop.ItemData left = DragonCombat.GetHandItem(player, "m_leftItem");
             ItemDrop.ItemData right = DragonCombat.GetHandItem(player, "m_rightItem");
 
-            if (Instance.EnableWarfreakDualWield.Value && advancement == "Mercenary" && DragonCombat.IsOneHandedWeapon(item))
+            if (Instance.EnableWarfreakDualWield.Value && advancement == "Mercenary" && DragonCombat.IsOneHandedWeapon(item) && !DragonCombat.IsGunStaff(item))   // v0.25.145 Gun Staves are never dual wielded
             {
                 ItemDrop.ItemData existingWeapon = null;
 
-                if (DragonCombat.IsOneHandedWeapon(right) && right != item)
+                if (DragonCombat.IsOneHandedWeapon(right) && !DragonCombat.IsGunStaff(right) && right != item)
                     existingWeapon = right;
-                else if (DragonCombat.IsOneHandedWeapon(left) && left != item)
+                else if (DragonCombat.IsOneHandedWeapon(left) && !DragonCombat.IsGunStaff(left) && left != item)
                     existingWeapon = left;
 
                 if (existingWeapon != null)
@@ -1999,25 +1999,6 @@ namespace DragonsAltarCombat
                     __state.Active = true;
                     __state.MercenaryDualWeapons = true;
                     __state.ExistingWeapon = existingWeapon;
-                    __state.NewItem = item;
-                    return true;
-                }
-            }
-
-            if (Instance.EnableSpellcasterDualGunStaves.Value && advancement == "Spellcaster" && DragonCombat.IsGunStaff(item))
-            {
-                ItemDrop.ItemData existingGunStaff = null;
-
-                if (DragonCombat.IsGunStaff(right) && right != item)
-                    existingGunStaff = right;
-                else if (DragonCombat.IsGunStaff(left) && left != item)
-                    existingGunStaff = left;
-
-                if (existingGunStaff != null)
-                {
-                    __state.Active = true;
-                    __state.SpellcasterDualGunStaves = true;
-                    __state.ExistingWeapon = existingGunStaff;
                     __state.NewItem = item;
                     return true;
                 }
@@ -2065,24 +2046,6 @@ namespace DragonsAltarCombat
             try
             {
                 if (__state.MercenaryDualWeapons)
-                {
-                    ItemDrop.ItemData right = __state.ExistingWeapon;
-                    ItemDrop.ItemData left = __state.NewItem;
-
-                    if (right != null && left != null && right != left)
-                    {
-                        DragonCombat.SetHandItem(player, "m_rightItem", right);
-                        DragonCombat.SetHandItem(player, "m_leftItem", left);
-                        DragonCombat.SetEquipped(right, true);
-                        DragonCombat.SetEquipped(left, true);
-                        DragonCombat.RefreshEquipment(player);
-                        __result = true;
-                    }
-
-                    return;
-                }
-
-                if (__state.SpellcasterDualGunStaves)
                 {
                     ItemDrop.ItemData right = __state.ExistingWeapon;
                     ItemDrop.ItemData left = __state.NewItem;
@@ -2218,7 +2181,6 @@ namespace DragonsAltarCombat
         public bool Active;
         public bool MercenaryDualWeapons;
         public bool DivineStaffShield;
-        public bool SpellcasterDualGunStaves;
         public ItemDrop.ItemData ExistingWeapon;
         public ItemDrop.ItemData ExistingOffhand;
         public ItemDrop.ItemData NewItem;
@@ -9235,12 +9197,12 @@ namespace DragonsAltarCombat
                 if (l == null || r == null || l == r) return;
                 string adv = GetAdvancementName(p);
                 bool dualMelee = IsOneHandedWeapon(l) && IsOneHandedWeapon(r) && !IsGunStaff(l);
-                bool dualGun = IsGunStaff(l) && IsGunStaff(r);
-                if ((dualMelee && adv != "Mercenary") || (dualGun && adv != "Spellcaster"))
+                bool dualGun = IsGunStaff(l) && IsGunStaff(r);   // v0.25.145: nobody dual wields Gun Staves (Horizon Walker mechanic removed)
+                if ((dualMelee && adv != "Mercenary") || dualGun)
                 {
                     p.UnequipItem(l, true);
                     if (MessageHud.instance != null)
-                        MessageHud.instance.ShowMessage(MessageHud.MessageType.Center, dualGun ? "Only a Horizon Walker can dual wield Gun Staves" : "Only a Mercenary can dual wield");
+                        MessageHud.instance.ShowMessage(MessageHud.MessageType.Center, dualGun ? "Gun Staves cannot be dual wielded" : "Only a Mercenary can dual wield");
                 }
             }
             catch (Exception) { }
@@ -11732,9 +11694,14 @@ namespace DragonsAltarCombat
             get { return DragonCombatPlugin.Instance == null || DragonCombatPlugin.Instance.EnhancedVfx == null || DragonCombatPlugin.Instance.EnhancedVfx.Value; }
         }
 
+        public static bool Guides
+        {
+            get { return DragonCombatPlugin.Instance == null || DragonCombatPlugin.Instance.ShowGuides == null || DragonCombatPlugin.Instance.ShowGuides.Value; }
+        }
+
         public static float Amount
         {
-            get { return DragonCombatPlugin.Instance == null || DragonCombatPlugin.Instance.VfxDensity == null ? 1f : Mathf.Clamp(DragonCombatPlugin.Instance.VfxDensity.Value, 0.1f, 3f); }
+            get { return DragonCombatPlugin.Instance == null || DragonCombatPlugin.Instance.VfxDensity == null ? 0.35f : Mathf.Clamp(DragonCombatPlugin.Instance.VfxDensity.Value, 0.1f, 3f); }
         }
 
         private static Texture2D Glow()
@@ -11848,7 +11815,10 @@ namespace DragonsAltarCombat
         public static void Flash(Vector3 pos, Color c, float intensity, float range, float seconds)
         {
             if (!Enabled) return;
-            intensity *= LightScale;
+            // v0.25.145 restrained: no bright flares - capped peak, short, small range
+            intensity = Mathf.Min(intensity, 2.5f) * LightScale;
+            seconds = Mathf.Min(seconds, 0.3f);
+            range = Mathf.Min(range, 6f);
             if (intensity <= 0.05f) return;
             DragonVfxLife l = Host(pos, seconds, "flash");
             Light light = l.gameObject.AddComponent<Light>();
@@ -11867,6 +11837,7 @@ namespace DragonsAltarCombat
         {
             if (!Enabled) return;
             DragonVfxLife l = Host(pos, life + 0.3f, "burst");
+            count = Mathf.Max(2, Mathf.RoundToInt(count * 0.6f));   // v0.25.145 no excessive bursts
             Particles(l.transform, c, count, 0f, 0.1f, life, speed * 0.4f, speed, size * 0.5f, size, gravity, ParticleSystemShapeType.Sphere, 0.2f, Vector3.zero, speed > 6f, true);
         }
 
@@ -12022,6 +11993,7 @@ namespace DragonsAltarCombat
             if (!Enabled || parent == null) return;
             GameObject go = new GameObject("IH_Glow");
             go.transform.SetParent(parent, false);
+            rate *= 0.5f;   // v0.25.145 restrained
             ParticleSystem ps = Particles(go.transform, c, 0, rate, 1f, 1.1f, 0.2f, 1.2f, 0.12f, 0.4f, -0.05f,
                 ParticleSystemShapeType.Sphere, Mathf.Max(0.1f, radius), Vector3.zero, false, true);
             ParticleSystem.MainModule m = ps.main;
@@ -12032,7 +12004,7 @@ namespace DragonsAltarCombat
                 light.type = LightType.Point;
                 light.color = c;
                 light.range = lightRange;
-                light.intensity = 2.2f * LightScale;
+                light.intensity = 1.2f * LightScale;
                 light.shadows = LightShadows.None;
             }
         }
@@ -12378,7 +12350,7 @@ namespace DragonsAltarCombat
 
         public static float LightScale
         {
-            get { return DragonCombatPlugin.Instance == null || DragonCombatPlugin.Instance.VfxLight == null ? 0.45f : Mathf.Clamp(DragonCombatPlugin.Instance.VfxLight.Value, 0f, 2f); }
+            get { return DragonCombatPlugin.Instance == null || DragonCombatPlugin.Instance.VfxLight == null ? 0.15f : Mathf.Clamp(DragonCombatPlugin.Instance.VfxLight.Value, 0f, 2f); }
         }
 
         private static float Hash(int x, int y, int seed)
@@ -12419,6 +12391,18 @@ namespace DragonsAltarCombat
         }
 
         private static float Rad(float u, float v) { float dx = u * 2f - 1f, dy = v * 2f - 1f; return Mathf.Sqrt(dx * dx + dy * dy); }
+
+        // v0.25.145 a hair-thin ring outline for targeting guides (no inner glow).
+        private static Texture2D _guideTex;
+        private static Texture2D GuideTex()
+        {
+            if (_guideTex == null) _guideTex = MakeTex(256, 256, delegate(float u, float v)
+            {
+                float d = Rad(u, v);
+                return d > 1f ? 0f : Mathf.Exp(-Mathf.Pow((d - 0.95f) / 0.012f, 2f));
+            }, TextureWrapMode.Clamp);
+            return _guideTex;
+        }
 
         private static Texture2D RingTex()
         {
@@ -12554,10 +12538,10 @@ namespace DragonsAltarCombat
             radius = Mathf.Max(0.5f, radius);
             Vector3 g = GroundPoint(pos) + Vector3.up * 0.07f;
             Quaternion yaw = Quaternion.Euler(0f, UnityEngine.Random.Range(0f, 360f), 0f);
-            Color rc = c; rc.a = 0.9f;
+            Color rc = c; rc.a = 0.5f;
             DragonMeshFx ring = MeshFx(g, yaw, true, Mat(RingTex(), true), rc, seconds + 0.15f); if (ring != null) ring.Conform = true;
             if (ring != null) { ring.ScaleFrom = Vector3.one * radius * 0.4f; ring.ScaleTo = Vector3.one * radius * 2.05f; ring.ScaleTime = seconds; }
-            Color gc = Color.Lerp(c, Color.white, 0.2f); gc.a = 0.55f;
+            Color gc = Color.Lerp(c, Color.white, 0.2f); gc.a = 0.18f;
             DragonMeshFx disc = MeshFx(g + Vector3.up * 0.01f, yaw, true, Mat(Glow(), true), gc, seconds * 0.8f + 0.1f); if (disc != null) disc.Conform = true;
             if (disc != null) { disc.ScaleFrom = Vector3.one * radius * 0.8f; disc.ScaleTo = Vector3.one * radius * 1.6f; disc.ScaleTime = seconds * 0.5f; }
         }
@@ -12565,11 +12549,12 @@ namespace DragonsAltarCombat
         // v0.25.63: a fixed-size glowing circle on the ground (area markers / telegraphs; replaces line rings).
         public static void AreaRing(Vector3 pos, Color c, float radius, float seconds)
         {
-            if (!Enabled) return;
+            // v0.25.145: this is the TARGETING / CHARGING guide - a thin, very faint outline, hidden by [Visuals] ShowTargetingGuides.
+            if (!Enabled || !Guides) return;
             radius = Mathf.Max(0.3f, radius);
             Vector3 g = GroundPoint(pos) + Vector3.up * 0.07f;
-            Color rc = c; rc.a = Mathf.Clamp01(c.a) * 0.85f;
-            DragonMeshFx ring = MeshFx(g, Quaternion.identity, true, Mat(RingTex(), true), rc, Mathf.Max(0.15f, seconds)); if (ring != null) ring.Conform = true;
+            Color rc = c; rc.a = Mathf.Min(0.22f, Mathf.Clamp01(c.a) * 0.3f);
+            DragonMeshFx ring = MeshFx(g, Quaternion.identity, true, Mat(GuideTex(), true), rc, Mathf.Max(0.15f, seconds)); if (ring != null) ring.Conform = true;
             if (ring != null) { ring.FadeIn = Mathf.Min(0.12f, seconds * 0.3f); ring.Hold = seconds * 0.5f; ring.ScaleFrom = ring.ScaleTo = Vector3.one * radius * 2.05f; }
         }
 
@@ -14488,8 +14473,7 @@ namespace DragonsAltarCombat
             Color c = ClassColor(p);
             Vector3 pos = p.transform.position;
             // v0.25.75 (user): no rune circle on the ground when a skill starts.
-            Burst(pos + Vector3.up * 0.2f, Color.Lerp(c, Color.white, 0.3f), Mathf.RoundToInt((big ? 40 : 14) * Amount), big ? 3.5f : 2f, 0.12f, 0.7f, -1.2f);
-            Flash(pos + Vector3.up * 1.1f, c, big ? 3f : 1.2f, big ? 8f : 4f, big ? 0.6f : 0.3f);
+            Burst(pos + Vector3.up * 0.2f, Color.Lerp(c, Color.white, 0.3f), Mathf.RoundToInt((big ? 16 : 6) * Amount), big ? 3f : 1.6f, 0.1f, 0.5f, -1.2f);   // v0.25.145 restrained, no flash
             if (big)
             {
                 // v0.25.77 (user): no light column on cast

@@ -41,7 +41,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Aethelborn Ascended - Ranger";
-        public const string ModVersion = "0.25.144";
+        public const string ModVersion = "0.25.145";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -3827,7 +3827,7 @@ namespace DragonsAltarRanger
                 // v0.25.63: real shockwave for impacts, textured ground circle for markers - no line placeholder
                 Color rc = color; rc.a = 1f;
                 bool wave = radius >= DragonCombat.M(1.5f) && duration <= 0.8f;
-                DragonCombat.RunVfx(delegate { if (wave) DragonVfx.Shockwave(center, rc, radius, Mathf.Max(0.25f, duration)); else DragonVfx.AreaRing(center, rc, radius, Mathf.Max(0.15f, duration)); });
+                DragonCombat.RunVfx(delegate { if (wave) DragonVfx.Shockwave(center, rc, radius, Mathf.Max(0.25f, duration)); });   // v0.25.145: decorative range rings removed
                 yield break;
             }
             GameObject obj = new GameObject("RangerRingVfx");

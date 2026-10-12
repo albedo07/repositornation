@@ -1,0 +1,21 @@
+Aethelborn Ascended v0.25.145 - Blade Storm Overhaul (baseline v0.25.144)
+
+1. HORIZON WALKER DUAL GUN STAVES REMOVED
+- Removed: the dual-equip branch (EquipItemPrefix/Postfix state), config EnableSpellcasterDualGunStaves, DualAttackSpeedMultiplier_v0123 (dual speed/cadence), the paired back-stow holster (UpdateDualStaffHolster), IsDualGunStaffEquipped and the dual wording in tooltips/altar text.
+- EnforceDualWieldOwner: two Gun Staves are now unequipped for EVERY class ("Gun Staves cannot be dual wielded"); the Mercenary SBDW equip branch ignores Gun Staves, so a Mercenary can never dual them. Mercenary SBDW / 2HDW untouched; single Gun Staff firing, accuracy, movement, Yin and Yang, Phase Flow, skills, Archmage charging untouched.
+
+2. BLADE STORM
+- Target point locked at cast time (same targeting, same CastRange); spheres spawn at random inside the spawn area around it. One activation = one charge/cost.
+- Normal: 2 spheres at 0.5 / 1.0 s. Ascended: 4 spheres at 0.5 / 1.0 / 1.5 / 2.0 s (the old Ascended extra cut is gone). Each sphere: 3 simultaneous Slash hits (per-attack Stun toggles Attack 1-3 kept) + 6 s Cripple.
+- Damage budget preserved and split: Normal 3 x cut over 2 x 3 hits (each hit = 0.5 x cut = 15 at Power 1); Ascended (3 x cut x 85% + 3 x cut x 25%) over 4 x 3 hits (each hit = 0.275 x cut = 8.25).
+- Player is not rooted while later spheres spawn (only the 0.4 s draw lock).
+- DEFAULTS (F8, independent Normal / Ascended): Normal spawn area radius 5 m ("Sword Master Judgement Cut / SpawnAreaRadius_v025145"), sphere damage radius 3 m (existing "Radius"), interval 0.5 s, Cripple 6 s. Ascended spawn area radius 7 m, sphere radius 4 m, interval 0.5 s, Cripple 6 s ("Sword Master Blade Storm Ascended"). Spawn area is a horizontal disc around the locked point (height follows the ground / the point's height above it).
+
+3. CRESCENT CLEAVE
+- Normal + Ascended waves draw overlapping enemies gently toward the wave: defaults Small 3 m/s, Big 1.2 m/s, Boss 0.5 m/s (separate Normal / Ascended keys PullSmall/Big/BossSpeed_v025145). Bounded per frame, never closer than 0.5 m, obstacle-checked (rays at 2 heights, no wall penetration/teleport), owner-side only, and a target is pulled at most once per frame regardless of overlapping waves/colliders.
+- Ascended fire trail segments (visual rings + damage areas) now expire after 2 s (FireTrailSeconds_v025145 default 2, range 0.5-2). Direct damage and hit intervals unchanged.
+
+4. RESTRAINED VFX
+- New defaults: LightIntensity_v025145 0.15 (was 0.45), ParticleDensity_v025145 0.35 (was 0.7) - new keys, so old saved values do not override. Flashes capped (peak 2.5, 0.3 s, 6 m), glow lights/rates halved, bursts -40%, ground shockwave rings/discs softer, cast flare flash removed, Blade Storm sphere flash removed.
+- Decorative range rings removed (Knight's Guidance ring, Glacial ring, Sorcerer/Ranger RingVfx markers); targeting/charging guides (Meteor Fall / Elemental Cataclysm markers, landing markers) are now thin, very faint outlines.
+- New F8 toggle [Visuals] "Show Targeting Guides" (default ON): hides ONLY those outlines.

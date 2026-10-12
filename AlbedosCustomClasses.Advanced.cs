@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.144";
+        public const string ModVersion = "0.25.145";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -171,6 +171,9 @@ namespace AlbedosCustomClassesAdvanced
         private ConfigEntry<float> _judgementStamina;
         private ConfigEntry<float> _judgementRange;
         private ConfigEntry<float> _judgementRadius;
+        private ConfigEntry<float> _crescentPullSmall, _crescentPullBig, _crescentPullBoss, _crescentAscPullSmall, _crescentAscPullBig, _crescentAscPullBoss;
+        // v0.25.145 Blade Storm: spawn area radius (separate from the sphere's damage radius), interval and Cripple, Normal / Ascended
+        private ConfigEntry<float> _bladeAreaRadius, _bladeInterval, _bladeCripple, _bladeAscSphereRadius, _bladeAscAreaRadius, _bladeAscInterval, _bladeAscCripple;
         private ConfigEntry<float> _judgementSlashDamage;
         private ConfigEntry<float> _judgementBuffer;
         private readonly float[] _judgementChargeReadyAt = new float[6]; // 4 normal, 6 Ascended (Blade Storm)
@@ -690,7 +693,10 @@ namespace AlbedosCustomClassesAdvanced
             _judgementCooldown = Config.Bind("Sword Master Judgement Cut", "RechargeSecondsPerStack", 12f, "Independent recharge time for each of the four stacks.");
             _judgementStamina = Config.Bind("Sword Master Judgement Cut", "StaminaCost", 18f, "Stamina cost per stack activation.");
             _judgementRange = Config.Bind("Sword Master Judgement Cut", "CastRange", 15f, "Maximum Ground PAC / Target PAC / Free Aim cast range.");
-            _judgementRadius = Config.Bind("Sword Master Judgement Cut", "Radius", 3f, "Sphere radius around the chosen cast point.");
+            _judgementRadius = Config.Bind("Sword Master Judgement Cut", "Radius", 3f, "Normal: damage radius of each of the 2 spheres (m).");
+            _bladeAreaRadius = Config.Bind("Sword Master Judgement Cut", "SpawnAreaRadius_v025145", 5f, "Normal: the 2 spheres appear at random inside this radius (m) around the point locked at cast time.");
+            _bladeInterval = Config.Bind("Sword Master Judgement Cut", "SphereIntervalSeconds_v025145", 0.5f, "Normal: seconds between activation and sphere 1, and between spheres (0.5 / 1.0).");
+            _bladeCripple = Config.Bind("Sword Master Judgement Cut", "CrippleSeconds_v025145", 6f, "Normal: Cripple duration applied by each sphere (s).");
             _judgementSlashDamage = Config.Bind("Sword Master Judgement Cut", "SlashDamagePerCut", 24f, "Pure Slash damage dealt by each of the three cuts. No Spirit, DoT or debuff.");
             _judgementBuffer = Config.Bind("Sword Master Judgement Cut", "ActivationBufferSeconds", 0.5f, "Minimum delay between charge activations. Independent stack recharge remains 12 seconds per spent stack.");
 
@@ -1677,52 +1683,62 @@ namespace AlbedosCustomClassesAdvanced
             StartCoroutine(JudgementCutRoutine(player, point));
         }
 
+        // v0.25.145 BLADE STORM OVERHAUL (user): the target point is locked at cast time; spheres then appear at random inside the
+        // spawn area around it (normal 2 at 0.5 / 1.0 s, Ascended 4 at 0.5 / 1.0 / 1.5 / 2.0 s). Each sphere deals three simultaneous
+        // Slash hits + Cripple. The player is NOT rooted while later spheres spawn. The variant's total damage budget is unchanged
+        // (normal 3 x cut; Ascended 3 x cut x CutDamagePercent + the old extra cut) and split over spheres x 3 hits.
         private IEnumerator JudgementCutRoutine(Player player, Vector3 point)
         {
             ShowMessage("Blade Storm");
-            float radius = Mathf.Max(0.5f, DragonCombat.M(_judgementRadius.Value));
             bool ascended = IsAscendedSkill("blade_storm");
+            float sphereR = Mathf.Max(0.5f, DragonCombat.M(ascended ? _bladeAscSphereRadius.Value : _judgementRadius.Value));
+            float areaR = Mathf.Max(0f, DragonCombat.M(ascended ? _bladeAscAreaRadius.Value : _bladeAreaRadius.Value));
+            float interval = Mathf.Max(0.05f, ascended ? _bladeAscInterval.Value : _bladeInterval.Value);
+            float crippleSeconds = Mathf.Max(0f, ascended ? _bladeAscCripple.Value : _bladeCripple.Value);
+            int spheres = ascended ? 4 : 2;
             float baseCut = Mathf.Max(0f, _bladeCutDamage.Value) * IhSkillPower(player, "blade_storm");
-            float slashDamage = baseCut * (ascended ? Mathf.Max(0f, _bladeAscFirst.Value) / 100f : 1f);
+            float budget = ascended
+                ? baseCut * 3f * (Mathf.Max(0f, _bladeAscFirst.Value) + Mathf.Max(0f, _bladeAscExtra.Value)) / 100f
+                : baseCut * 3f;
+            float perHit = budget / (spheres * 3f);
+            float groundAtPoint;
+            bool haveGround = DragonCombat.TryGroundY(point, 3f, 30f, out groundAtPoint);
+            float heightAbove = haveGround ? point.y - groundAtPoint : 0f;
 
-            if (player == null || player.IsDead())
-                yield break;
-
-            // OG-style Judgement Cut: all three cuts resolve on the same frame.
-            // Damage and the three sphere-cut visuals are simultaneous; only the existing
-            // per-stack recharge and 0.5s activation buffer govern repeated casts.
-            for (int slash = 0; slash < 3; slash++)
+            for (int sphere = 0; sphere < spheres; sphere++)
             {
-                List<Character> targets = GetSphereTargets(player, point, radius);
-                for (int i = 0; i < targets.Count; i++)
-                {
-                    HitData hit = new HitData();
-                    hit.m_damage.m_slash = slashDamage;
-                    hit.m_point = targets[i].transform.position;
-                    hit.m_dir = (targets[i].transform.position - point).normalized;
-                    hit.m_pushForce = 0f;
-                    hit.SetAttacker(player);
-                    targets[i].Damage(hit); DragonCombat.ApplySkillStun(player, targets[i], "blade_storm", DragonCombat.StunAttack(slash + 1), false, true, null);
-                }
-
-                if (_enableVfx.Value)
-                {
-                    if (slash == 0) { Vector3 jp = point; float jr = radius; DragonCombat.RunVfx(delegate { DragonVfx.JudgementSphere(jp, jr, 0.55f); }); }   // v0.25.65 Vergil's faded sphere
-                    StartCoroutine(AnimateJudgementSphereCut(point, radius, slash));
-                }
-            }
-
-            // Ascended: one extra cut (25% of a whole activation), no stack, never repeats.
-            if (ascended)
-            {
-                yield return new WaitForSeconds(Mathf.Max(0f, _bladeAscExtraDelay.Value));
+                yield return new WaitForSeconds(interval);
                 if (player == null || player.IsDead())
                     yield break;
-                List<Character> extra = GetSphereTargets(player, point, radius);
-                for (int i = 0; i < extra.Count; i++)
-                    IhDealRaw(player, extra[i], baseCut * 3f * Mathf.Max(0f, _bladeAscExtra.Value) / 100f, 0f, 0f, 0f, "blade_storm", "Ascended Echo", false, false, null);
+
+                Vector2 rnd = UnityEngine.Random.insideUnitCircle * areaR;
+                Vector3 center = new Vector3(point.x + rnd.x, point.y, point.z + rnd.y);
+                float gy;
+                if (haveGround && DragonCombat.TryGroundY(new Vector3(center.x, point.y, center.z), 6f, 30f, out gy)) center.y = gy + heightAbove;
+
+                List<Character> targets = GetSphereTargets(player, center, sphereR);
+                for (int i = 0; i < targets.Count; i++)
+                {
+                    for (int hitIndex = 0; hitIndex < 3; hitIndex++)
+                    {
+                        HitData hit = new HitData();
+                        hit.m_damage.m_slash = perHit;
+                        hit.m_point = targets[i].transform.position;
+                        hit.m_dir = (targets[i].transform.position - center).normalized;
+                        hit.m_pushForce = 0f;
+                        hit.SetAttacker(player);
+                        targets[i].Damage(hit);
+                        DragonCombat.ApplySkillStun(player, targets[i], "blade_storm", DragonCombat.StunAttack(hitIndex + 1), false, true, null);
+                    }
+                    if (crippleSeconds > 0f) DragonCombat.ApplyCripple(targets[i], crippleSeconds);
+                }
+
                 if (_enableVfx.Value)
-                    StartCoroutine(AnimateJudgementSphereCut(point, radius * 1.1f, 0));
+                {
+                    Vector3 jp = center; float jr = sphereR;
+                    DragonCombat.RunVfx(delegate { DragonVfx.JudgementSphere(jp, jr, 0.45f); });   // v0.25.65 Vergil's faded sphere
+                    StartCoroutine(AnimateJudgementSphereCut(center, sphereR, 0));
+                }
             }
         }
 
@@ -1781,7 +1797,7 @@ namespace AlbedosCustomClassesAdvanced
 
         private IEnumerator AnimateJudgementSphereCut(Vector3 center, float radius, int slash)
         {
-            DragonCombat.RunVfx(delegate { DragonVfx.Burst(center, new Color(0.45f, 0.78f, 1f, 1f), 30, 9f, 0.25f, 0.4f, 0f); DragonVfx.Flash(center, new Color(0.45f, 0.78f, 1f, 1f), 4f, radius * 2f, 0.3f); DragonVfx.SlashStreaks(center, new Color(0.55f, 0.82f, 1f, 1f), radius, 6, 0.3f); DragonVfx.SlashArc(center, UnityEngine.Random.onUnitSphere, radius, 220f, new Color(0.55f, 0.82f, 1f, 1f), radius * 0.18f, 0.35f, UnityEngine.Random.Range(-70f, 70f)); });
+            DragonCombat.RunVfx(delegate { DragonVfx.Burst(center, new Color(0.45f, 0.78f, 1f, 1f), 14, 6f, 0.2f, 0.3f, 0f); DragonVfx.SlashStreaks(center, new Color(0.55f, 0.82f, 1f, 1f), radius, 4, 0.25f); DragonVfx.SlashArc(center, UnityEngine.Random.onUnitSphere, radius, 220f, new Color(0.55f, 0.82f, 1f, 1f), radius * 0.18f, 0.35f, UnityEngine.Random.Range(-70f, 70f)); });
             if (_enableVfx.Value && DragonVfx.Enabled) yield break;   // v0.25.63 no line circles under the real cuts
             Vector3 axisA = Vector3.right;
             Vector3 axisB = Vector3.forward;
@@ -1845,7 +1861,7 @@ namespace AlbedosCustomClassesAdvanced
         private ConfigEntry<float> _moonAscWindup, _moonAscInterval, _moonAscWave, _moonAscFinisherWindup, _moonAscFinisher, _moonAscAfterDelay, _moonAscAfter;
         private ConfigEntry<float> _crescentAscFirst, _crescentAscSecond, _crescentAscSecondDelay, _crescentAscTrailTime, _crescentAscTrailPercent, _crescentAscBurnPercent, _crescentAscBurnDuration, _crescentAscBurnGap;
         private ConfigEntry<int> _crescentAscBurnStacks, _crescentAscTrailMaxTicks, _bladeAscStacks, _halfAscMaxTicks;
-        private ConfigEntry<float> _bladeAscFirst, _bladeAscExtra, _bladeAscExtraDelay;
+        private ConfigEntry<float> _bladeAscFirst, _bladeAscExtra;
         private ConfigEntry<float> _frenzyCooldown, _frenzyStamina, _frenzyWindup, _frenzyDistance, _frenzyWidth, _frenzyDashTime, _frenzyAfterDelay;
         private ConfigEntry<float> _frenzyHailInterval, _frenzyHailSpacing, _frenzyHailRadius, _frenzyAscBoomInterval, _frenzyAscBoomSpacing, _frenzyAscBoomRadius, _frenzyAscBoomPercent;
         private ConfigEntry<float> _frenzyAscWindup, _frenzyAscDistance, _frenzyAscWidthMult, _frenzyAscDamage;
@@ -1901,7 +1917,13 @@ namespace AlbedosCustomClassesAdvanced
             _crescentAscFirst = Config.Bind(ca, "FirstFanDamagePercent", 45f, "7 cleaves, each this % of a normal cleave.");
             _crescentAscSecond = Config.Bind(ca, "SecondFanDamagePercent", 30f, "6 cleaves between the first ones, each this % of a normal cleave.");
             _crescentAscSecondDelay = Config.Bind(ca, "SecondFanDelay_v02551", 0.5f, "Seconds after the first fan; a follow-up swing plays over this gap.");
-            _crescentAscTrailTime = Config.Bind(ca, "FireTrailSeconds", 4f, "How long every cleave's fire trail stays.");
+            _crescentAscTrailTime = Config.Bind(ca, "FireTrailSeconds_v025145", 2f, new ConfigDescription("How long every fire trail segment (visual and damage area) stays. Maximum 2 s.", new AcceptableValueRange<float>(0.5f, 2f)));
+            _crescentPullSmall = Config.Bind("Sword Master Crescent Cleave", "PullSmallSpeed_v025145", 3f, "Normal: Small enemies overlapping the wave are drawn toward it at most this fast (m/s).");
+            _crescentPullBig = Config.Bind("Sword Master Crescent Cleave", "PullBigSpeed_v025145", 1.2f, "Normal: Big enemies (m/s).");
+            _crescentPullBoss = Config.Bind("Sword Master Crescent Cleave", "PullBossSpeed_v025145", 0.5f, "Normal: Bosses (m/s) - weakest but functional.");
+            _crescentAscPullSmall = Config.Bind(ca, "PullSmallSpeed_v025145", 3f, "Ascended: Small enemies overlapping the waves are drawn toward them at most this fast (m/s).");
+            _crescentAscPullBig = Config.Bind(ca, "PullBigSpeed_v025145", 1.2f, "Ascended: Big enemies (m/s).");
+            _crescentAscPullBoss = Config.Bind(ca, "PullBossSpeed_v025145", 0.5f, "Ascended: Bosses (m/s) - weakest but functional.");
             _crescentAscTrailPercent = Config.Bind(ca, "FireTrailDamagePercent", 10f, "Fire trail hit every 0.5s (% of a normal cleave), one shared timer per target.");
             _crescentAscTrailMaxTicks = Config.Bind(ca, "FireTrailMaxHits", 8, "Maximum fire trail hits per target per cast.");
             _crescentAscBurnPercent = Config.Bind(ca, "BurnPercentPerStack", 3f, "Stacking Burn: % of a normal cleave per stack every 0.5s.");
@@ -1913,8 +1935,11 @@ namespace AlbedosCustomClassesAdvanced
             const string ba = "Sword Master Blade Storm Ascended";
             _bladeAscStacks = Config.Bind(ba, "Stacks", 6, "Stored stacks (normal 4).");
             _bladeAscFirst = Config.Bind(ba, "CutDamagePercent", 85f, "Each of the three cuts (% of a normal cut).");
-            _bladeAscExtra = Config.Bind(ba, "ExtraCutDamagePercent", 25f, "Extra cut (% of a full normal activation).");
-            _bladeAscExtraDelay = Config.Bind(ba, "ExtraCutDelay", 0.15f, "Seconds before the extra cut.");
+            _bladeAscExtra = Config.Bind(ba, "ExtraCutDamagePercent", 25f, "Part of the total damage budget (% of a full normal activation, added to CutDamagePercent x 3); the budget is split over the 4 spheres x 3 hits.");
+            _bladeAscSphereRadius = Config.Bind(ba, "SphereRadius_v025145", 4f, "Ascended: damage radius of each of the 4 spheres (m).");
+            _bladeAscAreaRadius = Config.Bind(ba, "SpawnAreaRadius_v025145", 7f, "Ascended: the 4 spheres appear at random inside this radius (m) around the point locked at cast time.");
+            _bladeAscInterval = Config.Bind(ba, "SphereIntervalSeconds_v025145", 0.5f, "Ascended: seconds between activation and sphere 1, and between spheres (0.5 / 1.0 / 1.5 / 2.0).");
+            _bladeAscCripple = Config.Bind(ba, "CrippleSeconds_v025145", 6f, "Ascended: Cripple duration applied by each sphere (s).");
 
             const string f = "Sword Master Frenzied Charge";
             _frenzyCooldown = Config.Bind(f, "Cooldown", 18f, "Seconds.");
@@ -2378,6 +2403,7 @@ namespace AlbedosCustomClassesAdvanced
                     Character target = hits[i].GetComponentInParent<Character>();
                     if (target == null || !IsEnemy(player, target)) continue;
                     int id = target.GetInstanceID();
+                    CleavePull(target, point, groundMask, ascended);   // v0.25.145 gentle draw toward the moving wave (once per target per frame)
                     float nextAllowed;
                     int count;
                     hitCount.TryGetValue(id, out count);
@@ -2411,10 +2437,61 @@ namespace AlbedosCustomClassesAdvanced
             if (cast != null) cast.Running--;
         }
 
+        // v0.25.145 (user): every overlapping enemy is drawn gently toward the wave - strongest on Small, weaker on Big, weakest on Bosses.
+        // Bounded: capped per frame, never closer than 0.5 m, obstacle-checked (no wall penetration, no teleport), owner-side only, and a
+        // target is pulled at most ONCE per frame no matter how many waves / colliders overlap it (no multiplication).
+        private static readonly Dictionary<int, int> _cleavePullFrame = new Dictionary<int, int>();
+        private void CleavePull(Character target, Vector3 wavePoint, int solidMask, bool ascended)
+        {
+            if (target == null || target.IsDead()) return;
+            int id = target.GetInstanceID(), frame;
+            if (_cleavePullFrame.TryGetValue(id, out frame) && frame == Time.frameCount) return;
+            _cleavePullFrame[id] = Time.frameCount;
+            if (_cleavePullFrame.Count > 256) _cleavePullFrame.Clear();
+            float speed = target.IsBoss() ? (ascended ? _crescentAscPullBoss.Value : _crescentPullBoss.Value)
+                : DragonCombat.IsSmallEnemy(target) ? (ascended ? _crescentAscPullSmall.Value : _crescentPullSmall.Value)
+                : (ascended ? _crescentAscPullBig.Value : _crescentPullBig.Value);
+            if (speed <= 0f) return;
+            try
+            {
+                ZNetView nv = target.GetComponent<ZNetView>();
+                if (nv != null && nv.IsValid() && !nv.IsOwner()) return;
+                Vector3 to = wavePoint - target.transform.position;
+                to.y = 0f;
+                float dist = to.magnitude;
+                const float stopGap = 0.5f, skin = 0.12f;
+                float want = Mathf.Min(DragonCombat.M(speed) * Time.deltaTime, dist - stopGap);
+                if (want <= 0.001f) return;
+                Vector3 dir = to / dist;
+                Collider col = target.GetCollider();
+                Vector3 c = col != null ? col.bounds.center : target.transform.position + Vector3.up;
+                float reach = col != null ? Mathf.Max(0.25f, Mathf.Min(col.bounds.extents.x, col.bounds.extents.z)) : 0.4f;
+                float[] heights = { 0f, -0.45f };
+                for (int h = 0; h < heights.Length; h++)
+                {
+                    float hy = col != null ? Mathf.Clamp(c.y + heights[h] * col.bounds.extents.y, col.bounds.min.y + 0.15f, col.bounds.max.y) : c.y;
+                    Vector3 o = new Vector3(c.x, hy, c.z);
+                    RaycastHit[] hits = Physics.RaycastAll(o, dir, want + reach + skin, solidMask, QueryTriggerInteraction.Ignore);
+                    for (int k = 0; k < hits.Length; k++)
+                    {
+                        Collider hc = hits[k].collider;
+                        if (hc == null || hc.isTrigger || hc.transform.IsChildOf(target.transform) || hc.GetComponentInParent<Character>() != null) continue;
+                        want = Mathf.Min(want, hits[k].distance - reach - skin);
+                    }
+                    if (want <= 0.001f) return;
+                }
+                Rigidbody rb = target.GetComponent<Rigidbody>();
+                Vector3 step = dir * want;
+                if (rb != null) rb.MovePosition(rb.position + step);
+                else target.transform.position += step;
+            }
+            catch (Exception) { }
+        }
+
         private IEnumerator CrescentFireTrailRoutine(Player player, IhCrescentCast cast)
         {
             int stunPulse = 0;
-            float life = Mathf.Max(0.5f, _crescentAscTrailTime.Value);
+            float life = Mathf.Clamp(_crescentAscTrailTime.Value, 0.5f, 2f);   // v0.25.145: every trail segment (visual + damage area) expires after 2 s at most
             float d = IhDamageSum(_crescentDamageV) * IhSkillPower(player, "crescent_cleave");
             int maxTicks = Mathf.Max(1, _crescentAscTrailMaxTicks.Value);
             yield return new WaitForSeconds(0.5f);
@@ -2426,7 +2503,7 @@ namespace AlbedosCustomClassesAdvanced
                 {
                     if (Time.time > cast.Times[p] + life) continue;
                     if (_enableVfx.Value && p % 2 == 0)
-                        StartCoroutine(AnimateRing(cast.Points[p] + Vector3.up * 0.08f, 0.2f, DragonCombat.M(0.9f), 0.45f, new Color(1f, 0.46f, 0.12f, 0.75f), 0.06f));
+                        StartCoroutine(AnimateRing(cast.Points[p] + Vector3.up * 0.08f, 0.2f, DragonCombat.M(0.9f), Mathf.Min(0.45f, cast.Times[p] + life - Time.time), new Color(1f, 0.46f, 0.12f, 0.45f), 0.06f));
                     List<Character> near = GetSphereTargets(player, cast.Points[p] + Vector3.up * 0.6f, DragonCombat.M(1.2f));
                     for (int i = 0; i < near.Count; i++)
                     {
@@ -3000,7 +3077,7 @@ namespace AlbedosCustomClassesAdvanced
             DragonCombat.PlayClip(player, "sm_guidance", 0.06f);   // v0.25.16 release-first
             ShowMessage("Knight's Guidance");
             // v0.25.69 (user: the Grace was too bright): a dim, thin column + a plain ring (no ground glow disc).
-            if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.AreaRing(player.transform.position, new Color(0.30f, 0.55f, 0.85f, 0.45f), Mathf.Max(1f, DragonCombat.M(_kgRadius.Value)), 0.7f); DragonVfx.SpiritWings(player.transform, new Color(0.55f, 0.80f, 1f, 1f), 2.2f); });   // v0.25.82 spectral wings
+            if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.SpiritWings(player.transform, new Color(0.55f, 0.80f, 1f, 1f), 2.2f); });   // v0.25.82 spectral wings
             float radius = Mathf.Max(1f, DragonCombat.M(_kgRadius.Value));
             float duration = Mathf.Max(1f, _kgDuration.Value);
             HashSet<Player> allies = new HashSet<Player>();
@@ -3161,10 +3238,14 @@ namespace AlbedosCustomClassesAdvanced
                     IhCosts(b, _crescentStamina.Value, "1s", _crescentCooldown.Value);
                     break;
                 case "blade_storm":
-                    b.Append(IhLine("Damage", "3 x " + IhNum(_bladeCutDamage.Value * power * (ascended ? _bladeAscFirst.Value / 100f : 1f)) + " Slash" +
-                        (ascended ? ", then " + IhNum(_bladeCutDamage.Value * 3f * power * _bladeAscExtra.Value / 100f) + " Slash" : "")));
+                    {
+                        int bsSpheres = ascended ? 4 : 2;
+                        float bsBudget = _bladeCutDamage.Value * 3f * power * (ascended ? (_bladeAscFirst.Value + _bladeAscExtra.Value) / 100f : 1f);
+                        b.Append(IhLine("Damage", bsSpheres.ToString() + " spheres, 3 x " + IhNum(bsBudget / (bsSpheres * 3f)) + " Slash each + " + IhNum(ascended ? _bladeAscCripple.Value : _bladeCripple.Value) + "s Cripple"));
+                        b.Append(IhLine("Area", IhNum(ascended ? _bladeAscAreaRadius.Value : _bladeAreaRadius.Value) + "m spawn radius, " + IhNum(ascended ? _bladeAscInterval.Value : _bladeInterval.Value) + "s apart"));
+                    }
                     b.Append(IhLine("Stacks", (ascended ? _bladeAscStacks.Value : 4).ToString() + ", " + IhNum(_judgementCooldown.Value) + "s recharge each"));
-                    b.Append(IhLine("Radius", IhNum(_judgementRadius.Value) + "m"));
+                    b.Append(IhLine("Radius", IhNum(ascended ? _bladeAscSphereRadius.Value : _judgementRadius.Value) + "m per sphere"));
                     b.Append(IhLine("Range", IhNum(_judgementRange.Value) + "m"));
                     b.Append(IhLine("Stamina Cost", IhNum(_judgementStamina.Value)));
                     break;
@@ -16802,7 +16883,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "Sword Master": return "+20 Sword (effective cap 100), +50% Sword Attack Speed, no Sword movement penalty. Blocking or Dodging stops the rest of a Sword Master skill.";
                 case "Mercenary": return "Dual-wield any two one-handed physical weapons. Hyper Armor unless a single hit deals 60% of your Max HP or more. +10 Sword, Axe and Clubs (cap 100). +25% Attack Speed with two one-handed physical weapons of the same type, or a two-handed physical weapon. No physical weapon movement penalty. +30% Armor and stronger aggro. While doing a skill you take 25% less damage (35% during the Ultimate). Unchained Fury: +1 Fury per melee hit, +3 per enemy hit by a skill; at 100 it triggers for 20s (3 min lockout).";
                 case "Wizard": return "Charged Staff attacks (Mouse2 + Mouse1): up to 3 stacks, 1 per second, 1 Eitr per 0.1s. Stack 1 doubles the size, Stacks 2-3 add damage. Overcharge: after 300 Eitr spent, 12s of +40% wind-up speed, +40% Eitr Regen and +40% Magic Damage.";
-                case "Spellcaster": return "Staff / Wand attack interval -50%, Eitr use -50%, +20% Eitr Regen, normal Staff / Wand damage -50%. No skill wind-ups, no Staff / Wand movement penalty. Dual Gun Staves fire together, twice as fast (each shot costs its Eitr), 100% accurate. Every skill is cast on the move without stopping.";
+                case "Spellcaster": return "Staff / Wand attack interval -50%, Eitr use -50%, +20% Eitr Regen, normal Staff / Wand damage -50%. No skill wind-ups, no Staff / Wand movement penalty. 100% accurate. Every skill is cast on the move without stopping.";
                 case "Acrobat": return "A second jump in mid-air. Dodge costs 50% less Stamina, all Stamina use -35%. Fall damage -75% and a fall never kills you (1 HP). Every Ranger skill can be cast in the air. Each enemy hit by your skills takes 1s off your shortest running cooldown (up to 3s per cast). Cannot wield Crossbows.";
                 case "Bowmaster": return "Standing still builds Focus: up to 5 stacks, +8% damage and +10% range each; moving drains it. Fully charged shots deal +30% damage. Crossbows: reload time -75%, no movement penalty, a loaded Crossbow stays loaded when unequipped (no Left Click chain).";
             }

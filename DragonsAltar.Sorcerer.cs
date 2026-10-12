@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Aethelborn Ascended - Sorcerer Advancements";
-        public const string ModVersion = "0.25.144";
+        public const string ModVersion = "0.25.145";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -280,7 +280,6 @@ namespace DragonsAltarSorcerer
         private float _aaSourceCheck;
         private ConfigEntry<float> _afterimageDamageMultiplier;
         private ConfigEntry<float> _gunStaffFireRateMultiplier;
-        private ConfigEntry<float> _dualGunStaffAttackSpeedMultiplier;
         private ConfigEntry<float> _gunStaffFiringMoveBonus;
 
         private readonly Dictionary<string, float> _cooldowns = new Dictionary<string, float>();
@@ -432,7 +431,6 @@ namespace DragonsAltarSorcerer
             _aaChargesCfg = Config.Bind("Spellcaster Afterimage Arsenal", "Charges_v02585", 2, "Normal Afterimage Arsenal charges (each recharges on the cooldown).");
             _afterimageDamageMultiplier = Config.Bind("Spellcaster Afterimage Arsenal", "DamageMultiplier", 1f, "Each afterimage shot = 100% of your attack.");
             _gunStaffFireRateMultiplier = Config.Bind("Spellcaster Gun Staff", "SingleAttackSpeedMultiplier_v0123", 1.5f, "Single Staff/Wand baseline: +50% Attack Speed. Rapid Gun Staff cooldown uses the same 1.5x target.");
-            _dualGunStaffAttackSpeedMultiplier = Config.Bind("Spellcaster Gun Staff", "DualAttackSpeedMultiplier_v0123", 2f, "Dual Gun Staves baseline: +100% Attack Speed. Example: 0.50s cadence becomes 0.25s.");
             _gunStaffFiringMoveBonus = Config.Bind("Spellcaster Gun Staff", "LegacyFiringMovementBonusPercent", 0f, "Legacy setting retained only for config compatibility. Firing no longer grants artificial movement speed.");
 
             BindWizardV0231();
@@ -649,79 +647,8 @@ namespace DragonsAltarSorcerer
         private Transform _reGlowRoot;
         private Material _reGlowMat;
 
-        // v0.25.86 (user): holstered dual Gun Staves show BOTH staves on your back (crossed), like Smoothbrain's DualWield.
-        private GameObject _backStaff2;
-        private object _backStaff2Item;
-        private static FieldInfo _veRightBack, _veLeftBack, _hHiddenLeft, _hHiddenRight, _idDrop;
-
-        private void UpdateDualStaffHolster(Player player)
-        {
-            bool want = false;
-            try
-            {
-                if (player != null && !player.IsDead() && GetAdvancement(player) == "Spellcaster")
-                {
-                    if (_hHiddenLeft == null) { _hHiddenLeft = typeof(Humanoid).GetField("m_hiddenLeftItem", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic); _hHiddenRight = typeof(Humanoid).GetField("m_hiddenRightItem", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic); }
-                    ItemDrop.ItemData hl = _hHiddenLeft == null ? null : _hHiddenLeft.GetValue(player) as ItemDrop.ItemData;
-                    ItemDrop.ItemData hr = _hHiddenRight == null ? null : _hHiddenRight.GetValue(player) as ItemDrop.ItemData;
-                    if (hl != null && hr != null && hl != hr && DragonCombat.IsGunStaff(hl) && DragonCombat.IsGunStaff(hr))
-                    {
-                        Component ve = null;
-                        Component[] cs = player.GetComponents<Component>();
-                        for (int i = 0; i < cs.Length; i++) if (cs[i] != null && cs[i].GetType().Name == "VisEquipment") { ve = cs[i]; break; }
-                        if (ve != null)
-                        {
-                            if (_veRightBack == null) { _veRightBack = ve.GetType().GetField("m_rightBackItemInstance", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic); _veLeftBack = ve.GetType().GetField("m_leftBackItemInstance", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic); }
-                            GameObject rb = _veRightBack == null ? null : _veRightBack.GetValue(ve) as GameObject;
-                            GameObject lb = _veLeftBack == null ? null : _veLeftBack.GetValue(ve) as GameObject;
-                            if (rb != null)
-                            {
-                                want = true;
-                                Quaternion cross = Quaternion.AngleAxis(-38f, player.transform.forward);
-                                if (lb != null && Vector3.Distance(lb.transform.position, rb.transform.position) < 0.35f)
-                                {
-                                    // Valheim attached the second staff on the same spot: turn it into an X.
-                                    lb.transform.rotation = cross * rb.transform.rotation;
-                                    lb.transform.position = rb.transform.position + player.transform.forward * -0.03f;
-                                    if (_backStaff2 != null) { Destroy(_backStaff2); _backStaff2 = null; }
-                                }
-                                else if (lb == null)
-                                {
-                                    // No back slot for the second staff: show its own model crossed over the first.
-                                    if (_backStaff2 == null || _backStaff2Item != (object)hl)
-                                    {
-                                        if (_backStaff2 != null) Destroy(_backStaff2);
-                                        _backStaff2 = null;
-                                        if (_idDrop == null) _idDrop = typeof(ItemDrop.ItemData).GetField("m_dropPrefab", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                                        GameObject drop = _idDrop == null ? null : _idDrop.GetValue(hl) as GameObject;
-                                        Transform att = drop == null ? null : drop.transform.Find("attach");
-                                        if (att != null)
-                                        {
-                                            _backStaff2 = (GameObject)Instantiate(att.gameObject, rb.transform.parent);
-                                            _backStaff2.name = "IH_BackStaff2";
-                                            foreach (Collider c in _backStaff2.GetComponentsInChildren<Collider>(true)) Destroy(c);
-                                            _backStaff2Item = hl;
-                                        }
-                                    }
-                                    if (_backStaff2 != null)
-                                    {
-                                        _backStaff2.transform.localScale = rb.transform.localScale;
-                                        _backStaff2.transform.rotation = cross * rb.transform.rotation;
-                                        _backStaff2.transform.position = rb.transform.position + player.transform.forward * -0.03f;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            catch (Exception) { want = false; }
-            if (!want && _backStaff2 != null) { Destroy(_backStaff2); _backStaff2 = null; _backStaff2Item = null; }
-        }
-
         private void LateUpdate()
         {
-            UpdateDualStaffHolster(Player.m_localPlayer);
             Player player = Player.m_localPlayer;
             bool on = player != null && !player.IsDead() && Time.time < _riftEchoUntil && _enableVfx.Value;
             if (!on) { if (_reGlow != null) { Destroy(_reGlow); _reGlow = null; } return; }
@@ -835,14 +762,10 @@ namespace DragonsAltarSorcerer
 
             if (advancement == "Spellcaster")
             {
-                bool dualGunStaff = IsDualGunStaffEquipped(player);
                 float speed = Mathf.Max(1f, _yyAttackSpeed.Value); // Yin and Yang: attack interval -50%, single or dual
 
                 if (Time.time < _phaseFlowUntil)
                     speed *= 1.133333f;
-                // v0.25.86 (user: two staves fired no faster than one): dual Gun Staves fire faster by the dual multiplier
-                // (the rapid-fire cadence follows the attack speed, not m_attackCooldown); every shot still costs its Eitr.
-                if (dualGunStaff) speed *= Mathf.Max(1f, _dualGunStaffAttackSpeedMultiplier.Value);
 
                 if (IsHoldingMagicWeapon(player))
                     DragonCombat.SetAttackSpeedSource(player, speed, 0.30f);
@@ -1472,7 +1395,7 @@ namespace DragonsAltarSorcerer
             if (_enableVfx.Value)
             {
                 Vector3 gc = center; float gr = radius, gd = duration;
-                DragonCombat.RunVfx(delegate { DragonVfx.AreaRing(gc, new Color(0.70f, 0.95f, 1f, 0.9f), gr, gd); DragonVfx.SpikeRing(gc, DragonVfx.Ice, gr * 0.55f, 10, 1.1f, gd); });
+                DragonCombat.RunVfx(delegate { DragonVfx.SpikeRing(gc, DragonVfx.Ice, gr * 0.55f, 10, 1.1f, gd); });
             }
             for (int t = 0; t < ticks; t++)
             {
@@ -1528,10 +1451,10 @@ namespace DragonsAltarSorcerer
                 if (_enableVfx.Value && holding && Time.time >= nextMarker)
                 {
                     nextMarker = Time.time + 0.2f;
-                    StartCoroutine(RingVfx(target, DragonCombat.M(_meteorRadius.Value) * (1f + 0.1f * stacks), new Color(1f, 0.45f, 0.10f, 0.55f), 0.22f));
+                    StartCoroutine(GuideVfx(target, DragonCombat.M(_meteorRadius.Value) * (1f + 0.1f * stacks), new Color(1f, 0.45f, 0.10f, 0.55f), 0.22f));
                 }
                 int now = Mathf.Min(3, Mathf.FloorToInt(heldFor));
-                if (now > stacks) { stacks = now; _meteorChargeShown = stacks; ShowMessage("Meteor Fall " + stacks + "/3" + (stacks >= 3 ? " - release to drop it where you aim" : "")); if (_enableVfx.Value) StartCoroutine(RingVfx(target, DragonCombat.M(_meteorRadius.Value) * (1f + 0.1f * stacks), new Color(1f, 0.45f, 0.10f, 0.75f), 0.4f)); }
+                if (now > stacks) { stacks = now; _meteorChargeShown = stacks; ShowMessage("Meteor Fall " + stacks + "/3" + (stacks >= 3 ? " - release to drop it where you aim" : "")); if (_enableVfx.Value) StartCoroutine(GuideVfx(target, DragonCombat.M(_meteorRadius.Value) * (1f + 0.1f * stacks), new Color(1f, 0.45f, 0.10f, 0.75f), 0.4f)); }
                 if (elapsed >= windup && !holding) break;
                 DragonCombat.LockSkill(player, 0.12f);
                 if (windup >= 1f || elapsed >= 1f) DragonCombat.FaceAimNow(player);
@@ -1557,7 +1480,7 @@ namespace DragonsAltarSorcerer
                 RaycastHit floor;
                 if (Physics.Raycast(p + Vector3.up * 20f, Vector3.down, out floor, 40f, LayerMask.GetMask("Default", "static_solid", "Default_small", "piece", "terrain"), QueryTriggerInteraction.Ignore))
                     p = floor.point;
-                if (_enableVfx.Value) StartCoroutine(RingVfx(p, small, new Color(1f, 0.35f, 0.05f, 0.85f), 0.5f)); // landing marker
+                if (_enableVfx.Value) StartCoroutine(GuideVfx(p, small, new Color(1f, 0.35f, 0.05f, 0.85f), 0.5f)); // landing marker
                 StartCoroutine(MeteorImpact(player, p, small, damageMul * _mfAscPercent.Value / 100f, 1.1f, DragonCombat.StunAttack(i + 2)));
                 yield return new WaitForSeconds(Mathf.Max(0.05f, _mfAscGap.Value));
             }
@@ -1731,8 +1654,8 @@ namespace DragonsAltarSorcerer
                 // v0.23.6: hold as long as you like at full charge; it lands where you aim on release.
                 Vector3 aimNow;
                 if (holding && AlbedoAimUtility.TryGetPhysicalTarget(player, DragonCombat.M(_cataclysmRange.Value), out aimNow)) target = aimNow;
-                if (_enableVfx.Value && holding && Time.time >= nextMarker) { nextMarker = Time.time + 0.2f; StartCoroutine(RingVfx(target, radius, new Color(0.76f, 0.30f, 1f, 0.45f), 0.22f)); }
-                if (_enableVfx.Value && ((int)(elapsed * 10f) % 4 == 0)) StartCoroutine(RingVfx(target, radius * Mathf.Clamp01(0.2f + charge / max), new Color(0.76f, 0.30f, 1f, 0.55f), 0.16f));
+                if (_enableVfx.Value && holding && Time.time >= nextMarker) { nextMarker = Time.time + 0.2f; StartCoroutine(GuideVfx(target, radius, new Color(0.76f, 0.30f, 1f, 0.45f), 0.22f)); }
+                if (_enableVfx.Value && ((int)(elapsed * 10f) % 4 == 0)) StartCoroutine(GuideVfx(target, radius * Mathf.Clamp01(0.2f + charge / max), new Color(0.76f, 0.30f, 1f, 0.55f), 0.16f));
                 yield return null;
             }
             _cataclysmCharge01 = 0f;
@@ -2510,10 +2433,7 @@ namespace DragonsAltarSorcerer
 
             ItemDrop.ItemData right = DragonCombat.GetHandItem(player, "m_rightItem");
             ItemDrop.ItemData left = DragonCombat.GetHandItem(player, "m_leftItem");
-            bool dual = IsDualGunStaffEquipped(player);
-            float cadenceMultiplier = dual
-                ? Mathf.Max(1f, _dualGunStaffAttackSpeedMultiplier.Value)
-                : Mathf.Max(1f, _gunStaffFireRateMultiplier.Value);
+            float cadenceMultiplier = Mathf.Max(1f, _gunStaffFireRateMultiplier.Value);
             ApplyInstantGunStaffTiming(right, cadenceMultiplier);
             ApplyInstantGunStaffTiming(left, cadenceMultiplier);
         }
@@ -2612,15 +2532,6 @@ namespace DragonsAltarSorcerer
                 }
             }
             _gunStaffTimingStates.Clear();
-        }
-
-        private bool IsDualGunStaffEquipped(Player player)
-        {
-            if (player == null)
-                return false;
-            ItemDrop.ItemData right = DragonCombat.GetHandItem(player, "m_rightItem");
-            ItemDrop.ItemData left = DragonCombat.GetHandItem(player, "m_leftItem");
-            return DragonCombat.IsGunStaff(right) && DragonCombat.IsGunStaff(left) && right != left;
         }
 
         private Color GetMagicProjectileColor(MagicDamageSnapshot damage)
@@ -4233,14 +4144,19 @@ namespace DragonsAltarSorcerer
             }
         }
 
+        // v0.25.145: targeting / charging guide = a thin, very faint outline (hidden by [Visuals] ShowTargetingGuides).
+        private IEnumerator GuideVfx(Vector3 center, float radius, Color color, float duration)
+        {
+            if (!DragonVfx.Enabled) yield break;
+            Color rc = color; rc.a = 1f;
+            DragonCombat.RunVfx(delegate { DragonVfx.AreaRing(center, rc, radius, Mathf.Max(0.15f, duration)); });
+        }
+
         private IEnumerator RingVfx(Vector3 center, float radius, Color color, float duration)
         {
             if (DragonVfx.Enabled)
             {
-                // v0.25.63: textured glowing circle instead of the line placeholder
-                Color rc = color; rc.a = 1f;
-                DragonCombat.RunVfx(delegate { DragonVfx.AreaRing(center, rc, radius, Mathf.Max(0.15f, duration)); });
-                yield break;
+                yield break;   // v0.25.145: decorative range rings removed (guides use GuideVfx)
             }
             GameObject obj = new GameObject("SorcererRingVfx");
             LineRenderer line = obj.AddComponent<LineRenderer>();
