@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.141";
+        public const string ModVersion = "0.25.142";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1621,6 +1621,9 @@ namespace AlbedosCustomClassesAdvanced
                 yield return new WaitForSeconds(second - f2);
                 if (player == null || player.IsDead() || SmInterrupted(castStart)) yield break;
                 IhFaceSkillAim(player);
+                // v0.25.142: the first fan's Mixamo graph was still weighted 1 over the animator, hiding the 2nd fan's swing until its
+                // last third (it looked cut). The graph hands over to the animator here so the 2nd CA plays from its start.
+                DragonMixamo.Stop(player, 0.12f);
                 DragonCombat.PlayClip(player, "sm_crescent_asc2", f2);
                 yield return new WaitForSeconds(f2);
                 if (player == null || player.IsDead() || SmInterrupted(castStart))
@@ -2186,7 +2189,7 @@ namespace AlbedosCustomClassesAdvanced
                     StartCoroutine(GhostSlashWave(player, fo, fd, range, width, afterSpeed, _moonDamageV, _moonAscAfter.Value / 100f, 1f, false, true, "Afterimage"));
                 else
                     // The finisher is 2x WIDTH.
-                    StartCoroutine(GhostSlashWave(player, fo, fd, range, width * 2f, finSpeed, _moonDamageV, _moonAscFinisher.Value / 100f, 2f, "Attack 5"));
+                    StartCoroutine(GhostSlashWave(player, fo, fd, range, width * 2f, finSpeed, _moonDamageV, _moonAscFinisher.Value / 100f, 2f, false, false, "Attack 5", true, 0.3f));   // v0.25.142 persistent: immediately, then every 0.3 s
             }
         }
 
@@ -2202,7 +2205,7 @@ namespace AlbedosCustomClassesAdvanced
             return GhostSlashWave(player, origin, forward, range, width, speed, damage, multiplier, heightScale, halfmoon, false, stunAttack);
         }
 
-        private IEnumerator GhostSlashWave(Player player, Vector3 origin, Vector3 forward, float range, float width, float speed, DamageConfig damage, float multiplier, float heightScale, bool halfmoon, bool stunSmallBig, string stunAttack = "Attack 1")
+        private IEnumerator GhostSlashWave(Player player, Vector3 origin, Vector3 forward, float range, float width, float speed, DamageConfig damage, float multiplier, float heightScale, bool halfmoon, bool stunSmallBig, string stunAttack = "Attack 1", bool persistent = false, float tickInterval = 0.3f)
         {
             if (forward.sqrMagnitude < 0.01f) forward = player.transform.forward;
             forward.Normalize();
@@ -2250,19 +2253,31 @@ namespace AlbedosCustomClassesAdvanced
                 }
             }
             HashSet<Character> hitTargets = new HashSet<Character>();
+            // v0.25.142 opt-in persistent hits (Ascended Moonlight's final GT): every overlapping enemy is hit immediately, then every
+            // tickInterval while the overlap lasts. One candidate per character per frame (several colliders never double-tick).
+            Dictionary<Character, float> nextTickAt = new Dictionary<Character, float>();
+            HashSet<Character> frameSeen = new HashSet<Character>();
             float distance = 0f;
             while (distance < range && player != null)
             {
                 distance = Mathf.Min(range, distance + speed * Time.deltaTime);
                 Vector3 center = origin + forward * distance;
                 Collider[] hits = Physics.OverlapBox(center, new Vector3(width * 0.5f, 1.2f * heightScale, 0.35f * heightScale), Quaternion.LookRotation(forward, Vector3.up));
+                frameSeen.Clear();
                 for (int i = 0; i < hits.Length; i++)
                 {
                     Character target = hits[i].GetComponentInParent<Character>();
-                    if (target == null || hitTargets.Contains(target) || !IsEnemy(player, target)) continue;
-                    hitTargets.Add(target);
+                    if (target == null || !IsEnemy(player, target) || !frameSeen.Add(target)) continue;
+                    bool firstHit = hitTargets.Add(target);
+                    if (!firstHit)
+                    {
+                        if (!persistent) continue;
+                        float due;
+                        if (nextTickAt.TryGetValue(target, out due) && Time.time < due) continue;
+                    }
+                    if (persistent) nextTickAt[target] = Time.time + Mathf.Max(0.05f, tickInterval);
                     // Afterimage has no additional slash animation; stun accompanies its projectile hit.
-                    if (!halfmoon && DragonCombat.SkillStunEnabled(player, "moonlight_splitter", stunAttack, stunSmallBig) && !target.IsBoss()) { if (DragonCombat.SkillStunEnabled(player, halfmoon ? "halfmoon_slash" : "moonlight_splitter", stunAttack, stunSmallBig || (halfmoon && _hmStunFin.Value), null)) DragonCombat.Stun(target, center); }
+                    if (firstHit && !halfmoon && DragonCombat.SkillStunEnabled(player, "moonlight_splitter", stunAttack, stunSmallBig) && !target.IsBoss()) { if (DragonCombat.SkillStunEnabled(player, halfmoon ? "halfmoon_slash" : "moonlight_splitter", stunAttack, stunSmallBig || (halfmoon && _hmStunFin.Value), null)) DragonCombat.Stun(target, center); }
                     if (_enableVfx.Value) { Vector3 mh = center; DragonCombat.RunVfx(delegate { DragonVfx.Burst(mh, new Color(0.80f, 0.88f, 1f, 1f), 14, 7f, 0.22f, 0.35f, 0f); DragonVfx.Flash(mh, new Color(0.55f, 0.62f, 1f, 1f), 2f, 4f, 0.15f); }); }   // v0.25.97 moon shards on hit
                     DealDamageScaled(player, target, damage, multiplier, 8f, false, halfmoon ? "halfmoon_slash" : "moonlight_splitter", stunAttack, stunSmallBig || (halfmoon && _hmStunFin.Value), true, null);
                     if (halfmoon)
@@ -2902,7 +2917,26 @@ namespace AlbedosCustomClassesAdvanced
         private IEnumerator HalfmoonAscendedRoutine(Player player, float windup, float start)
         {
             ShowMessage("Halfmoon Slash");
-            if (windup > 0f) yield return new WaitForSeconds(windup);
+            // v0.25.142 (user): exactly TWO regular Battleaxe strikes - attack 1 then attack 2 - at one speed, the 2nd started at the
+            // 1st's chain point (the Circle Swing chain machinery). No stance, hold or third CA. Without the vanilla triggers the
+            // previous two-clip path is used.
+            Animator hmAn = player.GetComponentInChildren<Animator>();
+            string hmAxe1 = DragonCombat.ResolveTriggerName(hmAn, "battleaxe_attack0"), hmAxe2 = DragonCombat.ResolveTriggerName(hmAn, "battleaxe_attack1");
+            bool hmChain = hmAxe1 != null && hmAxe2 != null;
+            AnimationClip hmC1 = null; float hmS = 1f;
+            if (hmChain)
+            {
+                hmS = Mathf.Clamp(CsTiming(hmAxe1)[0] / Mathf.Max(0.05f, windup), 0.7f, 2.5f);
+                DragonCombat.FireVanilla(player, hmAxe1);
+                bool hmDone1 = false;
+                StartCoroutine(CsSwing(player, hmAxe1, hmS, null, 0f, true, 0f, delegate(AnimationClip c) { hmC1 = c; hmDone1 = true; }));
+                while (!hmDone1) { if (player == null || player.IsDead()) yield break; yield return null; }
+            }
+            else
+            {
+                DragonCombat.PlayClip(player, "sm_halfmoon", windup, false, "sm_halfmoon_asc");
+                if (windup > 0f) yield return new WaitForSeconds(windup);
+            }
             if (player == null || player.IsDead()) yield break;
             float radius = HalfmoonRadius();
             Vector3 forward = IhFlatAim(player);
@@ -2914,15 +2948,29 @@ namespace AlbedosCustomClassesAdvanced
             // ANIMATION ends, not when the cuts finish. Rooted for the whole skill.
             StartCoroutine(HalfmoonTravelingCuts(player, forward, radius, start));
             DragonCombat.LockSkill(player, HmCutsSeconds() + 0.3f);
-            yield return new WaitForSeconds(HmAscSwingEnd - HmAscContact);
-            if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
-            // The finisher follows the first swing directly; the retired GT stance is omitted.
-            IhFaceSkillAim(player);
-            float swing = HmAscContact;
-            DragonCombat.LockSkill(player, HmAscSwingEnd + 0.15f);
-            DragonCombat.PlayClip(player, "sm_halfmoon", swing, false, "sm_halfmoon_finisher");
-            if (swing > 0f) yield return new WaitForSeconds(swing);
-            if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
+            if (hmChain)
+            {
+                yield return StartCoroutine(CsSwing(player, hmAxe1, hmS, null, CsTiming(hmAxe1)[1], false, 0f, null));   // follow-through to the chain point
+                if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
+                IhFaceSkillAim(player);
+                DragonCombat.LockSkill(player, 0.6f);
+                DragonCombat.FireVanilla(player, hmAxe2);
+                yield return StartCoroutine(CsSwing(player, hmAxe2, hmS, hmC1, 0f, true, 0f, null));   // attack 2 up to its hit frame
+                if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
+                float[] hmE2 = CsTiming(hmAxe2);
+                DragonCombat.SetSkillAnimSpeed(player, hmS, Mathf.Max(0.1f, (hmE2[2] - hmE2[0]) / hmS + 0.12f));   // the swing plays out at the same speed
+            }
+            else
+            {
+                yield return new WaitForSeconds(HmAscSwingEnd - HmAscContact);
+                if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
+                IhFaceSkillAim(player);
+                float swing = HmAscContact;
+                DragonCombat.LockSkill(player, HmAscSwingEnd + 0.15f);
+                DragonCombat.PlayClip(player, "sm_halfmoon", swing, false, "sm_halfmoon_finisher");
+                if (swing > 0f) yield return new WaitForSeconds(swing);
+                if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
+            }
             Vector3 origin = player.GetEyePoint() + player.transform.up * -0.25f;
             Vector3 dir = AlbedoAimUtility.GetProjectileDirection(player, origin);
             float range = Mathf.Max(1f, DragonCombat.M(_halfAscRange.Value));
@@ -4554,8 +4602,7 @@ namespace AlbedosCustomClassesAdvanced
                 IhFaceSkillAim(player);
                 float ascWindup = HmAscContact;
                 DragonCombat.LockSkill(player, ascWindup + HmCutsSeconds() + 0.4f);
-                DragonCombat.PlayClip(player, "sm_halfmoon", ascWindup, false, "sm_halfmoon_asc");
-                StartCoroutine(HalfmoonAscendedRoutine(player, ascWindup, Time.time));
+                StartCoroutine(HalfmoonAscendedRoutine(player, ascWindup, Time.time));   // v0.25.142: the CAs are fired inside the routine
                 return;
             }
             IhFaceSkillAim(player);

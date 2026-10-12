@@ -1,5 +1,7 @@
-v0.25.141 - Ghost Players
-1. Ascended Splitting Arrow great arrow at head level: passes through you and other players, still hits enemies and walls/terrain.
-2. Scimitar Swords / Hellblade Cleavers / paired knives: NACC chain, heavy unchanged. If not, send the "[NACC] two-handed weapon" log lines.
-3. Ordinary two-handed weapons unchanged.
-Verified here: compile check + C#5 parse only.
+v0.25.142 - Paired Chains
+1. Base class (no Advancement): try to equip Scimitar Swords / Hellblade Cleavers / paired knives -> rejected with a message. Equip as Mercenary, then switch to a base class -> unequipped, item stays in the inventory.
+2. Mercenary + 2HDW: five-hit chain plays the same clips/sequence as two separately equipped weapons; heavy attack unchanged; swap weapon / class -> normal animations return.
+3. Ascended Crescent Cleave: the 2nd swing plays completely.
+4. Ascended Halfmoon: exactly two Battleaxe strikes, no stance/hold; cuts + finisher wave as before.
+5. Ascended Moonlight 5th GT: damages immediately and every 0.3 s while an enemy overlaps; no double ticks.
+Verified here: compile check (stubbed) + C# 5 parse only. Everything above needs in-game testing.

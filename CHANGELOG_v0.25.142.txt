@@ -1,0 +1,20 @@
+Aethelborn Ascended v0.25.142 - Paired Chains (baseline v0.25.141)
+
+1. 2HDW (native two-handed paired weapons) vs base classes
+- Equip attempt rejected before either hand changes (Humanoid.EquipItem prefix returns false, short message) when the player has a class but no Advancement. Verified rule IsPairedWeapon (two-handed + primary "dual*" animation).
+- Returning to a base class with a 2HDW equipped: unequipped on the next 0.5 s check (stays in the inventory, nothing dropped). Every advancement (Mercenary included) keeps its existing eligibility.
+
+2. 2HDW plays SBDW's clips
+- ComboStartPrefix: eligible paired primaries apply SBDW's Attack1-3 clip override (DragonDualWield.ApplyPaired, separate from the two-weapon Apply) on the carrier swing states (swing_axe / axe_swing); ComboTriggerPrefix rewrites the native trigger to carrier0/1/2 with the same 0,1,0,1,2 sequence; chain timing keys use the carrier so cadence/blending are shared with SBDW. Native damage/effects stay; no off-hand strike, no controller of the two-weapon path.
+- The override is primary-only: released on heavy / secondary attacks, weapon change (0.5 s sync), class change (CheckAnimationClass) and 1 s after the chain ends; the two-weapon restore is skipped while it is active.
+- Real DualWield plugin installed: Load() still bypasses for SBDW; ApplyPaired takes the clips from the bundle that plugin already loaded (or its embedded dwanimations).
+- Clips / carrier unavailable -> native 2HDW animations (v0.25.141 behaviour).
+
+3. Ascended Crescent Cleave: complete 2nd CA
+- Cause: the first fan's Mixamo graph stayed at weight 1 over the animator, hiding the 2nd fan's swing (sm_crescent_asc2) until its last third. The graph now hands over (DragonMixamo.Stop 0.12 s) when the 2nd swing starts. Projectiles / timings unchanged.
+
+4. Ascended Halfmoon: two regular Battleaxe strikes
+- battleaxe_attack0 then battleaxe_attack1 at one speed, the 2nd fired at the 1st's chain point (Circle Swing chain machinery: CsSwing). No stance / hold / GT window / third CA. Hit, traveling cuts and finisher wave unchanged (the wave fires on the 2nd strike's hit frame). Falls back to the previous two-clip path if the triggers do not exist.
+
+5. Ascended Moonlight 5th GT: persistent damage
+- GhostSlashWave opt-in persistent path: hits each overlapping enemy immediately, then every 0.3 s while it overlaps (per-target cooldown, one candidate per character per frame - no collider duplicates). Damage per hit and the Attack 5 stun toggle (first hit only) unchanged. GTs 1-4 and the afterimage keep their once-per-wave rule.

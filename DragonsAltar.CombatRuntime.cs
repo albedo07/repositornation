@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.141";
+        public const string ModVersion = "0.25.142";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1040,7 +1040,7 @@ namespace DragonsAltarCombat
         private static FieldInfo _atkLevels, _atkLevel, _atkAnim, _atkChar, _atkWeapon, _atkAngle, _atkType;
         private static MethodInfo _atkMelee;
         private static bool _comboInStart, _comboDual;
-        private static string _comboBase;
+        private static string _comboBase, _comboCarrier;
         private static object _comboFinisher;
         private static float _comboLockUntil;
         private static bool _offhandSwing;
@@ -1226,6 +1226,14 @@ namespace DragonsAltarCombat
             try
             {
                 if (Instance == null || !Instance.ComboChainsEnabled.Value) return;
+                // v0.25.142 2HDW: the SBDW clip override belongs to the paired PRIMARY attack only - heavies, other weapons release it.
+                Player relP = character as Player;
+                if (relP != null && relP == Player.m_localPlayer)
+                {
+                    bool primaryPaired = weapon != null && DragonCombat.IsPairedWeapon(weapon) &&
+                        string.Equals(_atkAnim.GetValue(__instance) as string, weapon.m_shared.m_attack.m_attackAnimation, StringComparison.Ordinal);
+                    if (!primaryPaired) { DragonDualWield.ReleasePaired(relP); _comboCarrier = null; }
+                }
                 Player p;
                 if (!IsLocalMeleeStart(__instance, character, out p))
                 {
@@ -1249,6 +1257,20 @@ namespace DragonsAltarCombat
                 int count = Mathf.Min(levels, 3);
                 if (levels > count) _atkLevels.SetValue(__instance, count);
                 string anim = _atkAnim.GetValue(__instance) as string;
+                // v0.25.142 2HDW: play SBDW's clips for the primary chain (Attack1-3 on the carrier swing states). Chain timing keys use
+                // the carrier name so cadence is measured/shared with the working SBDW chain. Unavailable -> native animations.
+                string keyAnim = anim;
+                _comboCarrier = null;
+                if (DragonCombat.IsPairedWeapon(weapon))
+                {
+                    Animator pa = p.GetComponentInChildren<Animator>();
+                    if (DragonDualWield.ApplyPaired(pa, true))
+                    {
+                        string carrier = DragonCombat.PairedCarrier(pa);
+                        if (carrier != null) { _comboCarrier = carrier; keyAnim = carrier; }
+                        else DragonDualWield.ApplyPaired(pa, false);
+                    }
+                }
                 int length = Mathf.Clamp(Instance.ComboChainLength.Value, 2, 9);
                 string prevAnim = previousAttack == null ? null : _atkAnim.GetValue(previousAttack) as string;
                 // our own timer: the next attack continues the chain when it starts while the previous swing is
@@ -1266,7 +1288,7 @@ namespace DragonsAltarCombat
                 if (cont)
                 {
                     float measured = Time.time - _comboLastStart;
-                    string mk = ChainKey(anim, _comboDual, _comboHit);
+                    string mk = ChainKey(keyAnim, _comboDual, _comboHit);
                     float nat = DragonCombat.ChainNaturalClock - _comboClockStart;
                     float old;
                     if (measured > 0.15f && (!_chainNatural.TryGetValue(mk, out old) || nat < old)) _chainNatural[mk] = nat;
@@ -1274,25 +1296,25 @@ namespace DragonsAltarCombat
                 float chainF = 1f;
                 float natNow;
                 bool dualNow = UsesDualChain(p);
-                if (_chainNatural.TryGetValue(ChainKey(anim, dualNow, nextHit), out natNow))
+                if (_chainNatural.TryGetValue(ChainKey(keyAnim, dualNow, nextHit), out natNow))
                 {
                     // v0.25.65 (user): intervals stay EVEN inside the chain, but the beat is the weapon's own average
                     // swing (a greatsword stays heavier than a one-handed sword); attack speed bonuses then scale that
                     // base speed (+50% = 1.5x), they no longer collapse every weapon onto one interval.
-                    float target = Instance.ComboFixedInterval.Value ? Mathf.Max(0.2f, Instance.ComboSwingSeconds.Value) : ChainAverage(anim, dualNow, length, natNow);
+                    float target = Instance.ComboFixedInterval.Value ? Mathf.Max(0.2f, Instance.ComboSwingSeconds.Value) : ChainAverage(keyAnim, dualNow, length, natNow);
                     // v0.25.67 (user: dual wield attacked like the Flash): the dual wield clips are short knife-speed
                     // swings that also strike with BOTH weapons. A dual swing now lasts at least as long as the same
                     // weapon's one-handed swing (or ComboSwingSeconds before that is known); Warfreak's +50% then
                     // applies on top like for any other weapon.
                     if (dualNow)
                     {
-                        float oneHand = ChainAverage(anim, false, length, -1f);
+                        float oneHand = ChainAverage(keyAnim, false, length, -1f);
                         target = Mathf.Max(target, oneHand > 0.2f ? oneHand : Mathf.Max(0.2f, Instance.ComboSwingSeconds.Value));
                     }
                     chainF = Mathf.Clamp(natNow / Mathf.Max(0.2f, target), dualNow ? 0.25f : 0.6f, 3f);
                 }
                 else if (dualNow) chainF = 0.6f;   // v0.25.67: not measured yet - start slower than the raw dual clips
-                _comboStartAnim = anim;
+                _comboStartAnim = keyAnim;
                 DragonCombat.SetChainSpeed(p, chainF, 3f);
                 _chainPrevSpeed = DragonCombat.GetAttackSpeedMultiplier(p) * chainF;
                 _comboLastEnd = -1f;
@@ -1417,16 +1439,17 @@ namespace DragonsAltarCombat
                 Animator a = c == null ? null : c.GetComponentInChildren<Animator>();
                 Player p = c == null ? null : c.GetComponent<Player>();
                 bool nativePair = DragonCombat.IsPairedWeapon(DragonCombat.GetHandItem(p, "m_rightItem"));
+                bool routed = nativePair && _comboCarrier != null && DragonDualWield.PairedActive(a);   // v0.25.142 2HDW plays SBDW's clips
                 bool dwClips = !nativePair && _comboDual && DragonDualWield.Apply(p, a, true);
                 if (!nativePair && !_comboDual) DragonDualWield.Apply(p, a, false);
-                string baseName = _comboBase;
+                string baseName = routed ? _comboCarrier : _comboBase;
                 if (_comboDual && !nativePair && !dwClips && DragonCombat.AnimTriggerCount(a, "dual_knives") >= 2) baseName = "dual_knives";
                 int count = DragonCombat.AnimTriggerCount(a, baseName);
                 if (count <= 0) return true;
                 int index = Mathf.Clamp(_comboSwing, 0, count - 1);
                 if (_comboHit >= Mathf.Clamp(Instance.ComboChainLength.Value, 2, 9) - 1) index = count - 1;
                 string target = baseName + index.ToString();
-                if (nativePair) DragonCombat.PrepareExternalAnimation(a, target);
+                if (nativePair && !routed) DragonCombat.PrepareExternalAnimation(a, target);
                 bool baseClass = p != null && string.IsNullOrEmpty(DragonCombat.GetAdvancementName(p));
                 if (baseClass && _comboPrevSwing >= 0)
                     CaptureBaseComboState(a, baseName + _comboPrevSwing.ToString());
@@ -1471,6 +1494,14 @@ namespace DragonsAltarCombat
                 if (p == null || p.IsDead() || p.InAttack() || DragonCombat.ClipBusy(p) || Time.time < DragonMixamo.LiveUntil) return;
                 Animator a = p.GetComponentInChildren<Animator>();
                 if (a == null) return;
+                // v0.25.142 2HDW override only lives around a primary chain: released on weapon / class change and when idle.
+                ItemDrop.ItemData pr = DragonCombat.GetHandItem(p, "m_rightItem");
+                bool pairedNow = DragonCombat.IsPairedWeapon(pr) && DragonCombat.ComboWeaponProvider != null && DragonCombat.ComboWeaponProvider(p, pr);
+                if (DragonDualWield.PairedActive(a))
+                {
+                    if (!pairedNow || Time.time - _comboLastEnd > 1f) DragonDualWield.ApplyPaired(a, false);
+                    else return;   // mid-chain: never let the two-weapon restore below swap the controller away
+                }
                 DragonDualWield.Apply(p, a, IsDualWielding(p));
             }
             catch (Exception) { }
@@ -1926,20 +1957,29 @@ namespace DragonsAltarCombat
             return 0f;
         }
 
-        private static void EquipItemPrefix(Humanoid __instance, object[] __args, ref EquipPatchState __state)
+        private static bool EquipItemPrefix(Humanoid __instance, object[] __args, ref EquipPatchState __state, ref bool __result)
         {
             __state = new EquipPatchState();
 
             if (Instance == null || __instance == null || __args == null || __args.Length < 1)
-                return;
+                return true;
 
             Player player = __instance as Player;
             if (player == null || player != Player.m_localPlayer)
-                return;
+                return true;
 
             ItemDrop.ItemData item = __args[0] as ItemDrop.ItemData;
             if (item == null)
-                return;
+                return true;
+
+            // v0.25.142 (user): base classes cannot wield Therzie's native two-handed paired weapons (2HDW) - rejected before either hand changes.
+            if (DragonCombat.IsBaseClassBlocked2HDW(player, item))
+            {
+                __result = false;
+                if (MessageHud.instance != null)
+                    MessageHud.instance.ShowMessage(MessageHud.MessageType.Center, "Only an advanced class can wield dual weapons");
+                return false;
+            }
 
             string advancement = DragonCombat.GetAdvancementName(player);
             ItemDrop.ItemData left = DragonCombat.GetHandItem(player, "m_leftItem");
@@ -1960,7 +2000,7 @@ namespace DragonsAltarCombat
                     __state.MercenaryDualWeapons = true;
                     __state.ExistingWeapon = existingWeapon;
                     __state.NewItem = item;
-                    return;
+                    return true;
                 }
             }
 
@@ -1979,7 +2019,7 @@ namespace DragonsAltarCombat
                     __state.SpellcasterDualGunStaves = true;
                     __state.ExistingWeapon = existingGunStaff;
                     __state.NewItem = item;
-                    return;
+                    return true;
                 }
             }
 
@@ -1994,7 +2034,7 @@ namespace DragonsAltarCombat
                         __state.DivineStaffShield = true;
                         __state.ExistingOffhand = shield;
                         __state.NewItem = item;
-                        return;
+                        return true;
                     }
                 }
 
@@ -2010,6 +2050,7 @@ namespace DragonsAltarCombat
                     }
                 }
             }
+                    return true;
         }
 
         private static void EquipItemPostfix(Humanoid __instance, ref bool __result, EquipPatchState __state)
@@ -8479,6 +8520,21 @@ namespace DragonsAltarCombat
             return longest > 0.0001f;
         }
 
+        // Base class = a class without an Advancement. Every advancement keeps its existing eligibility (Mercenary included).
+        public static bool IsBaseClassBlocked2HDW(Player player, ItemDrop.ItemData item)
+        {
+            if (player == null || item == null || !IsPairedWeapon(item)) return false;
+            return string.IsNullOrEmpty(GetAdvancementName(player)) && !string.IsNullOrEmpty(GetClassName(player));
+        }
+
+        // v0.25.142 the vanilla swing triggers SBDW's Attack1-3 clips live on (3 swings). null = not available.
+        public static string PairedCarrier(Animator a)
+        {
+            string[] candidates = { "swing_axe", "axe_swing" };
+            for (int i = 0; i < candidates.Length; i++) if (AnimTriggerCount(a, candidates[i]) >= 3) return candidates[i];
+            return null;
+        }
+
         public static bool IsPairedWeapon(ItemDrop.ItemData item)
         {
             if (item == null || item.m_shared == null || item.m_shared.m_attack == null) return false;
@@ -9166,6 +9222,15 @@ namespace DragonsAltarCombat
             {
                 ItemDrop.ItemData l = GetHandItem(p, "m_leftItem");
                 ItemDrop.ItemData r = GetHandItem(p, "m_rightItem");
+                // v0.25.142: returning to a base class with a 2HDW equipped - unequip it (it stays in the inventory, nothing is dropped).
+                ItemDrop.ItemData paired = IsBaseClassBlocked2HDW(p, r) ? r : (IsBaseClassBlocked2HDW(p, l) ? l : null);
+                if (paired != null)
+                {
+                    p.UnequipItem(paired, true);
+                    if (MessageHud.instance != null)
+                        MessageHud.instance.ShowMessage(MessageHud.MessageType.Center, "Only an advanced class can wield dual weapons");
+                    return;
+                }
                 if (l == null || r == null || l == r) return;
                 string adv = GetAdvancementName(p);
                 bool dualMelee = IsOneHandedWeapon(l) && IsOneHandedWeapon(r) && !IsGunStaff(l);
@@ -9426,6 +9491,7 @@ namespace DragonsAltarCombat
             Animator animator = player.GetComponentInChildren<Animator>();
             DragonMixamoPlayer source = animator == null ? null : animator.GetComponent<DragonMixamoPlayer>();
             if (source != null) source.CancelAnimation();
+            DragonDualWield.ReleasePaired(player);   // v0.25.142 class change releases the 2HDW clip override
             DragonVanillaTail tail = player.GetComponent<DragonVanillaTail>();
             if (tail != null) { tail.enabled = false; UnityEngine.Object.Destroy(tail); }
             DragonVanillaLoop loop = player.GetComponent<DragonVanillaLoop>();
@@ -10832,6 +10898,120 @@ namespace DragonsAltarCombat
                 _clips = null;
                 if (DragonCombatPlugin.Instance != null) DragonCombatPlugin.Instance.LogInfo("[Immortal Heroes] DualWield.dll could not be read: " + ex.Message);
             }
+        }
+
+        // v0.25.142 2HDW: native two-handed paired weapons play SBDW's own clips (Attack1-3 on the carrier axe swing states)
+        // for their PRIMARY attacks only. Separate from Apply() so the Smoothbrain-style two-weapon path is untouched. The
+        // clips come from our own load, or - when the real DualWield plugin is installed (Load() bypasses) - from the
+        // bundle that plugin already loaded / its embedded resource.
+        private static bool _pairedTried;
+        private static Dictionary<string, AnimationClip> _pairedClips;
+        private static readonly Dictionary<int, RuntimeAnimatorController> _pairedBase = new Dictionary<int, RuntimeAnimatorController>();
+        private static readonly Dictionary<int, RuntimeAnimatorController> _pairedCtrl = new Dictionary<int, RuntimeAnimatorController>();
+        private static readonly Dictionary<int, RuntimeAnimatorController> _pairedByBase = new Dictionary<int, RuntimeAnimatorController>();
+
+        private static void LoadPaired()
+        {
+            if (_pairedTried) return;
+            _pairedTried = true;
+            try
+            {
+                Load();
+                if (_clips != null) { _pairedClips = _clips; return; }
+                AssetBundle found = null;
+                AssetBundle[] loaded = AssetBundle.GetAllLoadedAssetBundles() as AssetBundle[];
+                if (loaded == null) { List<AssetBundle> tmp = new List<AssetBundle>(AssetBundle.GetAllLoadedAssetBundles()); loaded = tmp.ToArray(); }
+                for (int i = 0; i < loaded.Length && found == null; i++)
+                    if (loaded[i] != null && loaded[i].Contains("Attack1") && loaded[i].Contains("DWblock")) found = loaded[i];
+                if (found == null)
+                {
+                    Type real = DragonCombat.FindTypeCached("DualWield.DualWield");
+                    System.Reflection.Assembly asm = real != null ? real.Assembly : null;
+                    if (asm == null)
+                    {
+                        string path = System.IO.Path.Combine(System.IO.Path.Combine(BepInEx.Paths.PluginPath, "ImmortalHeroesAssets"), "DualWield.dll");
+                        if (System.IO.File.Exists(path)) asm = System.Reflection.Assembly.LoadFile(path);
+                    }
+                    string res = null;
+                    string[] names = asm == null ? new string[0] : asm.GetManifestResourceNames();
+                    for (int i = 0; i < names.Length; i++) if (names[i].EndsWith("dwanimations", StringComparison.Ordinal)) res = names[i];
+                    if (res != null) using (System.IO.Stream st = asm.GetManifestResourceStream(res)) found = AssetBundle.LoadFromStream(st);
+                }
+                if (found == null) return;
+                Dictionary<string, AnimationClip> clips = new Dictionary<string, AnimationClip>();
+                string[] want = { "Attack1", "Attack2", "Attack3", "DWblock", "DWspecial", "DWspecial2" };
+                for (int i = 0; i < want.Length; i++)
+                {
+                    AnimationClip clip = found.LoadAsset<AnimationClip>(want[i]);
+                    if (clip != null) clips[want[i]] = clip;
+                }
+                if (clips.ContainsKey("Attack1") && clips.ContainsKey("Attack2") && clips.ContainsKey("Attack3")) _pairedClips = clips;
+            }
+            catch (Exception) { _pairedClips = null; }
+        }
+
+        public static bool PairedActive(Animator animator)
+        {
+            RuntimeAnimatorController ours;
+            return animator != null && _pairedCtrl.TryGetValue(animator.GetInstanceID(), out ours) && animator.runtimeAnimatorController == ours;
+        }
+
+        // on = SBDW clips for the primary attack chain (false when the clips are unavailable); off = back to whatever was active.
+        public static bool ApplyPaired(Animator animator, bool on)
+        {
+            if (animator == null) return false;
+            int id = animator.GetInstanceID();
+            bool isOurs = PairedActive(animator);
+            if (!on)
+            {
+                RuntimeAnimatorController b;
+                if (isOurs && _pairedBase.TryGetValue(id, out b) && b != null) { animator.runtimeAnimatorController = b; animator.Update(0f); }
+                return false;
+            }
+            LoadPaired();
+            if (_pairedClips == null) return false;
+            if (isOurs) return true;
+            try
+            {
+                RuntimeAnimatorController baseCtrl = animator.runtimeAnimatorController;
+                while (baseCtrl is AnimatorOverrideController && ((AnimatorOverrideController)baseCtrl).runtimeAnimatorController != null && !_pairedByBase.ContainsKey(baseCtrl.GetInstanceID()))
+                    baseCtrl = ((AnimatorOverrideController)baseCtrl).runtimeAnimatorController;
+                RuntimeAnimatorController current = animator.runtimeAnimatorController;
+                RuntimeAnimatorController ctrl;
+                if (!_pairedByBase.TryGetValue(current.GetInstanceID(), out ctrl))
+                {
+                    AnimatorOverrideController aoc = new AnimatorOverrideController(baseCtrl);
+                    List<KeyValuePair<AnimationClip, AnimationClip>> list = new List<KeyValuePair<AnimationClip, AnimationClip>>();
+                    AnimationClip[] all = aoc.animationClips;
+                    for (int i = 0; i < all.Length; i++)
+                    {
+                        string key; AnimationClip ext;
+                        if (all[i] != null && Map.TryGetValue(all[i].name, out key) && _pairedClips.TryGetValue(key, out ext))
+                        {
+                            AnimationClip copy = UnityEngine.Object.Instantiate(ext);
+                            copy.name = all[i].name;
+                            list.Add(new KeyValuePair<AnimationClip, AnimationClip>(all[i], copy));
+                        }
+                        else list.Add(new KeyValuePair<AnimationClip, AnimationClip>(all[i], all[i]));
+                    }
+                    aoc.ApplyOverrides(list);
+                    ctrl = aoc;
+                    _pairedByBase[current.GetInstanceID()] = ctrl;
+                }
+                _pairedBase[id] = current;
+                _pairedCtrl[id] = ctrl;
+                animator.runtimeAnimatorController = ctrl;
+                animator.Update(0f);
+                return true;
+            }
+            catch (Exception) { return false; }
+        }
+
+        public static void ReleasePaired(Player player)
+        {
+            if (player == null) return;
+            Animator a = player.GetComponentInChildren<Animator>();
+            if (a != null && PairedActive(a)) ApplyPaired(a, false);
         }
 
         // dual = true: use the dual-wield controller (returns whether it is available); false: restore.
