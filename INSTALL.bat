@@ -1,5 +1,5 @@
 @echo off
-title Immortal Heroes v0.25.143 - Merc Message
+title Immortal Heroes v0.25.144 - Merc Only
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
 echo.
 pause

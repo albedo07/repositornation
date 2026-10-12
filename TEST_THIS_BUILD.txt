@@ -1,4 +1,4 @@
-v0.25.143 - Merc Message (rest = v0.25.142)
+v0.25.144 - Merc Only (rest = v0.25.142)
 1. Base class (no Advancement): try to equip Scimitar Swords / Hellblade Cleavers / paired knives -> rejected with a message. Equip as Mercenary, then switch to a base class -> unequipped, item stays in the inventory.
 2. Mercenary + 2HDW: five-hit chain plays the same clips/sequence as two separately equipped weapons; heavy attack unchanged; swap weapon / class -> normal animations return.
 3. Ascended Crescent Cleave: the 2nd swing plays completely.

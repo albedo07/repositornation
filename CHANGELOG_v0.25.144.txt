@@ -1,0 +1,3 @@
+Aethelborn Ascended v0.25.144 - Merc Only
+- 2HDW (Therzie's native paired weapons, dual wield by nature) can now be equipped ONLY by a Mercenary. Every other class - Sword Master, Paladin, Priest, Archmage, Horizon Walker, Ranger ACs, base classes, no class - has the equip attempt rejected before either hand changes ("Only a Mercenary can dual wield"), and one already equipped is unequipped on the next 0.5 s check (stays in the inventory, nothing dropped).
+- Two separately equipped 1H weapons were already Mercenary-only (unchanged). Spellcaster dual Gun Staves untouched. Nothing else changed from v0.25.143.

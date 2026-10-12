@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.143";
+        public const string ModVersion = "0.25.144";
 
         internal static DragonCombatPlugin Instance;
 
@@ -8520,11 +8520,12 @@ namespace DragonsAltarCombat
             return longest > 0.0001f;
         }
 
-        // Base class = a class without an Advancement. Every advancement keeps its existing eligibility (Mercenary included).
+        // v0.25.144 (user): dual wielding belongs to the Mercenary ONLY. A 2HDW (dual wield by nature, two-handed in code) is
+        // blocked for every other class, base classes and classless players included.
         public static bool IsBaseClassBlocked2HDW(Player player, ItemDrop.ItemData item)
         {
             if (player == null || item == null || !IsPairedWeapon(item)) return false;
-            return string.IsNullOrEmpty(GetAdvancementName(player)) && !string.IsNullOrEmpty(GetClassName(player));
+            return GetAdvancementName(player) != "Mercenary";
         }
 
         // v0.25.142 the vanilla swing triggers SBDW's Attack1-3 clips live on (3 swings). null = not available.
