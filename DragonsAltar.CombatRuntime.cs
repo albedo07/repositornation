@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.151";
+        public const string ModVersion = "0.25.152";
 
         internal static DragonCombatPlugin Instance;
 
@@ -12081,11 +12081,12 @@ namespace DragonsAltarCombat
             if (go == null) return;
             try
             {
-                float k = Restraint * PolishBudget();
                 ParticleSystem[] pss = go.GetComponentsInChildren<ParticleSystem>(true);
                 for (int i = 0; i < pss.Length; i++)
                 {
                     ParticleSystem ps = pss[i];
+                    // v0.25.152: every system is budgeted like our own (Particles()), and the density setting applies
+                    float k = Restraint * Amount * PolishBudget();
                     ParticleSystem.MainModule main = ps.main;
                     if (main.maxParticles > 600) main.maxParticles = 600;
                     ParticleSystem.EmissionModule em = ps.emission;
@@ -12112,7 +12113,7 @@ namespace DragonsAltarCombat
                 {
                     Light l = lights[i];
                     if (LightScale <= 0.05f) { l.enabled = false; continue; }
-                    l.intensity = Mathf.Min(l.intensity * 0.5f, 1.2f);
+                    l.intensity = Mathf.Min(l.intensity * 0.5f, 1.2f) * LightScale;   // v0.25.152 the light setting scales continuously
                     l.range = Mathf.Min(l.range, 8f);
                     l.shadows = LightShadows.None;
                 }

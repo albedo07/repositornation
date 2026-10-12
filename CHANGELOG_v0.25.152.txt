@@ -1,0 +1,4 @@
+v0.25.152 VFX Limits (visual only; no config keys / defaults changed)
+- Spawned Valheim effects (LimitSpawned): particle scaling now includes the Particle Density setting (Amount) x restraint x budget; the VFX light setting scales light intensity continuously (still off at ~0), on top of the existing caps.
+- The overlap budget is charged per particle system (inside the loop), so complex vanilla effects are budgeted like custom ones.
+- Legacy (Enhanced VFX OFF) Sorcerer + Ranger guides: the material each guide creates is destroyed with it; cleanup runs in a finally block, so it also runs if the coroutine is stopped/interrupted.

@@ -41,7 +41,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Aethelborn Ascended - Ranger";
-        public const string ModVersion = "0.25.151";
+        public const string ModVersion = "0.25.152";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -3841,14 +3841,23 @@ namespace DragonsAltarRanger
             Color gcol = color; gcol.a = Mathf.Min(0.22f, Mathf.Clamp01(color.a) * 0.3f);
             gl.startColor = gcol;
             gl.endColor = gcol;
-            Material gm = VfxMaterial(Color.white); if (gm != null) gl.material = gm;
-            for (int gi = 0; gi < 48; gi++)
+            Material gm = VfxMaterial(Color.white);   // owned by this guide: destroyed with it
+            if (gm != null) gl.material = gm;
+            try
             {
-                float ga = (float)gi / 48f * Mathf.PI * 2f;
-                gl.SetPosition(gi, center + new Vector3(Mathf.Cos(ga) * radius, 0.08f, Mathf.Sin(ga) * radius));
+                for (int gi = 0; gi < 48; gi++)
+                {
+                    float ga = (float)gi / 48f * Mathf.PI * 2f;
+                    gl.SetPosition(gi, center + new Vector3(Mathf.Cos(ga) * radius, 0.08f, Mathf.Sin(ga) * radius));
+                }
+                yield return new WaitForSeconds(Mathf.Max(0.1f, duration));
             }
-            yield return new WaitForSeconds(Mathf.Max(0.1f, duration));
-            Destroy(gobj);
+            finally
+            {
+                // runs on expiry AND when the coroutine is stopped / interrupted
+                if (gobj != null) Destroy(gobj);
+                if (gm != null) Destroy(gm);
+            }
         }
 
         private IEnumerator RingVfx(Vector3 center, float radius, Color color, float duration)

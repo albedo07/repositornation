@@ -1,4 +1,3 @@
-v0.25.151 test (visual only):
-1. Clockwork: clock face shows with guides ON and OFF.
-2. Enhanced VFX OFF + guides ON: Meteor/Cataclysm/Starfall markers are thin and faint; guides OFF hides them.
-3. Meteor Fall / Fireball / Lightning impacts: no longer white-out; still readable.
+v0.25.152 test (visual only):
+1. Meteor / Fireball / lightning explosions: still readable; change Particle Density + VFX light in F8 and see them follow.
+2. Enhanced VFX OFF: cast Meteor/Cataclysm/Starfall repeatedly - guides appear/disappear, no material leak (Unity profiler / object count stable).

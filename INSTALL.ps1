@@ -1,7 +1,7 @@
 ﻿$ErrorActionPreference = "Stop"
 
 Write-Host ""
-Write-Host "IMMORTAL HEROES v0.25.151 - VFX POLISH TWO" -ForegroundColor Cyan
+Write-Host "IMMORTAL HEROES v0.25.152 - VFX LIMITS" -ForegroundColor Cyan
 Write-Host "All 10 DLLs compile in staging before the live profile is touched." -ForegroundColor Gray
 Write-Host ""
 
