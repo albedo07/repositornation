@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Aethelborn Ascended - Sorcerer Advancements";
-        public const string ModVersion = "0.25.150";
+        public const string ModVersion = "0.25.151";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1764,7 +1764,7 @@ namespace DragonsAltarSorcerer
             {
                 StartCoroutine(RingVfx(player.transform.position, DragonCombat.M(_clockRadius.Value), new Color(1f, 0.82f, 0.35f, 0.95f), 0.8f));
                 Vector3 kp = player.transform.position; float kr = DragonCombat.M(_clockRadius.Value);
-                DragonCombat.RunVfx(delegate { DragonVfx.Shockwave(kp, new Color(1f, 0.82f, 0.35f, 1f), kr, 0.7f); DragonVfx.Vortex(null, kp + Vector3.up, new Color(1f, 0.90f, 0.55f, 1f), 2.5f, 0.8f); DragonVfx.Glyph(kp, new Color(1f, 0.82f, 0.35f, 1f), kr * 0.6f, 2.5f, 120f); });   // v0.25.58 / v0.25.61 clock face
+                DragonCombat.RunVfx(delegate { DragonVfx.Shockwave(kp, new Color(1f, 0.82f, 0.35f, 1f), kr, 0.7f); DragonVfx.Vortex(null, kp + Vector3.up, new Color(1f, 0.90f, 0.55f, 1f), 2.5f, 0.8f); DragonVfx.Glyph(kp, new Color(1f, 0.82f, 0.35f, 1f), kr * 0.6f, 2.5f, 120f, true); });   // v0.25.58 / v0.25.61 clock face
             }
         }
 
@@ -4145,7 +4145,29 @@ namespace DragonsAltarSorcerer
         private IEnumerator GuideVfx(Vector3 center, float radius, Color color, float duration)
         {
             if (!DragonVfx.Guides) yield break;   // v0.25.150: one toggle for both VFX modes
-            if (!DragonVfx.Enabled) { yield return StartCoroutine(RingVfx(center, radius, color, duration)); yield break; }   // legacy line ring when Enhanced VFX is off
+            if (!DragonVfx.Enabled)
+            {
+            // v0.25.151: Enhanced VFX OFF -> the same faint guide, as a thin low-alpha line (not the thick legacy ring)
+            GameObject gobj = new GameObject("SorcererGuideLine");
+            LineRenderer gl = gobj.AddComponent<LineRenderer>();
+            gl.useWorldSpace = true;
+            gl.loop = true;
+            gl.positionCount = 48;
+            gl.startWidth = 0.04f;
+            gl.endWidth = 0.04f;
+            Color gcol = color; gcol.a = Mathf.Min(0.22f, Mathf.Clamp01(color.a) * 0.3f);
+            gl.startColor = gcol;
+            gl.endColor = gcol;
+            Shader gsh = Shader.Find("Sprites/Default"); if (gsh != null) gl.material = new Material(gsh);
+            for (int gi = 0; gi < 48; gi++)
+            {
+                float ga = (float)gi / 48f * Mathf.PI * 2f;
+                gl.SetPosition(gi, center + new Vector3(Mathf.Cos(ga) * radius, 0.08f, Mathf.Sin(ga) * radius));
+            }
+            yield return new WaitForSeconds(Mathf.Max(0.1f, duration));
+            Destroy(gobj);
+                yield break;
+            }
             Color rc = color; rc.a = 1f;
             DragonCombat.RunVfx(delegate { DragonVfx.AreaRing(center, rc, radius, Mathf.Max(0.15f, duration)); });
         }

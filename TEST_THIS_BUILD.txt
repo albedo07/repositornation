@@ -1,5 +1,4 @@
-v0.25.150 test (visual only):
-1. Each class, Normal + Ascended: effects readable, no white-out flashes, no strobing.
-2. Overlap: cast 3-4 skills / Whirlwind + Seismic + Bomb in a pack - screen stays readable, no stacked shakes.
-3. Show Targeting Guides ON/OFF x Enhanced VFX ON/OFF: Meteor/Cataclysm/Starfall/Arrow Rain/Rupture markers appear/disappear; attack visuals stay.
-4. Meteor Fall / Cataclysm / Punishing Bomb impacts still read as big hits without the light column.
+v0.25.151 test (visual only):
+1. Clockwork: clock face shows with guides ON and OFF.
+2. Enhanced VFX OFF + guides ON: Meteor/Cataclysm/Starfall markers are thin and faint; guides OFF hides them.
+3. Meteor Fall / Fireball / Lightning impacts: no longer white-out; still readable.

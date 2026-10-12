@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.150";
+        public const string ModVersion = "0.25.151";
 
         internal static DragonCombatPlugin Instance;
 
@@ -12065,12 +12065,59 @@ namespace DragonsAltarCombat
                     if (znv != null && prefab.GetComponentInChildren(znv, true) != null) continue;
                     GameObject go = UnityEngine.Object.Instantiate(prefab, pos, rot);
                     if (scale > 0f && Mathf.Abs(scale - 1f) > 0.01f) go.transform.localScale = prefab.transform.localScale * scale;
+                    LimitSpawned(go);   // v0.25.151: vanilla effects obey the same particle / light limits
                     UnityEngine.Object.Destroy(go, Mathf.Max(0.5f, life));
                     return go;
                 }
             }
             catch (Exception) { }
             return null;
+        }
+
+        // v0.25.151: spawned Valheim effects (Meteor explosion, Fireball hit, lightning...) get the same restraint as our own:
+        // particle rate / bursts x Restraint x per-frame budget, max 600 particles per system, lights capped + scaled by the VFX light setting.
+        private static void LimitSpawned(GameObject go)
+        {
+            if (go == null) return;
+            try
+            {
+                float k = Restraint * PolishBudget();
+                ParticleSystem[] pss = go.GetComponentsInChildren<ParticleSystem>(true);
+                for (int i = 0; i < pss.Length; i++)
+                {
+                    ParticleSystem ps = pss[i];
+                    ParticleSystem.MainModule main = ps.main;
+                    if (main.maxParticles > 600) main.maxParticles = 600;
+                    ParticleSystem.EmissionModule em = ps.emission;
+                    if (!em.enabled) continue;
+                    em.rateOverTimeMultiplier = em.rateOverTimeMultiplier * k;
+                    int n = em.burstCount;
+                    if (n > 0)
+                    {
+                        ParticleSystem.Burst[] bursts = new ParticleSystem.Burst[n];
+                        em.GetBursts(bursts);
+                        for (int b = 0; b < n; b++)
+                        {
+                            ParticleSystem.MinMaxCurve cnt = bursts[b].count;
+                            cnt.constantMin *= k;
+                            cnt.constantMax *= k;
+                            cnt.curveMultiplier *= k;
+                            bursts[b].count = cnt;
+                        }
+                        em.SetBursts(bursts);
+                    }
+                }
+                Light[] lights = go.GetComponentsInChildren<Light>(true);
+                for (int i = 0; i < lights.Length; i++)
+                {
+                    Light l = lights[i];
+                    if (LightScale <= 0.05f) { l.enabled = false; continue; }
+                    l.intensity = Mathf.Min(l.intensity * 0.5f, 1.2f);
+                    l.range = Mathf.Min(l.range, 8f);
+                    l.shadows = LightShadows.None;
+                }
+            }
+            catch (Exception) { }
         }
 
         // Writes every fx_/vfx_ prefab name to the log once, so effects can be picked by name later.
@@ -12827,19 +12874,25 @@ namespace DragonsAltarCombat
         }
 
         // Rotating rune circle on the ground (Clockwork, Gravity Dominion, Rupture, traps).
-        public static void Glyph(Vector3 pos, Color c, float radius, float seconds, float spin)
+        public static void Glyph(Vector3 pos, Color c, float radius, float seconds, float spin, bool skillVisual)
         {
-            // v0.25.150: rune circles are radius telegraphs, not attacks -> faint and hidden with [Visuals] ShowTargetingGuides
-            if (!Enabled || !Guides) return;
+            // v0.25.151: skillVisual (Clockwork's clock face) is part of the skill - never hidden by the guide toggle, subdued only
+            if (!Enabled || (!skillVisual && !Guides)) return;
             Vector3 g = GroundPoint(pos) + Vector3.up * 0.08f;
-            Color gc = c; gc.a = 0.22f;
+            Color gc = c; gc.a = skillVisual ? 0.5f : 0.22f;
             DragonMeshFx a = MeshFx(g, Quaternion.identity, true, Mat(RingTex(), true), gc, seconds); if (a != null) a.Conform = true;
             if (a != null) { a.FadeIn = 0.2f; a.Hold = seconds * 0.6f; a.ScaleFrom = Vector3.one * radius * 1.7f; a.ScaleTo = Vector3.one * radius * 2.05f; a.ScaleTime = 0.3f; a.Spin = spin; }
             DragonMeshFx b = MeshFx(g + Vector3.up * 0.01f, Quaternion.identity, true, Mat(RingTex(), true), gc, seconds); if (b != null) b.Conform = true;
             if (b != null) { b.FadeIn = 0.25f; b.Hold = seconds * 0.6f; b.ScaleFrom = Vector3.one * radius * 1.1f; b.ScaleTo = Vector3.one * radius * 1.25f; b.ScaleTime = 0.3f; b.Spin = -spin * 1.6f; }
-            Color dc = c; dc.a = 0.06f;
+            Color dc = c; dc.a = skillVisual ? 0.12f : 0.06f;
             DragonMeshFx d = MeshFx(g + Vector3.up * 0.02f, Quaternion.identity, true, Mat(Glow(), true), dc, seconds); if (d != null) d.Conform = true;
             if (d != null) { d.FadeIn = 0.2f; d.Hold = seconds * 0.6f; d.ScaleFrom = d.ScaleTo = Vector3.one * radius * 2f; }
+        }
+
+        // v0.25.150 rune-circle telegraphs (Rupture wind-up): a guide, hidden with Show Targeting Guides
+        public static void Glyph(Vector3 pos, Color c, float radius, float seconds, float spin)
+        {
+            Glyph(pos, c, radius, seconds, spin, false);
         }
 
         // Soft glowing streak a -> b that fades (arrows, rails, blades from the sky).

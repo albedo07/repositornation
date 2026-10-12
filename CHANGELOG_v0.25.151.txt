@@ -1,0 +1,4 @@
+v0.25.151 VFX Polish Two (visual only; no config keys / defaults changed)
+- Clockwork's clock face is a skill visual: no longer hidden by Show Targeting Guides (subdued, alpha 0.5). Arcane Rupture's wind-up circle stays a guide.
+- Enhanced VFX OFF: Sorcerer (Meteor / Cataclysm) and Ranger (Starfall / Arrow Rain / Explosive marks) guides are now a thin (0.04) low-alpha (<= 0.22) line, hidden by Show Targeting Guides - no more thick legacy outlines.
+- Spawned Valheim effects (Meteor / Fireball explosions, lightning, holy fx...) now obey the same limits: particle rate + bursts x0.7 x per-frame budget, max 600 particles per system, lights halved, capped (1.2 intensity, 8 m), no shadows, off when the VFX light setting is ~0.
