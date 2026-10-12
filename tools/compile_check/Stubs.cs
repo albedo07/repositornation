@@ -8,7 +8,7 @@ namespace BepInEx.Configuration {
   public abstract class ConfigEntryBase { public object DefaultValue; public object BoxedValue; public ConfigDefinition Definition; public ConfigDescription Description; public Type SettingType; }
   public class ConfigDefinition { public ConfigDefinition(){} public ConfigDefinition(string s, string k){} public string Section; public string Key; }
   public class ConfigEntry<T> : ConfigEntryBase { public T Value; public event EventHandler SettingChanged; }
-  public class ConfigFile { public ConfigEntry<T> Bind<T>(string s, string k, T d, string desc){ return null; } public ConfigEntry<T> Bind<T>(string s, string k, T d, ConfigDescription desc){ return null; } public void Save(){} public void Reload(){} public bool SaveOnConfigSet; }
+  public class ConfigFile { public ConfigEntry<T> Bind<T>(string s, string k, T d, string desc){ return null; } public ConfigEntry<T> Bind<T>(string s, string k, T d, ConfigDescription desc = null){ return null; } public void Save(){} public void Reload(){} public bool SaveOnConfigSet; }
 }
 namespace BepInEx {
   public class BaseUnityPlugin : MonoBehaviour { public BepInEx.Configuration.ConfigFile Config; protected BepInEx.Logging.ManualLogSource Logger; }
