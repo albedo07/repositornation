@@ -1,0 +1,3 @@
+v0.25.147 Guide and Pull Fix
+- Ranger GuideVfx legacy (VFX-off) fallback now honours Show Targeting Guides.
+- Crescent pull on remotely owned enemies: steps batched into one RPC per enemy per 0.1 s (accumulated step, max 0.75 m); receiver uses the same per-frame dedupe guard as the local path.

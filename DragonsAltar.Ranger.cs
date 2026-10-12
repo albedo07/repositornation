@@ -41,7 +41,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Aethelborn Ascended - Ranger";
-        public const string ModVersion = "0.25.146";
+        public const string ModVersion = "0.25.147";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -3829,7 +3829,7 @@ namespace DragonsAltarRanger
                 DragonCombat.RunVfx(delegate { DragonVfx.AreaRing(center, gc, radius, Mathf.Max(0.1f, duration)); });
                 yield break;
             }
-            yield return StartCoroutine(RingVfx(center, radius, color, duration));
+            if (DragonVfx.Guides) yield return StartCoroutine(RingVfx(center, radius, color, duration));   // legacy VFX-off path honours the toggle too
         }
 
         private IEnumerator RingVfx(Vector3 center, float radius, Color color, float duration)

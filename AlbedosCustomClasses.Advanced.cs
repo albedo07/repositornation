@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.146";
+        public const string ModVersion = "0.25.147";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -2469,6 +2469,7 @@ namespace AlbedosCustomClassesAdvanced
 
         private const string CleavePullRpc = "Aethelborn_CleavePull";
         private ZRoutedRpc _cleavePullRpcReg;
+        private static readonly Dictionary<int, float> _cleavePullAcc = new Dictionary<int, float>(), _cleavePullDue = new Dictionary<int, float>();
 
         private void RegisterCleavePullRpc()
         {
@@ -2482,6 +2483,17 @@ namespace AlbedosCustomClassesAdvanced
             RegisterCleavePullRpc();
             ZDO zdo = nv.GetZDO();
             if (ZRoutedRpc.instance == null || zdo == null) return;
+            // v0.25.146: batch the per-frame steps - one RPC per enemy per 0.1 s carrying the accumulated step
+            int key = nv.GetInstanceID();
+            float acc, due;
+            _cleavePullAcc.TryGetValue(key, out acc);
+            if (!_cleavePullDue.TryGetValue(key, out due)) due = 0f;
+            acc += step;
+            if (Time.time < due) { _cleavePullAcc[key] = acc; return; }
+            _cleavePullAcc[key] = 0f;
+            _cleavePullDue[key] = Time.time + 0.1f;
+            if (_cleavePullDue.Count > 256) { _cleavePullDue.Clear(); _cleavePullAcc.Clear(); }
+            step = Mathf.Min(acc, 0.75f);
             ZPackage pkg = new ZPackage();
             pkg.Write(zdo.m_uid);
             pkg.Write(wavePoint.x); pkg.Write(wavePoint.y); pkg.Write(wavePoint.z);
@@ -2503,7 +2515,10 @@ namespace AlbedosCustomClassesAdvanced
                 if (c == null || c.IsDead()) return;
                 ZNetView nv = c.GetComponent<ZNetView>();
                 if (nv == null || !nv.IsValid() || !nv.IsOwner()) return;
-                CleavePullStep(c, wp, mask, Mathf.Min(step, 2f));
+                int cid = c.GetInstanceID(), lastFrame;
+                if (_cleavePullFrame.TryGetValue(cid, out lastFrame) && lastFrame == Time.frameCount) return;   // same dedupe as the local path
+                _cleavePullFrame[cid] = Time.frameCount;
+                CleavePullStep(c, wp, mask, Mathf.Min(step, 0.75f));
             }
             catch (Exception) { }
         }
