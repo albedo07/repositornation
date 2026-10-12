@@ -1,5 +1,5 @@
 @echo off
-title Immortal Heroes v0.25.147 - Guide and Pull Fix
+title Immortal Heroes v0.25.148 - Pull Batching
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
 echo.
 pause

@@ -1,0 +1,3 @@
+v0.25.148 Pull Batching
+- Crescent pull (multiplayer): outgoing per-enemy batches are flushed from Update every 0.1 s, including after the enemy leaves the wave (nothing carries into a later cast); idle batches removed after 0.5 s.
+- Receiver no longer drops batches: every received step is summed per enemy and applied once per frame (cap 0.75 m).

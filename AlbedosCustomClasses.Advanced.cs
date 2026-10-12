@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.147";
+        public const string ModVersion = "0.25.148";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1254,6 +1254,7 @@ namespace AlbedosCustomClassesAdvanced
         private void Update()
         {
             RegisterCleavePullRpc();
+            UpdateCleavePullNet();
             UpdateRefreshingDots();
             if (Input.GetMouseButtonDown(0) && !Cursor.visible) _ihLmbLatchAt = Time.time;
 
@@ -2469,7 +2470,13 @@ namespace AlbedosCustomClassesAdvanced
 
         private const string CleavePullRpc = "Aethelborn_CleavePull";
         private ZRoutedRpc _cleavePullRpcReg;
-        private static readonly Dictionary<int, float> _cleavePullAcc = new Dictionary<int, float>(), _cleavePullDue = new Dictionary<int, float>();
+
+        // v0.25.148: outgoing batch per remote enemy (flushed every 0.1 s, also after it leaves the wave) and
+        // incoming inbox per owned enemy (every received batch is summed and applied once per frame - nothing is dropped).
+        private class CleavePullBatch { public ZNetView Nv; public Character Target; public Vector3 Point; public int Mask; public float Step; public float Due; public float Last; }
+        private static readonly Dictionary<int, CleavePullBatch> _cleavePullOut = new Dictionary<int, CleavePullBatch>();
+        private static readonly Dictionary<int, CleavePullBatch> _cleavePullIn = new Dictionary<int, CleavePullBatch>();
+        private static readonly List<int> _cleavePullKeys = new List<int>();
 
         private void RegisterCleavePullRpc()
         {
@@ -2480,24 +2487,34 @@ namespace AlbedosCustomClassesAdvanced
 
         private void ForwardCleavePull(ZNetView nv, Vector3 wavePoint, int solidMask, float step)
         {
-            RegisterCleavePullRpc();
-            ZDO zdo = nv.GetZDO();
-            if (ZRoutedRpc.instance == null || zdo == null) return;
-            // v0.25.146: batch the per-frame steps - one RPC per enemy per 0.1 s carrying the accumulated step
             int key = nv.GetInstanceID();
-            float acc, due;
-            _cleavePullAcc.TryGetValue(key, out acc);
-            if (!_cleavePullDue.TryGetValue(key, out due)) due = 0f;
-            acc += step;
-            if (Time.time < due) { _cleavePullAcc[key] = acc; return; }
-            _cleavePullAcc[key] = 0f;
-            _cleavePullDue[key] = Time.time + 0.1f;
-            if (_cleavePullDue.Count > 256) { _cleavePullDue.Clear(); _cleavePullAcc.Clear(); }
-            step = Mathf.Min(acc, 0.75f);
+            CleavePullBatch b;
+            if (!_cleavePullOut.TryGetValue(key, out b))
+            {
+                b = new CleavePullBatch();
+                b.Nv = nv;
+                b.Due = Time.time + 0.1f;
+                _cleavePullOut[key] = b;
+            }
+            b.Point = wavePoint;
+            b.Mask = solidMask;
+            b.Step += step;
+            b.Last = Time.time;
+        }
+
+        private void SendCleavePull(CleavePullBatch b)
+        {
+            float step = Mathf.Min(b.Step, 0.75f);
+            b.Step = 0f;
+            b.Due = Time.time + 0.1f;
+            if (step <= 0.001f || b.Nv == null || !b.Nv.IsValid()) return;
+            RegisterCleavePullRpc();
+            ZDO zdo = b.Nv.GetZDO();
+            if (ZRoutedRpc.instance == null || zdo == null) return;
             ZPackage pkg = new ZPackage();
             pkg.Write(zdo.m_uid);
-            pkg.Write(wavePoint.x); pkg.Write(wavePoint.y); pkg.Write(wavePoint.z);
-            pkg.Write(solidMask);
+            pkg.Write(b.Point.x); pkg.Write(b.Point.y); pkg.Write(b.Point.z);
+            pkg.Write(b.Mask);
             pkg.Write(step);
             ZRoutedRpc.instance.InvokeRoutedRPC(zdo.GetOwner(), CleavePullRpc, pkg);
         }
@@ -2513,12 +2530,47 @@ namespace AlbedosCustomClassesAdvanced
                 GameObject go = ZNetScene.instance != null ? ZNetScene.instance.FindInstance(id) : null;
                 Character c = go != null ? go.GetComponent<Character>() : null;
                 if (c == null || c.IsDead()) return;
-                ZNetView nv = c.GetComponent<ZNetView>();
-                if (nv == null || !nv.IsValid() || !nv.IsOwner()) return;
-                int cid = c.GetInstanceID(), lastFrame;
-                if (_cleavePullFrame.TryGetValue(cid, out lastFrame) && lastFrame == Time.frameCount) return;   // same dedupe as the local path
-                _cleavePullFrame[cid] = Time.frameCount;
-                CleavePullStep(c, wp, mask, Mathf.Min(step, 0.75f));
+                int cid = c.GetInstanceID();
+                CleavePullBatch b;
+                if (!_cleavePullIn.TryGetValue(cid, out b)) { b = new CleavePullBatch(); _cleavePullIn[cid] = b; }
+                b.Target = c;
+                b.Point = wp;
+                b.Mask = mask;
+                b.Step += Mathf.Min(step, 0.75f);
+            }
+            catch (Exception) { }
+        }
+
+        // Update: flush due outgoing batches (incl. enemies that left the wave), apply each inbox sum once.
+        private void UpdateCleavePullNet()
+        {
+            try
+            {
+                if (_cleavePullOut.Count > 0)
+                {
+                    _cleavePullKeys.Clear();
+                    _cleavePullKeys.AddRange(_cleavePullOut.Keys);
+                    for (int i = 0; i < _cleavePullKeys.Count; i++)
+                    {
+                        CleavePullBatch b = _cleavePullOut[_cleavePullKeys[i]];
+                        if (b.Step > 0f && Time.time >= b.Due) SendCleavePull(b);
+                        if (b.Step <= 0f && Time.time - b.Last > 0.5f) _cleavePullOut.Remove(_cleavePullKeys[i]);
+                    }
+                }
+                if (_cleavePullIn.Count > 0)
+                {
+                    _cleavePullKeys.Clear();
+                    _cleavePullKeys.AddRange(_cleavePullIn.Keys);
+                    for (int i = 0; i < _cleavePullKeys.Count; i++)
+                    {
+                        CleavePullBatch b = _cleavePullIn[_cleavePullKeys[i]];
+                        _cleavePullIn.Remove(_cleavePullKeys[i]);
+                        if (b.Target == null || b.Target.IsDead()) continue;
+                        ZNetView nv = b.Target.GetComponent<ZNetView>();
+                        if (nv == null || !nv.IsValid() || !nv.IsOwner()) continue;
+                        CleavePullStep(b.Target, b.Point, b.Mask, Mathf.Min(b.Step, 0.75f));
+                    }
+                }
             }
             catch (Exception) { }
         }

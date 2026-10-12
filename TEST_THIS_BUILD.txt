@@ -1,3 +1,3 @@
-v0.25.147 test:
-1. Starfall guide hidden/shown by Show Targeting Guides with VFX on AND off.
-2. Multiplayer: Crescent pull on remote-owned enemies smooth, low traffic.
+v0.25.148 test (multiplayer, 2 clients):
+1. Crescent pull on remote-owned enemies: consistent strength, also with two casters / lag.
+2. Enemy leaving the wave stops moving within ~0.1 s; next cast does not jerk it.
