@@ -1,0 +1,11 @@
+Aethelborn Ascended v0.25.141 - Ghost Players (baseline v0.25.140, reviewer corrections)
+
+1. PLAYERS ARE IGNORED BY OFFENSIVE SKILL COLLISIONS
+- Player colliders are identified through their parent Player (any child collider): caster and every other player.
+- Applied to Ranger + Sorcerer skill projectile / aim checks (IsPlayerCollider), the shared crosshair ray (AlbedoAimUtility) and the Punishing Bomb flight. Healing / buffs / normal player-world collision untouched.
+- RangerPlugin.ArrowFlight: the centre-ray-only solid filter for arrows > 0.4 m is REMOVED. Only the launch overlap (sphere starting inside the ground, distance 0) is ignored while the arrow clears the first 2r + 1 m; terrain, walls, structures and enemies stop it normally after that.
+
+2. NATIVE PAIRED WEAPONS
+- A weapon is paired only by attack metadata: two-handed item whose PRIMARY attack animation is a "dual*" set. Name guesses (scimitar / cleaver) and "registered by Warfare / Wizardry" are removed.
+- Primary attacks use the existing dual-wield NACC sequence + timing (UsesDualChain); heavies / secondaries untouched; no forced chain levels, no off-hand strike, no dual controller swap for native paired items.
+- Each two-handed weapon prints one log line "[NACC] two-handed weapon (paired=...): name prefab skill anim secondary chainLevels" - send me the lines for Scimitar Swords / Hellblade Cleavers if they do not enter NACC (their real metadata decides the rule).
