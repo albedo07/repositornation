@@ -1,0 +1,3 @@
+Aethelborn Ascended v0.25.140 - Committed Casts
+- Sky Summons (Glacial Descent, Goddess Relic, Lightning/Holy Relic, Heaven's Judgement, Lightning Tempest, Heaven's Crucible, Sky Arrow, Starfall, Hammer call) and Angel Comet no longer turn the body to the crosshair during their wind up: the aim is locked at cast.
+- Charge skills (Meteor Fall, Elemental Cataclysm) keep aiming. Everything else from v0.25.139 unchanged.

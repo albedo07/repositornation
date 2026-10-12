@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.139";
+        public const string ModVersion = "0.25.140";
 
         internal static DragonCombatPlugin Instance;
 
@@ -3780,7 +3780,12 @@ namespace DragonsAltarCombat
             CheckAnimationClass(player);
             // Non-charging Sky Summons lock their target at cast time; never turn them during the delay.
             // v0.25.139 (user): every skill with a wind up of 1 s or more faces the crosshair (Sky Summons included).
-            if (clip != "olympic_hero_brutal") FollowAimForWindup(player, windup);
+            // v0.25.140 (user): Sky Summons and Angel Comet are committed - the aim is locked at cast, the body never follows the crosshair.
+            bool committed = clip == "sorc_glacial" || clip == "sorc_glacial_asc" ||
+                clip == "cleric_goddess" || clip == "cleric_relic" || clip == "cleric_holy_relic" ||
+                clip == "cleric_judgement" || clip == "cleric_tempest" || clip == "cleric_crucible" ||
+                clip == "rg_sky" || clip == "rg_starfall" || clip == "cleric_hammer_call" || clip == "angel_comet";
+            if (!committed && clip != "olympic_hero_brutal") FollowAimForWindup(player, windup);
             if (DragonCombatPlugin.Instance != null && !DragonCombatPlugin.Instance.EnableSkillAnimations.Value) return;
             DragonClipKey[] keys = HorizonWalkerMoving(player) ? MovingCastClip() : BowClip(player, clip);   // v0.25.85 Ranger bow layer, v0.25.86 HW moving casts
             if (!hold && (clip == "warrior_impact_wave" || clip == "sm_crescent" || clip == "sm_crescent_asc"))

@@ -1,4 +1,4 @@
-v0.25.139 - Face Aim
+v0.25.140 - Committed Casts
 1. Ascended Astral Greatblade: turn the camera between slams - body + blade follow the aim every slam.
 2. Any 1 s+ wind up skill (Relics, Glacial, Hammer...): body turns to the crosshair during the wind up.
 3. Scimitar Swords / Hellblade Cleavers: normal attacks follow our chain (even intervals), heavy attack unchanged. Check LogOutput for "[NACC] paired weapon".
