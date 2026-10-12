@@ -198,6 +198,30 @@ static class T
             // genuine finisher (not rejected) still locks
             int h2 = 4; bool fin2 = h2 == 4; Check(fin2, "genuine finisher lockout kept");
         }
+        // v0.25.160: trigger path ownership for 2HDW (scimitar / Hellblade cleaver / paired knives)
+        {
+            foreach (string w in new string[] { "dual_scimitar", "dual_cleaver", "dual_knives_tw" })
+            {
+                var kg = new Dictionary<string, string>();                       // Warfare table: native trigger -> its own trigger
+                for (int i = 0; i < 3; i++) kg[w + i] = w + "_kg" + i;
+                string ours = "paired", ctrl = "paired";
+                for (int lvl = 0; lvl < 3; lvl++)
+                {
+                    // OLD order (Therzie prefix first): renamed before ours -> ours bails -> native
+                    string nameOld = kg[w + lvl]; bool oursSeesOld = nameOld.StartsWith(w) && char.IsDigit(nameOld[nameOld.Length - 1]) && nameOld.Length == w.Length + 1;
+                    Check(!oursSeesOld, w + " old order: our prefix could not see the renamed trigger (the cause)");
+                    // NEW: ours first (priority 100000) -> carrier; foreign prefix renames/swaps -> RPC prefix (last) restores
+                    string name = "swing_axe" + lvl;           // ours
+                    string mappedByForeign; if (kg.TryGetValue(name, out mappedByForeign)) name = mappedByForeign;   // carrier not in table: unchanged
+                    ctrl = "warfare";                          // foreign swaps controller anyway
+                    if (name != "swing_axe" + lvl) name = "swing_axe" + lvl;
+                    if (ctrl != ours) ctrl = ours;             // RouteRpcPrefix
+                    Check(name == "swing_axe" + lvl && ctrl == ours, w + " swing " + lvl + " reaches the animator as SBDW carrier on our controller");
+                    // fallback recognition when a foreign prefix still ran first
+                    Check(kg[w + lvl] == w + "_kg" + lvl, w + " renamed trigger maps back to level " + lvl);
+                }
+            }
+        }
         Console.WriteLine(fails == 0 ? "ALL PASS" : fails + " FAILED");
         Environment.Exit(fails == 0 ? 0 : 1);
     }

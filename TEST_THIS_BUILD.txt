@@ -10,3 +10,4 @@ v0.25.156: spam Mouse1 fast with 1H, SBDW, 2HDW: chain 1-2-1-2-3 and the 2->1 st
 v0.25.157: scimitar, Hellblade cleaver, paired knives (Mercenary): 1-2-1-2-3, then repeat with a skill between every swing. Check LogOutput.log for "WARNING [2HDW]" (must be absent). Heavy attack (Mouse2) native.
 v0.25.158: scimitar / Hellblade cleaver / paired knives (Mercenary) with Warfare loaded: every swing = SBDW clips, 1-2-1-2-3, skills between swings. A blocked swing + "WARNING [2HDW] ... attack rejected" means repair failed (send the line). Heavy attack native.
 v0.25.159: if "controller replaced before trigger" shows in the log, that click must cost nothing and the chain must not advance.
+v0.25.160: scimitar / Hellblade cleaver / paired knives (Mercenary): primary chain must look and time exactly like SBDW. Send the "[2HDW] trigger path:" lines from LogOutput.log.

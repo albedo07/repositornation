@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.159";
+        public const string ModVersion = "0.25.160";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1219,8 +1219,26 @@ namespace DragonsAltarCombat
             MethodInfo st = z == null ? null : z.GetMethod("SetTrigger", all, null, new Type[] { typeof(string) }, null);
             if (st != null)
             {
-                try { PatchWithHarmony(st, new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("ComboTriggerPrefix", BindingFlags.Static | BindingFlags.NonPublic)), null); n++; }
+                // v0.25.160: above every other mod's Priority.First. Equal priorities run in registration order and Therzie's
+                // plugins ("Therzie.*" sorts before our lower-case GUIDs) register first, so their SetTrigger prefix used to see -
+                // and redirect - the 2HDW swing trigger before ours.
+                HarmonyMethod ctp = new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("ComboTriggerPrefix", BindingFlags.Static | BindingFlags.NonPublic));
+                ctp.priority = 100000;
+                // postfix: covers a SetTrigger that drives the animator directly (no RPC) and a foreign prefix that swapped the controller
+                try { PatchWithHarmony(st, ctp, new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("RouteRpcPostfix", BindingFlags.Static | BindingFlags.NonPublic))); n++; }
                 catch (Exception ex) { Logger.LogWarning("Combo trigger patch: " + ex.Message); }
+            }
+            // v0.25.160: the trigger reaches the animator in ZSyncAnimation.RPC_SetTrigger (invoked for everybody, the local player
+            // included). A routed 2HDW swing keeps OUR controller and OUR carrier trigger through it: prefix runs last of all prefixes
+            // (restores name + controller another prefix changed), postfix re-asserts both if something swapped them inside.
+            MethodInfo[] zm = z == null ? new MethodInfo[0] : z.GetMethods(all);
+            for (int i = 0; i < zm.Length; i++)
+            {
+                if (zm[i].Name != "RPC_SetTrigger") continue;
+                HarmonyMethod rp = new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("RouteRpcPrefix", BindingFlags.Static | BindingFlags.NonPublic));
+                rp.priority = 0;
+                try { PatchWithHarmony(zm[i], rp, new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("RouteRpcPostfix", BindingFlags.Static | BindingFlags.NonPublic))); n++; }
+                catch (Exception ex) { Logger.LogWarning("Route RPC patch: " + ex.Message); }
             }
             return n;
         }
@@ -1649,15 +1667,93 @@ namespace DragonsAltarCombat
 
         // The swing trigger Valheim fires inside Attack.Start is rewritten to our swing. A backwards step
         // (swing 1 after swing 2) cannot be reached by trigger, so it cross-fades into the learned state.
+        // v0.25.160 routed 2HDW swing in flight: carrier trigger + our paired controller, valid for this frame only.
+        private static string _routeTrigger;
+        private static Animator _routeAnimator;
+        private static RuntimeAnimatorController _routeCtrl;
+        private static int _routeFrame = -10;
+
+        // One line per distinct interception, so the log names exactly where the native animation came from.
+        private static readonly HashSet<string> _routeLogged = new HashSet<string>();
+        private static void RouteLog(string what)
+        {
+            if (_routeLogged.Add(what) && Instance != null) Instance.LogInfo("[Immortal Heroes] [2HDW] trigger path: " + what + " - restored SBDW");
+        }
+
+        private static Animator RouteAnimatorOf(object zanim)
+        {
+            Component c = zanim as Component;
+            return c == null ? null : c.GetComponentInChildren<Animator>();
+        }
+
+        private static bool RouteLive(Animator a)
+        {
+            return _routeTrigger != null && a != null && a == _routeAnimator && _routeCtrl != null && Time.frameCount - _routeFrame <= 1;
+        }
+
+        private static void RouteRpcPrefix(object __instance, object[] __args)
+        {
+            try
+            {
+                Animator a = RouteAnimatorOf(__instance);
+                if (!RouteLive(a) || __args == null) return;
+                for (int i = 0; i < __args.Length; i++)
+                    if (__args[i] is string && !string.Equals((string)__args[i], _routeTrigger, StringComparison.Ordinal))
+                    { RouteLog("RPC_SetTrigger name changed to '" + (string)__args[i] + "'"); __args[i] = _routeTrigger; }
+                if (a.runtimeAnimatorController != _routeCtrl)
+                {
+                    RouteLog("controller swapped to '" + (a.runtimeAnimatorController == null ? "none" : a.runtimeAnimatorController.name) + "' before RPC_SetTrigger");
+                    a.runtimeAnimatorController = _routeCtrl; a.Update(0f);
+                }
+            }
+            catch (Exception) { }
+        }
+
+        private static void RouteRpcPostfix(object __instance)
+        {
+            try
+            {
+                Animator a = RouteAnimatorOf(__instance);
+                if (!RouteLive(a)) return;
+                string trig = _routeTrigger;
+                _routeTrigger = null;
+                if (a.runtimeAnimatorController != _routeCtrl)
+                {
+                    // swapped inside the call: put ours back and fire the carrier on it (the trigger set on the foreign controller is gone)
+                    RouteLog("controller swapped to '" + (a.runtimeAnimatorController == null ? "none" : a.runtimeAnimatorController.name) + "' inside SetTrigger");
+                    a.runtimeAnimatorController = _routeCtrl;
+                    a.Update(0f);
+                    a.SetTrigger(trig);
+                }
+            }
+            catch (Exception) { }
+        }
+
+        // The swing level of `name`: <base><n>, or the trigger an external (Warfare / Wizardry) table maps <base><n> to.
+        private static bool ComboLevelOf(string name, out int level)
+        {
+            level = -1;
+            if (name.StartsWith(_comboBase, StringComparison.Ordinal))
+            {
+                string digits = name.Substring(_comboBase.Length);
+                return digits.Length > 0 && int.TryParse(digits, out level);
+            }
+            for (int i = 0; i < 10; i++)
+            {
+                string mapped;
+                if (DragonCombat.ExternalTriggerName(_comboBase + i.ToString(), out mapped) && string.Equals(mapped, name, StringComparison.Ordinal))
+                { level = i; RouteLog("swing trigger already renamed to '" + name + "' by an earlier SetTrigger prefix"); return true; }
+            }
+            return false;
+        }
+
         private static bool ComboTriggerPrefix(object __instance, ref string __0)
         {
             if (!_comboInStart || string.IsNullOrEmpty(__0) || string.IsNullOrEmpty(_comboBase)) return true;
             try
             {
-                if (!__0.StartsWith(_comboBase, StringComparison.Ordinal)) return true;
-                string digits = __0.Substring(_comboBase.Length);
                 int level;
-                if (digits.Length == 0 || !int.TryParse(digits, out level)) return true;
+                if (!ComboLevelOf(__0, out level)) return true;
                 Component c = __instance as Component;
                 Animator a = c == null ? null : c.GetComponentInChildren<Animator>();
                 Player p = c == null ? null : c.GetComponent<Player>();
@@ -1717,6 +1813,7 @@ namespace DragonsAltarCombat
                     }
                 }
                 __0 = target;
+                if (routed && a != null) { _routeTrigger = target; _routeAnimator = a; _routeCtrl = a.runtimeAnimatorController; _routeFrame = Time.frameCount; }
                 DragonCombat.LearnState(a, target);
             }
             catch (Exception) { }
@@ -4418,6 +4515,7 @@ namespace DragonsAltarCombat
             }
             trigger = null; return false;
         }
+        public static bool ExternalTriggerName(string name, out string trigger) { return ExternalTrigger(name, out trigger); }
         public static bool IsExternalAnimation(string name)
         {
             string t; return !string.IsNullOrEmpty(name) && (ExternalTrigger(name, out t) || ExternalTrigger(name + "0", out t));
