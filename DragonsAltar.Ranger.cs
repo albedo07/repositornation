@@ -29,6 +29,7 @@ namespace DragonsAltarRanger
     {
         public Vector3 Position;
         public float ExpireAt;
+        public bool StunAscended;
         public GameObject Visual;
     }
 
@@ -823,7 +824,7 @@ namespace DragonsAltarRanger
                 new Color(0.70f, 1f, 0.55f, 1f), ascended ? endWidth * 0.5f : 0f,
                 delegate(Character enemy)
                 {
-                    Deal(player, enemy, d, _paDamage.Value / 100f * power, 4f, false);
+                    Deal(player, enemy, d, _paDamage.Value / 100f * power, 4f, false, "piercing_arrow", "Attack 1", false, false, null);
                     if (first) { DragonCombat.ApplyCripple(enemy, _paCripple.Value); first = false; }
                     if (ascended) DragonCombat.ApplyExpose(enemy, _paAscExpose.Value);
                     return true;
@@ -956,9 +957,9 @@ namespace DragonsAltarRanger
             int count = Mathf.Max(1, Mathf.RoundToInt(ascended ? _tsAscArrows.Value : _tsArrows.Value));
             bool[] killed = new bool[1];
             FanPierce(player, count, _tsFan.Value, DragonCombat.M(_tsRange.Value), new Color(0.55f, 1f, 0.75f, 1f),
-                delegate(Character enemy)
+                delegate(Character enemy, int arrow)
                 {
-                    Deal(player, enemy, d, mult, 6f, false);
+                    Deal(player, enemy, d, mult, 6f, false, "tumble_shot", DragonCombat.StunAttack(arrow + 1), false, false, ascended);
                     if (ascended && enemy.IsDead() && !killed[0])
                     {
                         killed[0] = true;
@@ -980,6 +981,7 @@ namespace DragonsAltarRanger
             while (_traps.Count >= max) RemoveTrap(0);
             SnareTrap trap = new SnareTrap();
             trap.Position = point;
+            trap.StunAscended = DragonCombat.AscendedProvider != null && DragonCombat.AscendedProvider(player, "snare_trap");
             trap.ExpireAt = Time.time + Mathf.Max(1f, _snLifetime.Value);
             if (_enableVfx.Value) trap.Visual = CreateTrapVisual(point, DragonCombat.M(_snTrigger.Value));
             _traps.Add(trap);
@@ -999,8 +1001,8 @@ namespace DragonsAltarRanger
                 for (int k = 0; k < inside.Count; k++)
                 {
                     Character enemy = inside[k];
-                    Deal(player, enemy, d, mult, 0f, false);
-                    if (DragonCombat.IsSmallEnemy(enemy)) DragonCombat.Stun(enemy, trap.Position);
+                    Deal(player, enemy, d, mult, 0f, false, "snare_trap", "Attack 1", true, true, trap.StunAscended);
+                    if (DragonCombat.IsSmallEnemy(enemy)) { if (DragonCombat.SkillStunEnabled(player, "snare_trap", "Attack 1", true, trap.StunAscended)) DragonCombat.Stun(enemy, trap.Position); }
                     DragonCombat.ApplyCripple(enemy, _snCripple.Value);
                 }
                 if (_enableVfx.Value) { StartCoroutine(RingVfx(trap.Position, DragonCombat.M(_snTrigger.Value), new Color(0.85f, 0.95f, 0.45f, 1f), 0.5f)); Vector3 tp = trap.Position; float tr = DragonCombat.M(_snTrigger.Value); DragonCombat.RunVfx(delegate { DragonVfx.Burst(tp + Vector3.up * 0.3f, new Color(0.85f, 0.95f, 0.45f, 1f), 40, 7f, 0.25f, 0.5f, 0.6f); DragonVfx.Vortex(null, tp + Vector3.up * 0.5f, new Color(0.60f, 0.90f, 0.35f, 1f), tr, 0.6f); DragonVfx.DustRing(tp, tr); }); }   // v0.25.58
@@ -1033,14 +1035,15 @@ namespace DragonsAltarRanger
             int fans = ascended ? 2 : 1;
             for (int f = 0; f < fans; f++)
             {
+                int stunFanOffset = f * Mathf.Max(1, Mathf.RoundToInt(_gvArrows.Value));
                 if (player == null || player.IsDead()) yield break;
                 RangerArrowDamage d = ArrowDamage(player);
                 float mult = _gvDamage.Value / 100f * DragonCombat.GetSkillPower(player, "gale_volley");
                 FanPierce(player, Mathf.Max(1, Mathf.RoundToInt(_gvArrows.Value)), _gvFan.Value, DragonCombat.M(_gvRange.Value),
                     new Color(0.55f, 1f, 0.90f, 1f),
-                    delegate(Character enemy)
+                    delegate(Character enemy, int arrow)
                     {
-                        Deal(player, enemy, d, mult, DragonCombat.IsSmallEnemy(enemy) ? _gvPush.Value : 4f, false);
+                        Deal(player, enemy, d, mult, DragonCombat.IsSmallEnemy(enemy) ? _gvPush.Value : 4f, false, "gale_volley", DragonCombat.StunAttack(stunFanOffset + arrow + 1), false, false, ascended);
                     });
                 Shoot(player, null);
                 if (f + 1 < fans) yield return new WaitForSeconds(Mathf.Max(0.05f, _gvAscDelay.Value));
@@ -1111,7 +1114,7 @@ namespace DragonsAltarRanger
                     List<Character> hits = GetSphereTargets(player, pos, radius);
                     for (int i = 0; i < hits.Count; i++)
                     {
-                        Deal(player, hits[i], d, mult, 0f, false);
+                        Deal(player, hits[i], d, mult, 0f, false, "cyclone_arrow", "Attack 1", false, false, ascended);
                         if (ascended) DragonCombat.ApplyFrost(hits[i], Mathf.Max(0.5f, _cyAscFrost.Value));
                         else if (DragonCombat.IsSmallEnemy(hits[i])) PullToward(hits[i], pos, _cyPull.Value);
                         OnSkillHit(player);
@@ -1230,7 +1233,7 @@ namespace DragonsAltarRanger
             float mult = _sdDamage.Value / 100f * DragonCombat.GetSkillPower(player, "swallow_dive");
             List<Character> hits = PathTargets(player, start, end, DragonCombat.M(_sdRadius.Value));
             RangerArrowDamage d = ArrowDamage(player);
-            for (int i = 0; i < hits.Count; i++) { Deal(player, hits[i], d, mult, 4f, false); OnSkillHit(player); }
+            for (int i = 0; i < hits.Count; i++) { Deal(player, hits[i], d, mult, 4f, false, "swallow_dive", "Attack 1", false, false, ascended); OnSkillHit(player); }
             if (_enableVfx.Value)
             {
                 LineVfx(start + Vector3.up, end + Vector3.up, new Color(0.55f, 1f, 0.90f, 0.95f), 0.25f, 0.35f);
@@ -1242,7 +1245,7 @@ namespace DragonsAltarRanger
                 yield return new WaitForSeconds(Mathf.Max(0.05f, _sdAscDelay.Value));
                 if (player == null) yield break;
                 List<Character> again = PathTargets(player, start, end, DragonCombat.M(_sdRadius.Value));
-                for (int i = 0; i < again.Count; i++) Deal(player, again[i], d, mult * _sdAscPercent.Value / 100f, 2f, false);
+                for (int i = 0; i < again.Count; i++) Deal(player, again[i], d, mult * _sdAscPercent.Value / 100f, 2f, false, "swallow_dive", "Aftershock", false, false, ascended);
                 if (_enableVfx.Value) LineVfx(start + Vector3.up, end + Vector3.up, new Color(0.85f, 1f, 1f, 0.95f), 0.20f, 0.25f);
             }
         }
@@ -1313,7 +1316,7 @@ namespace DragonsAltarRanger
                     nextTick = Time.time + interval;
                     fired++;
                     List<Character> hits = GetSphereTargets(player, point, radius);
-                    for (int i = 0; i < hits.Count; i++) { Deal(player, hits[i], d, mult, 2f, false); OnSkillHit(player); }
+                    for (int i = 0; i < hits.Count; i++) { Deal(player, hits[i], d, mult, 2f, false, "skyfall_barrage", DragonCombat.StunAttack(fired), false, false, ascended); OnSkillHit(player); }
                     if (_enableVfx.Value)
                     {
                         for (int k = 0; k < 6; k++)
@@ -1358,9 +1361,9 @@ namespace DragonsAltarRanger
                     List<Character> hits = GetSphereTargets(player, land, slamR);
                     for (int i = 0; i < hits.Count; i++)
                     {
-                        Deal(player, hits[i], blunt, slam, 20f, true);
+                        Deal(player, hits[i], blunt, slam, 20f, true, "skyfall_barrage", "Landing Slam", true, true, true);
                         if (IsBossTarget(hits[i])) DragonCombat.ApplyCripple(hits[i], _sbAscCripple.Value);
-                        else DragonCombat.Stun(hits[i], land);
+                        else { if (DragonCombat.SkillStunEnabled(player, "skyfall_barrage", "Landing Slam", true, true)) DragonCombat.Stun(hits[i], land); }
                         OnSkillHit(player);
                     }
                     if (_enableVfx.Value) { StartCoroutine(RingVfx(land, slamR, new Color(0.85f, 1f, 0.80f, 1f), 0.5f)); StartCoroutine(RingVfx(land, slamR * 0.5f, new Color(1f, 1f, 1f, 1f), 0.3f)); Vector3 sl = land; float slr = slamR; DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(sl, new Color(0.70f, 1f, 0.80f, 1f), slr, 2f); }); }   // v0.25.58
@@ -1432,8 +1435,8 @@ namespace DragonsAltarRanger
             List<Character> hits = GetSphereTargets(player, land, radius);
             for (int i = 0; i < hits.Count; i++)
             {
-                Deal(player, hits[i], blunt, mult, 15f, true);
-                DragonCombat.Stun(hits[i], land);   // Small + Big (Bosses are never stunned)
+                Deal(player, hits[i], blunt, mult, 15f, true, "ricochet_arrow", "Landing Slam", true, true, ascended);
+                { if (DragonCombat.SkillStunEnabled(player, "ricochet_arrow", "Landing Slam", true, ascended)) DragonCombat.Stun(hits[i], land); }   // Small + Big (Bosses are never stunned)
                 OnSkillHit(player);
             }
             if (_enableVfx.Value)
@@ -1475,7 +1478,7 @@ namespace DragonsAltarRanger
                         for (int i = 0; i < inC.Count; i++)
                         {
                             if (!done.Add(inC[i].GetInstanceID())) continue;
-                            Deal(player, inC[i], pierce, vm, 4f, false);
+                            Deal(player, inC[i], pierce, vm, 4f, false, "ricochet_arrow", "Circle " + (c + 1).ToString(), false, false, ascended);
                             OnSkillHit(player);
                         }
                         if (_enableVfx.Value)
@@ -1516,6 +1519,7 @@ namespace DragonsAltarRanger
 
         private IEnumerator FuriousWindsRoutine(Player player, bool ascended)
         {
+            int stunPulse = 0;
             ShowMessage("FURIOUS WINDS");
             float duration = Mathf.Max(0.5f, ascended ? _fwAscDuration.Value : _fwDuration.Value);
             float radius = DragonCombat.M(ascended ? _fwAscRadius.Value : _fwRadius.Value);
@@ -1577,6 +1581,7 @@ namespace DragonsAltarRanger
                 BlowAwayProjectiles(player, c, barrier);
                 if (Time.time >= nextTick)
                 {
+                stunPulse++;
                     nextTick = Time.time + Mathf.Max(0.05f, _fwInterval.Value);
                     for (int i = 0; i < near.Count; i++)
                     {
@@ -1586,7 +1591,7 @@ namespace DragonsAltarRanger
                         if (off.magnitude > radius) continue;
                         RangerArrowDamage cut = new RangerArrowDamage();
                         cut.Slash = slash;
-                        Deal(player, enemy, cut, 1f, 0f, false);
+                        Deal(player, enemy, cut, 1f, 0f, false, "furious_winds", DragonCombat.StunAttack(stunPulse), false, false, ascended);
                         int id = enemy.GetInstanceID();
                         int stacks;
                         _fwStacks.TryGetValue(id, out stacks);
@@ -1613,7 +1618,7 @@ namespace DragonsAltarRanger
                 List<Character> burst = GetSphereTargets(player, player.transform.position, radius + DragonCombat.M(1.5f));
                 for (int i = 0; i < burst.Count; i++)
                 {
-                    Deal(player, burst[i], d, _fwAscBurst.Value / 100f * power, DragonCombat.IsSmallEnemy(burst[i]) ? 40f : 8f, false);
+                    Deal(player, burst[i], d, _fwAscBurst.Value / 100f * power, DragonCombat.IsSmallEnemy(burst[i]) ? 40f : 8f, false, "furious_winds", "End Burst", false, false, ascended);
                     if (DragonCombat.IsSmallEnemy(burst[i])) Launch(burst[i], 9f);
                 }
                 if (_enableVfx.Value) { StartCoroutine(RingVfx(player.transform.position, radius, new Color(0.55f, 1f, 0.70f, 1f), 0.8f)); Vector3 fw = player.transform.position; float fwr = radius; DragonCombat.RunVfx(delegate { DragonVfx.GroundImpact(fw, new Color(0.55f, 1f, 0.70f, 1f), fwr, 1.4f); DragonVfx.SlashStreaks(fw + Vector3.up, new Color(0.55f, 1f, 0.70f, 1f), fwr, 10, 0.4f); }); }   // v0.25.58
@@ -2417,6 +2422,7 @@ namespace DragonsAltarRanger
             while (player != null && !player.IsDead() && (DragonCombat.IsTreeSkillKeyHeld("ballista_shot") || Time.time - started < 0.15f))
             {
                 DragonCombat.LockSkill(player, 0.15f);
+                if (Time.time - started >= 1f) DragonCombat.FaceAimNow(player);
                 DragonCombat.SkillBowHoldUntil = Time.time + 0.25f;
                 if (_ballistaStacks < 3 && Time.time >= _ballistaNextStack)
                 {
@@ -2443,7 +2449,7 @@ namespace DragonsAltarRanger
                 delegate(Character enemy)
                 {
                     bool small = DragonCombat.IsSmallEnemy(enemy);
-                    Deal(player, enemy, d, mult, small ? 30f : 6f, !small);
+                    Deal(player, enemy, d, mult, small ? 30f : 6f, !small, "ballista_shot", "Attack 1", false, false, ascended);
                     // v0.24.2 Ascended: the after-effect happens on hit (a piercing shot has no one left at its end).
                     if (ascended && stacks >= 3) BallistaShockwave(player, enemy, d, mult * _bsAscLinePercent.Value / 100f);
                     return true;
@@ -2472,7 +2478,7 @@ namespace DragonsAltarRanger
             for (int i = 0; i < hits.Count; i++)
             {
                 if (hits[i] == source) continue;
-                Deal(player, hits[i], d, mult, 10f, false);
+                Deal(player, hits[i], d, mult, 10f, false, "ballista_shot", "Shockwave", false, false, true);
             }
             if (_enableVfx.Value) { StartCoroutine(RingVfx(at, radius, new Color(0.85f, 1f, 0.70f, 0.9f), 0.4f)); Vector3 ba = at; float bar = radius; DragonCombat.RunVfx(delegate { DragonVfx.GroundImpact(ba, new Color(0.85f, 1f, 0.70f, 1f), bar, 0.8f); }); }   // v0.25.58
         }
@@ -2491,6 +2497,7 @@ namespace DragonsAltarRanger
 
         private IEnumerator ArrowRainRoutine(Player player, Vector3 point, bool ascended)
         {
+            int stunPulse = 0;
             float radius = DragonCombat.M(ascended ? _arAscRadius.Value : _arRadius.Value);
             float end = Time.time + Mathf.Max(0.5f, _arDuration.Value);
             RangerArrowDamage d = ArrowDamage(player);
@@ -2498,11 +2505,12 @@ namespace DragonsAltarRanger
             Dictionary<int, int> hits = new Dictionary<int, int>();
             while (Time.time < end && player != null)
             {
+                stunPulse++;
                 List<Character> inside = GetSphereTargets(player, point, radius);
                 for (int i = 0; i < inside.Count; i++)
                 {
                     Character enemy = inside[i];
-                    Deal(player, enemy, d, mult, 0f, false);
+                    Deal(player, enemy, d, mult, 0f, false, "arrow_rain", DragonCombat.StunAttack(stunPulse), false, false, ascended);
                     DragonCombat.ApplyCripple(enemy, _arCripple.Value);
                     if (ascended)
                     {
@@ -2566,7 +2574,7 @@ namespace DragonsAltarRanger
 
         private void Pin(Player player, Character target, RangerArrowDamage d, float mult, bool ascended)
         {
-            Deal(player, target, d, mult, 0f, false);
+            Deal(player, target, d, mult, 0f, false, "pinning_shot", "Attack 1", false, false, ascended);
             OnSkillHit(player);
             float seconds;
             if (IsBossTarget(target))
@@ -2600,7 +2608,7 @@ namespace DragonsAltarRanger
             blast.Blunt = d.Total() * 0.5f;
             float m = _psAscExplodePercent.Value / 100f * DragonCombat.GetSkillPower(player, "pinning_shot");
             List<Character> hits = GetSphereTargets(player, at, radius);
-            for (int i = 0; i < hits.Count; i++) { Deal(player, hits[i], blast, m, 8f, false); OnSkillHit(player); }
+            for (int i = 0; i < hits.Count; i++) { Deal(player, hits[i], blast, m, 8f, false, "pinning_shot", "Delayed Explosion", false, false, true); OnSkillHit(player); }
             if (!target.IsDead()) DragonCombat.ApplyExpose(target, Mathf.Max(0.5f, _psAscExposeAfter.Value));
             if (_enableVfx.Value)
             {
@@ -2673,6 +2681,7 @@ namespace DragonsAltarRanger
             while (player != null && !player.IsDead() && (DragonCombat.IsTreeSkillKeyHeld("explosive_arrow") || Time.time - started < 0.15f))
             {
                 DragonCombat.LockSkill(player, 0.15f);
+                if (Time.time - started >= 1f) DragonCombat.FaceAimNow(player);
                 DragonCombat.SkillBowHoldUntil = Time.time + 0.25f;
                 if (_exStacks < maxStacks && Time.time >= _exNextStack)
                 {
@@ -2703,7 +2712,7 @@ namespace DragonsAltarRanger
             DragonCombat.LockSkill(player, (shots - 1) * gap + 0.4f);
             for (int i = 0; i < shots && player != null && !player.IsDead(); i++)
             {
-                FireExplosive(player, scale, ascended, i == 0 ? (shots > 1 ? "Explosive Arrow x" + shots : "Explosive Arrow") : null, points, dirs);
+                FireExplosive(player, scale, ascended, i == 0 ? (shots > 1 ? "Explosive Arrow x" + shots : "Explosive Arrow") : null, points, dirs, DragonCombat.StunAttack(i + 1));
                 if (i + 1 < shots) yield return new WaitForSeconds(gap);
             }
             float lastShot = Time.time;
@@ -2732,10 +2741,10 @@ namespace DragonsAltarRanger
                 }
             yield return new WaitForSeconds(0.3f);   // the bombs fall
             if (player == null) yield break;
-            for (int p = 0; p < points.Count; p++) ClusterHit(player, points[p], dirs[p], blast, mult, r, ascended);
+            for (int p = 0; p < points.Count; p++) ClusterHit(player, points[p], dirs[p], blast, mult, r, ascended, "Cluster " + (p + 1).ToString());
         }
 
-        private void FireExplosive(Player player, float scale, bool ascended, string message, List<Vector3> points, List<Vector3> dirs)
+        private void FireExplosive(Player player, float scale, bool ascended, string message, List<Vector3> points, List<Vector3> dirs, string stunAttack = "Attack 1")
         {
             Vector3 origin = ShotOrigin(player);
             Vector3 dir = AimDir(player, origin);
@@ -2743,10 +2752,10 @@ namespace DragonsAltarRanger
             Shoot(player, message);
             StartCoroutine(ArrowFlight(player, origin, dir, DragonCombat.M(70f), DragonCombat.M(_eaRange.Value) * FocusRangeMultiplier(player), DragonCombat.M(0.35f), false,
                 new Color(1f, 0.55f, 0.25f, 1f), 0f, delegate(Character enemy) { return false; },
-                delegate(Vector3 at) { Explode(player, at, scale); points.Add(at); dirs.Add(dir); }));
+                delegate(Vector3 at) { Explode(player, at, scale, stunAttack); points.Add(at); dirs.Add(dir); }));
         }
 
-        private void Explode(Player player, Vector3 at, float scale)
+        private void Explode(Player player, Vector3 at, float scale, string stunAttack = "Attack 1")
         {
             if (player == null) return;
             float radius = DragonCombat.M(_eaRadius.Value);
@@ -2759,9 +2768,9 @@ namespace DragonsAltarRanger
             List<Character> hits = GetSphereTargets(player, at, radius);
             for (int i = 0; i < hits.Count; i++)
             {
-                Deal(player, hits[i], blast, mult, 12f, false);
+                Deal(player, hits[i], blast, mult, 12f, false, "explosive_arrow", stunAttack, true, true, null);
                 OnSkillHit(player);
-                if (DragonCombat.IsSmallEnemy(hits[i])) DragonCombat.Stun(hits[i], at);
+                if (DragonCombat.IsSmallEnemy(hits[i])) { if (DragonCombat.SkillStunEnabled(player, "explosive_arrow", stunAttack, true, null)) DragonCombat.Stun(hits[i], at); }
                 StartCoroutine(BurnRoutine(player, hits[i], total * mult * Mathf.Max(0f, _eaBurn.Value) / 100f, _eaBurnDuration.Value));
             }
             if (_enableVfx.Value)
@@ -2781,7 +2790,7 @@ namespace DragonsAltarRanger
         }
 
         // Cluster arrow bombs: three circles side by side (OOO) across the shot, on the blast.
-        private void ClusterHit(Player player, Vector3 at, Vector3 dir, RangerArrowDamage blast, float mult, float r, bool ascended)
+        private void ClusterHit(Player player, Vector3 at, Vector3 dir, RangerArrowDamage blast, float mult, float r, bool ascended, string stunAttack = "Attack 1")
         {
             Vector3[] circles = RowOfThree(GroundAt(at), dir, r);
             HashSet<int> done = new HashSet<int>();
@@ -2791,7 +2800,7 @@ namespace DragonsAltarRanger
                 for (int k = 0; k < hits.Count; k++)
                 {
                     if (!done.Add(hits[k].GetInstanceID())) continue;
-                    Deal(player, hits[k], blast, mult, 6f, false);
+                    Deal(player, hits[k], blast, mult, 6f, false, "explosive_arrow", stunAttack, false, false, ascended);
                     OnSkillHit(player);
                 }
                 if (_enableVfx.Value)
@@ -2888,7 +2897,7 @@ namespace DragonsAltarRanger
                     Vector3 to = enemy.transform.position - player.transform.position;
                     to.y = 0f;
                     if (to.sqrMagnitude > 0.25f && Vector3.Angle(flat, to) > cone * 0.5f) continue;
-                    Deal(player, enemy, d, mult, 4f, false);
+                    Deal(player, enemy, d, mult, 4f, false, "splitting_arrow", DragonCombat.StunAttack(v + 1), false, false, ascended);
                     OnSkillHit(player);
                 }
                 if (v + 1 < volleys) yield return new WaitForSeconds(interval);
@@ -2915,7 +2924,7 @@ namespace DragonsAltarRanger
             StartCoroutine(ArrowFlight(player, origin, dir, DragonCombat.M(80f), range, width * 0.5f, true, new Color(0.80f, 1f, 0.60f, 1f), 0f,
                 delegate(Character enemy)
                 {
-                    Deal(player, enemy, d, mult, DragonCombat.IsSmallEnemy(enemy) ? 25f : 6f, true);
+                    Deal(player, enemy, d, mult, DragonCombat.IsSmallEnemy(enemy) ? 25f : 6f, true, "splitting_arrow", "Great Arrow", false, false, null);
                     OnSkillHit(player);
                     return true;
                 }, null));
@@ -2970,12 +2979,12 @@ namespace DragonsAltarRanger
             List<Character> hits = GetSphereTargets(player, point, radius);
             for (int i = 0; i < hits.Count; i++)
             {
-                Deal(player, hits[i], sky, mult, 10f, true);
+                Deal(player, hits[i], sky, mult, 10f, true, "splitting_arrow", "Sky Arrow", true, true, true);
                 OnSkillHit(player);
                 // Stuns every archetype - the user's explicit exception to the "Bosses are never stunned" rule.
                 Vector3 away = hits[i].transform.position - point;
                 if (away.sqrMagnitude < 0.01f) away = Vector3.forward;
-                try { hits[i].Stagger(away.normalized); } catch { }
+                try { { if (DragonCombat.SkillStunEnabled(player, "splitting_arrow", "Sky Arrow", true, true)) hits[i].Stagger(away.normalized); } } catch { }
             }
         }
 
@@ -2993,6 +3002,7 @@ namespace DragonsAltarRanger
 
         private IEnumerator StarfallRoutine(Player player, Vector3 point, bool ascended)
         {
+            int stunPulse = 0;
             ShowMessage("STARFALL VOLLEY");
             float channel = Mathf.Max(0f, _sfChannel.Value);
             DragonCombat.LockSkill(player, channel);
@@ -3013,8 +3023,9 @@ namespace DragonsAltarRanger
                 if (ascended && FollowUpClick(sfFollow)) { DragonCombat.SwallowAttackInput(player, 0.4f); break; }   // v0.25.85 the finale now
                 if (Time.time >= nextTick)
                 {
+                    stunPulse++;
                     nextTick = Time.time + Mathf.Max(0.1f, _sfTick.Value);
-                    StarHitAll(player, point, radius, d, mult);
+                    StarHitAll(player, point, radius, d, mult, DragonCombat.StunAttack(stunPulse));
                 }
                 if (_enableVfx.Value)
                 {
@@ -3028,7 +3039,7 @@ namespace DragonsAltarRanger
             {
                 yield return new WaitForSeconds(0.3f);
                 if (_enableVfx.Value) StarVfx(GroundAt(point), DragonCombat.M(_sfAscRadius.Value), 4f);   // v0.25.85 (user): the final arrow is BIG (visual only)
-                StarHitAll(player, point, DragonCombat.M(_sfAscRadius.Value), d, _sfAscDamage.Value / 100f * DragonCombat.GetSkillPower(player, "starfall_volley"));
+                StarHitAll(player, point, DragonCombat.M(_sfAscRadius.Value), d, _sfAscDamage.Value / 100f * DragonCombat.GetSkillPower(player, "starfall_volley"), "Final Star");
             }
         }
 
@@ -3045,12 +3056,12 @@ namespace DragonsAltarRanger
             StartCoroutine(RingVfx(at, radius, new Color(0.85f, 1f, 0.70f, 0.9f), 0.3f));
         }
 
-        private void StarHitAll(Player player, Vector3 at, float radius, RangerArrowDamage d, float mult)
+        private void StarHitAll(Player player, Vector3 at, float radius, RangerArrowDamage d, float mult, string stunAttack = "Attack 1")
         {
             List<Character> hits = GetSphereTargets(player, at, radius);
             for (int i = 0; i < hits.Count; i++)
             {
-                Deal(player, hits[i], d, mult, 10f, !DragonCombat.IsSmallEnemy(hits[i]));
+                Deal(player, hits[i], d, mult, 10f, !DragonCombat.IsSmallEnemy(hits[i]), "starfall_volley", stunAttack, false, false, null);
                 OnSkillHit(player);
             }
         }
@@ -3152,19 +3163,20 @@ namespace DragonsAltarRanger
         // v0.25.33 user (Tumble Shot, Gale Volley): REAL arrows. Every arrow that touches an enemy deals its full
         // damage (several arrows on one target all count), arrows pierce every enemy without limit and stop only
         // on terrain / physical objects.
-        private void FanPierce(Player player, int count, float fanDegrees, float range, Color color, Action<Character> onHit)
+        private void FanPierce(Player player, int count, float fanDegrees, float range, Color color, Action<Character, int> onHit)
         {
             Vector3 origin = ShotOrigin(player);
             Vector3 dir = AimDir(player, origin);
             for (int i = 0; i < count; i++)
             {
+                int arrowSlot = i;
                 float a = count == 1 ? 0f : -fanDegrees * 0.5f + fanDegrees * i / (count - 1);
                 Vector3 shot = (Quaternion.AngleAxis(a, Vector3.up) * dir).normalized;
                 StartCoroutine(ArrowFlight(player, origin, shot, DragonCombat.M(60f), range, DragonCombat.M(0.35f), true, color, 0f,
                     delegate(Character enemy)
                     {
                         if (enemy == null || enemy.IsDead()) return true;
-                        onHit(enemy);
+                        onHit(enemy, arrowSlot);
                         OnSkillHit(player);
                         return true;
                     }, null));
@@ -3434,8 +3446,10 @@ namespace DragonsAltarRanger
             catch { return 0f; }
         }
 
-        private void Deal(Player attacker, Character target, RangerArrowDamage d, float multiplier, float push, bool stagger)
+        private void Deal(Player attacker, Character target, RangerArrowDamage d, float multiplier, float push, bool stagger, string stunSkill = null, string stunAttack = "Attack 1", bool stunDefault = false, bool stunHandled = false, bool? stunAsc = null)
         {
+            bool originalStun = stagger;
+            if (stunSkill != null) stagger &= DragonCombat.SkillStunEnabled(attacker, stunSkill, stunAttack, stunDefault, stunAsc) && target != null && !target.IsBoss() && !DragonCombat.IsDebuffImmune(target);
             if (target == null || target.IsDead() || d == null) return;
             float m = Mathf.Max(0f, multiplier) * RangedBonus(attacker);
             if (IsPinned(target)) m *= 1f + Mathf.Max(0f, _psBonus.Value) / 100f;
@@ -3453,6 +3467,7 @@ namespace DragonsAltarRanger
             hit.m_pushForce = push;
             hit.SetAttacker(attacker);
             target.Damage(hit);
+            if (stunSkill != null && !stunHandled) DragonCombat.ApplySkillStun(attacker, target, stunSkill, stunAttack, stunDefault, originalStun, stunAsc);
         }
 
         private List<Character> GetSphereTargets(Player attacker, Vector3 center, float radius)

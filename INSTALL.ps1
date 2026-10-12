@@ -1,8 +1,8 @@
 ﻿$ErrorActionPreference = "Stop"
 
 Write-Host ""
-Write-Host "IMMORTAL HEROES v0.25.138 - SMOOTH HOLD" -ForegroundColor Cyan
-Write-Host "Protected build: all 8 DLLs compile in staging before the live profile is touched." -ForegroundColor Gray
+Write-Host "AETHELBORN ASCENDED v0.25.138r - EXP ALPHA 3" -ForegroundColor Cyan
+Write-Host "All 10 DLLs compile in staging before the live profile is touched." -ForegroundColor Gray
 Write-Host ""
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -174,6 +174,7 @@ try {
     $sorcererSource = Join-Path $scriptDir "DragonsAltar.Sorcerer.cs"
     $rangerSource = Join-Path $scriptDir "DragonsAltar.Ranger.cs"
     $devToolsSource = Join-Path $scriptDir "DragonsAltar.DevTools.cs"
+    $expSource = Join-Path $scriptDir "Aethelborn.Experience.cs"
 
     Need-File $coreSource "Core source"
     Need-File $runtimeSource "Combat Runtime source"
@@ -184,6 +185,7 @@ try {
     Need-File $sorcererSource "Sorcerer source"
     Need-File $rangerSource "Ranger source"
     Need-File $devToolsSource "Developer Tools source"
+    Need-File $expSource "Experience source"
 
     if (-not (Test-Path -LiteralPath $pluginsDir)) {
         New-Item -ItemType Directory -Path $pluginsDir | Out-Null
@@ -198,6 +200,7 @@ try {
     $liveSorcererOut = Join-Path $pluginsDir "DragonsAltar.Sorcerer.dll"
     $liveRangerOut = Join-Path $pluginsDir "DragonsAltar.Ranger.dll"
     $liveDevToolsOut = Join-Path $pluginsDir "DragonsAltar.DevTools.dll"
+    $liveExpOut = Join-Path $pluginsDir "Aethelborn.Experience.dll"
 
     $stageDir = Join-Path ([System.IO.Path]::GetTempPath()) ("AlbedosCustomClasses-" + [Guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Path $stageDir | Out-Null
@@ -219,6 +222,7 @@ try {
     $sorcererOut = Join-Path $stageDir "DragonsAltar.Sorcerer.dll"
     $rangerOut = Join-Path $stageDir "DragonsAltar.Ranger.dll"
     $devToolsOut = Join-Path $stageDir "DragonsAltar.DevTools.dll"
+    $expOut = Join-Path $stageDir "Aethelborn.Experience.dll"
 
     $common = New-Object System.Collections.ArrayList
     [void](Add-UniqueRef $common $bepInExDll)
@@ -312,7 +316,14 @@ try {
     Compile-WithDependencies $devToolsSource $devToolsOut $devToolsRefs $managedDir $coreDir
     Write-Host "      Developer Tools compile passed." -ForegroundColor Green
 
-    Write-Host "All 9 DLLs compiled successfully. Installing staged DLL set..." -ForegroundColor Cyan
+    Write-Host "[10/10] Compiling Experience to staging..." -ForegroundColor Yellow
+    $expRefs = New-Object System.Collections.ArrayList
+    foreach ($r in $common) { [void]$expRefs.Add($r) }
+    [void](Add-UniqueRef $expRefs $harmony)
+    Compile-WithDependencies $expSource $expOut $expRefs $managedDir $coreDir
+    Write-Host "      Experience compile passed." -ForegroundColor Green
+
+    Write-Host "All 10 DLLs compiled successfully. Installing staged DLL set..." -ForegroundColor Cyan
 
     $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 
@@ -325,7 +336,8 @@ try {
         $liveAdvancedOut,
         $liveSorcererOut,
         $liveRangerOut,
-        $liveDevToolsOut
+        $liveDevToolsOut,
+        $liveExpOut
     )
 
     foreach ($oldDll in $liveDlls) {
@@ -343,6 +355,7 @@ try {
     Copy-Item -LiteralPath $sorcererOut -Destination $liveSorcererOut -Force
     Copy-Item -LiteralPath $rangerOut -Destination $liveRangerOut -Force
     Copy-Item -LiteralPath $devToolsOut -Destination $liveDevToolsOut -Force
+    Copy-Item -LiteralPath $expOut -Destination $liveExpOut -Force
 
     $liveAssetDir = Join-Path $pluginsDir "ImmortalHeroesAssets"
     if (-not (Test-Path -LiteralPath $liveAssetDir)) {
@@ -400,7 +413,7 @@ try {
     Write-Host ""
     Write-Host "SUCCESS" -ForegroundColor Green
     Write-Host ""
-    Write-Host "Installed 9 isolated DLLs:" -ForegroundColor White
+    Write-Host "Installed 10 isolated DLLs:" -ForegroundColor White
     Write-Host "  AlbedosCustomClasses.dll                  (altar/core)" -ForegroundColor White
     Write-Host "  AlbedosCustomClasses.CombatRuntime.dll    (cast lock / debuffs / buffs / mastery runtime)" -ForegroundColor White
     Write-Host "  AlbedosCustomClasses.Skills.dll           (starter skills + VFX)" -ForegroundColor White
@@ -410,6 +423,7 @@ try {
     Write-Host "  DragonsAltar.Sorcerer.dll                 (Wizard/Spellcaster advancements + clean dynamic HUD)" -ForegroundColor White
     Write-Host "  DragonsAltar.Ranger.dll                   (Ranger Class + Acrobat / Bowmaster)" -ForegroundColor White
     Write-Host "  DragonsAltar.DevTools.dll                 (developer skill tuning + world range/radius preview)" -ForegroundColor White
+    Write-Host "  Aethelborn.Experience.dll                 (kill EXP, levels, floating +EXP)" -ForegroundColor Cyan
     Write-Host "  ImmortalHeroesAssets\*.png (Skill Tree art, Tier buttons, Confirm plaque, selection ring)" -ForegroundColor White
     Write-Host ""
     Write-Host "If a risky combat DLL fails, the staged installer will not replace your current live set." -ForegroundColor Cyan

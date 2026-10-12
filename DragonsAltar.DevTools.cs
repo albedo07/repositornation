@@ -426,9 +426,23 @@ namespace DragonsAltarDevTools
         // the .cfg for compatibility but are not shown.
         private static bool IsRetired(string section, string key)
         {
+            if ((section == "Sword Master Halfmoon Slash" || section == "Sword Master Halfmoon Slash Ascended") && key == "StunEachFollowup_v025138l") return true;
+
             if (key.StartsWith("Legacy", StringComparison.OrdinalIgnoreCase))
                 return true;
+            // Old Ascended CA keys migrated to their own F8 sections (kept only for CFG compatibility).
+            if ((section == "Sword Master Moonlight Splitter Animation" && key.StartsWith("Finisher ") && key.Contains("Anim")) ||
+                (section == "Sword Master Halfmoon Slash Animation" && key.StartsWith("Finisher ") && key.Contains("Anim")) ||
+                (section == "Sword Master Crescent Cleave Animation" && (key.StartsWith("Ascended ") || key.StartsWith("Ascended Fan 2 ")) && key.Contains("Anim")) ||
+                (section == "Mercenary Heavy Slash Animation" && key.StartsWith("Ascended ") && key.Contains("Anim")) ||
+                (section == "Cleric Righteous Strike Animation" && key.StartsWith("Ascended ") && key.Contains("Anim")) ||
+                (section == "Sword Master Halfmoon Slash Animation" && key.StartsWith("Slash 2 ") && key.Contains("Anim")))
+                return true;
             // Angel Comet timing now comes from WindUpTime (v0.21.1).
+            if ((section == "Sword Master Moonlight Splitter Animation" && (key.StartsWith("AscendedSlash") || key.StartsWith("AscendedFinisher") || key.StartsWith("AscendedAfterimage"))) ||
+                (section == "Sword Master Crescent Cleave Animation" && key.StartsWith("Ascended")) ||
+                (section == "Sword Master Halfmoon Slash Animation" && key == "AscendedStanceSheatheSeconds_v025137"))
+                return true;
             if (section == "Paladin Fallen Angel" && (key == "RiseTime" || key == "DiveSpeed"))
                 return true;
             // v0.22.3 Sword Master rework: superseded by the *_v0223 keys / "v0223" damage sections.

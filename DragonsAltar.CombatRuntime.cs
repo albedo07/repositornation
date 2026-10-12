@@ -73,6 +73,7 @@ namespace DragonsAltarCombat
         private void Awake()
         {
             Instance = this;
+            DragonCombat.BindSkillStuns();
 
             EnableRuntime = Config.Bind("Runtime", "Enabled", true, "Enable Dragon's Altar combat runtime patches.");
             ArmBodyGuard = Config.Bind("Runtime", "ArmBodyGuard_v025118", true, "Body barrier for skill animations: an elbow, forearm or hand that would go inside the torso is pushed back out to its surface.");
@@ -97,27 +98,31 @@ namespace DragonsAltarCombat
             string[] tuning = new string[] {
                 "sm_slash_a|Sword Master Moonlight Splitter Animation|Slash 1",
                 "sm_slash_b|Sword Master Moonlight Splitter Animation|Slash 2",
-                "sm_moon_finisher|Sword Master Moonlight Splitter Animation|Finisher|0,100,50",
+                "sm_moon_finisher|Sword Master Moonlight Splitter Ascended Animation|Finisher|0,100,50",
+                "sm_slash_a_asc|Sword Master Moonlight Splitter Ascended Animation|Slash 1",
+                "sm_slash_b_asc|Sword Master Moonlight Splitter Ascended Animation|Slash 2",
                 "sm_halfmoon|Sword Master Halfmoon Slash Animation|Slash 1",
-                "sm_halfmoon_2|Sword Master Halfmoon Slash Animation|Slash 2",
-                "sm_halfmoon_finisher|Sword Master Halfmoon Slash Animation|Finisher",
+                "sm_halfmoon_asc|Sword Master Halfmoon Slash Ascended Animation|First swing",
+                "sm_halfmoon_finisher|Sword Master Halfmoon Slash Ascended Animation|Finisher",
                 "sm_crescent|Sword Master Crescent Cleave Animation|",
-                "sm_crescent_asc|Sword Master Crescent Cleave Animation|Ascended",
-                "sm_crescent_asc2|Sword Master Crescent Cleave Animation|Ascended Fan 2",
+                "sm_crescent_asc|Sword Master Crescent Cleave Ascended Animation|Fan 1",
+                "sm_crescent_asc2|Sword Master Crescent Cleave Ascended Animation|Fan 2",
                 "sm_eclipse|Sword Master Eclipse Animation|",
                 "sm_frenzied|Sword Master Frenzied Charge Animation|",
+                "sm_frenzied_asc|Sword Master Frenzied Charge Ascended Animation|",
                 "sm_guidance|Sword Master Knights Guidance Animation|",
                 "warrior_heavy|Warrior Heavy Slash Animation|",
                 "warrior_impact_wave|Warrior Impact Wave Animation||0,90,90",
+                "warrior_impact_wave_asc|Sword Master Impact Wave Ascended Animation||0,90,90",
                 "warrior_punch|Warrior Impact Punch Animation|",
-                "merc_heavy_asc|Mercenary Heavy Slash Animation|Ascended|0,100,60",
+                "merc_heavy_asc|Mercenary Heavy Slash Ascended Animation||0,100,60",
                 "merc_bomb|Mercenary Punishing Bomb Animation||0,100,100",
                 "merc_seismic|Mercenary Seismic Guillotine Animation||0,100,100",
                 "merc_roar|Mercenary Battlecry Animation|",
                 "merc_fury_accent|Mercenary Fury Animation|",
                 "cleric_zap|Cleric Lightning Zap Animation|",
                 "cleric_rs|Cleric Righteous Strike Animation||40,100,100",
-                "cleric_rs_asc|Cleric Righteous Strike Animation|Ascended|40,100,100",
+                "cleric_rs_asc|Cleric Righteous Strike Ascended Animation||40,100,100",
                 "cleric_wave|Cleric Holy Wave Animation|",
                 "cleric_wave_ally|Cleric Holy Wave Animation|Ally",
                 "cleric_goddess|Paladin Goddess Relic Animation||40,100,90",
@@ -161,10 +166,29 @@ namespace DragonsAltarCombat
                 // v0.25.138 optional 4th field "start,end,trigger" = the user's tuned defaults
                 float d0 = 0f, d1 = 100f, d2 = 0f;
                 if (f.Length > 3) { string[] dv = f[3].Split(','); d0 = float.Parse(dv[0], System.Globalization.CultureInfo.InvariantCulture); d1 = float.Parse(dv[1], System.Globalization.CultureInfo.InvariantCulture); d2 = float.Parse(dv[2], System.Globalization.CultureInfo.InvariantCulture); }
+                // Keep each Ascended clip independent, starting from the player's existing tuned values.
+                string legacySection = null, legacyPrefix = "";
+                switch (f[0])
+                {
+                    case "sm_moon_finisher": legacySection = "Sword Master Moonlight Splitter Animation"; legacyPrefix = "Finisher "; break;
+                    case "sm_halfmoon_finisher": legacySection = "Sword Master Halfmoon Slash Animation"; legacyPrefix = "Finisher "; break;
+                    case "sm_crescent_asc": legacySection = "Sword Master Crescent Cleave Animation"; legacyPrefix = "Ascended "; break;
+                    case "sm_crescent_asc2": legacySection = "Sword Master Crescent Cleave Animation"; legacyPrefix = "Ascended Fan 2 "; break;
+                    case "merc_heavy_asc": legacySection = "Mercenary Heavy Slash Animation"; legacyPrefix = "Ascended "; break;
+                    case "cleric_rs_asc": legacySection = "Cleric Righteous Strike Animation"; legacyPrefix = "Ascended "; break;
+                }
+                if (legacySection != null)
+                {
+                    d0 = Config.Bind(legacySection, legacyPrefix + "AnimStartPercent_v025133", d0).Value;
+                    d1 = Config.Bind(legacySection, legacyPrefix + "AnimEndPercent_v025133", d1).Value;
+                    d2 = Config.Bind(legacySection, legacyPrefix + "AnimTriggerPercent_v025136", d2).Value;
+                }
                 ConfigEntry<float> a = Config.Bind(f[1], pre + "AnimStartPercent_v025133", d0, new ConfigDescription((f[2].Length > 0 ? f[2] + ": " : "") + "the animation starts at this % (skips the beginning; 0 = from the start).", new AcceptableValueRange<float>(0f, 95f)));
                 ConfigEntry<float> b = Config.Bind(f[1], pre + "AnimEndPercent_v025133", d1, new ConfigDescription((f[2].Length > 0 ? f[2] + ": " : "") + "the animation is cut at this % and blends back (100 = plays to the end).", new AcceptableValueRange<float>(5f, 100f)));
-                ConfigEntry<float> c = Config.Bind(f[1], pre + "AnimTriggerPercent_v025136", d2, new ConfigDescription((f[2].Length > 0 ? f[2] + ": " : "") + "the skill goes off when the animation reaches this % (0 = its own hit frame, 100 = when it has fully played). The animation speed adapts so this point lands on the skill's wind up end.", new AcceptableValueRange<float>(0f, 100f)));
-                DragonCombat.AnimTuningEntries[f[0]] = new ConfigEntry<float>[] { a, b, c };
+                ConfigEntry<float> c = Config.Bind(f[1], pre + "AnimTriggerPercent_v025136", d2, new ConfigDescription((f[2].Length > 0 ? f[2] + ": " : "") + "Target contact marker. On Impact Wave/Moonlight, no speed change; other skills retain legacy timing unless CA Speed is set.", new AcceptableValueRange<float>(0f, 100f)));
+                float oldSpeed = legacySection == null ? 0f : Config.Bind(legacySection, legacyPrefix + "CASpeed_v025138c", 0f).Value;
+                ConfigEntry<float> speed = Config.Bind(f[1], pre + "CASpeed_v025138c", oldSpeed, new ConfigDescription("CA playback multiplier: 0 = existing timing (Impact Wave/Moonlight ignore Start/End/Trigger for speed), 1 = native speed. 0.1 to 6 = manual speed.", new AcceptableValueRange<float>(0f, 6f)));
+                DragonCombat.AnimTuningEntries[f[0]] = new ConfigEntry<float>[] { a, b, c, speed };
             }
             LegMotionScale = Config.Bind("Runtime", "LegMotionScale_v02522", 0f, "Strength of the procedural leg poses (Unity humanoid muscles). 0 = legs untouched, -1 = inverted (if knees bend the wrong way on your rig).");
             SkySummonDropTime = Config.Bind("Skills", "SkySummonDropTime", 0.18f, "Seconds for a spawned Sky Summon object to slam from its indoor-safe spawn point to the target AFTER the character wind-up finishes.");
@@ -1191,6 +1215,10 @@ namespace DragonsAltarCombat
                     if (lp != null && lp == Player.m_localPlayer) { _comboHit = -1; DragonCombat.SetChainSpeed(lp, 1f, 0.05f); }
                     return;
                 }
+                // Only the native primary attack of a paired item enters NACC. Secondary data is untouched.
+                if (DragonCombat.IsPairedWeapon(weapon) &&
+                    !string.Equals(_atkAnim.GetValue(__instance) as string, weapon.m_shared.m_attack.m_attackAnimation, StringComparison.Ordinal))
+                { _comboHit = -1; DragonCombat.SetChainSpeed(p, 1f, 0.05f); return; }
                 int levels = (int)_atkLevels.GetValue(__instance);
                 // v0.25.99 FIX (user: dual-wield Axe heavy attack stuck in slow motion): a heavy / single-hit attack
                 // inherited the last chain swing's speed (dual chains run down to 0.25x for 3 s). Every attack that
@@ -1324,6 +1352,36 @@ namespace DragonsAltarCombat
             return false;
         }
 
+        private static readonly Dictionary<string, KeyValuePair<int, int>> BaseComboStates = new Dictionary<string, KeyValuePair<int, int>>();
+
+        // Capture the outgoing attack, not a locomotion transition observed after a trigger.
+        private static void CaptureBaseComboState(Animator a, string trigger)
+        {
+            if (a == null) return;
+            float best = 0f;
+            for (int layer = 0; layer < a.layerCount; layer++)
+            {
+                for (int next = 0; next < 2; next++)
+                {
+                    if (next == 1 && !a.IsInTransition(layer)) continue;
+                    AnimatorClipInfo[] clips = next == 1 ? a.GetNextAnimatorClipInfo(layer) : a.GetCurrentAnimatorClipInfo(layer);
+                    for (int i = 0; i < clips.Length; i++)
+                    {
+                        if (clips[i].clip == null || clips[i].weight <= best) continue;
+                        AnimationEvent[] events = clips[i].clip.events;
+                        for (int e = 0; e < events.Length; e++)
+                        {
+                            if (events[e].functionName != "OnAttackTrigger" && events[e].functionName != "Hit") continue;
+                            AnimatorStateInfo state = next == 1 ? a.GetNextAnimatorStateInfo(layer) : a.GetCurrentAnimatorStateInfo(layer);
+                            BaseComboStates[a.GetInstanceID() + ":" + trigger] = new KeyValuePair<int, int>(layer, state.fullPathHash);
+                            best = clips[i].weight;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
         // The swing trigger Valheim fires inside Attack.Start is rewritten to our swing. A backwards step
         // (swing 1 after swing 2) cannot be reached by trigger, so it cross-fades into the learned state.
         private static bool ComboTriggerPrefix(object __instance, ref string __0)
@@ -1338,8 +1396,9 @@ namespace DragonsAltarCombat
                 Component c = __instance as Component;
                 Animator a = c == null ? null : c.GetComponentInChildren<Animator>();
                 Player p = c == null ? null : c.GetComponent<Player>();
-                bool dwClips = _comboDual && DragonDualWield.Apply(p, a, true);
-                if (!_comboDual) DragonDualWield.Apply(p, a, false);
+                bool nativePair = DragonCombat.IsPairedWeapon(DragonCombat.GetHandItem(p, "m_rightItem"));
+                bool dwClips = !nativePair && _comboDual && DragonDualWield.Apply(p, a, true);
+                if (!nativePair && !_comboDual) DragonDualWield.Apply(p, a, false);
                 string baseName = _comboBase;
                 if (_comboDual && !dwClips && DragonCombat.AnimTriggerCount(a, "dual_knives") >= 2) baseName = "dual_knives";
                 int count = DragonCombat.AnimTriggerCount(a, baseName);
@@ -1347,15 +1406,25 @@ namespace DragonsAltarCombat
                 int index = Mathf.Clamp(_comboSwing, 0, count - 1);
                 if (_comboHit >= Mathf.Clamp(Instance.ComboChainLength.Value, 2, 9) - 1) index = count - 1;
                 string target = baseName + index.ToString();
+                if (nativePair) DragonCombat.PrepareExternalAnimation(a, target);
+                bool baseClass = p != null && string.IsNullOrEmpty(DragonCombat.GetAdvancementName(p));
+                if (baseClass && _comboPrevSwing >= 0)
+                    CaptureBaseComboState(a, baseName + _comboPrevSwing.ToString());
                 if (a != null)
                 {
-                    for (int i = 0; i < count; i++) a.ResetTrigger(baseName + i.ToString());
+                    for (int i = 0; i < count; i++) a.ResetTrigger(DragonCombat.AnimatorTriggerName(baseName + i.ToString()));
                     if (_comboPrevSwing >= 0 && index <= _comboPrevSwing)
                     {
                         int hash, layer;
                         // v0.25.59: enter the repeated swing past its rest-pose wind up so it flows out of the last one
                         float blend = Mathf.Clamp(Instance.ComboBlend.Value, 0.02f, 0.4f);
                         float offset = Mathf.Clamp(Instance.ComboRepeatOffset.Value, 0f, 0.5f);
+                        KeyValuePair<int, int> captured;
+                        if (baseClass && BaseComboStates.TryGetValue(a.GetInstanceID() + ":" + target, out captured))
+                        {
+                            a.CrossFade(captured.Value, blend / Mathf.Max(0.1f, StateLength(a, captured.Key)), captured.Key, offset);
+                            return false; // Do not also queue the vanilla restart/third-strike transition.
+                        }
                         if (DragonCombat.LearnedState(a, target, out hash, out layer))
                         {
                             a.CrossFade(hash, blend / Mathf.Max(0.1f, StateLength(a, layer)), layer, offset);
@@ -1379,7 +1448,7 @@ namespace DragonsAltarCombat
         {
             try
             {
-                if (p == null || p.IsDead() || p.InAttack()) return;
+                if (p == null || p.IsDead() || p.InAttack() || DragonCombat.ClipBusy(p) || Time.time < DragonMixamo.LiveUntil) return;
                 Animator a = p.GetComponentInChildren<Animator>();
                 if (a == null) return;
                 DragonDualWield.Apply(p, a, IsDualWielding(p));
@@ -2464,6 +2533,7 @@ namespace DragonsAltarCombat
         // v0.25.88 JSAA touchdown anticipation: only Bonecrusher / Electric Smite.
         // Gameplay still decides the actual impact. These fields only drive visuals.
         private bool _jsaaLanding;
+        private static RuntimeAnimatorController _learnController;
         private float _jsaaApproach;
         private readonly RaycastHit[] _jsaaGroundHits = new RaycastHit[16];
         private int _token;
@@ -2518,7 +2588,9 @@ namespace DragonsAltarCombat
         private float _vaStartN, _vaEndN = 1f;   // v0.25.133 tuning
         private bool _vaJumped, _vaCut;
         private float _uniK;   // v0.25.135 the one speed of the current vanilla animation
-        private float _vaTrigN;   // v0.25.136 configured activation point (0 = own hit frame)
+        private float _vaTrigN;   // release marker, independent of playback speed
+        private float _caSpeed;   // CA speed override; 0 = original tempo
+        private bool _decoupleTiming;  // only the skills under review
         private bool _uniform;   // v0.25.138 every clip (was Warrior-group only)
         private float _constWindup;
         public const float RaiseSpeed = 1.8f;   // v0.25.49 faster buff raise
@@ -2533,9 +2605,13 @@ namespace DragonsAltarCombat
             _bowBool = null; _bowTrig = null;
         }
 
-        public void Begin(DragonClipKey[] keys, float windup, bool hold, Transform visual, string clipName = null)
+        public void Begin(DragonClipKey[] keys, float windup, bool hold, Transform visual, string clipName = null, string tuneName = null)
         {
+            enabled = true;
             ReleaseBow(false);
+            Animator controllerAnimator = GetComponentInChildren<Animator>();
+            RuntimeAnimatorController controller = controllerAnimator == null ? null : controllerAnimator.runtimeAnimatorController;
+            if (_learnController != controller) { _vaLearned.Clear(); _learnController = controller; }
             _jsaaLanding = clipName == "olympic_hero" || clipName == "olympic_hero_brutal";
             _highKnee = clipName == "merc_stomp";   // v0.25.101 vertical-shin knee raise (Stomp only)
             _jsaaApproach = 0f;
@@ -2545,7 +2621,9 @@ namespace DragonsAltarCombat
             if (_bowBool != null) DragonCombat.SetBowAim(GetComponent<Player>(), _bowBool, true);
             _va = keys[0].VA;
             _vaRepeat = keys[0].VR;
-            DragonCombat.AnimTuning(clipName, out _vaStartN, out _vaEndN, out _vaTrigN);
+            DragonCombat.AnimTuning(tuneName ?? clipName, out _vaStartN, out _vaEndN, out _vaTrigN);
+            _caSpeed = DragonCombat.AnimSpeed(tuneName ?? clipName);
+            _decoupleTiming = clipName == "warrior_impact_wave" || clipName == "sm_slash_a" || clipName == "sm_slash_b";
             // v0.25.138 (user: every CA as smooth as the Warrior ones): the one-speed engine for EVERY class.
             _uniform = true;
             DragonVanillaTail tail = GetComponent<DragonVanillaTail>();
@@ -2610,6 +2688,15 @@ namespace DragonsAltarCombat
         }
 
         // Blend from the current pose back to rest (charge ended without its finisher).
+        public void CancelAnimation()
+        {
+            ReleaseBow(false);
+            _vaTrack = false; _va = null; _keys = null;
+            ReleaseRoot();
+            SetLeftHidden(false);
+            enabled = false;
+        }
+
         public void Stop(float blend)
         {
             if (_keys == null) return;
@@ -2810,8 +2897,16 @@ namespace DragonsAltarCombat
                     return;
                 }
                 if (norm >= 1f) { _vaTrack = false; DragonCombat.SetSkillAnimSpeed(p, 1f, 0f); return; }
-                if (_quietLeft && _vaTrigN <= 0.001f) { DragonCombat.SetSkillAnimSpeed(p, RaiseSpeed, 0.15f); return; }   // v0.25.138 the raise plays 100% at one speed
-                if (_noTrack && _vaTrigN <= 0.001f) return;   // v0.25.133 emotes: natural speed unless a trigger % is set
+                if (_caSpeed > 0f)
+                {
+                    _uniK = Mathf.Clamp(_caSpeed, 0.1f, 6f);
+                    DragonCombat.SetSkillAnimSpeed(p, _uniK, 0.15f);
+                    return;
+                }
+                if (!_decoupleTiming && _quietLeft && _vaTrigN <= 0.001f) { DragonCombat.SetSkillAnimSpeed(p, RaiseSpeed, 0.15f); return; }
+                if (!_decoupleTiming && _noTrack && _vaTrigN <= 0.001f) return;
+                if (_decoupleTiming && _quietLeft) { DragonCombat.SetSkillAnimSpeed(p, RaiseSpeed, 0.15f); return; }
+                if (_decoupleTiming && _noTrack) return;
                 if (_constSpeed)
                 {
                     if (_constK <= 0f) _constK = Mathf.Clamp(_vaLead / Mathf.Max(0.05f, _constWindup - 0.08f), 1f, 4f); // v0.25.94 (user) the swing's hit frame lands ~0.08 s BEFORE the GTs release: animation first, then the waves // v0.25.91 one stable speed per swing so the vanilla contact frame lands on the skill hit (never slower than native).
@@ -2840,9 +2935,14 @@ namespace DragonsAltarCombat
                 if (_uniK <= 0f)
                 {
                     float len = Mathf.Max(0.05f, info.length);
-                    float hitN = _vaTrigN > 0.001f ? Mathf.Clamp(_vaTrigN, 0.02f, 1f) : Mathf.Clamp(_vaLead / len, 0.05f, 0.95f);   // v0.25.136 trigger %
-                    float leftNat = Mathf.Max(0.02f, (hitN - norm) * len);
-                    _uniK = norm >= hitN ? 1f : Mathf.Clamp(leftNat / left, 0.25f, 4f);
+                    if (_decoupleTiming) _uniK = Mathf.Clamp(_vaLead / Mathf.Max(0.05f, _constWindup), 0.25f, 4f);
+                    else
+                    {
+                        // Preserve the exact previous behavior of unrelated skills.
+                        float hitN = _vaTrigN > 0.001f ? Mathf.Clamp(_vaTrigN, 0.02f, 1f) : Mathf.Clamp(_vaLead / len, 0.05f, 0.95f);
+                        float leftNat = Mathf.Max(0.02f, (hitN - norm) * len);
+                        _uniK = norm >= hitN ? 1f : Mathf.Clamp(leftNat / left, 0.25f, 4f);
+                    }
                 }
                 DragonCombat.SetSkillAnimSpeed(p, _uniK, 0.15f);
             }
@@ -2877,7 +2977,7 @@ namespace DragonsAltarCombat
                 {
                     // v0.25.138 ONE SPEED TO 100%: the clip's keys are over but its vanilla animation is not - keep the same
                     // speed until it ends (it used to drop back to 1x mid-follow-through: fast first, slow at the end).
-                    float k = _quietLeft ? RaiseSpeed : (_constK > 0f ? _constK : _uniK);
+                    float k = _caSpeed > 0f ? Mathf.Clamp(_caSpeed, 0.1f, 6f) : (_quietLeft ? RaiseSpeed : (_constK > 0f ? _constK : _uniK));
                     if (k > 0f) DragonVanillaTail.Run(_owner as Player, _animator, _vaLayer, _vaHash, k, _vaCut ? 1f : _vaEndN, _vaPre[_vaLayer]);
                 }
                 ReleaseRoot();
@@ -3478,6 +3578,36 @@ namespace DragonsAltarCombat
     {
         // v0.25.133 per-clip animation tuning (start / end % of the vanilla animation)
         public static readonly Dictionary<string, ConfigEntry<float>[]> AnimTuningEntries = new Dictionary<string, ConfigEntry<float>[]>();
+        private static Player _aimWindupPlayer;
+        private static float _aimWindupUntil;
+
+        // Follow the crosshair only during a real, configurable wind-up of at least 1 second.
+        public static void FollowAimForWindup(Player player, float seconds)
+        {
+            if (player == null || player != Player.m_localPlayer) return;
+            if (seconds < 1f) { if (_aimWindupPlayer == player) _aimWindupUntil = 0f; return; }
+            _aimWindupPlayer = player;
+            _aimWindupUntil = Time.time + seconds;
+        }
+
+        public static void FaceAimNow(Player player)
+        {
+            if (player == null || player != Player.m_localPlayer || player.IsDead()) return;
+            Vector3 dir = GameCamera.instance != null ? GameCamera.instance.transform.forward : player.GetLookDir();
+            dir.y = 0f;
+            if (dir.sqrMagnitude < 0.001f) return;
+            Quaternion facing = Quaternion.LookRotation(dir.normalized, Vector3.up);
+            player.transform.rotation = facing;
+            Rigidbody body = player.GetComponent<Rigidbody>();
+            if (body != null) body.rotation = facing;
+        }
+
+        public static float AnimSpeed(string clip)
+        {
+            ConfigEntry<float>[] e;
+            return clip != null && AnimTuningEntries.TryGetValue(clip, out e) && e.Length > 3 ? Mathf.Max(0f, e[3].Value) : 0f;
+        }
+
         public static void AnimTuning(string clip, out float start, out float end)
         {
             float trig;
@@ -3620,11 +3750,31 @@ namespace DragonsAltarCombat
 
         // v0.25.7: play a keyframed skill clip (see DragonSkillClipDriver). windup = seconds until the
         // impact key; hold = stay on the impact pose until ClipImpact / ClipStop.
-        public static void PlayClip(Player player, string clip, float windup, bool hold)
+        public static void PlayClip(Player player, string clip, float windup, bool hold, string tuneName = null)
         {
             if (player == null || player != Player.m_localPlayer || string.IsNullOrEmpty(clip)) return;
+            CheckAnimationClass(player);
+            // Non-charging Sky Summons lock their target at cast time; never turn them during the delay.
+            bool fixedSkySummon = clip == "sorc_glacial" || clip == "sorc_glacial_asc" ||
+                clip == "cleric_goddess" || clip == "cleric_relic" || clip == "cleric_holy_relic" ||
+                clip == "cleric_judgement" || clip == "cleric_tempest" || clip == "cleric_crucible" ||
+                clip == "rg_sky" || clip == "rg_starfall" || clip == "cleric_hammer_call";
+            if (!fixedSkySummon && clip != "olympic_hero_brutal") FollowAimForWindup(player, windup);
             if (DragonCombatPlugin.Instance != null && !DragonCombatPlugin.Instance.EnableSkillAnimations.Value) return;
             DragonClipKey[] keys = HorizonWalkerMoving(player) ? MovingCastClip() : BowClip(player, clip);   // v0.25.85 Ranger bow layer, v0.25.86 HW moving casts
+            if (!hold && (clip == "warrior_impact_wave" || clip == "sm_crescent" || clip == "sm_crescent_asc"))
+            {
+                AnimationClip source = DragonMixamo.OriginalSkillClip(player, "MaceAltAttack");
+                float contact = DragonMixamo.ContactTime(source, 0.55f);
+                if (source != null && DragonMixamo.PlaySource(player, source, 0f, source.length,
+                    Mathf.Max(0.03f, windup) * source.length / Mathf.Max(0.03f, contact), 0.12f, false, tuneName ?? clip))
+                {
+                    DragonSkillClipDriver previous = player.GetComponent<DragonSkillClipDriver>();
+                    if (previous != null) previous.CancelAnimation();
+                    SetSkillAnimSpeed(player, 1f, 0f);
+                    return;
+                }
+            }
             if (keys == null && !hold) keys = VanillaClip(player, clip, 0f);
             if (keys == null) keys = SkillClip(clip);
             if (keys == null) return;
@@ -3648,7 +3798,7 @@ namespace DragonsAltarCombat
             if (legacy != null) UnityEngine.Object.Destroy(legacy);
             DragonSkillClipDriver d = player.GetComponent<DragonSkillClipDriver>();
             if (d == null) d = player.gameObject.AddComponent<DragonSkillClipDriver>();
-            d.Begin(keys, windup, hold, BodyVisual(player), clip);
+            d.Begin(keys, windup, hold, BodyVisual(player), clip, tuneName);
             DragonArmGuard.Attach(player);
         }
 
@@ -3958,6 +4108,60 @@ namespace DragonsAltarCombat
         private static readonly Dictionary<int, HashSet<string>> AnimTriggers = new Dictionary<int, HashSet<string>>();
         private static MethodInfo _zanimSetTrigger;
         private static bool _triggersLogged;
+        private static readonly Dictionary<string, string> ExternalTriggers = new Dictionary<string, string>();
+        private static readonly Dictionary<string, RuntimeAnimatorController> ExternalControllers = new Dictionary<string, RuntimeAnimatorController>();
+        private static bool ExternalTrigger(string name, out string trigger)
+        {
+            if (ExternalTriggers.TryGetValue(name, out trigger)) return true;
+            Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
+            for (int i = 0; i < assemblies.Length; i++)
+            {
+                string assemblyName = assemblies[i].GetName().Name;
+                if (assemblyName != "Warfare" && assemblyName != "Wizardry") continue;
+                try
+                {
+                    Type manager = assemblies[i].GetType("KG_Managers.AnimationReplaceManager");
+                    FieldInfo field = manager == null ? null : AccessTools.Field(manager, "Controllers");
+                    IDictionary controllers = field == null ? null : field.GetValue(null) as IDictionary;
+                    if (controllers == null || !controllers.Contains(name)) continue;
+                    trigger = ((KeyValuePair<RuntimeAnimatorController, string>)controllers[name]).Value;
+                    ExternalTriggers[name] = trigger;
+                    ExternalControllers[name] = ((KeyValuePair<RuntimeAnimatorController, string>)controllers[name]).Key;
+                    return true;
+                }
+                catch (Exception) { }
+            }
+            trigger = null; return false;
+        }
+        public static string AnimatorTriggerName(string name)
+        {
+            string trigger; return ExternalTrigger(name, out trigger) ? trigger : name;
+        }
+        public static void PrepareExternalAnimation(Animator animator, string name)
+        {
+            string trigger;
+            if (animator == null || !ExternalTrigger(name, out trigger)) return;
+            RuntimeAnimatorController controller = ExternalControllers[name];
+            if (controller != null && animator.runtimeAnimatorController != controller)
+            { animator.runtimeAnimatorController = controller; animator.Update(0f); }
+            CheckAnimationController(animator);
+        }
+
+        private static readonly Dictionary<int, RuntimeAnimatorController> TriggerControllers = new Dictionary<int, RuntimeAnimatorController>();
+        private static void CheckAnimationController(Animator a)
+        {
+            if (a == null) return;
+            int id = a.GetInstanceID();
+            RuntimeAnimatorController previous;
+            if (TriggerControllers.TryGetValue(id, out previous) && previous == a.runtimeAnimatorController) return;
+            TriggerControllers[id] = a.runtimeAnimatorController;
+            AnimTriggers.Remove(id);
+            string prefix = id + ":";
+            List<string> stale = new List<string>();
+            foreach (string key in LearnedStates.Keys) if (key.StartsWith(prefix, StringComparison.Ordinal)) stale.Add(key);
+            for (int i = 0; i < stale.Count; i++) LearnedStates.Remove(stale[i]);
+            PendingLearns.RemoveAll(delegate(StateLearn learn) { return learn.A == a; });
+        }
 
         private static void ParseVanMap()
         {
@@ -3992,6 +4196,7 @@ namespace DragonsAltarCombat
         public static bool LearnedState(Animator a, string trigger, out int hash, out int layer)
         {
             hash = 0; layer = 0;
+            CheckAnimationController(a);
             KeyValuePair<int, int> v;
             if (a == null || !LearnedStates.TryGetValue(a.GetInstanceID() + ":" + trigger, out v)) return false;
             layer = v.Key; hash = v.Value;
@@ -4001,6 +4206,7 @@ namespace DragonsAltarCombat
         public static void LearnState(Animator a, string trigger)
         {
             if (a == null || string.IsNullOrEmpty(trigger)) return;
+            CheckAnimationController(a);
             if (LearnedStates.ContainsKey(a.GetInstanceID() + ":" + trigger)) return;
             try
             {
@@ -4023,7 +4229,9 @@ namespace DragonsAltarCombat
                 {
                     // v0.25.44: wait until the animator consumed the trigger, then take the layer that is
                     // transitioning into a new state (the attack layer), not one that merely changed by movement.
-                    if (l.A.GetBool(l.Name)) continue;
+                    string learnedTrigger;
+                    if (ExternalTrigger(l.Name, out learnedTrigger)) { if (l.A.GetBool(learnedTrigger)) continue; }
+                    else if (l.A.GetBool(l.Name)) continue;
                     int pick = -1;
                     for (int i = 0; i < l.Pre.Length && i < l.A.layerCount; i++)
                         if (l.A.IsInTransition(i) && l.A.GetNextAnimatorStateInfo(i).fullPathHash != l.Pre[i]) { pick = i; break; }
@@ -4049,13 +4257,15 @@ namespace DragonsAltarCombat
             HashSet<string> set;
             if (!AnimTriggers.TryGetValue(a.GetInstanceID(), out set)) return 0;
             int n = 0;
-            while (n < 10 && set.Contains(name + n.ToString())) n++;
+            string external;
+            while (n < 10 && (set.Contains(name + n.ToString()) || ExternalTrigger(name + n.ToString(), out external))) n++;
             return n;
         }
 
         private static string ResolveTrigger(Animator a, string name)
         {
             if (a == null || string.IsNullOrEmpty(name)) return null;
+            CheckAnimationController(a);
             HashSet<string> set;
             if (!AnimTriggers.TryGetValue(a.GetInstanceID(), out set))
             {
@@ -4076,8 +4286,9 @@ namespace DragonsAltarCombat
                     DragonCombatPlugin.Instance.LogInfo("[Immortal Heroes] Animator triggers: " + string.Join(", ", all.ToArray()));
                 }
             }
-            if (set.Contains(name)) return name;
-            if (set.Contains(name + "0")) return name + "0";
+            string external;
+            if (set.Contains(name) || ExternalTrigger(name, out external)) return name;
+            if (set.Contains(name + "0") || ExternalTrigger(name + "0", out external)) return name + "0";
             string bare = name.TrimEnd('0', '1', '2', '3', '4', '5', '6', '7', '8', '9');
             if (bare != name && set.Contains(bare)) return bare;
             return null;
@@ -4120,6 +4331,15 @@ namespace DragonsAltarCombat
                 if (clip == "merc_cs1") m = new KeyValuePair<string, float>("battleaxe_attack0", 0.45f);
                 else if (clip == "merc_cs2") m = new KeyValuePair<string, float>("battleaxe_attack1", 0.45f);
                 else return null;
+            }
+            // Ground PAC attack CAs: use the mace heavy uppercut. Keep the original contact lead/timing.
+            switch (clip)
+            {
+                case "warrior_impact_wave":
+                case "sm_crescent": case "sm_crescent_asc":  // First wave only
+                case "merc_seismic":
+                    m = new KeyValuePair<string, float>("mace_secondary", m.Value);
+                    break;
             }
             string trig = ResolveTrigger(player.GetComponentInChildren<Animator>(), m.Key);
             if (trig == null) return null;
@@ -7682,6 +7902,268 @@ namespace DragonsAltarCombat
             state.ZapRadius = Mathf.Max(0.1f, radius);
         }
 
+        private static readonly Dictionary<string, ConfigEntry<bool>> SkillStunEntries = new Dictionary<string, ConfigEntry<bool>>();
+        private static readonly Dictionary<string, string> SkillStunSections = new Dictionary<string, string>
+        {
+            { "heavy_slash", "Warrior Heavy Slash" },
+            { "impact_wave", "Warrior Impact Wave" },
+            { "impact_punch", "Warrior Impact Punch" },
+            { "lightning_zap", "Cleric Lightning Zap" },
+            { "righteous_strike", "Cleric Righteous Strike" },
+            { "holy_wave", "Cleric Holy Wave" },
+            { "flame_burst", "Sorcerer Flame Burst" },
+            { "glacial_descent", "Sorcerer Glacial Descent" },
+            { "stonefang_eruption", "Sorcerer Stonefang Eruption" },
+            { "piercing_arrow", "Ranger Piercing Arrow" },
+            { "tumble_shot", "Ranger Tumble Shot" },
+            { "snare_trap", "Ranger Snare Trap" },
+            { "moonlight_splitter", "Sword Master Moonlight Splitter" },
+            { "crescent_cleave", "Sword Master Crescent Cleave" },
+            { "blade_storm", "Sword Master Blade Storm" },
+            { "frenzied_charge", "Sword Master Frenzied Charge" },
+            { "eclipse", "Sword Master Eclipse" },
+            { "halfmoon_slash", "Sword Master Halfmoon Slash" },
+            { "stomp", "Mercenary Stomp" },
+            { "circle_swing", "Mercenary Circle Swing" },
+            { "bonecrusher", "Mercenary Bonecrusher" },
+            { "seismic_guillotine", "Mercenary Seismic Guillotine" },
+            { "punishing_bomb", "Mercenary Punishing Bomb" },
+            { "whirlwind", "Mercenary Whirlwind" },
+            { "goddess_relic", "Paladin Goddess Relic" },
+            { "judgement_hammer", "Paladin Judgement Hammer" },
+            { "shield_charge", "Paladin Shield Charge" },
+            { "fallen_angel", "Paladin Fallen Angel" },
+            { "ray_of_hope", "Paladin Ray Of Hope" },
+            { "electric_smite", "Paladin Electric Smite" },
+            { "lightning_relic", "Priest Lightning Relic" },
+            { "holy_relic", "Priest Holy Relic" },
+            { "divine_intervention", "Priest Divine Intervention" },
+            { "grand_cross", "Priest Grand Cross" },
+            { "heavens_judgement", "Priest Heavens Judgement" },
+            { "lightning_tempest", "Priest Lightning Tempest" },
+            { "meteor_fall", "Wizard Meteor Fall" },
+            { "gravity_dominion", "Wizard Gravity Dominion" },
+            { "astral_railcannon", "Wizard Astral Railcannon" },
+            { "astral_greatblade", "Wizard Astral Greatblade" },
+            { "frost_nova", "Wizard Frost Nova" },
+            { "elemental_cataclysm", "Wizard Elemental Cataclysm" },
+            { "arcane_phalanx", "Spellcaster Arcane Phalanx" },
+            { "afterimage_arsenal", "Spellcaster Afterimage Arsenal" },
+            { "void_step", "Spellcaster Void Step" },
+            { "rift_echo", "Spellcaster Rift Echo" },
+            { "gravity_blast", "Spellcaster Gravity Blast" },
+            { "arcane_rupture", "Spellcaster Arcane Rupture" },
+            { "gale_volley", "Acrobat Gale Volley" },
+            { "cyclone_arrow", "Acrobat Cyclone Arrow" },
+            { "swallow_dive", "Acrobat Swallow Dive" },
+            { "skyfall_barrage", "Acrobat Skyfall Barrage" },
+            { "ricochet_arrow", "Acrobat Ricochet Arrow" },
+            { "furious_winds", "Acrobat Furious Winds" },
+            { "ballista_shot", "Bowmaster Ballista Shot" },
+            { "arrow_rain", "Bowmaster Arrow Rain" },
+            { "pinning_shot", "Bowmaster Pinning Shot" },
+            { "explosive_arrow", "Bowmaster Explosive Arrow" },
+            { "splitting_arrow", "Bowmaster Splitting Arrow" },
+            { "starfall_volley", "Bowmaster Starfall Volley" }
+        };
+
+        public static string StunAttack(int index) { return "Attack " + Mathf.Max(1, index).ToString(System.Globalization.CultureInfo.InvariantCulture); }
+
+        private static string StunKey(string skill, bool ascended, string attack)
+        {
+            return skill + "|" + (ascended ? "A|" : "N|") + attack;
+        }
+
+        private static ConfigEntry<bool> SkillStunEntry(string skill, bool ascended, string attack, bool defaultValue)
+        {
+            ConfigEntry<bool> entry;
+            string key = StunKey(skill, ascended, attack);
+            if (SkillStunEntries.TryGetValue(key, out entry)) return entry;
+            if (DragonCombatPlugin.Instance == null) return null;
+            string section;
+            if (!SkillStunSections.TryGetValue(skill, out section)) return null;
+            if (ascended)
+            {
+                switch (skill)
+                {
+                    case "heavy_slash": section = "Mercenary Heavy Slash"; break;
+                    case "impact_wave": section = "Sword Master Impact Wave"; break;
+                    case "righteous_strike": section = "Paladin Righteous Strike"; break;
+                    case "glacial_descent": section = "Wizard Glacial Descent"; break;
+                    case "stonefang_eruption": section = "Spellcaster Stonefang Eruption"; break;
+                    case "piercing_arrow": section = "Bowmaster Piercing Arrow"; break;
+                    case "tumble_shot": section = "Acrobat Tumble Shot"; break;
+                }
+            }
+            entry = DragonCombatPlugin.Instance.Config.Bind(section + (ascended ? " Stun Ascended" : " Stun Normal"),
+                attack + " Stun", defaultValue, "Forced stun for this attack only. Boss/debuff immunity stays intact; damage, knockback and other status effects are unchanged.");
+            SkillStunEntries[key] = entry;
+            return entry;
+        }
+
+        public static void SeedSkillStun(string skill, bool ascended, string attack, bool defaultValue)
+        {
+            SkillStunEntry(skill, ascended, attack, defaultValue);
+        }
+
+        public static void RegisterSkillStun(string skill, bool ascended, string attack, ConfigEntry<bool> entry)
+        {
+            if (entry != null) SkillStunEntries[StunKey(skill, ascended, attack)] = entry;
+        }
+
+        public static bool SkillStunEnabled(Player player, string skill, string attack, bool defaultValue, bool? ascended = null)
+        {
+            if (string.IsNullOrEmpty(skill)) return defaultValue;
+            bool asc = ascended.HasValue ? ascended.Value : AscendedProvider != null && AscendedProvider(player, skill);
+            ConfigEntry<bool> entry = SkillStunEntry(skill, asc, attack, defaultValue);
+            return entry == null ? defaultValue : entry.Value;
+        }
+
+        public static void ApplySkillStun(Player player, Character target, string skill, string attack, bool defaultValue, bool originallyEligible, bool? ascended = null)
+        {
+            if (player == null || target == null || target.IsDead() || target.IsBoss() || IsDebuffImmune(target)) return;
+            // A skill that already stunned keeps its original size/phase filter at default settings.
+            // Skills that did not stun can opt in without changing their damage code.
+            if (defaultValue && !originallyEligible) return;
+            if (SkillStunEnabled(player, skill, attack, defaultValue, ascended)) Stun(target, player.transform.position);
+        }
+
+        public static void BindSkillStuns()
+        {
+            ConfigFile stunConfig = DragonCombatPlugin.Instance.Config;
+            bool saveEach = stunConfig.SaveOnConfigSet;
+            stunConfig.SaveOnConfigSet = false;
+            try
+            {
+                string[] rows = new string[]
+                {
+                "heavy_slash|0|Attack 1=0",
+                "heavy_slash|1|Attack 1=0",
+                "impact_wave|0|Aftershock=0;Attack 1=0",
+                "impact_wave|1|Aftershock=0;Attack 1=0",
+                "impact_punch|0|Attack 1=1",
+                "impact_punch|1|Attack 1=1",
+                "lightning_zap|0|Attack 1=0;Detonation=0",
+                "lightning_zap|1|Attack 1=0;Detonation=0",
+                "righteous_strike|0|Attack 1=0;Attack 2=0;Judgement Detonation=0",
+                "righteous_strike|1|Attack 1=0;Attack 2=0;Judgement Detonation=0",
+                "flame_burst|0|Attack 1=0",
+                "flame_burst|1|Attack 1=0",
+                "glacial_descent|0|Attack 1=0",
+                "glacial_descent|1|Attack 1=0",
+                "stonefang_eruption|0|Attack 1=1",
+                "stonefang_eruption|1|Attack 1=1;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 2=0;Attack 3=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0",
+                "piercing_arrow|0|Attack 1=0",
+                "piercing_arrow|1|Attack 1=0",
+                "tumble_shot|0|Attack 1=0;Attack 2=0;Attack 3=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0",
+                "tumble_shot|1|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 2=0;Attack 3=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0",
+                "snare_trap|0|Attack 1=1",
+                "snare_trap|1|Attack 1=1",
+                "moonlight_splitter|0|Afterimage=0;Attack 1=0;Attack 2=0;Attack 3=0",
+                "moonlight_splitter|1|Afterimage=1;Attack 1=0;Attack 2=0;Attack 3=0;Attack 4=0;Attack 5=0",
+                "crescent_cleave|0|Attack 1=0;Attack 2=0;Attack 3=0",
+                "crescent_cleave|1|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 2=0;Attack 3=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0;Trail 1=0;Trail 10=0;Trail 11=0;Trail 12=0;Trail 13=0;Trail 14=0;Trail 15=0;Trail 16=0;Trail 17=0;Trail 18=0;Trail 19=0;Trail 2=0;Trail 20=0;Trail 21=0;Trail 22=0;Trail 23=0;Trail 24=0;Trail 25=0;Trail 26=0;Trail 27=0;Trail 28=0;Trail 29=0;Trail 3=0;Trail 30=0;Trail 31=0;Trail 32=0;Trail 4=0;Trail 5=0;Trail 6=0;Trail 7=0;Trail 8=0;Trail 9=0",
+                "blade_storm|0|Ascended Echo=0;Attack 1=0;Attack 2=0;Attack 3=0",
+                "blade_storm|1|Ascended Echo=0;Attack 1=0;Attack 2=0;Attack 3=0",
+                "frenzied_charge|0|Attack 1=0;Charge=1;Explosion=0",
+                "frenzied_charge|1|Attack 1=0;Charge=1;Explosion=0",
+                "eclipse|0|Attack 1=0;Counter=0;Delayed Hail=0;Opening Spin=0;Slash Hail=0;Spiral=0",
+                "eclipse|1|Attack 1=0;Counter=0;Delayed Hail=0;Opening Spin=0;Slash Hail=0;Spiral=0",
+                "stomp|0|Attack 1=1;Attack 2=1",
+                "stomp|1|Attack 1=1;Attack 2=1;Attack 3=1",
+                "circle_swing|0|Attack 1=1;Attack 2=1",
+                "circle_swing|1|Attack 1=1;Attack 2=1",
+                "bonecrusher|0|Aftershock=0;Attack 1=1;Fury Cone=1",
+                "bonecrusher|1|Aftershock=0;Attack 1=1;Fury Cone=1",
+                "seismic_guillotine|0|Main Explosion=1;Main Shock 1=1;Main Shock 10=1;Main Shock 11=1;Main Shock 12=1;Main Shock 13=1;Main Shock 14=1;Main Shock 15=1;Main Shock 2=1;Main Shock 3=1;Main Shock 4=1;Main Shock 5=1;Main Shock 6=1;Main Shock 7=1;Main Shock 8=1;Main Shock 9=1",
+                "seismic_guillotine|1|Left Explosion=1;Left Shock 1=1;Left Shock 10=1;Left Shock 11=1;Left Shock 12=1;Left Shock 13=1;Left Shock 14=1;Left Shock 15=1;Left Shock 16=1;Left Shock 17=1;Left Shock 18=1;Left Shock 19=1;Left Shock 2=1;Left Shock 20=1;Left Shock 21=1;Left Shock 22=1;Left Shock 23=1;Left Shock 24=1;Left Shock 25=1;Left Shock 26=1;Left Shock 27=1;Left Shock 28=1;Left Shock 29=1;Left Shock 3=1;Left Shock 30=1;Left Shock 31=1;Left Shock 32=1;Left Shock 33=1;Left Shock 34=1;Left Shock 35=1;Left Shock 36=1;Left Shock 37=1;Left Shock 38=1;Left Shock 39=1;Left Shock 4=1;Left Shock 40=1;Left Shock 5=1;Left Shock 6=1;Left Shock 7=1;Left Shock 8=1;Left Shock 9=1;Main Explosion=1;Main Shock 1=1;Main Shock 10=1;Main Shock 11=1;Main Shock 12=1;Main Shock 13=1;Main Shock 14=1;Main Shock 15=1;Main Shock 16=1;Main Shock 17=1;Main Shock 18=1;Main Shock 19=1;Main Shock 2=1;Main Shock 20=1;Main Shock 21=1;Main Shock 22=1;Main Shock 23=1;Main Shock 24=1;Main Shock 25=1;Main Shock 26=1;Main Shock 27=1;Main Shock 28=1;Main Shock 29=1;Main Shock 3=1;Main Shock 30=1;Main Shock 31=1;Main Shock 32=1;Main Shock 33=1;Main Shock 34=1;Main Shock 35=1;Main Shock 36=1;Main Shock 37=1;Main Shock 38=1;Main Shock 39=1;Main Shock 4=1;Main Shock 40=1;Main Shock 5=1;Main Shock 6=1;Main Shock 7=1;Main Shock 8=1;Main Shock 9=1;Right Explosion=1;Right Shock 1=1;Right Shock 10=1;Right Shock 11=1;Right Shock 12=1;Right Shock 13=1;Right Shock 14=1;Right Shock 15=1;Right Shock 16=1;Right Shock 17=1;Right Shock 18=1;Right Shock 19=1;Right Shock 2=1;Right Shock 20=1;Right Shock 21=1;Right Shock 22=1;Right Shock 23=1;Right Shock 24=1;Right Shock 25=1;Right Shock 26=1;Right Shock 27=1;Right Shock 28=1;Right Shock 29=1;Right Shock 3=1;Right Shock 30=1;Right Shock 31=1;Right Shock 32=1;Right Shock 33=1;Right Shock 34=1;Right Shock 35=1;Right Shock 36=1;Right Shock 37=1;Right Shock 38=1;Right Shock 39=1;Right Shock 4=1;Right Shock 40=1;Right Shock 5=1;Right Shock 6=1;Right Shock 7=1;Right Shock 8=1;Right Shock 9=1",
+                "punishing_bomb|0|Attack 1=0;Fire Burst=0",
+                "punishing_bomb|1|Attack 1=0;Attack 2=0;Attack 3=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Fire Burst=0",
+                "whirlwind|0|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 17=0;Attack 18=0;Attack 19=0;Attack 2=0;Attack 20=0;Attack 21=0;Attack 22=0;Attack 23=0;Attack 24=0;Attack 25=0;Attack 26=0;Attack 27=0;Attack 28=0;Attack 29=0;Attack 3=0;Attack 30=0;Attack 31=0;Attack 32=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0;Finisher=0",
+                "whirlwind|1|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 17=0;Attack 18=0;Attack 19=0;Attack 2=0;Attack 20=0;Attack 21=0;Attack 22=0;Attack 23=0;Attack 24=0;Attack 25=0;Attack 26=0;Attack 27=0;Attack 28=0;Attack 29=0;Attack 3=0;Attack 30=0;Attack 31=0;Attack 32=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0;Finisher=0",
+                "goddess_relic|0|Attack 1=0",
+                "goddess_relic|1|Attack 1=0",
+                "judgement_hammer|0|Attack 1=0;Orbit=0;Throw=0;Verdict=0",
+                "judgement_hammer|1|Attack 1=0;Orbit=0;Throw=0;Verdict=0",
+                "shield_charge|0|Attack 1=0;Charge=0;Lightning Trails=0;Slam=1",
+                "shield_charge|1|Attack 1=0;Charge=0;Lightning Trails=0;Slam=1",
+                "fallen_angel|0|Aftershock=1;Attack 1=1",
+                "fallen_angel|1|Aftershock=1;Attack 1=1",
+                "ray_of_hope|0|Attack 1=0;Burn Application=0;Impact=0;Shatter=0",
+                "ray_of_hope|1|Attack 1=0;Burn Application=0;Burn Tick 1=0;Burn Tick 10=0;Burn Tick 11=0;Burn Tick 12=0;Burn Tick 13=0;Burn Tick 14=0;Burn Tick 15=0;Burn Tick 16=0;Burn Tick 17=0;Burn Tick 18=0;Burn Tick 19=0;Burn Tick 2=0;Burn Tick 20=0;Burn Tick 21=0;Burn Tick 22=0;Burn Tick 23=0;Burn Tick 24=0;Burn Tick 25=0;Burn Tick 26=0;Burn Tick 27=0;Burn Tick 28=0;Burn Tick 29=0;Burn Tick 3=0;Burn Tick 30=0;Burn Tick 31=0;Burn Tick 32=0;Burn Tick 4=0;Burn Tick 5=0;Burn Tick 6=0;Burn Tick 7=0;Burn Tick 8=0;Burn Tick 9=0;Impact=0;Shatter=0",
+                "electric_smite|0|Attack 1=0",
+                "electric_smite|1|Attack 1=0;Storm Pulse 1=0;Storm Pulse 10=0;Storm Pulse 11=0;Storm Pulse 12=0;Storm Pulse 13=0;Storm Pulse 14=0;Storm Pulse 15=0;Storm Pulse 16=0;Storm Pulse 17=0;Storm Pulse 18=0;Storm Pulse 19=0;Storm Pulse 2=0;Storm Pulse 20=0;Storm Pulse 21=0;Storm Pulse 22=0;Storm Pulse 23=0;Storm Pulse 24=0;Storm Pulse 25=0;Storm Pulse 26=0;Storm Pulse 27=0;Storm Pulse 28=0;Storm Pulse 29=0;Storm Pulse 3=0;Storm Pulse 30=0;Storm Pulse 31=0;Storm Pulse 32=0;Storm Pulse 4=0;Storm Pulse 5=0;Storm Pulse 6=0;Storm Pulse 7=0;Storm Pulse 8=0;Storm Pulse 9=0",
+                "lightning_relic|0|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 17=0;Attack 18=0;Attack 19=0;Attack 2=0;Attack 20=0;Attack 21=0;Attack 22=0;Attack 23=0;Attack 24=0;Attack 25=0;Attack 26=0;Attack 27=0;Attack 28=0;Attack 29=0;Attack 3=0;Attack 30=0;Attack 31=0;Attack 32=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0;Final Blast=0",
+                "lightning_relic|1|Arc 1.1=0;Arc 1.2=0;Arc 1.3=0;Arc 10.1=0;Arc 10.2=0;Arc 10.3=0;Arc 11.1=0;Arc 11.2=0;Arc 11.3=0;Arc 12.1=0;Arc 12.2=0;Arc 12.3=0;Arc 13.1=0;Arc 13.2=0;Arc 13.3=0;Arc 14.1=0;Arc 14.2=0;Arc 14.3=0;Arc 15.1=0;Arc 15.2=0;Arc 15.3=0;Arc 16.1=0;Arc 16.2=0;Arc 16.3=0;Arc 17.1=0;Arc 17.2=0;Arc 17.3=0;Arc 18.1=0;Arc 18.2=0;Arc 18.3=0;Arc 19.1=0;Arc 19.2=0;Arc 19.3=0;Arc 2.1=0;Arc 2.2=0;Arc 2.3=0;Arc 20.1=0;Arc 20.2=0;Arc 20.3=0;Arc 21.1=0;Arc 21.2=0;Arc 21.3=0;Arc 22.1=0;Arc 22.2=0;Arc 22.3=0;Arc 23.1=0;Arc 23.2=0;Arc 23.3=0;Arc 24.1=0;Arc 24.2=0;Arc 24.3=0;Arc 25.1=0;Arc 25.2=0;Arc 25.3=0;Arc 26.1=0;Arc 26.2=0;Arc 26.3=0;Arc 27.1=0;Arc 27.2=0;Arc 27.3=0;Arc 28.1=0;Arc 28.2=0;Arc 28.3=0;Arc 29.1=0;Arc 29.2=0;Arc 29.3=0;Arc 3.1=0;Arc 3.2=0;Arc 3.3=0;Arc 30.1=0;Arc 30.2=0;Arc 30.3=0;Arc 31.1=0;Arc 31.2=0;Arc 31.3=0;Arc 32.1=0;Arc 32.2=0;Arc 32.3=0;Arc 4.1=0;Arc 4.2=0;Arc 4.3=0;Arc 5.1=0;Arc 5.2=0;Arc 5.3=0;Arc 6.1=0;Arc 6.2=0;Arc 6.3=0;Arc 7.1=0;Arc 7.2=0;Arc 7.3=0;Arc 8.1=0;Arc 8.2=0;Arc 8.3=0;Arc 9.1=0;Arc 9.2=0;Arc 9.3=0;Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 17=0;Attack 18=0;Attack 19=0;Attack 2=0;Attack 20=0;Attack 21=0;Attack 22=0;Attack 23=0;Attack 24=0;Attack 25=0;Attack 26=0;Attack 27=0;Attack 28=0;Attack 29=0;Attack 3=0;Attack 30=0;Attack 31=0;Attack 32=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0;Final Blast=1",
+                "holy_relic|0|Attack 1=0;Sanctified Bloom=0",
+                "holy_relic|1|Attack 1=0;Sanctified Bloom=0",
+                "divine_intervention|0|Attack 1=1;Parry Shockwave=1",
+                "divine_intervention|1|Attack 1=1;Parry Shockwave=1",
+                "grand_cross|0|Attack 1=0",
+                "grand_cross|1|Attack 1=0",
+                "heavens_judgement|0|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 17=0;Attack 18=0;Attack 19=0;Attack 2=0;Attack 20=0;Attack 21=0;Attack 22=0;Attack 23=0;Attack 24=0;Attack 25=0;Attack 26=0;Attack 27=0;Attack 28=0;Attack 29=0;Attack 3=0;Attack 30=0;Attack 31=0;Attack 32=0;Attack 33=0;Attack 34=0;Attack 35=0;Attack 36=0;Attack 37=0;Attack 38=0;Attack 39=0;Attack 4=0;Attack 40=0;Attack 41=0;Attack 42=0;Attack 43=0;Attack 44=0;Attack 45=0;Attack 46=0;Attack 47=0;Attack 48=0;Attack 49=0;Attack 5=0;Attack 50=0;Attack 51=0;Attack 52=0;Attack 53=0;Attack 54=0;Attack 55=0;Attack 56=0;Attack 57=0;Attack 58=0;Attack 59=0;Attack 6=0;Attack 60=0;Attack 61=0;Attack 62=0;Attack 63=0;Attack 64=0;Attack 7=0;Attack 8=0;Attack 9=0;Beam 1=0;Beam 10=0;Beam 11=0;Beam 12=0;Beam 13=0;Beam 14=0;Beam 15=0;Beam 16=0;Beam 17=0;Beam 18=0;Beam 19=0;Beam 2=0;Beam 20=0;Beam 21=0;Beam 22=0;Beam 23=0;Beam 24=0;Beam 25=0;Beam 26=0;Beam 27=0;Beam 28=0;Beam 29=0;Beam 3=0;Beam 30=0;Beam 31=0;Beam 32=0;Beam 33=0;Beam 34=0;Beam 35=0;Beam 36=0;Beam 37=0;Beam 38=0;Beam 39=0;Beam 4=0;Beam 40=0;Beam 41=0;Beam 42=0;Beam 43=0;Beam 44=0;Beam 45=0;Beam 46=0;Beam 47=0;Beam 48=0;Beam 49=0;Beam 5=0;Beam 50=0;Beam 51=0;Beam 52=0;Beam 53=0;Beam 54=0;Beam 55=0;Beam 56=0;Beam 57=0;Beam 58=0;Beam 59=0;Beam 6=0;Beam 60=0;Beam 61=0;Beam 62=0;Beam 63=0;Beam 64=0;Beam 7=0;Beam 8=0;Beam 9=0;Final Pillar=0",
+                "heavens_judgement|1|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 17=0;Attack 18=0;Attack 19=0;Attack 2=0;Attack 20=0;Attack 21=0;Attack 22=0;Attack 23=0;Attack 24=0;Attack 25=0;Attack 26=0;Attack 27=0;Attack 28=0;Attack 29=0;Attack 3=0;Attack 30=0;Attack 31=0;Attack 32=0;Attack 33=0;Attack 34=0;Attack 35=0;Attack 36=0;Attack 37=0;Attack 38=0;Attack 39=0;Attack 4=0;Attack 40=0;Attack 41=0;Attack 42=0;Attack 43=0;Attack 44=0;Attack 45=0;Attack 46=0;Attack 47=0;Attack 48=0;Attack 49=0;Attack 5=0;Attack 50=0;Attack 51=0;Attack 52=0;Attack 53=0;Attack 54=0;Attack 55=0;Attack 56=0;Attack 57=0;Attack 58=0;Attack 59=0;Attack 6=0;Attack 60=0;Attack 61=0;Attack 62=0;Attack 63=0;Attack 64=0;Attack 7=0;Attack 8=0;Attack 9=0;Beam 1=0;Beam 10=0;Beam 11=0;Beam 12=0;Beam 13=0;Beam 14=0;Beam 15=0;Beam 16=0;Beam 17=0;Beam 18=0;Beam 19=0;Beam 2=0;Beam 20=0;Beam 21=0;Beam 22=0;Beam 23=0;Beam 24=0;Beam 25=0;Beam 26=0;Beam 27=0;Beam 28=0;Beam 29=0;Beam 3=0;Beam 30=0;Beam 31=0;Beam 32=0;Beam 33=0;Beam 34=0;Beam 35=0;Beam 36=0;Beam 37=0;Beam 38=0;Beam 39=0;Beam 4=0;Beam 40=0;Beam 41=0;Beam 42=0;Beam 43=0;Beam 44=0;Beam 45=0;Beam 46=0;Beam 47=0;Beam 48=0;Beam 49=0;Beam 5=0;Beam 50=0;Beam 51=0;Beam 52=0;Beam 53=0;Beam 54=0;Beam 55=0;Beam 56=0;Beam 57=0;Beam 58=0;Beam 59=0;Beam 6=0;Beam 60=0;Beam 61=0;Beam 62=0;Beam 63=0;Beam 64=0;Beam 7=0;Beam 8=0;Beam 9=0;Final Pillar=0",
+                "lightning_tempest|0|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 17=0;Attack 18=0;Attack 19=0;Attack 2=0;Attack 20=0;Attack 21=0;Attack 22=0;Attack 23=0;Attack 24=0;Attack 25=0;Attack 26=0;Attack 27=0;Attack 28=0;Attack 29=0;Attack 3=0;Attack 30=0;Attack 31=0;Attack 32=0;Attack 33=0;Attack 34=0;Attack 35=0;Attack 36=0;Attack 37=0;Attack 38=0;Attack 39=0;Attack 4=0;Attack 40=0;Attack 41=0;Attack 42=0;Attack 43=0;Attack 44=0;Attack 45=0;Attack 46=0;Attack 47=0;Attack 48=0;Attack 49=0;Attack 5=0;Attack 50=0;Attack 51=0;Attack 52=0;Attack 53=0;Attack 54=0;Attack 55=0;Attack 56=0;Attack 57=0;Attack 58=0;Attack 59=0;Attack 6=0;Attack 60=0;Attack 61=0;Attack 62=0;Attack 63=0;Attack 64=0;Attack 7=0;Attack 8=0;Attack 9=0;Lightning 1=0;Lightning 10=0;Lightning 100=0;Lightning 101=0;Lightning 102=0;Lightning 103=0;Lightning 104=0;Lightning 105=0;Lightning 106=0;Lightning 107=0;Lightning 108=0;Lightning 109=0;Lightning 11=0;Lightning 110=0;Lightning 111=0;Lightning 112=0;Lightning 113=0;Lightning 114=0;Lightning 115=0;Lightning 116=0;Lightning 117=0;Lightning 118=0;Lightning 119=0;Lightning 12=0;Lightning 120=0;Lightning 121=0;Lightning 122=0;Lightning 123=0;Lightning 124=0;Lightning 125=0;Lightning 126=0;Lightning 127=0;Lightning 128=0;Lightning 13=0;Lightning 14=0;Lightning 15=0;Lightning 16=0;Lightning 17=0;Lightning 18=0;Lightning 19=0;Lightning 2=0;Lightning 20=0;Lightning 21=0;Lightning 22=0;Lightning 23=0;Lightning 24=0;Lightning 25=0;Lightning 26=0;Lightning 27=0;Lightning 28=0;Lightning 29=0;Lightning 3=0;Lightning 30=0;Lightning 31=0;Lightning 32=0;Lightning 33=0;Lightning 34=0;Lightning 35=0;Lightning 36=0;Lightning 37=0;Lightning 38=0;Lightning 39=0;Lightning 4=0;Lightning 40=0;Lightning 41=0;Lightning 42=0;Lightning 43=0;Lightning 44=0;Lightning 45=0;Lightning 46=0;Lightning 47=0;Lightning 48=0;Lightning 49=0;Lightning 5=0;Lightning 50=0;Lightning 51=0;Lightning 52=0;Lightning 53=0;Lightning 54=0;Lightning 55=0;Lightning 56=0;Lightning 57=0;Lightning 58=0;Lightning 59=0;Lightning 6=0;Lightning 60=0;Lightning 61=0;Lightning 62=0;Lightning 63=0;Lightning 64=0;Lightning 65=0;Lightning 66=0;Lightning 67=0;Lightning 68=0;Lightning 69=0;Lightning 7=0;Lightning 70=0;Lightning 71=0;Lightning 72=0;Lightning 73=0;Lightning 74=0;Lightning 75=0;Lightning 76=0;Lightning 77=0;Lightning 78=0;Lightning 79=0;Lightning 8=0;Lightning 80=0;Lightning 81=0;Lightning 82=0;Lightning 83=0;Lightning 84=0;Lightning 85=0;Lightning 86=0;Lightning 87=0;Lightning 88=0;Lightning 89=0;Lightning 9=0;Lightning 90=0;Lightning 91=0;Lightning 92=0;Lightning 93=0;Lightning 94=0;Lightning 95=0;Lightning 96=0;Lightning 97=0;Lightning 98=0;Lightning 99=0",
+                "lightning_tempest|1|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 17=0;Attack 18=0;Attack 19=0;Attack 2=0;Attack 20=0;Attack 21=0;Attack 22=0;Attack 23=0;Attack 24=0;Attack 25=0;Attack 26=0;Attack 27=0;Attack 28=0;Attack 29=0;Attack 3=0;Attack 30=0;Attack 31=0;Attack 32=0;Attack 33=0;Attack 34=0;Attack 35=0;Attack 36=0;Attack 37=0;Attack 38=0;Attack 39=0;Attack 4=0;Attack 40=0;Attack 41=0;Attack 42=0;Attack 43=0;Attack 44=0;Attack 45=0;Attack 46=0;Attack 47=0;Attack 48=0;Attack 49=0;Attack 5=0;Attack 50=0;Attack 51=0;Attack 52=0;Attack 53=0;Attack 54=0;Attack 55=0;Attack 56=0;Attack 57=0;Attack 58=0;Attack 59=0;Attack 6=0;Attack 60=0;Attack 61=0;Attack 62=0;Attack 63=0;Attack 64=0;Attack 7=0;Attack 8=0;Attack 9=0;Lightning 1=0;Lightning 10=0;Lightning 100=0;Lightning 101=0;Lightning 102=0;Lightning 103=0;Lightning 104=0;Lightning 105=0;Lightning 106=0;Lightning 107=0;Lightning 108=0;Lightning 109=0;Lightning 11=0;Lightning 110=0;Lightning 111=0;Lightning 112=0;Lightning 113=0;Lightning 114=0;Lightning 115=0;Lightning 116=0;Lightning 117=0;Lightning 118=0;Lightning 119=0;Lightning 12=0;Lightning 120=0;Lightning 121=0;Lightning 122=0;Lightning 123=0;Lightning 124=0;Lightning 125=0;Lightning 126=0;Lightning 127=0;Lightning 128=0;Lightning 13=0;Lightning 14=0;Lightning 15=0;Lightning 16=0;Lightning 17=0;Lightning 18=0;Lightning 19=0;Lightning 2=0;Lightning 20=0;Lightning 21=0;Lightning 22=0;Lightning 23=0;Lightning 24=0;Lightning 25=0;Lightning 26=0;Lightning 27=0;Lightning 28=0;Lightning 29=0;Lightning 3=0;Lightning 30=0;Lightning 31=0;Lightning 32=0;Lightning 33=0;Lightning 34=0;Lightning 35=0;Lightning 36=0;Lightning 37=0;Lightning 38=0;Lightning 39=0;Lightning 4=0;Lightning 40=0;Lightning 41=0;Lightning 42=0;Lightning 43=0;Lightning 44=0;Lightning 45=0;Lightning 46=0;Lightning 47=0;Lightning 48=0;Lightning 49=0;Lightning 5=0;Lightning 50=0;Lightning 51=0;Lightning 52=0;Lightning 53=0;Lightning 54=0;Lightning 55=0;Lightning 56=0;Lightning 57=0;Lightning 58=0;Lightning 59=0;Lightning 6=0;Lightning 60=0;Lightning 61=0;Lightning 62=0;Lightning 63=0;Lightning 64=0;Lightning 65=0;Lightning 66=0;Lightning 67=0;Lightning 68=0;Lightning 69=0;Lightning 7=0;Lightning 70=0;Lightning 71=0;Lightning 72=0;Lightning 73=0;Lightning 74=0;Lightning 75=0;Lightning 76=0;Lightning 77=0;Lightning 78=0;Lightning 79=0;Lightning 8=0;Lightning 80=0;Lightning 81=0;Lightning 82=0;Lightning 83=0;Lightning 84=0;Lightning 85=0;Lightning 86=0;Lightning 87=0;Lightning 88=0;Lightning 89=0;Lightning 9=0;Lightning 90=0;Lightning 91=0;Lightning 92=0;Lightning 93=0;Lightning 94=0;Lightning 95=0;Lightning 96=0;Lightning 97=0;Lightning 98=0;Lightning 99=0;Meteor 1=0;Meteor 10=0;Meteor 11=0;Meteor 12=0;Meteor 13=0;Meteor 14=0;Meteor 15=0;Meteor 16=0;Meteor 17=0;Meteor 18=0;Meteor 19=0;Meteor 2=0;Meteor 20=0;Meteor 21=0;Meteor 22=0;Meteor 23=0;Meteor 24=0;Meteor 25=0;Meteor 26=0;Meteor 27=0;Meteor 28=0;Meteor 29=0;Meteor 3=0;Meteor 30=0;Meteor 31=0;Meteor 32=0;Meteor 33=0;Meteor 34=0;Meteor 35=0;Meteor 36=0;Meteor 37=0;Meteor 38=0;Meteor 39=0;Meteor 4=0;Meteor 40=0;Meteor 41=0;Meteor 42=0;Meteor 43=0;Meteor 44=0;Meteor 45=0;Meteor 46=0;Meteor 47=0;Meteor 48=0;Meteor 49=0;Meteor 5=0;Meteor 50=0;Meteor 51=0;Meteor 52=0;Meteor 53=0;Meteor 54=0;Meteor 55=0;Meteor 56=0;Meteor 57=0;Meteor 58=0;Meteor 59=0;Meteor 6=0;Meteor 60=0;Meteor 61=0;Meteor 62=0;Meteor 63=0;Meteor 64=0;Meteor 7=0;Meteor 8=0;Meteor 9=0",
+                "meteor_fall|0|Attack 1=1",
+                "meteor_fall|1|Attack 1=1;Attack 2=1;Attack 3=1;Attack 4=1;Attack 5=1;Attack 6=1",
+                "gravity_dominion|0|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 17=0;Attack 18=0;Attack 19=0;Attack 2=0;Attack 20=0;Attack 21=0;Attack 22=0;Attack 23=0;Attack 24=0;Attack 25=0;Attack 26=0;Attack 27=0;Attack 28=0;Attack 29=0;Attack 3=0;Attack 30=0;Attack 31=0;Attack 32=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0;Final Blast=0",
+                "gravity_dominion|1|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 17=0;Attack 18=0;Attack 19=0;Attack 2=0;Attack 20=0;Attack 21=0;Attack 22=0;Attack 23=0;Attack 24=0;Attack 25=0;Attack 26=0;Attack 27=0;Attack 28=0;Attack 29=0;Attack 3=0;Attack 30=0;Attack 31=0;Attack 32=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0;Final Blast=1",
+                "astral_railcannon|0|Attack 1=0",
+                "astral_railcannon|1|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 17=0;Attack 18=0;Attack 19=0;Attack 2=0;Attack 20=0;Attack 21=0;Attack 22=0;Attack 23=0;Attack 24=0;Attack 25=0;Attack 26=0;Attack 27=0;Attack 28=0;Attack 29=0;Attack 3=0;Attack 30=0;Attack 31=0;Attack 32=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0",
+                "frost_nova|0|Attack 1=1",
+                "frost_nova|1|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 2=0;Attack 3=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0",
+                "elemental_cataclysm|0|Attack 1=1",
+                "elemental_cataclysm|1|Attack 1=1;Attack 2=1",
+                "arcane_phalanx|0|Attack 1=0;Spear Eruption=0",
+                "arcane_phalanx|1|Attack 1=0;Attack 2=0;Attack 3=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Spear Eruption=1",
+                "afterimage_arsenal|0|Attack 1=0;Attack 2=0;Attack 3=0",
+                "afterimage_arsenal|1|Attack 1=0;Attack 2=0;Attack 3=0",
+                "rift_echo|0|Attack 1=0;Attack 2=0;Attack 3=0",
+                "rift_echo|1|Attack 1=0;Attack 2=0;Attack 3=0",
+                "gravity_blast|0|Attack 1=0;End Burst=1;Orb=0",
+                "gravity_blast|1|Attack 1=0;End Burst=1;Orb=0",
+                "arcane_rupture|0|Attack 1=0",
+                "arcane_rupture|1|Attack 1=0",
+                "gale_volley|0|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 2=0;Attack 3=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0",
+                "gale_volley|1|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 2=0;Attack 3=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0",
+                "cyclone_arrow|0|Attack 1=0",
+                "cyclone_arrow|1|Attack 1=0",
+                "swallow_dive|0|Aftershock=0;Attack 1=0",
+                "swallow_dive|1|Aftershock=0;Attack 1=0",
+                "skyfall_barrage|0|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 2=0;Attack 3=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0;Landing Slam=0",
+                "skyfall_barrage|1|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 17=0;Attack 18=0;Attack 19=0;Attack 2=0;Attack 20=0;Attack 21=0;Attack 22=0;Attack 23=0;Attack 24=0;Attack 25=0;Attack 26=0;Attack 27=0;Attack 28=0;Attack 29=0;Attack 3=0;Attack 30=0;Attack 31=0;Attack 32=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0;Landing Slam=1",
+                "ricochet_arrow|0|Attack 1=0;Landing Slam=1",
+                "ricochet_arrow|1|Attack 1=0;Circle 1=0;Circle 2=0;Circle 3=0;Circle 4=0;Circle 5=0;Circle 6=0;Circle 7=0;Circle 8=0;Landing Slam=1",
+                "furious_winds|0|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 17=0;Attack 18=0;Attack 19=0;Attack 2=0;Attack 20=0;Attack 21=0;Attack 22=0;Attack 23=0;Attack 24=0;Attack 25=0;Attack 26=0;Attack 27=0;Attack 28=0;Attack 29=0;Attack 3=0;Attack 30=0;Attack 31=0;Attack 32=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0;End Burst=0",
+                "furious_winds|1|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 17=0;Attack 18=0;Attack 19=0;Attack 2=0;Attack 20=0;Attack 21=0;Attack 22=0;Attack 23=0;Attack 24=0;Attack 25=0;Attack 26=0;Attack 27=0;Attack 28=0;Attack 29=0;Attack 3=0;Attack 30=0;Attack 31=0;Attack 32=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0;End Burst=0",
+                "ballista_shot|0|Attack 1=0;Shockwave=0",
+                "ballista_shot|1|Attack 1=0;Shockwave=0",
+                "arrow_rain|0|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 17=0;Attack 18=0;Attack 19=0;Attack 2=0;Attack 20=0;Attack 21=0;Attack 22=0;Attack 23=0;Attack 24=0;Attack 25=0;Attack 26=0;Attack 27=0;Attack 28=0;Attack 29=0;Attack 3=0;Attack 30=0;Attack 31=0;Attack 32=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0",
+                "arrow_rain|1|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 17=0;Attack 18=0;Attack 19=0;Attack 2=0;Attack 20=0;Attack 21=0;Attack 22=0;Attack 23=0;Attack 24=0;Attack 25=0;Attack 26=0;Attack 27=0;Attack 28=0;Attack 29=0;Attack 3=0;Attack 30=0;Attack 31=0;Attack 32=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0",
+                "pinning_shot|0|Attack 1=0;Delayed Explosion=0",
+                "pinning_shot|1|Attack 1=0;Delayed Explosion=0",
+                "explosive_arrow|0|Attack 1=1;Cluster 1=0;Cluster 10=0;Cluster 11=0;Cluster 12=0;Cluster 13=0;Cluster 14=0;Cluster 15=0;Cluster 16=0;Cluster 17=0;Cluster 18=0;Cluster 19=0;Cluster 2=0;Cluster 20=0;Cluster 21=0;Cluster 22=0;Cluster 23=0;Cluster 24=0;Cluster 25=0;Cluster 26=0;Cluster 27=0;Cluster 28=0;Cluster 29=0;Cluster 3=0;Cluster 30=0;Cluster 31=0;Cluster 32=0;Cluster 4=0;Cluster 5=0;Cluster 6=0;Cluster 7=0;Cluster 8=0;Cluster 9=0",
+                "explosive_arrow|1|Attack 1=1;Cluster 1=0;Cluster 10=0;Cluster 11=0;Cluster 12=0;Cluster 13=0;Cluster 14=0;Cluster 15=0;Cluster 16=0;Cluster 17=0;Cluster 18=0;Cluster 19=0;Cluster 2=0;Cluster 20=0;Cluster 21=0;Cluster 22=0;Cluster 23=0;Cluster 24=0;Cluster 25=0;Cluster 26=0;Cluster 27=0;Cluster 28=0;Cluster 29=0;Cluster 3=0;Cluster 30=0;Cluster 31=0;Cluster 32=0;Cluster 4=0;Cluster 5=0;Cluster 6=0;Cluster 7=0;Cluster 8=0;Cluster 9=0",
+                "splitting_arrow|0|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 2=0;Attack 3=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0;Great Arrow=0;Sky Arrow=0",
+                "splitting_arrow|1|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 17=0;Attack 18=0;Attack 19=0;Attack 2=0;Attack 20=0;Attack 21=0;Attack 22=0;Attack 23=0;Attack 24=0;Attack 25=0;Attack 26=0;Attack 27=0;Attack 28=0;Attack 29=0;Attack 3=0;Attack 30=0;Attack 31=0;Attack 32=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0;Great Arrow=0;Sky Arrow=1",
+                "starfall_volley|0|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 17=0;Attack 18=0;Attack 19=0;Attack 2=0;Attack 20=0;Attack 21=0;Attack 22=0;Attack 23=0;Attack 24=0;Attack 25=0;Attack 26=0;Attack 27=0;Attack 28=0;Attack 29=0;Attack 3=0;Attack 30=0;Attack 31=0;Attack 32=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0;Final Star=0",
+                "starfall_volley|1|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 17=0;Attack 18=0;Attack 19=0;Attack 2=0;Attack 20=0;Attack 21=0;Attack 22=0;Attack 23=0;Attack 24=0;Attack 25=0;Attack 26=0;Attack 27=0;Attack 28=0;Attack 29=0;Attack 3=0;Attack 30=0;Attack 31=0;Attack 32=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0;Final Star=0",
+                };
+                for (int r = 0; r < rows.Length; r++)
+                {
+                    string[] fields = rows[r].Split('|');
+                    string[] attacks = fields[2].Split(';');
+                    for (int h = 0; h < attacks.Length; h++)
+                    {
+                        int equals = attacks[h].LastIndexOf('=');
+                        SkillStunEntry(fields[0], fields[1] == "1", attacks[h].Substring(0, equals), attacks[h].Substring(equals + 1) == "1");
+                    }
+                }
+            }
+            finally { stunConfig.SaveOnConfigSet = saveEach; if (saveEach) stunConfig.Save(); }
+        }
+
         public static void Stun(Character target, Vector3 fromPoint)
         {
             if (IsDebuffImmune(target)) return;
@@ -7918,6 +8400,54 @@ namespace DragonsAltarCombat
             {
             }
             return sharedName.Contains("wand") || prefabName.Contains("wand");
+        }
+
+        public static bool WeaponMeshBounds(Renderer renderer, out Bounds bounds)
+        {
+            bounds = new Bounds();
+            if (renderer == null || renderer is ParticleSystemRenderer || renderer is TrailRenderer || renderer is LineRenderer) return false;
+            MeshFilter filter = renderer.GetComponent<MeshFilter>();
+            if (filter != null && filter.sharedMesh != null) { bounds = filter.sharedMesh.bounds; return true; }
+            SkinnedMeshRenderer skinned = renderer as SkinnedMeshRenderer;
+            if (skinned != null && skinned.sharedMesh != null) { bounds = skinned.localBounds; return true; }
+            return false;
+        }
+
+        public static bool WeaponAxis(GameObject item, Transform hand, out Vector3 direction, out Vector3 tip)
+        {
+            direction = hand.up; tip = hand.position + direction;
+            float longest = 0f;
+            Renderer[] renderers = item.GetComponentsInChildren<Renderer>();
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                Bounds bounds;
+                if (!WeaponMeshBounds(renderers[i], out bounds)) continue;
+                for (int axis = 0; axis < 3; axis++)
+                {
+                    Vector3 extent = Vector3.zero; extent[axis] = bounds.extents[axis];
+                    Vector3 world = renderers[i].transform.TransformVector(extent);
+                    if (world.sqrMagnitude <= longest) continue;
+                    longest = world.sqrMagnitude;
+                    Vector3 center = renderers[i].transform.TransformPoint(bounds.center);
+                    if (Vector3.Dot(world, center - hand.position) < 0f) world = -world;
+                    direction = world.normalized; tip = center + world;
+                }
+            }
+            return longest > 0.0001f;
+        }
+
+        public static bool IsPairedWeapon(ItemDrop.ItemData item)
+        {
+            if (item == null || item.m_shared == null || item.m_shared.m_attack == null) return false;
+            if (item.m_shared.m_itemType.ToString() != "TwoHandedWeapon") return false;
+            string animation = item.m_shared.m_attack.m_attackAnimation ?? "";
+            return animation.StartsWith("dual", StringComparison.OrdinalIgnoreCase);
+        }
+
+        public static bool IsTherzieStaff(ItemDrop.ItemData item)
+        {
+            return IsStaffWeapon(item) && item.m_dropPrefab != null &&
+                item.m_dropPrefab.name.EndsWith("_TW", StringComparison.OrdinalIgnoreCase);
         }
 
         public static bool IsStaffWeapon(ItemDrop.ItemData item)
@@ -8837,9 +9367,37 @@ namespace DragonsAltarCombat
             DragonVfx.SetDomeAlpha(_bulwark, _bulwarkAlpha * (0.75f + 0.25f * Mathf.Sin(Time.time * 4f)) + flash * 0.8f);
         }
 
+        private static Player _animationClassPlayer;
+        private static string _animationClass, _animationAdvancement;
+        internal static void CheckAnimationClass(Player player)
+        {
+            if (player == null) { _animationClassPlayer = null; _animationClass = null; return; }
+            string className = GetClassName(player), advancement = GetAdvancementName(player);
+            if (_animationClassPlayer != player) { _animationClassPlayer = player; _animationClass = className; _animationAdvancement = advancement; return; }
+            if (_animationClass == className && _animationAdvancement == advancement) return;
+            _animationClass = className; _animationAdvancement = advancement;
+            DragonSkillClipDriver driver = player.GetComponent<DragonSkillClipDriver>();
+            if (driver != null) driver.CancelAnimation();
+            Animator animator = player.GetComponentInChildren<Animator>();
+            DragonMixamoPlayer source = animator == null ? null : animator.GetComponent<DragonMixamoPlayer>();
+            if (source != null) source.CancelAnimation();
+            DragonVanillaTail tail = player.GetComponent<DragonVanillaTail>();
+            if (tail != null) { tail.enabled = false; UnityEngine.Object.Destroy(tail); }
+            DragonVanillaLoop loop = player.GetComponent<DragonVanillaLoop>();
+            if (loop != null) { loop.enabled = false; UnityEngine.Object.Destroy(loop); }
+            VanillaPauseUntil = 0f; SkillBowHoldUntil = 0f; DragonMixamo.LiveUntil = 0f;
+            _aimWindupUntil = 0f;
+            ForceRun(player, false);
+            SetSkillAnimSpeed(player, 1f, 0f);
+            if (animator != null) animator.speed = 1f;
+        }
+
         public static void RuntimeUpdate()
         {
+            CheckAnimationClass(Player.m_localPlayer);
             float now = Time.time;
+            if (_aimWindupPlayer == Player.m_localPlayer && now < _aimWindupUntil)
+                FaceAimNow(_aimWindupPlayer);
             if (Player.m_localPlayer != null || _bulwark != null) UpdateHolyBulwark(Player.m_localPlayer);
             if (PendingLearns.Count > 0) UpdateLearns();
             UpdateLaunchFalls();
@@ -8929,6 +9487,7 @@ namespace DragonsAltarCombat
                 if (state.ZapAttacker != null)
                     hit.SetAttacker(state.ZapAttacker);
                 target.Damage(hit);
+                ApplySkillStun(state.ZapAttacker, target, "lightning_zap", "Detonation", false, true);
             }
 
             if (DragonCombatPlugin.Instance != null)
@@ -9596,9 +10155,21 @@ namespace DragonsAltarCombat
             if (an == null || !an.isHuman) return false;
             DragonMixamoPlayer p = an.GetComponent<DragonMixamoPlayer>();
             if (p == null) p = an.gameObject.AddComponent<DragonMixamoPlayer>();
-            p.Begin(player, an, clip, realTimes, clipTimes, fadeIn, fadeOut, transferRoot && clipTimes[0] < 0.05f);
+            p.Begin(player, an, clip, realTimes, clipTimes, fadeIn, fadeOut, transferRoot && clipTimes[0] < 0.05f,
+                name == "melee_run_jump_attack" || name == "great_sword_jump_attack");
             DragonArmGuard.Attach(player);
             return true;
+        }
+
+        // RJS landing: continue the held clip instead of blending two copies of the same pose.
+        public static bool ContinueWarp(Player player, string name, float[] realTimes, float[] clipTimes, float fadeIn, float fadeOut)
+        {
+            if (player == null) return false;
+            Animator an = player.GetComponentInChildren<Animator>();
+            DragonMixamoPlayer p = an == null ? null : an.GetComponent<DragonMixamoPlayer>();
+            AnimationClip clip = Resolve(name);
+            if (p != null && p.Continue(clip, realTimes, clipTimes, fadeOut)) return true;
+            return PlayWarp(player, name, realTimes, clipTimes, fadeIn, fadeOut, false);
         }
 
         // v0.25.129: jump slams - the real (physics) jump owns the height, so a clip's own rise is clipped off the hips
@@ -9641,6 +10212,73 @@ namespace DragonsAltarCombat
             Animator an = player.GetComponentInChildren<Animator>();
             DragonMixamoPlayer p = an != null ? an.GetComponent<DragonMixamoPlayer>() : null;
             if (p != null) p.HoldEnd = on;
+        }
+
+        public static AnimationClip OriginalSkillClip(Player player, string name)
+        {
+            Animator an = player == null ? null : player.GetComponentInChildren<Animator>();
+            RuntimeAnimatorController controller = an == null ? null : an.runtimeAnimatorController;
+            while (controller is AnimatorOverrideController)
+                controller = ((AnimatorOverrideController)controller).runtimeAnimatorController;
+            string wanted = name.Replace("_", "").Replace("-", "").Replace(" ", "").ToLowerInvariant();
+            AnimationClip[] clips;
+            // Some Dual Wield builds replace the complete controller rather than using an override chain.
+            try
+            {
+                Type dual = AccessTools.TypeByName("DualWield.DualWield");
+                FieldInfo field = dual == null ? null : AccessTools.Field(dual, "CustomRuntimeControllers");
+                IDictionary known = field == null ? null : field.GetValue(null) as IDictionary;
+                RuntimeAnimatorController original = known == null ? null : known["Original"] as RuntimeAnimatorController;
+                clips = original == null ? null : original.animationClips;
+                if (clips != null) for (int i = 0; i < clips.Length; i++)
+                    if (clips[i] != null && (clips[i].name.Replace("_", "").Replace("-", "").Replace(" ", "").ToLowerInvariant() == wanted ||
+                        (wanted.Contains("sledge") && clips[i].name.ToLowerInvariant().Contains("sledge") &&
+                         (clips[i].name.ToLowerInvariant().Contains("attack") || clips[i].name.ToLowerInvariant().Contains("swing")))))
+                        return clips[i];
+            }
+            catch (Exception) { }
+            clips = controller == null ? null : controller.animationClips;
+            if (clips != null) for (int i = 0; i < clips.Length; i++)
+                if (clips[i] != null && (clips[i].name.Replace("_", "").Replace("-", "").Replace(" ", "").ToLowerInvariant() == wanted ||
+                        (wanted.Contains("sledge") && clips[i].name.ToLowerInvariant().Contains("sledge") &&
+                         (clips[i].name.ToLowerInvariant().Contains("attack") || clips[i].name.ToLowerInvariant().Contains("swing")))))
+                    return clips[i];
+            return null;
+        }
+
+        public static bool PlaySource(Player player, AnimationClip clip, float from, float to, float seconds, float blend, bool hold, string tune = null)
+        {
+            Animator an = player == null ? null : player.GetComponentInChildren<Animator>();
+            if (clip == null || an == null || !an.isHuman) return false;
+            if (tune != null)
+            {
+                float start, end;
+                DragonCombat.AnimTuning(tune, out start, out end);
+                float oldSpan = Mathf.Max(0.03f, to - from);
+                from = Mathf.Max(from, start * clip.length);
+                to = Mathf.Max(from + 0.03f, Mathf.Min(to, end * clip.length));
+                float speed = DragonCombat.AnimSpeed(tune);
+                seconds = speed > 0f ? (to - from) / speed : seconds * (to - from) / oldSpan;
+            }
+            DragonMixamoPlayer p = an.GetComponent<DragonMixamoPlayer>();
+            if (p == null) p = an.gameObject.AddComponent<DragonMixamoPlayer>();
+            p.Begin(player, an, clip, new float[] { 0f, Mathf.Max(0.03f, seconds) },
+                new float[] { from, to }, blend, 0.22f, false, false, true);
+            p.HoldEnd = hold;
+            DragonCombat.BlockSkillAnimAttack(player, seconds + 0.25f);
+            DragonArmGuard.Attach(player);
+            return true;
+        }
+
+        public static float ContactTime(AnimationClip clip, float fallback)
+        {
+            if (clip != null)
+            {
+                AnimationEvent[] events = clip.events;
+                for (int i = 0; i < events.Length; i++)
+                    if (events[i].functionName == "OnAttackTrigger" || events[i].functionName == "Hit") return events[i].time;
+            }
+            return fallback;
         }
 
         public static float LiveUntil;   // v0.25.132 set while a Mixamo clip drives the local player
@@ -9705,9 +10343,11 @@ namespace DragonsAltarCombat
         private UnityEngine.Playables.PlayableGraph _graph;
         private UnityEngine.Animations.AnimationPlayableOutput _output;
         private UnityEngine.Animations.AnimationClipPlayable _clip;
+        private AnimationClip _sourceClip;
         private UnityEngine.Playables.Playable _root;
         private UnityEngine.Animations.AnimationMixerPlayable _xmix;
         private bool _live, _stopping, _mixing, _restSet, _transfer;
+        private bool _stableLanding;
         private float _fadeIn, _fadeOut, _age, _stopAt, _w, _mixAge;
         private float[] _wr, _wc;
         private Transform _hips, _body;
@@ -9719,12 +10359,13 @@ namespace DragonsAltarCombat
         public bool HoldEnd;   // v0.25.138
         private float _restY;
         private Renderer[] _reachR;
-        private float _reachFrom, _reachPeak, _reachTo;
+        private float _reachFrom, _reachPeak, _reachTo, _reachAngle;
+        private bool _reachLocked;
         private static int _reachMask = -1;
 
         public void SetReach(Renderer[] rs, float from, float peak, float to)
         {
-            _reachR = rs; _reachFrom = from; _reachPeak = Mathf.Max(from + 0.01f, peak); _reachTo = Mathf.Max(_reachPeak + 0.01f, to);
+            _reachR = rs; _reachAngle = 0f; _reachLocked = false; _reachFrom = from; _reachPeak = Mathf.Max(from + 0.01f, peak); _reachTo = Mathf.Max(_reachPeak + 0.01f, to);
         }
 
         // v0.25.130 bend the spine forward (around the body's right axis) until the weapon head touches the ground.
@@ -9737,11 +10378,24 @@ namespace DragonsAltarCombat
             w = w * w * (3f - 2f * w) * _wOut;
             Transform spine = an.GetBoneTransform(HumanBodyBones.Spine), hand = an.GetBoneTransform(HumanBodyBones.RightHand);
             if (spine == null || hand == null || w <= 0.001f) return;
+            if (_reachLocked)
+            {
+                spine.rotation = Quaternion.AngleAxis(_reachAngle * w, _body.right) * spine.rotation;
+                return;
+            }
             bool any = false; Bounds b = new Bounds();
             for (int i = 0; i < _reachR.Length; i++)
             {
                 if (_reachR[i] == null || !_reachR[i].enabled) continue;
-                if (!any) { b = _reachR[i].bounds; any = true; } else b.Encapsulate(_reachR[i].bounds);
+                Bounds local;
+                if (!DragonCombat.WeaponMeshBounds(_reachR[i], out local)) continue;
+                for (int corner = 0; corner < 8; corner++)
+                {
+                    Vector3 point = local.center + Vector3.Scale(local.extents,
+                        new Vector3((corner & 1) == 0 ? -1f : 1f, (corner & 2) == 0 ? -1f : 1f, (corner & 4) == 0 ? -1f : 1f));
+                    point = _reachR[i].transform.TransformPoint(point);
+                    if (!any) { b = new Bounds(point, Vector3.zero); any = true; } else b.Encapsulate(point);
+                }
             }
             if (!any) return;
             Vector3 dir = b.center - hand.position;
@@ -9765,13 +10419,17 @@ namespace DragonsAltarCombat
             if (R < 0.2f || f < 0.05f) return;
             float want = Mathf.Clamp((gy - 0.06f - spine.position.y) / R, -1f, 1f);   // v0.25.131 the head bites into the ground
             float delta = Mathf.Atan2(u, f) * Mathf.Rad2Deg - Mathf.Asin(want) * Mathf.Rad2Deg;
-            delta = Mathf.Clamp(delta, 0f, 60f) * w;
-            spine.rotation = Quaternion.AngleAxis(delta, _body.right) * spine.rotation;
+            _reachAngle = Mathf.Clamp(delta, 0f, 60f);
+            if (ct >= _reachPeak) _reachLocked = true;
+            spine.rotation = Quaternion.AngleAxis(_reachAngle * w, _body.right) * spine.rotation;
         }
 
-        public void Begin(Player player, Animator an, AnimationClip clip, float[] realTimes, float[] clipTimes, float fadeIn, float fadeOut, bool transfer)
+        public void Begin(Player player, Animator an, AnimationClip clip, float[] realTimes, float[] clipTimes, float fadeIn, float fadeOut, bool transfer, bool stableLanding, bool keepOutgoingTempo = false)
         {
+            DragonCombat.CheckAnimationClass(player);
             bool chained = _live && !_stopping && _graph.IsValid();
+            _reachR = null; _reachAngle = 0f; _reachLocked = false;
+            if (clip != _sourceClip) NoRise = false;
             _body = player.transform;
             _rb = player.GetComponent<Rigidbody>();
             _hips = an.GetBoneTransform(HumanBodyBones.Hips);
@@ -9788,10 +10446,17 @@ namespace DragonsAltarCombat
             else
             {
                 // the outgoing clip keeps moving naturally while the new one fades in
-                UnityEngine.Playables.PlayableExtensions.SetSpeed(_clip, 1.0);
+                float outgoing = 1f;
+                // A held contact pose remains held during its cross-fade; it cannot race into re-chambering.
+                if (keepOutgoingTempo && HoldEnd && _wr != null && _age >= _wr[_wr.Length - 1]) outgoing = 0f;
+                else if (keepOutgoingTempo && _wr != null)
+                    for (int i = 1; i < _wr.Length; i++)
+                        if (_age <= _wr[i]) { outgoing = (_wc[i] - _wc[i - 1]) / Mathf.Max(0.001f, _wr[i] - _wr[i - 1]); break; }
+                UnityEngine.Playables.PlayableExtensions.SetSpeed(_clip, outgoing);
             }
             UnityEngine.Animations.AnimationClipPlayable cp = UnityEngine.Animations.AnimationClipPlayable.Create(_graph, clip);
-            cp.SetApplyFootIK(true);
+            _stableLanding = stableLanding;
+            cp.SetApplyFootIK(!stableLanding); // These jumps already supply their own landing pose.
             UnityEngine.Playables.PlayableExtensions.SetTime(cp, Mathf.Max(0f, clipTimes[0]));
             UnityEngine.Playables.PlayableExtensions.SetSpeed(cp, 0.0);   // time is driven by the warp
             _mixing = false;
@@ -9814,7 +10479,7 @@ namespace DragonsAltarCombat
                 UnityEngine.Playables.PlayableOutputExtensions.SetWeight(_output, 0f);
                 _graph.Play();
             }
-            _clip = cp;
+            _clip = cp; _sourceClip = clip;
             _wr = (float[])realTimes.Clone(); _wc = (float[])clipTimes.Clone();
             for (int i = 0; i < _wc.Length; i++) _wc[i] = Mathf.Clamp(_wc[i], 0f, clip.length);
             _fadeIn = Mathf.Max(0.01f, fadeIn);
@@ -9823,6 +10488,21 @@ namespace DragonsAltarCombat
             _age = 0f; _stopping = false; _live = true; HoldEnd = false;
             _transfer = transfer && !chained && _rb != null;
             if (_transfer) { _bodyStart = _rb.position; _want = Vector3.zero; }
+        }
+
+        // Used only by Run Jump Slam recovery: the last airborne pose is already the first landing pose.
+        public bool Continue(AnimationClip clip, float[] realTimes, float[] clipTimes, float fadeOut)
+        {
+            if (!_live || _stopping || !_graph.IsValid() || clip == null || clip != _sourceClip ||
+                realTimes == null || clipTimes == null || realTimes.Length < 2 || realTimes.Length != clipTimes.Length) return false;
+            float actualContactStart = Warp(_age);
+            _wr = (float[])realTimes.Clone(); _wc = (float[])clipTimes.Clone();
+            _wc[0] = actualContactStart;
+            for (int i = 0; i < _wc.Length; i++) _wc[i] = Mathf.Clamp(_wc[i], 0f, clip.length);
+            _age = 0f; _fadeOut = Mathf.Max(0.01f, fadeOut); HoldEnd = false;
+            // Preserve the airborne hip anchor through contact: the frozen frame still contains root travel.
+            // This corrects only the visual skeleton; it never moves the Rigidbody.
+            return true;
         }
 
         public void StopNow(float fadeOut)
@@ -9891,7 +10571,8 @@ namespace DragonsAltarCombat
             }
             Vector3 corr = target - flat;
             if (NoRise && y > _restY) corr.y = _restY - y;   // v0.25.129 no double jump height
-            _hips.position += _body.TransformVector(corr) * _wOut;
+            // The pose is already blended; weighting its correction again leaves travel at the seam.
+            _hips.position += _body.TransformVector(corr) * (_stableLanding ? 1f : _wOut);
             if (_reachR != null) GroundReach(_hips.GetComponentInParent<Animator>());
         }
 
@@ -9917,9 +10598,12 @@ namespace DragonsAltarCombat
             _rb.MovePosition(_rb.position + step);
         }
 
+        public void CancelAnimation() { Kill(); NoRise = false; }
+
         private void Kill()
         {
             if (_graph.IsValid()) _graph.Destroy();
+            _reachR = null; _reachAngle = 0f; _reachLocked = false;
             _live = false; _mixing = false; _stopping = false;
         }
 
@@ -12764,22 +13448,9 @@ namespace DragonsAltarCombat
                 GameObject item = vis == null || _bladeVisRight == null ? null : _bladeVisRight.GetValue(vis) as GameObject;
                 if (item != null)
                 {
-                    Renderer[] rs = item.GetComponentsInChildren<Renderer>();
-                    bool any = false; Bounds b = new Bounds();
-                    for (int i = 0; i < rs.Length; i++)
-                    {
-                        if (rs[i] == null || rs[i] is ParticleSystemRenderer) continue;
-                        if (!any) { b = rs[i].bounds; any = true; } else b.Encapsulate(rs[i].bounds);
-                    }
-                    if (any)
-                    {
-                        Vector3 off = b.center - hand.position;
-                        if (off.magnitude > 0.1f)
-                        {
-                            dir = off.normalized;
-                            tip = hand.position + dir * Mathf.Clamp(off.magnitude * 2f, 0.3f, 2.5f);
-                        }
-                    }
+                    Vector3 axis, end;
+                    if (DragonCombat.WeaponAxis(item, hand, out axis, out end)) { dir = axis; tip = end; }
+
                 }
             }
             catch (Exception) { }

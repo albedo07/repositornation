@@ -254,6 +254,7 @@ namespace AlbedosCustomClassesSkills
         private ConfigEntry<float> _impactCooldown;
         private ConfigEntry<float> _impactStamina;
         private ConfigEntry<float> _impactWindup;
+        private ConfigEntry<float> _impactAnimSpeed;
         private ConfigEntry<float> _impactLength;
         private ConfigEntry<float> _impactWidth;
         private ConfigEntry<float> _impactTravelTime;
@@ -352,7 +353,8 @@ namespace AlbedosCustomClassesSkills
 
             _impactCooldown = Config.Bind("Warrior.Impact Wave", "Cooldown", 8f, "Seconds.");
             _impactStamina = Config.Bind("Warrior.Impact Wave", "StaminaCost", 18f, "Stamina cost.");
-            _impactWindup = Config.Bind("Warrior.Impact Wave", "Windup", 1f, "Framework default windup because this skill does not specify one.");
+            _impactWindup = Config.Bind("Warrior.Impact Wave", "Windup", 0.5f, "Seconds to the attack release (before attack speed and animation speed modifiers).");
+            _impactAnimSpeed = Config.Bind("Warrior.Impact Wave", "AnimationSpeed", 1f, new ConfigDescription("1 = normal. Plays the CA and releases the wave together at the chosen speed.", new AcceptableValueRange<float>(0.1f, 5f)));
             _impactLength = Config.Bind("Warrior.Impact Wave", "Length", 10f, "Framework Ground Projectile range: literal 10m.");
             _impactWidth = Config.Bind("Warrior.Impact Wave", "Width", 2f, "Framework Ground Projectile width: literal 2m.");
             _impactTravelTime = Config.Bind("Warrior.Impact Wave", "TravelTime", 0.65f, "Testing/default travel time across full range.");
@@ -646,13 +648,13 @@ namespace AlbedosCustomClassesSkills
 
             for (int i = 0; i < targets.Count; i++)
             {
-                DealDamage(player, targets[i], _heavyDamage, 18f);
+                DealDamage(player, targets[i], _heavyDamage, 18f, "heavy_slash", "Attack 1", false, false, false);
                 DragonCombat.ApplyBrokenBones(targets[i], 6f);
             }
 
             if (_enableVfx.Value)
             {
-                StartCoroutine(AnimateSlashArc(player.transform.position + Vector3.up * 1.0f, forward, range, angle, new Color(1f, 0.58f, 0.18f, 1f)));
+                StartCoroutine(AnimateSlashArc(player.transform.position + Vector3.up * 1.0f, forward, range, angle, new Color(1f, 0.58f, 0.18f, 1f), true));
                 // v0.25.55 VFX: sparks fly off the arc of the heavy slash
                 Vector3 hsC = player.transform.position + Vector3.up;
                 Vector3 hsF = forward; hsF.y = 0f; if (hsF.sqrMagnitude < 0.01f) hsF = Vector3.forward; hsF.Normalize();
@@ -672,7 +674,7 @@ namespace AlbedosCustomClassesSkills
             if (!BeginCast(player, id, _impactCooldown.Value, _impactStamina.Value))
                 return;
 
-            float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _impactWindup.Value));
+            float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _impactWindup.Value) / Mathf.Max(0.1f, _impactAnimSpeed.Value));
             DragonCombat.LockSkill(player, windup);
             DragonCombat.PlayClip(player, "warrior_impact_wave", windup);
             StartCoroutine(ImpactWaveRoutine(player, windup));
@@ -725,7 +727,7 @@ namespace AlbedosCustomClassesSkills
                     if (target == null || damaged.Contains(target) || !IsEnemy(player, target))
                         continue;
                     damaged.Add(target);
-                    DealDamage(player, target, _impactDamage, 16f);
+                    DealDamage(player, target, _impactDamage, 16f, "impact_wave", "Attack 1", false, false, false);
                 }
 
                 if (iwCrest != null)
@@ -798,9 +800,8 @@ namespace AlbedosCustomClassesSkills
                 if (target == null || damaged.Contains(target) || !IsEnemy(player, target))
                     continue;
                 damaged.Add(target);
-                DealDamage(player, target, _punchDamage, 24f);
-                if (DragonCombat.IsSmallEnemy(target))
-                    DragonCombat.Stun(target, player.transform.position);
+                DealDamage(player, target, _punchDamage, 24f, "impact_punch", "Attack 1", true, true, null);
+                DragonCombat.ApplySkillStun(player, target, "impact_punch", "Attack 1", true, true);
             }
 
             if (_enableVfx.Value)
@@ -858,7 +859,7 @@ namespace AlbedosCustomClassesSkills
 
             for (int i = 0; i < targets.Count; i++)
             {
-                DealDamage(player, targets[i], _zapDamage, 8f);
+                DealDamage(player, targets[i], _zapDamage, 8f, "lightning_zap", "Attack 1", false, false, null);
                 DragonCombat.ApplyZap(player, targets[i], _zapExplosionDamage.Value, 0f, 0f);
             }
 
@@ -898,7 +899,7 @@ namespace AlbedosCustomClassesSkills
             List<Character> targets = GetSphereTargets(player, target, Mathf.Max(0.5f, DragonCombat.M(_righteousRadius.Value)));
             for (int i = 0; i < targets.Count; i++)
             {
-                DealDamage(player, targets[i], _righteousDamage, 14f);
+                DealDamage(player, targets[i], _righteousDamage, 14f, "righteous_strike", "Attack 1", false, false, false);
                 DragonCombat.ApplyExpose(targets[i], Mathf.Max(0.1f, _righteousExposeDuration.Value));
             }
         }
@@ -963,7 +964,7 @@ namespace AlbedosCustomClassesSkills
             Vector3 origin = player.transform.position + Vector3.up * 1.1f;
             Vector3 forward = GetCrosshairDirection(player, origin);
             List<Character> targets = GetConeTargets(player, origin, forward, Mathf.Max(1f, DragonCombat.M(_flameRange.Value)), Mathf.Clamp(_flameConeAngle.Value, 10f, 170f));
-            for (int i = 0; i < targets.Count; i++) { DealDamage(player, targets[i], _flameDamage, 7f); StartCoroutine(FlameBurnRoutine(player, targets[i], Mathf.Max(0.1f, _flameBurnDuration.Value))); }
+            for (int i = 0; i < targets.Count; i++) { DealDamage(player, targets[i], _flameDamage, 7f, "flame_burst", "Attack 1", false, false, null); StartCoroutine(FlameBurnRoutine(player, targets[i], Mathf.Max(0.1f, _flameBurnDuration.Value))); }
             if (_enableVfx.Value)
             {
                 StartCoroutine(AnimateSlashArc(player.transform.position + Vector3.up * 0.9f, forward, Mathf.Max(1f, DragonCombat.M(_flameRange.Value)), _flameConeAngle.Value, new Color(1f, 0.28f, 0.05f, 1f)));
@@ -995,7 +996,7 @@ namespace AlbedosCustomClassesSkills
             if (_enableVfx.Value && DragonVfx.Enabled) { try { chunk = DragonVfx.IceDiamond(start, Mathf.Max(2f, DragonCombat.M(_glacialRadius.Value) * 0.9f)); } catch (Exception) { chunk = null; } }   // v0.25.75 diamond of ice
             if (_enableVfx.Value && chunk == null) { chunk = GameObject.CreatePrimitive(PrimitiveType.Cube); chunk.name = "DragonsAltarGlacialDescent"; chunk.transform.position = start; chunk.transform.localScale = new Vector3(4.8f, 3.6f, 4.8f); chunk.transform.rotation = Quaternion.Euler(18f, 28f, 12f); Collider c = chunk.GetComponent<Collider>(); if (c != null) Destroy(c); Renderer r = chunk.GetComponent<Renderer>(); if (r != null) { Shader s = Shader.Find("Sprites/Default"); if (s != null) r.material = new Material(s); if (r.material != null) r.material.color = new Color(0.48f, 0.86f, 1f, 0.86f); } }
             float elapsed = 0f; while (elapsed < 0.45f) { float t = Mathf.Clamp01(elapsed / 0.45f); if (chunk != null) { chunk.transform.position = Vector3.Lerp(start, target + Vector3.up * 1.4f, t); if (chunk.name != "IH_IceDiamond") chunk.transform.Rotate(new Vector3(38f, 22f, 17f) * Time.deltaTime); } elapsed += Time.deltaTime; yield return null; } if (chunk != null) Destroy(chunk);
-            float radius = Mathf.Max(0.5f, DragonCombat.M(_glacialRadius.Value)); List<Character> targets = GetSphereTargets(player, target, radius); for (int i = 0; i < targets.Count; i++) { DealDamage(player, targets[i], _glacialDamage, 18f); DragonCombat.ApplyFrost(targets[i], Mathf.Max(0.1f, _glacialFrostDuration.Value)); }
+            float radius = Mathf.Max(0.5f, DragonCombat.M(_glacialRadius.Value)); List<Character> targets = GetSphereTargets(player, target, radius); for (int i = 0; i < targets.Count; i++) { DealDamage(player, targets[i], _glacialDamage, 18f, "glacial_descent", "Attack 1", false, false, false); DragonCombat.ApplyFrost(targets[i], Mathf.Max(0.1f, _glacialFrostDuration.Value)); }
             if (_enableVfx.Value)
             {
                 StartCoroutine(AnimateRing(target + Vector3.up * 0.08f, 0.4f, radius, 0.55f, new Color(0.50f, 0.90f, 1f, 0.95f), 0.14f, 0f));
@@ -1013,7 +1014,7 @@ namespace AlbedosCustomClassesSkills
         private IEnumerator StonefangEruptionRoutine(Player player, Vector3 target, float windup)
         {
             ShowMessage("Stonefang Eruption"); if (windup > 0f) yield return new WaitForSeconds(windup); if (player == null || player.IsDead()) yield break; float radius = Mathf.Max(0.5f, DragonCombat.M(_stoneRadius.Value)); List<Character> targets = GetSphereTargets(player, target, radius);
-            for (int i = 0; i < targets.Count; i++) { Character enemy = targets[i]; DealDamage(player, enemy, _stoneDamage, 20f); if (DragonCombat.IsSmallEnemy(enemy)) DragonCombat.Stun(enemy, player.transform.position); if (!enemy.IsBoss()) DragonCombat.ApplyCripple(enemy, Mathf.Max(0.1f, _stoneCrippleDuration.Value)); }
+            for (int i = 0; i < targets.Count; i++) { Character enemy = targets[i]; DealDamage(player, enemy, _stoneDamage, 20f, "stonefang_eruption", "Attack 1", true, true, false); if (DragonCombat.IsSmallEnemy(enemy)) { if (DragonCombat.SkillStunEnabled(player, "stonefang_eruption", "Attack 1", true, false)) DragonCombat.Stun(enemy, player.transform.position); } if (!enemy.IsBoss()) DragonCombat.ApplyCripple(enemy, Mathf.Max(0.1f, _stoneCrippleDuration.Value)); }
             if (_enableVfx.Value) { for (int i = 0; i < 9; i++) { float a = ((float)i / 9f) * Mathf.PI * 2f; float d = i == 0 ? 0f : radius * (0.35f + 0.55f * ((float)(i % 3) / 2f)); StartCoroutine(AnimateStoneSpike(target + new Vector3(Mathf.Cos(a)*d, 0.1f, Mathf.Sin(a)*d), 0.30f + 0.04f*i)); } StartCoroutine(AnimateRing(target + Vector3.up*0.06f, 0.3f, radius, 0.45f, new Color(0.62f,0.48f,0.32f,0.90f),0.12f,0f)); Vector3 st = target; float sr = radius; DragonCombat.RunVfx(delegate { DragonVfx.Shockwave(st, new Color(0.70f, 0.55f, 0.35f, 1f), sr, 0.45f); DragonVfx.Burst(st + Vector3.up * 0.4f, new Color(0.45f, 0.36f, 0.26f, 0.85f), 70, 8f, 0.5f, 1.1f, 1.2f); DragonVfx.GroundImpact(st, new Color(0.85f, 0.60f, 0.30f, 1f), sr, 1.4f); DragonVfx.SpikeRing(st, DragonVfx.Rock, sr * 0.8f, 8, 2f, 1.4f); }); }
         }
 
@@ -1107,9 +1108,9 @@ namespace AlbedosCustomClassesSkills
             return result;
         }
 
-        private IEnumerator AnimateSlashArc(Vector3 center, Vector3 forward, float radius, float angle, Color color)
+        private IEnumerator AnimateSlashArc(Vector3 center, Vector3 forward, float radius, float angle, Color color, bool rightToLeft = false)
         {
-            if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.SlashArc(center, forward, radius, angle, color, Mathf.Max(0.5f, radius * 0.25f), 0.45f, 0f); });   // v0.25.59 skin
+            if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.SlashArc(center, forward, radius, angle, color, Mathf.Max(0.5f, radius * 0.25f), 0.45f, rightToLeft ? 180f : 0f); });   // v0.25.59 skin
             if (_enableVfx.Value && DragonVfx.Enabled) yield break;   // v0.25.63 no line placeholder
             GameObject obj = new GameObject("DragonsAltarSlashArc");
             LineRenderer line = obj.AddComponent<LineRenderer>();
@@ -1139,7 +1140,7 @@ namespace AlbedosCustomClassesSkills
                 for (int i = 0; i < line.positionCount; i++)
                 {
                     float p = (float)i / (float)(line.positionCount - 1);
-                    float a = Mathf.Lerp(-angle * 0.5f, angle * 0.5f, p) * Mathf.Deg2Rad;
+                    float a = Mathf.Lerp(rightToLeft ? angle * 0.5f : -angle * 0.5f, rightToLeft ? -angle * 0.5f : angle * 0.5f, p) * Mathf.Deg2Rad;
                     Vector3 dir = flat * Mathf.Cos(a) + right * Mathf.Sin(a);
                     line.SetPosition(i, center + dir * radius + Vector3.up * Mathf.Sin(p * Mathf.PI) * 0.35f);
                 }
@@ -1335,7 +1336,7 @@ namespace AlbedosCustomClassesSkills
             return true;
         }
 
-        private void DealDamage(Player attacker, Character target, DamageConfig cfg, float push)
+        private void DealDamage(Player attacker, Character target, DamageConfig cfg, float push, string stunSkill = null, string stunAttack = "Attack 1", bool stunDefault = false, bool stunHandled = false, bool? stunAsc = null)
         {
             float magic = DragonCombat.GetSorcererMagicDamageMultiplier(attacker);
             // v0.18.0: Tier power for the Cleric Class skills.
@@ -1370,6 +1371,7 @@ namespace AlbedosCustomClassesSkills
             hit.m_pushForce = push;
             hit.SetAttacker(attacker);
             target.Damage(hit);
+            if (stunSkill != null && !stunHandled) DragonCombat.ApplySkillStun(attacker, target, stunSkill, stunAttack, stunDefault, !stunDefault, stunAsc);
         }
 
         private bool TryGetPhysicalAimPoint(Player player, float range, out Vector3 point)

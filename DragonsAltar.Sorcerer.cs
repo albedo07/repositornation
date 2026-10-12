@@ -312,6 +312,7 @@ namespace DragonsAltarSorcerer
         private float _nextSpellcasterHeldFire;
         private int _wizardChargeStacks;
         private float _suppressWizardVanillaUntil;
+        private float _railFacingUntil;
         private bool _wizardStaffBonusActive;
 
         public float PortalReentryUntil;
@@ -803,6 +804,8 @@ namespace DragonsAltarSorcerer
             }
 
             string advancement = GetAdvancement(player);
+            if (advancement == "Wizard" && Time.time < _railFacingUntil && !player.IsDead())
+                FaceSkillAim(player); // Track the crosshair throughout Astral Railcannon's cast/beam.
             UpdateSpellcasterWeaponMastery(player, advancement);
 
             // Starter Skills DLL owns Arcane Blood's base +30% Eitr Regen.
@@ -971,7 +974,7 @@ namespace DragonsAltarSorcerer
             List<Character> targets = GetConeTargets(player, origin, forward, DragonCombat.M(_flameRange.Value), _flameAngle.Value);
             for (int i = 0; i < targets.Count; i++)
             {
-                Deal(player, targets[i], 0f, 0f, 0f, 34f, 0f, 0f, 0f, 0f, 6f, false);
+                Deal(player, targets[i], 0f, 0f, 0f, 34f, 0f, 0f, 0f, 0f, 6f, false, "flame_burst", "Attack 1", false, false, null);
                 StartCoroutine(BurnRoutine(player, targets[i], false, 6f, 2f));
             }
             if (_enableVfx.Value) { StartCoroutine(ConeVfx(origin, forward, DragonCombat.M(_flameRange.Value), _flameAngle.Value, new Color(1f, 0.28f, 0.05f, 0.95f))); Vector3 flo = origin, flf = forward; float flr = DragonCombat.M(_flameRange.Value), fla = _flameAngle.Value; DragonCombat.RunVfx(delegate { DragonVfx.FlameCone(flo, flf, flr, fla, 0.35f); }); }   // v0.25.61
@@ -1006,7 +1009,7 @@ namespace DragonsAltarSorcerer
             List<Character> targets = GetSphereTargets(player, target, DragonCombat.M(_iceRadius.Value));
             for (int i = 0; i < targets.Count; i++)
             {
-                Deal(player, targets[i], 22f, 0f, 0f, 0f, 36f, 0f, 0f, 0f, 12f, false);
+                Deal(player, targets[i], 22f, 0f, 0f, 0f, 36f, 0f, 0f, 0f, 12f, false, "glacial_descent", "Attack 1", false, false, null);
                 DragonCombat.ApplyFrost(targets[i], 6f);
             }
             if (_enableVfx.Value) { StartCoroutine(RingVfx(target, DragonCombat.M(_iceRadius.Value), new Color(0.55f, 0.90f, 1f, 0.95f), 0.7f)); Vector3 st = target; float sr = DragonCombat.M(_iceRadius.Value); DragonCombat.RunVfx(delegate { DragonVfx.ShatterIce(st, sr); DragonVfx.IceBurst(st, sr); }); }
@@ -1031,10 +1034,10 @@ namespace DragonsAltarSorcerer
             for (int i = 0; i < targets.Count; i++)
             {
                 Character enemy = targets[i];
-                Deal(player, enemy, 30f, 0f, 28f, 0f, 0f, 0f, 0f, 0f, 18f, false);
+                Deal(player, enemy, 30f, 0f, 28f, 0f, 0f, 0f, 0f, 0f, 18f, false, "stonefang_eruption", "Attack 1", true, true, null);
                 if (DragonCombat.IsSmallEnemy(enemy))
                 {
-                    DragonCombat.Stun(enemy, target);
+                    { if (DragonCombat.SkillStunEnabled(player, "stonefang_eruption", "Attack 1", true, null)) DragonCombat.Stun(enemy, target); }
                     DragonCombat.ApplyCripple(enemy, 6f);
                 }
                 else if (!IsBoss(enemy))
@@ -1069,6 +1072,7 @@ namespace DragonsAltarSorcerer
         private ConfigEntry<float> _gvAscRadius, _gvAscDuration, _gvAscBig, _gvAscBoss, _gvAscBlast, _gvAscStun;
         private ConfigEntry<float> _rcAscWindup, _rcAscDuration, _rcAscTick, _rcAscTickPercent;
         private ConfigEntry<float> _gbAscWindup, _gbAscGap, _gbAscPercent;
+        private ConfigEntry<bool> _bladeNormalStun, _bladeAscStun1, _bladeAscStun2, _bladeAscStun3;
         private ConfigEntry<float> _fnAscDuration, _fnAscTickPercent, _fnAscBlast, _fnAscFreeze, _fnAscBossSlow;
         private ConfigEntry<float> _ccAscDelay, _ccAscPercent;
         private float _overchargeLockedUntil;
@@ -1166,6 +1170,14 @@ namespace DragonsAltarSorcerer
             const string ba = "Wizard Astral Greatblade Ascended";
             _gbAscWindup = Config.Bind(ba, "Windup", 1f, "Ascended wind up (no charging).");
             _gbAscGap = Config.Bind(ba, "SlamInterval", 1f, "Seconds between the three slams.");
+            _bladeNormalStun = Config.Bind("Wizard Astral Greatblade", "Stun_v025138l", true, "Normal slam can stun.");
+            _bladeAscStun1 = Config.Bind(ba, "StunSlam1_v025138l", true, "Ascended first slam can stun.");
+            _bladeAscStun2 = Config.Bind(ba, "StunSlam2_v025138l", true, "Ascended second slam can stun.");
+            _bladeAscStun3 = Config.Bind(ba, "StunSlam3_v025138l", true, "Ascended third slam can stun.");
+            DragonCombat.RegisterSkillStun("astral_greatblade", false, "Attack 1", _bladeNormalStun);
+            DragonCombat.RegisterSkillStun("astral_greatblade", true, "Attack 1", _bladeAscStun1);
+            DragonCombat.RegisterSkillStun("astral_greatblade", true, "Attack 2", _bladeAscStun2);
+            DragonCombat.RegisterSkillStun("astral_greatblade", true, "Attack 3", _bladeAscStun3);
             _gbAscPercent = Config.Bind(ba, "SlamPercent", 70f, "Each slam: % of the uncharged slam (re-aimed at the crosshair).");
             const string na = "Wizard Frost Nova Ascended";
             _fnAscDuration = Config.Bind(na, "AuraDuration", 6f, "v0.25.86: seconds the frost stays on the ground after the blast (12 ticks).");
@@ -1191,11 +1203,11 @@ namespace DragonsAltarSorcerer
             return Input.GetKey(_modifier.Value) && Input.GetKey(legacy);
         }
 
-        private void DealWiz(Player attacker, Character target, WizDamage d, float multiplier, string skillId, float push, bool stagger)
+        private void DealWiz(Player attacker, Character target, WizDamage d, float multiplier, string skillId, float push, bool stagger, string stunSkill = null, string stunAttack = "Attack 1", bool stunDefault = false, bool stunHandled = false, bool? stunAsc = null)
         {
             if (d == null) return;
             float m = Mathf.Max(0f, multiplier) * DragonCombat.GetSkillPower(attacker, skillId);
-            Deal(attacker, target, d.Blunt.Value * m, d.Slash.Value * m, d.Pierce.Value * m, d.Fire.Value * m, d.Frost.Value * m, d.Lightning.Value * m, d.Poison.Value * m, d.Spirit.Value * m, push, stagger);
+            Deal(attacker, target, d.Blunt.Value * m, d.Slash.Value * m, d.Pierce.Value * m, d.Fire.Value * m, d.Frost.Value * m, d.Lightning.Value * m, d.Poison.Value * m, d.Spirit.Value * m, push, stagger, stunSkill, stunAttack, stunDefault, stunHandled, stunAsc);
         }
 
         private static float WizTotal(WizDamage d)
@@ -1217,6 +1229,7 @@ namespace DragonsAltarSorcerer
 
         private IEnumerator GravityRoutine(Player player, Vector3 center, float windup, bool ascended)
         {
+            int stunPulse = 0;
             ShowMessage("Gravity Dominion");
             if (windup > 0f) yield return new WaitForSeconds(windup);
             float radius = DragonCombat.M(ascended ? _gvAscRadius.Value : _gravityRadius.Value);
@@ -1238,6 +1251,7 @@ namespace DragonsAltarSorcerer
             StartCoroutine(GravityDrag(player, center, radius, end, ascended));
             while (Time.time < end && player != null)
             {
+                stunPulse++;
                 List<Character> targets = GetSphereTargets(player, center, radius);
                 for (int i = 0; i < targets.Count; i++)
                 {
@@ -1245,7 +1259,7 @@ namespace DragonsAltarSorcerer
                     DragonCombat.ApplyExpose(enemy, _gravityExpose.Value);
                     bool small = DragonCombat.IsSmallEnemy(enemy);
                     if (!small) DragonCombat.ApplyCripple(enemy, Mathf.Max(_gravityCripple.Value, tick + 0.5f));
-                    DealWiz(player, enemy, _gravityDmg, 1f, "gravity_dominion", 2f, false);
+                    DealWiz(player, enemy, _gravityDmg, 1f, "gravity_dominion", 2f, false, "gravity_dominion", DragonCombat.StunAttack(stunPulse), false, false, ascended);
                 }
                 if (_enableVfx.Value) StartCoroutine(RingVfx(center, radius, new Color(0.45f, 0.12f, 0.75f, 0.85f), Mathf.Min(0.85f, tick)));
                 yield return new WaitForSeconds(tick);
@@ -1257,13 +1271,13 @@ namespace DragonsAltarSorcerer
             for (int i = 0; i < hit.Count; i++)
             {
                 Character enemy = hit[i];
-                DealWiz(player, enemy, _gravityDmg, fullPulses * _gvAscBlast.Value / 100f, "gravity_dominion", 12f, true);
+                DealWiz(player, enemy, _gravityDmg, fullPulses * _gvAscBlast.Value / 100f, "gravity_dominion", 12f, true, "gravity_dominion", "Final Blast", true, false, ascended);
                 if (DragonCombat.IsSmallEnemy(enemy))
                 {
                     Rigidbody body = enemy.GetComponent<Rigidbody>();
                     if (body != null) body.AddForce(Vector3.up * 9f + (enemy.transform.position - center).normalized * 4f, ForceMode.VelocityChange);
                 }
-                else if (!IsBoss(enemy)) DragonCombat.Freeze(enemy, _gvAscStun.Value, 0f);
+                else if (!IsBoss(enemy) && DragonCombat.SkillStunEnabled(player, "gravity_dominion", "Final Blast", true, ascended)) DragonCombat.Freeze(enemy, _gvAscStun.Value, 0f);
             }
             if (_enableVfx.Value) { StartCoroutine(RingVfx(center, radius, new Color(0.75f, 0.30f, 1f, 1f), 0.6f)); CreateLightningBurst(center, radius); Vector3 bc = center; float br = radius; DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(bc, new Color(0.75f, 0.30f, 1f, 1f), br, 1.8f); }); }
         }
@@ -1307,7 +1321,7 @@ namespace DragonsAltarSorcerer
             DragonCombat.RunVfx(delegate { DragonVfx.StaffBlade(p, len, wid, new Color(0.62f, 0.45f, 1f, 1f), life, grow); });
         }
 
-        private void GreatbladeSlam(Player player, float multiplier)
+        private void GreatbladeSlam(Player player, float multiplier, int hitIndex = -1)
         {
             Vector3 forward = GreatbladeDirection(player);
             float range = DragonCombat.M(_bladeRange.Value);
@@ -1316,9 +1330,10 @@ namespace DragonsAltarSorcerer
             float burn = _bladeDmg.Spirit.Value * multiplier * DragonCombat.GetSkillPower(player, "astral_greatblade") * _bladeBurnPercent.Value / 100f;
             for (int i = 0; i < targets.Count; i++)
             {
-                DealWiz(player, targets[i], _bladeDmg, multiplier, "astral_greatblade", 32f, true);
+                bool stun = hitIndex < 0 ? _bladeNormalStun.Value : hitIndex == 0 ? _bladeAscStun1.Value : hitIndex == 1 ? _bladeAscStun2.Value : _bladeAscStun3.Value;
+                DealWiz(player, targets[i], _bladeDmg, multiplier, "astral_greatblade", 32f, stun, "astral_greatblade", DragonCombat.StunAttack(hitIndex < 0 ? 1 : hitIndex + 1), stun, true, hitIndex >= 0);
                 StartCoroutine(BurnRoutine(player, targets[i], true, _bladeBurnSeconds.Value, burn));
-                DragonCombat.Stun(targets[i], player.transform.position);
+                if (stun) { if (DragonCombat.SkillStunEnabled(player, "astral_greatblade", DragonCombat.StunAttack(hitIndex < 0 ? 1 : hitIndex + 1), stun, hitIndex >= 0)) DragonCombat.Stun(targets[i], player.transform.position); }
             }
             if (_enableVfx.Value)
             {
@@ -1339,30 +1354,68 @@ namespace DragonsAltarSorcerer
         {
             ShowMessage("Astral Greatblade");
             float windup = ScaleWindup(player, Mathf.Max(0f, _gbAscWindup.Value));
-            // you cannot move while the three slams happen
-            // v0.25.77 (user): repeated slams skipped their animation - each slam now gets a short recovery
-            // (the previous swing finishes) before the next lift starts, like the NACC intervals.
             float recover = 0.35f;
-            DragonCombat.LockSkill(player, windup + 2f * (Mathf.Max(0.1f, _gbAscGap.Value) + recover) + 0.4f);
-            DragonCombat.PlayClip(player, "wiz_greatblade", windup);
-            SummonStaffBlade(player, windup, windup + 2f * (Mathf.Max(0.1f, _gbAscGap.Value) + recover) + 0.45f);
+            float gap = Mathf.Max(0.1f, _gbAscGap.Value);
+
+            // Capture the locomotion/idle states that existed BEFORE the first slam.
+            // The final hit returns to these instead of letting swing_sledge re-chamber overhead.
+            Animator animator = player == null ? null : player.GetComponentInChildren<Animator>();
+            int[] returnState = null;
+            bool[] returnLoop = null;
+            if (animator != null)
+            {
+                returnState = new int[animator.layerCount];
+                returnLoop = new bool[animator.layerCount];
+                for (int layer = 0; layer < animator.layerCount; layer++)
+                {
+                    AnimatorStateInfo st = animator.GetCurrentAnimatorStateInfo(layer);
+                    returnState[layer] = st.fullPathHash;
+                    returnLoop[layer] = st.loop;
+                }
+            }
+
+            DragonCombat.LockSkill(player, windup + 2f * (gap + recover) + recover + 0.4f);
+            AnimationClip slamClip = DragonMixamo.OriginalSkillClip(player, "Sledge-Attack");
+            if (slamClip == null) slamClip = DragonMixamo.OriginalSkillClip(player, "sledge_swing");
+            float contact = DragonMixamo.ContactTime(slamClip, 0.55f);
+            DragonCombat.ClipStop(player, 0.05f);
+            bool chainedClip = DragonMixamo.PlaySource(player, slamClip, 0f, slamClip == null ? contact : slamClip.length,
+                windup * (slamClip == null ? contact : slamClip.length) / Mathf.Max(0.03f, contact), 0.12f, false, "wiz_greatblade_asc");
+            if (!chainedClip) DragonCombat.PlayClip(player, "wiz_greatblade", windup);
+            DragonCombat.FollowAimForWindup(player, windup);
+            SummonStaffBlade(player, windup, windup + 2f * (gap + recover) + 0.45f);
             if (windup > 0f) yield return new WaitForSeconds(windup);
+
             for (int slam = 0; slam < 3; slam++)
             {
                 if (player == null || player.IsDead()) yield break;
-                DragonCombat.LockSkill(player, Mathf.Max(0.1f, _gbAscGap.Value) + recover + 0.3f);
+                DragonCombat.LockSkill(player, gap + recover + 0.3f);
                 if (slam > 0)
                 {
-                    yield return new WaitForSeconds(recover);
-                    if (player == null || player.IsDead()) yield break;
-                    // v0.25.38 (user): slams 2 and 3 get the same big wind up as the first (raise, then slam),
-                    // filling the gap between slams instead of a quick 0.2 s chop.
-                    float gap = Mathf.Max(0.1f, _gbAscGap.Value);
-                    DragonCombat.PlayClip(player, "wiz_greatblade", gap);
-                    yield return new WaitForSeconds(gap);
+                    // Start the next swing at contact, without a held recovery frame.
+                    // Preserve the existing time between damage hits.
+                    float interval = gap + recover;
+                    if (chainedClip)
+                        DragonMixamo.PlaySource(player, slamClip, 0f, slamClip.length,
+                            interval * slamClip.length / Mathf.Max(0.03f, contact), Mathf.Min(0.25f, gap * 0.3f), false, "wiz_greatblade_slam_asc");
+                    else DragonCombat.PlayClip(player, "wiz_greatblade", interval);
+                    yield return new WaitForSeconds(interval);
                     if (player == null || player.IsDead()) yield break;
                 }
-                GreatbladeSlam(player, _gbAscPercent.Value / 100f);
+                GreatbladeSlam(player, _gbAscPercent.Value / 100f, slam);
+            }
+
+            // Let the third slam follow through naturally, then blend back to locomotion.
+            DragonCombat.LockSkill(player, recover + 0.2f);
+            yield return new WaitForSeconds(recover);
+            if (chainedClip) DragonMixamo.Stop(player, 0.22f);
+            if (player != null && !player.IsDead() && animator != null && returnState != null)
+            {
+                DragonCombat.VanillaPauseUntil = 0f;
+                DragonCombat.SetSkillAnimSpeed(player, 1f, 0f);
+                for (int layer = 0; layer < returnState.Length && layer < animator.layerCount; layer++)
+                    if (returnLoop[layer] && returnState[layer] != 0 && animator.HasState(layer, returnState[layer]))
+                        animator.CrossFade(returnState[layer], 0.18f, layer, 0f);
             }
         }
 
@@ -1387,10 +1440,10 @@ namespace DragonsAltarSorcerer
             for (int i = 0; i < targets.Count; i++)
             {
                 Character enemy = targets[i];
-                DealWiz(player, enemy, _novaDmg, 1f, "frost_nova", 18f, false);
+                DealWiz(player, enemy, _novaDmg, 1f, "frost_nova", 18f, false, "frost_nova", "Attack 1", true, true, false);
                 DragonCombat.ApplyFrost(enemy, _novaFrost.Value);
-                if (DragonCombat.IsSmallEnemy(enemy)) DragonCombat.Stun(enemy, player.transform.position);
-                else if (!IsBoss(enemy)) { ForceStagger(enemy, player.transform.position); DragonCombat.ApplyCripple(enemy, 3f); }
+                if (DragonCombat.IsSmallEnemy(enemy)) { if (DragonCombat.SkillStunEnabled(player, "frost_nova", "Attack 1", true, false)) DragonCombat.Stun(enemy, player.transform.position); }
+                else if (!IsBoss(enemy)) { { if (DragonCombat.SkillStunEnabled(player, "frost_nova", "Attack 1", true, false)) ForceStagger(enemy, player.transform.position); } DragonCombat.ApplyCripple(enemy, 3f); }
             }
             if (_enableVfx.Value)
             {
@@ -1424,7 +1477,7 @@ namespace DragonsAltarSorcerer
                 for (int i = 0; i < targets.Count; i++)
                 {
                     if (Mathf.Abs(targets[i].transform.position.y - center.y) > DragonCombat.M(2.5f)) continue;   // standing on it, not flying over
-                    DealWiz(player, targets[i], _novaDmg, _fnAscTickPercent.Value / 100f, "frost_nova", 0f, false);
+                    DealWiz(player, targets[i], _novaDmg, _fnAscTickPercent.Value / 100f, "frost_nova", 0f, false, "frost_nova", DragonCombat.StunAttack(t + 1), false, false, true);
                     DragonCombat.ApplyFrost(targets[i], Mathf.Max(1f, gap * 2f));
                 }
                 if (_enableVfx.Value)
@@ -1477,6 +1530,7 @@ namespace DragonsAltarSorcerer
                 if (now > stacks) { stacks = now; _meteorChargeShown = stacks; ShowMessage("Meteor Fall " + stacks + "/3" + (stacks >= 3 ? " - release to drop it where you aim" : "")); if (_enableVfx.Value) StartCoroutine(RingVfx(target, DragonCombat.M(_meteorRadius.Value) * (1f + 0.1f * stacks), new Color(1f, 0.45f, 0.10f, 0.75f), 0.4f)); }
                 if (elapsed >= windup && !holding) break;
                 DragonCombat.LockSkill(player, 0.12f);
+                if (windup >= 1f || elapsed >= 1f) DragonCombat.FaceAimNow(player);
                 yield return null;
             }
             if (player == null || player.IsDead()) yield break;
@@ -1485,7 +1539,7 @@ namespace DragonsAltarSorcerer
             DragonCombat.ClipImpact(player);   // release: drag the sky down
             float damageMul = 1f + 0.2f * stacks;
             float radius = DragonCombat.M(_meteorRadius.Value) * (1f + 0.1f * stacks);
-            yield return StartCoroutine(MeteorImpact(player, target, radius, damageMul, 2.4f * (1f + 0.15f * stacks)));
+            yield return StartCoroutine(MeteorImpact(player, target, radius, damageMul, 2.4f * (1f + 0.15f * stacks), "Attack 1"));
             if (player == null || !IsWizAscended(player, "meteor_fall")) yield break;
             // Ascended: 3 smaller meteors (5 at full charge) around the target, 12% of the charged main each.
             int count = stacks >= 3 ? 5 : 3;
@@ -1500,12 +1554,12 @@ namespace DragonsAltarSorcerer
                 if (Physics.Raycast(p + Vector3.up * 20f, Vector3.down, out floor, 40f, LayerMask.GetMask("Default", "static_solid", "Default_small", "piece", "terrain"), QueryTriggerInteraction.Ignore))
                     p = floor.point;
                 if (_enableVfx.Value) StartCoroutine(RingVfx(p, small, new Color(1f, 0.35f, 0.05f, 0.85f), 0.5f)); // landing marker
-                StartCoroutine(MeteorImpact(player, p, small, damageMul * _mfAscPercent.Value / 100f, 1.1f));
+                StartCoroutine(MeteorImpact(player, p, small, damageMul * _mfAscPercent.Value / 100f, 1.1f, DragonCombat.StunAttack(i + 2)));
                 yield return new WaitForSeconds(Mathf.Max(0.05f, _mfAscGap.Value));
             }
         }
 
-        private IEnumerator MeteorImpact(Player player, Vector3 target, float radius, float multiplier, float size)
+        private IEnumerator MeteorImpact(Player player, Vector3 target, float radius, float multiplier, float size, string stunAttack = "Attack 1")
         {
             Vector3 sky = DragonCombat.GetIndoorSafeSkyPoint(target, 12f);
             GameObject meteor = null;
@@ -1526,9 +1580,9 @@ namespace DragonsAltarSorcerer
             List<Character> targets = GetSphereTargets(player, target, radius);
             for (int i = 0; i < targets.Count; i++)
             {
-                DealWiz(player, targets[i], _meteorDmg, multiplier, "meteor_fall", 35f, true);
+                DealWiz(player, targets[i], _meteorDmg, multiplier, "meteor_fall", 35f, true, "meteor_fall", stunAttack, true, true, null);
                 StartCoroutine(BurnRoutine(player, targets[i], false, _meteorBurnSeconds.Value, burn));
-                ForceStagger(targets[i], target);
+                { if (DragonCombat.SkillStunEnabled(player, "meteor_fall", stunAttack, true, null)) ForceStagger(targets[i], target); }
             }
             if (_enableVfx.Value)
             {
@@ -1553,6 +1607,7 @@ namespace DragonsAltarSorcerer
             bool ascended = IsWizAscended(player, "astral_railcannon");
             float windup = ScaleWindup(player, Mathf.Max(0.2f, ascended ? _rcAscWindup.Value : _railWindup.Value));
             DragonCombat.LockSkill(player, windup);
+            _railFacingUntil = Time.time + windup + 0.5f;
             DragonCombat.PlayClip(player, ascended ? "wiz_railcannon_hold" : "wiz_railcannon", windup, ascended);
             StartCoroutine(ascended ? AscendedRailcannonRoutine(player, windup) : AstralRailcannonRoutine(player, windup));
         }
@@ -1574,7 +1629,7 @@ namespace DragonsAltarSorcerer
             if (rb != null) rb.AddForce(-forward * _railRecoil.Value, ForceMode.VelocityChange);
         }
 
-        private void RailShot(Player player, Vector3 origin, Vector3 forward, float multiplier, float beamLife)
+        private void RailShot(Player player, Vector3 origin, Vector3 forward, float multiplier, float beamLife, string stunAttack = "Attack 1")
         {
             float range = Mathf.Max(5f, DragonCombat.M(_railRange.Value));
             float width = Mathf.Max(0.8f, DragonCombat.M(_railWidth.Value));
@@ -1582,7 +1637,7 @@ namespace DragonsAltarSorcerer
             MagicDamageSnapshot damage = GetMagicWeaponDamage(GetCurrentWeapon(player));
             float m = multiplier * DragonCombat.GetSkillPower(player, "astral_railcannon");
             for (int i = 0; i < targets.Count; i++)
-                DealMagicWeaponDamage(player, targets[i], damage, m);
+                DealMagicWeaponDamage(player, targets[i], damage, m, "astral_railcannon", stunAttack, false, false, null);
             if (_enableVfx.Value)
             {
                 CreateBeam(origin, origin + forward * range, new Color(0.86f, 0.50f, 1f, 0.98f), width * 0.55f, beamLife);
@@ -1609,6 +1664,7 @@ namespace DragonsAltarSorcerer
         // Ascended: a steerable beam for up to 4s (20 ticks x 9% of the normal shot); releasing ends it.
         private IEnumerator AscendedRailcannonRoutine(Player player, float windup)
         {
+            int stunPulse = 0;
             ShowMessage("Astral Railcannon");
             if (windup > 0f) yield return new WaitForSeconds(windup);
             float tick = Mathf.Max(0.05f, _rcAscTick.Value);
@@ -1620,10 +1676,13 @@ namespace DragonsAltarSorcerer
                 if (!first && !SkillKeyHeld(player, "astral_railcannon", _skill8.Value)) break;
                 first = false;
                 DragonCombat.LockSkill(player, tick + 0.05f);
+                _railFacingUntil = Time.time + tick + 0.05f;
                 Vector3 origin = player.GetEyePoint();
-                RailShot(player, origin, AlbedoAimUtility.GetProjectileDirection(player, origin), shot, tick + 0.02f);
+                stunPulse++;
+                RailShot(player, origin, AlbedoAimUtility.GetProjectileDirection(player, origin), shot, tick + 0.02f, DragonCombat.StunAttack(stunPulse));
                 yield return new WaitForSeconds(tick);
             }
+            _railFacingUntil = 0f;
             DragonCombat.PlayClip(player, "wiz_railcannon", 0.05f);   // last kick, then rest
         }
 
@@ -1651,6 +1710,7 @@ namespace DragonsAltarSorcerer
             while (player != null && !player.IsDead() && (elapsed < minWindup || holding))
             {
                 DragonCombat.LockSkill(player, 0.12f);
+                if (minWindup >= 1f || elapsed >= 1f) DragonCombat.FaceAimNow(player);
                 elapsed += Time.deltaTime;
                 // charge timer from the key press; it stops the moment the key is released
                 if (holding && SkillKeyHeld(player, "elemental_cataclysm", _skill9.Value)) charge = Mathf.Min(max, elapsed);
@@ -1675,20 +1735,20 @@ namespace DragonsAltarSorcerer
             if (player == null) yield break;
             DragonCombat.ClipImpact(player);
             float multiplier = 1f + (Mathf.Max(1f, _cataclysmMaxMultiplier.Value) - 1f) * Mathf.Clamp01(charge / max);
-            CataclysmBlast(player, target, radius, multiplier);
+            CataclysmBlast(player, target, radius, multiplier, "Attack 1");
             ShowMessage("ELEMENTAL CATACLYSM x" + multiplier.ToString("0.0"));
             if (!IsWizAscended(player, "elemental_cataclysm")) yield break;
             yield return new WaitForSeconds(Mathf.Max(0.1f, _ccAscDelay.Value));
             if (player == null) yield break;
-            CataclysmBlast(player, target, radius, multiplier * _ccAscPercent.Value / 100f);
+            CataclysmBlast(player, target, radius, multiplier * _ccAscPercent.Value / 100f, "Attack 2");
         }
 
-        private void CataclysmBlast(Player player, Vector3 target, float radius, float multiplier)
+        private void CataclysmBlast(Player player, Vector3 target, float radius, float multiplier, string stunAttack = "Attack 1")
         {
             List<Character> targets = GetSphereTargets(player, target, radius);
             for (int i = 0; i < targets.Count; i++)
             {
-                DealWiz(player, targets[i], _cataclysmDmg, multiplier, "elemental_cataclysm", 55f, true);
+                DealWiz(player, targets[i], _cataclysmDmg, multiplier, "elemental_cataclysm", 55f, true, "elemental_cataclysm", stunAttack, true, false, null);
                 DragonCombat.ApplyExpose(targets[i], _cataclysmExpose.Value);
             }
             if (_enableVfx.Value)
@@ -1746,7 +1806,7 @@ namespace DragonsAltarSorcerer
                 Vector3 flat = enemy.transform.position - target;
                 flat.y = 0f;
                 bool inCore = flat.magnitude <= core;
-                DealWiz(player, enemy, _glacialAscDmg, inCore ? _gdAscCoreDamage.Value / 100f : 1f, "glacial_descent", 18f, false);
+                DealWiz(player, enemy, _glacialAscDmg, inCore ? _gdAscCoreDamage.Value / 100f : 1f, "glacial_descent", 18f, false, "glacial_descent", "Attack 1", false, false, true);
                 DragonCombat.ApplyFrost(enemy, 6f);
                 if (inCore) DragonCombat.Freeze(enemy, _gdAscFreeze.Value, _gdAscBossSlow.Value / 100f);
             }
@@ -1899,7 +1959,7 @@ namespace DragonsAltarSorcerer
                 Vector3 portal = target.transform.position + dir * 2.6f + Vector3.up * (1.1f + 0.4f * r);
                 if (_enableVfx.Value)
                     StartCoroutine(RingVfx(portal, 0.85f, new Color(0.80f, 0.22f, 1f, 0.95f), 0.30f));
-                StartCoroutine(RiftEchoProjectile(player, target, damage, portal, aimPoint));
+                StartCoroutine(RiftEchoProjectile(player, target, damage, portal, aimPoint, DragonCombat.StunAttack(r + 1)));
             }
         }
 
@@ -1929,7 +1989,7 @@ namespace DragonsAltarSorcerer
             return near;
         }
 
-        private IEnumerator RiftEchoProjectile(Player player, Character target, MagicDamageSnapshot damage, Vector3 origin, Vector3 aim)
+        private IEnumerator RiftEchoProjectile(Player player, Character target, MagicDamageSnapshot damage, Vector3 origin, Vector3 aim, string stunAttack = "Attack 1")
         {
             Vector3 to = aim - origin;
             float distance = Mathf.Max(0.1f, to.magnitude);
@@ -1949,7 +2009,7 @@ namespace DragonsAltarSorcerer
             }
 
             if (target != null && !target.IsDead())
-                DealMagicWeaponDamage(player, target, damage, Mathf.Max(0.05f, _riftEchoDamageMultiplier.Value));
+                DealMagicWeaponDamage(player, target, damage, Mathf.Max(0.05f, _riftEchoDamageMultiplier.Value), "rift_echo", stunAttack, false, false, null);
 
             if (_enableVfx.Value)
                 CreateBeam(aim + dir * 1.5f, aim - dir * 1.5f, new Color(0.82f, 0.36f, 1f, 0.88f), 0.10f, 0.20f);
@@ -1975,7 +2035,7 @@ namespace DragonsAltarSorcerer
                 if (_enableVfx.Value)
                     CreateBeam(origin, aimPoint, new Color(0.60f, 0.18f, 1f, 0.72f), 0.10f, 0.22f);
                 if (target != null)
-                    DealMagicWeaponDamage(player, target, damage, Mathf.Max(0.05f, _afterimageDamageMultiplier.Value));
+                    DealMagicWeaponDamage(player, target, damage, Mathf.Max(0.05f, _afterimageDamageMultiplier.Value), "afterimage_arsenal", DragonCombat.StunAttack(i + 1), false, false, null);
             }
         }
 
@@ -2132,6 +2192,8 @@ namespace DragonsAltarSorcerer
 
             Vector3 origin = player.GetEyePoint() + player.transform.forward * 0.45f;
             Vector3 dir = AlbedoAimUtility.GetProjectileDirection(player, origin);
+            if (weapon != null && weapon.m_shared != null && weapon.m_shared.m_attack != null)
+                DragonCombat.PlayVanillaTrigger(player, weapon.m_shared.m_attack.m_attackAnimation);
             StartCoroutine(WizardChargedProjectile(player, weapon, origin, dir, radius, multiplier));
             ShowMessage("STAFF CHARGE " + releasedStacks.ToString() + "/3");
         }
@@ -2363,7 +2425,7 @@ namespace DragonsAltarSorcerer
             return 0f;
         }
 
-        private void DealMagicWeaponDamage(Player attacker, Character target, MagicDamageSnapshot damage, float multiplier)
+        private void DealMagicWeaponDamage(Player attacker, Character target, MagicDamageSnapshot damage, float multiplier, string stunSkill = null, string stunAttack = "Attack 1", bool stunDefault = false, bool stunHandled = false, bool? stunAsc = null)
         {
             HitData hit = new HitData();
             multiplier = Mathf.Max(0f, multiplier) * DragonCombat.GetSorcererMagicDamageMultiplier(attacker);
@@ -2380,6 +2442,7 @@ namespace DragonsAltarSorcerer
             hit.m_pushForce = 10f;
             hit.SetAttacker(attacker);
             target.Damage(hit);
+            if (stunSkill != null && !stunHandled) DragonCombat.ApplySkillStun(attacker, target, stunSkill, stunAttack, stunDefault, !stunDefault, stunAsc);
         }
 
         private void OnNormalMagicAttack(Player player, ItemDrop.ItemData weapon)
@@ -2673,6 +2736,7 @@ namespace DragonsAltarSorcerer
             int count = Mathf.Max(1, ascended ? _paAscCount.Value : _phalanxCountV.Value);
             _phalanxSwordPercent = ascended ? _paAscPercent.Value / 100f : 1f;
             _phalanxSpearArmed = false;
+            _stunPhalanxShot = 0;
             DragonCombat.BeginMobileCast(player, 0.3f, true);   // v0.25.86 HW keeps sprint
             for (int i = 0; i < count; i++) _phalanxSwords.Add(CreateArcaneSword(player.transform.position));
             _nextPhalanxLaunch = Time.time + 0.15f;
@@ -2688,23 +2752,26 @@ namespace DragonsAltarSorcerer
             _phalanxSwords.Clear();
             // Ascended: all 8 launched together arm one Astral Spear eruption on the first impact.
             _phalanxSpearArmed = IsSpellAscended(player, "arcane_phalanx") && copy.Count >= Mathf.Max(1, _paAscCount.Value);
-            for (int i = 0; i < copy.Count; i++) LaunchSword(player, copy[i]);
+            for (int i = 0; i < copy.Count; i++) LaunchSword(player, copy[i], DragonCombat.StunAttack(_stunPhalanxShot + i + 1));
+            _stunPhalanxShot += copy.Count;
             DragonCombat.PlayClip(player, "hw_point", 0.06f);   // v0.25.18 Rift Conductor: dispatch point
             ShowMessage("PHALANX VOLLEY x" + copy.Count);
             StartCooldown("Spellcaster.ArcanePhalanx", _phalanxCooldown.Value);
         }
 
-        private void LaunchSword(Player player, GameObject sword)
+        private int _stunPhalanxShot;
+        private void LaunchSword(Player player, GameObject sword, string stunAttack = null)
         {
             if (sword == null) return;
+            if (stunAttack == null) stunAttack = DragonCombat.StunAttack(++_stunPhalanxShot);
             Vector3 origin = sword.transform.position;
             Vector3 dir = AlbedoAimUtility.GetProjectileDirection(player, origin);
-            StartCoroutine(SwordProjectile(player, sword, origin, dir, _phalanxSwordPercent));
+            StartCoroutine(SwordProjectile(player, sword, origin, dir, _phalanxSwordPercent, stunAttack));
             if (_phalanxSwords.Count == 0 && !_phalanxVolleyArmed && CooldownRemaining("Spellcaster.ArcanePhalanx") <= 0f)
                 StartCooldown("Spellcaster.ArcanePhalanx", _phalanxCooldown.Value); // cooldown starts once every sword is gone
         }
 
-        private IEnumerator SwordProjectile(Player player, GameObject sword, Vector3 origin, Vector3 dir, float percent)
+        private IEnumerator SwordProjectile(Player player, GameObject sword, Vector3 origin, Vector3 dir, float percent, string stunAttack = "Attack 1")
         {
             dir.Normalize();
             float traveled = 0f;
@@ -2721,7 +2788,7 @@ namespace DragonsAltarSorcerer
                     if (hits[i].collider == null || hits[i].collider.isTrigger || IsPlayerCollider(player, hits[i].collider)) continue;
                     Character target = hits[i].collider.GetComponentInParent<Character>();
                     if (target != null && !IsEnemy(player, target)) continue;
-                    if (target != null) DealWiz(player, target, _phalanxDmg, percent, "arcane_phalanx", 8f, false);
+                    if (target != null) DealWiz(player, target, _phalanxDmg, percent, "arcane_phalanx", 8f, false, "arcane_phalanx", stunAttack, false, false, null);
                     pos = hits[i].point;
                     stop = true;
                     break;
@@ -2752,7 +2819,7 @@ namespace DragonsAltarSorcerer
             float radius = DragonCombat.M(_paAscSpearRadius.Value);
             List<Character> targets = GetSphereTargets(player, point, radius);
             for (int i = 0; i < targets.Count; i++)
-                DealWiz(player, targets[i], _phalanxDmg, swordPercent * _paAscSpearPercent.Value / 100f, "arcane_phalanx", 14f, true);
+                DealWiz(player, targets[i], _phalanxDmg, swordPercent * _paAscSpearPercent.Value / 100f, "arcane_phalanx", 14f, true, "arcane_phalanx", "Spear Eruption", true, false, null);
             if (!_enableVfx.Value) return;
             // v0.25.86 (user): the spears always burst out of the terrain / structure under the impact, never in mid-air.
             float gy;
@@ -2856,7 +2923,7 @@ namespace DragonsAltarSorcerer
                     for (int i = 0; i < targets.Count; i++)
                     {
                         Character enemy = targets[i];
-                        DealWiz(player, enemy, _gravityBlastDmg, scale, "gravity_blast", 0f, false);
+                        DealWiz(player, enemy, _gravityBlastDmg, scale, "gravity_blast", 0f, false, "gravity_blast", "Orb", false, false, ascended);
                         bool small = DragonCombat.IsSmallEnemy(enemy);
                         bool boss = IsBoss(enemy);
                         if (!small) DragonCombat.ApplyCripple(enemy, _gbCripple.Value);   // Big + Bosses (refreshed per hit)
@@ -2872,7 +2939,7 @@ namespace DragonsAltarSorcerer
             if (player == null) yield break;
             List<Character> hit = GetSphereTargets(player, pos, radius);
             for (int i = 0; i < hit.Count; i++)
-                DealWiz(player, hit[i], _gravityBlastDmg, scale * _gbAscBurst.Value / 100f, "gravity_blast", 14f, true);
+                DealWiz(player, hit[i], _gravityBlastDmg, scale * _gbAscBurst.Value / 100f, "gravity_blast", 14f, true, "gravity_blast", "End Burst", true, false, ascended);
             if (_enableVfx.Value) StartCoroutine(ExplosionVfx(pos, radius, new Color(0.55f, 0.18f, 0.95f, 0.85f)));
         }
 
@@ -2962,8 +3029,8 @@ namespace DragonsAltarSorcerer
             for (int i = 0; i < targets.Count; i++)
             {
                 Character enemy = targets[i];
-                DealWiz(player, enemy, _stoneAscDmg, _saAscEruption.Value / 100f, "stonefang_eruption", 20f, false);
-                if (DragonCombat.IsSmallEnemy(enemy)) DragonCombat.Stun(enemy, target);
+                DealWiz(player, enemy, _stoneAscDmg, _saAscEruption.Value / 100f, "stonefang_eruption", 20f, false, "stonefang_eruption", "Attack 1", true, true, true);
+                if (DragonCombat.IsSmallEnemy(enemy)) { if (DragonCombat.SkillStunEnabled(player, "stonefang_eruption", "Attack 1", true, true)) DragonCombat.Stun(enemy, target); }
                 if (!IsBoss(enemy)) DragonCombat.ApplyCripple(enemy, 6f);
             }
             if (_enableVfx.Value) { CreateStoneSpikes(target, radius); Vector3 sft = target; float sfr = radius; DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(sft, new Color(0.85f, 0.60f, 0.30f, 1f), sfr, 2f); DragonVfx.SpikeRing(sft, DragonVfx.Rock, sfr * 0.85f, 12, 2.4f, 2f); }); }   // v0.25.58
@@ -2974,7 +3041,7 @@ namespace DragonsAltarSorcerer
                 if (player == null) yield break;
                 List<Character> inside = GetSphereTargets(player, target, radius);
                 for (int i = 0; i < inside.Count; i++)
-                    DealWiz(player, inside[i], _stoneAscDmg, _saAscTickPercent.Value / 100f, "stonefang_eruption", 0f, false);
+                    DealWiz(player, inside[i], _stoneAscDmg, _saAscTickPercent.Value / 100f, "stonefang_eruption", 0f, false, "stonefang_eruption", DragonCombat.StunAttack(t + 2), false, false, true);
                 if (_enableVfx.Value && t % 2 == 1) { CreateStoneSpikes(target, radius); Vector3 sft2 = target; float sfr2 = radius; DragonCombat.RunVfx(delegate { DragonVfx.Debris(sft2, new Color(0.45f, 0.38f, 0.30f, 1f), 6, 6f, 0.3f, 1.8f); DragonVfx.Shake(sft2, 20f, 0.6f); }); }
             }
         }
@@ -3298,13 +3365,13 @@ namespace DragonsAltarSorcerer
                 if (ranged)
                 {
                     if (_enableVfx.Value) CreateBeam(origin, aimPoint, new Color(0.40f, 0.70f, 1f, 0.80f), 0.10f, 0.20f);
-                    if (target != null) DealMagicWeaponDamage(player, target, damage, 1f);
+                    if (target != null) DealMagicWeaponDamage(player, target, damage, 1f, "afterimage_arsenal", DragonCombat.StunAttack(i + 1), false, false, null);
                 }
                 else
                 {
                     // melee copy: the swing hits in front of the mimic
                     List<Character> hits = GetSphereTargets(player, origin + _clones[i].transform.forward * 1.4f, 1.6f);
-                    for (int h = 0; h < hits.Count; h++) DealMagicWeaponDamage(player, hits[h], damage, 1f);
+                    for (int h = 0; h < hits.Count; h++) DealMagicWeaponDamage(player, hits[h], damage, 1f, "afterimage_arsenal", DragonCombat.StunAttack(i + 1), false, false, null);
                 }
             }
         }
@@ -3371,16 +3438,16 @@ namespace DragonsAltarSorcerer
                 float mult = state.DamageStack >= 3 ? 2f : 1f;
                 if (state.DamageStack >= 3) state.DamageStack = 0;
                 float asc = IsSpellAscended(player, "arcane_rupture") ? _ruAscDamage.Value / 100f : 1f;
-                DealWiz(player, enemy, _ruptureDmg, mult * asc, "arcane_rupture", 16f, false);
+                DealWiz(player, enemy, _ruptureDmg, mult * asc, "arcane_rupture", 16f, false, "arcane_rupture", "Attack 1", true, true, null);
                 DragonCombat.ApplyExpose(enemy, Mathf.Max(0.1f, _ruptureExpose.Value));   // v0.25.85 (user): every Rupture Exposes (normal + Ascended)
 
 
-                if (DragonCombat.IsSmallEnemy(enemy)) DragonCombat.Stun(enemy, target);
+                if (DragonCombat.IsSmallEnemy(enemy)) { if (DragonCombat.SkillStunEnabled(player, "arcane_rupture", "Attack 1", true, null)) DragonCombat.Stun(enemy, target); }
                 else
                 {
                     if (state.StunCycleHits <= 0)
                     {
-                        DragonCombat.Stun(enemy, target);
+                        { if (DragonCombat.SkillStunEnabled(player, "arcane_rupture", "Attack 1", true, null)) DragonCombat.Stun(enemy, target); }
                         state.StunCycleHits = 2;
                     }
                     else state.StunCycleHits--;
@@ -3537,11 +3604,24 @@ namespace DragonsAltarSorcerer
             }
         }
 
+        private static void FaceSkillAim(Player player)
+        {
+            if (player == null || player.IsDead()) return;
+            Vector3 forward = GameCamera.instance != null ? GameCamera.instance.transform.forward : player.GetLookDir();
+            forward.y = 0f;
+            if (forward.sqrMagnitude < 0.001f) return;
+            Quaternion heading = Quaternion.LookRotation(forward.normalized, Vector3.up);
+            player.transform.rotation = heading;
+            Rigidbody body = player.GetComponent<Rigidbody>();
+            if (body != null) body.rotation = heading;
+        }
+
         private bool BeginSkill(Player player, string id, float cooldown, float eitr)
         {
             if (CooldownRemaining(id) > 0f) { ShowCooldown(id); return false; }
             if (!SpendEitr(player, eitr)) { ShowMessage("Not enough Eitr"); return false; }
             StartCooldown(id, cooldown);
+            FaceSkillAim(player); // Match vanilla facing at cast start; only Railcannon tracks continuously.
             return true;
         }
 
@@ -3620,8 +3700,10 @@ namespace DragonsAltarSorcerer
             ShowMessage("Cooldown " + CooldownRemaining(id).ToString("0.0") + "s");
         }
 
-        private void Deal(Player attacker, Character target, float blunt, float slash, float pierce, float fire, float frost, float lightning, float poison, float spirit, float push, bool forceStagger)
+        private void Deal(Player attacker, Character target, float blunt, float slash, float pierce, float fire, float frost, float lightning, float poison, float spirit, float push, bool forceStagger, string stunSkill = null, string stunAttack = "Attack 1", bool stunDefault = false, bool stunHandled = false, bool? stunAsc = null)
         {
+            bool originalStun = forceStagger;
+            if (stunSkill != null) forceStagger &= DragonCombat.SkillStunEnabled(attacker, stunSkill, stunAttack, stunDefault, stunAsc) && target != null && !target.IsBoss() && !DragonCombat.IsDebuffImmune(target);
             if (target == null || target.IsDead()) return;
             float magic = DragonCombat.GetSorcererMagicDamageMultiplier(attacker);
             float e = ElementMultiplier();
@@ -3640,6 +3722,7 @@ namespace DragonsAltarSorcerer
             hit.SetAttacker(attacker);
             if (forceStagger) SetForceStagger(hit);
             target.Damage(hit);
+            if (stunSkill != null && !stunHandled) DragonCombat.ApplySkillStun(attacker, target, stunSkill, stunAttack, stunDefault, originalStun, stunAsc);
         }
 
         // Universal burn rule (v0.21.2): 0.5s ticks dealing the skill's own damage (perTick).
@@ -3803,7 +3886,8 @@ namespace DragonsAltarSorcerer
         {
             if (!DragonCombat.IsMagicWeapon(item) || item == null || item.m_shared == null)
                 return false;
-            if (DragonCombat.IsGunStaff(item))
+            // Therzie's projectile/channel staves use bursts too; that alone does not make them gun staves.
+            if (DragonCombat.IsGunStaff(item) && !DragonCombat.IsTherzieStaff(item))
                 return false;
 
             string sharedName = item.m_shared.m_name == null ? "" : item.m_shared.m_name.ToLowerInvariant();

@@ -1,0 +1,13 @@
+Aethelborn Ascended v0.25.138v - scoped TEST pass
+Run INSTALL.bat as usual. Therzie mods remain separate installations.
+Protected anchor: v0.25.138u, user-confirmed working.
+Anchor SHA256: 2166ecad2b3d3b9a25643c304c2b892cca2fd4ebd56417dced2b6a83b76abc5a
+
+- Native two-handed paired weapons enter NACC; Therzie custom trigger aliases are recognized. Their heavy attack definitions are untouched. Mercenary paired knives are eligible.
+- Therzie custom staves can use Archmage charge despite projectile bursts/channel timing. Release uses the weapon's normal staff CA; charging has no added pose/hold.
+- Astral sword VFX uses the staff mesh's actual length axis instead of its world bounding-box center.
+- Ascended Astral Greatblade follows aim during wind-ups of 1 second or more.
+- RJS height correction is applied after clip initialization. Landing continues from its actual sampled frame; ground reach uses current mesh transforms instead of previous renderer bounds.
+
+Checks: three changed modules compiled against Valheim/Unity; scope diff confirms other code/assets/configs/installers/EXP are byte-identical to anchor.
+In game: test paired normal/heavy attacks, charged staff release, sword VFX, Greatblade aim behind during 1s+ wind-up, and RJS from different elevations.
