@@ -1,3 +1,4 @@
-v0.25.148 test (multiplayer, 2 clients):
-1. Crescent pull on remote-owned enemies: consistent strength, also with two casters / lag.
-2. Enemy leaving the wave stops moving within ~0.1 s; next cast does not jerk it.
+v0.25.149 test (multiplayer, 2 clients):
+1. Crescent pull on remote-owned enemies = same distance as on own enemies, also with lag.
+2. Two casts back to back: no jerk / leftover burst on the second.
+3. Kill a pulled enemy mid-wave: no movement afterwards, no errors.

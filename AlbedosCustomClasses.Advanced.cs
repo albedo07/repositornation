@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.148";
+        public const string ModVersion = "0.25.149";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -2496,6 +2496,7 @@ namespace AlbedosCustomClassesAdvanced
                 b.Due = Time.time + 0.1f;
                 _cleavePullOut[key] = b;
             }
+            b.Target = nv.GetComponent<Character>();
             b.Point = wavePoint;
             b.Mask = solidMask;
             b.Step += step;
@@ -2504,13 +2505,16 @@ namespace AlbedosCustomClassesAdvanced
 
         private void SendCleavePull(CleavePullBatch b)
         {
-            float step = Mathf.Min(b.Step, 0.75f);
-            b.Step = 0f;
             b.Due = Time.time + 0.1f;
-            if (step <= 0.001f || b.Nv == null || !b.Nv.IsValid()) return;
+            // v0.25.149: dead / destroyed / invalid target -> drop the pending movement
+            if (b.Nv == null || !b.Nv.IsValid() || b.Target == null || b.Target.IsDead()) { b.Step = 0f; return; }
             RegisterCleavePullRpc();
             ZDO zdo = b.Nv.GetZDO();
-            if (ZRoutedRpc.instance == null || zdo == null) return;
+            if (ZRoutedRpc.instance == null || zdo == null) return;   // network not ready: keep the batch for the next flush
+            // v0.25.149: send at most 0.75 m, keep the remainder for the next flush (never discarded)
+            float step = Mathf.Min(b.Step, 0.75f);
+            b.Step -= step;
+            if (step <= 0.001f) return;
             ZPackage pkg = new ZPackage();
             pkg.Write(zdo.m_uid);
             pkg.Write(b.Point.x); pkg.Write(b.Point.y); pkg.Write(b.Point.z);
@@ -2553,8 +2557,9 @@ namespace AlbedosCustomClassesAdvanced
                     for (int i = 0; i < _cleavePullKeys.Count; i++)
                     {
                         CleavePullBatch b = _cleavePullOut[_cleavePullKeys[i]];
+                        if (b.Nv == null || !b.Nv.IsValid() || b.Target == null || b.Target.IsDead()) { _cleavePullOut.Remove(_cleavePullKeys[i]); continue; }
                         if (b.Step > 0f && Time.time >= b.Due) SendCleavePull(b);
-                        if (b.Step <= 0f && Time.time - b.Last > 0.5f) _cleavePullOut.Remove(_cleavePullKeys[i]);
+                        if (b.Step <= 0.001f && Time.time - b.Last > 0.5f) _cleavePullOut.Remove(_cleavePullKeys[i]);
                     }
                 }
                 if (_cleavePullIn.Count > 0)
@@ -2564,11 +2569,13 @@ namespace AlbedosCustomClassesAdvanced
                     for (int i = 0; i < _cleavePullKeys.Count; i++)
                     {
                         CleavePullBatch b = _cleavePullIn[_cleavePullKeys[i]];
-                        _cleavePullIn.Remove(_cleavePullKeys[i]);
-                        if (b.Target == null || b.Target.IsDead()) continue;
-                        ZNetView nv = b.Target.GetComponent<ZNetView>();
-                        if (nv == null || !nv.IsValid() || !nv.IsOwner()) continue;
-                        CleavePullStep(b.Target, b.Point, b.Mask, Mathf.Min(b.Step, 0.75f));
+                        ZNetView nv = b.Target != null ? b.Target.GetComponent<ZNetView>() : null;
+                        if (b.Target == null || b.Target.IsDead() || nv == null || !nv.IsValid() || !nv.IsOwner()) { _cleavePullIn.Remove(_cleavePullKeys[i]); continue; }
+                        // v0.25.149: apply at most 0.75 m this frame, keep the remainder for the next frame
+                        float use = Mathf.Min(b.Step, 0.75f);
+                        b.Step -= use;
+                        if (b.Step <= 0.001f) _cleavePullIn.Remove(_cleavePullKeys[i]);
+                        CleavePullStep(b.Target, b.Point, b.Mask, use);
                     }
                 }
             }
