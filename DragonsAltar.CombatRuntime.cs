@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.155";
+        public const string ModVersion = "0.25.156";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1310,6 +1310,7 @@ namespace DragonsAltarCombat
         private static void ComboStartPrefix(Attack __instance, Humanoid character, ItemDrop.ItemData weapon, ref Attack previousAttack, ref float timeSinceLastAttack)
         {
             _comboInStart = false;
+            if (character != null && character == Player.m_localPlayer) DragonCombat.BeginAttackActivation(__instance);   // v0.25.156
             try
             {
                 if (Instance == null || !Instance.ComboChainsEnabled.Value) return;
@@ -4351,7 +4352,7 @@ namespace DragonsAltarCombat
 
         // The animator trigger that really exists for `name` (name, or name + "0" for combo chains), or null.
         // v0.25.42 state learning: which animator state (layer + full path hash) a trigger leads to.
-        private class StateLearn { public Animator A; public string Name; public int[] Pre; public float At; public int Gen; public RuntimeAnimatorController Ctrl; public bool Paired; }
+        private class StateLearn { public Animator A; public string Name; public int[] Pre; public float At; public int Gen; public RuntimeAnimatorController Ctrl; public bool Paired; public int Serial; public object Atk; }
         private static readonly Dictionary<string, KeyValuePair<int, int>> LearnedStates = new Dictionary<string, KeyValuePair<int, int>>();
         private static readonly List<StateLearn> PendingLearns = new List<StateLearn>();
 
@@ -4373,12 +4374,23 @@ namespace DragonsAltarCombat
             try
             {
                 StateLearn l = new StateLearn();
-                l.A = a; l.Name = trigger; l.At = Time.time; l.Gen = NaccGen; l.Ctrl = a.runtimeAnimatorController; l.Paired = DragonDualWield.PairedActive(a);
+                l.A = a; l.Name = trigger; l.At = Time.time; l.Gen = NaccGen; l.Ctrl = a.runtimeAnimatorController; l.Paired = DragonDualWield.PairedActive(a); l.Serial = AttackSerial; l.Atk = NaccAttack;
                 l.Pre = new int[a.layerCount];
                 for (int i = 0; i < l.Pre.Length; i++) l.Pre[i] = a.GetCurrentAnimatorStateInfo(i).fullPathHash;
                 PendingLearns.Add(l);
             }
             catch (Exception) { }
+        }
+
+        private static bool IsCurrentAttack(Player p, object atk)
+        {
+            if (p == null || atk == null) return false;
+            try
+            {
+                if (_curAttackField == null) _curAttackField = typeof(Humanoid).GetField("m_currentAttack", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                return _curAttackField != null && ReferenceEquals(_curAttackField.GetValue(p), atk);
+            }
+            catch (Exception) { return false; }
         }
 
         // A skill animation (clip driver / Mixamo / vanilla skill trigger / skill lock) owns the animator right now.
@@ -4409,13 +4421,15 @@ namespace DragonsAltarCombat
                 bool named = st.IsName(trigger) || (ExternalTrigger(trigger, out mapped) && !string.IsNullOrEmpty(mapped) && st.IsName(mapped));
                 bool next = a.IsInTransition(layer) && a.GetNextAnimatorStateInfo(layer).fullPathHash == st.fullPathHash;
                 AnimatorClipInfo[] clips = next ? a.GetNextAnimatorClipInfo(layer) : a.GetCurrentAnimatorClipInfo(layer);
-                bool evented = false, bad = false, any = false;
+                bool evented = false, bad = false, any = false, expected = false, wrongSlot = false;
                 for (int i = 0; i < clips.Length; i++)
                 {
                     AnimationClip c = clips[i].clip;
                     if (c == null) continue;
                     any = true;
                     if (c.isLooping) { bad = true; continue; }
+                    int match = DragonDualWield.SwingClipMatch(a, c.name, trigger);   // SBDW / 2HDW: the expected carrier clip
+                    if (match > 0) expected = true; else if (match < 0) wrongSlot = true;
                     string cn = (c.name ?? "").ToLowerInvariant();
                     for (int w = 0; w < NotSwingWords.Length; w++)
                         if (cn.Contains(NotSwingWords[w]) && !cn.Contains("attack") && !cn.Contains("swing")) { bad = true; break; }
@@ -4423,7 +4437,11 @@ namespace DragonsAltarCombat
                     for (int e = 0; e < ev.Length; e++)
                         if (ev[e].functionName == "OnAttackTrigger" || ev[e].functionName == "Hit") evented = true;
                 }
-                if (!any || bad || (!named && !evented)) return false;
+                if (!any || bad || wrongSlot) return false;
+                // Replaced (override) clips are validated by the controller's own mapping; a clip that is not replaced falls back to the
+                // state name, or - renamed state - an attack event on a state that was just entered (not a swing already running).
+                bool fresh = next || st.normalizedTime < 0.35f;
+                if (!expected && !named && !(evented && fresh)) return false;
                 string prefix = a.GetInstanceID() + ":";
                 foreach (KeyValuePair<string, KeyValuePair<int, int>> kv in LearnedStates)
                     if (kv.Key.StartsWith(prefix, StringComparison.Ordinal) && kv.Key != prefix + trigger && kv.Value.Key == layer && kv.Value.Value == st.fullPathHash) return false;
@@ -4441,6 +4459,8 @@ namespace DragonsAltarCombat
                 if (l.A == null || Time.time - l.At > 0.6f) { PendingLearns.RemoveAt(k); continue; }
                 // v0.25.154: superseded (skill takeover / takeoff) or the controller changed -> dead, never learned.
                 if (l.Gen != NaccGen || l.Ctrl != l.A.runtimeAnimatorController || SkillOwnsAnimator(Player.m_localPlayer)) { PendingLearns.RemoveAt(k); continue; }
+                // v0.25.156: bound to its own attack - dropped once another attack started or it is no longer the player's current attack.
+                if (l.Serial != AttackSerial || !IsCurrentAttack(Player.m_localPlayer, l.Atk)) { PendingLearns.RemoveAt(k); continue; }
                 try
                 {
                     // v0.25.44: wait until the animator consumed the trigger, then take the layer that is
@@ -4685,6 +4705,16 @@ namespace DragonsAltarCombat
         //    timing and the chain trim captured under an older value are dead (UpdateLearns, ComboStopPostfix).
         //  - SkillAnimGen: bumped when a normal attack is accepted. Skill clip drivers, vanilla tails and loops started
         //    under an older value retire themselves; the damage / VFX coroutines the skill already started are untouched.
+        // v0.25.156: every local Attack.Start is one activation. A pending state learn belongs to exactly that Attack object;
+        // the next attack (any kind) supersedes it.
+        public static int AttackSerial;
+        public static object NaccAttack;
+        public static void BeginAttackActivation(object attack)
+        {
+            AttackSerial++; NaccAttack = attack;
+            PendingLearns.RemoveAll(delegate(StateLearn learn) { return learn.Serial != AttackSerial; });
+        }
+
         public static int NaccGen, SkillAnimGen, AnimActivation;   // AnimActivation: bumped by every new skill animation (PlayClip / FireVanilla) and every accepted normal attack
 
         // A skill takes over: the interrupted chain is reset (counters, timing, chain speed, pending state learning). Must run
@@ -11143,6 +11173,23 @@ namespace DragonsAltarCombat
                 if (clips.ContainsKey("Attack1") && clips.ContainsKey("Attack2") && clips.ContainsKey("Attack3")) _pairedClips = clips;
             }
             catch (Exception) { _pairedClips = null; }
+        }
+
+        // v0.25.156: with an SBDW / 2HDW override controller active, the clip of swing <digit> must be the bundle's Attack<digit+1>
+        // (override clips keep the replaced clip's name, Map: original name -> bundle key).
+        // 1 = this clip is the expected replacement for `trigger`, -1 = it is a replacement for another slot, 0 = not replaced.
+        public static int SwingClipMatch(Animator animator, string clipName, string trigger)
+        {
+            if (animator == null || string.IsNullOrEmpty(clipName) || string.IsNullOrEmpty(trigger)) return 0;
+            RuntimeAnimatorController dual;
+            bool active = PairedActive(animator) || (_dual.TryGetValue(animator.GetInstanceID(), out dual) && animator.runtimeAnimatorController == dual);
+            string key;
+            if (!active || !Map.TryGetValue(clipName, out key)) return 0;
+            int end = trigger.Length;
+            while (end > 0 && char.IsDigit(trigger[end - 1])) end--;
+            int idx;
+            if (end == trigger.Length || !int.TryParse(trigger.Substring(end), out idx)) return -1;
+            return key == "Attack" + (idx + 1).ToString() ? 1 : -1;
         }
 
         public static bool PairedActive(Animator animator)

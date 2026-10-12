@@ -1,0 +1,2 @@
+v0.25.156 - verified here: compile_check PASSED (0 new signatures), mcs --parse OK, tools/tests/nacc_handoff logic model ALL PASS (adds: learn dropped when superseded, override clip slot mapping). Model = decision logic only.
+NOT verified (in game): that real SBDW/2HDW states play the bundle clips under the Map names (Attack1-3 on axe_swing / Axe combo 2 / Axe combo 3 / knife_slash0-2) so the backward step (2 -> 1) is still learned; vanilla state names vs triggers on advancement classes (otherwise HasState fallback). Rapid click spam must never learn a wrong state.

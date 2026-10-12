@@ -131,6 +131,20 @@ static class T
             Check(!ok("swing2", true, true, false, true), "state already owned by another swing rejected");
             Check(!ok("swing2", true, true, true, false), "locomotion clip rejected");
         }
+        // v0.25.156: learn bound to its attack activation; override clip mapping
+        {
+            int serial = 1; int learnSerial = serial; serial++;   // another attack started
+            Check(learnSerial != serial, "learn dropped when another attack supersedes it");
+            Func<string, string, int> match = (clip, trig) => {
+                var map = new Dictionary<string, string> { { "axe_swing", "Attack1" }, { "Axe combo 2", "Attack2" }, { "Axe combo 3", "Attack3" } };
+                string key; if (!map.TryGetValue(clip, out key)) return 0;
+                int end = trig.Length; while (end > 0 && char.IsDigit(trig[end - 1])) end--;
+                return key == "Attack" + (int.Parse(trig.Substring(end)) + 1) ? 1 : -1; };
+            Check(match("axe_swing", "swing_axe0") == 1, "override clip for swing 0 = Attack1");
+            Check(match("Axe combo 2", "swing_axe1") == 1, "override clip for swing 1 = Attack2");
+            Check(match("Axe combo 3", "swing_axe1") == -1, "attack-event clip of another slot rejected for swing 1");
+            Check(match("Sword-Attack-R1", "swing_sword0") == 0, "non-replaced clip falls back to name / fresh-event rule");
+        }
         Console.WriteLine(fails == 0 ? "ALL PASS" : fails + " FAILED");
         Environment.Exit(fails == 0 ? 0 : 1);
     }
