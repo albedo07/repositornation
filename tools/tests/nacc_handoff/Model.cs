@@ -259,6 +259,18 @@ static class T
             ctrl = foreign; rpc(me, "emote_cheer");
             Check(ctrl == foreign, "skill/emote trigger after the swing keeps whatever controller it found");
         }
+        // v0.25.163: regular-size 2HDW fires SBDW's own carrier (dual_knives); paired knives keep swing_axe (untouched)
+        {
+            Func<string, string, string> carrier = (anim, skill) =>
+                (anim.StartsWith("dual") && !string.Equals(anim, "dual_knives", StringComparison.OrdinalIgnoreCase) && skill != "Knives") ? "dual_knives" : "swing_axe";
+            string sbdw = "dual_knives";   // ComboTriggerPrefix SBDW baseName with DualWield 1.0.12 installed
+            Check(carrier("dualaxes", "Swords") == sbdw, "scimitar 2HDW fires SBDW's carrier");
+            Check(carrier("dualaxes", "Axes") == sbdw, "Hellblade cleaver 2HDW fires SBDW's carrier");
+            Check(carrier("dual_knives", "Knives") == "swing_axe", "paired knives keep the old carrier (daggers untouched)");
+            int[] seq = { 0, 1, 0, 1, 2 }; string got = "";
+            for (int h = 0; h < 5; h++) got += sbdw + seq[h] + " ";
+            Check(got.Trim() == "dual_knives0 dual_knives1 dual_knives0 dual_knives1 dual_knives2", "2HDW chain = SBDW triggers 0,1,0,1,2");
+        }
         Console.WriteLine(fails == 0 ? "ALL PASS" : fails + " FAILED");
         Environment.Exit(fails == 0 ? 0 : 1);
     }

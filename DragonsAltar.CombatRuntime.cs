@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.162";
+        public const string ModVersion = "0.25.163";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1457,7 +1457,7 @@ namespace DragonsAltarCombat
                 {
                     Animator pa = p.GetComponentInChildren<Animator>();
                     string carrier;
-                    if (DragonDualWield.EnsurePaired(pa, out carrier, "attack start")) { _comboCarrier = carrier; keyAnim = carrier; }
+                    if (DragonDualWield.EnsurePaired(pa, out carrier, "attack start", DragonDualWield.UsesKnifeCarrier(weapon))) { _comboCarrier = carrier; keyAnim = carrier; }
                     else { _comboCarrier = null; _comboReject = true; return; }   // unrecoverable: reject, never fall back to the native animation
                 }
                 int length = Mathf.Clamp(Instance.ComboChainLength.Value, 2, 9);
@@ -1615,7 +1615,7 @@ namespace DragonsAltarCombat
             if (!lp.InAttack() && IsPairedPrimaryRequest(lp, __args))
             {
                 string pc;
-                if (!DragonDualWield.EnsurePaired(lp.GetComponentInChildren<Animator>(), out pc, "attack request")) { __result = false; return false; }
+                if (!DragonDualWield.EnsurePaired(lp.GetComponentInChildren<Animator>(), out pc, "attack request", DragonDualWield.UsesKnifeCarrier(lp.GetCurrentWeapon()))) { __result = false; return false; }
             }
             return true;
         }
@@ -1785,6 +1785,7 @@ namespace DragonsAltarCombat
             {
                 int level;
                 if (!ComboLevelOf(__0, out level)) return true;
+                string inName = __0;
                 Component c = __instance as Component;
                 Animator a = c == null ? null : c.GetComponentInChildren<Animator>();
                 Player p = c == null ? null : c.GetComponent<Player>();
@@ -1795,7 +1796,7 @@ namespace DragonsAltarCombat
                 {
                     string foreign = a == null || a.runtimeAnimatorController == null ? "none" : a.runtimeAnimatorController.name;
                     string c2;
-                    if (DragonDualWield.EnsurePaired(a, out c2, "controller replaced before trigger (by '" + foreign + "')")) _comboCarrier = c2;
+                    if (DragonDualWield.EnsurePaired(a, out c2, "controller replaced before trigger (by '" + foreign + "')", DragonDualWield.UsesKnifeCarrier(DragonCombat.GetHandItem(p, "m_rightItem")))) _comboCarrier = c2;
                     else
                     {
                         // Attack.Start is running: mark THIS Attack instance as rejected (ComboStartPostfix fails + rolls it back) and
@@ -1816,6 +1817,7 @@ namespace DragonsAltarCombat
                 if (_comboHit >= Mathf.Clamp(Instance.ComboChainLength.Value, 2, 9) - 1) index = count - 1;
                 string target = baseName + index.ToString();
                 if (nativePair && !routed) DragonCombat.PrepareExternalAnimation(a, target);
+                if (nativePair) DragonDualWield.LogPairedSwing(p, a, inName, target, routed);   // v0.25.163 what the animator really plays (first swings only)
                 bool baseClass = p != null && string.IsNullOrEmpty(DragonCombat.GetAdvancementName(p));
                 if (baseClass && _comboPrevSwing >= 0)
                     CaptureBaseComboState(a, baseName + _comboPrevSwing.ToString());
@@ -11451,6 +11453,11 @@ namespace DragonsAltarCombat
         // On failure the animator keeps the controller it had.
         public static bool RepairPaired(Animator a, out string carrier)
         {
+            return RepairPaired(a, out carrier, false);
+        }
+
+        public static bool RepairPaired(Animator a, out string carrier, bool knife)
+        {
             carrier = null;
             if (a == null) return false;
             LoadPaired();
@@ -11488,7 +11495,7 @@ namespace DragonsAltarCombat
                     a.runtimeAnimatorController = ctrl;
                     a.Update(0f);
                     DragonCombat.CheckController(a);
-                    string c3 = DragonCombat.PairedCarrier(a);
+                    string c3 = knife ? KnifeCarrier(a) : DragonCombat.PairedCarrier(a);
                     if (c3 == null) { a.runtimeAnimatorController = start; a.Update(0f); continue; }
                     _pairedNames[ctrl.GetInstanceID()] = names;
                     _pairedByBase[cands[i].GetInstanceID()] = ctrl;
@@ -11510,6 +11517,11 @@ namespace DragonsAltarCombat
         // clips (axe_swing / Axe combo 2 / Axe combo 3) of its base controller and the controller declares the carrier triggers x3.
         public static string PairedFault(Animator a, out string carrier)
         {
+            return PairedFault(a, out carrier, false);
+        }
+
+        public static string PairedFault(Animator a, out string carrier, bool knife)
+        {
             carrier = null;
             if (a == null) return "no animator";
             if (_pairedClips == null) return "SBDW clips not loaded (DualWield.dll / dwanimations bundle missing)";
@@ -11517,22 +11529,78 @@ namespace DragonsAltarCombat
             HashSet<string> names;
             if (!_pairedNames.TryGetValue(a.runtimeAnimatorController.GetInstanceID(), out names) || !HasCarrierClips(names))
                 return "override does not replace the 3 carrier clips (axe_swing / Axe combo 2 / Axe combo 3)";
-            carrier = DragonCombat.PairedCarrier(a);
-            return carrier == null ? "no swing_axe / axe_swing x3 triggers declared by the paired controller" : null;
+            carrier = knife ? KnifeCarrier(a) : DragonCombat.PairedCarrier(a);
+            if (carrier == null) return knife ? "no dual_knives x3 triggers declared by the paired controller" : "no swing_axe / axe_swing x3 triggers declared by the paired controller";
+            return null;
         }
 
         // Applies / repairs (rebuilds from the correct base controller) and validates. false = could not be made valid; the caller must
         // REJECT the attack (never play the native animation instead). Reason is logged once + shown once.
         public static bool EnsurePaired(Animator a, out string carrier, string where)
         {
+            return EnsurePaired(a, out carrier, where, false);
+        }
+
+        // v0.25.163 ROOT CAUSE (user: 2HDW still plays Therzie's chain): the working SBDW chain (DualWield 1.0.12 installed -> our own
+        // clip load bypassed) fires dual_knives0-2 (ComboTriggerPrefix baseName "dual_knives") on the knife_slash0-2 states. 2HDW was
+        // routed onto a DIFFERENT trigger set, swing_axe0-2, which SBDW never uses. Regular-size 2HDW (scimitars, cleavers) now fire
+        // exactly SBDW's carrier, dual_knives0-2, on the same SBDW clip map (Map: knife_slash0-2 -> Attack1-3). Paired knives (daggers)
+        // keep the swing_axe carrier unchanged (user: daggers have their own combo, not touched yet).
+        // v0.25.163 diagnostic (first 9 paired swings per session): trigger in/out, controller, statei, then the clips each layer plays
+        // 0.15 s later - so LogOutput.log shows exactly which animation a 2HDW swing ends up in.
+        private static int _swingLogs;
+        public static void LogPairedSwing(Player p, Animator a, string inName, string outName, bool routed)
+        {
+            if (_swingLogs >= 9 || a == null || DragonCombatPlugin.Instance == null) return;
+            _swingLogs++;
+            ItemDrop.ItemData w = DragonCombat.GetHandItem(p, "m_rightItem");
+            string ctrl = a.runtimeAnimatorController == null ? "none" : a.runtimeAnimatorController.name;
+            int statei = -1;
+            try { statei = a.GetInteger("statei"); } catch (Exception) { }
+            DragonCombatPlugin.Instance.LogInfo("[Immortal Heroes] [2HDW] swing " + _swingLogs + ": " + (w != null && w.m_dropPrefab != null ? w.m_dropPrefab.name : "?") +
+                " trigger '" + inName + "' -> '" + outName + "' routed=" + routed + " ours=" + PairedActive(a) + " controller='" + ctrl + "' statei=" + statei);
+            DragonCombatPlugin.Instance.StartCoroutine(LogPlayingLater(a, _swingLogs));
+        }
+
+        private static System.Collections.IEnumerator LogPlayingLater(Animator a, int n)
+        {
+            yield return new WaitForSeconds(0.15f);
+            if (a == null || DragonCombatPlugin.Instance == null) yield break;
+            string line = "";
+            for (int l = 0; l < a.layerCount; l++)
+            {
+                AnimatorClipInfo[] cur = a.GetCurrentAnimatorClipInfo(l);
+                AnimatorClipInfo[] nxt = a.IsInTransition(l) ? a.GetNextAnimatorClipInfo(l) : new AnimatorClipInfo[0];
+                string names = "";
+                for (int i = 0; i < cur.Length; i++) if (cur[i].clip != null) names += (names.Length > 0 ? "," : "") + cur[i].clip.name;
+                for (int i = 0; i < nxt.Length; i++) if (nxt[i].clip != null) names += (names.Length > 0 ? "," : "") + "->" + nxt[i].clip.name;
+                line += " | L" + l + " w" + a.GetLayerWeight(l).ToString("0.0") + ": " + (names.Length > 0 ? names : "-");
+            }
+            DragonCombatPlugin.Instance.LogInfo("[Immortal Heroes] [2HDW] swing " + n + " playing:" + line);
+        }
+
+        public static bool UsesKnifeCarrier(ItemDrop.ItemData w)
+        {
+            if (w == null || w.m_shared == null || w.m_shared.m_attack == null || !DragonCombat.IsPairedWeapon(w)) return false;
+            if (string.Equals(w.m_shared.m_attack.m_attackAnimation, "dual_knives", StringComparison.OrdinalIgnoreCase)) return false;
+            return w.m_shared.m_skillType.ToString() != "Knives";
+        }
+
+        public static string KnifeCarrier(Animator a)
+        {
+            return DragonCombat.StrictTriggerCount(a, "dual_knives") >= 3 ? "dual_knives" : null;
+        }
+
+        public static bool EnsurePaired(Animator a, out string carrier, string where, bool knife)
+        {
             carrier = null;
             if (a == null) return false;
             LoadPaired();
             if (!PairedActive(a)) ApplyPaired(a, true);
-            string fault = PairedFault(a, out carrier);
+            string fault = PairedFault(a, out carrier, knife);
             if (fault == null) return true;
             string first = fault;
-            if (RepairPaired(a, out carrier) && PairedFault(a, out carrier) == null)
+            if (RepairPaired(a, out carrier, knife) && PairedFault(a, out carrier, knife) == null)
             {
                 string note = where + ": repaired (" + first + ")";
                 if (_pairedLogged.Add(note) && DragonCombatPlugin.Instance != null) DragonCombatPlugin.Instance.LogInfo("[Immortal Heroes] [2HDW] " + note);

@@ -1,0 +1,5 @@
+v0.25.163 SBDW Carrier - test results (no game here)
+- mcs --parse -langversion:5 DragonsAltar.CombatRuntime.cs: OK
+- tools/compile_check/check.sh 3029660: PASSED (0 new signatures)
+- tools/tests/nacc_handoff (logic model): ALL PASS (+ carrier cases: scimitar / cleaver -> dual_knives, paired knives -> swing_axe, chain triggers 0,1,0,1,2)
+- NOT verified: in-game animation (needs your test + the [2HDW] swing lines).

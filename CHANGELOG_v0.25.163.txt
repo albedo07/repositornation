@@ -1,0 +1,6 @@
+v0.25.163 SBDW Carrier (CombatRuntime.cs only; 2HDW primary attacks of regular-size weapons only)
+- CAUSE (found in the code and your LogOutput.log, NOT confirmed in game): your working SBDW chain (Dual Wield 1.0.12 installed) fires dual_knives0-2 on the knife_slash clips. 2HDW was routed onto a different trigger set, swing_axe0-2, which SBDW never uses. Every 2HDW fix since v0.25.142 built on that wrong carrier.
+- FIX: scimitars / Hellblade cleavers (2HDW whose primary is not dual_knives and skill is not Knives) now fire SBDW's own triggers dual_knives0-2 (chain 0,1,0,1,2) on the SBDW clip override. Same validation / repair / reject rules as before, same OneHanded state hold.
+- Daggers (paired knives) untouched: same swing_axe path as v0.25.162.
+- Diagnostic: the first 9 paired swings log "[2HDW] swing N: <prefab> trigger 'dualaxes1' -> 'dual_knives1' routed=... controller=... statei=..." and, 0.15 s later, "[2HDW] swing N playing: | L0 ...: <clips>". If it still looks like Therzie's chain, send these lines.
+- Heavy attacks, damage, class restrictions, skills, SBDW unchanged.

@@ -13,3 +13,4 @@ v0.25.159: if "controller replaced before trigger" shows in the log, that click 
 v0.25.160: scimitar / Hellblade cleaver / paired knives (Mercenary): primary chain must look and time exactly like SBDW. Send the "[2HDW] trigger path:" lines from LogOutput.log.
 v0.25.161: scimitar / Hellblade cleaver / paired knives: primary chain = SBDW look + timing; heavy native; stance returns after the chain.
 v0.25.162: scimitar / Hellblade cleaver / paired knives: chain = SBDW; cast skills, emotes and heavy attack (Mouse2) right after a swing: each plays its own animation (none replaced by a swing).
+v0.25.163: Mercenary with scimitar / Hellblade cleaver: Mouse1 x5 must look + time like SBDW (1-2-1-2-3); heavy native. Send the "[2HDW] swing" lines from LogOutput.log. Daggers not changed.
