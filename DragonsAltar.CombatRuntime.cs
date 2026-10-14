@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.167";
+        public const string ModVersion = "0.25.168";
 
         internal static DragonCombatPlugin Instance;
 
@@ -10075,6 +10075,7 @@ namespace DragonsAltarCombat
             if (_aimWindupPlayer == Player.m_localPlayer && now < _aimWindupUntil)
                 FaceAimNow(_aimWindupPlayer);
             if (Player.m_localPlayer != null || _bulwark != null) UpdateHolyBulwark(Player.m_localPlayer);
+            DragonClothGuard.Update(Player.m_localPlayer);   // v0.25.168 cape follows the body during skill animations
             if (PendingLearns.Count > 0) UpdateLearns();
             UpdateLaunchFalls();
             if (now >= _nextDualCheck) { _nextDualCheck = now + 0.5f; EnforceDualWieldOwner(Player.m_localPlayer); DragonCombatPlugin.SyncDualController(Player.m_localPlayer); }
@@ -13111,7 +13112,8 @@ namespace DragonsAltarCombat
                 line.positionCount = n;
                 line.startWidth = 0.22f + radius * 0.02f;
                 line.endWidth = 0.03f;
-                Material m = Mat(LineTex(), false);   // v0.25.167 dark torn-earth fissures, not glowing lines
+                Material m = Mat(CrackTex(), false);   // v0.25.167 dark torn-earth fissures; v0.25.168 ragged crack texture
+                line.textureMode = LineTextureMode.Tile;
                 if (m == null) m = Additive();
                 if (m != null) line.sharedMaterial = m;
                 Vector3 side = Vector3.Cross(Vector3.up, dir);
@@ -13151,8 +13153,8 @@ namespace DragonsAltarCombat
                 MeshRenderer r = rock.AddComponent<MeshRenderer>();
                 if (mat != null) r.sharedMaterial = mat;
                 r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                float sz = size * UnityEngine.Random.Range(0.5f, 1.2f);
-                rock.transform.localScale = new Vector3(sz, sz * UnityEngine.Random.Range(0.6f, 1f), sz);
+                float sz = Mathf.Min(0.45f, size * UnityEngine.Random.Range(0.4f, 1.1f));   // v0.25.168 never oversized
+                rock.transform.localScale = new Vector3(sz * UnityEngine.Random.Range(0.75f, 1.25f), sz * UnityEngine.Random.Range(0.5f, 0.9f), sz * UnityEngine.Random.Range(0.75f, 1.25f));   // irregular chunks
                 rock.transform.position = center + Vector3.up * 0.3f;
                 rock.transform.rotation = UnityEngine.Random.rotation;
                 DragonDebris d = rock.AddComponent<DragonDebris>();
@@ -13251,7 +13253,8 @@ namespace DragonsAltarCombat
             line.positionCount = n;
             line.startWidth = width;
             line.endWidth = width * 0.3f;
-            Material m = Mat(LineTex(), false);   // v0.25.167 dark scar
+            Material m = Mat(CrackTex(), false);   // v0.25.167 dark scar; v0.25.168 ragged crack texture
+            line.textureMode = LineTextureMode.Tile;
             if (m == null) m = Additive();
             if (m != null) line.sharedMaterial = m;
             Vector3 dir = b - a; dir.y = 0f;
@@ -13294,29 +13297,169 @@ namespace DragonsAltarCombat
             Cracks(pos, new Color(0.55f, 0.88f, 1f, 1f), radius * 0.8f, 8, 3f);
         }
 
-        // The full "something heavy hit the ground" package.
+        // v0.25.168 (user: ground impacts = a Hulk Smash): dark radiating cracks, a forceful dirt burst thrown up and out,
+        // a rolling dust ring, irregular lit rock chunks, a scorch and a shake. The skill colour only tints a faint ground
+        // ring (identity) - no glowing particle ring, no spikes. Purely visual: the terrain itself is never modified.
         public static void HeavyLanding(Vector3 pos, Color c, float radius, float shake)
         {
-            Shockwave(pos, c, radius, 0.5f);
+            radius = Mathf.Max(0.8f, radius);
+            Color tint = c; tint.a = 0.5f;
+            GroundRing(pos, tint, radius, 0.5f);
+            DirtBurst(pos, radius, 1f);
             DustRing(pos, radius);
-            Cracks(pos, c, radius * 0.8f, 7, 3.5f);   // v0.25.150 fewer cracks / rocks / sparks
-            Debris(pos, new Color(0.42f, 0.36f, 0.30f, 1f), Mathf.RoundToInt(6 + radius * 1.2f), 6f + radius * 0.6f, 0.25f + radius * 0.02f, 2.5f);
-            Burst(pos + Vector3.up * 0.4f, Color.Lerp(c, Color.white, 0.35f), Mathf.RoundToInt(24 + radius * 5f), 9f + radius, 0.28f, 0.7f, 0.5f);
+            Cracks(pos, c, radius * 0.85f, 8, 4f);
+            Debris(pos, new Color(0.40f, 0.35f, 0.30f, 1f), Mathf.RoundToInt(7 + radius * 1.3f), 6f + radius * 0.6f, 0.22f + radius * 0.015f, 2.6f);
             Shake(pos, 25f + radius * 2f, shake);
-            Scorch(pos, radius * 0.55f, 6f);   // v0.25.59 skin
-            Smoke(pos, new Color(0.45f, 0.40f, 0.35f, 0.55f), radius, 2.2f, Mathf.RoundToInt(6 + radius));
+            Scorch(pos, radius * 0.55f, 6f);
+            Smoke(pos, new Color(0.45f, 0.40f, 0.35f, 0.5f), radius, 2.4f, Mathf.RoundToInt(6 + radius));
         }
 
-        // v0.25.58 ground hit without the shockwave ring (the caller already draws one): dust, cracks, rocks, sparks, shake.
+        // v0.25.58 ground hit without the ground ring (the caller already draws one): same Hulk-smash package, lighter.
         public static void GroundImpact(Vector3 pos, Color c, float radius, float shake)
         {
+            radius = Mathf.Max(0.6f, radius);
+            DirtBurst(pos, radius, 0.7f);
             DustRing(pos, radius);
-            Cracks(pos, c, radius * 0.75f, 6, 3f);   // v0.25.150
-            Debris(pos, new Color(0.42f, 0.36f, 0.30f, 1f), Mathf.RoundToInt(4 + radius), 5f + radius * 0.5f, 0.22f + radius * 0.02f, 2.2f);
-            Burst(pos + Vector3.up * 0.4f, Color.Lerp(c, Color.white, 0.3f), Mathf.RoundToInt(16 + radius * 4f), 8f + radius, 0.26f, 0.6f, 0.5f);
+            Cracks(pos, c, radius * 0.75f, 6, 3.2f);
+            Debris(pos, new Color(0.40f, 0.35f, 0.30f, 1f), Mathf.RoundToInt(4 + radius), 5f + radius * 0.5f, 0.2f + radius * 0.015f, 2.2f);
             if (shake > 0f) Shake(pos, 20f + radius * 2f, shake);
-            Scorch(pos, radius * 0.45f, 5f);   // v0.25.59 skin
-            Smoke(pos, new Color(0.45f, 0.40f, 0.35f, 0.5f), radius * 0.8f, 2f, Mathf.RoundToInt(4 + radius * 0.8f));
+            Scorch(pos, radius * 0.45f, 5f);
+            Smoke(pos, new Color(0.45f, 0.40f, 0.35f, 0.45f), radius * 0.8f, 2f, Mathf.RoundToInt(4 + radius * 0.8f));
+        }
+
+        // v0.25.168: soil and grit blasted up and outward from an impact (alpha dirt, gravity pulls it back down).
+        public static void DirtBurst(Vector3 pos, float radius, float strength)
+        {
+            if (!Enabled) return;
+            radius = Mathf.Max(0.5f, radius);
+            DragonVfxLife l = Host(GroundPoint(pos) + Vector3.up * 0.15f, 2.8f, "dirt");
+            Color soil = new Color(0.36f, 0.30f, 0.24f, 0.85f);
+            // heavy clods: a cone of fast dark grit falling back
+            ParticleSystem clods = Particles(l.transform, soil, Mathf.RoundToInt((30 + radius * 8f) * strength), 0f, 0.08f, 1.3f,
+                3f + radius * 0.8f, 6f + radius * 1.2f, 0.06f, 0.16f, 1.6f, ParticleSystemShapeType.Cone, radius * 0.35f, new Vector3(-90f, 0f, 0f), false, false);
+            ParticleSystem.ShapeModule sh = clods.shape; sh.angle = 38f;
+            // a dust plume rising out of the hit
+            Color dust = new Color(0.52f, 0.46f, 0.38f, 0.5f);
+            ParticleSystem plume = Particles(l.transform, dust, Mathf.RoundToInt((10 + radius * 3f) * strength), 0f, 0.1f, 1.8f,
+                1.5f, 3f + radius * 0.4f, 0.8f + radius * 0.15f, 1.6f + radius * 0.3f, -0.05f, ParticleSystemShapeType.Cone, radius * 0.3f, new Vector3(-90f, 0f, 0f), false, false);
+            ParticleSystemRenderer pr = plume.GetComponent<ParticleSystemRenderer>();
+            Material sm = Mat(SmokeTex(), false);
+            if (sm != null) pr.sharedMaterial = sm;
+            ParticleSystem.ShapeModule ps = plume.shape; ps.angle = 25f;
+            ParticleSystem.MainModule pm = plume.main; pm.startRotation = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
+        }
+
+        private static Texture2D _crackTex, _frostTex;
+        private static float _furrowWindow;
+        private static int _furrowCount;
+
+        // v0.25.168 ragged fissure: a dark core whose width wanders along the crack, torn edges, small side splinters.
+        private static Texture2D CrackTex()
+        {
+            if (_crackTex == null) _crackTex = MakeTex(128, 32, delegate(float u, float v)
+            {
+                float wobble = (Fbm(u * 9f, 0.5f, 21) - 0.5f) * 0.35f;
+                float w = 0.12f + 0.16f * Fbm(u * 6f, 3.1f, 22);
+                float d = Mathf.Abs(v - 0.5f - wobble * 0.5f);
+                float core = Mathf.Clamp01(1f - d / w);
+                float torn = Mathf.Clamp01(core * 1.6f - 0.25f + (Fbm(u * 24f, v * 8f, 23) - 0.5f) * 0.9f);
+                float splinter = Mathf.Clamp01(1f - Mathf.Abs(v - 0.5f) / 0.45f) * Mathf.Pow(Mathf.Clamp01(Fbm(u * 30f, v * 3f, 24) - 0.55f) * 3f, 2f) * 0.6f;
+                return Mathf.Clamp01(Mathf.Max(torn, splinter));
+            }, TextureWrapMode.Repeat);
+            return _crackTex;
+        }
+
+        // v0.25.168 hoarfrost: a frosted disc with crystalline feathering at its rim and patchy cover inside.
+        private static Texture2D FrostTex()
+        {
+            if (_frostTex == null) _frostTex = MakeTex(128, 128, delegate(float u, float v)
+            {
+                float r = Rad(u, v);
+                if (r >= 1f) return 0f;
+                float ang = Mathf.Atan2(v - 0.5f, u - 0.5f);
+                float feather = Mathf.Abs(Mathf.Sin(ang * 23f + Fbm(u * 5f, v * 5f, 31) * 6f));
+                float rim = Mathf.Clamp01((1f - r) / 0.25f);
+                float edge = Mathf.Clamp01(rim + (feather - 0.6f) * 0.8f * (1f - rim));
+                float patch = 0.45f + 0.55f * Fbm(u * 7f, v * 7f, 32);
+                return Mathf.Clamp01(edge * patch * 0.9f);
+            }, TextureWrapMode.Clamp);
+            return _frostTex;
+        }
+
+        // v0.25.168 a gust of air riding with a slash: pale stretched wind streaks + a little lifted dust, moving along fwd.
+        public static void Gust(Vector3 pos, Vector3 fwd, float width)
+        {
+            if (!Enabled) return;
+            fwd.y = 0f;
+            if (fwd.sqrMagnitude < 0.0001f) fwd = Vector3.forward;
+            DragonVfxLife l = Host(pos, 1.2f, "gust");
+            l.transform.rotation = Quaternion.LookRotation(fwd.normalized, Vector3.up);
+            ParticleSystem wind = Particles(l.transform, new Color(0.86f, 0.88f, 0.90f, 0.35f), 5, 0f, 0.05f, 0.45f, 7f, 11f, 0.05f, 0.1f, 0f,
+                ParticleSystemShapeType.Box, 0.1f, Vector3.zero, true, false);
+            ParticleSystem.ShapeModule sh = wind.shape; sh.scale = new Vector3(Mathf.Max(0.5f, width), 0.8f, 0.2f);
+            Material wm = Mat(StreakTex(), false);
+            if (wm != null) wind.GetComponent<ParticleSystemRenderer>().sharedMaterial = wm;
+            ParticleSystem dust = Particles(l.transform, new Color(0.55f, 0.49f, 0.41f, 0.35f), 3, 0f, 0.05f, 0.9f, 1f, 2.5f, 0.5f, 1f, -0.05f,
+                ParticleSystemShapeType.Box, 0.1f, Vector3.zero, false, false);
+            ParticleSystem.ShapeModule dsh = dust.shape; dsh.scale = new Vector3(Mathf.Max(0.5f, width), 0.2f, 0.3f);
+        }
+
+        // v0.25.168 Frost Nova ground: a hoarfrost carpet over the area for the whole duration + low drifting cold mist.
+        public static void FrostGround(Vector3 center, float radius, float seconds)
+        {
+            if (!Enabled) return;
+            radius = Mathf.Max(0.5f, radius);
+            seconds = Mathf.Max(0.3f, seconds);
+            Vector3 g = GroundPoint(center) + Vector3.up * 0.06f;
+            DragonMeshFx f = MeshFx(g, Quaternion.Euler(0f, UnityEngine.Random.Range(0f, 360f), 0f), true, Mat(FrostTex(), false), new Color(0.86f, 0.94f, 1f, 0.75f), seconds + 0.6f);
+            if (f != null) { f.Conform = true; f.FadeIn = 0.25f; f.Hold = seconds; f.ScaleFrom = Vector3.one * radius * 0.6f; f.ScaleTo = Vector3.one * radius * 2f; f.ScaleTime = 0.3f; }
+            DragonVfxLife l = Host(g + Vector3.up * 0.2f, seconds + 2f, "coldmist");
+            ParticleSystem mist = Particles(l.transform, new Color(0.80f, 0.90f, 0.98f, 0.28f), 6, Mathf.Clamp(radius * 2f, 4f, 16f), seconds, 2.4f, 0.1f, 0.4f, 0.8f + radius * 0.12f, 1.6f + radius * 0.2f, -0.01f,
+                ParticleSystemShapeType.Circle, radius * 0.9f, new Vector3(90f, 0f, 0f), false, false);
+            Material sm = Mat(SmokeTex(), false);
+            if (sm != null) mist.GetComponent<ParticleSystemRenderer>().sharedMaterial = sm;
+            l.StopEmitAt = seconds;
+            l.Systems = new ParticleSystem[] { mist };
+            Debris(center, new Color(0.75f, 0.92f, 1f, 1f), Mathf.RoundToInt(4 + radius), 4f, 0.12f, 1.6f);   // a few ice shards skitter out
+        }
+
+        // v0.25.168: one ground eruption (chains, fissure points): the earth bursts up in a dirt column with chunks.
+        public static void Eruption(Vector3 pos, Color c, float radius, float shake)
+        {
+            if (!Enabled) return;
+            radius = Mathf.Max(0.5f, radius);
+            DirtBurst(pos, radius, 1.2f);
+            Cracks(pos, c, radius * 0.8f, 5, 3f);
+            Debris(pos, new Color(0.40f, 0.35f, 0.30f, 1f), Mathf.RoundToInt(4 + radius * 1.5f), 7f + radius, 0.18f + radius * 0.03f, 2.2f);
+            Smoke(pos, new Color(0.48f, 0.42f, 0.36f, 0.45f), radius * 0.8f, 1.8f, Mathf.RoundToInt(3 + radius));
+            Scorch(pos, radius * 0.5f, 4f);
+            if (shake > 0f) Shake(pos, 15f + radius * 2f, shake);
+        }
+
+        // v0.25.168: something ploughing through the ground a -> b (a blade half underground): a torn furrow, dirt flicked
+        // up to both sides and a little dust. Call it per step with short segments.
+        public static void Furrow(Vector3 a, Vector3 b, Color c, float width)
+        {
+            if (!Enabled) return;
+            CrackLine(a, b, c, Mathf.Clamp(width * 0.3f, 0.12f, 0.5f), 3.5f);
+            // overlapping waves (Ascended fans) share one budget: at most 8 dirt sprays per 0.25 s, the scar always draws
+            if (Time.time >= _furrowWindow) { _furrowWindow = Time.time + 0.25f; _furrowCount = 0; }
+            if (++_furrowCount > 8) return;
+            Vector3 g = GroundPoint(b) + Vector3.up * 0.1f;
+            Vector3 f = b - a; f.y = 0f;
+            if (f.sqrMagnitude < 0.0001f) f = Vector3.forward;
+            DragonVfxLife l = Host(g, 2f, "furrow");
+            l.transform.rotation = Quaternion.LookRotation(f.normalized, Vector3.up);
+            Color soil = new Color(0.36f, 0.30f, 0.24f, 0.8f);
+            for (int k = -1; k <= 1; k += 2)
+            {
+                // spray thrown sideways-up off each lip of the cut
+                ParticleSystem ps = Particles(l.transform, soil, 10, 0f, 0.06f, 0.9f, 2.5f, 4.5f, 0.05f, 0.12f, 1.5f,
+                    ParticleSystemShapeType.Cone, 0.15f, new Vector3(-60f, k * 70f, 0f), false, false);
+                ParticleSystem.ShapeModule sh = ps.shape; sh.angle = 20f;
+            }
+            Smoke(g, new Color(0.50f, 0.44f, 0.37f, 0.35f), Mathf.Max(0.4f, width * 0.4f), 1.4f, 2);
+            Debris(g, new Color(0.40f, 0.35f, 0.30f, 1f), 1, 4f, 0.16f, 1.4f);
         }
 
         // Rising embers / sparks over an area for a while (burning ground, auras).
@@ -13913,7 +14056,7 @@ namespace DragonsAltarCombat
             if (!Enabled) return;
             if (normal.sqrMagnitude < 0.001f) normal = Vector3.forward;
             Quaternion rot = Quaternion.FromToRotation(Vector3.up, normal.normalized);
-            Color rc = c; rc.a = 0.85f;
+            Color rc = Color.Lerp(c, new Color(0.88f, 0.90f, 0.92f, 1f), 0.4f); rc.a = 0.5f;   // v0.25.168 air, not neon (was 0.85)
             DragonMeshFx ring = MeshFx(pos, rot, true, Mat(RingTex(), true), rc, seconds);
             if (ring != null) { ring.ScaleFrom = Vector3.one * radius * 0.3f; ring.ScaleTo = Vector3.one * radius * 2f; ring.ScaleTime = seconds; }
         }
@@ -15750,6 +15893,135 @@ namespace DragonsAltarCombat
             }
             transform.localScale = _scale * Mathf.Max(0.001f, k);
             if (Age >= Life + Fade) Destroy(gameObject);
+        }
+    }
+
+    // v0.25.168 (user: Bonecrusher video - the cape folds through the body and is pulled to the front): Valheim capes are
+    // MagicaCloth2 components (VisEquipment.SetupCloth). Their inertia constraint keeps the cloth where it was in WORLD
+    // space when the character moves; our jump slams / Mixamo warps move the body far and fast (leap, fall, hips pinned,
+    // MovePosition travel, root rolls), so the cape lagged behind and was whipped over the shoulders and through the torso.
+    // While a skill animation drives the local player (Mixamo clip live, clip driver busy, or a skill-locked airborne
+    // move) the cape's inertia is anchored to the player and its world / local inertia damped, so it moves with the body
+    // like a worn cape; afterwards the original values are blended back. Cloth colliders, gravity, wind and the cape
+    // itself are untouched (never hidden). Pure reflection: no MagicaCloth reference, silently inactive if the API differs.
+    public static class DragonClothGuard
+    {
+        private class Saved { public Component Cloth; public object Inertia; public object Holder; public FieldInfo HolderField; public float World = -1f, Local = -1f; public Transform Anchor; public float AnchorInertia = -1f; }
+        private static Type _clothType;
+        private static bool _typeTried;
+        private static PropertyInfo _serialize;
+        private static FieldInfo _inertiaField, _world, _local, _anchor, _anchorInertia;
+        private static MethodInfo _paramChange;
+        private static readonly List<Saved> _saved = new List<Saved>();
+        private static Player _owner;
+        private static float _level, _nextScan;
+        private const float Damp = 0.1f;   // inertia kept while guarded (fraction of the cape's own values)
+
+        private static bool Resolve()
+        {
+            if (_typeTried) return _clothType != null && _serialize != null && _inertiaField != null;
+            _typeTried = true;
+            try
+            {
+                _clothType = DragonCombat.FindTypeCached("MagicaCloth2.MagicaCloth");
+                if (_clothType == null) return false;
+                _serialize = _clothType.GetProperty("SerializeData", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                _paramChange = _clothType.GetMethod("SetParameterChange", BindingFlags.Instance | BindingFlags.Public, null, Type.EmptyTypes, null);
+                if (_serialize == null) return false;
+                _inertiaField = _serialize.PropertyType.GetField("inertiaConstraint", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (_inertiaField == null) return false;
+                Type it = _inertiaField.FieldType;
+                _world = FloatField(it, "worldInertia");
+                _local = FloatField(it, "localInertia");
+                _anchorInertia = FloatField(it, "anchorInertia");
+                _anchor = it.GetField("anchor", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (_anchor != null && _anchor.FieldType != typeof(Transform)) _anchor = null;
+                Debug.Log("[Aethelborn] Cape guard: MagicaCloth2 inertia " + (_world != null ? "world " : "") + (_local != null ? "local " : "") + (_anchor != null ? "anchor" : ""));
+            }
+            catch (Exception) { _clothType = null; }
+            return _clothType != null && _serialize != null && _inertiaField != null;
+        }
+
+        private static FieldInfo FloatField(Type t, string name)
+        {
+            FieldInfo f = t.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            return f != null && f.FieldType == typeof(float) ? f : null;
+        }
+
+        private static bool Driven(Player p)
+        {
+            if (p == null || p.IsDead()) return false;
+            if (Time.time < DragonMixamo.LiveUntil) return true;
+            if (DragonCombat.ClipBusy(p)) return true;
+            return DragonCombat.IsSkillLocked(p) && !p.IsOnGround();
+        }
+
+        public static void Update(Player p)
+        {
+            try
+            {
+                bool on = Driven(p);
+                if (!on && _saved.Count == 0) { _level = 0f; return; }
+                if (!Resolve()) return;
+                if (p != _owner) { Restore(); _owner = p; }
+                if (on && (_saved.Count == 0 || Time.time >= _nextScan)) { Scan(p); _nextScan = Time.time + 1f; }
+                // in fast (0.08 s) so the cape is held before the leap, out slowly (0.4 s) so it settles without a snap
+                _level = on ? Mathf.Min(1f, _level + Time.deltaTime / 0.08f) : Mathf.Max(0f, _level - Time.deltaTime / 0.4f);
+                Apply(_level);
+                if (!on && _level <= 0f) Restore();
+            }
+            catch (Exception) { }
+        }
+
+        private static void Scan(Player p)
+        {
+            if (p == null) return;
+            Component[] cloths = p.GetComponentsInChildren(_clothType, true);
+            for (int i = _saved.Count - 1; i >= 0; i--) if (_saved[i].Cloth == null) _saved.RemoveAt(i);
+            for (int i = 0; i < cloths.Length; i++)
+            {
+                bool known = false;
+                for (int k = 0; k < _saved.Count && !known; k++) known = _saved[k].Cloth == cloths[i];
+                if (known) continue;
+                object data = _serialize.GetValue(cloths[i], null);
+                if (data == null) continue;
+                object inertia = _inertiaField.GetValue(data);
+                if (inertia == null) continue;
+                Saved s = new Saved();
+                s.Cloth = cloths[i]; s.Inertia = inertia; s.Holder = data; s.HolderField = _inertiaField;
+                if (_world != null) s.World = (float)_world.GetValue(inertia);
+                if (_local != null) s.Local = (float)_local.GetValue(inertia);
+                if (_anchor != null) s.Anchor = (Transform)_anchor.GetValue(inertia);
+                if (_anchorInertia != null) s.AnchorInertia = (float)_anchorInertia.GetValue(inertia);
+                _saved.Add(s);
+            }
+        }
+
+        private static void Apply(float k)
+        {
+            for (int i = 0; i < _saved.Count; i++)
+            {
+                Saved s = _saved[i];
+                if (s.Cloth == null) continue;
+                object inertia = s.Inertia;
+                if (_world != null && s.World >= 0f) _world.SetValue(inertia, Mathf.Lerp(s.World, s.World * Damp, k));
+                if (_local != null && s.Local >= 0f) _local.SetValue(inertia, Mathf.Lerp(s.Local, s.Local * Damp, k));
+                if (_anchor != null && s.Anchor == null && _owner != null)
+                {
+                    // the player's root carries all of the leap / fall / travel: cancel it for the cloth while guarded
+                    _anchor.SetValue(inertia, k > 0f ? _owner.transform : null);
+                    if (_anchorInertia != null) _anchorInertia.SetValue(inertia, k > 0f ? Mathf.Lerp(Mathf.Max(0f, s.AnchorInertia), 0f, k) : Mathf.Max(0f, s.AnchorInertia));
+                }
+                if (inertia.GetType().IsValueType) s.HolderField.SetValue(s.Holder, inertia);   // struct data: write it back
+                if (_paramChange != null) _paramChange.Invoke(s.Cloth, null);
+            }
+        }
+
+        private static void Restore()
+        {
+            if (_saved.Count > 0 && _clothType != null) Apply(0f);
+            _saved.Clear();
+            _level = 0f;
         }
     }
 }

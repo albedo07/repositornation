@@ -1,5 +1,5 @@
 @echo off
-title Immortal Heroes v0.25.167 - Grounded Edges
+title Immortal Heroes v0.25.168 - Hulk Smash
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
 echo.
 pause

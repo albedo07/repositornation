@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Aethelborn Ascended - Sorcerer Advancements";
-        public const string ModVersion = "0.25.167";
+        public const string ModVersion = "0.25.168";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1293,9 +1293,9 @@ namespace DragonsAltarSorcerer
                 DragonCombat.RunVfx(delegate
                 {
                     DragonVfx.CrackLine(ga, gb, new Color(0.80f, 0.40f, 1f, 1f), Mathf.Clamp(gw * 0.35f, 0.4f, 1.4f), 4f);   // v0.25.58 the blade splits the ground
-                    for (int k = 1; k <= 4; k++) { Vector3 gp = Vector3.Lerp(ga, gb, k / 4.5f); DragonVfx.Spike(gp + Vector3.Cross(Vector3.up, gb - ga).normalized * gw * 0.4f, new Color(0.30f, 0.22f, 0.32f, 1f), 1.3f, 0.4f, 0.6f, Vector3.Cross(Vector3.up, gb - ga)); DragonVfx.Spike(gp - Vector3.Cross(Vector3.up, gb - ga).normalized * gw * 0.4f, new Color(0.30f, 0.22f, 0.32f, 1f), 1.3f, 0.4f, 0.6f, -Vector3.Cross(Vector3.up, gb - ga)); }
+                    // v0.25.168 (user): no spikes - the blade splits the ground (fissure + Hulk-smash landing below)
                     DragonVfx.HeavyLanding(Vector3.Lerp(ga, gb, 0.6f), new Color(0.75f, 0.30f, 1f, 1f), Mathf.Max(2f, gw * 1.5f), 2f);
-                    for (int k = 1; k <= 4; k++) DragonVfx.Burst(Vector3.Lerp(ga, gb, k / 4f) + Vector3.up * 0.4f, new Color(0.85f, 0.55f, 1f, 1f), 20, 7f, 0.3f, 0.5f, 0.4f);
+                    for (int k = 1; k <= 4; k++) DragonVfx.Eruption(Vector3.Lerp(ga, gb, k / 4.5f), new Color(0.75f, 0.30f, 1f, 1f), Mathf.Clamp(gw * 0.5f, 0.6f, 1.6f), 0f);   // v0.25.168 the split ground bursts open
                 });
             }
         }
@@ -1419,7 +1419,7 @@ namespace DragonsAltarSorcerer
             if (_enableVfx.Value)
             {
                 Vector3 gc = center; float gr = radius, gd = duration;
-                DragonCombat.RunVfx(delegate { DragonVfx.SpikeRing(gc, DragonVfx.Ice, gr * 0.55f, 10, 1.1f, gd); });
+                DragonCombat.RunVfx(delegate { DragonVfx.FrostGround(gc, gr, gd); });   // v0.25.168 hoarfrost carpet + cold mist (no spikes)
             }
             for (int t = 0; t < ticks; t++)
             {
@@ -1543,7 +1543,6 @@ namespace DragonsAltarSorcerer
                 {
                     DragonVfx.HeavyLanding(mt, new Color(1f, 0.40f, 0.08f, 1f), mr, Mathf.Clamp(mr * 0.4f, 1f, 3f));   // v0.25.58 the meteor really lands
                     DragonVfx.FireBlast(mt, mr * 0.8f);   // v0.25.61
-                    DragonVfx.SpikeRing(mt, new Color(0.22f, 0.16f, 0.13f, 1f), mr * 0.8f, 8, 1.4f, 1.2f);
                     DragonVfx.Embers(mt, new Color(1f, 0.40f, 0.08f, 1f), mr * 0.8f, Mathf.Max(1f, _meteorBurnSeconds.Value), 30f);   // v0.25.150 no light column, fewer embers
                     DragonVfx.Vanilla(new string[] { "vfx_FireballHit", "fx_fireball_staff_explosion" }, mt, Quaternion.identity, Mathf.Clamp(mr / 3f, 1f, 3f), 4f);
                 });
@@ -1711,7 +1710,6 @@ namespace DragonsAltarSorcerer
                     DragonVfx.HeavyLanding(ct, new Color(1f, 0.40f, 0.08f, 1f), cr, 3f);   // v0.25.58 the sky falls
                     DragonVfx.IceBurst(ct + new Vector3(cr * 0.3f, 0f, 0f), cr * 0.5f);
                     DragonVfx.FireBlast(ct, cr * 0.7f);   // v0.25.61
-                    DragonVfx.SpikeRing(ct, DragonVfx.Ice, cr * 0.9f, 10, 2.2f, 1.5f);
                     DragonVfx.Embers(ct, new Color(1f, 0.40f, 0.08f, 1f), cr * 0.8f, 3f, 45f);   // v0.25.150 Cataclysm: no rune circle / light column, fewer embers
                     DragonVfx.StormCloud(ct, cr, 14f, 2f);
                 });

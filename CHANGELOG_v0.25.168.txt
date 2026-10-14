@@ -1,0 +1,26 @@
+Aethelborn Ascended v0.25.168 - Hulk Smash (baseline = ANCHOR v0.25.167, SHA-256 9dbee8b4...3cd59)
+1. Ground impacts (visual only; damage areas, ticks, timing, terrain collision unchanged; terrain never modified):
+   - Shared Hulk-smash package for heavy hits (HeavyLanding / GroundImpact): dark ragged cracks, forceful dirt burst
+     (clods thrown up and falling back + dust plume), rolling dust ring, irregular lit rock chunks (size capped, no flat
+     sprites), scorch, shake; the skill colour only tints a faint ground ring. No glow particle ring, no spikes.
+   - New: Eruption (one ground burst), Furrow (blade ploughing half underground), Gust (wind riding a slash),
+     FrostGround (hoarfrost carpet + cold mist), CrackTex (ragged fissure texture), FrostTex.
+   - Impact Wave: crest slash + gust + ground cracking along the path (no spikes). Ascended: chain of ground eruptions.
+   - Seismic Guillotine: travelling cracks / eruptions along each fissure, one large eruption at the end.
+   - Crescent Cleave: blades plough half underground - torn furrow + dirt flicked up along the path; spike trail removed.
+     Ascended 2 s fire trail unchanged. Push unchanged.
+   - Stonefang Eruption: keeps real rounded tapered stone spikes (glow shockwave + big brown burst removed).
+   - Glacial Descent: ice spikes kept (normal + Ascended), burst halved.
+   - Spikes removed from: Stomp, Bonecrusher, Circle Swing eruption, Angel Comet aftershock, Astral Greatblade (now
+     eruptions along its scar), Frost Nova (now hoarfrost ground), Meteor Fall, Elemental Cataclysm.
+     Astral Spear (Phalanx "erupts into Astral Spears") keeps its spears.
+   - Punch / force rings softer and paler.
+2. Cape clipping (Bonecrusher and every jump slam / Mixamo / clip-driven skill animation):
+   - Cause: Valheim capes are MagicaCloth2; their inertia constraint keeps the cloth in world space while our skill
+     animations move the body far and fast (leap, fall, hips pinned, travel), so the cape lagged, flipped forward and
+     folded through the torso.
+   - Fix (DragonClothGuard): while a skill animation drives the local player, the cape's inertia is anchored to the
+     player and world/local inertia damped to 10%; blended back over 0.4 s afterwards. Cape never hidden; colliders,
+     gravity, wind, CA, movement and Rigidbody untouched. Log line "[Aethelborn] Cape guard: MagicaCloth2 inertia ..."
+     shows which fields were found.
+Everything else (Crescent push, AA NACC, skills, configs, HUD, class rules) unchanged.

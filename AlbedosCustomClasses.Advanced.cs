@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.167";
+        public const string ModVersion = "0.25.168";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -2387,15 +2387,10 @@ namespace AlbedosCustomClassesAdvanced
                     float ccDist = Vector3.Distance(new Vector3(point.x, 0f, point.z), new Vector3(origin.x, 0f, origin.z));
                     if (ccDist >= ccNextRock)
                     {
-                        ccNextRock = ccDist + 1.3f;
-                        Vector3 rp = point, rf = forward; Vector3 rs = Vector3.Cross(Vector3.up, forward); float rw = width;
-                        // rocks wrenched up on both sides of the cut
-                        DragonCombat.RunVfx(delegate
-                        {
-                            DragonVfx.Spike(rp + rs * rw * 0.35f, DragonVfx.Rock, UnityEngine.Random.Range(0.5f, 0.9f), 0.35f, 0.4f, rs + rf * 0.3f);
-                            DragonVfx.Spike(rp - rs * rw * 0.35f, DragonVfx.Rock, UnityEngine.Random.Range(0.5f, 0.9f), 0.35f, 0.4f, -rs + rf * 0.3f);
-                            DragonVfx.Debris(rp, new Color(0.42f, 0.36f, 0.30f, 1f), 2, 5f, 0.25f, 1.6f);
-                        });
+                        // v0.25.168 (user): the blade ploughs half underground - a torn furrow with dirt flicked up, no spikes
+                        Vector3 rp = point, rprev = point - forward * Mathf.Min(1.2f, ccDist + 0.01f); float rw = width; Color rc = ascended ? DragonVfx.Ember : DragonVfx.Steel;
+                        ccNextRock = ccDist + 1.2f;
+                        DragonCombat.RunVfx(delegate { DragonVfx.Furrow(rprev, rp, rc, rw); });
                     }
                 }
                 Collider[] hits = Physics.OverlapBox(center, new Vector3(width * 0.5f, height * 0.5f, 1.25f), Quaternion.LookRotation(forward, Vector3.up));
@@ -3288,9 +3283,9 @@ namespace AlbedosCustomClassesAdvanced
                     aiwCrest.transform.rotation = Quaternion.LookRotation(forward, Vector3.up);
                     if (dist >= aiwNext)
                     {
-                        aiwNext = dist + 1f;
-                        Vector3 aSide = Vector3.Cross(Vector3.up, forward), aP = probe, aF = forward; float aW = width;
-                        DragonCombat.RunVfx(delegate { for (int k = -1; k <= 1; k++) DragonVfx.Spike(aP + aSide * k * aW * 0.32f - aF * 0.4f, DragonVfx.Rock, UnityEngine.Random.Range(1f, 1.7f), 0.4f, 0.35f, aF + aSide * k * 0.6f); });
+                        aiwNext = dist + 2.2f;   // v0.25.168 (user): Ascended = a chain of ground eruptions (no spikes)
+                        Vector3 aP = probe, aF = forward; float aW = width;
+                        DragonCombat.RunVfx(delegate { DragonVfx.Eruption(aP - aF * 0.4f, DragonVfx.Fire, Mathf.Clamp(aW * 0.45f, 0.8f, 2.2f), 0.4f); });
                     }
                 }
                 else if (_enableVfx.Value)
@@ -3647,7 +3642,7 @@ namespace AlbedosCustomClassesAdvanced
             {
                 StartCoroutine(AnimateRing(center + Vector3.up * 0.08f, Mathf.Max(0.4f, innerVisual), radius, 0.55f, new Color(0.95f, 0.58f, 0.22f, 1f), 0.16f));
                 Vector3 sc = center; float sr = radius; bool firstStamp = innerVisual <= 0.01f;
-                DragonCombat.RunVfx(delegate { DragonVfx.GroundImpact(sc, DragonVfx.Fire, sr, firstStamp ? 1.4f : 0.8f); if (firstStamp) DragonVfx.SpikeRing(sc, DragonVfx.Rock, sr * 0.7f, 6, 0.9f, 0.3f); });   // v0.25.58 / v0.25.61
+                DragonCombat.RunVfx(delegate { DragonVfx.GroundImpact(sc, DragonVfx.Fire, sr, firstStamp ? 1.4f : 0.8f); });   // v0.25.58; v0.25.168 no spikes (Hulk-smash stamp)
             }
         }
 
@@ -4005,7 +4000,7 @@ namespace AlbedosCustomClassesAdvanced
                 StartCoroutine(AnimateRing(p + Vector3.up * 0.08f, 0.5f, r, 0.46f, new Color(1f, 0.52f, 0.18f, 0.95f), 0.16f));
                 Vector3 rp = p; float rr = r;
                 DragonCombat.RunVfx(delegate { DragonVfx.FireBlast(rp, rr); });
-                DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(rp, DragonVfx.Fire, rr, 1.8f); DragonVfx.SpikeRing(rp, DragonVfx.Rock, rr * 0.7f, 9, 2.4f, 0.9f); });
+                DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(rp, DragonVfx.Fire, rr, 1.8f); DragonVfx.Eruption(rp, DragonVfx.Fire, rr * 0.6f, 0f); });   // v0.25.168 one large eruption, no spikes
             }
         }
         private const float MxSpinAHold = 0.02f, MxSpinALoadEnd = 0.88f, MxSpinAHit = 1.03f, MxSpinAEnd = 1.10f, MxSpinASpeed = 1.2f, MxSpinALoad = 0.55f;
@@ -4157,7 +4152,7 @@ namespace AlbedosCustomClassesAdvanced
             {
                 StartCoroutine(AnimateRing(center + Vector3.up * 0.08f, 0.3f, radius, 0.55f, new Color(1f, 0.46f, 0.16f, 1f), 0.17f));
                 Vector3 bc = center; float br = radius;
-                DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(bc, DragonVfx.Fire, br, 2.2f); DragonVfx.Debris(bc, new Color(0.42f, 0.36f, 0.30f, 1f), 14, 10f, 0.4f, 2.6f); DragonVfx.SpikeRing(bc, DragonVfx.Rock, br * 0.6f, 10, 1.6f, 0.8f); });   // v0.25.58
+                DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(bc, DragonVfx.Fire, br, 2.2f); DragonVfx.Debris(bc, new Color(0.42f, 0.36f, 0.30f, 1f), 10, 10f, 0.3f, 2.6f); });   // v0.25.58; v0.25.168 Hulk smash, no spikes
             }
             if (!IsAscendedSkill("bonecrusher")) yield break;
             // Ascended: a ground shock 0.5s later (50%), no second jump.
@@ -5226,10 +5221,9 @@ namespace AlbedosCustomClassesAdvanced
                     DragonCombat.RunVfx(delegate
                     {
                         DragonVfx.CrackLine(sa, sb, DragonVfx.Fire, Mathf.Clamp(sw * 0.25f, 0.25f, 0.8f), 4f);   // v0.25.58 the fissure tears open
-                        if (rock) DragonVfx.Debris(sb, new Color(0.42f, 0.36f, 0.30f, 1f), 4, 6f, 0.3f, 1.8f);
-                        Vector3 sside = Vector3.Cross(Vector3.up, sb - sa);
-                        DragonVfx.Spike(sb + sside.normalized * UnityEngine.Random.Range(-0.6f, 0.6f), DragonVfx.Rock, UnityEngine.Random.Range(1.1f, 1.9f), 0.45f, 0.5f, sside * (rock ? 1f : -1f));   // v0.25.61 the earth splits upward
-                        DragonVfx.Burst(sb + Vector3.up * 0.2f, new Color(0.50f, 0.44f, 0.36f, 0.6f), 8, 3f, 0.6f, 0.8f, 0.3f);
+                        // v0.25.168 (user): travelling cracks / eruptions along the fissure (no spikes)
+                        if (rock) DragonVfx.Eruption(sb, DragonVfx.Fire, Mathf.Clamp(sw * 0.5f, 0.7f, 1.8f), 0f);
+                        else DragonVfx.Furrow(sa, sb, DragonVfx.Fire, sw);
                     });
                     lastScar = shockPoint;
                 }
@@ -5266,7 +5260,7 @@ namespace AlbedosCustomClassesAdvanced
                 StartCoroutine(AnimateRing(rupturePoint + Vector3.up * 0.08f, width * 0.5f, endRadius, 0.46f, new Color(1f, 0.52f, 0.18f, 0.95f), 0.16f));
                 Vector3 rp = rupturePoint; float rr = endRadius;   // v0.25.86 (user): no falling guillotine - a big explosion
                 DragonCombat.RunVfx(delegate { DragonVfx.FireBlast(rp, rr); });
-                DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(rp, DragonVfx.Fire, rr, 1.8f); DragonVfx.SpikeRing(rp, DragonVfx.Rock, rr * 0.7f, 9, 2.4f, 0.9f); });   // v0.25.58
+                DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(rp, DragonVfx.Fire, rr, 1.8f); DragonVfx.Eruption(rp, DragonVfx.Fire, rr * 0.6f, 0f); });   // v0.25.168 one large eruption, no spikes   // v0.25.58
             }
         }
 
@@ -7126,7 +7120,7 @@ namespace AlbedosCustomClassesAdvanced
             {
                 StartCoroutine(AnimateRing(point + Vector3.up * 0.08f, 0.4f, radius, 0.55f, new Color(1f, 0.88f, 0.48f, 1f), 0.16f));
                 Vector3 ap = point; float ar = radius;
-                DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(ap, DragonVfx.Holy, ar, 2f); DragonVfx.SpikeRing(ap, DragonVfx.Rock, ar * 0.85f, 12, 1.8f, 1f); DragonVfx.Shake(ap, 30f, 1.2f); });
+                DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(ap, DragonVfx.Holy, ar, 2f); DragonVfx.Shake(ap, 30f, 1.2f); });   // v0.25.168 no spikes
             }
         }
 

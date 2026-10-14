@@ -1,0 +1,5 @@
+v0.25.168 Hulk Smash - test results (no game here)
+- mcs --parse -langversion:5 Advanced, CombatRuntime, Skills, Sorcerer: OK
+- tools/compile_check/check.sh 3029660: PASSED (0 new signatures; Stubs.cs + Character.IsOnGround, a real Valheim member)
+- Cape: traced via decompiled assembly_valheim (VisEquipment.SetupCloth = MagicaCloth2; vanilla ResetCloth only touches Unity Cloth). MagicaCloth2 field names (inertiaConstraint.worldInertia/localInertia/anchor/anchorInertia) resolved by reflection at runtime - check the log line.
+- NOT verified in game: cape behaviour, look of cracks / dirt / frost under Valheim lighting.
