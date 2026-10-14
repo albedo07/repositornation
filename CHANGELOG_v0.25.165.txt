@@ -1,0 +1,5 @@
+v0.25.165 Sealed Panel (baseline v0.25.164; skill tree locked Advancement panel only)
+- Before Advancement the Advancement panel keeps its frame and the ADVANCEMENT header, but its interior is a plain, subdued fill (the panel's own hue, low saturation, dark, soft gradient). The baked-in node frames, nameplates, Grace node and AC scene of the canvas are painted over: new mask ImmortalHeroesAssets/Tree_SealedMask.png (tools/build_sealed_mask.py), applied to a cached copy of whichever canvas the tree uses (every base class: Warrior, Cleric, Sorcerer, Ranger).
+- No Advancement skill icons, frames, nameplates, tier stars or hover/click regions while locked (the "ADVANCEMENT - SEALED" hover region is gone too).
+- "ADVANCE AT THE ALTAR OF BLESSINGS" + the live requirements are centred in the empty panel in light text with a dark shadow; the header line "SEALED · ADVANCE AT LV 16" is light as well.
+- After advancing at the Altar the real Advancement tree shows exactly as before. Class side, hotbar, requirements and everything else unchanged.

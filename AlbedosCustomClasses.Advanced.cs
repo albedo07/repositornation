@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.164";
+        public const string ModVersion = "0.25.165";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -13954,7 +13954,7 @@ namespace AlbedosCustomClassesAdvanced
                 : "<color=" + ink + ">TIER POINTS  </color><color=" + red + ">" + Mathf.Max(0, classLeft).ToString() + "</color>";
             string advText = advanced
                 ? "<color=" + ink + ">TIER POINTS  </color><color=" + red + ">" + Mathf.Max(0, advLeft).ToString() + "</color>"
-                : "<color=" + ink + ">SEALED  ·  ADVANCE AT LV 16</color>";
+                : "<color=" + IhHex(1f, 0.87f, 0.58f) + ">SEALED  ·  ADVANCE AT LV 16</color>";   // v0.25.165 light on the plain sealed fill
             GUI.Label(ScaleReferenceRect(150f, 122f, 108f, 18f), classText, _ihHeaderStyle);
             GUI.Label(ScaleReferenceRect(580f, 122f, 194f, 18f), advText, _ihHeaderStyle); // centred on the painted strip (x 577-776)
         }
@@ -14741,11 +14741,12 @@ namespace AlbedosCustomClassesAdvanced
         {
             if (player == null || IhBranchesOf(GetClass(player)).Length == 0) return;
             IhEnsureTreeStyles();
+            // v0.25.165: centred in the plain sealed panel (interior x 338-978, y 118-522), light text with a dark shadow.
             GUIStyle st = new GUIStyle(_ihLockTextStyle);
             st.alignment = TextAnchor.MiddleCenter;
-            st.fontSize = Mathf.Max(8, Mathf.RoundToInt(ScaleReferenceRect(0f, 0f, 0f, 11f).height));
-            string ink = IhHex(0.36f, 0.26f, 0.18f);
-            GUI.Label(ScaleReferenceRect(380f, 300f, 500f, 18f), "<color=" + ink + ">ADVANCE AT THE ALTAR OF BLESSINGS</color>", st);
+            st.fontSize = Mathf.Max(9, Mathf.RoundToInt(ScaleReferenceRect(0f, 0f, 0f, 15f).height));
+            const float cx = 658f, w = 600f;
+            IhSealedLabel(ScaleReferenceRect(cx - w * 0.5f, 268f, w, 24f), "ADVANCE AT THE ALTAR OF BLESSINGS", IhHex(1f, 0.87f, 0.58f), st);
             // Branch-neutral requirements (the Advancement-specific prerequisite skill is shown in the Altar).
             int level = IhGetLevel(player);
             string[] cls = IhPlayerClassSkills(player);
@@ -14756,15 +14757,23 @@ namespace AlbedosCustomClassesAdvanced
                 (level >= 16 ? "+" : "-") + "Lv 16  (" + level.ToString() + ")",
                 (best >= 7 ? "+" : "-") + "The Advancement's Class skill at Tier 7",
                 (spent >= 14 ? "+" : "-") + "14 Class Tier Points spent  (" + spent.ToString() + "/14)" };
-            string ok = IhHex(0.20f, 0.45f, 0.18f);
-            string no = IhHex(0.55f, 0.16f, 0.12f);
-            st.fontSize = Mathf.Max(8, Mathf.RoundToInt(ScaleReferenceRect(0f, 0f, 0f, 10f).height));
+            string ok = IhHex(0.62f, 0.92f, 0.55f);
+            string no = IhHex(1f, 0.62f, 0.50f);
+            st.fontSize = Mathf.Max(8, Mathf.RoundToInt(ScaleReferenceRect(0f, 0f, 0f, 12f).height));
             for (int i = 0; i < lines.Length; i++)
             {
                 bool done = lines[i].StartsWith("+");
-                GUI.Label(ScaleReferenceRect(380f, 322f + i * 14f, 500f, 14f),
-                    "<color=" + (done ? ok : no) + ">" + (done ? "◆ " : "◇ ") + lines[i].Substring(1) + "</color>", st);
+                IhSealedLabel(ScaleReferenceRect(cx - w * 0.5f, 302f + i * 20f, w, 18f), (done ? "◆ " : "◇ ") + lines[i].Substring(1), done ? ok : no, st);
             }
+        }
+
+        private void IhSealedLabel(Rect r, string text, string hex, GUIStyle st)
+        {
+            string shadow = "<color=#000000CC>" + text + "</color>";
+            float o = Mathf.Max(1f, r.height / 14f);
+            GUI.Label(new Rect(r.x + o, r.y + o, r.width, r.height), shadow, st);
+            GUI.Label(new Rect(r.x - o * 0.5f, r.y, r.width, r.height), shadow, st);
+            GUI.Label(r, "<color=" + hex + ">" + text + "</color>", st);
         }
 
         // Advance plaque inside the sealed Paladin panel (before Advancement). v0.25.164: no longer drawn (Altar-only).
@@ -16595,6 +16604,8 @@ namespace AlbedosCustomClassesAdvanced
             Texture2D backdrop = IhKitBackdrop(IhTreeKit(), false);
             if (backdrop == null)
                 backdrop = _ihPreAdvanceBackdropTex != null ? _ihPreAdvanceBackdropTex : _treeReferenceBackdropTex;
+            if (treePlayer == null || string.IsNullOrEmpty(GetAdvancement(treePlayer)))
+                backdrop = IhSealedBackdrop(backdrop);   // v0.25.165 locked Advancement panel = plain fill, no baked nodes / preview art
             GUI.DrawTexture(full, backdrop, ScaleMode.StretchToFill, true);
             IhDrawHeaderPoints(treePlayer);
 
@@ -16602,7 +16613,7 @@ namespace AlbedosCustomClassesAdvanced
                 IhClassBlessingTitle(treeClass), IhClassBlessingText(treeClass));
             string treeBranch = IhTreeBranch();
             if (treePlayer == null || string.IsNullOrEmpty(GetAdvancement(treePlayer)))
-                RegisterReferenceHotspot(ScaleReferenceRect(332f, 76f, 651f, 64f), "ADVANCEMENT - SEALED", "Choose your Advancement Class at the Altar of Blessings (Lv 16). Its skills and Mastery appear here afterwards.");
+            { }   // v0.25.165 sealed panel: no hover / click regions
             else if (treeBranch == "Priest" || treeBranch == "Paladin")
                 RegisterReferenceHotspot(ScaleReferenceRect(332f, 76f, 651f, 64f),
                     (treeBranch == "Priest" ? "BLESS THY SINNERS - MASTERY" : "HEAVEN'S WILL - MASTERY"),
@@ -17382,6 +17393,61 @@ namespace AlbedosCustomClassesAdvanced
             _ihPreAdvanceBackdropTex.Apply(false,false);
             if(_ihLockedBackdropTex!=null) Destroy(_ihLockedBackdropTex);
             _ihLockedBackdropTex=IhMakeSharedLockedBackdrop(_ihPreAdvanceBackdropTex);
+        }
+
+        // v0.25.165 (user): before Advancement the Advancement panel shows a plain, subdued fill inside its frame. The universal
+        // chassis bakes the AC's node frames, nameplates and scene into every canvas, so the interior (Tree_SealedMask.png alpha,
+        // tools/build_sealed_mask.py) is repainted on a copy of the canvas: the panel's own hue, low saturation, dark, a soft
+        // top-to-bottom gradient and vignette. Cached per source canvas; the frame, header and the Class side are untouched.
+        private readonly Dictionary<Texture2D, Texture2D> _ihSealed = new Dictionary<Texture2D, Texture2D>();
+        private Texture2D _ihSealedMask;
+        private bool _ihSealedMaskTried;
+
+        private Texture2D IhSealedBackdrop(Texture2D src)
+        {
+            if (src == null) return null;
+            Texture2D done;
+            if (_ihSealed.TryGetValue(src, out done)) return done != null ? done : src;
+            _ihSealed[src] = null;
+            try
+            {
+                if (!_ihSealedMaskTried) { _ihSealedMaskTried = true; _ihSealedMask = LoadUiPng("Tree_SealedMask.png"); }
+                if (_ihSealedMask == null || src.width != 1011 || src.height != 662 || _ihSealedMask.width != 1011 || _ihSealedMask.height != 662) return src;
+                Color[] px = src.GetPixels();
+                Color[] mk = _ihSealedMask.GetPixels();
+                double r = 0, g = 0, b = 0; int n = 0;
+                for (int i = 0; i < px.Length; i++) if (mk[i].a > 0.5f) { r += px[i].r; g += px[i].g; b += px[i].b; n++; }
+                if (n == 0) return src;
+                float hue, sat, val;
+                Color.RGBToHSV(new Color((float)(r / n), (float)(g / n), (float)(b / n)), out hue, out sat, out val);
+                Color baseCol = Color.HSVToRGB(hue, sat * 0.6f, 0.32f);
+                for (int y = 0; y < 662; y++)
+                {
+                    int top = 661 - y;   // texture row y = reference row (661 - y)
+                    float t = Mathf.Clamp01((top - 118f) / 404f);
+                    for (int x = 0; x < 1011; x++)
+                    {
+                        int i = y * 1011 + x;
+                        float a = mk[i].a;
+                        if (a <= 0.001f) continue;
+                        float dx = (x - 657f) / 330f, dy = (top - 320f) / 210f;
+                        float vig = Mathf.Clamp01(Mathf.Sqrt(dx * dx + dy * dy));
+                        float k = (1.06f - 0.14f * t) * (1f - 0.25f * vig);
+                        Color f = new Color(baseCol.r * k, baseCol.g * k, baseCol.b * k, 1f);
+                        Color c = px[i];
+                        px[i] = new Color(c.r + (f.r - c.r) * a, c.g + (f.g - c.g) * a, c.b + (f.b - c.b) * a, c.a);
+                    }
+                }
+                Texture2D tex = new Texture2D(1011, 662, TextureFormat.RGBA32, false);
+                tex.name = "ImmortalHeroes_Sealed_" + src.name;
+                tex.wrapMode = TextureWrapMode.Clamp;
+                tex.filterMode = FilterMode.Bilinear;
+                tex.SetPixels(px);
+                tex.Apply(false, false);
+                _ihSealed[src] = tex;
+                return tex;
+            }
+            catch (Exception) { return src; }
         }
 
         private Texture2D IhMakeSharedLockedBackdrop(Texture2D backdrop)

@@ -1,0 +1,5 @@
+v0.25.165 Sealed Panel - test results (no game here)
+- mcs --parse -langversion:5 AlbedosCustomClasses.Advanced.cs: OK
+- tools/compile_check/check.sh 3029660: PASSED (0 new signatures)
+- Mask checked on Warrior Sword Master / Mercenary, Cleric Paladin pre-advance, Sorcerer Archmage, Ranger Acrobat canvases (same chassis): every baked node / nameplate inside the panel covered, frame + header kept. Offline render: docs/previews/PREVIEW_v0.25.165_Sealed_Advancement.png.
+- NOT verified in game: final colours (the game's Linear colour space), text placement at your resolution.
