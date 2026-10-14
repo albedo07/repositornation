@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.166";
+        public const string ModVersion = "0.25.167";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1501,7 +1501,7 @@ namespace AlbedosCustomClassesAdvanced
                 visual = new GameObject("DragonsAltarMoonlightGhost");
                 GameObject ghostVis = visual;
                 float gw1 = width;
-                DragonCombat.RunVfx(delegate { DragonVfx.AttachGlow(ghostVis.transform, new Color(0.45f, 0.78f, 1f, 1f), 0.4f, 12f, 3f); DragonVfx.CrescentBlade(ghostVis.transform, DragonVfx.Steel, gw1 * 0.6f, gw1 * 0.14f, 0f); });   // v0.25.55 / v0.25.63 moon crescent
+                DragonCombat.RunVfx(delegate { DragonVfx.CrescentBlade(ghostVis.transform, DragonVfx.Steel, gw1 * 0.6f, gw1 * 0.14f, 0f); });   // v0.25.55 / v0.25.63 moon crescent; v0.25.167 no glow motes
                 if (!DragonVfx.Enabled) line = visual.AddComponent<LineRenderer>();
                 if (line != null) {
                 line.useWorldSpace = true;
@@ -1920,12 +1920,12 @@ namespace AlbedosCustomClassesAdvanced
             _crescentAscSecond = Config.Bind(ca, "SecondFanDamagePercent", 30f, "6 cleaves between the first ones, each this % of a normal cleave.");
             _crescentAscSecondDelay = Config.Bind(ca, "SecondFanDelay_v02551", 0.5f, "Seconds after the first fan; a follow-up swing plays over this gap.");
             _crescentAscTrailTime = Config.Bind(ca, "FireTrailSeconds_v025145", 2f, new ConfigDescription("How long every fire trail segment (visual and damage area) stays. Maximum 2 s.", new AcceptableValueRange<float>(0.5f, 2f)));
-            _crescentPullSmall = Config.Bind("Sword Master Crescent Cleave", "PullSmallSpeed_v025145", 3f, "Normal: Small enemies overlapping the wave are drawn toward it at most this fast (m/s).");
-            _crescentPullBig = Config.Bind("Sword Master Crescent Cleave", "PullBigSpeed_v025145", 1.2f, "Normal: Big enemies (m/s).");
-            _crescentPullBoss = Config.Bind("Sword Master Crescent Cleave", "PullBossSpeed_v025145", 0.5f, "Normal: Bosses (m/s) - weakest but functional.");
-            _crescentAscPullSmall = Config.Bind(ca, "PullSmallSpeed_v025145", 3f, "Ascended: Small enemies overlapping the waves are drawn toward them at most this fast (m/s).");
-            _crescentAscPullBig = Config.Bind(ca, "PullBigSpeed_v025145", 1.2f, "Ascended: Big enemies (m/s).");
-            _crescentAscPullBoss = Config.Bind(ca, "PullBossSpeed_v025145", 0.5f, "Ascended: Bosses (m/s) - weakest but functional.");
+            _crescentPullSmall = Config.Bind("Sword Master Crescent Cleave", "PushSmallPercent_v025167", 100f, "Normal: Small enemies in the wave are pushed along its travel direction at this % of the wave speed (100 = they ride the wave front).");
+            _crescentPullBig = Config.Bind("Sword Master Crescent Cleave", "PushBigPercent_v025167", 65f, "Normal: Big enemies (% of the wave speed; they slowly fall behind the wave).");
+            _crescentPullBoss = Config.Bind("Sword Master Crescent Cleave", "PushBossPercent_v025167", 35f, "Normal: Bosses (% of the wave speed) - weakest but functional.");
+            _crescentAscPullSmall = Config.Bind(ca, "PushSmallPercent_v025167", 100f, "Ascended: Small enemies in a wave are pushed along its travel direction at this % of the wave speed.");
+            _crescentAscPullBig = Config.Bind(ca, "PushBigPercent_v025167", 65f, "Ascended: Big enemies (% of the wave speed).");
+            _crescentAscPullBoss = Config.Bind(ca, "PushBossPercent_v025167", 35f, "Ascended: Bosses (% of the wave speed) - weakest but functional.");
             _crescentAscTrailPercent = Config.Bind(ca, "FireTrailDamagePercent", 10f, "Fire trail hit every 0.5s (% of a normal cleave), one shared timer per target.");
             _crescentAscTrailMaxTicks = Config.Bind(ca, "FireTrailMaxHits", 8, "Maximum fire trail hits per target per cast.");
             _crescentAscBurnPercent = Config.Bind(ca, "BurnPercentPerStack", 3f, "Stacking Burn: % of a normal cleave per stack every 0.5s.");
@@ -2247,7 +2247,7 @@ namespace AlbedosCustomClassesAdvanced
                 GameObject ghostVis2 = visual;
                 float gw2 = width; Color gcol = halfmoon ? new Color(0.70f, 0.95f, 1f, 1f) : DragonVfx.Steel;
                 if (halfmoon)
-                    DragonCombat.RunVfx(delegate { DragonVfx.AttachGlow(ghostVis2.transform, new Color(0.45f, 0.78f, 1f, 1f), 0.4f * heightScale, 12f, 3f); DragonVfx.CrescentBlade(ghostVis2.transform, gcol, gw2 * 0.6f, gw2 * 0.14f * heightScale, 0f); DragonVfx.TrailWhile(ghostVis2.transform, new Color(0.80f, 0.95f, 1f, 1f), 0.22f * heightScale, delegate { return ghostVis2 != null; }); });   // v0.25.55 / v0.25.63 moon crescent; v0.25.98 sparkle trail
+                    DragonCombat.RunVfx(delegate { DragonVfx.CrescentBlade(ghostVis2.transform, gcol, gw2 * 0.6f, gw2 * 0.14f * heightScale, 0f); });   // v0.25.55 / v0.25.63 moon crescent; v0.25.167 glow motes + sparkle trail removed (the blade carries its own wind wake)
                 else
                 {
                     // v0.25.97 (user): Moonlord's Moonlight Splitter look - a large pale lunar crescent (white core,
@@ -2257,14 +2257,12 @@ namespace AlbedosCustomClassesAdvanced
                     float hs = heightScale;
                     DragonCombat.RunVfx(delegate
                     {
-                        DragonVfx.AttachGlow(ghostVis2.transform, moonRim, 0.55f * hs, 22f, 4.5f);
-                        DragonVfx.CrescentBlade(ghostVis2.transform, moonRim, gw2 * 0.72f, gw2 * 0.20f * hs, 0f);
-                        DragonVfx.CrescentBlade(ghostVis2.transform, moonCore, gw2 * 0.62f, gw2 * 0.10f * hs, 0f);
+                        // v0.25.167 (user: no glowing layers): one lunar blade (core/rim blended), no glow motes
+                        DragonVfx.CrescentBlade(ghostVis2.transform, Color.Lerp(moonCore, moonRim, 0.35f), gw2 * 0.7f, gw2 * 0.18f * hs, 0f);
                         GameObject echo = new GameObject("IH_MoonEcho");
                         echo.transform.SetParent(ghostVis2.transform, false);
                         echo.transform.localPosition = new Vector3(0f, 0f, -0.9f * hs);
                         DragonVfx.CrescentBlade(echo.transform, new Color(0.45f, 0.50f, 0.95f, 0.55f), gw2 * 0.55f, gw2 * 0.08f * hs, 0f);
-                        DragonVfx.TrailWhile(ghostVis2.transform, moonCore, 0.18f * hs, delegate { return ghostVis2 != null; });
                     });
                 }
                 if (!DragonVfx.Enabled) line = visual.AddComponent<LineRenderer>();
@@ -2362,6 +2360,7 @@ namespace AlbedosCustomClassesAdvanced
             Dictionary<int, int> hitCount = new Dictionary<int, int>();
             int groundMask = LayerMask.GetMask("Default", "static_solid", "Default_small", "piece_nonsolid", "terrain", "vehicle", "piece", "viewblock");
             float elapsed = 0f, lastTrail = -1f;
+            float waveSpeed = Mathf.Max(0f, range - 0.35f) / travelTime;   // v0.25.167 ground speed of the hitbox (units/s)
             float d = IhDamageSum(_crescentDamageV) * IhSkillPower(player, "crescent_cleave");
             GameObject ccBlade = null;
             float ccNextRock = 0.8f;
@@ -2373,7 +2372,7 @@ namespace AlbedosCustomClassesAdvanced
                 GameObject ccb = ccBlade; float cch = height; Color ccc = ascended ? DragonVfx.Ember : DragonVfx.Steel;
                 // v0.25.63 (user ref): the crescent's centre rides AT ground level, so half of it is underground and it
                 // reads as a blade of light tearing up out of the earth.
-                DragonCombat.RunVfx(delegate { DragonVfx.CrescentBlade(ccb.transform, ccc, cch * 0.95f, Mathf.Max(0.35f, cch * 0.16f), 90f); DragonVfx.AttachGlow(ccb.transform, ccc, cch * 0.25f, 30f, 3f); });
+                DragonCombat.RunVfx(delegate { DragonVfx.CrescentBlade(ccb.transform, ccc, cch * 0.95f, Mathf.Max(0.35f, cch * 0.16f), 90f); });   // v0.25.167 no glow motes
             }
             while (elapsed <= travelTime && player != null)
             {
@@ -2395,7 +2394,7 @@ namespace AlbedosCustomClassesAdvanced
                         {
                             DragonVfx.Spike(rp + rs * rw * 0.35f, DragonVfx.Rock, UnityEngine.Random.Range(0.5f, 0.9f), 0.35f, 0.4f, rs + rf * 0.3f);
                             DragonVfx.Spike(rp - rs * rw * 0.35f, DragonVfx.Rock, UnityEngine.Random.Range(0.5f, 0.9f), 0.35f, 0.4f, -rs + rf * 0.3f);
-                            DragonVfx.Debris(rp, new Color(0.42f, 0.36f, 0.30f, 1f), 3, 5f, 0.25f, 1.6f);
+                            DragonVfx.Debris(rp, new Color(0.42f, 0.36f, 0.30f, 1f), 2, 5f, 0.25f, 1.6f);
                         });
                     }
                 }
@@ -2405,7 +2404,7 @@ namespace AlbedosCustomClassesAdvanced
                     Character target = hits[i].GetComponentInParent<Character>();
                     if (target == null || !IsEnemy(player, target)) continue;
                     int id = target.GetInstanceID();
-                    CleavePull(target, point, groundMask, ascended);   // v0.25.145 gentle draw toward the moving wave (once per target per frame)
+                    CleavePull(target, point, forward, waveSpeed, groundMask, ascended);   // v0.25.167 push along the wave's travel (once per target per frame)
                     float nextAllowed;
                     int count;
                     hitCount.TryGetValue(id, out count);
@@ -2425,12 +2424,7 @@ namespace AlbedosCustomClassesAdvanced
                 if (_enableVfx.Value)
                 {
                     if (ccBlade == null) CreateCrescentVerticalSlashVisual(point, forward, width, height, 0.10f);   // line placeholder only without the effects
-                    if (elapsed - lastTrail >= 0f && Time.frameCount % 4 == 0)
-                    {
-                        Vector3 sp = point + Vector3.up * (height * 0.5f);
-                        Color cc = ascended ? new Color(1f, 0.45f, 0.14f, 1f) : new Color(0.45f, 0.78f, 1f, 1f);
-                        DragonCombat.RunVfx(delegate { DragonVfx.Burst(sp, cc, 8, 3f, 0.35f, 0.45f, -0.3f); });
-                    }
+                    // v0.25.167: the spark bursts every 4 frames are gone (flare clutter); rocks + wind wake remain
                 }
                 elapsed += Time.deltaTime;
                 yield return null;
@@ -2439,41 +2433,48 @@ namespace AlbedosCustomClassesAdvanced
             if (cast != null) cast.Running--;
         }
 
-        // v0.25.145 (user): every overlapping enemy is drawn gently toward the wave - strongest on Small, weaker on Big, weakest on Bosses.
-        // Bounded: capped per frame, never closer than 0.5 m, obstacle-checked (no wall penetration, no teleport), owner-side only, and a
-        // target is pulled at most ONCE per frame no matter how many waves / colliders overlap it (no multiplication).
+        // v0.25.167 (user): the waves PUSH instead of pull: every overlapping enemy is carried along the wave's travel direction
+        // (away from the caster) at a % of the wave speed - Small 100% (rides the wave front), Big weaker, Bosses weakest but
+        // functional - and never beyond the front of the hitbox (CleaveFrontGap), so the persistent ticks keep landing.
+        // Obstacle-checked (no wall penetration, no teleport), owner-side only, at most ONCE per target per frame.
+        private const float CleaveFrontGap = 0.9f;
         private static readonly Dictionary<int, int> _cleavePullFrame = new Dictionary<int, int>();
-        private void CleavePull(Character target, Vector3 wavePoint, int solidMask, bool ascended)
+        private void CleavePull(Character target, Vector3 wavePoint, Vector3 forward, float waveSpeed, int solidMask, bool ascended)
         {
             if (target == null || target.IsDead()) return;
             int id = target.GetInstanceID(), frame;
             if (_cleavePullFrame.TryGetValue(id, out frame) && frame == Time.frameCount) return;
             _cleavePullFrame[id] = Time.frameCount;
             if (_cleavePullFrame.Count > 256) _cleavePullFrame.Clear();
-            float speed = target.IsBoss() ? (ascended ? _crescentAscPullBoss.Value : _crescentPullBoss.Value)
+            float pct = target.IsBoss() ? (ascended ? _crescentAscPullBoss.Value : _crescentPullBoss.Value)
                 : DragonCombat.IsSmallEnemy(target) ? (ascended ? _crescentAscPullSmall.Value : _crescentPullSmall.Value)
                 : (ascended ? _crescentAscPullBig.Value : _crescentPullBig.Value);
-            if (speed <= 0f) return;
+            if (pct <= 0f || waveSpeed <= 0f) return;
+            forward.y = 0f;
+            if (forward.sqrMagnitude < 0.0001f) return;
+            forward.Normalize();
+            Vector3 front = wavePoint + forward * CleaveFrontGap;
+            float step = waveSpeed * Mathf.Clamp(pct, 0f, 100f) / 100f * Time.deltaTime;
             try
             {
-                // v0.25.146: a remotely owned enemy is moved by its owner - forward the pull instead of dropping it
+                // a remotely owned enemy is moved by its owner - forward the push instead of dropping it
                 ZNetView nv = target.GetComponent<ZNetView>();
                 if (nv != null && nv.IsValid() && !nv.IsOwner())
                 {
-                    ForwardCleavePull(nv, wavePoint, solidMask, DragonCombat.M(speed) * Time.deltaTime);
+                    ForwardCleavePull(nv, front, forward, solidMask, step);
                     return;
                 }
-                CleavePullStep(target, wavePoint, solidMask, DragonCombat.M(speed) * Time.deltaTime);
+                CleavePullStep(target, front, forward, solidMask, step);
             }
             catch (Exception) { }
         }
 
-        private const string CleavePullRpc = "Aethelborn_CleavePull";
+        private const string CleavePullRpc = "Aethelborn_CleavePush";   // v0.25.167 new packet (front point + direction)
         private ZRoutedRpc _cleavePullRpcReg;
 
         // v0.25.148: outgoing batch per remote enemy (flushed every 0.1 s, also after it leaves the wave) and
         // incoming inbox per owned enemy (every received batch is summed and applied once per frame - nothing is dropped).
-        private class CleavePullBatch { public ZNetView Nv; public Character Target; public Vector3 Point; public int Mask; public float Step; public float Due; public float Last; }
+        private class CleavePullBatch { public ZNetView Nv; public Character Target; public Vector3 Point; public Vector3 Dir; public int Mask; public float Step; public float Due; public float Last; }
         private static readonly Dictionary<int, CleavePullBatch> _cleavePullOut = new Dictionary<int, CleavePullBatch>();
         private static readonly Dictionary<int, CleavePullBatch> _cleavePullIn = new Dictionary<int, CleavePullBatch>();
         private static readonly List<int> _cleavePullKeys = new List<int>();
@@ -2485,7 +2486,7 @@ namespace AlbedosCustomClassesAdvanced
             _cleavePullRpcReg = ZRoutedRpc.instance;
         }
 
-        private void ForwardCleavePull(ZNetView nv, Vector3 wavePoint, int solidMask, float step)
+        private void ForwardCleavePull(ZNetView nv, Vector3 wavePoint, Vector3 dir, int solidMask, float step)
         {
             int key = nv.GetInstanceID();
             CleavePullBatch b;
@@ -2498,6 +2499,7 @@ namespace AlbedosCustomClassesAdvanced
             }
             b.Target = nv.GetComponent<Character>();
             b.Point = wavePoint;
+            b.Dir = dir;
             b.Mask = solidMask;
             b.Step += step;
             b.Last = Time.time;
@@ -2518,6 +2520,7 @@ namespace AlbedosCustomClassesAdvanced
             ZPackage pkg = new ZPackage();
             pkg.Write(zdo.m_uid);
             pkg.Write(b.Point.x); pkg.Write(b.Point.y); pkg.Write(b.Point.z);
+            pkg.Write(b.Dir.x); pkg.Write(b.Dir.z);
             pkg.Write(b.Mask);
             pkg.Write(step);
             ZRoutedRpc.instance.InvokeRoutedRPC(zdo.GetOwner(), CleavePullRpc, pkg);
@@ -2529,6 +2532,7 @@ namespace AlbedosCustomClassesAdvanced
             {
                 ZDOID id = pkg.ReadZDOID();
                 Vector3 wp = new Vector3(pkg.ReadSingle(), pkg.ReadSingle(), pkg.ReadSingle());
+                float dx = pkg.ReadSingle(), dz = pkg.ReadSingle();
                 int mask = pkg.ReadInt();
                 float step = pkg.ReadSingle();
                 GameObject go = ZNetScene.instance != null ? ZNetScene.instance.FindInstance(id) : null;
@@ -2539,6 +2543,7 @@ namespace AlbedosCustomClassesAdvanced
                 if (!_cleavePullIn.TryGetValue(cid, out b)) { b = new CleavePullBatch(); _cleavePullIn[cid] = b; }
                 b.Target = c;
                 b.Point = wp;
+                b.Dir = new Vector3(dx, 0f, dz);
                 b.Mask = mask;
                 b.Step += Mathf.Min(step, 0.75f);
             }
@@ -2575,24 +2580,26 @@ namespace AlbedosCustomClassesAdvanced
                         float use = Mathf.Min(b.Step, 0.75f);
                         b.Step -= use;
                         if (b.Step <= 0.001f) _cleavePullIn.Remove(_cleavePullKeys[i]);
-                        CleavePullStep(b.Target, b.Point, b.Mask, use);
+                        CleavePullStep(b.Target, b.Point, b.Dir, b.Mask, use);
                     }
                 }
             }
             catch (Exception) { }
         }
 
-        private void CleavePullStep(Character target, Vector3 wavePoint, int solidMask, float stepLength)
+        // v0.25.167: push along dir, never past the wave's front point (front = wave point + dir x CleaveFrontGap).
+        private void CleavePullStep(Character target, Vector3 frontPoint, Vector3 pushDir, int solidMask, float stepLength)
         {
             try
             {
-                Vector3 to = wavePoint - target.transform.position;
-                to.y = 0f;
-                float dist = to.magnitude;
-                const float stopGap = 0.5f, skin = 0.12f;
-                float want = Mathf.Min(stepLength, dist - stopGap);
+                pushDir.y = 0f;
+                if (pushDir.sqrMagnitude < 0.0001f) return;
+                Vector3 dir = pushDir.normalized;
+                Vector3 rel = target.transform.position - frontPoint;
+                rel.y = 0f;
+                const float skin = 0.12f;
+                float want = Mathf.Min(stepLength, -Vector3.Dot(rel, dir));
                 if (want <= 0.001f) return;
-                Vector3 dir = to / dist;
                 Collider col = target.GetCollider();
                 Vector3 c = col != null ? col.bounds.center : target.transform.position + Vector3.up;
                 float reach = col != null ? Mathf.Max(0.25f, Mathf.Min(col.bounds.extents.x, col.bounds.extents.z)) : 0.4f;

@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.166";
+        public const string ModVersion = "0.25.167";
 
         internal static DragonCombatPlugin Instance;
 
@@ -12481,7 +12481,7 @@ namespace DragonsAltarCombat
             if (_fade < 0f && Age >= MaxLife) Finish(0.3f);
             float k = Mathf.Clamp01(Age / 0.08f);
             if (_fade >= 0f) { _fade += Time.deltaTime; k *= 1f - Mathf.Clamp01(_fade / FadeLen); if (_fade >= FadeLen) { Destroy(gameObject); return; } }
-            float flick = 0.85f + 0.15f * Mathf.Sin(Age * 40f);
+            float flick = 1f;   // v0.25.167 no strobing (was a 40 Hz flicker)
             if (Mesh != null)
             {
                 if (_cols == null) _cols = new Color[Mesh.vertexCount];
@@ -12660,7 +12660,7 @@ namespace DragonsAltarCombat
         {
             if (_psFrame != Time.frameCount) { _psFrame = Time.frameCount; _psCount = 0; }
             _psCount++;
-            return _psCount <= 24 ? 1f : _psCount <= 48 ? 0.5f : 0.25f;
+            return _psCount <= 16 ? 1f : _psCount <= 32 ? 0.4f : 0.15f;   // v0.25.167 overlapping casts stay readable (was 24 / 48)
         }
         private static readonly float[] _flashAt = new float[4];
         private static int _flashIdx;
@@ -12679,7 +12679,12 @@ namespace DragonsAltarCombat
         public static ParticleSystem Particles(Transform parent, Color c, int burst, float rate, float emitSeconds, float life, float speedMin, float speedMax,
             float sizeMin, float sizeMax, float gravity, ParticleSystemShapeType shape, float radius, Vector3 shapeEuler, bool stretch, bool additive)
         {
-            if (additive) c.a *= 0.65f;   // v0.25.150 Valheim-style restraint (was 0.8)
+            if (additive)
+            {
+                // v0.25.167 (user: not cartoonish): additive light is desaturated and dimmer so it sits in Valheim's lighting
+                float lum = c.r * 0.3f + c.g * 0.59f + c.b * 0.11f;
+                c = new Color(Mathf.Lerp(c.r, lum, 0.3f), Mathf.Lerp(c.g, lum, 0.3f), Mathf.Lerp(c.b, lum, 0.3f), c.a * 0.5f);   // was a x0.65
+            }
             float budget = PolishBudget();   // v0.25.150: overlapping casts share one particle budget per frame
             GameObject go = new GameObject("ps");
             go.transform.SetParent(parent, false);
@@ -12692,7 +12697,7 @@ namespace DragonsAltarCombat
             main.startLifetime = new ParticleSystem.MinMaxCurve(life * 0.6f, life);
             main.startSpeed = new ParticleSystem.MinMaxCurve(speedMin, speedMax);
             main.startSize = new ParticleSystem.MinMaxCurve(sizeMin, sizeMax);
-            Color c2 = Color.Lerp(c, Color.white, 0.45f);
+            Color c2 = Color.Lerp(c, Color.white, 0.2f);   // v0.25.167 (was 0.45: blown-out white motes)
             c2.a = c.a;
             main.startColor = new ParticleSystem.MinMaxGradient(c, c2);
             main.gravityModifier = gravity;
@@ -12737,9 +12742,9 @@ namespace DragonsAltarCombat
         {
             if (!Enabled) return;
             // v0.25.145 restrained: no bright flares - capped peak, short, small range
-            intensity = Mathf.Min(intensity, 1.5f) * LightScale;   // v0.25.150 (was 2.5 / 0.3 s / 6 m)
+            intensity = Mathf.Min(intensity, 0.9f) * LightScale;   // v0.25.167 (was 1.5 / 5 m; v0.25.150 2.5 / 6 m)
             seconds = Mathf.Min(seconds, 0.25f);
-            range = Mathf.Min(range, 5f);
+            range = Mathf.Min(range, 4f);
             if (intensity <= 0.05f) return;
             // v0.25.150: at most 4 flashes per 0.25 s, so overlapping casts never strobe
             if (Time.time - _flashAt[_flashIdx] < 0.25f) return;
@@ -12762,7 +12767,8 @@ namespace DragonsAltarCombat
         {
             if (!Enabled) return;
             DragonVfxLife l = Host(pos, life + 0.3f, "burst");
-            count = Mathf.Max(2, Mathf.RoundToInt(count * 0.6f));   // v0.25.145 no excessive bursts
+            count = Mathf.Max(2, Mathf.RoundToInt(count * 0.45f));   // v0.25.167 less particle clutter (v0.25.145 0.6)
+            size *= 0.8f;
             Particles(l.transform, c, count, 0f, 0.1f, life, speed * 0.4f, speed, size * 0.5f, size, gravity, ParticleSystemShapeType.Sphere, 0.2f, Vector3.zero, speed > 6f, true);
         }
 
@@ -12773,15 +12779,15 @@ namespace DragonsAltarCombat
             radius = Mathf.Max(0.5f, radius);
             seconds = Mathf.Clamp(seconds, 0.15f, 2f);
             DragonVfxLife l = Host(pos + Vector3.up * 0.15f, seconds + 0.5f, "shock");
-            int n = Mathf.Clamp(Mathf.RoundToInt(radius * 9f), 20, 150);   // v0.25.150 (was 12/r, 30-260)
+            int n = Mathf.Clamp(Mathf.RoundToInt(radius * 5f), 12, 90);   // v0.25.167 (v0.25.150 9/r, 20-150)
             GroundRing(pos, c, radius, seconds);   // v0.25.59 skin
             float speed = radius / seconds;
             Particles(l.transform, c, n, 0f, 0.05f, seconds, speed * 0.85f, speed, 0.35f + radius * 0.03f, 0.7f + radius * 0.05f, 0f,
                 ParticleSystemShapeType.Circle, 0.25f, new Vector3(90f, 0f, 0f), true, true);
-            Color dust = Color.Lerp(c, Color.white, 0.6f);
-            dust.a = 0.5f;
-            Particles(l.transform, dust, Mathf.RoundToInt(n * 0.25f), 0f, 0.05f, seconds * 1.4f, speed * 0.25f, speed * 0.55f, 0.6f, 1.4f, -0.05f,
-                ParticleSystemShapeType.Circle, 0.3f, new Vector3(90f, 0f, 0f), false, true);
+            Color dust = Color.Lerp(c, new Color(0.50f, 0.45f, 0.40f, 1f), 0.8f);   // v0.25.167 real dust (alpha), not a second glow
+            dust.a = 0.4f;
+            Particles(l.transform, dust, Mathf.RoundToInt(n * 0.3f), 0f, 0.05f, seconds * 1.4f, speed * 0.25f, speed * 0.55f, 0.6f, 1.4f, -0.05f,
+                ParticleSystemShapeType.Circle, 0.3f, new Vector3(90f, 0f, 0f), false, false);
             Flash(pos + Vector3.up * 1.2f, c, 4f + radius * 0.25f, radius * 1.6f, seconds + 0.25f);
         }
 
@@ -12820,7 +12826,7 @@ namespace DragonsAltarCombat
             l.BoltCore = new Color(0.95f, 0.98f, 1f, 1f);
             Jag(outer, a, b, l.BoltJitter);
             Jag(inner, a, b, l.BoltJitter * 0.7f);
-            Burst(b, glow, 26, 9f, 0.18f, 0.45f, 0.6f);
+            Burst(b, glow, 12, 9f, 0.18f, 0.45f, 0.6f);   // v0.25.167 (was 26)
             Flash(b + Vector3.up * 0.8f, glow, 5f, 9f, seconds + 0.2f);
             // a couple of short branches
             for (int i = 0; i < 2; i++)
@@ -12918,7 +12924,7 @@ namespace DragonsAltarCombat
             if (!Enabled || parent == null) return;
             GameObject go = new GameObject("IH_Glow");
             go.transform.SetParent(parent, false);
-            rate *= 0.5f;   // v0.25.145 restrained
+            rate *= 0.35f;   // v0.25.167 (v0.25.145 0.5)
             ParticleSystem ps = Particles(go.transform, c, 0, rate, 1f, 1.1f, 0.2f, 1.2f, 0.12f, 0.4f, -0.05f,
                 ParticleSystemShapeType.Sphere, Mathf.Max(0.1f, radius), Vector3.zero, false, true);
             ParticleSystem.MainModule m = ps.main;
@@ -12929,7 +12935,7 @@ namespace DragonsAltarCombat
                 light.type = LightType.Point;
                 light.color = c;
                 light.range = Mathf.Min(lightRange, 3f);   // v0.25.150
-                light.intensity = 0.7f * LightScale;
+                light.intensity = 0.45f * LightScale;   // v0.25.167 (was 0.7)
                 light.shadows = LightShadows.None;
             }
         }
@@ -13105,7 +13111,8 @@ namespace DragonsAltarCombat
                 line.positionCount = n;
                 line.startWidth = 0.22f + radius * 0.02f;
                 line.endWidth = 0.03f;
-                Material m = Additive();
+                Material m = Mat(LineTex(), false);   // v0.25.167 dark torn-earth fissures, not glowing lines
+                if (m == null) m = Additive();
                 if (m != null) line.sharedMaterial = m;
                 Vector3 side = Vector3.Cross(Vector3.up, dir);
                 for (int k = 0; k < n; k++)
@@ -13119,30 +13126,31 @@ namespace DragonsAltarCombat
             }
             DragonCrackFade fade = l.gameObject.AddComponent<DragonCrackFade>();
             fade.Lines = lines.ToArray();
-            fade.Color = c;
+            fade.Color = Fissure(c);
             fade.Life = seconds;
+        }
+
+        // v0.25.167: ground scars are dark soil with only a hint of the skill colour.
+        private static Color Fissure(Color c)
+        {
+            Color k = Color.Lerp(new Color(0.07f, 0.055f, 0.045f, 1f), c, 0.18f);
+            k.a = 1f;
+            return k;
         }
 
         // Chunks of earth thrown out of an impact: real little rocks that arc, bounce once and sink away.
         public static void Debris(Vector3 center, Color c, int count, float speed, float size, float seconds)
         {
             if (!Enabled) return;
-            Shader sh = Shader.Find("Sprites/Default");
             count = Mathf.Clamp(Mathf.RoundToInt(count * Amount), 1, 60);
+            Material mat = NaturalMat(c);   // v0.25.167 lit rock / ice lumps instead of unlit cubes and balls
             for (int i = 0; i < count; i++)
             {
-                GameObject rock = GameObject.CreatePrimitive(i % 3 == 0 ? PrimitiveType.Cube : PrimitiveType.Sphere);
-                rock.name = "IH_Debris";
-                Collider col = rock.GetComponent<Collider>();
-                if (col != null) UnityEngine.Object.Destroy(col);
-                Renderer r = rock.GetComponent<Renderer>();
-                if (r != null && sh != null)
-                {
-                    r.material = new Material(sh);
-                    float shade = UnityEngine.Random.Range(0.7f, 1.1f);
-                    r.material.color = new Color(c.r * shade, c.g * shade, c.b * shade, 1f);
-                    r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                }
+                GameObject rock = new GameObject("IH_Debris");
+                rock.AddComponent<MeshFilter>().sharedMesh = LumpMesh(i);
+                MeshRenderer r = rock.AddComponent<MeshRenderer>();
+                if (mat != null) r.sharedMaterial = mat;
+                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                 float sz = size * UnityEngine.Random.Range(0.5f, 1.2f);
                 rock.transform.localScale = new Vector3(sz, sz * UnityEngine.Random.Range(0.6f, 1f), sz);
                 rock.transform.position = center + Vector3.up * 0.3f;
@@ -13243,7 +13251,8 @@ namespace DragonsAltarCombat
             line.positionCount = n;
             line.startWidth = width;
             line.endWidth = width * 0.3f;
-            Material m = Additive();
+            Material m = Mat(LineTex(), false);   // v0.25.167 dark scar
+            if (m == null) m = Additive();
             if (m != null) line.sharedMaterial = m;
             Vector3 dir = b - a; dir.y = 0f;
             Vector3 side = Vector3.Cross(Vector3.up, dir.normalized);
@@ -13257,7 +13266,7 @@ namespace DragonsAltarCombat
             }
             DragonCrackFade fade = l.gameObject.AddComponent<DragonCrackFade>();
             fade.Lines = new LineRenderer[] { line };
-            fade.Color = c;
+            fade.Color = Fissure(c);
             fade.Life = seconds;
         }
 
@@ -13516,7 +13525,7 @@ namespace DragonsAltarCombat
             radius = Mathf.Max(0.5f, radius);
             Vector3 g = GroundPoint(pos) + Vector3.up * 0.07f;
             Quaternion yaw = Quaternion.Euler(0f, UnityEngine.Random.Range(0f, 360f), 0f);
-            Color rc = c; rc.a = 0.35f;   // v0.25.150 (was 0.5)
+            Color rc = c; rc.a = 0.25f;   // v0.25.167 (v0.25.150 0.35)
             DragonMeshFx ring = MeshFx(g, yaw, true, Mat(RingTex(), true), rc, seconds + 0.15f); if (ring != null) ring.Conform = true;
             if (ring != null) { ring.ScaleFrom = Vector3.one * radius * 0.4f; ring.ScaleTo = Vector3.one * radius * 2.05f; ring.ScaleTime = seconds; }
             Color gc = Color.Lerp(c, Color.white, 0.2f); gc.a = 0.08f;   // v0.25.150 (was 0.18)
@@ -13549,7 +13558,7 @@ namespace DragonsAltarCombat
         public static void Beam(Vector3 pos, Color c, float radius, float height, float seconds)
         {
             if (!Enabled) return;
-            Color bc = Color.Lerp(c, Color.white, 0.25f); bc.a = 0.6f;   // v0.25.150 (was 0.85)
+            Color bc = Color.Lerp(c, Color.white, 0.15f); bc.a = 0.45f;   // v0.25.167 (v0.25.150 0.6)
             for (int i = 0; i < 2; i++)
             {
                 DragonMeshFx b = MeshFx(pos, Quaternion.Euler(0f, i * 90f + 20f, 0f), false, Mat(BeamTex(), true), bc, seconds);
@@ -13592,19 +13601,13 @@ namespace DragonsAltarCombat
             mesh.MarkDynamic();
             go.AddComponent<MeshFilter>().sharedMesh = mesh;
             MeshRenderer r = go.AddComponent<MeshRenderer>();
-            r.sharedMaterial = Mat(StreakTex(), true);
+            r.sharedMaterial = Mat(StreakTex(), false);   // v0.25.167 one alpha body (the additive glow copy is gone)
             r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            GameObject body = new GameObject("body");
-            body.transform.SetParent(go.transform, false);
-            body.AddComponent<MeshFilter>().sharedMesh = mesh;
-            MeshRenderer br = body.AddComponent<MeshRenderer>();
-            br.sharedMaterial = Mat(StreakTex(), false);   // v0.25.65 opaque-ish body so the arc reads in daylight
-            br.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             DragonSlashArc a = go.AddComponent<DragonSlashArc>();
             a.Radius = Mathf.Max(0.5f, radius);
             a.Arc = Mathf.Clamp(arcDeg, 20f, 360f);
             a.Width = Mathf.Max(0.15f, width);
-            Color cc = Color.Lerp(c, Color.white, 0.3f); cc.a = 1f;
+            Color cc = Color.Lerp(c, new Color(0.86f, 0.90f, 0.95f, 1f), 0.5f); cc.a = 0.8f;   // v0.25.167 pale steel, not neon
             a.Color = cc;
             a.Life = Mathf.Max(0.2f, seconds);
             a.Sweep = Mathf.Min(0.18f, a.Life * 0.4f);
@@ -13719,7 +13722,10 @@ namespace DragonsAltarCombat
             return m;
         }
 
-        // A jagged spike bursting out of the ground (rock or ice), tilted outward from `away`.
+        // v0.25.167 (user: solid tapered spikes, rounded bodies, pointed tips, skill material; no flat triangles):
+        // a smooth-shaded procedural horn (wide rounded base, bulging body, slight bend, needle tip) in a lit natural
+        // material - rock = rough stone, ice = glossy pale ice. A shorter companion horn leans off its base.
+        // Same height / radius / tilt / rise-hold-sink timing as before (DragonSpike).
         public static void Spike(Vector3 pos, Color c, float height, float radius, float hold, Vector3 away)
         {
             if (!Enabled) return;
@@ -13731,28 +13737,160 @@ namespace DragonsAltarCombat
             GameObject root = new GameObject("IH_Spike");
             root.transform.position = g;
             root.transform.rotation = rot;
-            Material mat = SolidMat(c);
+            Material mat = NaturalMat(c);
+            int seed = UnityEngine.Random.Range(0, 4);
             for (int i = 0; i < 2; i++)
             {
-                GameObject shard = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                Collider col = shard.GetComponent<Collider>();
-                if (col != null) UnityEngine.Object.Destroy(col);
-                shard.transform.SetParent(root.transform, false);
-                float h = height * (i == 0 ? 1f : 0.55f);
-                float r = radius * (i == 0 ? 1f : 0.6f);
-                // a cube rotated 45 deg and stretched reads as a faceted shard; the second is a smaller leaning chip
-                shard.transform.localScale = new Vector3(r, h, r * 0.8f);
-                shard.transform.localRotation = Quaternion.Euler(i == 0 ? 0f : 18f, 45f + i * 30f, i == 0 ? 6f : -14f);
-                shard.transform.localPosition = new Vector3(i == 0 ? 0f : r * 0.7f, h * 0.45f, 0f);
-                Renderer rr = shard.GetComponent<Renderer>();
-                if (rr != null && mat != null) { rr.sharedMaterial = mat; rr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; }
+                GameObject horn = new GameObject("horn");
+                horn.transform.SetParent(root.transform, false);
+                horn.AddComponent<MeshFilter>().sharedMesh = SpikeMesh(seed + i);
+                MeshRenderer rr = horn.AddComponent<MeshRenderer>();
+                if (mat != null) rr.sharedMaterial = mat;
+                rr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                float h = height * (i == 0 ? 1f : 0.5f);
+                float r = radius * (i == 0 ? 1.1f : 0.65f);
+                horn.transform.localScale = new Vector3(r, h, r);
+                horn.transform.localRotation = Quaternion.Euler(i == 0 ? 0f : 24f, UnityEngine.Random.Range(0f, 360f), i == 0 ? 0f : -10f);
+                horn.transform.localPosition = new Vector3(i == 0 ? 0f : r * 0.75f, -h * 0.08f, i == 0 ? 0f : r * 0.2f);
             }
             root.transform.position = g - root.transform.up * height * 1.05f;   // starts buried, bursts out
             DragonSpike sp = root.AddComponent<DragonSpike>();
             sp.Base = g;
             sp.Height = height;
             sp.Hold = Mathf.Max(0f, hold);
-            if (c.a < 0.99f) AttachGlow(root.transform, new Color(0.75f, 0.95f, 1f, 1f), radius * 0.6f, 10f, 0f);
+        }
+
+        private static readonly Mesh[] _spikeMeshes = new Mesh[6];
+        private static readonly Mesh[] _lumpMeshes = new Mesh[4];
+        private static readonly Dictionary<int, Material> _naturalMats = new Dictionary<int, Material>();
+        private static Texture2D _rockTex;
+
+        // Unit horn: base radius 0.5 at y 0 (a little below for burying), tip at y 1. Smooth normals = rounded body.
+        private static Mesh SpikeMesh(int seed)
+        {
+            seed = ((seed % _spikeMeshes.Length) + _spikeMeshes.Length) % _spikeMeshes.Length;
+            if (_spikeMeshes[seed] != null) return _spikeMeshes[seed];
+            const int sides = 10, rings = 9;
+            List<Vector3> v = new List<Vector3>();
+            List<Vector2> uv = new List<Vector2>();
+            List<int> t = new List<int>();
+            float bend = 0.06f + 0.05f * Hash(seed, 7, 3);
+            for (int k = 0; k < rings; k++)
+            {
+                float y = (float)k / rings;   // 0 .. <1, tip vertex added after
+                float prof = Mathf.Pow(1f - y, 0.9f) * (1f + 0.18f * Mathf.Sin(Mathf.PI * Mathf.Min(1f, y * 1.6f)));   // rounded bulge, tapering
+                float yy = Mathf.Lerp(-0.12f, 1f, y);
+                for (int i = 0; i <= sides; i++)
+                {
+                    float a = (float)i / sides * Mathf.PI * 2f;
+                    float n = 1f + 0.14f * (Hash(i % sides, k, seed) - 0.5f) * 2f * (1f - y * 0.5f);
+                    float r = 0.5f * prof * n;
+                    v.Add(new Vector3(Mathf.Cos(a) * r + bend * y * y, yy, Mathf.Sin(a) * r));
+                    uv.Add(new Vector2((float)i / sides * 2f, y * 3f));
+                }
+            }
+            int tip = v.Count;
+            v.Add(new Vector3(bend, 1f, 0f));
+            uv.Add(new Vector2(1f, 3f));
+            for (int k = 0; k < rings - 1; k++)
+                for (int i = 0; i < sides; i++)
+                {
+                    int a0 = k * (sides + 1) + i, a1 = a0 + 1, b0 = a0 + sides + 1, b1 = b0 + 1;
+                    t.Add(a0); t.Add(b0); t.Add(a1); t.Add(a1); t.Add(b0); t.Add(b1);
+                }
+            int last = (rings - 1) * (sides + 1);
+            for (int i = 0; i < sides; i++) { t.Add(last + i); t.Add(tip); t.Add(last + i + 1); }
+            Mesh m = new Mesh();
+            m.vertices = v.ToArray(); m.uv = uv.ToArray(); m.triangles = t.ToArray();
+            m.RecalculateNormals();
+            m.RecalculateBounds();
+            _spikeMeshes[seed] = m;
+            return m;
+        }
+
+        // Unit rock lump (debris): a noisy smooth sphere, flattened a little.
+        private static Mesh LumpMesh(int seed)
+        {
+            seed = ((seed % _lumpMeshes.Length) + _lumpMeshes.Length) % _lumpMeshes.Length;
+            if (_lumpMeshes[seed] != null) return _lumpMeshes[seed];
+            const int lon = 8, lat = 6;
+            List<Vector3> v = new List<Vector3>();
+            List<int> t = new List<int>();
+            for (int k = 0; k <= lat; k++)
+            {
+                float th = (float)k / lat * Mathf.PI;
+                for (int i = 0; i <= lon; i++)
+                {
+                    float ph = (float)i / lon * Mathf.PI * 2f;
+                    float n = 0.78f + 0.44f * Hash(i % lon, k, seed + 11);
+                    if (k == 0 || k == lat) n = 0.85f;
+                    v.Add(new Vector3(Mathf.Sin(th) * Mathf.Cos(ph), Mathf.Cos(th) * 0.8f, Mathf.Sin(th) * Mathf.Sin(ph)) * 0.5f * n);
+                }
+            }
+            for (int k = 0; k < lat; k++)
+                for (int i = 0; i < lon; i++)
+                {
+                    int a0 = k * (lon + 1) + i, a1 = a0 + 1, b0 = a0 + lon + 1, b1 = b0 + 1;
+                    t.Add(a0); t.Add(a1); t.Add(b0); t.Add(a1); t.Add(b1); t.Add(b0);
+                }
+            Mesh m = new Mesh();
+            m.vertices = v.ToArray(); m.triangles = t.ToArray();
+            Vector2[] uv = new Vector2[v.Count];
+            for (int i = 0; i < uv.Length; i++) uv[i] = new Vector2(v[i].x + v[i].z, v[i].y) * 2f;
+            m.uv = uv;
+            m.RecalculateNormals();
+            m.RecalculateBounds();
+            _lumpMeshes[seed] = m;
+            return m;
+        }
+
+        // Grey stone grain (RGB noise, multiplied by the material colour).
+        private static Texture2D RockTex()
+        {
+            if (_rockTex != null) return _rockTex;
+            const int n = 64;
+            _rockTex = new Texture2D(n, n, TextureFormat.RGBA32, true);
+            _rockTex.wrapMode = TextureWrapMode.Repeat;
+            Color[] px = new Color[n * n];
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    float f = Fbm(x / 9f, y / 9f, 5) * 0.6f + Fbm(x / 3f, y / 3f, 9) * 0.4f;
+                    float k = Mathf.Clamp(0.62f + 0.55f * (f - 0.5f) * 2f, 0.35f, 1.1f);
+                    px[y * n + x] = new Color(k, k * 0.98f, k * 0.95f, 1f);
+                }
+            _rockTex.SetPixels(px);
+            _rockTex.Apply(true);
+            return _rockTex;
+        }
+
+        // v0.25.167 lit natural material for spikes / debris: ice (translucent colours, or bright cold blues) = glossy pale
+        // ice; anything else = rough stone tinted by the skill colour. Falls back to SolidMat when Standard is stripped.
+        private static Material NaturalMat(Color c)
+        {
+            bool ice = c.a < 0.99f || (c.b > 0.9f && c.g > 0.8f && c.r < 0.9f);
+            int key = (ice ? 1 << 30 : 0) | Mathf.RoundToInt(c.r * 63f) | (Mathf.RoundToInt(c.g * 63f) << 6) | (Mathf.RoundToInt(c.b * 63f) << 12);
+            Material m;
+            if (_naturalMats.TryGetValue(key, out m) && m != null) return m;
+            Shader s = Shader.Find("Standard");
+            if (s == null) { Color k = c; k.a = 1f; return SolidMat(k); }
+            m = new Material(s);
+            if (ice)
+            {
+                m.color = new Color(Mathf.Lerp(c.r, 0.80f, 0.5f), Mathf.Lerp(c.g, 0.90f, 0.5f), Mathf.Lerp(c.b, 0.96f, 0.5f), 1f);
+                if (m.HasProperty("_Glossiness")) m.SetFloat("_Glossiness", 0.78f);
+                if (m.HasProperty("_Metallic")) m.SetFloat("_Metallic", 0.05f);
+            }
+            else
+            {
+                Color rc = Color.Lerp(c, new Color(0.50f, 0.47f, 0.44f, 1f), 0.3f) * 1.25f;   // grain texture averages ~0.6
+                m.color = new Color(Mathf.Clamp01(rc.r), Mathf.Clamp01(rc.g), Mathf.Clamp01(rc.b), 1f);
+                m.mainTexture = RockTex();
+                if (m.HasProperty("_Glossiness")) m.SetFloat("_Glossiness", 0.08f);
+                if (m.HasProperty("_Metallic")) m.SetFloat("_Metallic", 0f);
+            }
+            _naturalMats[key] = m;
+            return m;
         }
 
         // A ring of spikes around a point (Frost Nova, Stonefang, landings).
@@ -13786,7 +13924,7 @@ namespace DragonsAltarCombat
             // v0.25.151: skillVisual (Clockwork's clock face) is part of the skill - never hidden by the guide toggle, subdued only
             if (!Enabled || (!skillVisual && !Guides)) return;
             Vector3 g = GroundPoint(pos) + Vector3.up * 0.08f;
-            Color gc = c; gc.a = skillVisual ? 0.5f : 0.22f;
+            Color gc = c; gc.a = skillVisual ? 0.35f : 0.18f;   // v0.25.167 (was 0.5 / 0.22)
             DragonMeshFx a = MeshFx(g, Quaternion.identity, true, Mat(RingTex(), true), gc, seconds); if (a != null) a.Conform = true;
             if (a != null) { a.FadeIn = 0.2f; a.Hold = seconds * 0.6f; a.ScaleFrom = Vector3.one * radius * 1.7f; a.ScaleTo = Vector3.one * radius * 2.05f; a.ScaleTime = 0.3f; a.Spin = spin; }
             DragonMeshFx b = MeshFx(g + Vector3.up * 0.01f, Quaternion.identity, true, Mat(RingTex(), true), gc, seconds); if (b != null) b.Conform = true;
@@ -13870,7 +14008,7 @@ namespace DragonsAltarCombat
             if (!Enabled) return;
             radius = Mathf.Max(0.8f, radius);
             DragonVfxLife l = Host(pos + Vector3.up * 0.4f, 2.5f, "fireblast");
-            ParticleSystem ps = Particles(l.transform, new Color(1f, 0.6f, 0.2f, 1f), Mathf.RoundToInt(40 + radius * 10f), 0f, 0.1f, 0.7f, radius * 0.8f, radius * 1.6f, radius * 0.4f, radius * 0.9f, -0.3f,
+            ParticleSystem ps = Particles(l.transform, new Color(1f, 0.6f, 0.2f, 1f), Mathf.RoundToInt(28 + radius * 7f), 0f, 0.1f, 0.7f, radius * 0.8f, radius * 1.6f, radius * 0.4f, radius * 0.9f, -0.3f,
                 ParticleSystemShapeType.Sphere, radius * 0.3f, Vector3.zero, false, true);
             FireLook(ps);
             Smoke(pos + Vector3.up * radius * 0.5f, new Color(0.18f, 0.15f, 0.13f, 0.6f), radius, 2.6f, Mathf.RoundToInt(8 + radius * 1.5f));
@@ -13931,35 +14069,34 @@ namespace DragonsAltarCombat
             // roll 0 = horizontal slash, roll 90 = vertical slash (two blades 14 deg apart so it reads from behind too).
             float span = Mathf.Max(1f, radius * 1.9f);
             float thick = Mathf.Max(0.2f, width * 0.85f);
-            Color halo = Color.Lerp(c, new Color(0.40f, 0.78f, 1f, 1f), 0.6f); halo.a = 0.35f;
-            Color body = Color.Lerp(c, new Color(0.62f, 0.88f, 1f, 1f), 0.5f); body.a = 0.92f;
-            Color edge = Color.Lerp(c, Color.white, 0.92f); edge.a = 1f;
-            // v0.25.77 (user: "stop giving me the facing-the-camera shit"): the blade lies EXACTLY in the plane of its cut,
-            // convex edge leading in the travel direction - no tilt toward the camera, no second blade. Vertical slashes
-            // (Crescent Cleave) are one slightly thicker blade. Wake trails stream back from the apex and both tips.
+            // v0.25.167 (user: clear curved slash + restrained wind trail; no flares / glowing layers): ONE alpha-blended
+            // blade in the plane of the cut (convex edge leading, crisp edges from BladeTex), pale steel tinted by the
+            // skill colour; the additive halo and white edge layers are gone. Three faint, non-additive wind wakes
+            // (apex + tips) follow its movement.
             bool vertical = Mathf.Abs(roll) >= 60f;
             if (vertical) thick *= 1.35f;
             Quaternion q = Quaternion.AngleAxis(roll, Vector3.forward) * Quaternion.Euler(90f, 0f, 0f);
-            GetsugaLayer(parent, halo, span * 1.03f, thick * 1.5f, q, 0f, Mat(LineTex(), true));
+            Color body = Color.Lerp(c, new Color(0.84f, 0.90f, 0.96f, 1f), 0.55f); body.a = 0.78f;
             GetsugaLayer(parent, body, span, thick, q, 0f, Mat(BladeTex(), false));
-            GetsugaLayer(parent, edge, span * 0.98f, thick * 0.26f, q, thick * 0.32f, Mat(BladeTex(), true));
             float w = span * 0.5f, sag = span * 0.24f;
-            Color wake = Color.Lerp(c, new Color(0.55f, 0.85f, 1f, 1f), 0.5f); wake.a = 0.55f;
-            BladeWake(parent, q * new Vector3(0f, sag * 0.5f, 0f), wake, thick * 1.1f);
-            BladeWake(parent, q * new Vector3(-w * 0.92f, -sag * 0.35f, -span * 0.03f), wake, thick * 0.45f);
-            BladeWake(parent, q * new Vector3(w * 0.92f, -sag * 0.35f, -span * 0.03f), wake, thick * 0.45f);
+            Color wake = Color.Lerp(c, new Color(0.88f, 0.92f, 0.96f, 1f), 0.75f); wake.a = 0.22f;
+            BladeWake(parent, q * new Vector3(0f, sag * 0.5f, 0f), wake, thick * 1.6f);
+            wake.a = 0.12f;
+            BladeWake(parent, q * new Vector3(-w * 0.8f, -sag * 0.2f, -span * 0.03f), wake, thick * 0.7f);
+            BladeWake(parent, q * new Vector3(w * 0.8f, -sag * 0.2f, -span * 0.03f), wake, thick * 0.7f);
         }
 
         // A short glowing wake left behind a moving blade point (only shows while the carrier travels).
         private static void BladeWake(Transform parent, Vector3 local, Color c, float width)
         {
-            Material m = Mat(LineTex(), true);
+            Material m = Mat(LineTex(), false);   // v0.25.167 air, not light
+            if (m == null) m = Mat(LineTex(), true);
             if (m == null) return;
             GameObject go = new GameObject("IH_BladeWake");
             go.transform.SetParent(parent, false);
             go.transform.localPosition = local;
             TrailRenderer tr = go.AddComponent<TrailRenderer>();
-            tr.time = 0.28f;
+            tr.time = 0.35f;
             tr.minVertexDistance = 0.08f;
             tr.widthMultiplier = Mathf.Max(0.05f, width);
             AnimationCurve wc = new AnimationCurve();
@@ -14080,15 +14217,14 @@ namespace DragonsAltarCombat
             GameObject go = new GameObject("IH_SpinSlash");
             go.transform.SetParent(follow, false);
             go.transform.localPosition = Vector3.up * 1.0f;
-            Color glow = c; glow.a = 0.85f;
-            Color body = Color.Lerp(c, Color.white, 0.35f); body.a = 0.9f;
-            Color core = Color.Lerp(c, Color.white, 0.85f); core.a = 1f;
+            // v0.25.167 restrained: a pale steel blade arc + a faint thin edge (the wide additive glow layer is gone)
+            Color body = Color.Lerp(c, new Color(0.84f, 0.90f, 0.96f, 1f), 0.55f); body.a = 0.6f;
+            Color core = Color.Lerp(c, Color.white, 0.6f); core.a = 0.3f;
             for (int k = 0; k < 2; k++)
             {
                 Quaternion half = Quaternion.Euler(0f, k * 180f, 0f);
-                CrescentArc(go.transform, glow, radius, width * 3.5f, 0f, 75f, half, true, 0f);
-                CrescentArc(go.transform, body, radius, width * 1.8f, 0f, 70f, half, false, 0f);
-                CrescentArc(go.transform, core, radius, width * 0.7f, 0f, 66f, half, true, 0f);
+                CrescentArc(go.transform, body, radius, width * 1.5f, 0f, 70f, half, false, 0f);
+                CrescentArc(go.transform, core, radius, width * 0.45f, 0f, 66f, half, true, 0f);
             }
             DragonSpinner sp = go.AddComponent<DragonSpinner>();
             sp.DegPerSecond = 360f / Mathf.Max(0.1f, turnSeconds);
@@ -14348,7 +14484,7 @@ namespace DragonsAltarCombat
                     Debris(pos, new Color(0.7f, 0.92f, 1f, 1f), Mathf.Max(2, Mathf.RoundToInt(2 * size)), 4f, 0.08f, 1.2f);
                     break;
                 case 5:   // lightning: arcs jumping off the target
-                    for (int i = 0; i < 2; i++)
+                    for (int i = 0; i < 1; i++)   // v0.25.167 one arc (was 2)
                     {
                         Vector3 o = UnityEngine.Random.onUnitSphere * (0.9f + size * 0.4f);
                         Bolt(pos, pos + o, new Color(0.55f, 0.9f, 1f, 1f), 0.06f, 0.15f);

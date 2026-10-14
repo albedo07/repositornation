@@ -1,0 +1,5 @@
+v0.25.167 Grounded Edges - test results (no game here)
+- mcs --parse -langversion:5 Advanced + CombatRuntime: OK
+- tools/compile_check/check.sh 3029660: PASSED (0 new signatures)
+- Spike geometry rendered offline from the same math: docs/previews/PREVIEW_v0.25.167_Spikes.png (flat-shaded preview; game uses smooth normals).
+- NOT verified in game: push feel per enemy size, multiplayer push on remotely owned enemies, final look of materials under Valheim lighting.

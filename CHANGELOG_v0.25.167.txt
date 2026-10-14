@@ -1,0 +1,16 @@
+Aethelborn Ascended v0.25.167 - Grounded Edges (baseline v0.25.166)
+1. Crescent Cleave (Normal + Ascended): PUSH instead of pull.
+   - Enemies in a wave are carried along its travel direction (away from you) at a % of the wave speed:
+     Small 100% (ride the wave front), Big 65%, Boss 35% (F8: PushSmall/Big/BossPercent_v025167, Normal + Ascended).
+   - Never pushed past the front of the hitbox (0.9 m ahead of the wave point), so the persistent ticks keep landing.
+   - Obstacle checks, once-per-frame per target, owner-side movement + batched RPC (now "Aethelborn_CleavePush", carries direction) kept.
+   - Damage, tick interval, wave speed, range, animations, Ascended 2 s fire trails unchanged.
+2. VFX polish (visual only, shared DragonVfx building blocks -> every skill):
+   - Ground spikes: smooth tapered horns (rounded body, slight bend, needle tip) in lit materials: rough stone (grain texture) or glossy pale ice. No cube shards, no glow on ice.
+   - Debris: lit rock / ice lumps instead of unlit cubes and balls.
+   - Crescent slashes (Moonlight, Halfmoon, Crescent Cleave, Eclipse/Halfmoon flashes): one clear alpha blade (convex edge leading), halo + white edge layers removed, faint non-additive wind wakes. Glow motes / sparkle trails / per-frame spark bursts on the waves removed.
+   - Slash arcs + Whirlwind spin: single pale-steel body, wide additive glow removed.
+   - Cracks / scars: dark torn-earth fissures (hint of skill colour) instead of glowing lines.
+   - Light + particles: additive particles desaturated and dimmer, less white-out; flashes capped lower (0.9 / 4 m); bursts smaller; per-frame particle budget tighter so overlapping casts stay readable; shockwave dust is real (alpha) dust; Impact Wave crest no longer flickers; lightning hit = one arc.
+   - Targeting guides: unchanged (faint, one global toggle [Visuals] ShowTargetingGuides); attack visuals never depend on it.
+No hitbox, damage, timing, animation or movement changes except the Crescent push.
