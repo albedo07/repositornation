@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Aethelborn Ascended - Sorcerer Advancements";
-        public const string ModVersion = "0.25.168";
+        public const string ModVersion = "0.25.169";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1191,7 +1191,7 @@ namespace DragonsAltarSorcerer
                 Vector3 gc = center; float gr = radius, gd = Mathf.Max(0.5f, duration);
                 DragonCombat.RunVfx(delegate
                 {
-                    DragonVfx.Vortex(null, gc + Vector3.up * 1.2f, new Color(0.62f, 0.25f, 1f, 1f), gr, gd);   // v0.25.58 everything is sucked into the well
+                    DragonVfx.GravityWell(null, gc + Vector3.up * 1.2f, gr, gd);   // v0.25.169 air ripples + streaks + loose dirt drawn in (replaces the glow vortex)
                     DragonVfx.BlackHole(gc, gr, gd);   // v0.25.75 (user): a black hole hangs in the middle of the well
                 });
             }
@@ -2807,7 +2807,7 @@ namespace DragonsAltarSorcerer
             float tick = Mathf.Max(0.1f, _gbTick.Value);
             int solid = LayerMask.GetMask("Default", "static_solid", "Default_small", "piece", "terrain", "vehicle");
             GameObject orb = _enableVfx.Value ? CreateOrb(origin, DragonCombat.M(_gbOrbSize.Value), new Color(0.18f, 0.02f, 0.30f, 0.92f)) : null;
-            if (orb != null) { Transform ot = orb.transform; float vr = radius, vl = life + 2f; DragonCombat.RunVfx(delegate { DragonVfx.Vortex(ot, ot.position, new Color(0.62f, 0.25f, 1f, 1f), vr, vl); }); }   // v0.25.58 the orb drinks the light
+            if (orb != null) { Transform ot = orb.transform; float vr = radius, vl = life + 2f; DragonCombat.RunVfx(delegate { DragonVfx.GravityWell(ot, ot.position, vr, vl); }); }   // v0.25.169 gravity: air ripples + streaks + loose dirt dragged after the orb
             Vector3 pos = origin;
             bool moving = true;
             float elapsed = 0f;

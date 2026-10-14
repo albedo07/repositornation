@@ -1,4 +1,4 @@
-// v0.25.154 LOGIC MODEL of the skill <-> NACC handoff (NOT the shipped code, no Unity/Valheim): the same decisions as
+// v0.25.154 / v0.25.169 LOGIC MODEL of the skill <-> NACC handoff (NOT the shipped code, no Unity/Valheim): the same decisions as
 // DragonsAltar.CombatRuntime.cs (ResetNaccForSkill / ResetNaccChain / IsAirborne gate / ComboStart accept / UpdateLearns
 // validation / generation tokens) driven through the scenarios from the task. Weapon kinds: 1H, SBDW, 2HDW.
 using System;
@@ -25,17 +25,20 @@ class Sim
     }
     public void SkillEnd() { SkillLocked = false; }
     bool Retire() { SkillAnimGen++; DriverPlaying = false; TailPlaying = false; SkillSpeed = 1; return true; }
-    public void Takeoff() { if (!Airborne) { Airborne = true; ResetChain(); QueuedPrimary = 0; } }
+    // v0.25.169: ground contact never resets; a deliberate jump and real damage do; 0.7 s window after the swing finished
+    public const double Window = 0.7;
+    public void Takeoff() { Airborne = true; }                       // bump / slope / step / falling
+    public void Jump() { Airborne = true; if (ComboHit >= 0 || LastEnd > 0) ResetChain(); }   // vanilla "jump" trigger
     public void Land() { Airborne = false; }
+    public void Damage() { if (ComboHit >= 0) ResetChain(); }
     // Humanoid.StartAttack prefix + Attack.Start(prefix/postfix)
     public int Click(bool secondary, string weapon, string clip)
     {
         if (SkillLocked) return -1;
         bool nacc = !secondary && weapon != "bow";
-        if (Airborne && nacc) { ResetChain(); QueuedPrimary = 0; return -2; }
         if (Now < LockUntil) return -1;
         if (secondary || weapon == "bow") { ComboHit = -1; ChainSpeed = 1; Retire(); return -3; }   // heavy: accepted, chain broken
-        bool cont = ComboHit >= 0 && ComboHit < 4 && (LastEnd < 0 || Now - LastEnd <= 0.4);
+        bool cont = ComboHit >= 0 && ComboHit < 4 && (LastEnd < 0 || Now - LastEnd <= Window);
         int hit = cont ? ComboHit + 1 : 0;
         PrevSwing = cont ? Swing : -1; ComboHit = hit; Swing = Order[hit]; LastEnd = -1;
         Retire();   // postfix on accepted start
@@ -47,6 +50,7 @@ class Sim
     public void Tick(double dt)
     {
         Now += dt;
+        if (ComboHit >= 0 && LastEnd > 0 && Now - LastEnd > Window) ResetChain();   // timeout
         if (DriverStale) DriverPlaying = false;
         if (TailPlaying && TailGen != SkillAnimGen) TailPlaying = false;
         for (int k = Pending.Count - 1; k >= 0; k--)
@@ -100,21 +104,38 @@ static class T
             s = new Sim(); got = new List<int>(); Hits(s, 4, w, got); s.Click(false, "melee", w + "_attack"); s.SkillCast("S"); s.SkillEnd();
             Check(s.Click(false, "melee", w + "_attack") == 0, w + " interrupted finisher leaves no lockout");
             s = new Sim(); got = new List<int>(); Hits(s, 5, w, got); double lu = s.LockUntil; s.SkillCast("S"); Check(s.LockUntil == lu, w + " genuine finisher lockout preserved through takeover");
-            // jump + click: idle, after each strike, right after skill
-            for (int after = 0; after <= 5; after++)
+            // v0.25.169 airborne rules
+            Func<List<int>, string> J = l => string.Join(",", l.ConvertAll(x => x.ToString()).ToArray());
+            // uneven terrain: brief ground loss between every swing never resets
+            s = new Sim(); got = new List<int>();
+            for (int i = 0; i < 5; i++) { s.Takeoff(); s.Tick(0.05); s.Land(); got.Add(s.Click(false, "melee", w + "_attack")); s.Tick(0.3); s.StopSwing(); s.Tick(0.1); }
+            Check(J(got) == "0,1,0,1,2", w + " bumps keep the chain: " + J(got));
+            // airborne start, continue in the air, land, finish on the ground
+            s = new Sim(); s.Jump(); got = new List<int>(); Hits(s, 2, w, got); s.Land(); Hits(s, 3, w, got);
+            Check(J(got) == "0,1,0,1,2", w + " airborne start continues after landing: " + J(got));
+            Check(s.Click(false, "melee", w + "_attack") == -1, w + " finisher lockout after an air->ground chain");
+            // deliberate jump after each grounded strike: fresh chain in the air
+            for (int after = 1; after <= 4; after++)
             {
-                s = new Sim(); got = new List<int>(); if (after > 0) Hits(s, after, w, got);
-                s.Takeoff(); s.QueuedPrimary = 1;
-                int r = s.Click(false, "melee", w + "_attack"); Check(r == -2 || r == -1, w + " airborne NACC rejected after " + after + " (" + r + ")");
-                Check(s.QueuedPrimary == 0, w + " queued primary cleared"); Check(s.ComboHit == -1, w + " counters reset");
-                s.Land(); s.Tick(2.5);
-                got = new List<int>(); Hits(s, 5, w, got);
-                Check(string.Join(",", got.ConvertAll(x => x.ToString()).ToArray()) == "0,1,0,1,2", w + " landing combo 1-2-1-2-3 after " + after + ": " + string.Join(",", got.ConvertAll(x => x.ToString()).ToArray()));
+                s = new Sim(); got = new List<int>(); Hits(s, after, w, got); s.Jump();
+                int r = s.Click(false, "melee", w + "_attack"); Check(r == 0, w + " jump after " + after + " starts a fresh chain (" + r + ")");
             }
-            s = new Sim(); s.SkillCast("S"); s.SkillEnd(); s.Takeoff(); Check(s.Click(false, "melee", w) == -2, w + " jump right after skill rejected");
-            s.Land(); Check(s.Click(false, "melee", w) == 0, w + " land after skill starts strike 1");
-            // heavy attack airborne is not NACC
-            s = new Sim(); s.Takeoff(); Check(s.Click(true, "melee", w) == -3, w + " heavy attack unaffected by airborne gate");
+            // jump after the finisher: lockout still applies (reset cannot skip recovery)
+            s = new Sim(); got = new List<int>(); Hits(s, 5, w, got); s.Jump(); Check(s.Click(false, "melee", w + "_attack") == -1, w + " jump does not skip finisher lockout");
+            // damage resets continuation
+            s = new Sim(); got = new List<int>(); Hits(s, 3, w, got); s.Damage(); Check(s.Click(false, "melee", w + "_attack") == 0, w + " damage resets the chain");
+            // timeout: 0.69 s continues, 0.71 s resets
+            s = new Sim(); got = new List<int>(); Hits(s, 1, w, got); s.Tick(0.59); Check(s.Click(false, "melee", w + "_attack") == 1, w + " inside 0.7 s window continues");
+            s = new Sim(); got = new List<int>(); Hits(s, 1, w, got); s.Tick(0.62); Check(s.Click(false, "melee", w + "_attack") == 0, w + " after 0.7 s window resets");
+            // slow swing: the window starts when the swing finished, not when it started
+            s = new Sim(); s.Click(false, "melee", w + "_attack"); s.Tick(1.4); s.StopSwing(); s.Tick(0.5); Check(s.Click(false, "melee", w + "_attack") == 1, w + " slow swing keeps its full window");
+            // no endless chain: 20 clicks in a row (with jumps) never exceed strike 5 without a lockout
+            s = new Sim(); int maxHit = -1;
+            for (int i = 0; i < 20; i++) { if (i % 7 == 3) s.Jump(); else if (i % 7 == 5) s.Land(); int r = s.Click(false, "melee", w + "_attack"); if (r >= 0) maxHit = Math.Max(maxHit, s.ComboHit); s.Tick(0.3); s.StopSwing(); s.Tick(0.1); }
+            Check(maxHit <= 4, w + " no endless chain");
+            // heavy attack airborne still not NACC, still breaks the chain
+            s = new Sim(); s.Jump(); Check(s.Click(true, "melee", w) == -3, w + " heavy attack unaffected");
+            s = new Sim(); s.SkillCast("S"); s.SkillEnd(); s.Jump(); Check(s.Click(false, "melee", w) == 0, w + " airborne NACC right after a skill starts at strike 1");
         }
         // v0.25.155: tune routine activation token + requested-swing validation
         {

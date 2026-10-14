@@ -41,7 +41,7 @@ namespace AlbedosCustomClasses
     {
         public const string ModGuid = "albedo.customclasses";
         public const string ModName = "Aethelborn Ascended - Altar";
-        public const string ModVersion = "0.25.168";
+        public const string ModVersion = "0.25.169";
 
         internal const string ClassDataKey = "AlbedoCustomClasses.Class";
         internal const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -83,6 +83,15 @@ namespace AlbedosCustomClasses
         private Text _advDetailRole;
         private Text _advDetailBody;
         private Text _chooseBaseButtonText;
+        // v0.25.169 Altar selection states + in-Altar prompt (MessageHud is hidden behind the Altar)
+        private Button _chooseBaseButton, _viewAdvButton;
+        private Text _viewAdvButtonText;
+        private GameObject _altarPrompt;
+        private Text _altarPromptText;
+        private float _altarPromptUntil;
+        private static Plugin _altarInstance;
+        // Advanced registers this: (player, advancement or null) -> null when ready, else the unmet requirements (one per line).
+        public static Func<Player, string, string> AdvanceRequirementProvider;
         private Text _chooseAdvButtonText;
         private Text _confirmationText;
         private Button _chooseAdvButton;
@@ -97,6 +106,7 @@ namespace AlbedosCustomClasses
 
         private void Awake()
         {
+            _altarInstance = this;   // v0.25.169 Altar prompt
             Instance = this;
 
             _stoneCost = Config.Bind("Shrine", "StoneCost", 10, "Stone needed to build the shrine.");
@@ -1037,8 +1047,10 @@ namespace AlbedosCustomClasses
             _baseDetailRole = CreateWrappedText(_baseClassPage.transform, "", new Vector2(215f, 203f), 500f, 20f, 14, AltarGold, false, TextAnchor.MiddleCenter);
             BuildAltarSkillDetails(_baseClassPage.transform, false);
             Button choose = AltarButton(_baseClassPage.transform, "Choose Warrior", new Vector2(80f, -352f), new Vector2(248f, 56f), RequestBaseClassConfirmation);
+            _chooseBaseButton = choose;
             _chooseBaseButtonText = choose.GetComponentInChildren<Text>();
-            AltarButton(_baseClassPage.transform, "View Advancements", new Vector2(345f, -352f), new Vector2(258f, 56f), OpenFocusedAdvancements);
+            _viewAdvButton = AltarButton(_baseClassPage.transform, "View Advancements", new Vector2(345f, -352f), new Vector2(258f, 56f), OpenFocusedAdvancements);
+            _viewAdvButtonText = _viewAdvButton.GetComponentInChildren<Text>();
         }
 
         private void AltarClassCard(Transform parent, string name, string role, float y, bool advancement)
@@ -1195,6 +1207,9 @@ namespace AlbedosCustomClasses
 
         private void FocusBaseClass(string className)
         {
+            // v0.25.169 (user): once a Base Class is chosen the other cards are locked (switching = the existing class reset)
+            string owned = Player.m_localPlayer == null ? string.Empty : GetSelectedClass(Player.m_localPlayer);
+            if (!string.IsNullOrEmpty(owned) && className != owned) { ShowAltarPrompt("You are a " + owned + ".\nReset your class to choose another Base Class."); className = owned; }
             _focusedBaseClass = className;
             if (_altarBaseScroll != null) _altarBaseScroll.verticalNormalizedPosition = 1f;
             UpdateBaseClassDetail();
@@ -1228,10 +1243,43 @@ namespace AlbedosCustomClasses
             RefreshAltarSkillFooter(_focusedBaseClass, false);
             if (_chooseBaseButtonText != null)
                 _chooseBaseButtonText.text = "Choose " + _focusedBaseClass;
+            RefreshBaseSelectionState();
+        }
+
+        // v0.25.169 (user): no class = "Choose X" + "View Advancements"; a chosen class = no Choose, one centred "Advance"
+        // button, the other Base Class cards greyed and locked.
+        private void RefreshBaseSelectionState()
+        {
+            string owned = Player.m_localPlayer == null ? string.Empty : GetSelectedClass(Player.m_localPlayer);
+            bool has = !string.IsNullOrEmpty(owned);
+            if (_chooseBaseButton != null) _chooseBaseButton.gameObject.SetActive(!has);
+            if (_viewAdvButton != null)
+            {
+                RectTransform rt = _viewAdvButton.GetComponent<RectTransform>();
+                if (rt != null) rt.anchoredPosition = has ? new Vector2(215f, -352f) : new Vector2(345f, -352f);
+            }
+            if (_viewAdvButtonText != null) _viewAdvButtonText.text = has ? "Advance" : "View Advancements";
+            foreach (KeyValuePair<string, Image> card in _altarBaseCards)
+            {
+                if (card.Value == null) continue;
+                bool locked = has && card.Key != owned;
+                card.Value.color = locked ? new Color(0.42f, 0.42f, 0.42f, 1f) : Color.white;
+                Button b = card.Value.GetComponent<Button>();
+                if (b != null) b.interactable = !locked;
+            }
         }
 
         private void OpenFocusedAdvancements()
         {
+            // v0.25.169: with a chosen class this is the "Advance" button - unmet requirements are spelled out on the Altar
+            Player ap = Player.m_localPlayer;
+            string owned = ap == null ? string.Empty : GetSelectedClass(ap);
+            if (!string.IsNullOrEmpty(owned))
+            {
+                _focusedBaseClass = owned;
+                string missing = AdvanceRequirementProvider == null ? null : SafeRequirement(ap, null);
+                if (!string.IsNullOrEmpty(missing)) ShowAltarPrompt("Not ready to Advance:\n" + missing);
+            }
             _advancementParent = _focusedBaseClass;
             _focusedAdvancement = GetFirstAdvancement(_advancementParent);
             ShowAdvancementPage();
@@ -1247,6 +1295,8 @@ namespace AlbedosCustomClasses
                 _baseClassPage.SetActive(true);
             if (_advancementPage != null)
                 _advancementPage.SetActive(false);
+            string ownedClass = Player.m_localPlayer == null ? string.Empty : GetSelectedClass(Player.m_localPlayer);
+            if (!string.IsNullOrEmpty(ownedClass)) _focusedBaseClass = ownedClass;   // v0.25.169 a chosen class opens on its own card
             UpdateBaseClassDetail();
         }
 
@@ -1334,7 +1384,13 @@ namespace AlbedosCustomClasses
 
             if (GetSelectedClass(player) != _advancementParent)
             {
-                ShowCenterMessage("Choose " + _advancementParent + " as your Base Class first.");
+                ShowAltarPrompt("Choose " + _advancementParent + " as your Base Class first.");
+                return;
+            }
+            string notReady = SafeRequirement(player, _focusedAdvancement);
+            if (!string.IsNullOrEmpty(notReady) && string.IsNullOrEmpty(GetSelectedAdvancement(player)))
+            {
+                ShowAltarPrompt("Not ready to Advance to " + AcDisplay(_focusedAdvancement) + ":\n" + notReady);
                 return;
             }
 
@@ -1607,14 +1663,14 @@ namespace AlbedosCustomClasses
             string selectedClass = GetSelectedClass(player);
             if (selectedClass != requiredClass)
             {
-                ShowCenterMessage("Choose " + requiredClass + " first.");
+                ShowAltarPrompt("Choose " + requiredClass + " first.");
                 return;
             }
 
             string existing = GetSelectedAdvancement(player);
             if (!string.IsNullOrEmpty(existing) && !_allowAdvancementChange.Value)
             {
-                ShowCenterMessage("Your advancement is already " + existing + ".");
+                ShowAltarPrompt("Your Advancement is already " + AcDisplay(existing) + ".");
                 ShowAdvancementPage();
                 return;
             }
@@ -1622,7 +1678,7 @@ namespace AlbedosCustomClasses
             if (!SetSelectedAdvancement(player, advancementName))
             {
                 Logger.LogError("Could not save advancement selection to player custom data.");
-                ShowCenterMessage("Could not save advancement selection.");
+                ShowAltarPrompt("Could not save the Advancement selection.");
                 return;
             }
 
@@ -1808,6 +1864,54 @@ namespace AlbedosCustomClasses
             {
                 return null;
             }
+        }
+
+        private static string SafeRequirement(Player p, string advancement)
+        {
+            try { return AdvanceRequirementProvider == null ? null : AdvanceRequirementProvider(p, advancement); }
+            catch (Exception) { return null; }
+        }
+
+        // v0.25.169 readable prompt ABOVE the Altar menu for Altar failures (the vanilla centre message is hidden by the Altar).
+        // Falls back to the vanilla message when the Altar is not open. Click it or wait 6 s to close it.
+        public static void ShowAltarPrompt(string message)
+        {
+            Plugin inst = _altarInstance;
+            if (inst == null || inst._baseClassPage == null || !inst._baseClassPage.transform.parent.gameObject.activeInHierarchy) { ShowCenterMessage(message.Replace("\n", " ")); return; }
+            try { inst.ShowAltarPromptNow(message); }
+            catch (Exception) { ShowCenterMessage(message.Replace("\n", " ")); }
+        }
+
+        private void ShowAltarPromptNow(string message)
+        {
+            if (_altarPrompt == null)
+            {
+                Transform root = _baseClassPage.transform.parent;
+                Image bg = AltarImage("AltarPrompt", root, new Vector2(0f, 300f), new Vector2(720f, 118f), null, new Color(0.07f, 0.05f, 0.04f, 0.94f), true);
+                Outline edge = bg.gameObject.AddComponent<Outline>();
+                edge.effectColor = new Color(0.86f, 0.66f, 0.30f, 1f);
+                edge.effectDistance = new Vector2(2f, -2f);
+                Button close = bg.gameObject.AddComponent<Button>();
+                close.targetGraphic = bg;
+                close.onClick.AddListener(delegate { if (_altarPrompt != null) _altarPrompt.SetActive(false); });
+                _altarPromptText = CreateWrappedText(bg.transform, "", Vector2.zero, 690f, 108f, 19, new Color(0.98f, 0.90f, 0.72f, 1f), true, TextAnchor.MiddleCenter);
+                _altarPromptText.verticalOverflow = VerticalWrapMode.Overflow;
+                Shadow sh = _altarPromptText.gameObject.AddComponent<Shadow>();
+                sh.effectColor = new Color(0f, 0f, 0f, 0.9f);
+                sh.effectDistance = new Vector2(1.5f, -1.5f);
+                _altarPrompt = bg.gameObject;
+            }
+            _altarPromptText.text = message;
+            _altarPrompt.SetActive(true);
+            _altarPrompt.transform.SetAsLastSibling();
+            _altarPromptUntil = Time.unscaledTime + 6f;
+            StartCoroutine(HideAltarPromptLater());
+        }
+
+        private IEnumerator HideAltarPromptLater()
+        {
+            while (_altarPrompt != null && _altarPrompt.activeSelf && Time.unscaledTime < _altarPromptUntil) yield return null;
+            if (_altarPrompt != null && Time.unscaledTime >= _altarPromptUntil) _altarPrompt.SetActive(false);
         }
 
         private static void ShowCenterMessage(string message)

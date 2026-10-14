@@ -1,0 +1,12 @@
+v0.25.169 Arms and Altar - test results
+COMPILATION / MODEL (done here):
+- mcs --parse -langversion:5 on every edited .cs: OK
+- tools/compile_check/check.sh 3029660: PASSED (0 new signatures; includes Core)
+- tools/tests/nacc_handoff (logic model, no Unity): ALL PASS - five-hit order, finisher lockout, skill handoff, plus new:
+  bumps between swings keep the chain, airborne start -> landing continues to the finisher, jump after strikes 1-4 starts
+  a fresh chain, jump never skips finisher lockout, damage resets, 0.6 s continues / 0.72 s resets, slow swing keeps its
+  window, 20 clicks with jumps never exceed strike 5.
+- Cape cause: video frames analysed (docs/previews/CAPE_v0.25.168_video_frames.png); MagicaCloth2 culling/inertia concepts
+  confirmed from the vendor documentation (search); exact field names resolved by reflection at runtime (log line).
+NOT TESTED IN VALHEIM (needs your run): cape over repeated Bonecrusher casts, NACC on real terrain / jumps / damage /
+timeout, equip rules (incl. Therzie items), utility axe damage, Altar buttons + prompt, new dirt / gravity VFX.

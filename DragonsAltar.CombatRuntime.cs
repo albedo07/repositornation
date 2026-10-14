@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.168";
+        public const string ModVersion = "0.25.169";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1120,19 +1120,44 @@ namespace DragonsAltarCombat
             catch (Exception) { return false; }
         }
 
-        // Takeoff: the interrupted chain is forgotten (landing starts at strike one) and the queued primary click is dropped.
-        // Finisher lockouts are kept. Runs for every takeoff, jump skills included - it only touches NACC state.
-        private static bool _wasAirborne;
+        // v0.25.169 NACC CONTINUATION RULES (user), checked every frame for the local player:
+        //  - ground contact is irrelevant: losing it (rocks, slopes, steps, real airtime) never resets the chain; an airborne
+        //    chain carries on after landing while its window is open;
+        //  - a deliberate jump (the vanilla "jump" trigger, see ComboTriggerPrefix) breaks the running chain: the next swing in
+        //    the air starts a fresh chain at strike one (the grounded chain is never carried into the jump);
+        //  - real damage taken (health went down) breaks continuation;
+        //  - timeout: no next primary within ComboContinueWindow (0.7 s) after the last swing FINISHED (Attack.Stop, i.e. after
+        //    its recovery - slow swings keep the whole window) resets the chain.
+        // None of these touch the finisher lockout (_comboLockUntil / _comboFinisher), so a reset can never skip finisher recovery.
+        private static float _naccLastHealth = -1f, _naccLastMax = -1f;
+        private static Player _naccHealthOwner;
         internal static void UpdateNaccAirborne(Player p)
         {
-            if (p == null) { _wasAirborne = false; return; }
-            bool air = IsAirborne(p);
-            if (air && !_wasAirborne)
+            if (p == null) { _naccHealthOwner = null; _naccLastHealth = -1f; return; }
+            try
             {
-                ResetNaccChain(p);
-                DragonCombat.ClearQueuedPrimary(p);
+                float hp = p.GetHealth(), max = p.GetMaxHealth();
+                if (p != _naccHealthOwner) { _naccHealthOwner = p; _naccLastHealth = hp; _naccLastMax = max; }
+                // took damage: health fell while max health did not (a food running out clamps health - not damage)
+                if (_naccLastHealth >= 0f && hp < _naccLastHealth - 0.01f && max >= _naccLastMax - 0.01f && _comboHit >= 0) ResetNaccChain(p);
+                _naccLastHealth = hp; _naccLastMax = max;
             }
-            _wasAirborne = air;
+            catch (Exception) { }
+            if (_comboHit >= 0 && _comboLastEnd > 0f && Instance != null && Time.time - _comboLastEnd > Mathf.Max(0.05f, Instance.ComboContinueWindow.Value))
+                ResetNaccChain(p);   // window closed without a next primary
+        }
+
+        // v0.25.169: the vanilla jump fires the "jump" trigger on the local player's ZSyncAnimation -> break the chain.
+        private static void NaccJumpSeen(object zanim)
+        {
+            try
+            {
+                Component c = zanim as Component;
+                Player p = c == null ? null : c.GetComponent<Player>();
+                if (p == null || p != Player.m_localPlayer) return;
+                if (_comboHit >= 0 || _comboLastEnd > 0f) ResetNaccChain(p);
+            }
+            catch (Exception) { }
         }
         private static FieldInfo _atkHitPoint;
 
@@ -1165,7 +1190,7 @@ namespace DragonsAltarCombat
             ComboBlend = Config.Bind("Combat", "ComboBlendSeconds_v02559", 0.12f, "Cross-fade time between chained swings.");
             ComboFixedInterval = Config.Bind("Combat", "ComboFixedInterval_v02565", false, "On = every weapon's chain uses ComboSwingSeconds per hit (all weapons equally fast). Off = each weapon keeps its own speed (its average swing), with even intervals inside the chain; attack speed bonuses multiply it.");
             MeleeHitStop = Config.Bind("Combat", "MeleeHitStop_v02559", false, "Valheim's hit-stop (the swing freezes 0.15 s on every hit) for YOUR melee hits. Off = swings flow through enemies without stopping.");
-            ComboContinueWindow = Config.Bind("Combat", "ComboContinueWindow_v02544", 0.4f, "Seconds after a swing ends in which the next normal attack continues the chain (1-2-1-2-3) instead of starting over.");
+            ComboContinueWindow = Config.Bind("Combat", "ComboContinueWindow_v025169", 0.7f, "Seconds after a swing has FINISHED (Attack.Stop, i.e. after its recovery) in which the next normal attack continues the chain (1-2-1-2-3). Clicks during a swing queue and always continue. No click in time = the chain resets.");
             WhirlwindLoopStart = Config.Bind("Runtime", "WhirlwindLoopStart_v02542", 0.3f, "Whirlwind: where the looped spin restarts in Valheim's atgeir spin (0-1 of the animation).");
             WhirlwindLoopEnd = Config.Bind("Runtime", "WhirlwindLoopEnd_v02542", 0.72f, "Whirlwind: where the looped spin jumps back (0-1 of the animation).");
             ComboFields();
@@ -1272,7 +1297,7 @@ namespace DragonsAltarCombat
             if (p == null || DragonCombat.GetAdvancementName(p) != "Mercenary") return false;
             ItemDrop.ItemData l = DragonCombat.GetHandItem(p, "m_leftItem");
             ItemDrop.ItemData r = DragonCombat.GetHandItem(p, "m_rightItem");
-            return l != null && r != null && l != r && DragonCombat.IsOneHandedWeapon(l) && DragonCombat.IsOneHandedWeapon(r);
+            return DragonCombat.IsMatchingDualPair(l, r);   // v0.25.169 exact same prefab, no Spears / War Pikes
         }
 
         // v0.25.44 (user: "1st > 2nd > 1st > 2nd > 3rd"): our own chain counter picks the swing of every hit
@@ -1599,16 +1624,8 @@ namespace DragonsAltarCombat
             if (__instance == null || __instance != Player.m_localPlayer) return true;
             // v0.25.55: no normal attack while a skill holds the player (no attack sneaking out of a skill).
             if (DragonCombat.IsSkillLocked((Player)__instance)) { __result = false; return false; }
-            // v0.25.154: no airborne NACC. Rejected here, before any combo state moves or a trigger fires, and the
-            // attack is NOT handed to vanilla (return false). Heavy attacks and non-NACC weapons are untouched.
+            // v0.25.169 (user): NACC may start and continue in the air (the v0.25.154 airborne rejection is gone).
             Player lp = (Player)__instance;
-            if (IsAirborne(lp) && IsNaccPrimaryRequest(lp, __args))
-            {
-                ResetNaccChain(lp);
-                DragonCombat.ClearQueuedPrimary(lp);
-                __result = false;
-                return false;
-            }
             if (Time.time < _comboLockUntil) { __result = false; return false; }
             // v0.25.158: a 2HDW primary request is only accepted when its SBDW controller is valid (repaired if needed) - checked here,
             // before Attack.Start spends stamina or advances the combo. Not while a swing runs (never swap controllers mid-swing).
@@ -1779,6 +1796,7 @@ namespace DragonsAltarCombat
         private static bool ComboTriggerPrefix(object __instance, ref string __0)
         {
             _stDepth++; // v0.25.162: SetTrigger call depth (RouteSetTriggerPostfix decrements)
+            if (__0 == "jump") NaccJumpSeen(__instance);   // v0.25.169 deliberate jump breaks the chain
             if (!_comboInStart || string.IsNullOrEmpty(__0) || string.IsNullOrEmpty(_comboBase)) return true;
             try
             {
@@ -2216,6 +2234,8 @@ namespace DragonsAltarCombat
             {
                 ItemDrop.ItemData mainHand = DragonCombat.GetHandItem(__instance, "m_rightItem");
                 ItemDrop.ItemData offHand = DragonCombat.GetHandItem(__instance, "m_leftItem");
+                // v0.25.169 (user): a shield switches off the sword-only part of The Way of the Sword
+                if (advancement == "Sword Master" && (DragonCombat.IsShield(mainHand) || DragonCombat.IsShield(offHand))) return;
                 __result -= WeaponMasteryExemptPenalty(mainHand, advancement);
                 if (offHand != mainHand)
                     __result -= WeaponMasteryExemptPenalty(offHand, advancement);
@@ -2349,6 +2369,15 @@ namespace DragonsAltarCombat
                 return false;
             }
 
+            // v0.25.169 class weapon restrictions (combat equipment only; tools always pass)
+            string ruleWhy = DragonCombat.WeaponRuleViolation(player, item);
+            if (ruleWhy != null)
+            {
+                __result = false;
+                if (MessageHud.instance != null) MessageHud.instance.ShowMessage(MessageHud.MessageType.Center, ruleWhy);
+                return false;
+            }
+
             string advancement = DragonCombat.GetAdvancementName(player);
             ItemDrop.ItemData left = DragonCombat.GetHandItem(player, "m_leftItem");
             ItemDrop.ItemData right = DragonCombat.GetHandItem(player, "m_rightItem");
@@ -2357,9 +2386,10 @@ namespace DragonsAltarCombat
             {
                 ItemDrop.ItemData existingWeapon = null;
 
-                if (DragonCombat.IsOneHandedWeapon(right) && !DragonCombat.IsGunStaff(right) && right != item)
+                // v0.25.169 (user): only the exact same prefab pairs up (Bronze Axe + Bronze Axe); anything else equips normally
+                if (DragonCombat.IsMatchingDualPair(right, item))
                     existingWeapon = right;
-                else if (DragonCombat.IsOneHandedWeapon(left) && !DragonCombat.IsGunStaff(left) && left != item)
+                else if (DragonCombat.IsMatchingDualPair(left, item))
                     existingWeapon = left;
 
                 if (existingWeapon != null)
@@ -9082,6 +9112,118 @@ namespace DragonsAltarCombat
             return GetAdvancementName(player) != "Mercenary";
         }
 
+        // ------------------------------------------------------------------ v0.25.169 WEAPON RESTRICTIONS (user)
+        // Applied to real equip actions (Humanoid.EquipItem prefix) and re-checked every 0.5 s (class changes): a prohibited
+        // item is unequipped into the inventory (never dropped or deleted). Only COMBAT equipment is judged - tools (hammer,
+        // hoe, cultivator, fishing rod), torches, pickaxes and anything that is not a weapon or shield always pass.
+        //   Warrior / Mercenary : no daggers, fist weapons or ranged / magic weapons (combat axes allowed, modded too).
+        //   Sword Master        : Swords only (+ shields, + the utility axe).
+        //   Cleric / Paladin / Priest : Staves, Wands, Maces/Clubs only (+ shields, + the utility axe).
+        //   Sorcerer + ACs, Ranger + ACs : no melee except ONE dagger (no paired daggers); their ranged / shield rules stay
+        //                         in their own modules (Warlock / Wildborn); + the utility axe.
+        //   Utility axe: classes barred from combat axes may hold a GENUINE VANILLA one-handed chopping axe (prefab whitelist,
+        //   so a modded axe - Therzie's included - is never mistaken for one); it chops trees but deals no damage to creatures.
+        //   Mercenary dual wield: the exact same prefab in both hands (quality may differ), never Spears / War Pikes.
+        //   Kali (future, NOT built): melee = daggers + fist weapons, dual daggers from the Base Class, ranged = bows only with
+        //   no arrows consumed and no extra bow bonuses, same utility-axe exception.
+        private static readonly HashSet<string> VanillaChoppingAxes = new HashSet<string>(StringComparer.Ordinal)
+            { "AxeStone", "AxeFlint", "AxeBronze", "AxeIron", "AxeBlackMetal", "AxeJotunBane" };
+
+        public static string PrefabName(ItemDrop.ItemData item)
+        {
+            if (item == null) return "";
+            try { if (item.m_dropPrefab != null) return item.m_dropPrefab.name; } catch (Exception) { }
+            return "";
+        }
+
+        // "" = not combat equipment (never restricted)
+        public static string CombatKind(ItemDrop.ItemData item)
+        {
+            if (item == null || item.m_shared == null) return "";
+            string it = item.m_shared.m_itemType.ToString();
+            if (it == "Shield") return "shield";
+            if (it == "Torch" || it == "Tool" || it == "Utility" || it == "Misc" || it == "Ammo" || it == "AmmoNonEquipable" || it == "Consumable" || it == "Material" || it == "Trophy" || it == "Fish") return "";
+            if (it.IndexOf("Weapon", StringComparison.OrdinalIgnoreCase) < 0 && it != "Bow") return "";
+            switch (item.m_shared.m_skillType.ToString())
+            {
+                case "Swords": return "sword";
+                case "Knives": return "dagger";
+                case "Clubs": return "club";
+                case "Polearms": return "polearm";
+                case "Spears": return "spear";
+                case "Axes": return "axe";
+                case "Unarmed": return "fist";
+                case "Bows": return "bow";
+                case "Crossbows": return "crossbow";
+                case "ElementalMagic": case "BloodMagic": return "magic";
+            }
+            return "";   // pickaxes, fishing, unknown skills: tools
+        }
+
+        public static bool IsVanillaChoppingAxe(ItemDrop.ItemData item)
+        {
+            return item != null && item.m_shared != null && item.m_shared.m_skillType == Skills.SkillType.Axes &&
+                   IsOneHandedWeapon(item) && VanillaChoppingAxes.Contains(PrefabName(item));
+        }
+
+        private static bool BarredFromCombatAxes(Player p)
+        {
+            string cls = GetClass(p), adv = GetAdvancementName(p);
+            if (cls == "Warrior") return adv == "Sword Master";
+            return cls == "Cleric" || cls == "Sorcerer" || cls == "Ranger" || cls == "Kali";
+        }
+
+        // the axe is held only as a chopping tool: it must never hurt a creature
+        public static bool IsUtilityAxeOnly(Player p, ItemDrop.ItemData item)
+        {
+            return p != null && CombatKind(item) == "axe" && BarredFromCombatAxes(p) && IsVanillaChoppingAxe(item);
+        }
+
+        // null = allowed, otherwise the readable reason
+        public static string WeaponRuleViolation(Player p, ItemDrop.ItemData item)
+        {
+            if (p == null || item == null) return null;
+            string kind = CombatKind(item);
+            if (kind == "" || kind == "shield") return null;   // shields: per-class modules (Sorcerer / Ranger unequip theirs)
+            string cls = GetClass(p), adv = GetAdvancementName(p);
+            if (string.IsNullOrEmpty(cls)) return null;
+            if (kind == "axe" && BarredFromCombatAxes(p))
+                return IsVanillaChoppingAxe(item) ? null : "Only a plain vanilla axe can be carried as a woodcutting tool";
+            if (cls == "Warrior")
+            {
+                if (adv == "Sword Master") return kind == "sword" ? null : "A Sword Master fights with Swords only";
+                if (kind == "dagger" || kind == "fist") return "Warriors do not fight with daggers or fist weapons";
+                if (kind == "bow" || kind == "crossbow" || kind == "magic") return "Warriors do not use ranged weapons";
+                return null;
+            }
+            if (cls == "Cleric")
+                return kind == "magic" || kind == "club" ? null : "Clerics fight with Staves, Wands and Maces only";
+            if (cls == "Sorcerer" || cls == "Ranger")
+            {
+                bool melee = kind == "sword" || kind == "club" || kind == "polearm" || kind == "spear" || kind == "fist" || kind == "axe";
+                if (melee) return (cls == "Sorcerer" ? "Sorcerers" : "Rangers") + " carry no melee weapon except a single dagger";
+                if (kind == "dagger" && IsPairedWeapon(item)) return "No dual daggers";
+                return null;
+            }
+            return null;
+        }
+
+        // Mercenary dual wield: same prefab both hands (quality may differ); never Spears / War Pikes; never Gun Staves.
+        public static bool IsDualEligible(ItemDrop.ItemData item)
+        {
+            if (!IsOneHandedWeapon(item) || IsGunStaff(item)) return false;
+            if (item.m_shared.m_skillType == Skills.SkillType.Spears || item.m_shared.m_skillType == Skills.SkillType.Polearms) return false;
+            string n = PrefabName(item) + " " + (item.m_shared.m_name ?? "");
+            return n.IndexOf("pike", StringComparison.OrdinalIgnoreCase) < 0;
+        }
+
+        public static bool IsMatchingDualPair(ItemDrop.ItemData a, ItemDrop.ItemData b)
+        {
+            if (a == null || b == null || a == b || !IsDualEligible(a) || !IsDualEligible(b)) return false;
+            string pa = PrefabName(a), pb = PrefabName(b);
+            return pa.Length > 0 && pa == pb;
+        }
+
         // v0.25.142 the vanilla swing triggers SBDW's Attack1-3 clips live on (3 swings). null = not available.
         public static string PairedCarrier(Animator a)
         {
@@ -9538,6 +9680,12 @@ namespace DragonsAltarCombat
             }
 
             Player attacker = hit.GetAttacker() as Player;
+            // v0.25.169 utility axe (vanilla chopping axe held by a class barred from combat axes): no damage to creatures
+            if (attacker != null && ReadHitSkill(hit) == Skills.SkillType.Axes && IsUtilityAxeOnly(attacker, GetHandItem(attacker, "m_rightItem")))
+            {
+                hit.m_damage.Modify(0f);
+                hit.m_pushForce = 0f;
+            }
             // v0.25.11: split parts of a hit were already fully modified as the original hit.
             if (attacker != null && !SplitHitInFlight)
             {
@@ -9795,8 +9943,24 @@ namespace DragonsAltarCombat
                         MessageHud.instance.ShowMessage(MessageHud.MessageType.Center, "Only a Mercenary can dual wield");
                     return;
                 }
+                // v0.25.169 class weapon restrictions (e.g. after a class change): unequip into the inventory
+                ItemDrop.ItemData bad = WeaponRuleViolation(p, r) != null ? r : (WeaponRuleViolation(p, l) != null ? l : null);
+                if (bad != null)
+                {
+                    string why = WeaponRuleViolation(p, bad);
+                    p.UnequipItem(bad, true);
+                    if (MessageHud.instance != null) MessageHud.instance.ShowMessage(MessageHud.MessageType.Center, why);
+                    return;
+                }
                 if (l == null || r == null || l == r) return;
                 string adv = GetAdvancementName(p);
+                // a Mercenary's pair must be the exact same prefab (and never Spears / War Pikes)
+                if (adv == "Mercenary" && IsOneHandedWeapon(l) && IsOneHandedWeapon(r) && !IsGunStaff(l) && !IsGunStaff(r) && !IsMatchingDualPair(l, r))
+                {
+                    p.UnequipItem(l, true);
+                    if (MessageHud.instance != null) MessageHud.instance.ShowMessage(MessageHud.MessageType.Center, "Dual wield needs two of the same weapon");
+                    return;
+                }
                 bool dualMelee = IsOneHandedWeapon(l) && IsOneHandedWeapon(r) && !IsGunStaff(l);
                 bool dualGun = IsGunStaff(l) && IsGunStaff(r);   // v0.25.145: nobody dual wields Gun Staves (Horizon Walker mechanic removed)
                 if ((dualMelee && adv != "Mercenary") || dualGun)
@@ -12034,7 +12198,9 @@ namespace DragonsAltarCombat
         public bool Stopped;
         public Color BoltCore, BoltGlow;
         public Func<bool> Keep;
-        private bool _hadFollow;
+        public bool SnapGround;            // v0.25.169 follow the ground under Follow (dirt / dust emitters)
+        public float GroundMaxHeight = 3.5f;
+        private bool _hadFollow, _groundOn = true;
 
         private void Update()
         {
@@ -12046,7 +12212,22 @@ namespace DragonsAltarCombat
                 if (on) { Life = Age + 1.2f; StopEmitAt = -1f; }
                 else { Keep = null; StopEmitAt = Age; Life = Age + 1.2f; }
             }
-            if (Follow != null) { _hadFollow = true; transform.position = Follow.position + FollowOffset; }
+            if (Follow != null)
+            {
+                _hadFollow = true;
+                transform.position = Follow.position + FollowOffset;
+                if (SnapGround)
+                {
+                    Vector3 g = DragonVfx.GroundPoint(Follow.position);
+                    bool on = Follow.position.y - g.y <= GroundMaxHeight;
+                    transform.position = g + Vector3.up * 0.08f;
+                    if (on != _groundOn && Systems != null)
+                    {
+                        _groundOn = on;
+                        for (int i = 0; i < Systems.Length; i++) if (Systems[i] != null) { ParticleSystem.EmissionModule em = Systems[i].emission; em.enabled = on; }
+                    }
+                }
+            }
             else if (_hadFollow)
             {
                 // v0.25.61: the thing it followed is gone (tornado, orb) - stop emitting and fade out
@@ -13421,6 +13602,101 @@ namespace DragonsAltarCombat
             l.StopEmitAt = seconds;
             l.Systems = new ParticleSystem[] { mist };
             Debris(center, new Color(0.75f, 0.92f, 1f, 1f), Mathf.RoundToInt(4 + radius), 4f, 0.12f, 1.6f);   // a few ice shards skitter out
+        }
+
+        // v0.25.169 (user): something ploughing along / dragging over the ground leaves disturbed dirt behind it: small dark
+        // grit flicked up and back, low rolling dust, the odd irregular pebble. Loops while keep() is true; follows the
+        // ground under `follow` (stops emitting when it is more than 3.5 m above the ground). Restrained, alpha only.
+        public static GameObject GroundDust(Transform follow, float width, Func<bool> keep)
+        {
+            if (!Enabled || follow == null) return null;
+            width = Mathf.Clamp(width, 0.4f, 6f);
+            DragonVfxLife l = Host(follow.position, 2f, "grounddust");
+            l.Follow = follow;
+            l.SnapGround = true;
+            Color soil = new Color(0.35f, 0.29f, 0.23f, 0.8f);
+            ParticleSystem grit = Particles(l.transform, soil, 0, 22f + width * 6f, 1f, 0.8f, 1.2f, 3f, 0.04f, 0.1f, 1.4f,
+                ParticleSystemShapeType.Circle, width * 0.45f, new Vector3(90f, 0f, 0f), false, false);
+            ParticleSystem.ShapeModule gs = grit.shape; gs.arc = 360f;
+            ParticleSystem dust = Particles(l.transform, new Color(0.52f, 0.46f, 0.39f, 0.32f), 0, 5f + width * 1.5f, 1f, 1.6f, 0.2f, 0.7f, 0.6f + width * 0.15f, 1.2f + width * 0.25f, -0.02f,
+                ParticleSystemShapeType.Circle, width * 0.4f, new Vector3(90f, 0f, 0f), false, false);
+            Material sm = Mat(SmokeTex(), false);
+            if (sm != null) dust.GetComponent<ParticleSystemRenderer>().sharedMaterial = sm;
+            ParticleSystem.MainModule dm = dust.main; dm.startRotation = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
+            ParticleSystem[] ps = new ParticleSystem[] { grit, dust };
+            for (int i = 0; i < ps.Length; i++) { ParticleSystem.MainModule m = ps[i].main; m.loop = true; }
+            l.Systems = ps;
+            l.Keep = keep;
+            return l.gameObject;
+        }
+
+        // v0.25.169 (user): gravity skills (Gravity Dominion, Gravity Blast) - restrained air distortion and things drawn in:
+        // faint shrinking air ripples around the core, thin pale streaks pulled toward it and loose dirt on the ground
+        // underneath crawling inward. No glow; follows `follow` if given (moving orb), else stays at pos.
+        public static GameObject GravityWell(Transform follow, Vector3 pos, float radius, float seconds)
+        {
+            if (!Enabled) return null;
+            radius = Mathf.Clamp(radius, 1f, 20f);
+            seconds = Mathf.Max(0.3f, seconds);
+            // air: contracting ripples + inward streaks
+            DragonVfxLife air = Host(follow != null ? follow.position : pos, seconds + 1.5f, "gravityair");
+            air.Follow = follow;
+            ParticleSystem ripples = Particles(air.transform, new Color(0.82f, 0.80f, 0.88f, 0.14f), 1, 1.6f, seconds, 1.2f, 0f, 0f, radius * 1.6f, radius * 2f, 0f,
+                ParticleSystemShapeType.Sphere, 0.05f, Vector3.zero, false, false);
+            Material rm = Mat(RingTex(), false);
+            if (rm != null) ripples.GetComponent<ParticleSystemRenderer>().sharedMaterial = rm;
+            ParticleSystem.SizeOverLifetimeModule rs = ripples.sizeOverLifetime;
+            rs.size = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(new Keyframe(0f, 1f), new Keyframe(1f, 0.15f)));
+            float life = 0.9f;
+            ParticleSystem streaks = Particles(air.transform, new Color(0.80f, 0.78f, 0.86f, 0.3f), 0, 18f + radius * 3f, seconds, life, -radius / life * 1.05f, -radius / life * 0.8f, 0.03f, 0.06f, 0f,
+                ParticleSystemShapeType.Sphere, radius, Vector3.zero, true, false);
+            ParticleSystem.ShapeModule ss = streaks.shape; ss.radiusThickness = 0.05f;
+            Material sm = Mat(StreakTex(), false);
+            if (sm != null) streaks.GetComponent<ParticleSystemRenderer>().sharedMaterial = sm;
+            air.StopEmitAt = seconds;
+            air.Systems = new ParticleSystem[] { ripples, streaks };
+            // ground: loose dirt and dust crawling toward the point under the core
+            DragonVfxLife dirt = Host(GroundPoint(follow != null ? follow.position : pos), seconds + 1.5f, "gravitydirt");
+            dirt.Follow = follow;
+            dirt.SnapGround = true;
+            dirt.GroundMaxHeight = Mathf.Max(3f, radius);
+            if (follow == null) dirt.transform.position = GroundPoint(pos) + Vector3.up * 0.08f;
+            float dl = 1.3f;
+            ParticleSystem specks = Particles(dirt.transform, new Color(0.34f, 0.28f, 0.22f, 0.85f), 0, 26f + radius * 4f, seconds, dl, -radius / dl * 0.95f, -radius / dl * 0.7f, 0.04f, 0.09f, 0f,
+                ParticleSystemShapeType.Circle, radius, new Vector3(90f, 0f, 0f), false, false);
+            ParticleSystem.ShapeModule ds = specks.shape; ds.radiusThickness = 0.15f;
+            ParticleSystem haze = Particles(dirt.transform, new Color(0.50f, 0.45f, 0.38f, 0.22f), 0, 4f + radius * 0.6f, seconds, 2f, -radius / 2f * 0.8f, -radius / 2f * 0.5f, 0.8f, 1.5f, -0.01f,
+                ParticleSystemShapeType.Circle, radius, new Vector3(90f, 0f, 0f), false, false);
+            ParticleSystem.ShapeModule hs = haze.shape; hs.radiusThickness = 0.2f;
+            Material hm = Mat(SmokeTex(), false);
+            if (hm != null) haze.GetComponent<ParticleSystemRenderer>().sharedMaterial = hm;
+            dirt.StopEmitAt = seconds;
+            dirt.Systems = new ParticleSystem[] { specks, haze };
+            return air.gameObject;
+        }
+
+        // v0.25.169 (user): a big horizontal slash that meets the ground scores it: dark cracks along the arc it swept and a
+        // little dirt kicked up along the cut (Halfmoon Slash).
+        public static void SlashScar(Vector3 origin, Vector3 forward, float radius, float arcDeg, Color c)
+        {
+            if (!Enabled) return;
+            forward.y = 0f;
+            if (forward.sqrMagnitude < 0.001f) forward = Vector3.forward;
+            forward.Normalize();
+            int segs = Mathf.Clamp(Mathf.RoundToInt(arcDeg / 18f), 3, 10);
+            float r = Mathf.Max(1f, radius);
+            Vector3 prev = Vector3.zero;
+            for (int i = 0; i <= segs; i++)
+            {
+                float a = Mathf.Lerp(-arcDeg * 0.5f, arcDeg * 0.5f, (float)i / segs);
+                Vector3 p = origin + Quaternion.AngleAxis(a, Vector3.up) * forward * r * UnityEngine.Random.Range(0.92f, 1.04f);
+                if (i > 0)
+                {
+                    CrackLine(prev, p, c, Mathf.Clamp(r * 0.03f, 0.12f, 0.35f), 4f);
+                    if (i % 2 == 0) DirtBurst(p, Mathf.Clamp(r * 0.12f, 0.5f, 1.4f), 0.35f);
+                }
+                prev = p;
+            }
         }
 
         // v0.25.168: one ground eruption (chains, fissure points): the earth bursts up in a dirt column with chunks.
@@ -15896,50 +16172,93 @@ namespace DragonsAltarCombat
         }
     }
 
-    // v0.25.168 (user: Bonecrusher video - the cape folds through the body and is pulled to the front): Valheim capes are
-    // MagicaCloth2 components (VisEquipment.SetupCloth). Their inertia constraint keeps the cloth where it was in WORLD
-    // space when the character moves; our jump slams / Mixamo warps move the body far and fast (leap, fall, hips pinned,
-    // MovePosition travel, root rolls), so the cape lagged behind and was whipped over the shoulders and through the torso.
-    // While a skill animation drives the local player (Mixamo clip live, clip driver busy, or a skill-locked airborne
-    // move) the cape's inertia is anchored to the player and its world / local inertia damped, so it moves with the body
-    // like a worn cape; afterwards the original values are blended back. Cloth colliders, gravity, wind and the cape
-    // itself are untouched (never hidden). Pure reflection: no MagicaCloth reference, silently inactive if the API differs.
+    // v0.25.168 / v0.25.169 CAPE GUARD (user video, Bonecrusher): Valheim capes are MagicaCloth2 components
+    // (VisEquipment.SetupCloth). Frames of the video: the cape is NOT RENDERED at all while airborne and reappears at the
+    // landing stretched straight up, then whips down. Inertia alone cannot hide cloth: the cloth was culled - MagicaCloth's
+    // camera / distance culling paused the simulation ("Keep") while the cape renderer's bounds were stale (paused cloth
+    // never refreshes its bounds -> Unity frustum-culls the renderer -> the cloth stays "invisible" -> stays paused) and,
+    // on landing, it resumed from the takeoff pose. On top, world inertia drags the cloth through the fast scripted leap.
+    // While a skill animation drives the local player (Mixamo live, clip driver busy, skill-locked airborne):
+    //   - MagicaCloth camera culling Off + distance culling disabled (by name, reflection; restored afterwards),
+    //   - SkinnedMeshRenderer.updateWhenOffscreen on for the cape renderers (bounds always follow the bones),
+    //   - inertia anchored to the player, world/local inertia x0.1 (blended back over 0.4 s),
+    //   - if a cape renderer was still culled mid-skill, the cloth is reset once at the end (snaps onto the body
+    //     instead of whipping from where it was left). One log line per skill names what was found / seen.
+    // The cape is never hidden; colliders, gravity, wind, the CA, movement and the Rigidbody are untouched.
     public static class DragonClothGuard
     {
-        private class Saved { public Component Cloth; public object Inertia; public object Holder; public FieldInfo HolderField; public float World = -1f, Local = -1f; public Transform Anchor; public float AnchorInertia = -1f; }
+        private class Saved
+        {
+            public Component Cloth; public object Data; public object Inertia;
+            public float World = -1f, Local = -1f; public Transform Anchor; public float AnchorInertia = -1f;
+            public object Culling; public FieldInfo CullingField; public object CameraMode; public bool HadDistance; public bool DistanceUse;
+            public object DistanceSlider;
+            public List<SkinnedMeshRenderer> Skins = new List<SkinnedMeshRenderer>(); public List<bool> SkinOffscreen = new List<bool>();
+            public List<Renderer> Rends = new List<Renderer>();
+        }
         private static Type _clothType;
         private static bool _typeTried;
         private static PropertyInfo _serialize;
-        private static FieldInfo _inertiaField, _world, _local, _anchor, _anchorInertia;
-        private static MethodInfo _paramChange;
+        private static FieldInfo _inertiaField, _world, _local, _anchor, _anchorInertia, _cullingField, _cameraMode, _distanceLen, _sliderUse;
+        private static MethodInfo _paramChange, _reset;
         private static readonly List<Saved> _saved = new List<Saved>();
         private static Player _owner;
         private static float _level, _nextScan;
+        private static bool _sawCull, _logged, _wasOn;
         private const float Damp = 0.1f;   // inertia kept while guarded (fraction of the cape's own values)
 
         private static bool Resolve()
         {
-            if (_typeTried) return _clothType != null && _serialize != null && _inertiaField != null;
+            if (_typeTried) return _clothType != null && _serialize != null;
             _typeTried = true;
             try
             {
                 _clothType = DragonCombat.FindTypeCached("MagicaCloth2.MagicaCloth");
                 if (_clothType == null) return false;
-                _serialize = _clothType.GetProperty("SerializeData", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                const BindingFlags F = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+                _serialize = _clothType.GetProperty("SerializeData", F);
                 _paramChange = _clothType.GetMethod("SetParameterChange", BindingFlags.Instance | BindingFlags.Public, null, Type.EmptyTypes, null);
+                MethodInfo[] ms = _clothType.GetMethods(BindingFlags.Instance | BindingFlags.Public);
+                for (int i = 0; i < ms.Length && _reset == null; i++)
+                {
+                    if (ms[i].Name != "ResetCloth") continue;
+                    ParameterInfo[] ps = ms[i].GetParameters();
+                    if (ps.Length == 0 || (ps.Length == 1 && ps[0].ParameterType == typeof(bool))) _reset = ms[i];
+                }
                 if (_serialize == null) return false;
-                _inertiaField = _serialize.PropertyType.GetField("inertiaConstraint", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (_inertiaField == null) return false;
-                Type it = _inertiaField.FieldType;
-                _world = FloatField(it, "worldInertia");
-                _local = FloatField(it, "localInertia");
-                _anchorInertia = FloatField(it, "anchorInertia");
-                _anchor = it.GetField("anchor", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (_anchor != null && _anchor.FieldType != typeof(Transform)) _anchor = null;
-                Debug.Log("[Aethelborn] Cape guard: MagicaCloth2 inertia " + (_world != null ? "world " : "") + (_local != null ? "local " : "") + (_anchor != null ? "anchor" : ""));
+                Type sd = _serialize.PropertyType;
+                _inertiaField = sd.GetField("inertiaConstraint", F);
+                if (_inertiaField != null)
+                {
+                    Type it = _inertiaField.FieldType;
+                    _world = FloatField(it, "worldInertia");
+                    _local = FloatField(it, "localInertia");
+                    _anchorInertia = FloatField(it, "anchorInertia");
+                    _anchor = it.GetField("anchor", F);
+                    if (_anchor != null && _anchor.FieldType != typeof(Transform)) _anchor = null;
+                }
+                FieldInfo[] sf = sd.GetFields(F);
+                for (int i = 0; i < sf.Length && _cullingField == null; i++)
+                    if (sf[i].Name.IndexOf("culling", StringComparison.OrdinalIgnoreCase) >= 0 && !sf[i].FieldType.IsPrimitive) _cullingField = sf[i];
+                if (_cullingField != null)
+                {
+                    FieldInfo[] cf = _cullingField.FieldType.GetFields(F);
+                    for (int i = 0; i < cf.Length; i++)
+                    {
+                        string n = cf[i].Name;
+                        if (_cameraMode == null && cf[i].FieldType.IsEnum && n.IndexOf("camera", StringComparison.OrdinalIgnoreCase) >= 0 && n.IndexOf("mode", StringComparison.OrdinalIgnoreCase) >= 0 && Enum.IsDefined(cf[i].FieldType, "Off")) _cameraMode = cf[i];
+                        if (_distanceLen == null && n.IndexOf("distance", StringComparison.OrdinalIgnoreCase) >= 0 && n.IndexOf("length", StringComparison.OrdinalIgnoreCase) >= 0 && !cf[i].FieldType.IsPrimitive)
+                        {
+                            FieldInfo use = cf[i].FieldType.GetField("use", F);
+                            if (use != null && use.FieldType == typeof(bool)) { _distanceLen = cf[i]; _sliderUse = use; }
+                        }
+                    }
+                }
+                Debug.Log("[Aethelborn] Cape guard: MagicaCloth2 found; inertia " + (_world != null ? "world " : "") + (_local != null ? "local " : "") + (_anchor != null ? "anchor " : "")
+                    + "| culling " + (_cameraMode != null ? "camera " : "") + (_distanceLen != null ? "distance " : "") + "| reset " + (_reset != null ? "yes" : "no"));
             }
             catch (Exception) { _clothType = null; }
-            return _clothType != null && _serialize != null && _inertiaField != null;
+            return _clothType != null && _serialize != null;
         }
 
         private static FieldInfo FloatField(Type t, string name)
@@ -15961,16 +16280,43 @@ namespace DragonsAltarCombat
             try
             {
                 bool on = Driven(p);
-                if (!on && _saved.Count == 0) { _level = 0f; return; }
+                if (!on && _saved.Count == 0) { _level = 0f; _wasOn = false; return; }
                 if (!Resolve()) return;
                 if (p != _owner) { Restore(); _owner = p; }
+                if (on && !_wasOn) { _sawCull = false; _logged = false; }
+                _wasOn = on;
                 if (on && (_saved.Count == 0 || Time.time >= _nextScan)) { Scan(p); _nextScan = Time.time + 1f; }
-                // in fast (0.08 s) so the cape is held before the leap, out slowly (0.4 s) so it settles without a snap
                 _level = on ? Mathf.Min(1f, _level + Time.deltaTime / 0.08f) : Mathf.Max(0f, _level - Time.deltaTime / 0.4f);
-                Apply(_level);
-                if (!on && _level <= 0f) Restore();
+                Apply(_level, on);
+                if (on) Watch(p);
+                if (!on && _level <= 0f) { if (_sawCull) ResetCloths(); Restore(); }
             }
             catch (Exception) { }
+        }
+
+        // a cape renderer that is not drawn while the player's own body is on screen = culled cloth
+        private static void Watch(Player p)
+        {
+            if (_sawCull) return;
+            bool bodyVisible = false;
+            Renderer[] body = p.GetComponentsInChildren<SkinnedMeshRenderer>(false);
+            for (int i = 0; i < body.Length && !bodyVisible; i++) if (body[i] != null && body[i].isVisible && !IsCape(body[i])) bodyVisible = true;
+            if (!bodyVisible) return;
+            for (int i = 0; i < _saved.Count; i++)
+                for (int k = 0; k < _saved[i].Rends.Count; k++)
+                {
+                    Renderer r = _saved[i].Rends[k];
+                    if (r == null || !r.enabled || !r.gameObject.activeInHierarchy || r.isVisible) continue;
+                    _sawCull = true;
+                    if (!_logged) { _logged = true; Debug.Log("[Aethelborn] Cape guard: cape renderer '" + r.name + "' culled mid-skill (bounds centre " + r.bounds.center.ToString("F1") + ", player " + p.transform.position.ToString("F1") + ") - cloth will be reset at the end"); }
+                    return;
+                }
+        }
+
+        private static bool IsCape(Renderer r)
+        {
+            for (int i = 0; i < _saved.Count; i++) if (_saved[i].Rends.Contains(r)) return true;
+            return false;
         }
 
         private static void Scan(Player p)
@@ -15985,43 +16331,92 @@ namespace DragonsAltarCombat
                 if (known) continue;
                 object data = _serialize.GetValue(cloths[i], null);
                 if (data == null) continue;
-                object inertia = _inertiaField.GetValue(data);
-                if (inertia == null) continue;
                 Saved s = new Saved();
-                s.Cloth = cloths[i]; s.Inertia = inertia; s.Holder = data; s.HolderField = _inertiaField;
-                if (_world != null) s.World = (float)_world.GetValue(inertia);
-                if (_local != null) s.Local = (float)_local.GetValue(inertia);
-                if (_anchor != null) s.Anchor = (Transform)_anchor.GetValue(inertia);
-                if (_anchorInertia != null) s.AnchorInertia = (float)_anchorInertia.GetValue(inertia);
+                s.Cloth = cloths[i]; s.Data = data;
+                if (_inertiaField != null)
+                {
+                    s.Inertia = _inertiaField.GetValue(data);
+                    if (s.Inertia != null)
+                    {
+                        if (_world != null) s.World = (float)_world.GetValue(s.Inertia);
+                        if (_local != null) s.Local = (float)_local.GetValue(s.Inertia);
+                        if (_anchor != null) s.Anchor = (Transform)_anchor.GetValue(s.Inertia);
+                        if (_anchorInertia != null) s.AnchorInertia = (float)_anchorInertia.GetValue(s.Inertia);
+                    }
+                }
+                if (_cullingField != null)
+                {
+                    s.Culling = _cullingField.GetValue(data);
+                    if (s.Culling != null && _cameraMode != null) s.CameraMode = _cameraMode.GetValue(s.Culling);
+                    if (s.Culling != null && _distanceLen != null)
+                    {
+                        s.DistanceSlider = _distanceLen.GetValue(s.Culling);
+                        if (s.DistanceSlider != null) { s.HadDistance = true; s.DistanceUse = (bool)_sliderUse.GetValue(s.DistanceSlider); }
+                    }
+                }
+                // the cape's own renderers (MeshCloth / BoneCloth render through the cloth object's hierarchy)
+                Renderer[] rs = cloths[i].GetComponentsInChildren<Renderer>(true);
+                for (int k = 0; k < rs.Length; k++)
+                {
+                    s.Rends.Add(rs[k]);
+                    SkinnedMeshRenderer smr = rs[k] as SkinnedMeshRenderer;
+                    if (smr != null) { s.Skins.Add(smr); s.SkinOffscreen.Add(smr.updateWhenOffscreen); }
+                }
                 _saved.Add(s);
             }
         }
 
-        private static void Apply(float k)
+        private static void Apply(float k, bool on)
         {
             for (int i = 0; i < _saved.Count; i++)
             {
                 Saved s = _saved[i];
                 if (s.Cloth == null) continue;
                 object inertia = s.Inertia;
-                if (_world != null && s.World >= 0f) _world.SetValue(inertia, Mathf.Lerp(s.World, s.World * Damp, k));
-                if (_local != null && s.Local >= 0f) _local.SetValue(inertia, Mathf.Lerp(s.Local, s.Local * Damp, k));
-                if (_anchor != null && s.Anchor == null && _owner != null)
+                if (inertia != null)
                 {
-                    // the player's root carries all of the leap / fall / travel: cancel it for the cloth while guarded
-                    _anchor.SetValue(inertia, k > 0f ? _owner.transform : null);
-                    if (_anchorInertia != null) _anchorInertia.SetValue(inertia, k > 0f ? Mathf.Lerp(Mathf.Max(0f, s.AnchorInertia), 0f, k) : Mathf.Max(0f, s.AnchorInertia));
+                    if (_world != null && s.World >= 0f) _world.SetValue(inertia, Mathf.Lerp(s.World, s.World * Damp, k));
+                    if (_local != null && s.Local >= 0f) _local.SetValue(inertia, Mathf.Lerp(s.Local, s.Local * Damp, k));
+                    if (_anchor != null && s.Anchor == null && _owner != null)
+                    {
+                        _anchor.SetValue(inertia, k > 0f ? _owner.transform : null);
+                        if (_anchorInertia != null) _anchorInertia.SetValue(inertia, k > 0f ? Mathf.Lerp(Mathf.Max(0f, s.AnchorInertia), 0f, k) : Mathf.Max(0f, s.AnchorInertia));
+                    }
+                    if (inertia.GetType().IsValueType) _inertiaField.SetValue(s.Data, inertia);
                 }
-                if (inertia.GetType().IsValueType) s.HolderField.SetValue(s.Holder, inertia);   // struct data: write it back
+                // culling: off for the whole guarded time (no blend), original values back once released
+                bool guard = on || k > 0f;
+                if (s.Culling != null)
+                {
+                    if (_cameraMode != null && s.CameraMode != null) _cameraMode.SetValue(s.Culling, guard ? Enum.Parse(_cameraMode.FieldType, "Off") : s.CameraMode);
+                    if (s.HadDistance && s.DistanceSlider != null)
+                    {
+                        _sliderUse.SetValue(s.DistanceSlider, guard ? false : s.DistanceUse);
+                        if (s.DistanceSlider.GetType().IsValueType) _distanceLen.SetValue(s.Culling, s.DistanceSlider);
+                    }
+                    if (s.Culling.GetType().IsValueType) _cullingField.SetValue(s.Data, s.Culling);
+                }
+                for (int r = 0; r < s.Skins.Count; r++) if (s.Skins[r] != null) s.Skins[r].updateWhenOffscreen = guard || s.SkinOffscreen[r];
                 if (_paramChange != null) _paramChange.Invoke(s.Cloth, null);
+            }
+        }
+
+        private static void ResetCloths()
+        {
+            if (_reset == null) return;
+            for (int i = 0; i < _saved.Count; i++)
+            {
+                if (_saved[i].Cloth == null) continue;
+                try { _reset.Invoke(_saved[i].Cloth, _reset.GetParameters().Length == 0 ? null : new object[] { false }); } catch (Exception) { }
             }
         }
 
         private static void Restore()
         {
-            if (_saved.Count > 0 && _clothType != null) Apply(0f);
+            if (_saved.Count > 0 && _clothType != null) Apply(0f, false);
             _saved.Clear();
             _level = 0f;
+            _sawCull = false;
         }
     }
 }

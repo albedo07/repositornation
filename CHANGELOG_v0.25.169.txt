@@ -1,0 +1,56 @@
+Aethelborn Ascended v0.25.169 - Arms and Altar (baseline v0.25.168; ANCHOR v0.25.167 untouched)
+
+1. CAPE (Bonecrusher video)
+   Confirmed from the video frames (docs/previews/CAPE_v0.25.168_video_frames.png): while airborne the cape is NOT
+   RENDERED at all, then at the landing it appears stretched straight up and whips down. Inertia can lag cloth but cannot
+   make it invisible -> the cape's MagicaCloth2 simulation was CULLED (camera/distance culling "Keep" = paused) during the
+   leap: its renderer bounds stopped updating, Unity frustum-culled the renderer, the paused cloth never refreshed them,
+   and on landing it resumed from the takeoff pose. v0.25.168 only damped inertia, so it could not fix this.
+   Fix (DragonClothGuard, only while a skill animation drives you): MagicaCloth camera culling Off + distance culling off,
+   SkinnedMeshRenderer.updateWhenOffscreen on (bounds always follow the bones), inertia anchored to the player with
+   world/local inertia x0.1; everything restored afterwards (0.4 s blend). If a cape renderer is still seen culled mid-skill
+   the cloth is reset once when the skill ends, and one log line reports it. Re-applied for every cast (rescanned per skill).
+   Cape never hidden; CA, movement, Rigidbody untouched. LogOutput shows "[Aethelborn] Cape guard: MagicaCloth2 found; ..."
+   (which settings were found) and, if it ever happens again, "... culled mid-skill ...".
+
+2. NACC airborne rules
+   - Airborne primary rejection and the takeoff reset are gone: AA's NACC starts and continues in the air.
+   - Ground contact is ignored (rocks, slopes, steps never reset); an airborne chain continues after landing.
+   - A deliberate jump (vanilla "jump" trigger) breaks the running chain: the next swing in the air is strike 1.
+   - Taking real damage (health falls, max health unchanged) breaks continuation.
+   - Continuation window 0.7 s ([Combat] ComboContinueWindow_v025169). The timer starts when the previous swing has
+     FINISHED (Attack.Stop = after its recovery), so slow swings keep the whole window; clicks during a swing queue and
+     always continue. No primary within 0.7 s -> the chain resets.
+   - Five-hit order 1-2-1-2-3, finisher lockout (never touched by any reset), heavy attacks and skill handoffs unchanged.
+
+3. Weapon restrictions (real equip actions + 0.5 s re-check after class changes; prohibited items are unequipped into the
+   inventory, never dropped). Only combat equipment is judged: tools, torches, pickaxes, fishing rods always pass.
+   - Warrior / Mercenary: no daggers, fist weapons, ranged or magic weapons. Combat axes allowed (modded too).
+   - Sword Master: Swords only.  - Cleric / Paladin / Priest: Staves, Wands, Maces/Clubs only.
+   - Sorcerer + ACs, Ranger + ACs: no melee except one dagger, no dual daggers; their ranged / shield rules unchanged.
+   - Shields: Warrior, Mercenary, Sword Master, Cleric family may equip any shield; a shield disables The Way of the Sword's
+     sword-only bonuses (+Sword, +attack speed, no sword movement penalty).
+   - Utility axe: classes barred from combat axes (Sword Master, Cleric, Sorcerer, Ranger families) may hold a genuine
+     vanilla chopping axe (prefab whitelist AxeStone/Flint/Bronze/Iron/BlackMetal/JotunBane - modded axes incl. Therzie's
+     never match); it chops trees and deals no damage to creatures. Mercenary exempt.
+   - Mercenary dual wield: the exact same prefab in both hands (quality may differ); never Spears / War Pikes; native 2HDW
+     items stay single paired weapons. Warfreak's dual bonus follows the same rule.
+   - Kali (future, not built): daggers + fist weapons, dual daggers from the Base Class, bows only with no arrows consumed,
+     no extra bow bonuses, same utility-axe exception.
+
+4. Altar of Blessings
+   - No class: "Choose <Class>" + "View Advancements" (unchanged).
+   - Class chosen: "Choose" removed, "View Advancements" -> "Advance" (centred); other Base Class cards greyed + locked
+     (switching = the existing class reset).
+   - Advance / Choose Advancement with unmet requirements: a readable prompt ABOVE the Altar menu lists what is missing
+     (level, the Advancement's Class skill Tier 7, Class Tier Points, pending tiers). Other Altar failures use the same
+     prompt; unrelated vanilla messages and the requirements themselves are unchanged.
+
+5. VFX (visual only)
+   - Crescent Cleave: cracks kept + disturbed dirt, low dust and small grit following each half-buried wave (no spikes).
+   - Impact Wave (normal + Ascended): dirt + dust dragged along with the crest. Frenzied Charge / Shield Charge: dust
+     kicked up while dashing.
+   - Halfmoon Slash: the slash scores the ground (crack arc + dirt along the cut).
+   - Gravity Dominion + Horizon Walker's Gravity Blast: the glowing vortex is replaced by faint contracting air ripples,
+     thin pale streaks drawn inward and loose dirt / dust crawling toward the centre (follows the moving orb, stops when
+     it is high above the ground).

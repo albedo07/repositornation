@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.168";
+        public const string ModVersion = "0.25.169";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -2373,6 +2373,7 @@ namespace AlbedosCustomClassesAdvanced
                 // v0.25.63 (user ref): the crescent's centre rides AT ground level, so half of it is underground and it
                 // reads as a blade of light tearing up out of the earth.
                 DragonCombat.RunVfx(delegate { DragonVfx.CrescentBlade(ccb.transform, ccc, cch * 0.95f, Mathf.Max(0.35f, cch * 0.16f), 90f); });   // v0.25.167 no glow motes
+                float ccw = width; DragonCombat.RunVfx(delegate { DragonVfx.GroundDust(ccb.transform, Mathf.Clamp(ccw * 0.35f, 0.6f, 2.5f), delegate { return ccb != null; }); });   // v0.25.169 disturbed dirt + dust following the half-buried wave
             }
             while (elapsed <= travelTime && player != null)
             {
@@ -2720,7 +2721,7 @@ namespace AlbedosCustomClassesAdvanced
             if (windup > 0f) yield return new WaitForSeconds(windup);
             if (player == null || player.IsDead() || SmInterrupted(start)) { if (player != null) DragonCombat.ClipStop(player, 0.2f); yield break; }
             _frenzyActive = true;
-            if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.TrailWhile(player.transform, new Color(0.45f, 0.78f, 1f, 1f), 0.5f, delegate { return _frenzyActive && player != null; }); });
+            if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.TrailWhile(player.transform, new Color(0.45f, 0.78f, 1f, 1f), 0.5f, delegate { return _frenzyActive && player != null; }); DragonVfx.GroundDust(player.transform, 0.8f, delegate { return _frenzyActive && player != null; }); });   // v0.25.169 dust kicked up by the dash
             float distance = Mathf.Max(1f, ascended ? DragonCombat.M(_frenzyAscDistance.Value) : DragonCombat.M(_frenzyDistance.Value));
             float width = Mathf.Max(0.5f, DragonCombat.M(_frenzyWidth.Value)) * (ascended ? Mathf.Max(1f, _frenzyAscWidthMult.Value) : 1f);
             float damage = ascended ? Mathf.Max(0f, _frenzyAscDamage.Value) / 100f : 1f;
@@ -3258,6 +3259,7 @@ namespace AlbedosCustomClassesAdvanced
             DragonCrest aiwCrest = null;
             float aiwNext = 0.6f;
             if (_enableVfx.Value) { float aiwT = travel, aiwW = width; DragonCombat.RunVfx(delegate { aiwCrest = DragonVfx.Crest(new Color(1f, 0.62f, 0.22f, 1f), aiwW * 1.1f, 2.2f, aiwT + 1f); }); }   // v0.25.61
+            if (aiwCrest != null) { Transform act = aiwCrest.transform; float acw = width; DragonCombat.RunVfx(delegate { DragonVfx.GroundDust(act, Mathf.Clamp(acw * 0.5f, 0.6f, 3f), delegate { return act != null; }); }); }   // v0.25.169 dirt dragged along
             while (elapsed <= travel && player != null)
             {
                 float dist = Mathf.Lerp(0.5f, length, Mathf.Clamp01(elapsed / travel));
@@ -3560,7 +3562,7 @@ namespace AlbedosCustomClassesAdvanced
             // v0.25.85 (user): dual wield counts only with two one-handed weapons of the SAME type (sword+sword, axe+axe...).
             // Single-item dual weapons (e.g. Therzie's Warfare) are two-handed items, so they count through the 2H rule above.
             if (!(IhIsPhysicalMelee(right) && IhIsPhysicalMelee(left) && DragonCombat.IsOneHandedWeapon(right) && DragonCombat.IsOneHandedWeapon(left))) return false;
-            return right.m_shared != null && left.m_shared != null && right.m_shared.m_skillType == left.m_shared.m_skillType;
+            return DragonCombat.IsMatchingDualPair(right, left);   // v0.25.169 exact same prefab (was: same skill type)
         }
 
         // v0.25.86 Warfreak (Mastery): a Mercenary in the middle of a skill takes 25% less damage (35% in the Ultimate).
@@ -4887,6 +4889,7 @@ namespace AlbedosCustomClassesAdvanced
                 // v0.25.65 (user: Halfmoon is an ultimate - big): a huge bright crescent swept out in front of you
                 Vector3 hf = forward; hf.y = 0f; float hr = radius; Vector3 hp = player.transform.position + Vector3.up * 1.1f + (hf.sqrMagnitude > 0.001f ? hf.normalized : player.transform.forward) * hr * 0.6f;
                 DragonCombat.RunVfx(delegate { DragonVfx.CrescentFlash(hp, hf, DragonVfx.Steel, hr * 0.95f, Mathf.Max(0.6f, hr * 0.16f), 0f, 0.45f, 0.45f, 0.15f); DragonVfx.Shake(hp, 25f, 1f); });
+                Vector3 hg = player.transform.position; DragonCombat.RunVfx(delegate { DragonVfx.SlashScar(hg, hf, hr * 0.85f, 150f, DragonVfx.Steel); });   // v0.25.169 the slash scores the ground
             }
             List<Character> targets = GetFrontalTargets(player, player.transform.position + Vector3.up * 0.8f, forward, radius, 170f);
             for (int i = 0; i < targets.Count; i++)
@@ -5895,7 +5898,7 @@ namespace AlbedosCustomClassesAdvanced
         private IEnumerator ShieldChargeRoutine(Player player, Rigidbody body, CapsuleCollider capsule)
         {
             ShowMessage("Shield Charge");
-            if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.TrailWhile(player.transform, DragonVfx.Holy, 0.6f, delegate { return _shieldChargeActive && player != null; }); });
+            if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.TrailWhile(player.transform, DragonVfx.Holy, 0.6f, delegate { return _shieldChargeActive && player != null; }); DragonVfx.GroundDust(player.transform, 0.9f, delegate { return _shieldChargeActive && player != null; }); });   // v0.25.169 dust kicked up by the charge
             DragonCombat.PlayClip(player, "cleric_charge", 0.15f, true);
             DragonCombat.ForceRun(player, true, true, 0f);   // v0.25.19: real run + Valheim's shield-up block pose
             Vector3 forward = player.GetLookDir();
@@ -9898,6 +9901,7 @@ namespace AlbedosCustomClassesAdvanced
             ItemDrop.ItemData left = DragonCombat.GetHandItem(player, "m_leftItem");
             bool rightSword = right != null && right.m_shared != null && right.m_shared.m_skillType == Skills.SkillType.Swords;
             bool leftSword = left != null && left.m_shared != null && left.m_shared.m_skillType == Skills.SkillType.Swords;
+            if (DragonCombat.IsShield(right) || DragonCombat.IsShield(left)) return false;   // v0.25.169 (user): a shield disables the sword-only bonus
             return rightSword != leftSword;
         }
 
@@ -10583,6 +10587,7 @@ namespace AlbedosCustomClassesAdvanced
         {
             try
             {
+                IhRegisterAltarRequirements();   // v0.25.169
                 MethodInfo method = typeof(Plugin).GetMethod("ApplyAdvancementSelection", BindingFlags.Instance | BindingFlags.NonPublic);
                 MethodInfo prefixMethod = typeof(AdvancedPlugin).GetMethod("AltarAdvancementPrefix", BindingFlags.Static | BindingFlags.NonPublic);
                 if (method == null || prefixMethod == null)
@@ -10607,7 +10612,7 @@ namespace AlbedosCustomClassesAdvanced
                 return true;
             if (Instance.GetPrototypeTotalPending() > 0)
             {
-                Instance.ShowMessage("Confirm or clear your pending Class Tiers before Advancing.");
+                IhAltarPrompt("Confirm or clear your pending Class Tiers before Advancing.");
                 return false;
             }
             List<string> lines = new List<string>();
@@ -10619,8 +10624,55 @@ namespace AlbedosCustomClassesAdvanced
                 if (lines[i].StartsWith("-"))
                     missing.Add(lines[i].Substring(2));
             }
-            Instance.ShowMessage("Not ready to Advance: " + string.Join(", ", missing.ToArray()));
+            IhAltarPrompt("Not ready to Advance:\n" + string.Join("\n", missing.ToArray()));
             return false;
+        }
+
+        // v0.25.169: Altar failures go to the Altar's own prompt (Core Plugin.ShowAltarPrompt); the vanilla centre message is hidden there.
+        private static void IhAltarPrompt(string message)
+        {
+            try
+            {
+                MethodInfo m = typeof(Plugin).GetMethod("ShowAltarPrompt", BindingFlags.Static | BindingFlags.Public);
+                if (m != null) { m.Invoke(null, new object[] { message }); return; }
+            }
+            catch (Exception) { }
+            if (Instance != null) Instance.ShowMessage(message.Replace("\n", " "));
+        }
+
+        // v0.25.169: the Altar asks Advanced which Advancement requirements are unmet (null = ready). advancement null = any branch.
+        private static string IhAltarRequirements(Player player, string advancement)
+        {
+            if (Instance == null || player == null) return null;
+            if (!string.IsNullOrEmpty(Instance.GetAdvancement(player))) return null;
+            string cls = Instance.GetClass(player);
+            string[] branches = IhBranchesOf(cls);
+            if (branches.Length == 0) return null;
+            List<string> missing = new List<string>();
+            if (Instance.GetPrototypeTotalPending() > 0) missing.Add("Confirm or clear your pending Class Tiers in the Skill Tree");
+            string[] check = string.IsNullOrEmpty(advancement) ? branches : new string[] { advancement };
+            List<string> best = null;
+            for (int b = 0; b < check.Length; b++)
+            {
+                List<string> lines = new List<string>();
+                if (Instance.IhAdvanceChecklist(player, lines, check[b]) && missing.Count == 0) return null;
+                List<string> m = new List<string>();
+                for (int i = 0; i < lines.Count; i++) if (lines[i].StartsWith("-")) m.Add(lines[i].Substring(2) + (check.Length > 1 && lines[i].Contains("Tier 7") ? "  - " + IhAcDisplay(check[b]) : ""));
+                if (best == null) best = m;
+                else for (int i = 0; i < m.Count; i++) if (!best.Contains(m[i]) && m[i].Contains("Tier 7")) best.Add(m[i]);
+            }
+            if (best != null) missing.AddRange(best);
+            return missing.Count == 0 ? null : string.Join("\n", missing.ToArray());
+        }
+
+        private static void IhRegisterAltarRequirements()
+        {
+            try
+            {
+                FieldInfo f = typeof(Plugin).GetField("AdvanceRequirementProvider", BindingFlags.Static | BindingFlags.Public);
+                if (f != null) f.SetValue(null, new Func<Player, string, string>(IhAltarRequirements));
+            }
+            catch (Exception) { }
         }
 
         // An Ascended Paladin's Righteous Strike is handled here; the Cleric version is skipped.
