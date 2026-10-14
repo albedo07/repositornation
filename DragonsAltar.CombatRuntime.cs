@@ -1125,26 +1125,21 @@ namespace DragonsAltarCombat
         //    chain carries on after landing while its window is open;
         //  - a deliberate jump (the vanilla "jump" trigger, see ComboTriggerPrefix) breaks the running chain: the next swing in
         //    the air starts a fresh chain at strike one (the grounded chain is never carried into the jump);
-        //  - real damage taken (health went down) breaks continuation;
+        //  - FALL damage taken (v0.25.169b, user: not other damage) breaks continuation - see NaccFallDamage / BeginDamage;
         //  - timeout: no next primary within ComboContinueWindow (0.7 s) after the last swing FINISHED (Attack.Stop, i.e. after
         //    its recovery - slow swings keep the whole window) resets the chain.
         // None of these touch the finisher lockout (_comboLockUntil / _comboFinisher), so a reset can never skip finisher recovery.
-        private static float _naccLastHealth = -1f, _naccLastMax = -1f;
-        private static Player _naccHealthOwner;
         internal static void UpdateNaccAirborne(Player p)
         {
-            if (p == null) { _naccHealthOwner = null; _naccLastHealth = -1f; return; }
-            try
-            {
-                float hp = p.GetHealth(), max = p.GetMaxHealth();
-                if (p != _naccHealthOwner) { _naccHealthOwner = p; _naccLastHealth = hp; _naccLastMax = max; }
-                // took damage: health fell while max health did not (a food running out clamps health - not damage)
-                if (_naccLastHealth >= 0f && hp < _naccLastHealth - 0.01f && max >= _naccLastMax - 0.01f && _comboHit >= 0) ResetNaccChain(p);
-                _naccLastHealth = hp; _naccLastMax = max;
-            }
-            catch (Exception) { }
+            if (p == null) return;
             if (_comboHit >= 0 && _comboLastEnd > 0f && Instance != null && Time.time - _comboLastEnd > Mathf.Max(0.05f, Instance.ComboContinueWindow.Value))
                 ResetNaccChain(p);   // window closed without a next primary
+        }
+
+        // v0.25.169b: the local player took fall damage (called from BeginDamage after the fall reductions)
+        internal static void NaccFallDamage(Player p)
+        {
+            if (p != null && (_comboHit >= 0 || _comboLastEnd > 0f)) ResetNaccChain(p);
         }
 
         // v0.25.169: the vanilla jump fires the "jump" trigger on the local player's ZSyncAnimation -> break the chain.
@@ -9678,6 +9673,8 @@ namespace DragonsAltarCombat
                 float lf = LaunchFallFactor((Player)target);
                 if (lf < 1f) hit.m_damage.Modify(lf);
             }
+            // v0.25.169b (user): FALL damage (after every fall reduction) resets the NACC continuation; other damage does not
+            if (target == Player.m_localPlayer && IsFallHit(hit) && hit.GetTotalDamage() > 0.01f) DragonCombatPlugin.NaccFallDamage((Player)target);
 
             Player attacker = hit.GetAttacker() as Player;
             // v0.25.169 utility axe (vanilla chopping axe held by a class barred from combat axes): no damage to creatures

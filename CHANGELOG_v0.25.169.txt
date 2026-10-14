@@ -17,7 +17,7 @@ Aethelborn Ascended v0.25.169 - Arms and Altar (baseline v0.25.168; ANCHOR v0.25
    - Airborne primary rejection and the takeoff reset are gone: AA's NACC starts and continues in the air.
    - Ground contact is ignored (rocks, slopes, steps never reset); an airborne chain continues after landing.
    - A deliberate jump (vanilla "jump" trigger) breaks the running chain: the next swing in the air is strike 1.
-   - Taking real damage (health falls, max health unchanged) breaks continuation.
+   - Taking FALL damage (after fall reductions) breaks continuation; other damage does not (v0.25.169b).
    - Continuation window 0.7 s ([Combat] ComboContinueWindow_v025169). The timer starts when the previous swing has
      FINISHED (Attack.Stop = after its recovery), so slow swings keep the whole window; clicks during a swing queue and
      always continue. No primary within 0.7 s -> the chain resets.

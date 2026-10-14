@@ -30,7 +30,8 @@ class Sim
     public void Takeoff() { Airborne = true; }                       // bump / slope / step / falling
     public void Jump() { Airborne = true; if (ComboHit >= 0 || LastEnd > 0) ResetChain(); }   // vanilla "jump" trigger
     public void Land() { Airborne = false; }
-    public void Damage() { if (ComboHit >= 0) ResetChain(); }
+    public void Damage() { }                                          // v0.25.169b: ordinary damage keeps the chain
+    public void FallDamage() { if (ComboHit >= 0 || LastEnd > 0) ResetChain(); }
     // Humanoid.StartAttack prefix + Attack.Start(prefix/postfix)
     public int Click(bool secondary, string weapon, string clip)
     {
@@ -122,8 +123,9 @@ static class T
             }
             // jump after the finisher: lockout still applies (reset cannot skip recovery)
             s = new Sim(); got = new List<int>(); Hits(s, 5, w, got); s.Jump(); Check(s.Click(false, "melee", w + "_attack") == -1, w + " jump does not skip finisher lockout");
-            // damage resets continuation
-            s = new Sim(); got = new List<int>(); Hits(s, 3, w, got); s.Damage(); Check(s.Click(false, "melee", w + "_attack") == 0, w + " damage resets the chain");
+            // ordinary damage keeps the chain, fall damage resets it
+            s = new Sim(); got = new List<int>(); Hits(s, 3, w, got); s.Damage(); Check(s.Click(false, "melee", w + "_attack") == 1, w + " ordinary damage keeps the chain");
+            s = new Sim(); got = new List<int>(); Hits(s, 3, w, got); s.Takeoff(); s.Land(); s.FallDamage(); Check(s.Click(false, "melee", w + "_attack") == 0, w + " fall damage resets the chain");
             // timeout: 0.69 s continues, 0.71 s resets
             s = new Sim(); got = new List<int>(); Hits(s, 1, w, got); s.Tick(0.59); Check(s.Click(false, "melee", w + "_attack") == 1, w + " inside 0.7 s window continues");
             s = new Sim(); got = new List<int>(); Hits(s, 1, w, got); s.Tick(0.62); Check(s.Click(false, "melee", w + "_attack") == 0, w + " after 0.7 s window resets");
