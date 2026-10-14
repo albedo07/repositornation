@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.163";
+        public const string ModVersion = "0.25.164";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -5813,7 +5813,7 @@ namespace AlbedosCustomClassesAdvanced
                 yield break;
 
             float radius = Mathf.Max(1f, DragonCombat.M(_rayRadius.Value));
-            float healPercent = Mathf.Clamp(_rayHealPercent.Value, 0f, 100f) / 100f * IhSkillPower(player, "ray_of_hope");
+            float healPercent = Mathf.Clamp(_rayHealPercent.Value, 0f, 100f) / 100f * IhHealPower(player, "ray_of_hope");
             Collider[] allyHits = Physics.OverlapSphere(player.transform.position, radius);
             HashSet<Player> allies = new HashSet<Player>();
             bool ascended = IsAscendedSkill("ray_of_hope");
@@ -7673,7 +7673,7 @@ namespace AlbedosCustomClassesAdvanced
                         Player ally = players[i];
                         bool consecrated = IsInsideConsecratedGround(ally.transform.position);
                         float multiplier = consecrated ? Mathf.Max(1f, _consecratedMultiplier.Value) : 1f;
-                        Heal(ally, ally.GetMaxHealth() * Mathf.Max(0f, _holyRelicHealPercent.Value) * multiplier * IhSkillPower(player, "holy_relic") / 100f);
+                        Heal(ally, ally.GetMaxHealth() * Mathf.Max(0f, _holyRelicHealPercent.Value) * multiplier * IhHealPower(player, "holy_relic") / 100f);
                         if (ascended)
                         {
                             CleanseAilments(ally);
@@ -8933,10 +8933,19 @@ namespace AlbedosCustomClassesAdvanced
             if (stunSkill != null && !stunHandled) DragonCombat.ApplySkillStun(attacker, target, stunSkill, stunAttack, stunDefault, !stunDefault, stunAsc);
         }
 
+        // v0.25.164: Circle Swing, Seismic Guillotine and Whirlwind never applied their Tier bonus in gameplay (only their tooltip
+        // did). Their every hit funnels through DealSnapshotDamage with the skill id, so the Tier curve is applied here once.
+        private float IhSnapshotTierPower(Player attacker, string skillId)
+        {
+            if (skillId == "circle_swing" || skillId == "seismic_guillotine" || skillId == "whirlwind")
+                return IhSkillPower(attacker, skillId);
+            return 1f;
+        }
+
         private void DealSnapshotDamage(Player attacker, Character target, DamageSnapshot snapshot, float multiplier, float push, string stunSkill = null, string stunAttack = "Attack 1", bool stunDefault = false, bool stunHandled = false, bool? stunAsc = null)
         {
             HitData hit = new HitData();
-            multiplier = Mathf.Max(0f, multiplier);
+            multiplier = Mathf.Max(0f, multiplier) * IhSnapshotTierPower(attacker, stunSkill);
             hit.m_damage.m_blunt = snapshot.Blunt * multiplier;
             hit.m_damage.m_slash = snapshot.Slash * multiplier;
             hit.m_damage.m_pierce = snapshot.Pierce * multiplier;
@@ -8958,7 +8967,7 @@ namespace AlbedosCustomClassesAdvanced
             bool originalStun = forceStagger;
             if (stunSkill != null) forceStagger &= DragonCombat.SkillStunEnabled(attacker, stunSkill, stunAttack, stunDefault, stunAsc) && target != null && !target.IsBoss() && !DragonCombat.IsDebuffImmune(target);
             HitData hit = new HitData();
-            multiplier = Mathf.Max(0f, multiplier);
+            multiplier = Mathf.Max(0f, multiplier) * IhSnapshotTierPower(attacker, stunSkill);
             hit.m_damage.m_blunt = snapshot.Blunt * multiplier;
             hit.m_damage.m_slash = snapshot.Slash * multiplier;
             hit.m_damage.m_pierce = snapshot.Pierce * multiplier;
@@ -11845,7 +11854,7 @@ namespace AlbedosCustomClassesAdvanced
 
         private void BindImmortalProgression()
         {
-            _ihTierPowerPercent = Config.Bind("Progression", "TierPowerPercent", 10f, "Each Tier adds this percent to the skill's damage and healing.");
+            _ihTierPowerPercent = Config.Bind("Progression", "TierPowerPercent", 10f, "Each Tier adds this percent to the skill's HEALING. (v0.25.164: damage reaches +80% at every skill's max Tier.)");
             _ihUnlockAll = Config.Bind("Testing", "UnlockAllSkills", false, "Ignore Level / Tier Point unlock gates (testing only).");
 
             _damageSkillIds[_goddessDamage] = "goddess_relic";
@@ -11865,6 +11874,7 @@ namespace AlbedosCustomClassesAdvanced
             _damageSkillIds[_heavensDamage] = "heavens_judgement";
             _damageSkillIds[_tempestDamage] = IhPriestUltimate;
             DragonCombat.SkillPowerProvider = IhSkillPower;
+            DragonCombat.SkillHealPowerProvider = IhHealPower;   // v0.25.164
             DragonCombat.BucklerParryHandler = OnBucklerParry;
             _damageSkillIds[_relicAscBlastDamage] = "lightning_relic";
             _damageSkillIds[_crossAscBurstDamage] = "grand_cross";
@@ -11879,12 +11889,32 @@ namespace AlbedosCustomClassesAdvanced
             return IhSkillPower(attacker, skillId) * IhEmpowerFactor(skillId);
         }
 
-        // +TierPowerPercent per Tier (Ultimate uses its automatic Tier).
+        // v0.25.164 (user): DAMAGE Tier curve - every damage-dealing skill reaches exactly +80% at its max Tier, in even steps
+        // (Class 7 Tiers = +11.43% each, Advancement 5 = +16%, Ultimate 3 = +26.67%). Healing keeps +TierPowerPercent per Tier
+        // (IhHealPower). Ultimate uses its automatic Tier.
+        private const float IhTierDamageMax = 0.80f;
+        private float IhTierDamageBonus(string skillId, int tier)
+        {
+            int max = IhMaxTier(skillId);
+            return max <= 0 ? 0f : IhTierDamageMax * Mathf.Clamp(tier, 0, max) / max;
+        }
+
+        private float IhTierHealBonus(int tier)
+        {
+            return (_ihTierPowerPercent == null ? 10f : Mathf.Max(0f, _ihTierPowerPercent.Value)) / 100f * Mathf.Max(0, tier);
+        }
+
+        private float IhHealPower(Player player, string skillId)
+        {
+            if (player == null || player != Player.m_localPlayer) return 1f;
+            return 1f + IhTierHealBonus(IhGetTier(player, skillId));
+        }
+
         private float IhSkillPower(Player player, string skillId)
         {
             if (player == null || player != Player.m_localPlayer || _ihTierPowerPercent == null)
                 return 1f;
-            float power = 1f + Mathf.Max(0f, _ihTierPowerPercent.Value) / 100f * IhGetTier(player, skillId);
+            float power = 1f + IhTierDamageBonus(skillId, IhGetTier(player, skillId));
             // Lightning Zap / Righteous Strike damage is computed in Skills.cs through this provider;
             // they deal no healing, so the parry empowerment can ride on it for them only.
             if (skillId == "lightning_zap" || skillId == "righteous_strike")
@@ -11975,7 +12005,7 @@ namespace AlbedosCustomClassesAdvanced
         private IEnumerator AscendedHolyWaveRoutine(Player player)
         {
             const string sk = "albedo.customclasses.skills";
-            float power = IhSkillPower(player, "holy_wave");
+            float power = IhHealPower(player, "holy_wave");
             float instant = IhCfg(sk, "Cleric.Holy Wave", "ImmediateHeal", 25f) * power;
             float perSecond = IhCfg(sk, "Cleric.Holy Wave", "HealPercentPerSecond", 5f) * power;
             float duration = IhCfg(sk, "Cleric.Holy Wave", "Duration", 6f);
@@ -12835,8 +12865,13 @@ namespace AlbedosCustomClassesAdvanced
             return new Color(Mathf.GammaToLinearSpace(c.r), Mathf.GammaToLinearSpace(c.g), Mathf.GammaToLinearSpace(c.b), c.a);
         }
 
+        // v0.25.164: while a tooltip is composed, the builders' lines are captured as (field, value) and re-laid out by
+        // IhComposeTooltip in the fixed field order; nothing is printed directly.
+        private List<KeyValuePair<string, string>> _ihCap;
+
         private string IhLine(string label, string value)
         {
+            if (_ihCap != null && label != null) { _ihCap.Add(new KeyValuePair<string, string>(label, value ?? "")); return ""; }
             string colored = IhColorize(value);
             if (label == "Tier")
             {
@@ -12936,12 +12971,17 @@ namespace AlbedosCustomClassesAdvanced
         {
             Color saved = _ihTooltipAccent;
             _ihTooltipAccent = IhAccentFor(IhSkillFrameColor(node));
+            List<KeyValuePair<string, string>> cap = new List<KeyValuePair<string, string>>();
             try
             {
-                return IhBuildTooltipBody(player, node, out title);
+                _ihCap = cap;
+                IhBuildTooltipBody(player, node, out title);
+                _ihCap = null;
+                return IhComposeTooltip(player, node.Id, cap);
             }
             finally
             {
+                _ihCap = null;
                 _ihTooltipAccent = saved;
             }
         }
@@ -12956,7 +12996,8 @@ namespace AlbedosCustomClassesAdvanced
             int pending = GetPrototypePending(id);
             int maxTier = IhMaxTier(id);
             float pct = _ihTierPowerPercent == null ? 10f : _ihTierPowerPercent.Value;
-            float power = 1f + pct / 100f * tier;
+            // v0.25.164: the same curves as gameplay (damage +80% at max Tier; pure healing skills +TierPowerPercent per Tier)
+            float power = (id == "holy_wave" || id == "holy_relic") ? 1f + IhTierHealBonus(tier) : 1f + IhTierDamageBonus(id, tier);
             const string sk = "albedo.customclasses.skills";
             System.Text.StringBuilder b = new System.Text.StringBuilder();
 
@@ -13081,7 +13122,7 @@ namespace AlbedosCustomClassesAdvanced
                     IhCosts(b, _angelStamina.Value, IhNum(_angelWindupTotal.Value) + "s", _angelCooldown.Value);
                     break;
                 case "ray_of_hope":
-                    b.Append(IhLine("Healing", IhNum(_rayHealPercent.Value * power) + "% of Total HP"));
+                    b.Append(IhLine("Healing", IhNum(_rayHealPercent.Value * (1f + IhTierHealBonus(tier))) + "% of Total HP"));
                     b.Append(IhLine("Radius", IhNum(_rayRadius.Value) + "m"));
                     if (ascended)
                     {
@@ -13615,6 +13656,269 @@ namespace AlbedosCustomClassesAdvanced
             return "";
         }
 
+        // ------------------------------------------------------------------ v0.25.164 plain tooltips (user)
+        // Description = one direct sentence of what the skill does. {Field} tokens are filled with the live value the stat
+        // builders produced for that field; a parenthesised group whose token has no value is dropped.
+        public static string IhSkillDescription(string id)
+        {
+            switch (id)
+            {
+                // Cleric
+                case "lightning_zap": return "Fires a lightning cone that damages enemies and marks them with a Zap that explodes after a short delay.";
+                case "righteous_strike": return "Strikes the aimed spot with holy lightning, damaging and Exposing every enemy in the area.";
+                case "holy_wave": return "Heals you and nearby allies at once, then keeps healing them over time.";
+                case "goddess_relic": return "Drops a holy Cross on the aimed spot that damages every enemy under it.";
+                case "judgement_hammer": return "Throws a hammer forward that damages and Cripples every enemy it passes, growing and hitting harder the farther it flies.";
+                case "shield_charge": return "Charges forward behind your shield, damaging every enemy in your path; Left Click ends it with a hammer slam.";
+                case "fallen_angel": return "Leaps up and dives onto the aimed spot, damaging, Stunning and breaking the bones of every enemy in the area.";
+                case "ray_of_hope": return "Heals you and nearby allies, removes all their debuffs and makes them immune to new ones ({Buff}).";
+                case "electric_smite": return "Leaps and slams down, damaging the area and sending 16 Lightning Trails along the ground.";
+                case "heavens_light": return "Grants you and nearby allies extra defense and removes equipment movement penalties ({Buff}; {Duration}).";
+                case "lightning_relic": return "Plants a lightning Cross on the aimed spot that damages and Cripples nearby enemies with every pulse.";
+                case "holy_relic": return "Plants a holy Cross on the aimed spot that heals and buffs allies near it with every pulse.";
+                case "divine_intervention": return "Heals nearby allies and damages and Exposes enemies around you or your Relic.";
+                case "grand_cross": return "Sends a holy X forward that damages and burns every enemy it passes.";
+                case "heavens_judgement": return "Calls holy beams around you or your Relic that damage and Frost enemies.";
+                case "lightning_tempest": return "Summons a storm that strikes enemies inside it with lightning over time.";
+                case "grand_sigil": return "Gives you and nearby allies a Barrier that absorbs damage until it breaks ({Barrier}).";
+                // Warrior
+                case "heavy_slash": return "A heavy horizontal slash that damages enemies in front of you and inflicts Broken Bones.";
+                case "impact_wave": return "Sends a shockwave along the ground that damages every enemy in its line.";
+                case "impact_punch": return "A quick punch that damages enemies in front of you and Stuns small ones.";
+                case "moonlight_splitter": return "Fires crescent waves forward that pass through and damage every enemy in their path.";
+                case "crescent_cleave": return "Sends crescent cleaves across the ground in a fan, damaging every enemy they cross.";
+                case "blade_storm": return "Cuts the aimed area with spheres of blades that hit every enemy inside three times and Cripple them.";
+                case "frenzied_charge": return "Dashes forward with a thrust that damages enemies in your path, launching small ones and Stunning big ones.";
+                case "eclipse": return "A full-circle slash that damages every enemy around you.";
+                case "halfmoon_slash": return "A huge heavy slash forward followed by ground cuts along its path.";
+                case "knights_guidance": return "Grants you and nearby allies faster movement, faster Stamina regeneration and lower Stamina use ({Buff}; {Duration}).";
+                case "stomp": return "Stomps the ground, damaging nearby enemies, then sends an aftershock outward.";
+                case "circle_swing": return "Swings your weapon in a full circle, damaging and staggering every enemy around you.";
+                case "bonecrusher": return "Leaps up and slams down on the aimed spot, damaging enemies in the area and inflicting Broken Bones.";
+                case "seismic_guillotine": return "Opens a fissure along the ground to the aimed spot that damages enemies and explodes at its end.";
+                case "punishing_bomb": return "Bats a bomb forward that explodes on the first thing it hits, damaging and burning enemies around it.";
+                case "whirlwind": return "Spins continuously, damaging every enemy around you; recast to stop.";
+                case "battlecry": return "Grants you and nearby allies bonus damage against creatures and against trees, rocks and ore ({Buff}; {Labor}).";
+                // Sorcerer
+                case "flame_burst": return "Blasts a cone of fire that damages enemies in front of you and sets them on Fire Burn.";
+                case "glacial_descent": return "Drops a block of ice on the aimed spot that damages and Frosts every enemy in the area.";
+                case "stonefang_eruption": return "Raises stone spikes on the aimed spot that damage enemies, Stun small ones and Cripple the rest.";
+                case "meteor_fall": return "Drops a meteor on the aimed spot that damages every enemy in the area; hold the key to charge more stacks.";
+                case "gravity_dominion": return "Opens a black hole on the aimed spot that damages enemies over time, pulls small ones in and Exposes every enemy.";
+                case "astral_railcannon": return "Fires a beam forward that damages every enemy along its line.";
+                case "astral_greatblade": return "Slams a giant blade along your aim, damaging every enemy it hits.";
+                case "frost_nova": return "Releases a frost blast around you that damages and Frosts nearby enemies.";
+                case "elemental_cataclysm": return "Bombards the aimed area with every element; hold the key to strengthen it.";
+                case "clockwork": return "Grants you and nearby allies bonus skill damage and shorter cooldowns ({Buff}; {Duration}).";
+                case "arcane_phalanx": return "Summons spectral swords that launch at your aim while you hold Left Click, damaging the enemies they hit.";
+                case "afterimage_arsenal": return "Creates afterimages of you that repeat your weapon attacks for a short time.";
+                case "void_step": return "Teleports you to the aimed spot.";
+                case "rift_echo": return "Opens a rift behind your target that repeats your attacks on it while you hold Left Click.";
+                case "gravity_blast": return "Launches a slow orb that damages every enemy it passes through, pulls small ones in and Cripples the rest.";
+                case "arcane_rupture": return "Ruptures the aimed spot, damaging every enemy in the area; can be cast several times in a row.";
+                case "rift_walker": return "Places two linked portals that you and your allies can travel through.";
+                // Ranger
+                case "piercing_arrow": return "Fires an arrow that pierces every enemy in a line and Cripples the first one hit.";
+                case "tumble_shot": return "Backflips away and fires a fan of piercing arrows at your aim.";
+                case "snare_trap": return "Places a trap that damages, roots small enemies and Cripples big ones when they step on it.";
+                case "gale_volley": return "Jumps back and fires a wide fan of arrows that damages enemies and pushes small ones away.";
+                case "cyclone_arrow": return "Fires a slow wind arrow that damages enemies along its path and drags small ones with it.";
+                case "swallow_dive": return "Dashes forward through enemies, damaging everything you pass.";
+                case "skyfall_barrage": return "Leaps into the air and fires a barrage of arrows at the ground below.";
+                case "ricochet_arrow": return "Flips into the air and slams the ground, damaging nearby enemies, then backflips away.";
+                case "furious_winds": return "Surrounds you with a wind barrier that damages nearby enemies, pushes them back and destroys enemy projectiles; recast to stop.";
+                case "tailwind": return "Grants you and nearby allies faster movement, higher jumps and no fall damage ({Effect}; {Duration}).";
+                case "ballista_shot": return "Hold to charge a heavy arrow that pierces through every enemy in a line.";
+                case "arrow_rain": return "Rains arrows on the aimed area, damaging and Crippling every enemy there.";
+                case "pinning_shot": return "Fires an arrow that pins the target in place so your skills deal more damage to it ({Pinned}).";
+                case "explosive_arrow": return "Fires an arrow that explodes on impact, followed by cluster bombs around it.";
+                case "splitting_arrow": return "Fires spread shots into a wide cone, then a great arrow that pierces through the line.";
+                case "starfall_volley": return "Calls arrows down on every enemy around you over time; recast to stop.";
+                case "hawks_vigil": return "Reveals nearby enemies and sharpens your allies' aim ({Effect}; {Duration}).";
+            }
+            return IhLore(id, false);
+        }
+
+        // The Altar's skill text (Core reads it by reflection): the same sentence without live values.
+        public static string IhPlainDescription(string id)
+        {
+            string d = IhSkillDescription(id);
+            d = System.Text.RegularExpressions.Regex.Replace(d, @"\s*\([^()]*\{[A-Za-z]+\}[^()]*\)", "");
+            return System.Text.RegularExpressions.Regex.Replace(d, @"\{[A-Za-z]+\}", "").Trim();
+        }
+
+        // What Ascension adds (shown only while the skill can still be Ascended).
+        private static string IhAscensionText(string id)
+        {
+            switch (id)
+            {
+                case "righteous_strike": return "Hits a 7m area, applies Judgement Mark, sends 12 Lightning Trails with Spirit Burn and strikes again when it detonates a Mark.";
+                case "goddess_relic": return "A Cross three times the size hits a 10m area with Blunt and Lightning and applies Judgement Mark.";
+                case "judgement_hammer": return "The hammer flies back to you and hits everything again; catching it shortens its cooldown; applies Judgement Mark.";
+                case "shield_charge": return "Longer charge with a wider hitbox and Hyper Armor; the slam becomes a jumping Hammer Slam that also Stuns big enemies.";
+                case "fallen_angel": return "An aftershock 1.5x wider follows 0.5s later, the ground keeps burning and you gain Hyper Armor.";
+                case "ray_of_hope": return "Also grants a Barrier and strong healing over time, and sets enemies on Fire + Spirit Burn.";
+                case "electric_smite": return "Adds a Thunderstorm that strikes the area every 0.5s and burns enemies.";
+            }
+            string kit = IhKitAscendedSummary(id);
+            if (kit.Length == 0) kit = IhPriestAscendedSummary(id);
+            if (kit.Length == 0) return "";
+            return char.ToUpperInvariant(kit[0]) + kit.Substring(1) + ".";
+        }
+
+        private static bool IhIsDamageText(string v)
+        {
+            if (string.IsNullOrEmpty(v)) return false;
+            return System.Text.RegularExpressions.Regex.IsMatch(v, @"\d[\d.,]*\s*%?\s*(Blunt|Slash|Pierce|Fire|Frost|Lightning|Poison|Spirit)\b(?!\s*(Trail|Strike|Relic|Tempest|Arrow|Cross|Burn))")
+                || System.Text.RegularExpressions.Regex.IsMatch(v, @"\d[\d.,]*\s*%\s*(of\s+)?(your\s+)?(weapon|Bow|Damage|damage|the full skill)");
+        }
+
+        // Sub-hits whose value is a % of the skill / weapon (Moonlight waves, cleaves, aftershocks, clusters...).
+        private static bool IhDamagePartLabel(string l)
+        {
+            switch (l)
+            {
+                case "Waves": case "Cleaves": case "Strikes": case "Slam": case "Finisher": case "Aftershock": case "Detonation": case "Echo":
+                case "Afterimage": case "Volley": case "Spread Shots": case "Barrage": case "Meteors": case "Swords": case "Great Arrow":
+                case "Sky Arrow": case "Cluster": case "Cluster Bombs": case "Explosions": case "End Burst": case "End Blast": case "Full Charge":
+                case "Fire Trail": case "Ground Fire": case "Frozen Ground": case "Lightning Strike": case "Landing": case "Trail Damage":
+                case "Zap Damage": case "Storm Damage": case "On Hit": case "Astral Spear": case "Tornado": case "Beam": case "Launch":
+                    return true;
+            }
+            return false;
+        }
+
+        private static bool IhIsDotText(string v)
+        {
+            return v.IndexOf("Burn", StringComparison.Ordinal) >= 0 || v.IndexOf("DoT", StringComparison.Ordinal) >= 0 ||
+                v.IndexOf("Poison", StringComparison.Ordinal) >= 0 || v.IndexOf("Bleed", StringComparison.Ordinal) >= 0;
+        }
+
+        private static void IhAddUnique(List<string> list, string v)
+        {
+            v = (v ?? "").Trim();
+            if (v.Length > 0 && !list.Contains(v)) list.Add(v);
+        }
+
+        private string IhComposeTooltip(Player player, string id, List<KeyValuePair<string, string>> cap)
+        {
+            bool ascended = IsAscendedSkill(id);
+            List<string> dmg = new List<string>(), dot = new List<string>(), deb = new List<string>(), rng = new List<string>(), rad = new List<string>();
+            string stamina = null, eitr = null, hp = null, cooldown = null, duration = null;
+            Dictionary<string, string> token = new Dictionary<string, string>();
+            for (int i = 0; i < cap.Count; i++)
+            {
+                string L = cap[i].Key, V = (cap[i].Value ?? "").Trim();
+                if (V.Length == 0) continue;
+                if (!token.ContainsKey(L)) token[L] = V;
+                switch (L)
+                {
+                    case "Tier": case "Tier Up": case "Requires": case "Status": case "Key": case "Wind Up Time": case "Wind Up": case "Cast":
+                    case "Ascension": case "Ascended":
+                        break;
+                    case "Duration": if (duration == null) duration = V; break;
+                    case "Cooldown": cooldown = V; break;
+                    case "Stamina Cost": if (V != "0") stamina = V; break;
+                    case "Eitr Cost": if (V != "0") eitr = V; break;
+                    case "HP Cost": if (V != "0") hp = V; break;
+                    case "Cost":
+                        if (V.IndexOf("Eitr", StringComparison.OrdinalIgnoreCase) >= 0) eitr = V.Replace("Eitr", "").Trim();
+                        else if (V.IndexOf("HP", StringComparison.Ordinal) >= 0) hp = V.Replace("HP", "").Trim();
+                        else if (V.IndexOf("Stamina", StringComparison.OrdinalIgnoreCase) >= 0) stamina = V.Replace("Stamina", "").Trim();
+                        break;
+                    case "Healing":
+                        IhAddUnique(dmg, V.Replace("% of Total HP", "% Max HP").Replace("% Total HP", "% Max HP").Replace(" HP", "") + " Heal");
+                        break;
+                    case "Regeneration":
+                        token["__regen"] = V;
+                        break;
+                    case "Range": case "Distance": case "Reach": case "Travel": case "Cross Cast Range": case "Dash":
+                        IhAddUnique(rng, V); break;
+                    case "Radius": case "Area": case "Width": case "Hitbox": case "Size": case "Trigger Radius":
+                        IhAddUnique(rad, L == "Width" ? V + " wide" : V); break;
+                    case "Inflicts": case "Applies": case "Trail Burn": case "Storm Burn": case "Ring Burn":
+                        if (IhIsDotText(V)) IhAddUnique(dot, V); else IhAddUnique(deb, V);
+                        break;
+                    case "Buff": case "Gain": case "Effect": case "Barrier": case "Support": case "Removes": case "Cleanse": case "Labor":
+                    case "Buff Duration": case "Barrier Armor": case "Pinned": case "Mimics": case "Phantom": case "Portals":
+                        break;   // description tokens only
+                    default:
+                        if (L == "Damage") IhAddUnique(dmg, V);
+                        else if (IhIsDamageText(V) || (IhDamagePartLabel(L) && V.IndexOf('%') >= 0)) IhAddUnique(dmg, L + ": " + V);
+                        break;
+                }
+            }
+            string regen;
+            if (token.TryGetValue("__regen", out regen))
+            {
+                string r = regen.Replace("% of Total HP per second", "% Max HP Heal per tick (1s)").Replace("% of Max HP per second", "% Max HP Heal per tick (1s)");
+                if (r.IndexOf("Heal", StringComparison.Ordinal) < 0) r += " Heal";
+                if (duration != null && r.IndexOf(" for ", StringComparison.Ordinal) < 0 && !System.Text.RegularExpressions.Regex.IsMatch(r, @",\s*\d")) r += " for " + duration;
+                IhAddUnique(dmg, r);
+            }
+
+            System.Text.StringBuilder b = new System.Text.StringBuilder();
+            string desc = IhSkillDescription(id);
+            desc = System.Text.RegularExpressions.Regex.Replace(desc, @"\{([A-Za-z]+)\}", delegate(System.Text.RegularExpressions.Match m)
+            {
+                string v; return token.TryGetValue(m.Groups[1].Value, out v) ? v : "\u0001";
+            });
+            desc = System.Text.RegularExpressions.Regex.Replace(desc, @"\s*\(([^()]*)\)", delegate(System.Text.RegularExpressions.Match m)
+            {
+                string inner = m.Groups[1].Value;
+                if (inner.IndexOf('\u0001') < 0) return m.Value;
+                string[] parts = inner.Split(';');
+                List<string> keep = new List<string>();
+                for (int i = 0; i < parts.Length; i++) if (parts[i].IndexOf('\u0001') < 0 && parts[i].Trim().Length > 0) keep.Add(parts[i].Trim());
+                return keep.Count > 0 ? " (" + string.Join("; ", keep.ToArray()) + ")" : "";
+            });
+            desc = desc.Replace("\u0001", "");
+            if (ascended)
+            {
+                string asc = IhAscensionText(id);
+                if (asc.Length > 0) desc += " Ascended: " + asc;
+            }
+            b.Append(IhWhite(desc) + "\n\n");
+
+            int maxTier = IhMaxTier(id);
+            if (maxTier > 0)
+            {
+                int tier = IhGetTier(player, id), pending = GetPrototypePending(id);
+                bool heal = id == "holy_wave" || id == "holy_relic";
+                int shown = tier + pending;
+                float bonus = heal ? IhTierHealBonus(shown) : IhTierDamageBonus(id, shown);
+                string t = tier.ToString() + "/" + maxTier.ToString();
+                if (pending > 0) t += " → " + shown.ToString() + "/" + maxTier.ToString() + " (pending)";
+                if (id != "divine_intervention" && (heal || dmg.Count > 0 || dot.Count > 0))
+                    t += " · +" + IhNum(bonus * 100f) + "% " + (heal ? "Healing" : "Damage");
+                b.Append(IhOut("Tier", t));
+            }
+            if (dmg.Count > 0) b.Append(IhOut("Damage", string.Join("; ", dmg.ToArray())));
+            if (dot.Count > 0) b.Append(IhOut("DoT", string.Join("; ", dot.ToArray())));
+            if (deb.Count > 0) b.Append(IhOut("Atk Debuff", string.Join("; ", deb.ToArray())));
+            if (rng.Count > 0) b.Append(IhOut("Atk Range", string.Join("; ", rng.ToArray())));
+            if (rad.Count > 0) b.Append(IhOut("Atk Radius", string.Join("; ", rad.ToArray())));
+            if (stamina != null) b.Append(IhOut("Stamina Cost", stamina));
+            if (eitr != null) b.Append(IhOut("Eitr Cost", eitr));
+            if (hp != null) b.Append(IhOut("HP Cost", hp));
+            if (cooldown != null) b.Append(IhOut("Cooldown", cooldown));
+            if (!ascended && IhAscensionRule(id).Length > 0)
+            {
+                string asc = IhAscensionText(id);
+                if (asc.Length > 0) b.Append(IhOut("Ascension Description", asc));
+            }
+            return b.ToString().TrimEnd('\n');
+        }
+
+        // Printing outside the capture (IhLine is captured while a tooltip is composed).
+        private string IhOut(string label, string value)
+        {
+            List<KeyValuePair<string, string>> c = _ihCap;
+            _ihCap = null;
+            try { return IhLine(label, value); }
+            finally { _ihCap = c; }
+        }
+
         // ------------------------------------------------------------------ tree drawing helpers
         private void IhEnsureTreeStyles()
         {
@@ -13943,12 +14247,12 @@ namespace AlbedosCustomClassesAdvanced
         {
             if (player == null || w == null) return false;
             string cls = GetClass(player), adv = GetAdvancement(player);
-            if (adv == "Mercenary" && DragonCombat.IsPairedWeapon(w)) return true;
+            if (adv == "Mercenary" && DragonCombat.IsPairedWeapon(w) && !DragonCombat.IsPairedDagger(w)) return true;   // v0.25.164 paired daggers stay vanilla
             string[] ok;
             if (adv == "Sword Master") ok = new string[] { "Swords" };
             else if (cls == "Warrior") ok = new string[] { "Swords", "Axes", "Clubs", "Polearms", "Spears" };   // v0.25.47: Warrior + Merc, no Knives / Fist weapons
             else if (cls == "Cleric") ok = new string[] { "Clubs" };
-            else if (cls == "Kali") ok = new string[] { "Knives", "Unarmed" };
+            else if (cls == "Kali") ok = new string[] { "Unarmed" };   // v0.25.164 (user): daggers stay out of AA's NACC for now
             else return false;
             return IhWeaponSkillIn(w, ok);
         }
@@ -14410,6 +14714,12 @@ namespace AlbedosCustomClassesAdvanced
 
         private void IhAdvanceToPaladin(Player player)
         {
+            // v0.25.164 (user): Altar-only. The tree can no longer Advance / change the Class; the Altar writes the selection.
+            ShowMessage("Choose your Advancement Class at the Altar of Blessings.");
+        }
+
+        private void IhAdvanceToPaladinRetired(Player player)
+        {
             if (player == null || IhBranchesOf(GetClass(player)).Length == 0 || !string.IsNullOrEmpty(GetAdvancement(player))) return;
             List<string> lines = new List<string>();
             if (!IhAdvanceChecklist(player, lines) || GetPrototypeTotalPending() > 0)
@@ -14426,7 +14736,38 @@ namespace AlbedosCustomClassesAdvanced
             ShowMessage("Advanced to " + IhAcDisplay(branch) + "!" + (advancedKit != null ? " " + IhSkillName(advancedKit.AscendedClass) + " has Ascended." : ""));
         }
 
-        // Advance plaque inside the sealed Paladin panel (before Advancement).
+        // v0.25.164: sealed Advancement side before Advancement - requirement checklist only (read-only), Altar pointer, no action.
+        private void IhDrawSealedAdvancement(Player player)
+        {
+            if (player == null || IhBranchesOf(GetClass(player)).Length == 0) return;
+            IhEnsureTreeStyles();
+            GUIStyle st = new GUIStyle(_ihLockTextStyle);
+            st.alignment = TextAnchor.MiddleCenter;
+            st.fontSize = Mathf.Max(8, Mathf.RoundToInt(ScaleReferenceRect(0f, 0f, 0f, 11f).height));
+            string ink = IhHex(0.36f, 0.26f, 0.18f);
+            GUI.Label(ScaleReferenceRect(380f, 300f, 500f, 18f), "<color=" + ink + ">ADVANCE AT THE ALTAR OF BLESSINGS</color>", st);
+            // Branch-neutral requirements (the Advancement-specific prerequisite skill is shown in the Altar).
+            int level = IhGetLevel(player);
+            string[] cls = IhPlayerClassSkills(player);
+            int best = 0;
+            for (int i = 0; i < cls.Length; i++) best = Mathf.Max(best, IhGetTier(player, cls[i]));
+            int spent = IhSpent(player, cls);
+            string[] lines = {
+                (level >= 16 ? "+" : "-") + "Lv 16  (" + level.ToString() + ")",
+                (best >= 7 ? "+" : "-") + "The Advancement's Class skill at Tier 7",
+                (spent >= 14 ? "+" : "-") + "14 Class Tier Points spent  (" + spent.ToString() + "/14)" };
+            string ok = IhHex(0.20f, 0.45f, 0.18f);
+            string no = IhHex(0.55f, 0.16f, 0.12f);
+            st.fontSize = Mathf.Max(8, Mathf.RoundToInt(ScaleReferenceRect(0f, 0f, 0f, 10f).height));
+            for (int i = 0; i < lines.Length; i++)
+            {
+                bool done = lines[i].StartsWith("+");
+                GUI.Label(ScaleReferenceRect(380f, 322f + i * 14f, 500f, 14f),
+                    "<color=" + (done ? ok : no) + ">" + (done ? "◆ " : "◇ ") + lines[i].Substring(1) + "</color>", st);
+            }
+        }
+
+        // Advance plaque inside the sealed Paladin panel (before Advancement). v0.25.164: no longer drawn (Altar-only).
         private void IhDrawAdvancePanel(Player player)
         {
             if (player == null || IhBranchesOf(GetClass(player)).Length == 0 || !string.IsNullOrEmpty(GetAdvancement(player)))
@@ -16260,19 +16601,25 @@ namespace AlbedosCustomClassesAdvanced
             RegisterReferenceHotspot(ScaleReferenceRect(31f, 76f, 286f, 64f),
                 IhClassBlessingTitle(treeClass), IhClassBlessingText(treeClass));
             string treeBranch = IhTreeBranch();
-            if (treeBranch == "Priest" || treeBranch == "Paladin")
+            if (treePlayer == null || string.IsNullOrEmpty(GetAdvancement(treePlayer)))
+                RegisterReferenceHotspot(ScaleReferenceRect(332f, 76f, 651f, 64f), "ADVANCEMENT - SEALED", "Choose your Advancement Class at the Altar of Blessings (Lv 16). Its skills and Mastery appear here afterwards.");
+            else if (treeBranch == "Priest" || treeBranch == "Paladin")
                 RegisterReferenceHotspot(ScaleReferenceRect(332f, 76f, 651f, 64f),
                     (treeBranch == "Priest" ? "BLESS THY SINNERS - MASTERY" : "HEAVEN'S WILL - MASTERY"),
                     treeBranch == "Priest" ? GetAdvancedPassiveDescription(treePlayer, "Priest") : "+10% Magic Damage (Fire, Frost, Lightning, Poison, Spirit). Club-type melee + Shield: +15 Clubs (effective cap 100), no Armor movement penalties, and the Club's current Blunt damage guarantees Slash and Pierce each reach at least 50% of that Blunt value without lowering existing damage.");
             else
                 RegisterReferenceHotspot(ScaleReferenceRect(332f, 76f, 651f, 64f), IhMasteryTitle(treeBranch), IhMasteryText(treeBranch));
 
-            IhDrawBranchSelector(treePlayer);
+            // v0.25.164 (user): Class selection / change and Advancement Class previews belong to the Altar of Blessings only.
+            // Before Advancement the tree shows the current Class skills; the Advancement side stays sealed (no branch selector,
+            // no ADVANCE action, no preview nodes).
+            bool treeAdvanced = treePlayer != null && !string.IsNullOrEmpty(GetAdvancement(treePlayer));
             ReferenceNodeUi[] nodes = IhTreeNodes();
             for (int i = 0; i < nodes.Length; i++)
-                DrawReferenceNode(nodes[i]);
+                if (treeAdvanced || IhIsAnyClassSkill(nodes[i].Id))
+                    DrawReferenceNode(nodes[i]);
             IhDrawUniversalBranchLabels();
-            IhDrawAdvancePanel(treePlayer);
+            if (!treeAdvanced) IhDrawSealedAdvancement(treePlayer);
 
             DrawReferenceHotbarSlots();
             DrawReferenceHotbarHotkeys();
@@ -16523,7 +16870,9 @@ namespace AlbedosCustomClassesAdvanced
             title.normal.textColor=new Color(1f,0.93f,0.77f,1f);
             // Centred between the emblem and the gold star (x 665), shrunk to fit long AC names.
             Rect titleRect=ScaleReferenceRect(598f,87f,134f,35f);
-            string branchName=IhAcDisplay(IhTreeBranch()).ToUpperInvariant();
+            Player titlePlayer=Player.m_localPlayer;
+            bool titleAdvanced=titlePlayer!=null && !string.IsNullOrEmpty(GetAdvancement(titlePlayer));
+            string branchName=titleAdvanced ? IhAcDisplay(IhTreeBranch()).ToUpperInvariant() : "ADVANCEMENT";   // v0.25.164 no AC preview
             while(title.fontSize>10 && title.CalcSize(new GUIContent(branchName)).x>titleRect.width) title.fontSize--;
             GUI.Label(titleRect,branchName,title);
 
@@ -16552,6 +16901,7 @@ namespace AlbedosCustomClassesAdvanced
                 // Cleric Class plates are painted on the chassis; every other Class gets live names.
                 bool classSkill=IhIsAnyClassSkill(node.Id);
                 if(classSkill && labelClass=="Cleric") continue;
+                if(!classSkill && !titleAdvanced) continue;   // v0.25.164 sealed Advancement side: no preview names
                 Vector2 anchor=GetReferenceNameplateAnchor(node);
                 // Long names (Divine Intervention, Heaven's Judgement) shrink to stay inside the plate.
                 float width=classSkill ? IhClassLabelWidth(IhTemplateSlot(node.Id)) : IhLabelWidth(node.Id);
@@ -17076,7 +17426,7 @@ namespace AlbedosCustomClassesAdvanced
         {
             title = IsAscendedSkill(node.Id) ? "ASCENDED - " + IhSkillName(node.Id).ToUpperInvariant() : node.TooltipTitle;
             string id = node.Id;
-            float power = IhSkillPower(player,id);
+            float power = id == "holy_relic" ? IhHealPower(player,id) : IhSkillPower(player,id);   // v0.25.164 healing curve for pure heals
             System.Text.StringBuilder b = new System.Text.StringBuilder();
             string lore = "";
             switch(id)

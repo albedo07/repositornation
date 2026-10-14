@@ -232,7 +232,7 @@ namespace AlbedosCustomClassesSkills
         public static SkillsPlugin Instance;
         public const string ModGuid = "albedo.customclasses.skills";
         public const string ModName = "Aethelborn Ascended - Starter Skills";
-        public const string ModVersion = "0.25.163";
+        public const string ModVersion = "0.25.164";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";
@@ -933,7 +933,7 @@ namespace AlbedosCustomClassesSkills
                 StartCoroutine(AnimateRing(caster.transform.position + Vector3.up * 0.16f, 0.4f, Mathf.Max(1f, DragonCombat.M(_holyRadius.Value)) * 0.72f, 0.60f, new Color(0.75f, 0.95f, 1f, 0.85f), 0.045f, 0.08f));
             }
 
-            float holyPower = DragonCombat.GetSkillPower(caster, "holy_wave");
+            float holyPower = DragonCombat.GetSkillHealPower(caster, "holy_wave");   // v0.25.164 healing Tier curve
             HealPlayers(caster.transform.position, DragonCombat.M(_holyRadius.Value), _holyImmediate.Value * holyPower);
 
             int ticks = Mathf.Max(1, Mathf.RoundToInt(Mathf.Max(1f, _holyDuration.Value)));

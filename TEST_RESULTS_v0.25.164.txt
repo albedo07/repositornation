@@ -1,0 +1,9 @@
+v0.25.164 Clean Slate - test results (no game here)
+COMPILATION
+- mcs --parse -langversion:5: Advanced, CombatRuntime, Sorcerer, Skills, Core OK
+- tools/compile_check/check.sh 3029660 (Advanced + CombatRuntime + Skills + DevTools + GuardianAngel + Sorcerer + Ranger, Core separately): PASSED, 0 new signatures
+MODEL / OFFLINE
+- tools/tests/nacc_handoff: ALL PASS (+ Tier curve: 7/7, 5/5, 3/3 = +80%, even steps, heal +10%/Tier; paired daggers vanilla; non-Mercenary no 2HDW)
+- HUD frames rebuilt with tools/build_hud_frames.py --export: Warrior + Cleric frames / layouts identical to v0.25.163; Ranger / Sorcerer label column gone, trough alpha 255 (edge columns only anti-aliased)
+- tooltip damage / debuff classifier checked against real builder lines (C# harness)
+NOT TESTED IN GAME (needs you): HUD look, staff cadence + Horizon Walker leg cycle, NACC first use from a fresh launch (incl. 2HDW), tree without class selection, every tooltip's wording, Tier damage in combat.

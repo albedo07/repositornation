@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.163";
+        public const string ModVersion = "0.25.164";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1715,7 +1715,7 @@ namespace DragonsAltarCombat
                 if (a != null && _routeCtrl != null && a.runtimeAnimatorController != _routeCtrl)
                 {
                     RouteLog("controller swapped to '" + (a.runtimeAnimatorController == null ? "none" : a.runtimeAnimatorController.name) + "' before RPC_SetTrigger");
-                    a.runtimeAnimatorController = _routeCtrl; a.Update(0f);
+                    DragonCombat.SwapController(a, _routeCtrl);
                 }
             }
             catch (Exception) { }
@@ -1738,8 +1738,7 @@ namespace DragonsAltarCombat
             Animator a = _routeAnimator;
             if (a == null || _routeCtrl == null || a.runtimeAnimatorController == _routeCtrl) return;
             RouteLog("controller swapped to '" + (a.runtimeAnimatorController == null ? "none" : a.runtimeAnimatorController.name) + "' " + where);
-            a.runtimeAnimatorController = _routeCtrl;
-            a.Update(0f);
+            DragonCombat.SwapController(a, _routeCtrl);
             a.SetTrigger(_routeTrigger);
         }
 
@@ -4558,13 +4557,65 @@ namespace DragonsAltarCombat
         {
             string trigger; return ExternalTrigger(name, out trigger) ? trigger : name;
         }
+        // v0.25.164 ROOT CAUSE of the first-NACC "sit": assigning Animator.runtimeAnimatorController rebinds the animator - every
+        // parameter goes back to the controller default and the state machine restarts at its entry state. Valheim sets "wakeup"
+        // (the lie-down / sit-up entry pose), statei/statef (weapon state) and the attach / emote bools only on events, never per frame,
+        // so the first controller swap of a session (2HDW SBDW override on the first primary, Warfare / external sets) could leave the
+        // player in the sit-up pose until the next attack trigger pulled it out. Every controller swap goes through here: non-trigger
+        // parameters and each layer's current state are carried over, so the swap never changes pose or state.
+        public static void SwapController(Animator a, RuntimeAnimatorController c)
+        {
+            if (a == null || c == null || a.runtimeAnimatorController == c) return;
+            AnimatorControllerParameter[] ps = null;
+            object[] vals = null;
+            int[] hashes = null; float[] times = null;
+            try
+            {
+                ps = a.parameters;
+                vals = new object[ps.Length];
+                for (int i = 0; i < ps.Length; i++)
+                {
+                    AnimatorControllerParameterType t = ps[i].type;
+                    if (t == AnimatorControllerParameterType.Bool) vals[i] = a.GetBool(ps[i].nameHash);
+                    else if (t == AnimatorControllerParameterType.Float) vals[i] = a.GetFloat(ps[i].nameHash);
+                    else if (t == AnimatorControllerParameterType.Int) vals[i] = a.GetInteger(ps[i].nameHash);
+                }
+                hashes = new int[a.layerCount]; times = new float[a.layerCount];
+                for (int l = 0; l < a.layerCount; l++)
+                {
+                    AnimatorStateInfo st = a.GetCurrentAnimatorStateInfo(l);
+                    hashes[l] = st.fullPathHash; times[l] = st.normalizedTime;
+                }
+            }
+            catch (Exception) { ps = null; }
+            a.runtimeAnimatorController = c;
+            if (ps != null)
+            {
+                try
+                {
+                    for (int i = 0; i < ps.Length; i++)
+                    {
+                        if (vals[i] == null) continue;
+                        AnimatorControllerParameterType t = ps[i].type;
+                        if (t == AnimatorControllerParameterType.Bool) a.SetBool(ps[i].nameHash, (bool)vals[i]);
+                        else if (t == AnimatorControllerParameterType.Float) a.SetFloat(ps[i].nameHash, (float)vals[i]);
+                        else a.SetInteger(ps[i].nameHash, (int)vals[i]);
+                    }
+                    for (int l = 0; l < hashes.Length && l < a.layerCount; l++)
+                        if (a.HasState(l, hashes[l])) a.Play(hashes[l], l, times[l]);
+                }
+                catch (Exception) { }
+            }
+            a.Update(0f);
+        }
+
         public static void PrepareExternalAnimation(Animator animator, string name)
         {
             string trigger;
             if (animator == null || !ExternalTrigger(name, out trigger)) return;
             RuntimeAnimatorController controller = ExternalControllers[name];
             if (controller != null && animator.runtimeAnimatorController != controller)
-            { animator.runtimeAnimatorController = controller; animator.Update(0f); }
+            { SwapController(animator, controller); }
             CheckAnimationController(animator);
         }
 
@@ -7380,6 +7431,14 @@ namespace DragonsAltarCombat
         // v0.18.0: Immortal Heroes Tier power (+10% damage/healing per Tier). The Advanced module
         // registers the provider; skills in other modules ask for their multiplier by skill id.
         public static Func<Player, string, float> SkillPowerProvider;
+        // v0.25.164: healing keeps its own Tier curve (damage: +80% at max Tier, healing: +TierPowerPercent per Tier).
+        public static Func<Player, string, float> SkillHealPowerProvider;
+        public static float GetSkillHealPower(Player player, string skillId)
+        {
+            if (SkillHealPowerProvider == null || player == null || string.IsNullOrEmpty(skillId)) return GetSkillPower(player, skillId);
+            try { return Mathf.Max(0f, SkillHealPowerProvider(player, skillId)); }
+            catch { return 1f; }
+        }
 
         public static float GetSkillPower(Player player, string skillId)
         {
@@ -9039,6 +9098,15 @@ namespace DragonsAltarCombat
             // v0.25.141: attack metadata only - a native paired item is two-handed and its PRIMARY attack animation is a "dual*" set.
             // An external (Warfare / Wizardry) animation registration alone does not make a weapon paired.
             return animation.StartsWith("dual", StringComparison.OrdinalIgnoreCase);
+        }
+
+        // v0.25.164 (user): paired daggers (2HDW knives: primary dual_knives / Knives skill) stay VANILLA - not part of AA's NACC yet.
+        // They are still paired weapons for the equip rule (Mercenary only).
+        public static bool IsPairedDagger(ItemDrop.ItemData item)
+        {
+            if (!IsPairedWeapon(item)) return false;
+            return string.Equals(item.m_shared.m_attack.m_attackAnimation, "dual_knives", StringComparison.OrdinalIgnoreCase) ||
+                item.m_shared.m_skillType.ToString() == "Knives";
         }
 
         public static bool IsTherzieStaff(ItemDrop.ItemData item)
@@ -11492,11 +11560,10 @@ namespace DragonsAltarCombat
                         ctrl = BuildPairedOverride(cands[i], out names);
                         if (!HasCarrierClips(names)) { UnityEngine.Object.Destroy(ctrl); continue; }
                     }
-                    a.runtimeAnimatorController = ctrl;
-                    a.Update(0f);
+                    DragonCombat.SwapController(a, ctrl);
                     DragonCombat.CheckController(a);
                     string c3 = knife ? KnifeCarrier(a) : DragonCombat.PairedCarrier(a);
-                    if (c3 == null) { a.runtimeAnimatorController = start; a.Update(0f); continue; }
+                    if (c3 == null) { DragonCombat.SwapController(a, start); continue; }
                     _pairedNames[ctrl.GetInstanceID()] = names;
                     _pairedByBase[cands[i].GetInstanceID()] = ctrl;
                     if (start != null && !IsOurOverride(start)) _pairedByBase[start.GetInstanceID()] = ctrl;   // ApplyPaired finds the repaired one next time
@@ -11508,7 +11575,7 @@ namespace DragonsAltarCombat
                 }
                 catch (Exception) { }
             }
-            if (a.runtimeAnimatorController != start && start != null) { a.runtimeAnimatorController = start; a.Update(0f); }
+            if (a.runtimeAnimatorController != start && start != null) DragonCombat.SwapController(a, start);
             return false;
         }
         private static readonly HashSet<string> _pairedLogged = new HashSet<string>();
@@ -11688,7 +11755,7 @@ namespace DragonsAltarCombat
             if (!on)
             {
                 RuntimeAnimatorController b;
-                if (isOurs && _pairedBase.TryGetValue(id, out b) && b != null) { animator.runtimeAnimatorController = b; animator.Update(0f); }
+                if (isOurs && _pairedBase.TryGetValue(id, out b) && b != null) DragonCombat.SwapController(animator, b);
                 return false;
             }
             LoadPaired();
@@ -11712,8 +11779,7 @@ namespace DragonsAltarCombat
                 _pairedCtrl[id] = ctrl;
                 HashSet<string> have;
                 if (_pairedNames.TryGetValue(ctrl.GetInstanceID(), out have) && HasCarrierClips(have)) _vanillaRoot[id] = baseCtrl;
-                animator.runtimeAnimatorController = ctrl;
-                animator.Update(0f);
+                DragonCombat.SwapController(animator, ctrl);
                 return true;
             }
             catch (Exception) { return false; }
@@ -11781,7 +11847,7 @@ namespace DragonsAltarCombat
             if (!dual)
             {
                 RuntimeAnimatorController orig;
-                if (_original.TryGetValue(id, out orig) && animator.runtimeAnimatorController != orig) { animator.runtimeAnimatorController = orig; animator.Update(0f); }
+                if (_original.TryGetValue(id, out orig) && animator.runtimeAnimatorController != orig) DragonCombat.SwapController(animator, orig);
                 return false;
             }
             Load();
@@ -11811,7 +11877,7 @@ namespace DragonsAltarCombat
                     dualCtrl = aoc;
                     _dual[id] = dualCtrl;
                 }
-                if (animator.runtimeAnimatorController != dualCtrl) { animator.runtimeAnimatorController = dualCtrl; animator.Update(0f); }
+                if (animator.runtimeAnimatorController != dualCtrl) DragonCombat.SwapController(animator, dualCtrl);
                 return true;
             }
             catch (Exception) { return false; }

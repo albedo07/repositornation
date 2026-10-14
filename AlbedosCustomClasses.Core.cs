@@ -41,7 +41,7 @@ namespace AlbedosCustomClasses
     {
         public const string ModGuid = "albedo.customclasses";
         public const string ModName = "Aethelborn Ascended - Altar";
-        public const string ModVersion = "0.25.163";
+        public const string ModVersion = "0.25.164";
 
         internal const string ClassDataKey = "AlbedoCustomClasses.Class";
         internal const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -960,6 +960,15 @@ namespace AlbedosCustomClasses
 
         private string AltarSkillDescription(AltarSkillEntry entry)
         {
+            // v0.25.164 (user): plain one-sentence descriptions, the same ones the Skill Tree shows (Advanced.IhPlainDescription).
+            try
+            {
+                Type adv=Type.GetType("AlbedosCustomClassesAdvanced.AdvancedPlugin, AlbedosCustomClasses.Advanced");
+                MethodInfo plain=adv==null ? null : adv.GetMethod("IhPlainDescription",BindingFlags.Public|BindingFlags.Static);
+                string text=plain==null ? null : plain.Invoke(null,new object[]{entry.Id}) as string;
+                if(!string.IsNullOrEmpty(text)) return text;
+            }
+            catch(Exception) { }
             // Read the existing Cleric-tree tooltip builder without linking Core to Advanced.
             // This preserves live configured values and existing meter/degree/percent units.
             try

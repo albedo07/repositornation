@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Aethelborn Ascended - Sorcerer Advancements";
-        public const string ModVersion = "0.25.163";
+        public const string ModVersion = "0.25.164";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -477,6 +477,12 @@ namespace DragonsAltarSorcerer
             }
             _mimicShotHooks = shotHooks > 0;
 
+            // v0.25.164 (user): Horizon Walker keeps full movement speed while firing any staff / wand / Gun Staff (native
+            // projectile count, cadence and attack sequence untouched - only the attack's movement factor is lifted).
+            MethodInfo moveFactor = typeof(Humanoid).GetMethod("GetAttackSpeedFactorMovement", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (moveFactor != null)
+                PatchWithHarmony(moveFactor, null, new HarmonyMethod(typeof(SorcererPlugin).GetMethod("HwMoveFactorPostfix", BindingFlags.Static | BindingFlags.NonPublic)));
+
             MethodInfo eitrPrefix = typeof(SorcererPlugin).GetMethod("TryUseEitrPrefix", BindingFlags.Static | BindingFlags.NonPublic);
             MethodInfo[] playerMethods = typeof(Player).GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
             for (int i = 0; i < playerMethods.Length; i++)
@@ -611,6 +617,24 @@ namespace DragonsAltarSorcerer
         private bool _mimicShotHooks;
         private static FieldInfo _attackCharacterField;
         private static FieldInfo _attackWeaponField;
+
+        private static bool _hwFiring;   // set each frame by UpdateHwMobility
+        private static void HwMoveFactorPostfix(Humanoid __instance, ref float __result)
+        {
+            if (_hwFiring && __instance != null && __instance == Player.m_localPlayer && __result < 1f) __result = 1f;
+        }
+
+        // Horizon Walker firing a magic weapon on the ground: full movement speed + legs keep walking / running (HwLegCycle).
+        private void UpdateHwMobility(Player player, string advancement)
+        {
+            _hwFiring = false;
+            if (player == null || advancement != "Spellcaster" || player.IsDead() || !player.InAttack()) return;
+            if (!DragonCombat.IsMagicWeapon(GetCurrentWeapon(player))) return;
+            _hwFiring = true;
+            HwLegCycle legs = player.GetComponent<HwLegCycle>();
+            if (legs == null) legs = player.gameObject.AddComponent<HwLegCycle>();
+            legs.ActiveUntil = Time.time + 0.12f;
+        }
 
         private static void AttackShotPostfix(Attack __instance)
         {
@@ -2422,17 +2446,12 @@ namespace DragonsAltarSorcerer
 
         private void UpdateSpellcasterWeaponMastery(Player player, string advancement)
         {
-            if (player == null || advancement != "Spellcaster")
-            {
-                RestoreGunStaffTimings();
-                return;
-            }
-
-            ItemDrop.ItemData right = DragonCombat.GetHandItem(player, "m_rightItem");
-            ItemDrop.ItemData left = DragonCombat.GetHandItem(player, "m_leftItem");
-            float cadenceMultiplier = Mathf.Max(1f, _gunStaffFireRateMultiplier.Value);
-            ApplyInstantGunStaffTiming(right, cadenceMultiplier);
-            ApplyInstantGunStaffTiming(left, cadenceMultiplier);
+            // v0.25.164 ROOT CAUSE (user: doubled shots / altered intervals / gaps): this rewrote every Gun Staff's SHARED attack data
+            // while a Horizon Walker held it (draw / charge / warm-up zeroed, cooldown / 1.5, accuracy and movement factors forced)
+            // - a leftover of the removed dual-Gun-Staff mode. Staves now keep their native data; anything still modified from
+            // an older session is restored. Full movement while firing = HwMoveFactorPostfix (no item data touched).
+            RestoreGunStaffTimings();
+            UpdateHwMobility(player, advancement);
         }
 
         private void ApplyInstantGunStaffTiming(ItemDrop.ItemData item, float cadenceMultiplier)
@@ -4415,6 +4434,56 @@ namespace DragonsAltarSorcerer
 
             if (adv == "Wizard" && _wizardChargeActive)
                 GUI.Label(new Rect(x, y + size + 3f * scale, totalWidth, 18f * scale), "STAFF CHARGE  " + _wizardChargeStacks.ToString() + "/3", _titleStyle);
+        }
+    }
+
+    // v0.25.164 (user: Horizon Walker slid while moving + firing): the staff attack state owns the whole body, so the legs stood still
+    // while the body moved at full speed. After the animator (and after skill drivers), the legs swing in a walk / run cycle along the
+    // real movement direction (thigh swing about the movement-perpendicular axis, knee bend about the body's right axis, world-space
+    // rotations - no bone-axis assumptions). Only while firing AND moving on the ground; standing still keeps the native animation.
+    [DefaultExecutionOrder(31500)]
+    public class HwLegCycle : MonoBehaviour
+    {
+        public float ActiveUntil;
+        private Animator _an;
+        private Rigidbody _rb;
+        private Transform _lu, _ll, _ru, _rl;
+        private float _phase, _w;
+
+        private void LateUpdate()
+        {
+            if (_an == null) { _an = GetComponentInChildren<Animator>(); _rb = GetComponent<Rigidbody>(); if (_an == null) return; }
+            if (_lu == null)
+            {
+                _lu = _an.GetBoneTransform(HumanBodyBones.LeftUpperLeg); _ll = _an.GetBoneTransform(HumanBodyBones.LeftLowerLeg);
+                _ru = _an.GetBoneTransform(HumanBodyBones.RightUpperLeg); _rl = _an.GetBoneTransform(HumanBodyBones.RightLowerLeg);
+                if (_lu == null || _ll == null || _ru == null || _rl == null) return;
+            }
+            Vector3 v = _rb != null ? _rb.velocity : Vector3.zero;
+            v.y = 0f;
+            float speed = v.magnitude;
+            bool on = Time.time < ActiveUntil && speed > 0.6f;
+            _w = Mathf.MoveTowards(_w, on ? 1f : 0f, Time.deltaTime / 0.15f);
+            if (_w <= 0.001f) return;
+            Vector3 dir = speed > 0.05f ? v / speed : transform.forward;
+            Vector3 swingAxis = Vector3.Cross(Vector3.up, dir);
+            Vector3 kneeAxis = transform.right;
+            bool run = speed > 4.5f;
+            float stride = run ? 1.9f : 1.35f;                 // metres per full cycle
+            _phase += speed / stride * Mathf.PI * 2f * Time.deltaTime;
+            if (_phase > Mathf.PI * 2f) _phase -= Mathf.PI * 2f;
+            float swing = (run ? 38f : 26f) * _w;
+            float knee = (run ? 70f : 45f) * _w;
+            Leg(_lu, _ll, _phase, swing, knee, swingAxis, kneeAxis);
+            Leg(_ru, _rl, _phase + Mathf.PI, swing, knee, swingAxis, kneeAxis);
+        }
+
+        private static void Leg(Transform upper, Transform lower, float p, float swing, float knee, Vector3 swingAxis, Vector3 kneeAxis)
+        {
+            float s = Mathf.Sin(p);
+            upper.rotation = Quaternion.AngleAxis(-swing * s, swingAxis) * upper.rotation;   // + toward the movement direction
+            float bend = knee * Mathf.Max(0f, Mathf.Sin(p + 1.2f));                          // knee folds while the leg travels forward
+            lower.rotation = Quaternion.AngleAxis(bend, kneeAxis) * lower.rotation;           // shin swings back = knee bend
         }
     }
 }

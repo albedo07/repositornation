@@ -26,12 +26,16 @@ CLASSES = {
     bars=[("red", 238, 282, 580, 1292, 1400), ("lime", 304, 352, 580, 1156, 1400), ("blue", 372, 420, 580, 1136, 1400), ("gold", 440, 488, 580, 1082, 1390)], trough=(1150, 1370), tip=6,
     values=None, name=(440, 512, 730, 552),
     food=[((708, 675), 42), ((950, 675), 40), ((1195, 675), 42)], food_text=[(784, 667), (1026, 667), (1272, 667)], food_digit_r=17,
-    keep=[(430, 232, 500, 492)], cut=(362, 430, 410, 280, 595)),
+    keep=[(430, 232, 500, 492)], cut=(362, 430, 410, 280, 595),
+    # v0.25.164 finish: label column = icon chip + text up to the LAST bar start (STAMINA reaches past the HP fill start),
+    # source columns from the clean trough; food slots repainted flat (the leaf garnish spills past any circle).
+    label_x1="max", label_sx=1150,
+    food_fill=[(648, 641, 836, 717, 845), (890, 641, 1078, 717, 1087), (1135, 641, 1323, 717, 1332)]),
  "Sorcerer": dict(file="sorcerer", accent=[(112, 165)],
     bars=[("red", 230, 282, 700, 1462, 1458), ("lime", 298, 352, 700, 1290, 1462), ("blue", 366, 420, 700, 1226, 1465), ("gold", 436, 492, 700, 1124, 1462)], trough=(1150, 1440), tip=10,
     values=None, name=(205, 522, 455, 568),
     food=[((815, 680), 44), ((975, 680), 44), ((1135, 680), 44)], food_text=[(853, 713), (1013, 713), (1173, 713)], food_digit_r=14,
-    keep=[(520, 225, 610, 495)], cut=(358, 428, 515, 420, 590)),
+    keep=[(520, 225, 610, 495)], cut=(358, 428, 515, 420, 590), label_x1="max", label_sx=1180),
  "Cleric": dict(file="cleric", accent=[(12, 34)],
     bars=[("red", 278, 330, 660, 1452, 1448), ("lime", 357, 405, 660, 1400, 1450), ("blue", 434, 484, 660, 1400, 1450), ("gold", 506, 560, 660, 1146, 1450)], trough=(1240, 1440), tip=22,
     values=None, name=(200, 578, 380, 622),
@@ -105,8 +109,9 @@ def build(cls):
         erase[y0:y1, x0:x1] |= cv2.dilate(t, np.ones((5, 5), np.uint8))
     if g["values"]: text_erase(g["values"], 90, 110)
     text_erase(g["name"], 110, 120)
-    for (c, r) in g["food"]:
-        cv2.circle(erase, c, r, 255, -1)
+    if not g.get("food_fill"):
+        for (c, r) in g["food"]:
+            cv2.circle(erase, c, r, 255, -1)
     for (x0, y0, x1, y1) in g.get("food_erase", []):
         text_erase((x0, y0, x1, y1), 140, 110)
     if g["food_digit_r"]:
@@ -114,7 +119,17 @@ def build(cls):
             x, y = c; rr = g["food_digit_r"]
             text_erase((x - rr, y - rr - 4, x + rr, y + rr + 4), 80, 110)
     clean = cv2.inpaint(bgr, erase, 6, cv2.INPAINT_TELEA) if erase.any() else bgr
-    clean = remove_label_column(g, clean, strips)
+    for (x0, y0, x1, y1, sx) in g.get("food_fill", []):
+        # empty slot: the interior's own vertical profile (clean column right of the count), feathered 3 px
+        prof = clean[y0:y1, sx - 3:sx + 4].astype(float).mean(axis=1)
+        block = np.repeat(prof[:, None, :], x1 - x0, axis=1)
+        wgt = np.ones((y1 - y0, x1 - x0)); f = 3
+        for i in range(f):
+            wgt[:, i] *= (i + 1) / (f + 1); wgt[:, -1 - i] *= (i + 1) / (f + 1)
+            wgt[i, :] *= (i + 1) / (f + 1); wgt[-1 - i, :] *= (i + 1) / (f + 1)
+        reg = clean[y0:y1, x0:x1].astype(float)
+        clean[y0:y1, x0:x1] = (reg * (1 - wgt[..., None]) + block * wgt[..., None]).astype(np.uint8)
+    clean, lab_region = remove_label_column(g, clean, strips)
     # alpha: background-like pixels connected to the border become transparent (soft by distance)
     bg = np.median(np.concatenate([bgr_src[:20, :20].reshape(-1, 3), bgr_src[-20:, -20:].reshape(-1, 3), bgr_src[:20, -20:].reshape(-1, 3), bgr_src[-20:, :20].reshape(-1, 3)]), axis=0)
     diff = np.abs(bgr_src.astype(int) - bg).max(axis=2)
@@ -125,6 +140,15 @@ def build(cls):
     a = np.full((H, W), 255.0)
     a[outside] = np.clip((diff[outside] - 16) / 24.0, 0, 1) * 255
     a = cv2.GaussianBlur(a, (3, 3), 0)
+    if lab_region is not None and g.get("label_x1"):   # Warrior / Cleric frames stay byte-identical
+        # v0.25.164: the label column's ALPHA comes from the same source columns too - before, only the colour was replaced
+        # and the old HP / STAMINA / EXP shapes (and the background-keyed label chips) ghosted through.
+        ly0, ly1, lx0, lx1, lsx, lw = lab_region
+        a[ly0:ly1, lx0:lx1] = a[ly0:ly1, lx0:lx1] * (1 - lw[None, :]) + a[ly0:ly1, lsx:lsx + (lx1 - lx0)] * lw[None, :]
+        # The empty troughs are near-black like the painting's backdrop, so the keyer made parts of them see-through
+        # (Ranger HP / Eitr: the world showed inside the bars). Every trough is opaque, label column to channel end.
+        for st in strips:
+            a[st["y0"] + 2:st["y0"] + st["img"].shape[0] - 2, st["x0"]:st["xmax"]] = 255
     # un-premultiply the dark background out of soft edges
     af = np.clip(a / 255.0, 1e-3, 1)[..., None]
     rgb = np.clip((clean.astype(float) - bg * (1 - af)) / af, 0, 255)
@@ -143,9 +167,9 @@ def build(cls):
 def remove_label_column(g, img, strips):
     kx0, ky0, kx1, ky1 = g["keep"][0]
     lx0 = kx0 + g.get("label_pad", 0)
-    x1 = min(st["x0"] for st in strips) + 3
+    x1 = (max if g.get("label_x1") == "max" else min)(st["x0"] for st in strips) + 3
     w = x1 - lx0
-    sx = x1 + 24
+    sx = g.get("label_sx", x1 + 24)
     y0, y1 = ky0 - 6, ky1 + 6
     out = img.astype(float)
     src = img[y0:y1, sx:sx + w].astype(float)
@@ -156,7 +180,7 @@ def remove_label_column(g, img, strips):
     out[y0:y1, lx0:x1] = out[y0:y1, lx0:x1] * (1 - wgt[None, :, None]) + src * wgt[None, :, None]
     for st in strips:
         st["x0"] = lx0 + 4
-    return out.astype(np.uint8)
+    return out.astype(np.uint8), (y0, y1, lx0, x1, sx, wgt)
 
 # v0.25.73 (user): Stamina and Eitr share ONE bar line split in two. The painted Eitr row is cut out: everything right of
 # the bar column below the Stamina row (plus the food tray) moves up by one row height; a divider is painted at the

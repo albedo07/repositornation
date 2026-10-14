@@ -271,6 +271,22 @@ static class T
             for (int h = 0; h < 5; h++) got += sbdw + seq[h] + " ";
             Check(got.Trim() == "dual_knives0 dual_knives1 dual_knives0 dual_knives1 dual_knives2", "2HDW chain = SBDW triggers 0,1,0,1,2");
         }
+        // v0.25.164: damage Tier curve = +80% at every max Tier (even steps); healing keeps +10% per Tier
+        {
+            Func<int, int, float> dmg = (tier, max) => max <= 0 ? 0f : 0.8f * Math.Max(0, Math.Min(tier, max)) / max;
+            Check(Math.Abs(dmg(7, 7) - 0.8f) < 1e-5 && Math.Abs(dmg(5, 5) - 0.8f) < 1e-5 && Math.Abs(dmg(3, 3) - 0.8f) < 1e-5, "Class / Advancement / Ultimate max Tier = +80% damage");
+            Check(Math.Abs(dmg(1, 7) - 0.8f / 7f) < 1e-5 && Math.Abs(dmg(2, 5) - 0.32f) < 1e-5, "even steps toward +80%");
+            Check(dmg(9, 7) == dmg(7, 7) && dmg(0, 7) == 0f, "clamped at 0 and max");
+            Check(Math.Abs(0.10f * 7 - 0.7f) < 1e-5, "healing stays +10% per Tier (7/7 = +70%)");
+        }
+        // v0.25.164: paired daggers stay vanilla (no NACC), regular 2HDW keep NACC; dual wield stays Mercenary-only
+        {
+            Func<string, string, bool> dagger = (anim, skill) => anim == "dual_knives" || skill == "Knives";
+            Func<string, string, string, bool> nacc = (adv, anim, skill) => adv == "Mercenary" && anim.StartsWith("dual") && !dagger(anim, skill);
+            Check(nacc("Mercenary", "dualaxes", "Swords") && nacc("Mercenary", "dualaxes", "Axes"), "scimitar / cleaver 2HDW keep AA NACC");
+            Check(!nacc("Mercenary", "dual_knives", "Knives"), "paired daggers: vanilla chain");
+            Check(!nacc("Sword Master", "dualaxes", "Swords"), "non-Mercenary: no 2HDW");
+        }
         Console.WriteLine(fails == 0 ? "ALL PASS" : fails + " FAILED");
         Environment.Exit(fails == 0 ? 0 : 1);
     }
