@@ -1,0 +1,5 @@
+v0.25.166 Themed Seal - test results (no game here)
+- mcs --parse -langversion:5 AlbedosCustomClasses.Advanced.cs: OK
+- tools/compile_check/check.sh 3029660: PASSED (0 new signatures)
+- Offline previews (panel composited through the mask on each class canvas): docs/previews/PREVIEW_v0.25.166_Sealed_*.png
+- NOT verified in game: final colours under Linear colour space, text readability at your resolution.

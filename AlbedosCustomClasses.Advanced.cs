@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.165";
+        public const string ModVersion = "0.25.166";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -16605,7 +16605,7 @@ namespace AlbedosCustomClassesAdvanced
             if (backdrop == null)
                 backdrop = _ihPreAdvanceBackdropTex != null ? _ihPreAdvanceBackdropTex : _treeReferenceBackdropTex;
             if (treePlayer == null || string.IsNullOrEmpty(GetAdvancement(treePlayer)))
-                backdrop = IhSealedBackdrop(backdrop);   // v0.25.165 locked Advancement panel = plain fill, no baked nodes / preview art
+                backdrop = IhSealedBackdrop(backdrop, treeClass);   // v0.25.165 locked Advancement panel = plain fill, no baked nodes / preview art
             GUI.DrawTexture(full, backdrop, ScaleMode.StretchToFill, true);
             IhDrawHeaderPoints(treePlayer);
 
@@ -17399,22 +17399,47 @@ namespace AlbedosCustomClassesAdvanced
         // chassis bakes the AC's node frames, nameplates and scene into every canvas, so the interior (Tree_SealedMask.png alpha,
         // tools/build_sealed_mask.py) is repainted on a copy of the canvas: the panel's own hue, low saturation, dark, a soft
         // top-to-bottom gradient and vignette. Cached per source canvas; the frame, header and the Class side are untouched.
-        private readonly Dictionary<Texture2D, Texture2D> _ihSealed = new Dictionary<Texture2D, Texture2D>();
+        // v0.25.166 (user): the sealed fill follows the Base Class theme: Sealed_<Class>.png (tools/build_sealed_art.py, 1011x662,
+        // only the panel interior is used) replaces the procedural fill through the same mask; no theme art = procedural fill.
+        private readonly Dictionary<string, Texture2D> _ihSealed = new Dictionary<string, Texture2D>();
+        private readonly Dictionary<string, Texture2D> _ihSealedTheme = new Dictionary<string, Texture2D>();
         private Texture2D _ihSealedMask;
         private bool _ihSealedMaskTried;
 
-        private Texture2D IhSealedBackdrop(Texture2D src)
+        private Texture2D IhSealedBackdrop(Texture2D src, string cls)
         {
             if (src == null) return null;
+            if (cls == null) cls = "";
+            string key = src.GetInstanceID() + "|" + cls;
             Texture2D done;
-            if (_ihSealed.TryGetValue(src, out done)) return done != null ? done : src;
-            _ihSealed[src] = null;
+            if (_ihSealed.TryGetValue(key, out done)) return done != null ? done : src;
+            _ihSealed[key] = null;
             try
             {
                 if (!_ihSealedMaskTried) { _ihSealedMaskTried = true; _ihSealedMask = LoadUiPng("Tree_SealedMask.png"); }
                 if (_ihSealedMask == null || src.width != 1011 || src.height != 662 || _ihSealedMask.width != 1011 || _ihSealedMask.height != 662) return src;
                 Color[] px = src.GetPixels();
                 Color[] mk = _ihSealedMask.GetPixels();
+                Texture2D theme = null;
+                if (cls.Length > 0 && !_ihSealedTheme.TryGetValue(cls, out theme))
+                {
+                    theme = LoadUiPng("Sealed_" + cls + ".png");
+                    if (theme != null && (theme.width != 1011 || theme.height != 662)) theme = null;
+                    _ihSealedTheme[cls] = theme;
+                }
+                if (theme != null)
+                {
+                    Color[] th = theme.GetPixels();
+                    for (int i = 0; i < px.Length; i++)
+                    {
+                        float a = mk[i].a;
+                        if (a <= 0.001f) continue;
+                        Color c = px[i], f = th[i];
+                        px[i] = new Color(c.r + (f.r - c.r) * a, c.g + (f.g - c.g) * a, c.b + (f.b - c.b) * a, c.a);
+                    }
+                }
+                else
+                {
                 double r = 0, g = 0, b = 0; int n = 0;
                 for (int i = 0; i < px.Length; i++) if (mk[i].a > 0.5f) { r += px[i].r; g += px[i].g; b += px[i].b; n++; }
                 if (n == 0) return src;
@@ -17438,13 +17463,14 @@ namespace AlbedosCustomClassesAdvanced
                         px[i] = new Color(c.r + (f.r - c.r) * a, c.g + (f.g - c.g) * a, c.b + (f.b - c.b) * a, c.a);
                     }
                 }
+                }
                 Texture2D tex = new Texture2D(1011, 662, TextureFormat.RGBA32, false);
-                tex.name = "ImmortalHeroes_Sealed_" + src.name;
+                tex.name = "ImmortalHeroes_Sealed_" + cls + "_" + src.name;
                 tex.wrapMode = TextureWrapMode.Clamp;
                 tex.filterMode = FilterMode.Bilinear;
                 tex.SetPixels(px);
                 tex.Apply(false, false);
-                _ihSealed[src] = tex;
+                _ihSealed[key] = tex;
                 return tex;
             }
             catch (Exception) { return src; }

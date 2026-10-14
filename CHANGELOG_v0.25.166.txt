@@ -1,0 +1,8 @@
+Aethelborn Ascended v0.25.166 - Themed Seal
+- Locked Advancement panel background now follows the Base Class theme (only change):
+  Warrior = rustic riveted iron plates, rust + crimson, faint crossed swords/shield crest
+  Cleric  = royal blue with a gold damask lattice + gold filigree border, faint crown/cross crest
+  Sorcerer = violet nebula, stars + constellations, faint crescent crest
+  Ranger  = forest green wood grain + leaf shadows, faint bow/arrow crest
+- Art: ImmortalHeroesAssets/Sealed_<Class>.png (tools/build_sealed_art.py), drawn through Tree_SealedMask.png. Missing file = v0.25.165 plain fill.
+- Text, frame, header, Class side, hotbar, requirements: unchanged.
