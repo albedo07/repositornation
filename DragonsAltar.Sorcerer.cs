@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Aethelborn Ascended - Sorcerer Advancements";
-        public const string ModVersion = "0.25.179";
+        public const string ModVersion = "0.25.180";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1400,7 +1400,7 @@ namespace DragonsAltarSorcerer
             {
                 StartCoroutine(RingVfx(player.transform.position, radius, new Color(0.48f, 0.90f, 1f, 0.95f), 0.8f));
                 Vector3 np = player.transform.position; float nr = radius;
-                DragonCombat.RunVfx(delegate { DragonVfx.Shockwave(np, new Color(0.60f, 0.92f, 1f, 1f), nr, 0.5f); DragonVfx.IceBurst(np, nr); DragonVfx.Shake(np, 25f, 1.2f); DragonVfx.Flash(np + Vector3.up, new Color(0.60f, 0.92f, 1f, 1f), 6f, nr * 2f, 0.5f); DragonVfx.SpikeRing(np, DragonVfx.Ice, nr * 0.85f, 14, 1.8f, 1.5f); });   // v0.25.58 / v0.25.61 ring of ice
+                DragonCombat.RunVfx(delegate { DragonVfx.SoftWave(np, new Color(0.70f, 0.90f, 1f, 1f), nr, 0.6f); DragonVfx.FrostGround(np, nr, 4f); DragonVfx.IceBurst(np, nr * 0.6f); DragonVfx.Shake(np, 25f, 1.2f); });   // v0.25.180 low outward front of cold mist + temporary rime; no default ring of ice spikes
             }
         }
 
@@ -1434,7 +1434,7 @@ namespace DragonsAltarSorcerer
                 if (_enableVfx.Value)
                 {
                     Vector3 fc = center; float fr = radius;
-                    DragonCombat.RunVfx(delegate { DragonVfx.Burst(fc + Vector3.up * 0.2f, new Color(0.80f, 0.96f, 1f, 1f), 24, 2.5f, 0.25f, 0.8f, -0.1f); DragonVfx.Smoke(fc, new Color(0.85f, 0.95f, 1f, 0.5f), fr * 0.8f, 0.9f, 3); });
+                    DragonCombat.RunVfx(delegate { DragonVfx.Burst(fc + Vector3.up * 0.2f, new Color(0.80f, 0.96f, 1f, 1f), 8, 2.5f, 0.15f, 0.8f, -0.1f); DragonVfx.Smoke(fc, new Color(0.85f, 0.95f, 1f, 0.35f), fr * 0.8f, 0.9f, 1);   /* v0.25.180 sparse between pulses */ });
                 }
                 yield return new WaitForSeconds(gap);
             }
@@ -1544,7 +1544,7 @@ namespace DragonsAltarSorcerer
                     DragonVfx.HeavyLanding(mt, new Color(1f, 0.40f, 0.08f, 1f), mr, Mathf.Clamp(mr * 0.4f, 1f, 3f));   // v0.25.58 the meteor really lands
                     DragonVfx.FireBlast(mt, mr * 0.8f);   // v0.25.61
                     DragonVfx.Embers(mt, new Color(1f, 0.40f, 0.08f, 1f), mr * 0.8f, Mathf.Max(1f, _meteorBurnSeconds.Value), 30f);   // v0.25.150 no light column, fewer embers
-                    DragonVfx.Vanilla(new string[] { "vfx_FireballHit", "fx_fireball_staff_explosion" }, mt, Quaternion.identity, Mathf.Clamp(mr / 3f, 1f, 3f), 4f);
+                    DragonVfx.Debris(mt, new Color(0.30f, 0.24f, 0.20f, 1f), Mathf.RoundToInt(4 + mr * 0.5f), 6f + mr * 0.4f, 0.25f, 2.2f);   // v0.25.180 tumbling fragments instead of the vanilla fireball flare
                 });
             }
         }
@@ -1786,7 +1786,7 @@ namespace DragonsAltarSorcerer
             {
                 StartCoroutine(RingVfx(player.transform.position, DragonCombat.M(_clockRadius.Value), new Color(1f, 0.82f, 0.35f, 0.95f), 0.8f));
                 Vector3 kp = player.transform.position; float kr = DragonCombat.M(_clockRadius.Value);
-                DragonCombat.RunVfx(delegate { DragonVfx.Shockwave(kp, new Color(1f, 0.82f, 0.35f, 1f), kr, 0.7f); DragonVfx.Vortex(null, kp + Vector3.up, new Color(1f, 0.90f, 0.55f, 1f), 2.5f, 0.8f); DragonVfx.Glyph(kp, new Color(1f, 0.82f, 0.35f, 1f), kr * 0.6f, 2.5f, 120f, true); });   // v0.25.58 / v0.25.61 clock face
+                DragonCombat.RunVfx(delegate { DragonVfx.Glyph(kp, new Color(0.92f, 0.80f, 0.55f, 1f), kr * 0.6f, 2.5f, 120f, true); DragonVfx.Vortex(null, kp + Vector3.up, new Color(0.95f, 0.88f, 0.65f, 1f), 1.6f, 0.6f);   /* v0.25.180 one legible clock face (muted brass/ivory) + short unwinding finish; no shock ring */ });   // v0.25.58 / v0.25.61 clock face
             }
         }
 
@@ -2011,6 +2011,7 @@ namespace DragonsAltarSorcerer
             Rigidbody body = player.GetComponent<Rigidbody>();
             Vector3 momentum = body != null ? body.velocity : Vector3.zero;
             DragonCombat.PlayAccent(player, "hw_voidstep", 0.05f);   // v0.25.18 Ghost Step never replaces the running pose
+            Vector3 vfxFrom = player.transform.position;   // v0.25.180 VFX only: departure point for the fold
             TeleportPlayer(player, dest);
             if (body != null && IsSpellAscended(player, "void_step"))
                 body.velocity = momentum; // Ascended keeps momentum
@@ -2021,8 +2022,8 @@ namespace DragonsAltarSorcerer
             if (_enableVfx.Value)
             {
                 StartCoroutine(RingVfx(dest, 1.6f, new Color(0.58f, 0.12f, 1f, 0.95f), 0.35f));
-                Vector3 vd = dest;
-                DragonCombat.RunVfx(delegate { DragonVfx.Burst(vd + Vector3.up, new Color(0.58f, 0.12f, 1f, 1f), 40, 7f, 0.25f, 0.4f, 0f); DragonVfx.Flash(vd + Vector3.up, new Color(0.62f, 0.25f, 1f, 1f), 4f, 6f, 0.3f); });   // v0.25.58
+                Vector3 vd = dest, vo = vfxFrom;
+                DragonCombat.RunVfx(delegate { DragonVfx.GravityCollapse(vo + Vector3.up, 1.2f); DragonVfx.Burst(vd + Vector3.up, new Color(0.62f, 0.40f, 0.95f, 0.9f), 14, 5f, 0.12f, 0.35f, 0f); DragonVfx.Streak(vo + Vector3.up, vd + Vector3.up, new Color(0.62f, 0.45f, 0.95f, 0.5f), 0.08f, 0.35f); });   // v0.25.180 outward unfolding at arrival + a few stretched strands back to the departure (no flash)
             }
             ShowMessage((airborne ? "Void Step - Free Aim / Feather Falling" : "Void Step") + (max > 1 ? " (" + _voidCharges + "/" + max + ")" : ""));
         }
@@ -3968,11 +3969,12 @@ namespace DragonsAltarSorcerer
         {
             DragonCombat.RunVfx(delegate
             {
+                // v0.25.180 edge wisps along the beam (sparser) + a short contact light only on heavy beams
                 float len = Vector3.Distance(start, end);
-                int n = Mathf.Clamp(Mathf.RoundToInt(len / 2.5f), 1, 16);
-                for (int i = 0; i <= n; i++)
-                    DragonVfx.Burst(Vector3.Lerp(start, end, (float)i / n), color, Mathf.RoundToInt(4 + width * 10f), 1.5f + width * 2f, Mathf.Max(0.12f, width * 0.6f), 0.35f, 0f);
-                DragonVfx.Flash(end, color, 2f + width * 4f, 4f + width * 6f, Mathf.Max(0.2f, lifetime));
+                int n = Mathf.Clamp(Mathf.RoundToInt(len / 5f), 1, 8);
+                for (int i = 1; i <= n; i++)
+                    DragonVfx.Burst(Vector3.Lerp(start, end, (float)i / n), color, Mathf.RoundToInt(3 + width * 6f), 1.2f + width * 1.5f, Mathf.Max(0.08f, width * 0.4f), 0.3f, 0f);
+                if (width >= 0.3f) DragonVfx.Flash(end, color, 0.6f, 2f + width * 2f, 0.15f);
                 DragonVfx.Streak(start, end, color, Mathf.Max(0.08f, width * 0.8f), Mathf.Max(0.2f, lifetime + 0.15f));   // v0.25.61 soft glowing beam
             });
             if (DragonVfx.Enabled) return;   // v0.25.63 the glowing streak replaces the flat line

@@ -1,0 +1,73 @@
+Aethelborn Ascended v0.25.180 - Art Direction
+Baseline: v0.25.179 Double Start (anchor). VISUALS ONLY - no damage, hitbox, timing, cost, cooldown, animation, NACC,
+block/parry, cape, Altar/hotbar, movement or config change. Built from Aethelborn_Ascended_VFX_Art_Direction.md.
+
+SHARED ASSET FAMILIES (DragonVfx)
+- Slash ribbons: magic crescents (Moonlight / Crescent / Halfmoon / Eclipse / Grand Cross) are now a cupped 3-row ribbon
+  with a broken, flowing wind texture (scrolls along the blade), one hairline cutting edge on the leading side and
+  feathered wakes. Weapon wakes (SlashArc) = broken translucent shoulder + hairline edge. No opaque crescent cut-outs.
+- Judgement Cut volume (Blade Storm): 7 curved cut ribbons on random tilted planes (hairline edge + silver/indigo
+  shoulder, frayed ends), depth-tested so rear arcs pass behind the victim, 4 interior hairline cuts, faint smoky air,
+  arcs snap in inside the hit window, shear along themselves and dissolve into directional threads. No sphere shell.
+- Relic materials: pale weathered stone, aged bronze (slight patina), narrow emissive ivory inlay; shared + cached.
+- Ground impacts: the expanding ring is now a broken dust pressure front in the ground colour (no glowing ring / disc);
+  shockwave streaks are pale air, not neon; contact lights capped small.
+- Healing / blessing pulse (SoftWave): low translucent wave of soft strands + faint mist + rising motes (no dirt, no
+  flash). Heal ticks: small upward motes, no light per tick.
+- Sky beams: light drifts DOWN the beam, fewer streaks, small contact light; compact contact bloom.
+- Gravity: dark partly transparent core, narrow muted bent rim (was wide purple disks), curved inward strands
+  (orbital), translucent warped-air wisps (no ring billboards), loose soil that lifts and curls inward.
+- Fire: compact hot core, low fast-decaying smoke (no tall column), flame cones with dark smoke pockets and gaps.
+- Per-tick rings removed (the contact / hit-impact layer carries ticks); full-duration area circles are guides.
+
+WARRIOR - Heavy Slash steel-grey wake + gust + small directional chips (no spark fountain / flare) - Impact Wave
+  unchanged path visuals, rings now dust fronts - Impact Punch compact pressure burst (gust, dust, small light);
+  the spectral fist model and sonic rings are gone.
+SWORD MASTER - Moonlight / Crescent / Halfmoon slash ribbons (above); Moonlight persistent hits no light per tick -
+  Blade Storm Judgement Cut volume (old overlapping cut arcs off) - Frenzied Charge no ring per dash step -
+  Eclipse arcs + wind, sparser streaks, no 70-mote burst / big light, wind-up aura rings off - Halfmoon arc: dust curl
+  + gust instead of spark bursts + flare - Knight's Guidance soft pulse - Crescent Ascended fire trail: no ring per tick.
+MERCENARY - Stomp / Bonecrusher / Seismic / Circle Swing dust pressure fronts; Seismic no ring per step - Punishing
+  Bomb compact hot core + dirty blast + low smoke (no vanilla fireball, small light), no air ring, fire ground no ring
+  per tick - Whirlwind (normal + Ascended) no ring every tick - Battlecry chest breath gust + boot dust + warm specks
+  (no shockwave / sonic rings) - Fury sparse warm body motes + short activation breath + dust (no ring every 0.28 s,
+  no flare).
+CLERIC - Lightning Zap: small crackle at each bolt end (no ring) - Righteous Strike: narrow strike, branching sparks,
+  local dust, compact seal (no vanilla AoE flare / big ring) - Holy Wave: soft strand wave (no shockwave, rings,
+  vanilla prefab).
+PALADIN - Goddess Relic: rebuilt as weathered stone + bronze edging + lit grooves + carved bands + recessed seal +
+  bronze Celtic ring (deeper detail when Ascended size); narrow air-streak descent; heavy dust skirt, stone chips,
+  short cracks; no white explosion prefabs / big flash / ember aura / ring; lightning bolt only when Ascended;
+  light released upward at expiry - Judgement Hammer: stone head, bronze-framed striking faces + bands, leather haft,
+  inlaid cross motif, lightning only in the seams, curved head trails, faint spin echo; no halo / glow coat; dust only
+  under the flight - Shield Charge / Electric Smite rings now dust fronts - Angel Comet: no white explosion prefab,
+  restrained burst, burn ring no ring per tick - Ray of Hope + Heaven's Light: soft pulse - Holy Bulwark dome thin
+  while blocking, defined on actual blocks.
+PRIEST - Lightning / Holy Relic: same stone/bronze cross family (cool / warm grooves), pulse rings off, Holy Relic
+  heals = soft pulse - Divine Intervention soft pulse - Grand Cross = two crossed slash ribbons - Heaven's Judgement:
+  descending beams, compact blooms, no ring per beam, the full-duration circle is a guide, Ascended finale compact -
+  Heaven's Crucible soft pulse, no ring per absorbed hit - Sanctify / Ascended Holy Wave soft pulses.
+SORCERER - Flame Burst: flames only (no sword arc), ember tails, small source light - Glacial Descent: no shock rings,
+  low cold mist + rime (approved ice spikes kept) - Stonefang: no ring (spikes kept).
+ARCHMAGE (Wizard) - Gravity Dominion gravity family (above) - Frost Nova: cold mist front + rime, NO ice-spike ring,
+  no flash - Frost Nova Ascended aura sparser - Meteor: tumbling fragments instead of the vanilla fireball, low smoke -
+  Railcannon: no air rings along the beam, narrow core - Clockwork: one muted brass/ivory clock face + short
+  unwinding finish (no shock ring) - beams: sparser wisps, light only on heavy beams.
+HORIZON WALKER - Gravity Blast: dark transparent orb + rim + air wake, inward collapse at the end (no swelling flash
+  sphere / rings) - Void Step: inward fold at departure, outward unfolding + stretched strand at arrival (no flash) -
+  Rift Walker portals: translucent dark interior, gentle drift (no particle fountain).
+RANGER - Piercing Arrow: tight airflow at release (no sonic rings).
+ACROBAT - Swallow Dive pale wake, no flash - Skyfall / Somersault: one contact front - Cyclone: transparent corkscrew
+  (was opaque funnel) - Furious Winds: open translucent strands, no veil shell - Tailwind: NEW low wind streamers +
+  small leaf lift on every recipient (it had no visual).
+BOWMASTER - Ballista: compressed airflow, small light (no ring stack) - Pinning / Explosive: one contact front, no
+  vanilla fireball, small light; Ascended fire field no ring per tick - Splitting great arrow: heavier air shoulder
+  (no ring stack), sky marker = guide - Starfall: soil bursts only, no ring every 0.25 s.
+
+NOT DONE / PENDING (honest list)
+- No in-game test, no captures: compile check only (see TEST_RESULTS_v0.25.180.txt).
+- Arcane Phantom mimics, Rift Echo, Arcane Phalanx, Arcane Rupture, Snare Trap, Hawk's Vigil, Lightning Tempest,
+  Astral Greatblade, Elemental Cataclysm, Gale Volley, Tumble Shot, Arrow Rain: unchanged apart from the shared
+  families above (rings / fire / beams / flashes).
+- Overcharge has no world VFX (unchanged). Glacial Descent + Astral Spear keep their ice/arcane spikes (your v0.25.168
+  rule; the new doc says only Stonefang - tell me if they should go).

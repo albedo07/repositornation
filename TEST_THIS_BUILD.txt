@@ -1,32 +1,15 @@
-v0.25.155 Handoff Guards - in-game checks (plus v0.25.154 list)
-1. One-handed, SBDW and 2HDW: spam Alpha1-7 and Mouse1 alternately. Every NACC after a skill starts at strike 1; no leftover skill pose / speed; chain stays 1-2-1-2-3; skill damage/VFX still fire.
-2. Hit 2 -> skill -> NACC: strike 1 again. Strike 5 (finisher) -> lockout still applies; finisher cut by a skill -> no lockout.
-3. Jump + Mouse1: from idle, after each of strikes 1-5, right after a skill: nothing swings in the air, no vanilla attack, landing -> 1-2-1-2-3. Hold Mouse1 across a jump: first swing after landing is strike 1.
-4. Heavy attack (Mouse2/hold) in the air and on the ground unchanged. Circle Swing and RJS jump normally.
-5. Walk over bumps/stairs with Mouse1 held: no dropped swings.
-6. Frenzied Charge: start/end % trim works; cast a skill or attack mid-trim -> the trim stops, no stray CrossFade.
-7. SBDW + 2HDW chains: the 2 -> 1 backward step still flows (learned state). Report weapon type if it stutters.
-v0.25.156: spam Mouse1 fast with 1H, SBDW, 2HDW: chain 1-2-1-2-3 and the 2->1 step unchanged; no wrong-swing flicker.
-v0.25.157: scimitar, Hellblade cleaver, paired knives (Mercenary): 1-2-1-2-3, then repeat with a skill between every swing. Check LogOutput.log for "WARNING [2HDW]" (must be absent). Heavy attack (Mouse2) native.
-v0.25.158: scimitar / Hellblade cleaver / paired knives (Mercenary) with Warfare loaded: every swing = SBDW clips, 1-2-1-2-3, skills between swings. A blocked swing + "WARNING [2HDW] ... attack rejected" means repair failed (send the line). Heavy attack native.
-v0.25.159: if "controller replaced before trigger" shows in the log, that click must cost nothing and the chain must not advance.
-v0.25.160: scimitar / Hellblade cleaver / paired knives (Mercenary): primary chain must look and time exactly like SBDW. Send the "[2HDW] trigger path:" lines from LogOutput.log.
-v0.25.161: scimitar / Hellblade cleaver / paired knives: primary chain = SBDW look + timing; heavy native; stance returns after the chain.
-v0.25.162: scimitar / Hellblade cleaver / paired knives: chain = SBDW; cast skills, emotes and heavy attack (Mouse2) right after a swing: each plays its own animation (none replaced by a swing).
-v0.25.163: Mercenary with scimitar / Hellblade cleaver: Mouse1 x5 must look + time like SBDW (1-2-1-2-3); heavy native. Send the "[2HDW] swing" lines from LogOutput.log. Daggers not changed.
-v0.25.164: 1) Ranger / Sorcerer HUD: no ghost labels, empty food slots. 2) Gun Staff + staves: native shot count / cadence; Horizon Walker moves at full speed while firing, legs walk/run (standing still = normal anim). 3) Fresh launch -> first Mouse1 (1H, SBDW, 2HDW): never sits; chain 1-2-1-2-3. 4) Skill tree: no AC plaques / ADVANCE; advance at the Altar. 5) Hover skills (tree + Altar): plain sentence + fields in the new order; Tier 7/7 (5/5, 3/3) shows +80% Damage. 6) Paired daggers: vanilla chain.
-v0.25.165: open the Skill Tree with every base class before Advancement: Advancement panel = plain fill, no icons / names / stars / hover, centred Altar message + requirements readable. Advance at the Altar: real tree appears.
-v0.25.166: open the Skill Tree before Advancement as Warrior / Cleric / Sorcerer / Ranger: panel background = that class's theme (iron / royal blue+gold / nebula / forest), message + requirements readable, nothing else changed.
-v0.25.167: Crescent Cleave Normal + Ascended: small enemies ride the wave and keep taking ticks, big ones slide along then fall behind, bosses nudged; nobody pushed through walls. Check spikes (Impact Wave, Seismic, Stomp, Glacial, Frost Nova, Stonefang), crescents (Moonlight, Halfmoon, Crescent), slash arcs, Whirlwind, cracks: grounded look, no flares. Guides off: attack visuals still show.
-v0.25.168: Bonecrusher / Electric Smite / Circle Swing with a cape: cape stays behind the body, no fold-through; send the 'Cape guard' log line. Ground hits (Stomp, Bonecrusher, Seismic, Impact Wave, Crescent, Greatblade, Meteor): cracks + dirt + rocks, no spikes. Spikes only on Stonefang, Glacial Descent, Astral Spear. Frost Nova = frost on the ground.
-v0.25.169: 1) Bonecrusher x5 with a cape: cape visible the whole flight, no stretch/whip on landing; send the 'Cape guard' log lines. 2) NACC: chain on rocks/slopes (no reset), jump + attack (fresh chain), start in the air and finish on the ground, get hit mid-chain (keeps going), take fall damage mid-chain (resets), wait >0.7 s after a swing (resets). 3) Equip: each class tries swords/daggers/fists/bows/staves/clubs/axes (vanilla + Therzie), Merc Bronze+Bronze (dual) vs Bronze+Iron (no dual), Sword Master + shield (no sword bonus), vanilla axe as Sword Master: chops trees, 0 damage to enemies. 4) Altar: no class vs class chosen buttons, locked cards, Advance without requirements shows the prompt. 5) Crescent / Impact Wave dirt, Halfmoon ground scar, Gravity Dominion / Gravity Blast pull visuals.
-v0.25.170: 1) Advance at the Altar: Altar closes, Skill Tree opens; hotbar = exactly what you had (no slot removed/filled); fail an Advancement -> Altar stays open with the prompt. 2) Circle Swing + Bonecrusher x5 with a cape: no shaking, no straight-up cape at landing, normal swing while running after; send the 'Cape guard' lines. 3) Fresh launch, wait ~5 s at the menu/world, first Circle Swing / Bonecrusher / jump slam: no FPS drop. 4) Sword Master sword alone and sword + shield: block before the first attack, block between strikes, block after a skill -> Mouse1 x5 = 1-2-1-2-3 every time; try Warrior / Merc / Cleric too. 5) Crescent Cleave Normal + Ascended: an enemy carried by a wave takes damage while carried; the wave passes through after its 2 ticks.
-v0.25.171: Circle Swing + Bonecrusher x5 with a cape: cape hangs still on the back during the skill (no flinging / vanishing), resumes swinging right after; walk/run normally = normal cape. Send the "Cape guard: freeze mode" log line. If the cape looks wrong while frozen, set [Visuals] FreezeCapeDuringSkills_v025171 = false and tell me.
-v0.25.172: parry an enemy, then Mouse1 x5 (sword alone, sword + shield, mace + buckler): 1-2-1-2-3 every time. Also parry mid-chain and continue. If it still goes 1-2-3, send LogOutput.log lines starting with "[Aethelborn] NACC:".
-v0.25.173: Halfmoon Slash (normal + Ascended) with a Troll close in front and enemies at the rim: every follow-up slash hits all of them (damage numbers on the Troll for each slash). Enemies behind you / outside the arch are not hit by the follow-ups.
-v0.25.174: Crescent Cleave normal + Ascended: small enemies ride the wave the whole way, big ones slide then fall behind, bosses nudged; nobody pushed through walls.
-v0.25.175: restart Valheim. 1) Crescent Cleave (normal + Ascended): enemies dragged by the wave take its hits; try F8 HitboxDepthMeters_v025175 / MaxHitsPerWave_v025175. 2) Parry, then Mouse1 x5 several times (also parry mid-chain): 1-2-1-2-3. If not, send "[Aethelborn] NACC:" log lines.
-v0.25.176: F8 - set MaxPersistentHits_v025176 = 1 on Grand Cross / Judgement Hammer / Shield Charge / Electric Smite / Gravity Blast and check each enemy takes only 1 hit per cast; back to 0 = old behaviour. Blade Storm: change SpheresPerActivation / CutsPerSphere / Stacks and count spheres, slashes and charges.
-v0.25.177: parry an enemy, then Mouse1 x5 (the case that goes vanilla). Then send BepInEx/LogOutput.log (or every line containing "NACC").
-v0.25.178: parry, wait 0.5-2 s, Mouse1 x5 -> always 1-2-1-2-3 (try many times, also clicking during the parry). Normal chains (no block) unchanged. If it still breaks, send the "NACC trace" lines.
-v0.25.179: parry / block, then Mouse1 (tap and hold) x5 several times, sword and sword + shield: always 5 strikes. If not, send LogOutput.log again ("NACC trace" lines).
+v0.25.180 Art Direction - in-game checks (VISUALS ONLY - gameplay must feel exactly like v0.25.179)
+1. Blade Storm: curved cuts on several planes around each sphere, rear arcs hidden behind the target, no ball shell;
+   they appear with the hit and shear/dissolve after. Normal 2 / Ascended 4 spheres, same damage.
+2. Moonlight / Crescent / Halfmoon / Eclipse / Grand Cross: slashes look like flowing translucent ribbons with one thin
+   bright edge; check from the side and behind (no paper sheet). Crescent push + hits unchanged.
+3. Goddess Relic (normal + Ascended): stone + bronze cross, glowing grooves, lands with dust/chips/cracks, sinks and
+   releases light upward. Collider / standing on it unchanged. Priest relics: same material family, no ring.
+4. Judgement Hammer: stone/bronze hammer flips with a short curved trail + faint echo; Ascended return unchanged.
+5. Heavy hits (Stomp, Bonecrusher, Seismic, Angel Comet, Bomb, Meteor): dust front + chunks, no glowing orange rings,
+   no white explosion prefabs / tall smoke.
+6. Heals (Holy Wave, Ray of Hope, Heaven's Light, DI, Crucible, relic heals): soft pale wave, no dirt, no flash.
+7. Gravity Dominion / Gravity Blast: dark see-through core with a thin rim, strands + soil curling in, enemies visible.
+8. Fury / Whirlwind / Starfall / fire grounds: no ring spam every tick.
+9. Tailwind now shows wind + leaves on recipients. Cyclone / Furious Winds: you can see the player through the wind.
+10. FPS: overlapping casts (Blade Storm x4 + Crescent + Whirlwind) should not drop more than v0.25.179.

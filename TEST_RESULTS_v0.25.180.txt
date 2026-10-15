@@ -1,0 +1,7 @@
+v0.25.180 - verified here (no game, no Unity runtime):
+- mcs --parse -langversion:5 on all 5 edited .cs files: OK.
+- tools/compile_check/check.sh 3029660 (semantic compile vs stubs): COMPILE CHECK PASSED (0 new signatures).
+- No SetPositions / GetPositions / LoadImage introduced.
+- Scope check: every change is inside DragonVfx / visual helpers or VFX-only call sites (RunVfx / _enableVfx blocks);
+  one VFX-only local added in Void Step (departure point for the fold). Gameplay code paths untouched.
+NOT verified: visual result, occlusion, performance, night/day, slopes - needs in-game testing.

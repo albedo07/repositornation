@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.179";
+        public const string ModVersion = "0.25.180";
 
         internal static DragonCombatPlugin Instance;
 
@@ -10314,7 +10314,7 @@ namespace DragonsAltarCombat
             Vector3 f = p.transform.forward; f.y = 0f;
             if (f.sqrMagnitude > 0.001f) _bulwark.transform.rotation = Quaternion.LookRotation(f.normalized, Vector3.up);
             float flash = Mathf.Clamp01(1f - (Time.time - _bulwarkFlashAt) / 0.25f);
-            DragonVfx.SetDomeAlpha(_bulwark, _bulwarkAlpha * (0.75f + 0.25f * Mathf.Sin(Time.time * 4f)) + flash * 0.8f);
+            DragonVfx.SetDomeAlpha(_bulwark, _bulwarkAlpha * 0.3f + flash * 0.8f);   // v0.25.180 thin while blocking, defined on actual blocks
         }
 
         private static Player _animationClassPlayer;
@@ -13301,18 +13301,16 @@ namespace DragonsAltarCombat
         {
             if (!Enabled) return;
             radius = Mathf.Max(0.3f, radius);
-            DragonVfxLife l = Host(pos, seconds + 0.8f, "pillar");
+            // v0.25.180 VFX DIRECTION (descending holy beams): light drifts DOWN the beam's length from the sky (cone at the
+            // top pointing down), fewer streaks, small contact light only.
+            DragonVfxLife l = Host(pos + Vector3.up * Mathf.Max(2f, height), seconds + 0.8f, "pillar");
             float life = Mathf.Clamp(seconds * 0.6f, 0.3f, 1.2f);
             float speed = Mathf.Max(4f, height / life);
-            // Cone pointing up (shape +Z rotated onto +Y): streaks rise from a disc of the pillar's radius.
-            Particles(l.transform, c, Mathf.RoundToInt(30 + radius * 20f), 60f * radius, seconds, life, speed * 0.6f, speed, 0.25f, 0.6f, 0f,
-                ParticleSystemShapeType.Cone, radius * 0.6f, new Vector3(-90f, 0f, 0f), true, true);
-            Color core = Color.Lerp(c, Color.white, 0.7f);
-            Particles(l.transform, core, 6, 14f, seconds, life * 0.8f, speed * 0.9f, speed * 1.1f, radius * 1.2f, radius * 1.8f, 0f,
-                ParticleSystemShapeType.Cone, radius * 0.1f, new Vector3(-90f, 0f, 0f), true, true);
+            Particles(l.transform, c, Mathf.RoundToInt(12 + radius * 10f), 30f * radius, seconds, life, speed * 0.6f, speed, 0.12f, 0.3f, 0f,
+                ParticleSystemShapeType.Cone, radius * 0.5f, new Vector3(90f, 0f, 0f), true, true);
             l.StopEmitAt = seconds;
             l.Systems = l.GetComponentsInChildren<ParticleSystem>();
-            Flash(pos + Vector3.up * 2f, c, 6f + radius, 8f + radius * 3f, seconds + 0.4f);
+            Flash(pos + Vector3.up * 1f, c, 0.7f, radius * 2f, 0.15f);
             Beam(pos, c, radius, height, seconds + 0.3f);   // v0.25.59 skin
         }
 
@@ -13449,8 +13447,7 @@ namespace DragonsAltarCombat
         public static void Heal(Character target, Color c)
         {
             if (!Enabled || target == null) return;
-            Aura(target.transform, target.transform.position, c, 0.6f, 0.6f, 60f, 1.6f);
-            Flash(target.transform.position + Vector3.up, c, 2.5f, 4f, 0.6f);
+            Aura(target.transform, target.transform.position, c, 0.5f, 0.6f, 18f, 1.4f);   // v0.25.180 small upward motes, no light per heal tick
         }
 
         // Valheim's own effect prefab (first name that exists). Only prefabs without a ZNetView are spawned.
@@ -14748,12 +14745,7 @@ namespace DragonsAltarCombat
         {
             if (!Enabled) return;
             Streak(a, b, c, width, seconds);
-            Streak(a, b, Color.white, width * 0.35f, seconds * 0.8f);
-            Vector3 d = b - a;
-            float len = d.magnitude;
-            if (len < 0.5f) return;
-            int n = Mathf.Clamp(Mathf.RoundToInt(len / 4f), 1, 8);
-            for (int i = 1; i <= n; i++) AirRing(a + d * (i / (n + 1f)), d, c, width * 1.6f, 0.3f + i * 0.03f);
+            Streak(a, b, Color.Lerp(c, Color.white, 0.6f), width * 0.25f, seconds * 0.8f);   // v0.25.180 narrow core beam, textured outer flow; no air rings along it
         }
 
         // Real flames rushing out in a cone.
@@ -14765,13 +14757,18 @@ namespace DragonsAltarCombat
             l.transform.rotation = Quaternion.LookRotation(dir.normalized);
             float life = 0.55f;
             float speed = range / life;
-            ParticleSystem ps = Particles(l.transform, new Color(1f, 0.62f, 0.18f, 1f), 0, 260f, seconds, life, speed * 0.7f, speed, 0.6f, 1.3f + range * 0.06f, -0.15f,
+            // v0.25.180 irregular, transparent between the flames: fewer, smaller tongues + darker smoke pockets riding with them
+            ParticleSystem ps = Particles(l.transform, new Color(1f, 0.62f, 0.18f, 1f), 0, 150f, seconds, life, speed * 0.6f, speed, 0.45f, 1.0f + range * 0.05f, -0.15f,
                 ParticleSystemShapeType.Cone, 0.25f, Vector3.zero, false, true);
             ParticleSystem.ShapeModule sh = ps.shape;
             sh.angle = Mathf.Clamp(angle * 0.5f, 5f, 80f);
             FireLook(ps);
+            ParticleSystem pockets = Particles(l.transform, new Color(0.16f, 0.12f, 0.10f, 0.35f), 0, 30f, seconds, life * 1.3f, speed * 0.4f, speed * 0.7f, 0.4f, 0.9f, -0.1f,
+                ParticleSystemShapeType.Cone, 0.25f, Vector3.zero, false, false);
+            ParticleSystem.ShapeModule psh = pockets.shape;
+            psh.angle = Mathf.Clamp(angle * 0.45f, 5f, 80f);
             l.StopEmitAt = seconds;
-            l.Systems = new ParticleSystem[] { ps };
+            l.Systems = new ParticleSystem[] { ps, pockets };
             Smoke(origin + dir.normalized * range * 0.6f, new Color(0.25f, 0.22f, 0.2f, 0.45f), range * 0.3f, 1.6f, 6);
         }
 
@@ -14796,11 +14793,12 @@ namespace DragonsAltarCombat
             if (!Enabled) return;
             radius = Mathf.Max(0.8f, radius);
             DragonVfxLife l = Host(pos + Vector3.up * 0.4f, 2.5f, "fireblast");
-            ParticleSystem ps = Particles(l.transform, new Color(1f, 0.6f, 0.2f, 1f), Mathf.RoundToInt(28 + radius * 7f), 0f, 0.1f, 0.7f, radius * 0.8f, radius * 1.6f, radius * 0.4f, radius * 0.9f, -0.3f,
+            // v0.25.180 compact hot core + low, fast-decaying broken smoke (no tall column / mushroom)
+            ParticleSystem ps = Particles(l.transform, new Color(1f, 0.6f, 0.2f, 1f), Mathf.RoundToInt(18 + radius * 5f), 0f, 0.1f, 0.55f, radius * 0.7f, radius * 1.3f, radius * 0.3f, radius * 0.6f, -0.3f,
                 ParticleSystemShapeType.Sphere, radius * 0.3f, Vector3.zero, false, true);
             FireLook(ps);
-            Smoke(pos + Vector3.up * radius * 0.5f, new Color(0.18f, 0.15f, 0.13f, 0.6f), radius, 2.6f, Mathf.RoundToInt(8 + radius * 1.5f));
-            Embers(pos, Fire, radius * 0.8f, 1.2f, 80f);
+            Smoke(pos + Vector3.up * radius * 0.2f, new Color(0.18f, 0.15f, 0.13f, 0.45f), radius * 0.8f, 1.4f, Mathf.RoundToInt(5 + radius));
+            Embers(pos, Fire, radius * 0.8f, 1.2f, 40f);
             Scorch(pos, radius * 0.6f, 7f);
         }
 
@@ -15145,6 +15143,27 @@ namespace DragonsAltarCombat
                 threads.Play(true);
             }
             Flash(center, new Color(0.55f, 0.65f, 1f, 1f), 0.5f, r, 0.1f);
+        }
+
+        // v0.25.180 healing / blessing pulse (Holy Wave, Ray of Hope, Heaven's Light, Crucible, KG, relic heals...):
+        // a low translucent wave of soft moving strands + faint mist + a few rising motes. No dirt, no ring decal, no flash.
+        public static void SoftWave(Vector3 pos, Color c, float radius, float seconds)
+        {
+            if (!Enabled) return;
+            radius = Mathf.Max(0.8f, radius);
+            seconds = Mathf.Clamp(seconds, 0.3f, 2f);
+            DragonVfxLife l = Host(GroundPoint(pos) + Vector3.up * 0.3f, seconds + 1.6f, "softwave");
+            float speed = radius / seconds;
+            int n = Mathf.Clamp(Mathf.RoundToInt(radius * 5f), 12, 60);
+            Color strand = Color.Lerp(c, new Color(1f, 0.97f, 0.90f, 1f), 0.45f); strand.a = 0.35f;
+            Particles(l.transform, strand, n, 0f, 0.05f, seconds, speed * 0.8f, speed, 0.05f, 0.1f, 0f,
+                ParticleSystemShapeType.Circle, 0.3f, new Vector3(90f, 0f, 0f), true, false);
+            Color mist = Color.Lerp(c, Color.white, 0.5f); mist.a = 0.12f;
+            Particles(l.transform, mist, Mathf.RoundToInt(n * 0.4f), 0f, 0.05f, seconds * 1.2f, speed * 0.4f, speed * 0.7f, 0.5f, 1f, -0.02f,
+                ParticleSystemShapeType.Circle, 0.3f, new Vector3(90f, 0f, 0f), false, false);
+            Color mote = Color.Lerp(c, Color.white, 0.5f); mote.a = 0.6f;
+            Particles(l.transform, mote, 8, 0f, 0.3f, 1.4f, 0.2f, 0.6f, 0.04f, 0.08f, -0.2f,
+                ParticleSystemShapeType.Circle, radius * 0.6f, new Vector3(90f, 0f, 0f), false, true);
         }
 
         // ------------------------------------------------------------------ v0.25.180 relic materials (Goddess Relic, Judgement
@@ -15499,7 +15518,7 @@ namespace DragonsAltarCombat
         {
             if (!Enabled || parent == null) return;
             Shader sh = Shader.Find("Sprites/Default");
-            if (sh != null)
+            if (sh != null && false)   // v0.25.180 no veil shell: open spiralling ribbons only, the player stays visible
             {
                 GameObject s = GameObject.CreatePrimitive(PrimitiveType.Sphere);
                 Collider col = s.GetComponent<Collider>();
@@ -15513,8 +15532,8 @@ namespace DragonsAltarCombat
                 r.material.color = veil;
                 r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             }
-            Color body = c; body.a = 0.7f;
-            Color core = Color.Lerp(c, Color.white, 0.6f); core.a = 1f;
+            Color body = Color.Lerp(c, new Color(0.88f, 0.92f, 0.88f, 1f), 0.4f); body.a = 0.32f;   // v0.25.180 translucent wind strands
+            Color core = Color.Lerp(c, Color.white, 0.6f); core.a = 0.4f;
             float[] tilts = { 0f, 35f, -35f, 70f };
             for (int i = 0; i < tilts.Length; i++)
             {
@@ -16709,8 +16728,8 @@ namespace DragonsAltarCombat
         public static void WindFunnel(Transform parent, Vector3 localBase, float r0, float r1, float height, Color c)
         {
             if (!Enabled || parent == null) return;
-            Color outer = c; outer.a = 0.55f;
-            Color inner = Color.Lerp(c, Color.white, 0.4f); inner.a = 0.45f;
+            Color outer = Color.Lerp(c, new Color(0.88f, 0.90f, 0.88f, 1f), 0.4f); outer.a = 0.22f;   // v0.25.180 transparent corkscrew, not an opaque funnel
+            Color inner = Color.Lerp(c, Color.white, 0.5f); inner.a = 0.14f;
             GameObject a = MeshObject("funnelA", FunnelMesh(r0, r1, height, 4f, outer, 4), Mat(WhiteTex(), true), parent);
             a.transform.localPosition = localBase;
             a.AddComponent<DragonRotate>().Speed = new Vector3(0f, -320f, 0f);
@@ -16788,7 +16807,7 @@ namespace DragonsAltarCombat
             DragonRotate r1 = swirl.AddComponent<DragonRotate>(); r1.Speed = new Vector3(0f, 0f, 90f);
             GameObject glow = MeshObject("glow", SwirlDisk(true), Mat(WhiteTex(), true), root.transform);
             DragonRotate r2 = glow.AddComponent<DragonRotate>(); r2.Speed = new Vector3(0f, 0f, -150f);
-            ParticleSystem ps = Particles(root.transform, new Color(0.85f, 0.45f, 1f, 1f), 0, 60f * Amount, 1f, 0.6f, 0.2f, 0.8f, 0.04f, 0.12f, 0f,
+            ParticleSystem ps = Particles(root.transform, new Color(0.78f, 0.55f, 0.95f, 0.8f), 0, 22f * Amount, 1f, 0.6f, 0.2f, 0.8f, 0.04f, 0.1f, 0f,   // v0.25.180 gentle inward drift, no fountain
                 ParticleSystemShapeType.Circle, 1f, new Vector3(0f, 0f, 0f), false, true);
             ParticleSystem.MainModule mm = ps.main; mm.loop = true;
             ParticleSystem.ShapeModule sh = ps.shape; sh.radiusThickness = 0.05f; sh.rotation = new Vector3(0f, 0f, 0f);
@@ -16812,7 +16831,7 @@ namespace DragonsAltarCombat
                     float arm = 0.5f + 0.5f * Mathf.Sin(tw * 3f);
                     Color c;
                     if (rim) { c = Color.Lerp(new Color(0.75f, 0.3f, 1f, 1f), new Color(1f, 0.85f, 1f, 1f), f); c.a = Mathf.Pow(f, 6f) * 0.95f + arm * f * 0.15f; }
-                    else { c = Color.Lerp(new Color(0.03f, 0f, 0.08f, 1f), new Color(0.35f, 0.08f, 0.6f, 1f), arm * f); c.a = Mathf.Lerp(0.92f, 0.55f, f); }
+                    else { c = Color.Lerp(new Color(0.03f, 0f, 0.08f, 1f), new Color(0.30f, 0.10f, 0.50f, 1f), arm * f); c.a = Mathf.Lerp(0.72f, 0.4f, f); }   // v0.25.180 dark translucent interior
                     cs.Add(c);
                 }
             }
@@ -16872,9 +16891,10 @@ namespace DragonsAltarCombat
 
         public static void LightningImpact(Vector3 pos, float radius)
         {
-            Shockwave(pos, Storm, radius, 0.3f);
-            Burst(pos + Vector3.up * 0.3f, Storm, Mathf.RoundToInt(18 + radius * 4f), 10f + radius, 0.18f, 0.45f, 0.8f);
-            Vanilla(new string[] { "fx_himminafl_aoe", "fx_himminafl_hit", "fx_Lightning", "vfx_lightning" }, pos, Quaternion.identity, Mathf.Clamp(radius / 4f, 0.6f, 3f), 3f);
+            // v0.25.180 compact contact: small pressure front, branching sparks, local dust (no vanilla AoE flare)
+            GroundRing(pos, Storm, Mathf.Max(0.8f, radius * 0.5f), 0.3f);
+            Burst(pos + Vector3.up * 0.3f, Storm, Mathf.RoundToInt(10 + radius * 2f), 10f + radius, 0.12f, 0.4f, 0.8f);
+            DustRing(pos, Mathf.Max(0.8f, radius * 0.5f));
         }
 
         public static void SkyStrike(Vector3 ground, Color c, float radius, float height)
