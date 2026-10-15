@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.169";
+        public const string ModVersion = "0.25.170";
 
         internal static DragonCombatPlugin Instance;
 
@@ -252,6 +252,7 @@ namespace DragonsAltarCombat
 
         private void Update()
         {
+            DragonMixamo.PrewarmTick(Player.m_localPlayer);   // v0.25.170 load + warm the Mixamo clips before the first cast
             DragonCombat.RuntimeUpdate();
         }
 
@@ -1831,7 +1832,10 @@ namespace DragonsAltarCombat
                 if (nativePair && !routed) DragonCombat.PrepareExternalAnimation(a, target);
                 if (nativePair) DragonDualWield.LogPairedSwing(p, a, inName, target, routed);   // v0.25.163 what the animator really plays (first swings only)
                 bool baseClass = p != null && string.IsNullOrEmpty(DragonCombat.GetAdvancementName(p));
-                if (baseClass && _comboPrevSwing >= 0)
+                // v0.25.170 (user: after blocking the chain fell back to vanilla 1-2-3): the outgoing swing is captured for every class
+                // (was Base Class only). An attack started out of the block pose changes the block layer too, so the trigger learning below
+                // could miss swing 1 and the backwards step (hit 3) had no state to cross-fade into. Paired 2HDW routes are untouched.
+                if (!nativePair && _comboPrevSwing >= 0)
                     CaptureBaseComboState(a, baseName + _comboPrevSwing.ToString());
                 if (a != null)
                 {
@@ -1851,6 +1855,11 @@ namespace DragonsAltarCombat
                         if (DragonCombat.LearnedState(a, target, out hash, out layer))
                         {
                             a.CrossFade(hash, blend / Mathf.Max(0.1f, StateLength(a, layer)), layer, offset);
+                            return false;
+                        }
+                        if (!baseClass && !nativePair && BaseComboStates.TryGetValue(a.GetInstanceID() + ":" + target, out captured))
+                        {
+                            a.CrossFade(captured.Value, blend / Mathf.Max(0.1f, StateLength(a, captured.Key)), captured.Key, offset);   // v0.25.170 fallback
                             return false;
                         }
                         int sh = Animator.StringToHash(target);
@@ -4806,16 +4815,17 @@ namespace DragonsAltarCombat
                     string learnedTrigger;
                     if (ExternalTrigger(l.Name, out learnedTrigger)) { if (l.A.GetBool(learnedTrigger)) continue; }
                     else if (l.A.GetBool(l.Name)) continue;
-                    int pick = -1;
-                    for (int i = 0; i < l.Pre.Length && i < l.A.layerCount; i++)
-                        if (l.A.IsInTransition(i) && l.A.GetNextAnimatorStateInfo(i).fullPathHash != l.Pre[i]) { pick = i; break; }
+                    if (l.Paired != DragonDualWield.PairedActive(l.A)) { PendingLearns.RemoveAt(k); continue; }
+                    // v0.25.170 (user: chain lost after blocking): every layer that left its pre-trigger state is checked and the first one
+                    // holding a validated swing state is learned. Before, the FIRST transitioning layer was taken - an attack started out of
+                    // the block pose (block layer leaving 'blocking') picked that layer, failed validation and dropped the learn for good.
+                    // Layers that are not a swing are skipped; nothing valid yet = keep waiting (0.6 s timeout above).
                     for (int i = 0; i < l.Pre.Length && i < l.A.layerCount; i++)
                     {
-                        if (pick >= 0 && i != pick) continue;
                         AnimatorStateInfo st = l.A.IsInTransition(i) ? l.A.GetNextAnimatorStateInfo(i) : l.A.GetCurrentAnimatorStateInfo(i);
                         if (st.fullPathHash == l.Pre[i]) continue;
-                        // v0.25.154: only a validated swing state is cached (see IsSwingState); a locomotion / skill / looping state is dropped.
-                        if (l.Paired != DragonDualWield.PairedActive(l.A) || !IsSwingState(l.A, i, st, l.Name)) { PendingLearns.RemoveAt(k); break; }
+                        // v0.25.154: only a validated swing state is cached (see IsSwingState); a locomotion / skill / looping state is never cached.
+                        if (!IsSwingState(l.A, i, st, l.Name)) continue;
                         LearnedStates[l.A.GetInstanceID() + ":" + l.Name] = new KeyValuePair<int, int>(i, st.fullPathHash);
                         PendingLearns.RemoveAt(k);
                         break;
@@ -10842,6 +10852,7 @@ namespace DragonsAltarCombat
         private static void Load()
         {
             if (_clips != null) return;
+            if (FinishAsyncNow()) return;   // v0.25.170 a cast arrived while the background load was still running
             if (Time.realtimeSinceStartup < _nextTry) return;
             _nextTry = Time.realtimeSinceStartup + 10f;   // missing file: look again in 10 s (user may copy it in while playing)
             try
@@ -10853,7 +10864,7 @@ namespace DragonsAltarCombat
                     Log(_status);
                     return;
                 }
-                AssetBundle bundle = AssetBundle.LoadFromFile(path);
+                AssetBundle bundle = _pwBundle != null ? _pwBundle : AssetBundle.LoadFromFile(path);   // v0.25.170 reuse the background-loaded bundle
                 if (bundle == null)
                 {
                     _status = "Aethelborn animations FAILED to load (" + path + "). Valheim runs Unity " + Application.unityVersion + " - build the bundle with that exact Unity version.";
@@ -10864,10 +10875,12 @@ namespace DragonsAltarCombat
                 Dictionary<string, AnimationClip> clips = new Dictionary<string, AnimationClip>(StringComparer.OrdinalIgnoreCase);
                 AddClips(clips, bundle.LoadAllAssets<AnimationClip>());
                 string[] assets = bundle.GetAllAssetNames();
-                for (int i = 0; i < assets.Length; i++)
-                {
-                    try { AddClips(clips, bundle.LoadAssetWithSubAssets<AnimationClip>(assets[i])); } catch (Exception) { }
-                }
+                // v0.25.170: the per-asset pass loaded every clip a SECOND time - only needed when LoadAllAssets found none
+                if (clips.Count == 0)
+                    for (int i = 0; i < assets.Length; i++)
+                    {
+                        try { AddClips(clips, bundle.LoadAssetWithSubAssets<AnimationClip>(assets[i])); } catch (Exception) { }
+                    }
                 if (clips.Count == 0)
                 {
                     _status = "Aethelborn animations: bundle found but it holds NO clips (" + assets.Length + " assets). Rebuild it with AAAnimBuilder.";
@@ -10886,6 +10899,130 @@ namespace DragonsAltarCombat
                 _status = "Aethelborn animations error: " + e.Message;
                 Log(_status);
             }
+        }
+
+        // ------------------------------------------------------------------ v0.25.170 FIRST-USE PREWARM (user: big FPS drop on
+        // the first Mixamo skill after launch). Profiled by code path: the first cast ran Load() synchronously in the combat frame
+        // (FindBundle disk search + AssetBundle.LoadFromFile + LoadAllAssets of every clip and their mirrors + a SECOND full
+        // LoadAssetWithSubAssets pass over every asset), then created the first PlayableGraph / clip binding for the character.
+        // Repeated casts only pay the graph creation. Now: the bundle and its clips load ASYNCHRONOUSLY from the main menu on
+        // (LoadFromFileAsync + LoadAllAssetsAsync, one step per frame), and once a local player exists the clips the skills
+        // actually use are bound once on that character's Animator through a throw-away graph with output weight 0 (nothing
+        // is shown, no damage / VFX / resources), one clip per frame; the graph is destroyed right away. Re-done for a new
+        // character. A cast before the load finished completes it synchronously (old behaviour, no worse).
+        private static readonly string[] WarmClips = {
+            "melee_run_jump_attack", "great_sword_jump_attack", "great_sword_high_spin_attack", "great_sword_high_spin_attack_mirror",
+            "great_sword_slash_4", "great_sword_slash_4_mirror", "melee_attack_360_high", "melee_attack_360_high_mirror" };
+        private static int _pwState;   // 0 idle, 1 bundle loading, 2 clips loading, 3 loaded / failed
+        private static AssetBundleCreateRequest _pwBundleReq;
+        private static AssetBundle _pwBundle;
+        private static AssetBundleRequest _pwAssetsReq;
+        private static string _pwPath;
+        private static float _pwStartedAt;
+        private static Animator _pwWarmed;
+        private static int _pwIndex;
+
+        public static void PrewarmTick(Player local)
+        {
+            try
+            {
+                if (_clips == null)
+                {
+                    if (_pwState == 0)
+                    {
+                        if (Time.realtimeSinceStartup < _nextTry) return;
+                        _pwPath = FindBundle();
+                        if (_pwPath == null) { _pwState = 3; return; }   // Load() reports the missing file on first use
+                        _pwBundleReq = AssetBundle.LoadFromFileAsync(_pwPath);
+                        _pwStartedAt = Time.realtimeSinceStartup;
+                        _pwState = 1;
+                        return;
+                    }
+                    if (_pwState == 1)
+                    {
+                        if (_pwBundleReq == null || !_pwBundleReq.isDone) return;
+                        AssetBundle b = _pwBundleReq.assetBundle;
+                        if (b == null) { _pwState = 3; return; }
+                        _pwBundle = b;
+                        _pwAssetsReq = b.LoadAllAssetsAsync<AnimationClip>();
+                        _pwState = 2;
+                        return;
+                    }
+                    if (_pwState == 2)
+                    {
+                        if (_pwAssetsReq == null || !_pwAssetsReq.isDone) return;
+                        AdoptAsync();
+                        return;
+                    }
+                    return;
+                }
+                WarmBindings(local);
+            }
+            catch (Exception) { _pwState = 3; }
+        }
+
+        // a cast needs the clips now: finish the background requests synchronously
+        private static bool FinishAsyncNow()
+        {
+            if (_pwState != 1 && _pwState != 2) return false;
+            try
+            {
+                if (_pwState == 1)
+                {
+                    AssetBundle b = _pwBundleReq == null ? null : _pwBundleReq.assetBundle;   // blocks until loaded
+                    if (b == null) { _pwState = 3; return false; }
+                    _pwBundle = b;
+                    _pwAssetsReq = b.LoadAllAssetsAsync<AnimationClip>();
+                    _pwState = 2;
+                }
+                if (_pwAssetsReq != null) { object force = _pwAssetsReq.allAssets; if (force == null) { } }   // blocks until loaded
+                AdoptAsync();
+                return _clips != null;
+            }
+            catch (Exception) { _pwState = 3; return false; }
+        }
+
+        private static void AdoptAsync()
+        {
+            _pwState = 3;
+            if (_pwAssetsReq == null) return;
+            Dictionary<string, AnimationClip> clips = new Dictionary<string, AnimationClip>(StringComparer.OrdinalIgnoreCase);
+            UnityEngine.Object[] all = _pwAssetsReq.allAssets;
+            List<AnimationClip> list = new List<AnimationClip>();
+            if (all != null) for (int i = 0; i < all.Length; i++) { AnimationClip c = all[i] as AnimationClip; if (c != null) list.Add(c); }
+            AddClips(clips, list.ToArray());
+            if (clips.Count == 0) return;   // unusual bundle layout: the synchronous Load() (per-asset pass) handles it on first use
+            _clips = clips;
+            _status = "Aethelborn animations loaded: " + clips.Count + " clips";
+            Log(_status + " in the background from " + _pwPath + " (" + (Time.realtimeSinceStartup - _pwStartedAt).ToString("F2") + " s, Unity " + Application.unityVersion + ")");
+        }
+
+        // bind the skills' clips on this character's Animator once (weight-0 throw-away graph, one clip per frame)
+        private static void WarmBindings(Player local)
+        {
+            if (local == null || _clips == null) return;
+            Animator an = local.GetComponentInChildren<Animator>();
+            if (an == null) return;
+            if (an != _pwWarmed) { _pwWarmed = an; _pwIndex = 0; }
+            if (_pwIndex >= WarmClips.Length) return;
+            if (local.IsDead() || Time.time < DragonMixamo.LiveUntil || DragonCombat.ClipBusy(local)) return;   // never next to a live skill
+            DragonMixamoPlayer live = an.GetComponent<DragonMixamoPlayer>();
+            if (live != null && live.IsLive) return;
+            AnimationClip clip;
+            string name = WarmClips[_pwIndex++];
+            if (!_clips.TryGetValue(name, out clip) || clip == null) return;
+            UnityEngine.Playables.PlayableGraph g = UnityEngine.Playables.PlayableGraph.Create("Aethelborn Mixamo Warm");
+            try
+            {
+                g.SetTimeUpdateMode(UnityEngine.Playables.DirectorUpdateMode.Manual);
+                UnityEngine.Animations.AnimationPlayableOutput o = UnityEngine.Animations.AnimationPlayableOutput.Create(g, "warm", an);
+                UnityEngine.Playables.PlayableOutputExtensions.SetWeight(o, 0f);
+                UnityEngine.Animations.AnimationClipPlayable cp = UnityEngine.Animations.AnimationClipPlayable.Create(g, clip);
+                UnityEngine.Playables.PlayableOutputExtensions.SetSourcePlayable(o, cp);
+                g.Evaluate(0f);
+            }
+            finally { if (g.IsValid()) g.Destroy(); }
+            if (_pwIndex >= WarmClips.Length) Log("Aethelborn animations: skill clips prepared on the character");
         }
 
         private static void AddClips(Dictionary<string, AnimationClip> into, AnimationClip[] found)
@@ -11187,6 +11324,7 @@ namespace DragonsAltarCombat
         private UnityEngine.Playables.Playable _root;
         private UnityEngine.Animations.AnimationMixerPlayable _xmix;
         private bool _live, _stopping, _mixing, _restSet, _transfer;
+        public bool IsLive { get { return _live; } }   // v0.25.170 prewarm never runs next to a live clip
         private bool _stableLanding;
         private float _fadeIn, _fadeOut, _age, _stopAt, _w, _mixAge;
         private float[] _wr, _wc;
@@ -16169,40 +16307,38 @@ namespace DragonsAltarCombat
         }
     }
 
-    // v0.25.168 / v0.25.169 CAPE GUARD (user video, Bonecrusher): Valheim capes are MagicaCloth2 components
-    // (VisEquipment.SetupCloth). Frames of the video: the cape is NOT RENDERED at all while airborne and reappears at the
-    // landing stretched straight up, then whips down. Inertia alone cannot hide cloth: the cloth was culled - MagicaCloth's
-    // camera / distance culling paused the simulation ("Keep") while the cape renderer's bounds were stale (paused cloth
-    // never refreshes its bounds -> Unity frustum-culls the renderer -> the cloth stays "invisible" -> stays paused) and,
-    // on landing, it resumed from the takeoff pose. On top, world inertia drags the cloth through the fast scripted leap.
-    // While a skill animation drives the local player (Mixamo live, clip driver busy, skill-locked airborne):
-    //   - MagicaCloth camera culling Off + distance culling disabled (by name, reflection; restored afterwards),
-    //   - SkinnedMeshRenderer.updateWhenOffscreen on for the cape renderers (bounds always follow the bones),
-    //   - inertia anchored to the player, world/local inertia x0.1 (blended back over 0.4 s),
-    //   - if a cape renderer was still culled mid-skill, the cloth is reset once at the end (snaps onto the body
-    //     instead of whipping from where it was left). One log line per skill names what was found / seen.
-    // The cape is never hidden; colliders, gravity, wind, the CA, movement and the Rigidbody are untouched.
+    // CAPE GUARD (v0.25.168 -> v0.25.170). Valheim capes are MagicaCloth2 components (VisEquipment.SetupCloth).
+    // Video evidence: v0.25.168 - cape not rendered in the air (MagicaCloth culling paused it) -> fixed in v0.25.169 (still
+    // in place). v0.25.169 video (Circle Swing + Bonecrusher): cape visible, but at the Bonecrusher landing it points straight
+    // UP (it lagged above the body during the fast fall = world inertia still acting) and afterwards it jitters / bunches.
+    // Confirmed in our own guard code (v0.25.169): (1) a renderer-visibility heuristic reset the cloth at the end of skills
+    // (snap), (2) the inertia anchor was switched off abruptly at release, (3) the guard flickered on/off between animation
+    // segments (LiveUntil / ClipBusy gaps), re-applying and restoring every value each time, (4) parameters were pushed
+    // every frame. v0.25.170: one steady guard session per skill (0.35 s hysteresis), no reset, no anchor, parameters pushed
+    // only when they change; while guarded the cape ignores fast WORLD movement (world inertia 0 + movement / rotation speed
+    // limits, the documented MagicaCloth way) and skips teleport resets; culling stays off; values are blended back over
+    // 0.5 s afterwards. The cape keeps simulating (gravity, wind, colliders) the whole time and is never hidden.
     public static class DragonClothGuard
     {
         private class Saved
         {
             public Component Cloth; public object Data; public object Inertia;
-            public float World = -1f, Local = -1f; public Transform Anchor; public float AnchorInertia = -1f;
-            public object Culling; public FieldInfo CullingField; public object CameraMode; public bool HadDistance; public bool DistanceUse;
-            public object DistanceSlider;
+            public float World = -1f, Local = -1f;
+            public object MoveLimit, RotLimit; public bool MoveUse, RotUse; public float MoveVal, RotVal;
+            public object Teleport;
+            public object Culling; public object CameraMode; public bool HadDistance; public bool DistanceUse; public object DistanceSlider;
             public List<SkinnedMeshRenderer> Skins = new List<SkinnedMeshRenderer>(); public List<bool> SkinOffscreen = new List<bool>();
-            public List<Renderer> Rends = new List<Renderer>();
         }
         private static Type _clothType;
-        private static bool _typeTried;
+        private static bool _typeTried, _logged;
         private static PropertyInfo _serialize;
-        private static FieldInfo _inertiaField, _world, _local, _anchor, _anchorInertia, _cullingField, _cameraMode, _distanceLen, _sliderUse;
-        private static MethodInfo _paramChange, _reset;
+        private static FieldInfo _inertiaField, _world, _local, _moveLimit, _rotLimit, _teleport, _cullingField, _cameraMode, _distanceLen, _sliderUse, _sliderValue;
+        private static MethodInfo _paramChange;
         private static readonly List<Saved> _saved = new List<Saved>();
         private static Player _owner;
-        private static float _level, _nextScan;
-        private static bool _sawCull, _logged, _wasOn;
-        private const float Damp = 0.1f;   // inertia kept while guarded (fraction of the cape's own values)
+        private static float _level, _nextScan, _drivenUntil, _lastPushed = -1f;
+        private static bool _guardOn;
+        private const float Hold = 0.35f, BlendOut = 0.5f, MoveLimitMps = 1.0f, RotLimitDps = 120f, LocalKeep = 0.5f;
 
         private static bool Resolve()
         {
@@ -16215,13 +16351,6 @@ namespace DragonsAltarCombat
                 const BindingFlags F = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
                 _serialize = _clothType.GetProperty("SerializeData", F);
                 _paramChange = _clothType.GetMethod("SetParameterChange", BindingFlags.Instance | BindingFlags.Public, null, Type.EmptyTypes, null);
-                MethodInfo[] ms = _clothType.GetMethods(BindingFlags.Instance | BindingFlags.Public);
-                for (int i = 0; i < ms.Length && _reset == null; i++)
-                {
-                    if (ms[i].Name != "ResetCloth") continue;
-                    ParameterInfo[] ps = ms[i].GetParameters();
-                    if (ps.Length == 0 || (ps.Length == 1 && ps[0].ParameterType == typeof(bool))) _reset = ms[i];
-                }
                 if (_serialize == null) return false;
                 Type sd = _serialize.PropertyType;
                 _inertiaField = sd.GetField("inertiaConstraint", F);
@@ -16230,9 +16359,10 @@ namespace DragonsAltarCombat
                     Type it = _inertiaField.FieldType;
                     _world = FloatField(it, "worldInertia");
                     _local = FloatField(it, "localInertia");
-                    _anchorInertia = FloatField(it, "anchorInertia");
-                    _anchor = it.GetField("anchor", F);
-                    if (_anchor != null && _anchor.FieldType != typeof(Transform)) _anchor = null;
+                    _moveLimit = SliderField(it, "movementSpeedLimit");
+                    _rotLimit = SliderField(it, "rotationSpeedLimit");
+                    FieldInfo tp = it.GetField("teleportMode", F);
+                    if (tp != null && tp.FieldType.IsEnum && Enum.IsDefined(tp.FieldType, "None")) _teleport = tp;
                 }
                 FieldInfo[] sf = sd.GetFields(F);
                 for (int i = 0; i < sf.Length && _cullingField == null; i++)
@@ -16244,18 +16374,31 @@ namespace DragonsAltarCombat
                     {
                         string n = cf[i].Name;
                         if (_cameraMode == null && cf[i].FieldType.IsEnum && n.IndexOf("camera", StringComparison.OrdinalIgnoreCase) >= 0 && n.IndexOf("mode", StringComparison.OrdinalIgnoreCase) >= 0 && Enum.IsDefined(cf[i].FieldType, "Off")) _cameraMode = cf[i];
-                        if (_distanceLen == null && n.IndexOf("distance", StringComparison.OrdinalIgnoreCase) >= 0 && n.IndexOf("length", StringComparison.OrdinalIgnoreCase) >= 0 && !cf[i].FieldType.IsPrimitive)
-                        {
-                            FieldInfo use = cf[i].FieldType.GetField("use", F);
-                            if (use != null && use.FieldType == typeof(bool)) { _distanceLen = cf[i]; _sliderUse = use; }
-                        }
+                        if (_distanceLen == null && n.IndexOf("distance", StringComparison.OrdinalIgnoreCase) >= 0 && n.IndexOf("length", StringComparison.OrdinalIgnoreCase) >= 0 && SliderType(cf[i].FieldType)) _distanceLen = cf[i];
                     }
                 }
-                Debug.Log("[Aethelborn] Cape guard: MagicaCloth2 found; inertia " + (_world != null ? "world " : "") + (_local != null ? "local " : "") + (_anchor != null ? "anchor " : "")
-                    + "| culling " + (_cameraMode != null ? "camera " : "") + (_distanceLen != null ? "distance " : "") + "| reset " + (_reset != null ? "yes" : "no"));
+                Debug.Log("[Aethelborn] Cape guard: MagicaCloth2 found; inertia " + (_world != null ? "world " : "") + (_local != null ? "local " : "")
+                    + (_moveLimit != null ? "moveLimit " : "") + (_rotLimit != null ? "rotLimit " : "") + (_teleport != null ? "teleport " : "")
+                    + "| culling " + (_cameraMode != null ? "camera " : "") + (_distanceLen != null ? "distance" : ""));
             }
             catch (Exception) { _clothType = null; }
             return _clothType != null && _serialize != null;
+        }
+
+        private static bool SliderType(Type t)
+        {
+            if (t == null || t.IsPrimitive) return false;
+            const BindingFlags F = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            FieldInfo use = t.GetField("use", F), val = t.GetField("value", F);
+            if (use == null || val == null || use.FieldType != typeof(bool) || val.FieldType != typeof(float)) return false;
+            _sliderUse = use; _sliderValue = val;
+            return true;
+        }
+
+        private static FieldInfo SliderField(Type t, string name)
+        {
+            FieldInfo f = t.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            return f != null && SliderType(f.FieldType) ? f : null;
         }
 
         private static FieldInfo FloatField(Type t, string name)
@@ -16276,44 +16419,36 @@ namespace DragonsAltarCombat
         {
             try
             {
-                bool on = Driven(p);
-                if (!on && _saved.Count == 0) { _level = 0f; _wasOn = false; return; }
+                if (Driven(p)) _drivenUntil = Time.time + Hold;   // hysteresis: animation segment gaps never toggle the guard
+                bool on = p != null && !p.IsDead() && Time.time < _drivenUntil;
+                if (!on && _saved.Count == 0) { _level = 0f; _guardOn = false; return; }
                 if (!Resolve()) return;
                 if (p != _owner) { Restore(); _owner = p; }
-                if (on && !_wasOn) { _sawCull = false; _logged = false; }
-                _wasOn = on;
-                if (on && (_saved.Count == 0 || Time.time >= _nextScan)) { Scan(p); _nextScan = Time.time + 1f; }
-                _level = on ? Mathf.Min(1f, _level + Time.deltaTime / 0.08f) : Mathf.Max(0f, _level - Time.deltaTime / 0.4f);
-                Apply(_level, on);
-                if (on) Watch(p);
-                if (!on && _level <= 0f) { if (_sawCull) ResetCloths(); Restore(); }
+                if (on && !_guardOn) { _guardOn = true; Scan(p); _nextScan = Time.time + 1f; LogOnce(); }
+                else if (on && Time.time >= _nextScan) { Scan(p); _nextScan = Time.time + 1f; }
+                if (!on) _guardOn = false;
+                _level = on ? 1f : Mathf.Max(0f, _level - Time.deltaTime / BlendOut);
+                // push to MagicaCloth only when the blend moved (never every frame at a steady level)
+                if (_lastPushed < 0f || Mathf.Abs(_level - _lastPushed) >= 0.05f || (_level <= 0f && _lastPushed > 0f) || (_level >= 1f && _lastPushed < 1f))
+                {
+                    Apply(_level);
+                    _lastPushed = _level;
+                }
+                if (!on && _level <= 0f) Restore();
             }
             catch (Exception) { }
         }
 
-        // a cape renderer that is not drawn while the player's own body is on screen = culled cloth
-        private static void Watch(Player p)
+        private static void LogOnce()
         {
-            if (_sawCull) return;
-            bool bodyVisible = false;
-            Renderer[] body = p.GetComponentsInChildren<SkinnedMeshRenderer>(false);
-            for (int i = 0; i < body.Length && !bodyVisible; i++) if (body[i] != null && body[i].isVisible && !IsCape(body[i])) bodyVisible = true;
-            if (!bodyVisible) return;
-            for (int i = 0; i < _saved.Count; i++)
-                for (int k = 0; k < _saved[i].Rends.Count; k++)
-                {
-                    Renderer r = _saved[i].Rends[k];
-                    if (r == null || !r.enabled || !r.gameObject.activeInHierarchy || r.isVisible) continue;
-                    _sawCull = true;
-                    if (!_logged) { _logged = true; Debug.Log("[Aethelborn] Cape guard: cape renderer '" + r.name + "' culled mid-skill (bounds centre " + r.bounds.center.ToString("F1") + ", player " + p.transform.position.ToString("F1") + ") - cloth will be reset at the end"); }
-                    return;
-                }
-        }
-
-        private static bool IsCape(Renderer r)
-        {
-            for (int i = 0; i < _saved.Count; i++) if (_saved[i].Rends.Contains(r)) return true;
-            return false;
+            if (_logged || _saved.Count == 0) return;
+            _logged = true;
+            Saved s = _saved[0];
+            Debug.Log("[Aethelborn] Cape guard: cape '" + s.Cloth.name + "' worldInertia " + s.World.ToString("F2") + " localInertia " + s.Local.ToString("F2")
+                + " moveLimit " + (s.MoveLimit != null ? (s.MoveUse ? s.MoveVal.ToString("F2") : "off") : "n/a")
+                + " rotLimit " + (s.RotLimit != null ? (s.RotUse ? s.RotVal.ToString("F0") : "off") : "n/a")
+                + " teleport " + (s.Teleport != null ? s.Teleport.ToString() : "n/a")
+                + " camera culling " + (s.CameraMode != null ? s.CameraMode.ToString() : "n/a"));
         }
 
         private static void Scan(Player p)
@@ -16337,8 +16472,9 @@ namespace DragonsAltarCombat
                     {
                         if (_world != null) s.World = (float)_world.GetValue(s.Inertia);
                         if (_local != null) s.Local = (float)_local.GetValue(s.Inertia);
-                        if (_anchor != null) s.Anchor = (Transform)_anchor.GetValue(s.Inertia);
-                        if (_anchorInertia != null) s.AnchorInertia = (float)_anchorInertia.GetValue(s.Inertia);
+                        if (_moveLimit != null) { s.MoveLimit = _moveLimit.GetValue(s.Inertia); if (s.MoveLimit != null) { s.MoveUse = (bool)_sliderUse.GetValue(s.MoveLimit); s.MoveVal = (float)_sliderValue.GetValue(s.MoveLimit); } }
+                        if (_rotLimit != null) { s.RotLimit = _rotLimit.GetValue(s.Inertia); if (s.RotLimit != null) { s.RotUse = (bool)_sliderUse.GetValue(s.RotLimit); s.RotVal = (float)_sliderValue.GetValue(s.RotLimit); } }
+                        if (_teleport != null) s.Teleport = _teleport.GetValue(s.Inertia);
                     }
                 }
                 if (_cullingField != null)
@@ -16351,38 +16487,51 @@ namespace DragonsAltarCombat
                         if (s.DistanceSlider != null) { s.HadDistance = true; s.DistanceUse = (bool)_sliderUse.GetValue(s.DistanceSlider); }
                     }
                 }
-                // the cape's own renderers (MeshCloth / BoneCloth render through the cloth object's hierarchy)
                 Renderer[] rs = cloths[i].GetComponentsInChildren<Renderer>(true);
                 for (int k = 0; k < rs.Length; k++)
                 {
-                    s.Rends.Add(rs[k]);
                     SkinnedMeshRenderer smr = rs[k] as SkinnedMeshRenderer;
                     if (smr != null) { s.Skins.Add(smr); s.SkinOffscreen.Add(smr.updateWhenOffscreen); }
                 }
                 _saved.Add(s);
+                if (_level > 0f) { Apply(_level); _lastPushed = _level; }
             }
         }
 
-        private static void Apply(float k, bool on)
+        private static void SetSlider(object holder, FieldInfo field, object slider, bool use, float value)
+        {
+            if (slider == null) return;
+            _sliderUse.SetValue(slider, use);
+            _sliderValue.SetValue(slider, value);
+            if (slider.GetType().IsValueType) field.SetValue(holder, slider);
+        }
+
+        // k = 1 guarded, 0 = the cape's own values
+        private static void Apply(float k)
         {
             for (int i = 0; i < _saved.Count; i++)
             {
                 Saved s = _saved[i];
                 if (s.Cloth == null) continue;
+                bool guard = k > 0f;
                 object inertia = s.Inertia;
                 if (inertia != null)
                 {
-                    if (_world != null && s.World >= 0f) _world.SetValue(inertia, Mathf.Lerp(s.World, s.World * Damp, k));
-                    if (_local != null && s.Local >= 0f) _local.SetValue(inertia, Mathf.Lerp(s.Local, s.Local * Damp, k));
-                    if (_anchor != null && s.Anchor == null && _owner != null)
+                    if (_world != null && s.World >= 0f) _world.SetValue(inertia, Mathf.Lerp(s.World, 0f, k));
+                    if (_local != null && s.Local >= 0f) _local.SetValue(inertia, Mathf.Lerp(s.Local, s.Local * LocalKeep, k));
+                    if (s.MoveLimit != null)
                     {
-                        _anchor.SetValue(inertia, k > 0f ? _owner.transform : null);
-                        if (_anchorInertia != null) _anchorInertia.SetValue(inertia, k > 0f ? Mathf.Lerp(Mathf.Max(0f, s.AnchorInertia), 0f, k) : Mathf.Max(0f, s.AnchorInertia));
+                        float own = s.MoveUse ? s.MoveVal : 30f;
+                        SetSlider(inertia, _moveLimit, s.MoveLimit, guard || s.MoveUse, guard ? Mathf.Lerp(own, Mathf.Min(own, MoveLimitMps), k) : s.MoveVal);
                     }
+                    if (s.RotLimit != null)
+                    {
+                        float own = s.RotUse ? s.RotVal : 1440f;
+                        SetSlider(inertia, _rotLimit, s.RotLimit, guard || s.RotUse, guard ? Mathf.Lerp(own, Mathf.Min(own, RotLimitDps), k) : s.RotVal);
+                    }
+                    if (_teleport != null && s.Teleport != null) _teleport.SetValue(inertia, guard ? Enum.Parse(_teleport.FieldType, "None") : s.Teleport);
                     if (inertia.GetType().IsValueType) _inertiaField.SetValue(s.Data, inertia);
                 }
-                // culling: off for the whole guarded time (no blend), original values back once released
-                bool guard = on || k > 0f;
                 if (s.Culling != null)
                 {
                     if (_cameraMode != null && s.CameraMode != null) _cameraMode.SetValue(s.Culling, guard ? Enum.Parse(_cameraMode.FieldType, "Off") : s.CameraMode);
@@ -16398,22 +16547,13 @@ namespace DragonsAltarCombat
             }
         }
 
-        private static void ResetCloths()
-        {
-            if (_reset == null) return;
-            for (int i = 0; i < _saved.Count; i++)
-            {
-                if (_saved[i].Cloth == null) continue;
-                try { _reset.Invoke(_saved[i].Cloth, _reset.GetParameters().Length == 0 ? null : new object[] { false }); } catch (Exception) { }
-            }
-        }
-
         private static void Restore()
         {
-            if (_saved.Count > 0 && _clothType != null) Apply(0f, false);
+            if (_saved.Count > 0 && _clothType != null) Apply(0f);
             _saved.Clear();
             _level = 0f;
-            _sawCull = false;
+            _lastPushed = -1f;
+            _guardOn = false;
         }
     }
 }

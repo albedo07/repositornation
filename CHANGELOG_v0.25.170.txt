@@ -1,0 +1,50 @@
+Aethelborn Ascended v0.25.170 - Clean Handoff
+Baseline: v0.25.169b (latest supplied working pass). Anchor v0.25.167 untouched (docs/anchors).
+
+1. ADVANCEMENT -> SKILL TREE
+- A successful Advancement at the Altar of Blessings closes the Altar and opens that character's updated Skill Tree
+  (Core: Plugin.OpenSkillTreeRequest, registered by Advanced -> opens next frame).
+- Failed attempts: unchanged (Altar stays open, custom in-Altar prompt).
+- Hotbar kept exactly: no Base Class skill removed, nothing replaced or auto-filled. Permanent skills are no longer
+  auto-inserted (SanitizeHotbarLayout only clears slots that are invalid); the first post-Advancement load reads the
+  pre-Advancement layout key so the player's own slots carry over.
+
+2. CAPE SHAKING (Circle Swing / Bonecrusher) - CONFIRMED CAUSE
+- Video: cape visible now (v0.25.169 culling fix works) but points straight UP at the Bonecrusher landing (it lagged above
+  the body in the fast fall = world inertia still acting) and jitters/bunches afterwards.
+- Our own v0.25.169 guard fought the simulation (confirmed in code): (a) renderer heuristic ResetCloth at skill end = snap,
+  (b) inertia anchor removed abruptly at release, (c) guard flickered on/off between animation segments (LiveUntil /
+  ClipBusy gaps) and re-applied/restored every value each time, (d) SetParameterChange pushed every frame.
+- Fix (DragonClothGuard): one steady session per skill (0.35 s hysteresis); no reset, no anchor; while guarded world
+  inertia -> 0, local inertia x0.5, movement speed limit 1 m/s, rotation limit 120 deg/s, teleport mode None, culling off;
+  parameters pushed only when they change; 0.5 s blend back afterwards. Cape keeps simulating (gravity, wind, colliders),
+  never hidden or frozen; outside guarded skills the cape's own values are untouched. No CA / Rigidbody changes.
+- Log line "[Aethelborn] Cape guard: cape '...' worldInertia ... moveLimit ... teleport ... camera culling ..." prints the
+  cape's original values and which MagicaCloth fields were found (field names verified in game by this line).
+
+3. FIRST-USE MIXAMO FPS DROP
+- Profiled by code path: first cast ran Load() synchronously in combat (FindBundle disk search, LoadFromFile, LoadAllAssets
+  of every clip + mirrors, then a SECOND full per-asset load), plus the first clip binding on the character's Animator.
+  Repeated casts only pay graph creation.
+- Now: bundle + clips load asynchronously from the main menu (one step per frame); the second per-asset pass only runs if
+  the first found nothing; once a local player exists the 8 skill clips are bound once through a throw-away graph at
+  output weight 0 (nothing shown, no damage/VFX/resources), one per frame, graph destroyed at once; re-done for a new
+  character / Animator. A cast before loading finished completes it synchronously (old behaviour). Timing/blending unchanged.
+
+4. NACC AFTER BLOCKING (all classes, Sword Master reported)
+- Cause: the chain's backwards step (hit 3 = swing 1 again) cross-fades into the animator state LEARNED for that swing.
+  Learning took the FIRST animator layer that changed after the trigger. An attack started out of the block pose also
+  changes the block layer, so that layer was picked, failed swing validation and the learn was dropped. Swing 1 (always the
+  first strike, usually right after a block) stayed unlearned -> hit 3 had no state -> native trigger -> vanilla 1-2-3 look.
+- Fix: learning checks every changed layer and keeps the first validated swing state (non-swing layers skipped, keeps
+  waiting until the 0.6 s timeout). Fallback: the outgoing swing is captured at the next trigger for every class (was Base
+  Class only) and used when no learned state exists. Paired 2HDW route untouched.
+- Blocking, its bonuses, heavy attacks, skill handoffs, 0.7 s window, timing: unchanged. No delays added.
+
+5. CRESCENT CLEAVE PUSH vs DAMAGE (Normal + Ascended)
+- Cause: push and damage use the same box, but the push ran every frame for the whole 5.5 s travel while each wave deals
+  at most 2 ticks per target (0.5 s apart). Model: a small enemy was carried up to 17.8 m with no damage (big 3.9 m,
+  boss 1.0 m).
+- Fix: a wave only pushes a target it can still damage; after its last tick the wave passes through. Hitbox size, damage,
+  tick interval, 2-tick cap, Small/Big/Boss push %, front clamp, obstacle checks, multiplayer RPC batching and per-target
+  dedupe unchanged.

@@ -71,6 +71,7 @@ static class T
     static int fails;
     static void Check(bool c, string m) { if (!c) { fails++; Console.WriteLine("FAIL " + m); } }
     static void Hits(Sim s, int n, string w, List<int> got) { for (int i = 0; i < n; i++) { int r = s.Click(false, "melee", w + "_attack"); got.Add(r); s.Tick(0.3); s.StopSwing(); s.Tick(0.1); } }
+    static string J(List<int> l) { return string.Join(",", l.ConvertAll(x => x.ToString()).ToArray()); }
     static void Main()
     {
         foreach (string w in new string[] { "1H", "SBDW", "2HDW" })
@@ -106,7 +107,7 @@ static class T
             Check(s.Click(false, "melee", w + "_attack") == 0, w + " interrupted finisher leaves no lockout");
             s = new Sim(); got = new List<int>(); Hits(s, 5, w, got); double lu = s.LockUntil; s.SkillCast("S"); Check(s.LockUntil == lu, w + " genuine finisher lockout preserved through takeover");
             // v0.25.169 airborne rules
-            Func<List<int>, string> J = l => string.Join(",", l.ConvertAll(x => x.ToString()).ToArray());
+            // J: see T.J
             // uneven terrain: brief ground loss between every swing never resets
             s = new Sim(); got = new List<int>();
             for (int i = 0; i < 5; i++) { s.Takeoff(); s.Tick(0.05); s.Land(); got.Add(s.Click(false, "melee", w + "_attack")); s.Tick(0.3); s.StopSwing(); s.Tick(0.1); }
@@ -167,6 +168,40 @@ static class T
             Check(match("Axe combo 2", "swing_axe1") == 1, "override clip for swing 1 = Attack2");
             Check(match("Axe combo 3", "swing_axe1") == -1, "attack-event clip of another slot rejected for swing 1");
             Check(match("Sword-Attack-R1", "swing_sword0") == 0, "non-replaced clip falls back to name / fresh-event rule");
+        }
+        // v0.25.170: block -> primary. Layer 0 = block layer (leaves 'blocking' for a non-swing state), layer 1 = attack layer (enters the swing).
+        {
+            // each layer: changed?, isSwing?
+            Func<bool[], bool[], bool, int> oldLearn = (changed, swing, dummy) => {
+                int pick = -1; for (int i = 0; i < changed.Length; i++) if (changed[i]) { pick = i; break; }
+                for (int i = 0; i < changed.Length; i++) { if (pick >= 0 && i != pick) continue; if (!changed[i]) continue; return swing[i] ? i : -2; }
+                return -1; };
+            Func<bool[], bool[], bool, int> newLearn = (changed, swing, dummy) => {
+                for (int i = 0; i < changed.Length; i++) { if (!changed[i] || !swing[i]) continue; return i; }
+                return -1; };   // -1 = keep waiting
+            bool[] fromBlock = { true, true }, swingL = { false, true };
+            Check(oldLearn(fromBlock, swingL, false) == -2, "old rule: attack out of block dropped the learn (reproduces the bug)");
+            Check(newLearn(fromBlock, swingL, false) == 1, "attack out of block learns the attack layer");
+            Check(newLearn(new bool[] { false, true }, swingL, false) == 1, "attack from idle still learns");
+            Check(newLearn(new bool[] { true, false }, swingL, false) == -1, "only block layer changed: keep waiting, nothing cached");
+            Check(newLearn(new bool[] { true, true }, new bool[] { false, false }, false) == -1, "no swing state anywhere: nothing cached");
+            // hit 3 (backwards step to swing 0): learned -> captured outgoing swing (all classes) -> HasState
+            Func<bool, bool, bool, string> back = (learned, captured, hasState) => learned ? "learned" : captured ? "captured" : hasState ? "hasstate" : "trigger";
+            Check(back(false, true, false) == "captured", "swing 1 never learned (always started from block): captured state still gives 1-2-1-2-3");
+            Check(back(true, true, true) == "learned", "learned state keeps priority for advanced classes");
+            // chain counters are untouched by blocking: block before / between strikes inside the 0.7 s window continues, after it restarts
+            foreach (string w in new string[] { "sword", "sword_shield" })
+            {
+                Sim s = new Sim(); var got = new List<int>();
+                s.Tick(1.0);   // blocked before the first attack
+                Hits(s, 2, w, got); s.Tick(0.3);   // short block between strikes
+                Hits(s, 3, w, got);
+                Check(J(got) == "0,1,0,1,2", w + " block before / between strikes keeps 1-2-1-2-3: " + J(got));
+                s = new Sim(); got = new List<int>(); Hits(s, 2, w, got); s.Tick(2.0); s.Click(false, "melee", w + "_attack");
+                Check(s.ComboHit == 0, w + " long block (> 0.7 s window) restarts at strike 1 (existing window rule)");
+                s = new Sim(); s.SkillCast("S"); s.SkillEnd(); s.Tick(0.5); got = new List<int>(); Hits(s, 5, w, got);
+                Check(J(got) == "0,1,0,1,2", w + " skill -> block -> chain: " + J(got));
+            }
         }
         // v0.25.157: 2HDW paired controller validation + skill release (decision model)
         {

@@ -17,7 +17,7 @@ namespace AlbedosCustomClassesGuardian
     {
         public const string ModGuid = "albedo.customclasses.guardian";
         public const string ModName = "Aethelborn Ascended - Grand Sigil Survival";
-        public const string ModVersion = "0.25.169";
+        public const string ModVersion = "0.25.170";
 
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 

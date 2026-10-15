@@ -41,7 +41,7 @@ namespace AlbedosCustomClasses
     {
         public const string ModGuid = "albedo.customclasses";
         public const string ModName = "Aethelborn Ascended - Altar";
-        public const string ModVersion = "0.25.169";
+        public const string ModVersion = "0.25.170";
 
         internal const string ClassDataKey = "AlbedoCustomClasses.Class";
         internal const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -92,6 +92,8 @@ namespace AlbedosCustomClasses
         private static Plugin _altarInstance;
         // Advanced registers this: (player, advancement or null) -> null when ready, else the unmet requirements (one per line).
         public static Func<Player, string, string> AdvanceRequirementProvider;
+        // v0.25.170: Advanced registers this - opens the Skill Tree right after a successful Advancement.
+        public static Action OpenSkillTreeRequest;
         private Text _chooseAdvButtonText;
         private Text _confirmationText;
         private Button _chooseAdvButton;
@@ -1689,7 +1691,10 @@ namespace AlbedosCustomClasses
                 _currentAdvancementText.text = "Advancement: " + AcDisplay(advancementName);
 
             _focusedAdvancement = advancementName;
-            ShowAdvancementPage();
+            // v0.25.170 (user): a successful Advancement closes the Altar and opens the updated Skill Tree
+            // (failures above return early and keep the Altar open with the prompt).
+            CloseClassPanel();
+            try { if (OpenSkillTreeRequest != null) OpenSkillTreeRequest(); } catch (Exception) { }
         }
 
         private void ResetClassSelection()

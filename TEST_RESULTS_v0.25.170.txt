@@ -1,0 +1,17 @@
+v0.25.170 Clean Handoff - test results
+
+COMPILE / MODEL CHECKS (done here, no game):
+- tools/compile_check/check.sh 3029660: COMPILE CHECK PASSED (0 new signatures).
+- mcs --parse -langversion:5: CombatRuntime, Advanced, Core clean.
+- tools/tests/nacc_handoff (logic model): ALL PASS, incl. new block cases: attack out of block learns the attack layer
+  (old rule reproduces the dropped learn), block before / between strikes keeps 1-2-1-2-3 (sword, sword + shield),
+  long block > 0.7 s restarts at strike 1 (existing window), skill -> block -> chain, captured-state fallback.
+- tools/tests/cleave_push/model.py: ALL PASS - old: up to 17.8 m pushed with no damage; new: 2 ticks every case,
+  0 m pushed without damage (small/big/boss, start 2/6/12 m).
+
+NOT VERIFIED (needs Valheim):
+- Cape behaviour + MagicaCloth field names (send the 'Cape guard' log lines).
+- FPS of the first Mixamo cast after launch.
+- NACC after blocking in game (animator layers of the real controller).
+- Altar -> Skill Tree opening and hotbar carry-over.
+- Crescent carry feel in game.

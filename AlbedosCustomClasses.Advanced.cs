@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.169";
+        public const string ModVersion = "0.25.170";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -2400,10 +2400,14 @@ namespace AlbedosCustomClassesAdvanced
                     Character target = hits[i].GetComponentInParent<Character>();
                     if (target == null || !IsEnemy(player, target)) continue;
                     int id = target.GetInstanceID();
-                    CleavePull(target, point, forward, waveSpeed, groundMask, ascended);   // v0.25.167 push along the wave's travel (once per target per frame)
                     float nextAllowed;
                     int count;
                     hitCount.TryGetValue(id, out count);
+                    // v0.25.170 (user: enemies were pushed without being damaged): push and damage use this same box, but the push ran every
+                    // frame for the whole 5.5 s travel while this wave deals at most 2 ticks per target (0.5 s apart) - a carried enemy rode
+                    // ~5 s with no damage. The push now only carries a target this wave can still damage; after its last tick the wave
+                    // passes through it. Damage, tick interval, cap and push scaling are unchanged.
+                    if (count < 2) CleavePull(target, point, forward, waveSpeed, groundMask, ascended);   // v0.25.167 push along the wave's travel (once per target per frame)
                     if (count >= 2 || (nextHitAt.TryGetValue(id, out nextAllowed) && Time.time < nextAllowed)) continue;
                     nextHitAt[id] = Time.time + Mathf.Max(0.10f, _crescentPersistentTick.Value);
                     hitCount[id] = count + 1;
@@ -10671,8 +10675,23 @@ namespace AlbedosCustomClassesAdvanced
             {
                 FieldInfo f = typeof(Plugin).GetField("AdvanceRequirementProvider", BindingFlags.Static | BindingFlags.Public);
                 if (f != null) f.SetValue(null, new Func<Player, string, string>(IhAltarRequirements));
+                FieldInfo o = typeof(Plugin).GetField("OpenSkillTreeRequest", BindingFlags.Static | BindingFlags.Public);
+                if (o != null) o.SetValue(null, new Action(IhOpenTreeAfterAdvance));
             }
             catch (Exception) { }
+        }
+
+        // v0.25.170: called by the Altar after a successful Advancement - open the Skill Tree one frame later (after the
+        // Altar released its input block / cursor), so it shows the new Advancement and restores the cursor correctly.
+        private static void IhOpenTreeAfterAdvance()
+        {
+            if (Instance != null) Instance.StartCoroutine(Instance.IhOpenTreeNextFrame());
+        }
+
+        private IEnumerator IhOpenTreeNextFrame()
+        {
+            yield return null;
+            if (Player.m_localPlayer != null && !_skillbookOpen && !Plugin.IsClassPanelOpen) ToggleSkillbook();
         }
 
         // An Ascended Paladin's Righteous Strike is handled here; the Cleric version is skipped.
@@ -17825,27 +17844,9 @@ namespace AlbedosCustomClassesAdvanced
                 if (!string.IsNullOrEmpty(layout[i]) && !CanSlotSkill(layout[i]))
                     layout[i] = "";
             }
-            ReferenceNodeUi[] nodes = IhTreeNodes();
-            for (int n = 0; n < nodes.Length; n++)
-            {
-                string id = nodes[n].Id;
-                if (!IsPermanentHotbarSkill(id) || Array.IndexOf(layout, id) >= 0)
-                    continue;
-                int empty = Array.IndexOf(layout, "");
-                if (empty < 0)
-                {
-                    for (int i = layout.Length - 1; i >= 0; i--)
-                    {
-                        if (!IsPermanentHotbarSkill(layout[i]))
-                        {
-                            empty = i;
-                            break;
-                        }
-                    }
-                }
-                if (empty >= 0)
-                    layout[empty] = id;
-            }
+            // v0.25.170 (user): the hotbar is never auto-filled - missing permanent skills are no longer inserted (that also
+            // pushed Base Class skills out after Advancement). Players arrange their own bar; placed permanent skills still
+            // cannot be removed.
             return layout;
         }
 
@@ -17865,6 +17866,16 @@ namespace AlbedosCustomClassesAdvanced
                 return defaults;
 
             string saved = ReadPlayerData(player, IhHotbarSaveKey(player));
+            // v0.25.170 (user): right after Advancement the new bar key is empty - carry the pre-Advancement bar over exactly
+            // (Base Class skills stay, nothing is replaced or filled). No earlier bar = the plain Base Class default.
+            if (string.IsNullOrEmpty(saved) && !string.IsNullOrEmpty(GetAdvancement(player)))
+            {
+                string cls = GetClass(player);
+                saved = ReadPlayerData(player, HotbarLayoutKeyPrefix + (cls == "Cleric" ? "" : cls + "."));
+                defaults = classSkills.Length == 3
+                    ? new string[] { classSkills[0], classSkills[1], classSkills[2], "", "", "", "" }
+                    : new string[] { "", "", "", "", "", "", "" };
+            }
             if (string.IsNullOrEmpty(saved))
                 return defaults;
 
