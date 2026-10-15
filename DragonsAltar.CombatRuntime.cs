@@ -13015,6 +13015,21 @@ namespace DragonsAltarCombat
         }
     }
 
+    // v0.25.181: rubble that stays for `Life`, then sinks into the ground and is removed.
+    public class DragonSinkAway : MonoBehaviour
+    {
+        public float Life = 4f, Depth = 0.3f;
+        private float _age;
+        private Vector3 _start;
+        private void Start() { _start = transform.position; }
+        private void Update()
+        {
+            _age += Time.deltaTime;
+            if (_age > Life) transform.position = _start - Vector3.up * Depth * Mathf.Clamp01((_age - Life) / 0.8f);
+            if (_age > Life + 0.8f) Destroy(gameObject);
+        }
+    }
+
     // v0.25.180 AirStreak owner: trails keep emitting while Keep() holds, then detach so the wake finishes its fade.
     public class DragonStreakLife : MonoBehaviour
     {
@@ -15361,6 +15376,201 @@ namespace DragonsAltarCombat
             if (shake > 0f) Shake(g, 20f + radius * 2f, shake);
         }
 
+        // ------------------------------------------------------------------ v0.25.181 finished solid shapes
+        // Extrudes a closed 2D outline (counter-clockwise, XY) into a solid with chamfered (bevelled) front and back edges:
+        // flat-shaded faces + soft bevel normals, planar uvs (faces: xy, walls: perimeter x depth). Used for the relic
+        // crosses (one finished body instead of stacked boxes).
+        public static Mesh ExtrudeBevel(List<Vector2> outline, float depth, float bevel, float uvScale)
+        {
+            int n = outline == null ? 0 : outline.Count;
+            if (n < 3) return null;
+            float hd = depth * 0.5f;
+            bevel = Mathf.Clamp(bevel, 0f, hd * 0.9f);
+            List<Vector2> inner = OffsetOutline(outline, -bevel);
+            List<Vector3> v = new List<Vector3>();
+            List<Vector3> nr = new List<Vector3>();
+            List<Vector2> uv = new List<Vector2>();
+            List<int> t = new List<int>();
+            int[] tri = EarClip(inner);
+            // front (+z faces the viewer side +Z) and back
+            for (int side = 0; side < 2; side++)
+            {
+                float z = side == 0 ? hd : -hd;
+                Vector3 nz = side == 0 ? Vector3.forward : Vector3.back;
+                int b0 = v.Count;
+                for (int i = 0; i < n; i++) { v.Add(new Vector3(inner[i].x, inner[i].y, z)); nr.Add(nz); uv.Add(inner[i] * uvScale); }
+                for (int i = 0; i + 2 < tri.Length; i += 3)
+                {
+                    if (side == 0) { t.Add(b0 + tri[i]); t.Add(b0 + tri[i + 2]); t.Add(b0 + tri[i + 1]); }
+                    else { t.Add(b0 + tri[i]); t.Add(b0 + tri[i + 1]); t.Add(b0 + tri[i + 2]); }
+                }
+            }
+            // walls + bevels: quads around the perimeter
+            float per = 0f;
+            for (int i = 0; i < n; i++)
+            {
+                int j = (i + 1) % n;
+                Vector2 a = outline[i], b = outline[j], ai = inner[i], bi = inner[j];
+                Vector2 e = b - a;
+                float len = e.magnitude;
+                Vector3 wn = new Vector3(e.y, -e.x, 0f).normalized;   // outward for a CCW outline
+                // rows: front inner (z=hd), front outer (z=hd-bevel), back outer (z=-hd+bevel), back inner (z=-hd)
+                Vector3[] ra = { new Vector3(ai.x, ai.y, hd), new Vector3(a.x, a.y, hd - bevel), new Vector3(a.x, a.y, -hd + bevel), new Vector3(ai.x, ai.y, -hd) };
+                Vector3[] rb = { new Vector3(bi.x, bi.y, hd), new Vector3(b.x, b.y, hd - bevel), new Vector3(b.x, b.y, -hd + bevel), new Vector3(bi.x, bi.y, -hd) };
+                Vector3[] nn = { (wn + Vector3.forward).normalized, wn, (wn + Vector3.back).normalized };
+                float[] zz = { hd, hd - bevel, -hd + bevel, -hd };
+                for (int q = 0; q < 3; q++)
+                {
+                    int b0 = v.Count;
+                    v.Add(ra[q]); v.Add(rb[q]); v.Add(ra[q + 1]); v.Add(rb[q + 1]);
+                    for (int k = 0; k < 4; k++) nr.Add(nn[q]);
+                    uv.Add(new Vector2(per, zz[q]) * uvScale); uv.Add(new Vector2(per + len, zz[q]) * uvScale);
+                    uv.Add(new Vector2(per, zz[q + 1]) * uvScale); uv.Add(new Vector2(per + len, zz[q + 1]) * uvScale);
+                    t.Add(b0); t.Add(b0 + 2); t.Add(b0 + 1); t.Add(b0 + 1); t.Add(b0 + 2); t.Add(b0 + 3);
+                }
+                per += len;
+            }
+            Mesh m = new Mesh();
+            m.vertices = v.ToArray(); m.normals = nr.ToArray(); m.uv = uv.ToArray(); m.triangles = t.ToArray();
+            m.RecalculateBounds();
+            return m;
+        }
+
+        // Miter offset of a CCW outline (d > 0 outward, d < 0 inward).
+        public static List<Vector2> OffsetOutline(List<Vector2> p, float d)
+        {
+            int n = p.Count;
+            List<Vector2> o = new List<Vector2>(n);
+            for (int i = 0; i < n; i++)
+            {
+                Vector2 a = p[(i + n - 1) % n], b = p[i], c = p[(i + 1) % n];
+                Vector2 e0 = (b - a).normalized, e1 = (c - b).normalized;
+                Vector2 n0 = new Vector2(e0.y, -e0.x), n1 = new Vector2(e1.y, -e1.x);
+                Vector2 m = n0 + n1;
+                if (m.sqrMagnitude < 1e-6f) m = n0; else m.Normalize();
+                float cos = Mathf.Max(0.35f, Vector2.Dot(m, n0));
+                o.Add(b + m * (d / cos));
+            }
+            return o;
+        }
+
+        private static int[] EarClip(List<Vector2> poly)
+        {
+            int n = poly.Count;
+            List<int> idx = new List<int>(n);
+            for (int i = 0; i < n; i++) idx.Add(i);
+            List<int> outT = new List<int>();
+            int guard = 0;
+            while (idx.Count > 3 && guard++ < 4096)
+            {
+                bool clipped = false;
+                for (int i = 0; i < idx.Count; i++)
+                {
+                    int ia = idx[(i + idx.Count - 1) % idx.Count], ib = idx[i], ic = idx[(i + 1) % idx.Count];
+                    Vector2 a = poly[ia], b = poly[ib], c = poly[ic];
+                    float cross = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+                    if (cross <= 1e-7f) continue;   // reflex
+                    bool inside = false;
+                    for (int k = 0; k < idx.Count && !inside; k++)
+                    {
+                        int ip = idx[k];
+                        if (ip == ia || ip == ib || ip == ic) continue;
+                        inside = PointInTri(poly[ip], a, b, c);
+                    }
+                    if (inside) continue;
+                    outT.Add(ia); outT.Add(ib); outT.Add(ic);
+                    idx.RemoveAt(i);
+                    clipped = true;
+                    break;
+                }
+                if (!clipped) break;
+            }
+            if (idx.Count == 3) { outT.Add(idx[0]); outT.Add(idx[1]); outT.Add(idx[2]); }
+            return outT.ToArray();
+        }
+
+        private static bool PointInTri(Vector2 p, Vector2 a, Vector2 b, Vector2 c)
+        {
+            float d1 = (p.x - b.x) * (a.y - b.y) - (a.x - b.x) * (p.y - b.y);
+            float d2 = (p.x - c.x) * (b.y - c.y) - (b.x - c.x) * (p.y - c.y);
+            float d3 = (p.x - a.x) * (c.y - a.y) - (c.x - a.x) * (p.y - a.y);
+            bool neg = d1 < 0f || d2 < 0f || d3 < 0f, pos = d1 > 0f || d2 > 0f || d3 > 0f;
+            return !(neg && pos);
+        }
+
+        // A planted object's base: displaced dirt (dark mound decal + a lip of soil), a ring of small half-buried rubble and
+        // settling dust. Lumps sink away at the end. Cosmetic only.
+        public static void PlantedRubble(Vector3 ground, float radius, float life)
+        {
+            if (!Enabled) return;
+            radius = Mathf.Clamp(radius, 0.4f, 6f);
+            Vector3 g = GroundPoint(ground);
+            DragonMeshFx mound = MeshFx(g + Vector3.up * 0.04f, Quaternion.Euler(0f, VR() * 360f, 0f), true, Mat(ScorchTex(), false), new Color(0.20f, 0.15f, 0.11f, 0.85f), life + 0.6f);
+            if (mound != null) { mound.Conform = true; mound.FadeIn = 0.05f; mound.Hold = life; mound.ScaleFrom = Vector3.one * radius * 1.6f; mound.ScaleTo = Vector3.one * radius * 2.2f; mound.ScaleTime = 0.2f; }
+            Material rock = NaturalMat(new Color(0.42f, 0.37f, 0.31f, 1f));
+            Material soil = NaturalMat(new Color(0.30f, 0.24f, 0.18f, 1f));
+            int count = Mathf.RoundToInt(Mathf.Lerp(7f, 14f, Mathf.Clamp01(radius / 4f)));
+            for (int i = 0; i < count; i++)
+            {
+                float a = (i + VR() * 0.8f) / count * Mathf.PI * 2f;
+                float r = radius * Mathf.Lerp(0.55f, 1.15f, VR());
+                Vector3 p = GroundPoint(g + new Vector3(Mathf.Cos(a) * r, 0f, Mathf.Sin(a) * r));
+                GameObject lump = new GameObject("IH_Rubble");
+                lump.AddComponent<MeshFilter>().sharedMesh = LumpMesh(i + 3);
+                MeshRenderer mr = lump.AddComponent<MeshRenderer>();
+                Material m = i % 3 == 0 ? soil : rock;
+                if (m != null) mr.sharedMaterial = m;
+                mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                float sz = Mathf.Clamp(radius * Mathf.Lerp(0.12f, 0.28f, VR()), 0.08f, 0.6f);
+                lump.transform.localScale = new Vector3(sz * Mathf.Lerp(0.8f, 1.3f, VR()), sz * Mathf.Lerp(0.45f, 0.8f, VR()), sz * Mathf.Lerp(0.8f, 1.3f, VR()));
+                lump.transform.position = p - Vector3.up * sz * 0.25f;
+                lump.transform.rotation = Quaternion.Euler(VR() * 30f - 15f, VR() * 360f, VR() * 30f - 15f);
+                DragonSinkAway sa = lump.AddComponent<DragonSinkAway>();
+                sa.Life = life; sa.Depth = sz * 1.2f;
+            }
+            DirtBurst(g, radius * 0.8f, 0.6f);
+            DustRing(g, radius);
+        }
+
+        // ------------------------------------------------------------------ v0.25.181 Ultimate lightning (Electric Smite,
+        // Lightning Tempest): thick bolts in green / blue / yellow accents, rising out of the ground or striking it with
+        // cracks, dirt and a short contact front. No screen flashes (one small contact light).
+        public static readonly Color UltGreen = new Color(0.50f, 1f, 0.55f, 1f);
+        public static readonly Color UltBlue = new Color(0.45f, 0.75f, 1f, 1f);
+        public static readonly Color UltYellow = new Color(1f, 0.90f, 0.40f, 1f);
+        public static Color UltColor(int i)
+        {
+            int k = ((i % 3) + 3) % 3;
+            return k == 0 ? UltBlue : k == 1 ? UltGreen : UltYellow;
+        }
+
+        public static void RisingLightning(Vector3 ground, float radius, int count, float height, float width)
+        {
+            if (!Enabled) return;
+            Vector3 g = GroundPoint(ground);
+            for (int i = 0; i < count; i++)
+            {
+                float a = (i + VR() * 0.7f) / count * Mathf.PI * 2f;
+                float r = radius * Mathf.Lerp(0.15f, 0.8f, VR());
+                Vector3 b = GroundPoint(g + new Vector3(Mathf.Cos(a) * r, 0f, Mathf.Sin(a) * r));
+                Vector3 top = b + Vector3.up * height * Mathf.Lerp(0.6f, 1f, VR()) + new Vector3(VR() - 0.5f, 0f, VR() - 0.5f) * height * 0.25f;
+                Bolt(b, top, UltColor(i), width * Mathf.Lerp(0.8f, 1.2f, VR()), 0.45f);
+                Cracks(b, UltColor(i), Mathf.Max(0.8f, radius * 0.2f), 4, 3f);
+            }
+            Shatter(g, radius * 0.7f, 0f);
+        }
+
+        public static void UltimateStrike(Vector3 sky, Vector3 ground, Color c, float width, float frontRadius)
+        {
+            if (!Enabled) return;
+            Bolt(sky, ground, c, width, 0.35f);
+            Bolt(sky + new Vector3(VR() - 0.5f, 0f, VR() - 0.5f) * 1.5f, ground, Color.Lerp(c, Color.white, 0.3f), width * 0.45f, 0.3f);
+            Cracks(ground, c, Mathf.Max(1f, frontRadius), 6, 3f);
+            GroundRing(ground, c, Mathf.Max(1f, frontRadius), 0.3f);
+            DirtBurst(ground, Mathf.Max(0.8f, frontRadius * 0.6f), 0.8f);
+            Burst(ground + Vector3.up * 0.3f, c, 14, 9f, 0.12f, 0.4f, 0.8f);
+        }
+
         // ------------------------------------------------------------------ v0.25.180 relic materials (Goddess Relic, Judgement
         // Hammer, Priest relics): pale weathered stone, aged bronze/gold edging, narrow emissive ivory inlay. Shared and
         // cached (one material each, inlay per tint), so planting crosses never allocates materials.
@@ -15385,7 +15595,8 @@ namespace DragonsAltarCombat
                     float base0 = Fbm(nx + nz, ny - nz, 61);
                     float grain = Fbm((nx + nz) * 4f, (ny + nz) * 4f, 62);
                     float pit = Mathf.Clamp01((Fbm((nx - nz) * 2.5f, (ny + nz) * 2.5f, 63) - 0.62f) * 4f);
-                    float k = Mathf.Clamp(0.86f + (base0 - 0.5f) * 0.28f + (grain - 0.5f) * 0.12f - pit * 0.22f, 0.45f, 1f);
+                    float vein = Mathf.Clamp01(1f - Mathf.Abs(Fbm((nx + ny) * 1.7f, nz * 3f, 64) - 0.5f) * 14f) * 0.18f;   // v0.25.181 hairline weathering veins
+                    float k = Mathf.Clamp(0.84f + (base0 - 0.5f) * 0.42f + (grain - 0.5f) * 0.22f - pit * 0.32f - vein, 0.38f, 1f);
                     float warm = (base0 - 0.5f) * 0.05f;
                     px[y * n + x] = new Color(k * (0.97f + warm), k * 0.94f, k * (0.86f - warm), 1f);
                 }
@@ -15420,9 +15631,9 @@ namespace DragonsAltarCombat
             Shader s = Shader.Find("Standard");
             if (s == null) return SolidMat(new Color(0.80f, 0.77f, 0.70f, 1f));
             _relicStone = new Material(s);
-            _relicStone.color = new Color(0.86f, 0.83f, 0.76f, 1f);
+            _relicStone.color = new Color(0.74f, 0.71f, 0.64f, 1f);   // v0.25.181 weathered, not paper-white
             _relicStone.mainTexture = StoneTex();
-            if (_relicStone.HasProperty("_Glossiness")) _relicStone.SetFloat("_Glossiness", 0.14f);
+            if (_relicStone.HasProperty("_Glossiness")) _relicStone.SetFloat("_Glossiness", 0.22f);
             if (_relicStone.HasProperty("_Metallic")) _relicStone.SetFloat("_Metallic", 0f);
             return _relicStone;
         }
@@ -15433,10 +15644,11 @@ namespace DragonsAltarCombat
             Shader s = Shader.Find("Standard");
             if (s == null) return SolidMat(new Color(0.70f, 0.52f, 0.26f, 1f));
             _relicBronze = new Material(s);
-            _relicBronze.color = new Color(0.78f, 0.58f, 0.30f, 1f);
+            _relicBronze.color = new Color(0.76f, 0.55f, 0.27f, 1f);
             _relicBronze.mainTexture = BronzeTex();
             if (_relicBronze.HasProperty("_Glossiness")) _relicBronze.SetFloat("_Glossiness", 0.5f);
-            if (_relicBronze.HasProperty("_Metallic")) _relicBronze.SetFloat("_Metallic", 0.8f);
+            if (_relicBronze.HasProperty("_Metallic")) _relicBronze.SetFloat("_Metallic", 0.45f);   // v0.25.181 reads lit without reflection probes
+            if (_relicBronze.HasProperty("_EmissionColor")) { _relicBronze.EnableKeyword("_EMISSION"); _relicBronze.SetColor("_EmissionColor", new Color(0.07f, 0.045f, 0.02f, 1f)); }
             return _relicBronze;
         }
 

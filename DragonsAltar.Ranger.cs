@@ -1802,6 +1802,21 @@ namespace DragonsAltarRanger
             if (projectile != null) Patch(FindMethod(projectile, "Setup", 6), "ProjectileSetupPrefix", null);
             Patch(FindMethod(typeof(Player), "GetAttackDrawPercentage", 0), null, "DrawPercentagePostfix");
             Patch(FindMethod(typeof(ItemDrop.ItemData), "GetWeaponLoadingTime", 0), null, "LoadingTimePostfix");
+            // v0.25.181 (user: Greatbow = double speed while shooting): Therzie's Greatbows carry an attack movement factor of 2.0
+            // (vanilla bows <= 1), so a Ranger ran twice as fast while firing. Capped at normal speed for Rangers.
+            Patch(FindMethod(typeof(Humanoid), "GetAttackSpeedFactorMovement", 0), null, "RangerMoveFactorPostfix");
+        }
+
+        private static void RangerMoveFactorPostfix(Humanoid __instance, ref float __result)
+        {
+            try
+            {
+                if (__result <= 1f) return;
+                Player player = __instance as Player;
+                if (Instance == null || player == null || !IsLocalRanger(player)) return;
+                __result = 1f;
+            }
+            catch { }
         }
 
         private static MethodInfo FindMethod(Type type, string name, int minParams)

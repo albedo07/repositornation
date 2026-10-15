@@ -2057,6 +2057,7 @@ namespace DragonsAltarSorcerer
 
             DragonCombat.BeginMobileCast(player, 0.35f, true);
             DragonCombat.BlockEitrRegen(player, 0.20f);
+            DragonCombat.FaceAimNow(player);   // v0.25.181 (user): the body keeps facing the crosshair for the whole charge
 
             float held = Mathf.Max(0f, Time.time - _wizardChargeStarted);
             float secondsPerStack = Mathf.Max(0.25f, _wizardChargeThreshold.Value);
@@ -4466,6 +4467,11 @@ namespace DragonsAltarSorcerer
         private Rigidbody _rb;
         private Transform _lu, _ll, _ru, _rl;
         private float _phase, _w;
+        // v0.25.181 (user video: legs flew into splits when firing while running): the cycle was ADDED on top of whatever the
+        // animator posed - running already swings the legs (doubled) and a skipped animator frame stacked the offset. Now the
+        // legs are driven from a captured standing pose (absolute, blended in by _w), so the stride can never double or stack.
+        private Quaternion _rLU, _rLL, _rRU, _rRL;
+        private bool _hasRest;
 
         private void LateUpdate()
         {
@@ -4480,8 +4486,20 @@ namespace DragonsAltarSorcerer
             v.y = 0f;
             float speed = v.magnitude;
             bool on = Time.time < ActiveUntil && speed > 0.6f;
+            // standing pose: captured whenever the character stands still and is not driven (also re-captured later)
+            if (!on && _w <= 0.001f && speed < 0.2f)
+            {
+                _rLU = _lu.localRotation; _rLL = _ll.localRotation; _rRU = _ru.localRotation; _rRL = _rl.localRotation;
+                _hasRest = true;
+            }
             _w = Mathf.MoveTowards(_w, on ? 1f : 0f, Time.deltaTime / 0.15f);
             if (_w <= 0.001f) return;
+            if (!_hasRest)
+            {
+                // never seen standing yet: a neutral straight-leg pose from the current frame's hips is the safest base
+                _rLU = _lu.localRotation; _rLL = Quaternion.identity; _rRU = _ru.localRotation; _rRL = Quaternion.identity;
+                _hasRest = true;
+            }
             Vector3 dir = speed > 0.05f ? v / speed : transform.forward;
             Vector3 swingAxis = Vector3.Cross(Vector3.up, dir);
             Vector3 kneeAxis = transform.right;
@@ -4489,18 +4507,27 @@ namespace DragonsAltarSorcerer
             float stride = run ? 1.9f : 1.35f;                 // metres per full cycle
             _phase += speed / stride * Mathf.PI * 2f * Time.deltaTime;
             if (_phase > Mathf.PI * 2f) _phase -= Mathf.PI * 2f;
-            float swing = (run ? 38f : 26f) * _w;
-            float knee = (run ? 70f : 45f) * _w;
-            Leg(_lu, _ll, _phase, swing, knee, swingAxis, kneeAxis);
-            Leg(_ru, _rl, _phase + Mathf.PI, swing, knee, swingAxis, kneeAxis);
+            float swing = run ? 30f : 22f;
+            float knee = run ? 55f : 38f;
+            Leg(_lu, _ll, _rLU, _rLL, _phase, swing, knee, swingAxis, kneeAxis, _w);
+            Leg(_ru, _rl, _rRU, _rRL, _phase + Mathf.PI, swing, knee, swingAxis, kneeAxis, _w);
         }
 
-        private static void Leg(Transform upper, Transform lower, float p, float swing, float knee, Vector3 swingAxis, Vector3 kneeAxis)
+        private static void Leg(Transform upper, Transform lower, Quaternion restU, Quaternion restL, float p, float swing, float knee, Vector3 swingAxis, Vector3 kneeAxis, float w)
         {
+            Quaternion animU = upper.localRotation, animL = lower.localRotation;
+            // absolute target: standing pose + one clean stride (world-space axes), blended over the animator pose by w
+            upper.localRotation = restU;
+            lower.localRotation = restL;
             float s = Mathf.Sin(p);
             upper.rotation = Quaternion.AngleAxis(-swing * s, swingAxis) * upper.rotation;   // + toward the movement direction
             float bend = knee * Mathf.Max(0f, Mathf.Sin(p + 1.2f));                          // knee folds while the leg travels forward
             lower.rotation = Quaternion.AngleAxis(bend, kneeAxis) * lower.rotation;           // shin swings back = knee bend
+            if (w < 0.999f)
+            {
+                upper.localRotation = Quaternion.Slerp(animU, upper.localRotation, w);
+                lower.localRotation = Quaternion.Slerp(animL, lower.localRotation, w);
+            }
         }
     }
 }

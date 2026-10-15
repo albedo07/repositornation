@@ -5629,70 +5629,138 @@ namespace AlbedosCustomClassesAdvanced
 
         private void IhBuildSolidCross(Transform root, Color color, float height, float width, float thick)
         {
-            // v0.25.180 VFX DIRECTION (Dragon Nest weight, Valheim materials): a substantial pale weathered-stone cross
-            // with aged bronze edging (the bronze core shows as a rim along every beam), narrow emissive ivory grooves
-            // down both faces, carved bronze bands, a recessed bronze seal at the crossing and the approved Celtic ring
-            // in bronze. Shared cached materials (DragonVfx.Relic*), no glare lines. Proportions unchanged.
+            // v0.25.181 (user: image 3 still looked like a prototype): ONE finished body - a bevelled, extruded pattee cross
+            // outline in weathered stone (flared arms, chamfered tips, pointed foot), an aged-bronze rim following every edge,
+            // narrow lit grooves, bronze bands, a bronze-ringed seal at the crossing and the approved Celtic ring. Lit,
+            // shadow casting, shared cached meshes.
             Material stone = DragonVfx.RelicStone(), bronze = DragonVfx.RelicBronze(), inlay = DragonVfx.RelicInlay(color);
             if (stone == null || bronze == null || inlay == null) return;
-            bool big = height > 9f;   // Ascended size: deeper material detail (second groove pair, more bands)
-            float armY = height * 0.12f;
-            float t = thick;
-            float d = t * 0.8f;
-            float topY = height * 0.5f;
-            float footY = -height * 0.5f;
-            float half = width * 0.5f;
-            float sy0 = footY + t * 1.2f, sy1 = topY - t * 0.8f;
-            float shaftLen = sy1 - sy0, shaftMid = (sy0 + sy1) * 0.5f;
-            float armLen = (half - t * 0.8f) * 2f;
-            // shaft + arm: bronze core (edges) + stone body standing proud on both faces
-            IhRelicBlock(root, bronze, new Vector3(0f, shaftMid, 0f), new Vector3(t, shaftLen, d * 0.8f), 1f, shaftLen / t * 0.5f);
-            IhRelicBlock(root, stone, new Vector3(0f, shaftMid, 0f), new Vector3(t * 0.84f, shaftLen * 0.995f, d), 1f, shaftLen / t * 0.6f);
-            IhRelicBlock(root, bronze, new Vector3(0f, armY, 0f), new Vector3(armLen, t, d * 0.8f), armLen / t * 0.5f, 1f);
-            IhRelicBlock(root, stone, new Vector3(0f, armY, 0f), new Vector3(armLen * 0.995f, t * 0.84f, d), armLen / t * 0.6f, 1f);
-            // narrow lit grooves down the faces (barely proud of the stone so they read as inlay, not glow bars)
+            bool big = height > 9f;
+            float t = thick, d = t * 0.8f, a = t * 0.5f, F = a * 1.55f, Lf = t * 1.5f, c = t * 0.2f, spike = t * 1.8f;
+            float armY = height * 0.12f, topY = height * 0.5f, footY = -height * 0.5f, half = width * 0.5f, e = t * 0.08f;
+            string key = "solid|" + height.ToString("0.00") + "|" + width.ToString("0.00") + "|" + t.ToString("0.000");
+            Mesh body = IhRelicMesh(key + "|body", delegate { return DragonVfx.ExtrudeBevel(IhCrossOutline(0, a, F, Lf, c, half, armY, topY, footY, spike), d, t * 0.09f, 1f / Mathf.Max(0.2f, t * 2.2f)); });
+            Mesh rim = IhRelicMesh(key + "|rim", delegate { return DragonVfx.ExtrudeBevel(DragonVfx.OffsetOutline(IhCrossOutline(0, a, F, Lf, c, half, armY, topY, footY, spike), e), d * 0.7f, e * 0.6f, 1f / Mathf.Max(0.2f, t * 1.5f)); });
+            IhRelicMeshObject(root, body, stone, Vector3.zero);
+            IhRelicMeshObject(root, rim, bronze, Vector3.zero);
+            // narrow lit grooves down both faces (barely proud of the stone)
             float gw = t * (big ? 0.07f : 0.09f);
-            IhRelicBlock(root, inlay, new Vector3(0f, shaftMid, 0f), new Vector3(gw, shaftLen * 0.86f, d * 1.012f), 1f, 1f);
-            IhRelicBlock(root, inlay, new Vector3(0f, armY, 0f), new Vector3(armLen * 0.84f, gw, d * 1.012f), 1f, 1f);
+            float g0 = footY + spike + t * 0.9f, g1 = topY - Lf - t * 0.15f;
+            IhRelicBlock(root, inlay, new Vector3(0f, (g0 + g1) * 0.5f, 0f), new Vector3(gw, g1 - g0, d * 1.012f), 1f, 1f);
+            float ax = half - Lf - t * 0.15f;
+            IhRelicBlock(root, inlay, new Vector3(0f, armY, 0f), new Vector3(ax * 2f, gw, d * 1.012f), 1f, 1f);
             if (big)
             {
-                IhRelicBlock(root, inlay, new Vector3(-t * 0.22f, shaftMid, 0f), new Vector3(gw * 0.6f, shaftLen * 0.7f, d * 1.01f), 1f, 1f);
-                IhRelicBlock(root, inlay, new Vector3(t * 0.22f, shaftMid, 0f), new Vector3(gw * 0.6f, shaftLen * 0.7f, d * 1.01f), 1f, 1f);
+                IhRelicBlock(root, inlay, new Vector3(-a * 0.55f, (g0 + g1) * 0.5f, 0f), new Vector3(gw * 0.6f, (g1 - g0) * 0.8f, d * 1.01f), 1f, 1f);
+                IhRelicBlock(root, inlay, new Vector3(a * 0.55f, (g0 + g1) * 0.5f, 0f), new Vector3(gw * 0.6f, (g1 - g0) * 0.8f, d * 1.01f), 1f, 1f);
             }
-            // carved bronze bands across the beams
-            int bands = big ? 4 : 2;
+            // bronze bands wrapping the shaft (just below the crossing and above the foot)
+            int bands = big ? 3 : 2;
             for (int i = 0; i < bands; i++)
             {
-                float y = Mathf.Lerp(sy0 + t * 1.6f, armY - t * 1.2f, (i + 0.5f) / bands);
-                IhRelicBlock(root, bronze, new Vector3(0f, y, 0f), new Vector3(t * 0.9f, t * 0.12f, d * 1.05f), 1f, 1f);
+                float y = Mathf.Lerp(g0 + t * 0.3f, armY - a - t * 0.6f, (float)i / Mathf.Max(1, bands - 1));
+                IhRelicBlock(root, bronze, new Vector3(0f, y, 0f), new Vector3(2f * (a + e * 1.2f), t * 0.14f, d + e * 2.4f), 1f, 1f);
             }
-            for (int sgn = -1; sgn <= 1; sgn += 2)
-            {
-                IhRelicBlock(root, bronze, new Vector3(sgn * (half - t * 2.1f), armY, 0f), new Vector3(t * 0.12f, t * 0.9f, d * 1.05f), 1f, 1f);
-                if (big) IhRelicBlock(root, bronze, new Vector3(sgn * (half - t * 2.6f), armY, 0f), new Vector3(t * 0.08f, t * 0.9f, d * 1.05f), 1f, 1f);
-            }
-            IhRelicBlock(root, bronze, new Vector3(0f, topY - t * 2.1f, 0f), new Vector3(t * 0.9f, t * 0.12f, d * 1.05f), 1f, 1f);
-            // flared diamond tips: bronze rim, stone face, small lit core
-            IhCrossDiamond(root, bronze, stone, new Vector3(0f, topY - t * 0.7f, 0f), t * 1.45f, d);
-            IhCrossDiamond(root, bronze, stone, new Vector3(-half + t * 0.7f, armY, 0f), t * 1.45f, d);
-            IhCrossDiamond(root, bronze, stone, new Vector3(half - t * 0.7f, armY, 0f), t * 1.45f, d);
-            IhRelicDiamond(root, inlay, new Vector3(0f, topY - t * 0.7f, 0f), t * 0.32f, d * 1.3f);
-            IhRelicDiamond(root, inlay, new Vector3(-half + t * 0.7f, armY, 0f), t * 0.32f, d * 1.3f);
-            IhRelicDiamond(root, inlay, new Vector3(half - t * 0.7f, armY, 0f), t * 0.32f, d * 1.3f);
-            // pointed stone foot driven into the ground + bronze collar
-            GameObject foot = IhCrossBlock(root, stone, new Vector3(0f, footY + t * 1.1f, 0f), new Vector3(t * 0.95f, t * 0.95f, d * 0.95f));
-            foot.transform.localRotation = Quaternion.Euler(0f, 0f, 45f);
-            foot.transform.localScale = new Vector3(t * 0.75f, t * 1.9f, d * 0.95f);
-            IhRelicBlock(root, bronze, new Vector3(0f, footY + t * 2.4f, 0f), new Vector3(t * 1.5f, t * 0.35f, d * 1.25f), 1f, 1f);
-            // the approved Celtic ring, in aged bronze with a thin lit band
+            // seal at the crossing: bronze ring + bronze boss + small lit centre
+            IhTorus(root, bronze, new Vector3(0f, armY, d * 0.5f), a * 0.95f, t * 0.07f);
+            IhTorus(root, bronze, new Vector3(0f, armY, -d * 0.5f), a * 0.95f, t * 0.07f);
+            IhRelicDisc(root, bronze, new Vector3(0f, armY, 0f), a * 1.3f, d * 1.03f);
+            IhRelicDiamond(root, inlay, new Vector3(0f, armY, 0f), t * 0.28f, d * 1.08f);
+            // the approved Celtic ring in aged bronze with a thin lit band on its face
             float rr = Mathf.Clamp(width * 0.3f, t * 2.2f, height * 0.3f);
-            IhTorus(root, bronze, new Vector3(0f, armY, 0f), rr, t * 0.3f);
-            IhTorus(root, inlay, new Vector3(0f, armY, 0f), rr * 0.86f, t * 0.06f);
-            // recessed seal at the crossing: bronze frame, stone recess, small lit centre
-            IhRelicDisc(root, bronze, new Vector3(0f, armY, 0f), t * 1.25f, d * 1.1f);
-            IhRelicDisc(root, stone, new Vector3(0f, armY, 0f), t * 0.95f, d * 1.14f);
-            IhRelicDisc(root, inlay, new Vector3(0f, armY, 0f), t * 0.38f, d * 1.18f);
-            IhRelicDiamond(root, bronze, new Vector3(0f, armY, 0f), t * 0.62f, d * 1.16f);
+            IhTorus(root, bronze, new Vector3(0f, armY, 0f), rr, t * 0.24f);
+            IhTorus(root, inlay, new Vector3(0f, armY, t * 0.2f), rr, t * 0.045f);
+            IhTorus(root, inlay, new Vector3(0f, armY, -t * 0.2f), rr, t * 0.045f);
+        }
+
+        // v0.25.181 cross outlines (counter-clockwise, XY). style 0 = pattee (flared, chamfered tips, Goddess Relic),
+        // 1 = spear tips (Lightning Relic), 2 = rounded tips (Holy Relic). spike = pointed foot length.
+        private static List<Vector2> IhCrossOutline(int style, float a, float F, float Lf, float c, float half, float armY, float topY, float footY, float spike)
+        {
+            List<Vector2> p = new List<Vector2>();
+            p.Add(new Vector2(0f, footY));
+            p.Add(new Vector2(a, footY + spike));
+            p.Add(new Vector2(a, armY - a));
+            IhCrossTip(p, style, new Vector2(half, armY), Vector2.right, Vector2.up, a, F, Lf, c);
+            p.Add(new Vector2(a, armY + a));
+            IhCrossTip(p, style, new Vector2(0f, topY), Vector2.up, -Vector2.right, a, F, Lf, c);
+            p.Add(new Vector2(-a, armY + a));
+            IhCrossTip(p, style, new Vector2(-half, armY), -Vector2.right, -Vector2.up, a, F, Lf, c);
+            p.Add(new Vector2(-a, armY - a));
+            p.Add(new Vector2(-a, footY + spike));
+            return p;
+        }
+
+        // one arm end, walked counter-clockwise: from the arm's right side (seen looking out along dir) to its left side
+        private static void IhCrossTip(List<Vector2> p, int style, Vector2 end, Vector2 dir, Vector2 left, float a, float F, float Lf, float c)
+        {
+            Vector2 baseR = end - dir * Lf - left * a, baseL = end - dir * Lf + left * a;
+            p.Add(baseR);
+            if (style == 1)
+            {
+                p.Add(end - dir * Lf * 0.55f - left * F);
+                p.Add(end);
+                p.Add(end - dir * Lf * 0.55f + left * F);
+            }
+            else if (style == 2)
+            {
+                Vector2 ctr = end - dir * F;
+                for (int i = 0; i <= 6; i++)
+                {
+                    float ang = Mathf.Lerp(-90f, 90f, i / 6f) * Mathf.Deg2Rad;
+                    p.Add(ctr + dir * Mathf.Cos(ang) * F + left * Mathf.Sin(ang) * F);
+                }
+            }
+            else
+            {
+                p.Add(end - dir * c - left * F);
+                p.Add(end - left * (F - c));
+                p.Add(end + left * (F - c));
+                p.Add(end - dir * c + left * F);
+            }
+            p.Add(baseL);
+        }
+
+        private static readonly Dictionary<string, Mesh> _ihRelicMeshes = new Dictionary<string, Mesh>();
+        private delegate Mesh IhMeshBuild();
+        private static Mesh IhRelicMesh(string key, IhMeshBuild build)
+        {
+            Mesh m;
+            if (_ihRelicMeshes.TryGetValue(key, out m) && m != null) return m;
+            m = build();
+            if (m != null && _ihRelicMeshes.Count < 48) _ihRelicMeshes[key] = m;
+            return m;
+        }
+
+        private static GameObject IhRelicMeshObject(Transform root, Mesh mesh, Material mat, Vector3 pos)
+        {
+            if (mesh == null || mat == null) return null;
+            GameObject go = new GameObject("relicBody");
+            go.transform.SetParent(root, false);
+            go.transform.localPosition = pos;
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            MeshRenderer r = go.AddComponent<MeshRenderer>();
+            r.sharedMaterial = mat;
+            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
+            return go;
+        }
+
+        // heart outline (counter-clockwise), centred, width ~ size
+        private static List<Vector2> IhHeartOutline(float size)
+        {
+            List<Vector2> p = new List<Vector2>();
+            const int n = 28;
+            for (int i = 0; i < n; i++)
+            {
+                float tt = (float)i / n * Mathf.PI * 2f;
+                float x = 16f * Mathf.Pow(Mathf.Sin(tt), 3f);
+                float y = 13f * Mathf.Cos(tt) - 5f * Mathf.Cos(2f * tt) - 2f * Mathf.Cos(3f * tt) - Mathf.Cos(4f * tt);
+                p.Add(new Vector2(x, y) * (size / 34f));
+            }
+            float area = 0f;
+            for (int i = 0; i < n; i++) { Vector2 u = p[i], w = p[(i + 1) % n]; area += u.x * w.y - w.x * u.y; }
+            if (area < 0f) p.Reverse();
+            return p;
         }
 
         // v0.25.180 relic helpers: a block whose stone grain keeps its scale (tiling via property block), a rotated
@@ -5813,29 +5881,57 @@ namespace AlbedosCustomClassesAdvanced
         // and stand upright when they plant (no lean). Goddess Relic keeps the Celtic cross.
         private bool _ihNextCrossPlain;
 
+        private int _ihNextRelicStyle;   // v0.25.181: 1 = Lightning Relic, 2 = Holy Relic (set right before CreateCross)
         private void IhBuildPlainCross(Transform root, Color color, float height, float width, float thick)
         {
-            // v0.25.180 Priest relics: the same stone + bronze + lit-groove material family as Goddess Relic, plain
-            // silhouette (no ring, approved v0.25.86). The groove tint carries the relic's identity (Lightning cool,
-            // Holy warm). No additive glow bars.
+            // v0.25.181 (user): the Priest relics are visibly different designs in the same stone/bronze family:
+            // Lightning Relic = spear-tipped cross with a blue lightning-bolt inlay; Holy Relic = rounded arms in soft green
+            // with a bronze-framed heart emblem at the top. No ring (approved v0.25.86).
+            int style = _ihNextRelicStyle == 1 ? 1 : 2;
+            _ihNextRelicStyle = 0;
             Material stone = DragonVfx.RelicStone(), bronze = DragonVfx.RelicBronze(), inlay = DragonVfx.RelicInlay(color);
             if (stone == null || bronze == null || inlay == null) return;
-            float armY = height * 0.12f;
-            float d = thick * 0.8f;
-            IhRelicBlock(root, bronze, Vector3.zero, new Vector3(thick, height, d * 0.8f), 1f, height / thick * 0.5f);
-            IhRelicBlock(root, stone, Vector3.zero, new Vector3(thick * 0.84f, height * 0.995f, d), 1f, height / thick * 0.6f);
-            IhRelicBlock(root, bronze, new Vector3(0f, armY, 0f), new Vector3(width, thick, d * 0.8f), width / thick * 0.5f, 1f);
-            IhRelicBlock(root, stone, new Vector3(0f, armY, 0f), new Vector3(width * 0.995f, thick * 0.84f, d), width / thick * 0.6f, 1f);
-            float gw = thick * 0.09f;
-            IhRelicBlock(root, inlay, new Vector3(0f, -height * 0.04f, 0f), new Vector3(gw, height * 0.8f, d * 1.012f), 1f, 1f);
-            IhRelicBlock(root, inlay, new Vector3(0f, armY, 0f), new Vector3(width * 0.8f, gw, d * 1.012f), 1f, 1f);
-            float cap = thick * 1.45f;
-            IhRelicBlock(root, bronze, new Vector3(0f, height * 0.5f - cap * 0.4f, 0f), new Vector3(cap, cap * 0.8f, cap * 0.9f), 1f, 1f);
-            IhRelicBlock(root, bronze, new Vector3(-width * 0.5f + cap * 0.4f, armY, 0f), new Vector3(cap * 0.8f, cap, cap * 0.9f), 1f, 1f);
-            IhRelicBlock(root, bronze, new Vector3(width * 0.5f - cap * 0.4f, armY, 0f), new Vector3(cap * 0.8f, cap, cap * 0.9f), 1f, 1f);
-            IhRelicBlock(root, stone, new Vector3(0f, -height * 0.5f + cap * 0.6f, 0f), new Vector3(cap * 1.2f, cap * 1.2f, cap * 1.05f), 1f, 1f);
-            IhRelicDisc(root, bronze, new Vector3(0f, armY, 0f), thick * 1.15f, d * 1.1f);
-            IhRelicDisc(root, inlay, new Vector3(0f, armY, 0f), thick * 0.4f, d * 1.16f);
+            float t = thick, d = t * 0.8f, a = t * 0.5f, F = style == 1 ? a * 1.9f : a * 1.25f, Lf = style == 1 ? t * 1.9f : t * 1.2f, spike = t * 1.4f, e = t * 0.08f;
+            float armY = height * 0.12f, topY = height * 0.5f, footY = -height * 0.5f, half = width * 0.5f;
+            string key = "plain" + style + "|" + height.ToString("0.00") + "|" + width.ToString("0.00") + "|" + t.ToString("0.000");
+            Mesh body = IhRelicMesh(key + "|body", delegate { return DragonVfx.ExtrudeBevel(IhCrossOutline(style, a, F, Lf, 0f, half, armY, topY, footY, spike), d, t * 0.09f, 1f / Mathf.Max(0.2f, t * 2.2f)); });
+            Mesh rim = IhRelicMesh(key + "|rim", delegate { return DragonVfx.ExtrudeBevel(DragonVfx.OffsetOutline(IhCrossOutline(style, a, F, Lf, 0f, half, armY, topY, footY, spike), e), d * 0.7f, e * 0.6f, 1f / Mathf.Max(0.2f, t * 1.5f)); });
+            IhRelicMeshObject(root, body, stone, Vector3.zero);
+            IhRelicMeshObject(root, rim, bronze, Vector3.zero);
+            float gw = t * 0.09f;
+            if (style == 1)
+            {
+                // lightning-bolt zigzag inlay down the shaft + straight inlay along the arm
+                float y0 = footY + spike + t * 0.6f, y1 = topY - Lf * 0.9f;
+                int segs = 5;
+                for (int i = 0; i < segs; i++)
+                {
+                    float ya = Mathf.Lerp(y0, y1, (float)i / segs), yb = Mathf.Lerp(y0, y1, (float)(i + 1) / segs);
+                    float xa = (i % 2 == 0 ? -1f : 1f) * a * 0.35f, xb = -xa;
+                    Vector3 m0 = new Vector3((xa + xb) * 0.5f, (ya + yb) * 0.5f, 0f);
+                    float len = Mathf.Sqrt((xb - xa) * (xb - xa) + (yb - ya) * (yb - ya));
+                    GameObject seg = IhRelicBlock(root, inlay, m0, new Vector3(gw, len, d * 1.012f), 1f, 1f);
+                    if (seg != null) seg.transform.localRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(xb - xa, yb - ya) * -Mathf.Rad2Deg);
+                }
+                IhRelicBlock(root, inlay, new Vector3(0f, armY, 0f), new Vector3((half - Lf) * 2f, gw, d * 1.012f), 1f, 1f);
+                IhRelicDiamond(root, bronze, new Vector3(0f, armY, 0f), a * 1.1f, d * 1.04f);
+                IhRelicDiamond(root, inlay, new Vector3(0f, armY, 0f), a * 0.5f, d * 1.08f);
+            }
+            else
+            {
+                // soft green grooves + a bronze-framed heart emblem near the top of the upper arm
+                float y0 = footY + spike + t * 0.6f, y1 = armY - a - t * 0.2f;
+                IhRelicBlock(root, inlay, new Vector3(0f, (y0 + y1) * 0.5f, 0f), new Vector3(gw, y1 - y0, d * 1.012f), 1f, 1f);
+                IhRelicBlock(root, inlay, new Vector3(0f, armY, 0f), new Vector3((half - Lf) * 2f, gw, d * 1.012f), 1f, 1f);
+                float hs = Mathf.Min(a * 2.2f, (topY - armY) * 0.45f);
+                Vector3 hp = new Vector3(0f, topY - Lf * 0.5f - hs * 0.35f, 0f);
+                Mesh heartFrame = IhRelicMesh("heartF|" + hs.ToString("0.000"), delegate { return DragonVfx.ExtrudeBevel(IhHeartOutline(hs * 1.18f), d * 1.06f, hs * 0.05f, 1f); });
+                Mesh heart = IhRelicMesh("heart|" + hs.ToString("0.000"), delegate { return DragonVfx.ExtrudeBevel(IhHeartOutline(hs), d * 1.14f, hs * 0.06f, 1f); });
+                IhRelicMeshObject(root, heartFrame, bronze, hp);
+                IhRelicMeshObject(root, heart, inlay, hp);
+                IhRelicDisc(root, bronze, new Vector3(0f, armY, 0f), a * 1.2f, d * 1.04f);
+                IhRelicDisc(root, inlay, new Vector3(0f, armY, 0f), a * 0.55f, d * 1.08f);
+            }
         }
 
         private void IhCrossUprightPose(Vector3 ground, float height, Vector3 casterPos, float sink, out Vector3 center, out Quaternion rot)
@@ -5869,6 +5965,7 @@ namespace AlbedosCustomClassesAdvanced
             {
                 float r = Mathf.Max(1.2f, Mathf.Min(radius, height * 0.6f));
                 DragonVfx.HeavyLanding(ground, new Color(0.62f, 0.58f, 0.50f, 1f), r, shake);
+                DragonVfx.PlantedRubble(ground, Mathf.Clamp(height * 0.16f, 0.6f, 3.5f), 4.2f);   // v0.25.181 displaced dirt + rubble around the planted foot
                 DragonVfx.Debris(ground, new Color(0.80f, 0.77f, 0.70f, 1f), Mathf.RoundToInt(4 + r * 0.6f), 4f + r * 0.4f, 0.18f + r * 0.012f, 2f);
                 DragonVfx.Flash(ground + Vector3.up * 1.2f, DragonVfx.Holy, 0.6f, r, 0.15f);
             });
@@ -6662,7 +6759,12 @@ namespace AlbedosCustomClassesAdvanced
             }
 
             if (_enableVfx.Value)
+            {
                 StartCoroutine(AnimateRing(point + Vector3.up * 0.08f, 0.4f, radius, 0.52f, new Color(1f, 0.68f, 0.20f, 1f), 0.14f));
+                // v0.25.181 (user: Ultimate presence): thick lightning rising out of the ground, stronger cracks + rubble
+                Vector3 sp = point; float sr = radius;
+                DragonCombat.RunVfx(delegate { DragonVfx.RisingLightning(sp, sr, 7, 7f, 0.5f); DragonVfx.HeavyLanding(sp, DragonVfx.UltYellow, sr * 0.8f, 1.6f); });
+            }
 
             // Sixteen Ground Projectile trails, evenly spaced every 22.5 degrees.
             // A shared persistent-hit gate prevents targets near the origin from being hit
@@ -6766,7 +6868,7 @@ namespace AlbedosCustomClassesAdvanced
             forward.Normalize();
             int groundMask = LayerMask.GetMask("Default", "static_solid", "Default_small", "piece_nonsolid", "terrain", "vehicle", "piece", "viewblock");
             DragonGroundBolt crawl = null;
-            if (_enableVfx.Value) { float tl = travelTime; DragonCombat.RunVfx(delegate { crawl = DragonVfx.GroundLightning(DragonVfx.Storm, 0.12f, tl + 1f); }); }   // v0.25.60 real ground lightning
+            if (_enableVfx.Value) { float tl = travelTime; DragonCombat.RunVfx(delegate { crawl = DragonVfx.GroundLightning(DragonVfx.Storm, 0.3f, tl + 1f); }); }   // v0.25.60 real ground lightning; v0.25.181 thicker (Ascended RS)
 
             float elapsed = 0f;
             while (elapsed <= travelTime)
@@ -6839,7 +6941,7 @@ namespace AlbedosCustomClassesAdvanced
             float radius = Mathf.Max(1f, DragonCombat.M(_rsAscRadius.Value));
             if (_enableVfx.Value)
             {
-                CreateLightning(target, new Color(0.62f, 0.88f, 1f, 1f), 0.32f);
+                CreateLightning(target, new Color(0.62f, 0.88f, 1f, 1f), 0.32f, 0.9f, 26f);   // v0.25.181 thicker, from high above
                 StartCoroutine(AnimateRing(target + Vector3.up * 0.08f, 0.3f, radius, 0.5f, new Color(0.70f, 0.90f, 1f, 0.95f), 0.12f));
             }
 
@@ -6881,7 +6983,7 @@ namespace AlbedosCustomClassesAdvanced
             float followRadius = Mathf.Max(0.5f, DragonCombat.M(_rsAscFollowRadius.Value));
             if (_enableVfx.Value)
             {
-                CreateLightning(target, new Color(0.82f, 0.95f, 1f, 1f), 0.25f);
+                CreateLightning(target, new Color(0.82f, 0.95f, 1f, 1f), 0.25f, 0.6f, 22f);
                 StartCoroutine(AnimateRing(target + Vector3.up * 0.08f, 0.2f, followRadius, 0.35f, new Color(0.82f, 0.95f, 1f, 0.95f), 0.10f));
             }
             List<Character> follow = GetSphereTargets(player, target, followRadius);
@@ -7275,7 +7377,9 @@ namespace AlbedosCustomClassesAdvanced
                     for (int s = 0; s < 3; s++)
                     {
                         Vector2 r = UnityEngine.Random.insideUnitCircle * radius;
-                        CreateLightning(center + new Vector3(r.x, 0f, r.y), new Color(0.62f, 0.86f, 1f, 1f), 0.22f);
+                        Vector3 sg = center + new Vector3(r.x, 0f, r.y);
+                        if (DragonVfx.Enabled) { int si = s; DragonCombat.RunVfx(delegate { DragonVfx.UltimateStrike(DragonCombat.GetIndoorSafeSkyPoint(sg, 18f), sg, DragonVfx.UltColor(si), 0.55f, 1.6f); }); }   // v0.25.181 thick tri-colour strikes
+                        else CreateLightning(sg, new Color(0.62f, 0.86f, 1f, 1f), 0.22f);
                     }
                 }
                 yield return new WaitForSeconds(tick);
@@ -7538,6 +7642,7 @@ namespace AlbedosCustomClassesAdvanced
             IhCrossUprightPose(target, crossHeight, player.transform.position, 0.1f, out finalCenter, out relicRot);   // v0.25.86 planted upright (user)
             Vector3 sky = finalCenter + relicRot * Vector3.up * 6f;
             _ihNextCrossPlain = true;
+            _ihNextRelicStyle = 1;   // v0.25.181 Lightning Relic design
             GameObject cross = CreateCross(
                 sky,
                 new Color(0.55f, 0.88f, 1f, 1f),
@@ -7717,9 +7822,10 @@ namespace AlbedosCustomClassesAdvanced
             IhCrossUprightPose(target, crossHeight, player.transform.position, 0.1f, out finalCenter, out relicRot);   // v0.25.86 planted upright (user)
             Vector3 sky = finalCenter + relicRot * Vector3.up * 6f;
             _ihNextCrossPlain = true;
+            _ihNextRelicStyle = 2;   // v0.25.181 Holy Relic design (soft green, heart)
             GameObject cross = CreateCross(
                 sky,
-                new Color(1f, 0.90f, 0.45f, 1f),
+                DragonVfx.Enabled ? new Color(0.62f, 1f, 0.68f, 1f) : new Color(1f, 0.90f, 0.45f, 1f),   // v0.25.181 soft green healing identity
                 crossHeight,
                 2.7f,
                 0.10f,
@@ -8253,7 +8359,12 @@ namespace AlbedosCustomClassesAdvanced
                         strike = ground.point;
 
                     if (_enableVfx.Value)
-                        CreateLightning(strike, new Color(0.55f, 0.86f, 1f, 1f), 0.28f);
+                    {
+                        // v0.25.181 (user): Lightning Tempest = Ultimate: thick green / blue / yellow strikes, local cracks + a short
+                        // contact front at each real strike (no screen flash)
+                        if (DragonVfx.Enabled) { Vector3 ts = strike; int ti = stunPulse; DragonCombat.RunVfx(delegate { DragonVfx.UltimateStrike(DragonCombat.GetIndoorSafeSkyPoint(ts, 18f), ts, DragonVfx.UltColor(ti), 0.6f, DragonCombat.M(1.6f)); }); }
+                        else CreateLightning(strike, new Color(0.55f, 0.86f, 1f, 1f), 0.28f);
+                    }
 
                     List<Character> targets = GetSphereTargets(player, strike, DragonCombat.M(1.6f));
                     for (int i = 0; i < targets.Count; i++)
@@ -8877,6 +8988,7 @@ namespace AlbedosCustomClassesAdvanced
             }
         }
 
+        private static int _ihSmiteTrailIdx;
         private IEnumerator SpiritTrail(
             Player player,
             Vector3 origin,
@@ -8906,7 +9018,7 @@ namespace AlbedosCustomClassesAdvanced
             );
 
             DragonGroundBolt crawl = null;
-            if (_enableVfx.Value) { float tl = travelTime; DragonCombat.RunVfx(delegate { crawl = DragonVfx.GroundLightning(DragonVfx.Storm, 0.14f, tl + 1f); }); }   // v0.25.60 real ground lightning
+            if (_enableVfx.Value) { float tl = travelTime; DragonCombat.RunVfx(delegate { Color stc = DragonVfx.UltColor(_ihSmiteTrailIdx++); crawl = DragonVfx.GroundLightning(stc, 0.34f, tl + 1f); }); }   // v0.25.60 real ground lightning; v0.25.181 Ultimate: thick, green / blue / yellow
 
             float elapsed = 0f;
             while (elapsed <= travelTime)
@@ -11696,6 +11808,18 @@ namespace AlbedosCustomClassesAdvanced
 
                 Destroy(obj, Mathf.Max(0.04f, lifetime));
             }
+        }
+
+        // v0.25.181: thicker, higher bolt (Ascended Righteous Strike: thicker and more authoritative)
+        private void CreateLightning(Vector3 point, Color color, float lifetime, float width, float height)
+        {
+            if (DragonVfx.Enabled)
+            {
+                Vector3 sky = DragonCombat.GetIndoorSafeSkyPoint(point, height) + new Vector3(UnityEngine.Random.Range(-1.2f, 1.2f), 0f, UnityEngine.Random.Range(-1.2f, 1.2f));
+                DragonCombat.RunVfx(delegate { DragonVfx.Bolt(sky, point, color, width, Mathf.Max(0.25f, lifetime + 0.2f)); DragonVfx.Bolt(sky, point, Color.Lerp(color, Color.white, 0.4f), width * 0.4f, Mathf.Max(0.2f, lifetime + 0.15f)); DragonVfx.Cracks(point, color, 2f, 6, 3f); DragonVfx.DustRing(point, 1.5f); });
+                return;
+            }
+            CreateLightning(point, color, lifetime);
         }
 
         private void CreateLightning(Vector3 point, Color color, float lifetime)

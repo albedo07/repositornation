@@ -900,7 +900,7 @@ namespace AlbedosCustomClassesSkills
             if (windup > 0f)
                 yield return new WaitForSeconds(windup);
 
-            Vector3 sky = DragonCombat.GetIndoorSafeSkyPoint(target, 8f);
+            Vector3 sky = DragonCombat.GetIndoorSafeSkyPoint(target, 26f);   // v0.25.181 (user): the strike visibly descends from high above
             if (_enableVfx.Value)
                 PlayLightningVfx(sky, target, Mathf.Max(0.5f, DragonCombat.M(_righteousRadius.Value)));
 
