@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.172";
+        public const string ModVersion = "0.25.173";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -3410,7 +3410,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "halfmoon_slash":
                     if (ascended)
                     {
-                        b.Append(IhLine("Damage", IhDamage(_halfmoonDamageV, power) + ", follow-up ground cuts 50%"));
+                        b.Append(IhLine("Damage", IhDamage(_halfmoonDamageV, power) + ", each follow-up cut 50% to everyone inside the cleave"));
                         b.Append(IhLine("Width", IhNum(_halfmoonWidth.Value) + "m, frontal"));
                         b.Append(IhLine("Finisher", "Automatic after " + IhNum(_hmFinFollowWindup.Value) + "s preparation: " + IhNum(_halfAscFinDamageMult.Value * 100f) + "% Damage, " + IhNum(_halfmoonWidth.Value * _halfAscFinWidthMult.Value) + "m wide, " + IhNum(_halfAscRange.Value) + "m in " + IhNum(_halfAscTravel.Value) + "s (Ghost, Free Aim)"));
                     }
@@ -4867,7 +4867,11 @@ namespace AlbedosCustomClassesAdvanced
                 // v0.25.92 (user): the follow-up follows the SLASH (sword height along its arc), not the ground,
                 // and looks like Frenzied Charge's slash hail.
                 Vector3 point = center + Vector3.up * 0.9f + direction * radius;
-                List<Character> targets = GetSphereTargets(player, point, cutRadius);
+                // v0.25.173 (user: the follow-up slashes missed a Troll standing inside the cleave): every follow-up slash hits EVERYONE
+                // inside the cleave's arch (same 170 deg frontal sector and radius as the opening slash, from the cast point), plus
+                // anyone its own 2 m cut touches at the rim. One hit per target per slash (multiple colliders deduped by `hit`).
+                List<Character> targets = GetFrontalTargets(player, center + Vector3.up * 0.8f, forward, radius, 170f);
+                targets.AddRange(GetSphereTargets(player, point, cutRadius));
                 foreach (Character target in targets)
                 {
                     if (target == null || !hit.Add(target)) continue;
@@ -13616,7 +13620,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "blade_storm": return "Rend space itself: a sphere of blades bursts at your aim, again and again.";
                 case "frenzied_charge": return "Pull back, then dash forward with a thrust that launches small foes and stuns the large.";
                 case "eclipse": return "Your blade swells with magic for one sweeping slash all around you.";
-                case "halfmoon_slash": return "A wide heavy slash followed by 2m-radius ground cuts every 2m along its path.";
+                case "halfmoon_slash": return "A wide heavy slash followed by cuts along its arc; every cut hits everyone inside the cleave.";
                 case "knights_guidance": return "Lead your allies: faster movement, quicker stamina and less effort for every action.";
                 case "stomp": return "Stomp the earth: a crushing impact, then an aftershock rolls outward.";
                 case "circle_swing": return "Wind up and swing your weapon in a full circle, staggering everything around you.";
@@ -13762,7 +13766,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "blade_storm": return "Cuts the aimed area with spheres of blades that hit every enemy inside three times and Cripple them.";
                 case "frenzied_charge": return "Dashes forward with a thrust that damages enemies in your path, launching small ones and Stunning big ones.";
                 case "eclipse": return "A full-circle slash that damages every enemy around you.";
-                case "halfmoon_slash": return "A huge heavy slash forward followed by ground cuts along its path.";
+                case "halfmoon_slash": return "A huge heavy slash forward followed by cuts along its arc that hit everyone inside the cleave.";
                 case "knights_guidance": return "Grants you and nearby allies faster movement, faster Stamina regeneration and lower Stamina use ({Buff}; {Duration}).";
                 case "stomp": return "Stomps the ground, damaging nearby enemies, then sends an aftershock outward.";
                 case "circle_swing": return "Swings your weapon in a full circle, damaging and staggering every enemy around you.";

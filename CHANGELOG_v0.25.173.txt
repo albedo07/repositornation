@@ -1,0 +1,12 @@
+Aethelborn Ascended v0.25.173 - Full Cleave
+Baseline: v0.25.172. Only Halfmoon Slash's follow-up slashes changed.
+
+HALFMOON SLASH (user video: follow-up slashes missed a Troll inside the cleave)
+- Cause: each follow-up slash only hit a 2 m sphere ON the rim of the arc (at the full Halfmoon radius). Anything standing
+  inside the arc - closer than the rim, like a Troll right in front of you - was never touched by them.
+- Now every follow-up slash hits EVERYONE inside the cleave: the same 170 deg frontal arch and radius as the opening slash
+  (measured from where you cast, collider-aware so big bodies count), plus whatever its own 2 m cut touches at the rim.
+  One hit per target per slash. Normal and Ascended (the Ascended keeps the normal follow-up before its stance).
+- Per-hit damage (50%), Spirit DoT, stun rules, slash count and timing unchanged. Note: enemies inside the arch now take
+  every follow-up slash, so total damage on them is much higher than before (that is the requested behaviour).
+- Tooltip / Altar description updated.

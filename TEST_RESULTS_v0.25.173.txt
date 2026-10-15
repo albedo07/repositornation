@@ -1,0 +1,3 @@
+v0.25.173 Full Cleave - test results
+COMPILE (here, no game): check.sh 3029660 PASSED (0 new signatures); mcs --parse -langversion:5 Advanced clean.
+NOT VERIFIED (needs Valheim): follow-up slashes hitting a Troll / enemies standing close inside the arch; damage totals.

@@ -40,7 +40,7 @@ namespace DragonsAltarDevTools
     {
         public const string ModGuid = "albedo.customclasses.devtools";
         public const string ModName = "Aethelborn Ascended - Developer Tools";
-        public const string ModVersion = "0.25.172";
+        public const string ModVersion = "0.25.173";
 
         public static DeveloperToolsPlugin Instance;
 
