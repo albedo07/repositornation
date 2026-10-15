@@ -41,7 +41,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Aethelborn Ascended - Ranger";
-        public const string ModVersion = "0.25.180";
+        public const string ModVersion = "0.25.181";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -1051,6 +1051,7 @@ namespace DragonsAltarRanger
                     delegate(Character enemy, int arrow)
                     {
                         Deal(player, enemy, d, mult, DragonCombat.IsSmallEnemy(enemy) ? _gvPush.Value : 4f, false, "gale_volley", DragonCombat.StunAttack(stunFanOffset + arrow + 1), false, false, ascended);
+                        if (_enableVfx.Value && enemy != null && player != null) { Vector3 gp = enemy.transform.position + Vector3.up * 0.8f, gd = enemy.transform.position - player.transform.position; DragonCombat.RunVfx(delegate { DragonVfx.Gust(gp, gd, 1.2f); }); }   // v0.25.181 contact gust
                     });
                 Shoot(player, null);
                 if (f + 1 < fans) yield return new WaitForSeconds(Mathf.Max(0.05f, _gvAscDelay.Value));
@@ -1079,6 +1080,7 @@ namespace DragonsAltarRanger
             if (_enableVfx.Value)
                 vfx = ascended ? CreateTornado(pos, radius, DragonCombat.M(Mathf.Max(1f, _cyAscHeight.Value)), new Color(0.70f, 0.95f, 1f, 0.9f))
                                : CreateSpinRing(pos, radius, new Color(0.55f, 1f, 0.90f, 0.9f));
+            if (vfx != null) { GameObject cv = vfx; float cw = radius * 1.4f; DragonCombat.RunVfx(delegate { DragonVfx.GroundDust(cv.transform, cw, delegate { return cv != null; }, 1.6f); }); }   // v0.25.181 dirt pulled up wherever it passes near the ground
             float speed = range / travel;
             float traveled = 0f, nextHit = 0f;
             RangerArrowDamage d = ArrowDamage(player);
@@ -1452,7 +1454,7 @@ namespace DragonsAltarRanger
                 StartCoroutine(RingVfx(land, radius, new Color(0.55f, 1f, 0.90f, 1f), 0.5f));
                 if (!DragonVfx.Enabled) StartCoroutine(RingVfx(land, radius * 0.45f, new Color(1f, 1f, 1f, 1f), 0.3f));   // v0.25.180 one contact front
                 Vector3 sm = land; float smr = radius;
-                DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(sm, new Color(0.55f, 1f, 0.90f, 1f), smr, 1.6f); });   // v0.25.58
+                DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(sm, new Color(0.55f, 1f, 0.90f, 1f), smr, 1.6f); DragonVfx.Shatter(sm, smr * 0.55f, 0f); DragonVfx.DirtBurst(sm, smr * 0.5f, 1f); DragonVfx.PressureRing(sm + Vector3.up * 0.3f, Vector3.up, DragonVfx.Wind, smr * 0.5f); });   // v0.25.58 + v0.25.181 cracks, dirt, pressure front
             }
             yield return new WaitForSeconds(0.08f);
             if (player == null || player.IsDead()) { _somersaultActive = false; _hovering = false; yield break; }
@@ -1600,6 +1602,7 @@ namespace DragonsAltarRanger
                         RangerArrowDamage cut = new RangerArrowDamage();
                         cut.Slash = slash;
                         Deal(player, enemy, cut, 1f, 0f, false, "furious_winds", DragonCombat.StunAttack(stunPulse), false, false, ascended);
+                        if (_enableVfx.Value && (stunPulse + i) % 3 == 0) { Vector3 ep = enemy.transform.position + Vector3.up * 0.8f, ed = Vector3.Cross(Vector3.up, off).normalized; DragonCombat.RunVfx(delegate { DragonVfx.Gust(ep, ed, 1f); }); }   // v0.25.181 local wind cut on the hit (tangential, throttled)
                         int id = enemy.GetInstanceID();
                         int stacks;
                         _fwStacks.TryGetValue(id, out stacks);
@@ -1680,7 +1683,10 @@ namespace DragonsAltarRanger
                 Character owner = ownerField == null ? null : ownerField.GetValue(p) as Character;
                 if (owner == player || owner is Player) continue;
                 if ((p.transform.position - center).sqrMagnitude <= radius * radius * 1.1f)
+                {
+                    if (_enableVfx.Value) { Vector3 pp = p.transform.position, pd = p.transform.position - center; DragonCombat.RunVfx(delegate { DragonVfx.Gust(pp, pd, 0.8f); DragonVfx.Burst(pp, new Color(0.85f, 0.95f, 0.85f, 1f), 8, 5f, 0.05f, 0.3f, 0f); }); }   // v0.25.181 the projectile is visibly torn apart by the wind
                     Destroy(p.gameObject);
+                }
             }
         }
 
@@ -2467,6 +2473,7 @@ namespace DragonsAltarRanger
                 {
                     _ballistaStacks++;
                     _ballistaNextStack = Time.time + 1f;
+                    if (_enableVfx.Value) { Vector3 bo = ShotOrigin(player); int bs = _ballistaStacks; DragonCombat.RunVfx(delegate { DragonVfx.Vortex(null, bo, new Color(1f, 0.80f, 0.45f, 1f), 0.6f + bs * 0.35f, 0.6f); DragonVfx.Burst(bo, new Color(1f, 0.85f, 0.55f, 1f), 6 + bs * 6, 3f, 0.05f, 0.3f, 0f); }); }   // v0.25.181 the charge visibly builds per stack
                     ShowMessage("Ballista Shot " + _ballistaStacks + "/3" + (_ballistaStacks >= 3 ? " - release to fire" : ""));
                 }
                 yield return null;
@@ -2567,7 +2574,7 @@ namespace DragonsAltarRanger
                     {
                         Vector2 r = UnityEngine.Random.insideUnitCircle * radius;
                         Vector3 g = point + new Vector3(r.x, 0f, r.y);
-                        LineVfx(g + Vector3.up * DragonCombat.M(9f) + new Vector3(0.6f, 0f, 0.6f), g, c, 0.05f, 0.18f);
+                        LineVfx(g + Vector3.up * DragonCombat.M(9f) + new Vector3(0.6f, 0f, 0.6f), g, c, 0.08f, 0.2f);   // v0.25.181 thicker, readable falling arrows
                     }
                     StartCoroutine(GuideVfx(point, radius, c, Mathf.Max(0.05f, _arInterval.Value)));
                     Vector3 ap = point; float arr = radius; Color ac = c;
@@ -2700,6 +2707,7 @@ namespace DragonsAltarRanger
         // (re-aimed as each is loosed), every shot stronger per stack; clusters are 4m, land 1s after their
         // blast and leave burning ground.
         private bool _exCharging;
+        private bool _nextArrowFlame;   // v0.25.181 the next ArrowFlight carries a flame (Explosive Arrow)
         private int _exStacks;
         private float _exNextStack;
 
@@ -2801,6 +2809,7 @@ namespace DragonsAltarRanger
             Vector3 dir = AimDir(player, origin);
             DragonCombat.PlayClip(player, "rg_heavy", 0.08f);   // heavy kick-back
             Shoot(player, message);
+            _nextArrowFlame = true;
             StartCoroutine(ArrowFlight(player, origin, dir, DragonCombat.M(70f), DragonCombat.M(_eaRange.Value) * FocusRangeMultiplier(player), DragonCombat.M(0.35f), false,
                 new Color(1f, 0.55f, 0.25f, 1f), 0f, delegate(Character enemy) { return false; },
                 delegate(Vector3 at) { Explode(player, at, scale, stunAttack); points.Add(at); dirs.Add(dir); }));
@@ -2831,8 +2840,10 @@ namespace DragonsAltarRanger
                 Vector3 exAt = at;
                 DragonCombat.RunVfx(delegate
                 {
-                    DragonVfx.Burst(exAt + Vector3.up * 0.6f, new Color(1f, 0.5f, 0.15f, 1f), 70, 11f, 0.4f, 0.8f, 0.6f);
-                    DragonVfx.Burst(exAt + Vector3.up * 0.4f, new Color(0.32f, 0.28f, 0.25f, 0.6f), 35, 3f, 1.2f, 1.5f, -0.1f);
+                    // v0.25.181 (user): a proper fiery blast - hot core, sparks, dirt thrown, short dirty smoke (no mushroom)
+                    DragonVfx.FireBlast(exAt, radius * 0.75f);
+                    DragonVfx.Burst(exAt + Vector3.up * 0.6f, new Color(1f, 0.72f, 0.3f, 1f), 45, 13f, 0.05f, 0.6f, 0.9f);
+                    DragonVfx.DirtBurst(exAt, radius * 0.6f, 1f);
                     DragonVfx.GroundImpact(exAt, DragonVfx.Fire, radius, 1.4f);   // v0.25.58
                     DragonVfx.Flash(exAt + Vector3.up, DragonVfx.Fire, 0.8f, radius, 0.18f);   // v0.25.180 compact dirty blast, no vanilla fireball flare
                 });
@@ -2861,10 +2872,22 @@ namespace DragonsAltarRanger
                         Vector3 g = circles[c] + new Vector3(o.x, 0f, o.y);
                         LineVfx(g + Vector3.up * DragonCombat.M(10f) + new Vector3(0.8f, 0f, 0.8f), g, new Color(1f, 0.55f, 0.20f, 1f), 0.08f, 0.2f);
                     }
-                    StartCoroutine(RingVfx(circles[c], r, new Color(1f, 0.55f, 0.20f, 1f), 0.45f));
+                    if (!DragonVfx.Enabled) StartCoroutine(RingVfx(circles[c], r, new Color(1f, 0.55f, 0.20f, 1f), 0.45f));
+                    else
+                    {
+                        // v0.25.181 (user): distinct cluster detonations - each circle its own smaller blast, slightly staggered
+                        Vector3 cp = circles[c]; float cr = r; float delay = c * 0.07f;
+                        StartCoroutine(DelayedVfx(delay, delegate { DragonVfx.FireBlast(cp, cr * 0.5f); DragonVfx.Burst(cp + Vector3.up * 0.4f, new Color(1f, 0.72f, 0.3f, 1f), 22, 10f, 0.04f, 0.5f, 0.9f); DragonVfx.DirtBurst(cp, cr * 0.45f, 0.8f); DragonVfx.Shake(cp, 12f, 0.3f); }));
+                    }
                 }
                 if (ascended) StartCoroutine(FireFieldRoutine(player, circles[c], r, blast.Fire * 2f * mult * Mathf.Max(0f, _eaAscFieldPercent.Value) / 100f));
             }
+        }
+
+        private IEnumerator DelayedVfx(float delay, Action fx)
+        {
+            if (delay > 0f) yield return new WaitForSeconds(delay);
+            DragonCombat.RunVfx(fx);
         }
 
         private IEnumerator BurnRoutine(Player player, Character target, float perTick, float duration)
@@ -3276,6 +3299,7 @@ namespace DragonsAltarRanger
         private IEnumerator ArrowFlight(Player player, Vector3 pos, Vector3 dir, float speed, float range, float radius, bool pierce, Color color, float growTo, Func<Character, bool> onHit, Action<Vector3> onEnd)
         {
             GameObject vfx = _enableVfx.Value ? CreateArrowVfx(color, radius) : null;
+            if (_nextArrowFlame) { _nextArrowFlame = false; if (vfx != null) { GameObject fo = vfx; DragonCombat.RunVfx(delegate { DragonVfx.ProjectileFlame(fo.transform, 0.35f, delegate { return fo != null; }); }); } }   // v0.25.181 burning Explosive Arrow
             HashSet<int> done = new HashSet<int>();
             float traveled = 0f;
             bool stop = false;

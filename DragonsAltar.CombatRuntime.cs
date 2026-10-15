@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.180";
+        public const string ModVersion = "0.25.181";
 
         internal static DragonCombatPlugin Instance;
 
@@ -15005,6 +15005,28 @@ namespace DragonsAltarCombat
             Scorch(pos, radius * 0.6f, 7f);
         }
 
+        // v0.25.181 (user): a visible flame riding on a projectile (Explosive Arrow): licking fire tongues left behind in world
+        // space + a few sparks and a thin dark smoke wisp. Emits while keep() is true; parented to the projectile.
+        public static void ProjectileFlame(Transform follow, float size, Func<bool> keep)
+        {
+            if (!Enabled || follow == null) return;
+            size = Mathf.Clamp(size, 0.1f, 1.5f);
+            DragonVfxLife l = Host(follow.position, 30f, "projflame");
+            l.Follow = follow;
+            GameObject host = l.gameObject;
+            ParticleSystem fire = Particles(host.transform, new Color(1f, 0.58f, 0.2f, 1f), 0, 70f, 30f, 0.22f, 0.1f, 0.5f, size * 0.5f, size * 0.9f, -0.4f,
+                ParticleSystemShapeType.Sphere, size * 0.15f, Vector3.zero, false, true);
+            FireLook(fire);
+            ParticleSystem sparks = Particles(host.transform, new Color(1f, 0.75f, 0.35f, 1f), 0, 22f, 30f, 0.35f, 0.5f, 2f, 0.03f, 0.06f, 0.6f,
+                ParticleSystemShapeType.Sphere, size * 0.1f, Vector3.zero, true, true);
+            ParticleSystem smoke = Particles(host.transform, new Color(0.16f, 0.14f, 0.12f, 0.35f), 0, 12f, 30f, 0.6f, 0.05f, 0.25f, size * 0.6f, size * 1.1f, -0.15f,
+                ParticleSystemShapeType.Sphere, size * 0.1f, Vector3.zero, false, false);
+            Material sm = Mat(SmokeTex(), false);
+            if (sm != null) smoke.GetComponent<ParticleSystemRenderer>().sharedMaterial = sm;
+            l.Systems = new ParticleSystem[] { fire, sparks, smoke };
+            l.Keep = keep;
+        }
+
         // A vertical curved wall of force that the caller moves (Impact Wave crest). width = across the path.
         public static DragonCrest Crest(Color c, float width, float height, float maxLife)
         {
@@ -16100,7 +16122,24 @@ namespace DragonsAltarCombat
                 ring.transform.localRotation = Quaternion.Euler(tilts[i], i * 47f, 0f);
                 CrescentLayer(ring.transform, body, radius * (0.85f - i * 0.08f), radius * 0.12f, 0f, 170f, Quaternion.identity, false);
                 CrescentLayer(ring.transform, core, radius * (0.85f - i * 0.08f), radius * 0.04f, 0f, 165f, Quaternion.identity, true);
+                // v0.25.181 (user: layered rotating airflow): each strand also turns about its own tilted axis, alternating
+                // direction, so the layers visibly shear past each other through the open gaps
+                DragonRotate dr = ring.AddComponent<DragonRotate>();
+                dr.Speed = new Vector3(0f, (i % 2 == 0) ? -420f : 260f, 0f);
             }
+            // v0.25.181 outer counter-flow: three thin low strands further out, turning against the storm
+            Color outer = Color.Lerp(c, new Color(0.9f, 0.93f, 0.9f, 1f), 0.55f); outer.a = 0.22f;
+            for (int i = 0; i < 3; i++)
+            {
+                GameObject ring = new GameObject("windOuter");
+                ring.transform.SetParent(parent, false);
+                ring.transform.localPosition = Vector3.up * (0.2f + i * 0.5f);
+                ring.transform.localRotation = Quaternion.Euler(i * 12f - 12f, i * 120f, 0f);
+                CrescentLayer(ring.transform, outer, radius * (1.12f + i * 0.06f), radius * 0.05f, 0f, 120f, Quaternion.identity, false);
+                DragonRotate dr = ring.AddComponent<DragonRotate>();
+                dr.Speed = new Vector3(0f, -900f, 0f);   // net counter-rotation against the parent's 540 deg/s
+            }
+            GroundDust(parent, Mathf.Min(6f, radius * 1.6f), delegate { return parent != null; }, 1.2f);
         }
 
         // ------------------------------------------------------------------ themed presets

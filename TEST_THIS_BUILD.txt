@@ -1,15 +1,13 @@
-v0.25.180 Art Direction - in-game checks (VISUALS ONLY - gameplay must feel exactly like v0.25.179)
-1. Blade Storm: curved cuts on several planes around each sphere, rear arcs hidden behind the target, no ball shell;
-   they appear with the hit and shear/dissolve after. Normal 2 / Ascended 4 spheres, same damage.
-2. Moonlight / Crescent / Halfmoon / Eclipse / Grand Cross: slashes look like flowing translucent ribbons with one thin
-   bright edge; check from the side and behind (no paper sheet). Crescent push + hits unchanged.
-3. Goddess Relic (normal + Ascended): stone + bronze cross, glowing grooves, lands with dust/chips/cracks, sinks and
-   releases light upward. Collider / standing on it unchanged. Priest relics: same material family, no ring.
-4. Judgement Hammer: stone/bronze hammer flips with a short curved trail + faint echo; Ascended return unchanged.
-5. Heavy hits (Stomp, Bonecrusher, Seismic, Angel Comet, Bomb, Meteor): dust front + chunks, no glowing orange rings,
-   no white explosion prefabs / tall smoke.
-6. Heals (Holy Wave, Ray of Hope, Heaven's Light, DI, Crucible, relic heals): soft pale wave, no dirt, no flash.
-7. Gravity Dominion / Gravity Blast: dark see-through core with a thin rim, strands + soil curling in, enemies visible.
-8. Fury / Whirlwind / Starfall / fire grounds: no ring spam every tick.
-9. Tailwind now shows wind + leaves on recipients. Cyclone / Furious Winds: you can see the player through the wind.
-10. FPS: overlapping casts (Blade Storm x4 + Crescent + Whirlwind) should not drop more than v0.25.179.
+v0.25.181 VFX Revisions - in-game checks (not an anchor; compare with v0.25.179/180)
+1. Slashes (Moonlight, Crescent, Halfmoon, Eclipse, Blade Storm): flat sharp blades, no square wedge, SM blue / Asc dark blue.
+2. Eclipse: FPS before/after (Steam FPS counter or any overlay) - please report frame times.
+3. Merc Stomp / Bonecrusher / Seismic / Bomb: fractures + rubble, bomb reads as an explosion.
+4. Goddess Relic / Lightning Relic / Holy Relic: three different finished cross designs, rubble sinks away.
+5. Electric Smite / Lightning Tempest / Cataclysm: Ultimate-level strikes, colours distinguishable, day + night.
+6. Priest with a Buckler: Holy Parry indicator Ready -> Active (timer) -> Cooldown (timer).
+7. Grand Cross pushes Small/Big/Boss along its travel, damage unchanged.
+8. New Sorcerer -> Advance (Archmage and Horizon Walker): hotbar identical incl. empty slots, after reopening tree + relog.
+9. Archmage: hold a charged staff attack and turn the camera - body follows the crosshair.
+10. Horizon Walker: shoot while running - legs run normally.
+11. Ranger with a Greatbow: shooting while moving no longer doubles speed.
+12. Ranger family: snare snap, pin arrows, explosive flame + cluster blasts, Furious Winds layered wind, Ballista charge.

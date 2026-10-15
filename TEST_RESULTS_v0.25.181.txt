@@ -1,0 +1,5 @@
+v0.25.181 - verified here (no game, no Unity runtime):
+- tools/compile_check/check.sh 3029660 (semantic compile vs stubs): COMPILE CHECK PASSED (0 new signatures).
+- mcs --parse -langversion:5 on every edited .cs: OK. No SetPositions / GetPositions / LoadImage.
+- Greatbow speedFactor 2.0 confirmed from Therzie's bundle data (UnityPy).
+NOT verified: visuals, performance (no frame times measured), hotbar flow, indicator, Grand Cross push in game.

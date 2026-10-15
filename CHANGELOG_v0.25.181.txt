@@ -1,0 +1,47 @@
+Aethelborn Ascended v0.25.181 - VFX Revisions (NOT an anchor; anchor stays v0.25.179 Double Start)
+
+UNIVERSAL
+- Slashes: flat sharp blade (no convex bulge / square wedge), tapered at both ends; BladeWake trails taper (no square head).
+- Heals / buffs / relics: soft circular light pulse (SoftWave ring), reduced brightness, readable day and night.
+- Ultimates stronger: Electric Smite + Lightning Tempest = thick green/blue/yellow strikes from high above, rising ground
+  lightning, cracks + rubble; Elemental Cataclysm = fire / frost / lightning separately readable.
+- No spikes unless the skill says so. Targeting guides keep their own toggle.
+
+SWORD MASTER   blue (Normal) / dark blue (Ascended) everywhere; Blade Storm cuts denser/brighter on the sphere radius;
+               Crescent heavier torn soil + debris along the cut; Eclipse perf pass (shared slash meshes, no trail renderers
+               on flashes, cached raycasts/reflection).
+MERCENARY      branching fractures + broken ground + rubble (Stomp, Circle Eruption, Bonecrusher, Seismic end);
+               Punishing Bomb = real explosion (fire core, sparks, tongues, dirty smoke, embers, fractures); cluster mini
+               blasts with sparks + dirt.
+PALADIN        Goddess Relic = one finished bevelled pattee cross (stone/bronze, grooves, bands, seal), planted rubble
+               that sinks; Judgement Hammer polish (12-sided head, straps, rims, sigil); Shield Charge / Angel Comet
+               vapour pressure cone; Ascended RS thicker higher bolts; trails thicker.
+PRIEST         Lightning Relic = spear + zigzag design, blue pulse; Holy Relic = rounded + heart, soft green; Heaven's
+               Judgement contact shockwave + dirt + cracks per beam; Grand Cross brighter + dust.
+SORCERER/ARCH  Glacial / Frost Nova frost subtle; Flame cone detail layer; Greatblade = furrows + eruptions (no ring);
+               Cataclysm elements split; Gravity Well stronger inward drift.
+HORIZON WALKER blue-violet (Ascended deeper); Phalanx = flat spectral swords (bevelled, edge line, tip trail); Rift Echo
+               opens from a tapered rift slit; Void Step space fold at both ends; Rupture tear -> collapse -> cracks;
+               mimics dissolve-textured and quieter; Rift Walker portals have depth rims + inward particles.
+RANGER         tapered airflow arrow wakes (heavier for big shots), pass-through streaks; Snare = finished trap (rope,
+               stakes, iron jaw) that snaps tight on the feet; Pinning = 3 arrows driven in around the target.
+ACROBAT        Tumble / Gale / Dive wind ribbons following the real move; Gale contact gusts; Cyclone pulls up dirt near the
+               ground; Furious Winds layered counter-rotating airflow + outer counter-flow + ground dust, hit cuts and
+               destroyed projectiles visibly torn apart; Somersault landing cracks + dirt + pressure front; Tailwind pulse.
+BOWMASTER      Explosive Arrow burns in flight, real fiery blast, distinct staggered cluster detonations; Ballista charge
+               builds visibly per stack; Arrow Rain arrows thicker; Starfall contact front + soil per impact; Hawk's Vigil
+               soft pulse + hawk-eye emblem.
+
+GAMEPLAY / UI (requested)
+- Eclipse FPS: static profile -> shared crescent meshes (MaterialPropertyBlock fade), CrescentFlash without trails,
+  RaycastNonAlloc ground probe, terrain/structure answer cached per collider, cached Shake/IsTamed reflection, Eclipse
+  projectile scan every 2nd frame. NOT measured in game.
+- Priest Buckler Mastery indicator: Holy Parry - Ready / Active (duration) / Cooldown (time left); activation, duration,
+  cooldown unchanged; only with a Buckler.
+- Grand Cross carries enemies like Crescent Cleave (Small 100 / Big 65 / Boss 35 %, PushSmallPercent_v025181 etc.,
+  Ascended own keys); damage, ticks, obstacles, ownership, dedupe unchanged.
+- Sorcerer (any class) Advancement hotbar: the pre-Advancement bar (every slot incl. empties) is carried into the new AC
+  key; load never falls back to the kit default (Base bar instead); wrong length padded/trimmed. Altar->tree flow kept.
+- Archmage charged staff: body faces the crosshair for the whole charge.
+- Horizon Walker running shots: leg cycle now absolute from the standing rest pose (no splits / doubling).
+- Greatbow (Therzie GreatbowModer/Blackmetal/Dvergr_TW, attack speedFactor 2.0): Ranger movement factor capped at 1.
