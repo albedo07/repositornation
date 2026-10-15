@@ -1,0 +1,18 @@
+Aethelborn Ascended v0.25.175 - Wide Cleave
+Baseline: v0.25.174. Changed: Crescent Cleave hitbox options, NACC after parry.
+
+CRESCENT CLEAVE (user: some dragged enemies still not hit; want front/back size too)
+- New [Sword Master Crescent Cleave] HitboxDepthMeters_v025175 = front-to-back depth of each wave's hitbox,
+  default 4 m (was a fixed 2.5 m). Width (SlashWidth) and height (SlashHeight) unchanged. Normal + Ascended.
+- New MaxHitsPerWave_v025175 (default 2 = same damage as before). A wave hits each enemy at most this many times
+  (PersistentHitInterval 0.5 s apart), so a carried enemy stops taking damage after 2 hits even while it rides the
+  wave. Raise it (e.g. 6-11) if carried enemies should keep taking ticks.
+- Push (Small/Big/Boss %, front clamp 0.9 m inside the box, walls, multiplayer) unchanged.
+
+NACC AFTER PARRY (user: still vanilla 1-2-3; "don't read parrying as anything")
+- Blocks and parries are now invisible to the chain: for 0.6 s after any block / parry nothing is learned or captured
+  (no swing state recorded). Likely cause: an attack started out of the block pose recorded a swing state from the
+  wrong animation layer; that bad state stayed for the whole session and every later step back (hit 3) used it ->
+  vanilla-looking chain. Chains after a parry now use the clean states recorded in normal chains.
+- Blocking, parry bonuses, Buckler Parry, Hyper Armor on block, heavy attacks, skills, 0.7 s window: unchanged.
+- Restart Valheim once after installing (the old bad state lived in memory).

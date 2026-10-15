@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.174";
+        public const string ModVersion = "0.25.175";
 
         internal static DragonCombatPlugin Instance;
 
@@ -885,6 +885,7 @@ namespace DragonsAltarCombat
         private static void BlockAttackPostfix(BlockPatchState __state, bool __result, object __instance, object[] __args)
         {
             RestoreBlockState(__state);
+            if (__result && ReferenceEquals(__instance, Player.m_localPlayer)) DragonCombat.LastBlockAt = Time.time;   // v0.25.175 block / parry window
             if (__result && __state.HyperBlock)
             {
                 ZeroPush(__args);
@@ -1656,6 +1657,7 @@ namespace DragonsAltarCombat
             DragonCombat.CheckController(a);   // v0.25.154 states captured under another controller are dropped
             Player cp = Player.m_localPlayer;
             if (cp == null || !cp.InAttack() || DragonCombat.SkillOwnsAnimator(cp)) return;   // never capture a skill CA / locomotion state
+            if (DragonCombat.NearBlock()) return;   // v0.25.175 never capture out of a block / parry
             float best = 0f;
             for (int layer = 0; layer < a.layerCount; layer++)
             {
@@ -4728,6 +4730,7 @@ namespace DragonsAltarCombat
         public static void LearnState(Animator a, string trigger)
         {
             if (a == null || string.IsNullOrEmpty(trigger)) return;
+            if (NearBlock()) return;   // v0.25.175 never learn out of a block / parry
             CheckAnimationController(a);
             if (LearnedStates.ContainsKey(StateKey(a, trigger))) return;
             try
@@ -4820,6 +4823,7 @@ namespace DragonsAltarCombat
                 if (l.Gen != NaccGen || l.Ctrl != l.A.runtimeAnimatorController || SkillOwnsAnimator(Player.m_localPlayer)) { PendingLearns.RemoveAt(k); continue; }
                 // v0.25.156: bound to its own attack - dropped once another attack started or it is no longer the player's current attack.
                 if (l.Serial != AttackSerial || !IsCurrentAttack(Player.m_localPlayer, l.Atk)) { PendingLearns.RemoveAt(k); continue; }
+                if (NearBlock()) { PendingLearns.RemoveAt(k); continue; }   // v0.25.175 a block / parry happened during the learn
                 try
                 {
                     // v0.25.44: wait until the animator consumed the trigger, then take the layer that is
@@ -8180,6 +8184,12 @@ namespace DragonsAltarCombat
         }
 
         public static float BlockHyperUntil = -1f;
+        // v0.25.175 (user: vanilla 1-2-3 after a parry; "don't read parrying as anything"): last time the local player blocked / parried.
+        // NACC never learns or captures a swing state from inside that window - an attack started out of the block pose could cache a
+        // state from the wrong layer, and that bad state was then used for every later step back (hit 3) = vanilla-looking chain.
+        public static float LastBlockAt = -100f;
+        public const float BlockQuiet = 0.6f;
+        public static bool NearBlock() { return Time.time - LastBlockAt < BlockQuiet; }
 
         public static bool HasHyperArmor(Character character)
         {
@@ -10253,6 +10263,7 @@ namespace DragonsAltarCombat
         public static void RuntimeUpdate()
         {
             CheckAnimationClass(Player.m_localPlayer);
+            try { if (Player.m_localPlayer != null && Player.m_localPlayer.IsBlocking()) LastBlockAt = Time.time; } catch (Exception) { }   // v0.25.175
             DragonCombatPlugin.UpdateNaccAirborne(Player.m_localPlayer);   // v0.25.154 takeoff forgets the interrupted chain
             float now = Time.time;
             if (_aimWindupPlayer == Player.m_localPlayer && now < _aimWindupUntil)

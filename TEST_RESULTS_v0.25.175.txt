@@ -1,0 +1,3 @@
+v0.25.175 Wide Cleave - test results
+COMPILE / MODEL (here, no game): check.sh 3029660 PASSED (0 new signatures); mcs --parse -langversion:5 CombatRuntime + Advanced clean; tools/tests/nacc_handoff ALL PASS (new: no learn within 0.6 s of a block/parry).
+NOT VERIFIED (needs Valheim): chain after parry; Crescent hits on carried enemies with the new depth.

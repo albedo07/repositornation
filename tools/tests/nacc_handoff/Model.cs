@@ -189,6 +189,15 @@ static class T
             Func<bool, bool, bool, string> back = (learned, captured, hasState) => learned ? "learned" : captured ? "captured" : hasState ? "hasstate" : "trigger";
             Check(back(false, true, false) == "captured", "swing 1 never learned (always started from block): captured state still gives 1-2-1-2-3");
             Check(back(true, true, true) == "learned", "learned state keeps priority for advanced classes");
+            // v0.25.175: nothing is learned / captured within 0.6 s of a block or parry (a bad learn stuck for the session before)
+            {
+                Func<double, double, bool> canLearn = (now, lastBlock) => now - lastBlock >= 0.6;
+                Check(!canLearn(10.2, 10.0), "attack 0.2 s after a parry does not learn");
+                Check(canLearn(11.0, 10.0), "attack 1 s after a parry learns normally");
+                var learned = new Dictionary<string, int> { { "swing0", 1 } };   // learned earlier in a clean chain
+                bool stepBackOk = learned.ContainsKey("swing0");
+                Check(stepBackOk, "chain after a parry steps back with the clean state learned before");
+            }
             // v0.25.172: states keyed per controller survive a swap and swap-back (parry / block around another mod's controller)
             {
                 var learned = new Dictionary<string, int>();

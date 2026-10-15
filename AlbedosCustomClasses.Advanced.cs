@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.174";
+        public const string ModVersion = "0.25.175";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -163,6 +163,8 @@ namespace AlbedosCustomClassesAdvanced
         private ConfigEntry<float> _crescentTravelTime;
         private ConfigEntry<float> _crescentSlashWidth;
         private ConfigEntry<float> _crescentSlashHeight;
+        private ConfigEntry<float> _crescentHitDepth;   // v0.25.175
+        private ConfigEntry<int> _crescentMaxHits;      // v0.25.175
         private ConfigEntry<float> _crescentSpreadAngle;
         private ConfigEntry<float> _crescentPersistentTick;
         private DamageConfig _crescentDamage;
@@ -686,6 +688,8 @@ namespace AlbedosCustomClassesAdvanced
             _crescentTravelTime = Config.Bind("Sword Master Crescent Cleave", "TravelTimeSeconds_v0109", 5.5f, "Travel time: 20m over 5.5s (v0.25.50, slower).");
             _crescentSlashWidth = Config.Bind("Sword Master Crescent Cleave", "SlashWidth", 1f, "Width in meters of EACH vertical travelling slash hitbox.");
             _crescentSlashHeight = Config.Bind("Sword Master Crescent Cleave", "SlashHeight", 6.4f, "Doubled vertical cleave height.");
+            _crescentHitDepth = Config.Bind("Sword Master Crescent Cleave", "HitboxDepthMeters_v025175", 4f, "Front-to-back depth of each travelling cleave hitbox (m). v0.25.167 was 2.5. Bigger = enemies carried in front of / just behind the wave are still inside it.");
+            _crescentMaxHits = Config.Bind("Sword Master Crescent Cleave", "MaxHitsPerWave_v025175", 2, "Damage ticks one wave can deal to the same enemy (PersistentHitInterval apart). 2 = v0.25.167 damage; raise it so carried enemies keep taking ticks.");
             _crescentSpreadAngle = Config.Bind("Sword Master Crescent Cleave", "ConeSpreadDegrees_v0109", 120f, "Very wide cone matching the supplied second-cone reference: 120 degrees total spread, with the center slash travelling straight ahead.");
             _crescentPersistentTick = Config.Bind("Sword Master Crescent Cleave", "PersistentHitInterval", 0.5f, "Persistent Hitbox: enemies still inside the cleave can be damaged again every 0.5s.");
             _crescentDamage = BindDamage("Sword Master Crescent Cleave Damage", 0f, 28f, 0f, 0f, 0f, 0f, 0f, 20f);
@@ -2394,7 +2398,7 @@ namespace AlbedosCustomClassesAdvanced
                         DragonCombat.RunVfx(delegate { DragonVfx.Furrow(rprev, rp, rc, rw); });
                     }
                 }
-                Collider[] hits = Physics.OverlapBox(center, new Vector3(width * 0.5f, height * 0.5f, 1.25f), Quaternion.LookRotation(forward, Vector3.up));
+                Collider[] hits = Physics.OverlapBox(center, new Vector3(width * 0.5f, height * 0.5f, Mathf.Max(0.5f, DragonCombat.M(_crescentHitDepth.Value)) * 0.5f), Quaternion.LookRotation(forward, Vector3.up));   // v0.25.175 depth configurable (was 2.5 m)
                 for (int i = 0; i < hits.Length; i++)
                 {
                     Character target = hits[i].GetComponentInParent<Character>();
@@ -2407,7 +2411,7 @@ namespace AlbedosCustomClassesAdvanced
                     // damage the target, i.e. < 2 ticks) released enemies ~0.5 s after contact. Every enemy inside the wave is carried again
                     // for the whole travel, as in v0.25.167; damage (2 ticks per wave, 0.5 s apart) is unchanged.
                     CleavePull(target, point, forward, waveSpeed, groundMask, ascended);   // v0.25.167 push along the wave's travel (once per target per frame)
-                    if (count >= 2 || (nextHitAt.TryGetValue(id, out nextAllowed) && Time.time < nextAllowed)) continue;
+                    if (count >= Mathf.Max(1, _crescentMaxHits.Value) || (nextHitAt.TryGetValue(id, out nextAllowed) && Time.time < nextAllowed)) continue;   // v0.25.175 cap configurable (default 2)
                     nextHitAt[id] = Time.time + Mathf.Max(0.10f, _crescentPersistentTick.Value);
                     hitCount[id] = count + 1;
                     DealDamageScaled(player, target, _crescentDamageV, multiplier * 0.5f, 8f, false, "crescent_cleave", stunAttack, false, false, null);
