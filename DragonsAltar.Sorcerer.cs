@@ -2808,7 +2808,7 @@ namespace DragonsAltarSorcerer
             float radius = DragonCombat.M(_gbRadius.Value);
             float tick = Mathf.Max(0.1f, _gbTick.Value);
             int solid = LayerMask.GetMask("Default", "static_solid", "Default_small", "piece", "terrain", "vehicle");
-            GameObject orb = _enableVfx.Value ? CreateOrb(origin, DragonCombat.M(_gbOrbSize.Value), new Color(0.18f, 0.02f, 0.30f, 0.92f)) : null;
+            GameObject orb = _enableVfx.Value ? (DragonVfx.Enabled ? DragonVfx.GravityOrb(origin, DragonCombat.M(_gbOrbSize.Value)) : CreateOrb(origin, DragonCombat.M(_gbOrbSize.Value), new Color(0.18f, 0.02f, 0.30f, 0.92f))) : null;   // v0.25.180 dark transparent orb + rim + air wake
             if (orb != null) { Transform ot = orb.transform; float vr = radius, vl = life + 2f; DragonCombat.RunVfx(delegate { DragonVfx.GravityWell(ot, ot.position, vr, vl); }); }   // v0.25.169 gravity: air ripples + streaks + loose dirt dragged after the orb
             Vector3 pos = origin;
             bool moving = true;
@@ -2882,6 +2882,19 @@ namespace DragonsAltarSorcerer
         // with shock rings racing out to the radius.
         private IEnumerator ExplosionVfx(Vector3 center, float radius, Color color)
         {
+            if (DragonVfx.Enabled)
+            {
+                // v0.25.180 VFX DIRECTION: the pull collapses inward, then a compact local dust burst (no swelling flash
+                // sphere, no shock rings).
+                DragonCombat.RunVfx(delegate
+                {
+                    DragonVfx.GravityCollapse(center, radius);
+                    DragonVfx.GroundImpact(center, new Color(0.55f, 0.48f, 0.62f, 1f), Mathf.Max(1f, radius * 0.6f), 1.2f);
+                    DragonVfx.Burst(center + Vector3.up * 0.4f, new Color(0.30f, 0.26f, 0.32f, 0.6f), 24, 3f, 1.0f, 1.3f, -0.1f);
+                    DragonVfx.Flash(center + Vector3.up, color, 0.6f, radius, 0.15f);
+                });
+                yield break;
+            }
             DragonCombat.RunVfx(delegate
             {
                 DragonVfx.Shockwave(center, color, radius, 0.45f);
