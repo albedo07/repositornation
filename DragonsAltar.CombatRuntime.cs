@@ -4170,9 +4170,22 @@ namespace DragonsAltarCombat
             return false;
         }
 
+        // v0.25.181 (perf, same result): a collider's terrain/structure answer never changes - cache it per instance
+        private static readonly Dictionary<int, bool> _terrainCache = new Dictionary<int, bool>();
         public static bool IsTerrainOrStructure(Collider c)
         {
             if (c == null || c.isTrigger) return false;
+            int id = c.GetInstanceID();
+            bool cached;
+            if (_terrainCache.TryGetValue(id, out cached)) return cached;
+            bool r = IsTerrainOrStructureUncached(c);
+            if (_terrainCache.Count > 8192) _terrainCache.Clear();
+            _terrainCache[id] = r;
+            return r;
+        }
+
+        private static bool IsTerrainOrStructureUncached(Collider c)
+        {
             try
             {
                 if (_terrainLayer == -2) _terrainLayer = LayerMask.NameToLayer("terrain");
@@ -4187,6 +4200,7 @@ namespace DragonsAltarCombat
         }
 
         private static int _groundMask;
+        private static readonly RaycastHit[] _groundHits = new RaycastHit[64];
         public static int GroundMask()
         {
             if (_groundMask == 0) _groundMask = LayerMask.GetMask("terrain", "Default", "static_solid", "Default_small", "piece", "vehicle");
@@ -4197,12 +4211,14 @@ namespace DragonsAltarCombat
         public static bool TryGroundY(Vector3 pos, float above, float depth, out float y)
         {
             y = pos.y;
-            RaycastHit[] hits = Physics.RaycastAll(pos + Vector3.up * above, Vector3.down, above + depth, GroundMask(), QueryTriggerInteraction.Ignore);
-            if (hits == null || hits.Length == 0) return false;
+            // v0.25.181 (perf): non-allocating cast into a shared buffer (same hits as RaycastAll)
+            RaycastHit[] hits = _groundHits;
+            int n = Physics.RaycastNonAlloc(pos + Vector3.up * above, Vector3.down, hits, above + depth, GroundMask(), QueryTriggerInteraction.Ignore);
+            if (n <= 0) return false;
             // the surface nearest the reference height wins (a floor under a roof, the slope under a cliff edge)
             float best = float.MaxValue;
             bool found = false;
-            for (int i = 0; i < hits.Length; i++)
+            for (int i = 0; i < n; i++)
             {
                 if (!IsTerrainOrStructure(hits[i].collider)) continue;
                 float d = Mathf.Abs(hits[i].point.y - pos.y);
@@ -7352,6 +7368,15 @@ namespace DragonsAltarCombat
             ShowStatus(player, key, icon, label, seconds, stacks, null);
         }
 
+        // v0.25.181: same as ShowStatus, but an existing indicator also takes the new label (Ready / Active / Cooldown)
+        private static bool _relabel;
+        public static void ShowStatusState(Player player, string key, string icon, string label, float seconds, string detail)
+        {
+            _relabel = true;
+            try { ShowStatus(player, key, icon, label, seconds, 0, detail); }
+            finally { _relabel = false; }
+        }
+
         public static void ShowStatus(Player player, string key, string icon, string label, float seconds, int stacks, string detail)
         {
             try
@@ -7370,6 +7395,7 @@ namespace DragonsAltarCombat
                     SetStatusTime(existing, 0f);
                     existing.Stacks = stacks;
                     if (detail != null) existing.Detail = detail;
+                    if (_relabel) { existing.m_name = label; existing.m_tooltip = label; }   // v0.25.181 state indicators
                     return;
                 }
                 // v0.25.2 perf: no re-add while the same buff is refreshed every frame.
@@ -8442,6 +8468,16 @@ namespace DragonsAltarCombat
             if (Mathf.Abs(eitr) > 0.0001f) b.Append("\n").Append(BuffPct(eitr, "Eitr Regen"));
             if (hyper) b.Append("\nHyper Armor (no stagger or knockback)");
             return b.ToString();
+        }
+
+        // v0.25.181: seconds left on a timed buff by source (0 = not active) - used by the Holy Parry indicator
+        public static float TimedBuffRemaining(Player player, string source)
+        {
+            if (player == null || string.IsNullOrEmpty(source)) return 0f;
+            Dictionary<string, TimedBuffState> buffs;
+            TimedBuffState st;
+            if (!TimedBuffs.TryGetValue(player.GetInstanceID(), out buffs) || buffs == null || !buffs.TryGetValue(source, out st) || st == null) return 0f;
+            return Mathf.Max(0f, st.EndTime - Time.time);
         }
 
         public static void ApplyTimedBuff(Player player, float duration, float attackDamageBonus, float attackSpeedBonus, float moveSpeedBonus, float defenseBonus, float staminaRegenBonus, float eitrRegenBonus, bool hyperArmor)
@@ -12643,6 +12679,7 @@ namespace DragonsAltarCombat
             return Mathf.Lerp(h0, h1, tz);
         }
 
+        private Vector3[] _conformBuf;
         private void UpdateConform()
         {
             Vector3 sc = transform.localScale;
@@ -12651,7 +12688,8 @@ namespace DragonsAltarCombat
             _lastScale = sc; _lastRot = rot;
             float sy = Mathf.Max(0.01f, Mathf.Abs(sc.y));
             Vector3 pos = transform.position;
-            Vector3[] v = new Vector3[_gv.Length];
+            if (_conformBuf == null || _conformBuf.Length != _gv.Length) _conformBuf = new Vector3[_gv.Length];   // v0.25.181 reused
+            Vector3[] v = _conformBuf;
             for (int i = 0; i < _gv.Length; i++)
             {
                 Vector3 w = rot * new Vector3(_gv[i].x * sc.x, 0f, _gv[i].z * sc.z);
@@ -12922,10 +12960,12 @@ namespace DragonsAltarCombat
         public float Hold = 0.3f, Fade = 0.3f, Grow = 0f;
         private float _age;
         private MeshFilter[] _mf;
-        private Color[][] _base;
+        private Color[][] _base, _buf;
+        private Renderer[] _shared;   // v0.25.181 shared (cached) meshes fade through a property block, never the mesh
         private LineRenderer[] _lr;
         private Color[] _lrBase;
         private Vector3 _scale;
+        private MaterialPropertyBlock _mpb;
         private void Start()
         {
             _lr = GetComponentsInChildren<LineRenderer>();
@@ -12933,7 +12973,15 @@ namespace DragonsAltarCombat
             for (int i = 0; i < _lr.Length; i++) _lrBase[i] = _lr[i].startColor;
             _mf = GetComponentsInChildren<MeshFilter>();
             _base = new Color[_mf.Length][];
-            for (int i = 0; i < _mf.Length; i++) _base[i] = _mf[i].sharedMesh != null ? _mf[i].sharedMesh.colors : new Color[0];
+            _buf = new Color[_mf.Length][];
+            _shared = new Renderer[_mf.Length];
+            for (int i = 0; i < _mf.Length; i++)
+            {
+                DragonCutRibbon cr = _mf[i].GetComponent<DragonCutRibbon>();
+                if (cr != null && cr.SharedMesh) { _shared[i] = _mf[i].GetComponent<Renderer>(); _base[i] = new Color[0]; _buf[i] = new Color[0]; continue; }
+                _base[i] = _mf[i].sharedMesh != null ? _mf[i].sharedMesh.colors : new Color[0];
+                _buf[i] = new Color[_base[i].Length];
+            }
             _scale = transform.localScale;
         }
         private void Update()
@@ -12951,8 +12999,14 @@ namespace DragonsAltarCombat
                 }
                 for (int i = 0; i < _mf.Length; i++)
                 {
+                    if (_shared[i] != null)
+                    {
+                        DragonCutRibbon cr = _mf[i] == null ? null : _mf[i].GetComponent<DragonCutRibbon>();
+                        if (cr != null) cr.Fade01 = k;
+                        continue;
+                    }
                     if (_mf[i] == null || _mf[i].sharedMesh == null || _base[i].Length == 0) continue;
-                    Color[] c = new Color[_base[i].Length];
+                    Color[] c = _buf[i];
                     for (int j = 0; j < c.Length; j++) { c[j] = _base[i][j]; c[j].a *= k; }
                     _mf[i].sharedMesh.colors = c;
                 }
@@ -12991,22 +13045,38 @@ namespace DragonsAltarCombat
         public Mesh Mesh;
         public float Delay, Reveal = 0.06f, Hold = 0.4f, Fade = 0.3f, Flow, Shear, Tile = 1f;
         public bool ColorsOwned = true;
+        public bool SharedMesh;          // v0.25.181 cached mesh shared by many slashes: never written, never destroyed here
+        public float Fade01 = 1f;        // set by DragonFadeOut for shared meshes (applied through the property block)
         private Color[] _base, _cols;
-        private Vector2[] _uv0, _uv;
-        private float _age;
+        private Vector2[] _uv0;
+        private float _age, _lastFade = -1f;
+        private Renderer _r;
+        private MaterialPropertyBlock _mpb;
+        private Color _tint0;
+        private bool _hasTint;
         private void Start()
         {
             if (Mesh == null) { enabled = false; return; }
-            _base = Mesh.colors; _cols = new Color[_base.Length];
-            _uv0 = Mesh.uv; _uv = new Vector2[_uv0.Length];
-            ApplyUv();
-            if (ColorsOwned) Apply(0f, 1f);
+            _r = GetComponent<Renderer>();
+            if (_r != null && _r.sharedMaterial != null && _r.sharedMaterial.HasProperty("_TintColor")) { _hasTint = true; _tint0 = _r.sharedMaterial.GetColor("_TintColor"); }
+            if (ColorsOwned && !SharedMesh) { _base = Mesh.colors; _cols = new Color[_base.Length]; _uv0 = Mesh.uv; }
+            ApplyBlock();
+            if (ColorsOwned && !SharedMesh) Apply(0f, 1f);
         }
-        private void ApplyUv()
+        // v0.25.181 (perf): texture scroll + shared-mesh fade go through a MaterialPropertyBlock (no per-frame mesh upload)
+        private void ApplyBlock()
         {
-            float off = _age * Flow;
-            for (int i = 0; i < _uv0.Length; i++) _uv[i] = new Vector2(_uv0[i].x * Tile - off, _uv0[i].y);
-            Mesh.uv = _uv;
+            if (_r == null) return;
+            if (_mpb == null) _mpb = new MaterialPropertyBlock();
+            _r.GetPropertyBlock(_mpb);
+            _mpb.SetVector("_MainTex_ST", new Vector4(Tile, 1f, -_age * Flow, 0f));
+            if (SharedMesh)
+            {
+                if (_hasTint) { Color t = _tint0; t.a *= Fade01; _mpb.SetColor("_TintColor", t); }
+                else _mpb.SetColor("_Color", new Color(1f, 1f, 1f, Fade01));
+                _lastFade = Fade01;
+            }
+            _r.SetPropertyBlock(_mpb);
         }
         private void Apply(float rev, float k)
         {
@@ -13024,8 +13094,8 @@ namespace DragonsAltarCombat
         {
             if (Mesh == null) return;
             _age += Time.deltaTime;
-            if (Flow != 0f) ApplyUv();
-            if (!ColorsOwned) return;
+            if (Flow != 0f || (SharedMesh && Fade01 != _lastFade)) ApplyBlock();
+            if (!ColorsOwned || SharedMesh) return;
             float t = _age - Delay;
             if (t < 0f) { Apply(0f, 1f); return; }
             float rev = Reveal <= 0f ? 1f : Mathf.Clamp01(t / Reveal);
@@ -13039,7 +13109,7 @@ namespace DragonsAltarCombat
             Apply(rev, k);
             if (t >= out0 + Fade) Destroy(gameObject);
         }
-        private void OnDestroy() { if (Mesh != null) Destroy(Mesh); }
+        private void OnDestroy() { if (Mesh != null && !SharedMesh) Destroy(Mesh); }
     }
 
     // v0.25.65 Judgement Cut sphere: a faded, distorted-looking dome that pops in, holds while the cuts land,
@@ -13166,6 +13236,8 @@ namespace DragonsAltarCombat
             _psCount++;
             return _psCount <= 16 ? 1f : _psCount <= 32 ? 0.4f : 0.15f;   // v0.25.167 overlapping casts stay readable (was 24 / 48)
         }
+        private static Gradient _psFade;
+        private static AnimationCurve _psSize;
         private static readonly float[] _flashAt = new float[4];
         private static int _flashIdx;
         private static float _shakeNext;
@@ -13222,13 +13294,17 @@ namespace DragonsAltarCombat
             if (shape == ParticleSystemShapeType.Cone) sh.angle = 4f;
             ParticleSystem.ColorOverLifetimeModule col = ps.colorOverLifetime;
             col.enabled = true;
-            Gradient g = new Gradient();
-            g.SetKeys(new GradientColorKey[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
-                      new GradientAlphaKey[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(1f, 0.08f), new GradientAlphaKey(0.7f, 0.6f), new GradientAlphaKey(0f, 1f) });
-            col.color = new ParticleSystem.MinMaxGradient(g);
+            if (_psFade == null)   // v0.25.181 (perf): one shared fade gradient + size curve (identical every call)
+            {
+                _psFade = new Gradient();
+                _psFade.SetKeys(new GradientColorKey[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
+                          new GradientAlphaKey[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(1f, 0.08f), new GradientAlphaKey(0.7f, 0.6f), new GradientAlphaKey(0f, 1f) });
+                _psSize = new AnimationCurve(new Keyframe(0f, 0.6f), new Keyframe(0.15f, 1f), new Keyframe(1f, 0.25f));
+            }
+            col.color = new ParticleSystem.MinMaxGradient(_psFade);
             ParticleSystem.SizeOverLifetimeModule sol = ps.sizeOverLifetime;
             sol.enabled = true;
-            sol.size = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(new Keyframe(0f, 0.6f), new Keyframe(0.15f, 1f), new Keyframe(1f, 0.25f)));
+            sol.size = new ParticleSystem.MinMaxCurve(1f, _psSize);
             ParticleSystemRenderer r = go.GetComponent<ParticleSystemRenderer>();
             Material m = additive ? Additive() : Alpha();
             if (m != null) r.sharedMaterial = m;
@@ -13560,6 +13636,12 @@ namespace DragonsAltarCombat
 
         // ------------------------------------------------------------------ v0.25.57 detail layer
         // Camera shake near `pos` (Valheim's own GameCamera.AddShake).
+        private static bool _shakeInit;
+        private static FieldInfo _shakeField;
+        private static PropertyInfo _shakeProp;
+        private static MethodInfo _shakeMethod;
+        private static ParameterInfo[] _shakeParams;
+
         public static void Shake(Vector3 pos, float range, float strength)
         {
             if (!Enabled) return;
@@ -13570,16 +13652,26 @@ namespace DragonsAltarCombat
             range = Mathf.Min(range, 25f);
             try
             {
-                Type gc = DragonCombat.FindTypeCached("GameCamera");
-                if (gc == null) return;
+                // v0.25.181 (perf): reflection looked up once
+                if (!_shakeInit)
+                {
+                    _shakeInit = true;
+                    Type gc0 = DragonCombat.FindTypeCached("GameCamera");
+                    if (gc0 != null)
+                    {
+                        _shakeField = gc0.GetField("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                        _shakeProp = gc0.GetProperty("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                        _shakeMethod = gc0.GetMethod("AddShake", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                        if (_shakeMethod != null) _shakeParams = _shakeMethod.GetParameters();
+                    }
+                }
                 object inst = null;
-                FieldInfo f = gc.GetField("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-                if (f != null) inst = f.GetValue(null);
-                if (inst == null) { PropertyInfo pi = gc.GetProperty("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic); if (pi != null) inst = pi.GetValue(null, null); }
+                if (_shakeField != null) inst = _shakeField.GetValue(null);
+                if (inst == null && _shakeProp != null) inst = _shakeProp.GetValue(null, null);
                 if (inst == null) return;
-                MethodInfo m = gc.GetMethod("AddShake", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                MethodInfo m = _shakeMethod;
                 if (m == null) return;
-                ParameterInfo[] ps = m.GetParameters();
+                ParameterInfo[] ps = _shakeParams;
                 object[] args = new object[ps.Length];
                 for (int i = 0; i < ps.Length; i++)
                 {
@@ -13929,16 +14021,23 @@ namespace DragonsAltarCombat
         // ground under `follow` (stops emitting when it is more than 3.5 m above the ground). Restrained, alpha only.
         public static GameObject GroundDust(Transform follow, float width, Func<bool> keep)
         {
+            return GroundDust(follow, width, keep, 1f);
+        }
+
+        // v0.25.181 strength > 1 = a heavier continuous dirt trail (Crescent Cleave: soil torn up where the blade ploughs)
+        public static GameObject GroundDust(Transform follow, float width, Func<bool> keep, float strength)
+        {
             if (!Enabled || follow == null) return null;
             width = Mathf.Clamp(width, 0.4f, 6f);
+            strength = Mathf.Clamp(strength, 0.3f, 3f);
             DragonVfxLife l = Host(follow.position, 2f, "grounddust");
             l.Follow = follow;
             l.SnapGround = true;
             Color soil = new Color(0.35f, 0.29f, 0.23f, 0.8f);
-            ParticleSystem grit = Particles(l.transform, soil, 0, 22f + width * 6f, 1f, 0.8f, 1.2f, 3f, 0.04f, 0.1f, 1.4f,
+            ParticleSystem grit = Particles(l.transform, soil, 0, (22f + width * 6f) * strength, 1f, 0.8f, 1.2f, 3f * Mathf.Sqrt(strength), 0.04f, 0.1f + 0.04f * (strength - 1f), 1.4f,
                 ParticleSystemShapeType.Circle, width * 0.45f, new Vector3(90f, 0f, 0f), false, false);
             ParticleSystem.ShapeModule gs = grit.shape; gs.arc = 360f;
-            ParticleSystem dust = Particles(l.transform, new Color(0.52f, 0.46f, 0.39f, 0.32f), 0, 5f + width * 1.5f, 1f, 1.6f, 0.2f, 0.7f, 0.6f + width * 0.15f, 1.2f + width * 0.25f, -0.02f,
+            ParticleSystem dust = Particles(l.transform, new Color(0.52f, 0.46f, 0.39f, 0.32f), 0, (5f + width * 1.5f) * strength, 1f, 1.6f, 0.2f, 0.7f, 0.6f + width * 0.15f, 1.2f + width * 0.25f, -0.02f,
                 ParticleSystemShapeType.Circle, width * 0.4f, new Vector3(90f, 0f, 0f), false, false);
             Material sm = Mat(SmokeTex(), false);
             if (sm != null) dust.GetComponent<ParticleSystemRenderer>().sharedMaterial = sm;
@@ -14043,11 +14142,17 @@ namespace DragonsAltarCombat
         // up to both sides and a little dust. Call it per step with short segments.
         public static void Furrow(Vector3 a, Vector3 b, Color c, float width)
         {
+            Furrow(a, b, c, width, 1f);
+        }
+
+        public static void Furrow(Vector3 a, Vector3 b, Color c, float width, float strength)
+        {
             if (!Enabled) return;
+            strength = Mathf.Clamp(strength, 0.5f, 3f);
             CrackLine(a, b, c, Mathf.Clamp(width * 0.3f, 0.12f, 0.5f), 3.5f);
             // overlapping waves (Ascended fans) share one budget: at most 8 dirt sprays per 0.25 s, the scar always draws
             if (Time.time >= _furrowWindow) { _furrowWindow = Time.time + 0.25f; _furrowCount = 0; }
-            if (++_furrowCount > 8) return;
+            if (++_furrowCount > (strength > 1f ? 12 : 8)) return;
             Vector3 g = GroundPoint(b) + Vector3.up * 0.1f;
             Vector3 f = b - a; f.y = 0f;
             if (f.sqrMagnitude < 0.0001f) f = Vector3.forward;
@@ -14057,12 +14162,12 @@ namespace DragonsAltarCombat
             for (int k = -1; k <= 1; k += 2)
             {
                 // spray thrown sideways-up off each lip of the cut
-                ParticleSystem ps = Particles(l.transform, soil, 10, 0f, 0.06f, 0.9f, 2.5f, 4.5f, 0.05f, 0.12f, 1.5f,
+                ParticleSystem ps = Particles(l.transform, soil, Mathf.RoundToInt(10 * strength), 0f, 0.06f, 0.9f, 2.5f, 4.5f * Mathf.Sqrt(strength), 0.05f, 0.12f, 1.5f,
                     ParticleSystemShapeType.Cone, 0.15f, new Vector3(-60f, k * 70f, 0f), false, false);
                 ParticleSystem.ShapeModule sh = ps.shape; sh.angle = 20f;
             }
-            Smoke(g, new Color(0.50f, 0.44f, 0.37f, 0.35f), Mathf.Max(0.4f, width * 0.4f), 1.4f, 2);
-            Debris(g, new Color(0.40f, 0.35f, 0.30f, 1f), 1, 4f, 0.16f, 1.4f);
+            Smoke(g, new Color(0.50f, 0.44f, 0.37f, 0.35f), Mathf.Max(0.4f, width * 0.4f), 1.4f, Mathf.RoundToInt(2 * strength));
+            Debris(g, new Color(0.40f, 0.35f, 0.30f, 1f), Mathf.RoundToInt(1 * strength + 0.5f), 4f, 0.16f, 1.4f);
         }
 
         // Rising embers / sparks over an area for a while (burning ground, auras).
@@ -14847,6 +14952,12 @@ namespace DragonsAltarCombat
         // roll 90 = vertical blade.
         public static void CrescentBlade(Transform parent, Color c, float radius, float width, float roll)
         {
+            CrescentBlade(parent, c, radius, width, roll, true);
+        }
+
+        // wakes false = a stationary flash (the trails would draw nothing): v0.25.181 Eclipse / Halfmoon perf
+        public static void CrescentBlade(Transform parent, Color c, float radius, float width, float roll, bool wakes)
+        {
             if (!Enabled || parent == null) return;
             // v0.25.67 (user: "do you know what a Getsuga Tenshou is?"): a solid crescent wave of energy.
             // v0.25.69 (user: sleek, sharp, dangerous; the cutting edge must face where it travels): the crescent lies in the
@@ -14866,27 +14977,31 @@ namespace DragonsAltarCombat
             // cross-section - broad translucent shoulder with broken, flowing wind texture (scenery stays visible
             // through it), ONE hairline luminous cutting edge on the convex leading side, feathered wakes streaming off
             // the back. Holds its shape from front, side, above and behind (cupped 3-row mesh, both faces).
-            Color body = Color.Lerp(c, new Color(0.84f, 0.90f, 0.96f, 1f), 0.5f); body.a = 0.62f;
-            Color inner = Color.Lerp(c, new Color(0.30f, 0.34f, 0.46f, 1f), 0.45f); inner.a = 0.18f;
+            // v0.25.181 (user): FLAT sharp blade surface (no convex bulge), the skill colour reads through (blue / dark blue),
+            // the bright edge keeps dark colours visible at night; wakes are thin tapered ribbons (no square flags).
+            Color body = Color.Lerp(c, new Color(0.84f, 0.90f, 0.96f, 1f), 0.25f); body.a = 0.72f;
+            Color inner = Color.Lerp(c, new Color(0.30f, 0.34f, 0.46f, 1f), 0.3f); inner.a = 0.22f;
             Material sm = Mat(SlashTex(), false);
             if (sm == null) { GetsugaLayer(parent, body, span, thick, q, 0f, Mat(BladeTex(), false)); }
             else
             {
-                Mesh sh = GetsugaRibbon(span, thick * 1.2f, 0.32f, 0f, body, inner);
-                AttachFlow(parent, q, sh, sm, 0.9f, 2f);
-                Color edgeC = Color.Lerp(c, Color.white, 0.55f); edgeC.a = 0.75f;
-                Mesh ed = GetsugaRibbon(span * 0.98f, Mathf.Max(0.03f, thick * 0.09f), 0f, thick * 0.74f, edgeC, edgeC);
-                AttachFlow(parent, q, ed, Mat(LineTex(), true), 0f, 1f);
+                bool shared;
+                Mesh sh = SharedGetsuga(span, thick * 1.2f, 0f, body, inner, out shared);
+                AttachFlow(parent, q, sh, sm, 0.9f, 2f, shared);
+                Color edgeC = Color.Lerp(c, Color.white, 0.6f); edgeC.a = 0.9f;
+                Mesh ed = SharedGetsuga(span * 0.98f, Mathf.Max(0.03f, thick * 0.09f), thick * 0.74f, edgeC, edgeC, out shared);
+                AttachFlow(parent, q, ed, Mat(LineTex(), true), 0f, 1f, shared);
             }
+            if (!wakes) return;
             float w = span * 0.5f, sag = span * 0.24f;
-            Color wake = Color.Lerp(c, new Color(0.88f, 0.92f, 0.96f, 1f), 0.75f); wake.a = 0.24f;
-            BladeWake(parent, q * new Vector3(0f, sag * 0.5f, 0f), wake, thick * 1.6f);
-            wake.a = 0.12f;
-            BladeWake(parent, q * new Vector3(-w * 0.8f, -sag * 0.2f, -span * 0.03f), wake, thick * 0.7f);
-            BladeWake(parent, q * new Vector3(w * 0.8f, -sag * 0.2f, -span * 0.03f), wake, thick * 0.7f);
-            wake.a = 0.08f;   // feathered wisps peeling off the shoulder
-            BladeWake(parent, q * new Vector3(-w * 0.4f, sag * 0.25f, -span * 0.02f), wake, thick * 0.45f);
-            BladeWake(parent, q * new Vector3(w * 0.4f, sag * 0.25f, -span * 0.02f), wake, thick * 0.45f);
+            Color wake = Color.Lerp(c, new Color(0.88f, 0.92f, 0.96f, 1f), 0.5f); wake.a = 0.3f;
+            BladeWake(parent, q * new Vector3(0f, sag * 0.5f, 0f), wake, thick * 0.4f);
+            wake.a = 0.2f;
+            BladeWake(parent, q * new Vector3(-w * 0.8f, -sag * 0.2f, -span * 0.03f), wake, thick * 0.22f);
+            BladeWake(parent, q * new Vector3(w * 0.8f, -sag * 0.2f, -span * 0.03f), wake, thick * 0.22f);
+            wake.a = 0.14f;   // feathered wisps peeling off the shoulder
+            BladeWake(parent, q * new Vector3(-w * 0.4f, sag * 0.25f, -span * 0.02f), wake, thick * 0.15f);
+            BladeWake(parent, q * new Vector3(w * 0.4f, sag * 0.25f, -span * 0.02f), wake, thick * 0.15f);
         }
 
         // v0.25.180 the Getsuga crescent outline (same curve as GetsugaLayer) as a 3-row cupped ribbon: tips swept back,
@@ -14931,10 +15046,28 @@ namespace DragonsAltarCombat
             return m;
         }
 
+        // v0.25.181 (perf): identical crescent ribbons are built once and shared (colours baked in; fade/scroll per renderer)
+        private static readonly Dictionary<string, Mesh> _getsugaCache = new Dictionary<string, Mesh>();
+        private static Mesh SharedGetsuga(float span, float thick, float shift, Color outer, Color inner, out bool shared)
+        {
+            string key = span.ToString("0.00") + "|" + thick.ToString("0.000") + "|" + shift.ToString("0.000") + "|" + ColorUtility.ToHtmlStringRGBA(outer) + ColorUtility.ToHtmlStringRGBA(inner);
+            Mesh m;
+            if (_getsugaCache.TryGetValue(key, out m) && m != null) { shared = true; return m; }
+            m = GetsugaRibbon(span, thick, 0f, shift, outer, inner);
+            if (_getsugaCache.Count < 96) { _getsugaCache[key] = m; shared = true; }
+            else shared = false;
+            return m;
+        }
+
         private static void AttachFlow(Transform parent, Quaternion rot, Mesh mesh, Material mat, float flow, float tile)
         {
+            AttachFlow(parent, rot, mesh, mat, flow, tile, false);
+        }
+
+        private static void AttachFlow(Transform parent, Quaternion rot, Mesh mesh, Material mat, float flow, float tile, bool shared)
+        {
             if (mesh == null) return;
-            if (mat == null) { UnityEngine.Object.Destroy(mesh); return; }
+            if (mat == null) { if (!shared) UnityEngine.Object.Destroy(mesh); return; }
             GameObject go = new GameObject("IH_SlashSurface");
             go.transform.SetParent(parent, false);
             go.transform.localRotation = rot;
@@ -14944,7 +15077,7 @@ namespace DragonsAltarCombat
             r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             r.receiveShadows = false;
             DragonCutRibbon cr = go.AddComponent<DragonCutRibbon>();
-            cr.Mesh = mesh; cr.ColorsOwned = false; cr.Flow = flow; cr.Tile = tile;
+            cr.Mesh = mesh; cr.ColorsOwned = false; cr.Flow = flow; cr.Tile = tile; cr.SharedMesh = shared;
         }
 
         // A short glowing wake left behind a moving blade point (only shows while the carrier travels).
@@ -14957,12 +15090,13 @@ namespace DragonsAltarCombat
             go.transform.SetParent(parent, false);
             go.transform.localPosition = local;
             TrailRenderer tr = go.AddComponent<TrailRenderer>();
-            tr.time = 0.35f;
-            tr.minVertexDistance = 0.08f;
-            tr.widthMultiplier = Mathf.Max(0.05f, width);
-            AnimationCurve wc = new AnimationCurve();
-            wc.AddKey(0f, 1f); wc.AddKey(1f, 0f);
+            tr.time = 0.32f;
+            tr.minVertexDistance = 0.06f;
+            tr.widthMultiplier = Mathf.Max(0.03f, width);
+            AnimationCurve wc = new AnimationCurve();   // v0.25.181 tapered at BOTH ends: no square head on the wake
+            wc.AddKey(0f, 0.1f); wc.AddKey(0.18f, 1f); wc.AddKey(1f, 0f);
             tr.widthCurve = wc;
+            tr.numCornerVertices = 4;
             Gradient g = new Gradient();
             Color c0 = c; Color c1 = c; c1.a = 0f;
             g.SetKeys(new GradientColorKey[] { new GradientColorKey(c0, 0f), new GradientColorKey(c1, 1f) },
@@ -15102,6 +15236,13 @@ namespace DragonsAltarCombat
         // no cage, no globe shell. Visual only (own RNG, gameplay randomness untouched).
         public static void JudgementSphere(Vector3 center, float radius, float hold)
         {
+            JudgementSphere(center, radius, hold, new Color(0.32f, 0.62f, 1f, 1f));
+        }
+
+        // v0.25.181 (user: restore visibility): denser, wider, brighter cuts sitting ON the sphere radius so they visibly
+        // form the Judgement Cut ball at gameplay distance; tint = Sword Master blue (Normal) / dark blue (Ascended).
+        public static void JudgementSphere(Vector3 center, float radius, float hold, Color tint)
+        {
             if (!Enabled) return;
             Material shoulder = Mat(SlashTex(), false), edge = Mat(LineTex(), true);
             if (shoulder == null) return;
@@ -15109,19 +15250,19 @@ namespace DragonsAltarCombat
             hold = Mathf.Clamp(hold, 0.1f, 1.2f);
             DragonVfxLife host = Host(center, hold + 1.2f, "judgement_cut");
             Transform root = host.transform;
-            Color silver = new Color(0.80f, 0.86f, 0.96f, 0.42f);
-            Color indigo = new Color(0.26f, 0.28f, 0.58f, 0.30f);
-            Color hair = new Color(0.86f, 0.92f, 1f, 0.85f);
-            int arcs = 7;
+            Color silver = Color.Lerp(tint, new Color(0.86f, 0.90f, 0.98f, 1f), 0.45f); silver.a = 0.7f;
+            Color indigo = Color.Lerp(tint, new Color(0.10f, 0.10f, 0.30f, 1f), 0.4f); indigo.a = 0.42f;
+            Color hair = Color.Lerp(tint, Color.white, 0.7f); hair.a = 1f;
+            int arcs = 10;
             for (int k = 0; k < arcs; k++)
             {
                 Quaternion q = VRot();
-                float rr = r * Mathf.Lerp(0.72f, 1.04f, VR());
-                float span = Mathf.Lerp(95f, 165f, VR());
+                float rr = r * Mathf.Lerp(0.9f, 1.03f, VR());
+                float span = Mathf.Lerp(110f, 170f, VR());
                 float delay = VR() * 0.05f;   // all arcs land inside the simultaneous hit window
                 float shear = (VR() < 0.5f ? -1f : 1f) * Mathf.Lerp(35f, 70f, VR());
-                CutRibbon(root, q, Vector3.zero, ArcRibbon(rr, span, rr * 0.17f, 0.35f, 1f, silver, indigo, 18, k), shoulder, delay, hold, 0.35f, 0.5f, shear, 2f);
-                CutRibbon(root, q, Vector3.zero, ArcRibbon(rr, span * 0.97f, Mathf.Max(0.03f, rr * 0.022f), 0f, 0.5f, hair, hair, 18, k + 31), edge, delay, hold, 0.28f, 0f, shear, 1f);
+                CutRibbon(root, q, Vector3.zero, ArcRibbon(rr, span, rr * 0.22f, 0f, 1f, silver, indigo, 22, k), shoulder, delay, hold, 0.35f, 0.5f, shear, 2f);
+                CutRibbon(root, q, Vector3.zero, ArcRibbon(rr, span * 0.97f, Mathf.Max(0.05f, rr * 0.035f), 0f, 0.5f, hair, hair, 22, k + 31), edge, delay, hold, 0.28f, 0f, shear, 1f);
             }
             // sparse interior hairline cuts (near-straight: a tiny span on a big radius, shifted through the volume)
             for (int k = 0; k < 4; k++)
@@ -15164,6 +15305,60 @@ namespace DragonsAltarCombat
             Color mote = Color.Lerp(c, Color.white, 0.5f); mote.a = 0.6f;
             Particles(l.transform, mote, 8, 0f, 0.3f, 1.4f, 0.2f, 0.6f, 0.04f, 0.08f, -0.2f,
                 ParticleSystemShapeType.Circle, radius * 0.6f, new Vector3(90f, 0f, 0f), false, true);
+            // v0.25.181 (user): a clearly visible but soft circular light pulse expanding over the area (no flash)
+            Vector3 g = GroundPoint(pos) + Vector3.up * 0.09f;
+            Color rc = Color.Lerp(c, Color.white, 0.25f); rc.a = 0.42f;
+            DragonMeshFx ring = MeshFx(g, Quaternion.identity, true, Mat(SoftRingTex(), true), rc, seconds + 0.35f); if (ring != null) ring.Conform = true;
+            if (ring != null) { ring.FadeIn = 0.06f; ring.ScaleFrom = Vector3.one * radius * 0.35f; ring.ScaleTo = Vector3.one * radius * 2.05f; ring.ScaleTime = seconds; }
+        }
+
+        private static Texture2D _softRingTex;
+        // smooth round band with a soft inner trail (healing / buff pulse) - no hard edge, no glare centre
+        private static Texture2D SoftRingTex()
+        {
+            if (_softRingTex == null) _softRingTex = MakeTex(128, 128, delegate(float u, float v)
+            {
+                float d = Rad(u, v);
+                if (d >= 1f) return 0f;
+                float band = Mathf.Exp(-Mathf.Pow((d - 0.88f) / 0.06f, 2f));
+                float trail = Mathf.Clamp01((d - 0.55f) / 0.33f) * (d < 0.88f ? 0.22f : 0f);
+                return Mathf.Clamp01(band * 0.9f + trail);
+            }, TextureWrapMode.Clamp);
+            return _softRingTex;
+        }
+
+        // v0.25.181 (user, Mercenary: chaos and physical destruction): branching fractures + broken ground + irregular rubble
+        // + a forceful dirt burst. Cosmetic only (no terrain change, no spikes, no mushroom cloud).
+        public static void Shatter(Vector3 pos, float radius, float shake)
+        {
+            if (!Enabled) return;
+            radius = Mathf.Clamp(radius, 0.8f, 16f);
+            Vector3 g = GroundPoint(pos);
+            DirtBurst(g, radius, 1.5f);
+            int mains = Mathf.Clamp(Mathf.RoundToInt(5 + radius * 0.6f), 5, 12);
+            Color crack = new Color(0.10f, 0.08f, 0.07f, 1f);
+            for (int i = 0; i < mains; i++)
+            {
+                float ang = (i + VR() * 0.6f) / mains * Mathf.PI * 2f;
+                Vector3 dir = new Vector3(Mathf.Cos(ang), 0f, Mathf.Sin(ang));
+                float len = radius * Mathf.Lerp(0.6f, 1.05f, VR());
+                Vector3 mid = g + dir * len * 0.5f + new Vector3(dir.z, 0f, -dir.x) * (VR() - 0.5f) * len * 0.2f;
+                Vector3 end = g + dir * len;
+                float w = Mathf.Clamp(radius * 0.06f, 0.12f, 0.5f);
+                CrackLine(g, mid, crack, w, 4.5f);
+                CrackLine(mid, end, crack, w * 0.7f, 4.5f);
+                // one or two side branches off the middle of each main fracture
+                int br = VR() < 0.5f ? 1 : 2;
+                for (int b = 0; b < br; b++)
+                {
+                    float side = (b == 0 ? 1f : -1f) * Mathf.Lerp(25f, 55f, VR());
+                    Vector3 bd = Quaternion.Euler(0f, side, 0f) * dir;
+                    CrackLine(mid, mid + bd * len * Mathf.Lerp(0.25f, 0.45f, VR()), crack, w * 0.5f, 4f);
+                }
+            }
+            Debris(g, new Color(0.38f, 0.33f, 0.28f, 1f), Mathf.RoundToInt(8 + radius * 1.8f), 7f + radius * 0.8f, 0.22f + radius * 0.02f, 2.6f);
+            Scorch(g, radius * 0.6f, 6f);
+            if (shake > 0f) Shake(g, 20f + radius * 2f, shake);
         }
 
         // ------------------------------------------------------------------ v0.25.180 relic materials (Goddess Relic, Judgement
@@ -15415,7 +15610,7 @@ namespace DragonsAltarCombat
             GameObject go = new GameObject("IH_CrescentFlash");
             go.transform.position = pos;
             go.transform.rotation = Quaternion.LookRotation(f.normalized, Vector3.up);
-            CrescentBlade(go.transform, c, radius, width, roll);
+            CrescentBlade(go.transform, c, radius, width, roll, false);   // v0.25.181 stationary: no trail renderers
             DragonFadeOut fo = go.AddComponent<DragonFadeOut>();
             fo.Hold = hold; fo.Fade = fade; fo.Grow = grow;
             return go;

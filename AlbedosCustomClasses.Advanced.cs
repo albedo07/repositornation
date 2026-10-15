@@ -455,6 +455,7 @@ namespace AlbedosCustomClassesAdvanced
         private ConfigEntry<float> _grandCrossWidth;
         private ConfigEntry<float> _grandCrossRange;
         private ConfigEntry<float> _grandCrossTravelTime;
+        private ConfigEntry<float> _gcPushSmall, _gcPushBig, _gcPushBoss, _gcAscPushSmall, _gcAscPushBig, _gcAscPushBoss;   // v0.25.181
         private ConfigEntry<float> _grandCrossWindup;
         private ConfigEntry<float> _grandCrossTickInterval;
         private ConfigEntry<float> _grandCrossSpiritDot;
@@ -1117,6 +1118,13 @@ namespace AlbedosCustomClassesAdvanced
             _grandCrossWidth = Config.Bind("Priest Grand Cross", "Width", 7f, "Full width of the travelling X.");
             _grandCrossRange = Config.Bind("Priest Grand Cross", "Range", 25f, "Ghost projectile travel distance.");
             _grandCrossTravelTime = Config.Bind("Priest Grand Cross", "TravelTime", 6f, "Time to complete the full configured range.");
+            // v0.25.181 (user): Grand Cross carries enemies like Crescent Cleave (push along its travel, % of its speed)
+            _gcPushSmall = Config.Bind("Priest Grand Cross", "PushSmallPercent_v025181", 100f, "Normal: Small enemies hit by the cross are carried along its travel at this % of its speed (100 = they ride the cross).");
+            _gcPushBig = Config.Bind("Priest Grand Cross", "PushBigPercent_v025181", 65f, "Normal: same for Big enemies.");
+            _gcPushBoss = Config.Bind("Priest Grand Cross", "PushBossPercent_v025181", 35f, "Normal: same for Bosses.");
+            _gcAscPushSmall = Config.Bind("Priest Grand Cross Ascended", "PushSmallPercent_v025181", 100f, "Ascended: Small enemies hit by the cross are carried along its travel at this % of its speed.");
+            _gcAscPushBig = Config.Bind("Priest Grand Cross Ascended", "PushBigPercent_v025181", 65f, "Ascended: same for Big enemies.");
+            _gcAscPushBoss = Config.Bind("Priest Grand Cross Ascended", "PushBossPercent_v025181", 35f, "Ascended: same for Bosses.");
             _grandCrossWindup = Config.Bind("Priest Grand Cross", "Windup", 0.6f, "Two fast sword slashes form the travelling X.");
             _grandCrossTickInterval = Config.Bind("Priest Grand Cross", "PersistentHitInterval", 0.5f, "Persistent Damage interval while an enemy remains inside the travelling X.");
             _grandCrossSpiritDot = Config.Bind("Priest Grand Cross", "SpiritDotPerSecond", 7f, "Spirit Burn damage per second.");
@@ -1271,6 +1279,7 @@ namespace AlbedosCustomClassesAdvanced
                 return;
 
             IhEnsureCommands();
+            IhUpdateHolyParryIndicator(player);
 
             // While a hotbar key is being captured, Esc / the Skillbook key only serve the capture.
             // Combat runtime ticking below continues normally.
@@ -1748,7 +1757,7 @@ namespace AlbedosCustomClassesAdvanced
                 if (_enableVfx.Value)
                 {
                     Vector3 jp = center; float jr = sphereR;
-                    DragonCombat.RunVfx(delegate { DragonVfx.JudgementSphere(jp, jr, 0.45f); });   // v0.25.65 Vergil's faded sphere
+                    Color jc = IhSmColor("blade_storm"); DragonCombat.RunVfx(delegate { DragonVfx.JudgementSphere(jp, jr, 0.45f, jc); });   // v0.25.65 Vergil's faded sphere
                     if (!DragonVfx.Enabled) StartCoroutine(AnimateJudgementSphereCut(center, sphereR, 0));   // v0.25.180 the cut volume carries the arcs
                 }
             }
@@ -2242,6 +2251,12 @@ namespace AlbedosCustomClassesAdvanced
         }
 
         // Ghost laser wave: passes terrain (Ghost), pierces enemies, each enemy hit once per wave.
+        // v0.25.181 (user): Sword Master magic = blue (Normal) / dark blue (Ascended); the slash edge stays bright so the dark
+        // blue reads at night.
+        private static readonly Color IhSmBlue = new Color(0.32f, 0.62f, 1f, 1f);
+        private static readonly Color IhSmDeep = new Color(0.10f, 0.20f, 0.72f, 1f);
+        private Color IhSmColor(string id) { return IsAscendedSkill(id) ? IhSmDeep : IhSmBlue; }
+
         private IEnumerator GhostSlashWave(Player player, Vector3 origin, Vector3 forward, float range, float width, float speed, DamageConfig damage, float multiplier, float heightScale, string stunAttack = "Attack 1")
         {
             return GhostSlashWave(player, origin, forward, range, width, speed, damage, multiplier, heightScale, false, false, stunAttack);
@@ -2266,7 +2281,7 @@ namespace AlbedosCustomClassesAdvanced
             {
                 visual = new GameObject("DragonsAltarMoonlightGhost");
                 GameObject ghostVis2 = visual;
-                float gw2 = width; Color gcol = halfmoon ? new Color(0.70f, 0.95f, 1f, 1f) : DragonVfx.Steel;
+                float gw2 = width; Color gcol = IhSmColor(halfmoon ? "halfmoon_slash" : "moonlight_splitter");   // v0.25.181 blue / dark blue
                 if (halfmoon)
                     DragonCombat.RunVfx(delegate { DragonVfx.CrescentBlade(ghostVis2.transform, gcol, gw2 * 0.6f, gw2 * 0.14f * heightScale, 0f); });   // v0.25.55 / v0.25.63 moon crescent; v0.25.167 glow motes + sparkle trail removed (the blade carries its own wind wake)
                 else
@@ -2279,11 +2294,11 @@ namespace AlbedosCustomClassesAdvanced
                     DragonCombat.RunVfx(delegate
                     {
                         // v0.25.167 (user: no glowing layers): one lunar blade (core/rim blended), no glow motes
-                        DragonVfx.CrescentBlade(ghostVis2.transform, Color.Lerp(moonCore, moonRim, 0.35f), gw2 * 0.7f, gw2 * 0.18f * hs, 0f);
+                        DragonVfx.CrescentBlade(ghostVis2.transform, IhSmDeep, gw2 * 0.7f, gw2 * 0.18f * hs, 0f);
                         GameObject echo = new GameObject("IH_MoonEcho");
                         echo.transform.SetParent(ghostVis2.transform, false);
                         echo.transform.localPosition = new Vector3(0f, 0f, -0.9f * hs);
-                        DragonVfx.CrescentBlade(echo.transform, new Color(0.45f, 0.50f, 0.95f, 0.55f), gw2 * 0.55f, gw2 * 0.08f * hs, 0f);
+                        DragonVfx.CrescentBlade(echo.transform, new Color(IhSmDeep.r, IhSmDeep.g, IhSmDeep.b, 0.6f), gw2 * 0.55f, gw2 * 0.08f * hs, 0f);
                     });
                 }
                 if (!DragonVfx.Enabled) line = visual.AddComponent<LineRenderer>();
@@ -2371,7 +2386,7 @@ namespace AlbedosCustomClassesAdvanced
             float height = Mathf.Max(1f, DragonCombat.M(_crescentSlashHeight.Value));
             if (_enableVfx.Value)
             {
-                Vector3 co = origin + Vector3.up * 0.3f, cf = forward; float ch = height; Color ccol = ascended ? new Color(1f, 0.50f, 0.18f, 1f) : new Color(0.55f, 0.82f, 1f, 1f);
+                Vector3 co = origin + Vector3.up * 0.3f, cf = forward; float ch = height; Color ccol = ascended ? IhSmDeep : IhSmBlue;
                 DragonCombat.RunVfx(delegate { DragonVfx.SlashArc(co, cf, Mathf.Max(1.5f, ch * 0.7f), 150f, ccol, Mathf.Max(0.5f, ch * 0.18f), 0.5f, -90f); });   // v0.25.59 the overhead cut that launches the wave
             }
             float travelTime = Mathf.Max(0.20f, _crescentTravelTime.Value);
@@ -2391,11 +2406,11 @@ namespace AlbedosCustomClassesAdvanced
                 ccBlade = new GameObject("IH_CrescentWave");
                 ccBlade.transform.position = origin;
                 ccBlade.transform.rotation = Quaternion.LookRotation(forward, Vector3.up);
-                GameObject ccb = ccBlade; float cch = height; Color ccc = ascended ? DragonVfx.Ember : DragonVfx.Steel;
+                GameObject ccb = ccBlade; float cch = height; Color ccc = ascended ? IhSmDeep : IhSmBlue;   // v0.25.181 (the Ascended fire trail keeps its fire)
                 // v0.25.63 (user ref): the crescent's centre rides AT ground level, so half of it is underground and it
                 // reads as a blade of light tearing up out of the earth.
                 DragonCombat.RunVfx(delegate { DragonVfx.CrescentBlade(ccb.transform, ccc, cch * 0.95f, Mathf.Max(0.35f, cch * 0.16f), 90f); });   // v0.25.167 no glow motes
-                float ccw = width; DragonCombat.RunVfx(delegate { DragonVfx.GroundDust(ccb.transform, Mathf.Clamp(ccw * 0.35f, 0.6f, 2.5f), delegate { return ccb != null; }); });   // v0.25.169 disturbed dirt + dust following the half-buried wave
+                float ccw = width; DragonCombat.RunVfx(delegate { DragonVfx.GroundDust(ccb.transform, Mathf.Clamp(ccw * 0.5f, 1f, 3.5f), delegate { return ccb != null; }, 2f); });   /* v0.25.181 heavier continuous dirt trail */   // v0.25.169 disturbed dirt + dust following the half-buried wave
             }
             while (elapsed <= travelTime && player != null)
             {
@@ -2411,9 +2426,9 @@ namespace AlbedosCustomClassesAdvanced
                     if (ccDist >= ccNextRock)
                     {
                         // v0.25.168 (user): the blade ploughs half underground - a torn furrow with dirt flicked up, no spikes
-                        Vector3 rp = point, rprev = point - forward * Mathf.Min(1.2f, ccDist + 0.01f); float rw = width; Color rc = ascended ? DragonVfx.Ember : DragonVfx.Steel;
-                        ccNextRock = ccDist + 1.2f;
-                        DragonCombat.RunVfx(delegate { DragonVfx.Furrow(rprev, rp, rc, rw); });
+                        Vector3 rp = point, rprev = point - forward * Mathf.Min(1.2f, ccDist + 0.01f); float rw = width; Color rc = ascended ? DragonVfx.Ember : new Color(0.40f, 0.34f, 0.28f, 1f);
+                        ccNextRock = ccDist + 0.8f;   // v0.25.181 denser torn soil + small debris along the cut
+                        DragonCombat.RunVfx(delegate { DragonVfx.Furrow(rprev, rp, rc, rw, 2f); });
                     }
                 }
                 Collider[] hits = Physics.OverlapBox(center, new Vector3(width * 0.5f, height * 0.5f, Mathf.Max(0.5f, DragonCombat.M(_crescentHitDepth.Value)) * 0.5f), Quaternion.LookRotation(forward, Vector3.up));   // v0.25.175 depth configurable (was 2.5 m)
@@ -2460,6 +2475,34 @@ namespace AlbedosCustomClassesAdvanced
         // Obstacle-checked (no wall penetration, no teleport), owner-side only, at most ONCE per target per frame.
         private const float CleaveFrontGap = 0.9f;
         private static readonly Dictionary<int, int> _cleavePullFrame = new Dictionary<int, int>();
+        // v0.25.181: the same carry as CleavePull with explicit percentages (Grand Cross). front = the point the target is
+        // carried up to (kept inside the moving hitbox); obstacles, remote ownership and per-frame dedupe as Crescent.
+        private void CarryPush(Character target, Vector3 front, Vector3 forward, float speed, int solidMask, float pctSmall, float pctBig, float pctBoss)
+        {
+            if (target == null || target.IsDead()) return;
+            int id = target.GetInstanceID(), frame;
+            if (_cleavePullFrame.TryGetValue(id, out frame) && frame == Time.frameCount) return;
+            _cleavePullFrame[id] = Time.frameCount;
+            if (_cleavePullFrame.Count > 256) _cleavePullFrame.Clear();
+            float pct = target.IsBoss() ? pctBoss : DragonCombat.IsSmallEnemy(target) ? pctSmall : pctBig;
+            if (pct <= 0f || speed <= 0f) return;
+            forward.y = 0f;
+            if (forward.sqrMagnitude < 0.0001f) return;
+            forward.Normalize();
+            float step = speed * Mathf.Clamp(pct, 0f, 100f) / 100f * Time.deltaTime;
+            try
+            {
+                ZNetView nv = target.GetComponent<ZNetView>();
+                if (nv != null && nv.IsValid() && !nv.IsOwner())
+                {
+                    ForwardCleavePull(nv, front, forward, solidMask, step);
+                    return;
+                }
+                CleavePullStep(target, front, forward, solidMask, step);
+            }
+            catch (Exception) { }
+        }
+
         private void CleavePull(Character target, Vector3 wavePoint, Vector3 forward, float waveSpeed, int solidMask, bool ascended)
         {
             if (target == null || target.IsDead()) return;
@@ -2848,8 +2891,8 @@ namespace AlbedosCustomClassesAdvanced
                 {
                     Vector3 side = Vector3.Cross(Vector3.up, dir).normalized * hailRadius * ((i % 2 == 0) ? 1f : -1f);
                     StartCoroutine(AnimateSeveredHorizonLine(p + Vector3.up * 1.4f + side, p + Vector3.up * 0.2f - side, hailRadius, 0.1f));
-                    Vector3 hp = p + Vector3.up * 0.8f; float hr = hailRadius;
-                    DragonCombat.RunVfx(delegate { DragonVfx.SlashStreaks(hp, new Color(0.55f, 0.82f, 1f, 1f), hr * 1.4f, 3, 0.25f); DragonVfx.SlashArc(hp, UnityEngine.Random.onUnitSphere, hr * 1.2f, 160f, new Color(0.55f, 0.82f, 1f, 1f), hr * 0.3f, 0.3f, UnityEngine.Random.Range(-60f, 60f)); DragonVfx.Burst(hp, new Color(0.45f, 0.78f, 1f, 1f), 10, 6f, 0.2f, 0.3f, 0f); });   // v0.25.58
+                    Vector3 hp = p + Vector3.up * 0.8f; float hr = hailRadius; Color hcolSm = IhSmColor("frenzied_charge");
+                    DragonCombat.RunVfx(delegate { DragonVfx.SlashStreaks(hp, hcolSm, hr * 1.4f, 3, 0.25f); DragonVfx.SlashArc(hp, UnityEngine.Random.onUnitSphere, hr * 1.2f, 160f, hcolSm, hr * 0.3f, 0.3f, UnityEngine.Random.Range(-60f, 60f)); DragonVfx.Burst(hp, new Color(0.45f, 0.78f, 1f, 1f), 10, 6f, 0.2f, 0.3f, 0f); });   // v0.25.58
                 }
                 if (i + 1 < count) yield return new WaitForSeconds(Mathf.Max(0.05f, _frenzyHailInterval.Value));
             }
@@ -2929,11 +2972,11 @@ namespace AlbedosCustomClassesAdvanced
             {
                 StartCoroutine(AnimateRing(player.transform.position + Vector3.up * 0.9f, 0.6f, radius, 0.32f, new Color(0.70f, 0.86f, 1f, 0.95f), 0.20f));
                 StartCoroutine(AnimateTickRing(player.transform.position + Vector3.up * 1.2f, 0.4f, radius * 0.92f, 0.38f, new Color(0.55f, 0.40f, 0.95f, 0.85f), 0.12f));
-                Vector3 ep = player.transform.position; float er = radius;
+                Vector3 ep = player.transform.position; float er = radius; Color ecol = IhSmColor("eclipse");   // v0.25.181
                 DragonCombat.RunVfx(delegate
                 {
                     DragonVfx.SlashStreaks(ep + Vector3.up * 1.2f, new Color(0.62f, 0.50f, 1f, 1f), er, 6, 0.45f);   // v0.25.58 eclipse cuts (v0.25.180 sparser: gaps around the character)
-                    DragonVfx.SlashArc(ep + Vector3.up * 1f, Vector3.forward, er * 0.9f, 360f, new Color(0.62f, 0.50f, 1f, 1f), er * 0.15f, 0.55f, 0f);   // v0.25.59
+                    DragonVfx.SlashArc(ep + Vector3.up * 1f, Vector3.forward, er * 0.9f, 360f, ecol, er * 0.15f, 0.55f, 0f);   // v0.25.59
                     DragonVfx.SlashArc(ep + Vector3.up * 1.4f, Vector3.right, er * 0.7f, 360f, new Color(0.80f, 0.85f, 1f, 1f), er * 0.1f, 0.5f, 12f);
                     DragonVfx.Burst(ep + Vector3.up * 1f, new Color(0.70f, 0.74f, 0.95f, 1f), 18, 10f, 0.2f, 0.5f, 0f);   // v0.25.180 trailing wind specks, no flare
                     DragonVfx.Gust(ep + Vector3.up * 0.4f, Vector3.forward, er);
@@ -2966,7 +3009,7 @@ namespace AlbedosCustomClassesAdvanced
             // v0.25.85 (user): you launch and spiral upward, dragging Small and Big enemies up with you (never bosses),
             // crescents spiralling around you; the second afterimage hails at the top. Launch fall rule protects the fall.
             StartCoroutine(EclipseLaunch(player, radius));
-            Color vio = new Color(0.62f, 0.50f, 1f, 1f);
+            Color vio = IhSmColor("eclipse");   // v0.25.181
             for (int i = 0; i < 10; i++)
             {
                 if (player == null || player.IsDead()) yield break;
@@ -3086,7 +3129,7 @@ namespace AlbedosCustomClassesAdvanced
             Vector3 c = player.transform.position;
             if (_enableVfx.Value)
             {
-                Color vio = new Color(0.62f, 0.50f, 1f, 1f);
+                Color vio = IhSmColor("eclipse");   // v0.25.181
                 for (int i = 0; i < 12; i++)
                 {
                     Vector2 rp = UnityEngine.Random.insideUnitCircle * radius * 0.85f;
@@ -3121,9 +3164,12 @@ namespace AlbedosCustomClassesAdvanced
             if (ownerField == null || velField == null) yield break;
             HashSet<int> reflected = new HashSet<int>();
             float end = Time.time + window;
+            UnityEngine.Object[] list = null;
+            int scan = 0;
             while (Time.time < end && player != null && !player.IsDead())
             {
-                UnityEngine.Object[] list = UnityEngine.Object.FindObjectsOfType(_ihProjectileType);
+                // v0.25.181 (perf): full scene scan every 2nd frame; the frame in between re-checks the same projectiles
+                if (list == null || (scan++ & 1) == 0) list = UnityEngine.Object.FindObjectsOfType(_ihProjectileType);
                 for (int i = 0; i < list.Length; i++)
                 {
                     Component projectile = list[i] as Component;
@@ -3670,7 +3716,7 @@ namespace AlbedosCustomClassesAdvanced
             {
                 StartCoroutine(AnimateRing(center + Vector3.up * 0.08f, Mathf.Max(0.4f, innerVisual), radius, 0.55f, new Color(0.95f, 0.58f, 0.22f, 1f), 0.16f));
                 Vector3 sc = center; float sr = radius; bool firstStamp = innerVisual <= 0.01f;
-                DragonCombat.RunVfx(delegate { DragonVfx.GroundImpact(sc, DragonVfx.Fire, sr, firstStamp ? 1.4f : 0.8f); });   // v0.25.58; v0.25.168 no spikes (Hulk-smash stamp)
+                DragonCombat.RunVfx(delegate { DragonVfx.GroundImpact(sc, DragonVfx.Fire, sr, firstStamp ? 1.4f : 0.8f); DragonVfx.Shatter(sc, sr * 0.8f, 0f); });   /* v0.25.181 branching fractures + rubble */   // v0.25.58; v0.25.168 no spikes (Hulk-smash stamp)
             }
         }
 
@@ -4028,7 +4074,7 @@ namespace AlbedosCustomClassesAdvanced
                 StartCoroutine(AnimateRing(p + Vector3.up * 0.08f, 0.5f, r, 0.46f, new Color(1f, 0.52f, 0.18f, 0.95f), 0.16f));
                 Vector3 rp = p; float rr = r;
                 DragonCombat.RunVfx(delegate { DragonVfx.FireBlast(rp, rr); });
-                DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(rp, DragonVfx.Fire, rr, 1.8f); DragonVfx.Eruption(rp, DragonVfx.Fire, rr * 0.6f, 0f); });   // v0.25.168 one large eruption, no spikes
+                DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(rp, DragonVfx.Fire, rr, 1.8f); DragonVfx.Eruption(rp, DragonVfx.Fire, rr * 0.6f, 0f); DragonVfx.Shatter(rp, rr, 0f); });   // v0.25.168 one large eruption, no spikes; v0.25.181 fractures
             }
         }
         private const float MxSpinAHold = 0.02f, MxSpinALoadEnd = 0.88f, MxSpinAHit = 1.03f, MxSpinAEnd = 1.10f, MxSpinASpeed = 1.2f, MxSpinALoad = 0.55f;
@@ -4180,7 +4226,7 @@ namespace AlbedosCustomClassesAdvanced
             {
                 StartCoroutine(AnimateRing(center + Vector3.up * 0.08f, 0.3f, radius, 0.55f, new Color(1f, 0.46f, 0.16f, 1f), 0.17f));
                 Vector3 bc = center; float br = radius;
-                DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(bc, DragonVfx.Fire, br, 2.2f); DragonVfx.Debris(bc, new Color(0.42f, 0.36f, 0.30f, 1f), 10, 10f, 0.3f, 2.6f); });   // v0.25.58; v0.25.168 Hulk smash, no spikes
+                DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(bc, DragonVfx.Fire, br, 2.2f); DragonVfx.Debris(bc, new Color(0.42f, 0.36f, 0.30f, 1f), 10, 10f, 0.3f, 2.6f); DragonVfx.Shatter(bc, br, 0f); });   // v0.25.58; v0.25.168 Hulk smash, no spikes
             }
             if (!IsAscendedSkill("bonecrusher")) yield break;
             // Ascended: a ground shock 0.5s later (50%), no second jump.
@@ -4197,7 +4243,7 @@ namespace AlbedosCustomClassesAdvanced
             {
                 StartCoroutine(AnimateRing(center + Vector3.up * 0.06f, radius * 0.4f, radius, 0.45f, new Color(0.95f, 0.66f, 0.30f, 0.95f), 0.12f));
                 Vector3 ac = center; float ar = radius;
-                DragonCombat.RunVfx(delegate { DragonVfx.GroundImpact(ac, DragonVfx.Fire, ar, 1.2f); });   // v0.25.58
+                DragonCombat.RunVfx(delegate { DragonVfx.GroundImpact(ac, DragonVfx.Fire, ar, 1.2f); DragonVfx.Shatter(ac, ar * 0.7f, 0f); });   // v0.25.58
             }
         }
 
@@ -4291,12 +4337,16 @@ namespace AlbedosCustomClassesAdvanced
                 StartCoroutine(AnimateTickRing(impact + Vector3.up * 1.2f, 0.3f, radius * 0.7f, 0.35f, new Color(1f, 0.80f, 0.40f, 0.9f), 0.14f));
                 DragonCombat.RunVfx(delegate
                 {
-                    // v0.25.180 compact hot core, dirty outward blast, fragments, fast-decaying smoke (no vanilla fireball / tall column)
-                    DragonVfx.Burst(impact + Vector3.up * 0.6f, new Color(1f, 0.45f, 0.14f, 1f), 40, 12f, 0.35f, 0.7f, 0.6f);
-                    DragonVfx.Burst(impact + Vector3.up * 0.4f, new Color(0.35f, 0.30f, 0.26f, 0.7f), 40, 4f, 1.2f, 1.6f, -0.1f);
-                    DragonVfx.GroundImpact(impact, DragonVfx.Fire, radius, 2f);   // v0.25.58
-                    DragonVfx.FireBlast(impact, radius * 0.45f);
-                    DragonVfx.Flash(impact + Vector3.up, DragonVfx.Fire, 0.9f, radius, 0.2f);
+                    // v0.25.181 (user: must read as an EXPLOSION): brief fiery core + outward fire blast, fast sparks and
+                    // embers, short dirty smoke, debris + fractures. No vanilla fireball, no mushroom / tall column.
+                    DragonVfx.FireBlast(impact, radius * 0.75f);
+                    DragonVfx.Burst(impact + Vector3.up * 0.6f, new Color(1f, 0.55f, 0.18f, 1f), 90, 18f, 0.18f, 0.6f, 0.9f);   // sparks
+                    DragonVfx.Burst(impact + Vector3.up * 0.4f, new Color(1f, 0.38f, 0.10f, 1f), 40, 9f, 0.5f, 0.5f, 0.2f);   // outward fire tongues
+                    DragonVfx.Burst(impact + Vector3.up * 0.4f, new Color(0.30f, 0.26f, 0.23f, 0.7f), 40, 5f, 1.3f, 1.4f, -0.1f);   // dirty smoke
+                    DragonVfx.Embers(impact, DragonVfx.Fire, radius * 0.6f, 1.2f, 50f);
+                    DragonVfx.GroundImpact(impact, DragonVfx.Fire, radius, 2f);
+                    DragonVfx.Shatter(impact, radius * 0.8f, 0f);
+                    DragonVfx.Flash(impact + Vector3.up, DragonVfx.Fire, 0.9f, radius, 0.22f);
                     if (ascended) DragonVfx.Embers(impact, DragonVfx.Fire, radius * 0.8f, Mathf.Max(0.5f, _bombAscFireSeconds.Value), 60f);
                 });
             }
@@ -4331,7 +4381,7 @@ namespace AlbedosCustomClassesAdvanced
                     h.SetAttacker(player);
                     hit[i].Damage(h); DragonCombat.ApplySkillStun(player, hit[i], "punishing_bomb", DragonCombat.StunAttack(k + 2), false, true, null);
                 }
-                if (_enableVfx.Value) { Vector3 ep = p; float er = r; DragonCombat.RunVfx(delegate { DragonVfx.FireBlast(ep, er); DragonVfx.Shake(ep, 10f, 0.3f); }); }
+                if (_enableVfx.Value) { Vector3 ep = p; float er = r; DragonCombat.RunVfx(delegate { DragonVfx.FireBlast(ep, er); DragonVfx.Burst(ep + Vector3.up * 0.4f, new Color(1f, 0.55f, 0.18f, 1f), 30, 12f, 0.15f, 0.5f, 0.9f); DragonVfx.DirtBurst(ep, er, 0.8f); DragonVfx.Shake(ep, 10f, 0.3f); }); }   /* v0.25.181 sparks + dirt per mini blast */
                 yield return new WaitForSeconds(UnityEngine.Random.Range(0.06f, 0.14f));
             }
         }
@@ -4905,8 +4955,8 @@ namespace AlbedosCustomClassesAdvanced
                 {
                     Vector3 side = Vector3.Cross(Vector3.up, direction).normalized * cutRadius * ((i % 2 == 0) ? 1f : -1f);
                     StartCoroutine(AnimateSeveredHorizonLine(point + Vector3.up * 0.5f + side, point - Vector3.up * 0.5f - side, cutRadius, 0.1f));
-                    Vector3 hp = point; float hr = cutRadius;
-                    DragonCombat.RunVfx(delegate { DragonVfx.SlashStreaks(hp, new Color(0.55f, 0.82f, 1f, 1f), hr * 1.4f, 3, 0.25f); DragonVfx.SlashArc(hp, UnityEngine.Random.onUnitSphere, hr * 1.2f, 160f, new Color(0.55f, 0.82f, 1f, 1f), hr * 0.3f, 0.3f, UnityEngine.Random.Range(-60f, 60f)); DragonVfx.Burst(hp, new Color(0.45f, 0.78f, 1f, 1f), 10, 6f, 0.2f, 0.3f, 0f); });
+                    Vector3 hp = point; float hr = cutRadius; Color hcolSm = IhSmColor("halfmoon_slash");
+                    DragonCombat.RunVfx(delegate { DragonVfx.SlashStreaks(hp, hcolSm, hr * 1.4f, 3, 0.25f); DragonVfx.SlashArc(hp, UnityEngine.Random.onUnitSphere, hr * 1.2f, 160f, hcolSm, hr * 0.3f, 0.3f, UnityEngine.Random.Range(-60f, 60f)); DragonVfx.Burst(hp, new Color(0.45f, 0.78f, 1f, 1f), 10, 6f, 0.2f, 0.3f, 0f); });
                 }
                 yield return new WaitForSeconds(0.06f);
             }
@@ -4918,7 +4968,7 @@ namespace AlbedosCustomClassesAdvanced
             {
                 // v0.25.65 (user: Halfmoon is an ultimate - big): a huge bright crescent swept out in front of you
                 Vector3 hf = forward; hf.y = 0f; float hr = radius; Vector3 hp = player.transform.position + Vector3.up * 1.1f + (hf.sqrMagnitude > 0.001f ? hf.normalized : player.transform.forward) * hr * 0.6f;
-                DragonCombat.RunVfx(delegate { DragonVfx.CrescentFlash(hp, hf, DragonVfx.Steel, hr * 0.95f, Mathf.Max(0.6f, hr * 0.16f), 0f, 0.45f, 0.45f, 0.15f); DragonVfx.Shake(hp, 25f, 1f); });
+                DragonCombat.RunVfx(delegate { DragonVfx.CrescentFlash(hp, hf, IhSmColor("halfmoon_slash"), hr * 0.95f, Mathf.Max(0.6f, hr * 0.16f), 0f, 0.45f, 0.45f, 0.15f); DragonVfx.Shake(hp, 25f, 1f); });
                 Vector3 hg = player.transform.position; DragonCombat.RunVfx(delegate { DragonVfx.SlashScar(hg, hf, hr * 0.85f, 150f, DragonVfx.Steel); });   // v0.25.169 the slash scores the ground
             }
             List<Character> targets = GetFrontalTargets(player, player.transform.position + Vector3.up * 0.8f, forward, radius, 170f);
@@ -5293,7 +5343,7 @@ namespace AlbedosCustomClassesAdvanced
                 StartCoroutine(AnimateRing(rupturePoint + Vector3.up * 0.08f, width * 0.5f, endRadius, 0.46f, new Color(1f, 0.52f, 0.18f, 0.95f), 0.16f));
                 Vector3 rp = rupturePoint; float rr = endRadius;   // v0.25.86 (user): no falling guillotine - a big explosion
                 DragonCombat.RunVfx(delegate { DragonVfx.FireBlast(rp, rr); });
-                DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(rp, DragonVfx.Fire, rr, 1.8f); DragonVfx.Eruption(rp, DragonVfx.Fire, rr * 0.6f, 0f); });   // v0.25.168 one large eruption, no spikes   // v0.25.58
+                DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(rp, DragonVfx.Fire, rr, 1.8f); DragonVfx.Eruption(rp, DragonVfx.Fire, rr * 0.6f, 0f); DragonVfx.Shatter(rp, rr, 0f); });   // v0.25.168 one large eruption, no spikes   // v0.25.58
             }
         }
 
@@ -7941,6 +7991,7 @@ namespace AlbedosCustomClassesAdvanced
             }
 
             Dictionary<int, float> nextHitAt = new Dictionary<int, float>();
+            int gcSolid = LayerMask.GetMask("Default", "static_solid", "Default_small", "piece_nonsolid", "terrain", "vehicle", "piece", "viewblock");   // same obstacle mask as Crescent
             Quaternion rotation = Quaternion.LookRotation(forward, crossUp);
             float elapsed = 0f;
 
@@ -7984,6 +8035,11 @@ namespace AlbedosCustomClassesAdvanced
                     int enemyId = enemy.GetInstanceID();
                     if (!frameTargets.Add(enemyId))
                         continue;
+
+                    // v0.25.181 (user): carried along the cross's travel like Crescent Cleave (inside its 0.8 m half depth);
+                    // damage / tick / hit-cap rules below are unchanged.
+                    CarryPush(enemy, center + forward * 0.55f, forward, range / travelTime, gcSolid,
+                        ascended ? _gcAscPushSmall.Value : _gcPushSmall.Value, ascended ? _gcAscPushBig.Value : _gcPushBig.Value, ascended ? _gcAscPushBoss.Value : _gcPushBoss.Value);
 
                     float nextAllowed;
                     if (nextHitAt.TryGetValue(enemyId, out nextAllowed) && Time.time < nextAllowed)
@@ -9327,6 +9383,7 @@ namespace AlbedosCustomClassesAdvanced
             StartCoroutine(SpiritDot(attacker, target, spiritPerSecond, duration));
         }
 
+        private static readonly Dictionary<Type, MethodInfo> _ihTamedMethods = new Dictionary<Type, MethodInfo>();
         private bool IsEnemy(Player attacker, Character target)
         {
             if (target == null || target == attacker || target.IsDead())
@@ -9337,10 +9394,14 @@ namespace AlbedosCustomClassesAdvanced
 
             try
             {
-                MethodInfo method = target.GetType().GetMethod(
-                    "IsTamed",
-                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
-                );
+                // v0.25.181 (perf): the IsTamed lookup is cached per creature type (same answer)
+                Type tt = target.GetType();
+                MethodInfo method;
+                if (!_ihTamedMethods.TryGetValue(tt, out method))
+                {
+                    method = tt.GetMethod("IsTamed", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    _ihTamedMethods[tt] = method;
+                }
 
                 if (method != null && Convert.ToBoolean(method.Invoke(target, null)))
                     return false;
@@ -10736,7 +10797,28 @@ namespace AlbedosCustomClassesAdvanced
         // Altar released its input block / cursor), so it shows the new Advancement and restores the cursor correctly.
         private static void IhOpenTreeAfterAdvance()
         {
-            if (Instance != null) Instance.StartCoroutine(Instance.IhOpenTreeNextFrame());
+            if (Instance == null) return;
+            // v0.25.181 (user: Sorcerer advancement still re-slotted the bar): copy the pre-Advancement bar into the new
+            // Advancement key at the moment of Advancement, exactly (empty slots kept). A stale bar left in that key by an
+            // earlier build / an earlier advancement of the same character no longer wins.
+            try { Instance.IhCarryHotbarToAdvancement(Player.m_localPlayer); } catch (Exception) { }
+            Instance.StartCoroutine(Instance.IhOpenTreeNextFrame());
+        }
+
+        private void IhCarryHotbarToAdvancement(Player player)
+        {
+            if (player == null || string.IsNullOrEmpty(GetAdvancement(player))) return;
+            IDictionary data = GetCustomData(player);
+            if (data == null) return;
+            string cls = GetClass(player);
+            string pre = ReadPlayerData(player, HotbarLayoutKeyPrefix + (cls == "Cleric" ? "" : cls + "."));
+            if (string.IsNullOrEmpty(pre) || pre.Split(',').Length != 7)
+            {
+                string[] cs = IhPlayerClassSkills(player);
+                pre = cs.Length == 3 ? cs[0] + "," + cs[1] + "," + cs[2] + ",,,," : ",,,,,,";
+            }
+            data[IhHotbarSaveKey(player)] = pre;
+            _hotbarLayoutOwnerKey = "";
         }
 
         private IEnumerator IhOpenTreeNextFrame()
@@ -11295,7 +11377,7 @@ namespace AlbedosCustomClassesAdvanced
                 // v0.25.59 skin: the blade's crescent of light (ember for Mercenary, steel blue for Sword Master)
                 Vector3 hc = center, hf = forward; float hr = radius;
                 Player lp = Player.m_localPlayer;
-                Color hcol = lp != null && DragonCombat.GetAdvancementName(lp) == "Mercenary" ? new Color(1f, 0.55f, 0.20f, 1f) : new Color(0.55f, 0.82f, 1f, 1f);
+                Color hcol = lp != null && DragonCombat.GetAdvancementName(lp) == "Mercenary" ? new Color(1f, 0.55f, 0.20f, 1f) : IhSmColor("halfmoon_slash");
                 DragonCombat.RunVfx(delegate { DragonVfx.SlashArc(hc, hf, hr, 170f, hcol, Mathf.Max(0.5f, hr * 0.25f), 0.45f, 180f); });   // v0.25.93 right -> left like the swing
             }
             if (IhLocalRichVfx())
@@ -12224,6 +12306,48 @@ namespace AlbedosCustomClassesAdvanced
                 if (ally != null && !ally.IsDead())
                     Heal(ally, ally.GetMaxHealth() * Mathf.Max(0f, percentPerSecond) / 100f);
             }
+        }
+
+        // v0.25.181 (user): Priest Buckler Mastery indicator from the real state: READY (can trigger on the next Buckler
+        // parry), ACTIVE (the empower is pending; timer = the parry Hyper Armor still running) or COOLDOWN (Holy Parry
+        // cooldown left). Display only - activation, duration and cooldown are untouched.
+        private float _ihParryUiNext;
+        private bool _ihParryUiShown;
+        private void IhUpdateHolyParryIndicator(Player player)
+        {
+            if (Time.time < _ihParryUiNext) return;
+            _ihParryUiNext = Time.time + 0.2f;
+            bool show = false;
+            try
+            {
+                if (IhIsPriest(player) && !player.IsDead())
+                {
+                    ItemDrop.ItemData left = DragonCombat.GetHandItem(player, "m_leftItem");
+                    show = left != null && DragonCombat.IsBuckler(left);
+                }
+            }
+            catch (Exception) { show = false; }
+            if (!show)
+            {
+                if (_ihParryUiShown) { DragonCombat.ClearStatus(player, "priest_holy_parry"); _ihParryUiShown = false; }
+                return;
+            }
+            _ihParryUiShown = true;
+            float cd = GetCooldownRemaining("Priest.HolyParry");
+            float wave = GetCooldownRemaining("Priest.HolyShockwave");
+            string waveLine = wave > 0f ? "Holy Shockwave - " + Mathf.CeilToInt(wave) + "s" : "Holy Shockwave - Ready";
+            if (_parryEmpowerPending)
+            {
+                float hyper = DragonCombat.TimedBuffRemaining(player, "Priest.BucklerParry");
+                DragonCombat.ShowStatusState(player, "priest_holy_parry", "parry", "Holy Parry - Active", Mathf.Max(0f, hyper),
+                    "Mastery - Active\nNext damaging skill +" + IhNum(_parryEmpowerPercent.Value) + "% damage (kept until used)\n" + waveLine);
+            }
+            else if (cd > 0f)
+                DragonCombat.ShowStatusState(player, "priest_holy_parry", "parry", "Holy Parry - Cooldown", cd,
+                    "Mastery - Cooldown\nReady again in " + Mathf.CeilToInt(cd) + "s\n" + waveLine);
+            else
+                DragonCombat.ShowStatusState(player, "priest_holy_parry", "parry", "Holy Parry - Ready", 0f,
+                    "Mastery - Ready\nParry with a Buckler to empower your next damaging skill\n" + waveLine);
         }
 
         private void OnBucklerParry(Player player)
@@ -17937,10 +18061,9 @@ namespace AlbedosCustomClassesAdvanced
             // v0.18.1: before Advancement the bar starts with the three Class skills.
             IhKit kit = IhPlayerKit(player);
             string[] classSkills = IhPlayerClassSkills(player);
+            // v0.25.181 (user): never auto-fill Advancement skills / drop Base skills - the fallback is the Base Class bar
             string[] defaults = IhIsPaladin(player)
                 ? (string[])DefaultClericPaladinHotbar.Clone()
-                : kit != null
-                ? new string[] { kit.AscendedClass, kit.Adv[0], kit.Adv[1], kit.Adv[2], kit.Adv[3], kit.Adv[4], kit.Ultimate }
                 : classSkills.Length == 3
                 ? new string[] { classSkills[0], classSkills[1], classSkills[2], "", "", "", "" }
                 : new string[] { "", "", "", "", "", "", "" };
@@ -17963,7 +18086,12 @@ namespace AlbedosCustomClassesAdvanced
 
             string[] parts = saved.Split(',');
             if (parts.Length != defaults.Length)
-                return defaults;
+            {
+                // v0.25.181 malformed length: keep what is there (pad / trim to the 7 slots) instead of replacing the bar
+                string[] fixedParts = new string[defaults.Length];
+                for (int i = 0; i < fixedParts.Length; i++) fixedParts[i] = i < parts.Length ? parts[i] : "";
+                parts = fixedParts;
+            }
 
             string[] loaded = new string[parts.Length];
             for (int i = 0; i < parts.Length; i++)
