@@ -1,5 +1,5 @@
 @echo off
-title Immortal Heroes v0.25.177 - Parry Trace
+title Immortal Heroes v0.25.178 - Ghost Swings
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
 echo.
 pause

@@ -1,0 +1,5 @@
+v0.25.178 Ghost Swings - test results
+COMPILE / MODEL (here, no game): check.sh 3029660 PASSED (0 new signatures); mcs --parse -langversion:5 CombatRuntime clean;
+tools/tests/nacc_handoff ALL PASS (new: old rule reproduces the strike-2/4/5 start after a ghost click; ghost never continues;
+real queued swings still continue; ghost detection 0.5 s).
+NOT VERIFIED (needs Valheim): chain after parry with and without delay; whether 0.5 s is long enough at slow chain speeds.

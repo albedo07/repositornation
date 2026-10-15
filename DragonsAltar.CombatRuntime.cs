@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.177";
+        public const string ModVersion = "0.25.178";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1137,6 +1137,45 @@ namespace DragonsAltarCombat
             if (p == null) return;
             if (_comboHit >= 0 && _comboLastEnd > 0f && Instance != null && Time.time - _comboLastEnd > Mathf.Max(0.05f, Instance.ComboContinueWindow.Value))
                 ResetNaccChain(p);   // window closed without a next primary
+            // v0.25.178 GHOST SWINGS (user: after a parry the chain started at strike 2/4/5 or went vanilla): a click during the block /
+            // parry pose can be ACCEPTED by Attack.Start while no swing animation ever plays. Valheim only calls Attack.Stop for an attack
+            // that really entered its swing, so our end time stayed unset, the chain counted that click as a hit and believed a swing was
+            // still "running" - the next click seconds later continued at a later strike, and the leftover swing trigger fired a random
+            // strike. Now: a started chain attack whose swing never shows within 0.5 s is a ghost -> the chain is reset and our leftover
+            // swing triggers are cleared; a real swing that ended without a recorded Stop gets its end time here.
+            if (_comboLastEnd < 0f && (_comboHit >= 0 || _comboFinisher != null))
+            {
+                bool inAttack = p.InAttack();
+                if (inAttack) { _comboSwingSeen = true; _comboSwingSeenAt = Time.time; }
+                else if (!_comboSwingSeen && Time.time - _comboLastStart > 0.5f)
+                {
+                    NaccTrace("ghost swing: chain attack accepted but no swing played -> chain reset");
+                    ClearChainTriggers(p);
+                    if (_comboFinisher != null) { _comboFinisher = null; _comboLockUntil = _comboLockBefore; }   // a ghost finisher leaves no lockout
+                    ResetNaccChain(p);
+                }
+                else if (_comboSwingSeen && Time.time - _comboSwingSeenAt > 0.25f) _comboLastEnd = _comboSwingSeenAt;   // swing over, Stop not seen
+            }
+        }
+
+        private static bool _comboSwingSeen;
+        private static float _comboSwingSeenAt;
+
+        // v0.25.178: drop our not-yet-consumed swing triggers so a ghost click can never fire a random strike later.
+        private static void ClearChainTriggers(Player p)
+        {
+            try
+            {
+                Animator a = p == null ? null : p.GetComponentInChildren<Animator>();
+                if (a == null) return;
+                string[] bases = { _comboBase, _comboCarrier, "dual_knives" };
+                for (int b = 0; b < bases.Length; b++)
+                {
+                    if (string.IsNullOrEmpty(bases[b])) continue;
+                    for (int i = 0; i < 4; i++) a.ResetTrigger(DragonCombat.AnimatorTriggerName(bases[b] + i.ToString()));
+                }
+            }
+            catch (Exception) { }
         }
 
         // v0.25.169b: the local player took fall damage (called from BeginDamage after the fall reductions)
@@ -1497,7 +1536,7 @@ namespace DragonsAltarCombat
                 string prevAnim = previousAttack == null ? null : _atkAnim.GetValue(previousAttack) as string;
                 // our own timer: the next attack continues the chain when it starts while the previous swing is
                 // still running (queued chain) or within the window after it ended.
-                bool prevRunning = previousAttack != null && _comboLastEnd < 0f && Time.time - _comboLastStart < 2.5f;
+                bool prevRunning = previousAttack != null && _comboLastEnd < 0f && Time.time - _comboLastStart < 2.5f && p.InAttack();   // v0.25.178 a ghost (never-played) swing never continues the chain
                 bool cont = _comboHit >= 0 && prevAnim == anim && anim == _comboBase && _comboHit < length - 1 && UsesDualChain(p) == _comboDual
                     && (prevRunning || Time.time - _comboLastEnd <= Mathf.Max(0.05f, Instance.ComboContinueWindow.Value));
                 // v0.25.55 (user): every swing of the chain takes the same time (ComboSwingSeconds, 0.8s at no
@@ -1541,6 +1580,7 @@ namespace DragonsAltarCombat
                 _chainPrevSpeed = DragonCombat.GetAttackSpeedMultiplier(p) * chainF;
                 _comboLastEnd = -1f;
                 _comboLastStart = Time.time;
+                _comboSwingSeen = false;   // v0.25.178
                 _comboClockStart = DragonCombat.ChainNaturalClock;
                 _comboPrevSwing = cont ? _comboSwing : -1;
                 _comboHit = cont ? _comboHit + 1 : 0;

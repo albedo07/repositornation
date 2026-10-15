@@ -189,6 +189,20 @@ static class T
             Func<bool, bool, bool, string> back = (learned, captured, hasState) => learned ? "learned" : captured ? "captured" : hasState ? "hasstate" : "trigger";
             Check(back(false, true, false) == "captured", "swing 1 never learned (always started from block): captured state still gives 1-2-1-2-3");
             Check(back(true, true, true) == "learned", "learned state keeps priority for advanced classes");
+            // v0.25.178 ghost swings: an accepted click whose swing never plays (block / parry pose) must not advance the chain
+            {
+                // old rule: continuation = previous started < 2.5 s ago and no Stop seen
+                Func<double, bool, bool, bool> oldCont = (sinceStart, stopSeen, inAttack) => !stopSeen && sinceStart < 2.5;
+                Func<double, bool, bool, bool> newCont = (sinceStart, stopSeen, inAttack) => !stopSeen && sinceStart < 2.5 && inAttack;
+                Check(oldCont(1.8, false, false), "old rule: ghost click 1.8 s earlier still continued the chain (reproduces strike 2/4/5 start)");
+                Check(!newCont(1.8, false, false), "ghost click never continues the chain");
+                Check(newCont(0.3, false, true), "queued chain during a real swing still continues");
+                // ghost detection: chain attack started, no swing seen for 0.5 s -> reset to strike 1
+                Func<bool, double, bool> ghost = (swingSeen, sinceStart) => !swingSeen && sinceStart > 0.5;
+                Check(ghost(false, 0.6), "no swing 0.6 s after an accepted click = ghost -> chain reset + triggers cleared");
+                Check(!ghost(true, 0.6), "real swing is never a ghost");
+                Check(!ghost(false, 0.2), "swing not visible yet at 0.2 s = still waiting");
+            }
             // v0.25.175: nothing is learned / captured within 0.6 s of a block or parry (a bad learn stuck for the session before)
             {
                 Func<double, double, bool> canLearn = (now, lastBlock) => now - lastBlock >= 0.6;

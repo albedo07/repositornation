@@ -1,0 +1,19 @@
+Aethelborn Ascended v0.25.178 - Ghost Swings
+Baseline: v0.25.177 (parry trace kept). Only the normal attack chain (NACC) changed.
+
+NACC AFTER PARRY (user test: right after a parry the chain is fine; a bit later it starts at strike 2/4/5,
+goes vanilla 1-2-3 or only plays the 5th strike)
+- Cause (matches the user's read, "the parry is counted as an attack"): a click during the block / parry pose can be
+  ACCEPTED by Valheim's Attack.Start while no swing animation ever plays. Valheim only ends an attack (Attack.Stop)
+  after its swing really played, so our chain:
+    * counted that click as a hit (strike counter advanced),
+    * never got an end time, so it believed a swing was still running and let the next click up to 2.5 s later
+      CONTINUE the chain at a later strike (4th, 5th...),
+    * left our swing trigger waiting in the animator, which fired a random strike later.
+- Fix (the chain ignores what never swung, like a block):
+    * a chain click whose swing does not show within 0.5 s is a "ghost": the chain resets to strike 1 and our
+      leftover swing triggers are cleared (a ghost finisher leaves no lockout);
+    * a click only continues the chain while a real swing is playing, or inside the 0.7 s window after a real one;
+    * a real swing that ended without Valheim's Stop gets its end time, so the 0.7 s window still applies.
+- Unchanged: blocking / parry and their bonuses, heavy attacks, skills, 0.7 s window, timing, 1-2-1-2-3.
+- Diagnostic "[Aethelborn] NACC trace" lines (v0.25.177) stay, now also "ghost swing: ... -> chain reset".
