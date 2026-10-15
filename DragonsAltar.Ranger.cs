@@ -41,7 +41,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Aethelborn Ascended - Ranger";
-        public const string ModVersion = "0.25.181";
+        public const string ModVersion = "0.25.182";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -1515,6 +1515,10 @@ namespace DragonsAltarRanger
         // stacking Spirit DoT (every tick adds a stack, refreshed to 6s).
         private readonly Dictionary<int, int> _fwStacks = new Dictionary<int, int>();
         private readonly Dictionary<int, float> _fwStackUntil = new Dictionary<int, float>();
+        private readonly Dictionary<int, Character> _fwStackTarget = new Dictionary<int, Character>();   // v0.25.182 (perf) direct refs, no 80 m scan per tick
+        private UnityEngine.Object[] _fwProjCache;
+        private float _fwProjScanAt, _fwPuffAt;
+        private static FieldInfo _projOwnerField;
         private static Type _projectileType;
 
         // v0.25.71 (user): every channel / duration skill is cancelled by recasting it.
@@ -1548,6 +1552,7 @@ namespace DragonsAltarRanger
             float end = Time.time + duration, nextTick = 0f, nextDot = Time.time + 0.5f;
             _fwActive = true; _fwStop = false;
             float fwFollow = Time.time;
+            List<Character> near = null; float nearAt = 0f;
             while (Time.time < end && player != null && !player.IsDead() && !_fwStop)
             {
                 if (ascended && FollowUpClick(fwFollow)) { DragonCombat.SwallowAttackInput(player, 0.4f); _fwStop = true; break; }   // v0.25.85 the final gale now
@@ -1556,7 +1561,10 @@ namespace DragonsAltarRanger
                 // v0.24.2 wind barrier: enemies never get closer than they are; inside the barrier they
                 // drift out to it gradually (Small 1m -> edge in 5s, Big / Boss in 8s); outside it they
                 // can't cross it. Enemy projectiles inside the barrier are blown away.
-                List<Character> near = GetSphereTargets(player, c, radius + DragonCombat.M(1.5f));
+                // v0.25.182 (perf): the physics query (every collider in ~12-16 m) ran every frame - refreshed every 0.1 s now;
+                // the barrier clamp still runs every frame on the live positions
+                if (near == null || Time.time >= nearAt) { near = GetSphereTargets(player, c, radius + DragonCombat.M(1.5f)); nearAt = Time.time + 0.1f; }
+                else for (int q = near.Count - 1; q >= 0; q--) if (near[q] == null || near[q].IsDead()) near.RemoveAt(q);
                 for (int i = 0; i < near.Count; i++)
                 {
                     Character enemy = near[i];
@@ -1601,12 +1609,15 @@ namespace DragonsAltarRanger
                         if (off.magnitude > radius) continue;
                         RangerArrowDamage cut = new RangerArrowDamage();
                         cut.Slash = slash;
-                        Deal(player, enemy, cut, 1f, 0f, false, "furious_winds", DragonCombat.StunAttack(stunPulse), false, false, ascended);
-                        if (_enableVfx.Value && (stunPulse + i) % 3 == 0) { Vector3 ep = enemy.transform.position + Vector3.up * 0.8f, ed = Vector3.Cross(Vector3.up, off).normalized; DragonCombat.RunVfx(delegate { DragonVfx.Gust(ep, ed, 1f); }); }   // v0.25.181 local wind cut on the hit (tangential, throttled)
+                        DragonVfx.MuteHitImpact = true;   // v0.25.182 (perf): no per-target impact particles every 0.25 s tick
+                        try { Deal(player, enemy, cut, 1f, 0f, false, "furious_winds", DragonCombat.StunAttack(stunPulse), false, false, ascended); }
+                        finally { DragonVfx.MuteHitImpact = false; }
+                        if (_enableVfx.Value && i == stunPulse % near.Count) { Vector3 ep = enemy.transform.position + Vector3.up * 0.8f, ed = Vector3.Cross(Vector3.up, off).normalized; DragonCombat.RunVfx(delegate { DragonVfx.Gust(ep, ed, 1f); }); }   // v0.25.181 local wind cut (v0.25.182: one per tick)
                         int id = enemy.GetInstanceID();
                         int stacks;
                         _fwStacks.TryGetValue(id, out stacks);
                         _fwStacks[id] = stacks + 1;
+                        _fwStackTarget[id] = enemy;
                         _fwStackUntil[id] = Time.time + Mathf.Max(0.5f, _fwDotDuration.Value);
                         OnSkillHit(player);
                     }
@@ -1645,11 +1656,13 @@ namespace DragonsAltarRanger
             {
                 float until;
                 if (!_fwStackUntil.TryGetValue(pair.Key, out until) || Time.time >= until) { expired.Add(pair.Key); continue; }
-                Character target = FindCharacter(pair.Key);
+                Character target;
+                if (!_fwStackTarget.TryGetValue(pair.Key, out target) || target == null) target = null;
+                else if ((target.transform.position - player.transform.position).sqrMagnitude > DragonCombat.M(80f) * DragonCombat.M(80f)) target = null;   // same 80 m reach as FindCharacter
                 if (target == null || target.IsDead()) { expired.Add(pair.Key); continue; }
                 DragonCombat.ApplySpiritBurnTick(player, target, baseDamage * Mathf.Max(0f, _fwDot.Value) / 100f * pair.Value);
             }
-            for (int i = 0; i < expired.Count; i++) { _fwStacks.Remove(expired[i]); _fwStackUntil.Remove(expired[i]); }
+            for (int i = 0; i < expired.Count; i++) { _fwStacks.Remove(expired[i]); _fwStackUntil.Remove(expired[i]); _fwStackTarget.Remove(expired[i]); }
         }
 
         private IEnumerator FuriousDotAfter(Player player, float baseDamage)
@@ -1674,8 +1687,12 @@ namespace DragonsAltarRanger
         {
             if (_projectileType == null) _projectileType = Type.GetType("Projectile, assembly_valheim");
             if (_projectileType == null) return;
-            UnityEngine.Object[] all = UnityEngine.Object.FindObjectsOfType(_projectileType);
-            FieldInfo ownerField = _projectileType.GetField("m_owner", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            // v0.25.182 (perf): the full-scene object search ran EVERY frame - now every 0.1 s (positions still checked each frame
+            // on the cached list); the owner field is looked up once
+            if (_fwProjCache == null || Time.time >= _fwProjScanAt) { _fwProjCache = UnityEngine.Object.FindObjectsOfType(_projectileType); _fwProjScanAt = Time.time + 0.1f; }
+            UnityEngine.Object[] all = _fwProjCache;
+            if (_projOwnerField == null) _projOwnerField = _projectileType.GetField("m_owner", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            FieldInfo ownerField = _projOwnerField;
             for (int i = 0; i < all.Length; i++)
             {
                 Component p = all[i] as Component;
@@ -1684,7 +1701,7 @@ namespace DragonsAltarRanger
                 if (owner == player || owner is Player) continue;
                 if ((p.transform.position - center).sqrMagnitude <= radius * radius * 1.1f)
                 {
-                    if (_enableVfx.Value) { Vector3 pp = p.transform.position, pd = p.transform.position - center; DragonCombat.RunVfx(delegate { DragonVfx.Gust(pp, pd, 0.8f); DragonVfx.Burst(pp, new Color(0.85f, 0.95f, 0.85f, 1f), 8, 5f, 0.05f, 0.3f, 0f); }); }   // v0.25.181 the projectile is visibly torn apart by the wind
+                    if (_enableVfx.Value && Time.time >= _fwPuffAt) { _fwPuffAt = Time.time + 0.2f; Vector3 pp = p.transform.position, pd = p.transform.position - center; DragonCombat.RunVfx(delegate { DragonVfx.Gust(pp, pd, 0.8f); }); }   // v0.25.181 the projectile is torn apart by the wind (v0.25.182 max 5/s)
                     Destroy(p.gameObject);
                 }
             }
@@ -1717,13 +1734,14 @@ namespace DragonsAltarRanger
                     line.SetPosition(i, new Vector3(Mathf.Cos(a) * r, 0.3f + k * 0.45f, Mathf.Sin(a) * r));
                 }
             }
-            DragonCombat.RunVfx(delegate
-            {
-                GameObject g = new GameObject("leafGlow");
-                g.transform.SetParent(obj.transform, false);
-                g.transform.localPosition = new Vector3(0f, 1.2f, 0f);
-                DragonVfx.AttachGlow(g.transform, new Color(0.50f, 1f, 0.45f, 1f), radius * 0.8f, 120f, radius * 1.5f);
-            });
+            if (!DragonVfx.Enabled)
+                DragonCombat.RunVfx(delegate
+                {
+                    GameObject g = new GameObject("leafGlow");
+                    g.transform.SetParent(obj.transform, false);
+                    g.transform.localPosition = new Vector3(0f, 1.2f, 0f);
+                    DragonVfx.AttachGlow(g.transform, new Color(0.50f, 1f, 0.45f, 1f), radius * 0.8f, 120f, radius * 1.5f);
+                });   // v0.25.182 (perf + subtle): no glow cloud / point light over the dome
             return obj;
         }
 

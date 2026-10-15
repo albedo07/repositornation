@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.181";
+        public const string ModVersion = "0.25.182";
 
         internal static DragonCombatPlugin Instance;
 
@@ -13253,6 +13253,10 @@ namespace DragonsAltarCombat
         private static Texture2D _glow;
         private static bool _catalogLogged;
 
+        public static bool MuteHitImpact;   // v0.25.182 (perf): set around a skill's own rapid ticks (Furious Winds) to skip HitImpact
+        private static Material _windVeilMat;
+        private static Texture2D _windVeilTex;
+
         public static bool Enabled
         {
             get { return DragonCombatPlugin.Instance == null || DragonCombatPlugin.Instance.EnhancedVfx == null || DragonCombatPlugin.Instance.EnhancedVfx.Value; }
@@ -16092,27 +16096,50 @@ namespace DragonsAltarCombat
             if (r != null && m != null) { r.sharedMaterial = m; r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; }
         }
 
+        private static Material WindVeilMat()
+        {
+            if (_windVeilMat != null) return _windVeilMat;
+            if (_windVeilTex == null) _windVeilTex = MakeTex(128, 64, delegate(float u, float v)
+            {
+                // broken horizontal wind streaks (along the dome's longitude) with open gaps; fades out at the poles
+                float band = Mathf.Abs(Mathf.Sin(v * Mathf.PI * 7f + Noise(u * 3f, v * 2f, 41) * 2.5f));
+                float streak = Mathf.Pow(band, 6f) * Mathf.Clamp01(Noise(u * 6f, v * 9f, 43) * 1.8f - 0.55f);
+                float pole = Mathf.Clamp01(Mathf.Sin(v * Mathf.PI) * 1.6f);
+                return Mathf.Clamp01(streak * pole);
+            }, TextureWrapMode.Repeat);
+            Material baseMat = Mat(_windVeilTex, false);
+            if (baseMat == null) return null;
+            _windVeilMat = new Material(baseMat);
+            _windVeilMat.mainTexture = _windVeilTex;
+            if (_windVeilMat.HasProperty("_TintColor")) _windVeilMat.SetColor("_TintColor", new Color(0.46f, 0.52f, 0.48f, 0.22f));
+            else _windVeilMat.color = new Color(0.9f, 1f, 0.92f, 0.22f);
+            return _windVeilMat;
+        }
+
         // Neji's Rotation for Furious Winds: a spinning dome of green wind (veil + tilted crescent rings).
         public static void WindDome(Transform parent, Color c, float radius)
         {
             if (!Enabled || parent == null) return;
-            Shader sh = Shader.Find("Sprites/Default");
-            if (sh != null && false)   // v0.25.180 no veil shell: open spiralling ribbons only, the player stays visible
+            // v0.25.182 (user: keep the Neji dome, subtle, with wind): a faint dome shell made of broken wind streaks that flow
+            // around it (one shared cached material + the built-in sphere mesh: no per-cast textures/materials)
+            Material vm = WindVeilMat();
+            if (vm != null)
             {
                 GameObject s = GameObject.CreatePrimitive(PrimitiveType.Sphere);
                 Collider col = s.GetComponent<Collider>();
                 if (col != null) UnityEngine.Object.Destroy(col);
+                s.name = "windVeil";
                 s.transform.SetParent(parent, false);
-                s.transform.localPosition = Vector3.up * radius * 0.15f;
-                s.transform.localScale = new Vector3(radius * 2f, radius * 1.5f, radius * 2f);
+                s.transform.localPosition = Vector3.up * radius * 0.1f;
+                s.transform.localScale = new Vector3(radius * 2f, radius * 1.4f, radius * 2f);
                 Renderer r = s.GetComponent<Renderer>();
-                r.material = new Material(sh);
-                Color veil = c; veil.a = 0.16f;
-                r.material.color = veil;
+                r.sharedMaterial = vm;
                 r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                r.receiveShadows = false;
+                s.AddComponent<DragonRotate>().Speed = new Vector3(0f, -240f, 0f);   // streaks drift against the storm's spin
             }
-            Color body = Color.Lerp(c, new Color(0.88f, 0.92f, 0.88f, 1f), 0.4f); body.a = 0.32f;   // v0.25.180 translucent wind strands
-            Color core = Color.Lerp(c, Color.white, 0.6f); core.a = 0.4f;
+            Color body = Color.Lerp(c, new Color(0.88f, 0.92f, 0.88f, 1f), 0.4f); body.a = 0.22f;   // v0.25.180 translucent wind strands (v0.25.182 subtler)
+            Color core = Color.Lerp(c, Color.white, 0.6f); core.a = 0.28f;
             float[] tilts = { 0f, 35f, -35f, 70f };
             for (int i = 0; i < tilts.Length; i++)
             {
@@ -16127,19 +16154,7 @@ namespace DragonsAltarCombat
                 DragonRotate dr = ring.AddComponent<DragonRotate>();
                 dr.Speed = new Vector3(0f, (i % 2 == 0) ? -420f : 260f, 0f);
             }
-            // v0.25.181 outer counter-flow: three thin low strands further out, turning against the storm
-            Color outer = Color.Lerp(c, new Color(0.9f, 0.93f, 0.9f, 1f), 0.55f); outer.a = 0.22f;
-            for (int i = 0; i < 3; i++)
-            {
-                GameObject ring = new GameObject("windOuter");
-                ring.transform.SetParent(parent, false);
-                ring.transform.localPosition = Vector3.up * (0.2f + i * 0.5f);
-                ring.transform.localRotation = Quaternion.Euler(i * 12f - 12f, i * 120f, 0f);
-                CrescentLayer(ring.transform, outer, radius * (1.12f + i * 0.06f), radius * 0.05f, 0f, 120f, Quaternion.identity, false);
-                DragonRotate dr = ring.AddComponent<DragonRotate>();
-                dr.Speed = new Vector3(0f, -900f, 0f);   // net counter-rotation against the parent's 540 deg/s
-            }
-            GroundDust(parent, Mathf.Min(6f, radius * 1.6f), delegate { return parent != null; }, 1.2f);
+            GroundDust(parent, Mathf.Min(6f, radius * 1.6f), delegate { return parent != null; }, 0.8f);
         }
 
         // ------------------------------------------------------------------ themed presets
@@ -16177,7 +16192,7 @@ namespace DragonsAltarCombat
 
         public static void HitImpact(Character target, HitData hit)
         {
-            if (!Enabled || target == null || hit == null) return;
+            if (!Enabled || MuteHitImpact || target == null || hit == null) return;
             int id = target.GetInstanceID();
             float next;
             if (_impactNext.TryGetValue(id, out next) && Time.time < next) return;

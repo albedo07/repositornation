@@ -1,0 +1,21 @@
+Aethelborn Ascended v0.25.182 - Smooth Winds (on top of v0.25.181; NOT an anchor, anchor stays v0.25.179)
+
+FURIOUS WINDS (FPS)
+- Spirit DoT lookup: every 0.5 s EACH stacked enemy ran an 80 m physics scan (thousands of colliders) -> now direct
+  references (same 80 m reach rule). This was the biggest cost with several enemies.
+- Enemy-projectile wipe: full-scene object search every frame -> every 0.1 s (positions still checked each frame),
+  reflection looked up once.
+- Barrier target query (all colliders in 12-16 m) every frame -> every 0.1 s; the push clamp still runs every frame.
+- Per-tick hit-impact particle systems on every enemy (4 ticks/s) muted; one wind cut per tick instead;
+  projectile puffs max 5/s; glow cloud + point light over the dome removed.
+- Damage, ticks, push, barrier, DoT stacks, durations: unchanged.
+DOME (user: keep Neji, subtle, with wind)
+- Faint dome shell of broken wind streaks flowing around it (shared material, built-in sphere), wind strands dimmer,
+  outer extra strands removed, ground dust lighter; leaves kept.
+
+ASCENDED ECLIPSE (FPS)
+- Projectile reflect window: full-scene search every 2nd frame -> every 0.1 s (same window, same radius).
+- Slash hails (3 per Ascended cast): no extra per-enemy impact particle systems for the hail hits; streak particles on
+  every 2nd cut (crescents unchanged).
+- Creature-ghost during the launch: each nearby collider classified once instead of every 0.1 s.
+- Damage, suck, launch, reflect: unchanged.

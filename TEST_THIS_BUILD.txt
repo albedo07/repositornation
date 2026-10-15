@@ -1,13 +1,5 @@
-v0.25.181 VFX Revisions - in-game checks (not an anchor; compare with v0.25.179/180)
-1. Slashes (Moonlight, Crescent, Halfmoon, Eclipse, Blade Storm): flat sharp blades, no square wedge, SM blue / Asc dark blue.
-2. Eclipse: FPS before/after (Steam FPS counter or any overlay) - please report frame times.
-3. Merc Stomp / Bonecrusher / Seismic / Bomb: fractures + rubble, bomb reads as an explosion.
-4. Goddess Relic / Lightning Relic / Holy Relic: three different finished cross designs, rubble sinks away.
-5. Electric Smite / Lightning Tempest / Cataclysm: Ultimate-level strikes, colours distinguishable, day + night.
-6. Priest with a Buckler: Holy Parry indicator Ready -> Active (timer) -> Cooldown (timer).
-7. Grand Cross pushes Small/Big/Boss along its travel, damage unchanged.
-8. New Sorcerer -> Advance (Archmage and Horizon Walker): hotbar identical incl. empty slots, after reopening tree + relog.
-9. Archmage: hold a charged staff attack and turn the camera - body follows the crosshair.
-10. Horizon Walker: shoot while running - legs run normally.
-11. Ranger with a Greatbow: shooting while moving no longer doubles speed.
-12. Ranger family: snare snap, pin arrows, explosive flame + cluster blasts, Furious Winds layered wind, Ballista charge.
+v0.25.182 Smooth Winds - in-game checks
+1. Furious Winds (normal + Ascended) near 5+ enemies: FPS before/after (please send numbers); dome = faint wind shell +
+   strands + leaves; enemy arrows still blown away; damage/push/DoT feel unchanged.
+2. Ascended Eclipse in a pack: FPS; projectile reflect still works; hails/spiral look the same.
+3. Everything from v0.25.181 TEST list still applies.

@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.181";
+        public const string ModVersion = "0.25.182";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -3136,10 +3136,11 @@ namespace AlbedosCustomClassesAdvanced
                     Vector3 p = c + new Vector3(rp.x, 0.9f + lift * UnityEngine.Random.value, rp.y);
                     Vector3 f = UnityEngine.Random.onUnitSphere; f.y = 0f;
                     float rr = radius;
+                    bool streaks = (i & 1) == 0;   // v0.25.182 (perf): streak particle systems on every 2nd cut (crescents unchanged)
                     DragonCombat.RunVfx(delegate
                     {
                         DragonVfx.CrescentFlash(p, f, vio, rr * 0.22f, Mathf.Max(0.15f, rr * 0.03f), UnityEngine.Random.Range(-70f, 70f), 0.08f, 0.22f, 0.15f);
-                        DragonVfx.SlashStreaks(p, Color.Lerp(vio, Color.white, 0.4f), rr * 0.25f, 2, 0.2f);
+                        if (streaks) DragonVfx.SlashStreaks(p, Color.Lerp(vio, Color.white, 0.4f), rr * 0.25f, 3, 0.2f);
                     });
                     yield return new WaitForSeconds(0.03f);
                 }
@@ -3148,8 +3149,14 @@ namespace AlbedosCustomClassesAdvanced
             }
             if (player == null || player.IsDead()) yield break;
             List<Character> targets = GetSphereTargets(player, c + Vector3.up * 0.8f, radius);
-            for (int i = 0; i < targets.Count; i++)
-                DealDamageScaled(player, targets[i], _eclipseDamage, multiplier, 0f, false, "eclipse", stunAttack, false, false, null);
+            // v0.25.182 (perf): the hail already draws its own cuts - no extra per-enemy impact particle systems for these hits
+            DragonVfx.MuteHitImpact = true;
+            try
+            {
+                for (int i = 0; i < targets.Count; i++)
+                    DealDamageScaled(player, targets[i], _eclipseDamage, multiplier, 0f, false, "eclipse", stunAttack, false, false, null);
+            }
+            finally { DragonVfx.MuteHitImpact = false; }
         }
 
         // Ascended: hostile projectiles near you fly back at their shooter, keeping their own damage.
@@ -3165,11 +3172,12 @@ namespace AlbedosCustomClassesAdvanced
             HashSet<int> reflected = new HashSet<int>();
             float end = Time.time + window;
             UnityEngine.Object[] list = null;
-            int scan = 0;
+            float scanAt = 0f;
             while (Time.time < end && player != null && !player.IsDead())
             {
-                // v0.25.181 (perf): full scene scan every 2nd frame; the frame in between re-checks the same projectiles
-                if (list == null || (scan++ & 1) == 0) list = UnityEngine.Object.FindObjectsOfType(_ihProjectileType);
+                // v0.25.182 (perf): the full scene scan is the expensive part - every 0.1 s now (was every 2nd frame);
+                // every frame in between re-checks the same projectiles (a new one is caught within 0.1 s, well inside the radius)
+                if (list == null || Time.time >= scanAt) { list = UnityEngine.Object.FindObjectsOfType(_ihProjectileType); scanAt = Time.time + 0.1f; }
                 for (int i = 0; i < list.Length; i++)
                 {
                     Component projectile = list[i] as Component;
@@ -7491,6 +7499,7 @@ namespace AlbedosCustomClassesAdvanced
             CapsuleCollider capsule = player.GetComponent<CapsuleCollider>();
             if (capsule == null) yield break;
             List<Collider> ignored = new List<Collider>();
+            HashSet<int> checkedCols = new HashSet<int>();   // v0.25.182 (perf): each collider is classified once (owner never changes)
             float start = Time.time;
             float nextScan = 0f;
             try
@@ -7504,7 +7513,7 @@ namespace AlbedosCustomClassesAdvanced
                         for (int i = 0; i < near.Length; i++)
                         {
                             Collider c = near[i];
-                            if (c == null || c == capsule || c.isTrigger || ignored.Contains(c)) continue;
+                            if (c == null || c == capsule || c.isTrigger || !checkedCols.Add(c.GetInstanceID())) continue;
                             Character owner = c.GetComponentInParent<Character>();
                             if (owner == null || owner == player) continue;
                             Physics.IgnoreCollision(capsule, c, true);
