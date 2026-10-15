@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.173";
+        public const string ModVersion = "0.25.174";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -2403,11 +2403,10 @@ namespace AlbedosCustomClassesAdvanced
                     float nextAllowed;
                     int count;
                     hitCount.TryGetValue(id, out count);
-                    // v0.25.170 (user: enemies were pushed without being damaged): push and damage use this same box, but the push ran every
-                    // frame for the whole 5.5 s travel while this wave deals at most 2 ticks per target (0.5 s apart) - a carried enemy rode
-                    // ~5 s with no damage. The push now only carries a target this wave can still damage; after its last tick the wave
-                    // passes through it. Damage, tick interval, cap and push scaling are unchanged.
-                    if (count < 2) CleavePull(target, point, forward, waveSpeed, groundMask, ascended);   // v0.25.167 push along the wave's travel (once per target per frame)
+                    // v0.25.174 (user: Crescent Cleave could barely push any more): the v0.25.170 gate (push only while this wave can still
+                    // damage the target, i.e. < 2 ticks) released enemies ~0.5 s after contact. Every enemy inside the wave is carried again
+                    // for the whole travel, as in v0.25.167; damage (2 ticks per wave, 0.5 s apart) is unchanged.
+                    CleavePull(target, point, forward, waveSpeed, groundMask, ascended);   // v0.25.167 push along the wave's travel (once per target per frame)
                     if (count >= 2 || (nextHitAt.TryGetValue(id, out nextAllowed) && Time.time < nextAllowed)) continue;
                     nextHitAt[id] = Time.time + Mathf.Max(0.10f, _crescentPersistentTick.Value);
                     hitCount[id] = count + 1;

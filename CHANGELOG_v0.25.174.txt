@@ -1,0 +1,9 @@
+Aethelborn Ascended v0.25.174 - Push Restored
+Baseline: v0.25.173. Only the Crescent Cleave push changed.
+
+CRESCENT CLEAVE (user: barely pushes any more)
+- Cause: v0.25.170 only pushed enemies while the wave could still damage them (2 ticks, 0.5 s apart), so they were
+  released ~0.5 s after contact and the wave passed through them.
+- Fix: that gate is removed - every enemy inside the wave is carried for the whole travel again (v0.25.167 push:
+  Small 100% / Big 65% / Boss 35% of wave speed, front clamp, wall checks, multiplayer RPC). Normal + Ascended.
+- Damage unchanged (2 ticks per wave per enemy). Carried enemies therefore again ride the wave after their 2 ticks.
