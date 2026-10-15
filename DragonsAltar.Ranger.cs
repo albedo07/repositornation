@@ -41,7 +41,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Aethelborn Ascended - Ranger";
-        public const string ModVersion = "0.25.182";
+        public const string ModVersion = "0.25.183";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -592,11 +592,14 @@ namespace DragonsAltarRanger
         }
 
         // Windstep: Dodge costs 50% less Stamina (Player.m_dodgeStaminaUsage), restored otherwise.
+        private static FieldInfo _dodgeUsageField;   // v0.25.183 (perf) resolved once
+        private static bool _dodgeUsageLooked;
         private void UpdateDodgeCost(Player player, bool acrobat)
         {
             try
             {
-                FieldInfo f = typeof(Player).GetField("m_dodgeStaminaUsage", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (!_dodgeUsageLooked) { _dodgeUsageLooked = true; _dodgeUsageField = typeof(Player).GetField("m_dodgeStaminaUsage", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic); }
+                FieldInfo f = _dodgeUsageField;
                 if (f == null || f.FieldType != typeof(float)) return;
                 float current = (float)f.GetValue(player);
                 if (_dodgeBase < 0f) _dodgeBase = current;
@@ -621,15 +624,24 @@ namespace DragonsAltarRanger
             if (_enableVfx.Value) StartCoroutine(RingVfx(player.transform.position, DragonCombat.M(1.2f), new Color(0.55f, 1f, 0.90f, 0.9f), 0.3f));
         }
 
+        private static bool _jumpReflLooked;   // v0.25.183 (perf) resolved once (ran every airborne frame)
+        private static MethodInfo _takeInputMethod, _buttonDownMethod;
+        private static readonly object[] _jumpArgs = new object[] { "Jump" };
         private bool JumpPressed(Player player)
         {
             try
             {
-                MethodInfo take = typeof(Player).GetMethod("TakeInput", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+                if (!_jumpReflLooked)
+                {
+                    _jumpReflLooked = true;
+                    _takeInputMethod = typeof(Player).GetMethod("TakeInput", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+                    Type zinput = Type.GetType("ZInput, assembly_valheim");
+                    _buttonDownMethod = zinput == null ? null : zinput.GetMethod("GetButtonDown", BindingFlags.Static | BindingFlags.Public, null, new Type[] { typeof(string) }, null);
+                }
+                MethodInfo take = _takeInputMethod;
                 if (take != null && !Convert.ToBoolean(take.Invoke(player, null))) return false;
-                Type zinput = Type.GetType("ZInput, assembly_valheim");
-                MethodInfo down = zinput == null ? null : zinput.GetMethod("GetButtonDown", BindingFlags.Static | BindingFlags.Public, null, new Type[] { typeof(string) }, null);
-                if (down != null) return Convert.ToBoolean(down.Invoke(null, new object[] { "Jump" }));
+                MethodInfo down = _buttonDownMethod;
+                if (down != null) return Convert.ToBoolean(down.Invoke(null, _jumpArgs));
             }
             catch { }
             return Input.GetKeyDown(KeyCode.Space);
@@ -3583,12 +3595,16 @@ namespace DragonsAltarRanger
             return result;
         }
 
+        private static readonly Dictionary<Type, MethodInfo> _isTamedMethods = new Dictionary<Type, MethodInfo>();
         private bool IsEnemy(Player attacker, Character target)
         {
             if (target == null || target == attacker || target.IsDead() || target is Player) return false;
             try
             {
-                MethodInfo m = target.GetType().GetMethod("IsTamed", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                // v0.25.183 (perf): IsTamed resolved once per creature type (ran for every target, every frame with traps / channels)
+                Type tt = target.GetType();
+                MethodInfo m;
+                if (!_isTamedMethods.TryGetValue(tt, out m)) { m = tt.GetMethod("IsTamed", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic); _isTamedMethods[tt] = m; }
                 if (m != null && Convert.ToBoolean(m.Invoke(target, null))) return false;
             }
             catch { }
@@ -3608,10 +3624,15 @@ namespace DragonsAltarRanger
             return c != null && !c.isTrigger && (SolidMask() & (1 << c.gameObject.layer)) != 0;
         }
 
+        private static int _solidMaskCache = int.MinValue;   // v0.25.183 (perf) built once
         private static int SolidMask()
         {
-            int mask = LayerMask.GetMask("Default", "static_solid", "terrain", "piece", "Default_small", "vehicle");
-            return mask == 0 ? ~0 : mask;
+            if (_solidMaskCache == int.MinValue)
+            {
+                int mask = LayerMask.GetMask("Default", "static_solid", "terrain", "piece", "Default_small", "vehicle");
+                _solidMaskCache = mask == 0 ? ~0 : mask;
+            }
+            return _solidMaskCache;
         }
 
         private Vector3 ShotOrigin(Player player)
@@ -3731,12 +3752,23 @@ namespace DragonsAltarRanger
             return InvokeItem(player, "GetAmmoItem");
         }
 
+        private static Type _itemMethodType;
+        private static readonly Dictionary<string, MethodInfo> _itemMethods = new Dictionary<string, MethodInfo>();
         private ItemDrop.ItemData InvokeItem(Player player, string method)
         {
             if (player == null) return null;
             try
             {
-                MethodInfo m = player.GetType().GetMethod(method, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+                // v0.25.183 (perf): resolved once per (type, method) - ran every frame for Rangers
+                Type pt = player.GetType();
+                string key = method;
+                MethodInfo m;
+                if (pt != _itemMethodType) { _itemMethodType = pt; _itemMethods.Clear(); }
+                if (!_itemMethods.TryGetValue(key, out m))
+                {
+                    m = pt.GetMethod(method, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+                    _itemMethods[key] = m;
+                }
                 return m == null ? null : m.Invoke(player, null) as ItemDrop.ItemData;
             }
             catch { return null; }

@@ -232,7 +232,7 @@ namespace AlbedosCustomClassesSkills
         public static SkillsPlugin Instance;
         public const string ModGuid = "albedo.customclasses.skills";
         public const string ModName = "Aethelborn Ascended - Starter Skills";
-        public const string ModVersion = "0.25.182";
+        public const string ModVersion = "0.25.183";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";
@@ -496,11 +496,14 @@ namespace AlbedosCustomClassesSkills
         }
 
         // v0.23.0 Warlock: halved Eitr regen delay; Shields cannot be equipped (unequipped with a message).
+        private static FieldInfo _eitrRegenDelayField;   // v0.25.183 (perf) resolved once
+        private static bool _eitrRegenDelayLooked;
         private void UpdateWarlock(Player player, bool sorcerer)
         {
             try
             {
-                FieldInfo delay = typeof(Player).GetField("m_eitrRegenDelay", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (!_eitrRegenDelayLooked) { _eitrRegenDelayLooked = true; _eitrRegenDelayField = typeof(Player).GetField("m_eitrRegenDelay", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic); }
+                FieldInfo delay = _eitrRegenDelayField;
                 if (delay != null && delay.FieldType == typeof(float))
                 {
                     if (_baseEitrRegenDelay < 0f)
@@ -1327,6 +1330,14 @@ namespace AlbedosCustomClassesSkills
             }
         }
 
+
+        private static readonly Dictionary<Type, MethodInfo> _cachedIsTamed = new Dictionary<Type, MethodInfo>();
+        private static MethodInfo CachedIsTamed(Type t)
+        {
+            MethodInfo mi;
+            if (!_cachedIsTamed.TryGetValue(t, out mi)) { mi = t.GetMethod("IsTamed", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic); _cachedIsTamed[t] = mi; }
+            return mi;
+        }
         private bool IsEnemy(Player attacker, Character target)
         {
             if (target == null || target == attacker || target.IsDead())
@@ -1337,7 +1348,7 @@ namespace AlbedosCustomClassesSkills
 
             try
             {
-                MethodInfo isTamed = target.GetType().GetMethod("IsTamed", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                MethodInfo isTamed = CachedIsTamed(target.GetType());   // v0.25.183 (perf) resolved once per type
                 if (isTamed != null && Convert.ToBoolean(isTamed.Invoke(target, null)))
                     return false;
             }
@@ -1543,10 +1554,8 @@ namespace AlbedosCustomClassesSkills
             Destroy(waveObject);
         }
 
-        private void OnGUI()
-        {
-            // Unified v0.6 HUD is rendered by the isolated advancement plugin.
-        }
+        // v0.25.183 (perf): the empty OnGUI was removed - Unity still dispatched every GUI event to it.
+        // Unified v0.6 HUD is rendered by the isolated advancement plugin.
 
         public float GetCooldownForUi(string id)
         {

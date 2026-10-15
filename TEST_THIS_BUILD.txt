@@ -1,5 +1,7 @@
-v0.25.182 Smooth Winds - in-game checks
-1. Furious Winds (normal + Ascended) near 5+ enemies: FPS before/after (please send numbers); dome = faint wind shell +
-   strands + leaves; enemy arrows still blown away; damage/push/DoT feel unchanged.
-2. Ascended Eclipse in a pack: FPS; projectile reflect still works; hails/spiral look the same.
-3. Everything from v0.25.181 TEST list still applies.
+v0.25.183 Peak Performance - in-game checks
+1. FPS idle in a base and in combat vs v0.25.182 (please send numbers if you can).
+2. Seismic Guillotine (normal + Ascended) and Astral Greatblade: no hitch on cast; animations unchanged.
+3. First cast of each skill after loading in (wait ~5 s after spawn): no first-use hitch.
+4. Regression sweep: forced run (Frenzied/Shield Charge legs), Ranger bow aim/draw, Acrobat double jump + dodge cost,
+   Warlock Eitr delay, Sword Master/Merc/Paladin passives, skill-level bonuses (Wildborn, Warfreak, Way of the Sword),
+   HUD hides with inventory/map/menu/tree/altar/F8, skill tree branch plaques, Sorcerer buffs (Overcharge etc.).

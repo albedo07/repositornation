@@ -1,0 +1,2 @@
+v0.25.183 - verified here: compile check 3029660 PASSED (0 new signatures); mcs --parse -langversion:5 OK on all edited files.
+Static review only (two read-only audits + targeted fixes). NOT measured: frame times. Needs in-game testing.

@@ -1,0 +1,27 @@
+Aethelborn Ascended v0.25.183 - Peak Performance (on top of v0.25.182; NOT an anchor, anchor stays v0.25.179)
+Performance only. No skill, VFX, damage, timing or UI change intended - every fix returns the same result, just cheaper.
+
+CAST HITCHES (the "fraction of a second" drop on cast)
+- Seismic Guillotine / Astral Greatblade (+ Ascended slams): every cast searched every loaded assembly for the Dual Wield
+  type and string-processed every clip of the player's animator -> looked up once, same clip cached.
+- First casts: every procedural VFX texture (stone, scorch, frost, cracks, smoke, rings, pressure, slash, etc.) and the
+  shared materials were generated on the first cast that used them (up to ~200k noise samples + mipmap upload in one
+  frame). They are now built in the background after you load in (3 s after spawn, one per 0.05 s). Same textures.
+- Ground masks for debris / crack lines / ground probes built once (were allocated per call / per falling rock per frame).
+
+ALWAYS-ON (every frame, even when not casting)
+- ZSyncAnimation SetFloat/SetBool hooks (every character, many times per frame): typed hooks with a reference pre-check;
+  the old form allocated and boxed an array on every call. Same forced-run / bow-aim overrides.
+- Skill level / skill factor hooks (Valheim queries these constantly): typed argument, no per-call array; owner lookup no
+  longer scans every field of Skills; skill-type names cached.
+- Regen / speed hooks (SEMan): owner lookup reads only the fields that can hold a Player (resolved once per type).
+- HUD suppression check (inventory / menu / map / altar / tree / F8 open?): ~50 reflection lookups per frame -> resolved
+  once, same checks in the same order.
+- Hand-item reads (Sword Master, Mercenary, Paladin, Sorcerer checks), Warlock Eitr regen delay, Acrobat dodge cost +
+  double-jump input, Ranger / Archmage / Horizon Walker current-weapon reads, HUD static checks, status-effect list, HUD
+  field/method caches: reflection resolved once.
+- IsTamed checks (every skill target test in Skills, CombatRuntime, Sorcerer, Ranger): resolved once per creature type.
+- Skill-tree branch list cached (was rebuilt several times per frame / GUI event).
+- Sorcerer per-frame short buffs: label/icon only built when an indicator is shown; buff entry reused.
+- Mixamo prewarm: after all clips are warmed it checks for a new character animator once a second, not every frame.
+- Empty OnGUI removed from the Skills module (Unity still dispatched every GUI event to it).

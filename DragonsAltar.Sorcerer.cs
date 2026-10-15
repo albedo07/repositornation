@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Aethelborn Ascended - Sorcerer Advancements";
-        public const string ModVersion = "0.25.182";
+        public const string ModVersion = "0.25.183";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -3759,12 +3759,20 @@ namespace DragonsAltarSorcerer
             return result;
         }
 
+
+        private static readonly Dictionary<Type, MethodInfo> _cachedIsTamed = new Dictionary<Type, MethodInfo>();
+        private static MethodInfo CachedIsTamed(Type t)
+        {
+            MethodInfo mi;
+            if (!_cachedIsTamed.TryGetValue(t, out mi)) { mi = t.GetMethod("IsTamed", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic); _cachedIsTamed[t] = mi; }
+            return mi;
+        }
         private bool IsEnemy(Player attacker, Character target)
         {
             if (target == null || target == attacker || target.IsDead() || target is Player) return false;
             try
             {
-                MethodInfo m = target.GetType().GetMethod("IsTamed", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                MethodInfo m = CachedIsTamed(target.GetType());   // v0.25.183 (perf) resolved once per type
                 if (m != null && Convert.ToBoolean(m.Invoke(target, null))) return false;
             }
             catch { }
@@ -3874,11 +3882,15 @@ namespace DragonsAltarSorcerer
             return sharedName.Contains("staff") || prefabName.Contains("staff");
         }
 
+        private static Type _curWeaponType;
+        private static MethodInfo _curWeaponMethod;
         private ItemDrop.ItemData GetCurrentWeapon(Player player)
         {
             try
             {
-                MethodInfo m = player.GetType().GetMethod("GetCurrentWeapon", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                // v0.25.183 (perf): resolved once per type (ran every frame for Archmage / Horizon Walker)
+                if (player.GetType() != _curWeaponType) { _curWeaponType = player.GetType(); _curWeaponMethod = _curWeaponType.GetMethod("GetCurrentWeapon", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic); }
+                MethodInfo m = _curWeaponMethod;
                 if (m != null) return m.Invoke(player, null) as ItemDrop.ItemData;
             }
             catch { }

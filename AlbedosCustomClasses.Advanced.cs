@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.182";
+        public const string ModVersion = "0.25.183";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -10395,7 +10395,36 @@ namespace AlbedosCustomClassesAdvanced
                 return Mathf.Max(0f, _holyTrinityClubs.Value);
 
             // v0.24.0: skill modules (Ranger Wildborn +20 Bows / Sneak, Tailwind +Jump).
-            return Mathf.Max(0f, DragonCombat.ExternalSkillLevelBonus(player, skillType.ToString()));
+            return Mathf.Max(0f, DragonCombat.ExternalSkillLevelBonus(player, IhSkillTypeName(skillType)));
+        }
+
+        // v0.25.183 (perf): enum ToString allocated on every skill query - names cached (same strings)
+        private static readonly Dictionary<int, string> _ihSkillTypeNames = new Dictionary<int, string>();
+        private static string IhSkillTypeName(Skills.SkillType t)
+        {
+            string n;
+            if (!_ihSkillTypeNames.TryGetValue((int)t, out n)) { n = t.ToString(); _ihSkillTypeNames[(int)t] = n; }
+            return n;
+        }
+
+        // v0.25.183 (perf): the owner lookups scanned EVERY field of Skills / SEMan with GetFields() on each call (several
+        // times per frame). Now only the fields that can hold a Player are read, resolved once per type, in the same
+        // declaration order - same result.
+        private static readonly Dictionary<Type, FieldInfo[]> _ihPlayerFields = new Dictionary<Type, FieldInfo[]>();
+        internal static FieldInfo[] IhPlayerCapableFields(Type t)
+        {
+            FieldInfo[] r;
+            if (_ihPlayerFields.TryGetValue(t, out r)) return r;
+            FieldInfo[] all = t.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            List<FieldInfo> keep = new List<FieldInfo>();
+            for (int i = 0; i < all.Length; i++)
+            {
+                Type ft = all[i].FieldType;
+                if (ft.IsAssignableFrom(typeof(Player)) || typeof(Player).IsAssignableFrom(ft)) keep.Add(all[i]);
+            }
+            r = keep.ToArray();
+            _ihPlayerFields[t] = r;
+            return r;
         }
 
         private void PatchWithHarmony(MethodBase original, HarmonyMethod prefix, HarmonyMethod postfix)
@@ -10979,12 +11008,10 @@ namespace AlbedosCustomClassesAdvanced
                 Instance._paladinMarkSourceContext = string.Empty;
         }
 
-        private static void SkillLevelPostfix(Skills __instance, object[] __args, ref float __result)
+        // v0.25.183 (perf): typed argument (the object[] form allocated + boxed on every skill query, many per frame)
+        private static void SkillLevelPostfix(Skills __instance, Skills.SkillType __0, ref float __result)
         {
-            if (Instance == null || __args == null || __args.Length < 1)
-                return;
-
-            if (!(__args[0] is Skills.SkillType))
+            if (Instance == null)
                 return;
 
             Player player = Instance.GetPlayerFromSkills(__instance);
@@ -10992,18 +11019,16 @@ namespace AlbedosCustomClassesAdvanced
             if (player == null)
                 return;
 
-            float bonus = Instance.GetSkillBonus(player, (Skills.SkillType)__args[0]);
+            float bonus = Instance.GetSkillBonus(player, __0);
 
             if (bonus > 0f)
                 __result = Mathf.Clamp(__result + bonus, 0f, 100f);
         }
 
-        private static void SkillFactorPostfix(Skills __instance, object[] __args, ref float __result)
+        // v0.25.183 (perf): typed argument (the object[] form allocated + boxed on every skill query, many per frame)
+        private static void SkillFactorPostfix(Skills __instance, Skills.SkillType __0, ref float __result)
         {
-            if (Instance == null || __args == null || __args.Length < 1)
-                return;
-
-            if (!(__args[0] is Skills.SkillType))
+            if (Instance == null)
                 return;
 
             Player player = Instance.GetPlayerFromSkills(__instance);
@@ -11011,7 +11036,7 @@ namespace AlbedosCustomClassesAdvanced
             if (player == null)
                 return;
 
-            float bonus = Instance.GetSkillBonus(player, (Skills.SkillType)__args[0]);
+            float bonus = Instance.GetSkillBonus(player, __0);
 
             if (bonus > 0f)
                 __result = Mathf.Clamp01(__result + bonus / 100f);
@@ -11449,9 +11474,7 @@ namespace AlbedosCustomClassesAdvanced
 
             try
             {
-                FieldInfo[] fields = typeof(Skills).GetFields(
-                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
-                );
+                FieldInfo[] fields = IhPlayerCapableFields(typeof(Skills));
 
                 for (int i = 0; i < fields.Length; i++)
                 {
@@ -11475,9 +11498,7 @@ namespace AlbedosCustomClassesAdvanced
 
             try
             {
-                FieldInfo[] fields = seman.GetType().GetFields(
-                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
-                );
+                FieldInfo[] fields = IhPlayerCapableFields(seman.GetType());
 
                 for (int i = 0; i < fields.Length; i++)
                 {
@@ -12075,12 +12096,20 @@ namespace AlbedosCustomClassesAdvanced
         {
             return IhClassOfSkill(id).Length > 0;
         }
+        // v0.25.183 (perf): called many times per frame / GUI event - result cached per class (IhKits is a fixed table;
+        // no caller modifies the returned array)
+        private static readonly Dictionary<string, string[]> _ihBranchCache = new Dictionary<string, string[]>();
         private static string[] IhBranchesOf(string cls)
         {
+            string[] cached;
+            string key = cls ?? "";
+            if (_ihBranchCache.TryGetValue(key, out cached)) return cached;
             List<string> list = new List<string>();
             for (int i = 0; i < IhKits.Length; i++)
                 if (IhKits[i].Class == cls) list.Add(IhKits[i].Ac);
-            return list.ToArray();
+            cached = list.ToArray();
+            _ihBranchCache[key] = cached;
+            return cached;
         }
         private IhKit IhPlayerKit(Player player)
         {
@@ -15707,12 +15736,20 @@ namespace AlbedosCustomClassesAdvanced
             return g != null ? g.transform : null;
         }
 
+        // v0.25.183 (perf): static bool members resolved once per (type, name) - ran every frame for the HUD
+        private static readonly Dictionary<Type, Dictionary<string, MethodInfo>> _ihStaticBoolCache = new Dictionary<Type, Dictionary<string, MethodInfo>>();
         private static bool IhStaticBool(ref Type cache, string typeName, string method)
         {
             try
             {
                 if (cache == null) cache = Type.GetType(typeName + ", assembly_valheim");
-                MethodInfo m = cache == null ? null : cache.GetMethod(method, BindingFlags.Static | BindingFlags.Public);
+                MethodInfo m = null;
+                if (cache != null)
+                {
+                    Dictionary<string, MethodInfo> byName;
+                    if (!_ihStaticBoolCache.TryGetValue(cache, out byName)) { byName = new Dictionary<string, MethodInfo>(); _ihStaticBoolCache[cache] = byName; }
+                    if (!byName.TryGetValue(method, out m)) { m = cache.GetMethod(method, BindingFlags.Static | BindingFlags.Public); byName[method] = m; }
+                }
                 return m != null && Convert.ToBoolean(m.Invoke(null, null));
             }
             catch { return false; }
@@ -15745,7 +15782,12 @@ namespace AlbedosCustomClassesAdvanced
             try
             {
                 object seman = player.GetSEMan();
-                MethodInfo get = seman == null ? null : seman.GetType().GetMethod("GetStatusEffects", Type.EmptyTypes);
+                MethodInfo get = null;   // v0.25.183 (perf) resolved once per SEMan type
+                if (seman != null)
+                {
+                    if (seman.GetType() != _ihSemanStatusType) { _ihSemanStatusType = seman.GetType(); _ihSemanStatusGet = _ihSemanStatusType.GetMethod("GetStatusEffects", Type.EmptyTypes); }
+                    get = _ihSemanStatusGet;
+                }
                 System.Collections.IEnumerable list = get == null ? null : get.Invoke(seman, null) as System.Collections.IEnumerable;
                 if (list != null) foreach (object se in list) if (se is IhStatusDisplay) _ihHudEffects.Add(se);
             }
@@ -15876,17 +15918,23 @@ namespace AlbedosCustomClassesAdvanced
 
         private static readonly Dictionary<string, MethodInfo> _ihCallFloatCache = new Dictionary<string, MethodInfo>();
 
+        private static Type _ihSemanStatusType;
+        private static MethodInfo _ihSemanStatusGet;
+        // v0.25.183 (perf): keyed by Type then name (the string key was concatenated on every call, several per frame)
+        private static readonly Dictionary<Type, Dictionary<string, MethodInfo>> _ihCallFloatByType = new Dictionary<Type, Dictionary<string, MethodInfo>>();
         private static float IhCallFloat(object o, string method)
         {
             try
             {
                 if (o == null) return 0f;
-                string key = o.GetType().FullName + "." + method;
+                Type ot = o.GetType();
+                Dictionary<string, MethodInfo> byName;
+                if (!_ihCallFloatByType.TryGetValue(ot, out byName)) { byName = new Dictionary<string, MethodInfo>(); _ihCallFloatByType[ot] = byName; }
                 MethodInfo m;
-                if (!_ihCallFloatCache.TryGetValue(key, out m))
+                if (!byName.TryGetValue(method, out m))
                 {
-                    m = o.GetType().GetMethod(method, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
-                    _ihCallFloatCache[key] = m;
+                    m = ot.GetMethod(method, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+                    byName[method] = m;
                 }
                 return m == null ? 0f : Convert.ToSingle(m.Invoke(o, null));
             }
@@ -15894,18 +15942,21 @@ namespace AlbedosCustomClassesAdvanced
         }
 
         private static readonly Dictionary<string, FieldInfo> _ihFieldCache = new Dictionary<string, FieldInfo>();
+        private static readonly Dictionary<Type, Dictionary<string, FieldInfo>> _ihFieldByType = new Dictionary<Type, Dictionary<string, FieldInfo>>();
 
         // v0.25.9: FieldInfo cached per type + name (called every OnGUI event for the food row).
         private static object IhField(object o, string name)
         {
             if (o == null) return null;
-            string key = o.GetType().FullName + ":" + name;
+            Type ot = o.GetType();   // v0.25.183 (perf): keyed by Type then name (no string key per call)
+            Dictionary<string, FieldInfo> byName;
+            if (!_ihFieldByType.TryGetValue(ot, out byName)) { byName = new Dictionary<string, FieldInfo>(); _ihFieldByType[ot] = byName; }
             FieldInfo cached;
-            if (!_ihFieldCache.TryGetValue(key, out cached))
+            if (!byName.TryGetValue(name, out cached))
             {
-                for (Type t = o.GetType(); t != null && cached == null; t = t.BaseType)
+                for (Type t = ot; t != null && cached == null; t = t.BaseType)
                     cached = t.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
-                _ihFieldCache[key] = cached;
+                byName[name] = cached;
             }
             return cached == null ? null : cached.GetValue(o);
         }

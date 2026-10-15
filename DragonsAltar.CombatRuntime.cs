@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.182";
+        public const string ModVersion = "0.25.183";
 
         internal static DragonCombatPlugin Instance;
 
@@ -394,10 +394,45 @@ namespace DragonsAltarCombat
                 if (ps.Length != 2) continue;
                 if (ms[i].Name == "SetFloat" && ps[1].ParameterType != typeof(float)) continue;
                 if (ms[i].Name == "SetBool" && ps[1].ParameterType != typeof(bool)) continue;
-                try { PatchWithHarmony(ms[i], ms[i].Name == "SetBool" ? preBool : pre, null); n++; }
+                // v0.25.183 (perf): typed prefixes per overload (int hash / string name) - the object[] __args form
+                // allocated + boxed on EVERY SetFloat/SetBool of EVERY character; same override logic
+                HarmonyMethod use = ms[i].Name == "SetBool" ? preBool : pre;
+                string typed = null;
+                if (ps[0].ParameterType == typeof(int)) typed = ms[i].Name == "SetBool" ? "ZanimBoolPrefixHash" : "ZanimFloatPrefixHash";
+                else if (ps[0].ParameterType == typeof(string)) typed = ms[i].Name == "SetBool" ? "ZanimBoolPrefixName" : "ZanimFloatPrefixName";
+                if (typed != null)
+                {
+                    MethodInfo tm = typeof(DragonCombatPlugin).GetMethod(typed, BindingFlags.Static | BindingFlags.NonPublic);
+                    if (tm != null) use = new HarmonyMethod(tm);
+                }
+                try { PatchWithHarmony(ms[i], use, null); n++; }
                 catch (Exception ex) { Logger.LogWarning("Could not patch ZSyncAnimation.SetFloat: " + ex.Message); }
             }
             return n;
+        }
+
+        private static void ZanimFloatPrefixHash(object __instance, int __0, ref float __1)
+        {
+            if (!DragonCombat.ZanimOverrideCandidate(__instance)) return;
+            try { float v = __1; if (DragonCombat.ForceRunOverride(__instance, __0, ref v)) __1 = v; } catch { }
+        }
+
+        private static void ZanimFloatPrefixName(object __instance, string __0, ref float __1)
+        {
+            if (!DragonCombat.ZanimOverrideCandidate(__instance)) return;
+            try { float v = __1; if (DragonCombat.ForceRunOverride(__instance, __0, ref v)) __1 = v; } catch { }
+        }
+
+        private static void ZanimBoolPrefixHash(object __instance, int __0, ref bool __1)
+        {
+            if (!DragonCombat.ZanimOverrideCandidate(__instance)) return;
+            try { bool v = __1; if (DragonCombat.ForceBoolOverride(__instance, __0, ref v)) __1 = v; } catch { }
+        }
+
+        private static void ZanimBoolPrefixName(object __instance, string __0, ref bool __1)
+        {
+            if (!DragonCombat.ZanimOverrideCandidate(__instance)) return;
+            try { bool v = __1; if (DragonCombat.ForceBoolOverride(__instance, __0, ref v)) __1 = v; } catch { }
         }
 
         private static void ZanimBoolPrefix(object __instance, object[] __args)
@@ -4481,6 +4516,12 @@ namespace DragonsAltarCombat
         }
 
         // ZSyncAnimation.SetFloat prefix body: true = the value was replaced.
+        // v0.25.183 (perf): cheap pre-check (no boxing) - only the forced-run / bow-aim animator can be overridden
+        internal static bool ZanimOverrideCandidate(object zanim)
+        {
+            return (_forceRunZanim != null && ReferenceEquals(zanim, _forceRunZanim)) || (_bowAimZanim != null && ReferenceEquals(zanim, _bowAimZanim));
+        }
+
         internal static bool ForceRunOverride(object zanim, object key, ref float value)
         {
             if (_forceRunZanim == null || !ReferenceEquals(zanim, _forceRunZanim)) return false;
@@ -7961,35 +8002,87 @@ namespace DragonsAltarCombat
             return false;
         }
 
+        // v0.25.183 (perf): this ran every frame for ~7 UI types and re-resolved every FieldInfo / MethodInfo / PropertyInfo
+        // each time (50+ reflection lookups per frame). The members are now resolved once per UI type; the checks, their
+        // order and the "a real visibility method is authoritative" rule are unchanged.
+        private class UiReflect
+        {
+            public Type Type;
+            public FieldInfo InstanceField;
+            public PropertyInfo InstanceProperty;
+            public MethodInfo[] Methods;      // per name: bool method (or null)
+            public PropertyInfo[] Props;      // per name: bool property with getter (or null)
+            public MethodInfo[] Getters;
+            public FieldInfo[] Roots;
+        }
+        private static readonly Dictionary<string, UiReflect> _uiReflect = new Dictionary<string, UiReflect>();
+
+        private static UiReflect GetUiReflect(string typeName, string[] methodNames, string[] rootFields)
+        {
+            UiReflect r;
+            if (_uiReflect.TryGetValue(typeName, out r)) return r;
+            r = new UiReflect();
+            Type type = FindTypeCached(typeName);
+            r.Type = type;
+            if (type != null)
+            {
+                r.InstanceField = type.GetField("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                if (r.InstanceField == null)
+                    r.InstanceField = type.GetField("m_instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                r.InstanceProperty = type.GetProperty("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                if (r.InstanceProperty == null)
+                    r.InstanceProperty = type.GetProperty("m_instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                r.Methods = new MethodInfo[methodNames.Length];
+                r.Props = new PropertyInfo[methodNames.Length];
+                r.Getters = new MethodInfo[methodNames.Length];
+                for (int i = 0; i < methodNames.Length; i++)
+                {
+                    try
+                    {
+                        MethodInfo method = type.GetMethod(methodNames[i], BindingFlags.Static | BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+                        if (method != null && method.ReturnType == typeof(bool)) r.Methods[i] = method;
+                    }
+                    catch { }
+                    try
+                    {
+                        PropertyInfo property = type.GetProperty(methodNames[i], BindingFlags.Static | BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                        if (property != null && property.PropertyType == typeof(bool))
+                        {
+                            MethodInfo getter = property.GetGetMethod(true);
+                            if (getter != null) { r.Props[i] = property; r.Getters[i] = getter; }
+                        }
+                    }
+                    catch { }
+                }
+                r.Roots = new FieldInfo[rootFields.Length];
+                for (int i = 0; i < rootFields.Length; i++)
+                    r.Roots[i] = type.GetField(rootFields[i], BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            }
+            _uiReflect[typeName] = r;
+            return r;
+        }
+
         private static bool IsReflectedUiVisible(string typeName, string[] methodNames, string[] rootFields)
         {
             try
             {
-                Type type = FindTypeCached(typeName);
+                UiReflect r = GetUiReflect(typeName, methodNames, rootFields);
+                Type type = r.Type;
                 if (type == null)
                     return false;
 
                 object instance = null;
-                FieldInfo instanceField = type.GetField("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-                if (instanceField == null)
-                    instanceField = type.GetField("m_instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-                if (instanceField != null)
-                    instance = instanceField.GetValue(null);
+                if (r.InstanceField != null)
+                    instance = r.InstanceField.GetValue(null);
 
-                if (instance == null)
-                {
-                    PropertyInfo instanceProperty = type.GetProperty("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-                    if (instanceProperty == null)
-                        instanceProperty = type.GetProperty("m_instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-                    if (instanceProperty != null)
-                        instance = instanceProperty.GetValue(null, null);
-                }
+                if (instance == null && r.InstanceProperty != null)
+                    instance = r.InstanceProperty.GetValue(null, null);
 
                 bool visibilityMethodResolved = false;
-                for (int i = 0; i < methodNames.Length; i++)
+                for (int i = 0; i < r.Methods.Length; i++)
                 {
-                    MethodInfo method = type.GetMethod(methodNames[i], BindingFlags.Static | BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
-                    if (method != null && method.ReturnType == typeof(bool))
+                    MethodInfo method = r.Methods[i];
+                    if (method != null)
                     {
                         visibilityMethodResolved = true;
                         object target = method.IsStatic ? null : instance;
@@ -8001,20 +8094,16 @@ namespace DragonsAltarCombat
                         }
                     }
 
-                    PropertyInfo property = type.GetProperty(methodNames[i], BindingFlags.Static | BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                    if (property != null && property.PropertyType == typeof(bool))
+                    MethodInfo getter = r.Getters[i];
+                    if (getter != null)
                     {
-                        MethodInfo getter = property.GetGetMethod(true);
-                        if (getter != null)
+                        visibilityMethodResolved = true;
+                        object target = getter.IsStatic ? null : instance;
+                        if (getter.IsStatic || target != null)
                         {
-                            visibilityMethodResolved = true;
-                            object target = getter.IsStatic ? null : instance;
-                            if (getter.IsStatic || target != null)
-                            {
-                                object result = property.GetValue(target, null);
-                                if (result is bool && (bool)result)
-                                    return true;
-                            }
+                            object result = r.Props[i].GetValue(target, null);
+                            if (result is bool && (bool)result)
+                                return true;
                         }
                     }
                 }
@@ -8026,9 +8115,9 @@ namespace DragonsAltarCombat
                 if (instance == null)
                     return false;
 
-                for (int i = 0; i < rootFields.Length; i++)
+                for (int i = 0; i < r.Roots.Length; i++)
                 {
-                    FieldInfo field = type.GetField(rootFields[i], BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    FieldInfo field = r.Roots[i];
                     if (field == null)
                         continue;
                     GameObject root = field.GetValue(instance) as GameObject;
@@ -8042,6 +8131,12 @@ namespace DragonsAltarCombat
             return false;
         }
 
+        private static bool _hudPieceResolved;
+        private static FieldInfo _hudInstanceField, _hudPieceWindow;
+        private static MethodInfo _hudPieceVisible;
+        private static readonly Dictionary<string, PropertyInfo> _customUiProps = new Dictionary<string, PropertyInfo>();
+        private static readonly Dictionary<string, FieldInfo> _customUiFields = new Dictionary<string, FieldInfo>();
+
         private static bool IsHudPieceSelectionVisible()
         {
             try
@@ -8051,13 +8146,20 @@ namespace DragonsAltarCombat
                     return false;
 
                 object instance = null;
-                FieldInfo instanceField = type.GetField("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                if (!_hudPieceResolved)   // v0.25.183 (perf): members resolved once
+                {
+                    _hudPieceResolved = true;
+                    _hudInstanceField = type.GetField("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                    _hudPieceVisible = type.GetMethod("IsPieceSelectionVisible", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+                    _hudPieceWindow = type.GetField("m_pieceSelectionWindow", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                }
+                FieldInfo instanceField = _hudInstanceField;
                 if (instanceField != null)
                     instance = instanceField.GetValue(null);
                 if (instance == null)
                     return false;
 
-                MethodInfo visible = type.GetMethod("IsPieceSelectionVisible", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+                MethodInfo visible = _hudPieceVisible;
                 if (visible != null && visible.ReturnType == typeof(bool))
                 {
                     object result = visible.Invoke(instance, null);
@@ -8069,7 +8171,7 @@ namespace DragonsAltarCombat
                 // that case only inspect the actual selection window, never the
                 // broad m_buildHud root which can stay active while merely holding
                 // a Hammer and would hide our combat HUD during normal gameplay.
-                FieldInfo field = type.GetField("m_pieceSelectionWindow", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                FieldInfo field = _hudPieceWindow;
                 if (field != null)
                 {
                     GameObject root = field.GetValue(instance) as GameObject;
@@ -8093,7 +8195,13 @@ namespace DragonsAltarCombat
                     Type type = cachedType;
                     if (type == null)
                         continue;
-                    PropertyInfo property = type.GetProperty(propertyName, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                    PropertyInfo property;
+                    string pk = typeName + "|" + propertyName;
+                    if (!_customUiProps.TryGetValue(pk, out property))
+                    {
+                        property = type.GetProperty(propertyName, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                        _customUiProps[pk] = property;
+                    }
                     if (property == null || property.PropertyType != typeof(bool))
                         return false;
                     object value = property.GetValue(null, null);
@@ -8116,11 +8224,13 @@ namespace DragonsAltarCombat
                     Type type = cachedType;
                     if (type == null)
                         continue;
-                    FieldInfo instanceField = type.GetField(instanceFieldName, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                    FieldInfo instanceField, boolField;
+                    string ik = typeName + "|s|" + instanceFieldName, bk = typeName + "|i|" + boolFieldName;
+                    if (!_customUiFields.TryGetValue(ik, out instanceField)) { instanceField = type.GetField(instanceFieldName, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic); _customUiFields[ik] = instanceField; }
                     object instance = instanceField == null ? null : instanceField.GetValue(null);
                     if (instance == null)
                         return false;
-                    FieldInfo boolField = type.GetField(boolFieldName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (!_customUiFields.TryGetValue(bk, out boolField)) { boolField = type.GetField(boolFieldName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic); _customUiFields[bk] = boolField; }
                     if (boolField == null)
                         return false;
                     object value = boolField.GetValue(instance);
@@ -8494,25 +8604,17 @@ namespace DragonsAltarCombat
             if (string.IsNullOrEmpty(source))
                 source = "Generic";
 
-            string statusIcon, statusLabel;
-            TimedBuffLook(source, attackDamageBonus, attackSpeedBonus, moveSpeedBonus, defenseBonus, staminaRegenBonus, eitrRegenBonus, hyperArmor, out statusIcon, out statusLabel);
+            // v0.25.183 (perf): the look (label/icon) is only needed when an indicator is shown - Sorcerer modules re-apply
+            // short (0.35 s) buffs every frame, which built the label string each time
             if (duration >= 1f)
             {
+                string statusIcon, statusLabel;
+                TimedBuffLook(source, attackDamageBonus, attackSpeedBonus, moveSpeedBonus, defenseBonus, staminaRegenBonus, eitrRegenBonus, hyperArmor, out statusIcon, out statusLabel);
                 string det = TimedBuffDetail(attackDamageBonus, attackSpeedBonus, moveSpeedBonus, defenseBonus, staminaRegenBonus, eitrRegenBonus, hyperArmor);
                 string note;
                 if (BuffNotes.TryGetValue(source, out note) && !string.IsNullOrEmpty(note)) det += "\n" + note;
                 ShowStatus(player, "buff_" + source, statusIcon, statusLabel, duration, 0, det);
             }
-
-            TimedBuffState state = new TimedBuffState();
-            state.EndTime = Time.time + Mathf.Max(0.1f, duration);
-            state.AttackDamageBonus = attackDamageBonus;
-            state.AttackSpeedBonus = attackSpeedBonus;
-            state.MoveSpeedBonus = moveSpeedBonus;
-            state.DefenseBonus = defenseBonus;
-            state.StaminaRegenBonus = staminaRegenBonus;
-            state.EitrRegenBonus = eitrRegenBonus;
-            state.HyperArmor = hyperArmor;
 
             int id = player.GetInstanceID();
             Dictionary<string, TimedBuffState> buffs;
@@ -8521,6 +8623,16 @@ namespace DragonsAltarCombat
                 buffs = new Dictionary<string, TimedBuffState>();
                 TimedBuffs[id] = buffs;
             }
+            TimedBuffState state;
+            if (!buffs.TryGetValue(source, out state) || state == null) state = new TimedBuffState();   // v0.25.183 reuse (same values written)
+            state.EndTime = Time.time + Mathf.Max(0.1f, duration);
+            state.AttackDamageBonus = attackDamageBonus;
+            state.AttackSpeedBonus = attackSpeedBonus;
+            state.MoveSpeedBonus = moveSpeedBonus;
+            state.DefenseBonus = defenseBonus;
+            state.StaminaRegenBonus = staminaRegenBonus;
+            state.EitrRegenBonus = eitrRegenBonus;
+            state.HyperArmor = hyperArmor;
             buffs[source] = state;
         }
 
@@ -9099,6 +9211,19 @@ namespace DragonsAltarCombat
             return 1f + bonus;
         }
 
+        // v0.25.183 (perf): Humanoid hand-slot fields resolved once (GetHandItem runs several times per frame)
+        private static readonly Dictionary<string, FieldInfo> _handFields = new Dictionary<string, FieldInfo>();
+        private static FieldInfo HandField(string fieldName)
+        {
+            FieldInfo f;
+            if (!_handFields.TryGetValue(fieldName, out f))
+            {
+                f = typeof(Humanoid).GetField(fieldName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                _handFields[fieldName] = f;
+            }
+            return f;
+        }
+
         public static ItemDrop.ItemData GetHandItem(Humanoid humanoid, string fieldName)
         {
             if (humanoid == null || string.IsNullOrEmpty(fieldName))
@@ -9106,7 +9231,7 @@ namespace DragonsAltarCombat
 
             try
             {
-                FieldInfo field = typeof(Humanoid).GetField(fieldName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                FieldInfo field = HandField(fieldName);
                 if (field != null)
                     return field.GetValue(humanoid) as ItemDrop.ItemData;
             }
@@ -9124,7 +9249,7 @@ namespace DragonsAltarCombat
 
             try
             {
-                FieldInfo field = typeof(Humanoid).GetField(fieldName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                FieldInfo field = HandField(fieldName);
                 if (field != null)
                     field.SetValue(humanoid, item);
             }
@@ -10518,13 +10643,21 @@ namespace DragonsAltarCombat
             UnityEngine.Object.Destroy(obj);
         }
 
+
+        private static readonly Dictionary<Type, MethodInfo> _cachedIsTamed = new Dictionary<Type, MethodInfo>();
+        private static MethodInfo CachedIsTamed(Type t)
+        {
+            MethodInfo mi;
+            if (!_cachedIsTamed.TryGetValue(t, out mi)) { mi = t.GetMethod("IsTamed", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic); _cachedIsTamed[t] = mi; }
+            return mi;
+        }
         private static bool IsEnemy(Player attacker, Character target)
         {
             if (target == null || attacker == null || target == attacker || target.IsDead() || target is Player)
                 return false;
             try
             {
-                MethodInfo isTamed = target.GetType().GetMethod("IsTamed", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                MethodInfo isTamed = CachedIsTamed(target.GetType());   // v0.25.183 (perf) resolved once per type
                 if (isTamed != null && Convert.ToBoolean(isTamed.Invoke(target, null)))
                     return false;
             }
@@ -10534,13 +10667,25 @@ namespace DragonsAltarCombat
             return true;
         }
 
+        // v0.25.183 (perf): only fields that can hold a Player, resolved once per type (same declaration order, same result)
+        private static readonly Dictionary<Type, FieldInfo[]> _playerCapableFields = new Dictionary<Type, FieldInfo[]>();
         public static Player GetPlayerFromSEMan(object seman)
         {
             if (seman == null)
                 return null;
             try
             {
-                FieldInfo[] fields = seman.GetType().GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                Type st = seman.GetType();
+                FieldInfo[] fields;
+                if (!_playerCapableFields.TryGetValue(st, out fields))
+                {
+                    FieldInfo[] all = st.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    List<FieldInfo> keep = new List<FieldInfo>();
+                    for (int k = 0; k < all.Length; k++)
+                        if (all[k].FieldType.IsAssignableFrom(typeof(Player)) || typeof(Player).IsAssignableFrom(all[k].FieldType)) keep.Add(all[k]);
+                    fields = keep.ToArray();
+                    _playerCapableFields[st] = fields;
+                }
                 for (int i = 0; i < fields.Length; i++)
                 {
                     Player player = fields[i].GetValue(seman) as Player;
@@ -11141,9 +11286,13 @@ namespace DragonsAltarCombat
         }
 
         // bind the skills' clips on this character's Animator once (weight-0 throw-away graph, one clip per frame)
+        private static float _pwRecheckAt;
         private static void WarmBindings(Player local)
         {
             if (local == null || _clips == null) return;
+            // v0.25.183 (perf): once every clip is warmed, look for a new character animator once a second instead of every frame
+            if (_pwWarmed != null && _pwIndex >= WarmClips.Length && Time.time < _pwRecheckAt) return;
+            _pwRecheckAt = Time.time + 1f;
             Animator an = local.GetComponentInChildren<Animator>();
             if (an == null) return;
             if (an != _pwWarmed) { _pwWarmed = an; _pwIndex = 0; }
