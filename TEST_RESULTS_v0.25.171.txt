@@ -1,0 +1,3 @@
+v0.25.171 Still Cape - test results
+COMPILE (here, no game): tools/compile_check/check.sh 3029660 PASSED (0 new signatures); mcs --parse -langversion:5 CombatRuntime clean.
+NOT VERIFIED (needs Valheim): cape look while frozen (should hang still on the back), no pop when the cloth resumes, log line present.

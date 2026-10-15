@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.170";
+        public const string ModVersion = "0.25.171";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1036,6 +1036,7 @@ namespace DragonsAltarCombat
         internal ConfigEntry<bool> MeleeHitStop, ComboFixedInterval;
         internal ConfigEntry<bool> EnhancedVfx;
         internal ConfigEntry<float> VfxDensity, VfxLight;
+        internal ConfigEntry<bool> CapeFreeze;   // v0.25.171
         internal ConfigEntry<bool> ShowGuides;
         private static FieldInfo _atkLevels, _atkLevel, _atkAnim, _atkChar, _atkWeapon, _atkAngle, _atkType;
         private static MethodInfo _atkMelee;
@@ -1180,6 +1181,7 @@ namespace DragonsAltarCombat
             ShowGuides = Config.Bind("Visuals", "ShowTargetingGuides", true, "Thin, very faint outlines for targeting / charging guides. Off hides ONLY those outlines (never skill geometry, damage areas or other UI).");
             EnhancedVfx = Config.Bind("Visuals", "EnhancedSkillVfx_v02554", true, "Real particle / light / lightning effects on skills (v0.25.54). Off = the old line drawings only.");
             VfxDensity = Config.Bind("Visuals", "ParticleDensity_v025145", 0.35f, "Particle amount multiplier for skill effects (0.1 - 3). v0.25.145: restrained default.");
+            CapeFreeze = Config.Bind("Visuals", "FreezeCapeDuringSkills_v025171", true, "Capes stop simulating while a skill animation drives the body (they hang still and follow the body like armour) and resume afterwards. Off = the v0.25.170 cloth guard (cape keeps simulating with damped inertia).");
             VfxLight = Config.Bind("Visuals", "LightIntensity_v025145", 0.15f, "Brightness of the flashes / point lights skills create (0 = none, 1 = the old v0.25.54-58 look).");
             ComboSwingSeconds = Config.Bind("Combat", "ComboSwingSeconds_v02559", 0.6f, "Normal attack chain: seconds per swing for ALL 5 hits (finisher included) with no attack-speed bonus; class attack speed bonuses shorten it.");
             ComboRepeatOffset = Config.Bind("Combat", "ComboRepeatOffset_v02559", 0.22f, "When the chain steps back to an earlier swing (hit 3 = swing 1 again), it starts this far into that swing (0-0.5 of the animation) so it flows out of the previous swing instead of restarting from the rest pose.");
@@ -16415,10 +16417,63 @@ namespace DragonsAltarCombat
             return DragonCombat.IsSkillLocked(p) && !p.IsOnGround();
         }
 
+        // v0.25.171 (user: "still happening - freeze the cape or don't let our CAs affect it"): FREEZE mode (default). While a skill
+        // animation drives the body (same hysteresis as the guard) every MagicaCloth component on the player is switched OFF: no cloth
+        // simulation runs, the cape mesh is plain skinned to the body bones and moves with the body like armour - nothing our skill
+        // animations, root moves or falls do can fling, stretch or shake it. 0.15 s after the skill ends (hysteresis included) the
+        // components are switched back ON and the cloth starts again from the current pose. Only components WE switched off are
+        // switched back on. Config [Visuals] FreezeCapeDuringSkills_v025171 (off = the v0.25.170 damped guard below).
+        private static readonly List<Behaviour> _frozen = new List<Behaviour>();
+        private static float _frozenRelease;
+        private static bool _freezeLogged;
+        private const float Settle = 0.15f;
+
+        private static bool FreezeMode()
+        {
+            return DragonCombatPlugin.Instance == null || DragonCombatPlugin.Instance.CapeFreeze == null || DragonCombatPlugin.Instance.CapeFreeze.Value;
+        }
+
+        private static void FreezeUpdate(Player p, bool on)
+        {
+            if (p != _owner) { Unfreeze(); _owner = p; }
+            if (on)
+            {
+                _frozenRelease = Time.time + Settle;
+                if (_clothType == null) { _clothType = DragonCombat.FindTypeCached("MagicaCloth2.MagicaCloth"); if (_clothType == null) return; }
+                if (Time.time < _nextScan && _frozen.Count > 0) return;
+                _nextScan = Time.time + 0.5f;   // new cape equipped mid-skill
+                Component[] cloths = p.GetComponentsInChildren(_clothType, true);
+                for (int i = 0; i < cloths.Length; i++)
+                {
+                    Behaviour b = cloths[i] as Behaviour;
+                    if (b == null || !b.enabled) continue;
+                    b.enabled = false;
+                    _frozen.Add(b);
+                    if (!_freezeLogged) { _freezeLogged = true; Debug.Log("[Aethelborn] Cape guard: freeze mode - cloth '" + b.name + "' paused during skill animations"); }
+                }
+                return;
+            }
+            if (_frozen.Count > 0 && Time.time >= _frozenRelease) Unfreeze();
+        }
+
+        private static void Unfreeze()
+        {
+            for (int i = 0; i < _frozen.Count; i++) if (_frozen[i] != null) _frozen[i].enabled = true;
+            _frozen.Clear();
+        }
+
         public static void Update(Player p)
         {
             try
             {
+                if (FreezeMode())
+                {
+                    if (_saved.Count > 0) Restore();   // switched modes: the damped guard's values go back first
+                    if (Driven(p)) _drivenUntil = Time.time + Hold;
+                    FreezeUpdate(p, p != null && !p.IsDead() && Time.time < _drivenUntil);
+                    return;
+                }
+                if (_frozen.Count > 0) Unfreeze();
                 if (Driven(p)) _drivenUntil = Time.time + Hold;   // hysteresis: animation segment gaps never toggle the guard
                 bool on = p != null && !p.IsDead() && Time.time < _drivenUntil;
                 if (!on && _saved.Count == 0) { _level = 0f; _guardOn = false; return; }

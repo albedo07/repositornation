@@ -1,0 +1,12 @@
+Aethelborn Ascended v0.25.171 - Still Cape
+Baseline: v0.25.170. Only the cape changed.
+
+CAPE (user video: cape still flung / missing during Circle Swing + Bonecrusher)
+- New FREEZE mode (default ON, [Visuals] FreezeCapeDuringSkills_v025171): while a skill animation drives the body
+  (Mixamo clip live, clip driver busy, or skill-locked in the air; 0.35 s hysteresis) every MagicaCloth component on the
+  player is switched off. The cape then hangs as a normal skinned mesh and moves with the body like armour - skill
+  animations, root moves, jumps and landings cannot fling, stretch or shake it.
+- 0.15 s after the skill ends the components we switched off are switched back on; the cloth restarts from the current
+  pose. Normal cape movement outside skills is untouched.
+- Off = the v0.25.170 damped guard (kept as fallback).
+- Log: "[Aethelborn] Cape guard: freeze mode - cloth '...' paused during skill animations" (once).
