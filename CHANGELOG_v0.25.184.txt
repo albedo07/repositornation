@@ -1,0 +1,27 @@
+Aethelborn Ascended v0.25.184 - Performance Monitor (on top of v0.25.183; NOT an anchor, anchor stays v0.25.179)
+Measurement tool only. Off by default; when off every hook is one bool check. No skill / VFX / gameplay change.
+
+KEYS (in game)
+- F7          overlay + recording ON / OFF (turning it off writes the report)
+- Ctrl+F7     write the report now
+- Alt+F7      effect lights OFF / ON for new effects (A/B test: if FPS jumps, the GPU pays for light-heavy VFX)
+  Config [Performance Monitor]: EnabledAtStart_v025184, ToggleKey_v025184 (F7), SpikeMs_v025184 (25 ms).
+  To also test "no skill VFX at all": F8 -> [Visuals] EnhancedSkillVfx off.
+
+OVERLAY (top right): FPS, frame avg / max, our code ms per frame, VFX spawn ms per second, memory allocation KB/s,
+GC count, spikes, live effect objects, active skill, effect-lights state.
+
+REPORT  BepInEx/plugins/Aethelborn_Performance.txt (auto every 60 s while recording, on F7 off, on quit)
+- Idle baseline (no skill in the last 4 s): frame ms / FPS, our code ms.
+- Frame phases idle vs overall: Update (all mods + game) / Coroutines + animation (where skill routines run) /
+  LateUpdate / Render + GUI + physics + GPU wait.
+- Our code per module: Combat runtime, Advanced Update / LateUpdate / OnGUI (HUD + tree), Skills, Sorcerer
+  Update / LateUpdate / OnGUI, Ranger, VFX spawning.
+- PER SKILL (sorted worst first): casts, VFX spawn ms avg/max, effect hosts / particle systems / lights / vanilla fx
+  created per cast, +frame ms (extra frame time in the 4 s after a cast vs idle - includes GPU), +our ms, spikes,
+  worst frame, and a verdict naming the cause: VFX spawn hitch / skill routines / LateUpdate / GPU-render heavy.
+- Last 40 spikes: time, frame ms, our ms, active skill, our slowest module, slowest frame phase, [GC] marker.
+
+LIMITS: attribution = the last skill cast within 4 s (overlapping skills share the window); GPU cost is seen as
+the render phase growing, not split per effect (use Alt+F7 / the VFX toggle to confirm); other mods are only seen
+as "Update (all mods + game)" time.

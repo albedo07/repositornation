@@ -1,0 +1,2 @@
+v0.25.184 - verified here: compile check 3029660 PASSED (0 new signatures); mcs --parse -langversion:5 OK on every .cs.
+Not run in game: overlay layout, key handling, report file path (falls back to persistentDataPath) need in-game testing.

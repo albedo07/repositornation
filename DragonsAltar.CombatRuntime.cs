@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.183";
+        public const string ModVersion = "0.25.184";
 
         internal static DragonCombatPlugin Instance;
 
@@ -232,6 +232,12 @@ namespace DragonsAltarCombat
             MasteryComboStyleEnabled = Config.Bind("Weapon Mastery", "EnableComboStyleSpeed", true, "Adds a small accelerating animation-speed style across mastery hits 1-5. This is presentation/tuning, not a framework-mandated damage bonus.");
             MasteryComboSpeedPerStage = Config.Bind("Weapon Mastery", "ComboStyleSpeedPerStagePercent", 3f, "Extra animation speed per combo stage after the first. 3 means hit 5 is about 12 percent faster than hit 1.");
 
+            // v0.25.184 performance monitor (measurement only; off unless toggled)
+            DragonPerf.EnabledAtStart = Config.Bind("Performance Monitor", "EnabledAtStart_v025184", false, "Start recording at launch. Otherwise press the toggle key in game (F7). Ctrl+F7 writes the report, Alt+F7 turns effect lights off/on for an A/B test.");
+            DragonPerf.ToggleKey = Config.Bind("Performance Monitor", "ToggleKey_v025184", KeyCode.F7, "Overlay + recording on/off. Ctrl = write report now, Alt = effect lights off/on.");
+            DragonPerf.SpikeMs = Config.Bind("Performance Monitor", "SpikeMs_v025184", 25f, "A frame slower than this (ms) is logged as a spike with the active skill.");
+            if (gameObject.GetComponent<DragonPerfMonitor>() == null) gameObject.AddComponent<DragonPerfMonitor>();
+
             if (!EnableRuntime.Value)
             {
                 Logger.LogInfo(ModName + " v" + ModVersion + " loaded with runtime disabled.");
@@ -250,7 +256,16 @@ namespace DragonsAltarCombat
             }
         }
 
+        // v0.25.184 performance monitor: times this module's Update (one bool check when the monitor is off)
         private void Update()
+        {
+            if (!DragonPerf.On) { PerfUpdateInner(); return; }
+            long perfT = DragonPerf.Now();
+            try { PerfUpdateInner(); }
+            finally { DragonPerf.Add(DragonPerf.SecRuntime, perfT); }
+        }
+
+        private void PerfUpdateInner()
         {
             DragonMixamo.PrewarmTick(Player.m_localPlayer);   // v0.25.170 load + warm the Mixamo clips before the first cast
             DragonVfx.PrewarmTick(Player.m_localPlayer);      // v0.25.183 build the VFX textures/materials before the first cast
@@ -4183,8 +4198,11 @@ namespace DragonsAltarCombat
         public static void RunVfx(Action fx)
         {
             if (fx == null || !DragonVfx.Enabled) return;
+            bool perf = DragonPerf.On;   // v0.25.184 performance monitor: VFX spawn time + objects per skill
+            if (perf) DragonPerf.VfxBegin();
             try { fx(); }
             catch (Exception ex) { if (DragonCombatPlugin.Instance != null) DragonCombatPlugin.Instance.LogInfo("[Immortal Heroes] VFX error: " + ex.Message); }
+            finally { if (perf) DragonPerf.VfxEnd(); }
         }
 
         // v0.25.66 UNIVERSAL RULE (user): "Physical Objects" = environmental objects (trees, rocks, logs, bushes);
@@ -12640,6 +12658,9 @@ namespace DragonsAltarCombat
 
     public class DragonVfxLife : MonoBehaviour
     {
+        public static int Alive;   // v0.25.184 performance monitor: live effect hosts
+        private void Awake() { Alive++; }
+        private void OnDestroy() { Alive--; }
         public float Life = 1f, Age;
         public Light FlashLight;
         public float LightPeak, LightHold;
@@ -13571,6 +13592,7 @@ namespace DragonsAltarCombat
 
         private static DragonVfxLife Host(Vector3 pos, float life, string name)
         {
+            DragonPerf.Hosts++;
             GameObject go = new GameObject("IH_Vfx_" + name);
             go.transform.position = pos;
             DragonVfxLife l = go.AddComponent<DragonVfxLife>();
@@ -13582,6 +13604,7 @@ namespace DragonsAltarCombat
         public static ParticleSystem Particles(Transform parent, Color c, int burst, float rate, float emitSeconds, float life, float speedMin, float speedMax,
             float sizeMin, float sizeMax, float gravity, ParticleSystemShapeType shape, float radius, Vector3 shapeEuler, bool stretch, bool additive)
         {
+            DragonPerf.Systems++;
             if (additive)
             {
                 // v0.25.167 (user: not cartoonish): additive light is desaturated and dimmer so it sits in Valheim's lighting
@@ -13658,7 +13681,7 @@ namespace DragonsAltarCombat
             _flashAt[_flashIdx] = Time.time;
             _flashIdx = (_flashIdx + 1) % _flashAt.Length;
             DragonVfxLife l = Host(pos, seconds, "flash");
-            Light light = l.gameObject.AddComponent<Light>();
+            Light light = l.gameObject.AddComponent<Light>(); DragonPerf.OnLight(light);
             light.type = LightType.Point;
             light.color = c;
             light.range = Mathf.Max(1f, range);
@@ -13837,7 +13860,7 @@ namespace DragonsAltarCombat
             m.loop = true;
             if (lightRange > 0f)
             {
-                Light light = go.AddComponent<Light>();
+                Light light = go.AddComponent<Light>(); DragonPerf.OnLight(light);
                 light.type = LightType.Point;
                 light.color = c;
                 light.range = Mathf.Min(lightRange, 3f);   // v0.25.150
@@ -13881,6 +13904,7 @@ namespace DragonsAltarCombat
                     if (prefab == null) continue;
                     if (znv != null && prefab.GetComponentInChildren(znv, true) != null) continue;
                     GameObject go = UnityEngine.Object.Instantiate(prefab, pos, rot);
+                    DragonPerf.VanillaFx++;
                     if (scale > 0f && Mathf.Abs(scale - 1f) > 0.01f) go.transform.localScale = prefab.transform.localScale * scale;
                     LimitSpawned(go);   // v0.25.151: vanilla effects obey the same particle / light limits
                     UnityEngine.Object.Destroy(go, Mathf.Max(0.5f, life));
@@ -14894,7 +14918,7 @@ namespace DragonsAltarCombat
             {
                 GameObject lg = new GameObject("head");
                 lg.transform.SetParent(go.transform, false);
-                Light l = lg.AddComponent<Light>();
+                Light l = lg.AddComponent<Light>(); DragonPerf.OnLight(l);
                 l.type = LightType.Point;
                 l.color = c;
                 l.range = 3f;
@@ -16797,7 +16821,7 @@ namespace DragonsAltarCombat
             ParticleSystem rim = Particles(root.transform, new Color(0.62f, 0.52f, 0.80f, 0.6f), 0, 26f * Amount, seconds, 0.35f, 0f, 0.15f, core * 0.08f, core * 0.16f, 0f,
                 ParticleSystemShapeType.Sphere, core * 1.05f, Vector3.zero, false, true);
             ParticleSystem.ShapeModule sh = rim.shape; sh.radiusThickness = 0f;
-            Light l = root.AddComponent<Light>();
+            Light l = root.AddComponent<Light>(); DragonPerf.OnLight(l);
             l.type = LightType.Point; l.color = new Color(0.55f, 0.35f, 0.9f, 1f); l.range = Mathf.Min(4f, radius * 0.5f); l.intensity = 0.8f * LightScale; l.shadows = LightShadows.None;
             DragonBlackHole bh = root.AddComponent<DragonBlackHole>();
             bh.Life = seconds;
@@ -17256,7 +17280,7 @@ namespace DragonsAltarCombat
             MeshObject("glow", m, Mat(WhiteTex(), true), root.transform);
             DragonDome dd = root.AddComponent<DragonDome>();
             dd.Mesh = m; dd.Base = cs.ToArray();
-            Light l = root.AddComponent<Light>();
+            Light l = root.AddComponent<Light>(); DragonPerf.OnLight(l);
             l.type = LightType.Point; l.color = new Color(1f, 0.88f, 0.6f, 1f); l.range = radius * 2.2f; l.intensity = 0f; l.shadows = LightShadows.None;
             dd.Light = l;
             return root;
@@ -17550,7 +17574,7 @@ namespace DragonsAltarCombat
             root.AddComponent<DragonFaceCamera>();
             DragonPop pop = root.AddComponent<DragonPop>();
             pop.Grow = 0.25f; pop.Life = Mathf.Max(0.3f, seconds); pop.Fade = 0.3f; pop.Pulse = 0.05f;
-            Light l = root.AddComponent<Light>();
+            Light l = root.AddComponent<Light>(); DragonPerf.OnLight(l);
             l.type = LightType.Point; l.color = new Color(0.62f, 0.45f, 1f, 1f); l.range = Mathf.Min(radius * 4f, 18f); l.intensity = 1.0f * LightScale; l.shadows = LightShadows.None;
             return root;
         }
@@ -18396,6 +18420,368 @@ namespace DragonsAltarCombat
             _level = 0f;
             _lastPushed = -1f;
             _guardOn = false;
+        }
+    }
+}
+
+namespace DragonsAltarCombat
+{
+    // ==================================================================================
+    // v0.25.184 PERFORMANCE MONITOR (user: find what really costs FPS). Measurement only - when it is off (default)
+    // every hook is a single bool check. F7 = overlay + recording on/off, Ctrl+F7 = write the report now,
+    // Alt+F7 = effect lights on/off (A/B test: if FPS jumps with lights off, the GPU pays for light-heavy VFX).
+    // Report: BepInEx/plugins/Aethelborn_Performance.txt (+ summary in LogOutput.log).
+    //  - frame time, FPS, spikes (> SpikeMs) with the active skill, our code time per module, VFX spawn time, GC
+    //  - per skill: casts, VFX spawn ms (avg/max), objects / particle systems / lights / vanilla fx created per cast,
+    //    average frame time in the 4 s after the cast vs idle (the extra the skill costs incl. GPU), spikes, verdict.
+    // ==================================================================================
+    public class DragonPerfSkill
+    {
+        public string Id;
+        public int Casts, VfxCalls, Spikes, WindowFrames;
+        public double VfxMsTotal, VfxMsMax, WindowFrameMs, WindowOurMs, WorstFrameMs;
+        public int Hosts, Systems, Lights, Vanilla;
+        public double[] PhaseMs = new double[4];
+    }
+
+    public static class DragonPerf
+    {
+        public static bool On;
+        public static bool NoEffectLights;
+        public static ConfigEntry<bool> EnabledAtStart;
+        public static ConfigEntry<KeyCode> ToggleKey;
+        public static ConfigEntry<float> SpikeMs;
+
+        public const int SecRuntime = 0, SecAdvUpdate = 1, SecAdvLate = 2, SecAdvGui = 3, SecSkills = 4, SecSorcUpdate = 5,
+            SecSorcLate = 6, SecSorcGui = 7, SecRanger = 8, SecVfx = 9, SecCount = 10;
+        public static readonly string[] SecNames = { "Combat runtime Update", "Advanced Update", "Advanced LateUpdate", "Advanced OnGUI (HUD/tree)",
+            "Skills Update", "Sorcerer Update", "Sorcerer LateUpdate", "Sorcerer OnGUI", "Ranger Update", "VFX spawning (all skills)" };
+
+        // creation counters (always counted, int increments only)
+        public static int Hosts, Systems, LightsMade, VanillaFx;
+
+        private static readonly System.Diagnostics.Stopwatch _sw = System.Diagnostics.Stopwatch.StartNew();
+        private static readonly double _msPerTick = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+        internal static readonly long[] FrameTicks = new long[SecCount];
+        internal static readonly double[] IdleMsSum = new double[SecCount];
+        internal static readonly double[] AllMsSum = new double[SecCount];
+        internal static readonly Dictionary<string, DragonPerfSkill> Skills = new Dictionary<string, DragonPerfSkill>();
+        internal static string CurrentSkill;
+        internal static float CurrentAt = -999f;
+        private static int _vfxDepth, _castFrame = -1;
+        private static long _vfxStart;
+        private static int _h0, _s0, _l0, _v0;
+
+        public static long Now() { return _sw.ElapsedTicks; }
+        public static double Ms(long ticks) { return ticks * _msPerTick; }
+
+        public static void Add(int section, long startTicks)
+        {
+            FrameTicks[section] += _sw.ElapsedTicks - startTicks;
+        }
+
+        public static void NoteCast(string id)
+        {
+            if (!On || string.IsNullOrEmpty(id)) return;
+            if (CurrentSkill == id && _castFrame == Time.frameCount) return;   // the same cast reported twice in one frame
+            _castFrame = Time.frameCount;
+            CurrentSkill = id;
+            CurrentAt = Time.unscaledTime;
+            Skill(id).Casts++;
+        }
+
+        internal static string ActiveSkill()
+        {
+            return CurrentSkill != null && Time.unscaledTime - CurrentAt < 4f ? CurrentSkill : null;
+        }
+
+        internal static DragonPerfSkill Skill(string id)
+        {
+            DragonPerfSkill s;
+            if (!Skills.TryGetValue(id, out s)) { s = new DragonPerfSkill(); s.Id = id; Skills[id] = s; }
+            return s;
+        }
+
+        public static void VfxBegin()
+        {
+            if (_vfxDepth++ > 0) return;
+            _vfxStart = _sw.ElapsedTicks;
+            _h0 = Hosts; _s0 = Systems; _l0 = LightsMade; _v0 = VanillaFx;
+        }
+
+        public static void VfxEnd()
+        {
+            if (--_vfxDepth > 0) return;
+            if (_vfxDepth < 0) _vfxDepth = 0;
+            long dt = _sw.ElapsedTicks - _vfxStart;
+            FrameTicks[SecVfx] += dt;
+            string id = ActiveSkill() ?? "(no skill / passive)";
+            DragonPerfSkill s = Skill(id);
+            double ms = Ms(dt);
+            s.VfxCalls++;
+            s.VfxMsTotal += ms;
+            if (ms > s.VfxMsMax) s.VfxMsMax = ms;
+            s.Hosts += Hosts - _h0; s.Systems += Systems - _s0; s.Lights += LightsMade - _l0; s.Vanilla += VanillaFx - _v0;
+        }
+
+        // frame phase stamps (Stopwatch ticks): first Update, last Update, first LateUpdate, last LateUpdate
+        internal static long PUpdStart, PUpdEnd, PLateStart, PLateEnd;
+        public const int PhUpdate = 0, PhCoroutines = 1, PhLate = 2, PhRest = 3, PhCount = 4;
+        public static readonly string[] PhNames = { "Update (all mods + game)", "Coroutines + animation", "LateUpdate (all)", "Render / GUI / physics / GPU wait" };
+
+        public static void OnLight(Light l)
+        {
+            LightsMade++;
+            if (NoEffectLights && l != null) l.enabled = false;
+        }
+    }
+
+    // v0.25.184 runs LAST in Update and LateUpdate: closes the Update and LateUpdate phases for the monitor
+    [DefaultExecutionOrder(32000)]
+    public class DragonPerfEdge : MonoBehaviour
+    {
+        private void Update() { if (DragonPerf.On) DragonPerf.PUpdEnd = DragonPerf.Now(); }
+        private void LateUpdate() { if (DragonPerf.On) DragonPerf.PLateEnd = DragonPerf.Now(); }
+    }
+
+    [DefaultExecutionOrder(-32000)]
+    public class DragonPerfMonitor : MonoBehaviour
+    {
+        private readonly double[] _idlePhase = new double[DragonPerf.PhCount];
+        private readonly double[] _allPhase = new double[DragonPerf.PhCount];
+        private bool _skipSpike;
+        private readonly double[] _ph = new double[DragonPerf.PhCount];
+        private void LateUpdate() { if (DragonPerf.On) DragonPerf.PLateStart = DragonPerf.Now(); }
+        private class Spike { public float At; public double Ms, OurMs; public string Skill, Top; public bool Gc; }
+        private readonly List<Spike> _spikes = new List<Spike>();
+        private int _frames, _idleFrames, _spikeCount, _gcCount, _lastGc;
+        private double _frameMsSum, _idleFrameMsSum, _ourMsSum, _idleOurMsSum, _worst;
+        private float _startedAt, _nextAutoReport;
+        private long _lastMem, _allocBytes;
+        // one-second overlay window
+        private float _secStart;
+        private int _secFrames;
+        private double _secMsSum, _secMsMax, _secOurSum, _secVfxSum;
+        private long _secAlloc;
+        private string _overlay = "";
+        private GUIStyle _style;
+
+        private void Start()
+        {
+            if (DragonPerf.EnabledAtStart != null && DragonPerf.EnabledAtStart.Value) Begin();
+        }
+
+        private void Begin()
+        {
+            DragonPerf.On = true;
+            if (GetComponent<DragonPerfEdge>() == null) gameObject.AddComponent<DragonPerfEdge>();
+            DragonPerf.PUpdStart = DragonPerf.PUpdEnd = DragonPerf.PLateStart = DragonPerf.PLateEnd = 0;
+            _startedAt = Time.unscaledTime;
+            _nextAutoReport = Time.unscaledTime + 60f;
+            _lastGc = System.GC.CollectionCount(0);
+            _lastMem = System.GC.GetTotalMemory(false);
+            _secStart = Time.unscaledTime;
+            for (int i = 0; i < DragonPerf.SecCount; i++) DragonPerf.FrameTicks[i] = 0;
+            Debug.Log("[Aethelborn] Performance monitor ON (F7 off, Ctrl+F7 report, Alt+F7 effect lights)");
+        }
+
+        private void End()
+        {
+            WriteReport("monitor turned off");
+            DragonPerf.On = false;
+        }
+
+        private void Update()
+        {
+            KeyCode key = DragonPerf.ToggleKey != null ? DragonPerf.ToggleKey.Value : KeyCode.F7;
+            if (Input.GetKeyDown(key))
+            {
+                bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+                bool alt = Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt);
+                if (alt) { DragonPerf.NoEffectLights = !DragonPerf.NoEffectLights; Debug.Log("[Aethelborn] Effect lights " + (DragonPerf.NoEffectLights ? "OFF (new effects)" : "ON")); }
+                else if (ctrl) { if (DragonPerf.On) WriteReport("Ctrl+F7"); }
+                else if (DragonPerf.On) End(); else Begin();
+            }
+            if (!DragonPerf.On) return;
+
+            // close the previous frame (this runs first in the frame)
+            double frameMs = Time.unscaledDeltaTime * 1000.0;
+            long nowT = DragonPerf.Now();
+            double[] ph = _ph;
+            for (int k = 0; k < ph.Length; k++) ph[k] = 0;
+            bool phaseOk = DragonPerf.PUpdStart > 0 && DragonPerf.PUpdEnd >= DragonPerf.PUpdStart && DragonPerf.PLateStart >= DragonPerf.PUpdEnd && DragonPerf.PLateEnd >= DragonPerf.PLateStart;
+            if (phaseOk)
+            {
+                ph[DragonPerf.PhUpdate] = DragonPerf.Ms(DragonPerf.PUpdEnd - DragonPerf.PUpdStart);
+                ph[DragonPerf.PhCoroutines] = DragonPerf.Ms(DragonPerf.PLateStart - DragonPerf.PUpdEnd);
+                ph[DragonPerf.PhLate] = DragonPerf.Ms(DragonPerf.PLateEnd - DragonPerf.PLateStart);
+                ph[DragonPerf.PhRest] = DragonPerf.Ms(nowT - DragonPerf.PLateEnd);
+            }
+            DragonPerf.PUpdStart = nowT;
+            double ourMs = 0, topMs = 0; int top = -1;
+            for (int i = 0; i < DragonPerf.SecCount; i++)
+            {
+                double ms = DragonPerf.Ms(DragonPerf.FrameTicks[i]);
+                if (i != DragonPerf.SecVfx) ourMs += ms;   // VFX spawning is already inside the module that called it
+                DragonPerf.AllMsSum[i] += ms;
+                if (ms > topMs) { topMs = ms; top = i; }
+            }
+            double vfxMs = DragonPerf.Ms(DragonPerf.FrameTicks[DragonPerf.SecVfx]);
+            if (vfxMs > ourMs) ourMs = vfxMs;   // VFX spawned from coroutines is outside the module timers
+            int gc = System.GC.CollectionCount(0);
+            bool gcHit = gc != _lastGc;
+            if (gcHit) { _gcCount += gc - _lastGc; _lastGc = gc; }
+            long mem = System.GC.GetTotalMemory(false);
+            if (mem > _lastMem) { _allocBytes += mem - _lastMem; _secAlloc += mem - _lastMem; }
+            _lastMem = mem;
+
+            string skill = DragonPerf.ActiveSkill();
+            _frames++; _frameMsSum += frameMs; _ourMsSum += ourMs;
+            if (frameMs > _worst) _worst = frameMs;
+            for (int k = 0; k < DragonPerf.PhCount; k++) _allPhase[k] += ph[k];
+            if (skill == null)
+            {
+                for (int k = 0; k < DragonPerf.PhCount; k++) _idlePhase[k] += ph[k];
+                _idleFrames++; _idleFrameMsSum += frameMs; _idleOurMsSum += ourMs;
+                for (int i = 0; i < DragonPerf.SecCount; i++) DragonPerf.IdleMsSum[i] += DragonPerf.Ms(DragonPerf.FrameTicks[i]);
+            }
+            else
+            {
+                DragonPerfSkill s = DragonPerf.Skill(skill);
+                s.WindowFrames++; s.WindowFrameMs += frameMs; s.WindowOurMs += ourMs;
+                for (int k = 0; k < DragonPerf.PhCount; k++) s.PhaseMs[k] += ph[k];
+                if (frameMs > s.WorstFrameMs) s.WorstFrameMs = frameMs;
+            }
+            float spikeMs = DragonPerf.SpikeMs != null ? Mathf.Max(5f, DragonPerf.SpikeMs.Value) : 25f;
+            bool skipThis = _skipSpike; _skipSpike = false;
+            if (frameMs > spikeMs && Time.unscaledTime - _startedAt > 2f && !skipThis)
+            {
+                _spikeCount++;
+                if (skill != null) DragonPerf.Skill(skill).Spikes++;
+                Spike sp = new Spike();
+                sp.At = Time.unscaledTime - _startedAt; sp.Ms = frameMs; sp.OurMs = ourMs; sp.Skill = skill; sp.Gc = gcHit;
+                sp.Top = top >= 0 && topMs > 0.05 ? DragonPerf.SecNames[top] + " " + topMs.ToString("0.0") + " ms" : "-";
+                if (phaseOk)
+                {
+                    int big = 0;
+                    for (int k = 1; k < DragonPerf.PhCount; k++) if (ph[k] > ph[big]) big = k;
+                    sp.Top += " | slowest phase: " + DragonPerf.PhNames[big] + " " + ph[big].ToString("0.0") + " ms";
+                }
+                _spikes.Add(sp);
+                if (_spikes.Count > 300) _spikes.RemoveAt(0);
+            }
+            _secFrames++; _secMsSum += frameMs; _secOurSum += ourMs; _secVfxSum += vfxMs;
+            if (frameMs > _secMsMax) _secMsMax = frameMs;
+            for (int i = 0; i < DragonPerf.SecCount; i++) DragonPerf.FrameTicks[i] = 0;
+
+            if (Time.unscaledTime - _secStart >= 1f)
+            {
+                double secs = Time.unscaledTime - _secStart;
+                double avg = _secFrames > 0 ? _secMsSum / _secFrames : 0;
+                _overlay = "AETHELBORN PERF  (F7 off, Ctrl+F7 report, Alt+F7 lights)\n" +
+                    "FPS " + (_secFrames / secs).ToString("0") + "   frame avg " + avg.ToString("0.0") + " ms   max " + _secMsMax.ToString("0.0") + " ms\n" +
+                    "our code " + (_secFrames > 0 ? _secOurSum / _secFrames : 0).ToString("0.00") + " ms/frame   VFX spawn " + _secVfxSum.ToString("0.0") + " ms/s\n" +
+                    "alloc " + (_secAlloc / 1024.0 / secs).ToString("0") + " KB/s   GC " + _gcCount + "   spikes " + _spikeCount + "\n" +
+                    "live VFX " + DragonVfxLife.Alive + "   skill " + (skill ?? "-") + "   effect lights " + (DragonPerf.NoEffectLights ? "OFF" : "on");
+                _secStart = Time.unscaledTime; _secFrames = 0; _secMsSum = 0; _secMsMax = 0; _secOurSum = 0; _secVfxSum = 0; _secAlloc = 0;
+            }
+            if (Time.unscaledTime >= _nextAutoReport) { _nextAutoReport = Time.unscaledTime + 60f; WriteReport("auto (every 60 s)"); _skipSpike = true; }   // the file write itself is not a game spike
+        }
+
+        private void OnGUI()
+        {
+            if (!DragonPerf.On || Event.current.type != EventType.Repaint || string.IsNullOrEmpty(_overlay)) return;
+            if (_style == null) { _style = new GUIStyle(GUI.skin.box); _style.alignment = TextAnchor.UpperLeft; _style.fontSize = 13; _style.normal.textColor = Color.white; _style.wordWrap = false; }
+            GUI.Box(new Rect(Screen.width - 470, 8, 460, 92), _overlay, _style);
+        }
+
+        private void OnApplicationQuit()
+        {
+            if (DragonPerf.On) WriteReport("game closed");
+        }
+
+        private void WriteReport(string why)
+        {
+            try
+            {
+                System.Text.StringBuilder b = new System.Text.StringBuilder();
+                double session = Time.unscaledTime - _startedAt;
+                double baseFrame = _idleFrames > 0 ? _idleFrameMsSum / _idleFrames : (_frames > 0 ? _frameMsSum / _frames : 0);
+                double baseOur = _idleFrames > 0 ? _idleOurMsSum / _idleFrames : 0;
+                b.AppendLine("AETHELBORN ASCENDED - PERFORMANCE REPORT (" + why + ")  " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+                b.AppendLine("Recorded " + session.ToString("0") + " s, " + _frames + " frames. Effect lights: " + (DragonPerf.NoEffectLights ? "OFF" : "on"));
+                b.AppendLine();
+                b.AppendLine("IDLE BASELINE (no skill in the last 4 s): frame " + baseFrame.ToString("0.00") + " ms (" + (baseFrame > 0 ? 1000.0 / baseFrame : 0).ToString("0") + " FPS), our code " + baseOur.ToString("0.00") + " ms/frame");
+                b.AppendLine("Overall: frame " + (_frames > 0 ? _frameMsSum / _frames : 0).ToString("0.00") + " ms, worst " + _worst.ToString("0.0") + " ms, spikes " + _spikeCount + ", GC collections " + _gcCount +
+                    ", allocations " + (_allocBytes / 1048576.0 / Math.Max(1.0, session)).ToString("0.00") + " MB/s");
+                b.AppendLine();
+                b.AppendLine("FRAME PHASES (ms per frame, idle / overall) - where the frame time goes:");
+                for (int k = 0; k < DragonPerf.PhCount; k++)
+                    b.AppendLine("  " + DragonPerf.PhNames[k].PadRight(36) + (_idleFrames > 0 ? _idlePhase[k] / _idleFrames : 0).ToString("0.00").PadLeft(8) + " / " + (_frames > 0 ? _allPhase[k] / _frames : 0).ToString("0.00"));
+                b.AppendLine();
+                b.AppendLine("OUR CODE PER MODULE (ms per frame, idle / overall):");
+                for (int i = 0; i < DragonPerf.SecCount; i++)
+                    b.AppendLine("  " + DragonPerf.SecNames[i].PadRight(30) + (_idleFrames > 0 ? DragonPerf.IdleMsSum[i] / _idleFrames : 0).ToString("0.000").PadLeft(8) + " / " + (_frames > 0 ? DragonPerf.AllMsSum[i] / _frames : 0).ToString("0.000"));
+                b.AppendLine();
+                b.AppendLine("PER SKILL (window = 4 s after each cast; +frame = extra frame time vs idle = everything the skill costs incl. GPU)");
+                b.AppendLine("  skill                      casts  vfx ms avg/max  hosts/cast  psys/cast  lights/cast  vanilla/cast   +frame ms  +our ms  spikes  worst ms  verdict");
+                List<DragonPerfSkill> list = new List<DragonPerfSkill>(DragonPerf.Skills.Values);
+                list.Sort(delegate(DragonPerfSkill x, DragonPerfSkill y) { return Extra(y, baseFrame).CompareTo(Extra(x, baseFrame)); });
+                for (int i = 0; i < list.Count; i++)
+                {
+                    DragonPerfSkill s = list[i];
+                    int casts = Math.Max(1, s.Casts);
+                    double avgVfx = s.VfxCalls > 0 ? s.VfxMsTotal / casts : 0;
+                    double extra = Extra(s, baseFrame);
+                    double extraOur = s.WindowFrames > 0 ? s.WindowOurMs / s.WindowFrames - baseOur : 0;
+                    string verdict = "ok";
+                    if (s.VfxMsMax > 8) verdict = "CPU: VFX spawn hitch";
+                    if (extra > 2 && s.WindowFrames > 0 && _idleFrames > 0)
+                    {
+                        // which frame phase grew the most while this skill was active
+                        int big = 0; double bigD = -999;
+                        for (int k = 0; k < DragonPerf.PhCount; k++)
+                        {
+                            double d = s.PhaseMs[k] / s.WindowFrames - _idlePhase[k] / _idleFrames;
+                            if (d > bigD) { bigD = d; big = k; }
+                        }
+                        string cause = big == DragonPerf.PhRest ? "GPU/render heavy (effects on screen, lights, physics)" :
+                            big == DragonPerf.PhCoroutines ? "CPU: skill routines (hit checks / movement / effect updates)" :
+                            big == DragonPerf.PhLate ? "CPU: LateUpdate (animation drivers / effect followers)" : "CPU: Update scripts";
+                        verdict = (verdict == "ok" ? "" : verdict + " + ") + cause + " +" + bigD.ToString("0.0") + " ms";
+                    }
+                    if (s.Spikes > 0 && verdict == "ok") verdict = "spikes";
+                    b.AppendLine("  " + s.Id.PadRight(26) + s.Casts.ToString().PadLeft(5) + "  " + (avgVfx.ToString("0.0") + "/" + s.VfxMsMax.ToString("0.0")).PadLeft(13) +
+                        ((double)s.Hosts / casts).ToString("0").PadLeft(12) + ((double)s.Systems / casts).ToString("0").PadLeft(11) + ((double)s.Lights / casts).ToString("0.0").PadLeft(13) +
+                        ((double)s.Vanilla / casts).ToString("0.0").PadLeft(14) + extra.ToString("+0.0;-0.0").PadLeft(12) + extraOur.ToString("+0.00;-0.00").PadLeft(9) +
+                        s.Spikes.ToString().PadLeft(8) + s.WorstFrameMs.ToString("0.0").PadLeft(10) + "  " + verdict);
+                }
+                b.AppendLine();
+                b.AppendLine("LAST SPIKES (time s, frame ms, our ms, skill, biggest of our modules, GC)");
+                int from = Math.Max(0, _spikes.Count - 40);
+                for (int i = from; i < _spikes.Count; i++)
+                {
+                    Spike sp = _spikes[i];
+                    b.AppendLine("  " + sp.At.ToString("0.0").PadLeft(7) + "  " + sp.Ms.ToString("0.0").PadLeft(6) + "  " + sp.OurMs.ToString("0.0").PadLeft(6) + "  " + (sp.Skill ?? "-").PadRight(24) + "  " + sp.Top + (sp.Gc ? "  [GC]" : ""));
+                }
+                b.AppendLine();
+                b.AppendLine("HOW TO READ: +frame = how much slower frames were in the 4 s after that skill vs idle. The verdict names the");
+                b.AppendLine("frame phase that grew: GPU/render = its effects cost drawing (compare with Alt+F7 lights off); skill routines =");
+                b.AppendLine("its per-frame logic; vfx ms max > 8 = its spawn causes a hitch. A spike with low 'our ms' and no skill = the");
+                b.AppendLine("game / another mod; [GC] = memory cleanup.");
+                string dir = null;
+                try { dir = System.IO.Path.GetDirectoryName(typeof(DragonPerf).Assembly.Location); } catch { }
+                if (string.IsNullOrEmpty(dir)) dir = Application.persistentDataPath;
+                string path = System.IO.Path.Combine(dir, "Aethelborn_Performance.txt");
+                System.IO.File.WriteAllText(path, b.ToString());
+                Debug.Log("[Aethelborn] Performance report written: " + path);
+            }
+            catch (Exception ex) { Debug.LogWarning("[Aethelborn] Performance report failed: " + ex.Message); }
+        }
+
+        private static double Extra(DragonPerfSkill s, double baseFrame)
+        {
+            return s.WindowFrames > 0 ? s.WindowFrameMs / s.WindowFrames - baseFrame : 0;
         }
     }
 }

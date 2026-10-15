@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.183";
+        public const string ModVersion = "0.25.184";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1267,7 +1267,16 @@ namespace AlbedosCustomClassesAdvanced
             return true;
         }
 
+        // v0.25.184 performance monitor: times this module's Update (one bool check when the monitor is off)
         private void Update()
+        {
+            if (!DragonPerf.On) { PerfUpdateInner(); return; }
+            long perfT = DragonPerf.Now();
+            try { PerfUpdateInner(); }
+            finally { DragonPerf.Add(DragonPerf.SecAdvUpdate, perfT); }
+        }
+
+        private void PerfUpdateInner()
         {
             RegisterCleavePullRpc();
             UpdateCleavePullNet();
@@ -14626,6 +14635,7 @@ namespace AlbedosCustomClassesAdvanced
                     || (cdBefore <= 0f && (player.GetStamina() < staBefore - 0.5f || IhCallFloat(player, "GetEitr") < eitBefore - 0.5f));
                 if (began) DragonCombat.SwallowAttackInput(player, 0.35f);
                 if (began) { _ihCastId = id; _ihCastAt = Time.time; }
+                if (began) DragonPerf.NoteCast(id);   // v0.25.184 performance monitor attribution
                 // v0.25.72 activation rune circle under the caster (bigger + light column for Ultimates and Graces)
                 if (false && began && _enableVfx.Value)   // v0.25.85 (user): no cast flare, the skill's own particles are enough
                 {
@@ -14648,6 +14658,7 @@ namespace AlbedosCustomClassesAdvanced
                 string motion; float motionTime;
                 if (started && DragonCombat.SkillMotion(id, out motion, out motionTime)) DragonCombat.PlayBodyMotion(player, motion, motionTime);
                 if (started) { _ihCastId = id; _ihCastAt = Time.time; }   // charges that began count as a cast too
+                if (started) DragonPerf.NoteCast(id);   // v0.25.184 performance monitor attribution (same-frame repeat ignored)
             }
             if (tryEmpower && !relicBefore)
             {
@@ -15369,7 +15380,16 @@ namespace AlbedosCustomClassesAdvanced
             Cursor.lockState = _savedCursorLock;
         }
 
+        // v0.25.184 performance monitor: times this module's OnGUI (one bool check when the monitor is off)
         private void OnGUI()
+        {
+            if (!DragonPerf.On) { PerfOnGuiInner(); return; }
+            long perfT = DragonPerf.Now();
+            try { PerfOnGuiInner(); }
+            finally { DragonPerf.Add(DragonPerf.SecAdvGui, perfT); }
+        }
+
+        private void PerfOnGuiInner()
         {
             Player player = Player.m_localPlayer;
 
@@ -15417,7 +15437,16 @@ namespace AlbedosCustomClassesAdvanced
         private bool _ihHudMenuOpen;
         private static Type _ihHudType, _ihHotkeyBarType, _ihInvGuiType, _ihMenuType, _ihMinimapType;
 
+        // v0.25.184 performance monitor: times this module's LateUpdate (one bool check when the monitor is off)
         private void LateUpdate()
+        {
+            if (!DragonPerf.On) { PerfLateUpdateInner(); return; }
+            long perfT = DragonPerf.Now();
+            try { PerfLateUpdateInner(); }
+            finally { DragonPerf.Add(DragonPerf.SecAdvLate, perfT); }
+        }
+
+        private void PerfLateUpdateInner()
         {
             IhApplyVanillaHud();
         }

@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Aethelborn Ascended - Sorcerer Advancements";
-        public const string ModVersion = "0.25.183";
+        public const string ModVersion = "0.25.184";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -671,7 +671,16 @@ namespace DragonsAltarSorcerer
         private Transform _reGlowRoot;
         private Material _reGlowMat;
 
+        // v0.25.184 performance monitor: times this module's LateUpdate (one bool check when the monitor is off)
         private void LateUpdate()
+        {
+            if (!DragonPerf.On) { PerfLateUpdateInner(); return; }
+            long perfT = DragonPerf.Now();
+            try { PerfLateUpdateInner(); }
+            finally { DragonPerf.Add(DragonPerf.SecSorcLate, perfT); }
+        }
+
+        private void PerfLateUpdateInner()
         {
             Player player = Player.m_localPlayer;
             bool on = player != null && !player.IsDead() && Time.time < _riftEchoUntil && _enableVfx.Value;
@@ -731,7 +740,16 @@ namespace DragonsAltarSorcerer
             _reGlowBones = copy.GetComponentsInChildren<Transform>(true);
         }
 
+        // v0.25.184 performance monitor: times this module's Update (one bool check when the monitor is off)
         private void Update()
+        {
+            if (!DragonPerf.On) { PerfUpdateInner(); return; }
+            long perfT = DragonPerf.Now();
+            try { PerfUpdateInner(); }
+            finally { DragonPerf.Add(DragonPerf.SecSorcUpdate, perfT); }
+        }
+
+        private void PerfUpdateInner()
         {
             UpdateRuptureCharges();
             UpdatePhalanxVisuals();
@@ -4424,7 +4442,16 @@ namespace DragonsAltarSorcerer
             return false;
         }
 
+        // v0.25.184 performance monitor: times this module's OnGUI (one bool check when the monitor is off)
         private void OnGUI()
+        {
+            if (!DragonPerf.On) { PerfOnGuiInner(); return; }
+            long perfT = DragonPerf.Now();
+            try { PerfOnGuiInner(); }
+            finally { DragonPerf.Add(DragonPerf.SecSorcGui, perfT); }
+        }
+
+        private void PerfOnGuiInner()
         {
             Player player = Player.m_localPlayer;
             if (player == null || !_showHud.Value || GetClass(player) != "Sorcerer" || DragonCombat.IsTreeHotbarActive(player))

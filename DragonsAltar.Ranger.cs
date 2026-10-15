@@ -41,7 +41,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Aethelborn Ascended - Ranger";
-        public const string ModVersion = "0.25.183";
+        public const string ModVersion = "0.25.184";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -558,7 +558,16 @@ namespace DragonsAltarRanger
             return true;
         }
 
+        // v0.25.184 performance monitor: times this module's Update (one bool check when the monitor is off)
         private void Update()
+        {
+            if (!DragonPerf.On) { PerfUpdateInner(); return; }
+            long perfT = DragonPerf.Now();
+            try { PerfUpdateInner(); }
+            finally { DragonPerf.Add(DragonPerf.SecRanger, perfT); }
+        }
+
+        private void PerfUpdateInner()
         {
             Player player = Player.m_localPlayer;
             if (player == null || player.IsDead()) return;

@@ -232,7 +232,7 @@ namespace AlbedosCustomClassesSkills
         public static SkillsPlugin Instance;
         public const string ModGuid = "albedo.customclasses.skills";
         public const string ModName = "Aethelborn Ascended - Starter Skills";
-        public const string ModVersion = "0.25.183";
+        public const string ModVersion = "0.25.184";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";
@@ -555,7 +555,16 @@ namespace AlbedosCustomClassesSkills
             return cfg;
         }
 
+        // v0.25.184 performance monitor: times this module's Update (one bool check when the monitor is off)
         private void Update()
+        {
+            if (!DragonPerf.On) { PerfUpdateInner(); return; }
+            long perfT = DragonPerf.Now();
+            try { PerfUpdateInner(); }
+            finally { DragonPerf.Add(DragonPerf.SecSkills, perfT); }
+        }
+
+        private void PerfUpdateInner()
         {
             Player player = Player.m_localPlayer;
             if (player == null)
