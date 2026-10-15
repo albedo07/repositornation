@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.178";
+        public const string ModVersion = "0.25.179";
 
         internal static DragonCombatPlugin Instance;
 
@@ -885,7 +885,7 @@ namespace DragonsAltarCombat
         private static void BlockAttackPostfix(BlockPatchState __state, bool __result, object __instance, object[] __args)
         {
             RestoreBlockState(__state);
-            if (__result && ReferenceEquals(__instance, Player.m_localPlayer)) { DragonCombat.LastBlockAt = Time.time; NaccBlockBreak((Player)__instance, DragonCombat.IsInParryWindow((Player)__instance) ? "parry" : "blocked hit"); }   // v0.25.175 / v0.25.179
+            if (__result && ReferenceEquals(__instance, Player.m_localPlayer)) DragonCombat.LastBlockAt = Time.time;   // v0.25.175 block / parry window
             if (__result && __state.HyperBlock)
             {
                 ZeroPush(__args);
@@ -1160,28 +1160,6 @@ namespace DragonsAltarCombat
 
         private static bool _comboSwingSeen;
         private static float _comboSwingSeenAt;
-
-        // v0.25.179 (user: "make the game read Parry as a Block"): a block or parry is a clean break for the chain. On block start,
-        // block end and every successful block / parry the running chain is reset (a finished finisher keeps its lockout), our queued
-        // swing triggers are cleared, and the NEXT primary click is forced to strike 1 - nothing from before the block can carry over.
-        private static bool _naccFreshAfterBlock, _naccWasBlocking;
-        internal static void NaccBlockBreak(Player p, string why)
-        {
-            if (p == null || p != Player.m_localPlayer) return;
-            _naccFreshAfterBlock = true;
-            ClearChainTriggers(p);
-            if (_comboHit >= 0 || _comboLastEnd > 0f || (_comboFinisher != null && _comboLastEnd < 0f && !p.InAttack()))
-            {
-                NaccTrace("block break (" + why + "): chain reset, next click = strike 1");
-                ResetNaccChain(p);
-            }
-        }
-        internal static void NaccBlockPoll(Player p, bool blocking)
-        {
-            if (p == null) return;
-            if (blocking != _naccWasBlocking) NaccBlockBreak(p, blocking ? "block start" : "block end");
-            _naccWasBlocking = blocking;
-        }
 
         // v0.25.178: drop our not-yet-consumed swing triggers so a ghost click can never fire a random strike later.
         private static void ClearChainTriggers(Player p)
@@ -1559,9 +1537,7 @@ namespace DragonsAltarCombat
                 // our own timer: the next attack continues the chain when it starts while the previous swing is
                 // still running (queued chain) or within the window after it ended.
                 bool prevRunning = previousAttack != null && _comboLastEnd < 0f && Time.time - _comboLastStart < 2.5f && p.InAttack();   // v0.25.178 a ghost (never-played) swing never continues the chain
-                bool fresh = _naccFreshAfterBlock;
-                _naccFreshAfterBlock = false;   // v0.25.179 first click after a block / parry = strike 1
-                bool cont = !fresh && _comboHit >= 0 && prevAnim == anim && anim == _comboBase && _comboHit < length - 1 && UsesDualChain(p) == _comboDual
+                bool cont = _comboHit >= 0 && prevAnim == anim && anim == _comboBase && _comboHit < length - 1 && UsesDualChain(p) == _comboDual
                     && (prevRunning || Time.time - _comboLastEnd <= Mathf.Max(0.05f, Instance.ComboContinueWindow.Value));
                 // v0.25.55 (user): every swing of the chain takes the same time (ComboSwingSeconds, 0.8s at no
                 // attack-speed bonus), the finisher keeps its natural (longest) length. Each swing's natural time is
@@ -1700,6 +1676,17 @@ namespace DragonsAltarCombat
             // v0.25.169 (user): NACC may start and continue in the air (the v0.25.154 airborne rejection is gone).
             Player lp = (Player)__instance;
             if (Time.time < _comboLockUntil) { NaccTrace("attack request rejected: finisher lockout " + (_comboLockUntil - Time.time).ToString("F2") + "s"); __result = false; return false; }
+            // v0.25.179 DOUBLE START (user log, after a block / parry: "hit 1" then "hit 2" 0.02 s later -> strike 1 never played, the
+            // chain looked like 4 or 3 hits): the first chain swing started while the body was still leaving the block pose, so Valheim
+            // did not count it as "in an attack" yet and the held / queued click started the attack AGAIN the next frame, replacing it.
+            // A primary request while our last chain swing was accepted < 0.35 s ago and has not begun playing is that duplicate:
+            // rejected, the first swing plays. A swing that never plays is still reset by the ghost rule (0.5 s).
+            if (_comboHit >= 0 && _comboLastEnd < 0f && !_comboSwingSeen && Time.time - _comboLastStart < 0.35f && !lp.InAttack() && IsNaccPrimaryRequest(lp, __args))
+            {
+                NaccTrace("attack request rejected: duplicate start " + (Time.time - _comboLastStart).ToString("F2") + "s after hit " + (_comboHit + 1) + " (its swing has not begun yet)");
+                __result = false;
+                return false;
+            }
             // v0.25.158: a 2HDW primary request is only accepted when its SBDW controller is valid (repaired if needed) - checked here,
             // before Attack.Start spends stamina or advances the combo. Not while a swing runs (never swap controllers mid-swing).
             if (!lp.InAttack() && IsPairedPrimaryRequest(lp, __args))
@@ -10359,13 +10346,7 @@ namespace DragonsAltarCombat
         public static void RuntimeUpdate()
         {
             CheckAnimationClass(Player.m_localPlayer);
-            try
-            {
-                bool blk = Player.m_localPlayer != null && Player.m_localPlayer.IsBlocking();
-                if (blk) LastBlockAt = Time.time;   // v0.25.175
-                DragonCombatPlugin.NaccBlockPoll(Player.m_localPlayer, blk);   // v0.25.179 block / parry = chain break
-            }
-            catch (Exception) { }
+            try { if (Player.m_localPlayer != null && Player.m_localPlayer.IsBlocking()) LastBlockAt = Time.time; } catch (Exception) { }   // v0.25.175
             DragonCombatPlugin.UpdateNaccAirborne(Player.m_localPlayer);   // v0.25.154 takeoff forgets the interrupted chain
             float now = Time.time;
             if (_aimWindupPlayer == Player.m_localPlayer && now < _aimWindupUntil)

@@ -203,6 +203,13 @@ static class T
                 Check(!ghost(true, 0.6), "real swing is never a ghost");
                 Check(!ghost(false, 0.2), "swing not visible yet at 0.2 s = still waiting");
             }
+            // v0.25.179 double start after a block / parry (user log: hit 1, hit 2 0.02 s later)
+            {
+                Func<double, bool, bool, bool> dup = (sinceStart, swingSeen, inAttack) => !swingSeen && !inAttack && sinceStart < 0.35;
+                Check(dup(0.02, false, false), "second start 0.02 s after hit 1 whose swing has not begun = duplicate, rejected");
+                Check(!dup(0.42, true, true), "normal queued chain click during a playing swing is not a duplicate");
+                Check(!dup(0.6, false, false), "after 0.35 s a click is allowed (ghost rule resets at 0.5 s)");
+            }
             // v0.25.175: nothing is learned / captured within 0.6 s of a block or parry (a bad learn stuck for the session before)
             {
                 Func<double, double, bool> canLearn = (now, lastBlock) => now - lastBlock >= 0.6;

@@ -1,0 +1,12 @@
+Aethelborn Ascended v0.25.179 - Double Start
+Baseline: v0.25.178 (the unreleased "block = chain break" WIP commit was reverted - not needed). Only the NACC changed.
+
+NACC AFTER BLOCK / PARRY (user log, CONFIRMED cause)
+- The trace showed the chain counter was always right (every chain counted hit 1 -> 5). The lost strikes came from a
+  DOUBLE START: e.g. "+0.24s after block: start: hit 1" then "+0.26s: start: hit 2" - the first swing started while the
+  body was still leaving the block pose, Valheim did not count it as "in an attack" yet, and the held / queued click
+  started the attack again the very next frame. Strike 1 was replaced before it played (= 4-hit chain); twice = 3 hits.
+- Fix: a primary click while our last chain swing was accepted < 0.35 s ago and has not begun playing is rejected as a
+  duplicate - the first strike plays. (A swing that never plays is still reset by the v0.25.178 ghost rule at 0.5 s.)
+- Trace line: "attack request rejected: duplicate start ...".
+- Unchanged: block / parry, heavy attacks, skills, 0.7 s window, timing, 1-2-1-2-3, finisher lockout.

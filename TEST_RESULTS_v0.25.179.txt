@@ -1,0 +1,5 @@
+v0.25.179 Double Start - test results
+Evidence: user's LogOutput.log (v0.25.178 trace): hit 1 / hit 2 0.02 s apart right after a block (lines 895-899, 1018-1021).
+COMPILE / MODEL (here, no game): check.sh 3029660 PASSED (0 new signatures); mcs --parse -langversion:5 CombatRuntime clean;
+tools/tests/nacc_handoff ALL PASS (new: duplicate start rejected, queued chain click during a swing allowed, click after 0.35 s allowed).
+NOT VERIFIED (needs Valheim): chains after block / parry (sword, sword + shield).
