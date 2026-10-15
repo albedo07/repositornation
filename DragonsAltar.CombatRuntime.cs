@@ -253,6 +253,7 @@ namespace DragonsAltarCombat
         private void Update()
         {
             DragonMixamo.PrewarmTick(Player.m_localPlayer);   // v0.25.170 load + warm the Mixamo clips before the first cast
+            DragonVfx.PrewarmTick(Player.m_localPlayer);      // v0.25.183 build the VFX textures/materials before the first cast
             DragonCombat.RuntimeUpdate();
         }
 
@@ -12608,7 +12609,7 @@ namespace DragonsAltarCombat
                 Velocity += Physics.gravity * dt;
                 Vector3 next = transform.position + Velocity * dt;
                 RaycastHit hit;
-                if (Velocity.y < 0f && Physics.Raycast(transform.position, Vector3.down, out hit, Mathf.Max(0.2f, -Velocity.y * dt + 0.1f), LayerMask.GetMask("terrain", "Default", "static_solid", "piece"), QueryTriggerInteraction.Ignore))
+                if (Velocity.y < 0f && Physics.Raycast(transform.position, Vector3.down, out hit, Mathf.Max(0.2f, -Velocity.y * dt + 0.1f), DragonVfx.SolidGroundMask(), QueryTriggerInteraction.Ignore))
                 {
                     if (Velocity.y < -4f) { Velocity = new Vector3(Velocity.x * 0.4f, -Velocity.y * 0.3f, Velocity.z * 0.4f); Spin *= 0.4f; }
                     else { _landed = true; next = hit.point + Vector3.up * transform.localScale.y * 0.3f; }
@@ -13280,6 +13281,67 @@ namespace DragonsAltarCombat
         private static Material _add, _alpha;
         private static Texture2D _glow;
         private static bool _catalogLogged;
+
+        // v0.25.183 (perf): the ground mask used by debris / ground probes, built once (was allocated per call / per frame)
+        private static int _solidGroundMask = -1;
+        public static int SolidGroundMask()
+        {
+            if (_solidGroundMask == -1) _solidGroundMask = LayerMask.GetMask("terrain", "Default", "static_solid", "piece");
+            return _solidGroundMask;
+        }
+
+        // v0.25.183 (perf, user: first casts hitched): every procedural VFX texture + shared material used to be generated
+        // on the first cast that needed it (up to ~200k noise samples + mipmap upload in that one frame). They are now built
+        // in the background after you load in: 3 s after the local player exists, one item every 0.05 s. Same textures,
+        // same materials (the accessors cache them exactly as before).
+        private static int _warmStep = -1;
+        private static float _warmNext;
+        public static void PrewarmTick(Player p)
+        {
+            if (_warmStep >= 30 || p == null) return;
+            if (_warmStep < 0) { _warmStep = 0; _warmNext = Time.time + 3f; return; }
+            if (Time.time < _warmNext) return;
+            _warmNext = Time.time + 0.05f;
+            if (!Enabled) return;   // VFX off: nothing to warm (re-checked later if turned on)
+            try
+            {
+                switch (_warmStep)
+                {
+                    case 0: Glow(); break;
+                    case 1: Additive(); break;
+                    case 2: Alpha(); break;
+                    case 3: SmokeTex(); break;
+                    case 4: CrackTex(); break;
+                    case 5: ScorchTex(); break;
+                    case 6: PressureTex(); break;
+                    case 7: RockTex(); break;
+                    case 8: RingTex(); break;
+                    case 9: FrostTex(); break;
+                    case 10: StreakTex(); break;
+                    case 11: FlameTex(); break;
+                    case 12: BeamTex(); break;
+                    case 13: LineTex(); break;
+                    case 14: SlashTex(); break;
+                    case 15: BladeTex(); break;
+                    case 16: SoftRingTex(); break;
+                    case 17: StoneTex(); break;
+                    case 18: BronzeTex(); break;
+                    case 19: RelicStone(); break;
+                    case 20: RelicBronze(); break;
+                    case 21: DissolveTex(); break;
+                    case 22: GuideTex(); break;
+                    case 23: FeatherTex(); break;
+                    case 24: WhiteTex(); break;
+                    case 25: EyeTex(); break;
+                    case 26: ClearMat(); break;
+                    case 27: DarkCoreMat(); break;
+                    case 28: WindVeilMat(); break;
+                    case 29: Mat(SlashTex(), false); Mat(LineTex(), true); Mat(CrackTex(), false); Mat(SmokeTex(), false); Mat(StreakTex(), false); break;
+                }
+            }
+            catch (Exception) { }
+            _warmStep++;
+        }
 
         public static bool MuteHitImpact;   // v0.25.182 (perf): set around a skill's own rapid ticks (Furious Winds) to skip HitImpact
         private static Material _windVeilMat;
@@ -13968,7 +14030,6 @@ namespace DragonsAltarCombat
             if (m != null) line.sharedMaterial = m;
             Vector3 dir = b - a; dir.y = 0f;
             Vector3 side = Vector3.Cross(Vector3.up, dir.normalized);
-            int mask = LayerMask.GetMask("terrain", "Default", "static_solid", "piece");
             for (int k = 0; k < n; k++)
             {
                 float t = (float)k / (n - 1);
@@ -14487,7 +14548,7 @@ namespace DragonsAltarCombat
             float gy;
             if (DragonCombat.TryGroundY(pos, 12f, 40f, out gy)) return new Vector3(pos.x, gy, pos.z);   // v0.25.66 terrain / Structures
             RaycastHit hit;
-            if (Physics.Raycast(pos + Vector3.up * 2f, Vector3.down, out hit, 6f, LayerMask.GetMask("terrain", "Default", "static_solid", "piece"), QueryTriggerInteraction.Ignore))
+            if (Physics.Raycast(pos + Vector3.up * 2f, Vector3.down, out hit, 6f, DragonVfx.SolidGroundMask(), QueryTriggerInteraction.Ignore))
                 return hit.point;
             return pos;
         }
