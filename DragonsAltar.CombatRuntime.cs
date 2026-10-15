@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.176";
+        public const string ModVersion = "0.25.177";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1435,6 +1435,14 @@ namespace DragonsAltarCombat
             return false;
         }
 
+        // v0.25.177 (user: vanilla 1-2-3 after a parry, cause not found in code): every NACC decision within 5 s of a block / parry is
+        // logged ("[Aethelborn] NACC trace: ...") so the real branch shows in LogOutput.log. Log only, no behaviour change.
+        private static void NaccTrace(string msg)
+        {
+            if (Time.time - DragonCombat.LastBlockAt > 5f) return;
+            Debug.Log("[Aethelborn] NACC trace +" + (Time.time - DragonCombat.LastBlockAt).ToString("F2") + "s after block: " + msg);
+        }
+
         private static void ComboStartCore(Attack __instance, Humanoid character, ItemDrop.ItemData weapon, ref Attack previousAttack, ref float timeSinceLastAttack)
         {
             _comboInStart = false;
@@ -1453,6 +1461,7 @@ namespace DragonsAltarCombat
                 Player p;
                 if (!IsLocalMeleeStart(__instance, character, out p))
                 {
+                    if (character == Player.m_localPlayer) NaccTrace("start: not a melee primary (" + (_atkAnim.GetValue(__instance) as string) + ") -> chain reset");
                     // v0.25.99: any other local attack (heavy / area / ranged) also resets the chain speed.
                     Player lp = character as Player;
                     if (lp != null && lp == Player.m_localPlayer) { _comboHit = -1; DragonCombat.SetChainSpeed(lp, 1f, 0.05f); }
@@ -1467,9 +1476,9 @@ namespace DragonsAltarCombat
                 // v0.25.99 FIX (user: dual-wield Axe heavy attack stuck in slow motion): a heavy / single-hit attack
                 // inherited the last chain swing's speed (dual chains run down to 0.25x for 3 s). Every attack that
                 // is not part of our chain plays at normal speed and breaks the chain.
-                if (levels < 2) { _comboHit = -1; DragonCombat.SetChainSpeed(p, 1f, 0.05f); return; }   // only weapons that already chain (no spears / single heavy hits)
+                if (levels < 2) { NaccTrace("start: weapon has " + levels + " chain levels -> vanilla"); _comboHit = -1; DragonCombat.SetChainSpeed(p, 1f, 0.05f); return; }   // only weapons that already chain (no spears / single heavy hits)
                 // v0.25.45 (user): the 5-hit chain belongs to classes fit for the weapon; everyone else keeps vanilla.
-                if (DragonCombat.ComboWeaponProvider == null || !DragonCombat.ComboWeaponProvider(p, weapon)) { _comboHit = -1; DragonCombat.SetChainSpeed(p, 1f, 0.05f); return; }
+                if (DragonCombat.ComboWeaponProvider == null || !DragonCombat.ComboWeaponProvider(p, weapon)) { NaccTrace("start: class not fit for '" + (weapon == null ? "none" : weapon.m_shared.m_name) + "' -> vanilla"); _comboHit = -1; DragonCombat.SetChainSpeed(p, 1f, 0.05f); return; }
                 int count = Mathf.Min(levels, 3);
                 if (levels > count) _atkLevels.SetValue(__instance, count);
                 string anim = _atkAnim.GetValue(__instance) as string;
@@ -1544,8 +1553,9 @@ namespace DragonsAltarCombat
                 _comboDual = UsesDualChain(p);
                 _comboGen = DragonCombat.NaccGen;
                 _comboInStart = true;
+                NaccTrace("start: hit " + (_comboHit + 1) + " swing " + (_comboSwing + 1) + (cont ? " (continues)" : " (new chain: prevAnim " + prevAnim + ", window " + (_comboLastEnd < 0f ? "running" : (Time.time - _comboLastEnd).ToString("F2") + "s") + ")"));
             }
-            catch (Exception) { _comboInStart = false; }
+            catch (Exception ex) { _comboInStart = false; NaccTrace("start: exception " + ex.Message); }
         }
 
         private static void ComboStartPostfix(Attack __instance, ref bool __result, Humanoid character)
@@ -1622,10 +1632,10 @@ namespace DragonsAltarCombat
         {
             if (__instance == null || __instance != Player.m_localPlayer) return true;
             // v0.25.55: no normal attack while a skill holds the player (no attack sneaking out of a skill).
-            if (DragonCombat.IsSkillLocked((Player)__instance)) { __result = false; return false; }
+            if (DragonCombat.IsSkillLocked((Player)__instance)) { NaccTrace("attack request rejected: skill lock"); __result = false; return false; }
             // v0.25.169 (user): NACC may start and continue in the air (the v0.25.154 airborne rejection is gone).
             Player lp = (Player)__instance;
-            if (Time.time < _comboLockUntil) { __result = false; return false; }
+            if (Time.time < _comboLockUntil) { NaccTrace("attack request rejected: finisher lockout " + (_comboLockUntil - Time.time).ToString("F2") + "s"); __result = false; return false; }
             // v0.25.158: a 2HDW primary request is only accepted when its SBDW controller is valid (repaired if needed) - checked here,
             // before Attack.Start spends stamina or advances the combo. Not while a swing runs (never swap controllers mid-swing).
             if (!lp.InAttack() && IsPairedPrimaryRequest(lp, __args))
@@ -1798,7 +1808,12 @@ namespace DragonsAltarCombat
         {
             _stDepth++; // v0.25.162: SetTrigger call depth (RouteSetTriggerPostfix decrements)
             if (__0 == "jump") NaccJumpSeen(__instance);   // v0.25.169 deliberate jump breaks the chain
-            if (!_comboInStart || string.IsNullOrEmpty(__0) || string.IsNullOrEmpty(_comboBase)) return true;
+            if (!_comboInStart || string.IsNullOrEmpty(__0) || string.IsNullOrEmpty(_comboBase))
+            {
+                if (!_comboInStart && !string.IsNullOrEmpty(__0) && __0 != "jump" && Player.m_localPlayer != null && (__instance as Component) != null && ((Component)__instance).GetComponent<Player>() == Player.m_localPlayer && __0.Length > 1 && char.IsDigit(__0[__0.Length - 1]))
+                    NaccTrace("trigger '" + __0 + "' fired OUTSIDE our chain (native)");
+                return true;
+            }
             try
             {
                 int level;
@@ -1855,16 +1870,19 @@ namespace DragonsAltarCombat
                         if (baseClass && BaseComboStates.TryGetValue(DragonCombat.StateKey(a, target), out captured))
                         {
                             a.CrossFade(captured.Value, blend / Mathf.Max(0.1f, StateLength(a, captured.Key)), captured.Key, offset);
+                            NaccTrace("step back to '" + target + "' via captured state (base class)");
                             return false; // Do not also queue the vanilla restart/third-strike transition.
                         }
                         if (DragonCombat.LearnedState(a, target, out hash, out layer))
                         {
                             a.CrossFade(hash, blend / Mathf.Max(0.1f, StateLength(a, layer)), layer, offset);
+                            NaccTrace("step back to '" + target + "' via learned state (layer " + layer + ")");
                             return false;
                         }
                         if (!baseClass && !nativePair && BaseComboStates.TryGetValue(DragonCombat.StateKey(a, target), out captured))
                         {
                             a.CrossFade(captured.Value, blend / Mathf.Max(0.1f, StateLength(a, captured.Key)), captured.Key, offset);   // v0.25.170 fallback
+                            NaccTrace("step back to '" + target + "' via captured state");
                             return false;
                         }
                         int sh = Animator.StringToHash(target);
@@ -1878,6 +1896,7 @@ namespace DragonsAltarCombat
                         }
                     }
                 }
+                NaccTrace("trigger '" + inName + "' -> '" + target + "' (controller '" + (a == null || a.runtimeAnimatorController == null ? "none" : a.runtimeAnimatorController.name) + "')");
                 __0 = target;
                 if (routed && a != null) { _routeTrigger = target; _routeAnimator = a; _routeCtrl = a.runtimeAnimatorController; _routeZanim = __instance; _routeDepth = _stDepth; _routeDone = false; }
                 DragonCombat.LearnState(a, target);

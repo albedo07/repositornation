@@ -1,0 +1,13 @@
+Aethelborn Ascended v0.25.177 - Parry Trace
+Baseline: v0.25.176. Diagnostic build: NO behaviour change.
+
+NACC AFTER PARRY (still vanilla 1-2-3)
+- The cause could not be found by reading our code or Valheim's (decompiled): nothing in a parry resets or bypasses the
+  chain, and the v0.25.172 / v0.25.175 guesses did not help.
+- For 5 s after any block / parry, every chain decision is now written to LogOutput.log as
+  "[Aethelborn] NACC trace +X.XXs after block: ...":
+    start: hit N swing N (continues / new chain + why), or why it fell to vanilla (class/weapon, chain levels, not melee)
+    trigger 'x' -> 'y' (our rewrite + animator controller), or "fired OUTSIDE our chain (native)"
+    step back via learned / captured state, or "no state for the step back"
+    attack request rejected: skill lock / finisher lockout
+- These lines will show exactly which branch turns the chain vanilla after a parry.
