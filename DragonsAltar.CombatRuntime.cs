@@ -11331,21 +11331,49 @@ namespace DragonsAltarCombat
             if (p != null) p.HoldEnd = on;
         }
 
+        // v0.25.183 (perf, user: Seismic Guillotine hitch on cast): the lookup below searched every loaded assembly for the
+        // DualWield type (AccessTools.TypeByName, slow when the mod is absent) and string-processed every clip of the
+        // player's animator on EVERY cast. Same answer cached per (source controller, name); the DualWield type and its
+        // field are looked up once.
+        private static readonly Dictionary<string, AnimationClip> _origClipCache = new Dictionary<string, AnimationClip>();
+        private static bool _dualTypeLooked;
+        private static FieldInfo _dualControllersField;
+
         public static AnimationClip OriginalSkillClip(Player player, string name)
         {
             Animator an = player == null ? null : player.GetComponentInChildren<Animator>();
             RuntimeAnimatorController controller = an == null ? null : an.runtimeAnimatorController;
             while (controller is AnimatorOverrideController)
                 controller = ((AnimatorOverrideController)controller).runtimeAnimatorController;
+            RuntimeAnimatorController dualOriginal = null;
+            try
+            {
+                if (!_dualTypeLooked)
+                {
+                    _dualTypeLooked = true;
+                    Type dt = AccessTools.TypeByName("DualWield.DualWield");
+                    _dualControllersField = dt == null ? null : AccessTools.Field(dt, "CustomRuntimeControllers");
+                }
+                IDictionary known0 = _dualControllersField == null ? null : _dualControllersField.GetValue(null) as IDictionary;
+                dualOriginal = known0 == null || !known0.Contains("Original") ? null : known0["Original"] as RuntimeAnimatorController;
+            }
+            catch (Exception) { dualOriginal = null; }
+            string cacheKey = (dualOriginal != null ? dualOriginal.GetInstanceID() : 0).ToString() + "|" + (controller != null ? controller.GetInstanceID() : 0).ToString() + "|" + name;
+            AnimationClip cached;
+            if (_origClipCache.TryGetValue(cacheKey, out cached) && cached != null) return cached;
+            AnimationClip found = OriginalSkillClipUncached(controller, dualOriginal, name);
+            if (found != null) { if (_origClipCache.Count > 64) _origClipCache.Clear(); _origClipCache[cacheKey] = found; }
+            return found;
+        }
+
+        private static AnimationClip OriginalSkillClipUncached(RuntimeAnimatorController controller, RuntimeAnimatorController dualOriginal, string name)
+        {
             string wanted = name.Replace("_", "").Replace("-", "").Replace(" ", "").ToLowerInvariant();
             AnimationClip[] clips;
             // Some Dual Wield builds replace the complete controller rather than using an override chain.
             try
             {
-                Type dual = AccessTools.TypeByName("DualWield.DualWield");
-                FieldInfo field = dual == null ? null : AccessTools.Field(dual, "CustomRuntimeControllers");
-                IDictionary known = field == null ? null : field.GetValue(null) as IDictionary;
-                RuntimeAnimatorController original = known == null ? null : known["Original"] as RuntimeAnimatorController;
+                RuntimeAnimatorController original = dualOriginal;
                 clips = original == null ? null : original.animationClips;
                 if (clips != null) for (int i = 0; i < clips.Length; i++)
                     if (clips[i] != null && (clips[i].name.Replace("_", "").Replace("-", "").Replace(" ", "").ToLowerInvariant() == wanted ||
