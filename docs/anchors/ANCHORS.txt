@@ -1,4 +1,9 @@
-ANCHOR v0.25.167 Grounded Edges (user, 2026-10-14) - frozen working pass
+ANCHOR v0.25.179 Double Start (user, 2026-10-15) - frozen working pass
+archive: docs/anchors/Aethelborn_Ascended_v0.25.179_Double_Start.zip (original package, unmodified)
+SHA-256: 6a00002321970d2c34ab8534accee44f0e2c69bca3c030f9cb0facab5e687c3a
+commit:  70d3b37
+
+PREVIOUS ANCHOR v0.25.167 Grounded Edges (user, 2026-10-14) - frozen working pass
 archive: docs/anchors/Aethelborn_Ascended_v0.25.167_Grounded_Edges.zip (original package, unmodified)
 SHA-256: 9dbee8b4f3398367b7615ba6f13439c50de56de97df567012de039078bd3cd59
 commit:  0319c64
