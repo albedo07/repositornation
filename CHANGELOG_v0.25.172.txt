@@ -1,0 +1,13 @@
+Aethelborn Ascended v0.25.172 - Parry Chain
+Baseline: v0.25.171. Only the normal attack chain (NACC) changed.
+
+NACC AFTER PARRY (user video: vanilla 1-2-3 after a parry)
+- Likely cause (code): hit 3 of 1-2-1-2-3 steps BACK to swing 1 by cross-fading into an animator state the mod learned.
+  Every animator controller change wiped ALL learned / captured swing states. A controller swap and swap-back around a
+  block / parry (another animation mod, or our own dual-wield / paired controller restore) therefore left hit 3 with no
+  state -> the native trigger ran -> vanilla chain look until the states were learned again.
+- Fix: learned and captured swing states are now stored per controller and kept; a swap back to the same controller
+  finds them again. A state is still only used under the controller it was learned on.
+- Diagnostic: if the step back still finds nothing, LogOutput.log gets (max every 10 s):
+  "[Aethelborn] NACC: no state for the step back to '...' (hit N, controller '...', blocking ...)".
+- Unchanged: blocking / parry and their bonuses, heavy attacks, skill handoffs, 0.7 s window, timing. No delays.

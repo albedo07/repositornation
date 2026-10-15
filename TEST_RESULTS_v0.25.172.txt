@@ -1,0 +1,3 @@
+v0.25.172 Parry Chain - test results
+COMPILE / MODEL (here, no game): check.sh 3029660 PASSED (0 new signatures); mcs --parse -langversion:5 clean; tools/tests/nacc_handoff ALL PASS (new: per-controller states survive swap-back, never used under another controller).
+NOT VERIFIED (needs Valheim): chain after parry; whether a controller swap really happens around the parry (the log line answers it).

@@ -189,6 +189,16 @@ static class T
             Func<bool, bool, bool, string> back = (learned, captured, hasState) => learned ? "learned" : captured ? "captured" : hasState ? "hasstate" : "trigger";
             Check(back(false, true, false) == "captured", "swing 1 never learned (always started from block): captured state still gives 1-2-1-2-3");
             Check(back(true, true, true) == "learned", "learned state keeps priority for advanced classes");
+            // v0.25.172: states keyed per controller survive a swap and swap-back (parry / block around another mod's controller)
+            {
+                var learned = new Dictionary<string, int>();
+                Func<int, string, string> key = (ctrl, trig) => "anim/" + ctrl + ":" + trig;
+                learned[key(1, "swing0")] = 42;                       // learned under the vanilla controller
+                int ctrlNow = 2;                                       // swapped on parry
+                Check(!learned.ContainsKey(key(ctrlNow, "swing0")), "a state is never used under another controller");
+                ctrlNow = 1;                                           // swapped back
+                Check(learned.ContainsKey(key(ctrlNow, "swing0")), "swap-back keeps the learned swing 1 (old rule wiped it)");
+            }
             // chain counters are untouched by blocking: block before / between strikes inside the 0.7 s window continues, after it restarts
             foreach (string w in new string[] { "sword", "sword_shield" })
             {

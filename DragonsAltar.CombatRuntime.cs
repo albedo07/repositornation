@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.171";
+        public const string ModVersion = "0.25.172";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1671,7 +1671,7 @@ namespace DragonsAltarCombat
                         {
                             if (events[e].functionName != "OnAttackTrigger" && events[e].functionName != "Hit") continue;
                             AnimatorStateInfo state = next == 1 ? a.GetNextAnimatorStateInfo(layer) : a.GetCurrentAnimatorStateInfo(layer);
-                            BaseComboStates[a.GetInstanceID() + ":" + trigger] = new KeyValuePair<int, int>(layer, state.fullPathHash);
+                            BaseComboStates[DragonCombat.StateKey(a, trigger)] = new KeyValuePair<int, int>(layer, state.fullPathHash);
                             best = clips[i].weight;
                             break;
                         }
@@ -1791,6 +1791,7 @@ namespace DragonsAltarCombat
             return false;
         }
 
+        private static float _backMissLogAt;
         private static bool ComboTriggerPrefix(object __instance, ref string __0)
         {
             _stDepth++; // v0.25.162: SetTrigger call depth (RouteSetTriggerPostfix decrements)
@@ -1849,7 +1850,7 @@ namespace DragonsAltarCombat
                         float blend = Mathf.Clamp(Instance.ComboBlend.Value, 0.02f, 0.4f);
                         float offset = Mathf.Clamp(Instance.ComboRepeatOffset.Value, 0f, 0.5f);
                         KeyValuePair<int, int> captured;
-                        if (baseClass && BaseComboStates.TryGetValue(a.GetInstanceID() + ":" + target, out captured))
+                        if (baseClass && BaseComboStates.TryGetValue(DragonCombat.StateKey(a, target), out captured))
                         {
                             a.CrossFade(captured.Value, blend / Mathf.Max(0.1f, StateLength(a, captured.Key)), captured.Key, offset);
                             return false; // Do not also queue the vanilla restart/third-strike transition.
@@ -1859,7 +1860,7 @@ namespace DragonsAltarCombat
                             a.CrossFade(hash, blend / Mathf.Max(0.1f, StateLength(a, layer)), layer, offset);
                             return false;
                         }
-                        if (!baseClass && !nativePair && BaseComboStates.TryGetValue(a.GetInstanceID() + ":" + target, out captured))
+                        if (!baseClass && !nativePair && BaseComboStates.TryGetValue(DragonCombat.StateKey(a, target), out captured))
                         {
                             a.CrossFade(captured.Value, blend / Mathf.Max(0.1f, StateLength(a, captured.Key)), captured.Key, offset);   // v0.25.170 fallback
                             return false;
@@ -1867,6 +1868,12 @@ namespace DragonsAltarCombat
                         int sh = Animator.StringToHash(target);
                         for (int li = 0; li < a.layerCount; li++)
                             if (a.HasState(li, sh)) { a.CrossFade(sh, blend / Mathf.Max(0.1f, StateLength(a, li)), li, offset); return false; }
+                        if (Time.time >= _backMissLogAt)   // v0.25.172: the step back had no state -> say why (rate-limited)
+                        {
+                            _backMissLogAt = Time.time + 10f;
+                            Debug.Log("[Aethelborn] NACC: no state for the step back to '" + target + "' (hit " + (_comboHit + 1) + ", controller '"
+                                + (a.runtimeAnimatorController == null ? "none" : a.runtimeAnimatorController.name) + "', blocking " + a.GetBool("blocking") + ") - native trigger used");
+                        }
                     }
                 }
                 __0 = target;
@@ -4665,13 +4672,10 @@ namespace DragonsAltarCombat
             if (TriggerControllers.TryGetValue(id, out previous) && previous == a.runtimeAnimatorController) return;
             TriggerControllers[id] = a.runtimeAnimatorController;
             AnimTriggers.Remove(id);
-            string prefix = id + ":";
-            List<string> stale = new List<string>();
-            foreach (string key in LearnedStates.Keys) if (key.StartsWith(prefix, StringComparison.Ordinal)) stale.Add(key);
-            for (int i = 0; i < stale.Count; i++) LearnedStates.Remove(stale[i]);
-            stale.Clear();
-            foreach (string key in DragonCombatPlugin.BaseComboStates.Keys) if (key.StartsWith(prefix, StringComparison.Ordinal)) stale.Add(key);
-            for (int i = 0; i < stale.Count; i++) DragonCombatPlugin.BaseComboStates.Remove(stale[i]);   // v0.25.154 captured under the old controller
+            // v0.25.172 (user: vanilla 1-2-3 after a parry): learned / captured swing states are keyed per CONTROLLER (StateKey) and kept.
+            // They used to be wiped on every controller change, so a swap and swap-back around a block / parry (another mod's or
+            // ours) left the backwards step (hit 3) with nothing to cross-fade into -> native trigger -> vanilla chain. A state is still
+            // only ever used under the controller it was learned on (the v0.25.154 rule).
             PendingLearns.RemoveAll(delegate(StateLearn learn) { return learn.A == a; });
         }
 
@@ -4705,12 +4709,18 @@ namespace DragonsAltarCombat
         private static readonly Dictionary<string, KeyValuePair<int, int>> LearnedStates = new Dictionary<string, KeyValuePair<int, int>>();
         private static readonly List<StateLearn> PendingLearns = new List<StateLearn>();
 
+        public static string StateKey(Animator a, string trigger)
+        {
+            RuntimeAnimatorController c = a == null ? null : a.runtimeAnimatorController;
+            return (a == null ? 0 : a.GetInstanceID()) + "/" + (c == null ? 0 : c.GetInstanceID()) + ":" + trigger;
+        }
+
         public static bool LearnedState(Animator a, string trigger, out int hash, out int layer)
         {
             hash = 0; layer = 0;
             CheckAnimationController(a);
             KeyValuePair<int, int> v;
-            if (a == null || !LearnedStates.TryGetValue(a.GetInstanceID() + ":" + trigger, out v)) return false;
+            if (a == null || !LearnedStates.TryGetValue(StateKey(a, trigger), out v)) return false;
             layer = v.Key; hash = v.Value;
             return true;
         }
@@ -4719,7 +4729,7 @@ namespace DragonsAltarCombat
         {
             if (a == null || string.IsNullOrEmpty(trigger)) return;
             CheckAnimationController(a);
-            if (LearnedStates.ContainsKey(a.GetInstanceID() + ":" + trigger)) return;
+            if (LearnedStates.ContainsKey(StateKey(a, trigger))) return;
             try
             {
                 StateLearn l = new StateLearn();
@@ -4791,7 +4801,7 @@ namespace DragonsAltarCombat
                 // state name, or - renamed state - an attack event on a state that was just entered (not a swing already running).
                 bool fresh = next || st.normalizedTime < 0.35f;
                 if (!expected && !named && !(evented && fresh)) return false;
-                string prefix = a.GetInstanceID() + ":";
+                string prefix = StateKey(a, "");
                 foreach (KeyValuePair<string, KeyValuePair<int, int>> kv in LearnedStates)
                     if (kv.Key.StartsWith(prefix, StringComparison.Ordinal) && kv.Key != prefix + trigger && kv.Value.Key == layer && kv.Value.Value == st.fullPathHash) return false;
                 return true;
@@ -4828,7 +4838,7 @@ namespace DragonsAltarCombat
                         if (st.fullPathHash == l.Pre[i]) continue;
                         // v0.25.154: only a validated swing state is cached (see IsSwingState); a locomotion / skill / looping state is never cached.
                         if (!IsSwingState(l.A, i, st, l.Name)) continue;
-                        LearnedStates[l.A.GetInstanceID() + ":" + l.Name] = new KeyValuePair<int, int>(i, st.fullPathHash);
+                        LearnedStates[StateKey(l.A, l.Name)] = new KeyValuePair<int, int>(i, st.fullPathHash);
                         PendingLearns.RemoveAt(k);
                         break;
                     }
