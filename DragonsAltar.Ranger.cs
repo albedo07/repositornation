@@ -871,6 +871,7 @@ namespace DragonsAltarRanger
             DragonCombat.LockSkill(player, 0.35f);
             if (flip) DragonCombat.PlayClip(player, "rg_tumble", 0.02f);   // v0.25.13: tucked flip, draw upside down, loose
             const float duration = 0.3f;
+            if (_enableVfx.Value) { Player bp = player; float bend = Time.time + duration + 0.05f; Vector3 bs = start + Vector3.up * 0.8f, bb = back; DragonCombat.RunVfx(delegate { DragonVfx.AirStreak(bp.transform, DragonVfx.Wind, 0.5f, 0.3f, delegate { return bp != null && Time.time < bend; }); DragonVfx.Gust(bs, -bb, 1.4f); DragonVfx.Gust(bs, bb, 1f); }); }   // v0.25.181 wind ribbons follow the real flip + airflow off the jump
             bool fired = false;
             float t = 0f;
             while (t < duration && player != null && !player.IsDead())
@@ -1005,7 +1006,13 @@ namespace DragonsAltarRanger
                     if (DragonCombat.IsSmallEnemy(enemy)) { if (DragonCombat.SkillStunEnabled(player, "snare_trap", "Attack 1", true, trap.StunAscended)) DragonCombat.Stun(enemy, trap.Position); }
                     DragonCombat.ApplyCripple(enemy, _snCripple.Value);
                 }
-                if (_enableVfx.Value) { StartCoroutine(RingVfx(trap.Position, DragonCombat.M(_snTrigger.Value), new Color(0.85f, 0.95f, 0.45f, 1f), 0.5f)); Vector3 tp = trap.Position; float tr = DragonCombat.M(_snTrigger.Value); DragonCombat.RunVfx(delegate { DragonVfx.Burst(tp + Vector3.up * 0.3f, new Color(0.85f, 0.95f, 0.45f, 1f), 40, 7f, 0.25f, 0.5f, 0.6f); DragonVfx.Vortex(null, tp + Vector3.up * 0.5f, new Color(0.60f, 0.90f, 0.35f, 1f), tr, 0.6f); DragonVfx.DustRing(tp, tr); }); }   // v0.25.58
+                if (_enableVfx.Value)
+                {
+                    // v0.25.181 (user): the snare visibly snaps tight around each caught target's feet
+                    if (!DragonVfx.Enabled) StartCoroutine(RingVfx(trap.Position, DragonCombat.M(_snTrigger.Value), new Color(0.85f, 0.95f, 0.45f, 1f), 0.5f));
+                    for (int k2 = 0; k2 < inside.Count; k2++) { Vector3 fp = inside[k2].transform.position; DragonCombat.RunVfx(delegate { DragonVfx.SnareSnap(fp, 0.7f); }); }
+                    Vector3 tp = trap.Position; float tr = DragonCombat.M(_snTrigger.Value); DragonCombat.RunVfx(delegate { DragonVfx.Burst(tp + Vector3.up * 0.3f, new Color(0.62f, 0.50f, 0.32f, 1f), 14, 5f, 0.08f, 0.5f, 0.6f); DragonVfx.DustRing(tp, tr); });
+                }
                 ShowMessage("Snare Trap sprung");
                 RemoveTrap(i);
             }
@@ -1219,6 +1226,7 @@ namespace DragonsAltarRanger
             Rigidbody body = player.GetComponent<Rigidbody>();
             DragonCombat.PlayClip(player, "rg_dive", 0.08f);
             float t = 0f, duration = 0.25f;
+            if (_enableVfx.Value) { Player dp = player; float dend = Time.time + duration + 0.05f; DragonCombat.RunVfx(delegate { DragonVfx.AirStreak(dp.transform, DragonVfx.Wind, 0.6f, 0.35f, delegate { return dp != null && Time.time < dend; }); }); }   // v0.25.181 clean wake following the real dash
             while (t < duration && player != null)
             {
                 t += Time.fixedDeltaTime;
@@ -2655,7 +2663,19 @@ namespace DragonsAltarRanger
             Vector3 at = target.transform.position;
             Rigidbody body = target.GetComponent<Rigidbody>();
             float end = Time.time + seconds;
-            if (_enableVfx.Value) StartCoroutine(RingVfx(at, DragonCombat.M(1f), new Color(0.75f, 1f, 0.55f, 1f), seconds));
+            if (_enableVfx.Value)
+            {
+                StartCoroutine(RingVfx(at, DragonCombat.M(1f), new Color(0.75f, 1f, 0.55f, 1f), seconds));
+                // v0.25.181 (user): a clear pin - three arrows driven into the ground around the target's feet for the duration
+                for (int k = 0; k < 3; k++)
+                {
+                    float a = k * 2.094f + 0.4f;
+                    Vector3 off = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * 0.55f;
+                    Vector3 g = GroundAt(at + off), pd = (-off.normalized + Vector3.down * 1.6f).normalized;
+                    DragonCombat.RunVfx(delegate { DragonVfx.PlantedArrow(g, pd, 1f, new Color(0.75f, 1f, 0.55f, 1f), Mathf.Max(0.5f, seconds)); });
+                }
+                Vector3 pa = at; DragonCombat.RunVfx(delegate { DragonVfx.DirtBurst(pa, 0.7f, 0.6f); DragonVfx.SnareSnap(pa, 0.6f); });
+            }
             while (Time.time < end && target != null && !target.IsDead())
             {
                 target.transform.position = at;
@@ -3083,7 +3103,8 @@ namespace DragonsAltarRanger
                 DragonVfx.Burst(at + Vector3.up * 0.3f, sc, Mathf.RoundToInt(10 + width * 30f), 5f + width * 4f, 0.25f, 0.5f, 0.4f);
             });
             LineVfx(at + Vector3.up * DragonCombat.M(25f), at, new Color(0.85f, 1f, 0.70f, 1f), width, 0.25f);
-            if (!DragonVfx.Enabled) StartCoroutine(RingVfx(at, radius, new Color(0.85f, 1f, 0.70f, 0.9f), 0.3f));   // v0.25.180 Starfall: localized soil bursts only, no ring every 0.25 s
+            if (!DragonVfx.Enabled) StartCoroutine(RingVfx(at, radius, new Color(0.85f, 1f, 0.70f, 0.9f), 0.3f));
+            else { Vector3 sa = at; float sr = radius; DragonCombat.RunVfx(delegate { DragonVfx.GroundRing(sa, new Color(0.85f, 1f, 0.70f, 1f), Mathf.Min(2.5f, sr * 0.5f), 0.25f); DragonVfx.DirtBurst(sa, Mathf.Min(1.2f, sr * 0.3f), 0.7f); }); }   // v0.25.181 (user): short contact front + soil burst at each real impact (no flash)
         }
 
         private void StarHitAll(Player player, Vector3 at, float radius, RangerArrowDamage d, float mult, string stunAttack = "Attack 1")
@@ -3115,6 +3136,7 @@ namespace DragonsAltarRanger
             }
             foreach (Player ally in allies) _vigilUntil[ally.GetInstanceID()] = Time.time + duration;
             StartCoroutine(VigilMarks(player, duration));
+            if (_enableVfx.Value) { Vector3 hv = player.transform.position; float hr = DragonCombat.M(_hvRadius.Value); DragonCombat.RunVfx(delegate { DragonVfx.SoftWave(hv, new Color(0.85f, 0.92f, 0.70f, 1f), Mathf.Min(hr, 12f), 0.7f); DragonVfx.HawkEmblem(hv + Vector3.up * 2.6f, 0.9f, 1.4f, new Color(1f, 0.88f, 0.55f, 1f)); }); }   // v0.25.181 soft pulse + brief hawk-eye emblem
         }
 
         // v0.24.3: enemies in range glow red (instead of floating markers) while Hawk's Vigil lasts.
@@ -3253,7 +3275,7 @@ namespace DragonsAltarRanger
         // terrain always stop it. growTo > 0 widens the hitbox up to that radius at max range.
         private IEnumerator ArrowFlight(Player player, Vector3 pos, Vector3 dir, float speed, float range, float radius, bool pierce, Color color, float growTo, Func<Character, bool> onHit, Action<Vector3> onEnd)
         {
-            GameObject vfx = _enableVfx.Value ? CreateArrowVfx(color) : null;
+            GameObject vfx = _enableVfx.Value ? CreateArrowVfx(color, radius) : null;
             HashSet<int> done = new HashSet<int>();
             float traveled = 0f;
             bool stop = false;
@@ -3272,6 +3294,7 @@ namespace DragonsAltarRanger
                     {
                         if (!IsEnemy(player, ch) || !done.Add(ch.GetInstanceID())) continue;
                         onHit(ch);
+                        if (_enableVfx.Value && pierce) { Vector3 hp = ch.transform.position + Vector3.up * 1f, hd = dir; Color hc = color; float hw = Mathf.Clamp(radius * 0.5f, 0.05f, 0.4f); DragonCombat.RunVfx(delegate { DragonVfx.Streak(hp - hd * 0.6f, hp + hd * 1.6f, hc, hw, 0.2f); DragonVfx.Burst(hp, hc, 6, 6f, 0.06f, 0.25f, 0.3f); }); }   // v0.25.181 directional pass-through streak
                         if (!pierce) { stop = true; pos += dir * hits[i].distance; }
                     }
                     else if (IsSolid(c))
@@ -3735,6 +3758,11 @@ namespace DragonsAltarRanger
 
         private GameObject CreateArrowVfx(Color color)
         {
+            return CreateArrowVfx(color, 0f);
+        }
+
+        private GameObject CreateArrowVfx(Color color, float radius)
+        {
             GameObject obj = new GameObject("RangerArrow");
             LineRenderer line = obj.AddComponent<LineRenderer>();
             line.useWorldSpace = false;
@@ -3748,7 +3776,9 @@ namespace DragonsAltarRanger
             Material m = VfxMaterial(Color.white);
             if (m != null) line.material = m;
             // v0.25.55 VFX pass 4: every skill arrow leaves a glowing wind trail.
-            DragonCombat.RunVfx(delegate { DragonVfx.TrailWhile(obj.transform, color, 0.14f, delegate { return obj != null; }); });
+            // v0.25.181 (user): a sharp tapered airflow wake (narrow core + pale air), heavier for big shots - no glow motes
+            float ww = Mathf.Clamp(radius * 1.2f, 0.12f, 1.4f); bool heavy = radius >= DragonCombat.M(0.9f);
+            DragonCombat.RunVfx(delegate { DragonVfx.AirStreak(obj.transform, color, heavy ? ww : 0.16f, heavy ? 0.45f : 0.3f, delegate { return obj != null; }); });
             if (DragonVfx.Enabled) { LineRenderer al = line; DragonCombat.RunVfx(delegate { DragonVfx.SpiritArrow(obj.transform, color, 0.9f); al.enabled = false; }); }   // v0.25.84 a real spirit arrow
             return obj;
         }

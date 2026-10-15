@@ -1293,9 +1293,12 @@ namespace DragonsAltarSorcerer
                 DragonCombat.RunVfx(delegate
                 {
                     DragonVfx.CrackLine(ga, gb, new Color(0.80f, 0.40f, 1f, 1f), Mathf.Clamp(gw * 0.35f, 0.4f, 1.4f), 4f);   // v0.25.58 the blade splits the ground
-                    // v0.25.168 (user): no spikes - the blade splits the ground (fissure + Hulk-smash landing below)
-                    DragonVfx.HeavyLanding(Vector3.Lerp(ga, gb, 0.6f), new Color(0.75f, 0.30f, 1f, 1f), Mathf.Max(2f, gw * 1.5f), 2f);
-                    for (int k = 1; k <= 4; k++) DragonVfx.Eruption(Vector3.Lerp(ga, gb, k / 4.5f), new Color(0.75f, 0.30f, 1f, 1f), Mathf.Clamp(gw * 0.5f, 0.6f, 1.6f), 0f);   // v0.25.168 the split ground bursts open
+                    // v0.25.181 (user): no circular impact front - dirt and debris thrown out sideways along the blade's straight
+                    // contact line (torn furrow segments), the split ground bursting open along it
+                    int segs = Mathf.Clamp(Mathf.RoundToInt(Vector3.Distance(ga, gb) / 1.2f), 3, 14);
+                    for (int k = 0; k < segs; k++) DragonVfx.Furrow(Vector3.Lerp(ga, gb, (float)k / segs), Vector3.Lerp(ga, gb, (float)(k + 1) / segs), new Color(0.75f, 0.30f, 1f, 1f), Mathf.Max(1f, gw), 2.2f);
+                    for (int k = 1; k <= 3; k++) DragonVfx.Eruption(Vector3.Lerp(ga, gb, k / 3.5f), new Color(0.75f, 0.30f, 1f, 1f), Mathf.Clamp(gw * 0.45f, 0.6f, 1.4f), 0f);
+                    DragonVfx.Shake(Vector3.Lerp(ga, gb, 0.5f), 25f, 2f);
                 });
             }
         }
@@ -1400,7 +1403,7 @@ namespace DragonsAltarSorcerer
             {
                 StartCoroutine(RingVfx(player.transform.position, radius, new Color(0.48f, 0.90f, 1f, 0.95f), 0.8f));
                 Vector3 np = player.transform.position; float nr = radius;
-                DragonCombat.RunVfx(delegate { DragonVfx.SoftWave(np, new Color(0.70f, 0.90f, 1f, 1f), nr, 0.6f); DragonVfx.FrostGround(np, nr, 4f); DragonVfx.IceBurst(np, nr * 0.6f); DragonVfx.Shake(np, 25f, 1.2f); });   // v0.25.180 low outward front of cold mist + temporary rime; no default ring of ice spikes
+                DragonCombat.RunVfx(delegate { DragonVfx.SoftWave(np, new Color(0.70f, 0.90f, 1f, 1f), nr, 0.6f); DragonVfx.FrostGround(np, nr * 0.75f, 3.5f, 0.45f);   /* v0.25.181 subtle frost, the pulse carries the release */ DragonVfx.IceBurst(np, nr * 0.6f); DragonVfx.Shake(np, 25f, 1.2f); });   // v0.25.180 low outward front of cold mist + temporary rime; no default ring of ice spikes
             }
         }
 
@@ -1419,7 +1422,7 @@ namespace DragonsAltarSorcerer
             if (_enableVfx.Value)
             {
                 Vector3 gc = center; float gr = radius, gd = duration;
-                DragonCombat.RunVfx(delegate { DragonVfx.FrostGround(gc, gr, gd); });   // v0.25.168 hoarfrost carpet + cold mist (no spikes)
+                DragonCombat.RunVfx(delegate { DragonVfx.FrostGround(gc, gr, gd, 0.5f); });   // v0.25.168 hoarfrost carpet + cold mist (no spikes)
             }
             for (int t = 0; t < ticks; t++)
             {
@@ -1708,10 +1711,22 @@ namespace DragonsAltarSorcerer
                 DragonCombat.RunVfx(delegate
                 {
                     DragonVfx.HeavyLanding(ct, new Color(1f, 0.40f, 0.08f, 1f), cr, 3f);   // v0.25.58 the sky falls
-                    DragonVfx.IceBurst(ct + new Vector3(cr * 0.3f, 0f, 0f), cr * 0.5f);
-                    DragonVfx.FireBlast(ct, cr * 0.7f);   // v0.25.61
-                    DragonVfx.Embers(ct, new Color(1f, 0.40f, 0.08f, 1f), cr * 0.8f, 3f, 45f);   // v0.25.150 Cataclysm: no rune circle / light column, fewer embers
                     DragonVfx.StormCloud(ct, cr, 14f, 2f);
+                    // v0.25.181 (user: Ultimate, elements distinguishable): FIRE core on one side, FROST on another, LIGHTNING
+                    // striking a third, then the whole area shatters
+                    Vector3 fireP = ct + new Vector3(-cr * 0.3f, 0f, cr * 0.15f), iceP = ct + new Vector3(cr * 0.35f, 0f, cr * 0.1f), boltP = ct + new Vector3(0f, 0f, -cr * 0.35f);
+                    DragonVfx.FireBlast(fireP, cr * 0.6f);
+                    DragonVfx.Embers(fireP, new Color(1f, 0.40f, 0.08f, 1f), cr * 0.5f, 3f, 45f);
+                    DragonVfx.Scorch(fireP, cr * 0.45f, 6f);
+                    DragonVfx.IceBurst(iceP, cr * 0.45f);
+                    DragonVfx.FrostGround(iceP, cr * 0.4f, 3f, 0.6f);
+                    DragonVfx.Debris(iceP, new Color(0.75f, 0.92f, 1f, 1f), 8, 7f, 0.2f, 2f);
+                    for (int b = 0; b < 3; b++)
+                    {
+                        Vector3 bp = boltP + new Vector3(Mathf.Cos(b * 2.1f), 0f, Mathf.Sin(b * 2.1f)) * cr * 0.2f;
+                        DragonVfx.UltimateStrike(bp + Vector3.up * 14f, bp, b == 1 ? DragonVfx.UltYellow : DragonVfx.UltBlue, 0.55f, 1.4f);
+                    }
+                    DragonVfx.Shatter(ct, cr * 0.8f, 0f);
                 });
             }
         }
@@ -1905,7 +1920,11 @@ namespace DragonsAltarSorcerer
                 Vector3 dir = rifts == 1 ? away : Quaternion.AngleAxis(-35f + 35f * r, Vector3.up) * away;
                 Vector3 portal = target.transform.position + dir * 2.6f + Vector3.up * (1.1f + 0.4f * r);
                 if (_enableVfx.Value)
+                {
                     StartCoroutine(RingVfx(portal, 0.85f, new Color(0.80f, 0.22f, 1f, 0.95f), 0.30f));
+                    Vector3 rp = portal, rf = target.transform.position - portal; Color rcol = IsSpellAscended(player, "rift_echo") ? HwDeep : HwBlue;
+                    DragonCombat.RunVfx(delegate { DragonVfx.RiftSlit(rp, rf, 2.2f, 0.6f, rcol); });   // v0.25.181 the echo visibly emerges from a tapered rift
+                }
                 StartCoroutine(RiftEchoProjectile(player, target, damage, portal, aimPoint, DragonCombat.StunAttack(r + 1)));
             }
         }
@@ -2023,7 +2042,7 @@ namespace DragonsAltarSorcerer
             {
                 StartCoroutine(RingVfx(dest, 1.6f, new Color(0.58f, 0.12f, 1f, 0.95f), 0.35f));
                 Vector3 vd = dest, vo = vfxFrom;
-                DragonCombat.RunVfx(delegate { DragonVfx.GravityCollapse(vo + Vector3.up, 1.2f); DragonVfx.Burst(vd + Vector3.up, new Color(0.62f, 0.40f, 0.95f, 0.9f), 14, 5f, 0.12f, 0.35f, 0f); DragonVfx.Streak(vo + Vector3.up, vd + Vector3.up, new Color(0.62f, 0.45f, 0.95f, 0.5f), 0.08f, 0.35f); });   // v0.25.180 outward unfolding at arrival + a few stretched strands back to the departure (no flash)
+                DragonCombat.RunVfx(delegate { DragonVfx.SpaceFold(vo + Vector3.up, false, HwBlue, 1.2f); DragonVfx.SpaceFold(vd + Vector3.up, true, HwBlue, 1.2f); DragonVfx.GravityCollapse(vo + Vector3.up, 1.2f); DragonVfx.Burst(vd + Vector3.up, new Color(0.62f, 0.40f, 0.95f, 0.9f), 14, 5f, 0.12f, 0.35f, 0f); DragonVfx.Streak(vo + Vector3.up, vd + Vector3.up, new Color(0.62f, 0.45f, 0.95f, 0.5f), 0.08f, 0.35f); });   // v0.25.180 outward unfolding at arrival + a few stretched strands back to the departure (no flash)
             }
             ShowMessage((airborne ? "Void Step - Free Aim / Feather Falling" : "Void Step") + (max > 1 ? " (" + _voidCharges + "/" + max + ")" : ""));
         }
@@ -2672,7 +2691,8 @@ namespace DragonsAltarSorcerer
             _phalanxSpearArmed = false;
             _stunPhalanxShot = 0;
             DragonCombat.BeginMobileCast(player, 0.3f, true);   // v0.25.86 HW keeps sprint
-            for (int i = 0; i < count; i++) _phalanxSwords.Add(CreateArcaneSword(player.transform.position));
+            Color swc = IsSpellAscended(player, "arcane_phalanx") ? HwDeep : HwBlue;   // v0.25.181 blue-violet, Ascended deeper
+            for (int i = 0; i < count; i++) _phalanxSwords.Add(CreateArcaneSword(player.transform.position, swc));
             _nextPhalanxLaunch = Time.time + 0.15f;
             _phalanxExpireAt = Time.time + Mathf.Max(1f, _phalanxLifetime.Value); // swords stay 16s
             DragonCombat.PlayClip(player, "hw_rift_walker", 0.12f);   // both hands open: the swords appear
@@ -3151,7 +3171,7 @@ namespace DragonsAltarSorcerer
             {
                 Shader shader = Shader.Find("Sprites/Default");
                 _mimicMaterial = shader != null ? new Material(shader) : null;
-                if (_mimicMaterial != null) _mimicMaterial.color = new Color(0.58f, 0.30f, 1f, 0.42f);
+                if (_mimicMaterial != null) { _mimicMaterial.color = new Color(0.62f, 0.50f, 1f, 0.36f); if (DragonVfx.Enabled) _mimicMaterial.mainTexture = DragonVfx.DissolveTex(); }   // v0.25.181 softly dissolving, quieter than the player
             }
             for (int i = 0; i < 3; i++)
             {
@@ -3176,7 +3196,7 @@ namespace DragonsAltarSorcerer
             {
                 Shader shader = Shader.Find("Sprites/Default");
                 _mimicMaterial = shader != null ? new Material(shader) : null;
-                if (_mimicMaterial != null) _mimicMaterial.color = new Color(0.58f, 0.30f, 1f, 0.42f);
+                if (_mimicMaterial != null) { _mimicMaterial.color = new Color(0.62f, 0.50f, 1f, 0.36f); if (DragonVfx.Enabled) _mimicMaterial.mainTexture = DragonVfx.DissolveTex(); }   // v0.25.181 softly dissolving, quieter than the player
             }
             GameObject copy = MakeGhostCopy(src);
             if (copy == null) return;
@@ -3371,7 +3391,7 @@ namespace DragonsAltarSorcerer
         private IEnumerator RuptureRoutine(Player player, Vector3 target)
         {
             if (_enableVfx.Value) StartCoroutine(RingVfx(target, DragonCombat.M(_ruptureRadius.Value), new Color(0.58f, 0.10f, 0.95f, 0.70f), _ruptureWindup.Value));
-            if (_enableVfx.Value) { Vector3 rv = target; float rvr = DragonCombat.M(_ruptureRadius.Value), rvt = Mathf.Max(0.1f, _ruptureWindup.Value); DragonCombat.RunVfx(delegate { DragonVfx.Vortex(null, rv + Vector3.up * 0.6f, new Color(0.58f, 0.10f, 0.95f, 1f), rvr, rvt); DragonVfx.Glyph(rv, new Color(0.58f, 0.10f, 0.95f, 1f), rvr, rvt + 0.3f, -90f); }); }   // v0.25.58 / v0.25.61
+            if (_enableVfx.Value) { Vector3 rv = target; float rvr = DragonCombat.M(_ruptureRadius.Value), rvt = Mathf.Max(0.1f, _ruptureWindup.Value); Color rtc = IsSpellAscended(player, "arcane_rupture") ? HwDeep : HwBlue; DragonCombat.RunVfx(delegate { DragonVfx.RiftSlit(rv + Vector3.up * rvr * 0.55f, GameCamera.instance != null ? -GameCamera.instance.transform.forward : Vector3.forward, Mathf.Max(2f, rvr * 1.1f), rvt + 0.15f, rtc); });   /* v0.25.181 authoritative spatial tear */ DragonCombat.RunVfx(delegate { DragonVfx.Vortex(null, rv + Vector3.up * 0.6f, new Color(0.58f, 0.10f, 0.95f, 1f), rvr, rvt); DragonVfx.Glyph(rv, new Color(0.58f, 0.10f, 0.95f, 1f), rvr, rvt + 0.3f, -90f); }); }   // v0.25.58 / v0.25.61
             yield return new WaitForSeconds(Mathf.Max(0.1f, _ruptureWindup.Value));
             List<Character> targets = GetSphereTargets(player, target, DragonCombat.M(_ruptureRadius.Value));
             for (int i = 0; i < targets.Count; i++)
@@ -3403,7 +3423,7 @@ namespace DragonsAltarSorcerer
                     else state.StunCycleHits--;
                 }
             }
-            if (_enableVfx.Value) { CreateLightningBurst(target, DragonCombat.M(_ruptureRadius.Value)); Vector3 rx = target; float rxr = DragonCombat.M(_ruptureRadius.Value); DragonCombat.RunVfx(delegate { DragonVfx.GroundImpact(rx, new Color(0.62f, 0.20f, 1f, 1f), rxr, 1.2f); }); }   // v0.25.58
+            if (_enableVfx.Value) { CreateLightningBurst(target, DragonCombat.M(_ruptureRadius.Value)); Vector3 rx = target; float rxr = DragonCombat.M(_ruptureRadius.Value); Color rcx = IsSpellAscended(player, "arcane_rupture") ? HwDeep : HwBlue; DragonCombat.RunVfx(delegate { DragonVfx.GravityCollapse(rx + Vector3.up * 1.2f, rxr * 0.6f); DragonVfx.Burst(rx + Vector3.up, Color.Lerp(rcx, Color.white, 0.3f), 40, 14f, 0.1f, 0.4f, 0f); DragonVfx.GroundImpact(rx, rcx, rxr, 1.2f); DragonVfx.Shatter(rx, rxr * 0.6f, 0f); }); }   // v0.25.58; v0.25.181 inward compression -> sharp release -> local cracks/dirt
         }
 
         private void ActivateTwinRift(Player player)
@@ -4053,7 +4073,16 @@ namespace DragonsAltarSorcerer
             _phalanxVolleyArmed = false;
         }
 
+        // v0.25.181 (user): Horizon Walker = sleek blue-violet; Ascended deeper with readable highlights
+        private static readonly Color HwBlue = new Color(0.55f, 0.48f, 1f, 1f);
+        private static readonly Color HwDeep = new Color(0.30f, 0.16f, 0.78f, 1f);
+
         private GameObject CreateArcaneSword(Vector3 position)
+        {
+            return CreateArcaneSword(position, HwBlue);
+        }
+
+        private GameObject CreateArcaneSword(Vector3 position, Color swordColor)
         {
             GameObject obj = new GameObject("ArcanePhalanxSword");
             obj.transform.position = position;
@@ -4072,9 +4101,9 @@ namespace DragonsAltarSorcerer
             if (DragonVfx.Enabled)
             {
                 // v0.25.75: a real spectral sword (point along +Z like the old line)
-                try { DragonVfx.SpectralSword(obj.transform, 1.7f, new Color(0.72f, 0.38f, 1f, 1f)); line.enabled = false; } catch (Exception) { line.enabled = true; }
+                try { DragonVfx.SpectralSword(obj.transform, 1.7f, swordColor); line.enabled = false; } catch (Exception) { line.enabled = true; }
             }
-            DragonCombat.RunVfx(delegate { DragonVfx.AttachGlow(obj.transform, new Color(0.75f, 0.30f, 1f, 1f), 0.3f, 25f, 2.5f); });
+            if (!DragonVfx.Enabled) DragonCombat.RunVfx(delegate { DragonVfx.AttachGlow(obj.transform, new Color(0.75f, 0.30f, 1f, 1f), 0.3f, 25f, 2.5f); });   // v0.25.181 the edge carries the glow
             return obj;
         }
 

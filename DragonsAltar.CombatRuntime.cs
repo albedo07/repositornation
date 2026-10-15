@@ -13015,6 +13015,75 @@ namespace DragonsAltarCombat
         }
     }
 
+    // v0.25.181 rift slit: opens (width 0 -> 1), holds, closes, then removes itself
+    public class DragonRiftOpen : MonoBehaviour
+    {
+        public float Life = 0.6f;
+        private float _age;
+        private Vector3 _s;
+        private void Start() { _s = transform.localScale; transform.localScale = new Vector3(0.01f, _s.y, _s.z); }
+        private void Update()
+        {
+            _age += Time.deltaTime;
+            float open = Mathf.Clamp01(_age / 0.12f);
+            float close = Mathf.Clamp01((Life - _age) / 0.2f);
+            float k = Mathf.SmoothStep(0f, 1f, Mathf.Min(open, close));
+            transform.localScale = new Vector3(Mathf.Max(0.01f, _s.x * k), _s.y, _s.z);
+            if (_age >= Life) Destroy(gameObject);
+        }
+    }
+
+    // v0.25.181 vapour cone that rides the leading side of a fast-moving body (Shield Charge / Angel Comet)
+    public class DragonPressureCone : MonoBehaviour
+    {
+        public Transform Follow;
+        public Mesh Mesh;
+        public Func<bool> Keep;
+        public float MaxLife = 2f, Radius = 1f;
+        public Color Tint = Color.white;
+        private Vector3 _last, _dir = Vector3.forward;
+        private float _age, _vis, _ringAt, _end = -1f;
+        private bool _init;
+        private MaterialPropertyBlock _mpb;
+        private Renderer _r;
+        private void Update()
+        {
+            _age += Time.deltaTime;
+            bool alive = Follow != null && _age < MaxLife;
+            if (alive && Keep != null) { try { alive = Keep(); } catch (Exception) { alive = false; } }
+            Vector3 p = Follow != null ? Follow.position + Vector3.up * 1.0f : transform.position;
+            if (!_init) { _last = p; _init = true; }
+            Vector3 vel = Time.deltaTime > 0f ? (p - _last) / Time.deltaTime : Vector3.zero;
+            _last = p;
+            float speed = vel.magnitude;
+            if (speed > 0.5f) _dir = Vector3.Slerp(_dir, vel / speed, Mathf.Clamp01(Time.deltaTime * 12f));
+            float want = alive && speed > 5f ? Mathf.Clamp01((speed - 5f) / 6f) : 0f;
+            _vis = Mathf.MoveTowards(_vis, want, Time.deltaTime * 4f);
+            transform.position = p + _dir * Radius * 0.4f;
+            transform.rotation = Quaternion.LookRotation(_dir, Mathf.Abs(_dir.y) > 0.95f ? Vector3.forward : Vector3.up);
+            if (_r == null) _r = GetComponent<Renderer>();
+            if (_r != null)
+            {
+                if (_mpb == null) _mpb = new MaterialPropertyBlock();
+                _r.GetPropertyBlock(_mpb);
+                Color t = new Color(0.5f, 0.5f, 0.5f, 0.5f * _vis);
+                _mpb.SetColor("_TintColor", t);
+                _mpb.SetColor("_Color", new Color(1f, 1f, 1f, _vis));
+                _mpb.SetVector("_MainTex_ST", new Vector4(1f, 1f, -_age * 1.6f, 0f));
+                _r.SetPropertyBlock(_mpb);
+            }
+            if (_vis > 0.3f && Time.time >= _ringAt)
+            {
+                _ringAt = Time.time + 0.18f;
+                DragonVfx.PressureRing(p - _dir * Radius * 0.6f, _dir, Tint, Radius * 0.7f);
+            }
+            if (!alive && _end < 0f) _end = _age;
+            if (_end >= 0f && _vis <= 0.001f) Destroy(gameObject);
+            if (_age > MaxLife + 3f) Destroy(gameObject);
+        }
+        private void OnDestroy() { if (Mesh != null) Destroy(Mesh); }
+    }
+
     // v0.25.181: rubble that stays for `Life`, then sinks into the ground and is removed.
     public class DragonSinkAway : MonoBehaviour
     {
@@ -14015,14 +14084,21 @@ namespace DragonsAltarCombat
         // v0.25.168 Frost Nova ground: a hoarfrost carpet over the area for the whole duration + low drifting cold mist.
         public static void FrostGround(Vector3 center, float radius, float seconds)
         {
+            FrostGround(center, radius, seconds, 1f);
+        }
+
+        // v0.25.181 strength < 1 = subtle frost (user: Glacial Descent / Frost Nova ground frost toned down)
+        public static void FrostGround(Vector3 center, float radius, float seconds, float strength)
+        {
             if (!Enabled) return;
             radius = Mathf.Max(0.5f, radius);
             seconds = Mathf.Max(0.3f, seconds);
+            strength = Mathf.Clamp(strength, 0.1f, 1f);
             Vector3 g = GroundPoint(center) + Vector3.up * 0.06f;
-            DragonMeshFx f = MeshFx(g, Quaternion.Euler(0f, UnityEngine.Random.Range(0f, 360f), 0f), true, Mat(FrostTex(), false), new Color(0.86f, 0.94f, 1f, 0.75f), seconds + 0.6f);
+            DragonMeshFx f = MeshFx(g, Quaternion.Euler(0f, UnityEngine.Random.Range(0f, 360f), 0f), true, Mat(FrostTex(), false), new Color(0.86f, 0.94f, 1f, 0.75f * strength), seconds + 0.6f);
             if (f != null) { f.Conform = true; f.FadeIn = 0.25f; f.Hold = seconds; f.ScaleFrom = Vector3.one * radius * 0.6f; f.ScaleTo = Vector3.one * radius * 2f; f.ScaleTime = 0.3f; }
             DragonVfxLife l = Host(g + Vector3.up * 0.2f, seconds + 2f, "coldmist");
-            ParticleSystem mist = Particles(l.transform, new Color(0.80f, 0.90f, 0.98f, 0.28f), 6, Mathf.Clamp(radius * 2f, 4f, 16f), seconds, 2.4f, 0.1f, 0.4f, 0.8f + radius * 0.12f, 1.6f + radius * 0.2f, -0.01f,
+            ParticleSystem mist = Particles(l.transform, new Color(0.80f, 0.90f, 0.98f, 0.28f), Mathf.RoundToInt(6 * strength), Mathf.Clamp(radius * 2f, 4f, 16f) * strength, seconds, 2.4f, 0.1f, 0.4f, 0.8f + radius * 0.12f, 1.6f + radius * 0.2f, -0.01f,
                 ParticleSystemShapeType.Circle, radius * 0.9f, new Vector3(90f, 0f, 0f), false, false);
             Material sm = Mat(SmokeTex(), false);
             if (sm != null) mist.GetComponent<ParticleSystemRenderer>().sharedMaterial = sm;
@@ -14076,14 +14152,14 @@ namespace DragonsAltarCombat
             DragonVfxLife air = Host(follow != null ? follow.position : pos, seconds + 1.5f, "gravityair");
             air.Follow = follow;
             // v0.25.180 (no camera-facing ring billboards): translucent warped-air wisps spiralling in + curved strands
-            ParticleSystem ripples = Particles(air.transform, new Color(0.80f, 0.78f, 0.86f, 0.09f), 0, 3f + radius * 0.4f, seconds, 1.4f, -radius / 1.4f * 0.7f, -radius / 1.4f * 0.5f, radius * 0.25f, radius * 0.45f, 0f,
+            ParticleSystem ripples = Particles(air.transform, new Color(0.80f, 0.78f, 0.86f, 0.16f), 0, 5f + radius * 0.6f, seconds, 1.4f, -radius / 1.4f * 0.7f, -radius / 1.4f * 0.5f, radius * 0.25f, radius * 0.45f, 0f,
                 ParticleSystemShapeType.Sphere, radius * 0.9f, Vector3.zero, false, false);
             Material rm = Mat(SmokeTex(), false);
             if (rm != null) ripples.GetComponent<ParticleSystemRenderer>().sharedMaterial = rm;
             ParticleSystem.ShapeModule rsh = ripples.shape; rsh.radiusThickness = 0.1f;
             Swirl(ripples, 1.4f);
             float life = 0.9f;
-            ParticleSystem streaks = Particles(air.transform, new Color(0.80f, 0.78f, 0.86f, 0.3f), 0, 18f + radius * 3f, seconds, life, -radius / life * 1.05f, -radius / life * 0.8f, 0.03f, 0.06f, 0f,
+            ParticleSystem streaks = Particles(air.transform, new Color(0.82f, 0.80f, 0.90f, 0.48f), 0, 30f + radius * 5f, seconds, life, -radius / life * 1.05f, -radius / life * 0.8f, 0.03f, 0.06f, 0f,
                 ParticleSystemShapeType.Sphere, radius, Vector3.zero, true, false);
             ParticleSystem.ShapeModule ss = streaks.shape; ss.radiusThickness = 0.05f;
             Swirl(streaks, 2.2f);
@@ -14098,12 +14174,12 @@ namespace DragonsAltarCombat
             dirt.GroundMaxHeight = Mathf.Max(3f, radius);
             if (follow == null) dirt.transform.position = GroundPoint(pos) + Vector3.up * 0.08f;
             float dl = 1.3f;
-            ParticleSystem specks = Particles(dirt.transform, new Color(0.34f, 0.28f, 0.22f, 0.85f), 0, 26f + radius * 4f, seconds, dl, -radius / dl * 0.95f, -radius / dl * 0.7f, 0.04f, 0.09f, 0f,
+            ParticleSystem specks = Particles(dirt.transform, new Color(0.34f, 0.28f, 0.22f, 0.9f), 0, 40f + radius * 6f, seconds, dl, -radius / dl * 0.95f, -radius / dl * 0.7f, 0.04f, 0.09f, 0f,
                 ParticleSystemShapeType.Circle, radius, new Vector3(90f, 0f, 0f), false, false);
             ParticleSystem.ShapeModule ds = specks.shape; ds.radiusThickness = 0.15f;
             Swirl(specks, 1.6f);
             // a few loose fragments actually lift off the ground and curl inward (cosmetic, no physics)
-            ParticleSystem lifted = Particles(dirt.transform, new Color(0.32f, 0.27f, 0.21f, 0.9f), 0, 4f + radius * 0.8f, seconds, 1.6f, -radius / 1.6f * 0.8f, -radius / 1.6f * 0.6f, 0.05f, 0.1f, -0.35f,
+            ParticleSystem lifted = Particles(dirt.transform, new Color(0.32f, 0.27f, 0.21f, 0.9f), 0, 9f + radius * 1.6f, seconds, 1.6f, -radius / 1.6f * 0.8f, -radius / 1.6f * 0.6f, 0.05f, 0.1f, -0.35f,
                 ParticleSystemShapeType.Circle, radius * 0.8f, new Vector3(90f, 0f, 0f), false, false);
             Swirl(lifted, 1.8f);
             ParticleSystem haze = Particles(dirt.transform, new Color(0.50f, 0.45f, 0.38f, 0.22f), 0, 4f + radius * 0.6f, seconds, 2f, -radius / 2f * 0.8f, -radius / 2f * 0.5f, 0.8f, 1.5f, -0.01f,
@@ -14878,17 +14954,24 @@ namespace DragonsAltarCombat
             float life = 0.55f;
             float speed = range / life;
             // v0.25.180 irregular, transparent between the flames: fewer, smaller tongues + darker smoke pockets riding with them
-            ParticleSystem ps = Particles(l.transform, new Color(1f, 0.62f, 0.18f, 1f), 0, 150f, seconds, life, speed * 0.6f, speed, 0.45f, 1.0f + range * 0.05f, -0.15f,
+            // v0.25.181 (user: flame cone must read clearly): big soft tongues + a faster detailed layer (more coverage, still
+            // separate flames with gaps, not a sheet)
+            ParticleSystem ps = Particles(l.transform, new Color(1f, 0.62f, 0.18f, 1f), 0, 170f, seconds, life, speed * 0.6f, speed, 0.55f, 1.2f + range * 0.06f, -0.15f,
                 ParticleSystemShapeType.Cone, 0.25f, Vector3.zero, false, true);
             ParticleSystem.ShapeModule sh = ps.shape;
             sh.angle = Mathf.Clamp(angle * 0.5f, 5f, 80f);
             FireLook(ps);
+            ParticleSystem detail = Particles(l.transform, new Color(1f, 0.75f, 0.30f, 1f), 0, 160f, seconds, life * 0.8f, speed * 0.8f, speed * 1.15f, 0.2f, 0.5f, -0.2f,
+                ParticleSystemShapeType.Cone, 0.2f, Vector3.zero, false, true);
+            ParticleSystem.ShapeModule dsh2 = detail.shape;
+            dsh2.angle = Mathf.Clamp(angle * 0.55f, 5f, 85f);
+            FireLook(detail);
             ParticleSystem pockets = Particles(l.transform, new Color(0.16f, 0.12f, 0.10f, 0.35f), 0, 30f, seconds, life * 1.3f, speed * 0.4f, speed * 0.7f, 0.4f, 0.9f, -0.1f,
                 ParticleSystemShapeType.Cone, 0.25f, Vector3.zero, false, false);
             ParticleSystem.ShapeModule psh = pockets.shape;
             psh.angle = Mathf.Clamp(angle * 0.45f, 5f, 80f);
             l.StopEmitAt = seconds;
-            l.Systems = new ParticleSystem[] { ps, pockets };
+            l.Systems = new ParticleSystem[] { ps, detail, pockets };
             Smoke(origin + dir.normalized * range * 0.6f, new Color(0.25f, 0.22f, 0.2f, 0.45f), range * 0.3f, 1.6f, 6);
         }
 
@@ -15374,6 +15457,73 @@ namespace DragonsAltarCombat
             Debris(g, new Color(0.38f, 0.33f, 0.28f, 1f), Mathf.RoundToInt(8 + radius * 1.8f), 7f + radius * 0.8f, 0.22f + radius * 0.02f, 2.6f);
             Scorch(g, radius * 0.6f, 6f);
             if (shake > 0f) Shake(g, 20f + radius * 2f, shake);
+        }
+
+        // ------------------------------------------------------------------ v0.25.181 pressure cone (Shield Charge, Angel Comet)
+        // A jet's vapour cone: a translucent condensation sheet wrapped around the leading side of the moving body (open
+        // cone, apex ahead, flowing broken texture) + short pressure rings shed along the path. Follows the REAL motion
+        // (velocity from the transform), only while it moves fast; never touches speed or animation.
+        public static GameObject PressureCone(Transform follow, Color c, float radius, float maxSeconds, Func<bool> keep)
+        {
+            if (!Enabled || follow == null) return null;
+            Material m = Mat(SlashTex(), false);
+            if (m == null) return null;
+            GameObject go = new GameObject("IH_PressureCone");
+            go.transform.position = follow.position;
+            Mesh mesh = ConeSheet(Mathf.Max(0.6f, radius), Mathf.Max(1f, radius * 2.2f), Color.Lerp(c, Color.white, 0.75f));
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            MeshRenderer r = go.AddComponent<MeshRenderer>();
+            r.sharedMaterial = m;
+            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            r.receiveShadows = false;
+            DragonPressureCone pc = go.AddComponent<DragonPressureCone>();
+            pc.Follow = follow; pc.Mesh = mesh; pc.Keep = keep; pc.MaxLife = Mathf.Max(0.3f, maxSeconds); pc.Radius = radius; pc.Tint = c;
+            return go;
+        }
+
+        private static Mesh ConeSheet(float radius, float length, Color c)
+        {
+            const int around = 24, along = 6;
+            Vector3[] v = new Vector3[(around + 1) * (along + 1)];
+            Vector2[] uv = new Vector2[v.Length];
+            Color[] col = new Color[v.Length];
+            for (int j = 0; j <= along; j++)
+            {
+                float f = (float)j / along;                       // 0 = apex (ahead) .. 1 = trailing rim
+                float rr = radius * Mathf.Lerp(0.25f, 1f, Mathf.Sqrt(f));
+                float z = length * (0.35f - f);
+                for (int i = 0; i <= around; i++)
+                {
+                    float a = (float)i / around * Mathf.PI * 2f;
+                    int k = j * (around + 1) + i;
+                    v[k] = new Vector3(Mathf.Cos(a) * rr, Mathf.Sin(a) * rr, z);
+                    uv[k] = new Vector2((float)i / around * 3f, 0.25f + f * 0.7f);
+                    Color cc = c; cc.a = 0.32f * Mathf.Sin(f * Mathf.PI) * (0.55f + 0.45f * Mathf.Abs(Mathf.Sin(a)));
+                    col[k] = cc;
+                }
+            }
+            int[] t = new int[around * along * 12];
+            int q = 0;
+            for (int j = 0; j < along; j++)
+                for (int i = 0; i < around; i++)
+                {
+                    int a = j * (around + 1) + i, b = a + 1, cI = a + around + 1, d = cI + 1;
+                    t[q++] = a; t[q++] = cI; t[q++] = b; t[q++] = b; t[q++] = cI; t[q++] = d;
+                    t[q++] = a; t[q++] = b; t[q++] = cI; t[q++] = b; t[q++] = d; t[q++] = cI;
+                }
+            Mesh m = new Mesh();
+            m.vertices = v; m.uv = uv; m.colors = col; m.triangles = t;
+            m.RecalculateBounds();
+            return m;
+        }
+
+        // one expanding pressure ring shed behind a fast body (oriented across the travel direction)
+        public static void PressureRing(Vector3 pos, Vector3 dir, Color c, float radius)
+        {
+            if (!Enabled || dir.sqrMagnitude < 0.0001f) return;
+            Color rc = Color.Lerp(c, Color.white, 0.7f); rc.a = 0.28f;
+            DragonMeshFx ring = MeshFx(pos, Quaternion.FromToRotation(Vector3.up, dir.normalized), true, Mat(SoftRingTex(), false), rc, 0.35f);
+            if (ring != null) { ring.ScaleFrom = Vector3.one * radius * 0.9f; ring.ScaleTo = Vector3.one * radius * 2.6f; ring.ScaleTime = 0.35f; }
         }
 
         // ------------------------------------------------------------------ v0.25.181 finished solid shapes
@@ -16542,19 +16692,210 @@ namespace DragonsAltarCombat
         public static void SpectralSword(Transform parent, float length, Color c)
         {
             if (!Enabled || parent == null) return;
-            float w = length * 0.14f;
-            Color body = c; body.a = 0.8f;
-            Color halo = Color.Lerp(c, Color.white, 0.4f); halo.a = 0.45f;
-            GameObject blade = MeshObject("blade", BladeMesh(length * 0.72f, w, w * 0.18f, body, false), ClearMat(), parent);
-            blade.transform.localPosition = new Vector3(0f, 0f, -length * 0.25f + length * 0.2f);
-            GameObject glow = MeshObject("halo", BladeMesh(length * 0.74f, w * 1.6f, w * 0.4f, halo, true), Mat(WhiteTex(), true), parent);
-            glow.transform.localPosition = blade.transform.localPosition;
-            GameObject guard = MeshObject("guard", BladeMesh(w * 2.6f, w * 0.5f, w * 0.3f, halo, true), Mat(WhiteTex(), true), parent);
-            guard.transform.localRotation = Quaternion.Euler(0f, 90f, 0f);
-            guard.transform.localPosition = new Vector3(-w * 1.3f, 0f, blade.transform.localPosition.z);
-            GameObject grip = MeshObject("grip", BladeMesh(length * 0.22f, w * 0.35f, w * 0.35f, body, false), ClearMat(), parent);
-            grip.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
-            grip.transform.localPosition = blade.transform.localPosition;
+            // v0.25.181 (user): recognisable spectral sword - FLAT sharp blade (bevelled extrusion), textured translucent
+            // interior, a narrow luminous edge line around it, a slim guard + grip, and a smooth tapered launch trail.
+            // No blocky light wedges / halo boxes. Blade points along +Z like the old one.
+            float L = Mathf.Max(0.5f, length), w = L * 0.13f, hw = w * 0.5f, Lb = L * 0.72f, Lg = L * 0.22f;
+            GameObject sword = new GameObject("IH_SpectralSword");
+            sword.transform.SetParent(parent, false);
+            sword.transform.localPosition = new Vector3(0f, 0f, -0.44f * L);
+            sword.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);   // outline y (length) -> +Z, extrusion -> Y (thin)
+            List<Vector2> blade = new List<Vector2>();
+            blade.Add(new Vector2(-hw * 0.7f, Lg)); blade.Add(new Vector2(hw * 0.7f, Lg));
+            blade.Add(new Vector2(hw, Lg + Lb * 0.14f)); blade.Add(new Vector2(hw * 0.78f, Lg + Lb * 0.78f));
+            blade.Add(new Vector2(0f, Lg + Lb));
+            blade.Add(new Vector2(-hw * 0.78f, Lg + Lb * 0.78f)); blade.Add(new Vector2(-hw, Lg + Lb * 0.14f));
+            Color body = Color.Lerp(c, new Color(0.85f, 0.85f, 1f, 1f), 0.2f); body.a = 0.62f;
+            Material bm = Mat(SlashTex(), false);
+            Mesh bmesh = ExtrudeBevel(blade, w * 0.12f, w * 0.05f, 1f / Mathf.Max(0.1f, L * 0.6f));
+            if (bmesh != null && bm != null) { Colorize(bmesh, body); GameObject b = MeshObject("blade", bmesh, bm, sword.transform); b.AddComponent<DragonMeshOwner>().Mesh = bmesh; }
+            List<Vector2> guard = new List<Vector2>();
+            guard.Add(new Vector2(-w * 1.3f, Lg - w * 0.18f)); guard.Add(new Vector2(w * 1.3f, Lg - w * 0.18f));
+            guard.Add(new Vector2(w * 1.4f, Lg)); guard.Add(new Vector2(w * 1.3f, Lg + w * 0.18f));
+            guard.Add(new Vector2(-w * 1.3f, Lg + w * 0.18f)); guard.Add(new Vector2(-w * 1.4f, Lg));
+            List<Vector2> grip = new List<Vector2>();
+            grip.Add(new Vector2(-w * 0.16f, 0f)); grip.Add(new Vector2(w * 0.16f, 0f)); grip.Add(new Vector2(w * 0.16f, Lg)); grip.Add(new Vector2(-w * 0.16f, Lg));
+            Color hilt = Color.Lerp(c, Color.white, 0.35f); hilt.a = 0.75f;
+            Mesh gm = ExtrudeBevel(guard, w * 0.2f, w * 0.05f, 1f / Mathf.Max(0.1f, L * 0.6f));
+            Mesh hm = ExtrudeBevel(grip, w * 0.22f, w * 0.06f, 1f / Mathf.Max(0.1f, L * 0.6f));
+            if (gm != null && bm != null) { Colorize(gm, hilt); GameObject g = MeshObject("guard", gm, bm, sword.transform); g.AddComponent<DragonMeshOwner>().Mesh = gm; }
+            if (hm != null && bm != null) { Colorize(hm, hilt); GameObject g = MeshObject("grip", hm, bm, sword.transform); g.AddComponent<DragonMeshOwner>().Mesh = hm; }
+            // narrow luminous edge
+            Material em = Mat(LineTex(), true);
+            if (em != null)
+            {
+                GameObject eg = new GameObject("edge");
+                eg.transform.SetParent(sword.transform, false);
+                LineRenderer lr = eg.AddComponent<LineRenderer>();
+                lr.useWorldSpace = false; lr.loop = true;
+                lr.positionCount = blade.Count;
+                for (int k = 0; k < blade.Count; k++) lr.SetPosition(k, new Vector3(blade[k].x, blade[k].y, 0f));
+                lr.widthMultiplier = Mathf.Max(0.015f, L * 0.014f);
+                lr.numCornerVertices = 2;
+                Color ec = Color.Lerp(c, Color.white, 0.6f); ec.a = 0.9f;
+                lr.startColor = ec; lr.endColor = ec;
+                lr.sharedMaterial = em;
+                lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            }
+            // smooth launch trail from the tip (only visible while it flies)
+            GameObject tip = new GameObject("tip");
+            tip.transform.SetParent(parent, false);
+            tip.transform.localPosition = new Vector3(0f, 0f, 0.5f * L);
+            Material core = Mat(LineTex(), true), air = Mat(LineTex(), false);
+            if (core != null && air != null)
+            {
+                StreakTrail(tip.transform, air, new Color(c.r, c.g, c.b, 0.22f), w * 1.2f, 0.25f);
+                StreakTrail(tip.transform, core, new Color(Mathf.Lerp(c.r, 1f, 0.5f), Mathf.Lerp(c.g, 1f, 0.5f), Mathf.Lerp(c.b, 1f, 0.5f), 0.6f), w * 0.25f, 0.2f);
+            }
+        }
+
+        private static void Colorize(Mesh m, Color c)
+        {
+            if (m == null) return;
+            Color[] cs = new Color[m.vertexCount];
+            for (int i = 0; i < cs.Length; i++) cs[i] = c;
+            m.colors = cs;
+        }
+
+        // ------------------------------------------------------------------ v0.25.181 Ranger family helpers
+        // Snare trigger: the noose visibly snaps tight around the target's feet (rope-coloured loop shrinking + fibres + dust).
+        public static void SnareSnap(Vector3 feet, float size)
+        {
+            if (!Enabled) return;
+            Vector3 g = GroundPoint(feet) + Vector3.up * 0.12f;
+            Color rope = new Color(0.62f, 0.50f, 0.32f, 0.9f);
+            DragonMeshFx loop = MeshFx(g, Quaternion.identity, true, Mat(SoftRingTex(), false), rope, 0.6f);
+            if (loop != null) { loop.ScaleFrom = Vector3.one * size * 1.8f; loop.ScaleTo = Vector3.one * size * 0.35f; loop.ScaleTime = 0.16f; loop.Hold = 0.3f; }
+            Debris(g, new Color(0.55f, 0.44f, 0.28f, 1f), 4, 3f, 0.06f, 1f);
+            DustRing(g, Mathf.Max(0.6f, size));
+        }
+
+        private static Texture2D _eyeTex;
+        // hawk's eye emblem: almond outline + iris + pupil + two swept wing strokes
+        private static Texture2D EyeTex()
+        {
+            if (_eyeTex == null) _eyeTex = MakeTex(128, 64, delegate(float u, float v)
+            {
+                float x = u * 2f - 1f, y = (v * 2f - 1f) * 2f;
+                float almond = Mathf.Abs(y) - 0.55f * (1f - x * x);
+                float outline = Mathf.Exp(-Mathf.Pow(almond / 0.06f, 2f)) * (Mathf.Abs(x) < 0.98f ? 1f : 0f);
+                float r = Mathf.Sqrt(x * x * 4f + y * y * 0.5f);
+                float iris = Mathf.Exp(-Mathf.Pow((r - 0.42f) / 0.06f, 2f)) * 0.8f;
+                float pupil = r < 0.2f ? 1f : 0f;
+                float wing = 0f;
+                for (int s = -1; s <= 1; s += 2)
+                {
+                    float wx = x * s;
+                    if (wx > 0.55f) wing = Mathf.Max(wing, Mathf.Exp(-Mathf.Pow((y - 0.6f - (wx - 0.55f) * 1.5f) / 0.1f, 2f)) * Mathf.Clamp01((1f - wx) * 4f));
+                }
+                return Mathf.Clamp01(outline + iris + pupil + wing);
+            }, TextureWrapMode.Clamp);
+            return _eyeTex;
+        }
+
+        public static void HawkEmblem(Vector3 pos, float size, float life, Color c)
+        {
+            if (!Enabled) return;
+            Vector3 cam = GameCamera.instance != null ? GameCamera.instance.transform.forward : Vector3.forward;
+            Quaternion rot = Quaternion.LookRotation(Vector3.up, -cam) * Quaternion.Euler(90f, 0f, 0f);
+            Color ec = Color.Lerp(c, Color.white, 0.3f); ec.a = 0.75f;
+            DragonMeshFx em = MeshFx(pos, Quaternion.FromToRotation(Vector3.up, -cam), true, Mat(EyeTex(), true), ec, life);
+            if (em != null) { em.FadeIn = 0.15f; em.Hold = life * 0.5f; em.ScaleFrom = new Vector3(size * 1.6f, 1f, size * 0.8f); em.ScaleTo = new Vector3(size * 2f, 1f, size); em.ScaleTime = life; }
+        }
+
+        // ------------------------------------------------------------------ v0.25.181 Horizon Walker space effects
+        private static Texture2D _dissolveTex;
+        // broken, soft-edged noise mask (spectral copies dissolving at their edges)
+        public static Texture2D DissolveTex()
+        {
+            if (_dissolveTex == null) _dissolveTex = MakeTex(64, 64, delegate(float u, float v)
+            {
+                float n = Fbm(u * 6f, v * 6f, 81) * 0.7f + Fbm(u * 14f, v * 14f, 82) * 0.3f;
+                return Mathf.Clamp01((n - 0.28f) * 2.4f);
+            }, TextureWrapMode.Repeat);
+            return _dissolveTex;
+        }
+
+        // A tapered vertical rift (lens slit): dark centre, pale edges, a fainter wider layer behind; opens, holds, closes.
+        public static GameObject RiftSlit(Vector3 pos, Vector3 facing, float height, float life, Color c)
+        {
+            if (!Enabled) return null;
+            facing.y = 0f;
+            if (facing.sqrMagnitude < 0.001f) facing = Vector3.forward;
+            GameObject root = new GameObject("IH_RiftSlit");
+            root.transform.position = pos;
+            root.transform.rotation = Quaternion.LookRotation(facing.normalized, Vector3.up);
+            for (int layer = 0; layer < 2; layer++)
+            {
+                float h = height * (layer == 0 ? 1f : 1.25f), wdt = height * (layer == 0 ? 0.22f : 0.34f);
+                Mesh m = LensSlit(h, wdt, c, layer == 0 ? 1f : 0.45f);
+                GameObject g = MeshObject(layer == 0 ? "slit" : "slitBack", m, ClearMat(), root.transform);
+                g.transform.localPosition = new Vector3(0f, 0f, layer == 0 ? 0f : -0.06f);
+                g.AddComponent<DragonMeshOwner>().Mesh = m;
+            }
+            Material em = Mat(LineTex(), true);
+            if (em != null)
+            {
+                GameObject eg = new GameObject("edge");
+                eg.transform.SetParent(root.transform, false);
+                LineRenderer lr = eg.AddComponent<LineRenderer>();
+                lr.useWorldSpace = false; lr.loop = true;
+                const int n = 20;
+                lr.positionCount = n;
+                for (int k = 0; k < n; k++)
+                {
+                    float a = (float)k / n * Mathf.PI * 2f;
+                    lr.SetPosition(k, new Vector3(Mathf.Sin(a) * height * 0.11f * Mathf.Pow(Mathf.Abs(Mathf.Cos(a * 0.5f)) * 0f + Mathf.Abs(Mathf.Sin(a)), 0.6f), Mathf.Cos(a) * height * 0.5f, 0.02f));
+                }
+                lr.widthMultiplier = Mathf.Max(0.02f, height * 0.018f);
+                Color ec = Color.Lerp(c, Color.white, 0.55f); ec.a = 0.9f;
+                lr.startColor = ec; lr.endColor = ec;
+                lr.sharedMaterial = em;
+                lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            }
+            DragonRiftOpen ro = root.AddComponent<DragonRiftOpen>();
+            ro.Life = Mathf.Max(0.2f, life);
+            Burst(pos, Color.Lerp(c, Color.white, 0.3f), 8, 3f, 0.06f, 0.35f, 0f);
+            return root;
+        }
+
+        // lens-shaped double-sided slit in XY (height along Y, width along X): dark void core, pale tinted rim
+        private static Mesh LensSlit(float h, float w, Color c, float alphaScale)
+        {
+            const int n = 16;
+            List<Vector3> v = new List<Vector3>(); List<Color> cs = new List<Color>(); List<int> t = new List<int>();
+            v.Add(Vector3.zero); Color core = new Color(0.04f, 0.0f, 0.10f, 0.85f * alphaScale); cs.Add(core);
+            for (int i = 0; i < n; i++)
+            {
+                float a = (float)i / n * Mathf.PI * 2f;
+                float y = Mathf.Cos(a) * h * 0.5f;
+                float x = Mathf.Sin(a) * w * 0.5f * Mathf.Pow(Mathf.Abs(Mathf.Sin(a)), 0.4f);
+                v.Add(new Vector3(x, y, 0f));
+                Color rc = Color.Lerp(c, Color.white, 0.35f); rc.a = 0.75f * alphaScale; cs.Add(rc);
+            }
+            for (int i = 0; i < n; i++) { int a = 1 + i, b = 1 + (i + 1) % n; t.Add(0); t.Add(a); t.Add(b); t.Add(0); t.Add(b); t.Add(a); }
+            Mesh m = new Mesh();
+            m.vertices = v.ToArray(); m.colors = cs.ToArray(); m.triangles = t.ToArray();
+            Vector2[] uv = new Vector2[v.Count]; for (int i = 0; i < uv.Length; i++) uv[i] = new Vector2(0.5f, 0.5f);
+            m.uv = uv; m.RecalculateBounds();
+            return m;
+        }
+
+        // Void Step: a quick spatial fold - a soft ring facing the camera that collapses (departure) or unfolds (arrival),
+        // with a few short directional wisps. No flash, nothing lingers.
+        public static void SpaceFold(Vector3 pos, bool unfold, Color c, float size)
+        {
+            if (!Enabled) return;
+            Vector3 cam = GameCamera.instance != null ? GameCamera.instance.transform.forward : Vector3.forward;
+            Color rc = Color.Lerp(c, Color.white, 0.25f); rc.a = 0.55f;
+            DragonMeshFx ring = MeshFx(pos, Quaternion.FromToRotation(Vector3.up, -cam), true, Mat(SoftRingTex(), true), rc, 0.35f);
+            if (ring != null)
+            {
+                ring.ScaleFrom = Vector3.one * size * (unfold ? 0.2f : 2.2f);
+                ring.ScaleTo = Vector3.one * size * (unfold ? 2.2f : 0.15f);
+                ring.ScaleTime = 0.3f;
+            }
+            Burst(pos, Color.Lerp(c, Color.white, 0.3f), 10, unfold ? 6f : 2f, 0.05f, 0.3f, 0f);
         }
 
         // v0.25.77 Punishing Bomb: a black iron bomb with a brass fuse cap and a spitting fuse, tumbling in flight.
@@ -16694,11 +17035,30 @@ namespace DragonsAltarCombat
             MeshObject("bronze", Uvd(FacetMesh(v, t, white, 0f), 2f), bronze, unit.transform);
 
             v = new List<Vector3>(); t = new List<int>();
-            Tube(v, t, new Vector3(-0.36f, 0.39f, 0f), new Vector3(0.36f, 0.39f, 0f), Y, Z, 0.12f, 0.43f, 0.12f, 0.43f, 8);   // head mass
-            Tube(v, t, new Vector3(-0.47f, 0.39f, 0f), new Vector3(-0.53f, 0.39f, 0f), Y, Z, 0.105f, 0.40f, 0.09f, 0.34f, 8);  // striking faces
-            Tube(v, t, new Vector3(0.47f, 0.39f, 0f), new Vector3(0.53f, 0.39f, 0f), Y, Z, 0.105f, 0.40f, 0.09f, 0.34f, 8);
+            Tube(v, t, new Vector3(-0.36f, 0.39f, 0f), new Vector3(0.36f, 0.39f, 0f), Y, Z, 0.12f, 0.43f, 0.12f, 0.43f, 12);   // head mass (v0.25.181 smoother)
+            Tube(v, t, new Vector3(-0.47f, 0.39f, 0f), new Vector3(-0.53f, 0.39f, 0f), Y, Z, 0.105f, 0.40f, 0.09f, 0.34f, 12);  // striking faces
+            Tube(v, t, new Vector3(0.47f, 0.39f, 0f), new Vector3(0.53f, 0.39f, 0f), Y, Z, 0.105f, 0.40f, 0.09f, 0.34f, 12);
             Mesh headMesh = Uvd(FacetMesh(v, t, white, 0f), 1.5f);
             MeshObject("head", headMesh, stone, unit.transform);
+
+            // v0.25.181 (user: finished, like the relic): bronze corner straps along the head, a raised bronze rim and a lit
+            // sigil boss on each striking face (defined faces), polished gold-bronze cap on the crown
+            v = new List<Vector3>(); t = new List<int>();
+            for (int sy = -1; sy <= 1; sy += 2)
+                for (int sz = -1; sz <= 1; sz += 2)
+                    Tube(v, t, new Vector3(-0.33f, 0.39f + sy * 0.105f, sz * 0.375f), new Vector3(0.33f, 0.39f + sy * 0.105f, sz * 0.375f), Y, Z, 0.02f, 0.05f, 0.02f, 0.05f, 6);
+            for (int sd = -1; sd <= 1; sd += 2)
+                Tube(v, t, new Vector3(0.525f * sd, 0.39f, 0f), new Vector3(0.545f * sd, 0.39f, 0f), Y, Z, 0.095f, 0.35f, 0.088f, 0.32f, 12);   // face rim
+            Tube(v, t, new Vector3(0f, 0.505f, 0f), new Vector3(0f, 0.53f, 0f), X, Z, 0.16f, 0.36f, 0.12f, 0.28f, 12);                     // crown cap
+            MeshObject("straps", Uvd(FacetMesh(v, t, white, 0f), 2f), bronze, unit.transform);
+            v = new List<Vector3>(); t = new List<int>();
+            for (int sd = -1; sd <= 1; sd += 2)
+            {
+                Tube(v, t, new Vector3(0.53f * sd, 0.39f, 0f), new Vector3(0.556f * sd, 0.39f, 0f), Y, Z, 0.05f, 0.16f, 0.04f, 0.13f, 12);    // sigil boss
+                Tube(v, t, new Vector3(0.55f * sd, 0.30f, 0f), new Vector3(0.55f * sd, 0.48f, 0f), X, Z, 0.01f, 0.015f, 0.01f, 0.015f, 4);     // face cross
+                Tube(v, t, new Vector3(0.55f * sd, 0.39f, -0.2f), new Vector3(0.55f * sd, 0.39f, 0.2f), X, Y, 0.01f, 0.015f, 0.01f, 0.015f, 4);
+            }
+            MeshObject("faceSigils", FacetMesh(v, t, white, 0f), inlay, unit.transform);
 
             // sacred cross motif inlaid on both broad sides of the head
             v = new List<Vector3>(); t = new List<int>();
@@ -17185,7 +17545,19 @@ namespace DragonsAltarCombat
                 Vector3 dir = (p1 - p0).normalized; Vector3 side = Vector3.Cross(Vector3.up, dir);
                 Tube(v, t, p0, p1, Vector3.up, side, 0.05f, 0.05f, 0.05f, 0.05f, 5);
             }
-            MeshObject("rope", FacetMesh(v, t, new Color(0.62f, 0.50f, 0.32f, 1f), 0.3f), ClearMat(), parent);
+            // v0.25.181 (user: a finished physical trap): lit rope + wooden stakes + an iron jaw ring with teeth
+            MeshObject("rope", Uvd(FacetMesh(v, t, Color.white, 0f), 3f), NaturalMat(new Color(0.62f, 0.50f, 0.32f, 1f)), parent);
+            v = new List<Vector3>(); t = new List<int>();
+            float jr = radius * 0.45f;
+            for (int i = 0; i < n; i++)
+            {
+                float a0 = (float)i / n * Mathf.PI * 2f, a1 = (float)(i + 1) / n * Mathf.PI * 2f;
+                Vector3 p0 = new Vector3(Mathf.Cos(a0) * jr, 0.08f, Mathf.Sin(a0) * jr), p1 = new Vector3(Mathf.Cos(a1) * jr, 0.08f, Mathf.Sin(a1) * jr);
+                Vector3 dir = (p1 - p0).normalized; Vector3 side = Vector3.Cross(Vector3.up, dir);
+                Tube(v, t, p0, p1, Vector3.up, side, 0.035f, 0.05f, 0.035f, 0.05f, 6);
+                if (i % 2 == 0) Tube(v, t, p0, p0 + Vector3.up * 0.16f - p0.normalized * 0.05f, side, dir, 0.03f, 0.03f, 0.004f, 0.004f, 4);   // teeth
+            }
+            MeshObject("jaw", Uvd(FacetMesh(v, t, Color.white, 0f), 3f), NaturalMat(new Color(0.36f, 0.36f, 0.38f, 1f)), parent);
             v = new List<Vector3>(); t = new List<int>();
             for (int i = 0; i < 6; i++)
             {
@@ -17195,8 +17567,8 @@ namespace DragonsAltarCombat
                 Vector3 top = baseP + d * 0.25f + Vector3.up * 0.65f;
                 Tube(v, t, baseP, top, Vector3.Cross(Vector3.up, d), d, 0.06f, 0.06f, 0.01f, 0.01f, 5);
             }
-            MeshObject("stakes", FacetMesh(v, t, new Color(0.42f, 0.30f, 0.18f, 1f), 0.4f), ClearMat(), parent);
-            GameObject band = MeshObject("rune", RuneBandMesh(new Color(0.75f, 1f, 0.45f, 0.5f), 10, 0.9f, 1f), Mat(WhiteTex(), true), parent);
+            MeshObject("stakes", Uvd(FacetMesh(v, t, Color.white, 0f), 3f), NaturalMat(new Color(0.42f, 0.30f, 0.18f, 1f)), parent);
+            GameObject band = MeshObject("rune", RuneBandMesh(new Color(0.75f, 1f, 0.45f, 0.28f), 10, 0.9f, 1f), Mat(WhiteTex(), true), parent);   // subtle placed indicator
             band.transform.localPosition = new Vector3(0f, 0.05f, 0f);
             band.transform.localScale = Vector3.one * radius;
             band.AddComponent<DragonRotate>().Speed = new Vector3(0f, 25f, 0f);
@@ -17214,7 +17586,16 @@ namespace DragonsAltarCombat
             DragonRotate r1 = swirl.AddComponent<DragonRotate>(); r1.Speed = new Vector3(0f, 0f, 90f);
             GameObject glow = MeshObject("glow", SwirlDisk(true), Mat(WhiteTex(), true), root.transform);
             DragonRotate r2 = glow.AddComponent<DragonRotate>(); r2.Speed = new Vector3(0f, 0f, -150f);
-            ParticleSystem ps = Particles(root.transform, new Color(0.78f, 0.55f, 0.95f, 0.8f), 0, 22f * Amount, 1f, 0.6f, 0.2f, 0.8f, 0.04f, 0.1f, 0f,   // v0.25.180 gentle inward drift, no fountain
+            // v0.25.181 (user: finished rims with depth): two more rim layers stepped back + forward so the opening has
+            // thickness from the side; they counter-rotate for a flowing edge
+            for (int d = -1; d <= 1; d += 2)
+            {
+                GameObject depth = MeshObject("rimDepth", SwirlDisk(true), Mat(WhiteTex(), true), root.transform);
+                depth.transform.localPosition = new Vector3(0f, 0f, d * 0.12f);
+                depth.transform.localScale = Vector3.one * (1f + 0.05f * d);
+                DragonRotate rd = depth.AddComponent<DragonRotate>(); rd.Speed = new Vector3(0f, 0f, 110f * d);
+            }
+            ParticleSystem ps = Particles(root.transform, new Color(0.78f, 0.55f, 0.95f, 0.8f), 0, 22f * Amount, 1f, 0.6f, -0.8f, -0.25f, 0.04f, 0.1f, 0f,   // v0.25.181 visible INWARD drift, no fountain
                 ParticleSystemShapeType.Circle, 1f, new Vector3(0f, 0f, 0f), false, true);
             ParticleSystem.MainModule mm = ps.main; mm.loop = true;
             ParticleSystem.ShapeModule sh = ps.shape; sh.radiusThickness = 0.05f; sh.rotation = new Vector3(0f, 0f, 0f);

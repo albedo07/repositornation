@@ -6098,7 +6098,7 @@ namespace AlbedosCustomClassesAdvanced
         private IEnumerator ShieldChargeRoutine(Player player, Rigidbody body, CapsuleCollider capsule)
         {
             ShowMessage("Shield Charge");
-            if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.TrailWhile(player.transform, DragonVfx.Holy, 0.6f, delegate { return _shieldChargeActive && player != null; }); DragonVfx.GroundDust(player.transform, 0.9f, delegate { return _shieldChargeActive && player != null; }); });   // v0.25.169 dust kicked up by the charge
+            if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.TrailWhile(player.transform, DragonVfx.Holy, 0.6f, delegate { return _shieldChargeActive && player != null; }); DragonVfx.GroundDust(player.transform, 0.9f, delegate { return _shieldChargeActive && player != null; }); DragonVfx.PressureCone(player.transform, DragonVfx.Holy, 1.3f, 30f, delegate { return _shieldChargeActive && player != null; }); });   // v0.25.181 vapour cone   // v0.25.169 dust kicked up by the charge
             DragonCombat.PlayClip(player, "cleric_charge", 0.15f, true);
             DragonCombat.ForceRun(player, true, true, 0f);   // v0.25.19: real run + Valheim's shield-up block pose
             Vector3 forward = player.GetLookDir();
@@ -7219,7 +7219,7 @@ namespace AlbedosCustomClassesAdvanced
             StartCoroutine(IhCreatureGhost(player, 30f)); // v0.22.6: the dive lands on terrain, never on a Troll's head
             // v0.21.1: jump + nose-dive take WindUpTime (2.5s) in total.
             float total = Mathf.Max(0.6f, _angelWindupTotal.Value);
-            if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.Trail(player.transform, DragonVfx.Holy, 0.9f, total + 0.2f); DragonVfx.Burst(player.transform.position, DragonVfx.HolyWhite, 40, 6f, 0.3f, 0.8f, 0.2f); });
+            if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.Trail(player.transform, DragonVfx.Holy, 0.9f, total + 0.2f); DragonVfx.Burst(player.transform.position, DragonVfx.HolyWhite, 40, 6f, 0.3f, 0.8f, 0.2f); DragonVfx.PressureCone(player.transform, DragonVfx.Holy, 1.4f, total + 0.3f, null); });   // v0.25.181 vapour cone on the dive
             float riseTime = total * 0.56f;
             float hangTime = total * 0.06f;
             float height = Mathf.Max(1f, DragonCombat.M(_angelJumpHeight.Value));
@@ -7732,7 +7732,7 @@ namespace AlbedosCustomClassesAdvanced
                     if (_enableVfx.Value)
                     {
                         CreateLightning(target, new Color(0.48f, 0.82f, 1f, 0.92f), Mathf.Min(0.22f, interval * 0.45f));
-                        StartCoroutine(AnimateTickRing(target + Vector3.up * 0.08f, 0.3f, radius, Mathf.Min(0.32f, interval), new Color(0.58f, 0.90f, 1f, 0.65f), 0.05f));
+                        StartCoroutine(AnimateSoftRing(target + Vector3.up * 0.08f, 0.3f, radius, Mathf.Max(0.5f, Mathf.Min(0.8f, interval)), new Color(0.45f, 0.70f, 1f, 0.65f), 0.05f));   // v0.25.181 visible blue pulse
                         PulseConsecratedGroundVfx();
                     }
 
@@ -8091,7 +8091,8 @@ namespace AlbedosCustomClassesAdvanced
                 GameObject gcRoot = visualRoot;
                 DragonCombat.RunVfx(delegate
                 {
-                    DragonVfx.AttachGlow(gcRoot.transform, new Color(0.55f, 0.88f, 1f, 1f), Mathf.Max(0.8f, width * 0.25f), 140f, width * 1.5f);
+                    DragonVfx.AttachGlow(gcRoot.transform, new Color(0.55f, 0.88f, 1f, 1f), Mathf.Max(0.8f, width * 0.25f), 70f, width * 1.5f);
+                    DragonVfx.GroundDust(gcRoot.transform, Mathf.Clamp(width * 0.35f, 1f, 3f), delegate { return gcRoot != null; }, 1.4f);   // v0.25.181 ground contact
                     DragonVfx.TrailWhile(gcRoot.transform, new Color(0.70f, 0.94f, 1f, 1f), Mathf.Max(0.6f, width * 0.2f), delegate { return gcRoot != null; });
                 });
             }
@@ -8236,7 +8237,8 @@ namespace AlbedosCustomClassesAdvanced
                         // v0.25.86 (user): bigger beams coming down from high in the sky (visual only)
                         Vector3 sky = DragonCombat.GetIndoorSafeSkyPoint(strike + Vector3.up * 0.1f, 30f);
                         CreateTemporaryBeam(sky, strike + Vector3.up * 0.08f, new Color(1f, 0.94f, 0.62f, 0.96f), 0.5f, Mathf.Max(0.3f, Mathf.Min(0.35f, interval * 0.9f)));
-                        StartCoroutine(AnimateTickRing(strike + Vector3.up * 0.06f, 0.25f, impactRadius, Mathf.Min(0.28f, interval), new Color(1f, 0.90f, 0.46f, 0.70f), 0.07f));
+                        StartCoroutine(AnimateRing(strike + Vector3.up * 0.06f, 0.25f, Mathf.Max(1.5f, impactRadius), 0.3f, new Color(1f, 0.90f, 0.46f, 0.70f), 0.07f));   // v0.25.181 (user): a brief contact shockwave at every real beam landing
+                        if (DragonVfx.Enabled) { Vector3 bl = strike; float br = impactRadius; DragonCombat.RunVfx(delegate { DragonVfx.DirtBurst(bl, Mathf.Max(0.6f, br * 0.5f), 0.6f); DragonVfx.Cracks(bl, DragonVfx.Holy, Mathf.Max(0.8f, br * 0.6f), 5, 2.5f); }); }   // lands with force
                     }
 
                     List<Character> targets = GetSphereTargets(player, strike, impactRadius);

@@ -1011,7 +1011,7 @@ namespace AlbedosCustomClassesSkills
             {
                 if (!DragonVfx.Enabled) StartCoroutine(AnimateRing(target + Vector3.up * 0.08f, 0.4f, radius, 0.55f, new Color(0.50f, 0.90f, 1f, 0.95f), 0.14f, 0f));
                 Vector3 gt = target; float gr = radius;
-                DragonCombat.RunVfx(delegate { DragonVfx.ShatterIce(gt, gr); DragonVfx.FrostGround(gt, gr * 0.8f, 4f);   /* v0.25.180 low cold mist + rime instead of a shock ring */ DragonVfx.Burst(gt + Vector3.up * 0.6f, new Color(0.85f, 0.97f, 1f, 1f), 30, 9f, 0.3f, 0.9f, 0.8f); DragonVfx.IceBurst(gt, gr); DragonVfx.Shake(gt, 25f, 1.2f); DragonVfx.DustRing(gt, gr); DragonVfx.SpikeRing(gt, DragonVfx.Ice, gr * 0.75f, 9, 1.7f, 1.8f); DragonVfx.Spike(gt, DragonVfx.Ice, 2.4f, 0.8f, 1.8f, Vector3.zero); });   // v0.25.61 ice spikes
+                DragonCombat.RunVfx(delegate { DragonVfx.ShatterIce(gt, gr); DragonVfx.FrostGround(gt, gr * 0.55f, 3.5f, 0.4f);   /* v0.25.181 subtle */   /* v0.25.180 low cold mist + rime instead of a shock ring */ DragonVfx.Burst(gt + Vector3.up * 0.6f, new Color(0.85f, 0.97f, 1f, 1f), 30, 9f, 0.3f, 0.9f, 0.8f); DragonVfx.IceBurst(gt, gr); DragonVfx.Shake(gt, 25f, 1.2f); DragonVfx.DustRing(gt, gr); DragonVfx.SpikeRing(gt, DragonVfx.Ice, gr * 0.75f, 9, 1.7f, 1.8f); DragonVfx.Spike(gt, DragonVfx.Ice, 2.4f, 0.8f, 1.8f, Vector3.zero); });   // v0.25.61 ice spikes
             }
         }
 
