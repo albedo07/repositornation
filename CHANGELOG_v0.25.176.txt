@@ -1,0 +1,20 @@
+Aethelborn Ascended v0.25.176 - Hit Caps
+Baseline: v0.25.175. Only new F8 options; defaults keep today's behaviour.
+
+PERSISTENT DAMAGE HIT CAPS (user: option for how many times persistent damage can hit an enemy, every skill)
+- Persistent damage = a hitbox that stays / travels and re-hits enemies inside it on an interval. DoTs / burns
+  (Fire Burn, Spirit Burn, ...) are NOT persistent damage and are never counted.
+- One cast's hits on the same enemy are counted; once the cap is reached that cast stops damaging that enemy (other
+  effects of later ticks on it are skipped too). 0 = no limit.
+- New key MaxPersistentHits_v025176 (default 0 = no limit, as now) in:
+  Sword Master Moonlight Splitter Ascended (final wave) - Paladin Shield Charge - Paladin Electric Smite (all 16
+  trails together) - Paladin Righteous Strike Ascended (all 12 trails together) - Paladin Judgement Hammer (throw +
+  Ascended return together) - Priest Grand Cross - Spellcaster Gravity Blast (orb ticks; end burst not counted).
+- Already had one (unchanged): Crescent Cleave MaxHitsPerWave_v025175 (2), Crescent Cleave Ascended FireTrailMaxHits (8).
+- Shared helper DragonCombat.PersistentHit (per-cast counter that disappears with the cast).
+
+BLADE STORM (user: option for how many slashes)
+- Sword Master Judgement Cut: SpheresPerActivation_v025176 (2), CutsPerSphere_v025176 (3, normal + Ascended),
+  Stacks_v025176 (4 stored activations, normal).
+- Sword Master Blade Storm Ascended: SpheresPerActivation_v025176 (4); its Stacks key is unchanged.
+- Each cut keeps the damage it has at the default layout, so more spheres / cuts = more total damage.

@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.175";
+        public const string ModVersion = "0.25.176";
 
         internal static DragonCombatPlugin Instance;
 
@@ -8184,6 +8184,19 @@ namespace DragonsAltarCombat
         }
 
         public static float BlockHyperUntil = -1f;
+        // v0.25.176 (user): per-cast hit cap for persistent damage. `cast` = any object that lives exactly as long as one cast (the
+        // routine's own next-hit gate dictionary); counts die with it. cap <= 0 = no limit (old behaviour). DoTs never call this.
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<object, Dictionary<int, int>> _persistHits = new System.Runtime.CompilerServices.ConditionalWeakTable<object, Dictionary<int, int>>();
+        public static bool PersistentHit(object cast, Character target, int cap)
+        {
+            if (cap <= 0 || cast == null || target == null) return true;
+            Dictionary<int, int> d = _persistHits.GetOrCreateValue(cast);
+            int id = target.GetInstanceID(), n;
+            d.TryGetValue(id, out n);
+            if (n >= cap) return false;
+            d[id] = n + 1;
+            return true;
+        }
         // v0.25.175 (user: vanilla 1-2-3 after a parry; "don't read parrying as anything"): last time the local player blocked / parried.
         // NACC never learns or captures a swing state from inside that window - an attack started out of the block pose could cache a
         // state from the wrong layer, and that bad state was then used for every later step back (hit 3) = vanilla-looking chain.

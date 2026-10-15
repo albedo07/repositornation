@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.175";
+        public const string ModVersion = "0.25.176";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -165,6 +165,10 @@ namespace AlbedosCustomClassesAdvanced
         private ConfigEntry<float> _crescentSlashHeight;
         private ConfigEntry<float> _crescentHitDepth;   // v0.25.175
         private ConfigEntry<int> _crescentMaxHits;      // v0.25.175
+        // v0.25.176 (user): how many times ONE cast's persistent damage can hit the same enemy (0 = no limit). DoTs / burns are not
+        // persistent damage and never count. Blade Storm: spheres per activation + cuts per sphere + normal stacks.
+        private ConfigEntry<int> _moonAscGtMaxHits, _shieldChargeMaxHits, _divineTrailMaxHits, _rsAscTrailMaxHits, _hammerMaxHits, _grandCrossMaxHits;
+        private ConfigEntry<int> _bladeSpheres, _bladeAscSpheres, _bladeCutsPerSphere, _bladeStacks;
         private ConfigEntry<float> _crescentSpreadAngle;
         private ConfigEntry<float> _crescentPersistentTick;
         private DamageConfig _crescentDamage;
@@ -1701,12 +1705,14 @@ namespace AlbedosCustomClassesAdvanced
             float areaR = Mathf.Max(0f, DragonCombat.M(ascended ? _bladeAscAreaRadius.Value : _bladeAreaRadius.Value));
             float interval = Mathf.Max(0.05f, ascended ? _bladeAscInterval.Value : _bladeInterval.Value);
             float crippleSeconds = Mathf.Max(0f, ascended ? _bladeAscCripple.Value : _bladeCripple.Value);
-            int spheres = ascended ? 4 : 2;
+            int defSpheres = ascended ? 4 : 2;   // v0.25.176: damage per cut stays what the default layout gave
+            int spheres = Mathf.Clamp(ascended ? _bladeAscSpheres.Value : _bladeSpheres.Value, 1, 20);
+            int cuts = Mathf.Clamp(_bladeCutsPerSphere.Value, 1, 20);
             float baseCut = Mathf.Max(0f, _bladeCutDamage.Value) * IhSkillPower(player, "blade_storm");
             float budget = ascended
                 ? baseCut * 3f * (Mathf.Max(0f, _bladeAscFirst.Value) + Mathf.Max(0f, _bladeAscExtra.Value)) / 100f
                 : baseCut * 3f;
-            float perHit = budget / (spheres * 3f);
+            float perHit = budget / (defSpheres * 3f);
             float groundAtPoint;
             bool haveGround = DragonCombat.TryGroundY(point, 3f, 30f, out groundAtPoint);
             float heightAbove = haveGround ? point.y - groundAtPoint : 0f;
@@ -1725,7 +1731,7 @@ namespace AlbedosCustomClassesAdvanced
                 List<Character> targets = GetSphereTargets(player, center, sphereR);
                 for (int i = 0; i < targets.Count; i++)
                 {
-                    for (int hitIndex = 0; hitIndex < 3; hitIndex++)
+                    for (int hitIndex = 0; hitIndex < cuts; hitIndex++)
                     {
                         HitData hit = new HitData();
                         hit.m_damage.m_slash = perHit;
@@ -1761,7 +1767,7 @@ namespace AlbedosCustomClassesAdvanced
 
         private int BladeStormStacks()
         {
-            return IsAscendedSkill("blade_storm") ? Mathf.Clamp(_bladeAscStacks.Value, 1, _judgementChargeReadyAt.Length) : 4;
+            return Mathf.Clamp(IsAscendedSkill("blade_storm") ? _bladeAscStacks.Value : _bladeStacks.Value, 1, _judgementChargeReadyAt.Length);   // v0.25.176 normal configurable
         }
 
         private int GetReadyJudgementChargeIndex()
@@ -1945,6 +1951,17 @@ namespace AlbedosCustomClassesAdvanced
             _bladeAscSphereRadius = Config.Bind(ba, "SphereRadius_v025146", 2f, "Ascended: damage radius of each of the 4 spheres (m).");
             _bladeAscAreaRadius = Config.Bind(ba, "SpawnAreaRadius_v025146", 3f, "Ascended: the 4 spheres appear at random inside this radius (m) around the point locked at cast time.");
             _bladeAscInterval = Config.Bind(ba, "SphereIntervalSeconds_v025145", 0.5f, "Ascended: seconds between activation and sphere 1, and between spheres (0.5 / 1.0 / 1.5 / 2.0).");
+            const string ph = "MaxPersistentHits_v025176", phd = "Persistent damage: how many times ONE cast can hit the same enemy (0 = no limit). DoTs / burns never count.";
+            _moonAscGtMaxHits = Config.Bind("Sword Master Moonlight Splitter Ascended", ph, 0, phd + " Final (5th) wave.");
+            _shieldChargeMaxHits = Config.Bind("Paladin Shield Charge", ph, 0, phd + " (Big/Boss still end the charge after 4 ticks.)");
+            _divineTrailMaxHits = Config.Bind("Paladin Electric Smite", ph, 0, phd + " All 16 trails together.");
+            _rsAscTrailMaxHits = Config.Bind("Paladin Righteous Strike Ascended", ph, 0, phd + " All 12 trails together.");
+            _hammerMaxHits = Config.Bind("Paladin Judgement Hammer", ph, 0, phd + " Throw + Ascended return together.");
+            _grandCrossMaxHits = Config.Bind("Priest Grand Cross", ph, 0, phd);
+            _bladeSpheres = Config.Bind("Sword Master Judgement Cut", "SpheresPerActivation_v025176", 2, "Blade Storm (normal): judgement spheres per activation. Each sphere keeps its own damage (more spheres = more total damage).");
+            _bladeAscSpheres = Config.Bind(ba, "SpheresPerActivation_v025176", 4, "Blade Storm Ascended: judgement spheres per activation. Each sphere keeps its own damage.");
+            _bladeCutsPerSphere = Config.Bind("Sword Master Judgement Cut", "CutsPerSphere_v025176", 3, "Blade Storm (normal + Ascended): slashes each sphere deals to every enemy inside. Each cut keeps its own damage.");
+            _bladeStacks = Config.Bind("Sword Master Judgement Cut", "Stacks_v025176", 4, "Blade Storm (normal): stored activations (Ascended uses its own Stacks).");
             _bladeAscCripple = Config.Bind(ba, "CrippleSeconds_v025145", 6f, "Ascended: Cripple duration applied by each sphere (s).");
 
             const string f = "Sword Master Frenzied Charge";
@@ -2304,6 +2321,7 @@ namespace AlbedosCustomClassesAdvanced
                         float due;
                         if (nextTickAt.TryGetValue(target, out due) && Time.time < due) continue;
                     }
+                    if (persistent && !DragonCombat.PersistentHit(nextTickAt, target, _moonAscGtMaxHits.Value)) continue;   // v0.25.176 cap
                     if (persistent) nextTickAt[target] = Time.time + Mathf.Max(0.05f, tickInterval);
                     // Afterimage has no additional slash animation; stun accompanies its projectile hit.
                     if (firstHit && !halfmoon && DragonCombat.SkillStunEnabled(player, "moonlight_splitter", stunAttack, stunSmallBig) && !target.IsBoss()) { if (DragonCombat.SkillStunEnabled(player, halfmoon ? "halfmoon_slash" : "moonlight_splitter", stunAttack, stunSmallBig || (halfmoon && _hmStunFin.Value), null)) DragonCombat.Stun(target, center); }
@@ -5980,6 +5998,7 @@ namespace AlbedosCustomClassesAdvanced
                         float allowed;
                         if (nextHitAt.TryGetValue(tid, out allowed) && Time.time < allowed) continue;
                         if (!CanShieldChargeHit(player, target, hits[i], forward)) continue;
+                        if (!DragonCombat.PersistentHit(nextHitAt, target, _shieldChargeMaxHits.Value)) continue;   // v0.25.176 cap
                         nextHitAt[tid] = Time.time + Mathf.Max(0.10f, _shieldChargePersistentTick.Value);
                         DealShieldChargeDamage(player, target, forward, false, "shield_charge", "Charge", false, false, null);
 
@@ -6700,6 +6719,7 @@ namespace AlbedosCustomClassesAdvanced
                         float nextAllowed;
                         if (sharedNextHitAt.TryGetValue(targetId, out nextAllowed) && Time.time < nextAllowed)
                             continue;
+                        if (!DragonCombat.PersistentHit(sharedNextHitAt, target, _rsAscTrailMaxHits.Value)) continue;   // v0.25.176 cap
                         sharedNextHitAt[targetId] = Time.time + Mathf.Max(0.10f, tick);
                         DealDamage(player, target, damage, 0f, false);
                         RefreshSpiritBurn(player, target, spiritDps, Mathf.Max(0.1f, spiritDuration));
@@ -6983,6 +7003,7 @@ namespace AlbedosCustomClassesAdvanced
                 float allowed;
                 if (nextHitAt.TryGetValue(tid, out allowed) && Time.time < allowed)
                     continue;
+                if (!DragonCombat.PersistentHit(nextHitAt, target, _hammerMaxHits.Value)) continue;   // v0.25.176 cap
                 nextHitAt[tid] = Time.time + Mathf.Max(0.1f, _hammerTick.Value);
                 if (marks)
                     _paladinMarkSourceContext = "JudgementHammer";
@@ -7945,6 +7966,7 @@ namespace AlbedosCustomClassesAdvanced
                     if (nextHitAt.TryGetValue(enemyId, out nextAllowed) && Time.time < nextAllowed)
                         continue;
 
+                    if (!DragonCombat.PersistentHit(nextHitAt, enemy, _grandCrossMaxHits.Value)) continue;   // v0.25.176 cap
                     nextHitAt[enemyId] = Time.time + tickInterval;
                     DealDamage(player, enemy, _grandCrossDamage, 5f, false, "grand_cross", "Attack 1", false, false, null);
                     // v0.23.8 Ascended: no end burst; every hit Exposes and the Spirit DoT is doubled.
@@ -8850,6 +8872,7 @@ namespace AlbedosCustomClassesAdvanced
                     if (sharedNextHitAt.TryGetValue(targetId, out nextAllowed) && Time.time < nextAllowed)
                         continue;
 
+                    if (!DragonCombat.PersistentHit(sharedNextHitAt, target, _divineTrailMaxHits.Value)) continue;   // v0.25.176 cap
                     sharedNextHitAt[targetId] = Time.time + Mathf.Max(0.10f, _divineTrailPersistentTick.Value);
 
                     // Persistent direct Lightning Damage + refreshed Spirit DoT.

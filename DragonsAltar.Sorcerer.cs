@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Aethelborn Ascended - Sorcerer Advancements";
-        public const string ModVersion = "0.25.175";
+        public const string ModVersion = "0.25.176";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -2569,6 +2569,7 @@ namespace DragonsAltarSorcerer
         private ConfigEntry<int> _phalanxCountV;
         private ConfigEntry<float> _phalanxBuffer, _phalanxRange, _phalanxLifetime;
         private ConfigEntry<float> _gbCooldown, _gbEitr, _gbRange, _gbTravel, _gbRadius, _gbTick, _gbPull, _gbCripple, _gbOrbSize;
+        private ConfigEntry<int> _gbMaxHits;   // v0.25.176
         private ConfigEntry<float> _riftWalkerCooldown, _riftWalkerRange, _riftWalkerWindow, _riftWalkerLife;
         private ConfigEntry<float> _yyAttackSpeed;
         private ConfigEntry<float> _saAscRadius, _saAscEruption, _saAscTickPercent, _saAscDuration, _saAscCooldown, _saAscEitr, _saAscRange;
@@ -2607,6 +2608,7 @@ namespace DragonsAltarSorcerer
             _gbTravel = Config.Bind(g, "TravelTime", 4f, "Seconds to travel the range.");
             _gbRadius = Config.Bind(g, "Radius", 5f, "Damage / pull radius around the orb.");
             _gbTick = Config.Bind(g, "HitInterval", 0.5f, "Persistent damage interval.");
+            _gbMaxHits = Config.Bind(g, "MaxPersistentHits_v025176", 0, "Persistent damage: how many times ONE orb can hit the same enemy (0 = no limit). The end burst is not counted.");
             _gbPull = Config.Bind(g, "PullStrength", 2.5f, "Legacy (v0.25.85: continuous drag, see PullSpeed_v02585).");
             _gbPullSpeed = Config.Bind(g, "PullSpeed_v02585", 3f, "Small enemies are dragged toward the orb at this speed (m/s) while inside. Ascended: Big at BigPullPercent, Bosses at BossPullPercent of it.");
             _gbCripple = Config.Bind(g, "CrippleDuration", 3f, "Big and Boss: Cripple, refreshed on every hit.");
@@ -2814,6 +2816,7 @@ namespace DragonsAltarSorcerer
             float nextTick = 0f;
             bool detonated = false;
             List<Character> gbDrag = new List<Character>();
+            object gbCast = new object();   // v0.25.176 per-orb persistent hit counter
             while (elapsed < life && player != null)
             {
                 if (scale >= 1f && _gbRecasts >= 1) moving = false;
@@ -2854,6 +2857,7 @@ namespace DragonsAltarSorcerer
                     for (int i = 0; i < targets.Count; i++)
                     {
                         Character enemy = targets[i];
+                        if (!DragonCombat.PersistentHit(gbCast, enemy, _gbMaxHits.Value)) continue;   // v0.25.176 cap
                         DealWiz(player, enemy, _gravityBlastDmg, scale, "gravity_blast", 0f, false, "gravity_blast", "Orb", false, false, ascended);
                         bool small = DragonCombat.IsSmallEnemy(enemy);
                         bool boss = IsBoss(enemy);
