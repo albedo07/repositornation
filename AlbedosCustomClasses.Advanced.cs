@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.190";
+        public const string ModVersion = "0.25.191";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -2296,20 +2296,10 @@ namespace AlbedosCustomClassesAdvanced
                     DragonCombat.RunVfx(delegate { DragonVfx.CrescentBlade(ghostVis2.transform, gcol, gw2 * 0.6f, gw2 * 0.14f * heightScale, 0f); });   // v0.25.55 / v0.25.63 moon crescent; v0.25.167 glow motes + sparkle trail removed (the blade carries its own wind wake)
                 else
                 {
-                    // v0.25.97 (user): Moonlord's Moonlight Splitter look - a large pale lunar crescent (white core,
-                    // icy blue-violet rim), a fainter echo crescent trailing behind it, moon-dust sparkles streaming
-                    // off it and a cold moonlight glow.
-                    Color moonCore = new Color(0.86f, 0.93f, 1f, 1f), moonRim = new Color(0.55f, 0.62f, 1f, 1f);
+                    // v0.25.191 (user: no two slashes sewn together - look like the Ascended Halfmoon GT): ONE crescent blade,
+                    // same construction as the Halfmoon GT, in Moonlight's own colour.
                     float hs = heightScale;
-                    DragonCombat.RunVfx(delegate
-                    {
-                        // v0.25.167 (user: no glowing layers): one lunar blade (core/rim blended), no glow motes
-                        DragonVfx.CrescentBlade(ghostVis2.transform, IhSmDeep, gw2 * 0.7f, gw2 * 0.18f * hs, 0f);
-                        GameObject echo = new GameObject("IH_MoonEcho");
-                        echo.transform.SetParent(ghostVis2.transform, false);
-                        echo.transform.localPosition = new Vector3(0f, 0f, -0.9f * hs);
-                        DragonVfx.CrescentBlade(echo.transform, new Color(IhSmDeep.r, IhSmDeep.g, IhSmDeep.b, 0.6f), gw2 * 0.55f, gw2 * 0.08f * hs, 0f);
-                    });
+                    DragonCombat.RunVfx(delegate { DragonVfx.CrescentBlade(ghostVis2.transform, gcol, gw2 * 0.6f, gw2 * 0.14f * hs, 0f); });
                 }
                 if (!DragonVfx.Enabled) line = visual.AddComponent<LineRenderer>();
                 if (line != null) {
@@ -2983,14 +2973,17 @@ namespace AlbedosCustomClassesAdvanced
             }
             if (_enableVfx.Value)
             {
-                StartCoroutine(AnimateRing(player.transform.position + Vector3.up * 0.9f, 0.6f, radius, 0.32f, new Color(0.70f, 0.86f, 1f, 0.95f), 0.20f));
+                if (!DragonVfx.Enabled) StartCoroutine(AnimateRing(player.transform.position + Vector3.up * 0.9f, 0.6f, radius, 0.32f, new Color(0.70f, 0.86f, 1f, 0.95f), 0.20f));   // v0.25.191 no extra shockwave ring
                 StartCoroutine(AnimateTickRing(player.transform.position + Vector3.up * 1.2f, 0.4f, radius * 0.92f, 0.38f, new Color(0.55f, 0.40f, 0.95f, 0.85f), 0.12f));
                 Vector3 ep = player.transform.position; float er = radius; Color ecol = IhSmColor("eclipse");   // v0.25.181
+                Vector3 efwd = player.transform.forward; efwd.y = 0f; if (efwd.sqrMagnitude < 0.01f) efwd = Vector3.forward; efwd.Normalize();
                 DragonCombat.RunVfx(delegate
                 {
                     DragonVfx.SlashStreaks(ep + Vector3.up * 1.2f, new Color(0.62f, 0.50f, 1f, 1f), er, 6, 0.45f);   // v0.25.58 eclipse cuts (v0.25.180 sparser: gaps around the character)
-                    DragonVfx.SlashArc(ep + Vector3.up * 1f, Vector3.forward, er * 0.9f, 360f, ecol, er * 0.15f, 0.55f, 0f);   // v0.25.59
-                    DragonVfx.SlashArc(ep + Vector3.up * 1.4f, Vector3.right, er * 0.7f, 360f, new Color(0.80f, 0.85f, 1f, 1f), er * 0.1f, 0.5f, 12f);
+                    // v0.25.191 (user: whatever reads best in combat): ONE sweeping arc that leaves a gap behind the swing,
+                    // plus a thin trailing inner arc - no closed rings around the character
+                    DragonVfx.SlashArc(ep + Vector3.up * 1f, efwd, er * 0.9f, 300f, ecol, er * 0.15f, 0.55f, 0f);
+                    DragonVfx.SlashArc(ep + Vector3.up * 1.25f, efwd, er * 0.65f, 220f, new Color(0.80f, 0.85f, 1f, 0.7f), er * 0.06f, 0.45f, 8f);
                     DragonVfx.Burst(ep + Vector3.up * 1f, new Color(0.70f, 0.74f, 0.95f, 1f), 18, 10f, 0.2f, 0.5f, 0f);   // v0.25.180 trailing wind specks, no flare
                     DragonVfx.Gust(ep + Vector3.up * 0.4f, Vector3.forward, er);
                     DragonVfx.DustRing(ep, er);
@@ -3396,7 +3389,7 @@ namespace AlbedosCustomClassesAdvanced
                 yield return null;
             }
             if (aiwCrest != null) aiwCrest.Finish(0.3f);
-            if (_enableVfx.Value) { Vector3 s0 = origin, s1 = origin + forward * reached; float sw2 = width; DragonCombat.RunVfx(delegate { DragonVfx.CrackLine(s0, s1, DragonVfx.Fire, Mathf.Clamp(sw2 * 0.2f, 0.3f, 0.9f), 4f); }); }   // v0.25.58 scar along the wave
+            if (_enableVfx.Value) { Vector3 s0 = origin, s1 = origin + forward * reached; float sw2 = width; DragonCombat.RunVfx(delegate { DragonVfx.BranchCrackLine(s0, s1, DragonVfx.Fire, Mathf.Clamp(sw2 * 0.2f, 0.3f, 0.9f), 4f); }); }   // v0.25.58 scar along the wave
             // Aftershock: from the cast position back along the travelled path, 3m sections.
             float section = Mathf.Max(0.5f, DragonCombat.M(_iwAscSection.Value));
             HashSet<int> shockHit = new HashSet<int>();
@@ -3743,7 +3736,7 @@ namespace AlbedosCustomClassesAdvanced
             }
             if (_enableVfx.Value)
             {
-                StartCoroutine(AnimateRing(center + Vector3.up * 0.08f, Mathf.Max(0.4f, innerVisual), radius, 0.55f, new Color(0.95f, 0.58f, 0.22f, 1f), 0.16f));
+                if (!DragonVfx.Enabled) StartCoroutine(AnimateRing(center + Vector3.up * 0.08f, Mathf.Max(0.4f, innerVisual), radius, 0.55f, new Color(0.95f, 0.58f, 0.22f, 1f), 0.16f));   // v0.25.191 (user) no extra ring + flash
                 Vector3 sc = center; float sr = radius; bool firstStamp = innerVisual <= 0.01f;
                 DragonCombat.RunVfx(delegate { DragonVfx.GroundImpact(sc, DragonVfx.Fire, sr, firstStamp ? 1.4f : 0.8f); DragonVfx.Shatter(sc, sr * 0.8f, 0f); });   /* v0.25.181 branching fractures + rubble */   // v0.25.58; v0.25.168 no spikes (Hulk-smash stamp)
             }
@@ -4219,7 +4212,7 @@ namespace AlbedosCustomClassesAdvanced
             }
             if (_enableVfx.Value)
             {
-                StartCoroutine(AnimateRing(center + Vector3.up * 0.10f, 0.6f, radius, 0.65f, new Color(1f, 0.56f, 0.18f, 1f), 0.20f));
+                if (!DragonVfx.Enabled) StartCoroutine(AnimateRing(center + Vector3.up * 0.10f, 0.6f, radius, 0.65f, new Color(1f, 0.56f, 0.18f, 1f), 0.20f));   // v0.25.191 (user) no extra ring + flash
                 StartCoroutine(AnimateHalfmoonArc(center + Vector3.up * 1.0f, FlatForward(player), radius * 0.95f));
                 Vector3 cc = center; float cr = radius; bool cl = launch;
                 DragonCombat.RunVfx(delegate
@@ -4365,7 +4358,7 @@ namespace AlbedosCustomClassesAdvanced
             }
             if (_enableVfx.Value)
             {
-                StartCoroutine(AnimateRing(impact + Vector3.up * 0.1f, 0.4f, radius, 0.5f, new Color(1f, 0.48f, 0.14f, 1f), 0.22f));
+                if (!DragonVfx.Enabled) StartCoroutine(AnimateRing(impact + Vector3.up * 0.1f, 0.4f, radius, 0.5f, new Color(1f, 0.48f, 0.14f, 1f), 0.22f));   // v0.25.191 (user) no extra ring + flash
                 StartCoroutine(AnimateTickRing(impact + Vector3.up * 1.2f, 0.3f, radius * 0.7f, 0.35f, new Color(1f, 0.80f, 0.40f, 0.9f), 0.14f));
                 DragonCombat.RunVfx(delegate
                 {
@@ -4378,7 +4371,6 @@ namespace AlbedosCustomClassesAdvanced
                     DragonVfx.Embers(impact, DragonVfx.Fire, radius * 0.6f, 1.2f, 50f);
                     DragonVfx.GroundImpact(impact, DragonVfx.Fire, radius, 2f);
                     DragonVfx.Shatter(impact, radius * 0.8f, 0f);
-                    DragonVfx.Flash(impact + Vector3.up, DragonVfx.Fire, 0.9f, radius, 0.22f);
                     if (ascended) DragonVfx.Embers(impact, DragonVfx.Fire, radius * 0.8f, Mathf.Max(0.5f, _bombAscFireSeconds.Value), 60f);
                 });
             }
@@ -5520,6 +5512,8 @@ namespace AlbedosCustomClassesAdvanced
             {
                 Transform wt0 = player.transform; float wr0 = Mathf.Max(0.5f, DragonCombat.M(_whirlwindRadius.Value)) * 0.85f; float wd0 = duration;
                 DragonCombat.RunVfx(delegate { DragonVfx.SpinSlash(wt0, new Color(1f, 0.62f, 0.22f, 1f), wr0, Mathf.Max(0.25f, wr0 * 0.09f), wd0, 0.4f); });   // v0.25.66 circular slash
+                float wEnd = Time.time + duration; Player wpl = player;
+                DragonCombat.RunVfx(delegate { DragonVfx.GroundDust(wt0, wr0 * 0.9f, delegate { return wpl != null && _whirlActive && Time.time < wEnd; }, 1.2f); });   // v0.25.191 (user) dust curling at the feet while spinning
             }
 
             GameObject spinFxN = null;
@@ -5950,6 +5944,13 @@ namespace AlbedosCustomClassesAdvanced
         // green orb, ivory spike foot). Lightning Relic = ivory pillar with great white raised wings, blue lightning band,
         // gold crown + blue crystal. Goddess Relic = gold-framed ivory Celtic cross with a filigreed gold ring.
         // Pieces are cached meshes (lathe / extrude / tube / wing) on shared materials; wings sway gently.
+        // v0.25.191 destroys helper objects once cond() turns true (checked every frame)
+        private IEnumerator IhDestroyWhen(GameObject[] objs, Func<bool> cond)
+        {
+            while (!cond()) yield return null;
+            for (int i = 0; i < objs.Length; i++) if (objs[i] != null) Destroy(objs[i]);
+        }
+
         private static List<Vector2> IhProf(params float[] rv)
         {
             List<Vector2> p = new List<Vector2>();
@@ -6258,6 +6259,25 @@ namespace AlbedosCustomClassesAdvanced
         {
             ShowMessage("Shield Charge");
             if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.TrailWhile(player.transform, DragonVfx.Holy, 0.6f, delegate { return _shieldChargeActive && player != null; }); DragonVfx.GroundDust(player.transform, 0.9f, delegate { return _shieldChargeActive && player != null; }); DragonVfx.PressureCone(player.transform, DragonVfx.Holy, 1.3f, 30f, delegate { return _shieldChargeActive && player != null; }); });   // v0.25.181 vapour cone   // v0.25.169 dust kicked up by the charge
+            if (_enableVfx.Value && DragonVfx.Enabled)
+            {
+                // v0.25.191 (user): thin ivory light on the shield face (off-hand side, in front of the chest) + sparse sideward air streaks
+                Player scp = player;
+                GameObject face = new GameObject("IH_ShieldFace");
+                face.transform.SetParent(player.transform, false);
+                face.transform.localPosition = new Vector3(-0.25f, 1.15f, 0.55f);
+                GameObject sideL = new GameObject("IH_ChargeSideL"), sideR = new GameObject("IH_ChargeSideR");
+                sideL.transform.SetParent(player.transform, false); sideL.transform.localPosition = new Vector3(-0.9f, 0.9f, 0f);
+                sideR.transform.SetParent(player.transform, false); sideR.transform.localPosition = new Vector3(0.9f, 0.9f, 0f);
+                GameObject fc = face, sl = sideL, sr = sideR;
+                DragonCombat.RunVfx(delegate
+                {
+                    DragonVfx.AttachGlow(fc.transform, new Color(1f, 0.95f, 0.82f, 1f), 0.35f, 30f, 2.5f);
+                    DragonVfx.AirStreak(sl.transform, DragonVfx.HolyWhite, 0.25f, 0.3f, delegate { return _shieldChargeActive && scp != null; });
+                    DragonVfx.AirStreak(sr.transform, DragonVfx.HolyWhite, 0.25f, 0.3f, delegate { return _shieldChargeActive && scp != null; });
+                });
+                StartCoroutine(IhDestroyWhen(new GameObject[] { face, sideL, sideR }, delegate { return !_shieldChargeActive || scp == null; }));
+            }
             DragonCombat.PlayClip(player, "cleric_charge", 0.15f, true);
             DragonCombat.ForceRun(player, true, true, 0f);   // v0.25.19: real run + Valheim's shield-up block pose
             Vector3 forward = player.GetLookDir();
@@ -7227,6 +7247,17 @@ namespace AlbedosCustomClassesAdvanced
                 float safety = Time.time + 8f;
                 DragonCombat.PlayClip(player, "cleric_hammer_call", 0.2f, true);   // hand out, calling it back
                 bool caughtIt = false;
+                bool[] hammerReturning = new bool[] { true };
+                if (_enableVfx.Value && DragonVfx.Enabled && hammer != null)
+                {
+                    // v0.25.191 (user): the return gets its own receding trail (pale gold air wake + lightning-blue core)
+                    GameObject hr = hammer;
+                    DragonCombat.RunVfx(delegate
+                    {
+                        DragonVfx.AirStreak(hr.transform, new Color(1f, 0.92f, 0.65f, 1f), 0.9f, 0.45f, delegate { return hr != null && hammerReturning[0]; });
+                        DragonVfx.AirStreak(hr.transform, new Color(0.62f, 0.85f, 1f, 1f), 0.25f, 0.3f, delegate { return hr != null && hammerReturning[0]; });
+                    });
+                }
                 while (player != null && !player.IsDead() && Time.time < safety)
                 {
                     Vector3 home = player.transform.position + Vector3.up * 1.2f;
@@ -7259,6 +7290,7 @@ namespace AlbedosCustomClassesAdvanced
                     HammerHits(player, center, HammerHitRadius(height), damageMultiplier, nextHitAt, true, "Throw");
                     yield return null;
                 }
+                hammerReturning[0] = false;
                 if (!caughtIt) DragonCombat.ClipStop(player, 0.3f);
             }
 
@@ -7454,11 +7486,15 @@ namespace AlbedosCustomClassesAdvanced
             }
             if (_enableVfx.Value)
             {
-                CreateLightning(point, new Color(1f, 0.92f, 0.62f, 1f), 0.3f);
+                if (!DragonVfx.Enabled) CreateLightning(point, new Color(1f, 0.92f, 0.62f, 1f), 0.3f);   // v0.25.191 (user): no sky bolt - it is the Paladin slamming the ground
                 StartCoroutine(AnimateRing(point + Vector3.up * 0.08f, 0.4f, radius, 0.55f, new Color(1f, 0.88f, 0.48f, 1f), 0.16f));
                 DragonCombat.RunVfx(delegate
                 {
-                    
+                    // v0.25.191 (user: more destructive): branching fractures, displaced dirt, rubble and tumbling chunks
+                    DragonVfx.Shatter(point, radius * 0.8f, 0f);
+                    DragonVfx.DirtBurst(point, radius * 0.6f, 1.2f);
+                    DragonVfx.PlantedRubble(point, Mathf.Clamp(radius * 0.35f, 0.8f, 3f), 4f);
+                    DragonVfx.Debris(point, new Color(0.45f, 0.40f, 0.34f, 1f), 14, 9f, 0.3f, 2.2f);
                     DragonVfx.HeavyLanding(point, DragonVfx.Holy, radius, 2.5f);   // v0.25.57
                     DragonVfx.Feathers(point, DragonVfx.HolyWhite, radius * 0.7f, 1.5f, 40f);
                     DragonVfx.Burst(point + Vector3.up * 0.5f, DragonVfx.HolyWhite, 24, 10f, 0.25f, 0.8f, 0.4f);   // v0.25.180 weighty impact + low dust, no white explosion prefab
@@ -8144,10 +8180,30 @@ namespace AlbedosCustomClassesAdvanced
             float radius = Mathf.Max(1f, DragonCombat.M(_interventionRadius.Value));
 
             if (_enableVfx.Value)
+            {
                 StartCoroutine(AnimateSoftRing(center + Vector3.up * 0.08f, 0.8f, radius, 0.65f, new Color(1f, 0.92f, 0.48f, 0.95f), 0.13f));
-                { Vector3 diC = center; float diR = radius; DragonCombat.RunVfx(delegate { DragonVfx.Feathers(diC, DragonVfx.HolyWhite, diR * 0.7f, 2.5f, 45f); }); }
+                Vector3 diC = center; float diR = radius;
+                DragonCombat.RunVfx(delegate
+                {
+                    DragonVfx.Feathers(diC, DragonVfx.HolyWhite, diR * 0.7f, 2.5f, 45f);
+                    // v0.25.191 (user): a focused ivory-gold burst from the source + soft upward healing strands
+                    DragonVfx.Burst(diC + Vector3.up * 1f, new Color(1f, 0.92f, 0.62f, 0.95f), 30, 5f, 0.18f, 0.45f, 0f);
+                    DragonVfx.Burst(diC + Vector3.up * 0.3f, new Color(1f, 0.97f, 0.85f, 0.8f), 24, 1.2f, 0.07f, 1.4f, -1.2f);
+                    DragonVfx.Flash(diC + Vector3.up * 1.2f, new Color(1f, 0.92f, 0.62f, 1f), 0.8f, Mathf.Min(diR, 6f), 0.25f);
+                });
+            }
 
             List<Character> enemies = GetSphereTargets(player, center, radius);
+            if (_enableVfx.Value && DragonVfx.Enabled)
+            {
+                // v0.25.191 sharper outward streaks toward the enemies the burst damages
+                for (int i = 0; i < enemies.Count && i < 8; i++)
+                {
+                    if (enemies[i] == null) continue;
+                    Vector3 ea = center + Vector3.up * 1f, eb = enemies[i].transform.position + Vector3.up * 1f;
+                    DragonCombat.RunVfx(delegate { DragonVfx.Streak(ea, eb, new Color(1f, 0.90f, 0.55f, 0.8f), 0.07f, 0.3f); });
+                }
+            }
             for (int i = 0; i < enemies.Count; i++)
             {
                 DealDamageScaled(player, enemies[i], _interventionDamage, 1f, 12f, false, "divine_intervention", "Attack 1", true, true, null);
@@ -8254,8 +8310,15 @@ namespace AlbedosCustomClassesAdvanced
                     DragonCombat.RunVfx(delegate
                     {
                         // v0.25.86 (user): two sharp Getsuga magic slashes crossed into an X, cutting edges leading
-                        DragonVfx.CrescentBlade(vr.transform, new Color(0.36f, 0.82f, 1f, 1f), diag * 0.5f, bw * 1.4f, 45f);
-                        DragonVfx.CrescentBlade(vr.transform, new Color(0.72f, 0.94f, 1f, 1f), diag * 0.5f, bw * 1.4f, -45f);
+                        // v0.25.191 (user: add depth): the two crossed blades sit on their own planes, one ahead of the other,
+                        // plus a faint trailing echo X behind them so the cross reads from oblique angles
+                        GameObject gxa = new GameObject("IH_GCBladeA"), gxb = new GameObject("IH_GCBladeB"), gxe = new GameObject("IH_GCEcho");
+                        gxa.transform.SetParent(vr.transform, false); gxa.transform.localPosition = new Vector3(0f, 0f, bw * 0.45f);
+                        gxb.transform.SetParent(vr.transform, false); gxb.transform.localPosition = new Vector3(0f, 0f, -bw * 0.45f);
+                        gxe.transform.SetParent(vr.transform, false); gxe.transform.localPosition = new Vector3(0f, 0f, -bw * 1.6f);
+                        DragonVfx.CrescentBlade(gxa.transform, new Color(0.36f, 0.82f, 1f, 1f), diag * 0.5f, bw * 1.4f, 45f);
+                        DragonVfx.CrescentBlade(gxb.transform, new Color(0.72f, 0.94f, 1f, 1f), diag * 0.5f, bw * 1.4f, -45f);
+                        DragonVfx.CrescentBlade(gxe.transform, new Color(0.55f, 0.88f, 1f, 0.45f), diag * 0.42f, bw * 0.8f, 45f);
                     });
                 }
                 else
@@ -8415,6 +8478,7 @@ namespace AlbedosCustomClassesAdvanced
                         CreateTemporaryBeam(sky, strike + Vector3.up * 0.08f, new Color(1f, 0.94f, 0.62f, 0.96f), 0.5f, Mathf.Max(0.3f, Mathf.Min(0.35f, interval * 0.9f)));
                         StartCoroutine(AnimateRing(strike + Vector3.up * 0.06f, 0.25f, Mathf.Max(1.5f, impactRadius), 0.3f, new Color(1f, 0.90f, 0.46f, 0.70f), 0.07f));   // v0.25.181 (user): a brief contact shockwave at every real beam landing
                         if (DragonVfx.Enabled) { Vector3 bl = strike; float br = impactRadius; DragonCombat.RunVfx(delegate { DragonVfx.DirtBurst(bl, Mathf.Max(0.6f, br * 0.5f), 0.6f); DragonVfx.Cracks(bl, DragonVfx.Holy, Mathf.Max(0.8f, br * 0.6f), 2, 2.5f); }); }   // lands with force (v0.25.185 perf: 2 cracks per beam, was 5)
+                        if (DragonVfx.Enabled) { Vector3 bs0 = sky, bs1 = strike + Vector3.up * 0.3f; DragonCombat.RunVfx(delegate { for (int k = 0; k < 3; k++) DragonVfx.Burst(Vector3.Lerp(bs0, bs1, 0.45f + k * 0.2f), new Color(1f, 0.95f, 0.72f, 0.85f), 5, 0.4f, 0.09f, 0.6f, 2.5f); }); }   // v0.25.191 (user) light drifting down the beam
                     }
 
                     List<Character> targets = GetSphereTargets(player, strike, impactRadius);
@@ -8540,7 +8604,17 @@ namespace AlbedosCustomClassesAdvanced
                     {
                         // v0.25.181 (user): Lightning Tempest = Ultimate: thick green / blue / yellow strikes, local cracks + a short
                         // contact front at each real strike (no screen flash)
-                        if (DragonVfx.Enabled) { Vector3 ts = strike; int ti = stunPulse; DragonCombat.RunVfx(delegate { DragonVfx.UltimateStrike(DragonCombat.GetIndoorSafeSkyPoint(ts, 18f), ts, DragonVfx.UltColor(ti), 0.6f, DragonCombat.M(1.6f)); }); }
+                        if (DragonVfx.Enabled)
+                        {
+                            // v0.25.191 (user: visible): every strike leaves the storm canopy itself, with a sheet flash crawling through the cloud
+                            Vector3 ts = strike; int ti = stunPulse; Vector3 cloud = DragonCombat.GetIndoorSafeSkyPoint(ts, 12f);
+                            DragonCombat.RunVfx(delegate
+                            {
+                                DragonVfx.UltimateStrike(cloud, ts, DragonVfx.UltColor(ti), 0.6f, DragonCombat.M(1.6f));
+                                Vector3 cs = UnityEngine.Random.insideUnitSphere; cs.y = 0f;
+                                DragonVfx.Bolt(cloud + cs * 4f, cloud - cs * 4f + Vector3.up * 0.5f, new Color(0.75f, 0.85f, 1f, 0.9f), 0.12f, 0.2f);
+                            });
+                        }
                         else CreateLightning(strike, new Color(0.55f, 0.86f, 1f, 1f), 0.28f);
                     }
 
@@ -11477,6 +11551,7 @@ namespace AlbedosCustomClassesAdvanced
                 {
                     float overflow = effective - barrier.HP;
                     _barriers.Remove(id);
+                    _barrierBroken.Add(id);   // v0.25.191 the visual shatters
                     DragonCombat.ClearStatus(target as Player, "barrier");
 
                     float ratio = raw <= 0f ? 0f : Mathf.Clamp01(overflow / raw);
@@ -12061,6 +12136,8 @@ namespace AlbedosCustomClassesAdvanced
         // v0.25.6: golden, bright, see-through orb around the player for as long as the Barrier lives.
         private readonly HashSet<int> _barrierOrbs = new HashSet<int>();
 
+        private readonly HashSet<int> _barrierBroken = new HashSet<int>();   // v0.25.191 barriers broken by damage (not expired)
+
         private IEnumerator BarrierVisual(Player player)
         {
             if (player == null)
@@ -12069,6 +12146,7 @@ namespace AlbedosCustomClassesAdvanced
             if (_barrierOrbs.Contains(id))
                 yield break;
             _barrierOrbs.Add(id);
+            _barrierBroken.Remove(id);
 
             Shader shader = Shader.Find("Sprites/Default");
             GameObject orb = GameObject.CreatePrimitive(PrimitiveType.Sphere);
@@ -12131,6 +12209,26 @@ namespace AlbedosCustomClassesAdvanced
                 if (mat != null) mat.color = new Color(1f, 0.86f, 0.30f, (0.16f + 0.06f * pulse) * grow);
                 if (coreMat != null) coreMat.color = new Color(1f, 0.95f, 0.55f, (0.08f + 0.04f * pulse) * grow);
                 yield return null;
+            }
+
+            // v0.25.191 (user: make it shatter): when the Barrier is BROKEN (HP gone) its faceted shell bursts into shards;
+            // expiry keeps the soft fade.
+            BarrierState endState;
+            bool broken = _barrierBroken.Remove(id);
+            if (!broken && _barriers.TryGetValue(id, out endState) && endState != null && endState.HP <= 0f && Time.time < endState.EndTime) broken = true;
+            if (player == null || player.IsDead()) broken = false;
+            if (broken && DragonVfx.Enabled && orb != null)
+            {
+                Vector3 bc = orb.transform.position; float bs = size;
+                DragonCombat.RunVfx(delegate
+                {
+                    DragonVfx.Debris(bc, new Color(1f, 0.88f, 0.55f, 1f), 18, 7f, 0.16f, 1.1f);
+                    DragonVfx.Burst(bc, new Color(1f, 0.92f, 0.60f, 0.95f), 40, 6f, 0.07f, 0.45f, 0.6f);
+                    DragonVfx.Flash(bc, new Color(1f, 0.88f, 0.50f, 1f), 0.9f, bs * 1.5f, 0.15f);
+                });
+                Destroy(orb);
+                _barrierOrbs.Remove(id);
+                yield break;
             }
 
             // Fade out quickly on break / expiry.

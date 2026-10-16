@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Aethelborn Ascended - Sorcerer Advancements";
-        public const string ModVersion = "0.25.190";
+        public const string ModVersion = "0.25.191";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1670,6 +1670,9 @@ namespace DragonsAltarSorcerer
             StartCoroutine(CataclysmRoutine(player, target));
         }
 
+        private float _ccBuildAt;
+        private int _ccBuildIdx;
+
         private IEnumerator CataclysmRoutine(Player player, Vector3 target)
         {
             ShowMessage("Elemental Cataclysm");
@@ -1704,6 +1707,18 @@ namespace DragonsAltarSorcerer
                 if (holding && AlbedoAimUtility.TryGetPhysicalTarget(player, DragonCombat.M(_cataclysmRange.Value), out aimNow)) target = aimNow;
                 if (_enableVfx.Value && holding && Time.time >= nextMarker) { nextMarker = Time.time + 0.2f; StartCoroutine(GuideVfx(target, radius, new Color(0.76f, 0.30f, 1f, 0.45f), 0.22f)); }
                 if (_enableVfx.Value && ((int)(elapsed * 10f) % 4 == 0)) StartCoroutine(GuideVfx(target, radius * Mathf.Clamp01(0.2f + charge / max), new Color(0.76f, 0.30f, 1f, 0.55f), 0.16f));
+                if (_enableVfx.Value && DragonVfx.Enabled && holding && Time.time >= _ccBuildAt)
+                {
+                    // v0.25.191 elemental build-up at the target while charging: fire, frost and lightning take turns, stronger with charge
+                    _ccBuildAt = Time.time + 0.3f;
+                    int el = _ccBuildIdx++ % 3; float k01 = Mathf.Clamp01(charge / max);
+                    Vector2 q = UnityEngine.Random.insideUnitCircle * radius * 0.6f;
+                    Vector3 bp = target + new Vector3(q.x, 0.2f, q.y);
+                    int n = 4 + Mathf.RoundToInt(10f * k01);
+                    if (el == 0) DragonCombat.RunVfx(delegate { DragonVfx.Burst(bp, new Color(1f, 0.45f, 0.10f, 0.85f), n, 2f, 0.12f, 0.6f, -0.8f); });
+                    else if (el == 1) DragonCombat.RunVfx(delegate { DragonVfx.Burst(bp, new Color(0.70f, 0.92f, 1f, 0.85f), n, 1.5f, 0.1f, 0.7f, 0.4f); });
+                    else DragonCombat.RunVfx(delegate { DragonVfx.Bolt(bp + Vector3.up * (2f + 3f * k01), bp, new Color(0.75f, 0.85f, 1f, 0.9f), 0.05f + 0.06f * k01, 0.15f); });
+                }
                 yield return null;
             }
             _cataclysmCharge01 = 0f;
@@ -1729,28 +1744,30 @@ namespace DragonsAltarSorcerer
             if (_enableVfx.Value)
             {
                 StartCoroutine(RingVfx(target, radius, new Color(1f, 0.35f, 0.05f, 1f), 1f));
-                CreateLightningBurst(target, radius);
-                Vector3 ct = target; float cr = radius;
-                DragonCombat.RunVfx(delegate
-                {
-                    DragonVfx.HeavyLanding(ct, new Color(1f, 0.40f, 0.08f, 1f), cr, 3f);   // v0.25.58 the sky falls
-                    DragonVfx.StormCloud(ct, cr, 14f, 2f);
-                    // v0.25.181 (user: Ultimate, elements distinguishable): FIRE core on one side, FROST on another, LIGHTNING
-                    // striking a third, then the whole area shatters
-                    Vector3 fireP = ct + new Vector3(-cr * 0.3f, 0f, cr * 0.15f), iceP = ct + new Vector3(cr * 0.35f, 0f, cr * 0.1f), boltP = ct + new Vector3(0f, 0f, -cr * 0.35f);
-                    DragonVfx.FireBlast(fireP, cr * 0.6f);
-                    DragonVfx.Embers(fireP, new Color(1f, 0.40f, 0.08f, 1f), cr * 0.5f, 3f, 45f);
-                    DragonVfx.Scorch(fireP, cr * 0.45f, 6f);
-                    DragonVfx.IceBurst(iceP, cr * 0.45f);
-                    DragonVfx.FrostGround(iceP, cr * 0.4f, 3f, 0.6f);
-                    DragonVfx.Debris(iceP, new Color(0.75f, 0.92f, 1f, 1f), 8, 7f, 0.2f, 2f);
-                    for (int b = 0; b < 3; b++)
-                    {
-                        Vector3 bp = boltP + new Vector3(Mathf.Cos(b * 2.1f), 0f, Mathf.Sin(b * 2.1f)) * cr * 0.2f;
-                        DragonVfx.UltimateStrike(bp + Vector3.up * 14f, bp, b == 1 ? DragonVfx.UltYellow : DragonVfx.UltBlue, 0.55f, 1.4f);
-                    }
-                    DragonVfx.Shatter(ct, cr * 0.8f, 0f);
-                });
+                if (!DragonVfx.Enabled) CreateLightningBurst(target, radius);
+                else StartCoroutine(CataclysmPhases(target, radius, stunAttack == "Attack 2"));
+            }
+        }
+
+        // v0.25.191 (user: phases): the blast plays as three elemental phases (visual timing only - damage already landed):
+        // impact (sky falls, storm, shatter) + FIRE at once, FROST 0.25 s later, LIGHTNING 0.5 s later on its own side.
+        // The Ascended second blast runs the phases in reverse (lightning first).
+        private IEnumerator CataclysmPhases(Vector3 ct, float cr, bool reverse)
+        {
+            Vector3 fireP = ct + new Vector3(-cr * 0.3f, 0f, cr * 0.15f), iceP = ct + new Vector3(cr * 0.35f, 0f, cr * 0.1f), boltP = ct + new Vector3(0f, 0f, -cr * 0.35f);
+            DragonCombat.RunVfx(delegate
+            {
+                DragonVfx.HeavyLanding(ct, new Color(1f, 0.40f, 0.08f, 1f), cr, 3f);   // v0.25.58 the sky falls
+                DragonVfx.StormCloud(ct, cr, 14f, 2f);
+                DragonVfx.Shatter(ct, cr * 0.8f, 0f);
+            });
+            for (int phase = 0; phase < 3; phase++)
+            {
+                int el = reverse ? 2 - phase : phase;
+                if (el == 0) DragonCombat.RunVfx(delegate { DragonVfx.FireBlast(fireP, cr * 0.6f); DragonVfx.Embers(fireP, new Color(1f, 0.40f, 0.08f, 1f), cr * 0.5f, 3f, 45f); DragonVfx.Scorch(fireP, cr * 0.45f, 6f); });
+                else if (el == 1) DragonCombat.RunVfx(delegate { DragonVfx.IceBurst(iceP, cr * 0.45f); DragonVfx.FrostGround(iceP, cr * 0.4f, 3f, 0.6f); DragonVfx.Debris(iceP, new Color(0.75f, 0.92f, 1f, 1f), 8, 7f, 0.2f, 2f); });
+                else DragonCombat.RunVfx(delegate { for (int b = 0; b < 3; b++) { Vector3 bp = boltP + new Vector3(Mathf.Cos(b * 2.1f), 0f, Mathf.Sin(b * 2.1f)) * cr * 0.2f; DragonVfx.UltimateStrike(bp + Vector3.up * 14f, bp, b == 1 ? DragonVfx.UltYellow : DragonVfx.UltBlue, 0.55f, 1.4f); } });
+                yield return new WaitForSeconds(0.25f);
             }
         }
 
@@ -3422,7 +3439,7 @@ namespace DragonsAltarSorcerer
         private IEnumerator RuptureRoutine(Player player, Vector3 target)
         {
             if (_enableVfx.Value) StartCoroutine(RingVfx(target, DragonCombat.M(_ruptureRadius.Value), new Color(0.58f, 0.10f, 0.95f, 0.70f), _ruptureWindup.Value));
-            if (_enableVfx.Value) { Vector3 rv = target; float rvr = DragonCombat.M(_ruptureRadius.Value), rvt = Mathf.Max(0.1f, _ruptureWindup.Value); Color rtc = IsSpellAscended(player, "arcane_rupture") ? HwDeep : HwBlue; DragonCombat.RunVfx(delegate { DragonVfx.RiftSlit(rv + Vector3.up * rvr * 0.55f, GameCamera.instance != null ? -GameCamera.instance.transform.forward : Vector3.forward, Mathf.Max(2f, rvr * 1.1f), rvt + 0.15f, rtc); });   /* v0.25.181 authoritative spatial tear */ DragonCombat.RunVfx(delegate { DragonVfx.Vortex(null, rv + Vector3.up * 0.6f, new Color(0.58f, 0.10f, 0.95f, 1f), rvr, rvt); DragonVfx.Glyph(rv, new Color(0.58f, 0.10f, 0.95f, 1f), rvr, rvt + 0.3f, -90f); }); }   // v0.25.58 / v0.25.61
+            if (_enableVfx.Value) { Vector3 rv = target; float rvr = DragonCombat.M(_ruptureRadius.Value), rvt = Mathf.Max(0.1f, _ruptureWindup.Value); Color rtc = IsSpellAscended(player, "arcane_rupture") ? HwDeep : HwBlue; DragonCombat.RunVfx(delegate { DragonVfx.RiftSlit(rv + Vector3.up * 1.3f, GameCamera.instance != null ? -GameCamera.instance.transform.forward : Vector3.forward, Mathf.Clamp(rvr * 0.4f, 1.6f, 3f), rvt + 0.15f, rtc); });   /* v0.25.181 spatial tear; v0.25.191 (user: optimize) compressed at the cast point, not a huge floating slit */ DragonCombat.RunVfx(delegate { DragonVfx.Vortex(null, rv + Vector3.up * 0.6f, new Color(0.58f, 0.10f, 0.95f, 1f), rvr, rvt); DragonVfx.Glyph(rv, new Color(0.58f, 0.10f, 0.95f, 1f), rvr, rvt + 0.3f, -90f); }); }   // v0.25.58 / v0.25.61
             yield return new WaitForSeconds(Mathf.Max(0.1f, _ruptureWindup.Value));
             List<Character> targets = GetSphereTargets(player, target, DragonCombat.M(_ruptureRadius.Value));
             for (int i = 0; i < targets.Count; i++)
@@ -3454,7 +3471,7 @@ namespace DragonsAltarSorcerer
                     else state.StunCycleHits--;
                 }
             }
-            if (_enableVfx.Value) { CreateLightningBurst(target, DragonCombat.M(_ruptureRadius.Value)); Vector3 rx = target; float rxr = DragonCombat.M(_ruptureRadius.Value); Color rcx = IsSpellAscended(player, "arcane_rupture") ? HwDeep : HwBlue; DragonCombat.RunVfx(delegate { DragonVfx.GravityCollapse(rx + Vector3.up * 1.2f, rxr * 0.6f); DragonVfx.Burst(rx + Vector3.up, Color.Lerp(rcx, Color.white, 0.3f), 40, 14f, 0.1f, 0.4f, 0f); DragonVfx.GroundImpact(rx, rcx, rxr, 1.2f); DragonVfx.Shatter(rx, rxr * 0.6f, 0f); }); }   // v0.25.58; v0.25.181 inward compression -> sharp release -> local cracks/dirt
+            if (_enableVfx.Value) { if (!DragonVfx.Enabled) CreateLightningBurst(target, DragonCombat.M(_ruptureRadius.Value)); Vector3 rx = target; float rxr = DragonCombat.M(_ruptureRadius.Value); Color rcx = IsSpellAscended(player, "arcane_rupture") ? HwDeep : HwBlue; DragonCombat.RunVfx(delegate { DragonVfx.GravityCollapse(rx + Vector3.up * 1.2f, rxr * 0.6f); DragonVfx.Burst(rx + Vector3.up, Color.Lerp(rcx, Color.white, 0.3f), 20, 10f, 0.1f, 0.35f, 0f); DragonVfx.GroundImpact(rx, rcx, rxr, 1.2f); DragonVfx.Shatter(rx, rxr * 0.6f, 0f); }); }   // v0.25.58; v0.25.181 inward compression -> sharp release -> local cracks/dirt
         }
 
         private void ActivateTwinRift(Player player)

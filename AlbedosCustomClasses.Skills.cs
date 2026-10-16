@@ -232,7 +232,7 @@ namespace AlbedosCustomClassesSkills
         public static SkillsPlugin Instance;
         public const string ModGuid = "albedo.customclasses.skills";
         public const string ModName = "Aethelborn Ascended - Starter Skills";
-        public const string ModVersion = "0.25.190";
+        public const string ModVersion = "0.25.191";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";
@@ -722,7 +722,7 @@ namespace AlbedosCustomClassesSkills
                 DragonCombat.RunVfx(delegate { iwCrest = DragonVfx.Crest(new Color(1f, 0.62f, 0.22f, 1f), iwW0 * 1.1f, 1.8f, iwT + 1f); });   // v0.25.61 the wave itself
                 if (iwCrest != null) { Transform ict = iwCrest.transform; DragonCombat.RunVfx(delegate { DragonVfx.GroundDust(ict, Mathf.Clamp(iwW0 * 0.5f, 0.6f, 3f), delegate { return ict != null; }); }); }   // v0.25.169 dirt dragged along
                 Vector3 iwA = origin, iwB = origin + forward * length; float iwW = width;
-                DragonCombat.RunVfx(delegate { DragonVfx.CrackLine(iwA, iwB, new Color(1f, 0.62f, 0.22f, 1f), Mathf.Clamp(iwW * 0.2f, 0.3f, 0.9f), travel + 3.5f); DragonVfx.Shake(iwA, 15f, 0.7f); });   // v0.25.58 the wave scars the ground
+                DragonCombat.RunVfx(delegate { DragonVfx.BranchCrackLine(iwA, iwB, new Color(1f, 0.62f, 0.22f, 1f), Mathf.Clamp(iwW * 0.2f, 0.3f, 0.9f), travel + 3.5f); DragonVfx.Shake(iwA, 15f, 0.7f); });   // v0.25.58 the wave scars the ground
             }
 
             while (elapsed <= travel)

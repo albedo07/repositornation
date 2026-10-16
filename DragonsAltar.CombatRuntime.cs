@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.190";
+        public const string ModVersion = "0.25.191";
 
         internal static DragonCombatPlugin Instance;
 
@@ -14029,6 +14029,14 @@ namespace DragonsAltarCombat
         {
             if (!Enabled || target == null) return;
             Aura(target.transform, target.transform.position, c, 0.5f, 0.6f, 18f, 1.4f);   // v0.25.180 small upward motes, no light per heal tick
+            // v0.25.191 (user: make it glow): a brief warm body sheen on the healed character (once per second per target)
+            if (StatusGate(target, "healglow", 1f))
+            {
+                float h = BodyHeight(target);
+                Color g = Color.Lerp(c, new Color(1f, 0.95f, 0.75f, 1f), 0.4f); g.a = 0.9f;
+                StatusAura(target, g, 0.9f, 0.5f, Mathf.Clamp(h * 0.25f, 0.3f, 1.2f), 34f, 0.6f);
+                Flash(target.transform.position + Vector3.up * h * 0.55f, g, 0.55f, Mathf.Clamp(h * 1.4f, 1.5f, 4f), 0.5f);
+            }
         }
 
         // Valheim's own effect prefab (first name that exists). Only prefabs without a ZNetView are spawned.
@@ -14296,7 +14304,9 @@ namespace DragonsAltarCombat
         {
             if (!Enabled) return;
             DragonVfxLife l = Host(ground + Vector3.up * height, seconds + 2f, "storm");
-            Particles(l.transform, new Color(0.18f, 0.20f, 0.26f, 0.75f), 30, 25f, seconds, 2.5f, 0.1f, 0.6f, radius * 0.35f, radius * 0.6f, 0f,
+            // v0.25.191 (user: the storm must be clearly visible): bigger, denser, darker canopy puffs (size grows with the storm)
+            float puff = Mathf.Clamp(radius * 0.32f, 2.5f, 7f);
+            Particles(l.transform, new Color(0.14f, 0.15f, 0.20f, 0.9f), 45, 40f, seconds, puff, 0.1f, 0.6f, radius * 0.35f, radius * 0.6f, 0f,
                 ParticleSystemShapeType.Circle, radius, new Vector3(90f, 0f, 0f), false, false);
             Particles(l.transform, Storm, 0, 6f, seconds, 0.25f, 0f, 0.1f, radius * 0.3f, radius * 0.5f, 0f,
                 ParticleSystemShapeType.Circle, radius * 0.8f, new Vector3(90f, 0f, 0f), false, true);
@@ -14340,6 +14350,35 @@ namespace DragonsAltarCombat
         }
 
         // A straight scar torn along the ground (wave paths, fissures, blade drags).
+        // v0.25.191 (user: branching): main fissure a -> b plus short forked side cracks every ~2 m (alternating sides,
+        // some forking again), all following the terrain. Capped at 14 branches per call.
+        public static void BranchCrackLine(Vector3 a, Vector3 b, Color c, float width, float seconds)
+        {
+            if (!Enabled) return;
+            CrackLine(a, b, c, width, seconds);
+            Vector3 d = b - a; d.y = 0f;
+            float len = d.magnitude;
+            if (len < 1f) return;
+            d /= len;
+            Vector3 side = Vector3.Cross(Vector3.up, d);
+            int n = Mathf.Min(14, Mathf.FloorToInt(len / 2f));
+            System.Random rng = new System.Random(Mathf.RoundToInt(a.x * 13f + a.z * 7f));
+            for (int i = 0; i < n; i++)
+            {
+                float t = (i + 0.5f + (float)rng.NextDouble() * 0.4f) / (n + 0.5f);
+                Vector3 p = Vector3.Lerp(a, b, t);
+                float sgn = (i % 2 == 0) ? 1f : -1f;
+                float bl = width * (2.5f + (float)rng.NextDouble() * 3f);
+                Vector3 e = p + (side * sgn * 0.85f + d * 0.5f).normalized * bl;
+                CrackLine(p, e, c, width * 0.45f, seconds);
+                if (i % 3 == 0)
+                {
+                    Vector3 e2 = Vector3.Lerp(p, e, 0.55f);
+                    CrackLine(e2, e2 + (side * sgn * 0.3f + d).normalized * bl * 0.6f, c, width * 0.3f, seconds);
+                }
+            }
+        }
+
         public static void CrackLine(Vector3 a, Vector3 b, Color c, float width, float seconds)
         {
             if (!Enabled) return;
@@ -15822,19 +15861,44 @@ namespace DragonsAltarCombat
             SoftWave(pos, brass, radius, 0.8f);
             Vector3 g = GroundPoint(pos) + Vector3.up * 0.12f;
             float face = Mathf.Min(radius * 0.45f, 4f);
+            // v0.25.191 (user: make it turn): the face turns slowly while both hands UNWIND (fast counter-clockwise spin that
+            // slows to a stop) - local-space lines on rotating pivots, faded together
+            DragonVfxLife host = Host(g, seconds, "clockface");
+            GameObject facePivot = new GameObject("face"); facePivot.transform.SetParent(host.transform, false);
+            facePivot.transform.position = g;
+            facePivot.AddComponent<DragonClockSpin>().Init(-40f, -15f, seconds);
+            List<LineRenderer> lines = new List<LineRenderer>();
             for (int i = 0; i < 12; i++)
             {
                 float a = i * 30f * Mathf.Deg2Rad;
                 Vector3 dir = new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a));
                 float inner = face * (i % 3 == 0 ? 0.72f : 0.82f);
-                CutLine(g + dir * inner, g + dir * face, i % 3 == 0 ? ivory : brass, i % 3 == 0 ? 0.12f : 0.07f, seconds);
+                lines.Add(ClockLine(facePivot.transform, dir * inner, dir * face, i % 3 == 0 ? 0.12f : 0.07f));
             }
             float t = VR() * 360f;
-            Vector3 hour = Quaternion.Euler(0f, t, 0f) * Vector3.forward, minute = Quaternion.Euler(0f, t + 140f, 0f) * Vector3.forward;
-            CutLine(g, g + hour * face * 0.5f, ivory, 0.16f, seconds);
-            CutLine(g, g + minute * face * 0.78f, brass, 0.11f, seconds);
+            GameObject hourPivot = new GameObject("hour"); hourPivot.transform.SetParent(host.transform, false); hourPivot.transform.position = g;
+            hourPivot.transform.rotation = Quaternion.Euler(0f, t, 0f);
+            hourPivot.AddComponent<DragonClockSpin>().Init(-240f, 0f, seconds);
+            GameObject minPivot = new GameObject("minute"); minPivot.transform.SetParent(host.transform, false); minPivot.transform.position = g;
+            minPivot.transform.rotation = Quaternion.Euler(0f, t + 140f, 0f);
+            minPivot.AddComponent<DragonClockSpin>().Init(-900f, 0f, seconds);
+            lines.Add(ClockLine(hourPivot.transform, Vector3.zero, Vector3.forward * face * 0.5f, 0.16f));
+            lines.Add(ClockLine(minPivot.transform, Vector3.zero, Vector3.forward * face * 0.78f, 0.11f));
+            DragonCrackFade fadeTicks = host.gameObject.AddComponent<DragonCrackFade>();
+            fadeTicks.Lines = lines.ToArray(); fadeTicks.Color = brass; fadeTicks.Life = seconds; fadeTicks.Age = 0.13f; fadeTicks.EndAlpha = 1f;
             Burst(g + Vector3.up * 0.3f, brass, 26, 3.5f, 0.06f, 0.9f, -0.6f);
             Burst(g + Vector3.up * 0.2f, ivory, 12, 1.5f, 0.1f, 1.1f, -0.3f);
+        }
+
+        private static LineRenderer ClockLine(Transform parent, Vector3 a, Vector3 b, float width)
+        {
+            if (_cutTaper == null) _cutTaper = new AnimationCurve(new Keyframe(0f, 0f), new Keyframe(0.18f, 1f), new Keyframe(0.82f, 1f), new Keyframe(1f, 0f));
+            LineRenderer line = SoftLine(parent, width);
+            line.useWorldSpace = false;
+            line.widthCurve = _cutTaper;
+            line.numCapVertices = 0;
+            line.positionCount = 2; line.SetPosition(0, a); line.SetPosition(1, b);
+            return line;
         }
 
         // v0.25.185 a straight slash line with tapered (pointed) ends, additive, fading out
@@ -16289,6 +16353,20 @@ namespace DragonsAltarCombat
             if (m.HasProperty("_EmissionColor")) { m.EnableKeyword("_EMISSION"); m.SetColor("_EmissionColor", iv * 0.75f); }
             _relicInlay[key] = m;
             return m;
+        }
+
+        // v0.25.191 a real arrow body falling from a to b over `seconds` (Arrow Rain); destroyed on arrival (the caller's
+        // streak / planted arrow carries the landing).
+        public static void FallingArrow(Vector3 a, Vector3 b, Color c, float seconds)
+        {
+            if (!Enabled) return;
+            Vector3 d = b - a;
+            if (d.sqrMagnitude < 0.01f) return;
+            GameObject go = new GameObject("IH_FallingArrow");
+            go.transform.position = a;
+            go.transform.rotation = Quaternion.LookRotation(d.normalized, Vector3.up);
+            SpiritArrow(go.transform, c, 0.9f);
+            go.AddComponent<DragonFall>().Init(a, b, Mathf.Max(0.05f, seconds));
         }
 
         // v0.25.190 Astral Railcannon wind up: a translucent spectral cannon (barrel, muzzle ring, breech, two bands)
@@ -17397,12 +17475,47 @@ namespace DragonsAltarCombat
                 g.transform.localPosition = new Vector3(0f, 0f, length * (k * 0.27f));
                 AttachGlow(g.transform, Color.Lerp(c, Color.white, 0.4f), width * 0.5f, 18f, k == 2 ? Mathf.Max(5f, length * 0.6f) : 0f);
             }
+            // v0.25.191 (user): carved bright seams down both faces (centre ridge + two angled rune strokes per face)
+            // and a weapon-bound wake from the tip and the middle of the blade while it swings
+            Material seamMat = Mat(LineTex(), true);
+            if (seamMat != null)
+            {
+                Color sc = Color.Lerp(c, Color.white, 0.6f); sc.a = 0.85f;
+                float ht = width * 0.13f * 0.5f + 0.004f;
+                for (int face = -1; face <= 1; face += 2)
+                {
+                    BladeSeam(scaler.transform, seamMat, sc, width * 0.05f, new Vector3(0f, ht * face, length * 0.08f), new Vector3(0f, ht * face * 0.6f, length * 0.86f));
+                    for (int k = 0; k < 2; k++)
+                    {
+                        float z0 = length * (0.3f + k * 0.28f);
+                        BladeSeam(scaler.transform, seamMat, sc, width * 0.035f, new Vector3(width * 0.08f, ht * face, z0), new Vector3(width * 0.26f, ht * face * 0.7f, z0 + length * 0.07f));
+                    }
+                }
+            }
+            BladeWake(scaler.transform, new Vector3(0f, 0f, length * 0.95f), Color.Lerp(c, Color.white, 0.25f), width * 0.6f);
+            BladeWake(scaler.transform, new Vector3(0f, 0f, length * 0.55f), c, width * 0.4f);
             Burst(tip, Color.Lerp(c, Color.white, 0.4f), Mathf.RoundToInt(30 * Amount), 4f, 0.15f, 0.5f, -0.5f);
             DragonGrowBlade gb = root.AddComponent<DragonGrowBlade>();
             gb.Scaler = scaler.transform;
             gb.Grow = Mathf.Max(0.05f, grow);
             gb.Life = Mathf.Max(gb.Grow + 0.1f, life);
             return root;
+        }
+
+        private static void BladeSeam(Transform parent, Material m, Color c, float width, Vector3 a, Vector3 b)
+        {
+            GameObject go = new GameObject("seam");
+            go.transform.SetParent(parent, false);
+            LineRenderer lr = go.AddComponent<LineRenderer>();
+            lr.useWorldSpace = false;
+            lr.positionCount = 2;
+            lr.SetPosition(0, a);
+            lr.SetPosition(1, b);
+            lr.widthMultiplier = Mathf.Max(0.01f, width);
+            lr.startColor = c; lr.endColor = c;
+            lr.sharedMaterial = m;
+            lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            lr.receiveShadows = false;
         }
 
         // Blade along +Z: diamond cross-section, wide near the base, long taper to the point.
@@ -18500,6 +18613,33 @@ namespace DragonsAltarCombat
         }
     }
     // v0.25.75 helpers
+    // v0.25.191 straight flight a -> b, then self-destroy
+    public class DragonFall : MonoBehaviour
+    {
+        private Vector3 _a, _b; private float _t, _life = 0.2f;
+        public void Init(Vector3 a, Vector3 b, float life) { _a = a; _b = b; _life = life; }
+        private void Update()
+        {
+            _t += Time.deltaTime;
+            transform.position = Vector3.Lerp(_a, _b, Mathf.Clamp01(_t / _life));
+            if (_t >= _life) Destroy(gameObject);
+        }
+    }
+
+    // v0.25.191 clock hand / face spin: yaw speed eases from `from` to `to` deg/s over the life (unwinding)
+    public class DragonClockSpin : MonoBehaviour
+    {
+        private float _from, _to, _life = 1f, _age;
+        public void Init(float from, float to, float life) { _from = from; _to = to; _life = Mathf.Max(0.1f, life); }
+        private void Update()
+        {
+            _age += Time.deltaTime;
+            float k = Mathf.Clamp01(_age / _life);
+            float sp = Mathf.Lerp(_from, _to, 1f - (1f - k) * (1f - k));
+            transform.Rotate(0f, sp * Time.deltaTime, 0f, Space.World);
+        }
+    }
+
     // v0.25.190 spectral cannon: grows in over 0.2 s, holds, shrinks out over the last 0.15 s, then destroys itself
     public class DragonCannonLife : MonoBehaviour
     {

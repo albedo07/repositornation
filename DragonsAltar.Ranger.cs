@@ -41,7 +41,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Aethelborn Ascended - Ranger";
-        public const string ModVersion = "0.25.190";
+        public const string ModVersion = "0.25.191";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -2693,6 +2693,12 @@ namespace DragonsAltarRanger
                     {
                         Vector2 r = UnityEngine.Random.insideUnitCircle * radius;
                         Vector3 g = point + new Vector3(r.x, 0f, r.y);
+                        if (DragonVfx.Enabled && k % 3 == 0)
+                        {
+                            // v0.25.191 (user): real arrow bodies fall with the streaks (every 3rd, kept light), the streak lands after it
+                            Vector3 fa = g + Vector3.up * DragonCombat.M(9f) + new Vector3(0.6f, 0f, 0.6f), fb = GroundAt(g) + Vector3.up * 0.4f; Color fc = c;
+                            DragonCombat.RunVfx(delegate { DragonVfx.FallingArrow(fa, fb, fc, 0.18f); });
+                        }
                         LineVfx(g + Vector3.up * DragonCombat.M(9f) + new Vector3(0.6f, 0f, 0.6f), g, c, 0.08f, 0.2f);   // v0.25.181 thicker, readable falling arrows
                     }
                     StartCoroutine(GuideVfx(point, radius, c, Mathf.Max(0.05f, _arInterval.Value)));

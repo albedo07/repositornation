@@ -1,4 +1,4 @@
-# VFX completion list - v0.25.190 (against Aethelborn_Ascended_VFX_Art_Direction.md)
+# VFX completion list - v0.25.191 (was v0.25.190) (against Aethelborn_Ascended_VFX_Art_Direction.md)
 
 Static audit of every skill's runtime path (4 parallel code audits) + fixes in this pass.
 NOTHING here is verified in game. "Done" = the code builds the effect the direction asks for.
@@ -32,27 +32,30 @@ Gravity Blast, Rift Walker, Piercing Arrow, Tumble Shot, Snare Trap, Gale Volley
 Pinning Shot, Explosive Arrow, Starfall Volley, Ballista Shot, Splitting Arrow, Tailwind, Hawk's Vigil, Knight's Guidance,
 Battlecry, Frenzied Charge, Punishing Bomb (blast still wide), Heaven's Light, Ray of Hope, Lightning Zap, Fury, Overcharge.
 
-## Still open (not built - say which to do next)
-- Impact Wave: cracks are straight lines, not branching
-- Moonlight Splitter Ascended finisher: scaled-up blade, no distinct wide slow flow
-- Eclipse: full 360 rings + shockwave ring instead of one sweeping arc with gaps
-- Whirlwind (normal): one continuous spinning ring, not repeated short wakes; no foot dust
-- Circle Swing / Stomp / Punishing Bomb: extra shockwave ring + small flash on impact
-- Holy Wave: no body sheen on healed allies (needs a sheen material)
-- Shield Charge: no light on the shield face / side air streaks; slam adds a sky bolt
-- Angel Comet impact: extra sky bolt
-- Divine Intervention: no focused burst / outward damage streaks
-- Heaven's Judgement: no light drifting down the beams; shockwave ring per beam
-- Heaven's Crucible: no fresnel look, no fracture on break
-- Grand Cross: both blades on one plane (no front/back depth)
-- Lightning Tempest: canopy 12 m high, thick strikes
-- Judgement Hammer Ascended return: no separate receding trail
-- Astral Greatblade: no seams / swing wake; contact is wide
-- Elemental Cataclysm: all elements fire at once, no phases, no charge build-up
-- Clockwork: static face, no rotation / unwinding
-- Arcane Phantom: purple tint, not desaturated
-- Arcane Rupture: tear is huge and floating; extra purple bolts
-- Arrow Rain: streaks only, no arrow bodies in flight
+## Built in v0.25.191 (user's answers to the open list)
+- Impact Wave: branching cracks (`BranchCrackLine`) - normal + SM Ascended scar
+- Moonlight Splitter: ONE crescent blade like the Ascended Halfmoon GT (no second "sewn" echo blade); Ascended finisher kept
+- Eclipse (my pick): one 300 deg sweeping arc + thin inner trailing arc, no closed rings, no shockwave ring
+- Whirlwind (normal): dust curling at the feet
+- Circle Swing / Stomp / Punishing Bomb: extra shockwave ring + flash removed
+- Heals glow: brief warm body sheen + small light on healed characters (gated 1 s per target)
+- Shield Charge: ivory light on the shield face + sideward air streaks
+- Angel Comet: no sky bolt; more destruction (fractures, displaced dirt, rubble, chunks)
+- Divine Intervention: focused ivory-gold burst, upward healing strands, outward streaks to damaged enemies
+- Heaven's Judgement: light drifting down every beam
+- Heaven's Crucible / Barriers: shell shatters into shards when broken (expiry keeps the soft fade)
+- Grand Cross: blades on separate planes + faint echo X behind
+- Lightning Tempest: denser, darker, bigger canopy; strikes leave the cloud + sheet flash inside it
+- Judgement Hammer Ascended return: its own receding trail
+- Astral Greatblade: carved seams on both faces + swing wake (tip + mid)
+- Elemental Cataclysm: elemental build-up while charging; blast in phases fire -> frost -> lightning (Ascended 2nd blast reversed)
+- Clockwork: face turns, hands unwind (fast spin easing to a stop)
+- Arcane Phantom: kept purple (user)
+- Arcane Rupture: compact tear at the cast point, stray purple bolts removed, lighter burst
+- Arrow Rain: real arrow bodies falling with the streaks
+
+## Still open
+- Nothing from the audit list. Remaining work is in-game review (look, day/night, overlap, FPS) and your feedback.
 
 ## Never verified
 In-game look, day/night, slopes, overlapping casts, performance of the new pieces. Needs your screenshots / F7 report.

@@ -1,0 +1,15 @@
+Aethelborn Ascended v0.25.191 - VFX Finish (on top of v0.25.190; NOT an anchor, anchor stays v0.25.179)
+
+Every item of the v0.25.190 open list, built per your answers (visuals only - damage, hitboxes, timing unchanged).
+Full list: docs/design/VFX_COMPLETION.md
+
+Warrior: Impact Wave branching cracks; Moonlight Splitter = one crescent like the Ascended Halfmoon GT; Eclipse one sweeping
+arc (no rings); Whirlwind foot dust; Circle Swing / Stomp / Punishing Bomb without the extra ring + flash.
+Cleric: heal glow on healed allies; Shield Charge shield-face light + side air; Angel Comet no sky bolt, more destruction;
+Divine Intervention burst + strands + streaks; Heaven's Judgement drifting light; Barrier/Crucible shatters when broken;
+Grand Cross depth; Lightning Tempest dense visible storm, strikes from the cloud; Hammer Ascended return trail.
+Sorcerer: Astral Greatblade seams + swing wake; Elemental Cataclysm build-up + fire/frost/lightning phases; Clockwork turning
+face + unwinding hands; Arcane Rupture compact tear, no stray bolts (lighter).
+Ranger: Arrow Rain real falling arrows.
+
+VERIFIED: compile check vs 3029660 passed (0 new signatures), mcs --parse C# 5 on all files. NOT tested in game.

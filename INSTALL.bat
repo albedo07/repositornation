@@ -1,5 +1,5 @@
 @echo off
-title Immortal Heroes v0.25.190 - VFX Gaps
+title Immortal Heroes v0.25.191 - VFX Finish
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
 echo.
 pause
