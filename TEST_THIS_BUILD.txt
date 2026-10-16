@@ -1,5 +1,3 @@
-v0.25.187 Free Classless - in-game checks
-1. No class: equip a Therzie 2HDW -> equips, attacks play its own animations.
-2. No class: any armor / any weapon pair equips and stays equipped.
-3. Mercenary 2HDW chain + other classes' restrictions unchanged.
-4. Paladin Heaven's Will tooltip / Altar text: no armor movement line.
+v0.25.188 Greatbow Pace - in-game checks
+1. Ranger with a Greatbow: move while drawing / shooting -> same slowdown as a vanilla bow (compare with a Crude/Fine Bow).
+2. Vanilla bows: unchanged.

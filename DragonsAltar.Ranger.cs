@@ -41,7 +41,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Aethelborn Ascended - Ranger";
-        public const string ModVersion = "0.25.187";
+        public const string ModVersion = "0.25.188";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -1864,7 +1864,7 @@ namespace DragonsAltarRanger
             Patch(FindMethod(typeof(Player), "GetAttackDrawPercentage", 0), null, "DrawPercentagePostfix");
             Patch(FindMethod(typeof(ItemDrop.ItemData), "GetWeaponLoadingTime", 0), null, "LoadingTimePostfix");
             // v0.25.181 (user: Greatbow = double speed while shooting): Therzie's Greatbows carry an attack movement factor of 2.0
-            // (vanilla bows <= 1), so a Ranger ran twice as fast while firing. Capped at normal speed for Rangers.
+            // (vanilla bows <= 1), so a Ranger ran twice as fast while firing. Rangers get the vanilla bow's shooting speed (v0.25.188).
             Patch(FindMethod(typeof(Humanoid), "GetAttackSpeedFactorMovement", 0), null, "RangerMoveFactorPostfix");
         }
 
@@ -1875,9 +1875,36 @@ namespace DragonsAltarRanger
                 if (__result <= 1f) return;
                 Player player = __instance as Player;
                 if (Instance == null || player == null || !IsLocalRanger(player)) return;
-                __result = 1f;
+                __result = VanillaBowSpeedFactor();   // v0.25.188 (user): the vanilla bow's shooting speed (was capped at 1.0 = full speed)
             }
             catch { }
+        }
+
+        // v0.25.188 movement factor of a vanilla bow while drawing / shooting (Attack.m_speedFactor of the vanilla Bow prefab),
+        // read once from ObjectDB; 1.0 only if no vanilla bow can be found.
+        private static float _vanillaBowSpeed = -1f;
+        private static float VanillaBowSpeedFactor()
+        {
+            if (_vanillaBowSpeed > 0f) return _vanillaBowSpeed;
+            try
+            {
+                Type odb = Type.GetType("ObjectDB, assembly_valheim");
+                object db = odb == null ? null : odb.GetField("instance", BindingFlags.Static | BindingFlags.Public).GetValue(null);
+                MethodInfo get = db == null ? null : odb.GetMethod("GetItemPrefab", new Type[] { typeof(string) });
+                string[] names = { "Bow", "BowFineWood", "BowHuntsman" };
+                for (int i = 0; i < names.Length && get != null; i++)
+                {
+                    GameObject prefab = get.Invoke(db, new object[] { names[i] }) as GameObject;
+                    ItemDrop drop = prefab == null ? null : prefab.GetComponent<ItemDrop>();
+                    object atk = drop == null || drop.m_itemData == null || drop.m_itemData.m_shared == null ? null : (object)drop.m_itemData.m_shared.m_attack;
+                    FieldInfo f = atk == null ? null : atk.GetType().GetField("m_speedFactor", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (f == null) continue;
+                    float v = (float)f.GetValue(atk);
+                    if (v > 0f && v <= 1f) { _vanillaBowSpeed = v; return v; }
+                }
+            }
+            catch { }
+            return 1f;
         }
 
         private static MethodInfo FindMethod(Type type, string name, int minParams)

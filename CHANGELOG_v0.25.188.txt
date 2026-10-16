@@ -1,0 +1,7 @@
+Aethelborn Ascended v0.25.188 - Greatbow Pace (on top of v0.25.187; NOT an anchor, anchor stays v0.25.179)
+
+- Greatbow (user): while drawing / shooting a Ranger now moves at the vanilla bow's speed (Attack movement factor of the
+  vanilla Bow prefab, read from ObjectDB once) instead of full speed (v0.25.181 cap 1.0). Only weapons whose factor is
+  above 1.0 (Therzie's Greatbows, 2.0) are changed; every other bow is untouched.
+
+VERIFIED: compile check vs 3029660 passed (0 new signatures), mcs --parse C# 5. NOT tested in game.
