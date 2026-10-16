@@ -1,5 +1,5 @@
 @echo off
-title Immortal Heroes v0.25.184 - Performance Monitor
+title Immortal Heroes v0.25.185 - Visible Cuts
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
 echo.
 pause

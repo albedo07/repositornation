@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.184";
+        public const string ModVersion = "0.25.185";
 
         internal static DragonCombatPlugin Instance;
 
@@ -236,6 +236,7 @@ namespace DragonsAltarCombat
             DragonPerf.EnabledAtStart = Config.Bind("Performance Monitor", "EnabledAtStart_v025184", false, "Start recording at launch. Otherwise press the toggle key in game (F7). Ctrl+F7 writes the report, Alt+F7 turns effect lights off/on for an A/B test.");
             DragonPerf.ToggleKey = Config.Bind("Performance Monitor", "ToggleKey_v025184", KeyCode.F7, "Overlay + recording on/off. Ctrl = write report now, Alt = effect lights off/on.");
             DragonPerf.SpikeMs = Config.Bind("Performance Monitor", "SpikeMs_v025184", 25f, "A frame slower than this (ms) is logged as a spike with the active skill.");
+            DragonPerf.MaxLights = Config.Bind("Visuals", "MaxEffectLights_v025185", 6, "Most skill-effect point lights lit at the same time (each is an extra render pass). 0 = none.");
             if (gameObject.GetComponent<DragonPerfMonitor>() == null) gameObject.AddComponent<DragonPerfMonitor>();
 
             if (!EnableRuntime.Value)
@@ -260,9 +261,9 @@ namespace DragonsAltarCombat
         private void Update()
         {
             if (!DragonPerf.On) { PerfUpdateInner(); return; }
-            long perfT = DragonPerf.Now();
+            long perfT = DragonPerf.Now(), perfM = DragonPerf.Mem();
             try { PerfUpdateInner(); }
-            finally { DragonPerf.Add(DragonPerf.SecRuntime, perfT); }
+            finally { DragonPerf.Add(DragonPerf.SecRuntime, perfT, perfM); }
         }
 
         private void PerfUpdateInner()
@@ -288,6 +289,36 @@ namespace DragonsAltarCombat
 
         // v0.25.1: our buffs live on the Immortal HUD only; the vanilla status list (top right) keeps
         // showing vanilla / other mods' effects but never ours.
+        // v0.25.185 (perf, user report: Furious Winds spiked ~20 ms every 0.1 s): every projectile registers itself when it
+        // spawns (Projectile.Awake, else Setup), so skills that react to enemy projectiles (Furious Winds wipe, Eclipse reflect)
+        // read this list instead of searching every object in the scene (FindObjectsOfType).
+        private int PatchProjectileRegistry()
+        {
+            Type pt = Type.GetType("Projectile, assembly_valheim");
+            if (pt == null) return 0;
+            HarmonyMethod post = new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("ProjectileRegisterPostfix", BindingFlags.Static | BindingFlags.NonPublic));
+            int n = 0;
+            MethodInfo[] ms = pt.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+            for (int i = 0; i < ms.Length; i++)
+            {
+                if (ms[i].Name != "Awake") continue;
+                try { PatchWithHarmony(ms[i], null, post); n++; } catch (Exception ex) { Logger.LogWarning("Projectile registry (Awake): " + ex.Message); }
+            }
+            if (n == 0)
+                for (int i = 0; i < ms.Length; i++)
+                {
+                    if (ms[i].Name != "Setup") continue;
+                    try { PatchWithHarmony(ms[i], null, post); n++; } catch (Exception ex) { Logger.LogWarning("Projectile registry (Setup): " + ex.Message); }
+                }
+            DragonCombat.ProjectileRegistryActive = n > 0;
+            return n;
+        }
+
+        private static void ProjectileRegisterPostfix(object __instance)
+        {
+            DragonCombat.RegisterProjectile(__instance as Component);
+        }
+
         private int PatchHudStatusList()
         {
             Type hud = Type.GetType("Hud, assembly_valheim");
@@ -546,6 +577,7 @@ namespace DragonsAltarCombat
             count += PatchHudStatusList();
             count += PatchHudVitals();
             count += PatchForceRun();
+            count += PatchProjectileRegistry();
             count += PatchItemTooltips();
             count += PatchCheckRun();
             count += PatchInterruptMethod("Stagger");
@@ -4284,6 +4316,38 @@ namespace DragonsAltarCombat
             return found;
         }
 
+        // v0.25.185 projectile registry (see PatchProjectileRegistry). Destroyed / inactive entries are skipped and pruned.
+        public static bool ProjectileRegistryActive;
+        private static readonly List<Component> _liveProjectiles = new List<Component>();
+        private static readonly HashSet<int> _liveProjectileIds = new HashSet<int>();
+
+        internal static void RegisterProjectile(Component c)
+        {
+            if (c == null) return;
+            if (_liveProjectileIds.Add(c.GetInstanceID())) _liveProjectiles.Add(c);
+        }
+
+        // fills `into` with the projectiles that are alive and active right now (same set FindObjectsOfType would return)
+        public static void LiveProjectiles(List<Component> into)
+        {
+            into.Clear();
+            for (int i = _liveProjectiles.Count - 1; i >= 0; i--)
+            {
+                Component c = _liveProjectiles[i];
+                if (c == null) { _liveProjectileIds.Remove(((UnityEngine.Object)c).GetInstanceID()); _liveProjectiles.RemoveAt(i); continue; }   // destroyed
+                if (c.gameObject.activeInHierarchy) into.Add(c);
+            }
+        }
+
+        private static float _projPruneAt;
+        internal static void PruneProjectiles()
+        {
+            if (Time.time < _projPruneAt) return;
+            _projPruneAt = Time.time + 2f;
+            for (int i = _liveProjectiles.Count - 1; i >= 0; i--)
+                if (_liveProjectiles[i] == null) { _liveProjectileIds.Remove(((UnityEngine.Object)_liveProjectiles[i]).GetInstanceID()); _liveProjectiles.RemoveAt(i); }
+        }
+
         public static Type FindTypeCached(string name)
         {
             Type found;
@@ -5370,6 +5434,12 @@ namespace DragonsAltarCombat
         private static Dictionary<string, DragonClipKey[]> _clips;
 
         private static DragonClipKey K(float t) { return new DragonClipKey(t); }
+
+        // v0.25.185 (perf, user report: 166 ms hitch on the first skill of a session): build the clip library up front
+        public static void PrewarmClipLibrary()
+        {
+            SkillClip("__prewarm__");
+        }
 
         private static DragonClipKey[] SkillClip(string name)
         {
@@ -10525,6 +10595,7 @@ namespace DragonsAltarCombat
 
         public static void RuntimeUpdate()
         {
+            PruneProjectiles();   // v0.25.185 registry upkeep (every 2 s)
             CheckAnimationClass(Player.m_localPlayer);
             try { if (Player.m_localPlayer != null && Player.m_localPlayer.IsBlocking()) LastBlockAt = Time.time; } catch (Exception) { }   // v0.25.175
             DragonCombatPlugin.UpdateNaccAirborne(Player.m_localPlayer);   // v0.25.154 takeoff forgets the interrupted chain
@@ -12747,6 +12818,7 @@ namespace DragonsAltarCombat
         public LineRenderer[] Lines;
         public Color Color;
         public float Life = 3f, Age;
+        public float EndAlpha = 0.3f;   // v0.25.185 end-of-line alpha factor (cut lines keep full strength along their length)
         private void Update()
         {
             Age += Time.deltaTime;
@@ -12756,7 +12828,7 @@ namespace DragonsAltarCombat
             {
                 if (Lines[i] == null) continue;
                 Color a = Color; a.a = k;
-                Color b = Color; b.a = k * 0.3f;
+                Color b = Color; b.a = k * EndAlpha;
                 Lines[i].startColor = a;
                 Lines[i].endColor = b;
             }
@@ -13465,6 +13537,7 @@ namespace DragonsAltarCombat
         // in the background after you load in: 3 s after the local player exists, one item every 0.05 s. Same textures,
         // same materials (the accessors cache them exactly as before).
         private static int _warmStep = -1;
+        private static bool _clipsWarmed;
         private static float _warmNext;
         public static void PrewarmTick(Player p)
         {
@@ -13472,6 +13545,7 @@ namespace DragonsAltarCombat
             if (_warmStep < 0) { _warmStep = 0; _warmNext = Time.time + 3f; return; }
             if (Time.time < _warmNext) return;
             _warmNext = Time.time + 0.05f;
+            if (_warmStep == 0 && !_clipsWarmed) { _clipsWarmed = true; DragonCombat.PrewarmClipLibrary(); return; }   // v0.25.185 skill pose library (was built on the first cast), even with VFX off
             if (!Enabled) return;   // VFX off: nothing to warm (re-checked later if turned on)
             try
             {
@@ -14193,7 +14267,7 @@ namespace DragonsAltarCombat
             go.transform.SetParent(l.transform, false);
             LineRenderer line = go.AddComponent<LineRenderer>();
             line.useWorldSpace = true;
-            int n = Mathf.Clamp(Mathf.RoundToInt(Vector3.Distance(a, b) / 0.8f), 3, 40);
+            int n = Mathf.Clamp(Mathf.RoundToInt(Vector3.Distance(a, b) / 1.2f), 3, 18);   // v0.25.185 (perf) fewer ground probes per scar (was /0.8, max 40)
             line.positionCount = n;
             line.startWidth = width;
             line.endWidth = width * 0.3f;
@@ -15625,51 +15699,80 @@ namespace DragonsAltarCombat
             JudgementSphere(center, radius, hold, new Color(0.32f, 0.62f, 1f, 1f));
         }
 
-        // v0.25.181 (user: restore visibility): denser, wider, brighter cuts sitting ON the sphere radius so they visibly
-        // form the Judgement Cut ball at gameplay distance; tint = Sword Master blue (Normal) / dark blue (Ascended).
+        // v0.25.185 (user: "still can't see shit - add visible slashes"): Judgement Cut = a burst of crisp straight slashes
+        // through the sphere (white-hot tapered core + tinted glow, additive so they read day and night) plus three flat
+        // crescent blades. Replaces the translucent ribbon volume (24 ribbon meshes + 2 particle systems: also cheaper).
         public static void JudgementSphere(Vector3 center, float radius, float hold, Color tint)
         {
             if (!Enabled) return;
-            Material shoulder = Mat(SlashTex(), false), edge = Mat(LineTex(), true);
-            if (shoulder == null) return;
             float r = Mathf.Max(0.5f, radius);
             hold = Mathf.Clamp(hold, 0.1f, 1.2f);
-            DragonVfxLife host = Host(center, hold + 1.2f, "judgement_cut");
-            Transform root = host.transform;
-            Color silver = Color.Lerp(tint, new Color(0.86f, 0.90f, 0.98f, 1f), 0.45f); silver.a = 0.7f;
-            Color indigo = Color.Lerp(tint, new Color(0.10f, 0.10f, 0.30f, 1f), 0.4f); indigo.a = 0.42f;
-            Color hair = Color.Lerp(tint, Color.white, 0.7f); hair.a = 1f;
-            int arcs = 10;
-            for (int k = 0; k < arcs; k++)
+            Color glow = Color.Lerp(tint, new Color(0.55f, 0.75f, 1f, 1f), 0.35f);
+            Color core = Color.Lerp(tint, Color.white, 0.85f);
+            const int lines = 9;
+            for (int k = 0; k < lines; k++)
             {
-                Quaternion q = VRot();
-                float rr = r * Mathf.Lerp(0.9f, 1.03f, VR());
-                float span = Mathf.Lerp(110f, 170f, VR());
-                float delay = VR() * 0.05f;   // all arcs land inside the simultaneous hit window
-                float shear = (VR() < 0.5f ? -1f : 1f) * Mathf.Lerp(35f, 70f, VR());
-                CutRibbon(root, q, Vector3.zero, ArcRibbon(rr, span, rr * 0.22f, 0f, 1f, silver, indigo, 22, k), shoulder, delay, hold, 0.35f, 0.5f, shear, 2f);
-                CutRibbon(root, q, Vector3.zero, ArcRibbon(rr, span * 0.97f, Mathf.Max(0.05f, rr * 0.035f), 0f, 0.5f, hair, hair, 22, k + 31), edge, delay, hold, 0.28f, 0f, shear, 1f);
+                Vector3 d = VRot() * Vector3.forward;
+                Vector3 side = Vector3.Cross(d, VRot() * Vector3.up);
+                if (side.sqrMagnitude < 0.01f) side = Vector3.Cross(d, Vector3.right);
+                Vector3 off = side.normalized * (VR() - 0.5f) * r * 0.9f;
+                float half = r * Mathf.Lerp(0.85f, 1.15f, VR());
+                Vector3 a = center + off - d * half, b = center + off + d * half;
+                float life = hold + 0.25f + VR() * 0.1f;
+                CutLine(a, b, glow, Mathf.Max(0.08f, r * 0.07f), life);
+                CutLine(a, b, core, Mathf.Max(0.03f, r * 0.022f), life * 0.85f);
             }
-            // sparse interior hairline cuts (near-straight: a tiny span on a big radius, shifted through the volume)
-            for (int k = 0; k < 4; k++)
+            for (int k = 0; k < 3; k++)
             {
-                Quaternion q = VRot();
-                float big = r * 4f, off = (VR() - 0.5f) * r * 0.8f;
-                Vector3 shift = q * new Vector3(0f, -big + off, 0f);
-                Color h = hair; h.a = 0.55f;
-                CutRibbon(root, q, shift, ArcRibbon(big, Mathf.Rad2Deg * (r * 1.5f / big), Mathf.Max(0.02f, r * 0.012f), 0f, 0.5f, h, h, 8, k + 57), edge, 0.02f + VR() * 0.04f, hold * 0.8f, 0.2f, 0f, 0f, 1f);
-            }
-            // brief low-opacity air disturbance inside + directional threads left behind as the cuts dissolve
-            Particles(root, new Color(0.18f, 0.19f, 0.32f, 0.22f), 7, 0f, 0.1f, hold + 0.5f, 0.15f, 0.5f, r * 0.45f, r * 0.85f, 0f, ParticleSystemShapeType.Sphere, r * 0.45f, Vector3.zero, false, false);
-            ParticleSystem threads = Particles(root, new Color(0.80f, 0.88f, 1f, 0.6f), 16, 0f, 0.1f, 0.35f, 4f, 8f, 0.03f, 0.06f, 0f, ParticleSystemShapeType.Sphere, r * 0.8f, Vector3.zero, true, true);
-            if (threads != null)
-            {
-                threads.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
-                ParticleSystem.MainModule tm = threads.main;
-                tm.startDelay = hold + 0.05f;
-                threads.Play(true);
+                Vector3 f = VRot() * Vector3.forward;
+                CrescentFlash(center + VRot() * Vector3.forward * r * 0.15f, f, tint, r * 0.85f, Mathf.Max(0.15f, r * 0.09f), Mathf.Lerp(-80f, 80f, VR()), hold * 0.6f, 0.25f, 0.1f);
             }
             Flash(center, new Color(0.55f, 0.65f, 1f, 1f), 0.5f, r, 0.1f);
+        }
+
+        // v0.25.185 (user: Clockwork was invisible): a clear brass clock burst on the ground - soft gold pulse over the area,
+        // twelve hour ticks, two clock hands and rising brass sparks. Cheap (lines + one pulse + two particle bursts).
+        public static void ClockBurst(Vector3 pos, float radius, float seconds)
+        {
+            if (!Enabled) return;
+            radius = Mathf.Max(1f, radius);
+            seconds = Mathf.Clamp(seconds, 0.5f, 3f);
+            Color brass = new Color(1f, 0.80f, 0.38f, 1f), ivory = new Color(1f, 0.95f, 0.80f, 1f);
+            SoftWave(pos, brass, radius, 0.8f);
+            Vector3 g = GroundPoint(pos) + Vector3.up * 0.12f;
+            float face = Mathf.Min(radius * 0.45f, 4f);
+            for (int i = 0; i < 12; i++)
+            {
+                float a = i * 30f * Mathf.Deg2Rad;
+                Vector3 dir = new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a));
+                float inner = face * (i % 3 == 0 ? 0.72f : 0.82f);
+                CutLine(g + dir * inner, g + dir * face, i % 3 == 0 ? ivory : brass, i % 3 == 0 ? 0.12f : 0.07f, seconds);
+            }
+            float t = VR() * 360f;
+            Vector3 hour = Quaternion.Euler(0f, t, 0f) * Vector3.forward, minute = Quaternion.Euler(0f, t + 140f, 0f) * Vector3.forward;
+            CutLine(g, g + hour * face * 0.5f, ivory, 0.16f, seconds);
+            CutLine(g, g + minute * face * 0.78f, brass, 0.11f, seconds);
+            Burst(g + Vector3.up * 0.3f, brass, 26, 3.5f, 0.06f, 0.9f, -0.6f);
+            Burst(g + Vector3.up * 0.2f, ivory, 12, 1.5f, 0.1f, 1.1f, -0.3f);
+        }
+
+        // v0.25.185 a straight slash line with tapered (pointed) ends, additive, fading out
+        private static AnimationCurve _cutTaper;
+        public static void CutLine(Vector3 a, Vector3 b, Color c, float width, float seconds)
+        {
+            if (!Enabled) return;
+            if (_cutTaper == null) _cutTaper = new AnimationCurve(new Keyframe(0f, 0f), new Keyframe(0.18f, 1f), new Keyframe(0.82f, 1f), new Keyframe(1f, 0f));
+            DragonVfxLife l = Host(a, Mathf.Max(0.05f, seconds), "cutline");
+            LineRenderer line = SoftLine(l.transform, width);
+            line.widthCurve = _cutTaper;
+            line.numCapVertices = 0;
+            line.positionCount = 2; line.SetPosition(0, a); line.SetPosition(1, b);
+            DragonCrackFade fade = l.gameObject.AddComponent<DragonCrackFade>();
+            fade.Lines = new LineRenderer[] { line };
+            fade.Color = c;
+            fade.Life = seconds;
+            fade.Age = 0.13f;   // appears at once (the fade-in is 0.15 s)
+            fade.EndAlpha = 1f;
         }
 
         // v0.25.180 healing / blessing pulse (Holy Wave, Ray of Hope, Heaven's Light, Crucible, KG, relic heals...):
@@ -15721,7 +15824,7 @@ namespace DragonsAltarCombat
             radius = Mathf.Clamp(radius, 0.8f, 16f);
             Vector3 g = GroundPoint(pos);
             DirtBurst(g, radius, 1.5f);
-            int mains = Mathf.Clamp(Mathf.RoundToInt(5 + radius * 0.6f), 5, 12);
+            int mains = Mathf.Clamp(Mathf.RoundToInt(4 + radius * 0.4f), 4, 8);   // v0.25.185 (perf) was 5..12
             Color crack = new Color(0.10f, 0.08f, 0.07f, 1f);
             for (int i = 0; i < mains; i++)
             {
@@ -15734,7 +15837,7 @@ namespace DragonsAltarCombat
                 CrackLine(g, mid, crack, w, 4.5f);
                 CrackLine(mid, end, crack, w * 0.7f, 4.5f);
                 // one or two side branches off the middle of each main fracture
-                int br = VR() < 0.5f ? 1 : 2;
+                int br = VR() < 0.35f ? 1 : 0;   // v0.25.185 (perf) was 1-2 per fracture
                 for (int b = 0; b < br; b++)
                 {
                     float side = (b == 0 ? 1f : -1f) * Mathf.Lerp(25f, 55f, VR());
@@ -15742,7 +15845,7 @@ namespace DragonsAltarCombat
                     CrackLine(mid, mid + bd * len * Mathf.Lerp(0.25f, 0.45f, VR()), crack, w * 0.5f, 4f);
                 }
             }
-            Debris(g, new Color(0.38f, 0.33f, 0.28f, 1f), Mathf.RoundToInt(8 + radius * 1.8f), 7f + radius * 0.8f, 0.22f + radius * 0.02f, 2.6f);
+            Debris(g, new Color(0.38f, 0.33f, 0.28f, 1f), Mathf.RoundToInt(6 + radius * 1.0f), 7f + radius * 0.8f, 0.22f + radius * 0.02f, 2.6f);   // v0.25.185 (perf) fewer chunks
             Scorch(g, radius * 0.6f, 6f);
             if (shake > 0f) Shake(g, 20f + radius * 2f, shake);
         }
@@ -15993,7 +16096,7 @@ namespace DragonsAltarCombat
                 Vector3 b = GroundPoint(g + new Vector3(Mathf.Cos(a) * r, 0f, Mathf.Sin(a) * r));
                 Vector3 top = b + Vector3.up * height * Mathf.Lerp(0.6f, 1f, VR()) + new Vector3(VR() - 0.5f, 0f, VR() - 0.5f) * height * 0.25f;
                 Bolt(b, top, UltColor(i), width * Mathf.Lerp(0.8f, 1.2f, VR()), 0.45f);
-                Cracks(b, UltColor(i), Mathf.Max(0.8f, radius * 0.2f), 4, 3f);
+                if ((i & 1) == 0) Cracks(b, UltColor(i), Mathf.Max(0.8f, radius * 0.2f), 3, 3f);   // v0.25.185 (perf) every 2nd bolt
             }
             Shatter(g, radius * 0.7f, 0f);
         }
@@ -16003,8 +16106,7 @@ namespace DragonsAltarCombat
             if (!Enabled) return;
             Bolt(sky, ground, c, width, 0.35f);
             Bolt(sky + new Vector3(VR() - 0.5f, 0f, VR() - 0.5f) * 1.5f, ground, Color.Lerp(c, Color.white, 0.3f), width * 0.45f, 0.3f);
-            Cracks(ground, c, Mathf.Max(1f, frontRadius), 6, 3f);
-            GroundRing(ground, c, Mathf.Max(1f, frontRadius), 0.3f);
+            Cracks(ground, c, Mathf.Max(1f, frontRadius), 3, 3f);   // v0.25.185 (perf) 3 cracks, no ground-ring decal per strike
             DirtBurst(ground, Mathf.Max(0.8f, frontRadius * 0.6f), 0.8f);
             Burst(ground + Vector3.up * 0.3f, c, 14, 9f, 0.12f, 0.4f, 0.8f);
         }
@@ -18468,7 +18570,7 @@ namespace DragonsAltarCombat
         internal static readonly Dictionary<string, DragonPerfSkill> Skills = new Dictionary<string, DragonPerfSkill>();
         internal static string CurrentSkill;
         internal static float CurrentAt = -999f;
-        private static int _vfxDepth, _castFrame = -1;
+        private static int _vfxDepth, _castFrame = -1, _preCastFrame = -1;
         private static long _vfxStart;
         private static int _h0, _s0, _l0, _v0;
 
@@ -18480,14 +18582,41 @@ namespace DragonsAltarCombat
             FrameTicks[section] += _sw.ElapsedTicks - startTicks;
         }
 
+        // v0.25.185: + managed memory allocated inside the section (heap growth; a GC inside the section reads as 0)
+        internal static readonly long[] AllocBytes = new long[SecCount];
+        public static long Mem() { return System.GC.GetTotalMemory(false); }
+        public static void Add(int section, long startTicks, long startMem)
+        {
+            FrameTicks[section] += _sw.ElapsedTicks - startTicks;
+            long d = System.GC.GetTotalMemory(false) - startMem;
+            if (d > 0) AllocBytes[section] += d;
+        }
+
         public static void NoteCast(string id)
         {
             if (!On || string.IsNullOrEmpty(id)) return;
             if (CurrentSkill == id && _castFrame == Time.frameCount) return;   // the same cast reported twice in one frame
+            if (CurrentSkill == id && Time.unscaledTime - CurrentAt < 0.5f && _castFrame != Time.frameCount && _preCastFrame == Time.frameCount) { _castFrame = Time.frameCount; Skill(id).Casts++; return; }
             _castFrame = Time.frameCount;
             CurrentSkill = id;
             CurrentAt = Time.unscaledTime;
             Skill(id).Casts++;
+        }
+
+        // v0.25.185: called right BEFORE a skill runs, so effects spawned during the cast itself belong to it
+        public static void PreCast(string id)
+        {
+            if (!On || string.IsNullOrEmpty(id)) return;
+            CurrentSkill = id;
+            CurrentAt = Time.unscaledTime;
+            _preCastFrame = Time.frameCount;
+        }
+
+        internal static void ResetStats()
+        {
+            Skills.Clear();
+            for (int i = 0; i < SecCount; i++) { FrameTicks[i] = 0; IdleMsSum[i] = 0; AllMsSum[i] = 0; AllocBytes[i] = 0; }
+            CurrentSkill = null; CurrentAt = -999f; _castFrame = -1; _vfxDepth = 0;
         }
 
         internal static string ActiveSkill()
@@ -18529,10 +18658,19 @@ namespace DragonsAltarCombat
         public const int PhUpdate = 0, PhCoroutines = 1, PhLate = 2, PhRest = 3, PhCount = 4;
         public static readonly string[] PhNames = { "Update (all mods + game)", "Coroutines + animation", "LateUpdate (all)", "Render / GUI / physics / GPU wait" };
 
+        // v0.25.185 (perf, user reports: Smite / Tempest / Heaven's Judgement made ~40 point lights per cast): at most
+        // [Visuals] MaxEffectLights_v025185 effect lights are lit at once - each one is an extra render pass in Valheim.
+        public static ConfigEntry<int> MaxLights;
+        private static readonly List<Light> _liveLights = new List<Light>();
         public static void OnLight(Light l)
         {
             LightsMade++;
-            if (NoEffectLights && l != null) l.enabled = false;
+            if (l == null) return;
+            if (NoEffectLights) { l.enabled = false; return; }
+            for (int i = _liveLights.Count - 1; i >= 0; i--) if (_liveLights[i] == null || !_liveLights[i].enabled) _liveLights.RemoveAt(i);
+            int max = MaxLights != null ? Mathf.Max(0, MaxLights.Value) : 6;
+            if (_liveLights.Count >= max) { l.enabled = false; return; }
+            _liveLights.Add(l);
         }
     }
 
@@ -18574,6 +18712,13 @@ namespace DragonsAltarCombat
         private void Begin()
         {
             DragonPerf.On = true;
+            // v0.25.185 every recording starts from zero (v0.25.184 kept adding to the previous one)
+            DragonPerf.ResetStats();
+            _spikes.Clear();
+            _frames = _idleFrames = _spikeCount = _gcCount = 0;
+            _frameMsSum = _idleFrameMsSum = _ourMsSum = _idleOurMsSum = _worst = 0;
+            _allocBytes = 0;
+            for (int k = 0; k < DragonPerf.PhCount; k++) { _idlePhase[k] = 0; _allPhase[k] = 0; }
             if (GetComponent<DragonPerfEdge>() == null) gameObject.AddComponent<DragonPerfEdge>();
             DragonPerf.PUpdStart = DragonPerf.PUpdEnd = DragonPerf.PLateStart = DragonPerf.PLateEnd = 0;
             _startedAt = Time.unscaledTime;
@@ -18719,9 +18864,10 @@ namespace DragonsAltarCombat
                 for (int k = 0; k < DragonPerf.PhCount; k++)
                     b.AppendLine("  " + DragonPerf.PhNames[k].PadRight(36) + (_idleFrames > 0 ? _idlePhase[k] / _idleFrames : 0).ToString("0.00").PadLeft(8) + " / " + (_frames > 0 ? _allPhase[k] / _frames : 0).ToString("0.00"));
                 b.AppendLine();
-                b.AppendLine("OUR CODE PER MODULE (ms per frame, idle / overall):");
+                b.AppendLine("OUR CODE PER MODULE (ms per frame, idle / overall; memory allocated KB/s):");
                 for (int i = 0; i < DragonPerf.SecCount; i++)
-                    b.AppendLine("  " + DragonPerf.SecNames[i].PadRight(30) + (_idleFrames > 0 ? DragonPerf.IdleMsSum[i] / _idleFrames : 0).ToString("0.000").PadLeft(8) + " / " + (_frames > 0 ? DragonPerf.AllMsSum[i] / _frames : 0).ToString("0.000"));
+                    b.AppendLine("  " + DragonPerf.SecNames[i].PadRight(30) + (_idleFrames > 0 ? DragonPerf.IdleMsSum[i] / _idleFrames : 0).ToString("0.000").PadLeft(8) + " / " + (_frames > 0 ? DragonPerf.AllMsSum[i] / _frames : 0).ToString("0.000") +
+                        (i == DragonPerf.SecVfx ? "" : ("   alloc " + (DragonPerf.AllocBytes[i] / 1024.0 / Math.Max(1.0, session)).ToString("0") + " KB/s")));
                 b.AppendLine();
                 b.AppendLine("PER SKILL (window = 4 s after each cast; +frame = extra frame time vs idle = everything the skill costs incl. GPU)");
                 b.AppendLine("  skill                      casts  vfx ms avg/max  hosts/cast  psys/cast  lights/cast  vanilla/cast   +frame ms  +our ms  spikes  worst ms  verdict");

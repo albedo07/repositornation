@@ -199,6 +199,7 @@ namespace AethelbornExperience
 
         private void OnGUI()
         {
+            if (useGUILayout) useGUILayout = false;   // v0.25.185 (perf): no GUILayout here - skip IMGUI's layout pass
             if (_floating.Count == 0 || Camera.main == null) return;
             if (_expText == null)
             {

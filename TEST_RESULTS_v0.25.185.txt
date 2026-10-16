@@ -1,0 +1,2 @@
+v0.25.185 - verified here: compile check 3029660 PASSED (0 new signatures); mcs --parse -langversion:5 OK on every .cs.
+Static changes guided by the user's performance reports; not re-measured in game.

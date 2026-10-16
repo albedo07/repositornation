@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Aethelborn Ascended - Sorcerer Advancements";
-        public const string ModVersion = "0.25.184";
+        public const string ModVersion = "0.25.185";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -675,9 +675,9 @@ namespace DragonsAltarSorcerer
         private void LateUpdate()
         {
             if (!DragonPerf.On) { PerfLateUpdateInner(); return; }
-            long perfT = DragonPerf.Now();
+            long perfT = DragonPerf.Now(), perfM = DragonPerf.Mem();
             try { PerfLateUpdateInner(); }
-            finally { DragonPerf.Add(DragonPerf.SecSorcLate, perfT); }
+            finally { DragonPerf.Add(DragonPerf.SecSorcLate, perfT, perfM); }
         }
 
         private void PerfLateUpdateInner()
@@ -744,9 +744,9 @@ namespace DragonsAltarSorcerer
         private void Update()
         {
             if (!DragonPerf.On) { PerfUpdateInner(); return; }
-            long perfT = DragonPerf.Now();
+            long perfT = DragonPerf.Now(), perfM = DragonPerf.Mem();
             try { PerfUpdateInner(); }
-            finally { DragonPerf.Add(DragonPerf.SecSorcUpdate, perfT); }
+            finally { DragonPerf.Add(DragonPerf.SecSorcUpdate, perfT, perfM); }
         }
 
         private void PerfUpdateInner()
@@ -1817,9 +1817,9 @@ namespace DragonsAltarSorcerer
                 DragonCombat.GrantClockwork(ally, _clockDuration.Value, _clockSkillDamage.Value / 100f, 1f - Mathf.Clamp01(_clockCdr.Value / 100f));
             if (_enableVfx.Value)
             {
-                StartCoroutine(RingVfx(player.transform.position, DragonCombat.M(_clockRadius.Value), new Color(1f, 0.82f, 0.35f, 0.95f), 0.8f));
+                if (!DragonVfx.Enabled) StartCoroutine(RingVfx(player.transform.position, DragonCombat.M(_clockRadius.Value), new Color(1f, 0.82f, 0.35f, 0.95f), 0.8f));
                 Vector3 kp = player.transform.position; float kr = DragonCombat.M(_clockRadius.Value);
-                DragonCombat.RunVfx(delegate { DragonVfx.Glyph(kp, new Color(0.92f, 0.80f, 0.55f, 1f), kr * 0.6f, 2.5f, 120f, true); DragonVfx.Vortex(null, kp + Vector3.up, new Color(0.95f, 0.88f, 0.65f, 1f), 1.6f, 0.6f);   /* v0.25.180 one legible clock face (muted brass/ivory) + short unwinding finish; no shock ring */ });   // v0.25.58 / v0.25.61 clock face
+                DragonCombat.RunVfx(delegate { DragonVfx.ClockBurst(kp, kr, 1.6f); });   // v0.25.185 (user: was invisible) visible brass clock burst
             }
         }
 
@@ -4446,13 +4446,14 @@ namespace DragonsAltarSorcerer
         private void OnGUI()
         {
             if (!DragonPerf.On) { PerfOnGuiInner(); return; }
-            long perfT = DragonPerf.Now();
+            long perfT = DragonPerf.Now(), perfM = DragonPerf.Mem();
             try { PerfOnGuiInner(); }
-            finally { DragonPerf.Add(DragonPerf.SecSorcGui, perfT); }
+            finally { DragonPerf.Add(DragonPerf.SecSorcGui, perfT, perfM); }
         }
 
         private void PerfOnGuiInner()
         {
+            if (useGUILayout) useGUILayout = false;   // v0.25.185 (perf): no GUILayout / windows here - skip IMGUI's layout pass
             Player player = Player.m_localPlayer;
             if (player == null || !_showHud.Value || GetClass(player) != "Sorcerer" || DragonCombat.IsTreeHotbarActive(player))
                 return;

@@ -1,0 +1,33 @@
+Aethelborn Ascended v0.25.185 - Visible Cuts (on top of v0.25.184; NOT an anchor, anchor stays v0.25.179)
+Built from the user's 4 performance reports (Warrior / Cleric / Sorcerer / Ranger).
+
+VFX (user)
+- Blade Storm: the faint ribbon sphere ("purple mist") is replaced by crisp Judgement Cut slashes - 9 straight tapered
+  cuts through each sphere (white-hot core + Sword Master blue glow, additive: readable day and night) + 3 flat crescent
+  blades. Cheaper than before (24 ribbon meshes + 2 particle systems per sphere removed).
+- Clockwork (the other invisible skill: its clock face had been dimmed to a faint guide): brass clock burst - soft gold
+  pulse over the area, 12 hour ticks, 2 clock hands, rising brass sparks.
+
+PERFORMANCE (from the reports)
+- Furious Winds (+5.3 ms, a ~20 ms spike every 0.1 s): enemy projectiles now come from a registry filled as they spawn
+  (Projectile.Awake hook) instead of a scene-wide object search. Eclipse reflect uses the same registry.
+- First cast of a session (166 ms / 46 ms hitches in Advanced Update): the skill pose library is built in the background
+  after spawn (was built on the first cast).
+- HUD (largest steady cost, ~0.62 ms every frame): IMGUI's extra layout pass is skipped while the skill tree is closed
+  (also Sorcerer + EXP overlays); text measuring reuses one object instead of allocating per measurement.
+- Effect lights: at most 6 lit at once ([Visuals] MaxEffectLights_v025185, 0 = none). Smite / Tempest / Heaven's
+  Judgement made ~40 point lights per cast, each an extra render pass.
+- Lighter ground effects (small visual trade): Shatter 4-8 fractures (was 5-12) with fewer branches/chunks, crack scars
+  sample the ground every 1.2 m (max 18 points), Ultimate lightning strikes 3 cracks and no ring decal each, rising
+  lightning cracks on every 2nd bolt, Heaven's Judgement 2 cracks per beam (was 5), Crescent furrows every 1.2 m.
+- Fonts not yet loaded are searched again at most every 5 s (was every call).
+
+MONITOR FIXES
+- Each recording starts from zero (v0.25.184 kept adding to the previous one: frame counts, alloc MB/s and skills piled up).
+- Effects spawned during the cast itself now count for that skill (before: credited to the previous skill / "no skill").
+- New: memory allocated per module (KB/s) in "OUR CODE PER MODULE".
+
+FINDINGS NOT FIXABLE HERE
+- Recurring 35-110 ms spikes with no skill active in "Update" / "Coroutines + animation" (every 10-40 s): none of our
+  modules is above ~1 ms in those frames -> Valheim itself (saving / world streaming) or another mod.
+- Idle baseline 155-179 FPS; our code 0.7 ms of ~6 ms per frame (mostly the HUD, now reduced).

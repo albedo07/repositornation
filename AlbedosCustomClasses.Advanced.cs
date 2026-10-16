@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.184";
+        public const string ModVersion = "0.25.185";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1271,9 +1271,9 @@ namespace AlbedosCustomClassesAdvanced
         private void Update()
         {
             if (!DragonPerf.On) { PerfUpdateInner(); return; }
-            long perfT = DragonPerf.Now();
+            long perfT = DragonPerf.Now(), perfM = DragonPerf.Mem();
             try { PerfUpdateInner(); }
-            finally { DragonPerf.Add(DragonPerf.SecAdvUpdate, perfT); }
+            finally { DragonPerf.Add(DragonPerf.SecAdvUpdate, perfT, perfM); }
         }
 
         private void PerfUpdateInner()
@@ -2436,7 +2436,7 @@ namespace AlbedosCustomClassesAdvanced
                     {
                         // v0.25.168 (user): the blade ploughs half underground - a torn furrow with dirt flicked up, no spikes
                         Vector3 rp = point, rprev = point - forward * Mathf.Min(1.2f, ccDist + 0.01f); float rw = width; Color rc = ascended ? DragonVfx.Ember : new Color(0.40f, 0.34f, 0.28f, 1f);
-                        ccNextRock = ccDist + 0.8f;   // v0.25.181 denser torn soil + small debris along the cut
+                        ccNextRock = ccDist + 1.2f;   // v0.25.181 denser torn soil (v0.25.185 perf: every 1.2 m, was 0.8 m)
                         DragonCombat.RunVfx(delegate { DragonVfx.Furrow(rprev, rp, rc, rw, 2f); });
                     }
                 }
@@ -3182,14 +3182,21 @@ namespace AlbedosCustomClassesAdvanced
             float end = Time.time + window;
             UnityEngine.Object[] list = null;
             float scanAt = 0f;
+            List<Component> live = new List<Component>();
             while (Time.time < end && player != null && !player.IsDead())
             {
-                // v0.25.182 (perf): the full scene scan is the expensive part - every 0.1 s now (was every 2nd frame);
-                // every frame in between re-checks the same projectiles (a new one is caught within 0.1 s, well inside the radius)
-                if (list == null || Time.time >= scanAt) { list = UnityEngine.Object.FindObjectsOfType(_ihProjectileType); scanAt = Time.time + 0.1f; }
-                for (int i = 0; i < list.Length; i++)
+                // v0.25.185 (perf): projectiles from the runtime registry (filled as they spawn) - the scene-wide search
+                // (v0.25.182: every 0.1 s) is only the fallback if that hook is missing
+                live.Clear();
+                if (DragonCombat.ProjectileRegistryActive) DragonCombat.LiveProjectiles(live);
+                else
                 {
-                    Component projectile = list[i] as Component;
+                    if (list == null || Time.time >= scanAt) { list = UnityEngine.Object.FindObjectsOfType(_ihProjectileType); scanAt = Time.time + 0.1f; }
+                    for (int k = 0; k < list.Length; k++) { Component pc = list[k] as Component; if (pc != null) live.Add(pc); }
+                }
+                for (int i = 0; i < live.Count; i++)
+                {
+                    Component projectile = live[i];
                     if (projectile == null || reflected.Contains(projectile.GetInstanceID())) continue;
                     if ((projectile.transform.position - player.transform.position).sqrMagnitude > radius * radius) continue;
                     Character owner = ownerField.GetValue(projectile) as Character;
@@ -8256,7 +8263,7 @@ namespace AlbedosCustomClassesAdvanced
                         Vector3 sky = DragonCombat.GetIndoorSafeSkyPoint(strike + Vector3.up * 0.1f, 30f);
                         CreateTemporaryBeam(sky, strike + Vector3.up * 0.08f, new Color(1f, 0.94f, 0.62f, 0.96f), 0.5f, Mathf.Max(0.3f, Mathf.Min(0.35f, interval * 0.9f)));
                         StartCoroutine(AnimateRing(strike + Vector3.up * 0.06f, 0.25f, Mathf.Max(1.5f, impactRadius), 0.3f, new Color(1f, 0.90f, 0.46f, 0.70f), 0.07f));   // v0.25.181 (user): a brief contact shockwave at every real beam landing
-                        if (DragonVfx.Enabled) { Vector3 bl = strike; float br = impactRadius; DragonCombat.RunVfx(delegate { DragonVfx.DirtBurst(bl, Mathf.Max(0.6f, br * 0.5f), 0.6f); DragonVfx.Cracks(bl, DragonVfx.Holy, Mathf.Max(0.8f, br * 0.6f), 5, 2.5f); }); }   // lands with force
+                        if (DragonVfx.Enabled) { Vector3 bl = strike; float br = impactRadius; DragonCombat.RunVfx(delegate { DragonVfx.DirtBurst(bl, Mathf.Max(0.6f, br * 0.5f), 0.6f); DragonVfx.Cracks(bl, DragonVfx.Holy, Mathf.Max(0.8f, br * 0.6f), 2, 2.5f); }); }   // lands with force (v0.25.185 perf: 2 cracks per beam, was 5)
                     }
 
                     List<Character> targets = GetSphereTargets(player, strike, impactRadius);
@@ -14449,7 +14456,7 @@ namespace AlbedosCustomClassesAdvanced
             // v0.20.6: stars + count are centred together under the plate (the count used to hang
             // off the right, pushing the group ~13 px off centre). Width measured in reference px.
             float scale = Mathf.Max(0.01f, ScaleReferenceRect(0f, 0f, 100f, 0f).width / 100f);
-            float countWidth = Mathf.Ceil(_ihCountStyle.CalcSize(new GUIContent(countText)).x / scale) + 1f;
+            float countWidth = Mathf.Ceil(_ihCountStyle.CalcSize(IhGc(countText)).x / scale) + 1f;
             float x0 = anchor.x - (total + 3f + countWidth) * 0.5f;
             float y = anchor.y + 3f;
             for (int i = 0; i < maxTier; i++)
@@ -14497,7 +14504,7 @@ namespace AlbedosCustomClassesAdvanced
             // Fit inside the node's own column (nodes are ~137 px apart): shrink instead of overflowing.
             Rect lockLabel = ScaleReferenceRect(anchor.x - 60f, anchor.y + 2f, 120f, 14f);
             int baseSize = _ihLockTextStyle.fontSize;
-            while (_ihLockTextStyle.fontSize > 7 && _ihLockTextStyle.CalcSize(new GUIContent(shortReason)).x > lockLabel.width)
+            while (_ihLockTextStyle.fontSize > 7 && _ihLockTextStyle.CalcSize(IhGc(shortReason)).x > lockLabel.width)
                 _ihLockTextStyle.fontSize--;
             GUI.Label(lockLabel, "<color=" + IhHex(0.36f, 0.26f, 0.18f) + ">" + shortReason + "</color>", _ihLockTextStyle);
             _ihLockTextStyle.fontSize = baseSize;
@@ -14626,6 +14633,7 @@ namespace AlbedosCustomClassesAdvanced
             bool chargingBefore = readyBefore >= 0 && nextStack < 0f;
             float staBefore = player.GetStamina(), eitBefore = IhCallFloat(player, "GetEitr");
             IhFaceSkillAim(player);   // Use the crosshair heading for the skill being cast.
+            DragonPerf.PreCast(id);   // v0.25.185 performance monitor: effects spawned during the cast belong to this skill
             IhCastSkillNow(player, id);
             {
                 // v0.25.65: a skill that really started takes over from any normal attack (aborted, queue dropped)
@@ -15352,6 +15360,7 @@ namespace AlbedosCustomClassesAdvanced
         private void ToggleSkillbook()
         {
             _skillbookOpen = !_skillbookOpen;
+            useGUILayout = _skillbookOpen;   // v0.25.185 the tree window needs IMGUI's layout pass (skipped while it is closed)
 
             if (_skillbookOpen)
             {
@@ -15384,13 +15393,16 @@ namespace AlbedosCustomClassesAdvanced
         private void OnGUI()
         {
             if (!DragonPerf.On) { PerfOnGuiInner(); return; }
-            long perfT = DragonPerf.Now();
+            long perfT = DragonPerf.Now(), perfM = DragonPerf.Mem();
             try { PerfOnGuiInner(); }
-            finally { DragonPerf.Add(DragonPerf.SecAdvGui, perfT); }
+            finally { DragonPerf.Add(DragonPerf.SecAdvGui, perfT, perfM); }
         }
 
         private void PerfOnGuiInner()
         {
+            // v0.25.185 (perf, user report: HUD = biggest steady cost): IMGUI's extra Layout pass is only needed for the skill tree /
+            // tooltip windows (GUI.Window). With the tree closed it is skipped, which roughly halves the HUD's cost per frame.
+            if (useGUILayout != _skillbookOpen) useGUILayout = _skillbookOpen;
             Player player = Player.m_localPlayer;
 
             if (player == null)
@@ -15405,7 +15417,7 @@ namespace AlbedosCustomClassesAdvanced
                 && (!DragonCombat.IsGameplayHudSuppressed() || (DragonCombat.IsInventoryOpen() && !_ihHudMenuOpen)))
                 DrawCombatHud(player);
 
-            if (_skillbookOpen)
+            if (_skillbookOpen && useGUILayout)   // the frame the tree opens without a layout pass, the window waits one frame
             {
                 _skillbookRect = GUI.Window(706060, _skillbookRect, DrawSkillbookWindow, "", _treeWindowStyle);
                 // v0.23.7: the tooltip is its own top-most window so it can leave the tree window
@@ -15441,9 +15453,9 @@ namespace AlbedosCustomClassesAdvanced
         private void LateUpdate()
         {
             if (!DragonPerf.On) { PerfLateUpdateInner(); return; }
-            long perfT = DragonPerf.Now();
+            long perfT = DragonPerf.Now(), perfM = DragonPerf.Mem();
             try { PerfLateUpdateInner(); }
-            finally { DragonPerf.Add(DragonPerf.SecAdvLate, perfT); }
+            finally { DragonPerf.Add(DragonPerf.SecAdvLate, perfT, perfM); }
         }
 
         private void PerfLateUpdateInner()
@@ -16169,6 +16181,17 @@ namespace AlbedosCustomClassesAdvanced
             return Math.Max(0L, current).ToString() + "/" + Math.Max(1L, required).ToString();
         }
 
+        // v0.25.185 (perf): one reused GUIContent for text measuring (CalcSize/CalcHeight read it immediately) instead of a new
+        // object per measurement - the HUD's fit loops allocated dozens per frame
+        private static readonly GUIContent _ihGc = new GUIContent();
+        private static GUIContent IhGc(string text)
+        {
+            _ihGc.text = text;
+            _ihGc.image = null;
+            _ihGc.tooltip = null;
+            return _ihGc;
+        }
+
         private void IhDrawArtHud(Player player, IhHudLayout l, Rect panel, float k, float s)
         {
             if (Event.current.type != EventType.Repaint) return;
@@ -16203,7 +16226,7 @@ namespace AlbedosCustomClassesAdvanced
                 while (vfs > 8)
                 {
                     _ihArtValue.fontSize = vfs;
-                    if (Mathf.Max(_ihArtValue.CalcSize(new GUIContent(w0)).x, _ihArtValue.CalcSize(new GUIContent(w1)).x) <= boxW) break;
+                    if (Mathf.Max(_ihArtValue.CalcSize(IhGc(w0)).x, _ihArtValue.CalcSize(IhGc(w1)).x) <= boxW) break;
                     vfs--;
                 }
                 _ihArtValue.fontSize = vfs;
@@ -16213,7 +16236,7 @@ namespace AlbedosCustomClassesAdvanced
                 if (l.Split)
                 {
                     string es = Mathf.CeilToInt(Mathf.Max(0f, ei)).ToString(), ss = Mathf.CeilToInt(Mathf.Max(0f, st)).ToString() + "  |  ";
-                    float ew = _ihArtValue.CalcSize(new GUIContent(es)).x;
+                    float ew = _ihArtValue.CalcSize(IhGc(es)).x;
                     IhHudOutlineLabel(v1, es, _ihArtValue, eic);
                     IhHudOutlineLabel(new Rect(v1.x, v1.y, v1.width - ew, v1.height), ss, _ihArtValue, stc);
                 }
@@ -16249,7 +16272,7 @@ namespace AlbedosCustomClassesAdvanced
                 for (int tries = 0; tries < 40; tries++)
                 {
                     _ihArtValue.fontSize = lfs;
-                    float need = _ihArtValue.CalcSize(new GUIContent(nm)).x + (val == null ? 0f : _ihArtValue.CalcSize(new GUIContent(val)).x + gap);
+                    float need = _ihArtValue.CalcSize(IhGc(nm)).x + (val == null ? 0f : _ihArtValue.CalcSize(IhGc(val)).x + gap);
                     if (need <= r.width) break;
                     if (lfs > 9) { lfs--; continue; }
                     if (nm != shortNames[i]) { nm = shortNames[i]; lfs = fs2; continue; }
@@ -16271,7 +16294,7 @@ namespace AlbedosCustomClassesAdvanced
             Rect nr = new Rect(panel.x + l.Name.x * k, panel.y + l.Name.y * k, l.Name.width * k, l.Name.height * k);
             int fs = Mathf.Max(7, Mathf.RoundToInt(15f * k));
             _ihArtName.fontSize = fs;
-            while (fs > 7 && _ihArtName.CalcSize(new GUIContent(name)).x > nr.width - 6f * k) { fs--; _ihArtName.fontSize = fs; }
+            while (fs > 7 && _ihArtName.CalcSize(IhGc(name)).x > nr.width - 6f * k) { fs--; _ihArtName.fontSize = fs; }
             _ihArtName.normal.textColor = new Color(0.95f, 0.90f, 0.78f, 1f);
             IhHudShadowLabel(nr, name, _ihArtName);
 
@@ -16383,7 +16406,7 @@ namespace AlbedosCustomClassesAdvanced
             {
                 // Header plaque on the top edge: Name · CLASS.
                 string title = player.GetPlayerName() + "  ·  " + IhCurrentClassName(player).ToUpper();
-                float tw = Mathf.Max(200f * s, _ihHudTitle.CalcSize(new GUIContent(title)).x + 60f * s);
+                float tw = Mathf.Max(200f * s, _ihHudTitle.CalcSize(IhGc(title)).x + 60f * s);
                 Rect plaque = new Rect(panel.center.x - tw * 0.5f, panel.y - 15f * s, tw, 30f * s);
                 if (_ihHudPlaqueTex != null) IhDrawNineSlice(plaque, _ihHudPlaqueTex, 34f, s * 0.5f);
                 Color tc = _ihHudTitle.normal.textColor;
@@ -16448,13 +16471,13 @@ namespace AlbedosCustomClassesAdvanced
                     _ihTipTitle.fontSize = Mathf.RoundToInt(13f * s);
                     _ihTipLine.fontSize = Mathf.RoundToInt(12f * s);
                     float tipPad = 9f * s;
-                    Vector2 titleSize = _ihTipTitle.CalcSize(new GUIContent(hoverSe.m_name));
+                    Vector2 titleSize = _ihTipTitle.CalcSize(IhGc(hoverSe.m_name));
                     float tipW = titleSize.x;
                     float[] lineHs = new float[lines.Length];
                     float bodyH = 0f;
                     for (int li = 0; li < lines.Length; li++)
                     {
-                        Vector2 ls = _ihTipLine.CalcSize(new GUIContent(lines[li]));
+                        Vector2 ls = _ihTipLine.CalcSize(IhGc(lines[li]));
                         tipW = Mathf.Max(tipW, ls.x);
                         lineHs[li] = ls.y + 2f * s;
                         bodyH += lineHs[li];
@@ -16918,13 +16941,18 @@ namespace AlbedosCustomClassesAdvanced
         }
 
         private static readonly Dictionary<string, Font> IhFontCache = new Dictionary<string, Font>();
+        private static readonly Dictionary<string, float> IhFontMissAt = new Dictionary<string, float>();
 
         private static Font FindValheimFont(string name)
         {
             Font cached;
             if (IhFontCache.TryGetValue(name, out cached) && cached != null) return cached;
+            // v0.25.185 (perf): a font that is not loaded (yet) is searched again at most every 5 s (full asset scan)
+            float missAt;
+            if (cached == null && IhFontMissAt.TryGetValue(name, out missAt) && Time.realtimeSinceStartup < missAt) return null;
             cached = FindValheimFontUncached(name);
             if (cached != null) IhFontCache[name] = cached;
+            else IhFontMissAt[name] = Time.realtimeSinceStartup + 5f;
             return cached;
         }
 
@@ -16940,10 +16968,15 @@ namespace AlbedosCustomClassesAdvanced
         }
 
         private static Font _ihSerifCache;
+        private static float _ihSerifMissAt;
 
         private static Font FindValheimSerifFont()
         {
-            if (_ihSerifCache == null) _ihSerifCache = FindValheimSerifFontUncached();
+            if (_ihSerifCache == null && Time.realtimeSinceStartup >= _ihSerifMissAt)
+            {
+                _ihSerifCache = FindValheimSerifFontUncached();
+                if (_ihSerifCache == null) _ihSerifMissAt = Time.realtimeSinceStartup + 5f;   // v0.25.185 (perf) retry every 5 s, not every call
+            }
             return _ihSerifCache;
         }
 
@@ -17200,7 +17233,7 @@ namespace AlbedosCustomClassesAdvanced
             GUIStyle measure = new GUIStyle(_treeFooterConfirmStyle);
             measure.fontSize = Mathf.Max(9, Mathf.RoundToInt(probe.height * 0.46f));
             for (int i = 0; i < branches.Length; i++)
-                while (measure.fontSize > 7 && measure.CalcSize(new GUIContent(IhAcDisplay(branches[i]).ToUpperInvariant())).x > probe.width * 0.84f)
+                while (measure.fontSize > 7 && measure.CalcSize(IhGc(IhAcDisplay(branches[i]).ToUpperInvariant())).x > probe.width * 0.84f)
                     measure.fontSize--;
             for (int i = 0; i < branches.Length; i++)
             {
@@ -17377,7 +17410,7 @@ namespace AlbedosCustomClassesAdvanced
             Player titlePlayer=Player.m_localPlayer;
             bool titleAdvanced=titlePlayer!=null && !string.IsNullOrEmpty(GetAdvancement(titlePlayer));
             string branchName=titleAdvanced ? IhAcDisplay(IhTreeBranch()).ToUpperInvariant() : "ADVANCEMENT";   // v0.25.164 no AC preview
-            while(title.fontSize>10 && title.CalcSize(new GUIContent(branchName)).x>titleRect.width) title.fontSize--;
+            while(title.fontSize>10 && title.CalcSize(IhGc(branchName)).x>titleRect.width) title.fontSize--;
             GUI.Label(titleRect,branchName,title);
 
             GUIStyle label=new GUIStyle(_treeNodeNameStyle);
@@ -17397,7 +17430,7 @@ namespace AlbedosCustomClassesAdvanced
                 Rect classRect=ScaleReferenceRect(143f,87f,122f,35f);
                 classTitle.fontSize=title.fontSize;
                 string className=labelClass.ToUpperInvariant();
-                while(classTitle.fontSize>10 && classTitle.CalcSize(new GUIContent(className)).x>classRect.width) classTitle.fontSize--;
+                while(classTitle.fontSize>10 && classTitle.CalcSize(IhGc(className)).x>classRect.width) classTitle.fontSize--;
                 GUI.Label(classRect,className,classTitle);
             }
             foreach(ReferenceNodeUi node in IhTreeNodes())
@@ -17413,7 +17446,7 @@ namespace AlbedosCustomClassesAdvanced
                 string name=IhSkillName(node.Id);
                 int size=Mathf.Max(8,Mathf.RoundToInt(ScaleReferenceRect(0,0,0,10.5f).height));
                 label.fontSize=size;
-                while(label.fontSize>7 && label.CalcSize(new GUIContent(name)).x>r.width) label.fontSize--;
+                while(label.fontSize>7 && label.CalcSize(IhGc(name)).x>r.width) label.fontSize--;
                 GUI.Label(r,name,label);
             }
         }
@@ -19548,7 +19581,7 @@ namespace AlbedosCustomClassesAdvanced
             Vector2 mouse = Event.current.mousePosition + _skillbookRect.position;
             _treeTooltipBodyStyle.richText = true;
             float w = 400f;
-            float bodyHeight = _treeTooltipBodyStyle.CalcHeight(new GUIContent(_treeHoveredBody), w - 28f);
+            float bodyHeight = _treeTooltipBodyStyle.CalcHeight(IhGc(_treeHoveredBody), w - 28f);
             float h = Mathf.Max(70f, bodyHeight + 50f);
             float x = mouse.x + 18f;
             if (x + w > Screen.width - 8f) x = mouse.x - w - 18f;

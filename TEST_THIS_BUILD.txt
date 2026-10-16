@@ -1,8 +1,7 @@
-v0.25.184 Performance Monitor - how to use
-1. Load in, press F7 (overlay top right appears).
-2. Stand idle ~20 s (baseline), then cast each skill you suspect a few times with ~5 s between casts
-   (Furious Winds, Eclipse Asc, Seismic, Blade Storm, Ultimates...). Normal fighting also works.
-3. Optional A/B: Alt+F7 (effect lights off) and repeat the heavy skills.
-4. Press F7 again -> report written to BepInEx/plugins/Aethelborn_Performance.txt. Send me that file
-   (and LogOutput.log if something looks off).
-Check: with the monitor OFF, nothing behaves differently from v0.25.183.
+v0.25.185 Visible Cuts - in-game checks
+1. Blade Storm (normal + Ascended): clear bright slashes through each sphere, day and night.
+2. Clockwork: brass clock burst under you (pulse, ticks, hands, sparks).
+3. Furious Winds near ranged enemies: arrows still blown away, no stutter; Ascended Eclipse still reflects.
+4. First skill after loading in (wait ~5 s): no hitch.
+5. Skill tree / Altar / tooltips open and work normally (layout pass now only while the tree is open).
+6. Optional: record one class with F7 again and send the report (now per recording + allocation per module).

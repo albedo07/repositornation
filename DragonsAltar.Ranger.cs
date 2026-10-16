@@ -41,7 +41,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Aethelborn Ascended - Ranger";
-        public const string ModVersion = "0.25.184";
+        public const string ModVersion = "0.25.185";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -562,9 +562,9 @@ namespace DragonsAltarRanger
         private void Update()
         {
             if (!DragonPerf.On) { PerfUpdateInner(); return; }
-            long perfT = DragonPerf.Now();
+            long perfT = DragonPerf.Now(), perfM = DragonPerf.Mem();
             try { PerfUpdateInner(); }
-            finally { DragonPerf.Add(DragonPerf.SecRanger, perfT); }
+            finally { DragonPerf.Add(DragonPerf.SecRanger, perfT, perfM); }
         }
 
         private void PerfUpdateInner()
@@ -1538,6 +1538,7 @@ namespace DragonsAltarRanger
         private readonly Dictionary<int, float> _fwStackUntil = new Dictionary<int, float>();
         private readonly Dictionary<int, Character> _fwStackTarget = new Dictionary<int, Character>();   // v0.25.182 (perf) direct refs, no 80 m scan per tick
         private UnityEngine.Object[] _fwProjCache;
+        private readonly List<Component> _fwProjList = new List<Component>();
         private float _fwProjScanAt, _fwPuffAt;
         private static FieldInfo _projOwnerField;
         private static Type _projectileType;
@@ -1710,13 +1711,20 @@ namespace DragonsAltarRanger
             if (_projectileType == null) return;
             // v0.25.182 (perf): the full-scene object search ran EVERY frame - now every 0.1 s (positions still checked each frame
             // on the cached list); the owner field is looked up once
-            if (_fwProjCache == null || Time.time >= _fwProjScanAt) { _fwProjCache = UnityEngine.Object.FindObjectsOfType(_projectileType); _fwProjScanAt = Time.time + 0.1f; }
-            UnityEngine.Object[] all = _fwProjCache;
+            // v0.25.185 (perf, user report: a ~20 ms spike every 0.1 s): projectiles come from the runtime's registry (filled as they
+            // spawn); the scene-wide search is only the fallback if that hook could not be installed
+            _fwProjList.Clear();
+            if (DragonCombat.ProjectileRegistryActive) DragonCombat.LiveProjectiles(_fwProjList);
+            else
+            {
+                if (_fwProjCache == null || Time.time >= _fwProjScanAt) { _fwProjCache = UnityEngine.Object.FindObjectsOfType(_projectileType); _fwProjScanAt = Time.time + 0.1f; }
+                for (int k = 0; k < _fwProjCache.Length; k++) { Component pc = _fwProjCache[k] as Component; if (pc != null) _fwProjList.Add(pc); }
+            }
             if (_projOwnerField == null) _projOwnerField = _projectileType.GetField("m_owner", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
             FieldInfo ownerField = _projOwnerField;
-            for (int i = 0; i < all.Length; i++)
+            for (int i = 0; i < _fwProjList.Count; i++)
             {
-                Component p = all[i] as Component;
+                Component p = _fwProjList[i];
                 if (p == null) continue;
                 Character owner = ownerField == null ? null : ownerField.GetValue(p) as Character;
                 if (owner == player || owner is Player) continue;
