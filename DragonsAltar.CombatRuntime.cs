@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.185";
+        public const string ModVersion = "0.25.186";
 
         internal static DragonCombatPlugin Instance;
 
@@ -408,6 +408,7 @@ namespace DragonsAltarCombat
             if (DragonCombat.HasNoEquipmentPenalty(p)) return DragonCombat.GetClassName(p) == "Ranger" ? "Tailwind" : "Heaven's Light";
             string adv = DragonCombat.GetAdvancementName(p);
             string cls = DragonCombat.GetClassName(p);
+            if (IsArmorPiece(item) && DragonCombat.NegatesArmorPenalty(p)) return cls == "Cleric" ? "Cleric's Blessing" : "Warrior's Blessing";   // v0.25.186
             if ((adv == "Mercenary" || adv == "Sword Master") && WeaponMasteryExemptPenalty(item, adv) < 0f)
                 return adv == "Mercenary" ? "Warfreak" : "The Way of the Sword";
             if (cls == "Ranger" && RangedExemptPenalty(item, adv == "Bowmaster") < 0f) return "Wildborn";
@@ -2395,6 +2396,16 @@ namespace DragonsAltarCombat
             }
             if (__result >= 0f || Instance == null || __instance == null)
                 return;
+            // v0.25.186 (user): Warriors and Clerics wear heavy armor and never feel it: every armor piece's penalty is negated.
+            bool heavyNegated = false;
+            if (DragonCombat.NegatesArmorPenalty(__instance))
+            {
+                heavyNegated = true;
+                string[] heavy = { "m_chestItem", "m_legItem", "m_helmetItem", "m_shoulderItem" };
+                for (int i = 0; i < heavy.Length; i++)
+                    __result -= NegativeModifier(DragonCombat.GetHandItem(__instance, heavy[i]));
+                if (__result >= 0f) { __result = 0f; return; }
+            }
             // v0.22.4 Warfreak (Mercenary): no movement penalty from physical weapons.
             // v0.22.3 The Way of the Sword (Sword Master): no movement penalty from Swords.
             string advancement = DragonCombat.GetAdvancementName(__instance);
@@ -2454,7 +2465,7 @@ namespace DragonsAltarCombat
             }
 
             // v0.20.8 Holy Trinity (Paladin, Club-type melee weapon + any Shield): no Armor penalty.
-            if (Instance.HolyTrinityNoArmorPenalty.Value && DragonCombat.IsHolyTrinityActive(__instance))
+            if (!heavyNegated && Instance.HolyTrinityNoArmorPenalty.Value && DragonCombat.IsHolyTrinityActive(__instance))
             {
                 string[] armor = { "m_chestItem", "m_legItem", "m_helmetItem", "m_shoulderItem" };
                 for (int i = 0; i < armor.Length; i++)
@@ -7979,7 +7990,11 @@ namespace DragonsAltarCombat
         {
             if (player == null)
                 return;
-            StaminaUseCuts[player.GetInstanceID()] = new KeyValuePair<float, float>(Mathf.Clamp01(fraction), Time.time + Mathf.Max(0.1f, seconds));
+            float f = Mathf.Clamp01(fraction), until = Time.time + Mathf.Max(0.1f, seconds);
+            KeyValuePair<float, float> old;
+            // v0.25.186: a stronger cut that lasts at least as long is kept (Heaven's Light never weakens Bless Thy Sinners / Knight's Guidance)
+            if (StaminaUseCuts.TryGetValue(player.GetInstanceID(), out old) && old.Value >= until && old.Key >= f) return;
+            StaminaUseCuts[player.GetInstanceID()] = new KeyValuePair<float, float>(f, until);
         }
 
         public static float GetStaminaUseMultiplier(Player player)
@@ -9543,6 +9558,8 @@ namespace DragonsAltarCombat
         public static string WeaponRuleViolation(Player p, ItemDrop.ItemData item)
         {
             if (p == null || item == null) return null;
+            string armorWhy = ArmorRuleViolation(p, item);
+            if (armorWhy != null) return armorWhy;
             string kind = CombatKind(item);
             if (kind == "" || kind == "shield") return null;   // shields: per-class modules (Sorcerer / Ranger unequip theirs)
             string cls = GetClass(p), adv = GetAdvancementName(p);
@@ -9567,6 +9584,34 @@ namespace DragonsAltarCombat
             }
             return null;
         }
+
+        // v0.25.186 (user) class armor: heavy = any movement penalty (even -1%), light = none.
+        // Warrior / Cleric: Chest + Legs must be heavy (helmets and capes are free; their penalties are negated too).
+        // Sorcerer / Ranger: no armor piece (chest, legs, helmet, cape) may carry a movement penalty.
+        public static bool NegatesArmorPenalty(Player p)
+        {
+            if (p == null) return false;
+            string cls = GetClass(p);
+            return cls == "Warrior" || cls == "Cleric";
+        }
+
+        public static string ArmorRuleViolation(Player p, ItemDrop.ItemData item)
+        {
+            if (p == null || item == null || item.m_shared == null) return null;
+            string t = item.m_shared.m_itemType.ToString();
+            bool body = t == "Chest" || t == "Legs";
+            if (!body && t != "Helmet" && t != "Shoulder") return null;
+            string cls = GetClass(p);
+            if (string.IsNullOrEmpty(cls)) return null;
+            bool heavy = item.m_shared.m_movementModifier < 0f;
+            if ((cls == "Warrior" || cls == "Cleric") && body && !heavy)
+                return (cls == "Warrior" ? "Warriors" : "Clerics") + " wear heavy armor only";
+            if ((cls == "Sorcerer" || cls == "Ranger") && heavy)
+                return (cls == "Sorcerer" ? "Sorcerers" : "Rangers") + " wear light armor only";
+            return null;
+        }
+
+        private static readonly string[] ArmorSlotFields = { "m_chestItem", "m_legItem", "m_helmetItem", "m_shoulderItem" };
 
         // Mercenary dual wield: same prefab both hands (quality may differ); never Spears / War Pikes; never Gun Staves.
         public static bool IsDualEligible(ItemDrop.ItemData item)
@@ -10303,6 +10348,16 @@ namespace DragonsAltarCombat
                     p.UnequipItem(paired, true);
                     if (MessageHud.instance != null)
                         MessageHud.instance.ShowMessage(MessageHud.MessageType.Center, "Only a Mercenary can dual wield");
+                    return;
+                }
+                // v0.25.186 class armor (e.g. after choosing a class): unequip into the inventory
+                for (int ai = 0; ai < ArmorSlotFields.Length; ai++)
+                {
+                    ItemDrop.ItemData piece = GetHandItem(p, ArmorSlotFields[ai]);
+                    string armorWhy = ArmorRuleViolation(p, piece);
+                    if (armorWhy == null) continue;
+                    p.UnequipItem(piece, true);
+                    if (MessageHud.instance != null) MessageHud.instance.ShowMessage(MessageHud.MessageType.Center, armorWhy);
                     return;
                 }
                 // v0.25.169 class weapon restrictions (e.g. after a class change): unequip into the inventory

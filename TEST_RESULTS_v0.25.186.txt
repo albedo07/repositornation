@@ -1,0 +1,4 @@
+v0.25.186 static results
+- tools/compile_check/check.sh 3029660: COMPILE CHECK PASSED (0 new signatures)
+- mcs --parse -langversion:5: Advanced, CombatRuntime OK
+- In game: not tested.

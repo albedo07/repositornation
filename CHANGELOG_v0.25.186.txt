@@ -1,0 +1,22 @@
+Aethelborn Ascended v0.25.186 - Class Armor (on top of v0.25.185; NOT an anchor, anchor stays v0.25.179)
+
+CLASS ARMOR (user)
+- Heavy armor = any armor piece with a movement penalty (even -1%). Light armor = no movement penalty.
+- Warrior + Cleric (and their ACs): Chest and Legs must be heavy. Every armor piece's movement penalty is negated
+  (helmets and capes stay free to choose; their penalties are negated too). Tooltip shows "0% (-5% removed: Warrior's /
+  Cleric's Blessing)".
+- Sorcerer + Ranger (and their ACs): no armor piece (chest, legs, helmet, cape) with a movement penalty.
+- Equipping a forbidden piece is refused with a message; pieces already worn are unequipped into the inventory
+  (e.g. right after choosing a class). No class = no restriction.
+- Weapon / shield movement rules unchanged.
+
+HEAVEN'S LIGHT (Paladin Grace)
+- The equipment movement penalty removal is replaced by -25% Stamina use for the buff's duration
+  ([Paladin Heavens Light] StaminaUseCutPercent_v025186). +40% Overall Defense unchanged. Tooltip / buff note updated.
+  A stronger active stamina cut (Bless Thy Sinners, Knight's Guidance) is never weakened by it.
+
+SKILL TREE KEY (K)
+- The old fixed-kit window ("NO ADVANCEMENT SELECTED") is removed. Without a class, K does nothing.
+- J stays unused (reserved for the future stats menu).
+
+VERIFIED: compile check vs 3029660 passed (0 new signatures), mcs --parse C# 5 on edited files. NOT tested in game.

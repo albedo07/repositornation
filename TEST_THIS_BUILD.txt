@@ -1,7 +1,7 @@
-v0.25.185 Visible Cuts - in-game checks
-1. Blade Storm (normal + Ascended): clear bright slashes through each sphere, day and night.
-2. Clockwork: brass clock burst under you (pulse, ticks, hands, sparks).
-3. Furious Winds near ranged enemies: arrows still blown away, no stutter; Ascended Eclipse still reflects.
-4. First skill after loading in (wait ~5 s): no hitch.
-5. Skill tree / Altar / tooltips open and work normally (layout pass now only while the tree is open).
-6. Optional: record one class with F7 again and send the report (now per recording + allocation per module).
+v0.25.186 Class Armor - in-game checks
+1. Warrior/Cleric: try a Leather/Rag/Troll chest or legs -> refused "wear heavy armor only". Bronze/Iron chest + legs equip,
+   run speed same as naked; item tooltip shows the penalty as removed.
+2. Sorcerer/Ranger: try Bronze/Iron chest or legs -> refused "wear light armor only". Leather/Troll/robes equip.
+3. Choose a class while wearing the wrong armor -> it is unequipped into the inventory with the message.
+4. Paladin Heaven's Light: buff tooltip "-25% Stamina use"; sprint/attacks cost less; tree tooltip line "Stamina Use -25%".
+5. No class: press K -> nothing opens. With a class: K opens the Skill Tree as before.

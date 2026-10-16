@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.185";
+        public const string ModVersion = "0.25.186";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -136,6 +136,7 @@ namespace AlbedosCustomClassesAdvanced
         private ConfigEntry<KeyCode> _passiveActive;
         private ConfigEntry<KeyCode> _ultimate;
         private ConfigEntry<KeyCode> _skillbookKey;
+        private ConfigEntry<float> _graceLightStaminaCut;
 
         private ConfigEntry<bool> _enableVfx;
         private ConfigEntry<bool> _showCombatHud;
@@ -1308,7 +1309,7 @@ namespace AlbedosCustomClassesAdvanced
             {
                 if (_skillbookOpen)
                     ToggleSkillbook();
-                else if (!Plugin.IsClassPanelOpen && !DragonCombat.IsGameplayHudSuppressed())
+                else if (!Plugin.IsClassPanelOpen && !DragonCombat.IsGameplayHudSuppressed() && IhBranchesOf(GetClass(player)).Length > 0)   // v0.25.186 no class = no K
                     ToggleSkillbook();
             }
 
@@ -13610,7 +13611,7 @@ namespace AlbedosCustomClassesAdvanced
                     break;
                 case "heavens_light":
                     b.Append(IhLine("Buff", IhNum(_graceLightDefense.Value) + "% Overall Defense"));
-                    b.Append(IhLine("Removes", "equipment movement penalties"));
+                    b.Append(IhLine("Stamina Use", "-" + IhNum(_graceLightStaminaCut.Value) + "%"));
                     b.Append(IhLine("Radius", IhNum(_graceLightRadius.Value) + "m"));
                     b.Append(IhLine("Duration", IhNum(_graceLightDuration.Value) + "s"));
                     b.Append(IhLine("Cost", "None"));
@@ -14131,7 +14132,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "fallen_angel": return "Leaps up and dives onto the aimed spot, damaging, Stunning and breaking the bones of every enemy in the area.";
                 case "ray_of_hope": return "Heals you and nearby allies, removes all their debuffs and makes them immune to new ones ({Buff}).";
                 case "electric_smite": return "Leaps and slams down, damaging the area and sending 16 Lightning Trails along the ground.";
-                case "heavens_light": return "Grants you and nearby allies extra defense and removes equipment movement penalties ({Buff}; {Duration}).";
+                case "heavens_light": return "Grants you and nearby allies extra defense and lightens every effort: less Stamina used ({Buff}; {Duration}).";
                 case "lightning_relic": return "Plants a lightning Cross on the aimed spot that damages and Cripples nearby enemies with every pulse.";
                 case "holy_relic": return "Plants a holy Cross on the aimed spot that heals and buffs allies near it with every pulse.";
                 case "divine_intervention": return "Heals nearby allies and damages and Exposes enemies around you or your Relic.";
@@ -14530,6 +14531,7 @@ namespace AlbedosCustomClassesAdvanced
             _graceLightDuration = Config.Bind("Paladin Heavens Light", "Duration", 60f, "Buff duration in seconds.");
             _graceLightRadius = Config.Bind("Paladin Heavens Light", "Radius", 10f, "Players within this radius when cast get the buff (snapshot).");
             _graceLightDefense = Config.Bind("Paladin Heavens Light", "OverallDefensePercent", 40f, "Overall Defense bonus (less damage taken).");
+            _graceLightStaminaCut = Config.Bind("Paladin Heavens Light", "StaminaUseCutPercent_v025186", 25f, "v0.25.186: less Stamina used while Heaven's Light lasts (replaces the old equipment movement penalty removal).");
             DragonCombat.TreeHotbarProvider = IhUsesTreeHotbar;
             DragonCombat.TreeSkillKeyHeldProvider = IhSkillKeyHeld;
             DragonCombat.RegisterStackQuery(IhStackQuery);
@@ -14818,8 +14820,8 @@ namespace AlbedosCustomClassesAdvanced
             }
         }
 
-        // GRACE - Heaven's Light: 10m snapshot, +40% Overall Defense, no equipment movement
-        // penalties, 1 minute, 10 minute cooldown, free. Re-casting refreshes (never stacks).
+        // GRACE - Heaven's Light: 10m snapshot, +40% Overall Defense, -25% Stamina use
+        // (v0.25.186), 1 minute, 10 minute cooldown, free. Re-casting refreshes (never stacks).
         private void CastHeavensLight(Player player)
         {
             const string id = "Paladin.HeavensLight";
@@ -14840,11 +14842,12 @@ namespace AlbedosCustomClassesAdvanced
                 if (ally != null)
                     allies.Add(ally);
             }
-            DragonCombat.SetBuffNote("Paladin.HeavensLight", "No movement penalty from equipment (armor, shields, weapons)");
+            float hlCut = Mathf.Clamp(_graceLightStaminaCut.Value, 0f, 100f);
+            DragonCombat.SetBuffNote("Paladin.HeavensLight", "-" + IhNum(hlCut) + "% Stamina use");
             foreach (Player ally in allies)
             {
                 DragonCombat.ApplyTimedBuff(ally, "Paladin.HeavensLight", duration, 0f, 0f, 0f, Mathf.Max(0f, _graceLightDefense.Value) / 100f, 0f, 0f, false);
-                DragonCombat.GrantNoEquipmentPenalty(ally, duration);
+                DragonCombat.ApplyStaminaUseCut(ally, hlCut / 100f, duration);   // v0.25.186 (user): replaces GrantNoEquipmentPenalty
             }
             if (_enableVfx.Value)
             {
@@ -16768,7 +16771,8 @@ namespace AlbedosCustomClassesAdvanced
             // Immortal Heroes tree is authored from this reusable framework.
             if (!(IhBranchesOf(className).Length > 0 && (string.IsNullOrEmpty(advancement) || IhKitFor(className, advancement) != null)))
             {
-                DrawLegacySkillbookWindow(windowId);
+                // v0.25.186 (user): the old fixed-kit window is gone; without a class there is no Skill Tree
+                ToggleSkillbook();
                 return;
             }
 
@@ -17094,7 +17098,7 @@ namespace AlbedosCustomClassesAdvanced
             new ReferenceNodeUi("judgement_hammer", new Rect(357f, 287f, 103f, 105f), new Rect(369f, 290f, 70f, 69f), "3", TreeNodeKind.Signature, true, 5,
                 "ATTACK - JUDGEMENT HAMMER", "Paladin Signature Skill. Mandatory numbered hotbar skill."),
             new ReferenceNodeUi("heavens_light", new Rect(357f, 413f, 103f, 105f), new Rect(370f, 416f, 71f, 71f), "M4 + R", TreeNodeKind.Grace, true, 0,
-                "GRACE - HEAVEN'S LIGHT", "10m cast snapshot: +40% Overall Defense and removes equipment Movement Speed penalties for 1 minute. 10 minute cooldown."),
+                "GRACE - HEAVEN'S LIGHT", "10m cast snapshot: +40% Overall Defense and -25% Stamina use for 1 minute. 10 minute cooldown."),
 
             new ReferenceNodeUi("shield_charge", new Rect(532f, 151f, 103f, 105f), new Rect(548f, 158f, 68f, 72f), "4", TreeNodeKind.AdvancementNormal, false, 5,
                 "ATTACK - SHIELD CHARGE", "Paladin Advancement skill. Optional hotbar skill."),
@@ -19299,7 +19303,7 @@ namespace AlbedosCustomClassesAdvanced
             DrawTreeNode(new Rect(418f, 343f, 70f, 70f), "Judgement Hammer", "JH", TreeNodeKind.Signature,
                 5, 0, true, "SIGNATURE", "Signature Skill. Travelling holy hammer projectile. Signature skills are mandatory hotbar skills.");
             DrawTreeNode(new Rect(438f, 505f, 76f, 76f), "Heaven's Light", "✦", TreeNodeKind.Grace,
-                0, 0, false, "GRACE  •  M4+R", "+40% Overall Defense and removes equipment movement penalties. 1 minute duration, 10 minute cooldown. Grace uses its own standalone M4+R hotbox.");
+                0, 0, false, "GRACE  •  M4+R", "+40% Overall Defense and -25% Stamina use. 1 minute duration, 10 minute cooldown. Grace uses its own standalone M4+R hotbox.");
 
             DrawTreeNode(new Rect(638f, 184f, 64f, 64f), "Shield Charge", "SC", TreeNodeKind.AdvancementNormal,
                 5, 0, false, "ADVANCEMENT", "Interchangeable Advancement skill. Normal Advancement nodes use cyan styling.");
