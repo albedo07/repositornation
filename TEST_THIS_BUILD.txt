@@ -1,6 +1,7 @@
-v0.25.189 Finished Relics - in-game checks
-1. Priest Holy Relic: winged gold heart scepter lands upright, wings sway, green heart/orb glow.
-2. Priest Lightning Relic: white-winged ivory pillar with gold crown + blue crystal.
-3. Paladin Goddess Relic (normal + Ascended): gold/ivory Celtic cross with filigree ring; sinks away as before.
-4. Day and night: gold should read polished, not black (tell me if it looks too dark/bright).
-5. Equipment tooltip of a penalised armor piece as Warrior/Cleric: "0% (No movement penalty)" once.
+v0.25.190 VFX Gaps - in-game checks (Enhanced VFX on)
+1. Crescent Cleave Ascended: low embers along the cracks for ~2 s.  Angel Comet Ascended: flames on the burn ring edge.
+2. Priest Crucible / any Barrier: a shimmer when hit.  Lightning Zap: crackle when the Zap detonates (2 s later).
+3. Holy Relic: thin green streaks relic -> allies each pulse.  Lightning Relic: short bolts from the relic into the ground.
+4. Astral Railcannon: translucent cannon in front of you during the wind up.  Archmage hold-charge: motes at the staff.
+5. Ranger: Somersault flips leave wind; Cyclone shows the arrow inside; Ballista / Great Arrow body is big; Starfall hits enemies.
+6. Watch FPS with F7 during overlapping casts (new pieces are small, but not measured).

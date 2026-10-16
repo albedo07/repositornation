@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Aethelborn Ascended - Sorcerer Advancements";
-        public const string ModVersion = "0.25.189";
+        public const string ModVersion = "0.25.190";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -295,6 +295,7 @@ namespace DragonsAltarSorcerer
         private bool _wizardChargeActive;
         private float _wizardChargeStarted;
         private float _wizardChargeNextSpend;
+        private float _wizChargeVfxAt;   // v0.25.190 staff charge accent throttle
         private float _wizardChargeExtraEitrSpent;
         private ItemDrop.ItemData _wizardChargeWeapon;
         private bool _phalanxVolleyArmed;
@@ -1588,8 +1589,12 @@ namespace DragonsAltarSorcerer
             Vector3 origin = player.GetEyePoint();
             Vector3 forward = AlbedoAimUtility.GetProjectileDirection(player, origin);
             if (_enableVfx.Value)
+            {
+                if (DragonVfx.Enabled) { Player cp = player; Vector3 cf = forward; float cw = Mathf.Max(0.35f, windup) + 0.15f; DragonCombat.RunVfx(delegate { DragonVfx.SpectralCannon(cp.transform, cf, cw); }); }   // v0.25.190 a readable spectral cannon assembles in front of you (the rings drew nothing)
+                else
                 for (int ring = 0; ring < 4; ring++)
                     StartCoroutine(RingVfx(origin + forward * (1.5f + ring * 1.25f), 0.75f + ring * 0.25f, new Color(0.72f, 0.20f, 1f, 0.82f), Mathf.Max(0.35f, windup)));
+            }
             if (windup > 0f) yield return new WaitForSeconds(windup);
             if (player == null || player.IsDead()) yield break;
             origin = player.GetEyePoint();
@@ -1794,7 +1799,7 @@ namespace DragonsAltarSorcerer
                 StartCoroutine(RingVfx(target, radius, new Color(0.50f, 0.90f, 1f, 0.95f), 0.6f));
                 StartCoroutine(RingVfx(target, core, new Color(0.85f, 0.98f, 1f, 1f), 0.8f));
                 Vector3 it = target; float ir = radius;
-                float ic = core; DragonCombat.RunVfx(delegate { DragonVfx.ShatterIce(it, ic * 1.3f); DragonVfx.HeavyLanding(it, new Color(0.60f, 0.92f, 1f, 1f), ir, 2f); DragonVfx.IceBurst(it, ir); DragonVfx.SpikeRing(it, DragonVfx.Ice, ir * 0.8f, 12, 2.4f, 2f); DragonVfx.Spike(it, DragonVfx.Ice, 3.5f, 1.1f, 2f, Vector3.zero); });   // v0.25.58
+                float ic = core; DragonCombat.RunVfx(delegate { DragonVfx.ShatterIce(it, ic * 1.3f); DragonVfx.HeavyLanding(it, new Color(0.60f, 0.92f, 1f, 1f), ir, 2f); DragonVfx.IceBurst(it, ir); DragonVfx.SpikeRing(it, DragonVfx.Ice, ir * 0.8f, 12, 2.4f, 2f); DragonVfx.Spike(it, DragonVfx.Ice, 3.5f, 1.1f, 2f, Vector3.zero); DragonVfx.FrostGround(it, ir, 4f, 0.6f); });   // v0.25.58; v0.25.190 low cold mist + rime after the landing
             }
         }
 
@@ -2123,7 +2128,15 @@ namespace DragonsAltarSorcerer
                 _wizardChargeNextSpend = Time.time + tick;
             }
 
-            if (_enableVfx.Value && held > 0.15f && ((int)(held * 10f) % 3 == 0))
+            if (_enableVfx.Value && DragonVfx.Enabled && held > 0.15f && Time.time >= _wizChargeVfxAt)
+            {
+                // v0.25.190 the charge lives on the staff: energized motes at the staff head, more per stack (the ring drew nothing)
+                _wizChargeVfxAt = Time.time + 0.25f;
+                Vector3 tip = player.transform.position + Vector3.up * 1.45f + player.transform.forward * 0.55f + player.transform.right * 0.28f;
+                int st = Mathf.Max(0, _wizardChargeStacks);
+                DragonCombat.RunVfx(delegate { DragonVfx.Burst(tip, new Color(0.72f, 0.40f, 1f, 0.85f), 3 + st * 3, 0.6f + st * 0.3f, 0.05f, 0.35f, -0.1f); });
+            }
+            else if (_enableVfx.Value && !DragonVfx.Enabled && held > 0.15f && ((int)(held * 10f) % 3 == 0))
             {
                 float radius = _wizardChargeStacks >= 1 ? DragonCombat.M(_wizardChargeBaseRadius.Value) * 2f : DragonCombat.M(_wizardChargeBaseRadius.Value);
                 StartCoroutine(RingVfx(player.transform.position, Mathf.Max(0.5f, radius), new Color(0.70f, 0.24f, 1f, 0.48f), 0.12f));
@@ -3649,6 +3662,13 @@ namespace DragonsAltarSorcerer
                 _overchargeLockedUntil = _overchargeUntil + Mathf.Max(0f, _ocBuffer.Value);
                 ShowMessage("OVERCHARGE");
                 DragonCombat.PlayAccent(Player.m_localPlayer, "wiz_overcharge", 0.12f);
+                if (_enableVfx.Value && DragonVfx.Enabled && Player.m_localPlayer != null)
+                {
+                    // v0.25.190 short activation surge kept on the weapon side, away from the aim
+                    Player op = Player.m_localPlayer;
+                    Vector3 sp = op.transform.position + Vector3.up * 1.3f + op.transform.right * 0.3f;
+                    DragonCombat.RunVfx(delegate { DragonVfx.Burst(sp, new Color(0.75f, 0.45f, 1f, 0.9f), 20, 2.2f, 0.06f, 0.45f, -0.4f); DragonVfx.SoftWave(op.transform.position, new Color(0.70f, 0.40f, 1f, 1f), 2.2f, 0.4f); });
+                }
             }
         }
 
@@ -4049,6 +4069,8 @@ namespace DragonsAltarSorcerer
         {
             GameObject root = new GameObject("DragonsAltarRift");
             root.transform.position = position;
+            Player rfp = Player.m_localPlayer;   // v0.25.190 the portal opening faces the caster (was always world Z)
+            if (rfp != null) { Vector3 rf = rfp.transform.position - position; rf.y = 0f; if (rf.sqrMagnitude > 0.01f) root.transform.rotation = Quaternion.LookRotation(rf.normalized, Vector3.up); }
             int riftLayer = LayerMask.NameToLayer("piece_nonsolid");
             if (riftLayer >= 0) root.layer = riftLayer;
             PortalLink link = root.AddComponent<PortalLink>();

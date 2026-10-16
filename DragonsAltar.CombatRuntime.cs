@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.189";
+        public const string ModVersion = "0.25.190";
 
         internal static DragonCombatPlugin Instance;
 
@@ -8350,6 +8350,7 @@ namespace DragonsAltarCombat
 
         private static readonly Dictionary<int, float> SkillLockUntil = new Dictionary<int, float>();
         private static readonly Dictionary<int, float> ExplicitHyperArmorUntil = new Dictionary<int, float>();
+        private static float _hyperProcVfxAt;   // v0.25.190
         private static readonly Dictionary<int, float> HitHyperArmorUntil = new Dictionary<int, float>();
         private static readonly Dictionary<int, float> AttackSpeedSource = new Dictionary<int, float>();
         private static readonly Dictionary<int, float> SkillAnimSpeed = new Dictionary<int, float>();
@@ -10213,7 +10214,17 @@ namespace DragonsAltarCombat
                         HyperFirstHitGrant[key] = grant;
                     }
                     HyperFirstHitLast[key] = Time.time;
-                    if (grant) HitHyperArmorUntil[targetPlayer.GetInstanceID()] = Time.time + 0.20f;
+                    if (grant)
+                    {
+                        HitHyperArmorUntil[targetPlayer.GetInstanceID()] = Time.time + 0.20f;
+                        // v0.25.190 the defensive proc shows: a quick muted steel edge response (local player, max once per 0.6 s)
+                        if (targetPlayer == Player.m_localPlayer && DragonVfx.Enabled && Time.time >= _hyperProcVfxAt)
+                        {
+                            _hyperProcVfxAt = Time.time + 0.6f;
+                            Vector3 hp = targetPlayer.transform.position + Vector3.up * 1.1f;
+                            RunVfx(delegate { DragonVfx.Burst(hp, new Color(0.78f, 0.80f, 0.84f, 0.85f), 10, 2.4f, 0.05f, 0.22f, 0f); });
+                        }
+                    }
                     else HitHyperArmorUntil.Remove(targetPlayer.GetInstanceID());
                 }
 
@@ -10760,6 +10771,17 @@ namespace DragonsAltarCombat
 
         private static IEnumerator ZapVisual(Vector3 center, float radius)
         {
+            if (DragonVfx.Enabled)
+            {
+                // v0.25.190 the delayed Zap detonation crackles at the target: short ivory-blue filaments + a compact spark burst
+                DragonCombat.RunVfx(delegate
+                {
+                    Vector3 c0 = center + Vector3.up * 1f;
+                    for (int k = 0; k < 4; k++) { Vector3 o = UnityEngine.Random.onUnitSphere * radius * 0.8f; o.y = Mathf.Abs(o.y) * 0.5f; DragonVfx.Bolt(c0, center + o, new Color(0.80f, 0.92f, 1f, 0.95f), 0.05f, 0.16f); }
+                    DragonVfx.Burst(c0, new Color(0.85f, 0.95f, 1f, 0.9f), 14, 3f, 0.05f, 0.25f, 0f);
+                });
+                yield break;
+            }
             GameObject obj = new GameObject("DragonsAltarZap");
             LineRenderer line = obj.AddComponent<LineRenderer>();
             line.useWorldSpace = true;
@@ -16269,6 +16291,43 @@ namespace DragonsAltarCombat
             return m;
         }
 
+        // v0.25.190 Astral Railcannon wind up: a translucent spectral cannon (barrel, muzzle ring, breech, two bands)
+        // assembles in front of the chest along the aim and fades when the shot leaves. Cached mesh, one material.
+        private static Mesh _cannonMesh, _cannonBandMesh;
+        public static void SpectralCannon(Transform follow, Vector3 forward, float seconds)
+        {
+            if (!Enabled || follow == null) return;
+            if (_cannonMesh == null)
+            {
+                List<Vector2> pr = new List<Vector2>();
+                pr.Add(new Vector2(0f, 0f)); pr.Add(new Vector2(0.30f, 0f)); pr.Add(new Vector2(0.36f, 0.12f)); pr.Add(new Vector2(0.30f, 0.30f));
+                pr.Add(new Vector2(0.22f, 0.45f)); pr.Add(new Vector2(0.19f, 1.7f)); pr.Add(new Vector2(0.27f, 1.85f)); pr.Add(new Vector2(0.27f, 2.05f));
+                pr.Add(new Vector2(0.16f, 2.05f)); pr.Add(new Vector2(0.16f, 1.9f));
+                _cannonMesh = LatheMesh(pr, 14);
+                List<Vector2> bd = new List<Vector2>();
+                bd.Add(new Vector2(0f, 0f)); bd.Add(new Vector2(0.25f, 0f)); bd.Add(new Vector2(0.25f, 0.06f)); bd.Add(new Vector2(0f, 0.06f));
+                _cannonBandMesh = LatheMesh(bd, 14);
+            }
+            Material body = SolidMat(new Color(0.55f, 0.42f, 1f, 0.32f)), band = Mat(WhiteTex(), true);
+            if (body == null || _cannonMesh == null) return;
+            Vector3 f = forward.sqrMagnitude > 0.01f ? forward.normalized : follow.forward;
+            GameObject root = new GameObject("IH_SpectralCannon");
+            root.transform.SetParent(follow, false);
+            root.transform.position = follow.position + Vector3.up * 1.35f + f * 0.45f + follow.right * 0.15f;
+            root.transform.rotation = Quaternion.LookRotation(f, Vector3.up) * Quaternion.Euler(90f, 0f, 0f);   // lathe +Y -> aim
+            MeshObject("barrel", _cannonMesh, body, root.transform);
+            if (band != null && _cannonBandMesh != null)
+            {
+                for (int i = 0; i < 2; i++)
+                {
+                    GameObject b = MeshObject("band", _cannonBandMesh, band, root.transform);
+                    if (b != null) b.transform.localPosition = new Vector3(0f, 0.7f + i * 0.6f, 0f);
+                }
+            }
+            root.transform.localScale = Vector3.one * 0.2f;
+            root.AddComponent<DragonCannonLife>().Life = Mathf.Max(0.3f, seconds);
+        }
+
         // ------------------------------------------------------------------ v0.25.189 finished relics (user refs: Dragon Nest relics)
         // Polished gold, ivory, glowing gems and feathered wings for the three Cleric relics. Every mesh is built once and cached
         // by the caller; materials are shared singletons (no per-cast allocations after the first cast).
@@ -18250,7 +18309,14 @@ namespace DragonsAltarCombat
         // Furious Winds: real leaves (green lens blades) whirling around you on three tilted orbits.
         public static void LeafOrbit(Transform parent, float radius)
         {
+            LeafOrbit(parent, radius, 10);
+        }
+
+        // v0.25.190 perRing = leaves on each of the 3 orbits (sparse for Furious Winds / Cyclone)
+        public static void LeafOrbit(Transform parent, float radius, int perRing)
+        {
             if (!Enabled || parent == null) return;
+            perRing = Mathf.Clamp(perRing, 1, 10);
             Color[] cols = { new Color(0.40f, 0.80f, 0.30f, 0.95f), new Color(0.62f, 0.90f, 0.35f, 0.95f), new Color(0.85f, 0.75f, 0.30f, 0.95f) };
             System.Random rng = new System.Random(3);
             for (int k = 0; k < 3; k++)
@@ -18261,9 +18327,9 @@ namespace DragonsAltarCombat
                 pivot.transform.localRotation = Quaternion.Euler(k * 7f - 7f, 0f, k * 5f);
                 pivot.AddComponent<DragonRotate>().Speed = new Vector3(0f, 260f + k * 70f, 0f);
                 float r = radius * (0.6f + 0.15f * k);
-                for (int i = 0; i < 10; i++)
+                for (int i = 0; i < perRing; i++)
                 {
-                    float a = (i + (float)rng.NextDouble() * 0.6f) / 10f * 360f;
+                    float a = (i + (float)rng.NextDouble() * 0.6f) / perRing * 360f;
                     GameObject leaf = MeshObject("leaf", LensMesh(0.32f, 0.16f, 0.02f, cols[(i + k) % 3], true), ClearMat(), pivot.transform);
                     leaf.transform.localPosition = Quaternion.Euler(0f, a, 0f) * Vector3.forward * r + Vector3.up * ((float)rng.NextDouble() - 0.5f) * 0.6f;
                     leaf.transform.localRotation = Quaternion.Euler((float)rng.NextDouble() * 360f, a, (float)rng.NextDouble() * 360f);
@@ -18434,6 +18500,20 @@ namespace DragonsAltarCombat
         }
     }
     // v0.25.75 helpers
+    // v0.25.190 spectral cannon: grows in over 0.2 s, holds, shrinks out over the last 0.15 s, then destroys itself
+    public class DragonCannonLife : MonoBehaviour
+    {
+        public float Life = 1f;
+        private float _age;
+        private void Update()
+        {
+            _age += Time.deltaTime;
+            float k = _age < 0.2f ? Mathf.SmoothStep(0.2f, 1f, _age / 0.2f) : (_age > Life - 0.15f ? Mathf.Clamp01((Life - _age) / 0.15f) : 1f);
+            transform.localScale = Vector3.one * Mathf.Max(0.01f, k);
+            if (_age >= Life) Destroy(gameObject);
+        }
+    }
+
     // v0.25.189 gentle sway around a local axis (relic wings): angle = Deg * sin(t * Speed + Phase)
     public class DragonSway : MonoBehaviour
     {

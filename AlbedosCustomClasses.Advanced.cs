@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.189";
+        public const string ModVersion = "0.25.190";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -2714,7 +2714,10 @@ namespace AlbedosCustomClassesAdvanced
                 {
                     if (Time.time > cast.Times[p] + life) continue;
                     if (_enableVfx.Value && p % 2 == 0)
-                        StartCoroutine(AnimateTickRing(cast.Points[p] + Vector3.up * 0.08f, 0.2f, DragonCombat.M(0.9f), Mathf.Min(0.45f, cast.Times[p] + life - Time.time), new Color(1f, 0.46f, 0.12f, 0.45f), 0.06f));
+                    {
+                        if (DragonVfx.Enabled) { if (p % 4 == 0) { Vector3 fp = cast.Points[p]; float fl = Mathf.Min(0.5f, cast.Times[p] + life - Time.time); if (fl > 0.05f) DragonCombat.RunVfx(delegate { DragonVfx.Embers(fp, new Color(1f, 0.46f, 0.12f, 0.9f), DragonCombat.M(0.6f), fl, 10f); }); } }   // v0.25.190 the Ascended fire trail is visible: low embers on the cracks (the tick ring drew nothing)
+                        else StartCoroutine(AnimateTickRing(cast.Points[p] + Vector3.up * 0.08f, 0.2f, DragonCombat.M(0.9f), Mathf.Min(0.45f, cast.Times[p] + life - Time.time), new Color(1f, 0.46f, 0.12f, 0.45f), 0.06f));
+                    }
                     List<Character> near = GetSphereTargets(player, cast.Points[p] + Vector3.up * 0.6f, DragonCombat.M(1.2f));
                     for (int i = 0; i < near.Count; i++)
                     {
@@ -2799,7 +2802,7 @@ namespace AlbedosCustomClassesAdvanced
             if (windup > 0f) yield return new WaitForSeconds(windup);
             if (player == null || player.IsDead() || SmInterrupted(start)) { if (player != null) DragonCombat.ClipStop(player, 0.2f); yield break; }
             _frenzyActive = true;
-            if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.TrailWhile(player.transform, new Color(0.45f, 0.78f, 1f, 1f), 0.5f, delegate { return _frenzyActive && player != null; }); DragonVfx.GroundDust(player.transform, 0.8f, delegate { return _frenzyActive && player != null; }); });   // v0.25.169 dust kicked up by the dash
+            if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.TrailWhile(player.transform, new Color(0.45f, 0.78f, 1f, 1f), 0.5f, delegate { return _frenzyActive && player != null; }); DragonVfx.GroundDust(player.transform, 0.8f, delegate { return _frenzyActive && player != null; }); DragonVfx.AirStreak(player.transform, new Color(0.75f, 0.88f, 1f, 1f), 0.35f, 0.35f, delegate { return _frenzyActive && player != null; }); DragonVfx.Gust(player.transform.position + Vector3.up * 1f, -player.transform.forward, 1.4f); });   // v0.25.169 dust kicked up by the dash; v0.25.190 narrow thrust streak + air stretched backward
             float distance = Mathf.Max(1f, ascended ? DragonCombat.M(_frenzyAscDistance.Value) : DragonCombat.M(_frenzyDistance.Value));
             float width = Mathf.Max(0.5f, DragonCombat.M(_frenzyWidth.Value)) * (ascended ? Mathf.Max(1f, _frenzyAscWidthMult.Value) : 1f);
             float damage = ascended ? Mathf.Max(0f, _frenzyAscDamage.Value) / 100f : 1f;
@@ -3322,6 +3325,7 @@ namespace AlbedosCustomClassesAdvanced
             {
                 DragonCombat.ApplyTimedBuff(ally, "SwordMaster.KnightsGuidance", duration, 0f, 0f, Mathf.Max(0f, _kgMove.Value) / 100f, 0f, Mathf.Max(0f, _kgRegen.Value) / 100f, 0f, false);
                 DragonCombat.ApplyStaminaUseCut(ally, Mathf.Max(0f, _kgStaminaCut.Value) / 100f, duration);
+                if (_enableVfx.Value && DragonVfx.Enabled) { Vector3 cp = ally.transform.position + Vector3.up * 2.1f; DragonCombat.RunVfx(delegate { DragonVfx.Burst(cp, new Color(0.70f, 0.86f, 1f, 0.85f), 10, 0.9f, 0.07f, 0.7f, -0.35f); }); }   // v0.25.190 brief crest above every ally
             }
             if (_enableVfx.Value)
                 StartCoroutine(AnimateSoftRing(player.transform.position + Vector3.up * 0.10f, 0.6f, radius, 0.9f, new Color(0.62f, 0.84f, 1f, 0.95f), 0.10f));
@@ -4232,7 +4236,10 @@ namespace AlbedosCustomClassesAdvanced
         private IEnumerator BonecrusherRoutineV(Player player, float takeoffDelay)
         {
             ShowMessage("Bonecrusher");
+            bool[] boneLanded = new bool[1];
+            if (_enableVfx.Value && DragonVfx.Enabled) { Player bp = player; DragonCombat.RunVfx(delegate { DragonVfx.AirStreak(bp.transform, new Color(0.85f, 0.75f, 0.62f, 1f), 0.5f, 0.3f, delegate { return bp != null && !boneLanded[0]; }); }); }   // v0.25.190 disturbed air follows the leap + descent
             yield return StartCoroutine(AcrobaticJumpUntilLanding(player, takeoffDelay, Mathf.Max(1f, _boneWindup.Value), _boneWindup.Value >= 1f));
+            boneLanded[0] = true;
             if (player == null || player.IsDead()) yield break;
             OlympicLanding(player, 0.6f);
             Vector3 center = player.transform.position;
@@ -4304,7 +4311,7 @@ namespace AlbedosCustomClassesAdvanced
                 Shader shader = Shader.Find("Sprites/Default");
                 if (r != null && shader != null) { r.material = new Material(shader); r.material.color = new Color(0.20f, 0.14f, 0.10f, 1f); }
                 GameObject bombVis = bomb;
-                DragonCombat.RunVfx(delegate { DragonVfx.BombLook(bombVis); DragonVfx.AttachGlow(bombVis.transform, new Color(1f, 0.45f, 0.14f, 1f), 0.25f, 60f, 4f); });   // v0.25.55 burning fuse, v0.25.77 iron bomb
+                DragonCombat.RunVfx(delegate { DragonVfx.BombLook(bombVis); DragonVfx.AttachGlow(bombVis.transform, new Color(1f, 0.45f, 0.14f, 1f), 0.25f, 60f, 4f); DragonVfx.AirStreak(bombVis.transform, new Color(0.42f, 0.40f, 0.38f, 1f), 0.18f, 0.5f, delegate { return bombVis != null; }); });   // v0.25.55 burning fuse, v0.25.77 iron bomb, v0.25.190 thin smoke tail
             }
             Vector3 pos = origin;
             Vector3 impact = pos;
@@ -4568,7 +4575,10 @@ namespace AlbedosCustomClassesAdvanced
             DragonCombat.ShowStatus(player, "battlecry_labor", "labor", "Battlecry - Labor", Mathf.Max(1f, _bcEnvDuration.Value), 0,
                 "Labor Buff\n+" + IhNum(_bcEnvBonus.Value) + "% damage to trees, logs, rocks, ore and other destructible objects\n(your own tool and weapon hits)");
             foreach (Player ally in allies)
+            {
                 DragonCombat.ApplyTimedBuff(ally, "Mercenary.Battlecry", Mathf.Max(1f, _bcCreatureDuration.Value), Mathf.Max(0f, _bcCreatureBonus.Value) / 100f, 0f, 0f, 0f, 0f, 0f, false);
+                if (_enableVfx.Value && DragonVfx.Enabled && ally != player) { Vector3 wp = ally.transform.position + Vector3.up * 1.3f; DragonCombat.RunVfx(delegate { DragonVfx.Burst(wp, new Color(1f, 0.55f, 0.25f, 0.75f), 8, 1.5f, 0.12f, 0.5f, -0.2f); }); }   // v0.25.190 restrained warm accent on allies
+            }
             // Environment bonus: this client's own tool / weapon hits on trees, rocks, ore, objects.
             _battlecryEnvUntil = Time.time + Mathf.Max(1f, _bcEnvDuration.Value);
             if (_enableVfx.Value)
@@ -6984,6 +6994,7 @@ namespace AlbedosCustomClassesAdvanced
         {
             if (ally == null)
                 return;
+            if (_enableVfx.Value && DragonVfx.Enabled) { Vector3 cw = ally.transform.position + Vector3.up * 0.9f; DragonCombat.RunVfx(delegate { DragonVfx.Burst(cw, new Color(1f, 0.97f, 0.85f, 0.7f), 8, 1.2f, 0.06f, 0.9f, -0.6f); }); }   // v0.25.190 short lifting wisps when ailments are cleansed
             int id = ally.GetInstanceID();
             _refreshingFireBurns.Remove(id);
             _refreshingSpiritBurns.Remove(id);
@@ -7499,7 +7510,15 @@ namespace AlbedosCustomClassesAdvanced
                     RefreshFireBurn(player, targets[i], _angelFireDot.Value, burn);
                 }
                 if (_enableVfx.Value)
-                    StartCoroutine(AnimateTickRing(center + Vector3.up * 0.06f, radius * 0.92f, radius, 0.45f, new Color(1f, 0.55f, 0.25f, 0.85f), 0.10f));
+                {
+                    if (DragonVfx.Enabled)
+                    {
+                        // v0.25.190 the burning ring is visible: sparse grounded flames along its edge (the tick ring drew nothing)
+                        Vector3 rc = center; float rr = radius; float ph = Time.time;
+                        DragonCombat.RunVfx(delegate { for (int k = 0; k < 8; k++) { float a = k * 0.785f + ph; DragonVfx.Embers(rc + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * rr * 0.9f, new Color(1f, 0.55f, 0.25f, 0.9f), DragonCombat.M(0.5f), 0.55f, 8f); } });
+                    }
+                    else StartCoroutine(AnimateTickRing(center + Vector3.up * 0.06f, radius * 0.92f, radius, 0.45f, new Color(1f, 0.55f, 0.25f, 0.85f), 0.10f));
+                }
                 yield return new WaitForSeconds(0.5f);
             }
         }
@@ -7883,6 +7902,12 @@ namespace AlbedosCustomClassesAdvanced
                     {
                         CreateLightning(target, new Color(0.48f, 0.82f, 1f, 0.92f), Mathf.Min(0.22f, interval * 0.45f));
                         StartCoroutine(AnimateSoftRing(target + Vector3.up * 0.08f, 0.3f, radius, Mathf.Max(0.5f, Mathf.Min(0.8f, interval)), new Color(0.45f, 0.70f, 1f, 0.65f), 0.05f));   // v0.25.181 visible blue pulse
+                        if (DragonVfx.Enabled)
+                        {
+                            // v0.25.190 short branching discharges FROM the relic into the ground around it
+                            Vector3 top = target + Vector3.up * 3.2f; float dr = Mathf.Min(radius * 0.5f, DragonCombat.M(3f));
+                            DragonCombat.RunVfx(delegate { for (int k = 0; k < 3; k++) { Vector2 q = UnityEngine.Random.insideUnitCircle.normalized * UnityEngine.Random.Range(dr * 0.5f, dr); DragonVfx.Bolt(top, target + new Vector3(q.x, 0.05f, q.y), new Color(0.55f, 0.85f, 1f, 0.9f), 0.06f, 0.18f); } });
+                        }
                         PulseConsecratedGroundVfx();
                     }
 
@@ -8039,6 +8064,7 @@ namespace AlbedosCustomClassesAdvanced
                         bool consecrated = IsInsideConsecratedGround(ally.transform.position);
                         float multiplier = consecrated ? Mathf.Max(1f, _consecratedMultiplier.Value) : 1f;
                         Heal(ally, ally.GetMaxHealth() * Mathf.Max(0f, _holyRelicHealPercent.Value) * multiplier * IhHealPower(player, "holy_relic") / 100f);
+                        if (_enableVfx.Value && DragonVfx.Enabled && i < 6) { Vector3 ra = target + Vector3.up * 2.6f, rb = ally.transform.position + Vector3.up * 1.1f; DragonCombat.RunVfx(delegate { DragonVfx.Streak(ra, rb, new Color(0.70f, 1f, 0.72f, 0.35f), 0.08f, 0.45f); }); }   // v0.25.190 the healing pulse drifts from the relic to each ally
                         if (ascended)
                         {
                             CleanseAilments(ally);
@@ -12128,6 +12154,13 @@ namespace AlbedosCustomClassesAdvanced
         {
             if (player == null)
                 yield break;
+            if (DragonVfx.Enabled)
+            {
+                // v0.25.190 the Barrier answers a hit with a brief faceted shimmer (the tick ring drew nothing)
+                Vector3 bhp = player.transform.position + Vector3.up * 1f;
+                DragonCombat.RunVfx(delegate { DragonVfx.Burst(bhp, new Color(0.72f, 0.94f, 1f, 0.85f), 14, 2.2f, 0.06f, 0.3f, 0f); });
+                yield break;
+            }
 
             yield return AnimateTickRing(
                 player.transform.position + Vector3.up * 1f,
@@ -14972,6 +15005,7 @@ namespace AlbedosCustomClassesAdvanced
             {
                 DragonCombat.ApplyTimedBuff(ally, "Paladin.HeavensLight", duration, 0f, 0f, 0f, Mathf.Max(0f, _graceLightDefense.Value) / 100f, 0f, 0f, false);
                 DragonCombat.ApplyStaminaUseCut(ally, hlCut / 100f, duration);   // v0.25.186 (user): replaces GrantNoEquipmentPenalty
+                if (_enableVfx.Value && DragonVfx.Enabled) { Vector3 hp = ally.transform.position + Vector3.up * 2.1f; DragonCombat.RunVfx(delegate { DragonVfx.Burst(hp, new Color(1f, 0.90f, 0.55f, 0.85f), 10, 0.9f, 0.07f, 0.7f, -0.35f); }); }   // v0.25.190 restrained protective crest on every recipient (no light pillar, user rule)
             }
             if (_enableVfx.Value)
             {

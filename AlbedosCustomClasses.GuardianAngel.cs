@@ -17,7 +17,7 @@ namespace AlbedosCustomClassesGuardian
     {
         public const string ModGuid = "albedo.customclasses.guardian";
         public const string ModName = "Aethelborn Ascended - Grand Sigil Survival";
-        public const string ModVersion = "0.25.189";
+        public const string ModVersion = "0.25.190";
 
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -183,6 +183,18 @@ namespace AlbedosCustomClassesGuardian
 
         private IEnumerator GrandSigilVisual(Player player)
         {
+            if (DragonVfx.Enabled && player != null)
+            {
+                // v0.25.190 rescue: a short upward holy recovery motif at the actual proc (no persistent cross)
+                Player rp = player; Vector3 rpos = player.transform.position;
+                DragonCombat.RunVfx(delegate
+                {
+                    DragonVfx.SoftWave(rpos, new Color(1f, 0.92f, 0.62f, 1f), 3f, 0.6f);
+                    DragonVfx.Feathers(rpos + Vector3.up * 1.2f, new Color(1f, 0.97f, 0.88f, 1f), 1.2f, 1.2f, 18f);
+                    DragonVfx.Aura(rp.transform, rpos, new Color(1f, 0.90f, 0.60f, 1f), 0.6f, 1.6f, 22f, 1.4f);
+                });
+                yield break;
+            }
             GameObject ringObject = new GameObject("DragonsAltarGrandSigilRing");
             LineRenderer ring = ringObject.AddComponent<LineRenderer>();
             ring.useWorldSpace = true;

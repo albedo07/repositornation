@@ -1,0 +1,4 @@
+v0.25.190 static results
+- check.sh 3029660: PASSED (0 new signatures)
+- mcs --parse C# 5: OK (all .cs)
+- In game: not tested.

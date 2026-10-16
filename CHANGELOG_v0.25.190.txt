@@ -1,0 +1,18 @@
+Aethelborn Ascended v0.25.190 - VFX Gaps (on top of v0.25.189; NOT an anchor, anchor stays v0.25.179)
+
+Full static audit of all skills against the VFX art direction; every effect that was invisible (legacy helpers that draw
+nothing while Enhanced VFX is on) or missing now has a visual. Visuals only - damage, hitboxes, timing, cooldowns unchanged.
+Per-skill list (fixed / done / still open): docs/design/VFX_COMPLETION_v0.25.190.md
+
+Warrior: Crescent Ascended fire trail, Bonecrusher descent air, Frenzied Charge thrust streak + backward air, Punishing Bomb
+smoke tail, Knight's Guidance ally crest, Battlecry ally accent, Warrior Hyper Armor proc response.
+Cleric: Angel Comet Ascended burning ring, Barrier/Crucible hit shimmer, Zap detonation crackle, Bless Thy Sinners rescue motif,
+Heaven's Light recipient crest, cleanse wisps, Holy Relic pulse drift to allies, Lightning Relic discharges from the relic.
+Sorcerer: Overcharge surge, Archmage staff charge motes, Railcannon spectral cannon wind up, Glacial Ascended cold mist,
+Stonefang base dirt, Rift Walker portals face the caster.
+Ranger: air-jump wisps, Tumble Asc gust, Somersault flip wind, Swallow Dive slices + leaves, Cyclone visible arrow + leaves,
+big Ballista/Great Arrow body, Starfall lands on real enemies, boss pin arrows, subtle Hawk marks, Focus accent, Tailwind
+streamer, Skyfall dust, Furious Winds leaves halved (dome kept).
+
+VERIFIED: compile check vs 3029660 passed (0 new signatures; stub Character.GetRadius added - real Valheim member),
+mcs --parse C# 5 on all files. NOT tested in game.

@@ -41,7 +41,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Aethelborn Ascended - Ranger";
-        public const string ModVersion = "0.25.189";
+        public const string ModVersion = "0.25.190";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -630,7 +630,11 @@ namespace DragonsAltarRanger
             body.velocity = v;
             _doubleJumpUsed = true;
             ResetFloatField(player, "m_maxAirAltitude", player.transform.position.y);
-            if (_enableVfx.Value) StartCoroutine(RingVfx(player.transform.position, DragonCombat.M(1.2f), new Color(0.55f, 1f, 0.90f, 0.9f), 0.3f));
+            if (_enableVfx.Value)
+            {
+                if (DragonVfx.Enabled) { Player jp = player; Vector3 jf = player.transform.position + Vector3.up * 0.3f; float jend = Time.time + 0.35f; DragonCombat.RunVfx(delegate { DragonVfx.Gust(jf, Vector3.down, 0.9f); DragonVfx.AirStreak(jp.transform, DragonVfx.Wind, 0.3f, 0.25f, delegate { return jp != null && Time.time < jend; }); }); }   // v0.25.190 brief wisps on the real air jump
+                else StartCoroutine(RingVfx(player.transform.position, DragonCombat.M(1.2f), new Color(0.55f, 1f, 0.90f, 0.9f), 0.3f));
+            }
         }
 
         private static bool _jumpReflLooked;   // v0.25.183 (perf) resolved once (ran every airborne frame)
@@ -729,6 +733,7 @@ namespace DragonsAltarRanger
             if (player == null) yield break;
             Rigidbody body = player.GetComponent<Rigidbody>();
             _noFallUntilGrounded[player.GetInstanceID()] = true;
+            if (_enableVfx.Value && DragonVfx.Enabled) { Player fp = player; float fend = Time.time + seconds + 0.05f; DragonCombat.RunVfx(delegate { DragonVfx.AirStreak(fp.transform, DragonVfx.Wind, 0.45f, 0.35f, delegate { return fp != null && Time.time < fend; }); }); }   // v0.25.190 wind arc follows every flip (Somersault front + back flips)
             if (flipDir != 0)
                 StartCoroutine(PoseMotion(player, seconds, delegate(float k)
                 {
@@ -870,7 +875,11 @@ namespace DragonsAltarRanger
             {
                 List<Character> gust = GetSphereTargets(player, start, DragonCombat.M(_tsAscGust.Value));
                 for (int i = 0; i < gust.Count; i++) DragonCombat.ApplyCripple(gust[i], _tsAscCripple.Value);
-                if (_enableVfx.Value) StartCoroutine(RingVfx(start, DragonCombat.M(_tsAscGust.Value), new Color(0.55f, 1f, 0.90f, 0.9f), 1.0f));
+                if (_enableVfx.Value)
+                {
+                    if (DragonVfx.Enabled) { Vector3 gs = start; float gr = DragonCombat.M(_tsAscGust.Value); DragonCombat.RunVfx(delegate { DragonVfx.PressureRing(gs + Vector3.up * 0.3f, Vector3.up, DragonVfx.Wind, gr * 0.6f); DragonVfx.DirtBurst(gs, gr * 0.3f, 0.5f); }); }   // v0.25.190 the Ascended gust is visible (the 1 s ring never rendered)
+                    else StartCoroutine(RingVfx(start, DragonCombat.M(_tsAscGust.Value), new Color(0.55f, 1f, 0.90f, 0.9f), 1.0f));
+                }
             }
             return BackFlip(player, _tsDistance.Value, true, delegate { TumbleVolley(player, ascended); });
         }
@@ -1102,6 +1111,17 @@ namespace DragonsAltarRanger
                 vfx = ascended ? CreateTornado(pos, radius, DragonCombat.M(Mathf.Max(1f, _cyAscHeight.Value)), new Color(0.70f, 0.95f, 1f, 0.9f))
                                : CreateSpinRing(pos, radius, new Color(0.55f, 1f, 0.90f, 0.9f));
             if (vfx != null) { GameObject cv = vfx; float cw = radius * 1.4f; DragonCombat.RunVfx(delegate { DragonVfx.GroundDust(cv.transform, cw, delegate { return cv != null; }, 1.6f); }); }   // v0.25.181 dirt pulled up wherever it passes near the ground
+            // v0.25.190 the arrow itself rides inside the corkscrew (normal), with a few leaves carried round
+            GameObject cyArrow = null;
+            if (vfx != null && !ascended && DragonVfx.Enabled)
+            {
+                cyArrow = new GameObject("IH_CycloneArrow");
+                Vector3 fd = dir; fd.y = 0f; if (fd.sqrMagnitude < 0.01f) fd = Vector3.forward;
+                cyArrow.transform.rotation = Quaternion.LookRotation(fd.normalized, Vector3.up);
+                cyArrow.transform.position = pos + Vector3.up * 0.2f;
+                GameObject ca = cyArrow, cvx = vfx; float lr = radius * 0.7f; Color acol = new Color(0.55f, 1f, 0.90f, 0.9f);
+                DragonCombat.RunVfx(delegate { DragonVfx.SpiritArrow(ca.transform, acol, 1.1f); DragonVfx.LeafOrbit(cvx.transform, lr, 3); });
+            }
             float speed = range / travel;
             float traveled = 0f, nextHit = 0f;
             RangerArrowDamage d = ArrowDamage(player);
@@ -1120,6 +1140,7 @@ namespace DragonsAltarRanger
                     Vector3 vp = ascended ? GroundAt(pos) : pos;
                     vfx.transform.position = vp;
                     vfx.transform.Rotate(0f, 720f * Time.deltaTime, 0f, Space.World);
+                    if (cyArrow != null) cyArrow.transform.position = vp + Vector3.up * 0.2f;
                 }
                 if (ascended)
                 {
@@ -1153,6 +1174,7 @@ namespace DragonsAltarRanger
                 yield return null;
             }
             if (vfx != null) Destroy(vfx);
+            if (cyArrow != null) Destroy(cyArrow);
         }
 
         // A tall funnel of wind rings, narrow at the ground and wide at the top.
@@ -1265,6 +1287,19 @@ namespace DragonsAltarRanger
             List<Character> hits = PathTargets(player, start, end, DragonCombat.M(_sdRadius.Value));
             RangerArrowDamage d = ArrowDamage(player);
             for (int i = 0; i < hits.Count; i++) { Deal(player, hits[i], d, mult, 4f, false, "swallow_dive", "Attack 1", false, false, ascended); OnSkillHit(player); }
+            if (_enableVfx.Value && DragonVfx.Enabled)
+            {
+                // v0.25.190 a short wind slice on every enemy the dash cut + a few leaf fragments peeling off the wake
+                Vector3 sdir = dir; sdir.y = 0f; if (sdir.sqrMagnitude < 0.01f) sdir = player.transform.forward; sdir.Normalize();
+                for (int i = 0; i < hits.Count && i < 8; i++)
+                {
+                    if (hits[i] == null) continue;
+                    Vector3 hp = hits[i].transform.position + Vector3.up * 1f;
+                    DragonCombat.RunVfx(delegate { DragonVfx.SlashArc(hp, sdir, 0.9f, 70f, DragonVfx.Wind, 0.12f, 0.22f, 0f); });
+                }
+                Vector3 la = start + Vector3.up * 0.8f, lb = end + Vector3.up * 0.8f;
+                DragonCombat.RunVfx(delegate { for (int k = 0; k < 3; k++) DragonVfx.Burst(Vector3.Lerp(la, lb, (k + 0.5f) / 3f), new Color(0.45f, 0.62f, 0.28f, 0.9f), 4, 2f, 0.08f, 1.1f, -0.25f); });
+            }
             if (_enableVfx.Value)
             {
                 LineVfx(start + Vector3.up, end + Vector3.up, new Color(0.55f, 1f, 0.90f, 0.95f), 0.25f, 0.35f);
@@ -1355,6 +1390,7 @@ namespace DragonsAltarRanger
                             Vector2 r = UnityEngine.Random.insideUnitCircle * radius;
                             Vector3 ground = point + new Vector3(r.x, 0f, r.y);
                             LineVfx(ShotOrigin(player), ground, new Color(0.55f, 1f, 0.80f, 0.9f), 0.06f, 0.15f);   // v0.25.38 from the bow
+                            if (k % 2 == 0 && DragonVfx.Enabled) { Vector3 dg = GroundAt(ground); DragonCombat.RunVfx(delegate { DragonVfx.DirtBurst(dg, 0.35f, 0.35f); }); }   // v0.25.190 small dust puff at the hit
                         }
                         StartCoroutine(GuideVfx(point, radius, new Color(0.55f, 1f, 0.80f, 0.7f), interval));
                     }
@@ -1741,7 +1777,7 @@ namespace DragonsAltarRanger
             GameObject obj = new GameObject("RangerFuriousWinds");
             obj.transform.position = pos;
             Color[] colors = { new Color(0.45f, 0.95f, 0.45f, 0.9f), new Color(0.70f, 1f, 0.55f, 0.8f), new Color(0.40f, 0.85f, 0.70f, 0.8f) };
-            if (DragonVfx.Enabled) { GameObject lo = obj; float lr = radius; DragonCombat.RunVfx(delegate { DragonVfx.LeafOrbit(lo.transform, lr); }); }   // v0.25.84 real whirling leaves
+            if (DragonVfx.Enabled) { GameObject lo = obj; float lr = radius; DragonCombat.RunVfx(delegate { DragonVfx.LeafOrbit(lo.transform, lr, 5); }); }   // v0.25.190 sparse leaves (15, was 30)   // v0.25.84 real whirling leaves
             for (int k = 0; k < 6 && !DragonVfx.Enabled; k++)
             {
                 GameObject ring = new GameObject("Leaves" + k);
@@ -1811,6 +1847,8 @@ namespace DragonsAltarRanger
                         DragonVfx.Gust(ap + Vector3.up * 0.4f, af, 1f);
                         DragonVfx.Burst(ap + Vector3.up * 0.3f, new Color(0.45f, 0.62f, 0.28f, 0.9f), 6, 2f, 0.08f, 1.2f, -0.3f);
                     });
+                    Player tw = ally; float tend = Time.time + 2.5f;
+                    DragonCombat.RunVfx(delegate { DragonVfx.AirStreak(tw.transform, DragonVfx.Wind, 0.35f, 0.3f, delegate { return tw != null && Time.time < tend; }); });   // v0.25.190 short low streamer while the gust settles
                 }
             }
         }
@@ -2476,6 +2514,13 @@ namespace DragonsAltarRanger
             int stacks = Mathf.FloorToInt(_focus);
             if (stacks != _focusShown)
             {
+                if (stacks > _focusShown && _enableVfx.Value && DragonVfx.Enabled)
+                {
+                    // v0.25.190 restrained bow accent per Focus stack gained
+                    Vector3 fp = player.transform.position + Vector3.up * 1.25f + player.transform.forward * 0.35f - player.transform.right * 0.2f;
+                    int fs = stacks;
+                    DragonCombat.RunVfx(delegate { DragonVfx.Burst(fp, new Color(1f, 0.85f, 0.45f, 0.8f), 3 + fs, 0.8f, 0.05f, 0.45f, 0.2f); });
+                }
                 // v0.24.3: Focus shows as a buff with its stack count.
                 if (stacks > 0) DragonCombat.ShowStatus(player, "focus", "focus", "Deadeye Focus", 0f, stacks, "Attack Buff\n+" + Mathf.RoundToInt(stacks * _deFocusDamage.Value).ToString() + "% Arrow Damage\n+" + Mathf.RoundToInt(stacks * _deFocusRange.Value).ToString() + "% Arrow Range\nStand still to build (max " + Mathf.RoundToInt(_deFocusMax.Value).ToString() + "), moving drains it");
                 else DragonCombat.ClearStatus(player, "focus");
@@ -2701,6 +2746,19 @@ namespace DragonsAltarRanger
             {
                 seconds = _psBig.Value + 2f;
                 DragonCombat.ApplyCripple(target, seconds);
+                if (_enableVfx.Value && DragonVfx.Enabled)
+                {
+                    // v0.25.190 Bosses are not held in place, but the arrows still visibly pin their feet (visual only)
+                    Vector3 bat = target.transform.position; float bs = seconds; float br = Mathf.Max(0.6f, target.GetRadius() * 0.9f);
+                    for (int k = 0; k < 3; k++)
+                    {
+                        float a = k * 2.094f + 0.4f;
+                        Vector3 off = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * br;
+                        Vector3 g = GroundAt(bat + off), pd = (-off.normalized + Vector3.down * 1.6f).normalized;
+                        DragonCombat.RunVfx(delegate { DragonVfx.PlantedArrow(g, pd, 1.2f, new Color(0.75f, 1f, 0.55f, 1f), Mathf.Max(0.5f, bs)); });
+                    }
+                    DragonCombat.RunVfx(delegate { DragonVfx.DirtBurst(bat, br, 0.6f); });
+                }
             }
             else
             {
@@ -3176,8 +3234,12 @@ namespace DragonsAltarRanger
                 }
                 if (_enableVfx.Value)
                 {
-                    Vector2 r = UnityEngine.Random.insideUnitCircle * radius;
-                    StarVfx(GroundAt(point + new Vector3(r.x, 0f, r.y)), impact, 0.4f);
+                    // v0.25.190 the falling arrow lands on an enemy really inside the area when there is one
+                    List<Character> inArea = GetSphereTargets(player, point, radius);
+                    Vector3 sp;
+                    if (inArea.Count > 0) { Character tc = inArea[UnityEngine.Random.Range(0, inArea.Count)]; sp = tc != null ? tc.transform.position : point; }
+                    else { Vector2 r = UnityEngine.Random.insideUnitCircle * radius; sp = point + new Vector3(r.x, 0f, r.y); }
+                    StarVfx(GroundAt(sp), impact, 0.4f);
                 }
                 yield return new WaitForSeconds(Mathf.Max(0.05f, _sfInterval.Value));
             }
@@ -3259,7 +3321,7 @@ namespace DragonsAltarRanger
         private void SetRedHighlight(Character c, bool on)
         {
             if (c == null) return;
-            Color red = new Color(0.85f, 0.04f, 0.02f, 1f);
+            Color red = new Color(0.32f, 0.03f, 0.02f, 1f);   // v0.25.190 subtle mark (was a full-body red glow)
             // Valheim's MaterialMan owns the property blocks when present; fall back to our own block.
             try
             {
@@ -3897,7 +3959,14 @@ namespace DragonsAltarRanger
             // v0.25.181 (user): a sharp tapered airflow wake (narrow core + pale air), heavier for big shots - no glow motes
             float ww = Mathf.Clamp(radius * 1.2f, 0.12f, 1.4f); bool heavy = radius >= DragonCombat.M(0.9f);
             DragonCombat.RunVfx(delegate { DragonVfx.AirStreak(obj.transform, color, heavy ? ww : 0.16f, heavy ? 0.45f : 0.3f, delegate { return obj != null; }); });
-            if (DragonVfx.Enabled) { LineRenderer al = line; DragonCombat.RunVfx(delegate { DragonVfx.SpiritArrow(obj.transform, color, 0.9f); al.enabled = false; }); }   // v0.25.84 a real spirit arrow
+            if (DragonVfx.Enabled)
+            {
+                // v0.25.190 big shots (Ballista, Great Arrow) carry a visibly bigger arrow body (visual scale only)
+                Transform ap = obj.transform;
+                if (heavy) { GameObject big = new GameObject("bigArrow"); big.transform.SetParent(obj.transform, false); big.transform.localScale = Vector3.one * Mathf.Clamp(radius * 1.6f, 1.4f, 3.5f); ap = big.transform; }
+                LineRenderer al = line; Transform apf = ap;
+                DragonCombat.RunVfx(delegate { DragonVfx.SpiritArrow(apf, color, 0.9f); al.enabled = false; });
+            }   // v0.25.84 a real spirit arrow
             return obj;
         }
 
