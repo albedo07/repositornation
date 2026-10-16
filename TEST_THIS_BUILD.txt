@@ -1,7 +1,5 @@
-v0.25.186 Class Armor - in-game checks
-1. Warrior/Cleric: try a Leather/Rag/Troll chest or legs -> refused "wear heavy armor only". Bronze/Iron chest + legs equip,
-   run speed same as naked; item tooltip shows the penalty as removed.
-2. Sorcerer/Ranger: try Bronze/Iron chest or legs -> refused "wear light armor only". Leather/Troll/robes equip.
-3. Choose a class while wearing the wrong armor -> it is unequipped into the inventory with the message.
-4. Paladin Heaven's Light: buff tooltip "-25% Stamina use"; sprint/attacks cost less; tree tooltip line "Stamina Use -25%".
-5. No class: press K -> nothing opens. With a class: K opens the Skill Tree as before.
+v0.25.187 Free Classless - in-game checks
+1. No class: equip a Therzie 2HDW -> equips, attacks play its own animations.
+2. No class: any armor / any weapon pair equips and stays equipped.
+3. Mercenary 2HDW chain + other classes' restrictions unchanged.
+4. Paladin Heaven's Will tooltip / Altar text: no armor movement line.

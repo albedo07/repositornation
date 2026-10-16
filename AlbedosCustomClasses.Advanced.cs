@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.186";
+        public const string ModVersion = "0.25.187";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -17147,7 +17147,7 @@ namespace AlbedosCustomClassesAdvanced
             else if (treeBranch == "Priest" || treeBranch == "Paladin")
                 RegisterReferenceHotspot(ScaleReferenceRect(332f, 76f, 651f, 64f),
                     (treeBranch == "Priest" ? "BLESS THY SINNERS - MASTERY" : "HEAVEN'S WILL - MASTERY"),
-                    treeBranch == "Priest" ? GetAdvancedPassiveDescription(treePlayer, "Priest") : "+10% Magic Damage (Fire, Frost, Lightning, Poison, Spirit). Club-type melee + Shield: +15 Clubs (effective cap 100), no Armor movement penalties, and the Club's current Blunt damage guarantees Slash and Pierce each reach at least 50% of that Blunt value without lowering existing damage.");
+                    treeBranch == "Priest" ? GetAdvancedPassiveDescription(treePlayer, "Priest") : "+10% Magic Damage (Fire, Frost, Lightning, Poison, Spirit). Club-type melee + Shield: +15 Clubs (effective cap 100), and the Club's current Blunt damage guarantees Slash and Pierce each reach at least 50% of that Blunt value without lowering existing damage.");
             else
                 RegisterReferenceHotspot(ScaleReferenceRect(332f, 76f, 651f, 64f), IhMasteryTitle(treeBranch), IhMasteryText(treeBranch));
 
@@ -19286,7 +19286,7 @@ namespace AlbedosCustomClassesAdvanced
             if (paladinHeader.Contains(Event.current.mousePosition))
             {
                 _treeHoveredTitle = "HEAVEN'S WILL — MASTERY";
-                _treeHoveredBody = "While wielding a Club-type melee weapon + Shield: +15 Clubs, no Armor movement penalty, and Slash/Pierce are each brought up to 50% of current Blunt damage without lowering existing damage.";
+                _treeHoveredBody = "While wielding a Club-type melee weapon + Shield: +15 Clubs, and Slash/Pierce are each brought up to 50% of current Blunt damage without lowering existing damage.";
             }
 
             // The only progression connector: Ascended Class prerequisite -> Advancement.
@@ -19962,7 +19962,7 @@ namespace AlbedosCustomClassesAdvanced
 
             if (advancement == "Paladin")
             {
-                return "Heaven's Will: +10% Magic Damage. With a Club-type weapon and a Shield, +15 Clubs, no Armor movement penalty, and Slash / Pierce at least 50% of Blunt. Holy Bulwark: with a Tower Shield your block covers 3x the area (hits from the front and sides, 300 degrees) and a holy force field shields your front while you block.";
+                return "Heaven's Will: +10% Magic Damage. With a Club-type weapon and a Shield, +15 Clubs, and Slash / Pierce at least 50% of Blunt. Holy Bulwark: with a Tower Shield your block covers 3x the area (hits from the front and sides, 300 degrees) and a holy force field shields your front while you block.";
             }
 
             if (advancement == "Priest")

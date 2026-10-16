@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.186";
+        public const string ModVersion = "0.25.187";
 
         internal static DragonCombatPlugin Instance;
 
@@ -9484,6 +9484,7 @@ namespace DragonsAltarCombat
         public static bool IsBaseClassBlocked2HDW(Player player, ItemDrop.ItemData item)
         {
             if (player == null || item == null || !IsPairedWeapon(item)) return false;
+            if (string.IsNullOrEmpty(GetClass(player))) return false;   // v0.25.187 (user): no class = no restriction at all
             return GetAdvancementName(player) != "Mercenary";
         }
 
@@ -10370,6 +10371,7 @@ namespace DragonsAltarCombat
                     return;
                 }
                 if (l == null || r == null || l == r) return;
+                if (string.IsNullOrEmpty(GetClass(p))) return;   // v0.25.187 (user): classless players may dual wield anything
                 string adv = GetAdvancementName(p);
                 // a Mercenary's pair must be the exact same prefab (and never Spears / War Pikes)
                 if (adv == "Mercenary" && IsOneHandedWeapon(l) && IsOneHandedWeapon(r) && !IsGunStaff(l) && !IsGunStaff(r) && !IsMatchingDualPair(l, r))

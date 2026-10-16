@@ -1,0 +1,9 @@
+Aethelborn Ascended v0.25.187 - Free Classless (on top of v0.25.186; NOT an anchor, anchor stays v0.25.179)
+
+- No class = no equipment restriction at all (user): Therzie's two-handed paired weapons (2HDW) equip and play their own
+  native animations; two one-handed weapons / Gun Staves are no longer unequipped. (Weapon + armor rules already skipped
+  classless players.) Every class keeps its rules unchanged.
+- Heaven's Will (Paladin Mastery) text: "no Armor movement penalty" removed (tree tooltips, Altar) - Cleric's class armor
+  rule already removes it for every Cleric.
+
+VERIFIED: compile check vs 3029660 passed (0 new signatures), mcs --parse C# 5. NOT tested in game.
