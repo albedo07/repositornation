@@ -15,7 +15,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.188";
+        public const string ModVersion = "0.25.189";
 
         internal static DragonCombatPlugin Instance;
 
@@ -381,8 +381,10 @@ namespace DragonsAltarCombat
             catch { }
         }
 
+        // v0.25.189 (user): the whole line (value + vanilla total) becomes "0% (No movement penalty)"; only a NEGATIVE value is
+        // matched, so a second tooltip pass (nested GetTooltip overloads) leaves the rewritten line alone.
         private static readonly System.Text.RegularExpressions.Regex MoveLine =
-            new System.Text.RegularExpressions.Regex(@"((?:\$item_movement_modifier|Movement speed):\s*<color=[^>]*>)([+\-]?\d+)(%</color>)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            new System.Text.RegularExpressions.Regex(@"((?:\$item_movement_modifier|Movement speed):\s*)<color=[^>]*>-\d+%</color>[^\n]*", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
         // Shows the movement penalty this player really gets from the item (0% when a trait removes it).
         private static string MovementTooltip(ItemDrop.ItemData item, string text)
@@ -393,7 +395,7 @@ namespace DragonsAltarCombat
             if (reason == null) return text;
             return MoveLine.Replace(text, delegate(System.Text.RegularExpressions.Match m)
             {
-                return m.Groups[1].Value + "0" + m.Groups[3].Value + " <color=#80D8FF>(" + m.Groups[2].Value + "% removed: " + reason + ")</color>";
+                return m.Groups[1].Value + "<color=orange>0%</color> <color=#80D8FF>(No movement penalty)</color>";
             }, 1);
         }
 
@@ -16267,6 +16269,271 @@ namespace DragonsAltarCombat
             return m;
         }
 
+        // ------------------------------------------------------------------ v0.25.189 finished relics (user refs: Dragon Nest relics)
+        // Polished gold, ivory, glowing gems and feathered wings for the three Cleric relics. Every mesh is built once and cached
+        // by the caller; materials are shared singletons (no per-cast allocations after the first cast).
+        private static Material _relicGold, _relicIvory;
+        private static readonly Dictionary<int, Material> _relicGems = new Dictionary<int, Material>();
+        private static readonly Dictionary<int, Material> _relicFeathers = new Dictionary<int, Material>();
+        private static Texture2D _goldTex;
+
+        private static Texture2D GoldTex()
+        {
+            if (_goldTex != null) return _goldTex;
+            const int n = 64;
+            _goldTex = new Texture2D(n, n, TextureFormat.RGBA32, true);
+            _goldTex.wrapMode = TextureWrapMode.Repeat;
+            Color[] px = new Color[n * n];
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    float f = Fbm(x / 9f, y / 9f, 81), g = Fbm(x / 2f, y / 6f, 82);   // soft hammered warmth + fine brushed grain
+                    float k = 0.9f + (f - 0.5f) * 0.16f + (g - 0.5f) * 0.08f;
+                    px[y * n + x] = new Color(k, k * 0.98f, k * 0.94f, 1f);
+                }
+            _goldTex.SetPixels(px);
+            _goldTex.Apply(true);
+            return _goldTex;
+        }
+
+        public static Material RelicGold()
+        {
+            if (_relicGold != null) return _relicGold;
+            Shader s = Shader.Find("Standard");
+            if (s == null) return SolidMat(new Color(0.95f, 0.76f, 0.32f, 1f));
+            _relicGold = new Material(s);
+            _relicGold.color = new Color(1f, 0.79f, 0.34f, 1f);
+            _relicGold.mainTexture = GoldTex();
+            if (_relicGold.HasProperty("_Glossiness")) _relicGold.SetFloat("_Glossiness", 0.62f);
+            if (_relicGold.HasProperty("_Metallic")) _relicGold.SetFloat("_Metallic", 0.55f);   // reads polished without reflection probes
+            if (_relicGold.HasProperty("_EmissionColor")) { _relicGold.EnableKeyword("_EMISSION"); _relicGold.SetColor("_EmissionColor", new Color(0.13f, 0.085f, 0.02f, 1f)); }
+            return _relicGold;
+        }
+
+        public static Material RelicIvory()
+        {
+            if (_relicIvory != null) return _relicIvory;
+            Shader s = Shader.Find("Standard");
+            if (s == null) return SolidMat(new Color(0.96f, 0.92f, 0.82f, 1f));
+            _relicIvory = new Material(s);
+            _relicIvory.color = new Color(0.97f, 0.93f, 0.83f, 1f);
+            if (_relicIvory.HasProperty("_Glossiness")) _relicIvory.SetFloat("_Glossiness", 0.48f);
+            if (_relicIvory.HasProperty("_Metallic")) _relicIvory.SetFloat("_Metallic", 0f);
+            if (_relicIvory.HasProperty("_EmissionColor")) { _relicIvory.EnableKeyword("_EMISSION"); _relicIvory.SetColor("_EmissionColor", new Color(0.11f, 0.105f, 0.09f, 1f)); }
+            return _relicIvory;
+        }
+
+        // glossy, softly glowing gem (green heart, blue lightning stone...)
+        public static Material RelicGem(Color c)
+        {
+            int key = Mathf.RoundToInt(c.r * 31f) | (Mathf.RoundToInt(c.g * 31f) << 5) | (Mathf.RoundToInt(c.b * 31f) << 10);
+            Material m;
+            if (_relicGems.TryGetValue(key, out m) && m != null) return m;
+            Shader s = Shader.Find("Standard");
+            if (s == null) { m = SolidMat(c); _relicGems[key] = m; return m; }
+            m = new Material(s);
+            m.color = c;
+            if (m.HasProperty("_Glossiness")) m.SetFloat("_Glossiness", 0.92f);
+            if (m.HasProperty("_Metallic")) m.SetFloat("_Metallic", 0.1f);
+            if (m.HasProperty("_EmissionColor")) { m.EnableKeyword("_EMISSION"); m.SetColor("_EmissionColor", c * 0.85f); }
+            _relicGems[key] = m;
+            return m;
+        }
+
+        // soft feather white / cream (lit, faint glow so the wings read at night)
+        public static Material RelicFeather(Color c)
+        {
+            int key = Mathf.RoundToInt(c.r * 31f) | (Mathf.RoundToInt(c.g * 31f) << 5) | (Mathf.RoundToInt(c.b * 31f) << 10);
+            Material m;
+            if (_relicFeathers.TryGetValue(key, out m) && m != null) return m;
+            Shader s = Shader.Find("Standard");
+            if (s == null) { m = SolidMat(c); _relicFeathers[key] = m; return m; }
+            m = new Material(s);
+            m.color = c;
+            if (m.HasProperty("_Glossiness")) m.SetFloat("_Glossiness", 0.2f);
+            if (m.HasProperty("_Metallic")) m.SetFloat("_Metallic", 0f);
+            if (m.HasProperty("_EmissionColor")) { m.EnableKeyword("_EMISSION"); m.SetColor("_EmissionColor", c * 0.16f); }
+            _relicFeathers[key] = m;
+            return m;
+        }
+
+        // Surface of revolution around +Y. prof = (radius, y) listed bottom -> top; a repeated point = hard edge.
+        public static Mesh LatheMesh(List<Vector2> prof, int seg)
+        {
+            int n = prof == null ? 0 : prof.Count;
+            if (n < 2) return null;
+            seg = Mathf.Max(3, seg);
+            Vector3[] v = new Vector3[(seg + 1) * n];
+            Vector3[] nr = new Vector3[v.Length];
+            Vector2[] uv = new Vector2[v.Length];
+            float len = 0f;
+            for (int j = 0; j < n; j++)
+            {
+                if (j > 0) len += (prof[j] - prof[j - 1]).magnitude;
+                Vector2 tp;
+                bool samePrev = j > 0 && (prof[j] - prof[j - 1]).sqrMagnitude < 1e-10f;
+                bool sameNext = j < n - 1 && (prof[j + 1] - prof[j]).sqrMagnitude < 1e-10f;
+                if (j == 0 || samePrev) tp = prof[Mathf.Min(n - 1, j + 1 + (sameNext ? 1 : 0))] - prof[j];
+                else if (j == n - 1 || sameNext) tp = prof[j] - prof[j - 1];
+                else tp = (prof[j + 1] - prof[j]).normalized + (prof[j] - prof[j - 1]).normalized;
+                if (samePrev && j + 1 < n) tp = prof[j + 1] - prof[j];
+                Vector2 pn = new Vector2(tp.y, -tp.x);
+                if (pn.sqrMagnitude < 1e-10f) pn = new Vector2(1f, 0f);
+                pn.Normalize();
+                for (int i = 0; i <= seg; i++)
+                {
+                    float a = (float)i / seg * Mathf.PI * 2f;
+                    float ca = Mathf.Cos(a), sa = Mathf.Sin(a);
+                    v[i * n + j] = new Vector3(prof[j].x * ca, prof[j].y, prof[j].x * sa);
+                    nr[i * n + j] = new Vector3(pn.x * ca, pn.y, pn.x * sa);
+                    uv[i * n + j] = new Vector2((float)i / seg * 2f, len);
+                }
+            }
+            List<int> t = new List<int>();
+            for (int i = 0; i < seg; i++)
+                for (int j = 0; j < n - 1; j++)
+                {
+                    int a0 = i * n + j, a1 = a0 + 1, b0 = (i + 1) * n + j, b1 = b0 + 1;
+                    t.Add(a0); t.Add(a1); t.Add(b0);
+                    t.Add(b0); t.Add(a1); t.Add(b1);
+                }
+            Mesh m = new Mesh();
+            m.vertices = v; m.normals = nr; m.uv = uv; m.triangles = t.ToArray();
+            m.RecalculateBounds();
+            return m;
+        }
+
+        // Tube along a path (parallel-transport frames), radius r0 -> r1, start cap; used for wing arms and gold scrolls.
+        public static Mesh TubeMesh(List<Vector3> path, float r0, float r1, int side)
+        {
+            int n = path == null ? 0 : path.Count;
+            if (n < 2) return null;
+            side = Mathf.Max(3, side);
+            List<Vector3> v = new List<Vector3>();
+            List<Vector3> nr = new List<Vector3>();
+            List<Vector2> uv = new List<Vector2>();
+            List<int> t = new List<int>();
+            Vector3 T0 = (path[1] - path[0]).normalized;
+            Vector3 N = Vector3.Cross(T0, Mathf.Abs(T0.z) < 0.9f ? Vector3.forward : Vector3.up).normalized;
+            for (int j = 0; j < n; j++)
+            {
+                Vector3 T = j == 0 ? T0 : (j == n - 1 ? (path[j] - path[j - 1]).normalized : (path[j + 1] - path[j - 1]).normalized);
+                N = (N - T * Vector3.Dot(N, T)).normalized;
+                if (N.sqrMagnitude < 1e-6f) N = Vector3.Cross(T, Vector3.up).normalized;
+                Vector3 B = Vector3.Cross(T, N);
+                float r = Mathf.Lerp(r0, r1, (float)j / (n - 1));
+                for (int i = 0; i <= side; i++)
+                {
+                    float a = (float)i / side * Mathf.PI * 2f;
+                    Vector3 d = N * Mathf.Cos(a) + B * Mathf.Sin(a);
+                    v.Add(path[j] + d * r); nr.Add(d); uv.Add(new Vector2((float)i / side, (float)j / (n - 1)));
+                }
+            }
+            for (int j = 0; j < n - 1; j++)
+                for (int i = 0; i < side; i++)
+                {
+                    int a0 = j * (side + 1) + i, a1 = a0 + 1, b0 = a0 + side + 1, b1 = b0 + 1;
+                    t.Add(a0); t.Add(a1); t.Add(b0);
+                    t.Add(a1); t.Add(b1); t.Add(b0);
+                }
+            // start cap (the end tapers to a point)
+            int c0 = v.Count;
+            v.Add(path[0]); nr.Add(-T0); uv.Add(new Vector2(0.5f, 0f));
+            for (int i = 0; i < side; i++) { t.Add(c0); t.Add(i + 1); t.Add(i); }
+            Mesh m = new Mesh();
+            m.vertices = v.ToArray(); m.normals = nr.ToArray(); m.uv = uv.ToArray(); m.triangles = t.ToArray();
+            m.RecalculateBounds();
+            return m;
+        }
+
+        // Feather blade (CCW, XY): base at the origin, tip at (0, len), widest a third of the way up, slightly asymmetric.
+        public static List<Vector2> FeatherOutline(float len, float wid)
+        {
+            List<Vector2> p = new List<Vector2>();
+            const int k = 7;
+            for (int i = 0; i <= k; i++)
+            {
+                float s = (float)i / k;
+                float w = wid * 0.5f * Mathf.Sin(Mathf.PI * Mathf.Pow(s, 0.62f)) * (0.35f + 0.65f * Mathf.Sqrt(Mathf.Clamp01(1f - s * 0.15f)));
+                p.Add(new Vector2(w * 1.12f, s * len));
+            }
+            for (int i = k - 1; i >= 1; i--)
+            {
+                float s = (float)i / k;
+                float w = wid * 0.5f * Mathf.Sin(Mathf.PI * Mathf.Pow(s, 0.62f)) * (0.35f + 0.65f * Mathf.Sqrt(Mathf.Clamp01(1f - s * 0.15f)));
+                p.Add(new Vector2(-w * 0.88f, s * len));
+            }
+            p.Add(new Vector2(-wid * 0.06f, 0f));
+            p[0] = new Vector2(wid * 0.06f, 0f);
+            return p;
+        }
+
+        // Star / sunburst outline (CCW, XY)
+        public static List<Vector2> StarOutline(int points, float rIn, float rOut)
+        {
+            List<Vector2> p = new List<Vector2>();
+            for (int i = 0; i < points * 2; i++)
+            {
+                float a = Mathf.PI * 0.5f + (float)i / (points * 2) * Mathf.PI * 2f;
+                float r = (i % 2 == 0) ? rOut : rIn;
+                p.Add(new Vector2(Mathf.Cos(a) * r, Mathf.Sin(a) * r));
+            }
+            return p;
+        }
+
+        // One feathered wing (right side, +X) as ONE mesh: three overlapping layers (long flight feathers behind, secondaries,
+        // short rounded coverts in front) hung along a quadratic arm curve P0 (shoulder) -> P1 -> P2 (tip). Feather direction
+        // turns from angShoulder to angTip (degrees, 0 = +X, -90 = straight down), length grows lenShoulder -> lenTip.
+        public static Mesh WingMesh(Vector2 p0, Vector2 p1, Vector2 p2, float angShoulder, float angTip, float lenShoulder, float lenTip, float depth)
+        {
+            List<CombineInstance> parts = new List<CombineInstance>();
+            List<Mesh> temp = new List<Mesh>();
+            float[] lenK = { 1f, 0.66f, 0.36f };
+            float[] widK = { 0.2f, 0.24f, 0.36f };
+            int[] count = { 10, 9, 8 };
+            float[] zOff = { -depth * 1.1f, 0f, depth * 1.1f };
+            for (int layer = 0; layer < 3; layer++)
+            {
+                int c = count[layer];
+                for (int i = 0; i < c; i++)
+                {
+                    float u = c == 1 ? 1f : Mathf.Lerp(0.04f, 1f, (float)i / (c - 1));
+                    if (layer > 0) u = Mathf.Clamp01(u - 0.03f * layer);
+                    Vector2 pt = (1f - u) * (1f - u) * p0 + 2f * (1f - u) * u * p1 + u * u * p2;
+                    float ang = Mathf.Lerp(angShoulder, angTip, Mathf.Pow(u, 0.85f)) + ((i * 37 + layer * 11) % 7 - 3) * 0.6f;
+                    float len = Mathf.Lerp(lenShoulder, lenTip, u * u * (3f - 2f * u)) * lenK[layer];
+                    float wid = len * widK[layer] + lenTip * 0.03f;
+                    Mesh f = ExtrudeBevel(FeatherOutline(len, wid), depth, depth * 0.3f, 1f);
+                    if (f == null) continue;
+                    temp.Add(f);
+                    CombineInstance ci = new CombineInstance();
+                    ci.mesh = f;
+                    ci.transform = Matrix4x4.TRS(new Vector3(pt.x, pt.y, zOff[layer] + i * depth * 0.04f), Quaternion.Euler(0f, 0f, ang - 90f), Vector3.one);
+                    parts.Add(ci);
+                }
+            }
+            Mesh m = new Mesh();
+            m.CombineMeshes(parts.ToArray(), true, true);
+            m.RecalculateBounds();
+            for (int i = 0; i < temp.Count; i++) UnityEngine.Object.Destroy(temp[i]);
+            return m;
+        }
+
+        // planar spiral (scroll curl) path in XY around c: radius r -> r * shrink over `turns`, starting at angle a0 (deg), sign = turn direction
+        public static List<Vector3> ScrollPath(Vector3 c, float r, float shrink, float turns, float a0, float sign)
+        {
+            List<Vector3> p = new List<Vector3>();
+            int n = Mathf.Max(8, Mathf.RoundToInt(turns * 24f));
+            for (int i = 0; i <= n; i++)
+            {
+                float s = (float)i / n;
+                float a = (a0 + sign * s * turns * 360f) * Mathf.Deg2Rad;
+                float rr = r * Mathf.Lerp(1f, shrink, s);
+                p.Add(c + new Vector3(Mathf.Cos(a) * rr, Mathf.Sin(a) * rr, 0f));
+            }
+            return p;
+        }
+
         // Texture tiling per block so the stone grain keeps its scale on long beams (shared material, property block).
         public static void RelicTile(Renderer r, float sx, float sy)
         {
@@ -18167,6 +18434,16 @@ namespace DragonsAltarCombat
         }
     }
     // v0.25.75 helpers
+    // v0.25.189 gentle sway around a local axis (relic wings): angle = Deg * sin(t * Speed + Phase)
+    public class DragonSway : MonoBehaviour
+    {
+        public Vector3 Axis = Vector3.up;
+        public float Deg = 3f, Speed = 1.6f, Phase;
+        private Quaternion _base;
+        private void Start() { _base = transform.localRotation; }
+        private void Update() { transform.localRotation = _base * Quaternion.AngleAxis(Deg * Mathf.Sin(Time.time * Speed + Phase), Axis); }
+    }
+
     public class DragonRotate : MonoBehaviour
     {
         public Vector3 Speed;

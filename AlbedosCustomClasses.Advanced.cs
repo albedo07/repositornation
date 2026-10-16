@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.188";
+        public const string ModVersion = "0.25.189";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -5654,48 +5654,65 @@ namespace AlbedosCustomClassesAdvanced
 
         private void IhBuildSolidCross(Transform root, Color color, float height, float width, float thick)
         {
-            // v0.25.181 (user: image 3 still looked like a prototype): ONE finished body - a bevelled, extruded pattee cross
-            // outline in weathered stone (flared arms, chamfered tips, pointed foot), an aged-bronze rim following every edge,
-            // narrow lit grooves, bronze bands, a bronze-ringed seal at the crossing and the approved Celtic ring. Lit,
-            // shadow casting, shared cached meshes.
-            Material stone = DragonVfx.RelicStone(), bronze = DragonVfx.RelicBronze(), inlay = DragonVfx.RelicInlay(color);
-            if (stone == null || bronze == null || inlay == null) return;
+            // v0.25.189 (user ref: Dragon Nest relic, 4th image): a polished gold-framed Celtic cross - flared pattee arms
+            // with an ivory panel set into the gold frame, a thin gold line down the panel, gold bands, a gold seal with a
+            // glowing gem at the crossing and a heavy gold ring carrying filigree scroll curls. Lit, shadow casting, cached meshes.
+            Material gold = DragonVfx.RelicGold(), ivory = DragonVfx.RelicIvory(), gem = DragonVfx.RelicGem(Color.Lerp(color, new Color(1f, 0.85f, 0.4f, 1f), 0.5f));
+            if (gold == null || ivory == null || gem == null) return;
             bool big = height > 9f;
             float t = thick, d = t * 0.8f, a = t * 0.5f, F = a * 1.55f, Lf = t * 1.5f, c = t * 0.2f, spike = t * 1.8f;
-            float armY = height * 0.12f, topY = height * 0.5f, footY = -height * 0.5f, half = width * 0.5f, e = t * 0.08f;
-            string key = "solid|" + height.ToString("0.00") + "|" + width.ToString("0.00") + "|" + t.ToString("0.000");
-            Mesh body = IhRelicMesh(key + "|body", delegate { return DragonVfx.ExtrudeBevel(IhCrossOutline(0, a, F, Lf, c, half, armY, topY, footY, spike), d, t * 0.09f, 1f / Mathf.Max(0.2f, t * 2.2f)); });
-            Mesh rim = IhRelicMesh(key + "|rim", delegate { return DragonVfx.ExtrudeBevel(DragonVfx.OffsetOutline(IhCrossOutline(0, a, F, Lf, c, half, armY, topY, footY, spike), e), d * 0.7f, e * 0.6f, 1f / Mathf.Max(0.2f, t * 1.5f)); });
-            IhRelicMeshObject(root, body, stone, Vector3.zero);
-            IhRelicMeshObject(root, rim, bronze, Vector3.zero);
-            // narrow lit grooves down both faces (barely proud of the stone)
-            float gw = t * (big ? 0.07f : 0.09f);
+            float armY = height * 0.12f, topY = height * 0.5f, footY = -height * 0.5f, half = width * 0.5f;
+            string key = "goddess|" + height.ToString("0.00") + "|" + width.ToString("0.00") + "|" + t.ToString("0.000");
+            Mesh body = IhRelicMesh(key + "|body", delegate { return DragonVfx.ExtrudeBevel(IhCrossOutline(0, a, F, Lf, c, half, armY, topY, footY, spike), d, t * 0.1f, 1f / Mathf.Max(0.2f, t * 2.2f)); });
+            Mesh panel = IhRelicMesh(key + "|panel", delegate { return DragonVfx.ExtrudeBevel(DragonVfx.OffsetOutline(IhCrossOutline(0, a, F, Lf, c, half, armY, topY, footY, spike), -t * 0.14f), d * 1.08f, t * 0.04f, 1f / Mathf.Max(0.2f, t * 2.2f)); });
+            IhRelicMeshObject(root, body, gold, Vector3.zero);
+            IhRelicMeshObject(root, panel, ivory, Vector3.zero);
+            // thin gold lines inlaid down the panel and along the arm
+            float gw = t * (big ? 0.05f : 0.06f);
             float g0 = footY + spike + t * 0.9f, g1 = topY - Lf - t * 0.15f;
-            IhRelicBlock(root, inlay, new Vector3(0f, (g0 + g1) * 0.5f, 0f), new Vector3(gw, g1 - g0, d * 1.012f), 1f, 1f);
+            IhRelicBlock(root, gold, new Vector3(0f, (g0 + g1) * 0.5f, 0f), new Vector3(gw, g1 - g0, d * 1.12f), 1f, 1f);
             float ax = half - Lf - t * 0.15f;
-            IhRelicBlock(root, inlay, new Vector3(0f, armY, 0f), new Vector3(ax * 2f, gw, d * 1.012f), 1f, 1f);
-            if (big)
-            {
-                IhRelicBlock(root, inlay, new Vector3(-a * 0.55f, (g0 + g1) * 0.5f, 0f), new Vector3(gw * 0.6f, (g1 - g0) * 0.8f, d * 1.01f), 1f, 1f);
-                IhRelicBlock(root, inlay, new Vector3(a * 0.55f, (g0 + g1) * 0.5f, 0f), new Vector3(gw * 0.6f, (g1 - g0) * 0.8f, d * 1.01f), 1f, 1f);
-            }
-            // bronze bands wrapping the shaft (just below the crossing and above the foot)
+            IhRelicBlock(root, gold, new Vector3(0f, armY, 0f), new Vector3(ax * 2f, gw, d * 1.12f), 1f, 1f);
+            // gold bands wrapping the shaft
             int bands = big ? 3 : 2;
             for (int i = 0; i < bands; i++)
             {
                 float y = Mathf.Lerp(g0 + t * 0.3f, armY - a - t * 0.6f, (float)i / Mathf.Max(1, bands - 1));
-                IhRelicBlock(root, bronze, new Vector3(0f, y, 0f), new Vector3(2f * (a + e * 1.2f), t * 0.14f, d + e * 2.4f), 1f, 1f);
+                IhRelicBlock(root, gold, new Vector3(0f, y, 0f), new Vector3(2f * a + t * 0.1f, t * 0.14f, d * 1.16f), 1f, 1f);
             }
-            // seal at the crossing: bronze ring + bronze boss + small lit centre
-            IhTorus(root, bronze, new Vector3(0f, armY, d * 0.5f), a * 0.95f, t * 0.07f);
-            IhTorus(root, bronze, new Vector3(0f, armY, -d * 0.5f), a * 0.95f, t * 0.07f);
-            IhRelicDisc(root, bronze, new Vector3(0f, armY, 0f), a * 1.3f, d * 1.03f);
-            IhRelicDiamond(root, inlay, new Vector3(0f, armY, 0f), t * 0.28f, d * 1.08f);
-            // the approved Celtic ring in aged bronze with a thin lit band on its face
+            // seal at the crossing: gold rings + boss + glowing gem
+            IhTorus(root, gold, new Vector3(0f, armY, d * 0.56f), a * 0.95f, t * 0.07f);
+            IhTorus(root, gold, new Vector3(0f, armY, -d * 0.56f), a * 0.95f, t * 0.07f);
+            IhRelicDisc(root, gold, new Vector3(0f, armY, 0f), a * 1.3f, d * 1.14f);
+            IhRelicDiamond(root, gem, new Vector3(0f, armY, 0f), t * 0.3f, d * 1.22f);
+            // the heavy gold ring with an ivory band on each face and filigree scroll curls at the diagonals
             float rr = Mathf.Clamp(width * 0.3f, t * 2.2f, height * 0.3f);
-            IhTorus(root, bronze, new Vector3(0f, armY, 0f), rr, t * 0.24f);
-            IhTorus(root, inlay, new Vector3(0f, armY, t * 0.2f), rr, t * 0.045f);
-            IhTorus(root, inlay, new Vector3(0f, armY, -t * 0.2f), rr, t * 0.045f);
+            IhTorus(root, gold, new Vector3(0f, armY, 0f), rr, t * 0.26f);
+            IhTorus(root, ivory, new Vector3(0f, armY, t * 0.21f), rr, t * 0.05f);
+            IhTorus(root, ivory, new Vector3(0f, armY, -t * 0.21f), rr, t * 0.05f);
+            Mesh scrolls = IhRelicMesh(key + "|scrolls", delegate
+            {
+                List<CombineInstance> parts = new List<CombineInstance>();
+                for (int q = 0; q < 4; q++)
+                    for (int sd = -1; sd <= 1; sd += 2)
+                    {
+                        float th = (45f + q * 90f + sd * 11f) * Mathf.Deg2Rad;
+                        Vector2 dir = new Vector2(Mathf.Cos(th), Mathf.Sin(th));
+                        float cr = t * 0.34f;
+                        Vector3 cc = new Vector3(dir.x, dir.y, 0f) * (rr + t * 0.2f + cr);
+                        float startDeg = Mathf.Atan2(-dir.y, -dir.x) * Mathf.Rad2Deg;   // starts on the ring, curls outward
+                        CombineInstance ci = new CombineInstance();
+                        ci.mesh = DragonVfx.TubeMesh(DragonVfx.ScrollPath(cc, cr, 0.22f, 1.35f, startDeg, sd), t * 0.075f, t * 0.03f, 6);
+                        ci.transform = Matrix4x4.identity;
+                        if (ci.mesh != null) parts.Add(ci);
+                    }
+                Mesh m = new Mesh();
+                m.CombineMeshes(parts.ToArray(), true, true);
+                m.RecalculateBounds();
+                for (int i = 0; i < parts.Count; i++) Destroy(parts[i].mesh);
+                return m;
+            });
+            IhRelicMeshObject(root, scrolls, gold, new Vector3(0f, armY, 0f));
         }
 
         // v0.25.181 cross outlines (counter-clockwise, XY). style 0 = pattee (flared, chamfered tips, Goddess Relic),
@@ -5753,7 +5770,7 @@ namespace AlbedosCustomClassesAdvanced
             Mesh m;
             if (_ihRelicMeshes.TryGetValue(key, out m) && m != null) return m;
             m = build();
-            if (m != null && _ihRelicMeshes.Count < 48) _ihRelicMeshes[key] = m;
+            if (m != null && _ihRelicMeshes.Count < 160) _ihRelicMeshes[key] = m;   // v0.25.189 finished relics use more cached pieces
             return m;
         }
 
@@ -5909,54 +5926,161 @@ namespace AlbedosCustomClassesAdvanced
         private int _ihNextRelicStyle;   // v0.25.181: 1 = Lightning Relic, 2 = Holy Relic (set right before CreateCross)
         private void IhBuildPlainCross(Transform root, Color color, float height, float width, float thick)
         {
-            // v0.25.181 (user): the Priest relics are visibly different designs in the same stone/bronze family:
-            // Lightning Relic = spear-tipped cross with a blue lightning-bolt inlay; Holy Relic = rounded arms in soft green
-            // with a bronze-framed heart emblem at the top. No ring (approved v0.25.86).
+            // v0.25.189 (user refs): Lightning Relic = winged ivory pillar, Holy Relic = winged gold heart scepter.
             int style = _ihNextRelicStyle == 1 ? 1 : 2;
             _ihNextRelicStyle = 0;
-            Material stone = DragonVfx.RelicStone(), bronze = DragonVfx.RelicBronze(), inlay = DragonVfx.RelicInlay(color);
-            if (stone == null || bronze == null || inlay == null) return;
-            float t = thick, d = t * 0.8f, a = t * 0.5f, F = style == 1 ? a * 1.9f : a * 1.25f, Lf = style == 1 ? t * 1.9f : t * 1.2f, spike = t * 1.4f, e = t * 0.08f;
-            float armY = height * 0.12f, topY = height * 0.5f, footY = -height * 0.5f, half = width * 0.5f;
-            string key = "plain" + style + "|" + height.ToString("0.00") + "|" + width.ToString("0.00") + "|" + t.ToString("0.000");
-            Mesh body = IhRelicMesh(key + "|body", delegate { return DragonVfx.ExtrudeBevel(IhCrossOutline(style, a, F, Lf, 0f, half, armY, topY, footY, spike), d, t * 0.09f, 1f / Mathf.Max(0.2f, t * 2.2f)); });
-            Mesh rim = IhRelicMesh(key + "|rim", delegate { return DragonVfx.ExtrudeBevel(DragonVfx.OffsetOutline(IhCrossOutline(style, a, F, Lf, 0f, half, armY, topY, footY, spike), e), d * 0.7f, e * 0.6f, 1f / Mathf.Max(0.2f, t * 1.5f)); });
-            IhRelicMeshObject(root, body, stone, Vector3.zero);
-            IhRelicMeshObject(root, rim, bronze, Vector3.zero);
-            float gw = t * 0.09f;
-            if (style == 1)
+            // v0.25.189 (user refs): finished relic designs replace the stone crosses
+            if (style == 1) { IhBuildLightningRelic(root, color, height, width, thick); return; }
+            IhBuildHolyRelic(root, color, height, width, thick);
+        }
+
+
+        // ------------------------------------------------------------------ v0.25.189 FINISHED RELICS (user refs)
+        // Holy Relic = winged gold scepter (green heart in a sunburst, green crystal tip, blue collar gem, ivory shaft,
+        // green orb, ivory spike foot). Lightning Relic = ivory pillar with great white raised wings, blue lightning band,
+        // gold crown + blue crystal. Goddess Relic = gold-framed ivory Celtic cross with a filigreed gold ring.
+        // Pieces are cached meshes (lathe / extrude / tube / wing) on shared materials; wings sway gently.
+        private static List<Vector2> IhProf(params float[] rv)
+        {
+            List<Vector2> p = new List<Vector2>();
+            for (int i = 0; i + 1 < rv.Length; i += 2) p.Add(new Vector2(rv[i], rv[i + 1]));
+            return p;
+        }
+
+        // ellipsoid profile (bottom -> top) around y0
+        private static List<Vector2> IhEllipse(float r, float hh, float y0, int k)
+        {
+            List<Vector2> p = new List<Vector2>();
+            for (int i = 0; i <= k; i++)
             {
-                // lightning-bolt zigzag inlay down the shaft + straight inlay along the arm
-                float y0 = footY + spike + t * 0.6f, y1 = topY - Lf * 0.9f;
-                int segs = 5;
-                for (int i = 0; i < segs; i++)
-                {
-                    float ya = Mathf.Lerp(y0, y1, (float)i / segs), yb = Mathf.Lerp(y0, y1, (float)(i + 1) / segs);
-                    float xa = (i % 2 == 0 ? -1f : 1f) * a * 0.35f, xb = -xa;
-                    Vector3 m0 = new Vector3((xa + xb) * 0.5f, (ya + yb) * 0.5f, 0f);
-                    float len = Mathf.Sqrt((xb - xa) * (xb - xa) + (yb - ya) * (yb - ya));
-                    GameObject seg = IhRelicBlock(root, inlay, m0, new Vector3(gw, len, d * 1.012f), 1f, 1f);
-                    if (seg != null) seg.transform.localRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(xb - xa, yb - ya) * -Mathf.Rad2Deg);
-                }
-                IhRelicBlock(root, inlay, new Vector3(0f, armY, 0f), new Vector3((half - Lf) * 2f, gw, d * 1.012f), 1f, 1f);
-                IhRelicDiamond(root, bronze, new Vector3(0f, armY, 0f), a * 1.1f, d * 1.04f);
-                IhRelicDiamond(root, inlay, new Vector3(0f, armY, 0f), a * 0.5f, d * 1.08f);
+                float a = Mathf.Lerp(-90f, 90f, (float)i / k) * Mathf.Deg2Rad;
+                p.Add(new Vector2(Mathf.Cos(a) * r, y0 + Mathf.Sin(a) * hh));
             }
-            else
+            p[0] = new Vector2(0f, p[0].y); p[k] = new Vector2(0f, p[k].y);
+            return p;
+        }
+
+        private static GameObject IhRelicLathe(Transform root, string key, List<Vector2> prof, int seg, Material mat)
+        {
+            Mesh m = IhRelicMesh(key, delegate { return DragonVfx.LatheMesh(prof, seg); });
+            return IhRelicMeshObject(root, m, mat, Vector3.zero);
+        }
+
+        private static List<Vector3> IhBezier(Vector2 p0, Vector2 p1, Vector2 p2, int n, float z)
+        {
+            List<Vector3> p = new List<Vector3>();
+            for (int i = 0; i <= n; i++)
             {
-                // soft green grooves + a bronze-framed heart emblem near the top of the upper arm
-                float y0 = footY + spike + t * 0.6f, y1 = armY - a - t * 0.2f;
-                IhRelicBlock(root, inlay, new Vector3(0f, (y0 + y1) * 0.5f, 0f), new Vector3(gw, y1 - y0, d * 1.012f), 1f, 1f);
-                IhRelicBlock(root, inlay, new Vector3(0f, armY, 0f), new Vector3((half - Lf) * 2f, gw, d * 1.012f), 1f, 1f);
-                float hs = Mathf.Min(a * 2.2f, (topY - armY) * 0.45f);
-                Vector3 hp = new Vector3(0f, topY - Lf * 0.5f - hs * 0.35f, 0f);
-                Mesh heartFrame = IhRelicMesh("heartF|" + hs.ToString("0.000"), delegate { return DragonVfx.ExtrudeBevel(IhHeartOutline(hs * 1.18f), d * 1.06f, hs * 0.05f, 1f); });
-                Mesh heart = IhRelicMesh("heart|" + hs.ToString("0.000"), delegate { return DragonVfx.ExtrudeBevel(IhHeartOutline(hs), d * 1.14f, hs * 0.06f, 1f); });
-                IhRelicMeshObject(root, heartFrame, bronze, hp);
-                IhRelicMeshObject(root, heart, inlay, hp);
-                IhRelicDisc(root, bronze, new Vector3(0f, armY, 0f), a * 1.2f, d * 1.04f);
-                IhRelicDisc(root, inlay, new Vector3(0f, armY, 0f), a * 0.55f, d * 1.08f);
+                float u = (float)i / n;
+                Vector2 q = (1f - u) * (1f - u) * p0 + 2f * (1f - u) * u * p1 + u * u * p2;
+                p.Add(new Vector3(q.x, q.y, z));
             }
+            return p;
+        }
+
+        // a pair of mirrored wings: gold arm ending in a scroll curl + the feathered wing, hinged at the shoulder (gentle sway)
+        private static void IhRelicWings(Transform root, string key, Vector3 shoulder, Vector2 p1, Vector2 p2, float angS, float angT, float lenS, float lenT,
+            float depth, float armR, Material feather, Material gold, float curl)
+        {
+            Mesh wing = IhRelicMesh(key + "|wing", delegate { return DragonVfx.WingMesh(Vector2.zero, p1, p2, angS, angT, lenS, lenT, depth); });
+            Mesh arm = IhRelicMesh(key + "|arm", delegate
+            {
+                List<Vector3> path = IhBezier(Vector2.zero, p1, p2, 18, depth * 1.6f);
+                List<Vector3> sc = DragonVfx.ScrollPath(new Vector3(p2.x, p2.y + curl, depth * 1.6f), curl, 0.25f, 1.25f, -90f, 1f);
+                for (int i = 1; i < sc.Count; i++) path.Add(sc[i]);
+                return DragonVfx.TubeMesh(path, armR, armR * 0.3f, 8);
+            });
+            for (int s = 0; s < 2; s++)
+            {
+                GameObject pivot = new GameObject("relicWing");
+                pivot.transform.SetParent(root, false);
+                pivot.transform.localPosition = new Vector3(s == 0 ? shoulder.x : -shoulder.x, shoulder.y, shoulder.z);
+                pivot.transform.localScale = new Vector3(s == 0 ? 1f : -1f, 1f, 1f);
+                IhRelicMeshObject(pivot.transform, wing, feather, Vector3.zero);
+                IhRelicMeshObject(pivot.transform, arm, gold, Vector3.zero);
+                DragonSway sway = pivot.AddComponent<DragonSway>();
+                sway.Axis = Vector3.forward; sway.Deg = 2.5f; sway.Speed = 1.7f; sway.Phase = 0f;
+            }
+        }
+
+        private void IhBuildHolyRelic(Transform root, Color color, float h, float width, float t)
+        {
+            Material gold = DragonVfx.RelicGold(), ivory = DragonVfx.RelicIvory();
+            Material green = DragonVfx.RelicGem(new Color(0.45f, 1f, 0.32f, 1f)), blue = DragonVfx.RelicGem(new Color(0.30f, 0.62f, 1f, 1f));
+            Material feather = DragonVfx.RelicFeather(new Color(1f, 0.94f, 0.74f, 1f));
+            if (gold == null || ivory == null || green == null || blue == null || feather == null) return;
+            float R = t * 0.42f, H = h;
+            string k = "holy|" + h.ToString("0.00") + "|" + t.ToString("0.000");
+            // y of a fraction measured from the top (0) to the foot (1)
+            float[] Y = new float[101];
+            for (int i = 0; i <= 100; i++) Y[i] = H * 0.5f - i * 0.01f * H;
+            // lower body, bottom -> top
+            IhRelicLathe(root, k + "|tip", IhProf(0f, Y[100], 0.34f * R, Y[95], 0f, Y[95]), 12, gold);
+            IhRelicLathe(root, k + "|spike", IhProf(0.3f * R, Y[95], 1.0f * R, Y[83], 0f, Y[83]), 16, ivory);
+            IhRelicLathe(root, k + "|collar", IhProf(0f, Y[84], 1.25f * R, Y[84], 1.6f * R, Y[82], 1.25f * R, Y[80], 1.15f * R, Y[78], 1.15f * R, Y[76], 0f, Y[76]), 16, gold);
+            IhRelicLathe(root, k + "|orb", IhEllipse(1.5f * R, 1.5f * R, (Y[76] + Y[69]) * 0.5f, 10), 16, green);
+            float orbY = (Y[76] + Y[69]) * 0.5f;
+            IhTorus(root, gold, new Vector3(0f, orbY, 1.2f * R), 0.9f * R, 0.14f * R);
+            IhTorus(root, gold, new Vector3(0f, orbY, -1.2f * R), 0.9f * R, 0.14f * R);
+            IhRelicLathe(root, k + "|knob", IhProf(0f, Y[70], 1.15f * R, Y[70], 1.15f * R, Y[68], 1.3f * R, Y[66], 1.6f * R, Y[62], 1.1f * R, Y[59], 1.0f * R, Y[58], 0f, Y[58]), 8, gold);
+            IhRelicLathe(root, k + "|shaft", IhProf(0f, Y[59], 0.95f * R, Y[59], 0.9f * R, Y[42], 0f, Y[42]), 16, ivory);
+            for (int b = 0; b < 3; b++)
+            {
+                float yb = Mathf.Lerp(Y[56], Y[45], b * 0.5f);
+                IhRelicLathe(root, k + "|band" + b, IhProf(0f, yb - R * 0.12f, 0.98f * R, yb - R * 0.12f, 0.98f * R, yb + R * 0.12f, 0f, yb + R * 0.12f), 16, gold);
+            }
+            IhRelicLathe(root, k + "|rope", IhProf(0f, Y[43], 1.2f * R, Y[43], 1.32f * R, Y[41] + 0.5f * (Y[42] - Y[41]), 1.2f * R, Y[40], 0f, Y[40]), 16, gold);
+            IhRelicLathe(root, k + "|capital", IhProf(0f, Y[41], 1.05f * R, Y[41], 1.4f * R, Y[35], 1.75f * R, Y[32], 0f, Y[32]), 8, gold);
+            IhRelicLathe(root, k + "|bead", IhEllipse(1.3f * R, 0.55f * R, Y[31], 8), 16, blue);
+            // heart in a sunburst
+            float hs = 0.2f * H, hy = Y[20];
+            Vector3 hp = new Vector3(0f, hy + 2.5f * hs / 34f, 0f);
+            Mesh burst = IhRelicMesh(k + "|burst", delegate { return DragonVfx.ExtrudeBevel(DragonVfx.StarOutline(16, hs * 0.6f, hs * 0.86f), t * 0.4f, t * 0.06f, 1f); });
+            IhRelicMeshObject(root, burst, gold, new Vector3(0f, hy, -t * 0.3f));
+            IhRelicDisc(root, gold, new Vector3(0f, hy, -t * 0.12f), hs * 1.25f, t * 0.55f);
+            Mesh heartFrame = IhRelicMesh(k + "|hframe", delegate { return DragonVfx.ExtrudeBevel(IhHeartOutline(hs * 1.18f), t * 0.9f, hs * 0.05f, 1f); });
+            Mesh heart = IhRelicMesh(k + "|heart", delegate { return DragonVfx.ExtrudeBevel(IhHeartOutline(hs * 0.9f), t * 1.1f, hs * 0.06f, 1f); });
+            IhRelicMeshObject(root, heartFrame, gold, hp);
+            IhRelicMeshObject(root, heart, green, hp + new Vector3(0f, -hs * 0.03f, 0f));
+            IhRelicDiamond(root, blue, new Vector3(0f, hy - hs * 0.04f, 0f), hs * 0.12f, t * 1.25f);
+            // top spike + green crystal
+            IhRelicLathe(root, k + "|topspike", IhProf(0f, Y[12], 0.65f * R, Y[11], 0.32f * R, Y[8], 0f, Y[8]), 12, gold);
+            IhRelicLathe(root, k + "|crystal", IhProf(0f, Y[9], 0.8f * R, Y[5], 0f, Y[0]), 4, green);
+            // golden-cream wings below the heart, feathers hanging down and out
+            IhRelicWings(root, k, new Vector3(1.5f * R, Y[33], -t * 0.15f), new Vector2(0.2f * H, 0.17f * H), new Vector2(0.36f * H, 0.1f * H),
+                -100f, -72f, 0.13f * H, 0.36f * H, t * 0.12f, 0.5f * R, feather, gold, 0.045f * H);
+        }
+
+        private void IhBuildLightningRelic(Transform root, Color color, float h, float width, float t)
+        {
+            Material gold = DragonVfx.RelicGold(), ivory = DragonVfx.RelicIvory();
+            Material blue = DragonVfx.RelicGem(new Color(0.35f, 0.75f, 1f, 1f));
+            Material feather = DragonVfx.RelicFeather(new Color(0.97f, 0.98f, 1f, 1f));
+            if (gold == null || ivory == null || blue == null || feather == null) return;
+            float R = t * 0.42f, H = h;
+            string k = "light|" + h.ToString("0.00") + "|" + t.ToString("0.000");
+            float[] Y = new float[101];
+            for (int i = 0; i <= 100; i++) Y[i] = H * 0.5f - i * 0.01f * H;
+            IhRelicLathe(root, k + "|spike", IhProf(0f, Y[100], 1.05f * R, Y[86], 0f, Y[86]), 16, ivory);
+            IhRelicLathe(root, k + "|ring0", IhProf(0f, Y[87], 1.3f * R, Y[87], 1.55f * R, Y[85] + 0.5f * (Y[86] - Y[85]), 1.3f * R, Y[84], 0f, Y[84]), 16, gold);
+            IhRelicLathe(root, k + "|shaft", IhProf(0f, Y[85], 1.1f * R, Y[85], 1.2f * R, Y[46], 0f, Y[46]), 10, ivory);
+            IhRelicLathe(root, k + "|ring1", IhProf(0f, Y[47], 1.35f * R, Y[47], 1.5f * R, Y[45], 1.35f * R, Y[44], 0f, Y[44]), 16, gold);
+            IhRelicLathe(root, k + "|band", IhEllipse(1.45f * R, 0.045f * H, Y[40], 8), 16, blue);
+            IhRelicLathe(root, k + "|ring2", IhProf(0f, Y[36], 1.4f * R, Y[36], 1.6f * R, Y[34], 1.4f * R, Y[33], 0f, Y[33]), 16, gold);
+            IhRelicLathe(root, k + "|upper", IhProf(0f, Y[34], 1.3f * R, Y[34], 1.7f * R, Y[22], 1.85f * R, Y[18], 0f, Y[18]), 12, ivory);
+            IhRelicLathe(root, k + "|crown", IhProf(0f, Y[19], 1.9f * R, Y[19], 2.0f * R, Y[17], 1.9f * R, Y[15], 0f, Y[15]), 18, gold);
+            Mesh spike = IhRelicMesh(k + "|cspike", delegate { return DragonVfx.LatheMesh(IhProf(0f, 0f, 0.3f * R, 0f, 0f, 0.13f * H), 6); });
+            for (int i = 0; i < 9; i++)
+            {
+                float a = (float)i / 9f * Mathf.PI * 2f;
+                Vector3 outw = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                GameObject sp = IhRelicMeshObject(root, spike, gold, outw * 1.75f * R + Vector3.up * Y[16]);
+                if (sp != null) sp.transform.localRotation = Quaternion.FromToRotation(Vector3.up, (Vector3.up + outw * 0.33f).normalized);
+            }
+            IhRelicLathe(root, k + "|stone", IhProf(0f, Y[17], 0.95f * R, Y[8], 0f, Y[0]), 4, blue);
+            // great white wings raised up and out from the upper body
+            IhRelicWings(root, k, new Vector3(1.6f * R, Y[27], -t * 0.2f), new Vector2(0.18f * H, 0.2f * H), new Vector2(0.36f * H, 0.32f * H),
+                -110f, -40f, 0.18f * H, 0.34f * H, t * 0.12f, 0.45f * R, feather, gold, 0.035f * H);
         }
 
         private void IhCrossUprightPose(Vector3 ground, float height, Vector3 casterPos, float sink, out Vector3 center, out Quaternion rot)

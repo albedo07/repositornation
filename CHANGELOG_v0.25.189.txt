@@ -1,0 +1,19 @@
+Aethelborn Ascended v0.25.189 - Finished Relics (on top of v0.25.188; NOT an anchor, anchor stays v0.25.179)
+
+CLERIC RELICS (user refs; visuals only - sizes, timing, damage, colliders unchanged)
+- Holy Relic = winged gold scepter: green gem heart in a gold frame over a gold sunburst, gold spike + green crystal on
+  top, blue gem collar, gold capital, ivory shaft with gold bands, faceted gold knob, green orb with gold rings, ivory
+  spike foot with a gold tip; golden-cream feathered wings (3 feather layers) on gold arms ending in scroll curls.
+- Lightning Relic = ivory pillar with great white wings raised up and out (gold arms + scroll curls), gold bands, a
+  glowing blue band, gold crown of 9 spikes and a blue lightning crystal on top.
+- Goddess Relic (normal + Ascended) = polished gold Celtic cross with ivory panels set into the gold frame, thin gold
+  lines, gold bands, gold seal with a glowing gem, heavy gold ring with ivory bands and 8 filigree scroll curls.
+- Wings sway gently. All pieces are cached meshes on shared materials (built once, no per-cast allocations after that).
+- Front-view preview of the geometry: docs/previews/PREVIEW_v0.25.189_Relics.png (flat colours, not in-game lighting).
+
+TOOLTIP
+- Armor/weapon movement line now reads "Movement speed: 0% (No movement penalty)" (was repeated twice with a misleading
+  vanilla total).
+
+VERIFIED: compile check vs 3029660 passed (0 new signatures), mcs --parse C# 5, geometry preview rendered from the same
+math. NOT tested in game (lighting / material look needs your eyes).
