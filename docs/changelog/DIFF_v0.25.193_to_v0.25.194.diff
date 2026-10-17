@@ -1,0 +1,1915 @@
+--- /dev/null
++++ v0.25.194/AUDIO_PLAN_v0.25.194.txt
+@@ -0,0 +1,31 @@
++AETHELBORN ASCENDED - NEXT AUDIO PASS (PLAN ONLY)
++2026-10-17
++
++Use Valheim's existing sound prefabs and ZSFX playback. No audio changes are
++included in v194. The actual supplied game assembly contains ZSFX.Play,
++SetVolumeModifier, SetPitchModifier, Stop, FadeOut, m_audioClips and built-in
++concurrency settings; ZNetScene exposes GetPrefab and GetPrefabNames.
++
++1. Build a one-time catalog of the installed game's sfx_ prefabs. Preview them
++   in F8 and choose verified names. Do not guess prefab IDs or extract/reship
++   the game's sound files. Cache chosen prefab/clip references after lookup.
++2. Map a small number of events per skill: preparation (when needed), release,
++   impact and an optional short tail/loop for a persistent field. Position sounds
++   at the casting weapon, moving projectile/field or actual impact as appropriate.
++3. Reuse weapon swishes and cuts for Sword Master, heavy impacts/ground rumble
++   for Mercenary, lightning/healing sounds for Cleric's line, native elemental
++   sounds for Sorcerer and bow/projectile sounds for Ranger. Preview the exact
++   choices in game rather than committing to names not yet verified.
++4. Keep existing 3D attenuation/mixer behavior and ZSFX concurrency limits. Use
++   modest per-skill volume and slight native pitch variation. Persistent damage
++   ticks should not create a new full-volume sound every hit; throttle/loop them.
++5. Provide F8 master/per-skill volume and sound enable controls. Keep normal and
++   Ascended mappings independently tunable, with a restrained extra layer for
++   the upgrade. Match sound events to actual attack contact/release, not GUI clicks.
++6. Stop skill-owned loops on dodge cancellation/end/death. For multiplayer, send
++   the sound event once to nearby listeners; avoid playing both a local copy and
++   a network copy of the same event. Verify this with two clients before calling
++   the sound pass finished.
++
++This reuses the game's audio assets and native playback instead of requiring
++new audio files. Exact sound choices and final mixing still need an in-game pass.
+--- v0.25.193/AlbedosCustomClasses.Advanced.cs
++++ v0.25.194/AlbedosCustomClasses.Advanced.cs
+@@ -116,7 +116,7 @@
+     {
+         public const string ModGuid = "albedo.customclasses.advanced";
+         public const string ModName = "Aethelborn Ascended - Advancements";
+-        public const string ModVersion = "0.25.193";
++        public const string ModVersion = "0.25.194";
+ 
+         private const string ClassDataKey = "AlbedoCustomClasses.Class";
+         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
+@@ -703,8 +703,8 @@
+             _judgementCooldown = Config.Bind("Sword Master Judgement Cut", "RechargeSecondsPerStack", 12f, "Independent recharge time for each of the four stacks.");
+             _judgementStamina = Config.Bind("Sword Master Judgement Cut", "StaminaCost", 18f, "Stamina cost per stack activation.");
+             _judgementRange = Config.Bind("Sword Master Judgement Cut", "CastRange", 15f, "Maximum Ground PAC / Target PAC / Free Aim cast range.");
+-            _judgementRadius = Config.Bind("Sword Master Judgement Cut", "SphereRadius_v025146", 2f, "Normal: damage radius of each of the 2 spheres (m).");
+-            _bladeAreaRadius = Config.Bind("Sword Master Judgement Cut", "SpawnAreaRadius_v025146", 3f, "Normal: the 2 spheres appear at random inside this radius (m) around the point locked at cast time.");
++            _judgementRadius = Config.Bind("Sword Master Judgement Cut", "SphereRadius_v025146", 2f, "Normal: cosmetic cloud sphere radius (m); damage uses SpawnAreaRadius.");
++            _bladeAreaRadius = Config.Bind("Sword Master Judgement Cut", "SpawnAreaRadius_v025146", 3f, "Normal: target damage radius in all directions (m). Cosmetic spheres spawn around the locked point.");
+             _bladeInterval = Config.Bind("Sword Master Judgement Cut", "SphereIntervalSeconds_v025145", 0.5f, "Normal: seconds between activation and sphere 1, and between spheres (0.5 / 1.0).");
+             _bladeCripple = Config.Bind("Sword Master Judgement Cut", "CrippleSeconds_v025145", 6f, "Normal: Cripple duration applied by each sphere (s).");
+             _judgementSlashDamage = Config.Bind("Sword Master Judgement Cut", "SlashDamagePerCut", 24f, "Pure Slash damage dealt by each of the three cuts. No Spirit, DoT or debuff.");
+@@ -1217,6 +1217,7 @@
+ 
+         private void OnDestroy()
+         {
++            if (DragonCombat.SwordMasterDodgeRequested == new Action<Player>(OnSwordMasterDodge)) DragonCombat.SwordMasterDodgeRequested = null;
+             foreach(Texture2D texture in _ihAscendedIconArt.Values) if(texture!=null) Destroy(texture);
+             foreach(Texture2D texture in _ihPolishTextures) if(texture!=null) Destroy(texture);
+             _ihAscendedIconArt.Clear(); _ihPolishTextures.Clear(); _ihFrameSprites.Clear();
+@@ -1479,8 +1480,8 @@
+             DragonCombat.LockSkill(player, SmSwordCycle + 0.15f);
+             DragonCombat.PlayClip(player, "sm_slash_a", ascended ? SmAscContact : SmSwordContact, false, ascended ? "sm_slash_a_asc" : "sm_slash_a");
+             float start = Time.time;
+-            if (ascended) StartCoroutine(MoonlightAscendedRoutine(player, SmAscContact, start));
+-            else StartCoroutine(MoonlightRoutine(player, SmSwordContact, start));
++            if (ascended) StartSwordMasterWork(MoonlightAscendedRoutine(player, SmAscContact, start));
++            else StartSwordMasterWork(MoonlightRoutine(player, SmSwordContact, start));
+         }
+ 
+         private IEnumerator MoonlightRoutine(Player player, float windup, float start)
+@@ -1495,7 +1496,7 @@
+                 if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
+                 IhFaceSkillAim(player);
+                 Vector3 origin = player.GetEyePoint() - player.transform.up * 0.25f;
+-                StartCoroutine(GhostSlashWave(player, origin,
++                StartSwordMasterWork(GhostSlashWave(player, origin,
+                     AlbedoAimUtility.GetProjectileDirection(player, origin), range, width,
+                     speed, _moonDamageV, 1f, 1f, DragonCombat.StunAttack(wave + 1)));
+                 if (wave == 2) break;
+@@ -1593,7 +1594,7 @@
+             float windup = Mathf.Max(0.05f, IsAscendedSkill("crescent_cleave") ? _crAscWindup.Value : _crWindup.Value); // v0.25.137 F8 (was 0.30 fixed)
+             DragonCombat.LockSkill(player, windup + (IsAscendedSkill("crescent_cleave") ? 1.0f : 0.25f));
+             DragonCombat.PlayClip(player, IsAscendedSkill("crescent_cleave") ? "sm_crescent_asc" : "sm_crescent", windup);
+-            StartCoroutine(CrescentCleaveRoutine(player, windup));
++            StartSwordMasterWork(CrescentCleaveRoutine(player, windup));
+         }
+ 
+         private IEnumerator CrescentCleaveRoutine(Player player, float windup)
+@@ -1647,9 +1648,9 @@
+                 for (int i = 0; i < 7; i++)
+                 {
+                     float a = Mathf.Lerp(-halfSpread, halfSpread, i / 6f);
+-                    StartCoroutine(CrescentCleaveWave(player, origin, Quaternion.AngleAxis(a, Vector3.up) * baseForward, _crescentAscFirst.Value / 100f, cast, true, DragonCombat.StunAttack(i + 1)));
+-                }
+-                StartCoroutine(CrescentFireTrailRoutine(player, cast));
++                    StartSwordMasterWork(CrescentCleaveWave(player, origin, Quaternion.AngleAxis(a, Vector3.up) * baseForward, _crescentAscFirst.Value / 100f, cast, true, DragonCombat.StunAttack(i + 1)));
++                }
++                StartSwordMasterWork(CrescentFireTrailRoutine(player, cast));
+                 // v0.25.51 (user): the second set gets its own follow-up swing, timed to land with it.
+                 // v0.25.137 (user: Second Fan Delay did nothing - it was hardcoded 0.5): the F8 delay + its own swing wind up.
+                 float second = Mathf.Max(0.05f, _crescentAscSecondDelay.Value);
+@@ -1667,7 +1668,7 @@
+                 for (int i = 0; i < 6; i++)
+                 {
+                     float a = Mathf.Lerp(-halfSpread, halfSpread, (i + 0.5f) / 6f);
+-                    StartCoroutine(CrescentCleaveWave(player, origin, Quaternion.AngleAxis(a, Vector3.up) * baseForward, _crescentAscSecond.Value / 100f, cast, true, DragonCombat.StunAttack(i + 8)));
++                    StartSwordMasterWork(CrescentCleaveWave(player, origin, Quaternion.AngleAxis(a, Vector3.up) * baseForward, _crescentAscSecond.Value / 100f, cast, true, DragonCombat.StunAttack(i + 8)));
+                 }
+                 yield break;
+             }
+@@ -1675,7 +1676,7 @@
+             for (int i = 0; i < angles.Length; i++)
+             {
+                 Vector3 direction = Quaternion.AngleAxis(angles[i], Vector3.up) * baseForward;
+-                StartCoroutine(CrescentCleaveWave(player, origin, direction, 1f, null, false, DragonCombat.StunAttack(i + 1)));
++                StartSwordMasterWork(CrescentCleaveWave(player, origin, direction, 1f, null, false, DragonCombat.StunAttack(i + 1)));
+             }
+         }
+ 
+@@ -1710,12 +1711,12 @@
+             if (!IhAimedCreaturePoint(player, jRange, out point)) point = GetAimPoint(player, jRange);
+             DragonCombat.LockSkill(player, Mathf.Max(0.40f, _bladeDrawWindup.Value));
+             DragonCombat.PlayClip(player, "sm_blade_storm", Mathf.Max(0.03f, _bladeDrawWindup.Value));
+-            StartCoroutine(JudgementCutRoutine(player, point));
++            StartSwordMasterWork(JudgementCutRoutine(player, point));
+         }
+ 
+         // v0.25.145 BLADE STORM OVERHAUL (user): the target point is locked at cast time; spheres then appear at random inside the
+-        // spawn area around it (normal 2 at 0.5 / 1.0 s, Ascended 4 at 0.5 / 1.0 / 1.5 / 2.0 s). Each sphere deals three simultaneous
+-        // Slash hits + Cripple. The player is NOT rooted while later spheres spawn. The variant's total damage budget is unchanged
++        // target area around it (normal 2 at 0.5 / 1.0 s, Ascended 4 at 0.5 / 1.0 / 1.5 / 2.0 s). Each pulse deals three simultaneous
++        // Slash hits + Cripple across the FULL locked target radius; random spheres are cosmetic. The player is NOT rooted. The per-target budget is unchanged
+         // (normal 3 x cut; Ascended 3 x cut x CutDamagePercent + the old extra cut) and split over spheres x 3 hits.
+         private IEnumerator JudgementCutRoutine(Player player, Vector3 point)
+         {
+@@ -1748,7 +1749,7 @@
+                 float gy;
+                 if (haveGround && DragonCombat.TryGroundY(new Vector3(center.x, point.y, center.z), 6f, 30f, out gy)) center.y = gy + heightAbove;
+ 
+-                List<Character> targets = GetSphereTargets(player, center, sphereR);
++                List<Character> targets = GetSphereTargets(player, point, Mathf.Max(0.5f, areaR));
+                 for (int i = 0; i < targets.Count; i++)
+                 {
+                     for (int hitIndex = 0; hitIndex < cuts; hitIndex++)
+@@ -1968,8 +1969,8 @@
+             _bladeAscStacks = Config.Bind(ba, "Stacks", 6, "Stored stacks (normal 4).");
+             _bladeAscFirst = Config.Bind(ba, "CutDamagePercent", 85f, "Each of the three cuts (% of a normal cut).");
+             _bladeAscExtra = Config.Bind(ba, "ExtraCutDamagePercent", 25f, "Part of the total damage budget (% of a full normal activation, added to CutDamagePercent x 3); the budget is split over the 4 spheres x 3 hits.");
+-            _bladeAscSphereRadius = Config.Bind(ba, "SphereRadius_v025146", 2f, "Ascended: damage radius of each of the 4 spheres (m).");
+-            _bladeAscAreaRadius = Config.Bind(ba, "SpawnAreaRadius_v025146", 3f, "Ascended: the 4 spheres appear at random inside this radius (m) around the point locked at cast time.");
++            _bladeAscSphereRadius = Config.Bind(ba, "SphereRadius_v025146", 2f, "Ascended: cosmetic cloud sphere radius (m); damage uses SpawnAreaRadius.");
++            _bladeAscAreaRadius = Config.Bind(ba, "SpawnAreaRadius_v025146", 3f, "Ascended: target damage radius in all directions (m). Cosmetic spheres spawn around the locked point.");
+             _bladeAscInterval = Config.Bind(ba, "SphereIntervalSeconds_v025145", 0.5f, "Ascended: seconds between activation and sphere 1, and between spheres (0.5 / 1.0 / 1.5 / 2.0).");
+             const string ph = "MaxPersistentHits_v025176", phd = "Persistent damage: how many times ONE cast can hit the same enemy (0 = no limit). DoTs / burns never count.";
+             _moonAscGtMaxHits = Config.Bind("Sword Master Moonlight Splitter Ascended", ph, 0, phd + " Final (5th) wave.");
+@@ -1978,9 +1979,9 @@
+             _rsAscTrailMaxHits = Config.Bind("Paladin Righteous Strike Ascended", ph, 0, phd + " All 12 trails together.");
+             _hammerMaxHits = Config.Bind("Paladin Judgement Hammer", ph, 0, phd + " Throw + Ascended return together.");
+             _grandCrossMaxHits = Config.Bind("Priest Grand Cross", ph, 0, phd);
+-            _bladeSpheres = Config.Bind("Sword Master Judgement Cut", "SpheresPerActivation_v025176", 2, "Blade Storm (normal): judgement spheres per activation. Each sphere keeps its own damage (more spheres = more total damage).");
+-            _bladeAscSpheres = Config.Bind(ba, "SpheresPerActivation_v025176", 4, "Blade Storm Ascended: judgement spheres per activation. Each sphere keeps its own damage.");
+-            _bladeCutsPerSphere = Config.Bind("Sword Master Judgement Cut", "CutsPerSphere_v025176", 3, "Blade Storm (normal + Ascended): slashes each sphere deals to every enemy inside. Each cut keeps its own damage.");
++            _bladeSpheres = Config.Bind("Sword Master Judgement Cut", "SpheresPerActivation_v025176", 2, "Blade Storm (normal): attack pulses and cosmetic spheres per activation. Each pulse hits the full target area.");
++            _bladeAscSpheres = Config.Bind(ba, "SpheresPerActivation_v025176", 4, "Blade Storm Ascended: attack pulses and cosmetic spheres per activation. Each pulse hits the full target area.");
++            _bladeCutsPerSphere = Config.Bind("Sword Master Judgement Cut", "CutsPerSphere_v025176", 3, "Blade Storm (normal + Ascended): cuts per pulse against every enemy in the target area. Each cut keeps its own damage.");
+             _bladeStacks = Config.Bind("Sword Master Judgement Cut", "Stacks_v025176", 4, "Blade Storm (normal): stored activations (Ascended uses its own Stacks).");
+             _bladeAscCripple = Config.Bind(ba, "CrippleSeconds_v025145", 6f, "Ascended: Cripple duration applied by each sphere (s).");
+ 
+@@ -2096,6 +2097,18 @@
+             catch { }
+         }
+ 
++        private Coroutine StartSwordMasterWork(IEnumerator routine)
++        {
++            return StartCoroutine(DragonCombat.TrackSwordMasterSkill(Player.m_localPlayer, routine));
++        }
++
++        private void OnSwordMasterDodge(Player player)
++        {
++            _smInterruptAt = Time.time;
++            _frenzyActive = false;
++            _ihCastId = null; _ihCastAt = -10f;
++        }
++
+         private bool SmInterrupted(float castStart)
+         {
+             return _smInterruptAt >= castStart;
+@@ -2220,7 +2233,7 @@
+                 if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
+                 IhFaceSkillAim(player);
+                 Vector3 origin = player.GetEyePoint() - player.transform.up * 0.25f;
+-                StartCoroutine(GhostSlashWave(player, origin,
++                StartSwordMasterWork(GhostSlashWave(player, origin,
+                     AlbedoAimUtility.GetProjectileDirection(player, origin), range, width,
+                     speed, _moonDamageV, _moonAscWave.Value / 100f, 1f, DragonCombat.StunAttack(wave + 1)));
+                 // The 4th is also a normal sword hit. The 5th gets its own heavy animation.
+@@ -2254,10 +2267,10 @@
+                 if (part == 1 && Mathf.Abs(afterD) > 0f) { yield return new WaitForSeconds(Mathf.Abs(afterD)); if (player == null || player.IsDead() || SmInterrupted(start)) yield break; }
+                 if (afterNow)
+                     // Narrower ghost afterimage. Only it applies stun (never bosses).
+-                    StartCoroutine(GhostSlashWave(player, fo, fd, range, width, afterSpeed, _moonDamageV, _moonAscAfter.Value / 100f, 1f, false, true, "Afterimage"));
++                    StartSwordMasterWork(GhostSlashWave(player, fo, fd, range, width, afterSpeed, _moonDamageV, _moonAscAfter.Value / 100f, 1f, false, true, "Afterimage"));
+                 else
+                     // The finisher is 2x WIDTH.
+-                    StartCoroutine(GhostSlashWave(player, fo, fd, range, width * 2f, finSpeed, _moonDamageV, _moonAscFinisher.Value / 100f, 2f, false, false, "Attack 5", true, 0.3f));   // v0.25.142 persistent: immediately, then every 0.3 s
++                    StartSwordMasterWork(GhostSlashWave(player, fo, fd, range, width * 2f, finSpeed, _moonDamageV, _moonAscFinisher.Value / 100f, 2f, false, false, "Attack 5", true, 0.3f));   // v0.25.142 persistent: immediately, then every 0.3 s
+             }
+         }
+ 
+@@ -2294,13 +2307,13 @@
+                 GameObject ghostVis2 = visual;
+                 float gw2 = width; Color gcol = IhSmColor(halfmoon ? "halfmoon_slash" : "moonlight_splitter");   // v0.25.181 blue / dark blue
+                 if (halfmoon)
+-                    DragonCombat.RunVfx(delegate { DragonVfx.CrescentBlade(ghostVis2.transform, gcol, gw2 * 0.6f, gw2 * 0.14f * heightScale, 0f); });   // v0.25.55 / v0.25.63 moon crescent; v0.25.167 glow motes + sparkle trail removed (the blade carries its own wind wake)
++                    DragonCombat.RunVfx(delegate { if (ghostVis2 != null) DragonVfx.CrescentBlade(ghostVis2.transform, gcol, gw2 * 0.6f, gw2 * 0.14f * heightScale, 0f); });   // v0.25.55 / v0.25.63 moon crescent; v0.25.167 glow motes + sparkle trail removed (the blade carries its own wind wake)
+                 else
+                 {
+                     // v0.25.191 (user: no two slashes sewn together - look like the Ascended Halfmoon GT): ONE crescent blade,
+                     // same construction as the Halfmoon GT, in Moonlight's own colour.
+                     float hs = heightScale;
+-                    DragonCombat.RunVfx(delegate { DragonVfx.CrescentBlade(ghostVis2.transform, gcol, gw2 * 0.6f, gw2 * 0.14f * hs, 0f); });
++                    DragonCombat.RunVfx(delegate { if (ghostVis2 != null) DragonVfx.CrescentBlade(ghostVis2.transform, gcol, gw2 * 0.6f, gw2 * 0.14f * hs, 0f); });
+                 }
+                 if (!DragonVfx.Enabled) line = visual.AddComponent<LineRenderer>();
+                 if (line != null) {
+@@ -2314,6 +2327,8 @@
+                 if (shader != null) line.material = new Material(shader);
+                 }
+             }
++            try
++            {
+             HashSet<Character> hitTargets = new HashSet<Character>();
+             // v0.25.142 opt-in persistent hits (Ascended Moonlight's final GT): every overlapping enemy is hit immediately, then every
+             // tickInterval while the overlap lasts. One candidate per character per frame (several colliders never double-tick).
+@@ -2366,6 +2381,8 @@
+                 if (DragonVfx.Enabled) { Vector3 mend = visual.transform.position; float mw = width; DragonCombat.RunVfx(delegate { DragonVfx.Burst(mend, new Color(0.70f, 0.78f, 1f, 1f), 18, 4f, 0.25f, 0.6f, -0.5f); DragonVfx.Flash(mend, new Color(0.55f, 0.62f, 1f, 1f), 1.5f, mw, 0.25f); }); }   // v0.25.97 dissolves into moon dust
+                 Destroy(visual);
+             }
++            }
++            finally { if (visual != null) Destroy(visual); }
+         }
+ 
+         // ------------------------------------------------------------------ Crescent Cleave
+@@ -2410,9 +2427,11 @@
+                 GameObject ccb = ccBlade; float cch = height; Color ccc = ascended ? IhSmDeep : IhSmBlue;   // v0.25.181 (the Ascended fire trail keeps its fire)
+                 // v0.25.63 (user ref): the crescent's centre rides AT ground level, so half of it is underground and it
+                 // reads as a blade of light tearing up out of the earth.
+-                DragonCombat.RunVfx(delegate { DragonVfx.CrescentBlade(ccb.transform, ccc, cch * 0.95f, Mathf.Max(0.35f, cch * 0.16f), 90f); });   // v0.25.167 no glow motes
+-                float ccw = width; DragonCombat.RunVfx(delegate { DragonVfx.GroundDust(ccb.transform, Mathf.Clamp(ccw * 0.5f, 1f, 3.5f), delegate { return ccb != null; }, 2f); });   /* v0.25.181 heavier continuous dirt trail */   // v0.25.169 disturbed dirt + dust following the half-buried wave
+-            }
++                DragonCombat.RunVfx(delegate { if (ccb != null) DragonVfx.CrescentBlade(ccb.transform, ccc, cch * 0.95f, Mathf.Max(0.35f, cch * 0.16f), 90f); });   // v0.25.167 no glow motes
++                float ccw = width; DragonCombat.RunVfx(delegate { if (ccb != null) DragonVfx.GroundDust(ccb.transform, Mathf.Clamp(ccw * 0.5f, 1f, 3.5f), delegate { return ccb != null; }, 2f); });   /* v0.25.181 heavier continuous dirt trail */   // v0.25.169 disturbed dirt + dust following the half-buried wave
++            }
++            try
++            {
+             while (elapsed <= travelTime && player != null)
+             {
+                 float t = Mathf.Clamp01(elapsed / travelTime);
+@@ -2466,8 +2485,12 @@
+                 elapsed += Time.deltaTime;
+                 yield return null;
+             }
+-            if (ccBlade != null) Destroy(ccBlade);
+-            if (cast != null) cast.Running--;
++            }
++            finally
++            {
++                if (ccBlade != null) Destroy(ccBlade);
++                if (cast != null) cast.Running--;
++            }
+         }
+ 
+         // v0.25.167 (user): the waves PUSH instead of pull: every overlapping enemy is carried along the wave's travel direction
+@@ -2743,8 +2766,8 @@
+             float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, ascended ? _frenzyAscWindup.Value : _frenzyWindup.Value));
+             DragonCombat.FollowAimForWindup(player, windup); // Only before the dash commits.
+             DragonCombat.LockSkill(player, windup + _frenzyDashTime.Value + 0.1f);
+-            StartCoroutine(FrenzyPoseRoutine(player, windup, ascended));   // v0.25.42 Valheim's sword heavy attack, frozen through the dash
+-            StartCoroutine(FrenziedChargeRoutine(player, body, capsule, windup, ascended, Time.time));
++            StartSwordMasterWork(FrenzyPoseRoutine(player, windup, ascended));   // v0.25.42 Valheim's sword heavy attack, frozen through the dash
++            StartSwordMasterWork(FrenziedChargeRoutine(player, body, capsule, windup, ascended, Time.time));
+         }
+ 
+         // Only terrain / buildings stop the dash; creatures are passed through.
+@@ -2877,10 +2900,10 @@
+             float spacing = Mathf.Max(0.25f, DragonCombat.M(_frenzyHailSpacing.Value));
+             float hailRadius = Mathf.Max(0.25f, DragonCombat.M(_frenzyHailRadius.Value));
+             int count = Mathf.Max(1, Mathf.FloorToInt(len / spacing) + 1);
+-            if (ascended) StartCoroutine(FrenzyExplosionWave(player, startPos, endPos, damage));   // v0.25.86
++            if (ascended) StartSwordMasterWork(FrenzyExplosionWave(player, startPos, endPos, damage));   // v0.25.86
+             if (!ascended)
+             {
+-                yield return StartCoroutine(FrenzyExplosionWave(player, startPos, endPos, damage, false));
++                yield return StartSwordMasterWork(FrenzyExplosionWave(player, startPos, endPos, damage, false));
+                 yield break; // Normal: tiny explosions replace slash hail; Ascended stays unchanged.
+             }
+             for (int i = 0; i < count; i++)
+@@ -2950,7 +2973,7 @@
+             float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _eclipseWindup.Value));
+             DragonCombat.LockSkill(player, windup + 0.25f);
+             DragonCombat.PlayClip(player, "sm_eclipse", windup);
+-            StartCoroutine(EclipseRoutine(player, windup, ascended));
++            StartSwordMasterWork(EclipseRoutine(player, windup, ascended));
+         }
+ 
+         private IEnumerator EclipseRoutine(Player player, float windup, bool ascended)
+@@ -2959,7 +2982,7 @@
+             float window = Mathf.Max(0f, _eclipseAscReflectWindow.Value);
+             float radius = Mathf.Max(1f, ascended ? DragonCombat.M(_eclipseAscRadius.Value) : DragonCombat.M(_eclipseRadius.Value));
+             if (ascended && window > 0f)
+-                StartCoroutine(EclipseReflectRoutine(player, Mathf.Max(0f, windup - window * 0.5f), window, radius + 2f));
++                StartSwordMasterWork(EclipseReflectRoutine(player, Mathf.Max(0f, windup - window * 0.5f), window, radius + 2f));
+             if (_enableVfx.Value)
+                 StartCoroutine(AnimateAura(player, new Color(0.62f, 0.78f, 1f, 0.9f), Mathf.Max(0.1f, windup)));
+             if (windup > 0f) yield return new WaitForSeconds(windup);
+@@ -2991,7 +3014,7 @@
+                     DragonVfx.Shake(ep, 25f + er, 1.4f);
+                 });
+             }
+-            StartCoroutine(EclipseAfterimageRoutine(player, radius, damage, ascended));   // v0.25.65 afterimage slashes (damage, always)
++            StartSwordMasterWork(EclipseAfterimageRoutine(player, radius, damage, ascended));   // v0.25.65 afterimage slashes (damage, always)
+         }
+ 
+         // v0.25.65 (user): after the spin an afterimage of the blade cuts around you - a hail of slashes in the whole
+@@ -3003,19 +3026,19 @@
+             {
+                 yield return new WaitForSeconds(Mathf.Max(0f, _eclipseAfterDelay.Value));
+                 if (player == null || player.IsDead()) yield break;
+-                yield return StartCoroutine(EclipseSlashHail(player, radius, spinMult * Mathf.Max(0f, _eclipseAfterPercent.Value) / 100f, 0f, "Slash Hail"));
++                yield return StartSwordMasterWork(EclipseSlashHail(player, radius, spinMult * Mathf.Max(0f, _eclipseAfterPercent.Value) / 100f, 0f, "Slash Hail"));
+                 yield break;
+             }
+             // v0.25.86 (user) Ascended: everyone (Small, Big, Bosses) is sucked into the middle almost at once, and the
+             // spiral launch follows the 360 swing after 0.5s (the afterimage still cuts meanwhile).
+             float spinAt = Time.time;
+-            StartCoroutine(EclipseSuck(player, radius, 0.3f));
+-            StartCoroutine(EclipseDelayedHail(player, radius, spinMult * Mathf.Max(0f, _eclipseAfterPercent.Value) / 100f));
++            StartSwordMasterWork(EclipseSuck(player, radius, 0.3f));
++            StartSwordMasterWork(EclipseDelayedHail(player, radius, spinMult * Mathf.Max(0f, _eclipseAfterPercent.Value) / 100f));
+             while (Time.time - spinAt < Mathf.Max(0f, _eclipseAscSpiralGap.Value)) yield return null;
+             if (player == null || player.IsDead()) yield break;
+             // v0.25.85 (user): you launch and spiral upward, dragging Small and Big enemies up with you (never bosses),
+             // crescents spiralling around you; the second afterimage hails at the top. Launch fall rule protects the fall.
+-            StartCoroutine(EclipseLaunch(player, radius));
++            StartSwordMasterWork(EclipseLaunch(player, radius));
+             Color vio = IhSmColor("eclipse");   // v0.25.181
+             for (int i = 0; i < 10; i++)
+             {
+@@ -3033,14 +3056,14 @@
+             }
+             yield return new WaitForSeconds(0.15f);
+             if (player == null || player.IsDead()) yield break;
+-            yield return StartCoroutine(EclipseSlashHail(player, radius, spinMult * Mathf.Max(0f, _eclipseAscSpiralPercent.Value) / 100f, 1.5f, "Spiral"));
++            yield return StartSwordMasterWork(EclipseSlashHail(player, radius, spinMult * Mathf.Max(0f, _eclipseAscSpiralPercent.Value) / 100f, 1.5f, "Spiral"));
+         }
+ 
+         private IEnumerator EclipseDelayedHail(Player player, float radius, float mult)
+         {
+             yield return new WaitForSeconds(Mathf.Min(Mathf.Max(0f, _eclipseAfterDelay.Value), 0.3f));
+             if (player == null || player.IsDead()) yield break;
+-            yield return StartCoroutine(EclipseSlashHail(player, radius, mult, 0f, "Delayed Hail"));
++            yield return StartSwordMasterWork(EclipseSlashHail(player, radius, mult, 0f, "Delayed Hail"));
+         }
+ 
+         private IEnumerator EclipseSuck(Player player, float radius, float seconds)
+@@ -3080,7 +3103,7 @@
+             float dur = Mathf.Max(0.15f, _eclipseAscRiseTime.Value);
+             DragonCombat.LockSkill(player, dur + 0.5f);
+             DragonCombat.GrantLaunchFall(player, Mathf.Max(5f, _eclipseAscRise.Value));   // user: no fall damage unless you fall more than 10m
+-            StartCoroutine(IhCreatureGhost(player, dur + 3f));
++            StartSwordMasterWork(IhCreatureGhost(player, dur + 3f));
+             Rigidbody body = player.GetComponent<Rigidbody>();
+             Vector3 start = player.transform.position;
+             List<Character> lifted = new List<Character>();
+@@ -3232,7 +3255,7 @@
+                 hmS = Mathf.Clamp(CsTiming(hmAxe1)[0] / Mathf.Max(0.05f, windup), 0.7f, 2.5f);
+                 DragonCombat.FireVanilla(player, hmAxe1);
+                 bool hmDone1 = false;
+-                StartCoroutine(CsSwing(player, hmAxe1, hmS, null, 0f, true, 0f, delegate(AnimationClip c) { hmC1 = c; hmDone1 = true; }));
++                StartSwordMasterWork(CsSwing(player, hmAxe1, hmS, null, 0f, true, 0f, delegate(AnimationClip c) { hmC1 = c; hmS = Mathf.Clamp(CsTiming(hmAxe1)[0] / Mathf.Max(0.05f, windup), 0.1f, 4f); hmDone1 = true; }, windup));
+                 while (!hmDone1) { if (player == null || player.IsDead()) yield break; yield return null; }
+             }
+             else
+@@ -3249,16 +3272,16 @@
+             // v0.25.92 (user): Ascended keeps the normal Halfmoon rework (slash-hail follow-up) before the stance.
+             // v0.25.95 (user): the cuts run on their own; the finisher window opens as soon as the SWING
+             // ANIMATION ends, not when the cuts finish. Rooted for the whole skill.
+-            StartCoroutine(HalfmoonTravelingCuts(player, forward, radius, start));
++            StartSwordMasterWork(HalfmoonTravelingCuts(player, forward, radius, start));
+             DragonCombat.LockSkill(player, HmCutsSeconds() + 0.3f);
+             if (hmChain)
+             {
+-                yield return StartCoroutine(CsSwing(player, hmAxe1, hmS, null, CsTiming(hmAxe1)[1], false, 0f, null));   // follow-through to the chain point
++                yield return StartSwordMasterWork(CsSwing(player, hmAxe1, hmS, null, CsTiming(hmAxe1)[1], false, 0f, null));   // follow-through to the chain point
+                 if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
+                 IhFaceSkillAim(player);
+                 DragonCombat.LockSkill(player, 0.6f);
+                 DragonCombat.FireVanilla(player, hmAxe2);
+-                yield return StartCoroutine(CsSwing(player, hmAxe2, hmS, hmC1, 0f, true, 0f, null));   // attack 2 up to its hit frame
++                yield return StartSwordMasterWork(CsSwing(player, hmAxe2, hmS, hmC1, 0f, true, 0f, null));   // attack 2 up to its hit frame
+                 if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
+                 float[] hmE2 = CsTiming(hmAxe2);
+                 DragonCombat.SetSkillAnimSpeed(player, hmS, Mathf.Max(0.1f, (hmE2[2] - hmE2[0]) / hmS + 0.12f));   // the swing plays out at the same speed
+@@ -3281,7 +3304,7 @@
+             float speed = range / Mathf.Max(0.5f, _halfAscTravel.Value);
+             ShowMessage("Halfmoon Slash!");
+             // v0.25.1: the Ascended finisher wave is the one with the spin (in sm_halfmoon_finisher).
+-            StartCoroutine(GhostSlashWave(player, origin, dir, range, width, speed, _halfmoonDamageV, Mathf.Max(0f, _halfAscFinDamageMult.Value), 3f, true, "Finisher"));
++            StartSwordMasterWork(GhostSlashWave(player, origin, dir, range, width, speed, _halfmoonDamageV, Mathf.Max(0f, _halfAscFinDamageMult.Value), 3f, true, "Finisher"));
+         }
+ 
+         private float HmCutsSeconds()
+@@ -3332,7 +3355,7 @@
+             float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _iwAscWindup.Value) / Mathf.Max(0.1f, _iwAscAnimationSpeed.Value));
+             DragonCombat.LockSkill(player, windup);
+             DragonCombat.PlayClip(player, "warrior_impact_wave", windup, false, "warrior_impact_wave_asc");
+-            StartCoroutine(AscendedImpactWaveRoutine(player, windup, Time.time));
++            StartSwordMasterWork(AscendedImpactWaveRoutine(player, windup, Time.time));
+         }
+ 
+         private IEnumerator AscendedImpactWaveRoutine(Player player, float windup, float start)
+@@ -3393,10 +3416,10 @@
+             if (_enableVfx.Value) { Vector3 s0 = origin, s1 = origin + forward * reached; float sw2 = width; DragonCombat.RunVfx(delegate { DragonVfx.BranchCrackLine(s0, s1, DragonVfx.Fire, Mathf.Clamp(sw2 * 0.2f, 0.3f, 0.9f), 4f); }); }   // v0.25.58 scar along the wave
+             // Aftershock: from the cast position back along the travelled path, 3m sections.
+             float section = Mathf.Max(0.5f, DragonCombat.M(_iwAscSection.Value));
+-            HashSet<int> shockHit = new HashSet<int>();
+             for (float s = 0f; s < reached; s += section)
+             {
+                 if (player == null || player.IsDead() || SmInterrupted(start)) yield break;
++                HashSet<int> shockHit = new HashSet<int>(); // one hit per enemy per shockwave, not one per chain
+                 Vector3 c = origin + forward * Mathf.Min(reached, s + section * 0.5f);
+                 RaycastHit floor;
+                 if (Physics.Raycast(c + Vector3.up * 3f, Vector3.down, out floor, 8f, ground)) c = floor.point + Vector3.up * 0.18f;
+@@ -3467,13 +3490,14 @@
+                     break;
+                 case "blade_storm":
+                     {
+-                        int bsSpheres = ascended ? 4 : 2;
++                        int bsSpheres = Mathf.Clamp(ascended ? _bladeAscSpheres.Value : _bladeSpheres.Value, 1, 20);
++                        int bsCuts = Mathf.Clamp(_bladeCutsPerSphere.Value, 1, 20);
++                        int bsDefault = ascended ? 4 : 2;
+                         float bsBudget = _bladeCutDamage.Value * 3f * power * (ascended ? (_bladeAscFirst.Value + _bladeAscExtra.Value) / 100f : 1f);
+-                        b.Append(IhLine("Damage", bsSpheres.ToString() + " spheres, 3 x " + IhNum(bsBudget / (bsSpheres * 3f)) + " Slash each + " + IhNum(ascended ? _bladeAscCripple.Value : _bladeCripple.Value) + "s Cripple"));
+-                        b.Append(IhLine("Area", IhNum(ascended ? _bladeAscAreaRadius.Value : _bladeAreaRadius.Value) + "m spawn radius, " + IhNum(ascended ? _bladeAscInterval.Value : _bladeInterval.Value) + "s apart"));
++                        b.Append(IhLine("Damage", bsSpheres.ToString() + " pulses, " + bsCuts.ToString() + " x " + IhNum(bsBudget / (bsDefault * 3f)) + " Slash to every enemy in the target area + " + IhNum(ascended ? _bladeAscCripple.Value : _bladeCripple.Value) + "s Cripple"));
++                        b.Append(IhLine("Area", IhNum(ascended ? _bladeAscAreaRadius.Value : _bladeAreaRadius.Value) + "m target radius in all directions, " + IhNum(ascended ? _bladeAscInterval.Value : _bladeInterval.Value) + "s apart"));
+                     }
+                     b.Append(IhLine("Stacks", (ascended ? _bladeAscStacks.Value : 4).ToString() + ", " + IhNum(_judgementCooldown.Value) + "s recharge each"));
+-                    b.Append(IhLine("Radius", IhNum(ascended ? _bladeAscSphereRadius.Value : _judgementRadius.Value) + "m per sphere"));
+                     b.Append(IhLine("Range", IhNum(_judgementRange.Value) + "m"));
+                     b.Append(IhLine("Stamina Cost", IhNum(_judgementStamina.Value)));
+                     break;
+@@ -3739,7 +3763,7 @@
+             {
+                 if (!DragonVfx.Enabled) StartCoroutine(AnimateRing(center + Vector3.up * 0.08f, Mathf.Max(0.4f, innerVisual), radius, 0.55f, new Color(0.95f, 0.58f, 0.22f, 1f), 0.16f));   // v0.25.191 (user) no extra ring + flash
+                 Vector3 sc = center; float sr = radius; bool firstStamp = innerVisual <= 0.01f;
+-                DragonCombat.RunVfx(delegate { DragonVfx.GroundImpact(sc, DragonVfx.Fire, sr, firstStamp ? 1.4f : 0.8f); DragonVfx.Shatter(sc, sr * 0.8f, 0f); });   /* v0.25.181 branching fractures + rubble */   // v0.25.58; v0.25.168 no spikes (Hulk-smash stamp)
++                DragonCombat.RunVfx(delegate { DragonVfx.StompWindRing(sc, innerVisual, sr, 0.45f); DragonVfx.GroundImpact(sc, DragonVfx.Fire, sr, firstStamp ? 1.4f : 0.8f); DragonVfx.Shatter(sc, sr * 0.8f, 0f); });   /* v0.25.181 branching fractures + rubble */   // v0.25.58; v0.25.168 no spikes (Hulk-smash stamp)
+             }
+         }
+ 
+@@ -3933,8 +3957,13 @@
+             return -1f;
+         }
+ 
++        private static float CsContactSpeed(float naturalHit, float naturalNow, float elapsed, float requestedContact)
++        {
++            return Mathf.Clamp((naturalHit - naturalNow) / Mathf.Max(0.03f, requestedContact - elapsed), 0.1f, 4f);
++        }
++
+         // Plays one vanilla swing at speed s until its natural time reaches 'until' (hit or chain point).
+-        private IEnumerator CsSwing(Player player, string trig, float s, AnimationClip skip, float until, bool hitMark, float startNorm, System.Action<AnimationClip> done)
++        private IEnumerator CsSwing(Player player, string trig, float s, AnimationClip skip, float until, bool hitMark, float startNorm, System.Action<AnimationClip> done, float contactSeconds = 0f)
+         {
+             Animator an = player.GetComponentInChildren<Animator>();
+             float[] tm = CsTiming(trig);
+@@ -3951,6 +3980,12 @@
+                     if (clip != null)
+                     {
+                         CsLearn(trig, clip); tm = CsTiming(trig); if (hitMark) target = tm[0];
++                        if (hitMark && contactSeconds > 0f)
++                        {
++                            float naturalNow = Mathf.Max(0f, CsClipTime(an, layer, clip));
++                            s = CsContactSpeed(target, naturalNow, Time.time - t0, contactSeconds);
++                            DragonCombat.SetSkillAnimSpeed(player, s, 0.25f);
++                        }
+                         if (startNorm > 0.001f)
+                         {
+                             // v0.25.131 stitch: jump straight to where this swing's weapon meets the previous link's
+@@ -4620,7 +4655,6 @@
+             if (!BeginCast(player, "Mercenary.AscendedHeavySlash", IhCfg(sk, "Warrior.Heavy Slash", "Cooldown", 8f), IhCfg(sk, "Warrior.Heavy Slash", "StaminaCost", 20f))) return;
+             float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, IhCfg(sk, "Warrior.Heavy Slash", "Windup", 0.6f)));
+             DragonCombat.LockSkill(player, windup);
+-            DragonCombat.PlayClip(player, "merc_heavy_asc", windup);
+             StartCoroutine(AscendedHeavySlashRoutine(player, windup));
+         }
+ 
+@@ -4628,24 +4662,49 @@
+         {
+             const string sk = "albedo.customclasses.skills";
+             ShowMessage("Heavy Slash");
+-            if (windup > 0f) yield return new WaitForSeconds(windup);
+-            if (player == null || player.IsDead()) yield break;
+-            Vector3 origin = player.transform.position + Vector3.up * 1.0f;
+-            Vector3 forward = GetCrosshairDirection(player, origin);
+-            float range = Mathf.Max(0.5f, DragonCombat.M(_hsAscReach.Value));
+-            float angle = Mathf.Clamp(IhCfg(sk, "Warrior.Heavy Slash", "ArcDegrees", 120f), 20f, 180f);
+-            List<Character> targets = GetFrontalTargets(player, origin, forward, range, angle);
+-            for (int i = 0; i < targets.Count; i++)
+-            {
+-                DealDamageScaled(player, targets[i], _heavyAscDamage, 1f, 18f, false, "heavy_slash", "Attack 1", false, false, true);
+-                DragonCombat.ApplyBrokenBones(targets[i], 6f);
+-                GainMercenaryFuryFromSkillHit(player);
+-            }
+-            // Connecting grants Hyper Armor; recasting refreshes it, it never adds up.
+-            if (targets.Count > 0)
+-                DragonCombat.GrantHyperArmor(player, Mathf.Max(0f, _hsAscHyper.Value));
+-            if (_enableVfx.Value)
+-                StartCoroutine(AnimateHalfmoonArc(origin, FlatForward(player), range));
++            AnimationClip previous = null;
++            float speed = 1f;
++            for (int strike = 0; strike < 3; strike++)
++            {
++                if (player == null || player.IsDead()) yield break;
++                Animator an = player.GetComponentInChildren<Animator>();
++                string trigger = DragonCombat.ResolveTriggerName(an, "battleaxe_attack" + strike.ToString());
++                if (trigger != null)
++                {
++                    if (strike == 0) speed = Mathf.Clamp(CsTiming(trigger)[0] / Mathf.Max(0.05f, windup), 0.1f, 4f);
++                    DragonCombat.FireVanilla(player, trigger);
++                    AnimationClip current = null;
++                    yield return StartCoroutine(CsSwing(player, trigger, speed, previous, 0f, true, 0f,
++                        delegate(AnimationClip c) { current = c; }, strike == 0 ? windup : 0f));
++                    if (strike == 0) speed = Mathf.Clamp(CsTiming(trigger)[0] / Mathf.Max(0.05f, windup), 0.1f, 4f);
++                    previous = current;
++                }
++                else
++                {
++                    DragonCombat.PlayClip(player, "merc_heavy_asc", strike == 0 ? windup : 0.45f);
++                    yield return new WaitForSeconds(strike == 0 ? windup : 0.45f);
++                }
++                if (player == null || player.IsDead()) yield break;
++                Vector3 origin = player.transform.position + Vector3.up;
++                Vector3 forward = GetCrosshairDirection(player, origin);
++                float range = Mathf.Max(0.5f, DragonCombat.M(_hsAscReach.Value));
++                float angle = Mathf.Clamp(IhCfg(sk, "Warrior.Heavy Slash", "ArcDegrees", 120f), 20f, 180f);
++                List<Character> targets = GetFrontalTargets(player, origin, forward, range, angle);
++                for (int i = 0; i < targets.Count; i++)
++                {
++                    DealDamageScaled(player, targets[i], _heavyAscDamage, 1f, 18f, false, "heavy_slash", "Attack " + (strike + 1).ToString(), false, false, true);
++                    DragonCombat.ApplyBrokenBones(targets[i], 6f);
++                    GainMercenaryFuryFromSkillHit(player);
++                }
++                if (targets.Count > 0) DragonCombat.GrantHyperArmor(player, Mathf.Max(0f, _hsAscHyper.Value));
++                if (_enableVfx.Value) StartCoroutine(AnimateHalfmoonArc(origin, FlatForward(player), range));
++                if (trigger != null)
++                {
++                    float until = strike < 2 ? CsTiming(trigger)[1] : CsTiming(trigger)[2];
++                    yield return StartCoroutine(CsSwing(player, trigger, speed, null, until, false, 0f, null));
++                }
++            }
++            DragonCombat.SetSkillAnimSpeed(player, 1f, 0f);
+         }
+ 
+         // ------------------------------------------------------------------ tooltips
+@@ -4657,7 +4716,7 @@
+                 case "heavy_slash":
+                     if (ascended && IhPlayerKit(player) != null && IhPlayerKit(player).Ac == "Mercenary")
+                     {
+-                        b.Append(IhLine("Damage", IhDamage(_heavyAscDamage, power)));
++                        b.Append(IhLine("Damage", IhDamage(_heavyAscDamage, power) + " per strike, 3 strikes"));
+                         b.Append(IhLine("Reach", IhNum(_hsAscReach.Value) + "m"));
+                         b.Append(IhLine("On Hit", IhNum(_hsAscHyper.Value) + "s Hyper Armor"));
+                     }
+@@ -4921,14 +4980,14 @@
+                 IhFaceSkillAim(player);
+                 float ascWindup = HmAscContact;
+                 DragonCombat.LockSkill(player, ascWindup + HmCutsSeconds() + 0.4f);
+-                StartCoroutine(HalfmoonAscendedRoutine(player, ascWindup, Time.time));   // v0.25.142: the CAs are fired inside the routine
++                StartSwordMasterWork(HalfmoonAscendedRoutine(player, ascWindup, Time.time));   // v0.25.142: the CAs are fired inside the routine
+                 return;
+             }
+             IhFaceSkillAim(player);
+             float windup = HmContact;
+             DragonCombat.LockSkill(player, HmSwingEnd + 0.03f);   // movement resumes after the swing; traveling cuts continue independently
+             DragonCombat.PlayClip(player, "sm_halfmoon", windup);
+-            StartCoroutine(HalfmoonRoutine(player, windup));
++            StartSwordMasterWork(HalfmoonRoutine(player, windup));
+         }
+ 
+         private IEnumerator HalfmoonRoutine(Player player, float windup)
+@@ -4945,7 +5004,7 @@
+             ApplyHalfmoonHit(player, forward, radius, 1f);
+             if (_enableVfx.Value)
+                 StartCoroutine(AnimateHalfmoonArc(player.transform.position + Vector3.up * 0.9f, forward, radius));
+-            yield return StartCoroutine(HalfmoonTravelingCuts(player, forward, radius, castStart));
++            yield return StartSwordMasterWork(HalfmoonTravelingCuts(player, forward, radius, castStart));
+         }
+ 
+         private IEnumerator HalfmoonTravelingCuts(Player player, Vector3 forward, float radius, float castStart)
+@@ -5021,7 +5080,7 @@
+             // Guardian/Boss Power activation trigger, THEN start the 10s buff.
+             DragonCombat.LockSkill(player, activationTime);
+             DragonCombat.PlayAnimation(player, "gpower");
+-            StartCoroutine(SwordMasteryActivationRoutine(player, activationTime));
++            StartSwordMasterWork(SwordMasteryActivationRoutine(player, activationTime));
+         }
+ 
+         private IEnumerator SwordMasteryActivationRoutine(Player player, float activationTime)
+@@ -13959,7 +14018,7 @@
+             switch (id)
+             {
+                 case "piercing_arrow":
+-                    b.Append(IhLine("Damage", IhBowPct(IhR("Ranger Piercing Arrow", "DamagePercent", 160f), power) + ", every enemy in the line"));
++                    b.Append(IhLine("Damage", IhBowPct(IhR("Ranger Piercing Arrow", "DamagePercent", 160f) * (ascended ? 0.6f : 1f), power) + (ascended ? " per arrow; 3 arrows, 0.2s apart (180% previous total)" : ", every enemy in the line")));
+                     b.Append(IhLine("Range", IhNum(ascended ? IhR("Ranger Piercing Arrow Ascended", "Range", 60f) : IhR("Ranger Piercing Arrow", "Range", 40f)) + "m Laser Projectile, Free Aim"));
+                     b.Append(IhLine("Inflicts", "Cripple " + IhNum(IhR("Ranger Piercing Arrow", "CrippleDuration", 3f)) + "s (first enemy)" + (ascended ? ", Expose " + IhNum(IhR("Ranger Piercing Arrow Ascended", "ExposeDuration", 6f)) + "s" : "")));
+                     IhCosts(b, IhR("Ranger Piercing Arrow", "StaminaCost", 20f), "Instant", IhR("Ranger Piercing Arrow", "Cooldown", 8f));
+@@ -14346,14 +14405,14 @@
+         {
+             switch (id)
+             {
+-                case "impact_wave": return "15m x 3m; an aftershock runs back along the path (35%)";
++                case "impact_wave": return "15m x 3m; each aftershock can hit enemies in its range again (35%)";
+                 case "moonlight_splitter": return "4 natural sword swings (65%), then a 1.5x width heavy wave (110%) and a fast stunning afterimage (55%) 0.3s later";
+                 case "crescent_cleave": return "13 cleaves in two fans, burning fire trails and stacking Burn";
+                 case "blade_storm": return "6 stacks; each cast adds an extra cut (25%)";
+                 case "frenzied_charge": return "0.5s wind up, 12m, double width, 115% damage, a wave of explosions";
+                 case "eclipse": return "8m, 110%, reflects enemy projectiles, then you spiral 4m up dragging enemies with you, and a second afterimage";
+                 case "halfmoon_slash": return "after the first heavy slash, hold the stance and Left Click to release a huge Free Aim Ghost wave (3x damage, 1.5x width, 30m)";
+-                case "heavy_slash": return "5m reach, 140% damage, 2s Hyper Armor on hit";
++                case "heavy_slash": return "Three Battleaxe strikes, each with the previous Ascended strike damage; Hyper Armor on hit";
+                 case "stomp": return "a third impact at 15m (40%)";
+                 case "circle_swing": return "9m, two swings (90% + 60%), Hyper Armor, launches";
+                 case "bonecrusher": return "the landing is followed by a ground shock (50%)";
+@@ -14376,7 +14435,7 @@
+                 case "arcane_rupture": return "4 charges, 120% each";
+                 // v0.24.0 Ranger
+                 case "tumble_shot": return "5 arrows; a kill resets the cooldown; leaves a 4m gust that Cripples";
+-                case "piercing_arrow": return "60m, the arrow widens as it flies and Exposes";
++                case "piercing_arrow": return "Three arrows, 0.2s apart; 60% previous damage each (180% total), widening and Expose";
+                 case "gale_volley": return "3 charges; a second fan arcs over the first";
+                 case "cyclone_arrow": return "a tall tornado 2m wider that sucks in Small and Big enemies and Frosts everything";
+                 case "swallow_dive": return "3 charges; each dash leaves a wind slash that hits again after 0.5s";
+@@ -14424,7 +14483,7 @@
+                 case "impact_punch": return "A quick punch that damages enemies in front of you and Stuns small ones.";
+                 case "moonlight_splitter": return "Fires crescent waves forward that pass through and damage every enemy in their path.";
+                 case "crescent_cleave": return "Sends crescent cleaves across the ground in a fan, damaging every enemy they cross.";
+-                case "blade_storm": return "Cuts the aimed area with spheres of blades that hit every enemy inside three times and Cripple them.";
++                case "blade_storm": return "Repeatedly cuts and Cripples every enemy in the targeted area. Cloud spheres mark the attack pulses.";
+                 case "frenzied_charge": return "Dashes forward with a thrust that damages enemies in your path, launching small ones and Stunning big ones.";
+                 case "eclipse": return "A full-circle slash that damages every enemy around you.";
+                 case "halfmoon_slash": return "A huge heavy slash forward followed by cuts along its arc that hit everyone inside the cleave.";
+@@ -14810,6 +14869,7 @@
+             _graceLightRadius = Config.Bind("Paladin Heavens Light", "Radius", 10f, "Players within this radius when cast get the buff (snapshot).");
+             _graceLightDefense = Config.Bind("Paladin Heavens Light", "OverallDefensePercent", 40f, "Overall Defense bonus (less damage taken).");
+             _graceLightStaminaCut = Config.Bind("Paladin Heavens Light", "StaminaUseCutPercent_v025186", 25f, "v0.25.186: less Stamina used while Heaven's Light lasts (replaces the old equipment movement penalty removal).");
++            DragonCombat.SwordMasterDodgeRequested = OnSwordMasterDodge;
+             DragonCombat.TreeHotbarProvider = IhUsesTreeHotbar;
+             DragonCombat.TreeSkillKeyHeldProvider = IhSkillKeyHeld;
+             DragonCombat.RegisterStackQuery(IhStackQuery);
+@@ -14873,6 +14933,7 @@
+         private float _ihCastAt = -10f, _ihBusyMsgAt = -10f;
+         private bool IhSkillBusy(Player player, string id)
+         {
++            if (GetAdvancement(player) == "Sword Master" && player.InDodge()) return true;
+             if (id == _ihCastId && Time.time - _ihCastAt < 120f) return false;
+             bool busy = Time.time - _ihCastAt < 0.45f || DragonCombat.IsSkillLocked(player) || DragonCombat.ClipBusy(player);
+             if (busy && Time.time - _ihBusyMsgAt > 1f && !string.IsNullOrEmpty(_ihCastId))
+--- v0.25.193/AlbedosCustomClasses.Skills.cs
++++ v0.25.194/AlbedosCustomClasses.Skills.cs
+@@ -232,7 +232,7 @@
+         public static SkillsPlugin Instance;
+         public const string ModGuid = "albedo.customclasses.skills";
+         public const string ModName = "Aethelborn Ascended - Starter Skills";
+-        public const string ModVersion = "0.25.193";
++        public const string ModVersion = "0.25.194";
+ 
+         private const string ClassDataKey = "AlbedoCustomClasses.Class";
+         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";
+@@ -639,7 +639,7 @@
+             float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _heavyWindup.Value));
+             DragonCombat.LockSkill(player, windup);
+             DragonCombat.PlayClip(player, "warrior_heavy", windup);
+-            StartCoroutine(HeavySlashRoutine(player, windup));
++            StartCoroutine(DragonCombat.TrackSwordMasterSkill(player, HeavySlashRoutine(player, windup)));
+         }
+ 
+         private IEnumerator HeavySlashRoutine(Player player, float windup)
+@@ -689,7 +689,7 @@
+             float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _impactWindup.Value) / Mathf.Max(0.1f, _impactAnimSpeed.Value));
+             DragonCombat.LockSkill(player, windup);
+             DragonCombat.PlayClip(player, "warrior_impact_wave", windup);
+-            StartCoroutine(ImpactWaveRoutine(player, windup));
++            StartCoroutine(DragonCombat.TrackSwordMasterSkill(player, ImpactWaveRoutine(player, windup)));
+         }
+ 
+         private IEnumerator ImpactWaveRoutine(Player player, float windup)
+@@ -785,7 +785,7 @@
+             float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _punchWindup.Value));
+             DragonCombat.LockSkill(player, windup);
+             DragonCombat.PlayClip(player, "warrior_punch", windup);
+-            StartCoroutine(ImpactPunchRoutine(player, windup));
++            StartCoroutine(DragonCombat.TrackSwordMasterSkill(player, ImpactPunchRoutine(player, windup)));
+         }
+ 
+         private IEnumerator ImpactPunchRoutine(Player player, float windup)
+--- /dev/null
++++ v0.25.194/CHANGELOG_v0.25.194.txt
+@@ -0,0 +1,66 @@
++AETHELBORN ASCENDED v0.25.194 - SKILL FINISH & DODGE PRIORITY
++2026-10-17 (Asia/Manila)
++Based only on the preserved v193 source archive. No new Anchor promotion.
++
++GAMEPLAY / ANIMATION
++1. Halfmoon Slash: the Ascended first-swing path chose its speed from CsTiming's
++   cold fallback {0.85, 1.15, 1.6}, then learned the real contact time without
++   recalculating that speed. The first activation could therefore take longer
++   than the configured wind-up. The observed clip now calibrates its remaining
++   natural time against the remaining requested wind-up. Warm/cold timing math
++   both reaches a requested one-second contact. Follow-through uses learned data.
++   Normal Halfmoon's existing configured delay is retained. Fresh-launch testing
++   of both variants is still needed; no in-game cause confirmation is claimed.
++2. Blade Storm: each existing attack pulse damages every enemy overlapping the
++   full 3D target sphere around the point locked at cast time. The existing
++   SpawnAreaRadius setting now defines that damage radius (default 3m, normal
++   and Ascended independently). Small random cloud spheres are cosmetic only;
++   their position/radius no longer chooses which enemies get hit.
++   Pulse count/spacing, cuts per pulse, per-target damage budget, Cripple,
++   stamina, recharge and targeting distance are preserved. Relevant tooltips
++   and F8 descriptions now distinguish target radius from cosmetic sphere size.
++3. Sword Master dodge: both a dedicated dodge request and block+jump are handled
++   before AA's skill-lock filter can erase them. Valid roll input cancels pending
++   Sword Master skill work, queued native attacks, AA's running normal chain,
++   Mixamo/custom pose control, follow-aim and cast movement locks. Tracked child
++   waves/follow-ups cannot resume damage after their yields. Their iterator
++   finally blocks run immediately, including Frenzied Charge/ghost collision
++   cleanup. Traveling-cut objects are cleaned up on cancellation.
++   Native stamina cost, ground, encumbrance, alive/input eligibility and an
++   already-active roll remain in force. Only the requested Sword Master roll
++   bypasses native attack/stagger animation gates. Other classes are unchanged.
++   Already-applied buffs/DoTs and already-emitted cosmetic fades keep their normal
++   lifetimes; pending skill execution and new follow-up damage are cancelled.
++4. Ascended Heavy Swing / Heavy Slash: three full-strength hits using native
++   Battleaxe attack0 -> attack1 -> attack2, chaining at their animation events.
++   The first hit uses the existing wind-up. Each hit retains the old Ascended
++   strike's damage, Broken Bones, fury/on-hit Hyper Armor and existing slash VFX.
++   Cost/cooldown are paid once. Three hits total 300% of the former one-hit damage.
++5. Ascended Impact Wave: each follow-up shockwave gets its own enemy hit set.
++   Multiple colliders still count once per wave, but an enemy overlapping a later
++   shockwave can be hit again. Existing sections, timing, damage percent and
++   collision remain. This does not add an every-frame damage loop.
++6. Ascended Piercing Arrow: three arrows at 0.2s intervals. Each deals 60% of
++   the previous Ascended arrow's damage; 180% combined, or +80% total. With the
++   existing 160% weapon/ammo setting this is 96% per arrow, 288% combined, before
++   the unchanged tier/modifier calculations. Widening, piercing and Expose stay.
++   Uses the native bow_fire animation for each shot; cost/cooldown once.
++   Normal Piercing Arrow remains one arrow at its prior damage.
++
++REQUESTED VFX
++7. Blade Storm: textured, dense spherical cloud body plus interior cloud puffs
++   and the existing visible slashes. One cached sphere mesh and material; explicit
++   white vertex colors, 0.8 tint alpha and texture alpha floor 0.58 before fades.
++   The cloud body does not pass through particle-density/frame-budget reductions.
++   It draws before the cuts without writing depth, so the cuts stay readable.
++   Bounded interior particles (48 max), normal/Ascended colors retained.
++8. Stomp: retain a ring, with a broader soft gray-white wind pressure front.
++   It expands over the existing stomp radius while the cracks and debris remain.
++   No change to Stomp's damage, sequence or affected area.
++
++SCOPE
++Four edited C# modules: Advanced, CombatRuntime, Starter Skills, Ranger.
++Other six sources, all 185 assets, equipment rules, v193 sprint reload/UI guard,
++ground-fire implementation and cape/cloth code are unchanged. Configuration
++sections, keys, defaults, migrations and saved IDs are retained. Installer code
++is unchanged except its version/title banner. No audio added in this pass.
+--- v0.25.193/DragonsAltar.CombatRuntime.cs
++++ v0.25.194/DragonsAltar.CombatRuntime.cs
+@@ -2,6 +2,7 @@
+ using System.Collections;
+ using System.Collections.Generic;
+ using System.Reflection;
++using System.Reflection.Emit;
+ using BepInEx;
+ using BepInEx.Configuration;
+ using HarmonyLib;
+@@ -15,7 +16,7 @@
+     {
+         public const string ModGuid = "albedo.customclasses.combatruntime";
+         public const string ModName = "Aethelborn Ascended - Combat Runtime";
+-        public const string ModVersion = "0.25.193";
++        public const string ModVersion = "0.25.194";
+ 
+         internal static DragonCombatPlugin Instance;
+ 
+@@ -612,6 +613,12 @@
+                 try { PatchWithHarmony(rd, new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("RpcDamagePrefix", BindingFlags.Static | BindingFlags.NonPublic)), null); count++; }
+                 catch (Exception ex) { Logger.LogWarning("RPC_Damage patch: " + ex.Message); }
+             }
++            MethodInfo dodgeUpdate = typeof(Player).GetMethod("UpdateDodge", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
++            if (dodgeUpdate != null)
++            {
++                _harmony.Patch(dodgeUpdate, null, null, new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("SwordMasterDodgeTranspiler", BindingFlags.Static | BindingFlags.NonPublic)));
++                count++;
++            }
+             count += PatchEquipItem();
+             count += PatchHotbarUse();
+             // v0.25.78 Ray of Hope: debuff immunity blocks new debuff status effects.
+@@ -2168,6 +2175,14 @@
+ 
+         private static void SetControlsPrefix(Player __instance, ref Vector3 movedir, ref bool attack, ref bool attackHold, ref bool secondaryAttack, ref bool secondaryAttackHold, ref bool block, ref bool blockHold, ref bool jump, ref bool crouch, ref bool run, ref bool autoRun, ref bool dodge)
+         {
++            if ((dodge || (jump && (block || blockHold))) && DragonCombat.CanInstantSwordMasterDodge(__instance))
++            {
++                ResetNaccChain(__instance);
++                DragonCombat.PrepareSwordMasterDodge(__instance);
++                dodge = true; jump = false;
++                attack = false; attackHold = false; secondaryAttack = false; secondaryAttackHold = false;
++                block = false; blockHold = false;
++            }
+             if (__instance == null)
+                 return;
+ 
+@@ -2289,6 +2304,32 @@
+             }
+ 
+             __result = true;
++        }
++
++        // Only the pending Sword Master roll can pass an attack/stagger animation gate.
++        private static bool SwordMasterDodgeAttackGate(Character character)
++        {
++            return !DragonCombat.HasInstantDodgeRequest(character) && character.InAttack();
++        }
++        private static bool SwordMasterDodgeStaggerGate(Character character)
++        {
++            return !DragonCombat.HasInstantDodgeRequest(character) && character.IsStaggering();
++        }
++        private static IEnumerable<CodeInstruction> SwordMasterDodgeTranspiler(IEnumerable<CodeInstruction> instructions)
++        {
++            MethodInfo attack = AccessTools.Method(typeof(Character), "InAttack", Type.EmptyTypes);
++            MethodInfo stagger = AccessTools.Method(typeof(Character), "IsStaggering", Type.EmptyTypes);
++            MethodInfo attackGate = typeof(DragonCombatPlugin).GetMethod("SwordMasterDodgeAttackGate", BindingFlags.Static | BindingFlags.NonPublic);
++            MethodInfo staggerGate = typeof(DragonCombatPlugin).GetMethod("SwordMasterDodgeStaggerGate", BindingFlags.Static | BindingFlags.NonPublic);
++            foreach (CodeInstruction i in instructions)
++            {
++                if (i.opcode == OpCodes.Call || i.opcode == OpCodes.Callvirt)
++                {
++                    if (Equals(i.operand, attack)) { i.opcode = OpCodes.Call; i.operand = attackGate; }
++                    else if (Equals(i.operand, stagger)) { i.opcode = OpCodes.Call; i.operand = staggerGate; }
++                }
++                yield return i;
++            }
+         }
+ 
+         private static bool InterruptPrefix(Character __instance)
+@@ -8480,6 +8521,90 @@
+             return WhirlwindUntil.TryGetValue(player.GetInstanceID(), out end) && Time.time < end;
+         }
+ 
++        // A cancelled execution cannot resume after a yield; Dispose runs movement/collision finally blocks immediately.
++        public sealed class SkillExecution : IEnumerator, IDisposable
++        {
++            private IEnumerator _routine;
++            private Action<SkillExecution> _release;
++            private bool _disposed;
++            public SkillExecution(IEnumerator routine, Action<SkillExecution> release) { _routine = routine; _release = release; }
++            public object Current { get { return _disposed ? null : _routine.Current; } }
++            public bool MoveNext()
++            {
++                if (_disposed) return false;
++                bool more;
++                try { more = _routine.MoveNext(); } catch { Dispose(); throw; }
++                if (!more) Dispose();
++                return more;
++            }
++            public void Reset() { throw new NotSupportedException(); }
++            public void Dispose()
++            {
++                if (_disposed) return;
++                _disposed = true;
++                try { IDisposable d = _routine as IDisposable; if (d != null) d.Dispose(); }
++                finally { if (_release != null) _release(this); _routine = null; _release = null; }
++            }
++        }
++        private static readonly Dictionary<int, List<SkillExecution>> _swordMasterWork = new Dictionary<int, List<SkillExecution>>();
++        public static IEnumerator TrackSwordMasterSkill(Player player, IEnumerator routine)
++        {
++            if (player == null || GetAdvancementName(player) != "Sword Master") return routine;
++            int id = player.GetInstanceID();
++            List<SkillExecution> work;
++            if (!_swordMasterWork.TryGetValue(id, out work)) { work = new List<SkillExecution>(); _swordMasterWork[id] = work; }
++            List<SkillExecution> owner = work;
++            SkillExecution execution = new SkillExecution(routine, delegate(SkillExecution ended)
++            {
++                owner.Remove(ended);
++                if (owner.Count == 0) _swordMasterWork.Remove(id);
++            });
++            work.Add(execution);
++            return execution;
++        }
++        public static Action<Player> SwordMasterDodgeRequested;
++        private static Player _instantDodgePlayer;
++        private static float _instantDodgeUntil;
++        private static readonly Func<Player, float> _nativeDodgeCost = CreateDodgeCostGetter();
++        private static Func<Player, float> CreateDodgeCostGetter()
++        {
++            MethodInfo method = typeof(Player).GetMethod("GetDodgeStaminaUse", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
++            return method == null ? null : (Func<Player, float>)Delegate.CreateDelegate(typeof(Func<Player, float>), method);
++        }
++        public static bool CanInstantSwordMasterDodge(Player player)
++        {
++            return player != null && player == Player.m_localPlayer && GetAdvancementName(player) == "Sword Master"
++                && CanUseWorldInput(player) && player.IsOnGround() && !player.IsEncumbered() && !player.InDodge()
++                && _nativeDodgeCost != null && player.HaveStamina(_nativeDodgeCost(player));
++        }
++        public static bool HasInstantDodgeRequest(Character character)
++        {
++            return character != null && character == _instantDodgePlayer && character == Player.m_localPlayer && Time.time <= _instantDodgeUntil;
++        }
++        public static void PrepareSwordMasterDodge(Player player)
++        {
++            int id = player.GetInstanceID();
++            List<SkillExecution> work;
++            if (_swordMasterWork.TryGetValue(id, out work))
++            {
++                SkillExecution[] pending = work.ToArray();
++                for (int i = 0; i < pending.Length; i++)
++                    try { pending[i].Dispose(); } catch (Exception e) { Debug.LogWarning("AA dodge cancellation: " + e.Message); }
++                _swordMasterWork.Remove(id);
++            }
++            if (SwordMasterDodgeRequested != null) SwordMasterDodgeRequested(player);
++            SkillLockUntil.Remove(id); EndMobileCast(player);
++            _aimWindupUntil = 0f; AttackSwallowUntil = Time.time;
++            SkillAnimGen++; AnimActivation++;
++            CancelCurrentAttack(player);
++            DragonSkillClipDriver driver = player.GetComponent<DragonSkillClipDriver>();
++            if (driver != null) driver.CancelAnimation();
++            DragonMixamo.Stop(player, 0f);
++            SetSkillAnimSpeed(player, 1f, 0f);
++            ForceRun(player, false);
++            _instantDodgePlayer = player; _instantDodgeUntil = Time.time + 0.5f;
++        }
++
+         public static void LockSkill(Player player, float duration)
+         {
+             if (player == null)
+@@ -13362,6 +13487,25 @@
+     }
+ 
+     // v0.25.65: holds, then fades every child mesh's vertex colours out and destroys the object (crescent flashes).
++    public class DragonJudgementCloud : MonoBehaviour
++    {
++        public Color Tint;
++        public float Life = 1f;
++        private float _age;
++        private Renderer _renderer;
++        private MaterialPropertyBlock _block;
++        private void Awake() { _renderer = GetComponent<Renderer>(); _block = new MaterialPropertyBlock(); }
++        private void LateUpdate()
++        {
++            _age += Time.deltaTime;
++            Color c = Tint;
++            c.a *= Mathf.Clamp01(_age / 0.04f) * Mathf.Clamp01((Life - _age) / 0.25f);
++            _block.SetColor("_TintColor", c); _block.SetColor("_Color", c);
++            _block.SetVector("_MainTex_ST", new Vector4(1f, 1f, _age * 0.08f, _age * 0.025f));
++            if (_renderer != null) _renderer.SetPropertyBlock(_block);
++        }
++    }
++
+     public class DragonFadeOut : MonoBehaviour
+     {
+         public float Hold = 0.3f, Fade = 0.3f, Grow = 0f;
+@@ -13716,7 +13860,7 @@
+                     case 26: ClearMat(); break;
+                     case 27: DarkCoreMat(); break;
+                     case 28: WindVeilMat(); break;
+-                    case 29: Mat(SlashTex(), false); Mat(LineTex(), true); Mat(CrackTex(), false); Mat(SmokeTex(), false); Mat(StreakTex(), false); break;
++                    case 29: Mat(SlashTex(), false); Mat(LineTex(), true); Mat(CrackTex(), false); Mat(SmokeTex(), false); Mat(StreakTex(), false); JudgementCloudMaterial(); JudgementCloudMesh(); break;
+                 }
+             }
+             catch (Exception) { }
+@@ -15016,6 +15160,28 @@
+             if (ring != null) { ring.ScaleFrom = Vector3.one * radius * 0.4f; ring.ScaleTo = Vector3.one * radius * 2.05f; ring.ScaleTime = seconds; }
+         }
+ 
++        private static Texture2D _stompWindTex;
++        public static void StompWindRing(Vector3 pos, float innerRadius, float radius, float seconds)
++        {
++            if (!Enabled) return;
++            if (_stompWindTex == null) _stompWindTex = MakeTex(128, 128, delegate(float u, float v)
++            {
++                float d = Rad(u, v);
++                float ang = Mathf.Atan2(v - 0.5f, u - 0.5f);
++                float flow = 0.65f + 0.35f * Fbm(Mathf.Cos(ang) * 5f, Mathf.Sin(ang) * 5f + d * 7f, 194);
++                return Mathf.Exp(-Mathf.Pow((d - 0.83f) / 0.13f, 2f)) * flow * Mathf.Clamp01((1f - d) * 14f);
++            }, TextureWrapMode.Clamp);
++            DragonMeshFx ring = MeshFx(GroundPoint(pos) + Vector3.up * 0.12f, Quaternion.identity, true,
++                Mat(_stompWindTex, false), new Color(0.82f, 0.86f, 0.9f, 0.78f), seconds);
++            if (ring != null)
++            {
++                ring.Conform = true;
++                ring.ScaleFrom = Vector3.one * Mathf.Max(0.3f, innerRadius) * 2.4f;
++                ring.ScaleTo = Vector3.one * Mathf.Max(0.5f, radius) * 2.4f;
++                ring.ScaleTime = seconds;
++            }
++        }
++
+         private static Texture2D _pressureTex;
+         private static Texture2D PressureTex()
+         {
+@@ -15911,14 +16077,23 @@
+             hold = Mathf.Clamp(hold, 0.1f, 1.2f);
+             Color glow = Color.Lerp(tint, new Color(0.55f, 0.75f, 1f, 1f), 0.35f);
+             Color core = Color.Lerp(tint, Color.white, 0.85f);
+-            // v0.25.193: a soft spherical mist volume behind the existing visible cuts, not a solid globe / cage.
+-            DragonVfxLife haze = Host(center, hold + 0.35f, "judgementmist");
+-            Color fog = Color.Lerp(tint, new Color(0.55f, 0.63f, 0.82f, 1f), 0.45f); fog.a = 0.24f;
+-            ParticleSystem mist = Particles(haze.transform, fog, 18, 0f, 0.05f, hold + 0.35f,
+-                0.02f, 0.12f, r * 0.6f, r * 0.95f, 0f, ParticleSystemShapeType.Sphere, r * 0.58f, Vector3.zero, false, false);
++            // v0.25.194: dense cloud body with a stable spherical silhouette, plus interior cloud puffs.
++            float cloudLife = Mathf.Max(0.65f, hold) + 0.3f;
++            DragonVfxLife haze = Host(center, cloudLife, "judgementcloud");
++            GameObject body = new GameObject("cloudsphere"); body.transform.SetParent(haze.transform, false);
++            body.transform.localScale = Vector3.one * (r * 2f);
++            body.AddComponent<MeshFilter>().sharedMesh = JudgementCloudMesh();
++            MeshRenderer renderer = body.AddComponent<MeshRenderer>();
++            renderer.sharedMaterial = JudgementCloudMaterial();
++            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; renderer.receiveShadows = false;
++            Color fog = Color.Lerp(tint, new Color(0.65f, 0.73f, 0.9f, 1f), 0.25f); fog.a = 0.8f;
++            DragonJudgementCloud cloud = body.AddComponent<DragonJudgementCloud>();
++            cloud.Tint = fog; cloud.Life = cloudLife;
++            ParticleSystem mist = Particles(haze.transform, new Color(fog.r, fog.g, fog.b, 0.68f), 36, 0f, 0.05f, cloudLife,
++                0.02f, 0.08f, r * 0.7f, r, 0f, ParticleSystemShapeType.Sphere, r * 0.58f, Vector3.zero, false, false);
+             Material mistMaterial = Mat(SmokeTex(), false);
+             if (mistMaterial != null) mist.GetComponent<ParticleSystemRenderer>().sharedMaterial = mistMaterial;
+-            ParticleSystem.MainModule mistMain = mist.main; mistMain.maxParticles = 24;
++            ParticleSystem.MainModule mistMain = mist.main; mistMain.maxParticles = 48;
+             const int lines = 9;
+             for (int k = 0; k < lines; k++)
+             {
+@@ -15938,6 +16113,40 @@
+                 CrescentFlash(center + VRot() * Vector3.forward * r * 0.15f, f, tint, r * 0.85f, Mathf.Max(0.15f, r * 0.09f), Mathf.Lerp(-80f, 80f, VR()), hold * 0.6f, 0.25f, 0.1f);
+             }
+             Flash(center, new Color(0.55f, 0.65f, 1f, 1f), 0.5f, r, 0.1f);
++        }
++
++        private static Mesh _judgementCloudMesh;
++        private static Texture2D _judgementCloudTex;
++        private static Material _judgementCloudMat;
++        private static Mesh JudgementCloudMesh()
++        {
++            if (_judgementCloudMesh == null)
++            {
++                GameObject temporary = GameObject.CreatePrimitive(PrimitiveType.Sphere);
++                temporary.SetActive(false);
++                _judgementCloudMesh = UnityEngine.Object.Instantiate(temporary.GetComponent<MeshFilter>().sharedMesh) as Mesh;
++                if (_judgementCloudMesh != null)
++                {
++                    Color[] colors = new Color[_judgementCloudMesh.vertexCount];
++                    for (int i = 0; i < colors.Length; i++) colors[i] = Color.white;
++                    _judgementCloudMesh.colors = colors;
++                }
++                UnityEngine.Object.DestroyImmediate(temporary);
++            }
++            return _judgementCloudMesh;
++        }
++        private static Material JudgementCloudMaterial()
++        {
++            if (_judgementCloudMat != null) return _judgementCloudMat;
++            if (_judgementCloudTex == null) _judgementCloudTex = MakeTex(96, 64, delegate(float u, float v)
++            {
++                float a = u * Mathf.PI * 2f;
++                return 0.58f + 0.42f * Fbm(Mathf.Cos(a) * 3f + 5f, Mathf.Sin(a) * 3f + v * 6f, 194);
++            }, TextureWrapMode.Repeat);
++            _judgementCloudMat = Mat(_judgementCloudTex, false);
++            // Draw before the slashes without writing depth, so the cuts remain readable inside the cloud.
++            if (_judgementCloudMat != null) { _judgementCloudMat.renderQueue = 2990; if (_judgementCloudMat.HasProperty("_ZWrite")) _judgementCloudMat.SetInt("_ZWrite", 0); }
++            return _judgementCloudMat;
+         }
+ 
+         // v0.25.185 (user: Clockwork was invisible): a clear brass clock burst on the ground - soft gold pulse over the area,
+--- v0.25.193/DragonsAltar.Ranger.cs
++++ v0.25.194/DragonsAltar.Ranger.cs
+@@ -42,7 +42,7 @@
+     {
+         public const string ModGuid = "albedo.customclasses.ranger";
+         public const string ModName = "Aethelborn Ascended - Ranger";
+-        public const string ModVersion = "0.25.193";
++        public const string ModVersion = "0.25.194";
+         private const string ClassDataKey = "AlbedoCustomClasses.Class";
+         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
+ 
+@@ -852,25 +852,37 @@
+         {
+             if (!RequireBow(player)) return;
+             if (!BeginSkill(player, "Ranger.PiercingArrow", _paCooldown.Value, _paStamina.Value)) return;
++            StartCoroutine(PiercingArrowVolley(player, ascended));
++        }
++
++        private IEnumerator PiercingArrowVolley(Player player, bool ascended)
++        {
+             RangerArrowDamage d = ArrowDamage(player);
+             float power = DragonCombat.GetSkillPower(player, "piercing_arrow");
+             float range = DragonCombat.M(ascended ? _paAscRange.Value : _paRange.Value);
+-            Vector3 origin = ShotOrigin(player);
+-            Vector3 dir = AimDir(player, origin);
+-            DragonCombat.PlayClip(player, "rg_power", 0.1f);   // snap draw, strong recoil
+-            Shoot(player, "Piercing Arrow");
+-            if (_enableVfx.Value) { Vector3 po = origin, pd = dir; DragonCombat.RunVfx(delegate { DragonVfx.Gust(po + pd * 1.2f, pd, 0.8f); }); }   // v0.25.180 tight pale airflow at release (no sonic rings)
+-            bool first = true;
+-            float endWidth = DragonCombat.M(Mathf.Max(0.3f, _paAscWidth.Value));
+-            StartCoroutine(ArrowFlight(player, origin, dir, DragonCombat.M(_paSpeed.Value), range, DragonCombat.M(0.35f), true,
+-                new Color(0.70f, 1f, 0.55f, 1f), ascended ? endWidth * 0.5f : 0f,
+-                delegate(Character enemy)
+-                {
+-                    Deal(player, enemy, d, _paDamage.Value / 100f * power, 4f, false, "piercing_arrow", "Attack 1", false, false, null);
+-                    if (first) { DragonCombat.ApplyCripple(enemy, _paCripple.Value); first = false; }
+-                    if (ascended) DragonCombat.ApplyExpose(enemy, _paAscExpose.Value);
+-                    return true;
+-                }, null));
++            int count = ascended ? 3 : 1;
++            for (int shot = 0; shot < count; shot++)
++            {
++                if (player == null || player.IsDead()) yield break;
++                Vector3 origin = ShotOrigin(player);
++                Vector3 dir = AimDir(player, origin);
++                if (!ascended) DragonCombat.PlayClip(player, "rg_power", 0.1f);
++                Shoot(player, shot == 0 ? "Piercing Arrow" : null); // native bow_fire for every Ascended arrow
++                if (_enableVfx.Value) { Vector3 po = origin, pd = dir; DragonCombat.RunVfx(delegate { DragonVfx.Gust(po + pd * 1.2f, pd, 0.8f); }); }
++                bool first = true;
++                float endWidth = DragonCombat.M(Mathf.Max(0.3f, _paAscWidth.Value));
++                int attackNumber = shot + 1;
++                StartCoroutine(ArrowFlight(player, origin, dir, DragonCombat.M(_paSpeed.Value), range, DragonCombat.M(0.35f), true,
++                    new Color(0.70f, 1f, 0.55f, 1f), ascended ? endWidth * 0.5f : 0f,
++                    delegate(Character enemy)
++                    {
++                        Deal(player, enemy, d, _paDamage.Value / 100f * power * (ascended ? 0.6f : 1f), 4f, false, "piercing_arrow", "Attack " + attackNumber.ToString(), false, false, null);
++                        if (first) { DragonCombat.ApplyCripple(enemy, _paCripple.Value); first = false; }
++                        if (ascended) DragonCombat.ApplyExpose(enemy, _paAscExpose.Value);
++                        return true;
++                    }, null));
++                if (shot + 1 < count) yield return new WaitForSeconds(0.2f);
++            }
+         }
+ 
+         // ------------------------------------------------------------------ Tumble Shot
+--- v0.25.193/INSTALL.bat
++++ v0.25.194/INSTALL.bat
+@@ -1,5 +1,5 @@
+ @echo off
+-title Immortal Heroes v0.25.193 - Ranger Mobility and Buff Timers
++title Immortal Heroes v0.25.194 - Ranger Mobility and Buff Timers
+ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
+ echo.
+ pause
+--- v0.25.193/INSTALL.ps1
++++ v0.25.194/INSTALL.ps1
+@@ -1,7 +1,7 @@
+ $ErrorActionPreference = "Stop"
+ 
+ Write-Host ""
+-Write-Host "IMMORTAL HEROES v0.25.193 - SPRINT RELOAD AND WORLD INPUT" -ForegroundColor Cyan
++Write-Host "IMMORTAL HEROES v0.25.194 - SKILL FINISH AND DODGE PRIORITY" -ForegroundColor Cyan
+ Write-Host "All 10 DLLs compile in staging before the live profile is touched." -ForegroundColor Gray
+ Write-Host ""
+ 
+--- /dev/null
++++ v0.25.194/READ_ME_v0.25.194.txt
+@@ -0,0 +1,11 @@
++AETHELBORN ASCENDED v0.25.194 - SKILL FINISH & DODGE PRIORITY
++
++Install with the included INSTALL.bat as usual, then restart the game.
++Based on v193 only; all existing config values and art/animation files retained.
++
++See CHANGELOG_v0.25.194.txt for exactly what changed, TEST_THIS_BUILD.txt for
++fresh-launch and in-game checks, and TEST_RESULTS_v0.25.194.txt for what was
++verified statically and what remains untested. AUDIO_PLAN_v0.25.194.txt describes
++the next sound pass; this build does not add skill audio.
++
++This is a separate test pass and is not promoted to Anchor.
+--- v0.25.193/TEST_RESULTS_v0.25.193.txt
++++ /dev/null
+@@ -1,58 +0,0 @@
+-AETHELBORN ASCENDED v0.25.193 - VALIDATION RESULTS
+-2026-10-17 (Asia/Manila)
+-
+-BASELINE / PRESERVATION
+-Working baseline: Aethelborn_Ascended_v0.25.192_Ranger_Mobility_Buff_Timers.zip
+-SHA-256: e0dc53217533696acb4f3aae75b524c1a97bd7011aeb0504f8616a6db9f66ec4
+-Protected Anchor: Aethelborn_Ascended_v0.25.191_VFX_Finish.zip
+-SHA-256: 2a616dfc4b69484940cfd79e07a08300bc07dc8161416499537b438a95af7783
+-Both original archives unchanged. v193 is a separate test pass, not a new Anchor.
+-185 existing assets byte-identical. Five C# modules edited: CombatRuntime,
+-Ranger, Sorcerer, Advanced and Starter Skills. Other five module sources unchanged.
+-Installer changes are banner/title text only, with original bytes/line endings
+-preserved otherwise. Older test results archived under docs/changelog.
+-
+-STATIC COMPILATION - PASS
+-All ten modules compiled with -langversion:5 against the available Valheim,
+-Unity, BepInEx, Harmony and Jotunn references. Zero C# compile errors.
+-As in v192: local UnityEngine.UI.dll/System.Xml.dll references were damaged;
+-compile-only UI reference uses Unity3D.UnityEngine.UI 2018.3.5.1, and unused
+-invalid System.Xml is excluded. This is not an exact copy of the installed
+-Managed folder; the existing installer builds against the user's actual profile.
+-No compiled third-party reference DLLs are included in the ZIP.
+-
+-COMPILED-METHOD CHECKS - 8 PASS
+-Tests execute the shipped Ranger transpiler against actual game method IL:
+-- Confirms actual Player.CheckRun operand is Humanoid.ClearActionQueue.
+-- Confirms that real cancellation call is rewritten.
+-- Confirms all other actual sprint instructions remain unchanged.
+-- Supports the Player override form too.
+-- Leaves an unrelated method named ClearActionQueue untouched.
+-- Matches the actual Character.IsDrawingBow operand in Humanoid.CheckRun.
+-- Validates actual reload action metadata (type, item, progress and Reload enum).
+-- No-op when no cancellation call exists.
+-These are stronger than v192's synthetic-only operand tests, which missed the
+-virtual-base operands. They do not execute Unity's full movement/reload loop.
+-An attempted live predicate invocation outside Unity hit the existing native
+-Shader.PropertyToID initializer; live predicates are not claimed as executed.
+-
+-SCOPE AUDIT - 41 PASS
+-Includes archive hashes, asset identity, five-module edit scope, installer
+-identity except titles, vanilla animation/full-speed separation, central weapon
+-rules/no-class exemption, unchanged utility axes/shared skill animation driver,
+-Crescent lifetime cap, UI input gates and no new forbidden graphics calls.
+-Damage statements, waits, gameplay RNG and Config.Bind lines match v192.
+-This verifies source scope; it is not rendered-VFX or game-play validation.
+-
+-NOT AVAILABLE / NOT CLAIMED
+-The supplied source archive has no original CLAUDE.md, tools/compile_check/check.sh,
+-Stubs.cs or tools/release.sh, and this workspace has no project git checkout.
+-The exact signature-baseline check (including '0 new signatures'), release script,
+-project-memory update and git commit/push could not be performed.
+-mcs is not installed here, so mcs --parse -langversion:5 was not run; full C# 5
+-compilation was performed instead. No claim of equivalent project release checks.
+-
+-IN-GAME / RENDERED VALIDATION
+-Not performed: continuous Shift reload, loaded-state/resource behavior, UI/menu
+-input ownership, actual modded equipment recognition, staff animation, fire/mist
+-visibility, visual polish, multiplayer and FPS. Use TEST_THIS_BUILD.txt.
+--- /dev/null
++++ v0.25.194/TEST_RESULTS_v0.25.194.txt
+@@ -0,0 +1,65 @@
++AETHELBORN ASCENDED v0.25.194 - VALIDATION RESULTS
++2026-10-17 (Asia/Manila)
++
++BASELINE
++Only Aethelborn_Ascended_v0.25.193_Sprint_Reload_World_Input.zip.
++Preserved archive SHA-256:
++df396d9b93e860f6954b876c36d5dcc48bab289e84ebdcda82d47ab317bc4aa4
++Protected Anchor remains v191 per the existing handoff; this pass does not
++promote v193 or v194. Previous report records Anchor SHA-256:
++2a616dfc4b69484940cfd79e07a08300bc07dc8161416499537b438a95af7783
++This run verified the v193 archive; it does not claim a fresh v191 byte check.
++
++COMPILE - PASS
++All 10 modules compiled with C# 5 language rules against available Valheim,
++Unity, BepInEx, Harmony and Jotunn references. Final Advanced edits recompiled.
++As in v193, the supplied UnityEngine.UI.dll and System.Xml.dll references are
++invalid/truncated: a compile-only Unity3D.UnityEngine.UI 2018.3.5.1 reference
++was used, and unused invalid System.Xml excluded. This is not an exact copy
++of the installed game's Managed folder. The unchanged installer compiles all
++10 against the user's actual installed profile before updating that profile.
++No game/dependency DLLs or local compiler/runtime packages are bundled.
++
++12 COMPILED-METHOD CHECKS - PASS
++Executed the shipped managed SkillExecution wrapper: cancel while yielded,
++no later attack resumption, immediate finally cleanup/ownership release,
++idempotent cancellation, normal completion, exception cleanup and cancellation
++before the first step. These do not execute Unity collision APIs.
++Executed the shipped dodge transpiler on actual Player.UpdateDodge IL: exactly
++the attack/stagger gates change. All other native instructions, including
++stamina/ground/encumbrance/current-roll checks and cost, remain unchanged.
++Inspected compiled SetControlsPrefix: cancellation occurs before the skill lock
++filter. Tested no-op when target gates are absent. Invoked the shipped Halfmoon
++contact-speed calculation with cold/warm timing data; both reach requested 1s.
++
++66 STATIC SCOPE CHECKS - PASS
++Original v193 hash; four-source edit scope; 185 assets identical; installer
++banners only; all Config.Bind sections, keys and defaults retained; no added
++forbidden graphics APIs/FindObjectOfType. Equipment rules, v193 reload/UI guard,
++ground-fire implementation, shared animation/Rigidbody driver and cape code
++compare identical. Checks cover independent Blade Storm area targeting/damage
++arithmetic, cloud geometry/opacity, Stomp ring, dodge-owned pending skills,
++three full Heavy hits, per-shockwave hit deduplication and Piercing Arrow burst.
++
++VFX CODE REVIEW
++Old mist was particle-only: 0.24 alpha, low default density, a dim shared alpha
++material and shared particle budgets. New cloud has a cached geometry body,
++white vertex colors, explicit 0.8 property-block tint and a cloud texture alpha
++floor of 0.58 (>=0.464 tint/texture product before fade/shader/depth processing).
++The body is not scaled away by particle budgets, draws before the cuts without
++writing depth, and is accompanied by bounded interior puffs. These are code
++properties, NOT an observed in-game visibility measurement or screenshot.
++Actual appearance, lighting, render ordering and performance remain unverified.
++
++NOT PERFORMED / NOT CLAIMED
++No Valheim session or Unity rendering was available. Fresh-launch Halfmoon,
++instant roll feel, actual skill hits, physics/collision restoration, cloud/ring
++appearance/FPS, mod compatibility and multiplayer still require in-game tests.
++The source ZIP still lacks the original CLAUDE.md, tools/compile_check/check.sh,
++Stubs.cs and tools/release.sh; no project git checkout was provided. The exact
++3029660 signature-baseline/release-script checks, project-memory update and
++commit/push could not be performed. mcs is not installed, so the requested
++mcs --parse check was not run; full C# 5 compilation was used instead. No
++'0 new signatures' or equivalent repo-check claim is made.
++
++See TEST_THIS_BUILD.txt and AUDIO_PLAN_v0.25.194.txt. Audio is a plan only.
+--- v0.25.193/TEST_THIS_BUILD.txt
++++ v0.25.194/TEST_THIS_BUILD.txt
+@@ -1,36 +1,40 @@
+-AETHELBORN ASCENDED v0.25.193 - IN-GAME CHECKLIST
+-Not yet tested in game by Codex. Test both normal and Ascended where applicable.
++AETHELBORN ASCENDED v0.25.194 - IN-GAME CHECKLIST
++Codex has not run this build inside Valheim. Record normal/Ascended separately.
+ 
+-1. Bow Master: hold Shift and move with an unloaded crossbow. Let reloading finish
+-   without releasing Shift. Fire, continue sprinting and allow the next reload to
+-   finish; repeat several times. No walking/stop/restarted progress while loading.
+-   Try both starting the reload during sprint and beginning sprint during reload.
+-   Verify ammo/stamina costs, reload speed and saved loaded state after re-equipping.
+-   Non-Bow-Master crossbows and equip/use actions must retain normal restrictions.
+-2. Acrobat: bow/greatbow drawing and firing still keep full current sprint speed;
+-   base Ranger and Bow Master bows/greatbows keep the intended vanilla slowdown.
+-3. Horizon Walker: normal/gun staff moving fire uses vanilla pose/animation,
+-   retains full current movement speed and keeps the existing projectile cadence.
+-4. Activate normal and Ascended Arcane Phantom, Phalanx and Rift Echo. Open
+-   inventory, chest/container, chat/text input, map, escape menu, Altar, skill tree
+-   and F8. Click/hold either mouse button and press skill bindings in each UI.
+-   No new Phantom/Echo shots or sword launches; an armed Phalanx volley stays armed.
+-   After closing, deliberately attack the world: all follow-ups work normally.
+-   Repeat after switching focus to another application. Existing world projectiles
+-   and already-released skill effects may finish; they are not cancelled globally.
+-5. Open UI while holding a staff charge, Meteor/Cataclysm, Ballista or Ascended
+-   Explosive Arrow. The held charge should cancel, with no new release shot.
+-   Check normal charging/release still works in world input. Paid costs stay paid.
+-6. Check other classes' skill hotkeys and channel follow-up clicks in chat/menus.
+-   Then confirm hotbar drag/rebind, skill-tree K and developer F8 remain usable.
+-7. Ranger, Acrobat, Bow Master: staves/wands/gun staves cannot be equipped.
+-   Sorcerer, Archmage, Horizon Walker: bows/greatbows/crossbows cannot be equipped.
+-   Check changing class with forbidden gear already equipped: it should be safely
+-   unequipped into inventory. No-class characters must remain unrestricted.
+-8. Fire effects listed in CHANGELOG: visibly burning ground in daylight/night,
+-   no tall smoke wall, preserved impact visuals. Crescent trail expires within
+-   its existing two-second segment lifetime; hit/tick/push behavior is unchanged.
+-9. Blade Storm normal/Ascended: soft sphere-like mist with clear slashes, the
+-   intended blue/dark-blue distinction, visible in daylight and against enemies.
+-   Check repeated casts plus overlapping fire for visual density and FPS.
+-10. Existing buff timers, cape, NACC, damage and other skills remain regression checks.
++1. Halfmoon: fully restart Valheim (clears animation timing cache). Set the intended
++   normal and Ascended wind-ups independently to 1s in F8. Compare first cast with
++   later casts, including time to damage and the first Battleaxe swing. Repeat
++   a fresh process for each variant; do not test only after another Battleaxe skill.
++2. Blade Storm visibility: Enhanced VFX on. Test default and reduced VFX density
++   in daylight/night, against terrain and creatures. The cloud sphere body must be
++   clearly visible with the slashes inside it; blue normal/dark blue Ascended.
++   Check several activations and overlapping skills for FPS and excessive opacity.
++3. Blade Storm area: note normal/Ascended SpawnAreaRadius in F8. Place several
++   enemies across the targeted area, including different heights and a gap between
++   the small visual spheres. Every enemy inside the full 3D target radius should
++   take each attack pulse even if no cosmetic sphere is centered on it. Outside
++   targets should not be hit. The point is locked at cast, not chasing an enemy.
++4. Sword Master: try dedicated roll and block+jump during each skill's wind-up,
++   swing, channel and delayed follow-ups, including base skills and NACC. Try
++   before Blade Storm's first pulse and between pulses, Halfmoon's traveling cuts,
++   Crescent's second fan/fire trail, Eclipse's later hail and Frenzied Charge.
++   The roll should take priority; cancelled work must not resume new damage.
++   Check collision after cancelling Charge/Eclipse and that the next skill works.
++   Existing buffs/DoTs and emitted visual fades can expire normally. Check stamina
++   use once per native roll. Insufficient stamina, airborne, encumbered, dead,
++   menu input or an already-active roll retain native eligibility limits.
++5. Ascended Heavy Swing: exactly three Battleaxe strikes, first/second/third
++   native combo animations in order, one hit per enemy per strike, existing VFX
++   on every hit, one resource/cooldown payment. Normal Heavy Swing stays one hit.
++6. Ascended Impact Wave: an enemy overlapping two or more individual follow-up
++   shockwaves takes a hit from each; multiple colliders do not double-hit within
++   one wave. Verify walls/terrain and original wave travel still behave normally.
++7. Ascended Piercing Arrow: three native bow shots spaced 0.2s, piercing/widening
++   and Expose retained, 60% of old damage per arrow/180% total on the same target.
++   Normal is still one unchanged arrow. Check cost/cooldown are charged once.
++8. Stomp normal/Ascended: visible thicker wind ring, original cracks/debris and
++   damage sequence retained. Test on slopes/terrain and in daylight/night.
++9. Regression: v193 crossbow sprint reload, Horizon Walker moving staff animation,
++   menu click suppression, Ranger/Sorcerer restrictions, buffs/HUD, cape and NACC.
++   Also test Mercenary Circle Swing since its timing helper is shared; the new
++   contact calibration is opt-in for Halfmoon/Ascended Heavy, not a global change.
+--- /dev/null
++++ v0.25.194/docs/changelog/TEST_RESULTS_v0.25.193.txt
+@@ -0,0 +1,58 @@
++AETHELBORN ASCENDED v0.25.193 - VALIDATION RESULTS
++2026-10-17 (Asia/Manila)
++
++BASELINE / PRESERVATION
++Working baseline: Aethelborn_Ascended_v0.25.192_Ranger_Mobility_Buff_Timers.zip
++SHA-256: e0dc53217533696acb4f3aae75b524c1a97bd7011aeb0504f8616a6db9f66ec4
++Protected Anchor: Aethelborn_Ascended_v0.25.191_VFX_Finish.zip
++SHA-256: 2a616dfc4b69484940cfd79e07a08300bc07dc8161416499537b438a95af7783
++Both original archives unchanged. v193 is a separate test pass, not a new Anchor.
++185 existing assets byte-identical. Five C# modules edited: CombatRuntime,
++Ranger, Sorcerer, Advanced and Starter Skills. Other five module sources unchanged.
++Installer changes are banner/title text only, with original bytes/line endings
++preserved otherwise. Older test results archived under docs/changelog.
++
++STATIC COMPILATION - PASS
++All ten modules compiled with -langversion:5 against the available Valheim,
++Unity, BepInEx, Harmony and Jotunn references. Zero C# compile errors.
++As in v192: local UnityEngine.UI.dll/System.Xml.dll references were damaged;
++compile-only UI reference uses Unity3D.UnityEngine.UI 2018.3.5.1, and unused
++invalid System.Xml is excluded. This is not an exact copy of the installed
++Managed folder; the existing installer builds against the user's actual profile.
++No compiled third-party reference DLLs are included in the ZIP.
++
++COMPILED-METHOD CHECKS - 8 PASS
++Tests execute the shipped Ranger transpiler against actual game method IL:
++- Confirms actual Player.CheckRun operand is Humanoid.ClearActionQueue.
++- Confirms that real cancellation call is rewritten.
++- Confirms all other actual sprint instructions remain unchanged.
++- Supports the Player override form too.
++- Leaves an unrelated method named ClearActionQueue untouched.
++- Matches the actual Character.IsDrawingBow operand in Humanoid.CheckRun.
++- Validates actual reload action metadata (type, item, progress and Reload enum).
++- No-op when no cancellation call exists.
++These are stronger than v192's synthetic-only operand tests, which missed the
++virtual-base operands. They do not execute Unity's full movement/reload loop.
++An attempted live predicate invocation outside Unity hit the existing native
++Shader.PropertyToID initializer; live predicates are not claimed as executed.
++
++SCOPE AUDIT - 41 PASS
++Includes archive hashes, asset identity, five-module edit scope, installer
++identity except titles, vanilla animation/full-speed separation, central weapon
++rules/no-class exemption, unchanged utility axes/shared skill animation driver,
++Crescent lifetime cap, UI input gates and no new forbidden graphics calls.
++Damage statements, waits, gameplay RNG and Config.Bind lines match v192.
++This verifies source scope; it is not rendered-VFX or game-play validation.
++
++NOT AVAILABLE / NOT CLAIMED
++The supplied source archive has no original CLAUDE.md, tools/compile_check/check.sh,
++Stubs.cs or tools/release.sh, and this workspace has no project git checkout.
++The exact signature-baseline check (including '0 new signatures'), release script,
++project-memory update and git commit/push could not be performed.
++mcs is not installed here, so mcs --parse -langversion:5 was not run; full C# 5
++compilation was performed instead. No claim of equivalent project release checks.
++
++IN-GAME / RENDERED VALIDATION
++Not performed: continuous Shift reload, loaded-state/resource behavior, UI/menu
++input ownership, actual modded equipment recognition, staff animation, fire/mist
++visibility, visual polish, multiplayer and FPS. Use TEST_THIS_BUILD.txt.
+--- /dev/null
++++ v0.25.194/docs/changelog/TEST_THIS_BUILD_v0.25.193.txt
+@@ -0,0 +1,36 @@
++AETHELBORN ASCENDED v0.25.193 - IN-GAME CHECKLIST
++Not yet tested in game by Codex. Test both normal and Ascended where applicable.
++
++1. Bow Master: hold Shift and move with an unloaded crossbow. Let reloading finish
++   without releasing Shift. Fire, continue sprinting and allow the next reload to
++   finish; repeat several times. No walking/stop/restarted progress while loading.
++   Try both starting the reload during sprint and beginning sprint during reload.
++   Verify ammo/stamina costs, reload speed and saved loaded state after re-equipping.
++   Non-Bow-Master crossbows and equip/use actions must retain normal restrictions.
++2. Acrobat: bow/greatbow drawing and firing still keep full current sprint speed;
++   base Ranger and Bow Master bows/greatbows keep the intended vanilla slowdown.
++3. Horizon Walker: normal/gun staff moving fire uses vanilla pose/animation,
++   retains full current movement speed and keeps the existing projectile cadence.
++4. Activate normal and Ascended Arcane Phantom, Phalanx and Rift Echo. Open
++   inventory, chest/container, chat/text input, map, escape menu, Altar, skill tree
++   and F8. Click/hold either mouse button and press skill bindings in each UI.
++   No new Phantom/Echo shots or sword launches; an armed Phalanx volley stays armed.
++   After closing, deliberately attack the world: all follow-ups work normally.
++   Repeat after switching focus to another application. Existing world projectiles
++   and already-released skill effects may finish; they are not cancelled globally.
++5. Open UI while holding a staff charge, Meteor/Cataclysm, Ballista or Ascended
++   Explosive Arrow. The held charge should cancel, with no new release shot.
++   Check normal charging/release still works in world input. Paid costs stay paid.
++6. Check other classes' skill hotkeys and channel follow-up clicks in chat/menus.
++   Then confirm hotbar drag/rebind, skill-tree K and developer F8 remain usable.
++7. Ranger, Acrobat, Bow Master: staves/wands/gun staves cannot be equipped.
++   Sorcerer, Archmage, Horizon Walker: bows/greatbows/crossbows cannot be equipped.
++   Check changing class with forbidden gear already equipped: it should be safely
++   unequipped into inventory. No-class characters must remain unrestricted.
++8. Fire effects listed in CHANGELOG: visibly burning ground in daylight/night,
++   no tall smoke wall, preserved impact visuals. Crescent trail expires within
++   its existing two-second segment lifetime; hit/tick/push behavior is unchanged.
++9. Blade Storm normal/Ascended: soft sphere-like mist with clear slashes, the
++   intended blue/dark-blue distinction, visible in daylight and against enemies.
++   Check repeated casts plus overlapping fire for visual density and FPS.
++10. Existing buff timers, cape, NACC, damage and other skills remain regression checks.
+--- /dev/null
++++ v0.25.194/tools/tests/skill_finish_194/README.txt
+@@ -0,0 +1,3 @@
++ScopeTests.cs executes the shipped managed cancellation wrapper and rewrites actual game IL.
++The scripts use this development environment's local compiler/reference paths; they are
++not installation requirements and do not replace Valheim testing. Logs are included.
+--- /dev/null
++++ v0.25.194/tools/tests/skill_finish_194/ScopeTests.cs
+@@ -0,0 +1,108 @@
++using System;
++using System.Collections.Generic;
++using System.Reflection;
++using System.Reflection.Emit;
++using HarmonyLib;
++using DragonsAltarCombat;
++using AlbedosCustomClassesAdvanced;
++class UnrelatedQueue { public void ClearActionQueue() { } }
++class ScopeTests
++{
++    static int passed;
++    static readonly Dictionary<short, OpCode> opcodes = BuildOpcodes();
++    static Dictionary<short, OpCode> BuildOpcodes()
++    {
++        Dictionary<short, OpCode> result = new Dictionary<short, OpCode>();
++        foreach (FieldInfo field in typeof(OpCodes).GetFields(BindingFlags.Static | BindingFlags.Public))
++            if (field.FieldType == typeof(OpCode)) { OpCode op = (OpCode)field.GetValue(null); result[op.Value] = op; }
++        return result;
++    }
++    static void Check(bool condition, string name)
++    { if (!condition) throw new Exception(name); System.Console.WriteLine("PASS: " + name); passed++; }
++    static MethodInfo Method(Type type, string name)
++    { return AccessTools.Method(type, name); }
++    // Read original managed IL. In particular, retain the DECLARING TYPE of virtual method operands.
++    static List<CodeInstruction> ReadIL(MethodInfo method)
++    {
++        List<CodeInstruction> result = new List<CodeInstruction>();
++        byte[] bytes = method.GetMethodBody().GetILAsByteArray(); int p = 0;
++        while (p < bytes.Length)
++        {
++            short value = bytes[p++]; if (value == 0xfe) value = unchecked((short)(0xfe00 | bytes[p++]));
++            OpCode op = opcodes[value]; object operand = null; int size = 0;
++            switch (op.OperandType)
++            {
++                case OperandType.InlineNone: break;
++                case OperandType.ShortInlineBrTarget: case OperandType.ShortInlineI: case OperandType.ShortInlineVar: size = 1; break;
++                case OperandType.InlineVar: size = 2; break;
++                case OperandType.InlineI8: case OperandType.InlineR: size = 8; break;
++                case OperandType.InlineSwitch: size = 4 + 4 * BitConverter.ToInt32(bytes, p); break;
++                case OperandType.InlineMethod: operand = method.Module.ResolveMethod(BitConverter.ToInt32(bytes, p)); size = 4; break;
++                default: size = 4; break;
++            }
++            if (operand == null && size > 0) operand = BitConverter.ToString(bytes, p, size);
++            p += size; result.Add(new CodeInstruction(op, operand));
++        }
++        return result;
++    }
++    static int sideEffects, cleanups;
++    static System.Collections.IEnumerator PendingSkill()
++    {
++        try { yield return null; sideEffects++; yield return null; sideEffects++; }
++        finally { cleanups++; }
++    }
++    static System.Collections.IEnumerator FailingSkill()
++    {
++        try { yield return null; throw new InvalidOperationException("expected"); }
++        finally { cleanups++; }
++    }
++    static void Main()
++    {
++        int released = 0;
++        DragonCombat.SkillExecution work = new DragonCombat.SkillExecution(PendingSkill(), delegate { released++; });
++        Check(work.MoveNext(), "Real cancellation wrapper starts a skill and reaches its pending yield");
++        work.Dispose();
++        Check(cleanups == 1 && released == 1, "Dodge disposal immediately runs finally cleanup and releases ownership");
++        Check(!work.MoveNext() && sideEffects == 0, "Cancelled work never resumes its delayed attack");
++        work.Dispose(); Check(cleanups == 1 && released == 1, "Repeated cancellation is idempotent");
++        work = new DragonCombat.SkillExecution(PendingSkill(), delegate { released++; });
++        while (work.MoveNext()) { }
++        Check(sideEffects == 2 && cleanups == 2 && released == 2, "Uncancelled work preserves both skill steps and normal cleanup");
++        work = new DragonCombat.SkillExecution(FailingSkill(), delegate { released++; });
++        work.MoveNext(); bool threw = false;
++        try { work.MoveNext(); } catch (InvalidOperationException) { threw = true; }
++        Check(threw && cleanups == 3 && released == 3 && !work.MoveNext(), "Faulted work cleans up once and cannot run again");
++        work = new DragonCombat.SkillExecution(PendingSkill(), delegate { released++; });
++        work.Dispose(); Check(!work.MoveNext() && sideEffects == 2, "Cancellation before the first step prevents the entire attack");
++
++        MethodInfo update = Method(typeof(Player), "UpdateDodge");
++        List<CodeInstruction> actual = ReadIL(update), original = new List<CodeInstruction>();
++        foreach (CodeInstruction i in actual) original.Add(new CodeInstruction(i.opcode, i.operand));
++        MethodInfo transpiler = typeof(DragonCombatPlugin).GetMethod("SwordMasterDodgeTranspiler", BindingFlags.Static | BindingFlags.NonPublic);
++        List<CodeInstruction> result = new List<CodeInstruction>((IEnumerable<CodeInstruction>)transpiler.Invoke(null, new object[] { actual }));
++        int changed = 0; bool attack = false, stagger = false, preserved = result.Count == original.Count;
++        for (int i = 0; i < result.Count; i++)
++        {
++            if (result[i].opcode == original[i].opcode && Equals(result[i].operand, original[i].operand)) continue;
++            changed++;
++            MethodInfo before = original[i].operand as MethodInfo, after = result[i].operand as MethodInfo;
++            bool isAttack = before != null && after != null && before.Name == "InAttack" && after.Name == "SwordMasterDodgeAttackGate";
++            bool isStagger = before != null && after != null && before.Name == "IsStaggering" && after.Name == "SwordMasterDodgeStaggerGate";
++            attack |= isAttack; stagger |= isStagger; preserved &= isAttack || isStagger;
++        }
++        Check(changed == 2 && attack && stagger, "Actual Valheim dodge IL rewrites exactly the attack and stagger gates");
++        Check(preserved, "All native ground, stamina, encumbrance, existing-roll and cost instructions stay intact");
++        List<CodeInstruction> controls = ReadIL(typeof(DragonCombatPlugin).GetMethod("SetControlsPrefix", BindingFlags.Static | BindingFlags.NonPublic));
++        int prepare = controls.FindIndex(delegate(CodeInstruction i) { MethodInfo m = i.operand as MethodInfo; return m != null && m.Name == "PrepareSwordMasterDodge"; });
++        int locked = controls.FindIndex(delegate(CodeInstruction i) { MethodInfo m = i.operand as MethodInfo; return m != null && m.Name == "IsSkillLocked"; });
++        Check(prepare >= 0 && locked > prepare, "Dodge cancellation executes before the skill-lock input filter");
++        result = new List<CodeInstruction>((IEnumerable<CodeInstruction>)transpiler.Invoke(null, new object[] { new List<CodeInstruction> { new CodeInstruction(OpCodes.Ret) } }));
++        Check(result.Count == 1 && result[0].opcode == OpCodes.Ret, "Unrelated methods without dodge gates are unchanged");
++        MethodInfo speed = typeof(AdvancedPlugin).GetMethod("CsContactSpeed", BindingFlags.Static | BindingFlags.NonPublic);
++        float cold = (float)speed.Invoke(null, new object[] { 1.6f, 0.05f, 0.04f, 1f });
++        float warm = (float)speed.Invoke(null, new object[] { 1.6f, 0.1f, 0.08f, 1f });
++        Check(Math.Abs(0.04f + (1.6f - 0.05f) / cold - 1f) < 0.0001f && Math.Abs(0.08f + (1.6f - 0.1f) / warm - 1f) < 0.0001f,
++            "Shipped Halfmoon contact calibration reaches a requested one-second contact on cold and warm timing");
++        System.Console.WriteLine("Passed " + passed + " compiled-method checks. Unity gameplay and rendered visuals not exercised.");
++    }
++}
+--- /dev/null
++++ v0.25.194/tools/tests/skill_finish_194/audit.py
+@@ -0,0 +1,73 @@
++from pathlib import Path
++import re,json,hashlib,math
++base=Path('baseline193');work=Path('working194');out=Path('validation194');checks=[]
++def check(ok,label):
++ assert ok,label
++ checks.append(label);print('PASS:',label)
++def text(root,name):return (root/name).read_text(encoding='utf-8-sig')
++def region(s,start,end):a=s.index(start);return s[a:s.index(end,a)]
++archive=Path('source194/Aethelborn_Ascended_v0.25.193_Sprint_Reload_World_Input.zip')
++check(hashlib.sha256(archive.read_bytes()).hexdigest()=='df396d9b93e860f6954b876c36d5dcc48bab289e84ebdcda82d47ab317bc4aa4','Original v193 archive preserved exactly')
++changed={p.name for p in work.glob('*.cs') if p.read_bytes()!=(base/p.name).read_bytes()}
++check(changed=={'AlbedosCustomClasses.Advanced.cs','AlbedosCustomClasses.Skills.cs','DragonsAltar.CombatRuntime.cs','DragonsAltar.Ranger.cs'},'Only the four requested implementation modules changed')
++assets=[p for p in (base/'ImmortalHeroesAssets').rglob('*') if p.is_file()]
++check(all(p.read_bytes()==(work/p.relative_to(base)).read_bytes() for p in assets),str(len(assets))+' existing art/animation assets byte-identical')
++for name in ['INSTALL.bat','INSTALL.ps1']:
++ a=(base/name).read_bytes();check((work/name).read_bytes()==a.replace(b'v0.25.193',b'v0.25.194').replace(b'SPRINT RELOAD AND WORLD INPUT',b'SKILL FINISH AND DODGE PRIORITY'),name+' changes are title text only')
++# Compare the first three Config.Bind arguments, ignoring description-only clarifications.
++def bindings(s):
++ found=[]
++ for line in s.splitlines():
++  if 'Config.Bind(' not in line:continue
++  x=line.split('Config.Bind(',1)[1];args=[];begin=0;depth=0;quoted=False;escape=False
++  for i,c in enumerate(x):
++   if quoted:
++    if escape:escape=False
++    elif c=='\\':escape=True
++    elif c=='"':quoted=False
++   elif c=='"':quoted=True
++   elif c in '([{':depth+=1
++   elif c in ')]}':depth-=1
++   elif c==',' and depth==0:
++    args.append(x[begin:i].strip());begin=i+1
++    if len(args)==3:break
++  found.append(tuple(args))
++ return found
++for name in changed:
++ a=text(base,name);b=text(work,name)
++ check(bindings(a)==bindings(b),name+': every configuration section, key and default retained')
++ for forbidden in ['.SetPositions(','.GetPositions(','.LoadImage(', 'FindObjectOfType(']:
++  check(b.count(forbidden)==a.count(forbidden),name+': no new '+forbidden+' calls')
++c=text(work,'DragonsAltar.CombatRuntime.cs');oldc=text(base,'DragonsAltar.CombatRuntime.cs');a=text(work,'AlbedosCustomClasses.Advanced.cs');olda=text(base,'AlbedosCustomClasses.Advanced.cs');r=text(work,'DragonsAltar.Ranger.cs');oldr=text(base,'DragonsAltar.Ranger.cs');k=text(work,'AlbedosCustomClasses.Skills.cs')
++for start,end,label in [('        public static string WeaponRuleViolation(', '        // v0.25.186', 'Existing class equipment restrictions retained'),('        public static void GroundFire(', '        // ------------------------------------------------------------------ v0.25.59 skin layer','v193 ground-fire implementation retained'),('    public class DragonSkillClipDriver', '    public static class DragonCombat','Existing shared skill animation and Rigidbody driver retained')]:
++ check(region(c,start,end)==region(oldc,start,end),label)
++check(c[c.index('    public static class DragonClothGuard'):]==oldc[oldc.index('    public static class DragonClothGuard'):],'Cape/cloth code unchanged')
++check(region(r,'        private static bool SprintReload(', '        // v0.25.188')==region(oldr,'        private static bool SprintReload(', '        // v0.25.188'),'v193 sprint-reload implementation retained')
++check(region(c,'        public static bool CanUseWorldInput(', '        public static void SetUiInputBlocked(')==region(oldc,'        public static bool CanUseWorldInput(', '        public static void SetUiInputBlocked('),'v193 menu/input guard retained')
++bs=region(a,'        private IEnumerator JudgementCutRoutine(', '        // v0.23.5: Blade Storm')
++check('GetSphereTargets(player, point, Mathf.Max(0.5f, areaR))' in bs and 'GetSphereTargets(player, center, sphereR)' not in bs,'Blade Storm damage uses the full fixed 3D target area, independently of cosmetic spheres')
++for value in ['float budget = ascended','float perHit = budget / (defSpheres * 3f);','int cuts = Mathf.Clamp(_bladeCutsPerSphere.Value, 1, 20);']:
++ check(value in bs,'Blade Storm preserves existing per-target damage arithmetic: '+value)
++check('cloud.Tint = fog; cloud.Life = cloudLife;' in c and 'fog.a = 0.8f;' in c and 'body.AddComponent<MeshFilter>().sharedMesh = JudgementCloudMesh();' in c,'Blade Storm has a mesh-backed cloud with explicit 0.8 opacity')
++cloud=region(c,'        private static Mesh _judgementCloudMesh;', '        // v0.25.185 (user: Clockwork')
++check('Amount' not in cloud and 'PolishBudget' not in cloud and 'Restraint' not in cloud,'Cloud silhouette does not depend on particle density/frame budgets')
++check('return 0.58f + 0.42f * Fbm(' in cloud and 'renderQueue = 2990' in cloud and 'Color.white' in cloud,'Cloud texture has nonzero density, white mesh vertex colors and draws before the cuts')
++check(abs(.8*.58-.464)<1e-9,'Cloud texture/tint has at least 0.464 pre-fade alpha (not an in-game visibility measurement)')
++check('StompWindRing(sc, innerVisual, sr, 0.45f)' in a and 'GroundImpact(sc, DragonVfx.Fire, sr' in a,'Stomp retains ground impact/cracks and adds its own thick wind ring')
++check('CanInstantSwordMasterDodge(__instance)' in c and '(dodge || (jump && (block || blockHold)))' in c,'Both dedicated dodge and block+jump requests are handled before skill-lock filtering')
++check('CancelCurrentAttack(player);' in c and 'driver.CancelAnimation();' in c and 'DragonMixamo.Stop(player, 0f);' in c and 'SkillLockUntil.Remove(id); EndMobileCast(player);' in c,'Dodge releases native attacks, custom animation graphs and skill movement locks')
++for name in ['MoonlightRoutine','MoonlightAscendedRoutine','CrescentCleaveRoutine','CrescentCleaveWave','CrescentFireTrailRoutine','JudgementCutRoutine','FrenziedChargeRoutine','EclipseRoutine','EclipseSlashHail','HalfmoonRoutine','HalfmoonAscendedRoutine','HalfmoonTravelingCuts','AscendedImpactWaveRoutine','FrenzyPoseRoutine']:
++ check('StartSwordMasterWork('+name+'(' in a,'Dodge owns pending '+name+' work')
++for name in ['HeavySlashRoutine','ImpactWaveRoutine','ImpactPunchRoutine']:
++ check('TrackSwordMasterSkill(player, '+name+'(player, windup))' in k,'Sword Master base skill '+name+' participates in cancellation')
++check('finally { if (visual != null) Destroy(visual); }' in a and 'if (cast != null) cast.Running--;' in a,'Cancelled traveling cuts clean up their generated visuals and wave counters')
++check('int strike = 0; strike < 3; strike++' in a and '"battleaxe_attack" + strike.ToString()' in a,'Ascended Heavy Slash selects all three native Battleaxe attacks')
++check('DealDamageScaled(player, targets[i], _heavyAscDamage, 1f,' in a,'Each Ascended Heavy Slash strike retains full previous damage')
++iw=region(a,'        private IEnumerator AscendedImpactWaveRoutine(', '        // ------------------------------------------------------------------ tooltips')
++check(iw.index('HashSet<int> shockHit') > iw.index('for (float s = 0f; s < reached; s += section)'),'Ascended aftershock hit-deduplication resets per shockwave')
++pa=region(r,'        private void CastPiercingArrow(', '        // ------------------------------------------------------------------ Tumble Shot')
++check(pa.count('BeginSkill(')==1 and 'int count = ascended ? 3 : 1;' in pa and 'new WaitForSeconds(0.2f)' in pa,'Piercing Arrow pays once and fires three Ascended arrows at 0.2-second intervals')
++check('(ascended ? 0.6f : 1f)' in pa and abs(3*.6-1.8)<1e-9,'Ascended arrows deal 60% each, 180% combined; normal remains one 100% arrow')
++check('if (!ascended) DragonCombat.PlayClip' in pa and 'Shoot(player, shot == 0' in pa,'Ascended Piercing Arrow uses native bow_fire without the custom rg_power cast')
++(out/'scope_audit.json').write_text(json.dumps({'passed':len(checks),'checks':checks},indent=2))
++print('Passed',len(checks),'static scope checks. Unity rendering/gameplay not exercised.')
+--- /dev/null
++++ v0.25.194/tools/tests/skill_finish_194/compile.log
+@@ -0,0 +1,19 @@
++AlbedosCustomClasses.Core.cs: PASS
++
++DragonsAltar.CombatRuntime.cs: PASS
++
++AlbedosCustomClasses.Skills.cs: PASS
++
++AlbedosCustomClasses.Passives.cs: PASS
++
++AlbedosCustomClasses.GuardianAngel.cs: PASS
++
++AlbedosCustomClasses.Advanced.cs: PASS
++
++DragonsAltar.Sorcerer.cs: PASS
++
++DragonsAltar.Ranger.cs: PASS
++
++DragonsAltar.DevTools.cs: PASS
++
++Aethelborn.Experience.cs: PASS
+--- /dev/null
++++ v0.25.194/tools/tests/skill_finish_194/recompile.log
+@@ -0,0 +1 @@
++AlbedosCustomClasses.Advanced.cs: PASS
+--- /dev/null
++++ v0.25.194/tools/tests/skill_finish_194/run.py
+@@ -0,0 +1,26 @@
++from pathlib import Path
++import subprocess,os,json,shutil,urllib.request,zipfile
++from concurrent.futures import ThreadPoolExecutor
++out=Path('validation194');deps=Path('tooling194/testdeps');deps.mkdir(exist_ok=True)
++packages=[('monomod.backports','1.1.2'),('monomod.utils','25.0.11'),('monomod.core','1.3.3'),('monomod.runtimedetour','25.3.3'),('mono.cecil','0.11.6')]
++def fetch(pair):
++ name,ver=pair;d=deps/name
++ if not d.exists():
++  p=deps/(name+'.nupkg');urllib.request.urlretrieve('https://api.nuget.org/v3-flatcontainer/'+name+'/'+ver+'/'+name+'.'+ver+'.nupkg',p)
++  with zipfile.ZipFile(p) as z:z.extractall(d)
++ choices=list(d.glob('lib/*'))
++ if choices:
++  choice=sorted(choices,key=lambda p:(0 if p.name=='net6.0' else 1 if p.name=='netstandard2.0' else 2,str(p)))[0]
++  for p in choice.glob('*.dll'):shutil.copy2(p,out/p.name)
++with ThreadPoolExecutor(max_workers=5) as pool:list(pool.map(fetch,packages))
++refs=[p for p in Path('compile-refs/lib/net46').glob('*.dll') if p.name not in ['UnityEngine.UI.dll','System.Xml.dll']]+[Path('tooling194/ui/lib/UnityEngine.UI.dll')]
++for p in refs:
++ if not (out/p.name).exists():shutil.copy2(p,out/p.name)
++shutil.copy2('tooling194/jotunn/lib/net462/Jotunn.dll',out/'Jotunn.dll')
++refs += [out/'AlbedosCustomClasses.CombatRuntime.dll',out/'AlbedosCustomClasses.Advanced.dll',out/'AlbedosCustomClasses.dll']
++env=dict(os.environ,DOTNET_SYSTEM_GLOBALIZATION_INVARIANT='1')
++cmd=['tooling194/dotnet/dotnet','tooling194/compiler/tasks/netcore/bincore/csc.dll','-nologo','-noconfig','-nostdlib','-langversion:5','-target:exe','-out:'+str(out/'ScopeTests.dll')]+['-r:'+str(p) for p in refs]+['tests194/ScopeTests.cs']
++r=subprocess.run(cmd,env=env,capture_output=True,text=True);print(r.stdout+r.stderr);assert r.returncode==0
++(out/'ScopeTests.runtimeconfig.json').write_text(json.dumps({'runtimeOptions':{'tfm':'net6.0','framework':{'name':'Microsoft.NETCore.App','version':'6.0.36'}}}))
++r=subprocess.run(['tooling194/dotnet/dotnet',str(out/'ScopeTests.dll')],env=env,capture_output=True,text=True)
++(out/'shipped_method_tests.txt').write_text(r.stdout+r.stderr);print(r.stdout+r.stderr);assert r.returncode==0
+--- /dev/null
++++ v0.25.194/tools/tests/skill_finish_194/scope_audit.json
+@@ -0,0 +1,71 @@
++{
++  "passed": 66,
++  "checks": [
++    "Original v193 archive preserved exactly",
++    "Only the four requested implementation modules changed",
++    "185 existing art/animation assets byte-identical",
++    "INSTALL.bat changes are title text only",
++    "INSTALL.ps1 changes are title text only",
++    "AlbedosCustomClasses.Skills.cs: every configuration section, key and default retained",
++    "AlbedosCustomClasses.Skills.cs: no new .SetPositions( calls",
++    "AlbedosCustomClasses.Skills.cs: no new .GetPositions( calls",
++    "AlbedosCustomClasses.Skills.cs: no new .LoadImage( calls",
++    "AlbedosCustomClasses.Skills.cs: no new FindObjectOfType( calls",
++    "AlbedosCustomClasses.Advanced.cs: every configuration section, key and default retained",
++    "AlbedosCustomClasses.Advanced.cs: no new .SetPositions( calls",
++    "AlbedosCustomClasses.Advanced.cs: no new .GetPositions( calls",
++    "AlbedosCustomClasses.Advanced.cs: no new .LoadImage( calls",
++    "AlbedosCustomClasses.Advanced.cs: no new FindObjectOfType( calls",
++    "DragonsAltar.Ranger.cs: every configuration section, key and default retained",
++    "DragonsAltar.Ranger.cs: no new .SetPositions( calls",
++    "DragonsAltar.Ranger.cs: no new .GetPositions( calls",
++    "DragonsAltar.Ranger.cs: no new .LoadImage( calls",
++    "DragonsAltar.Ranger.cs: no new FindObjectOfType( calls",
++    "DragonsAltar.CombatRuntime.cs: every configuration section, key and default retained",
++    "DragonsAltar.CombatRuntime.cs: no new .SetPositions( calls",
++    "DragonsAltar.CombatRuntime.cs: no new .GetPositions( calls",
++    "DragonsAltar.CombatRuntime.cs: no new .LoadImage( calls",
++    "DragonsAltar.CombatRuntime.cs: no new FindObjectOfType( calls",
++    "Existing class equipment restrictions retained",
++    "v193 ground-fire implementation retained",
++    "Existing shared skill animation and Rigidbody driver retained",
++    "Cape/cloth code unchanged",
++    "v193 sprint-reload implementation retained",
++    "v193 menu/input guard retained",
++    "Blade Storm damage uses the full fixed 3D target area, independently of cosmetic spheres",
++    "Blade Storm preserves existing per-target damage arithmetic: float budget = ascended",
++    "Blade Storm preserves existing per-target damage arithmetic: float perHit = budget / (defSpheres * 3f);",
++    "Blade Storm preserves existing per-target damage arithmetic: int cuts = Mathf.Clamp(_bladeCutsPerSphere.Value, 1, 20);",
++    "Blade Storm has a mesh-backed cloud with explicit 0.8 opacity",
++    "Cloud silhouette does not depend on particle density/frame budgets",
++    "Cloud texture has nonzero density, white mesh vertex colors and draws before the cuts",
++    "Cloud texture/tint has at least 0.464 pre-fade alpha (not an in-game visibility measurement)",
++    "Stomp retains ground impact/cracks and adds its own thick wind ring",
++    "Both dedicated dodge and block+jump requests are handled before skill-lock filtering",
++    "Dodge releases native attacks, custom animation graphs and skill movement locks",
++    "Dodge owns pending MoonlightRoutine work",
++    "Dodge owns pending MoonlightAscendedRoutine work",
++    "Dodge owns pending CrescentCleaveRoutine work",
++    "Dodge owns pending CrescentCleaveWave work",
++    "Dodge owns pending CrescentFireTrailRoutine work",
++    "Dodge owns pending JudgementCutRoutine work",
++    "Dodge owns pending FrenziedChargeRoutine work",
++    "Dodge owns pending EclipseRoutine work",
++    "Dodge owns pending EclipseSlashHail work",
++    "Dodge owns pending HalfmoonRoutine work",
++    "Dodge owns pending HalfmoonAscendedRoutine work",
++    "Dodge owns pending HalfmoonTravelingCuts work",
++    "Dodge owns pending AscendedImpactWaveRoutine work",
++    "Dodge owns pending FrenzyPoseRoutine work",
++    "Sword Master base skill HeavySlashRoutine participates in cancellation",
++    "Sword Master base skill ImpactWaveRoutine participates in cancellation",
++    "Sword Master base skill ImpactPunchRoutine participates in cancellation",
++    "Cancelled traveling cuts clean up their generated visuals and wave counters",
++    "Ascended Heavy Slash selects all three native Battleaxe attacks",
++    "Each Ascended Heavy Slash strike retains full previous damage",
++    "Ascended aftershock hit-deduplication resets per shockwave",
++    "Piercing Arrow pays once and fires three Ascended arrows at 0.2-second intervals",
++    "Ascended arrows deal 60% each, 180% combined; normal remains one 100% arrow",
++    "Ascended Piercing Arrow uses native bow_fire without the custom rg_power cast"
++  ]
++}--- /dev/null
++++ v0.25.194/tools/tests/skill_finish_194/scope_audit.txt
+@@ -0,0 +1,67 @@
++PASS: Original v193 archive preserved exactly
++PASS: Only the four requested implementation modules changed
++PASS: 185 existing art/animation assets byte-identical
++PASS: INSTALL.bat changes are title text only
++PASS: INSTALL.ps1 changes are title text only
++PASS: AlbedosCustomClasses.Skills.cs: every configuration section, key and default retained
++PASS: AlbedosCustomClasses.Skills.cs: no new .SetPositions( calls
++PASS: AlbedosCustomClasses.Skills.cs: no new .GetPositions( calls
++PASS: AlbedosCustomClasses.Skills.cs: no new .LoadImage( calls
++PASS: AlbedosCustomClasses.Skills.cs: no new FindObjectOfType( calls
++PASS: AlbedosCustomClasses.Advanced.cs: every configuration section, key and default retained
++PASS: AlbedosCustomClasses.Advanced.cs: no new .SetPositions( calls
++PASS: AlbedosCustomClasses.Advanced.cs: no new .GetPositions( calls
++PASS: AlbedosCustomClasses.Advanced.cs: no new .LoadImage( calls
++PASS: AlbedosCustomClasses.Advanced.cs: no new FindObjectOfType( calls
++PASS: DragonsAltar.Ranger.cs: every configuration section, key and default retained
++PASS: DragonsAltar.Ranger.cs: no new .SetPositions( calls
++PASS: DragonsAltar.Ranger.cs: no new .GetPositions( calls
++PASS: DragonsAltar.Ranger.cs: no new .LoadImage( calls
++PASS: DragonsAltar.Ranger.cs: no new FindObjectOfType( calls
++PASS: DragonsAltar.CombatRuntime.cs: every configuration section, key and default retained
++PASS: DragonsAltar.CombatRuntime.cs: no new .SetPositions( calls
++PASS: DragonsAltar.CombatRuntime.cs: no new .GetPositions( calls
++PASS: DragonsAltar.CombatRuntime.cs: no new .LoadImage( calls
++PASS: DragonsAltar.CombatRuntime.cs: no new FindObjectOfType( calls
++PASS: Existing class equipment restrictions retained
++PASS: v193 ground-fire implementation retained
++PASS: Existing shared skill animation and Rigidbody driver retained
++PASS: Cape/cloth code unchanged
++PASS: v193 sprint-reload implementation retained
++PASS: v193 menu/input guard retained
++PASS: Blade Storm damage uses the full fixed 3D target area, independently of cosmetic spheres
++PASS: Blade Storm preserves existing per-target damage arithmetic: float budget = ascended
++PASS: Blade Storm preserves existing per-target damage arithmetic: float perHit = budget / (defSpheres * 3f);
++PASS: Blade Storm preserves existing per-target damage arithmetic: int cuts = Mathf.Clamp(_bladeCutsPerSphere.Value, 1, 20);
++PASS: Blade Storm has a mesh-backed cloud with explicit 0.8 opacity
++PASS: Cloud silhouette does not depend on particle density/frame budgets
++PASS: Cloud texture has nonzero density, white mesh vertex colors and draws before the cuts
++PASS: Cloud texture/tint has at least 0.464 pre-fade alpha (not an in-game visibility measurement)
++PASS: Stomp retains ground impact/cracks and adds its own thick wind ring
++PASS: Both dedicated dodge and block+jump requests are handled before skill-lock filtering
++PASS: Dodge releases native attacks, custom animation graphs and skill movement locks
++PASS: Dodge owns pending MoonlightRoutine work
++PASS: Dodge owns pending MoonlightAscendedRoutine work
++PASS: Dodge owns pending CrescentCleaveRoutine work
++PASS: Dodge owns pending CrescentCleaveWave work
++PASS: Dodge owns pending CrescentFireTrailRoutine work
++PASS: Dodge owns pending JudgementCutRoutine work
++PASS: Dodge owns pending FrenziedChargeRoutine work
++PASS: Dodge owns pending EclipseRoutine work
++PASS: Dodge owns pending EclipseSlashHail work
++PASS: Dodge owns pending HalfmoonRoutine work
++PASS: Dodge owns pending HalfmoonAscendedRoutine work
++PASS: Dodge owns pending HalfmoonTravelingCuts work
++PASS: Dodge owns pending AscendedImpactWaveRoutine work
++PASS: Dodge owns pending FrenzyPoseRoutine work
++PASS: Sword Master base skill HeavySlashRoutine participates in cancellation
++PASS: Sword Master base skill ImpactWaveRoutine participates in cancellation
++PASS: Sword Master base skill ImpactPunchRoutine participates in cancellation
++PASS: Cancelled traveling cuts clean up their generated visuals and wave counters
++PASS: Ascended Heavy Slash selects all three native Battleaxe attacks
++PASS: Each Ascended Heavy Slash strike retains full previous damage
++PASS: Ascended aftershock hit-deduplication resets per shockwave
++PASS: Piercing Arrow pays once and fires three Ascended arrows at 0.2-second intervals
++PASS: Ascended arrows deal 60% each, 180% combined; normal remains one 100% arrow
++PASS: Ascended Piercing Arrow uses native bow_fire without the custom rg_power cast
++Passed 66 static scope checks. Unity rendering/gameplay not exercised.
+--- /dev/null
++++ v0.25.194/tools/tests/skill_finish_194/shipped_method_tests.txt
+@@ -0,0 +1,13 @@
++PASS: Real cancellation wrapper starts a skill and reaches its pending yield
++PASS: Dodge disposal immediately runs finally cleanup and releases ownership
++PASS: Cancelled work never resumes its delayed attack
++PASS: Repeated cancellation is idempotent
++PASS: Uncancelled work preserves both skill steps and normal cleanup
++PASS: Faulted work cleans up once and cannot run again
++PASS: Cancellation before the first step prevents the entire attack
++PASS: Actual Valheim dodge IL rewrites exactly the attack and stagger gates
++PASS: All native ground, stamina, encumbrance, existing-roll and cost instructions stay intact
++PASS: Dodge cancellation executes before the skill-lock input filter
++PASS: Unrelated methods without dodge gates are unchanged
++PASS: Shipped Halfmoon contact calibration reaches a requested one-second contact on cold and warm timing
++Passed 12 compiled-method checks. Unity gameplay and rendered visuals not exercised.
+--- /dev/null
++++ v0.25.194/tools/tests/skill_finish_194/source_hashes.json
+@@ -0,0 +1,12 @@
++{
++  "Aethelborn.Experience.cs": "e313234c9a49783e5afcd631f58508a17a7f4404a4f4dba661c08c0d745fc519",
++  "AlbedosCustomClasses.Advanced.cs": "0a4b7335e5fb5b9b5361f73d2ad3a065fbf178a4664e42dbf3f4dc2785a528af",
++  "AlbedosCustomClasses.Core.cs": "f0e0b15f8551e75643838e833740e7775b393280d19dba10a6b48d9b78e19eff",
++  "AlbedosCustomClasses.GuardianAngel.cs": "e98ecb7cc72b3f2ded1540891382ca5d0a03423c03e59ed53c1ad4de15d5cf3d",
++  "AlbedosCustomClasses.Passives.cs": "1b7c566453631f252c8d3cc4ce66ab3fbf6d2fb17caa9b515944400b36673d55",
++  "AlbedosCustomClasses.Skills.cs": "21ef7607b87af572b3a285e6d5c4a256ca815205b3631aa0ee1c779d93b4c554",
++  "DragonsAltar.CombatRuntime.cs": "10b793a31dcb471ff951f077110d20abbdad70cfb8f5dd7e21c2a4182da1190b",
++  "DragonsAltar.DevTools.cs": "866dbf925f9ad538baf7177c08dd0bb160573ed687fd2b21dda685754cebc029",
++  "DragonsAltar.Ranger.cs": "a78ae7c7a8e67fbb2a02939b89d96abf3d552ab56b9b81a298ba4a0eb6fbd624",
++  "DragonsAltar.Sorcerer.cs": "f5876b0a61887631324b6e9686dd8d3c7b8a6231018d6d0b0cbcefc909bcc374"
++}

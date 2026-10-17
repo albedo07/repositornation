@@ -1,0 +1,18 @@
+AETHELBORN ASCENDED v0.25.200 - VALIDATION
+2026-10-18 (Asia/Manila)
+Baseline: Aethelborn_Ascended_v0.25.199_Guidance_Combo_Recovery.zip
+SHA-256: ed887e04aa94fca893b39fe97762a64cd16d926270df2667edcf2d24276346d4
+
+VERIFIED OUTSIDE UNITY
+- All ten modules compile with Roslyn 4.8, -langversion:5, supplied real Valheim/BepInEx/Harmony/Unity references, JotunnLib 2.30.2 and restored UnityEngine.UI reference. No new external runtime dependency is introduced. Package retains the PowerShell source installer; validation DLLs are not shipped as a Windows build.
+- 137 checks pass: 106 actual compiled-method/IL/math checks and 31 source-derived managed geometry/state/dispatch invariants. The latter include extrusion geometry, NACC rollback and the exact shipped bird prefixes/forwarder with native ports substituted. They do not run a real bird, Harmony detour, Unity renderer or game network.
+- New checks include per-recipient max-HP healing and tiers; hollow/broader wind profiles and terrain placement; Fury marker path; bird target hook signatures, disabled lifecycle, collision suppression, absence of required/added physics; guarded one-hit forwarding and recovery after exceptions; complete front/back sapphire and heart caps.
+- Heart reproduction: a 28-point heart outline at size 0.9 has three offset-contour self-intersections at tested bevels 0.04 and 0.06; the 0.04 case emits 22 front cap triangles where 26 are required. With the scoped zero-miter heart construction, there are zero self-intersections, all 26 front triangles plus matching back caps, and cap area matches outline area. Other extrusion/model code is unchanged.
+- 116 scope checks pass. Exactly three source modules changed; the other seven and all 185 original art/animation assets remain byte-identical. All unrelated configs and the previous NACC, CA, class/equipment, crossbow, cape, hammer and Blade Storm systems are unchanged. Installer edits only update release version/banner.
+- ZIP CRC, every packaged file and the original baseline SHA-256 are verified. Scoped implementation/document diff is against original v199. No Anchor promotion.
+
+IN-GAME / PLATFORM LIMITS
+- Windows PowerShell Add-Type/INSTALL, live Harmony patches, bird flight and collider coverage, native damage/resistance/drop/RPC delivery, multiplayer ownership, rendering/material blending/occlusion, wind visibility and actual FPS/GC require TEST_THIS_BUILD.txt. Code checks do not establish that every symptom is resolved in game.
+- Bird bridge specifically retains native ambient flight and native Destructible damage. It does not supply a full combat NPC animation/stagger controller. Existing colliders are preserved rather than enlarged or replaced.
+- Original CLAUDE.md, git checkout/remote, tools/release.sh, tools/compile_check/check.sh, Stubs.cs and mcs were not supplied/available. Their prescribed commands and commit/push were not run; no claim that the unavailable signature checker reported zero. Full C#5 compilation against the supplied real references was performed instead, and this pass has a dated project journal.
+- The two supplied images were inspected locally. No in-game video, live game session or fresh performance log was provided for this pass. Prior logs were not re-labeled as v200 tests. No measured FPS gain is asserted.

@@ -1,0 +1,24 @@
+AETHELBORN ASCENDED - LOG REVIEW / PASS THREE HANDOFF
+Reviewed 2026-10-17 (Asia/Manila). Sources: Aethelborn_Performance(3).txt and LogOutput(1).log.
+These logs were recorded with the v196-era scoped module versions and predate v197/v198. They are not a live test of the new passes. The listed affected AA source paths still exist in v197/v198. No log-driven source changes were made in pass two.
+
+ACTIONABLE CANDIDATES FOR PASS THREE
+1. EXP prefab scan: 392 caught null-reference warnings. Current Update scans uninitialized creature prefabs and Discover calls creature.GetMaxHealth(). Prefabs do not necessarily have the runtime network/health state that method expects. Investigate reading the serialized prefab health safely for discovery while preserving all existing configured rewards, scaling and earned EXP. Do not rebalance rewards as part of the fix.
+2. Harmony inherited-method warnings: CombatRuntime targets Character.Damage / Humanoid.BlockAttack through inherited reflections; Advanced has the Character.Damage warning; Sorcerer has Character.TryUseEitr. Resolve the actual declaring implementations and avoid registering the same implementation more than once. Verify damage/buff hooks still run exactly as intended; do not suppress warning output without fixing the target selection.
+3. Missing UI frame assets: eight warnings; cyan frames are absent for several Cleric/Paladin skills, and the Electric Smite colored frames are absent while a red frame exists. Existing procedural fallbacks prevent hard failure. Check intended alias/fallback selection and caching; preserve the established UI appearance. Not evidence that game skills failed.
+4. Performance monitor: Advanced OnGUI averages 0.497ms overall and allocates approximately 552KB/s in the measured AA section, the largest reported AA allocation source. Review cached labels/style/layout only where measured and behavior can remain identical. The idle/overall comparison is not an isolated per-skill benchmark. The report lists total 4.92MB/s for the game/all mods, not AA alone.
+
+PERFORMANCE INTERPRETATION
+Recorded 2,184 seconds. Idle frame 12.93ms, AA measured code 0.50ms/frame. Overall frame 10.58ms; worst 261.3ms. Render/GUI/physics/GPU-wait aggregate averages 10.84ms idle / 8.49ms overall. Recent 33.3ms stalls show about 0.1-0.2ms of measured AA script time and roughly 31ms in that aggregate. This cannot distinguish GPU load, unmeasured work, physics, other mods or frame limiting, and does not establish a specific AA-script cause. No recorded VFX spawn maximum exceeds 8ms. Preserve visuals unless a verified identical-result optimization is available; do not remove particles or mechanics to invent an FPS win.
+
+OTHER MESSAGES / ATTRIBUTION LIMITS
+- VNEI reflection type-load failure names a missing EpicLoot 0.13.0 compatibility dependency. Do not modify third-party mods or require EpicLoot merely to hide it. Where AA's broad type lookup triggers optional-type discovery, consider a targeted lookup that leaves unrelated optional types alone.
+- Shader compiler platform 18 unavailable: no identifying shader/asset or stack in this excerpt. It occurs around VNEI/Jotunn initialization; its source cannot be proven from this line. Do not remove AA materials on this evidence.
+- Main menu/respawn missing audio, missing world location IDs, a transient player-character ID and duplicate CanvasRenderer messages are not established as AA faults. No CanvasRenderer creation appears in AA source. Leave them alone unless a concrete AA call path is identified.
+- Therzie Warfare 1.9.5 and Dual Wield 1.0.12 are loaded. The end of the log records paired scimitar combo routing but does not contain a stack trace identifying the low-stamina freeze. Trace that separately for item 12 with the second video and stamina-failure cleanup path.
+
+PASS THREE STILL OWNS USER ITEMS 9-12
+9. Blade Storm cloud: thinner and blue, keeping the hollow curved ball.
+10. Knight's Guidance: +25% Skill Damage for 90s, cooldown 600s.
+11. Ascended Heavy Slash: align second VFX stroke diagonally with its swing.
+12. Therzie 2HDW low-stamina NACC freeze: restore a clean failure/recovery without changing combo behavior.

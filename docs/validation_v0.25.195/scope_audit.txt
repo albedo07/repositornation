@@ -1,0 +1,84 @@
+PASS: Original v194 ZIP is preserved exactly
+PASS: Exactly the six requested implementation/tooltip/settings modules changed
+PASS: 185 original art/animation assets remain byte-identical
+PASS: INSTALL.bat: release-banner edits only; encoding and line endings preserved
+PASS: INSTALL.ps1: release-banner edits only; encoding and line endings preserved
+PASS: DragonsAltar.CombatRuntime.cs: all original config keys, sections and defaults preserved
+PASS: DragonsAltar.CombatRuntime.cs: only permitted new setting is the 3SS contact interval
+PASS: DragonsAltar.CombatRuntime.cs: no new forbidden .SetPositions(
+PASS: DragonsAltar.CombatRuntime.cs: no new forbidden .GetPositions(
+PASS: DragonsAltar.CombatRuntime.cs: no new forbidden .LoadImage(
+PASS: DragonsAltar.CombatRuntime.cs: no new forbidden FindObjectOfType(
+PASS: AlbedosCustomClasses.Skills.cs: all original config keys, sections and defaults preserved
+PASS: AlbedosCustomClasses.Skills.cs: only permitted new setting is the 3SS contact interval
+PASS: AlbedosCustomClasses.Skills.cs: no new forbidden .SetPositions(
+PASS: AlbedosCustomClasses.Skills.cs: no new forbidden .GetPositions(
+PASS: AlbedosCustomClasses.Skills.cs: no new forbidden .LoadImage(
+PASS: AlbedosCustomClasses.Skills.cs: no new forbidden FindObjectOfType(
+PASS: AlbedosCustomClasses.Core.cs: all original config keys, sections and defaults preserved
+PASS: AlbedosCustomClasses.Core.cs: only permitted new setting is the 3SS contact interval
+PASS: AlbedosCustomClasses.Core.cs: no new forbidden .SetPositions(
+PASS: AlbedosCustomClasses.Core.cs: no new forbidden .GetPositions(
+PASS: AlbedosCustomClasses.Core.cs: no new forbidden .LoadImage(
+PASS: AlbedosCustomClasses.Core.cs: no new forbidden FindObjectOfType(
+PASS: AlbedosCustomClasses.Advanced.cs: all original config keys, sections and defaults preserved
+PASS: AlbedosCustomClasses.Advanced.cs: only permitted new setting is the 3SS contact interval
+PASS: AlbedosCustomClasses.Advanced.cs: no new forbidden .SetPositions(
+PASS: AlbedosCustomClasses.Advanced.cs: no new forbidden .GetPositions(
+PASS: AlbedosCustomClasses.Advanced.cs: no new forbidden .LoadImage(
+PASS: AlbedosCustomClasses.Advanced.cs: no new forbidden FindObjectOfType(
+PASS: DragonsAltar.DevTools.cs: all original config keys, sections and defaults preserved
+PASS: DragonsAltar.DevTools.cs: only permitted new setting is the 3SS contact interval
+PASS: DragonsAltar.DevTools.cs: no new forbidden .SetPositions(
+PASS: DragonsAltar.DevTools.cs: no new forbidden .GetPositions(
+PASS: DragonsAltar.DevTools.cs: no new forbidden .LoadImage(
+PASS: DragonsAltar.DevTools.cs: no new forbidden FindObjectOfType(
+PASS: DragonsAltar.Ranger.cs: all original config keys, sections and defaults preserved
+PASS: DragonsAltar.Ranger.cs: only permitted new setting is the 3SS contact interval
+PASS: DragonsAltar.Ranger.cs: no new forbidden .SetPositions(
+PASS: DragonsAltar.Ranger.cs: no new forbidden .GetPositions(
+PASS: DragonsAltar.Ranger.cs: no new forbidden .LoadImage(
+PASS: DragonsAltar.Ranger.cs: no new forbidden FindObjectOfType(
+PASS: Unchanged runtime method: public static string WeaponRuleViolation
+PASS: Unchanged runtime method: public static bool CanInstantSwordMasterDodge
+PASS: Unchanged runtime method: public static void PrepareSwordMasterDodge
+PASS: Unchanged runtime method: private static IEnumerable<CodeInstruction> SwordMasterDodgeTranspiler
+PASS: Unchanged runtime method: public static float GetAttackSpeedMultiplier
+PASS: Unchanged runtime method: public static void GroundFire
+PASS: Cape and Rigidbody cloth guard remain unchanged
+PASS: Combat unchanged: private IEnumerator JudgementCutRoutine
+PASS: Combat unchanged: private IEnumerator WhirlwindRoutine
+PASS: Combat unchanged: private IEnumerator WhirlwindAscendedRoutine
+PASS: Combat unchanged: private IEnumerator CrescentCleaveWave
+PASS: Combat unchanged: private IEnumerator SpiritTrail
+PASS: Combat unchanged: private IEnumerator PaladinTrail
+PASS: Combat unchanged: private IEnumerator MoonlightRoutine
+PASS: Combat unchanged: private IEnumerator MoonlightAscendedRoutine
+PASS: Base skill damage/hitboxes/timing unchanged: private void CastLightningZap
+PASS: Base skill damage/hitboxes/timing unchanged: private IEnumerator HeavySlashRoutine
+PASS: Base skill damage/hitboxes/timing unchanged: private IEnumerator ImpactWaveRoutine
+PASS: Base skill damage/hitboxes/timing unchanged: private IEnumerator ImpactPunchRoutine
+PASS: Preserved Ranger feature: private static bool SprintReload
+PASS: Preserved Ranger feature: private static bool IsCurrentCrossbowReload
+PASS: Preserved Ranger feature: private static void ClearActionsUnlessReloading
+PASS: Preserved Ranger feature: private static IEnumerable<CodeInstruction> SprintReloadTranspiler
+PASS: Preserved Ranger feature: private void CastPiercingArrow
+PASS: Only dodge causes a Sword Master sequence interruption
+PASS: Ascended Heavy Swing retains all three Battleaxe strikes
+PASS: Heavy Swing contact interval is at least 0.7s and follow-up animation speed is capped
+PASS: Heavy Swing has opposite horizontal strokes followed by a vertical third stroke
+PASS: Per-strike damage is unchanged
+PASS: Blade Storm uses soft particle volume, with no mesh shell/barrier
+PASS: Cloud visibility floor is bounded to 18-36 puffs and at most 48 live particles
+PASS: The hammer silhouette echo is removed
+PASS: Relics use a native lit surface option and the gold ring has real texture coordinates
+PASS: Cached visual templates contain no cosmetic colliders
+PASS: Additional point lights and Alt+F7 toggle are removed
+PASS: Obsolete light sliders are hidden from F8
+PASS: Missing cold resources are prepared in background, avoiding active cast preparation
+PASS: Whirlwind has a wind wake beneath the spinning blade
+PASS: Holding block cannot overwrite the ongoing tracked skill pose
+PASS: Ascension label and actual eligibility gate are applied
+PASS: Judgement Mark has a complete explanation in the stat body
+PASS: Header excludes buff-number tokens and effect stat rows retain those values
+83 checks passed. No Unity gameplay/rendering exercised.

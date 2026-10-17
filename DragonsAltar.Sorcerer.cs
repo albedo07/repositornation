@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Aethelborn Ascended - Sorcerer Advancements";
-        public const string ModVersion = "0.25.191";
+        public const string ModVersion = "0.25.199";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -488,7 +488,7 @@ namespace DragonsAltarSorcerer
             MethodInfo[] playerMethods = typeof(Player).GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
             for (int i = 0; i < playerMethods.Length; i++)
             {
-                MethodInfo method = playerMethods[i];
+                MethodInfo method = DragonMethodTargets.Implementation(playerMethods[i]);
                 if (method.Name != "TryUseEitr")
                     continue;
                 ParameterInfo[] parameters = method.GetParameters();
@@ -500,7 +500,7 @@ namespace DragonsAltarSorcerer
             MethodInfo wizardMaxEitrPrefix = typeof(SorcererPlugin).GetMethod("WizardSetMaxEitrPrefix", BindingFlags.Static | BindingFlags.NonPublic);
             for (int i = 0; i < playerMethods.Length; i++)
             {
-                MethodInfo method = playerMethods[i];
+                MethodInfo method = DragonMethodTargets.Implementation(playerMethods[i]);
                 if (method.Name != "SetMaxEitr")
                     continue;
                 ParameterInfo[] parameters = method.GetParameters();
@@ -578,7 +578,7 @@ namespace DragonsAltarSorcerer
                 return false;
             }
 
-            if (!Input.GetKey(KeyCode.Mouse0) || !Input.GetKey(KeyCode.Mouse1))
+            if (!DragonCombat.CanUseWorldInput(player) || !Input.GetKey(KeyCode.Mouse0) || !Input.GetKey(KeyCode.Mouse1))
                 return true;
 
             Instance.BeginWizardStaffCharge(player, weapon);
@@ -625,16 +625,14 @@ namespace DragonsAltarSorcerer
             if (_hwFiring && __instance != null && __instance == Player.m_localPlayer && __result < 1f) __result = 1f;
         }
 
-        // Horizon Walker firing a magic weapon on the ground: full movement speed + legs keep walking / running (HwLegCycle).
+        // Horizon Walker keeps full movement speed while firing; all locomotion animation is vanilla.
         private void UpdateHwMobility(Player player, string advancement)
         {
             _hwFiring = false;
             if (player == null || advancement != "Spellcaster" || player.IsDead() || !player.InAttack()) return;
             if (!DragonCombat.IsMagicWeapon(GetCurrentWeapon(player))) return;
             _hwFiring = true;
-            HwLegCycle legs = player.GetComponent<HwLegCycle>();
-            if (legs == null) legs = player.gameObject.AddComponent<HwLegCycle>();
-            legs.ActiveUntil = Time.time + 0.12f;
+            // v0.25.193: native animation only; keep the independent full-speed movement factor.
         }
 
         private static void AttackShotPostfix(Attack __instance)
@@ -757,6 +755,7 @@ namespace DragonsAltarSorcerer
             UpdateRifts();
 
             Player player = Player.m_localPlayer;
+            UpdateBuffIndicators(player, player == null || GetClass(player) != "Sorcerer" ? "" : GetAdvancement(player));
             if (player == null)
             {
                 RestoreGunStaffTimings();
@@ -820,7 +819,7 @@ namespace DragonsAltarSorcerer
                     DragonCombat.ApplyTimedBuff(player, "Spellcaster.PhaseFlow", 0.35f, 0f, 0f, 0.15f, 0f, 0f, 0.25f, false);
             }
 
-            if (_phalanxVolleyArmed && Input.GetKeyDown(KeyCode.Mouse0))
+            if (_phalanxVolleyArmed && DragonCombat.CanUseWorldInput(player) && Input.GetKeyDown(KeyCode.Mouse0))
             {
                 _phalanxVolleyArmed = false;
                 DragonCombat.SwallowAttackInput(player, 0.4f);   // v0.25.65
@@ -849,7 +848,7 @@ namespace DragonsAltarSorcerer
             if (DragonCombat.IsTreeHotbarActive(player))
                 return;
 
-            if (!Input.GetKey(_modifier.Value))
+            if (!DragonCombat.CanUseWorldInput(player) || !Input.GetKey(_modifier.Value) || DragonCombat.SkillAnimationBusy(player))
                 return;
 
             // M4+1/2/3 starter skills are owned by AlbedosCustomClasses.Skills.dll.
@@ -1044,6 +1043,28 @@ namespace DragonsAltarSorcerer
         private ConfigEntry<bool> _bladeNormalStun, _bladeAscStun1, _bladeAscStun2, _bladeAscStun3;
         private ConfigEntry<float> _fnAscDuration, _fnAscTickPercent, _fnAscBlast, _fnAscFreeze, _fnAscBossSlow;
         private ConfigEntry<float> _ccAscDelay, _ccAscPercent;
+        private float _buffIndicatorAt;
+        private void UpdateBuffIndicators(Player player, string advancement)
+        {
+            if (player == null || Time.time < _buffIndicatorAt) return;
+            _buffIndicatorAt = Time.time + 0.2f;
+            bool wizard = !player.IsDead() && advancement == "Wizard";
+            bool walker = !player.IsDead() && advancement == "Spellcaster";
+            DragonCombat.ShowStatusUntil(player, "wizard_overcharge", "overcharge", "Overcharge", wizard ? _overchargeUntil : 0f, 0,
+                "Attack Buff\n+" + Mathf.RoundToInt(_ocMagic.Value) + "% Magic Damage\n+" + Mathf.RoundToInt(_ocWindup.Value) + "% Wind-up Speed\n+" + Mathf.RoundToInt(_ocRegen.Value) + "% Eitr Regen");
+            DragonCombat.ShowStatusUntil(player, "walker_phase_flow", "portal", "Phase Flow", walker ? _phaseFlowUntil : 0f, 0,
+                "Movement Buff\n+15% Movement Speed\n+25% Eitr Regen\nFaster attacks");
+            DragonCombat.ShowStatusUntil(player, "walker_echo", "portal", "Rift Echo", walker ? _riftEchoUntil : 0f, 0,
+                "Attack Buff\nRifts repeat your attacks while Left Click is held");
+            float phantomEnd = walker ? (IsSpellAscended(player, "afterimage_arsenal") ? _mimicUntil : _afterimageUntil) : 0f;
+            DragonCombat.ShowStatusUntil(player, "walker_phantom", "generic", "Arcane Phantom", phantomEnd, 0,
+                "Attack Buff\nSpectral copies repeat your attacks");
+            DragonCombat.ShowStatusUntil(player, "walker_phalanx", "damage", "Arcane Phalanx", walker && _phalanxSwords.Count > 0 ? _phalanxExpireAt : 0f,
+                _phalanxSwords.Count, "Attack Buff\n{stacks} spectral swords remaining");
+            DragonCombat.ShowStatusUntil(player, "walker_portals", "portal", "Rift Walker", walker && _riftA != null ? _riftEndTime : 0f, 0,
+                _riftB != null ? "Linked portals are active" : "First portal placed; place the second to link them");
+        }
+
         private float _overchargeLockedUntil;
 
         private WizDamage BindWizDamage(string section, float blunt, float slash, float pierce, float fire, float frost, float lightning, float poison, float spirit)
@@ -1167,6 +1188,7 @@ namespace DragonsAltarSorcerer
         // Hold-to-charge: the tree hotbar key of the skill, or the legacy M4+key.
         private bool SkillKeyHeld(Player player, string id, KeyCode legacy)
         {
+            if (!DragonCombat.CanUseWorldInput(player)) return false;
             if (DragonCombat.IsTreeHotbarActive(player))
                 return DragonCombat.IsTreeSkillKeyHeld(id);
             return Input.GetKey(_modifier.Value) && Input.GetKey(legacy);
@@ -1487,6 +1509,11 @@ namespace DragonsAltarSorcerer
             float nextMarker = 0f;
             while (player != null && !player.IsDead())
             {
+                if (!DragonCombat.CanUseWorldInput(player))
+                {
+                    _meteorChargeShown = 0; _meteorChargeNext = 0f;
+                    DragonCombat.ClipStop(player, 0.1f); yield break;
+                }
                 float elapsed = Time.time - pressed;
                 // v0.23.6: at max stacks it can be held as long as you like; it lands where you aim on release.
                 if (holding && SkillKeyHeld(player, "meteor_fall", _skill7.Value)) heldFor = elapsed;
@@ -1565,7 +1592,7 @@ namespace DragonsAltarSorcerer
                 {
                     DragonVfx.HeavyLanding(mt, new Color(1f, 0.40f, 0.08f, 1f), mr, Mathf.Clamp(mr * 0.4f, 1f, 3f));   // v0.25.58 the meteor really lands
                     DragonVfx.FireBlast(mt, mr * 0.8f);   // v0.25.61
-                    DragonVfx.Embers(mt, new Color(1f, 0.40f, 0.08f, 1f), mr * 0.8f, Mathf.Max(1f, _meteorBurnSeconds.Value), 30f);   // v0.25.150 no light column, fewer embers
+                    DragonVfx.GroundFire(mt, mr * 0.8f, Mathf.Max(1f, _meteorBurnSeconds.Value));   // v0.25.193 visible low flames; no light column
                     DragonVfx.Debris(mt, new Color(0.30f, 0.24f, 0.20f, 1f), Mathf.RoundToInt(4 + mr * 0.5f), 6f + mr * 0.4f, 0.25f, 2.2f);   // v0.25.180 tumbling fragments instead of the vanilla fireball flare
                 });
             }
@@ -1687,6 +1714,11 @@ namespace DragonsAltarSorcerer
             DragonCombat.PlayClip(player, "wiz_cataclysm", Mathf.Max(0.3f, minWindup), true);
             while (player != null && !player.IsDead() && (elapsed < minWindup || holding))
             {
+                if (!DragonCombat.CanUseWorldInput(player))
+                {
+                    _cataclysmCharge01 = 0f;
+                    DragonCombat.ClipStop(player, 0.1f); yield break;
+                }
                 DragonCombat.LockSkill(player, 0.12f);
                 if (minWindup >= 1f || elapsed >= 1f) DragonCombat.FaceAimNow(player);
                 elapsed += Time.deltaTime;
@@ -1764,7 +1796,7 @@ namespace DragonsAltarSorcerer
             for (int phase = 0; phase < 3; phase++)
             {
                 int el = reverse ? 2 - phase : phase;
-                if (el == 0) DragonCombat.RunVfx(delegate { DragonVfx.FireBlast(fireP, cr * 0.6f); DragonVfx.Embers(fireP, new Color(1f, 0.40f, 0.08f, 1f), cr * 0.5f, 3f, 45f); DragonVfx.Scorch(fireP, cr * 0.45f, 6f); });
+                if (el == 0) DragonCombat.RunVfx(delegate { DragonVfx.FireBlast(fireP, cr * 0.6f); DragonVfx.GroundFire(fireP, cr * 0.5f, 3f); DragonVfx.Scorch(fireP, cr * 0.45f, 6f); });
                 else if (el == 1) DragonCombat.RunVfx(delegate { DragonVfx.IceBurst(iceP, cr * 0.45f); DragonVfx.FrostGround(iceP, cr * 0.4f, 3f, 0.6f); DragonVfx.Debris(iceP, new Color(0.75f, 0.92f, 1f, 1f), 8, 7f, 0.2f, 2f); });
                 else DragonCombat.RunVfx(delegate { for (int b = 0; b < 3; b++) { Vector3 bp = boltP + new Vector3(Mathf.Cos(b * 2.1f), 0f, Mathf.Sin(b * 2.1f)) * cr * 0.2f; DragonVfx.UltimateStrike(bp + Vector3.up * 14f, bp, b == 1 ? DragonVfx.UltYellow : DragonVfx.UltBlue, 0.55f, 1.4f); } });
                 yield return new WaitForSeconds(0.25f);
@@ -2108,9 +2140,10 @@ namespace DragonsAltarSorcerer
             if (!_wizardChargeActive)
                 return;
 
-            if (player == null || player.IsDead() || advancement != "Wizard" || !IsWizardStaff(GetCurrentWeapon(player)))
+            if (!DragonCombat.CanUseWorldInput(player) || advancement != "Wizard" || !IsWizardStaff(GetCurrentWeapon(player)))
             {
                 CancelWizardStaffCharge(player);
+                if (!DragonCombat.CanUseWorldInput(player)) DragonCombat.ClipStop(player, 0.1f);
                 return;
             }
 
@@ -2466,14 +2499,14 @@ namespace DragonsAltarSorcerer
             // Keep the attack postfix only as a low-latency assist. The actual
             // trigger is raw Mouse1 hold, so it no longer depends on a weapon
             // being classified as Magic or on Attack.Start repeating correctly.
-            if (player == null || GetAdvancement(player) != "Spellcaster" || !Input.GetKey(KeyCode.Mouse0))
+            if (!DragonCombat.CanUseWorldInput(player) || GetAdvancement(player) != "Spellcaster" || !Input.GetKey(KeyCode.Mouse0))
                 return;
             TryTriggerSpellcasterHeldFire(player);
         }
 
         private void UpdateSpellcasterHeldFire(Player player)
         {
-            if (player == null || !Input.GetKey(KeyCode.Mouse0))
+            if (!DragonCombat.CanUseWorldInput(player) || !Input.GetKey(KeyCode.Mouse0))
             {
                 // A fresh press always gets an immediate first trigger.
                 _nextSpellcasterHeldFire = 0f;
@@ -2485,7 +2518,7 @@ namespace DragonsAltarSorcerer
 
         private void TryTriggerSpellcasterHeldFire(Player player)
         {
-            if (player == null)
+            if (!DragonCombat.CanUseWorldInput(player))
                 return;
             ItemDrop.ItemData weapon = GetCurrentWeapon(player);
             // Rift Echo, Afterimages and Astral Clones pulse on a fixed cadence while Mouse1 is held,
@@ -3303,7 +3336,7 @@ namespace DragonsAltarSorcerer
 
         public void QueueMimicAttack(Player player, ItemDrop.ItemData weapon)
         {
-            if (player == null || ActiveCloneCount() == 0) return;
+            if (!DragonCombat.CanUseWorldInput(player) || ActiveCloneCount() == 0) return;
             _mimicAttackAt.Add(Time.time + 0.2f);
             _mimicAttackWeapon.Add(weapon);
         }

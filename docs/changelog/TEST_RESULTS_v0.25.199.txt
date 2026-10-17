@@ -1,0 +1,20 @@
+AETHELBORN ASCENDED v0.25.199 - PASS THREE VALIDATION
+2026-10-17 (Asia/Manila)
+Baseline: original Aethelborn_Ascended_v0.25.198_Relic_Faces_Cast_Completion.zip
+Baseline SHA-256: bdcc445ff23d4b37e69ac74406517d4c67e663efb83580017c7b6953dae13bbe
+
+VERIFIED OUTSIDE UNITY
+- All ten source modules fully compile with Roslyn 4.8, -langversion:5, supplied real Valheim/BepInEx/Harmony/Unity references, JotunnLib 2.30.2 and the restored UnityEngine.UI reference. Includes the new base-health, canonical method-handle, ZPackage, owner/identity and routed-RPC API calls. The package retains the existing PowerShell source installer; verification DLLs are not shipped as a Windows build.
+- 104 code/geometry checks pass: 88 actual compiled-method/IL/math checks and 16 source-derived managed-harness checks (8 extrusion invariants, 8 state snapshot/rollback invariants). Harnesses execute the shipped method bodies with only Unity-native Mesh/Player/combat services substituted; they do not execute a real animator/controller or native resource check.
+- Coverage includes prior Saving Grace, hearts, relic geometry, hammer growth, crossbow state/reload hooks, CA completion, dodge and tooltip checks; new cloud RGB/opacity samples, diagonal stroke selection/fallback, canonical real Valheim targets, skill-versus-heal/weapon factor paths, remote award owner/identity guards, and rejected combo state/resource recovery.
+- 110 source scope checks pass. Exactly four source modules changed. Other six modules are byte-identical. All 185 original art/animation assets are byte-identical. Successful NACC calculations and Ascended Heavy Slash gameplay/CA cadence remain identical except scoped transactional/visual additions. Blade Storm hit/damage routine, normal Heavy Slash, cape, crossbow/equipment rules, prior-pass geometry/CA fixes and buff mist are unchanged.
+- Archive CRC and every packaged file are checked; diff is against original v198. The original ZIP is unchanged. No Anchor promotion.
+
+LOG / VIDEO EVIDENCE LIMITS
+Both supplied logs were reviewed; they predate these passes and are not evidence of v199 running. The second video was inspected as context for the low-stamina pose freeze. The actual supplied Attack.Start implementation checks stamina before animation trigger, matching the found AA tentative-state failure path. This establishes a code defect and motivates the cleanup; it does not prove that this is the only cause in the full modded game.
+
+NOT VERIFIED HERE
+- Windows PowerShell Add-Type/INSTALL execution, live Harmony detours, native animation/rendering/material blending, actual skill damage in Valheim, RPC delivery between peers, Therzie controller behavior and live FPS/allocations require the checklist in TEST_THIS_BUILD.txt.
+- The custom tools/compile_check/check.sh 3029660, its Stubs.cs, mcs, tools/release.sh, original CLAUDE.md and git checkout/remote were not supplied in the source ZIP/environment. Their prescribed checks, release script, commit and push could not be run. The full C#5 compilation above is an additional real-reference check, not a claim that the missing signature checker reported zero. Dated project notes are supplied in docs/PROJECT_CHANGES_v0.25.199.txt.
+- No specific cause is established for the unattributed shader/audio/world warnings. VNEI's absent EpicLoot compatibility dependency is outside AA; only AA's avoidable broad lookup was changed.
+- HUD optimization removes four array allocations per repaint; no measured FPS/GC improvement is claimed. The requested thinner Blade Storm cloud also reduces its bounded particles; all other visuals are preserved.

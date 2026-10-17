@@ -1,0 +1,11 @@
+v0.25.197 - BATCH ONE IN-GAME CHECKLIST (ITEMS 1-4 ONLY)
+Run INSTALL.bat as usual. This is a separate test pass from v196, not a new Anchor.
+
+1. Saving Grace, solo: the Priest heart icon should read Saving Grace - Ready. Trigger the death-save; it should show the configured cooldown and recovery indicator. Rescue/recovery should behave as before.
+2. Saving Grace, multiplayer when available: all players should install this pass. An ally within the configured range of a living Priest should see the same heart/Ready indicator. Trigger that ally's save, then walk away, have the Priest disconnect or change class, or remove every Priest from sight. The ally's cooldown must remain and count down. Returning to a Priest must not reset or clear it. At expiry, show Ready if protected; otherwise remove the expired icon. Another ally keeps their own separate cooldown. A dead Priest must not grant readiness.
+3. Holy Relic: view from front, back, both sides and oblique angles in daylight/darkness. Both heart emblems should be exposed, with solid side surfaces and stronger green. Confirm the pulse/healing and other relic geometry are unchanged. Other disappearing gold/blue details are intentionally batch two.
+4. Ray of Hope, Divine Intervention and Ascended Lightning Relic: mist should be thicker and readily visible, with a short expanding cloud that fades. Confirm it does not hide the whole fight. Ascended Lightning Relic emits the added cloud only on landing. Buff, heal and damage behavior should match v196.
+5. Lightning Zap: watch from behind the caster; release and bolt sequence should travel from the caster's right to left. Confirm five bolts, unchanged CA and normal damage/marks.
+
+Items 5-12 from the request are intentionally not included in this build.
+Code checks do not establish rendered visibility, multiplayer behavior or FPS. Report any discrepancy with the skill name and log/video.

@@ -1,0 +1,30 @@
+AETHELBORN ASCENDED v0.25.198 - RELIC FACES AND CAST COMPLETION
+Batch two: items 5-8 only, based on the original v197 ZIP. Includes pass one's existing fixes.
+
+5. MODEL DETAILS DISAPPEARING BY ANGLE
+- Corrected the front/back cap triangle winding in shared beveled extrusion geometry. The caps previously pointed inward despite having outward normals, so backface culling hid the intended surfaces by viewing angle.
+- Covers the Goddess Relic's body/inset panels and Priest relic extrusions, including feathers and decorative details. The existing 3D side walls, outlines, UVs, normals, colors, materials, depth testing and model designs are retained.
+- Pass one's two raised green heart faces remain intact; their scoped orientation check is idempotent with the corrected shared geometry.
+
+6. JUDGEMENT HAMMER
+- Increased only the head's vertical thickness by 50% relative to v197. Accepted width, depth, grip, gold/ivory surfaces and blue gems remain as before.
+- Restored visible growth: Unity appends (Clone) when copying the cached model, but UpdateHammerVisual searches for the exact child name IH_Warhammer. Copied models now retain the template name, letting the existing updater scale them each flight step.
+- No changes to growth calculations, hit radius, damage, travel/spin speed, return, collision or resource/cooldown settings.
+
+7. WAIT FOR THE CA BEFORE ANOTHER CAST
+- New skill input waits for the complete current clip, the native animation follow-through, and any live Mixamo/source graph through fade-out. It no longer relies on the shorter first-0.25s-after-impact clip window.
+- Removed the unconditional same-skill exemption, which allowed repeat casts during their own unfinished CA.
+- Native follow-through explicitly releases ownership on completion before deferred component destruction, and stale ownership cannot block a newer animation generation.
+- Checks run before starting another cast or spending its resources. Existing multi-strike skill coroutines still drive their own subsequent CAs directly. No arbitrary extra CA delay or animation speed retiming.
+- Existing Whirlwind/Furious Winds/Starfall cancellation and active Priest relic dismissal remain available. Charge release/follow-up polling and Sword Master instant dodge cancellation are unchanged. Normal attack/combo and movement locks are unchanged.
+- Starter direct/legacy input and Sorcerer legacy bindings also check the pending CA.
+
+8. NORMAL HEAVY SLASH
+- The normal right-to-left slash explicitly retains its horizontal visual plane. Stale sampled weapon motion can no longer replace that effect with a vertical slash.
+- CA, sweep area, damage, timing and costs are unchanged. Ascended Heavy Slash's second-stroke revision remains for pass three.
+
+LOG REVIEW
+Reviewed both supplied logs and recorded actionable findings in docs/LOG_REVIEW_v0.25.198.txt for pass three. No unrelated log-driven code changes in this pass.
+
+PRESERVED
+Pass-one Saving Grace, heart placement/green tint, stronger support mist and right-to-left Lightning Zap; all config keys/defaults and 185 art/animation assets; NACC, crossbow state/reload, equipment rules, UI, cape guard, damage and hitboxes. Extra effect point lights remain removed. Items 9-12 are deferred. No Anchor promotion.

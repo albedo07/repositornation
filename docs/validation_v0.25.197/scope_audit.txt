@@ -1,0 +1,108 @@
+PASS: Original v196 archive is preserved exactly
+PASS: Exactly six modules changed for batch one: four implementation modules plus two display-name-only modules
+PASS: 185 existing art/animation assets remain byte-identical
+PASS: Byte-identical untouched module: DragonsAltar.Sorcerer.cs
+PASS: Byte-identical untouched module: AlbedosCustomClasses.Passives.cs
+PASS: Byte-identical untouched module: DragonsAltar.Ranger.cs
+PASS: Byte-identical untouched module: Aethelborn.Experience.cs
+PASS: INSTALL.bat: version/banner text only
+PASS: INSTALL.ps1: version/banner text only
+PASS: AlbedosCustomClasses.Advanced.cs: no methods removed or signatures changed
+PASS: AlbedosCustomClasses.Advanced.cs: only explicitly scoped method bodies changed: GetAdvancedPassiveDescription, GetAdvancedPassiveName, IhBuildHolyRelic
+PASS: AlbedosCustomClasses.Advanced.cs: only the intended helper methods added
+PASS: AlbedosCustomClasses.Advanced.cs: all config sections, keys and defaults unchanged
+PASS: AlbedosCustomClasses.Advanced.cs: no new .SetPositions(
+PASS: AlbedosCustomClasses.Advanced.cs: no new .GetPositions(
+PASS: AlbedosCustomClasses.Advanced.cs: no new .LoadImage(
+PASS: AlbedosCustomClasses.Advanced.cs: no new FindObjectOfType(
+PASS: AlbedosCustomClasses.Advanced.cs: UTF-8 BOM preserved
+PASS: AlbedosCustomClasses.Core.cs: no methods removed or signatures changed
+PASS: AlbedosCustomClasses.Core.cs: only the intended helper methods added
+PASS: AlbedosCustomClasses.Core.cs: all config sections, keys and defaults unchanged
+PASS: AlbedosCustomClasses.Core.cs: no new .SetPositions(
+PASS: AlbedosCustomClasses.Core.cs: no new .GetPositions(
+PASS: AlbedosCustomClasses.Core.cs: no new .LoadImage(
+PASS: AlbedosCustomClasses.Core.cs: no new FindObjectOfType(
+PASS: AlbedosCustomClasses.Core.cs: UTF-8 BOM preserved
+PASS: AlbedosCustomClasses.GuardianAngel.cs: no methods removed or signatures changed
+PASS: AlbedosCustomClasses.GuardianAngel.cs: only explicitly scoped method bodies changed: Awake, GetCustomData, HasNearbyPriest, OnDestroy, TriggerProtection, Update
+PASS: AlbedosCustomClasses.GuardianAngel.cs: only the intended helper methods added
+PASS: AlbedosCustomClasses.GuardianAngel.cs: all config sections, keys and defaults unchanged
+PASS: AlbedosCustomClasses.GuardianAngel.cs: no new .SetPositions(
+PASS: AlbedosCustomClasses.GuardianAngel.cs: no new .GetPositions(
+PASS: AlbedosCustomClasses.GuardianAngel.cs: no new .LoadImage(
+PASS: AlbedosCustomClasses.GuardianAngel.cs: no new FindObjectOfType(
+PASS: AlbedosCustomClasses.GuardianAngel.cs: UTF-8 BOM preserved
+PASS: AlbedosCustomClasses.Skills.cs: no methods removed or signatures changed
+PASS: AlbedosCustomClasses.Skills.cs: only explicitly scoped method bodies changed: AnimateConeLightning
+PASS: AlbedosCustomClasses.Skills.cs: only the intended helper methods added
+PASS: AlbedosCustomClasses.Skills.cs: all config sections, keys and defaults unchanged
+PASS: AlbedosCustomClasses.Skills.cs: no new .SetPositions(
+PASS: AlbedosCustomClasses.Skills.cs: no new .GetPositions(
+PASS: AlbedosCustomClasses.Skills.cs: no new .LoadImage(
+PASS: AlbedosCustomClasses.Skills.cs: no new FindObjectOfType(
+PASS: AlbedosCustomClasses.Skills.cs: UTF-8 BOM preserved
+PASS: DragonsAltar.CombatRuntime.cs: no methods removed or signatures changed
+PASS: DragonsAltar.CombatRuntime.cs: only explicitly scoped method bodies changed: Awake, DamageBuffMist, PrewarmTick, TimedBuffLook
+PASS: DragonsAltar.CombatRuntime.cs: only the intended helper methods added
+PASS: DragonsAltar.CombatRuntime.cs: all config sections, keys and defaults unchanged
+PASS: DragonsAltar.CombatRuntime.cs: no new .SetPositions(
+PASS: DragonsAltar.CombatRuntime.cs: no new .GetPositions(
+PASS: DragonsAltar.CombatRuntime.cs: no new .LoadImage(
+PASS: DragonsAltar.CombatRuntime.cs: no new FindObjectOfType(
+PASS: DragonsAltar.CombatRuntime.cs: UTF-8 BOM preserved
+PASS: DragonsAltar.DevTools.cs: no methods removed or signatures changed
+PASS: DragonsAltar.DevTools.cs: only the intended helper methods added
+PASS: DragonsAltar.DevTools.cs: all config sections, keys and defaults unchanged
+PASS: DragonsAltar.DevTools.cs: no new .SetPositions(
+PASS: DragonsAltar.DevTools.cs: no new .GetPositions(
+PASS: DragonsAltar.DevTools.cs: no new .LoadImage(
+PASS: DragonsAltar.DevTools.cs: no new FindObjectOfType(
+PASS: DragonsAltar.DevTools.cs: UTF-8 BOM preserved
+PASS: AlbedosCustomClasses.Core.cs: exact display-name/version changes only; internal skill IDs retained
+PASS: DragonsAltar.DevTools.cs: exact display-name/version changes only; internal skill IDs retained
+PASS: Unchanged public class DragonSkillClipDriver
+PASS: Unchanged public static class DragonMixamo
+PASS: Unchanged public static class DragonClothGuard
+PASS: Unchanged public class DragonWeaponWake
+PASS: Unchanged public class DragonCloudShellFade
+PASS: Entire DragonCombat gameplay class unchanged except recovery display label
+PASS: Unchanged skill/cancel routine: private IEnumerator AscendedHeavySlashRoutine
+PASS: Unchanged skill/cancel routine: private IEnumerator JudgementCutRoutine
+PASS: Unchanged skill/cancel routine: private IEnumerator WhirlwindRoutine
+PASS: Unchanged skill/cancel routine: private IEnumerator CrescentCleaveWave
+PASS: Unchanged skill/cancel routine: private IEnumerator RayOfHopeRoutine
+PASS: Unchanged skill/cancel routine: private IEnumerator DivineInterventionRoutine
+PASS: Unchanged skill/cancel routine: private IEnumerator LightningRelicRoutine
+PASS: Unchanged skill/cancel routine: private IEnumerator HolyRelicRoutine
+PASS: Unchanged skill/cancel routine: private IEnumerator HeavensJudgementRoutine
+PASS: Unchanged skill/cancel routine: private void UpdateSwordMasterInterrupt
+PASS: Deferred batch visuals untouched: public static void JudgementSphere
+PASS: Deferred batch visuals untouched: public static void CloudShellGeometry
+PASS: Deferred batch visuals untouched: public static Color CloudShellTexel
+PASS: Deferred batch visuals untouched: public static Vector3 HammerHeadPoint
+PASS: Deferred batch visuals untouched: private static void ThickenHammerHead
+PASS: Deferred batch visuals untouched: public static Mesh ExtrudeBevel
+PASS: Deferred batch visuals untouched: public static Material RelicGold
+PASS: Deferred batch visuals untouched: public static Material RelicGem
+PASS: Saving Grace gameplay/recovery unchanged: internal void TryProtectSetHealth
+PASS: Saving Grace gameplay/recovery unchanged: internal void TryProtectCheckDeath
+PASS: Saving Grace gameplay/recovery unchanged: private bool CanProtect
+PASS: Saving Grace gameplay/recovery unchanged: private IEnumerator Recovery
+PASS: Saving Grace gameplay/recovery unchanged: private IEnumerator GrandSigilVisual
+PASS: Lightning Zap damage, targets, CA, cost and cooldown unchanged
+PASS: Lightning Zap reverses only release and bolt direction; five bolts and 0.04s intervals retained
+PASS: Priest and ally share the same Saving Grace name, icon and status ID
+PASS: Remote Priest detection does not read private customData
+PASS: Only the owner publishes Priest state, and only when it changes
+PASS: Presence/indicator check is twice per second and avoids collider-array/hash-set allocations
+PASS: Active cooldown visibility is independent of Priest proximity
+PASS: Advertised Priest membership is cleared on plugin shutdown
+PASS: Only Holy Relic heart and its frame use corrected closed geometry on both sides
+PASS: Healing-only green tint is more saturated; blue and other relic materials unchanged
+PASS: Stronger support mist remains one bounded 52-particle system per cast
+PASS: Mist has higher opacity and larger billows
+PASS: Mist parameters are configured before its visible emission
+PASS: New cloud growth curve is cached and prewarmed
+PASS: Removed extra skill lights remain disabled
+107 source scope checks passed.

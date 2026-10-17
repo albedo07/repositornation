@@ -1,0 +1,226 @@
+--- v0.25.197/AlbedosCustomClasses.Advanced.cs
++++ v0.25.198/AlbedosCustomClasses.Advanced.cs
+@@ -116,7 +116,7 @@
+     {
+         public const string ModGuid = "albedo.customclasses.advanced";
+         public const string ModName = "Aethelborn Ascended - Advancements";
+-        public const string ModVersion = "0.25.197";
++        public const string ModVersion = "0.25.198";
+ 
+         private const string ClassDataKey = "AlbedoCustomClasses.Class";
+         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
+@@ -15039,16 +15039,22 @@
+                 IhCastSkill(player, IhGraceFor(player));
+         }
+ 
+-        // v0.25.80 (user): no multi-casting for any Class - one skill at a time, and it must finish (wind up / hold /
+-        // its swing) before another can start. Pressing the SAME skill again stays allowed (recasts, releases,
+-        // follow-up windows, channel cancels).
++        // Wait for the complete current CA before accepting another cast, including a repeat of the same skill.
++        // Existing channel cancellation/relic dismissal and coroutine-driven charge releases remain available.
+         private string _ihCastId;
+         private float _ihCastAt = -10f, _ihBusyMsgAt = -10f;
++        private bool IhIsActiveSkillControl(string id)
++        {
++            if (id == "whirlwind" && _whirlActive) return true;
++            if (id == "lightning_relic" && FindPriestRelic(true) != null) return true;
++            if (id == "holy_relic" && FindPriestRelic(false) != null) return true;
++            return DragonCombat.SkillCancelAvailable != null && DragonCombat.SkillCancelAvailable(id);
++        }
+         private bool IhSkillBusy(Player player, string id)
+         {
+             if (GetAdvancement(player) == "Sword Master" && player.InDodge()) return true;
+-            if (id == _ihCastId && Time.time - _ihCastAt < 120f) return false;
+-            bool busy = Time.time - _ihCastAt < 0.45f || DragonCombat.IsSkillLocked(player) || DragonCombat.ClipBusy(player);
++            if (IhIsActiveSkillControl(id)) return false;
++            bool busy = Time.time - _ihCastAt < 0.45f || DragonCombat.IsSkillLocked(player) || DragonCombat.SkillAnimationBusy(player);
+             if (busy && Time.time - _ihBusyMsgAt > 1f && !string.IsNullOrEmpty(_ihCastId))
+             {
+                 _ihBusyMsgAt = Time.time;
+--- v0.25.197/AlbedosCustomClasses.Skills.cs
++++ v0.25.198/AlbedosCustomClasses.Skills.cs
+@@ -232,7 +232,7 @@
+         public static SkillsPlugin Instance;
+         public const string ModGuid = "albedo.customclasses.skills";
+         public const string ModName = "Aethelborn Ascended - Starter Skills";
+-        public const string ModVersion = "0.25.197";
++        public const string ModVersion = "0.25.198";
+ 
+         private const string ClassDataKey = "AlbedoCustomClasses.Class";
+         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";
+@@ -596,7 +596,7 @@
+             if (DragonCombat.IsTreeHotbarActive(player))
+                 return;
+ 
+-            if (!DragonCombat.CanUseWorldInput(player) || !Input.GetKey(_modifier.Value))
++            if (!DragonCombat.CanUseWorldInput(player) || !Input.GetKey(_modifier.Value) || DragonCombat.SkillAnimationBusy(player))
+                 return;
+ 
+             if (Input.GetKeyDown(_skill1.Value))
+@@ -838,7 +838,7 @@
+         // v0.18.1: entry point for the Skill Tree hotbar (Advanced module).
+         public void CastFromHotbar(Player player, string skillId)
+         {
+-            if (player == null || player.IsDead())
++            if (player == null || player.IsDead() || DragonCombat.SkillAnimationBusy(player))
+                 return;
+             if (skillId == "lightning_zap")
+                 CastLightningZap(player);
+@@ -1134,7 +1134,7 @@
+ 
+         private IEnumerator AnimateSlashArc(Vector3 center, Vector3 forward, float radius, float angle, Color color, bool rightToLeft = false)
+         {
+-            if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.SlashArc(center, forward, radius, angle, color, Mathf.Max(0.5f, radius * 0.25f), 0.45f, rightToLeft ? 180f : 0f); });   // v0.25.59 skin
++            if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.SlashArc(center, forward, radius, angle, color, Mathf.Max(0.5f, radius * 0.25f), 0.45f, rightToLeft ? 180f : 0f, !rightToLeft); });   // Heavy Slash keeps its intended horizontal right-to-left sweep.
+             if (_enableVfx.Value && DragonVfx.Enabled) yield break;   // v0.25.63 no line placeholder
+             GameObject obj = new GameObject("DragonsAltarSlashArc");
+             LineRenderer line = obj.AddComponent<LineRenderer>();
+--- v0.25.197/DragonsAltar.CombatRuntime.cs
++++ v0.25.198/DragonsAltar.CombatRuntime.cs
+@@ -16,7 +16,7 @@
+     {
+         public const string ModGuid = "albedo.customclasses.combatruntime";
+         public const string ModName = "Aethelborn Ascended - Combat Runtime";
+-        public const string ModVersion = "0.25.197";
++        public const string ModVersion = "0.25.198";
+ 
+         internal static DragonCombatPlugin Instance;
+ 
+@@ -4568,6 +4568,22 @@
+             DragonSkillClipDriver d = player.GetComponent<DragonSkillClipDriver>();
+             return d != null && d.IsBusy;
+         }
++
++        // New-cast gate only: movement locks/NACC retain their existing rules. Internal skill strikes bypass it.
++        public static bool SkillAnimationBusy(Player player)
++        {
++            if (player == null || player.IsDead()) return false;
++            DragonSkillClipDriver driver = player.GetComponent<DragonSkillClipDriver>();
++            if (driver != null && driver.enabled && driver.IsPlaying) return true;
++            DragonVanillaTail tail = player.GetComponent<DragonVanillaTail>();
++            if (tail != null && tail.enabled && tail.IsBusy) return true;
++            Animator animator = player.GetComponentInChildren<Animator>();
++            DragonMixamoPlayer source = animator == null ? null : animator.GetComponent<DragonMixamoPlayer>();
++            return source != null && source.enabled && source.Live;
++        }
++
++        // Registered by Ranger for actions which stop an existing channel without starting a new CA.
++        public static Func<string, bool> SkillCancelAvailable;
+ 
+         public static void PlayAccent(Player player, string clip, float windup)
+         {
+@@ -11959,6 +11975,8 @@
+         private int _layer, _hash, _pre;
+         private float _k, _endN, _until;
+         private int _gen;   // v0.25.154
++        private bool _active;
++        public bool IsBusy { get { return _active && _gen == DragonCombat.SkillAnimGen; } }
+ 
+         public static void Run(Player p, Animator an, int layer, int hash, float k, float endN, int pre)
+         {
+@@ -11967,12 +11985,15 @@
+             if (t == null) t = p.gameObject.AddComponent<DragonVanillaTail>();
+             t._gen = DragonCombat.SkillAnimGen;
+             t._p = p; t._an = an; t._layer = layer; t._hash = hash; t._k = k; t._endN = endN; t._pre = pre;
++            t._active = true;
+             t._until = Time.time + 8f;
+             DragonCombat.SetSkillAnimSpeed(p, k, 0.15f);
+         }
+ 
+         private void Done(bool reset)
+         {
++            _active = false;
++            enabled = false;
+             if (reset && _p != null) DragonCombat.ReleaseSkillAnimSpeed(_p, _k);
+             Destroy(this);
+         }
+@@ -16419,7 +16440,7 @@
+         }
+         public static Vector3 HammerHeadPoint(Vector3 point)
+         {
+-            if (point.y > 0.24f) return new Vector3(point.x * 1.12f, 0.39f + (point.y - 0.39f) * 1.6f, point.z * 1.3f);
++            if (point.y > 0.24f) return new Vector3(point.x * 1.12f, 0.39f + (point.y - 0.39f) * 2.4f, point.z * 1.3f);
+             return point;
+         }
+         private static void ThickenHammerHead(GameObject hammer)
+@@ -16745,8 +16766,9 @@
+                 for (int i = 0; i < n; i++) { v.Add(new Vector3(inner[i].x, inner[i].y, z)); nr.Add(nz); uv.Add(inner[i] * uvScale); }
+                 for (int i = 0; i + 2 < tri.Length; i += 3)
+                 {
+-                    if (side == 0) { t.Add(b0 + tri[i]); t.Add(b0 + tri[i + 2]); t.Add(b0 + tri[i + 1]); }
+-                    else { t.Add(b0 + tri[i]); t.Add(b0 + tri[i + 1]); t.Add(b0 + tri[i + 2]); }
++                    // CCW cap triangles point toward +Z; reverse only the back cap.
++                    if (side == 0) { t.Add(b0 + tri[i]); t.Add(b0 + tri[i + 1]); t.Add(b0 + tri[i + 2]); }
++                    else { t.Add(b0 + tri[i]); t.Add(b0 + tri[i + 2]); t.Add(b0 + tri[i + 1]); }
+                 }
+             }
+             // walls + bevels: quads around the perimeter
+@@ -18662,6 +18684,8 @@
+             if (!Enabled || parent == null) return null;
+             WarmWarhammer();
+             GameObject model = UnityEngine.Object.Instantiate(_warhammerTemplate) as GameObject;
++            // Keep the exact child name used by UpdateHammerVisual; Instantiate appends (Clone).
++            model.name = _warhammerTemplate.name;
+             model.transform.SetParent(parent, false); model.SetActive(true);
+             return model;
+         }
+--- v0.25.197/DragonsAltar.Ranger.cs
++++ v0.25.198/DragonsAltar.Ranger.cs
+@@ -42,7 +42,7 @@
+     {
+         public const string ModGuid = "albedo.customclasses.ranger";
+         public const string ModName = "Aethelborn Ascended - Ranger";
+-        public const string ModVersion = "0.25.195";
++        public const string ModVersion = "0.25.198";
+         private const string ClassDataKey = "AlbedoCustomClasses.Class";
+         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
+ 
+@@ -374,6 +374,8 @@
+             DragonCombat.RegisterSkillLevelBonus(SkillLevelBonus);
+             DragonCombat.RegisterIncomingHitFilter(IncomingHit);
+             DragonCombat.ControlsHook = RangerControls;
++            DragonCombat.SkillCancelAvailable = delegate(string id)
++            { return (id == "furious_winds" && _fwActive) || (id == "starfall_volley" && _sfActive); };
+             DragonCombat.NormalAttackBaseSpeedProvider = RangerBowFireSpeed;
+             InstallPatches();
+             Logger.LogInfo(ModName + " v" + ModVersion + " loaded.");
+--- v0.25.197/DragonsAltar.Sorcerer.cs
++++ v0.25.198/DragonsAltar.Sorcerer.cs
+@@ -165,7 +165,7 @@
+     {
+         public const string ModGuid = "albedo.customclasses.sorcerer";
+         public const string ModName = "Aethelborn Ascended - Sorcerer Advancements";
+-        public const string ModVersion = "0.25.193";
++        public const string ModVersion = "0.25.198";
+ 
+         private const string ClassDataKey = "AlbedoCustomClasses.Class";
+         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
+@@ -848,7 +848,7 @@
+             if (DragonCombat.IsTreeHotbarActive(player))
+                 return;
+ 
+-            if (!DragonCombat.CanUseWorldInput(player) || !Input.GetKey(_modifier.Value))
++            if (!DragonCombat.CanUseWorldInput(player) || !Input.GetKey(_modifier.Value) || DragonCombat.SkillAnimationBusy(player))
+                 return;
+ 
+             // M4+1/2/3 starter skills are owned by AlbedosCustomClasses.Skills.dll.
+--- v0.25.197/INSTALL.bat
++++ v0.25.198/INSTALL.bat
+@@ -1,5 +1,5 @@
+ @echo off
+-title Immortal Heroes v0.25.197 - Saving Grace and Holy Relic
++title Immortal Heroes v0.25.198 - Relic Faces and Cast Completion
+ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
+ echo.
+ pause
+--- v0.25.197/INSTALL.ps1
++++ v0.25.198/INSTALL.ps1
+@@ -1,7 +1,7 @@
+ $ErrorActionPreference = "Stop"
+ 
+ Write-Host ""
+-Write-Host "IMMORTAL HEROES v0.25.197 - SAVING GRACE AND HOLY RELIC" -ForegroundColor Cyan
++Write-Host "IMMORTAL HEROES v0.25.198 - RELIC FACES AND CAST COMPLETION" -ForegroundColor Cyan
+ Write-Host "All 10 DLLs compile in staging before the live profile is touched." -ForegroundColor Gray
+ Write-Host ""
+ 

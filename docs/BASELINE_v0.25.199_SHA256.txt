@@ -1,0 +1,4 @@
+Protected starting archive: Aethelborn_Ascended_v0.25.199_Guidance_Combo_Recovery.zip
+Version: v0.25.199
+SHA-256: ed887e04aa94fca893b39fe97762a64cd16d926270df2667edcf2d24276346d4
+The original archive was verified and preserved unchanged. v200 uses a separate working copy/output archive. This record does not promote v199 or v200 to a new Anchor.

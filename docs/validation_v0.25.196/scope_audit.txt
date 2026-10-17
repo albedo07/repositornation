@@ -1,0 +1,59 @@
+PASS: Original v195 archive is preserved exactly
+PASS: Only the two requested visual implementation modules changed
+PASS: 185 existing art/animation assets unchanged
+PASS: Untouched module remains byte-identical: AlbedosCustomClasses.Core.cs
+PASS: Untouched module remains byte-identical: DragonsAltar.Ranger.cs
+PASS: Untouched module remains byte-identical: AlbedosCustomClasses.GuardianAngel.cs
+PASS: Untouched module remains byte-identical: AlbedosCustomClasses.Passives.cs
+PASS: Untouched module remains byte-identical: DragonsAltar.DevTools.cs
+PASS: Untouched module remains byte-identical: AlbedosCustomClasses.Skills.cs
+PASS: Untouched module remains byte-identical: Aethelborn.Experience.cs
+PASS: Untouched module remains byte-identical: DragonsAltar.Sorcerer.cs
+PASS: INSTALL.bat changes only the version/banner; byte encoding and line endings preserved
+PASS: INSTALL.ps1 changes only the version/banner; byte encoding and line endings preserved
+PASS: AlbedosCustomClasses.Advanced.cs: all config keys/defaults/descriptions unchanged
+PASS: AlbedosCustomClasses.Advanced.cs: no new .SetPositions( calls
+PASS: AlbedosCustomClasses.Advanced.cs: no new .GetPositions( calls
+PASS: AlbedosCustomClasses.Advanced.cs: no new .LoadImage( calls
+PASS: AlbedosCustomClasses.Advanced.cs: no new FindObjectOfType( calls
+PASS: DragonsAltar.CombatRuntime.cs: all config keys/defaults/descriptions unchanged
+PASS: DragonsAltar.CombatRuntime.cs: no new .SetPositions( calls
+PASS: DragonsAltar.CombatRuntime.cs: no new .GetPositions( calls
+PASS: DragonsAltar.CombatRuntime.cs: no new .LoadImage( calls
+PASS: DragonsAltar.CombatRuntime.cs: no new FindObjectOfType( calls
+PASS: Unchanged public static class DragonCombat (apart from release version)
+PASS: Unchanged public class DragonSkillClipDriver (apart from release version)
+PASS: Unchanged public static class DragonMixamo (apart from release version)
+PASS: Unchanged public static class DragonClothGuard (apart from release version)
+PASS: Unchanged public class DragonWeaponWake (apart from release version)
+PASS: Unchanged public class DragonCombatPlugin (apart from release version)
+PASS: Unchanged gameplay/UI method: private IEnumerator JudgementCutRoutine
+PASS: Unchanged gameplay/UI method: private IEnumerator WhirlwindRoutine
+PASS: Unchanged gameplay/UI method: private IEnumerator WhirlwindAscendedRoutine
+PASS: Unchanged gameplay/UI method: private IEnumerator CrescentCleaveWave
+PASS: Unchanged gameplay/UI method: private IEnumerator SpiritTrail
+PASS: Unchanged gameplay/UI method: private IEnumerator PaladinTrail
+PASS: Unchanged gameplay/UI method: private IEnumerator MoonlightRoutine
+PASS: Unchanged gameplay/UI method: private IEnumerator MoonlightAscendedRoutine
+PASS: Unchanged gameplay/UI method: private IEnumerator GrandSigilBarrierRoutine
+PASS: Unchanged gameplay/UI method: private string IhComposeTooltip
+PASS: Unchanged gameplay/UI method: private void UpdateSwordMasterInterrupt
+PASS: Ascended Heavy Swing changes only the visual-plane override: cadence, native CAs, damage and targets retained
+PASS: Ray of Hope changes only by adding one visual callback
+PASS: Divine Intervention changes only by adding mist to its existing VFX callback
+PASS: Ascended Lightning Relic adds mist once on landing; pulses/healing/damage unchanged
+PASS: Heavens Judgement changes only the radius visual: duration, beam timing, damage and hit areas retained
+PASS: Third strike cannot be overwritten by old sampled motion
+PASS: Wisps stay on the surface with small puff sizes, leaving a hollow center
+PASS: All volume particles are cleared and shell emission configured before playback
+PASS: Curved cloud fade uses cached renderer/properties instead of mutating shared meshes
+PASS: Existing weapon wake update order is preserved
+PASS: Gold/ivory/gem colors are in RGB albedo pixels instead of relying on a material tint
+PASS: Goddess and hammer bodies are gold; ivory remains on channels/striking faces
+PASS: Relic gems are mounted on both visible faces instead of buried inside the body
+PASS: Hammer has a larger head and larger blue gems, with cached geometry
+PASS: Extra point lights stay removed
+PASS: Sigil honors the existing guide toggle
+PASS: New shell and sigil textures/materials are prepared before casts
+PASS: Per-cast cloud fade does not own or destroy the shared cached shell mesh
+58 source scope checks passed.

@@ -1,0 +1,1756 @@
+--- v0.25.194/AlbedosCustomClasses.Advanced.cs
++++ v0.25.195/AlbedosCustomClasses.Advanced.cs
+@@ -116,7 +116,7 @@
+     {
+         public const string ModGuid = "albedo.customclasses.advanced";
+         public const string ModName = "Aethelborn Ascended - Advancements";
+-        public const string ModVersion = "0.25.194";
++        public const string ModVersion = "0.25.195";
+ 
+         private const string ClassDataKey = "AlbedoCustomClasses.Class";
+         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
+@@ -1221,6 +1221,8 @@
+             foreach(Texture2D texture in _ihAscendedIconArt.Values) if(texture!=null) Destroy(texture);
+             foreach(Texture2D texture in _ihPolishTextures) if(texture!=null) Destroy(texture);
+             _ihAscendedIconArt.Clear(); _ihPolishTextures.Clear(); _ihFrameSprites.Clear();
++            foreach (GameObject template in _relicTemplates.Values) if (template != null) Destroy(template);
++            _relicTemplates.Clear();
+             EndShieldCharge();
+             if (_harmony != null)
+             {
+@@ -1290,6 +1292,7 @@
+             if (player == null)
+                 return;
+ 
++            IhPrewarmRelics(player);
+             IhEnsureCommands();
+             IhUpdateHolyParryIndicator(player);
+ 
+@@ -2085,13 +2088,13 @@
+             return cfg.Blunt.Value + cfg.Slash.Value + cfg.Pierce.Value + cfg.Fire.Value + cfg.Frost.Value + cfg.Lightning.Value + cfg.Poison.Value + cfg.Spirit.Value;
+         }
+ 
+-        // Block or Dodge stops the rest of a Sword Master skill sequence (The Way of the Sword).
++        // v0.25.195: only Dodge cancels Sword Master skills; holding Block never interrupts a cast.
+         private void UpdateSwordMasterInterrupt(Player player, string advancement)
+         {
+             if (advancement != "Sword Master" || player == null) return;
+             try
+             {
+-                if (player.IsBlocking() || player.InDodge())
++                if (player.InDodge())
+                     _smInterruptAt = Time.time;
+             }
+             catch { }
+@@ -3567,7 +3570,7 @@
+         private ConfigEntry<int> _bombAscBurnStacks;
+         private ConfigEntry<float> _whirlAscDuration, _whirlAscTickPercent, _whirlAscSweepPercent;
+         private ConfigEntry<float> _bcRadius, _bcCreatureBonus, _bcCreatureDuration, _bcEnvBonus, _bcEnvDuration, _bcCooldown;
+-        private ConfigEntry<float> _hsAscReach, _hsAscHyper;
++        private ConfigEntry<float> _hsAscReach, _hsAscHyper, _hsAscStrikeInterval;
+         private float _mercLastCombat;
+         private bool _whirlStopRequested;
+         private bool _whirlActive;
+@@ -3652,6 +3655,7 @@
+ 
+             const string h = "Mercenary Heavy Slash Ascended";
+             _hsAscReach = Config.Bind(h, "Reach", 5f, "Ascended reach (normal 3.5m).");
++            _hsAscStrikeInterval = Config.Bind(h, "StrikeInterval_v025195", 0.7f, "Minimum seconds between the three Battleaxe contacts (3SS), never below 0.7s.");
+             _hsAscHyper = Config.Bind(h, "HyperArmorOnHit", 2f, "Hyper Armor seconds when it connects (refreshes, never stacks).");
+             _heavyAscDamage = BindDamage("Mercenary Heavy Slash Ascended Damage", 0f, 110f, 0f, 0f, 0f, 0f, 0f, 0f);
+ 
+@@ -3963,7 +3967,7 @@
+         }
+ 
+         // Plays one vanilla swing at speed s until its natural time reaches 'until' (hit or chain point).
+-        private IEnumerator CsSwing(Player player, string trig, float s, AnimationClip skip, float until, bool hitMark, float startNorm, System.Action<AnimationClip> done, float contactSeconds = 0f)
++        private IEnumerator CsSwing(Player player, string trig, float s, AnimationClip skip, float until, bool hitMark, float startNorm, System.Action<AnimationClip> done, float contactSeconds = 0f, float maxSpeed = 4f)
+         {
+             Animator an = player.GetComponentInChildren<Animator>();
+             float[] tm = CsTiming(trig);
+@@ -3983,7 +3987,7 @@
+                         if (hitMark && contactSeconds > 0f)
+                         {
+                             float naturalNow = Mathf.Max(0f, CsClipTime(an, layer, clip));
+-                            s = CsContactSpeed(target, naturalNow, Time.time - t0, contactSeconds);
++                            s = Mathf.Min(maxSpeed, CsContactSpeed(target, naturalNow, Time.time - t0, contactSeconds));
+                             DragonCombat.SetSkillAnimSpeed(player, s, 0.25f);
+                         }
+                         if (startNorm > 0.001f)
+@@ -4664,6 +4668,8 @@
+             ShowMessage("Heavy Slash");
+             AnimationClip previous = null;
+             float speed = 1f;
++            float lastContact = -100f;
++            float spacing = Mathf.Max(0.7f, _hsAscStrikeInterval.Value);
+             for (int strike = 0; strike < 3; strike++)
+             {
+                 if (player == null || player.IsDead()) yield break;
+@@ -4671,20 +4677,27 @@
+                 string trigger = DragonCombat.ResolveTriggerName(an, "battleaxe_attack" + strike.ToString());
+                 if (trigger != null)
+                 {
+-                    if (strike == 0) speed = Mathf.Clamp(CsTiming(trigger)[0] / Mathf.Max(0.05f, windup), 0.1f, 4f);
++                    // Contact spacing is absolute: class attack-speed bonuses must not collapse this 3SS.
++                    float contactDelay = strike == 0 ? Mathf.Max(0.05f, windup) : Mathf.Max(0.5f, lastContact + spacing - Time.time);
++                    speed = Mathf.Clamp(CsTiming(trigger)[0] / contactDelay, 0.1f, 1.25f);
++                    contactDelay = Mathf.Max(contactDelay, CsTiming(trigger)[0] / speed);
+                     DragonCombat.FireVanilla(player, trigger);
++                    DragonVfx.WeaponWake(player, contactDelay * 0.6f, 0.55f);
+                     AnimationClip current = null;
+                     yield return StartCoroutine(CsSwing(player, trigger, speed, previous, 0f, true, 0f,
+-                        delegate(AnimationClip c) { current = c; }, strike == 0 ? windup : 0f));
+-                    if (strike == 0) speed = Mathf.Clamp(CsTiming(trigger)[0] / Mathf.Max(0.05f, windup), 0.1f, 4f);
++                        delegate(AnimationClip c) { current = c; }, contactDelay, 1.25f));
++                    speed = Mathf.Clamp(CsTiming(trigger)[0] / contactDelay, 0.1f, 1.25f);
+                     previous = current;
+                 }
+                 else
+                 {
+-                    DragonCombat.PlayClip(player, "merc_heavy_asc", strike == 0 ? windup : 0.45f);
+-                    yield return new WaitForSeconds(strike == 0 ? windup : 0.45f);
++                    DragonCombat.PlayClip(player, "merc_heavy_asc", strike == 0 ? windup : spacing);
++                    yield return new WaitForSeconds(strike == 0 ? windup : spacing);
+                 }
+                 if (player == null || player.IsDead()) yield break;
++                if (strike > 0 && Time.time < lastContact + spacing)
++                    yield return new WaitForSeconds(lastContact + spacing - Time.time);
++                lastContact = Time.time;
+                 Vector3 origin = player.transform.position + Vector3.up;
+                 Vector3 forward = GetCrosshairDirection(player, origin);
+                 float range = Mathf.Max(0.5f, DragonCombat.M(_hsAscReach.Value));
+@@ -4697,7 +4710,14 @@
+                     GainMercenaryFuryFromSkillHit(player);
+                 }
+                 if (targets.Count > 0) DragonCombat.GrantHyperArmor(player, Mathf.Max(0f, _hsAscHyper.Value));
+-                if (_enableVfx.Value) StartCoroutine(AnimateHalfmoonArc(origin, FlatForward(player), range));
++                if (_enableVfx.Value)
++                {
++                    Vector3 fxOrigin = origin, fxForward = FlatForward(player); float fxRange = range;
++                    // Battleaxe 1 sweeps right-to-left, 2 returns left-to-right, 3 comes down vertically.
++                    float strokeRoll = strike == 0 ? 180f : strike == 1 ? 0f : -90f;
++                    DragonCombat.RunVfx(delegate { DragonVfx.SlashArc(fxOrigin, fxForward, fxRange, 150f,
++                        new Color(1f, 0.55f, 0.20f, 1f), Mathf.Max(0.25f, fxRange * 0.12f), 0.4f, strokeRoll); });
++                }
+                 if (trigger != null)
+                 {
+                     float until = strike < 2 ? CsTiming(trigger)[1] : CsTiming(trigger)[2];
+@@ -4719,6 +4739,8 @@
+                         b.Append(IhLine("Damage", IhDamage(_heavyAscDamage, power) + " per strike, 3 strikes"));
+                         b.Append(IhLine("Reach", IhNum(_hsAscReach.Value) + "m"));
+                         b.Append(IhLine("On Hit", IhNum(_hsAscHyper.Value) + "s Hyper Armor"));
++                        b.Append(IhLine("Strikes", "3 Battleaxe strikes (3SS)"));
++                        b.Append(IhLine("Strike Interval", "At least " + IhNum(Mathf.Max(0.7f, _hsAscStrikeInterval.Value)) + "s between hits"));
+                     }
+                     else
+                     {
+@@ -5721,10 +5743,10 @@
+             // v0.25.189 (user ref: Dragon Nest relic, 4th image): a polished gold-framed Celtic cross - flared pattee arms
+             // with an ivory panel set into the gold frame, a thin gold line down the panel, gold bands, a gold seal with a
+             // glowing gem at the crossing and a heavy gold ring carrying filigree scroll curls. Lit, shadow casting, cached meshes.
+-            Material gold = DragonVfx.RelicGold(), ivory = DragonVfx.RelicIvory(), gem = DragonVfx.RelicGem(Color.Lerp(color, new Color(1f, 0.85f, 0.4f, 1f), 0.5f));
++            Material gold = DragonVfx.RelicGold(), ivory = DragonVfx.RelicIvory(), gem = DragonVfx.RelicGem(new Color(0.15f, 0.48f, 0.85f, 1f));
+             if (gold == null || ivory == null || gem == null) return;
+             bool big = height > 9f;
+-            float t = thick, d = t * 0.8f, a = t * 0.5f, F = a * 1.55f, Lf = t * 1.5f, c = t * 0.2f, spike = t * 1.8f;
++            float t = thick, d = t * 1.3f, a = t * 0.5f, F = a * 1.55f, Lf = t * 1.5f, c = t * 0.2f, spike = t * 1.8f;
+             float armY = height * 0.12f, topY = height * 0.5f, footY = -height * 0.5f, half = width * 0.5f;
+             string key = "goddess|" + height.ToString("0.00") + "|" + width.ToString("0.00") + "|" + t.ToString("0.000");
+             Mesh body = IhRelicMesh(key + "|body", delegate { return DragonVfx.ExtrudeBevel(IhCrossOutline(0, a, F, Lf, c, half, armY, topY, footY, spike), d, t * 0.1f, 1f / Mathf.Max(0.2f, t * 2.2f)); });
+@@ -5748,7 +5770,12 @@
+             IhTorus(root, gold, new Vector3(0f, armY, d * 0.56f), a * 0.95f, t * 0.07f);
+             IhTorus(root, gold, new Vector3(0f, armY, -d * 0.56f), a * 0.95f, t * 0.07f);
+             IhRelicDisc(root, gold, new Vector3(0f, armY, 0f), a * 1.3f, d * 1.14f);
+-            IhRelicDiamond(root, gem, new Vector3(0f, armY, 0f), t * 0.3f, d * 1.22f);
++            IhRelicDiamond(root, gem, new Vector3(0f, armY, 0f), t * 0.78f, d * 1.65f);
++            for (int side = -1; side <= 1; side += 2)
++            {
++                IhRelicDiamond(root, gem, new Vector3(half * 0.64f * side, armY, 0f), t * 0.38f, d * 1.35f);
++                IhRelicDiamond(root, gem, new Vector3(0f, Mathf.Lerp(armY, side > 0 ? topY : footY, 0.45f), 0f), t * 0.42f, d * 1.35f);
++            }
+             // the heavy gold ring with an ivory band on each face and filigree scroll curls at the diagonals
+             float rr = Mathf.Clamp(width * 0.3f, t * 2.2f, height * 0.3f);
+             IhTorus(root, gold, new Vector3(0f, armY, 0f), rr, t * 0.26f);
+@@ -5880,8 +5907,9 @@
+ 
+         private void IhRelicDiamond(Transform root, Material m, Vector3 pos, float size, float depth)
+         {
+-            GameObject a = IhCrossBlock(root, m, pos, new Vector3(size, size, depth));
+-            if (a != null) a.transform.localRotation = Quaternion.Euler(0f, 0f, 45f);
++            string key = "gem195|" + size.ToString("R") + "|" + depth.ToString("R");
++            Mesh mesh = IhRelicMesh(key, delegate { return DragonVfx.RelicDiamondMesh(size, depth); });
++            IhRelicMeshObject(root, mesh, m, pos);
+         }
+ 
+         private void IhRelicDisc(Transform root, Material m, Vector3 pos, float diameter, float depth)
+@@ -5915,6 +5943,7 @@
+                 const int seg = 40, side = 10;
+                 Vector3[] v = new Vector3[(seg + 1) * (side + 1)];
+                 Vector3[] nrm = new Vector3[v.Length];
++                Vector2[] uv = new Vector2[v.Length];
+                 int[] tri = new int[seg * side * 6];
+                 for (int i = 0; i <= seg; i++)
+                 {
+@@ -5926,6 +5955,7 @@
+                         Vector3 n = c * Mathf.Cos(b) + Vector3.forward * Mathf.Sin(b);
+                         v[i * (side + 1) + j] = c * radius + n * tube;
+                         nrm[i * (side + 1) + j] = n;
++                        uv[i * (side + 1) + j] = new Vector2((float)i / seg * 8f, (float)j / side);
+                     }
+                 }
+                 int k = 0;
+@@ -5937,7 +5967,7 @@
+                         tri[k++] = p0 + 1; tri[k++] = p1; tri[k++] = p1 + 1;
+                     }
+                 mesh = new Mesh();
+-                mesh.vertices = v; mesh.normals = nrm; mesh.triangles = tri;
++                mesh.vertices = v; mesh.normals = nrm; mesh.uv = uv; mesh.triangles = tri;
+                 mesh.RecalculateBounds();
+                 _ihTorus[key] = mesh;
+             }
+@@ -6318,7 +6348,7 @@
+         private IEnumerator ShieldChargeRoutine(Player player, Rigidbody body, CapsuleCollider capsule)
+         {
+             ShowMessage("Shield Charge");
+-            if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.TrailWhile(player.transform, DragonVfx.Holy, 0.6f, delegate { return _shieldChargeActive && player != null; }); DragonVfx.GroundDust(player.transform, 0.9f, delegate { return _shieldChargeActive && player != null; }); DragonVfx.PressureCone(player.transform, DragonVfx.Holy, 1.3f, 30f, delegate { return _shieldChargeActive && player != null; }); });   // v0.25.181 vapour cone   // v0.25.169 dust kicked up by the charge
++            if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.TrailWhile(player.transform, DragonVfx.Holy, 0.6f, delegate { return _shieldChargeActive && player != null; }); DragonVfx.GroundDust(player.transform, 0.9f, delegate { return _shieldChargeActive && player != null; }); DragonVfx.PressureCone(player.transform, DragonVfx.Holy, IsAscendedSkill("shield_charge") ? 1.3f * Mathf.Max(1f, _chargeAscHitRadius.Value / Mathf.Max(0.1f, _shieldChargeRadius.Value)) : 1.3f, 30f, delegate { return _shieldChargeActive && player != null; }); });   // v0.25.181 vapour cone   // v0.25.169 dust kicked up by the charge
+             if (_enableVfx.Value && DragonVfx.Enabled)
+             {
+                 // v0.25.191 (user): thin ivory light on the shield face (off-hand side, in front of the chest) + sparse sideward air streaks
+@@ -7070,6 +7100,7 @@
+             }
+         }
+ 
++        private static readonly int[] _cleanseHashes = { StableHash("Burning"), StableHash("Spirit"), StableHash("Poison"), StableHash("Frost") };
+         private void CleanseAilments(Player ally)
+         {
+             if (ally == null)
+@@ -7080,17 +7111,9 @@
+             _refreshingSpiritBurns.Remove(id);
+             try
+             {
+-                object seman = ally.GetSEMan();
+-                if (seman == null)
+-                    return;
+-                MethodInfo remove = seman.GetType().GetMethod("RemoveStatusEffect",
+-                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+-                    null, new Type[] { typeof(int), typeof(bool) }, null);
+-                if (remove == null)
+-                    return;
+-                string[] ailments = { "Burning", "Spirit", "Poison", "Frost" };
+-                for (int i = 0; i < ailments.Length; i++)
+-                    remove.Invoke(seman, new object[] { StableHash(ailments[i]), false });
++                SEMan seman = ally.GetSEMan();
++                if (seman == null) return;
++                for (int i = 0; i < _cleanseHashes.Length; i++) seman.RemoveStatusEffect(_cleanseHashes[i], false);
+             }
+             catch (Exception ex)
+             {
+@@ -12011,6 +12034,44 @@
+             return targetPoint + Vector3.up * (Mathf.Max(0.1f, height) * 0.5f + 0.04f);
+         }
+ 
++        private readonly Dictionary<string, GameObject> _relicTemplates = new Dictionary<string, GameObject>();
++        private float _relicWarmAt;
++        private int _relicWarmStep;
++        private GameObject IhRelicTemplate(int style, Color color, float height, float width, float thickness)
++        {
++            string key = style.ToString() + "|" + height.ToString("R") + "|" + width.ToString("R") + "|" + thickness.ToString("R");
++            GameObject template;
++            if (_relicTemplates.TryGetValue(key, out template) && template != null) return template;
++            // F8 can change dimensions repeatedly. Keep the template cache bounded.
++            if (_relicTemplates.Count >= 12)
++            { foreach (GameObject old in _relicTemplates.Values) if (old != null) Destroy(old); _relicTemplates.Clear(); }
++            template = new GameObject("IH_RelicTemplate"); template.SetActive(false); DontDestroyOnLoad(template);
++            if (style == 0) IhBuildSolidCross(template.transform, color, height, width, thickness);
++            else if (style == 1) IhBuildLightningRelic(template.transform, color, height, width, thickness);
++            else IhBuildHolyRelic(template.transform, color, height, width, thickness);
++            // Primitive helpers schedule collider removal. Strip them before cloning even on a first-use frame.
++            Collider[] cosmeticColliders = template.GetComponentsInChildren<Collider>(true);
++            for (int i = 0; i < cosmeticColliders.Length; i++) DestroyImmediate(cosmeticColliders[i]);
++            _relicTemplates[key] = template;
++            return template;
++        }
++        private void IhPrewarmRelics(Player player)
++        {
++            if (_relicWarmStep >= 4 || !DragonVfx.MaterialsReady || !DragonVfx.Enabled || !_enableVfx.Value ||
++                Time.time < _relicWarmAt || DragonCombat.IsSkillLocked(player) || player.InAttack()) return;
++            _relicWarmAt = Time.time + 0.2f;
++            if (_relicWarmStep < 2)
++            {
++                float scale = _relicWarmStep == 1 ? Mathf.Max(1f, _goddessAscSizeMultiplier.Value) : 1f;
++                float height = Mathf.Max(1f, DragonCombat.M(_goddessCrossHeight.Value)) * scale;
++                float width = Mathf.Max(0.5f, DragonCombat.M(_goddessCrossWidth.Value)) * scale;
++                IhRelicTemplate(0, new Color(1f, 0.82f, 0.35f, 1f), height, width, Mathf.Max(0.48f * scale, height * 0.085f));
++            }
++            else
++                IhRelicTemplate(_relicWarmStep == 2 ? 1 : 2, Color.white, 4.2f, _relicWarmStep == 2 ? 2.5f : 2.7f, 0.4f);
++            _relicWarmStep++;
++        }
++
+         private GameObject CreateCross(
+             Vector3 center,
+             Color color,
+@@ -12073,20 +12134,18 @@
+                 if (shader != null)
+                     h.material = new Material(shader);
+ 
+-                GameObject lightObject = new GameObject("light");
+-                lightObject.transform.SetParent(root.transform, false);
+-                Light light = lightObject.AddComponent<Light>();
+-                light.type = LightType.Point;
+-                light.color = color;
+-                light.range = Mathf.Max(height, width) * 1.4f;
+-                light.intensity = 0.9f;   // v0.25.150
+-                light.shadows = LightShadows.None;
+             }
+ 
+             bool plainCross = _ihNextCrossPlain;
+             _ihNextCrossPlain = false;
+             if (visible && DragonVfx.Enabled)
+-                DragonCombat.RunVfx(delegate { if (plainCross) IhBuildPlainCross(root.transform, color, height, width, Mathf.Max(physicalThickness, height * 0.085f)); else IhBuildSolidCross(root.transform, color, height, width, Mathf.Max(physicalThickness, height * 0.085f)); });   // v0.25.57 solid sculpted cross; v0.25.86 Priest relics plain
++            {
++                int style = plainCross ? (_ihNextRelicStyle == 1 ? 1 : 2) : 0;
++                _ihNextRelicStyle = 0;
++                GameObject template = IhRelicTemplate(style, color, height, width, Mathf.Max(physicalThickness, height * 0.085f));
++                GameObject model = Instantiate(template) as GameObject;
++                model.name = "IH_RelicModel"; model.transform.SetParent(root.transform, false); model.SetActive(true);
++            }
+ 
+             if (visible && DragonVfx.Enabled)
+             {
+@@ -12269,7 +12328,7 @@
+                 coreR.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                 coreR.receiveShadows = false;
+             }
+-            Light glow = orb.AddComponent<Light>();
++            Light glow = orb.AddComponent<Light>(); glow.enabled = false;
+             glow.type = LightType.Point;
+             glow.color = new Color(1f, 0.82f, 0.30f);
+             glow.range = 4f;
+@@ -14405,49 +14464,49 @@
+         {
+             switch (id)
+             {
+-                case "impact_wave": return "15m x 3m; each aftershock can hit enemies in its range again (35%)";
+-                case "moonlight_splitter": return "4 natural sword swings (65%), then a 1.5x width heavy wave (110%) and a fast stunning afterimage (55%) 0.3s later";
+-                case "crescent_cleave": return "13 cleaves in two fans, burning fire trails and stacking Burn";
+-                case "blade_storm": return "6 stacks; each cast adds an extra cut (25%)";
+-                case "frenzied_charge": return "0.5s wind up, 12m, double width, 115% damage, a wave of explosions";
+-                case "eclipse": return "8m, 110%, reflects enemy projectiles, then you spiral 4m up dragging enemies with you, and a second afterimage";
+-                case "halfmoon_slash": return "after the first heavy slash, hold the stance and Left Click to release a huge Free Aim Ghost wave (3x damage, 1.5x width, 30m)";
+-                case "heavy_slash": return "Three Battleaxe strikes, each with the previous Ascended strike damage; Hyper Armor on hit";
+-                case "stomp": return "a third impact at 15m (40%)";
+-                case "circle_swing": return "9m, two swings (90% + 60%), Hyper Armor, launches";
+-                case "bonecrusher": return "the landing is followed by a ground shock (50%)";
+-                case "seismic_guillotine": return "3 fissures, 25m, every endpoint explodes for 140% and slows";
+-                case "punishing_bomb": return "12m, a cluster of small explosions, 6s ground fire and stacking Burn";
+-                case "whirlwind": return "8s tornado with Hyper Armor and a final sweep";
+-                case "glacial_descent": return "10m; the central 5m deals 135% and Freezes";
+-                case "meteor_fall": return "3 smaller meteors follow (5 at full charge)";
+-                case "gravity_dominion": return "10m for 7s, drags Big and Bosses in too, ends in an explosion";
+-                case "astral_railcannon": return "a steerable 4s beam";
+-                case "astral_greatblade": return "three slams, no charging";
+-                case "frost_nova": return "the frost stays on the ground for 6s, Frosting everyone standing on it";
+-                case "elemental_cataclysm": return "a second bombardment at 60%";
+-                case "stonefang_eruption": return "7m; the spikes stay 4s and keep hitting";
+-                case "arcane_phalanx": return "8 swords; a full volley erupts into Astral Spears";
+-                case "afterimage_arsenal": return "3 mimics follow you and repeat your attacks at 100%";
+-                case "void_step": return "2 charges, keeps momentum";
+-                case "rift_echo": return "3 rifts at once, each 100%";
+-                case "gravity_blast": return "25m, bursts for 130% when it stops, pulls Big too";
+-                case "arcane_rupture": return "4 charges, 120% each";
++                case "impact_wave": return "Attack range increases to 15m and width to 3m. Each follow-up shockwave can hit enemies again for 35% damage.";
++                case "moonlight_splitter": return "Adds four sword swings that each deal 65% damage, a final wave that deals 110% damage and is 50% wider, and a stunning afterimage that deals 55% damage after 0.3s.";
++                case "crescent_cleave": return "Fires 13 cleaves in two fans. The cleaves leave burning ground and repeated hits add more Burn.";
++                case "blade_storm": return "Charge capacity increases to 6. Each cast adds another cut that deals 25% damage.";
++                case "frenzied_charge": return "Wind-up becomes 0.5s, charge distance increases to 12m and the hit area doubles in width. Deals 115% damage and leaves a line of explosions.";
++                case "eclipse": return "Attack radius increases to 8m and damage becomes 110%. Reflects enemy projectiles, pulls enemies upward during a 4m rising spin, and adds another afterimage.";
++                case "halfmoon_slash": return "After the opening slash, hold the stance and press Left Click to release a wave that passes through enemies. The wave deals three times the damage, is 50% wider and travels up to 30m.";
++                case "heavy_slash": return "Changes one strike into 3 Battleaxe strikes (3SS), with at least 0.7s between hits. Each strike deals full damage and grants Hyper Armor when it hits.";
++                case "stomp": return "Adds a third impact with a 15m radius that deals 40% damage.";
++                case "circle_swing": return "Attack radius increases to 9m. Swings twice for 90% and 60% damage, launches enemies and grants Hyper Armor.";
++                case "bonecrusher": return "Adds a ground shock after the landing that deals 50% damage.";
++                case "seismic_guillotine": return "Creates three fissures with a 25m range. Each endpoint explodes for 140% damage and slows enemies.";
++                case "punishing_bomb": return "Explosion radius increases to 12m. Adds small explosions and ground fire that lasts 6s. Repeated hits add more Burn.";
++                case "whirlwind": return "Spin duration increases to 8s. Adds a tornado, grants Hyper Armor and ends with a final sweep.";
++                case "glacial_descent": return "Attack radius increases to 10m. Enemies within the central 5m take 135% damage and are Frozen.";
++                case "meteor_fall": return "Adds three smaller meteors after the main impact, or five when fully charged.";
++                case "gravity_dominion": return "Attack radius increases to 10m and duration to 7s. Also pulls big enemies and bosses, then ends with an explosion.";
++                case "astral_railcannon": return "Changes the shot into a beam you can steer for 4s.";
++                case "astral_greatblade": return "Strikes three times and no longer needs charging.";
++                case "frost_nova": return "Leaves frost on the ground for 6s. Enemies standing on it receive Frost.";
++                case "elemental_cataclysm": return "Adds a second bombardment that deals 60% damage.";
++                case "stonefang_eruption": return "Attack radius increases to 7m. The spikes remain for 4s and keep damaging enemies.";
++                case "arcane_phalanx": return "Sword count increases to 8. A full volley also releases Astral Spears.";
++                case "afterimage_arsenal": return "Creates three copies that follow you and repeat your attacks at full damage.";
++                case "void_step": return "Charge capacity increases to 2. Keeps your movement momentum through the teleport.";
++                case "rift_echo": return "Creates three rifts at once. Each rift repeats the attack at full damage.";
++                case "gravity_blast": return "Travel range increases to 25m. Also pulls big enemies and explodes for 130% damage when it stops.";
++                case "arcane_rupture": return "Charge capacity increases to 4. Each charge deals 120% damage.";
+                 // v0.24.0 Ranger
+-                case "tumble_shot": return "5 arrows; a kill resets the cooldown; leaves a 4m gust that Cripples";
+-                case "piercing_arrow": return "Three arrows, 0.2s apart; 60% previous damage each (180% total), widening and Expose";
+-                case "gale_volley": return "3 charges; a second fan arcs over the first";
+-                case "cyclone_arrow": return "a tall tornado 2m wider that sucks in Small and Big enemies and Frosts everything";
+-                case "swallow_dive": return "3 charges; each dash leaves a wind slash that hits again after 0.5s";
+-                case "skyfall_barrage": return "2 charges, 12 shots in a 14m circle you steer, then a slam (Left Click = now) and a backflip";
+-                case "ricochet_arrow": return "a 3m backflip that looses a volley of three 3m circles, then you fall";
+-                case "furious_winds": return "8s, 14m (10m barrier), ends in a gale that launches Small enemies (Left Click = now)";
+-                case "ballista_shot": return "at full charge every enemy it pierces erupts (5m, 60%)";
+-                case "arrow_rain": return "3 charges; frozen arrows: every 3rd hit Freezes";
+-                case "pinning_shot": return "pinned enemies are Exposed, then explode and stay Exposed 6s; pins 2 more";
+-                case "explosive_arrow": return "hold up to 3s for more shots; 4m clusters that leave burning ground";
+-                case "splitting_arrow": return "3 spread shots; a giant sky arrow follows the great arrow and Stuns everything";
+-                case "starfall_volley": return "ends with a giant arrow: 300% to every enemy in the area";
++                case "tumble_shot": return "Fires five arrows. A kill resets the cooldown. Leaves a gust with a 4m radius that Cripples enemies.";
++                case "piercing_arrow": return "Fires three arrows 0.2s apart. Each deals 60% of the single-arrow damage, for 180% total if all three hit. The arrows widen as they travel and apply Expose.";
++                case "gale_volley": return "Charge capacity increases to 3. Adds a second fan of arrows above the first.";
++                case "cyclone_arrow": return "Tornado width increases by 2m. Pulls small and big enemies and applies Frost to enemies inside.";
++                case "swallow_dive": return "Charge capacity increases to 3. Each dash leaves a wind slash that hits again after 0.5s.";
++                case "skyfall_barrage": return "Charge capacity increases to 2. Fires twelve shots into a 14m circle you can steer, then slams down and backflips. Left Click starts the slam early.";
++                case "ricochet_arrow": return "Backflips 3m and fires a volley into three circles, each with a 3m radius.";
++                case "furious_winds": return "Duration increases to 8s and attack radius to 14m, with a 10m barrier. Ends with a gale that launches small enemies. Left Click releases the gale early.";
++                case "ballista_shot": return "When fully charged, each pierced enemy releases an explosion with a 5m radius that deals 60% of the shot damage.";
++                case "arrow_rain": return "Charge capacity increases to 3. Every third hit on an enemy Freezes it.";
++                case "pinning_shot": return "Pins two more enemies. Pinned enemies receive Expose, then explode and stay Exposed for 6s.";
++                case "explosive_arrow": return "Hold for up to 3s to add shots. Cluster explosions have a 4m radius and leave burning ground.";
++                case "splitting_arrow": return "Fires three spread shots. A giant arrow falls after the great arrow and Stuns enemies it hits.";
++                case "starfall_volley": return "Ends with a giant arrow that deals 300% damage to enemies in its area.";
+             }
+             return "";
+         }
+@@ -14544,14 +14603,14 @@
+         }
+ 
+         // What Ascension adds (shown only while the skill can still be Ascended).
+-        private static string IhAscensionText(string id)
++        private string IhAscensionText(string id)
+         {
+             switch (id)
+             {
+-                case "righteous_strike": return "Hits a 7m area, applies Judgement Mark, sends 12 Lightning Trails with Spirit Burn and strikes again when it detonates a Mark.";
+-                case "goddess_relic": return "A Cross three times the size hits a 10m area with Blunt and Lightning and applies Judgement Mark.";
+-                case "judgement_hammer": return "The hammer flies back to you and hits everything again; catching it shortens its cooldown; applies Judgement Mark.";
+-                case "shield_charge": return "Longer charge with a wider hitbox and Hyper Armor; the slam becomes a jumping Hammer Slam that also Stuns big enemies.";
++                case "righteous_strike": return "Attack radius increases from " + IhNum(IhCfg("albedo.customclasses.skills", "Cleric.Righteous Strike", "Radius", 5f)) + "m to " + IhNum(_rsAscRadius.Value) + "m. Adds Judgement Mark and 12 ground lightning trails that apply Spirit Burn. Detonating a Mark causes another strike.";
++                case "goddess_relic": return "Attack radius increases from " + IhNum(_goddessRadiusV17.Value) + "m to " + IhNum(_goddessAscRadius.Value) + "m. Cross size increases to " + IhNum(_goddessAscSizeMultiplier.Value) + " times its normal size. Deals Blunt and Lightning damage and applies Judgement Mark.";
++                case "judgement_hammer": return "The hammer returns and can damage enemies again. Catching it reduces the cooldown by " + IhNum(_hammerCatchCooldownCut.Value) + "%. Hits also apply Judgement Mark.";
++                case "shield_charge": return "Charge distance increases from " + IhNum(_shieldChargeDistance.Value) + "m to " + IhNum(_chargeAscDistance.Value) + "m, and hit radius increases from " + IhNum(_shieldChargeRadius.Value) + "m to " + IhNum(_chargeAscHitRadius.Value) + "m. Grants Hyper Armor and replaces the final slam with a jumping hammer slam that can Stun big enemies.";
+                 case "fallen_angel": return "An aftershock 1.5x wider follows 0.5s later, the ground keeps burning and you gain Hyper Armor.";
+                 case "ray_of_hope": return "Also grants a Barrier and strong healing over time, and sets enemies on Fire + Spirit Burn.";
+                 case "electric_smite": return "Adds a Thunderstorm that strikes the area every 0.5s and burns enemies.";
+@@ -14559,7 +14618,7 @@
+             string kit = IhKitAscendedSummary(id);
+             if (kit.Length == 0) kit = IhPriestAscendedSummary(id);
+             if (kit.Length == 0) return "";
+-            return char.ToUpperInvariant(kit[0]) + kit.Substring(1) + ".";
++            return char.ToUpperInvariant(kit[0]) + kit.Substring(1) + (kit.EndsWith(".", StringComparison.Ordinal) ? "" : ".");
+         }
+ 
+         private static bool IhIsDamageText(string v)
+@@ -14601,6 +14660,7 @@
+             bool ascended = IsAscendedSkill(id);
+             List<string> dmg = new List<string>(), dot = new List<string>(), deb = new List<string>(), rng = new List<string>(), rad = new List<string>();
+             string stamina = null, eitr = null, hp = null, cooldown = null, duration = null;
++            List<KeyValuePair<string, string>> effects = new List<KeyValuePair<string, string>>();
+             Dictionary<string, string> token = new Dictionary<string, string>();
+             for (int i = 0; i < cap.Count; i++)
+             {
+@@ -14610,8 +14670,8 @@
+                 switch (L)
+                 {
+                     case "Tier": case "Tier Up": case "Requires": case "Status": case "Key": case "Wind Up Time": case "Wind Up": case "Cast":
+-                    case "Ascension": case "Ascended":
+-                        break;
++                    case "Ascension": break;
++                    case "Ascended": break;
+                     case "Duration": if (duration == null) duration = V; break;
+                     case "Cooldown": cooldown = V; break;
+                     case "Stamina Cost": if (V != "0") stamina = V; break;
+@@ -14637,10 +14697,11 @@
+                         break;
+                     case "Buff": case "Gain": case "Effect": case "Barrier": case "Support": case "Removes": case "Cleanse": case "Labor":
+                     case "Buff Duration": case "Barrier Armor": case "Pinned": case "Mimics": case "Phantom": case "Portals":
+-                        break;   // description tokens only
++                        effects.Add(new KeyValuePair<string, string>(L == "Buff Duration" ? "Duration" : L, V)); break;
+                     default:
+                         if (L == "Damage") IhAddUnique(dmg, V);
+                         else if (IhIsDamageText(V) || (IhDamagePartLabel(L) && V.IndexOf('%') >= 0)) IhAddUnique(dmg, L + ": " + V);
++                        else effects.Add(new KeyValuePair<string, string>(L, V));
+                         break;
+                 }
+             }
+@@ -14654,26 +14715,8 @@
+             }
+ 
+             System.Text.StringBuilder b = new System.Text.StringBuilder();
+-            string desc = IhSkillDescription(id);
+-            desc = System.Text.RegularExpressions.Regex.Replace(desc, @"\{([A-Za-z]+)\}", delegate(System.Text.RegularExpressions.Match m)
+-            {
+-                string v; return token.TryGetValue(m.Groups[1].Value, out v) ? v : "\u0001";
+-            });
+-            desc = System.Text.RegularExpressions.Regex.Replace(desc, @"\s*\(([^()]*)\)", delegate(System.Text.RegularExpressions.Match m)
+-            {
+-                string inner = m.Groups[1].Value;
+-                if (inner.IndexOf('\u0001') < 0) return m.Value;
+-                string[] parts = inner.Split(';');
+-                List<string> keep = new List<string>();
+-                for (int i = 0; i < parts.Length; i++) if (parts[i].IndexOf('\u0001') < 0 && parts[i].Trim().Length > 0) keep.Add(parts[i].Trim());
+-                return keep.Count > 0 ? " (" + string.Join("; ", keep.ToArray()) + ")" : "";
+-            });
+-            desc = desc.Replace("\u0001", "");
+-            if (ascended)
+-            {
+-                string asc = IhAscensionText(id);
+-                if (asc.Length > 0) desc += " Ascended: " + asc;
+-            }
++            string desc = IhPlainDescription(id);
++            if (ascended && id == "heavy_slash") desc = "Swing your Battleaxe three times, damaging enemies in front of you and inflicting Broken Bones.";
+             b.Append(IhWhite(desc) + "\n\n");
+ 
+             int maxTier = IhMaxTier(id);
+@@ -14690,20 +14733,75 @@
+                 b.Append(IhOut("Tier", t));
+             }
+             if (dmg.Count > 0) b.Append(IhOut("Damage", string.Join("; ", dmg.ToArray())));
+-            if (dot.Count > 0) b.Append(IhOut("DoT", string.Join("; ", dot.ToArray())));
++            if (dot.Count > 0) { for (int i = 0; i < dot.Count; i++) dot[i] = IhDotText(dot[i]); b.Append(IhOut("DoT", string.Join(", ", dot.ToArray()))); }
+             if (deb.Count > 0) b.Append(IhOut("Atk Debuff", string.Join("; ", deb.ToArray())));
+             if (rng.Count > 0) b.Append(IhOut("Atk Range", string.Join("; ", rng.ToArray())));
+             if (rad.Count > 0) b.Append(IhOut("Atk Radius", string.Join("; ", rad.ToArray())));
++            if (duration != null) b.Append(IhOut("Duration", duration));
++            for (int i = 0; i < effects.Count; i++) b.Append(IhOut(effects[i].Key, effects[i].Value));
++            bool explainsMark = false;
++            for (int i = 0; i < deb.Count; i++) if (deb[i].IndexOf("Judgement Mark", StringComparison.Ordinal) >= 0) explainsMark = true;
++            if (explainsMark) b.Append(IhOut("Judgement Mark", IhJudgementMarkText()));
++            if (ascended)
++            {
++                string changed = IhAscensionText(id);
++                if (changed.Length > 0) b.Append(IhOut("Skill Effect", changed));
++            }
+             if (stamina != null) b.Append(IhOut("Stamina Cost", stamina));
+             if (eitr != null) b.Append(IhOut("Eitr Cost", eitr));
+             if (hp != null) b.Append(IhOut("HP Cost", hp));
+             if (cooldown != null) b.Append(IhOut("Cooldown", cooldown));
+-            if (!ascended && IhAscensionRule(id).Length > 0)
++            string ascendReason;
++            if (!ascended && IhCheckAscend(player, id, false, out ascendReason))
+             {
+                 string asc = IhAscensionText(id);
+-                if (asc.Length > 0) b.Append(IhOut("Ascension Description", asc));
++                if (asc.Length > 0) b.Append(IhOut("Ascension", asc));
+             }
+             return b.ToString().TrimEnd('\n');
++        }
++
++        private string IhJudgementMarkText()
++        {
++            return "Marks the enemy for " + IhNum(_judgementMarkDuration.Value) + "s. A later hit deals " +
++                IhNum(Mathf.Max(1f, _judgementMarkedMultiplier.Value)) + " times its normal damage. Any later hit from a skill that applies Judgement Mark deals " +
++                IhNum(Mathf.Max(1f, _judgementCrossMultiplier.Value)) + " times damage and uses up the Mark in an explosion (" +
++                IhNum(_judgementDetonationLightning.Value) + " Lightning, " + IhNum(_judgementDetonationSpirit.Value) +
++                " Spirit). Other Lightning hits apply Zap; non-Lightning hits apply Cripple for " + IhNum(_judgementCrippleDuration.Value) + "s.";
++        }
++        private static string IhDotText(string text)
++        {
++            // Duration belongs to each element. Commas separate elements, never element from duration.
++            System.Text.RegularExpressions.MatchCollection times = System.Text.RegularExpressions.Regex.Matches(text, @"\b\d+(?:\.\d+)?s\b");
++            if (times.Count == 0) return text;
++            string duration = times[times.Count - 1].Value;
++            System.Text.RegularExpressions.MatchCollection elements = System.Text.RegularExpressions.Regex.Matches(text, @"\b(Fire|Spirit|Poison)(?: Burn)?\b");
++            List<string> parts = new List<string>(), seen = new List<string>();
++            for (int i = 0; i < elements.Count; i++)
++            {
++                string element = elements[i].Groups[1].Value;
++                if (seen.Contains(element)) continue;
++                seen.Add(element);
++                int begin = elements[i].Index + elements[i].Length;
++                int end = i + 1 < elements.Count ? elements[i + 1].Index : text.Length;
++                string segment = text.Substring(begin, end - begin);
++                System.Text.RegularExpressions.Match localTime = System.Text.RegularExpressions.Regex.Match(segment, @"^\s*,?\s*(\d+(?:\.\d+)?s)\b");
++                string time = localTime.Success ? localTime.Groups[1].Value : duration;
++                System.Text.RegularExpressions.Match dps = System.Text.RegularExpressions.Regex.Match(segment, @"\b(\d+(?:\.\d+)?)/s\b");
++                if (!dps.Success && text.IndexOf("/s each", StringComparison.Ordinal) >= 0)
++                    dps = System.Text.RegularExpressions.Regex.Match(text, @"\b(\d+(?:\.\d+)?)/s each");
++                parts.Add(element + " " + time + (dps.Success ? " (" + dps.Groups[1].Value + " damage/s)" : ""));
++            }
++            if (parts.Count == 0) return text;
++            // Keep explicit tick/stack information when present; formatting must not hide how the burn works.
++            System.Text.RegularExpressions.Match ticks = System.Text.RegularExpressions.Regex.Match(text, @"\d+(?:\.\d+)?%[^,]*every \d+(?:\.\d+)?s");
++            string result = string.Join(", ", parts.ToArray());
++            if (ticks.Success) result += " (" + ticks.Value + ")";
++            System.Text.RegularExpressions.Match percent = System.Text.RegularExpressions.Regex.Match(text, @"\d+(?:\.\d+)?% per stack");
++            if (percent.Success) result += " (" + percent.Value + ")";
++            if (text.IndexOf("refreshed", StringComparison.OrdinalIgnoreCase) >= 0) result += "; refreshed on hit";
++            int stack = text.IndexOf("stacks", StringComparison.OrdinalIgnoreCase);
++            if (stack >= 0) result += "; " + text.Substring(stack);
++            return result;
+         }
+ 
+         // Printing outside the capture (IhLine is captured while a tooltip is composed).
+@@ -15452,10 +15550,15 @@
+             GUI.Label(new Rect(rect.x - 10f, rect.yMax - 1f, rect.width + 20f, 16f * scale), FormatHotbarBinding(binding), _hudKeyCenterStyle);
+         }
+ 
++        private static readonly string[] _cooldownWholeSeconds = new string[3601];
+         private static string IhFormatCooldown(float seconds)
+         {
+             // v0.25.4: always seconds (no "2m" that suddenly drops to 59s).
+-            return seconds >= 10f ? Mathf.CeilToInt(seconds).ToString() : seconds.ToString("0.0");
++            if (seconds < 10f) return seconds.ToString("0.0");
++            int whole = Mathf.CeilToInt(seconds);
++            if (whole >= _cooldownWholeSeconds.Length) return whole.ToString();
++            if (_cooldownWholeSeconds[whole] == null) _cooldownWholeSeconds[whole] = whole.ToString();
++            return _cooldownWholeSeconds[whole];
+         }
+ 
+         // v0.23.5 universal stack counter: ready/max pill at the bottom right of the icon, and the
+@@ -18241,7 +18344,7 @@
+         {
+             switch (ac)
+             {
+-                case "Sword Master": return "+20 Sword (effective cap 100), +50% Sword Attack Speed, no Sword movement penalty. Blocking or Dodging stops the rest of a Sword Master skill.";
++                case "Sword Master": return "+20 Sword (effective cap 100), +50% Sword Attack Speed, no Sword movement penalty. Dodging stops the rest of a Sword Master skill. Blocking does not cancel skills.";
+                 case "Mercenary": return "Dual-wield any two one-handed physical weapons. Hyper Armor unless a single hit deals 60% of your Max HP or more. +10 Sword, Axe and Clubs (cap 100). +25% Attack Speed with two one-handed physical weapons of the same type, or a two-handed physical weapon. No physical weapon movement penalty. +30% Armor and stronger aggro. While doing a skill you take 25% less damage (35% during the Ultimate). Unchained Fury: +1 Fury per melee hit, +3 per enemy hit by a skill; at 100 it triggers for 20s (3 min lockout).";
+                 case "Wizard": return "Charged Staff attacks (Mouse2 + Mouse1): up to 3 stacks, 1 per second, 1 Eitr per 0.1s. Stack 1 doubles the size, Stacks 2-3 add damage. Overcharge: after 300 Eitr spent, 12s of +40% wind-up speed, +40% Eitr Regen and +40% Magic Damage.";
+                 case "Spellcaster": return "Staff / Wand attack interval -50%, Eitr use -50%, +20% Eitr Regen, normal Staff / Wand damage -50%. No skill wind-ups, no Staff / Wand movement penalty. 100% accurate. Every skill is cast on the move without stopping.";
+@@ -18373,13 +18476,13 @@
+         {
+             switch (id)
+             {
+-                case "holy_wave": return "no wind up, aim at an ally to cast it on them; 10m, Sanctifies allies, double instant heal below 30% HP, 5m echo wave after 2s at half healing";
+-                case "lightning_relic": return "14m pulses arc to 3 more enemies and Sanctify allies; the Cross detonates (8m, Stuns Small) when it ends";
+-                case "holy_relic": return "14m, +30% buffs, pulses cleanse Burn / Poison / Frost and Sanctify; final 25% Max HP heal when it ends";
+-                case "divine_intervention": return "with both Relics up, a Cross Cast fires from both; 250 HP Barrier; enemies are pulled inward";
+-                case "grand_cross": return IhNum(Instance._crossAscWidth.Value) + "m wide, travels " + IhNum(Instance._crossAscRange.Value) + "m; every enemy hit is Exposed (" + IhNum(Instance._crossAscExpose.Value) + "s) and takes double Spirit Burn";
+-                case "heavens_judgement": return "14m circle, 3s barrage, beams heal allies 3% Max HP, ends with a Pillar of Heaven";
+-                case "lightning_tempest": return "12m storm where you cast it with falling meteors; allies inside get +20% Defense and Hyper Armor; ends by detonating every Zap";
++                case "holy_wave": return "Removes wind-up and lets you target an ally. Heal radius increases to 10m. Doubles the instant heal for allies below 30% HP and adds a second heal after 2s within 5m at half strength. Also grants Sanctify.";
++                case "lightning_relic": return "Pulse radius increases to 14m. Each pulse can chain to three more enemies and grants Sanctify to allies. When the Relic ends, it explodes within 8m and Stuns small enemies.";
++                case "holy_relic": return "Pulse radius increases to 14m and buffs increase to 30%. Pulses remove Burn, Poison and Frost and grant Sanctify. When the Relic ends, it heals allies for 25% of their maximum HP.";
++                case "divine_intervention": return "With both Relics active, targeting a Relic casts from both of them. Grants a barrier that absorbs 250 damage and pulls enemies inward.";
++                case "grand_cross": return "Attack width increases from " + IhNum(Instance._grandCrossWidth.Value) + "m to " + IhNum(Instance._crossAscWidth.Value) + "m, and range increases from " + IhNum(Instance._grandCrossRange.Value) + "m to " + IhNum(Instance._crossAscRange.Value) + "m. Hits apply Expose for " + IhNum(Instance._crossAscExpose.Value) + "s and deal twice the Spirit Burn damage.";
++                case "heavens_judgement": return "Attack radius increases to 14m and the barrage lasts 3s. Each beam heals allies for 3% of their maximum HP. Ends with a large final beam.";
++                case "lightning_tempest": return "Creates a storm with a 12m radius at the target and adds falling meteors. Allies inside gain 20% Defense and Hyper Armor. When it ends, all Zap marks explode.";
+             }
+             return "";
+         }
+@@ -18418,7 +18521,7 @@
+             {
+                 case "lightning_relic":
+                     b.Append(IhLine("Damage",IhDamage(_lightningRelicDamage,power)+" per pulse"));
+-                    b.Append(IhLine("Radius",IhNum(_lightningRelicRadius.Value)+"m"));
++                    b.Append(IhLine("Radius",IhNum(IsAscendedSkill(id) ? _relicAscRadius.Value : _lightningRelicRadius.Value)+"m"));
+                     b.Append(IhLine("Range",IhNum(_lightningRelicRange.Value)+"m"));
+                     b.Append(IhLine("Duration",IhNum(_lightningRelicDuration.Value)+"s"));
+                     b.Append(IhLine("Pulse",IhNum(_lightningRelicInterval.Value)+"s"));
+@@ -18429,7 +18532,7 @@
+                     break;
+                 case "holy_relic":
+                     b.Append(IhLine("Healing",IhNum(_holyRelicHealPercent.Value*power)+"% Total HP per pulse"));
+-                    b.Append(IhLine("Radius",IhNum(_holyRelicRadius.Value)+"m"));
++                    b.Append(IhLine("Radius",IhNum(IsAscendedSkill(id) ? _relicAscRadius.Value : _holyRelicRadius.Value)+"m"));
+                     b.Append(IhLine("Range",IhNum(_holyRelicRange.Value)+"m"));
+                     b.Append(IhLine("Duration",IhNum(_holyRelicDuration.Value)+"s"));
+                     b.Append(IhLine("Pulse",IhNum(_holyRelicInterval.Value)+"s"));
+@@ -18451,8 +18554,8 @@
+                     break;
+                 case "grand_cross":
+                     b.Append(IhLine("Damage",IhDamage(_grandCrossDamage,power)+" every "+IhNum(_grandCrossTickInterval.Value)+"s"));
+-                    b.Append(IhLine("Width",IhNum(_grandCrossWidth.Value)+"m"));
+-                    b.Append(IhLine("Range",IhNum(_grandCrossRange.Value)+"m"));
++                    b.Append(IhLine("Width",IhNum(IsAscendedSkill(id) ? _crossAscWidth.Value : _grandCrossWidth.Value)+"m"));
++                    b.Append(IhLine("Range",IhNum(IsAscendedSkill(id) ? _crossAscRange.Value : _grandCrossRange.Value)+"m"));
+                     b.Append(IhLine("Travel Time",IhNum(_grandCrossTravelTime.Value)+"s"));
+                     b.Append(IhLine("Inflicts","Spirit Burn, "+IhNum(_grandCrossSpiritDuration.Value)+"s"));
+                     b.Append(IhLine("Cast","Self only; cannot Cross Cast"));
+@@ -18460,8 +18563,8 @@
+                     break;
+                 case "heavens_judgement":
+                     b.Append(IhLine("Damage",IhDamage(_heavensDamage,power)+" per beam"));
+-                    b.Append(IhLine("Radius",IhNum(_heavensRadius.Value)+"m"));
+-                    b.Append(IhLine("Barrage",IhNum(_heavensDuration.Value)+"s"));
++                    b.Append(IhLine("Radius",IhNum(IsAscendedSkill(id) ? _hjAscRadius.Value : _heavensRadius.Value)+"m"));
++                    b.Append(IhLine("Barrage",IhNum(IsAscendedSkill(id) ? _hjAscDuration.Value : _heavensDuration.Value)+"s"));
+                     b.Append(IhLine("Beam Interval",IhNum(_heavensStrikeInterval.Value)+"s"));
+                     b.Append(IhLine("Inflicts","Frost, "+IhNum(_heavensFrostDuration.Value)+"s"));
+                     b.Append(IhLine("Cast","Self or aimed active Relic"));
+@@ -18621,15 +18724,22 @@
+             return IhIsUnlocked(Player.m_localPlayer, id);
+         }
+ 
++        private int _hotbarOwnerPlayer, _hotbarOwnerLevel;
++        private string _hotbarOwnerClass, _hotbarOwnerAdvancement, _hotbarOwnerTiers;
++        private bool _hotbarOwnerUnlock;
+         private string[] GetHotbarLayout()
+         {
+             Player player = Player.m_localPlayer;
+-            string owner = player == null ? "" : player.GetInstanceID().ToString() + "|" + GetClass(player) + "|" + GetAdvancement(player) + "|" +
+-                IhGetLevel(player).ToString() + "|" + ReadPlayerData(player, IhTiersKey) + "|" + (_ihUnlockAll != null && _ihUnlockAll.Value ? "1" : "0");
+-            if (_hotbarLayout != null && owner == _hotbarLayoutOwnerKey)
+-                return _hotbarLayout;
+-
+-            _hotbarLayoutOwnerKey = owner;
++            int playerId = player == null ? 0 : player.GetInstanceID();
++            string cls = GetClass(player), advancement = GetAdvancement(player), tiers = ReadPlayerData(player, IhTiersKey);
++            int level = IhGetLevel(player);
++            bool unlock = _ihUnlockAll != null && _ihUnlockAll.Value;
++            if (_hotbarLayout != null && _hotbarLayoutOwnerKey.Length > 0 && _hotbarOwnerPlayer == playerId &&
++                _hotbarOwnerClass == cls && _hotbarOwnerAdvancement == advancement && _hotbarOwnerLevel == level &&
++                _hotbarOwnerTiers == tiers && _hotbarOwnerUnlock == unlock) return _hotbarLayout;
++            _hotbarLayoutOwnerKey = "valid";
++            _hotbarOwnerPlayer = playerId; _hotbarOwnerClass = cls; _hotbarOwnerAdvancement = advancement;
++            _hotbarOwnerLevel = level; _hotbarOwnerTiers = tiers; _hotbarOwnerUnlock = unlock;
+             _hotbarLayout = SanitizeHotbarLayout(LoadHotbarLayout(player));
+             return _hotbarLayout;
+         }
+@@ -19287,11 +19397,18 @@
+                 BeginHotbarKeyCapture(bindTarget);
+         }
+ 
++        private readonly KeyCode[] _bindingMods = new KeyCode[9], _bindingKeys = new KeyCode[9];
++        private readonly string[] _bindingLabels = new string[9];
+         private string FormatHotbarBinding(int index)
+         {
+             KeyCode mod = _hotbarSlotMods[index].Value;
+             KeyCode key = _hotbarSlotKeys[index].Value;
+-            return mod == KeyCode.None ? ShortKeyName(key) : ShortKeyName(mod) + " + " + ShortKeyName(key);
++            if (_bindingLabels[index] == null || _bindingMods[index] != mod || _bindingKeys[index] != key)
++            {
++                _bindingMods[index] = mod; _bindingKeys[index] = key;
++                _bindingLabels[index] = mod == KeyCode.None ? ShortKeyName(key) : ShortKeyName(mod) + " + " + ShortKeyName(key);
++            }
++            return _bindingLabels[index];
+         }
+ 
+         private void BeginHotbarKeyCapture(int target)
+--- v0.25.194/AlbedosCustomClasses.Core.cs
++++ v0.25.195/AlbedosCustomClasses.Core.cs
+@@ -41,7 +41,7 @@
+     {
+         public const string ModGuid = "albedo.customclasses";
+         public const string ModName = "Aethelborn Ascended - Altar";
+-        public const string ModVersion = "0.25.191";
++        public const string ModVersion = "0.25.195";
+ 
+         internal const string ClassDataKey = "AlbedoCustomClasses.Class";
+         internal const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
+@@ -1025,7 +1025,7 @@
+                 case "Ranger": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Wildborn (Blessing)","wildborn","+20 Bows and +20 Dodge, a quick-shot Left Click chain and a Right Click charged shot. Infinite arrows: half your Bow damage plus half the arrow's with a full stack. Cannot Block or use Shields.") } : new AltarSkillEntry[] { new AltarSkillEntry("Piercing Arrow","piercing_arrow","A straight arrow that tears through every foe in its line and cripples the first."), new AltarSkillEntry("Tumble Shot","tumble_shot","Backflip away and loose a fan of arrows at your aim."), new AltarSkillEntry("Snare Trap","snare_trap","Set a hidden snare that holds small prey in place and slows the large.") };
+                 case "Acrobat": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Windstep (Mastery)","windstep","A second jump in mid-air, Dodge costs 50% less Stamina, all Stamina use -35%, fall damage -75% and falls never kill, every Ranger skill can be cast in the air, and each skill hit trims your shortest cooldown. Never wields a Crossbow."), new AltarSkillEntry("Tailwind (Grace)","tailwind","Wind lifts you and your allies: much faster feet, no movement penalties, higher jumps and no fall damage for 2 minutes.") } : new AltarSkillEntry[] { new AltarSkillEntry("Gale Volley","gale_volley","Spring back out of reach and loose a wide fan of arrows that blows small foes away."), new AltarSkillEntry("Cyclone Arrow","cyclone_arrow","A slow, spinning arrow of wind that drags small foes along its path."), new AltarSkillEntry("Swallow Dive","swallow_dive","Dash through the enemy line as a gust of wind, cutting everything you pass."), new AltarSkillEntry("Skyfall Barrage","skyfall_barrage","Leap high into the sky and rain arrows on the ground below."), new AltarSkillEntry("Somersault Dance","ricochet_arrow","Front flip high into the air and slam the ground with your foot, then backflip out of reach."), new AltarSkillEntry("Furious Winds (Ultimate)","furious_winds","A whirlwind of magical leaves shields you and shreds every foe that comes near.") };
+                 case "Bowmaster": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Deadeye (Mastery)","deadeye","Standing still builds Focus: more damage and range with every second. Fully charged shots hit harder. Crossbows reload 75% faster, keep their load and lose their movement penalty."), new AltarSkillEntry("Hawk's Vigil (Grace)","hawks_vigil","Reveal every enemy around you and sharpen your allies' aim.") } : new AltarSkillEntry[] { new AltarSkillEntry("Ballista Shot","ballista_shot","Hold to draw a siege-strength arrow that blasts through the enemy line."), new AltarSkillEntry("Arrow Rain","arrow_rain","Darken the sky over your aim with a crippling volley."), new AltarSkillEntry("Pinning Shot","pinning_shot","Nail your target to the ground and leave it open to your next shots."), new AltarSkillEntry("Explosive Arrow","explosive_arrow","An arrow that bursts into flame on impact, followed by a carpet of cluster bombs."), new AltarSkillEntry("Splitting Arrow","splitting_arrow","Two spread shots into a wide cone, then one great arrow that tears through the line."), new AltarSkillEntry("Starfall Volley (Ultimate)","starfall_volley","Call giant arrows down from the heavens across the battlefield.") };
+-                case "Sword Master": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("The Way of the Sword (Mastery)","the_way_of_the_sword","With exactly one Sword: +20 Sword, +50% Attack Speed and no Sword movement penalty. Blocking or Dodging stops the rest of a Sword Master skill."), new AltarSkillEntry("Knight's Guidance (Grace)","knights_guidance","Lead every ally around you: faster movement, quicker stamina and less effort for every action, for 3 minutes.") } : new AltarSkillEntry[] { new AltarSkillEntry("Moonlight Splitter","moonlight_splitter","Three crescent waves of moonlight cleave through everything in their path."), new AltarSkillEntry("Crescent Cleave","crescent_cleave","Five giant crescent cleaves tear across the ground in a wide fan."), new AltarSkillEntry("Blade Storm","blade_storm","Rend space itself: a sphere of blades bursts at your aim, again and again."), new AltarSkillEntry("Frenzied Charge","frenzied_charge","Pull back, then dash forward with a thrust that launches small foes and stuns the large."), new AltarSkillEntry("Eclipse","eclipse","Your blade swells with magic for one sweeping slash all around you."), new AltarSkillEntry("Halfmoon Slash (Ultimate)","halfmoon_slash","A colossal half-moon slash, followed by its afterimage.") };
++                case "Sword Master": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("The Way of the Sword (Mastery)","the_way_of_the_sword","With exactly one Sword: +20 Sword, +50% Attack Speed and no Sword movement penalty. Dodging stops the rest of a Sword Master skill. Blocking does not cancel skills."), new AltarSkillEntry("Knight's Guidance (Grace)","knights_guidance","Lead every ally around you: faster movement, quicker stamina and less effort for every action, for 3 minutes.") } : new AltarSkillEntry[] { new AltarSkillEntry("Moonlight Splitter","moonlight_splitter","Three crescent waves of moonlight cleave through everything in their path."), new AltarSkillEntry("Crescent Cleave","crescent_cleave","Five giant crescent cleaves tear across the ground in a wide fan."), new AltarSkillEntry("Blade Storm","blade_storm","Rend space itself: a sphere of blades bursts at your aim, again and again."), new AltarSkillEntry("Frenzied Charge","frenzied_charge","Pull back, then dash forward with a thrust that launches small foes and stuns the large."), new AltarSkillEntry("Eclipse","eclipse","Your blade swells with magic for one sweeping slash all around you."), new AltarSkillEntry("Halfmoon Slash (Ultimate)","halfmoon_slash","A colossal half-moon slash, followed by its afterimage.") };
+                 case "Mercenary": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Warfreak (Mastery)","warfreak","Dual-wield any two one-handed physical weapons. Hyper Armor unless a single hit deals 60% of your Max HP or more. +10 Sword, Axe and Clubs, +25% Attack Speed with two one-handed physical weapons of the same type or a two-handed physical weapon, no physical weapon movement penalty, +30% Armor, 25% less damage taken while doing a skill (35% in the Ultimate). Unchained Fury triggers at 100 Fury for 20s."), new AltarSkillEntry("Battlecry (Grace)","battlecry","A war cry: you and nearby allies deal +15% damage to creatures for 1 minute and +25% damage to trees, rocks and ore for 3 minutes.") } : new AltarSkillEntry[] { new AltarSkillEntry("Stomp","stomp","Stomp the earth: a crushing impact, then an aftershock rolls outward."), new AltarSkillEntry("Circle Swing","circle_swing","Wind up and swing your weapon in a full circle, staggering everything around you."), new AltarSkillEntry("Bonecrusher","bonecrusher","Leap high and crash down, shattering the bones of everything below."), new AltarSkillEntry("Seismic Guillotine","seismic_guillotine","Tear a fissure through the ground to your aim, ending in a seismic explosion."), new AltarSkillEntry("Punishing Bomb","punishing_bomb","Bat a bomb into the enemy lines. It bursts on the first thing it touches and leaves them burning."), new AltarSkillEntry("Whirlwind (Ultimate)","whirlwind","Spin into a whirlwind of steel, carving everything that comes near.") };
+                 case "Paladin": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Heaven's Will (Mastery)","holy_trinity","+10% Magic Damage. With a Club-type weapon and a Shield: +15 Clubs, and Slash and Pierce each rise to at least 50% of your current Blunt damage. Holy Bulwark: with a Tower Shield your block covers 3x the area (front and sides) behind a holy force field."), new AltarSkillEntry("Heaven's Light (Grace)","heavens_light","Bless every ally around you with +40% Overall Defense and -25% Stamina use for 1 minute.") } : new AltarSkillEntry[] { new AltarSkillEntry("Goddess Relic","goddess_relic","Summon a holy Cross that strikes with Blunt and Lightning and burns foes with Spirit fire."), new AltarSkillEntry("Judgement Hammer","judgement_hammer","Hurl a holy hammer that grows as it flies, crushing everything in its path."), new AltarSkillEntry("Shield Charge","shield_charge","Raise your shield and charge forward, trampling everyone who dares stand in your path."), new AltarSkillEntry("Angel Comet","fallen_angel","Leap to the heavens, then crash upon your enemies like a blazing comet."), new AltarSkillEntry("Ray of Hope","ray_of_hope","Raise your hand to the heavens, healing every ally around you, strengthening their attacks, removing every debuff and warding them against new ones for 12s."), new AltarSkillEntry("Electric Smite (Ultimate)","electric_smite","Leap and slam down, releasing sixteen Lightning Trails that tear across the ground.") };
+                 case "Priest": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Bless Thy Sinners (Mastery)","bless_thy_sinners","+10% Magic Damage. When you or an ally within 20m would die, survive at 1 HP and recover 50% HP over time with a burst of speed. Your own save recharges in 20 minutes, each ally's separately. With a Buckler, a Parry releases a Holy Shockwave, grants Hyper Armor and empowers your next skill."), new AltarSkillEntry("Heaven's Crucible (Grace)","grand_sigil","Wrap yourself and nearby allies in a holy Barrier that holds until it breaks.") } : new AltarSkillEntry[] { new AltarSkillEntry("Lightning Relic","lightning_relic","Plant a Cross of lightning. Its pulses punish nearby foes; place Holy Relic beside it to consecrate the ground."), new AltarSkillEntry("Holy Relic","holy_relic","Raise a sacred Cross that restores your allies and strengthens everyone within its light."), new AltarSkillEntry("Divine Intervention","divine_intervention","Answer danger with a burst of holy power, restoring allies and exposing enemies around you or an aimed Relic."), new AltarSkillEntry("Grand Cross","grand_cross","Carve a radiant X through the battlefield. Its crossing blades travel forward, burning every foe they touch."), new AltarSkillEntry("Heaven's Judgement","heavens_judgement","Call a barrage of holy beams around yourself or an aimed Relic, chilling the enemies caught beneath them."), new AltarSkillEntry("Lightning Tempest (Ultimate)","lightning_tempest","Unleash a restless storm, layering lightning and afflictions across the battlefield.") };
+@@ -1537,7 +1537,7 @@
+         {
+             if (advancementName == "Sword Master")
+             {
+-                return "<b>IDENTITY</b>\nSword Master turns Warrior into a high-tempo sword specialist built around fast attacks, broad spirit slashes and precise burst windows.\n\n<b>THE WAY OF THE SWORD (MASTERY)</b>\nWith exactly one Sword: +20 Sword, +50% Attack Speed and no Sword movement penalty. Blocking or dodging cancels the rest of a skill sequence.\n\n<b>KNIGHT'S GUIDANCE (GRACE)</b>\nYou and allies within 10m move 1.5x faster, regenerate Stamina 40% faster and use 30% less Stamina for 3 minutes.\n\n<b>BEST FOR</b>\nAggressive players who want flashy sword pressure, ranged melee, charge management and a fast combo rhythm rather than tanking through everything.";
++                return "<b>IDENTITY</b>\nSword Master turns Warrior into a high-tempo sword specialist built around fast attacks, broad spirit slashes and precise burst windows.\n\n<b>THE WAY OF THE SWORD (MASTERY)</b>\nWith exactly one Sword: +20 Sword, +50% Attack Speed and no Sword movement penalty. Dodging cancels the rest of a skill sequence. Blocking does not cancel skills.\n\n<b>KNIGHT'S GUIDANCE (GRACE)</b>\nYou and allies within 10m move 1.5x faster, regenerate Stamina 40% faster and use 30% less Stamina for 3 minutes.\n\n<b>BEST FOR</b>\nAggressive players who want flashy sword pressure, ranged melee, charge management and a fast combo rhythm rather than tanking through everything.";
+             }
+             if (advancementName == "Mercenary")
+             {
+--- v0.25.194/AlbedosCustomClasses.Skills.cs
++++ v0.25.195/AlbedosCustomClasses.Skills.cs
+@@ -232,7 +232,7 @@
+         public static SkillsPlugin Instance;
+         public const string ModGuid = "albedo.customclasses.skills";
+         public const string ModName = "Aethelborn Ascended - Starter Skills";
+-        public const string ModVersion = "0.25.194";
++        public const string ModVersion = "0.25.195";
+ 
+         private const string ClassDataKey = "AlbedoCustomClasses.Class";
+         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";
+@@ -1177,14 +1177,18 @@
+         private IEnumerator AnimateConeLightning(Vector3 origin, Vector3 forward, float range, float angle)
+         {
+             int bolts = 5;
++            Vector3 right = Vector3.Cross(Vector3.up, forward).normalized;
++            if (right.sqrMagnitude < 0.001f) right = Vector3.right;
+             for (int b = 0; b < bolts; b++)
+             {
+                 float p = bolts <= 1 ? 0.5f : (float)b / (float)(bolts - 1);
+                 float yaw = Mathf.Lerp(-angle * 0.5f, angle * 0.5f, p);
+-                Vector3 dir = Quaternion.AngleAxis(yaw, Vector3.up) * forward.normalized;
++                Vector3 dir = (forward.normalized * Mathf.Cos(yaw * Mathf.Deg2Rad) + right * Mathf.Sin(yaw * Mathf.Deg2Rad)).normalized;
+                 Vector3 end = origin + dir * range;
+-                PlayLightningVfx(origin + Vector3.up * 0.4f, end, 0.8f);
+-                yield return new WaitForSeconds(0.025f);
++                // Trace the release left-to-right too, rather than fan every bolt from one stationary point.
++                Vector3 release = origin + right * Mathf.Lerp(-0.45f, 0.45f, p) + Vector3.up * 0.4f;
++                PlayLightningVfx(release, end, 0.8f);
++                yield return new WaitForSeconds(0.04f);
+             }
+         }
+ 
+--- v0.25.194/DragonsAltar.CombatRuntime.cs
++++ v0.25.195/DragonsAltar.CombatRuntime.cs
+@@ -16,7 +16,7 @@
+     {
+         public const string ModGuid = "albedo.customclasses.combatruntime";
+         public const string ModName = "Aethelborn Ascended - Combat Runtime";
+-        public const string ModVersion = "0.25.194";
++        public const string ModVersion = "0.25.195";
+ 
+         internal static DragonCombatPlugin Instance;
+ 
+@@ -237,7 +237,7 @@
+             DragonPerf.EnabledAtStart = Config.Bind("Performance Monitor", "EnabledAtStart_v025184", false, "Start recording at launch. Otherwise press the toggle key in game (F7). Ctrl+F7 writes the report, Alt+F7 turns effect lights off/on for an A/B test.");
+             DragonPerf.ToggleKey = Config.Bind("Performance Monitor", "ToggleKey_v025184", KeyCode.F7, "Overlay + recording on/off. Ctrl = write report now, Alt = effect lights off/on.");
+             DragonPerf.SpikeMs = Config.Bind("Performance Monitor", "SpikeMs_v025184", 25f, "A frame slower than this (ms) is logged as a spike with the active skill.");
+-            DragonPerf.MaxLights = Config.Bind("Visuals", "MaxEffectLights_v025185", 6, "Most skill-effect point lights lit at the same time (each is an extra render pass). 0 = none.");
++            DragonPerf.MaxLights = Config.Bind("Visuals", "MaxEffectLights_v025185", 6, "Legacy setting: extra skill point lights were removed in v0.25.195.");
+             if (gameObject.GetComponent<DragonPerfMonitor>() == null) gameObject.AddComponent<DragonPerfMonitor>();
+ 
+             if (!EnableRuntime.Value)
+@@ -1317,7 +1317,7 @@
+             EnhancedVfx = Config.Bind("Visuals", "EnhancedSkillVfx_v02554", true, "Real particle / light / lightning effects on skills (v0.25.54). Off = the old line drawings only.");
+             VfxDensity = Config.Bind("Visuals", "ParticleDensity_v025145", 0.35f, "Particle amount multiplier for skill effects (0.1 - 3). v0.25.145: restrained default.");
+             CapeFreeze = Config.Bind("Visuals", "FreezeCapeDuringSkills_v025171", true, "Capes stop simulating while a skill animation drives the body (they hang still and follow the body like armour) and resume afterwards. Off = the v0.25.170 cloth guard (cape keeps simulating with damped inertia).");
+-            VfxLight = Config.Bind("Visuals", "LightIntensity_v025145", 0.15f, "Brightness of the flashes / point lights skills create (0 = none, 1 = the old v0.25.54-58 look).");
++            VfxLight = Config.Bind("Visuals", "LightIntensity_v025145", 0.15f, "Legacy setting: extra skill point lights were removed in v0.25.195. Visible particles and lightning remain.");
+             ComboSwingSeconds = Config.Bind("Combat", "ComboSwingSeconds_v02559", 0.6f, "Normal attack chain: seconds per swing for ALL 5 hits (finisher included) with no attack-speed bonus; class attack speed bonuses shorten it.");
+             ComboRepeatOffset = Config.Bind("Combat", "ComboRepeatOffset_v02559", 0.22f, "When the chain steps back to an earlier swing (hit 3 = swing 1 again), it starts this far into that swing (0-0.5 of the animation) so it flows out of the previous swing instead of restarting from the rest pose.");
+             ComboBlend = Config.Bind("Combat", "ComboBlendSeconds_v02559", 0.12f, "Cross-fade time between chained swings.");
+@@ -2188,6 +2188,8 @@
+ 
+             string currentAdvancement = DragonCombat.GetAdvancementName(__instance);
+             ItemDrop.ItemData currentWeapon = __instance.GetCurrentWeapon();
++            if (currentAdvancement == "Sword Master" && DragonCombat.SwordMasterSkillRunning(__instance))
++            { block = false; blockHold = false; }
+ 
+             if (DragonCombat.GetClassName(__instance) == "Sorcerer" &&
+                 currentAdvancement == "Spellcaster" &&
+@@ -4455,6 +4457,7 @@
+             CheckAnimationClass(player);
+             SkillTakeover(player);   // v0.25.154
+             AnimActivation++;
++            if (DragonVfx.SwingClip(clip)) DragonVfx.WeaponWake(player, Mathf.Max(0f, windup * 0.65f), Mathf.Max(0.55f, windup * 0.5f));
+             // Non-charging Sky Summons lock their target at cast time; never turn them during the delay.
+             // v0.25.139 (user): every skill with a wind up of 1 s or more faces the crosshair (Sky Summons included).
+             // v0.25.140 (user): Sky Summons and Angel Comet are committed - the aim is locked at cast, the body never follows the crosshair.
+@@ -4533,6 +4536,7 @@
+                 float tq = Mathf.Max(0.18f, turn);
+                 int tt = Mathf.Max(1, Mathf.CeilToInt(Mathf.Max(0.1f, seconds) / tq));
+                 PlayClipKeys(player, SbSpin(tt, tq, true), 0.12f);
++                DragonVfx.WeaponWake(player, 0.12f, seconds);
+                 return;
+             }
+             // v0.25.24 SPAA (storyboard 09 CYCLONE): coil with the weapon across to the left, then turn clockwise
+@@ -4541,6 +4545,7 @@
+             int turns = Mathf.Max(1, Mathf.CeilToInt(Mathf.Max(0.1f, seconds) / q));
+             DragonClipKey[] v = VanillaClip(player, "spin", Mathf.Max(0.3f, seconds));
+             PlayClipKeys(player, v != null ? v : SbSpin(turns, q, twoHand), 0.15f);
++            DragonVfx.WeaponWake(player, 0.15f, seconds);
+         }
+ 
+ 
+@@ -5471,6 +5476,9 @@
+             if (player == null || string.IsNullOrEmpty(trigger)) return;
+             if (!trigger.StartsWith("emote", StringComparison.Ordinal)) BlockSkillAnimAttack(player, 2.5f);
+             AnimActivation++;
++            if (trigger.IndexOf("battleaxe", StringComparison.OrdinalIgnoreCase) >= 0 ||
++                trigger.IndexOf("sword", StringComparison.OrdinalIgnoreCase) >= 0 || trigger.IndexOf("atgeir", StringComparison.OrdinalIgnoreCase) >= 0 || trigger.IndexOf("mace", StringComparison.OrdinalIgnoreCase) >= 0)
++                DragonVfx.WeaponWake(player, 0.05f, 1.2f);
+             try
+             {
+                 Component z = null;
+@@ -8562,6 +8570,12 @@
+             work.Add(execution);
+             return execution;
+         }
++        public static bool SwordMasterSkillRunning(Player player)
++        {
++            if (player == null) return false;
++            List<SkillExecution> work;
++            return _swordMasterWork.TryGetValue(player.GetInstanceID(), out work) && work.Count > 0;
++        }
+         public static Action<Player> SwordMasterDodgeRequested;
+         private static Player _instantDodgePlayer;
+         private static float _instantDodgeUntil;
+@@ -10725,6 +10739,8 @@
+             catch (Exception) { return null; }
+         }
+ 
++        private static readonly MethodInfo _cleanseGetEffects = typeof(SEMan).GetMethod("GetStatusEffects", Type.EmptyTypes);
++        private static readonly MethodInfo _cleanseRemove = typeof(SEMan).GetMethod("RemoveStatusEffect", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new Type[] { typeof(int), typeof(bool) }, null);
+         public static void CleanseDebuffs(Character c)
+         {
+             if (c == null) return;
+@@ -10737,10 +10753,10 @@
+             {
+                 object seman = c.GetSEMan();
+                 if (seman == null) return;
+-                MethodInfo get = seman.GetType().GetMethod("GetStatusEffects", Type.EmptyTypes);
++                MethodInfo get = _cleanseGetEffects;
+                 System.Collections.IList list = get == null ? null : get.Invoke(seman, null) as System.Collections.IList;
+                 if (list == null) return;
+-                MethodInfo remove = seman.GetType().GetMethod("RemoveStatusEffect", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new Type[] { typeof(int), typeof(bool) }, null);
++                MethodInfo remove = _cleanseRemove;
+                 if (remove == null) return;
+                 List<string> names = new List<string>();
+                 for (int i = 0; i < list.Count; i++) { StatusEffect se = list[i] as StatusEffect; if (se != null && !(se is IhStatusDisplay) && IsDebuffEffectName(se.name)) names.Add(se.name); }
+@@ -11634,6 +11650,7 @@
+         private static float _pwRecheckAt;
+         private static void WarmBindings(Player local)
+         {
++            if (local.InAttack() || DragonCombat.IsSkillLocked(local) || DragonCombat.SkillOwnsAnimator(local)) return;
+             if (local == null || _clips == null) return;
+             // v0.25.183 (perf): once every clip is warmed, look for a new character animator once a second instead of every frame
+             if (_pwWarmed != null && _pwIndex >= WarmClips.Length && Time.time < _pwRecheckAt) return;
+@@ -13327,6 +13344,107 @@
+     // v0.25.60: lightning that crawls along the ground (Lightning Trails). The path is the list of ground
+     // points the trail has reached; every 0.05 s it is re-jagged sideways (never into the ground), the tail
+     // dims, the head crackles with small arcs, and when the trail ends it fades leaving a scorched scar.
++    // v0.25.195: actual equipped-weapon wake; transforms are resolved only when a skill starts.
++    // The trail follows the blade, so opposite and vertical swings cannot reuse the wrong fixed plane.
++    [DefaultExecutionOrder(31000)]
++    public class DragonWeaponWake : MonoBehaviour
++    {
++        private Player _player;
++        private Transform _tip;
++        private TrailRenderer _trail;
++        private GameObject _item, _leftItem;
++        private Transform _leftTip;
++        private TrailRenderer _leftTrail;
++        private Vector3 _leftRadial;
++        private static readonly FieldInfo LeftVisual = typeof(VisEquipment).GetField("m_leftItemInstance", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
++        private float _start, _end, _sampleAt;
++        private int _generation;
++        private Vector3 _radial, _normal;
++        private static readonly FieldInfo RightVisual = typeof(VisEquipment).GetField("m_rightItemInstance", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
++        public void Begin(Player player, float delay, float duration, Material material)
++        {
++            _player = player;
++            VisEquipment vis = player.GetComponentInChildren<VisEquipment>();
++            GameObject item = vis == null || RightVisual == null ? null : RightVisual.GetValue(vis) as GameObject;
++            if (item == null) return;
++            if (_item != item || _tip == null)
++            {
++                if (_tip != null) Destroy(_tip.gameObject);
++                Animator animator = player.GetComponentInChildren<Animator>();
++                Transform hand = animator == null || !animator.isHuman ? null : animator.GetBoneTransform(HumanBodyBones.RightHand);
++                Vector3 axis, end;
++                if (hand == null || !DragonCombat.WeaponAxis(item, hand, out axis, out end)) return;
++                _item = item;
++                GameObject tip = new GameObject("IH_WeaponWake"); _tip = tip.transform;
++                _tip.SetParent(item.transform, false); _tip.position = end;
++                _trail = tip.AddComponent<TrailRenderer>(); _trail.sharedMaterial = material;
++                _trail.time = 0.16f; _trail.minVertexDistance = 0.045f;
++                _trail.startWidth = 0.12f; _trail.endWidth = 0f;
++                _trail.numCapVertices = 3; _trail.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
++                _trail.receiveShadows = false; _trail.emitting = false;
++            }
++            GameObject left = vis == null || LeftVisual == null ? null : LeftVisual.GetValue(vis) as GameObject;
++            ItemDrop.ItemData rightData = DragonCombat.GetHandItem(player, "m_rightItem"), leftData = DragonCombat.GetHandItem(player, "m_leftItem");
++            if (!DragonCombat.IsMatchingDualPair(rightData, leftData)) left = null;
++            if (_leftItem != left || (_leftItem != null && _leftTip == null))
++            {
++                if (_leftTip != null) Destroy(_leftTip.gameObject);
++                _leftTrail = null; _leftTip = null; _leftItem = left;
++                if (left != null)
++                {
++                    Animator animator = player.GetComponentInChildren<Animator>();
++                    Transform hand = animator == null || !animator.isHuman ? null : animator.GetBoneTransform(HumanBodyBones.LeftHand);
++                    Vector3 axis, end;
++                    if (hand != null && DragonCombat.WeaponAxis(left, hand, out axis, out end))
++                    {
++                        GameObject point = new GameObject("IH_LeftWeaponWake"); _leftTip = point.transform;
++                        _leftTip.SetParent(left.transform, false); _leftTip.position = end;
++                        _leftTrail = point.AddComponent<TrailRenderer>(); _leftTrail.sharedMaterial = material;
++                        _leftTrail.time = 0.16f; _leftTrail.minVertexDistance = 0.045f; _leftTrail.startWidth = 0.12f; _leftTrail.endWidth = 0f;
++                        _leftTrail.numCapVertices = 3; _leftTrail.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
++                        _leftTrail.receiveShadows = false; _leftTrail.emitting = false;
++                    }
++                }
++            }
++            _trail.Clear();
++            Color color = DragonCombat.GetAdvancementName(player) == "Mercenary" ? new Color(0.87f, 0.77f, 0.63f, 0.58f) : new Color(0.48f, 0.68f, 0.9f, 0.62f);
++            _trail.startColor = color; _trail.endColor = new Color(color.r, color.g, color.b, 0f);
++            if (_leftTrail != null) { _leftTrail.Clear(); _leftTrail.startColor = color; _leftTrail.endColor = _trail.endColor;
++                _leftRadial = _leftTip.position - (player.transform.position + Vector3.up); }
++            _start = Time.time + Mathf.Max(0f, delay); _end = _start + Mathf.Clamp(duration, 0.1f, 15f);
++            _generation = DragonCombat.SkillAnimGen;
++            _normal = Vector3.zero; _radial = _tip.position - (player.transform.position + Vector3.up);
++            enabled = true;
++        }
++        public bool TryRoll(out float roll)
++        {
++            roll = 0f;
++            if (_player == null || Time.time > _end || Time.time - _sampleAt > 0.15f || _normal.sqrMagnitude < 0.01f) return false;
++            roll = Mathf.Atan2(-Vector3.Dot(_normal, _player.transform.right), Vector3.Dot(_normal, Vector3.up)) * Mathf.Rad2Deg;
++            return true;
++        }
++        private void LateUpdate()
++        {
++            if (_trail == null || _tip == null || _player == null || _player.IsDead() || _player.InDodge() || _generation != DragonCombat.SkillAnimGen || Time.time >= _end)
++            { if (_trail != null) _trail.emitting = false; if (_leftTrail != null) _leftTrail.emitting = false; enabled = false; return; }
++            Vector3 radial = _tip.position - (_player.transform.position + Vector3.up);
++            Vector3 normal = Vector3.Cross(_radial, radial);
++            bool moving = (radial - _radial).sqrMagnitude > 0.0001f;
++            if (moving && normal.sqrMagnitude > 0.0001f) { _normal = normal.normalized; _sampleAt = Time.time; }
++            _radial = radial;
++            _trail.emitting = Time.time >= _start && moving;
++            if (_leftTrail != null && _leftTip != null)
++            {
++                Vector3 leftRadial = _leftTip.position - (_player.transform.position + Vector3.up);
++                bool leftMoving = (leftRadial - _leftRadial).sqrMagnitude > 0.0001f;
++                Vector3 leftNormal = Vector3.Cross(_leftRadial, leftRadial);
++                if (!moving && leftMoving && leftNormal.sqrMagnitude > 0.0001f) { _normal = leftNormal.normalized; _sampleAt = Time.time; }
++                _leftRadial = leftRadial; _leftTrail.emitting = Time.time >= _start && leftMoving;
++            }
++        }
++        private void OnDestroy() { if (_tip != null) Destroy(_tip.gameObject); if (_leftTip != null) Destroy(_leftTip.gameObject); }
++    }
++
+     public class DragonGroundBolt : MonoBehaviour
+     {
+         public LineRenderer Glow, Core, Fork;
+@@ -13363,7 +13481,7 @@
+             {
+                 Vector3 b = Pts[Pts.Count - 1];
+                 Color sc = Color;
+-                DragonCombat.RunVfx(delegate { DragonVfx.Burst(b + Vector3.up * 0.15f, sc, 10, 4f, 0.14f, 0.3f, 0.5f); });   // fizzles out at the end
++                DragonCombat.RunVfx(delegate { DragonVfx.Burst(b + Vector3.up * 0.10f, sc, 4, 3f, 0.045f, 0.2f, 0.4f); });   // fizzles out at the end
+             }
+         }
+ 
+@@ -13389,20 +13507,22 @@
+             }
+             if (!_done && Pts.Count > 0 && Time.time >= _nextArc)
+             {
+-                _nextArc = Time.time + UnityEngine.Random.Range(0.08f, 0.16f);
++                _nextArc = Time.time + UnityEngine.Random.Range(0.12f, 0.20f);
+                 Vector3 head = Pts[Pts.Count - 1];
+                 Color hc = Color;
+-                DragonCombat.RunVfx(delegate { DragonVfx.Burst(head + Vector3.up * 0.1f, hc, 5, 4f, 0.12f, 0.25f, 0.6f); });
+-            }
+-        }
+-
+-        private static void Paint(LineRenderer l, Color c, float a)
++                DragonCombat.RunVfx(delegate { DragonVfx.Burst(head + Vector3.up * 0.07f, hc, 3, 3f, 0.04f, 0.2f, 0.5f); });
++            }
++        }
++
++        private readonly Gradient _paintGradient = new Gradient();
++        private readonly GradientColorKey[] _paintColors = new GradientColorKey[2];
++        private readonly GradientAlphaKey[] _paintAlpha = new GradientAlphaKey[3];
++        private void Paint(LineRenderer l, Color c, float a)
+         {
+             if (l == null) return;
+-            Gradient g = new Gradient();
+-            g.SetKeys(new GradientColorKey[] { new GradientColorKey(c, 0f), new GradientColorKey(c, 1f) },
+-                      new GradientAlphaKey[] { new GradientAlphaKey(a * 0.25f, 0f), new GradientAlphaKey(a * 0.8f, 0.6f), new GradientAlphaKey(a, 1f) });
+-            l.colorGradient = g;
++            _paintColors[0] = new GradientColorKey(c, 0f); _paintColors[1] = new GradientColorKey(c, 1f);
++            _paintAlpha[0] = new GradientAlphaKey(a * 0.25f, 0f); _paintAlpha[1] = new GradientAlphaKey(a * 0.8f, 0.6f); _paintAlpha[2] = new GradientAlphaKey(a, 1f);
++            _paintGradient.SetKeys(_paintColors, _paintAlpha); l.colorGradient = _paintGradient;
+         }
+ 
+         private Vector3 Jit(Vector3 p, Vector3 side, float amount)
+@@ -13487,24 +13607,6 @@
+     }
+ 
+     // v0.25.65: holds, then fades every child mesh's vertex colours out and destroys the object (crescent flashes).
+-    public class DragonJudgementCloud : MonoBehaviour
+-    {
+-        public Color Tint;
+-        public float Life = 1f;
+-        private float _age;
+-        private Renderer _renderer;
+-        private MaterialPropertyBlock _block;
+-        private void Awake() { _renderer = GetComponent<Renderer>(); _block = new MaterialPropertyBlock(); }
+-        private void LateUpdate()
+-        {
+-            _age += Time.deltaTime;
+-            Color c = Tint;
+-            c.a *= Mathf.Clamp01(_age / 0.04f) * Mathf.Clamp01((Life - _age) / 0.25f);
+-            _block.SetColor("_TintColor", c); _block.SetColor("_Color", c);
+-            _block.SetVector("_MainTex_ST", new Vector4(1f, 1f, _age * 0.08f, _age * 0.025f));
+-            if (_renderer != null) _renderer.SetPropertyBlock(_block);
+-        }
+-    }
+ 
+     public class DragonFadeOut : MonoBehaviour
+     {
+@@ -13821,7 +13923,8 @@
+         private static float _warmNext;
+         public static void PrewarmTick(Player p)
+         {
+-            if (_warmStep >= 30 || p == null) return;
++            if (_warmStep >= 40 || p == null) return;
++            if (p.InAttack() || DragonCombat.IsSkillLocked(p) || DragonCombat.SkillOwnsAnimator(p)) return;
+             if (_warmStep < 0) { _warmStep = 0; _warmNext = Time.time + 3f; return; }
+             if (Time.time < _warmNext) return;
+             _warmNext = Time.time + 0.05f;
+@@ -13860,13 +13963,41 @@
+                     case 26: ClearMat(); break;
+                     case 27: DarkCoreMat(); break;
+                     case 28: WindVeilMat(); break;
+-                    case 29: Mat(SlashTex(), false); Mat(LineTex(), true); Mat(CrackTex(), false); Mat(SmokeTex(), false); Mat(StreakTex(), false); JudgementCloudMaterial(); JudgementCloudMesh(); break;
++                    case 29: Mat(SlashTex(), false); Mat(LineTex(), true); Mat(CrackTex(), false); Mat(SmokeTex(), false); Mat(StreakTex(), false); CloudPuffSize(); break;
++                    case 30: RelicGold(); break;
++                    case 31: RelicIvory(); break;
++                    case 32: RelicGem(new Color(0.15f, 0.48f, 0.85f, 1f)); break;
++                    case 33: RelicGem(new Color(0.25f, 0.85f, 0.4f, 1f)); break;
++                    case 34: RelicFeather(Color.white); break;
++                    case 35: WarmWarhammer(); break;
++                    case 36: Mat(PressureTex(), false); break;
++                    case 37: RelicInlay(Holy); break;
++                    case 38: Mat(WhiteTex(), true); break;
++                    case 39: StompWindTexture(); break;
+                 }
+             }
+             catch (Exception) { }
+             _warmStep++;
+         }
+ 
++        public static void WeaponWake(Player player, float delay, float duration)
++        {
++            if (!Enabled || player == null || player != Player.m_localPlayer) return;
++            DragonWeaponWake wake = player.GetComponent<DragonWeaponWake>();
++            if (wake == null) wake = player.gameObject.AddComponent<DragonWeaponWake>();
++            wake.Begin(player, delay, duration, Mat(LineTex(), false));
++        }
++        public static bool SwingClip(string clip)
++        {
++            return clip == "warrior_heavy" || clip == "merc_heavy_asc" || clip == "warrior_impact_wave" ||
++                clip == "sm_slash_a" || clip == "sm_slash_b" || clip == "sm_moon_finisher" ||
++                clip == "sm_crescent" || clip == "sm_crescent_asc" || clip == "sm_halfmoon" || clip == "sm_halfmoon_2" ||
++                clip == "sm_halfmoon_finisher" || clip == "sm_eclipse" || clip == "merc_circle" || clip == "merc_circle_2" ||
++                clip == "merc_seismic" || clip == "merc_bone" || clip == "merc_bomb" || clip == "sm_crescent_asc2" ||
++                clip == "wiz_greatblade" || clip == "wiz_greatblade_slam" || clip == "sorc_blade" || clip == "sorc_blade_asc" ||
++                clip == "cleric_cross_1" || clip == "cleric_cross_2" || clip == "cleric_hammer_slam" || clip == "angel_comet" || clip == "cleric_zap";
++        }
++        public static bool MaterialsReady { get { return _warmStep >= 40; } }
+         public static bool MuteHitImpact;   // v0.25.182 (perf): set around a skill's own rapid ticks (Furious Winds) to skip HitImpact
+         private static Material _windVeilMat;
+         private static Texture2D _windVeilTex;
+@@ -14212,7 +14343,7 @@
+                 ParticleSystemShapeType.Sphere, Mathf.Max(0.1f, radius), Vector3.zero, false, true);
+             ParticleSystem.MainModule m = ps.main;
+             m.loop = true;
+-            if (lightRange > 0f)
++            if (lightRange > 0f && LightScale > 0.05f)
+             {
+                 Light light = go.AddComponent<Light>(); DragonPerf.OnLight(light);
+                 light.type = LightType.Point;
+@@ -14965,7 +15096,7 @@
+ 
+         public static float LightScale
+         {
+-            get { return DragonCombatPlugin.Instance == null || DragonCombatPlugin.Instance.VfxLight == null ? 0.15f : Mathf.Clamp(DragonCombatPlugin.Instance.VfxLight.Value, 0f, 2f); }
++            get { return 0f; } // v0.25.195: extra effect lights removed; particles/emissive effects are unchanged
+         }
+ 
+         private static float Hash(int x, int y, int seed)
+@@ -15161,9 +15292,8 @@
+         }
+ 
+         private static Texture2D _stompWindTex;
+-        public static void StompWindRing(Vector3 pos, float innerRadius, float radius, float seconds)
+-        {
+-            if (!Enabled) return;
++        private static Texture2D StompWindTexture()
++        {
+             if (_stompWindTex == null) _stompWindTex = MakeTex(128, 128, delegate(float u, float v)
+             {
+                 float d = Rad(u, v);
+@@ -15171,8 +15301,13 @@
+                 float flow = 0.65f + 0.35f * Fbm(Mathf.Cos(ang) * 5f, Mathf.Sin(ang) * 5f + d * 7f, 194);
+                 return Mathf.Exp(-Mathf.Pow((d - 0.83f) / 0.13f, 2f)) * flow * Mathf.Clamp01((1f - d) * 14f);
+             }, TextureWrapMode.Clamp);
++            return _stompWindTex;
++        }
++        public static void StompWindRing(Vector3 pos, float innerRadius, float radius, float seconds)
++        {
++            if (!Enabled) return;
+             DragonMeshFx ring = MeshFx(GroundPoint(pos) + Vector3.up * 0.12f, Quaternion.identity, true,
+-                Mat(_stompWindTex, false), new Color(0.82f, 0.86f, 0.9f, 0.78f), seconds);
++                Mat(StompWindTexture(), false), new Color(0.82f, 0.86f, 0.9f, 0.78f), seconds);
+             if (ring != null)
+             {
+                 ring.Conform = true;
+@@ -15257,6 +15392,12 @@
+         public static void SlashArc(Vector3 center, Vector3 forward, float radius, float arcDeg, Color c, float width, float seconds, float roll)
+         {
+             if (!Enabled) return;
++            Player local = Player.m_localPlayer;
++            if (local != null && (center - (local.transform.position + Vector3.up)).sqrMagnitude < 4f)
++            {
++                DragonWeaponWake wake = local.GetComponent<DragonWeaponWake>(); float observedRoll;
++                if (wake != null && wake.TryRoll(out observedRoll)) roll = observedRoll;
++            }
+             Vector3 f = forward; f.y = 0f;
+             if (f.sqrMagnitude < 0.001f) f = Vector3.forward;
+             GameObject go = new GameObject("IH_SlashArc");
+@@ -15351,11 +15492,12 @@
+             GameObject go = new GameObject("IH_GroundBolt");
+             DragonGroundBolt b = go.AddComponent<DragonGroundBolt>();
+             b.Color = c;
+-            b.Width = Mathf.Max(0.05f, width);
++            width = Mathf.Max(0.025f, width * 0.38f);
++            b.Width = width;
+             b.MaxLife = Mathf.Max(0.5f, maxLife);
+-            b.Glow = SoftLine(go.transform, width * 3f);
+-            b.Core = SoftLine(go.transform, width * 1.4f);
+-            b.Fork = SoftLine(go.transform, width * 1.6f);
++            b.Glow = SoftLine(go.transform, width * 1.8f);
++            b.Core = SoftLine(go.transform, width * 0.5f);
++            b.Fork = SoftLine(go.transform, width * 0.38f);
+             if (LightScale > 0.05f)
+             {
+                 GameObject lg = new GameObject("head");
+@@ -16049,6 +16191,17 @@
+                 CrescentArc(go.transform, body, radius, width * 1.5f, 0f, 70f, half, false, 0f);
+                 CrescentArc(go.transform, core, radius, width * 0.45f, 0f, 66f, half, true, 0f);
+             }
++            GameObject under = new GameObject("bladeWind"); under.transform.SetParent(go.transform, false);
++            under.transform.localPosition = Vector3.down * 0.42f;
++            Color wind = new Color(0.77f, 0.82f, 0.86f, 0.56f);
++            for (int k = 0; k < 3; k++)
++                CrescentArc(under.transform, wind, radius * 0.92f, Mathf.Max(0.09f, width * 0.65f), 0f, 105f,
++                    Quaternion.Euler(0f, k * 120f, k % 2 == 0 ? 7f : -7f), false, 0f);
++            ParticleSystem air = Particles(go.transform, new Color(0.72f, 0.76f, 0.79f, 0.38f), 8, 22f, seconds, 0.28f,
++                0.1f, 0.25f, 0.12f, 0.3f, 0f, ParticleSystemShapeType.Circle, radius * 0.8f, new Vector3(90f, 0f, 0f), false, false);
++            ParticleSystem.MainModule airMain = air.main; airMain.maxParticles = 32; airMain.simulationSpace = ParticleSystemSimulationSpace.Local;
++            ParticleSystem.VelocityOverLifetimeModule flow = air.velocityOverLifetime; flow.enabled = true;
++            flow.space = ParticleSystemSimulationSpace.Local; flow.orbitalY = new ParticleSystem.MinMaxCurve(12f);
+             DragonSpinner sp = go.AddComponent<DragonSpinner>();
+             sp.DegPerSecond = 360f / Mathf.Max(0.1f, turnSeconds);
+             DragonFadeOut fo = go.AddComponent<DragonFadeOut>();
+@@ -16077,23 +16230,21 @@
+             hold = Mathf.Clamp(hold, 0.1f, 1.2f);
+             Color glow = Color.Lerp(tint, new Color(0.55f, 0.75f, 1f, 1f), 0.35f);
+             Color core = Color.Lerp(tint, Color.white, 0.85f);
+-            // v0.25.194: dense cloud body with a stable spherical silhouette, plus interior cloud puffs.
++            // v0.25.195: Priest-storm smoke in a sphere VOLUME. No spherical surface/barrier mesh.
+             float cloudLife = Mathf.Max(0.65f, hold) + 0.3f;
+             DragonVfxLife haze = Host(center, cloudLife, "judgementcloud");
+-            GameObject body = new GameObject("cloudsphere"); body.transform.SetParent(haze.transform, false);
+-            body.transform.localScale = Vector3.one * (r * 2f);
+-            body.AddComponent<MeshFilter>().sharedMesh = JudgementCloudMesh();
+-            MeshRenderer renderer = body.AddComponent<MeshRenderer>();
+-            renderer.sharedMaterial = JudgementCloudMaterial();
+-            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; renderer.receiveShadows = false;
+-            Color fog = Color.Lerp(tint, new Color(0.65f, 0.73f, 0.9f, 1f), 0.25f); fog.a = 0.8f;
+-            DragonJudgementCloud cloud = body.AddComponent<DragonJudgementCloud>();
+-            cloud.Tint = fog; cloud.Life = cloudLife;
+-            ParticleSystem mist = Particles(haze.transform, new Color(fog.r, fog.g, fog.b, 0.68f), 36, 0f, 0.05f, cloudLife,
+-                0.02f, 0.08f, r * 0.7f, r, 0f, ParticleSystemShapeType.Sphere, r * 0.58f, Vector3.zero, false, false);
++            Color fog = Color.Lerp(new Color(0.14f, 0.15f, 0.20f, 0.94f), tint, 0.10f); fog.a = 0.94f;
++            ParticleSystem mist = Particles(haze.transform, fog, 42, 0f, 0.05f, cloudLife,
++                0.03f, 0.12f, r * 0.75f, r * 1.2f, 0f, ParticleSystemShapeType.Sphere, r * 0.65f, Vector3.zero, false, false);
++            ParticleSystem.ShapeModule mistShape = mist.shape; mistShape.radiusThickness = 1f;
++            ParticleSystem.MainModule mistMain = mist.main; mistMain.maxParticles = 48;
++            mistMain.startColor = new ParticleSystem.MinMaxGradient(fog, new Color(fog.r * 1.18f, fog.g * 1.18f, fog.b * 1.18f, fog.a));
++            ParticleSystem.EmissionModule mistEmission = mist.emission;
++            mistEmission.SetBursts(new ParticleSystem.Burst[] { new ParticleSystem.Burst(0f, (short)Mathf.Clamp(Mathf.RoundToInt(24f * Amount), 18, 36)) });
++            ParticleSystem.SizeOverLifetimeModule mistSize = mist.sizeOverLifetime;
++            mistSize.size = new ParticleSystem.MinMaxCurve(1f, CloudPuffSize());
+             Material mistMaterial = Mat(SmokeTex(), false);
+             if (mistMaterial != null) mist.GetComponent<ParticleSystemRenderer>().sharedMaterial = mistMaterial;
+-            ParticleSystem.MainModule mistMain = mist.main; mistMain.maxParticles = 48;
+             const int lines = 9;
+             for (int k = 0; k < lines; k++)
+             {
+@@ -16115,38 +16266,11 @@
+             Flash(center, new Color(0.55f, 0.65f, 1f, 1f), 0.5f, r, 0.1f);
+         }
+ 
+-        private static Mesh _judgementCloudMesh;
+-        private static Texture2D _judgementCloudTex;
+-        private static Material _judgementCloudMat;
+-        private static Mesh JudgementCloudMesh()
+-        {
+-            if (_judgementCloudMesh == null)
+-            {
+-                GameObject temporary = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+-                temporary.SetActive(false);
+-                _judgementCloudMesh = UnityEngine.Object.Instantiate(temporary.GetComponent<MeshFilter>().sharedMesh) as Mesh;
+-                if (_judgementCloudMesh != null)
+-                {
+-                    Color[] colors = new Color[_judgementCloudMesh.vertexCount];
+-                    for (int i = 0; i < colors.Length; i++) colors[i] = Color.white;
+-                    _judgementCloudMesh.colors = colors;
+-                }
+-                UnityEngine.Object.DestroyImmediate(temporary);
+-            }
+-            return _judgementCloudMesh;
+-        }
+-        private static Material JudgementCloudMaterial()
+-        {
+-            if (_judgementCloudMat != null) return _judgementCloudMat;
+-            if (_judgementCloudTex == null) _judgementCloudTex = MakeTex(96, 64, delegate(float u, float v)
+-            {
+-                float a = u * Mathf.PI * 2f;
+-                return 0.58f + 0.42f * Fbm(Mathf.Cos(a) * 3f + 5f, Mathf.Sin(a) * 3f + v * 6f, 194);
+-            }, TextureWrapMode.Repeat);
+-            _judgementCloudMat = Mat(_judgementCloudTex, false);
+-            // Draw before the slashes without writing depth, so the cuts remain readable inside the cloud.
+-            if (_judgementCloudMat != null) { _judgementCloudMat.renderQueue = 2990; if (_judgementCloudMat.HasProperty("_ZWrite")) _judgementCloudMat.SetInt("_ZWrite", 0); }
+-            return _judgementCloudMat;
++        private static AnimationCurve _cloudPuffSize;
++        private static AnimationCurve CloudPuffSize()
++        {
++            if (_cloudPuffSize == null) _cloudPuffSize = new AnimationCurve(new Keyframe(0f, 0.8f), new Keyframe(0.25f, 1f), new Keyframe(1f, 1.1f));
++            return _cloudPuffSize;
+         }
+ 
+         // v0.25.185 (user: Clockwork was invisible): a clear brass clock burst on the ground - soft gold pulse over the area,
+@@ -16732,30 +16856,61 @@
+             return _goldTex;
+         }
+ 
++        private static Material _nativeRelicSurface;
++        private static Shader RelicShader()
++        {
++            if (_nativeRelicSurface != null) return _nativeRelicSurface.shader;
++            // Reuse a shader shipped with Valheim. Standard is not guaranteed to be included in a player build.
++            if (ObjectDB.instance != null)
++            {
++                GameObject prefab = ObjectDB.instance.GetItemPrefab("SwordBronze");
++                if (prefab != null)
++                {
++                    Renderer[] renderers = prefab.GetComponentsInChildren<Renderer>(true);
++                    for (int i = 0; i < renderers.Length; i++)
++                    {
++                        Material material = renderers[i].sharedMaterial;
++                        if (material != null && material.shader != null && material.shader.isSupported && material.HasProperty("_MainTex"))
++                        { _nativeRelicSurface = material; Debug.Log("[AA] Relic surface shader: " + material.shader.name); return material.shader; }
++                    }
++                }
++            }
++            return Shader.Find("Standard");
++        }
++        private static Material NewRelicMaterial(Shader shader)
++        {
++            Material material = _nativeRelicSurface != null && _nativeRelicSurface.shader == shader ? new Material(_nativeRelicSurface) : new Material(shader);
++            material.mainTexture = WhiteTex(); material.mainTextureScale = Vector2.one;
++            material.mainTextureOffset = Vector2.zero;
++            if (material.HasProperty("_BumpMap")) material.SetTexture("_BumpMap", null);
++            material.DisableKeyword("_NORMALMAP");
++            return material;
++        }
+         public static Material RelicGold()
+         {
+             if (_relicGold != null) return _relicGold;
+-            Shader s = Shader.Find("Standard");
++            Shader s = RelicShader();
+             if (s == null) return SolidMat(new Color(0.95f, 0.76f, 0.32f, 1f));
+-            _relicGold = new Material(s);
+-            _relicGold.color = new Color(1f, 0.79f, 0.34f, 1f);
++            _relicGold = NewRelicMaterial(s);
++            _relicGold.color = new Color(0.76f, 0.57f, 0.25f, 1f);
+             _relicGold.mainTexture = GoldTex();
+             if (_relicGold.HasProperty("_Glossiness")) _relicGold.SetFloat("_Glossiness", 0.62f);
+             if (_relicGold.HasProperty("_Metallic")) _relicGold.SetFloat("_Metallic", 0.55f);   // reads polished without reflection probes
+-            if (_relicGold.HasProperty("_EmissionColor")) { _relicGold.EnableKeyword("_EMISSION"); _relicGold.SetColor("_EmissionColor", new Color(0.13f, 0.085f, 0.02f, 1f)); }
++            if (_relicGold.HasProperty("_EmissionColor")) { _relicGold.EnableKeyword("_EMISSION"); _relicGold.SetColor("_EmissionColor", new Color(0.025f, 0.015f, 0.005f, 1f)); }
+             return _relicGold;
+         }
+ 
+         public static Material RelicIvory()
+         {
+             if (_relicIvory != null) return _relicIvory;
+-            Shader s = Shader.Find("Standard");
++            Shader s = RelicShader();
+             if (s == null) return SolidMat(new Color(0.96f, 0.92f, 0.82f, 1f));
+-            _relicIvory = new Material(s);
+-            _relicIvory.color = new Color(0.97f, 0.93f, 0.83f, 1f);
++            _relicIvory = NewRelicMaterial(s);
++            _relicIvory.color = new Color(0.82f, 0.82f, 0.76f, 1f);
++            _relicIvory.mainTexture = StoneTex();
+             if (_relicIvory.HasProperty("_Glossiness")) _relicIvory.SetFloat("_Glossiness", 0.48f);
+             if (_relicIvory.HasProperty("_Metallic")) _relicIvory.SetFloat("_Metallic", 0f);
+-            if (_relicIvory.HasProperty("_EmissionColor")) { _relicIvory.EnableKeyword("_EMISSION"); _relicIvory.SetColor("_EmissionColor", new Color(0.11f, 0.105f, 0.09f, 1f)); }
++            if (_relicIvory.HasProperty("_EmissionColor")) { _relicIvory.EnableKeyword("_EMISSION"); _relicIvory.SetColor("_EmissionColor", new Color(0.025f, 0.025f, 0.022f, 1f)); }
+             return _relicIvory;
+         }
+ 
+@@ -16765,9 +16920,9 @@
+             int key = Mathf.RoundToInt(c.r * 31f) | (Mathf.RoundToInt(c.g * 31f) << 5) | (Mathf.RoundToInt(c.b * 31f) << 10);
+             Material m;
+             if (_relicGems.TryGetValue(key, out m) && m != null) return m;
+-            Shader s = Shader.Find("Standard");
++            Shader s = RelicShader();
+             if (s == null) { m = SolidMat(c); _relicGems[key] = m; return m; }
+-            m = new Material(s);
++            m = NewRelicMaterial(s);
+             m.color = c;
+             if (m.HasProperty("_Glossiness")) m.SetFloat("_Glossiness", 0.92f);
+             if (m.HasProperty("_Metallic")) m.SetFloat("_Metallic", 0.1f);
+@@ -16782,9 +16937,9 @@
+             int key = Mathf.RoundToInt(c.r * 31f) | (Mathf.RoundToInt(c.g * 31f) << 5) | (Mathf.RoundToInt(c.b * 31f) << 10);
+             Material m;
+             if (_relicFeathers.TryGetValue(key, out m) && m != null) return m;
+-            Shader s = Shader.Find("Standard");
++            Shader s = RelicShader();
+             if (s == null) { m = SolidMat(c); _relicFeathers[key] = m; return m; }
+-            m = new Material(s);
++            m = NewRelicMaterial(s);
+             m.color = c;
+             if (m.HasProperty("_Glossiness")) m.SetFloat("_Glossiness", 0.2f);
+             if (m.HasProperty("_Metallic")) m.SetFloat("_Metallic", 0f);
+@@ -17683,8 +17838,12 @@
+             ParticleSystem rim = Particles(root.transform, new Color(0.62f, 0.52f, 0.80f, 0.6f), 0, 26f * Amount, seconds, 0.35f, 0f, 0.15f, core * 0.08f, core * 0.16f, 0f,
+                 ParticleSystemShapeType.Sphere, core * 1.05f, Vector3.zero, false, true);
+             ParticleSystem.ShapeModule sh = rim.shape; sh.radiusThickness = 0f;
+-            Light l = root.AddComponent<Light>(); DragonPerf.OnLight(l);
+-            l.type = LightType.Point; l.color = new Color(0.55f, 0.35f, 0.9f, 1f); l.range = Mathf.Min(4f, radius * 0.5f); l.intensity = 0.8f * LightScale; l.shadows = LightShadows.None;
++            Light l = null;
++            if (LightScale > 0.05f)
++            {
++                l = root.AddComponent<Light>(); /* guarded */ DragonPerf.OnLight(l);
++                l.type = LightType.Point; l.color = new Color(0.55f, 0.35f, 0.9f, 1f); l.range = Mathf.Min(4f, radius * 0.5f); l.intensity = 0.8f * LightScale; l.shadows = LightShadows.None;
++            }
+             DragonBlackHole bh = root.AddComponent<DragonBlackHole>();
+             bh.Life = seconds;
+             return root;
+@@ -18177,8 +18336,12 @@
+             MeshObject("glow", m, Mat(WhiteTex(), true), root.transform);
+             DragonDome dd = root.AddComponent<DragonDome>();
+             dd.Mesh = m; dd.Base = cs.ToArray();
+-            Light l = root.AddComponent<Light>(); DragonPerf.OnLight(l);
+-            l.type = LightType.Point; l.color = new Color(1f, 0.88f, 0.6f, 1f); l.range = radius * 2.2f; l.intensity = 0f; l.shadows = LightShadows.None;
++            Light l = null;
++            if (LightScale > 0.05f)
++            {
++                l = root.AddComponent<Light>(); /* guarded */ DragonPerf.OnLight(l);
++                l.type = LightType.Point; l.color = new Color(1f, 0.88f, 0.6f, 1f); l.range = radius * 2.2f; l.intensity = 0f; l.shadows = LightShadows.None;
++            }
+             dd.Light = l;
+             return root;
+         }
+@@ -18218,7 +18381,34 @@
+         // depth along Z -0.5..0.5). The caller scales the returned child to (width, height, depth) every frame.
+         // Gold head with ivory striking faces, ivory haft with gold bands, gold pommel gem, a radiant halo shell and
+         // light ribbons from both striking faces (they draw arcs while it flips).
++        public static Mesh RelicDiamondMesh(float size, float depth)
++        {
++            Vector3[] p = { new Vector3(-size * 0.5f, 0f, 0f), new Vector3(0f, size * 0.7f, 0f),
++                new Vector3(size * 0.5f, 0f, 0f), new Vector3(0f, -size * 0.7f, 0f),
++                new Vector3(0f, 0f, depth * 0.5f), new Vector3(0f, 0f, -depth * 0.5f) };
++            List<Vector3> vertices = new List<Vector3>(6); vertices.AddRange(p);
++            List<int> triangles = new List<int>(24);
++            for (int i = 0; i < 4; i++) { triangles.Add((i + 1) % 4); triangles.Add(i); triangles.Add(4);
++                triangles.Add(i); triangles.Add((i + 1) % 4); triangles.Add(5); }
++            return Uvd(FacetMesh(vertices, triangles, Color.white, 0f), 1f);
++        }
++        private static GameObject _warhammerTemplate;
++        private static void WarmWarhammer()
++        {
++            if (_warhammerTemplate != null) return;
++            GameObject holder = new GameObject("IH_HammerTemplateRoot"); holder.SetActive(false);
++            UnityEngine.Object.DontDestroyOnLoad(holder);
++            _warhammerTemplate = BuildWarhammerGeometry(holder.transform);
++        }
+         public static GameObject HolyWarhammer(Transform parent)
++        {
++            if (!Enabled || parent == null) return null;
++            WarmWarhammer();
++            GameObject model = UnityEngine.Object.Instantiate(_warhammerTemplate) as GameObject;
++            model.transform.SetParent(parent, false); model.SetActive(true);
++            return model;
++        }
++        private static GameObject BuildWarhammerGeometry(Transform parent)
+         {
+             if (!Enabled || parent == null) return null;
+             // v0.25.180 VFX DIRECTION (an actual thrown hammer): thick beveled stone head with clear bronze-framed
+@@ -18227,7 +18417,7 @@
+             // transparent echo that lags the spin. No halo shell / glow coat. Same unit space + caller scaling.
+             GameObject unit = new GameObject("IH_Warhammer");
+             unit.transform.SetParent(parent, false);
+-            Material stone = RelicStone(), bronze = RelicBronze(), inlay = RelicInlay(Holy);
++            Material stone = RelicIvory(), bronze = RelicGold(), inlay = RelicInlay(Holy);
+             Material leather = NaturalMat(new Color(0.34f, 0.25f, 0.17f, 1f));
+             Vector3 X = Vector3.right, Y = Vector3.up, Z = Vector3.forward;
+             Color white = Color.white;
+@@ -18293,15 +18483,20 @@
+             DoubleSide(t);
+             MeshObject("seams", FacetMesh(v, t, new Color(0.72f, 0.86f, 1f, 0.55f), 0f), Mat(WhiteTex(), true), unit.transform);
+ 
+-            // faint transparent echo of the head lagging the spin (reads the end-over-end rotation)
+-            GameObject echo = new GameObject("echo");
+-            echo.transform.SetParent(unit.transform, false);
+-            echo.transform.localRotation = Quaternion.AngleAxis(-26f, X);
+-            v = new List<Vector3>(); t = new List<int>();
+-            Tube(v, t, new Vector3(-0.53f, 0.39f, 0f), new Vector3(0.53f, 0.39f, 0f), Y, Z, 0.12f, 0.43f, 0.12f, 0.43f, 8);
+-            DoubleSide(t);
+-            MeshObject("echoHead", FacetMesh(v, t, new Color(0.95f, 0.90f, 0.78f, 0.12f), 0.2f), ClearMat(), echo.transform);
+-
++            // Raised bronze bezels and faceted blue gems on both broad faces match Goddess Relic.
++            Mesh jewel = RelicDiamondMesh(0.18f, 0.055f);
++            Material blue = RelicGem(new Color(0.15f, 0.48f, 0.85f, 1f));
++            for (int side = -1; side <= 1; side += 2)
++            {
++                GameObject gem = MeshObject("blueDiamond", jewel, blue, unit.transform);
++                gem.transform.localPosition = new Vector3(0f, 0.39f, side * 0.45f);
++                for (int edge = -1; edge <= 1; edge += 2)
++                {
++                    GameObject inset = MeshObject("blueInset", jewel, blue, unit.transform);
++                    inset.transform.localScale = Vector3.one * 0.48f;
++                    inset.transform.localPosition = new Vector3(edge * 0.23f, 0.39f, side * 0.45f);
++                }
++            }
+             // short curved trail following the head (narrow core + pale air) - the flips draw arcs
+             GameObject keep = unit;
+             Material core = Mat(LineTex(), true), air = Mat(LineTex(), false);
+@@ -18471,8 +18666,12 @@
+             root.AddComponent<DragonFaceCamera>();
+             DragonPop pop = root.AddComponent<DragonPop>();
+             pop.Grow = 0.25f; pop.Life = Mathf.Max(0.3f, seconds); pop.Fade = 0.3f; pop.Pulse = 0.05f;
+-            Light l = root.AddComponent<Light>(); DragonPerf.OnLight(l);
+-            l.type = LightType.Point; l.color = new Color(0.62f, 0.45f, 1f, 1f); l.range = Mathf.Min(radius * 4f, 18f); l.intensity = 1.0f * LightScale; l.shadows = LightShadows.None;
++            Light l = null;
++            if (LightScale > 0.05f)
++            {
++                l = root.AddComponent<Light>(); /* guarded */ DragonPerf.OnLight(l);
++                l.type = LightType.Point; l.color = new Color(0.62f, 0.45f, 1f, 1f); l.range = Mathf.Min(radius * 4f, 18f); l.intensity = 1.0f * LightScale; l.shadows = LightShadows.None;
++            }
+             return root;
+         }
+ 
+@@ -19402,7 +19601,7 @@
+     public static class DragonPerf
+     {
+         public static bool On;
+-        public static bool NoEffectLights;
++        public static bool NoEffectLights = true;
+         public static ConfigEntry<bool> EnabledAtStart;
+         public static ConfigEntry<KeyCode> ToggleKey;
+         public static ConfigEntry<float> SpikeMs;
+@@ -19517,13 +19716,8 @@
+         private static readonly List<Light> _liveLights = new List<Light>();
+         public static void OnLight(Light l)
+         {
+-            LightsMade++;
+-            if (l == null) return;
+-            if (NoEffectLights) { l.enabled = false; return; }
+-            for (int i = _liveLights.Count - 1; i >= 0; i--) if (_liveLights[i] == null || !_liveLights[i].enabled) _liveLights.RemoveAt(i);
+-            int max = MaxLights != null ? Mathf.Max(0, MaxLights.Value) : 6;
+-            if (_liveLights.Count >= max) { l.enabled = false; return; }
+-            _liveLights.Add(l);
++            if (l != null) { l.enabled = false; UnityEngine.Object.Destroy(l); }
++
+         }
+     }
+ 
+@@ -19596,7 +19790,7 @@
+             {
+                 bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+                 bool alt = Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt);
+-                if (alt) { DragonPerf.NoEffectLights = !DragonPerf.NoEffectLights; Debug.Log("[Aethelborn] Effect lights " + (DragonPerf.NoEffectLights ? "OFF (new effects)" : "ON")); }
++                if (alt) { } // Alt+F7 removed: effect point lights are permanently off
+                 else if (ctrl) { if (DragonPerf.On) WriteReport("Ctrl+F7"); }
+                 else if (DragonPerf.On) End(); else Begin();
+             }
+@@ -19680,7 +19874,7 @@
+                     "FPS " + (_secFrames / secs).ToString("0") + "   frame avg " + avg.ToString("0.0") + " ms   max " + _secMsMax.ToString("0.0") + " ms\n" +
+                     "our code " + (_secFrames > 0 ? _secOurSum / _secFrames : 0).ToString("0.00") + " ms/frame   VFX spawn " + _secVfxSum.ToString("0.0") + " ms/s\n" +
+                     "alloc " + (_secAlloc / 1024.0 / secs).ToString("0") + " KB/s   GC " + _gcCount + "   spikes " + _spikeCount + "\n" +
+-                    "live VFX " + DragonVfxLife.Alive + "   skill " + (skill ?? "-") + "   effect lights " + (DragonPerf.NoEffectLights ? "OFF" : "on");
++                    "live VFX " + DragonVfxLife.Alive + "   skill " + (skill ?? "-") + "   effect point lights removed";
+                 _secStart = Time.unscaledTime; _secFrames = 0; _secMsSum = 0; _secMsMax = 0; _secOurSum = 0; _secVfxSum = 0; _secAlloc = 0;
+             }
+             if (Time.unscaledTime >= _nextAutoReport) { _nextAutoReport = Time.unscaledTime + 60f; WriteReport("auto (every 60 s)"); _skipSpike = true; }   // the file write itself is not a game spike
+@@ -19707,7 +19901,7 @@
+                 double baseFrame = _idleFrames > 0 ? _idleFrameMsSum / _idleFrames : (_frames > 0 ? _frameMsSum / _frames : 0);
+                 double baseOur = _idleFrames > 0 ? _idleOurMsSum / _idleFrames : 0;
+                 b.AppendLine("AETHELBORN ASCENDED - PERFORMANCE REPORT (" + why + ")  " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+-                b.AppendLine("Recorded " + session.ToString("0") + " s, " + _frames + " frames. Effect lights: " + (DragonPerf.NoEffectLights ? "OFF" : "on"));
++                b.AppendLine("Recorded " + session.ToString("0") + " s, " + _frames + " frames. Effect point lights: removed");
+                 b.AppendLine();
+                 b.AppendLine("IDLE BASELINE (no skill in the last 4 s): frame " + baseFrame.ToString("0.00") + " ms (" + (baseFrame > 0 ? 1000.0 / baseFrame : 0).ToString("0") + " FPS), our code " + baseOur.ToString("0.00") + " ms/frame");
+                 b.AppendLine("Overall: frame " + (_frames > 0 ? _frameMsSum / _frames : 0).ToString("0.00") + " ms, worst " + _worst.ToString("0.0") + " ms, spikes " + _spikeCount + ", GC collections " + _gcCount +
+@@ -19722,7 +19916,7 @@
+                     b.AppendLine("  " + DragonPerf.SecNames[i].PadRight(30) + (_idleFrames > 0 ? DragonPerf.IdleMsSum[i] / _idleFrames : 0).ToString("0.000").PadLeft(8) + " / " + (_frames > 0 ? DragonPerf.AllMsSum[i] / _frames : 0).ToString("0.000") +
+                         (i == DragonPerf.SecVfx ? "" : ("   alloc " + (DragonPerf.AllocBytes[i] / 1024.0 / Math.Max(1.0, session)).ToString("0") + " KB/s")));
+                 b.AppendLine();
+-                b.AppendLine("PER SKILL (window = 4 s after each cast; +frame = extra frame time vs idle = everything the skill costs incl. GPU)");
++                b.AppendLine("PER SKILL (window = 4 s after each cast; +frame = frame-time difference vs idle (comparison, not isolated skill cost))");
+                 b.AppendLine("  skill                      casts  vfx ms avg/max  hosts/cast  psys/cast  lights/cast  vanilla/cast   +frame ms  +our ms  spikes  worst ms  verdict");
+                 List<DragonPerfSkill> list = new List<DragonPerfSkill>(DragonPerf.Skills.Values);
+                 list.Sort(delegate(DragonPerfSkill x, DragonPerfSkill y) { return Extra(y, baseFrame).CompareTo(Extra(x, baseFrame)); });
+@@ -19744,7 +19938,7 @@
+                             double d = s.PhaseMs[k] / s.WindowFrames - _idlePhase[k] / _idleFrames;
+                             if (d > bigD) { bigD = d; big = k; }
+                         }
+-                        string cause = big == DragonPerf.PhRest ? "GPU/render heavy (effects on screen, lights, physics)" :
++                        string cause = big == DragonPerf.PhRest ? "Render/wait phase grew (cause unconfirmed)" :
+                             big == DragonPerf.PhCoroutines ? "CPU: skill routines (hit checks / movement / effect updates)" :
+                             big == DragonPerf.PhLate ? "CPU: LateUpdate (animation drivers / effect followers)" : "CPU: Update scripts";
+                         verdict = (verdict == "ok" ? "" : verdict + " + ") + cause + " +" + bigD.ToString("0.0") + " ms";
+@@ -19765,8 +19959,8 @@
+                 }
+                 b.AppendLine();
+                 b.AppendLine("HOW TO READ: +frame = how much slower frames were in the 4 s after that skill vs idle. The verdict names the");
+-                b.AppendLine("frame phase that grew: GPU/render = its effects cost drawing (compare with Alt+F7 lights off); skill routines =");
+-                b.AppendLine("its per-frame logic; vfx ms max > 8 = its spawn causes a hitch. A spike with low 'our ms' and no skill = the");
++                b.AppendLine("frame phase that grew: render/wait includes rendering, unmeasured work and frame limiting; skill routines =");
++                b.AppendLine("its per-frame logic; vfx ms max > 8 = its spawn causes a hitch. A spike with low 'our ms' and no skill is not attributed by this monitor to AA scripts; it may involve the");
+                 b.AppendLine("game / another mod; [GC] = memory cleanup.");
+                 string dir = null;
+                 try { dir = System.IO.Path.GetDirectoryName(typeof(DragonPerf).Assembly.Location); } catch { }
+--- v0.25.194/DragonsAltar.DevTools.cs
++++ v0.25.195/DragonsAltar.DevTools.cs
+@@ -40,7 +40,7 @@
+     {
+         public const string ModGuid = "albedo.customclasses.devtools";
+         public const string ModName = "Aethelborn Ascended - Developer Tools";
+-        public const string ModVersion = "0.25.191";
++        public const string ModVersion = "0.25.195";
+ 
+         public static DeveloperToolsPlugin Instance;
+ 
+@@ -304,6 +304,7 @@
+ 
+                     string section = entry.Definition.Section;
+                     string key = entry.Definition.Key;
++                    if (section == "Visuals" && (key == "LightIntensity_v025145" || key == "MaxEffectLights_v025185")) continue; // removed point-light feature
+                     string unique = section + "|" + key;
+                     DevSetting setting;
+                     if (!byKey.TryGetValue(unique, out setting))
+--- v0.25.194/DragonsAltar.Ranger.cs
++++ v0.25.195/DragonsAltar.Ranger.cs
+@@ -42,7 +42,7 @@
+     {
+         public const string ModGuid = "albedo.customclasses.ranger";
+         public const string ModName = "Aethelborn Ascended - Ranger";
+-        public const string ModVersion = "0.25.194";
++        public const string ModVersion = "0.25.195";
+         private const string ClassDataKey = "AlbedoCustomClasses.Class";
+         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
+ 
+@@ -1916,6 +1916,11 @@
+             if (projectile != null) Patch(FindMethod(projectile, "Setup", 6), "ProjectileSetupPrefix", null);
+             Patch(FindMethod(typeof(Player), "GetAttackDrawPercentage", 0), null, "DrawPercentagePostfix");
+             Patch(FindMethod(typeof(ItemDrop.ItemData), "GetWeaponLoadingTime", 0), null, "LoadingTimePostfix");
++            Patch(FindMethod(typeof(Player), "SetWeaponLoaded", 1), null, "CrossbowLoadedPostfix");
++            Patch(FindMethod(typeof(Player), "ResetLoadedWeapon", 0), "CrossbowResetPrefix", null);
++            Patch(FindMethod(typeof(Humanoid), "UnequipItem", 2), "CrossbowUnequipPrefix", null);
++            Patch(FindMethod(typeof(Humanoid), "EquipItem", 2), null, "CrossbowEquipPostfix");
++            Patch(FindMethod(typeof(Attack), "OnAttackTrigger", 0), "CrossbowFirePrefix", "CrossbowFirePostfix");
+             // v0.25.181 (user: Greatbow = double speed while shooting): Therzie's Greatbows carry an attack movement factor of 2.0
+             // (vanilla bows <= 1), so a Ranger ran twice as fast while firing. Rangers get the vanilla bow's shooting speed (v0.25.188).
+             Patch(FindMethod(typeof(Humanoid), "GetAttackSpeedFactorMovement", 0), null, "RangerMoveFactorPostfix");
+@@ -2557,34 +2562,70 @@
+ 
+         // Bowmaster: a loaded Crossbow stays loaded when you holster / unequip it.
+         private readonly HashSet<ItemDrop.ItemData> _loadedCrossbows = new HashSet<ItemDrop.ItemData>();
+-        private ItemDrop.ItemData _prevWeapon, _prevLoaded;
+-        private FieldInfo _loadedField;
+-        private bool _loadedFieldSearched;
+-
++        private static readonly FieldInfo _loadedField = AccessTools.Field(typeof(Player), "m_weaponLoaded");
++        private static readonly FieldInfo _shotCharacter = AccessTools.Field(typeof(Attack), "m_character");
++        private static readonly FieldInfo _shotWeapon = AccessTools.Field(typeof(Attack), "m_weapon");
++        private static readonly MethodInfo _setLoadedMethod = AccessTools.Method(typeof(Player), "SetWeaponLoaded", new Type[] { typeof(ItemDrop.ItemData) });
++        private static readonly Action<Player, ItemDrop.ItemData> _setLoaded = _setLoadedMethod == null ? null :
++            (Action<Player, ItemDrop.ItemData>)Delegate.CreateDelegate(typeof(Action<Player, ItemDrop.ItemData>), _setLoadedMethod);
++        private static bool KeepsCrossbow(Player player)
++        {
++            return Instance != null && IsLocalRanger(player) && Instance.GetAdvancement(player) == "Bowmaster";
++        }
++        private static ItemDrop.ItemData ReadLoaded(Player player)
++        { return _loadedField == null ? null : _loadedField.GetValue(player) as ItemDrop.ItemData; }
++        private static void CrossbowLoadedPostfix(Player __instance, ItemDrop.ItemData __0)
++        {
++            if (KeepsCrossbow(__instance) && IsCrossbow(__0)) Instance._loadedCrossbows.Add(__0);
++        }
++        [HarmonyPriority(Priority.First)]
++        private static void CrossbowResetPrefix(Player __instance)
++        {
++            if (!KeepsCrossbow(__instance)) return;
++            ItemDrop.ItemData loaded = ReadLoaded(__instance);
++            if (IsCrossbow(loaded)) Instance._loadedCrossbows.Add(loaded);
++            // Clearing the native field is not evidence of a shot: holster mods do it too.
++            // Only the completed Attack.OnAttackTrigger callback can consume saved loaded state.
++        }
++        [HarmonyPriority(Priority.First)]
++        private static void CrossbowUnequipPrefix(Humanoid __instance)
++        {
++            Player player = __instance as Player;
++            if (!KeepsCrossbow(player)) return;
++            ItemDrop.ItemData loaded = ReadLoaded(player);
++            if (IsCrossbow(loaded)) Instance._loadedCrossbows.Add(loaded);
++        }
++        private static void CrossbowEquipPostfix(Humanoid __instance, bool __result)
++        {
++            Player player = __instance as Player;
++            if (!__result || !KeepsCrossbow(player)) return;
++            Instance.RestoreLoadedCrossbow(player);
++        }
++        [HarmonyPriority(Priority.First)]
++        private static void CrossbowFirePrefix(Attack __instance, ref ItemDrop.ItemData __state)
++        {
++            Player player = _shotCharacter == null ? null : _shotCharacter.GetValue(__instance) as Player;
++            ItemDrop.ItemData weapon = _shotWeapon == null ? null : _shotWeapon.GetValue(__instance) as ItemDrop.ItemData;
++            if (KeepsCrossbow(player) && IsCrossbow(weapon) && ReferenceEquals(ReadLoaded(player), weapon)) __state = weapon;
++        }
++        private static void CrossbowFirePostfix(Attack __instance, ItemDrop.ItemData __state)
++        {
++            if (__state == null || Instance == null) return;
++            Player player = _shotCharacter.GetValue(__instance) as Player;
++            // Failed / staggered triggers do not consume a stored shot.
++            if (player != null && ReadLoaded(player) == null) Instance._loadedCrossbows.Remove(__state);
++        }
++        private void RestoreLoadedCrossbow(Player player)
++        {
++            ItemDrop.ItemData weapon = GetCurrentWeapon(player);
++            if (_setLoaded != null && IsCrossbow(weapon) && _loadedCrossbows.Contains(weapon) && ReadLoaded(player) == null)
++                _setLoaded(player, weapon); // use native setter: synchronize ZDO/animation as well as the field
++        }
+         private void UpdateLoadedCrossbow(Player player, bool bowmaster)
+         {
+             if (!bowmaster) { _loadedCrossbows.Clear(); return; }
+-            if (!_loadedFieldSearched)
+-            {
+-                _loadedFieldSearched = true;
+-                for (Type t = typeof(Player); t != null && _loadedField == null; t = t.BaseType)
+-                {
+-                    FieldInfo[] fs = t.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+-                    for (int i = 0; i < fs.Length; i++)
+-                        if (fs[i].FieldType == typeof(ItemDrop.ItemData) && fs[i].Name.IndexOf("Loaded", StringComparison.OrdinalIgnoreCase) >= 0) { _loadedField = fs[i]; break; }
+-                }
+-            }
+-            if (_loadedField == null) return;
+-            ItemDrop.ItemData weapon = GetCurrentWeapon(player);
+-            ItemDrop.ItemData loaded = _loadedField.GetValue(player) as ItemDrop.ItemData;
+-            if (loaded != null && IsCrossbow(loaded)) _loadedCrossbows.Add(loaded);
+-            if (loaded == null && IsCrossbow(weapon) && _loadedCrossbows.Contains(weapon))
+-            {
+-                if (_prevWeapon == weapon && _prevLoaded == weapon) _loadedCrossbows.Remove(weapon);   // it was fired
+-                else { _loadedField.SetValue(player, weapon); loaded = weapon; }                     // re-equipped: still loaded
+-            }
+-            _prevWeapon = weapon;
+-            _prevLoaded = loaded;
++            // Compatibility fallback for a mod that skips the original EquipItem method.
++            RestoreLoadedCrossbow(player);
+         }
+ 
+         // ==================================================================================
+--- v0.25.194/INSTALL.bat
++++ v0.25.195/INSTALL.bat
+@@ -1,5 +1,5 @@
+ @echo off
+-title Immortal Heroes v0.25.194 - Ranger Mobility and Buff Timers
++title Immortal Heroes v0.25.195 - Skill Polish and State Fixes
+ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
+ echo.
+ pause
+--- v0.25.194/INSTALL.ps1
++++ v0.25.195/INSTALL.ps1
+@@ -1,7 +1,7 @@
+ $ErrorActionPreference = "Stop"
+ 
+ Write-Host ""
+-Write-Host "IMMORTAL HEROES v0.25.194 - SKILL FINISH AND DODGE PRIORITY" -ForegroundColor Cyan
++Write-Host "IMMORTAL HEROES v0.25.195 - SKILL POLISH AND STATE FIXES" -ForegroundColor Cyan
+ Write-Host "All 10 DLLs compile in staging before the live profile is touched." -ForegroundColor Gray
+ Write-Host ""
+ 

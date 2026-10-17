@@ -1,0 +1,16 @@
+AETHELBORN ASCENDED v0.25.195 - IN-GAME TESTS
+Install from this archive using INSTALL.bat as usual. Keep your v194 ZIP.
+This is a test pass. Do not promote it to Anchor until confirmed in game.
+
+1. Fresh game launch: after spawning, cast Goddess Relic, Judgement Hammer, Ray of Hope, Stomp and a Mixamo skill once, then repeat. Record F7 performance and LogOutput.log. Compare in the same location/camera with the game focused. Note any first-use hitch.
+2. Sword Master: HOLD RIGHT CLICK before casting and throughout Moonlight Splitter, both Crescent versions and Halfmoon. Every intended strike must execute. Repeat and dodge midway: pending hits must stop immediately, with the roll still responsive. Check basic attacks after block/roll.
+3. Bow Master + InstantEquip enabled: reload fully, rapidly alternate holster/equip 10-20 times (including same-frame inputs), then shoot. Must remain loaded until fired, then genuinely reload. Repeat with two physical crossbows and after an interrupted reload: never grant a shot to an unloaded weapon. Hold Shift throughout the next reload to confirm sprint reload still works. Actual third-party mod execution was not available here.
+4. Ascended Heavy Swing: three native Battleaxe strikes, at least 0.7s between damage contacts. VFX follows each stroke (opposite horizontal sweeps then downward). F8 interval above 0.7s should space contacts farther apart. Verify normal Heavy Swing is unchanged.
+5. Blade Storm: dark cloudy sphere volume with slight blue, not a smooth barrier surface. Cuts remain visible in daylight/night. Test an enemy inside the main target area but between/outside individual cosmetic spheres: it still takes v194 area damage. No damage outside the configured area.
+6. Whirlwind normal/Ascended: wind follows the blade and curls below it, without lingering after channel/recast end. Watch FPS.
+7. Other swinging skills: check Moonlight, second Ascended Crescent, Halfmoon, Eclipse, Circle Swing, Seismic, Grand Cross and Astral Greatblade. Wakes must follow real weapon motion; check matching dual wield on Mercenary. Existing projectiles/hit areas must be unchanged.
+8. Lightning Zap: left-to-right release. Paladin ground trails: thin, sleek electricity, no fat puffs. Existing vertical lightning remains strong. Ascended Shield Charge has a visibly wider air cone and normal wall collision.
+9. Relics/hammer: inspect depth, textures and blue gems from front/back/day/night. Holy Relic stays green with its healing heart. Pulses remain. Hammer has no silhouette box. Cross physical collision and expiry remain normal.
+10. Tooltips: inspect buffs, Judgement Mark, normal/Ascended Priest skills and burns. Header has no numerical buff parentheses. Values remain in stat rows. Ascension appears only when existing requirements are met; Ascended changes are readable in body rows. F8 light controls/Alt+F7 are removed; F7 monitor still works.
+
+Send the new performance report, LogOutput.log, and screenshots/videos of anything still wrong. Real visibility and FPS require these in-game checks.

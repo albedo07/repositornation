@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Reflection.Emit;
 using BepInEx;
 using BepInEx.Configuration;
 using HarmonyLib;
@@ -41,7 +42,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Aethelborn Ascended - Ranger";
-        public const string ModVersion = "0.25.191";
+        public const string ModVersion = "0.25.198";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -373,6 +374,9 @@ namespace DragonsAltarRanger
             DragonCombat.RegisterSkillLevelBonus(SkillLevelBonus);
             DragonCombat.RegisterIncomingHitFilter(IncomingHit);
             DragonCombat.ControlsHook = RangerControls;
+            DragonCombat.SkillCancelAvailable = delegate(string id)
+            { return (id == "furious_winds" && _fwActive) || (id == "starfall_volley" && _sfActive); };
+            DragonCombat.NormalAttackBaseSpeedProvider = RangerBowFireSpeed;
             InstallPatches();
             Logger.LogInfo(ModName + " v" + ModVersion + " loaded.");
         }
@@ -553,7 +557,7 @@ namespace DragonsAltarRanger
         private float _lmbLatchAt = -10f;
         private bool FollowUpClick(float channelStart)
         {
-            if (_lmbLatchAt <= channelStart) return false;
+            if (!DragonCombat.CanUseWorldInput(Player.m_localPlayer) || _lmbLatchAt <= channelStart) return false;
             _lmbLatchAt = -10f;
             return true;
         }
@@ -571,14 +575,15 @@ namespace DragonsAltarRanger
         {
             Player player = Player.m_localPlayer;
             if (player == null || player.IsDead()) return;
-            if (Input.GetMouseButtonDown(0) && !Cursor.visible) _lmbLatchAt = Time.time;
+            if (!DragonCombat.CanUseWorldInput(player)) _lmbLatchAt = -10f;
+            else if (Input.GetMouseButtonDown(0)) _lmbLatchAt = Time.time;
             bool ranger = GetClass(player) == "Ranger";
             bool acrobat = ranger && GetAdvancement(player) == "Acrobat";
+            UpdateRangerBuffIndicators(player, ranger, acrobat);
             UpdateDodgeCost(player, acrobat);
             if (acrobat) DragonCombat.ApplyStaminaUseCut(player, Mathf.Clamp01(_wsStaminaUse.Value / 100f), 0.5f);
             // v0.25.2 perf: gear rules 5x per second, not every frame.
             if (ranger && Time.time >= _nextGearCheck) { _nextGearCheck = Time.time + 0.2f; UpdateForbiddenGear(player, acrobat); }
-            if (ranger) UpdateQuickShotSpeed(player);
             if (_splitRooted)
             {
                 DragonCombat.LockSkill(player, 0.15f);
@@ -598,6 +603,19 @@ namespace DragonsAltarRanger
             }
             else if (acrobat && !_doubleJumpUsed && !_hovering && JumpPressed(player))
                 AirJump(player);
+        }
+
+        private float _rangerBuffUiAt, _windsUntil;
+        private void UpdateRangerBuffIndicators(Player player, bool ranger, bool acrobat)
+        {
+            if (Time.time < _rangerBuffUiAt) return;
+            _rangerBuffUiAt = Time.time + 0.2f;
+            float vigil;
+            _vigilUntil.TryGetValue(player.GetInstanceID(), out vigil);
+            DragonCombat.ShowStatusUntil(player, "hawks_vigil", "vigil", "Hawk's Vigil", vigil, 0,
+                "Attack Buff\n+" + Mathf.RoundToInt(_hvRanged.Value) + "% Ranged Damage");
+            DragonCombat.ShowStatusUntil(player, "furious_winds", "wind", "Furious Winds", ranger && acrobat && _fwActive ? _windsUntil : 0f, 0,
+                "Wind barrier active; recast to end it");
         }
 
         // Windstep: Dodge costs 50% less Stamina (Player.m_dodgeStaminaUsage), restored otherwise.
@@ -836,25 +854,37 @@ namespace DragonsAltarRanger
         {
             if (!RequireBow(player)) return;
             if (!BeginSkill(player, "Ranger.PiercingArrow", _paCooldown.Value, _paStamina.Value)) return;
+            StartCoroutine(PiercingArrowVolley(player, ascended));
+        }
+
+        private IEnumerator PiercingArrowVolley(Player player, bool ascended)
+        {
             RangerArrowDamage d = ArrowDamage(player);
             float power = DragonCombat.GetSkillPower(player, "piercing_arrow");
             float range = DragonCombat.M(ascended ? _paAscRange.Value : _paRange.Value);
-            Vector3 origin = ShotOrigin(player);
-            Vector3 dir = AimDir(player, origin);
-            DragonCombat.PlayClip(player, "rg_power", 0.1f);   // snap draw, strong recoil
-            Shoot(player, "Piercing Arrow");
-            if (_enableVfx.Value) { Vector3 po = origin, pd = dir; DragonCombat.RunVfx(delegate { DragonVfx.Gust(po + pd * 1.2f, pd, 0.8f); }); }   // v0.25.180 tight pale airflow at release (no sonic rings)
-            bool first = true;
-            float endWidth = DragonCombat.M(Mathf.Max(0.3f, _paAscWidth.Value));
-            StartCoroutine(ArrowFlight(player, origin, dir, DragonCombat.M(_paSpeed.Value), range, DragonCombat.M(0.35f), true,
-                new Color(0.70f, 1f, 0.55f, 1f), ascended ? endWidth * 0.5f : 0f,
-                delegate(Character enemy)
-                {
-                    Deal(player, enemy, d, _paDamage.Value / 100f * power, 4f, false, "piercing_arrow", "Attack 1", false, false, null);
-                    if (first) { DragonCombat.ApplyCripple(enemy, _paCripple.Value); first = false; }
-                    if (ascended) DragonCombat.ApplyExpose(enemy, _paAscExpose.Value);
-                    return true;
-                }, null));
+            int count = ascended ? 3 : 1;
+            for (int shot = 0; shot < count; shot++)
+            {
+                if (player == null || player.IsDead()) yield break;
+                Vector3 origin = ShotOrigin(player);
+                Vector3 dir = AimDir(player, origin);
+                if (!ascended) DragonCombat.PlayClip(player, "rg_power", 0.1f);
+                Shoot(player, shot == 0 ? "Piercing Arrow" : null); // native bow_fire for every Ascended arrow
+                if (_enableVfx.Value) { Vector3 po = origin, pd = dir; DragonCombat.RunVfx(delegate { DragonVfx.Gust(po + pd * 1.2f, pd, 0.8f); }); }
+                bool first = true;
+                float endWidth = DragonCombat.M(Mathf.Max(0.3f, _paAscWidth.Value));
+                int attackNumber = shot + 1;
+                StartCoroutine(ArrowFlight(player, origin, dir, DragonCombat.M(_paSpeed.Value), range, DragonCombat.M(0.35f), true,
+                    new Color(0.70f, 1f, 0.55f, 1f), ascended ? endWidth * 0.5f : 0f,
+                    delegate(Character enemy)
+                    {
+                        Deal(player, enemy, d, _paDamage.Value / 100f * power * (ascended ? 0.6f : 1f), 4f, false, "piercing_arrow", "Attack " + attackNumber.ToString(), false, false, null);
+                        if (first) { DragonCombat.ApplyCripple(enemy, _paCripple.Value); first = false; }
+                        if (ascended) DragonCombat.ApplyExpose(enemy, _paAscExpose.Value);
+                        return true;
+                    }, null));
+                if (shot + 1 < count) yield return new WaitForSeconds(0.2f);
+            }
         }
 
         // ------------------------------------------------------------------ Tumble Shot
@@ -1609,6 +1639,7 @@ namespace DragonsAltarRanger
             float slash = Mathf.Max(0f, _fwSlash.Value) / 100f * power * d.Total();
             float end = Time.time + duration, nextTick = 0f, nextDot = Time.time + 0.5f;
             _fwActive = true; _fwStop = false;
+            _windsUntil = end;
             float fwFollow = Time.time;
             List<Character> near = null; float nearAt = 0f;
             while (Time.time < end && player != null && !player.IsDead() && !_fwStop)
@@ -1684,6 +1715,7 @@ namespace DragonsAltarRanger
                 yield return null;
             }
             _fwActive = false;
+            DragonCombat.ClearStatus(player, "furious_winds");
             if (storm != null) Destroy(storm);
             if (_fwStop && player != null)
             {
@@ -1861,26 +1893,11 @@ namespace DragonsAltarRanger
         private float _releaseAt, _chargeDraw;
         private int _chain;
         private float _nextQuickShot;
-        private float _qsPressedAt = -10f, _qsStart, _qsSpeed = 1.6f;
-        private bool _qsWasIn, _qsMeasuring;
-
-        // v0.24.4: the quick-shot animation is sped up until one shot (start -> end of the attack)
-        // takes ChainInterval minus a small margin; the speed adapts to the bow's real animation.
-        private void UpdateQuickShotSpeed(Player player)
+        // v0.25.192: Warfare registers these greatbow primary attacks at 2.2x. One absolute base
+        // speed for every Ranger bow prevents the external greatbow speed from multiplying AA's speed again.
+        private static float RangerBowFireSpeed(Player player)
         {
-            ItemDrop.ItemData weapon = GetCurrentWeapon(player);
-            bool inAtk = InAttack(player);
-            bool quick = IsBow(weapon) && !_charging && !_releasePending;
-            if (inAtk && !_qsWasIn) { _qsStart = Time.time; _qsMeasuring = quick && Time.time - _qsPressedAt < 0.35f; }
-            if (inAtk && _qsMeasuring && quick) DragonCombat.SetAttackSpeedSource(player, _qsSpeed, 0.15f);
-            if (!inAtk && _qsWasIn && _qsMeasuring)
-            {
-                float took = Time.time - _qsStart;
-                float target = Mathf.Max(0.15f, _wbInterval.Value - 0.05f);
-                if (took > 0.05f) _qsSpeed = Mathf.Clamp(_qsSpeed * took / target, 1f, 5f);
-                _qsMeasuring = false;
-            }
-            _qsWasIn = inAtk;
+            return IsLocalRanger(player) && IsBow(Instance.GetCurrentWeapon(player)) ? 2.2f : 0f;
         }
         private float _lastQuickShot;
         private float _pendingShotMult = 1f;
@@ -1901,21 +1918,109 @@ namespace DragonsAltarRanger
             if (projectile != null) Patch(FindMethod(projectile, "Setup", 6), "ProjectileSetupPrefix", null);
             Patch(FindMethod(typeof(Player), "GetAttackDrawPercentage", 0), null, "DrawPercentagePostfix");
             Patch(FindMethod(typeof(ItemDrop.ItemData), "GetWeaponLoadingTime", 0), null, "LoadingTimePostfix");
+            Patch(FindMethod(typeof(Player), "SetWeaponLoaded", 1), null, "CrossbowLoadedPostfix");
+            Patch(FindMethod(typeof(Player), "ResetLoadedWeapon", 0), "CrossbowResetPrefix", null);
+            Patch(FindMethod(typeof(Humanoid), "UnequipItem", 2), "CrossbowUnequipPrefix", null);
+            Patch(FindMethod(typeof(Humanoid), "EquipItem", 2), null, "CrossbowEquipPostfix");
+            Patch(FindMethod(typeof(Attack), "OnAttackTrigger", 0), "CrossbowFirePrefix", "CrossbowFirePostfix");
             // v0.25.181 (user: Greatbow = double speed while shooting): Therzie's Greatbows carry an attack movement factor of 2.0
             // (vanilla bows <= 1), so a Ranger ran twice as fast while firing. Rangers get the vanilla bow's shooting speed (v0.25.188).
             Patch(FindMethod(typeof(Humanoid), "GetAttackSpeedFactorMovement", 0), null, "RangerMoveFactorPostfix");
+            _harmony.Patch(FindMethod(typeof(Humanoid), "CheckRun", 2), null, null,
+                new HarmonyMethod(typeof(RangerPlugin).GetMethod("BowSprintTranspiler", BindingFlags.Static | BindingFlags.NonPublic)));
+            _harmony.Patch(FindMethod(typeof(Player), "CheckRun", 2), null, null,
+                new HarmonyMethod(typeof(RangerPlugin).GetMethod("SprintReloadTranspiler", BindingFlags.Static | BindingFlags.NonPublic)));
+            Patch(FindMethod(typeof(Player), "InMinorActionSlowdown", 0), null, "ReloadSlowdownPostfix");
         }
 
         private static void RangerMoveFactorPostfix(Humanoid __instance, ref float __result)
         {
-            try
+            Player player = __instance as Player;
+            if (Instance == null || !IsLocalRanger(player)) return;
+            ItemDrop.ItemData weapon = Instance.GetCurrentWeapon(player);
+            if (IsBow(weapon))
             {
-                if (__result <= 1f) return;
-                Player player = __instance as Player;
-                if (Instance == null || player == null || !IsLocalRanger(player)) return;
-                __result = VanillaBowSpeedFactor();   // v0.25.188 (user): the vanilla bow's shooting speed (was capped at 1.0 = full speed)
+                // Only Acrobat retains full speed. Greatbows obey exactly the same firing factor as other bows.
+                if (Instance.GetAdvancement(player) == "Acrobat") __result = 1f;
+                else if (InAttack(player)) __result = VanillaBowSpeedFactor();
             }
-            catch { }
+        }
+
+        private static bool MobileBow(Player player)
+        {
+            return Instance != null && IsLocalRanger(player) && Instance.GetAdvancement(player) == "Acrobat"
+                && IsBow(Instance.GetCurrentWeapon(player));
+        }
+
+        // Leave Player.CheckRun's stamina, encumbrance, crouch and dodge checks intact.
+        private static bool DrawingBlocksSprint(Humanoid humanoid)
+        {
+            if (MobileBow(humanoid as Player)) return false;
+            return humanoid.IsDrawingBow();
+        }
+
+        private static IEnumerable<CodeInstruction> BowSprintTranspiler(IEnumerable<CodeInstruction> instructions)
+        {
+            MethodInfo drawing = FindMethod(typeof(Character), "IsDrawingBow", 0);
+            MethodInfo humanoidDrawing = FindMethod(typeof(Humanoid), "IsDrawingBow", 0);
+            MethodInfo replacement = typeof(RangerPlugin).GetMethod("DrawingBlocksSprint", BindingFlags.Static | BindingFlags.NonPublic);
+            foreach (CodeInstruction i in instructions)
+            {
+                if ((i.opcode == OpCodes.Call || i.opcode == OpCodes.Callvirt) && (Equals(i.operand, drawing) || Equals(i.operand, humanoidDrawing)))
+                { i.opcode = OpCodes.Call; i.operand = replacement; }
+                yield return i;
+            }
+        }
+
+        private static readonly FieldInfo _actionQueueField = AccessTools.Field(typeof(Player), "m_actionQueue");
+        private static readonly Type _reloadActionType = _actionQueueField == null ? null : _actionQueueField.FieldType.GetGenericArguments()[0];
+        private static readonly FieldInfo _reloadTypeField = _reloadActionType == null ? null : AccessTools.Field(_reloadActionType, "m_type");
+        private static readonly FieldInfo _reloadItemField = _reloadActionType == null ? null : AccessTools.Field(_reloadActionType, "m_item");
+        private static readonly object _reloadEnum = _reloadTypeField == null ? null : Enum.Parse(_reloadTypeField.FieldType, "Reload");
+        private static bool SprintReload(Player player)
+        {
+            if (Instance == null || !IsLocalRanger(player) || player.IsDead() || Instance.GetAdvancement(player) != "Bowmaster") return false;
+            ItemDrop.ItemData weapon = Instance.GetCurrentWeapon(player);
+            if (!IsCrossbow(weapon)) return false;
+            IList queue = _actionQueueField == null ? null : _actionQueueField.GetValue(player) as IList;
+            // Preserve only a queue consisting of this weapon's reload. Never retain equip/use actions while sprinting.
+            if (queue == null || queue.Count != 1 || queue[0] == null) return false;
+            object action = queue[0];
+            return IsCurrentCrossbowReload(action, weapon);
+        }
+
+        // v0.25.193: only a Reload for the held crossbow is exempt from sprint cancellation.
+        private static bool IsCurrentCrossbowReload(object action, ItemDrop.ItemData weapon)
+        {
+            return IsCrossbow(weapon) && action != null && _reloadActionType != null && _reloadActionType.IsInstanceOfType(action)
+                && _reloadTypeField != null && _reloadItemField != null && Equals(_reloadTypeField.GetValue(action), _reloadEnum)
+                && ReferenceEquals(_reloadItemField.GetValue(action), weapon);
+        }
+
+        private static MethodInfo _clearActionsMethod;
+        private static void ClearActionsUnlessReloading(Player player)
+        {
+            if (SprintReload(player)) return;
+            if (_clearActionsMethod == null) _clearActionsMethod = FindMethod(typeof(Player), "ClearActionQueue", 0);
+            if (_clearActionsMethod != null) _clearActionsMethod.Invoke(player, null);
+        }
+
+        private static IEnumerable<CodeInstruction> SprintReloadTranspiler(IEnumerable<CodeInstruction> instructions)
+        {
+            MethodInfo clear = FindMethod(typeof(Humanoid), "ClearActionQueue", 0);
+            MethodInfo playerClear = FindMethod(typeof(Player), "ClearActionQueue", 0);
+            MethodInfo replacement = typeof(RangerPlugin).GetMethod("ClearActionsUnlessReloading", BindingFlags.Static | BindingFlags.NonPublic);
+            foreach (CodeInstruction i in instructions)
+            {
+                if ((i.opcode == OpCodes.Call || i.opcode == OpCodes.Callvirt) && (Equals(i.operand, clear) || Equals(i.operand, playerClear)))
+                { i.opcode = OpCodes.Call; i.operand = replacement; }
+                yield return i;
+            }
+        }
+
+        private static void ReloadSlowdownPostfix(Player __instance, ref bool __result)
+        {
+            if (__result && SprintReload(__instance)) __result = false;
         }
 
         // v0.25.188 movement factor of a vanilla bow while drawing / shooting (Attack.m_speedFactor of the vanilla Bow prefab),
@@ -1942,7 +2047,7 @@ namespace DragonsAltarRanger
                 }
             }
             catch { }
-            return 1f;
+            return 0.5f;   // vanilla bow attack factor until ObjectDB is ready (not full-speed fallback)
         }
 
         private static MethodInfo FindMethod(Type type, string name, int minParams)
@@ -2009,6 +2114,7 @@ namespace DragonsAltarRanger
         private void RangerControls(Player player, ref bool attack, ref bool attackHold, ref bool block, ref bool blockHold)
         {
             if (player != Player.m_localPlayer || GetClass(player) != "Ranger") { RestoreBowDraw(); return; }
+            if (!DragonCombat.CanUseWorldInput(player)) { attack = false; attackHold = false; block = false; blockHold = false; return; }
             // v0.25.52 (user): follow-up shot windows - Left Click fires, Right Click cancels.
             if (_windowFire != null)
             {
@@ -2069,7 +2175,6 @@ namespace DragonsAltarRanger
             SetBowDraw(weapon, false);
             // v0.24.3: quick shots every 0.5s; the 4th (finisher) adds 1s before the next one.
             if (Time.time < _nextQuickShot || Time.time < _skillCastUntil) { attack = false; attackHold = false; }
-            else if (attack || attackHold) _qsPressedAt = Time.time;
         }
 
         // v0.25.52 universal follow-up shot window (Splitting Arrow's great arrow and sky arrow): aim freely and
@@ -2459,34 +2564,70 @@ namespace DragonsAltarRanger
 
         // Bowmaster: a loaded Crossbow stays loaded when you holster / unequip it.
         private readonly HashSet<ItemDrop.ItemData> _loadedCrossbows = new HashSet<ItemDrop.ItemData>();
-        private ItemDrop.ItemData _prevWeapon, _prevLoaded;
-        private FieldInfo _loadedField;
-        private bool _loadedFieldSearched;
-
+        private static readonly FieldInfo _loadedField = AccessTools.Field(typeof(Player), "m_weaponLoaded");
+        private static readonly FieldInfo _shotCharacter = AccessTools.Field(typeof(Attack), "m_character");
+        private static readonly FieldInfo _shotWeapon = AccessTools.Field(typeof(Attack), "m_weapon");
+        private static readonly MethodInfo _setLoadedMethod = AccessTools.Method(typeof(Player), "SetWeaponLoaded", new Type[] { typeof(ItemDrop.ItemData) });
+        private static readonly Action<Player, ItemDrop.ItemData> _setLoaded = _setLoadedMethod == null ? null :
+            (Action<Player, ItemDrop.ItemData>)Delegate.CreateDelegate(typeof(Action<Player, ItemDrop.ItemData>), _setLoadedMethod);
+        private static bool KeepsCrossbow(Player player)
+        {
+            return Instance != null && IsLocalRanger(player) && Instance.GetAdvancement(player) == "Bowmaster";
+        }
+        private static ItemDrop.ItemData ReadLoaded(Player player)
+        { return _loadedField == null ? null : _loadedField.GetValue(player) as ItemDrop.ItemData; }
+        private static void CrossbowLoadedPostfix(Player __instance, ItemDrop.ItemData __0)
+        {
+            if (KeepsCrossbow(__instance) && IsCrossbow(__0)) Instance._loadedCrossbows.Add(__0);
+        }
+        [HarmonyPriority(Priority.First)]
+        private static void CrossbowResetPrefix(Player __instance)
+        {
+            if (!KeepsCrossbow(__instance)) return;
+            ItemDrop.ItemData loaded = ReadLoaded(__instance);
+            if (IsCrossbow(loaded)) Instance._loadedCrossbows.Add(loaded);
+            // Clearing the native field is not evidence of a shot: holster mods do it too.
+            // Only the completed Attack.OnAttackTrigger callback can consume saved loaded state.
+        }
+        [HarmonyPriority(Priority.First)]
+        private static void CrossbowUnequipPrefix(Humanoid __instance)
+        {
+            Player player = __instance as Player;
+            if (!KeepsCrossbow(player)) return;
+            ItemDrop.ItemData loaded = ReadLoaded(player);
+            if (IsCrossbow(loaded)) Instance._loadedCrossbows.Add(loaded);
+        }
+        private static void CrossbowEquipPostfix(Humanoid __instance, bool __result)
+        {
+            Player player = __instance as Player;
+            if (!__result || !KeepsCrossbow(player)) return;
+            Instance.RestoreLoadedCrossbow(player);
+        }
+        [HarmonyPriority(Priority.First)]
+        private static void CrossbowFirePrefix(Attack __instance, ref ItemDrop.ItemData __state)
+        {
+            Player player = _shotCharacter == null ? null : _shotCharacter.GetValue(__instance) as Player;
+            ItemDrop.ItemData weapon = _shotWeapon == null ? null : _shotWeapon.GetValue(__instance) as ItemDrop.ItemData;
+            if (KeepsCrossbow(player) && IsCrossbow(weapon) && ReferenceEquals(ReadLoaded(player), weapon)) __state = weapon;
+        }
+        private static void CrossbowFirePostfix(Attack __instance, ItemDrop.ItemData __state)
+        {
+            if (__state == null || Instance == null) return;
+            Player player = _shotCharacter.GetValue(__instance) as Player;
+            // Failed / staggered triggers do not consume a stored shot.
+            if (player != null && ReadLoaded(player) == null) Instance._loadedCrossbows.Remove(__state);
+        }
+        private void RestoreLoadedCrossbow(Player player)
+        {
+            ItemDrop.ItemData weapon = GetCurrentWeapon(player);
+            if (_setLoaded != null && IsCrossbow(weapon) && _loadedCrossbows.Contains(weapon) && ReadLoaded(player) == null)
+                _setLoaded(player, weapon); // use native setter: synchronize ZDO/animation as well as the field
+        }
         private void UpdateLoadedCrossbow(Player player, bool bowmaster)
         {
             if (!bowmaster) { _loadedCrossbows.Clear(); return; }
-            if (!_loadedFieldSearched)
-            {
-                _loadedFieldSearched = true;
-                for (Type t = typeof(Player); t != null && _loadedField == null; t = t.BaseType)
-                {
-                    FieldInfo[] fs = t.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
-                    for (int i = 0; i < fs.Length; i++)
-                        if (fs[i].FieldType == typeof(ItemDrop.ItemData) && fs[i].Name.IndexOf("Loaded", StringComparison.OrdinalIgnoreCase) >= 0) { _loadedField = fs[i]; break; }
-                }
-            }
-            if (_loadedField == null) return;
-            ItemDrop.ItemData weapon = GetCurrentWeapon(player);
-            ItemDrop.ItemData loaded = _loadedField.GetValue(player) as ItemDrop.ItemData;
-            if (loaded != null && IsCrossbow(loaded)) _loadedCrossbows.Add(loaded);
-            if (loaded == null && IsCrossbow(weapon) && _loadedCrossbows.Contains(weapon))
-            {
-                if (_prevWeapon == weapon && _prevLoaded == weapon) _loadedCrossbows.Remove(weapon);   // it was fired
-                else { _loadedField.SetValue(player, weapon); loaded = weapon; }                     // re-equipped: still loaded
-            }
-            _prevWeapon = weapon;
-            _prevLoaded = loaded;
+            // Compatibility fallback for a mod that skips the original EquipItem method.
+            RestoreLoadedCrossbow(player);
         }
 
         // ==================================================================================
@@ -2599,7 +2740,7 @@ namespace DragonsAltarRanger
             }
             _ballistaCharging = false;
             EndSkillDraw(player);
-            if (player == null || player.IsDead()) yield break;
+            if (!DragonCombat.CanUseWorldInput(player)) { DragonCombat.ClipStop(player, 0.1f); yield break; }
             StartCooldown("Bowmaster.BallistaShot", _bsCooldown.Value);
             int stacks = _ballistaStacks;
             RangerArrowDamage d = ArrowDamage(player);
@@ -2890,7 +3031,7 @@ namespace DragonsAltarRanger
             }
             _exCharging = false;
             EndSkillDraw(player);
-            if (player == null || player.IsDead()) yield break;
+            if (!DragonCombat.CanUseWorldInput(player)) { DragonCombat.ClipStop(player, 0.1f); yield break; }
             StartCooldown("Bowmaster.ExplosiveArrow", _eaCooldown.Value);
             DragonCombat.ClipImpact(player);
             int stacks = _exStacks;
@@ -3043,7 +3184,7 @@ namespace DragonsAltarRanger
             float end = Time.time + Mathf.Max(0.5f, _eaAscField.Value);
             while (Time.time < end && player != null)
             {
-                if (_enableVfx.Value) { if (!DragonVfx.Enabled) StartCoroutine(RingVfx(at, radius * 0.9f, new Color(1f, 0.40f, 0.10f, 0.8f), 0.5f));   /* v0.25.180 ground fire stays low: embers only per tick */ Vector3 ff = at; float ffr = radius; DragonCombat.RunVfx(delegate { DragonVfx.Embers(ff, DragonVfx.Fire, ffr * 0.8f, 0.5f, 60f); }); }
+                if (_enableVfx.Value) { if (!DragonVfx.Enabled) StartCoroutine(RingVfx(at, radius * 0.9f, new Color(1f, 0.40f, 0.10f, 0.8f), 0.5f));   /* v0.25.193 low flames cover the existing fire field */ Vector3 ff = at; float ffr = radius; DragonCombat.RunVfx(delegate { DragonVfx.GroundFire(ff, ffr, Mathf.Min(0.5f, end - Time.time)); }); }
                 List<Character> inside = GetSphereTargets(player, at, radius);
                 for (int i = 0; i < inside.Count; i++) DragonCombat.ApplyFireBurnTick(player, inside[i], perTick);
                 yield return new WaitForSeconds(0.5f);

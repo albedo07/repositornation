@@ -1,0 +1,1018 @@
+--- v0.25.192/AlbedosCustomClasses.Advanced.cs
++++ v0.25.193/AlbedosCustomClasses.Advanced.cs
+@@ -116,7 +116,7 @@
+     {
+         public const string ModGuid = "albedo.customclasses.advanced";
+         public const string ModName = "Aethelborn Ascended - Advancements";
+-        public const string ModVersion = "0.25.192";
++        public const string ModVersion = "0.25.193";
+ 
+         private const string ClassDataKey = "AlbedoCustomClasses.Class";
+         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
+@@ -1263,7 +1263,7 @@
+         private float _ihLmbLatchAt = -10f;
+         private bool IhFollowUpClick(float channelStart)
+         {
+-            if (_ihLmbLatchAt <= channelStart) return false;
++            if (!DragonCombat.CanUseWorldInput(Player.m_localPlayer) || _ihLmbLatchAt <= channelStart) return false;
+             _ihLmbLatchAt = -10f;
+             return true;
+         }
+@@ -1282,7 +1282,8 @@
+             RegisterCleavePullRpc();
+             UpdateCleavePullNet();
+             UpdateRefreshingDots();
+-            if (Input.GetMouseButtonDown(0) && !Cursor.visible) _ihLmbLatchAt = Time.time;
++            if (!DragonCombat.CanUseWorldInput(Player.m_localPlayer)) _ihLmbLatchAt = -10f;
++            else if (Input.GetMouseButtonDown(0)) _ihLmbLatchAt = Time.time;
+ 
+             Player player = Player.m_localPlayer;
+             if (player == null)
+@@ -1345,7 +1346,7 @@
+                 return;
+             }
+ 
+-            if (!Input.GetKey(_modifier.Value))
++            if (!DragonCombat.CanUseWorldInput(player) || !Input.GetKey(_modifier.Value))
+                 return;
+ 
+             if (Input.GetKeyDown(_skill4.Value))
+@@ -2705,7 +2706,7 @@
+                     if (Time.time > cast.Times[p] + life) continue;
+                     if (_enableVfx.Value && p % 2 == 0)
+                     {
+-                        if (DragonVfx.Enabled) { if (p % 4 == 0) { Vector3 fp = cast.Points[p]; float fl = Mathf.Min(0.5f, cast.Times[p] + life - Time.time); if (fl > 0.05f) DragonCombat.RunVfx(delegate { DragonVfx.Embers(fp, new Color(1f, 0.46f, 0.12f, 0.9f), DragonCombat.M(0.6f), fl, 10f); }); } }   // v0.25.190 the Ascended fire trail is visible: low embers on the cracks (the tick ring drew nothing)
++                        if (DragonVfx.Enabled) { if (p % 4 == 0) { Vector3 fp = cast.Points[p]; float fl = Mathf.Min(0.5f, cast.Times[p] + life - Time.time); if (fl > 0.05f) DragonCombat.RunVfx(delegate { DragonVfx.GroundFire(fp, DragonCombat.M(0.8f), fl); }); } }   // v0.25.193 visible low flames on the existing trail, with the same remaining segment lifetime
+                         else StartCoroutine(AnimateTickRing(cast.Points[p] + Vector3.up * 0.08f, 0.2f, DragonCombat.M(0.9f), Mathf.Min(0.45f, cast.Times[p] + life - Time.time), new Color(1f, 0.46f, 0.12f, 0.45f), 0.06f));
+                     }
+                     List<Character> near = GetSphereTargets(player, cast.Points[p] + Vector3.up * 0.6f, DragonCombat.M(1.2f));
+@@ -4371,7 +4372,7 @@
+                     DragonVfx.Embers(impact, DragonVfx.Fire, radius * 0.6f, 1.2f, 50f);
+                     DragonVfx.GroundImpact(impact, DragonVfx.Fire, radius, 2f);
+                     DragonVfx.Shatter(impact, radius * 0.8f, 0f);
+-                    if (ascended) DragonVfx.Embers(impact, DragonVfx.Fire, radius * 0.8f, Mathf.Max(0.5f, _bombAscFireSeconds.Value), 60f);
++                    if (ascended) DragonVfx.GroundFire(impact, radius, Mathf.Max(0.5f, _bombAscFireSeconds.Value));
+                 });
+             }
+             if (ascended)
+@@ -6304,7 +6305,7 @@
+                     // Charging into a wall therefore behaves like running on a treadmill.
+                     // Dedicated manual finisher: Left Click triggers the Hammer Slam.
+                     // Pressing M4+6 again does nothing while Shield Charge is active.
+-                    bool lmbHeld = Input.GetMouseButton(0);
++                    bool lmbHeld = DragonCombat.CanUseWorldInput(player) && Input.GetMouseButton(0);
+                     bool lmbPressed = lmbHeld && !lmbWasHeld;
+                     lmbWasHeld = lmbHeld;
+                     if (lmbPressed)
+@@ -7551,7 +7552,7 @@
+                     {
+                         // v0.25.190 the burning ring is visible: sparse grounded flames along its edge (the tick ring drew nothing)
+                         Vector3 rc = center; float rr = radius; float ph = Time.time;
+-                        DragonCombat.RunVfx(delegate { for (int k = 0; k < 8; k++) { float a = k * 0.785f + ph; DragonVfx.Embers(rc + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * rr * 0.9f, new Color(1f, 0.55f, 0.25f, 0.9f), DragonCombat.M(0.5f), 0.55f, 8f); } });
++                        DragonCombat.RunVfx(delegate { for (int k = 0; k < 8; k++) { float a = k * 0.785f + ph; DragonVfx.GroundFire(rc + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * rr * 0.9f, DragonCombat.M(0.6f), 0.5f); } });
+                     }
+                     else StartCoroutine(AnimateTickRing(center + Vector3.up * 0.06f, radius * 0.92f, radius, 0.45f, new Color(1f, 0.55f, 0.25f, 0.85f), 0.10f));
+                 }
+@@ -14831,7 +14832,7 @@
+         // v0.23.1: hold-to-charge skills (Meteor Fall, Astral Greatblade, Elemental Cataclysm).
+         private bool IhSkillKeyHeld(string id)
+         {
+-            if (string.IsNullOrEmpty(id)) return false;
++            if (string.IsNullOrEmpty(id) || !DragonCombat.CanUseWorldInput(Player.m_localPlayer)) return false;
+             string[] layout = GetHotbarLayout();
+             for (int i = 0; i < layout.Length && i < BindGrace; i++)
+                 if (layout[i] == id && _hotbarSlotKeys[i].Value != KeyCode.None && Input.GetKey(_hotbarSlotKeys[i].Value))
+@@ -14850,7 +14851,7 @@
+ 
+         private void HandleTreeHotbarInput(Player player)
+         {
+-            if (Plugin.IsClassPanelOpen || DragonCombat.IsGameplayHudSuppressed())
++            if (!DragonCombat.CanUseWorldInput(player))
+                 return;
+             string[] layout = GetHotbarLayout();
+             for (int i = 0; i < layout.Length && i < BindGrace; i++)
+--- v0.25.192/AlbedosCustomClasses.Skills.cs
++++ v0.25.193/AlbedosCustomClasses.Skills.cs
+@@ -232,7 +232,7 @@
+         public static SkillsPlugin Instance;
+         public const string ModGuid = "albedo.customclasses.skills";
+         public const string ModName = "Aethelborn Ascended - Starter Skills";
+-        public const string ModVersion = "0.25.192";
++        public const string ModVersion = "0.25.193";
+ 
+         private const string ClassDataKey = "AlbedoCustomClasses.Class";
+         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";
+@@ -596,7 +596,7 @@
+             if (DragonCombat.IsTreeHotbarActive(player))
+                 return;
+ 
+-            if (!Input.GetKey(_modifier.Value))
++            if (!DragonCombat.CanUseWorldInput(player) || !Input.GetKey(_modifier.Value))
+                 return;
+ 
+             if (Input.GetKeyDown(_skill1.Value))
+@@ -1000,7 +1000,7 @@
+                 {
+                     for (int k = 2; k <= 5; k += 3) DragonVfx.Burst(fo + ff * fr * k / 5f, new Color(1f, 0.42f, 0.12f, 1f), 8, 2f + k, 0.06f, 0.6f, -0.4f);   // v0.25.180 cooling ember tails (the FlameCone carries the tongues)
+                     DragonVfx.Flash(fo + ff * 0.8f, new Color(1f, 0.45f, 0.1f, 1f), 0.8f, 3f, 0.2f);   // v0.25.180 compact bright source only
+-                    DragonVfx.Embers(fo + ff * fr * 0.6f - Vector3.up * 0.8f, new Color(1f, 0.45f, 0.1f, 1f), fr * 0.35f, 0.8f, 50f);   // v0.25.58 scorched ground
++                    DragonVfx.GroundFire(fo + ff * fr * 0.6f - Vector3.up * 0.8f, fr * 0.35f, 0.8f);   // v0.25.193 visible burning ground
+                     DragonVfx.FlameCone(fo, ff, fr, fca, 0.35f);   // v0.25.61 real flames
+                 });
+             }
+--- /dev/null
++++ v0.25.193/CHANGELOG_v0.25.193.txt
+@@ -0,0 +1,40 @@
++AETHELBORN ASCENDED v0.25.193 - SPRINT RELOAD & WORLD INPUT
++2026-10-17 (Asia/Manila)
++
++GAMEPLAY / INPUT
++- Bow Master sprinting now intercepts the actual Humanoid.ClearActionQueue call
++  emitted in Player.CheckRun. v192 matched only the Player override and missed it.
++  Only the held crossbow's sole Reload action is retained. Native progress,
++  completion, resource costs, reload-time bonus and saved loaded state are kept.
++  Reload action type/item metadata is cached once instead of resolved each frame.
++- Corrected the same virtual base-slot matching in the existing Acrobat bow
++  sprint exemption (actual operand Character.IsDrawingBow). No new class bonus.
++- Horizon Walker uses vanilla animation while moving and firing. The custom
++  HwLegCycle is no longer added/refreshed; full-speed shooting remains.
++- Arcane Phantom, Arcane Phalanx (single swords and armed full volley), Rift Echo
++  and clone attack queuing require world input. UI clicks do not consume swords
++  or the armed volley. Buff timers and already-started effects keep updating.
++- Shared world-input guard checks native Player.TakeInput (including chat/text
++  entry), visible cursor, game focus, known game/mod menus and mod input blocking.
++  Universal/legacy skill hotkeys and click follow-ups use it as well.
++- Opening a UI during Wizard staff, Meteor Fall, Elemental Cataclysm, Ballista
++  Shot or Explosive Arrow charging cancels the held input instead of treating
++  UI input as a release-to-fire command. It does not refund already-paid costs.
++- Entire Ranger bloodline: no Staves/Wands, including Gun Staves (magic weapons).
++- Entire Sorcerer bloodline: no Bows, Greatbows or Crossbows.
++  Uses the existing equip rejection and periodic gear enforcement. No-class,
++  dagger, shield, armor, axe/tool and Mercenary rules are preserved.
++
++REQUESTED VFX ONLY
++- Added bounded, textured low flames and sparks to existing ground-fire visuals:
++  Crescent Cleave's Ascended trail, Punishing Bomb's Ascended field, Explosive
++  Arrow's field, Angel Comet's burning ring, Meteor Fall, Elemental Cataclysm's
++  fire phase and Flame Burst's scorched ground. Existing bursts/embers retained
++  where they are impact accents rather than burning ground.
++- Blade Storm: added soft, translucent spherical blue/indigo mist behind the
++  existing visible slashes. No solid cage, flash increase or expanding smoke cloud.
++- Ground-fire hosts share a 48-live-host limit; each flame system caps at 120
++  particles and sparks at 24, under existing density/restraint/frame budgets.
++  The mist uses one capped 24-particle system per sphere and cached smoke material.
++- No damage, hitbox, push, tick, cooldown, gameplay RNG or config-default changes.
++  Crescent fire segments retain the existing two-second cap. No terrain editing.
+--- v0.25.192/DragonsAltar.CombatRuntime.cs
++++ v0.25.193/DragonsAltar.CombatRuntime.cs
+@@ -15,7 +15,7 @@
+     {
+         public const string ModGuid = "albedo.customclasses.combatruntime";
+         public const string ModName = "Aethelborn Ascended - Combat Runtime";
+-        public const string ModVersion = "0.25.192";
++        public const string ModVersion = "0.25.193";
+ 
+         internal static DragonCombatPlugin Instance;
+ 
+@@ -8051,8 +8051,26 @@
+             return player != null && NoEquipmentPenaltyUntil.TryGetValue(player.GetInstanceID(), out until) && Time.time < until;
+         }
+ 
++        // v0.25.193: raw skill inputs must obey Valheim's input ownership, including chat / text entry.
++        // Resolve TakeInput once; the delegate avoids reflection lookup / invocation on every frame.
++        private static readonly Func<Player, bool> _worldInputCheck = CreateWorldInputCheck();
++        private static bool _explicitUiInputBlocked;
++        private static Func<Player, bool> CreateWorldInputCheck()
++        {
++            MethodInfo method = typeof(Player).GetMethod("TakeInput", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
++            return method == null ? null : (Func<Player, bool>)Delegate.CreateDelegate(typeof(Func<Player, bool>), method);
++        }
++
++        public static bool CanUseWorldInput(Player player)
++        {
++            if (player == null || player != Player.m_localPlayer || !Application.isFocused || Cursor.visible || _explicitUiInputBlocked
++                || player.IsDead() || IsGameplayHudSuppressed()) return false;
++            return _worldInputCheck != null && _worldInputCheck(player);
++        }
++
+         public static void SetUiInputBlocked(bool blocked)
+         {
++            _explicitUiInputBlocked = blocked;
+             try
+             {
+                 Type cachedType = FindTypeCached("Jotunn.Managers.GUIManager");
+@@ -9611,6 +9629,8 @@
+                 return kind == "magic" || kind == "club" ? null : "Clerics fight with Staves, Wands and Maces only";
+             if (cls == "Sorcerer" || cls == "Ranger")
+             {
++                if (cls == "Ranger" && kind == "magic") return "Rangers cannot equip Staves or Wands";
++                if (cls == "Sorcerer" && (kind == "bow" || kind == "crossbow")) return "Sorcerers cannot equip Bows, Greatbows or Crossbows";
+                 bool melee = kind == "sword" || kind == "club" || kind == "polearm" || kind == "spear" || kind == "fist" || kind == "axe";
+                 if (melee) return (cls == "Sorcerer" ? "Sorcerers" : "Rangers") + " carry no melee weapon except a single dagger";
+                 if (kind == "dagger" && IsPairedWeapon(item)) return "No dual daggers";
+@@ -14767,6 +14787,33 @@
+             l.Systems = l.GetComponentsInChildren<ParticleSystem>();
+         }
+ 
++        // v0.25.193: actual low flames over existing burning ground; visual only, never a damage or terrain component.
++        // The host expires with the caller's remaining field lifetime (including Crescent's two-second segment cap).
++        private static readonly List<DragonVfxLife> _groundFireHosts = new List<DragonVfxLife>();
++        public static void GroundFire(Vector3 pos, float radius, float seconds)
++        {
++            if (!Enabled || seconds <= 0.02f) return;
++            for (int i = _groundFireHosts.Count - 1; i >= 0; i--)
++                if (_groundFireHosts[i] == null) _groundFireHosts.RemoveAt(i);
++            if (_groundFireHosts.Count >= 48) return;
++            radius = Mathf.Max(0.2f, radius);
++            DragonVfxLife l = Host(GroundPoint(pos) + Vector3.up * 0.08f, seconds, "groundfire");
++            _groundFireHosts.Add(l);
++            float density = Mathf.Clamp(24f + radius * 14f, 28f, 110f);
++            ParticleSystem fire = Particles(l.transform, new Color(1f, 0.62f, 0.20f, 1f), 8, density, seconds,
++                0.65f, 0f, 0.04f, 0.28f, 0.85f, -0.06f, ParticleSystemShapeType.Circle, radius, new Vector3(-90f, 0f, 0f), false, true);
++            FireLook(fire);
++            ParticleSystem.VelocityOverLifetimeModule velocity = fire.velocityOverLifetime;
++            velocity.enabled = true; velocity.space = ParticleSystemSimulationSpace.World;
++            velocity.y = new ParticleSystem.MinMaxCurve(0.45f, 0.85f);
++            ParticleSystem.MainModule fm = fire.main; fm.maxParticles = 120;
++            ParticleSystem sparks = Particles(l.transform, new Color(1f, 0.70f, 0.22f, 0.9f), 3, density * 0.12f, seconds,
++                0.6f, 0.3f, 0.8f, 0.035f, 0.08f, -0.15f, ParticleSystemShapeType.Circle, radius, new Vector3(-90f, 0f, 0f), false, true);
++            ParticleSystem.MainModule sm = sparks.main; sm.maxParticles = 24;
++            l.StopEmitAt = seconds;
++            l.Systems = new ParticleSystem[] { fire, sparks };
++        }
++
+         // ------------------------------------------------------------------ v0.25.59 skin layer
+         // Generated textures (no asset files): soft ring, scorch, smoke puff, light column, slash ribbon, feather.
+         private static Texture2D _ringTex, _scorchTex, _smokeTex, _beamTex, _streakTex, _featherTex;
+@@ -15864,6 +15911,14 @@
+             hold = Mathf.Clamp(hold, 0.1f, 1.2f);
+             Color glow = Color.Lerp(tint, new Color(0.55f, 0.75f, 1f, 1f), 0.35f);
+             Color core = Color.Lerp(tint, Color.white, 0.85f);
++            // v0.25.193: a soft spherical mist volume behind the existing visible cuts, not a solid globe / cage.
++            DragonVfxLife haze = Host(center, hold + 0.35f, "judgementmist");
++            Color fog = Color.Lerp(tint, new Color(0.55f, 0.63f, 0.82f, 1f), 0.45f); fog.a = 0.24f;
++            ParticleSystem mist = Particles(haze.transform, fog, 18, 0f, 0.05f, hold + 0.35f,
++                0.02f, 0.12f, r * 0.6f, r * 0.95f, 0f, ParticleSystemShapeType.Sphere, r * 0.58f, Vector3.zero, false, false);
++            Material mistMaterial = Mat(SmokeTex(), false);
++            if (mistMaterial != null) mist.GetComponent<ParticleSystemRenderer>().sharedMaterial = mistMaterial;
++            ParticleSystem.MainModule mistMain = mist.main; mistMain.maxParticles = 24;
+             const int lines = 9;
+             for (int k = 0; k < lines; k++)
+             {
+--- v0.25.192/DragonsAltar.Ranger.cs
++++ v0.25.193/DragonsAltar.Ranger.cs
+@@ -42,7 +42,7 @@
+     {
+         public const string ModGuid = "albedo.customclasses.ranger";
+         public const string ModName = "Aethelborn Ascended - Ranger";
+-        public const string ModVersion = "0.25.192";
++        public const string ModVersion = "0.25.193";
+         private const string ClassDataKey = "AlbedoCustomClasses.Class";
+         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
+ 
+@@ -555,7 +555,7 @@
+         private float _lmbLatchAt = -10f;
+         private bool FollowUpClick(float channelStart)
+         {
+-            if (_lmbLatchAt <= channelStart) return false;
++            if (!DragonCombat.CanUseWorldInput(Player.m_localPlayer) || _lmbLatchAt <= channelStart) return false;
+             _lmbLatchAt = -10f;
+             return true;
+         }
+@@ -573,7 +573,8 @@
+         {
+             Player player = Player.m_localPlayer;
+             if (player == null || player.IsDead()) return;
+-            if (Input.GetMouseButtonDown(0) && !Cursor.visible) _lmbLatchAt = Time.time;
++            if (!DragonCombat.CanUseWorldInput(player)) _lmbLatchAt = -10f;
++            else if (Input.GetMouseButtonDown(0)) _lmbLatchAt = Time.time;
+             bool ranger = GetClass(player) == "Ranger";
+             bool acrobat = ranger && GetAdvancement(player) == "Acrobat";
+             UpdateRangerBuffIndicators(player, ranger, acrobat);
+@@ -1941,30 +1942,40 @@
+ 
+         private static IEnumerable<CodeInstruction> BowSprintTranspiler(IEnumerable<CodeInstruction> instructions)
+         {
+-            MethodInfo drawing = FindMethod(typeof(Humanoid), "IsDrawingBow", 0);
++            MethodInfo drawing = FindMethod(typeof(Character), "IsDrawingBow", 0);
++            MethodInfo humanoidDrawing = FindMethod(typeof(Humanoid), "IsDrawingBow", 0);
+             MethodInfo replacement = typeof(RangerPlugin).GetMethod("DrawingBlocksSprint", BindingFlags.Static | BindingFlags.NonPublic);
+             foreach (CodeInstruction i in instructions)
+             {
+-                if ((i.opcode == OpCodes.Call || i.opcode == OpCodes.Callvirt) && Equals(i.operand, drawing))
++                if ((i.opcode == OpCodes.Call || i.opcode == OpCodes.Callvirt) && (Equals(i.operand, drawing) || Equals(i.operand, humanoidDrawing)))
+                 { i.opcode = OpCodes.Call; i.operand = replacement; }
+                 yield return i;
+             }
+         }
+ 
+-        private static FieldInfo _actionQueueField;
++        private static readonly FieldInfo _actionQueueField = AccessTools.Field(typeof(Player), "m_actionQueue");
++        private static readonly Type _reloadActionType = _actionQueueField == null ? null : _actionQueueField.FieldType.GetGenericArguments()[0];
++        private static readonly FieldInfo _reloadTypeField = _reloadActionType == null ? null : AccessTools.Field(_reloadActionType, "m_type");
++        private static readonly FieldInfo _reloadItemField = _reloadActionType == null ? null : AccessTools.Field(_reloadActionType, "m_item");
++        private static readonly object _reloadEnum = _reloadTypeField == null ? null : Enum.Parse(_reloadTypeField.FieldType, "Reload");
+         private static bool SprintReload(Player player)
+         {
+             if (Instance == null || !IsLocalRanger(player) || player.IsDead() || Instance.GetAdvancement(player) != "Bowmaster") return false;
+             ItemDrop.ItemData weapon = Instance.GetCurrentWeapon(player);
+             if (!IsCrossbow(weapon)) return false;
+-            if (_actionQueueField == null) _actionQueueField = AccessTools.Field(typeof(Player), "m_actionQueue");
+             IList queue = _actionQueueField == null ? null : _actionQueueField.GetValue(player) as IList;
+             // Preserve only a queue consisting of this weapon's reload. Never retain equip/use actions while sprinting.
+             if (queue == null || queue.Count != 1 || queue[0] == null) return false;
+             object action = queue[0];
+-            object type = ReadField(action, "m_type");
+-            return type != null && string.Equals(type.ToString(), "Reload", StringComparison.OrdinalIgnoreCase)
+-                && ReferenceEquals(ReadField(action, "m_item"), weapon);
++            return IsCurrentCrossbowReload(action, weapon);
++        }
++
++        // v0.25.193: only a Reload for the held crossbow is exempt from sprint cancellation.
++        private static bool IsCurrentCrossbowReload(object action, ItemDrop.ItemData weapon)
++        {
++            return IsCrossbow(weapon) && action != null && _reloadActionType != null && _reloadActionType.IsInstanceOfType(action)
++                && _reloadTypeField != null && _reloadItemField != null && Equals(_reloadTypeField.GetValue(action), _reloadEnum)
++                && ReferenceEquals(_reloadItemField.GetValue(action), weapon);
+         }
+ 
+         private static MethodInfo _clearActionsMethod;
+@@ -1977,11 +1988,12 @@
+ 
+         private static IEnumerable<CodeInstruction> SprintReloadTranspiler(IEnumerable<CodeInstruction> instructions)
+         {
+-            MethodInfo clear = FindMethod(typeof(Player), "ClearActionQueue", 0);
++            MethodInfo clear = FindMethod(typeof(Humanoid), "ClearActionQueue", 0);
++            MethodInfo playerClear = FindMethod(typeof(Player), "ClearActionQueue", 0);
+             MethodInfo replacement = typeof(RangerPlugin).GetMethod("ClearActionsUnlessReloading", BindingFlags.Static | BindingFlags.NonPublic);
+             foreach (CodeInstruction i in instructions)
+             {
+-                if ((i.opcode == OpCodes.Call || i.opcode == OpCodes.Callvirt) && Equals(i.operand, clear))
++                if ((i.opcode == OpCodes.Call || i.opcode == OpCodes.Callvirt) && (Equals(i.operand, clear) || Equals(i.operand, playerClear)))
+                 { i.opcode = OpCodes.Call; i.operand = replacement; }
+                 yield return i;
+             }
+@@ -2083,6 +2095,7 @@
+         private void RangerControls(Player player, ref bool attack, ref bool attackHold, ref bool block, ref bool blockHold)
+         {
+             if (player != Player.m_localPlayer || GetClass(player) != "Ranger") { RestoreBowDraw(); return; }
++            if (!DragonCombat.CanUseWorldInput(player)) { attack = false; attackHold = false; block = false; blockHold = false; return; }
+             // v0.25.52 (user): follow-up shot windows - Left Click fires, Right Click cancels.
+             if (_windowFire != null)
+             {
+@@ -2672,7 +2685,7 @@
+             }
+             _ballistaCharging = false;
+             EndSkillDraw(player);
+-            if (player == null || player.IsDead()) yield break;
++            if (!DragonCombat.CanUseWorldInput(player)) { DragonCombat.ClipStop(player, 0.1f); yield break; }
+             StartCooldown("Bowmaster.BallistaShot", _bsCooldown.Value);
+             int stacks = _ballistaStacks;
+             RangerArrowDamage d = ArrowDamage(player);
+@@ -2963,7 +2976,7 @@
+             }
+             _exCharging = false;
+             EndSkillDraw(player);
+-            if (player == null || player.IsDead()) yield break;
++            if (!DragonCombat.CanUseWorldInput(player)) { DragonCombat.ClipStop(player, 0.1f); yield break; }
+             StartCooldown("Bowmaster.ExplosiveArrow", _eaCooldown.Value);
+             DragonCombat.ClipImpact(player);
+             int stacks = _exStacks;
+@@ -3116,7 +3129,7 @@
+             float end = Time.time + Mathf.Max(0.5f, _eaAscField.Value);
+             while (Time.time < end && player != null)
+             {
+-                if (_enableVfx.Value) { if (!DragonVfx.Enabled) StartCoroutine(RingVfx(at, radius * 0.9f, new Color(1f, 0.40f, 0.10f, 0.8f), 0.5f));   /* v0.25.180 ground fire stays low: embers only per tick */ Vector3 ff = at; float ffr = radius; DragonCombat.RunVfx(delegate { DragonVfx.Embers(ff, DragonVfx.Fire, ffr * 0.8f, 0.5f, 60f); }); }
++                if (_enableVfx.Value) { if (!DragonVfx.Enabled) StartCoroutine(RingVfx(at, radius * 0.9f, new Color(1f, 0.40f, 0.10f, 0.8f), 0.5f));   /* v0.25.193 low flames cover the existing fire field */ Vector3 ff = at; float ffr = radius; DragonCombat.RunVfx(delegate { DragonVfx.GroundFire(ff, ffr, Mathf.Min(0.5f, end - Time.time)); }); }
+                 List<Character> inside = GetSphereTargets(player, at, radius);
+                 for (int i = 0; i < inside.Count; i++) DragonCombat.ApplyFireBurnTick(player, inside[i], perTick);
+                 yield return new WaitForSeconds(0.5f);
+--- v0.25.192/DragonsAltar.Sorcerer.cs
++++ v0.25.193/DragonsAltar.Sorcerer.cs
+@@ -165,7 +165,7 @@
+     {
+         public const string ModGuid = "albedo.customclasses.sorcerer";
+         public const string ModName = "Aethelborn Ascended - Sorcerer Advancements";
+-        public const string ModVersion = "0.25.192";
++        public const string ModVersion = "0.25.193";
+ 
+         private const string ClassDataKey = "AlbedoCustomClasses.Class";
+         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
+@@ -578,7 +578,7 @@
+                 return false;
+             }
+ 
+-            if (!Input.GetKey(KeyCode.Mouse0) || !Input.GetKey(KeyCode.Mouse1))
++            if (!DragonCombat.CanUseWorldInput(player) || !Input.GetKey(KeyCode.Mouse0) || !Input.GetKey(KeyCode.Mouse1))
+                 return true;
+ 
+             Instance.BeginWizardStaffCharge(player, weapon);
+@@ -625,16 +625,14 @@
+             if (_hwFiring && __instance != null && __instance == Player.m_localPlayer && __result < 1f) __result = 1f;
+         }
+ 
+-        // Horizon Walker firing a magic weapon on the ground: full movement speed + legs keep walking / running (HwLegCycle).
++        // Horizon Walker keeps full movement speed while firing; all locomotion animation is vanilla.
+         private void UpdateHwMobility(Player player, string advancement)
+         {
+             _hwFiring = false;
+             if (player == null || advancement != "Spellcaster" || player.IsDead() || !player.InAttack()) return;
+             if (!DragonCombat.IsMagicWeapon(GetCurrentWeapon(player))) return;
+             _hwFiring = true;
+-            HwLegCycle legs = player.GetComponent<HwLegCycle>();
+-            if (legs == null) legs = player.gameObject.AddComponent<HwLegCycle>();
+-            legs.ActiveUntil = Time.time + 0.12f;
++            // v0.25.193: native animation only; keep the independent full-speed movement factor.
+         }
+ 
+         private static void AttackShotPostfix(Attack __instance)
+@@ -821,7 +819,7 @@
+                     DragonCombat.ApplyTimedBuff(player, "Spellcaster.PhaseFlow", 0.35f, 0f, 0f, 0.15f, 0f, 0f, 0.25f, false);
+             }
+ 
+-            if (_phalanxVolleyArmed && Input.GetKeyDown(KeyCode.Mouse0))
++            if (_phalanxVolleyArmed && DragonCombat.CanUseWorldInput(player) && Input.GetKeyDown(KeyCode.Mouse0))
+             {
+                 _phalanxVolleyArmed = false;
+                 DragonCombat.SwallowAttackInput(player, 0.4f);   // v0.25.65
+@@ -850,7 +848,7 @@
+             if (DragonCombat.IsTreeHotbarActive(player))
+                 return;
+ 
+-            if (!Input.GetKey(_modifier.Value))
++            if (!DragonCombat.CanUseWorldInput(player) || !Input.GetKey(_modifier.Value))
+                 return;
+ 
+             // M4+1/2/3 starter skills are owned by AlbedosCustomClasses.Skills.dll.
+@@ -1190,6 +1188,7 @@
+         // Hold-to-charge: the tree hotbar key of the skill, or the legacy M4+key.
+         private bool SkillKeyHeld(Player player, string id, KeyCode legacy)
+         {
++            if (!DragonCombat.CanUseWorldInput(player)) return false;
+             if (DragonCombat.IsTreeHotbarActive(player))
+                 return DragonCombat.IsTreeSkillKeyHeld(id);
+             return Input.GetKey(_modifier.Value) && Input.GetKey(legacy);
+@@ -1510,6 +1509,11 @@
+             float nextMarker = 0f;
+             while (player != null && !player.IsDead())
+             {
++                if (!DragonCombat.CanUseWorldInput(player))
++                {
++                    _meteorChargeShown = 0; _meteorChargeNext = 0f;
++                    DragonCombat.ClipStop(player, 0.1f); yield break;
++                }
+                 float elapsed = Time.time - pressed;
+                 // v0.23.6: at max stacks it can be held as long as you like; it lands where you aim on release.
+                 if (holding && SkillKeyHeld(player, "meteor_fall", _skill7.Value)) heldFor = elapsed;
+@@ -1588,7 +1592,7 @@
+                 {
+                     DragonVfx.HeavyLanding(mt, new Color(1f, 0.40f, 0.08f, 1f), mr, Mathf.Clamp(mr * 0.4f, 1f, 3f));   // v0.25.58 the meteor really lands
+                     DragonVfx.FireBlast(mt, mr * 0.8f);   // v0.25.61
+-                    DragonVfx.Embers(mt, new Color(1f, 0.40f, 0.08f, 1f), mr * 0.8f, Mathf.Max(1f, _meteorBurnSeconds.Value), 30f);   // v0.25.150 no light column, fewer embers
++                    DragonVfx.GroundFire(mt, mr * 0.8f, Mathf.Max(1f, _meteorBurnSeconds.Value));   // v0.25.193 visible low flames; no light column
+                     DragonVfx.Debris(mt, new Color(0.30f, 0.24f, 0.20f, 1f), Mathf.RoundToInt(4 + mr * 0.5f), 6f + mr * 0.4f, 0.25f, 2.2f);   // v0.25.180 tumbling fragments instead of the vanilla fireball flare
+                 });
+             }
+@@ -1710,6 +1714,11 @@
+             DragonCombat.PlayClip(player, "wiz_cataclysm", Mathf.Max(0.3f, minWindup), true);
+             while (player != null && !player.IsDead() && (elapsed < minWindup || holding))
+             {
++                if (!DragonCombat.CanUseWorldInput(player))
++                {
++                    _cataclysmCharge01 = 0f;
++                    DragonCombat.ClipStop(player, 0.1f); yield break;
++                }
+                 DragonCombat.LockSkill(player, 0.12f);
+                 if (minWindup >= 1f || elapsed >= 1f) DragonCombat.FaceAimNow(player);
+                 elapsed += Time.deltaTime;
+@@ -1787,7 +1796,7 @@
+             for (int phase = 0; phase < 3; phase++)
+             {
+                 int el = reverse ? 2 - phase : phase;
+-                if (el == 0) DragonCombat.RunVfx(delegate { DragonVfx.FireBlast(fireP, cr * 0.6f); DragonVfx.Embers(fireP, new Color(1f, 0.40f, 0.08f, 1f), cr * 0.5f, 3f, 45f); DragonVfx.Scorch(fireP, cr * 0.45f, 6f); });
++                if (el == 0) DragonCombat.RunVfx(delegate { DragonVfx.FireBlast(fireP, cr * 0.6f); DragonVfx.GroundFire(fireP, cr * 0.5f, 3f); DragonVfx.Scorch(fireP, cr * 0.45f, 6f); });
+                 else if (el == 1) DragonCombat.RunVfx(delegate { DragonVfx.IceBurst(iceP, cr * 0.45f); DragonVfx.FrostGround(iceP, cr * 0.4f, 3f, 0.6f); DragonVfx.Debris(iceP, new Color(0.75f, 0.92f, 1f, 1f), 8, 7f, 0.2f, 2f); });
+                 else DragonCombat.RunVfx(delegate { for (int b = 0; b < 3; b++) { Vector3 bp = boltP + new Vector3(Mathf.Cos(b * 2.1f), 0f, Mathf.Sin(b * 2.1f)) * cr * 0.2f; DragonVfx.UltimateStrike(bp + Vector3.up * 14f, bp, b == 1 ? DragonVfx.UltYellow : DragonVfx.UltBlue, 0.55f, 1.4f); } });
+                 yield return new WaitForSeconds(0.25f);
+@@ -2131,9 +2140,10 @@
+             if (!_wizardChargeActive)
+                 return;
+ 
+-            if (player == null || player.IsDead() || advancement != "Wizard" || !IsWizardStaff(GetCurrentWeapon(player)))
++            if (!DragonCombat.CanUseWorldInput(player) || advancement != "Wizard" || !IsWizardStaff(GetCurrentWeapon(player)))
+             {
+                 CancelWizardStaffCharge(player);
++                if (!DragonCombat.CanUseWorldInput(player)) DragonCombat.ClipStop(player, 0.1f);
+                 return;
+             }
+ 
+@@ -2489,14 +2499,14 @@
+             // Keep the attack postfix only as a low-latency assist. The actual
+             // trigger is raw Mouse1 hold, so it no longer depends on a weapon
+             // being classified as Magic or on Attack.Start repeating correctly.
+-            if (player == null || GetAdvancement(player) != "Spellcaster" || !Input.GetKey(KeyCode.Mouse0))
++            if (!DragonCombat.CanUseWorldInput(player) || GetAdvancement(player) != "Spellcaster" || !Input.GetKey(KeyCode.Mouse0))
+                 return;
+             TryTriggerSpellcasterHeldFire(player);
+         }
+ 
+         private void UpdateSpellcasterHeldFire(Player player)
+         {
+-            if (player == null || !Input.GetKey(KeyCode.Mouse0))
++            if (!DragonCombat.CanUseWorldInput(player) || !Input.GetKey(KeyCode.Mouse0))
+             {
+                 // A fresh press always gets an immediate first trigger.
+                 _nextSpellcasterHeldFire = 0f;
+@@ -2508,7 +2518,7 @@
+ 
+         private void TryTriggerSpellcasterHeldFire(Player player)
+         {
+-            if (player == null)
++            if (!DragonCombat.CanUseWorldInput(player))
+                 return;
+             ItemDrop.ItemData weapon = GetCurrentWeapon(player);
+             // Rift Echo, Afterimages and Astral Clones pulse on a fixed cadence while Mouse1 is held,
+@@ -3326,7 +3336,7 @@
+ 
+         public void QueueMimicAttack(Player player, ItemDrop.ItemData weapon)
+         {
+-            if (player == null || ActiveCloneCount() == 0) return;
++            if (!DragonCombat.CanUseWorldInput(player) || ActiveCloneCount() == 0) return;
+             _mimicAttackAt.Add(Time.time + 0.2f);
+             _mimicAttackWeapon.Add(weapon);
+         }
+--- v0.25.192/INSTALL.bat
++++ v0.25.193/INSTALL.bat
+@@ -1,5 +1,5 @@
+ @echo off
+-title Immortal Heroes v0.25.192 - Ranger Mobility and Buff Timers
++title Immortal Heroes v0.25.193 - Ranger Mobility and Buff Timers
+ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
+ echo.
+ pause
+--- v0.25.192/INSTALL.ps1
++++ v0.25.193/INSTALL.ps1
+@@ -1,7 +1,7 @@
+ $ErrorActionPreference = "Stop"
+ 
+ Write-Host ""
+-Write-Host "IMMORTAL HEROES v0.25.192 - RANGER MOBILITY AND BUFF TIMERS" -ForegroundColor Cyan
++Write-Host "IMMORTAL HEROES v0.25.193 - SPRINT RELOAD AND WORLD INPUT" -ForegroundColor Cyan
+ Write-Host "All 10 DLLs compile in staging before the live profile is touched." -ForegroundColor Gray
+ Write-Host ""
+ 
+--- /dev/null
++++ v0.25.193/READ_ME_v0.25.193.txt
+@@ -0,0 +1,14 @@
++AETHELBORN ASCENDED v0.25.193 - SPRINT RELOAD, WORLD INPUT & FIRE VFX
++
++Install using the included INSTALL.bat as usual. It stages/compiles all ten
++modules against the installed game/profile before updating the live profile.
++Restart the game for the new animation/input hooks to load.
++
++Built from v192 only. Protected v191 Anchor is untouched.
++See CHANGELOG_v0.25.193.txt for the exact scope, TEST_THIS_BUILD.txt for in-game
++checks and TEST_RESULTS_v0.25.193.txt for evidence and outstanding validation.
++
++2026-10-17: corrected virtual-method matching for sprint reload/bow drawing,
++blocked UI-driven skill inputs, restored vanilla Horizon Walker moving-fire
++animation, added the requested bloodline restrictions and scoped ground-fire /
++Blade Storm mist visuals. No defaults reset or unrelated VFX changes.
+--- v0.25.192/TEST_RESULTS_v0.25.191.txt
++++ /dev/null
+@@ -1,4 +0,0 @@
+-v0.25.191 static results
+-- check.sh 3029660: PASSED (0 new signatures)
+-- mcs --parse C# 5: OK (all .cs)
+-- In game: not tested.
+--- v0.25.192/TEST_RESULTS_v0.25.192.txt
++++ /dev/null
+@@ -1,29 +0,0 @@
+-AlbedosCustomClasses.Core.cs: PASS
+-
+-DragonsAltar.CombatRuntime.cs: PASS
+-
+-AlbedosCustomClasses.Skills.cs: PASS
+-
+-AlbedosCustomClasses.Passives.cs: PASS
+-
+-AlbedosCustomClasses.GuardianAngel.cs: PASS
+-
+-AlbedosCustomClasses.Advanced.cs: PASS
+-
+-DragonsAltar.Sorcerer.cs: PASS
+-
+-DragonsAltar.Ranger.cs: PASS
+-
+-DragonsAltar.DevTools.cs: PASS
+-
+-Aethelborn.Experience.cs: PASS
+-
+-PASS: Acrobat drawing gate replaced
+-PASS: Unrelated sprint checks unchanged
+-PASS: Sprint queue clear redirected to reload guard
+-PASS: Reload patch preserves unrelated calls
+-PASS: No replacement when drawing gate absent
+-PASS: No replacement when queue clear absent
+-Passed 6 shipped-method checks. Unity gameplay not exercised.
+-
+-See READ_ME_v0.25.192.txt for reference limitations and pending in-game checks.
+--- /dev/null
++++ v0.25.193/TEST_RESULTS_v0.25.193.txt
+@@ -0,0 +1,58 @@
++AETHELBORN ASCENDED v0.25.193 - VALIDATION RESULTS
++2026-10-17 (Asia/Manila)
++
++BASELINE / PRESERVATION
++Working baseline: Aethelborn_Ascended_v0.25.192_Ranger_Mobility_Buff_Timers.zip
++SHA-256: e0dc53217533696acb4f3aae75b524c1a97bd7011aeb0504f8616a6db9f66ec4
++Protected Anchor: Aethelborn_Ascended_v0.25.191_VFX_Finish.zip
++SHA-256: 2a616dfc4b69484940cfd79e07a08300bc07dc8161416499537b438a95af7783
++Both original archives unchanged. v193 is a separate test pass, not a new Anchor.
++185 existing assets byte-identical. Five C# modules edited: CombatRuntime,
++Ranger, Sorcerer, Advanced and Starter Skills. Other five module sources unchanged.
++Installer changes are banner/title text only, with original bytes/line endings
++preserved otherwise. Older test results archived under docs/changelog.
++
++STATIC COMPILATION - PASS
++All ten modules compiled with -langversion:5 against the available Valheim,
++Unity, BepInEx, Harmony and Jotunn references. Zero C# compile errors.
++As in v192: local UnityEngine.UI.dll/System.Xml.dll references were damaged;
++compile-only UI reference uses Unity3D.UnityEngine.UI 2018.3.5.1, and unused
++invalid System.Xml is excluded. This is not an exact copy of the installed
++Managed folder; the existing installer builds against the user's actual profile.
++No compiled third-party reference DLLs are included in the ZIP.
++
++COMPILED-METHOD CHECKS - 8 PASS
++Tests execute the shipped Ranger transpiler against actual game method IL:
++- Confirms actual Player.CheckRun operand is Humanoid.ClearActionQueue.
++- Confirms that real cancellation call is rewritten.
++- Confirms all other actual sprint instructions remain unchanged.
++- Supports the Player override form too.
++- Leaves an unrelated method named ClearActionQueue untouched.
++- Matches the actual Character.IsDrawingBow operand in Humanoid.CheckRun.
++- Validates actual reload action metadata (type, item, progress and Reload enum).
++- No-op when no cancellation call exists.
++These are stronger than v192's synthetic-only operand tests, which missed the
++virtual-base operands. They do not execute Unity's full movement/reload loop.
++An attempted live predicate invocation outside Unity hit the existing native
++Shader.PropertyToID initializer; live predicates are not claimed as executed.
++
++SCOPE AUDIT - 41 PASS
++Includes archive hashes, asset identity, five-module edit scope, installer
++identity except titles, vanilla animation/full-speed separation, central weapon
++rules/no-class exemption, unchanged utility axes/shared skill animation driver,
++Crescent lifetime cap, UI input gates and no new forbidden graphics calls.
++Damage statements, waits, gameplay RNG and Config.Bind lines match v192.
++This verifies source scope; it is not rendered-VFX or game-play validation.
++
++NOT AVAILABLE / NOT CLAIMED
++The supplied source archive has no original CLAUDE.md, tools/compile_check/check.sh,
++Stubs.cs or tools/release.sh, and this workspace has no project git checkout.
++The exact signature-baseline check (including '0 new signatures'), release script,
++project-memory update and git commit/push could not be performed.
++mcs is not installed here, so mcs --parse -langversion:5 was not run; full C# 5
++compilation was performed instead. No claim of equivalent project release checks.
++
++IN-GAME / RENDERED VALIDATION
++Not performed: continuous Shift reload, loaded-state/resource behavior, UI/menu
++input ownership, actual modded equipment recognition, staff animation, fire/mist
++visibility, visual polish, multiplayer and FPS. Use TEST_THIS_BUILD.txt.
+--- v0.25.192/TEST_THIS_BUILD.txt
++++ v0.25.193/TEST_THIS_BUILD.txt
+@@ -1,8 +1,36 @@
+-v0.25.191 VFX Finish - in-game checks (Enhanced VFX on)
+-1. Moonlight Splitter: a single crescent per wave (no doubled slash).  Eclipse: one sweeping arc, no rings.
+-2. Impact Wave: cracks fork off the main scar.  Whirlwind: dust at the feet.
+-3. Angel Comet: no lightning bolt, big fractures + rubble.  Shield Charge: glow on the shield + side streaks.
+-4. Barrier (Crucible / DI / Ray of Hope Asc): bursts into shards when broken.  Healing: brief glow on healed allies.
+-5. Lightning Tempest: storm canopy clearly visible, bolts come out of it.  Grand Cross: X has depth from the side.
+-6. Elemental Cataclysm: elements build while charging; fire, then frost, then lightning.  Clockwork: hands spin back and stop.
+-7. Astral Greatblade: bright seams + trail when swinging.  Arrow Rain: arrows visibly fall.  F7 during overlaps.
++AETHELBORN ASCENDED v0.25.193 - IN-GAME CHECKLIST
++Not yet tested in game by Codex. Test both normal and Ascended where applicable.
++
++1. Bow Master: hold Shift and move with an unloaded crossbow. Let reloading finish
++   without releasing Shift. Fire, continue sprinting and allow the next reload to
++   finish; repeat several times. No walking/stop/restarted progress while loading.
++   Try both starting the reload during sprint and beginning sprint during reload.
++   Verify ammo/stamina costs, reload speed and saved loaded state after re-equipping.
++   Non-Bow-Master crossbows and equip/use actions must retain normal restrictions.
++2. Acrobat: bow/greatbow drawing and firing still keep full current sprint speed;
++   base Ranger and Bow Master bows/greatbows keep the intended vanilla slowdown.
++3. Horizon Walker: normal/gun staff moving fire uses vanilla pose/animation,
++   retains full current movement speed and keeps the existing projectile cadence.
++4. Activate normal and Ascended Arcane Phantom, Phalanx and Rift Echo. Open
++   inventory, chest/container, chat/text input, map, escape menu, Altar, skill tree
++   and F8. Click/hold either mouse button and press skill bindings in each UI.
++   No new Phantom/Echo shots or sword launches; an armed Phalanx volley stays armed.
++   After closing, deliberately attack the world: all follow-ups work normally.
++   Repeat after switching focus to another application. Existing world projectiles
++   and already-released skill effects may finish; they are not cancelled globally.
++5. Open UI while holding a staff charge, Meteor/Cataclysm, Ballista or Ascended
++   Explosive Arrow. The held charge should cancel, with no new release shot.
++   Check normal charging/release still works in world input. Paid costs stay paid.
++6. Check other classes' skill hotkeys and channel follow-up clicks in chat/menus.
++   Then confirm hotbar drag/rebind, skill-tree K and developer F8 remain usable.
++7. Ranger, Acrobat, Bow Master: staves/wands/gun staves cannot be equipped.
++   Sorcerer, Archmage, Horizon Walker: bows/greatbows/crossbows cannot be equipped.
++   Check changing class with forbidden gear already equipped: it should be safely
++   unequipped into inventory. No-class characters must remain unrestricted.
++8. Fire effects listed in CHANGELOG: visibly burning ground in daylight/night,
++   no tall smoke wall, preserved impact visuals. Crescent trail expires within
++   its existing two-second segment lifetime; hit/tick/push behavior is unchanged.
++9. Blade Storm normal/Ascended: soft sphere-like mist with clear slashes, the
++   intended blue/dark-blue distinction, visible in daylight and against enemies.
++   Check repeated casts plus overlapping fire for visual density and FPS.
++10. Existing buff timers, cape, NACC, damage and other skills remain regression checks.
+--- /dev/null
++++ v0.25.193/docs/changelog/TEST_RESULTS_v0.25.191.txt
+@@ -0,0 +1,4 @@
++v0.25.191 static results
++- check.sh 3029660: PASSED (0 new signatures)
++- mcs --parse C# 5: OK (all .cs)
++- In game: not tested.
+--- /dev/null
++++ v0.25.193/docs/changelog/TEST_RESULTS_v0.25.192.txt
+@@ -0,0 +1,29 @@
++AlbedosCustomClasses.Core.cs: PASS
++
++DragonsAltar.CombatRuntime.cs: PASS
++
++AlbedosCustomClasses.Skills.cs: PASS
++
++AlbedosCustomClasses.Passives.cs: PASS
++
++AlbedosCustomClasses.GuardianAngel.cs: PASS
++
++AlbedosCustomClasses.Advanced.cs: PASS
++
++DragonsAltar.Sorcerer.cs: PASS
++
++DragonsAltar.Ranger.cs: PASS
++
++DragonsAltar.DevTools.cs: PASS
++
++Aethelborn.Experience.cs: PASS
++
++PASS: Acrobat drawing gate replaced
++PASS: Unrelated sprint checks unchanged
++PASS: Sprint queue clear redirected to reload guard
++PASS: Reload patch preserves unrelated calls
++PASS: No replacement when drawing gate absent
++PASS: No replacement when queue clear absent
++Passed 6 shipped-method checks. Unity gameplay not exercised.
++
++See READ_ME_v0.25.192.txt for reference limitations and pending in-game checks.
+--- /dev/null
++++ v0.25.193/docs/changelog/TEST_THIS_BUILD_before_v0.25.193.txt
+@@ -0,0 +1,8 @@
++v0.25.191 VFX Finish - in-game checks (Enhanced VFX on)
++1. Moonlight Splitter: a single crescent per wave (no doubled slash).  Eclipse: one sweeping arc, no rings.
++2. Impact Wave: cracks fork off the main scar.  Whirlwind: dust at the feet.
++3. Angel Comet: no lightning bolt, big fractures + rubble.  Shield Charge: glow on the shield + side streaks.
++4. Barrier (Crucible / DI / Ray of Hope Asc): bursts into shards when broken.  Healing: brief glow on healed allies.
++5. Lightning Tempest: storm canopy clearly visible, bolts come out of it.  Grand Cross: X has depth from the side.
++6. Elemental Cataclysm: elements build while charging; fire, then frost, then lightning.  Clockwork: hands spin back and stop.
++7. Astral Greatblade: bright seams + trail when swinging.  Arrow Rain: arrows visibly fall.  F7 during overlaps.
+--- /dev/null
++++ v0.25.193/tools/tests/sprint_input_193/README.txt
+@@ -0,0 +1,4 @@
++ScopeTests.cs targets the shipped Ranger assembly and actual game IL. audit.py
++checks this workspace's source snapshots. run.py is the development-environment
++runner; its local compiler/reference paths are not installation dependencies.
++Included logs record what was actually run. No tests here replace in-game checks.
+--- /dev/null
++++ v0.25.193/tools/tests/sprint_input_193/ScopeTests.cs
+@@ -0,0 +1,78 @@
++using System;
++using System.Collections.Generic;
++using System.Reflection;
++using System.Reflection.Emit;
++using HarmonyLib;
++using DragonsAltarRanger;
++class UnrelatedQueue { public void ClearActionQueue() { } }
++class ScopeTests
++{
++    static int passed;
++    static readonly Dictionary<short, OpCode> opcodes = BuildOpcodes();
++    static Dictionary<short, OpCode> BuildOpcodes()
++    {
++        Dictionary<short, OpCode> result = new Dictionary<short, OpCode>();
++        foreach (FieldInfo field in typeof(OpCodes).GetFields(BindingFlags.Static | BindingFlags.Public))
++            if (field.FieldType == typeof(OpCode)) { OpCode op = (OpCode)field.GetValue(null); result[op.Value] = op; }
++        return result;
++    }
++    static void Check(bool condition, string name)
++    { if (!condition) throw new Exception(name); System.Console.WriteLine("PASS: " + name); passed++; }
++    static MethodInfo Method(Type type, string name)
++    { return AccessTools.Method(type, name); }
++    static List<CodeInstruction> Transpile(string name, List<CodeInstruction> code)
++    {
++        MethodInfo method = typeof(RangerPlugin).GetMethod(name, BindingFlags.Static | BindingFlags.NonPublic);
++        return new List<CodeInstruction>((IEnumerable<CodeInstruction>)method.Invoke(null, new object[] { code }));
++    }
++    // Read original managed IL. In particular, retain the DECLARING TYPE of virtual method operands.
++    static List<CodeInstruction> ReadIL(MethodInfo method)
++    {
++        List<CodeInstruction> result = new List<CodeInstruction>();
++        byte[] bytes = method.GetMethodBody().GetILAsByteArray(); int p = 0;
++        while (p < bytes.Length)
++        {
++            short value = bytes[p++]; if (value == 0xfe) value = unchecked((short)(0xfe00 | bytes[p++]));
++            OpCode op = opcodes[value]; object operand = null; int size = 0;
++            switch (op.OperandType)
++            {
++                case OperandType.InlineNone: break;
++                case OperandType.ShortInlineBrTarget: case OperandType.ShortInlineI: case OperandType.ShortInlineVar: size = 1; break;
++                case OperandType.InlineVar: size = 2; break;
++                case OperandType.InlineI8: case OperandType.InlineR: size = 8; break;
++                case OperandType.InlineSwitch: size = 4 + 4 * BitConverter.ToInt32(bytes, p); break;
++                case OperandType.InlineMethod: operand = method.Module.ResolveMethod(BitConverter.ToInt32(bytes, p)); size = 4; break;
++                default: size = 4; break;
++            }
++            if (operand == null && size > 0) operand = BitConverter.ToString(bytes, p, size);
++            p += size; result.Add(new CodeInstruction(op, operand));
++        }
++        return result;
++    }
++    static void Main()
++    {
++        List<CodeInstruction> actual = ReadIL(Method(typeof(Player), "CheckRun"));
++        int clearIndex = actual.FindIndex(delegate(CodeInstruction i) { MethodInfo m = i.operand as MethodInfo; return m != null && m.Name == "ClearActionQueue"; });
++        Check(clearIndex >= 0 && ((MethodInfo)actual[clearIndex].operand).DeclaringType == typeof(Humanoid), "Actual Valheim sprint IL calls the Humanoid virtual base slot");
++        List<CodeInstruction> original = new List<CodeInstruction>(); foreach (CodeInstruction i in actual) original.Add(new CodeInstruction(i.opcode, i.operand));
++        List<CodeInstruction> result = Transpile("SprintReloadTranspiler", actual);
++        Check(((MethodInfo)result[clearIndex].operand).Name == "ClearActionsUnlessReloading" && result[clearIndex].opcode == OpCodes.Call, "Actual Valheim sprint cancellation is intercepted");
++        bool unchanged = result.Count == original.Count;
++        for (int i = 0; i < result.Count; i++) if (i != clearIndex) unchanged &= result[i].opcode == original[i].opcode && Equals(result[i].operand, original[i].operand);
++        Check(unchanged, "All other actual sprint instructions (stamina and run conditions) preserved");
++        List<CodeInstruction> input = new List<CodeInstruction> { new CodeInstruction(OpCodes.Callvirt, Method(typeof(Player), "ClearActionQueue")), new CodeInstruction(OpCodes.Callvirt, Method(typeof(UnrelatedQueue), "ClearActionQueue")), new CodeInstruction(OpCodes.Ret) };
++        result = Transpile("SprintReloadTranspiler", input);
++        Check(((MethodInfo)result[0].operand).Name == "ClearActionsUnlessReloading", "Override-form cancellation is also supported");
++        Check(((MethodInfo)result[1].operand).DeclaringType == typeof(UnrelatedQueue) && result[2].opcode == OpCodes.Ret, "Unrelated same-name method is untouched");
++        actual = ReadIL(Method(typeof(Humanoid), "CheckRun"));
++        result = Transpile("BowSprintTranspiler", actual);
++        Check(result.Exists(delegate(CodeInstruction i) { MethodInfo m = i.operand as MethodInfo; return m != null && m.Name == "DrawingBlocksSprint"; }), "Existing Acrobat bow sprint patch still matches actual IL");
++        FieldInfo queue = AccessTools.Field(typeof(Player), "m_actionQueue");
++        Type actionType = queue.FieldType.GetGenericArguments()[0];
++        FieldInfo typeField = AccessTools.Field(actionType, "m_type"), itemField = AccessTools.Field(actionType, "m_item"), timeField = AccessTools.Field(actionType, "m_time");
++        Check(typeField != null && itemField != null && timeField != null && Enum.IsDefined(typeField.FieldType, "Reload"), "Actual game reload action exposes the cached type, item and progress fields");
++        System.Console.WriteLine("NOT RUN: live-player reload predicates, resource use, animation and speed require Unity. An attempted predicate invocation hit the existing Shader.PropertyToID native initializer outside Unity.");
++        Check(Transpile("SprintReloadTranspiler", new List<CodeInstruction> { new CodeInstruction(OpCodes.Ret) })[0].opcode == OpCodes.Ret, "Methods without sprint cancellation are unchanged");
++        System.Console.WriteLine("Passed " + passed + " compiled-method checks. Unity gameplay not exercised.");
++    }
++}
+--- /dev/null
++++ v0.25.193/tools/tests/sprint_input_193/audit.py
+@@ -0,0 +1,50 @@
++from pathlib import Path
++import hashlib,json,re
++base=Path('working192');work=Path('working193');out=Path('validation193')
++checks=[]
++def check(value, label):
++ assert value,label
++ checks.append(label);print('PASS:',label)
++def source(name):return (work/name).read_text(encoding='utf-8-sig')
++anchor=Path('upload/Aethelborn_Ascended_v0.25.191_VFX_Finish.zip')
++prev=Path('output/Aethelborn_Ascended_v0.25.192_Ranger_Mobility_Buff_Timers.zip')
++check(hashlib.sha256(anchor.read_bytes()).hexdigest()=='2a616dfc4b69484940cfd79e07a08300bc07dc8161416499537b438a95af7783','Original v191 Anchor archive unchanged')
++check(hashlib.sha256(prev.read_bytes()).hexdigest()=='e0dc53217533696acb4f3aae75b524c1a97bd7011aeb0504f8616a6db9f66ec4','Original v192 working archive unchanged')
++assets=[p for p in (base/'ImmortalHeroesAssets').rglob('*') if p.is_file()]
++check(all(p.read_bytes()==(work/p.relative_to(base)).read_bytes() for p in assets),str(len(assets))+' existing asset files byte-identical')
++changed={p.name for p in work.glob('*.cs') if p.read_bytes()!=(base/p.name).read_bytes()}
++check(changed=={'DragonsAltar.CombatRuntime.cs','DragonsAltar.Ranger.cs','DragonsAltar.Sorcerer.cs','AlbedosCustomClasses.Advanced.cs','AlbedosCustomClasses.Skills.cs'},'Only five scoped C# modules changed')
++for name in ['INSTALL.bat','INSTALL.ps1']:
++ a=(base/name).read_bytes();expected=a.replace(b'v0.25.192',b'v0.25.193').replace(b'RANGER MOBILITY AND BUFF TIMERS',b'SPRINT RELOAD AND WORLD INPUT')
++ check((work/name).read_bytes()==expected,name+' title text only; installation behavior identical')
++s=source('DragonsAltar.Sorcerer.cs');c=source('DragonsAltar.CombatRuntime.cs');a=source('AlbedosCustomClasses.Advanced.cs');r=source('DragonsAltar.Ranger.cs');k=source('AlbedosCustomClasses.Skills.cs')
++check('AddComponent<HwLegCycle>' not in s and 'legs.ActiveUntil =' not in s,'Custom Horizon Walker leg animation no longer installed or refreshed')
++check('if (_hwFiring && __instance != null && __instance == Player.m_localPlayer && __result < 1f) __result = 1f;' in s,'Existing Horizon Walker full-speed shooting factor retained')
++check('cls == "Ranger" && kind == "magic"' in c and 'cls == "Sorcerer" && (kind == "bow" || kind == "crossbow")' in c,'Central equip rules reject Ranger magic weapons and Sorcerer bows/crossbows for the whole bloodline')
++check('if (string.IsNullOrEmpty(cls)) return null;' in c,'No-class equipment exemption retained')
++# The sections below have no visual behavior and are outside the requested scope.
++original=(base/'DragonsAltar.CombatRuntime.cs').read_text(encoding='utf-8-sig')
++for start,end,label in [('        // ------------------------------------------------------------------ v0.25.169 WEAPON RESTRICTIONS', '        public static string WeaponRuleViolation', 'Existing equipment classifier and utility-axe rules retained'),('    public class DragonSkillClipDriver', '    public static class DragonCombat','Shared skill animation driver retained')]:
++ if start in original and end in original[original.index(start):]:
++  before=original[original.index(start):original.index(end,original.index(start))];after=c[c.index(start):c.index(end,c.index(start))]
++  check(before==after,label)
++check('Mathf.Clamp(_crescentAscTrailTime.Value, 0.5f, 2f)' in a and 'Mathf.Min(0.5f, cast.Times[p] + life - Time.time)' in a,'Crescent fire segments keep their existing two-second lifetime cap')
++# All damage operations, waits, RNG and gameplay configs stay byte-for-byte at the call-site line level.
++for name in changed:
++ b=(base/name).read_text(encoding='utf-8-sig');n=source(name)
++ extract=lambda t:[l.strip() for l in t.splitlines() if ('Config.Bind(' in l or 'new WaitForSeconds(' in l or 'UnityEngine.Random.' in l or '.Damage(' in l or '.m_damage.' in l or 'ApplyFireBurnTick(' in l or 'IhDealRaw(' in l or 'IhAddBurnStack(' in l)]
++ check(extract(b)==extract(n),name+': config bindings, damage statements, wait intervals and gameplay RNG retained')
++check('if (_phalanxVolleyArmed && DragonCombat.CanUseWorldInput(player)' in s,'Phalanx all-swords volley has a UI input gate before consuming its armed state')
++for signature in ['private void TryTriggerSpellcasterHeldFire(Player player)','public void QueueMimicAttack(Player player, ItemDrop.ItemData weapon)','private void UpdateSpellcasterHeldFire(Player player)']:
++ block=s[s.index(signature):s.index(signature)+350]
++ check('CanUseWorldInput(player)' in block,signature+' rejects UI input')
++check('!Application.isFocused' in c and 'Cursor.visible' in c and '_worldInputCheck(player)' in c and '_explicitUiInputBlocked' in c,'World input guard checks focus, free cursor, mod input blocking and native TakeInput')
++check('if (!DragonCombat.CanUseWorldInput(player))' in a[a.index('private void HandleTreeHotbarInput'):a.index('private void HandleTreeHotbarInput')+250],'Universal hotbar input uses the shared world gate')
++check('CanUseWorldInput(player) || !Input.GetKey(_modifier.Value)' in k and 'CanUseWorldInput(player) || !Input.GetKey(_modifier.Value)' in s,'Starter and Sorcerer legacy hotkeys use the shared world gate')
++check('!DragonCombat.CanUseWorldInput(player)) { DragonCombat.ClipStop(player, 0.1f); yield break; }' in r and '_meteorChargeShown = 0; _meteorChargeNext = 0f;' in s,'Opening UI cancels held charge input instead of releasing a new shot')
++# Explicit compatibility blacklist applies to new calls; do not rewrite any unrelated pre-existing code.
++for name in changed:
++ old=(base/name).read_text(encoding='utf-8-sig');new=source(name)
++ for forbidden in ['.SetPositions(','.GetPositions(','.LoadImage(']:check(new.count(forbidden)==old.count(forbidden),name+': no new '+forbidden+' calls')
++(out/'scope_audit.json').write_text(json.dumps({'passed':len(checks),'checks':checks},indent=2))
++print('Passed',len(checks),'static scope checks; game behavior and rendered appearance not exercised.')
+--- /dev/null
++++ v0.25.193/tools/tests/sprint_input_193/compile.log
+@@ -0,0 +1,19 @@
++AlbedosCustomClasses.Core.cs: PASS
++
++DragonsAltar.CombatRuntime.cs: PASS
++
++AlbedosCustomClasses.Skills.cs: PASS
++
++AlbedosCustomClasses.Passives.cs: PASS
++
++AlbedosCustomClasses.GuardianAngel.cs: PASS
++
++AlbedosCustomClasses.Advanced.cs: PASS
++
++DragonsAltar.Sorcerer.cs: PASS
++
++DragonsAltar.Ranger.cs: PASS
++
++DragonsAltar.DevTools.cs: PASS
++
++Aethelborn.Experience.cs: PASS
+--- /dev/null
++++ v0.25.193/tools/tests/sprint_input_193/run.py
+@@ -0,0 +1,14 @@
++from pathlib import Path
++import subprocess,os,shutil,json
++out=Path('validation193')
++# Reuse only runtime dependencies; never overwrite the newly compiled AA modules.
++for p in Path('validation192').glob('*.dll'):
++ if not (out/p.name).exists() and p.name!='ScopeTests.dll':shutil.copy2(p,out/p.name)
++refs=list(Path('compile-refs/lib/net46').glob('*.dll'))
++refs=[p for p in refs if p.name not in ['UnityEngine.UI.dll','System.Xml.dll']]+list(Path('build192-tools/repaired-refs').glob('*.dll'))+[out/'DragonsAltar.Ranger.dll',out/'AlbedosCustomClasses.CombatRuntime.dll']
++env=dict(os.environ,DOTNET_SYSTEM_GLOBALIZATION_INVARIANT='1')
++cmd=['build192-tools/dotnet/dotnet','build192-tools/compiler/tasks/netcore/bincore/csc.dll','-nologo','-noconfig','-nostdlib','-langversion:5','-target:exe','-out:'+str(out/'ScopeTests.dll')]+['-r:'+str(p) for p in refs]+['tests193/ScopeTests.cs']
++r=subprocess.run(cmd,env=env,capture_output=True,text=True);print(r.stdout+r.stderr);assert r.returncode==0
++(out/'ScopeTests.runtimeconfig.json').write_text(json.dumps({'runtimeOptions':{'tfm':'net6.0','framework':{'name':'Microsoft.NETCore.App','version':'6.0.36'}}}))
++r=subprocess.run(['build192-tools/dotnet/dotnet',str(out/'ScopeTests.dll')],env=env,capture_output=True,text=True)
++(out/'shipped_method_tests.txt').write_text(r.stdout+r.stderr);print(r.stdout+r.stderr);assert r.returncode==0
+--- /dev/null
++++ v0.25.193/tools/tests/sprint_input_193/scope_audit.json
+@@ -0,0 +1,46 @@
++{
++  "passed": 41,
++  "checks": [
++    "Original v191 Anchor archive unchanged",
++    "Original v192 working archive unchanged",
++    "185 existing asset files byte-identical",
++    "Only five scoped C# modules changed",
++    "INSTALL.bat title text only; installation behavior identical",
++    "INSTALL.ps1 title text only; installation behavior identical",
++    "Custom Horizon Walker leg animation no longer installed or refreshed",
++    "Existing Horizon Walker full-speed shooting factor retained",
++    "Central equip rules reject Ranger magic weapons and Sorcerer bows/crossbows for the whole bloodline",
++    "No-class equipment exemption retained",
++    "Existing equipment classifier and utility-axe rules retained",
++    "Shared skill animation driver retained",
++    "Crescent fire segments keep their existing two-second lifetime cap",
++    "AlbedosCustomClasses.Advanced.cs: config bindings, damage statements, wait intervals and gameplay RNG retained",
++    "DragonsAltar.CombatRuntime.cs: config bindings, damage statements, wait intervals and gameplay RNG retained",
++    "DragonsAltar.Ranger.cs: config bindings, damage statements, wait intervals and gameplay RNG retained",
++    "AlbedosCustomClasses.Skills.cs: config bindings, damage statements, wait intervals and gameplay RNG retained",
++    "DragonsAltar.Sorcerer.cs: config bindings, damage statements, wait intervals and gameplay RNG retained",
++    "Phalanx all-swords volley has a UI input gate before consuming its armed state",
++    "private void TryTriggerSpellcasterHeldFire(Player player) rejects UI input",
++    "public void QueueMimicAttack(Player player, ItemDrop.ItemData weapon) rejects UI input",
++    "private void UpdateSpellcasterHeldFire(Player player) rejects UI input",
++    "World input guard checks focus, free cursor, mod input blocking and native TakeInput",
++    "Universal hotbar input uses the shared world gate",
++    "Starter and Sorcerer legacy hotkeys use the shared world gate",
++    "Opening UI cancels held charge input instead of releasing a new shot",
++    "AlbedosCustomClasses.Advanced.cs: no new .SetPositions( calls",
++    "AlbedosCustomClasses.Advanced.cs: no new .GetPositions( calls",
++    "AlbedosCustomClasses.Advanced.cs: no new .LoadImage( calls",
++    "DragonsAltar.CombatRuntime.cs: no new .SetPositions( calls",
++    "DragonsAltar.CombatRuntime.cs: no new .GetPositions( calls",
++    "DragonsAltar.CombatRuntime.cs: no new .LoadImage( calls",
++    "DragonsAltar.Ranger.cs: no new .SetPositions( calls",
++    "DragonsAltar.Ranger.cs: no new .GetPositions( calls",
++    "DragonsAltar.Ranger.cs: no new .LoadImage( calls",
++    "AlbedosCustomClasses.Skills.cs: no new .SetPositions( calls",
++    "AlbedosCustomClasses.Skills.cs: no new .GetPositions( calls",
++    "AlbedosCustomClasses.Skills.cs: no new .LoadImage( calls",
++    "DragonsAltar.Sorcerer.cs: no new .SetPositions( calls",
++    "DragonsAltar.Sorcerer.cs: no new .GetPositions( calls",
++    "DragonsAltar.Sorcerer.cs: no new .LoadImage( calls"
++  ]
++}--- /dev/null
++++ v0.25.193/tools/tests/sprint_input_193/shipped_method_tests.txt
+@@ -0,0 +1,10 @@
++PASS: Actual Valheim sprint IL calls the Humanoid virtual base slot
++PASS: Actual Valheim sprint cancellation is intercepted
++PASS: All other actual sprint instructions (stamina and run conditions) preserved
++PASS: Override-form cancellation is also supported
++PASS: Unrelated same-name method is untouched
++PASS: Existing Acrobat bow sprint patch still matches actual IL
++PASS: Actual game reload action exposes the cached type, item and progress fields
++NOT RUN: live-player reload predicates, resource use, animation and speed require Unity. An attempted predicate invocation hit the existing Shader.PropertyToID native initializer outside Unity.
++PASS: Methods without sprint cancellation are unchanged
++Passed 8 compiled-method checks. Unity gameplay not exercised.

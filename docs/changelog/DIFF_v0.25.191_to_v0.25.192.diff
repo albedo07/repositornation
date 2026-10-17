@@ -1,0 +1,525 @@
+--- v0.25.191/AlbedosCustomClasses.Advanced.cs
++++ v0.25.192/AlbedosCustomClasses.Advanced.cs
+@@ -116,7 +116,7 @@
+     {
+         public const string ModGuid = "albedo.customclasses.advanced";
+         public const string ModName = "Aethelborn Ascended - Advancements";
+-        public const string ModVersion = "0.25.191";
++        public const string ModVersion = "0.25.192";
+ 
+         private const string ClassDataKey = "AlbedoCustomClasses.Class";
+         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
+@@ -10170,6 +10170,25 @@
+             return false;
+         }
+ 
++        private float _temporaryBuffUiAt;
++        private void UpdateTemporaryBuffIndicators(Player player, string advancement)
++        {
++            if (player == null || Time.time < _temporaryBuffUiAt) return;
++            _temporaryBuffUiAt = Time.time + 0.2f;
++            float alive = player.IsDead() ? 0f : 1f;
++            DragonCombat.ShowStatusUntil(player, "fury", "fury", "Unchained Fury", advancement == "Mercenary" ? _mercFuryUntil * alive : 0f, 0,
++                "Attack Buff\nMercenary skills use their Ascended versions");
++            float lockUntil = advancement == "Mercenary" && Time.time >= _mercFuryUntil ? _mercFuryCooldownUntil * alive : 0f;
++            DragonCombat.ShowStatusUntil(player, "fury_recovery", "fury", "Fury Recovery", lockUntil, 0,
++                "Fury cannot build until this cooldown ends");
++            DragonCombat.ShowStatusUntil(player, "empty_sheath", "parry", "Empty Sheath", advancement == "Sword Master" ? _emptySheathCounterUntil * alive : 0f, 0,
++                "Counter window is active");
++            float sanctified;
++            _sanctifiedUntil.TryGetValue(player.GetInstanceID(), out sanctified);
++            DragonCombat.ShowStatusUntil(player, "sanctified_bloom", "relic", "Sanctified Bloom", sanctified * alive, 0,
++                "The next eligible relic interaction triggers Sanctified Bloom");
++        }
++
+         private bool IsUnchainedFuryActive()
+         {
+             return Time.time < _mercFuryUntil;
+@@ -10177,6 +10196,7 @@
+ 
+         private void UpdateMercenaryFuryState(Player player, string advancement)
+         {
++            UpdateTemporaryBuffIndicators(player, advancement);
+             if (advancement != "Mercenary")
+             {
+                 _mercFury = 0f;
+@@ -12736,6 +12756,8 @@
+         private IEnumerator IhHealOverTime(Player ally, float percentPerSecond, float seconds)
+         {
+             float end = Time.time + Mathf.Max(0f, seconds);
++            DragonCombat.ShowStatus(ally, "holy_wave_mending", "heart", "Holy Wave - Mending", Mathf.Max(0f, seconds), 0,
++                "Recovery Buff\n" + IhNum(percentPerSecond) + "% Max HP healed per second");
+             while (Time.time < end && ally != null && !ally.IsDead())
+             {
+                 yield return new WaitForSeconds(1f);
+--- v0.25.191/AlbedosCustomClasses.GuardianAngel.cs
++++ v0.25.192/AlbedosCustomClasses.GuardianAngel.cs
+@@ -17,7 +17,7 @@
+     {
+         public const string ModGuid = "albedo.customclasses.guardian";
+         public const string ModName = "Aethelborn Ascended - Grand Sigil Survival";
+-        public const string ModVersion = "0.25.191";
++        public const string ModVersion = "0.25.192";
+ 
+         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
+ 
+@@ -63,8 +63,34 @@
+             }
+         }
+ 
++        private float _indicatorAt;
++        private bool _indicatorShown;
++        private void Update()
++        {
++            if (Time.time < _indicatorAt) return;
++            _indicatorAt = Time.time + 0.5f;
++            Player player = Player.m_localPlayer;
++            if (player == null) return;
++            bool self = GetAdvancement(player) == "Priest";
++            float until = self ? _selfNextAvailableTime : _allyNextAvailableTime;
++            bool eligible = !player.IsDead() && (self || until > Time.time || HasNearbyPriest(player));
++            if (!eligible)
++            {
++                if (_indicatorShown) DragonCombat.ClearStatus(player, "priest_life_token");
++                _indicatorShown = false;
++                return;
++            }
++            _indicatorShown = true;
++            float left = Mathf.Max(0f, until - Time.time);
++            string title = self ? "Bless Thy Sinners" : "Priest's Protection";
++            DragonCombat.ShowStatusState(player, "priest_life_token", "heart", title + (left > 0f ? " - Cooldown" : " - Ready"), left,
++                left > 0f ? "Death-save unavailable. Ready in " + Mathf.CeilToInt(left) + "s."
++                    : (self ? "Your death-save is ready." : "Ally death-save is ready while a living Priest is nearby."));
++        }
++
+         private void OnDestroy()
+         {
++            if (Player.m_localPlayer != null) DragonCombat.ClearStatus(Player.m_localPlayer, "priest_life_token");
+             if (_harmony != null)
+             {
+                 try
+@@ -159,6 +185,9 @@
+                 _allyNextAvailableTime = Time.time + Mathf.Max(0f, cooldown);
+             else
+                 _selfNextAvailableTime = Time.time + Mathf.Max(0f, cooldown);
++
++            _indicatorAt = 0f;
++            Update();
+ 
+             if (_enableVfx.Value)
+                 StartCoroutine(GrandSigilVisual(player));
+--- v0.25.191/AlbedosCustomClasses.Skills.cs
++++ v0.25.192/AlbedosCustomClasses.Skills.cs
+@@ -232,7 +232,7 @@
+         public static SkillsPlugin Instance;
+         public const string ModGuid = "albedo.customclasses.skills";
+         public const string ModName = "Aethelborn Ascended - Starter Skills";
+-        public const string ModVersion = "0.25.191";
++        public const string ModVersion = "0.25.192";
+ 
+         private const string ClassDataKey = "AlbedoCustomClasses.Class";
+         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";
+@@ -960,6 +960,8 @@
+             HealPlayers(caster.transform.position, DragonCombat.M(_holyRadius.Value), _holyImmediate.Value * holyPower);
+ 
+             int ticks = Mathf.Max(1, Mathf.RoundToInt(Mathf.Max(1f, _holyDuration.Value)));
++            DragonCombat.ShowStatus(caster, "holy_wave_area", "heart", "Holy Wave", ticks, 0,
++                "Recovery Buff\nHealing area follows the caster for this duration");
+             for (int i = 0; i < ticks; i++)
+             {
+                 yield return new WaitForSeconds(1f);
+--- v0.25.191/DragonsAltar.CombatRuntime.cs
++++ v0.25.192/DragonsAltar.CombatRuntime.cs
+@@ -15,7 +15,7 @@
+     {
+         public const string ModGuid = "albedo.customclasses.combatruntime";
+         public const string ModName = "Aethelborn Ascended - Combat Runtime";
+-        public const string ModVersion = "0.25.191";
++        public const string ModVersion = "0.25.192";
+ 
+         internal static DragonCombatPlugin Instance;
+ 
+@@ -588,7 +588,9 @@
+             count += PatchInterruptMethod("ApplyPushback");
+             count += PatchDamageMethods();
+             count += PatchAnimationSpeed();
+-            count += PatchFloatRefSEMan("ModifySpeed", "SpeedPrefix");
++            // v0.25.192: current Valheim renamed this hook; keep the legacy fallback, never apply twice.
++            int moveHooks = PatchFloatRefSEMan("ApplyStatusEffectSpeedMods", "SpeedPrefix");
++            count += moveHooks > 0 ? moveHooks : PatchFloatRefSEMan("ModifySpeed", "SpeedPrefix");
+             count += PatchFloatRefSEMan("ModifyStaminaRegen", "StaminaRegenPrefix");
+             count += PatchFloatRefSEMan("ModifyEitrRegen", "EitrRegenPrefix");
+             count += PatchAttackGetStamina();
+@@ -7567,6 +7569,27 @@
+             catch { }
+         }
+ 
++        // v0.25.192: display-only indicator driven by the owner's real expiration, not a second buff timer.
++        private static int _untilIndicatorPlayer;
++        private static readonly HashSet<string> UntilIndicators = new HashSet<string>();
++        public static void ShowStatusUntil(Player player, string key, string icon, string label, float until, int stacks, string detail)
++        {
++            if (player == null || player != Player.m_localPlayer) return;
++            int id = player.GetInstanceID();
++            if (_untilIndicatorPlayer != id)
++            {
++                UntilIndicators.Clear();
++                _untilIndicatorPlayer = id;
++            }
++            HashSet<string> shown = UntilIndicators;
++            if (until > Time.time && !player.IsDead())
++            {
++                shown.Add(key);
++                ShowStatus(player, key, icon, label, until - Time.time, stacks, detail);
++            }
++            else if (shown.Remove(key)) ClearStatus(player, key);
++        }
++
+         public static void ClearStatus(Player player, string key)
+         {
+             try
+@@ -8493,7 +8516,7 @@
+                 return;
+             ExplicitHyperArmorUntil[player.GetInstanceID()] = Time.time + Mathf.Max(0f, duration);
+             if (duration >= 1f) RunVfx(delegate { DragonVfx.HyperShimmer(player, duration); });
+-            if (duration >= 1f) ShowStatus(player, "hyper_armor", "hyper_armor", "Hyper Armor", duration, 0, "Defense Buff\nNo stagger or knockback from hits");
++            if (duration > 0f) ShowStatus(player, "hyper_armor", "hyper_armor", "Hyper Armor", duration, 0, "Defense Buff\nNo stagger or knockback from hits");
+         }
+ 
+         public static float BlockHyperUntil = -1f;
+@@ -8543,6 +8566,8 @@
+             return false;
+         }
+ 
++        public static Func<Player, float> NormalAttackBaseSpeedProvider;
++
+         public static void ApplyManagedAnimationSpeed(Player player, Animator animator)
+         {
+             if (player == null || animator == null)
+@@ -8590,6 +8615,11 @@
+             int pid = player.GetInstanceID();
+             bool skillTimed = SkillAnimSpeed.TryGetValue(pid, out skillSpeed) && SkillAnimSpeedUntil.TryGetValue(pid, out skillUntil) && Time.time < skillUntil;
+             if (skillTimed) factor = skillSpeed;
++            else if (player.InAttack() && NormalAttackBaseSpeedProvider != null)
++            {
++                float normalBase = NormalAttackBaseSpeedProvider(player);
++                if (normalBase > 0f) baseSpeed = normalBase;
++            }
+ 
+             factor = Mathf.Max(skillTimed ? 0.01f : 0.1f, factor);
+ 
+@@ -8712,7 +8742,7 @@
+ 
+             // v0.25.183 (perf): the look (label/icon) is only needed when an indicator is shown - Sorcerer modules re-apply
+             // short (0.35 s) buffs every frame, which built the label string each time
+-            if (duration >= 1f)
++            if (duration > 0f && source != "Sorcerer.AdvancementEitrRegen" && source != "Sorcerer.ArcaneBlood" && source != "Wizard.Overcharge" && source != "Spellcaster.PhaseFlow")
+             {
+                 string statusIcon, statusLabel;
+                 TimedBuffLook(source, attackDamageBonus, attackSpeedBonus, moveSpeedBonus, defenseBonus, staminaRegenBonus, eitrRegenBonus, hyperArmor, out statusIcon, out statusLabel);
+@@ -12752,7 +12782,12 @@
+         public override string GetIconText()
+         {
+             if (Stacks > 0) return Stacks.ToString();
+-            if (m_ttl <= 0f) return "";
++            if (m_ttl <= 0f)
++            {
++                if (m_name != null && m_name.EndsWith(" - Ready", StringComparison.Ordinal)) return "Ready";
++                if (m_name != null && m_name.EndsWith(" - Active", StringComparison.Ordinal)) return "Active";
++                return "";
++            }
+             return Mathf.CeilToInt(Mathf.Max(0f, m_ttl - m_time)).ToString() + "s";
+         }
+     }
+--- v0.25.191/DragonsAltar.Ranger.cs
++++ v0.25.192/DragonsAltar.Ranger.cs
+@@ -2,6 +2,7 @@
+ using System.Collections;
+ using System.Collections.Generic;
+ using System.Reflection;
++using System.Reflection.Emit;
+ using BepInEx;
+ using BepInEx.Configuration;
+ using HarmonyLib;
+@@ -41,7 +42,7 @@
+     {
+         public const string ModGuid = "albedo.customclasses.ranger";
+         public const string ModName = "Aethelborn Ascended - Ranger";
+-        public const string ModVersion = "0.25.191";
++        public const string ModVersion = "0.25.192";
+         private const string ClassDataKey = "AlbedoCustomClasses.Class";
+         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
+ 
+@@ -373,6 +374,7 @@
+             DragonCombat.RegisterSkillLevelBonus(SkillLevelBonus);
+             DragonCombat.RegisterIncomingHitFilter(IncomingHit);
+             DragonCombat.ControlsHook = RangerControls;
++            DragonCombat.NormalAttackBaseSpeedProvider = RangerBowFireSpeed;
+             InstallPatches();
+             Logger.LogInfo(ModName + " v" + ModVersion + " loaded.");
+         }
+@@ -574,11 +576,11 @@
+             if (Input.GetMouseButtonDown(0) && !Cursor.visible) _lmbLatchAt = Time.time;
+             bool ranger = GetClass(player) == "Ranger";
+             bool acrobat = ranger && GetAdvancement(player) == "Acrobat";
++            UpdateRangerBuffIndicators(player, ranger, acrobat);
+             UpdateDodgeCost(player, acrobat);
+             if (acrobat) DragonCombat.ApplyStaminaUseCut(player, Mathf.Clamp01(_wsStaminaUse.Value / 100f), 0.5f);
+             // v0.25.2 perf: gear rules 5x per second, not every frame.
+             if (ranger && Time.time >= _nextGearCheck) { _nextGearCheck = Time.time + 0.2f; UpdateForbiddenGear(player, acrobat); }
+-            if (ranger) UpdateQuickShotSpeed(player);
+             if (_splitRooted)
+             {
+                 DragonCombat.LockSkill(player, 0.15f);
+@@ -598,6 +600,19 @@
+             }
+             else if (acrobat && !_doubleJumpUsed && !_hovering && JumpPressed(player))
+                 AirJump(player);
++        }
++
++        private float _rangerBuffUiAt, _windsUntil;
++        private void UpdateRangerBuffIndicators(Player player, bool ranger, bool acrobat)
++        {
++            if (Time.time < _rangerBuffUiAt) return;
++            _rangerBuffUiAt = Time.time + 0.2f;
++            float vigil;
++            _vigilUntil.TryGetValue(player.GetInstanceID(), out vigil);
++            DragonCombat.ShowStatusUntil(player, "hawks_vigil", "vigil", "Hawk's Vigil", vigil, 0,
++                "Attack Buff\n+" + Mathf.RoundToInt(_hvRanged.Value) + "% Ranged Damage");
++            DragonCombat.ShowStatusUntil(player, "furious_winds", "wind", "Furious Winds", ranger && acrobat && _fwActive ? _windsUntil : 0f, 0,
++                "Wind barrier active; recast to end it");
+         }
+ 
+         // Windstep: Dodge costs 50% less Stamina (Player.m_dodgeStaminaUsage), restored otherwise.
+@@ -1609,6 +1624,7 @@
+             float slash = Mathf.Max(0f, _fwSlash.Value) / 100f * power * d.Total();
+             float end = Time.time + duration, nextTick = 0f, nextDot = Time.time + 0.5f;
+             _fwActive = true; _fwStop = false;
++            _windsUntil = end;
+             float fwFollow = Time.time;
+             List<Character> near = null; float nearAt = 0f;
+             while (Time.time < end && player != null && !player.IsDead() && !_fwStop)
+@@ -1684,6 +1700,7 @@
+                 yield return null;
+             }
+             _fwActive = false;
++            DragonCombat.ClearStatus(player, "furious_winds");
+             if (storm != null) Destroy(storm);
+             if (_fwStop && player != null)
+             {
+@@ -1861,26 +1878,11 @@
+         private float _releaseAt, _chargeDraw;
+         private int _chain;
+         private float _nextQuickShot;
+-        private float _qsPressedAt = -10f, _qsStart, _qsSpeed = 1.6f;
+-        private bool _qsWasIn, _qsMeasuring;
+-
+-        // v0.24.4: the quick-shot animation is sped up until one shot (start -> end of the attack)
+-        // takes ChainInterval minus a small margin; the speed adapts to the bow's real animation.
+-        private void UpdateQuickShotSpeed(Player player)
+-        {
+-            ItemDrop.ItemData weapon = GetCurrentWeapon(player);
+-            bool inAtk = InAttack(player);
+-            bool quick = IsBow(weapon) && !_charging && !_releasePending;
+-            if (inAtk && !_qsWasIn) { _qsStart = Time.time; _qsMeasuring = quick && Time.time - _qsPressedAt < 0.35f; }
+-            if (inAtk && _qsMeasuring && quick) DragonCombat.SetAttackSpeedSource(player, _qsSpeed, 0.15f);
+-            if (!inAtk && _qsWasIn && _qsMeasuring)
+-            {
+-                float took = Time.time - _qsStart;
+-                float target = Mathf.Max(0.15f, _wbInterval.Value - 0.05f);
+-                if (took > 0.05f) _qsSpeed = Mathf.Clamp(_qsSpeed * took / target, 1f, 5f);
+-                _qsMeasuring = false;
+-            }
+-            _qsWasIn = inAtk;
++        // v0.25.192: Warfare registers these greatbow primary attacks at 2.2x. One absolute base
++        // speed for every Ranger bow prevents the external greatbow speed from multiplying AA's speed again.
++        private static float RangerBowFireSpeed(Player player)
++        {
++            return IsLocalRanger(player) && IsBow(Instance.GetCurrentWeapon(player)) ? 2.2f : 0f;
+         }
+         private float _lastQuickShot;
+         private float _pendingShotMult = 1f;
+@@ -1904,18 +1906,90 @@
+             // v0.25.181 (user: Greatbow = double speed while shooting): Therzie's Greatbows carry an attack movement factor of 2.0
+             // (vanilla bows <= 1), so a Ranger ran twice as fast while firing. Rangers get the vanilla bow's shooting speed (v0.25.188).
+             Patch(FindMethod(typeof(Humanoid), "GetAttackSpeedFactorMovement", 0), null, "RangerMoveFactorPostfix");
++            _harmony.Patch(FindMethod(typeof(Humanoid), "CheckRun", 2), null, null,
++                new HarmonyMethod(typeof(RangerPlugin).GetMethod("BowSprintTranspiler", BindingFlags.Static | BindingFlags.NonPublic)));
++            _harmony.Patch(FindMethod(typeof(Player), "CheckRun", 2), null, null,
++                new HarmonyMethod(typeof(RangerPlugin).GetMethod("SprintReloadTranspiler", BindingFlags.Static | BindingFlags.NonPublic)));
++            Patch(FindMethod(typeof(Player), "InMinorActionSlowdown", 0), null, "ReloadSlowdownPostfix");
+         }
+ 
+         private static void RangerMoveFactorPostfix(Humanoid __instance, ref float __result)
+         {
+-            try
+-            {
+-                if (__result <= 1f) return;
+-                Player player = __instance as Player;
+-                if (Instance == null || player == null || !IsLocalRanger(player)) return;
+-                __result = VanillaBowSpeedFactor();   // v0.25.188 (user): the vanilla bow's shooting speed (was capped at 1.0 = full speed)
+-            }
+-            catch { }
++            Player player = __instance as Player;
++            if (Instance == null || !IsLocalRanger(player)) return;
++            ItemDrop.ItemData weapon = Instance.GetCurrentWeapon(player);
++            if (IsBow(weapon))
++            {
++                // Only Acrobat retains full speed. Greatbows obey exactly the same firing factor as other bows.
++                if (Instance.GetAdvancement(player) == "Acrobat") __result = 1f;
++                else if (InAttack(player)) __result = VanillaBowSpeedFactor();
++            }
++        }
++
++        private static bool MobileBow(Player player)
++        {
++            return Instance != null && IsLocalRanger(player) && Instance.GetAdvancement(player) == "Acrobat"
++                && IsBow(Instance.GetCurrentWeapon(player));
++        }
++
++        // Leave Player.CheckRun's stamina, encumbrance, crouch and dodge checks intact.
++        private static bool DrawingBlocksSprint(Humanoid humanoid)
++        {
++            if (MobileBow(humanoid as Player)) return false;
++            return humanoid.IsDrawingBow();
++        }
++
++        private static IEnumerable<CodeInstruction> BowSprintTranspiler(IEnumerable<CodeInstruction> instructions)
++        {
++            MethodInfo drawing = FindMethod(typeof(Humanoid), "IsDrawingBow", 0);
++            MethodInfo replacement = typeof(RangerPlugin).GetMethod("DrawingBlocksSprint", BindingFlags.Static | BindingFlags.NonPublic);
++            foreach (CodeInstruction i in instructions)
++            {
++                if ((i.opcode == OpCodes.Call || i.opcode == OpCodes.Callvirt) && Equals(i.operand, drawing))
++                { i.opcode = OpCodes.Call; i.operand = replacement; }
++                yield return i;
++            }
++        }
++
++        private static FieldInfo _actionQueueField;
++        private static bool SprintReload(Player player)
++        {
++            if (Instance == null || !IsLocalRanger(player) || player.IsDead() || Instance.GetAdvancement(player) != "Bowmaster") return false;
++            ItemDrop.ItemData weapon = Instance.GetCurrentWeapon(player);
++            if (!IsCrossbow(weapon)) return false;
++            if (_actionQueueField == null) _actionQueueField = AccessTools.Field(typeof(Player), "m_actionQueue");
++            IList queue = _actionQueueField == null ? null : _actionQueueField.GetValue(player) as IList;
++            // Preserve only a queue consisting of this weapon's reload. Never retain equip/use actions while sprinting.
++            if (queue == null || queue.Count != 1 || queue[0] == null) return false;
++            object action = queue[0];
++            object type = ReadField(action, "m_type");
++            return type != null && string.Equals(type.ToString(), "Reload", StringComparison.OrdinalIgnoreCase)
++                && ReferenceEquals(ReadField(action, "m_item"), weapon);
++        }
++
++        private static MethodInfo _clearActionsMethod;
++        private static void ClearActionsUnlessReloading(Player player)
++        {
++            if (SprintReload(player)) return;
++            if (_clearActionsMethod == null) _clearActionsMethod = FindMethod(typeof(Player), "ClearActionQueue", 0);
++            if (_clearActionsMethod != null) _clearActionsMethod.Invoke(player, null);
++        }
++
++        private static IEnumerable<CodeInstruction> SprintReloadTranspiler(IEnumerable<CodeInstruction> instructions)
++        {
++            MethodInfo clear = FindMethod(typeof(Player), "ClearActionQueue", 0);
++            MethodInfo replacement = typeof(RangerPlugin).GetMethod("ClearActionsUnlessReloading", BindingFlags.Static | BindingFlags.NonPublic);
++            foreach (CodeInstruction i in instructions)
++            {
++                if ((i.opcode == OpCodes.Call || i.opcode == OpCodes.Callvirt) && Equals(i.operand, clear))
++                { i.opcode = OpCodes.Call; i.operand = replacement; }
++                yield return i;
++            }
++        }
++
++        private static void ReloadSlowdownPostfix(Player __instance, ref bool __result)
++        {
++            if (__result && SprintReload(__instance)) __result = false;
+         }
+ 
+         // v0.25.188 movement factor of a vanilla bow while drawing / shooting (Attack.m_speedFactor of the vanilla Bow prefab),
+@@ -1942,7 +2016,7 @@
+                 }
+             }
+             catch { }
+-            return 1f;
++            return 0.5f;   // vanilla bow attack factor until ObjectDB is ready (not full-speed fallback)
+         }
+ 
+         private static MethodInfo FindMethod(Type type, string name, int minParams)
+@@ -2069,7 +2143,6 @@
+             SetBowDraw(weapon, false);
+             // v0.24.3: quick shots every 0.5s; the 4th (finisher) adds 1s before the next one.
+             if (Time.time < _nextQuickShot || Time.time < _skillCastUntil) { attack = false; attackHold = false; }
+-            else if (attack || attackHold) _qsPressedAt = Time.time;
+         }
+ 
+         // v0.25.52 universal follow-up shot window (Splitting Arrow's great arrow and sky arrow): aim freely and
+--- v0.25.191/DragonsAltar.Sorcerer.cs
++++ v0.25.192/DragonsAltar.Sorcerer.cs
+@@ -165,7 +165,7 @@
+     {
+         public const string ModGuid = "albedo.customclasses.sorcerer";
+         public const string ModName = "Aethelborn Ascended - Sorcerer Advancements";
+-        public const string ModVersion = "0.25.191";
++        public const string ModVersion = "0.25.192";
+ 
+         private const string ClassDataKey = "AlbedoCustomClasses.Class";
+         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
+@@ -757,6 +757,7 @@
+             UpdateRifts();
+ 
+             Player player = Player.m_localPlayer;
++            UpdateBuffIndicators(player, player == null || GetClass(player) != "Sorcerer" ? "" : GetAdvancement(player));
+             if (player == null)
+             {
+                 RestoreGunStaffTimings();
+@@ -1044,6 +1045,28 @@
+         private ConfigEntry<bool> _bladeNormalStun, _bladeAscStun1, _bladeAscStun2, _bladeAscStun3;
+         private ConfigEntry<float> _fnAscDuration, _fnAscTickPercent, _fnAscBlast, _fnAscFreeze, _fnAscBossSlow;
+         private ConfigEntry<float> _ccAscDelay, _ccAscPercent;
++        private float _buffIndicatorAt;
++        private void UpdateBuffIndicators(Player player, string advancement)
++        {
++            if (player == null || Time.time < _buffIndicatorAt) return;
++            _buffIndicatorAt = Time.time + 0.2f;
++            bool wizard = !player.IsDead() && advancement == "Wizard";
++            bool walker = !player.IsDead() && advancement == "Spellcaster";
++            DragonCombat.ShowStatusUntil(player, "wizard_overcharge", "overcharge", "Overcharge", wizard ? _overchargeUntil : 0f, 0,
++                "Attack Buff\n+" + Mathf.RoundToInt(_ocMagic.Value) + "% Magic Damage\n+" + Mathf.RoundToInt(_ocWindup.Value) + "% Wind-up Speed\n+" + Mathf.RoundToInt(_ocRegen.Value) + "% Eitr Regen");
++            DragonCombat.ShowStatusUntil(player, "walker_phase_flow", "portal", "Phase Flow", walker ? _phaseFlowUntil : 0f, 0,
++                "Movement Buff\n+15% Movement Speed\n+25% Eitr Regen\nFaster attacks");
++            DragonCombat.ShowStatusUntil(player, "walker_echo", "portal", "Rift Echo", walker ? _riftEchoUntil : 0f, 0,
++                "Attack Buff\nRifts repeat your attacks while Left Click is held");
++            float phantomEnd = walker ? (IsSpellAscended(player, "afterimage_arsenal") ? _mimicUntil : _afterimageUntil) : 0f;
++            DragonCombat.ShowStatusUntil(player, "walker_phantom", "generic", "Arcane Phantom", phantomEnd, 0,
++                "Attack Buff\nSpectral copies repeat your attacks");
++            DragonCombat.ShowStatusUntil(player, "walker_phalanx", "damage", "Arcane Phalanx", walker && _phalanxSwords.Count > 0 ? _phalanxExpireAt : 0f,
++                _phalanxSwords.Count, "Attack Buff\n{stacks} spectral swords remaining");
++            DragonCombat.ShowStatusUntil(player, "walker_portals", "portal", "Rift Walker", walker && _riftA != null ? _riftEndTime : 0f, 0,
++                _riftB != null ? "Linked portals are active" : "First portal placed; place the second to link them");
++        }
++
+         private float _overchargeLockedUntil;
+ 
+         private WizDamage BindWizDamage(string section, float blunt, float slash, float pierce, float fire, float frost, float lightning, float poison, float spirit)
+--- v0.25.191/INSTALL.bat
++++ v0.25.192/INSTALL.bat
+@@ -1,5 +1,5 @@
+ @echo off
+-title Immortal Heroes v0.25.191 - VFX Finish
++title Immortal Heroes v0.25.192 - Ranger Mobility and Buff Timers
+ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
+ echo.
+ pause
+--- v0.25.191/INSTALL.ps1
++++ v0.25.192/INSTALL.ps1
+@@ -1,7 +1,7 @@
+ $ErrorActionPreference = "Stop"
+ 
+ Write-Host ""
+-Write-Host "IMMORTAL HEROES v0.25.191 - VFX FINISH" -ForegroundColor Cyan
++Write-Host "IMMORTAL HEROES v0.25.192 - RANGER MOBILITY AND BUFF TIMERS" -ForegroundColor Cyan
+ Write-Host "All 10 DLLs compile in staging before the live profile is touched." -ForegroundColor Gray
+ Write-Host ""
+ 

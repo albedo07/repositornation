@@ -1,0 +1,40 @@
+AETHELBORN ASCENDED v0.25.200 - WIND RINGS AND BIRD TARGETS
+2026-10-18 (Asia/Manila). Separate pass based only on the original v199 ZIP.
+
+1. WHIRLWIND
+- Moved under-blade wind from its elevated rotating child into repeated terrain-grounded downwash rings, like helicopter downwash. Existing blade crescents and Ascended tornado remain.
+- Both normal/Ascended repeating pulse rings use ground placement. Downwash follows the player by issuing new pulses at the current ground location and stops when its owner dies, channel ends or visual parent is removed. No changes to movement, CA, hit radius, tick timing, pulls or damage.
+
+2. CIRCLE SWING
+- Replaced the common hit's halfmoon/slash streaks with a broad wind ring. The strong ring has a wider band and higher opacity than Stomp's existing wind ring.
+- Includes normal/Ascended hits, the existing animation branches, the legacy fallback and the Ascended eruption's ring. Existing eruption/debris and hit logic remain. Stomp itself is unchanged.
+
+3. FURY COOLDOWN
+- Fury Recovery's icon now has three downward chevrons. Its small strip is orange during recovery; active Fury retains its normal icon/strip.
+- Existing seconds countdown remains visible below the icon. No changes to Fury generation, duration or cooldown.
+
+4. HOLY WAVE
+- Initial healing now uses 20% of EACH recipient's maximum HP as its base, replacing flat 25 HP. Existing healing tier bonuses still apply.
+- Normal and Ascended healing, the Ascended low-HP double heal and percentage-scaled echo use the recipient's max HP. Sustained healing, radius, duration, resource cost and cooldown remain as before.
+- New ImmediateHealPercent_v025200 config key defaults to 20, so old saved flat values cannot be misread as percentages. Updated dynamic and legacy tooltip text. Example before tiers: 100 max HP -> 20 heal; 250 max HP -> 50 heal.
+
+5. DAMAGING SUPPORT WIND
+- DamageBuffMist is now airy annular airflow with an open center, rather than a gray volume filling the area. A ground wind ring supplies visible motion; sparse smoke wisps remain around its perimeter.
+- RGB matches each existing radius pulse: Ray of Hope gold, Divine Intervention gold, Lightning Relic blue, Sanctified Bloom pale gold. Lightning Relic gets the cast effect in both versions; Bloom emits it when it actually triggers damage. Existing support pulse rings remain.
+- Particle cap is 28, textures/materials are cached and both wind textures join the existing prewarm. Damage, buff strength, DoT and pulse timing are unchanged.
+
+6. EMBEDDED RELIC INLAYS
+- Goddess Relic sapphires now use shallow, closed beveled diamond inserts. Their rear halves intersect the actual cross/seal backing instead of sitting on the large old mounting offsets. Front and back inserts remain.
+- Holy Relic now has one green heart extending through its backing, with caps just outside the two backing surfaces. Removed the two raised heart plates/frames. Its small blue accent is seated into this backing too. Existing green pigment, gold, wings and accepted overall shapes remain.
+- Found a specific heart geometry defect in managed geometry tests: inward miter offsets fold/self-intersect near the heart cusp; one tested bevel also produces incomplete caps. Heart-specific flat cap construction now retains the original outline, with no self-intersections and complete front/back coverage. Shared extrusion, other models and the hammer are unchanged.
+- Closed cap geometry is checked statically. Rendering/occlusion/material behavior from actual camera angles still requires game testing.
+
+7. BIRDS AS SKILL TARGETS
+- Native ambient birds use RandomFlyingBird + Destructible, while AA skills search Character components. Added a disabled Character-compatible target/damage adapter to birds with native destructibles.
+- Attached once at bird spawn or from the existing bird registry. Existing Character-based targeting, range tests and damage helpers can now recognize them without edits across every skill/class.
+- Adapter never runs Character.Awake or movement updates, adds no colliders/Rigidbody, and does not replace the bird's native damage RPC. Target bounds/velocity queries have bird-only hooks; ordinary creatures retain their native methods.
+- AA skill hits use existing creature damage rules then native Destructible damage/RPC handling. Native weapon hits on adapted birds enter the same creature rules. A per-bird finally-protected guard prevents recursion/double damage. Native health, resistance handling, drops and destruction remain with Valheim.
+- Ambient birds do not acquire a combat NPC stagger controller; bird-only stagger calls are skipped instead of invoking an unregistered Character RPC. Native flight remains in control. Confirm flight/landed targeting, multiplayer, drops and absence of errors in game.
+
+PRESERVED
+All 185 original art/animation assets and seven unrelated source modules are byte-identical. Prior v199 fixes, NACC/dodge/block behavior, CAs, crossbow state/reload, equipment/class rules, hotbar, cape, Blade Storm and hammer behavior remain. No new point lights or terrain modification. No Anchor promotion.

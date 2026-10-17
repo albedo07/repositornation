@@ -1,0 +1,24 @@
+AETHELBORN ASCENDED v0.25.198 - BATCH TWO VALIDATION
+Date: 2026-10-17 (Asia/Manila)
+Baseline: Aethelborn_Ascended_v0.25.197_Saving_Grace_Holy_Relic.zip
+Baseline SHA-256: 11930e9f3ffc0e8992feffa7cca9dcb5dbcc9ea7bbdf5d62a333b9dac7afac30
+Scope: current request items 5-8. Logs reviewed; actionable fixes reserved for pass three.
+
+VERIFIED OUTSIDE UNITY
+- All ten revised source modules fully compile with Roslyn 4.8.0, -langversion:5, supplied real Valheim/BepInEx/Harmony/Unity references, JotunnLib 2.30.2 and the restored UnityEngine.UI reference. Source installer distribution is retained; validation DLLs are not substituted into the game package.
+- 78 code/geometry checks pass: 70 actual compiled-method/IL/math checks plus 8 invariants executed from the shipped extrusion source with only the native Mesh allocation/bounds replaced by a managed snapshot. These include the prior 59 pass-one/regression checks.
+- Compiled IL verifies full clip/native-tail/source-graph gating, native tail acquisition/release and generation checks, preserved internal multi-strike animation entry, starter entry guard, restored hammer child name and explicit normal Heavy Slash plane handling. Actual hammer point math verifies taller head and unchanged width/depth/grip.
+- The source-derived geometry harness checks complete outward front/back caps and retained surface layout for Goddess Relic body, Goddess inset panel, Holy Relic sunburst and Priest feather outlines. The native GPU renderer is not exercised.
+- 115 source scope checks pass. Exactly five source modules changed: CombatRuntime, Advanced, Skills, Sorcerer and Ranger. Ranger only registers its existing active channel-cancel states; Sorcerer only adds the legacy-input gate. Core, Guardian, Passives, DevTools and Experience are byte-identical to v197.
+- All 185 existing art/animation assets and config keys/defaults/descriptions remain byte-identical. Existing animation drivers/source player, NACC hooks, dodge cancellation, movement locks, crossbow state/reload, armor/equipment rules, damage, hammer hit/growth/travel calculations and deferred skills are unchanged. Existing visual materials/colors are unchanged. Installer banner/version text only.
+- Geometry fix changes only cap index order; visible hammer growth fix changes only the copied model's name; head change adjusts only its existing vertical transform factor. No new VFX systems, lights, assets, FindObjectOfType or forbidden graphics APIs. Cast ownership checks use components/fields, without per-frame reflection.
+
+LIMITS / GAME VERIFICATION
+- No Valheim/Unity runtime is available. Actual CA timing/transitions, spam behavior, renderer output, multiplayer, all live charge/cancel scenarios and frame-time/FPS remain unverified. See TEST_THIS_BUILD.txt.
+- Headless execution of the native-tail property was not possible because its actual DragonCombat generation field belongs to a static initializer which calls Unity Animator.StringToHash. Its ownership/acquire/release logic was checked from the actual compiled IL instead; no engine behavior is claimed.
+- The provided screenshots and first video were inspected; source causes were identified for the cap winding, clone-name growth lookup and incomplete casting gate. These are source-level fixes consistent with the observations, not a recorded successful in-game retest.
+- Logs predate v197/v198; their affected code paths were checked against the current baseline before recording pass-three candidates. The performance report does not isolate every render/wait stall to AA; no claim of a measured FPS fix.
+- Original CLAUDE.md, tools/compile_check/check.sh, Stubs.cs, release.sh and a git checkout were not supplied; mcs is not installed. Their exact signature/release/parse checks and commit/push were not run. Full C#5 builds against real API assemblies are the available compiler validation.
+- No Anchor overwritten or promoted. Original v197 ZIP preserved exactly. Items 9-12 are unchanged.
+
+Evidence: docs/validation_v0.25.198/; logs: docs/LOG_REVIEW_v0.25.198.txt.

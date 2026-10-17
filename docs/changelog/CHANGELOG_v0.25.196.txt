@@ -1,0 +1,29 @@
+AETHELBORN ASCENDED v0.25.196 - HOLLOW CLOUDS AND RELIC DETAIL
+Visual revision pass based on the original v195 archive. Not an Anchor promotion.
+
+1. BLADE STORM
+- Cloud patches now curve around a spherical surface and leave the center empty.
+- Small surface wisps soften its edges. No filled fog volume or solid barrier mesh.
+- Shell mesh, textures and materials are cached and prepared before casts.
+- Attack slashes, damage, targets, timing and hit area are unchanged.
+
+2. GODDESS RELIC, JUDGEMENT HAMMER AND PRIEST RELICS
+- Warm gold bodies and ivory details use colored albedo textures with grain and veins, rather than relying on a white texture multiplied by material tint.
+- Blue and healing-green gems have their own colored, faceted texture. Cross gems are mounted on the visible front/back faces instead of buried inside the body.
+- Hammer head is thicker, striking faces retain ivory detail, and its larger blue gems are more exposed. Grip and gameplay size are unchanged.
+- Priest relics share these material fixes while retaining their lightning/healing identities, healing heart and pulses.
+
+3. ASCENDED HEAVY SWING / HEAVY SLASH
+- The three visual strokes use their explicit intended planes. Stale motion sampled from strike two can no longer turn the third downward slash into a horizontal effect.
+- The existing three strikes, native animations and strike interval are unchanged.
+
+4. DAMAGING SUPPORT SKILLS
+- Added brief, restrained radius mist to Ray of Hope and Divine Intervention, plus Ascended Lightning Relic on landing.
+- No additional damage, healing, pulses, duration or resource cost.
+
+5. HEAVEN'S JUDGEMENT
+- Radius guide is now a double-ring sigil with twelve rune marks, spokes and a central cross/diamond.
+- Follows the ground, stays within the existing radius, lasts through the existing cast/barrage and honors the guide toggle.
+
+SCOPE
+Only CombatRuntime and Advanced source modules changed, plus release banner text and documentation. All eight other source modules, 185 existing art/animation assets and configuration defaults are unchanged. Extra skill point lights remain removed. Final shader appearance and performance require in-game testing.

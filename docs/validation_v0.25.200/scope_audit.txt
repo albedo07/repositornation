@@ -1,0 +1,117 @@
+PASS: Original v199 archive preserved exactly
+PASS: Exactly the three required source modules changed
+PASS: Untouched module byte-identical: DragonsAltar.Sorcerer.cs
+PASS: Untouched module byte-identical: Aethelborn.Experience.cs
+PASS: Untouched module byte-identical: AlbedosCustomClasses.Core.cs
+PASS: Untouched module byte-identical: AlbedosCustomClasses.Passives.cs
+PASS: Untouched module byte-identical: DragonsAltar.DevTools.cs
+PASS: Untouched module byte-identical: AlbedosCustomClasses.GuardianAngel.cs
+PASS: Untouched module byte-identical: DragonsAltar.Ranger.cs
+PASS: 185 original art and animation assets byte-identical
+PASS: AlbedosCustomClasses.Advanced.cs: existing method changes confined to requested scope
+PASS: AlbedosCustomClasses.Advanced.cs: only intended helpers/adapter methods and private signature changes
+PASS: AlbedosCustomClasses.Advanced.cs: no new forbidden API .SetPositions(
+PASS: AlbedosCustomClasses.Advanced.cs: no new forbidden API .GetPositions(
+PASS: AlbedosCustomClasses.Advanced.cs: no new forbidden API .LoadImage(
+PASS: AlbedosCustomClasses.Advanced.cs: no new forbidden API FindObjectOfType(
+PASS: AlbedosCustomClasses.Advanced.cs: original BOM preserved
+PASS: AlbedosCustomClasses.Advanced.cs: every unrelated config binding unchanged
+PASS: AlbedosCustomClasses.Skills.cs: existing method changes confined to requested scope
+PASS: AlbedosCustomClasses.Skills.cs: only intended helpers/adapter methods and private signature changes
+PASS: AlbedosCustomClasses.Skills.cs: no new forbidden API .SetPositions(
+PASS: AlbedosCustomClasses.Skills.cs: no new forbidden API .GetPositions(
+PASS: AlbedosCustomClasses.Skills.cs: no new forbidden API .LoadImage(
+PASS: AlbedosCustomClasses.Skills.cs: no new forbidden API FindObjectOfType(
+PASS: AlbedosCustomClasses.Skills.cs: original BOM preserved
+PASS: AlbedosCustomClasses.Skills.cs: every unrelated config binding unchanged
+PASS: DragonsAltar.CombatRuntime.cs: existing method changes confined to requested scope
+PASS: DragonsAltar.CombatRuntime.cs: only intended helpers/adapter methods and private signature changes
+PASS: DragonsAltar.CombatRuntime.cs: no new forbidden API .SetPositions(
+PASS: DragonsAltar.CombatRuntime.cs: no new forbidden API .GetPositions(
+PASS: DragonsAltar.CombatRuntime.cs: no new forbidden API .LoadImage(
+PASS: DragonsAltar.CombatRuntime.cs: no new forbidden API FindObjectOfType(
+PASS: DragonsAltar.CombatRuntime.cs: original BOM preserved
+PASS: DragonsAltar.CombatRuntime.cs: every unrelated config binding unchanged
+PASS: Unchanged retained combat/visual system: private static void ComboStartCore
+PASS: Unchanged retained combat/visual system: private static void ComboStartPostfix
+PASS: Unchanged retained combat/visual system: private static ComboSnap TakeSnap
+PASS: Unchanged retained combat/visual system: private static void RollBack
+PASS: Unchanged retained combat/visual system: public static void BeginAttackActivation
+PASS: Unchanged retained combat/visual system: public static void RestoreAttackActivation
+PASS: Unchanged retained combat/visual system: public static void CommitAttackActivation
+PASS: Unchanged retained combat/visual system: public static void PrepareSwordMasterDodge
+PASS: Unchanged retained combat/visual system: public static bool CanInstantSwordMasterDodge
+PASS: Unchanged retained combat/visual system: public static void RetireSkillAnimations
+PASS: Unchanged retained combat/visual system: public static bool SkillAnimationBusy
+PASS: Unchanged retained combat/visual system: public static void LockSkill
+PASS: Unchanged retained combat/visual system: public static bool CanUseWorldInput
+PASS: Unchanged retained combat/visual system: public static DamagePatchState BeginDamage
+PASS: Unchanged retained combat/visual system: public static void EndDamage
+PASS: Unchanged retained combat/visual system: public static float GetSkillPower
+PASS: Unchanged retained combat/visual system: public static float GetSkillHealPower
+PASS: Unchanged retained combat/visual system: public static void ApplyTimedSkillDamageBuff
+PASS: Unchanged retained combat/visual system: public static float GetSkillDamageMultiplier
+PASS: Unchanged retained combat/visual system: public static class DragonDualWield
+PASS: Unchanged retained combat/visual system: public static class DragonClothGuard
+PASS: Unchanged retained combat/visual system: public class DragonWeaponWake
+PASS: Unchanged retained combat/visual system: public class DragonSkillClipDriver
+PASS: Unchanged retained combat/visual system: public static void StompWindRing
+PASS: Unchanged retained combat/visual system: public static Mesh RelicDiamondMesh
+PASS: Unchanged retained combat/visual system: public static Mesh ExtrudeBevel
+PASS: Unchanged retained combat/visual system: public static Vector3 HammerHeadPoint
+PASS: Unchanged retained combat/visual system: public static GameObject HolyWarhammer
+PASS: Unchanged retained combat/visual system: public static void CloudShellGeometry
+PASS: Unchanged retained combat/visual system: public static Color CloudShellTexel
+PASS: Unchanged retained combat/visual system: public static float LightScale
+PASS: Unchanged retained skill/state behavior: private IEnumerator AscendedHeavySlashRoutine
+PASS: Unchanged retained skill/state behavior: private static float IhHeavySlashStrokeRoll
+PASS: Unchanged retained skill/state behavior: private void CastKnightsGuidance
+PASS: Unchanged retained skill/state behavior: private void ApplyKnightsGuidance
+PASS: Unchanged retained skill/state behavior: private void ReceiveKnightsGuidance
+PASS: Unchanged retained skill/state behavior: private float IhSkillPower
+PASS: Unchanged retained skill/state behavior: private float IhHealPower
+PASS: Unchanged retained skill/state behavior: private IEnumerator JudgementCutRoutine
+PASS: Unchanged retained skill/state behavior: private IEnumerator JudgementHammerRoutine
+PASS: Unchanged retained skill/state behavior: private void UpdateHammerVisual
+PASS: Unchanged retained skill/state behavior: private IEnumerator CrescentCleaveWave
+PASS: Unchanged retained skill/state behavior: private void UpdateSwordMasterInterrupt
+PASS: Unchanged retained skill/state behavior: private void UpdateTemporaryBuffIndicators
+PASS: Unchanged retained skill/state behavior: private bool IhSkillBusy
+PASS: Unchanged retained skill/state behavior: private bool IhIsActiveSkillControl
+PASS: Unchanged retained skill/state behavior: private void IhBuildLightningRelic
+PASS: Unchanged starter attack: private void CastHeavySlash
+PASS: Unchanged starter attack: private IEnumerator HeavySlashRoutine
+PASS: Unchanged starter attack: private IEnumerator AnimateSlashArc
+PASS: Unchanged starter attack: private IEnumerator AnimateConeLightning
+PASS: All immediate-heal config/tooltip sources use percent max HP instead of the old flat 25
+PASS: Normal Holy Wave computes immediate healing separately for each recipient
+PASS: Ascended main heal and echo both use the recipient's maximum HP
+PASS: Ascended low-HP multiplier and echo percentage remain intact
+PASS: Holy heart is one through-backing insert rather than two raised plates
+PASS: Cross sapphires are closed beveled inserts whose back halves overlap their backing
+PASS: New inset meshes have their own cache key, preserving unrelated cached gem designs
+PASS: Healing heart retains its stronger green pigment
+PASS: Heart-specific cap geometry avoids the inward cusp miter that drops triangles
+PASS: private void CircleSwingHit(: wind shockwaves replace slash VFX
+PASS: private IEnumerator CircleSwingRoutine(: wind shockwaves replace slash VFX
+PASS: Ascended Circle Swing eruption also uses the wind ring while retaining its ground impact
+PASS: private IEnumerator WhirlwindRoutine(: removed torso-height pulse ring
+PASS: private IEnumerator WhirlwindAscendedRoutine(: removed torso-height pulse ring
+PASS: Whirlwind under-blade air is now a terrain downwash emitter; blade crescents remain
+PASS: Both cached wind textures/materials are included in existing prewarm
+PASS: Damage-buff wind is class-colored, annular and particle-bounded rather than a filled gray cloud
+PASS: RayOfHopeRoutine: airy damaging support ring shares existing pulse RGB
+PASS: DivineInterventionRoutine: airy damaging support ring shares existing pulse RGB
+PASS: LightningRelicRoutine: airy damaging support ring shares existing pulse RGB
+PASS: IhSanctify: airy damaging support ring shares existing pulse RGB
+PASS: Down chevrons are specific to Fury cooldown, not its active buff
+PASS: Fury's seconds countdown remains independently visible below its icon
+PASS: Bird bridge never enters native Character lifecycle/movement setup
+PASS: Bird bridge does not change native collision bodies or hitboxes
+PASS: Bird bridge never replaces the native destructible damage RPC
+PASS: Bird bridge suppresses Character's inherited collision/movement callback
+PASS: Bird forwarding is guarded against recursion and releases state on failure
+PASS: Birds are attached once at spawn or from the existing registry, never via world scans per frame
+PASS: INSTALL.bat: only release version and banner changed
+PASS: INSTALL.ps1: only release version and banner changed
+116 scope checks passed.

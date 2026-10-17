@@ -1,0 +1,19 @@
+AlbedosCustomClasses.Core.cs: PASS
+
+DragonsAltar.CombatRuntime.cs: PASS
+
+AlbedosCustomClasses.Skills.cs: PASS
+
+AlbedosCustomClasses.Passives.cs: PASS
+
+AlbedosCustomClasses.GuardianAngel.cs: PASS
+
+AlbedosCustomClasses.Advanced.cs: PASS
+
+DragonsAltar.Sorcerer.cs: PASS
+
+DragonsAltar.Ranger.cs: PASS
+
+DragonsAltar.DevTools.cs: PASS
+
+Aethelborn.Experience.cs: PASS

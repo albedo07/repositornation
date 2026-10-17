@@ -1,0 +1,66 @@
+AETHELBORN ASCENDED v0.25.194 - SKILL FINISH & DODGE PRIORITY
+2026-10-17 (Asia/Manila)
+Based only on the preserved v193 source archive. No new Anchor promotion.
+
+GAMEPLAY / ANIMATION
+1. Halfmoon Slash: the Ascended first-swing path chose its speed from CsTiming's
+   cold fallback {0.85, 1.15, 1.6}, then learned the real contact time without
+   recalculating that speed. The first activation could therefore take longer
+   than the configured wind-up. The observed clip now calibrates its remaining
+   natural time against the remaining requested wind-up. Warm/cold timing math
+   both reaches a requested one-second contact. Follow-through uses learned data.
+   Normal Halfmoon's existing configured delay is retained. Fresh-launch testing
+   of both variants is still needed; no in-game cause confirmation is claimed.
+2. Blade Storm: each existing attack pulse damages every enemy overlapping the
+   full 3D target sphere around the point locked at cast time. The existing
+   SpawnAreaRadius setting now defines that damage radius (default 3m, normal
+   and Ascended independently). Small random cloud spheres are cosmetic only;
+   their position/radius no longer chooses which enemies get hit.
+   Pulse count/spacing, cuts per pulse, per-target damage budget, Cripple,
+   stamina, recharge and targeting distance are preserved. Relevant tooltips
+   and F8 descriptions now distinguish target radius from cosmetic sphere size.
+3. Sword Master dodge: both a dedicated dodge request and block+jump are handled
+   before AA's skill-lock filter can erase them. Valid roll input cancels pending
+   Sword Master skill work, queued native attacks, AA's running normal chain,
+   Mixamo/custom pose control, follow-aim and cast movement locks. Tracked child
+   waves/follow-ups cannot resume damage after their yields. Their iterator
+   finally blocks run immediately, including Frenzied Charge/ghost collision
+   cleanup. Traveling-cut objects are cleaned up on cancellation.
+   Native stamina cost, ground, encumbrance, alive/input eligibility and an
+   already-active roll remain in force. Only the requested Sword Master roll
+   bypasses native attack/stagger animation gates. Other classes are unchanged.
+   Already-applied buffs/DoTs and already-emitted cosmetic fades keep their normal
+   lifetimes; pending skill execution and new follow-up damage are cancelled.
+4. Ascended Heavy Swing / Heavy Slash: three full-strength hits using native
+   Battleaxe attack0 -> attack1 -> attack2, chaining at their animation events.
+   The first hit uses the existing wind-up. Each hit retains the old Ascended
+   strike's damage, Broken Bones, fury/on-hit Hyper Armor and existing slash VFX.
+   Cost/cooldown are paid once. Three hits total 300% of the former one-hit damage.
+5. Ascended Impact Wave: each follow-up shockwave gets its own enemy hit set.
+   Multiple colliders still count once per wave, but an enemy overlapping a later
+   shockwave can be hit again. Existing sections, timing, damage percent and
+   collision remain. This does not add an every-frame damage loop.
+6. Ascended Piercing Arrow: three arrows at 0.2s intervals. Each deals 60% of
+   the previous Ascended arrow's damage; 180% combined, or +80% total. With the
+   existing 160% weapon/ammo setting this is 96% per arrow, 288% combined, before
+   the unchanged tier/modifier calculations. Widening, piercing and Expose stay.
+   Uses the native bow_fire animation for each shot; cost/cooldown once.
+   Normal Piercing Arrow remains one arrow at its prior damage.
+
+REQUESTED VFX
+7. Blade Storm: textured, dense spherical cloud body plus interior cloud puffs
+   and the existing visible slashes. One cached sphere mesh and material; explicit
+   white vertex colors, 0.8 tint alpha and texture alpha floor 0.58 before fades.
+   The cloud body does not pass through particle-density/frame-budget reductions.
+   It draws before the cuts without writing depth, so the cuts stay readable.
+   Bounded interior particles (48 max), normal/Ascended colors retained.
+8. Stomp: retain a ring, with a broader soft gray-white wind pressure front.
+   It expands over the existing stomp radius while the cracks and debris remain.
+   No change to Stomp's damage, sequence or affected area.
+
+SCOPE
+Four edited C# modules: Advanced, CombatRuntime, Starter Skills, Ranger.
+Other six sources, all 185 assets, equipment rules, v193 sprint reload/UI guard,
+ground-fire implementation and cape/cloth code are unchanged. Configuration
+sections, keys, defaults, migrations and saved IDs are retained. Installer code
+is unchanged except its version/title banner. No audio added in this pass.

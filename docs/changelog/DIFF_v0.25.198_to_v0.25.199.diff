@@ -1,0 +1,701 @@
+--- v0.25.198/Aethelborn.Experience.cs
++++ v0.25.199/Aethelborn.Experience.cs
+@@ -11,7 +11,7 @@
+ 
+ namespace AethelbornExperience
+ {
+-    [BepInPlugin("albedo.customclasses.exp", "Aethelborn Ascended - Experience", "0.25.138.1")]
++    [BepInPlugin("albedo.customclasses.exp", "Aethelborn Ascended - Experience", "0.25.199")]
+     [BepInDependency("albedo.customclasses.advanced", BepInDependency.DependencyFlags.HardDependency)]
+     public class ExperiencePlugin : BaseUnityPlugin
+     {
+@@ -105,7 +105,7 @@
+                 try
+                 {
+                     Character character = prefab.GetComponent<Character>();
+-                    if (character != null && prefab.GetComponent<Player>() == null) Discover(prefab.name, character);
++                    if (character != null && prefab.GetComponent<Player>() == null) Discover(prefab.name, character, true);
+                 }
+                 catch (Exception error)
+                 {
+@@ -224,13 +224,13 @@
+             }
+         }
+ 
+-        private ConfigEntry<int> Discover(string name, Character creature)
++        private ConfigEntry<int> Discover(string name, Character creature, bool prefab = false)
+         {
+             string key = Regex.Replace(name, "[^a-zA-Z0-9_-]", "_");
+             if (key.Length == 0) key = "UnknownCreature";
+             ConfigEntry<int> cfg;
+             if (_creatureRewards.TryGetValue(key, out cfg)) return cfg;
+-            int hp = creature == null ? 0 : (int)Math.Max(0f, creature.GetMaxHealth());
++            int hp = creature == null ? 0 : (int)Math.Max(0f, (prefab ? creature.GetMaxHealthBase() : creature.GetMaxHealth()));
+             int rate = Math.Max(1, _healthExpDivisor.Value);
+             int oldAuto = Math.Min(100000, Math.Max(1, _baseCreatureExp.Value + hp / rate));
+             int biome = CreatureProgression(key);
+--- v0.25.198/AlbedosCustomClasses.Advanced.cs
++++ v0.25.199/AlbedosCustomClasses.Advanced.cs
+@@ -116,7 +116,7 @@
+     {
+         public const string ModGuid = "albedo.customclasses.advanced";
+         public const string ModName = "Aethelborn Ascended - Advancements";
+-        public const string ModVersion = "0.25.198";
++        public const string ModVersion = "0.25.199";
+ 
+         private const string ClassDataKey = "AlbedoCustomClasses.Class";
+         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
+@@ -1283,6 +1283,7 @@
+         private void PerfUpdateInner()
+         {
+             RegisterCleavePullRpc();
++            RegisterKnightsGuidanceRpc();
+             UpdateCleavePullNet();
+             UpdateRefreshingDots();
+             if (!DragonCombat.CanUseWorldInput(Player.m_localPlayer)) _ihLmbLatchAt = -10f;
+@@ -1906,7 +1907,7 @@
+         private ConfigEntry<float> _halfAscWindup, _halfAscRange, _halfAscTravel, _halfAscGap, _halfAscTick, _halfAscMain, _halfAscSecondary, _halfAscWidth;
+         private ConfigEntry<float> _halfAscPullBack, _hmFinFollowWindup, _halfAscReleaseWindup, _halfAscFinWidthMult, _halfAscFinDamageMult;
+         private ConfigEntry<bool> _hmStunNormal, _hmStunNormalCuts, _hmStunAsc, _hmStunAscCuts, _hmStunFin;
+-        private ConfigEntry<float> _kgRadius, _kgDuration, _kgCooldown, _kgMove, _kgRegen, _kgStaminaCut;
++        private ConfigEntry<float> _kgRadius, _kgDuration, _kgCooldown, _kgSkillDamage;
+         private ConfigEntry<float> _iwAscLength, _iwAscWidth, _iwAscSection, _iwAscSectionGap, _iwAscAftershock;
+         private float _smInterruptAt = -100f;
+ 
+@@ -2055,11 +2056,10 @@
+ 
+             const string k = "Sword Master Knights Guidance";
+             _kgRadius = Config.Bind(k, "Radius", 10f, "Players within this radius at cast get the buff (snapshot).");
+-            _kgDuration = Config.Bind(k, "Duration", 180f, "Buff duration in seconds (3 min).");
+-            _kgCooldown = Config.Bind(k, "Cooldown", 780f, "Grace cooldown in seconds (13 min).");
+-            _kgMove = Config.Bind(k, "MoveSpeedPercent", 50f, "+Movement Speed (50 = 1.5x).");
+-            _kgRegen = Config.Bind(k, "StaminaRegenPercent", 40f, "+Stamina Regen.");
+-            _kgStaminaCut = Config.Bind(k, "StaminaUseReductionPercent", 30f, "Less Stamina used for all actions.");
++            // New keys deliberately retire the old 180s/780s movement/stamina defaults in existing configs.
++            _kgDuration = Config.Bind(k, "Duration_v025199", 90f, "Skill damage buff duration in seconds.");
++            _kgCooldown = Config.Bind(k, "Cooldown_v025199", 600f, "Grace cooldown in seconds (10 min).");
++            _kgSkillDamage = Config.Bind(k, "SkillDamagePercent_v025199", 25f, "Additional skill damage only. Does not increase weapon damage or healing.");
+ 
+             const string ia = "Sword Master Impact Wave Ascended";
+             _iwAscCooldown = Config.Bind(ia, "Cooldown", 8f, "Seconds (independent of Normal Impact Wave).");
+@@ -3322,6 +3322,51 @@
+         }
+ 
+         // ------------------------------------------------------------------ Knight's Guidance (Grace)
++        private const string KnightsGuidanceRpc = "Aethelborn_KnightsGuidance_v199";
++        private ZRoutedRpc _knightsGuidanceRpcReg;
++
++        private void RegisterKnightsGuidanceRpc()
++        {
++            if (ZRoutedRpc.instance == null || _knightsGuidanceRpcReg == ZRoutedRpc.instance) return;
++            ZRoutedRpc.instance.Register<ZPackage>(KnightsGuidanceRpc, new Action<long, ZPackage>(ReceiveKnightsGuidance));
++            _knightsGuidanceRpcReg = ZRoutedRpc.instance;
++        }
++
++        private void ApplyKnightsGuidance(Player ally, float duration, float bonus)
++        {
++            if (ally == null) return;
++            if (ally == Player.m_localPlayer)
++            {
++                DragonCombat.ApplyTimedSkillDamageBuff(ally, "SwordMaster.KnightsGuidance", duration, bonus);
++                return;
++            }
++            // Buff stats and the HUD belong to the recipient's client, not our remote player replica.
++            RegisterKnightsGuidanceRpc();
++            ZNetView nv = ally.GetComponent<ZNetView>();
++            ZDO zdo = nv != null && nv.IsValid() ? nv.GetZDO() : null;
++            if (zdo == null || ZRoutedRpc.instance == null) return;
++            ZPackage pkg = new ZPackage();
++            pkg.Write(zdo.m_uid); pkg.Write(duration); pkg.Write(bonus);
++            ZRoutedRpc.instance.InvokeRoutedRPC(zdo.GetOwner(), KnightsGuidanceRpc, pkg);
++        }
++
++        private void ReceiveKnightsGuidance(long sender, ZPackage pkg)
++        {
++            try
++            {
++                Player player = Player.m_localPlayer;
++                if (player == null || player.IsDead()) return;
++                ZDOID id = pkg.ReadZDOID();
++                float duration = pkg.ReadSingle(), bonus = pkg.ReadSingle();
++                ZNetView nv = player.GetComponent<ZNetView>();
++                if (nv == null || !nv.IsValid() || !nv.IsOwner() || nv.GetZDO().m_uid != id) return;
++                if (float.IsNaN(duration) || float.IsInfinity(duration) || duration <= 0f ||
++                    float.IsNaN(bonus) || float.IsInfinity(bonus) || bonus < 0f) return;
++                DragonCombat.ApplyTimedSkillDamageBuff(player, "SwordMaster.KnightsGuidance", duration, bonus);
++            }
++            catch (Exception) { }
++        }
++
+         private void CastKnightsGuidance(Player player)
+         {
+             if (!BeginCast(player, "SwordMaster.KnightsGuidance", _kgCooldown.Value, 0f)) return;
+@@ -3340,11 +3385,9 @@
+                 Player ally = hits[i].GetComponentInParent<Player>();
+                 if (ally != null) allies.Add(ally);
+             }
+-            DragonCombat.SetBuffNote("SwordMaster.KnightsGuidance", "-" + IhNum(_kgStaminaCut.Value) + "% Stamina used by every action");
+             foreach (Player ally in allies)
+             {
+-                DragonCombat.ApplyTimedBuff(ally, "SwordMaster.KnightsGuidance", duration, 0f, 0f, Mathf.Max(0f, _kgMove.Value) / 100f, 0f, Mathf.Max(0f, _kgRegen.Value) / 100f, 0f, false);
+-                DragonCombat.ApplyStaminaUseCut(ally, Mathf.Max(0f, _kgStaminaCut.Value) / 100f, duration);
++                ApplyKnightsGuidance(ally, duration, Mathf.Max(0f, _kgSkillDamage.Value) / 100f);
+                 if (_enableVfx.Value && DragonVfx.Enabled) { Vector3 cp = ally.transform.position + Vector3.up * 2.1f; DragonCombat.RunVfx(delegate { DragonVfx.Burst(cp, new Color(0.70f, 0.86f, 1f, 0.85f), 10, 0.9f, 0.07f, 0.7f, -0.35f); }); }   // v0.25.190 brief crest above every ally
+             }
+             if (_enableVfx.Value)
+@@ -3540,7 +3583,7 @@
+                     IhCosts(b, _halfmoonStamina.Value, IhNum(HmContact) + "s heavy hit", _halfmoonCooldown.Value);
+                     break;
+                 case "knights_guidance":
+-                    b.Append(IhLine("Buff", "+" + IhNum(_kgMove.Value) + "% Movement Speed, +" + IhNum(_kgRegen.Value) + "% Stamina Regen, -" + IhNum(_kgStaminaCut.Value) + "% Stamina use"));
++                    b.Append(IhLine("Buff", "+" + IhNum(_kgSkillDamage.Value) + "% Skill Damage"));
+                     b.Append(IhLine("Radius", IhNum(_kgRadius.Value) + "m"));
+                     b.Append(IhLine("Duration", IhNum(_kgDuration.Value / 60f) + " min"));
+                     b.Append(IhLine("Cost", "None"));
+@@ -4662,6 +4705,15 @@
+             StartCoroutine(AscendedHeavySlashRoutine(player, windup));
+         }
+ 
++        private static float IhHeavySlashStrokeRoll(int strike, bool sampled, float observed)
++        {
++            if (strike == 0) return 180f;
++            if (strike != 1) return -90f;
++            // A normal is periodic over 180 degrees; retain the observed diagonal direction.
++            float plane = Mathf.Abs(Mathf.DeltaAngle(0f, observed)) % 90f;
++            return sampled && plane >= 15f && plane <= 75f ? observed : 45f;
++        }
++
+         private IEnumerator AscendedHeavySlashRoutine(Player player, float windup)
+         {
+             const string sk = "albedo.customclasses.skills";
+@@ -4713,8 +4765,12 @@
+                 if (_enableVfx.Value)
+                 {
+                     Vector3 fxOrigin = origin, fxForward = FlatForward(player); float fxRange = range;
+-                    // Battleaxe 1 sweeps right-to-left, 2 returns left-to-right, 3 comes down vertically.
+-                    float strokeRoll = strike == 0 ? 180f : strike == 1 ? 0f : -90f;
++                    // Only the second stroke follows fresh diagonal weapon motion. Ignore flat/vertical
++                    // entry-blend samples so neither neighboring stroke can replace its diagonal effect.
++                    float observedRoll = 0f;
++                    DragonWeaponWake wake = strike == 1 ? player.GetComponent<DragonWeaponWake>() : null;
++                    bool sampled = wake != null && wake.TryRoll(out observedRoll);
++                    float strokeRoll = IhHeavySlashStrokeRoll(strike, sampled, observedRoll);
+                     DragonCombat.RunVfx(delegate { DragonVfx.SlashArc(fxOrigin, fxForward, fxRange, 150f,
+                         new Color(1f, 0.55f, 0.20f, 1f), Mathf.Max(0.25f, fxRange * 0.12f), 0.4f, strokeRoll, false); });
+                 }
+@@ -11122,7 +11178,7 @@
+ 
+                     for (int i = 0; i < methods.Length; i++)
+                     {
+-                        MethodInfo method = methods[i];
++                        MethodInfo method = DragonMethodTargets.Implementation(methods[i]);
+ 
+                         if (method.Name != "Damage")
+                             continue;
+@@ -12745,7 +12801,7 @@
+             // they deal no healing, so the parry empowerment can ride on it for them only.
+             if (skillId == "lightning_zap" || skillId == "righteous_strike")
+                 power *= IhEmpowerFactor(skillId);
+-            return power;
++            return power * DragonCombat.GetSkillDamageMultiplier(player);
+         }
+ 
+         // ------------------------------------------------------------------ v0.20.9 Buckler Parry
+@@ -14415,7 +14471,7 @@
+                 case "frenzied_charge": return "Pull back, then dash forward with a thrust that launches small foes and stuns the large.";
+                 case "eclipse": return "Your blade swells with magic for one sweeping slash all around you.";
+                 case "halfmoon_slash": return "A wide heavy slash followed by cuts along its arc; every cut hits everyone inside the cleave.";
+-                case "knights_guidance": return "Lead your allies: faster movement, quicker stamina and less effort for every action.";
++                case "knights_guidance": return "Increases skill damage for you and nearby allies.";
+                 case "stomp": return "Stomp the earth: a crushing impact, then an aftershock rolls outward.";
+                 case "circle_swing": return "Wind up and swing your weapon in a full circle, staggering everything around you.";
+                 case "bonecrusher": return "Leap high and crash down, shattering the bones of everything below.";
+@@ -14561,7 +14617,7 @@
+                 case "frenzied_charge": return "Dashes forward with a thrust that damages enemies in your path, launching small ones and Stunning big ones.";
+                 case "eclipse": return "A full-circle slash that damages every enemy around you.";
+                 case "halfmoon_slash": return "A huge heavy slash forward followed by cuts along its arc that hit everyone inside the cleave.";
+-                case "knights_guidance": return "Grants you and nearby allies faster movement, faster Stamina regeneration and lower Stamina use ({Buff}; {Duration}).";
++                case "knights_guidance": return "Increases skill damage for you and nearby allies.";
+                 case "stomp": return "Stomps the ground, damaging nearby enemies, then sends an aftershock outward.";
+                 case "circle_swing": return "Swings your weapon in a full circle, damaging and staggering every enemy around you.";
+                 case "bonecrusher": return "Leaps up and slams down on the aimed spot, damaging enemies in the area and inflicting Broken Bones.";
+@@ -16659,6 +16715,11 @@
+             return _ihGc;
+         }
+ 
++        private readonly float[] _ihArtCurrent = new float[4], _ihArtMaximum = new float[4];
++        private static readonly string[] IhArtNames = { "HP", "STA", "EITR", "EXP" };
++        private static readonly string[] IhArtSplitNames = { "HP", "STAMINA", "EITR", "EXP" };
++        private static readonly string[] IhArtShortNames = { "HP", "STA", "EIT", "EXP" };
++
+         private void IhDrawArtHud(Player player, IhHudLayout l, Rect panel, float k, float s)
+         {
+             if (Event.current.type != EventType.Repaint) return;
+@@ -16676,7 +16737,9 @@
+             if (!float.TryParse(ReadPlayerData(player, "ImmortalHeroes.EXPRatio"),
+                 System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out xp)) xp = 0f;
+             xp = Mathf.Clamp01(xp);
+-            float[] cur = { hp, st, ei, xp }, max = { hpMax, stMax, eiMax, 1f };
++            float[] cur = _ihArtCurrent, max = _ihArtMaximum;
++            cur[0] = hp; cur[1] = st; cur[2] = ei; cur[3] = xp;
++            max[0] = hpMax; max[1] = stMax; max[2] = eiMax; max[3] = 1f;
+             for (int i = 0; i < 4; i++) IhDrawArtBar(panel, l, i, k, max[i] > 0f ? cur[i] / max[i] : 0f);
+ 
+             // v0.25.73 (user: "can't see shit"): bigger numbers with a black outline. Stamina | Eitr share one bar line
+@@ -16714,8 +16777,8 @@
+             }
+             // v0.25.74 (user): the painted icon/label column is gone; each bar (or half) carries its name on the left
+             // and its number on the right (Warrior keeps its painted value column, so only the names go in its bars).
+-            string[] names = { "HP", l.Split ? "STAMINA" : "STA", "EITR", "EXP" };
+-            string[] shortNames = { "HP", "STA", "EIT", "EXP" };
++            string[] names = l.Split ? IhArtSplitNames : IhArtNames;
++            string[] shortNames = IhArtShortNames;
+             for (int i = 0; i < 4; i++)
+             {
+                 if (i == 2 && !l.Split && eiMax <= 0f) continue;
+@@ -18074,7 +18137,9 @@
+             string key=(slot=="lightning_zap" ? "holy_wave" : slot)+"_"+color;
+             Texture2D texture;
+             if(_ihFrameSprites.TryGetValue(key,out texture)) return texture;
+-            texture=LoadUiPng("Frame_"+key+".png");
++            // Frame variants are optional probes; the painted/procedural frame already covers missing ones.
++            string fileName="Frame_"+key+".png";
++            texture=IhAssetExists(fileName) ? LoadUiPng(fileName) : null;
+             _ihFrameSprites[key]=texture;
+             if(texture!=null) _ihPolishTextures.Add(texture);
+             return texture;
+--- /dev/null
++++ v0.25.199/CHANGELOG_v0.25.199.txt
+@@ -0,0 +1,35 @@
++AETHELBORN ASCENDED v0.25.199 - GUIDANCE AND COMBO RECOVERY
++2026-10-17 (Asia/Manila). Pass three: user items 9-12 plus scoped log fixes.
++Built from the original v198 ZIP. Includes both earlier passes. Not an Anchor promotion.
++
++9. BLADE STORM CLOUD
++- Changed the dark gray cloud skin and wisps to blue. Retained the curved, hollow ball geometry.
++- Reduced shell opacity cap from 0.84 to 0.48 and wisp opacity from 0.94 to 0.50.
++- Reduced the wisp burst from 18-28 to 12-20 particles and its cap from 48 to 32. Particle count still respects the existing VFX amount setting. This is the requested thinner-cloud revision, not a claimed measured FPS improvement.
++- Slashes, bright cut cores, shell curvature, lifetime, full-area damage and hit timing are unchanged. Damaging-buff mist remains stronger as requested in pass one.
++
++10. KNIGHT'S GUIDANCE
++- Replaced movement speed, stamina regeneration and stamina-use reduction with +25% Skill Damage for 90 seconds. Cooldown is 600 seconds (10 minutes). No resource cost. Existing 10m snapshot recipient radius and visuals remain.
++- Uses a separate timed skill-damage stat consumed once by the shared skill-power provider. Ordinary weapon attacks and healing use their existing paths and do not receive this bonus. Example: a skill that currently deals 100 damage deals 125 while the buff is active, before other existing modifiers.
++- Added recipient-owner delivery for multiplayer allies: each recipient's client applies the bonus and its existing buff icon/timer. Existing awards refresh the same source rather than stacking with themselves. Requires the updated mod on participating clients.
++- Updated descriptions, tooltip stats and buff details. New versioned duration/cooldown/damage config keys retire old saved defaults; old entries no longer control the skill. No other skill settings changed.
++
++11. ASCENDED HEAVY SLASH / HEAVY SWING
++- Second strike uses fresh diagonal weapon-motion samples, with a 45-degree fallback. Flat/vertical transition samples are rejected so the previous/next stroke cannot replace the diagonal.
++- First strike remains a horizontal sweep; third remains vertical. No later automatic plane replacement for these explicitly selected effects.
++- Same three native Battleaxe strikes, minimum spacing, CA timing, damage, range, debuffs and cancellation rules.
++
++12. THERZIE 2HDW NACC STAMINA REJECTION
++- Found an AA failure path: combo indices, running/end timestamps, speed, observed-swing state and tentative timing were advanced before Attack.Start's native stamina check. A rejected start previously reset only the hit index and discarded the recovery snapshot.
++- Failed native starts now restore the pre-attempt AA state, prior speed lifetime, cadence measurement and activation identity. They do not stop the preceding attack, force a new animation, or refund costs taken by Valheim/other mods.
++- Pending state learning is pruned after acceptance, so a failed stamina check no longer discards the preceding swing's pending learn. Existing late paired-controller rejection still stops its rejected instance and refunds the actual resource difference.
++- Successful combo routing, swing timing, continuation window, damage, finisher locks, airborne rules and dodge/block behavior are unchanged. The reported in-game freeze still requires a Therzie/modded-controller test.
++
++LOG-DRIVEN FIXES
++- EXP prefab discovery reads native base health without requiring a live network view. Actual kill discovery still reads live max health; reward formulas, custom rewards, keys and migrations are unchanged.
++- Runtime/Advanced damage hooks, Runtime block hooks and Sorcerer Eitr/max-Eitr hooks resolve exact declaring implementations. Inherited aliases are deduplicated before Harmony patch registration; real overrides remain distinct.
++- Optional DualWield lookup uses the existing cached exact-name assembly lookup, avoiding AA's broad Harmony scan of unrelated optional VNEI/EpicLoot types. Does not repair VNEI's missing EpicLoot dependency itself.
++- Optional frame-color probes check whether the file exists before loading, cache the same null fallback when absent, and preserve the existing painted/procedural frame. Does not add or recolor artwork.
++- HUD numeric/label arrays are reused instead of allocating four arrays per repaint. Current stat sampling, layout, colors and rendering frequency are unchanged. No live FPS/GC improvement measurement is claimed.
++
++All 185 original art/animation assets are byte-identical. Earlier pass-one/pass-two fixes and equipment/crossbow rules remain. Extra point lights stay removed. Details and limitations are in TEST_RESULTS and docs/LOG_REVIEW.
+--- v0.25.198/DragonsAltar.CombatRuntime.cs
++++ v0.25.199/DragonsAltar.CombatRuntime.cs
+@@ -10,13 +10,23 @@
+ 
+ namespace DragonsAltarCombat
+ {
++    // Canonical implementations prevent inherited reflection aliases from being patched twice.
++    public static class DragonMethodTargets
++    {
++        public static MethodInfo Implementation(MethodInfo method)
++        {
++            if (method == null || method.DeclaringType == method.ReflectedType) return method;
++            return (MethodInfo)MethodBase.GetMethodFromHandle(method.MethodHandle, method.DeclaringType.TypeHandle);
++        }
++    }
++
+     [BepInPlugin(ModGuid, ModName, ModVersion)]
+     [BepInDependency("albedo.customclasses", BepInDependency.DependencyFlags.HardDependency)]
+     public class DragonCombatPlugin : BaseUnityPlugin
+     {
+         public const string ModGuid = "albedo.customclasses.combatruntime";
+         public const string ModName = "Aethelborn Ascended - Combat Runtime";
+-        public const string ModVersion = "0.25.198";
++        public const string ModVersion = "0.25.199";
+ 
+         internal static DragonCombatPlugin Instance;
+ 
+@@ -737,7 +747,7 @@
+                 MethodInfo[] methods = types[t].GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                 for (int i = 0; i < methods.Length; i++)
+                 {
+-                    MethodInfo method = methods[i];
++                    MethodInfo method = DragonMethodTargets.Implementation(methods[i]);
+                     if (method.Name != "Damage")
+                         continue;
+ 
+@@ -902,8 +912,9 @@
+             int count = 0;
+             Type[] types = new Type[] { typeof(Player), typeof(Humanoid) };
+             for (int t = 0; t < types.Length; t++)
+-                foreach (MethodInfo method in types[t].GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+-                {
++                foreach (MethodInfo candidate in types[t].GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
++                {
++                    MethodInfo method = DragonMethodTargets.Implementation(candidate);
+                     if (method.Name != "BlockAttack" || !seen.Add(method)) continue;
+                     try
+                     {
+@@ -1497,6 +1508,8 @@
+         {
+             public int Hit, Swing, Prev, Count, Gen; public float LastEnd, LastStart, ClockStart, PrevSpeed, LockUntil, LockBefore, ChainSpeed, Stamina, Eitr;
+             public string StartAnim, Base, Carrier; public bool Dual; public object Finisher;
++            public bool SwingSeen, HadMeasurement; public float SwingSeenAt, ChainRemaining, MeasuredBefore;
++            public string MeasureKey; public int AttackSerial; public object ActivationAttack;
+         }
+         private static ComboSnap _snap;
+ 
+@@ -1528,17 +1541,28 @@
+             c.LockUntil = _comboLockUntil; c.LockBefore = _comboLockBefore; c.StartAnim = _comboStartAnim; c.Base = _comboBase;
+             c.Carrier = _comboCarrier; c.Dual = _comboDual; c.Finisher = _comboFinisher;
+             c.ChainSpeed = DragonCombat.ChainSpeedFor(p);
++            c.ChainRemaining = DragonCombat.ChainSpeedRemaining(p);
++            c.SwingSeen = _comboSwingSeen; c.SwingSeenAt = _comboSwingSeenAt;
++            c.AttackSerial = DragonCombat.AttackSerial; c.ActivationAttack = DragonCombat.NaccAttack;
+             c.Stamina = p.GetStamina(); c.Eitr = CallFloat(p, "GetEitr");
+             return c;
+         }
+ 
+-        private static void RollBack(Player p, ComboSnap c)
++        private static void RollBack(Player p, ComboSnap c, bool refundResources)
+         {
+             _comboHit = c.Hit; _comboSwing = c.Swing; _comboPrevSwing = c.Prev; _comboCount = c.Count; _comboGen = c.Gen;
+             _comboLastEnd = c.LastEnd; _comboLastStart = c.LastStart; _comboClockStart = c.ClockStart; _chainPrevSpeed = c.PrevSpeed;
+             _comboLockUntil = c.LockUntil; _comboLockBefore = c.LockBefore; _comboStartAnim = c.StartAnim; _comboBase = c.Base;
+             _comboCarrier = c.Carrier; _comboDual = c.Dual; _comboFinisher = c.Finisher;
+-            DragonCombat.SetChainSpeed(p, c.ChainSpeed, c.ChainSpeed == 1f ? 0.05f : 0.5f);
++            _comboSwingSeen = c.SwingSeen; _comboSwingSeenAt = c.SwingSeenAt;
++            DragonCombat.RestoreAttackActivation(c.AttackSerial, c.ActivationAttack);
++            if (c.MeasureKey != null)
++            {
++                if (c.HadMeasurement) _chainNatural[c.MeasureKey] = c.MeasuredBefore;
++                else _chainNatural.Remove(c.MeasureKey);
++            }
++            DragonCombat.SetChainSpeed(p, c.ChainSpeed, c.ChainRemaining);
++            if (!refundResources) return;
+             // refund whatever Attack.Start already took
+             float st = c.Stamina - p.GetStamina(); if (st > 0.001f) CallAdd(p, "AddStamina", st);
+             float et = c.Eitr - CallFloat(p, "GetEitr"); if (et > 0.001f) CallAdd(p, "AddEitr", et);
+@@ -1647,7 +1671,15 @@
+                     string mk = ChainKey(keyAnim, _comboDual, _comboHit);
+                     float nat = DragonCombat.ChainNaturalClock - _comboClockStart;
+                     float old;
+-                    if (measured > 0.15f && (!_chainNatural.TryGetValue(mk, out old) || nat < old)) _chainNatural[mk] = nat;
++                    if (measured > 0.15f && (!_chainNatural.TryGetValue(mk, out old) || nat < old))
++                    {
++                        if (_snap != null)
++                        {
++                            _snap.MeasureKey = mk;
++                            _snap.HadMeasurement = _chainNatural.TryGetValue(mk, out _snap.MeasuredBefore);
++                        }
++                        _chainNatural[mk] = nat;
++                    }
+                 }
+                 float chainF = 1f;
+                 float natNow;
+@@ -1704,12 +1736,25 @@
+                 __result = false;
+                 StopAttackInstance(__instance);
+                 Player lp = character as Player;
+-                if (lp != null && _snap != null) RollBack(lp, _snap);   // after Stop: its postfix must not leave a stale end time
++                if (lp != null && _snap != null) RollBack(lp, _snap, true);   // after Stop: its postfix must not leave a stale end time
+                 _snap = null;
+                 return;
+             }
++            // Native Start can reject for stamina before any animation trigger. Undo only our
++            // tentative NACC state; never stop the preceding swing or refund native/mod costs.
++            if (!__result && _comboInStart && _snap != null && character == Player.m_localPlayer)
++            {
++                RollBack((Player)character, _snap, false);
++                _comboInStart = false;
++                _snap = null;
++                return;
++            }
+             _snap = null;
+-            if (__result && character != null && character == Player.m_localPlayer) DragonCombat.SkillAnimAttackBlockUntil = 0f;
++            if (__result && character != null && character == Player.m_localPlayer)
++            {
++                DragonCombat.CommitAttackActivation();
++                DragonCombat.SkillAnimAttackBlockUntil = 0f;
++            }
+             // v0.25.154: an ACCEPTED melee normal attack retires the skill animation drivers it supersedes (damage / VFX the
+             // skill already cast keep running - only the animation side stops). Failed starts retire nothing.
+             Player rp;
+@@ -2840,6 +2885,7 @@
+     {
+         public float EndTime;
+         public float AttackDamageBonus;
++        public float SkillDamageBonus;
+         public float AttackSpeedBonus;
+         public float MoveSpeedBonus;
+         public float DefenseBonus;
+@@ -5375,7 +5421,18 @@
+         public static void BeginAttackActivation(object attack)
+         {
+             AttackSerial++; NaccAttack = attack;
++            // Prune only after acceptance: a failed stamina check must not discard the previous swing's learn.
++        }
++
++        public static void CommitAttackActivation()
++        {
+             PendingLearns.RemoveAll(delegate(StateLearn learn) { return learn.Serial != AttackSerial; });
++        }
++
++        public static void RestoreAttackActivation(int serial, object attack)
++        {
++            AttackSerial = serial; NaccAttack = attack;
++            PendingLearns.RemoveAll(delegate(StateLearn learn) { return learn.Serial != serial; });
+         }
+ 
+         public static int NaccGen, SkillAnimGen, AnimActivation;   // AnimActivation: bumped by every new skill animation (PlayClip / FireVanilla) and every accepted normal attack
+@@ -8837,6 +8894,13 @@
+             return 1f;
+         }
+ 
++        public static float ChainSpeedRemaining(Player player)
++        {
++            float until;
++            return player != null && ChainSpeedUntil.TryGetValue(player.GetInstanceID(), out until)
++                ? Mathf.Max(0f, until - Time.time) : 0f;
++        }
++
+         public static void SetAttackSpeedSource(Player player, float multiplier, float ttl)
+         {
+             if (player == null)
+@@ -8937,6 +9001,7 @@
+             if (!buffs.TryGetValue(source, out state) || state == null) state = new TimedBuffState();   // v0.25.183 reuse (same values written)
+             state.EndTime = Time.time + Mathf.Max(0.1f, duration);
+             state.AttackDamageBonus = attackDamageBonus;
++            state.SkillDamageBonus = 0f;
+             state.AttackSpeedBonus = attackSpeedBonus;
+             state.MoveSpeedBonus = moveSpeedBonus;
+             state.DefenseBonus = defenseBonus;
+@@ -8946,6 +9011,21 @@
+             buffs[source] = state;
+         }
+ 
++        // Separate from attack damage: the skill power provider consumes this once, while
++        // ordinary weapon hits and the independent healing provider never read it.
++        public static void ApplyTimedSkillDamageBuff(Player player, string source, float duration, float bonus)
++        {
++            if (player == null || string.IsNullOrEmpty(source)) return;
++            SetBuffNote(source, BuffPct(Mathf.Max(0f, bonus), "Skill Damage"));
++            ApplyTimedBuff(player, source, duration, 0f, 0f, 0f, 0f, 0f, 0f, false);
++            TimedBuffs[player.GetInstanceID()][source].SkillDamageBonus = Mathf.Max(0f, bonus);
++        }
++
++        public static float GetSkillDamageMultiplier(Player player)
++        {
++            return Mathf.Max(0f, 1f + GetTimedBuffSum(player, "SkillDamage"));
++        }
++
+         public static float GetMoveSpeedMultiplier(Player player)
+         {
+             return Mathf.Max(0.1f, 1f + GetTimedBuffSum(player, "MoveSpeed"));
+@@ -9016,6 +9096,7 @@
+                     continue;
+ 
+                 if (stat == "AttackDamage") total += buff.AttackDamageBonus;
++                else if (stat == "SkillDamage") total += buff.SkillDamageBonus;
+                 else if (stat == "AttackSpeed") total += buff.AttackSpeedBonus;
+                 else if (stat == "MoveSpeed") total += buff.MoveSpeedBonus;
+                 else if (stat == "Defense") total += buff.DefenseBonus;
+@@ -11880,7 +11961,7 @@
+                 if (!_dualTypeLooked)
+                 {
+                     _dualTypeLooked = true;
+-                    Type dt = AccessTools.TypeByName("DualWield.DualWield");
++                    Type dt = DragonCombat.FindTypeCached("DualWield.DualWield");
+                     _dualControllersField = dt == null ? null : AccessTools.Field(dt, "CustomRuntimeControllers");
+                 }
+                 IDictionary known0 = _dualControllersField == null ? null : _dualControllersField.GetValue(null) as IDictionary;
+@@ -16286,15 +16367,15 @@
+             float cloudLife = Mathf.Max(0.65f, hold) + 0.3f;
+             DragonVfxLife haze = Host(center, cloudLife, "judgementcloud");
+             JudgementCloudShell(center, r, cloudLife);
+-            Color fog = Color.Lerp(new Color(0.14f, 0.15f, 0.20f, 0.94f), tint, 0.10f); fog.a = 0.94f;
+-            ParticleSystem mist = Particles(haze.transform, fog, 42, 0f, 0.05f, cloudLife,
++            Color fog = Color.Lerp(new Color(0.20f, 0.43f, 0.85f, 0.50f), tint, 0.30f); fog.a = 0.50f;
++            ParticleSystem mist = Particles(haze.transform, fog, 28, 0f, 0.05f, cloudLife,
+                 0.01f, 0.05f, r * 0.20f, r * 0.34f, 0f, ParticleSystemShapeType.Sphere, r, Vector3.zero, false, false);
+             mist.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+             ParticleSystem.ShapeModule mistShape = mist.shape; mistShape.radiusThickness = 0f;
+-            ParticleSystem.MainModule mistMain = mist.main; mistMain.maxParticles = 48;
++            ParticleSystem.MainModule mistMain = mist.main; mistMain.maxParticles = 32;
+             mistMain.startColor = new ParticleSystem.MinMaxGradient(fog, new Color(fog.r * 1.18f, fog.g * 1.18f, fog.b * 1.18f, fog.a));
+             ParticleSystem.EmissionModule mistEmission = mist.emission;
+-            mistEmission.SetBursts(new ParticleSystem.Burst[] { new ParticleSystem.Burst(0f, (short)Mathf.Clamp(Mathf.RoundToInt(20f * Amount), 18, 28)) });
++            mistEmission.SetBursts(new ParticleSystem.Burst[] { new ParticleSystem.Burst(0f, (short)Mathf.Clamp(Mathf.RoundToInt(14f * Amount), 12, 20)) });
+             ParticleSystem.SizeOverLifetimeModule mistSize = mist.sizeOverLifetime;
+             mistSize.size = new ParticleSystem.MinMaxCurve(1f, CloudPuffSize());
+             Material mistMaterial = Mat(SmokeTex(), false);
+@@ -16368,9 +16449,9 @@
+             float x = (u - 0.5f) * 2f, y = (v - 0.5f) * 2f;
+             float billow = Fbm(u * 6f, v * 6f, 196);
+             float edge = Mathf.Clamp01((1f - Mathf.Sqrt(x * x + y * y)) * 4.5f);
+-            float alpha = edge * Mathf.Clamp01((billow - 0.23f) * 2.8f) * 0.84f;
++            float alpha = edge * Mathf.Clamp01((billow - 0.23f) * 2.8f) * 0.48f;
+             float shade = 0.78f + billow * 0.4f;
+-            return new Color(0.16f * shade, 0.20f * shade, 0.28f * shade, alpha);
++            return new Color(0.22f * shade, 0.43f * shade, 0.82f * shade, alpha);
+         }
+         private static Texture2D CloudShellTexture()
+         {
+--- v0.25.198/DragonsAltar.Sorcerer.cs
++++ v0.25.199/DragonsAltar.Sorcerer.cs
+@@ -165,7 +165,7 @@
+     {
+         public const string ModGuid = "albedo.customclasses.sorcerer";
+         public const string ModName = "Aethelborn Ascended - Sorcerer Advancements";
+-        public const string ModVersion = "0.25.198";
++        public const string ModVersion = "0.25.199";
+ 
+         private const string ClassDataKey = "AlbedoCustomClasses.Class";
+         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
+@@ -488,7 +488,7 @@
+             MethodInfo[] playerMethods = typeof(Player).GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+             for (int i = 0; i < playerMethods.Length; i++)
+             {
+-                MethodInfo method = playerMethods[i];
++                MethodInfo method = DragonMethodTargets.Implementation(playerMethods[i]);
+                 if (method.Name != "TryUseEitr")
+                     continue;
+                 ParameterInfo[] parameters = method.GetParameters();
+@@ -500,7 +500,7 @@
+             MethodInfo wizardMaxEitrPrefix = typeof(SorcererPlugin).GetMethod("WizardSetMaxEitrPrefix", BindingFlags.Static | BindingFlags.NonPublic);
+             for (int i = 0; i < playerMethods.Length; i++)
+             {
+-                MethodInfo method = playerMethods[i];
++                MethodInfo method = DragonMethodTargets.Implementation(playerMethods[i]);
+                 if (method.Name != "SetMaxEitr")
+                     continue;
+                 ParameterInfo[] parameters = method.GetParameters();
+--- v0.25.198/INSTALL.bat
++++ v0.25.199/INSTALL.bat
+@@ -1,5 +1,5 @@
+ @echo off
+-title Immortal Heroes v0.25.198 - Relic Faces and Cast Completion
++title Immortal Heroes v0.25.199 - Guidance and Combo Recovery
+ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
+ echo.
+ pause
+--- v0.25.198/INSTALL.ps1
++++ v0.25.199/INSTALL.ps1
+@@ -1,7 +1,7 @@
+ $ErrorActionPreference = "Stop"
+ 
+ Write-Host ""
+-Write-Host "IMMORTAL HEROES v0.25.198 - RELIC FACES AND CAST COMPLETION" -ForegroundColor Cyan
++Write-Host "IMMORTAL HEROES v0.25.199 - GUIDANCE AND COMBO RECOVERY" -ForegroundColor Cyan
+ Write-Host "All 10 DLLs compile in staging before the live profile is touched." -ForegroundColor Gray
+ Write-Host ""
+ 
+--- /dev/null
++++ v0.25.199/READ_ME_v0.25.199.txt
+@@ -0,0 +1,10 @@
++AETHELBORN ASCENDED v0.25.199 - PASS THREE
++Install with INSTALL.bat as usual. This ZIP extends v198 and includes passes one and two.
++
++Main changes: thinner blue hollow Blade Storm cloud; Knight's Guidance +25% Skill Damage/90s/600s cooldown; diagonal second Ascended Heavy Slash VFX; failed-start NACC state restoration for the low-stamina issue. Includes targeted fixes from the supplied logs.
++
++Read TEST_THIS_BUILD.txt for the in-game checklist, CHANGELOG_v0.25.199.txt for changes, TEST_RESULTS_v0.25.199.txt for verified checks/limits, and docs/LOG_REVIEW_v0.25.199.txt for log attribution.
++
++Keep a copy of your current working installation. No configuration reset is required. Knight's Guidance deliberately uses new versioned buff-duration/cooldown/damage keys; obsolete movement/stamina entries are no longer used. Updated multiplayer clients are needed for the new recipient delivery.
++
++This is the existing source-installer distribution, not a Windows-built DLL claim. All ten modules compile against the supplied real references under C#5, but there was no Unity/Valheim session here. Nothing is promoted to Anchor without your confirmation.
+--- /dev/null
++++ v0.25.199/TEST_RESULTS_v0.25.199.txt
+@@ -0,0 +1,20 @@
++AETHELBORN ASCENDED v0.25.199 - PASS THREE VALIDATION
++2026-10-17 (Asia/Manila)
++Baseline: original Aethelborn_Ascended_v0.25.198_Relic_Faces_Cast_Completion.zip
++Baseline SHA-256: bdcc445ff23d4b37e69ac74406517d4c67e663efb83580017c7b6953dae13bbe
++
++VERIFIED OUTSIDE UNITY
++- All ten source modules fully compile with Roslyn 4.8, -langversion:5, supplied real Valheim/BepInEx/Harmony/Unity references, JotunnLib 2.30.2 and the restored UnityEngine.UI reference. Includes the new base-health, canonical method-handle, ZPackage, owner/identity and routed-RPC API calls. The package retains the existing PowerShell source installer; verification DLLs are not shipped as a Windows build.
++- 104 code/geometry checks pass: 88 actual compiled-method/IL/math checks and 16 source-derived managed-harness checks (8 extrusion invariants, 8 state snapshot/rollback invariants). Harnesses execute the shipped method bodies with only Unity-native Mesh/Player/combat services substituted; they do not execute a real animator/controller or native resource check.
++- Coverage includes prior Saving Grace, hearts, relic geometry, hammer growth, crossbow state/reload hooks, CA completion, dodge and tooltip checks; new cloud RGB/opacity samples, diagonal stroke selection/fallback, canonical real Valheim targets, skill-versus-heal/weapon factor paths, remote award owner/identity guards, and rejected combo state/resource recovery.
++- 110 source scope checks pass. Exactly four source modules changed. Other six modules are byte-identical. All 185 original art/animation assets are byte-identical. Successful NACC calculations and Ascended Heavy Slash gameplay/CA cadence remain identical except scoped transactional/visual additions. Blade Storm hit/damage routine, normal Heavy Slash, cape, crossbow/equipment rules, prior-pass geometry/CA fixes and buff mist are unchanged.
++- Archive CRC and every packaged file are checked; diff is against original v198. The original ZIP is unchanged. No Anchor promotion.
++
++LOG / VIDEO EVIDENCE LIMITS
++Both supplied logs were reviewed; they predate these passes and are not evidence of v199 running. The second video was inspected as context for the low-stamina pose freeze. The actual supplied Attack.Start implementation checks stamina before animation trigger, matching the found AA tentative-state failure path. This establishes a code defect and motivates the cleanup; it does not prove that this is the only cause in the full modded game.
++
++NOT VERIFIED HERE
++- Windows PowerShell Add-Type/INSTALL execution, live Harmony detours, native animation/rendering/material blending, actual skill damage in Valheim, RPC delivery between peers, Therzie controller behavior and live FPS/allocations require the checklist in TEST_THIS_BUILD.txt.
++- The custom tools/compile_check/check.sh 3029660, its Stubs.cs, mcs, tools/release.sh, original CLAUDE.md and git checkout/remote were not supplied in the source ZIP/environment. Their prescribed checks, release script, commit and push could not be run. The full C#5 compilation above is an additional real-reference check, not a claim that the missing signature checker reported zero. Dated project notes are supplied in docs/PROJECT_CHANGES_v0.25.199.txt.
++- No specific cause is established for the unattributed shader/audio/world warnings. VNEI's absent EpicLoot compatibility dependency is outside AA; only AA's avoidable broad lookup was changed.
++- HUD optimization removes four array allocations per repaint; no measured FPS/GC improvement is claimed. The requested thinner Blade Storm cloud also reduces its bounded particles; all other visuals are preserved.
+--- v0.25.198/TEST_THIS_BUILD.txt
++++ v0.25.199/TEST_THIS_BUILD.txt
+@@ -1,12 +1,14 @@
+-v0.25.198 - BATCH TWO IN-GAME CHECKLIST (ITEMS 5-8)
+-Run INSTALL.bat as usual. Includes v197's pass-one changes. This is a separate test pass, not an Anchor promotion.
++v0.25.199 - PASS THREE IN-GAME CHECKLIST (ITEMS 9-12 + LOG FIXES)
++Run INSTALL.bat as usual. Includes both earlier passes. Not an Anchor promotion.
+ 
+-1. Model details: inspect Goddess Relic and both Priest relics from front/back and oblique angles, both close and at combat distance. Surfaces/feathers/inset details should no longer disappear by viewing angle. Confirm the accepted colors/design and pass-one raised green heart on both faces remain.
+-2. Judgement Hammer: confirm a taller/chunkier head with the same width/depth/material/gems. Throw across open ground and watch the actual model grow during normal and Ascended outbound flight; Ascended return should keep its existing growth behavior. Verify hit behavior and wall collision match v197. Test after a fresh load as well as subsequent casts.
+-3. Cast-spam video scenario: alternate Goddess Relic, Righteous Strike, Lightning Zap, buffs and other skills rapidly. Also repeat the same skill using the existing short-cooldown testing settings. The next cast must wait for the prior CA and follow-through/fade to finish, then start at its own normal configured speed. Rejected presses must not spend resources or start cooldowns. No automatic queued cast is added.
+-4. Test native and Mixamo skills, full and trimmed F8 animation End settings, normal and Ascended variants. Confirm movement restrictions are unchanged and a canceled/dead/finished animation does not leave casting stuck.
+-5. Confirm Sword Master dodge still cancels immediately. Verify multi-strike skills still complete every intended strike. Check charge release/follow-up clicks, Whirlwind/Furious Winds/Starfall recast cancellation and active Priest relic dismissal.
+-6. Sword Master normal Heavy Slash: it should show the horizontal right-to-left sweep after other skills, after blocking and with camera/character turns. Check other base classes too. Ascended second-stroke alignment is intentionally pass three.
+-7. Brief regression: Saving Grace Ready/Cooldown behavior, both green healing hearts, stronger damaging-buff mist and right-to-left Lightning Zap remain from v197.
++9. Blade Storm: test normal and Ascended casts in daylight, shade and at night, against both light/dark backgrounds. Look around the ball: it should read as a curved hollow blue cloud with visible slashes, thinner than v198. Confirm full-area damage and tick timing match v198. Check the VFX amount settings you normally use. Buff-attack mist should retain pass one's stronger look.
+ 
+-Items 9-12 and log-driven fixes remain for pass three. Actual rendering, CA transitions, gameplay and FPS require game testing; code checks do not substitute for it.
++10. Knight's Guidance: cast on yourself; the buff timer should begin at 1m30s and cooldown at 10m. At the same skill tier/loadout, compare a damaging skill before/during/after: damage should gain 25% while active; weapon-only hits, healing, movement, stamina regen and stamina costs should not gain the retired bonuses. Example 100 -> 125 before unchanged other modifiers. Buff expires after 90s. Recast should refresh the same source, not stack itself. Test with old saved configs to ensure the obsolete 180s/780s defaults do not survive. When possible, use two updated clients: ally inside the existing 10m snapshot gets its own icon/timer and bonus, keeps it after leaving range, loses it at expiry; an ally outside the snapshot gets none. Test client-to-host and client-to-client awards.
++
++11. Ascended Heavy Slash: cast all three native Battleaxe strikes repeatedly and after other skills/blocking. Expect first horizontal sweep, second diagonal matching the return swing, third vertical. Check both cold/first and warmed casts, different attack-speed values and camera/character turns. Cadence must remain the existing minimum 0.7s/configured timing. Normal Heavy Slash stays horizontal. Dodge cancellation should still stop later strikes; holding block should not cancel them.
++
++12. Low-stamina Therzie NACC: repeat the supplied video's scenario with the same paired weapon and installed Dual Wield/Therzie mods. Start with enough stamina for several swings, then hold/spam attack through exhaustion. A rejected attempt must not freeze the pose or advance the combo. Stop clicking, regain stamina and attack again. Also test exhaustion between swings, at the finisher, while moving, after blocking and with minor uneven ground. Check the existing 0.7s continuation window and normal damage interruption. Compare ordinary sword/axe chains and secondary/heavy attacks. Successful combos must retain their previous rhythm and costs. No free stamina/Eitr refunds on ordinary rejection.
++
++LOG FIXES: start a fresh game/session and inspect BepInEx logs. Confirm AA's prefab-scan null-reference warnings and inherited-target Harmony warnings are absent. Check EXP for normal/starred/modded creatures and an existing customized reward. Open every class tree and hotbar: optional frame variants should retain the existing fallback appearance without missing-file warning spam. VNEI's missing EpicLoot dependency may still be reported by VNEI/other scanners; no third-party mod was repaired. Capture a new performance log with the same settings/scene for comparison; no FPS improvement has been measured here.
++
++QUICK REGRESSION: Saving Grace ready/cooldown indicators, raised green hearts front/back, visible hammer growth/taller head, casting waits for prior CA, right-to-left Zap, instant dodge, crossbow sprint reload and saved state, UI input blocking, equipment restrictions. Extra effect point lights remain removed.
+--- /dev/null
++++ v0.25.199/docs/LOG_REVIEW_v0.25.199.txt
+@@ -0,0 +1,18 @@
++AETHELBORN ASCENDED v0.25.199 - LOG REVIEW RESOLUTION
++2026-10-17 (Asia/Manila). Inputs: Aethelborn_Performance(3).txt and LogOutput(1).log, as supplied locally. These predate v197/v198/v199; no new live game log is claimed.
++
++FIXED IN AA CODE
++1. 392 EXP prefab-scan null-reference warnings: Discover called GetMaxHealth on uninitialized prefab Characters; native GetMaxHealth dereferences m_nview. Prefab discovery now calls GetMaxHealthBase, which reads base health and existing world-level scaling without that network-view access. Kill discovery retains live GetMaxHealth. Reward math, config keys/defaults, customized rewards and migrations are otherwise identical.
++2. Harmony inherited-target warnings: canonicalized inherited reflections to the actual declaring MethodInfo before patching/deduplication. Runtime and Advanced damage, Runtime block and Sorcerer Eitr/max-Eitr scanners now select the implementation Harmony expects. Same metadata token/module, same prefix/postfix/priority; distinct real overrides remain distinct. This repairs target selection rather than hiding the warning.
++3. Optional UI frame variants: color-search/icon construction deliberately probes variants not included among the painted chassis/overlay assets. IhFrameSprite now checks existence on its first cache miss and stores the same null fallback for missing variants, avoiding the required-loader warning for an optional probe. Painted/procedural fallback and all artwork remain unchanged. Missing PNGs were not invented or recolored.
++4. VNEI/EpicLoot type-load error: AA's optional DualWield type lookup used Harmony's broad TypeByName enumeration. It now uses the existing cached exact-name Assembly.GetType lookup. This avoids AA loading unrelated optional types; VNEI's absent EpicLoot compatibility dependency itself remains an external issue and could still be reported by other scanners.
++5. Advanced HUD allocation: replaced two temporary numeric arrays and two temporary label arrays per repaint with reused arrays. Actual values are still sampled on each repaint, and existing layout, colors and drawing stay intact. No per-frame reflection was added. The measured 552KB/s Advanced GUI allocation source has other contributors; no measured total reduction/FPS gain is asserted.
++
++SEPARATE REQUEST: LOW-STAMINA NACC
++The supplied paired-weapon video shows a frozen attack pose after several swings. AA advanced combo state and speed before native Attack.Start accepted the attack; on ordinary false it only reset the hit index. The patch now rolls tentative state/measurements/activation back, retains the prior pending state learn, and preserves native resource failure. No native rejection refund or forced idle/controller replacement. Actual Therzie/controller behavior must still be tested in game.
++
++LEFT ATTRIBUTED / UNRESOLVED
++The original performance sample covers 2,184s: idle 12.93ms; measured AA code about 0.50ms/frame; overall 10.58ms; worst 261.3ms. Recent 33.3ms stalls show roughly 0.1-0.2ms measured AA script time and ~31ms in aggregate rendering/GUI/physics/GPU-wait. This does not isolate a GPU, shader, other-mod, physics, frame-cap or unmeasured-AA cause. No logged VFX spawn maximum exceeds 8ms. The unattributed shader platform warning, missing main-menu/respawn audio, world-location IDs, transient player ID and duplicate CanvasRenderer messages lack a concrete AA source path in these logs. No third-party files/materials or unrelated mechanics were changed.
++
++NEXT EVIDENCE
++After installing v199, repeat the checklist and capture both fresh logs, including the same low-stamina weapon/mod combination. That can establish which warnings disappeared and whether the reported freeze/performance symptom is resolved.
+--- /dev/null
++++ v0.25.199/docs/PROJECT_CHANGES_v0.25.199.txt
+@@ -0,0 +1,8 @@
++2026-10-17 (Asia/Manila) - v0.25.199 pass three, original v198 baseline.
++9: Blade Storm cloud thinner and blue; same hollow curved skin, slashes and damage.
++10: Knight's Guidance now only +25% Skill Damage/90s, cooldown 600s; new config keys replace obsolete settings, provider separated from healing/weapon damage, same 10m snapshot targeting and owner-side ally buff/timer delivery.
++11: Ascended Heavy Slash second effect follows validated diagonal motion with diagonal fallback; first horizontal and third vertical unchanged; same native Battleaxe 3SS/timing/damage.
++12: Native failed NACC starts restore tentative state/speed lifetime/cadence/activation without resource refunds or stopping the previous swing. Accepted activation commits pending learning; paired-controller late rejection retains its existing refund.
++Logs: safe EXP base-health prefab discovery; canonical Harmony declaring targets; exact cached optional DualWield lookup; optional frame existence/cached fallback; four HUD arrays reused with identical output.
++All ten modules compile C#5. 104 code/geometry checks (88 actual compiled checks, 16 source-derived harness invariants) and 110 scope checks pass. 185 existing assets unchanged. Actual game/rendering/multiplayer/Therzie/FPS remain unverified. All previous passes retained. No Anchor promotion.
++Original CLAUDE.md/git/release/checker tools were unavailable; this dated journal records this pass without fabricating the missing project memory or claiming commit/push.

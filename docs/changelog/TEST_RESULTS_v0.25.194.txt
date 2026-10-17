@@ -1,0 +1,65 @@
+AETHELBORN ASCENDED v0.25.194 - VALIDATION RESULTS
+2026-10-17 (Asia/Manila)
+
+BASELINE
+Only Aethelborn_Ascended_v0.25.193_Sprint_Reload_World_Input.zip.
+Preserved archive SHA-256:
+df396d9b93e860f6954b876c36d5dcc48bab289e84ebdcda82d47ab317bc4aa4
+Protected Anchor remains v191 per the existing handoff; this pass does not
+promote v193 or v194. Previous report records Anchor SHA-256:
+2a616dfc4b69484940cfd79e07a08300bc07dc8161416499537b438a95af7783
+This run verified the v193 archive; it does not claim a fresh v191 byte check.
+
+COMPILE - PASS
+All 10 modules compiled with C# 5 language rules against available Valheim,
+Unity, BepInEx, Harmony and Jotunn references. Final Advanced edits recompiled.
+As in v193, the supplied UnityEngine.UI.dll and System.Xml.dll references are
+invalid/truncated: a compile-only Unity3D.UnityEngine.UI 2018.3.5.1 reference
+was used, and unused invalid System.Xml excluded. This is not an exact copy
+of the installed game's Managed folder. The unchanged installer compiles all
+10 against the user's actual installed profile before updating that profile.
+No game/dependency DLLs or local compiler/runtime packages are bundled.
+
+12 COMPILED-METHOD CHECKS - PASS
+Executed the shipped managed SkillExecution wrapper: cancel while yielded,
+no later attack resumption, immediate finally cleanup/ownership release,
+idempotent cancellation, normal completion, exception cleanup and cancellation
+before the first step. These do not execute Unity collision APIs.
+Executed the shipped dodge transpiler on actual Player.UpdateDodge IL: exactly
+the attack/stagger gates change. All other native instructions, including
+stamina/ground/encumbrance/current-roll checks and cost, remain unchanged.
+Inspected compiled SetControlsPrefix: cancellation occurs before the skill lock
+filter. Tested no-op when target gates are absent. Invoked the shipped Halfmoon
+contact-speed calculation with cold/warm timing data; both reach requested 1s.
+
+66 STATIC SCOPE CHECKS - PASS
+Original v193 hash; four-source edit scope; 185 assets identical; installer
+banners only; all Config.Bind sections, keys and defaults retained; no added
+forbidden graphics APIs/FindObjectOfType. Equipment rules, v193 reload/UI guard,
+ground-fire implementation, shared animation/Rigidbody driver and cape code
+compare identical. Checks cover independent Blade Storm area targeting/damage
+arithmetic, cloud geometry/opacity, Stomp ring, dodge-owned pending skills,
+three full Heavy hits, per-shockwave hit deduplication and Piercing Arrow burst.
+
+VFX CODE REVIEW
+Old mist was particle-only: 0.24 alpha, low default density, a dim shared alpha
+material and shared particle budgets. New cloud has a cached geometry body,
+white vertex colors, explicit 0.8 property-block tint and a cloud texture alpha
+floor of 0.58 (>=0.464 tint/texture product before fade/shader/depth processing).
+The body is not scaled away by particle budgets, draws before the cuts without
+writing depth, and is accompanied by bounded interior puffs. These are code
+properties, NOT an observed in-game visibility measurement or screenshot.
+Actual appearance, lighting, render ordering and performance remain unverified.
+
+NOT PERFORMED / NOT CLAIMED
+No Valheim session or Unity rendering was available. Fresh-launch Halfmoon,
+instant roll feel, actual skill hits, physics/collision restoration, cloud/ring
+appearance/FPS, mod compatibility and multiplayer still require in-game tests.
+The source ZIP still lacks the original CLAUDE.md, tools/compile_check/check.sh,
+Stubs.cs and tools/release.sh; no project git checkout was provided. The exact
+3029660 signature-baseline/release-script checks, project-memory update and
+commit/push could not be performed. mcs is not installed, so the requested
+mcs --parse check was not run; full C# 5 compilation was used instead. No
+'0 new signatures' or equivalent repo-check claim is made.
+
+See TEST_THIS_BUILD.txt and AUDIO_PLAN_v0.25.194.txt. Audio is a plan only.

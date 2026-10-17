@@ -1,0 +1,4 @@
+2026-10-17 (Asia/Manila) - v0.25.196 visual revision, based on original v195.
+User authorized hollow curved Blade Storm clouds, restored textured/gemmed relics and chunkier hammer head, deterministic third Heavy Swing VFX, mist for damaging support skills and a Heaven's Judgement sigil.
+Changed only DragonsAltar.CombatRuntime.cs and AlbedosCustomClasses.Advanced.cs; updated installer banners and release notes. No combat or configuration changes. Extra skill point lights remain removed.
+All 10 modules compile under C#5; 44 compiled-method checks and 58 scope checks pass. Actual Unity appearance/performance remains untested. Original CLAUDE.md and git release tools were not supplied; this dated journal records the pass without inventing project memory. Not an Anchor promotion.

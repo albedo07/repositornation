@@ -1,0 +1,10 @@
+2026-10-18 (Asia/Manila) - v0.25.200, original v199 as the only baseline.
+1. Whirlwind under-blade wind and pulse rings moved to terrain-conforming downwash; original blade arcs/Ascended tornado/CA/mechanics retained.
+2. Circle Swing common/legacy/eruption visuals use thicker, stronger wind rings instead of slash VFX; gameplay unchanged; Stomp untouched.
+3. Fury Recovery gets downward cooldown chevrons/orange strip; active Fury and the seconds timer retain existing logic.
+4. Holy Wave initial base heal: flat 25 -> 20% of recipient max HP via a new percent config key. Existing healing tiers, sustained heal, Ascended low-HP multiplier/echo, costs and timing preserved. Tooltips updated.
+5. Existing damaging support mist converted to class/radius-color annular airflow. Ray of Hope, Divine Intervention, both Lightning Relics and Sanctified Bloom covered. Bounded particles, cached/prewarmed wind materials.
+6. Goddess sapphires and Holy Relic heart embedded in backing. Closed beveled sapphire inserts; one through-backing green heart instead of raised plates. Heart-specific inward miter removed after tests reproduced self-intersections/incomplete caps. Shared extrusion/hammer/other designs retained.
+7. Disabled Character-compatible target/damage bridge for native RandomFlyingBird + Destructible. No Character movement/initialization, added colliders/Rigidbody or replaced native damage RPC. Bird-specific metadata hooks and guarded damage forwarding use native health/drops/network destruction; ambient stagger calls do not invoke unsupported Character RPCs. Actual game/multiplayer tests still required.
+Validation: ten full C#5 module builds, 137 compiled/source-derived checks, 116 scope checks. 185 original assets and seven unrelated source modules byte-identical. Original v199 preserved. No Anchor promotion or unrelated cleanup.
+Original CLAUDE.md/git/release/checker tools were absent; this dated journal records the pass without inventing the missing project memory or claiming push/release-script execution.

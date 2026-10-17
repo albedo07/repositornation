@@ -1,0 +1,20 @@
+AETHELBORN ASCENDED v0.25.195 - VALIDATION
+Date: 2026-10-17 (Asia/Manila)
+Baseline: Aethelborn_Ascended_v0.25.194_Skill_Finish_Dodge_Priority.zip
+Baseline SHA-256: d366aea591631ac42c5a76b1cece252787303e9457499752dc04a63e4f47b3cf
+
+VERIFIED
+- All 10 source modules compile against the supplied Valheim/BepInEx/Harmony/Unity references using Roslyn with -langversion:5.
+- 33 compiled-method/IL checks pass: actual cancellation wrapper disposal/normal/fault paths; exact native dodge-gate rewrite and preserved native stamina/ground checks; preserved Halfmoon cold-contact calibration; seven burn-format cases; eight buff/pinning header cases; native crossbow hook signatures/field contracts; consumption-only-on-firing IL; native setter restoration path; block removed from the interruption predicate.
+- 83 static scope checks pass: original v194 archive checksum; six changed modules; all 185 existing art/animation assets unchanged; original config keys/defaults retained; only added setting is Ascended Heavy Swing strike interval; equipment rules, existing dodge implementation, normal base skill combat, Blade Storm damage, Crescent/Whirlwind combat, Paladin trail damage, sprint-reload filter, Piercing Arrow and cape guard unchanged. Installer banner text only.
+- Source files retain their original UTF-8 BOM/newline format; installers preserve their original byte encoding/newlines apart from release banners.
+- No new forbidden graphics APIs, FindObjectOfType, per-frame reflection lookup, or C# 6+ syntax.
+
+LIMITS / STILL NEEDS IN-GAME TESTING
+- No Valheim/Unity runtime is available here. No actual frame-time, visual screenshot, gameplay animation, multiplayer or live InstantEquip test was performed.
+- The report establishes a Goddess Relic spawn hitch and a Ray of Hope-associated update sample. Missing cached resources/repeated allocation paths are addressed; it does not prove every cause of first-use stutter has been removed. Engine shader/animation initialization, other mods and frame limiting remain possible contributors.
+- Ranger's entire static constructor calls Unity shader APIs, so direct CLR execution of the complete Ranger filter was not possible outside Unity. Its original filter source is unchanged; IL/API contracts and state-consumption paths were checked instead.
+- Exact project tools/compile_check/check.sh, Stubs.cs, release.sh, original CLAUDE.md and a git checkout were not included in the supplied distribution. mcs is not installed. No claim of running that signature checker, mcs --parse, commit or push is made. C#5 full compilation against supplied real API references is the available verification.
+- No Anchor promotion. v194 preserved; this v195 pass awaits user testing.
+
+Evidence: docs/validation_v0.25.195/ (compile log, managed-method checks, scope audit, source hashes and test source).

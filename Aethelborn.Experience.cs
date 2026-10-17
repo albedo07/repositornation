@@ -11,7 +11,7 @@ using UnityEngine;
 
 namespace AethelbornExperience
 {
-    [BepInPlugin("albedo.customclasses.exp", "Aethelborn Ascended - Experience", "0.25.138.1")]
+    [BepInPlugin("albedo.customclasses.exp", "Aethelborn Ascended - Experience", "0.25.199")]
     [BepInDependency("albedo.customclasses.advanced", BepInDependency.DependencyFlags.HardDependency)]
     public class ExperiencePlugin : BaseUnityPlugin
     {
@@ -105,7 +105,7 @@ namespace AethelbornExperience
                 try
                 {
                     Character character = prefab.GetComponent<Character>();
-                    if (character != null && prefab.GetComponent<Player>() == null) Discover(prefab.name, character);
+                    if (character != null && prefab.GetComponent<Player>() == null) Discover(prefab.name, character, true);
                 }
                 catch (Exception error)
                 {
@@ -224,13 +224,13 @@ namespace AethelbornExperience
             }
         }
 
-        private ConfigEntry<int> Discover(string name, Character creature)
+        private ConfigEntry<int> Discover(string name, Character creature, bool prefab = false)
         {
             string key = Regex.Replace(name, "[^a-zA-Z0-9_-]", "_");
             if (key.Length == 0) key = "UnknownCreature";
             ConfigEntry<int> cfg;
             if (_creatureRewards.TryGetValue(key, out cfg)) return cfg;
-            int hp = creature == null ? 0 : (int)Math.Max(0f, creature.GetMaxHealth());
+            int hp = creature == null ? 0 : (int)Math.Max(0f, (prefab ? creature.GetMaxHealthBase() : creature.GetMaxHealth()));
             int rate = Math.Max(1, _healthExpDivisor.Value);
             int oldAuto = Math.Min(100000, Math.Max(1, _baseCreatureExp.Value + hp / rate));
             int biome = CreatureProgression(key);

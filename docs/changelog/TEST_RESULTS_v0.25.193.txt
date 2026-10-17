@@ -1,0 +1,58 @@
+AETHELBORN ASCENDED v0.25.193 - VALIDATION RESULTS
+2026-10-17 (Asia/Manila)
+
+BASELINE / PRESERVATION
+Working baseline: Aethelborn_Ascended_v0.25.192_Ranger_Mobility_Buff_Timers.zip
+SHA-256: e0dc53217533696acb4f3aae75b524c1a97bd7011aeb0504f8616a6db9f66ec4
+Protected Anchor: Aethelborn_Ascended_v0.25.191_VFX_Finish.zip
+SHA-256: 2a616dfc4b69484940cfd79e07a08300bc07dc8161416499537b438a95af7783
+Both original archives unchanged. v193 is a separate test pass, not a new Anchor.
+185 existing assets byte-identical. Five C# modules edited: CombatRuntime,
+Ranger, Sorcerer, Advanced and Starter Skills. Other five module sources unchanged.
+Installer changes are banner/title text only, with original bytes/line endings
+preserved otherwise. Older test results archived under docs/changelog.
+
+STATIC COMPILATION - PASS
+All ten modules compiled with -langversion:5 against the available Valheim,
+Unity, BepInEx, Harmony and Jotunn references. Zero C# compile errors.
+As in v192: local UnityEngine.UI.dll/System.Xml.dll references were damaged;
+compile-only UI reference uses Unity3D.UnityEngine.UI 2018.3.5.1, and unused
+invalid System.Xml is excluded. This is not an exact copy of the installed
+Managed folder; the existing installer builds against the user's actual profile.
+No compiled third-party reference DLLs are included in the ZIP.
+
+COMPILED-METHOD CHECKS - 8 PASS
+Tests execute the shipped Ranger transpiler against actual game method IL:
+- Confirms actual Player.CheckRun operand is Humanoid.ClearActionQueue.
+- Confirms that real cancellation call is rewritten.
+- Confirms all other actual sprint instructions remain unchanged.
+- Supports the Player override form too.
+- Leaves an unrelated method named ClearActionQueue untouched.
+- Matches the actual Character.IsDrawingBow operand in Humanoid.CheckRun.
+- Validates actual reload action metadata (type, item, progress and Reload enum).
+- No-op when no cancellation call exists.
+These are stronger than v192's synthetic-only operand tests, which missed the
+virtual-base operands. They do not execute Unity's full movement/reload loop.
+An attempted live predicate invocation outside Unity hit the existing native
+Shader.PropertyToID initializer; live predicates are not claimed as executed.
+
+SCOPE AUDIT - 41 PASS
+Includes archive hashes, asset identity, five-module edit scope, installer
+identity except titles, vanilla animation/full-speed separation, central weapon
+rules/no-class exemption, unchanged utility axes/shared skill animation driver,
+Crescent lifetime cap, UI input gates and no new forbidden graphics calls.
+Damage statements, waits, gameplay RNG and Config.Bind lines match v192.
+This verifies source scope; it is not rendered-VFX or game-play validation.
+
+NOT AVAILABLE / NOT CLAIMED
+The supplied source archive has no original CLAUDE.md, tools/compile_check/check.sh,
+Stubs.cs or tools/release.sh, and this workspace has no project git checkout.
+The exact signature-baseline check (including '0 new signatures'), release script,
+project-memory update and git commit/push could not be performed.
+mcs is not installed here, so mcs --parse -langversion:5 was not run; full C# 5
+compilation was performed instead. No claim of equivalent project release checks.
+
+IN-GAME / RENDERED VALIDATION
+Not performed: continuous Shift reload, loaded-state/resource behavior, UI/menu
+input ownership, actual modded equipment recognition, staff animation, fire/mist
+visibility, visual polish, multiplayer and FPS. Use TEST_THIS_BUILD.txt.

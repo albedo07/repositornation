@@ -1,0 +1,11 @@
+v0.25.196 - IN-GAME CHECKLIST
+Install using INSTALL.bat as usual. This is a test pass; no Anchor was promoted.
+
+1. Blade Storm: check normal and ascended versions in daylight and darkness, from outside and inside. Clouds should curve around a hollow ball with gaps, visible slashes and an empty center. Check that it neither looks like a solid barrier nor vanishes at typical combat distance.
+2. Goddess Relic / Judgement Hammer / Priest relics: confirm warm gold and ivory texture detail, visible blue diamonds from both sides, a chunkier hammer head, and distinct blue lightning / green healing relics. Check that colors do not wash out to uniform white. Confirm existing pulses and healing heart remain.
+3. Ascended Heavy Swing: repeat all three strikes while turning the camera/character. Third slash should remain vertical and match the downward swing. Confirm the configured cadence is unchanged.
+4. Ray of Hope, Divine Intervention and Ascended Lightning Relic: confirm a subtle, brief radius mist appears without hiding targets. Lightning Relic should emit the added mist once on landing, not on every pulse. Confirm normal buff/heal/damage behavior.
+5. Heaven's Judgement: check the new sigil's ground alignment, readability, original radius and lifetime through the barrage. Turn existing guides off and confirm it respects that setting.
+6. Compare first-use and repeated casts for stutter. No measured FPS improvement is claimed; report any remaining hitch with the skill name and log.
+
+Existing blocking/dodge behavior, crossbow state, combat numbers and timing should match v195.

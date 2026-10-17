@@ -1,0 +1,7 @@
+2026-10-17 (Asia/Manila) - Batch one, v0.25.197, based only on original v196.
+Item 1: Saving Grace display rename; replicated owner-published Priest-presence flag; recipient Ready/Cooldown indicator with cooldown independent of Priest proximity. Existing cooldown/rescue/recovery numbers and internal IDs retained.
+Item 2: two raised Holy Relic heart faces, scoped outward winding correction, stronger green pigment. Other relic designs unchanged.
+Item 3: thicker bounded mist on existing damaging-support callbacks; cached/prewarmed growth; no gameplay changes or new lights.
+Item 4: Lightning Zap release and bolts reversed to right-to-left; CA/combat/timing unchanged.
+All ten modules compile under C#5; 59 compiled-method/IL/math checks and 107 scope checks pass. Multiplayer and actual rendered VFX require game testing. Items 5-12 remain deferred to batches two/three. No Anchor promotion.
+Original CLAUDE.md and git/release tools were not supplied; this dated journal records the pass without replacing original project memory.

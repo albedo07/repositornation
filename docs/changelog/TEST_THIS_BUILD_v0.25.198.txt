@@ -1,0 +1,12 @@
+v0.25.198 - BATCH TWO IN-GAME CHECKLIST (ITEMS 5-8)
+Run INSTALL.bat as usual. Includes v197's pass-one changes. This is a separate test pass, not an Anchor promotion.
+
+1. Model details: inspect Goddess Relic and both Priest relics from front/back and oblique angles, both close and at combat distance. Surfaces/feathers/inset details should no longer disappear by viewing angle. Confirm the accepted colors/design and pass-one raised green heart on both faces remain.
+2. Judgement Hammer: confirm a taller/chunkier head with the same width/depth/material/gems. Throw across open ground and watch the actual model grow during normal and Ascended outbound flight; Ascended return should keep its existing growth behavior. Verify hit behavior and wall collision match v197. Test after a fresh load as well as subsequent casts.
+3. Cast-spam video scenario: alternate Goddess Relic, Righteous Strike, Lightning Zap, buffs and other skills rapidly. Also repeat the same skill using the existing short-cooldown testing settings. The next cast must wait for the prior CA and follow-through/fade to finish, then start at its own normal configured speed. Rejected presses must not spend resources or start cooldowns. No automatic queued cast is added.
+4. Test native and Mixamo skills, full and trimmed F8 animation End settings, normal and Ascended variants. Confirm movement restrictions are unchanged and a canceled/dead/finished animation does not leave casting stuck.
+5. Confirm Sword Master dodge still cancels immediately. Verify multi-strike skills still complete every intended strike. Check charge release/follow-up clicks, Whirlwind/Furious Winds/Starfall recast cancellation and active Priest relic dismissal.
+6. Sword Master normal Heavy Slash: it should show the horizontal right-to-left sweep after other skills, after blocking and with camera/character turns. Check other base classes too. Ascended second-stroke alignment is intentionally pass three.
+7. Brief regression: Saving Grace Ready/Cooldown behavior, both green healing hearts, stronger damaging-buff mist and right-to-left Lightning Zap remain from v197.
+
+Items 9-12 and log-driven fixes remain for pass three. Actual rendering, CA transitions, gameplay and FPS require game testing; code checks do not substitute for it.

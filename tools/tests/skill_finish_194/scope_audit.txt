@@ -1,0 +1,67 @@
+PASS: Original v193 archive preserved exactly
+PASS: Only the four requested implementation modules changed
+PASS: 185 existing art/animation assets byte-identical
+PASS: INSTALL.bat changes are title text only
+PASS: INSTALL.ps1 changes are title text only
+PASS: AlbedosCustomClasses.Skills.cs: every configuration section, key and default retained
+PASS: AlbedosCustomClasses.Skills.cs: no new .SetPositions( calls
+PASS: AlbedosCustomClasses.Skills.cs: no new .GetPositions( calls
+PASS: AlbedosCustomClasses.Skills.cs: no new .LoadImage( calls
+PASS: AlbedosCustomClasses.Skills.cs: no new FindObjectOfType( calls
+PASS: AlbedosCustomClasses.Advanced.cs: every configuration section, key and default retained
+PASS: AlbedosCustomClasses.Advanced.cs: no new .SetPositions( calls
+PASS: AlbedosCustomClasses.Advanced.cs: no new .GetPositions( calls
+PASS: AlbedosCustomClasses.Advanced.cs: no new .LoadImage( calls
+PASS: AlbedosCustomClasses.Advanced.cs: no new FindObjectOfType( calls
+PASS: DragonsAltar.Ranger.cs: every configuration section, key and default retained
+PASS: DragonsAltar.Ranger.cs: no new .SetPositions( calls
+PASS: DragonsAltar.Ranger.cs: no new .GetPositions( calls
+PASS: DragonsAltar.Ranger.cs: no new .LoadImage( calls
+PASS: DragonsAltar.Ranger.cs: no new FindObjectOfType( calls
+PASS: DragonsAltar.CombatRuntime.cs: every configuration section, key and default retained
+PASS: DragonsAltar.CombatRuntime.cs: no new .SetPositions( calls
+PASS: DragonsAltar.CombatRuntime.cs: no new .GetPositions( calls
+PASS: DragonsAltar.CombatRuntime.cs: no new .LoadImage( calls
+PASS: DragonsAltar.CombatRuntime.cs: no new FindObjectOfType( calls
+PASS: Existing class equipment restrictions retained
+PASS: v193 ground-fire implementation retained
+PASS: Existing shared skill animation and Rigidbody driver retained
+PASS: Cape/cloth code unchanged
+PASS: v193 sprint-reload implementation retained
+PASS: v193 menu/input guard retained
+PASS: Blade Storm damage uses the full fixed 3D target area, independently of cosmetic spheres
+PASS: Blade Storm preserves existing per-target damage arithmetic: float budget = ascended
+PASS: Blade Storm preserves existing per-target damage arithmetic: float perHit = budget / (defSpheres * 3f);
+PASS: Blade Storm preserves existing per-target damage arithmetic: int cuts = Mathf.Clamp(_bladeCutsPerSphere.Value, 1, 20);
+PASS: Blade Storm has a mesh-backed cloud with explicit 0.8 opacity
+PASS: Cloud silhouette does not depend on particle density/frame budgets
+PASS: Cloud texture has nonzero density, white mesh vertex colors and draws before the cuts
+PASS: Cloud texture/tint has at least 0.464 pre-fade alpha (not an in-game visibility measurement)
+PASS: Stomp retains ground impact/cracks and adds its own thick wind ring
+PASS: Both dedicated dodge and block+jump requests are handled before skill-lock filtering
+PASS: Dodge releases native attacks, custom animation graphs and skill movement locks
+PASS: Dodge owns pending MoonlightRoutine work
+PASS: Dodge owns pending MoonlightAscendedRoutine work
+PASS: Dodge owns pending CrescentCleaveRoutine work
+PASS: Dodge owns pending CrescentCleaveWave work
+PASS: Dodge owns pending CrescentFireTrailRoutine work
+PASS: Dodge owns pending JudgementCutRoutine work
+PASS: Dodge owns pending FrenziedChargeRoutine work
+PASS: Dodge owns pending EclipseRoutine work
+PASS: Dodge owns pending EclipseSlashHail work
+PASS: Dodge owns pending HalfmoonRoutine work
+PASS: Dodge owns pending HalfmoonAscendedRoutine work
+PASS: Dodge owns pending HalfmoonTravelingCuts work
+PASS: Dodge owns pending AscendedImpactWaveRoutine work
+PASS: Dodge owns pending FrenzyPoseRoutine work
+PASS: Sword Master base skill HeavySlashRoutine participates in cancellation
+PASS: Sword Master base skill ImpactWaveRoutine participates in cancellation
+PASS: Sword Master base skill ImpactPunchRoutine participates in cancellation
+PASS: Cancelled traveling cuts clean up their generated visuals and wave counters
+PASS: Ascended Heavy Slash selects all three native Battleaxe attacks
+PASS: Each Ascended Heavy Slash strike retains full previous damage
+PASS: Ascended aftershock hit-deduplication resets per shockwave
+PASS: Piercing Arrow pays once and fires three Ascended arrows at 0.2-second intervals
+PASS: Ascended arrows deal 60% each, 180% combined; normal remains one 100% arrow
+PASS: Ascended Piercing Arrow uses native bow_fire without the custom rg_power cast
+Passed 66 static scope checks. Unity rendering/gameplay not exercised.

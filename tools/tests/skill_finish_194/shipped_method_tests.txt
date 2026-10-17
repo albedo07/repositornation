@@ -1,0 +1,13 @@
+PASS: Real cancellation wrapper starts a skill and reaches its pending yield
+PASS: Dodge disposal immediately runs finally cleanup and releases ownership
+PASS: Cancelled work never resumes its delayed attack
+PASS: Repeated cancellation is idempotent
+PASS: Uncancelled work preserves both skill steps and normal cleanup
+PASS: Faulted work cleans up once and cannot run again
+PASS: Cancellation before the first step prevents the entire attack
+PASS: Actual Valheim dodge IL rewrites exactly the attack and stagger gates
+PASS: All native ground, stamina, encumbrance, existing-roll and cost instructions stay intact
+PASS: Dodge cancellation executes before the skill-lock input filter
+PASS: Unrelated methods without dodge gates are unchanged
+PASS: Shipped Halfmoon contact calibration reaches a requested one-second contact on cold and warm timing
+Passed 12 compiled-method checks. Unity gameplay and rendered visuals not exercised.

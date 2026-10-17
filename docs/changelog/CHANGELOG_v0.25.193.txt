@@ -1,0 +1,40 @@
+AETHELBORN ASCENDED v0.25.193 - SPRINT RELOAD & WORLD INPUT
+2026-10-17 (Asia/Manila)
+
+GAMEPLAY / INPUT
+- Bow Master sprinting now intercepts the actual Humanoid.ClearActionQueue call
+  emitted in Player.CheckRun. v192 matched only the Player override and missed it.
+  Only the held crossbow's sole Reload action is retained. Native progress,
+  completion, resource costs, reload-time bonus and saved loaded state are kept.
+  Reload action type/item metadata is cached once instead of resolved each frame.
+- Corrected the same virtual base-slot matching in the existing Acrobat bow
+  sprint exemption (actual operand Character.IsDrawingBow). No new class bonus.
+- Horizon Walker uses vanilla animation while moving and firing. The custom
+  HwLegCycle is no longer added/refreshed; full-speed shooting remains.
+- Arcane Phantom, Arcane Phalanx (single swords and armed full volley), Rift Echo
+  and clone attack queuing require world input. UI clicks do not consume swords
+  or the armed volley. Buff timers and already-started effects keep updating.
+- Shared world-input guard checks native Player.TakeInput (including chat/text
+  entry), visible cursor, game focus, known game/mod menus and mod input blocking.
+  Universal/legacy skill hotkeys and click follow-ups use it as well.
+- Opening a UI during Wizard staff, Meteor Fall, Elemental Cataclysm, Ballista
+  Shot or Explosive Arrow charging cancels the held input instead of treating
+  UI input as a release-to-fire command. It does not refund already-paid costs.
+- Entire Ranger bloodline: no Staves/Wands, including Gun Staves (magic weapons).
+- Entire Sorcerer bloodline: no Bows, Greatbows or Crossbows.
+  Uses the existing equip rejection and periodic gear enforcement. No-class,
+  dagger, shield, armor, axe/tool and Mercenary rules are preserved.
+
+REQUESTED VFX ONLY
+- Added bounded, textured low flames and sparks to existing ground-fire visuals:
+  Crescent Cleave's Ascended trail, Punishing Bomb's Ascended field, Explosive
+  Arrow's field, Angel Comet's burning ring, Meteor Fall, Elemental Cataclysm's
+  fire phase and Flame Burst's scorched ground. Existing bursts/embers retained
+  where they are impact accents rather than burning ground.
+- Blade Storm: added soft, translucent spherical blue/indigo mist behind the
+  existing visible slashes. No solid cage, flash increase or expanding smoke cloud.
+- Ground-fire hosts share a 48-live-host limit; each flame system caps at 120
+  particles and sparks at 24, under existing density/restraint/frame budgets.
+  The mist uses one capped 24-particle system per sphere and cached smoke material.
+- No damage, hitbox, push, tick, cooldown, gameplay RNG or config-default changes.
+  Crescent fire segments retain the existing two-second cap. No terrain editing.

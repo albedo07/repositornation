@@ -1,0 +1,29 @@
+AETHELBORN ASCENDED v0.25.197 - SAVING GRACE AND HOLY RELIC
+Batch one: user items 1-4 only, based on the original v196 ZIP.
+
+1. SAVING GRACE
+- Renamed the Priest death-save/mastery display to Saving Grace in the HUD, Altar, skill-tree display and developer menu. Existing skill, save, status, icon and config IDs are retained.
+- Every recipient uses the same heart icon and Saving Grace Ready/Cooldown name as the Priest.
+- Priest owners now advertise Priest membership through their player ZDO. Other clients use that replicated flag to detect nearby living Priests, instead of trying to read another player's private customData.
+- An active recipient cooldown takes priority over range; leaving the Priest, having the Priest leave, or having no Priest visible does not hide the unexpired timer. Ready is shown only when actually eligible.
+- Presence checks run twice per second using the existing player list. The owner writes network state only when Priest membership changes. Cached field/view lookups replace repeated field discovery and collider/hash-set scans.
+- Existing self/ally cooldown lengths, rescue conditions, 1 HP survival, recovery, stamina and movement bonuses are unchanged. Cooldowns keep their existing in-session time base; this pass does not add save/relog persistence.
+
+2. HOLY RELIC HEART
+- Added raised heart emblems on both front and back, clearing the gold disc/sunburst rather than embedding the rear emblem inside it.
+- Corrected inward-facing triangle winding on the heart and its frame, including their real 3D side walls. This correction is scoped to those heart meshes; general relic detail fixes belong to batch two.
+- Made healing-green pigment more saturated, retaining the existing gold/ivory design and blue accents.
+
+3. DAMAGE-BUFF MIST
+- Increased opacity, billow size, lifetime and bounded emission for the existing attack/support mist used by Ray of Hope, Divine Intervention and Ascended Lightning Relic.
+- Smoke expands and fades over the existing radius, with one particle system capped at 52 particles per cast. Shared materials, particle budget and prewarmed cached growth curve are retained. No lights added.
+- Existing damage, healing, pulse timings and skill durations are unchanged.
+
+4. LIGHTNING ZAP
+- Reversed both the release movement and successive lightning bolts to right-to-left.
+- Five bolts and their 0.04s visual interval are unchanged, along with the CA, cone targeting, damage, cost and cooldown.
+
+DEFERRED AS REQUESTED
+Items 5-8 remain for batch two: other disappearing model details, hammer head/growth, cast-animation completion lock, normal Heavy Slash sweep.
+Items 9-12 remain for batch three: lighter blue Blade Storm cloud, Knight's Guidance adjustment, diagonal second Ascended Heavy Slash, Therzie 2HDW stamina freeze.
+No Anchor promotion. No unrelated skill, animation, combat, equipment or configuration-default changes.

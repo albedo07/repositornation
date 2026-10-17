@@ -1,0 +1,13 @@
+Dated change record - 2026-10-17 (Asia/Manila)
+Original project CLAUDE.md was not provided in the distribution. These entries can be merged into it when the repository is supplied.
+- v195: 3SS means the number of strikes/CA executions. Ascended Heavy Swing remains three full-damage Battleaxe strikes; contact interval is at least 0.7s.
+- v195: Sword Master skills ignore held block; dodge remains the only manual interruption of pending skill work.
+- v195: Crossbow memory follows native events; a cleared loaded field alone is never treated as a shot. Native loaded setter handles network synchronization.
+- v195: Weapon wakes follow actual weapon tips and sampled planes, including permitted matching off-hand weapons.
+- v195: Whirlwind gains wind under its blade; Blade Storm uses dark blue-tinted sphere-shaped smoke, with no barrier mesh. Blade Storm area damage remains from v194.
+- v195: Lightning Zap sweeps left-to-right; ground lightning trails are thinner; Ascended Shield Charge has a wider pressure cone.
+- v195: Relics/hammer use lit, textured surfaces and blue gems; healing heart/blue lightning distinction remains. Hammer echo box removed.
+- v195: Extra skill point lights and Alt+F7 toggle removed, with legacy settings retained but hidden.
+- v195: Header says what a skill does; numeric effects are body rows. Ascension is gated by existing eligibility. Judgement Mark explained. Burn duration stays beside its element.
+- v195: Added missing material/model preparation and model caches; avoid warming during attacks. Cache hotbar labels/owner checks/cooldown text, bolt gradients and cleanse API resolution.
+- v195: v194 archive is preserved by SHA-256. This is an unconfirmed test pass, with no new Anchor declaration.

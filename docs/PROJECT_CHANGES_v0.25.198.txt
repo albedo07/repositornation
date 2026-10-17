@@ -1,0 +1,8 @@
+2026-10-17 (Asia/Manila) - v0.25.198, batch two, based only on original v197.
+Item 5: correct shared extrusion cap winding; retain relic designs/materials/geometry layout and pass-one hearts.
+Item 6: head vertical thickness +50% relative to v197; preserve other hammer styling; restore clone name so existing visual growth finds the model.
+Item 7: gate new/repeated casts through full CA, native follow-through and source fade; preserve internal strikes, charge release, channel/relic cancellation and instant dodge. No normal-attack or movement lock changes.
+Item 8: normal Heavy Slash explicitly keeps its horizontal right-to-left VFX plane.
+Reviewed AA/BepInEx logs; recorded candidate fixes for pass three without mixing them into this pass. Items 9-12 unchanged.
+All ten modules compile under C#5; 78 code/geometry checks and 115 scope checks pass. Actual Unity rendering, CA transitions, multiplayer and FPS remain unverified. No Anchor promotion.
+Original CLAUDE.md and git/release tools were not supplied; this dated journal records the pass without fabricating original project memory.

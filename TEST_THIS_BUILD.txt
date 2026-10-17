@@ -1,8 +1,14 @@
-v0.25.191 VFX Finish - in-game checks (Enhanced VFX on)
-1. Moonlight Splitter: a single crescent per wave (no doubled slash).  Eclipse: one sweeping arc, no rings.
-2. Impact Wave: cracks fork off the main scar.  Whirlwind: dust at the feet.
-3. Angel Comet: no lightning bolt, big fractures + rubble.  Shield Charge: glow on the shield + side streaks.
-4. Barrier (Crucible / DI / Ray of Hope Asc): bursts into shards when broken.  Healing: brief glow on healed allies.
-5. Lightning Tempest: storm canopy clearly visible, bolts come out of it.  Grand Cross: X has depth from the side.
-6. Elemental Cataclysm: elements build while charging; fire, then frost, then lightning.  Clockwork: hands spin back and stop.
-7. Astral Greatblade: bright seams + trail when swinging.  Arrow Rain: arrows visibly fall.  F7 during overlaps.
+v0.25.200 - IN-GAME CHECKLIST
+Install using INSTALL.bat as usual. Separate pass from preserved v199; no Anchor promotion.
+
+1. Whirlwind: normal and Ascended, stationary and moving over flat ground, slopes, uneven rocks and built floors. Wind downwash must stay on the surface. Accepted blade arcs/Ascended tornado remain. Stop/recast, die and leave the skill: downwash should stop. Confirm the previous movement freedom, hit cadence and damage.
+2. Circle Swing: normal and Ascended, first and follow-up hits. Expect a wide, strong wind ring at the attack radius with no slash crescents/streaks. Compare with Stomp; Circle Swing's ring should be thicker/stronger. Ascended ground eruption/debris remain. Check every available CA branch and normal controls.
+3. Fury: observe active Fury, then its recovery cooldown. Only recovery should have three downward chevrons and the orange strip; the seconds timer must remain readable. Confirm normal Fury generation and the original duration/cooldown. Test the HUD scales/resolutions you use.
+4. Holy Wave: with unchanged healing tier, test allies with different maximum HP. Base heal is 20% max HP, then the existing healing-tier factor. Example at 1x healing power: max 100 -> 20; max 250 -> 50. Actual restored HP is capped by missing HP. Check normal, Ascended low-HP bonus, echo and sustained healing, and the tooltip. Test old saved configs; old ImmediateHeal=25 should no longer set the initial heal.
+5. Damaging support effects: Ray of Hope normal/Ascended, Divine Intervention, both Lightning Relics and Sanctified Bloom. Wind should be airy and ring-shaped, visibly colored like each existing radius pulse, with no filled gray cloud. Confirm support effects, damage/DoT and pulse timing remain. Pure healing/buff effects should retain their existing behavior. Test daylight/shade/night and your usual VFX amount settings.
+6. Relics: Goddess Relic normal/Ascended and Holy Relic, from front/back and while circling through oblique angles, close and at combat distance. Sapphires and green heart should sit in the backing without air gaps, disappearing cap fragments or z-fighting. Check the same accepted body colors, green pigment, wings and scale. Judgement Hammer appearance/growth should remain v199's.
+7. Birds: after fresh world load and on later spawns, aim at landed birds with targeted skills; test AoE, cone, wave and projectile skills at valid ranges. Test flying birds where native hitboxes permit and watch for missed targeting/errors. Damage should follow existing creature rules, occur once, and leave normal feathers/drops. Test ordinary bow/weapon hits too, including class utility-axe restrictions. A native bird stays under its ambient flight controller rather than becoming a combat NPC. With two updated clients, test owner/non-owner damage, single death/drop delivery and no missing-RPC errors. Confirm other creatures, tamed creatures, players, structures and trees retain their prior behavior.
+
+REGRESSION: v199 Knight's Guidance (+25% skill damage/90s/600s), paired-weapon exhaustion recovery, diagonal second Ascended Heavy Slash, Blade Storm's thinner blue shell, previous NACC/dodge/block rules, first-cast CA, crossbow sprint reload/save, UI input blocking, Saving Grace, equipment restrictions, cape and hammer growth.
+
+Capture fresh AA and BepInEx logs if any issue remains. No live FPS improvement or full game compatibility is claimed by code checks alone.

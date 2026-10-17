@@ -1,0 +1,806 @@
+--- v0.25.199/AlbedosCustomClasses.Advanced.cs
++++ v0.25.200/AlbedosCustomClasses.Advanced.cs
+@@ -116,7 +116,7 @@
+     {
+         public const string ModGuid = "albedo.customclasses.advanced";
+         public const string ModName = "Aethelborn Ascended - Advancements";
+-        public const string ModVersion = "0.25.199";
++        public const string ModVersion = "0.25.200";
+ 
+         private const string ClassDataKey = "AlbedoCustomClasses.Class";
+         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
+@@ -4176,7 +4176,8 @@
+             }
+             if (_enableVfx.Value)
+             {
+-                StartCoroutine(AnimateRing(p + Vector3.up * 0.08f, 0.5f, r, 0.46f, new Color(1f, 0.52f, 0.18f, 0.95f), 0.16f));
++                if (!DragonVfx.Enabled) StartCoroutine(AnimateRing(p + Vector3.up * 0.08f, 0.5f, r, 0.46f, new Color(1f, 0.52f, 0.18f, 0.95f), 0.16f));
++                DragonCombat.RunVfx(delegate { DragonVfx.WindRing(p, 0.5f, r, 0.65f, new Color(0.82f, 0.86f, 0.9f, 1f), false); });
+                 Vector3 rp = p; float rr = r;
+                 DragonCombat.RunVfx(delegate { DragonVfx.FireBlast(rp, rr); });
+                 DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(rp, DragonVfx.Fire, rr, 1.8f); DragonVfx.Eruption(rp, DragonVfx.Fire, rr * 0.6f, 0f); DragonVfx.Shatter(rp, rr, 0f); });   // v0.25.168 one large eruption, no spikes; v0.25.181 fractures
+@@ -4296,12 +4297,11 @@
+             if (_enableVfx.Value)
+             {
+                 if (!DragonVfx.Enabled) StartCoroutine(AnimateRing(center + Vector3.up * 0.10f, 0.6f, radius, 0.65f, new Color(1f, 0.56f, 0.18f, 1f), 0.20f));   // v0.25.191 (user) no extra ring + flash
+-                StartCoroutine(AnimateHalfmoonArc(center + Vector3.up * 1.0f, FlatForward(player), radius * 0.95f));
+                 Vector3 cc = center; float cr = radius; bool cl = launch;
+                 DragonCombat.RunVfx(delegate
+                 {
++                    DragonVfx.WindRing(cc, 0.5f, cr, 0.65f, new Color(0.82f, 0.86f, 0.9f, 1f), false);
+                     DragonVfx.DustRing(cc, cr);
+-                    DragonVfx.SlashStreaks(cc + Vector3.up * 1f, DragonVfx.Fire, cr * 0.8f, 8, 0.35f);
+                     DragonVfx.Shake(cc, 20f + cr, cl ? 1.2f : 0.6f);
+                     if (cl) DragonVfx.Debris(cc, new Color(0.42f, 0.36f, 0.30f, 1f), 10, 7f, 0.25f, 2f);
+                 });   // v0.25.58
+@@ -4586,7 +4586,7 @@
+                 }
+                 if (_enableVfx.Value && tick % 2 == 0) { Vector3 wp = player.transform.position; float ww = Mathf.Max(0.5f, DragonCombat.M(_whirlwindRadius.Value)); DragonCombat.RunVfx(delegate { DragonVfx.DustRing(wp, ww); DragonVfx.SlashStreaks(wp + Vector3.up * 1f, DragonVfx.Fire, ww, 4, 0.25f); DragonVfx.SlashArc(wp + Vector3.up * 0.9f, UnityEngine.Random.onUnitSphere, ww, 360f, DragonVfx.Fire, ww * 0.2f, 0.35f, UnityEngine.Random.Range(-10f, 10f)); }); }
+                 if (_enableVfx.Value)
+-                    StartCoroutine(AnimateTickRing(player.transform.position + Vector3.up * 0.9f, 0.4f, Mathf.Max(0.5f, DragonCombat.M(_whirlwindRadius.Value)), Mathf.Min(0.32f, interval), new Color(1f, 0.62f, 0.22f, 0.75f), 0.10f));
++                    DragonCombat.RunVfx(delegate { DragonVfx.WindRing(player.transform.position, 0.4f, Mathf.Max(0.5f, DragonCombat.M(_whirlwindRadius.Value)), Mathf.Min(0.32f, interval), new Color(0.77f, 0.82f, 0.86f, 1f), true); });
+                 yield return new WaitForSeconds(interval);
+             }
+             _whirlActive = false;
+@@ -5346,7 +5346,7 @@
+             if (_enableVfx.Value)
+             {
+                 StartCoroutine(AnimateRing(center + Vector3.up * 0.10f, 0.6f, radius, 0.65f, new Color(1f, 0.56f, 0.18f, 1f), 0.20f));
+-                StartCoroutine(AnimateHalfmoonArc(center + Vector3.up * 1.0f, forward, radius * 0.95f));
++                DragonCombat.RunVfx(delegate { DragonVfx.WindRing(center, 0.5f, radius, 0.65f, new Color(0.82f, 0.86f, 0.9f, 1f), false); });
+             }
+         }
+ 
+@@ -5677,7 +5677,7 @@
+                 }
+ 
+                 if (_enableVfx.Value)
+-                    StartCoroutine(AnimateTickRing(player.transform.position + Vector3.up * 0.9f, 0.4f, Mathf.Max(0.5f, DragonCombat.M(_whirlwindRadius.Value)), Mathf.Min(0.32f, interval), new Color(1f, 0.62f, 0.22f, 0.75f), 0.10f));
++                    DragonCombat.RunVfx(delegate { DragonVfx.WindRing(player.transform.position, 0.4f, Mathf.Max(0.5f, DragonCombat.M(_whirlwindRadius.Value)), Mathf.Min(0.32f, interval), new Color(0.77f, 0.82f, 0.86f, 1f), true); });
+ 
+                 yield return new WaitForSeconds(interval);
+             }
+@@ -5826,11 +5826,11 @@
+             IhTorus(root, gold, new Vector3(0f, armY, d * 0.56f), a * 0.95f, t * 0.07f);
+             IhTorus(root, gold, new Vector3(0f, armY, -d * 0.56f), a * 0.95f, t * 0.07f);
+             IhRelicDisc(root, gold, new Vector3(0f, armY, 0f), a * 1.3f, d * 1.14f);
+-            IhRelicDiamond(root, gem, new Vector3(0f, armY, 0f), t * 0.78f, d * 1.65f);
++            IhRelicDiamond(root, gem, new Vector3(0f, armY, 0f), t * 0.78f, d * 1.14f);
+             for (int side = -1; side <= 1; side += 2)
+             {
+-                IhRelicDiamond(root, gem, new Vector3(half * 0.64f * side, armY, 0f), t * 0.38f, d * 1.35f);
+-                IhRelicDiamond(root, gem, new Vector3(0f, Mathf.Lerp(armY, side > 0 ? topY : footY, 0.45f), 0f), t * 0.42f, d * 1.35f);
++                IhRelicDiamond(root, gem, new Vector3(half * 0.64f * side, armY, 0f), t * 0.38f, d * 1.12f);
++                IhRelicDiamond(root, gem, new Vector3(0f, Mathf.Lerp(armY, side > 0 ? topY : footY, 0.45f), 0f), t * 0.42f, d * 1.12f);
+             }
+             // the heavy gold ring with an ivory band on each face and filigree scroll curls at the diagonals
+             float rr = Mathf.Clamp(width * 0.3f, t * 2.2f, height * 0.3f);
+@@ -5963,12 +5963,12 @@
+ 
+         private void IhRelicDiamond(Transform root, Material m, Vector3 pos, float size, float depth)
+         {
+-            string key = "gem196|" + size.ToString("R") + "|" + depth.ToString("R");
+-            Mesh mesh = IhRelicMesh(key, delegate { return DragonVfx.RelicDiamondMesh(size, depth * 0.28f); });
+-            if (Mathf.Abs(pos.z) > 0.001f) { IhRelicMeshObject(root, mesh, m, pos); return; }
+-            // Mount the gemstone on both visible faces, rather than burying most of it in the shaft.
+-            IhRelicMeshObject(root, mesh, m, pos + Vector3.forward * (depth * 0.5f));
+-            IhRelicMeshObject(root, mesh, m, pos - Vector3.forward * (depth * 0.5f));
++            string key = "gem200|" + size.ToString("R") + "|" + depth.ToString("R");
++            Mesh mesh = IhRelicMesh(key, delegate { return DragonVfx.ExtrudeBevel(DragonVfx.InsetGemOutline(size), depth * 0.12f, depth * 0.025f, 1f); });
++            // The rear half of each closed gem is inside its backing. The front facets sit just above it.
++            float seat = depth * 0.49f;
++            IhRelicMeshObject(root, mesh, m, pos + Vector3.forward * seat);
++            IhRelicMeshObject(root, mesh, m, pos - Vector3.forward * seat);
+         }
+ 
+         private void IhRelicDisc(Transform root, Material m, Vector3 pos, float diameter, float depth)
+@@ -6198,17 +6198,13 @@
+             Mesh burst = IhRelicMesh(k + "|burst", delegate { return DragonVfx.ExtrudeBevel(DragonVfx.StarOutline(16, hs * 0.6f, hs * 0.86f), t * 0.4f, t * 0.06f, 1f); });
+             IhRelicMeshObject(root, burst, gold, new Vector3(0f, hy, -t * 0.3f));
+             IhRelicDisc(root, gold, new Vector3(0f, hy, -t * 0.12f), hs * 1.25f, t * 0.55f);
+-            // Two raised, closed heart faces clear the backing disc/sunburst on both sides.
+-            // Correct the face winding only on these heart meshes; other relic designs are a later batch.
+-            Mesh heartFrame = IhRelicMesh(k + "|hframe197", delegate { return DragonVfx.RelicHeartMesh(IhHeartOutline(hs * 1.18f), t * 0.22f, hs * 0.05f); });
+-            Mesh heart = IhRelicMesh(k + "|heart197", delegate { return DragonVfx.RelicHeartMesh(IhHeartOutline(hs * 0.9f), t * 0.32f, hs * 0.06f); });
+-            for (int side = 0; side < 2; side++)
+-            {
+-                Vector3 face = hp + Vector3.forward * DragonVfx.HolyHeartFaceDepth(t, side == 0);
+-                IhRelicMeshObject(root, heartFrame, gold, face);
+-                IhRelicMeshObject(root, heart, green, face + new Vector3(0f, -hs * 0.03f, 0f));
+-            }
+-            IhRelicDiamond(root, blue, new Vector3(0f, hy - hs * 0.04f, 0f), hs * 0.12f, t * 1.25f);
++            // One through-backing heart insert has a visible front and back, without floating plates.
++            float front = DragonVfx.HolyHeartFaceDepth(t, true), back = DragonVfx.HolyHeartFaceDepth(t, false);
++            float heartDepth = front - back;
++            Mesh heart = IhRelicMesh(k + "|heart200", delegate { return DragonVfx.RelicHeartMesh(IhHeartOutline(hs * 0.9f), heartDepth, hs * 0.04f); });
++            Vector3 seat = hp + Vector3.forward * ((front + back) * 0.5f);
++            IhRelicMeshObject(root, heart, green, seat + new Vector3(0f, -hs * 0.03f, 0f));
++            IhRelicDiamond(root, blue, new Vector3(0f, hy - hs * 0.04f, seat.z), hs * 0.12f, heartDepth);
+             // top spike + green crystal
+             IhRelicLathe(root, k + "|topspike", IhProf(0f, Y[12], 0.65f * R, Y[11], 0.32f * R, Y[8], 0f, Y[8]), 12, gold);
+             IhRelicLathe(root, k + "|crystal", IhProf(0f, Y[9], 0.8f * R, Y[5], 0f, Y[0]), 4, green);
+@@ -6361,7 +6357,7 @@
+                 if (ascended) StartCoroutine(RayHopeBurn(player, enemies[i]));   // v0.25.78 Fire + Spirit, stronger stacking
+             }
+             if (_enableVfx.Value) StartCoroutine(AnimateSoftRing(player.transform.position + Vector3.up * 0.12f, 0.6f, radius, 0.8f, new Color(1f, 0.93f, 0.52f, 0.95f), 0.11f));
+-            if (_enableVfx.Value) { Vector3 fog = player.transform.position; DragonCombat.RunVfx(delegate { DragonVfx.DamageBuffMist(fog, radius, new Color(0.85f, 0.70f, 0.46f, 1f)); }); }
++            if (_enableVfx.Value) { Vector3 fog = player.transform.position; DragonCombat.RunVfx(delegate { DragonVfx.DamageBuffMist(fog, radius, new Color(1f, 0.93f, 0.52f, 1f)); }); }
+         }
+ 
+         // v0.25.78 Ascended Ray of Hope: Fire + Spirit Burn for 8s; every tick stacks harder than the universal ramp.
+@@ -8033,7 +8029,7 @@
+                 SetCrossPhysical(cross, true);
+             }
+             if (_enableVfx.Value) IhCrossImpactVfx(target, Mathf.Max(2f, radius * 0.6f), crossHeight, 0.8f);   // v0.25.57
+-            if (ascended && _enableVfx.Value) { Vector3 fog = target; DragonCombat.RunVfx(delegate { DragonVfx.DamageBuffMist(fog, radius, DragonVfx.Storm); }); }
++            if (_enableVfx.Value) { Vector3 fog = target; DragonCombat.RunVfx(delegate { DragonVfx.DamageBuffMist(fog, radius, new Color(0.45f, 0.70f, 1f, 1f)); }); }
+ 
+             PriestRelicState relic = RegisterPriestRelic(
+                 cross,
+@@ -8335,7 +8331,7 @@
+                 Vector3 diC = center; float diR = radius;
+                 DragonCombat.RunVfx(delegate
+                 {
+-                    DragonVfx.DamageBuffMist(diC, diR, DragonVfx.HolyWhite);
++                    DragonVfx.DamageBuffMist(diC, diR, new Color(1f, 0.92f, 0.48f, 1f));
+                     DragonVfx.Feathers(diC, DragonVfx.HolyWhite, diR * 0.7f, 2.5f, 45f);
+                     // v0.25.191 (user): a focused ivory-gold burst from the source + soft upward healing strands
+                     DragonVfx.Burst(diC + Vector3.up * 1f, new Color(1f, 0.92f, 0.62f, 0.95f), 30, 5f, 0.18f, 0.45f, 0f);
+@@ -12856,7 +12852,11 @@
+                 for (int i = 0; i < enemies.Count; i++)
+                     DealDamageScaled(caster, enemies[i], _bloomDamage, 1f, 6f, false, "holy_relic", "Sanctified Bloom", false, false, null);
+                 if (_enableVfx.Value)
++                {
+                     StartCoroutine(AnimateSoftRing(ally.transform.position + Vector3.up * 0.1f, 0.3f, r, 0.35f, new Color(1f, 0.95f, 0.65f, 0.95f), 0.10f));
++                    Vector3 bloomPoint = ally.transform.position;
++                    DragonCombat.RunVfx(delegate { DragonVfx.DamageBuffMist(bloomPoint, r, new Color(1f, 0.95f, 0.65f, 1f)); });
++                }
+                 return;
+             }
+             _sanctifiedUntil[id] = Time.time + Mathf.Max(0.5f, _sanctifiedDuration.Value);
+@@ -12888,7 +12888,7 @@
+         {
+             const string sk = "albedo.customclasses.skills";
+             float power = IhHealPower(player, "holy_wave");
+-            float instant = IhCfg(sk, "Cleric.Holy Wave", "ImmediateHeal", 25f) * power;
++            float instant = IhCfg(sk, "Cleric.Holy Wave", "ImmediateHealPercent_v025200", 20f) * power;
+             float perSecond = IhCfg(sk, "Cleric.Holy Wave", "HealPercentPerSecond", 5f) * power;
+             float duration = IhCfg(sk, "Cleric.Holy Wave", "Duration", 6f);
+             // Aim at an ally (within range) to centre the wave on them; otherwise on yourself.
+@@ -12902,7 +12902,8 @@
+             {
+                 Player ally = allies[i];
+                 bool low = ally.GetHealth() < ally.GetMaxHealth() * Mathf.Max(0f, _ahwLowHp.Value) / 100f;
+-                Heal(ally, low ? instant * 2f : instant);
++                float immediate = DragonCombat.PercentMaxHeal(ally.GetMaxHealth(), instant, 1f);
++                Heal(ally, low ? immediate * 2f : immediate);
+                 StartCoroutine(IhHealOverTime(ally, perSecond, duration));
+                 IhSanctify(player, ally);
+             }
+@@ -12917,7 +12918,7 @@
+                 StartCoroutine(AnimateSoftRing(center + Vector3.up * 0.08f, 0.4f, echoRadius, 0.45f, new Color(0.62f, 1f, 0.70f, 0.80f), 0.09f));
+             allies = IhAlliesInRadius(player, center, echoRadius);
+             for (int i = 0; i < allies.Count; i++)
+-                Heal(allies[i], echo);
++                Heal(allies[i], DragonCombat.PercentMaxHeal(allies[i].GetMaxHealth(), echo, 1f));
+         }
+ 
+         private Player IhAimedAlly(Player caster, float range)
+@@ -13978,7 +13979,7 @@
+                 case "holy_wave":
+                     if (ascended && IhIsPriest(player))
+                         b.Append(IhLine("Ascended", IhPriestAscendedSummary("holy_wave")));
+-                    b.Append(IhLine("Healing", IhNum(IhCfg(sk, "Cleric.Holy Wave", "ImmediateHeal", 25f) * power) + " HP"));
++                    b.Append(IhLine("Healing", IhNum(IhCfg(sk, "Cleric.Holy Wave", "ImmediateHealPercent_v025200", 20f) * power) + "% of Total HP immediately"));
+                     b.Append(IhLine("Regeneration", IhNum(IhCfg(sk, "Cleric.Holy Wave", "HealPercentPerSecond", 5f) * power) + "% of Total HP per second"));
+                     b.Append(IhLine("Duration", IhNum(IhCfg(sk, "Cleric.Holy Wave", "Duration", 6f)) + "s"));
+                     b.Append(IhLine("Radius", IhNum(IhCfg(sk, "Cleric.Holy Wave", "Radius", 7f)) + "m"));
+@@ -16968,7 +16969,8 @@
+                     IhHudFill(new Rect(ir.x, ir.y, 1f, ir.height), edge);
+                     IhHudFill(new Rect(ir.xMax - 1f, ir.y, 1f, ir.height), edge);
+                     IhDrawSprite(new Rect(ir.x + 3f * s, ir.y + 3f * s, ir.width - 6f * s, ir.height - 6f * s), se.m_icon);
+-                    IhHudFill(new Rect(ir.x, ir.yMax + 1f, ir.width, 2f * s), new Color(0.30f, 0.78f, 0.30f, 1f));
++                    if (se.CooldownMarker) IhDrawCooldownChevrons(ir, s);
++                    IhHudFill(new Rect(ir.x, ir.yMax + 1f, ir.width, 2f * s), se.CooldownMarker ? new Color(0.9f, 0.42f, 0.18f, 1f) : new Color(0.30f, 0.78f, 0.30f, 1f));
+                     // v0.25.8: stacks (e.g. Barrier HP) on the icon AND the timer underneath.
+                     string timer = se.m_ttl > 0f ? Mathf.CeilToInt(se.Remaining()).ToString() + "s" : "";
+                     if (se.Stacks > 0 && timer.Length > 0)
+@@ -17082,6 +17084,19 @@
+             finally { GUI.matrix = hudM0; }
+         }
+ 
++        private void IhDrawCooldownChevrons(Rect icon, float scale)
++        {
++            Color color = new Color(1f, 0.82f, 0.42f, 1f);
++            float width = icon.width * 0.38f, left = icon.xMax - width - scale;
++            for (int row = 0; row < 3; row++)
++                for (int step = 0; step < 5; step++)
++                {
++                    float x = left + width * step / 5f;
++                    float y = icon.y + scale + row * 5f * scale + (2f - Mathf.Abs(step - 2f)) * 1.2f * scale;
++                    IhHudFill(new Rect(x, y, width / 5f + 0.5f * scale, 1.8f * scale), color);
++                }
++        }
++
+         private bool _ttShow;
+         private Rect _ttRect;
+         private string _ttTitle = "", _ttBody = "";
+@@ -17618,7 +17633,7 @@
+             new ReferenceNodeUi("righteous_strike", new Rect(151f, 287f, 98f, 105f), new Rect(167f, 290f, 69f, 69f), "1", TreeNodeKind.Ascended, true, 7,
+                 "ATTACK - RIGHTEOUS STRIKE", "Paladin's Ascended Class skill. Permanent on the hotbar after Advancement."),
+             new ReferenceNodeUi("holy_wave", new Rect(151f, 413f, 98f, 105f), new Rect(167f, 416f, 69f, 69f), "6", TreeNodeKind.Buff, false, 7,
+-                "BUFF - HOLY WAVE", "7m pulse: heal 25 HP immediately, then 5% Total HP per second for 6 seconds."),
++                "BUFF - HOLY WAVE", "7m pulse: heal 20% of each ally's maximum HP immediately, then 5% per second for 6 seconds. Healing tiers still apply."),
+ 
+             new ReferenceNodeUi("goddess_relic", new Rect(357f, 151f, 103f, 105f), new Rect(369f, 158f, 70f, 72f), "2", TreeNodeKind.Signature, true, 5,
+                 "ATTACK - GODDESS RELIC", "Paladin Signature Skill. Mandatory numbered hotbar skill."),
+@@ -20302,7 +20317,7 @@
+             {
+                 DrawBookCard(new Rect(30f, 105f, 440f, 90f), "Lightning Zap", "M4 + 1", "Instant 10m Ghost cone. Pierce + Lightning and inflicts Zap.");
+                 DrawBookCard(new Rect(30f, 202f, 440f, 90f), "Righteous Strike", "M4 + 2", "0.7s Ground PAC Sky Summon. Blunt + Lightning, 5m AoE, inflicts Expose.");
+-                DrawBookCard(new Rect(30f, 299f, 440f, 90f), "Holy Wave", "M4 + 3", "Instant 7m wave: 25 HP now + 5% max HP/sec for 6s. VFX pulses once.");
++                DrawBookCard(new Rect(30f, 299f, 440f, 90f), "Holy Wave", "M4 + 3", "Instant 7m wave: 20% max HP now + 5% max HP/sec for 6s, before healing tiers. VFX pulses once.");
+                 DrawBookCard(new Rect(30f, 396f, 440f, 72f), "Cleric Blessings", "PASSIVE", "Shield Weapon Mastery: every Shield gets 1.5x Block Force + Block Power. Divine Duality: wield a Staff + Shield together.");
+             }
+             else if (className == "Sorcerer")
+--- v0.25.199/AlbedosCustomClasses.Skills.cs
++++ v0.25.200/AlbedosCustomClasses.Skills.cs
+@@ -232,7 +232,7 @@
+         public static SkillsPlugin Instance;
+         public const string ModGuid = "albedo.customclasses.skills";
+         public const string ModName = "Aethelborn Ascended - Starter Skills";
+-        public const string ModVersion = "0.25.198";
++        public const string ModVersion = "0.25.200";
+ 
+         private const string ClassDataKey = "AlbedoCustomClasses.Class";
+         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";
+@@ -384,7 +384,7 @@
+             _holyCooldown = Config.Bind("Cleric.Holy Wave", "Cooldown", 8f, "Seconds.");
+             _holyStamina = Config.Bind("Cleric.Holy Wave", "StaminaCost", 25f, "Stamina cost.");
+             _holyRadius = Config.Bind("Cleric.Holy Wave", "Radius", 7f, "Framework healing radius: literal 7m.");
+-            _holyImmediate = Config.Bind("Cleric.Holy Wave", "ImmediateHeal", 25f, "Framework immediate HP heal.");
++            _holyImmediate = Config.Bind("Cleric.Holy Wave", "ImmediateHealPercent_v025200", 20f, "Immediately heal this percent of each recipient's maximum HP, before the existing healing tier bonus.");
+             _holyPercent = Config.Bind("Cleric.Holy Wave", "HealPercentPerSecond", 5f, "Percent max HP healed each second.");
+             _holyDuration = Config.Bind("Cleric.Holy Wave", "Duration", 6f, "Heal-over-time duration.");
+ 
+@@ -957,7 +957,7 @@
+             }
+ 
+             float holyPower = DragonCombat.GetSkillHealPower(caster, "holy_wave");   // v0.25.164 healing Tier curve
+-            HealPlayers(caster.transform.position, DragonCombat.M(_holyRadius.Value), _holyImmediate.Value * holyPower);
++            HealPlayersPercent(caster.transform.position, DragonCombat.M(_holyRadius.Value), _holyImmediate.Value * holyPower);
+ 
+             int ticks = Mathf.Max(1, Mathf.RoundToInt(Mathf.Max(1f, _holyDuration.Value)));
+             DragonCombat.ShowStatus(caster, "holy_wave_area", "heart", "Holy Wave", ticks, 0,
+@@ -1238,7 +1238,7 @@
+             StartCoroutine(AnimateRing(end + Vector3.up * 0.08f, 0.2f, Mathf.Max(0.4f, radius), 0.30f, new Color(0.55f, 0.84f, 1f, 0.92f), 0.07f, 0f));
+         }
+ 
+-        private void HealPlayers(Vector3 center, float radius, float amount)
++        private void HealPlayersPercent(Vector3 center, float radius, float percent)
+         {
+             radius = Mathf.Max(0.1f, radius);
+             Collider[] hits = Physics.OverlapSphere(center, radius);
+@@ -1251,7 +1251,7 @@
+                     continue;
+ 
+                 healed.Add(ally);
+-                Heal(ally, amount);
++                Heal(ally, DragonCombat.PercentMaxHeal(ally.GetMaxHealth(), percent, 1f));
+                 if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.Heal(ally, DragonVfx.Holy); });
+             }
+         }
+--- /dev/null
++++ v0.25.200/CHANGELOG_v0.25.200.txt
+@@ -0,0 +1,40 @@
++AETHELBORN ASCENDED v0.25.200 - WIND RINGS AND BIRD TARGETS
++2026-10-18 (Asia/Manila). Separate pass based only on the original v199 ZIP.
++
++1. WHIRLWIND
++- Moved under-blade wind from its elevated rotating child into repeated terrain-grounded downwash rings, like helicopter downwash. Existing blade crescents and Ascended tornado remain.
++- Both normal/Ascended repeating pulse rings use ground placement. Downwash follows the player by issuing new pulses at the current ground location and stops when its owner dies, channel ends or visual parent is removed. No changes to movement, CA, hit radius, tick timing, pulls or damage.
++
++2. CIRCLE SWING
++- Replaced the common hit's halfmoon/slash streaks with a broad wind ring. The strong ring has a wider band and higher opacity than Stomp's existing wind ring.
++- Includes normal/Ascended hits, the existing animation branches, the legacy fallback and the Ascended eruption's ring. Existing eruption/debris and hit logic remain. Stomp itself is unchanged.
++
++3. FURY COOLDOWN
++- Fury Recovery's icon now has three downward chevrons. Its small strip is orange during recovery; active Fury retains its normal icon/strip.
++- Existing seconds countdown remains visible below the icon. No changes to Fury generation, duration or cooldown.
++
++4. HOLY WAVE
++- Initial healing now uses 20% of EACH recipient's maximum HP as its base, replacing flat 25 HP. Existing healing tier bonuses still apply.
++- Normal and Ascended healing, the Ascended low-HP double heal and percentage-scaled echo use the recipient's max HP. Sustained healing, radius, duration, resource cost and cooldown remain as before.
++- New ImmediateHealPercent_v025200 config key defaults to 20, so old saved flat values cannot be misread as percentages. Updated dynamic and legacy tooltip text. Example before tiers: 100 max HP -> 20 heal; 250 max HP -> 50 heal.
++
++5. DAMAGING SUPPORT WIND
++- DamageBuffMist is now airy annular airflow with an open center, rather than a gray volume filling the area. A ground wind ring supplies visible motion; sparse smoke wisps remain around its perimeter.
++- RGB matches each existing radius pulse: Ray of Hope gold, Divine Intervention gold, Lightning Relic blue, Sanctified Bloom pale gold. Lightning Relic gets the cast effect in both versions; Bloom emits it when it actually triggers damage. Existing support pulse rings remain.
++- Particle cap is 28, textures/materials are cached and both wind textures join the existing prewarm. Damage, buff strength, DoT and pulse timing are unchanged.
++
++6. EMBEDDED RELIC INLAYS
++- Goddess Relic sapphires now use shallow, closed beveled diamond inserts. Their rear halves intersect the actual cross/seal backing instead of sitting on the large old mounting offsets. Front and back inserts remain.
++- Holy Relic now has one green heart extending through its backing, with caps just outside the two backing surfaces. Removed the two raised heart plates/frames. Its small blue accent is seated into this backing too. Existing green pigment, gold, wings and accepted overall shapes remain.
++- Found a specific heart geometry defect in managed geometry tests: inward miter offsets fold/self-intersect near the heart cusp; one tested bevel also produces incomplete caps. Heart-specific flat cap construction now retains the original outline, with no self-intersections and complete front/back coverage. Shared extrusion, other models and the hammer are unchanged.
++- Closed cap geometry is checked statically. Rendering/occlusion/material behavior from actual camera angles still requires game testing.
++
++7. BIRDS AS SKILL TARGETS
++- Native ambient birds use RandomFlyingBird + Destructible, while AA skills search Character components. Added a disabled Character-compatible target/damage adapter to birds with native destructibles.
++- Attached once at bird spawn or from the existing bird registry. Existing Character-based targeting, range tests and damage helpers can now recognize them without edits across every skill/class.
++- Adapter never runs Character.Awake or movement updates, adds no colliders/Rigidbody, and does not replace the bird's native damage RPC. Target bounds/velocity queries have bird-only hooks; ordinary creatures retain their native methods.
++- AA skill hits use existing creature damage rules then native Destructible damage/RPC handling. Native weapon hits on adapted birds enter the same creature rules. A per-bird finally-protected guard prevents recursion/double damage. Native health, resistance handling, drops and destruction remain with Valheim.
++- Ambient birds do not acquire a combat NPC stagger controller; bird-only stagger calls are skipped instead of invoking an unregistered Character RPC. Native flight remains in control. Confirm flight/landed targeting, multiplayer, drops and absence of errors in game.
++
++PRESERVED
++All 185 original art/animation assets and seven unrelated source modules are byte-identical. Prior v199 fixes, NACC/dodge/block behavior, CAs, crossbow state/reload, equipment/class rules, hotbar, cape, Blade Storm and hammer behavior remain. No new point lights or terrain modification. No Anchor promotion.
+--- v0.25.199/DragonsAltar.CombatRuntime.cs
++++ v0.25.200/DragonsAltar.CombatRuntime.cs
+@@ -26,7 +26,7 @@
+     {
+         public const string ModGuid = "albedo.customclasses.combatruntime";
+         public const string ModName = "Aethelborn Ascended - Combat Runtime";
+-        public const string ModVersion = "0.25.199";
++        public const string ModVersion = "0.25.200";
+ 
+         internal static DragonCombatPlugin Instance;
+ 
+@@ -598,6 +598,7 @@
+             count += PatchInterruptMethod("AddStaggerDamage");
+             count += PatchInterruptMethod("ApplyPushback");
+             count += PatchDamageMethods();
++            count += PatchBirdTargets();
+             count += PatchAnimationSpeed();
+             // v0.25.192: current Valheim renamed this hook; keep the legacy fallback, never apply twice.
+             int moveHooks = PatchFloatRefSEMan("ApplyStatusEffectSpeedMods", "SpeedPrefix");
+@@ -729,6 +730,63 @@
+             }
+ 
+             return count;
++        }
++
++        private int PatchBirdTargets()
++        {
++            BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
++            PatchWithHarmony(typeof(RandomFlyingBird).GetMethod("Awake", flags), null,
++                new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("BirdAwakePostfix", BindingFlags.Static | BindingFlags.NonPublic)));
++            PatchWithHarmony(typeof(Destructible).GetMethod("Damage", flags, null, new Type[] { typeof(HitData) }, null),
++                new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("BirdDestructiblePrefix", BindingFlags.Static | BindingFlags.NonPublic)), null);
++            int count = 2;
++            string[] vectors = { "GetCenterPoint", "GetTopPoint", "GetHeadPoint", "GetEyePoint", "GetVelocity" };
++            string[] floats = { "GetRadius", "GetHeight", "GetMass" };
++            HarmonyMethod vector = new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("BirdVectorPrefix", BindingFlags.Static | BindingFlags.NonPublic));
++            HarmonyMethod number = new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("BirdFloatPrefix", BindingFlags.Static | BindingFlags.NonPublic));
++            for (int i = 0; i < vectors.Length; i++)
++            { MethodInfo method = typeof(Character).GetMethod(vectors[i], flags); if (method != null) { PatchWithHarmony(method, vector, null); count++; } }
++            for (int i = 0; i < floats.Length; i++)
++            { MethodInfo method = typeof(Character).GetMethod(floats[i], flags); if (method != null) { PatchWithHarmony(method, number, null); count++; } }
++            MethodInfo stagger = typeof(Character).GetMethod("Stagger", flags, null, new Type[] { typeof(Vector3) }, null);
++            if (stagger != null) { PatchWithHarmony(stagger, new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("BirdStaggerPrefix", BindingFlags.Static | BindingFlags.NonPublic)), null); count++; }
++            // Existing scene birds are handled once; future spawns use Awake. Never scan the world every frame.
++            for (int i = 0; i < RandomFlyingBird.Instances.Count; i++)
++                DragonBirdTarget.Attach(RandomFlyingBird.Instances[i] as RandomFlyingBird);
++            return count;
++        }
++        private static void BirdAwakePostfix(RandomFlyingBird __instance) { DragonBirdTarget.Attach(__instance); }
++        private static bool BirdDestructiblePrefix(Destructible __instance, HitData __0)
++        {
++            DragonBirdTarget bird = __instance.GetComponent<DragonBirdTarget>();
++            if (bird == null || bird.Forwarding) return true;
++            // Native weapon hits use the same creature rules too; ReceiveSkillHit guards the return path.
++            bird.Damage(__0);
++            return false;
++        }
++        private static bool BirdVectorPrefix(Character __instance, MethodBase __originalMethod, ref Vector3 __result)
++        {
++            DragonBirdTarget bird = __instance as DragonBirdTarget;
++            if (bird == null) return true;
++            Bounds bounds = bird.TargetBounds();
++            if (__originalMethod.Name == "GetVelocity") __result = bird.FlightVelocity();
++            else if (__originalMethod.Name == "GetCenterPoint") __result = bounds.center;
++            else __result = bounds.center + Vector3.up * bounds.extents.y;
++            return false;
++        }
++        private static bool BirdFloatPrefix(Character __instance, MethodBase __originalMethod, ref float __result)
++        {
++            DragonBirdTarget bird = __instance as DragonBirdTarget;
++            if (bird == null) return true;
++            Bounds bounds = bird.TargetBounds();
++            __result = __originalMethod.Name == "GetHeight" ? Mathf.Max(0.1f, bounds.size.y) :
++                __originalMethod.Name == "GetRadius" ? Mathf.Max(0.05f, Mathf.Max(bounds.extents.x, bounds.extents.z)) : 0.1f;
++            return false;
++        }
++        private static bool BirdStaggerPrefix(Character __instance)
++        {
++            // Ambient birds have no Character stagger RPC or combat animator. Native destruction handles their hits.
++            return !(__instance is DragonBirdTarget);
+         }
+ 
+         private int PatchDamageMethods()
+@@ -2431,14 +2489,18 @@
+             catch (Exception) { return true; }
+         }
+ 
+-        private static void DamagePrefix(Character __instance, object[] __args, ref DamagePatchState __state)
++        private static bool DamagePrefix(Character __instance, object[] __args, ref DamagePatchState __state)
+         {
+             __state = default(DamagePatchState);
+             if (__instance == null || __args == null || __args.Length < 1 || !(__args[0] is HitData))
+-                return;
++                return true;
+ 
+             HitData hit = (HitData)__args[0];
+             __state = DragonCombat.BeginDamage(__instance, hit);
++            DragonBirdTarget bird = __instance as DragonBirdTarget;
++            if (bird == null) return true;
++            bird.ReceiveSkillHit(hit);
++            return false;
+         }
+ 
+         private static void DamagePostfix(Character __instance, DamagePatchState __state)
+@@ -2879,6 +2941,72 @@
+     {
+         public bool RestoreModifiers;
+         public HitData.DamageModifiers OriginalModifiers;
++    }
++
++    // A disabled query/damage adapter only. Never runs Character.Awake, replaces native damage RPCs,
++    // joins Character update lists, adds colliders/rigidbodies, or changes the bird's native flight/drops.
++    public class DragonBirdTarget : Character
++    {
++        private RandomFlyingBird _bird;
++        private Destructible _damageable;
++        private Collider[] _birdColliders;
++        private bool _forwarding;
++        public bool Forwarding { get { return _forwarding; } }
++        public static void Attach(RandomFlyingBird bird)
++        {
++            if (bird == null || bird.GetComponent<Character>() != null || bird.GetComponent<Destructible>() == null) return;
++            ZNetView view = bird.GetComponent<ZNetView>();
++            if (view == null || !view.IsValid()) return;
++            bird.gameObject.AddComponent<DragonBirdTarget>();
++        }
++        protected override void Awake()
++        {
++            enabled = false;
++            _bird = GetComponent<RandomFlyingBird>();
++            _damageable = GetComponent<Destructible>();
++            m_nview = GetComponent<ZNetView>();
++            m_body = GetComponent<Rigidbody>();
++            m_collider = GetComponent<CapsuleCollider>();
++            m_visual = gameObject; m_head = transform;
++            m_name = _bird != null ? _bird.name.Replace("(Clone)", "") : "Bird";
++            m_health = _damageable != null ? _damageable.m_health : 1f;
++            _birdColliders = GetComponentsInChildren<Collider>(true);
++            m_seman = new SEMan(this, m_nview);
++        }
++        protected override void OnEnable() { }
++        protected override void OnDisable() { }
++        protected override void Start() { }
++        private void OnCollisionStay(Collision collision) { }
++        protected override void OnDestroy() { if (m_seman != null) m_seman.OnDestroy(); }
++        public override bool IsDead()
++        {
++            return _bird == null || _damageable == null || m_nview == null || !m_nview.IsValid();
++        }
++        public override string GetHoverName() { return m_name; }
++        public Bounds TargetBounds()
++        {
++            Bounds bounds = new Bounds(transform.position, Vector3.one * 0.2f);
++            bool found = false;
++            for (int i = 0; _birdColliders != null && i < _birdColliders.Length; i++)
++            {
++                Collider collider = _birdColliders[i];
++                if (collider == null || !collider.enabled || !collider.gameObject.activeInHierarchy) continue;
++                if (!found) { bounds = collider.bounds; found = true; } else bounds.Encapsulate(collider.bounds);
++            }
++            return bounds;
++        }
++        public Vector3 FlightVelocity()
++        {
++            return _bird != null && _bird.m_flyingModel != null && _bird.m_flyingModel.activeInHierarchy
++                ? transform.forward * _bird.m_speed : Vector3.zero;
++        }
++        public void ReceiveSkillHit(HitData hit)
++        {
++            if (IsDead() || hit == null || _forwarding) return;
++            _forwarding = true;
++            try { _damageable.Damage(hit); }
++            finally { _forwarding = false; }
++        }
+     }
+ 
+     internal class TimedBuffState
+@@ -7674,6 +7802,7 @@
+                 se.Stacks = stacks;
+                 se.Detail = detail;
+                 se.m_icon = StatusSprite(icon);
++                se.CooldownMarker = key == "fury_recovery";
+                 MethodInfo[] methods = seman.GetType().GetMethods(BindingFlags.Instance | BindingFlags.Public);
+                 for (int i = 0; i < methods.Length; i++)
+                 {
+@@ -7874,6 +8003,11 @@
+             if (SkillHealPowerProvider == null || player == null || string.IsNullOrEmpty(skillId)) return GetSkillPower(player, skillId);
+             try { return Mathf.Max(0f, SkillHealPowerProvider(player, skillId)); }
+             catch { return 1f; }
++        }
++
++        public static float PercentMaxHeal(float maximumHp, float percent, float tierPower)
++        {
++            return Mathf.Max(0f, maximumHp) * Mathf.Max(0f, percent) / 100f * Mathf.Max(0f, tierPower);
+         }
+ 
+         public static float GetSkillPower(Player player, string skillId)
+@@ -9496,6 +9630,7 @@
+ 
+         public static bool IsSmallEnemy(Character target)
+         {
++            if (target is DragonBirdTarget) return !target.IsDead();
+             if (target == null || target.IsDead() || target.IsBoss())
+                 return false;
+ 
+@@ -13034,6 +13169,7 @@
+     public class IhStatusDisplay : StatusEffect
+     {
+         public int Stacks;
++        public bool CooldownMarker;
+         // v0.25.34 hover tooltip: first line = buff type ("Attack Buff"...), then the numbers; {stacks} = Stacks.
+         public string Detail;
+ 
+@@ -13376,6 +13512,24 @@
+ 
+     // v0.25.59 VFX skin: a crescent ribbon of light that sweeps left -> right through an arc and fades
+     // (the visible blade trail of every slash skill).
++    public class DragonGroundWind : MonoBehaviour
++    {
++        public Transform Follow;
++        public Player Owner;
++        public float Radius, Life;
++        public Color Tint;
++        private float _age, _pulseAt;
++        private void Update()
++        {
++            _age += Time.deltaTime;
++            if (Follow == null || _age >= Life || (Owner != null && (Owner.IsDead() || !DragonCombat.IsWhirlwindActive(Owner))))
++            { Destroy(gameObject); return; }
++            if (Time.time < _pulseAt) return;
++            _pulseAt = Time.time + 0.24f;
++            DragonVfx.WindRing(Follow.position, Mathf.Max(0.4f, Radius * 0.6f), Radius, 0.55f, Tint, false);
++        }
++    }
++
+     public class DragonSlashArc : MonoBehaviour
+     {
+         public float Radius = 3f, Arc = 150f, Width = 0.8f, Sweep = 0.16f, Life = 0.5f, Age;
+@@ -14088,7 +14242,7 @@
+                     case 26: ClearMat(); break;
+                     case 27: DarkCoreMat(); break;
+                     case 28: WindVeilMat(); break;
+-                    case 29: Mat(SlashTex(), false); Mat(LineTex(), true); Mat(CrackTex(), false); Mat(SmokeTex(), false); Mat(StreakTex(), false); CloudPuffSize(); DamageBuffMistSize(); break;
++                    case 29: Mat(SlashTex(), false); Mat(LineTex(), true); Mat(CrackTex(), false); Mat(SmokeTex(), false); Mat(StreakTex(), false); CloudPuffSize(); DamageBuffMistSize(); Mat(WindRingTexture(false), false); Mat(WindRingTexture(true), false); break;
+                     case 30: RelicGold(); break;
+                     case 31: RelicIvory(); break;
+                     case 32: RelicGem(new Color(0.15f, 0.48f, 0.85f, 1f)); break;
+@@ -15431,6 +15585,37 @@
+             }, TextureWrapMode.Clamp);
+             return _stompWindTex;
+         }
++        private static Texture2D _strongWindTex, _airyWindTex;
++        public static float WindRingAlpha(float u, float v, bool airy)
++        {
++            float d = Rad(u, v), angle = Mathf.Atan2(v - 0.5f, u - 0.5f);
++            float flow = 0.58f + 0.42f * Fbm(Mathf.Cos(angle) * 5f, Mathf.Sin(angle) * 5f + d * 7f, 200);
++            float band = airy ? 0.18f : 0.23f;
++            return Mathf.Exp(-Mathf.Pow((d - 0.80f) / band, 2f)) * flow * Mathf.Clamp01((1f - d) * 14f);
++        }
++        private static Texture2D WindRingTexture(bool airy)
++        {
++            if (airy)
++            {
++                if (_airyWindTex == null) _airyWindTex = MakeTex(128, 128, delegate(float u, float v) { return WindRingAlpha(u, v, true); }, TextureWrapMode.Clamp);
++                return _airyWindTex;
++            }
++            if (_strongWindTex == null) _strongWindTex = MakeTex(128, 128, delegate(float u, float v) { return WindRingAlpha(u, v, false); }, TextureWrapMode.Clamp);
++            return _strongWindTex;
++        }
++        public static void WindRing(Vector3 pos, float innerRadius, float radius, float seconds, Color tint, bool airy)
++        {
++            if (!Enabled) return;
++            Color color = tint; color.a = airy ? 0.64f : 0.94f;
++            DragonMeshFx ring = MeshFx(GroundPoint(pos) + Vector3.up * 0.12f, Quaternion.identity, true,
++                Mat(WindRingTexture(airy), false), color, seconds);
++            if (ring == null) return;
++            ring.Conform = true;
++            ring.ScaleFrom = Vector3.one * Mathf.Max(0.3f, innerRadius) * 2.5f;
++            ring.ScaleTo = Vector3.one * Mathf.Max(0.5f, radius) * 2.5f;
++            ring.ScaleTime = seconds; ring.Spin = airy ? 18f : 35f;
++        }
++
+         public static void StompWindRing(Vector3 pos, float innerRadius, float radius, float seconds)
+         {
+             if (!Enabled) return;
+@@ -16324,17 +16509,11 @@
+                 CrescentArc(go.transform, body, radius, width * 1.5f, 0f, 70f, half, false, 0f);
+                 CrescentArc(go.transform, core, radius, width * 0.45f, 0f, 66f, half, true, 0f);
+             }
+-            GameObject under = new GameObject("bladeWind"); under.transform.SetParent(go.transform, false);
+-            under.transform.localPosition = Vector3.down * 0.42f;
+-            Color wind = new Color(0.77f, 0.82f, 0.86f, 0.56f);
+-            for (int k = 0; k < 3; k++)
+-                CrescentArc(under.transform, wind, radius * 0.92f, Mathf.Max(0.09f, width * 0.65f), 0f, 105f,
+-                    Quaternion.Euler(0f, k * 120f, k % 2 == 0 ? 7f : -7f), false, 0f);
+-            ParticleSystem air = Particles(go.transform, new Color(0.72f, 0.76f, 0.79f, 0.38f), 8, 22f, seconds, 0.28f,
+-                0.1f, 0.25f, 0.12f, 0.3f, 0f, ParticleSystemShapeType.Circle, radius * 0.8f, new Vector3(90f, 0f, 0f), false, false);
+-            ParticleSystem.MainModule airMain = air.main; airMain.maxParticles = 32; airMain.simulationSpace = ParticleSystemSimulationSpace.Local;
+-            ParticleSystem.VelocityOverLifetimeModule flow = air.velocityOverLifetime; flow.enabled = true;
+-            flow.space = ParticleSystemSimulationSpace.Local; flow.orbitalY = new ParticleSystem.MinMaxCurve(12f);
++            GameObject groundWind = new GameObject("IH_WhirlGroundWind");
++            groundWind.transform.SetParent(go.transform, false);
++            DragonGroundWind ground = groundWind.AddComponent<DragonGroundWind>();
++            ground.Follow = follow; ground.Owner = follow.GetComponent<Player>(); ground.Radius = radius;
++            ground.Life = Mathf.Max(0.05f, seconds); ground.Tint = new Color(0.77f, 0.82f, 0.86f, 0.8f);
+             DragonSpinner sp = go.AddComponent<DragonSpinner>();
+             sp.DegPerSecond = 360f / Mathf.Max(0.1f, turnSeconds);
+             DragonFadeOut fo = go.AddComponent<DragonFadeOut>();
+@@ -16552,15 +16731,18 @@
+         {
+             if (!Enabled) return;
+             radius = Mathf.Max(1f, radius);
+-            DragonVfxLife host = Host(point + Vector3.up * Mathf.Clamp(radius * 0.07f, 0.5f, 1.5f), 2.5f, "damagebuffmist");
+-            Color smoke = Color.Lerp(new Color(0.58f, 0.59f, 0.61f, 1f), tint, 0.22f); smoke.a = 0.64f;
+-            ParticleSystem mist = Particles(host.transform, smoke, 42, 14f, 0.6f, 1.8f, 0.08f, 0.24f,
+-                radius * 0.25f, radius * 0.38f, -0.015f, ParticleSystemShapeType.Circle, radius * 0.65f, new Vector3(90f, 0f, 0f), false, false);
++            WindRing(point, 0.7f, radius, 1.15f, tint, true);
++            DragonVfxLife host = Host(GroundPoint(point) + Vector3.up * 0.22f, 1.8f, "damagebuffwind");
++            Color air = tint; air.a = 0.52f;
++            ParticleSystem mist = Particles(host.transform, air, 20, 0f, 0.1f, 1.4f, 0.08f, 0.22f,
++                radius * 0.06f, radius * 0.12f, 0f, ParticleSystemShapeType.Circle, radius * 0.85f,
++                new Vector3(90f, 0f, 0f), false, false);
+             mist.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+-            ParticleSystem.MainModule main = mist.main; main.maxParticles = 52;
+-            ParticleSystem.ShapeModule shape = mist.shape; shape.radiusThickness = 1f;
+-            ParticleSystem.SizeOverLifetimeModule size = mist.sizeOverLifetime;
+-            size.size = new ParticleSystem.MinMaxCurve(1f, DamageBuffMistSize());
++            ParticleSystem.MainModule main = mist.main; main.maxParticles = 28;
++            ParticleSystem.ShapeModule shape = mist.shape; shape.radiusThickness = 0.06f;
++            ParticleSystem.VelocityOverLifetimeModule flow = mist.velocityOverLifetime;
++            flow.enabled = true; flow.space = ParticleSystemSimulationSpace.Local;
++            flow.orbitalY = new ParticleSystem.MinMaxCurve(1.6f);
+             mist.GetComponent<ParticleSystemRenderer>().sharedMaterial = Mat(SmokeTex(), false);
+             mist.Play(true);
+         }
+@@ -16897,7 +17079,9 @@
+ 
+         public static Mesh RelicHeartMesh(List<Vector2> outline, float depth, float bevel)
+         {
+-            Mesh mesh = ExtrudeBevel(outline, depth, bevel, 1f);
++            // An inward miter crosses the heart's sharp cusp and leaves cap triangles missing.
++            // Flush inlays use the original outline, retaining complete closed front/back faces.
++            Mesh mesh = ExtrudeBevel(outline, depth, 0f, 1f);
+             if (mesh == null) return null;
+             int[] triangles = mesh.triangles;
+             OrientRelicHeartFaces(mesh.vertices, mesh.normals, triangles);
+@@ -16907,8 +17091,8 @@
+ 
+         public static float HolyHeartFaceDepth(float thickness, bool front)
+         {
+-            // Backing extends from -0.50t to +0.155t. Each 0.32t-deep heart clears it.
+-            return thickness * (front ? 0.40f : -0.74f);
++            // Inset spans the backing instead of sitting on two raised plates.
++            return thickness * (front ? 0.18f : -0.525f);
+         }
+ 
+         // Miter offset of a CCW outline (d > 0 outward, d < 0 inward).
+@@ -18741,6 +18925,11 @@
+         // depth along Z -0.5..0.5). The caller scales the returned child to (width, height, depth) every frame.
+         // Gold head with ivory striking faces, ivory haft with gold bands, gold pommel gem, a radiant halo shell and
+         // light ribbons from both striking faces (they draw arcs while it flips).
++        public static List<Vector2> InsetGemOutline(float size)
++        {
++            return new List<Vector2> { new Vector2(-size * 0.5f, 0f), new Vector2(0f, -size * 0.7f),
++                new Vector2(size * 0.5f, 0f), new Vector2(0f, size * 0.7f) };
++        }
+         public static Mesh RelicDiamondMesh(float size, float depth)
+         {
+             Vector3[] p = { new Vector3(-size * 0.5f, 0f, 0f), new Vector3(0f, size * 0.7f, 0f),
+--- v0.25.199/INSTALL.bat
++++ v0.25.200/INSTALL.bat
+@@ -1,5 +1,5 @@
+ @echo off
+-title Immortal Heroes v0.25.199 - Guidance and Combo Recovery
++title Immortal Heroes v0.25.200 - Wind Rings and Bird Targets
+ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
+ echo.
+ pause
+--- v0.25.199/INSTALL.ps1
++++ v0.25.200/INSTALL.ps1
+@@ -1,7 +1,7 @@
+ $ErrorActionPreference = "Stop"
+ 
+ Write-Host ""
+-Write-Host "IMMORTAL HEROES v0.25.199 - GUIDANCE AND COMBO RECOVERY" -ForegroundColor Cyan
++Write-Host "IMMORTAL HEROES v0.25.200 - WIND RINGS AND BIRD TARGETS" -ForegroundColor Cyan
+ Write-Host "All 10 DLLs compile in staging before the live profile is touched." -ForegroundColor Gray
+ Write-Host ""
+ 
+--- /dev/null
++++ v0.25.200/READ_ME_v0.25.200.txt
+@@ -0,0 +1,10 @@
++AETHELBORN ASCENDED v0.25.200 - WIND RINGS AND BIRD TARGETS
++Use INSTALL.bat as usual. Includes the previous v199 pass and its earlier fixes.
++
++This pass covers exactly the seven current requests: ground downwash for Whirlwind, strong wind rings for Circle Swing, Fury cooldown chevrons, 20% max-HP initial Holy Wave healing, class-colored airy rings for damaging support pulses, embedded relic gems/hearts, and native bird target/damage support.
++
++Holy Wave's 20% is the base heal; existing healing tiers still apply. Only its immediate-heal config gets a new versioned key. Other settings do not need a reset.
++
++Read TEST_THIS_BUILD.txt before testing; CHANGELOG_v0.25.200.txt explains changes and TEST_RESULTS_v0.25.200.txt states what was checked. This remains the source-installer distribution. Compilation/tests were performed outside Unity; no in-game or Windows installer run is claimed.
++
++Original v199 is preserved separately. This pass does not promote a new Anchor.
+--- /dev/null
++++ v0.25.200/TEST_RESULTS_v0.25.200.txt
+@@ -0,0 +1,18 @@
++AETHELBORN ASCENDED v0.25.200 - VALIDATION
++2026-10-18 (Asia/Manila)
++Baseline: Aethelborn_Ascended_v0.25.199_Guidance_Combo_Recovery.zip
++SHA-256: ed887e04aa94fca893b39fe97762a64cd16d926270df2667edcf2d24276346d4
++
++VERIFIED OUTSIDE UNITY
++- All ten modules compile with Roslyn 4.8, -langversion:5, supplied real Valheim/BepInEx/Harmony/Unity references, JotunnLib 2.30.2 and restored UnityEngine.UI reference. No new external runtime dependency is introduced. Package retains the PowerShell source installer; validation DLLs are not shipped as a Windows build.
++- 137 checks pass: 106 actual compiled-method/IL/math checks and 31 source-derived managed geometry/state/dispatch invariants. The latter include extrusion geometry, NACC rollback and the exact shipped bird prefixes/forwarder with native ports substituted. They do not run a real bird, Harmony detour, Unity renderer or game network.
++- New checks include per-recipient max-HP healing and tiers; hollow/broader wind profiles and terrain placement; Fury marker path; bird target hook signatures, disabled lifecycle, collision suppression, absence of required/added physics; guarded one-hit forwarding and recovery after exceptions; complete front/back sapphire and heart caps.
++- Heart reproduction: a 28-point heart outline at size 0.9 has three offset-contour self-intersections at tested bevels 0.04 and 0.06; the 0.04 case emits 22 front cap triangles where 26 are required. With the scoped zero-miter heart construction, there are zero self-intersections, all 26 front triangles plus matching back caps, and cap area matches outline area. Other extrusion/model code is unchanged.
++- 116 scope checks pass. Exactly three source modules changed; the other seven and all 185 original art/animation assets remain byte-identical. All unrelated configs and the previous NACC, CA, class/equipment, crossbow, cape, hammer and Blade Storm systems are unchanged. Installer edits only update release version/banner.
++- ZIP CRC, every packaged file and the original baseline SHA-256 are verified. Scoped implementation/document diff is against original v199. No Anchor promotion.
++
++IN-GAME / PLATFORM LIMITS
++- Windows PowerShell Add-Type/INSTALL, live Harmony patches, bird flight and collider coverage, native damage/resistance/drop/RPC delivery, multiplayer ownership, rendering/material blending/occlusion, wind visibility and actual FPS/GC require TEST_THIS_BUILD.txt. Code checks do not establish that every symptom is resolved in game.
++- Bird bridge specifically retains native ambient flight and native Destructible damage. It does not supply a full combat NPC animation/stagger controller. Existing colliders are preserved rather than enlarged or replaced.
++- Original CLAUDE.md, git checkout/remote, tools/release.sh, tools/compile_check/check.sh, Stubs.cs and mcs were not supplied/available. Their prescribed commands and commit/push were not run; no claim that the unavailable signature checker reported zero. Full C#5 compilation against the supplied real references was performed instead, and this pass has a dated project journal.
++- The two supplied images were inspected locally. No in-game video, live game session or fresh performance log was provided for this pass. Prior logs were not re-labeled as v200 tests. No measured FPS gain is asserted.
+--- v0.25.199/TEST_THIS_BUILD.txt
++++ v0.25.200/TEST_THIS_BUILD.txt
+@@ -1,14 +1,14 @@
+-v0.25.199 - PASS THREE IN-GAME CHECKLIST (ITEMS 9-12 + LOG FIXES)
+-Run INSTALL.bat as usual. Includes both earlier passes. Not an Anchor promotion.
++v0.25.200 - IN-GAME CHECKLIST
++Install using INSTALL.bat as usual. Separate pass from preserved v199; no Anchor promotion.
+ 
+-9. Blade Storm: test normal and Ascended casts in daylight, shade and at night, against both light/dark backgrounds. Look around the ball: it should read as a curved hollow blue cloud with visible slashes, thinner than v198. Confirm full-area damage and tick timing match v198. Check the VFX amount settings you normally use. Buff-attack mist should retain pass one's stronger look.
++1. Whirlwind: normal and Ascended, stationary and moving over flat ground, slopes, uneven rocks and built floors. Wind downwash must stay on the surface. Accepted blade arcs/Ascended tornado remain. Stop/recast, die and leave the skill: downwash should stop. Confirm the previous movement freedom, hit cadence and damage.
++2. Circle Swing: normal and Ascended, first and follow-up hits. Expect a wide, strong wind ring at the attack radius with no slash crescents/streaks. Compare with Stomp; Circle Swing's ring should be thicker/stronger. Ascended ground eruption/debris remain. Check every available CA branch and normal controls.
++3. Fury: observe active Fury, then its recovery cooldown. Only recovery should have three downward chevrons and the orange strip; the seconds timer must remain readable. Confirm normal Fury generation and the original duration/cooldown. Test the HUD scales/resolutions you use.
++4. Holy Wave: with unchanged healing tier, test allies with different maximum HP. Base heal is 20% max HP, then the existing healing-tier factor. Example at 1x healing power: max 100 -> 20; max 250 -> 50. Actual restored HP is capped by missing HP. Check normal, Ascended low-HP bonus, echo and sustained healing, and the tooltip. Test old saved configs; old ImmediateHeal=25 should no longer set the initial heal.
++5. Damaging support effects: Ray of Hope normal/Ascended, Divine Intervention, both Lightning Relics and Sanctified Bloom. Wind should be airy and ring-shaped, visibly colored like each existing radius pulse, with no filled gray cloud. Confirm support effects, damage/DoT and pulse timing remain. Pure healing/buff effects should retain their existing behavior. Test daylight/shade/night and your usual VFX amount settings.
++6. Relics: Goddess Relic normal/Ascended and Holy Relic, from front/back and while circling through oblique angles, close and at combat distance. Sapphires and green heart should sit in the backing without air gaps, disappearing cap fragments or z-fighting. Check the same accepted body colors, green pigment, wings and scale. Judgement Hammer appearance/growth should remain v199's.
++7. Birds: after fresh world load and on later spawns, aim at landed birds with targeted skills; test AoE, cone, wave and projectile skills at valid ranges. Test flying birds where native hitboxes permit and watch for missed targeting/errors. Damage should follow existing creature rules, occur once, and leave normal feathers/drops. Test ordinary bow/weapon hits too, including class utility-axe restrictions. A native bird stays under its ambient flight controller rather than becoming a combat NPC. With two updated clients, test owner/non-owner damage, single death/drop delivery and no missing-RPC errors. Confirm other creatures, tamed creatures, players, structures and trees retain their prior behavior.
+ 
+-10. Knight's Guidance: cast on yourself; the buff timer should begin at 1m30s and cooldown at 10m. At the same skill tier/loadout, compare a damaging skill before/during/after: damage should gain 25% while active; weapon-only hits, healing, movement, stamina regen and stamina costs should not gain the retired bonuses. Example 100 -> 125 before unchanged other modifiers. Buff expires after 90s. Recast should refresh the same source, not stack itself. Test with old saved configs to ensure the obsolete 180s/780s defaults do not survive. When possible, use two updated clients: ally inside the existing 10m snapshot gets its own icon/timer and bonus, keeps it after leaving range, loses it at expiry; an ally outside the snapshot gets none. Test client-to-host and client-to-client awards.
++REGRESSION: v199 Knight's Guidance (+25% skill damage/90s/600s), paired-weapon exhaustion recovery, diagonal second Ascended Heavy Slash, Blade Storm's thinner blue shell, previous NACC/dodge/block rules, first-cast CA, crossbow sprint reload/save, UI input blocking, Saving Grace, equipment restrictions, cape and hammer growth.
+ 
+-11. Ascended Heavy Slash: cast all three native Battleaxe strikes repeatedly and after other skills/blocking. Expect first horizontal sweep, second diagonal matching the return swing, third vertical. Check both cold/first and warmed casts, different attack-speed values and camera/character turns. Cadence must remain the existing minimum 0.7s/configured timing. Normal Heavy Slash stays horizontal. Dodge cancellation should still stop later strikes; holding block should not cancel them.
+-
+-12. Low-stamina Therzie NACC: repeat the supplied video's scenario with the same paired weapon and installed Dual Wield/Therzie mods. Start with enough stamina for several swings, then hold/spam attack through exhaustion. A rejected attempt must not freeze the pose or advance the combo. Stop clicking, regain stamina and attack again. Also test exhaustion between swings, at the finisher, while moving, after blocking and with minor uneven ground. Check the existing 0.7s continuation window and normal damage interruption. Compare ordinary sword/axe chains and secondary/heavy attacks. Successful combos must retain their previous rhythm and costs. No free stamina/Eitr refunds on ordinary rejection.
+-
+-LOG FIXES: start a fresh game/session and inspect BepInEx logs. Confirm AA's prefab-scan null-reference warnings and inherited-target Harmony warnings are absent. Check EXP for normal/starred/modded creatures and an existing customized reward. Open every class tree and hotbar: optional frame variants should retain the existing fallback appearance without missing-file warning spam. VNEI's missing EpicLoot dependency may still be reported by VNEI/other scanners; no third-party mod was repaired. Capture a new performance log with the same settings/scene for comparison; no FPS improvement has been measured here.
+-
+-QUICK REGRESSION: Saving Grace ready/cooldown indicators, raised green hearts front/back, visible hammer growth/taller head, casting waits for prior CA, right-to-left Zap, instant dodge, crossbow sprint reload and saved state, UI input blocking, equipment restrictions. Extra effect point lights remain removed.
++Capture fresh AA and BepInEx logs if any issue remains. No live FPS improvement or full game compatibility is claimed by code checks alone.
+--- /dev/null
++++ v0.25.200/docs/BASELINE_v0.25.199_SHA256.txt
+@@ -0,0 +1,4 @@
++Protected starting archive: Aethelborn_Ascended_v0.25.199_Guidance_Combo_Recovery.zip
++Version: v0.25.199
++SHA-256: ed887e04aa94fca893b39fe97762a64cd16d926270df2667edcf2d24276346d4
++The original archive was verified and preserved unchanged. v200 uses a separate working copy/output archive. This record does not promote v199 or v200 to a new Anchor.
+--- /dev/null
++++ v0.25.200/docs/PROJECT_CHANGES_v0.25.200.txt
+@@ -0,0 +1,10 @@
++2026-10-18 (Asia/Manila) - v0.25.200, original v199 as the only baseline.
++1. Whirlwind under-blade wind and pulse rings moved to terrain-conforming downwash; original blade arcs/Ascended tornado/CA/mechanics retained.
++2. Circle Swing common/legacy/eruption visuals use thicker, stronger wind rings instead of slash VFX; gameplay unchanged; Stomp untouched.
++3. Fury Recovery gets downward cooldown chevrons/orange strip; active Fury and the seconds timer retain existing logic.
++4. Holy Wave initial base heal: flat 25 -> 20% of recipient max HP via a new percent config key. Existing healing tiers, sustained heal, Ascended low-HP multiplier/echo, costs and timing preserved. Tooltips updated.
++5. Existing damaging support mist converted to class/radius-color annular airflow. Ray of Hope, Divine Intervention, both Lightning Relics and Sanctified Bloom covered. Bounded particles, cached/prewarmed wind materials.
++6. Goddess sapphires and Holy Relic heart embedded in backing. Closed beveled sapphire inserts; one through-backing green heart instead of raised plates. Heart-specific inward miter removed after tests reproduced self-intersections/incomplete caps. Shared extrusion/hammer/other designs retained.
++7. Disabled Character-compatible target/damage bridge for native RandomFlyingBird + Destructible. No Character movement/initialization, added colliders/Rigidbody or replaced native damage RPC. Bird-specific metadata hooks and guarded damage forwarding use native health/drops/network destruction; ambient stagger calls do not invoke unsupported Character RPCs. Actual game/multiplayer tests still required.
++Validation: ten full C#5 module builds, 137 compiled/source-derived checks, 116 scope checks. 185 original assets and seven unrelated source modules byte-identical. Original v199 preserved. No Anchor promotion or unrelated cleanup.
++Original CLAUDE.md/git/release/checker tools were absent; this dated journal records the pass without inventing the missing project memory or claiming push/release-script execution.

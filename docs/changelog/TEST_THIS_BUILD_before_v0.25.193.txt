@@ -1,0 +1,8 @@
+v0.25.191 VFX Finish - in-game checks (Enhanced VFX on)
+1. Moonlight Splitter: a single crescent per wave (no doubled slash).  Eclipse: one sweeping arc, no rings.
+2. Impact Wave: cracks fork off the main scar.  Whirlwind: dust at the feet.
+3. Angel Comet: no lightning bolt, big fractures + rubble.  Shield Charge: glow on the shield + side streaks.
+4. Barrier (Crucible / DI / Ray of Hope Asc): bursts into shards when broken.  Healing: brief glow on healed allies.
+5. Lightning Tempest: storm canopy clearly visible, bolts come out of it.  Grand Cross: X has depth from the side.
+6. Elemental Cataclysm: elements build while charging; fire, then frost, then lightning.  Clockwork: hands spin back and stop.
+7. Astral Greatblade: bright seams + trail when swinging.  Arrow Rain: arrows visibly fall.  F7 during overlaps.

@@ -40,7 +40,7 @@ namespace DragonsAltarDevTools
     {
         public const string ModGuid = "albedo.customclasses.devtools";
         public const string ModName = "Aethelborn Ascended - Developer Tools";
-        public const string ModVersion = "0.25.191";
+        public const string ModVersion = "0.25.197";
 
         public static DeveloperToolsPlugin Instance;
 
@@ -304,6 +304,7 @@ namespace DragonsAltarDevTools
 
                     string section = entry.Definition.Section;
                     string key = entry.Definition.Key;
+                    if (section == "Visuals" && (key == "LightIntensity_v025145" || key == "MaxEffectLights_v025185")) continue; // removed point-light feature
                     string unique = section + "|" + key;
                     DevSetting setting;
                     if (!byKey.TryGetValue(unique, out setting))
@@ -497,7 +498,7 @@ namespace DragonsAltarDevTools
         {
             string text = System.Text.RegularExpressions.Regex.Replace(section, @"\s+v\d+$", "");
             text = text.Replace("Fallen Angel", "Angel Comet")
-                       .Replace("Grand Sigil Survival", "Priest Bless Thy Sinners")
+                       .Replace("Grand Sigil Survival", "Priest Saving Grace")
                        .Replace("Priest Grand Sigil", "Priest Heaven's Crucible")
                        .Replace("Heavens ", "Heaven's ")
                        .Replace("Judgement Cut", "Blade Storm")

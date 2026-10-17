@@ -1,0 +1,8 @@
+2026-10-17 (Asia/Manila) - v0.25.199 pass three, original v198 baseline.
+9: Blade Storm cloud thinner and blue; same hollow curved skin, slashes and damage.
+10: Knight's Guidance now only +25% Skill Damage/90s, cooldown 600s; new config keys replace obsolete settings, provider separated from healing/weapon damage, same 10m snapshot targeting and owner-side ally buff/timer delivery.
+11: Ascended Heavy Slash second effect follows validated diagonal motion with diagonal fallback; first horizontal and third vertical unchanged; same native Battleaxe 3SS/timing/damage.
+12: Native failed NACC starts restore tentative state/speed lifetime/cadence/activation without resource refunds or stopping the previous swing. Accepted activation commits pending learning; paired-controller late rejection retains its existing refund.
+Logs: safe EXP base-health prefab discovery; canonical Harmony declaring targets; exact cached optional DualWield lookup; optional frame existence/cached fallback; four HUD arrays reused with identical output.
+All ten modules compile C#5. 104 code/geometry checks (88 actual compiled checks, 16 source-derived harness invariants) and 110 scope checks pass. 185 existing assets unchanged. Actual game/rendering/multiplayer/Therzie/FPS remain unverified. All previous passes retained. No Anchor promotion.
+Original CLAUDE.md/git/release/checker tools were unavailable; this dated journal records this pass without fabricating the missing project memory or claiming commit/push.

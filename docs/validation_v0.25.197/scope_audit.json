@@ -1,0 +1,188 @@
+{
+  "passed": 107,
+  "checks": [
+    "Original v196 archive is preserved exactly",
+    "Exactly six modules changed for batch one: four implementation modules plus two display-name-only modules",
+    "185 existing art/animation assets remain byte-identical",
+    "Byte-identical untouched module: DragonsAltar.Sorcerer.cs",
+    "Byte-identical untouched module: AlbedosCustomClasses.Passives.cs",
+    "Byte-identical untouched module: DragonsAltar.Ranger.cs",
+    "Byte-identical untouched module: Aethelborn.Experience.cs",
+    "INSTALL.bat: version/banner text only",
+    "INSTALL.ps1: version/banner text only",
+    "AlbedosCustomClasses.Advanced.cs: no methods removed or signatures changed",
+    "AlbedosCustomClasses.Advanced.cs: only explicitly scoped method bodies changed: GetAdvancedPassiveDescription, GetAdvancedPassiveName, IhBuildHolyRelic",
+    "AlbedosCustomClasses.Advanced.cs: only the intended helper methods added",
+    "AlbedosCustomClasses.Advanced.cs: all config sections, keys and defaults unchanged",
+    "AlbedosCustomClasses.Advanced.cs: no new .SetPositions(",
+    "AlbedosCustomClasses.Advanced.cs: no new .GetPositions(",
+    "AlbedosCustomClasses.Advanced.cs: no new .LoadImage(",
+    "AlbedosCustomClasses.Advanced.cs: no new FindObjectOfType(",
+    "AlbedosCustomClasses.Advanced.cs: UTF-8 BOM preserved",
+    "AlbedosCustomClasses.Core.cs: no methods removed or signatures changed",
+    "AlbedosCustomClasses.Core.cs: only the intended helper methods added",
+    "AlbedosCustomClasses.Core.cs: all config sections, keys and defaults unchanged",
+    "AlbedosCustomClasses.Core.cs: no new .SetPositions(",
+    "AlbedosCustomClasses.Core.cs: no new .GetPositions(",
+    "AlbedosCustomClasses.Core.cs: no new .LoadImage(",
+    "AlbedosCustomClasses.Core.cs: no new FindObjectOfType(",
+    "AlbedosCustomClasses.Core.cs: UTF-8 BOM preserved",
+    "AlbedosCustomClasses.GuardianAngel.cs: no methods removed or signatures changed",
+    "AlbedosCustomClasses.GuardianAngel.cs: only explicitly scoped method bodies changed: Awake, GetCustomData, HasNearbyPriest, OnDestroy, TriggerProtection, Update",
+    "AlbedosCustomClasses.GuardianAngel.cs: only the intended helper methods added",
+    "AlbedosCustomClasses.GuardianAngel.cs: all config sections, keys and defaults unchanged",
+    "AlbedosCustomClasses.GuardianAngel.cs: no new .SetPositions(",
+    "AlbedosCustomClasses.GuardianAngel.cs: no new .GetPositions(",
+    "AlbedosCustomClasses.GuardianAngel.cs: no new .LoadImage(",
+    "AlbedosCustomClasses.GuardianAngel.cs: no new FindObjectOfType(",
+    "AlbedosCustomClasses.GuardianAngel.cs: UTF-8 BOM preserved",
+    "AlbedosCustomClasses.Skills.cs: no methods removed or signatures changed",
+    "AlbedosCustomClasses.Skills.cs: only explicitly scoped method bodies changed: AnimateConeLightning",
+    "AlbedosCustomClasses.Skills.cs: only the intended helper methods added",
+    "AlbedosCustomClasses.Skills.cs: all config sections, keys and defaults unchanged",
+    "AlbedosCustomClasses.Skills.cs: no new .SetPositions(",
+    "AlbedosCustomClasses.Skills.cs: no new .GetPositions(",
+    "AlbedosCustomClasses.Skills.cs: no new .LoadImage(",
+    "AlbedosCustomClasses.Skills.cs: no new FindObjectOfType(",
+    "AlbedosCustomClasses.Skills.cs: UTF-8 BOM preserved",
+    "DragonsAltar.CombatRuntime.cs: no methods removed or signatures changed",
+    "DragonsAltar.CombatRuntime.cs: only explicitly scoped method bodies changed: Awake, DamageBuffMist, PrewarmTick, TimedBuffLook",
+    "DragonsAltar.CombatRuntime.cs: only the intended helper methods added",
+    "DragonsAltar.CombatRuntime.cs: all config sections, keys and defaults unchanged",
+    "DragonsAltar.CombatRuntime.cs: no new .SetPositions(",
+    "DragonsAltar.CombatRuntime.cs: no new .GetPositions(",
+    "DragonsAltar.CombatRuntime.cs: no new .LoadImage(",
+    "DragonsAltar.CombatRuntime.cs: no new FindObjectOfType(",
+    "DragonsAltar.CombatRuntime.cs: UTF-8 BOM preserved",
+    "DragonsAltar.DevTools.cs: no methods removed or signatures changed",
+    "DragonsAltar.DevTools.cs: only the intended helper methods added",
+    "DragonsAltar.DevTools.cs: all config sections, keys and defaults unchanged",
+    "DragonsAltar.DevTools.cs: no new .SetPositions(",
+    "DragonsAltar.DevTools.cs: no new .GetPositions(",
+    "DragonsAltar.DevTools.cs: no new .LoadImage(",
+    "DragonsAltar.DevTools.cs: no new FindObjectOfType(",
+    "DragonsAltar.DevTools.cs: UTF-8 BOM preserved",
+    "AlbedosCustomClasses.Core.cs: exact display-name/version changes only; internal skill IDs retained",
+    "DragonsAltar.DevTools.cs: exact display-name/version changes only; internal skill IDs retained",
+    "Unchanged public class DragonSkillClipDriver",
+    "Unchanged public static class DragonMixamo",
+    "Unchanged public static class DragonClothGuard",
+    "Unchanged public class DragonWeaponWake",
+    "Unchanged public class DragonCloudShellFade",
+    "Entire DragonCombat gameplay class unchanged except recovery display label",
+    "Unchanged skill/cancel routine: private IEnumerator AscendedHeavySlashRoutine",
+    "Unchanged skill/cancel routine: private IEnumerator JudgementCutRoutine",
+    "Unchanged skill/cancel routine: private IEnumerator WhirlwindRoutine",
+    "Unchanged skill/cancel routine: private IEnumerator CrescentCleaveWave",
+    "Unchanged skill/cancel routine: private IEnumerator RayOfHopeRoutine",
+    "Unchanged skill/cancel routine: private IEnumerator DivineInterventionRoutine",
+    "Unchanged skill/cancel routine: private IEnumerator LightningRelicRoutine",
+    "Unchanged skill/cancel routine: private IEnumerator HolyRelicRoutine",
+    "Unchanged skill/cancel routine: private IEnumerator HeavensJudgementRoutine",
+    "Unchanged skill/cancel routine: private void UpdateSwordMasterInterrupt",
+    "Deferred batch visuals untouched: public static void JudgementSphere",
+    "Deferred batch visuals untouched: public static void CloudShellGeometry",
+    "Deferred batch visuals untouched: public static Color CloudShellTexel",
+    "Deferred batch visuals untouched: public static Vector3 HammerHeadPoint",
+    "Deferred batch visuals untouched: private static void ThickenHammerHead",
+    "Deferred batch visuals untouched: public static Mesh ExtrudeBevel",
+    "Deferred batch visuals untouched: public static Material RelicGold",
+    "Deferred batch visuals untouched: public static Material RelicGem",
+    "Saving Grace gameplay/recovery unchanged: internal void TryProtectSetHealth",
+    "Saving Grace gameplay/recovery unchanged: internal void TryProtectCheckDeath",
+    "Saving Grace gameplay/recovery unchanged: private bool CanProtect",
+    "Saving Grace gameplay/recovery unchanged: private IEnumerator Recovery",
+    "Saving Grace gameplay/recovery unchanged: private IEnumerator GrandSigilVisual",
+    "Lightning Zap damage, targets, CA, cost and cooldown unchanged",
+    "Lightning Zap reverses only release and bolt direction; five bolts and 0.04s intervals retained",
+    "Priest and ally share the same Saving Grace name, icon and status ID",
+    "Remote Priest detection does not read private customData",
+    "Only the owner publishes Priest state, and only when it changes",
+    "Presence/indicator check is twice per second and avoids collider-array/hash-set allocations",
+    "Active cooldown visibility is independent of Priest proximity",
+    "Advertised Priest membership is cleared on plugin shutdown",
+    "Only Holy Relic heart and its frame use corrected closed geometry on both sides",
+    "Healing-only green tint is more saturated; blue and other relic materials unchanged",
+    "Stronger support mist remains one bounded 52-particle system per cast",
+    "Mist has higher opacity and larger billows",
+    "Mist parameters are configured before its visible emission",
+    "New cloud growth curve is cached and prewarmed",
+    "Removed extra skill lights remain disabled"
+  ],
+  "method_inventory": {
+    "AlbedosCustomClasses.Advanced.cs": {
+      "changed_methods": [
+        "GetAdvancedPassiveDescription",
+        "GetAdvancedPassiveName",
+        "IhBuildHolyRelic"
+      ],
+      "added_methods": [],
+      "removed_methods": []
+    },
+    "AlbedosCustomClasses.Core.cs": {
+      "changed_methods": [
+        "AltarSkillEntries",
+        "GetAdvancementSkills"
+      ],
+      "added_methods": [],
+      "removed_methods": []
+    },
+    "AlbedosCustomClasses.GuardianAngel.cs": {
+      "changed_methods": [
+        "Awake",
+        "GetCustomData",
+        "HasNearbyPriest",
+        "OnDestroy",
+        "TriggerProtection",
+        "Update"
+      ],
+      "added_methods": [
+        "ClearPriestPresence",
+        "PublishPriestPresence",
+        "ShouldShowSavingGrace"
+      ],
+      "removed_methods": []
+    },
+    "AlbedosCustomClasses.Skills.cs": {
+      "changed_methods": [
+        "AnimateConeLightning"
+      ],
+      "added_methods": [],
+      "removed_methods": []
+    },
+    "DragonsAltar.CombatRuntime.cs": {
+      "changed_methods": [
+        "Awake",
+        "DamageBuffMist",
+        "PrewarmTick",
+        "TimedBuffLook"
+      ],
+      "added_methods": [
+        "DamageBuffMistSize",
+        "HolyHeartFaceDepth",
+        "OrientRelicHeartFaces",
+        "RelicHeartMesh"
+      ],
+      "removed_methods": []
+    },
+    "DragonsAltar.DevTools.cs": {
+      "changed_methods": [
+        "DisplaySection"
+      ],
+      "added_methods": [],
+      "removed_methods": []
+    }
+  },
+  "source_sha256": {
+    "Aethelborn.Experience.cs": "e313234c9a49783e5afcd631f58508a17a7f4404a4f4dba661c08c0d745fc519",
+    "AlbedosCustomClasses.Advanced.cs": "35e57e142513a98bf7db6882aff814c7be3bfbc732ad93f510b582694d42bc49",
+    "AlbedosCustomClasses.Core.cs": "f4a1d22d857314b9d952ab2d02338f3d68ca87ae3068136c67e8d3fb89cb04d4",
+    "AlbedosCustomClasses.GuardianAngel.cs": "073f212b687b401822f57c5187507bd10666d70f7e2ba746b535feae4526cfce",
+    "AlbedosCustomClasses.Passives.cs": "1b7c566453631f252c8d3cc4ce66ab3fbf6d2fb17caa9b515944400b36673d55",
+    "AlbedosCustomClasses.Skills.cs": "4346728da44e1f6bbd717ae44cd972116cf616c75ae70d7924f39a8ec4357222",
+    "DragonsAltar.CombatRuntime.cs": "1e59e785c4591a8cd235837b4343593ca230fff0013af94ebecbc38b1788c8ff",
+    "DragonsAltar.DevTools.cs": "1d2e20345ac983202362560a4b69b74b4cd54ec1fb12382a18db1483cb1ab6fb",
+    "DragonsAltar.Ranger.cs": "cd600e4039035796c02ba4318cd93432edec1e7ac7e9e347d5e33c699bd7bd0e",
+    "DragonsAltar.Sorcerer.cs": "f5876b0a61887631324b6e9686dd8d3c7b8a6231018d6d0b0cbcefc909bcc374"
+  }
+}

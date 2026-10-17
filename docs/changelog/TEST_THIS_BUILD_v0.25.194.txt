@@ -1,0 +1,40 @@
+AETHELBORN ASCENDED v0.25.194 - IN-GAME CHECKLIST
+Codex has not run this build inside Valheim. Record normal/Ascended separately.
+
+1. Halfmoon: fully restart Valheim (clears animation timing cache). Set the intended
+   normal and Ascended wind-ups independently to 1s in F8. Compare first cast with
+   later casts, including time to damage and the first Battleaxe swing. Repeat
+   a fresh process for each variant; do not test only after another Battleaxe skill.
+2. Blade Storm visibility: Enhanced VFX on. Test default and reduced VFX density
+   in daylight/night, against terrain and creatures. The cloud sphere body must be
+   clearly visible with the slashes inside it; blue normal/dark blue Ascended.
+   Check several activations and overlapping skills for FPS and excessive opacity.
+3. Blade Storm area: note normal/Ascended SpawnAreaRadius in F8. Place several
+   enemies across the targeted area, including different heights and a gap between
+   the small visual spheres. Every enemy inside the full 3D target radius should
+   take each attack pulse even if no cosmetic sphere is centered on it. Outside
+   targets should not be hit. The point is locked at cast, not chasing an enemy.
+4. Sword Master: try dedicated roll and block+jump during each skill's wind-up,
+   swing, channel and delayed follow-ups, including base skills and NACC. Try
+   before Blade Storm's first pulse and between pulses, Halfmoon's traveling cuts,
+   Crescent's second fan/fire trail, Eclipse's later hail and Frenzied Charge.
+   The roll should take priority; cancelled work must not resume new damage.
+   Check collision after cancelling Charge/Eclipse and that the next skill works.
+   Existing buffs/DoTs and emitted visual fades can expire normally. Check stamina
+   use once per native roll. Insufficient stamina, airborne, encumbered, dead,
+   menu input or an already-active roll retain native eligibility limits.
+5. Ascended Heavy Swing: exactly three Battleaxe strikes, first/second/third
+   native combo animations in order, one hit per enemy per strike, existing VFX
+   on every hit, one resource/cooldown payment. Normal Heavy Swing stays one hit.
+6. Ascended Impact Wave: an enemy overlapping two or more individual follow-up
+   shockwaves takes a hit from each; multiple colliders do not double-hit within
+   one wave. Verify walls/terrain and original wave travel still behave normally.
+7. Ascended Piercing Arrow: three native bow shots spaced 0.2s, piercing/widening
+   and Expose retained, 60% of old damage per arrow/180% total on the same target.
+   Normal is still one unchanged arrow. Check cost/cooldown are charged once.
+8. Stomp normal/Ascended: visible thicker wind ring, original cracks/debris and
+   damage sequence retained. Test on slopes/terrain and in daylight/night.
+9. Regression: v193 crossbow sprint reload, Horizon Walker moving staff animation,
+   menu click suppression, Ranger/Sorcerer restrictions, buffs/HUD, cape and NACC.
+   Also test Mercenary Circle Swing since its timing helper is shared; the new
+   contact calibration is opt-in for Halfmoon/Ascended Heavy, not a global change.

@@ -1,0 +1,10 @@
+PASS: Actual Valheim sprint IL calls the Humanoid virtual base slot
+PASS: Actual Valheim sprint cancellation is intercepted
+PASS: All other actual sprint instructions (stamina and run conditions) preserved
+PASS: Override-form cancellation is also supported
+PASS: Unrelated same-name method is untouched
+PASS: Existing Acrobat bow sprint patch still matches actual IL
+PASS: Actual game reload action exposes the cached type, item and progress fields
+NOT RUN: live-player reload predicates, resource use, animation and speed require Unity. An attempted predicate invocation hit the existing Shader.PropertyToID native initializer outside Unity.
+PASS: Methods without sprint cancellation are unchanged
+Passed 8 compiled-method checks. Unity gameplay not exercised.

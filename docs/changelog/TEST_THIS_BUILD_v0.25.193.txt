@@ -1,0 +1,36 @@
+AETHELBORN ASCENDED v0.25.193 - IN-GAME CHECKLIST
+Not yet tested in game by Codex. Test both normal and Ascended where applicable.
+
+1. Bow Master: hold Shift and move with an unloaded crossbow. Let reloading finish
+   without releasing Shift. Fire, continue sprinting and allow the next reload to
+   finish; repeat several times. No walking/stop/restarted progress while loading.
+   Try both starting the reload during sprint and beginning sprint during reload.
+   Verify ammo/stamina costs, reload speed and saved loaded state after re-equipping.
+   Non-Bow-Master crossbows and equip/use actions must retain normal restrictions.
+2. Acrobat: bow/greatbow drawing and firing still keep full current sprint speed;
+   base Ranger and Bow Master bows/greatbows keep the intended vanilla slowdown.
+3. Horizon Walker: normal/gun staff moving fire uses vanilla pose/animation,
+   retains full current movement speed and keeps the existing projectile cadence.
+4. Activate normal and Ascended Arcane Phantom, Phalanx and Rift Echo. Open
+   inventory, chest/container, chat/text input, map, escape menu, Altar, skill tree
+   and F8. Click/hold either mouse button and press skill bindings in each UI.
+   No new Phantom/Echo shots or sword launches; an armed Phalanx volley stays armed.
+   After closing, deliberately attack the world: all follow-ups work normally.
+   Repeat after switching focus to another application. Existing world projectiles
+   and already-released skill effects may finish; they are not cancelled globally.
+5. Open UI while holding a staff charge, Meteor/Cataclysm, Ballista or Ascended
+   Explosive Arrow. The held charge should cancel, with no new release shot.
+   Check normal charging/release still works in world input. Paid costs stay paid.
+6. Check other classes' skill hotkeys and channel follow-up clicks in chat/menus.
+   Then confirm hotbar drag/rebind, skill-tree K and developer F8 remain usable.
+7. Ranger, Acrobat, Bow Master: staves/wands/gun staves cannot be equipped.
+   Sorcerer, Archmage, Horizon Walker: bows/greatbows/crossbows cannot be equipped.
+   Check changing class with forbidden gear already equipped: it should be safely
+   unequipped into inventory. No-class characters must remain unrestricted.
+8. Fire effects listed in CHANGELOG: visibly burning ground in daylight/night,
+   no tall smoke wall, preserved impact visuals. Crescent trail expires within
+   its existing two-second segment lifetime; hit/tick/push behavior is unchanged.
+9. Blade Storm normal/Ascended: soft sphere-like mist with clear slashes, the
+   intended blue/dark-blue distinction, visible in daylight and against enemies.
+   Check repeated casts plus overlapping fire for visual density and FPS.
+10. Existing buff timers, cape, NACC, damage and other skills remain regression checks.

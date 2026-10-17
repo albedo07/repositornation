@@ -1,0 +1,22 @@
+AETHELBORN ASCENDED v0.25.197 - BATCH ONE VALIDATION
+Date: 2026-10-17 (Asia/Manila)
+Baseline: Aethelborn_Ascended_v0.25.196_Hollow_Clouds_Relic_Detail.zip
+Baseline SHA-256: c236681142278dc8ef07a89e3815d8ce785dbd4467eaee6f24410bd6e0fdb9f7
+Scope: current request items 1-4 only. Items 5-12 are deferred to their requested batches.
+
+VERIFIED OUTSIDE UNITY
+- All ten baseline and all ten revised source modules fully compile using Roslyn 4.8.0 with -langversion:5, supplied real Valheim/BepInEx/Harmony/Unity references, JotunnLib 2.30.2 and the restored UnityEngine.UI reference. The distribution remains a source installer; validation binaries are not shipped as game replacements.
+- 59 compiled-method/IL/math checks pass. Includes 44 prior regression checks and 15 Saving Grace eligibility/network-call, heart geometry/placement and green-albedo checks.
+- Saving Grace's actual display-policy method was exercised for protected/unprotected recipients, Priest self-readiness, cooldown after leaving Priest range, near-expiry and exact-expiry behavior, and death during cooldown. IL confirms real owner-guarded ZDO flag publication and replicated-flag lookup with living/radius checks. This is not a live multiplayer test.
+- Heart orientation correction was executed on front/back cap triangles and a side wall. Corrected faces point outward, proper walls remain unchanged and the correction is idempotent. Placement clears the actual gold backing extents on both sides. Green texels retain strong channel contrast. This is not a GPU render.
+- 107 source scope checks pass. Exactly six source modules changed: Guardian, Advanced, Skills and CombatRuntime implement items 1-4; Core and DevTools have display-name/version changes only. All four other modules and all 185 existing art/animation assets are byte-identical.
+- Existing config sections/keys/defaults, internal skill/save/status IDs, rescue/recovery values, all deferred-batch skills/animations/combat, hammer geometry/growth and Blade Storm are unchanged. Installer banners only. No new forbidden graphics APIs, FindObjectOfType, per-frame field discovery or point lights.
+- Mist uses one capped particle system per cast, the existing global particle budget, shared material and a cached/prewarmed growth curve. No measured FPS claim.
+
+LIMITS / REQUIRED GAME CHECKS
+- Valheim/Unity gameplay, rendering, two-client ZDO propagation, real death-save execution, multiplayer latency, audio and frame-time/FPS were not exercised. Every participating client needs this pass for the new Priest-presence advertisement.
+- The cooldown icon stays driven by the existing local cooldown deadlines. Existing cooldown persistence behavior is unchanged; no new cross-session/save/relog persistence was added.
+- Original CLAUDE.md, tools/compile_check/check.sh, Stubs.cs, release.sh and the git checkout were not supplied; mcs is not installed. Those exact signature/release/parse checks and commit/push could not be run. No claim that they were run is made. Full C#5 builds against the real reference assemblies are the available compiler validation.
+- No Anchor overwritten or promoted. Original v196 ZIP is preserved.
+
+Evidence: docs/validation_v0.25.197/ contains compile logs, compiled-method results, full scope audit, source hashes and test source/scripts. See TEST_THIS_BUILD.txt for the in-game checklist.

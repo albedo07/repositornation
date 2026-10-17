@@ -1,0 +1,20 @@
+AETHELBORN ASCENDED v0.25.196 - VALIDATION
+Date: 2026-10-17 (Asia/Manila)
+Baseline: Aethelborn_Ascended_v0.25.195_Skill_Polish_State_Fixes.zip
+Baseline SHA-256: 3b97bd27259d1c1012aac307598433f40d2e40b23a597d67dacc0d5676e0ab07
+
+VERIFIED
+- All 10 baseline and all 10 revised source modules fully compile with Roslyn 4.8.0, -langversion:5, against the supplied Valheim/BepInEx/Harmony/Unity references, restored Jotunn 2.30.2 and UnityEngine.UI reference. No compiled binaries are substituted into the source installer distribution.
+- 44 compiled-method/IL/math checks pass. Includes the 33 prior cancellation, native dodge, Halfmoon contact, tooltip and crossbow contract checks, plus 11 checks for curved hollow cloud geometry, bounded mesh, transparent cloud edges, colored textured albedo, gem colors, hammer head/grip transformation, preserved SlashArc API, isolated forced stroke planes and sigil geometry/coverage.
+- 58 source scope checks pass. Only two source modules changed. All eight other modules and all 185 existing art/animation assets are byte-identical. Config keys/defaults are unchanged. Installer changes are version/banner text only. Existing combat, cancellation, clip handling, cape guard and listed skill routines are unchanged except the explicit visual callbacks.
+- Cloud resources are cached; the shell uses 1,176 vertices / 3,456 double-sided triangles and bounded surface particles. No new point lights or forbidden graphics APIs. Existing weapon wake update order is preserved.
+- The supplied PNG is a preview of the exact compiled procedural sigil pattern, composited on a dark background. It is NOT an in-game render or proof of engine material output.
+
+NOT VERIFIED IN GAME
+- No Valheim/Unity runtime is available here. Actual cloud appearance, relic shader output, animation alignment, terrain rendering, multiplayer and frame-time/FPS must be checked in game.
+- Colored albedo and exposed gem placement address the source paths consistent with the supplied white-model screenshots; actual GPU/shader output has not been inspected.
+- This pass does not claim to remove every first-use engine/shader initialization hitch.
+- The original CLAUDE.md, git checkout, tools/compile_check/check.sh, Stubs.cs and release.sh were not included in the supplied distribution. mcs is not installed. No claim of running that custom signature checker, mcs --parse, committing or pushing is made. Full C#5 compilation against real reference assemblies is the available alternative verification.
+- No Anchor promotion or overwrite. v195 is preserved separately.
+
+Evidence: docs/validation_v0.25.196/; visual checklist: TEST_THIS_BUILD.txt.

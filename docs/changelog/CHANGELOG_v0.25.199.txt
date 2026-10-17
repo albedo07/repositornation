@@ -1,0 +1,35 @@
+AETHELBORN ASCENDED v0.25.199 - GUIDANCE AND COMBO RECOVERY
+2026-10-17 (Asia/Manila). Pass three: user items 9-12 plus scoped log fixes.
+Built from the original v198 ZIP. Includes both earlier passes. Not an Anchor promotion.
+
+9. BLADE STORM CLOUD
+- Changed the dark gray cloud skin and wisps to blue. Retained the curved, hollow ball geometry.
+- Reduced shell opacity cap from 0.84 to 0.48 and wisp opacity from 0.94 to 0.50.
+- Reduced the wisp burst from 18-28 to 12-20 particles and its cap from 48 to 32. Particle count still respects the existing VFX amount setting. This is the requested thinner-cloud revision, not a claimed measured FPS improvement.
+- Slashes, bright cut cores, shell curvature, lifetime, full-area damage and hit timing are unchanged. Damaging-buff mist remains stronger as requested in pass one.
+
+10. KNIGHT'S GUIDANCE
+- Replaced movement speed, stamina regeneration and stamina-use reduction with +25% Skill Damage for 90 seconds. Cooldown is 600 seconds (10 minutes). No resource cost. Existing 10m snapshot recipient radius and visuals remain.
+- Uses a separate timed skill-damage stat consumed once by the shared skill-power provider. Ordinary weapon attacks and healing use their existing paths and do not receive this bonus. Example: a skill that currently deals 100 damage deals 125 while the buff is active, before other existing modifiers.
+- Added recipient-owner delivery for multiplayer allies: each recipient's client applies the bonus and its existing buff icon/timer. Existing awards refresh the same source rather than stacking with themselves. Requires the updated mod on participating clients.
+- Updated descriptions, tooltip stats and buff details. New versioned duration/cooldown/damage config keys retire old saved defaults; old entries no longer control the skill. No other skill settings changed.
+
+11. ASCENDED HEAVY SLASH / HEAVY SWING
+- Second strike uses fresh diagonal weapon-motion samples, with a 45-degree fallback. Flat/vertical transition samples are rejected so the previous/next stroke cannot replace the diagonal.
+- First strike remains a horizontal sweep; third remains vertical. No later automatic plane replacement for these explicitly selected effects.
+- Same three native Battleaxe strikes, minimum spacing, CA timing, damage, range, debuffs and cancellation rules.
+
+12. THERZIE 2HDW NACC STAMINA REJECTION
+- Found an AA failure path: combo indices, running/end timestamps, speed, observed-swing state and tentative timing were advanced before Attack.Start's native stamina check. A rejected start previously reset only the hit index and discarded the recovery snapshot.
+- Failed native starts now restore the pre-attempt AA state, prior speed lifetime, cadence measurement and activation identity. They do not stop the preceding attack, force a new animation, or refund costs taken by Valheim/other mods.
+- Pending state learning is pruned after acceptance, so a failed stamina check no longer discards the preceding swing's pending learn. Existing late paired-controller rejection still stops its rejected instance and refunds the actual resource difference.
+- Successful combo routing, swing timing, continuation window, damage, finisher locks, airborne rules and dodge/block behavior are unchanged. The reported in-game freeze still requires a Therzie/modded-controller test.
+
+LOG-DRIVEN FIXES
+- EXP prefab discovery reads native base health without requiring a live network view. Actual kill discovery still reads live max health; reward formulas, custom rewards, keys and migrations are unchanged.
+- Runtime/Advanced damage hooks, Runtime block hooks and Sorcerer Eitr/max-Eitr hooks resolve exact declaring implementations. Inherited aliases are deduplicated before Harmony patch registration; real overrides remain distinct.
+- Optional DualWield lookup uses the existing cached exact-name assembly lookup, avoiding AA's broad Harmony scan of unrelated optional VNEI/EpicLoot types. Does not repair VNEI's missing EpicLoot dependency itself.
+- Optional frame-color probes check whether the file exists before loading, cache the same null fallback when absent, and preserve the existing painted/procedural frame. Does not add or recolor artwork.
+- HUD numeric/label arrays are reused instead of allocating four arrays per repaint. Current stat sampling, layout, colors and rendering frequency are unchanged. No live FPS/GC improvement measurement is claimed.
+
+All 185 original art/animation assets are byte-identical. Earlier pass-one/pass-two fixes and equipment/crossbow rules remain. Extra point lights stay removed. Details and limitations are in TEST_RESULTS and docs/LOG_REVIEW.

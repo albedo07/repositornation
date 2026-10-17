@@ -1,0 +1,38 @@
+AETHELBORN ASCENDED v0.25.195 - SKILL POLISH AND STATE FIXES
+2026-10-17 (Asia/Manila)
+Baseline: exact v194 Skill Finish and Dodge Priority archive. Separate test pass; no Anchor promotion.
+
+GAMEPLAY / BUG FIXES
+- Ascended Heavy Swing / Heavy Slash: retains three native Battleaxe strikes (3SS). Contacts are at least 0.7s apart; follow-up playback is capped at 1.25x. New F8 StrikeInterval_v025195 defaults to 0.7s and cannot lower the minimum. Full existing per-strike damage, cost, cooldown and reach are retained.
+- Sword Master: blocking no longer marks skills as interrupted. Held block is suppressed while a tracked skill owns execution. The working instant dodge cancellation is preserved.
+- Bow Master loaded crossbows: record reload/reset/unequip events, restore through the native loaded-weapon setter on equip, and consume saved state only after a completed firing trigger clears the native loaded weapon. Rapid holster/equip is no longer mistaken for a shot. Existing sprint-reload filter is unchanged.
+
+VFX
+- Ascended Heavy Swing: opposite horizontal wakes for the first two strokes and a downward third wake; nearby slash planes also follow sampled weapon motion.
+- Weapon swings: wakes follow the actual equipped weapon tip, including permitted matching off-hand weapons. Includes the real Greatblade, Grand Cross and second Crescent animation names. Caster-local arcs use the observed swing plane when available. No changes to traveling attack paths or hitboxes.
+- Whirlwind: adds rotating air ribbons and a bounded wind-particle system below the blade. Same lifetime/parent as the current spin; retains both normal and Ascended damage logic.
+- Blade Storm: removes the solid barrier sphere. Uses dark, slightly blue smoke puffs filling a sphere, with visible existing cuts. Minimum 18, maximum 36 emitted puffs; maximum 48 live particles per cosmetic sphere. Full-area damage from v194 is unchanged.
+- Lightning Zap: visibly sweeps its release from left to right; no damage or targeting changes.
+- Goddess Relic: thicker body, faceted blue center/arm/shaft gems, textured ivory and muted gold, and UVs on the gold ring. Reuses a Valheim item surface shader when available rather than relying only on Standard/unlit fallback.
+- Judgement Hammer: removes the silhouette echo around the head; adds matching blue gems, textured ivory and gold.
+- Priest relics: receive the same lit/textured material treatment and actual faceted gems; existing blue lightning, green healing heart, wings and pulses remain.
+- Ground lightning trails: thinner glow/core/forks and smaller, sparser sparks. Vertical lightning strikes are unchanged.
+- Ascended Shield Charge: pressure cone scales with its wider hit radius. Gameplay collision is unchanged.
+- Removes extra skill point lights and Alt+F7 switching. Visible particles, bolts, emissive surfaces and normal Altar/world lighting remain. Legacy config keys are retained but hidden in F8.
+
+TOOLTIPS
+- Header describes the action. Buff amounts/durations and other captured effects appear in stat rows instead of header parentheses.
+- Explains Judgement Mark, including duration, hit multipliers, consumption/explosion, Zap and Cripple interaction.
+- Uses Ascension (not Ascension Description), shown only when the character meets the existing Ascension requirements. Rewrites upgrade summaries as sentences describing the change. Current Ascended effects appear in body rows.
+- Burn format: Fire 12s, Spirit 12s. Preserves damage/s, percentage-per-tick, stacking and refresh details.
+- Priest Ascended area rows use the Ascended radius/width/range settings.
+
+PERFORMANCE
+- Adds background preparation for missing gold/ivory/gem materials, the hammer model, Stomp wind texture and inactive relic visual templates.
+- Reuses the hammer geometry and relic models across casts; visual templates contain no cosmetic colliders. Original physical cross colliders are unchanged.
+- Defers VFX and animation-binding warmup during active skill/attack animation.
+- Caches ground-bolt gradients, hotbar binding labels, hotbar owner comparisons and whole-second cooldown text. Caches cleanse API lookup and avoids repeated reflection calls for native ailment removal.
+- Performance report no longer presents render/wait growth as a confirmed GPU diagnosis or suggests the removed light toggle.
+
+VALIDATION
+See TEST_RESULTS_v0.25.195.txt. Compilation and code checks do not verify visuals, actual FPS or live InstantEquip compatibility.

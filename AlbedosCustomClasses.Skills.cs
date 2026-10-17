@@ -232,7 +232,7 @@ namespace AlbedosCustomClassesSkills
         public static SkillsPlugin Instance;
         public const string ModGuid = "albedo.customclasses.skills";
         public const string ModName = "Aethelborn Ascended - Starter Skills";
-        public const string ModVersion = "0.25.191";
+        public const string ModVersion = "0.25.200";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";
@@ -384,7 +384,7 @@ namespace AlbedosCustomClassesSkills
             _holyCooldown = Config.Bind("Cleric.Holy Wave", "Cooldown", 8f, "Seconds.");
             _holyStamina = Config.Bind("Cleric.Holy Wave", "StaminaCost", 25f, "Stamina cost.");
             _holyRadius = Config.Bind("Cleric.Holy Wave", "Radius", 7f, "Framework healing radius: literal 7m.");
-            _holyImmediate = Config.Bind("Cleric.Holy Wave", "ImmediateHeal", 25f, "Framework immediate HP heal.");
+            _holyImmediate = Config.Bind("Cleric.Holy Wave", "ImmediateHealPercent_v025200", 20f, "Immediately heal this percent of each recipient's maximum HP, before the existing healing tier bonus.");
             _holyPercent = Config.Bind("Cleric.Holy Wave", "HealPercentPerSecond", 5f, "Percent max HP healed each second.");
             _holyDuration = Config.Bind("Cleric.Holy Wave", "Duration", 6f, "Heal-over-time duration.");
 
@@ -596,7 +596,7 @@ namespace AlbedosCustomClassesSkills
             if (DragonCombat.IsTreeHotbarActive(player))
                 return;
 
-            if (!Input.GetKey(_modifier.Value))
+            if (!DragonCombat.CanUseWorldInput(player) || !Input.GetKey(_modifier.Value) || DragonCombat.SkillAnimationBusy(player))
                 return;
 
             if (Input.GetKeyDown(_skill1.Value))
@@ -639,7 +639,7 @@ namespace AlbedosCustomClassesSkills
             float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _heavyWindup.Value));
             DragonCombat.LockSkill(player, windup);
             DragonCombat.PlayClip(player, "warrior_heavy", windup);
-            StartCoroutine(HeavySlashRoutine(player, windup));
+            StartCoroutine(DragonCombat.TrackSwordMasterSkill(player, HeavySlashRoutine(player, windup)));
         }
 
         private IEnumerator HeavySlashRoutine(Player player, float windup)
@@ -689,7 +689,7 @@ namespace AlbedosCustomClassesSkills
             float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _impactWindup.Value) / Mathf.Max(0.1f, _impactAnimSpeed.Value));
             DragonCombat.LockSkill(player, windup);
             DragonCombat.PlayClip(player, "warrior_impact_wave", windup);
-            StartCoroutine(ImpactWaveRoutine(player, windup));
+            StartCoroutine(DragonCombat.TrackSwordMasterSkill(player, ImpactWaveRoutine(player, windup)));
         }
 
         private IEnumerator ImpactWaveRoutine(Player player, float windup)
@@ -785,7 +785,7 @@ namespace AlbedosCustomClassesSkills
             float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _punchWindup.Value));
             DragonCombat.LockSkill(player, windup);
             DragonCombat.PlayClip(player, "warrior_punch", windup);
-            StartCoroutine(ImpactPunchRoutine(player, windup));
+            StartCoroutine(DragonCombat.TrackSwordMasterSkill(player, ImpactPunchRoutine(player, windup)));
         }
 
         private IEnumerator ImpactPunchRoutine(Player player, float windup)
@@ -838,7 +838,7 @@ namespace AlbedosCustomClassesSkills
         // v0.18.1: entry point for the Skill Tree hotbar (Advanced module).
         public void CastFromHotbar(Player player, string skillId)
         {
-            if (player == null || player.IsDead())
+            if (player == null || player.IsDead() || DragonCombat.SkillAnimationBusy(player))
                 return;
             if (skillId == "lightning_zap")
                 CastLightningZap(player);
@@ -957,9 +957,11 @@ namespace AlbedosCustomClassesSkills
             }
 
             float holyPower = DragonCombat.GetSkillHealPower(caster, "holy_wave");   // v0.25.164 healing Tier curve
-            HealPlayers(caster.transform.position, DragonCombat.M(_holyRadius.Value), _holyImmediate.Value * holyPower);
+            HealPlayersPercent(caster.transform.position, DragonCombat.M(_holyRadius.Value), _holyImmediate.Value * holyPower);
 
             int ticks = Mathf.Max(1, Mathf.RoundToInt(Mathf.Max(1f, _holyDuration.Value)));
+            DragonCombat.ShowStatus(caster, "holy_wave_area", "heart", "Holy Wave", ticks, 0,
+                "Recovery Buff\nHealing area follows the caster for this duration");
             for (int i = 0; i < ticks; i++)
             {
                 yield return new WaitForSeconds(1f);
@@ -998,7 +1000,7 @@ namespace AlbedosCustomClassesSkills
                 {
                     for (int k = 2; k <= 5; k += 3) DragonVfx.Burst(fo + ff * fr * k / 5f, new Color(1f, 0.42f, 0.12f, 1f), 8, 2f + k, 0.06f, 0.6f, -0.4f);   // v0.25.180 cooling ember tails (the FlameCone carries the tongues)
                     DragonVfx.Flash(fo + ff * 0.8f, new Color(1f, 0.45f, 0.1f, 1f), 0.8f, 3f, 0.2f);   // v0.25.180 compact bright source only
-                    DragonVfx.Embers(fo + ff * fr * 0.6f - Vector3.up * 0.8f, new Color(1f, 0.45f, 0.1f, 1f), fr * 0.35f, 0.8f, 50f);   // v0.25.58 scorched ground
+                    DragonVfx.GroundFire(fo + ff * fr * 0.6f - Vector3.up * 0.8f, fr * 0.35f, 0.8f);   // v0.25.193 visible burning ground
                     DragonVfx.FlameCone(fo, ff, fr, fca, 0.35f);   // v0.25.61 real flames
                 });
             }
@@ -1132,7 +1134,7 @@ namespace AlbedosCustomClassesSkills
 
         private IEnumerator AnimateSlashArc(Vector3 center, Vector3 forward, float radius, float angle, Color color, bool rightToLeft = false)
         {
-            if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.SlashArc(center, forward, radius, angle, color, Mathf.Max(0.5f, radius * 0.25f), 0.45f, rightToLeft ? 180f : 0f); });   // v0.25.59 skin
+            if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.SlashArc(center, forward, radius, angle, color, Mathf.Max(0.5f, radius * 0.25f), 0.45f, rightToLeft ? 180f : 0f, !rightToLeft); });   // Heavy Slash keeps its intended horizontal right-to-left sweep.
             if (_enableVfx.Value && DragonVfx.Enabled) yield break;   // v0.25.63 no line placeholder
             GameObject obj = new GameObject("DragonsAltarSlashArc");
             LineRenderer line = obj.AddComponent<LineRenderer>();
@@ -1175,14 +1177,18 @@ namespace AlbedosCustomClassesSkills
         private IEnumerator AnimateConeLightning(Vector3 origin, Vector3 forward, float range, float angle)
         {
             int bolts = 5;
+            Vector3 right = Vector3.Cross(Vector3.up, forward).normalized;
+            if (right.sqrMagnitude < 0.001f) right = Vector3.right;
             for (int b = 0; b < bolts; b++)
             {
                 float p = bolts <= 1 ? 0.5f : (float)b / (float)(bolts - 1);
-                float yaw = Mathf.Lerp(-angle * 0.5f, angle * 0.5f, p);
-                Vector3 dir = Quaternion.AngleAxis(yaw, Vector3.up) * forward.normalized;
+                float yaw = Mathf.Lerp(angle * 0.5f, -angle * 0.5f, p);
+                Vector3 dir = (forward.normalized * Mathf.Cos(yaw * Mathf.Deg2Rad) + right * Mathf.Sin(yaw * Mathf.Deg2Rad)).normalized;
                 Vector3 end = origin + dir * range;
-                PlayLightningVfx(origin + Vector3.up * 0.4f, end, 0.8f);
-                yield return new WaitForSeconds(0.025f);
+                // Trace the release right-to-left too, rather than fan every bolt from one stationary point.
+                Vector3 release = origin + right * Mathf.Lerp(0.45f, -0.45f, p) + Vector3.up * 0.4f;
+                PlayLightningVfx(release, end, 0.8f);
+                yield return new WaitForSeconds(0.04f);
             }
         }
 
@@ -1232,7 +1238,7 @@ namespace AlbedosCustomClassesSkills
             StartCoroutine(AnimateRing(end + Vector3.up * 0.08f, 0.2f, Mathf.Max(0.4f, radius), 0.30f, new Color(0.55f, 0.84f, 1f, 0.92f), 0.07f, 0f));
         }
 
-        private void HealPlayers(Vector3 center, float radius, float amount)
+        private void HealPlayersPercent(Vector3 center, float radius, float percent)
         {
             radius = Mathf.Max(0.1f, radius);
             Collider[] hits = Physics.OverlapSphere(center, radius);
@@ -1245,7 +1251,7 @@ namespace AlbedosCustomClassesSkills
                     continue;
 
                 healed.Add(ally);
-                Heal(ally, amount);
+                Heal(ally, DragonCombat.PercentMaxHeal(ally.GetMaxHealth(), percent, 1f));
                 if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.Heal(ally, DragonVfx.Holy); });
             }
         }

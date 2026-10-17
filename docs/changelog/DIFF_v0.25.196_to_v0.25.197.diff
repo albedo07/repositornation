@@ -1,0 +1,424 @@
+--- v0.25.196/AlbedosCustomClasses.Advanced.cs
++++ v0.25.197/AlbedosCustomClasses.Advanced.cs
+@@ -116,7 +116,7 @@
+     {
+         public const string ModGuid = "albedo.customclasses.advanced";
+         public const string ModName = "Aethelborn Ascended - Advancements";
+-        public const string ModVersion = "0.25.196";
++        public const string ModVersion = "0.25.197";
+ 
+         private const string ClassDataKey = "AlbedoCustomClasses.Class";
+         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
+@@ -6110,7 +6110,7 @@
+         private void IhBuildHolyRelic(Transform root, Color color, float h, float width, float t)
+         {
+             Material gold = DragonVfx.RelicGold(), ivory = DragonVfx.RelicIvory();
+-            Material green = DragonVfx.RelicGem(new Color(0.45f, 1f, 0.32f, 1f)), blue = DragonVfx.RelicGem(new Color(0.30f, 0.62f, 1f, 1f));
++            Material green = DragonVfx.RelicGem(new Color(0.08f, 0.82f, 0.19f, 1f)), blue = DragonVfx.RelicGem(new Color(0.30f, 0.62f, 1f, 1f));
+             Material feather = DragonVfx.RelicFeather(new Color(1f, 0.94f, 0.74f, 1f));
+             if (gold == null || ivory == null || green == null || blue == null || feather == null) return;
+             float R = t * 0.42f, H = h;
+@@ -6142,10 +6142,16 @@
+             Mesh burst = IhRelicMesh(k + "|burst", delegate { return DragonVfx.ExtrudeBevel(DragonVfx.StarOutline(16, hs * 0.6f, hs * 0.86f), t * 0.4f, t * 0.06f, 1f); });
+             IhRelicMeshObject(root, burst, gold, new Vector3(0f, hy, -t * 0.3f));
+             IhRelicDisc(root, gold, new Vector3(0f, hy, -t * 0.12f), hs * 1.25f, t * 0.55f);
+-            Mesh heartFrame = IhRelicMesh(k + "|hframe", delegate { return DragonVfx.ExtrudeBevel(IhHeartOutline(hs * 1.18f), t * 0.9f, hs * 0.05f, 1f); });
+-            Mesh heart = IhRelicMesh(k + "|heart", delegate { return DragonVfx.ExtrudeBevel(IhHeartOutline(hs * 0.9f), t * 1.1f, hs * 0.06f, 1f); });
+-            IhRelicMeshObject(root, heartFrame, gold, hp);
+-            IhRelicMeshObject(root, heart, green, hp + new Vector3(0f, -hs * 0.03f, 0f));
++            // Two raised, closed heart faces clear the backing disc/sunburst on both sides.
++            // Correct the face winding only on these heart meshes; other relic designs are a later batch.
++            Mesh heartFrame = IhRelicMesh(k + "|hframe197", delegate { return DragonVfx.RelicHeartMesh(IhHeartOutline(hs * 1.18f), t * 0.22f, hs * 0.05f); });
++            Mesh heart = IhRelicMesh(k + "|heart197", delegate { return DragonVfx.RelicHeartMesh(IhHeartOutline(hs * 0.9f), t * 0.32f, hs * 0.06f); });
++            for (int side = 0; side < 2; side++)
++            {
++                Vector3 face = hp + Vector3.forward * DragonVfx.HolyHeartFaceDepth(t, side == 0);
++                IhRelicMeshObject(root, heartFrame, gold, face);
++                IhRelicMeshObject(root, heart, green, face + new Vector3(0f, -hs * 0.03f, 0f));
++            }
+             IhRelicDiamond(root, blue, new Vector3(0f, hy - hs * 0.04f, 0f), hs * 0.12f, t * 1.25f);
+             // top spike + green crystal
+             IhRelicLathe(root, k + "|topspike", IhProf(0f, Y[12], 0.65f * R, Y[11], 0.32f * R, Y[8], 0f, Y[8]), 12, gold);
+@@ -20410,7 +20416,7 @@
+             if (advancement == "Sword Master") return "The Way of the Sword";
+             if (advancement == "Mercenary") return "Warfreak";
+             if (advancement == "Paladin") return "Heaven's Will";
+-            if (advancement == "Priest") return "Bless Thy Sinners";
++            if (advancement == "Priest") return "Saving Grace";
+             return "Advanced Passive";
+         }
+ 
+@@ -20432,7 +20438,7 @@
+             }
+ 
+             if (advancement == "Priest")
+-                return "+10% Magic Damage (Fire, Frost, Lightning, Poison, Spirit). You and allies within 20m survive a lethal hit at 1 HP, then recover 50% HP over 6s with +50% Move Speed and -70% Stamina use. Self 20 min, each ally 40 min.\n\nBuckler: doubled Parry. A Parry grants 5s Hyper Armor and empowers your next skill with +35% Damage (kept until used, then 25s before a Parry can grant it again), and releases a 10m Holy Shockwave (Spirit damage, Stuns Small and Big; 15s cooldown).";
++                return "+10% Magic Damage (Fire, Frost, Lightning, Poison, Spirit). Saving Grace: you and allies within 20m survive a lethal hit at 1 HP, then recover 50% HP over 6s with +50% Move Speed and -70% Stamina use. Self 20 min, each ally 40 min.\n\nBuckler: doubled Parry. A Parry grants 5s Hyper Armor and empowers your next skill with +35% Damage (kept until used, then 25s before a Parry can grant it again), and releases a 10m Holy Shockwave (Spirit damage, Stuns Small and Big; 15s cooldown).";
+ 
+             return "";
+         }
+--- v0.25.196/AlbedosCustomClasses.Core.cs
++++ v0.25.197/AlbedosCustomClasses.Core.cs
+@@ -41,7 +41,7 @@
+     {
+         public const string ModGuid = "albedo.customclasses";
+         public const string ModName = "Aethelborn Ascended - Altar";
+-        public const string ModVersion = "0.25.195";
++        public const string ModVersion = "0.25.197";
+ 
+         internal const string ClassDataKey = "AlbedoCustomClasses.Class";
+         internal const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
+@@ -1028,7 +1028,7 @@
+                 case "Sword Master": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("The Way of the Sword (Mastery)","the_way_of_the_sword","With exactly one Sword: +20 Sword, +50% Attack Speed and no Sword movement penalty. Dodging stops the rest of a Sword Master skill. Blocking does not cancel skills."), new AltarSkillEntry("Knight's Guidance (Grace)","knights_guidance","Lead every ally around you: faster movement, quicker stamina and less effort for every action, for 3 minutes.") } : new AltarSkillEntry[] { new AltarSkillEntry("Moonlight Splitter","moonlight_splitter","Three crescent waves of moonlight cleave through everything in their path."), new AltarSkillEntry("Crescent Cleave","crescent_cleave","Five giant crescent cleaves tear across the ground in a wide fan."), new AltarSkillEntry("Blade Storm","blade_storm","Rend space itself: a sphere of blades bursts at your aim, again and again."), new AltarSkillEntry("Frenzied Charge","frenzied_charge","Pull back, then dash forward with a thrust that launches small foes and stuns the large."), new AltarSkillEntry("Eclipse","eclipse","Your blade swells with magic for one sweeping slash all around you."), new AltarSkillEntry("Halfmoon Slash (Ultimate)","halfmoon_slash","A colossal half-moon slash, followed by its afterimage.") };
+                 case "Mercenary": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Warfreak (Mastery)","warfreak","Dual-wield any two one-handed physical weapons. Hyper Armor unless a single hit deals 60% of your Max HP or more. +10 Sword, Axe and Clubs, +25% Attack Speed with two one-handed physical weapons of the same type or a two-handed physical weapon, no physical weapon movement penalty, +30% Armor, 25% less damage taken while doing a skill (35% in the Ultimate). Unchained Fury triggers at 100 Fury for 20s."), new AltarSkillEntry("Battlecry (Grace)","battlecry","A war cry: you and nearby allies deal +15% damage to creatures for 1 minute and +25% damage to trees, rocks and ore for 3 minutes.") } : new AltarSkillEntry[] { new AltarSkillEntry("Stomp","stomp","Stomp the earth: a crushing impact, then an aftershock rolls outward."), new AltarSkillEntry("Circle Swing","circle_swing","Wind up and swing your weapon in a full circle, staggering everything around you."), new AltarSkillEntry("Bonecrusher","bonecrusher","Leap high and crash down, shattering the bones of everything below."), new AltarSkillEntry("Seismic Guillotine","seismic_guillotine","Tear a fissure through the ground to your aim, ending in a seismic explosion."), new AltarSkillEntry("Punishing Bomb","punishing_bomb","Bat a bomb into the enemy lines. It bursts on the first thing it touches and leaves them burning."), new AltarSkillEntry("Whirlwind (Ultimate)","whirlwind","Spin into a whirlwind of steel, carving everything that comes near.") };
+                 case "Paladin": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Heaven's Will (Mastery)","holy_trinity","+10% Magic Damage. With a Club-type weapon and a Shield: +15 Clubs, and Slash and Pierce each rise to at least 50% of your current Blunt damage. Holy Bulwark: with a Tower Shield your block covers 3x the area (front and sides) behind a holy force field."), new AltarSkillEntry("Heaven's Light (Grace)","heavens_light","Bless every ally around you with +40% Overall Defense and -25% Stamina use for 1 minute.") } : new AltarSkillEntry[] { new AltarSkillEntry("Goddess Relic","goddess_relic","Summon a holy Cross that strikes with Blunt and Lightning and burns foes with Spirit fire."), new AltarSkillEntry("Judgement Hammer","judgement_hammer","Hurl a holy hammer that grows as it flies, crushing everything in its path."), new AltarSkillEntry("Shield Charge","shield_charge","Raise your shield and charge forward, trampling everyone who dares stand in your path."), new AltarSkillEntry("Angel Comet","fallen_angel","Leap to the heavens, then crash upon your enemies like a blazing comet."), new AltarSkillEntry("Ray of Hope","ray_of_hope","Raise your hand to the heavens, healing every ally around you, strengthening their attacks, removing every debuff and warding them against new ones for 12s."), new AltarSkillEntry("Electric Smite (Ultimate)","electric_smite","Leap and slam down, releasing sixteen Lightning Trails that tear across the ground.") };
+-                case "Priest": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Bless Thy Sinners (Mastery)","bless_thy_sinners","+10% Magic Damage. When you or an ally within 20m would die, survive at 1 HP and recover 50% HP over time with a burst of speed. Your own save recharges in 20 minutes, each ally's separately. With a Buckler, a Parry releases a Holy Shockwave, grants Hyper Armor and empowers your next skill."), new AltarSkillEntry("Heaven's Crucible (Grace)","grand_sigil","Wrap yourself and nearby allies in a holy Barrier that holds until it breaks.") } : new AltarSkillEntry[] { new AltarSkillEntry("Lightning Relic","lightning_relic","Plant a Cross of lightning. Its pulses punish nearby foes; place Holy Relic beside it to consecrate the ground."), new AltarSkillEntry("Holy Relic","holy_relic","Raise a sacred Cross that restores your allies and strengthens everyone within its light."), new AltarSkillEntry("Divine Intervention","divine_intervention","Answer danger with a burst of holy power, restoring allies and exposing enemies around you or an aimed Relic."), new AltarSkillEntry("Grand Cross","grand_cross","Carve a radiant X through the battlefield. Its crossing blades travel forward, burning every foe they touch."), new AltarSkillEntry("Heaven's Judgement","heavens_judgement","Call a barrage of holy beams around yourself or an aimed Relic, chilling the enemies caught beneath them."), new AltarSkillEntry("Lightning Tempest (Ultimate)","lightning_tempest","Unleash a restless storm, layering lightning and afflictions across the battlefield.") };
++                case "Priest": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Saving Grace (Mastery)","bless_thy_sinners","+10% Magic Damage. When you or an ally within 20m would die, survive at 1 HP and recover 50% HP over time with a burst of speed. Your own save recharges in 20 minutes, each ally's separately. With a Buckler, a Parry releases a Holy Shockwave, grants Hyper Armor and empowers your next skill."), new AltarSkillEntry("Heaven's Crucible (Grace)","grand_sigil","Wrap yourself and nearby allies in a holy Barrier that holds until it breaks.") } : new AltarSkillEntry[] { new AltarSkillEntry("Lightning Relic","lightning_relic","Plant a Cross of lightning. Its pulses punish nearby foes; place Holy Relic beside it to consecrate the ground."), new AltarSkillEntry("Holy Relic","holy_relic","Raise a sacred Cross that restores your allies and strengthens everyone within its light."), new AltarSkillEntry("Divine Intervention","divine_intervention","Answer danger with a burst of holy power, restoring allies and exposing enemies around you or an aimed Relic."), new AltarSkillEntry("Grand Cross","grand_cross","Carve a radiant X through the battlefield. Its crossing blades travel forward, burning every foe they touch."), new AltarSkillEntry("Heaven's Judgement","heavens_judgement","Call a barrage of holy beams around yourself or an aimed Relic, chilling the enemies caught beneath them."), new AltarSkillEntry("Lightning Tempest (Ultimate)","lightning_tempest","Unleash a restless storm, layering lightning and afflictions across the battlefield.") };
+                 case "Wizard": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Archmage (Mastery)","archmage","Charge normal Staff attacks (not Gun Staves) for up to 3 stacks, 1 per second; the first stack doubles the impact size. Spending 300 Eitr triggers Overcharge for 12s: +40% faster wind up, +40% Eitr Regen and +40% Magic Damage."), new AltarSkillEntry("Clockwork (Grace)","clockwork","Bend time for you and nearby allies: +30% Skill Damage and skills that start their cooldown are 50% faster to recover for 22s.") } : new AltarSkillEntry[] { new AltarSkillEntry("Gravity Dominion","gravity_dominion","Create a gravitational field at the targeted area that controls enemies inside it."), new AltarSkillEntry("Astral Greatblade","astral_greatblade","Wind up and aim an astral blade attack. Holding the charge increases its power."), new AltarSkillEntry("Frost Nova","frost_nova","Release an area burst of Frost around the caster."), new AltarSkillEntry("Meteor Fall","meteor_fall","Call a meteor onto the targeted ground area."), new AltarSkillEntry("Astral Railcannon","astral_railcannon","Assemble and fire an aimed magical beam through the area ahead."), new AltarSkillEntry("Elemental Cataclysm (Ultimate)","elemental_cataclysm","Charge and release the Archmage's large elemental area attack at the targeted location.") };
+                 case "Spellcaster": return passive ? new AltarSkillEntry[] { new AltarSkillEntry("Yin and Yang (Mastery)","yin_and_yang","With any Staff or Wand: attacks twice as fast, Eitr use -50%, +20% Eitr Regen, normal Staff/Wand damage -50%. No skill wind up, no Staff/Wand movement penalty. Perfect accuracy. Every skill is cast on the move."), new AltarSkillEntry("Rift Walker (Grace)","rift_walker","Place two linked portals up to 50m away and travel between them with E.") } : new AltarSkillEntry[] { new AltarSkillEntry("Arcane Phalanx","arcane_phalanx","Summon hovering arcane swords; Mouse1 launches them one by one, recast and click to fire them all."), new AltarSkillEntry("Arcane Phantom","afterimage_arsenal","Leave spectral copies of yourself that fire along with your attacks."), new AltarSkillEntry("Void Step","void_step","Teleport instantly to your aim, even mid-attack, and float down safely."), new AltarSkillEntry("Rift Echo","rift_echo","Open rifts behind your target that echo your attacks back through it."), new AltarSkillEntry("Gravity Blast","gravity_blast","Hurl a ball of darkness that grinds through every enemy and drags the small ones in."), new AltarSkillEntry("Arcane Rupture (Ultimate)","arcane_rupture","Rupture the ground at your aim again and again, up to three charges, while you keep moving.") };
+             }
+@@ -1568,7 +1568,7 @@
+             if (advancementName == "Sword Master") return "<b>SKILLS</b>  Moonlight Splitter  |  Crescent Cleave  |  Blade Storm  |  Frenzied Charge  |  Eclipse  |  Halfmoon Slash (Ultimate)\n<b>MASTERY</b>  The Way of the Sword  |  <b>GRACE</b>  Knight's Guidance";
+             if (advancementName == "Mercenary") return "<b>SKILLS</b>  Stomp  |  Circle Swing  |  Bonecrusher  |  Seismic Guillotine  |  Punishing Bomb  |  Whirlwind (Ultimate)\n<b>MASTERY</b>  Warfreak  |  <b>GRACE</b>  Battlecry";
+             if (advancementName == "Paladin") return "<b>SKILLS</b>  Goddess Relic  |  Judgement Hammer  |  Shield Charge  |  Angel Comet  |  Ray of Hope  |  Electric Smite (Ultimate)\n<b>MASTERY</b>  Heaven's Will  |  <b>GRACE</b>  Heaven's Light";
+-            if (advancementName == "Priest") return "<b>SKILLS</b>  Lightning Relic  |  Holy Relic  |  Divine Intervention  |  Grand Cross  |  Heaven's Judgement  |  Lightning Tempest (Ultimate)\n<b>MASTERY</b>  Bless Thy Sinners  |  <b>GRACE</b>  Heaven's Crucible";
++            if (advancementName == "Priest") return "<b>SKILLS</b>  Lightning Relic  |  Holy Relic  |  Divine Intervention  |  Grand Cross  |  Heaven's Judgement  |  Lightning Tempest (Ultimate)\n<b>MASTERY</b>  Saving Grace  |  <b>GRACE</b>  Heaven's Crucible";
+             if (advancementName == "Acrobat") return "<b>SKILLS</b>  Gale Volley  |  Cyclone Arrow  |  Swallow Dive  |  Skyfall Barrage  |  Somersault Dance  |  Furious Winds (Ultimate)\n<b>MASTERY</b>  Windstep  |  <b>GRACE</b>  Tailwind";
+             if (advancementName == "Bowmaster") return "<b>SKILLS</b>  Ballista Shot  |  Arrow Rain  |  Pinning Shot  |  Explosive Arrow  |  Splitting Arrow  |  Starfall Volley (Ultimate)\n<b>MASTERY</b>  Deadeye  |  <b>GRACE</b>  Hawk's Vigil";
+             if (advancementName == "Wizard") return "<b>SKILLS</b>  Meteor Fall  |  Gravity Dominion  |  Astral Railcannon  |  Astral Greatblade  |  Frost Nova  |  Elemental Cataclysm (Ultimate)\n<b>MASTERY</b>  Archmage  |  <b>GRACE</b>  Clockwork";
+--- v0.25.196/AlbedosCustomClasses.GuardianAngel.cs
++++ v0.25.197/AlbedosCustomClasses.GuardianAngel.cs
+@@ -16,10 +16,16 @@
+     public class GuardianPlugin : BaseUnityPlugin
+     {
+         public const string ModGuid = "albedo.customclasses.guardian";
+-        public const string ModName = "Aethelborn Ascended - Grand Sigil Survival";
+-        public const string ModVersion = "0.25.192";
++        public const string ModName = "Aethelborn Ascended - Saving Grace";
++        public const string ModVersion = "0.25.197";
+ 
+         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
++        // Each owner advertises only Priest membership; cooldowns remain on the protected player's client.
++        private const string PriestPresenceKey = "AA.SavingGracePriest_v1";
++        private static readonly FieldInfo CustomDataField = typeof(Player).GetField(
++            "m_customData", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
++        private Player _presencePlayer;
++        private ZNetView _presenceView;
+ 
+         internal static GuardianPlugin Instance;
+ 
+@@ -41,12 +47,12 @@
+         {
+             Instance = this;
+ 
+-            _selfCooldown = Config.Bind("Grand Sigil Survival", "PriestSelfCooldownSeconds_v0123", 1200f, "Priest Grand Sigil death-save cooldown: 20 minutes.");
+-            _allyCooldown = Config.Bind("Grand Sigil Survival", "AllyResurrectionCooldownSeconds_v0208", 2400f, "Bless Thy Sinners: ally death-save cooldown, 40 minutes per ally.");
+-            _allyRadius = Config.Bind("Grand Sigil Survival", "AllyProtectionRadiusMeters_v0123", 20f, "Allies within 20m of a living Priest receive Grand Sigil's death-save.");
++            _selfCooldown = Config.Bind("Grand Sigil Survival", "PriestSelfCooldownSeconds_v0123", 1200f, "Saving Grace: Priest death-save cooldown: 20 minutes.");
++            _allyCooldown = Config.Bind("Grand Sigil Survival", "AllyResurrectionCooldownSeconds_v0208", 2400f, "Saving Grace: ally death-save cooldown, 40 minutes per ally.");
++            _allyRadius = Config.Bind("Grand Sigil Survival", "AllyProtectionRadiusMeters_v0123", 20f, "Allies within 20m of a living Priest receive Saving Grace.");
+             _recoveryPercent = Config.Bind("Grand Sigil Survival", "RecoveryPercent", 50f, "Percent of max HP restored after a lethal hit is prevented.");
+-            _recoveryDuration = Config.Bind("Grand Sigil Survival", "RecoveryDuration_v0208", 6f, "Bless Thy Sinners: 50% HP recovered over this many seconds; the speed / stamina window lasts as long.");
+-            _staminaUseCut = Config.Bind("Grand Sigil Survival", "StaminaUseReductionPercent", 70f, "Bless Thy Sinners: less Stamina used for all actions during the recovery window.");
++            _recoveryDuration = Config.Bind("Grand Sigil Survival", "RecoveryDuration_v0208", 6f, "Saving Grace: 50% HP recovered over this many seconds; the speed / stamina window lasts as long.");
++            _staminaUseCut = Config.Bind("Grand Sigil Survival", "StaminaUseReductionPercent", 70f, "Saving Grace: less Stamina used for all actions during the recovery window.");
+             _enableVfx = Config.Bind("Visuals", "EnableVFX", true, "Enable Grand Sigil survival visual effects.");
+             _testingForceCooldowns = Config.Bind("Testing", "ForceCooldowns", false, "Testing mode: force Grand Sigil survival cooldown to one value.");
+             _testingCooldownSeconds = Config.Bind("Testing", "CooldownSeconds", 5f, "Testing cooldown used while ForceCooldowns is enabled.");
+@@ -72,8 +78,10 @@
+             Player player = Player.m_localPlayer;
+             if (player == null) return;
+             bool self = GetAdvancement(player) == "Priest";
++            PublishPriestPresence(player, self);
+             float until = self ? _selfNextAvailableTime : _allyNextAvailableTime;
+-            bool eligible = !player.IsDead() && (self || until > Time.time || HasNearbyPriest(player));
++            bool nearby = !self && until <= Time.time && !player.IsDead() && HasNearbyPriest(player);
++            bool eligible = ShouldShowSavingGrace(!player.IsDead(), self, nearby, until, Time.time);
+             if (!eligible)
+             {
+                 if (_indicatorShown) DragonCombat.ClearStatus(player, "priest_life_token");
+@@ -82,14 +90,43 @@
+             }
+             _indicatorShown = true;
+             float left = Mathf.Max(0f, until - Time.time);
+-            string title = self ? "Bless Thy Sinners" : "Priest's Protection";
+-            DragonCombat.ShowStatusState(player, "priest_life_token", "heart", title + (left > 0f ? " - Cooldown" : " - Ready"), left,
+-                left > 0f ? "Death-save unavailable. Ready in " + Mathf.CeilToInt(left) + "s."
+-                    : (self ? "Your death-save is ready." : "Ally death-save is ready while a living Priest is nearby."));
++            DragonCombat.ShowStatusState(player, "priest_life_token", "heart", "Saving Grace" + (left > 0f ? " - Cooldown" : " - Ready"), left,
++                left > 0f ? "Saving Grace is on cooldown for " + Mathf.CeilToInt(left) + "s. This timer continues outside Priest range."
++                    : (self ? "Survive a lethal hit at 1 HP, then recover."
++                        : "A living Priest is nearby. Survive a lethal hit at 1 HP, then recover. Stay within Priest range."));
++        }
++
++        // The cooldown state takes priority over range (and death); never hide an unexpired recipient timer.
++        internal static bool ShouldShowSavingGrace(bool alive, bool self, bool nearby, float until, float now)
++        {
++            return until > now || (alive && (self || nearby));
++        }
++
++        private void PublishPriestPresence(Player player, bool priest)
++        {
++            if (_presencePlayer != player)
++            {
++                ClearPriestPresence();
++                _presencePlayer = player;
++                _presenceView = player.GetComponent<ZNetView>();
++            }
++            if (_presenceView == null || !_presenceView.IsValid() || !_presenceView.IsOwner()) return;
++            ZDO zdo = _presenceView.GetZDO();
++            if (zdo.GetBool(PriestPresenceKey, false) != priest) zdo.Set(PriestPresenceKey, priest);
++        }
++
++        private void ClearPriestPresence()
++        {
++            if (_presenceView != null && _presenceView.IsValid() && _presenceView.IsOwner())
++            {
++                ZDO zdo = _presenceView.GetZDO();
++                if (zdo.GetBool(PriestPresenceKey, false)) zdo.Set(PriestPresenceKey, false);
++            }
+         }
+ 
+         private void OnDestroy()
+         {
++            ClearPriestPresence();
+             if (Player.m_localPlayer != null) DragonCombat.ClearStatus(Player.m_localPlayer, "priest_life_token");
+             if (_harmony != null)
+             {
+@@ -154,21 +191,15 @@
+         private bool HasNearbyPriest(Player player)
+         {
+             float radius = Mathf.Max(1f, DragonCombat.M(_allyRadius.Value));
+-            Collider[] hits = Physics.OverlapSphere(player.transform.position, radius, ~0, QueryTriggerInteraction.Ignore);
+-            HashSet<int> seen = new HashSet<int>();
+-
+-            for (int i = 0; i < hits.Length; i++)
+-            {
+-                Player priest = hits[i].GetComponentInParent<Player>();
+-                if (priest == null || priest == player || priest.IsDead())
+-                    continue;
+-
+-                int id = priest.GetInstanceID();
+-                if (!seen.Add(id))
+-                    continue;
+-
+-                if (GetAdvancement(priest) == "Priest")
+-                    return true;
++            float radiusSquared = radius * radius;
++            List<Player> players = Player.GetAllPlayers();
++            for (int i = 0; i < players.Count; i++)
++            {
++                Player priest = players[i];
++                if (priest == null || priest == player || priest.IsDead()
++                    || (priest.transform.position - player.transform.position).sqrMagnitude > radiusSquared) continue;
++                ZNetView view = priest.GetComponent<ZNetView>();
++                if (view != null && view.IsValid() && view.GetZDO().GetBool(PriestPresenceKey, false)) return true;
+             }
+ 
+             return false;
+@@ -202,12 +233,12 @@
+             if (MessageHud.instance != null)
+                 MessageHud.instance.ShowMessage(
+                     MessageHud.MessageType.Center,
+-                    allyProtection ? "Bless Thy Sinners - Resurrection" : "Bless Thy Sinners"
++                    "Saving Grace - Saved"
+                 );
+ 
+             Logger.LogInfo(allyProtection
+-                ? "Bless Thy Sinners prevented ally lethal damage."
+-                : "Bless Thy Sinners prevented Priest lethal damage.");
++                ? "Saving Grace prevented ally lethal damage."
++                : "Saving Grace prevented Priest lethal damage.");
+         }
+ 
+         private IEnumerator GrandSigilVisual(Player player)
+@@ -357,15 +388,8 @@
+         {
+             try
+             {
+-                FieldInfo field = typeof(Player).GetField(
+-                    "m_customData",
+-                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
+-                );
+-
+-                if (field == null)
+-                    return null;
+-
+-                return field.GetValue(player) as IDictionary;
++                if (CustomDataField == null) return null;
++                return CustomDataField.GetValue(player) as IDictionary;
+             }
+             catch
+             {
+--- v0.25.196/AlbedosCustomClasses.Skills.cs
++++ v0.25.197/AlbedosCustomClasses.Skills.cs
+@@ -232,7 +232,7 @@
+         public static SkillsPlugin Instance;
+         public const string ModGuid = "albedo.customclasses.skills";
+         public const string ModName = "Aethelborn Ascended - Starter Skills";
+-        public const string ModVersion = "0.25.195";
++        public const string ModVersion = "0.25.197";
+ 
+         private const string ClassDataKey = "AlbedoCustomClasses.Class";
+         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";
+@@ -1182,11 +1182,11 @@
+             for (int b = 0; b < bolts; b++)
+             {
+                 float p = bolts <= 1 ? 0.5f : (float)b / (float)(bolts - 1);
+-                float yaw = Mathf.Lerp(-angle * 0.5f, angle * 0.5f, p);
++                float yaw = Mathf.Lerp(angle * 0.5f, -angle * 0.5f, p);
+                 Vector3 dir = (forward.normalized * Mathf.Cos(yaw * Mathf.Deg2Rad) + right * Mathf.Sin(yaw * Mathf.Deg2Rad)).normalized;
+                 Vector3 end = origin + dir * range;
+-                // Trace the release left-to-right too, rather than fan every bolt from one stationary point.
+-                Vector3 release = origin + right * Mathf.Lerp(-0.45f, 0.45f, p) + Vector3.up * 0.4f;
++                // Trace the release right-to-left too, rather than fan every bolt from one stationary point.
++                Vector3 release = origin + right * Mathf.Lerp(0.45f, -0.45f, p) + Vector3.up * 0.4f;
+                 PlayLightningVfx(release, end, 0.8f);
+                 yield return new WaitForSeconds(0.04f);
+             }
+--- v0.25.196/DragonsAltar.CombatRuntime.cs
++++ v0.25.197/DragonsAltar.CombatRuntime.cs
+@@ -16,7 +16,7 @@
+     {
+         public const string ModGuid = "albedo.customclasses.combatruntime";
+         public const string ModName = "Aethelborn Ascended - Combat Runtime";
+-        public const string ModVersion = "0.25.196";
++        public const string ModVersion = "0.25.197";
+ 
+         internal static DragonCombatPlugin Instance;
+ 
+@@ -208,7 +208,7 @@
+             FrostPhysicalDamageBonus = Config.Bind("Debuffs", "FrostPhysicalDamageTakenPercent", 20f, "Extra physical damage taken while Frost weakens physical defense.");
+             ZapDelay = Config.Bind("Debuffs", "ZapDelay_v0212", 2f, "Seconds before Zap explodes (universal rule: 2s).");
+             ZapRadius = Config.Bind("Debuffs", "ZapRadius", 1f, "Zap explosion radius.");
+-            ClericMasteryMagicDamage = Config.Bind("Cleric Mastery", "MagicDamagePercent", 10f, "Heaven's Will (Paladin) and Bless Thy Sinners (Priest): +Magic Damage (Fire, Frost, Lightning, Poison, Spirit) on everything they deal.");
++            ClericMasteryMagicDamage = Config.Bind("Cleric Mastery", "MagicDamagePercent", 10f, "Heaven's Will (Paladin) and Saving Grace (Priest): +Magic Damage (Fire, Frost, Lightning, Poison, Spirit) on everything they deal.");
+             CharacterHeightMeters = Config.Bind("Measurement", "CharacterHeightMeters", 0.5f, "v0.22.5 ruler (user rule): your character's height counts as this many meters. Every range, radius, width, length and travel speed in every config is in these meters.");
+             UnitsPerMeterOverride = Config.Bind("Measurement", "UnitsPerMeterOverride", 1.5f, "Unity units per config meter. 1.5 = the confirmed in-game ruler (user, v0.23.3). 0 = automatic from character height / CharacterHeightMeters.");
+             ZapDamage = Config.Bind("Debuffs", "ZapLightningDamage", 25f, "Testing/default lightning damage for Zap because the framework does not specify an amount.");
+@@ -7725,6 +7725,7 @@
+                 b.Append(tail[i]);
+             }
+             label = b.ToString();
++            if (source == "Priest.GrandSigilRecovery") label = "Saving Grace - Recovery";
+             if (defense > 0f) icon = "defense";
+             else if (damage > 0f) icon = "damage";
+             else if (move > 0f) icon = "haste";
+@@ -13985,7 +13986,7 @@
+                     case 26: ClearMat(); break;
+                     case 27: DarkCoreMat(); break;
+                     case 28: WindVeilMat(); break;
+-                    case 29: Mat(SlashTex(), false); Mat(LineTex(), true); Mat(CrackTex(), false); Mat(SmokeTex(), false); Mat(StreakTex(), false); CloudPuffSize(); break;
++                    case 29: Mat(SlashTex(), false); Mat(LineTex(), true); Mat(CrackTex(), false); Mat(SmokeTex(), false); Mat(StreakTex(), false); CloudPuffSize(); DamageBuffMistSize(); break;
+                     case 30: RelicGold(); break;
+                     case 31: RelicIvory(); break;
+                     case 32: RelicGem(new Color(0.15f, 0.48f, 0.85f, 1f)); break;
+@@ -16438,16 +16439,28 @@
+             for (int i = 0; i < hammer.transform.childCount; i++)
+             { Transform part = hammer.transform.GetChild(i); if (part.name == "tipL" || part.name == "tipR") part.localPosition = HammerHeadPoint(part.localPosition); }
+         }
++        private static AnimationCurve _damageBuffMistSize;
++        private static AnimationCurve DamageBuffMistSize()
++        {
++            if (_damageBuffMistSize == null) _damageBuffMistSize = new AnimationCurve(
++                new Keyframe(0f, 0.65f), new Keyframe(0.18f, 1f), new Keyframe(0.7f, 1.1f), new Keyframe(1f, 1.3f));
++            return _damageBuffMistSize;
++        }
+         public static void DamageBuffMist(Vector3 point, float radius, Color tint)
+         {
+             if (!Enabled) return;
+             radius = Mathf.Max(1f, radius);
+-            DragonVfxLife host = Host(point + Vector3.up * 0.28f, 2.1f, "damagebuffmist");
+-            Color smoke = Color.Lerp(new Color(0.48f, 0.49f, 0.51f, 1f), tint, 0.22f); smoke.a = 0.36f;
+-            ParticleSystem mist = Particles(host.transform, smoke, 24, 8f, 0.5f, 1.6f, 0.05f, 0.18f,
+-                radius * 0.18f, radius * 0.3f, -0.015f, ParticleSystemShapeType.Circle, radius * 0.72f, new Vector3(90f, 0f, 0f), false, false);
+-            ParticleSystem.MainModule main = mist.main; main.maxParticles = 36;
++            DragonVfxLife host = Host(point + Vector3.up * Mathf.Clamp(radius * 0.07f, 0.5f, 1.5f), 2.5f, "damagebuffmist");
++            Color smoke = Color.Lerp(new Color(0.58f, 0.59f, 0.61f, 1f), tint, 0.22f); smoke.a = 0.64f;
++            ParticleSystem mist = Particles(host.transform, smoke, 42, 14f, 0.6f, 1.8f, 0.08f, 0.24f,
++                radius * 0.25f, radius * 0.38f, -0.015f, ParticleSystemShapeType.Circle, radius * 0.65f, new Vector3(90f, 0f, 0f), false, false);
++            mist.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
++            ParticleSystem.MainModule main = mist.main; main.maxParticles = 52;
++            ParticleSystem.ShapeModule shape = mist.shape; shape.radiusThickness = 1f;
++            ParticleSystem.SizeOverLifetimeModule size = mist.sizeOverLifetime;
++            size.size = new ParticleSystem.MinMaxCurve(1f, DamageBuffMistSize());
+             mist.GetComponent<ParticleSystemRenderer>().sharedMaterial = Mat(SmokeTex(), false);
++            mist.Play(true);
+         }
+         private static float SigilSegment(Vector2 point, Vector2 a, Vector2 b)
+         {
+@@ -16765,6 +16778,34 @@
+             m.vertices = v.ToArray(); m.normals = nr.ToArray(); m.uv = uv.ToArray(); m.triangles = t.ToArray();
+             m.RecalculateBounds();
+             return m;
++        }
++
++        // Scoped to Holy Relic hearts: older extrusions have inward-facing cap winding.
++        public static void OrientRelicHeartFaces(Vector3[] vertices, Vector3[] normals, int[] triangles)
++        {
++            for (int i = 0; i + 2 < triangles.Length; i += 3)
++            {
++                int a = triangles[i], b = triangles[i + 1], c = triangles[i + 2];
++                Vector3 face = Vector3.Cross(vertices[b] - vertices[a], vertices[c] - vertices[a]);
++                if (Vector3.Dot(face, normals[a] + normals[b] + normals[c]) < 0f)
++                { triangles[i + 1] = c; triangles[i + 2] = b; }
++            }
++        }
++
++        public static Mesh RelicHeartMesh(List<Vector2> outline, float depth, float bevel)
++        {
++            Mesh mesh = ExtrudeBevel(outline, depth, bevel, 1f);
++            if (mesh == null) return null;
++            int[] triangles = mesh.triangles;
++            OrientRelicHeartFaces(mesh.vertices, mesh.normals, triangles);
++            mesh.triangles = triangles;
++            return mesh;
++        }
++
++        public static float HolyHeartFaceDepth(float thickness, bool front)
++        {
++            // Backing extends from -0.50t to +0.155t. Each 0.32t-deep heart clears it.
++            return thickness * (front ? 0.40f : -0.74f);
+         }
+ 
+         // Miter offset of a CCW outline (d > 0 outward, d < 0 inward).
+--- v0.25.196/DragonsAltar.DevTools.cs
++++ v0.25.197/DragonsAltar.DevTools.cs
+@@ -40,7 +40,7 @@
+     {
+         public const string ModGuid = "albedo.customclasses.devtools";
+         public const string ModName = "Aethelborn Ascended - Developer Tools";
+-        public const string ModVersion = "0.25.195";
++        public const string ModVersion = "0.25.197";
+ 
+         public static DeveloperToolsPlugin Instance;
+ 
+@@ -498,7 +498,7 @@
+         {
+             string text = System.Text.RegularExpressions.Regex.Replace(section, @"\s+v\d+$", "");
+             text = text.Replace("Fallen Angel", "Angel Comet")
+-                       .Replace("Grand Sigil Survival", "Priest Bless Thy Sinners")
++                       .Replace("Grand Sigil Survival", "Priest Saving Grace")
+                        .Replace("Priest Grand Sigil", "Priest Heaven's Crucible")
+                        .Replace("Heavens ", "Heaven's ")
+                        .Replace("Judgement Cut", "Blade Storm")
+--- v0.25.196/INSTALL.bat
++++ v0.25.197/INSTALL.bat
+@@ -1,5 +1,5 @@
+ @echo off
+-title Immortal Heroes v0.25.196 - Hollow Clouds and Relic Detail
++title Immortal Heroes v0.25.197 - Saving Grace and Holy Relic
+ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
+ echo.
+ pause
+--- v0.25.196/INSTALL.ps1
++++ v0.25.197/INSTALL.ps1
+@@ -1,7 +1,7 @@
+ $ErrorActionPreference = "Stop"
+ 
+ Write-Host ""
+-Write-Host "IMMORTAL HEROES v0.25.196 - HOLLOW CLOUDS AND RELIC DETAIL" -ForegroundColor Cyan
++Write-Host "IMMORTAL HEROES v0.25.197 - SAVING GRACE AND HOLY RELIC" -ForegroundColor Cyan
+ Write-Host "All 10 DLLs compile in staging before the live profile is touched." -ForegroundColor Gray
+ Write-Host ""
+ 

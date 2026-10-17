@@ -1,0 +1,29 @@
+AlbedosCustomClasses.Core.cs: PASS
+
+DragonsAltar.CombatRuntime.cs: PASS
+
+AlbedosCustomClasses.Skills.cs: PASS
+
+AlbedosCustomClasses.Passives.cs: PASS
+
+AlbedosCustomClasses.GuardianAngel.cs: PASS
+
+AlbedosCustomClasses.Advanced.cs: PASS
+
+DragonsAltar.Sorcerer.cs: PASS
+
+DragonsAltar.Ranger.cs: PASS
+
+DragonsAltar.DevTools.cs: PASS
+
+Aethelborn.Experience.cs: PASS
+
+PASS: Acrobat drawing gate replaced
+PASS: Unrelated sprint checks unchanged
+PASS: Sprint queue clear redirected to reload guard
+PASS: Reload patch preserves unrelated calls
+PASS: No replacement when drawing gate absent
+PASS: No replacement when queue clear absent
+Passed 6 shipped-method checks. Unity gameplay not exercised.
+
+See READ_ME_v0.25.192.txt for reference limitations and pending in-game checks.

@@ -1,0 +1,116 @@
+PASS: Original v197 archive is preserved exactly
+PASS: Exactly five source modules changed for items 5-8
+PASS: Byte-identical untouched module: AlbedosCustomClasses.Passives.cs
+PASS: Byte-identical untouched module: AlbedosCustomClasses.Core.cs
+PASS: Byte-identical untouched module: DragonsAltar.DevTools.cs
+PASS: Byte-identical untouched module: AlbedosCustomClasses.GuardianAngel.cs
+PASS: Byte-identical untouched module: Aethelborn.Experience.cs
+PASS: 185 existing art/animation assets byte-identical
+PASS: INSTALL.bat: version/banner text only
+PASS: INSTALL.ps1: version/banner text only
+PASS: AlbedosCustomClasses.Advanced.cs: no removed methods or altered existing signatures
+PASS: AlbedosCustomClasses.Advanced.cs: only scoped method bodies changed: IhSkillBusy
+PASS: AlbedosCustomClasses.Advanced.cs: only intended helpers added
+PASS: AlbedosCustomClasses.Advanced.cs: all config keys/defaults/descriptions unchanged
+PASS: AlbedosCustomClasses.Advanced.cs: no new .SetPositions(
+PASS: AlbedosCustomClasses.Advanced.cs: no new .GetPositions(
+PASS: AlbedosCustomClasses.Advanced.cs: no new .LoadImage(
+PASS: AlbedosCustomClasses.Advanced.cs: no new FindObjectOfType(
+PASS: AlbedosCustomClasses.Advanced.cs: original BOM preserved
+PASS: AlbedosCustomClasses.Skills.cs: no removed methods or altered existing signatures
+PASS: AlbedosCustomClasses.Skills.cs: only scoped method bodies changed: AnimateSlashArc, CastFromHotbar, PerfUpdateInner
+PASS: AlbedosCustomClasses.Skills.cs: only intended helpers added
+PASS: AlbedosCustomClasses.Skills.cs: all config keys/defaults/descriptions unchanged
+PASS: AlbedosCustomClasses.Skills.cs: no new .SetPositions(
+PASS: AlbedosCustomClasses.Skills.cs: no new .GetPositions(
+PASS: AlbedosCustomClasses.Skills.cs: no new .LoadImage(
+PASS: AlbedosCustomClasses.Skills.cs: no new FindObjectOfType(
+PASS: AlbedosCustomClasses.Skills.cs: original BOM preserved
+PASS: DragonsAltar.CombatRuntime.cs: no removed methods or altered existing signatures
+PASS: DragonsAltar.CombatRuntime.cs: only scoped method bodies changed: Done, ExtrudeBevel, HammerHeadPoint, HolyWarhammer, Run
+PASS: DragonsAltar.CombatRuntime.cs: only intended helpers added
+PASS: DragonsAltar.CombatRuntime.cs: all config keys/defaults/descriptions unchanged
+PASS: DragonsAltar.CombatRuntime.cs: no new .SetPositions(
+PASS: DragonsAltar.CombatRuntime.cs: no new .GetPositions(
+PASS: DragonsAltar.CombatRuntime.cs: no new .LoadImage(
+PASS: DragonsAltar.CombatRuntime.cs: no new FindObjectOfType(
+PASS: DragonsAltar.CombatRuntime.cs: original BOM preserved
+PASS: DragonsAltar.Ranger.cs: no removed methods or altered existing signatures
+PASS: DragonsAltar.Ranger.cs: only scoped method bodies changed: Awake
+PASS: DragonsAltar.Ranger.cs: only intended helpers added
+PASS: DragonsAltar.Ranger.cs: all config keys/defaults/descriptions unchanged
+PASS: DragonsAltar.Ranger.cs: no new .SetPositions(
+PASS: DragonsAltar.Ranger.cs: no new .GetPositions(
+PASS: DragonsAltar.Ranger.cs: no new .LoadImage(
+PASS: DragonsAltar.Ranger.cs: no new FindObjectOfType(
+PASS: DragonsAltar.Ranger.cs: original BOM preserved
+PASS: DragonsAltar.Sorcerer.cs: no removed methods or altered existing signatures
+PASS: DragonsAltar.Sorcerer.cs: only scoped method bodies changed: PerfUpdateInner
+PASS: DragonsAltar.Sorcerer.cs: only intended helpers added
+PASS: DragonsAltar.Sorcerer.cs: all config keys/defaults/descriptions unchanged
+PASS: DragonsAltar.Sorcerer.cs: no new .SetPositions(
+PASS: DragonsAltar.Sorcerer.cs: no new .GetPositions(
+PASS: DragonsAltar.Sorcerer.cs: no new .LoadImage(
+PASS: DragonsAltar.Sorcerer.cs: no new FindObjectOfType(
+PASS: DragonsAltar.Sorcerer.cs: original BOM preserved
+PASS: Unchanged public class DragonCombatPlugin (except release version)
+PASS: Unchanged public class DragonSkillClipDriver (except release version)
+PASS: Unchanged public static class DragonMixamo (except release version)
+PASS: Unchanged public class DragonMixamoPlayer (except release version)
+PASS: Unchanged public static class DragonClothGuard (except release version)
+PASS: Unchanged public class DragonWeaponWake (except release version)
+PASS: Unchanged public class DragonCloudShellFade (except release version)
+PASS: Unchanged animation/combat behavior: public static void PrepareSwordMasterDodge
+PASS: Unchanged animation/combat behavior: public static bool CanInstantSwordMasterDodge
+PASS: Unchanged animation/combat behavior: public static void RetireSkillAnimations
+PASS: Unchanged animation/combat behavior: public static void LockSkill
+PASS: Unchanged animation/combat behavior: public static bool IsSkillLocked
+PASS: Unchanged animation/combat behavior: public static bool ClipBusy
+PASS: Unchanged animation/combat behavior: public static void PlayClip
+PASS: Unchanged animation/combat behavior: public sealed class SkillExecution
+PASS: Unchanged animation/combat behavior: public static void SetSkillAnimSpeed
+PASS: Unchanged skill/model logic: private IEnumerator JudgementHammerRoutine
+PASS: Unchanged skill/model logic: private bool UpdateHammerSize
+PASS: Unchanged skill/model logic: private float HammerHitRadius
+PASS: Unchanged skill/model logic: private void UpdateHammerVisual
+PASS: Unchanged skill/model logic: private IEnumerator AscendedHeavySlashRoutine
+PASS: Unchanged skill/model logic: private IEnumerator JudgementCutRoutine
+PASS: Unchanged skill/model logic: private void CastKnightsGuidance
+PASS: Unchanged skill/model logic: private IEnumerator MoonlightRoutine
+PASS: Unchanged skill/model logic: private IEnumerator CrescentCleaveWave
+PASS: Unchanged skill/model logic: private IEnumerator HeavensJudgementRoutine
+PASS: Unchanged skill/model logic: private void UpdateSwordMasterInterrupt
+PASS: Unchanged skill/model logic: private void IhBuildSolidCross
+PASS: Unchanged skill/model logic: private void IhBuildHolyRelic
+PASS: Unchanged skill/model logic: private void IhBuildLightningRelic
+PASS: Unchanged existing visual design: public static void JudgementSphere
+PASS: Unchanged existing visual design: public static Color CloudShellTexel
+PASS: Unchanged existing visual design: public static void DamageBuffMist
+PASS: Unchanged existing visual design: public static float HolyHeartFaceDepth
+PASS: Unchanged existing visual design: public static Mesh RelicHeartMesh
+PASS: Unchanged existing visual design: private static void ThickenHammerHead
+PASS: Unchanged existing visual design: private static GameObject BuildWarhammerGeometry
+PASS: Unchanged existing visual design: public static Material RelicGold
+PASS: Unchanged existing visual design: public static Material RelicGem
+PASS: Unchanged existing visual design: public static Mesh RelicDiamondMesh
+PASS: Unchanged existing visual design: public static void SlashArc
+PASS: Unchanged starter gameplay / batch-one Zap: private void CastHeavySlash
+PASS: Unchanged starter gameplay / batch-one Zap: private IEnumerator HeavySlashRoutine
+PASS: Unchanged starter gameplay / batch-one Zap: private IEnumerator AnimateConeLightning
+PASS: Shared extrusion changes only cap winding; geometry/UVs/normals/sides/materials unchanged
+PASS: Hammer changes only head height: accepted width, depth and grip preserved
+PASS: Hammer clone changes only its child name so the existing visual growth updater finds it
+PASS: Repeat casts cannot bypass animation completion merely by sharing the last skill ID
+PASS: New cast input checks complete animation ownership
+PASS: Full CA gate includes clip keys, native tail and source graph/fade
+PASS: New cast gate does not use the short 0.25-second post-impact clip window
+PASS: Intentional channel stop/relic dismissal controls remain available
+PASS: Internal skill multi-strike calls bypass the input gate
+PASS: Normal Heavy Slash only disables sampled-plane replacement for its horizontal sweep
+PASS: Normal Heavy Slash still requests the right-to-left horizontal effect
+PASS: Starter direct entry rejects a pending CA before resources are spent
+PASS: AlbedosCustomClasses.Skills.cs: legacy input also waits for the CA
+PASS: DragonsAltar.Sorcerer.cs: legacy input also waits for the CA
+PASS: Extra effect point lights remain removed
+PASS: Menu/world input and ongoing charge-release polling are unchanged
+115 scope checks passed.

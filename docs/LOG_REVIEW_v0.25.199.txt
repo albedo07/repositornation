@@ -1,0 +1,18 @@
+AETHELBORN ASCENDED v0.25.199 - LOG REVIEW RESOLUTION
+2026-10-17 (Asia/Manila). Inputs: Aethelborn_Performance(3).txt and LogOutput(1).log, as supplied locally. These predate v197/v198/v199; no new live game log is claimed.
+
+FIXED IN AA CODE
+1. 392 EXP prefab-scan null-reference warnings: Discover called GetMaxHealth on uninitialized prefab Characters; native GetMaxHealth dereferences m_nview. Prefab discovery now calls GetMaxHealthBase, which reads base health and existing world-level scaling without that network-view access. Kill discovery retains live GetMaxHealth. Reward math, config keys/defaults, customized rewards and migrations are otherwise identical.
+2. Harmony inherited-target warnings: canonicalized inherited reflections to the actual declaring MethodInfo before patching/deduplication. Runtime and Advanced damage, Runtime block and Sorcerer Eitr/max-Eitr scanners now select the implementation Harmony expects. Same metadata token/module, same prefix/postfix/priority; distinct real overrides remain distinct. This repairs target selection rather than hiding the warning.
+3. Optional UI frame variants: color-search/icon construction deliberately probes variants not included among the painted chassis/overlay assets. IhFrameSprite now checks existence on its first cache miss and stores the same null fallback for missing variants, avoiding the required-loader warning for an optional probe. Painted/procedural fallback and all artwork remain unchanged. Missing PNGs were not invented or recolored.
+4. VNEI/EpicLoot type-load error: AA's optional DualWield type lookup used Harmony's broad TypeByName enumeration. It now uses the existing cached exact-name Assembly.GetType lookup. This avoids AA loading unrelated optional types; VNEI's absent EpicLoot compatibility dependency itself remains an external issue and could still be reported by other scanners.
+5. Advanced HUD allocation: replaced two temporary numeric arrays and two temporary label arrays per repaint with reused arrays. Actual values are still sampled on each repaint, and existing layout, colors and drawing stay intact. No per-frame reflection was added. The measured 552KB/s Advanced GUI allocation source has other contributors; no measured total reduction/FPS gain is asserted.
+
+SEPARATE REQUEST: LOW-STAMINA NACC
+The supplied paired-weapon video shows a frozen attack pose after several swings. AA advanced combo state and speed before native Attack.Start accepted the attack; on ordinary false it only reset the hit index. The patch now rolls tentative state/measurements/activation back, retains the prior pending state learn, and preserves native resource failure. No native rejection refund or forced idle/controller replacement. Actual Therzie/controller behavior must still be tested in game.
+
+LEFT ATTRIBUTED / UNRESOLVED
+The original performance sample covers 2,184s: idle 12.93ms; measured AA code about 0.50ms/frame; overall 10.58ms; worst 261.3ms. Recent 33.3ms stalls show roughly 0.1-0.2ms measured AA script time and ~31ms in aggregate rendering/GUI/physics/GPU-wait. This does not isolate a GPU, shader, other-mod, physics, frame-cap or unmeasured-AA cause. No logged VFX spawn maximum exceeds 8ms. The unattributed shader platform warning, missing main-menu/respawn audio, world-location IDs, transient player ID and duplicate CanvasRenderer messages lack a concrete AA source path in these logs. No third-party files/materials or unrelated mechanics were changed.
+
+NEXT EVIDENCE
+After installing v199, repeat the checklist and capture both fresh logs, including the same low-stamina weapon/mod combination. That can establish which warnings disappeared and whether the reported freeze/performance symptom is resolved.

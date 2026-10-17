@@ -1,0 +1,31 @@
+AETHELBORN ASCENDED - NEXT AUDIO PASS (PLAN ONLY)
+2026-10-17
+
+Use Valheim's existing sound prefabs and ZSFX playback. No audio changes are
+included in v194. The actual supplied game assembly contains ZSFX.Play,
+SetVolumeModifier, SetPitchModifier, Stop, FadeOut, m_audioClips and built-in
+concurrency settings; ZNetScene exposes GetPrefab and GetPrefabNames.
+
+1. Build a one-time catalog of the installed game's sfx_ prefabs. Preview them
+   in F8 and choose verified names. Do not guess prefab IDs or extract/reship
+   the game's sound files. Cache chosen prefab/clip references after lookup.
+2. Map a small number of events per skill: preparation (when needed), release,
+   impact and an optional short tail/loop for a persistent field. Position sounds
+   at the casting weapon, moving projectile/field or actual impact as appropriate.
+3. Reuse weapon swishes and cuts for Sword Master, heavy impacts/ground rumble
+   for Mercenary, lightning/healing sounds for Cleric's line, native elemental
+   sounds for Sorcerer and bow/projectile sounds for Ranger. Preview the exact
+   choices in game rather than committing to names not yet verified.
+4. Keep existing 3D attenuation/mixer behavior and ZSFX concurrency limits. Use
+   modest per-skill volume and slight native pitch variation. Persistent damage
+   ticks should not create a new full-volume sound every hit; throttle/loop them.
+5. Provide F8 master/per-skill volume and sound enable controls. Keep normal and
+   Ascended mappings independently tunable, with a restrained extra layer for
+   the upgrade. Match sound events to actual attack contact/release, not GUI clicks.
+6. Stop skill-owned loops on dodge cancellation/end/death. For multiplayer, send
+   the sound event once to nearby listeners; avoid playing both a local copy and
+   a network copy of the same event. Verify this with two clients before calling
+   the sound pass finished.
+
+This reuses the game's audio assets and native playback instead of requiring
+new audio files. Exact sound choices and final mixing still need an in-game pass.

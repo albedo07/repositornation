@@ -1,0 +1,503 @@
+--- v0.25.195/DragonsAltar.CombatRuntime.cs
++++ v0.25.196/DragonsAltar.CombatRuntime.cs
+@@ -16,7 +16,7 @@
+     {
+         public const string ModGuid = "albedo.customclasses.combatruntime";
+         public const string ModName = "Aethelborn Ascended - Combat Runtime";
+-        public const string ModVersion = "0.25.195";
++        public const string ModVersion = "0.25.196";
+ 
+         internal static DragonCombatPlugin Instance;
+ 
+@@ -13346,6 +13346,28 @@
+     // dims, the head crackles with small arcs, and when the trail ends it fades leaving a scorched scar.
+     // v0.25.195: actual equipped-weapon wake; transforms are resolved only when a skill starts.
+     // The trail follows the blade, so opposite and vertical swings cannot reuse the wrong fixed plane.
++    public class DragonCloudShellFade : MonoBehaviour
++    {
++        public Renderer Surface;
++        public float Life = 1f;
++        private float _age;
++        private static readonly int ColorId = Shader.PropertyToID("_Color"), TintId = Shader.PropertyToID("_TintColor");
++        private readonly MaterialPropertyBlock _properties = new MaterialPropertyBlock();
++        private void Update()
++        {
++            _age += Time.deltaTime;
++            if (_age >= Life) { Destroy(gameObject); return; }
++            float fade = Mathf.Min(Mathf.Clamp01(_age / 0.08f), Mathf.Clamp01((Life - _age) / 0.26f));
++            if (Surface != null)
++            {
++                _properties.SetColor(ColorId, new Color(1f, 1f, 1f, fade));
++                _properties.SetColor(TintId, new Color(0.5f, 0.5f, 0.5f, 0.5f * fade));
++                Surface.SetPropertyBlock(_properties);
++            }
++            transform.Rotate(Vector3.up, Time.deltaTime * 9f, Space.Self);
++        }
++    }
++
+     [DefaultExecutionOrder(31000)]
+     public class DragonWeaponWake : MonoBehaviour
+     {
+@@ -13923,7 +13945,7 @@
+         private static float _warmNext;
+         public static void PrewarmTick(Player p)
+         {
+-            if (_warmStep >= 40 || p == null) return;
++            if (_warmStep >= 43 || p == null) return;
+             if (p.InAttack() || DragonCombat.IsSkillLocked(p) || DragonCombat.SkillOwnsAnimator(p)) return;
+             if (_warmStep < 0) { _warmStep = 0; _warmNext = Time.time + 3f; return; }
+             if (Time.time < _warmNext) return;
+@@ -13974,6 +13996,9 @@
+                     case 37: RelicInlay(Holy); break;
+                     case 38: Mat(WhiteTex(), true); break;
+                     case 39: StompWindTexture(); break;
++                    case 40: Mat(CloudShellTexture(), false); break;
++                    case 41: CloudShellMesh(); break;
++                    case 42: Mat(HeavensSigilTexture(), false); break;
+                 }
+             }
+             catch (Exception) { }
+@@ -13997,7 +14022,7 @@
+                 clip == "wiz_greatblade" || clip == "wiz_greatblade_slam" || clip == "sorc_blade" || clip == "sorc_blade_asc" ||
+                 clip == "cleric_cross_1" || clip == "cleric_cross_2" || clip == "cleric_hammer_slam" || clip == "angel_comet" || clip == "cleric_zap";
+         }
+-        public static bool MaterialsReady { get { return _warmStep >= 40; } }
++        public static bool MaterialsReady { get { return _warmStep >= 43; } }
+         public static bool MuteHitImpact;   // v0.25.182 (perf): set around a skill's own rapid ticks (Furious Winds) to skip HitImpact
+         private static Material _windVeilMat;
+         private static Texture2D _windVeilTex;
+@@ -15391,9 +15416,14 @@
+         // around the forward axis (0 = horizontal, 90 = vertical, negative = the other diagonal).
+         public static void SlashArc(Vector3 center, Vector3 forward, float radius, float arcDeg, Color c, float width, float seconds, float roll)
+         {
++            SlashArc(center, forward, radius, arcDeg, c, width, seconds, roll, true);
++        }
++
++        public static void SlashArc(Vector3 center, Vector3 forward, float radius, float arcDeg, Color c, float width, float seconds, float roll, bool followWeaponPlane)
++        {
+             if (!Enabled) return;
+             Player local = Player.m_localPlayer;
+-            if (local != null && (center - (local.transform.position + Vector3.up)).sqrMagnitude < 4f)
++            if (followWeaponPlane && local != null && (center - (local.transform.position + Vector3.up)).sqrMagnitude < 4f)
+             {
+                 DragonWeaponWake wake = local.GetComponent<DragonWeaponWake>(); float observedRoll;
+                 if (wake != null && wake.TryRoll(out observedRoll)) roll = observedRoll;
+@@ -16230,21 +16260,24 @@
+             hold = Mathf.Clamp(hold, 0.1f, 1.2f);
+             Color glow = Color.Lerp(tint, new Color(0.55f, 0.75f, 1f, 1f), 0.35f);
+             Color core = Color.Lerp(tint, Color.white, 0.85f);
+-            // v0.25.195: Priest-storm smoke in a sphere VOLUME. No spherical surface/barrier mesh.
++            // v0.25.196: patchy curved smoke skin, with the center left hollow.
+             float cloudLife = Mathf.Max(0.65f, hold) + 0.3f;
+             DragonVfxLife haze = Host(center, cloudLife, "judgementcloud");
++            JudgementCloudShell(center, r, cloudLife);
+             Color fog = Color.Lerp(new Color(0.14f, 0.15f, 0.20f, 0.94f), tint, 0.10f); fog.a = 0.94f;
+             ParticleSystem mist = Particles(haze.transform, fog, 42, 0f, 0.05f, cloudLife,
+-                0.03f, 0.12f, r * 0.75f, r * 1.2f, 0f, ParticleSystemShapeType.Sphere, r * 0.65f, Vector3.zero, false, false);
+-            ParticleSystem.ShapeModule mistShape = mist.shape; mistShape.radiusThickness = 1f;
++                0.01f, 0.05f, r * 0.20f, r * 0.34f, 0f, ParticleSystemShapeType.Sphere, r, Vector3.zero, false, false);
++            mist.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
++            ParticleSystem.ShapeModule mistShape = mist.shape; mistShape.radiusThickness = 0f;
+             ParticleSystem.MainModule mistMain = mist.main; mistMain.maxParticles = 48;
+             mistMain.startColor = new ParticleSystem.MinMaxGradient(fog, new Color(fog.r * 1.18f, fog.g * 1.18f, fog.b * 1.18f, fog.a));
+             ParticleSystem.EmissionModule mistEmission = mist.emission;
+-            mistEmission.SetBursts(new ParticleSystem.Burst[] { new ParticleSystem.Burst(0f, (short)Mathf.Clamp(Mathf.RoundToInt(24f * Amount), 18, 36)) });
++            mistEmission.SetBursts(new ParticleSystem.Burst[] { new ParticleSystem.Burst(0f, (short)Mathf.Clamp(Mathf.RoundToInt(20f * Amount), 18, 28)) });
+             ParticleSystem.SizeOverLifetimeModule mistSize = mist.sizeOverLifetime;
+             mistSize.size = new ParticleSystem.MinMaxCurve(1f, CloudPuffSize());
+             Material mistMaterial = Mat(SmokeTex(), false);
+             if (mistMaterial != null) mist.GetComponent<ParticleSystemRenderer>().sharedMaterial = mistMaterial;
++            mist.Play();
+             const int lines = 9;
+             for (int k = 0; k < lines; k++)
+             {
+@@ -16264,6 +16297,195 @@
+                 CrescentFlash(center + VRot() * Vector3.forward * r * 0.15f, f, tint, r * 0.85f, Mathf.Max(0.15f, r * 0.09f), Mathf.Lerp(-80f, 80f, VR()), hold * 0.6f, 0.25f, 0.1f);
+             }
+             Flash(center, new Color(0.55f, 0.65f, 1f, 1f), 0.5f, r, 0.1f);
++        }
++
++        // v0.25.196: curved smoke patches on an empty sphere; no filled interior and no solid barrier surface.
++        private static Mesh _cloudShell;
++        private static Texture2D _cloudShellTexture, _judgementSigilTexture;
++        public static void CloudShellGeometry(out Vector3[] vertices, out Vector2[] uv, out int[] triangles)
++        {
++            const int patches = 24, cells = 6, row = cells + 1;
++            vertices = new Vector3[patches * row * row]; uv = new Vector2[vertices.Length];
++            triangles = new int[patches * cells * cells * 12]; int index = 0;
++            for (int patch = 0; patch < patches; patch++)
++            {
++                float y = 1f - 2f * (patch + 0.5f) / patches;
++                float angle = patch * 2.39996323f, radial = Mathf.Sqrt(1f - y * y);
++                Vector3 normal = new Vector3(Mathf.Cos(angle) * radial, y, Mathf.Sin(angle) * radial);
++                Vector3 right = Vector3.Cross(normal, Mathf.Abs(y) < 0.9f ? Vector3.up : Vector3.right).normalized;
++                Vector3 up = Vector3.Cross(right, normal).normalized;
++                int offset = patch * row * row;
++                for (int j = 0; j <= cells; j++) for (int i = 0; i <= cells; i++)
++                {
++                    float u = (float)i / cells, v = (float)j / cells;
++                    vertices[offset + j * row + i] = (normal + right * ((u - 0.5f) * 0.92f) + up * ((v - 0.5f) * 0.92f)).normalized;
++                    uv[offset + j * row + i] = new Vector2(u, v);
++                }
++                for (int j = 0; j < cells; j++) for (int i = 0; i < cells; i++)
++                {
++                    int a = offset + j * row + i, b = a + 1, c = a + row, d = c + 1;
++                    triangles[index++] = a; triangles[index++] = b; triangles[index++] = c;
++                    triangles[index++] = b; triangles[index++] = d; triangles[index++] = c;
++                    triangles[index++] = a; triangles[index++] = c; triangles[index++] = b;
++                    triangles[index++] = b; triangles[index++] = c; triangles[index++] = d;
++                }
++            }
++        }
++        private static Mesh CloudShellMesh()
++        {
++            if (_cloudShell != null) return _cloudShell;
++            Vector3[] v; Vector2[] uv; int[] triangles; CloudShellGeometry(out v, out uv, out triangles);
++            _cloudShell = new Mesh(); _cloudShell.name = "IH_HollowCloudShell";
++            _cloudShell.vertices = v; _cloudShell.uv = uv; _cloudShell.triangles = triangles;
++            Color[] colors = new Color[v.Length]; for (int i = 0; i < colors.Length; i++) colors[i] = Color.white;
++            _cloudShell.colors = colors; _cloudShell.RecalculateBounds();
++            return _cloudShell;
++        }
++        public static Color CloudShellTexel(float u, float v)
++        {
++            float x = (u - 0.5f) * 2f, y = (v - 0.5f) * 2f;
++            float billow = Fbm(u * 6f, v * 6f, 196);
++            float edge = Mathf.Clamp01((1f - Mathf.Sqrt(x * x + y * y)) * 4.5f);
++            float alpha = edge * Mathf.Clamp01((billow - 0.23f) * 2.8f) * 0.84f;
++            float shade = 0.78f + billow * 0.4f;
++            return new Color(0.16f * shade, 0.20f * shade, 0.28f * shade, alpha);
++        }
++        private static Texture2D CloudShellTexture()
++        {
++            if (_cloudShellTexture != null) return _cloudShellTexture;
++            _cloudShellTexture = ColoredTexture(96, delegate(float u, float v) { return CloudShellTexel(u, v); }, TextureWrapMode.Clamp);
++            return _cloudShellTexture;
++        }
++        private static void JudgementCloudShell(Vector3 center, float radius, float seconds)
++        {
++            GameObject shell = new GameObject("IH_CloudShell"); shell.transform.position = center;
++            shell.transform.localScale = Vector3.one * radius;
++            shell.AddComponent<MeshFilter>().sharedMesh = CloudShellMesh();
++            MeshRenderer renderer = shell.AddComponent<MeshRenderer>(); renderer.sharedMaterial = Mat(CloudShellTexture(), false);
++            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; renderer.receiveShadows = false;
++            DragonCloudShellFade fade = shell.AddComponent<DragonCloudShellFade>(); fade.Surface = renderer; fade.Life = seconds;
++        }
++        private delegate Color ColoredTexel(float u, float v);
++        private static Texture2D ColoredTexture(int size, ColoredTexel sample, TextureWrapMode wrap)
++        {
++            Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, true); texture.wrapMode = wrap;
++            Color[] pixels = new Color[size * size];
++            for (int y = 0; y < size; y++) for (int x = 0; x < size; x++) pixels[y * size + x] = sample((x + 0.5f) / size, (y + 0.5f) / size);
++            texture.SetPixels(pixels); texture.Apply(true); return texture;
++        }
++        private static readonly Dictionary<int, Texture2D> _relicAlbedos = new Dictionary<int, Texture2D>();
++        // Full RGB albedo: color must survive shaders that ignore Material.color. No white gem texture.
++        public static Color RelicAlbedoTexel(int style, float u, float v, Color tint)
++        {
++            float grain = Fbm(u * 12f, v * 10f, 211 + style);
++            float brushed = Fbm(u * 4f, v * 36f, 241 + style);
++            float shade = 0.8f + grain * 0.28f + (brushed - 0.5f) * 0.12f;
++            if (style == 0)
++            {
++                float scratch = Mathf.Pow(Mathf.Max(0f, Mathf.Sin(u * 220f + grain * 5f)), 18f) * 0.07f;
++                return new Color((0.86f - scratch) * shade, (0.62f - scratch) * shade, (0.24f - scratch * 0.5f) * shade, 1f);
++            }
++            if (style == 1)
++            {
++                float vein = Mathf.Exp(-Mathf.Pow((grain - 0.5f) / 0.045f, 2f)) * 0.10f;
++                return new Color((0.84f - vein) * shade, (0.76f - vein) * shade, (0.58f - vein) * shade, 1f);
++            }
++            if (style == 2)
++            {
++                float facets = 0.62f + 0.32f * Mathf.Abs(Mathf.Sin((u + v) * 9f));
++                float glint = Mathf.Exp(-((u - 0.32f) * (u - 0.32f) + (v - 0.7f) * (v - 0.7f)) * 100f) * 0.10f;
++                return new Color(Mathf.Clamp01(tint.r * facets + glint * 0.2f), Mathf.Clamp01(tint.g * facets + glint * 0.5f), Mathf.Clamp01(tint.b * facets + glint), 1f);
++            }
++            return new Color(tint.r * shade, tint.g * shade, tint.b * shade, 1f);
++        }
++        private static Texture2D RelicAlbedo(int style, Color tint)
++        {
++            int key = style | (Mathf.RoundToInt(tint.r * 31f) << 3) | (Mathf.RoundToInt(tint.g * 31f) << 8) | (Mathf.RoundToInt(tint.b * 31f) << 13);
++            Texture2D texture;
++            if (_relicAlbedos.TryGetValue(key, out texture) && texture != null) return texture;
++            texture = ColoredTexture(64, delegate(float u, float v) { return RelicAlbedoTexel(style, u, v, tint); }, TextureWrapMode.Repeat);
++            _relicAlbedos[key] = texture; return texture;
++        }
++        private static void SetRelicAlbedo(Material material, Texture2D texture)
++        {
++            material.mainTexture = texture;
++            if (material.HasProperty("_MainTex")) material.SetTexture("_MainTex", texture);
++            if (material.HasProperty("_Color")) material.SetColor("_Color", Color.white);
++            if (material.HasProperty("_TintColor")) material.SetColor("_TintColor", Color.white);
++            material.DisableKeyword("_EMISSION");
++            if (material.HasProperty("_EmissionColor")) material.SetColor("_EmissionColor", Color.black);
++            if (material.HasProperty("_EmissionMap")) material.SetTexture("_EmissionMap", null);
++        }
++        public static Vector3 HammerHeadPoint(Vector3 point)
++        {
++            if (point.y > 0.24f) return new Vector3(point.x * 1.12f, 0.39f + (point.y - 0.39f) * 1.6f, point.z * 1.3f);
++            return point;
++        }
++        private static void ThickenHammerHead(GameObject hammer)
++        {
++            MeshFilter[] filters = hammer.GetComponentsInChildren<MeshFilter>(true);
++            for (int i = 0; i < filters.Length; i++)
++            {
++                Transform part = filters[i].transform;
++                if (part.name == "blueDiamond" || part.name == "blueInset")
++                { part.localPosition = HammerHeadPoint(part.localPosition); continue; }
++                Mesh mesh = filters[i].sharedMesh; if (mesh == null) continue;
++                Vector3[] vertices = mesh.vertices;
++                for (int j = 0; j < vertices.Length; j++) vertices[j] = HammerHeadPoint(vertices[j]);
++                mesh.vertices = vertices; mesh.RecalculateNormals(); mesh.RecalculateBounds();
++            }
++            // Trail anchors move with the thicker head too. No changes to the gameplay root or its scale.
++            for (int i = 0; i < hammer.transform.childCount; i++)
++            { Transform part = hammer.transform.GetChild(i); if (part.name == "tipL" || part.name == "tipR") part.localPosition = HammerHeadPoint(part.localPosition); }
++        }
++        public static void DamageBuffMist(Vector3 point, float radius, Color tint)
++        {
++            if (!Enabled) return;
++            radius = Mathf.Max(1f, radius);
++            DragonVfxLife host = Host(point + Vector3.up * 0.28f, 2.1f, "damagebuffmist");
++            Color smoke = Color.Lerp(new Color(0.48f, 0.49f, 0.51f, 1f), tint, 0.22f); smoke.a = 0.36f;
++            ParticleSystem mist = Particles(host.transform, smoke, 24, 8f, 0.5f, 1.6f, 0.05f, 0.18f,
++                radius * 0.18f, radius * 0.3f, -0.015f, ParticleSystemShapeType.Circle, radius * 0.72f, new Vector3(90f, 0f, 0f), false, false);
++            ParticleSystem.MainModule main = mist.main; main.maxParticles = 36;
++            mist.GetComponent<ParticleSystemRenderer>().sharedMaterial = Mat(SmokeTex(), false);
++        }
++        private static float SigilSegment(Vector2 point, Vector2 a, Vector2 b)
++        {
++            Vector2 line = b - a;
++            float t = Mathf.Clamp01(Vector2.Dot(point - a, line) / Mathf.Max(0.00001f, line.sqrMagnitude));
++            return (point - a - line * t).magnitude;
++        }
++        public static float HeavensSigilAlpha(float u, float v)
++        {
++            Vector2 p = new Vector2((u - 0.5f) * 2f, (v - 0.5f) * 2f); float radius = p.magnitude;
++            float ring = Mathf.Max(Mathf.Exp(-Mathf.Pow((radius - 0.98f) / 0.006f, 2f)), Mathf.Exp(-Mathf.Pow((radius - 0.86f) / 0.0045f, 2f)) * 0.7f);
++            float angle = Mathf.Atan2(p.y, p.x), sector = Mathf.PI * 2f / 12f;
++            float fold = Mathf.Repeat(angle + sector * 0.5f, sector) - sector * 0.5f;
++            Vector2 rune = new Vector2(Mathf.Cos(fold) * radius - 0.74f, Mathf.Sin(fold) * radius);
++            float runeStroke = SigilSegment(rune, new Vector2(-0.05f, 0f), new Vector2(0.05f, 0f));
++            runeStroke = Mathf.Min(runeStroke, SigilSegment(rune, new Vector2(0f, 0f), new Vector2(0.04f, 0.04f)));
++            runeStroke = Mathf.Min(runeStroke, SigilSegment(rune, new Vector2(0f, 0f), new Vector2(0.04f, -0.04f)));
++            float glyph = Mathf.Exp(-Mathf.Pow(runeStroke / 0.007f, 2f));
++            float cross = Mathf.Min(SigilSegment(p, new Vector2(-0.36f, 0f), new Vector2(0.36f, 0f)), SigilSegment(p, new Vector2(0f, -0.36f), new Vector2(0f, 0.36f)));
++            float diamond = Mathf.Abs(Mathf.Abs(p.x) + Mathf.Abs(p.y) - 0.48f) * 0.7071f;
++            float center = Mathf.Max(Mathf.Exp(-Mathf.Pow(cross / 0.009f, 2f)), Mathf.Exp(-Mathf.Pow(diamond / 0.006f, 2f)) * 0.75f);
++            float spineAngle = Mathf.Repeat(angle + Mathf.PI / 8f, Mathf.PI / 4f) - Mathf.PI / 8f;
++            float spoke = radius > 0.48f && radius < 0.64f ? Mathf.Exp(-Mathf.Pow(radius * Mathf.Sin(spineAngle) / 0.006f, 2f)) * 0.55f : 0f;
++            return Mathf.Clamp01(Mathf.Max(ring, Mathf.Max(glyph, Mathf.Max(center, spoke)))) * Mathf.Clamp01((1f - radius) * 100f);
++        }
++        private static Texture2D HeavensSigilTexture()
++        {
++            if (_judgementSigilTexture == null) _judgementSigilTexture = MakeTex(256, 256, delegate(float u, float v) { return HeavensSigilAlpha(u, v); }, TextureWrapMode.Clamp);
++            return _judgementSigilTexture;
++        }
++        public static void HeavensJudgementSigil(Vector3 point, float radius, float seconds)
++        {
++            if (!Enabled || !Guides) return;
++            DragonMeshFx sigil = MeshFx(GroundPoint(point) + Vector3.up * 0.11f, Quaternion.identity, true,
++                Mat(HeavensSigilTexture(), false), new Color(0.88f, 0.78f, 0.48f, 0.72f), seconds);
++            if (sigil == null) return;
++            sigil.Conform = true; sigil.ScaleFrom = sigil.ScaleTo = Vector3.one * radius * 2.04f;
++            sigil.FadeIn = 0.08f; sigil.Hold = Mathf.Max(0f, seconds - 0.3f);
+         }
+ 
+         private static AnimationCurve _cloudPuffSize;
+@@ -16892,11 +17114,9 @@
+             Shader s = RelicShader();
+             if (s == null) return SolidMat(new Color(0.95f, 0.76f, 0.32f, 1f));
+             _relicGold = NewRelicMaterial(s);
+-            _relicGold.color = new Color(0.76f, 0.57f, 0.25f, 1f);
+-            _relicGold.mainTexture = GoldTex();
++            SetRelicAlbedo(_relicGold, RelicAlbedo(0, Color.white));
+             if (_relicGold.HasProperty("_Glossiness")) _relicGold.SetFloat("_Glossiness", 0.62f);
+-            if (_relicGold.HasProperty("_Metallic")) _relicGold.SetFloat("_Metallic", 0.55f);   // reads polished without reflection probes
+-            if (_relicGold.HasProperty("_EmissionColor")) { _relicGold.EnableKeyword("_EMISSION"); _relicGold.SetColor("_EmissionColor", new Color(0.025f, 0.015f, 0.005f, 1f)); }
++            if (_relicGold.HasProperty("_Metallic")) _relicGold.SetFloat("_Metallic", 0.25f);   // reads polished without reflection probes
+             return _relicGold;
+         }
+ 
+@@ -16906,11 +17126,9 @@
+             Shader s = RelicShader();
+             if (s == null) return SolidMat(new Color(0.96f, 0.92f, 0.82f, 1f));
+             _relicIvory = NewRelicMaterial(s);
+-            _relicIvory.color = new Color(0.82f, 0.82f, 0.76f, 1f);
+-            _relicIvory.mainTexture = StoneTex();
++            SetRelicAlbedo(_relicIvory, RelicAlbedo(1, Color.white));
+             if (_relicIvory.HasProperty("_Glossiness")) _relicIvory.SetFloat("_Glossiness", 0.48f);
+             if (_relicIvory.HasProperty("_Metallic")) _relicIvory.SetFloat("_Metallic", 0f);
+-            if (_relicIvory.HasProperty("_EmissionColor")) { _relicIvory.EnableKeyword("_EMISSION"); _relicIvory.SetColor("_EmissionColor", new Color(0.025f, 0.025f, 0.022f, 1f)); }
+             return _relicIvory;
+         }
+ 
+@@ -16923,10 +17141,9 @@
+             Shader s = RelicShader();
+             if (s == null) { m = SolidMat(c); _relicGems[key] = m; return m; }
+             m = NewRelicMaterial(s);
+-            m.color = c;
++            SetRelicAlbedo(m, RelicAlbedo(2, c));
+             if (m.HasProperty("_Glossiness")) m.SetFloat("_Glossiness", 0.92f);
+             if (m.HasProperty("_Metallic")) m.SetFloat("_Metallic", 0.1f);
+-            if (m.HasProperty("_EmissionColor")) { m.EnableKeyword("_EMISSION"); m.SetColor("_EmissionColor", c * 0.85f); }
+             _relicGems[key] = m;
+             return m;
+         }
+@@ -16940,10 +17157,9 @@
+             Shader s = RelicShader();
+             if (s == null) { m = SolidMat(c); _relicFeathers[key] = m; return m; }
+             m = NewRelicMaterial(s);
+-            m.color = c;
++            SetRelicAlbedo(m, RelicAlbedo(3, c));
+             if (m.HasProperty("_Glossiness")) m.SetFloat("_Glossiness", 0.2f);
+             if (m.HasProperty("_Metallic")) m.SetFloat("_Metallic", 0f);
+-            if (m.HasProperty("_EmissionColor")) { m.EnableKeyword("_EMISSION"); m.SetColor("_EmissionColor", c * 0.16f); }
+             _relicFeathers[key] = m;
+             return m;
+         }
+@@ -18438,11 +18654,13 @@
+             MeshObject("bronze", Uvd(FacetMesh(v, t, white, 0f), 2f), bronze, unit.transform);
+ 
+             v = new List<Vector3>(); t = new List<int>();
+-            Tube(v, t, new Vector3(-0.36f, 0.39f, 0f), new Vector3(0.36f, 0.39f, 0f), Y, Z, 0.12f, 0.43f, 0.12f, 0.43f, 12);   // head mass (v0.25.181 smoother)
+-            Tube(v, t, new Vector3(-0.47f, 0.39f, 0f), new Vector3(-0.53f, 0.39f, 0f), Y, Z, 0.105f, 0.40f, 0.09f, 0.34f, 12);  // striking faces
++            Tube(v, t, new Vector3(-0.36f, 0.39f, 0f), new Vector3(0.36f, 0.39f, 0f), Y, Z, 0.12f, 0.43f, 0.12f, 0.43f, 12);
++            MeshObject("head", Uvd(FacetMesh(v, t, white, 0f), 1.5f), bronze, unit.transform); // gold body, ivory striking faces
++            v = new List<Vector3>(); t = new List<int>();
++            Tube(v, t, new Vector3(-0.47f, 0.39f, 0f), new Vector3(-0.53f, 0.39f, 0f), Y, Z, 0.105f, 0.40f, 0.09f, 0.34f, 12);
+             Tube(v, t, new Vector3(0.47f, 0.39f, 0f), new Vector3(0.53f, 0.39f, 0f), Y, Z, 0.105f, 0.40f, 0.09f, 0.34f, 12);
+             Mesh headMesh = Uvd(FacetMesh(v, t, white, 0f), 1.5f);
+-            MeshObject("head", headMesh, stone, unit.transform);
++            MeshObject("strikingFaces", headMesh, stone, unit.transform);
+ 
+             // v0.25.181 (user: finished, like the relic): bronze corner straps along the head, a raised bronze rim and a lit
+             // sigil boss on each striking face (defined faces), polished gold-bronze cap on the crown
+@@ -18484,7 +18702,7 @@
+             MeshObject("seams", FacetMesh(v, t, new Color(0.72f, 0.86f, 1f, 0.55f), 0f), Mat(WhiteTex(), true), unit.transform);
+ 
+             // Raised bronze bezels and faceted blue gems on both broad faces match Goddess Relic.
+-            Mesh jewel = RelicDiamondMesh(0.18f, 0.055f);
++            Mesh jewel = RelicDiamondMesh(0.26f, 0.07f);
+             Material blue = RelicGem(new Color(0.15f, 0.48f, 0.85f, 1f));
+             for (int side = -1; side <= 1; side += 2)
+             {
+@@ -18509,6 +18727,7 @@
+                     StreakTrail(tip.transform, air, new Color(0.92f, 0.90f, 0.84f, 0.18f), 0.55f, 0.28f);
+                     StreakTrail(tip.transform, core, new Color(1f, 0.92f, 0.70f, 0.4f), 0.1f, 0.2f);
+                 }
++            ThickenHammerHead(unit);
+             return unit;
+         }
+ 
+--- v0.25.195/AlbedosCustomClasses.Advanced.cs
++++ v0.25.196/AlbedosCustomClasses.Advanced.cs
+@@ -116,7 +116,7 @@
+     {
+         public const string ModGuid = "albedo.customclasses.advanced";
+         public const string ModName = "Aethelborn Ascended - Advancements";
+-        public const string ModVersion = "0.25.195";
++        public const string ModVersion = "0.25.196";
+ 
+         private const string ClassDataKey = "AlbedoCustomClasses.Class";
+         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
+@@ -4716,7 +4716,7 @@
+                     // Battleaxe 1 sweeps right-to-left, 2 returns left-to-right, 3 comes down vertically.
+                     float strokeRoll = strike == 0 ? 180f : strike == 1 ? 0f : -90f;
+                     DragonCombat.RunVfx(delegate { DragonVfx.SlashArc(fxOrigin, fxForward, fxRange, 150f,
+-                        new Color(1f, 0.55f, 0.20f, 1f), Mathf.Max(0.25f, fxRange * 0.12f), 0.4f, strokeRoll); });
++                        new Color(1f, 0.55f, 0.20f, 1f), Mathf.Max(0.25f, fxRange * 0.12f), 0.4f, strokeRoll, false); });
+                 }
+                 if (trigger != null)
+                 {
+@@ -5752,13 +5752,13 @@
+             Mesh body = IhRelicMesh(key + "|body", delegate { return DragonVfx.ExtrudeBevel(IhCrossOutline(0, a, F, Lf, c, half, armY, topY, footY, spike), d, t * 0.1f, 1f / Mathf.Max(0.2f, t * 2.2f)); });
+             Mesh panel = IhRelicMesh(key + "|panel", delegate { return DragonVfx.ExtrudeBevel(DragonVfx.OffsetOutline(IhCrossOutline(0, a, F, Lf, c, half, armY, topY, footY, spike), -t * 0.14f), d * 1.08f, t * 0.04f, 1f / Mathf.Max(0.2f, t * 2.2f)); });
+             IhRelicMeshObject(root, body, gold, Vector3.zero);
+-            IhRelicMeshObject(root, panel, ivory, Vector3.zero);
++            IhRelicMeshObject(root, panel, gold, Vector3.zero);
+             // thin gold lines inlaid down the panel and along the arm
+             float gw = t * (big ? 0.05f : 0.06f);
+             float g0 = footY + spike + t * 0.9f, g1 = topY - Lf - t * 0.15f;
+-            IhRelicBlock(root, gold, new Vector3(0f, (g0 + g1) * 0.5f, 0f), new Vector3(gw, g1 - g0, d * 1.12f), 1f, 1f);
++            IhRelicBlock(root, ivory, new Vector3(0f, (g0 + g1) * 0.5f, 0f), new Vector3(gw, g1 - g0, d * 1.12f), 1f, 1f);
+             float ax = half - Lf - t * 0.15f;
+-            IhRelicBlock(root, gold, new Vector3(0f, armY, 0f), new Vector3(ax * 2f, gw, d * 1.12f), 1f, 1f);
++            IhRelicBlock(root, ivory, new Vector3(0f, armY, 0f), new Vector3(ax * 2f, gw, d * 1.12f), 1f, 1f);
+             // gold bands wrapping the shaft
+             int bands = big ? 3 : 2;
+             for (int i = 0; i < bands; i++)
+@@ -5907,9 +5907,12 @@
+ 
+         private void IhRelicDiamond(Transform root, Material m, Vector3 pos, float size, float depth)
+         {
+-            string key = "gem195|" + size.ToString("R") + "|" + depth.ToString("R");
+-            Mesh mesh = IhRelicMesh(key, delegate { return DragonVfx.RelicDiamondMesh(size, depth); });
+-            IhRelicMeshObject(root, mesh, m, pos);
++            string key = "gem196|" + size.ToString("R") + "|" + depth.ToString("R");
++            Mesh mesh = IhRelicMesh(key, delegate { return DragonVfx.RelicDiamondMesh(size, depth * 0.28f); });
++            if (Mathf.Abs(pos.z) > 0.001f) { IhRelicMeshObject(root, mesh, m, pos); return; }
++            // Mount the gemstone on both visible faces, rather than burying most of it in the shaft.
++            IhRelicMeshObject(root, mesh, m, pos + Vector3.forward * (depth * 0.5f));
++            IhRelicMeshObject(root, mesh, m, pos - Vector3.forward * (depth * 0.5f));
+         }
+ 
+         private void IhRelicDisc(Transform root, Material m, Vector3 pos, float diameter, float depth)
+@@ -6296,6 +6299,7 @@
+                 if (ascended) StartCoroutine(RayHopeBurn(player, enemies[i]));   // v0.25.78 Fire + Spirit, stronger stacking
+             }
+             if (_enableVfx.Value) StartCoroutine(AnimateSoftRing(player.transform.position + Vector3.up * 0.12f, 0.6f, radius, 0.8f, new Color(1f, 0.93f, 0.52f, 0.95f), 0.11f));
++            if (_enableVfx.Value) { Vector3 fog = player.transform.position; DragonCombat.RunVfx(delegate { DragonVfx.DamageBuffMist(fog, radius, new Color(0.85f, 0.70f, 0.46f, 1f)); }); }
+         }
+ 
+         // v0.25.78 Ascended Ray of Hope: Fire + Spirit Burn for 8s; every tick stacks harder than the universal ramp.
+@@ -7967,6 +7971,7 @@
+                 SetCrossPhysical(cross, true);
+             }
+             if (_enableVfx.Value) IhCrossImpactVfx(target, Mathf.Max(2f, radius * 0.6f), crossHeight, 0.8f);   // v0.25.57
++            if (ascended && _enableVfx.Value) { Vector3 fog = target; DragonCombat.RunVfx(delegate { DragonVfx.DamageBuffMist(fog, radius, DragonVfx.Storm); }); }
+ 
+             PriestRelicState relic = RegisterPriestRelic(
+                 cross,
+@@ -8268,6 +8273,7 @@
+                 Vector3 diC = center; float diR = radius;
+                 DragonCombat.RunVfx(delegate
+                 {
++                    DragonVfx.DamageBuffMist(diC, diR, DragonVfx.HolyWhite);
+                     DragonVfx.Feathers(diC, DragonVfx.HolyWhite, diR * 0.7f, 2.5f, 45f);
+                     // v0.25.191 (user): a focused ivory-gold burst from the source + soft upward healing strands
+                     DragonVfx.Burst(diC + Vector3.up * 1f, new Color(1f, 0.92f, 0.62f, 0.95f), 30, 5f, 0.18f, 0.45f, 0f);
+@@ -8521,7 +8527,10 @@
+             float impactRadius = Mathf.Max(0.5f, DragonCombat.M(_heavensStrikeRadius.Value));
+ 
+             if (_enableVfx.Value)
+-                StartCoroutine(AnimateGuideRing(center + Vector3.up * 0.08f, radius, radius, windup + duration + 0.10f, new Color(1f, 0.92f, 0.52f, 0.82f), 0.14f));
++            {
++                if (DragonVfx.Enabled) DragonCombat.RunVfx(delegate { DragonVfx.HeavensJudgementSigil(center, radius, windup + duration + 0.10f); });
++                else StartCoroutine(AnimateGuideRing(center + Vector3.up * 0.08f, radius, radius, windup + duration + 0.10f, new Color(1f, 0.92f, 0.52f, 0.82f), 0.14f));
++            }
+ 
+             if (windup > 0f)
+                 yield return new WaitForSeconds(windup);
+--- v0.25.195/INSTALL.bat
++++ v0.25.196/INSTALL.bat
+@@ -1,5 +1,5 @@
+ @echo off
+-title Immortal Heroes v0.25.195 - Skill Polish and State Fixes
++title Immortal Heroes v0.25.196 - Hollow Clouds and Relic Detail
+ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
+ echo.
+ pause
+--- v0.25.195/INSTALL.ps1
++++ v0.25.196/INSTALL.ps1
+@@ -1,7 +1,7 @@
+ $ErrorActionPreference = "Stop"
+ 
+ Write-Host ""
+-Write-Host "IMMORTAL HEROES v0.25.195 - SKILL POLISH AND STATE FIXES" -ForegroundColor Cyan
++Write-Host "IMMORTAL HEROES v0.25.196 - HOLLOW CLOUDS AND RELIC DETAIL" -ForegroundColor Cyan
+ Write-Host "All 10 DLLs compile in staging before the live profile is touched." -ForegroundColor Gray
+ Write-Host ""
+ 

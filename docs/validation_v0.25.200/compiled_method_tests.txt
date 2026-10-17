@@ -1,0 +1,138 @@
+PASS: Real cancellation wrapper starts a skill and reaches its pending yield
+PASS: Dodge disposal immediately runs finally cleanup and releases ownership
+PASS: Cancelled work never resumes its delayed attack
+PASS: Repeated cancellation is idempotent
+PASS: Uncancelled work preserves both skill steps and normal cleanup
+PASS: Faulted work cleans up once and cannot run again
+PASS: Cancellation before the first step prevents the entire attack
+PASS: Actual Valheim dodge IL rewrites exactly the attack and stagger gates
+PASS: All native ground, stamina, encumbrance, existing-roll and cost instructions stay intact
+PASS: Dodge cancellation executes before the skill-lock input filter
+PASS: Unrelated methods without dodge gates are unchanged
+PASS: Shipped Halfmoon contact calibration reaches a requested one-second contact on cold and warm timing
+PASS: Actual tooltip burn formatter: Spirit Burn, 6s -> Spirit 6s
+PASS: Actual tooltip burn formatter: Fire Burn + Spirit Burn 4/s each, 6s -> Fire 6s (4 damage/s), Spirit 6s (4 damage/s)
+PASS: Actual tooltip burn formatter: Spirit Burn, a stack per hit (4% per stack), 6s, refreshed -> Spirit 6s (4% per stack); refreshed on hit
+PASS: Actual tooltip burn formatter: Fire Burn, 12s -> Fire 12s
+PASS: Actual tooltip burn formatter: Fire 6s, Poison 12s -> Fire 6s, Poison 12s
+PASS: Actual tooltip burn formatter: Fire Burn 10/s, Spirit Burn 12/s, 6s -> Fire 6s (10 damage/s), Spirit 6s (12 damage/s)
+PASS: Actual tooltip burn formatter: Fire Burn 6% Fire every 0.5s, 6s -> Fire 6s (6% Fire every 0.5s)
+PASS: Actual ray_of_hope header contains purpose without buff-number parentheses
+PASS: Actual heavens_light header contains purpose without buff-number parentheses
+PASS: Actual knights_guidance header contains purpose without buff-number parentheses
+PASS: Actual grand_sigil header contains purpose without buff-number parentheses
+PASS: Actual tailwind header contains purpose without buff-number parentheses
+PASS: Actual hawks_vigil header contains purpose without buff-number parentheses
+PASS: Actual pinning_shot header contains purpose without buff-number parentheses
+PASS: Actual afterimage_arsenal header contains purpose without buff-number parentheses
+PASS: Compiled sprint-reload filter requires the same physical weapon reference
+PASS: Crossbow event state uses actual native loaded and attack weapon fields
+PASS: Compiled crossbow hooks consume saved state only after a completed shot, never from a reset/holster alone
+PASS: Compiled restore uses the native setter delegate rather than unsynchronized field writes
+PASS: Compiled Sword Master interruption keeps dodge and removes blocking
+PASS: All native crossbow event patch signatures exist in supplied Valheim assemblies
+PASS: Actual cloud geometry is curved skin with an empty interior, including between vertices
+PASS: Cloud shell is a bounded cached 1176-vertex/3456-triangle mesh with valid indices
+PASS: Cloud patches have transparent edges and billowing opacity, not a uniform barrier surface
+PASS: Actual gold texture contains warm RGB pigment and measurable grain instead of white/flat tint
+PASS: Actual gem textures retain strong blue and healing-green pigment without Material.color
+PASS: Actual hammer transformation thickens the head and leaves its grip unchanged
+PASS: Existing eight-argument SlashArc API is preserved beside the explicit-plane overload
+PASS: Existing SlashArc callers retain automatic swing-plane tracking
+PASS: Ascended Heavy Swing supplies its own validated stroke plane without a later automatic replacement
+PASS: Actual sigil has a central cross, a readable outer boundary and transparent exterior
+PASS: Sigil has visible detailed linework while most of the ground remains clear
+PASS: An ally sees Saving Grace ready when a living Priest is nearby
+PASS: A Priest sees their own Saving Grace ready without another Priest
+PASS: An unprotected ally does not see a false ready icon outside Priest range
+PASS: Recipient cooldown icon remains after leaving all Priests
+PASS: Recipient cooldown remains visible until its actual deadline
+PASS: Cooldown expiry hides an out-of-range icon or restores ready when a Priest is nearby
+PASS: Death never displays false readiness and does not erase an active cooldown indicator
+PASS: Compiled Priest advertisement uses the real owner guard and avoids unchanged network writes
+PASS: Compiled ally protection reads the replicated Priest flag rather than another player's private custom data
+PASS: Compiled Priest detection retains living-player and radius checks
+PASS: Actual heart-face correction points front, back and side triangles outward
+PASS: Correctly oriented heart side walls are preserved
+PASS: Heart winding correction is idempotent
+PASS: Inset heart cap positions sit just above both backing surfaces instead of on raised plates
+PASS: Revised healing-gem albedo keeps strong green contrast across every sampled texel
+PASS: New-cast gate waits for all clip keys, not only the first 0.25s after contact
+PASS: New-cast gate includes native follow-through and the live source graph through fade-out
+PASS: Compiled native-tail gate requires active ownership and the current skill generation
+PASS: Compiled tail completion releases ownership before deferred component destruction
+PASS: Compiled native tail acquires its animation ownership when started
+PASS: Hotbar gates new casts on complete animation ownership while checking real active controls separately
+PASS: Internal multi-strike animation calls are not blocked by the new input gate
+PASS: Direct starter-skill entry rejects a busy animation before entering any resource-spending cast
+PASS: Compiled hammer creation restores the template child name immediately after Instantiate
+PASS: Actual hammer head is taller without widening or deepening the accepted design
+PASS: Compiled normal Heavy Slash effect bypasses sampled swing-plane replacement only for its explicit sweep
+PASS: Goddess Relic body: shipped geometry source yields complete front/back caps facing outward
+PASS: Goddess Relic body: surface layout, vertices, UVs and normal counts are retained
+PASS: Goddess Relic inset panel: shipped geometry source yields complete front/back caps facing outward
+PASS: Goddess Relic inset panel: surface layout, vertices, UVs and normal counts are retained
+PASS: Holy Relic sunburst: shipped geometry source yields complete front/back caps facing outward
+PASS: Holy Relic sunburst: surface layout, vertices, UVs and normal counts are retained
+PASS: Priest relic feather: shipped geometry source yields complete front/back caps facing outward
+PASS: Priest relic feather: surface layout, vertices, UVs and normal counts are retained
+PASS: Actual first and third Heavy Swing visual strokes remain horizontal and vertical despite unrelated samples
+PASS: Actual second-stroke helper retains a diagonal when samples are absent or from flat/vertical entry blends
+PASS: Actual second-stroke helper follows usable live diagonal weapon motion in either direction
+PASS: All 9216 actual cloud texels are blue with bounded reduced opacity and visible cloud peaks
+PASS: Actual inherited Player damage resolves to its exact declaring implementation
+PASS: Actual Character/Player reflection aliases deduplicate to one Harmony target
+PASS: Sorcerer Eitr hook resolves its inherited target without changing its implementation
+PASS: Canonicalization preserves direct targets and handles missing optional methods
+PASS: All skill power consumers receive the separate skill damage factor
+PASS: Healing power does not consume the new skill-only bonus
+PASS: Ordinary weapon damage and incoming hit handling do not apply the skill-only factor again
+PASS: Guidance cast awards the new skill-only buff without the old stamina-use reduction
+PASS: Guidance awards locally or routes one award to the remote recipient owner
+PASS: Remote Guidance delivery checks local ownership and target identity before applying the timer and stats
+PASS: NACC postfix includes failed-start rollback and accepted-activation commit
+PASS: Tentative activation no longer destroys the preceding swing's pending state learn
+PASS: Failed-start rollback restores prior activation identity as well as combo counters
+PASS: EXP uses safe base health for prefabs while retaining live max-health discovery for kills
+PASS: Actual percentage heal scales with each recipient's maximum HP rather than a flat amount
+PASS: Actual percentage heal retains existing healing tier multiplication and rejects negative maximum HP
+PASS: Actual airy wind texture is a visible annulus with a clear center and transparent exterior
+PASS: Actual strong wind texture has a broader band than the airy buff ring
+PASS: Compiled wind ring samples ground and enables existing terrain conformity
+PASS: Whirlwind downwash emits ground rings only while its owning channel remains active
+PASS: Damaging-buff wind uses a hollow annular particle emitter and a terrain ring
+PASS: Status creation records the explicit Fury cooldown marker flag
+PASS: HUD draws cooldown chevrons through its geometry helper while retaining the timer
+PASS: Bird target adapter is compatible with existing Character queries without auto-required physics components
+PASS: Bird adapter disables itself and never runs Character initialization or its RPC registration
+PASS: Bird adapter never joins the Character movement/update registry
+PASS: Bird adapter suppresses inherited Character ground-contact collision processing
+PASS: Bird bridge attaches no colliders or Rigidbody and leaves native hitboxes/flight physics in place
+PASS: Bird hit forwarding uses native Destructible damage with finally-protected recursion state
+PASS: Native bird hits enter the same creature rules with an explicit return-path guard
+PASS: AA creature damage applies existing combat modifiers before forwarding bird damage
+PASS: All bird spawn, damage and target-position hook signatures exist in the supplied real Valheim assembly
+PASS: Actual flat heart cap has no self-intersections and completely covers its outline on both faces
+PASS: Prior heart inward miter reproduces folded/self-intersecting geometry at bevel 0.04
+PASS: Prior heart inward miter reproduces folded/self-intersecting geometry at bevel 0.06
+PASS: Embedded cross sapphire: shipped geometry source yields complete front/back caps facing outward
+PASS: Embedded cross sapphire: surface layout, vertices, UVs and normal counts are retained
+PASS: Through-backing healing heart: shipped geometry source yields complete front/back caps facing outward
+PASS: Through-backing healing heart: surface layout, vertices, UVs and normal counts are retained
+PASS: Shipped bird-only native prefix leaves ordinary destructibles unchanged
+PASS: Shipped character prefix still permits the normal creature damage body
+PASS: Shipped native-bird path applies creature modifiers once and calls native destructible damage exactly once
+PASS: Shipped bridge retains the exact HitData and releases its recursion guard
+PASS: Shipped AA skill-bird path reaches native damage once without falling through to Character RPC damage
+PASS: Shipped forwarding guard resets in finally when native damage fails
+PASS: A subsequent bird hit still reaches native damage after an exception
+PASS: Dead birds and null direct hits do not forward native damage
+PASS: Shipped rollback source restores all pre-attempt combo indices and generation after failure
+PASS: Shipped rollback source restores end/start/clock and observed-swing state instead of leaving a ghost running attack
+PASS: Shipped rollback source preserves the preceding swing's lock, finisher and paired carrier ownership
+PASS: Shipped rollback source restores exact prior speed lifetime and activation identity
+PASS: Native rejected-start rollback does not refund resource costs taken by the game or other mods
+PASS: Rejected attempt restores its previous learned swing duration
+PASS: Rejected attempt removes a newly learned tentative cadence entry
+PASS: Existing late-controller rejection still refunds only the actual resource difference
+Passed 137 code/geometry checks (compiled-method/IL/math checks plus source-derived geometry, rollback and bird-dispatch harness invariants). Unity gameplay and rendered visuals not exercised.
