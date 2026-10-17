@@ -26,7 +26,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.201";
+        public const string ModVersion = "0.25.202";
 
         internal static DragonCombatPlugin Instance;
 
@@ -14826,6 +14826,7 @@ namespace DragonsAltarCombat
                 GameObject go = new GameObject("crack");
                 go.transform.SetParent(l.transform, false);
                 LineRenderer line = go.AddComponent<LineRenderer>();
+                LayFlat(line);   // v0.25.202 (user: cracks only on the side facing away from the camera)
                 line.useWorldSpace = true;
                 int n = 9;
                 line.positionCount = n;
@@ -14991,6 +14992,17 @@ namespace DragonsAltarCombat
             }
         }
 
+        // v0.25.202: ground lines lie FLAT on the ground. The default LineRenderer alignment (View) turns the ribbon toward
+        // the camera, so a crack pointing at / away from the camera is seen edge-on and vanishes - only cracks running
+        // across the view showed. TransformZ with the object's Z pointing down = a ribbon in the ground plane, visible
+        // from every side (particle shaders draw both faces).
+        public static void LayFlat(LineRenderer line)
+        {
+            if (line == null) return;
+            line.alignment = LineAlignment.TransformZ;
+            line.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+        }
+
         public static void CrackLine(Vector3 a, Vector3 b, Color c, float width, float seconds)
         {
             if (!Enabled) return;
@@ -14998,6 +15010,7 @@ namespace DragonsAltarCombat
             GameObject go = new GameObject("scar");
             go.transform.SetParent(l.transform, false);
             LineRenderer line = go.AddComponent<LineRenderer>();
+            LayFlat(line);
             line.useWorldSpace = true;
             int n = Mathf.Clamp(Mathf.RoundToInt(Vector3.Distance(a, b) / 1.2f), 3, 18);   // v0.25.185 (perf) fewer ground probes per scar (was /0.8, max 40)
             line.positionCount = n;
@@ -17423,8 +17436,12 @@ namespace DragonsAltarCombat
                     for (int i = 0; i < renderers.Length; i++)
                     {
                         Material material = renderers[i].sharedMaterial;
-                        if (material != null && material.shader != null && material.shader.isSupported && material.HasProperty("_MainTex"))
-                        { _nativeRelicSurface = material; Debug.Log("[AA] Relic surface shader: " + material.shader.name); return material.shader; }
+                        // v0.25.202 (user: Goddess Relic hollow, gems hidden from the front, hammer rings / face vanishing by
+                        // angle): the copied sword material draws the INNER faces (front-face culling), so every correctly
+                        // built closed mesh looked inside-out. Only reuse it when its culling can be set back to Back;
+                        // otherwise Standard (back-face culling, used by every other lit VFX solid) is used.
+                        if (material != null && material.shader != null && material.shader.isSupported && material.HasProperty("_MainTex") && material.HasProperty("_Cull"))
+                        { _nativeRelicSurface = material; Debug.Log("[AA] Relic surface shader: " + material.shader.name + " (cull was " + material.GetFloat("_Cull") + ", forced Back)"); return material.shader; }
                     }
                 }
             }
@@ -17437,6 +17454,7 @@ namespace DragonsAltarCombat
             material.mainTextureOffset = Vector2.zero;
             if (material.HasProperty("_BumpMap")) material.SetTexture("_BumpMap", null);
             material.DisableKeyword("_NORMALMAP");
+            if (material.HasProperty("_Cull")) material.SetFloat("_Cull", (float)UnityEngine.Rendering.CullMode.Back);   // v0.25.202 outer faces only
             return material;
         }
         public static Material RelicGold()
@@ -17578,6 +17596,10 @@ namespace DragonsAltarCombat
             int c0 = v.Count;
             v.Add(path[0]); nr.Add(-T0); uv.Add(new Vector2(0.5f, 0f));
             for (int i = 0; i < side; i++) { t.Add(c0); t.Add(i + 1); t.Add(i); }
+            // v0.25.202 end cap too (closed solid from every side)
+            int c1 = v.Count, e0 = (n - 1) * (side + 1);
+            v.Add(path[n - 1]); nr.Add((path[n - 1] - path[n - 2]).normalized); uv.Add(new Vector2(0.5f, 1f));
+            for (int i = 0; i < side; i++) { t.Add(c1); t.Add(e0 + i); t.Add(e0 + i + 1); }
             Mesh m = new Mesh();
             m.vertices = v.ToArray(); m.normals = nr.ToArray(); m.uv = uv.ToArray(); m.triangles = t.ToArray();
             m.RecalculateBounds();
@@ -18904,6 +18926,10 @@ namespace DragonsAltarCombat
         // Faceted tube from a to b (n sides) with elliptical radii (ru along u, rw along w) at each end; capped.
         private static void Tube(List<Vector3> v, List<int> t, Vector3 a, Vector3 b, Vector3 u, Vector3 w, float ru0, float rw0, float ru1, float rw1, int n)
         {
+            // v0.25.202: a tube built along -handed axes (e.g. +X with u = Y, w = Z: the hammer head, its bands, straps and the
+            // right striking face) came out INSIDE-OUT - its outside faces were culled and only showed through a front-culling
+            // material. Swap u/w when needed so the walls and caps always face outward, whatever the axis direction.
+            if (Vector3.Dot(Vector3.Cross(b - a, w), u) < 0f) { Vector3 sw = u; u = w; w = sw; float r = ru0; ru0 = rw0; rw0 = r; r = ru1; ru1 = rw1; rw1 = r; }
             int s = v.Count;
             for (int i = 0; i < n; i++) { float ang = (i + 0.5f) / n * Mathf.PI * 2f; v.Add(a + u * Mathf.Cos(ang) * ru0 + w * Mathf.Sin(ang) * rw0); }
             for (int i = 0; i < n; i++) { float ang = (i + 0.5f) / n * Mathf.PI * 2f; v.Add(b + u * Mathf.Cos(ang) * ru1 + w * Mathf.Sin(ang) * rw1); }

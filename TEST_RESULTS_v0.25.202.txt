@@ -1,0 +1,5 @@
+v0.25.202 static verification (no game):
+- Mesh test harness (python port of ExtrudeBevel/OffsetOutline/EarClip): 30 meshes closed, outward, full caps.
+- Tube (hammer) 8 representative calls incl. +X/-X axes: 0 inward triangles. TubeMesh with end cap: closed, outward.
+- tools/compile_check/check.sh 3029660: PASSED. mcs --parse -langversion:5: all .cs OK.
+NOT verified: in-game look (shader choice is logged).

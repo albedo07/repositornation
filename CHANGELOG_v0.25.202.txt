@@ -1,0 +1,22 @@
+Aethelborn Ascended v0.25.202 - Solid Relics (visuals only)
+
+ROOT CAUSE (relics hollow, gems visible only from the side, hammer rings / striking face vanishing by angle):
+v0.25.195 made the relic + hammer materials copies of the vanilla SwordBronze material. That material draws the
+INNER faces of a mesh (front-face culling). Every correctly built closed mesh therefore looked inside-out:
+- you saw into the Goddess Relic,
+- the gems' front faces were hidden and only their side walls showed past the cross outline,
+- the haft rings and the left striking face vanished.
+Pieces that happened to be built inside-out looked fine, which hid the problem.
+A geometry test of every relic outline (Goddess, Lightning and Holy crosses at 3 sizes, panel, gems, bezels, heart,
+sunburst, feathers) confirms closed, outward-facing meshes with complete caps.
+
+FIXES
+- Relic materials: the vanilla material is reused only if its culling can be set; it is forced to Back
+  (outer faces only). Otherwise Standard is used. The log line "[AA] Relic surface shader:" shows which.
+  Applies to Goddess / Lightning / Holy Relic and the Judgement Hammer.
+- Judgement Hammer: the head, its bands, straps, face rims and the right striking face were built inside-out.
+  Every tube is now generated outward-facing, whatever axis direction it is built along (`Tube`).
+- Gold scroll curls (TubeMesh): an end cap was added, so they are closed solids.
+- Ground cracks (Cracks, CrackLine, BranchCrackLine): lines were camera-facing ribbons. A crack pointing toward or
+  away from the camera was seen edge-on and vanished, so only cracks running across the view showed.
+  They now lie flat on the ground (`LayFlat`) and are visible from every side.

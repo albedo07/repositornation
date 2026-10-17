@@ -1,8 +1,6 @@
-TEST v0.25.201 Embedded Gems
-1. Goddess Relic + Holy Relic: orbit the camera all around (front, side, back, grazing angles).
-   Gems/heart never vanish or flicker, sit IN gold settings, look part of the relic.
-2. Judgement Hammer: head is a short horizontal block, symmetrical; as it grows, it grows evenly.
-3. Skill tree of every AC (SM, Merc, Paladin, Priest, Archmage, HW, Acrobat, Bowmaster):
-   padlock badge on both Signatures + Ultimate sits on top like the Base Class badge.
-4. Delete/rename your old cfg entries or start fresh: new defaults match your AA.config
-   (except damage). Eclipse Asc opening spin stuns.
+TEST v0.25.202 Solid Relics
+1. Goddess Relic: walk around it. Solid gold body (never see inside), blue gems visible from the front and back.
+2. Holy + Lightning Relic: same check (heart, crystal, sunburst, wings).
+3. Judgement Hammer: rings on the haft, both striking faces and the head visible while it flips (upside down too).
+4. Circle Swing / Stomp / any ground slam: cracks visible in ALL directions, whatever the camera angle.
+5. LogOutput.log: line "[AA] Relic surface shader: ..." (tells which shader the relics use).
