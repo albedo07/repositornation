@@ -350,8 +350,8 @@ namespace DragonsAltarSorcerer
 
             _flameCooldown = Config.Bind("Sorcerer Flame Burst", "Cooldown", 7f, "Seconds.");
             _flameEitr = Config.Bind("Sorcerer Flame Burst", "EitrCost", 18f, "Eitr cost.");
-            _flameRange = Config.Bind("Sorcerer Flame Burst", "Range", 10f, "Cone range in meters.");
-            _flameAngle = Config.Bind("Sorcerer Flame Burst", "ConeDegrees", 70f, "Cone width.");
+            _flameRange = Config.Bind("Sorcerer Flame Burst", "Range", 15f, "Cone range in meters.");
+            _flameAngle = Config.Bind("Sorcerer Flame Burst", "ConeDegrees", 85f, "Cone width.");
 
             _iceCooldown = Config.Bind("Sorcerer Glacial Descent", "Cooldown", 9f, "Seconds.");
             _iceEitr = Config.Bind("Sorcerer Glacial Descent", "EitrCost", 24f, "Eitr cost.");
@@ -380,19 +380,19 @@ namespace DragonsAltarSorcerer
 
             _meteorCooldown = Config.Bind("Wizard Meteor Fall", "Cooldown", 18f, "Seconds.");
             _meteorEitr = Config.Bind("Wizard Meteor Fall", "EitrCost", 45f, "Eitr cost.");
-            _meteorRadius = Config.Bind("Wizard Meteor Fall", "Radius", 7f, "Toned-down meteor radius.");
+            _meteorRadius = Config.Bind("Wizard Meteor Fall", "Radius", 10f, "Toned-down meteor radius.");
             _meteorRange = Config.Bind("Wizard Meteor Fall", "CastRange", 50f, "Ground PAC range.");
 
             _cataclysmCooldown = Config.Bind("Wizard Elemental Cataclysm", "Cooldown", 75f, "Seconds.");
             _cataclysmEitr = Config.Bind("Wizard Elemental Cataclysm", "EitrCost", 80f, "Eitr cost.");
-            _cataclysmRadius = Config.Bind("Wizard Elemental Cataclysm", "Radius", 10f, "Ultimate radius.");
+            _cataclysmRadius = Config.Bind("Wizard Elemental Cataclysm", "Radius", 15f, "Ultimate radius.");
             _cataclysmRange = Config.Bind("Wizard Elemental Cataclysm", "CastRange", 50f, "Ground PAC range.");
             _cataclysmCharge = Config.Bind("Wizard Elemental Cataclysm", "MaxChargeTime", 6f, "Maximum total charge time.");
             _railCooldown = Config.Bind("Wizard Astral Railcannon", "Cooldown", 22f, "Seconds.");
             _railEitr = Config.Bind("Wizard Astral Railcannon", "EitrCost", 65f, "Eitr cost.");
             _railRange = Config.Bind("Wizard Astral Railcannon", "Range", 50f, "Laser AoE range.");
             _railWidth = Config.Bind("Wizard Astral Railcannon", "Width", 4f, "Beam width.");
-            _railWindup = Config.Bind("Wizard Astral Railcannon", "Windup", 2.5f, "Deliberate cannon assembly time.");
+            _railWindup = Config.Bind("Wizard Astral Railcannon", "Windup", 1.5f, "Deliberate cannon assembly time.");
 
             _wizardHeldStaffEitrRegen = Config.Bind("Wizard Staff Weapon Mastery", "HeldStaffEitrRegenPercent_v0231", 0f, "Additional Eitr Regen while the Wizard is actually holding a Staff.");
             _wizardHeldStaffFlatEitr = Config.Bind("Wizard Staff Weapon Mastery", "HeldStaffFlatEitr_v0231", 0f, "Flat Max Eitr while the Wizard is actually holding a Staff.");
@@ -1084,7 +1084,7 @@ namespace DragonsAltarSorcerer
         private void BindWizardV0231()
         {
             const string g = "Wizard Gravity Dominion";
-            _gravityWindup = Config.Bind(g, "Windup", 1f, "Wind up.");
+            _gravityWindup = Config.Bind(g, "Windup", 0.5f, "Wind up.");
             _gravityTick = Config.Bind(g, "HitInterval", 1f, "Seconds between pulses.");
             _gravityPull = Config.Bind(g, "PullStrength", 7f, "Legacy (v0.25.85: the pull is a continuous drag, see PullSpeed_v02585).");
             _gravityPullSpeed = Config.Bind(g, "PullSpeed_v02585", 6f, "Small enemies are dragged into the well at this speed (m/s), the whole time they are inside.");
@@ -1097,7 +1097,7 @@ namespace DragonsAltarSorcerer
             _bladeBurnSeconds = Config.Bind(b, "SpiritBurnDuration", 6f, "Spirit Burn duration.");
             _bladeDmg = BindWizDamage("Wizard Astral Greatblade Damage", 55f, 62f, 0f, 0f, 0f, 0f, 0f, 48f);
             const string n = "Wizard Frost Nova";
-            _novaWindup = Config.Bind(n, "Windup", 1f, "Wind up.");
+            _novaWindup = Config.Bind(n, "Windup", 0.7f, "Wind up.");
             _novaFrost = Config.Bind(n, "FrostDuration", 8f, "Frost on Small, Big and Boss.");
             _novaDmg = BindWizDamage("Wizard Frost Nova Damage", 0f, 0f, 0f, 0f, 62f, 0f, 0f, 0f);
             const string m = "Wizard Meteor Fall";
@@ -1114,7 +1114,7 @@ namespace DragonsAltarSorcerer
             _cataclysmExpose = Config.Bind(c, "ExposeDuration", 15f, "Expose: the only ailment.");
             _cataclysmDmg = BindWizDamage("Wizard Elemental Cataclysm Damage", 55f, 55f, 55f, 55f, 55f, 55f, 55f, 0f);
             const string o = "Wizard Overcharge";
-            _ocThreshold = Config.Bind(o, "EitrSpentToTrigger", 300f, "Eitr spent to activate Overcharge.");
+            _ocThreshold = Config.Bind(o, "EitrSpentToTrigger", 500f, "Eitr spent to activate Overcharge.");
             _ocDuration = Config.Bind(o, "Duration", 12f, "Seconds active.");
             _ocBuffer = Config.Bind(o, "AccumulationBuffer", 5f, "Seconds after it ends before Eitr spent counts again.");
             _ocWindup = Config.Bind(o, "WindupSpeedPercent", 40f, "Faster wind up for long-cast skills.");
@@ -1140,7 +1140,7 @@ namespace DragonsAltarSorcerer
             const string ma = "Wizard Meteor Fall Ascended";
             _mfAscPercent = Config.Bind(ma, "SmallMeteorPercent", 12f, "Each small meteor: % of the charged main meteor.");
             _mfAscWindup = Config.Bind(ma, "Windup", 0.5f, "Ascended wind up (the charge timer still starts on the key press).");
-            _mfAscRadius = Config.Bind(ma, "SmallMeteorRadius", 3f, "Small meteor radius.");
+            _mfAscRadius = Config.Bind(ma, "SmallMeteorRadius", 5f, "Small meteor radius.");
             _mfAscGap = Config.Bind(ma, "Interval", 0.25f, "Seconds between small meteors (3, or 5 at full charge).");
             _mfAscSpread = Config.Bind(ma, "Spread", 5f, "Distance of the small meteors from the target point.");
             const string gva = "Wizard Gravity Dominion Ascended";
@@ -2721,7 +2721,7 @@ namespace DragonsAltarSorcerer
             _riftWalkerRange = Config.Bind(w, "PlacementRange", 50f, "Max distance for each portal (physical aim; Free Aim mid-air otherwise).");
             _riftWalkerWindow = Config.Bind(w, "PlacementWindow", 30f, "Seconds to place Portal B after A.");
             _riftWalkerLife = Config.Bind(w, "LinkedLifetime", 30f, "Seconds both portals work once B is placed.");
-            _yyAttackSpeed = Config.Bind("Spellcaster Gun Staff", "AttackSpeedMultiplier_v0232", 2f, "Yin and Yang: Staff / Wand attack interval -50% (2x speed), single or dual.");
+            _yyAttackSpeed = Config.Bind("Spellcaster Gun Staff", "AttackSpeedMultiplier_v0232", 0f, "Yin and Yang: Staff / Wand attack interval -50% (2x speed), single or dual.");
             const string sa = "Spellcaster Stonefang Eruption Ascended";
             _saAscRadius = Config.Bind(sa, "Radius", 7f, "Ascended radius.");
             _saAscEruption = Config.Bind(sa, "EruptionPercent", 80f, "Eruption damage %.");

@@ -232,7 +232,7 @@ namespace AlbedosCustomClassesSkills
         public static SkillsPlugin Instance;
         public const string ModGuid = "albedo.customclasses.skills";
         public const string ModName = "Aethelborn Ascended - Starter Skills";
-        public const string ModVersion = "0.25.200";
+        public const string ModVersion = "0.25.201";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";
@@ -369,14 +369,14 @@ namespace AlbedosCustomClassesSkills
             _zapCooldown = Config.Bind("Cleric.Lightning Zap", "Cooldown", 8f, "Seconds.");
             _zapStamina = Config.Bind("Cleric.Lightning Zap", "StaminaCost", 18f, "Stamina cost.");
             _zapRange = Config.Bind("Cleric.Lightning Zap", "Range", 10f, "Framework cone range: literal 10m.");
-            _zapConeAngle = Config.Bind("Cleric.Lightning Zap", "ConeDegrees", 70f, "Testing/default cone width.");
+            _zapConeAngle = Config.Bind("Cleric.Lightning Zap", "ConeDegrees", 85f, "Testing/default cone width.");
             _zapExplosionDamage = Config.Bind("Cleric.Lightning Zap", "ZapExplosionLightningDamage", 0f, "0 uses Combat Runtime Zap default because the framework does not specify an explosion damage amount.");
             _zapDamage = BindDamage("Cleric.Lightning Zap.Damage", 0f, 0f, 18f, 0f, 0f, 40f, 0f, 0f);
 
             _righteousCooldown = Config.Bind("Cleric.Righteous Strike", "Cooldown", 8f, "Seconds.");
             _righteousStamina = Config.Bind("Cleric.Righteous Strike", "StaminaCost", 20f, "Stamina cost.");
             _righteousWindup = Config.Bind("Cleric.Righteous Strike", "Windup", 0.7f, "Framework windup.");
-            _righteousRadius = Config.Bind("Cleric.Righteous Strike", "Radius", 5f, "Framework AoE radius: literal 5m.");
+            _righteousRadius = Config.Bind("Cleric.Righteous Strike", "Radius", 7f, "Framework AoE radius: literal 5m.");
             _righteousRange = Config.Bind("Cleric.Righteous Strike", "Range", 50f, "Ground PAC cast range in literal world meters. Works indoors.");
             _righteousExposeDuration = Config.Bind("Cleric.Righteous Strike", "ExposeDuration", 6f, "Framework default debuff duration.");
             _righteousDamage = BindDamage("Cleric.Righteous Strike.Damage", 35f, 0f, 0f, 0f, 0f, 42f, 0f, 0f);
@@ -385,7 +385,7 @@ namespace AlbedosCustomClassesSkills
             _holyStamina = Config.Bind("Cleric.Holy Wave", "StaminaCost", 25f, "Stamina cost.");
             _holyRadius = Config.Bind("Cleric.Holy Wave", "Radius", 7f, "Framework healing radius: literal 7m.");
             _holyImmediate = Config.Bind("Cleric.Holy Wave", "ImmediateHealPercent_v025200", 20f, "Immediately heal this percent of each recipient's maximum HP, before the existing healing tier bonus.");
-            _holyPercent = Config.Bind("Cleric.Holy Wave", "HealPercentPerSecond", 5f, "Percent max HP healed each second.");
+            _holyPercent = Config.Bind("Cleric.Holy Wave", "HealPercentPerSecond", 4f, "Percent max HP healed each second.");
             _holyDuration = Config.Bind("Cleric.Holy Wave", "Duration", 6f, "Heal-over-time duration.");
 
             _flameCooldown = Config.Bind("Sorcerer.Flame Burst", "Cooldown", 7f, "Seconds.");

@@ -1,14 +1,8 @@
-v0.25.200 - IN-GAME CHECKLIST
-Install using INSTALL.bat as usual. Separate pass from preserved v199; no Anchor promotion.
-
-1. Whirlwind: normal and Ascended, stationary and moving over flat ground, slopes, uneven rocks and built floors. Wind downwash must stay on the surface. Accepted blade arcs/Ascended tornado remain. Stop/recast, die and leave the skill: downwash should stop. Confirm the previous movement freedom, hit cadence and damage.
-2. Circle Swing: normal and Ascended, first and follow-up hits. Expect a wide, strong wind ring at the attack radius with no slash crescents/streaks. Compare with Stomp; Circle Swing's ring should be thicker/stronger. Ascended ground eruption/debris remain. Check every available CA branch and normal controls.
-3. Fury: observe active Fury, then its recovery cooldown. Only recovery should have three downward chevrons and the orange strip; the seconds timer must remain readable. Confirm normal Fury generation and the original duration/cooldown. Test the HUD scales/resolutions you use.
-4. Holy Wave: with unchanged healing tier, test allies with different maximum HP. Base heal is 20% max HP, then the existing healing-tier factor. Example at 1x healing power: max 100 -> 20; max 250 -> 50. Actual restored HP is capped by missing HP. Check normal, Ascended low-HP bonus, echo and sustained healing, and the tooltip. Test old saved configs; old ImmediateHeal=25 should no longer set the initial heal.
-5. Damaging support effects: Ray of Hope normal/Ascended, Divine Intervention, both Lightning Relics and Sanctified Bloom. Wind should be airy and ring-shaped, visibly colored like each existing radius pulse, with no filled gray cloud. Confirm support effects, damage/DoT and pulse timing remain. Pure healing/buff effects should retain their existing behavior. Test daylight/shade/night and your usual VFX amount settings.
-6. Relics: Goddess Relic normal/Ascended and Holy Relic, from front/back and while circling through oblique angles, close and at combat distance. Sapphires and green heart should sit in the backing without air gaps, disappearing cap fragments or z-fighting. Check the same accepted body colors, green pigment, wings and scale. Judgement Hammer appearance/growth should remain v199's.
-7. Birds: after fresh world load and on later spawns, aim at landed birds with targeted skills; test AoE, cone, wave and projectile skills at valid ranges. Test flying birds where native hitboxes permit and watch for missed targeting/errors. Damage should follow existing creature rules, occur once, and leave normal feathers/drops. Test ordinary bow/weapon hits too, including class utility-axe restrictions. A native bird stays under its ambient flight controller rather than becoming a combat NPC. With two updated clients, test owner/non-owner damage, single death/drop delivery and no missing-RPC errors. Confirm other creatures, tamed creatures, players, structures and trees retain their prior behavior.
-
-REGRESSION: v199 Knight's Guidance (+25% skill damage/90s/600s), paired-weapon exhaustion recovery, diagonal second Ascended Heavy Slash, Blade Storm's thinner blue shell, previous NACC/dodge/block rules, first-cast CA, crossbow sprint reload/save, UI input blocking, Saving Grace, equipment restrictions, cape and hammer growth.
-
-Capture fresh AA and BepInEx logs if any issue remains. No live FPS improvement or full game compatibility is claimed by code checks alone.
+TEST v0.25.201 Embedded Gems
+1. Goddess Relic + Holy Relic: orbit the camera all around (front, side, back, grazing angles).
+   Gems/heart never vanish or flicker, sit IN gold settings, look part of the relic.
+2. Judgement Hammer: head is a short horizontal block, symmetrical; as it grows, it grows evenly.
+3. Skill tree of every AC (SM, Merc, Paladin, Priest, Archmage, HW, Acrobat, Bowmaster):
+   padlock badge on both Signatures + Ultimate sits on top like the Base Class badge.
+4. Delete/rename your old cfg entries or start fresh: new defaults match your AA.config
+   (except damage). Eclipse Asc opening spin stuns.

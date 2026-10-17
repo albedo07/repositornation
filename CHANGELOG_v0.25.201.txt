@@ -1,0 +1,39 @@
+Aethelborn Ascended v0.25.201 - Embedded Gems
+Baseline: v0.25.200 Wind Rings and Bird Targets (ChatGPT passes 192-200, imported unchanged).
+
+1. RELICS (Paladin Goddess Relic, Priest Holy Relic)
+- Cause of "floating / disappearing by angle": v0.25.200 gems were thin plates seated INSIDE or
+  within 1% of the relic surfaces (centre gem inside the seal disc, side gems on the panel face,
+  heart 0.025 thickness from the disc and sunburst) -> z-fighting.
+- Gems are now SET stones: a gold bezel (collar) passes through the relic and the stone passes
+  through the bezel, both rising clearly (>= 6% of thickness) above front and back faces
+  (`IhSetGem`). One piece with the relic, readable from every angle, no coplanar faces.
+- Holy Relic heart: gold heart frame through the whole relic body + green heart through the frame
+  + blue gem through the heart (no bezel). No surface is shared with the disc or sunburst.
+
+2. JUDGEMENT HAMMER
+- Head = symmetrical horizontal block: square cross-section, length 0.7 of v0.25.200, no 2.4x
+  vertical stretch (`HammerHeadPoint`). Head bottom stays on the collar.
+- Growth is UNIFORM (`UpdateHammerVisual` scales all axes by height / 1.21). Gameplay hitbox
+  and growth rate unchanged.
+
+3. PERMANENT BADGES (skill tree, all Advancement Classes)
+- The painted padlock badges on the AC permanent slots (Signature 1, Signature 2, Ultimate) were
+  cut by the skill art. The badge texture is now stamped ON TOP of frame + art at the painted
+  position (25 px, Ultimate 29 px), same as the Base Class badge (`IhDrawFrameOverlay`).
+
+4. CONFIG DEFAULTS = USER'S AA.config (damage + [Testing] excluded)
+- Immortal HUD positions / sizes / scales, Judgement Hammer Range 35 / Travel 4, RoH Asc barrier
+  6 s, Shield Charge hits 6 / Asc radius 5, DI wind up 0.5, Grand Cross travel 9 / interval 0.3,
+  Heaven's Judgement (wind up 1, 2 s / Asc 4 s, 0.15 s, 10 beams, radius 3), Holy Wave heal 4%/s,
+  Lightning Zap cone 85, Righteous Strike radius 7, Crescent Cleave (travel 6, width 3, 5 hits,
+  cone 80, 0.3 s, wind up 0.5), Halfmoon width 16 / wind up 1 / Asc finisher x2, Moonlight width 6
+  / wind up 0.3 / Asc 0.3+0.3, Blade Storm Asc sphere interval 0.3, Flame Burst range 15 / cone 85,
+  Gun Staff attack speed multiplier 0, Railcannon wind up 1.5, Cataclysm radius 15, Meteor radius 10
+  / Asc small meteor radius 5, Gravity Dominion wind up 0.5, Frost Nova wind up 0.7, Overcharge 500
+  Eitr, Cyclone travel 7 s.
+- Stun: Eclipse Ascended Opening Spin = Stun ON.
+- NOT taken (damage): RoH Asc burn, Lightning Relic damage, Blade Storm Asc cut %, Eclipse burn /
+  frost, Frenzied explosion %, Judgement Cut per cut, Flame Burst fire, Meteor Asc small %.
+
+Compile-check stubs: real Valheim members used by v0.25.192-200 added (checked in decompiled source).

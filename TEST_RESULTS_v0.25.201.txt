@@ -1,0 +1,5 @@
+v0.25.201 static verification only (no game, no Unity):
+- tools/compile_check/check.sh 3029660: PASSED (0 new signatures) after adding real Valheim stubs.
+- mcs --parse -langversion:5: all .cs OK.
+- Relic/hammer geometry: clearance values checked in code (gems >= 0.06 t above/below every face).
+NOT verified: in-game look of gems, hammer and badges.

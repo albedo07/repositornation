@@ -26,7 +26,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.200";
+        public const string ModVersion = "0.25.201";
 
         internal static DragonCombatPlugin Instance;
 
@@ -9520,7 +9520,7 @@ namespace DragonsAltarCombat
                 "frenzied_charge|0|Attack 1=0;Charge=1;Explosion=0",
                 "frenzied_charge|1|Attack 1=0;Charge=1;Explosion=0",
                 "eclipse|0|Attack 1=0;Counter=0;Delayed Hail=0;Opening Spin=0;Slash Hail=0;Spiral=0",
-                "eclipse|1|Attack 1=0;Counter=0;Delayed Hail=0;Opening Spin=0;Slash Hail=0;Spiral=0",
+                "eclipse|1|Attack 1=0;Counter=0;Delayed Hail=0;Opening Spin=1;Slash Hail=0;Spiral=0",
                 "stomp|0|Attack 1=1;Attack 2=1",
                 "stomp|1|Attack 1=1;Attack 2=1;Attack 3=1",
                 "circle_swing|0|Attack 1=1;Attack 2=1",
@@ -16700,7 +16700,10 @@ namespace DragonsAltarCombat
         }
         public static Vector3 HammerHeadPoint(Vector3 point)
         {
-            if (point.y > 0.24f) return new Vector3(point.x * 1.12f, 0.39f + (point.y - 0.39f) * 2.4f, point.z * 1.3f);
+            // v0.25.201 (user: head = a symmetrical HORIZONTAL rectangle, not tall): the head's cross-section becomes square
+            // (half 0.21 high x 0.21 deep, was 0.29 x 0.56) and its length 0.7x, so it reads as a horizontal block about 1.8x
+            // longer than tall. The head's bottom stays on the socket collar (y 0.27); the haft is untouched.
+            if (point.y > 0.24f) return new Vector3(point.x * 0.7f, 0.48f + (point.y - 0.39f) * 1.75f, point.z * 0.488f);
             return point;
         }
         private static void ThickenHammerHead(GameObject hammer)
