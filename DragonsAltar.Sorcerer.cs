@@ -1337,7 +1337,7 @@ namespace DragonsAltarSorcerer
                     // v0.25.181 (user): no circular impact front - dirt and debris thrown out sideways along the blade's straight
                     // contact line (torn furrow segments), the split ground bursting open along it
                     int segs = Mathf.Clamp(Mathf.RoundToInt(Vector3.Distance(ga, gb) / 1.2f), 3, 14);
-                    for (int k = 0; k < segs; k++) DragonVfx.Furrow(Vector3.Lerp(ga, gb, (float)k / segs), Vector3.Lerp(ga, gb, (float)(k + 1) / segs), new Color(0.75f, 0.30f, 1f, 1f), Mathf.Max(1f, gw), 2.2f);
+                    for (int k = 0; k < segs; k++) DragonVfx.Furrow(Vector3.Lerp(ga, gb, (float)k / segs), Vector3.Lerp(ga, gb, (float)(k + 1) / segs), new Color(0.75f, 0.30f, 1f, 1f), Mathf.Max(1f, gw), 2.2f, false);   // v0.25.204 CrackLine above is the scar
                     for (int k = 1; k <= 3; k++) DragonVfx.Eruption(Vector3.Lerp(ga, gb, k / 3.5f), new Color(0.75f, 0.30f, 1f, 1f), Mathf.Clamp(gw * 0.45f, 0.6f, 1.4f), 0f);
                     DragonVfx.Shake(Vector3.Lerp(ga, gb, 0.5f), 25f, 2f);
                 });

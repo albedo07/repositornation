@@ -1,0 +1,4 @@
+v0.25.204 static verification (no game):
+- compile_check 3029660 PASSED; mcs --parse -langversion:5 all .cs OK.
+- Badge cleanup reproduced offline on Warrior_Mercenary_Artwork.png (same algorithm): preview checked, corners clean.
+NOT verified: in-game look.

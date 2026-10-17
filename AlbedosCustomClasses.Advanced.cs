@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.203";
+        public const string ModVersion = "0.25.204";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -4708,7 +4708,10 @@ namespace AlbedosCustomClassesAdvanced
         private static float IhHeavySlashStrokeRoll(int strike, bool sampled, float observed)
         {
             if (strike == 0) return 180f;
-            if (strike != 1) return -90f;
+            // v0.25.204 (user: 3rd strike slash disappeared): a pure overhead chop (-90) lies in the vertical plane that
+            // runs straight away from the camera behind the player = seen edge-on, invisible. 25 deg off vertical still
+            // reads as the overhead chop and faces the camera.
+            if (strike != 1) return -65f;
             // A normal is periodic over 180 degrees; retain the observed diagonal direction.
             float plane = Mathf.Abs(Mathf.DeltaAngle(0f, observed)) % 90f;
             return sampled && plane >= 15f && plane <= 75f ? observed : 45f;
@@ -4772,7 +4775,7 @@ namespace AlbedosCustomClassesAdvanced
                     bool sampled = wake != null && wake.TryRoll(out observedRoll);
                     float strokeRoll = IhHeavySlashStrokeRoll(strike, sampled, observedRoll);
                     DragonCombat.RunVfx(delegate { DragonVfx.SlashArc(fxOrigin, fxForward, fxRange, 150f,
-                        new Color(1f, 0.55f, 0.20f, 1f), Mathf.Max(0.25f, fxRange * 0.12f), 0.4f, strokeRoll, false); });
+                        new Color(1f, 0.55f, 0.20f, 1f), Mathf.Max(0.25f, fxRange * (strokeRoll == -65f ? 0.16f : 0.12f)), 0.4f, strokeRoll, false); });
                 }
                 if (trigger != null)
                 {
@@ -5471,7 +5474,7 @@ namespace AlbedosCustomClassesAdvanced
                         DragonVfx.CrackLine(sa, sb, DragonVfx.Fire, Mathf.Clamp(sw * 0.25f, 0.25f, 0.8f), 4f);   // v0.25.58 the fissure tears open
                         // v0.25.168 (user): travelling cracks / eruptions along the fissure (no spikes)
                         if (rock) DragonVfx.Eruption(sb, DragonVfx.Fire, Mathf.Clamp(sw * 0.5f, 0.7f, 1.8f), 0f);
-                        else DragonVfx.Furrow(sa, sb, DragonVfx.Fire, sw);
+                        else DragonVfx.Furrow(sa, sb, DragonVfx.Fire, sw, 1f, false);   // v0.25.204 scar already drawn above
                     });
                     lastScar = shockPoint;
                 }
@@ -17704,6 +17707,7 @@ namespace AlbedosCustomClassesAdvanced
             Texture2D backdrop = IhKitBackdrop(IhTreeKit(), false);
             if (backdrop == null)
                 backdrop = _ihPreAdvanceBackdropTex != null ? _ihPreAdvanceBackdropTex : _treeReferenceBackdropTex;
+            backdrop = IhCleanBadges(backdrop);   // v0.25.204 painted Signature / Ultimate badges removed, frame corners rebuilt
             if (treePlayer == null || string.IsNullOrEmpty(GetAdvancement(treePlayer)))
                 backdrop = IhSealedBackdrop(backdrop, treeClass);   // v0.25.165 locked Advancement panel = plain fill, no baked nodes / preview art
             GUI.DrawTexture(full, backdrop, ScaleMode.StretchToFill, true);
@@ -18183,6 +18187,7 @@ namespace AlbedosCustomClassesAdvanced
             // Frame variants are optional probes; the painted/procedural frame already covers missing ones.
             string fileName="Frame_"+key+".png";
             texture=IhAssetExists(fileName) ? LoadUiPng(fileName) : null;
+            if(texture!=null) IhMirrorBadgeCorner(texture, slot);   // v0.25.204 the colour overlays had the same badge gap
             _ihFrameSprites[key]=texture;
             if(texture!=null) _ihPolishTextures.Add(texture);
             return texture;
@@ -18202,23 +18207,89 @@ namespace AlbedosCustomClassesAdvanced
                     GUI.DrawTexture(IhSnap(ScaleReferenceRect(r.x,r.y,r.width,r.height)),sprite);
                 }
             }
-            // Ascended skills are permanent: give them the same corner badge Signatures / Ultimates
-            // have painted (Goddess Relic, Judgement Hammer and Electric Smite slots already show one).
-            if(color=="magenta" && slot!="goddess_relic" && slot!="judgement_hammer" && slot!=IhUltimate && _treePermanentBadgeTex!=null)
+            // v0.25.204 (user: badges must look STAMPED on intact borders, like the Base Class one, on every class):
+            // the painted Signature / Ultimate badges are removed from the canvas and their frame corners rebuilt
+            // (IhCleanBadges / IhMirrorBadgeCorner), so every permanent slot - Ascended, Signature, Ultimate - gets
+            // the one stamp, drawn last, at the Base Class position and size.
+            bool permanent=color=="magenta" || color=="red" || slot=="goddess_relic" || slot=="judgement_hammer" || slot==IhUltimate;
+            if(permanent && _treePermanentBadgeTex!=null)
             {
                 Rect f=IhOverlayField(slot);
                 GUI.DrawTexture(IhSnap(ScaleReferenceRect(f.xMax-11.5f,f.yMin-17.5f,23f,23f)),_treePermanentBadgeTex);
             }
-            // v0.25.201 (user): the PAINTED badges on the Signature / Ultimate slots were cut by the skill art drawn into the
-            // opening. Stamp the same badge texture on top, centred on the painted one (measured on the chassis) and a
-            // little larger so it fully covers it - every class uses these slots.
-            if(_treePermanentBadgeTex!=null && (slot=="goddess_relic" || slot=="judgement_hammer" || slot==IhUltimate))
+        }
+
+        // v0.25.204 painted permanent badges on the chassis (centre x/y, half size, reference px). The frames are
+        // left/right symmetric, so the badge corner is rebuilt from the mirrored (intact) top-left corner.
+        private static readonly float[] IhPaintedBadges = { 431.7f, 163f, 13f,  433f, 292f, 13f,  951f, 217f, 17f };
+        private static string IhBadgeSlot(int i) { return i == 0 ? "goddess_relic" : i == 1 ? "judgement_hammer" : "electric_smite"; }
+        private readonly Dictionary<int,Texture2D> _ihCleanBackdrops = new Dictionary<int,Texture2D>();
+
+        private Texture2D IhCleanBadges(Texture2D src)
+        {
+            if(src==null || src.width!=1011 || src.height!=662) return src;
+            Texture2D done;
+            if(_ihCleanBackdrops.TryGetValue(src.GetInstanceID(),out done) && done!=null) return done;
+            try
             {
-                float bx=slot=="goddess_relic"?431f:slot=="judgement_hammer"?433f:954f;
-                float by=slot=="goddess_relic"?162f:slot=="judgement_hammer"?291f:222f;
-                float bs=slot==IhUltimate?29f:25f;
-                GUI.DrawTexture(IhSnap(ScaleReferenceRect(bx-bs*0.5f,by-bs*0.5f,bs,bs)),_treePermanentBadgeTex);
+                Texture2D t=new Texture2D(src.width,src.height,TextureFormat.RGBA32,src.mipmapCount>1);
+                t.SetPixels(src.GetPixels());
+                t.wrapMode=src.wrapMode; t.filterMode=src.filterMode;
+                for(int b=0;b<3;b++)
+                {
+                    Rect fr=IhFrameSpriteRect(IhBadgeSlot(b));
+                    float axis=fr.x+fr.width*0.5f;
+                    int r=Mathf.CeilToInt(IhPaintedBadges[b*3+2]);
+                    int x0=Mathf.RoundToInt(IhPaintedBadges[b*3])-r, y0=Mathf.RoundToInt(IhPaintedBadges[b*3+1])-r, w=r*2+1;
+                    Color[] donor=new Color[w*w], corr=new Color[w*w];
+                    for(int y=0;y<w;y++) for(int x=0;x<w;x++)
+                    {
+                        int px=Mathf.Clamp(x0+x,0,1010), py=Mathf.Clamp(y0+y,0,661), i=y*w+x;
+                        int mx=Mathf.Clamp(Mathf.RoundToInt(2f*axis-px-1f),0,1010);
+                        donor[i]=src.GetPixel(mx,661-py);
+                        if(x==0||y==0||x==w-1||y==w-1) corr[i]=src.GetPixel(px,661-py)-donor[i];
+                    }
+                    // blend the mirrored patch into the untouched surroundings (boundary difference relaxed inward)
+                    for(int pass=0;pass<300;pass++)
+                        for(int y=1;y<w-1;y++) for(int x=1;x<w-1;x++)
+                        { int i=y*w+x; corr[i]=(corr[i-1]+corr[i+1]+corr[i-w]+corr[i+w])*0.25f; }
+                    for(int y=1;y<w-1;y++) for(int x=1;x<w-1;x++)
+                    {
+                        int px=x0+x, py=y0+y; if(px<0||px>1010||py<0||py>661) continue;
+                        Color c=donor[y*w+x]+corr[y*w+x]; c.a=1f;
+                        t.SetPixel(px,661-py,c);
+                    }
+                }
+                t.Apply(src.mipmapCount>1);
+                _ihCleanBackdrops[src.GetInstanceID()]=t;
+                _ihPolishTextures.Add(t);
+                return t;
             }
+            catch(Exception ex) { Logger.LogWarning("[AA] badge cleanup skipped: "+ex.Message); _ihCleanBackdrops[src.GetInstanceID()]=src; return src; }
+        }
+
+        // Same rebuild inside a Frame_<slot>_<color>.png overlay (1 texel = 1 reference px; transparent outside the frame).
+        private void IhMirrorBadgeCorner(Texture2D sprite, string slot)
+        {
+            int b=slot=="goddess_relic" ? 0 : slot=="judgement_hammer" ? 1 : slot=="electric_smite" ? 2 : -1;
+            if(b<0 || sprite==null) return;
+            try
+            {
+                Rect fr=IhFrameSpriteRect(slot);
+                if(Mathf.Abs(sprite.width-fr.width)>2f || Mathf.Abs(sprite.height-fr.height)>2f) return;
+                int r=Mathf.CeilToInt(IhPaintedBadges[b*3+2]);
+                int cx=Mathf.RoundToInt(IhPaintedBadges[b*3]-fr.x), cy=Mathf.RoundToInt(IhPaintedBadges[b*3+1]-fr.y);
+                int W=sprite.width, H=sprite.height;
+                Color[] px=sprite.GetPixels();
+                for(int y=cy-r;y<=cy+r;y++) for(int x=cx-r;x<=cx+r;x++)
+                {
+                    if(x<0||x>=W||y<0||y>=H) continue;
+                    int mx=W-1-x; if(mx<0||mx>=W) continue;
+                    px[(H-1-y)*W+x]=px[(H-1-y)*W+mx];
+                }
+                sprite.SetPixels(px); sprite.Apply(sprite.mipmapCount>1);
+            }
+            catch(Exception) { }
         }
 
         // CPU version used while building the Priest canvas, so its hotbar icons carry the same frame.

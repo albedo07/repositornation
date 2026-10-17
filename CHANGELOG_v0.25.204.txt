@@ -1,0 +1,16 @@
+Aethelborn Ascended v0.25.204 - Clean Borders (visuals only; relics untouched as approved)
+
+1. BLADE STORM: the ball of light inside is about 1.5x bigger (halo, white heart and mist). The 5 curved slashes are
+   unchanged.
+2. GROUND CRACKS DOUBLED: Seismic Guillotine, Impact Wave and Astral Greatblade drew every crack twice - once as the
+   full-length scar and again under each dirt furrow, with slightly different jitter - so the overlap looked brighter.
+   The furrows now add only the dirt (`Furrow(..., scar false)`), so each crack is drawn once. Crescent Cleave keeps
+   its furrow scar, since that is its only crack.
+3. ASCENDED HEAVY SLASH 3RD STRIKE: the overhead chop's slash was drawn in a perfectly vertical plane running straight
+   away from the camera, so from behind the player it was edge-on and invisible. It is now tilted 25 deg off vertical
+   (still reads as the overhead chop) and slightly wider.
+4. SKILL TREE BADGES (every class): the painted lock emblems are removed from the Signature and Ultimate frames. Each
+   corner is rebuilt as plain border from the frame's mirrored, intact corner, blended into the art around it - on
+   the tree canvas and on the colour overlays (Ascended red / magenta, ...). Every permanent skill (Ascended,
+   Signature, Ultimate) now gets the same single stamped badge, at the Base Class position and size.
+   Preview: docs/previews/PREVIEW_v0.25.204_Clean_Badges.png (top = rebuilt borders, bottom = with the stamp).

@@ -232,7 +232,7 @@ namespace AlbedosCustomClassesSkills
         public static SkillsPlugin Instance;
         public const string ModGuid = "albedo.customclasses.skills";
         public const string ModName = "Aethelborn Ascended - Starter Skills";
-        public const string ModVersion = "0.25.203";
+        public const string ModVersion = "0.25.204";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";
@@ -754,7 +754,7 @@ namespace AlbedosCustomClassesSkills
                         iwNextSpike = iwDist + 1.1f;
                         Vector3 iwP = probe; float iwWs = width;
                         // v0.25.168 (user): the wave cracks the ground as it passes (no spikes)
-                        DragonCombat.RunVfx(delegate { DragonVfx.Furrow(iwPrev, iwP, new Color(1f, 0.62f, 0.22f, 1f), iwWs); });
+                        DragonCombat.RunVfx(delegate { DragonVfx.Furrow(iwPrev, iwP, new Color(1f, 0.62f, 0.22f, 1f), iwWs, 1f, false); });   // v0.25.204 the wave's BranchCrackLine is the scar
                     }
                 }
                 if (_enableVfx.Value)

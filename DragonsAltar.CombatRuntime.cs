@@ -26,7 +26,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.203";
+        public const string ModVersion = "0.25.204";
 
         internal static DragonCombatPlugin Instance;
 
@@ -15412,9 +15412,16 @@ namespace DragonsAltarCombat
 
         public static void Furrow(Vector3 a, Vector3 b, Color c, float width, float strength)
         {
+            Furrow(a, b, c, width, strength, true);
+        }
+
+        // v0.25.204 (user: overlapping brighter cracks): scar = false when the caller already draws its own full-length scar
+        // (Seismic fissure, Impact Wave, Greatblade) - the furrow then adds only the dirt, so the two cracks never stack.
+        public static void Furrow(Vector3 a, Vector3 b, Color c, float width, float strength, bool scar)
+        {
             if (!Enabled) return;
             strength = Mathf.Clamp(strength, 0.5f, 3f);
-            CrackLine(a, b, c, Mathf.Clamp(width * 0.3f, 0.12f, 0.5f), 3.5f);
+            if (scar) CrackLine(a, b, c, Mathf.Clamp(width * 0.3f, 0.12f, 0.5f), 3.5f);
             // overlapping waves (Ascended fans) share one budget: at most 8 dirt sprays per 0.25 s, the scar always draws
             if (Time.time >= _furrowWindow) { _furrowWindow = Time.time + 0.25f; _furrowCount = 0; }
             if (++_furrowCount > (strength > 1f ? 12 : 8)) return;
@@ -16649,16 +16656,16 @@ namespace DragonsAltarCombat
             Color core = Color.Lerp(tint, Color.white, 0.85f);
             float life = hold + 0.45f;
             DragonVfxLife host = Host(center, life + 0.6f, "judgementball");
-            // ball of light: dense overlapping soft glow sprites (outer tinted halo, inner white heart) + a little blue mist
+            // ball of light (v0.25.204 user: bigger, ~1.5x): dense overlapping soft glow sprites (outer tinted halo, inner white heart) + a little blue mist
             Color halo = Color.Lerp(tint, Color.white, 0.35f); halo.a = 0.55f;
-            ParticleSystem outer = Particles(host.transform, halo, 10, 14f, life * 0.8f, 0.45f, 0f, 0.05f, r * 0.9f, r * 1.25f, 0f,
-                ParticleSystemShapeType.Sphere, r * 0.12f, Vector3.zero, false, true);
+            ParticleSystem outer = Particles(host.transform, halo, 12, 16f, life * 0.8f, 0.45f, 0f, 0.05f, r * 1.4f, r * 1.9f, 0f,
+                ParticleSystemShapeType.Sphere, r * 0.18f, Vector3.zero, false, true);
             Color heart = Color.Lerp(tint, Color.white, 0.8f); heart.a = 0.8f;
-            ParticleSystem inner = Particles(host.transform, heart, 6, 10f, life * 0.8f, 0.35f, 0f, 0.03f, r * 0.45f, r * 0.65f, 0f,
-                ParticleSystemShapeType.Sphere, r * 0.06f, Vector3.zero, false, true);
+            ParticleSystem inner = Particles(host.transform, heart, 8, 12f, life * 0.8f, 0.35f, 0f, 0.03f, r * 0.75f, r * 1.0f, 0f,
+                ParticleSystemShapeType.Sphere, r * 0.1f, Vector3.zero, false, true);
             Color fog = Color.Lerp(new Color(0.30f, 0.52f, 0.95f, 0.35f), tint, 0.3f); fog.a = 0.35f;
-            ParticleSystem mist = Particles(host.transform, fog, 8, 6f, life * 0.7f, 0.8f, 0.05f, 0.25f, r * 0.35f, r * 0.6f, 0f,
-                ParticleSystemShapeType.Sphere, r * 0.45f, Vector3.zero, false, false);
+            ParticleSystem mist = Particles(host.transform, fog, 10, 8f, life * 0.7f, 0.8f, 0.05f, 0.25f, r * 0.5f, r * 0.85f, 0f,
+                ParticleSystemShapeType.Sphere, r * 0.6f, Vector3.zero, false, false);
             Material mistMaterial = Mat(SmokeTex(), false);
             if (mistMaterial != null) mist.GetComponent<ParticleSystemRenderer>().sharedMaterial = mistMaterial;
             outer.Play(); inner.Play(); mist.Play();
