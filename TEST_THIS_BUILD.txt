@@ -1,6 +1,7 @@
-TEST v0.25.202 Solid Relics
-1. Goddess Relic: walk around it. Solid gold body (never see inside), blue gems visible from the front and back.
-2. Holy + Lightning Relic: same check (heart, crystal, sunburst, wings).
-3. Judgement Hammer: rings on the haft, both striking faces and the head visible while it flips (upside down too).
-4. Circle Swing / Stomp / any ground slam: cracks visible in ALL directions, whatever the camera angle.
-5. LogOutput.log: line "[AA] Relic surface shader: ..." (tells which shader the relics use).
+TEST v0.25.203 Solid Objects
+1. Goddess / Holy / Lightning Relic: walk all around, look from below and the sides. Solid, nothing showing through,
+   gems visible from the front and back.
+2. Judgement Hammer: rings fully around the handle from every angle, including upside down.
+3. Any ground slam (Circle Swing, Stomp, Seismic, Impact Wave): cracks in ALL directions, whatever the camera angle.
+4. Blade Storm: glowing ball of light + 5 curved slashes around it.
+5. LogOutput.log should NOT show "[AA] Relic surface shader" (only printed when the fallback is used).

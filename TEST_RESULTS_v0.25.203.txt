@@ -1,0 +1,4 @@
+v0.25.203 static verification (no game):
+- tools/compile_check/check.sh 3029660 PASSED; mcs --parse -langversion:5 all .cs OK.
+- Hammer haft rings: tube volumes positive (closed, outward). Crack strip winding: top face +Y, underside added.
+NOT verified: in-game look.

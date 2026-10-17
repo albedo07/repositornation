@@ -26,7 +26,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.202";
+        public const string ModVersion = "0.25.203";
 
         internal static DragonCombatPlugin Instance;
 
@@ -13330,6 +13330,69 @@ namespace DragonsAltarCombat
         }
     }
 
+    // v0.25.203 fade for ground crack strips (vertex colours; the particle shaders multiply them in)
+    public class DragonStripFade : MonoBehaviour
+    {
+        public MeshFilter[] Strips;
+        public Color Color;
+        public float Life = 3f, Age;
+        private float _last = -1f;
+        private void Update()
+        {
+            Age += Time.deltaTime;
+            float k = Age < 0.15f ? Age / 0.15f : 1f - Mathf.Clamp01((Age - 0.15f) / Mathf.Max(0.1f, Life - 0.15f));
+            if (Mathf.Abs(k - _last) < 0.02f || Strips == null) return;
+            _last = k;
+            for (int i = 0; i < Strips.Length; i++)
+            {
+                if (Strips[i] == null) continue;
+                Mesh m = Strips[i].sharedMesh; if (m == null) continue;
+                int n = m.vertexCount;
+                Color[] c = new Color[n];
+                for (int j = 0; j < n; j++) { Color x = Color; x.a = k * Mathf.Lerp(1f, 0.3f, (float)(j / 2) / Mathf.Max(1, n / 2 - 1)); c[j] = x; }
+                m.colors = c;
+            }
+        }
+        private void OnDestroy()
+        {
+            if (Strips == null) return;
+            for (int i = 0; i < Strips.Length; i++) if (Strips[i] != null && Strips[i].sharedMesh != null) Destroy(Strips[i].sharedMesh);
+        }
+    }
+
+    // v0.25.203 Judgement Cut curved slash: reveals its arc along the path (Sweep), holds, then fades out (glow + core lines).
+    public class DragonArcCut : MonoBehaviour
+    {
+        public Vector3[] Points;
+        public LineRenderer Glow, Core;
+        public Color GlowColor, CoreColor;
+        public float Delay, Sweep = 0.07f, Life = 0.6f, Age;
+        private static AnimationCurve _taper;
+        private void Start()
+        {
+            if (_taper == null) _taper = new AnimationCurve(new Keyframe(0f, 0f), new Keyframe(0.25f, 0.85f), new Keyframe(0.55f, 1f), new Keyframe(1f, 0f));
+            if (Glow != null) { Glow.widthCurve = _taper; Glow.positionCount = 0; }
+            if (Core != null) { Core.widthCurve = _taper; Core.positionCount = 0; }
+        }
+        private void Update()
+        {
+            Age += Time.deltaTime;
+            if (Points == null || Points.Length < 2) return;
+            float t = Age - Delay;
+            if (t < 0f) return;
+            int n = Mathf.Clamp(Mathf.CeilToInt(Points.Length * Mathf.Clamp01(t / Mathf.Max(0.01f, Sweep))), 2, Points.Length);
+            float k = 1f - Mathf.Clamp01((t - Life * 0.45f) / Mathf.Max(0.05f, Life * 0.55f));
+            Apply(Glow, n, GlowColor, k * 0.8f);
+            Apply(Core, n, CoreColor, k);
+        }
+        private void Apply(LineRenderer l, int n, Color c, float a)
+        {
+            if (l == null) return;
+            if (l.positionCount != n) { l.positionCount = n; for (int i = 0; i < n; i++) l.SetPosition(i, Points[i]); }
+            c.a = a; l.startColor = c; l.endColor = c;
+        }
+    }
+
     public class DragonCrackFade : MonoBehaviour
     {
         public LineRenderer[] Lines;
@@ -14813,43 +14876,80 @@ namespace DragonsAltarCombat
         }
 
         // Glowing jagged cracks radiating from an impact, fading out.
+        // v0.25.203 (user: cracks still only where I look): every crack is a real flat MESH strip on the ground (both faces,
+        // width laid out in the ground plane) - no LineRenderer, so nothing turns toward the camera or depends on the view.
         public static void Cracks(Vector3 center, Color c, float radius, int count, float seconds)
         {
             if (!Enabled) return;
             DragonVfxLife l = Host(center, seconds, "cracks");
-            List<LineRenderer> lines = new List<LineRenderer>();
+            List<MeshFilter> strips = new List<MeshFilter>();
             for (int i = 0; i < count; i++)
             {
                 float a = (i + UnityEngine.Random.Range(-0.3f, 0.3f)) / count * Mathf.PI * 2f;
                 Vector3 dir = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
                 float len = radius * UnityEngine.Random.Range(0.55f, 1f);
-                GameObject go = new GameObject("crack");
-                go.transform.SetParent(l.transform, false);
-                LineRenderer line = go.AddComponent<LineRenderer>();
-                LayFlat(line);   // v0.25.202 (user: cracks only on the side facing away from the camera)
-                line.useWorldSpace = true;
-                int n = 9;
-                line.positionCount = n;
-                line.startWidth = 0.22f + radius * 0.02f;
-                line.endWidth = 0.03f;
-                Material m = Mat(CrackTex(), false);   // v0.25.167 dark torn-earth fissures; v0.25.168 ragged crack texture
-                line.textureMode = LineTextureMode.Tile;
-                if (m == null) m = Additive();
-                if (m != null) line.sharedMaterial = m;
+                const int n = 9;
+                Vector3[] pts = new Vector3[n];
                 Vector3 side = Vector3.Cross(Vector3.up, dir);
                 for (int k = 0; k < n; k++)
                 {
                     float t = (float)k / (n - 1);
                     Vector3 p = center + dir * len * t + side * (k == 0 ? 0f : UnityEngine.Random.Range(-0.35f, 0.35f) * radius * 0.12f);
-                    p = GroundPoint(p);   // v0.25.66 terrain / Structures
-                    line.SetPosition(k, p + Vector3.up * 0.04f);
+                    pts[k] = GroundPoint(p) + Vector3.up * 0.05f;   // v0.25.66 terrain / Structures
                 }
-                lines.Add(line);
+                MeshFilter f = GroundStrip(l.transform, pts, 0.22f + radius * 0.02f, 0.03f);
+                if (f != null) strips.Add(f);
             }
-            DragonCrackFade fade = l.gameObject.AddComponent<DragonCrackFade>();
-            fade.Lines = lines.ToArray();
+            DragonStripFade fade = l.gameObject.AddComponent<DragonStripFade>();
+            fade.Strips = strips.ToArray();
             fade.Color = Fissure(c);
             fade.Life = seconds;
+        }
+
+        // v0.25.203 flat ground ribbon through world points: width tapers w0 -> w1, laid sideways in the ground plane
+        // (perpendicular to the path, horizontal), triangles on BOTH faces, crack texture tiled 1 per metre.
+        private static MeshFilter GroundStrip(Transform parent, Vector3[] pts, float w0, float w1)
+        {
+            int n = pts == null ? 0 : pts.Length;
+            if (n < 2) return null;
+            Material m = Mat(CrackTex(), false);
+            if (m == null) m = Additive();
+            if (m == null) return null;
+            Vector3[] v = new Vector3[n * 2];
+            Vector2[] uv = new Vector2[n * 2];
+            Color[] col = new Color[n * 2];
+            float dist = 0f;
+            for (int k = 0; k < n; k++)
+            {
+                Vector3 tan = (k < n - 1 ? pts[k + 1] - pts[k] : pts[k] - pts[k - 1]);
+                if (k > 0 && k < n - 1) tan = pts[k + 1] - pts[k - 1];
+                tan.y = 0f;
+                if (tan.sqrMagnitude < 1e-6f) tan = Vector3.forward;
+                Vector3 side = Vector3.Cross(Vector3.up, tan.normalized);
+                float w = Mathf.Lerp(w0, w1, (float)k / (n - 1)) * 0.5f;
+                if (k > 0) dist += Vector3.Distance(pts[k], pts[k - 1]);
+                v[k * 2] = pts[k] - side * w; v[k * 2 + 1] = pts[k] + side * w;
+                uv[k * 2] = new Vector2(dist, 0f); uv[k * 2 + 1] = new Vector2(dist, 1f);
+                col[k * 2] = Color.white; col[k * 2 + 1] = Color.white;
+            }
+            int[] tri = new int[(n - 1) * 12];
+            int ti = 0;
+            for (int k = 0; k < n - 1; k++)
+            {
+                int a = k * 2, b = a + 1, c = a + 2, d = a + 3;
+                tri[ti++] = a; tri[ti++] = c; tri[ti++] = b; tri[ti++] = b; tri[ti++] = c; tri[ti++] = d;   // top face
+                tri[ti++] = a; tri[ti++] = b; tri[ti++] = c; tri[ti++] = b; tri[ti++] = d; tri[ti++] = c;   // underside
+            }
+            GameObject go = new GameObject("crackStrip");
+            go.transform.SetParent(parent, false);
+            go.transform.position = Vector3.zero; go.transform.rotation = Quaternion.identity; go.transform.localScale = Vector3.one;
+            Mesh mesh = new Mesh();
+            mesh.vertices = v; mesh.uv = uv; mesh.colors = col; mesh.triangles = tri;
+            mesh.RecalculateBounds();
+            MeshFilter mf = go.AddComponent<MeshFilter>(); mf.sharedMesh = mesh;
+            MeshRenderer r = go.AddComponent<MeshRenderer>(); r.sharedMaterial = m;
+            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; r.receiveShadows = false;
+            return mf;
         }
 
         // v0.25.167: ground scars are dark soil with only a hint of the skill colour.
@@ -15007,30 +15107,19 @@ namespace DragonsAltarCombat
         {
             if (!Enabled) return;
             DragonVfxLife l = Host(a, seconds, "scar");
-            GameObject go = new GameObject("scar");
-            go.transform.SetParent(l.transform, false);
-            LineRenderer line = go.AddComponent<LineRenderer>();
-            LayFlat(line);
-            line.useWorldSpace = true;
             int n = Mathf.Clamp(Mathf.RoundToInt(Vector3.Distance(a, b) / 1.2f), 3, 18);   // v0.25.185 (perf) fewer ground probes per scar (was /0.8, max 40)
-            line.positionCount = n;
-            line.startWidth = width;
-            line.endWidth = width * 0.3f;
-            Material m = Mat(CrackTex(), false);   // v0.25.167 dark scar; v0.25.168 ragged crack texture
-            line.textureMode = LineTextureMode.Tile;
-            if (m == null) m = Additive();
-            if (m != null) line.sharedMaterial = m;
             Vector3 dir = b - a; dir.y = 0f;
             Vector3 side = Vector3.Cross(Vector3.up, dir.normalized);
+            Vector3[] pts = new Vector3[n];
             for (int k = 0; k < n; k++)
             {
                 float t = (float)k / (n - 1);
                 Vector3 p = Vector3.Lerp(a, b, t) + side * UnityEngine.Random.Range(-0.25f, 0.25f) * width * 2f;
-                p = GroundPoint(p);   // v0.25.66 terrain / Structures
-                line.SetPosition(k, p + Vector3.up * 0.04f);
+                pts[k] = GroundPoint(p) + Vector3.up * 0.05f;   // v0.25.66 terrain / Structures
             }
-            DragonCrackFade fade = l.gameObject.AddComponent<DragonCrackFade>();
-            fade.Lines = new LineRenderer[] { line };
+            MeshFilter f = GroundStrip(l.transform, pts, width, width * 0.3f);   // v0.25.203 flat mesh strip (every angle)
+            DragonStripFade fade = l.gameObject.AddComponent<DragonStripFade>();
+            fade.Strips = f == null ? new MeshFilter[0] : new MeshFilter[] { f };
             fade.Color = Fissure(c);
             fade.Life = seconds;
         }
@@ -16550,48 +16639,55 @@ namespace DragonsAltarCombat
         // crescent blades. Replaces the translucent ribbon volume (24 ribbon meshes + 2 particle systems: also cheaper).
         public static void JudgementSphere(Vector3 center, float radius, float hold, Color tint)
         {
+            // v0.25.203 (user ref: Vergil's Judgement Cut): a ball of light - a soft glowing mist core, brightest in the
+            // middle - wrapped by 5 long CURVED slashes that sweep around it on different tilted planes (white-hot core
+            // + tinted glow, tapered ends), each drawn on in 0.07 s, staggered, then fading. Visual only (own RNG).
             if (!Enabled) return;
             float r = Mathf.Max(0.5f, radius);
             hold = Mathf.Clamp(hold, 0.1f, 1.2f);
-            Color glow = Color.Lerp(tint, new Color(0.55f, 0.75f, 1f, 1f), 0.35f);
+            Color glow = Color.Lerp(tint, new Color(0.55f, 0.80f, 1f, 1f), 0.35f);
             Color core = Color.Lerp(tint, Color.white, 0.85f);
-            // v0.25.196: patchy curved smoke skin, with the center left hollow.
-            float cloudLife = Mathf.Max(0.65f, hold) + 0.3f;
-            DragonVfxLife haze = Host(center, cloudLife, "judgementcloud");
-            JudgementCloudShell(center, r, cloudLife);
-            Color fog = Color.Lerp(new Color(0.20f, 0.43f, 0.85f, 0.50f), tint, 0.30f); fog.a = 0.50f;
-            ParticleSystem mist = Particles(haze.transform, fog, 28, 0f, 0.05f, cloudLife,
-                0.01f, 0.05f, r * 0.20f, r * 0.34f, 0f, ParticleSystemShapeType.Sphere, r, Vector3.zero, false, false);
-            mist.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
-            ParticleSystem.ShapeModule mistShape = mist.shape; mistShape.radiusThickness = 0f;
-            ParticleSystem.MainModule mistMain = mist.main; mistMain.maxParticles = 32;
-            mistMain.startColor = new ParticleSystem.MinMaxGradient(fog, new Color(fog.r * 1.18f, fog.g * 1.18f, fog.b * 1.18f, fog.a));
-            ParticleSystem.EmissionModule mistEmission = mist.emission;
-            mistEmission.SetBursts(new ParticleSystem.Burst[] { new ParticleSystem.Burst(0f, (short)Mathf.Clamp(Mathf.RoundToInt(14f * Amount), 12, 20)) });
-            ParticleSystem.SizeOverLifetimeModule mistSize = mist.sizeOverLifetime;
-            mistSize.size = new ParticleSystem.MinMaxCurve(1f, CloudPuffSize());
+            float life = hold + 0.45f;
+            DragonVfxLife host = Host(center, life + 0.6f, "judgementball");
+            // ball of light: dense overlapping soft glow sprites (outer tinted halo, inner white heart) + a little blue mist
+            Color halo = Color.Lerp(tint, Color.white, 0.35f); halo.a = 0.55f;
+            ParticleSystem outer = Particles(host.transform, halo, 10, 14f, life * 0.8f, 0.45f, 0f, 0.05f, r * 0.9f, r * 1.25f, 0f,
+                ParticleSystemShapeType.Sphere, r * 0.12f, Vector3.zero, false, true);
+            Color heart = Color.Lerp(tint, Color.white, 0.8f); heart.a = 0.8f;
+            ParticleSystem inner = Particles(host.transform, heart, 6, 10f, life * 0.8f, 0.35f, 0f, 0.03f, r * 0.45f, r * 0.65f, 0f,
+                ParticleSystemShapeType.Sphere, r * 0.06f, Vector3.zero, false, true);
+            Color fog = Color.Lerp(new Color(0.30f, 0.52f, 0.95f, 0.35f), tint, 0.3f); fog.a = 0.35f;
+            ParticleSystem mist = Particles(host.transform, fog, 8, 6f, life * 0.7f, 0.8f, 0.05f, 0.25f, r * 0.35f, r * 0.6f, 0f,
+                ParticleSystemShapeType.Sphere, r * 0.45f, Vector3.zero, false, false);
             Material mistMaterial = Mat(SmokeTex(), false);
             if (mistMaterial != null) mist.GetComponent<ParticleSystemRenderer>().sharedMaterial = mistMaterial;
-            mist.Play();
-            const int lines = 9;
-            for (int k = 0; k < lines; k++)
+            outer.Play(); inner.Play(); mist.Play();
+            // 5 curved slashes around the ball: great-circle arcs (200-290 deg) on random tilted planes, slightly off the
+            // sphere (0.95-1.2 r) so they wrap around it instead of sitting on one shell
+            const int arcs = 5;
+            for (int k = 0; k < arcs; k++)
             {
-                Vector3 d = VRot() * Vector3.forward;
-                Vector3 side = Vector3.Cross(d, VRot() * Vector3.up);
-                if (side.sqrMagnitude < 0.01f) side = Vector3.Cross(d, Vector3.right);
-                Vector3 off = side.normalized * (VR() - 0.5f) * r * 0.9f;
-                float half = r * Mathf.Lerp(0.85f, 1.15f, VR());
-                Vector3 a = center + off - d * half, b = center + off + d * half;
-                float life = hold + 0.25f + VR() * 0.1f;
-                CutLine(a, b, glow, Mathf.Max(0.08f, r * 0.07f), life);
-                CutLine(a, b, core, Mathf.Max(0.03f, r * 0.022f), life * 0.85f);
+                Quaternion q = VRot();
+                Vector3 u = q * Vector3.right, v = q * Vector3.up;
+                float span = Mathf.Lerp(200f, 290f, VR()) * Mathf.Deg2Rad, start = VR() * Mathf.PI * 2f;
+                float rr = r * Mathf.Lerp(0.95f, 1.2f, VR());
+                const int n = 40;
+                Vector3[] pts = new Vector3[n];
+                for (int i = 0; i < n; i++)
+                {
+                    float t = (float)i / (n - 1), ang = start + span * t;
+                    float bulge = 1f + 0.08f * Mathf.Sin(t * Mathf.PI);   // the middle of the cut bows out a little
+                    pts[i] = center + (u * Mathf.Cos(ang) + v * Mathf.Sin(ang)) * rr * bulge;
+                }
+                GameObject go = new GameObject("arcCut");
+                go.transform.SetParent(host.transform, false);
+                LineRenderer gl = SoftLine(go.transform, Mathf.Max(0.12f, r * 0.13f));
+                LineRenderer cl = SoftLine(go.transform, Mathf.Max(0.05f, r * 0.045f));
+                DragonArcCut cut = go.AddComponent<DragonArcCut>();
+                cut.Points = pts; cut.Glow = gl; cut.Core = cl; cut.GlowColor = glow; cut.CoreColor = core;
+                cut.Delay = k * 0.05f; cut.Sweep = 0.07f; cut.Life = life - k * 0.05f;
             }
-            for (int k = 0; k < 3; k++)
-            {
-                Vector3 f = VRot() * Vector3.forward;
-                CrescentFlash(center + VRot() * Vector3.forward * r * 0.15f, f, tint, r * 0.85f, Mathf.Max(0.15f, r * 0.09f), Mathf.Lerp(-80f, 80f, VR()), hold * 0.6f, 0.25f, 0.1f);
-            }
-            Flash(center, new Color(0.55f, 0.65f, 1f, 1f), 0.5f, r, 0.1f);
+            Flash(center, new Color(0.55f, 0.70f, 1f, 1f), 0.6f, r * 1.5f, 0.12f);
         }
 
         // v0.25.196: curved smoke patches on an empty sphere; no filled interior and no solid barrier surface.
@@ -17426,7 +17522,12 @@ namespace DragonsAltarCombat
         private static Shader RelicShader()
         {
             if (_nativeRelicSurface != null) return _nativeRelicSurface.shader;
-            // Reuse a shader shipped with Valheim. Standard is not guaranteed to be included in a player build.
+            // v0.25.203 (user: relics/hammer must be SOLID physical objects from every angle): Standard first - a plain opaque,
+            // depth-writing, back-face-culled surface (also used by every other lit VFX solid: spikes, rubble, debris). The
+            // copied vanilla sword material (v0.25.195) carried unknown render state (culling / depth / queue) that let inner
+            // parts show through the gold. It stays only as a fallback if Standard is missing.
+            Shader std = Shader.Find("Standard");
+            if (std != null && std.isSupported) return std;
             if (ObjectDB.instance != null)
             {
                 GameObject prefab = ObjectDB.instance.GetItemPrefab("SwordBronze");
@@ -17455,6 +17556,14 @@ namespace DragonsAltarCombat
             if (material.HasProperty("_BumpMap")) material.SetTexture("_BumpMap", null);
             material.DisableKeyword("_NORMALMAP");
             if (material.HasProperty("_Cull")) material.SetFloat("_Cull", (float)UnityEngine.Rendering.CullMode.Back);   // v0.25.202 outer faces only
+            // v0.25.203: force a plain OPAQUE surface - writes depth, drawn in the geometry queue, no blending
+            if (material.HasProperty("_Mode")) material.SetFloat("_Mode", 0f);
+            if (material.HasProperty("_ZWrite")) material.SetFloat("_ZWrite", 1f);
+            if (material.HasProperty("_SrcBlend")) material.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.One);
+            if (material.HasProperty("_DstBlend")) material.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.Zero);
+            material.DisableKeyword("_ALPHATEST_ON"); material.DisableKeyword("_ALPHABLEND_ON"); material.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+            material.SetOverrideTag("RenderType", "Opaque");
+            material.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Geometry;
             return material;
         }
         public static Material RelicGold()
@@ -18944,6 +19053,15 @@ namespace DragonsAltarCombat
             }
         }
 
+        // v0.25.203 a ring around the round haft: inner radius = haft, rounded top/bottom edges (bevel rows), 16 sides
+        private static void HaftRing(List<Vector3> v, List<int> t, float y0, float y1, float haftR, float ringR)
+        {
+            float e = Mathf.Min(0.015f, (y1 - y0) * 0.3f), mid = Mathf.Lerp(haftR, ringR, 0.55f);
+            Tube(v, t, new Vector3(0f, y0, 0f), new Vector3(0f, y0 + e, 0f), Vector3.right, Vector3.forward, mid, mid, ringR, ringR, 16);
+            Tube(v, t, new Vector3(0f, y0 + e, 0f), new Vector3(0f, y1 - e, 0f), Vector3.right, Vector3.forward, ringR, ringR, ringR, ringR, 16);
+            Tube(v, t, new Vector3(0f, y1 - e, 0f), new Vector3(0f, y1, 0f), Vector3.right, Vector3.forward, ringR, ringR, mid, mid, 16);
+        }
+
         private static void DoubleSide(List<int> t)
         {
             int count = t.Count;
@@ -19003,14 +19121,18 @@ namespace DragonsAltarCombat
             Color white = Color.white;
 
             List<Vector3> v = new List<Vector3>(); List<int> t = new List<int>();
-            Tube(v, t, new Vector3(0f, -0.44f, 0f), new Vector3(0f, 0.20f, 0f), X, Z, 0.075f, 0.12f, 0.07f, 0.11f, 8);   // haft
+            // v0.25.203 (user: rings must ENCLOSE the handle, not look like plates): the haft is ROUND (16 sides, it was a
+            // flattened ellipse made for the old non-uniform scale) and runs up into the head; every band is a real ring
+            // ~1.45x the haft radius with rounded edges, and the collar sits below the head's reshape line (0.24).
+            Tube(v, t, new Vector3(0f, -0.44f, 0f), new Vector3(0f, 0.30f, 0f), X, Z, 0.075f, 0.075f, 0.068f, 0.068f, 16);   // haft
             MeshObject("haft", Uvd(FacetMesh(v, t, white, 0f), 3f), leather, unit.transform);
 
             v = new List<Vector3>(); t = new List<int>();
-            Tube(v, t, new Vector3(0f, -0.52f, 0f), new Vector3(0f, -0.44f, 0f), X, Z, 0.05f, 0.08f, 0.12f, 0.19f, 8);    // pommel
-            Tube(v, t, new Vector3(0f, -0.24f, 0f), new Vector3(0f, -0.20f, 0f), X, Z, 0.095f, 0.15f, 0.095f, 0.15f, 8);  // grip band
-            Tube(v, t, new Vector3(0f, 0.04f, 0f), new Vector3(0f, 0.08f, 0f), X, Z, 0.095f, 0.15f, 0.095f, 0.15f, 8);    // upper band
-            Tube(v, t, new Vector3(0f, 0.20f, 0f), new Vector3(0f, 0.27f, 0f), X, Z, 0.08f, 0.13f, 0.15f, 0.27f, 8);      // socket collar
+            Tube(v, t, new Vector3(0f, -0.53f, 0f), new Vector3(0f, -0.49f, 0f), X, Z, 0.07f, 0.07f, 0.11f, 0.11f, 16);     // pommel cap
+            Tube(v, t, new Vector3(0f, -0.49f, 0f), new Vector3(0f, -0.44f, 0f), X, Z, 0.11f, 0.11f, 0.085f, 0.085f, 16);
+            HaftRing(v, t, -0.25f, -0.19f, 0.074f, 0.108f);   // grip ring
+            HaftRing(v, t, 0.02f, 0.08f, 0.071f, 0.104f);     // upper ring
+            HaftRing(v, t, 0.165f, 0.24f, 0.069f, 0.118f);    // socket collar (top exactly on the 0.24 reshape line: untouched)
             Tube(v, t, new Vector3(-0.30f, 0.39f, 0f), new Vector3(-0.25f, 0.39f, 0f), Y, Z, 0.135f, 0.46f, 0.135f, 0.46f, 8);   // head bands
             Tube(v, t, new Vector3(0.25f, 0.39f, 0f), new Vector3(0.30f, 0.39f, 0f), Y, Z, 0.135f, 0.46f, 0.135f, 0.46f, 8);
             Tube(v, t, new Vector3(-0.36f, 0.39f, 0f), new Vector3(-0.47f, 0.39f, 0f), Y, Z, 0.13f, 0.49f, 0.125f, 0.47f, 8);  // face frames

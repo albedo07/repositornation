@@ -1,0 +1,26 @@
+Aethelborn Ascended v0.25.203 - Solid Objects (visuals only)
+
+1. RELICS + JUDGEMENT HAMMER = plain SOLID objects
+- Their material is now Unity's Standard surface, forced fully opaque: it writes depth, draws in the normal geometry
+  queue and shows only outer faces.
+- The copied vanilla sword material from v0.25.195 is now only a fallback if Standard is missing. It carried hidden
+  render settings, and those let inner parts and the far side show through the gold: the hollow, "still loading" look
+  and the gems missing from the front.
+- The meshes themselves were verified closed and outward-facing in v0.25.202.
+
+2. JUDGEMENT HAMMER HANDLE
+- The haft is round (16 sides). It used to be a flattened ellipse, built for the old stretched scaling, which made the
+  bands look like plates.
+- The grip ring, upper ring and socket collar are real rings, about 1.45x the haft's thickness, with rounded edges,
+  all the way around.
+- The collar no longer gets squashed by the head reshape.
+
+3. GROUND CRACKS (every skill: Cracks, CrackLine, BranchCrackLine, Shatter, Furrow, Eruption...)
+- Each crack is now a flat MESH strip lying on the ground, visible from both faces.
+- No LineRenderer anymore, so nothing depends on where the camera looks.
+
+4. BLADE STORM (Judgement Cut, user reference)
+- A ball of light: a soft glowing core, white at the heart with a tinted halo and a little blue mist.
+- 5 long curved slashes (200-290 deg arcs) sweep around it on different tilted planes. Each is drawn on in 0.07 s,
+  staggered 0.05 s apart, then fades.
+- Replaces the straight cut lines, crescent flashes and hollow smoke shell.
