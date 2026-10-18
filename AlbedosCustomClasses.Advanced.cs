@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.204";
+        public const string ModVersion = "0.25.205";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -14368,9 +14368,9 @@ namespace AlbedosCustomClassesAdvanced
                     IhEitrCosts(b, IhW("Wizard Elemental Cataclysm", "EitrCost", 80f), "charge", IhW("Wizard Elemental Cataclysm", "Cooldown", 75f));
                     return;
                 case "clockwork":
-                    b.Append(IhLine("Buff", "+" + IhNum(IhW("Wizard Clockwork", "SkillDamagePercent", 30f)) + "% Skill Damage, -" + IhNum(IhW("Wizard Clockwork", "CooldownReductionPercent", 50f)) + "% cooldown for skills that start their cooldown while active (not Graces)"));
+                    b.Append(IhLine("Buff", "-" + IhNum(IhW("Wizard Clockwork", "CooldownReductionPercent", 50f)) + "% cooldown for skills that start their cooldown while active (not Graces)"));
                     b.Append(IhLine("Radius", IhNum(IhW("Wizard Clockwork", "Radius", 10f)) + "m"));
-                    b.Append(IhLine("Duration", IhNum(IhW("Wizard Clockwork", "Duration", 22f)) + "s"));
+                    b.Append(IhLine("Duration", IhNum(IhW("Wizard Clockwork", "Duration_v025205", 45f)) + "s"));
                     b.Append(IhLine("Cost", "None"));
                     b.Append(IhLine("Wind Up Time", "Instant"));
                     b.Append(IhLine("Cooldown", IhNum(IhW("Wizard Clockwork", "Cooldown", 600f) / 60f) + " min"));
@@ -14667,7 +14667,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "astral_greatblade": return "Slams a giant blade along your aim, damaging every enemy it hits.";
                 case "frost_nova": return "Releases a frost blast around you that damages and Frosts nearby enemies.";
                 case "elemental_cataclysm": return "Bombards the aimed area with every element; hold the key to strengthen it.";
-                case "clockwork": return "Grants you and nearby allies bonus skill damage and shorter cooldowns ({Buff}; {Duration}).";
+                case "clockwork": return "Grants you and nearby allies shorter cooldowns ({Buff}; {Duration}).";
                 case "arcane_phalanx": return "Summons spectral swords that launch at your aim while you hold Left Click, damaging the enemies they hit.";
                 case "afterimage_arsenal": return "Creates afterimages of you that repeat your weapon attacks for a short time.";
                 case "void_step": return "Teleports you to the aimed spot.";

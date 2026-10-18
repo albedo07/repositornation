@@ -1,0 +1,44 @@
+Aethelborn Ascended v0.25.205 - Sorcerer Polish (on the v0.25.204 anchor)
+
+1. METEOR FALL
+- The meteor is a real lit boulder:
+  - a smooth rock shape with lumps, ridges and crater dents;
+  - a pitted basalt texture;
+  - glowing lava cracks in its emission;
+  - flames peeling off it and streaming behind.
+  Before, it was a flat, unlit silver faceted shape.
+- Ascended small meteors land with AIR shockwaves (two rings in the air), flames, dirt and debris. Their ground rings
+  and landing markers are gone.
+- Charge guide works like Elemental Cataclysm: the outer ring shows the full attack radius and a second ring fills it
+  as the charge builds.
+2. GRAVITY DOMINION + GRAVITY BLAST (user ref): solid black ball, strong white rim and a ragged purple outline, all
+   facing the camera so they always show whole. Three tilted 3D orbit rings (real tubes with thickness, brighter
+   toward their heads) circle the ball, so they are visible from any angle. They replace the flat disks that went
+   edge-on.
+3. ELEMENTAL CATACLYSM: a big air bullet crashes down from the sky with a long trail. Fire, frost, lightning and earth
+   (a tumbling rock) spiral around it, leaving helical streams; lightning arcs flicker between it and its core.
+   - On the ground: one big explosion dome, branching cracks, an air shockwave and a dirt burst.
+   - TIMING: the blast now lands when the bullet does, 0.5 s after release. The Ascended second blast keeps its
+     delay after the first.
+4. FROST GROUND (Frost Nova, Glacial Descent, Cataclysm): a plain frost circle with subtle faded spots. The spiked,
+   cogwheel-like rim is gone.
+5. ASTRAL GREATBLADE: denser. A near-opaque deep astral core blade inside a thicker body that is 90% opaque instead
+   of 72%.
+6. GLACIAL DESCENT (normal + Ascended): a crystal with depth:
+   - a lit glossy ice core inside a translucent faceted shell;
+   - 4 smaller crystals growing off it;
+   - star glints flashing over the facets.
+7. CHARGED STAFF (Archmage):
+   - Charging now carries the staff's own attack movement penalty (its vanilla speed factor), and you can't sprint
+     while charging.
+   - The impact is a purple explosion dome with purple flames (Staff of Embers style, bigger) plus embers.
+8. FIRE EVERYWHERE (ground fire, Flame Burst, fire blasts, burning projectiles, meteors):
+   - The old flame texture was a straight-sided triangle, randomly tilted and dimmed by half.
+   - Now: a 16-frame animated flame flipbook of upright licking tongues with the colour built in, full brightness and
+     turbulence. Preview: docs/previews/PREVIEW_v0.25.205_Flames.png.
+   - Ground fire is denser and taller, with a hot glow bed and smoke.
+9. FLAME BURST = a flamethrower: a white-hot jet that billows into a rolling, swelling roar of flame, flung sparks,
+   heat smoke and a scorch.
+10. CLOCKWORK: the Skill Damage bonus is removed (new key SkillDamagePercent_v025205 = 0) and the duration is 45 s
+    (new key Duration_v025205). The 50% cooldown reduction is unchanged. Tooltip, description and buff text are
+    updated.

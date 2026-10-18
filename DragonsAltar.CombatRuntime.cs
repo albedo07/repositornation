@@ -26,7 +26,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.204";
+        public const string ModVersion = "0.25.205";
 
         internal static DragonCombatPlugin Instance;
 
@@ -8118,7 +8118,7 @@ namespace DragonsAltarCombat
             ClockworkDamage[id] = Mathf.Max(0f, skillDamageBonus);
             ClockworkCooldown[id] = Mathf.Clamp(cooldownMultiplier, 0f, 1f);
             ShowStatus(player, "clockwork", "clockwork", "Clockwork", seconds, 0,
-                "Attack Buff\n" + BuffPct(Mathf.Max(0f, skillDamageBonus), "Skill Damage") + "\nSkill cooldowns that start now: -" + Mathf.RoundToInt((1f - Mathf.Clamp01(cooldownMultiplier)) * 100f).ToString() + "%");
+                (skillDamageBonus > 0f ? "Attack Buff\n" + BuffPct(skillDamageBonus, "Skill Damage") + "\n" : "Buff\n") + "Skill cooldowns that start now: -" + Mathf.RoundToInt((1f - Mathf.Clamp01(cooldownMultiplier)) * 100f).ToString() + "%");
         }
 
         public static bool IsClockworkActive(Player player)
@@ -13393,6 +13393,45 @@ namespace DragonsAltarCombat
         }
     }
 
+    // v0.25.205 explosion shell: pops out (ease-out 0.18 s), keeps swelling slightly, churns its fire texture, fades.
+    public class DragonBlastShell : MonoBehaviour
+    {
+        public float Radius = 3f, Life = 0.8f;
+        public Color Tint = Color.white;
+        private float _age;
+        private Material _m;
+        private void Start() { Renderer r = GetComponent<Renderer>(); if (r != null) _m = r.material; transform.localScale = Vector3.one * Radius * 0.2f; }
+        private void Update()
+        {
+            _age += Time.deltaTime;
+            float k = _age < 0.18f ? 1f - Mathf.Pow(1f - _age / 0.18f, 3f) : 1f + 0.12f * (_age - 0.18f);
+            transform.localScale = Vector3.one * Radius * Mathf.Lerp(0.2f, 1f, Mathf.Clamp01(k)) * Mathf.Max(1f, k);
+            float a = _age < 0.12f ? 1f : 1f - Mathf.Clamp01((_age - 0.12f) / Mathf.Max(0.1f, Life - 0.12f));
+            if (_m != null)
+            {
+                Color c = Tint; c.a = a;
+                if (_m.HasProperty("_TintColor")) _m.SetColor("_TintColor", new Color(c.r * 0.5f, c.g * 0.5f, c.b * 0.5f, a * 0.5f)); else _m.color = c;
+                _m.mainTextureOffset = new Vector2(_age * 0.35f, -_age * 0.6f);
+            }
+            if (_age >= Life) Destroy(gameObject);
+        }
+        private void OnDestroy() { if (_m != null) Destroy(_m); }
+    }
+
+    // v0.25.205 lightning element of the Cataclysm air bullet: a short jagged arc flickers between it and the bullet core.
+    public class DragonArcFlicker : MonoBehaviour
+    {
+        public Transform Center;
+        public float Width = 0.08f;
+        private float _next;
+        private void Update()
+        {
+            if (Center == null || Time.time < _next) return;
+            _next = Time.time + UnityEngine.Random.Range(0.06f, 0.14f);
+            DragonVfx.Bolt(Center.position, transform.position, new Color(0.75f, 0.85f, 1f, 1f), Width, 0.09f);
+        }
+    }
+
     public class DragonCrackFade : MonoBehaviour
     {
         public LineRenderer[] Lines;
@@ -15227,12 +15266,12 @@ namespace DragonsAltarCombat
             {
                 float r = Rad(u, v);
                 if (r >= 1f) return 0f;
-                float ang = Mathf.Atan2(v - 0.5f, u - 0.5f);
-                float feather = Mathf.Abs(Mathf.Sin(ang * 23f + Fbm(u * 5f, v * 5f, 31) * 6f));
-                float rim = Mathf.Clamp01((1f - r) / 0.25f);
-                float edge = Mathf.Clamp01(rim + (feather - 0.6f) * 0.8f * (1f - rim));
-                float patch = 0.45f + 0.55f * Fbm(u * 7f, v * 7f, 32);
-                return Mathf.Clamp01(edge * patch * 0.9f);
+                // v0.25.205 (user: the spiked rim looked like a cogwheel): a plain frost circle - soft round edge, even cover
+                // with subtle faded spots, no rim spikes
+                float edge = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((1f - r) / 0.22f));
+                float spots = Fbm(u * 6f, v * 6f, 32);
+                float patch = 0.62f + 0.38f * Mathf.SmoothStep(0.25f, 0.75f, spots);   // faded, never holes
+                return Mathf.Clamp01(edge * patch * 0.8f);
             }, TextureWrapMode.Clamp);
             return _frostTex;
         }
@@ -15465,19 +15504,30 @@ namespace DragonsAltarCombat
             radius = Mathf.Max(0.2f, radius);
             DragonVfxLife l = Host(GroundPoint(pos) + Vector3.up * 0.08f, seconds, "groundfire");
             _groundFireHosts.Add(l);
-            float density = Mathf.Clamp(24f + radius * 14f, 28f, 110f);
-            ParticleSystem fire = Particles(l.transform, new Color(1f, 0.62f, 0.20f, 1f), 8, density, seconds,
-                0.65f, 0f, 0.04f, 0.28f, 0.85f, -0.06f, ParticleSystemShapeType.Circle, radius, new Vector3(-90f, 0f, 0f), false, true);
+            // v0.25.205 (user: stronger, dynamic): denser, taller licking flames (flipbook FireLook), a hot low glow bed and a
+            // thin dark smoke drifting off the tips
+            float density = Mathf.Clamp(40f + radius * 22f, 45f, 170f);
+            ParticleSystem fire = Particles(l.transform, new Color(1f, 0.62f, 0.20f, 1f), 12, density, seconds,
+                0.75f, 0f, 0.06f, 0.45f, 1.25f, -0.08f, ParticleSystemShapeType.Circle, radius, new Vector3(-90f, 0f, 0f), false, true);
             FireLook(fire);
             ParticleSystem.VelocityOverLifetimeModule velocity = fire.velocityOverLifetime;
             velocity.enabled = true; velocity.space = ParticleSystemSimulationSpace.World;
-            velocity.y = new ParticleSystem.MinMaxCurve(0.45f, 0.85f);
-            ParticleSystem.MainModule fm = fire.main; fm.maxParticles = 120;
+            velocity.y = new ParticleSystem.MinMaxCurve(0.9f, 1.7f);
+            ParticleSystem.MainModule fm = fire.main; fm.maxParticles = 190;
+            Color bedC = new Color(1f, 0.45f, 0.12f, 0.35f);
+            ParticleSystem bed = Particles(l.transform, bedC, 4, Mathf.Clamp(4f + radius * 3f, 5f, 24f), seconds, 0.9f, 0f, 0.02f, radius * 0.5f, radius * 0.9f, 0f,
+                ParticleSystemShapeType.Circle, radius * 0.6f, new Vector3(-90f, 0f, 0f), false, true);
+            ParticleSystem.MainModule bm = bed.main; bm.maxParticles = 24;
+            ParticleSystem smoke = Particles(l.transform, new Color(0.14f, 0.11f, 0.10f, 0.3f), 0, Mathf.Clamp(3f + radius * 2f, 4f, 16f), seconds, 1.6f, 0.6f, 1.2f, 0.5f, 1.1f, -0.1f,
+                ParticleSystemShapeType.Circle, radius * 0.8f, new Vector3(-90f, 0f, 0f), false, false);
+            Material smm = Mat(SmokeTex(), false);
+            if (smm != null) smoke.GetComponent<ParticleSystemRenderer>().sharedMaterial = smm;
+            ParticleSystem.MainModule smk = smoke.main; smk.maxParticles = 30;
             ParticleSystem sparks = Particles(l.transform, new Color(1f, 0.70f, 0.22f, 0.9f), 3, density * 0.12f, seconds,
                 0.6f, 0.3f, 0.8f, 0.035f, 0.08f, -0.15f, ParticleSystemShapeType.Circle, radius, new Vector3(-90f, 0f, 0f), false, true);
             ParticleSystem.MainModule sm = sparks.main; sm.maxParticles = 24;
             l.StopEmitAt = seconds;
-            l.Systems = new ParticleSystem[] { fire, sparks };
+            l.Systems = new ParticleSystem[] { fire, sparks, bed, smoke };
         }
 
         // ------------------------------------------------------------------ v0.25.59 skin layer
@@ -16224,47 +16274,289 @@ namespace DragonsAltarCombat
         // Real flames rushing out in a cone.
         public static void FlameCone(Vector3 origin, Vector3 dir, float range, float angle, float seconds)
         {
+            // v0.25.205 (user: stronger, more violent, a real flamethrower): a white-hot jet out of the nozzle that billows
+            // into a widening, rolling roar of flame (flipbook tongues, turbulence, drag so the front piles up and swells),
+            // flung sparks, heat smoke rolling off the end and a scorch where it lands. Visual only; damage unchanged.
             if (!Enabled) return;
             if (dir.sqrMagnitude < 0.001f) dir = Vector3.forward;
-            DragonVfxLife l = Host(origin, seconds + 1.2f, "flames");
+            seconds = Mathf.Max(0.55f, seconds);
+            DragonVfxLife l = Host(origin, seconds + 1.6f, "flames");
             l.transform.rotation = Quaternion.LookRotation(dir.normalized);
-            float life = 0.55f;
-            float speed = range / life;
-            // v0.25.180 irregular, transparent between the flames: fewer, smaller tongues + darker smoke pockets riding with them
-            // v0.25.181 (user: flame cone must read clearly): big soft tongues + a faster detailed layer (more coverage, still
-            // separate flames with gaps, not a sheet)
-            ParticleSystem ps = Particles(l.transform, new Color(1f, 0.62f, 0.18f, 1f), 0, 170f, seconds, life, speed * 0.6f, speed, 0.55f, 1.2f + range * 0.06f, -0.15f,
+            float life = 0.6f;
+            float speed = range / life * 1.25f;
+            float spread = Mathf.Clamp(angle * 0.5f, 5f, 80f);
+            // jet core: narrow, fast, white-hot
+            ParticleSystem jet = Particles(l.transform, Color.white, 0, 160f, seconds, life * 0.55f, speed * 0.9f, speed * 1.1f, 0.35f, 0.7f, 0f,
+                ParticleSystemShapeType.Cone, 0.12f, Vector3.zero, false, true);
+            ParticleSystem.ShapeModule jsh = jet.shape; jsh.angle = Mathf.Max(4f, spread * 0.35f);
+            FireLook(jet);
+            // the roaring body: big tongues that slow down and swell (drag) and roll with turbulence
+            ParticleSystem body = Particles(l.transform, Color.white, 0, 260f, seconds, life, speed * 0.7f, speed * 1.05f, 0.6f, 1.3f + range * 0.07f, -0.25f,
                 ParticleSystemShapeType.Cone, 0.25f, Vector3.zero, false, true);
-            ParticleSystem.ShapeModule sh = ps.shape;
-            sh.angle = Mathf.Clamp(angle * 0.5f, 5f, 80f);
-            FireLook(ps);
-            ParticleSystem detail = Particles(l.transform, new Color(1f, 0.75f, 0.30f, 1f), 0, 160f, seconds, life * 0.8f, speed * 0.8f, speed * 1.15f, 0.2f, 0.5f, -0.2f,
-                ParticleSystemShapeType.Cone, 0.2f, Vector3.zero, false, true);
-            ParticleSystem.ShapeModule dsh2 = detail.shape;
-            dsh2.angle = Mathf.Clamp(angle * 0.55f, 5f, 85f);
-            FireLook(detail);
-            ParticleSystem pockets = Particles(l.transform, new Color(0.16f, 0.12f, 0.10f, 0.35f), 0, 30f, seconds, life * 1.3f, speed * 0.4f, speed * 0.7f, 0.4f, 0.9f, -0.1f,
+            ParticleSystem.ShapeModule bsh = body.shape; bsh.angle = spread;
+            FireLook(body);
+            ParticleSystem.LimitVelocityOverLifetimeModule drag = body.limitVelocityOverLifetime;
+            drag.enabled = true; drag.dampen = 0.08f; drag.limit = new ParticleSystem.MinMaxCurve(speed * 0.35f);
+            ParticleSystem.SizeOverLifetimeModule bs = body.sizeOverLifetime;
+            bs.size = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(new Keyframe(0f, 0.3f), new Keyframe(0.35f, 1.1f), new Keyframe(1f, 2.1f)));
+            ParticleSystem.NoiseModule bn = body.noise; bn.strength = 1.4f; bn.frequency = 0.9f;
+            // sparks flung out of the stream
+            ParticleSystem sparks = Particles(l.transform, new Color(1f, 0.78f, 0.35f, 1f), 0, 70f, seconds, 0.7f, speed * 0.6f, speed * 1.2f, 0.03f, 0.07f, 0.6f,
+                ParticleSystemShapeType.Cone, 0.2f, Vector3.zero, true, true);
+            ParticleSystem.ShapeModule ssh = sparks.shape; ssh.angle = spread * 1.15f;
+            // heat smoke rolling off the end of the flames
+            ParticleSystem pockets = Particles(l.transform, new Color(0.13f, 0.10f, 0.09f, 0.45f), 0, 45f, seconds, life * 1.6f, speed * 0.35f, speed * 0.6f, 0.8f, 1.6f, -0.2f,
                 ParticleSystemShapeType.Cone, 0.25f, Vector3.zero, false, false);
-            ParticleSystem.ShapeModule psh = pockets.shape;
-            psh.angle = Mathf.Clamp(angle * 0.45f, 5f, 80f);
+            ParticleSystem.ShapeModule psh = pockets.shape; psh.angle = spread * 0.9f;
+            Material sm = Mat(SmokeTex(), false);
+            if (sm != null) pockets.GetComponent<ParticleSystemRenderer>().sharedMaterial = sm;
             l.StopEmitAt = seconds;
-            l.Systems = new ParticleSystem[] { ps, detail, pockets };
-            Smoke(origin + dir.normalized * range * 0.6f, new Color(0.25f, 0.22f, 0.2f, 0.45f), range * 0.3f, 1.6f, 6);
+            l.Systems = new ParticleSystem[] { jet, body, sparks, pockets };
+            Flash(origin + dir.normalized * range * 0.25f, new Color(1f, 0.55f, 0.15f, 1f), 0.9f, range * 0.8f, seconds);
+            Smoke(origin + dir.normalized * range * 0.7f, new Color(0.22f, 0.19f, 0.17f, 0.5f), range * 0.35f, 1.8f, 8);
+            Vector3 end = GroundPoint(origin + dir.normalized * range * 0.7f);
+            Scorch(end, Mathf.Max(1f, range * 0.25f), 5f);
         }
 
+        // v0.25.205 (user: ground fire = dull triangles, needs to be dynamic and strong): every fire effect (ground fire,
+        // Flame Burst, fire blasts, burning projectiles) shares this look. The old texture was one straight-sided triangle,
+        // tilted at random and dimmed by the additive desaturation. Now: a 4x4 FLIPBOOK of turbulent flame tongues
+        // (colour baked in: white-yellow core, orange body, red ragged tips) that plays over each particle's life from a
+        // random frame, upright, full brightness, with turbulence noise so every tongue licks and flickers.
+        private static Texture2D _flameSheet, _flameSheetGray;
+        private static Texture2D FlameSheet() { return FlameSheet(false); }
+        private static Texture2D FlameSheet(bool gray)
+        {
+            if (!gray && _flameSheet != null) return _flameSheet;
+            if (gray && _flameSheetGray != null) return _flameSheetGray;
+            const int tile = 64, tiles = 4, n = tile * tiles;
+            Texture2D t = new Texture2D(n, n, TextureFormat.RGBA32, true);
+            t.wrapMode = TextureWrapMode.Clamp;
+            Color[] px = new Color[n * n];
+            for (int ty = 0; ty < tiles; ty++)
+                for (int tx = 0; tx < tiles; tx++)
+                {
+                    int frame = (tiles - 1 - ty) * tiles + tx;   // Unity reads frames from the TOP-left
+                    float ph = frame / 16f;
+                    for (int y = 0; y < tile; y++)
+                        for (int x = 0; x < tile; x++)
+                        {
+                            float u = (x + 0.5f) / tile, v = (y + 0.5f) / tile;
+                            // a narrow, round-based tongue that sways as it rises; scrolling noise eats ragged tongues out of
+                            // its sides and top (previewed offline: docs/previews/PREVIEW_v0.25.205_Flames.png)
+                            float sway = (Fbm(v * 2f - ph * 3f, ph * 5f, 61) - 0.5f) * 0.6f * v;
+                            float xx = (u - 0.5f - sway) * 2f;
+                            float w = 0.62f * Mathf.Pow(Mathf.Clamp01(1f - v), 0.7f) * Mathf.Clamp01(0.35f + v * 4f) + 0.04f;
+                            float erode = Fbm(u * 5f, v * 3.4f - ph * 4f, 73);
+                            float body = Mathf.Clamp01(1f - Mathf.Abs(xx) / Mathf.Max(0.04f, w));
+                            float f = body * (1.15f - v * 0.85f) + (erode - 0.5f) * 0.85f * (0.3f + v);
+                            float a = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((f - 0.18f) / 0.24f)) * Mathf.Clamp01(v * 10f) * Mathf.Clamp01((0.5f - Mathf.Abs(u - 0.5f)) * 12f);
+                            float heat = Mathf.Clamp01(Mathf.Pow(body, 1.5f) * Mathf.Pow(1f - v, 1.2f) * 1.6f);
+                            Color c = heat > 0.6f ? new Color(1f, Mathf.Lerp(0.6f, 0.93f, (heat - 0.6f) / 0.4f), Mathf.Lerp(0.15f, 0.62f, (heat - 0.6f) / 0.4f))
+                                    : new Color(Mathf.Lerp(0.8f, 1f, heat / 0.6f), Mathf.Lerp(0.2f, 0.6f, heat / 0.6f), Mathf.Lerp(0.04f, 0.15f, heat / 0.6f));
+                            if (gray) { float lum = 0.55f + 0.45f * heat; c = new Color(lum, lum, lum, 1f); }   // tinted by the particle colour
+                            c.a = Mathf.Clamp01(a);
+                            px[(ty * tile + y) * n + tx * tile + x] = c;
+                        }
+                }
+            t.SetPixels(px);
+            t.Apply(true);
+            if (gray) _flameSheetGray = t; else _flameSheet = t;
+            return t;
+        }
+
+        // v0.25.205 coloured fire (purple Archmage flames...): the same flipbook in greyscale, tinted by the particle colour
+        private static Material _flameGrayMat;
+        private static void FireLookTinted(ParticleSystem ps, Color tint)
+        {
+            FireLook(ps);
+            if (_flameGrayMat == null)
+            {
+                Material baseMat = Mat(FlameTex(), true);
+                if (baseMat != null) { _flameGrayMat = new Material(baseMat); _flameGrayMat.mainTexture = FlameSheet(true); }
+            }
+            if (_flameGrayMat != null) ps.GetComponent<ParticleSystemRenderer>().sharedMaterial = _flameGrayMat;
+            ParticleSystem.MainModule main = ps.main;
+            Color hi = Color.Lerp(tint, Color.white, 0.35f); hi.a = 1f; Color lo = tint; lo.a = 1f;
+            main.startColor = new ParticleSystem.MinMaxGradient(lo, hi);
+        }
+
+        private static Material _flameSheetMat;
         private static void FireLook(ParticleSystem ps)
         {
-            Material m = Mat(FlameTex(), true);
-            if (m != null) ps.GetComponent<ParticleSystemRenderer>().sharedMaterial = m;
+            if (_flameSheetMat == null)
+            {
+                Material baseMat = Mat(FlameTex(), true);
+                if (baseMat != null) { _flameSheetMat = new Material(baseMat); _flameSheetMat.mainTexture = FlameSheet(); }
+            }
+            if (_flameSheetMat != null) ps.GetComponent<ParticleSystemRenderer>().sharedMaterial = _flameSheetMat;
             ParticleSystem.MainModule main = ps.main;
-            main.startRotation = new ParticleSystem.MinMaxCurve(-0.4f, 0.4f);
+            main.startRotation = new ParticleSystem.MinMaxCurve(-0.12f, 0.12f);   // upright tongues (was +-0.4 rad tilted triangles)
+            main.startColor = new ParticleSystem.MinMaxGradient(new Color(1f, 0.95f, 0.85f, 1f), new Color(1f, 0.82f, 0.6f, 1f));   // full strength; the texture carries the colour
+            ParticleSystem.TextureSheetAnimationModule sheet = ps.textureSheetAnimation;
+            sheet.enabled = true;
+            sheet.numTilesX = 4; sheet.numTilesY = 4;
+            sheet.animation = ParticleSystemAnimationType.WholeSheet;
+            sheet.frameOverTime = new ParticleSystem.MinMaxCurve(1f, AnimationCurve.Linear(0f, 0f, 1f, 1f));
+            sheet.startFrame = new ParticleSystem.MinMaxCurve(0f, 15f);
+            sheet.cycleCount = 2;
+            ParticleSystem.NoiseModule nz = ps.noise;
+            nz.enabled = true; nz.strength = 0.6f; nz.frequency = 1.4f; nz.scrollSpeed = 1.5f; nz.damping = true;
             ParticleSystem.ColorOverLifetimeModule col = ps.colorOverLifetime;
             Gradient g = new Gradient();
-            g.SetKeys(new GradientColorKey[] { new GradientColorKey(new Color(1f, 0.95f, 0.7f), 0f), new GradientColorKey(new Color(1f, 0.55f, 0.12f), 0.35f), new GradientColorKey(new Color(0.75f, 0.15f, 0.05f), 0.8f), new GradientColorKey(new Color(0.2f, 0.1f, 0.08f), 1f) },
-                      new GradientAlphaKey[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(1f, 0.1f), new GradientAlphaKey(0.6f, 0.7f), new GradientAlphaKey(0f, 1f) });
+            g.SetKeys(new GradientColorKey[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(new Color(1f, 0.9f, 0.75f), 0.4f), new GradientColorKey(new Color(1f, 0.55f, 0.35f), 0.8f), new GradientColorKey(new Color(0.45f, 0.2f, 0.15f), 1f) },
+                      new GradientAlphaKey[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(1f, 0.08f), new GradientAlphaKey(0.85f, 0.6f), new GradientAlphaKey(0f, 1f) });
             col.color = new ParticleSystem.MinMaxGradient(g);
             ParticleSystem.SizeOverLifetimeModule sol = ps.sizeOverLifetime;
-            sol.size = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(new Keyframe(0f, 0.4f), new Keyframe(0.3f, 1f), new Keyframe(1f, 1.3f)));
+            sol.size = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(new Keyframe(0f, 0.45f), new Keyframe(0.25f, 1f), new Keyframe(1f, 1.25f)));
+        }
+
+        // v0.25.205 (user ref: Staff of Embers impact): a big explosion DOME - a churning fiery sphere shell centred on the
+        // impact point (its lower half in the ground reads as a dome) that pops out in 0.18 s, rolls and fades, a brighter
+        // inner core shell, a roaring burst of flame tongues, embers, smoke, a flash and a scorch. tint = the fire colour.
+        private static Texture2D _blastTex;
+        private static Mesh _blastSphere;
+        private static Texture2D BlastTex()
+        {
+            if (_blastTex == null)
+            {
+                _blastTex = MakeTex(128, 128, delegate(float u, float v)
+                {
+                    float big = Fbm(u * 5f, v * 5f, 611), fine = Fbm(u * 15f, v * 15f, 613);
+                    return Mathf.Clamp01((big * 0.75f + fine * 0.35f - 0.25f) * 1.8f);
+                }, TextureWrapMode.Repeat);
+            }
+            return _blastTex;
+        }
+        private static Mesh BlastSphere()
+        {
+            if (_blastSphere != null) return _blastSphere;
+            const int lat = 14, lon = 22;
+            Vector3[] v = new Vector3[(lat + 1) * (lon + 1)]; Vector2[] uv = new Vector2[v.Length]; Color[] cs = new Color[v.Length];
+            for (int j = 0; j <= lat; j++)
+                for (int i = 0; i <= lon; i++)
+                {
+                    float th = Mathf.PI * j / lat, ph = Mathf.PI * 2f * i / lon;
+                    v[j * (lon + 1) + i] = new Vector3(Mathf.Sin(th) * Mathf.Cos(ph), Mathf.Cos(th), Mathf.Sin(th) * Mathf.Sin(ph)) * 0.5f;
+                    uv[j * (lon + 1) + i] = new Vector2((float)i / lon * 3f, (float)j / lat * 2f);
+                    cs[j * (lon + 1) + i] = Color.white;
+                }
+            List<int> t = new List<int>();
+            for (int j = 0; j < lat; j++)
+                for (int i = 0; i < lon; i++)
+                {
+                    int a0 = j * (lon + 1) + i, a1 = a0 + 1, b0 = a0 + lon + 1, b1 = b0 + 1;
+                    t.Add(a0); t.Add(a1); t.Add(b0); t.Add(a1); t.Add(b1); t.Add(b0);
+                }
+            _blastSphere = new Mesh(); _blastSphere.vertices = v; _blastSphere.uv = uv; _blastSphere.colors = cs; _blastSphere.triangles = t.ToArray();
+            _blastSphere.RecalculateBounds();
+            return _blastSphere;
+        }
+
+        public static void ExplosionDome(Vector3 pos, float radius, Color tint, bool coloredFire)
+        {
+            if (!Enabled) return;
+            radius = Mathf.Clamp(radius, 0.8f, 20f);
+            Vector3 g = GroundPoint(pos);
+            Material baseMat = Mat(BlastTex(), true);
+            for (int layer = 0; layer < 2; layer++)
+            {
+                if (baseMat == null) break;
+                GameObject shell = MeshObject("IH_BlastShell", BlastSphere(), baseMat, null);   // the shell instances its own copy to fade
+                shell.transform.position = g;
+                shell.transform.rotation = Quaternion.Euler(0f, UnityEngine.Random.Range(0f, 360f), 0f);
+                DragonBlastShell b = shell.AddComponent<DragonBlastShell>();
+                b.Radius = radius * (layer == 0 ? 2f : 1.3f);   // sphere mesh is unit DIAMETER
+                b.Tint = layer == 0 ? tint : Color.Lerp(tint, Color.white, 0.55f);
+                b.Life = layer == 0 ? 0.85f : 0.5f;
+            }
+            DragonVfxLife l = Host(g + Vector3.up * 0.3f, 3f, "blast");
+            ParticleSystem tongues = Particles(l.transform, tint, Mathf.RoundToInt(30 + radius * 8f), 0f, 0.1f, 0.7f, radius * 0.8f, radius * 1.6f, radius * 0.35f, radius * 0.75f, -0.4f,
+                ParticleSystemShapeType.Hemisphere, radius * 0.35f, new Vector3(-90f, 0f, 0f), false, true);
+            if (coloredFire) FireLookTinted(tongues, tint); else FireLook(tongues);
+            ParticleSystem.MainModule tm = tongues.main; tm.maxParticles = 160;
+            tongues.Play();
+            Embers(g, coloredFire ? Color.Lerp(tint, Color.white, 0.3f) : Fire, radius, 1.4f, 50f);
+            Smoke(g + Vector3.up * radius * 0.4f, new Color(0.16f, 0.13f, 0.14f, 0.5f), radius, 2f, Mathf.RoundToInt(6 + radius * 1.5f));
+            Flash(g + Vector3.up * radius * 0.4f, tint, 1.2f, radius * 2.5f, 0.35f);
+            Scorch(g, radius * 0.75f, 7f);
+            Shake(g, 20f + radius * 3f, Mathf.Clamp(radius * 0.25f, 0.4f, 2f));
+        }
+
+        // v0.25.205 (user: Elemental Cataclysm = a big AIR BULLET engulfed by lightning, earth, frost and fire SPIRALLING
+        // around it, long trail, crashing down): returns the bullet root; the caller moves it and destroys it on impact.
+        public static GameObject AirBullet(Vector3 pos, float radius)
+        {
+            if (!Enabled) return null;
+            radius = Mathf.Clamp(radius, 0.8f, 6f);
+            GameObject root = new GameObject("IH_AirBullet");
+            root.transform.position = pos;
+            // the compressed air: a pale rim halo (camera-facing, readable from any angle) + churning inner wisps
+            GameObject rim = MeshObject("airRim", HaloQuad(new Color(0.85f, 0.93f, 1f, 0.75f)), Mat(GravRimTex(), true), root.transform);
+            rim.transform.localScale = Vector3.one * radius * 2f / 0.55f; rim.AddComponent<DragonFaceCamera>();
+            DragonMeshOwner ro = rim.AddComponent<DragonMeshOwner>(); ro.Mesh = rim.GetComponent<MeshFilter>().sharedMesh;
+            ParticleSystem wisps = Particles(root.transform, new Color(0.85f, 0.92f, 1f, 0.35f), 0, 40f, 30f, 0.35f, 0.2f, 1f, radius * 0.4f, radius * 0.8f, 0f,
+                ParticleSystemShapeType.Sphere, radius * 0.8f, Vector3.zero, false, false);
+            Material sm = Mat(SmokeTex(), false); if (sm != null) wisps.GetComponent<ParticleSystemRenderer>().sharedMaterial = sm;
+            ParticleSystem.MainModule wm = wisps.main; wm.loop = true; wm.simulationSpace = ParticleSystemSimulationSpace.Local;
+            // the long trail behind it
+            TrailRenderer tr = root.AddComponent<TrailRenderer>();
+            tr.time = 1.1f; tr.minVertexDistance = 0.2f;
+            tr.widthCurve = new AnimationCurve(new Keyframe(0f, radius * 1.7f), new Keyframe(0.4f, radius * 1.1f), new Keyframe(1f, 0f));
+            Material tm = Mat(SmokeTex(), true); if (tm != null) tr.sharedMaterial = tm;
+            Gradient tg = new Gradient();
+            tg.SetKeys(new GradientColorKey[] { new GradientColorKey(new Color(0.9f, 0.95f, 1f), 0f), new GradientColorKey(new Color(0.6f, 0.7f, 0.95f), 1f) },
+                       new GradientAlphaKey[] { new GradientAlphaKey(0.75f, 0f), new GradientAlphaKey(0.35f, 0.4f), new GradientAlphaKey(0f, 1f) });
+            tr.colorGradient = tg;
+            tr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            // the four elements spiral around it: two counter-rotating pivots, each carrying two elements at different
+            // heights; their world-space particles leave helical streams behind the falling bullet
+            for (int p = 0; p < 2; p++)
+            {
+                GameObject pivot = new GameObject("spiral");
+                pivot.transform.SetParent(root.transform, false);
+                DragonRotate rot = pivot.AddComponent<DragonRotate>(); rot.Speed = new Vector3(0f, p == 0 ? 540f : -460f, 0f);
+                for (int k = 0; k < 2; k++)
+                {
+                    int el = p * 2 + k;   // 0 fire, 1 frost, 2 lightning, 3 earth
+                    float ang = k * Mathf.PI;
+                    GameObject node = new GameObject("element");
+                    node.transform.SetParent(pivot.transform, false);
+                    node.transform.localPosition = new Vector3(Mathf.Cos(ang), (k == 0 ? 0.35f : -0.35f) * (p == 0 ? 1f : -1f), Mathf.Sin(ang)) * radius * 1.25f;
+                    if (el == 0)
+                    {
+                        ParticleSystem f = Particles(node.transform, Fire, 0, 90f, 30f, 0.45f, 0f, 0.3f, radius * 0.3f, radius * 0.55f, -0.2f, ParticleSystemShapeType.Sphere, radius * 0.1f, Vector3.zero, false, true);
+                        FireLook(f); ParticleSystem.MainModule fm = f.main; fm.loop = true;
+                    }
+                    else if (el == 1)
+                    {
+                        ParticleSystem f = Particles(node.transform, new Color(0.75f, 0.93f, 1f, 1f), 0, 70f, 30f, 0.5f, 0f, 0.2f, radius * 0.08f, radius * 0.18f, 0.3f, ParticleSystemShapeType.Sphere, radius * 0.12f, Vector3.zero, false, true);
+                        ParticleSystem.MainModule fm = f.main; fm.loop = true;
+                        ParticleSystem mist = Particles(node.transform, new Color(0.8f, 0.92f, 1f, 0.3f), 0, 20f, 30f, 0.6f, 0f, 0.1f, radius * 0.25f, radius * 0.45f, 0f, ParticleSystemShapeType.Sphere, radius * 0.1f, Vector3.zero, false, false);
+                        if (sm != null) mist.GetComponent<ParticleSystemRenderer>().sharedMaterial = sm;
+                        ParticleSystem.MainModule mm2 = mist.main; mm2.loop = true;
+                    }
+                    else if (el == 2)
+                    {
+                        ParticleSystem f = Particles(node.transform, new Color(0.78f, 0.88f, 1f, 1f), 0, 60f, 30f, 0.25f, 0.5f, 2f, 0.04f, 0.09f, 0f, ParticleSystemShapeType.Sphere, radius * 0.1f, Vector3.zero, true, true);
+                        ParticleSystem.MainModule fm = f.main; fm.loop = true;
+                        DragonArcFlicker arc = node.AddComponent<DragonArcFlicker>(); arc.Center = root.transform; arc.Width = Mathf.Max(0.05f, radius * 0.06f);
+                    }
+                    else
+                    {
+                        GameObject chunk = new GameObject("rock");
+                        chunk.transform.SetParent(node.transform, false);
+                        chunk.AddComponent<MeshFilter>().sharedMesh = LumpMesh(el + 3);
+                        MeshRenderer mr = chunk.AddComponent<MeshRenderer>(); mr.sharedMaterial = NaturalMat(new Color(0.42f, 0.36f, 0.30f, 1f));
+                        chunk.transform.localScale = Vector3.one * radius * 0.45f;
+                        DragonRotate cr = chunk.AddComponent<DragonRotate>(); cr.Speed = new Vector3(200f, 140f, 90f);
+                        ParticleSystem f = Particles(node.transform, new Color(0.45f, 0.39f, 0.32f, 0.6f), 0, 30f, 30f, 0.7f, 0f, 0.2f, radius * 0.15f, radius * 0.3f, 0.2f, ParticleSystemShapeType.Sphere, radius * 0.15f, Vector3.zero, false, false);
+                        if (sm != null) f.GetComponent<ParticleSystemRenderer>().sharedMaterial = sm;
+                        ParticleSystem.MainModule fm = f.main; fm.loop = true;
+                    }
+                }
+            }
+            return root;
         }
 
         // A ball of fire: flame core, smoke column, embers, scorch.
@@ -18391,15 +18683,45 @@ namespace DragonsAltarCombat
         }
 
         // Glacial Descent: a huge cut diamond of ice, point down, spinning slowly, frost streaming behind it.
+        // v0.25.205 (user: more texture and depth, a crystal with glistening parts): a lit glossy ice core inside a
+        // translucent faceted shell, smaller crystals growing off its base, and star glints flashing over the facets.
+        private static Texture2D _glintTex;
+        private static Texture2D GlintTex()
+        {
+            if (_glintTex == null) _glintTex = MakeTex(64, 64, delegate(float u, float v)
+            {
+                float dx = Mathf.Abs(u - 0.5f) * 2f, dy = Mathf.Abs(v - 0.5f) * 2f;
+                float star = Mathf.Max(Mathf.Exp(-(dx * 18f + dy * 2.2f)), Mathf.Exp(-(dy * 18f + dx * 2.2f)));
+                float core = Mathf.Exp(-(dx * dx + dy * dy) * 30f);
+                return Mathf.Clamp01((star + core) * Mathf.Clamp01(1f - Mathf.Sqrt(dx * dx + dy * dy)));
+            }, TextureWrapMode.Clamp);
+            return _glintTex;
+        }
+
         public static GameObject IceDiamond(Vector3 pos, float size)
         {
             if (!Enabled) return null;
             GameObject root = new GameObject("IH_IceDiamond");
             root.transform.position = pos;
             float h = size * 1.35f, w = size * 0.8f;
-            MeshObject("body", DiamondMesh(h, w, new Color(0.70f, 0.93f, 1f, 0.78f)), ClearMat(), root.transform);
-            GameObject core = MeshObject("core", DiamondMesh(h * 0.55f, w * 0.55f, new Color(0.85f, 0.97f, 1f, 0.55f)), Mat(WhiteTex(), true), root.transform);
-            core.transform.localPosition = new Vector3(0f, -h * 0.05f, 0f);
+            Material ice = NaturalMat(new Color(0.66f, 0.90f, 1f, 0.9f));   // lit glossy ice (catches the light = glints)
+            MeshObject("core", DiamondMesh(h * 0.82f, w * 0.78f, Color.white), ice, root.transform);
+            MeshObject("body", DiamondMesh(h, w, new Color(0.70f, 0.93f, 1f, 0.5f)), ClearMat(), root.transform);
+            GameObject inner = MeshObject("inner", DiamondMesh(h * 0.5f, w * 0.5f, new Color(0.85f, 0.97f, 1f, 0.4f)), Mat(WhiteTex(), true), root.transform);
+            inner.transform.localPosition = new Vector3(0f, -h * 0.05f, 0f);
+            // smaller crystals growing off the upper body, tilted outward
+            for (int i = 0; i < 4; i++)
+            {
+                float a = i * 90f + 20f;
+                GameObject sat = MeshObject("shard", DiamondMesh(h * (0.42f + 0.08f * (i % 2)), w * 0.32f, Color.white), ice, root.transform);
+                sat.transform.localRotation = Quaternion.Euler(0f, a, 0f) * Quaternion.Euler(0f, 0f, 38f);
+                sat.transform.localPosition = Quaternion.Euler(0f, a, 0f) * new Vector3(w * 0.28f, h * 0.18f, 0f);
+            }
+            // glistening: short star glints popping over the crystal
+            ParticleSystem glints = Particles(root.transform, Color.white, 0, 26f, 30f, 0.22f, 0f, 0.05f, size * 0.12f, size * 0.32f, 0f,
+                ParticleSystemShapeType.Sphere, w * 0.55f, Vector3.zero, false, true);
+            Material gm = Mat(GlintTex(), true); if (gm != null) glints.GetComponent<ParticleSystemRenderer>().sharedMaterial = gm;
+            ParticleSystem.MainModule glm = glints.main; glm.loop = true; glm.simulationSpace = ParticleSystemSimulationSpace.Local; glm.startColor = new ParticleSystem.MinMaxGradient(Color.white, new Color(0.8f, 0.95f, 1f, 1f));
             DragonRotate rot = root.AddComponent<DragonRotate>();
             rot.Speed = new Vector3(0f, 55f, 0f);
             AttachGlow(root.transform, new Color(0.70f, 0.94f, 1f, 1f), w * 0.45f, 50f, Mathf.Max(6f, size * 1.6f));
@@ -18457,15 +18779,7 @@ namespace DragonsAltarCombat
             ball.transform.SetParent(root.transform, false);
             ball.transform.localScale = Vector3.one * core * 2f;
             Renderer br = ball.GetComponent<Renderer>();
-            Material dark = DarkCoreMat();
-            if (br != null && dark != null) { br.sharedMaterial = dark; br.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; }
-            for (int d = 0; d < 2; d++)
-            {
-                GameObject disk = MeshObject("rim", DiskMesh(core * 1.04f, core * (d == 0 ? 1.5f : 1.3f), d + 3), Mat(WhiteTex(), true), root.transform);
-                disk.transform.localRotation = Quaternion.Euler(d == 0 ? 22f : -30f, 0f, d == 0 ? 8f : 16f);
-                DragonRotate r = disk.AddComponent<DragonRotate>();
-                r.Speed = new Vector3(0f, d == 0 ? 200f : -260f, 0f);
-            }
+            GravityDress(root.transform, br, core);   // v0.25.205
             GameObject keep = root;
             AirStreak(root.transform, new Color(0.55f, 0.45f, 0.75f, 1f), core * 1.2f, 0.45f, delegate { return keep != null && keep.activeInHierarchy; });
             return root;
@@ -18498,6 +18812,110 @@ namespace DragonsAltarCombat
 
         // Gravity Dominion: a black hole hanging over the well - a pitch-black core, a shimmering event-horizon
         // rim and two tilted accretion disks spiralling around it.
+        // v0.25.205 (user ref: pixel black hole - black ball, strong WHITE rim, PURPLE outlines, rings circling it, visible
+        // from any angle): shared look for Gravity Dominion's black hole and Gravity Blast's orb.
+        //  - core: opaque black;
+        //  - rim + outline: camera-facing halos (always seen whole): a bright white ring hugging the ball and a ragged,
+        //    wavy purple outline around it;
+        //  - 3 orbit rings: real 3D tubes (thickness, so never invisible edge-on), tilted on different axes, each brighter
+        //    toward its head like a streak, spinning around the ball.
+        private static Material _blackCore;
+        private static Texture2D _gravRimTex, _gravOutlineTex;
+        private static Material BlackCoreMat()
+        {
+            if (_blackCore != null) return _blackCore;
+            Shader s = Shader.Find("Sprites/Default");
+            if (s == null) return SolidMat(new Color(0f, 0f, 0f, 1f));
+            _blackCore = new Material(s); _blackCore.color = new Color(0f, 0f, 0f, 1f);
+            return _blackCore;
+        }
+        private static Texture2D GravRimTex()
+        {
+            if (_gravRimTex == null) _gravRimTex = MakeTex(128, 128, delegate(float u, float v)
+            {
+                float r = Rad(u, v);   // ball edge at r = 0.55
+                float inner = Mathf.Exp(-Mathf.Pow((r - 0.56f) / 0.035f, 2f));
+                float glow = Mathf.Exp(-Mathf.Pow((r - 0.58f) / 0.12f, 2f)) * 0.55f;
+                return r < 0.5f ? 0f : Mathf.Clamp01(inner + glow);
+            }, TextureWrapMode.Clamp);
+            return _gravRimTex;
+        }
+        private static Texture2D GravOutlineTex()
+        {
+            if (_gravOutlineTex == null) _gravOutlineTex = MakeTex(128, 128, delegate(float u, float v)
+            {
+                float r = Rad(u, v);
+                float ang = Mathf.Atan2(v - 0.5f, u - 0.5f);
+                float wave = 0.025f * Mathf.Sin(ang * 3f + Fbm(u * 3f, v * 3f, 501) * 5f) + 0.045f * (Fbm(u * 7f, v * 7f, 503) - 0.5f);
+                float band = Mathf.Exp(-Mathf.Pow((r - (0.70f + wave)) / 0.045f, 2f));
+                float wisp = Mathf.Exp(-Mathf.Pow((r - (0.80f + wave * 1.8f)) / 0.025f, 2f)) * 0.7f * Mathf.Clamp01(Fbm(u * 6f, v * 6f, 507) * 2.2f - 0.7f);
+                return r < 0.6f ? 0f : Mathf.Clamp01(band + wisp);
+            }, TextureWrapMode.Clamp);
+            return _gravOutlineTex;
+        }
+        private static Mesh HaloQuad(Color c)
+        {
+            Mesh m = new Mesh();
+            m.vertices = new Vector3[] { new Vector3(-0.5f, -0.5f, 0f), new Vector3(0.5f, -0.5f, 0f), new Vector3(-0.5f, 0.5f, 0f), new Vector3(0.5f, 0.5f, 0f) };
+            m.uv = new Vector2[] { new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0f, 1f), new Vector2(1f, 1f) };
+            m.colors = new Color[] { c, c, c, c };
+            m.triangles = new int[] { 0, 2, 1, 1, 2, 3, 0, 1, 2, 1, 3, 2 };
+            m.RecalculateBounds();
+            return m;
+        }
+        private static Mesh OrbitRingMesh(float radius, float tube, Color head, Color tail)
+        {
+            const int seg = 64, side = 8;
+            Vector3[] v = new Vector3[(seg + 1) * (side + 1)];
+            Color[] cs = new Color[v.Length];
+            for (int i = 0; i <= seg; i++)
+            {
+                float f = (float)i / seg, a = f * Mathf.PI * 2f;
+                Vector3 c = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                Color col = Color.Lerp(tail, head, Mathf.Pow(f, 1.6f));
+                for (int j = 0; j <= side; j++)
+                {
+                    float b = (float)j / side * Mathf.PI * 2f;
+                    v[i * (side + 1) + j] = c * (radius + Mathf.Cos(b) * tube) + Vector3.up * Mathf.Sin(b) * tube;
+                    cs[i * (side + 1) + j] = col;
+                }
+            }
+            int[] t = new int[seg * side * 6]; int k = 0;
+            for (int i = 0; i < seg; i++)
+                for (int j = 0; j < side; j++)
+                {
+                    int p0 = i * (side + 1) + j, p1 = p0 + side + 1;
+                    t[k++] = p0; t[k++] = p0 + 1; t[k++] = p1; t[k++] = p0 + 1; t[k++] = p1 + 1; t[k++] = p1;
+                }
+            Mesh m = new Mesh(); m.vertices = v; m.colors = cs; m.triangles = t; m.RecalculateBounds();
+            return m;
+        }
+        private static void GravityDress(Transform root, Renderer core, float coreR)
+        {
+            Material black = BlackCoreMat();
+            if (core != null && black != null) { core.sharedMaterial = black; core.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; }
+            // halos (camera-facing): white rim hugging the ball, ragged purple outline outside it
+            float rimSize = coreR * 2f / 0.55f;
+            GameObject rim = MeshObject("rimHalo", HaloQuad(new Color(1f, 0.97f, 1f, 1f)), Mat(GravRimTex(), true), root);
+            rim.transform.localScale = Vector3.one * rimSize; rim.AddComponent<DragonFaceCamera>();
+            DragonMeshOwner o1 = rim.AddComponent<DragonMeshOwner>(); o1.Mesh = rim.GetComponent<MeshFilter>().sharedMesh;
+            GameObject outline = MeshObject("outlineHalo", HaloQuad(new Color(0.72f, 0.35f, 1f, 1f)), Mat(GravOutlineTex(), true), root);
+            outline.transform.localScale = Vector3.one * rimSize; outline.AddComponent<DragonFaceCamera>();
+            DragonMeshOwner o2 = outline.AddComponent<DragonMeshOwner>(); o2.Mesh = outline.GetComponent<MeshFilter>().sharedMesh;
+            // orbit rings: tilted 3D tubes spinning around the ball
+            float[] tilt = { 18f, -34f, 62f }, yaw = { 0f, 70f, 140f }, rad = { 1.55f, 1.85f, 1.35f }, spd = { 190f, -150f, 240f };
+            for (int i = 0; i < 3; i++)
+            {
+                GameObject pivot = new GameObject("orbit");
+                pivot.transform.SetParent(root, false);
+                pivot.transform.localRotation = Quaternion.Euler(tilt[i], yaw[i], 0f);
+                Mesh rm = OrbitRingMesh(coreR * rad[i], coreR * 0.055f, new Color(0.95f, 0.85f, 1f, 0.95f), new Color(0.45f, 0.15f, 0.75f, 0.05f));
+                GameObject ring = MeshObject("ring", rm, Mat(WhiteTex(), true), pivot.transform);
+                DragonMeshOwner o3 = ring.AddComponent<DragonMeshOwner>(); o3.Mesh = rm;
+                DragonRotate r = ring.AddComponent<DragonRotate>(); r.Speed = new Vector3(0f, spd[i], 0f);
+            }
+        }
+
         public static GameObject BlackHole(Vector3 ground, float radius, float seconds)
         {
             if (!Enabled) return null;
@@ -18511,15 +18929,7 @@ namespace DragonsAltarCombat
             Renderer br = ball.GetComponent<Renderer>();
             // v0.25.180 VFX DIRECTION (show suction): a dark, PARTLY transparent core, one narrow bent rim hugging it
             // (muted, not a wide purple disk), sparse rim motes and a small light; the field around stays open.
-            Material dark = DarkCoreMat();
-            if (br != null && dark != null) { br.sharedMaterial = dark; br.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; }
-            for (int d = 0; d < 2; d++)
-            {
-                GameObject disk = MeshObject("rim", DiskMesh(core * 1.04f, core * (d == 0 ? 1.55f : 1.35f), d), Mat(WhiteTex(), true), root.transform);
-                disk.transform.localRotation = Quaternion.Euler(d == 0 ? 18f : -28f, 0f, d == 0 ? 6f : 14f);
-                DragonRotate r = disk.AddComponent<DragonRotate>();
-                r.Speed = new Vector3(0f, d == 0 ? 160f : -220f, 0f);
-            }
+            GravityDress(root.transform, br, core);   // v0.25.205
             ParticleSystem rim = Particles(root.transform, new Color(0.62f, 0.52f, 0.80f, 0.6f), 0, 26f * Amount, seconds, 0.35f, 0f, 0.15f, core * 0.08f, core * 0.16f, 0f,
                 ParticleSystemShapeType.Sphere, core * 1.05f, Vector3.zero, false, true);
             ParticleSystem.ShapeModule sh = rim.shape; sh.radiusThickness = 0f;
@@ -18603,8 +19013,12 @@ namespace DragonsAltarCombat
             root.transform.SetParent(hand, true);
             GameObject scaler = new GameObject("grow");
             scaler.transform.SetParent(root.transform, false);
-            Color body = c; body.a = 0.72f;
-            MeshObject("blade", BladeMesh(length, width, width * 0.13f, body, false), ClearMat(), scaler.transform);
+            // v0.25.205 (user: denser - it looked light for a giant sword): a near-opaque deep astral core blade inside a
+            // thicker translucent body (was one 72% sheet, 0.13 thick)
+            Color deep = Color.Lerp(c, new Color(0.18f, 0.06f, 0.32f, 1f), 0.45f); deep.a = 0.96f;
+            MeshObject("core", BladeMesh(length * 0.97f, width * 0.78f, width * 0.2f, deep, false), ClearMat(), scaler.transform);
+            Color body = c; body.a = 0.9f;
+            MeshObject("blade", BladeMesh(length, width, width * 0.26f, body, false), ClearMat(), scaler.transform);
             Color halo = Color.Lerp(c, Color.white, 0.35f); halo.a = 0.4f;
             MeshObject("halo", BladeMesh(length * 1.03f, width * 1.35f, width * 0.3f, halo, true), Mat(WhiteTex(), true), scaler.transform);
             // guard: a bar of light where the staff becomes the blade
@@ -18624,7 +19038,7 @@ namespace DragonsAltarCombat
             if (seamMat != null)
             {
                 Color sc = Color.Lerp(c, Color.white, 0.6f); sc.a = 0.85f;
-                float ht = width * 0.13f * 0.5f + 0.004f;
+                float ht = width * 0.26f * 0.5f + 0.004f;   // v0.25.205 seams ride the thicker faces
                 for (int face = -1; face <= 1; face += 2)
                 {
                     BladeSeam(scaler.transform, seamMat, sc, width * 0.05f, new Vector3(0f, ht * face, length * 0.08f), new Vector3(0f, ht * face * 0.6f, length * 0.86f));
@@ -18686,58 +19100,104 @@ namespace DragonsAltarCombat
         }
 
         // v0.25.75 Meteor Fall / Cataclysm: a tumbling faceted boulder of basalt with molten seams, wrapped in fire.
+        // v0.25.205 (user: the meteor looked like a silver prototype "still trying to render"): a real lit boulder - a smooth
+        // sphere pushed in and out by layered noise (lumps, ridges) with a few crater dents, Standard material with a
+        // pitted basalt albedo and glowing lava veins in the emission map (cracks between the plates burn).
+        private static Texture2D _meteorAlbedo, _meteorLava;
+        private static Material _meteorMat;
+        private static Material MeteorMat()
+        {
+            if (_meteorMat != null) return _meteorMat;
+            const int n = 128;
+            _meteorAlbedo = new Texture2D(n, n, TextureFormat.RGBA32, true); _meteorAlbedo.wrapMode = TextureWrapMode.Repeat;
+            _meteorLava = new Texture2D(n, n, TextureFormat.RGBA32, true); _meteorLava.wrapMode = TextureWrapMode.Repeat;
+            Color[] al = new Color[n * n], lv = new Color[n * n];
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    float u = (float)x / n, v = (float)y / n;
+                    float f = Fbm(u * 8f, v * 8f, 401), fine = Fbm(u * 26f, v * 26f, 409);
+                    float pits = Mathf.Clamp01((Fbm(u * 14f, v * 14f, 417) - 0.62f) * 4f);
+                    float k = 0.16f + 0.16f * f + 0.08f * fine - 0.07f * pits;
+                    al[y * n + x] = new Color(k * 1.05f, k * 0.95f, k * 0.9f, 1f);
+                    // veins = thin bands where a second noise crosses its mid value
+                    float vein = Mathf.Clamp01(1f - Mathf.Abs(Fbm(u * 5f, v * 5f, 431) - 0.5f) * 22f);
+                    vein *= Mathf.Clamp01(Fbm(u * 3f, v * 3f, 437) * 1.6f - 0.35f);
+                    lv[y * n + x] = new Color(1f, 0.38f + 0.3f * vein, 0.06f, 1f) * vein;
+                }
+            _meteorAlbedo.SetPixels(al); _meteorAlbedo.Apply(true);
+            _meteorLava.SetPixels(lv); _meteorLava.Apply(true);
+            Shader sh = Shader.Find("Standard");
+            if (sh == null) return null;
+            _meteorMat = new Material(sh);
+            _meteorMat.mainTexture = _meteorAlbedo;
+            _meteorMat.color = Color.white;
+            if (_meteorMat.HasProperty("_Glossiness")) _meteorMat.SetFloat("_Glossiness", 0.18f);
+            if (_meteorMat.HasProperty("_Metallic")) _meteorMat.SetFloat("_Metallic", 0f);
+            _meteorMat.EnableKeyword("_EMISSION");
+            if (_meteorMat.HasProperty("_EmissionMap")) _meteorMat.SetTexture("_EmissionMap", _meteorLava);
+            if (_meteorMat.HasProperty("_EmissionColor")) _meteorMat.SetColor("_EmissionColor", new Color(2.2f, 1.2f, 0.5f, 1f));
+            return _meteorMat;
+        }
+
+        private static Mesh MeteorMesh(float r, int seed)
+        {
+            const int lat = 16, lon = 24;
+            Vector3[] v = new Vector3[(lat + 1) * (lon + 1)];
+            Vector2[] uv = new Vector2[v.Length];
+            Vector3[] craters = new Vector3[5];
+            for (int c = 0; c < craters.Length; c++) craters[c] = UnityEngine.Random.onUnitSphere;
+            for (int j = 0; j <= lat; j++)
+            {
+                float th = Mathf.PI * j / lat;
+                for (int i = 0; i <= lon; i++)
+                {
+                    float ph = Mathf.PI * 2f * (i % lon) / lon;
+                    Vector3 d = new Vector3(Mathf.Sin(th) * Mathf.Cos(ph), Mathf.Cos(th), Mathf.Sin(th) * Mathf.Sin(ph));
+                    float h = 0.82f + 0.22f * Fbm(d.x * 1.6f + d.z * 0.7f + seed * 0.13f, d.y * 1.6f + d.z * 0.9f, 451)
+                                    + 0.07f * Fbm(d.x * 5f + d.y * 3f, d.z * 5f - d.y * 2f, 457);
+                    for (int c = 0; c < craters.Length; c++)
+                    {
+                        float dd = Vector3.Dot(d, craters[c]);
+                        if (dd > 0.9f) h -= 0.09f * Mathf.SmoothStep(0f, 1f, (dd - 0.9f) / 0.1f);   // dent
+                        else if (dd > 0.86f) h += 0.03f;                                             // raised rim
+                    }
+                    v[j * (lon + 1) + i] = d * r * h;
+                    uv[j * (lon + 1) + i] = new Vector2((float)i / lon * 2f, (float)j / lat);
+                }
+            }
+            List<int> t = new List<int>();
+            for (int j = 0; j < lat; j++)
+                for (int i = 0; i < lon; i++)
+                {
+                    int a0 = j * (lon + 1) + i, a1 = a0 + 1, b0 = a0 + lon + 1, b1 = b0 + 1;
+                    t.Add(a0); t.Add(a1); t.Add(b0); t.Add(a1); t.Add(b1); t.Add(b0);
+                }
+            Mesh m = new Mesh();
+            m.vertices = v; m.uv = uv; m.triangles = t.ToArray();
+            m.RecalculateNormals(); m.RecalculateBounds();
+            return m;
+        }
+
         public static GameObject MeteorRock(Vector3 pos, float size)
         {
             if (!Enabled) return null;
             GameObject root = new GameObject("IH_Meteor");
             root.transform.position = pos;
-            int lat = 6, lon = 9;
             float r = Mathf.Max(0.3f, size * 0.55f);
-            List<Vector3> v = new List<Vector3>();
-            List<int> t = new List<int>();
-            System.Random rng = new System.Random(UnityEngine.Random.Range(0, 100000));
-            v.Add(new Vector3(0f, r * 0.9f, 0f));
-            for (int j = 1; j < lat; j++)
-            {
-                float th = Mathf.PI * j / lat;
-                for (int i = 0; i < lon; i++)
-                {
-                    float ph = Mathf.PI * 2f * i / lon + j * 0.35f;
-                    float jr = r * (0.78f + 0.36f * (float)rng.NextDouble());
-                    v.Add(new Vector3(Mathf.Sin(th) * Mathf.Cos(ph) * jr, Mathf.Cos(th) * jr, Mathf.Sin(th) * Mathf.Sin(ph) * jr));
-                }
-            }
-            v.Add(new Vector3(0f, -r * 0.85f, 0f));
-            int bottom = v.Count - 1;
-            for (int i = 0; i < lon; i++) { t.Add(0); t.Add(1 + (i + 1) % lon); t.Add(1 + i); }
-            for (int j = 0; j < lat - 2; j++)
-                for (int i = 0; i < lon; i++)
-                {
-                    int a = 1 + j * lon + i, b = 1 + j * lon + (i + 1) % lon, c = a + lon, d = b + lon;
-                    t.Add(a); t.Add(b); t.Add(c); t.Add(b); t.Add(d); t.Add(c);
-                }
-            int last = 1 + (lat - 2) * lon;
-            for (int i = 0; i < lon; i++) { t.Add(bottom); t.Add(last + i); t.Add(last + (i + 1) % lon); }
-            Mesh rock = FacetMesh(v, t, new Color(0.30f, 0.24f, 0.22f, 1f), 0.1f);
-            // molten seams: some facets glow ember-hot
-            Color[] cs = rock.colors;
-            for (int i = 0; i + 2 < cs.Length; i += 3)
-            {
-                if (rng.NextDouble() < 0.28)
-                {
-                    Color hot = Color.Lerp(new Color(1f, 0.35f, 0.05f, 1f), new Color(1f, 0.75f, 0.3f, 1f), (float)rng.NextDouble());
-                    cs[i] = hot; cs[i + 1] = hot; cs[i + 2] = hot;
-                }
-            }
-            rock.colors = cs;
-            MeshObject("rock", rock, ClearMat(), root.transform);
+            Material mat = MeteorMat();
+            Mesh rock = MeteorMesh(r, UnityEngine.Random.Range(0, 100000));
+            GameObject body = MeshObject("rock", rock, mat != null ? mat : SolidMat(new Color(0.22f, 0.19f, 0.17f, 1f)), root.transform);
+            if (body != null) { DragonMeshOwner own = body.AddComponent<DragonMeshOwner>(); own.Mesh = rock; }
             DragonRotate rot = root.AddComponent<DragonRotate>();
             rot.Speed = new Vector3(70f, 110f, 40f);
             // fire shell + ember light, and a burning tail
             GameObject shell = new GameObject("fire");
             shell.transform.SetParent(root.transform, false);
-            ParticleSystem ps = Particles(shell.transform, new Color(1f, 0.45f, 0.1f, 1f), 0, 140f * Amount, 1f, 0.45f, 0.5f, 2f, r * 0.35f, r * 0.8f, -0.8f,
-                ParticleSystemShapeType.Sphere, r * 0.9f, Vector3.zero, false, true);
+            // v0.25.205 flames peel off the surface and stream behind it (world space) instead of a shell hiding the rock
+            ParticleSystem ps = Particles(shell.transform, new Color(1f, 0.45f, 0.1f, 1f), 0, 110f * Amount, 1f, 0.4f, 0.2f, 0.8f, r * 0.3f, r * 0.65f, -0.4f,
+                ParticleSystemShapeType.Sphere, r * 0.95f, Vector3.zero, false, true);
+            FireLook(ps);
             ParticleSystem.MainModule mm = ps.main; mm.loop = true; mm.simulationSpace = ParticleSystemSimulationSpace.World;
             AttachGlow(root.transform, new Color(1f, 0.5f, 0.15f, 1f), r, 30f, Mathf.Max(6f, size * 4f));
             GameObject keep = root;

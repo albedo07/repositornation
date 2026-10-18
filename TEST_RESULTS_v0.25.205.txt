@@ -1,0 +1,4 @@
+v0.25.205 static verification (no game):
+- compile_check 3029660 PASSED; mcs --parse -langversion:5 all .cs OK.
+- Flame flipbook + gravity halos + frost texture ported to Python and previewed (docs/previews/PREVIEW_v0.25.205_Flames.png).
+NOT verified: in-game look, particle counts / FPS.

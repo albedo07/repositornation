@@ -1,5 +1,9 @@
-TEST v0.25.204 Clean Borders
-1. Blade Storm: bigger glowing ball inside the slashes.
-2. Seismic Guillotine / Impact Wave / Astral Greatblade: one crack per line, no brighter doubled lines.
-3. Ascended Heavy Slash (Mercenary): the 3rd strike shows its slash.
-4. Skill tree, every AC: Signature + Ultimate frames are plain borders with ONE stamped badge, like the Base Class.
+TEST v0.25.205 Sorcerer Polish
+1. Meteor Fall: rock looks like real stone with lava cracks; charge guide fills; Ascended small meteors = air shockwaves.
+2. Gravity Dominion / Gravity Blast: black ball, white rim, purple outline, rings circling it from every angle.
+3. Elemental Cataclysm: elemental air bullet + long trail crashes down, then a big explosion + cracks.
+4. Frost Nova / Glacial: plain frost circle, no spiked rim.
+5. Astral Greatblade: denser blade. Glacial Descent: glossy crystal with glints.
+6. Archmage charged staff: slower while charging; purple explosion dome on impact.
+7. Any ground fire / Flame Burst: real flickering flames; Flame Burst = flamethrower.
+8. Clockwork: 45 s, no Skill Damage line.
