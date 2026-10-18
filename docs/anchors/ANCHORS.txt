@@ -1,4 +1,9 @@
-ANCHOR v0.25.179 Double Start (user, 2026-10-15) - frozen working pass
+ANCHOR v0.25.204 Clean Borders (user, 2026-10-18: "Everything here is perfect") - frozen working pass
+archive: docs/anchors/Aethelborn_Ascended_v0.25.204_Clean_Borders.zip (original package, unmodified)
+SHA-256: 0de57f035bd2342f150177fa8768b7f06817579479833571912945c92356ef8e
+commit:  622b8a1
+
+PREVIOUS ANCHOR v0.25.179 Double Start (user, 2026-10-15) - frozen working pass
 archive: docs/anchors/Aethelborn_Ascended_v0.25.179_Double_Start.zip (original package, unmodified)
 SHA-256: 6a00002321970d2c34ab8534accee44f0e2c69bca3c030f9cb0facab5e687c3a
 commit:  70d3b37
