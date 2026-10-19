@@ -65,12 +65,18 @@ save('BigWhooshClimb', fade(seg(bw, 0.42, 0.98), 0.003, 0.01))
 save('BigWhooshDrop', cut(seg(bw, 0.98), 0.8, 0.35))
 save('BigWhoosh2', cut(A(seg(load('BigWhoosh2'), 0.20)), 1.2, 0.4))
 bass = seg(load('BassDrop'), 0.36)
+def pure_bass(x):
+    # v225 (user: raising Bass Drop also raised a windy layer): keep the first 40 ms broadband (the hit), then only < 150 Hz.
+    low = lp(lp(lp(lp(x, 150), 150), 150), 150)
+    t = np.arange(len(x)) / SR; keep = np.clip(1 - (t - 0.04) / 0.08, 0, 1)
+    return low / np.abs(low).max() * np.abs(x).max() + (x - low) * keep
+bass = pure_bass(bass)
 save('BassDrop', cut(bass, 1.2, 0.5))
 # Blade Storm: the approved recording, rumble/hiss trimmed, with the BassDrop body underneath it (bass above the slashes).
+# v225: separate stems (own sliders): the cleaned recording and its bass body.
 bs = lp(hp(load('BladeStorm'), 35), 11000)
-b2 = cut(bass, len(bs)/SR, 0.35)
-bs = bs/np.abs(bs).max()*0.7 + b2/np.abs(b2).max()*0.85
 save('BladeStorm', bs)
+save('BladeStormBass', cut(bass, len(bs)/SR, 0.35))
 save('SM_CCRumble', A(load('old_SM_CCRumble')))
 # Circle Swing (Mercenary): one turn of the spinning swing; low debris from the rumble recording.
 save('SpinningSwing', fade(seg(load('SpinningSwing'), 0.0, 0.95), 0.003, 0.12))
