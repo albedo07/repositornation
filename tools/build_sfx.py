@@ -42,29 +42,30 @@ def save(n, x):
         w.setnchannels(1); w.setsampwidth(2); w.setframerate(SR); w.writeframes((np.clip(x,-1,1)*32767).astype('<i2').tobytes())
     print(f'{n:18s} {len(x)/SR:5.2f}s  M {mloud(x):6.1f}  pk {20*np.log10(abs(x).max()):5.1f}  peakAt {np.argmax(env(x))*0.01:.2f}s')
 A = autotrim
-for n in ['SwordSwing','HeavyPunch','Buff']: save(n, A(load(n)))
+for n in ['HeavyPunch','Buff']: save(n, A(load(n)))
 # Played at the contact frame: start close to the swing's peak (-15 dB onset, 30 ms run-in) so the whoosh lands on the hit.
-for n in ['HeavySwing','HeavySwing2','SwordSwing2','MagicSlash','MagicSlash2']: save(n, fade(A(load(n), 0.03, 0.178), 0.02, 0.04))
+for n in ['HeavySwing','HeavySwing2','SwordSwing','MagicSlash','MagicSlash2']: save(n, fade(A(load(n), 0.03, 0.178), 0.02, 0.04))
 save('SmallBoom', cut(A(load('SmallBoom')), 1.4, 0.5))
 def claudeslash():
-    # Dry blade slash, no reverb: a swept band of air (6 kHz -> 1.2 kHz) + a short steel ring + a low push.
-    rng = np.random.default_rng(7); n = int(0.34*SR); t = np.arange(n)/SR
-    noise = rng.standard_normal(n); y = np.zeros(n); lo = bp = 0.0
-    for i in range(n):                                   # state-variable band-pass, swept centre
-        fc = 1200 + 4800*np.exp(-t[i]/0.06); f = 2*np.sin(np.pi*fc/SR); q = 0.55
-        hi = noise[i] - lo - q*bp; bp += f*hi; lo += f*bp; y[i] = bp
-    air = y * np.clip(t/0.012, 0, 1) * np.exp(-np.maximum(t-0.03, 0)/0.075)
-    ring = sum(a*np.sin(2*np.pi*fr*t + rng.uniform(0, 6.3)) for fr, a in ((2950,1),(4420,.7),(6170,.45),(7930,.3)))
-    ring *= np.clip((t-0.02)/0.004, 0, 1) * np.exp(-np.maximum(t-0.02, 0)/0.07)
-    push = lp(rng.standard_normal(n), 300) * np.clip(t/0.01, 0, 1) * np.exp(-t/0.05)
-    return air/np.abs(air).max() + ring/np.abs(ring).max()*0.22 + push/np.abs(push).max()*0.35
+    # v223 (user: steel, not a laser; very high like Judgement Cut): GPTslash raised 4 semitones (shorter, brighter)
+    # + a crisp 3-14 kHz steel hiss on the edge + a faint high glassy ring. Dry, no reverb.
+    g = A(load('old_SM_GPTslash')); f = 2 ** (4 / 12)
+    g = np.interp(np.arange(0, len(g) - 1, f), np.arange(len(g)), g)
+    rng = np.random.default_rng(11); n = len(g) + int(0.03 * SR); t = np.arange(n) / SR
+    base = np.zeros(n); base[:len(g)] = g / np.abs(g).max()
+    hiss = rng.standard_normal(n); hiss = hiss - lp(hiss, 3000); hiss = lp(hiss, 14000)
+    hiss *= np.clip(t / 0.003, 0, 1) * np.exp(-t / 0.05)
+    ring = sum(a * np.sin(2 * np.pi * fr * t + rng.uniform(0, 6.3)) * (1 + 0.3 * np.sin(2 * np.pi * rng.uniform(25, 60) * t))
+               for fr, a in ((6400, 1), (8900, .7), (11700, .5)))
+    ring *= np.clip(t / 0.004, 0, 1) * np.exp(-t / 0.04)
+    return base + hiss / np.abs(hiss).max() * 0.45 + ring / np.abs(ring).max() * 0.12
 save('Claudeslash', claudeslash())
 bw = load('BigWhoosh')
 save('BigWhooshClimb', fade(seg(bw, 0.42, 0.98), 0.003, 0.01))
-save('BigWhooshDrop', seg(bw, 0.98))
-save('BigWhoosh2', A(seg(load('BigWhoosh2'), 0.20)))
+save('BigWhooshDrop', cut(seg(bw, 0.98), 0.8, 0.35))
+save('BigWhoosh2', cut(A(seg(load('BigWhoosh2'), 0.20)), 1.2, 0.4))
 bass = seg(load('BassDrop'), 0.36)
-save('BassDrop', cut(bass, 1.8, 0.7))
+save('BassDrop', cut(bass, 1.2, 0.5))
 # Blade Storm: the approved recording, rumble/hiss trimmed, with the BassDrop body underneath it (bass above the slashes).
 bs = lp(hp(load('BladeStorm'), 35), 11000)
 b2 = cut(bass, len(bs)/SR, 0.35)
