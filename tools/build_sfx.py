@@ -44,38 +44,24 @@ def save(n, x):
 A = autotrim
 for n in ['HeavyPunch','Buff']: save(n, A(load(n)))
 # Played at the contact frame: start close to the swing's peak (-15 dB onset, 30 ms run-in) so the whoosh lands on the hit.
-for n in ['HeavySwing','HeavySwing2','SwordSwing','MagicSlash','MagicSlash2']: save(n, fade(A(load(n), 0.03, 0.178), 0.02, 0.04))
+for n in ['HeavySwing','HeavySwing2','SwordSwing','MagicSlash']: save(n, fade(A(load(n), 0.03, 0.178), 0.02, 0.04))
 save('SmallBoom', cut(A(load('SmallBoom')), 1.4, 0.5))
-def claudeslash():
-    # v223 (user: steel, not a laser; very high like Judgement Cut): GPTslash raised 4 semitones (shorter, brighter)
-    # + a crisp 3-14 kHz steel hiss on the edge + a faint high glassy ring. Dry, no reverb.
-    g = A(load('old_SM_GPTslash')); f = 2 ** (4 / 12)
-    g = np.interp(np.arange(0, len(g) - 1, f), np.arange(len(g)), g)
-    rng = np.random.default_rng(11); n = len(g) + int(0.03 * SR); t = np.arange(n) / SR
-    base = np.zeros(n); base[:len(g)] = g / np.abs(g).max()
-    hiss = rng.standard_normal(n); hiss = hiss - lp(hiss, 3000); hiss = lp(hiss, 14000)
-    hiss *= np.clip(t / 0.003, 0, 1) * np.exp(-t / 0.05)
-    ring = sum(a * np.sin(2 * np.pi * fr * t + rng.uniform(0, 6.3)) * (1 + 0.3 * np.sin(2 * np.pi * rng.uniform(25, 60) * t))
-               for fr, a in ((6400, 1), (8900, .7), (11700, .5)))
-    ring *= np.clip(t / 0.004, 0, 1) * np.exp(-t / 0.04)
-    return base + hiss / np.abs(hiss).max() * 0.45 + ring / np.abs(ring).max() * 0.12
-save('Claudeslash', claudeslash())
 bw = load('BigWhoosh')
 save('BigWhooshClimb', fade(seg(bw, 0.42, 0.98), 0.003, 0.01))
 save('BigWhooshDrop', cut(seg(bw, 0.98), 0.8, 0.35))
 save('BigWhoosh2', cut(A(seg(load('BigWhoosh2'), 0.20)), 1.2, 0.4))
 bass = seg(load('BassDrop'), 0.36)
-def pure_bass(x):
-    # v225 (user: raising Bass Drop also raised a windy layer): keep the first 40 ms broadband (the hit), then only < 150 Hz.
-    low = lp(lp(lp(lp(x, 150), 150), 150), 150)
-    t = np.arange(len(x)) / SR; keep = np.clip(1 - (t - 0.04) / 0.08, 0, 1)
-    return low / np.abs(low).max() * np.abs(x).max() + (x - low) * keep
-bass = pure_bass(bass)
 save('BassDrop', cut(bass, 1.2, 0.5))
 # Blade Storm: the approved recording, rumble/hiss trimmed, with the BassDrop body underneath it (bass above the slashes).
 # v225: separate stems (own sliders): the cleaned recording and its bass body.
+# v226 (user): the Blade Storm recording's slashing IS the mod's slash sound: Slash Barrage = recording above 300 Hz,
+# Blade Storm body = recording below 300 Hz (zero-phase split, the two sum back to the recording).
+def zlp(x, f):
+    return lp(lp(x[::-1], f)[::-1], f)
 bs = lp(hp(load('BladeStorm'), 35), 11000)
-save('BladeStorm', bs)
+body = zlp(zlp(bs, 300), 300)
+save('SlashBarrage', bs - body)
+save('BladeStormBody', body)
 save('BladeStormBass', cut(bass, len(bs)/SR, 0.35))
 save('SM_CCRumble', A(load('old_SM_CCRumble')))
 # Circle Swing (Mercenary): one turn of the spinning swing; low debris from the rumble recording.
