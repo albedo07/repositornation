@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Reflection;
 using BepInEx;
 using BepInEx.Configuration;
 using UnityEngine;
@@ -39,8 +40,8 @@ namespace DragonsAltarDevTools
     public class DeveloperToolsPlugin : BaseUnityPlugin
     {
         public const string ModGuid = "albedo.customclasses.devtools";
-        public const string ModName = "Dragon's Altar - Developer Tools";
-        public const string ModVersion = "0.25.80";
+        public const string ModName = "Aethelborn Ascended - Developer Tools";
+        public const string ModVersion = "0.25.206";
 
         public static DeveloperToolsPlugin Instance;
 
@@ -150,6 +151,7 @@ namespace DragonsAltarDevTools
             if (!_defaultsChecked)
             {
                 _defaultsChecked = true;
+                ApplyUserDefaults();
                 if (_defaultsApplied.Value != DefaultsPass)
                 {
                     RefreshSettings();
@@ -176,11 +178,12 @@ namespace DragonsAltarDevTools
 
             if (_open && Input.GetKeyDown(KeyCode.Escape))
             {
-                ClosePanel();
+                CommitFocusedBox();
+                CloseByEscape();
                 return;
             }
 
-            if (_dirtyFiles.Count > 0 && _autoSave.Value && Time.unscaledTime - _lastChangeTime > 0.75f)
+            if (_dirtyFiles.Count > 0 && _autoSave.Value && Time.unscaledTime - _lastChangeTime > 3f)
                 SaveDirty();
 
             if (_open && _preview && _enableWorldPreview.Value)
@@ -264,8 +267,192 @@ namespace DragonsAltarDevTools
             return type == typeof(float) || type == typeof(int) || type == typeof(bool) || type == typeof(string) || (type != null && type.IsEnum);
         }
 
+        // v0.25.232 (user: "everything in my config is now the default"): guid|section|key|old default|new default.
+        // Applied once all modules are loaded: the entry's DefaultValue becomes the user's value (F8 DEFAULT and the defaults pass
+        // use it) and an entry still at the old default takes the new one (fresh installs).
+        private static readonly string[] UserDefaults = {
+            "albedo.customclasses.advanced|Immortal HUD|PosX|2|1",
+            "albedo.customclasses.advanced|Immortal HUD|PosY|768|743",
+            "albedo.customclasses.advanced|Immortal HUD|SkillBarPosX|56|48",
+            "albedo.customclasses.advanced|Paladin Ray of Hope|AttackDamageBonusPercent|30|10",
+            "albedo.customclasses.advanced|Paladin Ray of Hope Ascended|BurnDamagePerSecond_v02578|20|5",
+            "albedo.customclasses.advanced|Priest Lightning Relic Damage|Lightning|32|12",
+            "albedo.customclasses.advanced|Priest Lightning Relic Damage|Spirit|22|16",
+            "albedo.customclasses.advanced|Sword Master Blade Storm Ascended|CutDamagePercent|85|110",
+            "albedo.customclasses.advanced|Sword Master Blade Storm Ascended|ExtraCutDamagePercent|25|50",
+            "albedo.customclasses.advanced|Sword Master Crescent Cleave|MaxHitsPerWave_v025175|5|10",
+            "albedo.customclasses.advanced|Sword Master Eclipse|SpiritBurnPerSecond|4|30",
+            "albedo.customclasses.advanced|Sword Master Eclipse Damage|Frost|0|30",
+            "albedo.customclasses.advanced|Sword Master Frenzied Charge|ExplosionPercent_v025138k|50|80",
+            "albedo.customclasses.advanced|Sword Master Frenzied Charge Ascended|Windup|0.5|1",
+            "albedo.customclasses.advanced|Sword Master Judgement Cut|SlashDamagePerCut_v0223|30|45",
+            "albedo.customclasses.advanced|Sword Master Moonlight Splitter Animation|AscendedSlashWindup_v025134|0.3|0.2",
+            "albedo.customclasses.advanced|Sword Master Moonlight Splitter Animation|AscendedSlashInterval_v025134|0.3|0.2",
+            "albedo.customclasses.advanced|Sword Master Moonlight Splitter Ascended|Windup|0.5|0.35",
+            "albedo.customclasses.advanced|Sword Master Moonlight Splitter Ascended|WaveInterval|0.3|0.35",
+            "albedo.customclasses.advanced|Sword Master Moonlight Splitter Ascended Animation|SlashWindup_v025138d|0.2|0.3",
+            "albedo.customclasses.advanced|Sword Master Moonlight Splitter Ascended Animation|SlashInterval_v025138d|0.2|0.3",
+            "albedo.customclasses.advanced|Testing|ForceCooldowns|false|true",
+            "albedo.customclasses.advanced|Testing|AscendedSkills||lightning_relic, holy_relic, divine_intervention, grand_cross, heavens_judgement, lightning_tempest, arcane_rupture, gravity_blast, rift_echo, void_step, afterimage_arsenal, arcane_phalanx, splitting_arrow, starfall_volley, explosive_arrow, pinning_shot, arrow_rain, ballista_shot, eclipse, frenzied_charge, crescent_cleave, halfmoon_slash",
+            "albedo.customclasses.combatruntime|Acrobat Tailwind Animation|AnimTriggerPercent_v025136|0|100",
+            "albedo.customclasses.combatruntime|Bowmaster Hawks Vigil Animation|CASpeed_v025138c|0|2.3",
+            "albedo.customclasses.combatruntime|Cleric Holy Wave Animation|AnimEndPercent_v025133|100|80",
+            "albedo.customclasses.combatruntime|Cleric Holy Wave Animation|AnimTriggerPercent_v025136|0|100",
+            "albedo.customclasses.combatruntime|Cleric Holy Wave Animation|Ally AnimEndPercent_v025133|100|80",
+            "albedo.customclasses.combatruntime|Cleric Holy Wave Animation|Ally AnimTriggerPercent_v025136|0|100",
+            "albedo.customclasses.combatruntime|Cleric Lightning Zap Animation|CASpeed_v025138c|0|3",
+            "albedo.customclasses.combatruntime|Cleric Righteous Strike Animation|AnimStartPercent_v025133|40|0",
+            "albedo.customclasses.combatruntime|Cleric Righteous Strike Animation|Ascended AnimStartPercent_v025133|40|0",
+            "albedo.customclasses.combatruntime|Mercenary Battlecry Animation|AnimTriggerPercent_v025136|0|100",
+            "albedo.customclasses.combatruntime|Mercenary Heavy Slash Ascended Animation|AnimTriggerPercent_v025136|60|0",
+            "albedo.customclasses.combatruntime|Mercenary Heavy Slash Ascended Animation|CASpeed_v025138c|0|2",
+            "albedo.customclasses.combatruntime|Mercenary Punishing Bomb Animation|AnimTriggerPercent_v025136|100|0",
+            "albedo.customclasses.combatruntime|Mercenary Punishing Bomb Animation|CASpeed_v025138c|0|2.3",
+            "albedo.customclasses.combatruntime|Mercenary Seismic Guillotine Animation|CASpeed_v025138c|0|2",
+            "albedo.customclasses.combatruntime|Paladin Goddess Relic Animation|AnimStartPercent_v025133|40|0",
+            "albedo.customclasses.combatruntime|Paladin Goddess Relic Animation|AnimTriggerPercent_v025136|90|0",
+            "albedo.customclasses.combatruntime|Paladin Goddess Relic Animation|CASpeed_v025138c|0|1",
+            "albedo.customclasses.combatruntime|Paladin Heavens Light Animation|AnimEndPercent_v025133|100|80",
+            "albedo.customclasses.combatruntime|Paladin Heavens Light Animation|AnimTriggerPercent_v025136|0|100",
+            "albedo.customclasses.combatruntime|Paladin Judgement Hammer Animation|AnimStartPercent_v025133|45|20",
+            "albedo.customclasses.combatruntime|Paladin Ray of Hope Animation|AnimTriggerPercent_v025136|0|100",
+            "albedo.customclasses.combatruntime|Paladin Shield Charge Animation|Hammer Slam AnimStartPercent_v025133|45|0",
+            "albedo.customclasses.combatruntime|Paladin Shield Charge Stun Ascended|Attack 1 Stun|false|true",
+            "albedo.customclasses.combatruntime|Paladin Shield Charge Stun Normal|Attack 1 Stun|false|true",
+            "albedo.customclasses.combatruntime|Priest Divine Intervention Animation|AnimTriggerPercent_v025136|0|100",
+            "albedo.customclasses.combatruntime|Priest Heavens Judgement Animation|AnimEndPercent_v025133|100|80",
+            "albedo.customclasses.combatruntime|Priest Heavens Judgement Animation|CASpeed_v025138c|0|1",
+            "albedo.customclasses.combatruntime|Priest Holy Relic Animation|AnimStartPercent_v025133|30|0",
+            "albedo.customclasses.combatruntime|Priest Holy Relic Animation|AnimEndPercent_v025133|100|80",
+            "albedo.customclasses.combatruntime|Priest Holy Relic Animation|CASpeed_v025138c|0|2.5",
+            "albedo.customclasses.combatruntime|Priest Lightning Relic Animation|AnimStartPercent_v025133|40|0",
+            "albedo.customclasses.combatruntime|Priest Lightning Relic Animation|AnimEndPercent_v025133|100|80",
+            "albedo.customclasses.combatruntime|Priest Lightning Relic Animation|CASpeed_v025138c|0|2.5",
+            "albedo.customclasses.combatruntime|Priest Lightning Tempest Animation|AnimEndPercent_v025133|100|70",
+            "albedo.customclasses.combatruntime|Priest Lightning Tempest Animation|AnimTriggerPercent_v025136|90|0",
+            "albedo.customclasses.combatruntime|Ranger Snare Trap Animation|AnimStartPercent_v025133|0|21",
+            "albedo.customclasses.combatruntime|Ranger Snare Trap Animation|AnimEndPercent_v025133|100|80",
+            "albedo.customclasses.combatruntime|Ranger Snare Trap Animation|AnimTriggerPercent_v025136|0|100",
+            "albedo.customclasses.combatruntime|Sorcerer Flame Burst Animation|AnimTriggerPercent_v025136|0|100",
+            "albedo.customclasses.combatruntime|Sorcerer Glacial Descent Animation|AnimTriggerPercent_v025136|0|70",
+            "albedo.customclasses.combatruntime|Sorcerer Glacial Descent Animation|Ascended AnimTriggerPercent_v025136|0|70",
+            "albedo.customclasses.combatruntime|Sorcerer Stonefang Eruption Animation|AnimEndPercent_v025133|100|90",
+            "albedo.customclasses.combatruntime|Sorcerer Stonefang Eruption Animation|AnimTriggerPercent_v025136|0|100",
+            "albedo.customclasses.combatruntime|Sorcerer Stonefang Eruption Animation|Ascended AnimEndPercent_v025133|100|90",
+            "albedo.customclasses.combatruntime|Sorcerer Stonefang Eruption Animation|Ascended AnimTriggerPercent_v025136|0|100",
+            "albedo.customclasses.combatruntime|Spellcaster Afterimage Arsenal Animation|Ascended AnimEndPercent_v025133|100|50",
+            "albedo.customclasses.combatruntime|Spellcaster Afterimage Arsenal Animation|Ascended AnimTriggerPercent_v025136|0|100",
+            "albedo.customclasses.combatruntime|Spellcaster Arcane Phalanx Animation|AnimEndPercent_v025133|100|50",
+            "albedo.customclasses.combatruntime|Spellcaster Arcane Phalanx Animation|AnimTriggerPercent_v025136|0|100",
+            "albedo.customclasses.combatruntime|Spellcaster Arcane Phalanx Animation|Launch AnimEndPercent_v025133|100|50",
+            "albedo.customclasses.combatruntime|Spellcaster Arcane Phalanx Animation|Launch AnimTriggerPercent_v025136|0|100",
+            "albedo.customclasses.combatruntime|Spellcaster Arcane Rupture Animation|AnimEndPercent_v025133|100|50",
+            "albedo.customclasses.combatruntime|Spellcaster Arcane Rupture Animation|AnimTriggerPercent_v025136|0|100",
+            "albedo.customclasses.combatruntime|Spellcaster Gravity Blast Animation|AnimEndPercent_v025133|100|80",
+            "albedo.customclasses.combatruntime|Spellcaster Gravity Blast Animation|AnimTriggerPercent_v025136|0|100",
+            "albedo.customclasses.combatruntime|Spellcaster Rift Echo Animation|AnimEndPercent_v025133|100|80",
+            "albedo.customclasses.combatruntime|Spellcaster Rift Echo Animation|AnimTriggerPercent_v025136|0|100",
+            "albedo.customclasses.combatruntime|Spellcaster Rift Walker Animation|AnimEndPercent_v025133|100|80",
+            "albedo.customclasses.combatruntime|Spellcaster Rift Walker Animation|AnimTriggerPercent_v025136|0|100",
+            "albedo.customclasses.combatruntime|Sword Master Crescent Cleave Audio|First Strike Volume (%)|100|70",
+            "albedo.customclasses.combatruntime|Sword Master Crescent Cleave Audio|First Strike Pitch (%)|100|80",
+            "albedo.customclasses.combatruntime|Sword Master Crescent Cleave Audio|Second Strike Volume (%)|100|70",
+            "albedo.customclasses.combatruntime|Sword Master Crescent Cleave Audio|Second Strike Pitch (%)|100|80",
+            "albedo.customclasses.combatruntime|Sword Master Crescent Cleave Audio|Sword Slash Volume (%)|70|50",
+            "albedo.customclasses.combatruntime|Sword Master Crescent Cleave Audio|Sword Slash Pitch (%)|80|70",
+            "albedo.customclasses.combatruntime|Sword Master Eclipse Audio|Opening Sweep Volume (%)|100|150",
+            "albedo.customclasses.combatruntime|Sword Master Eclipse Audio|Opening Sweep Pitch (%)|100|80",
+            "albedo.customclasses.combatruntime|Sword Master Eclipse Audio|Slash Barrage Volume (%)|100|50",
+            "albedo.customclasses.combatruntime|Sword Master Frenzied Charge Animation|AnimTriggerPercent_v025136|0|100",
+            "albedo.customclasses.combatruntime|Sword Master Frenzied Charge Animation|CASpeed_v025138c|0|1",
+            "albedo.customclasses.combatruntime|Sword Master Frenzied Charge Ascended Animation|CASpeed_v025138c|0|1.4",
+            "albedo.customclasses.combatruntime|Sword Master Frenzied Charge Audio|Dash Pitch (%)|50|130",
+            "albedo.customclasses.combatruntime|Sword Master Frenzied Charge Audio|Slash Barrage Volume (%)|100|50",
+            "albedo.customclasses.combatruntime|Sword Master Frenzied Charge Audio|Windup Pitch (%)|100|130",
+            "albedo.customclasses.combatruntime|Sword Master Halfmoon Slash Ascended Animation|First swing CASpeed_v025138c|0|1.4",
+            "albedo.customclasses.combatruntime|Sword Master Halfmoon Slash Audio|Slash Barrage Volume (%)|100|50",
+            "albedo.customclasses.combatruntime|Sword Master Halfmoon Slash Audio|Windup Volume (%)|200|150",
+            "albedo.customclasses.combatruntime|Sword Master Halfmoon Slash Audio|Windup Pitch (%)|100|150",
+            "albedo.customclasses.combatruntime|Sword Master Halfmoon Slash Audio|Windup Speed (%)|100|120",
+            "albedo.customclasses.combatruntime|Sword Master Halfmoon Slash Audio|Bass Drop Length (%)|100|80",
+            "albedo.customclasses.combatruntime|Sword Master Halfmoon Slash Audio|Bass Drop Pitch (%)|100|150",
+            "albedo.customclasses.combatruntime|Sword Master Impact Wave Ascended Animation|AnimEndPercent_v025133|90|80",
+            "albedo.customclasses.combatruntime|Sword Master Impact Wave Ascended Animation|AnimTriggerPercent_v025136|90|0",
+            "albedo.customclasses.combatruntime|Sword Master Impact Wave Ascended Animation|CASpeed_v025138c|0|3",
+            "albedo.customclasses.combatruntime|Sword Master Knights Guidance Animation|AnimEndPercent_v025133|100|80",
+            "albedo.customclasses.combatruntime|Sword Master Knights Guidance Animation|AnimTriggerPercent_v025136|0|100",
+            "albedo.customclasses.combatruntime|Sword Master Moonlight Splitter Ascended Animation|Finisher AnimTriggerPercent_v025136|50|100",
+            "albedo.customclasses.combatruntime|Sword Master Moonlight Splitter Ascended Animation|Finisher CASpeed_v025138c|0|2.2",
+            "albedo.customclasses.combatruntime|Sword Master Moonlight Splitter Ascended Animation|Slash 1 CASpeed_v025138c|0|1.7",
+            "albedo.customclasses.combatruntime|Warrior Heavy Slash Animation|CASpeed_v025138c|0|2",
+            "albedo.customclasses.combatruntime|Warrior Impact Punch Animation|CASpeed_v025138c|0|2",
+            "albedo.customclasses.combatruntime|Warrior Impact Wave Animation|AnimEndPercent_v025133|90|79",
+            "albedo.customclasses.combatruntime|Warrior Impact Wave Animation|AnimTriggerPercent_v025136|90|100",
+            "albedo.customclasses.combatruntime|Warrior Impact Wave Animation|CASpeed_v025138c|0|2",
+            "albedo.customclasses.combatruntime|Warrior Impact Wave Audio|Wave Recording Pitch (%)|100|70",
+            "albedo.customclasses.combatruntime|Warrior Impact Wave Audio|Weapon Swing Volume (%)|100|150",
+            "albedo.customclasses.combatruntime|Warrior Impact Wave Audio|Weapon Swing Pitch (%)|100|120",
+            "albedo.customclasses.combatruntime|Wizard Astral Greatblade Animation|CASpeed_v025138c|0|1.1",
+            "albedo.customclasses.combatruntime|Wizard Clockwork Animation|AnimEndPercent_v025133|100|40",
+            "albedo.customclasses.combatruntime|Wizard Frost Nova Animation|AnimTriggerPercent_v025136|0|100",
+            "albedo.customclasses.combatruntime|Wizard Gravity Dominion Animation|AnimEndPercent_v025133|100|30",
+            "albedo.customclasses.combatruntime|Wizard Gravity Dominion Animation|AnimTriggerPercent_v025136|0|25",
+            "albedo.customclasses.guardian|Testing|ForceCooldowns|false|true",
+            "albedo.customclasses.ranger|Testing|ForceCooldowns|false|true",
+            "albedo.customclasses.skills|Sorcerer.Flame Burst.Damage|Fire|34|60",
+            "albedo.customclasses.skills|Testing|ForceCooldowns|false|true",
+            "albedo.customclasses.sorcerer|Spellcaster Gravity Blast Ascended|BigPullPercent|40|100",
+            "albedo.customclasses.sorcerer|Spellcaster Gravity Blast Ascended|BossPullPercent|20|70",
+            "albedo.customclasses.sorcerer|Testing|ForceCooldowns|false|true",
+            "albedo.customclasses.sorcerer|Wizard Meteor Fall Ascended|SmallMeteorPercent|12|20"
+        };
+        private bool _userDefaultsApplied;
+        private void ApplyUserDefaults()
+        {
+            if (_userDefaultsApplied) return;
+            _userDefaultsApplied = true;
+            Dictionary<string, string[]> table = new Dictionary<string, string[]>();
+            for (int i = 0; i < UserDefaults.Length; i++)
+            {
+                string[] f = UserDefaults[i].Split('|');
+                if (f.Length == 5) table[f[0] + "|" + f[1] + "|" + f[2]] = f;
+            }
+            FieldInfo backing = typeof(ConfigEntryBase).GetField("<DefaultValue>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic);
+            UnityEngine.Object[] plugins = UnityEngine.Object.FindObjectsOfType(typeof(BaseUnityPlugin));
+            int applied = 0;
+            for (int p = 0; p < plugins.Length; p++)
+            {
+                BaseUnityPlugin plugin = plugins[p] as BaseUnityPlugin;
+                if (plugin == null) continue;
+                string guid = string.Empty;
+                try { if (plugin.Info != null && plugin.Info.Metadata != null) guid = plugin.Info.Metadata.GUID; } catch { }
+                if (plugin == this) guid = ModGuid;
+                if (string.IsNullOrEmpty(guid) || !guid.StartsWith("albedo.customclasses", StringComparison.OrdinalIgnoreCase)) continue;
+                IDictionary<ConfigDefinition, ConfigEntryBase> entries = plugin.Config as IDictionary<ConfigDefinition, ConfigEntryBase>;
+                if (entries == null) continue;
+                bool changed = false;
+                foreach (KeyValuePair<ConfigDefinition, ConfigEntryBase> pair in entries)
+                {
+                    string[] f;
+                    if (pair.Value == null || !table.TryGetValue(guid + "|" + pair.Key.Section + "|" + pair.Key.Key, out f)) continue;
+                    try
+                    {
+                        object value = TomlTypeConverter.ConvertToValue(f[4], pair.Value.SettingType);
+                        if (backing != null) backing.SetValue(pair.Value, value);
+                        if (string.Equals(pair.Value.GetSerializedValue(), f[3], StringComparison.Ordinal)) { pair.Value.BoxedValue = value; changed = true; }
+                        applied++;
+                    }
+                    catch (Exception) { }
+                }
+                if (changed) plugin.Config.Save();
+            }
+            Logger.LogInfo("Immortal Heroes: " + applied + " user defaults applied.");
+        }
+
         private void RefreshSettings()
         {
+            ApplyUserDefaults();
+            _settingsVersion++;
             _settings.Clear();
             _inputBuffers.Clear();
             Dictionary<string, DevSetting> byKey = new Dictionary<string, DevSetting>();
@@ -304,6 +491,7 @@ namespace DragonsAltarDevTools
 
                     string section = entry.Definition.Section;
                     string key = entry.Definition.Key;
+                    if (section == "Visuals" && (key == "LightIntensity_v025145" || key == "MaxEffectLights_v025185")) continue; // removed point-light feature
                     string unique = section + "|" + key;
                     DevSetting setting;
                     if (!byKey.TryGetValue(unique, out setting))
@@ -426,9 +614,23 @@ namespace DragonsAltarDevTools
         // the .cfg for compatibility but are not shown.
         private static bool IsRetired(string section, string key)
         {
+            if ((section == "Sword Master Halfmoon Slash" || section == "Sword Master Halfmoon Slash Ascended") && key == "StunEachFollowup_v025138l") return true;
+
             if (key.StartsWith("Legacy", StringComparison.OrdinalIgnoreCase))
                 return true;
+            // Old Ascended CA keys migrated to their own F8 sections (kept only for CFG compatibility).
+            if ((section == "Sword Master Moonlight Splitter Animation" && key.StartsWith("Finisher ") && key.Contains("Anim")) ||
+                (section == "Sword Master Halfmoon Slash Animation" && key.StartsWith("Finisher ") && key.Contains("Anim")) ||
+                (section == "Sword Master Crescent Cleave Animation" && (key.StartsWith("Ascended ") || key.StartsWith("Ascended Fan 2 ")) && key.Contains("Anim")) ||
+                (section == "Mercenary Heavy Slash Animation" && key.StartsWith("Ascended ") && key.Contains("Anim")) ||
+                (section == "Cleric Righteous Strike Animation" && key.StartsWith("Ascended ") && key.Contains("Anim")) ||
+                (section == "Sword Master Halfmoon Slash Animation" && key.StartsWith("Slash 2 ") && key.Contains("Anim")))
+                return true;
             // Angel Comet timing now comes from WindUpTime (v0.21.1).
+            if ((section == "Sword Master Moonlight Splitter Animation" && (key.StartsWith("AscendedSlash") || key.StartsWith("AscendedFinisher") || key.StartsWith("AscendedAfterimage"))) ||
+                (section == "Sword Master Crescent Cleave Animation" && key.StartsWith("Ascended")) ||
+                (section == "Sword Master Halfmoon Slash Animation" && key == "AscendedStanceSheatheSeconds_v025137"))
+                return true;
             if (section == "Paladin Fallen Angel" && (key == "RiseTime" || key == "DiveSpeed"))
                 return true;
             // v0.22.3 Sword Master rework: superseded by the *_v0223 keys / "v0223" damage sections.
@@ -483,12 +685,15 @@ namespace DragonsAltarDevTools
         {
             string text = System.Text.RegularExpressions.Regex.Replace(section, @"\s+v\d+$", "");
             text = text.Replace("Fallen Angel", "Angel Comet")
-                       .Replace("Grand Sigil Survival", "Priest Bless Thy Sinners")
+                       .Replace("Grand Sigil Survival", "Priest Saving Grace")
+                       .Replace("Bless Thy Sinners", "Saving Grace")
+                       .Replace("Holy Trinity", "Heaven's Will")
                        .Replace("Priest Grand Sigil", "Priest Heaven's Crucible")
                        .Replace("Heavens ", "Heaven's ")
                        .Replace("Judgement Cut", "Blade Storm")
                        .Replace("Knights Guidance", "Knight's Guidance")
-                       .Replace("Mercenary Weapon Mastery - Warfreak", "Mercenary Warfreak");
+                       .Replace("Mercenary Weapon Mastery - Warfreak", "Mercenary Warfreak")
+                       .Replace("Afterimage Arsenal", "Arcane Phantom");   // v0.25.86 rename
             // v0.23.3 display names (config sections keep their ids).
             if (text.StartsWith("Spellcaster", StringComparison.Ordinal)) text = "Horizon Walker" + text.Substring(11);
             if (text.StartsWith("Wizard", StringComparison.Ordinal)) text = "Archmage" + text.Substring(6);
@@ -871,10 +1076,19 @@ namespace DragonsAltarDevTools
             if (!_open)
                 return;
 
+            // v0.25.236 (user): Esc closes the window even while typing in a box; the typed value is applied and everything saved.
+            Event ev = Event.current;
+            if (ev != null && ev.type == EventType.KeyDown && ev.keyCode == KeyCode.Escape)
+            {
+                CommitFocusedBox();
+                ev.Use();
+                CloseByEscape();
+                return;
+            }
             EnsureStyles();
             Color old = GUI.color;
             GUI.color = Color.white;
-            _windowRect = GUI.Window(990011, _windowRect, DrawWindow, "IMMORTAL HEROES - CONFIG");
+            _windowRect = GUI.Window(990011, _windowRect, DrawWindow, "AETHELBORN ASCENDED - CONFIG");
             GUI.color = old;
         }
 
@@ -882,7 +1096,7 @@ namespace DragonsAltarDevTools
         {
             GUI.DrawTexture(new Rect(0f, 22f, _windowRect.width, _windowRect.height - 22f), _panelTexture);
 
-            GUI.Label(new Rect(22f, 30f, 340f, 28f), "Immortal Heroes Config", _titleStyle);
+            GUI.Label(new Rect(22f, 30f, 340f, 28f), "Aethelborn Ascended Config", _titleStyle);
             string saveState = _dirtyFiles.Count > 0 ? (_autoSave.Value ? "Saving..." : "Unsaved changes") : "All changes saved";
             if (Time.unscaledTime < _statusUntil)
                 saveState = _status;
@@ -1029,19 +1243,28 @@ namespace DragonsAltarDevTools
             return FriendlySectionName(section);
         }
 
+        private readonly List<DevSetting> _visibleCache = new List<DevSetting>();
+        private string _visibleKey;
+        private int _settingsVersion;
         private void DrawSettingsPanel()
         {
-            List<DevSetting> visible = new List<DevSetting>();
             string search = (_search ?? "").Trim().ToLowerInvariant();
-            for (int i = 0; i < _settings.Count; i++)
+            string visibleKey = _selectedSection + "\n" + search + "\n" + _settingsVersion;
+            if (visibleKey != _visibleKey)
             {
-                DevSetting s = _settings[i];
-                if (s.Section != _selectedSection || s.Tab.Length == 0)
-                    continue;
-                if (search.Length > 0 && !s.Section.ToLowerInvariant().Contains(search) && !s.Key.ToLowerInvariant().Contains(search))
-                    continue;
-                visible.Add(s);
+                _visibleKey = visibleKey;
+                _visibleCache.Clear();
+                for (int i = 0; i < _settings.Count; i++)
+                {
+                    DevSetting s = _settings[i];
+                    if (s.Section != _selectedSection || s.Tab.Length == 0)
+                        continue;
+                    if (search.Length > 0 && !s.Section.ToLowerInvariant().Contains(search) && !s.Key.ToLowerInvariant().Contains(search))
+                        continue;
+                    _visibleCache.Add(s);
+                }
             }
+            List<DevSetting> visible = _visibleCache;
 
             GUI.Label(new Rect(344f, 128f, 520f, 26f), FriendlySectionName(_selectedSection), _titleStyle);
             if (visible.Count > 0 && GUI.Button(new Rect(918f, 130f, 170f, 26f), "SECTION DEFAULTS"))
@@ -1070,6 +1293,7 @@ namespace DragonsAltarDevTools
             for (int i = 0; i < visible.Count; i++)
             {
                 DevSetting setting = visible[i];
+                if (y + rowHeight < _settingScroll.y - 4f || y > _settingScroll.y + view.height + 4f) { y += rowHeight; continue; }   // v0.25.235: off-screen rows cost nothing
                 bool selectedRow = setting.Id == _selectedSettingId;
                 float h = rowHeight - 4f;
                 if (selectedRow)
@@ -1132,12 +1356,17 @@ namespace DragonsAltarDevTools
                 _inputBuffers[setting.Id] = buffer;
             }
 
+            // v0.25.235 (user): typing only edits the box; Enter applies it.
+            string control = "num" + setting.Id;
+            bool enter = EnterOn(control);
+            GUI.SetNextControlName(control);
             string next = GUI.TextField(new Rect(540f, y + 3f, 90f, 28f), buffer, _valueStyle);
             if (next != buffer)
+                _inputBuffers[setting.Id] = buffer = next;
+            if (enter)
             {
-                _inputBuffers[setting.Id] = next;
                 float parsed;
-                if (float.TryParse(next, NumberStyles.Float, CultureInfo.InvariantCulture, out parsed))
+                if (float.TryParse(buffer, NumberStyles.Float, CultureInfo.InvariantCulture, out parsed))
                 {
                     if (setting.SettingType == typeof(int))
                         SetValue(setting, Mathf.RoundToInt(parsed));
@@ -1192,9 +1421,82 @@ namespace DragonsAltarDevTools
         private void DrawStringRow(DevSetting setting, float y)
         {
             string current = Convert.ToString(setting.Main.BoxedValue, CultureInfo.InvariantCulture) ?? "";
-            string next = GUI.TextField(new Rect(226f, y + 3f, 404f, 28f), current);
-            if (next != current)
-                SetValue(setting, next);
+            string buffer;
+            if (!_inputBuffers.TryGetValue(setting.Id, out buffer)) buffer = current;
+            string control = "txt" + setting.Id;
+            bool enter = EnterOn(control);
+            GUI.SetNextControlName(control);
+            string next = GUI.TextField(new Rect(226f, y + 3f, 404f, 28f), buffer);
+            if (next != buffer) _inputBuffers[setting.Id] = buffer = next;
+            if (enter && buffer != current)
+            {
+                SetValue(setting, buffer);
+                _inputBuffers.Remove(setting.Id);
+            }
+        }
+
+        // v0.25.237 (user): Esc leaves the config window - typing or not - and must not open Valheim's game menu.
+        private float _escClosedAt = -10f;
+        private void CloseByEscape()
+        {
+            GUIUtility.keyboardControl = 0;
+            _escClosedAt = Time.unscaledTime;
+            ClosePanel();
+            HideGameMenu();
+        }
+        private Type _menuType;
+        private void HideGameMenu()
+        {
+            try
+            {
+                if (_menuType == null) _menuType = FindLoadedType("Menu");
+                if (_menuType == null) return;
+                BindingFlags flags = BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
+                object menu = null;
+                PropertyInfo prop = _menuType.GetProperty("instance", flags);
+                if (prop != null) menu = prop.GetValue(null, null);
+                if (menu == null) { FieldInfo f = _menuType.GetField("m_instance", flags); if (f != null) menu = f.GetValue(null); }
+                MethodInfo hide = menu == null ? null : _menuType.GetMethod("Hide", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+                if (hide != null) hide.Invoke(menu, null);
+            }
+            catch (Exception) { }
+        }
+        private void LateUpdate()
+        {
+            // the game reads the same Esc press after we close (input is unblocked) - close its menu for that moment
+            if (Time.unscaledTime - _escClosedAt < 0.4f) HideGameMenu();
+        }
+
+        private void CommitFocusedBox()
+        {
+            string focused = GUI.GetNameOfFocusedControl() ?? "";
+            if (focused.Length < 4 || (!focused.StartsWith("num") && !focused.StartsWith("txt"))) return;
+            string id = focused.Substring(3), buffer;
+            if (!_inputBuffers.TryGetValue(id, out buffer)) return;
+            for (int i = 0; i < _settings.Count; i++)
+            {
+                DevSetting setting = _settings[i];
+                if (setting.Id != id) continue;
+                if (focused.StartsWith("txt")) SetValue(setting, buffer);
+                else
+                {
+                    float parsed;
+                    if (float.TryParse(buffer, NumberStyles.Float, CultureInfo.InvariantCulture, out parsed))
+                    {
+                        if (setting.SettingType == typeof(int)) SetValue(setting, Mathf.RoundToInt(parsed));
+                        else SetValue(setting, parsed);
+                    }
+                }
+                break;
+            }
+            GUI.FocusControl(null);
+        }
+
+        // True on the Enter key press while the named text box has focus.
+        private static bool EnterOn(string control)
+        {
+            Event e = Event.current;
+            return e != null && e.type == EventType.KeyDown && (e.keyCode == KeyCode.Return || e.keyCode == KeyCode.KeypadEnter) && GUI.GetNameOfFocusedControl() == control;
         }
 
         // ------------------------------------------------------------------ v0.20.4 Progression tab

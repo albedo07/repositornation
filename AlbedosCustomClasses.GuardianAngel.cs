@@ -16,10 +16,16 @@ namespace AlbedosCustomClassesGuardian
     public class GuardianPlugin : BaseUnityPlugin
     {
         public const string ModGuid = "albedo.customclasses.guardian";
-        public const string ModName = "Dragon's Altar - Grand Sigil Survival";
-        public const string ModVersion = "0.25.80";
+        public const string ModName = "Aethelborn Ascended - Saving Grace";
+        public const string ModVersion = "0.25.197";
 
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
+        // Each owner advertises only Priest membership; cooldowns remain on the protected player's client.
+        private const string PriestPresenceKey = "AA.SavingGracePriest_v1";
+        private static readonly FieldInfo CustomDataField = typeof(Player).GetField(
+            "m_customData", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        private Player _presencePlayer;
+        private ZNetView _presenceView;
 
         internal static GuardianPlugin Instance;
 
@@ -41,12 +47,12 @@ namespace AlbedosCustomClassesGuardian
         {
             Instance = this;
 
-            _selfCooldown = Config.Bind("Grand Sigil Survival", "PriestSelfCooldownSeconds_v0123", 1200f, "Priest Grand Sigil death-save cooldown: 20 minutes.");
-            _allyCooldown = Config.Bind("Grand Sigil Survival", "AllyResurrectionCooldownSeconds_v0208", 2400f, "Bless Thy Sinners: ally death-save cooldown, 40 minutes per ally.");
-            _allyRadius = Config.Bind("Grand Sigil Survival", "AllyProtectionRadiusMeters_v0123", 20f, "Allies within 20m of a living Priest receive Grand Sigil's death-save.");
+            _selfCooldown = Config.Bind("Grand Sigil Survival", "PriestSelfCooldownSeconds_v0123", 1200f, "Saving Grace: Priest death-save cooldown: 20 minutes.");
+            _allyCooldown = Config.Bind("Grand Sigil Survival", "AllyResurrectionCooldownSeconds_v0208", 2400f, "Saving Grace: ally death-save cooldown, 40 minutes per ally.");
+            _allyRadius = Config.Bind("Grand Sigil Survival", "AllyProtectionRadiusMeters_v0123", 20f, "Allies within 20m of a living Priest receive Saving Grace.");
             _recoveryPercent = Config.Bind("Grand Sigil Survival", "RecoveryPercent", 50f, "Percent of max HP restored after a lethal hit is prevented.");
-            _recoveryDuration = Config.Bind("Grand Sigil Survival", "RecoveryDuration_v0208", 6f, "Bless Thy Sinners: 50% HP recovered over this many seconds; the speed / stamina window lasts as long.");
-            _staminaUseCut = Config.Bind("Grand Sigil Survival", "StaminaUseReductionPercent", 70f, "Bless Thy Sinners: less Stamina used for all actions during the recovery window.");
+            _recoveryDuration = Config.Bind("Grand Sigil Survival", "RecoveryDuration_v0208", 6f, "Saving Grace: 50% HP recovered over this many seconds; the speed / stamina window lasts as long.");
+            _staminaUseCut = Config.Bind("Grand Sigil Survival", "StaminaUseReductionPercent", 70f, "Saving Grace: less Stamina used for all actions during the recovery window.");
             _enableVfx = Config.Bind("Visuals", "EnableVFX", true, "Enable Grand Sigil survival visual effects.");
             _testingForceCooldowns = Config.Bind("Testing", "ForceCooldowns", false, "Testing mode: force Grand Sigil survival cooldown to one value.");
             _testingCooldownSeconds = Config.Bind("Testing", "CooldownSeconds", 5f, "Testing cooldown used while ForceCooldowns is enabled.");
@@ -63,8 +69,65 @@ namespace AlbedosCustomClassesGuardian
             }
         }
 
+        private float _indicatorAt;
+        private bool _indicatorShown;
+        private void Update()
+        {
+            if (Time.time < _indicatorAt) return;
+            _indicatorAt = Time.time + 0.5f;
+            Player player = Player.m_localPlayer;
+            if (player == null) return;
+            bool self = GetAdvancement(player) == "Priest";
+            PublishPriestPresence(player, self);
+            float until = self ? _selfNextAvailableTime : _allyNextAvailableTime;
+            bool nearby = !self && until <= Time.time && !player.IsDead() && HasNearbyPriest(player);
+            bool eligible = ShouldShowSavingGrace(!player.IsDead(), self, nearby, until, Time.time);
+            if (!eligible)
+            {
+                if (_indicatorShown) DragonCombat.ClearStatus(player, "priest_life_token");
+                _indicatorShown = false;
+                return;
+            }
+            _indicatorShown = true;
+            float left = Mathf.Max(0f, until - Time.time);
+            DragonCombat.ShowStatusState(player, "priest_life_token", "heart", "Saving Grace" + (left > 0f ? " - Cooldown" : " - Ready"), left,
+                left > 0f ? "Saving Grace is on cooldown for " + Mathf.CeilToInt(left) + "s. This timer continues outside Priest range."
+                    : (self ? "Survive a lethal hit at 1 HP, then recover."
+                        : "A living Priest is nearby. Survive a lethal hit at 1 HP, then recover. Stay within Priest range."));
+        }
+
+        // The cooldown state takes priority over range (and death); never hide an unexpired recipient timer.
+        internal static bool ShouldShowSavingGrace(bool alive, bool self, bool nearby, float until, float now)
+        {
+            return until > now || (alive && (self || nearby));
+        }
+
+        private void PublishPriestPresence(Player player, bool priest)
+        {
+            if (_presencePlayer != player)
+            {
+                ClearPriestPresence();
+                _presencePlayer = player;
+                _presenceView = player.GetComponent<ZNetView>();
+            }
+            if (_presenceView == null || !_presenceView.IsValid() || !_presenceView.IsOwner()) return;
+            ZDO zdo = _presenceView.GetZDO();
+            if (zdo.GetBool(PriestPresenceKey, false) != priest) zdo.Set(PriestPresenceKey, priest);
+        }
+
+        private void ClearPriestPresence()
+        {
+            if (_presenceView != null && _presenceView.IsValid() && _presenceView.IsOwner())
+            {
+                ZDO zdo = _presenceView.GetZDO();
+                if (zdo.GetBool(PriestPresenceKey, false)) zdo.Set(PriestPresenceKey, false);
+            }
+        }
+
         private void OnDestroy()
         {
+            ClearPriestPresence();
+            if (Player.m_localPlayer != null) DragonCombat.ClearStatus(Player.m_localPlayer, "priest_life_token");
             if (_harmony != null)
             {
                 try
@@ -128,21 +191,15 @@ namespace AlbedosCustomClassesGuardian
         private bool HasNearbyPriest(Player player)
         {
             float radius = Mathf.Max(1f, DragonCombat.M(_allyRadius.Value));
-            Collider[] hits = Physics.OverlapSphere(player.transform.position, radius, ~0, QueryTriggerInteraction.Ignore);
-            HashSet<int> seen = new HashSet<int>();
-
-            for (int i = 0; i < hits.Length; i++)
+            float radiusSquared = radius * radius;
+            List<Player> players = Player.GetAllPlayers();
+            for (int i = 0; i < players.Count; i++)
             {
-                Player priest = hits[i].GetComponentInParent<Player>();
-                if (priest == null || priest == player || priest.IsDead())
-                    continue;
-
-                int id = priest.GetInstanceID();
-                if (!seen.Add(id))
-                    continue;
-
-                if (GetAdvancement(priest) == "Priest")
-                    return true;
+                Player priest = players[i];
+                if (priest == null || priest == player || priest.IsDead()
+                    || (priest.transform.position - player.transform.position).sqrMagnitude > radiusSquared) continue;
+                ZNetView view = priest.GetComponent<ZNetView>();
+                if (view != null && view.IsValid() && view.GetZDO().GetBool(PriestPresenceKey, false)) return true;
             }
 
             return false;
@@ -160,6 +217,9 @@ namespace AlbedosCustomClassesGuardian
             else
                 _selfNextAvailableTime = Time.time + Mathf.Max(0f, cooldown);
 
+            _indicatorAt = 0f;
+            Update();
+
             if (_enableVfx.Value)
                 StartCoroutine(GrandSigilVisual(player));
 
@@ -173,16 +233,28 @@ namespace AlbedosCustomClassesGuardian
             if (MessageHud.instance != null)
                 MessageHud.instance.ShowMessage(
                     MessageHud.MessageType.Center,
-                    allyProtection ? "Bless Thy Sinners - Resurrection" : "Bless Thy Sinners"
+                    "Saving Grace - Saved"
                 );
 
             Logger.LogInfo(allyProtection
-                ? "Bless Thy Sinners prevented ally lethal damage."
-                : "Bless Thy Sinners prevented Priest lethal damage.");
+                ? "Saving Grace prevented ally lethal damage."
+                : "Saving Grace prevented Priest lethal damage.");
         }
 
         private IEnumerator GrandSigilVisual(Player player)
         {
+            if (DragonVfx.Enabled && player != null)
+            {
+                // v0.25.190 rescue: a short upward holy recovery motif at the actual proc (no persistent cross)
+                Player rp = player; Vector3 rpos = player.transform.position;
+                DragonCombat.RunVfx(delegate
+                {
+                    DragonVfx.SoftWave(rpos, new Color(1f, 0.92f, 0.62f, 1f), 3f, 0.6f);
+                    DragonVfx.Feathers(rpos + Vector3.up * 1.2f, new Color(1f, 0.97f, 0.88f, 1f), 1.2f, 1.2f, 18f);
+                    DragonVfx.Aura(rp.transform, rpos, new Color(1f, 0.90f, 0.60f, 1f), 0.6f, 1.6f, 22f, 1.4f);
+                });
+                yield break;
+            }
             GameObject ringObject = new GameObject("DragonsAltarGrandSigilRing");
             LineRenderer ring = ringObject.AddComponent<LineRenderer>();
             ring.useWorldSpace = true;
@@ -316,15 +388,8 @@ namespace AlbedosCustomClassesGuardian
         {
             try
             {
-                FieldInfo field = typeof(Player).GetField(
-                    "m_customData",
-                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
-                );
-
-                if (field == null)
-                    return null;
-
-                return field.GetValue(player) as IDictionary;
+                if (CustomDataField == null) return null;
+                return CustomDataField.GetValue(player) as IDictionary;
             }
             catch
             {

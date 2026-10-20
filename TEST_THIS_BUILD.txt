@@ -1,5 +1,3 @@
-TEST v0.25.80
-1. Mash several skills at once (any Class, incl. Archmage): only the first one casts; the others work once it has finished.
-2. Recasts still work: Whirlwind / Furious Winds / Starfall cancel, Meteor / Ballista charge release, Gravity Blast recast, Halfmoon follow-up, Shield Charge slam click.
-3. Warrior HUD: numbers inside the bars, no empty value column, bars reach the end caps.
-4. Rift Walker: portals look like swirling void ovals.
+TEST v0.25.238 Warrior Bloodline Anchor
+1. Load in, wait ~1 minute idle (log line "Pre-compiled N methods"), then cast each skill for the first time: no stutter.
+2. All Warrior / Sword Master / Mercenary skills about equally loud.

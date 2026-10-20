@@ -1,8 +1,8 @@
 ﻿$ErrorActionPreference = "Stop"
 
 Write-Host ""
-Write-Host "IMMORTAL HEROES v0.25.80 - ONE AT A TIME" -ForegroundColor Cyan
-Write-Host "Protected build: all 8 DLLs compile in staging before the live profile is touched." -ForegroundColor Gray
+Write-Host "IMMORTAL HEROES v0.25.238 - WARRIOR BLOODLINE ANCHOR" -ForegroundColor Cyan
+Write-Host "All 10 DLLs compile in staging before the live profile is touched." -ForegroundColor Gray
 Write-Host ""
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -174,6 +174,7 @@ try {
     $sorcererSource = Join-Path $scriptDir "DragonsAltar.Sorcerer.cs"
     $rangerSource = Join-Path $scriptDir "DragonsAltar.Ranger.cs"
     $devToolsSource = Join-Path $scriptDir "DragonsAltar.DevTools.cs"
+    $expSource = Join-Path $scriptDir "Aethelborn.Experience.cs"
 
     Need-File $coreSource "Core source"
     Need-File $runtimeSource "Combat Runtime source"
@@ -184,6 +185,7 @@ try {
     Need-File $sorcererSource "Sorcerer source"
     Need-File $rangerSource "Ranger source"
     Need-File $devToolsSource "Developer Tools source"
+    Need-File $expSource "Experience source"
 
     if (-not (Test-Path -LiteralPath $pluginsDir)) {
         New-Item -ItemType Directory -Path $pluginsDir | Out-Null
@@ -198,6 +200,7 @@ try {
     $liveSorcererOut = Join-Path $pluginsDir "DragonsAltar.Sorcerer.dll"
     $liveRangerOut = Join-Path $pluginsDir "DragonsAltar.Ranger.dll"
     $liveDevToolsOut = Join-Path $pluginsDir "DragonsAltar.DevTools.dll"
+    $liveExpOut = Join-Path $pluginsDir "Aethelborn.Experience.dll"
 
     $stageDir = Join-Path ([System.IO.Path]::GetTempPath()) ("AlbedosCustomClasses-" + [Guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Path $stageDir | Out-Null
@@ -210,6 +213,16 @@ try {
         Copy-Item -LiteralPath $asset.FullName -Destination (Join-Path $stageAssetDir $asset.Name) -Force
     }
 
+    # v211: require and stage the trimmed PCM bank before touching the live installation.
+    $sfxNames = @("BassDrop.wav", "BigWhoosh.wav", "BigWhoosh2.wav", "BladeStorm.wav", "Buff.wav", "BuffSpells.wav", "GD_Formation.wav", "GD_Impact.wav", "GD_Shatter.wav", "HeavyPunch.wav", "HeavySwing.wav", "HeavySwing2.wav", "MidBoom.wav", "SM_CCRumble.wav", "SmallBoom.wav", "SolidBoom.wav", "SpinningSwing.wav", "StoneFang.wav", "SwordSlash.wav", "SwordSlash2.wav", "SwordSwing.wav", "SwordSwing2.wav", "Tornado.wav")
+    $stageSfxDir = Join-Path $stageAssetDir "SFX"
+    New-Item -ItemType Directory -Path $stageSfxDir | Out-Null
+    foreach ($name in $sfxNames) {
+        $sourceSfx = Join-Path (Join-Path $uiAssetDir "SFX") $name
+        Need-File $sourceSfx ("Base Class audio: " + $name)
+        Copy-Item -LiteralPath $sourceSfx -Destination (Join-Path $stageSfxDir $name) -Force
+    }
+
     $coreOut = Join-Path $stageDir "AlbedosCustomClasses.dll"
     $runtimeOut = Join-Path $stageDir "AlbedosCustomClasses.CombatRuntime.dll"
     $skillsOut = Join-Path $stageDir "AlbedosCustomClasses.Skills.dll"
@@ -219,6 +232,7 @@ try {
     $sorcererOut = Join-Path $stageDir "DragonsAltar.Sorcerer.dll"
     $rangerOut = Join-Path $stageDir "DragonsAltar.Ranger.dll"
     $devToolsOut = Join-Path $stageDir "DragonsAltar.DevTools.dll"
+    $expOut = Join-Path $stageDir "Aethelborn.Experience.dll"
 
     $common = New-Object System.Collections.ArrayList
     [void](Add-UniqueRef $common $bepInExDll)
@@ -312,7 +326,14 @@ try {
     Compile-WithDependencies $devToolsSource $devToolsOut $devToolsRefs $managedDir $coreDir
     Write-Host "      Developer Tools compile passed." -ForegroundColor Green
 
-    Write-Host "All 9 DLLs compiled successfully. Installing staged DLL set..." -ForegroundColor Cyan
+    Write-Host "[10/10] Compiling Experience to staging..." -ForegroundColor Yellow
+    $expRefs = New-Object System.Collections.ArrayList
+    foreach ($r in $common) { [void]$expRefs.Add($r) }
+    [void](Add-UniqueRef $expRefs $harmony)
+    Compile-WithDependencies $expSource $expOut $expRefs $managedDir $coreDir
+    Write-Host "      Experience compile passed." -ForegroundColor Green
+
+    Write-Host "All 10 DLLs compiled successfully. Installing staged DLL set..." -ForegroundColor Cyan
 
     $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 
@@ -325,7 +346,8 @@ try {
         $liveAdvancedOut,
         $liveSorcererOut,
         $liveRangerOut,
-        $liveDevToolsOut
+        $liveDevToolsOut,
+        $liveExpOut
     )
 
     foreach ($oldDll in $liveDlls) {
@@ -343,6 +365,7 @@ try {
     Copy-Item -LiteralPath $sorcererOut -Destination $liveSorcererOut -Force
     Copy-Item -LiteralPath $rangerOut -Destination $liveRangerOut -Force
     Copy-Item -LiteralPath $devToolsOut -Destination $liveDevToolsOut -Force
+    Copy-Item -LiteralPath $expOut -Destination $liveExpOut -Force
 
     $liveAssetDir = Join-Path $pluginsDir "ImmortalHeroesAssets"
     if (-not (Test-Path -LiteralPath $liveAssetDir)) {
@@ -359,6 +382,18 @@ try {
     foreach ($layout in (Get-ChildItem -LiteralPath $uiAssetDir -File -Filter "HUD_Layout_*.txt")) {
         Copy-Item -LiteralPath $layout.FullName -Destination (Join-Path $liveAssetDir $layout.Name) -Force
     }
+    # v211: install only the staged Base Class bank, preserving previous files as backups.
+    $liveSfxDir = Join-Path $liveAssetDir "SFX"
+    if (-not (Test-Path -LiteralPath $liveSfxDir)) {
+        New-Item -ItemType Directory -Path $liveSfxDir | Out-Null
+    }
+    foreach ($name in $sfxNames) {
+        $liveSfx = Join-Path $liveSfxDir $name
+        if (Test-Path -LiteralPath $liveSfx) {
+            Copy-Item -LiteralPath $liveSfx -Destination ($liveSfx + ".backup-" + $stamp) -Force
+        }
+        Copy-Item -LiteralPath (Join-Path $stageSfxDir $name) -Destination $liveSfx -Force
+    }
     # v0.25.43: DualWield.dll (Smoothbrain's DualWield mod) only supplies its dual-wield animation clips; it is
     # read from ImmortalHeroesAssets and never loaded as a plugin.
     $dwSource = Join-Path $uiAssetDir "DualWield.dll"
@@ -367,11 +402,40 @@ try {
         Write-Host "  DualWield animations installed (ImmortalHeroesAssets\DualWield.dll)" -ForegroundColor White
     }
 
+    # v0.25.125: Mixamo animation bundle (aethelborn_anims). Until now it had to be copied by hand into the GAME's
+    # plugins\ImmortalHeroesAssets folder - easy to put in the wrong folder, and then the old animations play.
+    # Now the installer takes it from this zip folder or, if newer, straight from the Unity build output
+    # (<your profile>\<Unity project>\AABuild\aethelborn_anims).
+    $animName = "aethelborn_anims"
+    $animCandidates = @()
+    $animLocal = Join-Path $uiAssetDir $animName
+    if (Test-Path -LiteralPath $animLocal) { $animCandidates += Get-Item -LiteralPath $animLocal }
+    foreach ($pattern in @("$env:USERPROFILE\*\AABuild\$animName", "$env:USERPROFILE\*\*\AABuild\$animName", "$env:USERPROFILE\*\*\*\AABuild\$animName")) {
+        $animCandidates += @(Get-ChildItem -Path $pattern -File -ErrorAction SilentlyContinue)
+    }
+    $animLive = Join-Path $liveAssetDir $animName
+    $animBest = $animCandidates | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if ($animBest) {
+        $copyAnim = $true
+        if (Test-Path -LiteralPath $animLive) {
+            $liveAnim = Get-Item -LiteralPath $animLive
+            if ($liveAnim.LastWriteTime -ge $animBest.LastWriteTime -and $liveAnim.Length -eq $animBest.Length) { $copyAnim = $false }
+        }
+        if ($copyAnim) { Copy-Item -LiteralPath $animBest.FullName -Destination $animLive -Force }
+        Write-Host ("  Animations: " + $animLive + "  (" + [math]::Round((Get-Item -LiteralPath $animLive).Length / 1MB, 1) + " MB, from " + $animBest.FullName + ")") -ForegroundColor White
+    }
+    elseif (Test-Path -LiteralPath $animLive) {
+        Write-Host ("  Animations: " + $animLive + " (already installed)") -ForegroundColor White
+    }
+    else {
+        Write-Host "  Animations: aethelborn_anims NOT found - build it in Unity (Aethelborn Ascended > Build Animation Bundle), then run INSTALL again." -ForegroundColor Yellow
+    }
+
     Remove-Item -LiteralPath $stageDir -Recurse -Force -ErrorAction SilentlyContinue
     Write-Host ""
     Write-Host "SUCCESS" -ForegroundColor Green
     Write-Host ""
-    Write-Host "Installed 9 isolated DLLs:" -ForegroundColor White
+    Write-Host "Installed 10 isolated DLLs:" -ForegroundColor White
     Write-Host "  AlbedosCustomClasses.dll                  (altar/core)" -ForegroundColor White
     Write-Host "  AlbedosCustomClasses.CombatRuntime.dll    (cast lock / debuffs / buffs / mastery runtime)" -ForegroundColor White
     Write-Host "  AlbedosCustomClasses.Skills.dll           (starter skills + VFX)" -ForegroundColor White
@@ -381,8 +445,10 @@ try {
     Write-Host "  DragonsAltar.Sorcerer.dll                 (Wizard/Spellcaster advancements + clean dynamic HUD)" -ForegroundColor White
     Write-Host "  DragonsAltar.Ranger.dll                   (Ranger Class + Acrobat / Bowmaster)" -ForegroundColor White
     Write-Host "  DragonsAltar.DevTools.dll                 (developer skill tuning + world range/radius preview)" -ForegroundColor White
+    Write-Host "  Aethelborn.Experience.dll                 (kill EXP, levels, floating +EXP)" -ForegroundColor Cyan
     Write-Host "  ImmortalHeroesAssets\*.png (Skill Tree art, Tier buttons, Confirm plaque, selection ring)" -ForegroundColor White
     Write-Host ""
+    Write-Host "  ImmortalHeroesAssets\SFX\*.wav (23 skill sound files)" -ForegroundColor White
     Write-Host "If a risky combat DLL fails, the staged installer will not replace your current live set." -ForegroundColor Cyan
     Write-Host ""
 }

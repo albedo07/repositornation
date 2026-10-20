@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Reflection.Emit;
 using BepInEx;
 using BepInEx.Configuration;
 using HarmonyLib;
@@ -9,16 +10,1382 @@ using UnityEngine;
 
 namespace DragonsAltarCombat
 {
+    // v213: balanced Base Class audio, native Effects routing and full Impact Wave mix. Never instantiate an effect prefab or change Unity's random state.
+    public enum DragonBaseSound { HeavySlash, ImpactWave, ImpactPunch, LightningZap, RighteousStrike, HolyWave, FlameBurst, GlacialDescent, Stonefang, Arrow, TrapPlace, TrapSnap, GlacialCreate, TumbleArrow, Moonlight, CrescentSlash, CrescentDirt, BladeStorm, FrenzyDash, FrenzyCut, FrenzyPressure, EclipseSweep, EclipseHail, HalfmoonSweep, HalfmoonCuts, HalfmoonFinisher, KnightsGuidance, StompImpact, StompAfter, CircleSweep, CircleRupture, BoneLeap, BoneImpact, BoneAfter, BombThrow, BombExplosion, BombCluster, SeismicSlam, SeismicTravel, SeismicRupture, Whirlwind, WhirlwindFinisher, Battlecry, Fury, ImpactAfterquake, GlacialShatter, FrenzyCharge, HalfmoonCharge, MoonlightAfter, HalfmoonBoom, ImpactSwing, CrescentFire, BladeStormSlash, EclipseSpiral, StompRumble, StompAfterRumble, CircleGust, CircleRumble, BoneBass, BoneRumble, BoneAfterRumble, BombMid, BombBass, SeismicSlamRumble, SeismicEndBass, SeismicEndRumble, BattlecryBass, FuryRumble, BladeStormBass, MoonlightWind, CrescentSlash2, MoonlightSlash, CrescentSword, HalfmoonSwing, EclipseRise, WhirlwindWhoosh }
+    // v0.25.238: first-cast FPS drops - the first time a method runs, Mono compiles it; one skill cast runs hundreds of the mod's
+    // methods (routines, VFX builders, audio). After you load in, every method of the mod's assemblies is compiled ahead of time
+    // in small slices (1.5 ms per frame, paused while casting or attacking), on the main thread (no threading risks).
+    public static class DragonJitWarm
+    {
+        private static List<System.Reflection.MethodBase> _queue;
+        private static int _next;
+        private static bool _done;
+        private static float _startAt = -1f;
+        public static void Tick(Player p)
+        {
+            if (_done || p == null) return;
+            if (_startAt < 0f) { _startAt = Time.unscaledTime + 5f; return; }
+            if (Time.unscaledTime < _startAt || p.InAttack() || DragonCombat.IsSkillLocked(p)) return;
+            try
+            {
+                if (_queue == null) { Build(); return; }
+                System.Diagnostics.Stopwatch watch = System.Diagnostics.Stopwatch.StartNew();
+                while (_next < _queue.Count && watch.Elapsed.TotalMilliseconds < 1.5)
+                {
+                    try { System.Runtime.CompilerServices.RuntimeHelpers.PrepareMethod(_queue[_next].MethodHandle); } catch (Exception) { }
+                    _next++;
+                }
+                if (_next >= _queue.Count) { _done = true; Debug.Log("[Aethelborn] Pre-compiled " + _queue.Count + " methods (first casts no longer stall)."); _queue = null; }
+            }
+            catch (Exception) { _done = true; }
+        }
+        private static void Build()
+        {
+            _queue = new List<System.Reflection.MethodBase>();
+            System.Reflection.BindingFlags all = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.DeclaredOnly;
+            foreach (System.Reflection.Assembly asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                string name = asm.GetName().Name;
+                if (!name.StartsWith("AlbedosCustomClasses", StringComparison.Ordinal) && !name.StartsWith("Aethelborn", StringComparison.Ordinal)) continue;
+                Type[] types;
+                try { types = asm.GetTypes(); } catch (System.Reflection.ReflectionTypeLoadException e) { types = e.Types; }
+                for (int t = 0; t < types.Length; t++)
+                {
+                    Type type = types[t];
+                    if (type == null || type.ContainsGenericParameters || type.IsInterface) continue;
+                    System.Reflection.MethodInfo[] methods = type.GetMethods(all);
+                    for (int m = 0; m < methods.Length; m++)
+                    {
+                        System.Reflection.MethodInfo mi = methods[m];
+                        if (mi.IsAbstract || mi.ContainsGenericParameters || (mi.Attributes & System.Reflection.MethodAttributes.PinvokeImpl) != 0) continue;
+                        _queue.Add(mi);
+                    }
+                }
+            }
+        }
+    }
+
+    public static class DragonSkillAudio
+    {
+        private sealed class Profile
+        {
+            public AudioClip[] Clips;
+            public float Pitch = 1f;
+            public int NextClip;
+            public bool Custom;
+        }
+        private sealed class Voice
+        {
+            public AudioSource Source;
+            public float End, BaseVolume;
+            public bool UsesMixer;
+            public int Cue, Layer;
+            public int Ticket;
+            public bool Sustained;
+            public float RepeatAt;
+            public bool Repeat;
+            public Transform Follow;
+            public Func<bool> Continue;
+            public bool Raw;
+            public float StartTime;
+        }
+        private const int CueCount = 76;
+        private static readonly Profile[] Profiles = new Profile[CueCount];
+        private static readonly bool[] Warned = new bool[CueCount];
+        private const int OneShotVoices = 32;   // v0.25.232: whole recordings overlap more; 12 voices made new sounds cut old ones
+        private static readonly Voice[] Voices = new Voice[36]; // Four reserved slots keep all 13 Ascended cleaves audible.
+        private static readonly string[][] Prefabs = {
+            new string[] { "sfx_sword_swing" }, new string[] { "sfx_sledge_iron_hit", "sfx_sledge_hit" },
+            new string[] { "sfx_club_hit" }, new string[] { "sfx_thunder", "sfx_lightning" },
+            new string[] { "sfx_stafflightning_fire", "sfx_staff_lightning_fire" }, new string[] { "sfx_Potion_health_Start" },
+            new string[] { "sfx_staff_fireball_fire" }, new string[] { "sfx_staff_iceshard_hit", "sfx_drake_attack_hit" },
+            new string[] { "sfx_pickaxe_hit" }, new string[] { "sfx_bow_fire" },
+            new string[] { "sfx_bush_hit", "sfx_bush_destroy", "sfx_bush_destroyed" }, new string[] { "sfx_bush_hit", "sfx_bush_destroy", "sfx_bush_destroyed" }, new string[0], new string[] { "sfx_bow_fire" },
+            new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0] };
+        private static readonly string[] Items = { "SwordIron", "SledgeStagbreaker", "SledgeStagbreaker", "StaffLightning", "StaffLightning", "MeadHealthMedium", "StaffFireball", "StaffIceShards", "PickaxeIron", "BowHuntsman", null, null, null, "BowHuntsman", null, null, null, null, null, null, "SledgeStagbreaker", null, null, null, null, null, null, null, null, null, null, null, null, null, null, "StaffFireball", "StaffFireball", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null };
+        // 0 swing, 1 terrain impact, 2 projectile release, 3 projectile impact, 4 healing status, 5 ordinary impact.
+        private static readonly int[] Stages = { 0, 1, 5, 3, 2, 4, 2, 3, 1, 2, 5, 5, -1, 2, -1, -1, -1, -1, -1, -1, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 3, 3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+        private static readonly string[] SkillNames = { "Heavy Slash", "Impact Wave", "Impact Punch", "Lightning Zap", "Righteous Strike", "Holy Wave", "Flame Burst", "Glacial Descent", "Stonefang Eruption", "Piercing Arrow", "Tumble Shot", "Snare Trap",
+            "Moonlight Splitter", "Crescent Cleave", "Blade Storm", "Frenzied Charge", "Eclipse", "Halfmoon Slash", "Knights Guidance", "Stomp", "Circle Swing", "Bonecrusher", "Punishing Bomb", "Seismic Guillotine", "Whirlwind", "Battlecry", "Unchained Fury"
+        };
+        private static readonly string[] SkillClasses = { "Warrior", "Warrior", "Warrior", "Cleric", "Cleric", "Cleric", "Sorcerer", "Sorcerer", "Sorcerer", "Ranger", "Ranger", "Ranger",
+            "Sword Master", "Sword Master", "Sword Master", "Sword Master", "Sword Master", "Sword Master", "Sword Master", "Mercenary", "Mercenary", "Mercenary", "Mercenary", "Mercenary", "Mercenary", "Mercenary", "Mercenary"
+        };
+        private static readonly int[] CueSkills = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 11, 7, 10,
+            12, 13, 13, 14, 15, 15, 15, 16, 16, 17, 17, 17, 18, 19, 19, 20, 20, 21, 21, 21, 22, 22, 22, 23, 23, 23, 24, 24, 25, 26, 1, 7, 15, 17, 12, 17, 1, 13, 14, 16, 19, 19, 20, 20, 21, 21, 21, 22, 22, 23, 23, 23, 25, 26, 14, 12, 13, 12, 13, 17, 16, 24 };
+        private static readonly float[] DefaultVolumes = { 108f, 115f, 130f, 300f, 200f, 300f, 100f, 200f, 200f, 300f, 300f, 200f, 107f, 115f, 78f, 120f, 107f, 84f, 135f, 69f, 108f, 108f, 75f, 88f, 110f, 120f, 134f };
+        // v222: Warrior, Sword Master and Circle Swing use the equal-loudness bank: 100% default, 300% max.
+        private static readonly bool[] Rebalanced = { true, true, true, false, false, false, false, false, false, false, false, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true };
+        private static readonly float[] PreviousFactoryVolumes = { 70f, 70f, 70f, 100f, 100f, 100f, 70f, 100f, 70f, 70f, 70f, 70f,
+            70f, 70f, 70f, 70f, 70f, 70f, 70f, 70f, 70f, 70f, 70f, 70f, 70f, 70f, 70f
+        };
+        private static readonly ConfigEntry<float>[] SkillVolumes = new ConfigEntry<float>[27];
+        // Sound shaping per component (each sound of a skill): Length, Pitch, Speed (pitch kept), Bass. No reverb (v227, user).
+        private static readonly ConfigEntry<float>[] LayerLength = new ConfigEntry<float>[76], LayerPitch = new ConfigEntry<float>[76],
+            LayerSpeed = new ConfigEntry<float>[76], LayerBass = new ConfigEntry<float>[76];
+        // v0.25.230 hit markers: where in the recording its hit is (ms); the sound is started so that point lands on the skill's hit.
+        private static readonly float[] DefaultMarker = { 650f, 620f, 0f, 0f, 0f, 0f, 620f, 0f, 950f, 370f, 700f, 620f, 370f, 0f, 370f, 0f, 30f, 380f, 400f, 380f, 470f, 810f, 380f, 600f, 30f, 700f, 810f, 700f, 380f, 430f, 620f, 700f, 0f, 950f, 470f, 400f, 380f, 0f, 0f, 620f, 380f, 0f, 0f, 950f, 0f, 380f, 0f, 0f, 700f, 380f, 0f, 380f, 0f, 380f, 470f, 260f, 400f, 810f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 400f, 0f, 0f, 0f, 0f, 400f, 370f, 370f, 400f, 470f, 0f };
+        // v0.25.231: the user's own tuning is the default (F8 DEFAULT returns to it).
+        private static readonly float[] DefaultPitch = { 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 50f, 120f, 100f, 100f, 120f, 100f, 120f, 100f, 88f, 85f, 100f, 90f, 115f, 75f, 75f, 110f, 95f, 115f, 70f, 135f, 85f, 105f, 85f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 90f, 100f, 100f, 100f, 80f, 70f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 75f, 100f, 70f, 60f, 100f, 100f, 100f, 80f, 90f, 130f, 100f }, DefaultSpeed = { 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 50f, 100f, 100f, 50f, 100f, 50f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 130f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 50f, 100f, 100f, 100f, 100f }, DefaultBass = { 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 120f, 120f, 100f, 130f, 100f, 140f, 150f, 100f, 100f, 100f, 140f, 100f, 130f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f }, DefaultSync = { 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, -400f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, -400f, -1000f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f };
+        private static readonly ConfigEntry<float>[] LayerMarker = new ConfigEntry<float>[76], LayerSync = new ConfigEntry<float>[76];
+        private static readonly float[] DefaultLength = { 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 35f, 100f, 100f, 40f, 100f, 100f, 100f, 100f, 100f, 100f, 40f, 100f, 35f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 3f, 3f, 60f, 2.5f, 50f, 5f, 4f, 100f, 50f, 5f, 50f, 5f, 60f, 50f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 45f, 100f };
+        private static readonly ConfigEntry<float>[] LayerVolumes = new ConfigEntry<float>[76];
+        private static readonly float[] DefaultLayers = { 100f, 100f, 50f, 200f, 200f, 200f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 200f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 80f, 100f, 50f, 100f, 100f, 100f, 100f, 300f, 100f, 200f, 100f, 100f, 100f, 100f, 100f, 100f, 70f, 55f, 70f, 60f, 80f, 70f, 60f, 70f, 90f, 70f, 80f, 70f, 70f, 70f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 120f, 100f, 200f, 100f, 30f, 70f, 100f, 80f, 100f };
+        private static readonly bool[] RebalancedLayers = { true, true, false, false, false, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, false, false, false, false, false, false, true, true, true, true, true, true, true, true, true, true, true };
+        private static readonly float[] PreviousFactoryLayers = { 100f, 100f, 40f, 100f, 100f, 100f,
+            100f, 65f, 100f, 85f, 80f, 100f, 85f, 100f, 75f, 100f, 100f, 85f, 100f, 100f, 85f, 100f, 85f, 80f, 100f, 65f, 100f, 65f, 100f, 90f, 100f, 80f, 35f, 100f, 100f, 100f, 55f
+        };
+        private static readonly List<AudioClip> RetiredClips = new List<AudioClip>();
+        private static float _nextCollect;
+
+        private static bool _configReady;
+        public static void BindConfig(ConfigFile config)
+        {
+            _configReady = false;
+            ConfigEntry<bool> migrated = config.Bind("Skill Audio", "FactoryVolumes300_v025221", false,
+                "Internal one-time migration of old factory sound levels. Custom levels and mute are preserved.");
+            ConfigEntry<bool> matched = config.Bind("Skill Audio", "MatchedLoudness_v025238", false,
+                "Internal one-time move of the Warrior / Sword Master / Mercenary Skill Volumes to the matched-loudness defaults.");
+            ConfigEntry<bool> v237 = config.Bind("Skill Audio", "StompStamp_v025237", false,
+                "Internal one-time move of the Stomp stamp to its v0.25.237 tone.");
+            ConfigEntry<bool> v236 = config.Bind("Skill Audio", "StompTornado_v025236", false,
+                "Internal one-time move of the Stomp stamp to its v0.25.236 sound.");
+            ConfigEntry<bool> v234 = config.Bind("Skill Audio", "SoundRedo_v025234", false,
+                "Internal one-time move of the Stomp stamp, Bomb blast/crack, Circle Swing swing and Battlecry to their v0.25.234 sounds.");
+            ConfigEntry<bool> merc2 = config.Bind("Skill Audio", "MercenaryRedo_v025233", false,
+                "Internal one-time move of Stomp, Circle Swing and the Punishing Bomb throw to their v0.25.233 sounds.");
+            ConfigEntry<bool> merc = config.Bind("Skill Audio", "MercenaryRaw_v025232", false,
+                "Internal one-time move of the Mercenary skill sounds to their v0.25.232 defaults.");
+            ConfigEntry<bool> barrage = config.Bind("Skill Audio", "SlashBarragePitch120_v025231", false,
+                "Internal one-time set of every Slash Barrage to 120% pitch (v0.25.231).");
+            ConfigEntry<bool> entire = config.Bind("Skill Audio", "EntireSounds_v025229", false,
+                "Internal one-time reset of the raw-sound Length sliders to 100 (whole recording).");
+            ConfigEntry<bool> slashes = config.Bind("Skill Audio", "SwordSlashes_v025228", false,
+                "Internal one-time reset of the Slash Barrage and wind-up sliders to their v0.25.228 defaults.");
+            ConfigEntry<bool> raw = config.Bind("Skill Audio", "RawSounds_v025227", false,
+                "Internal one-time reset of the raw-sound skills to their defaults (v0.25.227).");
+            ConfigEntry<bool> rebalanced = config.Bind("Skill Audio", "EqualLoudness100_v025222", false,
+                "Internal one-time reset of the rebalanced skills' old 300 default to 100. Custom levels and mute are preserved.");
+            for (int i = 0; i < SkillNames.Length; i++)
+            {
+                float max = Rebalanced[i] ? 300f : 600f;
+                SkillVolumes[i] = config.Bind(SkillClasses[i] + " " + SkillNames[i] + " Audio", "Skill Volume (%)", DefaultVolumes[i],
+                    new ConfigDescription("Volume for this skill, including its Ascended version. Default " + DefaultVolumes[i] + "; range 0-" + max + ". Skill and component sliders multiply" + (Rebalanced[i] ? "; above 100 they climb steeply (200 = 4x, 300 = 9x)" : "") + ". Valheim Master/Effects remain the final controls.", new AcceptableValueRange<float>(0f, max)));
+                if (!migrated.Value && Math.Abs(SkillVolumes[i].Value - PreviousFactoryVolumes[i]) < 0.001f) SkillVolumes[i].Value = 300f;
+                if (!rebalanced.Value && Rebalanced[i] && Math.Abs(SkillVolumes[i].Value - 300f) < 0.001f) SkillVolumes[i].Value = 100f;
+                if (!raw.Value && Rebalanced[i]) SkillVolumes[i].Value = DefaultVolumes[i];
+                if (!merc.Value && SkillClasses[i] == "Mercenary") SkillVolumes[i].Value = DefaultVolumes[i];
+                if (!matched.Value && Rebalanced[i]) SkillVolumes[i].Value = DefaultVolumes[i];
+            }
+            string[] sections = { "Warrior Impact Wave Audio", "Warrior Impact Wave Audio", "Sorcerer Glacial Descent Audio", "Sorcerer Glacial Descent Audio", "Ranger Snare Trap Audio", "Ranger Snare Trap Audio", "Sword Master Crescent Cleave Audio", "Sword Master Crescent Cleave Audio", "Sword Master Frenzied Charge Audio", "Sword Master Frenzied Charge Audio", "Sword Master Frenzied Charge Audio", "Sword Master Eclipse Audio", "Sword Master Eclipse Audio", "Sword Master Halfmoon Slash Audio", "Sword Master Halfmoon Slash Audio", "Sword Master Halfmoon Slash Audio", "Mercenary Stomp Audio", "Mercenary Stomp Audio", "Mercenary Circle Swing Audio", "Mercenary Circle Swing Audio", "Mercenary Bonecrusher Audio", "Mercenary Bonecrusher Audio", "Mercenary Bonecrusher Audio", "Mercenary Punishing Bomb Audio", "Mercenary Punishing Bomb Audio", "Mercenary Punishing Bomb Audio", "Mercenary Seismic Guillotine Audio", "Mercenary Seismic Guillotine Audio", "Mercenary Seismic Guillotine Audio", "Mercenary Whirlwind Audio", "Mercenary Whirlwind Audio", "Warrior Impact Wave Audio", "Sorcerer Glacial Descent Audio", "Sword Master Frenzied Charge Audio", "Sword Master Halfmoon Slash Audio", "Sword Master Moonlight Splitter Audio", "Sword Master Halfmoon Slash Audio", "Sword Master Crescent Cleave Audio", "Sword Master Blade Storm Audio", "Sword Master Eclipse Audio", "Sword Master Blade Storm Audio", "Mercenary Stomp Audio", "Mercenary Stomp Audio", "Mercenary Circle Swing Audio", "Mercenary Circle Swing Audio", "Mercenary Bonecrusher Audio", "Mercenary Bonecrusher Audio", "Mercenary Bonecrusher Audio", "Mercenary Punishing Bomb Audio", "Mercenary Punishing Bomb Audio", "Mercenary Seismic Guillotine Audio", "Mercenary Seismic Guillotine Audio", "Mercenary Seismic Guillotine Audio", "Mercenary Battlecry Audio", "Mercenary Unchained Fury Audio", "Sword Master Blade Storm Audio", "Warrior Heavy Slash Audio", "Warrior Impact Punch Audio", "Cleric Lightning Zap Audio", "Cleric Righteous Strike Audio", "Cleric Holy Wave Audio", "Sorcerer Flame Burst Audio", "Sorcerer Stonefang Eruption Audio", "Ranger Piercing Arrow Audio", "Ranger Tumble Shot Audio", "Sword Master Moonlight Splitter Audio", "Sword Master Knights Guidance Audio", "Mercenary Battlecry Audio", "Mercenary Unchained Fury Audio", "Sword Master Moonlight Splitter Audio", "Sword Master Crescent Cleave Audio", "Sword Master Moonlight Splitter Audio", "Sword Master Crescent Cleave Audio", "Sword Master Halfmoon Slash Audio", "Sword Master Eclipse Audio", "Mercenary Whirlwind Audio" };
+            string[] names = { "Wave Recording Volume (%)", "Weapon Swing Volume (%)", "Ice Formation Volume (%)", "Ice Landing Volume (%)", "Trap Placement Volume (%)", "Trap Trigger Volume (%)", "First Strike Volume (%)", "Ground Trail Volume (%)", "Dash Volume (%)", "Slash Barrage Volume (%)", "Pressure Eruptions Volume (%)", "Opening Sweep Volume (%)", "Slash Barrage Volume (%)", "Opening Sweep Volume (%)", "Slash Barrage Volume (%)", "Finisher Wind Volume (%)", "Stamp Volume (%)", "Aftershocks Volume (%)", "Sweeps Volume (%)", "Ascended Eruption Volume (%)", "Leap Volume (%)", "Landing Volume (%)", "Ascended Aftershock Volume (%)", "Throw Volume (%)", "Explosion Volume (%)", "Ascended Cluster Volume (%)", "Slam Volume (%)", "Traveling Cracks Volume (%)", "Final Eruptions Volume (%)", "Spinning Wind Volume (%)", "Ascended Final Sweep Volume (%)", "Ascended Aftershocks Volume (%)", "Ice Shatter Volume (%)", "Windup Volume (%)", "Windup Volume (%)", "Follow-up Cuts Volume (%)", "Bass Drop Volume (%)", "Fire Trail Volume (%)", "Slash Barrage Volume (%)", "Spiral Swing Volume (%)", "Bass Body Volume (%)", "Debris Rumble Volume (%)", "Aftershock Debris Volume (%)", "Wind Body Volume (%)", "Eruption Debris Volume (%)", "Landing Bass Volume (%)", "Landing Debris Volume (%)", "Aftershock Debris Volume (%)", "Blast Crack Volume (%)", "Blast Bass Volume (%)", "Slam Debris Volume (%)", "Final Bass Volume (%)", "Final Debris Volume (%)", "Bass Body Volume (%)", "Surge Volume (%)", "Storm Volume (%)", "Swing Volume (%)", "Punch Volume (%)", "Zap Volume (%)", "Strike Volume (%)", "Wave Volume (%)", "Flames Volume (%)", "Eruption Volume (%)", "Shot Volume (%)", "Shot Volume (%)", "Slash Volume (%)", "Buff Volume (%)", "Cry Volume (%)", "Buff Volume (%)", "Wind Volume (%)", "Second Strike Volume (%)", "Sword Slash Volume (%)", "Sword Slash Volume (%)", "Swing Volume (%)", "Launch Whoosh Volume (%)", "Tornado Volume (%)" };
+            for (int i = 0; i < names.Length; i++)
+            {
+                if (i == 13 || i == 38 || i == CueLayers[(int)DragonBaseSound.MoonlightAfter] || i == CueLayers[(int)DragonBaseSound.Battlecry] || IsRumbleLayer(i)) continue;   // unused: Halfmoon's old opening sweep; Blade Storm's separate slashes (the raw recording is the slashes, v227)
+                float max = RebalancedLayers[i] ? 300f : 600f;
+                LayerVolumes[i] = config.Bind(sections[i], names[i], DefaultLayers[i],
+                    new ConfigDescription("Volume of this sound inside the skill. Default " + DefaultLayers[i] + "; range 0-" + max + ". Multiplies the skill volume; updates active sounds. 0 = mute.", new AcceptableValueRange<float>(0f, max)));
+                if (!migrated.Value && i < PreviousFactoryLayers.Length && Math.Abs(LayerVolumes[i].Value - PreviousFactoryLayers[i]) < 0.001f) LayerVolumes[i].Value = 300f;
+                if (!rebalanced.Value && RebalancedLayers[i] && Math.Abs(LayerVolumes[i].Value - 300f) < 0.001f) LayerVolumes[i].Value = 100f;
+                string sound = names[i].Replace(" Volume (%)", "");
+                LayerLength[i] = config.Bind(sections[i], sound + " Length (%)", DefaultLength[i], new ConfigDescription("Plays this share of the sound, with a short fade at the cut. 100 = whole sound.", new AcceptableValueRange<float>(10f, 100f)));
+                LayerPitch[i] = config.Bind(sections[i], sound + " Pitch (%)", DefaultPitch[i], new ConfigDescription("Pitch of this sound. Like a tape: higher is also faster. 100 = original.", new AcceptableValueRange<float>(50f, 200f)));
+                LayerSpeed[i] = config.Bind(sections[i], sound + " Speed (%)", DefaultSpeed[i], new ConfigDescription("Playback speed of this sound, pitch kept. 100 = original.", new AcceptableValueRange<float>(50f, 200f)));
+                LayerBass[i] = config.Bind(sections[i], sound + " Bass (%)", DefaultBass[i], new ConfigDescription("Low end (below ~150 Hz) of this sound. 0 = none, 100 = original, 300 = triple.", new AcceptableValueRange<float>(0f, 300f)));
+                if (!raw.Value && RebalancedLayers[i]) { LayerVolumes[i].Value = DefaultLayers[i]; LayerLength[i].Value = DefaultLength[i]; LayerPitch[i].Value = DefaultPitch[i]; LayerSpeed[i].Value = DefaultSpeed[i]; LayerBass[i].Value = DefaultBass[i]; }
+                if (!slashes.Value && (i == CueLayers[19] || i == CueLayers[22] || i == CueLayers[24] || i == CueLayers[46] || i == CueLayers[47]))
+                { LayerVolumes[i].Value = DefaultLayers[i]; LayerLength[i].Value = DefaultLength[i]; }
+                if (!entire.Value && RebalancedLayers[i]) LayerLength[i].Value = 100f;
+                if (RebalancedLayers[i])
+                {
+                    LayerMarker[i] = config.Bind(sections[i], sound + " Hit Marker (ms)", DefaultMarker[i], new ConfigDescription("Where in the recording this sound's hit is. The sound starts early so this point lands exactly on the skill's hit. Measured per file; adjust by ear.", new AcceptableValueRange<float>(0f, 5000f)));
+                    LayerSync[i] = config.Bind(sections[i], sound + " Sync (ms)", DefaultSync[i], new ConfigDescription("Nudges this sound later (+) or earlier (-) against the skill's hit.", new AcceptableValueRange<float>(-1000f, 1000f)));
+                    if (!barrage.Value && (i == CueLayers[19] || i == CueLayers[22] || i == CueLayers[24])) { LayerPitch[i].Value = DefaultPitch[i]; LayerSpeed[i].Value = DefaultSpeed[i]; }
+                    if (!v237.Value && i == CueLayers[27]) { LayerPitch[i].Value = DefaultPitch[i]; LayerBass[i].Value = DefaultBass[i]; }
+                    if (!v236.Value && i == CueLayers[27])
+                    {
+                        LayerVolumes[i].Value = DefaultLayers[i]; LayerLength[i].Value = DefaultLength[i]; LayerPitch[i].Value = DefaultPitch[i];
+                        LayerSpeed[i].Value = DefaultSpeed[i]; LayerBass[i].Value = DefaultBass[i]; LayerMarker[i].Value = DefaultMarker[i]; LayerSync[i].Value = DefaultSync[i];
+                    }
+                    if (!v234.Value && (i == CueLayers[27] || i == CueLayers[35] || i == CueLayers[61] || i == CueLayers[29] || i == CueLayers[66]))
+                    {
+                        LayerVolumes[i].Value = DefaultLayers[i]; LayerLength[i].Value = DefaultLength[i]; LayerPitch[i].Value = DefaultPitch[i];
+                        LayerSpeed[i].Value = DefaultSpeed[i]; LayerBass[i].Value = DefaultBass[i]; LayerMarker[i].Value = DefaultMarker[i]; LayerSync[i].Value = DefaultSync[i];
+                    }
+                    if (!merc2.Value && (sections[i] == "Mercenary Stomp Audio" || sections[i] == "Mercenary Circle Swing Audio" || i == CueLayers[(int)DragonBaseSound.BombThrow]))
+                    {
+                        LayerVolumes[i].Value = DefaultLayers[i]; LayerLength[i].Value = DefaultLength[i]; LayerPitch[i].Value = DefaultPitch[i];
+                        LayerSpeed[i].Value = DefaultSpeed[i]; LayerBass[i].Value = DefaultBass[i]; LayerMarker[i].Value = DefaultMarker[i]; LayerSync[i].Value = DefaultSync[i];
+                    }
+                    if (!merc.Value && sections[i].StartsWith("Mercenary"))
+                    {
+                        LayerVolumes[i].Value = DefaultLayers[i]; LayerLength[i].Value = DefaultLength[i]; LayerPitch[i].Value = DefaultPitch[i];
+                        LayerSpeed[i].Value = DefaultSpeed[i]; LayerBass[i].Value = DefaultBass[i]; LayerMarker[i].Value = DefaultMarker[i]; LayerSync[i].Value = DefaultSync[i];
+                    }
+                }
+            }
+            migrated.Value = true; rebalanced.Value = true; raw.Value = true; slashes.Value = true; entire.Value = true; barrage.Value = true; merc.Value = true; merc2.Value = true; v234.Value = true; v236.Value = true; v237.Value = true; matched.Value = true;
+            _configReady = true;
+        }
+        // v217: phase controls and bounded repeat rates, independent of target count/VFX.
+        // v226: every sound of every skill is its own component (volume + shaping sliders).
+        private static readonly int[] CueLayers = { 56, 0, 57, 58, 59, 60, 61, 3, 62, 63, 4, 5, 2, 64, 65, 6, 7, 55, 8, 9, 10, 11, 12, 13, 14, 15, 66, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 67, 68, 31, 32, 33, 34, 35, 36, 1, 37, 38, 39, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 40, 69, 70, 71, 72, 73, 74, 75 };
+        private static readonly float[] PhaseGaps = { 0.06f, 0.06f, 0.12f, 0.06f, 0.08f, 0.03f, 0.1f, 0.06f, 0.03f, 0.06f, 0.03f, 0.06f, 0.15f, 0.06f, 0.08f, 0.08f, 0.08f, 0.15f, 0.08f, 0.08f, 0.1f, 0.05f, 0.1f, 0.06f, 0.12f, 0.08f, 0.18f, 0.08f, 0.15f, 0.15f, 0.1f, 0.08f, 0.06f, 0.06f, 0.06f, 0.06f, 0.06f, 0.40f, 0.06f, 0.06f, 0.08f, 0.08f, 0.08f, 0.08f, 0.08f, 0.08f, 0.08f, 0.05f, 0.05f, 0.06f, 0.08f, 0.08f, 0.15f, 0.15f, 0.06f, 0.04f, 0.12f, 0.04f, 0.12f, 0.12f, 0.2f, 0.2f };
+        private static readonly float[] CueNext = new float[CueCount];
+        private static float SkillGain(int cue)
+        {
+            int skill = CueSkills[cue]; ConfigEntry<float> entry = SkillVolumes[skill];
+            float value = entry == null ? DefaultVolumes[skill] : entry.Value;
+            return float.IsNaN(value) || float.IsInfinity(value) ? 0f : Mathf.Clamp(value / 100f, 0f, 6f);
+        }
+        private static float LayerGain(int layer)
+        {
+            if (layer < 0) return 1f;
+            ConfigEntry<float> entry = LayerVolumes[layer];
+            float value = entry == null ? DefaultLayers[layer] : entry.Value;
+            return float.IsNaN(value) || float.IsInfinity(value) ? 0f : Mathf.Clamp(value / 100f, 0f, 6f);
+        }
+        private static int EventLayer(DragonBaseSound cue) { return CueLayers[(int)cue]; }
+        // Each slider allows 6x, so master and component can combine to 36x.
+        // Unity clamps source.volume to 1. Fixed one-shot headroom preserves
+        // the old levels and supports live tuning without PCM work or restarts.
+        private const float PlaybackHeadroom = 36f;
+        private static float VoiceGain(Voice voice)
+        {
+            return voice.BaseVolume * SkillGain(voice.Cue) * LayerGain(voice.Layer);
+        }
+        private static float CueTarget(int cue)
+        {
+            // Keep the already-approved Cleric level; give other skills substantially more available body/headroom.
+            return cue >= (int)DragonBaseSound.LightningZap && cue <= (int)DragonBaseSound.HolyWave ? TargetRms : 0.40f;
+        }
+        private static float LimitPeak(float value)
+        {
+            float magnitude = Math.Abs(value);
+            if (magnitude <= 0.85f) return value;
+            float extra = magnitude - 0.85f;
+            magnitude = 0.85f + 0.10f * extra / (0.10f + extra);
+            return value < 0f ? -magnitude : magnitude;
+        }
+        private static void CollectRetired()
+        {
+            float now = Time.unscaledTime;
+            for (int i = RetiredClips.Count - 1; i >= 0; i--)
+            {
+                AudioClip clip = RetiredClips[i]; bool active = false;
+                for (int j = 0; j < Voices.Length; j++)
+                {
+                    Voice voice = Voices[j];
+                    if (voice != null && voice.Source != null && voice.Source.isPlaying && voice.End > now && voice.Source.clip == clip) { active = true; break; }
+                }
+                if (active) continue;
+                if (clip != null) UnityEngine.Object.Destroy(clip);
+                OwnedClips.Remove(clip); RetiredClips.RemoveAt(i);
+            }
+        }
+
+        private static GameObject _root;
+        private static ZNetScene _scene;
+        private static ObjectDB _db;
+        private static int _warm, _variantWarm;
+        private static float _nextWarm;
+        private static bool _silent;
+
+        
+        private static bool Enabled
+        {
+            get
+            {
+                DragonCombatPlugin plugin = DragonCombatPlugin.Instance;
+                return _configReady && plugin != null && plugin.SkillAudioEnabled != null && plugin.SkillAudioEnabled.Value;
+            }
+        }
+        private static bool _tickWarned;
+        public static void Tick(Player player)
+        {
+            try { TickInner(player); }
+            catch (Exception error)
+            {
+                if (!_tickWarned) { _tickWarned = true; Debug.LogWarning("[Aethelborn] Audio update skipped: " + error.GetType().Name); }
+            }
+        }
+        private static void TickInner(Player player)
+        {
+            if (_scene != ZNetScene.instance || _db != ObjectDB.instance)
+            {
+                Clear(); _scene = ZNetScene.instance; _db = ObjectDB.instance;
+                _nextWarm = Time.unscaledTime + 3f;
+            }
+            RegisterRpc();
+            if (player == null || !Enabled)
+            {
+                if (!_silent) StopVoices();
+                _silent = true; return;
+            }
+            _silent = false;
+            float now = Time.unscaledTime;
+            float gameVolume = AudioMan.instance == null ? 0f : Mathf.Sqrt(Mathf.Clamp01(AudioMan.GetSFXVolume()));
+            for (int i = 0; i < Voices.Length; i++)
+            {
+                Voice voice = Voices[i]; if (voice == null || voice.Source == null) continue;
+                if (now >= voice.End) { if (voice.Source.isPlaying) voice.Source.Stop(); ReleaseSustain(voice); continue; }
+                if (voice.Sustained)
+                {
+                    bool keep = true;
+                    try { if (voice.Continue != null) keep = voice.Continue(); }
+                    catch { keep = false; }
+                    if (!keep) { voice.Source.Stop(); voice.End = now; ReleaseSustain(voice); continue; }
+                    if (voice.Follow != null) voice.Source.transform.position = voice.Follow.position;
+                    if (now >= voice.RepeatAt)
+                    {
+                        // Cached short clips overlap by 20ms; no PCM work or new sources per frame.
+                        if (voice.Raw) { voice.Source.time = voice.StartTime; voice.Source.Play(); voice.RepeatAt = float.MaxValue; }
+                        else
+                        {
+                            voice.Source.PlayOneShot(voice.Source.clip, PlaybackHeadroom);
+                            voice.RepeatAt = voice.Repeat ? now + Mathf.Max(0.06f, voice.Source.clip.length / voice.Source.pitch - 0.02f) : float.MaxValue;
+                        }
+                    }
+                }
+                // Preserve the native sound mixer; apply the equivalent SFX mixer amplitude only when its template has no group.
+                float level = voice.Raw ? Mathf.Min(1f, RawGain(voice.Cue, voice.BaseVolume)) * Space(voice.Source) : VoiceGain(voice) / PlaybackHeadroom;
+                voice.Source.volume = level * (gameVolume <= 0f ? 0f : (voice.UsesMixer ? 1f : gameVolume)) * Mathf.Clamp01((voice.End - now) / 0.08f);
+            }
+            if (now >= _nextCollect) { _nextCollect = now + 1f; CollectRetired(); }
+            if (_scene == null || _db == null || now < _nextWarm || player.InAttack() || DragonCombat.SkillAnimationBusy(player)) return;
+            _nextWarm = now + 0.1f;
+            // Keep the original Base Class / source-pool warmup priority as the bank grows.
+            if (_warm < 14) { Resolve(_warm++); return; }
+            if (_warm < 14 + OneShotVoices) { EnsureVoice(_warm++ - 14); return; }
+            if (_warm < Profiles.Length + OneShotVoices) { Resolve(_warm++ - OneShotVoices); return; }
+            if (_warm < Profiles.Length + Voices.Length) { EnsureVoice(_warm++ - Profiles.Length); return; }
+            // v0.25.238: then keep every raw sound's processed copy ready (built here, between casts, instead of on the first cast;
+            // a cached copy is a dictionary hit, so the round keeps up with slider changes for free)
+            int cue = _variantWarm++ % CueCount;
+            if (RawCue((DragonBaseSound)cue) && Profiles[cue] != null && Profiles[cue].Clips != null)
+                for (int c = 0; c < Profiles[cue].Clips.Length; c++) RawVariant(cue, Profiles[cue].Clips[c], RawGain(cue, 1f));
+        }
+        private static Profile Extract(GameObject prefab)
+        {
+            if (prefab == null) return null;
+            ZSFX[] sounds = prefab.GetComponentsInChildren<ZSFX>(true);
+            for (int i = 0; i < sounds.Length; i++)
+            {
+                ZSFX sound = sounds[i];
+                if (sound.m_audioClips == null || sound.m_audioClips.Length == 0) continue;
+                List<AudioClip> clips = new List<AudioClip>();
+                for (int j = 0; j < sound.m_audioClips.Length; j++) if (sound.m_audioClips[j] != null) clips.Add(sound.m_audioClips[j]);
+                if (clips.Count == 0) continue;
+                Profile p = new Profile(); p.Clips = clips.ToArray();
+                p.Pitch = Mathf.Clamp((sound.m_minPitch + sound.m_maxPitch) * 0.5f, 0.6f, 1.5f);
+                return p;
+            }
+            AudioSource[] direct = prefab.GetComponentsInChildren<AudioSource>(true);
+            for (int i = 0; i < direct.Length; i++)
+            {
+                if (direct[i].clip == null || direct[i].loop) continue;
+                Profile profile = new Profile(); profile.Clips = new AudioClip[] { direct[i].clip };
+                return profile;
+            }
+            return null;
+        }
+        private static Profile FromEffects(EffectList effects)
+        {
+            if (effects == null || effects.m_effectPrefabs == null) return null;
+            for (int i = 0; i < effects.m_effectPrefabs.Length; i++)
+            {
+                EffectList.EffectData effect = effects.m_effectPrefabs[i];
+                if (effect == null || !effect.m_enabled) continue;
+                Profile result = Extract(effect.m_prefab); if (result != null) return result;
+            }
+            return null;
+        }
+        private static Profile FromItem(string itemName, int stage)
+        {
+            if (ObjectDB.instance == null || string.IsNullOrEmpty(itemName)) return null;
+            GameObject prefab = ObjectDB.instance.GetItemPrefab(itemName);
+            ItemDrop drop = prefab == null ? null : prefab.GetComponent<ItemDrop>();
+            if (drop == null || drop.m_itemData == null || drop.m_itemData.m_shared == null) return null;
+            ItemDrop.ItemData.SharedData data = drop.m_itemData.m_shared; Attack attack = data.m_attack;
+            Profile p = null;
+            if (stage == 4) return data.m_consumeStatusEffect == null ? null : FromEffects(data.m_consumeStatusEffect.m_startEffects);
+            if (stage == 0)
+            {
+                p = FromEffects(data.m_startEffect);
+                if (p == null && attack != null) p = FromEffects(attack.m_startEffect);
+            }
+            if (stage == 2 || stage == 0)
+            {
+                if (p == null) p = FromEffects(data.m_triggerEffect);
+                if (p == null && attack != null) p = FromEffects(attack.m_triggerEffect);
+            }
+            if (stage == 3 && attack != null && attack.m_attackProjectile != null)
+            {
+                Projectile projectile = attack.m_attackProjectile.GetComponent<Projectile>();
+                if (projectile != null) p = FromEffects(projectile.m_hitEffects);
+            }
+            if (stage == 1)
+            {
+                p = FromEffects(data.m_hitTerrainEffect);
+                if (p == null && attack != null) p = FromEffects(attack.m_hitTerrainEffect);
+            }
+            if (p == null) p = FromEffects(data.m_hitEffect);
+            if (p == null && attack != null) p = FromEffects(attack.m_hitEffect);
+            return p;
+        }
+        private static readonly Dictionary<string, AudioClip> CustomClips = new Dictionary<string, AudioClip>();
+        // v227 (user): the supplied recordings exactly as given - never leveled, trimmed, filtered or faded.
+        private static readonly HashSet<string> PreLeveled = new HashSet<string> { "BassDrop.wav", "BigWhoosh.wav", "BigWhoosh2.wav", "BladeStorm.wav", "BoulderCrash.wav", "Buff.wav", "HeavyPunch.wav", "HeavySwing.wav", "HeavySwing2.wav", "MidBoom.wav", "Rumbling.wav", "SM_CCRumble.wav", "SmallBoom.wav", "SolidBoom.wav", "SpinningSwing.wav", "SwordSlash.wav", "SwordSlash2.wav", "SwordSwing.wav", "SwordSwing2.wav", "Tornado.wav" };
+        private static readonly Dictionary<AudioClip, float> ClipLead = new Dictionary<AudioClip, float>();
+        private static float Lead(AudioClip clip) { float lead; return clip != null && ClipLead.TryGetValue(clip, out lead) ? lead : 0f; }
+        // v229 (user): every supplied sound plays ENTIRE, from its first sample to its last; Length / Pitch / Speed / Volume are the user's to tune.
+        private static void CueWindow(DragonBaseSound cue, AudioClip clip, out float start, out float end)
+        {
+            start = 0f; end = clip == null ? 0f : clip.length;
+        }
+        // v0.25.235 (user): no rumbling on Mercenary - these components no longer play or show.
+        private static bool IsRumbleLayer(int layer)
+        {
+            DragonBaseSound[] gone = { DragonBaseSound.StompRumble, DragonBaseSound.StompAfterRumble, DragonBaseSound.CircleRumble, DragonBaseSound.BoneRumble,
+                DragonBaseSound.BoneAfterRumble, DragonBaseSound.SeismicSlamRumble, DragonBaseSound.SeismicEndRumble };
+            for (int i = 0; i < gone.Length; i++) if (CueLayers[(int)gone[i]] == layer) return true;
+            return false;
+        }
+        private static bool RawCue(DragonBaseSound cue) { return RebalancedLayers[CueLayers[(int)cue]]; }
+        // Hit point of this clip in its file (s): the component's marker, shifted by how this clip's own hit differs from the first clip's.
+        private static float MarkerSeconds(int cue, AudioClip clip)
+        {
+            int layer = CueLayers[cue];
+            float ms = LayerMarker[layer] == null ? DefaultMarker[layer] : LayerMarker[layer].Value;
+            Profile profile = Profiles[cue];
+            float shift = profile != null && profile.Clips != null && profile.Clips.Length > 1 ? Lead(clip) - Lead(profile.Clips[0]) : 0f;
+            float value = Mathf.Max(0f, ms / 1000f + shift);
+            return float.IsNaN(value) || float.IsInfinity(value) ? 0f : value;
+        }
+        private static float SyncSeconds(int cue)
+        {
+            ConfigEntry<float> entry = LayerSync[CueLayers[cue]];
+            float value = entry == null ? 0f : entry.Value / 1000f;
+            return float.IsNaN(value) || float.IsInfinity(value) ? 0f : value;
+        }
+        // v0.25.230 stereo everywhere: the file plays as recorded (2D); distance falloff and left/right pan are applied by hand
+        // from the listener (the game camera), so quality never drops with distance.
+        private static Transform _ear; private static float _earNext;
+        private static float Space(AudioSource source)
+        {
+            if (_ear == null || Time.unscaledTime >= _earNext) { _earNext = Time.unscaledTime + 2f; if (GameCamera.instance != null) _ear = GameCamera.instance.transform; }
+            if (_ear == null) { source.panStereo = 0f; return 1f; }
+            Vector3 d = source.transform.position - _ear.position; float dist = d.magnitude;
+            float near = DragonCombat.M(6f), far = DragonCombat.M(90f);
+            float g = dist <= near ? 1f : near / dist;
+            if (dist > far * 0.8f) g *= Mathf.Clamp01((far - dist) / (far * 0.2f));
+            float side = dist < 0.01f ? 0f : Vector3.Dot(d / dist, _ear.right);
+            source.panStereo = Mathf.Clamp(side * 0.8f * Mathf.Clamp01((dist - 1.5f) / 4f), -0.8f, 0.8f);
+            return g;
+        }
+        // v0.25.230 network: other players hear Warrior / Sword Master / Circle Swing sounds, each with their own falloff and sliders.
+        private const string SfxRpc = "AA_SkillSfx";
+        private static ZRoutedRpc _rpcReg;
+        private static int _nonce;
+        private static void RegisterRpc()
+        {
+            if (ZRoutedRpc.instance == null || _rpcReg == ZRoutedRpc.instance) return;
+            if (_nonce == 0) _nonce = UnityEngine.Random.Range(1, int.MaxValue);
+            ZRoutedRpc.instance.Register<ZPackage>(SfxRpc, new Action<long, ZPackage>(ReceiveSfx));
+            _rpcReg = ZRoutedRpc.instance;
+        }
+        private static void SendSfx(int type, DragonBaseSound cue, Vector3 p, int swing, float pitch, float maxSeconds, float time)
+        {
+            try
+            {
+                RegisterRpc();
+                if (ZRoutedRpc.instance == null) return;
+                ZPackage pkg = new ZPackage();
+                pkg.Write(_nonce); pkg.Write(type); pkg.Write((int)cue);
+                pkg.Write(p.x); pkg.Write(p.y); pkg.Write(p.z);
+                pkg.Write(swing); pkg.Write(pitch); pkg.Write(maxSeconds); pkg.Write(time);
+                ZRoutedRpc.instance.InvokeRoutedRPC(ZRoutedRpc.Everybody, SfxRpc, pkg);
+            }
+            catch (Exception) { }
+        }
+        private static void ReceiveSfx(long sender, ZPackage pkg)
+        {
+            try
+            {
+                if (pkg.ReadInt() == _nonce) return;   // our own message comes back to us too
+                int type = pkg.ReadInt(), id = pkg.ReadInt();
+                Vector3 p = new Vector3(pkg.ReadSingle(), pkg.ReadSingle(), pkg.ReadSingle());
+                int swing = pkg.ReadInt(); float pitch = pkg.ReadSingle(), maxSeconds = pkg.ReadSingle(), time = pkg.ReadSingle();
+                if (id < 0 || id >= CueCount || !RawCue((DragonBaseSound)id) || Player.m_localPlayer == null) return;
+                if (type == 3) { StopRemote(id); return; }
+                if (type == 2) SustainLocal((DragonBaseSound)id, p, time, pitch, 1f, null, null);
+                else PlayLocal((DragonBaseSound)id, p, swing, pitch, maxSeconds, type == 1 ? time : 0f);
+            }
+            catch (Exception) { }
+        }
+        private static void StopRemote(int id)
+        {
+            float now = Time.unscaledTime;
+            for (int i = 0; i < Voices.Length; i++)
+            {
+                Voice v = Voices[i];
+                if (v != null && v.Sustained && v.Cue == id && v.Continue == null && v.End > now) v.End = now + 0.08f;
+            }
+        }
+        // v0.25.230 clean loudness above 100%: look-ahead peak limiter (5 ms look-ahead, 1.5 ms attack, 80 ms release) instead of clipping.
+        private static void LimitLoud(float[] x, int channels, int rate)
+        {
+            int frames = x.Length / channels, look = Math.Max(1, rate / 200);
+            const float ceiling = 0.95f;
+            float attack = 1f - Mathf.Exp(-1f / (0.0015f * rate)), release = 1f - Mathf.Exp(-1f / (0.08f * rate));
+            float[] need = new float[frames];
+            for (int i = 0; i < frames; i++)
+            {
+                float peak = 0f;
+                for (int c = 0; c < channels; c++) peak = Math.Max(peak, Math.Abs(x[i * channels + c]));
+                need[i] = peak > ceiling ? ceiling / peak : 1f;
+            }
+            int[] queue = new int[frames]; int head = 0, tail = 0; float gain = 1f;
+            for (int i = 0, j = 0; i < frames; i++)
+            {
+                for (; j < frames && j <= i + look; j++)   // sliding minimum of the needed gain over [i, i + look]
+                {
+                    while (tail > head && need[queue[tail - 1]] >= need[j]) tail--;
+                    queue[tail++] = j;
+                }
+                while (queue[head] < i) head++;
+                float target = need[queue[head]];
+                gain += (target - gain) * (target < gain ? attack : release);
+                for (int c = 0; c < channels; c++)
+                {
+                    float v = x[i * channels + c] * gain;
+                    x[i * channels + c] = v > ceiling ? ceiling : (v < -ceiling ? -ceiling : v);
+                }
+            }
+        }
+        // v227 (user: 300% must blow your ears off): above 100% each slider climbs as a square (200% = 4x, 300% = 9x);
+        // skill x sound multiply. The boost is baked into the samples (Unity caps source volume at 1).
+        private static float Loud(float percent) { float v = Mathf.Max(0f, percent) / 100f; return v <= 1f ? v : v * v; }
+        private static float RawGain(int cue, float balance)
+        {
+            int skill = CueSkills[cue], layer = CueLayers[cue];
+            float sv = SkillVolumes[skill] == null ? DefaultVolumes[skill] : SkillVolumes[skill].Value;
+            float lv = LayerVolumes[layer] == null ? DefaultLayers[layer] : LayerVolumes[layer].Value;
+            float g = Loud(sv) * Loud(lv) * balance;
+            return float.IsNaN(g) || float.IsInfinity(g) ? 0f : Mathf.Clamp(g, 0f, 81f);
+        }
+        private static AudioClip RawVariant(int cue, AudioClip clip, float gain)
+        {
+            float speed = Mathf.Clamp(Shape(LayerSpeed, cue, 100f), 0.5f, 2f), bass = Mathf.Clamp(Shape(LayerBass, cue, 100f), 0f, 3f);
+            float drive = gain > 1f ? Mathf.Round(gain * 20f) / 20f : 1f;
+            if (clip == null || (Math.Abs(speed - 1f) < 0.005f && Math.Abs(bass - 1f) < 0.005f && drive <= 1f)) return clip;
+            string key = clip.GetInstanceID() + "|" + Mathf.RoundToInt(speed * 100f) + "|" + Mathf.RoundToInt(bass * 100f) + "|" + Mathf.RoundToInt(drive * 100f);
+            AudioClip cached;
+            if (Variants.TryGetValue(key, out cached) && cached != null) return cached;
+            float[] samples; int channels, rate;
+            if (!ReadPcm(clip, out samples, out channels, out rate)) return clip;
+            if (Math.Abs(bass - 1f) >= 0.005f) ShapeBass(samples, channels, rate, bass);
+            if (drive > 1f) { for (int i = 0; i < samples.Length; i++) samples[i] *= drive; LimitLoud(samples, channels, rate); }
+            if (Math.Abs(speed - 1f) >= 0.005f) samples = Stretch(samples, channels, rate, speed);
+            AudioClip result = CreatePcm(clip.name + "_r" + key, samples, channels, rate, TargetRms, false);
+            if (result == null) return clip;
+            if (Variants.Count >= 96) { foreach (AudioClip old in Variants.Values) if (old != null) RetiredClips.Add(old); Variants.Clear(); }
+            Variants[key] = result; ClipLead[result] = Lead(clip) / speed;
+            return result;
+        }
+        private static readonly bool[] CustomWarned = new bool[CueCount];
+        private static string _soundFolder;
+        private static readonly string[][] CustomFiles = {
+            new string[] { "HeavySwing2.wav", "HeavySwing2.wav", "HeavySwing.wav" }, new string[] { "BigWhoosh.wav" }, new string[] { "HeavyPunch.wav" }, null, null, new string[] { "BuffSpells.wav" }, null, new string[] { "GD_Impact.wav" }, new string[] { "StoneFang.wav" }, null, null, null, new string[] { "GD_Formation.wav" }, null, new string[] { "HeavySwing2.wav" }, new string[] { "HeavySwing.wav" }, new string[] { "SM_CCRumble.wav" }, new string[] { "BladeStorm.wav" }, new string[] { "BigWhoosh.wav" }, new string[] { "SwordSlash.wav", "SwordSlash2.wav" }, new string[] { "SmallBoom.wav" }, new string[] { "SwordSwing.wav" }, new string[] { "SwordSlash.wav", "SwordSlash2.wav" }, null, new string[] { "SwordSlash.wav", "SwordSlash2.wav" }, null, new string[] { "Buff.wav" }, new string[] { "MidBoom.wav" }, new string[] { "BassDrop.wav" }, new string[] { "HeavySwing2.wav" }, new string[] { "SolidBoom.wav" }, new string[] { "BigWhoosh2.wav" }, new string[] { "HeavyPunch.wav" }, new string[] { "SolidBoom.wav" }, new string[] { "SwordSwing2.wav" }, new string[] { "MidBoom.wav" }, new string[] { "SmallBoom.wav" }, new string[] { "HeavyPunch.wav" }, new string[] { "SmallBoom.wav" }, new string[] { "SolidBoom.wav" }, new string[] { "SpinningSwing.wav" }, new string[] { "HeavySwing.wav" }, new string[] { "Buff.wav" }, new string[] { "Buff.wav" }, new string[] { "SmallBoom.wav" }, new string[] { "GD_Shatter.wav" }, new string[] { "BigWhoosh.wav" }, new string[] { "BigWhoosh2.wav" }, new string[] { "HeavySwing2.wav" }, new string[] { "BassDrop.wav" }, new string[] { "SwordSwing.wav" }, null, null, new string[] { "SwordSwing.wav" }, null, null, new string[] { "BigWhoosh.wav" }, null, new string[] { "BassDrop.wav" }, null, null, new string[] { "SmallBoom.wav" }, new string[] { "BassDrop.wav" }, null, new string[] { "BassDrop.wav" }, null, new string[] { "BassDrop.wav" }, new string[] { "BigWhoosh2.wav" }, new string[] { "BassDrop.wav" }, null, new string[] { "HeavySwing2.wav" }, new string[] { "SwordSlash.wav" }, new string[] { "SwordSlash.wav" }, new string[] { "HeavySwing2.wav" }, new string[] { "BigWhoosh2.wav" }, new string[] { "Tornado.wav" }
+        };
+        private static int PcmInt(byte[] bytes, int offset)
+        {
+            return bytes[offset] | bytes[offset + 1] << 8 | bytes[offset + 2] << 16 | bytes[offset + 3] << 24;
+        }
+        private static bool PcmTag(byte[] bytes, int offset, string tag)
+        {
+            return bytes[offset] == tag[0] && bytes[offset + 1] == tag[1] && bytes[offset + 2] == tag[2] && bytes[offset + 3] == tag[3];
+        }
+        private static bool DecodePcm(byte[] bytes, out float[] samples, out int channels, out int rate)
+        {
+            samples = null; channels = 0; rate = 0;
+            if (bytes == null || bytes.Length < 44 || bytes.Length > 16 * 1024 * 1024 || !PcmTag(bytes, 0, "RIFF") || !PcmTag(bytes, 8, "WAVE")) return false;
+            int length = PcmInt(bytes, 4);
+            if (length < 36 || length > bytes.Length - 8) return false;
+            int limit = length + 8, position = -1, size = 0, format = 0, bits = 0, align = 0, byteRate = 0;
+            for (int offset = 12; offset <= limit - 8; )
+            {
+                int chunk = PcmInt(bytes, offset + 4), body = offset + 8;
+                if (chunk < 0 || chunk > limit - body) return false;
+                if (PcmTag(bytes, offset, "fmt "))
+                {
+                    if (chunk < 16) return false;
+                    format = bytes[body] | bytes[body + 1] << 8;
+                    channels = bytes[body + 2] | bytes[body + 3] << 8;
+                    rate = PcmInt(bytes, body + 4); byteRate = PcmInt(bytes, body + 8);
+                    align = bytes[body + 12] | bytes[body + 13] << 8;
+                    bits = bytes[body + 14] | bytes[body + 15] << 8;
+                }
+                else if (PcmTag(bytes, offset, "data") && position < 0) { position = body; size = chunk; }
+                int next = body + chunk + (chunk & 1);
+                if (next > limit) return false;
+                offset = next;
+            }
+            if (format != 1 || bits != 16 || channels < 1 || channels > 2 || rate < 8000 || rate > 96000 || align != channels * 2 || byteRate != rate * channels * 2 || position < 0 || size <= 0 || size % align != 0) return false;
+            samples = new float[size / 2];
+            for (int i = 0; i < samples.Length; i++)
+            {
+                int at = position + i * 2;
+                samples[i] = (short)(bytes[at] | bytes[at + 1] << 8) / 32768f;
+            }
+            return true;
+        }
+        // Resolve the float[] overload once. Direct binding exposes newer Span overloads to the legacy installer compiler.
+        private delegate bool PcmWriter(AudioClip clip, float[] samples, int offset);
+        private static PcmWriter _pcmWriter;
+        private static bool WritePcm(AudioClip clip, float[] samples)
+        {
+            if (_pcmWriter == null)
+            {
+                System.Reflection.MethodInfo method = typeof(AudioClip).GetMethod("SetData", new Type[] { typeof(float[]), typeof(int) });
+                if (method == null) return false;
+                _pcmWriter = (PcmWriter)Delegate.CreateDelegate(typeof(PcmWriter), method);
+            }
+            return _pcmWriter(clip, samples, 0);
+        }
+        private const float TargetRms = 0.16f;
+        private static readonly Dictionary<AudioClip, AudioClip> LeveledClips = new Dictionary<AudioClip, AudioClip>();
+        private static readonly Dictionary<AudioClip, AudioClip> LoudClips = new Dictionary<AudioClip, AudioClip>();
+        private static readonly HashSet<AudioClip> OwnedClips = new HashSet<AudioClip>();
+        private delegate bool PcmReader(AudioClip clip, float[] samples, int offset);
+        private static PcmReader _pcmReader;
+        private static bool _readerResolved;
+        private static bool _mixerResolved;
+        private static UnityEngine.Audio.AudioMixerGroup _effectsMixer;
+        private static readonly System.Reflection.FieldInfo MasterMixerField = typeof(AudioMan).GetField("m_masterMixer", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+
+        private static void ResolveEffectsMixer()
+        {
+            if (_mixerResolved || AudioMan.instance == null) return;
+            _mixerResolved = true;
+            try
+            {
+                UnityEngine.Audio.AudioMixer mixer = MasterMixerField == null ? null : MasterMixerField.GetValue(AudioMan.instance) as UnityEngine.Audio.AudioMixer;
+                if (mixer != null)
+                {
+                    UnityEngine.Audio.AudioMixerGroup[] groups = mixer.FindMatchingGroups("SFX");
+                    if (groups.Length == 0) groups = mixer.FindMatchingGroups("sfx");
+                    for (int i = 0; i < groups.Length; i++)
+                        if (string.Equals(groups[i].name, "SFX", StringComparison.OrdinalIgnoreCase)) { _effectsMixer = groups[i]; break; }
+                    if (_effectsMixer == null && groups.Length > 0) _effectsMixer = groups[0];
+                }
+            }
+            catch (Exception) { }
+            if (_effectsMixer == null)
+                Debug.Log("[Aethelborn] Skill audio uses native Effects-slider gain fallback; no SFX mixer group found.");
+        }
+        private static bool ReadPcm(AudioClip clip, out float[] samples, out int channels, out int rate)
+        {
+            samples = null; channels = 0; rate = 0;
+            if (clip == null) return false;
+            try
+            {
+                channels = clip.channels; rate = clip.frequency;
+                if (channels < 1 || channels > 2 || rate < 8000 || rate > 96000 || clip.samples <= 0) return false;
+                if (!_readerResolved)
+                {
+                    _readerResolved = true;
+                    System.Reflection.MethodInfo method = typeof(AudioClip).GetMethod("GetData", new Type[] { typeof(float[]), typeof(int) });
+                    if (method != null) _pcmReader = (PcmReader)Delegate.CreateDelegate(typeof(PcmReader), method);
+                }
+                if (_pcmReader == null) return false;
+                int frames = Math.Min(clip.samples, rate * 8);
+                samples = new float[frames * channels];
+                if (_pcmReader(clip, samples, 0)) return true;
+                // One cold-load attempt only; never decode, allocate or retry on hot playback.
+                if (clip.LoadAudioData() && _pcmReader(clip, samples, 0)) return true;
+            }
+            catch (Exception) { }
+            samples = null; return false;
+        }
+        private static float WindowRms(float[] samples, int channels, int rate)
+        {
+            int window = Math.Max(1, rate / 10) * channels;
+            window = Math.Min(window, samples.Length);
+            if (window == 0) return 0f;
+            double sum = 0, maximum = 0;
+            for (int i = 0; i < samples.Length; i++)
+            {
+                double value = samples[i]; sum += value * value;
+                if (i >= window) { value = samples[i - window]; sum -= value * value; }
+                if (i >= window - 1 && sum > maximum) maximum = sum;
+            }
+            return (float)Math.Sqrt(maximum / window);
+        }
+        private static void LevelPcm(float[] samples, int channels, int rate, float target = TargetRms)
+        {
+            // Match the strongest 100ms of each cue, without making long tails or silence artificially loud.
+            float peak = 0f;
+            for (int i = 0; i < samples.Length; i++)
+            {
+                if (float.IsNaN(samples[i]) || float.IsInfinity(samples[i])) samples[i] = 0f;
+                peak = Math.Max(peak, Math.Abs(samples[i]));
+            }
+            for (int pass = 0; pass < 8; pass++)
+            {
+                float rms = WindowRms(samples, channels, rate);
+                if (rms < 0.000001f || (peak <= 0.95f && Math.Abs(rms - target) <= target * 0.01f)) return;
+                float gain = Mathf.Clamp(target / rms, 0.01f, 32f);
+                peak = 0f;
+                for (int i = 0; i < samples.Length; i++)
+                {
+                    float value = samples[i] * gain, magnitude = Math.Abs(value);
+                    if (magnitude > 0.85f)
+                    {
+                        float extra = magnitude - 0.85f;
+                        magnitude = 0.85f + 0.10f * extra / (0.10f + extra);
+                        value = value < 0f ? -magnitude : magnitude;
+                    }
+                    samples[i] = value; peak = Math.Max(peak, Math.Abs(value));
+                }
+            }
+        }
+        private static AudioClip CreatePcm(string name, float[] samples, int channels, int rate, float target = TargetRms, bool normalize = true)
+        {
+            AudioClip clip = null;
+            try
+            {
+                if (normalize) LevelPcm(samples, channels, rate, target);
+                clip = AudioClip.Create(name, samples.Length / channels, channels, rate, false);
+                if (clip != null && WritePcm(clip, samples)) { OwnedClips.Add(clip); return clip; }
+            }
+            catch (Exception) { }
+            if (clip != null) UnityEngine.Object.Destroy(clip);
+            return null;
+        }
+        private static AudioClip LevelClip(AudioClip original, float target)
+        {
+            AudioClip cached;
+            Dictionary<AudioClip, AudioClip> bank = target > TargetRms ? LoudClips : LeveledClips;
+            if (bank.TryGetValue(original, out cached)) return cached;
+            float[] samples; int channels, rate;
+            AudioClip result = null;
+            if (ReadPcm(original, out samples, out channels, out rate))
+                result = CreatePcm("AA_Level_" + original.name, samples, channels, rate, target);
+            if (result == null)
+            {
+                result = original;
+                Debug.LogWarning("[Aethelborn] Native clip could not be leveled: " + original.name + "; native sound retained at the common Effects-controlled gain.");
+            }
+            bank[original] = result;
+            return result;
+        }
+        private static void LevelProfile(Profile profile, int cue)
+        {
+            if (profile == null || profile.Custom) return;
+            for (int i = 0; i < profile.Clips.Length; i++) profile.Clips[i] = LevelClip(profile.Clips[i], CueTarget(cue));
+        }
+        private static float MonoAt(float[] samples, int channels, double frame)
+        {
+            int count = samples.Length / channels;
+            if (frame < 0 || frame >= count) return 0f;
+            int a = (int)frame, b = Math.Min(a + 1, count - 1);
+            float fraction = (float)(frame - a), value = 0f;
+            for (int i = 0; i < channels; i++)
+                value += samples[a * channels + i] + (samples[b * channels + i] - samples[a * channels + i]) * fraction;
+            return value / channels;
+        }
+        private static Profile FromRelease(string itemName)
+        {
+            GameObject prefab = ObjectDB.instance.GetItemPrefab(itemName);
+            ItemDrop drop = prefab == null ? null : prefab.GetComponent<ItemDrop>();
+            if (drop == null || drop.m_itemData == null || drop.m_itemData.m_shared == null) return null;
+            ItemDrop.ItemData.SharedData data = drop.m_itemData.m_shared;
+            Attack attack = data.m_attack;
+            // Native projectile firing uses m_burstEffect; never substitute the projectile's hit/explosion sound.
+            Profile result = attack == null ? null : FromEffects(attack.m_burstEffect);
+            if (result == null && attack != null) result = FromEffects(attack.m_triggerEffect);
+            if (result == null) result = FromEffects(data.m_triggerEffect);
+            if (result == null && attack != null) result = FromEffects(attack.m_startEffect);
+            if (result == null) result = FromEffects(data.m_startEffect);
+            return result;
+        }
+
+        private static AudioClip LoadCustom(string name, int cue)
+        {
+            AudioClip cached;
+            if (CustomClips.TryGetValue(name, out cached) && cached != null) return cached;
+            AudioClip clip = null;
+            try
+            {
+                if (_soundFolder == null) _soundFolder = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(typeof(DragonSkillAudio).Assembly.Location), "ImmortalHeroesAssets", "SFX");
+                string file = System.IO.Path.Combine(_soundFolder, name);
+                System.IO.FileInfo info = new System.IO.FileInfo(file);
+                if (!info.Exists || info.Length > 16 * 1024 * 1024) return null;
+                float[] samples; int channels, rate;
+                if (!DecodePcm(System.IO.File.ReadAllBytes(file), out samples, out channels, out rate)) return null;
+                bool leveled = PreLeveled.Contains(name);
+                clip = CreatePcm("AA_" + name, samples, channels, rate, CueTarget(cue), !leveled);
+                if (clip == null) return null;
+                ClipLead[clip] = BuildLead(samples, channels, rate);
+                CustomClips[name] = clip;
+                return clip;
+            }
+            catch (Exception)
+            {
+                if (clip != null) UnityEngine.Object.Destroy(clip);
+                return null;
+            }
+        }
+        private static float Shape(ConfigEntry<float>[] entries, int cue, float neutral)
+        {
+            ConfigEntry<float> entry = entries[CueLayers[cue]];
+            float value = entry == null ? neutral : entry.Value;
+            return float.IsNaN(value) || float.IsInfinity(value) ? neutral / 100f : value / 100f;
+        }
+        private static readonly Dictionary<string, AudioClip> Variants = new Dictionary<string, AudioClip>();
+        // Bass and Speed are baked into a cached copy of the clip; rebuilt only when that skill's slider changes.
+        private static AudioClip Variant(int cue, AudioClip clip)
+        {
+            float speed = Mathf.Clamp(Shape(LayerSpeed, cue, 100f), 0.5f, 2f), bass = Mathf.Clamp(Shape(LayerBass, cue, 100f), 0f, 3f);
+            if (clip == null || (Math.Abs(speed - 1f) < 0.005f && Math.Abs(bass - 1f) < 0.005f)) return clip;
+            string key = clip.GetInstanceID() + "|" + Mathf.RoundToInt(speed * 100f) + "|" + Mathf.RoundToInt(bass * 100f);
+            AudioClip cached;
+            if (Variants.TryGetValue(key, out cached) && cached != null) return cached;
+            float[] samples; int channels, rate;
+            if (!ReadPcm(clip, out samples, out channels, out rate)) return clip;
+            if (Math.Abs(bass - 1f) >= 0.005f) ShapeBass(samples, channels, rate, bass);
+            if (Math.Abs(speed - 1f) >= 0.005f) samples = Stretch(samples, channels, rate, speed);
+            AudioClip result = CreatePcm(clip.name + "_v" + key, samples, channels, rate, TargetRms, false);
+            if (result == null) return clip;
+            if (Variants.Count >= 96) { foreach (AudioClip old in Variants.Values) if (old != null) RetiredClips.Add(old); Variants.Clear(); }
+            Variants[key] = result; ClipLead[result] = Lead(clip) / speed;
+            return result;
+        }
+        // Low band (< ~150 Hz, zero-phase: two one-pole low-passes run forward then backward) scaled; the rest untouched,
+        // so 100% is the original exactly and 0% removes the low end cleanly.
+        private static void ShapeBass(float[] samples, int channels, int rate, float bass)
+        {
+            float a = 1f - Mathf.Exp(-2f * Mathf.PI * 180f / rate);
+            int frames = samples.Length / channels; float[] low = new float[frames];
+            for (int c = 0; c < channels; c++)
+            {
+                float s1 = 0f, s2 = 0f;
+                for (int i = 0; i < frames; i++) { s1 += a * (samples[i * channels + c] - s1); s2 += a * (s1 - s2); low[i] = s2; }
+                s1 = 0f; s2 = 0f;
+                for (int i = frames - 1; i >= 0; i--) { s1 += a * (low[i] - s1); s2 += a * (s1 - s2); low[i] = s2; }
+                for (int i = 0; i < frames; i++) samples[i * channels + c] = LimitPeak(samples[i * channels + c] + low[i] * (bass - 1f));
+            }
+        }
+        // WSOLA time stretch (30 ms Hann frames, 50% overlap, +-10 ms similarity search): speed changes, pitch does not.
+        private static float[] Stretch(float[] x, int channels, int rate, float speed)
+        {
+            int frames = x.Length / channels, n = Math.Max(256, rate * 30 / 1000), hs = n / 2, tol = rate / 100;
+            if (frames < n * 2) return x;
+            int outFrames = (int)(frames / speed) + n * 2;
+            float[] y = new float[outFrames * channels], norm = new float[outFrames], win = new float[n];
+            for (int i = 0; i < n; i++) win[i] = 0.5f - 0.5f * Mathf.Cos(2f * Mathf.PI * i / n);
+            int prev = 0, outPos = 0;
+            for (int k = 0; ; k++)
+            {
+                int target = (int)(k * hs * speed), best = target;
+                if (k > 0)
+                {
+                    int natural = prev + hs; double top = double.MinValue;
+                    for (int d = -tol; d <= tol; d += 2)
+                    {
+                        int cand = target + d; if (cand < 0 || cand + n >= frames || natural + n >= frames) continue;
+                        double sum = 0;
+                        for (int j = 0; j < n; j += 4) sum += x[(natural + j) * channels] * x[(cand + j) * channels];
+                        if (sum > top) { top = sum; best = cand; }
+                    }
+                }
+                if (best < 0 || best + n >= frames || outPos + n >= outFrames) break;
+                for (int j = 0; j < n; j++)
+                {
+                    for (int c = 0; c < channels; c++) y[(outPos + j) * channels + c] += x[(best + j) * channels + c] * win[j];
+                    norm[outPos + j] += win[j];
+                }
+                prev = best; outPos += hs;
+            }
+            int length = Math.Max(1, outPos + hs);
+            float[] result = new float[length * channels];
+            for (int i = 0; i < length; i++)
+                for (int c = 0; c < channels; c++) result[i * channels + c] = norm[i] > 0.001f ? y[i * channels + c] / Mathf.Max(norm[i], 0.5f) : 0f;
+            return result;
+        }
+        // Seconds until the sound first reaches 70% of its loudest 10 ms: lands a windup's climax on the impact.
+        private static float BuildLead(float[] samples, int channels, int rate)
+        {
+            int window = Math.Max(1, rate / 100) * channels, count = samples.Length / window;
+            if (count == 0) return 0f;
+            float[] energy = new float[count]; float top = 0f;
+            for (int w = 0; w < count; w++)
+            {
+                double sum = 0; for (int i = w * window; i < (w + 1) * window; i++) sum += samples[i] * samples[i];
+                energy[w] = (float)Math.Sqrt(sum / window); top = Math.Max(top, energy[w]);
+            }
+            for (int w = 0; w < count; w++) if (energy[w] >= top * 0.7f) return w * 0.01f;
+            return 0f;
+        }
+        private static Profile FromCustom(int cue)
+        {
+            string[] files = CustomFiles[cue];
+            if (files == null) return null;
+            AudioClip[] clips = new AudioClip[files.Length];
+            for (int i = 0; i < clips.Length; i++)
+            {
+                clips[i] = LoadCustom(files[i], cue);
+                if (clips[i] == null)
+                {
+                    if (!CustomWarned[cue]) { CustomWarned[cue] = true; Debug.LogWarning("[Aethelborn] Custom skill audio missing/invalid: " + files[i] + "; check ImmortalHeroesAssets/SFX."); }
+                    return null;
+                }
+            }
+            Profile profile = new Profile(); profile.Clips = clips; profile.Custom = true;
+            return profile;
+        }
+        private static Profile FromFire()
+        {
+            string[] names = { "fire_pit", "bonfire", "Fire" };
+            for (int i = 0; i < names.Length; i++)
+            {
+                GameObject prefab = ZNetScene.instance.GetPrefab(names[i]);
+                if (prefab == null) continue;
+                AudioSource[] sources = prefab.GetComponentsInChildren<AudioSource>(true);
+                for (int j = 0; j < sources.Length; j++)
+                {
+                    if (sources[j].clip == null || !sources[j].loop) continue;
+                    Profile result = new Profile(); result.Clips = new AudioClip[] { sources[j].clip }; return result;
+                }
+                Profile fallback = Extract(prefab); if (fallback != null) return fallback;
+            }
+            return null;
+        }
+
+        // v227 (user): Moonlight / Halfmoon GT waves = Valheim's own wind.
+        private static Profile FromWind()
+        {
+            if (AudioMan.instance == null) return null;
+            foreach (System.Reflection.FieldInfo field in typeof(AudioMan).GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic))
+            {
+                if (field.Name.IndexOf("wind", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                object value = field.GetValue(AudioMan.instance); AudioClip clip = null;
+                if (value is AudioSource) clip = ((AudioSource)value).clip;
+                else if (value is AudioClip) clip = (AudioClip)value;
+                else if (value is AudioClip[] && ((AudioClip[])value).Length > 0) clip = ((AudioClip[])value)[0];
+                if (clip == null) continue;
+                Profile p = new Profile(); p.Clips = new AudioClip[] { clip }; p.Custom = true;
+                Debug.Log("[Aethelborn] GT wind sound: AudioMan." + field.Name + " (" + clip.name + ")");
+                return p;
+            }
+            return null;
+        }
+
+        private static Profile FromBush()
+        {
+            string[] names = { "Bush01", "Bush01_heath", "Bush01_forest", "Bush02_en" };
+            for (int i = 0; i < names.Length; i++)
+            {
+                GameObject bush = ZNetScene.instance.GetPrefab(names[i]);
+                if (bush == null) continue;
+                Destructible destructible = bush.GetComponent<Destructible>();
+                if (destructible == null) continue;
+                Profile sound = FromEffects(destructible.m_hitEffect);
+                if (sound == null) sound = FromEffects(destructible.m_destroyedEffect);
+                if (sound != null) return sound;
+            }
+            return null;
+        }
+
+        private static Profile Resolve(int cue)
+        {
+            if (Profiles[cue] != null) return Profiles[cue];
+            if (ZNetScene.instance == null || ObjectDB.instance == null) return null;
+            bool wind = cue == (int)DragonBaseSound.MoonlightWind || cue == (int)DragonBaseSound.HalfmoonFinisher;
+            Profile p = cue == (int)DragonBaseSound.CrescentFire ? FromFire() : (wind ? FromWind() : FromCustom(cue));
+            string selected = p == null ? null : (cue == (int)DragonBaseSound.CrescentFire ? "native campfire crackle" : string.Join(" + ", CustomFiles[cue]));
+            bool bush = cue == (int)DragonBaseSound.TrapPlace || cue == (int)DragonBaseSound.TrapSnap;
+            // Flame Burst uses the actual Staff of Embers release effect references first.
+            if (p == null && cue == (int)DragonBaseSound.FlameBurst)
+            { p = FromRelease("StaffFireball"); if (p != null) selected = "StaffFireball projectile burst/release effects"; }
+            for (int i = 0; i < Prefabs[cue].Length && p == null; i++)
+            {
+                p = Extract(ZNetScene.instance.GetPrefab(Prefabs[cue][i]));
+                if (p != null) selected = Prefabs[cue][i];
+            }
+            if (p == null && bush) { p = FromBush(); if (p != null) selected = "vanilla bush effect list"; }
+            if (p == null && !bush && cue != (int)DragonBaseSound.FlameBurst && !string.IsNullOrEmpty(Items[cue]))
+            { p = FromItem(Items[cue], Stages[cue]); if (p != null) selected = Items[cue] + " effect list"; }
+            if (p != null)
+            {
+                ResolveEffectsMixer();
+                if (!RawCue((DragonBaseSound)cue)) LevelProfile(p, cue);
+                Profiles[cue] = p;
+                Debug.Log("[Aethelborn] Skill audio " + ((DragonBaseSound)cue).ToString() + ": " + selected + " (" + p.Clips.Length + " clips)");
+            }
+            else if (!Warned[cue])
+            {
+                Warned[cue] = true;
+                Debug.LogWarning("[Aethelborn] Skill audio unavailable: " + ((DragonBaseSound)cue).ToString() + "; skill continues normally.");
+            }
+            return p;
+        }
+        private static Voice EnsureVoice(int index)
+        {
+            if (Voices[index] != null && Voices[index].Source != null) return Voices[index];
+            if (_root == null) _root = new GameObject("AA_BaseSkillAudio");
+            GameObject child = new GameObject("voice"); child.transform.SetParent(_root.transform, false);
+            AudioSource source = child.AddComponent<AudioSource>();
+            source.playOnAwake = false; source.loop = false; source.spatialBlend = 1f;
+            source.rolloffMode = AudioRolloffMode.Logarithmic; source.minDistance = 2f; source.maxDistance = 35f;
+            source.dopplerLevel = 0f; source.priority = 0;   // v226: never culled under a flood of hit sounds
+            Voice voice = new Voice(); voice.Source = source; Voices[index] = voice;
+            source.bypassReverbZones = true;   // v227 (user): no room reverb / echo on skill sounds
+            return voice;
+        }
+        private static readonly float[] ExpectedAt = new float[CueCount];
+        public static void Play(Player caster, DragonBaseSound cue, Vector3 position, int swing = 0, float pitchScale = 1f, float maxSeconds = 0f)
+        {
+            if (!Enabled || caster == null || caster != Player.m_localPlayer || caster.IsDead() || AudioMan.instance == null) return;
+            int id = (int)cue; if (id < 0 || id >= CueCount) return;
+            float expected = ExpectedAt[id];
+            if (expected > 0f && Math.Abs(Time.unscaledTime - expected) < 0.6f) { ExpectedAt[id] = 0f; return; }   // already started at the cast
+            if (RawCue(cue)) SendSfx(0, cue, position, swing, pitchScale, maxSeconds, 0f);
+            PlayLocal(cue, position, swing, pitchScale, maxSeconds, 0f);
+        }
+        // v0.25.230: called when a skill is cast, with the time until its hit; the sound starts early so its marker lands on the hit.
+        // The Play() at the hit itself is then absorbed.
+        public static void Expect(Player caster, DragonBaseSound cue, Vector3 position, float hitIn, float pitchScale = 1f, int swing = 0)
+        {
+            if (!Enabled || caster == null || caster != Player.m_localPlayer || caster.IsDead() || AudioMan.instance == null || !RawCue(cue)) return;
+            if (float.IsNaN(hitIn) || float.IsInfinity(hitIn)) return;
+            hitIn = Mathf.Clamp(hitIn, 0f, 10f);
+            ExpectedAt[(int)cue] = Time.unscaledTime + hitIn;
+            SendSfx(1, cue, position, swing, pitchScale, 0f, hitIn);
+            PlayLocal(cue, position, swing, pitchScale, 0f, hitIn);
+        }
+        private static void PlayLocal(DragonBaseSound cue, Vector3 position, int swing, float pitchScale, float maxSeconds, float hitIn)
+        {
+            if (!Enabled || AudioMan.instance == null || Player.m_localPlayer == null) return;
+            int id = (int)cue; if (id < 0 || id >= Profiles.Length) return;
+            if (float.IsNaN(position.x) || float.IsNaN(position.y) || float.IsNaN(position.z) || float.IsInfinity(position.x) || float.IsInfinity(position.y) || float.IsInfinity(position.z)) return;
+            try
+            {
+                if (id >= 14)
+                {
+                    float now = Time.unscaledTime;
+                    if (now < CueNext[id]) return;
+                    CueNext[id] = now + PhaseGaps[id - 14];
+                }
+                // Resolve at most once per cue until the next warmup/scene; missing sounds do not retry every damage tick.
+                Profile profile = Profiles[id];
+                if (profile == null && !Warned[id]) profile = Resolve(id);
+                if (profile == null) return;
+                float gain = PlaybackBalance(cue, profile);
+                _hitIn = hitIn;   // also used by this sound's companions below; cleared at the end
+                int primary = PlayLayer(profile, cue, position, swing, gain, -1, EventLayer(cue), pitchScale, maxSeconds);
+                // v221: independent Mercenary stems protect this impact and its earlier companions under pool pressure.
+                int companion = -1;
+                switch (cue)
+                {
+                    case DragonBaseSound.StompImpact:
+                        break;
+                    case DragonBaseSound.StompAfter:
+                        break;
+                    case DragonBaseSound.CircleSweep:
+                        companion = PlayCompanion(DragonBaseSound.CircleGust, position, pitchScale, maxSeconds, primary, companion);
+                        break;
+                    case DragonBaseSound.CircleRupture:
+                        break;
+                    case DragonBaseSound.BoneImpact:
+                        companion = PlayCompanion(DragonBaseSound.BoneBass, position, pitchScale, maxSeconds, primary, companion);
+                        break;
+                    case DragonBaseSound.BoneAfter:
+                        break;
+                    case DragonBaseSound.BombExplosion:
+                        companion = PlayCompanion(DragonBaseSound.BombMid, position, pitchScale, maxSeconds, primary, companion);
+                        companion = PlayCompanion(DragonBaseSound.BombBass, position, pitchScale, maxSeconds, primary, companion);
+                        break;
+                    case DragonBaseSound.SeismicSlam:
+                        break;
+                    case DragonBaseSound.SeismicRupture:
+                        companion = PlayCompanion(DragonBaseSound.SeismicEndBass, position, pitchScale, maxSeconds, primary, companion);
+                        break;
+                    case DragonBaseSound.Fury:
+                        companion = PlayCompanion(DragonBaseSound.FuryRumble, position, pitchScale, maxSeconds, primary, companion);
+                        break;
+                }
+                if (cue == DragonBaseSound.GlacialDescent)
+                {
+                    int iceId = (int)DragonBaseSound.GlacialShatter;
+                    float now = Time.unscaledTime;
+                    if (now >= CueNext[iceId])
+                    {
+                        CueNext[iceId] = now + PhaseGaps[iceId - 14];
+                        Profile ice = Profiles[iceId];
+                        if (ice == null && !Warned[iceId]) ice = Resolve(iceId);
+                        // Preserve the main landing even when all twelve pooled voices are busy.
+                        if (ice != null) PlayLayer(ice, DragonBaseSound.GlacialShatter, position, 0, 1f, primary, EventLayer(DragonBaseSound.GlacialShatter));
+                    }
+                }
+            }
+            catch (Exception error)
+            {
+                if (!Warned[id]) { Warned[id] = true; Debug.LogWarning("[Aethelborn] Skill audio skipped: " + cue.ToString() + " (" + error.GetType().Name + ")"); }
+            }
+            finally { _hitIn = 0f; }
+        }
+        private static float PlaybackBalance(DragonBaseSound cue, Profile profile)
+        {
+            if (RawCue(cue)) return 1f;
+            float gain = 1f;
+            switch (cue)
+            {
+                case DragonBaseSound.StompRumble: gain *= 0.55f; break;
+                case DragonBaseSound.StompAfterRumble: gain *= 0.55f; break;
+                case DragonBaseSound.CircleGust: gain *= 0.6f; break;
+                case DragonBaseSound.CircleRumble: gain *= 0.55f; break;
+                case DragonBaseSound.BoneBass: gain *= 0.8f; break;
+                case DragonBaseSound.BoneRumble: gain *= 0.5f; break;
+                case DragonBaseSound.BoneAfterRumble: gain *= 0.55f; break;
+                case DragonBaseSound.BombMid: gain *= 0.65f; break;
+                case DragonBaseSound.BombBass: gain *= 0.5f; break;
+                case DragonBaseSound.SeismicSlamRumble: gain *= 0.6f; break;
+                case DragonBaseSound.SeismicEndBass: gain *= 0.85f; break;
+                case DragonBaseSound.SeismicEndRumble: gain *= 0.7f; break;
+                case DragonBaseSound.BattlecryBass: gain *= 0.25f; break;
+                case DragonBaseSound.FuryRumble: gain *= 0.35f; break;
+            }
+            return gain;
+        }
+        private static int PlayCompanion(DragonBaseSound cue, Vector3 position, float pitchScale, float maxSeconds, int primary, int other)
+        {
+            int id = (int)cue;
+            float now = Time.unscaledTime;
+            if (now < CueNext[id]) return -1;
+            CueNext[id] = now + PhaseGaps[id - 14];
+            Profile profile = Profiles[id];
+            if (profile == null && !Warned[id]) profile = Resolve(id);
+            if (profile == null) return -1;
+            return PlayLayer(profile, cue, position, 0, PlaybackBalance(cue, profile), primary, EventLayer(cue), pitchScale, maxSeconds, -1, other);
+        }
+        private static int PlayLayer(Profile profile, DragonBaseSound cue, Vector3 position, int swing, float layerGain, int avoidVoice, int layer, float pitchScale = 1f, float maxSeconds = 0f, int preferredVoice = -1, int avoidVoice2 = -1)
+        {
+                int index = profile.Custom && cue == DragonBaseSound.HeavySlash ? Mathf.Clamp(swing, 0, profile.Clips.Length - 1) : profile.NextClip;
+                AudioClip clip = Variant((int)cue, profile.Clips[index]);
+                profile.NextClip = (profile.NextClip + 1) % profile.Clips.Length;
+                if (clip == null) return -1;
+                float now = Time.unscaledTime; int selected = 0;
+                while (selected == avoidVoice || selected == avoidVoice2) selected++;
+                for (int i = 0; preferredVoice < 0 && i < OneShotVoices; i++)
+                {
+                    if (i == avoidVoice || i == avoidVoice2) continue;
+                    if (Voices[i] == null || Voices[i].Source == null || Voices[i].End <= now) { selected = i; break; }
+                    if (Voices[i].Sustained) continue;   // v228: a wind-up keeps its voice
+                    if (Voices[selected] != null && (Voices[selected].Sustained || Voices[i].End < Voices[selected].End)) selected = i;
+                }
+                if (preferredVoice >= 0) selected = preferredVoice;
+                Voice voice = EnsureVoice(selected); ReleaseSustain(voice); AudioSource source = voice.Source;
+                if (RawCue(cue)) return PlayRaw(voice, selected, profile.Clips[index], cue, position, layerGain, layer, pitchScale, maxSeconds);
+                voice.Raw = false; source.loop = false; source.bypassListenerEffects = false; source.spatialBlend = 1f; source.panStereo = 0f;
+                source.Stop(); source.transform.position = position; source.clip = clip; source.pitch = Mathf.Clamp(profile.Pitch * (float.IsNaN(pitchScale) || float.IsInfinity(pitchScale) ? 1f : pitchScale) * Shape(LayerPitch, (int)cue, 100f), 0.25f, 3f);
+                source.outputAudioMixerGroup = _effectsMixer; voice.UsesMixer = _effectsMixer != null;
+                bool iceImpact = cue == DragonBaseSound.GlacialDescent || cue == DragonBaseSound.GlacialShatter;
+                source.minDistance = Mathf.Max(0.5f, DragonCombat.M(iceImpact ? 6f : 2f));
+                source.maxDistance = Mathf.Max(source.minDistance + 1f, DragonCombat.M(iceImpact ? 120f : 80f));
+                voice.BaseVolume = layerGain; voice.Cue = (int)cue; voice.Layer = layer;
+                voice.End = now + Mathf.Clamp(clip.length / source.pitch * Mathf.Clamp(Shape(LayerLength, (int)cue, 100f), 0.1f, 1f), 0.08f, 4f);
+                if (maxSeconds > 0f && !float.IsInfinity(maxSeconds)) voice.End = Mathf.Min(voice.End, now + Mathf.Max(0.03f, maxSeconds));
+                float gameGain = Mathf.Sqrt(Mathf.Clamp01(AudioMan.GetSFXVolume()));
+                source.volume = (VoiceGain(voice) / PlaybackHeadroom) * (gameGain <= 0f ? 0f : (voice.UsesMixer ? 1f : gameGain));
+                source.PlayOneShot(clip, PlaybackHeadroom);
+                return selected;
+        }
+
+        // v227 raw path: the recording as given (no leveling, no mixer reverb), played from its window with Play().
+        private static float _hitIn;   // seconds until the skill's hit for the sound being started (0 = the hit is now)
+        private static int PlayRaw(Voice voice, int selected, AudioClip original, DragonBaseSound cue, Vector3 position, float balance, int layer, float pitchScale, float maxSeconds)
+        {
+            if (original == null) return -1;
+            AudioSource source = voice.Source; float now = Time.unscaledTime;
+            float gain = RawGain((int)cue, balance);
+            AudioClip clip = RawVariant((int)cue, original, gain);
+            float speed = Mathf.Clamp(Shape(LayerSpeed, (int)cue, 100f), 0.5f, 2f);
+            float scale = clip != original ? 1f / speed : 1f;
+            source.Stop(); source.loop = false; source.transform.position = position; source.clip = clip;
+            source.pitch = Mathf.Clamp((float.IsNaN(pitchScale) || float.IsInfinity(pitchScale) ? 1f : pitchScale) * Shape(LayerPitch, (int)cue, 100f), 0.25f, 3f);
+            source.outputAudioMixerGroup = null; voice.UsesMixer = false;   // no Valheim mixer reverb; the Effects slider is applied by hand
+            source.bypassReverbZones = true; source.bypassListenerEffects = true; source.spatialBlend = 0f;
+            voice.Raw = true; voice.BaseVolume = balance; voice.Cue = (int)cue; voice.Layer = layer;
+            // The marker lands on the hit: start early when the hit is ahead, or start inside the file when it is now.
+            float lead = MarkerSeconds((int)cue, original) * scale / source.pitch - SyncSeconds((int)cue);
+            float delay = _hitIn - lead, offset = 0f;
+            if (delay < 0f) { offset = Mathf.Min(-delay * source.pitch, Mathf.Max(0f, clip.length - 0.02f)); delay = 0f; }
+            source.time = offset; voice.StartTime = offset;
+            float playable = (clip.length - offset) / source.pitch * Mathf.Clamp(Shape(LayerLength, (int)cue, 100f), 0.1f, 1f);
+            // v0.25.232: the user's recordings play whole (Length slider trims); old code-side caps cut them. Only the fire loop keeps its cap.
+            if (cue == DragonBaseSound.CrescentFire && maxSeconds > 0f && !float.IsInfinity(maxSeconds)) playable = Mathf.Min(playable, Mathf.Max(0.03f, maxSeconds));
+            voice.End = now + delay + Mathf.Clamp(playable, 0.05f, 60f);
+            source.volume = Mathf.Min(1f, gain) * Mathf.Sqrt(Mathf.Clamp01(AudioMan.GetSFXVolume())) * Space(source);
+            if (delay > 0.02f) { voice.RepeatAt = now + delay; voice.Sustained = true; }   // waiting for its start; nobody may take the voice
+            else { voice.RepeatAt = float.MaxValue; source.Play(); }
+            return selected;
+        }
+
+        // v219: bounded, owned voices for moving cleaves and interruptible windups.
+        private static int _nextTicket;
+        private static void ReleaseSustain(Voice voice)
+        {
+            voice.Ticket = 0; voice.Sustained = false; voice.Repeat = false; voice.Continue = null; voice.Follow = null;
+        }
+        public static int BeginSustain(Player caster, DragonBaseSound cue, Vector3 position, float seconds, float pitchScale = 1f, float gain = 1f, Func<bool> alive = null, bool followCaster = false)
+        {
+            if (!Enabled || caster == null || caster != Player.m_localPlayer || caster.IsDead() || AudioMan.instance == null || !(seconds > 0f) || float.IsNaN(seconds) || float.IsInfinity(seconds)) return -1;
+            if (RawCue(cue)) SendSfx(2, cue, position, 0, pitchScale, 0f, seconds);
+            Func<bool> watched = alive;
+            if (alive != null && RawCue(cue))
+            {
+                bool[] told = new bool[1]; Vector3 at = position;
+                watched = delegate
+                {
+                    bool keep = alive();
+                    if (!keep && !told[0]) { told[0] = true; SendSfx(3, cue, at, 0, 1f, 0f, 0f); }
+                    return keep;
+                };
+            }
+            return SustainLocal(cue, position, seconds, pitchScale, gain, watched, followCaster ? caster.transform : null);
+        }
+        private static int SustainLocal(DragonBaseSound cue, Vector3 position, float seconds, float pitchScale, float gain, Func<bool> alive, Transform follow)
+        {
+            if (!Enabled || AudioMan.instance == null || !(seconds > 0f) || float.IsNaN(seconds) || float.IsInfinity(seconds)) return -1;
+            int id = (int)cue; if (id < 0 || id >= Profiles.Length) return -1;
+            if (float.IsNaN(position.x) || float.IsNaN(position.y) || float.IsNaN(position.z) || float.IsInfinity(position.x) || float.IsInfinity(position.y) || float.IsInfinity(position.z)) return -1;
+            try
+            {
+                Profile profile = Profiles[id];
+                if (profile == null && !Warned[id]) profile = Resolve(id);
+                if (profile == null) return -1;
+                int slot = -1; float oldest = float.MaxValue;
+                int available = cue == DragonBaseSound.CrescentDirt ? Voices.Length : OneShotVoices;
+                for (int v = 0; v < available; v++)
+                {
+                    Voice candidate = Voices[v];
+                    if (candidate == null || candidate.Source == null || candidate.End <= Time.unscaledTime) { slot = v; break; }
+                    if (candidate.Sustained && candidate.End < oldest) { oldest = candidate.End; slot = v; }
+                }
+                if (slot < 0)   // v0.25.232: every voice busy - a wind-up takes the voice that finishes first instead of being dropped
+                {
+                    for (int v = 0; v < available; v++)
+                        if (Voices[v] != null && !Voices[v].Sustained && (slot < 0 || Voices[v].End < Voices[slot].End)) slot = v;
+                    if (slot < 0) return -1;
+                }
+                int index;
+                _hitIn = cue == DragonBaseSound.CrescentDirt || cue == DragonBaseSound.WhirlwindWhoosh ? 0f : Mathf.Min(seconds, 60f);   // a wind-up's marker lands on the hit
+                try { index = PlayLayer(profile, cue, position, 0, Mathf.Clamp01(gain), -1, EventLayer(cue), pitchScale, 0f, slot); }
+                finally { _hitIn = 0f; }
+                if (index < 0) return -1;
+                Voice voice = Voices[index]; float now = Time.unscaledTime;
+                _nextTicket = _nextTicket == int.MaxValue ? 1 : _nextTicket + 1;
+                voice.Ticket = _nextTicket; voice.Sustained = true;
+                voice.Repeat = cue == DragonBaseSound.CrescentDirt || cue == DragonBaseSound.WhirlwindWhoosh;   // only the moving ground rumble loops
+                float length = voice.Source.clip.length / voice.Source.pitch;
+                if (voice.Raw)
+                {
+                    // PlayRaw already placed it (marker on the hit, delayed start); a looping rumble just loops for its time.
+                    if (voice.Repeat) { voice.Source.loop = true; voice.End = now + Mathf.Min(seconds, 60f); voice.RepeatAt = float.MaxValue; }
+                }
+                else if (voice.Repeat)
+                {
+                    voice.End = now + Mathf.Min(seconds, 60f);
+                    voice.RepeatAt = now + Mathf.Max(0.06f, length - 0.02f);
+                }
+                else
+                {
+                    // One take, started so its climax lands on the impact; the tail rings out unless the cast is interrupted.
+                    float delay = Mathf.Max(0f, Mathf.Min(seconds, 60f) - Lead(voice.Source.clip) / voice.Source.pitch);
+                    voice.End = now + delay + Mathf.Min(length * Mathf.Clamp(Shape(LayerLength, id, 100f), 0.1f, 1f), 4f);   // v226: the whole (already short) take; trim with its Length slider
+                    voice.RepeatAt = delay > 0.02f ? now + delay : float.MaxValue;
+                    if (delay > 0.02f) voice.Source.Stop();
+                }
+                voice.Continue = alive; voice.Follow = follow;
+                return voice.Ticket;
+            }
+            catch (Exception error)
+            {
+                if (!Warned[id]) { Warned[id] = true; Debug.LogWarning("[Aethelborn] Sustained audio skipped: " + error.GetType().Name); }
+                return -1;
+            }
+        }
+        public static bool MoveSustain(int ticket, Vector3 position)
+        {
+            if (ticket <= 0) return false;
+            try
+            {
+                for (int i = 0; i < Voices.Length; i++)
+                {
+                    Voice v = Voices[i]; if (v == null || v.Ticket != ticket || !v.Sustained || v.Source == null) continue;
+                    v.Source.transform.position = position; return true;
+                }
+            }
+            catch { }
+            return false;
+        }
+        public static void EndSustain(int ticket)
+        {
+            if (ticket <= 0) return;
+            try
+            {
+                for (int i = 0; i < Voices.Length; i++)
+                {
+                    Voice v = Voices[i]; if (v == null || v.Ticket != ticket) continue;
+                    v.End = Mathf.Min(v.End, Time.unscaledTime + 0.05f); ReleaseSustain(v); return;
+                }
+            }
+            catch { }
+        }
+
+        private static void StopVoices()
+        {
+            for (int i = 0; i < Voices.Length; i++) if (Voices[i] != null) { if (Voices[i].Source != null) Voices[i].Source.Stop(); ReleaseSustain(Voices[i]); }
+        }
+        public static void Clear()
+        {
+            StopVoices();
+            if (_root != null) UnityEngine.Object.Destroy(_root);
+            _root = null;
+            for (int i = 0; i < Voices.Length; i++) Voices[i] = null;
+            for (int i = 0; i < Profiles.Length; i++) { Profiles[i] = null; Warned[i] = false; }
+            foreach (AudioClip clip in OwnedClips) if (clip != null) UnityEngine.Object.Destroy(clip);
+            OwnedClips.Clear(); ClipLead.Clear(); Variants.Clear(); LeveledClips.Clear(); LoudClips.Clear(); CustomClips.Clear(); RetiredClips.Clear();
+            _mixerResolved = false; _effectsMixer = null;
+            for (int i = 0; i < CustomWarned.Length; i++) CustomWarned[i] = false;
+            Array.Clear(CueNext, 0, CueNext.Length);
+            _warm = 0; _silent = false;
+        }
+    }
+
+    // Canonical implementations prevent inherited reflection aliases from being patched twice.
+    public static class DragonMethodTargets
+    {
+        public static MethodInfo Implementation(MethodInfo method)
+        {
+            if (method == null || method.DeclaringType == method.ReflectedType) return method;
+            return (MethodInfo)MethodBase.GetMethodFromHandle(method.MethodHandle, method.DeclaringType.TypeHandle);
+        }
+    }
+
     [BepInPlugin(ModGuid, ModName, ModVersion)]
     [BepInDependency("albedo.customclasses", BepInDependency.DependencyFlags.HardDependency)]
     public class DragonCombatPlugin : BaseUnityPlugin
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
-        public const string ModName = "Dragon's Altar - Combat Runtime";
-        public const string ModVersion = "0.25.80";
+        public const string ModName = "Aethelborn Ascended - Combat Runtime";
+        public const string ModVersion = "0.25.221";
 
         internal static DragonCombatPlugin Instance;
 
+        internal ConfigEntry<bool> SkillAudioEnabled;
         internal ConfigEntry<float> DefaultDebuffDuration;
         internal ConfigEntry<float> ExposeDamageBonus;
         internal ConfigEntry<float> BrokenBonesDamageBonus;
@@ -48,12 +1415,13 @@ namespace DragonsAltarCombat
         internal ConfigEntry<bool> MasteryComboStyleEnabled;
         internal ConfigEntry<float> MasteryComboSpeedPerStage;
         internal ConfigEntry<bool> EnableSkillAnimations;
+        internal ConfigEntry<bool> ArmBodyGuard;
+        internal ConfigEntry<float> ArmGuardWidth;
         internal ConfigEntry<float> LegMotionScale;
         internal ConfigEntry<string> VanillaAnimationMap;
         internal ConfigEntry<float> SkySummonDropTime;
         internal ConfigEntry<bool> EnableWarfreakDualWield;
         internal ConfigEntry<bool> EnableDivineStaffShield;
-        internal ConfigEntry<bool> EnableSpellcasterDualGunStaves;
         internal ConfigEntry<bool> RemoveDivineEquipmentMovementPenalty;
         internal ConfigEntry<bool> ClericBlessingNoPenalty;
         internal ConfigEntry<bool> HolyTrinityNoArmorPenalty;
@@ -71,12 +1439,25 @@ namespace DragonsAltarCombat
         private void Awake()
         {
             Instance = this;
+            DragonCombat.BindSkillStuns();
 
             EnableRuntime = Config.Bind("Runtime", "Enabled", true, "Enable Dragon's Altar combat runtime patches.");
+            // Audio is optional: a setting error must never stop combat/equipment initialization.
+            try
+            {
+                SkillAudioEnabled = Config.Bind("Skill Audio", "Enabled", true, "Play Base Class skill sounds. Volume follows Valheim Master/Effects settings. Client-local; independent of VFX settings.");
+                DragonSkillAudio.BindConfig(Config);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning("Skill audio disabled for this session because audio settings could not load. Combat initialization will continue. " + ex);
+            }
+            ArmBodyGuard = Config.Bind("Runtime", "ArmBodyGuard_v025118", true, "Body barrier for skill animations: an elbow, forearm or hand that would go inside the torso is pushed back out to its surface.");
+            ArmGuardWidth = Config.Bind("Runtime", "ArmGuardTorsoWidth_v025118", 1f, "Size of the torso barrier (1 = measured from the shoulders; raise it if arms still sink in, lower it if they float away from the body).");
             EnableSkillAnimations = Config.Bind("Runtime", "EnableSkillAnimations", true, "Use Dragon's Altar procedural skill poses. Class skills do not trigger vanilla weapon attacks.");
-            VanillaAnimationMap = Config.Bind("Runtime", "VanillaAnimationMap_v02551",
+            VanillaAnimationMap = Config.Bind("Runtime", "VanillaAnimationMap_v02593",
                 "sm_slash_a=swing_longsword0@0.28;sm_slash_b=swing_longsword1@0.28;sm_halfmoon=battlea" + "xe_attack@0.45;sm_halfmoon_2=battleaxe_attack@0.45;warrior_h" +
-                "eavy=battleaxe_attack@0.45;merc_heavy_asc=battleaxe_attack@0.45;sm_moon_finisher=battleaxe_attack@0.45;sm_crescent=swing_sledge@0.55;sm_crescent_asc=swing_sledge@0.55;sm_crescent_asc2=swing_longsword1@0.3;cleric_hammer_slam=axe_secondary@0.45;merc_bomb=battleaxe_attack@0.45;merc_circle" +
+                "eavy=battleaxe_attack@0.45;merc_heavy_asc=battleaxe_attack@0.45;sm_moon_finisher=battleaxe_attack@0.45;sm_crescent=swing_sledge@0.9;sm_crescent_asc=swing_sledge@0.9;sm_crescent_asc2=swing_longsword1@0.3;cleric_hammer_slam=axe_secondary@0.45;merc_bomb=battleaxe_attack@0.45;merc_circle" +
                 "=atgeir_secondary@0.45;merc_circle_2=atgeir_secondary@0.4;sm_eclipse=atgeir_secondary@0.45;sm_halfmoon_finisher=atgeir_secondary@0.45;warrior_impact_wave=swing_sledge@0.55;merc_sei" +
                 "smic=swing_sledge@0.55;wiz_greatblade=swing_sledge@0.55;wiz_greatblade_slam=swing_sledge@0.55;warrior_punch=unarmed_attack@0.2;sm_thrust=spear_poke@0.25;cleric_hammer=spear_throw@0" +
                 ".4;cleric_cross_1=swing_longsword0@0.28;cleric_cross_2=swing_longsword1@0.28;cleric_zap=staff_fireball@0.25;sorc_flame=staff_fireball@0.25;hw_gravity_blast=staff_fireball@0.25;cler" +
@@ -87,11 +1468,108 @@ namespace DragonsAltarCombat
                 "int@0.2;hw_open=emote_point@0.2;hw_stop=emote_point@0.2;hw_pinch=emote_point@0.2;hw_afterimage=emote_point@0.2;hw_rift_walker=emote_point@0.2;wiz_gravity=emote_comehere@0.3;sorc_stone" +
                 "fang_asc=emote_point@0.2",
                 "Skill clips that play Valheim's own animation (clip=trigger@seconds before impact). Remove an entry to use the custom pose instead. All animator trigger names of your game are written once to the BepInEx log ('[Immortal Heroes] Animator triggers').");
+            // v0.25.133 (user): every skill animation can be tuned - where Valheim's animation starts (skip its
+            // anticipation / stitch to the previous move) and where it is cut (blends back out). Wind up times stay in
+            // each skill's own section.
+            string[] tuning = new string[] {
+                "sm_slash_a|Sword Master Moonlight Splitter Animation|Slash 1",
+                "sm_slash_b|Sword Master Moonlight Splitter Animation|Slash 2",
+                "sm_moon_finisher|Sword Master Moonlight Splitter Ascended Animation|Finisher|0,100,50",
+                "sm_slash_a_asc|Sword Master Moonlight Splitter Ascended Animation|Slash 1",
+                "sm_slash_b_asc|Sword Master Moonlight Splitter Ascended Animation|Slash 2",
+                "sm_halfmoon|Sword Master Halfmoon Slash Animation|Slash 1",
+                "sm_halfmoon_asc|Sword Master Halfmoon Slash Ascended Animation|First swing",
+                "sm_halfmoon_finisher|Sword Master Halfmoon Slash Ascended Animation|Finisher",
+                "sm_crescent|Sword Master Crescent Cleave Animation|",
+                "sm_crescent_asc|Sword Master Crescent Cleave Ascended Animation|Fan 1",
+                "sm_crescent_asc2|Sword Master Crescent Cleave Ascended Animation|Fan 2",
+                "sm_eclipse|Sword Master Eclipse Animation|",
+                "sm_frenzied|Sword Master Frenzied Charge Animation|",
+                "sm_frenzied_asc|Sword Master Frenzied Charge Ascended Animation|",
+                "sm_guidance|Sword Master Knights Guidance Animation|",
+                "warrior_heavy|Warrior Heavy Slash Animation|",
+                "warrior_impact_wave|Warrior Impact Wave Animation||0,90,90",
+                "warrior_impact_wave_asc|Sword Master Impact Wave Ascended Animation||0,90,90",
+                "warrior_punch|Warrior Impact Punch Animation|",
+                "merc_heavy_asc|Mercenary Heavy Slash Ascended Animation||0,100,60",
+                "merc_bomb|Mercenary Punishing Bomb Animation||0,100,100",
+                "merc_seismic|Mercenary Seismic Guillotine Animation||0,100,100",
+                "merc_roar|Mercenary Battlecry Animation|",
+                "merc_fury_accent|Mercenary Fury Animation|",
+                "cleric_zap|Cleric Lightning Zap Animation|",
+                "cleric_rs|Cleric Righteous Strike Animation||40,100,100",
+                "cleric_rs_asc|Cleric Righteous Strike Ascended Animation||40,100,100",
+                "cleric_wave|Cleric Holy Wave Animation|",
+                "cleric_wave_ally|Cleric Holy Wave Animation|Ally",
+                "cleric_goddess|Paladin Goddess Relic Animation||40,100,90",
+                "cleric_hammer|Paladin Judgement Hammer Animation||45,100,100",
+                "cleric_hammer_slam|Paladin Shield Charge Animation|Hammer Slam|45,100,100",
+                "cleric_ray|Paladin Ray of Hope Animation|",
+                "cleric_light|Paladin Heavens Light Animation|",
+                "cleric_relic|Priest Lightning Relic Animation||40,100,100",
+                "cleric_holy_relic|Priest Holy Relic Animation||30,100,100",
+                "cleric_intervention|Priest Divine Intervention Animation|",
+                "cleric_cross_1|Priest Grand Cross Animation|Cross 1",
+                "cleric_cross_2|Priest Grand Cross Animation|Cross 2",
+                "cleric_judgement|Priest Heavens Judgement Animation|",
+                "cleric_tempest|Priest Lightning Tempest Animation||30,100,90",
+                "cleric_crucible|Priest Heavens Crucible Animation|",
+                "sorc_flame|Sorcerer Flame Burst Animation|",
+                "sorc_glacial|Sorcerer Glacial Descent Animation|",
+                "sorc_glacial_asc|Sorcerer Glacial Descent Animation|Ascended",
+                "sorc_stonefang|Sorcerer Stonefang Eruption Animation|",
+                "sorc_stonefang_asc|Sorcerer Stonefang Eruption Animation|Ascended",
+                "wiz_greatblade|Wizard Astral Greatblade Animation|",
+                "wiz_greatblade_slam|Wizard Astral Greatblade Animation|Slams 2-3",
+                "wiz_gravity|Wizard Gravity Dominion Animation|",
+                "wiz_nova|Wizard Frost Nova Animation|",
+                "wiz_clockwork|Wizard Clockwork Animation|",
+                "hw_command|Spellcaster Arcane Phalanx Animation|",
+                "hw_point|Spellcaster Arcane Phalanx Animation|Launch",
+                "hw_rift_echo|Spellcaster Rift Echo Animation|",
+                "hw_rupture|Spellcaster Arcane Rupture Animation|",
+                "hw_gravity_blast|Spellcaster Gravity Blast Animation|",
+                "hw_afterimage|Spellcaster Afterimage Arsenal Animation|Ascended",
+                "hw_rift_walker|Spellcaster Rift Walker Animation|",
+                "rg_tailwind|Acrobat Tailwind Animation|",
+                "rg_vigil|Bowmaster Hawks Vigil Animation|",
+                "rg_trap|Ranger Snare Trap Animation|"
+            };
+            for (int t = 0; t < tuning.Length; t++)
+            {
+                string[] f = tuning[t].Split('|');
+                string pre = f[2].Length > 0 ? f[2] + " " : "";
+                // v0.25.138 optional 4th field "start,end,trigger" = the user's tuned defaults
+                float d0 = 0f, d1 = 100f, d2 = 0f;
+                if (f.Length > 3) { string[] dv = f[3].Split(','); d0 = float.Parse(dv[0], System.Globalization.CultureInfo.InvariantCulture); d1 = float.Parse(dv[1], System.Globalization.CultureInfo.InvariantCulture); d2 = float.Parse(dv[2], System.Globalization.CultureInfo.InvariantCulture); }
+                // Keep each Ascended clip independent, starting from the player's existing tuned values.
+                string legacySection = null, legacyPrefix = "";
+                switch (f[0])
+                {
+                    case "sm_moon_finisher": legacySection = "Sword Master Moonlight Splitter Animation"; legacyPrefix = "Finisher "; break;
+                    case "sm_halfmoon_finisher": legacySection = "Sword Master Halfmoon Slash Animation"; legacyPrefix = "Finisher "; break;
+                    case "sm_crescent_asc": legacySection = "Sword Master Crescent Cleave Animation"; legacyPrefix = "Ascended "; break;
+                    case "sm_crescent_asc2": legacySection = "Sword Master Crescent Cleave Animation"; legacyPrefix = "Ascended Fan 2 "; break;
+                    case "merc_heavy_asc": legacySection = "Mercenary Heavy Slash Animation"; legacyPrefix = "Ascended "; break;
+                    case "cleric_rs_asc": legacySection = "Cleric Righteous Strike Animation"; legacyPrefix = "Ascended "; break;
+                }
+                if (legacySection != null)
+                {
+                    d0 = Config.Bind(legacySection, legacyPrefix + "AnimStartPercent_v025133", d0).Value;
+                    d1 = Config.Bind(legacySection, legacyPrefix + "AnimEndPercent_v025133", d1).Value;
+                    d2 = Config.Bind(legacySection, legacyPrefix + "AnimTriggerPercent_v025136", d2).Value;
+                }
+                ConfigEntry<float> a = Config.Bind(f[1], pre + "AnimStartPercent_v025133", d0, new ConfigDescription((f[2].Length > 0 ? f[2] + ": " : "") + "the animation starts at this % (skips the beginning; 0 = from the start).", new AcceptableValueRange<float>(0f, 95f)));
+                ConfigEntry<float> b = Config.Bind(f[1], pre + "AnimEndPercent_v025133", d1, new ConfigDescription((f[2].Length > 0 ? f[2] + ": " : "") + "the animation is cut at this % and blends back (100 = plays to the end).", new AcceptableValueRange<float>(5f, 100f)));
+                ConfigEntry<float> c = Config.Bind(f[1], pre + "AnimTriggerPercent_v025136", d2, new ConfigDescription((f[2].Length > 0 ? f[2] + ": " : "") + "Target contact marker. On Impact Wave/Moonlight, no speed change; other skills retain legacy timing unless CA Speed is set.", new AcceptableValueRange<float>(0f, 100f)));
+                float oldSpeed = legacySection == null ? 0f : Config.Bind(legacySection, legacyPrefix + "CASpeed_v025138c", 0f).Value;
+                ConfigEntry<float> speed = Config.Bind(f[1], pre + "CASpeed_v025138c", oldSpeed, new ConfigDescription("CA playback multiplier: 0 = existing timing (Impact Wave/Moonlight ignore Start/End/Trigger for speed), 1 = native speed. 0.1 to 6 = manual speed.", new AcceptableValueRange<float>(0f, 6f)));
+                DragonCombat.AnimTuningEntries[f[0]] = new ConfigEntry<float>[] { a, b, c, speed };
+            }
             LegMotionScale = Config.Bind("Runtime", "LegMotionScale_v02522", 0f, "Strength of the procedural leg poses (Unity humanoid muscles). 0 = legs untouched, -1 = inverted (if knees bend the wrong way on your rig).");
             SkySummonDropTime = Config.Bind("Skills", "SkySummonDropTime", 0.18f, "Seconds for a spawned Sky Summon object to slam from its indoor-safe spawn point to the target AFTER the character wind-up finishes.");
             EnableWarfreakDualWield = Config.Bind("Weapon Mastery", "EnableWarfreakDualWield", true, "Warfreak: Mercenary may equip any two one-handed weapons simultaneously. Dedicated combination animations are a later animation pass.");
             EnableDivineStaffShield = Config.Bind("Weapon Mastery", "EnableDivineStaffShield", true, "Divine Duality: Cleric may equip a Staff and Shield together, including before advancement.");
-            EnableSpellcasterDualGunStaves = Config.Bind("Weapon Mastery", "EnableSpellcasterDualGunStaves", true, "Allow Spellcaster to equip two rapid-fire Gun Staves. The Sorcerer module handles cadence and accuracy without a synthetic off-hand projectile.");
             RemoveDivineEquipmentMovementPenalty = Config.Bind("Weapon Mastery", "LegacyRemoveDivineEquipmentMovementPenalty", false, "Legacy option retained for config compatibility. Cleric no longer gets a blanket equipment movement-penalty removal.");
             ClericBlessingNoPenalty = Config.Bind("Cleric Blessing", "NoShieldStaffClubMovementPenalty", true, "Cleric's Blessing: Shields, Staves and one-handed Club weapons have no movement penalty (two-handed Clubs excluded).");
             HolyTrinityNoArmorPenalty = Config.Bind("Paladin Holy Trinity", "NoArmorMovementPenalty", true, "Holy Trinity (Club-type melee weapon + any Shield): Armor has no movement penalty.");
@@ -106,7 +1584,7 @@ namespace DragonsAltarCombat
             FrostPhysicalDamageBonus = Config.Bind("Debuffs", "FrostPhysicalDamageTakenPercent", 20f, "Extra physical damage taken while Frost weakens physical defense.");
             ZapDelay = Config.Bind("Debuffs", "ZapDelay_v0212", 2f, "Seconds before Zap explodes (universal rule: 2s).");
             ZapRadius = Config.Bind("Debuffs", "ZapRadius", 1f, "Zap explosion radius.");
-            ClericMasteryMagicDamage = Config.Bind("Cleric Mastery", "MagicDamagePercent", 10f, "Heaven's Will (Paladin) and Bless Thy Sinners (Priest): +Magic Damage (Fire, Frost, Lightning, Poison, Spirit) on everything they deal.");
+            ClericMasteryMagicDamage = Config.Bind("Cleric Mastery", "MagicDamagePercent", 10f, "Heaven's Will (Paladin) and Saving Grace (Priest): +Magic Damage (Fire, Frost, Lightning, Poison, Spirit) on everything they deal.");
             CharacterHeightMeters = Config.Bind("Measurement", "CharacterHeightMeters", 0.5f, "v0.22.5 ruler (user rule): your character's height counts as this many meters. Every range, radius, width, length and travel speed in every config is in these meters.");
             UnitsPerMeterOverride = Config.Bind("Measurement", "UnitsPerMeterOverride", 1.5f, "Unity units per config meter. 1.5 = the confirmed in-game ruler (user, v0.23.3). 0 = automatic from character height / CharacterHeightMeters.");
             ZapDamage = Config.Bind("Debuffs", "ZapLightningDamage", 25f, "Testing/default lightning damage for Zap because the framework does not specify an amount.");
@@ -131,6 +1609,13 @@ namespace DragonsAltarCombat
             MasteryComboStyleEnabled = Config.Bind("Weapon Mastery", "EnableComboStyleSpeed", true, "Adds a small accelerating animation-speed style across mastery hits 1-5. This is presentation/tuning, not a framework-mandated damage bonus.");
             MasteryComboSpeedPerStage = Config.Bind("Weapon Mastery", "ComboStyleSpeedPerStagePercent", 3f, "Extra animation speed per combo stage after the first. 3 means hit 5 is about 12 percent faster than hit 1.");
 
+            // v0.25.184 performance monitor (measurement only; off unless toggled)
+            DragonPerf.EnabledAtStart = Config.Bind("Performance Monitor", "EnabledAtStart_v025184", false, "Start recording at launch. Otherwise press the toggle key in game (F7). Ctrl+F7 writes the report, Alt+F7 turns effect lights off/on for an A/B test.");
+            DragonPerf.ToggleKey = Config.Bind("Performance Monitor", "ToggleKey_v025184", KeyCode.F7, "Overlay + recording on/off. Ctrl = write report now, Alt = effect lights off/on.");
+            DragonPerf.SpikeMs = Config.Bind("Performance Monitor", "SpikeMs_v025184", 25f, "A frame slower than this (ms) is logged as a spike with the active skill.");
+            DragonPerf.MaxLights = Config.Bind("Visuals", "MaxEffectLights_v025185", 6, "Legacy setting: extra skill point lights were removed in v0.25.195.");
+            if (gameObject.GetComponent<DragonPerfMonitor>() == null) gameObject.AddComponent<DragonPerfMonitor>();
+
             if (!EnableRuntime.Value)
             {
                 Logger.LogInfo(ModName + " v" + ModVersion + " loaded with runtime disabled.");
@@ -149,13 +1634,28 @@ namespace DragonsAltarCombat
             }
         }
 
+        // v0.25.184 performance monitor: times this module's Update (one bool check when the monitor is off)
         private void Update()
         {
+            if (!DragonPerf.On) { PerfUpdateInner(); return; }
+            long perfT = DragonPerf.Now(), perfM = DragonPerf.Mem();
+            try { PerfUpdateInner(); }
+            finally { DragonPerf.Add(DragonPerf.SecRuntime, perfT, perfM); }
+        }
+
+        private void PerfUpdateInner()
+        {
+            DragonMixamo.PrewarmTick(Player.m_localPlayer);   // v0.25.170 load + warm the Mixamo clips before the first cast
+            DragonVfx.PrewarmTick(Player.m_localPlayer);      // v0.25.183 build the VFX textures/materials before the first cast
+            DragonJitWarm.Tick(Player.m_localPlayer);         // v0.25.238 pre-compile the mod's code before the first cast
+            DragonSkillAudio.Tick(Player.m_localPlayer);
             DragonCombat.RuntimeUpdate();
         }
 
         private void OnDestroy()
         {
+            DragonSkillAudio.Clear();
+            DragonCombat.ClearShieldChargeGuard();
             if (_harmony != null)
             {
                 try
@@ -170,6 +1670,36 @@ namespace DragonsAltarCombat
 
         // v0.25.1: our buffs live on the Immortal HUD only; the vanilla status list (top right) keeps
         // showing vanilla / other mods' effects but never ours.
+        // v0.25.185 (perf, user report: Furious Winds spiked ~20 ms every 0.1 s): every projectile registers itself when it
+        // spawns (Projectile.Awake, else Setup), so skills that react to enemy projectiles (Furious Winds wipe, Eclipse reflect)
+        // read this list instead of searching every object in the scene (FindObjectsOfType).
+        private int PatchProjectileRegistry()
+        {
+            Type pt = Type.GetType("Projectile, assembly_valheim");
+            if (pt == null) return 0;
+            HarmonyMethod post = new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("ProjectileRegisterPostfix", BindingFlags.Static | BindingFlags.NonPublic));
+            int n = 0;
+            MethodInfo[] ms = pt.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+            for (int i = 0; i < ms.Length; i++)
+            {
+                if (ms[i].Name != "Awake") continue;
+                try { PatchWithHarmony(ms[i], null, post); n++; } catch (Exception ex) { Logger.LogWarning("Projectile registry (Awake): " + ex.Message); }
+            }
+            if (n == 0)
+                for (int i = 0; i < ms.Length; i++)
+                {
+                    if (ms[i].Name != "Setup") continue;
+                    try { PatchWithHarmony(ms[i], null, post); n++; } catch (Exception ex) { Logger.LogWarning("Projectile registry (Setup): " + ex.Message); }
+                }
+            DragonCombat.ProjectileRegistryActive = n > 0;
+            return n;
+        }
+
+        private static void ProjectileRegisterPostfix(object __instance)
+        {
+            DragonCombat.RegisterProjectile(__instance as Component);
+        }
+
         private int PatchHudStatusList()
         {
             Type hud = Type.GetType("Hud, assembly_valheim");
@@ -232,8 +1762,10 @@ namespace DragonsAltarCombat
             catch { }
         }
 
+        // v0.25.189 (user): the whole line (value + vanilla total) becomes "0% (No movement penalty)"; only a NEGATIVE value is
+        // matched, so a second tooltip pass (nested GetTooltip overloads) leaves the rewritten line alone.
         private static readonly System.Text.RegularExpressions.Regex MoveLine =
-            new System.Text.RegularExpressions.Regex(@"((?:\$item_movement_modifier|Movement speed):\s*<color=[^>]*>)([+\-]?\d+)(%</color>)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            new System.Text.RegularExpressions.Regex(@"((?:\$item_movement_modifier|Movement speed):\s*)<color=[^>]*>-\d+%</color>[^\n]*", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
         // Shows the movement penalty this player really gets from the item (0% when a trait removes it).
         private static string MovementTooltip(ItemDrop.ItemData item, string text)
@@ -244,7 +1776,7 @@ namespace DragonsAltarCombat
             if (reason == null) return text;
             return MoveLine.Replace(text, delegate(System.Text.RegularExpressions.Match m)
             {
-                return m.Groups[1].Value + "0" + m.Groups[3].Value + " <color=#80D8FF>(" + m.Groups[2].Value + "% removed: " + reason + ")</color>";
+                return m.Groups[1].Value + "<color=orange>0%</color>";
             }, 1);
         }
 
@@ -259,6 +1791,7 @@ namespace DragonsAltarCombat
             if (DragonCombat.HasNoEquipmentPenalty(p)) return DragonCombat.GetClassName(p) == "Ranger" ? "Tailwind" : "Heaven's Light";
             string adv = DragonCombat.GetAdvancementName(p);
             string cls = DragonCombat.GetClassName(p);
+            if (IsArmorPiece(item) && DragonCombat.NegatesArmorPenalty(p)) return cls == "Cleric" ? "Cleric's Blessing" : "Warrior's Blessing";   // v0.25.186
             if ((adv == "Mercenary" || adv == "Sword Master") && WeaponMasteryExemptPenalty(item, adv) < 0f)
                 return adv == "Mercenary" ? "Warfreak" : "The Way of the Sword";
             if (cls == "Ranger" && RangedExemptPenalty(item, adv == "Bowmaster") < 0f) return "Wildborn";
@@ -291,10 +1824,45 @@ namespace DragonsAltarCombat
                 if (ps.Length != 2) continue;
                 if (ms[i].Name == "SetFloat" && ps[1].ParameterType != typeof(float)) continue;
                 if (ms[i].Name == "SetBool" && ps[1].ParameterType != typeof(bool)) continue;
-                try { PatchWithHarmony(ms[i], ms[i].Name == "SetBool" ? preBool : pre, null); n++; }
+                // v0.25.183 (perf): typed prefixes per overload (int hash / string name) - the object[] __args form
+                // allocated + boxed on EVERY SetFloat/SetBool of EVERY character; same override logic
+                HarmonyMethod use = ms[i].Name == "SetBool" ? preBool : pre;
+                string typed = null;
+                if (ps[0].ParameterType == typeof(int)) typed = ms[i].Name == "SetBool" ? "ZanimBoolPrefixHash" : "ZanimFloatPrefixHash";
+                else if (ps[0].ParameterType == typeof(string)) typed = ms[i].Name == "SetBool" ? "ZanimBoolPrefixName" : "ZanimFloatPrefixName";
+                if (typed != null)
+                {
+                    MethodInfo tm = typeof(DragonCombatPlugin).GetMethod(typed, BindingFlags.Static | BindingFlags.NonPublic);
+                    if (tm != null) use = new HarmonyMethod(tm);
+                }
+                try { PatchWithHarmony(ms[i], use, null); n++; }
                 catch (Exception ex) { Logger.LogWarning("Could not patch ZSyncAnimation.SetFloat: " + ex.Message); }
             }
             return n;
+        }
+
+        private static void ZanimFloatPrefixHash(object __instance, int __0, ref float __1)
+        {
+            if (!DragonCombat.ZanimOverrideCandidate(__instance)) return;
+            try { float v = __1; if (DragonCombat.ForceRunOverride(__instance, __0, ref v)) __1 = v; } catch { }
+        }
+
+        private static void ZanimFloatPrefixName(object __instance, string __0, ref float __1)
+        {
+            if (!DragonCombat.ZanimOverrideCandidate(__instance)) return;
+            try { float v = __1; if (DragonCombat.ForceRunOverride(__instance, __0, ref v)) __1 = v; } catch { }
+        }
+
+        private static void ZanimBoolPrefixHash(object __instance, int __0, ref bool __1)
+        {
+            if (!DragonCombat.ZanimOverrideCandidate(__instance)) return;
+            try { bool v = __1; if (DragonCombat.ForceBoolOverride(__instance, __0, ref v)) __1 = v; } catch { }
+        }
+
+        private static void ZanimBoolPrefixName(object __instance, string __0, ref bool __1)
+        {
+            if (!DragonCombat.ZanimOverrideCandidate(__instance)) return;
+            try { bool v = __1; if (DragonCombat.ForceBoolOverride(__instance, __0, ref v)) __1 = v; } catch { }
         }
 
         private static void ZanimBoolPrefix(object __instance, object[] __args)
@@ -334,6 +1902,9 @@ namespace DragonsAltarCombat
         {
             if (_harmony == null || original == null)
                 return;
+            // v0.25.139: our patches run FIRST (prefixes) and LAST (postfixes) - Aethelborn has the final say over other mods.
+            if (prefix != null && prefix.priority < 0) prefix.priority = Priority.First;
+            if (postfix != null && postfix.priority < 0) postfix.priority = Priority.Last;
 
             MethodInfo[] methods = typeof(Harmony).GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 
@@ -390,14 +1961,18 @@ namespace DragonsAltarCombat
             count += PatchHudStatusList();
             count += PatchHudVitals();
             count += PatchForceRun();
+            count += PatchProjectileRegistry();
             count += PatchItemTooltips();
             count += PatchCheckRun();
             count += PatchInterruptMethod("Stagger");
             count += PatchInterruptMethod("AddStaggerDamage");
             count += PatchInterruptMethod("ApplyPushback");
             count += PatchDamageMethods();
+            count += PatchBirdTargets();
             count += PatchAnimationSpeed();
-            count += PatchFloatRefSEMan("ModifySpeed", "SpeedPrefix");
+            // v0.25.192: current Valheim renamed this hook; keep the legacy fallback, never apply twice.
+            int moveHooks = PatchFloatRefSEMan("ApplyStatusEffectSpeedMods", "SpeedPrefix");
+            count += moveHooks > 0 ? moveHooks : PatchFloatRefSEMan("ModifySpeed", "SpeedPrefix");
             count += PatchFloatRefSEMan("ModifyStaminaRegen", "StaminaRegenPrefix");
             count += PatchFloatRefSEMan("ModifyEitrRegen", "EitrRegenPrefix");
             count += PatchAttackGetStamina();
@@ -416,8 +1991,14 @@ namespace DragonsAltarCombat
             foreach (MethodInfo rd in typeof(Character).GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
             {
                 if (rd.Name != "RPC_Damage") continue;
-                try { PatchWithHarmony(rd, new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("RpcDamagePrefix", BindingFlags.Static | BindingFlags.NonPublic)), null); count++; }
+                try { PatchWithHarmony(rd, new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("RpcDamagePrefix", BindingFlags.Static | BindingFlags.NonPublic)), new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("RpcDamagePostfix", BindingFlags.Static | BindingFlags.NonPublic))); count++; }
                 catch (Exception ex) { Logger.LogWarning("RPC_Damage patch: " + ex.Message); }
+            }
+            MethodInfo dodgeUpdate = typeof(Player).GetMethod("UpdateDodge", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (dodgeUpdate != null)
+            {
+                _harmony.Patch(dodgeUpdate, null, null, new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("SwordMasterDodgeTranspiler", BindingFlags.Static | BindingFlags.NonPublic)));
+                count++;
             }
             count += PatchEquipItem();
             count += PatchHotbarUse();
@@ -521,6 +2102,63 @@ namespace DragonsAltarCombat
             return count;
         }
 
+        private int PatchBirdTargets()
+        {
+            BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            PatchWithHarmony(typeof(RandomFlyingBird).GetMethod("Awake", flags), null,
+                new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("BirdAwakePostfix", BindingFlags.Static | BindingFlags.NonPublic)));
+            PatchWithHarmony(typeof(Destructible).GetMethod("Damage", flags, null, new Type[] { typeof(HitData) }, null),
+                new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("BirdDestructiblePrefix", BindingFlags.Static | BindingFlags.NonPublic)), null);
+            int count = 2;
+            string[] vectors = { "GetCenterPoint", "GetTopPoint", "GetHeadPoint", "GetEyePoint", "GetVelocity" };
+            string[] floats = { "GetRadius", "GetHeight", "GetMass" };
+            HarmonyMethod vector = new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("BirdVectorPrefix", BindingFlags.Static | BindingFlags.NonPublic));
+            HarmonyMethod number = new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("BirdFloatPrefix", BindingFlags.Static | BindingFlags.NonPublic));
+            for (int i = 0; i < vectors.Length; i++)
+            { MethodInfo method = typeof(Character).GetMethod(vectors[i], flags); if (method != null) { PatchWithHarmony(method, vector, null); count++; } }
+            for (int i = 0; i < floats.Length; i++)
+            { MethodInfo method = typeof(Character).GetMethod(floats[i], flags); if (method != null) { PatchWithHarmony(method, number, null); count++; } }
+            MethodInfo stagger = typeof(Character).GetMethod("Stagger", flags, null, new Type[] { typeof(Vector3) }, null);
+            if (stagger != null) { PatchWithHarmony(stagger, new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("BirdStaggerPrefix", BindingFlags.Static | BindingFlags.NonPublic)), null); count++; }
+            // Existing scene birds are handled once; future spawns use Awake. Never scan the world every frame.
+            for (int i = 0; i < RandomFlyingBird.Instances.Count; i++)
+                DragonBirdTarget.Attach(RandomFlyingBird.Instances[i] as RandomFlyingBird);
+            return count;
+        }
+        private static void BirdAwakePostfix(RandomFlyingBird __instance) { DragonBirdTarget.Attach(__instance); }
+        private static bool BirdDestructiblePrefix(Destructible __instance, HitData __0)
+        {
+            DragonBirdTarget bird = __instance.GetComponent<DragonBirdTarget>();
+            if (bird == null || bird.Forwarding) return true;
+            // Native weapon hits use the same creature rules too; ReceiveSkillHit guards the return path.
+            bird.Damage(__0);
+            return false;
+        }
+        private static bool BirdVectorPrefix(Character __instance, MethodBase __originalMethod, ref Vector3 __result)
+        {
+            DragonBirdTarget bird = __instance as DragonBirdTarget;
+            if (bird == null) return true;
+            Bounds bounds = bird.TargetBounds();
+            if (__originalMethod.Name == "GetVelocity") __result = bird.FlightVelocity();
+            else if (__originalMethod.Name == "GetCenterPoint") __result = bounds.center;
+            else __result = bounds.center + Vector3.up * bounds.extents.y;
+            return false;
+        }
+        private static bool BirdFloatPrefix(Character __instance, MethodBase __originalMethod, ref float __result)
+        {
+            DragonBirdTarget bird = __instance as DragonBirdTarget;
+            if (bird == null) return true;
+            Bounds bounds = bird.TargetBounds();
+            __result = __originalMethod.Name == "GetHeight" ? Mathf.Max(0.1f, bounds.size.y) :
+                __originalMethod.Name == "GetRadius" ? Mathf.Max(0.05f, Mathf.Max(bounds.extents.x, bounds.extents.z)) : 0.1f;
+            return false;
+        }
+        private static bool BirdStaggerPrefix(Character __instance)
+        {
+            // Ambient birds have no Character stagger RPC or combat animator. Native destruction handles their hits.
+            return !(__instance is DragonBirdTarget);
+        }
+
         private int PatchDamageMethods()
         {
             MethodInfo prefixMethod = typeof(DragonCombatPlugin).GetMethod("DamagePrefix", BindingFlags.Static | BindingFlags.NonPublic);
@@ -537,7 +2175,7 @@ namespace DragonsAltarCombat
                 MethodInfo[] methods = types[t].GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
                 for (int i = 0; i < methods.Length; i++)
                 {
-                    MethodInfo method = methods[i];
+                    MethodInfo method = DragonMethodTargets.Implementation(methods[i]);
                     if (method.Name != "Damage")
                         continue;
 
@@ -698,18 +2336,21 @@ namespace DragonsAltarCombat
             MethodInfo prefix = typeof(DragonCombatPlugin).GetMethod("BlockAttackPrefix", BindingFlags.Static | BindingFlags.NonPublic);
             MethodInfo postfix = typeof(DragonCombatPlugin).GetMethod("BlockAttackPostfix", BindingFlags.Static | BindingFlags.NonPublic);
             MethodInfo restoreOnly = typeof(DragonCombatPlugin).GetMethod("BlockAttackRestorePostfix", BindingFlags.Static | BindingFlags.NonPublic);
+            MethodInfo confirmedParry = typeof(DragonCombatPlugin).GetMethod("ConfirmedParryTranspiler", BindingFlags.Static | BindingFlags.NonPublic);
             HashSet<MethodBase> seen = new HashSet<MethodBase>();
             int count = 0;
             Type[] types = new Type[] { typeof(Player), typeof(Humanoid) };
             for (int t = 0; t < types.Length; t++)
-                foreach (MethodInfo method in types[t].GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+                foreach (MethodInfo candidate in types[t].GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
                 {
+                    MethodInfo method = DragonMethodTargets.Implementation(candidate);
                     if (method.Name != "BlockAttack" || !seen.Add(method)) continue;
                     try
                     {
                         // The parry hook reads the bool result; any other overload only restores the shield.
                         MethodInfo post = method.ReturnType == typeof(bool) ? postfix : restoreOnly;
-                        PatchWithHarmony(method, new HarmonyMethod(prefix), new HarmonyMethod(post));
+                        _harmony.Patch(method, new HarmonyMethod(prefix), new HarmonyMethod(post),
+                            method.ReturnType == typeof(bool) ? new HarmonyMethod(confirmedParry) : null);
                         count++;
                     }
                     catch (Exception ex) { Logger.LogWarning("Could not patch BlockAttack: " + ex.Message); }
@@ -741,7 +2382,6 @@ namespace DragonsAltarCombat
                 if (DragonCombat.GetAdvancementName(player) == "Priest" && DragonCombat.IsBuckler(blocker))
                 {
                     __state.ParryField = SetTemporaryBlockMultiplier(blocker.m_shared, "m_timedBlockBonus", 2f, out __state.OriginalParry);
-                    __state.BucklerParryWindow = DragonCombat.IsInParryWindow(player);
                 }
                 // v0.25.78 Holy Bulwark (Paladin Mastery + Tower Shield): the block covers 3x the area.
                 if (DragonCombat.GetAdvancementName(player) == "Paladin" && DragonCombat.IsTowerShield(blocker))
@@ -780,17 +2420,48 @@ namespace DragonsAltarCombat
         private static void BlockAttackPostfix(BlockPatchState __state, bool __result, object __instance, object[] __args)
         {
             RestoreBlockState(__state);
+            if (__result && ReferenceEquals(__instance, Player.m_localPlayer)) DragonCombat.LastBlockAt = Time.time;   // v0.25.175 block / parry window
             if (__result && __state.HyperBlock)
             {
                 ZeroPush(__args);
                 DragonCombat.BlockHyperUntil = Time.time + 0.8f;
             }
-            // A successful block that started inside the parry window = a Buckler Parry.
-            if (__result && __state.BucklerParryWindow && DragonCombat.BucklerParryHandler != null)
+        }
+
+        // Native BlockAttack returns true even on a broken block. Hook the native PERFECT BLOCK branch instead.
+        // At ldfld m_perfectBlockEffect the stack holds `this`; Dup preserves it for the original effect load.
+        private static IEnumerable<CodeInstruction> ConfirmedParryTranspiler(IEnumerable<CodeInstruction> instructions)
+        {
+            MethodInfo notify = typeof(DragonCombatPlugin).GetMethod("ConfirmedBucklerParry", BindingFlags.Static | BindingFlags.NonPublic);
+            int hooks = 0;
+            foreach (CodeInstruction instruction in instructions)
             {
-                try { DragonCombat.BucklerParryHandler(__instance as Player); }
-                catch (Exception ex) { if (Instance != null) Instance.Logger.LogWarning("Buckler Parry failed: " + ex.Message); }
+                FieldInfo field = instruction.operand as FieldInfo;
+                if (instruction.opcode == OpCodes.Ldfld && field != null && field.Name == "m_perfectBlockEffect")
+                {
+                    CodeInstruction dup = new CodeInstruction(OpCodes.Dup);
+                    instruction.MoveLabelsTo(dup);
+                    instruction.MoveBlocksTo(dup);
+                    yield return dup;
+                    yield return new CodeInstruction(OpCodes.Call, notify);
+                    hooks++;
+                }
+                yield return instruction;
             }
+            if (Instance != null)
+            {
+                if (hooks == 1) Instance.Logger.LogInfo("Buckler: native successful-parry hook installed.");
+                else Instance.Logger.LogWarning("Buckler: expected one native perfect-block branch, found " + hooks + ".");
+            }
+        }
+
+        private static void ConfirmedBucklerParry(Humanoid humanoid)
+        {
+            Player player = humanoid as Player;
+            if (player == null || player != Player.m_localPlayer || DragonCombat.GetAdvancementName(player) != "Priest" ||
+                !DragonCombat.IsBuckler(DragonCombat.GetHandItem(player, "m_leftItem")) || DragonCombat.BucklerParryHandler == null) return;
+            try { DragonCombat.BucklerParryHandler(player); }
+            catch (Exception ex) { if (Instance != null) Instance.Logger.LogWarning("Buckler Parry failed: " + ex.Message); }
         }
 
         private static void BlockAttackRestorePostfix(BlockPatchState __state)
@@ -931,13 +2602,165 @@ namespace DragonsAltarCombat
         internal ConfigEntry<bool> MeleeHitStop, ComboFixedInterval;
         internal ConfigEntry<bool> EnhancedVfx;
         internal ConfigEntry<float> VfxDensity, VfxLight;
+        internal ConfigEntry<bool> CapeFreeze;   // v0.25.171
+        internal ConfigEntry<bool> ShowGuides;
         private static FieldInfo _atkLevels, _atkLevel, _atkAnim, _atkChar, _atkWeapon, _atkAngle, _atkType;
         private static MethodInfo _atkMelee;
         private static bool _comboInStart, _comboDual;
-        private static string _comboBase;
+        private static string _comboBase, _comboCarrier;
         private static object _comboFinisher;
-        private static float _comboLockUntil;
+        private static float _comboLockUntil, _comboLockBefore;
+        private static int _comboGen;       // v0.25.154 NaccGen the running chain swing started under
         private static bool _offhandSwing;
+
+        // v0.25.154 skill <-> NACC handoff. A skill takeover drops everything the interrupted chain was still doing (counters,
+        // timing, speed trim, pending state learning). A finisher that really finished keeps its lockout; one the skill cut
+        // short does not lock the next normal attack. Idempotent, local player only.
+        internal static void ResetNaccForSkill(Player p)
+        {
+            if (p == null || p != Player.m_localPlayer) return;
+            ResetNaccChain(p);
+            if (_comboFinisher != null) { _comboFinisher = null; _comboLockUntil = _comboLockBefore; }
+            // v0.25.157: a skill's vanilla animation must run on the vanilla controller, not on SBDW's replaced Attack1-3 clips. The 2HDW
+            // override is released here (only if it is ours) and re-applied + validated by the next accepted primary swing.
+            DragonDualWield.ReleasePaired(p);
+        }
+
+        // Counters / timing / speed of the running chain (the finisher lockout is NOT touched here).
+        private static void ResetNaccChain(Player p)
+        {
+            DragonCombat.NaccGen++;
+            _comboHit = -1; _comboSwing = 0; _comboPrevSwing = -1; _comboLastEnd = -1f; _comboInStart = false;
+            _comboCarrier = null;
+            DragonCombat.SetChainSpeed(p, 1f, 0.05f);
+            DragonCombat.CancelStateLearning(p);
+        }
+
+        private static readonly Dictionary<string, MethodInfo> _charBoolCache = new Dictionary<string, MethodInfo>();
+        private static FieldInfo _lastGroundTouch;
+        private static bool CharBool(Character c, string name)
+        {
+            try
+            {
+                MethodInfo m;
+                if (!_charBoolCache.TryGetValue(name, out m))
+                {
+                    m = typeof(Character).GetMethod(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+                    _charBoolCache[name] = m;
+                }
+                return m != null && m.ReturnType == typeof(bool) && (bool)m.Invoke(c, null);
+            }
+            catch (Exception) { return false; }
+        }
+
+        // Off the ground: no ground contact, or no contact for more than a few physics steps (bumps do not count).
+        // Swimming / attached / riding are not "airborne".
+        internal static bool IsAirborne(Player p)
+        {
+            if (p == null) return false;
+            if (CharBool(p, "IsSwimming") || CharBool(p, "IsAttached") || CharBool(p, "IsRiding") || CharBool(p, "IsOnLadder")) return false;
+            if (!CharBool(p, "IsOnGround")) return true;
+            try
+            {
+                if (_lastGroundTouch == null) _lastGroundTouch = typeof(Character).GetField("m_lastGroundTouch", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (_lastGroundTouch != null && _lastGroundTouch.FieldType == typeof(float) && (float)_lastGroundTouch.GetValue(p) > 0.06f) return true;
+            }
+            catch (Exception) { }
+            return false;
+        }
+
+        // The request is a NACC primary swing: chained melee primary attack of a weapon the class is fit for.
+        // Heavy (secondary) attacks, ranged / magic attacks and skills are never NACC.
+        private static bool IsNaccPrimaryRequest(Player p, object[] args)
+        {
+            try
+            {
+                if (Instance == null || !Instance.ComboChainsEnabled.Value || _atkLevels == null || _atkType == null) return false;
+                if (args != null && args.Length > 1 && args[1] is bool && (bool)args[1]) return false;
+                ItemDrop.ItemData w = p.GetCurrentWeapon();
+                if (w == null || w.m_shared == null || w.m_shared.m_attack == null) return false;
+                object type = _atkType.GetValue(w.m_shared.m_attack);
+                string ts = type == null ? "" : type.ToString();
+                if (ts != "Horizontal" && ts != "Vertical") return false;
+                if ((int)_atkLevels.GetValue(w.m_shared.m_attack) < 2) return false;
+                return DragonCombat.ComboWeaponProvider != null && DragonCombat.ComboWeaponProvider(p, w);
+            }
+            catch (Exception) { return false; }
+        }
+
+        // v0.25.169 NACC CONTINUATION RULES (user), checked every frame for the local player:
+        //  - ground contact is irrelevant: losing it (rocks, slopes, steps, real airtime) never resets the chain; an airborne
+        //    chain carries on after landing while its window is open;
+        //  - a deliberate jump (the vanilla "jump" trigger, see ComboTriggerPrefix) breaks the running chain: the next swing in
+        //    the air starts a fresh chain at strike one (the grounded chain is never carried into the jump);
+        //  - FALL damage taken (v0.25.169b, user: not other damage) breaks continuation - see NaccFallDamage / BeginDamage;
+        //  - timeout: no next primary within ComboContinueWindow (0.7 s) after the last swing FINISHED (Attack.Stop, i.e. after
+        //    its recovery - slow swings keep the whole window) resets the chain.
+        // None of these touch the finisher lockout (_comboLockUntil / _comboFinisher), so a reset can never skip finisher recovery.
+        internal static void UpdateNaccAirborne(Player p)
+        {
+            if (p == null) return;
+            if (_comboHit >= 0 && _comboLastEnd > 0f && Instance != null && Time.time - _comboLastEnd > Mathf.Max(0.05f, Instance.ComboContinueWindow.Value))
+                ResetNaccChain(p);   // window closed without a next primary
+            // v0.25.178 GHOST SWINGS (user: after a parry the chain started at strike 2/4/5 or went vanilla): a click during the block /
+            // parry pose can be ACCEPTED by Attack.Start while no swing animation ever plays. Valheim only calls Attack.Stop for an attack
+            // that really entered its swing, so our end time stayed unset, the chain counted that click as a hit and believed a swing was
+            // still "running" - the next click seconds later continued at a later strike, and the leftover swing trigger fired a random
+            // strike. Now: a started chain attack whose swing never shows within 0.5 s is a ghost -> the chain is reset and our leftover
+            // swing triggers are cleared; a real swing that ended without a recorded Stop gets its end time here.
+            if (_comboLastEnd < 0f && (_comboHit >= 0 || _comboFinisher != null))
+            {
+                bool inAttack = p.InAttack();
+                if (inAttack) { _comboSwingSeen = true; _comboSwingSeenAt = Time.time; }
+                else if (!_comboSwingSeen && Time.time - _comboLastStart > 0.5f)
+                {
+                    NaccTrace("ghost swing: chain attack accepted but no swing played -> chain reset");
+                    ClearChainTriggers(p);
+                    if (_comboFinisher != null) { _comboFinisher = null; _comboLockUntil = _comboLockBefore; }   // a ghost finisher leaves no lockout
+                    ResetNaccChain(p);
+                }
+                else if (_comboSwingSeen && Time.time - _comboSwingSeenAt > 0.25f) _comboLastEnd = _comboSwingSeenAt;   // swing over, Stop not seen
+            }
+        }
+
+        private static bool _comboSwingSeen;
+        private static float _comboSwingSeenAt;
+
+        // v0.25.178: drop our not-yet-consumed swing triggers so a ghost click can never fire a random strike later.
+        private static void ClearChainTriggers(Player p)
+        {
+            try
+            {
+                Animator a = p == null ? null : p.GetComponentInChildren<Animator>();
+                if (a == null) return;
+                string[] bases = { _comboBase, _comboCarrier, "dual_knives" };
+                for (int b = 0; b < bases.Length; b++)
+                {
+                    if (string.IsNullOrEmpty(bases[b])) continue;
+                    for (int i = 0; i < 4; i++) a.ResetTrigger(DragonCombat.AnimatorTriggerName(bases[b] + i.ToString()));
+                }
+            }
+            catch (Exception) { }
+        }
+
+        // v0.25.169b: the local player took fall damage (called from BeginDamage after the fall reductions)
+        internal static void NaccFallDamage(Player p)
+        {
+            if (p != null && (_comboHit >= 0 || _comboLastEnd > 0f)) ResetNaccChain(p);
+        }
+
+        // v0.25.169: the vanilla jump fires the "jump" trigger on the local player's ZSyncAnimation -> break the chain.
+        private static void NaccJumpSeen(object zanim)
+        {
+            try
+            {
+                Component c = zanim as Component;
+                Player p = c == null ? null : c.GetComponent<Player>();
+                if (p == null || p != Player.m_localPlayer) return;
+                if (_comboHit >= 0 || _comboLastEnd > 0f) ResetNaccChain(p);
+            }
+            catch (Exception) { }
+        }
         private static FieldInfo _atkHitPoint;
 
         private static void ComboFields()
@@ -960,15 +2783,17 @@ namespace DragonsAltarCombat
             ComboChainsEnabled = Config.Bind("Combat", "FiveHitCombos_v02538", true, "Normal melee attacks chain into a 5-hit combo built from the weapon's own vanilla swings.");
             ComboChainLength = Config.Bind("Combat", "ComboLength_v02538", 5, "Hits in the normal attack chain.");
             ComboFinisherLockout = Config.Bind("Combat", "ComboFinisherLockout_v02538", 1f, "Seconds after the last hit of the chain before a new normal attack can start.");
+            ShowGuides = Config.Bind("Visuals", "ShowTargetingGuides", true, "Thin, very faint outlines for targeting / charging guides. Off hides ONLY those outlines (never skill geometry, damage areas or other UI).");
             EnhancedVfx = Config.Bind("Visuals", "EnhancedSkillVfx_v02554", true, "Real particle / light / lightning effects on skills (v0.25.54). Off = the old line drawings only.");
-            VfxDensity = Config.Bind("Visuals", "ParticleDensity_v02559", 0.7f, "Particle amount multiplier for skill effects (0.1 - 3).");
-            VfxLight = Config.Bind("Visuals", "LightIntensity_v02559", 0.45f, "Brightness of the flashes / point lights skills create (0 = none, 1 = the old v0.25.54-58 look).");
+            VfxDensity = Config.Bind("Visuals", "ParticleDensity_v025145", 0.35f, "Particle amount multiplier for skill effects (0.1 - 3). v0.25.145: restrained default.");
+            CapeFreeze = Config.Bind("Visuals", "FreezeCapeDuringSkills_v025171", true, "Capes stop simulating while a skill animation drives the body (they hang still and follow the body like armour) and resume afterwards. Off = the v0.25.170 cloth guard (cape keeps simulating with damped inertia).");
+            VfxLight = Config.Bind("Visuals", "LightIntensity_v025145", 0.15f, "Legacy setting: extra skill point lights were removed in v0.25.195. Visible particles and lightning remain.");
             ComboSwingSeconds = Config.Bind("Combat", "ComboSwingSeconds_v02559", 0.6f, "Normal attack chain: seconds per swing for ALL 5 hits (finisher included) with no attack-speed bonus; class attack speed bonuses shorten it.");
             ComboRepeatOffset = Config.Bind("Combat", "ComboRepeatOffset_v02559", 0.22f, "When the chain steps back to an earlier swing (hit 3 = swing 1 again), it starts this far into that swing (0-0.5 of the animation) so it flows out of the previous swing instead of restarting from the rest pose.");
             ComboBlend = Config.Bind("Combat", "ComboBlendSeconds_v02559", 0.12f, "Cross-fade time between chained swings.");
             ComboFixedInterval = Config.Bind("Combat", "ComboFixedInterval_v02565", false, "On = every weapon's chain uses ComboSwingSeconds per hit (all weapons equally fast). Off = each weapon keeps its own speed (its average swing), with even intervals inside the chain; attack speed bonuses multiply it.");
             MeleeHitStop = Config.Bind("Combat", "MeleeHitStop_v02559", false, "Valheim's hit-stop (the swing freezes 0.15 s on every hit) for YOUR melee hits. Off = swings flow through enemies without stopping.");
-            ComboContinueWindow = Config.Bind("Combat", "ComboContinueWindow_v02544", 0.4f, "Seconds after a swing ends in which the next normal attack continues the chain (1-2-1-2-3) instead of starting over.");
+            ComboContinueWindow = Config.Bind("Combat", "ComboContinueWindow_v025169", 0.7f, "Seconds after a swing has FINISHED (Attack.Stop, i.e. after its recovery) in which the next normal attack continues the chain (1-2-1-2-3). Clicks during a swing queue and always continue. No click in time = the chain resets.");
             WhirlwindLoopStart = Config.Bind("Runtime", "WhirlwindLoopStart_v02542", 0.3f, "Whirlwind: where the looped spin restarts in Valheim's atgeir spin (0-1 of the animation).");
             WhirlwindLoopEnd = Config.Bind("Runtime", "WhirlwindLoopEnd_v02542", 0.72f, "Whirlwind: where the looped spin jumps back (0-1 of the animation).");
             ComboFields();
@@ -1022,8 +2847,26 @@ namespace DragonsAltarCombat
             MethodInfo st = z == null ? null : z.GetMethod("SetTrigger", all, null, new Type[] { typeof(string) }, null);
             if (st != null)
             {
-                try { PatchWithHarmony(st, new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("ComboTriggerPrefix", BindingFlags.Static | BindingFlags.NonPublic)), null); n++; }
+                // v0.25.160: above every other mod's Priority.First. Equal priorities run in registration order and Therzie's
+                // plugins ("Therzie.*" sorts before our lower-case GUIDs) register first, so their SetTrigger prefix used to see -
+                // and redirect - the 2HDW swing trigger before ours.
+                HarmonyMethod ctp = new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("ComboTriggerPrefix", BindingFlags.Static | BindingFlags.NonPublic));
+                ctp.priority = 100000;
+                // postfix: covers a SetTrigger that drives the animator directly (no RPC) and a foreign prefix that swapped the controller
+                try { PatchWithHarmony(st, ctp, new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("RouteSetTriggerPostfix", BindingFlags.Static | BindingFlags.NonPublic))); n++; }
                 catch (Exception ex) { Logger.LogWarning("Combo trigger patch: " + ex.Message); }
+            }
+            // v0.25.160: the trigger reaches the animator in ZSyncAnimation.RPC_SetTrigger (invoked for everybody, the local player
+            // included). A routed 2HDW swing keeps OUR controller and OUR carrier trigger through it: prefix runs last of all prefixes
+            // (restores name + controller another prefix changed), postfix re-asserts both if something swapped them inside.
+            MethodInfo[] zm = z == null ? new MethodInfo[0] : z.GetMethods(all);
+            for (int i = 0; i < zm.Length; i++)
+            {
+                if (zm[i].Name != "RPC_SetTrigger") continue;
+                HarmonyMethod rp = new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("RouteRpcPrefix", BindingFlags.Static | BindingFlags.NonPublic));
+                rp.priority = 0;
+                try { PatchWithHarmony(zm[i], rp, new HarmonyMethod(typeof(DragonCombatPlugin).GetMethod("RouteRpcPostfix", BindingFlags.Static | BindingFlags.NonPublic))); n++; }
+                catch (Exception ex) { Logger.LogWarning("Route RPC patch: " + ex.Message); }
             }
             return n;
         }
@@ -1057,7 +2900,7 @@ namespace DragonsAltarCombat
             if (p == null || DragonCombat.GetAdvancementName(p) != "Mercenary") return false;
             ItemDrop.ItemData l = DragonCombat.GetHandItem(p, "m_leftItem");
             ItemDrop.ItemData r = DragonCombat.GetHandItem(p, "m_rightItem");
-            return l != null && r != null && l != r && DragonCombat.IsOneHandedWeapon(l) && DragonCombat.IsOneHandedWeapon(r);
+            return DragonCombat.IsMatchingDualPair(l, r);   // v0.25.169 exact same prefab, no Spears / War Pikes
         }
 
         // v0.25.44 (user: "1st > 2nd > 1st > 2nd > 3rd"): our own chain counter picks the swing of every hit
@@ -1073,6 +2916,22 @@ namespace DragonsAltarCombat
             if (count <= 1) return 0;
             if (hit >= length - 1) return count - 1;
             return count > 2 ? hit % 2 : 0;
+        }
+
+        // v0.25.139: dual-wield chain rules (dual speed keys, dual timing) also apply to two-handed paired weapons.
+        private static bool UsesDualChain(Player p)
+        {
+            return p != null && (IsDualWielding(p) || DragonCombat.IsPairedWeapon(DragonCombat.GetHandItem(p, "m_rightItem")));
+        }
+
+        private static readonly HashSet<string> _pairedLogged = new HashSet<string>();
+        private static void LogPairedOnce(ItemDrop.ItemData w, int levels, Attack at)
+        {
+            string key = w.m_shared.m_name;
+            if (w.m_shared.m_itemType.ToString() != "TwoHandedWeapon" || !_pairedLogged.Add(key) || DragonCombatPlugin.Instance == null) return;
+            DragonCombatPlugin.Instance.Logger.LogInfo("[NACC] two-handed weapon (paired=" + DragonCombat.IsPairedWeapon(w) + "): " + key + " prefab=" + (w.m_dropPrefab != null ? w.m_dropPrefab.name : "?") +
+                " skill=" + w.m_shared.m_skillType + " anim=" + w.m_shared.m_attack.m_attackAnimation + " secondary=" +
+                (w.m_shared.m_secondaryAttack != null ? w.m_shared.m_secondaryAttack.m_attackAnimation : "-") + " chainLevels=" + levels);
         }
 
         private static float _comboLastEnd = -10f, _comboLastStart = -10f, _chainPrevSpeed = 1f;
@@ -1098,27 +2957,165 @@ namespace DragonsAltarCombat
         }
         private static readonly Dictionary<string, float> _chainNatural = new Dictionary<string, float>();
 
-        private static void ComboStartPrefix(Attack __instance, Humanoid character, ItemDrop.ItemData weapon, ref Attack previousAttack, ref float timeSinceLastAttack)
+        // v0.25.158: a 2HDW primary swing whose SBDW controller cannot be made valid is REJECTED here (Attack.Start skipped, so no stamina,
+        // no trigger, no combo advance) - the native animation is never substituted. Heavy attacks never set the flag.
+        // v0.25.159 LATE REJECTION. The trigger fires INSIDE Attack.Start; if the paired controller cannot be restored there, that exact
+        // Attack instance is marked, Start's result is turned into false (Humanoid.StartAttack then assigns nothing), the instance is
+        // stopped, every combo field the attempt touched is rolled back and the attack cost Start already took is refunded.
+        private static Attack _lateRejected;
+        private class ComboSnap
+        {
+            public int Hit, Swing, Prev, Count, Gen; public float LastEnd, LastStart, ClockStart, PrevSpeed, LockUntil, LockBefore, ChainSpeed, Stamina, Eitr;
+            public string StartAnim, Base, Carrier; public bool Dual; public object Finisher;
+            public bool SwingSeen, HadMeasurement; public float SwingSeenAt, ChainRemaining, MeasuredBefore;
+            public string MeasureKey; public int AttackSerial; public object ActivationAttack;
+        }
+        private static ComboSnap _snap;
+
+        private static float CallFloat(Player p, string method)
+        {
+            try
+            {
+                MethodInfo m = typeof(Player).GetMethod(method, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+                return m == null ? 0f : (float)m.Invoke(p, null);
+            }
+            catch (Exception) { return 0f; }
+        }
+
+        private static void CallAdd(Player p, string method, float v)
+        {
+            try
+            {
+                MethodInfo m = typeof(Player).GetMethod(method, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new Type[] { typeof(float) }, null);
+                if (m != null) m.Invoke(p, new object[] { v });
+            }
+            catch (Exception) { }
+        }
+
+        private static ComboSnap TakeSnap(Player p)
+        {
+            ComboSnap c = new ComboSnap();
+            c.Hit = _comboHit; c.Swing = _comboSwing; c.Prev = _comboPrevSwing; c.Count = _comboCount; c.Gen = _comboGen;
+            c.LastEnd = _comboLastEnd; c.LastStart = _comboLastStart; c.ClockStart = _comboClockStart; c.PrevSpeed = _chainPrevSpeed;
+            c.LockUntil = _comboLockUntil; c.LockBefore = _comboLockBefore; c.StartAnim = _comboStartAnim; c.Base = _comboBase;
+            c.Carrier = _comboCarrier; c.Dual = _comboDual; c.Finisher = _comboFinisher;
+            c.ChainSpeed = DragonCombat.ChainSpeedFor(p);
+            c.ChainRemaining = DragonCombat.ChainSpeedRemaining(p);
+            c.SwingSeen = _comboSwingSeen; c.SwingSeenAt = _comboSwingSeenAt;
+            c.AttackSerial = DragonCombat.AttackSerial; c.ActivationAttack = DragonCombat.NaccAttack;
+            c.Stamina = p.GetStamina(); c.Eitr = CallFloat(p, "GetEitr");
+            return c;
+        }
+
+        private static void RollBack(Player p, ComboSnap c, bool refundResources)
+        {
+            _comboHit = c.Hit; _comboSwing = c.Swing; _comboPrevSwing = c.Prev; _comboCount = c.Count; _comboGen = c.Gen;
+            _comboLastEnd = c.LastEnd; _comboLastStart = c.LastStart; _comboClockStart = c.ClockStart; _chainPrevSpeed = c.PrevSpeed;
+            _comboLockUntil = c.LockUntil; _comboLockBefore = c.LockBefore; _comboStartAnim = c.StartAnim; _comboBase = c.Base;
+            _comboCarrier = c.Carrier; _comboDual = c.Dual; _comboFinisher = c.Finisher;
+            _comboSwingSeen = c.SwingSeen; _comboSwingSeenAt = c.SwingSeenAt;
+            DragonCombat.RestoreAttackActivation(c.AttackSerial, c.ActivationAttack);
+            if (c.MeasureKey != null)
+            {
+                if (c.HadMeasurement) _chainNatural[c.MeasureKey] = c.MeasuredBefore;
+                else _chainNatural.Remove(c.MeasureKey);
+            }
+            DragonCombat.SetChainSpeed(p, c.ChainSpeed, c.ChainRemaining);
+            if (!refundResources) return;
+            // refund whatever Attack.Start already took
+            float st = c.Stamina - p.GetStamina(); if (st > 0.001f) CallAdd(p, "AddStamina", st);
+            float et = c.Eitr - CallFloat(p, "GetEitr"); if (et > 0.001f) CallAdd(p, "AddEitr", et);
+        }
+
+        private static void StopAttackInstance(Attack a)
+        {
+            try
+            {
+                MethodInfo m = a.GetType().GetMethod("Abort", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+                if (m == null) m = a.GetType().GetMethod("Stop", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+                if (m != null) m.Invoke(a, null);
+            }
+            catch (Exception) { }
+        }
+
+        private static bool _comboReject;
+        private static bool ComboStartPrefix(Attack __instance, Humanoid character, ItemDrop.ItemData weapon, ref Attack previousAttack, ref float timeSinceLastAttack, ref bool __result)
+        {
+            _comboReject = false;
+            _lateRejected = null;
+            Player sp = character as Player;
+            _snap = sp != null && sp == Player.m_localPlayer ? TakeSnap(sp) : null;
+            ComboStartCore(__instance, character, weapon, ref previousAttack, ref timeSinceLastAttack);
+            if (!_comboReject) return true;
+            _comboReject = false; _comboInStart = false;
+            __result = false;
+            return false;
+        }
+
+        // v0.25.177 (user: vanilla 1-2-3 after a parry, cause not found in code): every NACC decision within 5 s of a block / parry is
+        // logged ("[Aethelborn] NACC trace: ...") so the real branch shows in LogOutput.log. Log only, no behaviour change.
+        private static void NaccTrace(string msg)
+        {
+            if (Time.time - DragonCombat.LastBlockAt > 5f) return;
+            Debug.Log("[Aethelborn] NACC trace +" + (Time.time - DragonCombat.LastBlockAt).ToString("F2") + "s after block: " + msg);
+        }
+
+        private static void ComboStartCore(Attack __instance, Humanoid character, ItemDrop.ItemData weapon, ref Attack previousAttack, ref float timeSinceLastAttack)
         {
             _comboInStart = false;
+            if (character != null && character == Player.m_localPlayer) DragonCombat.BeginAttackActivation(__instance);   // v0.25.156
             try
             {
                 if (Instance == null || !Instance.ComboChainsEnabled.Value) return;
+                // v0.25.142 2HDW: the SBDW clip override belongs to the paired PRIMARY attack only - heavies, other weapons release it.
+                Player relP = character as Player;
+                if (relP != null && relP == Player.m_localPlayer)
+                {
+                    bool primaryPaired = weapon != null && DragonCombat.IsPairedWeapon(weapon) &&
+                        string.Equals(_atkAnim.GetValue(__instance) as string, weapon.m_shared.m_attack.m_attackAnimation, StringComparison.Ordinal);
+                    if (!primaryPaired) { DragonDualWield.ReleasePaired(relP); _comboCarrier = null; }
+                }
                 Player p;
-                if (!IsLocalMeleeStart(__instance, character, out p)) return;
+                if (!IsLocalMeleeStart(__instance, character, out p))
+                {
+                    if (character == Player.m_localPlayer) NaccTrace("start: not a melee primary (" + (_atkAnim.GetValue(__instance) as string) + ") -> chain reset");
+                    // v0.25.99: any other local attack (heavy / area / ranged) also resets the chain speed.
+                    Player lp = character as Player;
+                    if (lp != null && lp == Player.m_localPlayer) { _comboHit = -1; DragonCombat.SetChainSpeed(lp, 1f, 0.05f); }
+                    return;
+                }
+                // Only the native primary attack of a paired item enters NACC. Secondary data is untouched.
+                if (DragonCombat.IsPairedWeapon(weapon) &&
+                    !string.Equals(_atkAnim.GetValue(__instance) as string, weapon.m_shared.m_attack.m_attackAnimation, StringComparison.Ordinal))
+                { _comboHit = -1; DragonCombat.SetChainSpeed(p, 1f, 0.05f); return; }
                 int levels = (int)_atkLevels.GetValue(__instance);
-                if (levels < 2) return;   // only weapons that already chain (no spears / single heavy hits)
+                LogPairedOnce(weapon, levels, __instance);   // v0.25.141 one diagnostic line per two-handed weapon
+                // v0.25.99 FIX (user: dual-wield Axe heavy attack stuck in slow motion): a heavy / single-hit attack
+                // inherited the last chain swing's speed (dual chains run down to 0.25x for 3 s). Every attack that
+                // is not part of our chain plays at normal speed and breaks the chain.
+                if (levels < 2) { NaccTrace("start: weapon has " + levels + " chain levels -> vanilla"); _comboHit = -1; DragonCombat.SetChainSpeed(p, 1f, 0.05f); return; }   // only weapons that already chain (no spears / single heavy hits)
                 // v0.25.45 (user): the 5-hit chain belongs to classes fit for the weapon; everyone else keeps vanilla.
-                if (DragonCombat.ComboWeaponProvider == null || !DragonCombat.ComboWeaponProvider(p, weapon)) { _comboHit = -1; return; }
+                if (DragonCombat.ComboWeaponProvider == null || !DragonCombat.ComboWeaponProvider(p, weapon)) { NaccTrace("start: class not fit for '" + (weapon == null ? "none" : weapon.m_shared.m_name) + "' -> vanilla"); _comboHit = -1; DragonCombat.SetChainSpeed(p, 1f, 0.05f); return; }
                 int count = Mathf.Min(levels, 3);
                 if (levels > count) _atkLevels.SetValue(__instance, count);
                 string anim = _atkAnim.GetValue(__instance) as string;
+                // v0.25.142 2HDW: play SBDW's clips for the primary chain (Attack1-3 on the carrier swing states). Chain timing keys use
+                // the carrier name so cadence is measured/shared with the working SBDW chain. Unavailable -> native animations.
+                string keyAnim = anim;
+                _comboCarrier = null;
+                if (DragonCombat.IsPairedWeapon(weapon))
+                {
+                    Animator pa = p.GetComponentInChildren<Animator>();
+                    string carrier;
+                    if (DragonDualWield.EnsurePaired(pa, out carrier, "attack start", DragonDualWield.UsesKnifeCarrier(weapon))) { _comboCarrier = carrier; keyAnim = carrier; }
+                    else { _comboCarrier = null; _comboReject = true; return; }   // unrecoverable: reject, never fall back to the native animation
+                }
                 int length = Mathf.Clamp(Instance.ComboChainLength.Value, 2, 9);
                 string prevAnim = previousAttack == null ? null : _atkAnim.GetValue(previousAttack) as string;
                 // our own timer: the next attack continues the chain when it starts while the previous swing is
                 // still running (queued chain) or within the window after it ended.
-                bool prevRunning = previousAttack != null && _comboLastEnd < 0f && Time.time - _comboLastStart < 2.5f;
-                bool cont = _comboHit >= 0 && prevAnim == anim && anim == _comboBase && _comboHit < length - 1 && IsDualWielding(p) == _comboDual
+                bool prevRunning = previousAttack != null && _comboLastEnd < 0f && Time.time - _comboLastStart < 2.5f && p.InAttack();   // v0.25.178 a ghost (never-played) swing never continues the chain
+                bool cont = _comboHit >= 0 && prevAnim == anim && anim == _comboBase && _comboHit < length - 1 && UsesDualChain(p) == _comboDual
                     && (prevRunning || Time.time - _comboLastEnd <= Mathf.Max(0.05f, Instance.ComboContinueWindow.Value));
                 // v0.25.55 (user): every swing of the chain takes the same time (ComboSwingSeconds, 0.8s at no
                 // attack-speed bonus), the finisher keeps its natural (longest) length. Each swing's natural time is
@@ -1130,37 +3127,46 @@ namespace DragonsAltarCombat
                 if (cont)
                 {
                     float measured = Time.time - _comboLastStart;
-                    string mk = ChainKey(anim, _comboDual, _comboHit);
+                    string mk = ChainKey(keyAnim, _comboDual, _comboHit);
                     float nat = DragonCombat.ChainNaturalClock - _comboClockStart;
                     float old;
-                    if (measured > 0.15f && (!_chainNatural.TryGetValue(mk, out old) || nat < old)) _chainNatural[mk] = nat;
+                    if (measured > 0.15f && (!_chainNatural.TryGetValue(mk, out old) || nat < old))
+                    {
+                        if (_snap != null)
+                        {
+                            _snap.MeasureKey = mk;
+                            _snap.HadMeasurement = _chainNatural.TryGetValue(mk, out _snap.MeasuredBefore);
+                        }
+                        _chainNatural[mk] = nat;
+                    }
                 }
                 float chainF = 1f;
                 float natNow;
-                bool dualNow = IsDualWielding(p);
-                if (_chainNatural.TryGetValue(ChainKey(anim, dualNow, nextHit), out natNow))
+                bool dualNow = UsesDualChain(p);
+                if (_chainNatural.TryGetValue(ChainKey(keyAnim, dualNow, nextHit), out natNow))
                 {
                     // v0.25.65 (user): intervals stay EVEN inside the chain, but the beat is the weapon's own average
                     // swing (a greatsword stays heavier than a one-handed sword); attack speed bonuses then scale that
                     // base speed (+50% = 1.5x), they no longer collapse every weapon onto one interval.
-                    float target = Instance.ComboFixedInterval.Value ? Mathf.Max(0.2f, Instance.ComboSwingSeconds.Value) : ChainAverage(anim, dualNow, length, natNow);
+                    float target = Instance.ComboFixedInterval.Value ? Mathf.Max(0.2f, Instance.ComboSwingSeconds.Value) : ChainAverage(keyAnim, dualNow, length, natNow);
                     // v0.25.67 (user: dual wield attacked like the Flash): the dual wield clips are short knife-speed
                     // swings that also strike with BOTH weapons. A dual swing now lasts at least as long as the same
                     // weapon's one-handed swing (or ComboSwingSeconds before that is known); Warfreak's +50% then
                     // applies on top like for any other weapon.
                     if (dualNow)
                     {
-                        float oneHand = ChainAverage(anim, false, length, -1f);
+                        float oneHand = ChainAverage(keyAnim, false, length, -1f);
                         target = Mathf.Max(target, oneHand > 0.2f ? oneHand : Mathf.Max(0.2f, Instance.ComboSwingSeconds.Value));
                     }
                     chainF = Mathf.Clamp(natNow / Mathf.Max(0.2f, target), dualNow ? 0.25f : 0.6f, 3f);
                 }
                 else if (dualNow) chainF = 0.6f;   // v0.25.67: not measured yet - start slower than the raw dual clips
-                _comboStartAnim = anim;
+                _comboStartAnim = keyAnim;
                 DragonCombat.SetChainSpeed(p, chainF, 3f);
                 _chainPrevSpeed = DragonCombat.GetAttackSpeedMultiplier(p) * chainF;
                 _comboLastEnd = -1f;
                 _comboLastStart = Time.time;
+                _comboSwingSeen = false;   // v0.25.178
                 _comboClockStart = DragonCombat.ChainNaturalClock;
                 _comboPrevSwing = cont ? _comboSwing : -1;
                 _comboHit = cont ? _comboHit + 1 : 0;
@@ -1170,15 +3176,48 @@ namespace DragonsAltarCombat
                 previousAttack = null;
                 timeSinceLastAttack = 0f;
                 _comboBase = anim;
-                _comboDual = IsDualWielding(p);
+                _comboDual = UsesDualChain(p);
+                _comboGen = DragonCombat.NaccGen;
                 _comboInStart = true;
+                NaccTrace("start: hit " + (_comboHit + 1) + " swing " + (_comboSwing + 1) + (cont ? " (continues)" : " (new chain: prevAnim " + prevAnim + ", window " + (_comboLastEnd < 0f ? "running" : (Time.time - _comboLastEnd).ToString("F2") + "s") + ")"));
             }
-            catch (Exception) { _comboInStart = false; }
+            catch (Exception ex) { _comboInStart = false; NaccTrace("start: exception " + ex.Message); }
         }
 
-        private static void ComboStartPostfix(Attack __instance, bool __result, Humanoid character)
+        private static void ComboStartPostfix(Attack __instance, ref bool __result, Humanoid character)
         {
-            if (__result && character != null && character == Player.m_localPlayer) DragonCombat.SkillAnimAttackBlockUntil = 0f;
+            // v0.25.159: this exact Attack was rejected inside Start (paired controller lost at trigger time): fail it, stop it, roll the
+            // attempt back and skip every success-side effect below (skill retire, finisher bookkeeping, lockout).
+            if (_lateRejected != null && ReferenceEquals(__instance, _lateRejected))
+            {
+                _lateRejected = null;
+                _comboInStart = false;
+                __result = false;
+                StopAttackInstance(__instance);
+                Player lp = character as Player;
+                if (lp != null && _snap != null) RollBack(lp, _snap, true);   // after Stop: its postfix must not leave a stale end time
+                _snap = null;
+                return;
+            }
+            // Native Start can reject for stamina before any animation trigger. Undo only our
+            // tentative NACC state; never stop the preceding swing or refund native/mod costs.
+            if (!__result && _comboInStart && _snap != null && character == Player.m_localPlayer)
+            {
+                RollBack((Player)character, _snap, false);
+                _comboInStart = false;
+                _snap = null;
+                return;
+            }
+            _snap = null;
+            if (__result && character != null && character == Player.m_localPlayer)
+            {
+                DragonCombat.CommitAttackActivation();
+                DragonCombat.SkillAnimAttackBlockUntil = 0f;
+            }
+            // v0.25.154: an ACCEPTED melee normal attack retires the skill animation drivers it supersedes (damage / VFX the
+            // skill already cast keep running - only the animation side stops). Failed starts retire nothing.
+            Player rp;
+            if (__result && IsLocalMeleeStart(__instance, character, out rp)) DragonCombat.RetireSkillAnimations(rp);
             bool was = _comboInStart;
             _comboInStart = false;
             if (!was) return;
@@ -1191,6 +3230,7 @@ namespace DragonsAltarCombat
                 int length = Mathf.Clamp(Instance.ComboChainLength.Value, 2, 9);
                 if (_comboHit >= length - 1)
                 {
+                    _comboLockBefore = _comboLockUntil;
                     _comboFinisher = __instance;
                     _comboHit = -1;
                     // safety net in case Stop never reports (interrupted swing)
@@ -1210,7 +3250,8 @@ namespace DragonsAltarCombat
             {
                 // finisher length: start -> stop at the speed it played (min of what we have seen)
                 float measured = Time.time - _comboLastStart;
-                if (Instance != null && measured > 0.15f && !string.IsNullOrEmpty(_comboStartAnim))
+                // v0.25.154: a swing a skill / takeoff cut short is not a natural length - never measure it.
+                if (Instance != null && measured > 0.15f && !string.IsNullOrEmpty(_comboStartAnim) && _comboGen == DragonCombat.NaccGen)
                 {
                     string fk = ChainKey(_comboStartAnim, _comboDual, Mathf.Clamp(Instance.ComboChainLength.Value, 2, 9) - 1);
                     float nat = DragonCombat.ChainNaturalClock - _comboClockStart, old;
@@ -1226,59 +3267,288 @@ namespace DragonsAltarCombat
             return __instance == null || __instance != Player.m_localPlayer || Time.time >= DragonCombat.SkillAnimAttackBlockUntil;
         }
 
-        private static bool ComboLockPrefix(Humanoid __instance, ref bool __result)
+        private static bool ComboLockPrefix(Humanoid __instance, ref bool __result, object[] __args)
         {
             if (__instance == null || __instance != Player.m_localPlayer) return true;
             // v0.25.55: no normal attack while a skill holds the player (no attack sneaking out of a skill).
-            if (DragonCombat.IsSkillLocked((Player)__instance)) { __result = false; return false; }
-            if (Time.time >= _comboLockUntil) return true;
-            __result = false;
-            return false;
+            if (DragonCombat.IsSkillLocked((Player)__instance)) { NaccTrace("attack request rejected: skill lock"); __result = false; return false; }
+            // v0.25.169 (user): NACC may start and continue in the air (the v0.25.154 airborne rejection is gone).
+            Player lp = (Player)__instance;
+            if (Time.time < _comboLockUntil) { NaccTrace("attack request rejected: finisher lockout " + (_comboLockUntil - Time.time).ToString("F2") + "s"); __result = false; return false; }
+            // v0.25.179 DOUBLE START (user log, after a block / parry: "hit 1" then "hit 2" 0.02 s later -> strike 1 never played, the
+            // chain looked like 4 or 3 hits): the first chain swing started while the body was still leaving the block pose, so Valheim
+            // did not count it as "in an attack" yet and the held / queued click started the attack AGAIN the next frame, replacing it.
+            // A primary request while our last chain swing was accepted < 0.35 s ago and has not begun playing is that duplicate:
+            // rejected, the first swing plays. A swing that never plays is still reset by the ghost rule (0.5 s).
+            if (_comboHit >= 0 && _comboLastEnd < 0f && !_comboSwingSeen && Time.time - _comboLastStart < 0.35f && !lp.InAttack() && IsNaccPrimaryRequest(lp, __args))
+            {
+                NaccTrace("attack request rejected: duplicate start " + (Time.time - _comboLastStart).ToString("F2") + "s after hit " + (_comboHit + 1) + " (its swing has not begun yet)");
+                __result = false;
+                return false;
+            }
+            // v0.25.158: a 2HDW primary request is only accepted when its SBDW controller is valid (repaired if needed) - checked here,
+            // before Attack.Start spends stamina or advances the combo. Not while a swing runs (never swap controllers mid-swing).
+            if (!lp.InAttack() && IsPairedPrimaryRequest(lp, __args))
+            {
+                string pc;
+                if (!DragonDualWield.EnsurePaired(lp.GetComponentInChildren<Animator>(), out pc, "attack request", DragonDualWield.UsesKnifeCarrier(lp.GetCurrentWeapon()))) { __result = false; return false; }
+            }
+            return true;
+        }
+
+        private static bool IsPairedPrimaryRequest(Player p, object[] args)
+        {
+            try
+            {
+                if (Instance == null || !Instance.ComboChainsEnabled.Value) return false;
+                if (args != null && args.Length > 1 && args[1] is bool && (bool)args[1]) return false;   // heavy / secondary: untouched
+                ItemDrop.ItemData w = p.GetCurrentWeapon();
+                return w != null && DragonCombat.IsPairedWeapon(w) && DragonCombat.ComboWeaponProvider != null && DragonCombat.ComboWeaponProvider(p, w);
+            }
+            catch (Exception) { return false; }
+        }
+
+        internal static readonly Dictionary<string, KeyValuePair<int, int>> BaseComboStates = new Dictionary<string, KeyValuePair<int, int>>();
+
+        // Capture the outgoing attack, not a locomotion transition observed after a trigger.
+        private static void CaptureBaseComboState(Animator a, string trigger)
+        {
+            if (a == null) return;
+            DragonCombat.CheckController(a);   // v0.25.154 states captured under another controller are dropped
+            Player cp = Player.m_localPlayer;
+            if (cp == null || !cp.InAttack() || DragonCombat.SkillOwnsAnimator(cp)) return;   // never capture a skill CA / locomotion state
+            if (DragonCombat.NearBlock()) return;   // v0.25.175 never capture out of a block / parry
+            float best = 0f;
+            for (int layer = 0; layer < a.layerCount; layer++)
+            {
+                for (int next = 0; next < 2; next++)
+                {
+                    if (next == 1 && !a.IsInTransition(layer)) continue;
+                    AnimatorClipInfo[] clips = next == 1 ? a.GetNextAnimatorClipInfo(layer) : a.GetCurrentAnimatorClipInfo(layer);
+                    for (int i = 0; i < clips.Length; i++)
+                    {
+                        if (clips[i].clip == null || clips[i].weight <= best) continue;
+                        AnimationEvent[] events = clips[i].clip.events;
+                        for (int e = 0; e < events.Length; e++)
+                        {
+                            if (events[e].functionName != "OnAttackTrigger" && events[e].functionName != "Hit") continue;
+                            AnimatorStateInfo state = next == 1 ? a.GetNextAnimatorStateInfo(layer) : a.GetCurrentAnimatorStateInfo(layer);
+                            BaseComboStates[DragonCombat.StateKey(a, trigger)] = new KeyValuePair<int, int>(layer, state.fullPathHash);
+                            best = clips[i].weight;
+                            break;
+                        }
+                    }
+                }
+            }
         }
 
         // The swing trigger Valheim fires inside Attack.Start is rewritten to our swing. A backwards step
         // (swing 1 after swing 2) cannot be reached by trigger, so it cross-fades into the learned state.
-        private static bool ComboTriggerPrefix(object __instance, ref string __0)
+        // v0.25.162 routed 2HDW swing, bound to ONE SetTrigger invocation: the call depth it was routed at (nested SetTrigger
+        // calls run deeper), its ZSyncAnimation, and its exact carrier trigger name. Only that RPC_SetTrigger is checked; any
+        // other trigger (skills, emotes, heavy attacks, nested calls, remote RPCs) passes untouched. Names are never rewritten.
+        private static string _routeTrigger;
+        private static Animator _routeAnimator;
+        private static RuntimeAnimatorController _routeCtrl;
+        private static object _routeZanim;
+        private static int _routeDepth = -1;
+        private static bool _routeDone;
+        private static int _stDepth;
+
+        // One line per distinct interception, so the log names exactly where the native animation came from.
+        private static readonly HashSet<string> _routeLogged = new HashSet<string>();
+        private static void RouteLog(string what)
         {
-            if (!_comboInStart || string.IsNullOrEmpty(__0) || string.IsNullOrEmpty(_comboBase)) return true;
+            if (_routeLogged.Add(what) && Instance != null) Instance.LogInfo("[Immortal Heroes] [2HDW] trigger path: " + what + " - restored SBDW");
+        }
+
+        private static Animator RouteAnimatorOf(object zanim)
+        {
+            Component c = zanim as Component;
+            return c == null ? null : c.GetComponentInChildren<Animator>();
+        }
+
+        private static void RouteClear()
+        {
+            _routeTrigger = null; _routeAnimator = null; _routeCtrl = null; _routeZanim = null; _routeDepth = -1; _routeDone = false;
+        }
+
+        // The routed invocation's own RPC_SetTrigger: same call depth, same ZSyncAnimation, same trigger name, not yet handled.
+        private static bool RouteOwns(object zanim, object[] args)
+        {
+            if (_routeTrigger == null || _routeDone || _routeDepth != _stDepth || zanim == null || !ReferenceEquals(zanim, _routeZanim)) return false;
+            if (args == null) return false;
+            for (int i = 0; i < args.Length; i++)
+                if (args[i] is string) return string.Equals((string)args[i], _routeTrigger, StringComparison.Ordinal);
+            return false;
+        }
+
+        private static void RouteRpcPrefix(object __instance, object[] __args)
+        {
             try
             {
-                if (!__0.StartsWith(_comboBase, StringComparison.Ordinal)) return true;
-                string digits = __0.Substring(_comboBase.Length);
+                if (!RouteOwns(__instance, __args)) return;
+                Animator a = _routeAnimator;
+                if (a != null && _routeCtrl != null && a.runtimeAnimatorController != _routeCtrl)
+                {
+                    RouteLog("controller swapped to '" + (a.runtimeAnimatorController == null ? "none" : a.runtimeAnimatorController.name) + "' before RPC_SetTrigger");
+                    DragonCombat.SwapController(a, _routeCtrl);
+                }
+            }
+            catch (Exception) { }
+        }
+
+        private static void RouteRpcPostfix(object __instance, object[] __args)
+        {
+            try
+            {
+                if (!RouteOwns(__instance, __args)) return;
+                _routeDone = true;
+                RouteReassert("inside RPC_SetTrigger");
+            }
+            catch (Exception) { }
+        }
+
+        // swapped inside the call: put ours back and fire the carrier on it (the trigger set on the foreign controller is gone)
+        private static void RouteReassert(string where)
+        {
+            Animator a = _routeAnimator;
+            if (a == null || _routeCtrl == null || a.runtimeAnimatorController == _routeCtrl) return;
+            RouteLog("controller swapped to '" + (a.runtimeAnimatorController == null ? "none" : a.runtimeAnimatorController.name) + "' " + where);
+            DragonCombat.SwapController(a, _routeCtrl);
+            a.SetTrigger(_routeTrigger);
+        }
+
+        // Postfix of every ZSyncAnimation.SetTrigger (paired with ComboTriggerPrefix's depth count). Ends the routed invocation
+        // at its own depth only; covers a SetTrigger that never reached RPC_SetTrigger.
+        private static void RouteSetTriggerPostfix(object __instance)
+        {
+            try
+            {
+                if (_routeTrigger != null && _routeDepth == _stDepth && ReferenceEquals(__instance, _routeZanim))
+                {
+                    if (!_routeDone) RouteReassert("inside SetTrigger");
+                    RouteClear();
+                }
+            }
+            catch (Exception) { RouteClear(); }
+            finally { if (_stDepth > 0) _stDepth--; }
+        }
+
+        // The swing level of `name`: <base><n>, or the trigger an external (Warfare / Wizardry) table maps <base><n> to.
+        private static bool ComboLevelOf(string name, out int level)
+        {
+            level = -1;
+            if (name.StartsWith(_comboBase, StringComparison.Ordinal))
+            {
+                string digits = name.Substring(_comboBase.Length);
+                return digits.Length > 0 && int.TryParse(digits, out level);
+            }
+            for (int i = 0; i < 10; i++)
+            {
+                string mapped;
+                if (DragonCombat.ExternalTriggerName(_comboBase + i.ToString(), out mapped) && string.Equals(mapped, name, StringComparison.Ordinal))
+                { level = i; RouteLog("swing trigger already renamed to '" + name + "' by an earlier SetTrigger prefix"); return true; }
+            }
+            return false;
+        }
+
+        private static float _backMissLogAt;
+        private static bool ComboTriggerPrefix(object __instance, ref string __0)
+        {
+            _stDepth++; // v0.25.162: SetTrigger call depth (RouteSetTriggerPostfix decrements)
+            if (__0 == "jump") NaccJumpSeen(__instance);   // v0.25.169 deliberate jump breaks the chain
+            if (!_comboInStart || string.IsNullOrEmpty(__0) || string.IsNullOrEmpty(_comboBase))
+            {
+                if (!_comboInStart && !string.IsNullOrEmpty(__0) && __0 != "jump" && Player.m_localPlayer != null && (__instance as Component) != null && ((Component)__instance).GetComponent<Player>() == Player.m_localPlayer && __0.Length > 1 && char.IsDigit(__0[__0.Length - 1]))
+                    NaccTrace("trigger '" + __0 + "' fired OUTSIDE our chain (native)");
+                return true;
+            }
+            try
+            {
                 int level;
-                if (digits.Length == 0 || !int.TryParse(digits, out level)) return true;
+                if (!ComboLevelOf(__0, out level)) return true;
+                string inName = __0;
                 Component c = __instance as Component;
                 Animator a = c == null ? null : c.GetComponentInChildren<Animator>();
                 Player p = c == null ? null : c.GetComponent<Player>();
-                bool dwClips = _comboDual && DragonDualWield.Apply(p, a, true);
-                if (!_comboDual) DragonDualWield.Apply(p, a, false);
-                string baseName = _comboBase;
-                if (_comboDual && !dwClips && DragonCombat.AnimTriggerCount(a, "dual_knives") >= 2) baseName = "dual_knives";
+                bool nativePair = DragonCombat.IsPairedWeapon(DragonCombat.GetHandItem(p, "m_rightItem"));
+                // v0.25.157: the paired controller is re-validated right before the swing trigger fires. Another mod (Warfare's animation
+                // replace manager) can swap the controller between Attack.Start and this trigger: re-assert ours once, or log and play native.
+                if (nativePair && _comboCarrier != null && !DragonDualWield.PairedActive(a))
+                {
+                    string foreign = a == null || a.runtimeAnimatorController == null ? "none" : a.runtimeAnimatorController.name;
+                    string c2;
+                    if (DragonDualWield.EnsurePaired(a, out c2, "controller replaced before trigger (by '" + foreign + "')", DragonDualWield.UsesKnifeCarrier(DragonCombat.GetHandItem(p, "m_rightItem")))) _comboCarrier = c2;
+                    else
+                    {
+                        // Attack.Start is running: mark THIS Attack instance as rejected (ComboStartPostfix fails + rolls it back) and
+                        // swallow the native trigger. m_currentAttack is not assigned yet - never cancel the player's previous attack here.
+                        _lateRejected = DragonCombat.NaccAttack as Attack;
+                        return false;
+                    }
+                }
+                bool routed = nativePair && _comboCarrier != null && DragonDualWield.PairedActive(a);   // v0.25.142 2HDW plays SBDW's clips
+                if (routed) DragonDualWield.HoldOneHandedState(p);   // v0.25.161 SBDW's own animator state (see HoldOneHandedState)
+                bool dwClips = !nativePair && _comboDual && DragonDualWield.Apply(p, a, true);
+                if (!nativePair && !_comboDual) DragonDualWield.Apply(p, a, false);
+                string baseName = routed ? _comboCarrier : _comboBase;
+                if (_comboDual && !nativePair && !dwClips && DragonCombat.AnimTriggerCount(a, "dual_knives") >= 2) baseName = "dual_knives";
                 int count = DragonCombat.AnimTriggerCount(a, baseName);
                 if (count <= 0) return true;
                 int index = Mathf.Clamp(_comboSwing, 0, count - 1);
                 if (_comboHit >= Mathf.Clamp(Instance.ComboChainLength.Value, 2, 9) - 1) index = count - 1;
                 string target = baseName + index.ToString();
+                if (nativePair && !routed) DragonCombat.PrepareExternalAnimation(a, target);
+                if (nativePair) DragonDualWield.LogPairedSwing(p, a, inName, target, routed);   // v0.25.163 what the animator really plays (first swings only)
+                bool baseClass = p != null && string.IsNullOrEmpty(DragonCombat.GetAdvancementName(p));
+                // v0.25.170 (user: after blocking the chain fell back to vanilla 1-2-3): the outgoing swing is captured for every class
+                // (was Base Class only). An attack started out of the block pose changes the block layer too, so the trigger learning below
+                // could miss swing 1 and the backwards step (hit 3) had no state to cross-fade into. Paired 2HDW routes are untouched.
+                if (!nativePair && _comboPrevSwing >= 0)
+                    CaptureBaseComboState(a, baseName + _comboPrevSwing.ToString());
                 if (a != null)
                 {
-                    for (int i = 0; i < count; i++) a.ResetTrigger(baseName + i.ToString());
+                    for (int i = 0; i < count; i++) a.ResetTrigger(DragonCombat.AnimatorTriggerName(baseName + i.ToString()));
                     if (_comboPrevSwing >= 0 && index <= _comboPrevSwing)
                     {
                         int hash, layer;
                         // v0.25.59: enter the repeated swing past its rest-pose wind up so it flows out of the last one
                         float blend = Mathf.Clamp(Instance.ComboBlend.Value, 0.02f, 0.4f);
                         float offset = Mathf.Clamp(Instance.ComboRepeatOffset.Value, 0f, 0.5f);
+                        KeyValuePair<int, int> captured;
+                        if (baseClass && BaseComboStates.TryGetValue(DragonCombat.StateKey(a, target), out captured))
+                        {
+                            a.CrossFade(captured.Value, blend / Mathf.Max(0.1f, StateLength(a, captured.Key)), captured.Key, offset);
+                            NaccTrace("step back to '" + target + "' via captured state (base class)");
+                            return false; // Do not also queue the vanilla restart/third-strike transition.
+                        }
                         if (DragonCombat.LearnedState(a, target, out hash, out layer))
                         {
                             a.CrossFade(hash, blend / Mathf.Max(0.1f, StateLength(a, layer)), layer, offset);
+                            NaccTrace("step back to '" + target + "' via learned state (layer " + layer + ")");
+                            return false;
+                        }
+                        if (!baseClass && !nativePair && BaseComboStates.TryGetValue(DragonCombat.StateKey(a, target), out captured))
+                        {
+                            a.CrossFade(captured.Value, blend / Mathf.Max(0.1f, StateLength(a, captured.Key)), captured.Key, offset);   // v0.25.170 fallback
+                            NaccTrace("step back to '" + target + "' via captured state");
                             return false;
                         }
                         int sh = Animator.StringToHash(target);
                         for (int li = 0; li < a.layerCount; li++)
                             if (a.HasState(li, sh)) { a.CrossFade(sh, blend / Mathf.Max(0.1f, StateLength(a, li)), li, offset); return false; }
+                        if (Time.time >= _backMissLogAt)   // v0.25.172: the step back had no state -> say why (rate-limited)
+                        {
+                            _backMissLogAt = Time.time + 10f;
+                            Debug.Log("[Aethelborn] NACC: no state for the step back to '" + target + "' (hit " + (_comboHit + 1) + ", controller '"
+                                + (a.runtimeAnimatorController == null ? "none" : a.runtimeAnimatorController.name) + "', blocking " + a.GetBool("blocking") + ") - native trigger used");
+                        }
                     }
                 }
+                NaccTrace("trigger '" + inName + "' -> '" + target + "' (controller '" + (a == null || a.runtimeAnimatorController == null ? "none" : a.runtimeAnimatorController.name) + "')");
                 __0 = target;
+                if (routed && a != null) { _routeTrigger = target; _routeAnimator = a; _routeCtrl = a.runtimeAnimatorController; _routeZanim = __instance; _routeDepth = _stDepth; _routeDone = false; }
                 DragonCombat.LearnState(a, target);
             }
             catch (Exception) { }
@@ -1291,9 +3561,17 @@ namespace DragonsAltarCombat
         {
             try
             {
-                if (p == null || p.IsDead() || p.InAttack()) return;
+                if (p == null || p.IsDead() || p.InAttack() || DragonCombat.ClipBusy(p) || Time.time < DragonMixamo.LiveUntil) return;
                 Animator a = p.GetComponentInChildren<Animator>();
                 if (a == null) return;
+                // v0.25.142 2HDW override only lives around a primary chain: released on weapon / class change and when idle.
+                ItemDrop.ItemData pr = DragonCombat.GetHandItem(p, "m_rightItem");
+                bool pairedNow = DragonCombat.IsPairedWeapon(pr) && DragonCombat.ComboWeaponProvider != null && DragonCombat.ComboWeaponProvider(p, pr);
+                if (DragonDualWield.PairedActive(a))
+                {
+                    if (!pairedNow || Time.time - _comboLastEnd > 1f) DragonDualWield.ReleasePaired(p);   // v0.25.161 also restores the weapon's animation state
+                    else return;   // mid-chain: never let the two-weapon restore below swap the controller away
+                }
                 DragonDualWield.Apply(p, a, IsDualWielding(p));
             }
             catch (Exception) { }
@@ -1401,11 +3679,21 @@ namespace DragonsAltarCombat
 
         private static void SetControlsPrefix(Player __instance, ref Vector3 movedir, ref bool attack, ref bool attackHold, ref bool secondaryAttack, ref bool secondaryAttackHold, ref bool block, ref bool blockHold, ref bool jump, ref bool crouch, ref bool run, ref bool autoRun, ref bool dodge)
         {
+            if ((dodge || (jump && (block || blockHold))) && DragonCombat.CanInstantSwordMasterDodge(__instance))
+            {
+                ResetNaccChain(__instance);
+                DragonCombat.PrepareSwordMasterDodge(__instance);
+                dodge = true; jump = false;
+                attack = false; attackHold = false; secondaryAttack = false; secondaryAttackHold = false;
+                block = false; blockHold = false;
+            }
             if (__instance == null)
                 return;
 
             string currentAdvancement = DragonCombat.GetAdvancementName(__instance);
             ItemDrop.ItemData currentWeapon = __instance.GetCurrentWeapon();
+            if (currentAdvancement == "Sword Master" && DragonCombat.SwordMasterSkillRunning(__instance))
+            { block = false; blockHold = false; }
 
             if (DragonCombat.GetClassName(__instance) == "Sorcerer" &&
                 currentAdvancement == "Spellcaster" &&
@@ -1445,10 +3733,11 @@ namespace DragonsAltarCombat
 
             if (DragonCombat.IsSkillLocked(__instance))
             {
+                bool keepHold = DragonCombat.SkillBowHoldActive && attackHold;   // v0.25.86 charged bow skills = the vanilla draw hold
                 DragonCombat.ClearAttackQueue(__instance);
                 movedir = Vector3.zero;
                 attack = false;
-                attackHold = false;
+                attackHold = keepHold;
                 secondaryAttack = false;
                 secondaryAttackHold = false;
                 block = false;
@@ -1523,6 +3812,32 @@ namespace DragonsAltarCombat
             __result = true;
         }
 
+        // Only the pending Sword Master roll can pass an attack/stagger animation gate.
+        private static bool SwordMasterDodgeAttackGate(Character character)
+        {
+            return !DragonCombat.HasInstantDodgeRequest(character) && character.InAttack();
+        }
+        private static bool SwordMasterDodgeStaggerGate(Character character)
+        {
+            return !DragonCombat.HasInstantDodgeRequest(character) && character.IsStaggering();
+        }
+        private static IEnumerable<CodeInstruction> SwordMasterDodgeTranspiler(IEnumerable<CodeInstruction> instructions)
+        {
+            MethodInfo attack = AccessTools.Method(typeof(Character), "InAttack", Type.EmptyTypes);
+            MethodInfo stagger = AccessTools.Method(typeof(Character), "IsStaggering", Type.EmptyTypes);
+            MethodInfo attackGate = typeof(DragonCombatPlugin).GetMethod("SwordMasterDodgeAttackGate", BindingFlags.Static | BindingFlags.NonPublic);
+            MethodInfo staggerGate = typeof(DragonCombatPlugin).GetMethod("SwordMasterDodgeStaggerGate", BindingFlags.Static | BindingFlags.NonPublic);
+            foreach (CodeInstruction i in instructions)
+            {
+                if (i.opcode == OpCodes.Call || i.opcode == OpCodes.Callvirt)
+                {
+                    if (Equals(i.operand, attack)) { i.opcode = OpCodes.Call; i.operand = attackGate; }
+                    else if (Equals(i.operand, stagger)) { i.opcode = OpCodes.Call; i.operand = staggerGate; }
+                }
+                yield return i;
+            }
+        }
+
         private static bool InterruptPrefix(Character __instance)
         {
             if (__instance != null && __instance == Player.m_localPlayer && Time.time < DragonCombat.BlockHyperUntil) return false;
@@ -1548,16 +3863,53 @@ namespace DragonsAltarCombat
             return true;
         }
 
+        // v226 (user: the stunned-hit clang buried skill SFX): hits on a staggered creature play its m_critHitEffects (a loud
+        // metallic clang) once PER HIT, so multi-hit skills stacked dozens. Local skill hits now clang at most once per 0.35 s.
+        private static FieldInfo _critHitField;
+        private static object _mutedCrit;
+        private static float _nextSkillClang;
+        private static void MuteSkillClang(Character target, HitData hit)
+        {
+            if (target == null || target is Player || hit == null || !target.IsStaggering()) return;
+            if (hit.GetAttacker() != Player.m_localPlayer || DragonCombat.ReadHitSkill(hit) != Skills.SkillType.None) return;
+            if (Time.time >= _nextSkillClang) { _nextSkillClang = Time.time + 0.35f; return; }
+            if (_critHitField == null) _critHitField = typeof(Character).GetField("m_critHitEffects", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (_critHitField == null) return;
+            _mutedCrit = _critHitField.GetValue(target);
+            object silent = Activator.CreateInstance(_critHitField.FieldType);
+            FieldInfo list = _critHitField.FieldType.GetField("m_effectPrefabs");
+            if (list != null && list.GetValue(silent) == null) list.SetValue(silent, Array.CreateInstance(list.FieldType.GetElementType(), 0));
+            _critHitField.SetValue(target, silent);
+        }
+        private static void RpcDamagePostfix(Character __instance)
+        {
+            if (_mutedCrit == null || _critHitField == null) return;
+            try { _critHitField.SetValue(__instance, _mutedCrit); } catch (Exception) { }
+            _mutedCrit = null;
+        }
+
         private static void RpcDamagePrefix(Character __instance, object[] __args)
         {
             try
             {
+                if (!(__instance is Player) && __args != null)
+                {
+                    for (int i = 0; i < __args.Length; i++)
+                        if (__args[i] is HitData) { MuteSkillClang(__instance, (HitData)__args[i]); break; }
+                    return;
+                }
                 Player p = __instance as Player;
                 if (p == null || p != Player.m_localPlayer || __args == null) return;
                 for (int i = 0; i < __args.Length; i++)
                 {
                     HitData hit = __args[i] as HitData;
-                    if (hit != null) { DragonCombat.EvaluateIncomingHyper(p, hit); return; }
+                    if (hit != null)
+                    {
+                        // Apply once on the receiving owner, after networking. Damage() can run on another client.
+                        if (DragonCombat.HasShieldChargeGuard(p)) hit.m_damage.Modify(0.60f);
+                        DragonCombat.EvaluateIncomingHyper(p, hit);
+                        return;
+                    }
                 }
             }
             catch (Exception) { }
@@ -1567,6 +3919,7 @@ namespace DragonsAltarCombat
         {
             try
             {
+                if (__instance != null && __instance == Player.m_localPlayer && Time.time < DragonMixamo.LiveUntil) return false;   // v0.25.132 Mixamo clip travel never moves the body (you stay where you land)
                 if (__instance == null || __instance != Player.m_localPlayer || Time.time >= DragonCombat.BlockHyperUntil) return true;
                 Humanoid h = __instance as Humanoid;
                 return h != null && h.InAttack();
@@ -1574,14 +3927,18 @@ namespace DragonsAltarCombat
             catch (Exception) { return true; }
         }
 
-        private static void DamagePrefix(Character __instance, object[] __args, ref DamagePatchState __state)
+        private static bool DamagePrefix(Character __instance, object[] __args, ref DamagePatchState __state)
         {
             __state = default(DamagePatchState);
             if (__instance == null || __args == null || __args.Length < 1 || !(__args[0] is HitData))
-                return;
+                return true;
 
             HitData hit = (HitData)__args[0];
             __state = DragonCombat.BeginDamage(__instance, hit);
+            DragonBirdTarget bird = __instance as DragonBirdTarget;
+            if (bird == null) return true;
+            bird.ReceiveSkillHit(hit);
+            return false;
         }
 
         private static void DamagePostfix(Character __instance, DamagePatchState __state)
@@ -1623,7 +3980,7 @@ namespace DragonsAltarCombat
 
         private static void EquipmentMovementPostfix(Player __instance, ref float __result)
         {
-            // v0.18.1: Heaven's Light (Grace) removes equipment movement penalties while active.
+            // Timed equipment-penalty exemption, retained for Tailwind and compatibility.
             if (__result < 0f && DragonCombat.HasNoEquipmentPenalty(__instance))
             {
                 __result = 0f;
@@ -1631,6 +3988,16 @@ namespace DragonsAltarCombat
             }
             if (__result >= 0f || Instance == null || __instance == null)
                 return;
+            // v0.25.186 (user): Warriors and Clerics wear heavy armor and never feel it: every armor piece's penalty is negated.
+            bool heavyNegated = false;
+            if (DragonCombat.NegatesArmorPenalty(__instance))
+            {
+                heavyNegated = true;
+                string[] heavy = { "m_chestItem", "m_legItem", "m_helmetItem", "m_shoulderItem" };
+                for (int i = 0; i < heavy.Length; i++)
+                    __result -= NegativeModifier(DragonCombat.GetHandItem(__instance, heavy[i]));
+                if (__result >= 0f) { __result = 0f; return; }
+            }
             // v0.22.4 Warfreak (Mercenary): no movement penalty from physical weapons.
             // v0.22.3 The Way of the Sword (Sword Master): no movement penalty from Swords.
             string advancement = DragonCombat.GetAdvancementName(__instance);
@@ -1638,6 +4005,8 @@ namespace DragonsAltarCombat
             {
                 ItemDrop.ItemData mainHand = DragonCombat.GetHandItem(__instance, "m_rightItem");
                 ItemDrop.ItemData offHand = DragonCombat.GetHandItem(__instance, "m_leftItem");
+                // v0.25.169 (user): a shield switches off the sword-only part of The Way of the Sword
+                if (advancement == "Sword Master" && (DragonCombat.IsShield(mainHand) || DragonCombat.IsShield(offHand))) return;
                 __result -= WeaponMasteryExemptPenalty(mainHand, advancement);
                 if (offHand != mainHand)
                     __result -= WeaponMasteryExemptPenalty(offHand, advancement);
@@ -1688,7 +4057,7 @@ namespace DragonsAltarCombat
             }
 
             // v0.20.8 Holy Trinity (Paladin, Club-type melee weapon + any Shield): no Armor penalty.
-            if (Instance.HolyTrinityNoArmorPenalty.Value && DragonCombat.IsHolyTrinityActive(__instance))
+            if (!heavyNegated && Instance.HolyTrinityNoArmorPenalty.Value && DragonCombat.IsHolyTrinityActive(__instance))
             {
                 string[] armor = { "m_chestItem", "m_legItem", "m_helmetItem", "m_shoulderItem" };
                 for (int i = 0; i < armor.Length; i++)
@@ -1747,32 +4116,51 @@ namespace DragonsAltarCombat
             return 0f;
         }
 
-        private static void EquipItemPrefix(Humanoid __instance, object[] __args, ref EquipPatchState __state)
+        private static bool EquipItemPrefix(Humanoid __instance, object[] __args, ref EquipPatchState __state, ref bool __result)
         {
             __state = new EquipPatchState();
 
             if (Instance == null || __instance == null || __args == null || __args.Length < 1)
-                return;
+                return true;
 
             Player player = __instance as Player;
             if (player == null || player != Player.m_localPlayer)
-                return;
+                return true;
 
             ItemDrop.ItemData item = __args[0] as ItemDrop.ItemData;
             if (item == null)
-                return;
+                return true;
+
+            // v0.25.142 (user): base classes cannot wield Therzie's native two-handed paired weapons (2HDW) - rejected before either hand changes.
+            if (DragonCombat.IsBaseClassBlocked2HDW(player, item))
+            {
+                __result = false;
+                if (MessageHud.instance != null)
+                    MessageHud.instance.ShowMessage(MessageHud.MessageType.Center, "Only a Mercenary can dual wield");
+                return false;
+            }
+
+            // v0.25.169 class weapon restrictions (combat equipment only; tools always pass)
+            string ruleWhy = DragonCombat.WeaponRuleViolation(player, item);
+            if (ruleWhy != null)
+            {
+                __result = false;
+                if (MessageHud.instance != null) MessageHud.instance.ShowMessage(MessageHud.MessageType.Center, ruleWhy);
+                return false;
+            }
 
             string advancement = DragonCombat.GetAdvancementName(player);
             ItemDrop.ItemData left = DragonCombat.GetHandItem(player, "m_leftItem");
             ItemDrop.ItemData right = DragonCombat.GetHandItem(player, "m_rightItem");
 
-            if (Instance.EnableWarfreakDualWield.Value && advancement == "Mercenary" && DragonCombat.IsOneHandedWeapon(item))
+            if (Instance.EnableWarfreakDualWield.Value && advancement == "Mercenary" && DragonCombat.IsOneHandedWeapon(item) && !DragonCombat.IsGunStaff(item))   // v0.25.145 Gun Staves are never dual wielded
             {
                 ItemDrop.ItemData existingWeapon = null;
 
-                if (DragonCombat.IsOneHandedWeapon(right) && right != item)
+                // v0.25.169 (user): only the exact same prefab pairs up (Bronze Axe + Bronze Axe); anything else equips normally
+                if (DragonCombat.IsMatchingDualPair(right, item))
                     existingWeapon = right;
-                else if (DragonCombat.IsOneHandedWeapon(left) && left != item)
+                else if (DragonCombat.IsMatchingDualPair(left, item))
                     existingWeapon = left;
 
                 if (existingWeapon != null)
@@ -1781,26 +4169,7 @@ namespace DragonsAltarCombat
                     __state.MercenaryDualWeapons = true;
                     __state.ExistingWeapon = existingWeapon;
                     __state.NewItem = item;
-                    return;
-                }
-            }
-
-            if (Instance.EnableSpellcasterDualGunStaves.Value && advancement == "Spellcaster" && DragonCombat.IsGunStaff(item))
-            {
-                ItemDrop.ItemData existingGunStaff = null;
-
-                if (DragonCombat.IsGunStaff(right) && right != item)
-                    existingGunStaff = right;
-                else if (DragonCombat.IsGunStaff(left) && left != item)
-                    existingGunStaff = left;
-
-                if (existingGunStaff != null)
-                {
-                    __state.Active = true;
-                    __state.SpellcasterDualGunStaves = true;
-                    __state.ExistingWeapon = existingGunStaff;
-                    __state.NewItem = item;
-                    return;
+                    return true;
                 }
             }
 
@@ -1815,7 +4184,7 @@ namespace DragonsAltarCombat
                         __state.DivineStaffShield = true;
                         __state.ExistingOffhand = shield;
                         __state.NewItem = item;
-                        return;
+                        return true;
                     }
                 }
 
@@ -1831,6 +4200,7 @@ namespace DragonsAltarCombat
                     }
                 }
             }
+                    return true;
         }
 
         private static void EquipItemPostfix(Humanoid __instance, ref bool __result, EquipPatchState __state)
@@ -1845,24 +4215,6 @@ namespace DragonsAltarCombat
             try
             {
                 if (__state.MercenaryDualWeapons)
-                {
-                    ItemDrop.ItemData right = __state.ExistingWeapon;
-                    ItemDrop.ItemData left = __state.NewItem;
-
-                    if (right != null && left != null && right != left)
-                    {
-                        DragonCombat.SetHandItem(player, "m_rightItem", right);
-                        DragonCombat.SetHandItem(player, "m_leftItem", left);
-                        DragonCombat.SetEquipped(right, true);
-                        DragonCombat.SetEquipped(left, true);
-                        DragonCombat.RefreshEquipment(player);
-                        __result = true;
-                    }
-
-                    return;
-                }
-
-                if (__state.SpellcasterDualGunStaves)
                 {
                     ItemDrop.ItemData right = __state.ExistingWeapon;
                     ItemDrop.ItemData left = __state.NewItem;
@@ -1998,7 +4350,6 @@ namespace DragonsAltarCombat
         public bool Active;
         public bool MercenaryDualWeapons;
         public bool DivineStaffShield;
-        public bool SpellcasterDualGunStaves;
         public ItemDrop.ItemData ExistingWeapon;
         public ItemDrop.ItemData ExistingOffhand;
         public ItemDrop.ItemData NewItem;
@@ -2013,7 +4364,6 @@ namespace DragonsAltarCombat
         public float OriginalParry;
         public float OriginalForce;
         public float OriginalPower;
-        public bool BucklerParryWindow;
         public bool HyperBlock;
     }
 
@@ -2030,10 +4380,77 @@ namespace DragonsAltarCombat
         public HitData.DamageModifiers OriginalModifiers;
     }
 
+    // A disabled query/damage adapter only. Never runs Character.Awake, replaces native damage RPCs,
+    // joins Character update lists, adds colliders/rigidbodies, or changes the bird's native flight/drops.
+    public class DragonBirdTarget : Character
+    {
+        private RandomFlyingBird _bird;
+        private Destructible _damageable;
+        private Collider[] _birdColliders;
+        private bool _forwarding;
+        public bool Forwarding { get { return _forwarding; } }
+        public static void Attach(RandomFlyingBird bird)
+        {
+            if (bird == null || bird.GetComponent<Character>() != null || bird.GetComponent<Destructible>() == null) return;
+            ZNetView view = bird.GetComponent<ZNetView>();
+            if (view == null || !view.IsValid()) return;
+            bird.gameObject.AddComponent<DragonBirdTarget>();
+        }
+        protected override void Awake()
+        {
+            enabled = false;
+            _bird = GetComponent<RandomFlyingBird>();
+            _damageable = GetComponent<Destructible>();
+            m_nview = GetComponent<ZNetView>();
+            m_body = GetComponent<Rigidbody>();
+            m_collider = GetComponent<CapsuleCollider>();
+            m_visual = gameObject; m_head = transform;
+            m_name = _bird != null ? _bird.name.Replace("(Clone)", "") : "Bird";
+            m_health = _damageable != null ? _damageable.m_health : 1f;
+            _birdColliders = GetComponentsInChildren<Collider>(true);
+            m_seman = new SEMan(this, m_nview);
+        }
+        protected override void OnEnable() { }
+        protected override void OnDisable() { }
+        protected override void Start() { }
+        private void OnCollisionStay(Collision collision) { }
+        protected override void OnDestroy() { if (m_seman != null) m_seman.OnDestroy(); }
+        public override bool IsDead()
+        {
+            return _bird == null || _damageable == null || m_nview == null || !m_nview.IsValid();
+        }
+        public override string GetHoverName() { return m_name; }
+        public Bounds TargetBounds()
+        {
+            Bounds bounds = new Bounds(transform.position, Vector3.one * 0.2f);
+            bool found = false;
+            for (int i = 0; _birdColliders != null && i < _birdColliders.Length; i++)
+            {
+                Collider collider = _birdColliders[i];
+                if (collider == null || !collider.enabled || !collider.gameObject.activeInHierarchy) continue;
+                if (!found) { bounds = collider.bounds; found = true; } else bounds.Encapsulate(collider.bounds);
+            }
+            return bounds;
+        }
+        public Vector3 FlightVelocity()
+        {
+            return _bird != null && _bird.m_flyingModel != null && _bird.m_flyingModel.activeInHierarchy
+                ? transform.forward * _bird.m_speed : Vector3.zero;
+        }
+        public void ReceiveSkillHit(HitData hit)
+        {
+            if (IsDead() || hit == null || _forwarding) return;
+            _forwarding = true;
+            try { _damageable.Damage(hit); }
+            finally { _forwarding = false; }
+        }
+    }
+
     internal class TimedBuffState
     {
         public float EndTime;
         public float AttackDamageBonus;
+        public float SkillDamageBonus;
         public float AttackSpeedBonus;
         public float MoveSpeedBonus;
         public float DefenseBonus;
@@ -2299,6 +4716,14 @@ namespace DragonsAltarCombat
         public Vector3 LD;
         public float LR, LW;
         public DragonClipKey LHand(float x, float y, float z, float reach) { LD = new Vector3(x, y, z); LR = reach; LW = 1f; return this; }
+        // v0.25.85 elbow pole override (both arms, mirrored for the left): Wing() = chicken wing - the upper arm is
+        // raised out to the side, elbow out/back, so the forearm can point FORWARD.
+        public Vector3 EP;
+        public float EW;
+        public DragonClipKey Wing() { EP = new Vector3(0.6f, -0.4f, -0.7f); EW = 1f; EM = false; return this; }
+        // v0.25.86 main-hand-only chicken wing (Bonecrusher / Electric Smite flight; the off hand stays as it is)
+        public bool EM;
+        public DragonClipKey WingMain() { EP = new Vector3(0.6f, -0.4f, -0.7f); EW = 1f; EM = true; return this; }
         // v0.25.25 VANILLA LAYER (first key only): Valheim attack animation `VA` fired `VL` seconds before the
         // impact (VR > 0 = repeat every VR seconds while the clip runs); NoAim = the vanilla animation holds the
         // weapon, so the universal "weapon follows the forearm" rule stays off.
@@ -2316,6 +4741,12 @@ namespace DragonsAltarCombat
         // v0.25.40 buff raise (copied from the user's approved ChatGPT pass): QL = the off-hand arm is frozen to
         // the pose it had when the skill began; NoTrack = the vanilla state plays at its natural speed.
         public bool QL, NoTrack;
+        // v0.25.85 Ranger vanilla bow layer: the equipped bow's own draw bool is held through the wind up / hold and
+        // its own attack trigger fires at the impact (release).
+        public string BowTrig, BowBool;
+        // v0.25.86 constant-speed vanilla timing (Sword Master): one steady speed per swing (hit frame on the impact),
+        // no stretched anticipation, no 6x recovery.
+        public bool ConstSpeed;
         // Same pose as another key at a new time (holds / shakes).
         public DragonClipKey Copy(float t)
         {
@@ -2323,7 +4754,7 @@ namespace DragonsAltarCombat
             for (int i = 0; i < B.Length; i++) k.B[i] = B[i];
             for (int i = 0; i < L.Length; i++) k.L[i] = L[i];
             k.R = R; k.O = O; k.Lin = Lin; k.Spin = Spin;
-            k.WD = WD; k.WW = WW; k.SD = SD; k.SW = SW; k.TW = TW; k.TG = TG; k.HD = HD; k.HR = HR; k.HW = HW; k.LD = LD; k.LR = LR; k.LW = LW; k.FLh = FLh; k.FRh = FRh;
+            k.WD = WD; k.WW = WW; k.SD = SD; k.SW = SW; k.TW = TW; k.TG = TG; k.HD = HD; k.HR = HR; k.HW = HW; k.LD = LD; k.LR = LR; k.LW = LW; k.FLh = FLh; k.FRh = FRh; k.EP = EP; k.EW = EW; k.EM = EM;
             return k;
         }
     }
@@ -2339,6 +4770,40 @@ namespace DragonsAltarCombat
             if (_owner == null || _owner.IsDead()) { DragonCombat.ForceRun(_owner as Player, false); Destroy(this); return; }
             if (!DragonCombat.ForceRunTick()) Destroy(this);
         }
+    }
+
+    // v208: owned by one Shield Charge, including its finisher and full animation recovery.
+    public class DragonShieldChargeGuard : MonoBehaviour
+    {
+        public Player Player;
+        public int Generation;
+        public bool Charging;
+        private bool _ended;
+        private float _age, _classCheck;
+        private bool _paladin = true;
+        public bool Valid(Player player)
+        {
+            return !_ended && player != null && Player == player && player == Player.m_localPlayer &&
+                !player.IsDead() && Generation == DragonCombat.SkillAnimGen && _paladin;
+        }
+        public void End()
+        {
+            if (_ended) return;
+            _ended = true;
+            DragonCombat.ClearStatus(Player, "shield_charge_guard");
+            Destroy(this);
+        }
+        private void Update()
+        {
+            _age += Time.deltaTime;
+            if (_age >= _classCheck)
+            {
+                _classCheck = _age + 0.2f;
+                _paladin = Player != null && DragonCombat.GetAdvancementName(Player) == "Paladin";
+            }
+            if (!Valid(Player) || (!Charging && !DragonCombat.SkillAnimationBusy(Player))) End();
+        }
+        private void OnDestroy() { if (!_ended) { _ended = true; DragonCombat.ClearStatus(Player, "shield_charge_guard"); } }
     }
 
     public class DragonSkillClipDriver : MonoBehaviour
@@ -2357,14 +4822,24 @@ namespace DragonsAltarCombat
         private DragonClipKey[] _keys;
         private float _start, _windup, _impactAt = -1f, _holdLimit;
         private bool _hold;
+        // v0.25.88 JSAA touchdown anticipation: only Bonecrusher / Electric Smite.
+        // Gameplay still decides the actual impact. These fields only drive visuals.
+        private bool _jsaaLanding;
+        private static RuntimeAnimatorController _learnController;
+        private float _jsaaApproach;
+        private readonly RaycastHit[] _jsaaGroundHits = new RaycastHit[16];
         private int _token;
+        private int _gen;   // v0.25.154 DragonCombat.SkillAnimGen this clip started under; a newer value = a normal attack took over
         private Vector3[] _b = new Vector3[10];
         private Vector3 _r, _o;
         private readonly float[] _l = new float[8];
         private float _spin;
         private Vector3 _wd, _sd;
         private float _ww, _sw, _tw, _tg, _env, _hr, _hw, _lr, _lw, _flh, _frh;
-        private Vector3 _hd, _ld;
+        private bool _highKnee;
+        private Vector3 _hd, _ld, _ep;
+        private float _ew;
+        private bool _em;
         // v0.25.15 legs: Unity humanoid muscles (HumanPoseHandler), applied on the animator's real pose.
         private static readonly HumanBodyBones[] LegBones =
         {
@@ -2399,10 +4874,56 @@ namespace DragonsAltarCombat
         private Rigidbody _body;
         private float _vaLead = 0.3f;
 
-        public void Begin(DragonClipKey[] keys, float windup, bool hold, Transform visual)
+        private string _bowTrig, _bowBool;
+        private bool _bowFired;
+        private bool _constSpeed;
+        private float _constK;
+        private float _vaStartN, _vaEndN = 1f;   // v0.25.133 tuning
+        private bool _vaJumped, _vaCut;
+        private float _uniK;   // v0.25.135 the one speed of the current vanilla animation
+        private float _vaTrigN;   // release marker, independent of playback speed
+        private float _caSpeed;   // CA speed override; 0 = original tempo
+        private bool _decoupleTiming;  // only the skills under review
+        private bool _finishInterventionRaise;
+        private bool _uniform;   // v0.25.138 every clip (was Warrior-group only)
+        private float _constWindup;
+        public const float RaiseSpeed = 1.8f;   // v0.25.49 faster buff raise
+
+        private void ReleaseBow(bool fire)
         {
+            if (_bowBool == null && _bowTrig == null) return;
+            Player p = _owner as Player;
+            if (p == null) p = GetComponent<Player>();
+            if (_bowBool != null) DragonCombat.SetBowAim(p, _bowBool, false);
+            if (fire && _bowTrig != null) DragonCombat.FireVanilla(p, _bowTrig);
+            _bowBool = null; _bowTrig = null;
+        }
+
+        public void Begin(DragonClipKey[] keys, float windup, bool hold, Transform visual, string clipName = null, string tuneName = null)
+        {
+            enabled = true;
+            ReleaseBow(false);
+            Animator controllerAnimator = GetComponentInChildren<Animator>();
+            RuntimeAnimatorController controller = controllerAnimator == null ? null : controllerAnimator.runtimeAnimatorController;
+            if (_learnController != controller) { _vaLearned.Clear(); _learnController = controller; }
+            _finishInterventionRaise = clipName == "cleric_intervention";
+            _jsaaLanding = clipName == "olympic_hero" || clipName == "olympic_hero_brutal";
+            _highKnee = clipName == "merc_stomp";   // v0.25.101 vertical-shin knee raise (Stomp only)
+            _jsaaApproach = 0f;
+            _bowTrig = keys[0].BowTrig;
+            _bowBool = keys[0].BowBool;
+            _bowFired = false;
+            if (_bowBool != null) DragonCombat.SetBowAim(GetComponent<Player>(), _bowBool, true);
             _va = keys[0].VA;
             _vaRepeat = keys[0].VR;
+            DragonCombat.AnimTuning(tuneName ?? clipName, out _vaStartN, out _vaEndN, out _vaTrigN);
+            _caSpeed = DragonCombat.AnimSpeed(tuneName ?? clipName);
+            _decoupleTiming = clipName == "warrior_impact_wave" || clipName == "sm_slash_a" || clipName == "sm_slash_b";
+            // v0.25.138 (user: every CA as smooth as the Warrior ones): the one-speed engine for EVERY class.
+            _uniform = true;
+            DragonVanillaTail tail = GetComponent<DragonVanillaTail>();
+            if (tail != null) Destroy(tail);
+            _vaJumped = false; _vaCut = false;
             _vaAt = Time.time + Mathf.Max(0f, windup - keys[0].VL);
             if (_va != null && _vaRepeat <= 0.05f) _vaAt = Time.time + Mathf.Max(0.1f, windup) * Mathf.Clamp01(keys[0].VF);
             _vaGuess = Mathf.Max(0.2f, keys[0].VL * 1.8f);
@@ -2410,6 +4931,9 @@ namespace DragonsAltarCombat
             _noAim = keys[0].NoAim;
             _noPlant = keys[0].NoPlant;
             _noTrack = keys[0].NoTrack;
+            _constSpeed = keys[0].ConstSpeed;
+            _constK = 0f;
+            _constWindup = windup;
             _quietLeft = keys[0].QL;
             _qlCaptured = false;
             _vaLead = Mathf.Max(0.05f, keys[0].VL);
@@ -2432,6 +4956,7 @@ namespace DragonsAltarCombat
             _visual = visual;
             if (_animator == null) _animator = GetComponentInChildren<Animator>();
             _token = DragonCombat.ClaimMotionRoot(_visual);
+            _gen = DragonCombat.SkillAnimGen;
         }
 
         public bool IsHolding { get { return _keys != null && _hold && _impactAt < 0f; } }
@@ -2459,6 +4984,15 @@ namespace DragonsAltarCombat
         }
 
         // Blend from the current pose back to rest (charge ended without its finisher).
+        public void CancelAnimation()
+        {
+            ReleaseBow(false);
+            _vaTrack = false; _va = null; _keys = null;
+            ReleaseRoot();
+            SetLeftHidden(false);
+            enabled = false;
+        }
+
         public void Stop(float blend)
         {
             if (_keys == null) return;
@@ -2538,6 +5072,9 @@ namespace DragonsAltarCombat
             _hd = Vector3.Slerp(ha.normalized, hb.normalized, w);
             _hr = a.HW > 0f && b.HW > 0f ? Mathf.Lerp(a.HR, b.HR, w) : (a.HW > 0f ? a.HR : b.HR);
             _lw = Mathf.Lerp(a.LW, b.LW, w);
+            _ew = Mathf.Lerp(a.EW, b.EW, w);
+            _ep = a.EW > 0f ? a.EP : b.EP;
+            _em = a.EW > 0f ? a.EM : b.EM;
             _flh = Mathf.Lerp(a.FLh, b.FLh, w);
             _frh = Mathf.Lerp(a.FRh, b.FRh, w);
             Vector3 la = a.LW > 0f ? a.LD : b.LD, lb = b.LW > 0f ? b.LD : a.LD;
@@ -2586,8 +5123,29 @@ namespace DragonsAltarCombat
                 _vaLayer = -1;
                 _vaFiredAt = Time.time;
                 _vaTrack = true;
+                _uniK = 0f;
             }
             catch (Exception) { }
+        }
+
+        private bool RestartInterventionRaise()
+        {
+            if (!_finishInterventionRaise || _animator == null || _vaPre == null) return false;
+            for (int layer = 0; layer < _animator.layerCount; layer++)
+            {
+                AnimatorStateInfo state = _animator.GetCurrentAnimatorStateInfo(layer);
+                AnimatorClipInfo[] clips = _animator.GetCurrentAnimatorClipInfo(layer);
+                bool cheer = false;
+                for (int i = 0; i < clips.Length; i++)
+                    if (clips[i].clip != null && clips[i].clip.name.IndexOf("cheer", StringComparison.OrdinalIgnoreCase) >= 0) { cheer = true; break; }
+                if (!cheer) continue;
+                _animator.ResetTrigger("emote_cheer");
+                _animator.CrossFadeInFixedTime(state.fullPathHash, 0.08f, layer, 0f);
+                _vaLayer = layer; _vaHash = state.fullPathHash; _vaFiredAt = Time.time;
+                _vaTrack = true; _uniK = 0f;
+                return true;
+            }
+            return false;
         }
 
         private bool RestartVanilla(string trigger)
@@ -2597,14 +5155,17 @@ namespace DragonsAltarCombat
             try
             {
                 if (lv[0] >= _animator.layerCount) return false;
-                bool inIt = _animator.GetCurrentAnimatorStateInfo(lv[0]).fullPathHash == lv[1]
-                    || (_animator.IsInTransition(lv[0]) && _animator.GetNextAnimatorStateInfo(lv[0]).fullPathHash == lv[1]);
+                AnimatorStateInfo cs = _animator.GetCurrentAnimatorStateInfo(lv[0]);
+                bool inIt = (cs.fullPathHash == lv[1] && !cs.loop)   // v0.25.86: also when finishing (Ascended Greatblade 2nd slam)
+                    || (_animator.IsInTransition(lv[0]) && _animator.GetNextAnimatorStateInfo(lv[0]).fullPathHash == lv[1] && !_animator.GetNextAnimatorStateInfo(lv[0]).loop);
+                // v0.25.85 ROOT CAUSE of lost skill swings: a looping state (run / idle) learned while moving made every
+                // later cast cross-fade into run/idle instead of firing the swing. Only a non-looping swing restarts.
                 if (!inIt) return false;
                 Player p = _owner as Player;
                 if (p != null) DragonCombat.BlockSkillAnimAttack(p, 2.5f);
                 _animator.ResetTrigger(trigger);
                 _animator.CrossFadeInFixedTime(lv[1], 0.08f, lv[0], 0f);
-                if (_vaTrack) { _vaLayer = lv[0]; _vaHash = lv[1]; _vaFiredAt = Time.time; }
+                if (_vaTrack) { _vaLayer = lv[0]; _vaHash = lv[1]; _vaFiredAt = Time.time; _constK = 0f; _uniK = 0f; }
                 return true;
             }
             catch (Exception) { return false; }
@@ -2614,6 +5175,8 @@ namespace DragonsAltarCombat
         {
             Player p = _owner as Player;
             if (p == null || _animator == null || _vaPre == null) { _vaTrack = false; return; }
+            // v0.25.86: a skill can hold the vanilla swing (jump slams falling further than planned)
+            if (Time.time < DragonCombat.VanillaPauseUntil) { DragonCombat.SetSkillAnimSpeed(p, 0.02f, 0.12f); return; }
             try
             {
                 float end = _impactAt >= 0f ? _impactAt : _start + _windup;
@@ -2624,13 +5187,14 @@ namespace DragonsAltarCombat
                     for (int l = 0; l < _vaPre.Length && _vaLayer < 0; l++)
                     {
                         AnimatorStateInfo st = _animator.IsInTransition(l) ? _animator.GetNextAnimatorStateInfo(l) : _animator.GetCurrentAnimatorStateInfo(l);
-                        if (st.fullPathHash != _vaPre[l]) { _vaLayer = l; _vaHash = st.fullPathHash; if (_vaTrigger != null) _vaLearned[_vaTrigger] = new int[] { l, _vaHash }; }
+                        if (st.fullPathHash != _vaPre[l] && !st.loop) { _vaLayer = l; _vaHash = st.fullPathHash; if (_vaTrigger != null) _vaLearned[_vaTrigger] = new int[] { l, _vaHash }; }   // v0.25.85 never a looping (locomotion) state
                     }
                     if (_vaLayer < 0)
                     {
                         if (Time.time - _vaFiredAt > 0.5f) { _vaTrack = false; return; }
                         remain = Mathf.Max(0f, _vaGuess - (Time.time - _vaFiredAt));
-                        DragonCombat.SetSkillAnimSpeed(p, Mathf.Clamp(remain / left, 0.3f, 6f), 0.15f);
+                        if (_quietLeft) DragonCombat.SetSkillAnimSpeed(p, RaiseSpeed, 0.15f);   // v0.25.138 one speed for the raise
+                        else if (!_noTrack) DragonCombat.SetSkillAnimSpeed(p, Mathf.Clamp(remain / left, 0.3f, 6f), 0.15f);
                         return;
                     }
                 }
@@ -2640,21 +5204,63 @@ namespace DragonsAltarCombat
                 else if (_animator.IsInTransition(_vaLayer) && _animator.GetNextAnimatorStateInfo(_vaLayer).fullPathHash == _vaHash) info = _animator.GetNextAnimatorStateInfo(_vaLayer);
                 else { _vaTrack = false; DragonCombat.SetSkillAnimSpeed(p, 1f, 0f); return; }
                 float norm = info.normalizedTime;
+                // v0.25.133 tuning: start the animation later / cut it earlier (blend back to what played before)
+                if (!_vaJumped && _vaStartN > 0.001f && norm < _vaStartN) { _vaJumped = true; _uniK = 0f; _animator.CrossFade(_vaHash, 0.05f, _vaLayer, _vaStartN); return; }
+                if (!_vaCut && _vaEndN < 0.999f && norm >= _vaEndN)
+                {
+                    _vaCut = true; _vaTrack = false; DragonCombat.SetSkillAnimSpeed(p, 1f, 0f);
+                    _animator.CrossFade(_vaPre[_vaLayer], 0.25f, _vaLayer);
+                    return;
+                }
                 if (norm >= 1f) { _vaTrack = false; DragonCombat.SetSkillAnimSpeed(p, 1f, 0f); return; }
-                // v0.25.35 two phases (user: slow wind up, then a fast swing timed to the skill): the vanilla
-                // anticipation (everything up to ~0.22 s before its hit frame) is stretched over the wind up, the
-                // swing itself plays fast in the last ~0.25 s so its hit frame lands exactly on the impact;
-                // the recovery after the impact is played out at 6x.
-                float len = Mathf.Max(0.05f, info.length);
-                float hitN = Mathf.Clamp(_vaLead / len, 0.15f, 0.9f);
-                float swingN = Mathf.Clamp((_vaLead - 0.22f) / len, 0f, hitN);
-                float swingDur = Mathf.Min(0.25f, Mathf.Max(0.04f, (end - _vaFiredAt) * 0.45f));
-                float swingAt = end - swingDur;
-                float speed;
-                if (Time.time > end + 0.02f) speed = 6f;
-                else if (Time.time < swingAt) speed = Mathf.Clamp((swingN - norm) * len / Mathf.Max(0.03f, swingAt - Time.time), 0.12f, 6f);
-                else speed = Mathf.Clamp((hitN - norm) * len / Mathf.Max(0.03f, end - Time.time), 0.12f, 6f);
-                DragonCombat.SetSkillAnimSpeed(p, speed, 0.15f);
+                if (_caSpeed > 0f)
+                {
+                    _uniK = Mathf.Clamp(_caSpeed, 0.1f, 6f);
+                    DragonCombat.SetSkillAnimSpeed(p, _uniK, 0.15f);
+                    return;
+                }
+                if (!_decoupleTiming && _quietLeft && _vaTrigN <= 0.001f) { DragonCombat.SetSkillAnimSpeed(p, RaiseSpeed, 0.15f); return; }
+                if (!_decoupleTiming && _noTrack && _vaTrigN <= 0.001f) return;
+                if (_decoupleTiming && _quietLeft) { DragonCombat.SetSkillAnimSpeed(p, RaiseSpeed, 0.15f); return; }
+                if (_decoupleTiming && _noTrack) return;
+                if (_constSpeed)
+                {
+                    if (_constK <= 0f) _constK = Mathf.Clamp(_vaLead / Mathf.Max(0.05f, _constWindup - 0.08f), 1f, 4f); // v0.25.94 (user) the swing's hit frame lands ~0.08 s BEFORE the GTs release: animation first, then the waves // v0.25.91 one stable speed per swing so the vanilla contact frame lands on the skill hit (never slower than native).
+                    DragonCombat.SetSkillAnimSpeed(p, _constK, 0.15f);
+                    return;
+                }
+                // v0.25.135 ONE SMOOTH MOTION (user, every skill): one constant speed for the whole animation, set
+                // once when it starts so its hit frame lands on the impact, then the follow-through + recovery play out
+                // to 100% at that SAME speed (no slow wind up / fast swing / 6x recovery any more). End % still cuts.
+                if (!_uniform)
+                {
+                    // v0.25.35 two phases (restored v0.25.137 for every non-Warrior class): anticipation stretched over the
+                    // wind up, the swing fast in the last ~0.25 s so its hit frame lands on the impact, recovery at 6x.
+                    float len0 = Mathf.Max(0.05f, info.length);
+                    float hitN0 = Mathf.Clamp(_vaLead / len0, 0.15f, 0.9f);
+                    float swingN = Mathf.Clamp((_vaLead - 0.22f) / len0, 0f, hitN0);
+                    float swingDur = Mathf.Min(0.25f, Mathf.Max(0.04f, (end - _vaFiredAt) * 0.45f));
+                    float swingAt = end - swingDur;
+                    float speed;
+                    if (Time.time > end + 0.02f) speed = 6f;
+                    else if (Time.time < swingAt) speed = Mathf.Clamp((swingN - norm) * len0 / Mathf.Max(0.03f, swingAt - Time.time), 0.12f, 6f);
+                    else speed = Mathf.Clamp((hitN0 - norm) * len0 / Mathf.Max(0.03f, end - Time.time), 0.12f, 6f);
+                    DragonCombat.SetSkillAnimSpeed(p, speed, 0.15f);
+                    return;
+                }
+                if (_uniK <= 0f)
+                {
+                    float len = Mathf.Max(0.05f, info.length);
+                    if (_decoupleTiming) _uniK = Mathf.Clamp(_vaLead / Mathf.Max(0.05f, _constWindup), 0.25f, 4f);
+                    else
+                    {
+                        // Preserve the exact previous behavior of unrelated skills.
+                        float hitN = _vaTrigN > 0.001f ? Mathf.Clamp(_vaTrigN, 0.02f, 1f) : Mathf.Clamp(_vaLead / len, 0.05f, 0.95f);
+                        float leftNat = Mathf.Max(0.02f, (hitN - norm) * len);
+                        _uniK = norm >= hitN ? 1f : Mathf.Clamp(leftNat / left, 0.25f, 4f);
+                    }
+                }
+                DragonCombat.SetSkillAnimSpeed(p, _uniK, 0.15f);
             }
             catch (Exception) { _vaTrack = false; }
         }
@@ -2662,33 +5268,65 @@ namespace DragonsAltarCombat
         private void LateUpdate()
         {
             if (_keys == null || _keys.Length == 0) { Destroy(this); return; }
+            if (_gen != DragonCombat.SkillAnimGen) { CancelAnimation(); return; }   // v0.25.154 superseded by a normal attack
             if (_owner == null) _owner = GetComponent<Character>();
             float t = Phase();
             // v0.25.49 (user: gliding with the arm still raised): our emotes are fired as raw triggers, so
             // Valheim never cancels them when you walk. A raise ends the moment you move after the lock.
             bool movedOut = false;
-            if (_vaFiredName == "emote_cheer" && _owner is Player && !DragonCombat.IsSkillLocked((Player)_owner))
+            if (!_finishInterventionRaise && _vaFiredName == "emote_cheer" && _owner is Player && !DragonCombat.IsSkillLocked((Player)_owner))
             {
                 Rigidbody orb = _owner.GetComponent<Rigidbody>();
                 if (orb != null && new Vector3(orb.velocity.x, 0f, orb.velocity.z).magnitude > 0.8f) movedOut = true;
             }
-            if (movedOut || t > _keys[_keys.Length - 1].T || (_owner != null && _owner.IsDead()))
+            // Divine Intervention owns its full raise, including the native follow-through, not just windup + .3s.
+            bool fullRaise = _finishInterventionRaise && _owner != null && !_owner.IsDead() &&
+                (_va != null || (_vaTrack && Time.time - _vaFiredAt < 8f));
+            if (fullRaise && _owner is Player) DragonCombat.LockSkill((Player)_owner, 0.1f);
+            if (movedOut || (t > _keys[_keys.Length - 1].T && !fullRaise) || (_owner != null && _owner.IsDead()))
             {
                 // v0.25.41: kneel loops in Valheim - stand back up when the skill's clip is over.
-                // v0.25.49: every emote a skill fired is stopped when its clip ends.
-                if (_vaFiredName != null && _vaFiredName.StartsWith("emote", StringComparison.Ordinal)) DragonCombat.StopEmote(_owner as Player);
+                // v0.25.138 (user: the buff raise never played 100%): one-shot emotes (cheer, roar, flex, point...) play out
+                // on their own; only the looping kneel, a move-out or death stop them.
+                bool dead = _owner != null && _owner.IsDead();
+                if (_vaFiredName != null && _vaFiredName.StartsWith("emote", StringComparison.Ordinal) && (movedOut || dead || _vaFiredName.Contains("kneel")))
+                {
+                    DragonCombat.StopEmote(_owner as Player);
+                    if (_owner is Player) DragonCombat.SetSkillAnimSpeed((Player)_owner, 1f, 0f);
+                }
+                else if (!dead && _vaTrack && _vaLayer >= 0 && _animator != null && _vaPre != null && _vaLayer < _vaPre.Length)
+                {
+                    // v0.25.138 ONE SPEED TO 100%: the clip's keys are over but its vanilla animation is not - keep the same
+                    // speed until it ends (it used to drop back to 1x mid-follow-through: fast first, slow at the end).
+                    float k = _caSpeed > 0f ? Mathf.Clamp(_caSpeed, 0.1f, 6f) : (_quietLeft ? RaiseSpeed : (_constK > 0f ? _constK : _uniK));
+                    if (k > 0f) DragonVanillaTail.Run(_owner as Player, _animator, _vaLayer, _vaHash, k, _vaCut ? 1f : _vaEndN, _vaPre[_vaLayer]);
+                }
                 ReleaseRoot();
                 _keys = null;
                 Destroy(this);
                 return;
             }
             Sample(t);
+            // The original JSAA did not enter its kneel until AFTER the physical landing.
+            // Blend toward touchdown while the character is descending near solid terrain;
+            // on the contact frame the complete pose is already in place.
+            if (_jsaaLanding && _keys.Length > 6)
+            {
+                if (_impactAt >= 0f && t <= _keys[6].T)
+                    Set(_keys[5], _keys[6], 1f);
+                else if (_impactAt < 0f && _hold)
+                {
+                    float approach = JsaLandingApproach();
+                    if (approach > 0.001f) Set(_keys[5], _keys[6], approach);
+                }
+            }
             if (_animator == null) _animator = GetComponentInChildren<Animator>();
+            if (!_bowFired && (_bowTrig != null || _bowBool != null) && t >= -0.02f) { _bowFired = true; ReleaseBow(true); }
             if (_va != null && Time.time >= _vaAt)
             {
                 _vaTrigger = _va;
-                if (_vaRepeat <= 0.05f && !_noTrack) StartVanillaTracking();
-                if (!RestartVanilla(_va)) DragonCombat.FireVanilla(_owner as Player, _va);
+                if (_vaRepeat <= 0.05f && (!_noTrack || _quietLeft || _vaStartN > 0.001f || _vaEndN < 0.999f || _vaTrigN > 0.001f)) StartVanillaTracking();   // v0.25.133 tuned emotes too
+                if (!RestartInterventionRaise() && !RestartVanilla(_va)) DragonCombat.FireVanilla(_owner as Player, _va);
                 _vaFiredName = _va;
                 if (_vaRepeat > 0.05f) _vaAt += _vaRepeat; else _va = null;
             }
@@ -2734,6 +5372,37 @@ namespace DragonsAltarCombat
                 AimHeldItems();
                 QuietLeftArm();
             }
+        }
+
+        // v0.25.88 JSAA ONLY: physically anticipate the superhero kneel in the final
+        // ~1.4 metres of descent. Do not emit impacts or move the character rigidbody.
+        // RaycastNonAlloc ignores our own capsule, creatures, walls and triggers; a
+        // drop off a cliff continues to hold the airborne guard until real terrain.
+        private float JsaLandingApproach()
+        {
+            if (_body == null && _owner != null) _body = _owner.GetComponent<Rigidbody>();
+            if (_body == null || _owner == null || _body.velocity.y > -0.25f)
+            {
+                _jsaaApproach = Mathf.MoveTowards(_jsaaApproach, 0f, Time.deltaTime * 12f);
+                return _jsaaApproach;
+            }
+            float groundGap = float.MaxValue;
+            Vector3 origin = _owner.transform.position + Vector3.up * 0.65f;
+            int n = Physics.RaycastNonAlloc(origin, Vector3.down, _jsaaGroundHits, 2.5f,
+                ~0, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < n; i++)
+            {
+                RaycastHit h = _jsaaGroundHits[i];
+                if (h.collider == null || h.normal.y < 0.55f) continue;
+                if (h.collider.GetComponentInParent<Character>() != null) continue;
+                float gap = _owner.transform.position.y - h.point.y;
+                if (gap >= -0.15f && gap < groundGap) groundGap = gap;
+            }
+            float aim = groundGap < float.MaxValue
+                ? Mathf.SmoothStep(0f, 1f, 1f - Mathf.InverseLerp(0.12f, 1.45f, groundGap))
+                : 0f;
+            _jsaaApproach = Mathf.MoveTowards(_jsaaApproach, aim, Time.deltaTime * 14f);
+            return _jsaaApproach;
         }
 
         // v0.25.40: freeze the off-hand arm (shoulder to hand) to its pose at the start of the skill.
@@ -2821,6 +5490,14 @@ namespace DragonsAltarCombat
             return new Vector3(0.45f * side, -1f + 1.1f * up, 0.15f + 0.3f * up);
         }
 
+        private Vector3 PoleFor(Vector3 d, bool right)
+        {
+            Vector3 p = ElbowPole(d, right);
+            if (_ew <= 0.01f || (!right && _em)) return p;
+            Vector3 e = _ep; if (!right) e.x = -e.x;
+            return Vector3.Slerp(p.normalized, e.normalized, Mathf.Clamp01(_ew));
+        }
+
         private void PlaceHand(bool right, Vector3 dir, float reach, float weight)
         {
             float w = Mathf.Clamp01(weight);
@@ -2835,7 +5512,7 @@ namespace DragonsAltarCombat
                 float len = (la.position - ua.position).magnitude + (hand.position - la.position).magnitude;
                 Vector3 d = ArmDir(dir, right);
                 Vector3 target = ua.position + frame.rotation * d * (len * Mathf.Clamp(reach, 0.25f, 0.999f));
-                Vector3 pole = frame.rotation * ElbowPole(d, right);
+                Vector3 pole = frame.rotation * PoleFor(d, right);
                 TwoBoneIK(ua, la, hand, target, pole, w);
                 int o = right ? 4 : 7;
                 _written[o] = ua.localRotation; _hasWritten[o] = true;
@@ -2860,7 +5537,7 @@ namespace DragonsAltarCombat
                 float len = (la.position - ua.position).magnitude + (hand.position - la.position).magnitude;
                 Vector3 d = ArmDir(_hd, true);
                 Vector3 target = ua.position + frame.rotation * d * (len * Mathf.Clamp(_hr, 0.25f, 0.999f));
-                Vector3 pole = frame.rotation * ElbowPole(d, true);
+                Vector3 pole = frame.rotation * PoleFor(d, true);
                 TwoBoneIK(ua, la, hand, target, pole, w);
                 _written[4] = ua.localRotation; _hasWritten[4] = true;
                 _written[5] = la.localRotation; _hasWritten[5] = true;
@@ -2876,10 +5553,19 @@ namespace DragonsAltarCombat
             if (_body == null && _owner != null) _body = _owner.GetComponent<Rigidbody>();
             bool moving = false;
             if (_body != null) { Vector3 hv = _body.velocity; hv.y = 0f; moving = hv.magnitude > 1.2f; }
-            bool can = !_noPlant && !moving && _feetCaptured && _visual != null && DragonCombat.OwnsMotionRoot(_token) && Grounded();
+            // A jump slam can retain horizontal momentum for a moment after its
+            // terrain hit. Plant its touchdown feet even during that brief slide,
+            // otherwise it looks like the legs stay standing under the kneel.
+            bool jsaaContact = _jsaaLanding && _impactAt >= 0f && Time.time - _impactAt < 0.45f;
+            bool can = !_noPlant && (!moving || jsaaContact) && _feetCaptured && _visual != null && DragonCombat.OwnsMotionRoot(_token) && Grounded();
             float tilt = Mathf.Max(Mathf.Abs(Mathf.DeltaAngle(0f, _r.x)), Mathf.Max(Mathf.Abs(Mathf.DeltaAngle(0f, _r.z)), Mathf.Abs(Mathf.DeltaAngle(0f, _spin))));
             float upright = 1f - Mathf.InverseLerp(25f, 45f, tilt);
-            _plantW = Mathf.MoveTowards(_plantW, can ? _env * upright : 0f, Time.deltaTime * 8f);
+            // JSAA touches down already kneeling. Don't spend another 0.125s slowly
+            // activating the planted legs AFTER the impact (other clips unchanged).
+            if (_jsaaLanding && _impactAt >= 0f && can && upright > 0.95f)
+                _plantW = _env;
+            else
+                _plantW = Mathf.MoveTowards(_plantW, can ? _env * upright : 0f, Time.deltaTime * 8f);
             if (!_feetCaptured || _plantW <= 0.001f || _visual == null) return;
             try
             {
@@ -2896,9 +5582,39 @@ namespace DragonsAltarCombat
                     Vector3 step = new Vector3((f == 0 ? -1f : 1f) * spread * 0.5f, 0f, lift * 0.45f);
                     Vector3 local = basePos + baseRot * (qy * (Vector3.Scale(_visual.localScale, _footLocal[f]) + step));
                     Vector3 target = parent != null ? parent.TransformPoint(local) : local;
-                    target += Vector3.up * Mathf.Max(0f, f == 0 ? _flh : _frh);
+                    float liftH = Mathf.Max(0f, f == 0 ? _flh : _frh);
+                    // v0.25.101 (user): a raised knee = high-knee pose with the SHIN VERTICAL under the knee (no quad
+                    // stretch). Lift 0..0.6 maps to thigh flexion 0..90 deg (clamped to 95 = realistic hip limit, knee
+                    // flexion = the same angle), the foot sits straight below the knee, never under the ground, and
+                    // keeps the vanilla foot's side offset so the thigh never crosses into the torso.
+                    if (liftH > 0.01f && _highKnee && !_jsaaLanding)
+                    {
+                        Vector3 hip = a.position;
+                        float thigh = (b.position - a.position).magnitude, shin = (c.position - b.position).magnitude;
+                        Vector3 fwd = pole; fwd.y = 0f; fwd = fwd.sqrMagnitude > 0.0001f ? fwd.normalized : Vector3.forward;
+                        Vector3 sideOff = target - hip; sideOff -= fwd * Vector3.Dot(sideOff, fwd); sideOff.y = 0f;
+                        float sideMax = thigh * 0.35f;
+                        if (sideOff.magnitude > sideMax) sideOff = sideOff.normalized * sideMax;
+                        float flex = Mathf.Clamp(Mathf.Clamp01(liftH / 0.6f) * 90f, 0f, 95f) * Mathf.Deg2Rad;
+                        Vector3 knee = hip + sideOff + (Vector3.down * Mathf.Cos(flex) + fwd * Mathf.Sin(flex)) * thigh;
+                        Vector3 foot = knee + Vector3.down * shin;
+                        foot.y = Mathf.Max(foot.y, target.y);
+                        target = foot;
+                    }
+                    else target += Vector3.up * liftH;
                     Quaternion footRot = parentRot * baseRot * qy * _footLocalRot[f];
-                    TwoBoneIK(a, b, c, target, pole, _plantW);
+                    // With the right foot trailing behind, the right knee has to
+                    // fold DOWN toward the floor, not forward like a standing squat.
+                    // Left knee bends UP over the forward-planted foot.
+                    Vector3 kneePole = pole;
+                    if (_jsaaLanding && _impactAt >= 0f)
+                    {
+                        Vector3 localPole = f == 0
+                            ? new Vector3(-0.06f, 0.25f, 1f)
+                            : new Vector3(0.08f, -1f, 0.34f);
+                        kneePole = (parentRot * baseRot * qy * localPole).normalized;
+                    }
+                    TwoBoneIK(a, b, c, target, kneePole, _plantW);
                     c.rotation = Quaternion.Slerp(c.rotation, footRot, _plantW);
                 }
                 for (int i = 0; i < 6; i++) _legWritten[i] = _leg[i].localRotation;
@@ -3170,6 +5886,7 @@ namespace DragonsAltarCombat
 
         private void OnDestroy()
         {
+            ReleaseBow(false);
             if (_keys != null) ReleaseRoot();
             SetLeftHidden(false);
             IDisposable d = _hph as IDisposable;
@@ -3178,8 +5895,61 @@ namespace DragonsAltarCombat
         }
     }
 
+    public enum SkillStunOverride { Inherit, Enabled, Disabled }
+
     public static class DragonCombat
     {
+        // v0.25.133 per-clip animation tuning (start / end % of the vanilla animation)
+        public static readonly Dictionary<string, ConfigEntry<float>[]> AnimTuningEntries = new Dictionary<string, ConfigEntry<float>[]>();
+        private static Player _aimWindupPlayer;
+        private static float _aimWindupUntil;
+
+        // Follow the crosshair only during a real, configurable wind-up of at least 1 second.
+        public static void FollowAimForWindup(Player player, float seconds)
+        {
+            if (player == null || player != Player.m_localPlayer) return;
+            if (seconds < 1f) { if (_aimWindupPlayer == player) _aimWindupUntil = 0f; return; }
+            _aimWindupPlayer = player;
+            _aimWindupUntil = Time.time + seconds;
+        }
+
+        public static void FaceAimNow(Player player)
+        {
+            if (player == null || player != Player.m_localPlayer || player.IsDead()) return;
+            Vector3 dir = GameCamera.instance != null ? GameCamera.instance.transform.forward : player.GetLookDir();
+            dir.y = 0f;
+            if (dir.sqrMagnitude < 0.001f) return;
+            Quaternion facing = Quaternion.LookRotation(dir.normalized, Vector3.up);
+            player.transform.rotation = facing;
+            Rigidbody body = player.GetComponent<Rigidbody>();
+            if (body != null) body.rotation = facing;
+        }
+
+        public static float AnimSpeed(string clip)
+        {
+            ConfigEntry<float>[] e;
+            return clip != null && AnimTuningEntries.TryGetValue(clip, out e) && e.Length > 3 ? Mathf.Max(0f, e[3].Value) : 0f;
+        }
+
+        public static void AnimTuning(string clip, out float start, out float end)
+        {
+            float trig;
+            AnimTuning(clip, out start, out end, out trig);
+        }
+
+        // v0.25.136 trigger: fraction of the animation that lands on the skill's activation (0 = the clip's own hit frame)
+        public static void AnimTuning(string clip, out float start, out float end, out float trigger)
+        {
+            start = 0f; end = 1f; trigger = 0f;
+            ConfigEntry<float>[] te;
+            if (clip != null && AnimTuningEntries.TryGetValue(clip, out te) && te.Length > 2) trigger = Mathf.Clamp(te[2].Value, 0f, 100f) / 100f;
+            ConfigEntry<float>[] e;
+            if (clip == null || !AnimTuningEntries.TryGetValue(clip, out e)) return;
+            start = Mathf.Clamp(e[0].Value, 0f, 95f) / 100f;
+            end = Mathf.Clamp(e[1].Value, 5f, 100f) / 100f;
+            if (end <= start + 0.05f) end = Mathf.Min(1f, start + 0.05f);
+        }
+
         // v0.25.4: set by the Immortal HUD; blocks Hud.UpdateHealth / Stamina / Eitr / Food.
         public static bool VanillaVitalsHidden;
 
@@ -3188,11 +5958,20 @@ namespace DragonsAltarCombat
         private static readonly Dictionary<string, Type> TypeCache = new Dictionary<string, Type>();
 
         // v0.25.54: runs a visual effect; a failure in an effect never interrupts the skill that called it.
+        // Targeting guides are local-only objects, with an explicit caster; never network them.
+        public static bool CanShowGuide(Player caster)
+        {
+            return caster != null && caster == Player.m_localPlayer && !caster.IsDead();
+        }
+
         public static void RunVfx(Action fx)
         {
             if (fx == null || !DragonVfx.Enabled) return;
+            bool perf = DragonPerf.On;   // v0.25.184 performance monitor: VFX spawn time + objects per skill
+            if (perf) DragonPerf.VfxBegin();
             try { fx(); }
             catch (Exception ex) { if (DragonCombatPlugin.Instance != null) DragonCombatPlugin.Instance.LogInfo("[Immortal Heroes] VFX error: " + ex.Message); }
+            finally { if (perf) DragonPerf.VfxEnd(); }
         }
 
         // v0.25.66 UNIVERSAL RULE (user): "Physical Objects" = environmental objects (trees, rocks, logs, bushes);
@@ -3214,9 +5993,22 @@ namespace DragonsAltarCombat
             return false;
         }
 
+        // v0.25.181 (perf, same result): a collider's terrain/structure answer never changes - cache it per instance
+        private static readonly Dictionary<int, bool> _terrainCache = new Dictionary<int, bool>();
         public static bool IsTerrainOrStructure(Collider c)
         {
             if (c == null || c.isTrigger) return false;
+            int id = c.GetInstanceID();
+            bool cached;
+            if (_terrainCache.TryGetValue(id, out cached)) return cached;
+            bool r = IsTerrainOrStructureUncached(c);
+            if (_terrainCache.Count > 8192) _terrainCache.Clear();
+            _terrainCache[id] = r;
+            return r;
+        }
+
+        private static bool IsTerrainOrStructureUncached(Collider c)
+        {
             try
             {
                 if (_terrainLayer == -2) _terrainLayer = LayerMask.NameToLayer("terrain");
@@ -3231,6 +6023,7 @@ namespace DragonsAltarCombat
         }
 
         private static int _groundMask;
+        private static readonly RaycastHit[] _groundHits = new RaycastHit[64];
         public static int GroundMask()
         {
             if (_groundMask == 0) _groundMask = LayerMask.GetMask("terrain", "Default", "static_solid", "Default_small", "piece", "vehicle");
@@ -3241,12 +6034,14 @@ namespace DragonsAltarCombat
         public static bool TryGroundY(Vector3 pos, float above, float depth, out float y)
         {
             y = pos.y;
-            RaycastHit[] hits = Physics.RaycastAll(pos + Vector3.up * above, Vector3.down, above + depth, GroundMask(), QueryTriggerInteraction.Ignore);
-            if (hits == null || hits.Length == 0) return false;
+            // v0.25.181 (perf): non-allocating cast into a shared buffer (same hits as RaycastAll)
+            RaycastHit[] hits = _groundHits;
+            int n = Physics.RaycastNonAlloc(pos + Vector3.up * above, Vector3.down, hits, above + depth, GroundMask(), QueryTriggerInteraction.Ignore);
+            if (n <= 0) return false;
             // the surface nearest the reference height wins (a floor under a roof, the slope under a cliff edge)
             float best = float.MaxValue;
             bool found = false;
-            for (int i = 0; i < hits.Length; i++)
+            for (int i = 0; i < n; i++)
             {
                 if (!IsTerrainOrStructure(hits[i].collider)) continue;
                 float d = Mathf.Abs(hits[i].point.y - pos.y);
@@ -3256,6 +6051,38 @@ namespace DragonsAltarCombat
                 found = true;
             }
             return found;
+        }
+
+        // v0.25.185 projectile registry (see PatchProjectileRegistry). Destroyed / inactive entries are skipped and pruned.
+        public static bool ProjectileRegistryActive;
+        private static readonly List<Component> _liveProjectiles = new List<Component>();
+        private static readonly HashSet<int> _liveProjectileIds = new HashSet<int>();
+
+        internal static void RegisterProjectile(Component c)
+        {
+            if (c == null) return;
+            if (_liveProjectileIds.Add(c.GetInstanceID())) _liveProjectiles.Add(c);
+        }
+
+        // fills `into` with the projectiles that are alive and active right now (same set FindObjectsOfType would return)
+        public static void LiveProjectiles(List<Component> into)
+        {
+            into.Clear();
+            for (int i = _liveProjectiles.Count - 1; i >= 0; i--)
+            {
+                Component c = _liveProjectiles[i];
+                if (c == null) { _liveProjectileIds.Remove(((UnityEngine.Object)c).GetInstanceID()); _liveProjectiles.RemoveAt(i); continue; }   // destroyed
+                if (c.gameObject.activeInHierarchy) into.Add(c);
+            }
+        }
+
+        private static float _projPruneAt;
+        internal static void PruneProjectiles()
+        {
+            if (Time.time < _projPruneAt) return;
+            _projPruneAt = Time.time + 2f;
+            for (int i = _liveProjectiles.Count - 1; i >= 0; i--)
+                if (_liveProjectiles[i] == null) { _liveProjectileIds.Remove(((UnityEngine.Object)_liveProjectiles[i]).GetInstanceID()); _liveProjectiles.RemoveAt(i); }
         }
 
         public static Type FindTypeCached(string name)
@@ -3303,30 +6130,61 @@ namespace DragonsAltarCombat
 
         // v0.25.7: play a keyframed skill clip (see DragonSkillClipDriver). windup = seconds until the
         // impact key; hold = stay on the impact pose until ClipImpact / ClipStop.
-        public static void PlayClip(Player player, string clip, float windup, bool hold)
+        public static void PlayClip(Player player, string clip, float windup, bool hold, string tuneName = null)
         {
             if (player == null || player != Player.m_localPlayer || string.IsNullOrEmpty(clip)) return;
+            CheckAnimationClass(player);
+            SkillTakeover(player);   // v0.25.154
+            AnimActivation++;
+            if (DragonVfx.SwingClip(clip)) DragonVfx.WeaponWake(player, Mathf.Max(0f, windup * 0.65f), Mathf.Max(0.55f, windup * 0.5f));
+            // Non-charging Sky Summons lock their target at cast time; never turn them during the delay.
+            // v0.25.139 (user): every skill with a wind up of 1 s or more faces the crosshair (Sky Summons included).
+            // v0.25.140 (user): Sky Summons and Angel Comet are committed - the aim is locked at cast, the body never follows the crosshair.
+            bool committed = clip == "sorc_glacial" || clip == "sorc_glacial_asc" ||
+                clip == "cleric_goddess" || clip == "cleric_relic" || clip == "cleric_holy_relic" ||
+                clip == "cleric_judgement" || clip == "cleric_tempest" || clip == "cleric_crucible" ||
+                clip == "rg_sky" || clip == "rg_starfall" || clip == "cleric_hammer_call" || clip == "angel_comet";
+            if (!committed && clip != "olympic_hero_brutal") FollowAimForWindup(player, windup);
             if (DragonCombatPlugin.Instance != null && !DragonCombatPlugin.Instance.EnableSkillAnimations.Value) return;
-            DragonClipKey[] keys = hold ? null : VanillaClip(player, clip, 0f);
+            DragonClipKey[] keys = HorizonWalkerMoving(player) ? MovingCastClip() : BowClip(player, clip);   // v0.25.85 Ranger bow layer, v0.25.86 HW moving casts
+            if (!hold && (clip == "warrior_impact_wave" || clip == "sm_crescent" || clip == "sm_crescent_asc"))
+            {
+                AnimationClip source = DragonMixamo.OriginalSkillClip(player, "MaceAltAttack");
+                float contact = DragonMixamo.ContactTime(source, 0.55f);
+                if (source != null && DragonMixamo.PlaySource(player, source, 0f, source.length,
+                    Mathf.Max(0.03f, windup) * source.length / Mathf.Max(0.03f, contact), 0.12f, false, tuneName ?? clip))
+                {
+                    DragonSkillClipDriver previous = player.GetComponent<DragonSkillClipDriver>();
+                    if (previous != null) previous.CancelAnimation();
+                    SetSkillAnimSpeed(player, 1f, 0f);
+                    return;
+                }
+            }
+            if (keys == null && !hold) keys = VanillaClip(player, clip, 0f);
             if (keys == null) keys = SkillClip(clip);
             if (keys == null) return;
             // v0.25.72: the weapon hand glows in the Class colour through every real wind up / hold
-            if (windup >= 0.3f || hold) { Player wp = player; float ws = hold ? 3f : windup + 0.25f; RunVfx(delegate { DragonVfx.WeaponCharge(wp, ws); }); }
+            // v0.25.85 (user): no weapon charge orb / flare
+            if (false && (windup >= 0.3f || hold)) { Player wp = player; float ws = hold ? 3f : windup + 0.25f; RunVfx(delegate { DragonVfx.WeaponCharge(wp, ws); }); }
             // v0.25.40 (user): buff raises stand still until the wind up is over (no gliding).
             bool standEmote = keys[0].VA != null && keys[0].VA.StartsWith("emote", StringComparison.Ordinal) &&
                               !clip.StartsWith("hw_", StringComparison.Ordinal) && clip != "merc_fury_accent";
+            // v0.25.86 (user: Heaven's Crucible lost its animation): long wind-up raises start late enough that the raise
+            // is still up when the skill lands (it used to finish ~1s before the Barrier appeared).
+            if (keys[0].QL && windup > 0.8f) keys[0].VF = Mathf.Clamp01(1f - 0.75f / windup);
             if (keys[0].VA != null && (keys[0].QL || standEmote))
             {
                 LockSkill(player, Mathf.Max(0.5f, windup) + 0.05f);
                 Rigidbody rb = player.GetComponent<Rigidbody>();
                 if (rb != null) rb.velocity = new Vector3(0f, rb.velocity.y, 0f);   // stop at once, no slide
-                if (keys[0].QL) SetSkillAnimSpeed(player, 1.8f, Mathf.Max(0.5f, windup) + 0.3f);   // v0.25.49 faster raise
+                // v0.25.138: the raise speed (1.8x) is held by the clip driver from the emote's first to its last frame
             }
             DragonSkillPoseDriver legacy = player.GetComponent<DragonSkillPoseDriver>();
             if (legacy != null) UnityEngine.Object.Destroy(legacy);
             DragonSkillClipDriver d = player.GetComponent<DragonSkillClipDriver>();
             if (d == null) d = player.gameObject.AddComponent<DragonSkillClipDriver>();
-            d.Begin(keys, windup, hold, BodyVisual(player));
+            d.Begin(keys, windup, hold, BodyVisual(player), clip, tuneName);
+            DragonArmGuard.Attach(player);
         }
 
         // Plays caller-built keys (variable-length clips such as Whirlwind).
@@ -3357,6 +6215,7 @@ namespace DragonsAltarCombat
                 float tq = Mathf.Max(0.18f, turn);
                 int tt = Mathf.Max(1, Mathf.CeilToInt(Mathf.Max(0.1f, seconds) / tq));
                 PlayClipKeys(player, SbSpin(tt, tq, true), 0.12f);
+                DragonVfx.WeaponWake(player, 0.12f, seconds);
                 return;
             }
             // v0.25.24 SPAA (storyboard 09 CYCLONE): coil with the weapon across to the left, then turn clockwise
@@ -3365,6 +6224,7 @@ namespace DragonsAltarCombat
             int turns = Mathf.Max(1, Mathf.CeilToInt(Mathf.Max(0.1f, seconds) / q));
             DragonClipKey[] v = VanillaClip(player, "spin", Mathf.Max(0.3f, seconds));
             PlayClipKeys(player, v != null ? v : SbSpin(turns, q, twoHand), 0.15f);
+            DragonVfx.WeaponWake(player, 0.15f, seconds);
         }
 
 
@@ -3375,12 +6235,34 @@ namespace DragonsAltarCombat
 
         // v0.25.15: automatic procs (Fury, Overcharge, death-save, parry burst) are low-priority accents:
         // they never replace a skill clip that is playing.
+        // v0.25.86 (user: "Charge = Hold"): while a charged bow skill charges, the Ranger controls hold the bow's REAL
+        // vanilla draw (attackHold); the skill cancels the vanilla shot before it fires its own.
+        public static float SkillBowHoldUntil;
+        public static float VanillaPauseUntil;   // v0.25.86 freezes the playing vanilla skill swing (refresh every frame)
+        public static bool SkillBowHoldActive { get { return Time.time < SkillBowHoldUntil; } }
+
         public static bool ClipBusy(Player player)
         {
             if (player == null) return false;
             DragonSkillClipDriver d = player.GetComponent<DragonSkillClipDriver>();
             return d != null && d.IsBusy;
         }
+
+        // New-cast gate only: movement locks/NACC retain their existing rules. Internal skill strikes bypass it.
+        public static bool SkillAnimationBusy(Player player)
+        {
+            if (player == null || player.IsDead()) return false;
+            DragonSkillClipDriver driver = player.GetComponent<DragonSkillClipDriver>();
+            if (driver != null && driver.enabled && driver.IsPlaying) return true;
+            DragonVanillaTail tail = player.GetComponent<DragonVanillaTail>();
+            if (tail != null && tail.enabled && tail.IsBusy) return true;
+            Animator animator = player.GetComponentInChildren<Animator>();
+            DragonMixamoPlayer source = animator == null ? null : animator.GetComponent<DragonMixamoPlayer>();
+            return source != null && source.enabled && source.Live;
+        }
+
+        // Registered by Ranger for actions which stop an existing channel without starting a new CA.
+        public static Func<string, bool> SkillCancelAvailable;
 
         public static void PlayAccent(Player player, string clip, float windup)
         {
@@ -3472,6 +6354,12 @@ namespace DragonsAltarCombat
         }
 
         // ZSyncAnimation.SetFloat prefix body: true = the value was replaced.
+        // v0.25.183 (perf): cheap pre-check (no boxing) - only the forced-run / bow-aim animator can be overridden
+        internal static bool ZanimOverrideCandidate(object zanim)
+        {
+            return (_forceRunZanim != null && ReferenceEquals(zanim, _forceRunZanim)) || (_bowAimZanim != null && ReferenceEquals(zanim, _bowAimZanim));
+        }
+
         internal static bool ForceRunOverride(object zanim, object key, ref float value)
         {
             if (_forceRunZanim == null || !ReferenceEquals(zanim, _forceRunZanim)) return false;
@@ -3485,8 +6373,95 @@ namespace DragonsAltarCombat
 
         // ZSyncAnimation.SetBool prefix body: onGround stays true while a run is forced (kinematic moves made
         // Valheim play the falling legs), blocking stays on while the shield pose is forced.
+        // v0.25.85 forced bow draw (Ranger vanilla bow layer).
+        private static object _bowAimZanim;
+        private static string _bowAimName;
+        private static int _bowAimHash;
+        private static bool _bowAimOn;
+
+        public static void SetBowAim(Player p, string name, bool on)
+        {
+            if (p == null || string.IsNullOrEmpty(name)) return;
+            try
+            {
+                Component z = null;
+                Component[] cs = p.GetComponents<Component>();
+                for (int i = 0; i < cs.Length; i++) if (cs[i] != null && cs[i].GetType().Name == "ZSyncAnimation") { z = cs[i]; break; }
+                _bowAimZanim = z; _bowAimName = name; _bowAimHash = Animator.StringToHash(name); _bowAimOn = on;
+                Animator a = p.GetComponentInChildren<Animator>();
+                if (a != null) a.SetBool(name, on);
+            }
+            catch (Exception) { }
+        }
+
+        // The equipped bow / crossbow's own animations (attack trigger + draw bool), resolved on this animator.
+        private static bool BowAnims(Player p, out string trig, out string draw)
+        {
+            trig = null; draw = null;
+            try
+            {
+                ItemDrop.ItemData w = GetHandItem(p, "m_leftItem");
+                if (w == null || w.m_shared == null) w = GetHandItem(p, "m_rightItem");
+                if (w == null || w.m_shared == null) return false;
+                object atk = w.m_shared.GetType().GetField("m_attack").GetValue(w.m_shared);
+                if (atk == null) return false;
+                FieldInfo fa = atk.GetType().GetField("m_attackAnimation"), fd = atk.GetType().GetField("m_drawAnimationState"), fb = atk.GetType().GetField("m_bowDraw");
+                string an = fa == null ? null : fa.GetValue(atk) as string;
+                string dn = fd == null ? null : fd.GetValue(atk) as string;
+                if (string.IsNullOrEmpty(an) || an.IndexOf("bow", StringComparison.OrdinalIgnoreCase) < 0) return false;
+                Animator a = p.GetComponentInChildren<Animator>();
+                trig = ResolveTrigger(a, an);
+                if (trig == null) return false;
+                // a real draw bow (item type Bow) - not m_bowDraw, which Wildborn's quick shots toggle at runtime
+                FieldInfo ft = w.m_shared.GetType().GetField("m_itemType");
+                object itype = ft == null ? null : ft.GetValue(w.m_shared);
+                bool drawBow = itype != null && itype.ToString() == "Bow";
+                if (drawBow && !string.IsNullOrEmpty(dn) && a != null)
+                {
+                    AnimatorControllerParameter[] ps = a.parameters;
+                    for (int i = 0; i < ps.Length; i++) if (ps[i].type == AnimatorControllerParameterType.Bool && ps[i].name == dn) { draw = dn; break; }
+                }
+                return true;
+            }
+            catch (Exception) { return false; }
+        }
+
+        // Ranger shots that play the vanilla bow draw + release (user): pitch 1 = aim up (Sky shots), -1 = down (hover).
+        private static int BowShotPitch(string clip, out bool isShot)
+        {
+            isShot = true;
+            switch (clip)
+            {
+                case "rg_sky": case "rg_starfall": return 1;
+                case "rg_hover": return -1;
+                case "rg_shot": case "rg_power": case "rg_heavy": case "rg_ballista": case "rg_kneel":
+                case "rg_split_a": case "rg_split_b": return 0;   // v0.25.86 Splitting volleys: vanilla bow, no custom sweep (arm clipped)
+            }
+            isShot = false;
+            return 0;
+        }
+
+        private static DragonClipKey[] BowClip(Player player, string clip)
+        {
+            bool isShot;
+            int pitch = BowShotPitch(clip, out isShot);
+            if (!isShot) return null;
+            string trig, draw;
+            if (!BowAnims(player, out trig, out draw)) return null;
+            if (clip == "rg_ballista") draw = null;   // v0.25.86 charged shots use the real vanilla draw hold (SkillBowHold)
+            DragonClipKey pose = K(0f);
+            if (pitch > 0) pose.Hd(-32f, 0f, 0f);       // v0.25.86 (user): Sky shots = the vanilla bow action, only the head looks up (no back bend)
+            else if (pitch < 0) pose.Sp(12f, 0f, 0f).Ch(22f, 0f, 0f).Hd(16f, 0f, 0f);     // aimed down from the air
+            DragonClipKey[] k = new DragonClipKey[] { K(-1f), pose.Copy(-0.6f), pose, pose.Copy(0.3f), K(0.6f) };
+            k[0].NoAim = true; k[0].NoTrack = true;
+            k[0].BowTrig = null; k[0].BowBool = draw;   // the release (bow_fire) is fired by the Ranger's own Shoot() at every shot
+            return k;
+        }
+
         internal static bool ForceBoolOverride(object zanim, object key, ref bool value)
         {
+            if (_bowAimOn && _bowAimZanim != null && ReferenceEquals(zanim, _bowAimZanim) &&
+                (key is int ? (int)key == _bowAimHash : (key as string) == _bowAimName)) { value = true; return true; }
             if (_forceRunZanim == null || !ReferenceEquals(zanim, _forceRunZanim)) return false;
             bool ground = key is int ? (int)key == OnGroundHash : (key as string) == "onGround";
             bool blocking = key is int ? (int)key == BlockingHash : (key as string) == "blocking";
@@ -3542,6 +6517,135 @@ namespace DragonsAltarCombat
         private static readonly Dictionary<int, HashSet<string>> AnimTriggers = new Dictionary<int, HashSet<string>>();
         private static MethodInfo _zanimSetTrigger;
         private static bool _triggersLogged;
+        private static readonly Dictionary<string, string> ExternalTriggers = new Dictionary<string, string>();
+        private static readonly Dictionary<string, RuntimeAnimatorController> ExternalControllers = new Dictionary<string, RuntimeAnimatorController>();
+        private static List<IDictionary> _extManagers = new List<IDictionary>();
+        private static float _extScanAt;
+        private static bool ExternalTrigger(string name, out string trigger)
+        {
+            if (ExternalTriggers.TryGetValue(name, out trigger)) return true;
+            // v0.25.139: the Warfare / Wizardry controller tables are found once (rescanned every 5 s while none is
+            // known) instead of scanning every loaded assembly on each call.
+            if (_extManagers.Count == 0 && Time.realtimeSinceStartup >= _extScanAt)
+            {
+                _extScanAt = Time.realtimeSinceStartup + 5f;
+                Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
+                for (int i = 0; i < assemblies.Length; i++)
+                {
+                    string assemblyName = assemblies[i].GetName().Name;
+                    if (assemblyName != "Warfare" && assemblyName != "Wizardry") continue;
+                    try
+                    {
+                        Type manager = assemblies[i].GetType("KG_Managers.AnimationReplaceManager");
+                        FieldInfo field = manager == null ? null : AccessTools.Field(manager, "Controllers");
+                        IDictionary controllers = field == null ? null : field.GetValue(null) as IDictionary;
+                        if (controllers != null) _extManagers.Add(controllers);
+                    }
+                    catch (Exception) { }
+                }
+            }
+            for (int i = 0; i < _extManagers.Count; i++)
+            {
+                try
+                {
+                    IDictionary controllers = _extManagers[i];
+                    if (!controllers.Contains(name)) continue;
+                    trigger = ((KeyValuePair<RuntimeAnimatorController, string>)controllers[name]).Value;
+                    ExternalTriggers[name] = trigger;
+                    ExternalControllers[name] = ((KeyValuePair<RuntimeAnimatorController, string>)controllers[name]).Key;
+                    return true;
+                }
+                catch (Exception) { }
+            }
+            trigger = null; return false;
+        }
+        public static bool ExternalTriggerName(string name, out string trigger) { return ExternalTrigger(name, out trigger); }
+        public static bool IsExternalAnimation(string name)
+        {
+            string t; return !string.IsNullOrEmpty(name) && (ExternalTrigger(name, out t) || ExternalTrigger(name + "0", out t));
+        }
+        public static string AnimatorTriggerName(string name)
+        {
+            string trigger; return ExternalTrigger(name, out trigger) ? trigger : name;
+        }
+        // v0.25.164 ROOT CAUSE of the first-NACC "sit": assigning Animator.runtimeAnimatorController rebinds the animator - every
+        // parameter goes back to the controller default and the state machine restarts at its entry state. Valheim sets "wakeup"
+        // (the lie-down / sit-up entry pose), statei/statef (weapon state) and the attach / emote bools only on events, never per frame,
+        // so the first controller swap of a session (2HDW SBDW override on the first primary, Warfare / external sets) could leave the
+        // player in the sit-up pose until the next attack trigger pulled it out. Every controller swap goes through here: non-trigger
+        // parameters and each layer's current state are carried over, so the swap never changes pose or state.
+        public static void SwapController(Animator a, RuntimeAnimatorController c)
+        {
+            if (a == null || c == null || a.runtimeAnimatorController == c) return;
+            AnimatorControllerParameter[] ps = null;
+            object[] vals = null;
+            int[] hashes = null; float[] times = null;
+            try
+            {
+                ps = a.parameters;
+                vals = new object[ps.Length];
+                for (int i = 0; i < ps.Length; i++)
+                {
+                    AnimatorControllerParameterType t = ps[i].type;
+                    if (t == AnimatorControllerParameterType.Bool) vals[i] = a.GetBool(ps[i].nameHash);
+                    else if (t == AnimatorControllerParameterType.Float) vals[i] = a.GetFloat(ps[i].nameHash);
+                    else if (t == AnimatorControllerParameterType.Int) vals[i] = a.GetInteger(ps[i].nameHash);
+                }
+                hashes = new int[a.layerCount]; times = new float[a.layerCount];
+                for (int l = 0; l < a.layerCount; l++)
+                {
+                    AnimatorStateInfo st = a.GetCurrentAnimatorStateInfo(l);
+                    hashes[l] = st.fullPathHash; times[l] = st.normalizedTime;
+                }
+            }
+            catch (Exception) { ps = null; }
+            a.runtimeAnimatorController = c;
+            if (ps != null)
+            {
+                try
+                {
+                    for (int i = 0; i < ps.Length; i++)
+                    {
+                        if (vals[i] == null) continue;
+                        AnimatorControllerParameterType t = ps[i].type;
+                        if (t == AnimatorControllerParameterType.Bool) a.SetBool(ps[i].nameHash, (bool)vals[i]);
+                        else if (t == AnimatorControllerParameterType.Float) a.SetFloat(ps[i].nameHash, (float)vals[i]);
+                        else a.SetInteger(ps[i].nameHash, (int)vals[i]);
+                    }
+                    for (int l = 0; l < hashes.Length && l < a.layerCount; l++)
+                        if (a.HasState(l, hashes[l])) a.Play(hashes[l], l, times[l]);
+                }
+                catch (Exception) { }
+            }
+            a.Update(0f);
+        }
+
+        public static void PrepareExternalAnimation(Animator animator, string name)
+        {
+            string trigger;
+            if (animator == null || !ExternalTrigger(name, out trigger)) return;
+            RuntimeAnimatorController controller = ExternalControllers[name];
+            if (controller != null && animator.runtimeAnimatorController != controller)
+            { SwapController(animator, controller); }
+            CheckAnimationController(animator);
+        }
+
+        internal static void CheckController(Animator a) { CheckAnimationController(a); }
+        private static readonly Dictionary<int, RuntimeAnimatorController> TriggerControllers = new Dictionary<int, RuntimeAnimatorController>();
+        private static void CheckAnimationController(Animator a)
+        {
+            if (a == null) return;
+            int id = a.GetInstanceID();
+            RuntimeAnimatorController previous;
+            if (TriggerControllers.TryGetValue(id, out previous) && previous == a.runtimeAnimatorController) return;
+            TriggerControllers[id] = a.runtimeAnimatorController;
+            AnimTriggers.Remove(id);
+            // v0.25.172 (user: vanilla 1-2-3 after a parry): learned / captured swing states are keyed per CONTROLLER (StateKey) and kept.
+            // They used to be wiped on every controller change, so a swap and swap-back around a block / parry (another mod's or
+            // ours) left the backwards step (hit 3) with nothing to cross-fade into -> native trigger -> vanilla chain. A state is still
+            // only ever used under the controller it was learned on (the v0.25.154 rule).
+            PendingLearns.RemoveAll(delegate(StateLearn learn) { return learn.A == a; });
+        }
 
         private static void ParseVanMap()
         {
@@ -3569,15 +6673,22 @@ namespace DragonsAltarCombat
 
         // The animator trigger that really exists for `name` (name, or name + "0" for combo chains), or null.
         // v0.25.42 state learning: which animator state (layer + full path hash) a trigger leads to.
-        private class StateLearn { public Animator A; public string Name; public int[] Pre; public float At; }
+        private class StateLearn { public Animator A; public string Name; public int[] Pre; public float At; public int Gen; public RuntimeAnimatorController Ctrl; public bool Paired; public int Serial; public object Atk; }
         private static readonly Dictionary<string, KeyValuePair<int, int>> LearnedStates = new Dictionary<string, KeyValuePair<int, int>>();
         private static readonly List<StateLearn> PendingLearns = new List<StateLearn>();
+
+        public static string StateKey(Animator a, string trigger)
+        {
+            RuntimeAnimatorController c = a == null ? null : a.runtimeAnimatorController;
+            return (a == null ? 0 : a.GetInstanceID()) + "/" + (c == null ? 0 : c.GetInstanceID()) + ":" + trigger;
+        }
 
         public static bool LearnedState(Animator a, string trigger, out int hash, out int layer)
         {
             hash = 0; layer = 0;
+            CheckAnimationController(a);
             KeyValuePair<int, int> v;
-            if (a == null || !LearnedStates.TryGetValue(a.GetInstanceID() + ":" + trigger, out v)) return false;
+            if (a == null || !LearnedStates.TryGetValue(StateKey(a, trigger), out v)) return false;
             layer = v.Key; hash = v.Value;
             return true;
         }
@@ -3585,16 +6696,87 @@ namespace DragonsAltarCombat
         public static void LearnState(Animator a, string trigger)
         {
             if (a == null || string.IsNullOrEmpty(trigger)) return;
-            if (LearnedStates.ContainsKey(a.GetInstanceID() + ":" + trigger)) return;
+            if (NearBlock()) return;   // v0.25.175 never learn out of a block / parry
+            CheckAnimationController(a);
+            if (LearnedStates.ContainsKey(StateKey(a, trigger))) return;
             try
             {
                 StateLearn l = new StateLearn();
-                l.A = a; l.Name = trigger; l.At = Time.time;
+                l.A = a; l.Name = trigger; l.At = Time.time; l.Gen = NaccGen; l.Ctrl = a.runtimeAnimatorController; l.Paired = DragonDualWield.PairedActive(a); l.Serial = AttackSerial; l.Atk = NaccAttack;
                 l.Pre = new int[a.layerCount];
                 for (int i = 0; i < l.Pre.Length; i++) l.Pre[i] = a.GetCurrentAnimatorStateInfo(i).fullPathHash;
                 PendingLearns.Add(l);
             }
             catch (Exception) { }
+        }
+
+        private static bool IsCurrentAttack(Player p, object atk)
+        {
+            if (p == null || atk == null) return false;
+            try
+            {
+                if (_curAttackField == null) _curAttackField = typeof(Humanoid).GetField("m_currentAttack", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                return _curAttackField != null && ReferenceEquals(_curAttackField.GetValue(p), atk);
+            }
+            catch (Exception) { return false; }
+        }
+
+        // A skill animation (clip driver / Mixamo / vanilla skill trigger / skill lock) owns the animator right now.
+        public static bool SkillOwnsAnimator(Player p)
+        {
+            if (p == null) return false;
+            if (Time.time < SkillAnimAttackBlockUntil || Time.time < DragonMixamo.LiveUntil) return true;
+            return IsSkillLocked(p) || ClipBusy(p);
+        }
+
+        private static readonly string[] NotSwingWords = { "idle", "walk", "run", "jog", "sprint", "crouch", "sneak", "swim", "jump", "fall", "land", "dodge", "roll", "emote", "equip", "unequip", "block", "stagger", "hit", "death", "sit", "sleep", "cast", "kneel", "mixamo", "skill" };
+
+        // The requested swing's state check. `trigger` is the swing trigger the animator just consumed (for SBDW / 2HDW it is
+        // already the carrier trigger of the active override controller). The state is accepted for THAT trigger only when:
+        //  - not looping, the player is in a melee attack, and no clip of it is locomotion / skill named;
+        //  - its state name is the trigger (or the trigger the external Warfare / Wizardry table maps it to), or - for a
+        //    renamed override state - one of its clips carries an attack event;
+        //  - no OTHER trigger of this controller already owns that (layer, state) - one state is never two swings.
+        // Anything else is left unlearned (the HasState fallback in ComboTriggerPrefix still applies).
+        public static bool IsSwingState(Animator a, int layer, AnimatorStateInfo st, string trigger)
+        {
+            try
+            {
+                if (a == null || st.loop || string.IsNullOrEmpty(trigger)) return false;
+                Player p = Player.m_localPlayer;
+                if (p == null || !p.InAttack()) return false;
+                string mapped;
+                bool named = st.IsName(trigger) || (ExternalTrigger(trigger, out mapped) && !string.IsNullOrEmpty(mapped) && st.IsName(mapped));
+                bool next = a.IsInTransition(layer) && a.GetNextAnimatorStateInfo(layer).fullPathHash == st.fullPathHash;
+                AnimatorClipInfo[] clips = next ? a.GetNextAnimatorClipInfo(layer) : a.GetCurrentAnimatorClipInfo(layer);
+                bool evented = false, bad = false, any = false, expected = false, wrongSlot = false;
+                for (int i = 0; i < clips.Length; i++)
+                {
+                    AnimationClip c = clips[i].clip;
+                    if (c == null) continue;
+                    any = true;
+                    if (c.isLooping) { bad = true; continue; }
+                    int match = DragonDualWield.SwingClipMatch(a, c.name, trigger);   // SBDW / 2HDW: the expected carrier clip
+                    if (match > 0) expected = true; else if (match < 0) wrongSlot = true;
+                    string cn = (c.name ?? "").ToLowerInvariant();
+                    for (int w = 0; w < NotSwingWords.Length; w++)
+                        if (cn.Contains(NotSwingWords[w]) && !cn.Contains("attack") && !cn.Contains("swing")) { bad = true; break; }
+                    AnimationEvent[] ev = c.events;
+                    for (int e = 0; e < ev.Length; e++)
+                        if (ev[e].functionName == "OnAttackTrigger" || ev[e].functionName == "Hit") evented = true;
+                }
+                if (!any || bad || wrongSlot) return false;
+                // Replaced (override) clips are validated by the controller's own mapping; a clip that is not replaced falls back to the
+                // state name, or - renamed state - an attack event on a state that was just entered (not a swing already running).
+                bool fresh = next || st.normalizedTime < 0.35f;
+                if (!expected && !named && !(evented && fresh)) return false;
+                string prefix = StateKey(a, "");
+                foreach (KeyValuePair<string, KeyValuePair<int, int>> kv in LearnedStates)
+                    if (kv.Key.StartsWith(prefix, StringComparison.Ordinal) && kv.Key != prefix + trigger && kv.Value.Key == layer && kv.Value.Value == st.fullPathHash) return false;
+                return true;
+            }
+            catch (Exception) { }
+            return false;
         }
 
         private static void UpdateLearns()
@@ -3603,20 +6785,30 @@ namespace DragonsAltarCombat
             {
                 StateLearn l = PendingLearns[k];
                 if (l.A == null || Time.time - l.At > 0.6f) { PendingLearns.RemoveAt(k); continue; }
+                // v0.25.154: superseded (skill takeover / takeoff) or the controller changed -> dead, never learned.
+                if (l.Gen != NaccGen || l.Ctrl != l.A.runtimeAnimatorController || SkillOwnsAnimator(Player.m_localPlayer)) { PendingLearns.RemoveAt(k); continue; }
+                // v0.25.156: bound to its own attack - dropped once another attack started or it is no longer the player's current attack.
+                if (l.Serial != AttackSerial || !IsCurrentAttack(Player.m_localPlayer, l.Atk)) { PendingLearns.RemoveAt(k); continue; }
+                if (NearBlock()) { PendingLearns.RemoveAt(k); continue; }   // v0.25.175 a block / parry happened during the learn
                 try
                 {
                     // v0.25.44: wait until the animator consumed the trigger, then take the layer that is
                     // transitioning into a new state (the attack layer), not one that merely changed by movement.
-                    if (l.A.GetBool(l.Name)) continue;
-                    int pick = -1;
-                    for (int i = 0; i < l.Pre.Length && i < l.A.layerCount; i++)
-                        if (l.A.IsInTransition(i) && l.A.GetNextAnimatorStateInfo(i).fullPathHash != l.Pre[i]) { pick = i; break; }
+                    string learnedTrigger;
+                    if (ExternalTrigger(l.Name, out learnedTrigger)) { if (l.A.GetBool(learnedTrigger)) continue; }
+                    else if (l.A.GetBool(l.Name)) continue;
+                    if (l.Paired != DragonDualWield.PairedActive(l.A)) { PendingLearns.RemoveAt(k); continue; }
+                    // v0.25.170 (user: chain lost after blocking): every layer that left its pre-trigger state is checked and the first one
+                    // holding a validated swing state is learned. Before, the FIRST transitioning layer was taken - an attack started out of
+                    // the block pose (block layer leaving 'blocking') picked that layer, failed validation and dropped the learn for good.
+                    // Layers that are not a swing are skipped; nothing valid yet = keep waiting (0.6 s timeout above).
                     for (int i = 0; i < l.Pre.Length && i < l.A.layerCount; i++)
                     {
-                        if (pick >= 0 && i != pick) continue;
                         AnimatorStateInfo st = l.A.IsInTransition(i) ? l.A.GetNextAnimatorStateInfo(i) : l.A.GetCurrentAnimatorStateInfo(i);
                         if (st.fullPathHash == l.Pre[i]) continue;
-                        LearnedStates[l.A.GetInstanceID() + ":" + l.Name] = new KeyValuePair<int, int>(i, st.fullPathHash);
+                        // v0.25.154: only a validated swing state is cached (see IsSwingState); a locomotion / skill / looping state is never cached.
+                        if (!IsSwingState(l.A, i, st, l.Name)) continue;
+                        LearnedStates[StateKey(l.A, l.Name)] = new KeyValuePair<int, int>(i, st.fullPathHash);
                         PendingLearns.RemoveAt(k);
                         break;
                     }
@@ -3633,6 +6825,19 @@ namespace DragonsAltarCombat
             HashSet<string> set;
             if (!AnimTriggers.TryGetValue(a.GetInstanceID(), out set)) return 0;
             int n = 0;
+            string external;
+            while (n < 10 && (set.Contains(name + n.ToString()) || ExternalTrigger(name + n.ToString(), out external))) n++;
+            return n;
+        }
+
+        // Triggers the animator's CURRENT controller really declares (no external-table names).
+        public static int StrictTriggerCount(Animator a, string name)
+        {
+            if (a == null || string.IsNullOrEmpty(name)) return 0;
+            ResolveTrigger(a, name);
+            HashSet<string> set;
+            if (!AnimTriggers.TryGetValue(a.GetInstanceID(), out set)) return 0;
+            int n = 0;
             while (n < 10 && set.Contains(name + n.ToString())) n++;
             return n;
         }
@@ -3640,6 +6845,7 @@ namespace DragonsAltarCombat
         private static string ResolveTrigger(Animator a, string name)
         {
             if (a == null || string.IsNullOrEmpty(name)) return null;
+            CheckAnimationController(a);
             HashSet<string> set;
             if (!AnimTriggers.TryGetValue(a.GetInstanceID(), out set))
             {
@@ -3660,8 +6866,9 @@ namespace DragonsAltarCombat
                     DragonCombatPlugin.Instance.LogInfo("[Immortal Heroes] Animator triggers: " + string.Join(", ", all.ToArray()));
                 }
             }
-            if (set.Contains(name)) return name;
-            if (set.Contains(name + "0")) return name + "0";
+            string external;
+            if (set.Contains(name) || ExternalTrigger(name, out external)) return name;
+            if (set.Contains(name + "0") || ExternalTrigger(name + "0", out external)) return name + "0";
             string bare = name.TrimEnd('0', '1', '2', '3', '4', '5', '6', '7', '8', '9');
             if (bare != name && set.Contains(bare)) return bare;
             return null;
@@ -3669,6 +6876,19 @@ namespace DragonsAltarCombat
 
         // Overlay for a vanilla-animated skill: the vanilla attack does the arms / weapon; we only add a planted
         // stance and a slight lean. length > 0 = sustained (repeat the animation every second).
+        // v0.25.86 (user: the Sword Master animations were broken / super sped up): calm constant-speed swings.
+        public static bool IsConstSpeedClip(string clip)
+        {
+            switch (clip)
+            {
+                case "sm_slash_a": case "sm_slash_b": case "sm_moon_finisher":
+                case "sm_crescent": case "sm_crescent_asc": case "sm_crescent_asc2":
+                case "sm_halfmoon": case "sm_halfmoon_2":
+                    return true;
+            }
+            return false;
+        }
+
         public static bool IsRaiseBuffClip(string clip)
         {
             switch (clip)
@@ -3685,7 +6905,22 @@ namespace DragonsAltarCombat
         {
             ParseVanMap();
             KeyValuePair<string, float> m;
-            if (!VanMap.TryGetValue(clip, out m)) return null;
+            if (!VanMap.TryGetValue(clip, out m))
+            {
+                // v0.25.128 Circle Swing = Battleaxe attack 1 / attack 2 (built in, independent of the config map)
+                if (clip == "merc_cs1") m = new KeyValuePair<string, float>("battleaxe_attack0", 0.45f);
+                else if (clip == "merc_cs2") m = new KeyValuePair<string, float>("battleaxe_attack1", 0.45f);
+                else return null;
+            }
+            // Ground PAC attack CAs: use the mace heavy uppercut. Keep the original contact lead/timing.
+            switch (clip)
+            {
+                case "warrior_impact_wave":
+                case "sm_crescent": case "sm_crescent_asc":  // First wave only
+                case "merc_seismic":
+                    m = new KeyValuePair<string, float>("mace_secondary", m.Value);
+                    break;
+            }
             string trig = ResolveTrigger(player.GetComponentInChildren<Animator>(), m.Key);
             if (trig == null) return null;
             if (IsRaiseBuffClip(clip))
@@ -3716,11 +6951,11 @@ namespace DragonsAltarCombat
                 // knee up and the right arm cocked back, stride the left foot forward and plant, then uncoil into the vanilla spin.
                 k = new DragonClipKey[] {
                     K(-1f),
-                    Ft(K(-0.86f).Rot(0f, 30f, 0f).Sp(3f, 0f, 0f).Off(0f, -0.06f, 0f), 0.1f, 0.1f).Hand(0.55f, 0.1f, -0.45f, 0.8f),
-                    K(-0.72f).Rot(0f, 65f, 0f).Sp(-5f, 0f, 0f).LL(0.35f, 0.05f, 0f, 0f).Lift(0.32f, 0.1f).Off(0f, 0.12f, 0.08f).Hand(0.5f, 0.45f, -0.85f, 0.95f),
-                    K(-0.56f).Rot(0f, 65f, 0f).Sp(-4f, 0f, 0f).LL(0.45f, 0.05f, 0f, 0f).Lift(0.26f, 0f).Off(0f, 0.01f, 0.14f).Hand(0.5f, 0.5f, -0.9f, 0.95f),
-                    K(-0.42f).Rot(0f, 55f, 0f).Sp(4f, 0f, 0f).LL(0.7f, 0.15f, 0f, 0f).RL(-0.3f, 0.12f, 0f, 0f).Lift(0f, 0f).Off(0f, -0.07f, 0.2f).Hand(0.5f, 0.45f, -0.85f, 0.95f),
-                    Ft(K(-0.25f).Rot(0f, 20f, 0f).Sp(6f, 0f, 0f).Off(0f, -0.05f, 0.2f), 0.6f, 0.25f),
+                    Ft(K(-0.93f).Rot(0f, 30f, 0f).Sp(3f, 0f, 0f).Off(0f, -0.06f, 0f), 0.1f, 0.1f).Hand(0.55f, 0.1f, -0.45f, 0.8f),
+                    K(-0.85f).Rot(0f, 65f, 0f).Sp(-5f, 0f, 0f).LL(0.35f, 0.05f, 0f, 0f).Lift(0.32f, 0.1f).Off(0f, 0.12f, 0.08f).Hand(0.5f, 0.45f, -0.85f, 0.95f),
+                    K(-0.76f).Rot(0f, 65f, 0f).Sp(-4f, 0f, 0f).LL(0.45f, 0.05f, 0f, 0f).Lift(0.26f, 0f).Off(0f, 0.01f, 0.14f).Hand(0.5f, 0.5f, -0.9f, 0.95f),
+                    K(-0.66f).Rot(0f, 55f, 0f).Sp(4f, 0f, 0f).LL(0.7f, 0.15f, 0f, 0f).RL(-0.3f, 0.12f, 0f, 0f).Lift(0f, 0f).Off(0f, -0.07f, 0.2f).Hand(0.5f, 0.45f, -0.85f, 0.95f),
+                    Ft(K(-0.52f).Rot(0f, 20f, 0f).Sp(6f, 0f, 0f).Off(0f, -0.05f, 0.2f), 0.6f, 0.25f),
                     Ft(K(0f).Sp(6f, 0f, 0f).Off(0f, -0.03f, 0.18f), 0.4f, 0.15f),
                     Ft(K(0.35f).Sp(4f, 0f, 0f).Off(0f, -0.02f, 0.1f), 0.25f, 0.1f),
                     K(0.75f) };
@@ -3728,7 +6963,9 @@ namespace DragonsAltarCombat
             k[0].VA = trig;
             k[0].VL = m.Value;
             if (trig.StartsWith("emote", StringComparison.Ordinal)) { k[0].NoTrack = true; k[0].NoPlant = true; }   // v0.25.41 emotes: natural speed, their own legs
-            if (clip == "merc_circle" && length <= 0f) k[0].VF = 0.62f;   // after the crow hop
+            if (clip == "merc_circle" && length <= 0f) k[0].VF = 0.4f;   // after the crow hop (v0.25.86: quicker hop, slower spin)
+            if (clip == "wiz_nova") k[0].NoTrack = true;
+            if (IsConstSpeedClip(clip)) k[0].ConstSpeed = true;   // v0.25.85 (user): Frost Nova's staff raise at natural speed, never fast-forwarded
             k[0].VR = length > 0f ? 1f : 0f;
             k[0].NoAim = true;
             return k;
@@ -3737,6 +6974,53 @@ namespace DragonsAltarCombat
         public static string ResolveTriggerName(Animator a, string name) { return ResolveTrigger(a, name); }
 
         // Fires a Valheim animator trigger by (base) name; false when the game has no such animation.
+        // v0.25.134: Start / End % tuning for vanilla swings fired directly (not through PlayClip). Call right after the
+        // trigger: watches for the new state, jumps it to its start % and cuts it at its end % (blends back).
+        public static void TuneVanilla(Player player, string clipKey)
+        {
+            float st, en;
+            AnimTuning(clipKey, out st, out en);
+            if (player == null || DragonCombatPlugin.Instance == null || (st <= 0.001f && en >= 0.999f)) return;
+            DragonCombatPlugin.Instance.StartCoroutine(TuneVanillaRoutine(player, st, en, AnimActivation));
+        }
+
+        // v0.25.154: the routine owns the animator only while its activation is the newest (a later skill animation or an
+        // accepted normal attack bumps AnimActivation) and the controller it started under is still the animator's.
+        private static IEnumerator TuneVanillaRoutine(Player player, float st, float en, int gen)
+        {
+            Animator an = player == null ? null : player.GetComponentInChildren<Animator>();
+            if (an == null) yield break;
+            RuntimeAnimatorController ctrl = an.runtimeAnimatorController;
+            int n = an.layerCount;
+            int[] pre = new int[n];
+            for (int l = 0; l < n; l++) pre[l] = an.GetCurrentAnimatorStateInfo(l).fullPathHash;
+            int layer = -1, hash = 0;
+            float t0 = Time.time;
+            while (layer < 0 && Time.time - t0 < 0.5f)
+            {
+                yield return null;
+                if (an == null || gen != AnimActivation || an.runtimeAnimatorController != ctrl) yield break;
+                for (int l = 0; l < n && layer < 0; l++)
+                {
+                    AnimatorStateInfo s = an.IsInTransition(l) ? an.GetNextAnimatorStateInfo(l) : an.GetCurrentAnimatorStateInfo(l);
+                    if (s.fullPathHash != pre[l] && !s.loop) { layer = l; hash = s.fullPathHash; }
+                }
+            }
+            if (layer < 0 || gen != AnimActivation || an.runtimeAnimatorController != ctrl) yield break;
+            if (st > 0.001f) an.CrossFade(hash, 0.05f, layer, st);
+            while (an != null && Time.time - t0 < 6f)
+            {
+                yield return null;
+                if (an == null || gen != AnimActivation || an.runtimeAnimatorController != ctrl) yield break;
+                AnimatorStateInfo cur = an.GetCurrentAnimatorStateInfo(layer);
+                AnimatorStateInfo info;
+                if (cur.fullPathHash == hash) info = cur;
+                else if (an.IsInTransition(layer) && an.GetNextAnimatorStateInfo(layer).fullPathHash == hash) info = an.GetNextAnimatorStateInfo(layer);
+                else yield break;
+                if (info.normalizedTime >= en) { if (en < 0.999f) an.CrossFade(pre[layer], 0.25f, layer); yield break; }
+            }
+        }
+
         public static bool PlayVanillaTrigger(Player player, string name)
         {
             if (player == null) return false;
@@ -3758,9 +7042,82 @@ namespace DragonsAltarCombat
         // ignore attack events until a new normal attack really starts.
         public static float SkillAnimAttackBlockUntil;
 
+        // v0.25.154 ANIMATION OWNERSHIP. Two generation tokens, one per direction of the handoff:
+        //  - NaccGen: bumped when a skill (or a takeoff) takes over from the normal attack chain. State learning, swing
+        //    timing and the chain trim captured under an older value are dead (UpdateLearns, ComboStopPostfix).
+        //  - SkillAnimGen: bumped when a normal attack is accepted. Skill clip drivers, vanilla tails and loops started
+        //    under an older value retire themselves; the damage / VFX coroutines the skill already started are untouched.
+        // v0.25.156: every local Attack.Start is one activation. A pending state learn belongs to exactly that Attack object;
+        // the next attack (any kind) supersedes it.
+        public static int AttackSerial;
+        public static object NaccAttack;
+        public static void BeginAttackActivation(object attack)
+        {
+            AttackSerial++; NaccAttack = attack;
+            // Prune only after acceptance: a failed stamina check must not discard the previous swing's learn.
+        }
+
+        public static void CommitAttackActivation()
+        {
+            PendingLearns.RemoveAll(delegate(StateLearn learn) { return learn.Serial != AttackSerial; });
+        }
+
+        public static void RestoreAttackActivation(int serial, object attack)
+        {
+            AttackSerial = serial; NaccAttack = attack;
+            PendingLearns.RemoveAll(delegate(StateLearn learn) { return learn.Serial != serial; });
+        }
+
+        public static int NaccGen, SkillAnimGen, AnimActivation;   // AnimActivation: bumped by every new skill animation (PlayClip / FireVanilla) and every accepted normal attack
+
+        // A skill takes over: the interrupted chain is reset (counters, timing, chain speed, pending state learning). Must run
+        // BEFORE the running attack is aborted so a finisher the skill cut short does not leave its lockout behind.
+        public static void SkillTakeover(Player player)
+        {
+            if (player == null || player != Player.m_localPlayer) return;
+            DragonCombatPlugin.ResetNaccForSkill(player);
+        }
+
+        // A normal attack is accepted: skill animation drivers that are still playing are retired before NACC owns the animator.
+        public static void RetireSkillAnimations(Player player)
+        {
+            if (player == null || player != Player.m_localPlayer) return;
+            SkillAnimGen++; AnimActivation++;
+            Animator animator = player.GetComponentInChildren<Animator>();
+            DragonSkillClipDriver driver = player.GetComponent<DragonSkillClipDriver>();
+            bool wasPlaying = driver != null && driver.IsPlaying;
+            if (driver != null) driver.CancelAnimation();
+            DragonMixamoPlayer source = animator == null ? null : animator.GetComponent<DragonMixamoPlayer>();
+            if (source != null && source.Live) source.CancelAnimation();
+            DragonVanillaTail tail = player.GetComponent<DragonVanillaTail>();
+            if (tail != null) { tail.enabled = false; UnityEngine.Object.Destroy(tail); }
+            DragonVanillaLoop loop = player.GetComponent<DragonVanillaLoop>();
+            if (loop != null) { loop.enabled = false; UnityEngine.Object.Destroy(loop); }
+            VanillaPauseUntil = 0f; SkillBowHoldUntil = 0f; DragonMixamo.LiveUntil = 0f;
+            _aimWindupUntil = 0f;
+            if (wasPlaying) ForceRun(player, false);
+            SetSkillAnimSpeed(player, 1f, 0f);   // the skill's speed override must never time the swing
+        }
+
+        // Pending state learning of the local animator is dropped (a skill owns it now / the chain was cut).
+        public static void CancelStateLearning(Player player)
+        {
+            Animator a = player == null ? null : player.GetComponentInChildren<Animator>();
+            PendingLearns.RemoveAll(delegate(StateLearn learn) { return learn.A == null || learn.A == a; });
+        }
+
+        // The queued primary click only (heavy / secondary input is left alone).
+        public static void ClearQueuedPrimary(Player player)
+        {
+            if (player == null) return;
+            FieldInfo fi = FindField(player.GetType(), "m_queuedAttackTimer", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (fi != null && fi.FieldType == typeof(float)) fi.SetValue(player, 0f);
+        }
+
         public static void BlockSkillAnimAttack(Player player, float seconds)
         {
             if (player == null || player != Player.m_localPlayer) return;
+            SkillTakeover(player);
             SkillAnimAttackBlockUntil = Mathf.Max(SkillAnimAttackBlockUntil, Time.time + Mathf.Max(0.1f, seconds));
             CancelCurrentAttack(player);
         }
@@ -3815,6 +7172,7 @@ namespace DragonsAltarCombat
         public static void SwallowAttackInput(Player player, float seconds)
         {
             if (player == null || player != Player.m_localPlayer) return;
+            SkillTakeover(player);
             AttackSwallowUntil = Mathf.Max(AttackSwallowUntil, Time.time + Mathf.Max(0.05f, seconds));
             CancelCurrentAttack(player);
         }
@@ -3823,6 +7181,10 @@ namespace DragonsAltarCombat
         {
             if (player == null || string.IsNullOrEmpty(trigger)) return;
             if (!trigger.StartsWith("emote", StringComparison.Ordinal)) BlockSkillAnimAttack(player, 2.5f);
+            AnimActivation++;
+            if (trigger.IndexOf("battleaxe", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                trigger.IndexOf("sword", StringComparison.OrdinalIgnoreCase) >= 0 || trigger.IndexOf("atgeir", StringComparison.OrdinalIgnoreCase) >= 0 || trigger.IndexOf("mace", StringComparison.OrdinalIgnoreCase) >= 0)
+                DragonVfx.WeaponWake(player, 0.05f, 1.2f);
             try
             {
                 Component z = null;
@@ -3842,6 +7204,12 @@ namespace DragonsAltarCombat
         private static Dictionary<string, DragonClipKey[]> _clips;
 
         private static DragonClipKey K(float t) { return new DragonClipKey(t); }
+
+        // v0.25.185 (perf, user report: 166 ms hitch on the first skill of a session): build the clip library up front
+        public static void PrewarmClipLibrary()
+        {
+            SkillClip("__prewarm__");
+        }
 
         private static DragonClipKey[] SkillClip(string name)
         {
@@ -4038,12 +7406,12 @@ namespace DragonsAltarCombat
                 // absorb it. Hands quiet.
                 // v0.25.63 (user): exaggerated - the knee comes up past the hip, both arms flare out and up like the
                 // roar emote, then the foot is driven down with the chest thrown forward and the arms flung wide.
-                DragonClipKey raise = K(-0.55f).Sp(-8f, 0f, 0f).Ch(-6f, 0f, 0f).Hd(-6f, 0f, 0f).LL(0f, 0.06f, 0f, 0f).RL(0.35f, 0.1f, 0f, 0f).Lift(0f, 0.62f).Off(0f, 0.04f, 0f)
-                    .Hand(0.55f, -0.6f, -0.05f, 0.62f).LHand(-0.55f, -0.6f, -0.05f, 0.62f);
+                DragonClipKey raise = K(-0.55f).Sp(-8f, 0f, 0f).Ch(-6f, 0f, 0f).Hd(-6f, 0f, 0f).LL(0.35f, 0.1f, 0f, 0f).RL(0f, 0.06f, 0f, 0f).Lift(0.62f, 0f).Off(0f, 0.04f, 0f)
+                    .Hand(0.62f, -0.32f, 0.66f, 0.64f).LHand(-0.62f, -0.32f, 0.66f, 0.64f).Wing();   // v0.25.85 chicken wing: upper arms raised out, forearms forward
                 // v0.25.69 (user: flare = chicken wings, not arms stretched out): elbows bent and pushed out, hands at the hips.
-                DragonClipKey peak = raise.Copy(-0.15f).Lift(0f, 0.7f).Hand(0.6f, -0.55f, -0.12f, 0.6f).LHand(-0.6f, -0.55f, -0.12f, 0.6f);
-                DragonClipKey hit = K(0f).Sp(20f, 0f, 0f).Ch(10f, 0f, 0f).Hd(-12f, 0f, 0f).LL(-0.05f, 0.12f, 0f, 0f).RL(0.35f, 0.14f, 0f, 0f).Lift(0f, 0f).Off(0f, -0.16f, 0f)
-                    .Hand(0.62f, -0.7f, 0.08f, 0.66f).LHand(-0.62f, -0.7f, 0.08f, 0.66f).Linear();
+                DragonClipKey peak = raise.Copy(-0.15f).Lift(0.6f, 0f).Hand(0.65f, -0.3f, 0.68f, 0.66f).LHand(-0.65f, -0.3f, 0.68f, 0.66f).Wing();
+                DragonClipKey hit = K(0f).Sp(20f, 0f, 0f).Ch(10f, 0f, 0f).Hd(-12f, 0f, 0f).LL(0.35f, 0.14f, 0f, 0f).RL(-0.05f, 0.12f, 0f, 0f).Lift(0f, 0f).Off(0f, -0.16f, 0f)
+                    .Hand(0.6f, -0.45f, 0.62f, 0.68f).LHand(-0.6f, -0.45f, 0.62f, 0.68f).Wing().Linear();
                 DragonClipKey stAfter = hit.Copy(0.3f); stAfter.Lin = false;
                 return new DragonClipKey[] { K(-1f), raise, peak, hit, stAfter, K(0.65f) };
             }
@@ -4073,27 +7441,43 @@ namespace DragonsAltarCombat
             return new DragonClipKey[] { K(-1f), K(-0.4f).Hand(0.2f, -0.2f, 0.8f, 0.7f), pt, pt.Copy(0.15f), K(0.45f) };
         }
 
-        // Olympic Hero (JSAA, storyboard 01): load fist cocked back + crouch, launch fist forward, fast counter-
-        // clockwise barrel roll, unwind fist down, main-hand impact (fist on the ground, left foot forward, right
-        // knee low behind), recover to guard. Hold at the poised fall until the real landing.
+        // v0.25.88 JSAA ONLY (Bonecrusher + Electric Smite): retain the approved
+        // airborne boxing guard and hammer wind-up. Touchdown is visually prepared
+        // during the last part of the fall, NOT started after contact. The held
+        // Phase=0 pose still remains airborne during long/cliff descents; only
+        // JsaLandingApproach() moves it into the landing as terrain approaches.
         private static DragonClipKey[] SbOlympic(bool brutal)
         {
             float d = brutal ? 1.15f : 1f;
-            DragonClipKey load = Ft(K(-0.93f).Sp(16f * d, -10f, 0f).Ch(6f, -6f, 0f).Hd(-12f, 0f, 0f).Hand(0.45f, 0.1f, -0.45f, 0.6f).Off(0f, -0.15f * d, 0f), 0.2f, 0.1f);
-            // v0.25.30 user: no superman pose. In the air the body leans only diagonally (~38 deg), the main arm is
-            // flared a little out to the side and the weapon is carried up (not pointed ahead).
-            // v0.25.75 (user): no barrel roll. Like the Wave emote's raise, the main arm goes straight up over the
-            // head with the weapon pointing at the sky and STAYS there (no waving) for the whole flight; the slam
-            // to the ground only happens on the real landing (the clip holds at T=0 until ClipImpact).
-            DragonClipKey launch = K(-0.72f).Sp(-4f, 0f, 0f).Ch(-4f, 0f, 0f).Hd(-14f, 0f, 0f).Hand(0.22f, 1f, 0.05f, 1f).Wp(0.05f, 1f, -0.15f).Rot(26f, 0f, 0f).Off(0f, 0.06f, 0f);   // v0.25.77 diagonal torso in the air
-            // v0.25.76 (user): the barrel roll stays - the body rolls once while the arm stays raised overhead.
-            DragonClipKey raise0 = launch.Copy(-0.6f).Rot(30f, 0f, 0f).Sn(30f).Hand(0.2f, 1f, 0.08f, 1f);
-            DragonClipKey raise1 = launch.Copy(-0.32f).Rot(30f, 0f, 0f).Sn(360f).Hand(0.2f, 1f, 0.08f, 1f);
-            DragonClipKey poised = K(0f).Sp(4f, 0f, 0f).Ch(-2f, 0f, 0f).Hd(-12f, 0f, 0f).Hand(0.2f, 1f, 0.1f, 1f).Wp(0.05f, 1f, -0.1f).Rot(24f, 0f, 0f).Sn(360f);
-            DragonClipKey impact = Ft(K(0.1f).Sp(30f, 0f, 0f).Ch(14f, 0f, 0f).Hd(-28f, 0f, 0f).Hand(0.05f, -1f, 0.35f, 0.97f).Wp(0f, -0.8f, 0.6f).Rot(6f, 0f, 0f).Off(0f, -0.38f * d, 0.05f).Sn(360f), 0.75f, 0.8f).Linear();
-            DragonClipKey settle = impact.Copy(brutal ? 0.3f : 0.22f).Off(0f, -0.4f * d, 0.05f); settle.Lin = false;
-            DragonClipKey rec = Ft(K(brutal ? 0.58f : 0.45f).Sp(8f, 0f, 0f).Hd(-6f, 0f, 0f).Hand(0.35f, -0.45f, 0.35f, 0.6f).Off(0f, -0.06f, 0f).Sn(360f), 0.3f, 0.2f);
-            return new DragonClipKey[] { K(-1f), load, launch, raise0, raise1, poised, impact, settle, rec, K(brutal ? 0.9f : 0.75f).Sn(360f) };
+            DragonClipKey load = Ft(K(-0.93f).Sp(16f * d, -10f, 0f).Ch(6f, -6f, 0f).Hd(-12f, 0f, 0f)
+                .Hand(0.45f, 0.1f, -0.45f, 0.6f).Off(0f, -0.15f * d, 0f), 0.2f, 0.1f);
+
+            // AIR: left fist in a bent chest/face-height boxing guard; right fist
+            // and weapon cocked high and slightly right, ready for the bonk.
+            DragonClipKey launch = K(-0.72f).Sp(-4f, 0f, 0f).Ch(-4f, 0f, 0f).Hd(-14f, 0f, 0f)
+                .Hand(1f, 0.35f, 0.1f, 0.92f).Wp(1f, 0.45f, 0.1f)   // v0.25.100 (user): main arm stretched OUTWARD, elbow only slightly bent
+               
+                .LHand(-0.17f, 0.83f, 0.57f, 0.69f)
+                .Rot(45f, 0f, 0f).Off(0f, 0.06f, 0f);
+            DragonClipKey roll0 = launch.Copy(-0.6f).Rot(62f, 0f, 0f).Sn(30f);
+            DragonClipKey roll1 = launch.Copy(-0.32f).Rot(62f, 0f, 0f).Sn(360f);
+            DragonClipKey poised = launch.Copy(0f).Rot(55f, 0f, 0f).Sn(360f);
+
+            // One continuous movement into a fully formed kneel AT impact:
+            // left foot forward/knee up, right knee low and behind, left arm
+            // stretched straight left, right hand slamming straight down.
+            DragonClipKey impact = Ft(K(0.01f).Sp(32f, 0f, 0f).Ch(16f, 0f, 0f).Hd(-22f, 0f, 0f)
+                .Hand(0.08f, -1f, 0.30f, 0.95f).Wp(0.08f, -1f, 0.23f)
+                .LHand(-1f, -0.08f, 0.16f, 0.97f)
+                .Rot(6f, 0f, 0f).Off(0f, -0.50f * d, 0.06f).Sn(360f), 0.88f, 0.88f).Linear();
+            // Hold the actual impact silhouette long enough for the player to
+            // SEE it during VFX, then rise (no second preparatory attack).
+            DragonClipKey settle = impact.Copy(brutal ? 0.43f : 0.35f).Off(0f, -0.51f * d, 0.06f);
+            settle.Lin = false;
+            DragonClipKey rec = Ft(K(brutal ? 0.77f : 0.68f).Sp(8f, 0f, 0f).Hd(-6f, 0f, 0f)
+                .Hand(0.35f, -0.45f, 0.35f, 0.6f).Off(0f, -0.06f, 0f).Sn(360f), 0.3f, 0.2f);
+            return new DragonClipKey[] { K(-1f), load, launch, roll0, roll1, poised,
+                impact, settle, rec, K(brutal ? 1.07f : 0.95f).Sn(360f) };
         }
 
         private static void BuildStoryboardClips(Dictionary<string, DragonClipKey[]> c)
@@ -4114,8 +7498,13 @@ namespace DragonsAltarCombat
             c["sm_blade_storm"] = SbSlash(0f, 0.1f, false, false);
             c["sm_halfmoon"] = SbSlash(0.6f, 0.1f, false, true);
             c["sm_halfmoon_2"] = SbSlash(0.6f, 0.1f, false, false);
-            DragonClipKey[] pullHold = SbSlash(0.6f, 0.1f, false, true);
-            c["sm_halfmoon_stance"] = new DragonClipKey[] { K(-1f), pullHold[1].Copy(0f), K(0.15f) };
+            // v0.25.86 (user: arm clipping into the body in the last stance): no two-handed grip behind the hip - the sword is
+            // held low and forward on the right, one-handed, the off hand braced in front of the chest.
+            // v0.25.89: modest, anatomy-safe finisher anticipation. The vanilla grip owns BOTH arms;
+            // only a little torso coil / knee flex is layered so no wrists fold through the rib cage.
+            DragonClipKey hmStance = Ft(K(0f).Sp(5f, -10f, 0f).Ch(2f, -5f, 0f)
+                .Off(0f, -0.045f, 0f), 0.2f, 0.15f);
+            c["sm_halfmoon_stance"] = new DragonClipKey[] { K(-1f), hmStance, hmStance.Copy(0.15f), K(0.35f) };
             c["sm_halfmoon_finisher"] = SbSlash(1.2f, 0.15f, true, true);
             c["warrior_impact_wave"] = SbGolf(0.25f);
             c["merc_seismic"] = SbGolf(0.25f);
@@ -4132,6 +7521,13 @@ namespace DragonsAltarCombat
             c["merc_bomb"] = SbBat();
             c["sorc_stonefang"] = SbGround(0);
             c["merc_stomp"] = SbGround(1);
+            // v0.25.111 Mixamo overlay helper: no bone offsets, no foot planting, no weapon aim - only the
+            // left hand on the main weapon's handle (the Mixamo spin swings one-handed).
+            {
+                DragonClipKey g0 = K(-1f); g0.NoPlant = true; g0.NoAim = true;
+                DragonClipKey g1 = K(0f).Two(-0.13f);
+                c["mx_grip"] = new DragonClipKey[] { g0, g1, g1.Copy(1.2f), K(1.4f) };
+            }
             c["rg_trap"] = SbGround(2);
             c["sorc_stonefang_asc"] = SbGround(3);
             c["merc_circle"] = SbSpin(1, 0.4f);
@@ -4170,7 +7566,7 @@ namespace DragonsAltarCombat
             c["sm_charge"][0].NoPlant = true;
             DragonClipKey[] oh = c["olympic_hero"];
             List<DragonClipKey> land = new List<DragonClipKey>();
-            land.Add(oh[5].Copy(-1f));
+            land.Add(oh[6].Copy(-1f));
             for (int i = 6; i < oh.Length; i++) land.Add(oh[i]);
             c["olympic_land"] = land.ToArray();
 
@@ -5052,7 +8448,7 @@ namespace DragonsAltarCombat
             // Fallback landing when nothing was holding (only the contact + recovery part).
             DragonClipKey[] oh = c["olympic_hero"];
             List<DragonClipKey> land = new List<DragonClipKey>();
-            land.Add(oh[5].Copy(-1f));
+            land.Add(oh[6].Copy(-1f));
             for (int i = 6; i < oh.Length; i++) land.Add(oh[i]);
             c["olympic_land"] = land.ToArray();
         }
@@ -5872,6 +9268,15 @@ namespace DragonsAltarCombat
             ShowStatus(player, key, icon, label, seconds, stacks, null);
         }
 
+        // v0.25.181: same as ShowStatus, but an existing indicator also takes the new label (Ready / Active / Cooldown)
+        private static bool _relabel;
+        public static void ShowStatusState(Player player, string key, string icon, string label, float seconds, string detail)
+        {
+            _relabel = true;
+            try { ShowStatus(player, key, icon, label, seconds, 0, detail); }
+            finally { _relabel = false; }
+        }
+
         public static void ShowStatus(Player player, string key, string icon, string label, float seconds, int stacks, string detail)
         {
             try
@@ -5890,6 +9295,8 @@ namespace DragonsAltarCombat
                     SetStatusTime(existing, 0f);
                     existing.Stacks = stacks;
                     if (detail != null) existing.Detail = detail;
+                    existing.CooldownMarker = key == "fury_recovery" || key == "priest_buckler_recovery" || key == "priest_shockwave_recovery";
+                    if (_relabel) { existing.m_name = label; existing.m_tooltip = label; }   // v0.25.181 state indicators
                     return;
                 }
                 // v0.25.2 perf: no re-add while the same buff is refreshed every frame.
@@ -5901,6 +9308,7 @@ namespace DragonsAltarCombat
                 se.Stacks = stacks;
                 se.Detail = detail;
                 se.m_icon = StatusSprite(icon);
+                se.CooldownMarker = key == "fury_recovery" || key == "priest_buckler_recovery" || key == "priest_shockwave_recovery";
                 MethodInfo[] methods = seman.GetType().GetMethods(BindingFlags.Instance | BindingFlags.Public);
                 for (int i = 0; i < methods.Length; i++)
                 {
@@ -5916,6 +9324,27 @@ namespace DragonsAltarCombat
                 }
             }
             catch { }
+        }
+
+        // v0.25.192: display-only indicator driven by the owner's real expiration, not a second buff timer.
+        private static int _untilIndicatorPlayer;
+        private static readonly HashSet<string> UntilIndicators = new HashSet<string>();
+        public static void ShowStatusUntil(Player player, string key, string icon, string label, float until, int stacks, string detail)
+        {
+            if (player == null || player != Player.m_localPlayer) return;
+            int id = player.GetInstanceID();
+            if (_untilIndicatorPlayer != id)
+            {
+                UntilIndicators.Clear();
+                _untilIndicatorPlayer = id;
+            }
+            HashSet<string> shown = UntilIndicators;
+            if (until > Time.time && !player.IsDead())
+            {
+                shown.Add(key);
+                ShowStatus(player, key, icon, label, until - Time.time, stacks, detail);
+            }
+            else if (shown.Remove(key)) ClearStatus(player, key);
         }
 
         public static void ClearStatus(Player player, string key)
@@ -6004,6 +9433,7 @@ namespace DragonsAltarCombat
                 b.Append(tail[i]);
             }
             label = b.ToString();
+            if (source == "Priest.GrandSigilRecovery") label = "Saving Grace - Recovery";
             if (defense > 0f) icon = "defense";
             else if (damage > 0f) icon = "damage";
             else if (move > 0f) icon = "haste";
@@ -6024,7 +9454,7 @@ namespace DragonsAltarCombat
             {
                 case "Paladin.HeavensLight": return "sun";
                 case "Paladin.RayOfHope": return "ray";
-                case "SwordMaster.KnightsGuidance": return "wing_boot";
+                case "SwordMaster.KnightsGuidance": return "damage";   // v0.25.231: KG is a damage buff
                 case "Mercenary.Battlecry": return "horn";
                 case "Priest.HolyRelic": return "relic";
                 case "Priest.DivineIntervention": return "wings";
@@ -6072,6 +9502,19 @@ namespace DragonsAltarCombat
         // v0.18.0: Immortal Heroes Tier power (+10% damage/healing per Tier). The Advanced module
         // registers the provider; skills in other modules ask for their multiplier by skill id.
         public static Func<Player, string, float> SkillPowerProvider;
+        // v0.25.164: healing keeps its own Tier curve (damage: +80% at max Tier, healing: +TierPowerPercent per Tier).
+        public static Func<Player, string, float> SkillHealPowerProvider;
+        public static float GetSkillHealPower(Player player, string skillId)
+        {
+            if (SkillHealPowerProvider == null || player == null || string.IsNullOrEmpty(skillId)) return GetSkillPower(player, skillId);
+            try { return Mathf.Max(0f, SkillHealPowerProvider(player, skillId)); }
+            catch { return 1f; }
+        }
+
+        public static float PercentMaxHeal(float maximumHp, float percent, float tierPower)
+        {
+            return Mathf.Max(0f, maximumHp) * Mathf.Max(0f, percent) / 100f * Mathf.Max(0f, tierPower);
+        }
 
         public static float GetSkillPower(Player player, string skillId)
         {
@@ -6181,7 +9624,7 @@ namespace DragonsAltarCombat
             ClockworkDamage[id] = Mathf.Max(0f, skillDamageBonus);
             ClockworkCooldown[id] = Mathf.Clamp(cooldownMultiplier, 0f, 1f);
             ShowStatus(player, "clockwork", "clockwork", "Clockwork", seconds, 0,
-                "Attack Buff\n" + BuffPct(Mathf.Max(0f, skillDamageBonus), "Skill Damage") + "\nSkill cooldowns that start now: -" + Mathf.RoundToInt((1f - Mathf.Clamp01(cooldownMultiplier)) * 100f).ToString() + "%");
+                (skillDamageBonus > 0f ? "Attack Buff\n" + BuffPct(skillDamageBonus, "Skill Damage") + "\n" : "Buff\n") + "Skill cooldowns that start now: -" + Mathf.RoundToInt((1f - Mathf.Clamp01(cooldownMultiplier)) * 100f).ToString() + "%");
         }
 
         public static bool IsClockworkActive(Player player)
@@ -6285,7 +9728,7 @@ namespace DragonsAltarCombat
         // Bucklers by name (vanilla + most mods), or a shield with a buckler-class parry bonus.
         public static bool IsBuckler(ItemDrop.ItemData item)
         {
-            if (!IsShield(item) || IsTowerShield(item))
+            if (!IsShield(item))
                 return false;
             string name = item.m_shared.m_name == null ? "" : item.m_shared.m_name.ToLowerInvariant();
             string prefab = "";
@@ -6297,15 +9740,17 @@ namespace DragonsAltarCombat
             catch
             {
             }
-            return name.Contains("buckler") || prefab.Contains("buckler") || item.m_shared.m_timedBlockBonus >= 2.5f;
+            if (name.Contains("buckler") || prefab.Contains("buckler")) return true;
+            return !name.Contains("tower") && !prefab.Contains("tower") && item.m_shared.m_timedBlockBonus >= 2.5f;
         }
 
         // Same test Valheim uses for a timed block: the block started less than 0.25s ago.
+        private static readonly FieldInfo _parryBlockTimer = typeof(Humanoid).GetField("m_blockTimer", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
         public static bool IsInParryWindow(Humanoid humanoid)
         {
             try
             {
-                FieldInfo field = typeof(Humanoid).GetField("m_blockTimer", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                FieldInfo field = _parryBlockTimer;
                 if (field == null)
                     return false;
                 float timer = (float)field.GetValue(humanoid);
@@ -6335,7 +9780,11 @@ namespace DragonsAltarCombat
         {
             if (player == null)
                 return;
-            StaminaUseCuts[player.GetInstanceID()] = new KeyValuePair<float, float>(Mathf.Clamp01(fraction), Time.time + Mathf.Max(0.1f, seconds));
+            float f = Mathf.Clamp01(fraction), until = Time.time + Mathf.Max(0.1f, seconds);
+            KeyValuePair<float, float> old;
+            // v0.25.186: a stronger cut that lasts at least as long is kept (Heaven's Light never weakens Bless Thy Sinners / Knight's Guidance)
+            if (StaminaUseCuts.TryGetValue(player.GetInstanceID(), out old) && old.Value >= until && old.Key >= f) return;
+            StaminaUseCuts[player.GetInstanceID()] = new KeyValuePair<float, float>(f, until);
         }
 
         public static float GetStaminaUseMultiplier(Player player)
@@ -6351,7 +9800,7 @@ namespace DragonsAltarCombat
             return 1f - cut.Key;
         }
 
-        // v0.18.1: timed removal of equipment movement penalties (Heaven's Light Grace).
+        // Timed equipment-penalty exemption (Tailwind); Heaven's Light reduces Stamina use.
         private static readonly Dictionary<int, float> NoEquipmentPenaltyUntil = new Dictionary<int, float>();
 
         public static void GrantNoEquipmentPenalty(Player player, float seconds)
@@ -6367,8 +9816,26 @@ namespace DragonsAltarCombat
             return player != null && NoEquipmentPenaltyUntil.TryGetValue(player.GetInstanceID(), out until) && Time.time < until;
         }
 
+        // v0.25.193: raw skill inputs must obey Valheim's input ownership, including chat / text entry.
+        // Resolve TakeInput once; the delegate avoids reflection lookup / invocation on every frame.
+        private static readonly Func<Player, bool> _worldInputCheck = CreateWorldInputCheck();
+        private static bool _explicitUiInputBlocked;
+        private static Func<Player, bool> CreateWorldInputCheck()
+        {
+            MethodInfo method = typeof(Player).GetMethod("TakeInput", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+            return method == null ? null : (Func<Player, bool>)Delegate.CreateDelegate(typeof(Func<Player, bool>), method);
+        }
+
+        public static bool CanUseWorldInput(Player player)
+        {
+            if (player == null || player != Player.m_localPlayer || !Application.isFocused || Cursor.visible || _explicitUiInputBlocked
+                || player.IsDead() || IsGameplayHudSuppressed()) return false;
+            return _worldInputCheck != null && _worldInputCheck(player);
+        }
+
         public static void SetUiInputBlocked(bool blocked)
         {
+            _explicitUiInputBlocked = blocked;
             try
             {
                 Type cachedType = FindTypeCached("Jotunn.Managers.GUIManager");
@@ -6446,35 +9913,87 @@ namespace DragonsAltarCombat
             return false;
         }
 
+        // v0.25.183 (perf): this ran every frame for ~7 UI types and re-resolved every FieldInfo / MethodInfo / PropertyInfo
+        // each time (50+ reflection lookups per frame). The members are now resolved once per UI type; the checks, their
+        // order and the "a real visibility method is authoritative" rule are unchanged.
+        private class UiReflect
+        {
+            public Type Type;
+            public FieldInfo InstanceField;
+            public PropertyInfo InstanceProperty;
+            public MethodInfo[] Methods;      // per name: bool method (or null)
+            public PropertyInfo[] Props;      // per name: bool property with getter (or null)
+            public MethodInfo[] Getters;
+            public FieldInfo[] Roots;
+        }
+        private static readonly Dictionary<string, UiReflect> _uiReflect = new Dictionary<string, UiReflect>();
+
+        private static UiReflect GetUiReflect(string typeName, string[] methodNames, string[] rootFields)
+        {
+            UiReflect r;
+            if (_uiReflect.TryGetValue(typeName, out r)) return r;
+            r = new UiReflect();
+            Type type = FindTypeCached(typeName);
+            r.Type = type;
+            if (type != null)
+            {
+                r.InstanceField = type.GetField("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                if (r.InstanceField == null)
+                    r.InstanceField = type.GetField("m_instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                r.InstanceProperty = type.GetProperty("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                if (r.InstanceProperty == null)
+                    r.InstanceProperty = type.GetProperty("m_instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                r.Methods = new MethodInfo[methodNames.Length];
+                r.Props = new PropertyInfo[methodNames.Length];
+                r.Getters = new MethodInfo[methodNames.Length];
+                for (int i = 0; i < methodNames.Length; i++)
+                {
+                    try
+                    {
+                        MethodInfo method = type.GetMethod(methodNames[i], BindingFlags.Static | BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+                        if (method != null && method.ReturnType == typeof(bool)) r.Methods[i] = method;
+                    }
+                    catch { }
+                    try
+                    {
+                        PropertyInfo property = type.GetProperty(methodNames[i], BindingFlags.Static | BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                        if (property != null && property.PropertyType == typeof(bool))
+                        {
+                            MethodInfo getter = property.GetGetMethod(true);
+                            if (getter != null) { r.Props[i] = property; r.Getters[i] = getter; }
+                        }
+                    }
+                    catch { }
+                }
+                r.Roots = new FieldInfo[rootFields.Length];
+                for (int i = 0; i < rootFields.Length; i++)
+                    r.Roots[i] = type.GetField(rootFields[i], BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            }
+            _uiReflect[typeName] = r;
+            return r;
+        }
+
         private static bool IsReflectedUiVisible(string typeName, string[] methodNames, string[] rootFields)
         {
             try
             {
-                Type type = FindTypeCached(typeName);
+                UiReflect r = GetUiReflect(typeName, methodNames, rootFields);
+                Type type = r.Type;
                 if (type == null)
                     return false;
 
                 object instance = null;
-                FieldInfo instanceField = type.GetField("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-                if (instanceField == null)
-                    instanceField = type.GetField("m_instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-                if (instanceField != null)
-                    instance = instanceField.GetValue(null);
+                if (r.InstanceField != null)
+                    instance = r.InstanceField.GetValue(null);
 
-                if (instance == null)
-                {
-                    PropertyInfo instanceProperty = type.GetProperty("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-                    if (instanceProperty == null)
-                        instanceProperty = type.GetProperty("m_instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-                    if (instanceProperty != null)
-                        instance = instanceProperty.GetValue(null, null);
-                }
+                if (instance == null && r.InstanceProperty != null)
+                    instance = r.InstanceProperty.GetValue(null, null);
 
                 bool visibilityMethodResolved = false;
-                for (int i = 0; i < methodNames.Length; i++)
+                for (int i = 0; i < r.Methods.Length; i++)
                 {
-                    MethodInfo method = type.GetMethod(methodNames[i], BindingFlags.Static | BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
-                    if (method != null && method.ReturnType == typeof(bool))
+                    MethodInfo method = r.Methods[i];
+                    if (method != null)
                     {
                         visibilityMethodResolved = true;
                         object target = method.IsStatic ? null : instance;
@@ -6486,20 +10005,16 @@ namespace DragonsAltarCombat
                         }
                     }
 
-                    PropertyInfo property = type.GetProperty(methodNames[i], BindingFlags.Static | BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                    if (property != null && property.PropertyType == typeof(bool))
+                    MethodInfo getter = r.Getters[i];
+                    if (getter != null)
                     {
-                        MethodInfo getter = property.GetGetMethod(true);
-                        if (getter != null)
+                        visibilityMethodResolved = true;
+                        object target = getter.IsStatic ? null : instance;
+                        if (getter.IsStatic || target != null)
                         {
-                            visibilityMethodResolved = true;
-                            object target = getter.IsStatic ? null : instance;
-                            if (getter.IsStatic || target != null)
-                            {
-                                object result = property.GetValue(target, null);
-                                if (result is bool && (bool)result)
-                                    return true;
-                            }
+                            object result = r.Props[i].GetValue(target, null);
+                            if (result is bool && (bool)result)
+                                return true;
                         }
                     }
                 }
@@ -6511,9 +10026,9 @@ namespace DragonsAltarCombat
                 if (instance == null)
                     return false;
 
-                for (int i = 0; i < rootFields.Length; i++)
+                for (int i = 0; i < r.Roots.Length; i++)
                 {
-                    FieldInfo field = type.GetField(rootFields[i], BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    FieldInfo field = r.Roots[i];
                     if (field == null)
                         continue;
                     GameObject root = field.GetValue(instance) as GameObject;
@@ -6527,6 +10042,12 @@ namespace DragonsAltarCombat
             return false;
         }
 
+        private static bool _hudPieceResolved;
+        private static FieldInfo _hudInstanceField, _hudPieceWindow;
+        private static MethodInfo _hudPieceVisible;
+        private static readonly Dictionary<string, PropertyInfo> _customUiProps = new Dictionary<string, PropertyInfo>();
+        private static readonly Dictionary<string, FieldInfo> _customUiFields = new Dictionary<string, FieldInfo>();
+
         private static bool IsHudPieceSelectionVisible()
         {
             try
@@ -6536,13 +10057,20 @@ namespace DragonsAltarCombat
                     return false;
 
                 object instance = null;
-                FieldInfo instanceField = type.GetField("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                if (!_hudPieceResolved)   // v0.25.183 (perf): members resolved once
+                {
+                    _hudPieceResolved = true;
+                    _hudInstanceField = type.GetField("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                    _hudPieceVisible = type.GetMethod("IsPieceSelectionVisible", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+                    _hudPieceWindow = type.GetField("m_pieceSelectionWindow", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                }
+                FieldInfo instanceField = _hudInstanceField;
                 if (instanceField != null)
                     instance = instanceField.GetValue(null);
                 if (instance == null)
                     return false;
 
-                MethodInfo visible = type.GetMethod("IsPieceSelectionVisible", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+                MethodInfo visible = _hudPieceVisible;
                 if (visible != null && visible.ReturnType == typeof(bool))
                 {
                     object result = visible.Invoke(instance, null);
@@ -6554,7 +10082,7 @@ namespace DragonsAltarCombat
                 // that case only inspect the actual selection window, never the
                 // broad m_buildHud root which can stay active while merely holding
                 // a Hammer and would hide our combat HUD during normal gameplay.
-                FieldInfo field = type.GetField("m_pieceSelectionWindow", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                FieldInfo field = _hudPieceWindow;
                 if (field != null)
                 {
                     GameObject root = field.GetValue(instance) as GameObject;
@@ -6578,7 +10106,13 @@ namespace DragonsAltarCombat
                     Type type = cachedType;
                     if (type == null)
                         continue;
-                    PropertyInfo property = type.GetProperty(propertyName, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                    PropertyInfo property;
+                    string pk = typeName + "|" + propertyName;
+                    if (!_customUiProps.TryGetValue(pk, out property))
+                    {
+                        property = type.GetProperty(propertyName, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                        _customUiProps[pk] = property;
+                    }
                     if (property == null || property.PropertyType != typeof(bool))
                         return false;
                     object value = property.GetValue(null, null);
@@ -6601,11 +10135,13 @@ namespace DragonsAltarCombat
                     Type type = cachedType;
                     if (type == null)
                         continue;
-                    FieldInfo instanceField = type.GetField(instanceFieldName, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                    FieldInfo instanceField, boolField;
+                    string ik = typeName + "|s|" + instanceFieldName, bk = typeName + "|i|" + boolFieldName;
+                    if (!_customUiFields.TryGetValue(ik, out instanceField)) { instanceField = type.GetField(instanceFieldName, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic); _customUiFields[ik] = instanceField; }
                     object instance = instanceField == null ? null : instanceField.GetValue(null);
                     if (instance == null)
                         return false;
-                    FieldInfo boolField = type.GetField(boolFieldName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (!_customUiFields.TryGetValue(bk, out boolField)) { boolField = type.GetField(boolFieldName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic); _customUiFields[bk] = boolField; }
                     if (boolField == null)
                         return false;
                     object value = boolField.GetValue(instance);
@@ -6620,12 +10156,22 @@ namespace DragonsAltarCombat
 
         private static readonly Dictionary<int, float> SkillLockUntil = new Dictionary<int, float>();
         private static readonly Dictionary<int, float> ExplicitHyperArmorUntil = new Dictionary<int, float>();
+        private static float _hyperProcVfxAt;   // v0.25.190
         private static readonly Dictionary<int, float> HitHyperArmorUntil = new Dictionary<int, float>();
         private static readonly Dictionary<int, float> AttackSpeedSource = new Dictionary<int, float>();
         private static readonly Dictionary<int, float> SkillAnimSpeed = new Dictionary<int, float>();
         private static readonly Dictionary<int, float> SkillAnimSpeedUntil = new Dictionary<int, float>();
 
         // v0.25.30 skill animation timing: overrides the animator speed factor while a skill's vanilla animation plays.
+        // v0.25.138: drops the override only if it is still the given one (another skill may have set its own since).
+        public static void ReleaseSkillAnimSpeed(Player player, float multiplier)
+        {
+            if (player == null) return;
+            int id = player.GetInstanceID();
+            float cur;
+            if (SkillAnimSpeed.TryGetValue(id, out cur) && Mathf.Abs(cur - Mathf.Clamp(multiplier, 0.01f, 6f)) < 0.0001f) SkillAnimSpeedUntil[id] = Time.time;
+        }
+
         public static void SetSkillAnimSpeed(Player player, float multiplier, float ttl)
         {
             if (player == null) return;
@@ -6699,11 +10245,126 @@ namespace DragonsAltarCombat
             return WhirlwindUntil.TryGetValue(player.GetInstanceID(), out end) && Time.time < end;
         }
 
+        // A cancelled execution cannot resume after a yield; Dispose runs movement/collision finally blocks immediately.
+        public sealed class SkillExecution : IEnumerator, IDisposable
+        {
+            private IEnumerator _routine;
+            private Action<SkillExecution> _release;
+            private bool _disposed;
+            public SkillExecution(IEnumerator routine, Action<SkillExecution> release) { _routine = routine; _release = release; }
+            public object Current { get { return _disposed ? null : _routine.Current; } }
+            public bool MoveNext()
+            {
+                if (_disposed) return false;
+                bool more;
+                try { more = _routine.MoveNext(); } catch { Dispose(); throw; }
+                if (!more) Dispose();
+                return more;
+            }
+            public void Reset() { throw new NotSupportedException(); }
+            public void Dispose()
+            {
+                if (_disposed) return;
+                _disposed = true;
+                try { IDisposable d = _routine as IDisposable; if (d != null) d.Dispose(); }
+                finally { if (_release != null) _release(this); _routine = null; _release = null; }
+            }
+        }
+        private static readonly Dictionary<int, List<SkillExecution>> _swordMasterWork = new Dictionary<int, List<SkillExecution>>();
+        public static IEnumerator TrackSwordMasterSkill(Player player, IEnumerator routine)
+        {
+            if (player == null || GetAdvancementName(player) != "Sword Master") return routine;
+            int id = player.GetInstanceID();
+            List<SkillExecution> work;
+            if (!_swordMasterWork.TryGetValue(id, out work)) { work = new List<SkillExecution>(); _swordMasterWork[id] = work; }
+            List<SkillExecution> owner = work;
+            SkillExecution execution = new SkillExecution(routine, delegate(SkillExecution ended)
+            {
+                owner.Remove(ended);
+                if (owner.Count == 0) _swordMasterWork.Remove(id);
+            });
+            work.Add(execution);
+            return execution;
+        }
+        public static bool SwordMasterSkillRunning(Player player)
+        {
+            if (player == null) return false;
+            List<SkillExecution> work;
+            return _swordMasterWork.TryGetValue(player.GetInstanceID(), out work) && work.Count > 0;
+        }
+        public static Action<Player> SwordMasterDodgeRequested;
+        private static Player _instantDodgePlayer;
+        private static float _instantDodgeUntil;
+        private static readonly Func<Player, float> _nativeDodgeCost = CreateDodgeCostGetter();
+        private static Func<Player, float> CreateDodgeCostGetter()
+        {
+            MethodInfo method = typeof(Player).GetMethod("GetDodgeStaminaUse", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            return method == null ? null : (Func<Player, float>)Delegate.CreateDelegate(typeof(Func<Player, float>), method);
+        }
+        public static bool CanInstantSwordMasterDodge(Player player)
+        {
+            return player != null && player == Player.m_localPlayer && GetAdvancementName(player) == "Sword Master"
+                && CanUseWorldInput(player) && player.IsOnGround() && !player.IsEncumbered() && !player.InDodge()
+                && _nativeDodgeCost != null && player.HaveStamina(_nativeDodgeCost(player));
+        }
+        public static bool HasInstantDodgeRequest(Character character)
+        {
+            return character != null && character == _instantDodgePlayer && character == Player.m_localPlayer && Time.time <= _instantDodgeUntil;
+        }
+        public static void PrepareSwordMasterDodge(Player player)
+        {
+            int id = player.GetInstanceID();
+            List<SkillExecution> work;
+            if (_swordMasterWork.TryGetValue(id, out work))
+            {
+                SkillExecution[] pending = work.ToArray();
+                for (int i = 0; i < pending.Length; i++)
+                    try { pending[i].Dispose(); } catch (Exception e) { Debug.LogWarning("AA dodge cancellation: " + e.Message); }
+                _swordMasterWork.Remove(id);
+            }
+            if (SwordMasterDodgeRequested != null) SwordMasterDodgeRequested(player);
+            SkillLockUntil.Remove(id); EndMobileCast(player);
+            _aimWindupUntil = 0f; AttackSwallowUntil = Time.time;
+            SkillAnimGen++; AnimActivation++;
+            CancelCurrentAttack(player);
+            DragonSkillClipDriver driver = player.GetComponent<DragonSkillClipDriver>();
+            if (driver != null) driver.CancelAnimation();
+            DragonMixamo.Stop(player, 0f);
+            SetSkillAnimSpeed(player, 1f, 0f);
+            ForceRun(player, false);
+            _instantDodgePlayer = player; _instantDodgeUntil = Time.time + 0.5f;
+        }
+
         public static void LockSkill(Player player, float duration)
         {
             if (player == null)
                 return;
+            // v0.25.86 (user): a Horizon Walker casts EVERY skill on the move and never stops (momentum, sprint kept).
+            if (duration > 0f && GetAdvancementName(player) == "Spellcaster")
+            {
+                BeginMobileCast(player, duration, true);
+                return;
+            }
             SkillLockUntil[player.GetInstanceID()] = Time.time + Mathf.Max(0f, duration);
+        }
+
+        // v0.25.86 Horizon Walker casting while moving: the casting hand rises forward (staff up), upper body only,
+        // legs keep running.
+        private static bool HorizonWalkerMoving(Player player)
+        {
+            if (player == null || GetAdvancementName(player) != "Spellcaster") return false;
+            Rigidbody rb = player.GetComponent<Rigidbody>();
+            if (rb == null) return false;
+            Vector3 v = rb.velocity; v.y = 0f;
+            return v.magnitude > 1.2f;
+        }
+
+        private static DragonClipKey[] MovingCastClip()
+        {
+            DragonClipKey up = K(0f).Hand(0.3f, 0.75f, 0.6f, 0.95f).Hd(-6f, 0f, 0f);
+            DragonClipKey[] k = new DragonClipKey[] { K(-1f), up.Copy(-0.45f), up, up.Copy(0.22f), K(0.55f) };
+            k[0].NoPlant = true;
+            return k;
         }
 
         public static bool IsSkillLocked(Player player)
@@ -6728,10 +10389,54 @@ namespace DragonsAltarCombat
                 return;
             ExplicitHyperArmorUntil[player.GetInstanceID()] = Time.time + Mathf.Max(0f, duration);
             if (duration >= 1f) RunVfx(delegate { DragonVfx.HyperShimmer(player, duration); });
-            if (duration >= 1f) ShowStatus(player, "hyper_armor", "hyper_armor", "Hyper Armor", duration, 0, "Defense Buff\nNo stagger or knockback from hits");
+            if (duration > 0f) ShowStatus(player, "hyper_armor", "hyper_armor", "Hyper Armor", duration, 0, "Defense Buff\nNo stagger or knockback from hits");
         }
 
         public static float BlockHyperUntil = -1f;
+        // v0.25.176 (user): per-cast hit cap for persistent damage. `cast` = any object that lives exactly as long as one cast (the
+        // routine's own next-hit gate dictionary); counts die with it. cap <= 0 = no limit (old behaviour). DoTs never call this.
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<object, Dictionary<int, int>> _persistHits = new System.Runtime.CompilerServices.ConditionalWeakTable<object, Dictionary<int, int>>();
+        public static bool PersistentHit(object cast, Character target, int cap)
+        {
+            if (cap <= 0 || cast == null || target == null) return true;
+            Dictionary<int, int> d = _persistHits.GetOrCreateValue(cast);
+            int id = target.GetInstanceID(), n;
+            d.TryGetValue(id, out n);
+            if (n >= cap) return false;
+            d[id] = n + 1;
+            return true;
+        }
+        // v0.25.175 (user: vanilla 1-2-3 after a parry; "don't read parrying as anything"): last time the local player blocked / parried.
+        // NACC never learns or captures a swing state from inside that window - an attack started out of the block pose could cache a
+        // state from the wrong layer, and that bad state was then used for every later step back (hit 3) = vanilla-looking chain.
+        public static float LastBlockAt = -100f;
+        public const float BlockQuiet = 0.6f;
+        public static bool NearBlock() { return Time.time - LastBlockAt < BlockQuiet; }
+
+        private static DragonShieldChargeGuard _shieldChargeGuard;
+        public static void BeginShieldChargeGuard(Player player)
+        {
+            if (player == null || player != Player.m_localPlayer) return;
+            if (_shieldChargeGuard != null) _shieldChargeGuard.End();
+            DragonShieldChargeGuard guard = player.gameObject.AddComponent<DragonShieldChargeGuard>();
+            guard.Player = player; guard.Generation = SkillAnimGen; guard.Charging = true;
+            _shieldChargeGuard = guard;
+            ShowStatusState(player, "shield_charge_guard", "hyper_armor", "Shield Charge - Active", 0f,
+                "Defense Buff\nCannot be staggered or knocked back\n40% less damage during charge and finisher");
+        }
+        public static void EndShieldChargeTravel(Player player)
+        {
+            if (_shieldChargeGuard != null && _shieldChargeGuard.Player == player) _shieldChargeGuard.Charging = false;
+        }
+        public static void ClearShieldChargeGuard()
+        {
+            if (_shieldChargeGuard != null) _shieldChargeGuard.End();
+            _shieldChargeGuard = null;
+        }
+        public static bool HasShieldChargeGuard(Player player)
+        {
+            return _shieldChargeGuard != null && _shieldChargeGuard.Valid(player);
+        }
 
         public static bool HasHyperArmor(Character character)
         {
@@ -6739,6 +10444,7 @@ namespace DragonsAltarCombat
             if (player == null)
                 return false;
 
+            if (HasShieldChargeGuard(player)) return true;
             int id = player.GetInstanceID();
             float end;
             if (ExplicitHyperArmorUntil.TryGetValue(id, out end) && Time.time < end)
@@ -6758,6 +10464,8 @@ namespace DragonsAltarCombat
             }
             return false;
         }
+
+        public static Func<Player, float> NormalAttackBaseSpeedProvider;
 
         public static void ApplyManagedAnimationSpeed(Player player, Animator animator)
         {
@@ -6806,6 +10514,11 @@ namespace DragonsAltarCombat
             int pid = player.GetInstanceID();
             bool skillTimed = SkillAnimSpeed.TryGetValue(pid, out skillSpeed) && SkillAnimSpeedUntil.TryGetValue(pid, out skillUntil) && Time.time < skillUntil;
             if (skillTimed) factor = skillSpeed;
+            else if (player.InAttack() && NormalAttackBaseSpeedProvider != null)
+            {
+                float normalBase = NormalAttackBaseSpeedProvider(player);
+                if (normalBase > 0f) baseSpeed = normalBase;
+            }
 
             factor = Mathf.Max(skillTimed ? 0.01f : 0.1f, factor);
 
@@ -6847,6 +10560,13 @@ namespace DragonsAltarCombat
             float v, until;
             if (ChainSpeed.TryGetValue(id, out v) && ChainSpeedUntil.TryGetValue(id, out until) && Time.time < until) return v;
             return 1f;
+        }
+
+        public static float ChainSpeedRemaining(Player player)
+        {
+            float until;
+            return player != null && ChainSpeedUntil.TryGetValue(player.GetInstanceID(), out until)
+                ? Mathf.Max(0f, until - Time.time) : 0f;
         }
 
         public static void SetAttackSpeedSource(Player player, float multiplier, float ttl)
@@ -6903,6 +10623,16 @@ namespace DragonsAltarCombat
             return b.ToString();
         }
 
+        // v0.25.181: seconds left on a timed buff by source (0 = not active) - used by the Holy Parry indicator
+        public static float TimedBuffRemaining(Player player, string source)
+        {
+            if (player == null || string.IsNullOrEmpty(source)) return 0f;
+            Dictionary<string, TimedBuffState> buffs;
+            TimedBuffState st;
+            if (!TimedBuffs.TryGetValue(player.GetInstanceID(), out buffs) || buffs == null || !buffs.TryGetValue(source, out st) || st == null) return 0f;
+            return Mathf.Max(0f, st.EndTime - Time.time);
+        }
+
         public static void ApplyTimedBuff(Player player, float duration, float attackDamageBonus, float attackSpeedBonus, float moveSpeedBonus, float defenseBonus, float staminaRegenBonus, float eitrRegenBonus, bool hyperArmor)
         {
             ApplyTimedBuff(player, "Generic", duration, attackDamageBonus, attackSpeedBonus, moveSpeedBonus, defenseBonus, staminaRegenBonus, eitrRegenBonus, hyperArmor);
@@ -6916,25 +10646,17 @@ namespace DragonsAltarCombat
             if (string.IsNullOrEmpty(source))
                 source = "Generic";
 
-            string statusIcon, statusLabel;
-            TimedBuffLook(source, attackDamageBonus, attackSpeedBonus, moveSpeedBonus, defenseBonus, staminaRegenBonus, eitrRegenBonus, hyperArmor, out statusIcon, out statusLabel);
-            if (duration >= 1f)
+            // v0.25.183 (perf): the look (label/icon) is only needed when an indicator is shown - Sorcerer modules re-apply
+            // short (0.35 s) buffs every frame, which built the label string each time
+            if (duration > 0f && source != "Sorcerer.AdvancementEitrRegen" && source != "Sorcerer.ArcaneBlood" && source != "Wizard.Overcharge" && source != "Spellcaster.PhaseFlow")
             {
+                string statusIcon, statusLabel;
+                TimedBuffLook(source, attackDamageBonus, attackSpeedBonus, moveSpeedBonus, defenseBonus, staminaRegenBonus, eitrRegenBonus, hyperArmor, out statusIcon, out statusLabel);
                 string det = TimedBuffDetail(attackDamageBonus, attackSpeedBonus, moveSpeedBonus, defenseBonus, staminaRegenBonus, eitrRegenBonus, hyperArmor);
                 string note;
                 if (BuffNotes.TryGetValue(source, out note) && !string.IsNullOrEmpty(note)) det += "\n" + note;
                 ShowStatus(player, "buff_" + source, statusIcon, statusLabel, duration, 0, det);
             }
-
-            TimedBuffState state = new TimedBuffState();
-            state.EndTime = Time.time + Mathf.Max(0.1f, duration);
-            state.AttackDamageBonus = attackDamageBonus;
-            state.AttackSpeedBonus = attackSpeedBonus;
-            state.MoveSpeedBonus = moveSpeedBonus;
-            state.DefenseBonus = defenseBonus;
-            state.StaminaRegenBonus = staminaRegenBonus;
-            state.EitrRegenBonus = eitrRegenBonus;
-            state.HyperArmor = hyperArmor;
 
             int id = player.GetInstanceID();
             Dictionary<string, TimedBuffState> buffs;
@@ -6943,7 +10665,33 @@ namespace DragonsAltarCombat
                 buffs = new Dictionary<string, TimedBuffState>();
                 TimedBuffs[id] = buffs;
             }
+            TimedBuffState state;
+            if (!buffs.TryGetValue(source, out state) || state == null) state = new TimedBuffState();   // v0.25.183 reuse (same values written)
+            state.EndTime = Time.time + Mathf.Max(0.1f, duration);
+            state.AttackDamageBonus = attackDamageBonus;
+            state.SkillDamageBonus = 0f;
+            state.AttackSpeedBonus = attackSpeedBonus;
+            state.MoveSpeedBonus = moveSpeedBonus;
+            state.DefenseBonus = defenseBonus;
+            state.StaminaRegenBonus = staminaRegenBonus;
+            state.EitrRegenBonus = eitrRegenBonus;
+            state.HyperArmor = hyperArmor;
             buffs[source] = state;
+        }
+
+        // Separate from attack damage: the skill power provider consumes this once, while
+        // ordinary weapon hits and the independent healing provider never read it.
+        public static void ApplyTimedSkillDamageBuff(Player player, string source, float duration, float bonus)
+        {
+            if (player == null || string.IsNullOrEmpty(source)) return;
+            SetBuffNote(source, BuffPct(Mathf.Max(0f, bonus), "Skill Damage"));
+            ApplyTimedBuff(player, source, duration, 0f, 0f, 0f, 0f, 0f, 0f, false);
+            TimedBuffs[player.GetInstanceID()][source].SkillDamageBonus = Mathf.Max(0f, bonus);
+        }
+
+        public static float GetSkillDamageMultiplier(Player player)
+        {
+            return Mathf.Max(0f, 1f + GetTimedBuffSum(player, "SkillDamage"));
         }
 
         public static float GetMoveSpeedMultiplier(Player player)
@@ -7016,6 +10764,7 @@ namespace DragonsAltarCombat
                     continue;
 
                 if (stat == "AttackDamage") total += buff.AttackDamageBonus;
+                else if (stat == "SkillDamage") total += buff.SkillDamageBonus;
                 else if (stat == "AttackSpeed") total += buff.AttackSpeedBonus;
                 else if (stat == "MoveSpeed") total += buff.MoveSpeedBonus;
                 else if (stat == "Defense") total += buff.DefenseBonus;
@@ -7139,6 +10888,296 @@ namespace DragonsAltarCombat
             state.ZapRadius = Mathf.Max(0.1f, radius);
         }
 
+        private static readonly Dictionary<string, ConfigEntry<bool>> SkillStunEntries = new Dictionary<string, ConfigEntry<bool>>();
+        private static readonly Dictionary<string, string> SkillStunSections = new Dictionary<string, string>
+        {
+            { "heavy_slash", "Warrior Heavy Slash" },
+            { "impact_wave", "Warrior Impact Wave" },
+            { "impact_punch", "Warrior Impact Punch" },
+            { "lightning_zap", "Cleric Lightning Zap" },
+            { "righteous_strike", "Cleric Righteous Strike" },
+            { "holy_wave", "Cleric Holy Wave" },
+            { "flame_burst", "Sorcerer Flame Burst" },
+            { "glacial_descent", "Sorcerer Glacial Descent" },
+            { "stonefang_eruption", "Sorcerer Stonefang Eruption" },
+            { "piercing_arrow", "Ranger Piercing Arrow" },
+            { "tumble_shot", "Ranger Tumble Shot" },
+            { "snare_trap", "Ranger Snare Trap" },
+            { "moonlight_splitter", "Sword Master Moonlight Splitter" },
+            { "crescent_cleave", "Sword Master Crescent Cleave" },
+            { "blade_storm", "Sword Master Blade Storm" },
+            { "frenzied_charge", "Sword Master Frenzied Charge" },
+            { "eclipse", "Sword Master Eclipse" },
+            { "halfmoon_slash", "Sword Master Halfmoon Slash" },
+            { "stomp", "Mercenary Stomp" },
+            { "circle_swing", "Mercenary Circle Swing" },
+            { "bonecrusher", "Mercenary Bonecrusher" },
+            { "seismic_guillotine", "Mercenary Seismic Guillotine" },
+            { "punishing_bomb", "Mercenary Punishing Bomb" },
+            { "whirlwind", "Mercenary Whirlwind" },
+            { "goddess_relic", "Paladin Goddess Relic" },
+            { "judgement_hammer", "Paladin Judgement Hammer" },
+            { "shield_charge", "Paladin Shield Charge" },
+            { "fallen_angel", "Paladin Fallen Angel" },
+            { "ray_of_hope", "Paladin Ray Of Hope" },
+            { "electric_smite", "Paladin Electric Smite" },
+            { "lightning_relic", "Priest Lightning Relic" },
+            { "holy_relic", "Priest Holy Relic" },
+            { "divine_intervention", "Priest Divine Intervention" },
+            { "grand_cross", "Priest Grand Cross" },
+            { "heavens_judgement", "Priest Heavens Judgement" },
+            { "lightning_tempest", "Priest Lightning Tempest" },
+            { "meteor_fall", "Wizard Meteor Fall" },
+            { "gravity_dominion", "Wizard Gravity Dominion" },
+            { "astral_railcannon", "Wizard Astral Railcannon" },
+            { "astral_greatblade", "Wizard Astral Greatblade" },
+            { "frost_nova", "Wizard Frost Nova" },
+            { "elemental_cataclysm", "Wizard Elemental Cataclysm" },
+            { "arcane_phalanx", "Spellcaster Arcane Phalanx" },
+            { "afterimage_arsenal", "Spellcaster Afterimage Arsenal" },
+            { "void_step", "Spellcaster Void Step" },
+            { "rift_echo", "Spellcaster Rift Echo" },
+            { "gravity_blast", "Spellcaster Gravity Blast" },
+            { "arcane_rupture", "Spellcaster Arcane Rupture" },
+            { "gale_volley", "Acrobat Gale Volley" },
+            { "cyclone_arrow", "Acrobat Cyclone Arrow" },
+            { "swallow_dive", "Acrobat Swallow Dive" },
+            { "skyfall_barrage", "Acrobat Skyfall Barrage" },
+            { "ricochet_arrow", "Acrobat Ricochet Arrow" },
+            { "furious_winds", "Acrobat Furious Winds" },
+            { "ballista_shot", "Bowmaster Ballista Shot" },
+            { "arrow_rain", "Bowmaster Arrow Rain" },
+            { "pinning_shot", "Bowmaster Pinning Shot" },
+            { "explosive_arrow", "Bowmaster Explosive Arrow" },
+            { "splitting_arrow", "Bowmaster Splitting Arrow" },
+            { "starfall_volley", "Bowmaster Starfall Volley" }
+        };
+
+        public static string StunAttack(int index) { return "Attack " + Mathf.Max(1, index).ToString(System.Globalization.CultureInfo.InvariantCulture); }
+
+        private static string StunKey(string skill, bool ascended, string attack)
+        {
+            return skill + "|" + (ascended ? "A|" : "N|") + attack;
+        }
+
+        private static ConfigEntry<bool> SkillStunEntry(string skill, bool ascended, string attack, bool defaultValue)
+        {
+            ConfigEntry<bool> entry;
+            string key = StunKey(skill, ascended, attack);
+            if (SkillStunEntries.TryGetValue(key, out entry)) return entry;
+            if (DragonCombatPlugin.Instance == null) return null;
+            string section;
+            if (!SkillStunSections.TryGetValue(skill, out section)) return null;
+            if (ascended)
+            {
+                switch (skill)
+                {
+                    case "heavy_slash": section = "Mercenary Heavy Slash"; break;
+                    case "impact_wave": section = "Sword Master Impact Wave"; break;
+                    case "righteous_strike": section = "Paladin Righteous Strike"; break;
+                    case "glacial_descent": section = "Wizard Glacial Descent"; break;
+                    case "stonefang_eruption": section = "Spellcaster Stonefang Eruption"; break;
+                    case "piercing_arrow": section = "Bowmaster Piercing Arrow"; break;
+                    case "tumble_shot": section = "Acrobat Tumble Shot"; break;
+                }
+            }
+            entry = DragonCombatPlugin.Instance.Config.Bind(section + (ascended ? " Stun Ascended" : " Stun Normal"),
+                attack + " Stun", defaultValue, "Forced stun for this attack only. Boss/debuff immunity stays intact; damage, knockback and other status effects are unchanged.");
+            SkillStunEntries[key] = entry;
+            BindStunSizes(key, entry);
+            return entry;
+        }
+
+        public static void SeedSkillStun(string skill, bool ascended, string attack, bool defaultValue)
+        {
+            SkillStunEntry(skill, ascended, attack, defaultValue);
+        }
+
+        public static void RegisterSkillStun(string skill, bool ascended, string attack, ConfigEntry<bool> entry)
+        {
+            if (entry != null)
+            {
+                string key = StunKey(skill, ascended, attack);
+                SkillStunEntries[key] = entry;
+                BindStunSizes(key, entry);
+            }
+        }
+
+        public static bool SkillStunEnabled(Player player, string skill, string attack, bool defaultValue, bool? ascended = null)
+        {
+            if (string.IsNullOrEmpty(skill)) return defaultValue;
+            bool asc = ascended.HasValue ? ascended.Value : AscendedProvider != null && AscendedProvider(player, skill);
+            ConfigEntry<bool> entry = SkillStunEntry(skill, asc, attack, defaultValue);
+            return entry == null ? defaultValue : entry.Value;
+        }
+
+        private static readonly Dictionary<string, ConfigEntry<SkillStunOverride>[]> SkillStunSizes = new Dictionary<string, ConfigEntry<SkillStunOverride>[]>();
+        private static void BindStunSizes(string key, ConfigEntry<bool> legacy)
+        {
+            if (legacy == null || DragonCombatPlugin.Instance == null || SkillStunSizes.ContainsKey(key)) return;
+            ConfigEntry<SkillStunOverride>[] sizes = new ConfigEntry<SkillStunOverride>[2];
+            for (int i = 0; i < 2; i++)
+                sizes[i] = DragonCombatPlugin.Instance.Config.Bind(legacy.Definition.Section,
+                    legacy.Definition.Key + (i == 0 ? " Small" : " Big"), SkillStunOverride.Inherit,
+                    "Inherit = existing skill rules and Stun toggle. Enabled = force stun for this size even if the legacy toggle/size rule is off. Disabled = never force stun for this size. Bosses and immune targets are always excluded; launch/pull mechanics are unchanged.");
+            SkillStunSizes[key] = sizes;
+        }
+
+        public static bool ShouldSkillStun(Player player, Character target, string skill, string attack, bool defaultValue, bool originallyEligible, bool? ascended = null)
+        {
+            if (player == null || target == null || target.IsDead() || target.IsBoss() || IsDebuffImmune(target)) return false;
+            bool asc = ascended.HasValue ? ascended.Value : AscendedProvider != null && AscendedProvider(player, skill);
+            ConfigEntry<bool> legacy = string.IsNullOrEmpty(skill) ? null : SkillStunEntry(skill, asc, attack, defaultValue);
+            ConfigEntry<SkillStunOverride>[] sizes;
+            if (SkillStunSizes.TryGetValue(StunKey(skill, asc, attack), out sizes))
+            {
+                SkillStunOverride mode = sizes[IsSmallEnemy(target) ? 0 : 1].Value;
+                if (mode != SkillStunOverride.Inherit) return mode == SkillStunOverride.Enabled;
+            }
+            return (legacy == null ? defaultValue : legacy.Value) && (!defaultValue || originallyEligible);
+        }
+
+        public static void ApplySkillStun(Player player, Character target, string skill, string attack, bool defaultValue, bool originallyEligible, bool? ascended = null)
+        {
+            if (ShouldSkillStun(player, target, skill, attack, defaultValue, originallyEligible, ascended)) Stun(target, player.transform.position);
+        }
+
+        public static void BindSkillStuns()
+        {
+            ConfigFile stunConfig = DragonCombatPlugin.Instance.Config;
+            bool saveEach = stunConfig.SaveOnConfigSet;
+            stunConfig.SaveOnConfigSet = false;
+            try
+            {
+                string[] rows = new string[]
+                {
+                "heavy_slash|0|Attack 1=0",
+                "heavy_slash|1|Attack 1=0",
+                "impact_wave|0|Aftershock=0;Attack 1=0",
+                "impact_wave|1|Aftershock=0;Attack 1=0",
+                "impact_punch|0|Attack 1=1",
+                "impact_punch|1|Attack 1=1",
+                "lightning_zap|0|Attack 1=0;Detonation=0",
+                "lightning_zap|1|Attack 1=0;Detonation=0",
+                "righteous_strike|0|Attack 1=0;Attack 2=0;Judgement Detonation=0",
+                "righteous_strike|1|Attack 1=0;Attack 2=0;Judgement Detonation=0",
+                "flame_burst|0|Attack 1=0",
+                "flame_burst|1|Attack 1=0",
+                "glacial_descent|0|Attack 1=0",
+                "glacial_descent|1|Attack 1=0",
+                "stonefang_eruption|0|Attack 1=1",
+                "stonefang_eruption|1|Attack 1=1;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 2=0;Attack 3=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0",
+                "piercing_arrow|0|Attack 1=0",
+                "piercing_arrow|1|Attack 1=0",
+                "tumble_shot|0|Attack 1=0;Attack 2=0;Attack 3=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0",
+                "tumble_shot|1|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 2=0;Attack 3=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0",
+                "snare_trap|0|Attack 1=1",
+                "snare_trap|1|Attack 1=1",
+                "moonlight_splitter|0|Afterimage=0;Attack 1=0;Attack 2=0;Attack 3=0",
+                "moonlight_splitter|1|Afterimage=1;Attack 1=0;Attack 2=0;Attack 3=0;Attack 4=0;Attack 5=0",
+                "crescent_cleave|0|Attack 1=0;Attack 2=0;Attack 3=0",
+                "crescent_cleave|1|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 2=0;Attack 3=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0;Trail 1=0;Trail 10=0;Trail 11=0;Trail 12=0;Trail 13=0;Trail 14=0;Trail 15=0;Trail 16=0;Trail 17=0;Trail 18=0;Trail 19=0;Trail 2=0;Trail 20=0;Trail 21=0;Trail 22=0;Trail 23=0;Trail 24=0;Trail 25=0;Trail 26=0;Trail 27=0;Trail 28=0;Trail 29=0;Trail 3=0;Trail 30=0;Trail 31=0;Trail 32=0;Trail 4=0;Trail 5=0;Trail 6=0;Trail 7=0;Trail 8=0;Trail 9=0",
+                "blade_storm|0|Ascended Echo=0;Attack 1=0;Attack 2=0;Attack 3=0",
+                "blade_storm|1|Ascended Echo=0;Attack 1=0;Attack 2=0;Attack 3=0",
+                "frenzied_charge|0|Attack 1=0;Charge=1;Explosion=0",
+                "frenzied_charge|1|Attack 1=0;Charge=1;Explosion=0",
+                "eclipse|0|Attack 1=0;Counter=0;Delayed Hail=0;Opening Spin=0;Slash Hail=0;Spiral=0",
+                "eclipse|1|Attack 1=0;Counter=0;Delayed Hail=0;Opening Spin=1;Slash Hail=0;Spiral=0",
+                "stomp|0|Attack 1=1;Attack 2=1",
+                "stomp|1|Attack 1=1;Attack 2=1;Attack 3=1",
+                "circle_swing|0|Attack 1=1;Attack 2=1",
+                "circle_swing|1|Attack 1=1;Attack 2=1",
+                "bonecrusher|0|Aftershock=0;Attack 1=1;Fury Cone=1",
+                "bonecrusher|1|Aftershock=0;Attack 1=1;Fury Cone=1",
+                "seismic_guillotine|0|Main Explosion=1;Main Shock 1=1;Main Shock 10=1;Main Shock 11=1;Main Shock 12=1;Main Shock 13=1;Main Shock 14=1;Main Shock 15=1;Main Shock 2=1;Main Shock 3=1;Main Shock 4=1;Main Shock 5=1;Main Shock 6=1;Main Shock 7=1;Main Shock 8=1;Main Shock 9=1",
+                "seismic_guillotine|1|Left Explosion=1;Left Shock 1=1;Left Shock 10=1;Left Shock 11=1;Left Shock 12=1;Left Shock 13=1;Left Shock 14=1;Left Shock 15=1;Left Shock 16=1;Left Shock 17=1;Left Shock 18=1;Left Shock 19=1;Left Shock 2=1;Left Shock 20=1;Left Shock 21=1;Left Shock 22=1;Left Shock 23=1;Left Shock 24=1;Left Shock 25=1;Left Shock 26=1;Left Shock 27=1;Left Shock 28=1;Left Shock 29=1;Left Shock 3=1;Left Shock 30=1;Left Shock 31=1;Left Shock 32=1;Left Shock 33=1;Left Shock 34=1;Left Shock 35=1;Left Shock 36=1;Left Shock 37=1;Left Shock 38=1;Left Shock 39=1;Left Shock 4=1;Left Shock 40=1;Left Shock 5=1;Left Shock 6=1;Left Shock 7=1;Left Shock 8=1;Left Shock 9=1;Main Explosion=1;Main Shock 1=1;Main Shock 10=1;Main Shock 11=1;Main Shock 12=1;Main Shock 13=1;Main Shock 14=1;Main Shock 15=1;Main Shock 16=1;Main Shock 17=1;Main Shock 18=1;Main Shock 19=1;Main Shock 2=1;Main Shock 20=1;Main Shock 21=1;Main Shock 22=1;Main Shock 23=1;Main Shock 24=1;Main Shock 25=1;Main Shock 26=1;Main Shock 27=1;Main Shock 28=1;Main Shock 29=1;Main Shock 3=1;Main Shock 30=1;Main Shock 31=1;Main Shock 32=1;Main Shock 33=1;Main Shock 34=1;Main Shock 35=1;Main Shock 36=1;Main Shock 37=1;Main Shock 38=1;Main Shock 39=1;Main Shock 4=1;Main Shock 40=1;Main Shock 5=1;Main Shock 6=1;Main Shock 7=1;Main Shock 8=1;Main Shock 9=1;Right Explosion=1;Right Shock 1=1;Right Shock 10=1;Right Shock 11=1;Right Shock 12=1;Right Shock 13=1;Right Shock 14=1;Right Shock 15=1;Right Shock 16=1;Right Shock 17=1;Right Shock 18=1;Right Shock 19=1;Right Shock 2=1;Right Shock 20=1;Right Shock 21=1;Right Shock 22=1;Right Shock 23=1;Right Shock 24=1;Right Shock 25=1;Right Shock 26=1;Right Shock 27=1;Right Shock 28=1;Right Shock 29=1;Right Shock 3=1;Right Shock 30=1;Right Shock 31=1;Right Shock 32=1;Right Shock 33=1;Right Shock 34=1;Right Shock 35=1;Right Shock 36=1;Right Shock 37=1;Right Shock 38=1;Right Shock 39=1;Right Shock 4=1;Right Shock 40=1;Right Shock 5=1;Right Shock 6=1;Right Shock 7=1;Right Shock 8=1;Right Shock 9=1",
+                "punishing_bomb|0|Attack 1=0;Fire Burst=0",
+                "punishing_bomb|1|Attack 1=0;Attack 2=0;Attack 3=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Fire Burst=0",
+                "whirlwind|0|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 17=0;Attack 18=0;Attack 19=0;Attack 2=0;Attack 20=0;Attack 21=0;Attack 22=0;Attack 23=0;Attack 24=0;Attack 25=0;Attack 26=0;Attack 27=0;Attack 28=0;Attack 29=0;Attack 3=0;Attack 30=0;Attack 31=0;Attack 32=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0;Finisher=0",
+                "whirlwind|1|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 17=0;Attack 18=0;Attack 19=0;Attack 2=0;Attack 20=0;Attack 21=0;Attack 22=0;Attack 23=0;Attack 24=0;Attack 25=0;Attack 26=0;Attack 27=0;Attack 28=0;Attack 29=0;Attack 3=0;Attack 30=0;Attack 31=0;Attack 32=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0;Finisher=0",
+                "goddess_relic|0|Attack 1=0",
+                "goddess_relic|1|Attack 1=0",
+                "judgement_hammer|0|Attack 1=0;Orbit=0;Throw=0;Verdict=0",
+                "judgement_hammer|1|Attack 1=0;Orbit=0;Throw=0;Verdict=0",
+                "shield_charge|0|Attack 1=0;Charge=0;Lightning Trails=0;Slam=1",
+                "shield_charge|1|Attack 1=0;Charge=0;Lightning Trails=0;Slam=1",
+                "fallen_angel|0|Aftershock=1;Attack 1=1",
+                "fallen_angel|1|Aftershock=1;Attack 1=1",
+                "ray_of_hope|0|Attack 1=0;Burn Application=0;Impact=0;Shatter=0",
+                "ray_of_hope|1|Attack 1=0;Burn Application=0;Burn Tick 1=0;Burn Tick 10=0;Burn Tick 11=0;Burn Tick 12=0;Burn Tick 13=0;Burn Tick 14=0;Burn Tick 15=0;Burn Tick 16=0;Burn Tick 17=0;Burn Tick 18=0;Burn Tick 19=0;Burn Tick 2=0;Burn Tick 20=0;Burn Tick 21=0;Burn Tick 22=0;Burn Tick 23=0;Burn Tick 24=0;Burn Tick 25=0;Burn Tick 26=0;Burn Tick 27=0;Burn Tick 28=0;Burn Tick 29=0;Burn Tick 3=0;Burn Tick 30=0;Burn Tick 31=0;Burn Tick 32=0;Burn Tick 4=0;Burn Tick 5=0;Burn Tick 6=0;Burn Tick 7=0;Burn Tick 8=0;Burn Tick 9=0;Impact=0;Shatter=0",
+                "electric_smite|0|Attack 1=0",
+                "electric_smite|1|Attack 1=0;Storm Pulse 1=0;Storm Pulse 10=0;Storm Pulse 11=0;Storm Pulse 12=0;Storm Pulse 13=0;Storm Pulse 14=0;Storm Pulse 15=0;Storm Pulse 16=0;Storm Pulse 17=0;Storm Pulse 18=0;Storm Pulse 19=0;Storm Pulse 2=0;Storm Pulse 20=0;Storm Pulse 21=0;Storm Pulse 22=0;Storm Pulse 23=0;Storm Pulse 24=0;Storm Pulse 25=0;Storm Pulse 26=0;Storm Pulse 27=0;Storm Pulse 28=0;Storm Pulse 29=0;Storm Pulse 3=0;Storm Pulse 30=0;Storm Pulse 31=0;Storm Pulse 32=0;Storm Pulse 4=0;Storm Pulse 5=0;Storm Pulse 6=0;Storm Pulse 7=0;Storm Pulse 8=0;Storm Pulse 9=0",
+                "lightning_relic|0|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 17=0;Attack 18=0;Attack 19=0;Attack 2=0;Attack 20=0;Attack 21=0;Attack 22=0;Attack 23=0;Attack 24=0;Attack 25=0;Attack 26=0;Attack 27=0;Attack 28=0;Attack 29=0;Attack 3=0;Attack 30=0;Attack 31=0;Attack 32=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0;Final Blast=0",
+                "lightning_relic|1|Arc 1.1=0;Arc 1.2=0;Arc 1.3=0;Arc 10.1=0;Arc 10.2=0;Arc 10.3=0;Arc 11.1=0;Arc 11.2=0;Arc 11.3=0;Arc 12.1=0;Arc 12.2=0;Arc 12.3=0;Arc 13.1=0;Arc 13.2=0;Arc 13.3=0;Arc 14.1=0;Arc 14.2=0;Arc 14.3=0;Arc 15.1=0;Arc 15.2=0;Arc 15.3=0;Arc 16.1=0;Arc 16.2=0;Arc 16.3=0;Arc 17.1=0;Arc 17.2=0;Arc 17.3=0;Arc 18.1=0;Arc 18.2=0;Arc 18.3=0;Arc 19.1=0;Arc 19.2=0;Arc 19.3=0;Arc 2.1=0;Arc 2.2=0;Arc 2.3=0;Arc 20.1=0;Arc 20.2=0;Arc 20.3=0;Arc 21.1=0;Arc 21.2=0;Arc 21.3=0;Arc 22.1=0;Arc 22.2=0;Arc 22.3=0;Arc 23.1=0;Arc 23.2=0;Arc 23.3=0;Arc 24.1=0;Arc 24.2=0;Arc 24.3=0;Arc 25.1=0;Arc 25.2=0;Arc 25.3=0;Arc 26.1=0;Arc 26.2=0;Arc 26.3=0;Arc 27.1=0;Arc 27.2=0;Arc 27.3=0;Arc 28.1=0;Arc 28.2=0;Arc 28.3=0;Arc 29.1=0;Arc 29.2=0;Arc 29.3=0;Arc 3.1=0;Arc 3.2=0;Arc 3.3=0;Arc 30.1=0;Arc 30.2=0;Arc 30.3=0;Arc 31.1=0;Arc 31.2=0;Arc 31.3=0;Arc 32.1=0;Arc 32.2=0;Arc 32.3=0;Arc 4.1=0;Arc 4.2=0;Arc 4.3=0;Arc 5.1=0;Arc 5.2=0;Arc 5.3=0;Arc 6.1=0;Arc 6.2=0;Arc 6.3=0;Arc 7.1=0;Arc 7.2=0;Arc 7.3=0;Arc 8.1=0;Arc 8.2=0;Arc 8.3=0;Arc 9.1=0;Arc 9.2=0;Arc 9.3=0;Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 17=0;Attack 18=0;Attack 19=0;Attack 2=0;Attack 20=0;Attack 21=0;Attack 22=0;Attack 23=0;Attack 24=0;Attack 25=0;Attack 26=0;Attack 27=0;Attack 28=0;Attack 29=0;Attack 3=0;Attack 30=0;Attack 31=0;Attack 32=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0;Final Blast=1",
+                "holy_relic|0|Attack 1=0;Sanctified Bloom=0",
+                "holy_relic|1|Attack 1=0;Sanctified Bloom=0",
+                "divine_intervention|0|Attack 1=1;Parry Shockwave=1",
+                "divine_intervention|1|Attack 1=1;Parry Shockwave=1",
+                "grand_cross|0|Attack 1=0",
+                "grand_cross|1|Attack 1=0",
+                "heavens_judgement|0|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 17=0;Attack 18=0;Attack 19=0;Attack 2=0;Attack 20=0;Attack 21=0;Attack 22=0;Attack 23=0;Attack 24=0;Attack 25=0;Attack 26=0;Attack 27=0;Attack 28=0;Attack 29=0;Attack 3=0;Attack 30=0;Attack 31=0;Attack 32=0;Attack 33=0;Attack 34=0;Attack 35=0;Attack 36=0;Attack 37=0;Attack 38=0;Attack 39=0;Attack 4=0;Attack 40=0;Attack 41=0;Attack 42=0;Attack 43=0;Attack 44=0;Attack 45=0;Attack 46=0;Attack 47=0;Attack 48=0;Attack 49=0;Attack 5=0;Attack 50=0;Attack 51=0;Attack 52=0;Attack 53=0;Attack 54=0;Attack 55=0;Attack 56=0;Attack 57=0;Attack 58=0;Attack 59=0;Attack 6=0;Attack 60=0;Attack 61=0;Attack 62=0;Attack 63=0;Attack 64=0;Attack 7=0;Attack 8=0;Attack 9=0;Beam 1=0;Beam 10=0;Beam 11=0;Beam 12=0;Beam 13=0;Beam 14=0;Beam 15=0;Beam 16=0;Beam 17=0;Beam 18=0;Beam 19=0;Beam 2=0;Beam 20=0;Beam 21=0;Beam 22=0;Beam 23=0;Beam 24=0;Beam 25=0;Beam 26=0;Beam 27=0;Beam 28=0;Beam 29=0;Beam 3=0;Beam 30=0;Beam 31=0;Beam 32=0;Beam 33=0;Beam 34=0;Beam 35=0;Beam 36=0;Beam 37=0;Beam 38=0;Beam 39=0;Beam 4=0;Beam 40=0;Beam 41=0;Beam 42=0;Beam 43=0;Beam 44=0;Beam 45=0;Beam 46=0;Beam 47=0;Beam 48=0;Beam 49=0;Beam 5=0;Beam 50=0;Beam 51=0;Beam 52=0;Beam 53=0;Beam 54=0;Beam 55=0;Beam 56=0;Beam 57=0;Beam 58=0;Beam 59=0;Beam 6=0;Beam 60=0;Beam 61=0;Beam 62=0;Beam 63=0;Beam 64=0;Beam 7=0;Beam 8=0;Beam 9=0;Final Pillar=0",
+                "heavens_judgement|1|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 17=0;Attack 18=0;Attack 19=0;Attack 2=0;Attack 20=0;Attack 21=0;Attack 22=0;Attack 23=0;Attack 24=0;Attack 25=0;Attack 26=0;Attack 27=0;Attack 28=0;Attack 29=0;Attack 3=0;Attack 30=0;Attack 31=0;Attack 32=0;Attack 33=0;Attack 34=0;Attack 35=0;Attack 36=0;Attack 37=0;Attack 38=0;Attack 39=0;Attack 4=0;Attack 40=0;Attack 41=0;Attack 42=0;Attack 43=0;Attack 44=0;Attack 45=0;Attack 46=0;Attack 47=0;Attack 48=0;Attack 49=0;Attack 5=0;Attack 50=0;Attack 51=0;Attack 52=0;Attack 53=0;Attack 54=0;Attack 55=0;Attack 56=0;Attack 57=0;Attack 58=0;Attack 59=0;Attack 6=0;Attack 60=0;Attack 61=0;Attack 62=0;Attack 63=0;Attack 64=0;Attack 7=0;Attack 8=0;Attack 9=0;Beam 1=0;Beam 10=0;Beam 11=0;Beam 12=0;Beam 13=0;Beam 14=0;Beam 15=0;Beam 16=0;Beam 17=0;Beam 18=0;Beam 19=0;Beam 2=0;Beam 20=0;Beam 21=0;Beam 22=0;Beam 23=0;Beam 24=0;Beam 25=0;Beam 26=0;Beam 27=0;Beam 28=0;Beam 29=0;Beam 3=0;Beam 30=0;Beam 31=0;Beam 32=0;Beam 33=0;Beam 34=0;Beam 35=0;Beam 36=0;Beam 37=0;Beam 38=0;Beam 39=0;Beam 4=0;Beam 40=0;Beam 41=0;Beam 42=0;Beam 43=0;Beam 44=0;Beam 45=0;Beam 46=0;Beam 47=0;Beam 48=0;Beam 49=0;Beam 5=0;Beam 50=0;Beam 51=0;Beam 52=0;Beam 53=0;Beam 54=0;Beam 55=0;Beam 56=0;Beam 57=0;Beam 58=0;Beam 59=0;Beam 6=0;Beam 60=0;Beam 61=0;Beam 62=0;Beam 63=0;Beam 64=0;Beam 7=0;Beam 8=0;Beam 9=0;Final Pillar=0",
+                "lightning_tempest|0|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 17=0;Attack 18=0;Attack 19=0;Attack 2=0;Attack 20=0;Attack 21=0;Attack 22=0;Attack 23=0;Attack 24=0;Attack 25=0;Attack 26=0;Attack 27=0;Attack 28=0;Attack 29=0;Attack 3=0;Attack 30=0;Attack 31=0;Attack 32=0;Attack 33=0;Attack 34=0;Attack 35=0;Attack 36=0;Attack 37=0;Attack 38=0;Attack 39=0;Attack 4=0;Attack 40=0;Attack 41=0;Attack 42=0;Attack 43=0;Attack 44=0;Attack 45=0;Attack 46=0;Attack 47=0;Attack 48=0;Attack 49=0;Attack 5=0;Attack 50=0;Attack 51=0;Attack 52=0;Attack 53=0;Attack 54=0;Attack 55=0;Attack 56=0;Attack 57=0;Attack 58=0;Attack 59=0;Attack 6=0;Attack 60=0;Attack 61=0;Attack 62=0;Attack 63=0;Attack 64=0;Attack 7=0;Attack 8=0;Attack 9=0;Lightning 1=0;Lightning 10=0;Lightning 100=0;Lightning 101=0;Lightning 102=0;Lightning 103=0;Lightning 104=0;Lightning 105=0;Lightning 106=0;Lightning 107=0;Lightning 108=0;Lightning 109=0;Lightning 11=0;Lightning 110=0;Lightning 111=0;Lightning 112=0;Lightning 113=0;Lightning 114=0;Lightning 115=0;Lightning 116=0;Lightning 117=0;Lightning 118=0;Lightning 119=0;Lightning 12=0;Lightning 120=0;Lightning 121=0;Lightning 122=0;Lightning 123=0;Lightning 124=0;Lightning 125=0;Lightning 126=0;Lightning 127=0;Lightning 128=0;Lightning 13=0;Lightning 14=0;Lightning 15=0;Lightning 16=0;Lightning 17=0;Lightning 18=0;Lightning 19=0;Lightning 2=0;Lightning 20=0;Lightning 21=0;Lightning 22=0;Lightning 23=0;Lightning 24=0;Lightning 25=0;Lightning 26=0;Lightning 27=0;Lightning 28=0;Lightning 29=0;Lightning 3=0;Lightning 30=0;Lightning 31=0;Lightning 32=0;Lightning 33=0;Lightning 34=0;Lightning 35=0;Lightning 36=0;Lightning 37=0;Lightning 38=0;Lightning 39=0;Lightning 4=0;Lightning 40=0;Lightning 41=0;Lightning 42=0;Lightning 43=0;Lightning 44=0;Lightning 45=0;Lightning 46=0;Lightning 47=0;Lightning 48=0;Lightning 49=0;Lightning 5=0;Lightning 50=0;Lightning 51=0;Lightning 52=0;Lightning 53=0;Lightning 54=0;Lightning 55=0;Lightning 56=0;Lightning 57=0;Lightning 58=0;Lightning 59=0;Lightning 6=0;Lightning 60=0;Lightning 61=0;Lightning 62=0;Lightning 63=0;Lightning 64=0;Lightning 65=0;Lightning 66=0;Lightning 67=0;Lightning 68=0;Lightning 69=0;Lightning 7=0;Lightning 70=0;Lightning 71=0;Lightning 72=0;Lightning 73=0;Lightning 74=0;Lightning 75=0;Lightning 76=0;Lightning 77=0;Lightning 78=0;Lightning 79=0;Lightning 8=0;Lightning 80=0;Lightning 81=0;Lightning 82=0;Lightning 83=0;Lightning 84=0;Lightning 85=0;Lightning 86=0;Lightning 87=0;Lightning 88=0;Lightning 89=0;Lightning 9=0;Lightning 90=0;Lightning 91=0;Lightning 92=0;Lightning 93=0;Lightning 94=0;Lightning 95=0;Lightning 96=0;Lightning 97=0;Lightning 98=0;Lightning 99=0",
+                "lightning_tempest|1|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 17=0;Attack 18=0;Attack 19=0;Attack 2=0;Attack 20=0;Attack 21=0;Attack 22=0;Attack 23=0;Attack 24=0;Attack 25=0;Attack 26=0;Attack 27=0;Attack 28=0;Attack 29=0;Attack 3=0;Attack 30=0;Attack 31=0;Attack 32=0;Attack 33=0;Attack 34=0;Attack 35=0;Attack 36=0;Attack 37=0;Attack 38=0;Attack 39=0;Attack 4=0;Attack 40=0;Attack 41=0;Attack 42=0;Attack 43=0;Attack 44=0;Attack 45=0;Attack 46=0;Attack 47=0;Attack 48=0;Attack 49=0;Attack 5=0;Attack 50=0;Attack 51=0;Attack 52=0;Attack 53=0;Attack 54=0;Attack 55=0;Attack 56=0;Attack 57=0;Attack 58=0;Attack 59=0;Attack 6=0;Attack 60=0;Attack 61=0;Attack 62=0;Attack 63=0;Attack 64=0;Attack 7=0;Attack 8=0;Attack 9=0;Lightning 1=0;Lightning 10=0;Lightning 100=0;Lightning 101=0;Lightning 102=0;Lightning 103=0;Lightning 104=0;Lightning 105=0;Lightning 106=0;Lightning 107=0;Lightning 108=0;Lightning 109=0;Lightning 11=0;Lightning 110=0;Lightning 111=0;Lightning 112=0;Lightning 113=0;Lightning 114=0;Lightning 115=0;Lightning 116=0;Lightning 117=0;Lightning 118=0;Lightning 119=0;Lightning 12=0;Lightning 120=0;Lightning 121=0;Lightning 122=0;Lightning 123=0;Lightning 124=0;Lightning 125=0;Lightning 126=0;Lightning 127=0;Lightning 128=0;Lightning 13=0;Lightning 14=0;Lightning 15=0;Lightning 16=0;Lightning 17=0;Lightning 18=0;Lightning 19=0;Lightning 2=0;Lightning 20=0;Lightning 21=0;Lightning 22=0;Lightning 23=0;Lightning 24=0;Lightning 25=0;Lightning 26=0;Lightning 27=0;Lightning 28=0;Lightning 29=0;Lightning 3=0;Lightning 30=0;Lightning 31=0;Lightning 32=0;Lightning 33=0;Lightning 34=0;Lightning 35=0;Lightning 36=0;Lightning 37=0;Lightning 38=0;Lightning 39=0;Lightning 4=0;Lightning 40=0;Lightning 41=0;Lightning 42=0;Lightning 43=0;Lightning 44=0;Lightning 45=0;Lightning 46=0;Lightning 47=0;Lightning 48=0;Lightning 49=0;Lightning 5=0;Lightning 50=0;Lightning 51=0;Lightning 52=0;Lightning 53=0;Lightning 54=0;Lightning 55=0;Lightning 56=0;Lightning 57=0;Lightning 58=0;Lightning 59=0;Lightning 6=0;Lightning 60=0;Lightning 61=0;Lightning 62=0;Lightning 63=0;Lightning 64=0;Lightning 65=0;Lightning 66=0;Lightning 67=0;Lightning 68=0;Lightning 69=0;Lightning 7=0;Lightning 70=0;Lightning 71=0;Lightning 72=0;Lightning 73=0;Lightning 74=0;Lightning 75=0;Lightning 76=0;Lightning 77=0;Lightning 78=0;Lightning 79=0;Lightning 8=0;Lightning 80=0;Lightning 81=0;Lightning 82=0;Lightning 83=0;Lightning 84=0;Lightning 85=0;Lightning 86=0;Lightning 87=0;Lightning 88=0;Lightning 89=0;Lightning 9=0;Lightning 90=0;Lightning 91=0;Lightning 92=0;Lightning 93=0;Lightning 94=0;Lightning 95=0;Lightning 96=0;Lightning 97=0;Lightning 98=0;Lightning 99=0;Meteor 1=0;Meteor 10=0;Meteor 11=0;Meteor 12=0;Meteor 13=0;Meteor 14=0;Meteor 15=0;Meteor 16=0;Meteor 17=0;Meteor 18=0;Meteor 19=0;Meteor 2=0;Meteor 20=0;Meteor 21=0;Meteor 22=0;Meteor 23=0;Meteor 24=0;Meteor 25=0;Meteor 26=0;Meteor 27=0;Meteor 28=0;Meteor 29=0;Meteor 3=0;Meteor 30=0;Meteor 31=0;Meteor 32=0;Meteor 33=0;Meteor 34=0;Meteor 35=0;Meteor 36=0;Meteor 37=0;Meteor 38=0;Meteor 39=0;Meteor 4=0;Meteor 40=0;Meteor 41=0;Meteor 42=0;Meteor 43=0;Meteor 44=0;Meteor 45=0;Meteor 46=0;Meteor 47=0;Meteor 48=0;Meteor 49=0;Meteor 5=0;Meteor 50=0;Meteor 51=0;Meteor 52=0;Meteor 53=0;Meteor 54=0;Meteor 55=0;Meteor 56=0;Meteor 57=0;Meteor 58=0;Meteor 59=0;Meteor 6=0;Meteor 60=0;Meteor 61=0;Meteor 62=0;Meteor 63=0;Meteor 64=0;Meteor 7=0;Meteor 8=0;Meteor 9=0",
+                "meteor_fall|0|Attack 1=1",
+                "meteor_fall|1|Attack 1=1;Attack 2=1;Attack 3=1;Attack 4=1;Attack 5=1;Attack 6=1",
+                "gravity_dominion|0|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 17=0;Attack 18=0;Attack 19=0;Attack 2=0;Attack 20=0;Attack 21=0;Attack 22=0;Attack 23=0;Attack 24=0;Attack 25=0;Attack 26=0;Attack 27=0;Attack 28=0;Attack 29=0;Attack 3=0;Attack 30=0;Attack 31=0;Attack 32=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0;Final Blast=0",
+                "gravity_dominion|1|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 17=0;Attack 18=0;Attack 19=0;Attack 2=0;Attack 20=0;Attack 21=0;Attack 22=0;Attack 23=0;Attack 24=0;Attack 25=0;Attack 26=0;Attack 27=0;Attack 28=0;Attack 29=0;Attack 3=0;Attack 30=0;Attack 31=0;Attack 32=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0;Final Blast=1",
+                "astral_railcannon|0|Attack 1=0",
+                "astral_railcannon|1|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 17=0;Attack 18=0;Attack 19=0;Attack 2=0;Attack 20=0;Attack 21=0;Attack 22=0;Attack 23=0;Attack 24=0;Attack 25=0;Attack 26=0;Attack 27=0;Attack 28=0;Attack 29=0;Attack 3=0;Attack 30=0;Attack 31=0;Attack 32=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0",
+                "frost_nova|0|Attack 1=1",
+                "frost_nova|1|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 2=0;Attack 3=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0",
+                "elemental_cataclysm|0|Attack 1=1",
+                "elemental_cataclysm|1|Attack 1=1;Attack 2=1",
+                "arcane_phalanx|0|Attack 1=0;Spear Eruption=0",
+                "arcane_phalanx|1|Attack 1=0;Attack 2=0;Attack 3=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Spear Eruption=1",
+                "afterimage_arsenal|0|Attack 1=0;Attack 2=0;Attack 3=0",
+                "afterimage_arsenal|1|Attack 1=0;Attack 2=0;Attack 3=0",
+                "rift_echo|0|Attack 1=0;Attack 2=0;Attack 3=0",
+                "rift_echo|1|Attack 1=0;Attack 2=0;Attack 3=0",
+                "gravity_blast|0|Attack 1=0;End Burst=1;Orb=0",
+                "gravity_blast|1|Attack 1=0;End Burst=1;Orb=0",
+                "arcane_rupture|0|Attack 1=0",
+                "arcane_rupture|1|Attack 1=0",
+                "gale_volley|0|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 2=0;Attack 3=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0",
+                "gale_volley|1|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 2=0;Attack 3=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0",
+                "cyclone_arrow|0|Attack 1=0",
+                "cyclone_arrow|1|Attack 1=0",
+                "swallow_dive|0|Aftershock=0;Attack 1=0",
+                "swallow_dive|1|Aftershock=0;Attack 1=0",
+                "skyfall_barrage|0|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 2=0;Attack 3=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0;Landing Slam=0",
+                "skyfall_barrage|1|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 17=0;Attack 18=0;Attack 19=0;Attack 2=0;Attack 20=0;Attack 21=0;Attack 22=0;Attack 23=0;Attack 24=0;Attack 25=0;Attack 26=0;Attack 27=0;Attack 28=0;Attack 29=0;Attack 3=0;Attack 30=0;Attack 31=0;Attack 32=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0;Landing Slam=1",
+                "ricochet_arrow|0|Attack 1=0;Landing Slam=1",
+                "ricochet_arrow|1|Attack 1=0;Circle 1=0;Circle 2=0;Circle 3=0;Circle 4=0;Circle 5=0;Circle 6=0;Circle 7=0;Circle 8=0;Landing Slam=1",
+                "furious_winds|0|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 17=0;Attack 18=0;Attack 19=0;Attack 2=0;Attack 20=0;Attack 21=0;Attack 22=0;Attack 23=0;Attack 24=0;Attack 25=0;Attack 26=0;Attack 27=0;Attack 28=0;Attack 29=0;Attack 3=0;Attack 30=0;Attack 31=0;Attack 32=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0;End Burst=0",
+                "furious_winds|1|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 17=0;Attack 18=0;Attack 19=0;Attack 2=0;Attack 20=0;Attack 21=0;Attack 22=0;Attack 23=0;Attack 24=0;Attack 25=0;Attack 26=0;Attack 27=0;Attack 28=0;Attack 29=0;Attack 3=0;Attack 30=0;Attack 31=0;Attack 32=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0;End Burst=0",
+                "ballista_shot|0|Attack 1=0;Shockwave=0",
+                "ballista_shot|1|Attack 1=0;Shockwave=0",
+                "arrow_rain|0|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 17=0;Attack 18=0;Attack 19=0;Attack 2=0;Attack 20=0;Attack 21=0;Attack 22=0;Attack 23=0;Attack 24=0;Attack 25=0;Attack 26=0;Attack 27=0;Attack 28=0;Attack 29=0;Attack 3=0;Attack 30=0;Attack 31=0;Attack 32=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0",
+                "arrow_rain|1|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 17=0;Attack 18=0;Attack 19=0;Attack 2=0;Attack 20=0;Attack 21=0;Attack 22=0;Attack 23=0;Attack 24=0;Attack 25=0;Attack 26=0;Attack 27=0;Attack 28=0;Attack 29=0;Attack 3=0;Attack 30=0;Attack 31=0;Attack 32=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0",
+                "pinning_shot|0|Attack 1=0;Delayed Explosion=0",
+                "pinning_shot|1|Attack 1=0;Delayed Explosion=0",
+                "explosive_arrow|0|Attack 1=1;Cluster 1=0;Cluster 10=0;Cluster 11=0;Cluster 12=0;Cluster 13=0;Cluster 14=0;Cluster 15=0;Cluster 16=0;Cluster 17=0;Cluster 18=0;Cluster 19=0;Cluster 2=0;Cluster 20=0;Cluster 21=0;Cluster 22=0;Cluster 23=0;Cluster 24=0;Cluster 25=0;Cluster 26=0;Cluster 27=0;Cluster 28=0;Cluster 29=0;Cluster 3=0;Cluster 30=0;Cluster 31=0;Cluster 32=0;Cluster 4=0;Cluster 5=0;Cluster 6=0;Cluster 7=0;Cluster 8=0;Cluster 9=0",
+                "explosive_arrow|1|Attack 1=1;Cluster 1=0;Cluster 10=0;Cluster 11=0;Cluster 12=0;Cluster 13=0;Cluster 14=0;Cluster 15=0;Cluster 16=0;Cluster 17=0;Cluster 18=0;Cluster 19=0;Cluster 2=0;Cluster 20=0;Cluster 21=0;Cluster 22=0;Cluster 23=0;Cluster 24=0;Cluster 25=0;Cluster 26=0;Cluster 27=0;Cluster 28=0;Cluster 29=0;Cluster 3=0;Cluster 30=0;Cluster 31=0;Cluster 32=0;Cluster 4=0;Cluster 5=0;Cluster 6=0;Cluster 7=0;Cluster 8=0;Cluster 9=0",
+                "splitting_arrow|0|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 2=0;Attack 3=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0;Great Arrow=0;Sky Arrow=0",
+                "splitting_arrow|1|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 17=0;Attack 18=0;Attack 19=0;Attack 2=0;Attack 20=0;Attack 21=0;Attack 22=0;Attack 23=0;Attack 24=0;Attack 25=0;Attack 26=0;Attack 27=0;Attack 28=0;Attack 29=0;Attack 3=0;Attack 30=0;Attack 31=0;Attack 32=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0;Great Arrow=0;Sky Arrow=1",
+                "starfall_volley|0|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 17=0;Attack 18=0;Attack 19=0;Attack 2=0;Attack 20=0;Attack 21=0;Attack 22=0;Attack 23=0;Attack 24=0;Attack 25=0;Attack 26=0;Attack 27=0;Attack 28=0;Attack 29=0;Attack 3=0;Attack 30=0;Attack 31=0;Attack 32=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0;Final Star=0",
+                "starfall_volley|1|Attack 1=0;Attack 10=0;Attack 11=0;Attack 12=0;Attack 13=0;Attack 14=0;Attack 15=0;Attack 16=0;Attack 17=0;Attack 18=0;Attack 19=0;Attack 2=0;Attack 20=0;Attack 21=0;Attack 22=0;Attack 23=0;Attack 24=0;Attack 25=0;Attack 26=0;Attack 27=0;Attack 28=0;Attack 29=0;Attack 3=0;Attack 30=0;Attack 31=0;Attack 32=0;Attack 4=0;Attack 5=0;Attack 6=0;Attack 7=0;Attack 8=0;Attack 9=0;Final Star=0",
+                };
+                for (int r = 0; r < rows.Length; r++)
+                {
+                    string[] fields = rows[r].Split('|');
+                    string[] attacks = fields[2].Split(';');
+                    for (int h = 0; h < attacks.Length; h++)
+                    {
+                        int equals = attacks[h].LastIndexOf('=');
+                        SkillStunEntry(fields[0], fields[1] == "1", attacks[h].Substring(0, equals), attacks[h].Substring(equals + 1) == "1");
+                    }
+                }
+            }
+            finally { stunConfig.SaveOnConfigSet = saveEach; if (saveEach) stunConfig.Save(); }
+        }
+
         public static void Stun(Character target, Vector3 fromPoint)
         {
             if (IsDebuffImmune(target)) return;
@@ -7153,6 +11192,7 @@ namespace DragonsAltarCombat
 
         public static bool IsSmallEnemy(Character target)
         {
+            if (target is DragonBirdTarget) return !target.IsDead();
             if (target == null || target.IsDead() || target.IsBoss())
                 return false;
 
@@ -7259,6 +11299,19 @@ namespace DragonsAltarCombat
             return 1f + bonus;
         }
 
+        // v0.25.183 (perf): Humanoid hand-slot fields resolved once (GetHandItem runs several times per frame)
+        private static readonly Dictionary<string, FieldInfo> _handFields = new Dictionary<string, FieldInfo>();
+        private static FieldInfo HandField(string fieldName)
+        {
+            FieldInfo f;
+            if (!_handFields.TryGetValue(fieldName, out f))
+            {
+                f = typeof(Humanoid).GetField(fieldName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                _handFields[fieldName] = f;
+            }
+            return f;
+        }
+
         public static ItemDrop.ItemData GetHandItem(Humanoid humanoid, string fieldName)
         {
             if (humanoid == null || string.IsNullOrEmpty(fieldName))
@@ -7266,7 +11319,7 @@ namespace DragonsAltarCombat
 
             try
             {
-                FieldInfo field = typeof(Humanoid).GetField(fieldName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                FieldInfo field = HandField(fieldName);
                 if (field != null)
                     return field.GetValue(humanoid) as ItemDrop.ItemData;
             }
@@ -7284,7 +11337,7 @@ namespace DragonsAltarCombat
 
             try
             {
-                FieldInfo field = typeof(Humanoid).GetField(fieldName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                FieldInfo field = HandField(fieldName);
                 if (field != null)
                     field.SetValue(humanoid, item);
             }
@@ -7375,6 +11428,226 @@ namespace DragonsAltarCombat
             {
             }
             return sharedName.Contains("wand") || prefabName.Contains("wand");
+        }
+
+        public static bool WeaponMeshBounds(Renderer renderer, out Bounds bounds)
+        {
+            bounds = new Bounds();
+            if (renderer == null || renderer is ParticleSystemRenderer || renderer is TrailRenderer || renderer is LineRenderer) return false;
+            MeshFilter filter = renderer.GetComponent<MeshFilter>();
+            if (filter != null && filter.sharedMesh != null) { bounds = filter.sharedMesh.bounds; return true; }
+            SkinnedMeshRenderer skinned = renderer as SkinnedMeshRenderer;
+            if (skinned != null && skinned.sharedMesh != null) { bounds = skinned.localBounds; return true; }
+            return false;
+        }
+
+        public static bool WeaponAxis(GameObject item, Transform hand, out Vector3 direction, out Vector3 tip)
+        {
+            direction = hand.up; tip = hand.position + direction;
+            float longest = 0f;
+            Renderer[] renderers = item.GetComponentsInChildren<Renderer>();
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                Bounds bounds;
+                if (!WeaponMeshBounds(renderers[i], out bounds)) continue;
+                for (int axis = 0; axis < 3; axis++)
+                {
+                    Vector3 extent = Vector3.zero; extent[axis] = bounds.extents[axis];
+                    Vector3 world = renderers[i].transform.TransformVector(extent);
+                    if (world.sqrMagnitude <= longest) continue;
+                    longest = world.sqrMagnitude;
+                    Vector3 center = renderers[i].transform.TransformPoint(bounds.center);
+                    if (Vector3.Dot(world, center - hand.position) < 0f) world = -world;
+                    direction = world.normalized; tip = center + world;
+                }
+            }
+            return longest > 0.0001f;
+        }
+
+        // v0.25.144 (user): dual wielding belongs to the Mercenary ONLY. A 2HDW (dual wield by nature, two-handed in code) is
+        // blocked for every other class, base classes and classless players included.
+        public static bool IsBaseClassBlocked2HDW(Player player, ItemDrop.ItemData item)
+        {
+            if (player == null || item == null || !IsPairedWeapon(item)) return false;
+            if (string.IsNullOrEmpty(GetClass(player))) return false;   // v0.25.187 (user): no class = no restriction at all
+            return GetAdvancementName(player) != "Mercenary";
+        }
+
+        // ------------------------------------------------------------------ v0.25.169 WEAPON RESTRICTIONS (user)
+        // Applied to real equip actions (Humanoid.EquipItem prefix) and re-checked every 0.5 s (class changes): a prohibited
+        // item is unequipped into the inventory (never dropped or deleted). Only COMBAT equipment is judged - tools (hammer,
+        // hoe, cultivator, fishing rod), torches, pickaxes and anything that is not a weapon or shield always pass.
+        //   Warrior / Mercenary : no daggers, fist weapons or ranged / magic weapons (combat axes allowed, modded too).
+        //   Sword Master        : Swords only (+ shields, + the utility axe).
+        //   Cleric / Paladin / Priest : Staves, Wands, Maces/Clubs only (+ shields, + the utility axe).
+        //   Sorcerer + ACs, Ranger + ACs : no melee except ONE dagger (no paired daggers); their ranged / shield rules stay
+        //                         in their own modules (Warlock / Wildborn); + the utility axe.
+        //   Utility axe: classes barred from combat axes may hold a GENUINE VANILLA one-handed chopping axe (prefab whitelist,
+        //   so a modded axe - Therzie's included - is never mistaken for one); it chops trees but deals no damage to creatures.
+        //   Mercenary dual wield: the exact same prefab in both hands (quality may differ), never Spears / War Pikes.
+        //   Kali (future, NOT built): melee = daggers + fist weapons, dual daggers from the Base Class, ranged = bows only with
+        //   no arrows consumed and no extra bow bonuses, same utility-axe exception.
+        private static readonly HashSet<string> VanillaChoppingAxes = new HashSet<string>(StringComparer.Ordinal)
+            { "AxeStone", "AxeFlint", "AxeBronze", "AxeIron", "AxeBlackMetal", "AxeJotunBane" };
+
+        public static string PrefabName(ItemDrop.ItemData item)
+        {
+            if (item == null) return "";
+            try { if (item.m_dropPrefab != null) return item.m_dropPrefab.name; } catch (Exception) { }
+            return "";
+        }
+
+        // "" = not combat equipment (never restricted)
+        public static string CombatKind(ItemDrop.ItemData item)
+        {
+            if (item == null || item.m_shared == null) return "";
+            string it = item.m_shared.m_itemType.ToString();
+            if (it == "Shield") return "shield";
+            if (it == "Torch" || it == "Tool" || it == "Utility" || it == "Misc" || it == "Ammo" || it == "AmmoNonEquipable" || it == "Consumable" || it == "Material" || it == "Trophy" || it == "Fish") return "";
+            if (it.IndexOf("Weapon", StringComparison.OrdinalIgnoreCase) < 0 && it != "Bow") return "";
+            switch (item.m_shared.m_skillType.ToString())
+            {
+                case "Swords": return "sword";
+                case "Knives": return "dagger";
+                case "Clubs": return "club";
+                case "Polearms": return "polearm";
+                case "Spears": return "spear";
+                case "Axes": return "axe";
+                case "Unarmed": return "fist";
+                case "Bows": return "bow";
+                case "Crossbows": return "crossbow";
+                case "ElementalMagic": case "BloodMagic": return "magic";
+            }
+            return "";   // pickaxes, fishing, unknown skills: tools
+        }
+
+        public static bool IsVanillaChoppingAxe(ItemDrop.ItemData item)
+        {
+            return item != null && item.m_shared != null && item.m_shared.m_skillType == Skills.SkillType.Axes &&
+                   IsOneHandedWeapon(item) && VanillaChoppingAxes.Contains(PrefabName(item));
+        }
+
+        private static bool BarredFromCombatAxes(Player p)
+        {
+            string cls = GetClass(p), adv = GetAdvancementName(p);
+            if (cls == "Warrior") return adv == "Sword Master";
+            return cls == "Cleric" || cls == "Sorcerer" || cls == "Ranger" || cls == "Kali";
+        }
+
+        // the axe is held only as a chopping tool: it must never hurt a creature
+        public static bool IsUtilityAxeOnly(Player p, ItemDrop.ItemData item)
+        {
+            return p != null && CombatKind(item) == "axe" && BarredFromCombatAxes(p) && IsVanillaChoppingAxe(item);
+        }
+
+        // null = allowed, otherwise the readable reason
+        public static string WeaponRuleViolation(Player p, ItemDrop.ItemData item)
+        {
+            if (p == null || item == null) return null;
+            string armorWhy = ArmorRuleViolation(p, item);
+            if (armorWhy != null) return armorWhy;
+            string kind = CombatKind(item);
+            if (kind == "" || kind == "shield") return null;   // shields: per-class modules (Sorcerer / Ranger unequip theirs)
+            string cls = GetClass(p), adv = GetAdvancementName(p);
+            if (string.IsNullOrEmpty(cls)) return null;
+            if (kind == "axe" && BarredFromCombatAxes(p))
+                return IsVanillaChoppingAxe(item) ? null : "Only a plain vanilla axe can be carried as a woodcutting tool";
+            if (cls == "Warrior")
+            {
+                if (adv == "Sword Master") return kind == "sword" ? null : "A Sword Master fights with Swords only";
+                if (kind == "dagger" || kind == "fist") return "Warriors do not fight with daggers or fist weapons";
+                if (kind == "bow" || kind == "crossbow" || kind == "magic") return "Warriors do not use ranged weapons";
+                return null;
+            }
+            if (cls == "Cleric")
+                return kind == "magic" || kind == "club" ? null : "Clerics fight with Staves, Wands and Maces only";
+            if (cls == "Sorcerer" || cls == "Ranger")
+            {
+                if (cls == "Ranger" && kind == "magic") return "Rangers cannot equip Staves or Wands";
+                if (cls == "Sorcerer" && (kind == "bow" || kind == "crossbow")) return "Sorcerers cannot equip Bows, Greatbows or Crossbows";
+                bool melee = kind == "sword" || kind == "club" || kind == "polearm" || kind == "spear" || kind == "fist" || kind == "axe";
+                if (melee) return (cls == "Sorcerer" ? "Sorcerers" : "Rangers") + " carry no melee weapon except a single dagger";
+                if (kind == "dagger" && IsPairedWeapon(item)) return "No dual daggers";
+                return null;
+            }
+            return null;
+        }
+
+        // v0.25.186 (user) class armor: heavy = any movement penalty (even -1%), light = none.
+        // Warrior / Cleric: Chest + Legs must be heavy (helmets and capes are free; their penalties are negated too).
+        // Sorcerer / Ranger: no armor piece (chest, legs, helmet, cape) may carry a movement penalty.
+        public static bool NegatesArmorPenalty(Player p)
+        {
+            if (p == null) return false;
+            string cls = GetClass(p);
+            return cls == "Warrior" || cls == "Cleric";
+        }
+
+        public static string ArmorRuleViolation(Player p, ItemDrop.ItemData item)
+        {
+            if (p == null || item == null || item.m_shared == null) return null;
+            string t = item.m_shared.m_itemType.ToString();
+            bool body = t == "Chest" || t == "Legs";
+            if (!body && t != "Helmet" && t != "Shoulder") return null;
+            string cls = GetClass(p);
+            if (string.IsNullOrEmpty(cls)) return null;
+            bool heavy = item.m_shared.m_movementModifier < 0f;
+            if ((cls == "Warrior" || cls == "Cleric") && body && !heavy)
+                return (cls == "Warrior" ? "Warriors" : "Clerics") + " wear heavy armor only";
+            if ((cls == "Sorcerer" || cls == "Ranger") && heavy)
+                return (cls == "Sorcerer" ? "Sorcerers" : "Rangers") + " wear light armor only";
+            return null;
+        }
+
+        private static readonly string[] ArmorSlotFields = { "m_chestItem", "m_legItem", "m_helmetItem", "m_shoulderItem" };
+
+        // Mercenary dual wield: same prefab both hands (quality may differ); never Spears / War Pikes; never Gun Staves.
+        public static bool IsDualEligible(ItemDrop.ItemData item)
+        {
+            if (!IsOneHandedWeapon(item) || IsGunStaff(item)) return false;
+            if (item.m_shared.m_skillType == Skills.SkillType.Spears || item.m_shared.m_skillType == Skills.SkillType.Polearms) return false;
+            string n = PrefabName(item) + " " + (item.m_shared.m_name ?? "");
+            return n.IndexOf("pike", StringComparison.OrdinalIgnoreCase) < 0;
+        }
+
+        public static bool IsMatchingDualPair(ItemDrop.ItemData a, ItemDrop.ItemData b)
+        {
+            if (a == null || b == null || a == b || !IsDualEligible(a) || !IsDualEligible(b)) return false;
+            string pa = PrefabName(a), pb = PrefabName(b);
+            return pa.Length > 0 && pa == pb;
+        }
+
+        // v0.25.142 the vanilla swing triggers SBDW's Attack1-3 clips live on (3 swings). null = not available.
+        public static string PairedCarrier(Animator a)
+        {
+            string[] candidates = { "swing_axe", "axe_swing" };
+            for (int i = 0; i < candidates.Length; i++) if (StrictTriggerCount(a, candidates[i]) >= 3) return candidates[i];
+            return null;
+        }
+
+        public static bool IsPairedWeapon(ItemDrop.ItemData item)
+        {
+            if (item == null || item.m_shared == null || item.m_shared.m_attack == null) return false;
+            if (item.m_shared.m_itemType.ToString() != "TwoHandedWeapon") return false;
+            string animation = item.m_shared.m_attack.m_attackAnimation ?? "";
+            // v0.25.141: attack metadata only - a native paired item is two-handed and its PRIMARY attack animation is a "dual*" set.
+            // An external (Warfare / Wizardry) animation registration alone does not make a weapon paired.
+            return animation.StartsWith("dual", StringComparison.OrdinalIgnoreCase);
+        }
+
+        // v0.25.164 (user): paired daggers (2HDW knives: primary dual_knives / Knives skill) stay VANILLA - not part of AA's NACC yet.
+        // They are still paired weapons for the equip rule (Mercenary only).
+        public static bool IsPairedDagger(ItemDrop.ItemData item)
+        {
+            if (!IsPairedWeapon(item)) return false;
+            return string.Equals(item.m_shared.m_attack.m_attackAnimation, "dual_knives", StringComparison.OrdinalIgnoreCase) ||
+                item.m_shared.m_skillType.ToString() == "Knives";
+        }
+
+        public static bool IsTherzieStaff(ItemDrop.ItemData item)
+        {
+            return IsStaffWeapon(item) && item.m_dropPrefab != null &&
+                item.m_dropPrefab.name.EndsWith("_TW", StringComparison.OrdinalIgnoreCase);
         }
 
         public static bool IsStaffWeapon(ItemDrop.ItemData item)
@@ -7792,8 +12065,22 @@ namespace DragonsAltarCombat
             {
                 try { IncomingHitFilters[f](target, hit); } catch { }
             }
+            // v0.25.85 launch fall rule (after the module filters, so Acrobat / Wildborn reductions stack on top).
+            if (target is Player && LaunchFalls.Count > 0 && IsFallHit(hit))
+            {
+                float lf = LaunchFallFactor((Player)target);
+                if (lf < 1f) hit.m_damage.Modify(lf);
+            }
+            // v0.25.169b (user): FALL damage (after every fall reduction) resets the NACC continuation; other damage does not
+            if (target == Player.m_localPlayer && IsFallHit(hit) && hit.GetTotalDamage() > 0.01f) DragonCombatPlugin.NaccFallDamage((Player)target);
 
             Player attacker = hit.GetAttacker() as Player;
+            // v0.25.169 utility axe (vanilla chopping axe held by a class barred from combat axes): no damage to creatures
+            if (attacker != null && ReadHitSkill(hit) == Skills.SkillType.Axes && IsUtilityAxeOnly(attacker, GetHandItem(attacker, "m_rightItem")))
+            {
+                hit.m_damage.Modify(0f);
+                hit.m_pushForce = 0f;
+            }
             // v0.25.11: split parts of a hit were already fully modified as the original hit.
             if (attacker != null && !SplitHitInFlight)
             {
@@ -7911,7 +12198,17 @@ namespace DragonsAltarCombat
                         HyperFirstHitGrant[key] = grant;
                     }
                     HyperFirstHitLast[key] = Time.time;
-                    if (grant) HitHyperArmorUntil[targetPlayer.GetInstanceID()] = Time.time + 0.20f;
+                    if (grant)
+                    {
+                        HitHyperArmorUntil[targetPlayer.GetInstanceID()] = Time.time + 0.20f;
+                        // v0.25.190 the defensive proc shows: a quick muted steel edge response (local player, max once per 0.6 s)
+                        if (targetPlayer == Player.m_localPlayer && DragonVfx.Enabled && Time.time >= _hyperProcVfxAt)
+                        {
+                            _hyperProcVfxAt = Time.time + 0.6f;
+                            Vector3 hp = targetPlayer.transform.position + Vector3.up * 1.1f;
+                            RunVfx(delegate { DragonVfx.Burst(hp, new Color(0.78f, 0.80f, 0.84f, 0.85f), 10, 2.4f, 0.05f, 0.22f, 0f); });
+                        }
+                    }
                     else HitHyperArmorUntil.Remove(targetPlayer.GetInstanceID());
                 }
 
@@ -8042,18 +12339,125 @@ namespace DragonsAltarCombat
             {
                 ItemDrop.ItemData l = GetHandItem(p, "m_leftItem");
                 ItemDrop.ItemData r = GetHandItem(p, "m_rightItem");
+                // v0.25.142: returning to a base class with a 2HDW equipped - unequip it (it stays in the inventory, nothing is dropped).
+                ItemDrop.ItemData paired = IsBaseClassBlocked2HDW(p, r) ? r : (IsBaseClassBlocked2HDW(p, l) ? l : null);
+                if (paired != null)
+                {
+                    p.UnequipItem(paired, true);
+                    if (MessageHud.instance != null)
+                        MessageHud.instance.ShowMessage(MessageHud.MessageType.Center, "Only a Mercenary can dual wield");
+                    return;
+                }
+                // v0.25.186 class armor (e.g. after choosing a class): unequip into the inventory
+                for (int ai = 0; ai < ArmorSlotFields.Length; ai++)
+                {
+                    ItemDrop.ItemData piece = GetHandItem(p, ArmorSlotFields[ai]);
+                    string armorWhy = ArmorRuleViolation(p, piece);
+                    if (armorWhy == null) continue;
+                    p.UnequipItem(piece, true);
+                    if (MessageHud.instance != null) MessageHud.instance.ShowMessage(MessageHud.MessageType.Center, armorWhy);
+                    return;
+                }
+                // v0.25.169 class weapon restrictions (e.g. after a class change): unequip into the inventory
+                ItemDrop.ItemData bad = WeaponRuleViolation(p, r) != null ? r : (WeaponRuleViolation(p, l) != null ? l : null);
+                if (bad != null)
+                {
+                    string why = WeaponRuleViolation(p, bad);
+                    p.UnequipItem(bad, true);
+                    if (MessageHud.instance != null) MessageHud.instance.ShowMessage(MessageHud.MessageType.Center, why);
+                    return;
+                }
                 if (l == null || r == null || l == r) return;
+                if (string.IsNullOrEmpty(GetClass(p))) return;   // v0.25.187 (user): classless players may dual wield anything
                 string adv = GetAdvancementName(p);
+                // a Mercenary's pair must be the exact same prefab (and never Spears / War Pikes)
+                if (adv == "Mercenary" && IsOneHandedWeapon(l) && IsOneHandedWeapon(r) && !IsGunStaff(l) && !IsGunStaff(r) && !IsMatchingDualPair(l, r))
+                {
+                    p.UnequipItem(l, true);
+                    if (MessageHud.instance != null) MessageHud.instance.ShowMessage(MessageHud.MessageType.Center, "Dual wield needs two of the same weapon");
+                    return;
+                }
                 bool dualMelee = IsOneHandedWeapon(l) && IsOneHandedWeapon(r) && !IsGunStaff(l);
-                bool dualGun = IsGunStaff(l) && IsGunStaff(r);
-                if ((dualMelee && adv != "Mercenary") || (dualGun && adv != "Spellcaster"))
+                bool dualGun = IsGunStaff(l) && IsGunStaff(r);   // v0.25.145: nobody dual wields Gun Staves (Horizon Walker mechanic removed)
+                if ((dualMelee && adv != "Mercenary") || dualGun)
                 {
                     p.UnequipItem(l, true);
                     if (MessageHud.instance != null)
-                        MessageHud.instance.ShowMessage(MessageHud.MessageType.Center, dualGun ? "Only a Horizon Walker can dual wield Gun Staves" : "Only a Mercenary can dual wield");
+                        MessageHud.instance.ShowMessage(MessageHud.MessageType.Center, dualGun ? "Gun Staves cannot be dual wielded" : "Only a Mercenary can dual wield");
                 }
             }
             catch (Exception) { }
+        }
+
+        // ------------------------------------------------------------------ v0.25.85 LAUNCH FALL RULE (user, universal)
+        // Every skill that sends you up protects you from fall damage: none for a fall up to 2x the launch height H,
+        // then 75% / 50% / 25% less damage for falls up to 3H / 4H / 5H, full damage beyond (H = 5m: 10m free,
+        // 15m -75%, 20m -50%, 25m -25%, 30m+ full). H = the real rise (peak - launch), at least the skill's height.
+        private class LaunchFallState { public float LaunchY, PeakY, MinRise, LandedAt = -1f, Granted; }
+        private static readonly Dictionary<int, LaunchFallState> LaunchFalls = new Dictionary<int, LaunchFallState>();
+        private static MethodInfo _lfGround;
+
+        public static void GrantLaunchFall(Player p, float riseMeters)
+        {
+            if (p == null) return;
+            LaunchFallState st;
+            float y = p.transform.position.y;
+            if (!LaunchFalls.TryGetValue(p.GetInstanceID(), out st) || st == null || st.LandedAt >= 0f)
+            {
+                st = new LaunchFallState();
+                st.LaunchY = y; st.PeakY = y;
+                LaunchFalls[p.GetInstanceID()] = st;
+            }
+            st.MinRise = Mathf.Max(st.MinRise, M(Mathf.Max(0f, riseMeters)));
+            st.Granted = Time.time;
+            st.LandedAt = -1f;
+        }
+
+        private static void UpdateLaunchFalls()
+        {
+            if (LaunchFalls.Count == 0) return;
+            Player p = Player.m_localPlayer;
+            List<int> drop = null;
+            foreach (KeyValuePair<int, LaunchFallState> kv in LaunchFalls)
+            {
+                LaunchFallState st = kv.Value;
+                if (p == null || kv.Key != p.GetInstanceID() || st == null) { if (drop == null) drop = new List<int>(); drop.Add(kv.Key); continue; }
+                float y = p.transform.position.y;
+                if (y > st.PeakY) st.PeakY = y;
+                bool grounded = false;
+                try { if (_lfGround == null) _lfGround = typeof(Character).GetMethod("IsOnGround", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic); grounded = _lfGround != null && (bool)_lfGround.Invoke(p, null); } catch (Exception) { }
+                if (grounded && Time.time - st.Granted > 0.4f && st.LandedAt < 0f) st.LandedAt = Time.time;
+                if (st.LandedAt >= 0f && Time.time - st.LandedAt > 0.4f) { if (drop == null) drop = new List<int>(); drop.Add(kv.Key); }
+                else if (Time.time - st.Granted > 60f) { if (drop == null) drop = new List<int>(); drop.Add(kv.Key); }
+            }
+            if (drop != null) for (int i = 0; i < drop.Count; i++) LaunchFalls.Remove(drop[i]);
+        }
+
+        // Fraction of the fall damage that is still taken (1 = untouched).
+        private static float LaunchFallFactor(Player p)
+        {
+            LaunchFallState st;
+            if (p == null || !LaunchFalls.TryGetValue(p.GetInstanceID(), out st) || st == null) return 1f;
+            float h = Mathf.Max(st.MinRise, st.PeakY - st.LaunchY);
+            if (h <= 0.05f) return 1f;
+            float fall = Mathf.Max(0f, st.PeakY - p.transform.position.y);
+            if (fall <= 2f * h) return 0f;
+            if (fall <= 3f * h) return 0.25f;
+            if (fall <= 4f * h) return 0.5f;
+            if (fall <= 5f * h) return 0.75f;
+            return 1f;
+        }
+
+        private static FieldInfo _hitTypeField;
+        public static bool IsFallHit(HitData hit)
+        {
+            try
+            {
+                if (_hitTypeField == null) _hitTypeField = typeof(HitData).GetField("m_hitType", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                object v = _hitTypeField == null ? null : _hitTypeField.GetValue(hit);
+                return v != null && v.ToString() == "Fall";
+            }
+            catch (Exception) { return false; }
         }
 
         // ------------------------------------------------------------------ v0.25.78
@@ -8130,6 +12534,8 @@ namespace DragonsAltarCombat
             catch (Exception) { return null; }
         }
 
+        private static readonly MethodInfo _cleanseGetEffects = typeof(SEMan).GetMethod("GetStatusEffects", Type.EmptyTypes);
+        private static readonly MethodInfo _cleanseRemove = typeof(SEMan).GetMethod("RemoveStatusEffect", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new Type[] { typeof(int), typeof(bool) }, null);
         public static void CleanseDebuffs(Character c)
         {
             if (c == null) return;
@@ -8142,10 +12548,10 @@ namespace DragonsAltarCombat
             {
                 object seman = c.GetSEMan();
                 if (seman == null) return;
-                MethodInfo get = seman.GetType().GetMethod("GetStatusEffects", Type.EmptyTypes);
+                MethodInfo get = _cleanseGetEffects;
                 System.Collections.IList list = get == null ? null : get.Invoke(seman, null) as System.Collections.IList;
                 if (list == null) return;
-                MethodInfo remove = seman.GetType().GetMethod("RemoveStatusEffect", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new Type[] { typeof(int), typeof(bool) }, null);
+                MethodInfo remove = _cleanseRemove;
                 if (remove == null) return;
                 List<string> names = new List<string>();
                 for (int i = 0; i < list.Count; i++) { StatusEffect se = list[i] as StatusEffect; if (se != null && !(se is IhStatusDisplay) && IsDebuffEffectName(se.name)) names.Add(se.name); }
@@ -8214,14 +12620,48 @@ namespace DragonsAltarCombat
             Vector3 f = p.transform.forward; f.y = 0f;
             if (f.sqrMagnitude > 0.001f) _bulwark.transform.rotation = Quaternion.LookRotation(f.normalized, Vector3.up);
             float flash = Mathf.Clamp01(1f - (Time.time - _bulwarkFlashAt) / 0.25f);
-            DragonVfx.SetDomeAlpha(_bulwark, _bulwarkAlpha * (0.75f + 0.25f * Mathf.Sin(Time.time * 4f)) + flash * 0.8f);
+            DragonVfx.SetDomeAlpha(_bulwark, _bulwarkAlpha * 0.3f + flash * 0.8f);   // v0.25.180 thin while blocking, defined on actual blocks
+        }
+
+        private static Player _animationClassPlayer;
+        private static string _animationClass, _animationAdvancement;
+        internal static void CheckAnimationClass(Player player)
+        {
+            if (player == null) { _animationClassPlayer = null; _animationClass = null; return; }
+            string className = GetClassName(player), advancement = GetAdvancementName(player);
+            if (_animationClassPlayer != player) { _animationClassPlayer = player; _animationClass = className; _animationAdvancement = advancement; return; }
+            if (_animationClass == className && _animationAdvancement == advancement) return;
+            _animationClass = className; _animationAdvancement = advancement;
+            DragonSkillClipDriver driver = player.GetComponent<DragonSkillClipDriver>();
+            if (driver != null) driver.CancelAnimation();
+            Animator animator = player.GetComponentInChildren<Animator>();
+            DragonMixamoPlayer source = animator == null ? null : animator.GetComponent<DragonMixamoPlayer>();
+            if (source != null) source.CancelAnimation();
+            DragonDualWield.ReleasePaired(player);   // v0.25.142 class change releases the 2HDW clip override
+            DragonVanillaTail tail = player.GetComponent<DragonVanillaTail>();
+            if (tail != null) { tail.enabled = false; UnityEngine.Object.Destroy(tail); }
+            DragonVanillaLoop loop = player.GetComponent<DragonVanillaLoop>();
+            if (loop != null) { loop.enabled = false; UnityEngine.Object.Destroy(loop); }
+            VanillaPauseUntil = 0f; SkillBowHoldUntil = 0f; DragonMixamo.LiveUntil = 0f;
+            _aimWindupUntil = 0f;
+            ForceRun(player, false);
+            SetSkillAnimSpeed(player, 1f, 0f);
+            if (animator != null) animator.speed = 1f;
         }
 
         public static void RuntimeUpdate()
         {
+            PruneProjectiles();   // v0.25.185 registry upkeep (every 2 s)
+            CheckAnimationClass(Player.m_localPlayer);
+            try { if (Player.m_localPlayer != null && Player.m_localPlayer.IsBlocking()) LastBlockAt = Time.time; } catch (Exception) { }   // v0.25.175
+            DragonCombatPlugin.UpdateNaccAirborne(Player.m_localPlayer);   // v0.25.154 takeoff forgets the interrupted chain
             float now = Time.time;
+            if (_aimWindupPlayer == Player.m_localPlayer && now < _aimWindupUntil)
+                FaceAimNow(_aimWindupPlayer);
             if (Player.m_localPlayer != null || _bulwark != null) UpdateHolyBulwark(Player.m_localPlayer);
+            DragonClothGuard.Update(Player.m_localPlayer);   // v0.25.168 cape follows the body during skill animations
             if (PendingLearns.Count > 0) UpdateLearns();
+            UpdateLaunchFalls();
             if (now >= _nextDualCheck) { _nextDualCheck = now + 0.5f; EnforceDualWieldOwner(Player.m_localPlayer); DragonCombatPlugin.SyncDualController(Player.m_localPlayer); }
 
             List<int> removeBuffPlayers = null;
@@ -8308,6 +12748,7 @@ namespace DragonsAltarCombat
                 if (state.ZapAttacker != null)
                     hit.SetAttacker(state.ZapAttacker);
                 target.Damage(hit);
+                ApplySkillStun(state.ZapAttacker, target, "lightning_zap", "Detonation", false, true);
             }
 
             if (DragonCombatPlugin.Instance != null)
@@ -8316,6 +12757,17 @@ namespace DragonsAltarCombat
 
         private static IEnumerator ZapVisual(Vector3 center, float radius)
         {
+            if (DragonVfx.Enabled)
+            {
+                // v0.25.190 the delayed Zap detonation crackles at the target: short ivory-blue filaments + a compact spark burst
+                DragonCombat.RunVfx(delegate
+                {
+                    Vector3 c0 = center + Vector3.up * 1f;
+                    for (int k = 0; k < 4; k++) { Vector3 o = UnityEngine.Random.onUnitSphere * radius * 0.8f; o.y = Mathf.Abs(o.y) * 0.5f; DragonVfx.Bolt(c0, center + o, new Color(0.80f, 0.92f, 1f, 0.95f), 0.05f, 0.16f); }
+                    DragonVfx.Burst(c0, new Color(0.85f, 0.95f, 1f, 0.9f), 14, 3f, 0.05f, 0.25f, 0f);
+                });
+                yield break;
+            }
             GameObject obj = new GameObject("DragonsAltarZap");
             LineRenderer line = obj.AddComponent<LineRenderer>();
             line.useWorldSpace = true;
@@ -8347,13 +12799,21 @@ namespace DragonsAltarCombat
             UnityEngine.Object.Destroy(obj);
         }
 
+
+        private static readonly Dictionary<Type, MethodInfo> _cachedIsTamed = new Dictionary<Type, MethodInfo>();
+        private static MethodInfo CachedIsTamed(Type t)
+        {
+            MethodInfo mi;
+            if (!_cachedIsTamed.TryGetValue(t, out mi)) { mi = t.GetMethod("IsTamed", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic); _cachedIsTamed[t] = mi; }
+            return mi;
+        }
         private static bool IsEnemy(Player attacker, Character target)
         {
             if (target == null || attacker == null || target == attacker || target.IsDead() || target is Player)
                 return false;
             try
             {
-                MethodInfo isTamed = target.GetType().GetMethod("IsTamed", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                MethodInfo isTamed = CachedIsTamed(target.GetType());   // v0.25.183 (perf) resolved once per type
                 if (isTamed != null && Convert.ToBoolean(isTamed.Invoke(target, null)))
                     return false;
             }
@@ -8363,13 +12823,25 @@ namespace DragonsAltarCombat
             return true;
         }
 
+        // v0.25.183 (perf): only fields that can hold a Player, resolved once per type (same declaration order, same result)
+        private static readonly Dictionary<Type, FieldInfo[]> _playerCapableFields = new Dictionary<Type, FieldInfo[]>();
         public static Player GetPlayerFromSEMan(object seman)
         {
             if (seman == null)
                 return null;
             try
             {
-                FieldInfo[] fields = seman.GetType().GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                Type st = seman.GetType();
+                FieldInfo[] fields;
+                if (!_playerCapableFields.TryGetValue(st, out fields))
+                {
+                    FieldInfo[] all = st.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    List<FieldInfo> keep = new List<FieldInfo>();
+                    for (int k = 0; k < all.Length; k++)
+                        if (all[k].FieldType.IsAssignableFrom(typeof(Player)) || typeof(Player).IsAssignableFrom(all[k].FieldType)) keep.Add(all[k]);
+                    fields = keep.ToArray();
+                    _playerCapableFields[st] = fields;
+                }
                 for (int i = 0; i < fields.Length; i++)
                 {
                     Player player = fields[i].GetValue(seman) as Player;
@@ -8624,7 +13096,7 @@ namespace DragonsAltarCombat
             hit.m_damage.Modify(multiplier);
         }
 
-        private static Skills.SkillType ReadHitSkill(HitData hit)
+        internal static Skills.SkillType ReadHitSkill(HitData hit)
         {
             try
             {
@@ -8801,6 +13273,932 @@ namespace DragonsAltarCombat
     // asset bundle embedded in DualWield.dll. If the user drops that DLL into ImmortalHeroesAssets/ (NOT into
     // plugins), its bundle is read and an AnimatorOverrideController swaps the one-handed attack clips for the
     // dual-wield ones while two one-handed weapons are held - the same clip map the mod itself uses.
+    // ---------------------------------------------------------------- v0.25.111 MIXAMO CLIPS
+    // Real animation clips (Mixamo FBX -> Unity Humanoid -> Asset Bundle 'aethelborn_anims' in
+    // ImmortalHeroesAssets). A clip is played on the player's own Animator through a Playables output that is
+    // blended over Valheim's controller (fade in / out), between two clip times at a chosen speed, so its hit
+    // frame lands on the skill's damage. Root motion is baked into the pose in Unity, so the clip never moves
+    // the character: the skill code keeps owning movement. No bundle = the old animation plays (fallback).
+    public static class DragonMixamo
+    {
+        private static Dictionary<string, AnimationClip> _clips;
+        private static float _nextTry = -1f;
+        private static string _status = "not loaded yet";
+        private static bool _statusShown;
+
+        // v0.25.125 ROOT CAUSE FIX: the clips never loaded in-game (every Circle Swing so far was the old procedural
+        // fallback). Now: the bundle is searched everywhere it can sensibly be (plugins/ImmortalHeroesAssets, next to
+        // this DLL, anywhere under BepInEx/plugins), clips are read both ways (LoadAllAssets and per-asset sub-assets)
+        // and the result is shown ON SCREEN the first time a skill asks, so nobody has to dig through the log.
+        public static string Status { get { Load(); return _status; } }
+        public static int Count { get { Load(); return _clips == null ? 0 : _clips.Count; } }
+
+        private static void Load()
+        {
+            if (_clips != null) return;
+            if (FinishAsyncNow()) return;   // v0.25.170 a cast arrived while the background load was still running
+            if (Time.realtimeSinceStartup < _nextTry) return;
+            _nextTry = Time.realtimeSinceStartup + 10f;   // missing file: look again in 10 s (user may copy it in while playing)
+            try
+            {
+                string path = FindBundle();
+                if (path == null)
+                {
+                    _status = "Aethelborn animations NOT FOUND - put 'aethelborn_anims' (from Unity AABuild) into " + System.IO.Path.Combine(System.IO.Path.Combine(Paths.PluginPath, "ImmortalHeroesAssets"), "aethelborn_anims");
+                    Log(_status);
+                    return;
+                }
+                AssetBundle bundle = _pwBundle != null ? _pwBundle : AssetBundle.LoadFromFile(path);   // v0.25.170 reuse the background-loaded bundle
+                if (bundle == null)
+                {
+                    _status = "Aethelborn animations FAILED to load (" + path + "). Valheim runs Unity " + Application.unityVersion + " - build the bundle with that exact Unity version.";
+                    Log(_status);
+                    _nextTry = float.MaxValue;
+                    return;
+                }
+                Dictionary<string, AnimationClip> clips = new Dictionary<string, AnimationClip>(StringComparer.OrdinalIgnoreCase);
+                AddClips(clips, bundle.LoadAllAssets<AnimationClip>());
+                string[] assets = bundle.GetAllAssetNames();
+                // v0.25.170: the per-asset pass loaded every clip a SECOND time - only needed when LoadAllAssets found none
+                if (clips.Count == 0)
+                    for (int i = 0; i < assets.Length; i++)
+                    {
+                        try { AddClips(clips, bundle.LoadAssetWithSubAssets<AnimationClip>(assets[i])); } catch (Exception) { }
+                    }
+                if (clips.Count == 0)
+                {
+                    _status = "Aethelborn animations: bundle found but it holds NO clips (" + assets.Length + " assets). Rebuild it with AAAnimBuilder.";
+                    Log(_status);
+                    _nextTry = float.MaxValue;
+                    return;
+                }
+                _clips = clips;
+                List<string> names = new List<string>(clips.Keys);
+                names.Sort(StringComparer.Ordinal);
+                _status = "Aethelborn animations loaded: " + clips.Count + " clips";
+                Log(_status + " from " + path + " (Unity " + Application.unityVersion + "): " + string.Join(", ", names.ToArray()));
+            }
+            catch (Exception e)
+            {
+                _status = "Aethelborn animations error: " + e.Message;
+                Log(_status);
+            }
+        }
+
+        // ------------------------------------------------------------------ v0.25.170 FIRST-USE PREWARM (user: big FPS drop on
+        // the first Mixamo skill after launch). Profiled by code path: the first cast ran Load() synchronously in the combat frame
+        // (FindBundle disk search + AssetBundle.LoadFromFile + LoadAllAssets of every clip and their mirrors + a SECOND full
+        // LoadAssetWithSubAssets pass over every asset), then created the first PlayableGraph / clip binding for the character.
+        // Repeated casts only pay the graph creation. Now: the bundle and its clips load ASYNCHRONOUSLY from the main menu on
+        // (LoadFromFileAsync + LoadAllAssetsAsync, one step per frame), and once a local player exists the clips the skills
+        // actually use are bound once on that character's Animator through a throw-away graph with output weight 0 (nothing
+        // is shown, no damage / VFX / resources), one clip per frame; the graph is destroyed right away. Re-done for a new
+        // character. A cast before the load finished completes it synchronously (old behaviour, no worse).
+        private static readonly string[] WarmClips = {
+            "melee_run_jump_attack", "great_sword_jump_attack", "great_sword_high_spin_attack", "great_sword_high_spin_attack_mirror",
+            "great_sword_slash_4", "great_sword_slash_4_mirror", "melee_attack_360_high", "melee_attack_360_high_mirror" };
+        private static int _pwState;   // 0 idle, 1 bundle loading, 2 clips loading, 3 loaded / failed
+        private static AssetBundleCreateRequest _pwBundleReq;
+        private static AssetBundle _pwBundle;
+        private static AssetBundleRequest _pwAssetsReq;
+        private static string _pwPath;
+        private static float _pwStartedAt;
+        private static Animator _pwWarmed;
+        private static int _pwIndex;
+
+        public static void PrewarmTick(Player local)
+        {
+            try
+            {
+                if (_clips == null)
+                {
+                    if (_pwState == 0)
+                    {
+                        if (Time.realtimeSinceStartup < _nextTry) return;
+                        _pwPath = FindBundle();
+                        if (_pwPath == null) { _pwState = 3; return; }   // Load() reports the missing file on first use
+                        _pwBundleReq = AssetBundle.LoadFromFileAsync(_pwPath);
+                        _pwStartedAt = Time.realtimeSinceStartup;
+                        _pwState = 1;
+                        return;
+                    }
+                    if (_pwState == 1)
+                    {
+                        if (_pwBundleReq == null || !_pwBundleReq.isDone) return;
+                        AssetBundle b = _pwBundleReq.assetBundle;
+                        if (b == null) { _pwState = 3; return; }
+                        _pwBundle = b;
+                        _pwAssetsReq = b.LoadAllAssetsAsync<AnimationClip>();
+                        _pwState = 2;
+                        return;
+                    }
+                    if (_pwState == 2)
+                    {
+                        if (_pwAssetsReq == null || !_pwAssetsReq.isDone) return;
+                        AdoptAsync();
+                        return;
+                    }
+                    return;
+                }
+                WarmBindings(local);
+            }
+            catch (Exception) { _pwState = 3; }
+        }
+
+        // a cast needs the clips now: finish the background requests synchronously
+        private static bool FinishAsyncNow()
+        {
+            if (_pwState != 1 && _pwState != 2) return false;
+            try
+            {
+                if (_pwState == 1)
+                {
+                    AssetBundle b = _pwBundleReq == null ? null : _pwBundleReq.assetBundle;   // blocks until loaded
+                    if (b == null) { _pwState = 3; return false; }
+                    _pwBundle = b;
+                    _pwAssetsReq = b.LoadAllAssetsAsync<AnimationClip>();
+                    _pwState = 2;
+                }
+                if (_pwAssetsReq != null) { object force = _pwAssetsReq.allAssets; if (force == null) { } }   // blocks until loaded
+                AdoptAsync();
+                return _clips != null;
+            }
+            catch (Exception) { _pwState = 3; return false; }
+        }
+
+        private static void AdoptAsync()
+        {
+            _pwState = 3;
+            if (_pwAssetsReq == null) return;
+            Dictionary<string, AnimationClip> clips = new Dictionary<string, AnimationClip>(StringComparer.OrdinalIgnoreCase);
+            UnityEngine.Object[] all = _pwAssetsReq.allAssets;
+            List<AnimationClip> list = new List<AnimationClip>();
+            if (all != null) for (int i = 0; i < all.Length; i++) { AnimationClip c = all[i] as AnimationClip; if (c != null) list.Add(c); }
+            AddClips(clips, list.ToArray());
+            if (clips.Count == 0) return;   // unusual bundle layout: the synchronous Load() (per-asset pass) handles it on first use
+            _clips = clips;
+            _status = "Aethelborn animations loaded: " + clips.Count + " clips";
+            Log(_status + " in the background from " + _pwPath + " (" + (Time.realtimeSinceStartup - _pwStartedAt).ToString("F2") + " s, Unity " + Application.unityVersion + ")");
+        }
+
+        // bind the skills' clips on this character's Animator once (weight-0 throw-away graph, one clip per frame)
+        private static float _pwRecheckAt;
+        private static void WarmBindings(Player local)
+        {
+            if (local.InAttack() || DragonCombat.IsSkillLocked(local) || DragonCombat.SkillOwnsAnimator(local)) return;
+            if (local == null || _clips == null) return;
+            // v0.25.183 (perf): once every clip is warmed, look for a new character animator once a second instead of every frame
+            if (_pwWarmed != null && _pwIndex >= WarmClips.Length && Time.time < _pwRecheckAt) return;
+            _pwRecheckAt = Time.time + 1f;
+            Animator an = local.GetComponentInChildren<Animator>();
+            if (an == null) return;
+            if (an != _pwWarmed) { _pwWarmed = an; _pwIndex = 0; }
+            if (_pwIndex >= WarmClips.Length) return;
+            if (local.IsDead() || Time.time < DragonMixamo.LiveUntil || DragonCombat.ClipBusy(local)) return;   // never next to a live skill
+            DragonMixamoPlayer live = an.GetComponent<DragonMixamoPlayer>();
+            if (live != null && live.IsLive) return;
+            AnimationClip clip;
+            string name = WarmClips[_pwIndex++];
+            if (!_clips.TryGetValue(name, out clip) || clip == null) return;
+            UnityEngine.Playables.PlayableGraph g = UnityEngine.Playables.PlayableGraph.Create("Aethelborn Mixamo Warm");
+            try
+            {
+                g.SetTimeUpdateMode(UnityEngine.Playables.DirectorUpdateMode.Manual);
+                UnityEngine.Animations.AnimationPlayableOutput o = UnityEngine.Animations.AnimationPlayableOutput.Create(g, "warm", an);
+                UnityEngine.Playables.PlayableOutputExtensions.SetWeight(o, 0f);
+                UnityEngine.Animations.AnimationClipPlayable cp = UnityEngine.Animations.AnimationClipPlayable.Create(g, clip);
+                UnityEngine.Playables.PlayableOutputExtensions.SetSourcePlayable(o, cp);
+                g.Evaluate(0f);
+            }
+            finally { if (g.IsValid()) g.Destroy(); }
+            if (_pwIndex >= WarmClips.Length) Log("Aethelborn animations: skill clips prepared on the character");
+        }
+
+        private static void AddClips(Dictionary<string, AnimationClip> into, AnimationClip[] found)
+        {
+            if (found == null) return;
+            for (int i = 0; i < found.Length; i++)
+            {
+                AnimationClip c = found[i];
+                if (c == null || c.name.StartsWith("__preview__", StringComparison.Ordinal)) continue;
+                into[c.name] = c;
+            }
+        }
+
+        private static string FindBundle()
+        {
+            string[] names = new string[] { "aethelborn_anims", "immortalheroes_anims" };
+            List<string> dirs = new List<string>();
+            dirs.Add(System.IO.Path.Combine(Paths.PluginPath, "ImmortalHeroesAssets"));
+            try
+            {
+                string here = System.IO.Path.GetDirectoryName(typeof(DragonMixamo).Assembly.Location);
+                if (!string.IsNullOrEmpty(here)) { dirs.Add(System.IO.Path.Combine(here, "ImmortalHeroesAssets")); dirs.Add(here); }
+            }
+            catch (Exception) { }
+            dirs.Add(Paths.PluginPath);
+            for (int d = 0; d < dirs.Count; d++)
+                for (int n = 0; n < names.Length; n++)
+                {
+                    string p = System.IO.Path.Combine(dirs[d], names[n]);
+                    if (System.IO.File.Exists(p)) return p;
+                }
+            for (int n = 0; n < names.Length; n++)
+            {
+                try
+                {
+                    string[] hits = System.IO.Directory.GetFiles(Paths.PluginPath, names[n], System.IO.SearchOption.AllDirectories);
+                    if (hits.Length > 0) return hits[0];
+                }
+                catch (Exception) { }
+            }
+            return null;
+        }
+
+        private static void Log(string s)
+        {
+            if (DragonCombatPlugin.Instance != null) DragonCombatPlugin.Instance.LogInfo("[Mixamo] " + s);
+            else Debug.Log("[Mixamo] " + s);
+        }
+
+        // Shown once per session on screen (top left) the first time a skill looks for its animation.
+        public static void ShowStatusOnce()
+        {
+            if (_statusShown) return;
+            Load();
+            _statusShown = true;
+            try { if (MessageHud.instance != null) MessageHud.instance.ShowMessage(MessageHud.MessageType.TopLeft, _status); } catch (Exception) { }
+        }
+
+        public static bool Has(string name)
+        {
+            return Resolve(name) != null;
+        }
+
+        // Exact name, else a clip whose name ENDS with it (Mixamo files keep prefixes like "x_bot_..."); mirror and
+        // non-mirror never match each other.
+        private static AnimationClip Resolve(string name)
+        {
+            Load();
+            if (_clips == null || string.IsNullOrEmpty(name)) return null;
+            AnimationClip c;
+            if (_clips.TryGetValue(name, out c)) return c;
+            bool wantMirror = name.EndsWith("_mirror", StringComparison.Ordinal);
+            foreach (KeyValuePair<string, AnimationClip> kv in _clips)
+            {
+                string k = kv.Key.ToLowerInvariant();
+                if (k.EndsWith(name, StringComparison.Ordinal) && k.EndsWith("_mirror", StringComparison.Ordinal) == wantMirror) return kv.Value;
+            }
+            return null;
+        }
+
+        // Plays clip time 'from' -> 'to' at 'speed'; returns false (nothing happens) when the clip is missing.
+        public static bool Play(Player player, string name, float from, float to, float speed, float fadeIn, float fadeOut)
+        {
+            return Play(player, name, from, to, speed, fadeIn, fadeOut, true);
+        }
+
+        public static bool Play(Player player, string name, float from, float to, float speed, float fadeIn, float fadeOut, bool inPlace)
+        {
+            float s = Mathf.Clamp(speed, 0.05f, 8f);
+            return PlayWarp(player, name, new float[] { 0f, Mathf.Max(0.02f, (to - from) / s) }, new float[] { from, to }, fadeIn, fadeOut, false);
+        }
+
+        // v0.25.125 TIME WARP: realTimes[i] (seconds after the call) -> clipTimes[i] (seconds in the clip), linear in
+        // between, so the skill decides exactly when every part of the move happens (slow anticipation, fast strike,
+        // hit frame ON the damage). Holds the last clip time, then fades out to the Animator.
+        // transferRoot: the clip's own forward travel (baked into the pose) moves the real player body; the hips are
+        // pinned to the body otherwise (no drifting away from the collider, no snap back). Only for clips started at
+        // their beginning (clipTimes[0] ~ 0).
+        public static bool PlayWarp(Player player, string name, float[] realTimes, float[] clipTimes, float fadeIn, float fadeOut, bool transferRoot)
+        {
+            ShowStatusOnce();
+            AnimationClip clip = Resolve(name);
+            if (player == null || clip == null || realTimes == null || clipTimes == null || realTimes.Length < 2 || realTimes.Length != clipTimes.Length) return false;
+            Animator an = player.GetComponentInChildren<Animator>();
+            if (an == null || !an.isHuman) return false;
+            DragonMixamoPlayer p = an.GetComponent<DragonMixamoPlayer>();
+            if (p == null) p = an.gameObject.AddComponent<DragonMixamoPlayer>();
+            p.Begin(player, an, clip, realTimes, clipTimes, fadeIn, fadeOut, transferRoot && clipTimes[0] < 0.05f,
+                name == "melee_run_jump_attack" || name == "great_sword_jump_attack");
+            DragonArmGuard.Attach(player);
+            return true;
+        }
+
+        // RJS landing: continue the held clip instead of blending two copies of the same pose.
+        public static bool ContinueWarp(Player player, string name, float[] realTimes, float[] clipTimes, float fadeIn, float fadeOut)
+        {
+            if (player == null) return false;
+            Animator an = player.GetComponentInChildren<Animator>();
+            DragonMixamoPlayer p = an == null ? null : an.GetComponent<DragonMixamoPlayer>();
+            AnimationClip clip = Resolve(name);
+            if (p != null && p.Continue(clip, realTimes, clipTimes, fadeOut)) return true;
+            return PlayWarp(player, name, realTimes, clipTimes, fadeIn, fadeOut, false);
+        }
+
+        // v0.25.129: jump slams - the real (physics) jump owns the height, so a clip's own rise is clipped off the hips
+        // (crouches stay). Set before PlayWarp; cleared when that motion has faded out.
+        public static void SetNoRise(Player player, bool on)
+        {
+            if (player == null) return;
+            Animator an = player.GetComponentInChildren<Animator>();
+            if (an == null) return;
+            DragonMixamoPlayer p = an.GetComponent<DragonMixamoPlayer>();
+            if (p == null) p = an.gameObject.AddComponent<DragonMixamoPlayer>();
+            p.NoRise = on;
+        }
+
+        // v0.25.130 jump slams: between clip times from..to (full at peak..to) the spine bends forward so the main
+        // weapon's head reaches the terrain under it.
+        public static void SetGroundReach(Player player, float from, float peak, float to)
+        {
+            if (player == null) return;
+            Animator an = player.GetComponentInChildren<Animator>();
+            DragonMixamoPlayer p = an != null ? an.GetComponent<DragonMixamoPlayer>() : null;
+            if (p == null) return;
+            GameObject item = null;
+            Component[] cs = player.GetComponentsInChildren<Component>();
+            for (int i = 0; i < cs.Length; i++)
+                if (cs[i] != null && cs[i].GetType().Name == "VisEquipment")
+                {
+                    FieldInfo f = cs[i].GetType().GetField("m_rightItemInstance", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    item = f == null ? null : f.GetValue(cs[i]) as GameObject;
+                    break;
+                }
+            p.SetReach(item == null ? null : item.GetComponentsInChildren<Renderer>(), from, peak, to);
+        }
+
+        // v0.25.138: the current warp HOLDS its last frame (no fade out) until the next PlayWarp chains from it or
+        // Stop is called (safety: 8 s). Set right after PlayWarp.
+        public static void SetHold(Player player, bool on)
+        {
+            if (player == null) return;
+            Animator an = player.GetComponentInChildren<Animator>();
+            DragonMixamoPlayer p = an != null ? an.GetComponent<DragonMixamoPlayer>() : null;
+            if (p != null) p.HoldEnd = on;
+        }
+
+        // v0.25.183 (perf, user: Seismic Guillotine hitch on cast): the lookup below searched every loaded assembly for the
+        // DualWield type (AccessTools.TypeByName, slow when the mod is absent) and string-processed every clip of the
+        // player's animator on EVERY cast. Same answer cached per (source controller, name); the DualWield type and its
+        // field are looked up once.
+        private static readonly Dictionary<string, AnimationClip> _origClipCache = new Dictionary<string, AnimationClip>();
+        private static bool _dualTypeLooked;
+        private static FieldInfo _dualControllersField;
+
+        public static AnimationClip OriginalSkillClip(Player player, string name)
+        {
+            Animator an = player == null ? null : player.GetComponentInChildren<Animator>();
+            RuntimeAnimatorController controller = an == null ? null : an.runtimeAnimatorController;
+            while (controller is AnimatorOverrideController)
+                controller = ((AnimatorOverrideController)controller).runtimeAnimatorController;
+            RuntimeAnimatorController dualOriginal = null;
+            try
+            {
+                if (!_dualTypeLooked)
+                {
+                    _dualTypeLooked = true;
+                    Type dt = DragonCombat.FindTypeCached("DualWield.DualWield");
+                    _dualControllersField = dt == null ? null : AccessTools.Field(dt, "CustomRuntimeControllers");
+                }
+                IDictionary known0 = _dualControllersField == null ? null : _dualControllersField.GetValue(null) as IDictionary;
+                dualOriginal = known0 == null || !known0.Contains("Original") ? null : known0["Original"] as RuntimeAnimatorController;
+            }
+            catch (Exception) { dualOriginal = null; }
+            string cacheKey = (dualOriginal != null ? dualOriginal.GetInstanceID() : 0).ToString() + "|" + (controller != null ? controller.GetInstanceID() : 0).ToString() + "|" + name;
+            AnimationClip cached;
+            if (_origClipCache.TryGetValue(cacheKey, out cached) && cached != null) return cached;
+            AnimationClip found = OriginalSkillClipUncached(controller, dualOriginal, name);
+            if (found != null) { if (_origClipCache.Count > 64) _origClipCache.Clear(); _origClipCache[cacheKey] = found; }
+            return found;
+        }
+
+        private static AnimationClip OriginalSkillClipUncached(RuntimeAnimatorController controller, RuntimeAnimatorController dualOriginal, string name)
+        {
+            string wanted = name.Replace("_", "").Replace("-", "").Replace(" ", "").ToLowerInvariant();
+            AnimationClip[] clips;
+            // Some Dual Wield builds replace the complete controller rather than using an override chain.
+            try
+            {
+                RuntimeAnimatorController original = dualOriginal;
+                clips = original == null ? null : original.animationClips;
+                if (clips != null) for (int i = 0; i < clips.Length; i++)
+                    if (clips[i] != null && (clips[i].name.Replace("_", "").Replace("-", "").Replace(" ", "").ToLowerInvariant() == wanted ||
+                        (wanted.Contains("sledge") && clips[i].name.ToLowerInvariant().Contains("sledge") &&
+                         (clips[i].name.ToLowerInvariant().Contains("attack") || clips[i].name.ToLowerInvariant().Contains("swing")))))
+                        return clips[i];
+            }
+            catch (Exception) { }
+            clips = controller == null ? null : controller.animationClips;
+            if (clips != null) for (int i = 0; i < clips.Length; i++)
+                if (clips[i] != null && (clips[i].name.Replace("_", "").Replace("-", "").Replace(" ", "").ToLowerInvariant() == wanted ||
+                        (wanted.Contains("sledge") && clips[i].name.ToLowerInvariant().Contains("sledge") &&
+                         (clips[i].name.ToLowerInvariant().Contains("attack") || clips[i].name.ToLowerInvariant().Contains("swing")))))
+                    return clips[i];
+            return null;
+        }
+
+        public static bool PlaySource(Player player, AnimationClip clip, float from, float to, float seconds, float blend, bool hold, string tune = null)
+        {
+            Animator an = player == null ? null : player.GetComponentInChildren<Animator>();
+            if (clip == null || an == null || !an.isHuman) return false;
+            if (tune != null)
+            {
+                float start, end;
+                DragonCombat.AnimTuning(tune, out start, out end);
+                float oldSpan = Mathf.Max(0.03f, to - from);
+                from = Mathf.Max(from, start * clip.length);
+                to = Mathf.Max(from + 0.03f, Mathf.Min(to, end * clip.length));
+                float speed = DragonCombat.AnimSpeed(tune);
+                seconds = speed > 0f ? (to - from) / speed : seconds * (to - from) / oldSpan;
+            }
+            DragonMixamoPlayer p = an.GetComponent<DragonMixamoPlayer>();
+            if (p == null) p = an.gameObject.AddComponent<DragonMixamoPlayer>();
+            p.Begin(player, an, clip, new float[] { 0f, Mathf.Max(0.03f, seconds) },
+                new float[] { from, to }, blend, 0.22f, false, false, true);
+            p.HoldEnd = hold;
+            DragonCombat.BlockSkillAnimAttack(player, seconds + 0.25f);
+            DragonArmGuard.Attach(player);
+            return true;
+        }
+
+        public static float ContactTime(AnimationClip clip, float fallback)
+        {
+            if (clip != null)
+            {
+                AnimationEvent[] events = clip.events;
+                for (int i = 0; i < events.Length; i++)
+                    if (events[i].functionName == "OnAttackTrigger" || events[i].functionName == "Hit") return events[i].time;
+            }
+            return fallback;
+        }
+
+        public static float LiveUntil;   // v0.25.132 set while a Mixamo clip drives the local player
+
+        public static void Stop(Player player, float fadeOut)
+        {
+            if (player == null) return;
+            Animator an = player.GetComponentInChildren<Animator>();
+            DragonMixamoPlayer p = an != null ? an.GetComponent<DragonMixamoPlayer>() : null;
+            if (p != null) p.StopNow(fadeOut);
+        }
+    }
+
+    // v0.25.138: keeps a skill's vanilla animation at its one speed after the clip driver's keys are over, until the
+    // state ends (100%), its End % cuts it, or anything else takes the layer. Then the speed is released.
+    public class DragonVanillaTail : MonoBehaviour
+    {
+        private Player _p;
+        private Animator _an;
+        private int _layer, _hash, _pre;
+        private float _k, _endN, _until;
+        private int _gen;   // v0.25.154
+        private bool _active;
+        public bool IsBusy { get { return _active && _gen == DragonCombat.SkillAnimGen; } }
+
+        public static void Run(Player p, Animator an, int layer, int hash, float k, float endN, int pre)
+        {
+            if (p == null || an == null) return;
+            DragonVanillaTail t = p.GetComponent<DragonVanillaTail>();
+            if (t == null) t = p.gameObject.AddComponent<DragonVanillaTail>();
+            t._gen = DragonCombat.SkillAnimGen;
+            t._p = p; t._an = an; t._layer = layer; t._hash = hash; t._k = k; t._endN = endN; t._pre = pre;
+            t._active = true;
+            t._until = Time.time + 8f;
+            DragonCombat.SetSkillAnimSpeed(p, k, 0.15f);
+        }
+
+        private void Done(bool reset)
+        {
+            _active = false;
+            enabled = false;
+            if (reset && _p != null) DragonCombat.ReleaseSkillAnimSpeed(_p, _k);
+            Destroy(this);
+        }
+
+        private void LateUpdate()
+        {
+            if (_p == null || _an == null || _p.IsDead() || Time.time > _until || _layer >= _an.layerCount || _gen != DragonCombat.SkillAnimGen) { Done(true); return; }
+            try
+            {
+                if (_an.IsInTransition(_layer) && _an.GetNextAnimatorStateInfo(_layer).fullPathHash != _hash) { Done(true); return; }
+                AnimatorStateInfo st = _an.GetCurrentAnimatorStateInfo(_layer);
+                if (st.fullPathHash != _hash) { Done(true); return; }
+                if (_endN < 0.999f && st.normalizedTime >= _endN) { Done(true); _an.CrossFade(_pre, 0.25f, _layer); return; }
+                if (st.normalizedTime >= 1f) { Done(true); return; }
+                DragonCombat.SetSkillAnimSpeed(_p, _k, 0.15f);
+            }
+            catch (Exception) { Done(true); }
+        }
+    }
+
+    // v0.25.125: one PlayableGraph per character. A clip started while another still plays is added to the SAME graph
+    // and cross-faded in (mixer; the old branch keeps moving at natural speed) - one continuous motion, no seam.
+    // Hips are pinned to where the vanilla pose had them (body-relative), plus the transferred travel lead, so a
+    // clip started mid-way never jumps the body and a spin turns around the character's own centre.
+    [DefaultExecutionOrder(31000)]
+    public class DragonMixamoPlayer : MonoBehaviour
+    {
+        private UnityEngine.Playables.PlayableGraph _graph;
+        private UnityEngine.Animations.AnimationPlayableOutput _output;
+        private UnityEngine.Animations.AnimationClipPlayable _clip;
+        private AnimationClip _sourceClip;
+        private UnityEngine.Playables.Playable _root;
+        private UnityEngine.Animations.AnimationMixerPlayable _xmix;
+        private bool _live, _stopping, _mixing, _restSet, _transfer;
+        public bool IsLive { get { return _live; } }   // v0.25.170 prewarm never runs next to a live clip
+        private bool _stableLanding;
+        private float _fadeIn, _fadeOut, _age, _stopAt, _w, _mixAge;
+        private float[] _wr, _wc;
+        private Transform _hips, _body;
+        private Rigidbody _rb;
+        private Vector3 _rest, _bodyStart, _want;
+
+        public bool Live { get { return _live; } }
+        public bool NoRise;
+        public bool HoldEnd;   // v0.25.138
+        private float _restY;
+        private Renderer[] _reachR;
+        private float _reachFrom, _reachPeak, _reachTo, _reachAngle;
+        private bool _reachLocked;
+        private static int _reachMask = -1;
+
+        public void SetReach(Renderer[] rs, float from, float peak, float to)
+        {
+            _reachR = rs; _reachAngle = 0f; _reachLocked = false; _reachFrom = from; _reachPeak = Mathf.Max(from + 0.01f, peak); _reachTo = Mathf.Max(_reachPeak + 0.01f, to);
+        }
+
+        // v0.25.130 bend the spine forward (around the body's right axis) until the weapon head touches the ground.
+        private void GroundReach(Animator an)
+        {
+            if (_reachR == null || _reachR.Length == 0 || !UnityEngine.Playables.PlayableExtensions.IsValid(_clip)) return;
+            float ct = (float)UnityEngine.Playables.PlayableExtensions.GetTime(_clip);
+            if (ct <= _reachFrom || ct >= _reachTo + 0.15f) { if (ct >= _reachTo + 0.15f) _reachR = null; return; }
+            float w = ct < _reachPeak ? Mathf.InverseLerp(_reachFrom, _reachPeak, ct) : 1f - Mathf.Clamp01((ct - _reachTo) / 0.15f);
+            w = w * w * (3f - 2f * w) * _wOut;
+            Transform spine = an.GetBoneTransform(HumanBodyBones.Spine), hand = an.GetBoneTransform(HumanBodyBones.RightHand);
+            if (spine == null || hand == null || w <= 0.001f) return;
+            // v0.25.139 JITTER ROOT CAUSE: the player's Animator is not re-evaluated on every rendered frame, so the bend was
+            // applied again on top of itself each frame (the spine kept rotating until the next animator tick) and the weapon
+            // probe measured the already-bent pose. A spine that still holds what we wrote last frame is restored first.
+            if (_spineT == spine && _spineHas && Quaternion.Angle(spine.localRotation, _spineWritten) < 0.01f) spine.localRotation = _spineBase;
+            else _spineBase = spine.localRotation;
+            _spineT = spine; _spineHas = true; _spineWritten = spine.localRotation;
+            if (_reachLocked)
+            {
+                spine.rotation = Quaternion.AngleAxis(_reachAngle * w, _body.right) * spine.rotation;
+                _spineWritten = spine.localRotation;
+                return;
+            }
+            bool any = false; Bounds b = new Bounds();
+            for (int i = 0; i < _reachR.Length; i++)
+            {
+                if (_reachR[i] == null || !_reachR[i].enabled) continue;
+                Bounds local;
+                if (!DragonCombat.WeaponMeshBounds(_reachR[i], out local)) continue;
+                for (int corner = 0; corner < 8; corner++)
+                {
+                    Vector3 point = local.center + Vector3.Scale(local.extents,
+                        new Vector3((corner & 1) == 0 ? -1f : 1f, (corner & 2) == 0 ? -1f : 1f, (corner & 4) == 0 ? -1f : 1f));
+                    point = _reachR[i].transform.TransformPoint(point);
+                    if (!any) { b = new Bounds(point, Vector3.zero); any = true; } else b.Encapsulate(point);
+                }
+            }
+            if (!any) return;
+            Vector3 dir = b.center - hand.position;
+            if (dir.sqrMagnitude < 0.0001f) return;
+            dir.Normalize();
+            Vector3 e = b.extents;
+            Vector3 tip = b.center + dir * (Mathf.Abs(dir.x) * e.x + Mathf.Abs(dir.y) * e.y + Mathf.Abs(dir.z) * e.z);
+            if (_reachMask == -1) _reachMask = LayerMask.GetMask("Default", "static_solid", "Default_small", "terrain", "piece", "vehicle");
+            RaycastHit[] hits = Physics.RaycastAll(tip + Vector3.up * 2f, Vector3.down, 5f, _reachMask, QueryTriggerInteraction.Ignore);
+            float gy = float.NegativeInfinity;
+            for (int i = 0; i < hits.Length; i++)
+            {
+                Collider c = hits[i].collider;
+                if (c == null || c.transform.IsChildOf(_body) || c.GetComponentInParent<Character>() != null) continue;
+                if (hits[i].point.y > gy) gy = hits[i].point.y;
+            }
+            if (float.IsNegativeInfinity(gy) || tip.y <= gy - 0.06f || tip.y - gy > 2.5f) return;   // v0.25.131 only near the ground
+            Vector3 fwd = _body.forward; fwd.y = 0f; fwd.Normalize();
+            Vector3 v = tip - spine.position;
+            float f = Vector3.Dot(v, fwd), u = v.y, R = Mathf.Sqrt(f * f + u * u);
+            if (R < 0.2f || f < 0.05f) return;
+            float want = Mathf.Clamp((gy - 0.06f - spine.position.y) / R, -1f, 1f);   // v0.25.131 the head bites into the ground
+            float delta = Mathf.Atan2(u, f) * Mathf.Rad2Deg - Mathf.Asin(want) * Mathf.Rad2Deg;
+            _reachAngle = Mathf.Clamp(delta, 0f, 60f);
+            if (ct >= _reachPeak) _reachLocked = true;
+            spine.rotation = Quaternion.AngleAxis(_reachAngle * w, _body.right) * spine.rotation;
+            _spineWritten = spine.localRotation;
+        }
+
+        private Transform _spineT;
+        private Quaternion _spineBase, _spineWritten;
+        private bool _spineHas;
+
+        public void Begin(Player player, Animator an, AnimationClip clip, float[] realTimes, float[] clipTimes, float fadeIn, float fadeOut, bool transfer, bool stableLanding, bool keepOutgoingTempo = false)
+        {
+            DragonCombat.CheckAnimationClass(player);
+            bool chained = _live && !_stopping && _graph.IsValid();
+            _reachR = null; _reachAngle = 0f; _reachLocked = false; _spineHas = false;
+            if (clip != _sourceClip) NoRise = false;
+            _body = player.transform;
+            _rb = player.GetComponent<Rigidbody>();
+            _hips = an.GetBoneTransform(HumanBodyBones.Hips);
+            if (!chained)
+            {
+                Kill();
+                _graph = UnityEngine.Playables.PlayableGraph.Create("Aethelborn Mixamo");
+                _graph.SetTimeUpdateMode(UnityEngine.Playables.DirectorUpdateMode.GameTime);
+                _output = UnityEngine.Animations.AnimationPlayableOutput.Create(_graph, "Aethelborn Mixamo", an);
+                // rest = where the vanilla pose has the hips relative to the body (last evaluated frame)
+                _restSet = false;
+                if (_hips != null && _body != null) { _rest = _body.InverseTransformPoint(_hips.position); _restY = _rest.y; _rest.y = 0f; _restSet = true; }
+            }
+            else
+            {
+                // the outgoing clip keeps moving naturally while the new one fades in
+                float outgoing = 1f;
+                // A held contact pose remains held during its cross-fade; it cannot race into re-chambering.
+                if (keepOutgoingTempo && HoldEnd && _wr != null && _age >= _wr[_wr.Length - 1]) outgoing = 0f;
+                else if (keepOutgoingTempo && _wr != null)
+                    for (int i = 1; i < _wr.Length; i++)
+                        if (_age <= _wr[i]) { outgoing = (_wc[i] - _wc[i - 1]) / Mathf.Max(0.001f, _wr[i] - _wr[i - 1]); break; }
+                UnityEngine.Playables.PlayableExtensions.SetSpeed(_clip, outgoing);
+            }
+            UnityEngine.Animations.AnimationClipPlayable cp = UnityEngine.Animations.AnimationClipPlayable.Create(_graph, clip);
+            _stableLanding = stableLanding;
+            cp.SetApplyFootIK(!stableLanding); // These jumps already supply their own landing pose.
+            UnityEngine.Playables.PlayableExtensions.SetTime(cp, Mathf.Max(0f, clipTimes[0]));
+            UnityEngine.Playables.PlayableExtensions.SetSpeed(cp, 0.0);   // time is driven by the warp
+            _mixing = false;
+            if (chained)
+            {
+                _xmix = UnityEngine.Animations.AnimationMixerPlayable.Create(_graph, 2);
+                _graph.Connect(_root, 0, _xmix, 0);
+                _graph.Connect(cp, 0, _xmix, 1);
+                UnityEngine.Playables.PlayableExtensions.SetInputWeight(_xmix, 0, 1f);
+                UnityEngine.Playables.PlayableExtensions.SetInputWeight(_xmix, 1, 0f);
+                _root = _xmix;
+                UnityEngine.Playables.PlayableOutputExtensions.SetSourcePlayable(_output, _root);
+                UnityEngine.Playables.PlayableOutputExtensions.SetWeight(_output, 1f);
+                _mixing = true; _mixAge = 0f;
+            }
+            else
+            {
+                _root = cp;
+                UnityEngine.Playables.PlayableOutputExtensions.SetSourcePlayable(_output, _root);
+                UnityEngine.Playables.PlayableOutputExtensions.SetWeight(_output, 0f);
+                _graph.Play();
+            }
+            _clip = cp; _sourceClip = clip;
+            _wr = (float[])realTimes.Clone(); _wc = (float[])clipTimes.Clone();
+            for (int i = 0; i < _wc.Length; i++) _wc[i] = Mathf.Clamp(_wc[i], 0f, clip.length);
+            _fadeIn = Mathf.Max(0.01f, fadeIn);
+            _fadeOut = Mathf.Max(0.01f, fadeOut);
+            if (!chained) _w = 0f;
+            _age = 0f; _stopping = false; _live = true; HoldEnd = false;
+            _transfer = transfer && !chained && _rb != null;
+            if (_transfer) { _bodyStart = _rb.position; _want = Vector3.zero; }
+        }
+
+        // Used only by Run Jump Slam recovery: the last airborne pose is already the first landing pose.
+        public bool Continue(AnimationClip clip, float[] realTimes, float[] clipTimes, float fadeOut)
+        {
+            if (!_live || _stopping || !_graph.IsValid() || clip == null || clip != _sourceClip ||
+                realTimes == null || clipTimes == null || realTimes.Length < 2 || realTimes.Length != clipTimes.Length) return false;
+            float actualContactStart = Warp(_age);
+            _wr = (float[])realTimes.Clone(); _wc = (float[])clipTimes.Clone();
+            _wc[0] = actualContactStart;
+            for (int i = 0; i < _wc.Length; i++) _wc[i] = Mathf.Clamp(_wc[i], 0f, clip.length);
+            _age = 0f; _fadeOut = Mathf.Max(0.01f, fadeOut); HoldEnd = false;
+            // Preserve the airborne hip anchor through contact: the frozen frame still contains root travel.
+            // This corrects only the visual skeleton; it never moves the Rigidbody.
+            return true;
+        }
+
+        public void StopNow(float fadeOut)
+        {
+            if (!_live || _stopping) return;
+            _fadeOut = Mathf.Max(0.01f, fadeOut);
+            _stopping = true; _stopAt = _age;
+        }
+
+        private float Warp(float age)
+        {
+            if (age <= _wr[0]) return _wc[0];
+            for (int i = 1; i < _wr.Length; i++)
+                if (age <= _wr[i])
+                {
+                    float span = Mathf.Max(0.0001f, _wr[i] - _wr[i - 1]);
+                    return Mathf.Lerp(_wc[i - 1], _wc[i], (age - _wr[i - 1]) / span);
+                }
+            return _wc[_wc.Length - 1];
+        }
+
+        private static float Ease(float x) { x = Mathf.Clamp01(x); return x * x * (3f - 2f * x); }
+
+        private void Update()
+        {
+            if (!_live) return;
+            if (!_graph.IsValid()) { _live = false; return; }
+            if (_body != null && _body == (Player.m_localPlayer != null ? Player.m_localPlayer.transform : null)) DragonMixamo.LiveUntil = Time.time + 0.1f;
+            _age += Time.deltaTime;
+            UnityEngine.Playables.PlayableExtensions.SetTime(_clip, Warp(_age));
+            if (!_stopping && _age >= _wr[_wr.Length - 1] && (!HoldEnd || _age >= _wr[_wr.Length - 1] + 8f)) { _stopping = true; _stopAt = _age; }
+            if (_mixing)
+            {
+                _mixAge += Time.deltaTime;
+                float x = Ease(_mixAge / _fadeIn);
+                UnityEngine.Playables.PlayableExtensions.SetInputWeight(_xmix, 0, 1f - x);
+                UnityEngine.Playables.PlayableExtensions.SetInputWeight(_xmix, 1, x);
+                if (x >= 1f) _mixing = false;
+                _w = 1f;
+            }
+            else if (_w < 1f && !_stopping) _w = Ease(_age / _fadeIn);
+            float w = _w;
+            if (_stopping) w *= 1f - Ease((_age - _stopAt) / _fadeOut);
+            UnityEngine.Playables.PlayableOutputExtensions.SetWeight(_output, w);
+            _wOut = w;
+            if (_stopping && _age - _stopAt >= _fadeOut) { Kill(); NoRise = false; }
+        }
+
+        private float _wOut;
+
+        // Hips pin (+ travel lead) after the Animator wrote the pose; ArmGuard (32000) runs after this.
+        private void LateUpdate()
+        {
+            if (!_live || _hips == null || _body == null || !_restSet) return;
+            Vector3 local = _body.InverseTransformPoint(_hips.position);
+            float y = local.y;
+            Vector3 flat = new Vector3(local.x, 0f, local.z);
+            Vector3 target = _rest;
+            if (_transfer && !_stopping)
+            {
+                Vector3 drift = flat - _rest;                      // clip travel so far (body frame)
+                Vector3 moved = _body.InverseTransformDirection(_rb.position - _bodyStart);
+                moved.y = 0f;
+                _want = drift;
+                target = _rest + Vector3.ClampMagnitude(drift - moved, 0.35f);
+            }
+            Vector3 corr = target - flat;
+            if (NoRise && y > _restY) corr.y = _restY - y;   // v0.25.129 no double jump height
+            // The pose is already blended; weighting its correction again leaves travel at the seam.
+            _hips.position += _body.TransformVector(corr) * (_stableLanding ? 1f : _wOut);
+            if (_reachR != null) GroundReach(_hips.GetComponentInParent<Animator>());
+        }
+
+        // The body follows the clip's travel (walls stop it); the hips lead it by at most 0.35 m.
+        private void FixedUpdate()
+        {
+            if (!_live || !_transfer || _stopping || _rb == null || _body == null) return;
+            Vector3 moved = _body.InverseTransformDirection(_rb.position - _bodyStart);
+            moved.y = 0f;
+            Vector3 step = _body.TransformDirection(_want - moved);
+            step.y = 0f;
+            float len = step.magnitude;
+            float max = 12f * Time.fixedDeltaTime;
+            if (len < 0.001f) return;
+            if (len > max) { step *= max / len; len = max; }
+            RaycastHit[] hits = Physics.RaycastAll(_rb.position + Vector3.up * 0.6f, step / len, len + 0.35f, ~0, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < hits.Length; i++)
+            {
+                Collider c = hits[i].collider;
+                if (c == null || c.transform.IsChildOf(_body) || c.GetComponentInParent<Character>() != null) continue;
+                return;   // wall / tree / rock: the body stops, the hips lead stays capped
+            }
+            _rb.MovePosition(_rb.position + step);
+        }
+
+        public void CancelAnimation() { Kill(); NoRise = false; }
+
+        private void Kill()
+        {
+            if (_graph.IsValid()) _graph.Destroy();
+            _reachR = null; _reachAngle = 0f; _reachLocked = false; _spineHas = false;
+            _live = false; _mixing = false; _stopping = false;
+        }
+
+        private void OnDestroy() { Kill(); }
+    }
+
+    // v0.25.118 BODY BARRIER (user: arms must never go inside the body). Runs after every other
+    // animation step (Animator, Mixamo output, clip driver IK) while a skill animation plays. The torso
+    // is an elliptic cylinder from the hips to the neck, sized from the shoulder width. Any elbow / mid
+    // upper arm sample inside it turns the upper arm so it sits on the surface; any hand / mid forearm
+    // sample inside turns the forearm about the elbow. Joint twist limits come from the Humanoid avatar.
+    [DefaultExecutionOrder(32000)]
+    public class DragonArmGuard : MonoBehaviour
+    {
+        private Animator _an;
+        private Player _player;
+        private DragonMixamoPlayer _mx;
+
+        public static void Attach(Player player)
+        {
+            if (player == null || DragonCombatPlugin.Instance == null || !DragonCombatPlugin.Instance.ArmBodyGuard.Value) return;
+            if (player.GetComponent<DragonArmGuard>() == null) player.gameObject.AddComponent<DragonArmGuard>();
+        }
+
+        private void LateUpdate()
+        {
+            if (DragonCombatPlugin.Instance == null || !DragonCombatPlugin.Instance.ArmBodyGuard.Value) return;
+            if (_player == null) _player = GetComponent<Player>();
+            if (_an == null) _an = GetComponentInChildren<Animator>();
+            if (_an == null || !_an.isHuman) return;
+            if (_mx == null) _mx = _an.GetComponent<DragonMixamoPlayer>();
+            bool active = (_mx != null && _mx.Live) || GetComponent<DragonSkillClipDriver>() != null;
+            if (!active) return;
+            Apply(_an, Mathf.Max(0.3f, DragonCombatPlugin.Instance.ArmGuardWidth.Value));
+        }
+
+        private static void Apply(Animator an, float scale)
+        {
+            Transform hips = an.GetBoneTransform(HumanBodyBones.Hips);
+            Transform neck = an.GetBoneTransform(HumanBodyBones.Neck);
+            Transform lua = an.GetBoneTransform(HumanBodyBones.LeftUpperArm);
+            Transform rua = an.GetBoneTransform(HumanBodyBones.RightUpperArm);
+            if (hips == null || neck == null || lua == null || rua == null) return;
+            Vector3 a = hips.position;
+            Vector3 up = neck.position - a;
+            float len = up.magnitude;
+            if (len < 0.05f) return;
+            up /= len;
+            Vector3 across = rua.position - lua.position;
+            float halfW = across.magnitude * 0.5f;
+            Vector3 side = Vector3.ProjectOnPlane(across, up);
+            if (side.sqrMagnitude < 1e-6f) return;
+            side.Normalize();
+            Vector3 fwd = Vector3.Cross(side, up);
+            Torso t = new Torso();
+            t.A = a; t.Up = up; t.Len = len; t.Side = side; t.Fwd = fwd;
+            t.Rx = halfW * 0.78f * scale; t.Rz = halfW * 0.6f * scale;
+            for (int pass = 0; pass < 2; pass++)
+            {
+                Arm(an, t, true);
+                Arm(an, t, false);
+            }
+        }
+
+        private struct Torso { public Vector3 A, Up, Side, Fwd; public float Len, Rx, Rz; }
+
+        private static void Arm(Animator an, Torso t, bool right)
+        {
+            Transform ua = an.GetBoneTransform(right ? HumanBodyBones.RightUpperArm : HumanBodyBones.LeftUpperArm);
+            Transform la = an.GetBoneTransform(right ? HumanBodyBones.RightLowerArm : HumanBodyBones.LeftLowerArm);
+            Transform hand = an.GetBoneTransform(right ? HumanBodyBones.RightHand : HumanBodyBones.LeftHand);
+            if (ua == null || la == null || hand == null) return;
+            float sideSign = right ? 1f : -1f;
+            // upper arm: elbow and the middle of the upper arm
+            PushBone(ua, ua.position, la.position, t, sideSign);
+            // forearm: wrist and the middle of the forearm (the held weapon follows the hand)
+            PushBone(la, la.position, hand.position, t, sideSign);
+        }
+
+        // Turns 'bone' (pivot at 'joint') so the deepest sample on joint->end leaves the torso.
+        private static void PushBone(Transform bone, Vector3 joint, Vector3 end, Torso t, float sideSign)
+        {
+            float best = 1f;
+            Vector3 bestP = end, bestOut = end;
+            for (int i = 1; i <= 2; i++)
+            {
+                Vector3 p = Vector3.Lerp(joint, end, i * 0.5f);
+                float depth;
+                Vector3 outside;
+                if (Inside(p, t, sideSign, out depth, out outside) && depth < best) { best = depth; bestP = p; bestOut = outside; }
+            }
+            if (best >= 1f) return;
+            Vector3 from = bestP - joint, to = bestOut - joint;
+            if (from.sqrMagnitude < 1e-6f || to.sqrMagnitude < 1e-6f) return;
+            bone.rotation = Quaternion.FromToRotation(from, to) * bone.rotation;
+        }
+
+        // depth = normalised elliptic radius (< 1 = inside); outside = the point pushed to the surface.
+        private static bool Inside(Vector3 p, Torso t, float sideSign, out float depth, out Vector3 outside)
+        {
+            depth = 1f; outside = p;
+            Vector3 local = p - t.A;
+            float h = Vector3.Dot(local, t.Up);
+            if (h < -0.05f * t.Len || h > t.Len * 0.95f) return false;
+            float x = Vector3.Dot(local, t.Side), z = Vector3.Dot(local, t.Fwd);
+            float d = Mathf.Sqrt((x / t.Rx) * (x / t.Rx) + (z / t.Rz) * (z / t.Rz));
+            if (d >= 1f) return false;
+            depth = d;
+            // v0.25.120: a fixed escape direction per case (no flipping between frames = no shaking): an arm that
+            // crossed the body's midline goes to the FRONT of the chest, otherwise out to its own side/front surface.
+            float k = 1.06f;
+            Vector3 radial;
+            if (x * sideSign < 0.15f * t.Rx)
+            {
+                float zf = t.Rz * k * Mathf.Sqrt(Mathf.Max(0.05f, 1f - (x / t.Rx) * (x / t.Rx)));
+                radial = t.Side * x + t.Fwd * Mathf.Max(zf, z);
+            }
+            else radial = (t.Side * x + t.Fwd * z) * (k / d);
+            outside = t.A + t.Up * h + radial;
+            return true;
+        }
+    }
+
     public static class DragonDualWield
     {
         private static bool _tried;
@@ -8851,6 +14249,378 @@ namespace DragonsAltarCombat
             }
         }
 
+        // v0.25.142 2HDW: native two-handed paired weapons play SBDW's own clips (Attack1-3 on the carrier axe swing states)
+        // for their PRIMARY attacks only. Separate from Apply() so the Smoothbrain-style two-weapon path is untouched. The
+        // clips come from our own load, or - when the real DualWield plugin is installed (Load() bypasses) - from the
+        // bundle that plugin already loaded / its embedded resource.
+        private static bool _pairedTried;
+        private static Dictionary<string, AnimationClip> _pairedClips;
+        private static readonly Dictionary<int, RuntimeAnimatorController> _pairedBase = new Dictionary<int, RuntimeAnimatorController>();
+        private static readonly Dictionary<int, RuntimeAnimatorController> _pairedCtrl = new Dictionary<int, RuntimeAnimatorController>();
+        private static readonly Dictionary<int, RuntimeAnimatorController> _pairedByBase = new Dictionary<int, RuntimeAnimatorController>();
+        private static readonly Dictionary<int, HashSet<string>> _pairedNames = new Dictionary<int, HashSet<string>>();   // override controller id -> original clip names it replaced
+        private static readonly Dictionary<int, RuntimeAnimatorController> _vanillaRoot = new Dictionary<int, RuntimeAnimatorController>();   // animator id -> last base controller that validated
+        private static readonly string[] CarrierClips = { "axe_swing", "Axe combo 2", "Axe combo 3" };   // the clips of the swing_axe / axe_swing carrier states
+
+        private static bool HasCarrierClips(HashSet<string> names)
+        {
+            if (names == null) return false;
+            for (int i = 0; i < CarrierClips.Length; i++) if (!names.Contains(CarrierClips[i])) return false;
+            return true;
+        }
+
+        private static bool IsOurOverride(RuntimeAnimatorController c)
+        {
+            return c != null && _pairedNames.ContainsKey(c.GetInstanceID());
+        }
+
+        // Builds the SBDW override on `baseCtrl`; names = original clips it replaced.
+        private static AnimatorOverrideController BuildPairedOverride(RuntimeAnimatorController baseCtrl, out HashSet<string> names)
+        {
+            names = new HashSet<string>();
+            AnimatorOverrideController aoc = new AnimatorOverrideController(baseCtrl);
+            List<KeyValuePair<AnimationClip, AnimationClip>> list = new List<KeyValuePair<AnimationClip, AnimationClip>>();
+            AnimationClip[] all = aoc.animationClips;
+            for (int i = 0; i < all.Length; i++)
+            {
+                string key; AnimationClip ext;
+                if (all[i] != null && Map.TryGetValue(all[i].name, out key) && _pairedClips.TryGetValue(key, out ext))
+                {
+                    AnimationClip copy = UnityEngine.Object.Instantiate(ext);
+                    copy.name = all[i].name;
+                    list.Add(new KeyValuePair<AnimationClip, AnimationClip>(all[i], copy));
+                    names.Add(all[i].name);
+                }
+                else list.Add(new KeyValuePair<AnimationClip, AnimationClip>(all[i], all[i]));
+            }
+            aoc.ApplyOverrides(list);
+            return aoc;
+        }
+
+        // v0.25.158 REPAIR: rebuild the override from a base controller that really carries the carrier swing clips. Candidates, in order:
+        // the current controller's own chain (another mod's controller), the controller we replaced, the last base that validated.
+        // Each candidate is assigned and checked (3 carrier clips replaced + 3 carrier triggers declared) - the first that passes wins.
+        // On failure the animator keeps the controller it had.
+        public static bool RepairPaired(Animator a, out string carrier)
+        {
+            return RepairPaired(a, out carrier, false);
+        }
+
+        public static bool RepairPaired(Animator a, out string carrier, bool knife)
+        {
+            carrier = null;
+            if (a == null) return false;
+            LoadPaired();
+            if (_pairedClips == null) return false;
+            int id = a.GetInstanceID();
+            RuntimeAnimatorController start = a.runtimeAnimatorController;
+            List<RuntimeAnimatorController> cands = new List<RuntimeAnimatorController>();
+            RuntimeAnimatorController seed = start;
+            RuntimeAnimatorController[] seeds = new RuntimeAnimatorController[3];
+            RuntimeAnimatorController known;
+            seeds[0] = IsOurOverride(start) ? null : start;
+            seeds[1] = _pairedBase.TryGetValue(id, out known) ? known : null;
+            seeds[2] = _vanillaRoot.TryGetValue(id, out known) ? known : null;
+            for (int s = 0; s < seeds.Length; s++)
+                for (RuntimeAnimatorController c = seeds[s]; c != null && cands.Count < 12; )
+                {
+                    if (!IsOurOverride(c) && !cands.Contains(c)) cands.Add(c);
+                    AnimatorOverrideController o = c as AnimatorOverrideController;
+                    c = o == null ? null : o.runtimeAnimatorController;
+                }
+            for (int i = 0; i < cands.Count; i++)
+            {
+                try
+                {
+                    HashSet<string> names = null;
+                    RuntimeAnimatorController cached;
+                    AnimatorOverrideController ctrl = null;
+                    if (_pairedByBase.TryGetValue(cands[i].GetInstanceID(), out cached) && cached is AnimatorOverrideController &&
+                        _pairedNames.TryGetValue(cached.GetInstanceID(), out names) && HasCarrierClips(names)) ctrl = (AnimatorOverrideController)cached;   // reuse, no re-instancing
+                    if (ctrl == null)
+                    {
+                        ctrl = BuildPairedOverride(cands[i], out names);
+                        if (!HasCarrierClips(names)) { UnityEngine.Object.Destroy(ctrl); continue; }
+                    }
+                    DragonCombat.SwapController(a, ctrl);
+                    DragonCombat.CheckController(a);
+                    string c3 = knife ? KnifeCarrier(a) : DragonCombat.PairedCarrier(a);
+                    if (c3 == null) { DragonCombat.SwapController(a, start); continue; }
+                    _pairedNames[ctrl.GetInstanceID()] = names;
+                    _pairedByBase[cands[i].GetInstanceID()] = ctrl;
+                    if (start != null && !IsOurOverride(start)) _pairedByBase[start.GetInstanceID()] = ctrl;   // ApplyPaired finds the repaired one next time
+                    _pairedCtrl[id] = ctrl;
+                    if (!IsOurOverride(start)) _pairedBase[id] = start;
+                    _vanillaRoot[id] = cands[i];
+                    carrier = c3;
+                    return true;
+                }
+                catch (Exception) { }
+            }
+            if (a.runtimeAnimatorController != start && start != null) DragonCombat.SwapController(a, start);
+            return false;
+        }
+        private static readonly HashSet<string> _pairedLogged = new HashSet<string>();
+
+        // v0.25.157/158: the paired (2HDW) override is only valid when it is the animator's CURRENT controller, replaced the three carrier
+        // clips (axe_swing / Axe combo 2 / Axe combo 3) of its base controller and the controller declares the carrier triggers x3.
+        public static string PairedFault(Animator a, out string carrier)
+        {
+            return PairedFault(a, out carrier, false);
+        }
+
+        public static string PairedFault(Animator a, out string carrier, bool knife)
+        {
+            carrier = null;
+            if (a == null) return "no animator";
+            if (_pairedClips == null) return "SBDW clips not loaded (DualWield.dll / dwanimations bundle missing)";
+            if (!PairedActive(a)) return "paired controller is not active (animator runs '" + (a.runtimeAnimatorController == null ? "none" : a.runtimeAnimatorController.name) + "')";
+            HashSet<string> names;
+            if (!_pairedNames.TryGetValue(a.runtimeAnimatorController.GetInstanceID(), out names) || !HasCarrierClips(names))
+                return "override does not replace the 3 carrier clips (axe_swing / Axe combo 2 / Axe combo 3)";
+            carrier = knife ? KnifeCarrier(a) : DragonCombat.PairedCarrier(a);
+            if (carrier == null) return knife ? "no dual_knives x3 triggers declared by the paired controller" : "no swing_axe / axe_swing x3 triggers declared by the paired controller";
+            return null;
+        }
+
+        // Applies / repairs (rebuilds from the correct base controller) and validates. false = could not be made valid; the caller must
+        // REJECT the attack (never play the native animation instead). Reason is logged once + shown once.
+        public static bool EnsurePaired(Animator a, out string carrier, string where)
+        {
+            return EnsurePaired(a, out carrier, where, false);
+        }
+
+        // v0.25.163 ROOT CAUSE (user: 2HDW still plays Therzie's chain): the working SBDW chain (DualWield 1.0.12 installed -> our own
+        // clip load bypassed) fires dual_knives0-2 (ComboTriggerPrefix baseName "dual_knives") on the knife_slash0-2 states. 2HDW was
+        // routed onto a DIFFERENT trigger set, swing_axe0-2, which SBDW never uses. Regular-size 2HDW (scimitars, cleavers) now fire
+        // exactly SBDW's carrier, dual_knives0-2, on the same SBDW clip map (Map: knife_slash0-2 -> Attack1-3). Paired knives (daggers)
+        // keep the swing_axe carrier unchanged (user: daggers have their own combo, not touched yet).
+        // v0.25.163 diagnostic (first 9 paired swings per session): trigger in/out, controller, statei, then the clips each layer plays
+        // 0.15 s later - so LogOutput.log shows exactly which animation a 2HDW swing ends up in.
+        private static int _swingLogs;
+        public static void LogPairedSwing(Player p, Animator a, string inName, string outName, bool routed)
+        {
+            if (_swingLogs >= 9 || a == null || DragonCombatPlugin.Instance == null) return;
+            _swingLogs++;
+            ItemDrop.ItemData w = DragonCombat.GetHandItem(p, "m_rightItem");
+            string ctrl = a.runtimeAnimatorController == null ? "none" : a.runtimeAnimatorController.name;
+            int statei = -1;
+            try { statei = a.GetInteger("statei"); } catch (Exception) { }
+            DragonCombatPlugin.Instance.LogInfo("[Immortal Heroes] [2HDW] swing " + _swingLogs + ": " + (w != null && w.m_dropPrefab != null ? w.m_dropPrefab.name : "?") +
+                " trigger '" + inName + "' -> '" + outName + "' routed=" + routed + " ours=" + PairedActive(a) + " controller='" + ctrl + "' statei=" + statei);
+            DragonCombatPlugin.Instance.StartCoroutine(LogPlayingLater(a, _swingLogs));
+        }
+
+        private static System.Collections.IEnumerator LogPlayingLater(Animator a, int n)
+        {
+            yield return new WaitForSeconds(0.15f);
+            if (a == null || DragonCombatPlugin.Instance == null) yield break;
+            string line = "";
+            for (int l = 0; l < a.layerCount; l++)
+            {
+                AnimatorClipInfo[] cur = a.GetCurrentAnimatorClipInfo(l);
+                AnimatorClipInfo[] nxt = a.IsInTransition(l) ? a.GetNextAnimatorClipInfo(l) : new AnimatorClipInfo[0];
+                string names = "";
+                for (int i = 0; i < cur.Length; i++) if (cur[i].clip != null) names += (names.Length > 0 ? "," : "") + cur[i].clip.name;
+                for (int i = 0; i < nxt.Length; i++) if (nxt[i].clip != null) names += (names.Length > 0 ? "," : "") + "->" + nxt[i].clip.name;
+                line += " | L" + l + " w" + a.GetLayerWeight(l).ToString("0.0") + ": " + (names.Length > 0 ? names : "-");
+            }
+            DragonCombatPlugin.Instance.LogInfo("[Immortal Heroes] [2HDW] swing " + n + " playing:" + line);
+        }
+
+        public static bool UsesKnifeCarrier(ItemDrop.ItemData w)
+        {
+            if (w == null || w.m_shared == null || w.m_shared.m_attack == null || !DragonCombat.IsPairedWeapon(w)) return false;
+            if (string.Equals(w.m_shared.m_attack.m_attackAnimation, "dual_knives", StringComparison.OrdinalIgnoreCase)) return false;
+            return w.m_shared.m_skillType.ToString() != "Knives";
+        }
+
+        public static string KnifeCarrier(Animator a)
+        {
+            return DragonCombat.StrictTriggerCount(a, "dual_knives") >= 3 ? "dual_knives" : null;
+        }
+
+        public static bool EnsurePaired(Animator a, out string carrier, string where, bool knife)
+        {
+            carrier = null;
+            if (a == null) return false;
+            LoadPaired();
+            if (!PairedActive(a)) ApplyPaired(a, true);
+            string fault = PairedFault(a, out carrier, knife);
+            if (fault == null) return true;
+            string first = fault;
+            if (RepairPaired(a, out carrier, knife) && PairedFault(a, out carrier, knife) == null)
+            {
+                string note = where + ": repaired (" + first + ")";
+                if (_pairedLogged.Add(note) && DragonCombatPlugin.Instance != null) DragonCombatPlugin.Instance.LogInfo("[Immortal Heroes] [2HDW] " + note);
+                return true;
+            }
+            carrier = null;
+            string key = where + ":" + fault;
+            if (_pairedLogged.Add(key) && DragonCombatPlugin.Instance != null)
+            {
+                DragonCombatPlugin.Instance.LogInfo("[Immortal Heroes] WARNING [2HDW] " + where + ": attack rejected - " + first + "; repair failed");
+                try { if (MessageHud.instance != null) MessageHud.instance.ShowMessage(MessageHud.MessageType.TopLeft, "2HDW: SBDW animation unavailable (" + first + ") - attack blocked, see LogOutput.log"); } catch (Exception) { }
+            }
+            return false;
+        }
+
+        private static void LoadPaired()
+        {
+            if (_pairedTried) return;
+            _pairedTried = true;
+            try
+            {
+                Load();
+                if (_clips != null) { _pairedClips = _clips; return; }
+                AssetBundle found = null;
+                AssetBundle[] loaded = AssetBundle.GetAllLoadedAssetBundles() as AssetBundle[];
+                if (loaded == null) { List<AssetBundle> tmp = new List<AssetBundle>(AssetBundle.GetAllLoadedAssetBundles()); loaded = tmp.ToArray(); }
+                for (int i = 0; i < loaded.Length && found == null; i++)
+                    if (loaded[i] != null && loaded[i].Contains("Attack1") && loaded[i].Contains("DWblock")) found = loaded[i];
+                if (found == null)
+                {
+                    Type real = DragonCombat.FindTypeCached("DualWield.DualWield");
+                    System.Reflection.Assembly asm = real != null ? real.Assembly : null;
+                    if (asm == null)
+                    {
+                        string path = System.IO.Path.Combine(System.IO.Path.Combine(BepInEx.Paths.PluginPath, "ImmortalHeroesAssets"), "DualWield.dll");
+                        if (System.IO.File.Exists(path)) asm = System.Reflection.Assembly.LoadFile(path);
+                    }
+                    string res = null;
+                    string[] names = asm == null ? new string[0] : asm.GetManifestResourceNames();
+                    for (int i = 0; i < names.Length; i++) if (names[i].EndsWith("dwanimations", StringComparison.Ordinal)) res = names[i];
+                    if (res != null) using (System.IO.Stream st = asm.GetManifestResourceStream(res)) found = AssetBundle.LoadFromStream(st);
+                }
+                if (found == null) return;
+                Dictionary<string, AnimationClip> clips = new Dictionary<string, AnimationClip>();
+                string[] want = { "Attack1", "Attack2", "Attack3", "DWblock", "DWspecial", "DWspecial2" };
+                for (int i = 0; i < want.Length; i++)
+                {
+                    AnimationClip clip = found.LoadAsset<AnimationClip>(want[i]);
+                    if (clip != null) clips[want[i]] = clip;
+                }
+                if (clips.ContainsKey("Attack1") && clips.ContainsKey("Attack2") && clips.ContainsKey("Attack3")) _pairedClips = clips;
+            }
+            catch (Exception) { _pairedClips = null; }
+        }
+
+        // v0.25.156: with an SBDW / 2HDW override controller active, the clip of swing <digit> must be the bundle's Attack<digit+1>
+        // (override clips keep the replaced clip's name, Map: original name -> bundle key).
+        // 1 = this clip is the expected replacement for `trigger`, -1 = it is a replacement for another slot, 0 = not replaced.
+        public static int SwingClipMatch(Animator animator, string clipName, string trigger)
+        {
+            if (animator == null || string.IsNullOrEmpty(clipName) || string.IsNullOrEmpty(trigger)) return 0;
+            RuntimeAnimatorController dual;
+            bool active = PairedActive(animator) || (_dual.TryGetValue(animator.GetInstanceID(), out dual) && animator.runtimeAnimatorController == dual);
+            string key;
+            if (!active || !Map.TryGetValue(clipName, out key)) return 0;
+            int end = trigger.Length;
+            while (end > 0 && char.IsDigit(trigger[end - 1])) end--;
+            int idx;
+            if (end == trigger.Length || !int.TryParse(trigger.Substring(end), out idx)) return -1;
+            return key == "Attack" + (idx + 1).ToString() ? 1 : -1;
+        }
+
+        public static bool PairedActive(Animator animator)
+        {
+            RuntimeAnimatorController ours;
+            return animator != null && _pairedCtrl.TryGetValue(animator.GetInstanceID(), out ours) && animator.runtimeAnimatorController == ours;
+        }
+
+        // on = SBDW clips for the primary attack chain (false when the clips are unavailable); off = back to whatever was active.
+        public static bool ApplyPaired(Animator animator, bool on)
+        {
+            if (animator == null) return false;
+            int id = animator.GetInstanceID();
+            bool isOurs = PairedActive(animator);
+            if (!on)
+            {
+                RuntimeAnimatorController b;
+                if (isOurs && _pairedBase.TryGetValue(id, out b) && b != null) DragonCombat.SwapController(animator, b);
+                return false;
+            }
+            LoadPaired();
+            if (_pairedClips == null) return false;
+            if (isOurs) return true;
+            try
+            {
+                RuntimeAnimatorController baseCtrl = animator.runtimeAnimatorController;
+                while (baseCtrl is AnimatorOverrideController && ((AnimatorOverrideController)baseCtrl).runtimeAnimatorController != null && !_pairedByBase.ContainsKey(baseCtrl.GetInstanceID()))
+                    baseCtrl = ((AnimatorOverrideController)baseCtrl).runtimeAnimatorController;
+                RuntimeAnimatorController current = animator.runtimeAnimatorController;
+                RuntimeAnimatorController ctrl;
+                if (!_pairedByBase.TryGetValue(current.GetInstanceID(), out ctrl))
+                {
+                    HashSet<string> names;
+                    ctrl = BuildPairedOverride(baseCtrl, out names);
+                    _pairedByBase[current.GetInstanceID()] = ctrl;
+                    _pairedNames[ctrl.GetInstanceID()] = names;
+                }
+                _pairedBase[id] = current;
+                _pairedCtrl[id] = ctrl;
+                HashSet<string> have;
+                if (_pairedNames.TryGetValue(ctrl.GetInstanceID(), out have) && HasCarrierClips(have)) _vanillaRoot[id] = baseCtrl;
+                DragonCombat.SwapController(animator, ctrl);
+                return true;
+            }
+            catch (Exception) { return false; }
+        }
+
+        public static void ReleasePaired(Player player)
+        {
+            if (player == null) return;
+            Animator a = player.GetComponentInChildren<Animator>();
+            if (a != null && PairedActive(a)) ApplyPaired(a, false);
+            RestoreAnimState(player);
+        }
+
+        // v0.25.161 ROOT CAUSE (assembly_valheim + Warfare bundle): Humanoid.SetupAnimationState puts the animator in the weapon's
+        // AnimationState (statef / statei). Therzie's scimitar + demonic axe = DualAxes (15), paired knives = Knives (11); SBDW's
+        // one-handed weapons = OneHanded (1). The player controller's swing states are selected by that state, so the SBDW carrier
+        // swing (swing_axe0-2) never runs in the DualAxes / Knives state - the native dualaxes / dual_knives sets do. A routed 2HDW
+        // primary swing therefore holds OneHanded - exactly the state SBDW plays in - and the weapon's own state comes back when the
+        // paired chain is released (idle, heavy attack, skill takeover, weapon / class change). Valheim only re-applies the state on
+        // equipment changes (SetupEquipment), so the hold is not fought every frame.
+        private static bool _stateHeld;
+        private static Component _stateZanim;
+        private static MethodInfo _zSetFloat, _zSetInt, _setupState;
+
+        private static Component ZanimOf(Player p)
+        {
+            Component[] cs = p.GetComponents<Component>();
+            for (int i = 0; i < cs.Length; i++) if (cs[i] != null && cs[i].GetType().Name == "ZSyncAnimation") return cs[i];
+            return null;
+        }
+
+        public static void HoldOneHandedState(Player p)
+        {
+            if (p == null) return;
+            try
+            {
+                Component z = ZanimOf(p);
+                if (z == null) return;
+                if (_zSetFloat == null) _zSetFloat = z.GetType().GetMethod("SetFloat", new Type[] { typeof(string), typeof(float) });
+                if (_zSetInt == null) _zSetInt = z.GetType().GetMethod("SetInt", new Type[] { typeof(string), typeof(int) });
+                if (_zSetFloat != null) _zSetFloat.Invoke(z, new object[] { "statef", 1f });   // AnimationState.OneHanded
+                if (_zSetInt != null) _zSetInt.Invoke(z, new object[] { "statei", 1 });
+                _stateHeld = true; _stateZanim = z;
+            }
+            catch (Exception) { }
+        }
+
+        public static void RestoreAnimState(Player p)
+        {
+            if (!_stateHeld || p == null) return;
+            _stateHeld = false; _stateZanim = null;
+            try
+            {
+                if (_setupState == null) _setupState = typeof(Humanoid).GetMethod("SetupAnimationState", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+                if (_setupState != null) _setupState.Invoke(p, null);   // Valheim's own: back to the equipped weapon's state
+            }
+            catch (Exception) { }
+        }
+
         // dual = true: use the dual-wield controller (returns whether it is available); false: restore.
         public static bool Apply(Player player, Animator animator, bool dual)
         {
@@ -8859,7 +14629,7 @@ namespace DragonsAltarCombat
             if (!dual)
             {
                 RuntimeAnimatorController orig;
-                if (_original.TryGetValue(id, out orig) && animator.runtimeAnimatorController != orig) { animator.runtimeAnimatorController = orig; animator.Update(0f); }
+                if (_original.TryGetValue(id, out orig) && animator.runtimeAnimatorController != orig) DragonCombat.SwapController(animator, orig);
                 return false;
             }
             Load();
@@ -8889,7 +14659,7 @@ namespace DragonsAltarCombat
                     dualCtrl = aoc;
                     _dual[id] = dualCtrl;
                 }
-                if (animator.runtimeAnimatorController != dualCtrl) { animator.runtimeAnimatorController = dualCtrl; animator.Update(0f); }
+                if (animator.runtimeAnimatorController != dualCtrl) DragonCombat.SwapController(animator, dualCtrl);
                 return true;
             }
             catch (Exception) { return false; }
@@ -8906,6 +14676,7 @@ namespace DragonsAltarCombat
         private string _trigger;
         private int _layer = -1, _hash;
         private int[] _pre;
+        private int _gen;   // v0.25.154
 
         public static bool Play(Player player, string trigger, float seconds, float startN, float endN)
         {
@@ -8915,6 +14686,7 @@ namespace DragonsAltarCombat
             if (t == null) return false;
             DragonVanillaLoop l = player.GetComponent<DragonVanillaLoop>();
             if (l == null) l = player.gameObject.AddComponent<DragonVanillaLoop>();
+            l._gen = DragonCombat.SkillAnimGen;
             l._a = a; l._trigger = t; l._end = Time.time + Mathf.Max(0.3f, seconds);
             l._startN = Mathf.Clamp01(startN); l._endN = Mathf.Clamp(endN, l._startN + 0.05f, 1f);
             l._layer = -1;
@@ -8933,7 +14705,7 @@ namespace DragonsAltarCombat
         {
             if (_a == null) { Destroy(this); return; }
             Character owner = GetComponent<Character>();
-            if (owner == null || owner.IsDead() || Time.time >= _end) { Destroy(this); return; }
+            if (owner == null || owner.IsDead() || Time.time >= _end || _gen != DragonCombat.SkillAnimGen) { Destroy(this); return; }
             try
             {
                 if (_layer < 0)
@@ -8959,6 +14731,7 @@ namespace DragonsAltarCombat
     public class IhStatusDisplay : StatusEffect
     {
         public int Stacks;
+        public bool CooldownMarker;
         // v0.25.34 hover tooltip: first line = buff type ("Attack Buff"...), then the numbers; {stacks} = Stacks.
         public string Detail;
 
@@ -8972,7 +14745,12 @@ namespace DragonsAltarCombat
         public override string GetIconText()
         {
             if (Stacks > 0) return Stacks.ToString();
-            if (m_ttl <= 0f) return "";
+            if (m_ttl <= 0f)
+            {
+                if (m_name != null && m_name.EndsWith(" - Ready", StringComparison.Ordinal)) return "Ready";
+                if (m_name != null && m_name.EndsWith(" - Active", StringComparison.Ordinal)) return "Active";
+                return "";
+            }
             return Mathf.CeilToInt(Mathf.Max(0f, m_ttl - m_time)).ToString() + "s";
         }
     }
@@ -8986,8 +14764,175 @@ namespace DragonsAltarCombat
     // flickering lightning, light pillars, shockwaves, auras that follow a target, and Valheim's own effect
     // prefabs (looked up by name in ZNetScene, network-free ones only). All objects clean themselves up.
     // ==================================================================================
+    // v0.25.153: legacy (Enhanced VFX OFF) targeting-guide line with its OWN lifetime. Unity does not run an iterator's
+    // finally block when a coroutine is stopped or its host is destroyed, so the guide expires by itself (Update) and
+    // frees the material it created in OnDestroy - whatever happens to the coroutine / plugin that spawned it.
+    // Guides never own a ZNetView. Remove them if their local caster leaves or dies.
+    public class DragonLocalGuide : MonoBehaviour
+    {
+        public Player Caster;
+        private void LateUpdate()
+        {
+            if (!DragonCombat.CanShowGuide(Caster)) Destroy(gameObject);
+        }
+    }
+
+    // Shared meshes/materials; only cached transforms and property blocks change during the portal's life.
+    // Distributed ground fire. World-space anchors sampled once; live refill does no raycasts or allocations.
+    public class DragonGroundFlames : MonoBehaviour
+    {
+        public ParticleSystem Flames;
+        public Vector3[] Points;
+        public float Seconds, Size = 1f;
+        private float _age, _next;
+        private int _cursor, _batch;
+        public void Begin()
+        {
+            if (Flames == null || Points == null || Points.Length == 0) return;
+            _batch = Mathf.Max(1, Mathf.CeilToInt(Points.Length / 4f));
+            // Populate the entire radius immediately; one bounded particle per anchor, independent of random shape placement.
+            for (int i = 0; i < Points.Length; i++) Emit(i, i % 4 * 0.12f);
+            _next = 0.18f;
+        }
+        private void Emit(int i, float offset)
+        {
+            ParticleSystem.EmitParams p = new ParticleSystem.EmitParams();
+            p.position = Points[i]; p.velocity = Vector3.up * 0.25f;
+            p.startLifetime = Mathf.Min(0.85f + offset, Mathf.Max(0.03f, Seconds - _age));
+            p.startSize = Size * (0.9f + 0.18f * Mathf.Sin(i * 3.7f + _age * 4f));
+            p.startColor = new Color(1f, 0.88f, 0.66f, 0.95f);
+            p.applyShapeToPosition = false;
+            Flames.Emit(p, 1);
+        }
+        private void Update()
+        {
+            _age += Time.deltaTime;
+            if (_age >= Seconds || Flames == null) { enabled = false; return; }
+            if (_age < _next || Points == null || Points.Length == 0) return;
+            _next = _age + 0.18f;
+            for (int i = 0; i < _batch; i++) { Emit(_cursor, 0f); _cursor = (_cursor + 1) % Points.Length; }
+        }
+    }
+
+    public class DragonPortalRipple : MonoBehaviour
+    {
+        public Transform[] Rings;
+        public Renderer[] Surfaces;
+        private readonly MaterialPropertyBlock _block = new MaterialPropertyBlock();
+        private static readonly int ColorId = Shader.PropertyToID("_Color");
+        private static readonly int TintId = Shader.PropertyToID("_TintColor");
+        private float _age, _next;
+        private void Update()
+        {
+            _age += Time.deltaTime;
+            if (_age < _next || Rings == null || Surfaces == null) return;
+            _next = _age + 0.05f;
+            for (int i = 0; i < Rings.Length; i++)
+            {
+                if (Rings[i] == null || Surfaces[i] == null) continue;
+                float phase = (_age / 1.8f + (i % 4) * 0.25f) % 1f;
+                float scale = 0.26f + 0.69f * phase;
+                Rings[i].localScale = Vector3.one * scale;
+                float depth = 0.02f + 0.22f * Mathf.Pow(scale / 0.95f, 1.4f) + 0.045f;
+                Rings[i].localPosition = new Vector3(0f, 0f, i < 4 ? depth : -depth);
+                Rings[i].localRotation = Quaternion.Euler(90f, _age * 24f, 0f);
+                float alpha = Mathf.Sin(phase * Mathf.PI) * 0.55f;
+                _block.SetColor(ColorId, new Color(1f, 1f, 1f, alpha));
+                _block.SetColor(TintId, new Color(0.5f, 0.5f, 0.5f, 0.5f * alpha));
+                Surfaces[i].SetPropertyBlock(_block);
+            }
+        }
+    }
+
+    // A bounded, erratic purple discharge at the target; no new meshes/materials/arrays in Update.
+    public class DragonRuptureCharge : MonoBehaviour
+    {
+        public LineRenderer[] Lines;
+        public float Life = 1f, Spread = 2f;
+        private float _age, _next;
+        private void Update()
+        {
+            _age += Time.deltaTime;
+            if (Lines == null || _age >= Life) { Destroy(gameObject); return; }
+            if (_age < _next) return;
+            _next = _age + 0.09f;
+            float fade = Mathf.Clamp01(_age / 0.12f) * Mathf.Clamp01((Life - _age) / 0.09f);
+            for (int arc = 0; arc < Lines.Length / 2; arc++)
+            {
+                LineRenderer outer = Lines[arc * 2], core = Lines[arc * 2 + 1];
+                if (outer == null || core == null) continue;
+                Vector3 a = UnityEngine.Random.insideUnitSphere * Spread;
+                Vector3 b = -a * 0.8f;
+                a.y = Mathf.Clamp(a.y * 0.65f, -0.65f, Spread * 0.65f);
+                b.y = Mathf.Clamp(b.y * 0.65f, -0.65f, Spread * 0.65f);
+                for (int i = 0; i < 9; i++)
+                {
+                    float u = i / 8f;
+                    Vector3 q = Vector3.Lerp(a, b, u);
+                    if (i > 0 && i < 8) q += UnityEngine.Random.insideUnitSphere * Spread * 0.18f;
+                    q.y = Mathf.Max(-0.7f, q.y);
+                    q += transform.position;
+                    outer.SetPosition(i, q); core.SetPosition(i, q);
+                }
+                Color purple = new Color(0.58f, 0.10f, 1f, 0.75f * fade);
+                Color bright = new Color(0.83f, 0.45f, 1f, 0.95f * fade);
+                outer.startColor = outer.endColor = purple;
+                core.startColor = core.endColor = bright;
+            }
+        }
+    }
+
+    public class DragonGuideLife : MonoBehaviour
+    {
+        public static int Alive;
+        public float Until;
+        public Material Owned;
+        public Player Caster;
+
+        public static void Spawn(Vector3 center, float radius, Color color, float duration)
+        {
+            Spawn(Player.m_localPlayer, center, radius, color, duration);
+        }
+
+        public static void Spawn(Player caster, Vector3 center, float radius, Color color, float duration)
+        {
+            if (!DragonCombat.CanShowGuide(caster) || !DragonVfx.Guides || Alive >= 40) return;
+            GameObject go = new GameObject("IH_GuideLine");
+            LineRenderer gl = go.AddComponent<LineRenderer>();
+            gl.useWorldSpace = true;
+            gl.loop = true;
+            gl.positionCount = 48;
+            gl.startWidth = 0.04f;
+            gl.endWidth = 0.04f;
+            Color gcol = color; gcol.a = Mathf.Min(0.22f, Mathf.Clamp01(color.a) * 0.3f);
+            gl.startColor = gcol;
+            gl.endColor = gcol;
+            DragonGuideLife life = go.AddComponent<DragonGuideLife>();
+            life.Caster = caster;
+            Shader sh = Shader.Find("Sprites/Default");
+            if (sh != null) { life.Owned = new Material(sh); gl.material = life.Owned; }
+            for (int i = 0; i < 48; i++)
+            {
+                float a = (float)i / 48f * Mathf.PI * 2f;
+                gl.SetPosition(i, center + new Vector3(Mathf.Cos(a) * radius, 0.08f, Mathf.Sin(a) * radius));
+            }
+            life.Until = Time.time + Mathf.Max(0.1f, duration);
+        }
+
+        private void Awake() { Alive++; }
+        private void Update() { if (!DragonCombat.CanShowGuide(Caster) || Time.time >= Until) Destroy(gameObject); }
+        private void OnDestroy()
+        {
+            Alive--;
+            if (Owned != null) { Destroy(Owned); Owned = null; }
+        }
+    }
+
     public class DragonVfxLife : MonoBehaviour
     {
+        public static int Alive;   // v0.25.184 performance monitor: live effect hosts
+        private void Awake() { Alive++; }
+        private void OnDestroy() { Alive--; }
         public float Life = 1f, Age;
         public Light FlashLight;
         public float LightPeak, LightHold;
@@ -9001,7 +14946,9 @@ namespace DragonsAltarCombat
         public bool Stopped;
         public Color BoltCore, BoltGlow;
         public Func<bool> Keep;
-        private bool _hadFollow;
+        public bool SnapGround;            // v0.25.169 follow the ground under Follow (dirt / dust emitters)
+        public float GroundMaxHeight = 3.5f;
+        private bool _hadFollow, _groundOn = true;
 
         private void Update()
         {
@@ -9013,7 +14960,22 @@ namespace DragonsAltarCombat
                 if (on) { Life = Age + 1.2f; StopEmitAt = -1f; }
                 else { Keep = null; StopEmitAt = Age; Life = Age + 1.2f; }
             }
-            if (Follow != null) { _hadFollow = true; transform.position = Follow.position + FollowOffset; }
+            if (Follow != null)
+            {
+                _hadFollow = true;
+                transform.position = Follow.position + FollowOffset;
+                if (SnapGround)
+                {
+                    Vector3 g = DragonVfx.GroundPoint(Follow.position);
+                    bool on = Follow.position.y - g.y <= GroundMaxHeight;
+                    transform.position = g + Vector3.up * 0.08f;
+                    if (on != _groundOn && Systems != null)
+                    {
+                        _groundOn = on;
+                        for (int i = 0; i < Systems.Length; i++) if (Systems[i] != null) { ParticleSystem.EmissionModule em = Systems[i].emission; em.enabled = on; }
+                    }
+                }
+            }
             else if (_hadFollow)
             {
                 // v0.25.61: the thing it followed is gone (tornado, orb) - stop emitting and fade out
@@ -9052,11 +15014,117 @@ namespace DragonsAltarCombat
         }
     }
 
+    // v0.25.203 fade for ground crack strips (vertex colours; the particle shaders multiply them in)
+    public class DragonStripFade : MonoBehaviour
+    {
+        public MeshFilter[] Strips;
+        public Color Color;
+        public float Life = 3f, Age;
+        private float _last = -1f;
+        private Color[][] _colors209;
+        private void Update()
+        {
+            Age += Time.deltaTime;
+            float k = Age < 0.15f ? Age / 0.15f : 1f - Mathf.Clamp01((Age - 0.15f) / Mathf.Max(0.1f, Life - 0.15f));
+            if (Mathf.Abs(k - _last) < 0.02f || Strips == null) return;
+            _last = k;
+            if (_colors209 == null || _colors209.Length != Strips.Length) _colors209 = new Color[Strips.Length][];
+            for (int i = 0; i < Strips.Length; i++)
+            {
+                if (Strips[i] == null) continue;
+                Mesh m = Strips[i].sharedMesh; if (m == null) continue;
+                int n = m.vertexCount;
+                Color[] c = _colors209[i];
+                if (c == null || c.Length != n) { c = new Color[n]; _colors209[i] = c; }
+                for (int j = 0; j < n; j++) { Color x = Color; x.a = k * Mathf.Lerp(1f, 0.3f, (float)(j / 2) / Mathf.Max(1, n / 2 - 1)); c[j] = x; }
+                m.colors = c;
+            }
+        }
+        private void OnDestroy()
+        {
+            if (Strips == null) return;
+            for (int i = 0; i < Strips.Length; i++) if (Strips[i] != null && Strips[i].sharedMesh != null) Destroy(Strips[i].sharedMesh);
+        }
+    }
+
+    // v0.25.203 Judgement Cut curved slash: reveals its arc along the path (Sweep), holds, then fades out (glow + core lines).
+    public class DragonArcCut : MonoBehaviour
+    {
+        public Vector3[] Points;
+        public LineRenderer Glow, Core;
+        public Color GlowColor, CoreColor;
+        public float Delay, Sweep = 0.07f, Life = 0.6f, Age;
+        private static AnimationCurve _taper;
+        private void Start()
+        {
+            if (_taper == null) _taper = new AnimationCurve(new Keyframe(0f, 0f), new Keyframe(0.25f, 0.85f), new Keyframe(0.55f, 1f), new Keyframe(1f, 0f));
+            if (Glow != null) { Glow.widthCurve = _taper; Glow.positionCount = 0; }
+            if (Core != null) { Core.widthCurve = _taper; Core.positionCount = 0; }
+        }
+        private void Update()
+        {
+            Age += Time.deltaTime;
+            if (Points == null || Points.Length < 2) return;
+            float t = Age - Delay;
+            if (t < 0f) return;
+            int n = Mathf.Clamp(Mathf.CeilToInt(Points.Length * Mathf.Clamp01(t / Mathf.Max(0.01f, Sweep))), 2, Points.Length);
+            float k = 1f - Mathf.Clamp01((t - Life * 0.45f) / Mathf.Max(0.05f, Life * 0.55f));
+            Apply(Glow, n, GlowColor, k * 0.8f);
+            Apply(Core, n, CoreColor, k);
+        }
+        private void Apply(LineRenderer l, int n, Color c, float a)
+        {
+            if (l == null) return;
+            if (l.positionCount != n) { l.positionCount = n; for (int i = 0; i < n; i++) l.SetPosition(i, Points[i]); }
+            c.a = a; l.startColor = c; l.endColor = c;
+        }
+    }
+
+    // v0.25.205 explosion shell: pops out (ease-out 0.18 s), keeps swelling slightly, churns its fire texture, fades.
+    public class DragonBlastShell : MonoBehaviour
+    {
+        public float Radius = 3f, Life = 0.8f;
+        public Color Tint = Color.white;
+        private float _age;
+        private Material _m;
+        private void Start() { Renderer r = GetComponent<Renderer>(); if (r != null) _m = r.material; transform.localScale = Vector3.one * Radius * 0.2f; }
+        private void Update()
+        {
+            _age += Time.deltaTime;
+            float k = _age < 0.18f ? 1f - Mathf.Pow(1f - _age / 0.18f, 3f) : 1f + 0.12f * (_age - 0.18f);
+            transform.localScale = Vector3.one * Radius * Mathf.Lerp(0.2f, 1f, Mathf.Clamp01(k)) * Mathf.Max(1f, k);
+            float a = _age < 0.12f ? 1f : 1f - Mathf.Clamp01((_age - 0.12f) / Mathf.Max(0.1f, Life - 0.12f));
+            if (_m != null)
+            {
+                Color c = Tint; c.a = a;
+                if (_m.HasProperty("_TintColor")) _m.SetColor("_TintColor", new Color(c.r * 0.5f, c.g * 0.5f, c.b * 0.5f, a * 0.5f)); else _m.color = c;
+                _m.mainTextureOffset = new Vector2(_age * 0.35f, -_age * 0.6f);
+            }
+            if (_age >= Life) Destroy(gameObject);
+        }
+        private void OnDestroy() { if (_m != null) Destroy(_m); }
+    }
+
+    // v0.25.205 lightning element of the Cataclysm air bullet: a short jagged arc flickers between it and the bullet core.
+    public class DragonArcFlicker : MonoBehaviour
+    {
+        public Transform Center;
+        public float Width = 0.08f;
+        private float _next;
+        private void Update()
+        {
+            if (Center == null || Time.time < _next) return;
+            _next = Time.time + UnityEngine.Random.Range(0.06f, 0.14f);
+            DragonVfx.Bolt(Center.position, transform.position, new Color(0.75f, 0.85f, 1f, 1f), Width, 0.09f);
+        }
+    }
+
     public class DragonCrackFade : MonoBehaviour
     {
         public LineRenderer[] Lines;
         public Color Color;
         public float Life = 3f, Age;
+        public float EndAlpha = 0.3f;   // v0.25.185 end-of-line alpha factor (cut lines keep full strength along their length)
         private void Update()
         {
             Age += Time.deltaTime;
@@ -9066,7 +15134,7 @@ namespace DragonsAltarCombat
             {
                 if (Lines[i] == null) continue;
                 Color a = Color; a.a = k;
-                Color b = Color; b.a = k * 0.3f;
+                Color b = Color; b.a = k * EndAlpha;
                 Lines[i].startColor = a;
                 Lines[i].endColor = b;
             }
@@ -9089,7 +15157,7 @@ namespace DragonsAltarCombat
                 Velocity += Physics.gravity * dt;
                 Vector3 next = transform.position + Velocity * dt;
                 RaycastHit hit;
-                if (Velocity.y < 0f && Physics.Raycast(transform.position, Vector3.down, out hit, Mathf.Max(0.2f, -Velocity.y * dt + 0.1f), LayerMask.GetMask("terrain", "Default", "static_solid", "piece"), QueryTriggerInteraction.Ignore))
+                if (Velocity.y < 0f && Physics.Raycast(transform.position, Vector3.down, out hit, Mathf.Max(0.2f, -Velocity.y * dt + 0.1f), DragonVfx.SolidGroundMask(), QueryTriggerInteraction.Ignore))
                 {
                     if (Velocity.y < -4f) { Velocity = new Vector3(Velocity.x * 0.4f, -Velocity.y * 0.3f, Velocity.z * 0.4f); Spin *= 0.4f; }
                     else { _landed = true; next = hit.point + Vector3.up * transform.localScale.y * 0.3f; }
@@ -9188,6 +15256,7 @@ namespace DragonsAltarCombat
             return Mathf.Lerp(h0, h1, tz);
         }
 
+        private Vector3[] _conformBuf;
         private void UpdateConform()
         {
             Vector3 sc = transform.localScale;
@@ -9196,7 +15265,8 @@ namespace DragonsAltarCombat
             _lastScale = sc; _lastRot = rot;
             float sy = Mathf.Max(0.01f, Mathf.Abs(sc.y));
             Vector3 pos = transform.position;
-            Vector3[] v = new Vector3[_gv.Length];
+            if (_conformBuf == null || _conformBuf.Length != _gv.Length) _conformBuf = new Vector3[_gv.Length];   // v0.25.181 reused
+            Vector3[] v = _conformBuf;
             for (int i = 0; i < _gv.Length; i++)
             {
                 Vector3 w = rot * new Vector3(_gv[i].x * sc.x, 0f, _gv[i].z * sc.z);
@@ -9231,6 +15301,24 @@ namespace DragonsAltarCombat
 
     // v0.25.59 VFX skin: a crescent ribbon of light that sweeps left -> right through an arc and fades
     // (the visible blade trail of every slash skill).
+    public class DragonGroundWind : MonoBehaviour
+    {
+        public Transform Follow;
+        public Player Owner;
+        public float Radius, Life;
+        public Color Tint;
+        private float _age, _pulseAt;
+        private void Update()
+        {
+            _age += Time.deltaTime;
+            if (Follow == null || _age >= Life || (Owner != null && (Owner.IsDead() || !DragonCombat.IsWhirlwindActive(Owner))))
+            { Destroy(gameObject); return; }
+            if (Time.time < _pulseAt) return;
+            _pulseAt = Time.time + 0.24f;
+            DragonVfx.WindRing(Follow.position, Mathf.Max(0.4f, Radius * 0.6f), Radius, 0.55f, Tint, false);
+        }
+    }
+
     public class DragonSlashArc : MonoBehaviour
     {
         public float Radius = 3f, Arc = 150f, Width = 0.8f, Sweep = 0.16f, Life = 0.5f, Age;
@@ -9302,6 +15390,129 @@ namespace DragonsAltarCombat
     // v0.25.60: lightning that crawls along the ground (Lightning Trails). The path is the list of ground
     // points the trail has reached; every 0.05 s it is re-jagged sideways (never into the ground), the tail
     // dims, the head crackles with small arcs, and when the trail ends it fades leaving a scorched scar.
+    // v0.25.195: actual equipped-weapon wake; transforms are resolved only when a skill starts.
+    // The trail follows the blade, so opposite and vertical swings cannot reuse the wrong fixed plane.
+    public class DragonCloudShellFade : MonoBehaviour
+    {
+        public Renderer Surface;
+        public float Life = 1f;
+        private float _age;
+        private static readonly int ColorId = Shader.PropertyToID("_Color"), TintId = Shader.PropertyToID("_TintColor");
+        private readonly MaterialPropertyBlock _properties = new MaterialPropertyBlock();
+        private void Update()
+        {
+            _age += Time.deltaTime;
+            if (_age >= Life) { Destroy(gameObject); return; }
+            float fade = Mathf.Min(Mathf.Clamp01(_age / 0.08f), Mathf.Clamp01((Life - _age) / 0.26f));
+            if (Surface != null)
+            {
+                _properties.SetColor(ColorId, new Color(1f, 1f, 1f, fade));
+                _properties.SetColor(TintId, new Color(0.5f, 0.5f, 0.5f, 0.5f * fade));
+                Surface.SetPropertyBlock(_properties);
+            }
+            transform.Rotate(Vector3.up, Time.deltaTime * 9f, Space.Self);
+        }
+    }
+
+    [DefaultExecutionOrder(31000)]
+    public class DragonWeaponWake : MonoBehaviour
+    {
+        private Player _player;
+        private Transform _tip;
+        private TrailRenderer _trail;
+        private GameObject _item, _leftItem;
+        private Transform _leftTip;
+        private TrailRenderer _leftTrail;
+        private Vector3 _leftRadial;
+        private static readonly FieldInfo LeftVisual = typeof(VisEquipment).GetField("m_leftItemInstance", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+        private float _start, _end, _sampleAt;
+        private int _generation;
+        private Vector3 _radial, _normal;
+        private static readonly FieldInfo RightVisual = typeof(VisEquipment).GetField("m_rightItemInstance", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+        public void Begin(Player player, float delay, float duration, Material material)
+        {
+            _player = player;
+            VisEquipment vis = player.GetComponentInChildren<VisEquipment>();
+            GameObject item = vis == null || RightVisual == null ? null : RightVisual.GetValue(vis) as GameObject;
+            if (item == null) return;
+            if (_item != item || _tip == null)
+            {
+                if (_tip != null) Destroy(_tip.gameObject);
+                Animator animator = player.GetComponentInChildren<Animator>();
+                Transform hand = animator == null || !animator.isHuman ? null : animator.GetBoneTransform(HumanBodyBones.RightHand);
+                Vector3 axis, end;
+                if (hand == null || !DragonCombat.WeaponAxis(item, hand, out axis, out end)) return;
+                _item = item;
+                GameObject tip = new GameObject("IH_WeaponWake"); _tip = tip.transform;
+                _tip.SetParent(item.transform, false); _tip.position = end;
+                _trail = tip.AddComponent<TrailRenderer>(); _trail.sharedMaterial = material;
+                _trail.time = 0.16f; _trail.minVertexDistance = 0.045f;
+                _trail.startWidth = 0.12f; _trail.endWidth = 0f;
+                _trail.numCapVertices = 3; _trail.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                _trail.receiveShadows = false; _trail.emitting = false;
+            }
+            GameObject left = vis == null || LeftVisual == null ? null : LeftVisual.GetValue(vis) as GameObject;
+            ItemDrop.ItemData rightData = DragonCombat.GetHandItem(player, "m_rightItem"), leftData = DragonCombat.GetHandItem(player, "m_leftItem");
+            if (!DragonCombat.IsMatchingDualPair(rightData, leftData)) left = null;
+            if (_leftItem != left || (_leftItem != null && _leftTip == null))
+            {
+                if (_leftTip != null) Destroy(_leftTip.gameObject);
+                _leftTrail = null; _leftTip = null; _leftItem = left;
+                if (left != null)
+                {
+                    Animator animator = player.GetComponentInChildren<Animator>();
+                    Transform hand = animator == null || !animator.isHuman ? null : animator.GetBoneTransform(HumanBodyBones.LeftHand);
+                    Vector3 axis, end;
+                    if (hand != null && DragonCombat.WeaponAxis(left, hand, out axis, out end))
+                    {
+                        GameObject point = new GameObject("IH_LeftWeaponWake"); _leftTip = point.transform;
+                        _leftTip.SetParent(left.transform, false); _leftTip.position = end;
+                        _leftTrail = point.AddComponent<TrailRenderer>(); _leftTrail.sharedMaterial = material;
+                        _leftTrail.time = 0.16f; _leftTrail.minVertexDistance = 0.045f; _leftTrail.startWidth = 0.12f; _leftTrail.endWidth = 0f;
+                        _leftTrail.numCapVertices = 3; _leftTrail.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                        _leftTrail.receiveShadows = false; _leftTrail.emitting = false;
+                    }
+                }
+            }
+            _trail.Clear();
+            Color color = DragonCombat.GetAdvancementName(player) == "Mercenary" ? new Color(0.87f, 0.77f, 0.63f, 0.58f) : new Color(0.48f, 0.68f, 0.9f, 0.62f);
+            _trail.startColor = color; _trail.endColor = new Color(color.r, color.g, color.b, 0f);
+            if (_leftTrail != null) { _leftTrail.Clear(); _leftTrail.startColor = color; _leftTrail.endColor = _trail.endColor;
+                _leftRadial = _leftTip.position - (player.transform.position + Vector3.up); }
+            _start = Time.time + Mathf.Max(0f, delay); _end = _start + Mathf.Clamp(duration, 0.1f, 15f);
+            _generation = DragonCombat.SkillAnimGen;
+            _normal = Vector3.zero; _radial = _tip.position - (player.transform.position + Vector3.up);
+            enabled = true;
+        }
+        public bool TryRoll(out float roll)
+        {
+            roll = 0f;
+            if (_player == null || Time.time > _end || Time.time - _sampleAt > 0.15f || _normal.sqrMagnitude < 0.01f) return false;
+            roll = Mathf.Atan2(-Vector3.Dot(_normal, _player.transform.right), Vector3.Dot(_normal, Vector3.up)) * Mathf.Rad2Deg;
+            return true;
+        }
+        private void LateUpdate()
+        {
+            if (_trail == null || _tip == null || _player == null || _player.IsDead() || _player.InDodge() || _generation != DragonCombat.SkillAnimGen || Time.time >= _end)
+            { if (_trail != null) _trail.emitting = false; if (_leftTrail != null) _leftTrail.emitting = false; enabled = false; return; }
+            Vector3 radial = _tip.position - (_player.transform.position + Vector3.up);
+            Vector3 normal = Vector3.Cross(_radial, radial);
+            bool moving = (radial - _radial).sqrMagnitude > 0.0001f;
+            if (moving && normal.sqrMagnitude > 0.0001f) { _normal = normal.normalized; _sampleAt = Time.time; }
+            _radial = radial;
+            _trail.emitting = Time.time >= _start && moving;
+            if (_leftTrail != null && _leftTip != null)
+            {
+                Vector3 leftRadial = _leftTip.position - (_player.transform.position + Vector3.up);
+                bool leftMoving = (leftRadial - _leftRadial).sqrMagnitude > 0.0001f;
+                Vector3 leftNormal = Vector3.Cross(_leftRadial, leftRadial);
+                if (!moving && leftMoving && leftNormal.sqrMagnitude > 0.0001f) { _normal = leftNormal.normalized; _sampleAt = Time.time; }
+                _leftRadial = leftRadial; _leftTrail.emitting = Time.time >= _start && leftMoving;
+            }
+        }
+        private void OnDestroy() { if (_tip != null) Destroy(_tip.gameObject); if (_leftTip != null) Destroy(_leftTip.gameObject); }
+    }
+
     public class DragonGroundBolt : MonoBehaviour
     {
         public LineRenderer Glow, Core, Fork;
@@ -9338,7 +15549,7 @@ namespace DragonsAltarCombat
             {
                 Vector3 b = Pts[Pts.Count - 1];
                 Color sc = Color;
-                DragonCombat.RunVfx(delegate { DragonVfx.Burst(b + Vector3.up * 0.15f, sc, 10, 4f, 0.14f, 0.3f, 0.5f); });   // fizzles out at the end
+                DragonCombat.RunVfx(delegate { DragonVfx.Burst(b + Vector3.up * 0.10f, sc, 4, 3f, 0.045f, 0.2f, 0.4f); });   // fizzles out at the end
             }
         }
 
@@ -9360,24 +15571,26 @@ namespace DragonsAltarCombat
             if (HeadLight != null && Pts.Count > 0)
             {
                 HeadLight.transform.position = Pts[Pts.Count - 1] + Vector3.up * 0.5f;
-                HeadLight.intensity = 1.6f * DragonVfx.LightScale * flick;
+                HeadLight.intensity = 1.0f * DragonVfx.LightScale * flick;
             }
             if (!_done && Pts.Count > 0 && Time.time >= _nextArc)
             {
-                _nextArc = Time.time + UnityEngine.Random.Range(0.08f, 0.16f);
+                _nextArc = Time.time + UnityEngine.Random.Range(0.12f, 0.20f);
                 Vector3 head = Pts[Pts.Count - 1];
                 Color hc = Color;
-                DragonCombat.RunVfx(delegate { DragonVfx.Burst(head + Vector3.up * 0.1f, hc, 5, 4f, 0.12f, 0.25f, 0.6f); });
+                DragonCombat.RunVfx(delegate { DragonVfx.Burst(head + Vector3.up * 0.07f, hc, 3, 3f, 0.04f, 0.2f, 0.5f); });
             }
         }
 
-        private static void Paint(LineRenderer l, Color c, float a)
+        private readonly Gradient _paintGradient = new Gradient();
+        private readonly GradientColorKey[] _paintColors = new GradientColorKey[2];
+        private readonly GradientAlphaKey[] _paintAlpha = new GradientAlphaKey[3];
+        private void Paint(LineRenderer l, Color c, float a)
         {
             if (l == null) return;
-            Gradient g = new Gradient();
-            g.SetKeys(new GradientColorKey[] { new GradientColorKey(c, 0f), new GradientColorKey(c, 1f) },
-                      new GradientAlphaKey[] { new GradientAlphaKey(a * 0.25f, 0f), new GradientAlphaKey(a * 0.8f, 0.6f), new GradientAlphaKey(a, 1f) });
-            l.colorGradient = g;
+            _paintColors[0] = new GradientColorKey(c, 0f); _paintColors[1] = new GradientColorKey(c, 1f);
+            _paintAlpha[0] = new GradientAlphaKey(a * 0.25f, 0f); _paintAlpha[1] = new GradientAlphaKey(a * 0.8f, 0.6f); _paintAlpha[2] = new GradientAlphaKey(a, 1f);
+            _paintGradient.SetKeys(_paintColors, _paintAlpha); l.colorGradient = _paintGradient;
         }
 
         private Vector3 Jit(Vector3 p, Vector3 side, float amount)
@@ -9449,7 +15662,7 @@ namespace DragonsAltarCombat
             if (_fade < 0f && Age >= MaxLife) Finish(0.3f);
             float k = Mathf.Clamp01(Age / 0.08f);
             if (_fade >= 0f) { _fade += Time.deltaTime; k *= 1f - Mathf.Clamp01(_fade / FadeLen); if (_fade >= FadeLen) { Destroy(gameObject); return; } }
-            float flick = 0.85f + 0.15f * Mathf.Sin(Age * 40f);
+            float flick = 1f;   // v0.25.167 no strobing (was a 40 Hz flicker)
             if (Mesh != null)
             {
                 if (_cols == null) _cols = new Color[Mesh.vertexCount];
@@ -9462,15 +15675,18 @@ namespace DragonsAltarCombat
     }
 
     // v0.25.65: holds, then fades every child mesh's vertex colours out and destroys the object (crescent flashes).
+
     public class DragonFadeOut : MonoBehaviour
     {
         public float Hold = 0.3f, Fade = 0.3f, Grow = 0f;
         private float _age;
         private MeshFilter[] _mf;
-        private Color[][] _base;
+        private Color[][] _base, _buf;
+        private Renderer[] _shared;   // v0.25.181 shared (cached) meshes fade through a property block, never the mesh
         private LineRenderer[] _lr;
         private Color[] _lrBase;
         private Vector3 _scale;
+        private MaterialPropertyBlock _mpb;
         private void Start()
         {
             _lr = GetComponentsInChildren<LineRenderer>();
@@ -9478,7 +15694,15 @@ namespace DragonsAltarCombat
             for (int i = 0; i < _lr.Length; i++) _lrBase[i] = _lr[i].startColor;
             _mf = GetComponentsInChildren<MeshFilter>();
             _base = new Color[_mf.Length][];
-            for (int i = 0; i < _mf.Length; i++) _base[i] = _mf[i].sharedMesh != null ? _mf[i].sharedMesh.colors : new Color[0];
+            _buf = new Color[_mf.Length][];
+            _shared = new Renderer[_mf.Length];
+            for (int i = 0; i < _mf.Length; i++)
+            {
+                DragonCutRibbon cr = _mf[i].GetComponent<DragonCutRibbon>();
+                if (cr != null && cr.SharedMesh) { _shared[i] = _mf[i].GetComponent<Renderer>(); _base[i] = new Color[0]; _buf[i] = new Color[0]; continue; }
+                _base[i] = _mf[i].sharedMesh != null ? _mf[i].sharedMesh.colors : new Color[0];
+                _buf[i] = new Color[_base[i].Length];
+            }
             _scale = transform.localScale;
         }
         private void Update()
@@ -9496,14 +15720,201 @@ namespace DragonsAltarCombat
                 }
                 for (int i = 0; i < _mf.Length; i++)
                 {
+                    if (_shared[i] != null)
+                    {
+                        DragonCutRibbon cr = _mf[i] == null ? null : _mf[i].GetComponent<DragonCutRibbon>();
+                        if (cr != null) cr.Fade01 = k;
+                        continue;
+                    }
                     if (_mf[i] == null || _mf[i].sharedMesh == null || _base[i].Length == 0) continue;
-                    Color[] c = new Color[_base[i].Length];
+                    Color[] c = _buf[i];
                     for (int j = 0; j < c.Length; j++) { c[j] = _base[i][j]; c[j].a *= k; }
                     _mf[i].sharedMesh.colors = c;
                 }
             }
             if (_age >= Hold + Fade) Destroy(gameObject);
         }
+    }
+
+    // v0.25.181 rift slit: opens (width 0 -> 1), holds, closes, then removes itself
+    public class DragonRiftOpen : MonoBehaviour
+    {
+        public float Life = 0.6f;
+        private float _age;
+        private Vector3 _s;
+        private void Start() { _s = transform.localScale; transform.localScale = new Vector3(0.01f, _s.y, _s.z); }
+        private void Update()
+        {
+            _age += Time.deltaTime;
+            float open = Mathf.Clamp01(_age / 0.12f);
+            float close = Mathf.Clamp01((Life - _age) / 0.2f);
+            float k = Mathf.SmoothStep(0f, 1f, Mathf.Min(open, close));
+            transform.localScale = new Vector3(Mathf.Max(0.01f, _s.x * k), _s.y, _s.z);
+            if (_age >= Life) Destroy(gameObject);
+        }
+    }
+
+    // v0.25.181 vapour cone that rides the leading side of a fast-moving body (Shield Charge / Angel Comet)
+    public class DragonPressureCone : MonoBehaviour
+    {
+        public Transform Follow;
+        public Mesh Mesh;
+        public Func<bool> Keep;
+        public float MaxLife = 2f, Radius = 1f;
+        public Color Tint = Color.white;
+        private Vector3 _last, _dir = Vector3.forward;
+        private float _age, _vis, _ringAt, _end = -1f;
+        private bool _init;
+        private MaterialPropertyBlock _mpb;
+        private Renderer _r;
+        private void Update()
+        {
+            _age += Time.deltaTime;
+            bool alive = Follow != null && _age < MaxLife;
+            if (alive && Keep != null) { try { alive = Keep(); } catch (Exception) { alive = false; } }
+            Vector3 p = Follow != null ? Follow.position + Vector3.up * 1.0f : transform.position;
+            if (!_init) { _last = p; _init = true; }
+            Vector3 vel = Time.deltaTime > 0f ? (p - _last) / Time.deltaTime : Vector3.zero;
+            _last = p;
+            float speed = vel.magnitude;
+            if (speed > 0.5f) _dir = Vector3.Slerp(_dir, vel / speed, Mathf.Clamp01(Time.deltaTime * 12f));
+            float want = alive && speed > 5f ? Mathf.Clamp01((speed - 5f) / 6f) : 0f;
+            _vis = Mathf.MoveTowards(_vis, want, Time.deltaTime * 4f);
+            transform.position = p + _dir * Radius * 0.4f;
+            transform.rotation = Quaternion.LookRotation(_dir, Mathf.Abs(_dir.y) > 0.95f ? Vector3.forward : Vector3.up);
+            if (_r == null) _r = GetComponent<Renderer>();
+            if (_r != null)
+            {
+                if (_mpb == null) _mpb = new MaterialPropertyBlock();
+                _r.GetPropertyBlock(_mpb);
+                Color t = new Color(0.5f, 0.5f, 0.5f, 0.5f * _vis);
+                _mpb.SetColor("_TintColor", t);
+                _mpb.SetColor("_Color", new Color(1f, 1f, 1f, _vis));
+                _mpb.SetVector("_MainTex_ST", new Vector4(1f, 1f, -_age * 1.6f, 0f));
+                _r.SetPropertyBlock(_mpb);
+            }
+            if (_vis > 0.3f && Time.time >= _ringAt)
+            {
+                _ringAt = Time.time + 0.18f;
+                DragonVfx.PressureRing(p - _dir * Radius * 0.6f, _dir, Tint, Radius * 0.7f);
+            }
+            if (!alive && _end < 0f) _end = _age;
+            if (_end >= 0f && _vis <= 0.001f) Destroy(gameObject);
+            if (_age > MaxLife + 3f) Destroy(gameObject);
+        }
+        private void OnDestroy() { if (Mesh != null) Destroy(Mesh); }
+    }
+
+    // v0.25.181: rubble that stays for `Life`, then sinks into the ground and is removed.
+    public class DragonSinkAway : MonoBehaviour
+    {
+        public float Life = 4f, Depth = 0.3f;
+        private float _age;
+        private Vector3 _start;
+        private void Start() { _start = transform.position; }
+        private void Update()
+        {
+            _age += Time.deltaTime;
+            if (_age > Life) transform.position = _start - Vector3.up * Depth * Mathf.Clamp01((_age - Life) / 0.8f);
+            if (_age > Life + 0.8f) Destroy(gameObject);
+        }
+    }
+
+    // v0.25.180 AirStreak owner: trails keep emitting while Keep() holds, then detach so the wake finishes its fade.
+    public class DragonStreakLife : MonoBehaviour
+    {
+        public Func<bool> Keep;
+        public TrailRenderer[] Trails;
+        private float _left = -1f;
+        private void Update()
+        {
+            if (_left < 0f)
+            {
+                bool on = false;
+                try { on = Keep != null && Keep(); } catch (Exception) { }
+                if (on) return;
+                _left = 0f;
+                transform.SetParent(null, true);
+                for (int i = 0; Trails != null && i < Trails.Length; i++) if (Trails[i] != null) Trails[i].emitting = false;
+            }
+            _left += Time.deltaTime;
+            if (_left > 1.5f) Destroy(gameObject);
+        }
+    }
+
+    // v0.25.180 one cut ribbon (Judgement Cut arcs, magic slash shoulders): vertex alpha carries the snap-in sweep and
+    // the frayed dissolve from the tail; uv.x scrolls the flowing wind texture; on dissolve the ribbon shears along its
+    // own arc. ColorsOwned false = flow only (DragonFadeOut / the carrier fades it). Owns its mesh.
+    public class DragonCutRibbon : MonoBehaviour
+    {
+        public Mesh Mesh;
+        public float Delay, Reveal = 0.06f, Hold = 0.4f, Fade = 0.3f, Flow, Shear, Tile = 1f;
+        public bool ColorsOwned = true;
+        public bool SharedMesh;          // v0.25.181 cached mesh shared by many slashes: never written, never destroyed here
+        public float Fade01 = 1f;        // set by DragonFadeOut for shared meshes (applied through the property block)
+        private Color[] _base, _cols;
+        private Vector2[] _uv0;
+        private float _age, _lastFade = -1f;
+        private Renderer _r;
+        private MaterialPropertyBlock _mpb;
+        private Color _tint0;
+        private bool _hasTint;
+        private void Start()
+        {
+            if (Mesh == null) { enabled = false; return; }
+            _r = GetComponent<Renderer>();
+            if (_r != null && _r.sharedMaterial != null && _r.sharedMaterial.HasProperty("_TintColor")) { _hasTint = true; _tint0 = _r.sharedMaterial.GetColor("_TintColor"); }
+            if (ColorsOwned && !SharedMesh) { _base = Mesh.colors; _cols = new Color[_base.Length]; _uv0 = Mesh.uv; }
+            ApplyBlock();
+            if (ColorsOwned && !SharedMesh) Apply(0f, 1f);
+        }
+        // v0.25.181 (perf): texture scroll + shared-mesh fade go through a MaterialPropertyBlock (no per-frame mesh upload)
+        private void ApplyBlock()
+        {
+            if (_r == null) return;
+            if (_mpb == null) _mpb = new MaterialPropertyBlock();
+            _r.GetPropertyBlock(_mpb);
+            _mpb.SetVector("_MainTex_ST", new Vector4(Tile, 1f, -_age * Flow, 0f));
+            if (SharedMesh)
+            {
+                if (_hasTint) { Color t = _tint0; t.a *= Fade01; _mpb.SetColor("_TintColor", t); }
+                else _mpb.SetColor("_Color", new Color(1f, 1f, 1f, Fade01));
+                _lastFade = Fade01;
+            }
+            _r.SetPropertyBlock(_mpb);
+        }
+        private void Apply(float rev, float k)
+        {
+            for (int i = 0; i < _base.Length; i++)
+            {
+                float u = _uv0[i].x;
+                float sweep = Mathf.Clamp01((rev * 1.2f - u) / 0.2f);
+                float dissolve = Mathf.Clamp01((u + 0.25f - (1f - k) * 1.25f) / 0.25f);
+                Color c = _base[i]; c.a *= sweep * dissolve * (0.3f + 0.7f * k);
+                _cols[i] = c;
+            }
+            Mesh.colors = _cols;
+        }
+        private void Update()
+        {
+            if (Mesh == null) return;
+            _age += Time.deltaTime;
+            if (Flow != 0f || (SharedMesh && Fade01 != _lastFade)) ApplyBlock();
+            if (!ColorsOwned || SharedMesh) return;
+            float t = _age - Delay;
+            if (t < 0f) { Apply(0f, 1f); return; }
+            float rev = Reveal <= 0f ? 1f : Mathf.Clamp01(t / Reveal);
+            float k = 1f;
+            float out0 = Reveal + Hold;
+            if (t > out0)
+            {
+                k = 1f - Mathf.Clamp01((t - out0) / Mathf.Max(0.01f, Fade));
+                if (Shear != 0f) transform.Rotate(0f, 0f, Shear * Time.deltaTime, Space.Self);
+            }
+            Apply(rev, k);
+            if (t >= out0 + Fade) Destroy(gameObject);
+        }
+        private void OnDestroy() { if (Mesh != null && !SharedMesh) Destroy(Mesh); }
     }
 
     // v0.25.65 Judgement Cut sphere: a faded, distorted-looking dome that pops in, holds while the cuts land,
@@ -9563,14 +15974,162 @@ namespace DragonsAltarCombat
         private static Texture2D _glow;
         private static bool _catalogLogged;
 
+        // v0.25.183 (perf): the ground mask used by debris / ground probes, built once (was allocated per call / per frame)
+        private static int _solidGroundMask = -1;
+        public static int SolidGroundMask()
+        {
+            if (_solidGroundMask == -1) _solidGroundMask = LayerMask.GetMask("terrain", "Default", "static_solid", "piece");
+            return _solidGroundMask;
+        }
+
+        // v0.25.183 (perf, user: first casts hitched): every procedural VFX texture + shared material used to be generated
+        // on the first cast that needed it (up to ~200k noise samples + mipmap upload in that one frame). They are now built
+        // in the background after you load in: 3 s after the local player exists, one item every 0.05 s. Same textures,
+        // same materials (the accessors cache them exactly as before).
+        private static int _warmStep = -1;
+        private static bool _clipsWarmed;
+        private static float _warmNext;
+        // v0.25.238: draws each common effect material once (a few-pixel dot 1 m in front of the camera for half a second), so
+        // the graphics driver compiles those shaders now instead of on a skill's first cast.
+        private static void WarmShaders()
+        {
+            Camera cam = Camera.main;
+            if (cam == null) return;
+            Material[] mats = { Additive(), Alpha(), Mat(SmokeTex(), false), Mat(SmokeTex(), true), Mat(LineTex(), true), Mat(SlashTex(), false), Mat(BlastTex(), true),
+                Mat(WhiteTex(), true), ClearMat(), DarkCoreMat(), SolidMat(new Color(0.5f, 0.5f, 0.5f, 1f)), NaturalMat(new Color(0.38f, 0.32f, 0.27f, 1f)), RelicGold(), RelicIvory(), MeteorMat() };
+            GameObject root = new GameObject("IH_ShaderWarm");
+            root.transform.position = cam.transform.position + cam.transform.forward * 1f;
+            Mesh quad = QuadMesh(false);
+            for (int i = 0; i < mats.Length; i++)
+            {
+                if (mats[i] == null) continue;
+                GameObject q = new GameObject("w");
+                q.transform.SetParent(root.transform, false);
+                q.transform.localScale = Vector3.one * 0.004f;
+                q.transform.rotation = Quaternion.LookRotation(-cam.transform.forward);
+                q.AddComponent<MeshFilter>().sharedMesh = quad;
+                MeshRenderer r = q.AddComponent<MeshRenderer>(); r.sharedMaterial = mats[i];
+                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; r.receiveShadows = false;
+            }
+            UnityEngine.Object.Destroy(quad, 0.6f);
+            UnityEngine.Object.Destroy(root, 0.5f);
+        }
+        public static void PrewarmTick(Player p)
+        {
+            if (_warmStep >= 62 || p == null) return;
+            if (p.InAttack() || DragonCombat.IsSkillLocked(p) || DragonCombat.SkillOwnsAnimator(p)) return;
+            if (_warmStep < 0) { _warmStep = 0; _warmNext = Time.time + 3f; return; }
+            if (Time.time < _warmNext) return;
+            _warmNext = Time.time + 0.05f;
+            if (_warmStep == 0 && !_clipsWarmed) { _clipsWarmed = true; DragonCombat.PrewarmClipLibrary(); return; }   // v0.25.185 skill pose library (was built on the first cast), even with VFX off
+            if (!Enabled) return;   // VFX off: nothing to warm (re-checked later if turned on)
+            try
+            {
+                switch (_warmStep)
+                {
+                    case 0: Glow(); break;
+                    case 1: Additive(); break;
+                    case 2: Alpha(); break;
+                    case 3: SmokeTex(); break;
+                    case 4: CrackTex(); break;
+                    case 5: ScorchTex(); break;
+                    case 6: PressureTex(); break;
+                    case 7: RockTex(); break;
+                    case 8: RingTex(); break;
+                    case 9: FrostTex(); break;
+                    case 10: StreakTex(); break;
+                    case 11: FlameTex(); break;
+                    case 12: BeamTex(); break;
+                    case 13: LineTex(); break;
+                    case 14: SlashTex(); break;
+                    case 15: BladeTex(); break;
+                    case 16: SoftRingTex(); break;
+                    case 17: StoneTex(); break;
+                    case 18: BronzeTex(); break;
+                    case 19: RelicStone(); break;
+                    case 20: RelicBronze(); break;
+                    case 21: DissolveTex(); break;
+                    case 22: GuideTex(); break;
+                    case 23: FeatherTex(); break;
+                    case 24: WhiteTex(); break;
+                    case 25: EyeTex(); break;
+                    case 26: ClearMat(); break;
+                    case 27: DarkCoreMat(); break;
+                    case 28: WindVeilMat(); break;
+                    case 29: Mat(SlashTex(), false); Mat(LineTex(), true); Mat(CrackTex(), false); Mat(SmokeTex(), false); Mat(StreakTex(), false); CloudPuffSize(); DamageBuffMistSize(); Mat(WindRingTexture(false), false); Mat(WindRingTexture(true), false); break;
+                    case 30: RelicGold(); break;
+                    case 31: RelicIvory(); break;
+                    case 32: RelicGem(new Color(0.15f, 0.48f, 0.85f, 1f)); break;
+                    case 33: RelicGem(new Color(0.25f, 0.85f, 0.4f, 1f)); break;
+                    case 34: RelicFeather(Color.white); break;
+                    case 35: WarmWarhammer(); break;
+                    case 36: Mat(PressureTex(), false); break;
+                    case 37: RelicInlay(Holy); break;
+                    case 38: Mat(WhiteTex(), true); break;
+                    case 39: StompWindTexture(); break;
+                    case 40: Mat(CloudShellTexture(), false); break;
+                    case 41: CloudShellMesh(); break;
+                    case 42: Mat(HeavensSigilTexture(), false); break;
+                    case 43: PortalSurfaceMesh(); PortalRimMesh(false); PortalRimMesh(true); Mat(PortalWaterTexture(), false); break;
+                    case 44: Mat(BlastTex(), true); Mat(SmokeTex(), false); BlastSphere(); break;
+                    case 45: WarmArcaneFire(); break;
+                    case 46: Mat(LineTex(), true); break;
+                    case 47: PortalTunnelMesh(); Mat(PortalSpatialTexture(), false); break;
+                    case 48: PortalElectricMesh(); break;
+                    case 49: BlackCoreMat(); break;
+                    case 50: Mat(GravRimTex(), true); break;
+                    case 51: Mat(GravOutlineTex(), true); break;
+                    case 52: GravityHalo209(0); GravityHalo209(1); break;
+                    case 53: GravityOrbit209(0); break;
+                    case 54: GravityOrbit209(1); break;
+                    case 55: GravityOrbit209(2); break;
+                    case 56: Mat(BeamTex(), true); break;
+                    case 57: GlintTex(); FlameSheet(false); break;   // v0.25.238
+                    case 58: FlameSheet(true); MeteorMat(); break;
+                    case 59: for (int k = 0; k < _lumpMeshes.Length; k++) LumpMesh(k); break;
+                    case 60: for (int k = 0; k < _spikeMeshes.Length; k++) SpikeMesh(k); NaturalMat(new Color(0.38f, 0.32f, 0.27f, 1f)); NaturalMat(new Color(0.40f, 0.35f, 0.30f, 1f)); break;
+                    case 61: WarmShaders(); break;   // v0.25.238 the GPU compiles each effect shader on its first draw - do it now
+                }
+            }
+            catch (Exception) { }
+            _warmStep++;
+        }
+
+        public static void WeaponWake(Player player, float delay, float duration)
+        {
+            if (!Enabled || player == null || player != Player.m_localPlayer) return;
+            DragonWeaponWake wake = player.GetComponent<DragonWeaponWake>();
+            if (wake == null) wake = player.gameObject.AddComponent<DragonWeaponWake>();
+            wake.Begin(player, delay, duration, Mat(LineTex(), false));
+        }
+        public static bool SwingClip(string clip)
+        {
+            return clip == "warrior_heavy" || clip == "merc_heavy_asc" || clip == "warrior_impact_wave" ||
+                clip == "sm_slash_a" || clip == "sm_slash_b" || clip == "sm_moon_finisher" ||
+                clip == "sm_crescent" || clip == "sm_crescent_asc" || clip == "sm_halfmoon" || clip == "sm_halfmoon_2" ||
+                clip == "sm_halfmoon_finisher" || clip == "sm_eclipse" || clip == "merc_circle" || clip == "merc_circle_2" ||
+                clip == "merc_seismic" || clip == "merc_bone" || clip == "merc_bomb" || clip == "sm_crescent_asc2" ||
+                clip == "wiz_greatblade" || clip == "wiz_greatblade_slam" || clip == "sorc_blade" || clip == "sorc_blade_asc" ||
+                clip == "cleric_cross_1" || clip == "cleric_cross_2" || clip == "cleric_hammer_slam" || clip == "angel_comet" || clip == "cleric_zap";
+        }
+        public static bool MaterialsReady { get { return _warmStep >= 57; } }
+        public static bool MuteHitImpact;   // v0.25.182 (perf): set around a skill's own rapid ticks (Furious Winds) to skip HitImpact
+        private static Material _windVeilMat;
+        private static Texture2D _windVeilTex;
+
         public static bool Enabled
         {
             get { return DragonCombatPlugin.Instance == null || DragonCombatPlugin.Instance.EnhancedVfx == null || DragonCombatPlugin.Instance.EnhancedVfx.Value; }
         }
 
+        public static bool Guides
+        {
+            get { return DragonCombatPlugin.Instance == null || DragonCombatPlugin.Instance.ShowGuides == null || DragonCombatPlugin.Instance.ShowGuides.Value; }
+        }
+
         public static float Amount
         {
-            get { return DragonCombatPlugin.Instance == null || DragonCombatPlugin.Instance.VfxDensity == null ? 1f : Mathf.Clamp(DragonCombatPlugin.Instance.VfxDensity.Value, 0.1f, 3f); }
+            get { return DragonCombatPlugin.Instance == null || DragonCombatPlugin.Instance.VfxDensity == null ? 0.35f : Mathf.Clamp(DragonCombatPlugin.Instance.VfxDensity.Value, 0.1f, 3f); }
         }
 
         private static Texture2D Glow()
@@ -9615,8 +16174,25 @@ namespace DragonsAltarCombat
             return _alpha;
         }
 
+        // v0.25.150 VFX POLISH: one internal restraint on every particle system + a per-frame budget so overlapping
+        // casts never stack into screen clutter (the user's density / light settings still apply on top).
+        private const float Restraint = 0.7f;
+        private static int _psFrame = -1, _psCount;
+        private static float PolishBudget()
+        {
+            if (_psFrame != Time.frameCount) { _psFrame = Time.frameCount; _psCount = 0; }
+            _psCount++;
+            return _psCount <= 16 ? 1f : _psCount <= 32 ? 0.4f : 0.15f;   // v0.25.167 overlapping casts stay readable (was 24 / 48)
+        }
+        private static Gradient _psFade;
+        private static AnimationCurve _psSize;
+        private static readonly float[] _flashAt = new float[4];
+        private static int _flashIdx;
+        private static float _shakeNext;
+
         private static DragonVfxLife Host(Vector3 pos, float life, string name)
         {
+            DragonPerf.Hosts++;
             GameObject go = new GameObject("IH_Vfx_" + name);
             go.transform.position = pos;
             DragonVfxLife l = go.AddComponent<DragonVfxLife>();
@@ -9628,7 +16204,14 @@ namespace DragonsAltarCombat
         public static ParticleSystem Particles(Transform parent, Color c, int burst, float rate, float emitSeconds, float life, float speedMin, float speedMax,
             float sizeMin, float sizeMax, float gravity, ParticleSystemShapeType shape, float radius, Vector3 shapeEuler, bool stretch, bool additive)
         {
-            if (additive) c.a *= 0.8f;   // v0.25.59 toned down
+            DragonPerf.Systems++;
+            if (additive)
+            {
+                // v0.25.167 (user: not cartoonish): additive light is desaturated and dimmer so it sits in Valheim's lighting
+                float lum = c.r * 0.3f + c.g * 0.59f + c.b * 0.11f;
+                c = new Color(Mathf.Lerp(c.r, lum, 0.3f), Mathf.Lerp(c.g, lum, 0.3f), Mathf.Lerp(c.b, lum, 0.3f), c.a * 0.5f);   // was a x0.65
+            }
+            float budget = PolishBudget();   // v0.25.150: overlapping casts share one particle budget per frame
             GameObject go = new GameObject("ps");
             go.transform.SetParent(parent, false);
             ParticleSystem ps = go.AddComponent<ParticleSystem>();
@@ -9640,17 +16223,17 @@ namespace DragonsAltarCombat
             main.startLifetime = new ParticleSystem.MinMaxCurve(life * 0.6f, life);
             main.startSpeed = new ParticleSystem.MinMaxCurve(speedMin, speedMax);
             main.startSize = new ParticleSystem.MinMaxCurve(sizeMin, sizeMax);
-            Color c2 = Color.Lerp(c, Color.white, 0.45f);
+            Color c2 = Color.Lerp(c, Color.white, 0.2f);   // v0.25.167 (was 0.45: blown-out white motes)
             c2.a = c.a;
             main.startColor = new ParticleSystem.MinMaxGradient(c, c2);
             main.gravityModifier = gravity;
             main.simulationSpace = ParticleSystemSimulationSpace.World;
-            main.maxParticles = 1200;
+            main.maxParticles = 600;
             main.scalingMode = ParticleSystemScalingMode.Hierarchy;
             ParticleSystem.EmissionModule em = ps.emission;
             em.enabled = true;
-            em.rateOverTime = rate * Amount;
-            int b = Mathf.Max(0, Mathf.RoundToInt(burst * Amount));
+            em.rateOverTime = rate * Amount * Restraint * budget;
+            int b = Mathf.Max(0, Mathf.RoundToInt(burst * Amount * Restraint * budget));
             if (b > 0) em.SetBursts(new ParticleSystem.Burst[] { new ParticleSystem.Burst(0f, (short)Mathf.Min(b, 30000)) });
             else em.SetBursts(new ParticleSystem.Burst[0]);
             ParticleSystem.ShapeModule sh = ps.shape;
@@ -9661,13 +16244,17 @@ namespace DragonsAltarCombat
             if (shape == ParticleSystemShapeType.Cone) sh.angle = 4f;
             ParticleSystem.ColorOverLifetimeModule col = ps.colorOverLifetime;
             col.enabled = true;
-            Gradient g = new Gradient();
-            g.SetKeys(new GradientColorKey[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
-                      new GradientAlphaKey[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(1f, 0.08f), new GradientAlphaKey(0.7f, 0.6f), new GradientAlphaKey(0f, 1f) });
-            col.color = new ParticleSystem.MinMaxGradient(g);
+            if (_psFade == null)   // v0.25.181 (perf): one shared fade gradient + size curve (identical every call)
+            {
+                _psFade = new Gradient();
+                _psFade.SetKeys(new GradientColorKey[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
+                          new GradientAlphaKey[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(1f, 0.08f), new GradientAlphaKey(0.7f, 0.6f), new GradientAlphaKey(0f, 1f) });
+                _psSize = new AnimationCurve(new Keyframe(0f, 0.6f), new Keyframe(0.15f, 1f), new Keyframe(1f, 0.25f));
+            }
+            col.color = new ParticleSystem.MinMaxGradient(_psFade);
             ParticleSystem.SizeOverLifetimeModule sol = ps.sizeOverLifetime;
             sol.enabled = true;
-            sol.size = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(new Keyframe(0f, 0.6f), new Keyframe(0.15f, 1f), new Keyframe(1f, 0.25f)));
+            sol.size = new ParticleSystem.MinMaxCurve(1f, _psSize);
             ParticleSystemRenderer r = go.GetComponent<ParticleSystemRenderer>();
             Material m = additive ? Additive() : Alpha();
             if (m != null) r.sharedMaterial = m;
@@ -9684,10 +16271,17 @@ namespace DragonsAltarCombat
         public static void Flash(Vector3 pos, Color c, float intensity, float range, float seconds)
         {
             if (!Enabled) return;
-            intensity *= LightScale;
+            // v0.25.145 restrained: no bright flares - capped peak, short, small range
+            intensity = Mathf.Min(intensity, 0.9f) * LightScale;   // v0.25.167 (was 1.5 / 5 m; v0.25.150 2.5 / 6 m)
+            seconds = Mathf.Min(seconds, 0.25f);
+            range = Mathf.Min(range, 4f);
             if (intensity <= 0.05f) return;
+            // v0.25.150: at most 4 flashes per 0.25 s, so overlapping casts never strobe
+            if (Time.time - _flashAt[_flashIdx] < 0.25f) return;
+            _flashAt[_flashIdx] = Time.time;
+            _flashIdx = (_flashIdx + 1) % _flashAt.Length;
             DragonVfxLife l = Host(pos, seconds, "flash");
-            Light light = l.gameObject.AddComponent<Light>();
+            Light light = l.gameObject.AddComponent<Light>(); DragonPerf.OnLight(light);
             light.type = LightType.Point;
             light.color = c;
             light.range = Mathf.Max(1f, range);
@@ -9703,6 +16297,8 @@ namespace DragonsAltarCombat
         {
             if (!Enabled) return;
             DragonVfxLife l = Host(pos, life + 0.3f, "burst");
+            count = Mathf.Max(2, Mathf.RoundToInt(count * 0.45f));   // v0.25.167 less particle clutter (v0.25.145 0.6)
+            size *= 0.8f;
             Particles(l.transform, c, count, 0f, 0.1f, life, speed * 0.4f, speed, size * 0.5f, size, gravity, ParticleSystemShapeType.Sphere, 0.2f, Vector3.zero, speed > 6f, true);
         }
 
@@ -9713,16 +16309,17 @@ namespace DragonsAltarCombat
             radius = Mathf.Max(0.5f, radius);
             seconds = Mathf.Clamp(seconds, 0.15f, 2f);
             DragonVfxLife l = Host(pos + Vector3.up * 0.15f, seconds + 0.5f, "shock");
-            int n = Mathf.Clamp(Mathf.RoundToInt(radius * 12f), 30, 260);
+            int n = Mathf.Clamp(Mathf.RoundToInt(radius * 5f), 12, 90);   // v0.25.167 (v0.25.150 9/r, 20-150)
             GroundRing(pos, c, radius, seconds);   // v0.25.59 skin
             float speed = radius / seconds;
-            Particles(l.transform, c, n, 0f, 0.05f, seconds, speed * 0.85f, speed, 0.35f + radius * 0.03f, 0.7f + radius * 0.05f, 0f,
-                ParticleSystemShapeType.Circle, 0.25f, new Vector3(90f, 0f, 0f), true, true);
-            Color dust = Color.Lerp(c, Color.white, 0.6f);
-            dust.a = 0.5f;
-            Particles(l.transform, dust, Mathf.RoundToInt(n * 0.35f), 0f, 0.05f, seconds * 1.4f, speed * 0.25f, speed * 0.55f, 0.6f, 1.4f, -0.05f,
-                ParticleSystemShapeType.Circle, 0.3f, new Vector3(90f, 0f, 0f), false, true);
-            Flash(pos + Vector3.up * 1.2f, c, 4f + radius * 0.25f, radius * 1.6f, seconds + 0.25f);
+            Color air = Color.Lerp(c, new Color(0.86f, 0.87f, 0.86f, 1f), 0.55f); air.a = 0.4f;   // v0.25.180 air streaks, not neon
+            Particles(l.transform, air, n, 0f, 0.05f, seconds, speed * 0.85f, speed, 0.35f + radius * 0.03f, 0.7f + radius * 0.05f, 0f,
+                ParticleSystemShapeType.Circle, 0.25f, new Vector3(90f, 0f, 0f), true, false);
+            Color dust = Color.Lerp(c, new Color(0.50f, 0.45f, 0.40f, 1f), 0.8f);   // v0.25.167 real dust (alpha), not a second glow
+            dust.a = 0.4f;
+            Particles(l.transform, dust, Mathf.RoundToInt(n * 0.3f), 0f, 0.05f, seconds * 1.4f, speed * 0.25f, speed * 0.55f, 0.6f, 1.4f, -0.05f,
+                ParticleSystemShapeType.Circle, 0.3f, new Vector3(90f, 0f, 0f), false, false);
+            Flash(pos + Vector3.up * 1.2f, c, 0.5f, radius, 0.12f);   // v0.25.180 small contact light only
         }
 
         // Column of light: rising streaks + a bright core + flash.
@@ -9730,18 +16327,16 @@ namespace DragonsAltarCombat
         {
             if (!Enabled) return;
             radius = Mathf.Max(0.3f, radius);
-            DragonVfxLife l = Host(pos, seconds + 0.8f, "pillar");
+            // v0.25.180 VFX DIRECTION (descending holy beams): light drifts DOWN the beam's length from the sky (cone at the
+            // top pointing down), fewer streaks, small contact light only.
+            DragonVfxLife l = Host(pos + Vector3.up * Mathf.Max(2f, height), seconds + 0.8f, "pillar");
             float life = Mathf.Clamp(seconds * 0.6f, 0.3f, 1.2f);
             float speed = Mathf.Max(4f, height / life);
-            // Cone pointing up (shape +Z rotated onto +Y): streaks rise from a disc of the pillar's radius.
-            Particles(l.transform, c, Mathf.RoundToInt(30 + radius * 20f), 60f * radius, seconds, life, speed * 0.6f, speed, 0.25f, 0.6f, 0f,
-                ParticleSystemShapeType.Cone, radius * 0.6f, new Vector3(-90f, 0f, 0f), true, true);
-            Color core = Color.Lerp(c, Color.white, 0.7f);
-            Particles(l.transform, core, 6, 14f, seconds, life * 0.8f, speed * 0.9f, speed * 1.1f, radius * 1.2f, radius * 1.8f, 0f,
-                ParticleSystemShapeType.Cone, radius * 0.1f, new Vector3(-90f, 0f, 0f), true, true);
+            Particles(l.transform, c, Mathf.RoundToInt(12 + radius * 10f), 30f * radius, seconds, life, speed * 0.6f, speed, 0.12f, 0.3f, 0f,
+                ParticleSystemShapeType.Cone, radius * 0.5f, new Vector3(90f, 0f, 0f), true, true);
             l.StopEmitAt = seconds;
             l.Systems = l.GetComponentsInChildren<ParticleSystem>();
-            Flash(pos + Vector3.up * 2f, c, 6f + radius, 8f + radius * 3f, seconds + 0.4f);
+            Flash(pos + Vector3.up * 1f, c, 0.7f, radius * 2f, 0.15f);
             Beam(pos, c, radius, height, seconds + 0.3f);   // v0.25.59 skin
         }
 
@@ -9760,7 +16355,7 @@ namespace DragonsAltarCombat
             l.BoltCore = new Color(0.95f, 0.98f, 1f, 1f);
             Jag(outer, a, b, l.BoltJitter);
             Jag(inner, a, b, l.BoltJitter * 0.7f);
-            Burst(b, glow, 26, 9f, 0.18f, 0.45f, 0.6f);
+            Burst(b, glow, 12, 9f, 0.18f, 0.45f, 0.6f);   // v0.25.167 (was 26)
             Flash(b + Vector3.up * 0.8f, glow, 5f, 9f, seconds + 0.2f);
             // a couple of short branches
             for (int i = 0; i < 2; i++)
@@ -9858,17 +16453,18 @@ namespace DragonsAltarCombat
             if (!Enabled || parent == null) return;
             GameObject go = new GameObject("IH_Glow");
             go.transform.SetParent(parent, false);
+            rate *= 0.35f;   // v0.25.167 (v0.25.145 0.5)
             ParticleSystem ps = Particles(go.transform, c, 0, rate, 1f, 1.1f, 0.2f, 1.2f, 0.12f, 0.4f, -0.05f,
                 ParticleSystemShapeType.Sphere, Mathf.Max(0.1f, radius), Vector3.zero, false, true);
             ParticleSystem.MainModule m = ps.main;
             m.loop = true;
-            if (lightRange > 0f)
+            if (lightRange > 0f && LightScale > 0.05f)
             {
-                Light light = go.AddComponent<Light>();
+                Light light = go.AddComponent<Light>(); DragonPerf.OnLight(light);
                 light.type = LightType.Point;
                 light.color = c;
-                light.range = lightRange;
-                light.intensity = 2.2f * LightScale;
+                light.range = Mathf.Min(lightRange, 3f);   // v0.25.150
+                light.intensity = 0.45f * LightScale;   // v0.25.167 (was 0.7)
                 light.shadows = LightShadows.None;
             }
         }
@@ -9877,8 +16473,15 @@ namespace DragonsAltarCombat
         public static void Heal(Character target, Color c)
         {
             if (!Enabled || target == null) return;
-            Aura(target.transform, target.transform.position, c, 0.6f, 0.6f, 60f, 1.6f);
-            Flash(target.transform.position + Vector3.up, c, 2.5f, 4f, 0.6f);
+            Aura(target.transform, target.transform.position, c, 0.5f, 0.6f, 18f, 1.4f);   // v0.25.180 small upward motes, no light per heal tick
+            // v0.25.191 (user: make it glow): a brief warm body sheen on the healed character (once per second per target)
+            if (StatusGate(target, "healglow", 1f))
+            {
+                float h = BodyHeight(target);
+                Color g = Color.Lerp(c, new Color(1f, 0.95f, 0.75f, 1f), 0.4f); g.a = 0.9f;
+                StatusAura(target, g, 0.9f, 0.5f, Mathf.Clamp(h * 0.25f, 0.3f, 1.2f), 34f, 0.6f);
+                Flash(target.transform.position + Vector3.up * h * 0.55f, g, 0.55f, Mathf.Clamp(h * 1.4f, 1.5f, 4f), 0.5f);
+            }
         }
 
         // Valheim's own effect prefab (first name that exists). Only prefabs without a ZNetView are spawned.
@@ -9909,13 +16512,62 @@ namespace DragonsAltarCombat
                     if (prefab == null) continue;
                     if (znv != null && prefab.GetComponentInChildren(znv, true) != null) continue;
                     GameObject go = UnityEngine.Object.Instantiate(prefab, pos, rot);
+                    DragonPerf.VanillaFx++;
                     if (scale > 0f && Mathf.Abs(scale - 1f) > 0.01f) go.transform.localScale = prefab.transform.localScale * scale;
+                    LimitSpawned(go);   // v0.25.151: vanilla effects obey the same particle / light limits
                     UnityEngine.Object.Destroy(go, Mathf.Max(0.5f, life));
                     return go;
                 }
             }
             catch (Exception) { }
             return null;
+        }
+
+        // v0.25.151: spawned Valheim effects (Meteor explosion, Fireball hit, lightning...) get the same restraint as our own:
+        // particle rate / bursts x Restraint x per-frame budget, max 600 particles per system, lights capped + scaled by the VFX light setting.
+        private static void LimitSpawned(GameObject go)
+        {
+            if (go == null) return;
+            try
+            {
+                ParticleSystem[] pss = go.GetComponentsInChildren<ParticleSystem>(true);
+                for (int i = 0; i < pss.Length; i++)
+                {
+                    ParticleSystem ps = pss[i];
+                    // v0.25.152: every system is budgeted like our own (Particles()), and the density setting applies
+                    float k = Restraint * Amount * PolishBudget();
+                    ParticleSystem.MainModule main = ps.main;
+                    if (main.maxParticles > 600) main.maxParticles = 600;
+                    ParticleSystem.EmissionModule em = ps.emission;
+                    if (!em.enabled) continue;
+                    em.rateOverTimeMultiplier = em.rateOverTimeMultiplier * k;
+                    int n = em.burstCount;
+                    if (n > 0)
+                    {
+                        ParticleSystem.Burst[] bursts = new ParticleSystem.Burst[n];
+                        em.GetBursts(bursts);
+                        for (int b = 0; b < n; b++)
+                        {
+                            ParticleSystem.MinMaxCurve cnt = bursts[b].count;
+                            cnt.constantMin *= k;
+                            cnt.constantMax *= k;
+                            cnt.curveMultiplier *= k;
+                            bursts[b].count = cnt;
+                        }
+                        em.SetBursts(bursts);
+                    }
+                }
+                Light[] lights = go.GetComponentsInChildren<Light>(true);
+                for (int i = 0; i < lights.Length; i++)
+                {
+                    Light l = lights[i];
+                    if (LightScale <= 0.05f) { l.enabled = false; continue; }
+                    l.intensity = Mathf.Min(l.intensity * 0.5f, 1.2f) * LightScale;   // v0.25.152 the light setting scales continuously
+                    l.range = Mathf.Min(l.range, 8f);
+                    l.shadows = LightShadows.None;
+                }
+            }
+            catch (Exception) { }
         }
 
         // Writes every fx_/vfx_ prefab name to the log once, so effects can be picked by name later.
@@ -9943,21 +16595,42 @@ namespace DragonsAltarCombat
 
         // ------------------------------------------------------------------ v0.25.57 detail layer
         // Camera shake near `pos` (Valheim's own GameCamera.AddShake).
+        private static bool _shakeInit;
+        private static FieldInfo _shakeField;
+        private static PropertyInfo _shakeProp;
+        private static MethodInfo _shakeMethod;
+        private static ParameterInfo[] _shakeParams;
+
         public static void Shake(Vector3 pos, float range, float strength)
         {
             if (!Enabled) return;
+            // v0.25.150: half strength, one shake per 0.2 s (overlapping impacts no longer stack)
+            if (Time.time < _shakeNext) return;
+            _shakeNext = Time.time + 0.2f;
+            strength *= 0.5f;
+            range = Mathf.Min(range, 25f);
             try
             {
-                Type gc = DragonCombat.FindTypeCached("GameCamera");
-                if (gc == null) return;
+                // v0.25.181 (perf): reflection looked up once
+                if (!_shakeInit)
+                {
+                    _shakeInit = true;
+                    Type gc0 = DragonCombat.FindTypeCached("GameCamera");
+                    if (gc0 != null)
+                    {
+                        _shakeField = gc0.GetField("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                        _shakeProp = gc0.GetProperty("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                        _shakeMethod = gc0.GetMethod("AddShake", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                        if (_shakeMethod != null) _shakeParams = _shakeMethod.GetParameters();
+                    }
+                }
                 object inst = null;
-                FieldInfo f = gc.GetField("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-                if (f != null) inst = f.GetValue(null);
-                if (inst == null) { PropertyInfo pi = gc.GetProperty("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic); if (pi != null) inst = pi.GetValue(null, null); }
+                if (_shakeField != null) inst = _shakeField.GetValue(null);
+                if (inst == null && _shakeProp != null) inst = _shakeProp.GetValue(null, null);
                 if (inst == null) return;
-                MethodInfo m = gc.GetMethod("AddShake", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                MethodInfo m = _shakeMethod;
                 if (m == null) return;
-                ParameterInfo[] ps = m.GetParameters();
+                ParameterInfo[] ps = _shakeParams;
                 object[] args = new object[ps.Length];
                 for (int i = 0; i < ps.Length; i++)
                 {
@@ -9973,64 +16646,105 @@ namespace DragonsAltarCombat
         }
 
         // Glowing jagged cracks radiating from an impact, fading out.
+        // v0.25.203 (user: cracks still only where I look): every crack is a real flat MESH strip on the ground (both faces,
+        // width laid out in the ground plane) - no LineRenderer, so nothing turns toward the camera or depends on the view.
         public static void Cracks(Vector3 center, Color c, float radius, int count, float seconds)
         {
             if (!Enabled) return;
             DragonVfxLife l = Host(center, seconds, "cracks");
-            List<LineRenderer> lines = new List<LineRenderer>();
+            List<MeshFilter> strips = new List<MeshFilter>();
             for (int i = 0; i < count; i++)
             {
                 float a = (i + UnityEngine.Random.Range(-0.3f, 0.3f)) / count * Mathf.PI * 2f;
                 Vector3 dir = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
                 float len = radius * UnityEngine.Random.Range(0.55f, 1f);
-                GameObject go = new GameObject("crack");
-                go.transform.SetParent(l.transform, false);
-                LineRenderer line = go.AddComponent<LineRenderer>();
-                line.useWorldSpace = true;
-                int n = 9;
-                line.positionCount = n;
-                line.startWidth = 0.22f + radius * 0.02f;
-                line.endWidth = 0.03f;
-                Material m = Additive();
-                if (m != null) line.sharedMaterial = m;
+                const int n = 9;
+                Vector3[] pts = new Vector3[n];
                 Vector3 side = Vector3.Cross(Vector3.up, dir);
                 for (int k = 0; k < n; k++)
                 {
                     float t = (float)k / (n - 1);
                     Vector3 p = center + dir * len * t + side * (k == 0 ? 0f : UnityEngine.Random.Range(-0.35f, 0.35f) * radius * 0.12f);
-                    p = GroundPoint(p);   // v0.25.66 terrain / Structures
-                    line.SetPosition(k, p + Vector3.up * 0.04f);
+                    pts[k] = GroundPoint(p) + Vector3.up * 0.05f;   // v0.25.66 terrain / Structures
                 }
-                lines.Add(line);
+                MeshFilter f = GroundStrip(l.transform, pts, 0.22f + radius * 0.02f, 0.03f);
+                if (f != null) strips.Add(f);
             }
-            DragonCrackFade fade = l.gameObject.AddComponent<DragonCrackFade>();
-            fade.Lines = lines.ToArray();
-            fade.Color = c;
+            DragonStripFade fade = l.gameObject.AddComponent<DragonStripFade>();
+            fade.Strips = strips.ToArray();
+            fade.Color = Fissure(c);
             fade.Life = seconds;
+        }
+
+        // v0.25.203 flat ground ribbon through world points: width tapers w0 -> w1, laid sideways in the ground plane
+        // (perpendicular to the path, horizontal), triangles on BOTH faces, crack texture tiled 1 per metre.
+        private static MeshFilter GroundStrip(Transform parent, Vector3[] pts, float w0, float w1)
+        {
+            int n = pts == null ? 0 : pts.Length;
+            if (n < 2) return null;
+            Material m = Mat(CrackTex(), false);
+            if (m == null) m = Additive();
+            if (m == null) return null;
+            Vector3[] v = new Vector3[n * 2];
+            Vector2[] uv = new Vector2[n * 2];
+            Color[] col = new Color[n * 2];
+            float dist = 0f;
+            for (int k = 0; k < n; k++)
+            {
+                Vector3 tan = (k < n - 1 ? pts[k + 1] - pts[k] : pts[k] - pts[k - 1]);
+                if (k > 0 && k < n - 1) tan = pts[k + 1] - pts[k - 1];
+                tan.y = 0f;
+                if (tan.sqrMagnitude < 1e-6f) tan = Vector3.forward;
+                Vector3 side = Vector3.Cross(Vector3.up, tan.normalized);
+                float w = Mathf.Lerp(w0, w1, (float)k / (n - 1)) * 0.5f;
+                if (k > 0) dist += Vector3.Distance(pts[k], pts[k - 1]);
+                v[k * 2] = pts[k] - side * w; v[k * 2 + 1] = pts[k] + side * w;
+                uv[k * 2] = new Vector2(dist, 0f); uv[k * 2 + 1] = new Vector2(dist, 1f);
+                col[k * 2] = Color.white; col[k * 2 + 1] = Color.white;
+            }
+            int[] tri = new int[(n - 1) * 12];
+            int ti = 0;
+            for (int k = 0; k < n - 1; k++)
+            {
+                int a = k * 2, b = a + 1, c = a + 2, d = a + 3;
+                tri[ti++] = a; tri[ti++] = c; tri[ti++] = b; tri[ti++] = b; tri[ti++] = c; tri[ti++] = d;   // top face
+                tri[ti++] = a; tri[ti++] = b; tri[ti++] = c; tri[ti++] = b; tri[ti++] = d; tri[ti++] = c;   // underside
+            }
+            GameObject go = new GameObject("crackStrip");
+            go.transform.SetParent(parent, false);
+            go.transform.position = Vector3.zero; go.transform.rotation = Quaternion.identity; go.transform.localScale = Vector3.one;
+            Mesh mesh = new Mesh();
+            mesh.vertices = v; mesh.uv = uv; mesh.colors = col; mesh.triangles = tri;
+            mesh.RecalculateBounds();
+            MeshFilter mf = go.AddComponent<MeshFilter>(); mf.sharedMesh = mesh;
+            MeshRenderer r = go.AddComponent<MeshRenderer>(); r.sharedMaterial = m;
+            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; r.receiveShadows = false;
+            return mf;
+        }
+
+        // v0.25.167: ground scars are dark soil with only a hint of the skill colour.
+        private static Color Fissure(Color c)
+        {
+            Color k = Color.Lerp(new Color(0.07f, 0.055f, 0.045f, 1f), c, 0.18f);
+            k.a = 1f;
+            return k;
         }
 
         // Chunks of earth thrown out of an impact: real little rocks that arc, bounce once and sink away.
         public static void Debris(Vector3 center, Color c, int count, float speed, float size, float seconds)
         {
             if (!Enabled) return;
-            Shader sh = Shader.Find("Sprites/Default");
             count = Mathf.Clamp(Mathf.RoundToInt(count * Amount), 1, 60);
+            Material mat = NaturalMat(c);   // v0.25.167 lit rock / ice lumps instead of unlit cubes and balls
             for (int i = 0; i < count; i++)
             {
-                GameObject rock = GameObject.CreatePrimitive(i % 3 == 0 ? PrimitiveType.Cube : PrimitiveType.Sphere);
-                rock.name = "IH_Debris";
-                Collider col = rock.GetComponent<Collider>();
-                if (col != null) UnityEngine.Object.Destroy(col);
-                Renderer r = rock.GetComponent<Renderer>();
-                if (r != null && sh != null)
-                {
-                    r.material = new Material(sh);
-                    float shade = UnityEngine.Random.Range(0.7f, 1.1f);
-                    r.material.color = new Color(c.r * shade, c.g * shade, c.b * shade, 1f);
-                    r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                }
-                float sz = size * UnityEngine.Random.Range(0.5f, 1.2f);
-                rock.transform.localScale = new Vector3(sz, sz * UnityEngine.Random.Range(0.6f, 1f), sz);
+                GameObject rock = new GameObject("IH_Debris");
+                rock.AddComponent<MeshFilter>().sharedMesh = LumpMesh(i);
+                MeshRenderer r = rock.AddComponent<MeshRenderer>();
+                if (mat != null) r.sharedMaterial = mat;
+                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                float sz = Mathf.Min(0.45f, size * UnityEngine.Random.Range(0.4f, 1.1f));   // v0.25.168 never oversized
+                rock.transform.localScale = new Vector3(sz * UnityEngine.Random.Range(0.75f, 1.25f), sz * UnityEngine.Random.Range(0.5f, 0.9f), sz * UnityEngine.Random.Range(0.75f, 1.25f));   // irregular chunks
                 rock.transform.position = center + Vector3.up * 0.3f;
                 rock.transform.rotation = UnityEngine.Random.rotation;
                 DragonDebris d = rock.AddComponent<DragonDebris>();
@@ -10073,7 +16787,9 @@ namespace DragonsAltarCombat
         {
             if (!Enabled) return;
             DragonVfxLife l = Host(ground + Vector3.up * height, seconds + 2f, "storm");
-            Particles(l.transform, new Color(0.18f, 0.20f, 0.26f, 0.75f), 30, 25f, seconds, 2.5f, 0.1f, 0.6f, radius * 0.35f, radius * 0.6f, 0f,
+            // v0.25.191 (user: the storm must be clearly visible): bigger, denser, darker canopy puffs (size grows with the storm)
+            float puff = Mathf.Clamp(radius * 0.32f, 2.5f, 7f);
+            Particles(l.transform, new Color(0.14f, 0.15f, 0.20f, 0.9f), 45, 40f, seconds, puff, 0.1f, 0.6f, radius * 0.35f, radius * 0.6f, 0f,
                 ParticleSystemShapeType.Circle, radius, new Vector3(90f, 0f, 0f), false, false);
             Particles(l.transform, Storm, 0, 6f, seconds, 0.25f, 0f, 0.1f, radius * 0.3f, radius * 0.5f, 0f,
                 ParticleSystemShapeType.Circle, radius * 0.8f, new Vector3(90f, 0f, 0f), false, true);
@@ -10117,33 +16833,64 @@ namespace DragonsAltarCombat
         }
 
         // A straight scar torn along the ground (wave paths, fissures, blade drags).
+        // v0.25.191 (user: branching): main fissure a -> b plus short forked side cracks every ~2 m (alternating sides,
+        // some forking again), all following the terrain. Capped at 14 branches per call.
+        public static void BranchCrackLine(Vector3 a, Vector3 b, Color c, float width, float seconds)
+        {
+            if (!Enabled) return;
+            CrackLine(a, b, c, width, seconds);
+            Vector3 d = b - a; d.y = 0f;
+            float len = d.magnitude;
+            if (len < 1f) return;
+            d /= len;
+            Vector3 side = Vector3.Cross(Vector3.up, d);
+            int n = Mathf.Min(14, Mathf.FloorToInt(len / 2f));
+            System.Random rng = new System.Random(Mathf.RoundToInt(a.x * 13f + a.z * 7f));
+            for (int i = 0; i < n; i++)
+            {
+                float t = (i + 0.5f + (float)rng.NextDouble() * 0.4f) / (n + 0.5f);
+                Vector3 p = Vector3.Lerp(a, b, t);
+                float sgn = (i % 2 == 0) ? 1f : -1f;
+                float bl = width * (2.5f + (float)rng.NextDouble() * 3f);
+                Vector3 e = p + (side * sgn * 0.85f + d * 0.5f).normalized * bl;
+                CrackLine(p, e, c, width * 0.45f, seconds);
+                if (i % 3 == 0)
+                {
+                    Vector3 e2 = Vector3.Lerp(p, e, 0.55f);
+                    CrackLine(e2, e2 + (side * sgn * 0.3f + d).normalized * bl * 0.6f, c, width * 0.3f, seconds);
+                }
+            }
+        }
+
+        // v0.25.202: ground lines lie FLAT on the ground. The default LineRenderer alignment (View) turns the ribbon toward
+        // the camera, so a crack pointing at / away from the camera is seen edge-on and vanishes - only cracks running
+        // across the view showed. TransformZ with the object's Z pointing down = a ribbon in the ground plane, visible
+        // from every side (particle shaders draw both faces).
+        public static void LayFlat(LineRenderer line)
+        {
+            if (line == null) return;
+            line.alignment = LineAlignment.TransformZ;
+            line.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+        }
+
         public static void CrackLine(Vector3 a, Vector3 b, Color c, float width, float seconds)
         {
             if (!Enabled) return;
             DragonVfxLife l = Host(a, seconds, "scar");
-            GameObject go = new GameObject("scar");
-            go.transform.SetParent(l.transform, false);
-            LineRenderer line = go.AddComponent<LineRenderer>();
-            line.useWorldSpace = true;
-            int n = Mathf.Clamp(Mathf.RoundToInt(Vector3.Distance(a, b) / 0.8f), 3, 40);
-            line.positionCount = n;
-            line.startWidth = width;
-            line.endWidth = width * 0.3f;
-            Material m = Additive();
-            if (m != null) line.sharedMaterial = m;
+            int n = Mathf.Clamp(Mathf.RoundToInt(Vector3.Distance(a, b) / 1.2f), 3, 18);   // v0.25.185 (perf) fewer ground probes per scar (was /0.8, max 40)
             Vector3 dir = b - a; dir.y = 0f;
             Vector3 side = Vector3.Cross(Vector3.up, dir.normalized);
-            int mask = LayerMask.GetMask("terrain", "Default", "static_solid", "piece");
+            Vector3[] pts = new Vector3[n];
             for (int k = 0; k < n; k++)
             {
                 float t = (float)k / (n - 1);
                 Vector3 p = Vector3.Lerp(a, b, t) + side * UnityEngine.Random.Range(-0.25f, 0.25f) * width * 2f;
-                p = GroundPoint(p);   // v0.25.66 terrain / Structures
-                line.SetPosition(k, p + Vector3.up * 0.04f);
+                pts[k] = GroundPoint(p) + Vector3.up * 0.05f;   // v0.25.66 terrain / Structures
             }
-            DragonCrackFade fade = l.gameObject.AddComponent<DragonCrackFade>();
-            fade.Lines = new LineRenderer[] { line };
-            fade.Color = c;
+            MeshFilter f = GroundStrip(l.transform, pts, width, width * 0.3f);   // v0.25.203 flat mesh strip (every angle)
+            DragonStripFade fade = l.gameObject.AddComponent<DragonStripFade>();
+            fade.Strips = f == null ? new MeshFilter[0] : new MeshFilter[] { f };
+            fade.Color = Fissure(c);
             fade.Life = seconds;
         }
 
@@ -10171,29 +16918,298 @@ namespace DragonsAltarCombat
             Cracks(pos, new Color(0.55f, 0.88f, 1f, 1f), radius * 0.8f, 8, 3f);
         }
 
-        // The full "something heavy hit the ground" package.
+        // v0.25.168 (user: ground impacts = a Hulk Smash): dark radiating cracks, a forceful dirt burst thrown up and out,
+        // a rolling dust ring, irregular lit rock chunks, a scorch and a shake. The skill colour only tints a faint ground
+        // ring (identity) - no glowing particle ring, no spikes. Purely visual: the terrain itself is never modified.
         public static void HeavyLanding(Vector3 pos, Color c, float radius, float shake)
         {
-            Shockwave(pos, c, radius, 0.5f);
+            radius = Mathf.Max(0.8f, radius);
+            Color tint = c; tint.a = 0.5f;
+            GroundRing(pos, tint, radius, 0.5f);
+            DirtBurst(pos, radius, 1f);
             DustRing(pos, radius);
-            Cracks(pos, c, radius * 0.8f, 9, 3.5f);
-            Debris(pos, new Color(0.42f, 0.36f, 0.30f, 1f), Mathf.RoundToInt(10 + radius * 2f), 6f + radius * 0.6f, 0.25f + radius * 0.02f, 2.5f);
-            Burst(pos + Vector3.up * 0.4f, Color.Lerp(c, Color.white, 0.5f), Mathf.RoundToInt(40 + radius * 8f), 9f + radius, 0.3f, 0.8f, 0.5f);
+            Cracks(pos, c, radius * 0.85f, 8, 4f);
+            Debris(pos, new Color(0.40f, 0.35f, 0.30f, 1f), Mathf.RoundToInt(7 + radius * 1.3f), 6f + radius * 0.6f, 0.22f + radius * 0.015f, 2.6f);
             Shake(pos, 25f + radius * 2f, shake);
-            Scorch(pos, radius * 0.55f, 6f);   // v0.25.59 skin
-            Smoke(pos, new Color(0.45f, 0.40f, 0.35f, 0.55f), radius, 2.2f, Mathf.RoundToInt(6 + radius));
+            Scorch(pos, radius * 0.55f, 6f);
+            Smoke(pos, new Color(0.45f, 0.40f, 0.35f, 0.5f), radius, 2.4f, Mathf.RoundToInt(6 + radius));
         }
 
-        // v0.25.58 ground hit without the shockwave ring (the caller already draws one): dust, cracks, rocks, sparks, shake.
+        // v0.25.58 ground hit without the ground ring (the caller already draws one): same Hulk-smash package, lighter.
         public static void GroundImpact(Vector3 pos, Color c, float radius, float shake)
         {
+            radius = Mathf.Max(0.6f, radius);
+            DirtBurst(pos, radius, 0.7f);
             DustRing(pos, radius);
-            Cracks(pos, c, radius * 0.75f, 7, 3f);
-            Debris(pos, new Color(0.42f, 0.36f, 0.30f, 1f), Mathf.RoundToInt(6 + radius * 1.5f), 5f + radius * 0.5f, 0.22f + radius * 0.02f, 2.2f);
-            Burst(pos + Vector3.up * 0.4f, Color.Lerp(c, Color.white, 0.4f), Mathf.RoundToInt(25 + radius * 6f), 8f + radius, 0.28f, 0.7f, 0.5f);
+            Cracks(pos, c, radius * 0.75f, 6, 3.2f);
+            Debris(pos, new Color(0.40f, 0.35f, 0.30f, 1f), Mathf.RoundToInt(4 + radius), 5f + radius * 0.5f, 0.2f + radius * 0.015f, 2.2f);
             if (shake > 0f) Shake(pos, 20f + radius * 2f, shake);
-            Scorch(pos, radius * 0.45f, 5f);   // v0.25.59 skin
-            Smoke(pos, new Color(0.45f, 0.40f, 0.35f, 0.5f), radius * 0.8f, 2f, Mathf.RoundToInt(4 + radius * 0.8f));
+            Scorch(pos, radius * 0.45f, 5f);
+            Smoke(pos, new Color(0.45f, 0.40f, 0.35f, 0.45f), radius * 0.8f, 2f, Mathf.RoundToInt(4 + radius * 0.8f));
+        }
+
+        // v0.25.168: soil and grit blasted up and outward from an impact (alpha dirt, gravity pulls it back down).
+        public static void DirtBurst(Vector3 pos, float radius, float strength)
+        {
+            if (!Enabled) return;
+            radius = Mathf.Max(0.5f, radius);
+            DragonVfxLife l = Host(GroundPoint(pos) + Vector3.up * 0.15f, 2.8f, "dirt");
+            Color soil = new Color(0.36f, 0.30f, 0.24f, 0.85f);
+            // heavy clods: a cone of fast dark grit falling back
+            ParticleSystem clods = Particles(l.transform, soil, Mathf.RoundToInt((30 + radius * 8f) * strength), 0f, 0.08f, 1.3f,
+                3f + radius * 0.8f, 6f + radius * 1.2f, 0.06f, 0.16f, 1.6f, ParticleSystemShapeType.Cone, radius * 0.35f, new Vector3(-90f, 0f, 0f), false, false);
+            ParticleSystem.ShapeModule sh = clods.shape; sh.angle = 38f;
+            // a dust plume rising out of the hit
+            Color dust = new Color(0.52f, 0.46f, 0.38f, 0.5f);
+            ParticleSystem plume = Particles(l.transform, dust, Mathf.RoundToInt((10 + radius * 3f) * strength), 0f, 0.1f, 1.8f,
+                1.5f, 3f + radius * 0.4f, 0.8f + radius * 0.15f, 1.6f + radius * 0.3f, -0.05f, ParticleSystemShapeType.Cone, radius * 0.3f, new Vector3(-90f, 0f, 0f), false, false);
+            ParticleSystemRenderer pr = plume.GetComponent<ParticleSystemRenderer>();
+            Material sm = Mat(SmokeTex(), false);
+            if (sm != null) pr.sharedMaterial = sm;
+            ParticleSystem.ShapeModule ps = plume.shape; ps.angle = 25f;
+            ParticleSystem.MainModule pm = plume.main; pm.startRotation = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
+        }
+
+        private static Texture2D _crackTex, _frostTex;
+        private static float _furrowWindow;
+        private static int _furrowCount;
+
+        // v0.25.168 ragged fissure: a dark core whose width wanders along the crack, torn edges, small side splinters.
+        private static Texture2D CrackTex()
+        {
+            if (_crackTex == null) _crackTex = MakeTex(128, 32, delegate(float u, float v)
+            {
+                float wobble = (Fbm(u * 9f, 0.5f, 21) - 0.5f) * 0.35f;
+                float w = 0.12f + 0.16f * Fbm(u * 6f, 3.1f, 22);
+                float d = Mathf.Abs(v - 0.5f - wobble * 0.5f);
+                float core = Mathf.Clamp01(1f - d / w);
+                float torn = Mathf.Clamp01(core * 1.6f - 0.25f + (Fbm(u * 24f, v * 8f, 23) - 0.5f) * 0.9f);
+                float splinter = Mathf.Clamp01(1f - Mathf.Abs(v - 0.5f) / 0.45f) * Mathf.Pow(Mathf.Clamp01(Fbm(u * 30f, v * 3f, 24) - 0.55f) * 3f, 2f) * 0.6f;
+                return Mathf.Clamp01(Mathf.Max(torn, splinter));
+            }, TextureWrapMode.Repeat);
+            return _crackTex;
+        }
+
+        // v0.25.168 hoarfrost: a frosted disc with crystalline feathering at its rim and patchy cover inside.
+        private static Texture2D FrostTex()
+        {
+            if (_frostTex == null) _frostTex = MakeTex(128, 128, delegate(float u, float v)
+            {
+                float r = Rad(u, v);
+                if (r >= 1f) return 0f;
+                // v0.25.205 (user: the spiked rim looked like a cogwheel): a plain frost circle - soft round edge, even cover
+                // with subtle faded spots, no rim spikes
+                float edge = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((1f - r) / 0.22f));
+                float spots = Fbm(u * 6f, v * 6f, 32);
+                float patch = 0.62f + 0.38f * Mathf.SmoothStep(0.25f, 0.75f, spots);   // faded, never holes
+                return Mathf.Clamp01(edge * patch * 0.8f);
+            }, TextureWrapMode.Clamp);
+            return _frostTex;
+        }
+
+        // v0.25.168 a gust of air riding with a slash: pale stretched wind streaks + a little lifted dust, moving along fwd.
+        public static void Gust(Vector3 pos, Vector3 fwd, float width)
+        {
+            if (!Enabled) return;
+            fwd.y = 0f;
+            if (fwd.sqrMagnitude < 0.0001f) fwd = Vector3.forward;
+            DragonVfxLife l = Host(pos, 1.2f, "gust");
+            l.transform.rotation = Quaternion.LookRotation(fwd.normalized, Vector3.up);
+            ParticleSystem wind = Particles(l.transform, new Color(0.86f, 0.88f, 0.90f, 0.35f), 5, 0f, 0.05f, 0.45f, 7f, 11f, 0.05f, 0.1f, 0f,
+                ParticleSystemShapeType.Box, 0.1f, Vector3.zero, true, false);
+            ParticleSystem.ShapeModule sh = wind.shape; sh.scale = new Vector3(Mathf.Max(0.5f, width), 0.8f, 0.2f);
+            Material wm = Mat(StreakTex(), false);
+            if (wm != null) wind.GetComponent<ParticleSystemRenderer>().sharedMaterial = wm;
+            ParticleSystem dust = Particles(l.transform, new Color(0.55f, 0.49f, 0.41f, 0.35f), 3, 0f, 0.05f, 0.9f, 1f, 2.5f, 0.5f, 1f, -0.05f,
+                ParticleSystemShapeType.Box, 0.1f, Vector3.zero, false, false);
+            ParticleSystem.ShapeModule dsh = dust.shape; dsh.scale = new Vector3(Mathf.Max(0.5f, width), 0.2f, 0.3f);
+        }
+
+        // v0.25.168 Frost Nova ground: a hoarfrost carpet over the area for the whole duration + low drifting cold mist.
+        public static void FrostGround(Vector3 center, float radius, float seconds)
+        {
+            FrostGround(center, radius, seconds, 1f);
+        }
+
+        // v0.25.181 strength < 1 = subtle frost (user: Glacial Descent / Frost Nova ground frost toned down)
+        public static void FrostGround(Vector3 center, float radius, float seconds, float strength)
+        {
+            if (!Enabled) return;
+            radius = Mathf.Max(0.5f, radius);
+            seconds = Mathf.Max(0.3f, seconds);
+            strength = Mathf.Clamp(strength, 0.1f, 1f);
+            Vector3 g = GroundPoint(center) + Vector3.up * 0.06f;
+            DragonMeshFx f = MeshFx(g, Quaternion.Euler(0f, UnityEngine.Random.Range(0f, 360f), 0f), true, Mat(FrostTex(), false), new Color(0.86f, 0.94f, 1f, 0.75f * strength), seconds + 0.6f);
+            if (f != null) { f.Conform = true; f.FadeIn = 0.25f; f.Hold = seconds; f.ScaleFrom = Vector3.one * radius * 0.6f; f.ScaleTo = Vector3.one * radius * 2f; f.ScaleTime = 0.3f; }
+            DragonVfxLife l = Host(g + Vector3.up * 0.2f, seconds + 2f, "coldmist");
+            ParticleSystem mist = Particles(l.transform, new Color(0.80f, 0.90f, 0.98f, 0.28f), Mathf.RoundToInt(6 * strength), Mathf.Clamp(radius * 2f, 4f, 16f) * strength, seconds, 2.4f, 0.1f, 0.4f, 0.8f + radius * 0.12f, 1.6f + radius * 0.2f, -0.01f,
+                ParticleSystemShapeType.Circle, radius * 0.9f, new Vector3(90f, 0f, 0f), false, false);
+            Material sm = Mat(SmokeTex(), false);
+            if (sm != null) mist.GetComponent<ParticleSystemRenderer>().sharedMaterial = sm;
+            l.StopEmitAt = seconds;
+            l.Systems = new ParticleSystem[] { mist };
+            Debris(center, new Color(0.75f, 0.92f, 1f, 1f), Mathf.RoundToInt(4 + radius), 4f, 0.12f, 1.6f);   // a few ice shards skitter out
+        }
+
+        // v0.25.169 (user): something ploughing along / dragging over the ground leaves disturbed dirt behind it: small dark
+        // grit flicked up and back, low rolling dust, the odd irregular pebble. Loops while keep() is true; follows the
+        // ground under `follow` (stops emitting when it is more than 3.5 m above the ground). Restrained, alpha only.
+        public static GameObject GroundDust(Transform follow, float width, Func<bool> keep)
+        {
+            return GroundDust(follow, width, keep, 1f);
+        }
+
+        // v0.25.181 strength > 1 = a heavier continuous dirt trail (Crescent Cleave: soil torn up where the blade ploughs)
+        public static GameObject GroundDust(Transform follow, float width, Func<bool> keep, float strength)
+        {
+            if (!Enabled || follow == null) return null;
+            width = Mathf.Clamp(width, 0.4f, 6f);
+            strength = Mathf.Clamp(strength, 0.3f, 3f);
+            DragonVfxLife l = Host(follow.position, 2f, "grounddust");
+            l.Follow = follow;
+            l.SnapGround = true;
+            Color soil = new Color(0.35f, 0.29f, 0.23f, 0.8f);
+            ParticleSystem grit = Particles(l.transform, soil, 0, (22f + width * 6f) * strength, 1f, 0.8f, 1.2f, 3f * Mathf.Sqrt(strength), 0.04f, 0.1f + 0.04f * (strength - 1f), 1.4f,
+                ParticleSystemShapeType.Circle, width * 0.45f, new Vector3(90f, 0f, 0f), false, false);
+            ParticleSystem.ShapeModule gs = grit.shape; gs.arc = 360f;
+            ParticleSystem dust = Particles(l.transform, new Color(0.52f, 0.46f, 0.39f, 0.32f), 0, (5f + width * 1.5f) * strength, 1f, 1.6f, 0.2f, 0.7f, 0.6f + width * 0.15f, 1.2f + width * 0.25f, -0.02f,
+                ParticleSystemShapeType.Circle, width * 0.4f, new Vector3(90f, 0f, 0f), false, false);
+            Material sm = Mat(SmokeTex(), false);
+            if (sm != null) dust.GetComponent<ParticleSystemRenderer>().sharedMaterial = sm;
+            ParticleSystem.MainModule dm = dust.main; dm.startRotation = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
+            ParticleSystem[] ps = new ParticleSystem[] { grit, dust };
+            for (int i = 0; i < ps.Length; i++) { ParticleSystem.MainModule m = ps[i].main; m.loop = true; }
+            l.Systems = ps;
+            l.Keep = keep;
+            return l.gameObject;
+        }
+
+        // v0.25.169 (user): gravity skills (Gravity Dominion, Gravity Blast) - restrained air distortion and things drawn in:
+        // faint shrinking air ripples around the core, thin pale streaks pulled toward it and loose dirt on the ground
+        // underneath crawling inward. No glow; follows `follow` if given (moving orb), else stays at pos.
+        public static GameObject GravityWell(Transform follow, Vector3 pos, float radius, float seconds)
+        {
+            if (!Enabled) return null;
+            radius = Mathf.Clamp(radius, 1f, 20f);
+            seconds = Mathf.Max(0.3f, seconds);
+            // air: contracting ripples + inward streaks
+            DragonVfxLife air = Host(follow != null ? follow.position : pos, seconds + 1.5f, "gravityair");
+            air.Follow = follow;
+            // v0.25.180 (no camera-facing ring billboards): translucent warped-air wisps spiralling in + curved strands
+            ParticleSystem ripples = Particles(air.transform, new Color(0.80f, 0.78f, 0.86f, 0.16f), 0, 5f + radius * 0.6f, seconds, 1.4f, -radius / 1.4f * 0.7f, -radius / 1.4f * 0.5f, radius * 0.25f, radius * 0.45f, 0f,
+                ParticleSystemShapeType.Sphere, radius * 0.9f, Vector3.zero, false, false);
+            Material rm = Mat(SmokeTex(), false);
+            if (rm != null) ripples.GetComponent<ParticleSystemRenderer>().sharedMaterial = rm;
+            ParticleSystem.ShapeModule rsh = ripples.shape; rsh.radiusThickness = 0.1f;
+            Swirl(ripples, 1.4f);
+            float life = 0.9f;
+            ParticleSystem streaks = Particles(air.transform, new Color(0.82f, 0.80f, 0.90f, 0.48f), 0, 30f + radius * 5f, seconds, life, -radius / life * 1.05f, -radius / life * 0.8f, 0.03f, 0.06f, 0f,
+                ParticleSystemShapeType.Sphere, radius, Vector3.zero, true, false);
+            ParticleSystem.ShapeModule ss = streaks.shape; ss.radiusThickness = 0.05f;
+            Swirl(streaks, 2.2f);
+            Material sm = Mat(StreakTex(), false);
+            if (sm != null) streaks.GetComponent<ParticleSystemRenderer>().sharedMaterial = sm;
+            air.StopEmitAt = seconds;
+            air.Systems = new ParticleSystem[] { ripples, streaks };
+            // ground: loose dirt and dust crawling toward the point under the core
+            DragonVfxLife dirt = Host(GroundPoint(follow != null ? follow.position : pos), seconds + 1.5f, "gravitydirt");
+            dirt.Follow = follow;
+            dirt.SnapGround = true;
+            dirt.GroundMaxHeight = Mathf.Max(3f, radius);
+            if (follow == null) dirt.transform.position = GroundPoint(pos) + Vector3.up * 0.08f;
+            float dl = 1.3f;
+            ParticleSystem specks = Particles(dirt.transform, new Color(0.34f, 0.28f, 0.22f, 0.9f), 0, 40f + radius * 6f, seconds, dl, -radius / dl * 0.95f, -radius / dl * 0.7f, 0.04f, 0.09f, 0f,
+                ParticleSystemShapeType.Circle, radius, new Vector3(90f, 0f, 0f), false, false);
+            ParticleSystem.ShapeModule ds = specks.shape; ds.radiusThickness = 0.15f;
+            Swirl(specks, 1.6f);
+            // a few loose fragments actually lift off the ground and curl inward (cosmetic, no physics)
+            ParticleSystem lifted = Particles(dirt.transform, new Color(0.32f, 0.27f, 0.21f, 0.9f), 0, 9f + radius * 1.6f, seconds, 1.6f, -radius / 1.6f * 0.8f, -radius / 1.6f * 0.6f, 0.05f, 0.1f, -0.35f,
+                ParticleSystemShapeType.Circle, radius * 0.8f, new Vector3(90f, 0f, 0f), false, false);
+            Swirl(lifted, 1.8f);
+            ParticleSystem haze = Particles(dirt.transform, new Color(0.50f, 0.45f, 0.38f, 0.22f), 0, 4f + radius * 0.6f, seconds, 2f, -radius / 2f * 0.8f, -radius / 2f * 0.5f, 0.8f, 1.5f, -0.01f,
+                ParticleSystemShapeType.Circle, radius, new Vector3(90f, 0f, 0f), false, false);
+            ParticleSystem.ShapeModule hs = haze.shape; hs.radiusThickness = 0.2f;
+            Material hm = Mat(SmokeTex(), false);
+            if (hm != null) haze.GetComponent<ParticleSystemRenderer>().sharedMaterial = hm;
+            dirt.StopEmitAt = seconds;
+            dirt.Systems = new ParticleSystem[] { specks, haze, lifted };
+            return air.gameObject;
+        }
+
+        // v0.25.169 (user): a big horizontal slash that meets the ground scores it: dark cracks along the arc it swept and a
+        // little dirt kicked up along the cut (Halfmoon Slash).
+        public static void SlashScar(Vector3 origin, Vector3 forward, float radius, float arcDeg, Color c)
+        {
+            if (!Enabled) return;
+            forward.y = 0f;
+            if (forward.sqrMagnitude < 0.001f) forward = Vector3.forward;
+            forward.Normalize();
+            int segs = Mathf.Clamp(Mathf.RoundToInt(arcDeg / 18f), 3, 10);
+            float r = Mathf.Max(1f, radius);
+            Vector3 prev = Vector3.zero;
+            for (int i = 0; i <= segs; i++)
+            {
+                float a = Mathf.Lerp(-arcDeg * 0.5f, arcDeg * 0.5f, (float)i / segs);
+                Vector3 p = origin + Quaternion.AngleAxis(a, Vector3.up) * forward * r * UnityEngine.Random.Range(0.92f, 1.04f);
+                if (i > 0)
+                {
+                    CrackLine(prev, p, c, Mathf.Clamp(r * 0.03f, 0.12f, 0.35f), 4f);
+                    if (i % 2 == 0) DirtBurst(p, Mathf.Clamp(r * 0.12f, 0.5f, 1.4f), 0.35f);
+                }
+                prev = p;
+            }
+        }
+
+        // v0.25.168: one ground eruption (chains, fissure points): the earth bursts up in a dirt column with chunks.
+        public static void Eruption(Vector3 pos, Color c, float radius, float shake)
+        {
+            if (!Enabled) return;
+            radius = Mathf.Max(0.5f, radius);
+            DirtBurst(pos, radius, 1.2f);
+            Cracks(pos, c, radius * 0.8f, 5, 3f);
+            Debris(pos, new Color(0.40f, 0.35f, 0.30f, 1f), Mathf.RoundToInt(4 + radius * 1.5f), 7f + radius, 0.18f + radius * 0.03f, 2.2f);
+            Smoke(pos, new Color(0.48f, 0.42f, 0.36f, 0.45f), radius * 0.8f, 1.8f, Mathf.RoundToInt(3 + radius));
+            Scorch(pos, radius * 0.5f, 4f);
+            if (shake > 0f) Shake(pos, 15f + radius * 2f, shake);
+        }
+
+        // v0.25.168: something ploughing through the ground a -> b (a blade half underground): a torn furrow, dirt flicked
+        // up to both sides and a little dust. Call it per step with short segments.
+        public static void Furrow(Vector3 a, Vector3 b, Color c, float width)
+        {
+            Furrow(a, b, c, width, 1f);
+        }
+
+        public static void Furrow(Vector3 a, Vector3 b, Color c, float width, float strength)
+        {
+            Furrow(a, b, c, width, strength, true);
+        }
+
+        // v0.25.204 (user: overlapping brighter cracks): scar = false when the caller already draws its own full-length scar
+        // (Seismic fissure, Impact Wave, Greatblade) - the furrow then adds only the dirt, so the two cracks never stack.
+        public static void Furrow(Vector3 a, Vector3 b, Color c, float width, float strength, bool scar)
+        {
+            if (!Enabled) return;
+            strength = Mathf.Clamp(strength, 0.5f, 3f);
+            if (scar) CrackLine(a, b, c, Mathf.Clamp(width * 0.3f, 0.12f, 0.5f), 3.5f);
+            // overlapping waves (Ascended fans) share one budget: at most 8 dirt sprays per 0.25 s, the scar always draws
+            if (Time.time >= _furrowWindow) { _furrowWindow = Time.time + 0.25f; _furrowCount = 0; }
+            if (++_furrowCount > (strength > 1f ? 12 : 8)) return;
+            Vector3 g = GroundPoint(b) + Vector3.up * 0.1f;
+            Vector3 f = b - a; f.y = 0f;
+            if (f.sqrMagnitude < 0.0001f) f = Vector3.forward;
+            DragonVfxLife l = Host(g, 2f, "furrow");
+            l.transform.rotation = Quaternion.LookRotation(f.normalized, Vector3.up);
+            Color soil = new Color(0.36f, 0.30f, 0.24f, 0.8f);
+            for (int k = -1; k <= 1; k += 2)
+            {
+                // spray thrown sideways-up off each lip of the cut
+                ParticleSystem ps = Particles(l.transform, soil, Mathf.RoundToInt(10 * strength), 0f, 0.06f, 0.9f, 2.5f, 4.5f * Mathf.Sqrt(strength), 0.05f, 0.12f, 1.5f,
+                    ParticleSystemShapeType.Cone, 0.15f, new Vector3(-60f, k * 70f, 0f), false, false);
+                ParticleSystem.ShapeModule sh = ps.shape; sh.angle = 20f;
+            }
+            Smoke(g, new Color(0.50f, 0.44f, 0.37f, 0.35f), Mathf.Max(0.4f, width * 0.4f), 1.4f, Mathf.RoundToInt(2 * strength));
+            Debris(g, new Color(0.40f, 0.35f, 0.30f, 1f), Mathf.RoundToInt(1 * strength + 0.5f), 4f, 0.16f, 1.4f);
         }
 
         // Rising embers / sparks over an area for a while (burning ground, auras).
@@ -10207,6 +17223,58 @@ namespace DragonsAltarCombat
             l.Systems = l.GetComponentsInChildren<ParticleSystem>();
         }
 
+        // v0.25.193: actual low flames over existing burning ground; visual only, never a damage or terrain component.
+        // The host expires with the caller's remaining field lifetime (including Crescent's two-second segment cap).
+        private static readonly List<DragonVfxLife> _groundFireHosts = new List<DragonVfxLife>();
+        public static void GroundFire(Vector3 pos, float radius, float seconds)
+        {
+            if (!Enabled || seconds <= 0.02f) return;
+            for (int i = _groundFireHosts.Count - 1; i >= 0; i--)
+                if (_groundFireHosts[i] == null) _groundFireHosts.RemoveAt(i);
+            if (_groundFireHosts.Count >= 48) return;
+            radius = Mathf.Max(0.2f, radius);
+            DragonVfxLife l = Host(GroundPoint(pos) + Vector3.up * 0.08f, seconds, "groundfire");
+            _groundFireHosts.Add(l);
+            float density = Mathf.Clamp(40f + radius * 22f, 45f, 170f);
+            ParticleSystem fire = Particles(l.transform, new Color(1f, 0.57f, 0.14f, 1f), 0, 0f, seconds,
+                1.1f, 0f, 0f, 0.8f, 1.5f, 0f, ParticleSystemShapeType.Circle, radius, Vector3.zero, false, false);
+            FireLook(fire);
+            ParticleSystem.MainModule fm = fire.main; fm.maxParticles = 300;
+            DragonGroundFlames field = l.gameObject.AddComponent<DragonGroundFlames>();
+            field.Flames = fire; field.Seconds = seconds;
+            int anchors = Mathf.Clamp(Mathf.CeilToInt(Mathf.PI * radius * radius / 1.5f * Restraint * PolishBudget() * Mathf.Clamp(Amount / 0.35f, 0.25f, 1.5f)), 4, 180);
+            field.Points = GroundFirePoints(pos, radius, anchors);
+            field.Size = Mathf.Min(4f, Mathf.Max(1f, radius * Mathf.Sqrt(Mathf.PI / anchors) * 1.8f));
+            field.Begin();
+            Color bedC = new Color(1f, 0.45f, 0.12f, 0.35f);
+            ParticleSystem bed = Particles(l.transform, bedC, 4, Mathf.Clamp(4f + radius * 3f, 5f, 24f), seconds, 0.9f, 0f, 0.02f, radius * 0.5f, radius * 0.9f, 0f,
+                ParticleSystemShapeType.Circle, radius * 0.6f, new Vector3(-90f, 0f, 0f), false, true);
+            ParticleSystem.MainModule bm = bed.main; bm.maxParticles = 24;
+            ParticleSystem smoke = Particles(l.transform, new Color(0.14f, 0.11f, 0.10f, 0.3f), 0, Mathf.Clamp(3f + radius * 2f, 4f, 16f), seconds, 1.6f, 0.6f, 1.2f, 0.5f, 1.1f, -0.1f,
+                ParticleSystemShapeType.Circle, radius * 0.8f, new Vector3(-90f, 0f, 0f), false, false);
+            Material smm = Mat(SmokeTex(), false);
+            if (smm != null) smoke.GetComponent<ParticleSystemRenderer>().sharedMaterial = smm;
+            ParticleSystem.MainModule smk = smoke.main; smk.maxParticles = 30;
+            ParticleSystem sparks = Particles(l.transform, new Color(1f, 0.70f, 0.22f, 0.9f), 3, density * 0.12f, seconds,
+                0.6f, 0.3f, 0.8f, 0.035f, 0.08f, -0.15f, ParticleSystemShapeType.Circle, radius, new Vector3(-90f, 0f, 0f), false, true);
+            ParticleSystem.MainModule sm = sparks.main; sm.maxParticles = 24;
+            l.StopEmitAt = seconds;
+            l.Systems = new ParticleSystem[] { fire, sparks, bed, smoke };
+        }
+
+        private static Vector3[] GroundFirePoints(Vector3 pos, float radius, int anchors)
+        {
+            Vector3[] points = new Vector3[anchors];
+            for (int i = 0; i < anchors; i++)
+            {
+                float distance = radius * Mathf.Sqrt(i / (float)(anchors - 1));
+                float angle = i * 2.39996323f;
+                Vector3 sample = pos + new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * distance;
+                points[i] = GroundPoint(sample) + Vector3.up * 0.15f;
+            }
+            return points;
+        }
+
         // ------------------------------------------------------------------ v0.25.59 skin layer
         // Generated textures (no asset files): soft ring, scorch, smoke puff, light column, slash ribbon, feather.
         private static Texture2D _ringTex, _scorchTex, _smokeTex, _beamTex, _streakTex, _featherTex;
@@ -10214,7 +17282,7 @@ namespace DragonsAltarCombat
 
         public static float LightScale
         {
-            get { return DragonCombatPlugin.Instance == null || DragonCombatPlugin.Instance.VfxLight == null ? 0.45f : Mathf.Clamp(DragonCombatPlugin.Instance.VfxLight.Value, 0f, 2f); }
+            get { return 0f; } // v0.25.195: extra effect lights removed; particles/emissive effects are unchanged
         }
 
         private static float Hash(int x, int y, int seed)
@@ -10255,6 +17323,18 @@ namespace DragonsAltarCombat
         }
 
         private static float Rad(float u, float v) { float dx = u * 2f - 1f, dy = v * 2f - 1f; return Mathf.Sqrt(dx * dx + dy * dy); }
+
+        // v0.25.145 a hair-thin ring outline for targeting guides (no inner glow).
+        private static Texture2D _guideTex;
+        private static Texture2D GuideTex()
+        {
+            if (_guideTex == null) _guideTex = MakeTex(256, 256, delegate(float u, float v)
+            {
+                float d = Rad(u, v);
+                return d > 1f ? 0f : Mathf.Exp(-Mathf.Pow((d - 0.95f) / 0.012f, 2f));
+            }, TextureWrapMode.Clamp);
+            return _guideTex;
+        }
 
         private static Texture2D RingTex()
         {
@@ -10378,7 +17458,7 @@ namespace DragonsAltarCombat
             float gy;
             if (DragonCombat.TryGroundY(pos, 12f, 40f, out gy)) return new Vector3(pos.x, gy, pos.z);   // v0.25.66 terrain / Structures
             RaycastHit hit;
-            if (Physics.Raycast(pos + Vector3.up * 2f, Vector3.down, out hit, 6f, LayerMask.GetMask("terrain", "Default", "static_solid", "piece"), QueryTriggerInteraction.Ignore))
+            if (Physics.Raycast(pos + Vector3.up * 2f, Vector3.down, out hit, 6f, DragonVfx.SolidGroundMask(), QueryTriggerInteraction.Ignore))
                 return hit.point;
             return pos;
         }
@@ -10390,23 +17470,101 @@ namespace DragonsAltarCombat
             radius = Mathf.Max(0.5f, radius);
             Vector3 g = GroundPoint(pos) + Vector3.up * 0.07f;
             Quaternion yaw = Quaternion.Euler(0f, UnityEngine.Random.Range(0f, 360f), 0f);
-            Color rc = c; rc.a = 0.9f;
-            DragonMeshFx ring = MeshFx(g, yaw, true, Mat(RingTex(), true), rc, seconds + 0.15f); if (ring != null) ring.Conform = true;
+            // v0.25.180 VFX DIRECTION (no giant luminous rings): the expanding front is a broken, dusty pressure wave in
+            // the ground's colour with only a hint of the skill tint (alpha, not additive); the glow disc is gone.
+            Color rc = Color.Lerp(c, new Color(0.52f, 0.47f, 0.40f, 1f), 0.72f); rc.a = 0.3f;
+            DragonMeshFx ring = MeshFx(g, yaw, true, Mat(PressureTex(), false), rc, seconds + 0.15f); if (ring != null) ring.Conform = true;
             if (ring != null) { ring.ScaleFrom = Vector3.one * radius * 0.4f; ring.ScaleTo = Vector3.one * radius * 2.05f; ring.ScaleTime = seconds; }
-            Color gc = Color.Lerp(c, Color.white, 0.2f); gc.a = 0.55f;
-            DragonMeshFx disc = MeshFx(g + Vector3.up * 0.01f, yaw, true, Mat(Glow(), true), gc, seconds * 0.8f + 0.1f); if (disc != null) disc.Conform = true;
-            if (disc != null) { disc.ScaleFrom = Vector3.one * radius * 0.8f; disc.ScaleTo = Vector3.one * radius * 1.6f; disc.ScaleTime = seconds * 0.5f; }
+        }
+
+        private static Texture2D _stompWindTex;
+        private static Texture2D StompWindTexture()
+        {
+            if (_stompWindTex == null) _stompWindTex = MakeTex(128, 128, delegate(float u, float v)
+            {
+                float d = Rad(u, v);
+                float ang = Mathf.Atan2(v - 0.5f, u - 0.5f);
+                float flow = 0.65f + 0.35f * Fbm(Mathf.Cos(ang) * 5f, Mathf.Sin(ang) * 5f + d * 7f, 194);
+                return Mathf.Exp(-Mathf.Pow((d - 0.83f) / 0.13f, 2f)) * flow * Mathf.Clamp01((1f - d) * 14f);
+            }, TextureWrapMode.Clamp);
+            return _stompWindTex;
+        }
+        private static Texture2D _strongWindTex, _airyWindTex;
+        public static float WindRingAlpha(float u, float v, bool airy)
+        {
+            float d = Rad(u, v), angle = Mathf.Atan2(v - 0.5f, u - 0.5f);
+            float flow = 0.58f + 0.42f * Fbm(Mathf.Cos(angle) * 5f, Mathf.Sin(angle) * 5f + d * 7f, 200);
+            float band = airy ? 0.18f : 0.23f;
+            return Mathf.Exp(-Mathf.Pow((d - 0.80f) / band, 2f)) * flow * Mathf.Clamp01((1f - d) * 14f);
+        }
+        private static Texture2D WindRingTexture(bool airy)
+        {
+            if (airy)
+            {
+                if (_airyWindTex == null) _airyWindTex = MakeTex(128, 128, delegate(float u, float v) { return WindRingAlpha(u, v, true); }, TextureWrapMode.Clamp);
+                return _airyWindTex;
+            }
+            if (_strongWindTex == null) _strongWindTex = MakeTex(128, 128, delegate(float u, float v) { return WindRingAlpha(u, v, false); }, TextureWrapMode.Clamp);
+            return _strongWindTex;
+        }
+        public static void WindRing(Vector3 pos, float innerRadius, float radius, float seconds, Color tint, bool airy)
+        {
+            if (!Enabled) return;
+            Color color = tint; color.a = airy ? 0.64f : 0.94f;
+            DragonMeshFx ring = MeshFx(GroundPoint(pos) + Vector3.up * 0.12f, Quaternion.identity, true,
+                Mat(WindRingTexture(airy), false), color, seconds);
+            if (ring == null) return;
+            ring.Conform = true;
+            ring.ScaleFrom = Vector3.one * Mathf.Max(0.3f, innerRadius) * 2.5f;
+            ring.ScaleTo = Vector3.one * Mathf.Max(0.5f, radius) * 2.5f;
+            ring.ScaleTime = seconds; ring.Spin = airy ? 18f : 35f;
+        }
+
+        public static void StompWindRing(Vector3 pos, float innerRadius, float radius, float seconds)
+        {
+            if (!Enabled) return;
+            DragonMeshFx ring = MeshFx(GroundPoint(pos) + Vector3.up * 0.12f, Quaternion.identity, true,
+                Mat(StompWindTexture(), false), new Color(0.82f, 0.86f, 0.9f, 0.78f), seconds);
+            if (ring != null)
+            {
+                ring.Conform = true;
+                ring.ScaleFrom = Vector3.one * Mathf.Max(0.3f, innerRadius) * 2.4f;
+                ring.ScaleTo = Vector3.one * Mathf.Max(0.5f, radius) * 2.4f;
+                ring.ScaleTime = seconds;
+            }
+        }
+
+        private static Texture2D _pressureTex;
+        private static Texture2D PressureTex()
+        {
+            if (_pressureTex == null) _pressureTex = MakeTex(128, 128, delegate(float u, float v)
+            {
+                float d = Rad(u, v);
+                if (d >= 1f) return 0f;
+                float ang = Mathf.Atan2(v - 0.5f, u - 0.5f);
+                float broken = 0.35f + 0.65f * Fbm(Mathf.Cos(ang) * 3f + 7f, Mathf.Sin(ang) * 3f + d * 4f, 51);
+                float front = Mathf.Exp(-Mathf.Pow((d - 0.86f) / 0.08f, 2f));
+                float trail = Mathf.Clamp01((d - 0.45f) / 0.4f) * (d < 0.86f ? 0.3f : 0f);
+                return Mathf.Clamp01((front + trail) * broken);
+            }, TextureWrapMode.Clamp);
+            return _pressureTex;
         }
 
         // v0.25.63: a fixed-size glowing circle on the ground (area markers / telegraphs; replaces line rings).
         public static void AreaRing(Vector3 pos, Color c, float radius, float seconds)
         {
-            if (!Enabled) return;
+            AreaRing(Player.m_localPlayer, pos, c, radius, seconds);
+        }
+
+        public static void AreaRing(Player caster, Vector3 pos, Color c, float radius, float seconds)
+        {
+            // v0.25.145: this is the TARGETING / CHARGING guide - a thin, very faint outline, hidden by [Visuals] ShowTargetingGuides.
+            if (!Enabled || !Guides || !DragonCombat.CanShowGuide(caster)) return;
             radius = Mathf.Max(0.3f, radius);
             Vector3 g = GroundPoint(pos) + Vector3.up * 0.07f;
-            Color rc = c; rc.a = Mathf.Clamp01(c.a) * 0.85f;
-            DragonMeshFx ring = MeshFx(g, Quaternion.identity, true, Mat(RingTex(), true), rc, Mathf.Max(0.15f, seconds)); if (ring != null) ring.Conform = true;
-            if (ring != null) { ring.FadeIn = Mathf.Min(0.12f, seconds * 0.3f); ring.Hold = seconds * 0.5f; ring.ScaleFrom = ring.ScaleTo = Vector3.one * radius * 2.05f; }
+            Color rc = c; rc.a = Mathf.Min(0.22f, Mathf.Clamp01(c.a) * 0.3f);
+            DragonMeshFx ring = MeshFx(g, Quaternion.identity, true, Mat(GuideTex(), true), rc, Mathf.Max(0.15f, seconds)); if (ring != null) ring.Conform = true;
+            if (ring != null) { ring.gameObject.AddComponent<DragonLocalGuide>().Caster = caster; ring.FadeIn = Mathf.Min(0.12f, seconds * 0.3f); ring.Hold = seconds * 0.5f; ring.ScaleFrom = ring.ScaleTo = Vector3.one * radius * 2.05f; }
         }
 
         // Burnt / broken ground that lingers after a heavy hit.
@@ -10422,7 +17580,7 @@ namespace DragonsAltarCombat
         public static void Beam(Vector3 pos, Color c, float radius, float height, float seconds)
         {
             if (!Enabled) return;
-            Color bc = Color.Lerp(c, Color.white, 0.25f); bc.a = 0.85f;
+            Color bc = Color.Lerp(c, Color.white, 0.15f); bc.a = 0.45f;   // v0.25.167 (v0.25.150 0.6)
             for (int i = 0; i < 2; i++)
             {
                 DragonMeshFx b = MeshFx(pos, Quaternion.Euler(0f, i * 90f + 20f, 0f), false, Mat(BeamTex(), true), bc, seconds);
@@ -10455,7 +17613,18 @@ namespace DragonsAltarCombat
         // around the forward axis (0 = horizontal, 90 = vertical, negative = the other diagonal).
         public static void SlashArc(Vector3 center, Vector3 forward, float radius, float arcDeg, Color c, float width, float seconds, float roll)
         {
+            SlashArc(center, forward, radius, arcDeg, c, width, seconds, roll, true);
+        }
+
+        public static void SlashArc(Vector3 center, Vector3 forward, float radius, float arcDeg, Color c, float width, float seconds, float roll, bool followWeaponPlane)
+        {
             if (!Enabled) return;
+            Player local = Player.m_localPlayer;
+            if (followWeaponPlane && local != null && (center - (local.transform.position + Vector3.up)).sqrMagnitude < 4f)
+            {
+                DragonWeaponWake wake = local.GetComponent<DragonWeaponWake>(); float observedRoll;
+                if (wake != null && wake.TryRoll(out observedRoll)) roll = observedRoll;
+            }
             Vector3 f = forward; f.y = 0f;
             if (f.sqrMagnitude < 0.001f) f = Vector3.forward;
             GameObject go = new GameObject("IH_SlashArc");
@@ -10465,23 +17634,41 @@ namespace DragonsAltarCombat
             mesh.MarkDynamic();
             go.AddComponent<MeshFilter>().sharedMesh = mesh;
             MeshRenderer r = go.AddComponent<MeshRenderer>();
-            r.sharedMaterial = Mat(StreakTex(), true);
+            // v0.25.180 VFX DIRECTION: weapon wake = broken, streaky translucent shoulder (scenery shows through) + one
+            // hairline pale cutting edge riding the outer rim (was one solid streak body).
+            Material wm = Mat(SlashTex(), false);
+            r.sharedMaterial = wm != null ? wm : Mat(StreakTex(), false);
             r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            GameObject body = new GameObject("body");
-            body.transform.SetParent(go.transform, false);
-            body.AddComponent<MeshFilter>().sharedMesh = mesh;
-            MeshRenderer br = body.AddComponent<MeshRenderer>();
-            br.sharedMaterial = Mat(StreakTex(), false);   // v0.25.65 opaque-ish body so the arc reads in daylight
-            br.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             DragonSlashArc a = go.AddComponent<DragonSlashArc>();
             a.Radius = Mathf.Max(0.5f, radius);
             a.Arc = Mathf.Clamp(arcDeg, 20f, 360f);
             a.Width = Mathf.Max(0.15f, width);
-            Color cc = Color.Lerp(c, Color.white, 0.3f); cc.a = 1f;
+            Color cc = Color.Lerp(c, new Color(0.86f, 0.90f, 0.95f, 1f), 0.5f); cc.a = 0.85f;   // v0.25.167 pale steel, not neon
             a.Color = cc;
             a.Life = Mathf.Max(0.2f, seconds);
             a.Sweep = Mathf.Min(0.18f, a.Life * 0.4f);
             a.Init(mesh);
+            Material em = Mat(LineTex(), true);
+            if (wm != null && em != null)
+            {
+                GameObject eg = new GameObject("IH_SlashEdge");
+                eg.transform.SetParent(go.transform, false);
+                Mesh emesh = new Mesh();
+                emesh.MarkDynamic();
+                eg.AddComponent<MeshFilter>().sharedMesh = emesh;
+                MeshRenderer er = eg.AddComponent<MeshRenderer>();
+                er.sharedMaterial = em;
+                er.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                DragonSlashArc e = eg.AddComponent<DragonSlashArc>();
+                e.Radius = a.Radius + a.Width * 0.04f;
+                e.Arc = a.Arc;
+                e.Width = Mathf.Max(0.03f, a.Width * 0.09f);
+                Color ec = Color.Lerp(c, Color.white, 0.6f); ec.a = 0.55f;
+                e.Color = ec;
+                e.Life = a.Life * 0.8f;
+                e.Sweep = a.Sweep;
+                e.Init(emesh);
+            }
         }
 
         private static void SkinFeathers(ParticleSystem ps)
@@ -10532,16 +17719,17 @@ namespace DragonsAltarCombat
             GameObject go = new GameObject("IH_GroundBolt");
             DragonGroundBolt b = go.AddComponent<DragonGroundBolt>();
             b.Color = c;
-            b.Width = Mathf.Max(0.05f, width);
+            width = Mathf.Max(0.025f, width * 0.38f);
+            b.Width = width;
             b.MaxLife = Mathf.Max(0.5f, maxLife);
-            b.Glow = SoftLine(go.transform, width * 3f);
-            b.Core = SoftLine(go.transform, width * 1.4f);
-            b.Fork = SoftLine(go.transform, width * 1.6f);
+            b.Glow = SoftLine(go.transform, width * 1.8f);
+            b.Core = SoftLine(go.transform, width * 0.5f);
+            b.Fork = SoftLine(go.transform, width * 0.38f);
             if (LightScale > 0.05f)
             {
                 GameObject lg = new GameObject("head");
                 lg.transform.SetParent(go.transform, false);
-                Light l = lg.AddComponent<Light>();
+                Light l = lg.AddComponent<Light>(); DragonPerf.OnLight(l);
                 l.type = LightType.Point;
                 l.color = c;
                 l.range = 3f;
@@ -10592,7 +17780,10 @@ namespace DragonsAltarCombat
             return m;
         }
 
-        // A jagged spike bursting out of the ground (rock or ice), tilted outward from `away`.
+        // v0.25.167 (user: solid tapered spikes, rounded bodies, pointed tips, skill material; no flat triangles):
+        // a smooth-shaded procedural horn (wide rounded base, bulging body, slight bend, needle tip) in a lit natural
+        // material - rock = rough stone, ice = glossy pale ice. A shorter companion horn leans off its base.
+        // Same height / radius / tilt / rise-hold-sink timing as before (DragonSpike).
         public static void Spike(Vector3 pos, Color c, float height, float radius, float hold, Vector3 away)
         {
             if (!Enabled) return;
@@ -10604,28 +17795,160 @@ namespace DragonsAltarCombat
             GameObject root = new GameObject("IH_Spike");
             root.transform.position = g;
             root.transform.rotation = rot;
-            Material mat = SolidMat(c);
+            Material mat = NaturalMat(c);
+            int seed = UnityEngine.Random.Range(0, 4);
             for (int i = 0; i < 2; i++)
             {
-                GameObject shard = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                Collider col = shard.GetComponent<Collider>();
-                if (col != null) UnityEngine.Object.Destroy(col);
-                shard.transform.SetParent(root.transform, false);
-                float h = height * (i == 0 ? 1f : 0.55f);
-                float r = radius * (i == 0 ? 1f : 0.6f);
-                // a cube rotated 45 deg and stretched reads as a faceted shard; the second is a smaller leaning chip
-                shard.transform.localScale = new Vector3(r, h, r * 0.8f);
-                shard.transform.localRotation = Quaternion.Euler(i == 0 ? 0f : 18f, 45f + i * 30f, i == 0 ? 6f : -14f);
-                shard.transform.localPosition = new Vector3(i == 0 ? 0f : r * 0.7f, h * 0.45f, 0f);
-                Renderer rr = shard.GetComponent<Renderer>();
-                if (rr != null && mat != null) { rr.sharedMaterial = mat; rr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; }
+                GameObject horn = new GameObject("horn");
+                horn.transform.SetParent(root.transform, false);
+                horn.AddComponent<MeshFilter>().sharedMesh = SpikeMesh(seed + i);
+                MeshRenderer rr = horn.AddComponent<MeshRenderer>();
+                if (mat != null) rr.sharedMaterial = mat;
+                rr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                float h = height * (i == 0 ? 1f : 0.5f);
+                float r = radius * (i == 0 ? 1.1f : 0.65f);
+                horn.transform.localScale = new Vector3(r, h, r);
+                horn.transform.localRotation = Quaternion.Euler(i == 0 ? 0f : 24f, UnityEngine.Random.Range(0f, 360f), i == 0 ? 0f : -10f);
+                horn.transform.localPosition = new Vector3(i == 0 ? 0f : r * 0.75f, -h * 0.08f, i == 0 ? 0f : r * 0.2f);
             }
             root.transform.position = g - root.transform.up * height * 1.05f;   // starts buried, bursts out
             DragonSpike sp = root.AddComponent<DragonSpike>();
             sp.Base = g;
             sp.Height = height;
             sp.Hold = Mathf.Max(0f, hold);
-            if (c.a < 0.99f) AttachGlow(root.transform, new Color(0.75f, 0.95f, 1f, 1f), radius * 0.6f, 10f, 0f);
+        }
+
+        private static readonly Mesh[] _spikeMeshes = new Mesh[6];
+        private static readonly Mesh[] _lumpMeshes = new Mesh[4];
+        private static readonly Dictionary<int, Material> _naturalMats = new Dictionary<int, Material>();
+        private static Texture2D _rockTex;
+
+        // Unit horn: base radius 0.5 at y 0 (a little below for burying), tip at y 1. Smooth normals = rounded body.
+        private static Mesh SpikeMesh(int seed)
+        {
+            seed = ((seed % _spikeMeshes.Length) + _spikeMeshes.Length) % _spikeMeshes.Length;
+            if (_spikeMeshes[seed] != null) return _spikeMeshes[seed];
+            const int sides = 10, rings = 9;
+            List<Vector3> v = new List<Vector3>();
+            List<Vector2> uv = new List<Vector2>();
+            List<int> t = new List<int>();
+            float bend = 0.06f + 0.05f * Hash(seed, 7, 3);
+            for (int k = 0; k < rings; k++)
+            {
+                float y = (float)k / rings;   // 0 .. <1, tip vertex added after
+                float prof = Mathf.Pow(1f - y, 0.9f) * (1f + 0.18f * Mathf.Sin(Mathf.PI * Mathf.Min(1f, y * 1.6f)));   // rounded bulge, tapering
+                float yy = Mathf.Lerp(-0.12f, 1f, y);
+                for (int i = 0; i <= sides; i++)
+                {
+                    float a = (float)i / sides * Mathf.PI * 2f;
+                    float n = 1f + 0.14f * (Hash(i % sides, k, seed) - 0.5f) * 2f * (1f - y * 0.5f);
+                    float r = 0.5f * prof * n;
+                    v.Add(new Vector3(Mathf.Cos(a) * r + bend * y * y, yy, Mathf.Sin(a) * r));
+                    uv.Add(new Vector2((float)i / sides * 2f, y * 3f));
+                }
+            }
+            int tip = v.Count;
+            v.Add(new Vector3(bend, 1f, 0f));
+            uv.Add(new Vector2(1f, 3f));
+            for (int k = 0; k < rings - 1; k++)
+                for (int i = 0; i < sides; i++)
+                {
+                    int a0 = k * (sides + 1) + i, a1 = a0 + 1, b0 = a0 + sides + 1, b1 = b0 + 1;
+                    t.Add(a0); t.Add(b0); t.Add(a1); t.Add(a1); t.Add(b0); t.Add(b1);
+                }
+            int last = (rings - 1) * (sides + 1);
+            for (int i = 0; i < sides; i++) { t.Add(last + i); t.Add(tip); t.Add(last + i + 1); }
+            Mesh m = new Mesh();
+            m.vertices = v.ToArray(); m.uv = uv.ToArray(); m.triangles = t.ToArray();
+            m.RecalculateNormals();
+            m.RecalculateBounds();
+            _spikeMeshes[seed] = m;
+            return m;
+        }
+
+        // Unit rock lump (debris): a noisy smooth sphere, flattened a little.
+        private static Mesh LumpMesh(int seed)
+        {
+            seed = ((seed % _lumpMeshes.Length) + _lumpMeshes.Length) % _lumpMeshes.Length;
+            if (_lumpMeshes[seed] != null) return _lumpMeshes[seed];
+            const int lon = 8, lat = 6;
+            List<Vector3> v = new List<Vector3>();
+            List<int> t = new List<int>();
+            for (int k = 0; k <= lat; k++)
+            {
+                float th = (float)k / lat * Mathf.PI;
+                for (int i = 0; i <= lon; i++)
+                {
+                    float ph = (float)i / lon * Mathf.PI * 2f;
+                    float n = 0.78f + 0.44f * Hash(i % lon, k, seed + 11);
+                    if (k == 0 || k == lat) n = 0.85f;
+                    v.Add(new Vector3(Mathf.Sin(th) * Mathf.Cos(ph), Mathf.Cos(th) * 0.8f, Mathf.Sin(th) * Mathf.Sin(ph)) * 0.5f * n);
+                }
+            }
+            for (int k = 0; k < lat; k++)
+                for (int i = 0; i < lon; i++)
+                {
+                    int a0 = k * (lon + 1) + i, a1 = a0 + 1, b0 = a0 + lon + 1, b1 = b0 + 1;
+                    t.Add(a0); t.Add(a1); t.Add(b0); t.Add(a1); t.Add(b1); t.Add(b0);
+                }
+            Mesh m = new Mesh();
+            m.vertices = v.ToArray(); m.triangles = t.ToArray();
+            Vector2[] uv = new Vector2[v.Count];
+            for (int i = 0; i < uv.Length; i++) uv[i] = new Vector2(v[i].x + v[i].z, v[i].y) * 2f;
+            m.uv = uv;
+            m.RecalculateNormals();
+            m.RecalculateBounds();
+            _lumpMeshes[seed] = m;
+            return m;
+        }
+
+        // Grey stone grain (RGB noise, multiplied by the material colour).
+        private static Texture2D RockTex()
+        {
+            if (_rockTex != null) return _rockTex;
+            const int n = 64;
+            _rockTex = new Texture2D(n, n, TextureFormat.RGBA32, true);
+            _rockTex.wrapMode = TextureWrapMode.Repeat;
+            Color[] px = new Color[n * n];
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    float f = Fbm(x / 9f, y / 9f, 5) * 0.6f + Fbm(x / 3f, y / 3f, 9) * 0.4f;
+                    float k = Mathf.Clamp(0.62f + 0.55f * (f - 0.5f) * 2f, 0.35f, 1.1f);
+                    px[y * n + x] = new Color(k, k * 0.98f, k * 0.95f, 1f);
+                }
+            _rockTex.SetPixels(px);
+            _rockTex.Apply(true);
+            return _rockTex;
+        }
+
+        // v0.25.167 lit natural material for spikes / debris: ice (translucent colours, or bright cold blues) = glossy pale
+        // ice; anything else = rough stone tinted by the skill colour. Falls back to SolidMat when Standard is stripped.
+        private static Material NaturalMat(Color c)
+        {
+            bool ice = c.a < 0.99f || (c.b > 0.9f && c.g > 0.8f && c.r < 0.9f);
+            int key = (ice ? 1 << 30 : 0) | Mathf.RoundToInt(c.r * 63f) | (Mathf.RoundToInt(c.g * 63f) << 6) | (Mathf.RoundToInt(c.b * 63f) << 12);
+            Material m;
+            if (_naturalMats.TryGetValue(key, out m) && m != null) return m;
+            Shader s = Shader.Find("Standard");
+            if (s == null) { Color k = c; k.a = 1f; return SolidMat(k); }
+            m = new Material(s);
+            if (ice)
+            {
+                m.color = new Color(Mathf.Lerp(c.r, 0.80f, 0.5f), Mathf.Lerp(c.g, 0.90f, 0.5f), Mathf.Lerp(c.b, 0.96f, 0.5f), 1f);
+                if (m.HasProperty("_Glossiness")) m.SetFloat("_Glossiness", 0.78f);
+                if (m.HasProperty("_Metallic")) m.SetFloat("_Metallic", 0.05f);
+            }
+            else
+            {
+                Color rc = Color.Lerp(c, new Color(0.50f, 0.47f, 0.44f, 1f), 0.3f) * 1.25f;   // grain texture averages ~0.6
+                m.color = new Color(Mathf.Clamp01(rc.r), Mathf.Clamp01(rc.g), Mathf.Clamp01(rc.b), 1f);
+                m.mainTexture = RockTex();
+                if (m.HasProperty("_Glossiness")) m.SetFloat("_Glossiness", 0.08f);
+                if (m.HasProperty("_Metallic")) m.SetFloat("_Metallic", 0f);
+            }
+            _naturalMats[key] = m;
+            return m;
         }
 
         // A ring of spikes around a point (Frost Nova, Stonefang, landings).
@@ -10648,24 +17971,64 @@ namespace DragonsAltarCombat
             if (!Enabled) return;
             if (normal.sqrMagnitude < 0.001f) normal = Vector3.forward;
             Quaternion rot = Quaternion.FromToRotation(Vector3.up, normal.normalized);
-            Color rc = c; rc.a = 0.85f;
+            Color rc = Color.Lerp(c, new Color(0.88f, 0.90f, 0.92f, 1f), 0.4f); rc.a = 0.5f;   // v0.25.168 air, not neon (was 0.85)
             DragonMeshFx ring = MeshFx(pos, rot, true, Mat(RingTex(), true), rc, seconds);
             if (ring != null) { ring.ScaleFrom = Vector3.one * radius * 0.3f; ring.ScaleTo = Vector3.one * radius * 2f; ring.ScaleTime = seconds; }
         }
 
         // Rotating rune circle on the ground (Clockwork, Gravity Dominion, Rupture, traps).
+        public static void Glyph(Vector3 pos, Color c, float radius, float seconds, float spin, bool skillVisual)
+        {
+            Glyph(Player.m_localPlayer, pos, c, radius, seconds, spin, skillVisual);
+        }
+
+        public static void Glyph(Player caster, Vector3 pos, Color c, float radius, float seconds, float spin, bool skillVisual)
+        {
+            // v0.25.151: skillVisual (Clockwork's clock face) is part of the skill - never hidden by the guide toggle, subdued only
+            if (!Enabled || (!skillVisual && (!Guides || !DragonCombat.CanShowGuide(caster)))) return;
+            Vector3 g = GroundPoint(pos) + Vector3.up * 0.08f;
+            Color gc = c; gc.a = skillVisual ? 0.35f : 0.18f;   // v0.25.167 (was 0.5 / 0.22)
+            DragonMeshFx a = MeshFx(g, Quaternion.identity, true, Mat(RingTex(), true), gc, seconds); if (a != null) { a.Conform = true; if (!skillVisual) a.gameObject.AddComponent<DragonLocalGuide>().Caster = caster; }
+            if (a != null) { a.FadeIn = 0.2f; a.Hold = seconds * 0.6f; a.ScaleFrom = Vector3.one * radius * 1.7f; a.ScaleTo = Vector3.one * radius * 2.05f; a.ScaleTime = 0.3f; a.Spin = spin; }
+            DragonMeshFx b = MeshFx(g + Vector3.up * 0.01f, Quaternion.identity, true, Mat(RingTex(), true), gc, seconds); if (b != null) { b.Conform = true; if (!skillVisual) b.gameObject.AddComponent<DragonLocalGuide>().Caster = caster; }
+            if (b != null) { b.FadeIn = 0.25f; b.Hold = seconds * 0.6f; b.ScaleFrom = Vector3.one * radius * 1.1f; b.ScaleTo = Vector3.one * radius * 1.25f; b.ScaleTime = 0.3f; b.Spin = -spin * 1.6f; }
+            Color dc = c; dc.a = skillVisual ? 0.12f : 0.06f;
+            DragonMeshFx d = MeshFx(g + Vector3.up * 0.02f, Quaternion.identity, true, Mat(Glow(), true), dc, seconds); if (d != null) { d.Conform = true; if (!skillVisual) d.gameObject.AddComponent<DragonLocalGuide>().Caster = caster; }
+            if (d != null) { d.FadeIn = 0.2f; d.Hold = seconds * 0.6f; d.ScaleFrom = d.ScaleTo = Vector3.one * radius * 2f; }
+        }
+
+        // v0.25.150 rune-circle telegraphs (Rupture wind-up): a guide, hidden with Show Targeting Guides
         public static void Glyph(Vector3 pos, Color c, float radius, float seconds, float spin)
         {
+            Glyph(pos, c, radius, seconds, spin, false);
+        }
+
+        // Four central purple lightning strands. Actual skill windup/radius and hit time are owned by the caller.
+        public static void RuptureCharge(Vector3 point, float radius, float seconds)
+        {
             if (!Enabled) return;
-            Vector3 g = GroundPoint(pos) + Vector3.up * 0.08f;
-            Color gc = c; gc.a = 0.8f;
-            DragonMeshFx a = MeshFx(g, Quaternion.identity, true, Mat(RingTex(), true), gc, seconds); if (a != null) a.Conform = true;
-            if (a != null) { a.FadeIn = 0.2f; a.Hold = seconds * 0.6f; a.ScaleFrom = Vector3.one * radius * 1.7f; a.ScaleTo = Vector3.one * radius * 2.05f; a.ScaleTime = 0.3f; a.Spin = spin; }
-            DragonMeshFx b = MeshFx(g + Vector3.up * 0.01f, Quaternion.identity, true, Mat(RingTex(), true), gc, seconds); if (b != null) b.Conform = true;
-            if (b != null) { b.FadeIn = 0.25f; b.Hold = seconds * 0.6f; b.ScaleFrom = Vector3.one * radius * 1.1f; b.ScaleTo = Vector3.one * radius * 1.25f; b.ScaleTime = 0.3f; b.Spin = -spin * 1.6f; }
-            Color dc = c; dc.a = 0.3f;
-            DragonMeshFx d = MeshFx(g + Vector3.up * 0.02f, Quaternion.identity, true, Mat(Glow(), true), dc, seconds); if (d != null) d.Conform = true;
-            if (d != null) { d.FadeIn = 0.2f; d.Hold = seconds * 0.6f; d.ScaleFrom = d.ScaleTo = Vector3.one * radius * 2f; }
+            DragonVfxLife host = Host(GroundPoint(point) + Vector3.up * 0.9f, Mathf.Max(0.1f, seconds), "ruptureCharge");
+            DragonRuptureCharge charge = host.gameObject.AddComponent<DragonRuptureCharge>();
+            charge.Life = Mathf.Max(0.1f, seconds); charge.Spread = Mathf.Clamp(radius * 0.22f, 0.8f, 2.2f);
+            charge.Lines = new LineRenderer[8];
+            for (int i = 0; i < charge.Lines.Length; i++)
+            {
+                LineRenderer line = SoftLine(host.transform, i % 2 == 0 ? 0.11f : 0.035f);
+                line.positionCount = 9;
+                // Initialise before the first render: never draw the line from the world origin.
+                for (int p = 0; p < 9; p++) line.SetPosition(p, host.transform.position);
+                line.startColor = line.endColor = new Color(0.6f, 0.15f, 1f, 0f);
+                charge.Lines[i] = line;
+            }
+        }
+
+        private static void WarmArcaneFire()
+        {
+            FlameSheet(); FlameSheet(true);
+            Material baseMat = Mat(FlameTex(), true);
+            if (baseMat == null) return;
+            if (_flameSheetMat == null) { _flameSheetMat = new Material(baseMat); _flameSheetMat.mainTexture = FlameSheet(); }
+            if (_flameGrayMat == null) { _flameGrayMat = new Material(baseMat); _flameGrayMat.mainTexture = FlameSheet(true); }
         }
 
         // Soft glowing streak a -> b that fades (arrows, rails, blades from the sky).
@@ -10688,60 +18051,409 @@ namespace DragonsAltarCombat
         {
             if (!Enabled) return;
             Streak(a, b, c, width, seconds);
-            Streak(a, b, Color.white, width * 0.35f, seconds * 0.8f);
-            Vector3 d = b - a;
-            float len = d.magnitude;
-            if (len < 0.5f) return;
-            int n = Mathf.Clamp(Mathf.RoundToInt(len / 4f), 1, 8);
-            for (int i = 1; i <= n; i++) AirRing(a + d * (i / (n + 1f)), d, c, width * 1.6f, 0.3f + i * 0.03f);
+            Streak(a, b, Color.Lerp(c, Color.white, 0.6f), width * 0.25f, seconds * 0.8f);   // v0.25.180 narrow core beam, textured outer flow; no air rings along it
         }
 
         // Real flames rushing out in a cone.
         public static void FlameCone(Vector3 origin, Vector3 dir, float range, float angle, float seconds)
         {
+            // v0.25.205 (user: stronger, more violent, a real flamethrower): a white-hot jet out of the nozzle that billows
+            // into a widening, rolling roar of flame (flipbook tongues, turbulence, drag so the front piles up and swells),
+            // flung sparks, heat smoke rolling off the end and a scorch where it lands. Visual only; damage unchanged.
             if (!Enabled) return;
             if (dir.sqrMagnitude < 0.001f) dir = Vector3.forward;
-            DragonVfxLife l = Host(origin, seconds + 1.2f, "flames");
+            seconds = Mathf.Max(0.55f, seconds);
+            DragonVfxLife l = Host(origin, seconds + 1.6f, "flames");
             l.transform.rotation = Quaternion.LookRotation(dir.normalized);
-            float life = 0.55f;
-            float speed = range / life;
-            ParticleSystem ps = Particles(l.transform, new Color(1f, 0.62f, 0.18f, 1f), 0, 260f, seconds, life, speed * 0.7f, speed, 0.6f, 1.3f + range * 0.06f, -0.15f,
+            float life = 0.6f;
+            float speed = range / life * 1.25f;
+            float spread = Mathf.Clamp(angle * 0.5f, 5f, 80f);
+            // jet core: narrow, fast, white-hot
+            ParticleSystem jet = Particles(l.transform, Color.white, 0, 160f, seconds, life * 0.55f, speed * 0.9f, speed * 1.1f, 0.35f, 0.7f, 0f,
+                ParticleSystemShapeType.Cone, 0.12f, Vector3.zero, false, true);
+            ParticleSystem.ShapeModule jsh = jet.shape; jsh.angle = Mathf.Max(4f, spread * 0.35f);
+            FireLook(jet);
+            // the roaring body: big tongues that slow down and swell (drag) and roll with turbulence
+            ParticleSystem body = Particles(l.transform, Color.white, 0, 260f, seconds, life, speed * 0.7f, speed * 1.05f, 0.6f, 1.3f + range * 0.07f, -0.25f,
                 ParticleSystemShapeType.Cone, 0.25f, Vector3.zero, false, true);
-            ParticleSystem.ShapeModule sh = ps.shape;
-            sh.angle = Mathf.Clamp(angle * 0.5f, 5f, 80f);
-            FireLook(ps);
+            ParticleSystem.ShapeModule bsh = body.shape; bsh.angle = spread;
+            FireLook(body);
+            ParticleSystem.LimitVelocityOverLifetimeModule drag = body.limitVelocityOverLifetime;
+            drag.enabled = true; drag.dampen = 0.08f; drag.limit = new ParticleSystem.MinMaxCurve(speed * 0.35f);
+            ParticleSystem.SizeOverLifetimeModule bs = body.sizeOverLifetime;
+            bs.size = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(new Keyframe(0f, 0.3f), new Keyframe(0.35f, 1.1f), new Keyframe(1f, 2.1f)));
+            ParticleSystem.NoiseModule bn = body.noise; bn.strength = 1.4f; bn.frequency = 0.9f;
+            // sparks flung out of the stream
+            ParticleSystem sparks = Particles(l.transform, new Color(1f, 0.78f, 0.35f, 1f), 0, 70f, seconds, 0.7f, speed * 0.6f, speed * 1.2f, 0.03f, 0.07f, 0.6f,
+                ParticleSystemShapeType.Cone, 0.2f, Vector3.zero, true, true);
+            ParticleSystem.ShapeModule ssh = sparks.shape; ssh.angle = spread * 1.15f;
+            // heat smoke rolling off the end of the flames
+            ParticleSystem pockets = Particles(l.transform, new Color(0.13f, 0.10f, 0.09f, 0.45f), 0, 45f, seconds, life * 1.6f, speed * 0.35f, speed * 0.6f, 0.8f, 1.6f, -0.2f,
+                ParticleSystemShapeType.Cone, 0.25f, Vector3.zero, false, false);
+            ParticleSystem.ShapeModule psh = pockets.shape; psh.angle = spread * 0.9f;
+            Material sm = Mat(SmokeTex(), false);
+            if (sm != null) pockets.GetComponent<ParticleSystemRenderer>().sharedMaterial = sm;
             l.StopEmitAt = seconds;
-            l.Systems = new ParticleSystem[] { ps };
-            Smoke(origin + dir.normalized * range * 0.6f, new Color(0.25f, 0.22f, 0.2f, 0.45f), range * 0.3f, 1.6f, 6);
+            l.Systems = new ParticleSystem[] { jet, body, sparks, pockets };
+            Flash(origin + dir.normalized * range * 0.25f, new Color(1f, 0.55f, 0.15f, 1f), 0.9f, range * 0.8f, seconds);
+            Smoke(origin + dir.normalized * range * 0.7f, new Color(0.22f, 0.19f, 0.17f, 0.5f), range * 0.35f, 1.8f, 8);
+            Vector3 end = GroundPoint(origin + dir.normalized * range * 0.7f);
+            Scorch(end, Mathf.Max(1f, range * 0.25f), 5f);
         }
 
+        // v0.25.205 (user: ground fire = dull triangles, needs to be dynamic and strong): every fire effect (ground fire,
+        // Flame Burst, fire blasts, burning projectiles) shares this look. The old texture was one straight-sided triangle,
+        // tilted at random and dimmed by the additive desaturation. Now: a 4x4 FLIPBOOK of turbulent flame tongues
+        // (colour baked in: white-yellow core, orange body, red ragged tips) that plays over each particle's life from a
+        // random frame, upright, full brightness, with turbulence noise so every tongue licks and flickers.
+        private static Texture2D _flameSheet, _flameSheetGray;
+        private static Texture2D FlameSheet() { return FlameSheet(false); }
+        private static Texture2D FlameSheet(bool gray)
+        {
+            if (!gray && _flameSheet != null) return _flameSheet;
+            if (gray && _flameSheetGray != null) return _flameSheetGray;
+            const int tile = 64, tiles = 4, n = tile * tiles;
+            Texture2D t = new Texture2D(n, n, TextureFormat.RGBA32, true);
+            t.wrapMode = TextureWrapMode.Clamp;
+            Color[] px = new Color[n * n];
+            for (int ty = 0; ty < tiles; ty++)
+                for (int tx = 0; tx < tiles; tx++)
+                {
+                    int frame = (tiles - 1 - ty) * tiles + tx;   // Unity reads frames from the TOP-left
+                    float ph = frame / 16f;
+                    for (int y = 0; y < tile; y++)
+                        for (int x = 0; x < tile; x++)
+                        {
+                            float u = (x + 0.5f) / tile, v = (y + 0.5f) / tile;
+                            // a narrow, round-based tongue that sways as it rises; scrolling noise eats ragged tongues out of
+                            // its sides and top (previewed offline: docs/previews/PREVIEW_v0.25.205_Flames.png)
+                            float sway = (Fbm(v * 2f - ph * 3f, ph * 5f, 61) - 0.5f) * 0.6f * v;
+                            float xx = (u - 0.5f - sway) * 2f;
+                            float w = 0.62f * Mathf.Pow(Mathf.Clamp01(1f - v), 0.7f) * Mathf.Clamp01(0.35f + v * 4f) + 0.04f;
+                            float erode = Fbm(u * 5f, v * 3.4f - ph * 4f, 73);
+                            float body = Mathf.Clamp01(1f - Mathf.Abs(xx) / Mathf.Max(0.04f, w));
+                            float f = body * (1.15f - v * 0.85f) + (erode - 0.5f) * 0.85f * (0.3f + v);
+                            float a = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((f - 0.18f) / 0.24f)) * Mathf.Clamp01(v * 10f) * Mathf.Clamp01((0.5f - Mathf.Abs(u - 0.5f)) * 12f);
+                            float heat = Mathf.Clamp01(Mathf.Pow(body, 1.5f) * Mathf.Pow(1f - v, 1.2f) * 1.6f);
+                            Color c = heat > 0.6f ? new Color(1f, Mathf.Lerp(0.6f, 0.93f, (heat - 0.6f) / 0.4f), Mathf.Lerp(0.15f, 0.62f, (heat - 0.6f) / 0.4f))
+                                    : new Color(Mathf.Lerp(0.8f, 1f, heat / 0.6f), Mathf.Lerp(0.2f, 0.6f, heat / 0.6f), Mathf.Lerp(0.04f, 0.15f, heat / 0.6f));
+                            if (gray) { float lum = 0.55f + 0.45f * heat; c = new Color(lum, lum, lum, 1f); }   // tinted by the particle colour
+                            c.a = Mathf.Clamp01(a);
+                            px[(ty * tile + y) * n + tx * tile + x] = c;
+                        }
+                }
+            t.SetPixels(px);
+            t.Apply(true);
+            if (gray) _flameSheetGray = t; else _flameSheet = t;
+            return t;
+        }
+
+        // v0.25.205 coloured fire (purple Archmage flames...): the same flipbook in greyscale, tinted by the particle colour
+        private static Material _flameGrayMat;
+        private static void FireLookTinted(ParticleSystem ps, Color tint)
+        {
+            FireLook(ps);
+            if (_flameGrayMat == null)
+            {
+                Material baseMat = Mat(FlameTex(), true);
+                if (baseMat != null) { _flameGrayMat = new Material(baseMat); _flameGrayMat.mainTexture = FlameSheet(true); }
+            }
+            if (_flameGrayMat != null) ps.GetComponent<ParticleSystemRenderer>().sharedMaterial = _flameGrayMat;
+            ParticleSystem.MainModule main = ps.main;
+            Color hi = Color.Lerp(tint, Color.white, 0.35f); hi.a = 1f; Color lo = tint; lo.a = 1f;
+            main.startColor = new ParticleSystem.MinMaxGradient(lo, hi);
+        }
+
+        private static Material _flameSheetMat;
         private static void FireLook(ParticleSystem ps)
         {
-            Material m = Mat(FlameTex(), true);
-            if (m != null) ps.GetComponent<ParticleSystemRenderer>().sharedMaterial = m;
+            if (_flameSheetMat == null)
+            {
+                Material baseMat = Mat(FlameTex(), true);
+                if (baseMat != null) { _flameSheetMat = new Material(baseMat); _flameSheetMat.mainTexture = FlameSheet(); }
+            }
+            if (_flameSheetMat != null) ps.GetComponent<ParticleSystemRenderer>().sharedMaterial = _flameSheetMat;
             ParticleSystem.MainModule main = ps.main;
-            main.startRotation = new ParticleSystem.MinMaxCurve(-0.4f, 0.4f);
+            main.startRotation = new ParticleSystem.MinMaxCurve(-0.12f, 0.12f);   // upright tongues (was +-0.4 rad tilted triangles)
+            main.startColor = new ParticleSystem.MinMaxGradient(new Color(1f, 0.95f, 0.85f, 1f), new Color(1f, 0.82f, 0.6f, 1f));   // full strength; the texture carries the colour
+            ParticleSystem.TextureSheetAnimationModule sheet = ps.textureSheetAnimation;
+            sheet.enabled = true;
+            sheet.numTilesX = 4; sheet.numTilesY = 4;
+            sheet.animation = ParticleSystemAnimationType.WholeSheet;
+            sheet.frameOverTime = new ParticleSystem.MinMaxCurve(1f, AnimationCurve.Linear(0f, 0f, 1f, 1f));
+            sheet.startFrame = new ParticleSystem.MinMaxCurve(0f, 15f);
+            sheet.cycleCount = 2;
+            ParticleSystem.NoiseModule nz = ps.noise;
+            nz.enabled = true; nz.strength = 0.6f; nz.frequency = 1.4f; nz.scrollSpeed = 1.5f; nz.damping = true;
             ParticleSystem.ColorOverLifetimeModule col = ps.colorOverLifetime;
             Gradient g = new Gradient();
-            g.SetKeys(new GradientColorKey[] { new GradientColorKey(new Color(1f, 0.95f, 0.7f), 0f), new GradientColorKey(new Color(1f, 0.55f, 0.12f), 0.35f), new GradientColorKey(new Color(0.75f, 0.15f, 0.05f), 0.8f), new GradientColorKey(new Color(0.2f, 0.1f, 0.08f), 1f) },
-                      new GradientAlphaKey[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(1f, 0.1f), new GradientAlphaKey(0.6f, 0.7f), new GradientAlphaKey(0f, 1f) });
+            g.SetKeys(new GradientColorKey[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(new Color(1f, 0.9f, 0.75f), 0.4f), new GradientColorKey(new Color(1f, 0.55f, 0.35f), 0.8f), new GradientColorKey(new Color(0.45f, 0.2f, 0.15f), 1f) },
+                      new GradientAlphaKey[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(1f, 0.08f), new GradientAlphaKey(0.85f, 0.6f), new GradientAlphaKey(0f, 1f) });
             col.color = new ParticleSystem.MinMaxGradient(g);
             ParticleSystem.SizeOverLifetimeModule sol = ps.sizeOverLifetime;
-            sol.size = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(new Keyframe(0f, 0.4f), new Keyframe(0.3f, 1f), new Keyframe(1f, 1.3f)));
+            sol.size = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(new Keyframe(0f, 0.45f), new Keyframe(0.25f, 1f), new Keyframe(1f, 1.25f)));
+        }
+
+        // v0.25.205 (user ref: Staff of Embers impact): a big explosion DOME - a churning fiery sphere shell centred on the
+        // impact point (its lower half in the ground reads as a dome) that pops out in 0.18 s, rolls and fades, a brighter
+        // inner core shell, a roaring burst of flame tongues, embers, smoke, a flash and a scorch. tint = the fire colour.
+        private static Texture2D _blastTex;
+        private static Mesh _blastSphere;
+        private static Texture2D BlastTex()
+        {
+            if (_blastTex == null)
+            {
+                _blastTex = MakeTex(128, 128, delegate(float u, float v)
+                {
+                    float big = Fbm(u * 5f, v * 5f, 611), fine = Fbm(u * 15f, v * 15f, 613);
+                    return Mathf.Clamp01((big * 0.75f + fine * 0.35f - 0.25f) * 1.8f);
+                }, TextureWrapMode.Repeat);
+            }
+            return _blastTex;
+        }
+        private static Mesh BlastSphere()
+        {
+            if (_blastSphere != null) return _blastSphere;
+            const int lat = 14, lon = 22;
+            Vector3[] v = new Vector3[(lat + 1) * (lon + 1)]; Vector2[] uv = new Vector2[v.Length]; Color[] cs = new Color[v.Length];
+            for (int j = 0; j <= lat; j++)
+                for (int i = 0; i <= lon; i++)
+                {
+                    float th = Mathf.PI * j / lat, ph = Mathf.PI * 2f * i / lon;
+                    v[j * (lon + 1) + i] = new Vector3(Mathf.Sin(th) * Mathf.Cos(ph), Mathf.Cos(th), Mathf.Sin(th) * Mathf.Sin(ph)) * 0.5f;
+                    uv[j * (lon + 1) + i] = new Vector2((float)i / lon * 3f, (float)j / lat * 2f);
+                    cs[j * (lon + 1) + i] = Color.white;
+                }
+            List<int> t = new List<int>();
+            for (int j = 0; j < lat; j++)
+                for (int i = 0; i < lon; i++)
+                {
+                    int a0 = j * (lon + 1) + i, a1 = a0 + 1, b0 = a0 + lon + 1, b1 = b0 + 1;
+                    t.Add(a0); t.Add(a1); t.Add(b0); t.Add(a1); t.Add(b1); t.Add(b0);
+                }
+            _blastSphere = new Mesh(); _blastSphere.vertices = v; _blastSphere.uv = uv; _blastSphere.colors = cs; _blastSphere.triangles = t.ToArray();
+            _blastSphere.RecalculateBounds();
+            return _blastSphere;
+        }
+
+        public static void ExplosionDome(Vector3 pos, float radius, Color tint, bool coloredFire)
+        {
+            ExplosionDome(pos, radius, tint, coloredFire, true);
+        }
+
+        public static void ExplosionDome(Vector3 pos, float radius, Color tint, bool coloredFire, bool groundContact)
+        {
+            ExplosionDomeCore(pos, radius, tint, coloredFire, groundContact, true);
+        }
+
+        public static void PressureDome(Vector3 pos, float radius, Color tint, bool groundContact)
+        {
+            ExplosionDomeCore(pos, radius, tint, false, groundContact, false);
+        }
+
+        private static void ExplosionDomeCore(Vector3 pos, float radius, Color tint, bool coloredFire, bool groundContact, bool flames)
+        {
+            if (!Enabled) return;
+            radius = Mathf.Clamp(radius, 0.8f, 20f);
+            Vector3 g = groundContact ? GroundPoint(pos) : pos;
+            Material baseMat = flames ? Mat(BlastTex(), true) : Mat(SmokeTex(), false);
+            for (int layer = 0; layer < 2; layer++)
+            {
+                if (baseMat == null) break;
+                GameObject shell = MeshObject("IH_BlastShell", BlastSphere(), baseMat, null);   // the shell instances its own copy to fade
+                shell.transform.position = g;
+                shell.transform.rotation = Quaternion.Euler(0f, UnityEngine.Random.Range(0f, 360f), 0f);
+                DragonBlastShell b = shell.AddComponent<DragonBlastShell>();
+                b.Radius = radius * (layer == 0 ? 2f : 1.3f);   // sphere mesh is unit DIAMETER
+                b.Tint = layer == 0 ? tint : Color.Lerp(tint, Color.white, 0.55f);
+                b.Life = layer == 0 ? 0.85f : 0.5f;
+            }
+            if (!flames)
+            {
+                if (groundContact) WindRing(g, 0.4f, radius, 0.55f, tint, true);
+                Smoke(g + Vector3.up * radius * 0.2f, new Color(tint.r * 0.6f, tint.g * 0.6f, tint.b * 0.6f, 0.4f), radius * 0.6f, 1f, 8);
+                return;
+            }
+            DragonVfxLife l = Host(g + Vector3.up * 0.3f, 3f, "blast");
+            ParticleSystem tongues = Particles(l.transform, tint, Mathf.RoundToInt(12 + radius * 3f), 0f, 0.1f, 0.55f, radius * 0.2f, radius * 0.5f, radius * 0.35f, radius * 0.65f, -0.4f,
+                ParticleSystemShapeType.Hemisphere, radius * 0.35f, new Vector3(-90f, 0f, 0f), false, true);
+            if (coloredFire) FireLookTinted(tongues, tint); else FireLook(tongues);
+            ParticleSystem.MainModule tm = tongues.main; tm.maxParticles = 160;
+            tongues.Play();
+            Embers(g, coloredFire ? Color.Lerp(tint, Color.white, 0.3f) : Fire, radius, 1.4f, 50f);
+            Smoke(g + Vector3.up * radius * 0.4f, new Color(0.16f, 0.13f, 0.14f, 0.5f), radius, 2f, Mathf.RoundToInt(6 + radius * 1.5f));
+            Flash(g + Vector3.up * radius * 0.4f, tint, 1.2f, radius * 2.5f, 0.35f);
+            if (groundContact) Scorch(g, radius * 0.75f, 7f);
+            Shake(g, 20f + radius * 3f, Mathf.Clamp(radius * 0.25f, 0.4f, 2f));
+        }
+
+        // v0.25.205 (user: Elemental Cataclysm = a big AIR BULLET engulfed by lightning, earth, frost and fire SPIRALLING
+        // around it, long trail, crashing down): returns the bullet root; the caller moves it and destroys it on impact.
+        public static GameObject AirBullet(Vector3 pos, float radius)
+        {
+            if (!Enabled) return null;
+            radius = Mathf.Clamp(radius, 0.8f, 6f);
+            GameObject root = new GameObject("IH_AirBullet");
+            root.transform.position = pos;
+            // the compressed air: a pale rim halo (camera-facing, readable from any angle) + churning inner wisps
+            GameObject rim = MeshObject("airRim", HaloQuad(new Color(0.85f, 0.93f, 1f, 0.75f)), Mat(GravRimTex(), true), root.transform);
+            rim.transform.localScale = Vector3.one * radius * 2f / 0.55f; rim.AddComponent<DragonFaceCamera>();
+            DragonMeshOwner ro = rim.AddComponent<DragonMeshOwner>(); ro.Mesh = rim.GetComponent<MeshFilter>().sharedMesh;
+            ParticleSystem wisps = Particles(root.transform, new Color(0.85f, 0.92f, 1f, 0.35f), 0, 40f, 30f, 0.35f, 0.2f, 1f, radius * 0.4f, radius * 0.8f, 0f,
+                ParticleSystemShapeType.Sphere, radius * 0.8f, Vector3.zero, false, false);
+            Material sm = Mat(SmokeTex(), false); if (sm != null) wisps.GetComponent<ParticleSystemRenderer>().sharedMaterial = sm;
+            ParticleSystem.MainModule wm = wisps.main; wm.loop = true; wm.simulationSpace = ParticleSystemSimulationSpace.Local;
+            // the long trail behind it
+            TrailRenderer tr = root.AddComponent<TrailRenderer>();
+            tr.time = 1.1f; tr.minVertexDistance = 0.2f;
+            tr.widthCurve = new AnimationCurve(new Keyframe(0f, radius * 1.7f), new Keyframe(0.4f, radius * 1.1f), new Keyframe(1f, 0f));
+            Material tm = Mat(SmokeTex(), true); if (tm != null) tr.sharedMaterial = tm;
+            Gradient tg = new Gradient();
+            tg.SetKeys(new GradientColorKey[] { new GradientColorKey(new Color(0.9f, 0.95f, 1f), 0f), new GradientColorKey(new Color(0.6f, 0.7f, 0.95f), 1f) },
+                       new GradientAlphaKey[] { new GradientAlphaKey(0.75f, 0f), new GradientAlphaKey(0.35f, 0.4f), new GradientAlphaKey(0f, 1f) });
+            tr.colorGradient = tg;
+            tr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            // the four elements spiral around it: two counter-rotating pivots, each carrying two elements at different
+            // heights; their world-space particles leave helical streams behind the falling bullet
+            for (int p = 0; p < 2; p++)
+            {
+                GameObject pivot = new GameObject("spiral");
+                pivot.transform.SetParent(root.transform, false);
+                DragonRotate rot = pivot.AddComponent<DragonRotate>(); rot.Speed = new Vector3(0f, p == 0 ? 540f : -460f, 0f);
+                for (int k = 0; k < 2; k++)
+                {
+                    int el = p * 2 + k;   // 0 fire, 1 frost, 2 lightning, 3 earth
+                    float ang = k * Mathf.PI;
+                    GameObject node = new GameObject("element");
+                    node.transform.SetParent(pivot.transform, false);
+                    node.transform.localPosition = new Vector3(Mathf.Cos(ang), (k == 0 ? 0.35f : -0.35f) * (p == 0 ? 1f : -1f), Mathf.Sin(ang)) * radius * 1.25f;
+                    if (el == 0)
+                    {
+                        ParticleSystem f = Particles(node.transform, Fire, 0, 90f, 30f, 0.45f, 0f, 0.3f, radius * 0.3f, radius * 0.55f, -0.2f, ParticleSystemShapeType.Sphere, radius * 0.1f, Vector3.zero, false, true);
+                        FireLook(f); ParticleSystem.MainModule fm = f.main; fm.loop = true;
+                    }
+                    else if (el == 1)
+                    {
+                        ParticleSystem f = Particles(node.transform, new Color(0.75f, 0.93f, 1f, 1f), 0, 70f, 30f, 0.5f, 0f, 0.2f, radius * 0.08f, radius * 0.18f, 0.3f, ParticleSystemShapeType.Sphere, radius * 0.12f, Vector3.zero, false, true);
+                        ParticleSystem.MainModule fm = f.main; fm.loop = true;
+                        ParticleSystem mist = Particles(node.transform, new Color(0.8f, 0.92f, 1f, 0.3f), 0, 20f, 30f, 0.6f, 0f, 0.1f, radius * 0.25f, radius * 0.45f, 0f, ParticleSystemShapeType.Sphere, radius * 0.1f, Vector3.zero, false, false);
+                        if (sm != null) mist.GetComponent<ParticleSystemRenderer>().sharedMaterial = sm;
+                        ParticleSystem.MainModule mm2 = mist.main; mm2.loop = true;
+                    }
+                    else if (el == 2)
+                    {
+                        ParticleSystem f = Particles(node.transform, new Color(0.78f, 0.88f, 1f, 1f), 0, 60f, 30f, 0.25f, 0.5f, 2f, 0.04f, 0.09f, 0f, ParticleSystemShapeType.Sphere, radius * 0.1f, Vector3.zero, true, true);
+                        ParticleSystem.MainModule fm = f.main; fm.loop = true;
+                        DragonArcFlicker arc = node.AddComponent<DragonArcFlicker>(); arc.Center = root.transform; arc.Width = Mathf.Max(0.05f, radius * 0.06f);
+                    }
+                    else
+                    {
+                        GameObject chunk = new GameObject("rock");
+                        chunk.transform.SetParent(node.transform, false);
+                        chunk.AddComponent<MeshFilter>().sharedMesh = LumpMesh(el + 3);
+                        MeshRenderer mr = chunk.AddComponent<MeshRenderer>(); mr.sharedMaterial = NaturalMat(new Color(0.42f, 0.36f, 0.30f, 1f));
+                        chunk.transform.localScale = Vector3.one * radius * 0.45f;
+                        DragonRotate cr = chunk.AddComponent<DragonRotate>(); cr.Speed = new Vector3(200f, 140f, 90f);
+                        ParticleSystem f = Particles(node.transform, new Color(0.45f, 0.39f, 0.32f, 0.6f), 0, 30f, 30f, 0.7f, 0f, 0.2f, radius * 0.15f, radius * 0.3f, 0.2f, ParticleSystemShapeType.Sphere, radius * 0.15f, Vector3.zero, false, false);
+                        if (sm != null) f.GetComponent<ParticleSystemRenderer>().sharedMaterial = sm;
+                        ParticleSystem.MainModule fm = f.main; fm.loop = true;
+                    }
+                }
+            }
+            return root;
+        }
+
+        // v0.25.223 (user reference: a buried charge going off): a BLAST, not a fire dome. A ragged starburst of dirt jets
+        // thrown up and out from one ground point (15-70 deg off vertical, uneven), each a dark soil plume that slows and
+        // hangs, with a grit streak inside it; a dark core, flying clods, a low dust skirt and ground cracks. No fire, no shell.
+        public static void Blast(Vector3 pos, float radius, Color tint, float shake)
+        {
+            if (!Enabled) return;
+            radius = Mathf.Clamp(radius, 0.6f, 20f);
+            Vector3 g = GroundPoint(pos);
+            DragonVfxLife l = Host(g + Vector3.up * 0.1f, 4.5f, "blast");
+            Material smoke = Mat(SmokeTex(), false);
+            Color soil = Color.Lerp(new Color(0.30f, 0.25f, 0.20f, 0.9f), tint, 0.15f); soil.a = 0.9f;
+            Color dust = Color.Lerp(new Color(0.58f, 0.52f, 0.44f, 0.6f), tint, 0.12f); dust.a = 0.6f;
+            int jets = UnityEngine.Random.Range(10, 15);
+            float turn = UnityEngine.Random.Range(0f, 360f);
+            for (int j = 0; j < jets; j++)
+            {
+                float az = turn + j * 360f / jets + UnityEngine.Random.Range(-14f, 14f);
+                float tilt = UnityEngine.Random.Range(15f, 70f);
+                float power = Mathf.Lerp(1.15f, 0.6f, (tilt - 15f) / 55f) * UnityEngine.Random.Range(0.75f, 1.15f);   // steep jets fly higher
+                GameObject jet = new GameObject("jet");
+                jet.transform.SetParent(l.transform, false);
+                jet.transform.rotation = Quaternion.Euler(-90f + tilt, az, 0f);   // cone emits along +Z
+                float speed = radius * 4.2f * power;
+                ParticleSystem plume = Particles(jet.transform, j % 3 == 0 ? dust : soil, Mathf.RoundToInt(10 + radius * 2f), 0f, 0.12f, 1.7f,
+                    speed * 0.35f, speed, radius * 0.22f, radius * 0.45f, 0.35f, ParticleSystemShapeType.Cone, radius * 0.08f, Vector3.zero, false, false);
+                if (smoke != null) plume.GetComponent<ParticleSystemRenderer>().sharedMaterial = smoke;
+                ParticleSystem.ShapeModule psh = plume.shape; psh.angle = 7f;
+                ParticleSystem.MainModule pm = plume.main; pm.startRotation = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
+                ParticleSystem.LimitVelocityOverLifetimeModule pd = plume.limitVelocityOverLifetime;
+                pd.enabled = true; pd.dampen = 0.12f; pd.limit = new ParticleSystem.MinMaxCurve(speed * 0.18f);
+                ParticleSystem.SizeOverLifetimeModule ps = plume.sizeOverLifetime;
+                ps.size = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(new Keyframe(0f, 0.35f), new Keyframe(0.25f, 1f), new Keyframe(1f, 1.8f)));
+                ParticleSystem grit = Particles(jet.transform, new Color(0.18f, 0.15f, 0.12f, 1f), Mathf.RoundToInt(8 + radius * 2f), 0f, 0.08f, 1.1f,
+                    speed * 0.8f, speed * 1.25f, 0.04f, 0.1f, 1.4f, ParticleSystemShapeType.Cone, radius * 0.05f, Vector3.zero, true, false);
+                ParticleSystem.ShapeModule gsh = grit.shape; gsh.angle = 4f;
+            }
+            ParticleSystem core = Particles(l.transform, new Color(0.16f, 0.13f, 0.11f, 0.95f), Mathf.RoundToInt(8 + radius * 2f), 0f, 0.1f, 1.2f,
+                radius * 0.8f, radius * 2f, radius * 0.4f, radius * 0.7f, 0.2f, ParticleSystemShapeType.Cone, radius * 0.15f, new Vector3(-90f, 0f, 0f), false, false);
+            if (smoke != null) core.GetComponent<ParticleSystemRenderer>().sharedMaterial = smoke;
+            ParticleSystem.ShapeModule csh = core.shape; csh.angle = 25f;
+            Debris(g, new Color(0.38f, 0.32f, 0.27f, 1f), Mathf.RoundToInt(6 + radius * 2f), 5f + radius * 1.5f, 0.15f + radius * 0.03f, 2.4f);
+            DustRing(g, radius * 1.2f);
+            Cracks(g, tint, radius * 0.7f, 6, 3.5f);
+            Flash(g + Vector3.up * radius * 0.3f, new Color(1f, 0.9f, 0.75f, 1f), 0.6f, radius * 2f, 0.12f);
+            if (shake > 0f) Shake(g, 15f + radius * 3f, shake);
+        }
+
+        // v0.25.229 (user: Frenzied Charge breaks the sound barrier - the wind-up sucks the air in, the dash releases it):
+        // thin air streaks and faint wisps start on a sphere around the focus and rush inward to it for the whole wind-up.
+        public static void AirInhale(Vector3 focus, float radius, float seconds, Color tint)
+        {
+            if (!Enabled) return;
+            radius = Mathf.Clamp(radius, 1f, 8f); seconds = Mathf.Clamp(seconds, 0.1f, 5f);
+            DragonVfxLife l = Host(focus, seconds + 1f, "inhale");
+            float speed = radius / 0.45f;
+            Color air = Color.Lerp(new Color(0.88f, 0.94f, 1f, 0.6f), tint, 0.25f); air.a = 0.6f;
+            ParticleSystem streaks = Particles(l.transform, air, 0, 70f, seconds, 0.45f, -speed, -speed * 0.85f, 0.03f, 0.07f, 0f,
+                ParticleSystemShapeType.Sphere, radius, Vector3.zero, true, true);
+            ParticleSystem wisps = Particles(l.transform, new Color(0.82f, 0.86f, 0.92f, 0.22f), 0, 16f, seconds, 0.6f, -radius / 0.6f, -radius / 0.75f,
+                radius * 0.15f, radius * 0.3f, 0f, ParticleSystemShapeType.Sphere, radius * 0.9f, Vector3.zero, false, false);
+            Material sm = Mat(SmokeTex(), false); if (sm != null) wisps.GetComponent<ParticleSystemRenderer>().sharedMaterial = sm;
+            l.StopEmitAt = seconds;
+            l.Systems = new ParticleSystem[] { streaks, wisps };
         }
 
         // A ball of fire: flame core, smoke column, embers, scorch.
         public static void FireBlast(Vector3 pos, float radius)
         {
-            if (!Enabled) return;
-            radius = Mathf.Max(0.8f, radius);
-            DragonVfxLife l = Host(pos + Vector3.up * 0.4f, 2.5f, "fireblast");
-            ParticleSystem ps = Particles(l.transform, new Color(1f, 0.6f, 0.2f, 1f), Mathf.RoundToInt(40 + radius * 10f), 0f, 0.1f, 0.7f, radius * 0.8f, radius * 1.6f, radius * 0.4f, radius * 0.9f, -0.3f,
-                ParticleSystemShapeType.Sphere, radius * 0.3f, Vector3.zero, false, true);
-            FireLook(ps);
-            Smoke(pos + Vector3.up * radius * 0.5f, new Color(0.18f, 0.15f, 0.13f, 0.6f), radius, 2.6f, Mathf.RoundToInt(8 + radius * 1.5f));
-            Embers(pos, Fire, radius * 0.8f, 1.2f, 80f);
-            Scorch(pos, radius * 0.6f, 7f);
+            ExplosionDome(pos, radius, Fire, false);
+        }
+
+        // v0.25.181 (user): a visible flame riding on a projectile (Explosive Arrow): licking fire tongues left behind in world
+        // space + a few sparks and a thin dark smoke wisp. Emits while keep() is true; parented to the projectile.
+        public static void ProjectileFlame(Transform follow, float size, Func<bool> keep)
+        {
+            if (!Enabled || follow == null) return;
+            size = Mathf.Clamp(size, 0.1f, 1.5f);
+            DragonVfxLife l = Host(follow.position, 30f, "projflame");
+            l.Follow = follow;
+            GameObject host = l.gameObject;
+            ParticleSystem fire = Particles(host.transform, new Color(1f, 0.58f, 0.2f, 1f), 0, 70f, 30f, 0.22f, 0.1f, 0.5f, size * 0.5f, size * 0.9f, -0.4f,
+                ParticleSystemShapeType.Sphere, size * 0.15f, Vector3.zero, false, true);
+            FireLook(fire);
+            ParticleSystem sparks = Particles(host.transform, new Color(1f, 0.75f, 0.35f, 1f), 0, 22f, 30f, 0.35f, 0.5f, 2f, 0.03f, 0.06f, 0.6f,
+                ParticleSystemShapeType.Sphere, size * 0.1f, Vector3.zero, true, true);
+            ParticleSystem smoke = Particles(host.transform, new Color(0.16f, 0.14f, 0.12f, 0.35f), 0, 12f, 30f, 0.6f, 0.05f, 0.25f, size * 0.6f, size * 1.1f, -0.15f,
+                ParticleSystemShapeType.Sphere, size * 0.1f, Vector3.zero, false, false);
+            Material sm = Mat(SmokeTex(), false);
+            if (sm != null) smoke.GetComponent<ParticleSystemRenderer>().sharedMaterial = sm;
+            l.Systems = new ParticleSystem[] { fire, sparks, smoke };
+            l.Keep = keep;
         }
 
         // A vertical curved wall of force that the caller moves (Impact Wave crest). width = across the path.
@@ -10789,6 +18501,12 @@ namespace DragonsAltarCombat
         // roll 90 = vertical blade.
         public static void CrescentBlade(Transform parent, Color c, float radius, float width, float roll)
         {
+            CrescentBlade(parent, c, radius, width, roll, true);
+        }
+
+        // wakes false = a stationary flash (the trails would draw nothing): v0.25.181 Eclipse / Halfmoon perf
+        public static void CrescentBlade(Transform parent, Color c, float radius, float width, float roll, bool wakes)
+        {
             if (!Enabled || parent == null) return;
             // v0.25.67 (user: "do you know what a Getsuga Tenshou is?"): a solid crescent wave of energy.
             // v0.25.69 (user: sleek, sharp, dangerous; the cutting edge must face where it travels): the crescent lies in the
@@ -10797,40 +18515,137 @@ namespace DragonsAltarCombat
             // roll 0 = horizontal slash, roll 90 = vertical slash (two blades 14 deg apart so it reads from behind too).
             float span = Mathf.Max(1f, radius * 1.9f);
             float thick = Mathf.Max(0.2f, width * 0.85f);
-            Color halo = Color.Lerp(c, new Color(0.40f, 0.78f, 1f, 1f), 0.6f); halo.a = 0.35f;
-            Color body = Color.Lerp(c, new Color(0.62f, 0.88f, 1f, 1f), 0.5f); body.a = 0.92f;
-            Color edge = Color.Lerp(c, Color.white, 0.92f); edge.a = 1f;
-            // v0.25.77 (user: "stop giving me the facing-the-camera shit"): the blade lies EXACTLY in the plane of its cut,
-            // convex edge leading in the travel direction - no tilt toward the camera, no second blade. Vertical slashes
-            // (Crescent Cleave) are one slightly thicker blade. Wake trails stream back from the apex and both tips.
+            // v0.25.167 (user: clear curved slash + restrained wind trail; no flares / glowing layers): ONE alpha-blended
+            // blade in the plane of the cut (convex edge leading, crisp edges from BladeTex), pale steel tinted by the
+            // skill colour; the additive halo and white edge layers are gone. Three faint, non-additive wind wakes
+            // (apex + tips) follow its movement.
             bool vertical = Mathf.Abs(roll) >= 60f;
             if (vertical) thick *= 1.35f;
             Quaternion q = Quaternion.AngleAxis(roll, Vector3.forward) * Quaternion.Euler(90f, 0f, 0f);
-            GetsugaLayer(parent, halo, span * 1.03f, thick * 1.5f, q, 0f, Mat(LineTex(), true));
-            GetsugaLayer(parent, body, span, thick, q, 0f, Mat(BladeTex(), false));
-            GetsugaLayer(parent, edge, span * 0.98f, thick * 0.26f, q, thick * 0.32f, Mat(BladeTex(), true));
+            // v0.25.180 VFX DIRECTION (magic slash family, replaces the paper crescent): a bowed ribbon with a curved
+            // cross-section - broad translucent shoulder with broken, flowing wind texture (scenery stays visible
+            // through it), ONE hairline luminous cutting edge on the convex leading side, feathered wakes streaming off
+            // the back. Holds its shape from front, side, above and behind (cupped 3-row mesh, both faces).
+            // v0.25.181 (user): FLAT sharp blade surface (no convex bulge), the skill colour reads through (blue / dark blue),
+            // the bright edge keeps dark colours visible at night; wakes are thin tapered ribbons (no square flags).
+            Color body = Color.Lerp(c, new Color(0.84f, 0.90f, 0.96f, 1f), 0.25f); body.a = 0.72f;
+            Color inner = Color.Lerp(c, new Color(0.30f, 0.34f, 0.46f, 1f), 0.3f); inner.a = 0.22f;
+            Material sm = Mat(SlashTex(), false);
+            if (sm == null) { GetsugaLayer(parent, body, span, thick, q, 0f, Mat(BladeTex(), false)); }
+            else
+            {
+                bool shared;
+                Mesh sh = SharedGetsuga(span, thick * 1.2f, 0f, body, inner, out shared);
+                AttachFlow(parent, q, sh, sm, 0.9f, 2f, shared);
+                Color edgeC = Color.Lerp(c, Color.white, 0.6f); edgeC.a = 0.9f;
+                Mesh ed = SharedGetsuga(span * 0.98f, Mathf.Max(0.03f, thick * 0.09f), thick * 0.74f, edgeC, edgeC, out shared);
+                AttachFlow(parent, q, ed, Mat(LineTex(), true), 0f, 1f, shared);
+            }
+            if (!wakes) return;
             float w = span * 0.5f, sag = span * 0.24f;
-            Color wake = Color.Lerp(c, new Color(0.55f, 0.85f, 1f, 1f), 0.5f); wake.a = 0.55f;
-            BladeWake(parent, q * new Vector3(0f, sag * 0.5f, 0f), wake, thick * 1.1f);
-            BladeWake(parent, q * new Vector3(-w * 0.92f, -sag * 0.35f, -span * 0.03f), wake, thick * 0.45f);
-            BladeWake(parent, q * new Vector3(w * 0.92f, -sag * 0.35f, -span * 0.03f), wake, thick * 0.45f);
+            Color wake = Color.Lerp(c, new Color(0.88f, 0.92f, 0.96f, 1f), 0.5f); wake.a = 0.3f;
+            BladeWake(parent, q * new Vector3(0f, sag * 0.5f, 0f), wake, thick * 0.4f);
+            wake.a = 0.2f;
+            BladeWake(parent, q * new Vector3(-w * 0.8f, -sag * 0.2f, -span * 0.03f), wake, thick * 0.22f);
+            BladeWake(parent, q * new Vector3(w * 0.8f, -sag * 0.2f, -span * 0.03f), wake, thick * 0.22f);
+            wake.a = 0.14f;   // feathered wisps peeling off the shoulder
+            BladeWake(parent, q * new Vector3(-w * 0.4f, sag * 0.25f, -span * 0.02f), wake, thick * 0.15f);
+            BladeWake(parent, q * new Vector3(w * 0.4f, sag * 0.25f, -span * 0.02f), wake, thick * 0.15f);
+        }
+
+        // v0.25.180 the Getsuga crescent outline (same curve as GetsugaLayer) as a 3-row cupped ribbon: tips swept back,
+        // thickest in the middle; uv.y 0 concave side .. 1 convex cutting edge. outerShift moves the band outward.
+        private static Mesh GetsugaRibbon(float span, float thick, float cup, float outerShift, Color outer, Color inner)
+        {
+            const int n = 40, rows = 3;
+            float w = span * 0.5f, sag = span * 0.24f, sweep = span * 0.04f;
+            Vector3[] v = new Vector3[(n + 1) * rows];
+            Vector2[] uv = new Vector2[v.Length];
+            Color[] cols = new Color[v.Length];
+            for (int i = 0; i <= n; i++)
+            {
+                float t = Mathf.Lerp(-1f, 1f, (float)i / n);
+                float y = sag * (1f - t * t) - sag * 0.5f;
+                Vector2 nrm = new Vector2(2f * sag * t, w).normalized;
+                Vector3 n3 = new Vector3(nrm.x, nrm.y, 0f);
+                float th = thick * Mathf.Pow(Mathf.Max(0f, 1f - t * t), 1.1f) + thick * 0.01f;
+                Vector3 mid = new Vector3(w * t, y, -sweep * t * t) + n3 * outerShift * Mathf.Pow(Mathf.Max(0f, 1f - t * t), 1.1f);   // rides the tapered outer edge
+                float end = 1f - Mathf.Pow(Mathf.Abs(t), 6f);
+                for (int j = 0; j < rows; j++)
+                {
+                    float sj = (float)j / (rows - 1), x = sj * 2f - 1f;
+                    v[i * rows + j] = mid + n3 * th * (sj - 0.35f) + Vector3.back * cup * th * (1f - x * x);
+                    uv[i * rows + j] = new Vector2((float)i / n, sj);
+                    Color k = Color.Lerp(inner, outer, sj); k.a *= end;
+                    cols[i * rows + j] = k;
+                }
+            }
+            int[] tri = new int[n * (rows - 1) * 12];
+            int q = 0;
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < rows - 1; j++)
+                {
+                    int a = i * rows + j, b = a + rows;
+                    tri[q++] = a; tri[q++] = b; tri[q++] = a + 1; tri[q++] = a + 1; tri[q++] = b; tri[q++] = b + 1;
+                    tri[q++] = a; tri[q++] = a + 1; tri[q++] = b; tri[q++] = a + 1; tri[q++] = b + 1; tri[q++] = b;
+                }
+            Mesh m = new Mesh();
+            m.vertices = v; m.uv = uv; m.colors = cols; m.triangles = tri;
+            m.RecalculateBounds();
+            return m;
+        }
+
+        // v0.25.181 (perf): identical crescent ribbons are built once and shared (colours baked in; fade/scroll per renderer)
+        private static readonly Dictionary<string, Mesh> _getsugaCache = new Dictionary<string, Mesh>();
+        private static Mesh SharedGetsuga(float span, float thick, float shift, Color outer, Color inner, out bool shared)
+        {
+            string key = span.ToString("0.00") + "|" + thick.ToString("0.000") + "|" + shift.ToString("0.000") + "|" + ColorUtility.ToHtmlStringRGBA(outer) + ColorUtility.ToHtmlStringRGBA(inner);
+            Mesh m;
+            if (_getsugaCache.TryGetValue(key, out m) && m != null) { shared = true; return m; }
+            m = GetsugaRibbon(span, thick, 0f, shift, outer, inner);
+            if (_getsugaCache.Count < 96) { _getsugaCache[key] = m; shared = true; }
+            else shared = false;
+            return m;
+        }
+
+        private static void AttachFlow(Transform parent, Quaternion rot, Mesh mesh, Material mat, float flow, float tile)
+        {
+            AttachFlow(parent, rot, mesh, mat, flow, tile, false);
+        }
+
+        private static void AttachFlow(Transform parent, Quaternion rot, Mesh mesh, Material mat, float flow, float tile, bool shared)
+        {
+            if (mesh == null) return;
+            if (mat == null) { if (!shared) UnityEngine.Object.Destroy(mesh); return; }
+            GameObject go = new GameObject("IH_SlashSurface");
+            go.transform.SetParent(parent, false);
+            go.transform.localRotation = rot;
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            MeshRenderer r = go.AddComponent<MeshRenderer>();
+            r.sharedMaterial = mat;
+            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            r.receiveShadows = false;
+            DragonCutRibbon cr = go.AddComponent<DragonCutRibbon>();
+            cr.Mesh = mesh; cr.ColorsOwned = false; cr.Flow = flow; cr.Tile = tile; cr.SharedMesh = shared;
         }
 
         // A short glowing wake left behind a moving blade point (only shows while the carrier travels).
         private static void BladeWake(Transform parent, Vector3 local, Color c, float width)
         {
-            Material m = Mat(LineTex(), true);
+            Material m = Mat(LineTex(), false);   // v0.25.167 air, not light
+            if (m == null) m = Mat(LineTex(), true);
             if (m == null) return;
             GameObject go = new GameObject("IH_BladeWake");
             go.transform.SetParent(parent, false);
             go.transform.localPosition = local;
             TrailRenderer tr = go.AddComponent<TrailRenderer>();
-            tr.time = 0.28f;
-            tr.minVertexDistance = 0.08f;
-            tr.widthMultiplier = Mathf.Max(0.05f, width);
-            AnimationCurve wc = new AnimationCurve();
-            wc.AddKey(0f, 1f); wc.AddKey(1f, 0f);
+            tr.time = 0.32f;
+            tr.minVertexDistance = 0.06f;
+            tr.widthMultiplier = Mathf.Max(0.03f, width);
+            AnimationCurve wc = new AnimationCurve();   // v0.25.181 tapered at BOTH ends: no square head on the wake
+            wc.AddKey(0f, 0.1f); wc.AddKey(0.18f, 1f); wc.AddKey(1f, 0f);
             tr.widthCurve = wc;
+            tr.numCornerVertices = 4;
             Gradient g = new Gradient();
             Color c0 = c; Color c1 = c; c1.a = 0f;
             g.SetKeys(new GradientColorKey[] { new GradientColorKey(c0, 0f), new GradientColorKey(c1, 1f) },
@@ -10923,7 +18738,7 @@ namespace DragonsAltarCombat
             for (int i = 0; i <= 8; i++)
             {
                 float t = i / 8f;
-                curve.AddKey(t, Mathf.Pow(Mathf.Sin(t * Mathf.PI), 0.7f) + 0.04f);
+                curve.AddKey(t, Mathf.Pow(Mathf.Max(0f, Mathf.Sin(t * Mathf.PI)), 0.7f) + 0.04f);
             }
             line.widthCurve = curve;
             line.widthMultiplier = Mathf.Max(0.05f, width);
@@ -10946,16 +18761,20 @@ namespace DragonsAltarCombat
             GameObject go = new GameObject("IH_SpinSlash");
             go.transform.SetParent(follow, false);
             go.transform.localPosition = Vector3.up * 1.0f;
-            Color glow = c; glow.a = 0.85f;
-            Color body = Color.Lerp(c, Color.white, 0.35f); body.a = 0.9f;
-            Color core = Color.Lerp(c, Color.white, 0.85f); core.a = 1f;
+            // v0.25.167 restrained: a pale steel blade arc + a faint thin edge (the wide additive glow layer is gone)
+            Color body = Color.Lerp(c, new Color(0.84f, 0.90f, 0.96f, 1f), 0.55f); body.a = 0.6f;
+            Color core = Color.Lerp(c, Color.white, 0.6f); core.a = 0.3f;
             for (int k = 0; k < 2; k++)
             {
                 Quaternion half = Quaternion.Euler(0f, k * 180f, 0f);
-                CrescentArc(go.transform, glow, radius, width * 3.5f, 0f, 75f, half, true, 0f);
-                CrescentArc(go.transform, body, radius, width * 1.8f, 0f, 70f, half, false, 0f);
-                CrescentArc(go.transform, core, radius, width * 0.7f, 0f, 66f, half, true, 0f);
+                CrescentArc(go.transform, body, radius, width * 1.5f, 0f, 70f, half, false, 0f);
+                CrescentArc(go.transform, core, radius, width * 0.45f, 0f, 66f, half, true, 0f);
             }
+            GameObject groundWind = new GameObject("IH_WhirlGroundWind");
+            groundWind.transform.SetParent(go.transform, false);
+            DragonGroundWind ground = groundWind.AddComponent<DragonGroundWind>();
+            ground.Follow = follow; ground.Owner = follow.GetComponent<Player>(); ground.Radius = radius;
+            ground.Life = Mathf.Max(0.05f, seconds); ground.Tint = new Color(0.77f, 0.82f, 0.86f, 0.8f);
             DragonSpinner sp = go.AddComponent<DragonSpinner>();
             sp.DegPerSecond = 360f / Mathf.Max(0.1f, turnSeconds);
             DragonFadeOut fo = go.AddComponent<DragonFadeOut>();
@@ -10963,37 +18782,1331 @@ namespace DragonsAltarCombat
             return go;
         }
 
-        // Vergil's Judgement Cut: a pale, faded sphere over the area (outer veil + darker core), cuts flash inside.
+        // v0.25.180 VFX DIRECTION (Judgement Cut reference): the volume is defined by intersecting curved cuts, not a
+        // ball. Several bowed slash ribbons on differently tilted planes (hairline bright edge + translucent silver/indigo
+        // shoulder with broken flowing opacity and frayed ends) snap in together with the three simultaneous hits, rear
+        // arcs really pass behind the victim (depth-tested meshes), sparse hairline cuts cross the interior, a faint smoky
+        // air disturbance, then every arc shears along itself and dissolves into directional threads. Gaps everywhere:
+        // no cage, no globe shell. Visual only (own RNG, gameplay randomness untouched).
+        // v221: single clockwise rising cut; local X/Z radius .35r..r, local Y .15..1.8m.
+        // Follows the caster, not the terrain. Two tapered lines, no lights or particles.
         public static void JudgementSphere(Vector3 center, float radius, float hold)
         {
+            JudgementSphere(center, radius, hold, new Color(0.32f, 0.62f, 1f, 1f));
+        }
+
+        // v0.25.185 (user: "still can't see shit - add visible slashes"): Judgement Cut = a burst of crisp straight slashes
+        // through the sphere (white-hot tapered core + tinted glow, additive so they read day and night) plus three flat
+        // crescent blades. Replaces the translucent ribbon volume (24 ribbon meshes + 2 particle systems: also cheaper).
+        public static void JudgementSphere(Vector3 center, float radius, float hold, Color tint)
+        {
+            // v0.25.203 (user ref: Vergil's Judgement Cut): a ball of light - a soft glowing mist core, brightest in the
+            // middle - wrapped by 5 long CURVED slashes that sweep around it on different tilted planes (white-hot core
+            // + tinted glow, tapered ends), each drawn on in 0.07 s, staggered, then fading. Visual only (own RNG).
             if (!Enabled) return;
-            Shader sh = Shader.Find("Sprites/Default");
-            if (sh == null) return;
-            GameObject root = new GameObject("IH_JudgementSphere");
-            root.transform.position = center;
-            Color[] cols = { new Color(0.62f, 0.78f, 1f, 0.22f), new Color(0.08f, 0.10f, 0.20f, 0.28f) };
-            float[] sizes = { 1f, 0.82f };
-            Renderer[] rends = new Renderer[2];
-            for (int i = 0; i < 2; i++)
+            float r = Mathf.Max(0.5f, radius);
+            float mistRadius = r * 4f; // v221: double the v209 mist dimensions again; slash radius stays r.
+            hold = Mathf.Clamp(hold, 0.1f, 1.2f);
+            Color glow = Color.Lerp(tint, new Color(0.55f, 0.80f, 1f, 1f), 0.35f);
+            Color core = Color.Lerp(tint, Color.white, 0.85f);
+            float life = hold + 0.45f;
+            DragonVfxLife host = Host(center, life + 0.6f, "judgementball");
+            // ball of light (v0.25.204 user: bigger, ~1.5x): dense overlapping soft glow sprites (outer tinted halo, inner white heart) + a little blue mist
+            Color halo = Color.Lerp(tint, Color.white, 0.35f); halo.a = 0.55f;
+            ParticleSystem outer = Particles(host.transform, halo, 12, 16f, life * 0.8f, 0.45f, 0f, 0.05f, mistRadius * 1.4f, mistRadius * 1.9f, 0f,
+                ParticleSystemShapeType.Sphere, mistRadius * 0.18f, Vector3.zero, false, true);
+            Color heart = Color.Lerp(tint, Color.white, 0.8f); heart.a = 0.8f;
+            ParticleSystem inner = Particles(host.transform, heart, 8, 12f, life * 0.8f, 0.35f, 0f, 0.03f, mistRadius * 0.75f, mistRadius * 1.0f, 0f,
+                ParticleSystemShapeType.Sphere, mistRadius * 0.1f, Vector3.zero, false, true);
+            Color fog = Color.Lerp(new Color(0.30f, 0.52f, 0.95f, 0.35f), tint, 0.3f); fog.a = 0.35f;
+            ParticleSystem mist = Particles(host.transform, fog, 10, 8f, life * 0.7f, 0.8f, 0.05f, 0.25f, mistRadius * 0.5f, mistRadius * 0.85f, 0f,
+                ParticleSystemShapeType.Sphere, mistRadius * 0.6f, Vector3.zero, false, false);
+            Material mistMaterial = Mat(SmokeTex(), false);
+            if (mistMaterial != null) mist.GetComponent<ParticleSystemRenderer>().sharedMaterial = mistMaterial;
+            outer.Play(); inner.Play(); mist.Play();
+            // 5 curved slashes around the ball: great-circle arcs (200-290 deg) on random tilted planes, slightly off the
+            // sphere (0.95-1.2 r) so they wrap around it instead of sitting on one shell
+            const int arcs = 5;
+            for (int k = 0; k < arcs; k++)
             {
-                GameObject s = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                Collider c = s.GetComponent<Collider>();
-                if (c != null) UnityEngine.Object.Destroy(c);
-                s.transform.SetParent(root.transform, false);
-                s.transform.localScale = Vector3.one * sizes[i];
-                Renderer r = s.GetComponent<Renderer>();
-                r.material = new Material(sh);
-                r.material.color = cols[i];
-                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                rends[i] = r;
+                Quaternion q = VRot();
+                Vector3 u = q * Vector3.right, v = q * Vector3.up;
+                float span = Mathf.Lerp(200f, 290f, VR()) * Mathf.Deg2Rad, start = VR() * Mathf.PI * 2f;
+                float rr = r * Mathf.Lerp(0.95f, 1.2f, VR());
+                const int n = 40;
+                Vector3[] pts = new Vector3[n];
+                for (int i = 0; i < n; i++)
+                {
+                    float t = (float)i / (n - 1), ang = start + span * t;
+                    float bulge = 1f + 0.08f * Mathf.Sin(t * Mathf.PI);   // the middle of the cut bows out a little
+                    pts[i] = center + (u * Mathf.Cos(ang) + v * Mathf.Sin(ang)) * rr * bulge;
+                }
+                GameObject go = new GameObject("arcCut");
+                go.transform.SetParent(host.transform, false);
+                LineRenderer gl = SoftLine(go.transform, Mathf.Max(0.12f, r * 0.13f));
+                LineRenderer cl = SoftLine(go.transform, Mathf.Max(0.05f, r * 0.045f));
+                DragonArcCut cut = go.AddComponent<DragonArcCut>();
+                cut.Points = pts; cut.Glow = gl; cut.Core = cl; cut.GlowColor = glow; cut.CoreColor = core;
+                cut.Delay = k * 0.05f; cut.Sweep = 0.07f; cut.Life = life - k * 0.05f;
             }
-            DragonSphereFx fx = root.AddComponent<DragonSphereFx>();
-            fx.Rends = rends; fx.Cols = cols; fx.Radius = Mathf.Max(0.5f, radius); fx.Hold = Mathf.Max(0.1f, hold);
-            // the rim glows faintly + a soft light inside
-            Color rim = new Color(0.70f, 0.85f, 1f, 0.6f);
-            DragonMeshFx ring = MeshFx(center, Quaternion.LookRotation(Vector3.up), true, Mat(RingTex(), true), rim, hold + 0.35f);
-            if (ring != null) { ring.ScaleFrom = Vector3.one * radius * 2.2f; ring.ScaleTo = Vector3.one * radius * 2.05f; ring.ScaleTime = 0.1f; }
-            Flash(center, new Color(0.55f, 0.75f, 1f, 1f), 3f, radius * 2f, hold + 0.3f);
+            Flash(center, new Color(0.55f, 0.70f, 1f, 1f), 0.6f, r * 1.5f, 0.12f);
+        }
+
+        // v0.25.196: curved smoke patches on an empty sphere; no filled interior and no solid barrier surface.
+        private static Mesh _cloudShell;
+        private static Texture2D _cloudShellTexture, _judgementSigilTexture;
+        public static void CloudShellGeometry(out Vector3[] vertices, out Vector2[] uv, out int[] triangles)
+        {
+            const int patches = 24, cells = 6, row = cells + 1;
+            vertices = new Vector3[patches * row * row]; uv = new Vector2[vertices.Length];
+            triangles = new int[patches * cells * cells * 12]; int index = 0;
+            for (int patch = 0; patch < patches; patch++)
+            {
+                float y = 1f - 2f * (patch + 0.5f) / patches;
+                float angle = patch * 2.39996323f, radial = Mathf.Sqrt(1f - y * y);
+                Vector3 normal = new Vector3(Mathf.Cos(angle) * radial, y, Mathf.Sin(angle) * radial);
+                Vector3 right = Vector3.Cross(normal, Mathf.Abs(y) < 0.9f ? Vector3.up : Vector3.right).normalized;
+                Vector3 up = Vector3.Cross(right, normal).normalized;
+                int offset = patch * row * row;
+                for (int j = 0; j <= cells; j++) for (int i = 0; i <= cells; i++)
+                {
+                    float u = (float)i / cells, v = (float)j / cells;
+                    vertices[offset + j * row + i] = (normal + right * ((u - 0.5f) * 0.92f) + up * ((v - 0.5f) * 0.92f)).normalized;
+                    uv[offset + j * row + i] = new Vector2(u, v);
+                }
+                for (int j = 0; j < cells; j++) for (int i = 0; i < cells; i++)
+                {
+                    int a = offset + j * row + i, b = a + 1, c = a + row, d = c + 1;
+                    triangles[index++] = a; triangles[index++] = b; triangles[index++] = c;
+                    triangles[index++] = b; triangles[index++] = d; triangles[index++] = c;
+                    triangles[index++] = a; triangles[index++] = c; triangles[index++] = b;
+                    triangles[index++] = b; triangles[index++] = c; triangles[index++] = d;
+                }
+            }
+        }
+        private static Mesh CloudShellMesh()
+        {
+            if (_cloudShell != null) return _cloudShell;
+            Vector3[] v; Vector2[] uv; int[] triangles; CloudShellGeometry(out v, out uv, out triangles);
+            _cloudShell = new Mesh(); _cloudShell.name = "IH_HollowCloudShell";
+            _cloudShell.vertices = v; _cloudShell.uv = uv; _cloudShell.triangles = triangles;
+            Color[] colors = new Color[v.Length]; for (int i = 0; i < colors.Length; i++) colors[i] = Color.white;
+            _cloudShell.colors = colors; _cloudShell.RecalculateBounds();
+            return _cloudShell;
+        }
+        public static Color CloudShellTexel(float u, float v)
+        {
+            float x = (u - 0.5f) * 2f, y = (v - 0.5f) * 2f;
+            float billow = Fbm(u * 6f, v * 6f, 196);
+            float edge = Mathf.Clamp01((1f - Mathf.Sqrt(x * x + y * y)) * 4.5f);
+            float alpha = edge * Mathf.Clamp01((billow - 0.23f) * 2.8f) * 0.48f;
+            float shade = 0.78f + billow * 0.4f;
+            return new Color(0.22f * shade, 0.43f * shade, 0.82f * shade, alpha);
+        }
+        private static Texture2D CloudShellTexture()
+        {
+            if (_cloudShellTexture != null) return _cloudShellTexture;
+            _cloudShellTexture = ColoredTexture(96, delegate(float u, float v) { return CloudShellTexel(u, v); }, TextureWrapMode.Clamp);
+            return _cloudShellTexture;
+        }
+        private static void JudgementCloudShell(Vector3 center, float radius, float seconds)
+        {
+            GameObject shell = new GameObject("IH_CloudShell"); shell.transform.position = center;
+            shell.transform.localScale = Vector3.one * radius;
+            shell.AddComponent<MeshFilter>().sharedMesh = CloudShellMesh();
+            MeshRenderer renderer = shell.AddComponent<MeshRenderer>(); renderer.sharedMaterial = Mat(CloudShellTexture(), false);
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; renderer.receiveShadows = false;
+            DragonCloudShellFade fade = shell.AddComponent<DragonCloudShellFade>(); fade.Surface = renderer; fade.Life = seconds;
+        }
+        private delegate Color ColoredTexel(float u, float v);
+        private static Texture2D ColoredTexture(int size, ColoredTexel sample, TextureWrapMode wrap)
+        {
+            Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, true); texture.wrapMode = wrap;
+            Color[] pixels = new Color[size * size];
+            for (int y = 0; y < size; y++) for (int x = 0; x < size; x++) pixels[y * size + x] = sample((x + 0.5f) / size, (y + 0.5f) / size);
+            texture.SetPixels(pixels); texture.Apply(true); return texture;
+        }
+        private static readonly Dictionary<int, Texture2D> _relicAlbedos = new Dictionary<int, Texture2D>();
+        // Full RGB albedo: color must survive shaders that ignore Material.color. No white gem texture.
+        public static Color RelicAlbedoTexel(int style, float u, float v, Color tint)
+        {
+            float grain = Fbm(u * 12f, v * 10f, 211 + style);
+            float brushed = Fbm(u * 4f, v * 36f, 241 + style);
+            float shade = 0.8f + grain * 0.28f + (brushed - 0.5f) * 0.12f;
+            if (style == 0)
+            {
+                float scratch = Mathf.Pow(Mathf.Max(0f, Mathf.Sin(u * 220f + grain * 5f)), 18f) * 0.07f;
+                return new Color((0.86f - scratch) * shade, (0.62f - scratch) * shade, (0.24f - scratch * 0.5f) * shade, 1f);
+            }
+            if (style == 1)
+            {
+                float vein = Mathf.Exp(-Mathf.Pow((grain - 0.5f) / 0.045f, 2f)) * 0.10f;
+                return new Color((0.84f - vein) * shade, (0.76f - vein) * shade, (0.58f - vein) * shade, 1f);
+            }
+            if (style == 2)
+            {
+                float facets = 0.62f + 0.32f * Mathf.Abs(Mathf.Sin((u + v) * 9f));
+                float glint = Mathf.Exp(-((u - 0.32f) * (u - 0.32f) + (v - 0.7f) * (v - 0.7f)) * 100f) * 0.10f;
+                return new Color(Mathf.Clamp01(tint.r * facets + glint * 0.2f), Mathf.Clamp01(tint.g * facets + glint * 0.5f), Mathf.Clamp01(tint.b * facets + glint), 1f);
+            }
+            return new Color(tint.r * shade, tint.g * shade, tint.b * shade, 1f);
+        }
+        private static Texture2D RelicAlbedo(int style, Color tint)
+        {
+            int key = style | (Mathf.RoundToInt(tint.r * 31f) << 3) | (Mathf.RoundToInt(tint.g * 31f) << 8) | (Mathf.RoundToInt(tint.b * 31f) << 13);
+            Texture2D texture;
+            if (_relicAlbedos.TryGetValue(key, out texture) && texture != null) return texture;
+            texture = ColoredTexture(64, delegate(float u, float v) { return RelicAlbedoTexel(style, u, v, tint); }, TextureWrapMode.Repeat);
+            _relicAlbedos[key] = texture; return texture;
+        }
+        private static void SetRelicAlbedo(Material material, Texture2D texture)
+        {
+            material.mainTexture = texture;
+            if (material.HasProperty("_MainTex")) material.SetTexture("_MainTex", texture);
+            if (material.HasProperty("_Color")) material.SetColor("_Color", Color.white);
+            if (material.HasProperty("_TintColor")) material.SetColor("_TintColor", Color.white);
+            material.DisableKeyword("_EMISSION");
+            if (material.HasProperty("_EmissionColor")) material.SetColor("_EmissionColor", Color.black);
+            if (material.HasProperty("_EmissionMap")) material.SetTexture("_EmissionMap", null);
+        }
+        public static Vector3 HammerHeadPoint(Vector3 point)
+        {
+            // v0.25.201 (user: head = a symmetrical HORIZONTAL rectangle, not tall): the head's cross-section becomes square
+            // (half 0.21 high x 0.21 deep, was 0.29 x 0.56) and its length 0.7x, so it reads as a horizontal block about 1.8x
+            // longer than tall. The head's bottom stays on the socket collar (y 0.27); the haft is untouched.
+            if (point.y > 0.24f) return new Vector3(point.x * 0.7f, 0.48f + (point.y - 0.39f) * 1.75f, point.z * 0.488f);
+            return point;
+        }
+        private static void ThickenHammerHead(GameObject hammer)
+        {
+            MeshFilter[] filters = hammer.GetComponentsInChildren<MeshFilter>(true);
+            for (int i = 0; i < filters.Length; i++)
+            {
+                Transform part = filters[i].transform;
+                if (part.name == "blueDiamond" || part.name == "blueInset")
+                { part.localPosition = HammerHeadPoint(part.localPosition); continue; }
+                Mesh mesh = filters[i].sharedMesh; if (mesh == null) continue;
+                Vector3[] vertices = mesh.vertices;
+                for (int j = 0; j < vertices.Length; j++) vertices[j] = HammerHeadPoint(vertices[j]);
+                mesh.vertices = vertices; mesh.RecalculateNormals(); mesh.RecalculateBounds();
+            }
+            // Trail anchors move with the thicker head too. No changes to the gameplay root or its scale.
+            for (int i = 0; i < hammer.transform.childCount; i++)
+            { Transform part = hammer.transform.GetChild(i); if (part.name == "tipL" || part.name == "tipR") part.localPosition = HammerHeadPoint(part.localPosition); }
+        }
+        private static AnimationCurve _damageBuffMistSize;
+        private static AnimationCurve DamageBuffMistSize()
+        {
+            if (_damageBuffMistSize == null) _damageBuffMistSize = new AnimationCurve(
+                new Keyframe(0f, 0.65f), new Keyframe(0.18f, 1f), new Keyframe(0.7f, 1.1f), new Keyframe(1f, 1.3f));
+            return _damageBuffMistSize;
+        }
+        public static void DamageBuffMist(Vector3 point, float radius, Color tint)
+        {
+            if (!Enabled) return;
+            radius = Mathf.Max(1f, radius);
+            WindRing(point, 0.7f, radius, 1.15f, tint, true);
+            DragonVfxLife host = Host(GroundPoint(point) + Vector3.up * 0.22f, 1.8f, "damagebuffwind");
+            Color air = tint; air.a = 0.52f;
+            ParticleSystem mist = Particles(host.transform, air, 20, 0f, 0.1f, 1.4f, 0.08f, 0.22f,
+                radius * 0.06f, radius * 0.12f, 0f, ParticleSystemShapeType.Circle, radius * 0.85f,
+                new Vector3(90f, 0f, 0f), false, false);
+            mist.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            ParticleSystem.MainModule main = mist.main; main.maxParticles = 28;
+            ParticleSystem.ShapeModule shape = mist.shape; shape.radiusThickness = 0.06f;
+            ParticleSystem.VelocityOverLifetimeModule flow = mist.velocityOverLifetime;
+            flow.enabled = true; flow.space = ParticleSystemSimulationSpace.Local;
+            flow.orbitalY = new ParticleSystem.MinMaxCurve(1.6f);
+            mist.GetComponent<ParticleSystemRenderer>().sharedMaterial = Mat(SmokeTex(), false);
+            mist.Play(true);
+        }
+        private static float SigilSegment(Vector2 point, Vector2 a, Vector2 b)
+        {
+            Vector2 line = b - a;
+            float t = Mathf.Clamp01(Vector2.Dot(point - a, line) / Mathf.Max(0.00001f, line.sqrMagnitude));
+            return (point - a - line * t).magnitude;
+        }
+        public static float HeavensSigilAlpha(float u, float v)
+        {
+            Vector2 p = new Vector2((u - 0.5f) * 2f, (v - 0.5f) * 2f); float radius = p.magnitude;
+            float ring = Mathf.Max(Mathf.Exp(-Mathf.Pow((radius - 0.98f) / 0.006f, 2f)), Mathf.Exp(-Mathf.Pow((radius - 0.86f) / 0.0045f, 2f)) * 0.7f);
+            float angle = Mathf.Atan2(p.y, p.x), sector = Mathf.PI * 2f / 12f;
+            float fold = Mathf.Repeat(angle + sector * 0.5f, sector) - sector * 0.5f;
+            Vector2 rune = new Vector2(Mathf.Cos(fold) * radius - 0.74f, Mathf.Sin(fold) * radius);
+            float runeStroke = SigilSegment(rune, new Vector2(-0.05f, 0f), new Vector2(0.05f, 0f));
+            runeStroke = Mathf.Min(runeStroke, SigilSegment(rune, new Vector2(0f, 0f), new Vector2(0.04f, 0.04f)));
+            runeStroke = Mathf.Min(runeStroke, SigilSegment(rune, new Vector2(0f, 0f), new Vector2(0.04f, -0.04f)));
+            float glyph = Mathf.Exp(-Mathf.Pow(runeStroke / 0.007f, 2f));
+            float cross = Mathf.Min(SigilSegment(p, new Vector2(-0.36f, 0f), new Vector2(0.36f, 0f)), SigilSegment(p, new Vector2(0f, -0.36f), new Vector2(0f, 0.36f)));
+            float diamond = Mathf.Abs(Mathf.Abs(p.x) + Mathf.Abs(p.y) - 0.48f) * 0.7071f;
+            float center = Mathf.Max(Mathf.Exp(-Mathf.Pow(cross / 0.009f, 2f)), Mathf.Exp(-Mathf.Pow(diamond / 0.006f, 2f)) * 0.75f);
+            float spineAngle = Mathf.Repeat(angle + Mathf.PI / 8f, Mathf.PI / 4f) - Mathf.PI / 8f;
+            float spoke = radius > 0.48f && radius < 0.64f ? Mathf.Exp(-Mathf.Pow(radius * Mathf.Sin(spineAngle) / 0.006f, 2f)) * 0.55f : 0f;
+            return Mathf.Clamp01(Mathf.Max(ring, Mathf.Max(glyph, Mathf.Max(center, spoke)))) * Mathf.Clamp01((1f - radius) * 100f);
+        }
+        private static Texture2D HeavensSigilTexture()
+        {
+            if (_judgementSigilTexture == null) _judgementSigilTexture = MakeTex(256, 256, delegate(float u, float v) { return HeavensSigilAlpha(u, v); }, TextureWrapMode.Clamp);
+            return _judgementSigilTexture;
+        }
+        public static void HeavensJudgementSigil(Vector3 point, float radius, float seconds)
+        {
+            if (!Enabled || !Guides) return;
+            DragonMeshFx sigil = MeshFx(GroundPoint(point) + Vector3.up * 0.11f, Quaternion.identity, true,
+                Mat(HeavensSigilTexture(), false), new Color(0.88f, 0.78f, 0.48f, 0.72f), seconds);
+            if (sigil == null) return;
+            sigil.Conform = true; sigil.ScaleFrom = sigil.ScaleTo = Vector3.one * radius * 2.04f;
+            sigil.FadeIn = 0.08f; sigil.Hold = Mathf.Max(0f, seconds - 0.3f);
+        }
+
+        private static AnimationCurve _cloudPuffSize;
+        private static AnimationCurve CloudPuffSize()
+        {
+            if (_cloudPuffSize == null) _cloudPuffSize = new AnimationCurve(new Keyframe(0f, 0.8f), new Keyframe(0.25f, 1f), new Keyframe(1f, 1.1f));
+            return _cloudPuffSize;
+        }
+
+        // v0.25.185 (user: Clockwork was invisible): a clear brass clock burst on the ground - soft gold pulse over the area,
+        // twelve hour ticks, two clock hands and rising brass sparks. Cheap (lines + one pulse + two particle bursts).
+        public static void ClockBurst(Vector3 pos, float radius, float seconds)
+        {
+            if (!Enabled) return;
+            radius = Mathf.Max(1f, radius);
+            seconds = Mathf.Clamp(seconds, 0.5f, 3f);
+            Color brass = new Color(1f, 0.80f, 0.38f, 1f), ivory = new Color(1f, 0.95f, 0.80f, 1f);
+            SoftWave(pos, brass, radius, 0.8f);
+            Vector3 g = GroundPoint(pos) + Vector3.up * 0.12f;
+            float face = Mathf.Min(radius * 0.45f, 4f);
+            // v0.25.191 (user: make it turn): the face turns slowly while both hands UNWIND (fast counter-clockwise spin that
+            // slows to a stop) - local-space lines on rotating pivots, faded together
+            DragonVfxLife host = Host(g, seconds, "clockface");
+            GameObject facePivot = new GameObject("face"); facePivot.transform.SetParent(host.transform, false);
+            facePivot.transform.position = g;
+            facePivot.AddComponent<DragonClockSpin>().Init(-40f, -15f, seconds);
+            List<LineRenderer> lines = new List<LineRenderer>();
+            for (int i = 0; i < 12; i++)
+            {
+                float a = i * 30f * Mathf.Deg2Rad;
+                Vector3 dir = new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a));
+                float inner = face * (i % 3 == 0 ? 0.72f : 0.82f);
+                lines.Add(ClockLine(facePivot.transform, dir * inner, dir * face, i % 3 == 0 ? 0.12f : 0.07f));
+            }
+            float t = VR() * 360f;
+            GameObject hourPivot = new GameObject("hour"); hourPivot.transform.SetParent(host.transform, false); hourPivot.transform.position = g;
+            hourPivot.transform.rotation = Quaternion.Euler(0f, t, 0f);
+            hourPivot.AddComponent<DragonClockSpin>().Init(-240f, 0f, seconds);
+            GameObject minPivot = new GameObject("minute"); minPivot.transform.SetParent(host.transform, false); minPivot.transform.position = g;
+            minPivot.transform.rotation = Quaternion.Euler(0f, t + 140f, 0f);
+            minPivot.AddComponent<DragonClockSpin>().Init(-900f, 0f, seconds);
+            lines.Add(ClockLine(hourPivot.transform, Vector3.zero, Vector3.forward * face * 0.5f, 0.16f));
+            lines.Add(ClockLine(minPivot.transform, Vector3.zero, Vector3.forward * face * 0.78f, 0.11f));
+            DragonCrackFade fadeTicks = host.gameObject.AddComponent<DragonCrackFade>();
+            fadeTicks.Lines = lines.ToArray(); fadeTicks.Color = brass; fadeTicks.Life = seconds; fadeTicks.Age = 0.13f; fadeTicks.EndAlpha = 1f;
+            Burst(g + Vector3.up * 0.3f, brass, 26, 3.5f, 0.06f, 0.9f, -0.6f);
+            Burst(g + Vector3.up * 0.2f, ivory, 12, 1.5f, 0.1f, 1.1f, -0.3f);
+        }
+
+        private static LineRenderer ClockLine(Transform parent, Vector3 a, Vector3 b, float width)
+        {
+            if (_cutTaper == null) _cutTaper = new AnimationCurve(new Keyframe(0f, 0f), new Keyframe(0.18f, 1f), new Keyframe(0.82f, 1f), new Keyframe(1f, 0f));
+            LineRenderer line = SoftLine(parent, width);
+            line.useWorldSpace = false;
+            line.widthCurve = _cutTaper;
+            line.numCapVertices = 0;
+            line.positionCount = 2; line.SetPosition(0, a); line.SetPosition(1, b);
+            return line;
+        }
+
+        // v0.25.185 a straight slash line with tapered (pointed) ends, additive, fading out
+        private static AnimationCurve _cutTaper;
+        public static void CutLine(Vector3 a, Vector3 b, Color c, float width, float seconds)
+        {
+            if (!Enabled) return;
+            if (_cutTaper == null) _cutTaper = new AnimationCurve(new Keyframe(0f, 0f), new Keyframe(0.18f, 1f), new Keyframe(0.82f, 1f), new Keyframe(1f, 0f));
+            DragonVfxLife l = Host(a, Mathf.Max(0.05f, seconds), "cutline");
+            LineRenderer line = SoftLine(l.transform, width);
+            line.widthCurve = _cutTaper;
+            line.numCapVertices = 0;
+            line.positionCount = 2; line.SetPosition(0, a); line.SetPosition(1, b);
+            DragonCrackFade fade = l.gameObject.AddComponent<DragonCrackFade>();
+            fade.Lines = new LineRenderer[] { line };
+            fade.Color = c;
+            fade.Life = seconds;
+            fade.Age = 0.13f;   // appears at once (the fade-in is 0.15 s)
+            fade.EndAlpha = 1f;
+        }
+
+        // v0.25.180 healing / blessing pulse (Holy Wave, Ray of Hope, Heaven's Light, Crucible, KG, relic heals...):
+        // a low translucent wave of soft moving strands + faint mist + a few rising motes. No dirt, no ring decal, no flash.
+        public static void SoftWave(Vector3 pos, Color c, float radius, float seconds)
+        {
+            if (!Enabled) return;
+            radius = Mathf.Max(0.8f, radius);
+            seconds = Mathf.Clamp(seconds, 0.3f, 2f);
+            DragonVfxLife l = Host(GroundPoint(pos) + Vector3.up * 0.3f, seconds + 1.6f, "softwave");
+            float speed = radius / seconds;
+            int n = Mathf.Clamp(Mathf.RoundToInt(radius * 5f), 12, 60);
+            Color strand = Color.Lerp(c, new Color(1f, 0.97f, 0.90f, 1f), 0.45f); strand.a = 0.35f;
+            Particles(l.transform, strand, n, 0f, 0.05f, seconds, speed * 0.8f, speed, 0.05f, 0.1f, 0f,
+                ParticleSystemShapeType.Circle, 0.3f, new Vector3(90f, 0f, 0f), true, false);
+            Color mist = Color.Lerp(c, Color.white, 0.5f); mist.a = 0.12f;
+            Particles(l.transform, mist, Mathf.RoundToInt(n * 0.4f), 0f, 0.05f, seconds * 1.2f, speed * 0.4f, speed * 0.7f, 0.5f, 1f, -0.02f,
+                ParticleSystemShapeType.Circle, 0.3f, new Vector3(90f, 0f, 0f), false, false);
+            Color mote = Color.Lerp(c, Color.white, 0.5f); mote.a = 0.6f;
+            Particles(l.transform, mote, 8, 0f, 0.3f, 1.4f, 0.2f, 0.6f, 0.04f, 0.08f, -0.2f,
+                ParticleSystemShapeType.Circle, radius * 0.6f, new Vector3(90f, 0f, 0f), false, true);
+            // v0.25.181 (user): a clearly visible but soft circular light pulse expanding over the area (no flash)
+            Vector3 g = GroundPoint(pos) + Vector3.up * 0.09f;
+            Color rc = Color.Lerp(c, Color.white, 0.25f); rc.a = 0.42f;
+            DragonMeshFx ring = MeshFx(g, Quaternion.identity, true, Mat(SoftRingTex(), true), rc, seconds + 0.35f); if (ring != null) ring.Conform = true;
+            if (ring != null) { ring.FadeIn = 0.06f; ring.ScaleFrom = Vector3.one * radius * 0.35f; ring.ScaleTo = Vector3.one * radius * 2.05f; ring.ScaleTime = seconds; }
+        }
+
+        private static Texture2D _softRingTex;
+        // smooth round band with a soft inner trail (healing / buff pulse) - no hard edge, no glare centre
+        private static Texture2D SoftRingTex()
+        {
+            if (_softRingTex == null) _softRingTex = MakeTex(128, 128, delegate(float u, float v)
+            {
+                float d = Rad(u, v);
+                if (d >= 1f) return 0f;
+                float band = Mathf.Exp(-Mathf.Pow((d - 0.88f) / 0.06f, 2f));
+                float trail = Mathf.Clamp01((d - 0.55f) / 0.33f) * (d < 0.88f ? 0.22f : 0f);
+                return Mathf.Clamp01(band * 0.9f + trail);
+            }, TextureWrapMode.Clamp);
+            return _softRingTex;
+        }
+
+        // v0.25.181 (user, Mercenary: chaos and physical destruction): branching fractures + broken ground + irregular rubble
+        // + a forceful dirt burst. Cosmetic only (no terrain change, no spikes, no mushroom cloud).
+        public static void Shatter(Vector3 pos, float radius, float shake)
+        {
+            if (!Enabled) return;
+            radius = Mathf.Clamp(radius, 0.8f, 16f);
+            Vector3 g = GroundPoint(pos);
+            DirtBurst(g, radius, 1.5f);
+            int mains = Mathf.Clamp(Mathf.RoundToInt(4 + radius * 0.4f), 4, 8);   // v0.25.185 (perf) was 5..12
+            Color crack = new Color(0.10f, 0.08f, 0.07f, 1f);
+            for (int i = 0; i < mains; i++)
+            {
+                float ang = (i + VR() * 0.6f) / mains * Mathf.PI * 2f;
+                Vector3 dir = new Vector3(Mathf.Cos(ang), 0f, Mathf.Sin(ang));
+                float len = radius * Mathf.Lerp(0.6f, 1.05f, VR());
+                Vector3 mid = g + dir * len * 0.5f + new Vector3(dir.z, 0f, -dir.x) * (VR() - 0.5f) * len * 0.2f;
+                Vector3 end = g + dir * len;
+                float w = Mathf.Clamp(radius * 0.06f, 0.12f, 0.5f);
+                CrackLine(g, mid, crack, w, 4.5f);
+                CrackLine(mid, end, crack, w * 0.7f, 4.5f);
+                // one or two side branches off the middle of each main fracture
+                int br = VR() < 0.35f ? 1 : 0;   // v0.25.185 (perf) was 1-2 per fracture
+                for (int b = 0; b < br; b++)
+                {
+                    float side = (b == 0 ? 1f : -1f) * Mathf.Lerp(25f, 55f, VR());
+                    Vector3 bd = Quaternion.Euler(0f, side, 0f) * dir;
+                    CrackLine(mid, mid + bd * len * Mathf.Lerp(0.25f, 0.45f, VR()), crack, w * 0.5f, 4f);
+                }
+            }
+            Debris(g, new Color(0.38f, 0.33f, 0.28f, 1f), Mathf.RoundToInt(6 + radius * 1.0f), 7f + radius * 0.8f, 0.22f + radius * 0.02f, 2.6f);   // v0.25.185 (perf) fewer chunks
+            Scorch(g, radius * 0.6f, 6f);
+            if (shake > 0f) Shake(g, 20f + radius * 2f, shake);
+        }
+
+        // ------------------------------------------------------------------ v0.25.181 pressure cone (Shield Charge, Angel Comet)
+        // A jet's vapour cone: a translucent condensation sheet wrapped around the leading side of the moving body (open
+        // cone, apex ahead, flowing broken texture) + short pressure rings shed along the path. Follows the REAL motion
+        // (velocity from the transform), only while it moves fast; never touches speed or animation.
+        public static GameObject PressureCone(Transform follow, Color c, float radius, float maxSeconds, Func<bool> keep)
+        {
+            if (!Enabled || follow == null) return null;
+            Material m = Mat(SlashTex(), false);
+            if (m == null) return null;
+            GameObject go = new GameObject("IH_PressureCone");
+            go.transform.position = follow.position;
+            Mesh mesh = ConeSheet(Mathf.Max(0.6f, radius), Mathf.Max(1f, radius * 2.2f), Color.Lerp(c, Color.white, 0.75f));
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            MeshRenderer r = go.AddComponent<MeshRenderer>();
+            r.sharedMaterial = m;
+            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            r.receiveShadows = false;
+            DragonPressureCone pc = go.AddComponent<DragonPressureCone>();
+            pc.Follow = follow; pc.Mesh = mesh; pc.Keep = keep; pc.MaxLife = Mathf.Max(0.3f, maxSeconds); pc.Radius = radius; pc.Tint = c;
+            return go;
+        }
+
+        private static Mesh ConeSheet(float radius, float length, Color c)
+        {
+            const int around = 24, along = 6;
+            Vector3[] v = new Vector3[(around + 1) * (along + 1)];
+            Vector2[] uv = new Vector2[v.Length];
+            Color[] col = new Color[v.Length];
+            for (int j = 0; j <= along; j++)
+            {
+                float f = (float)j / along;                       // 0 = apex (ahead) .. 1 = trailing rim
+                float rr = radius * Mathf.Lerp(0.25f, 1f, Mathf.Sqrt(f));
+                float z = length * (0.35f - f);
+                for (int i = 0; i <= around; i++)
+                {
+                    float a = (float)i / around * Mathf.PI * 2f;
+                    int k = j * (around + 1) + i;
+                    v[k] = new Vector3(Mathf.Cos(a) * rr, Mathf.Sin(a) * rr, z);
+                    uv[k] = new Vector2((float)i / around * 3f, 0.25f + f * 0.7f);
+                    Color cc = c; cc.a = 0.32f * Mathf.Sin(f * Mathf.PI) * (0.55f + 0.45f * Mathf.Abs(Mathf.Sin(a)));
+                    col[k] = cc;
+                }
+            }
+            int[] t = new int[around * along * 12];
+            int q = 0;
+            for (int j = 0; j < along; j++)
+                for (int i = 0; i < around; i++)
+                {
+                    int a = j * (around + 1) + i, b = a + 1, cI = a + around + 1, d = cI + 1;
+                    t[q++] = a; t[q++] = cI; t[q++] = b; t[q++] = b; t[q++] = cI; t[q++] = d;
+                    t[q++] = a; t[q++] = b; t[q++] = cI; t[q++] = b; t[q++] = d; t[q++] = cI;
+                }
+            Mesh m = new Mesh();
+            m.vertices = v; m.uv = uv; m.colors = col; m.triangles = t;
+            m.RecalculateBounds();
+            return m;
+        }
+
+        // one expanding pressure ring shed behind a fast body (oriented across the travel direction)
+        public static void PressureRing(Vector3 pos, Vector3 dir, Color c, float radius)
+        {
+            if (!Enabled || dir.sqrMagnitude < 0.0001f) return;
+            Color rc = Color.Lerp(c, Color.white, 0.7f); rc.a = 0.28f;
+            DragonMeshFx ring = MeshFx(pos, Quaternion.FromToRotation(Vector3.up, dir.normalized), true, Mat(SoftRingTex(), false), rc, 0.35f);
+            if (ring != null) { ring.ScaleFrom = Vector3.one * radius * 0.9f; ring.ScaleTo = Vector3.one * radius * 2.6f; ring.ScaleTime = 0.35f; }
+        }
+
+        // ------------------------------------------------------------------ v0.25.181 finished solid shapes
+        // Extrudes a closed 2D outline (counter-clockwise, XY) into a solid with chamfered (bevelled) front and back edges:
+        // flat-shaded faces + soft bevel normals, planar uvs (faces: xy, walls: perimeter x depth). Used for the relic
+        // crosses (one finished body instead of stacked boxes).
+        public static Mesh ExtrudeBevel(List<Vector2> outline, float depth, float bevel, float uvScale)
+        {
+            int n = outline == null ? 0 : outline.Count;
+            if (n < 3) return null;
+            float hd = depth * 0.5f;
+            bevel = Mathf.Clamp(bevel, 0f, hd * 0.9f);
+            List<Vector2> inner = OffsetOutline(outline, -bevel);
+            List<Vector3> v = new List<Vector3>();
+            List<Vector3> nr = new List<Vector3>();
+            List<Vector2> uv = new List<Vector2>();
+            List<int> t = new List<int>();
+            int[] tri = EarClip(inner);
+            // front (+z faces the viewer side +Z) and back
+            for (int side = 0; side < 2; side++)
+            {
+                float z = side == 0 ? hd : -hd;
+                Vector3 nz = side == 0 ? Vector3.forward : Vector3.back;
+                int b0 = v.Count;
+                for (int i = 0; i < n; i++) { v.Add(new Vector3(inner[i].x, inner[i].y, z)); nr.Add(nz); uv.Add(inner[i] * uvScale); }
+                for (int i = 0; i + 2 < tri.Length; i += 3)
+                {
+                    // CCW cap triangles point toward +Z; reverse only the back cap.
+                    if (side == 0) { t.Add(b0 + tri[i]); t.Add(b0 + tri[i + 1]); t.Add(b0 + tri[i + 2]); }
+                    else { t.Add(b0 + tri[i]); t.Add(b0 + tri[i + 2]); t.Add(b0 + tri[i + 1]); }
+                }
+            }
+            // walls + bevels: quads around the perimeter
+            float per = 0f;
+            for (int i = 0; i < n; i++)
+            {
+                int j = (i + 1) % n;
+                Vector2 a = outline[i], b = outline[j], ai = inner[i], bi = inner[j];
+                Vector2 e = b - a;
+                float len = e.magnitude;
+                Vector3 wn = new Vector3(e.y, -e.x, 0f).normalized;   // outward for a CCW outline
+                // rows: front inner (z=hd), front outer (z=hd-bevel), back outer (z=-hd+bevel), back inner (z=-hd)
+                Vector3[] ra = { new Vector3(ai.x, ai.y, hd), new Vector3(a.x, a.y, hd - bevel), new Vector3(a.x, a.y, -hd + bevel), new Vector3(ai.x, ai.y, -hd) };
+                Vector3[] rb = { new Vector3(bi.x, bi.y, hd), new Vector3(b.x, b.y, hd - bevel), new Vector3(b.x, b.y, -hd + bevel), new Vector3(bi.x, bi.y, -hd) };
+                Vector3[] nn = { (wn + Vector3.forward).normalized, wn, (wn + Vector3.back).normalized };
+                float[] zz = { hd, hd - bevel, -hd + bevel, -hd };
+                for (int q = 0; q < 3; q++)
+                {
+                    int b0 = v.Count;
+                    v.Add(ra[q]); v.Add(rb[q]); v.Add(ra[q + 1]); v.Add(rb[q + 1]);
+                    for (int k = 0; k < 4; k++) nr.Add(nn[q]);
+                    uv.Add(new Vector2(per, zz[q]) * uvScale); uv.Add(new Vector2(per + len, zz[q]) * uvScale);
+                    uv.Add(new Vector2(per, zz[q + 1]) * uvScale); uv.Add(new Vector2(per + len, zz[q + 1]) * uvScale);
+                    t.Add(b0); t.Add(b0 + 2); t.Add(b0 + 1); t.Add(b0 + 1); t.Add(b0 + 2); t.Add(b0 + 3);
+                }
+                per += len;
+            }
+            Mesh m = new Mesh();
+            m.vertices = v.ToArray(); m.normals = nr.ToArray(); m.uv = uv.ToArray(); m.triangles = t.ToArray();
+            m.RecalculateBounds();
+            return m;
+        }
+
+        // Scoped to Holy Relic hearts: older extrusions have inward-facing cap winding.
+        public static void OrientRelicHeartFaces(Vector3[] vertices, Vector3[] normals, int[] triangles)
+        {
+            for (int i = 0; i + 2 < triangles.Length; i += 3)
+            {
+                int a = triangles[i], b = triangles[i + 1], c = triangles[i + 2];
+                Vector3 face = Vector3.Cross(vertices[b] - vertices[a], vertices[c] - vertices[a]);
+                if (Vector3.Dot(face, normals[a] + normals[b] + normals[c]) < 0f)
+                { triangles[i + 1] = c; triangles[i + 2] = b; }
+            }
+        }
+
+        public static Mesh RelicHeartMesh(List<Vector2> outline, float depth, float bevel)
+        {
+            // An inward miter crosses the heart's sharp cusp and leaves cap triangles missing.
+            // Flush inlays use the original outline, retaining complete closed front/back faces.
+            Mesh mesh = ExtrudeBevel(outline, depth, 0f, 1f);
+            if (mesh == null) return null;
+            int[] triangles = mesh.triangles;
+            OrientRelicHeartFaces(mesh.vertices, mesh.normals, triangles);
+            mesh.triangles = triangles;
+            return mesh;
+        }
+
+        public static float HolyHeartFaceDepth(float thickness, bool front)
+        {
+            // Inset spans the backing instead of sitting on two raised plates.
+            return thickness * (front ? 0.18f : -0.525f);
+        }
+
+        // Miter offset of a CCW outline (d > 0 outward, d < 0 inward).
+        public static List<Vector2> OffsetOutline(List<Vector2> p, float d)
+        {
+            int n = p.Count;
+            List<Vector2> o = new List<Vector2>(n);
+            for (int i = 0; i < n; i++)
+            {
+                Vector2 a = p[(i + n - 1) % n], b = p[i], c = p[(i + 1) % n];
+                Vector2 e0 = (b - a).normalized, e1 = (c - b).normalized;
+                Vector2 n0 = new Vector2(e0.y, -e0.x), n1 = new Vector2(e1.y, -e1.x);
+                Vector2 m = n0 + n1;
+                if (m.sqrMagnitude < 1e-6f) m = n0; else m.Normalize();
+                float cos = Mathf.Max(0.35f, Vector2.Dot(m, n0));
+                o.Add(b + m * (d / cos));
+            }
+            return o;
+        }
+
+        private static int[] EarClip(List<Vector2> poly)
+        {
+            int n = poly.Count;
+            List<int> idx = new List<int>(n);
+            for (int i = 0; i < n; i++) idx.Add(i);
+            List<int> outT = new List<int>();
+            int guard = 0;
+            while (idx.Count > 3 && guard++ < 4096)
+            {
+                bool clipped = false;
+                for (int i = 0; i < idx.Count; i++)
+                {
+                    int ia = idx[(i + idx.Count - 1) % idx.Count], ib = idx[i], ic = idx[(i + 1) % idx.Count];
+                    Vector2 a = poly[ia], b = poly[ib], c = poly[ic];
+                    float cross = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+                    if (cross <= 1e-7f) continue;   // reflex
+                    bool inside = false;
+                    for (int k = 0; k < idx.Count && !inside; k++)
+                    {
+                        int ip = idx[k];
+                        if (ip == ia || ip == ib || ip == ic) continue;
+                        inside = PointInTri(poly[ip], a, b, c);
+                    }
+                    if (inside) continue;
+                    outT.Add(ia); outT.Add(ib); outT.Add(ic);
+                    idx.RemoveAt(i);
+                    clipped = true;
+                    break;
+                }
+                if (!clipped) break;
+            }
+            if (idx.Count == 3) { outT.Add(idx[0]); outT.Add(idx[1]); outT.Add(idx[2]); }
+            return outT.ToArray();
+        }
+
+        private static bool PointInTri(Vector2 p, Vector2 a, Vector2 b, Vector2 c)
+        {
+            float d1 = (p.x - b.x) * (a.y - b.y) - (a.x - b.x) * (p.y - b.y);
+            float d2 = (p.x - c.x) * (b.y - c.y) - (b.x - c.x) * (p.y - c.y);
+            float d3 = (p.x - a.x) * (c.y - a.y) - (c.x - a.x) * (p.y - a.y);
+            bool neg = d1 < 0f || d2 < 0f || d3 < 0f, pos = d1 > 0f || d2 > 0f || d3 > 0f;
+            return !(neg && pos);
+        }
+
+        // A planted object's base: displaced dirt (dark mound decal + a lip of soil), a ring of small half-buried rubble and
+        // settling dust. Lumps sink away at the end. Cosmetic only.
+        public static void PlantedRubble(Vector3 ground, float radius, float life)
+        {
+            if (!Enabled) return;
+            radius = Mathf.Clamp(radius, 0.4f, 6f);
+            Vector3 g = GroundPoint(ground);
+            DragonMeshFx mound = MeshFx(g + Vector3.up * 0.04f, Quaternion.Euler(0f, VR() * 360f, 0f), true, Mat(ScorchTex(), false), new Color(0.20f, 0.15f, 0.11f, 0.85f), life + 0.6f);
+            if (mound != null) { mound.Conform = true; mound.FadeIn = 0.05f; mound.Hold = life; mound.ScaleFrom = Vector3.one * radius * 1.6f; mound.ScaleTo = Vector3.one * radius * 2.2f; mound.ScaleTime = 0.2f; }
+            Material rock = NaturalMat(new Color(0.42f, 0.37f, 0.31f, 1f));
+            Material soil = NaturalMat(new Color(0.30f, 0.24f, 0.18f, 1f));
+            int count = Mathf.RoundToInt(Mathf.Lerp(7f, 14f, Mathf.Clamp01(radius / 4f)));
+            for (int i = 0; i < count; i++)
+            {
+                float a = (i + VR() * 0.8f) / count * Mathf.PI * 2f;
+                float r = radius * Mathf.Lerp(0.55f, 1.15f, VR());
+                Vector3 p = GroundPoint(g + new Vector3(Mathf.Cos(a) * r, 0f, Mathf.Sin(a) * r));
+                GameObject lump = new GameObject("IH_Rubble");
+                lump.AddComponent<MeshFilter>().sharedMesh = LumpMesh(i + 3);
+                MeshRenderer mr = lump.AddComponent<MeshRenderer>();
+                Material m = i % 3 == 0 ? soil : rock;
+                if (m != null) mr.sharedMaterial = m;
+                mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                float sz = Mathf.Clamp(radius * Mathf.Lerp(0.12f, 0.28f, VR()), 0.08f, 0.6f);
+                lump.transform.localScale = new Vector3(sz * Mathf.Lerp(0.8f, 1.3f, VR()), sz * Mathf.Lerp(0.45f, 0.8f, VR()), sz * Mathf.Lerp(0.8f, 1.3f, VR()));
+                lump.transform.position = p - Vector3.up * sz * 0.25f;
+                lump.transform.rotation = Quaternion.Euler(VR() * 30f - 15f, VR() * 360f, VR() * 30f - 15f);
+                DragonSinkAway sa = lump.AddComponent<DragonSinkAway>();
+                sa.Life = life; sa.Depth = sz * 1.2f;
+            }
+            DirtBurst(g, radius * 0.8f, 0.6f);
+            DustRing(g, radius);
+        }
+
+        // ------------------------------------------------------------------ v0.25.181 Ultimate lightning (Electric Smite,
+        // Lightning Tempest): thick bolts in green / blue / yellow accents, rising out of the ground or striking it with
+        // cracks, dirt and a short contact front. No screen flashes (one small contact light).
+        public static readonly Color UltGreen = new Color(0.50f, 1f, 0.55f, 1f);
+        public static readonly Color UltBlue = new Color(0.45f, 0.75f, 1f, 1f);
+        public static readonly Color UltYellow = new Color(1f, 0.90f, 0.40f, 1f);
+        public static Color UltColor(int i)
+        {
+            int k = ((i % 3) + 3) % 3;
+            return k == 0 ? UltBlue : k == 1 ? UltGreen : UltYellow;
+        }
+
+        public static void RisingLightning(Vector3 ground, float radius, int count, float height, float width)
+        {
+            if (!Enabled) return;
+            Vector3 g = GroundPoint(ground);
+            for (int i = 0; i < count; i++)
+            {
+                float a = (i + VR() * 0.7f) / count * Mathf.PI * 2f;
+                float r = radius * Mathf.Lerp(0.15f, 0.8f, VR());
+                Vector3 b = GroundPoint(g + new Vector3(Mathf.Cos(a) * r, 0f, Mathf.Sin(a) * r));
+                Vector3 top = b + Vector3.up * height * Mathf.Lerp(0.6f, 1f, VR()) + new Vector3(VR() - 0.5f, 0f, VR() - 0.5f) * height * 0.25f;
+                Bolt(b, top, UltColor(i), width * Mathf.Lerp(0.8f, 1.2f, VR()), 0.45f);
+                if ((i & 1) == 0) Cracks(b, UltColor(i), Mathf.Max(0.8f, radius * 0.2f), 3, 3f);   // v0.25.185 (perf) every 2nd bolt
+            }
+            Shatter(g, radius * 0.7f, 0f);
+        }
+
+        public static void UltimateStrike(Vector3 sky, Vector3 ground, Color c, float width, float frontRadius)
+        {
+            if (!Enabled) return;
+            Bolt(sky, ground, c, width, 0.35f);
+            Bolt(sky + new Vector3(VR() - 0.5f, 0f, VR() - 0.5f) * 1.5f, ground, Color.Lerp(c, Color.white, 0.3f), width * 0.45f, 0.3f);
+            Cracks(ground, c, Mathf.Max(1f, frontRadius), 3, 3f);   // v0.25.185 (perf) 3 cracks, no ground-ring decal per strike
+            DirtBurst(ground, Mathf.Max(0.8f, frontRadius * 0.6f), 0.8f);
+            Burst(ground + Vector3.up * 0.3f, c, 14, 9f, 0.12f, 0.4f, 0.8f);
+        }
+
+        // ------------------------------------------------------------------ v0.25.180 relic materials (Goddess Relic, Judgement
+        // Hammer, Priest relics): pale weathered stone, aged bronze/gold edging, narrow emissive ivory inlay. Shared and
+        // cached (one material each, inlay per tint), so planting crosses never allocates materials.
+        private static Texture2D _stoneTex, _bronzeTex;
+        private static Material _relicStone, _relicBronze;
+        private static readonly Dictionary<int, Material> _relicInlay = new Dictionary<int, Material>();
+
+        private static Texture2D StoneTex()
+        {
+            if (_stoneTex != null) return _stoneTex;
+            const int n = 128;
+            _stoneTex = new Texture2D(n, n, TextureFormat.RGBA32, true);
+            _stoneTex.wrapMode = TextureWrapMode.Repeat;
+            Color[] px = new Color[n * n];
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    float u = (float)x / n, v = (float)y / n;
+                    // tileable: sample the noise on a torus
+                    float a = u * Mathf.PI * 2f, b = v * Mathf.PI * 2f;
+                    float nx = Mathf.Cos(a) * 1.3f + 5f, ny = Mathf.Sin(a) * 1.3f + 5f, nz = Mathf.Cos(b) * 1.3f + Mathf.Sin(b) * 0.7f;
+                    float base0 = Fbm(nx + nz, ny - nz, 61);
+                    float grain = Fbm((nx + nz) * 4f, (ny + nz) * 4f, 62);
+                    float pit = Mathf.Clamp01((Fbm((nx - nz) * 2.5f, (ny + nz) * 2.5f, 63) - 0.62f) * 4f);
+                    float vein = Mathf.Clamp01(1f - Mathf.Abs(Fbm((nx + ny) * 1.7f, nz * 3f, 64) - 0.5f) * 14f) * 0.18f;   // v0.25.181 hairline weathering veins
+                    float k = Mathf.Clamp(0.84f + (base0 - 0.5f) * 0.42f + (grain - 0.5f) * 0.22f - pit * 0.32f - vein, 0.38f, 1f);
+                    float warm = (base0 - 0.5f) * 0.05f;
+                    px[y * n + x] = new Color(k * (0.97f + warm), k * 0.94f, k * (0.86f - warm), 1f);
+                }
+            _stoneTex.SetPixels(px);
+            _stoneTex.Apply(true);
+            return _stoneTex;
+        }
+
+        private static Texture2D BronzeTex()
+        {
+            if (_bronzeTex != null) return _bronzeTex;
+            const int n = 64;
+            _bronzeTex = new Texture2D(n, n, TextureFormat.RGBA32, true);
+            _bronzeTex.wrapMode = TextureWrapMode.Repeat;
+            Color[] px = new Color[n * n];
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    float f = Fbm(x / 7f, y / 7f, 71), g = Fbm(x / 2.5f, y / 2.5f, 72);
+                    float patina = Mathf.Clamp01((f - 0.58f) * 3f) * 0.35f;   // a little aged green in the recesses
+                    float k = 0.85f + (g - 0.5f) * 0.25f;
+                    px[y * n + x] = new Color(Mathf.Lerp(k, 0.55f, patina), Mathf.Lerp(k, 0.75f, patina), Mathf.Lerp(k, 0.62f, patina), 1f);
+                }
+            _bronzeTex.SetPixels(px);
+            _bronzeTex.Apply(true);
+            return _bronzeTex;
+        }
+
+        public static Material RelicStone()
+        {
+            if (_relicStone != null) return _relicStone;
+            Shader s = Shader.Find("Standard");
+            if (s == null) return SolidMat(new Color(0.80f, 0.77f, 0.70f, 1f));
+            _relicStone = new Material(s);
+            _relicStone.color = new Color(0.74f, 0.71f, 0.64f, 1f);   // v0.25.181 weathered, not paper-white
+            _relicStone.mainTexture = StoneTex();
+            if (_relicStone.HasProperty("_Glossiness")) _relicStone.SetFloat("_Glossiness", 0.22f);
+            if (_relicStone.HasProperty("_Metallic")) _relicStone.SetFloat("_Metallic", 0f);
+            return _relicStone;
+        }
+
+        public static Material RelicBronze()
+        {
+            if (_relicBronze != null) return _relicBronze;
+            Shader s = Shader.Find("Standard");
+            if (s == null) return SolidMat(new Color(0.70f, 0.52f, 0.26f, 1f));
+            _relicBronze = new Material(s);
+            _relicBronze.color = new Color(0.76f, 0.55f, 0.27f, 1f);
+            _relicBronze.mainTexture = BronzeTex();
+            if (_relicBronze.HasProperty("_Glossiness")) _relicBronze.SetFloat("_Glossiness", 0.5f);
+            if (_relicBronze.HasProperty("_Metallic")) _relicBronze.SetFloat("_Metallic", 0.45f);   // v0.25.181 reads lit without reflection probes
+            if (_relicBronze.HasProperty("_EmissionColor")) { _relicBronze.EnableKeyword("_EMISSION"); _relicBronze.SetColor("_EmissionColor", new Color(0.07f, 0.045f, 0.02f, 1f)); }
+            return _relicBronze;
+        }
+
+        // Narrow lit groove material: ivory tinted by the skill colour, emissive so it reads at night without a glare.
+        public static Material RelicInlay(Color tint)
+        {
+            int key = Mathf.RoundToInt(tint.r * 31f) | (Mathf.RoundToInt(tint.g * 31f) << 5) | (Mathf.RoundToInt(tint.b * 31f) << 10);
+            Material m;
+            if (_relicInlay.TryGetValue(key, out m) && m != null) return m;
+            Shader s = Shader.Find("Standard");
+            Color iv = Color.Lerp(new Color(0.98f, 0.94f, 0.84f, 1f), tint, 0.3f); iv.a = 1f;
+            if (s == null) { m = SolidMat(iv); _relicInlay[key] = m; return m; }
+            m = new Material(s);
+            m.color = iv;
+            if (m.HasProperty("_Glossiness")) m.SetFloat("_Glossiness", 0.4f);
+            if (m.HasProperty("_Metallic")) m.SetFloat("_Metallic", 0f);
+            if (m.HasProperty("_EmissionColor")) { m.EnableKeyword("_EMISSION"); m.SetColor("_EmissionColor", iv * 0.75f); }
+            _relicInlay[key] = m;
+            return m;
+        }
+
+        // v0.25.191 a real arrow body falling from a to b over `seconds` (Arrow Rain); destroyed on arrival (the caller's
+        // streak / planted arrow carries the landing).
+        public static void FallingArrow(Vector3 a, Vector3 b, Color c, float seconds)
+        {
+            if (!Enabled) return;
+            Vector3 d = b - a;
+            if (d.sqrMagnitude < 0.01f) return;
+            GameObject go = new GameObject("IH_FallingArrow");
+            go.transform.position = a;
+            go.transform.rotation = Quaternion.LookRotation(d.normalized, Vector3.up);
+            SpiritArrow(go.transform, c, 0.9f);
+            go.AddComponent<DragonFall>().Init(a, b, Mathf.Max(0.05f, seconds));
+        }
+
+        // v0.25.190 Astral Railcannon wind up: a translucent spectral cannon (barrel, muzzle ring, breech, two bands)
+        // assembles in front of the chest along the aim and fades when the shot leaves. Cached mesh, one material.
+        private static Mesh _cannonMesh, _cannonBandMesh;
+        public static void SpectralCannon(Transform follow, Vector3 forward, float seconds)
+        {
+            if (!Enabled || follow == null) return;
+            if (_cannonMesh == null)
+            {
+                List<Vector2> pr = new List<Vector2>();
+                pr.Add(new Vector2(0f, 0f)); pr.Add(new Vector2(0.30f, 0f)); pr.Add(new Vector2(0.36f, 0.12f)); pr.Add(new Vector2(0.30f, 0.30f));
+                pr.Add(new Vector2(0.22f, 0.45f)); pr.Add(new Vector2(0.19f, 1.7f)); pr.Add(new Vector2(0.27f, 1.85f)); pr.Add(new Vector2(0.27f, 2.05f));
+                pr.Add(new Vector2(0.16f, 2.05f)); pr.Add(new Vector2(0.16f, 1.9f));
+                _cannonMesh = LatheMesh(pr, 14);
+                List<Vector2> bd = new List<Vector2>();
+                bd.Add(new Vector2(0f, 0f)); bd.Add(new Vector2(0.25f, 0f)); bd.Add(new Vector2(0.25f, 0.06f)); bd.Add(new Vector2(0f, 0.06f));
+                _cannonBandMesh = LatheMesh(bd, 14);
+            }
+            Material body = SolidMat(new Color(0.55f, 0.42f, 1f, 0.32f)), band = Mat(WhiteTex(), true);
+            if (body == null || _cannonMesh == null) return;
+            Vector3 f = forward.sqrMagnitude > 0.01f ? forward.normalized : follow.forward;
+            GameObject root = new GameObject("IH_SpectralCannon");
+            root.transform.SetParent(follow, false);
+            root.transform.position = follow.position + Vector3.up * 1.35f + f * 0.45f + follow.right * 0.15f;
+            root.transform.rotation = Quaternion.LookRotation(f, Vector3.up) * Quaternion.Euler(90f, 0f, 0f);   // lathe +Y -> aim
+            MeshObject("barrel", _cannonMesh, body, root.transform);
+            if (band != null && _cannonBandMesh != null)
+            {
+                for (int i = 0; i < 2; i++)
+                {
+                    GameObject b = MeshObject("band", _cannonBandMesh, band, root.transform);
+                    if (b != null) b.transform.localPosition = new Vector3(0f, 0.7f + i * 0.6f, 0f);
+                }
+            }
+            root.transform.localScale = Vector3.one * 0.2f;
+            root.AddComponent<DragonCannonLife>().Life = Mathf.Max(0.3f, seconds);
+        }
+
+        // ------------------------------------------------------------------ v0.25.189 finished relics (user refs: Dragon Nest relics)
+        // Polished gold, ivory, glowing gems and feathered wings for the three Cleric relics. Every mesh is built once and cached
+        // by the caller; materials are shared singletons (no per-cast allocations after the first cast).
+        private static Material _relicGold, _relicIvory;
+        private static readonly Dictionary<int, Material> _relicGems = new Dictionary<int, Material>();
+        private static readonly Dictionary<int, Material> _relicFeathers = new Dictionary<int, Material>();
+        private static Texture2D _goldTex;
+
+        private static Texture2D GoldTex()
+        {
+            if (_goldTex != null) return _goldTex;
+            const int n = 64;
+            _goldTex = new Texture2D(n, n, TextureFormat.RGBA32, true);
+            _goldTex.wrapMode = TextureWrapMode.Repeat;
+            Color[] px = new Color[n * n];
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    float f = Fbm(x / 9f, y / 9f, 81), g = Fbm(x / 2f, y / 6f, 82);   // soft hammered warmth + fine brushed grain
+                    float k = 0.9f + (f - 0.5f) * 0.16f + (g - 0.5f) * 0.08f;
+                    px[y * n + x] = new Color(k, k * 0.98f, k * 0.94f, 1f);
+                }
+            _goldTex.SetPixels(px);
+            _goldTex.Apply(true);
+            return _goldTex;
+        }
+
+        private static Material _nativeRelicSurface;
+        private static Shader RelicShader()
+        {
+            if (_nativeRelicSurface != null) return _nativeRelicSurface.shader;
+            // v0.25.203 (user: relics/hammer must be SOLID physical objects from every angle): Standard first - a plain opaque,
+            // depth-writing, back-face-culled surface (also used by every other lit VFX solid: spikes, rubble, debris). The
+            // copied vanilla sword material (v0.25.195) carried unknown render state (culling / depth / queue) that let inner
+            // parts show through the gold. It stays only as a fallback if Standard is missing.
+            Shader std = Shader.Find("Standard");
+            if (std != null && std.isSupported) return std;
+            if (ObjectDB.instance != null)
+            {
+                GameObject prefab = ObjectDB.instance.GetItemPrefab("SwordBronze");
+                if (prefab != null)
+                {
+                    Renderer[] renderers = prefab.GetComponentsInChildren<Renderer>(true);
+                    for (int i = 0; i < renderers.Length; i++)
+                    {
+                        Material material = renderers[i].sharedMaterial;
+                        // v0.25.202 (user: Goddess Relic hollow, gems hidden from the front, hammer rings / face vanishing by
+                        // angle): the copied sword material draws the INNER faces (front-face culling), so every correctly
+                        // built closed mesh looked inside-out. Only reuse it when its culling can be set back to Back;
+                        // otherwise Standard (back-face culling, used by every other lit VFX solid) is used.
+                        if (material != null && material.shader != null && material.shader.isSupported && material.HasProperty("_MainTex") && material.HasProperty("_Cull"))
+                        { _nativeRelicSurface = material; Debug.Log("[AA] Relic surface shader: " + material.shader.name + " (cull was " + material.GetFloat("_Cull") + ", forced Back)"); return material.shader; }
+                    }
+                }
+            }
+            return Shader.Find("Standard");
+        }
+        private static Material NewRelicMaterial(Shader shader)
+        {
+            Material material = _nativeRelicSurface != null && _nativeRelicSurface.shader == shader ? new Material(_nativeRelicSurface) : new Material(shader);
+            material.mainTexture = WhiteTex(); material.mainTextureScale = Vector2.one;
+            material.mainTextureOffset = Vector2.zero;
+            if (material.HasProperty("_BumpMap")) material.SetTexture("_BumpMap", null);
+            material.DisableKeyword("_NORMALMAP");
+            if (material.HasProperty("_Cull")) material.SetFloat("_Cull", (float)UnityEngine.Rendering.CullMode.Back);   // v0.25.202 outer faces only
+            // v0.25.203: force a plain OPAQUE surface - writes depth, drawn in the geometry queue, no blending
+            if (material.HasProperty("_Mode")) material.SetFloat("_Mode", 0f);
+            if (material.HasProperty("_ZWrite")) material.SetFloat("_ZWrite", 1f);
+            if (material.HasProperty("_SrcBlend")) material.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.One);
+            if (material.HasProperty("_DstBlend")) material.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.Zero);
+            material.DisableKeyword("_ALPHATEST_ON"); material.DisableKeyword("_ALPHABLEND_ON"); material.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+            material.SetOverrideTag("RenderType", "Opaque");
+            material.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Geometry;
+            return material;
+        }
+        public static Material RelicGold()
+        {
+            if (_relicGold != null) return _relicGold;
+            Shader s = RelicShader();
+            if (s == null) return SolidMat(new Color(0.95f, 0.76f, 0.32f, 1f));
+            _relicGold = NewRelicMaterial(s);
+            SetRelicAlbedo(_relicGold, RelicAlbedo(0, Color.white));
+            if (_relicGold.HasProperty("_Glossiness")) _relicGold.SetFloat("_Glossiness", 0.62f);
+            if (_relicGold.HasProperty("_Metallic")) _relicGold.SetFloat("_Metallic", 0.25f);   // reads polished without reflection probes
+            return _relicGold;
+        }
+
+        public static Material RelicIvory()
+        {
+            if (_relicIvory != null) return _relicIvory;
+            Shader s = RelicShader();
+            if (s == null) return SolidMat(new Color(0.96f, 0.92f, 0.82f, 1f));
+            _relicIvory = NewRelicMaterial(s);
+            SetRelicAlbedo(_relicIvory, RelicAlbedo(1, Color.white));
+            if (_relicIvory.HasProperty("_Glossiness")) _relicIvory.SetFloat("_Glossiness", 0.48f);
+            if (_relicIvory.HasProperty("_Metallic")) _relicIvory.SetFloat("_Metallic", 0f);
+            return _relicIvory;
+        }
+
+        // glossy, softly glowing gem (green heart, blue lightning stone...)
+        public static Material RelicGem(Color c)
+        {
+            int key = Mathf.RoundToInt(c.r * 31f) | (Mathf.RoundToInt(c.g * 31f) << 5) | (Mathf.RoundToInt(c.b * 31f) << 10);
+            Material m;
+            if (_relicGems.TryGetValue(key, out m) && m != null) return m;
+            Shader s = RelicShader();
+            if (s == null) { m = SolidMat(c); _relicGems[key] = m; return m; }
+            m = NewRelicMaterial(s);
+            SetRelicAlbedo(m, RelicAlbedo(2, c));
+            if (m.HasProperty("_Glossiness")) m.SetFloat("_Glossiness", 0.92f);
+            if (m.HasProperty("_Metallic")) m.SetFloat("_Metallic", 0.1f);
+            _relicGems[key] = m;
+            return m;
+        }
+
+        // soft feather white / cream (lit, faint glow so the wings read at night)
+        public static Material RelicFeather(Color c)
+        {
+            int key = Mathf.RoundToInt(c.r * 31f) | (Mathf.RoundToInt(c.g * 31f) << 5) | (Mathf.RoundToInt(c.b * 31f) << 10);
+            Material m;
+            if (_relicFeathers.TryGetValue(key, out m) && m != null) return m;
+            Shader s = RelicShader();
+            if (s == null) { m = SolidMat(c); _relicFeathers[key] = m; return m; }
+            m = NewRelicMaterial(s);
+            SetRelicAlbedo(m, RelicAlbedo(3, c));
+            if (m.HasProperty("_Glossiness")) m.SetFloat("_Glossiness", 0.2f);
+            if (m.HasProperty("_Metallic")) m.SetFloat("_Metallic", 0f);
+            _relicFeathers[key] = m;
+            return m;
+        }
+
+        // Surface of revolution around +Y. prof = (radius, y) listed bottom -> top; a repeated point = hard edge.
+        public static Mesh LatheMesh(List<Vector2> prof, int seg)
+        {
+            int n = prof == null ? 0 : prof.Count;
+            if (n < 2) return null;
+            seg = Mathf.Max(3, seg);
+            Vector3[] v = new Vector3[(seg + 1) * n];
+            Vector3[] nr = new Vector3[v.Length];
+            Vector2[] uv = new Vector2[v.Length];
+            float len = 0f;
+            for (int j = 0; j < n; j++)
+            {
+                if (j > 0) len += (prof[j] - prof[j - 1]).magnitude;
+                Vector2 tp;
+                bool samePrev = j > 0 && (prof[j] - prof[j - 1]).sqrMagnitude < 1e-10f;
+                bool sameNext = j < n - 1 && (prof[j + 1] - prof[j]).sqrMagnitude < 1e-10f;
+                if (j == 0 || samePrev) tp = prof[Mathf.Min(n - 1, j + 1 + (sameNext ? 1 : 0))] - prof[j];
+                else if (j == n - 1 || sameNext) tp = prof[j] - prof[j - 1];
+                else tp = (prof[j + 1] - prof[j]).normalized + (prof[j] - prof[j - 1]).normalized;
+                if (samePrev && j + 1 < n) tp = prof[j + 1] - prof[j];
+                Vector2 pn = new Vector2(tp.y, -tp.x);
+                if (pn.sqrMagnitude < 1e-10f) pn = new Vector2(1f, 0f);
+                pn.Normalize();
+                for (int i = 0; i <= seg; i++)
+                {
+                    float a = (float)i / seg * Mathf.PI * 2f;
+                    float ca = Mathf.Cos(a), sa = Mathf.Sin(a);
+                    v[i * n + j] = new Vector3(prof[j].x * ca, prof[j].y, prof[j].x * sa);
+                    nr[i * n + j] = new Vector3(pn.x * ca, pn.y, pn.x * sa);
+                    uv[i * n + j] = new Vector2((float)i / seg * 2f, len);
+                }
+            }
+            List<int> t = new List<int>();
+            for (int i = 0; i < seg; i++)
+                for (int j = 0; j < n - 1; j++)
+                {
+                    int a0 = i * n + j, a1 = a0 + 1, b0 = (i + 1) * n + j, b1 = b0 + 1;
+                    t.Add(a0); t.Add(a1); t.Add(b0);
+                    t.Add(b0); t.Add(a1); t.Add(b1);
+                }
+            Mesh m = new Mesh();
+            m.vertices = v; m.normals = nr; m.uv = uv; m.triangles = t.ToArray();
+            m.RecalculateBounds();
+            return m;
+        }
+
+        // Tube along a path (parallel-transport frames), radius r0 -> r1, start cap; used for wing arms and gold scrolls.
+        public static Mesh TubeMesh(List<Vector3> path, float r0, float r1, int side)
+        {
+            int n = path == null ? 0 : path.Count;
+            if (n < 2) return null;
+            side = Mathf.Max(3, side);
+            List<Vector3> v = new List<Vector3>();
+            List<Vector3> nr = new List<Vector3>();
+            List<Vector2> uv = new List<Vector2>();
+            List<int> t = new List<int>();
+            Vector3 T0 = (path[1] - path[0]).normalized;
+            Vector3 N = Vector3.Cross(T0, Mathf.Abs(T0.z) < 0.9f ? Vector3.forward : Vector3.up).normalized;
+            for (int j = 0; j < n; j++)
+            {
+                Vector3 T = j == 0 ? T0 : (j == n - 1 ? (path[j] - path[j - 1]).normalized : (path[j + 1] - path[j - 1]).normalized);
+                N = (N - T * Vector3.Dot(N, T)).normalized;
+                if (N.sqrMagnitude < 1e-6f) N = Vector3.Cross(T, Vector3.up).normalized;
+                Vector3 B = Vector3.Cross(T, N);
+                float r = Mathf.Lerp(r0, r1, (float)j / (n - 1));
+                for (int i = 0; i <= side; i++)
+                {
+                    float a = (float)i / side * Mathf.PI * 2f;
+                    Vector3 d = N * Mathf.Cos(a) + B * Mathf.Sin(a);
+                    v.Add(path[j] + d * r); nr.Add(d); uv.Add(new Vector2((float)i / side, (float)j / (n - 1)));
+                }
+            }
+            for (int j = 0; j < n - 1; j++)
+                for (int i = 0; i < side; i++)
+                {
+                    int a0 = j * (side + 1) + i, a1 = a0 + 1, b0 = a0 + side + 1, b1 = b0 + 1;
+                    t.Add(a0); t.Add(a1); t.Add(b0);
+                    t.Add(a1); t.Add(b1); t.Add(b0);
+                }
+            // start cap (the end tapers to a point)
+            int c0 = v.Count;
+            v.Add(path[0]); nr.Add(-T0); uv.Add(new Vector2(0.5f, 0f));
+            for (int i = 0; i < side; i++) { t.Add(c0); t.Add(i + 1); t.Add(i); }
+            // v0.25.202 end cap too (closed solid from every side)
+            int c1 = v.Count, e0 = (n - 1) * (side + 1);
+            v.Add(path[n - 1]); nr.Add((path[n - 1] - path[n - 2]).normalized); uv.Add(new Vector2(0.5f, 1f));
+            for (int i = 0; i < side; i++) { t.Add(c1); t.Add(e0 + i); t.Add(e0 + i + 1); }
+            Mesh m = new Mesh();
+            m.vertices = v.ToArray(); m.normals = nr.ToArray(); m.uv = uv.ToArray(); m.triangles = t.ToArray();
+            m.RecalculateBounds();
+            return m;
+        }
+
+        // Feather blade (CCW, XY): base at the origin, tip at (0, len), widest a third of the way up, slightly asymmetric.
+        public static List<Vector2> FeatherOutline(float len, float wid)
+        {
+            List<Vector2> p = new List<Vector2>();
+            const int k = 7;
+            for (int i = 0; i <= k; i++)
+            {
+                float s = (float)i / k;
+                float w = wid * 0.5f * Mathf.Sin(Mathf.PI * Mathf.Pow(s, 0.62f)) * (0.35f + 0.65f * Mathf.Sqrt(Mathf.Clamp01(1f - s * 0.15f)));
+                p.Add(new Vector2(w * 1.12f, s * len));
+            }
+            for (int i = k - 1; i >= 1; i--)
+            {
+                float s = (float)i / k;
+                float w = wid * 0.5f * Mathf.Sin(Mathf.PI * Mathf.Pow(s, 0.62f)) * (0.35f + 0.65f * Mathf.Sqrt(Mathf.Clamp01(1f - s * 0.15f)));
+                p.Add(new Vector2(-w * 0.88f, s * len));
+            }
+            p.Add(new Vector2(-wid * 0.06f, 0f));
+            p[0] = new Vector2(wid * 0.06f, 0f);
+            return p;
+        }
+
+        // Star / sunburst outline (CCW, XY)
+        public static List<Vector2> StarOutline(int points, float rIn, float rOut)
+        {
+            List<Vector2> p = new List<Vector2>();
+            for (int i = 0; i < points * 2; i++)
+            {
+                float a = Mathf.PI * 0.5f + (float)i / (points * 2) * Mathf.PI * 2f;
+                float r = (i % 2 == 0) ? rOut : rIn;
+                p.Add(new Vector2(Mathf.Cos(a) * r, Mathf.Sin(a) * r));
+            }
+            return p;
+        }
+
+        // One feathered wing (right side, +X) as ONE mesh: three overlapping layers (long flight feathers behind, secondaries,
+        // short rounded coverts in front) hung along a quadratic arm curve P0 (shoulder) -> P1 -> P2 (tip). Feather direction
+        // turns from angShoulder to angTip (degrees, 0 = +X, -90 = straight down), length grows lenShoulder -> lenTip.
+        public static Mesh WingMesh(Vector2 p0, Vector2 p1, Vector2 p2, float angShoulder, float angTip, float lenShoulder, float lenTip, float depth)
+        {
+            List<CombineInstance> parts = new List<CombineInstance>();
+            List<Mesh> temp = new List<Mesh>();
+            float[] lenK = { 1f, 0.66f, 0.36f };
+            float[] widK = { 0.2f, 0.24f, 0.36f };
+            int[] count = { 10, 9, 8 };
+            float[] zOff = { -depth * 1.1f, 0f, depth * 1.1f };
+            for (int layer = 0; layer < 3; layer++)
+            {
+                int c = count[layer];
+                for (int i = 0; i < c; i++)
+                {
+                    float u = c == 1 ? 1f : Mathf.Lerp(0.04f, 1f, (float)i / (c - 1));
+                    if (layer > 0) u = Mathf.Clamp01(u - 0.03f * layer);
+                    Vector2 pt = (1f - u) * (1f - u) * p0 + 2f * (1f - u) * u * p1 + u * u * p2;
+                    float ang = Mathf.Lerp(angShoulder, angTip, Mathf.Pow(u, 0.85f)) + ((i * 37 + layer * 11) % 7 - 3) * 0.6f;
+                    float len = Mathf.Lerp(lenShoulder, lenTip, u * u * (3f - 2f * u)) * lenK[layer];
+                    float wid = len * widK[layer] + lenTip * 0.03f;
+                    Mesh f = ExtrudeBevel(FeatherOutline(len, wid), depth, depth * 0.3f, 1f);
+                    if (f == null) continue;
+                    temp.Add(f);
+                    CombineInstance ci = new CombineInstance();
+                    ci.mesh = f;
+                    ci.transform = Matrix4x4.TRS(new Vector3(pt.x, pt.y, zOff[layer] + i * depth * 0.04f), Quaternion.Euler(0f, 0f, ang - 90f), Vector3.one);
+                    parts.Add(ci);
+                }
+            }
+            Mesh m = new Mesh();
+            m.CombineMeshes(parts.ToArray(), true, true);
+            m.RecalculateBounds();
+            for (int i = 0; i < temp.Count; i++) UnityEngine.Object.Destroy(temp[i]);
+            return m;
+        }
+
+        // planar spiral (scroll curl) path in XY around c: radius r -> r * shrink over `turns`, starting at angle a0 (deg), sign = turn direction
+        public static List<Vector3> ScrollPath(Vector3 c, float r, float shrink, float turns, float a0, float sign)
+        {
+            List<Vector3> p = new List<Vector3>();
+            int n = Mathf.Max(8, Mathf.RoundToInt(turns * 24f));
+            for (int i = 0; i <= n; i++)
+            {
+                float s = (float)i / n;
+                float a = (a0 + sign * s * turns * 360f) * Mathf.Deg2Rad;
+                float rr = r * Mathf.Lerp(1f, shrink, s);
+                p.Add(c + new Vector3(Mathf.Cos(a) * rr, Mathf.Sin(a) * rr, 0f));
+            }
+            return p;
+        }
+
+        // Texture tiling per block so the stone grain keeps its scale on long beams (shared material, property block).
+        public static void RelicTile(Renderer r, float sx, float sy)
+        {
+            if (r == null) return;
+            MaterialPropertyBlock b = new MaterialPropertyBlock();
+            r.GetPropertyBlock(b);
+            b.SetVector("_MainTex_ST", new Vector4(Mathf.Max(0.2f, sx), Mathf.Max(0.2f, sy), 0f, 0f));
+            r.SetPropertyBlock(b);
+        }
+
+        // A narrow streak + displaced air following a falling / thrown object while keep() holds (relic descent, hammer).
+        public static GameObject AirStreak(Transform follow, Color c, float width, float seconds, Func<bool> keep)
+        {
+            if (!Enabled || follow == null) return null;
+            Material core = Mat(LineTex(), true), air = Mat(LineTex(), false);
+            if (core == null || air == null) return null;
+            GameObject go = new GameObject("IH_AirStreak");
+            go.transform.SetParent(follow, false);
+            Color cc = Color.Lerp(c, Color.white, 0.4f); cc.a = 0.55f;
+            Color ac = Color.Lerp(c, new Color(0.86f, 0.88f, 0.90f, 1f), 0.7f); ac.a = 0.16f;
+            TrailRenderer a = StreakTrail(go.transform, air, ac, Mathf.Max(0.1f, width * 2.6f), seconds * 1.4f);
+            TrailRenderer b = StreakTrail(go.transform, core, cc, Mathf.Max(0.03f, width * 0.35f), seconds);
+            DragonStreakLife life = go.AddComponent<DragonStreakLife>();
+            life.Keep = keep; life.Trails = new TrailRenderer[] { a, b };
+            return go;
+        }
+
+        private static TrailRenderer StreakTrail(Transform parent, Material m, Color c, float width, float time)
+        {
+            GameObject g = new GameObject("trail");
+            g.transform.SetParent(parent, false);
+            TrailRenderer tr = g.AddComponent<TrailRenderer>();
+            tr.time = Mathf.Max(0.1f, time);
+            tr.minVertexDistance = 0.1f;
+            tr.widthMultiplier = width;
+            AnimationCurve wc = new AnimationCurve(); wc.AddKey(0f, 1f); wc.AddKey(1f, 0f);
+            tr.widthCurve = wc;
+            Gradient gr = new Gradient();
+            Color c1 = c; c1.a = 0f;
+            gr.SetKeys(new GradientColorKey[] { new GradientColorKey(c, 0f), new GradientColorKey(c1, 1f) },
+                       new GradientAlphaKey[] { new GradientAlphaKey(c.a, 0f), new GradientAlphaKey(0f, 1f) });
+            tr.colorGradient = gr;
+            tr.sharedMaterial = m;
+            tr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            tr.receiveShadows = false;
+            tr.numCapVertices = 2;
+            return tr;
+        }
+
+        // Relic expiry: its internal light releases upward in a few small fragments + a little settling dust at the foot.
+        public static void RelicRelease(Vector3 foot, Vector3 up, float height, Color c)
+        {
+            if (!Enabled) return;
+            DragonVfxLife l = Host(foot + up * height * 0.45f, 2.6f, "relic_release");
+            l.transform.rotation = Quaternion.FromToRotation(Vector3.up, up);
+            Color m = Color.Lerp(new Color(0.98f, 0.94f, 0.84f, 1f), c, 0.3f); m.a = 0.7f;
+            Particles(l.transform, m, Mathf.RoundToInt(8 + height * 0.8f), 0f, 0.3f, 1.6f, 0.4f, 1.2f, 0.05f, 0.11f, -0.25f,
+                ParticleSystemShapeType.Box, height * 0.35f, Vector3.zero, false, true);
+            DragonVfxLife d = Host(GroundPoint(foot) + Vector3.up * 0.15f, 2.4f, "relic_dust");
+            Particles(d.transform, new Color(0.55f, 0.50f, 0.43f, 0.35f), 8, 0f, 0.2f, 1.6f, 0.3f, 0.9f, 0.5f, 1.1f, -0.02f,
+                ParticleSystemShapeType.Circle, Mathf.Max(0.4f, height * 0.06f), new Vector3(90f, 0f, 0f), false, false);
+        }
+
+        // ------------------------------------------------------------------ v0.25.180 slash ribbon assets
+        private static readonly System.Random _vrng = new System.Random(1801);
+        private static float VR() { return (float)_vrng.NextDouble(); }
+        private static Quaternion VRot() { return Quaternion.Euler(VR() * 360f, VR() * 360f, VR() * 360f); }
+
+        private static Texture2D _slashTex;
+        // Broken, streaky slash surface: v = 0 inner (feathered) .. 1 outer (dense near the cutting edge); u repeats
+        // seamlessly along the blade so a scrolling uv reads as wind flowing over the surface.
+        private static Texture2D SlashTex()
+        {
+            if (_slashTex == null) _slashTex = MakeTex(96, 32, delegate(float u, float v)
+            {
+                float ang = u * Mathf.PI * 2f;
+                float n = Fbm(Mathf.Cos(ang) * 1.6f + 4f, Mathf.Sin(ang) * 1.6f + v * 2.2f + 4f, 41);
+                float streak = Fbm(Mathf.Cos(ang) * 3.2f + 9f, Mathf.Sin(ang) * 3.2f + v * 9f, 43);
+                float across = Mathf.Pow(Mathf.Clamp01(v), 1.4f) * Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((1f - v) / 0.08f));
+                float broken = Mathf.Clamp01((n * 0.6f + streak * 0.6f - 0.32f) * 1.9f);
+                return Mathf.Clamp01(across * (0.25f + 0.75f * broken));
+            }, TextureWrapMode.Repeat);
+            return _slashTex;
+        }
+
+        // A bowed ribbon along an arc in the local XY plane (around +Z, centred on +Y): radius r, span in degrees, width
+        // across (radial), cup = out-of-plane bow of the cross-section (fraction of the width), centre = where the arc
+        // radius sits across the band (1 = outer edge on the arc). Tapered + frayed ends. uv.x 0..1 along, uv.y 0 inner..1 outer.
+        private static Mesh ArcRibbon(float r, float span, float width, float cup, float centre, Color outer, Color inner, int n, int seed)
+        {
+            const int rows = 3;
+            Vector3[] v = new Vector3[(n + 1) * rows];
+            Vector2[] uv = new Vector2[v.Length];
+            Color[] cols = new Color[v.Length];
+            for (int i = 0; i <= n; i++)
+            {
+                float t = (float)i / n;
+                float a = Mathf.Lerp(-span * 0.5f, span * 0.5f, t) * Mathf.Deg2Rad;
+                Vector3 d = new Vector3(Mathf.Sin(a), Mathf.Cos(a), 0f);
+                float taper = Mathf.Pow(Mathf.Max(0f, Mathf.Sin(t * Mathf.PI)), 0.7f);
+                float w = width * (taper * 0.96f + 0.04f);
+                float fray = Mathf.Clamp01(Mathf.Sin(t * Mathf.PI) * 1.8f) * (0.7f + 0.3f * Noise(t * 9f, 0.5f, seed));
+                for (int j = 0; j < rows; j++)
+                {
+                    float sj = (float)j / (rows - 1);
+                    float x = (sj * 2f - 1f);
+                    v[i * rows + j] = d * (r + (sj - centre) * w) + Vector3.forward * cup * w * (1f - x * x);
+                    uv[i * rows + j] = new Vector2(t, sj);
+                    Color c = Color.Lerp(inner, outer, sj); c.a *= fray;
+                    cols[i * rows + j] = c;
+                }
+            }
+            int[] tri = new int[n * (rows - 1) * 12];
+            int k = 0;
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < rows - 1; j++)
+                {
+                    int p = i * rows + j, q = p + rows;
+                    tri[k++] = p; tri[k++] = q; tri[k++] = p + 1; tri[k++] = p + 1; tri[k++] = q; tri[k++] = q + 1;
+                    tri[k++] = p; tri[k++] = p + 1; tri[k++] = q; tri[k++] = p + 1; tri[k++] = q + 1; tri[k++] = q;
+                }
+            Mesh m = new Mesh();
+            m.vertices = v; m.uv = uv; m.colors = cols; m.triangles = tri;
+            m.RecalculateBounds();
+            return m;
+        }
+
+        private static DragonCutRibbon CutRibbon(Transform parent, Quaternion rot, Vector3 pos, Mesh mesh, Material mat, float delay, float hold, float fade, float flow, float shear, float tile)
+        {
+            if (mesh == null || mat == null) return null;
+            GameObject go = new GameObject("IH_Cut");
+            go.transform.SetParent(parent, false);
+            go.transform.localRotation = rot;
+            go.transform.localPosition = pos;
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            MeshRenderer mr = go.AddComponent<MeshRenderer>();
+            mr.sharedMaterial = mat;
+            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            mr.receiveShadows = false;
+            DragonCutRibbon c = go.AddComponent<DragonCutRibbon>();
+            c.Mesh = mesh; c.Delay = delay; c.Hold = hold; c.Fade = fade; c.Flow = flow; c.Shear = shear; c.Tile = tile;
+            return c;
         }
 
         // A standing crescent that appears, holds and fades (big swings: Halfmoon, Eclipse afterimage slashes).
@@ -11004,7 +20117,7 @@ namespace DragonsAltarCombat
             GameObject go = new GameObject("IH_CrescentFlash");
             go.transform.position = pos;
             go.transform.rotation = Quaternion.LookRotation(f.normalized, Vector3.up);
-            CrescentBlade(go.transform, c, radius, width, roll);
+            CrescentBlade(go.transform, c, radius, width, roll, false);   // v0.25.181 stationary: no trail renderers
             DragonFadeOut fo = go.AddComponent<DragonFadeOut>();
             fo.Hold = hold; fo.Fade = fade; fo.Grow = grow;
             return go;
@@ -11028,7 +20141,7 @@ namespace DragonsAltarCombat
                 float a = Mathf.Lerp(-span, span, t) * Mathf.Deg2Rad;
                 Vector3 d = new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a));
                 // crescent: thickest in the middle, needle-thin tips; the band is centred on the arc
-                float w = width * Mathf.Pow(Mathf.Sin(t * Mathf.PI), 0.8f) + width * 0.04f;
+                float w = width * Mathf.Pow(Mathf.Max(0f, Mathf.Sin(t * Mathf.PI)), 0.8f) + width * 0.04f;
                 v[i * 2] = d * (radius - w * 0.5f);
                 v[i * 2 + 1] = d * (radius + w * 0.5f);
                 uv[i * 2] = new Vector2(t, 0f); uv[i * 2 + 1] = new Vector2(t, 1f);
@@ -11102,27 +20215,50 @@ namespace DragonsAltarCombat
             if (r != null && m != null) { r.sharedMaterial = m; r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; }
         }
 
+        private static Material WindVeilMat()
+        {
+            if (_windVeilMat != null) return _windVeilMat;
+            if (_windVeilTex == null) _windVeilTex = MakeTex(128, 64, delegate(float u, float v)
+            {
+                // broken horizontal wind streaks (along the dome's longitude) with open gaps; fades out at the poles
+                float band = Mathf.Abs(Mathf.Sin(v * Mathf.PI * 7f + Noise(u * 3f, v * 2f, 41) * 2.5f));
+                float streak = Mathf.Pow(band, 6f) * Mathf.Clamp01(Noise(u * 6f, v * 9f, 43) * 1.8f - 0.55f);
+                float pole = Mathf.Clamp01(Mathf.Sin(v * Mathf.PI) * 1.6f);
+                return Mathf.Clamp01(streak * pole);
+            }, TextureWrapMode.Repeat);
+            Material baseMat = Mat(_windVeilTex, false);
+            if (baseMat == null) return null;
+            _windVeilMat = new Material(baseMat);
+            _windVeilMat.mainTexture = _windVeilTex;
+            if (_windVeilMat.HasProperty("_TintColor")) _windVeilMat.SetColor("_TintColor", new Color(0.46f, 0.52f, 0.48f, 0.22f));
+            else _windVeilMat.color = new Color(0.9f, 1f, 0.92f, 0.22f);
+            return _windVeilMat;
+        }
+
         // Neji's Rotation for Furious Winds: a spinning dome of green wind (veil + tilted crescent rings).
         public static void WindDome(Transform parent, Color c, float radius)
         {
             if (!Enabled || parent == null) return;
-            Shader sh = Shader.Find("Sprites/Default");
-            if (sh != null)
+            // v0.25.182 (user: keep the Neji dome, subtle, with wind): a faint dome shell made of broken wind streaks that flow
+            // around it (one shared cached material + the built-in sphere mesh: no per-cast textures/materials)
+            Material vm = WindVeilMat();
+            if (vm != null)
             {
                 GameObject s = GameObject.CreatePrimitive(PrimitiveType.Sphere);
                 Collider col = s.GetComponent<Collider>();
                 if (col != null) UnityEngine.Object.Destroy(col);
+                s.name = "windVeil";
                 s.transform.SetParent(parent, false);
-                s.transform.localPosition = Vector3.up * radius * 0.15f;
-                s.transform.localScale = new Vector3(radius * 2f, radius * 1.5f, radius * 2f);
+                s.transform.localPosition = Vector3.up * radius * 0.1f;
+                s.transform.localScale = new Vector3(radius * 2f, radius * 1.4f, radius * 2f);
                 Renderer r = s.GetComponent<Renderer>();
-                r.material = new Material(sh);
-                Color veil = c; veil.a = 0.16f;
-                r.material.color = veil;
+                r.sharedMaterial = vm;
                 r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                r.receiveShadows = false;
+                s.AddComponent<DragonRotate>().Speed = new Vector3(0f, -240f, 0f);   // streaks drift against the storm's spin
             }
-            Color body = c; body.a = 0.7f;
-            Color core = Color.Lerp(c, Color.white, 0.6f); core.a = 1f;
+            Color body = Color.Lerp(c, new Color(0.88f, 0.92f, 0.88f, 1f), 0.4f); body.a = 0.22f;   // v0.25.180 translucent wind strands (v0.25.182 subtler)
+            Color core = Color.Lerp(c, Color.white, 0.6f); core.a = 0.28f;
             float[] tilts = { 0f, 35f, -35f, 70f };
             for (int i = 0; i < tilts.Length; i++)
             {
@@ -11132,7 +20268,12 @@ namespace DragonsAltarCombat
                 ring.transform.localRotation = Quaternion.Euler(tilts[i], i * 47f, 0f);
                 CrescentLayer(ring.transform, body, radius * (0.85f - i * 0.08f), radius * 0.12f, 0f, 170f, Quaternion.identity, false);
                 CrescentLayer(ring.transform, core, radius * (0.85f - i * 0.08f), radius * 0.04f, 0f, 165f, Quaternion.identity, true);
+                // v0.25.181 (user: layered rotating airflow): each strand also turns about its own tilted axis, alternating
+                // direction, so the layers visibly shear past each other through the open gaps
+                DragonRotate dr = ring.AddComponent<DragonRotate>();
+                dr.Speed = new Vector3(0f, (i % 2 == 0) ? -420f : 260f, 0f);
             }
+            GroundDust(parent, Mathf.Min(6f, radius * 1.6f), delegate { return parent != null; }, 0.8f);
         }
 
         // ------------------------------------------------------------------ themed presets
@@ -11170,18 +20311,18 @@ namespace DragonsAltarCombat
 
         public static void HitImpact(Character target, HitData hit)
         {
-            if (!Enabled || target == null || hit == null) return;
+            if (!Enabled || MuteHitImpact || target == null || hit == null) return;
             int id = target.GetInstanceID();
             float next;
             if (_impactNext.TryGetValue(id, out next) && Time.time < next) return;
             if (_impactNext.Count > 400) _impactNext.Clear();
-            _impactNext[id] = Time.time + 0.15f;
+            _impactNext[id] = Time.time + 0.2f;   // v0.25.150 (was 0.15)
             float sl = hit.m_damage.m_slash, bl = hit.m_damage.m_blunt, pi = hit.m_damage.m_pierce, fi = hit.m_damage.m_fire,
                   fr = hit.m_damage.m_frost, li = hit.m_damage.m_lightning, po = hit.m_damage.m_poison, sp = hit.m_damage.m_spirit;
             float total = Mathf.Max(0.01f, bl + sl + pi + fi + fr + li + po + sp);
             if (total < 0.5f) return;
             Vector3 pos = target.transform.position + Vector3.up * 1.0f;
-            float size = Mathf.Clamp(Mathf.Sqrt(total) * 0.12f, 0.5f, 2.2f);   // bigger hits, bigger sparks
+            float size = Mathf.Clamp(Mathf.Sqrt(total) * 0.11f, 0.5f, 1.8f);   // bigger hits, bigger sparks (v0.25.150 cap 1.8)
             float best = sl; int kind = 0;
             if (bl > best) { best = bl; kind = 1; }
             if (pi > best) { best = pi; kind = 2; }
@@ -11190,7 +20331,7 @@ namespace DragonsAltarCombat
             if (li > best) { best = li; kind = 5; }
             if (po > best) { best = po; kind = 6; }
             if (sp > best) { best = sp; kind = 7; }
-            int n = Mathf.RoundToInt(12f * size * Amount);
+            int n = Mathf.RoundToInt(9f * size * Amount);
             switch (kind)
             {
                 case 0:   // slash: white-hot cut streaks
@@ -11200,26 +20341,26 @@ namespace DragonsAltarCombat
                 case 1:   // blunt: dust puff + rock chips
                     Burst(pos, new Color(0.85f, 0.78f, 0.65f, 1f), n, 4f, 0.25f, 0.5f, 0.8f);
                     Smoke(pos - Vector3.up * 0.5f, new Color(0.55f, 0.5f, 0.45f, 0.45f), 0.6f * size, 0.8f, 4);
-                    if (size > 1.4f) Shake(pos, 12f, 0.4f);
+                    if (size > 1.6f) Shake(pos, 12f, 0.4f);
                     break;
                 case 2:   // pierce: a short sharp spray straight through
                     Burst(pos, new Color(1f, 0.95f, 0.8f, 1f), n, 10f, 0.08f, 0.25f, 0.2f);
                     break;
                 case 3:   // fire: ember spray + flare
                     Burst(pos, new Color(1f, 0.55f, 0.15f, 1f), n + 6, 6f, 0.2f, 0.6f, -0.4f);
-                    Flash(pos, new Color(1f, 0.5f, 0.2f, 1f), 1.6f, 3f + size, 0.25f);
+                    Flash(pos, new Color(1f, 0.5f, 0.2f, 1f), 1.0f, 2.5f + size, 0.2f);
                     break;
                 case 4:   // frost: crystal shards
                     Burst(pos, new Color(0.8f, 0.95f, 1f, 1f), n, 6f, 0.15f, 0.5f, 1.2f);
                     Debris(pos, new Color(0.7f, 0.92f, 1f, 1f), Mathf.Max(2, Mathf.RoundToInt(2 * size)), 4f, 0.08f, 1.2f);
                     break;
                 case 5:   // lightning: arcs jumping off the target
-                    for (int i = 0; i < 2; i++)
+                    for (int i = 0; i < 1; i++)   // v0.25.167 one arc (was 2)
                     {
                         Vector3 o = UnityEngine.Random.onUnitSphere * (0.9f + size * 0.4f);
                         Bolt(pos, pos + o, new Color(0.55f, 0.9f, 1f, 1f), 0.06f, 0.15f);
                     }
-                    Flash(pos, new Color(0.55f, 0.85f, 1f, 1f), 1.8f, 3f + size, 0.15f);
+                    Flash(pos, new Color(0.55f, 0.85f, 1f, 1f), 1.1f, 2.5f + size, 0.15f);
                     break;
                 case 6:   // poison: green bubbling puff
                     Smoke(pos, new Color(0.45f, 0.85f, 0.3f, 0.5f), 0.5f * size, 1f, 5);
@@ -11227,7 +20368,7 @@ namespace DragonsAltarCombat
                     break;
                 default:  // spirit: holy motes rising + soft ring
                     Burst(pos, new Color(1f, 0.93f, 0.7f, 1f), n, 4f, 0.15f, 0.7f, -0.6f);
-                    Flash(pos, new Color(1f, 0.9f, 0.6f, 1f), 1.4f, 3f + size, 0.2f);
+                    Flash(pos, new Color(1f, 0.9f, 0.6f, 1f), 0.9f, 2.5f + size, 0.18f);
                     break;
             }
         }
@@ -11285,7 +20426,7 @@ namespace DragonsAltarCombat
                     if (kind == "freeze")
                     {
                         IceBurst(t.transform.position, Mathf.Clamp(w * 1.4f, 0.8f, 3f));
-                        Flash(t.transform.position + Vector3.up * h * 0.5f, new Color(0.6f, 0.9f, 1f, 1f), 1.6f, 4f, 0.4f);
+                        Flash(t.transform.position + Vector3.up * h * 0.5f, new Color(0.6f, 0.9f, 1f, 1f), 1.0f, 3f, 0.25f);
                     }
                     break;
                 case "expose":
@@ -11312,12 +20453,11 @@ namespace DragonsAltarCombat
                 case "fireburn":
                     if (!StatusGate(t, kind, 0.5f)) return;
                     Embers(t.transform.position + Vector3.up * h * 0.4f, new Color(1f, 0.5f, 0.12f, 1f), w, 0.55f, 40f * Amount);
-                    Flash(t.transform.position + Vector3.up * h * 0.5f, new Color(1f, 0.45f, 0.15f, 1f), 0.9f, 2.5f + w, 0.25f);
+                    // v0.25.150: no light flash on every burn tick (embers carry it)
                     break;
                 case "spiritburn":
                     if (!StatusGate(t, kind, 0.5f)) return;
                     Embers(t.transform.position + Vector3.up * h * 0.4f, new Color(1f, 0.95f, 0.75f, 1f), w, 0.55f, 34f * Amount);
-                    Flash(t.transform.position + Vector3.up * h * 0.5f, new Color(1f, 0.9f, 0.6f, 1f), 0.8f, 2.5f + w, 0.25f);
                     break;
             }
         }
@@ -11406,15 +20546,45 @@ namespace DragonsAltarCombat
         }
 
         // Glacial Descent: a huge cut diamond of ice, point down, spinning slowly, frost streaming behind it.
+        // v0.25.205 (user: more texture and depth, a crystal with glistening parts): a lit glossy ice core inside a
+        // translucent faceted shell, smaller crystals growing off its base, and star glints flashing over the facets.
+        private static Texture2D _glintTex;
+        private static Texture2D GlintTex()
+        {
+            if (_glintTex == null) _glintTex = MakeTex(64, 64, delegate(float u, float v)
+            {
+                float dx = Mathf.Abs(u - 0.5f) * 2f, dy = Mathf.Abs(v - 0.5f) * 2f;
+                float star = Mathf.Max(Mathf.Exp(-(dx * 18f + dy * 2.2f)), Mathf.Exp(-(dy * 18f + dx * 2.2f)));
+                float core = Mathf.Exp(-(dx * dx + dy * dy) * 30f);
+                return Mathf.Clamp01((star + core) * Mathf.Clamp01(1f - Mathf.Sqrt(dx * dx + dy * dy)));
+            }, TextureWrapMode.Clamp);
+            return _glintTex;
+        }
+
         public static GameObject IceDiamond(Vector3 pos, float size)
         {
             if (!Enabled) return null;
             GameObject root = new GameObject("IH_IceDiamond");
             root.transform.position = pos;
             float h = size * 1.35f, w = size * 0.8f;
-            MeshObject("body", DiamondMesh(h, w, new Color(0.70f, 0.93f, 1f, 0.78f)), ClearMat(), root.transform);
-            GameObject core = MeshObject("core", DiamondMesh(h * 0.55f, w * 0.55f, new Color(0.85f, 0.97f, 1f, 0.55f)), Mat(WhiteTex(), true), root.transform);
-            core.transform.localPosition = new Vector3(0f, -h * 0.05f, 0f);
+            Material ice = NaturalMat(new Color(0.66f, 0.90f, 1f, 0.9f));   // lit glossy ice (catches the light = glints)
+            MeshObject("core", DiamondMesh(h * 0.82f, w * 0.78f, Color.white), ice, root.transform);
+            MeshObject("body", DiamondMesh(h, w, new Color(0.70f, 0.93f, 1f, 0.5f)), ClearMat(), root.transform);
+            GameObject inner = MeshObject("inner", DiamondMesh(h * 0.5f, w * 0.5f, new Color(0.85f, 0.97f, 1f, 0.4f)), Mat(WhiteTex(), true), root.transform);
+            inner.transform.localPosition = new Vector3(0f, -h * 0.05f, 0f);
+            // smaller crystals growing off the upper body, tilted outward
+            for (int i = 0; i < 4; i++)
+            {
+                float a = i * 90f + 20f;
+                GameObject sat = MeshObject("shard", DiamondMesh(h * (0.42f + 0.08f * (i % 2)), w * 0.32f, Color.white), ice, root.transform);
+                sat.transform.localRotation = Quaternion.Euler(0f, a, 0f) * Quaternion.Euler(0f, 0f, 38f);
+                sat.transform.localPosition = Quaternion.Euler(0f, a, 0f) * new Vector3(w * 0.28f, h * 0.18f, 0f);
+            }
+            // glistening: short star glints popping over the crystal
+            ParticleSystem glints = Particles(root.transform, Color.white, 0, 26f, 30f, 0.22f, 0f, 0.05f, size * 0.12f, size * 0.32f, 0f,
+                ParticleSystemShapeType.Sphere, w * 0.55f, Vector3.zero, false, true);
+            Material gm = Mat(GlintTex(), true); if (gm != null) glints.GetComponent<ParticleSystemRenderer>().sharedMaterial = gm;
+            ParticleSystem.MainModule glm = glints.main; glm.loop = true; glm.simulationSpace = ParticleSystemSimulationSpace.Local; glm.startColor = new ParticleSystem.MinMaxGradient(Color.white, new Color(0.8f, 0.95f, 1f, 1f));
             DragonRotate rot = root.AddComponent<DragonRotate>();
             rot.Speed = new Vector3(0f, 55f, 0f);
             AttachGlow(root.transform, new Color(0.70f, 0.94f, 1f, 1f), w * 0.45f, 50f, Mathf.Max(6f, size * 1.6f));
@@ -11433,8 +20603,194 @@ namespace DragonsAltarCombat
             Flash(pos + Vector3.up, new Color(0.65f, 0.92f, 1f, 1f), 4f, 6f + size * 2f, 0.4f);
         }
 
+        // v0.25.180 curved inward paths: orbital velocity around the system's local Y (world up for ground emitters).
+        private static void Swirl(ParticleSystem ps, float orbit)
+        {
+            if (ps == null) return;
+            ParticleSystem.VelocityOverLifetimeModule vel = ps.velocityOverLifetime;
+            vel.enabled = true;
+            vel.space = ParticleSystemSimulationSpace.Local;
+            vel.x = new ParticleSystem.MinMaxCurve(0f);
+            vel.y = new ParticleSystem.MinMaxCurve(0f);
+            vel.z = new ParticleSystem.MinMaxCurve(0f);
+            vel.orbitalX = new ParticleSystem.MinMaxCurve(0f);
+            vel.orbitalY = new ParticleSystem.MinMaxCurve(orbit * 0.7f, orbit);
+            vel.orbitalZ = new ParticleSystem.MinMaxCurve(0f);
+        }
+
+        private static Material _darkCore;
+        private static Material DarkCoreMat()
+        {
+            if (_darkCore != null) return _darkCore;
+            Shader s = Shader.Find("Sprites/Default");
+            if (s == null) return SolidMat(new Color(0.02f, 0.01f, 0.04f, 1f));
+            _darkCore = new Material(s);
+            _darkCore.color = new Color(0.03f, 0.01f, 0.06f, 0.8f);
+            return _darkCore;
+        }
+
+        // Gravity Blast travelling orb: dark partly transparent core + narrow bent rim + a disturbed-air wake trailing it
+        // (the inward strands / lifted soil come from GravityWell following it). Visual only; the caller moves/destroys it.
+        public static GameObject GravityOrb(Vector3 pos, float size)
+        {
+            GameObject root = new GameObject("IH_GravityOrb");
+            root.transform.position = pos;
+            if (!Enabled) return root;
+            float core = Mathf.Max(0.2f, size * 0.5f);
+            GameObject ball = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            Collider col = ball.GetComponent<Collider>(); if (col != null) UnityEngine.Object.Destroy(col);
+            ball.transform.SetParent(root.transform, false);
+            ball.transform.localScale = Vector3.one * core * 2f;
+            Renderer br = ball.GetComponent<Renderer>();
+            GravityDress(root.transform, br, core);   // v0.25.205
+            GameObject keep = root;
+            AirStreak(root.transform, new Color(0.55f, 0.45f, 0.75f, 1f), core * 1.2f, 0.45f, delegate { return keep != null && keep.activeInHierarchy; });
+            return root;
+        }
+
+        // Gravity Blast end: the orb's pull collapses inward (dark core shrinking, strands rushing in) then a compact
+        // burst of local dust - an inward collapse, not an expanding flash sphere.
+        public static void GravityCollapse(Vector3 center, float radius)
+        {
+            if (!Enabled) return;
+            radius = Mathf.Clamp(radius, 1f, 20f);
+            GameObject root = new GameObject("IH_GravityCollapse");
+            root.transform.position = center;
+            GameObject ball = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            Collider col = ball.GetComponent<Collider>(); if (col != null) UnityEngine.Object.Destroy(col);
+            ball.transform.SetParent(root.transform, false);
+            ball.transform.localScale = Vector3.one * Mathf.Min(2.5f, radius * 0.3f);
+            Renderer br = ball.GetComponent<Renderer>();
+            Material dark = DarkCoreMat();
+            if (br != null && dark != null) { br.sharedMaterial = dark; br.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; }
+            DragonBlackHole bh = root.AddComponent<DragonBlackHole>();
+            bh.Life = 0.05f;   // pops in, then collapses over 0.3 s
+            DragonVfxLife l = Host(center, 1.4f, "gravity_collapse");
+            float life = 0.35f;
+            ParticleSystem inward = Particles(l.transform, new Color(0.78f, 0.74f, 0.86f, 0.4f), 26, 0f, 0.05f, life, -radius / life * 1.0f, -radius / life * 0.8f, 0.03f, 0.06f, 0f,
+                ParticleSystemShapeType.Sphere, radius, Vector3.zero, true, false);
+            ParticleSystem.ShapeModule ish = inward.shape; ish.radiusThickness = 0.05f;
+            Swirl(inward, 3f);
+        }
+
         // Gravity Dominion: a black hole hanging over the well - a pitch-black core, a shimmering event-horizon
         // rim and two tilted accretion disks spiralling around it.
+        // v0.25.205 (user ref: pixel black hole - black ball, strong WHITE rim, PURPLE outlines, rings circling it, visible
+        // from any angle): shared look for Gravity Dominion's black hole and Gravity Blast's orb.
+        //  - core: opaque black;
+        //  - rim + outline: camera-facing halos (always seen whole): a bright white ring hugging the ball and a ragged,
+        //    wavy purple outline around it;
+        //  - 3 orbit rings: real 3D tubes (thickness, so never invisible edge-on), tilted on different axes, each brighter
+        //    toward its head like a streak, spinning around the ball.
+        private static Material _blackCore;
+        private static Texture2D _gravRimTex, _gravOutlineTex;
+        private static Material BlackCoreMat()
+        {
+            if (_blackCore != null) return _blackCore;
+            Shader s = Shader.Find("Sprites/Default");
+            if (s == null) return SolidMat(new Color(0f, 0f, 0f, 1f));
+            _blackCore = new Material(s); _blackCore.color = new Color(0f, 0f, 0f, 1f);
+            return _blackCore;
+        }
+        private static Texture2D GravRimTex()
+        {
+            if (_gravRimTex == null) _gravRimTex = MakeTex(128, 128, delegate(float u, float v)
+            {
+                float r = Rad(u, v);   // ball edge at r = 0.55
+                float inner = Mathf.Exp(-Mathf.Pow((r - 0.56f) / 0.035f, 2f));
+                float glow = Mathf.Exp(-Mathf.Pow((r - 0.58f) / 0.12f, 2f)) * 0.55f;
+                return r < 0.5f ? 0f : Mathf.Clamp01(inner + glow);
+            }, TextureWrapMode.Clamp);
+            return _gravRimTex;
+        }
+        private static Texture2D GravOutlineTex()
+        {
+            if (_gravOutlineTex == null) _gravOutlineTex = MakeTex(128, 128, delegate(float u, float v)
+            {
+                float r = Rad(u, v);
+                float ang = Mathf.Atan2(v - 0.5f, u - 0.5f);
+                float wave = 0.025f * Mathf.Sin(ang * 3f + Fbm(u * 3f, v * 3f, 501) * 5f) + 0.045f * (Fbm(u * 7f, v * 7f, 503) - 0.5f);
+                float band = Mathf.Exp(-Mathf.Pow((r - (0.70f + wave)) / 0.045f, 2f));
+                float wisp = Mathf.Exp(-Mathf.Pow((r - (0.80f + wave * 1.8f)) / 0.025f, 2f)) * 0.7f * Mathf.Clamp01(Fbm(u * 6f, v * 6f, 507) * 2.2f - 0.7f);
+                return r < 0.6f ? 0f : Mathf.Clamp01(band + wisp);
+            }, TextureWrapMode.Clamp);
+            return _gravOutlineTex;
+        }
+        private static Mesh HaloQuad(Color c)
+        {
+            Mesh m = new Mesh();
+            m.vertices = new Vector3[] { new Vector3(-0.5f, -0.5f, 0f), new Vector3(0.5f, -0.5f, 0f), new Vector3(-0.5f, 0.5f, 0f), new Vector3(0.5f, 0.5f, 0f) };
+            m.uv = new Vector2[] { new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0f, 1f), new Vector2(1f, 1f) };
+            m.colors = new Color[] { c, c, c, c };
+            m.triangles = new int[] { 0, 2, 1, 1, 2, 3, 0, 1, 2, 1, 3, 2 };
+            m.RecalculateBounds();
+            return m;
+        }
+        private static Mesh OrbitRingMesh(float radius, float tube, Color head, Color tail)
+        {
+            const int seg = 64, side = 8;
+            Vector3[] v = new Vector3[(seg + 1) * (side + 1)];
+            Color[] cs = new Color[v.Length];
+            for (int i = 0; i <= seg; i++)
+            {
+                float f = (float)i / seg, a = f * Mathf.PI * 2f;
+                Vector3 c = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                Color col = Color.Lerp(tail, head, Mathf.Pow(f, 1.6f));
+                for (int j = 0; j <= side; j++)
+                {
+                    float b = (float)j / side * Mathf.PI * 2f;
+                    v[i * (side + 1) + j] = c * (radius + Mathf.Cos(b) * tube) + Vector3.up * Mathf.Sin(b) * tube;
+                    cs[i * (side + 1) + j] = col;
+                }
+            }
+            int[] t = new int[seg * side * 6]; int k = 0;
+            for (int i = 0; i < seg; i++)
+                for (int j = 0; j < side; j++)
+                {
+                    int p0 = i * (side + 1) + j, p1 = p0 + side + 1;
+                    t[k++] = p0; t[k++] = p0 + 1; t[k++] = p1; t[k++] = p0 + 1; t[k++] = p1 + 1; t[k++] = p1;
+                }
+            Mesh m = new Mesh(); m.vertices = v; m.colors = cs; m.triangles = t; m.RecalculateBounds();
+            return m;
+        }
+        private static readonly Mesh[] _gravityHalos209 = new Mesh[2], _gravityOrbits209 = new Mesh[3];
+        private static readonly float[] GravityTilt209 = { 18f, -34f, 62f }, GravityYaw209 = { 0f, 70f, 140f },
+            GravityRadius209 = { 1.55f, 1.85f, 1.35f }, GravitySpeed209 = { 190f, -150f, 240f };
+        private static Mesh GravityHalo209(int i)
+        {
+            if (_gravityHalos209[i] == null) _gravityHalos209[i] = HaloQuad(i == 0 ? new Color(1f, 0.97f, 1f, 1f) : new Color(0.72f, 0.35f, 1f, 1f));
+            return _gravityHalos209[i];
+        }
+        private static Mesh GravityOrbit209(int i)
+        {
+            if (_gravityOrbits209[i] == null) _gravityOrbits209[i] = OrbitRingMesh(GravityRadius209[i], 0.055f,
+                new Color(0.95f, 0.85f, 1f, 0.95f), new Color(0.45f, 0.15f, 0.75f, 0.05f));
+            return _gravityOrbits209[i];
+        }
+
+        private static void GravityDress(Transform root, Renderer core, float coreR)
+        {
+            Material black = BlackCoreMat();
+            if (core != null && black != null) { core.sharedMaterial = black; core.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; }
+            // halos (camera-facing): white rim hugging the ball, ragged purple outline outside it
+            float rimSize = coreR * 2f / 0.55f;
+            GameObject rim = MeshObject("rimHalo", GravityHalo209(0), Mat(GravRimTex(), true), root);
+            rim.transform.localScale = Vector3.one * rimSize; rim.AddComponent<DragonFaceCamera>();
+            GameObject outline = MeshObject("outlineHalo", GravityHalo209(1), Mat(GravOutlineTex(), true), root);
+            outline.transform.localScale = Vector3.one * rimSize; outline.AddComponent<DragonFaceCamera>();
+            // orbit rings: tilted 3D tubes spinning around the ball
+            for (int i = 0; i < 3; i++)
+            {
+                GameObject pivot = new GameObject("orbit");
+                pivot.transform.SetParent(root, false);
+                pivot.transform.localRotation = Quaternion.Euler(GravityTilt209[i], GravityYaw209[i], 0f);
+                Mesh rm = GravityOrbit209(i);
+                GameObject ring = MeshObject("ring", rm, Mat(WhiteTex(), true), pivot.transform);
+                ring.transform.localScale = Vector3.one * coreR;
+                DragonRotate r = ring.AddComponent<DragonRotate>(); r.Speed = new Vector3(0f, GravitySpeed209[i], 0f);
+            }
+        }
+
         public static GameObject BlackHole(Vector3 ground, float radius, float seconds)
         {
             if (!Enabled) return null;
@@ -11446,21 +20802,18 @@ namespace DragonsAltarCombat
             ball.transform.SetParent(root.transform, false);
             ball.transform.localScale = Vector3.one * core * 2f;
             Renderer br = ball.GetComponent<Renderer>();
-            Material dark = SolidMat(new Color(0.01f, 0f, 0.02f, 1f));
-            if (br != null && dark != null) { br.sharedMaterial = dark; br.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; }
-            for (int d = 0; d < 2; d++)
-            {
-                GameObject disk = MeshObject("disk", DiskMesh(core * 1.2f, core * (d == 0 ? 3.2f : 2.4f), d), Mat(WhiteTex(), true), root.transform);
-                disk.transform.localRotation = Quaternion.Euler(d == 0 ? 18f : -28f, 0f, d == 0 ? 6f : 14f);
-                DragonRotate r = disk.AddComponent<DragonRotate>();
-                r.Speed = new Vector3(0f, d == 0 ? 160f : -220f, 0f);
-            }
-            // event horizon: purple-white motes clinging to the surface
-            ParticleSystem rim = Particles(root.transform, new Color(0.75f, 0.45f, 1f, 1f), 0, 80f * Amount, seconds, 0.35f, 0f, 0.15f, core * 0.12f, core * 0.25f, 0f,
+            // v0.25.180 VFX DIRECTION (show suction): a dark, PARTLY transparent core, one narrow bent rim hugging it
+            // (muted, not a wide purple disk), sparse rim motes and a small light; the field around stays open.
+            GravityDress(root.transform, br, core);   // v0.25.205
+            ParticleSystem rim = Particles(root.transform, new Color(0.62f, 0.52f, 0.80f, 0.6f), 0, 26f * Amount, seconds, 0.35f, 0f, 0.15f, core * 0.08f, core * 0.16f, 0f,
                 ParticleSystemShapeType.Sphere, core * 1.05f, Vector3.zero, false, true);
             ParticleSystem.ShapeModule sh = rim.shape; sh.radiusThickness = 0f;
-            Light l = root.AddComponent<Light>();
-            l.type = LightType.Point; l.color = new Color(0.6f, 0.25f, 1f, 1f); l.range = radius * 1.2f; l.intensity = 2.4f * LightScale; l.shadows = LightShadows.None;
+            Light l = null;
+            if (LightScale > 0.05f)
+            {
+                l = root.AddComponent<Light>(); /* guarded */ DragonPerf.OnLight(l);
+                l.type = LightType.Point; l.color = new Color(0.55f, 0.35f, 0.9f, 1f); l.range = Mathf.Min(4f, radius * 0.5f); l.intensity = 0.8f * LightScale; l.shadows = LightShadows.None;
+            }
             DragonBlackHole bh = root.AddComponent<DragonBlackHole>();
             bh.Life = seconds;
             return root;
@@ -11482,9 +20835,9 @@ namespace DragonsAltarCombat
                     float a = (float)i / n * Mathf.PI * 2f + f * 1.6f;
                     v.Add(new Vector3(Mathf.Cos(a) * r, 0f, Mathf.Sin(a) * r));
                     float band = 0.55f + 0.45f * Mathf.Sin(i * 0.9f + seed * 2.1f + j * 1.7f) * Mathf.Sin(i * 0.23f + seed);
-                    Color hot = new Color(1f, 0.85f, 0.6f, 1f), cold = new Color(0.55f, 0.2f, 1f, 1f);
+                    Color hot = new Color(0.92f, 0.86f, 0.78f, 1f), cold = new Color(0.46f, 0.36f, 0.72f, 1f);   // v0.25.180 muted
                     Color c = Color.Lerp(hot, cold, Mathf.Pow(f, 0.6f));
-                    c.a = Mathf.Clamp01(band * (1f - f) * (j == 0 ? 0.3f : 1f) * 0.9f);
+                    c.a = Mathf.Clamp01(band * (1f - f) * (j == 0 ? 0.3f : 1f) * 0.55f);
                     cs.Add(c);
                 }
             }
@@ -11522,22 +20875,9 @@ namespace DragonsAltarCombat
                 GameObject item = vis == null || _bladeVisRight == null ? null : _bladeVisRight.GetValue(vis) as GameObject;
                 if (item != null)
                 {
-                    Renderer[] rs = item.GetComponentsInChildren<Renderer>();
-                    bool any = false; Bounds b = new Bounds();
-                    for (int i = 0; i < rs.Length; i++)
-                    {
-                        if (rs[i] == null || rs[i] is ParticleSystemRenderer) continue;
-                        if (!any) { b = rs[i].bounds; any = true; } else b.Encapsulate(rs[i].bounds);
-                    }
-                    if (any)
-                    {
-                        Vector3 off = b.center - hand.position;
-                        if (off.magnitude > 0.1f)
-                        {
-                            dir = off.normalized;
-                            tip = hand.position + dir * Mathf.Clamp(off.magnitude * 2f, 0.3f, 2.5f);
-                        }
-                    }
+                    Vector3 axis, end;
+                    if (DragonCombat.WeaponAxis(item, hand, out axis, out end)) { dir = axis; tip = end; }
+
                 }
             }
             catch (Exception) { }
@@ -11548,8 +20888,12 @@ namespace DragonsAltarCombat
             root.transform.SetParent(hand, true);
             GameObject scaler = new GameObject("grow");
             scaler.transform.SetParent(root.transform, false);
-            Color body = c; body.a = 0.72f;
-            MeshObject("blade", BladeMesh(length, width, width * 0.13f, body, false), ClearMat(), scaler.transform);
+            // v0.25.205 (user: denser - it looked light for a giant sword): a near-opaque deep astral core blade inside a
+            // thicker translucent body (was one 72% sheet, 0.13 thick)
+            Color deep = Color.Lerp(c, new Color(0.18f, 0.06f, 0.32f, 1f), 0.45f); deep.a = 0.96f;
+            MeshObject("core", BladeMesh(length * 0.97f, width * 0.78f, width * 0.2f, deep, false), ClearMat(), scaler.transform);
+            Color body = c; body.a = 0.9f;
+            MeshObject("blade", BladeMesh(length, width, width * 0.26f, body, false), ClearMat(), scaler.transform);
             Color halo = Color.Lerp(c, Color.white, 0.35f); halo.a = 0.4f;
             MeshObject("halo", BladeMesh(length * 1.03f, width * 1.35f, width * 0.3f, halo, true), Mat(WhiteTex(), true), scaler.transform);
             // guard: a bar of light where the staff becomes the blade
@@ -11563,12 +20907,47 @@ namespace DragonsAltarCombat
                 g.transform.localPosition = new Vector3(0f, 0f, length * (k * 0.27f));
                 AttachGlow(g.transform, Color.Lerp(c, Color.white, 0.4f), width * 0.5f, 18f, k == 2 ? Mathf.Max(5f, length * 0.6f) : 0f);
             }
+            // v0.25.191 (user): carved bright seams down both faces (centre ridge + two angled rune strokes per face)
+            // and a weapon-bound wake from the tip and the middle of the blade while it swings
+            Material seamMat = Mat(LineTex(), true);
+            if (seamMat != null)
+            {
+                Color sc = Color.Lerp(c, Color.white, 0.6f); sc.a = 0.85f;
+                float ht = width * 0.26f * 0.5f + 0.004f;   // v0.25.205 seams ride the thicker faces
+                for (int face = -1; face <= 1; face += 2)
+                {
+                    BladeSeam(scaler.transform, seamMat, sc, width * 0.05f, new Vector3(0f, ht * face, length * 0.08f), new Vector3(0f, ht * face * 0.6f, length * 0.86f));
+                    for (int k = 0; k < 2; k++)
+                    {
+                        float z0 = length * (0.3f + k * 0.28f);
+                        BladeSeam(scaler.transform, seamMat, sc, width * 0.035f, new Vector3(width * 0.08f, ht * face, z0), new Vector3(width * 0.26f, ht * face * 0.7f, z0 + length * 0.07f));
+                    }
+                }
+            }
+            BladeWake(scaler.transform, new Vector3(0f, 0f, length * 0.95f), Color.Lerp(c, Color.white, 0.25f), width * 0.6f);
+            BladeWake(scaler.transform, new Vector3(0f, 0f, length * 0.55f), c, width * 0.4f);
             Burst(tip, Color.Lerp(c, Color.white, 0.4f), Mathf.RoundToInt(30 * Amount), 4f, 0.15f, 0.5f, -0.5f);
             DragonGrowBlade gb = root.AddComponent<DragonGrowBlade>();
             gb.Scaler = scaler.transform;
             gb.Grow = Mathf.Max(0.05f, grow);
             gb.Life = Mathf.Max(gb.Grow + 0.1f, life);
             return root;
+        }
+
+        private static void BladeSeam(Transform parent, Material m, Color c, float width, Vector3 a, Vector3 b)
+        {
+            GameObject go = new GameObject("seam");
+            go.transform.SetParent(parent, false);
+            LineRenderer lr = go.AddComponent<LineRenderer>();
+            lr.useWorldSpace = false;
+            lr.positionCount = 2;
+            lr.SetPosition(0, a);
+            lr.SetPosition(1, b);
+            lr.widthMultiplier = Mathf.Max(0.01f, width);
+            lr.startColor = c; lr.endColor = c;
+            lr.sharedMaterial = m;
+            lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            lr.receiveShadows = false;
         }
 
         // Blade along +Z: diamond cross-section, wide near the base, long taper to the point.
@@ -11596,58 +20975,104 @@ namespace DragonsAltarCombat
         }
 
         // v0.25.75 Meteor Fall / Cataclysm: a tumbling faceted boulder of basalt with molten seams, wrapped in fire.
+        // v0.25.205 (user: the meteor looked like a silver prototype "still trying to render"): a real lit boulder - a smooth
+        // sphere pushed in and out by layered noise (lumps, ridges) with a few crater dents, Standard material with a
+        // pitted basalt albedo and glowing lava veins in the emission map (cracks between the plates burn).
+        private static Texture2D _meteorAlbedo, _meteorLava;
+        private static Material _meteorMat;
+        private static Material MeteorMat()
+        {
+            if (_meteorMat != null) return _meteorMat;
+            const int n = 128;
+            _meteorAlbedo = new Texture2D(n, n, TextureFormat.RGBA32, true); _meteorAlbedo.wrapMode = TextureWrapMode.Repeat;
+            _meteorLava = new Texture2D(n, n, TextureFormat.RGBA32, true); _meteorLava.wrapMode = TextureWrapMode.Repeat;
+            Color[] al = new Color[n * n], lv = new Color[n * n];
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    float u = (float)x / n, v = (float)y / n;
+                    float f = Fbm(u * 8f, v * 8f, 401), fine = Fbm(u * 26f, v * 26f, 409);
+                    float pits = Mathf.Clamp01((Fbm(u * 14f, v * 14f, 417) - 0.62f) * 4f);
+                    float k = 0.16f + 0.16f * f + 0.08f * fine - 0.07f * pits;
+                    al[y * n + x] = new Color(k * 1.05f, k * 0.95f, k * 0.9f, 1f);
+                    // veins = thin bands where a second noise crosses its mid value
+                    float vein = Mathf.Clamp01(1f - Mathf.Abs(Fbm(u * 5f, v * 5f, 431) - 0.5f) * 22f);
+                    vein *= Mathf.Clamp01(Fbm(u * 3f, v * 3f, 437) * 1.6f - 0.35f);
+                    lv[y * n + x] = new Color(1f, 0.38f + 0.3f * vein, 0.06f, 1f) * vein;
+                }
+            _meteorAlbedo.SetPixels(al); _meteorAlbedo.Apply(true);
+            _meteorLava.SetPixels(lv); _meteorLava.Apply(true);
+            Shader sh = Shader.Find("Standard");
+            if (sh == null) return null;
+            _meteorMat = new Material(sh);
+            _meteorMat.mainTexture = _meteorAlbedo;
+            _meteorMat.color = Color.white;
+            if (_meteorMat.HasProperty("_Glossiness")) _meteorMat.SetFloat("_Glossiness", 0.18f);
+            if (_meteorMat.HasProperty("_Metallic")) _meteorMat.SetFloat("_Metallic", 0f);
+            _meteorMat.EnableKeyword("_EMISSION");
+            if (_meteorMat.HasProperty("_EmissionMap")) _meteorMat.SetTexture("_EmissionMap", _meteorLava);
+            if (_meteorMat.HasProperty("_EmissionColor")) _meteorMat.SetColor("_EmissionColor", new Color(2.2f, 1.2f, 0.5f, 1f));
+            return _meteorMat;
+        }
+
+        private static Mesh MeteorMesh(float r, int seed)
+        {
+            const int lat = 16, lon = 24;
+            Vector3[] v = new Vector3[(lat + 1) * (lon + 1)];
+            Vector2[] uv = new Vector2[v.Length];
+            Vector3[] craters = new Vector3[5];
+            for (int c = 0; c < craters.Length; c++) craters[c] = UnityEngine.Random.onUnitSphere;
+            for (int j = 0; j <= lat; j++)
+            {
+                float th = Mathf.PI * j / lat;
+                for (int i = 0; i <= lon; i++)
+                {
+                    float ph = Mathf.PI * 2f * (i % lon) / lon;
+                    Vector3 d = new Vector3(Mathf.Sin(th) * Mathf.Cos(ph), Mathf.Cos(th), Mathf.Sin(th) * Mathf.Sin(ph));
+                    float h = 0.82f + 0.22f * Fbm(d.x * 1.6f + d.z * 0.7f + seed * 0.13f, d.y * 1.6f + d.z * 0.9f, 451)
+                                    + 0.07f * Fbm(d.x * 5f + d.y * 3f, d.z * 5f - d.y * 2f, 457);
+                    for (int c = 0; c < craters.Length; c++)
+                    {
+                        float dd = Vector3.Dot(d, craters[c]);
+                        if (dd > 0.9f) h -= 0.09f * Mathf.SmoothStep(0f, 1f, (dd - 0.9f) / 0.1f);   // dent
+                        else if (dd > 0.86f) h += 0.03f;                                             // raised rim
+                    }
+                    v[j * (lon + 1) + i] = d * r * h;
+                    uv[j * (lon + 1) + i] = new Vector2((float)i / lon * 2f, (float)j / lat);
+                }
+            }
+            List<int> t = new List<int>();
+            for (int j = 0; j < lat; j++)
+                for (int i = 0; i < lon; i++)
+                {
+                    int a0 = j * (lon + 1) + i, a1 = a0 + 1, b0 = a0 + lon + 1, b1 = b0 + 1;
+                    t.Add(a0); t.Add(a1); t.Add(b0); t.Add(a1); t.Add(b1); t.Add(b0);
+                }
+            Mesh m = new Mesh();
+            m.vertices = v; m.uv = uv; m.triangles = t.ToArray();
+            m.RecalculateNormals(); m.RecalculateBounds();
+            return m;
+        }
+
         public static GameObject MeteorRock(Vector3 pos, float size)
         {
             if (!Enabled) return null;
             GameObject root = new GameObject("IH_Meteor");
             root.transform.position = pos;
-            int lat = 6, lon = 9;
             float r = Mathf.Max(0.3f, size * 0.55f);
-            List<Vector3> v = new List<Vector3>();
-            List<int> t = new List<int>();
-            System.Random rng = new System.Random(UnityEngine.Random.Range(0, 100000));
-            v.Add(new Vector3(0f, r * 0.9f, 0f));
-            for (int j = 1; j < lat; j++)
-            {
-                float th = Mathf.PI * j / lat;
-                for (int i = 0; i < lon; i++)
-                {
-                    float ph = Mathf.PI * 2f * i / lon + j * 0.35f;
-                    float jr = r * (0.78f + 0.36f * (float)rng.NextDouble());
-                    v.Add(new Vector3(Mathf.Sin(th) * Mathf.Cos(ph) * jr, Mathf.Cos(th) * jr, Mathf.Sin(th) * Mathf.Sin(ph) * jr));
-                }
-            }
-            v.Add(new Vector3(0f, -r * 0.85f, 0f));
-            int bottom = v.Count - 1;
-            for (int i = 0; i < lon; i++) { t.Add(0); t.Add(1 + (i + 1) % lon); t.Add(1 + i); }
-            for (int j = 0; j < lat - 2; j++)
-                for (int i = 0; i < lon; i++)
-                {
-                    int a = 1 + j * lon + i, b = 1 + j * lon + (i + 1) % lon, c = a + lon, d = b + lon;
-                    t.Add(a); t.Add(b); t.Add(c); t.Add(b); t.Add(d); t.Add(c);
-                }
-            int last = 1 + (lat - 2) * lon;
-            for (int i = 0; i < lon; i++) { t.Add(bottom); t.Add(last + i); t.Add(last + (i + 1) % lon); }
-            Mesh rock = FacetMesh(v, t, new Color(0.30f, 0.24f, 0.22f, 1f), 0.1f);
-            // molten seams: some facets glow ember-hot
-            Color[] cs = rock.colors;
-            for (int i = 0; i + 2 < cs.Length; i += 3)
-            {
-                if (rng.NextDouble() < 0.28)
-                {
-                    Color hot = Color.Lerp(new Color(1f, 0.35f, 0.05f, 1f), new Color(1f, 0.75f, 0.3f, 1f), (float)rng.NextDouble());
-                    cs[i] = hot; cs[i + 1] = hot; cs[i + 2] = hot;
-                }
-            }
-            rock.colors = cs;
-            MeshObject("rock", rock, ClearMat(), root.transform);
+            Material mat = MeteorMat();
+            Mesh rock = MeteorMesh(r, UnityEngine.Random.Range(0, 100000));
+            GameObject body = MeshObject("rock", rock, mat != null ? mat : SolidMat(new Color(0.22f, 0.19f, 0.17f, 1f)), root.transform);
+            if (body != null) { DragonMeshOwner own = body.AddComponent<DragonMeshOwner>(); own.Mesh = rock; }
             DragonRotate rot = root.AddComponent<DragonRotate>();
             rot.Speed = new Vector3(70f, 110f, 40f);
             // fire shell + ember light, and a burning tail
             GameObject shell = new GameObject("fire");
             shell.transform.SetParent(root.transform, false);
-            ParticleSystem ps = Particles(shell.transform, new Color(1f, 0.45f, 0.1f, 1f), 0, 140f * Amount, 1f, 0.45f, 0.5f, 2f, r * 0.35f, r * 0.8f, -0.8f,
-                ParticleSystemShapeType.Sphere, r * 0.9f, Vector3.zero, false, true);
+            // v0.25.205 flames peel off the surface and stream behind it (world space) instead of a shell hiding the rock
+            ParticleSystem ps = Particles(shell.transform, new Color(1f, 0.45f, 0.1f, 1f), 0, 110f * Amount, 1f, 0.4f, 0.2f, 0.8f, r * 0.3f, r * 0.65f, -0.4f,
+                ParticleSystemShapeType.Sphere, r * 0.95f, Vector3.zero, false, true);
+            FireLook(ps);
             ParticleSystem.MainModule mm = ps.main; mm.loop = true; mm.simulationSpace = ParticleSystemSimulationSpace.World;
             AttachGlow(root.transform, new Color(1f, 0.5f, 0.15f, 1f), r, 30f, Mathf.Max(6f, size * 4f));
             GameObject keep = root;
@@ -11659,19 +21084,210 @@ namespace DragonsAltarCombat
         public static void SpectralSword(Transform parent, float length, Color c)
         {
             if (!Enabled || parent == null) return;
-            float w = length * 0.14f;
-            Color body = c; body.a = 0.8f;
-            Color halo = Color.Lerp(c, Color.white, 0.4f); halo.a = 0.45f;
-            GameObject blade = MeshObject("blade", BladeMesh(length * 0.72f, w, w * 0.18f, body, false), ClearMat(), parent);
-            blade.transform.localPosition = new Vector3(0f, 0f, -length * 0.25f + length * 0.2f);
-            GameObject glow = MeshObject("halo", BladeMesh(length * 0.74f, w * 1.6f, w * 0.4f, halo, true), Mat(WhiteTex(), true), parent);
-            glow.transform.localPosition = blade.transform.localPosition;
-            GameObject guard = MeshObject("guard", BladeMesh(w * 2.6f, w * 0.5f, w * 0.3f, halo, true), Mat(WhiteTex(), true), parent);
-            guard.transform.localRotation = Quaternion.Euler(0f, 90f, 0f);
-            guard.transform.localPosition = new Vector3(-w * 1.3f, 0f, blade.transform.localPosition.z);
-            GameObject grip = MeshObject("grip", BladeMesh(length * 0.22f, w * 0.35f, w * 0.35f, body, false), ClearMat(), parent);
-            grip.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
-            grip.transform.localPosition = blade.transform.localPosition;
+            // v0.25.181 (user): recognisable spectral sword - FLAT sharp blade (bevelled extrusion), textured translucent
+            // interior, a narrow luminous edge line around it, a slim guard + grip, and a smooth tapered launch trail.
+            // No blocky light wedges / halo boxes. Blade points along +Z like the old one.
+            float L = Mathf.Max(0.5f, length), w = L * 0.13f, hw = w * 0.5f, Lb = L * 0.72f, Lg = L * 0.22f;
+            GameObject sword = new GameObject("IH_SpectralSword");
+            sword.transform.SetParent(parent, false);
+            sword.transform.localPosition = new Vector3(0f, 0f, -0.44f * L);
+            sword.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);   // outline y (length) -> +Z, extrusion -> Y (thin)
+            List<Vector2> blade = new List<Vector2>();
+            blade.Add(new Vector2(-hw * 0.7f, Lg)); blade.Add(new Vector2(hw * 0.7f, Lg));
+            blade.Add(new Vector2(hw, Lg + Lb * 0.14f)); blade.Add(new Vector2(hw * 0.78f, Lg + Lb * 0.78f));
+            blade.Add(new Vector2(0f, Lg + Lb));
+            blade.Add(new Vector2(-hw * 0.78f, Lg + Lb * 0.78f)); blade.Add(new Vector2(-hw, Lg + Lb * 0.14f));
+            Color body = Color.Lerp(c, new Color(0.85f, 0.85f, 1f, 1f), 0.2f); body.a = 0.62f;
+            Material bm = Mat(SlashTex(), false);
+            Mesh bmesh = ExtrudeBevel(blade, w * 0.12f, w * 0.05f, 1f / Mathf.Max(0.1f, L * 0.6f));
+            if (bmesh != null && bm != null) { Colorize(bmesh, body); GameObject b = MeshObject("blade", bmesh, bm, sword.transform); b.AddComponent<DragonMeshOwner>().Mesh = bmesh; }
+            List<Vector2> guard = new List<Vector2>();
+            guard.Add(new Vector2(-w * 1.3f, Lg - w * 0.18f)); guard.Add(new Vector2(w * 1.3f, Lg - w * 0.18f));
+            guard.Add(new Vector2(w * 1.4f, Lg)); guard.Add(new Vector2(w * 1.3f, Lg + w * 0.18f));
+            guard.Add(new Vector2(-w * 1.3f, Lg + w * 0.18f)); guard.Add(new Vector2(-w * 1.4f, Lg));
+            List<Vector2> grip = new List<Vector2>();
+            grip.Add(new Vector2(-w * 0.16f, 0f)); grip.Add(new Vector2(w * 0.16f, 0f)); grip.Add(new Vector2(w * 0.16f, Lg)); grip.Add(new Vector2(-w * 0.16f, Lg));
+            Color hilt = Color.Lerp(c, Color.white, 0.35f); hilt.a = 0.75f;
+            Mesh gm = ExtrudeBevel(guard, w * 0.2f, w * 0.05f, 1f / Mathf.Max(0.1f, L * 0.6f));
+            Mesh hm = ExtrudeBevel(grip, w * 0.22f, w * 0.06f, 1f / Mathf.Max(0.1f, L * 0.6f));
+            if (gm != null && bm != null) { Colorize(gm, hilt); GameObject g = MeshObject("guard", gm, bm, sword.transform); g.AddComponent<DragonMeshOwner>().Mesh = gm; }
+            if (hm != null && bm != null) { Colorize(hm, hilt); GameObject g = MeshObject("grip", hm, bm, sword.transform); g.AddComponent<DragonMeshOwner>().Mesh = hm; }
+            // narrow luminous edge
+            Material em = Mat(LineTex(), true);
+            if (em != null)
+            {
+                GameObject eg = new GameObject("edge");
+                eg.transform.SetParent(sword.transform, false);
+                LineRenderer lr = eg.AddComponent<LineRenderer>();
+                lr.useWorldSpace = false; lr.loop = true;
+                lr.positionCount = blade.Count;
+                for (int k = 0; k < blade.Count; k++) lr.SetPosition(k, new Vector3(blade[k].x, blade[k].y, 0f));
+                lr.widthMultiplier = Mathf.Max(0.015f, L * 0.014f);
+                lr.numCornerVertices = 2;
+                Color ec = Color.Lerp(c, Color.white, 0.6f); ec.a = 0.9f;
+                lr.startColor = ec; lr.endColor = ec;
+                lr.sharedMaterial = em;
+                lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            }
+            // smooth launch trail from the tip (only visible while it flies)
+            GameObject tip = new GameObject("tip");
+            tip.transform.SetParent(parent, false);
+            tip.transform.localPosition = new Vector3(0f, 0f, 0.5f * L);
+            Material core = Mat(LineTex(), true), air = Mat(LineTex(), false);
+            if (core != null && air != null)
+            {
+                StreakTrail(tip.transform, air, new Color(c.r, c.g, c.b, 0.22f), w * 1.2f, 0.25f);
+                StreakTrail(tip.transform, core, new Color(Mathf.Lerp(c.r, 1f, 0.5f), Mathf.Lerp(c.g, 1f, 0.5f), Mathf.Lerp(c.b, 1f, 0.5f), 0.6f), w * 0.25f, 0.2f);
+            }
+        }
+
+        private static void Colorize(Mesh m, Color c)
+        {
+            if (m == null) return;
+            Color[] cs = new Color[m.vertexCount];
+            for (int i = 0; i < cs.Length; i++) cs[i] = c;
+            m.colors = cs;
+        }
+
+        // ------------------------------------------------------------------ v0.25.181 Ranger family helpers
+        // Snare trigger: the noose visibly snaps tight around the target's feet (rope-coloured loop shrinking + fibres + dust).
+        public static void SnareSnap(Vector3 feet, float size)
+        {
+            if (!Enabled) return;
+            Vector3 g = GroundPoint(feet) + Vector3.up * 0.12f;
+            Color rope = new Color(0.62f, 0.50f, 0.32f, 0.9f);
+            DragonMeshFx loop = MeshFx(g, Quaternion.identity, true, Mat(SoftRingTex(), false), rope, 0.6f);
+            if (loop != null) { loop.ScaleFrom = Vector3.one * size * 1.8f; loop.ScaleTo = Vector3.one * size * 0.35f; loop.ScaleTime = 0.16f; loop.Hold = 0.3f; }
+            Debris(g, new Color(0.55f, 0.44f, 0.28f, 1f), 4, 3f, 0.06f, 1f);
+            DustRing(g, Mathf.Max(0.6f, size));
+        }
+
+        private static Texture2D _eyeTex;
+        // hawk's eye emblem: almond outline + iris + pupil + two swept wing strokes
+        private static Texture2D EyeTex()
+        {
+            if (_eyeTex == null) _eyeTex = MakeTex(128, 64, delegate(float u, float v)
+            {
+                float x = u * 2f - 1f, y = (v * 2f - 1f) * 2f;
+                float almond = Mathf.Abs(y) - 0.55f * (1f - x * x);
+                float outline = Mathf.Exp(-Mathf.Pow(almond / 0.06f, 2f)) * (Mathf.Abs(x) < 0.98f ? 1f : 0f);
+                float r = Mathf.Sqrt(x * x * 4f + y * y * 0.5f);
+                float iris = Mathf.Exp(-Mathf.Pow((r - 0.42f) / 0.06f, 2f)) * 0.8f;
+                float pupil = r < 0.2f ? 1f : 0f;
+                float wing = 0f;
+                for (int s = -1; s <= 1; s += 2)
+                {
+                    float wx = x * s;
+                    if (wx > 0.55f) wing = Mathf.Max(wing, Mathf.Exp(-Mathf.Pow((y - 0.6f - (wx - 0.55f) * 1.5f) / 0.1f, 2f)) * Mathf.Clamp01((1f - wx) * 4f));
+                }
+                return Mathf.Clamp01(outline + iris + pupil + wing);
+            }, TextureWrapMode.Clamp);
+            return _eyeTex;
+        }
+
+        public static void HawkEmblem(Vector3 pos, float size, float life, Color c)
+        {
+            if (!Enabled) return;
+            Vector3 cam = GameCamera.instance != null ? GameCamera.instance.transform.forward : Vector3.forward;
+            Quaternion rot = Quaternion.LookRotation(Vector3.up, -cam) * Quaternion.Euler(90f, 0f, 0f);
+            Color ec = Color.Lerp(c, Color.white, 0.3f); ec.a = 0.75f;
+            DragonMeshFx em = MeshFx(pos, Quaternion.FromToRotation(Vector3.up, -cam), true, Mat(EyeTex(), true), ec, life);
+            if (em != null) { em.FadeIn = 0.15f; em.Hold = life * 0.5f; em.ScaleFrom = new Vector3(size * 1.6f, 1f, size * 0.8f); em.ScaleTo = new Vector3(size * 2f, 1f, size); em.ScaleTime = life; }
+        }
+
+        // ------------------------------------------------------------------ v0.25.181 Horizon Walker space effects
+        private static Texture2D _dissolveTex;
+        // broken, soft-edged noise mask (spectral copies dissolving at their edges)
+        public static Texture2D DissolveTex()
+        {
+            if (_dissolveTex == null) _dissolveTex = MakeTex(64, 64, delegate(float u, float v)
+            {
+                float n = Fbm(u * 6f, v * 6f, 81) * 0.7f + Fbm(u * 14f, v * 14f, 82) * 0.3f;
+                return Mathf.Clamp01((n - 0.28f) * 2.4f);
+            }, TextureWrapMode.Repeat);
+            return _dissolveTex;
+        }
+
+        // A tapered vertical rift (lens slit): dark centre, pale edges, a fainter wider layer behind; opens, holds, closes.
+        public static GameObject RiftSlit(Vector3 pos, Vector3 facing, float height, float life, Color c)
+        {
+            if (!Enabled) return null;
+            facing.y = 0f;
+            if (facing.sqrMagnitude < 0.001f) facing = Vector3.forward;
+            GameObject root = new GameObject("IH_RiftSlit");
+            root.transform.position = pos;
+            root.transform.rotation = Quaternion.LookRotation(facing.normalized, Vector3.up);
+            for (int layer = 0; layer < 2; layer++)
+            {
+                float h = height * (layer == 0 ? 1f : 1.25f), wdt = height * (layer == 0 ? 0.22f : 0.34f);
+                Mesh m = LensSlit(h, wdt, c, layer == 0 ? 1f : 0.45f);
+                GameObject g = MeshObject(layer == 0 ? "slit" : "slitBack", m, ClearMat(), root.transform);
+                g.transform.localPosition = new Vector3(0f, 0f, layer == 0 ? 0f : -0.06f);
+                g.AddComponent<DragonMeshOwner>().Mesh = m;
+            }
+            Material em = Mat(LineTex(), true);
+            if (em != null)
+            {
+                GameObject eg = new GameObject("edge");
+                eg.transform.SetParent(root.transform, false);
+                LineRenderer lr = eg.AddComponent<LineRenderer>();
+                lr.useWorldSpace = false; lr.loop = true;
+                const int n = 20;
+                lr.positionCount = n;
+                for (int k = 0; k < n; k++)
+                {
+                    float a = (float)k / n * Mathf.PI * 2f;
+                    lr.SetPosition(k, new Vector3(Mathf.Sin(a) * height * 0.11f * Mathf.Pow(Mathf.Abs(Mathf.Cos(a * 0.5f)) * 0f + Mathf.Abs(Mathf.Sin(a)), 0.6f), Mathf.Cos(a) * height * 0.5f, 0.02f));
+                }
+                lr.widthMultiplier = Mathf.Max(0.02f, height * 0.018f);
+                Color ec = Color.Lerp(c, Color.white, 0.55f); ec.a = 0.9f;
+                lr.startColor = ec; lr.endColor = ec;
+                lr.sharedMaterial = em;
+                lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            }
+            DragonRiftOpen ro = root.AddComponent<DragonRiftOpen>();
+            ro.Life = Mathf.Max(0.2f, life);
+            Burst(pos, Color.Lerp(c, Color.white, 0.3f), 8, 3f, 0.06f, 0.35f, 0f);
+            return root;
+        }
+
+        // lens-shaped double-sided slit in XY (height along Y, width along X): dark void core, pale tinted rim
+        private static Mesh LensSlit(float h, float w, Color c, float alphaScale)
+        {
+            const int n = 16;
+            List<Vector3> v = new List<Vector3>(); List<Color> cs = new List<Color>(); List<int> t = new List<int>();
+            v.Add(Vector3.zero); Color core = new Color(0.04f, 0.0f, 0.10f, 0.85f * alphaScale); cs.Add(core);
+            for (int i = 0; i < n; i++)
+            {
+                float a = (float)i / n * Mathf.PI * 2f;
+                float y = Mathf.Cos(a) * h * 0.5f;
+                float x = Mathf.Sin(a) * w * 0.5f * Mathf.Pow(Mathf.Abs(Mathf.Sin(a)), 0.4f);
+                v.Add(new Vector3(x, y, 0f));
+                Color rc = Color.Lerp(c, Color.white, 0.35f); rc.a = 0.75f * alphaScale; cs.Add(rc);
+            }
+            for (int i = 0; i < n; i++) { int a = 1 + i, b = 1 + (i + 1) % n; t.Add(0); t.Add(a); t.Add(b); t.Add(0); t.Add(b); t.Add(a); }
+            Mesh m = new Mesh();
+            m.vertices = v.ToArray(); m.colors = cs.ToArray(); m.triangles = t.ToArray();
+            Vector2[] uv = new Vector2[v.Count]; for (int i = 0; i < uv.Length; i++) uv[i] = new Vector2(0.5f, 0.5f);
+            m.uv = uv; m.RecalculateBounds();
+            return m;
+        }
+
+        // Void Step: a quick spatial fold - a soft ring facing the camera that collapses (departure) or unfolds (arrival),
+        // with a few short directional wisps. No flash, nothing lingers.
+        public static void SpaceFold(Vector3 pos, bool unfold, Color c, float size)
+        {
+            if (!Enabled) return;
+            Vector3 cam = GameCamera.instance != null ? GameCamera.instance.transform.forward : Vector3.forward;
+            Color rc = Color.Lerp(c, Color.white, 0.25f); rc.a = 0.55f;
+            DragonMeshFx ring = MeshFx(pos, Quaternion.FromToRotation(Vector3.up, -cam), true, Mat(SoftRingTex(), true), rc, 0.35f);
+            if (ring != null)
+            {
+                ring.ScaleFrom = Vector3.one * size * (unfold ? 0.2f : 2.2f);
+                ring.ScaleTo = Vector3.one * size * (unfold ? 2.2f : 0.15f);
+                ring.ScaleTime = 0.3f;
+            }
+            Burst(pos, Color.Lerp(c, Color.white, 0.3f), 10, unfold ? 6f : 2f, 0.05f, 0.3f, 0f);
         }
 
         // v0.25.77 Punishing Bomb: a black iron bomb with a brass fuse cap and a spitting fuse, tumbling in flight.
@@ -11740,8 +21356,12 @@ namespace DragonsAltarCombat
             MeshObject("glow", m, Mat(WhiteTex(), true), root.transform);
             DragonDome dd = root.AddComponent<DragonDome>();
             dd.Mesh = m; dd.Base = cs.ToArray();
-            Light l = root.AddComponent<Light>();
-            l.type = LightType.Point; l.color = new Color(1f, 0.88f, 0.6f, 1f); l.range = radius * 2.2f; l.intensity = 0f; l.shadows = LightShadows.None;
+            Light l = null;
+            if (LightScale > 0.05f)
+            {
+                l = root.AddComponent<Light>(); /* guarded */ DragonPerf.OnLight(l);
+                l.type = LightType.Point; l.color = new Color(1f, 0.88f, 0.6f, 1f); l.range = radius * 2.2f; l.intensity = 0f; l.shadows = LightShadows.None;
+            }
             dd.Light = l;
             return root;
         }
@@ -11753,23 +21373,837 @@ namespace DragonsAltarCombat
             if (dd != null) dd.SetAlpha(a);
         }
 
+        // v0.25.81 solid-object helpers ------------------------------------------------------------
+        // Faceted tube from a to b (n sides) with elliptical radii (ru along u, rw along w) at each end; capped.
+        private static void Tube(List<Vector3> v, List<int> t, Vector3 a, Vector3 b, Vector3 u, Vector3 w, float ru0, float rw0, float ru1, float rw1, int n)
+        {
+            // v0.25.202: a tube built along -handed axes (e.g. +X with u = Y, w = Z: the hammer head, its bands, straps and the
+            // right striking face) came out INSIDE-OUT - its outside faces were culled and only showed through a front-culling
+            // material. Swap u/w when needed so the walls and caps always face outward, whatever the axis direction.
+            if (Vector3.Dot(Vector3.Cross(b - a, w), u) < 0f) { Vector3 sw = u; u = w; w = sw; float r = ru0; ru0 = rw0; rw0 = r; r = ru1; ru1 = rw1; rw1 = r; }
+            int s = v.Count;
+            for (int i = 0; i < n; i++) { float ang = (i + 0.5f) / n * Mathf.PI * 2f; v.Add(a + u * Mathf.Cos(ang) * ru0 + w * Mathf.Sin(ang) * rw0); }
+            for (int i = 0; i < n; i++) { float ang = (i + 0.5f) / n * Mathf.PI * 2f; v.Add(b + u * Mathf.Cos(ang) * ru1 + w * Mathf.Sin(ang) * rw1); }
+            v.Add(a); v.Add(b);
+            int ca = s + 2 * n, cb = ca + 1;
+            for (int i = 0; i < n; i++)
+            {
+                int p0 = s + i, p1 = s + (i + 1) % n, q0 = p0 + n, q1 = p1 + n;
+                t.Add(p0); t.Add(q0); t.Add(p1); t.Add(p1); t.Add(q0); t.Add(q1);
+                t.Add(ca); t.Add(p0); t.Add(p1);
+                t.Add(cb); t.Add(q1); t.Add(q0);
+            }
+        }
+
+        // v0.25.203 a ring around the round haft: inner radius = haft, rounded top/bottom edges (bevel rows), 16 sides
+        private static void HaftRing(List<Vector3> v, List<int> t, float y0, float y1, float haftR, float ringR)
+        {
+            float e = Mathf.Min(0.015f, (y1 - y0) * 0.3f), mid = Mathf.Lerp(haftR, ringR, 0.55f);
+            Tube(v, t, new Vector3(0f, y0, 0f), new Vector3(0f, y0 + e, 0f), Vector3.right, Vector3.forward, mid, mid, ringR, ringR, 16);
+            Tube(v, t, new Vector3(0f, y0 + e, 0f), new Vector3(0f, y1 - e, 0f), Vector3.right, Vector3.forward, ringR, ringR, ringR, ringR, 16);
+            Tube(v, t, new Vector3(0f, y1 - e, 0f), new Vector3(0f, y1, 0f), Vector3.right, Vector3.forward, ringR, ringR, mid, mid, 16);
+        }
+
+        private static void DoubleSide(List<int> t)
+        {
+            int count = t.Count;
+            for (int i = 0; i < count; i += 3) { t.Add(t[i]); t.Add(t[i + 2]); t.Add(t[i + 1]); }
+        }
+
+        // Judgement Hammer: a holy warhammer in UNIT space (haft along Y -0.5..0.5, head across X -0.5..0.5 at the top,
+        // depth along Z -0.5..0.5). The caller scales the returned child to (width, height, depth) every frame.
+        // Gold head with ivory striking faces, ivory haft with gold bands, gold pommel gem, a radiant halo shell and
+        // light ribbons from both striking faces (they draw arcs while it flips).
+        public static List<Vector2> InsetGemOutline(float size)
+        {
+            return new List<Vector2> { new Vector2(-size * 0.5f, 0f), new Vector2(0f, -size * 0.7f),
+                new Vector2(size * 0.5f, 0f), new Vector2(0f, size * 0.7f) };
+        }
+        public static Mesh RelicDiamondMesh(float size, float depth)
+        {
+            Vector3[] p = { new Vector3(-size * 0.5f, 0f, 0f), new Vector3(0f, size * 0.7f, 0f),
+                new Vector3(size * 0.5f, 0f, 0f), new Vector3(0f, -size * 0.7f, 0f),
+                new Vector3(0f, 0f, depth * 0.5f), new Vector3(0f, 0f, -depth * 0.5f) };
+            List<Vector3> vertices = new List<Vector3>(6); vertices.AddRange(p);
+            List<int> triangles = new List<int>(24);
+            for (int i = 0; i < 4; i++) { triangles.Add((i + 1) % 4); triangles.Add(i); triangles.Add(4);
+                triangles.Add(i); triangles.Add((i + 1) % 4); triangles.Add(5); }
+            return Uvd(FacetMesh(vertices, triangles, Color.white, 0f), 1f);
+        }
+        private static GameObject _warhammerTemplate;
+        private static void WarmWarhammer()
+        {
+            if (_warhammerTemplate != null) return;
+            GameObject holder = new GameObject("IH_HammerTemplateRoot"); holder.SetActive(false);
+            UnityEngine.Object.DontDestroyOnLoad(holder);
+            _warhammerTemplate = BuildWarhammerGeometry(holder.transform);
+        }
+        public static GameObject HolyWarhammer(Transform parent)
+        {
+            if (!Enabled || parent == null) return null;
+            WarmWarhammer();
+            GameObject model = UnityEngine.Object.Instantiate(_warhammerTemplate) as GameObject;
+            // Keep the exact child name used by UpdateHammerVisual; Instantiate appends (Clone).
+            model.name = _warhammerTemplate.name;
+            model.transform.SetParent(parent, false); model.SetActive(true);
+            return model;
+        }
+        private static GameObject BuildWarhammerGeometry(Transform parent)
+        {
+            if (!Enabled || parent == null) return null;
+            // v0.25.180 VFX DIRECTION (an actual thrown hammer): thick beveled stone head with clear bronze-framed
+            // striking faces, bronze bands, a leather-wrapped haft, the cross's sacred motif inlaid on the head, fine
+            // lightning running only through recessed seams, a short curved trail following the head and a faint
+            // transparent echo that lags the spin. No halo shell / glow coat. Same unit space + caller scaling.
+            GameObject unit = new GameObject("IH_Warhammer");
+            unit.transform.SetParent(parent, false);
+            Material stone = RelicIvory(), bronze = RelicGold(), inlay = RelicInlay(Holy);
+            Material leather = NaturalMat(new Color(0.34f, 0.25f, 0.17f, 1f));
+            Vector3 X = Vector3.right, Y = Vector3.up, Z = Vector3.forward;
+            Color white = Color.white;
+
+            List<Vector3> v = new List<Vector3>(); List<int> t = new List<int>();
+            // v0.25.203 (user: rings must ENCLOSE the handle, not look like plates): the haft is ROUND (16 sides, it was a
+            // flattened ellipse made for the old non-uniform scale) and runs up into the head; every band is a real ring
+            // ~1.45x the haft radius with rounded edges, and the collar sits below the head's reshape line (0.24).
+            Tube(v, t, new Vector3(0f, -0.44f, 0f), new Vector3(0f, 0.30f, 0f), X, Z, 0.075f, 0.075f, 0.068f, 0.068f, 16);   // haft
+            MeshObject("haft", Uvd(FacetMesh(v, t, white, 0f), 3f), leather, unit.transform);
+
+            v = new List<Vector3>(); t = new List<int>();
+            Tube(v, t, new Vector3(0f, -0.53f, 0f), new Vector3(0f, -0.49f, 0f), X, Z, 0.07f, 0.07f, 0.11f, 0.11f, 16);     // pommel cap
+            Tube(v, t, new Vector3(0f, -0.49f, 0f), new Vector3(0f, -0.44f, 0f), X, Z, 0.11f, 0.11f, 0.085f, 0.085f, 16);
+            HaftRing(v, t, -0.25f, -0.19f, 0.074f, 0.108f);   // grip ring
+            HaftRing(v, t, 0.02f, 0.08f, 0.071f, 0.104f);     // upper ring
+            HaftRing(v, t, 0.165f, 0.24f, 0.069f, 0.118f);    // socket collar (top exactly on the 0.24 reshape line: untouched)
+            Tube(v, t, new Vector3(-0.30f, 0.39f, 0f), new Vector3(-0.25f, 0.39f, 0f), Y, Z, 0.135f, 0.46f, 0.135f, 0.46f, 8);   // head bands
+            Tube(v, t, new Vector3(0.25f, 0.39f, 0f), new Vector3(0.30f, 0.39f, 0f), Y, Z, 0.135f, 0.46f, 0.135f, 0.46f, 8);
+            Tube(v, t, new Vector3(-0.36f, 0.39f, 0f), new Vector3(-0.47f, 0.39f, 0f), Y, Z, 0.13f, 0.49f, 0.125f, 0.47f, 8);  // face frames
+            Tube(v, t, new Vector3(0.36f, 0.39f, 0f), new Vector3(0.47f, 0.39f, 0f), Y, Z, 0.13f, 0.49f, 0.125f, 0.47f, 8);
+            MeshObject("bronze", Uvd(FacetMesh(v, t, white, 0f), 2f), bronze, unit.transform);
+
+            v = new List<Vector3>(); t = new List<int>();
+            Tube(v, t, new Vector3(-0.36f, 0.39f, 0f), new Vector3(0.36f, 0.39f, 0f), Y, Z, 0.12f, 0.43f, 0.12f, 0.43f, 12);
+            MeshObject("head", Uvd(FacetMesh(v, t, white, 0f), 1.5f), bronze, unit.transform); // gold body, ivory striking faces
+            v = new List<Vector3>(); t = new List<int>();
+            Tube(v, t, new Vector3(-0.47f, 0.39f, 0f), new Vector3(-0.53f, 0.39f, 0f), Y, Z, 0.105f, 0.40f, 0.09f, 0.34f, 12);
+            Tube(v, t, new Vector3(0.47f, 0.39f, 0f), new Vector3(0.53f, 0.39f, 0f), Y, Z, 0.105f, 0.40f, 0.09f, 0.34f, 12);
+            Mesh headMesh = Uvd(FacetMesh(v, t, white, 0f), 1.5f);
+            MeshObject("strikingFaces", headMesh, stone, unit.transform);
+
+            // v0.25.181 (user: finished, like the relic): bronze corner straps along the head, a raised bronze rim and a lit
+            // sigil boss on each striking face (defined faces), polished gold-bronze cap on the crown
+            v = new List<Vector3>(); t = new List<int>();
+            for (int sy = -1; sy <= 1; sy += 2)
+                for (int sz = -1; sz <= 1; sz += 2)
+                    Tube(v, t, new Vector3(-0.33f, 0.39f + sy * 0.105f, sz * 0.375f), new Vector3(0.33f, 0.39f + sy * 0.105f, sz * 0.375f), Y, Z, 0.02f, 0.05f, 0.02f, 0.05f, 6);
+            for (int sd = -1; sd <= 1; sd += 2)
+                Tube(v, t, new Vector3(0.525f * sd, 0.39f, 0f), new Vector3(0.545f * sd, 0.39f, 0f), Y, Z, 0.095f, 0.35f, 0.088f, 0.32f, 12);   // face rim
+            Tube(v, t, new Vector3(0f, 0.505f, 0f), new Vector3(0f, 0.53f, 0f), X, Z, 0.16f, 0.36f, 0.12f, 0.28f, 12);                     // crown cap
+            MeshObject("straps", Uvd(FacetMesh(v, t, white, 0f), 2f), bronze, unit.transform);
+            v = new List<Vector3>(); t = new List<int>();
+            for (int sd = -1; sd <= 1; sd += 2)
+            {
+                Tube(v, t, new Vector3(0.53f * sd, 0.39f, 0f), new Vector3(0.556f * sd, 0.39f, 0f), Y, Z, 0.05f, 0.16f, 0.04f, 0.13f, 12);    // sigil boss
+                Tube(v, t, new Vector3(0.55f * sd, 0.30f, 0f), new Vector3(0.55f * sd, 0.48f, 0f), X, Z, 0.01f, 0.015f, 0.01f, 0.015f, 4);     // face cross
+                Tube(v, t, new Vector3(0.55f * sd, 0.39f, -0.2f), new Vector3(0.55f * sd, 0.39f, 0.2f), X, Y, 0.01f, 0.015f, 0.01f, 0.015f, 4);
+            }
+            MeshObject("faceSigils", FacetMesh(v, t, white, 0f), inlay, unit.transform);
+
+            // sacred cross motif inlaid on both broad sides of the head
+            v = new List<Vector3>(); t = new List<int>();
+            for (int sd = -1; sd <= 1; sd += 2)
+            {
+                float z = 0.43f * sd;
+                Tube(v, t, new Vector3(0f, 0.30f, z), new Vector3(0f, 0.48f, z), X, Z, 0.012f, 0.018f, 0.012f, 0.018f, 4);
+                Tube(v, t, new Vector3(-0.08f, 0.42f, z), new Vector3(0.08f, 0.42f, z), Y, Z, 0.012f, 0.018f, 0.012f, 0.018f, 4);
+            }
+            MeshObject("motif", FacetMesh(v, t, white, 0f), inlay, unit.transform);
+
+            // lightning seams: narrow additive lines in the recesses between the bands and the faces
+            v = new List<Vector3>(); t = new List<int>();
+            for (int sd = -1; sd <= 1; sd += 2)
+            {
+                Tube(v, t, new Vector3(0.245f * sd, 0.39f, 0f), new Vector3(0.245f * sd, 0.39f, 0f) + new Vector3(0.006f * sd, 0f, 0f), Y, Z, 0.128f, 0.445f, 0.128f, 0.445f, 8);
+                Tube(v, t, new Vector3(0.36f * sd, 0.39f, 0f), new Vector3(0.365f * sd, 0.39f, 0f), Y, Z, 0.128f, 0.445f, 0.128f, 0.445f, 8);
+            }
+            DoubleSide(t);
+            MeshObject("seams", FacetMesh(v, t, new Color(0.72f, 0.86f, 1f, 0.55f), 0f), Mat(WhiteTex(), true), unit.transform);
+
+            // Raised bronze bezels and faceted blue gems on both broad faces match Goddess Relic.
+            Mesh jewel = RelicDiamondMesh(0.26f, 0.07f);
+            Material blue = RelicGem(new Color(0.15f, 0.48f, 0.85f, 1f));
+            for (int side = -1; side <= 1; side += 2)
+            {
+                GameObject gem = MeshObject("blueDiamond", jewel, blue, unit.transform);
+                gem.transform.localPosition = new Vector3(0f, 0.39f, side * 0.45f);
+                for (int edge = -1; edge <= 1; edge += 2)
+                {
+                    GameObject inset = MeshObject("blueInset", jewel, blue, unit.transform);
+                    inset.transform.localScale = Vector3.one * 0.48f;
+                    inset.transform.localPosition = new Vector3(edge * 0.23f, 0.39f, side * 0.45f);
+                }
+            }
+            // short curved trail following the head (narrow core + pale air) - the flips draw arcs
+            GameObject keep = unit;
+            Material core = Mat(LineTex(), true), air = Mat(LineTex(), false);
+            if (core != null && air != null)
+                for (int sd = -1; sd <= 1; sd += 2)
+                {
+                    GameObject tip = new GameObject(sd < 0 ? "tipL" : "tipR");
+                    tip.transform.SetParent(unit.transform, false);
+                    tip.transform.localPosition = new Vector3(0.5f * sd, 0.39f, 0f);
+                    StreakTrail(tip.transform, air, new Color(0.92f, 0.90f, 0.84f, 0.18f), 0.55f, 0.28f);
+                    StreakTrail(tip.transform, core, new Color(1f, 0.92f, 0.70f, 0.4f), 0.1f, 0.2f);
+                }
+            ThickenHammerHead(unit);
+            return unit;
+        }
+
+        // Planar uv from the vertex positions so the shared stone / bronze textures show grain on facet meshes.
+        private static Mesh Uvd(Mesh m, float scale)
+        {
+            if (m == null) return null;
+            Vector3[] p = m.vertices;
+            Vector3[] n = m.normals;
+            Vector2[] uv = new Vector2[p.Length];
+            for (int i = 0; i < p.Length; i++)
+            {
+                Vector3 a = n != null && n.Length == p.Length ? n[i] : Vector3.up;
+                float ax = Mathf.Abs(a.x), ay = Mathf.Abs(a.y), az = Mathf.Abs(a.z);
+                uv[i] = (ax >= ay && ax >= az ? new Vector2(p[i].z, p[i].y) : ay >= az ? new Vector2(p[i].x, p[i].z) : new Vector2(p[i].x, p[i].y)) * scale;
+            }
+            m.uv = uv;
+            return m;
+        }
+
+        // Double-pointed lens blade along local X (centre at the origin), flat in local XY, thin in Z.
+        private static Mesh LensMesh(float length, float width, float thick, Color c, bool soft)
+        {
+            float[] x = { -0.5f, -0.38f, -0.12f, 0f, 0.12f, 0.38f, 0.5f };
+            float[] wf = { 0f, 0.55f, 0.92f, 1f, 0.92f, 0.55f, 0f };
+            List<Vector3> v = new List<Vector3>(); List<int> t = new List<int>();
+            for (int i = 0; i < x.Length; i++)
+            {
+                float hw = width * 0.5f * wf[i], ht = thick * 0.5f * Mathf.Max(0.05f, wf[i]), xx = x[i] * length;
+                v.Add(new Vector3(xx, hw, 0f)); v.Add(new Vector3(xx, 0f, ht)); v.Add(new Vector3(xx, -hw, 0f)); v.Add(new Vector3(xx, 0f, -ht));
+            }
+            for (int i = 0; i < x.Length - 1; i++)
+                for (int k = 0; k < 4; k++)
+                {
+                    int a = i * 4 + k, b = i * 4 + (k + 1) % 4, cc = a + 4, d = b + 4;
+                    t.Add(a); t.Add(b); t.Add(cc); t.Add(b); t.Add(d); t.Add(cc);
+                }
+            if (soft) DoubleSide(t);
+            return FacetMesh(v, t, c, 0.6f);
+        }
+
+        // Grand Cross: one holy light blade (lens) with a white-hot core and a soft halo, lying along local X of `parent`
+        // rotated by `rollDeg` around local Z. Both tips leave light ribbons as the cross travels.
+        public static void LightBlade(Transform parent, float length, float width, float rollDeg, Color c)
+        {
+            if (!Enabled || parent == null) return;
+            GameObject root = new GameObject("IH_LightBlade");
+            root.transform.SetParent(parent, false);
+            root.transform.localRotation = Quaternion.AngleAxis(rollDeg, Vector3.forward);
+            Color body = c; body.a = 0.75f;
+            Color halo = Color.Lerp(c, Color.white, 0.3f); halo.a = 0.30f;
+            Color core = new Color(1f, 1f, 1f, 0.9f);
+            MeshObject("body", LensMesh(length, width, width * 0.25f, body, true), ClearMat(), root.transform);
+            MeshObject("halo", LensMesh(length * 1.06f, width * 2.2f, width * 0.6f, halo, true), Mat(WhiteTex(), true), root.transform);
+            MeshObject("core", LensMesh(length * 0.92f, width * 0.32f, width * 0.12f, core, true), Mat(WhiteTex(), true), root.transform);
+            GameObject keep = root;
+            for (int side = -1; side <= 1; side += 2)
+            {
+                GameObject tip = new GameObject("tip");
+                tip.transform.SetParent(root.transform, false);
+                tip.transform.localPosition = new Vector3(length * 0.46f * side, 0f, 0f);
+                TrailWhile(tip.transform, Color.Lerp(c, Color.white, 0.35f), Mathf.Max(0.3f, width * 0.6f), delegate { return keep != null; });
+            }
+        }
+
+        // Barrier: a geodesic crystal shell (subdivided icosahedron, radius 0.5 like the primitive sphere) with lit
+        // facets and brighter lattice rims, so the Barrier reads as a faceted holy shield, not a plain bubble.
+        public static Mesh GeodesicShell(Color c)
+        {
+            float p = (1f + Mathf.Sqrt(5f)) * 0.5f;
+            List<Vector3> v = new List<Vector3>
+            {
+                new Vector3(-1, p, 0), new Vector3(1, p, 0), new Vector3(-1, -p, 0), new Vector3(1, -p, 0),
+                new Vector3(0, -1, p), new Vector3(0, 1, p), new Vector3(0, -1, -p), new Vector3(0, 1, -p),
+                new Vector3(p, 0, -1), new Vector3(p, 0, 1), new Vector3(-p, 0, -1), new Vector3(-p, 0, 1)
+            };
+            int[] f = { 0,11,5, 0,5,1, 0,1,7, 0,7,10, 0,10,11, 1,5,9, 5,11,4, 11,10,2, 10,7,6, 7,1,8,
+                        3,9,4, 3,4,2, 3,2,6, 3,6,8, 3,8,9, 4,9,5, 2,4,11, 6,2,10, 8,6,7, 9,8,1 };
+            for (int i = 0; i < v.Count; i++) v[i] = v[i].normalized * 0.5f;
+            List<int> t = new List<int>();
+            for (int i = 0; i < f.Length; i += 3)
+            {
+                Vector3 a = v[f[i]], b = v[f[i + 1]], d = v[f[i + 2]];
+                Vector3 ab = ((a + b) * 0.5f).normalized * 0.5f, bd = ((b + d) * 0.5f).normalized * 0.5f, da = ((d + a) * 0.5f).normalized * 0.5f;
+                int s = v.Count; v.Add(ab); v.Add(bd); v.Add(da);
+                t.Add(f[i]); t.Add(s); t.Add(s + 2);
+                t.Add(s); t.Add(f[i + 1]); t.Add(s + 1);
+                t.Add(s + 2); t.Add(s + 1); t.Add(f[i + 2]);
+                t.Add(s); t.Add(s + 1); t.Add(s + 2);
+            }
+            DoubleSide(t);
+            Mesh m = FacetMesh(v, t, c, 0.9f);
+            // lattice: every third facet a touch brighter, so the shell sparkles as it turns
+            Color[] cs = m.colors;
+            for (int i = 0; i + 2 < cs.Length; i += 3)
+                if ((i / 3) % 3 == 0) { Color k = Color.Lerp(cs[i], Color.white, 0.45f); k.a = cs[i].a; cs[i] = k; cs[i + 1] = k; cs[i + 2] = k; }
+            m.colors = cs;
+            return m;
+        }
+
+        // v0.25.82 WARRIOR HERO OBJECTS -----------------------------------------------------------------
+        private static Mesh ColoredMesh(List<Vector3> v, List<Color> c, List<int> t)
+        {
+            Mesh m = new Mesh();
+            m.vertices = v.ToArray(); m.colors = c.ToArray(); m.triangles = t.ToArray();
+            Vector2[] uv = new Vector2[v.Count]; for (int i = 0; i < uv.Length; i++) uv[i] = new Vector2(0.5f, 0.5f);
+            m.uv = uv;
+            m.RecalculateBounds();
+            return m;
+        }
+
+        // Eclipse: a black sun with a blazing violet corona (spiky rays) and a white-hot rim, hovering over you,
+        // always facing the camera; it swells in, pulses, then collapses.
+        public static GameObject EclipseSun(Vector3 pos, float radius, float seconds)
+        {
+            if (!Enabled) return null;
+            GameObject root = new GameObject("IH_EclipseSun");
+            root.transform.position = pos;
+            root.transform.localScale = Vector3.one * radius;
+            int n = 64;
+            // black core (alpha)
+            List<Vector3> v = new List<Vector3>(); List<Color> c = new List<Color>(); List<int> t = new List<int>();
+            v.Add(Vector3.zero); c.Add(new Color(0.02f, 0f, 0.05f, 1f));
+            for (int i = 0; i < n; i++) { float a = (float)i / n * Mathf.PI * 2f; v.Add(new Vector3(Mathf.Cos(a), Mathf.Sin(a), 0f)); c.Add(new Color(0.05f, 0.01f, 0.10f, 1f)); }
+            for (int i = 0; i < n; i++) { t.Add(0); t.Add(1 + i); t.Add(1 + (i + 1) % n); }
+            MeshObject("core", ColoredMesh(v, c, t), ClearMat(), root.transform);
+            // corona with rays (additive)
+            v = new List<Vector3>(); c = new List<Color>(); t = new List<int>();
+            System.Random rng = new System.Random(7);
+            for (int i = 0; i < n; i++)
+            {
+                float a = (float)i / n * Mathf.PI * 2f;
+                Vector3 d = new Vector3(Mathf.Cos(a), Mathf.Sin(a), 0f);
+                float ray = 1.45f + 0.9f * Mathf.Pow(Mathf.Abs(Mathf.Sin(a * 4f + 0.4f)), 10f) + 0.25f * (float)rng.NextDouble();
+                v.Add(d * 0.98f); c.Add(new Color(0.78f, 0.62f, 1f, 1f));
+                v.Add(d * 1.12f); c.Add(new Color(0.62f, 0.42f, 1f, 0.85f));
+                v.Add(d * ray); c.Add(new Color(0.35f, 0.15f, 0.9f, 0f));
+            }
+            for (int i = 0; i < n; i++)
+            {
+                int a0 = i * 3, b0 = ((i + 1) % n) * 3;
+                for (int k = 0; k < 2; k++) { t.Add(a0 + k); t.Add(a0 + k + 1); t.Add(b0 + k); t.Add(b0 + k); t.Add(a0 + k + 1); t.Add(b0 + k + 1); }
+            }
+            MeshObject("corona", ColoredMesh(v, c, t), Mat(WhiteTex(), true), root.transform);
+            // white-hot rim
+            v = new List<Vector3>(); c = new List<Color>(); t = new List<int>();
+            for (int i = 0; i < n; i++)
+            {
+                float a = (float)i / n * Mathf.PI * 2f; Vector3 d = new Vector3(Mathf.Cos(a), Mathf.Sin(a), 0f);
+                v.Add(d * 0.97f); c.Add(new Color(1f, 0.95f, 1f, 1f));
+                v.Add(d * 1.04f); c.Add(new Color(0.9f, 0.8f, 1f, 0.6f));
+            }
+            for (int i = 0; i < n; i++) { int a0 = i * 2, b0 = ((i + 1) % n) * 2; t.Add(a0); t.Add(a0 + 1); t.Add(b0); t.Add(b0); t.Add(a0 + 1); t.Add(b0 + 1); }
+            MeshObject("rim", ColoredMesh(v, c, t), Mat(WhiteTex(), true), root.transform);
+            root.AddComponent<DragonFaceCamera>();
+            DragonPop pop = root.AddComponent<DragonPop>();
+            pop.Grow = 0.25f; pop.Life = Mathf.Max(0.3f, seconds); pop.Fade = 0.3f; pop.Pulse = 0.05f;
+            Light l = null;
+            if (LightScale > 0.05f)
+            {
+                l = root.AddComponent<Light>(); /* guarded */ DragonPerf.OnLight(l);
+                l.type = LightType.Point; l.color = new Color(0.62f, 0.45f, 1f, 1f); l.range = Mathf.Min(radius * 4f, 18f); l.intensity = 1.0f * LightScale; l.shadows = LightShadows.None;
+            }
+            return root;
+        }
+
+        // Seismic Guillotine: a giant ember-forged guillotine blade drops out of the sky onto the rupture and bites
+        // into the ground (slanted molten edge, weight block on top), then sinks away.
+        public static void GuillotineDrop(Vector3 ground, Vector3 forward, float size)
+        {
+            if (!Enabled) return;
+            forward.y = 0f; if (forward.sqrMagnitude < 0.01f) forward = Vector3.forward; forward.Normalize();
+            GameObject root = new GameObject("IH_Guillotine");
+            Vector3 side = Vector3.Cross(Vector3.up, forward);
+            root.transform.rotation = Quaternion.LookRotation(side, Vector3.up);   // blade plane = local XY contains the fissure line
+            root.transform.localScale = Vector3.one * size;
+            int n = 10; float th = 0.05f;
+            List<Vector3> v = new List<Vector3>(); List<int> t = new List<int>();
+            for (int i = 0; i <= n; i++)
+            {
+                float x = -0.5f + (float)i / n;
+                float yb = -0.5f + 0.32f * (x + 0.5f);   // slanted cutting edge
+                v.Add(new Vector3(x, 0.45f, th)); v.Add(new Vector3(x, 0.45f, -th)); v.Add(new Vector3(x, yb, 0f));
+            }
+            for (int i = 0; i < n; i++)
+            {
+                int a = i * 3, b = (i + 1) * 3;
+                t.Add(a); t.Add(a + 2); t.Add(b); t.Add(b); t.Add(a + 2); t.Add(b + 2);             // front face
+                t.Add(a + 1); t.Add(b + 1); t.Add(a + 2); t.Add(b + 1); t.Add(b + 2); t.Add(a + 2); // back face
+                t.Add(a); t.Add(b); t.Add(a + 1); t.Add(b); t.Add(b + 1); t.Add(a + 1);             // top
+            }
+            Tube(v, t, new Vector3(-0.56f, 0.53f, 0f), new Vector3(0.56f, 0.53f, 0f), Vector3.up, Vector3.forward, 0.09f, 0.12f, 0.09f, 0.12f, 4);   // weight block
+            MeshObject("blade", FacetMesh(v, t, new Color(0.30f, 0.27f, 0.26f, 1f), 0.5f), ClearMat(), root.transform);
+            // molten edge (additive band along the cutting edge, both sides)
+            List<Vector3> ev = new List<Vector3>(); List<Color> ec = new List<Color>(); List<int> et = new List<int>();
+            for (int i = 0; i <= n; i++)
+            {
+                float x = -0.5f + (float)i / n, yb = -0.5f + 0.32f * (x + 0.5f);
+                ev.Add(new Vector3(x, yb - 0.01f, 0f)); ec.Add(new Color(1f, 0.85f, 0.45f, 1f));
+                ev.Add(new Vector3(x, yb + 0.12f, 0f)); ec.Add(new Color(1f, 0.35f, 0.05f, 0f));
+            }
+            for (int i = 0; i < n; i++) { int a = i * 2, b = a + 2; et.Add(a); et.Add(a + 1); et.Add(b); et.Add(b); et.Add(a + 1); et.Add(b + 1); }
+            DoubleSide(et);
+            GameObject edge = MeshObject("edge", ColoredMesh(ev, ec, et), Mat(WhiteTex(), true), root.transform);
+            edge.transform.localScale = new Vector3(1f, 1f, 1f);
+            AttachGlow(root.transform, Fire, size * 0.15f, 25f, size * 1.5f);
+            DragonPop pop = root.AddComponent<DragonPop>();
+            pop.From = ground + Vector3.up * (size * 3f + 8f);
+            pop.To = ground + Vector3.up * (size * 0.25f);   // edge buried ~25%
+            pop.Move = 0.18f; pop.EaseIn = true; pop.Life = 0.9f; pop.Fade = 0.35f; pop.Sink = size * 0.8f;
+            root.transform.position = pop.From;
+            TrailWhile(root.transform, new Color(1f, 0.5f, 0.15f, 1f), size * 0.3f, delegate { return pop != null && pop.Age < pop.Move; });
+        }
+
+        // Impact Punch: a giant spectral fist (palm, four knuckles, curled fingers, thumb) punches forward and bursts.
+        public static void SpectralFist(Vector3 from, Vector3 forward, float distance, float size, Color c)
+        {
+            if (!Enabled) return;
+            if (forward.sqrMagnitude < 0.01f) forward = Vector3.forward;
+            forward.Normalize();
+            GameObject root = new GameObject("IH_SpectralFist");
+            root.transform.rotation = Quaternion.LookRotation(forward, Vector3.up);
+            root.transform.localScale = Vector3.one * size;
+            List<Vector3> v = new List<Vector3>(); List<int> t = new List<int>();
+            Tube(v, t, new Vector3(0f, 0f, -0.6f), new Vector3(0f, 0f, 0.25f), Vector3.right, Vector3.up, 0.42f, 0.30f, 0.50f, 0.36f, 6);   // back of the hand + wrist
+            for (int k = 0; k < 4; k++)
+            {
+                float x = -0.33f + k * 0.22f;
+                Tube(v, t, new Vector3(x, 0.12f, 0.2f), new Vector3(x, 0.10f, 0.52f), Vector3.right, Vector3.up, 0.11f, 0.13f, 0.10f, 0.12f, 6);   // knuckles
+                Tube(v, t, new Vector3(x, -0.02f, 0.5f), new Vector3(x, -0.22f, 0.42f), Vector3.right, Vector3.forward, 0.1f, 0.1f, 0.09f, 0.09f, 6); // curled fingers
+            }
+            Tube(v, t, new Vector3(-0.45f, -0.18f, 0.05f), new Vector3(-0.05f, -0.26f, 0.42f), Vector3.up, Vector3.forward, 0.11f, 0.12f, 0.09f, 0.1f, 6);   // thumb
+            Color body = c; body.a = 0.7f;
+            Color halo = Color.Lerp(c, Color.white, 0.35f); halo.a = 0.25f;
+            MeshObject("fist", FacetMesh(v, t, body, 0.8f), ClearMat(), root.transform);
+            GameObject h = MeshObject("halo", FacetMesh(v, new List<int>(t), halo, 0.3f), Mat(WhiteTex(), true), root.transform);
+            h.transform.localScale = Vector3.one * 1.18f;
+            AttachGlow(root.transform, c, size * 0.3f, 50f, size * 2.5f);
+            DragonPop pop = root.AddComponent<DragonPop>();
+            pop.From = from; pop.To = from + forward * distance;
+            pop.Move = 0.14f; pop.Grow = 0.08f; pop.Life = 0.22f; pop.Fade = 0.18f;
+            root.transform.position = from;
+            TrailWhile(root.transform, c, size * 0.6f, delegate { return pop != null && pop.Age < pop.Life; });
+        }
+
+        // Knight's Guidance: dim spectral wings unfold from your back (two fans of light feathers), then fold away.
+        public static void SpiritWings(Transform follow, Color c, float seconds)
+        {
+            if (!Enabled || follow == null) return;
+            GameObject root = new GameObject("IH_SpiritWings");
+            root.transform.SetParent(follow, false);
+            root.transform.localPosition = new Vector3(0f, 1.35f, -0.25f);
+            Color body = c; body.a = 0.38f;
+            Color core = Color.Lerp(c, Color.white, 0.6f); core.a = 0.5f;
+            for (int side = -1; side <= 1; side += 2)
+            {
+                GameObject wing = new GameObject(side < 0 ? "wingL" : "wingR");
+                wing.transform.SetParent(root.transform, false);
+                for (int f = 0; f < 7; f++)
+                {
+                    float ang = 15f + f * 17f;                       // fan from up-out to down-out
+                    float len = 1.5f - Mathf.Abs(f - 2.5f) * 0.12f;
+                    GameObject feather = new GameObject("f");
+                    feather.transform.SetParent(wing.transform, false);
+                    float e = (60f - ang) * Mathf.Deg2Rad;            // +45 deg (up-out) .. -57 deg (down-out)
+                    Vector3 d = new Vector3(side * Mathf.Cos(e), Mathf.Sin(e), -0.25f);
+                    feather.transform.localRotation = Quaternion.LookRotation(d, Vector3.forward);   // flat in the back plane
+                    MeshObject("b", BladeMesh(len, 0.32f, 0.04f, body, true), Mat(WhiteTex(), true), feather.transform);
+                    MeshObject("c", BladeMesh(len * 0.95f, 0.06f, 0.02f, core, true), Mat(WhiteTex(), true), feather.transform);
+                }
+            }
+            DragonPop pop = root.AddComponent<DragonPop>();
+            pop.Grow = 0.35f; pop.Life = Mathf.Max(0.5f, seconds); pop.Fade = 0.45f;
+            Feathers(follow.position + Vector3.up * 1.3f, c, 1.2f, 0.8f, 30f);
+        }
+
+        // v0.25.83 SORCERER HERO OBJECTS ---------------------------------------------------------------
+        // Flat annulus in local XZ (radius 0.5 scale) broken into glowing rune dashes.
+        private static Mesh RuneBandMesh(Color c, int segments, float inner, float outer)
+        {
+            List<Vector3> v = new List<Vector3>(); List<Color> cs = new List<Color>(); List<int> t = new List<int>();
+            int n = segments * 4;
+            for (int i = 0; i <= n; i++)
+            {
+                float a = (float)i / n * Mathf.PI * 2f;
+                bool lit = (i / 2) % 2 == 0;
+                Color k = c; k.a = lit ? c.a : c.a * 0.25f;
+                Vector3 d = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                v.Add(d * inner); cs.Add(k);
+                v.Add(d * outer); cs.Add(k);
+            }
+            for (int i = 0; i < n; i++) { int a = i * 2, b = a + 2; t.Add(a); t.Add(a + 1); t.Add(b); t.Add(b); t.Add(a + 1); t.Add(b + 1); }
+            DoubleSide(t);
+            return ColoredMesh(v, cs, t);
+        }
+
+        // Turns a primitive sphere orb into an arcane energy orb: faceted crystal shell (keeps the orb's material,
+        // so callers can still tint/fade it), a white-hot core and two rune bands spinning on different axes.
+        // Dark orbs (Gravity Blast) get a black core and violet bands instead.
+        public static void EnergyOrb(GameObject orb, Color c, bool full)
+        {
+            if (!Enabled || orb == null) return;
+            MeshFilter mf = orb.GetComponent<MeshFilter>();
+            if (mf != null) mf.sharedMesh = GeodesicShell(new Color(1f, 1f, 1f, 1f));
+            if (!full) return;
+            bool dark = c.grayscale < 0.2f;
+            Color band = dark ? new Color(0.70f, 0.40f, 1f, 0.9f) : Color.Lerp(c, Color.white, 0.35f);
+            band.a = 0.9f;
+            GameObject core = MeshObject("core", GeodesicShell(dark ? new Color(0.02f, 0f, 0.05f, 1f) : new Color(1f, 0.97f, 1f, 0.9f)), dark ? ClearMat() : Mat(WhiteTex(), true), orb.transform);
+            core.transform.localScale = Vector3.one * 0.55f;
+            for (int k = 0; k < 2; k++)
+            {
+                GameObject pivot = new GameObject("bandPivot");
+                pivot.transform.SetParent(orb.transform, false);
+                pivot.transform.localRotation = Quaternion.Euler(k == 0 ? 20f : 75f, k * 60f, k == 0 ? -15f : 30f);
+                GameObject ring = MeshObject("band", RuneBandMesh(band, 8, 0.62f, 0.72f), Mat(WhiteTex(), true), pivot.transform);
+                ring.AddComponent<DragonRotate>().Speed = new Vector3(0f, k == 0 ? 220f : -160f, 0f);
+            }
+        }
+
+        // Arcane lightning burst: real jagged bolts from the sky with branches, instead of straight lines.
+        public static void ArcaneBoltRain(Vector3 center, float radius, int count)
+        {
+            if (!Enabled) return;
+            for (int i = 0; i < count; i++)
+            {
+                float a = (float)i / count * Mathf.PI * 2f + UnityEngine.Random.Range(-0.2f, 0.2f);
+                Vector3 p = GroundPoint(center + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * radius * UnityEngine.Random.Range(0.45f, 0.8f));
+                Color col = i % 2 == 0 ? new Color(0.72f, 0.36f, 1f, 1f) : new Color(0.50f, 0.85f, 1f, 1f);
+                Bolt(p + Vector3.up * 11f + new Vector3(UnityEngine.Random.Range(-1f, 1f), 0f, UnityEngine.Random.Range(-1f, 1f)), p, col, 0.22f, 0.3f);
+                Burst(p + Vector3.up * 0.2f, col, 10, 5f, 0.2f, 0.35f, 0f);
+            }
+        }
+
+        // v0.25.84 RANGER HERO OBJECTS -----------------------------------------------------------------
+        // Skill arrow: a glowing spirit arrow pointing +Z with the head at the origin (faceted head, shaft, 3 fletches).
+        public static void SpiritArrow(Transform parent, Color c, float length)
+        {
+            if (!Enabled || parent == null) return;
+            List<Vector3> v = new List<Vector3>(); List<int> t = new List<int>();
+            Tube(v, t, new Vector3(0f, 0f, -length), new Vector3(0f, 0f, -length * 0.12f), Vector3.right, Vector3.up, 0.018f, 0.018f, 0.018f, 0.018f, 5);   // shaft
+            Mesh shaft = FacetMesh(v, t, new Color(0.92f, 0.86f, 0.70f, 1f), 0.3f);
+            MeshObject("shaft", shaft, ClearMat(), parent);
+            v = new List<Vector3>(); t = new List<int>();
+            Tube(v, t, new Vector3(0f, 0f, -length * 0.14f), new Vector3(0f, 0f, 0f), Vector3.right, Vector3.up, 0.06f, 0.025f, 0.002f, 0.002f, 4);   // broadhead
+            Color head = Color.Lerp(c, Color.white, 0.5f); head.a = 1f;
+            MeshObject("head", FacetMesh(v, t, head, 0.8f), ClearMat(), parent);
+            Color fl = c; fl.a = 0.85f;
+            for (int k = 0; k < 3; k++)
+            {
+                GameObject f = new GameObject("fletch");
+                f.transform.SetParent(parent, false);
+                f.transform.localRotation = Quaternion.AngleAxis(k * 120f, Vector3.forward);
+                List<Vector3> fv = new List<Vector3> { new Vector3(0f, 0.015f, -length * 0.98f), new Vector3(0f, 0.09f, -length * 0.95f), new Vector3(0f, 0.015f, -length * 0.72f) };
+                List<int> ft = new List<int> { 0, 1, 2 };
+                DoubleSide(ft);
+                MeshObject("v", FacetMesh(fv, ft, fl, 0.2f), Mat(WhiteTex(), true), f.transform);
+            }
+            Color halo = c; halo.a = 0.3f;
+            v = new List<Vector3>(); t = new List<int>();
+            Tube(v, t, new Vector3(0f, 0f, -length * 0.5f), new Vector3(0f, 0f, 0.05f), Vector3.right, Vector3.up, 0.07f, 0.07f, 0.02f, 0.02f, 6);
+            DoubleSide(t);
+            MeshObject("halo", FacetMesh(v, t, halo, 0.1f), Mat(WhiteTex(), true), parent);
+        }
+
+        // Spiral wind funnel (radius r0 at the bottom -> r1 at the top), two counter-rotating additive layers with
+        // streaked bands. Used by the Cyclone tornado and the Cyclone Arrow.
+        private static Mesh FunnelMesh(float r0, float r1, float height, float twist, Color c, int bands)
+        {
+            int n = 40, h = 14;
+            List<Vector3> v = new List<Vector3>(); List<Color> cs = new List<Color>(); List<int> t = new List<int>();
+            for (int j = 0; j <= h; j++)
+            {
+                float y = (float)j / h;
+                float r = Mathf.Lerp(r0, r1, Mathf.Pow(y, 0.8f));
+                float fade = Mathf.SmoothStep(0f, 1f, y * 5f) * Mathf.SmoothStep(0f, 1f, (1f - y) * 4f);
+                for (int i = 0; i <= n; i++)
+                {
+                    float a = (float)i / n * Mathf.PI * 2f + y * twist;
+                    v.Add(new Vector3(Mathf.Cos(a) * r, y * height, Mathf.Sin(a) * r));
+                    float stripe = Mathf.Pow(Mathf.Max(0f, Mathf.Sin((float)i / n * Mathf.PI * 2f * bands - y * 6f)), 3f);
+                    Color k = c; k.a = c.a * (0.12f + 0.88f * stripe) * fade;
+                    cs.Add(k);
+                }
+            }
+            for (int j = 0; j < h; j++)
+                for (int i = 0; i < n; i++)
+                {
+                    int a = j * (n + 1) + i, b = a + 1, cc = a + n + 1, d = cc + 1;
+                    t.Add(a); t.Add(cc); t.Add(b); t.Add(b); t.Add(cc); t.Add(d);
+                }
+            DoubleSide(t);
+            return ColoredMesh(v, cs, t);
+        }
+
+        public static void WindFunnel(Transform parent, Vector3 localBase, float r0, float r1, float height, Color c)
+        {
+            if (!Enabled || parent == null) return;
+            Color outer = Color.Lerp(c, new Color(0.88f, 0.90f, 0.88f, 1f), 0.4f); outer.a = 0.22f;   // v0.25.180 transparent corkscrew, not an opaque funnel
+            Color inner = Color.Lerp(c, Color.white, 0.5f); inner.a = 0.14f;
+            GameObject a = MeshObject("funnelA", FunnelMesh(r0, r1, height, 4f, outer, 4), Mat(WhiteTex(), true), parent);
+            a.transform.localPosition = localBase;
+            a.AddComponent<DragonRotate>().Speed = new Vector3(0f, -320f, 0f);
+            GameObject b = MeshObject("funnelB", FunnelMesh(r0 * 0.6f, r1 * 0.7f, height * 0.95f, -3f, inner, 3), Mat(WhiteTex(), true), parent);
+            b.transform.localPosition = localBase;
+            b.AddComponent<DragonRotate>().Speed = new Vector3(0f, -480f, 0f);
+        }
+
+        // Furious Winds: real leaves (green lens blades) whirling around you on three tilted orbits.
+        public static void LeafOrbit(Transform parent, float radius)
+        {
+            LeafOrbit(parent, radius, 10);
+        }
+
+        // v0.25.190 perRing = leaves on each of the 3 orbits (sparse for Furious Winds / Cyclone)
+        public static void LeafOrbit(Transform parent, float radius, int perRing)
+        {
+            if (!Enabled || parent == null) return;
+            perRing = Mathf.Clamp(perRing, 1, 10);
+            Color[] cols = { new Color(0.40f, 0.80f, 0.30f, 0.95f), new Color(0.62f, 0.90f, 0.35f, 0.95f), new Color(0.85f, 0.75f, 0.30f, 0.95f) };
+            System.Random rng = new System.Random(3);
+            for (int k = 0; k < 3; k++)
+            {
+                GameObject pivot = new GameObject("leafOrbit");
+                pivot.transform.SetParent(parent, false);
+                pivot.transform.localPosition = new Vector3(0f, 0.6f + k * 0.7f, 0f);
+                pivot.transform.localRotation = Quaternion.Euler(k * 7f - 7f, 0f, k * 5f);
+                pivot.AddComponent<DragonRotate>().Speed = new Vector3(0f, 260f + k * 70f, 0f);
+                float r = radius * (0.6f + 0.15f * k);
+                for (int i = 0; i < perRing; i++)
+                {
+                    float a = (i + (float)rng.NextDouble() * 0.6f) / perRing * 360f;
+                    GameObject leaf = MeshObject("leaf", LensMesh(0.32f, 0.16f, 0.02f, cols[(i + k) % 3], true), ClearMat(), pivot.transform);
+                    leaf.transform.localPosition = Quaternion.Euler(0f, a, 0f) * Vector3.forward * r + Vector3.up * ((float)rng.NextDouble() - 0.5f) * 0.6f;
+                    leaf.transform.localRotation = Quaternion.Euler((float)rng.NextDouble() * 360f, a, (float)rng.NextDouble() * 360f);
+                    leaf.AddComponent<DragonRotate>().Speed = new Vector3(400f, 0f, 250f);
+                }
+            }
+        }
+
+        // Snare Trap: a real hunter's snare - a rope noose loop on the ground, wooden stakes leaning out around it,
+        // and a faint green rune band so it stays readable.
+        public static void SnareTrap(Transform parent, float radius)
+        {
+            if (!Enabled || parent == null) return;
+            List<Vector3> v = new List<Vector3>(); List<int> t = new List<int>();
+            int n = 18;
+            float rr = radius * 0.8f;
+            for (int i = 0; i < n; i++)
+            {
+                float a0 = (float)i / n * Mathf.PI * 2f, a1 = (float)(i + 1) / n * Mathf.PI * 2f;
+                Vector3 p0 = new Vector3(Mathf.Cos(a0) * rr, 0.06f, Mathf.Sin(a0) * rr), p1 = new Vector3(Mathf.Cos(a1) * rr, 0.06f, Mathf.Sin(a1) * rr);
+                Vector3 dir = (p1 - p0).normalized; Vector3 side = Vector3.Cross(Vector3.up, dir);
+                Tube(v, t, p0, p1, Vector3.up, side, 0.05f, 0.05f, 0.05f, 0.05f, 5);
+            }
+            // v0.25.181 (user: a finished physical trap): lit rope + wooden stakes + an iron jaw ring with teeth
+            MeshObject("rope", Uvd(FacetMesh(v, t, Color.white, 0f), 3f), NaturalMat(new Color(0.62f, 0.50f, 0.32f, 1f)), parent);
+            v = new List<Vector3>(); t = new List<int>();
+            float jr = radius * 0.45f;
+            for (int i = 0; i < n; i++)
+            {
+                float a0 = (float)i / n * Mathf.PI * 2f, a1 = (float)(i + 1) / n * Mathf.PI * 2f;
+                Vector3 p0 = new Vector3(Mathf.Cos(a0) * jr, 0.08f, Mathf.Sin(a0) * jr), p1 = new Vector3(Mathf.Cos(a1) * jr, 0.08f, Mathf.Sin(a1) * jr);
+                Vector3 dir = (p1 - p0).normalized; Vector3 side = Vector3.Cross(Vector3.up, dir);
+                Tube(v, t, p0, p1, Vector3.up, side, 0.035f, 0.05f, 0.035f, 0.05f, 6);
+                if (i % 2 == 0) Tube(v, t, p0, p0 + Vector3.up * 0.16f - p0.normalized * 0.05f, side, dir, 0.03f, 0.03f, 0.004f, 0.004f, 4);   // teeth
+            }
+            MeshObject("jaw", Uvd(FacetMesh(v, t, Color.white, 0f), 3f), NaturalMat(new Color(0.36f, 0.36f, 0.38f, 1f)), parent);
+            v = new List<Vector3>(); t = new List<int>();
+            for (int i = 0; i < 6; i++)
+            {
+                float a = (i + 0.5f) / 6f * Mathf.PI * 2f;
+                Vector3 d = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                Vector3 baseP = d * radius * 0.95f;
+                Vector3 top = baseP + d * 0.25f + Vector3.up * 0.65f;
+                Tube(v, t, baseP, top, Vector3.Cross(Vector3.up, d), d, 0.06f, 0.06f, 0.01f, 0.01f, 5);
+            }
+            MeshObject("stakes", Uvd(FacetMesh(v, t, Color.white, 0f), 3f), NaturalMat(new Color(0.42f, 0.30f, 0.18f, 1f)), parent);
+            GameObject band = MeshObject("rune", RuneBandMesh(new Color(0.75f, 1f, 0.45f, 0.28f), 10, 0.9f, 1f), Mat(WhiteTex(), true), parent);   // subtle placed indicator
+            band.transform.localPosition = new Vector3(0f, 0.05f, 0f);
+            band.transform.localScale = Vector3.one * radius;
+            band.AddComponent<DragonRotate>().Speed = new Vector3(0f, 25f, 0f);
+        }
+
         // v0.25.80 Rift Walker portal: a standing oval of swirling void (dark core, spiral bands) with a blazing rim.
         public static void RiftPortal(Transform parent, Vector3 centre, float rx, float ry)
         {
+            // X width, Y up, Z depth; pivot = existing opening centre. Same rx/ry and traversal root.
             if (!Enabled || parent == null) return;
             GameObject root = new GameObject("IH_RiftPortal");
             root.transform.SetParent(parent, false);
             root.transform.localPosition = centre;
             root.transform.localScale = new Vector3(rx, ry, 1f);
-            GameObject swirl = MeshObject("swirl", SwirlDisk(false), ClearMat(), root.transform);
-            DragonRotate r1 = swirl.AddComponent<DragonRotate>(); r1.Speed = new Vector3(0f, 0f, 90f);
-            GameObject glow = MeshObject("glow", SwirlDisk(true), Mat(WhiteTex(), true), root.transform);
-            DragonRotate r2 = glow.AddComponent<DragonRotate>(); r2.Speed = new Vector3(0f, 0f, -150f);
-            ParticleSystem ps = Particles(root.transform, new Color(0.85f, 0.45f, 1f, 1f), 0, 60f * Amount, 1f, 0.6f, 0.2f, 0.8f, 0.04f, 0.12f, 0f,
-                ParticleSystemShapeType.Circle, 1f, new Vector3(0f, 0f, 0f), false, true);
+            GameObject throat = MeshObject("darkThroat", PortalSurfaceMesh(), Mat(PortalWaterTexture(), false), root.transform);
+            throat.transform.localScale = new Vector3(0.245f, 0.245f, 1f);
+            for (int side = 0; side < 2; side++)
+            {
+                float face = side == 0 ? 1f : -1f;
+                GameObject tunnel = MeshObject("spatialTunnel", PortalTunnelMesh(), Mat(PortalSpatialTexture(), false), root.transform);
+                tunnel.transform.localRotation = Quaternion.Euler(0f, side == 0 ? 0f : 180f, 0f);
+                tunnel.AddComponent<DragonRotate>().Speed = new Vector3(0f, 0f, face * 18f);
+                GameObject lip = MeshObject("purpleRim", PortalRimMesh(false), Mat(WhiteTex(), true), root.transform);
+                lip.transform.localPosition = new Vector3(0f, 0f, face * 0.25f);
+                lip.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+                GameObject edge = MeshObject("electricLip", PortalElectricMesh(), Mat(WhiteTex(), true), root.transform);
+                edge.transform.localPosition = new Vector3(0f, 0f, face * 0.275f);
+                edge.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+                edge.AddComponent<DragonRotate>().Speed = new Vector3(0f, face * 38f, 0f);
+            }
+            DragonPortalRipple ripple = root.AddComponent<DragonPortalRipple>();
+            ripple.Rings = new Transform[8]; ripple.Surfaces = new Renderer[8];
+            for (int side = 0; side < 2; side++)
+                for (int i = 0; i < 4; i++)
+                {
+                    int k = side * 4 + i;
+                    GameObject crest = MeshObject("waterRipple", PortalRimMesh(true), Mat(WhiteTex(), true), root.transform);
+                    crest.transform.localPosition = new Vector3(0f, 0f, side == 0 ? 0.28f : -0.28f);
+                    crest.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+                    ripple.Rings[k] = crest.transform; ripple.Surfaces[k] = crest.GetComponent<Renderer>();
+                }
+            ParticleSystem ps = Particles(root.transform, new Color(0.65f, 0.25f, 1f, 0.8f), 0, 22f * Amount, 1f, 0.6f, -0.8f, -0.25f, 0.04f, 0.1f, 0f,
+                ParticleSystemShapeType.Circle, 1f, Vector3.zero, false, true);
             ParticleSystem.MainModule mm = ps.main; mm.loop = true;
-            ParticleSystem.ShapeModule sh = ps.shape; sh.radiusThickness = 0.05f; sh.rotation = new Vector3(0f, 0f, 0f);
+            ParticleSystem.ShapeModule sh = ps.shape; sh.radiusThickness = 0.05f;
         }
+
+        private static Mesh _portalTunnel208, _portalElectric208;
+        private static Texture2D _portalSpatial208;
+        // X width, Y up, Z depth; pivot = opening centre. Closed annular tunnel wall, two faces + end caps.
+        // Mouth r=.95 z=.24; throat r=.24 z=.052; thickness .012. Opposite face is a rotation, never negative scale.
+        private static Mesh PortalTunnelMesh()
+        {
+            if (_portalTunnel208 != null) return _portalTunnel208;
+            const int around = 64, radial = 12, row = around + 1, layer = (radial + 1) * row;
+            Vector3[] v = new Vector3[layer * 2]; Color[] c = new Color[v.Length]; Vector2[] uv = new Vector2[v.Length];
+            List<int> triangles = new List<int>();
+            for (int wall = 0; wall < 2; wall++)
+                for (int j = 0; j <= radial; j++)
+                    for (int i = 0; i <= around; i++)
+                    {
+                        float f = j / (float)radial, radius = Mathf.Lerp(0.24f, 0.95f, f);
+                        float angle = i * Mathf.PI * 2f / around;
+                        int index = wall * layer + j * row + i;
+                        float depth = 0.02f + 0.22f * Mathf.Pow(radius / 0.95f, 1.4f) - wall * 0.012f;
+                        v[index] = new Vector3(Mathf.Cos(angle) * radius, Mathf.Sin(angle) * radius, depth);
+                        float arm = Mathf.Pow(0.5f + 0.5f * Mathf.Sin(angle * 7f - f * 17f), 3f);
+                        c[index] = Color.Lerp(new Color(0.05f, 0.06f, 0.22f, 0.92f), new Color(0.32f, 0.34f, 0.88f, 0.88f), arm * (0.25f + f * 0.75f));
+                        uv[index] = new Vector2(i / (float)around + f * 0.4f, f);
+                    }
+            for (int j = 0; j < radial; j++)
+                for (int i = 0; i < around; i++)
+                {
+                    int a = j * row + i, b = a + 1, d = a + row, e = d + 1;
+                    triangles.Add(a); triangles.Add(d); triangles.Add(b); triangles.Add(b); triangles.Add(d); triangles.Add(e);
+                    triangles.Add(a + layer); triangles.Add(b + layer); triangles.Add(d + layer);
+                    triangles.Add(b + layer); triangles.Add(e + layer); triangles.Add(d + layer);
+                }
+            for (int end = 0; end < 2; end++)
+                for (int i = 0; i < around; i++)
+                {
+                    int a = end * radial * row + i, b = a + 1;
+                    if (end == 0)
+                    { triangles.Add(a); triangles.Add(b); triangles.Add(a + layer); triangles.Add(b); triangles.Add(b + layer); triangles.Add(a + layer); }
+                    else
+                    { triangles.Add(a); triangles.Add(a + layer); triangles.Add(b); triangles.Add(b); triangles.Add(a + layer); triangles.Add(b + layer); }
+                }
+            _portalTunnel208 = new Mesh(); _portalTunnel208.vertices = v; _portalTunnel208.colors = c;
+            _portalTunnel208.uv = uv; _portalTunnel208.triangles = triangles.ToArray();
+            _portalTunnel208.RecalculateNormals(); _portalTunnel208.RecalculateBounds();
+            return _portalTunnel208;
+        }
+
+        private static Texture2D PortalSpatialTexture()
+        {
+            if (_portalSpatial208 == null) _portalSpatial208 = MakeTex(256, 128, delegate(float u, float v)
+            {
+                // UV.x wraps around the tunnel, UV.y runs into its throat: thin turbulent streams, not flat radial plates.
+                float noise = Fbm(u * 15f, v * 9f, 8208);
+                float strand = Mathf.Pow(0.5f + 0.5f * Mathf.Sin(u * Mathf.PI * 32f + v * 31f + noise * 3.5f), 3f);
+                return 0.28f + 0.38f * strand + 0.22f * noise;
+            }, TextureWrapMode.Repeat);
+            return _portalSpatial208;
+        }
+
+        private static Mesh PortalElectricMesh()
+        {
+            if (_portalElectric208 != null) return _portalElectric208;
+            _portalElectric208 = OrbitRingMesh(0.985f, 0.006f, new Color(0.46f, 0.56f, 1f, 0.9f), new Color(0.80f, 0.78f, 1f, 0.9f));
+            Vector3[] vertices = _portalElectric208.vertices;
+            for (int i = 0; i < vertices.Length; i++)
+            {
+                float angle = Mathf.Atan2(vertices[i].z, vertices[i].x);
+                float irregular = 1f + 0.009f * Mathf.Sin(angle * 17f) + 0.006f * Mathf.Cos(angle * 29f);
+                vertices[i].x *= irregular; vertices[i].z *= irregular;
+            }
+            _portalElectric208.vertices = vertices; _portalElectric208.RecalculateNormals(); _portalElectric208.RecalculateBounds();
+            return _portalElectric208;
+        }
+
+        private static Mesh _portalSurface207, _portalRim207, _portalRipple207;
+        private static Texture2D _portalWater207;
+        private static Mesh PortalSurfaceMesh()
+        {
+            if (_portalSurface207 != null) return _portalSurface207;
+            List<Vector2> outline = new List<Vector2>();
+            for (int i = 0; i < 64; i++)
+            {
+                float a = i * Mathf.PI * 2f / 64f;
+                outline.Add(new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * 0.965f);
+            }
+            _portalSurface207 = ExtrudeBevel(outline, 0.03f, 0.004f, 1f);
+            Vector3[] v = _portalSurface207.vertices;
+            Vector2[] uv = new Vector2[v.Length]; Color[] colors = new Color[v.Length];
+            for (int i = 0; i < v.Length; i++)
+            {
+                uv[i] = new Vector2(v[i].x * 0.5f + 0.5f, v[i].y * 0.5f + 0.5f);
+                colors[i] = new Color(0.18f, 0.035f, 0.32f, 0.82f);
+            }
+            _portalSurface207.uv = uv; _portalSurface207.colors = colors;
+            _portalSurface207.RecalculateNormals(); _portalSurface207.RecalculateBounds();
+            return _portalSurface207;
+        }
+
+        private static Mesh PortalRimMesh(bool ripple)
+        {
+            if (ripple)
+            {
+                if (_portalRipple207 == null) _portalRipple207 = OrbitRingMesh(0.982f, 0.008f,
+                    new Color(0.52f, 0.18f, 0.9f, 0.8f), new Color(0.52f, 0.18f, 0.9f, 0.8f));
+                return _portalRipple207;
+            }
+            if (_portalRim207 == null) _portalRim207 = OrbitRingMesh(0.982f, 0.018f,
+                new Color(0.62f, 0.12f, 1f, 0.95f), new Color(0.62f, 0.12f, 1f, 0.95f));
+            return _portalRim207;
+        }
+
+        private static Texture2D PortalWaterTexture()
+        {
+            if (_portalWater207 == null) _portalWater207 = MakeTex(128, 128, delegate(float u, float v)
+            {
+                float r = Rad(u, v);
+                float flow = Fbm(u * 6f, v * 6f, 7207);
+                float waves = 0.5f + 0.5f * Mathf.Sin(r * 38f + (flow - 0.5f) * 4f);
+                return 0.45f + 0.3f * flow + 0.12f * waves;
+            }, TextureWrapMode.Clamp);
+            return _portalWater207;
+        }
+
 
         // Unit disk in XY (radius 1): spiral arms; rim = bright edge ring only (additive), else dark void body.
         private static Mesh SwirlDisk(bool rim)
@@ -11789,7 +22223,7 @@ namespace DragonsAltarCombat
                     float arm = 0.5f + 0.5f * Mathf.Sin(tw * 3f);
                     Color c;
                     if (rim) { c = Color.Lerp(new Color(0.75f, 0.3f, 1f, 1f), new Color(1f, 0.85f, 1f, 1f), f); c.a = Mathf.Pow(f, 6f) * 0.95f + arm * f * 0.15f; }
-                    else { c = Color.Lerp(new Color(0.03f, 0f, 0.08f, 1f), new Color(0.35f, 0.08f, 0.6f, 1f), arm * f); c.a = Mathf.Lerp(0.92f, 0.55f, f); }
+                    else { c = Color.Lerp(new Color(0.03f, 0f, 0.08f, 1f), new Color(0.30f, 0.10f, 0.50f, 1f), arm * f); c.a = Mathf.Lerp(0.72f, 0.4f, f); }   // v0.25.180 dark translucent interior
                     cs.Add(c);
                 }
             }
@@ -11813,12 +22247,11 @@ namespace DragonsAltarCombat
             Color c = ClassColor(p);
             Vector3 pos = p.transform.position;
             // v0.25.75 (user): no rune circle on the ground when a skill starts.
-            Burst(pos + Vector3.up * 0.2f, Color.Lerp(c, Color.white, 0.3f), Mathf.RoundToInt((big ? 40 : 14) * Amount), big ? 3.5f : 2f, 0.12f, 0.7f, -1.2f);
-            Flash(pos + Vector3.up * 1.1f, c, big ? 3f : 1.2f, big ? 8f : 4f, big ? 0.6f : 0.3f);
+            Burst(pos + Vector3.up * 0.2f, Color.Lerp(c, Color.white, 0.3f), Mathf.RoundToInt((big ? 16 : 6) * Amount), big ? 3f : 1.6f, 0.1f, 0.5f, -1.2f);   // v0.25.145 restrained, no flash
             if (big)
             {
                 // v0.25.77 (user): no light column on cast
-                Shake(pos, 20f, 0.6f);
+                Shake(pos, 20f, 0.4f);   // v0.25.150
             }
         }
 
@@ -11831,7 +22264,7 @@ namespace DragonsAltarCombat
             GameObject go = new GameObject("IH_WeaponCharge");
             go.transform.SetParent(hand, false);
             Color c = ClassColor(p);
-            AttachGlow(go.transform, c, 0.18f, 45f * Amount, 2.5f);
+            AttachGlow(go.transform, c, 0.16f, 30f * Amount, 1.5f);   // v0.25.150 subtler weapon charge
             UnityEngine.Object.Destroy(go, Mathf.Min(seconds, 4f) + 0.2f);
         }
 
@@ -11844,15 +22277,16 @@ namespace DragonsAltarCombat
         public static void HolyImpact(Vector3 pos, float radius)
         {
             Shockwave(pos, Holy, radius, 0.45f);
-            Burst(pos + Vector3.up * 0.4f, HolyWhite, Mathf.RoundToInt(24 + radius * 6f), 6f + radius, 0.25f, 0.8f, -0.2f);
+            Burst(pos + Vector3.up * 0.4f, HolyWhite, Mathf.RoundToInt(16 + radius * 4f), 6f + radius, 0.22f, 0.7f, -0.2f);
             Vanilla(new string[] { "fx_DvergerMage_Support_start", "vfx_HealthUpgrade", "fx_guardstone_activate" }, pos, Quaternion.identity, 1f, 3f);
         }
 
         public static void LightningImpact(Vector3 pos, float radius)
         {
-            Shockwave(pos, Storm, radius, 0.3f);
-            Burst(pos + Vector3.up * 0.3f, Storm, Mathf.RoundToInt(30 + radius * 6f), 10f + radius, 0.2f, 0.5f, 0.8f);
-            Vanilla(new string[] { "fx_himminafl_aoe", "fx_himminafl_hit", "fx_Lightning", "vfx_lightning" }, pos, Quaternion.identity, Mathf.Clamp(radius / 4f, 0.6f, 3f), 3f);
+            // v0.25.180 compact contact: small pressure front, branching sparks, local dust (no vanilla AoE flare)
+            GroundRing(pos, Storm, Mathf.Max(0.8f, radius * 0.5f), 0.3f);
+            Burst(pos + Vector3.up * 0.3f, Storm, Mathf.RoundToInt(10 + radius * 2f), 10f + radius, 0.12f, 0.4f, 0.8f);
+            DustRing(pos, Mathf.Max(0.8f, radius * 0.5f));
         }
 
         public static void SkyStrike(Vector3 ground, Color c, float radius, float height)
@@ -11862,6 +22296,57 @@ namespace DragonsAltarCombat
         }
     }
     // v0.25.75 helpers
+    // v0.25.191 straight flight a -> b, then self-destroy
+    public class DragonFall : MonoBehaviour
+    {
+        private Vector3 _a, _b; private float _t, _life = 0.2f;
+        public void Init(Vector3 a, Vector3 b, float life) { _a = a; _b = b; _life = life; }
+        private void Update()
+        {
+            _t += Time.deltaTime;
+            transform.position = Vector3.Lerp(_a, _b, Mathf.Clamp01(_t / _life));
+            if (_t >= _life) Destroy(gameObject);
+        }
+    }
+
+    // v0.25.191 clock hand / face spin: yaw speed eases from `from` to `to` deg/s over the life (unwinding)
+    public class DragonClockSpin : MonoBehaviour
+    {
+        private float _from, _to, _life = 1f, _age;
+        public void Init(float from, float to, float life) { _from = from; _to = to; _life = Mathf.Max(0.1f, life); }
+        private void Update()
+        {
+            _age += Time.deltaTime;
+            float k = Mathf.Clamp01(_age / _life);
+            float sp = Mathf.Lerp(_from, _to, 1f - (1f - k) * (1f - k));
+            transform.Rotate(0f, sp * Time.deltaTime, 0f, Space.World);
+        }
+    }
+
+    // v0.25.190 spectral cannon: grows in over 0.2 s, holds, shrinks out over the last 0.15 s, then destroys itself
+    public class DragonCannonLife : MonoBehaviour
+    {
+        public float Life = 1f;
+        private float _age;
+        private void Update()
+        {
+            _age += Time.deltaTime;
+            float k = _age < 0.2f ? Mathf.SmoothStep(0.2f, 1f, _age / 0.2f) : (_age > Life - 0.15f ? Mathf.Clamp01((Life - _age) / 0.15f) : 1f);
+            transform.localScale = Vector3.one * Mathf.Max(0.01f, k);
+            if (_age >= Life) Destroy(gameObject);
+        }
+    }
+
+    // v0.25.189 gentle sway around a local axis (relic wings): angle = Deg * sin(t * Speed + Phase)
+    public class DragonSway : MonoBehaviour
+    {
+        public Vector3 Axis = Vector3.up;
+        public float Deg = 3f, Speed = 1.6f, Phase;
+        private Quaternion _base;
+        private void Start() { _base = transform.localRotation; }
+        private void Update() { transform.localRotation = _base * Quaternion.AngleAxis(Deg * Mathf.Sin(Time.time * Speed + Phase), Axis); }
+    }
+
     public class DragonRotate : MonoBehaviour
     {
         public Vector3 Speed;
@@ -11883,7 +22368,7 @@ namespace DragonsAltarCombat
             else if (_age < Life) k = 1f + 0.04f * Mathf.Sin(_age * 9f);
             else k = Mathf.Lerp(1f, 0f, (_age - Life) / 0.3f);
             transform.localScale = _scale * Mathf.Max(0.001f, k);
-            if (_light != null) _light.intensity = Mathf.Max(0f, k) * 2.4f * DragonVfx.LightScale;
+            if (_light != null) _light.intensity = Mathf.Max(0f, k) * 0.8f * DragonVfx.LightScale;
             if (_age >= Life + 0.3f) Destroy(gameObject);
         }
     }
@@ -11924,5 +22409,757 @@ namespace DragonsAltarCombat
             Mesh.colors = _buf;
         }
         private void OnDestroy() { if (Mesh != null) Destroy(Mesh); }
+    }
+    // v0.25.82: always faces the camera (billboard).
+    public class DragonFaceCamera : MonoBehaviour
+    {
+        private void LateUpdate()
+        {
+            Camera cam = Camera.main;
+            if (cam != null) transform.rotation = Quaternion.LookRotation(cam.transform.forward, cam.transform.up);
+        }
+    }
+
+    // v0.25.82: generic life of a hero object: optional move From -> To (EaseIn = accelerating, like a falling blade),
+    // scale pop-in (Grow), optional pulse, then shrink (or Sink into the ground) over Fade and destroy.
+    public class DragonPop : MonoBehaviour
+    {
+        public Vector3 From, To;
+        public float Move, Grow, Life = 1f, Fade = 0.3f, Pulse, Sink;
+        public bool EaseIn;
+        public float Age;
+        private Vector3 _scale;
+        private bool _moves;
+        private void Start()
+        {
+            _scale = transform.localScale;
+            _moves = Move > 0f;
+            if (Grow > 0f) transform.localScale = _scale * 0.05f;
+        }
+        private void Update()
+        {
+            Age += Time.deltaTime;
+            if (_moves)
+            {
+                float m = Mathf.Clamp01(Age / Move);
+                m = EaseIn ? m * m : 1f - (1f - m) * (1f - m);
+                transform.position = Vector3.Lerp(From, To, m);
+            }
+            float k = 1f;
+            if (Grow > 0f && Age < Grow) k = Mathf.SmoothStep(0.05f, 1f, Age / Grow);
+            else if (Age < Life) k = 1f + Pulse * Mathf.Sin(Age * 9f);
+            else
+            {
+                float f = Mathf.Clamp01((Age - Life) / Mathf.Max(0.01f, Fade));
+                if (Sink > 0f) { transform.position = To - Vector3.up * Sink * f * f; k = 1f; }
+                else k = 1f - f;
+            }
+            transform.localScale = _scale * Mathf.Max(0.001f, k);
+            if (Age >= Life + Fade) Destroy(gameObject);
+        }
+    }
+
+    // CAPE GUARD (v0.25.168 -> v0.25.170). Valheim capes are MagicaCloth2 components (VisEquipment.SetupCloth).
+    // Video evidence: v0.25.168 - cape not rendered in the air (MagicaCloth culling paused it) -> fixed in v0.25.169 (still
+    // in place). v0.25.169 video (Circle Swing + Bonecrusher): cape visible, but at the Bonecrusher landing it points straight
+    // UP (it lagged above the body during the fast fall = world inertia still acting) and afterwards it jitters / bunches.
+    // Confirmed in our own guard code (v0.25.169): (1) a renderer-visibility heuristic reset the cloth at the end of skills
+    // (snap), (2) the inertia anchor was switched off abruptly at release, (3) the guard flickered on/off between animation
+    // segments (LiveUntil / ClipBusy gaps), re-applying and restoring every value each time, (4) parameters were pushed
+    // every frame. v0.25.170: one steady guard session per skill (0.35 s hysteresis), no reset, no anchor, parameters pushed
+    // only when they change; while guarded the cape ignores fast WORLD movement (world inertia 0 + movement / rotation speed
+    // limits, the documented MagicaCloth way) and skips teleport resets; culling stays off; values are blended back over
+    // 0.5 s afterwards. The cape keeps simulating (gravity, wind, colliders) the whole time and is never hidden.
+    public static class DragonClothGuard
+    {
+        private class Saved
+        {
+            public Component Cloth; public object Data; public object Inertia;
+            public float World = -1f, Local = -1f;
+            public object MoveLimit, RotLimit; public bool MoveUse, RotUse; public float MoveVal, RotVal;
+            public object Teleport;
+            public object Culling; public object CameraMode; public bool HadDistance; public bool DistanceUse; public object DistanceSlider;
+            public List<SkinnedMeshRenderer> Skins = new List<SkinnedMeshRenderer>(); public List<bool> SkinOffscreen = new List<bool>();
+        }
+        private static Type _clothType;
+        private static bool _typeTried, _logged;
+        private static PropertyInfo _serialize;
+        private static FieldInfo _inertiaField, _world, _local, _moveLimit, _rotLimit, _teleport, _cullingField, _cameraMode, _distanceLen, _sliderUse, _sliderValue;
+        private static MethodInfo _paramChange;
+        private static readonly List<Saved> _saved = new List<Saved>();
+        private static Player _owner;
+        private static float _level, _nextScan, _drivenUntil, _lastPushed = -1f;
+        private static bool _guardOn;
+        private const float Hold = 0.35f, BlendOut = 0.5f, MoveLimitMps = 1.0f, RotLimitDps = 120f, LocalKeep = 0.5f;
+
+        private static bool Resolve()
+        {
+            if (_typeTried) return _clothType != null && _serialize != null;
+            _typeTried = true;
+            try
+            {
+                _clothType = DragonCombat.FindTypeCached("MagicaCloth2.MagicaCloth");
+                if (_clothType == null) return false;
+                const BindingFlags F = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+                _serialize = _clothType.GetProperty("SerializeData", F);
+                _paramChange = _clothType.GetMethod("SetParameterChange", BindingFlags.Instance | BindingFlags.Public, null, Type.EmptyTypes, null);
+                if (_serialize == null) return false;
+                Type sd = _serialize.PropertyType;
+                _inertiaField = sd.GetField("inertiaConstraint", F);
+                if (_inertiaField != null)
+                {
+                    Type it = _inertiaField.FieldType;
+                    _world = FloatField(it, "worldInertia");
+                    _local = FloatField(it, "localInertia");
+                    _moveLimit = SliderField(it, "movementSpeedLimit");
+                    _rotLimit = SliderField(it, "rotationSpeedLimit");
+                    FieldInfo tp = it.GetField("teleportMode", F);
+                    if (tp != null && tp.FieldType.IsEnum && Enum.IsDefined(tp.FieldType, "None")) _teleport = tp;
+                }
+                FieldInfo[] sf = sd.GetFields(F);
+                for (int i = 0; i < sf.Length && _cullingField == null; i++)
+                    if (sf[i].Name.IndexOf("culling", StringComparison.OrdinalIgnoreCase) >= 0 && !sf[i].FieldType.IsPrimitive) _cullingField = sf[i];
+                if (_cullingField != null)
+                {
+                    FieldInfo[] cf = _cullingField.FieldType.GetFields(F);
+                    for (int i = 0; i < cf.Length; i++)
+                    {
+                        string n = cf[i].Name;
+                        if (_cameraMode == null && cf[i].FieldType.IsEnum && n.IndexOf("camera", StringComparison.OrdinalIgnoreCase) >= 0 && n.IndexOf("mode", StringComparison.OrdinalIgnoreCase) >= 0 && Enum.IsDefined(cf[i].FieldType, "Off")) _cameraMode = cf[i];
+                        if (_distanceLen == null && n.IndexOf("distance", StringComparison.OrdinalIgnoreCase) >= 0 && n.IndexOf("length", StringComparison.OrdinalIgnoreCase) >= 0 && SliderType(cf[i].FieldType)) _distanceLen = cf[i];
+                    }
+                }
+                Debug.Log("[Aethelborn] Cape guard: MagicaCloth2 found; inertia " + (_world != null ? "world " : "") + (_local != null ? "local " : "")
+                    + (_moveLimit != null ? "moveLimit " : "") + (_rotLimit != null ? "rotLimit " : "") + (_teleport != null ? "teleport " : "")
+                    + "| culling " + (_cameraMode != null ? "camera " : "") + (_distanceLen != null ? "distance" : ""));
+            }
+            catch (Exception) { _clothType = null; }
+            return _clothType != null && _serialize != null;
+        }
+
+        private static bool SliderType(Type t)
+        {
+            if (t == null || t.IsPrimitive) return false;
+            const BindingFlags F = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            FieldInfo use = t.GetField("use", F), val = t.GetField("value", F);
+            if (use == null || val == null || use.FieldType != typeof(bool) || val.FieldType != typeof(float)) return false;
+            _sliderUse = use; _sliderValue = val;
+            return true;
+        }
+
+        private static FieldInfo SliderField(Type t, string name)
+        {
+            FieldInfo f = t.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            return f != null && SliderType(f.FieldType) ? f : null;
+        }
+
+        private static FieldInfo FloatField(Type t, string name)
+        {
+            FieldInfo f = t.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            return f != null && f.FieldType == typeof(float) ? f : null;
+        }
+
+        private static bool Driven(Player p)
+        {
+            if (p == null || p.IsDead()) return false;
+            if (Time.time < DragonMixamo.LiveUntil) return true;
+            if (DragonCombat.ClipBusy(p)) return true;
+            return DragonCombat.IsSkillLocked(p) && !p.IsOnGround();
+        }
+
+        // v0.25.171 (user: "still happening - freeze the cape or don't let our CAs affect it"): FREEZE mode (default). While a skill
+        // animation drives the body (same hysteresis as the guard) every MagicaCloth component on the player is switched OFF: no cloth
+        // simulation runs, the cape mesh is plain skinned to the body bones and moves with the body like armour - nothing our skill
+        // animations, root moves or falls do can fling, stretch or shake it. 0.15 s after the skill ends (hysteresis included) the
+        // components are switched back ON and the cloth starts again from the current pose. Only components WE switched off are
+        // switched back on. Config [Visuals] FreezeCapeDuringSkills_v025171 (off = the v0.25.170 damped guard below).
+        private static readonly List<Behaviour> _frozen = new List<Behaviour>();
+        private static float _frozenRelease;
+        private static bool _freezeLogged;
+        private const float Settle = 0.15f;
+
+        private static bool FreezeMode()
+        {
+            return DragonCombatPlugin.Instance == null || DragonCombatPlugin.Instance.CapeFreeze == null || DragonCombatPlugin.Instance.CapeFreeze.Value;
+        }
+
+        private static void FreezeUpdate(Player p, bool on)
+        {
+            if (p != _owner) { Unfreeze(); _owner = p; }
+            if (on)
+            {
+                _frozenRelease = Time.time + Settle;
+                if (_clothType == null) { _clothType = DragonCombat.FindTypeCached("MagicaCloth2.MagicaCloth"); if (_clothType == null) return; }
+                if (Time.time < _nextScan && _frozen.Count > 0) return;
+                _nextScan = Time.time + 0.5f;   // new cape equipped mid-skill
+                Component[] cloths = p.GetComponentsInChildren(_clothType, true);
+                for (int i = 0; i < cloths.Length; i++)
+                {
+                    Behaviour b = cloths[i] as Behaviour;
+                    if (b == null || !b.enabled) continue;
+                    b.enabled = false;
+                    _frozen.Add(b);
+                    if (!_freezeLogged) { _freezeLogged = true; Debug.Log("[Aethelborn] Cape guard: freeze mode - cloth '" + b.name + "' paused during skill animations"); }
+                }
+                return;
+            }
+            if (_frozen.Count > 0 && Time.time >= _frozenRelease) Unfreeze();
+        }
+
+        private static void Unfreeze()
+        {
+            for (int i = 0; i < _frozen.Count; i++) if (_frozen[i] != null) _frozen[i].enabled = true;
+            _frozen.Clear();
+        }
+
+        public static void Update(Player p)
+        {
+            try
+            {
+                if (FreezeMode())
+                {
+                    if (_saved.Count > 0) Restore();   // switched modes: the damped guard's values go back first
+                    if (Driven(p)) _drivenUntil = Time.time + Hold;
+                    FreezeUpdate(p, p != null && !p.IsDead() && Time.time < _drivenUntil);
+                    return;
+                }
+                if (_frozen.Count > 0) Unfreeze();
+                if (Driven(p)) _drivenUntil = Time.time + Hold;   // hysteresis: animation segment gaps never toggle the guard
+                bool on = p != null && !p.IsDead() && Time.time < _drivenUntil;
+                if (!on && _saved.Count == 0) { _level = 0f; _guardOn = false; return; }
+                if (!Resolve()) return;
+                if (p != _owner) { Restore(); _owner = p; }
+                if (on && !_guardOn) { _guardOn = true; Scan(p); _nextScan = Time.time + 1f; LogOnce(); }
+                else if (on && Time.time >= _nextScan) { Scan(p); _nextScan = Time.time + 1f; }
+                if (!on) _guardOn = false;
+                _level = on ? 1f : Mathf.Max(0f, _level - Time.deltaTime / BlendOut);
+                // push to MagicaCloth only when the blend moved (never every frame at a steady level)
+                if (_lastPushed < 0f || Mathf.Abs(_level - _lastPushed) >= 0.05f || (_level <= 0f && _lastPushed > 0f) || (_level >= 1f && _lastPushed < 1f))
+                {
+                    Apply(_level);
+                    _lastPushed = _level;
+                }
+                if (!on && _level <= 0f) Restore();
+            }
+            catch (Exception) { }
+        }
+
+        private static void LogOnce()
+        {
+            if (_logged || _saved.Count == 0) return;
+            _logged = true;
+            Saved s = _saved[0];
+            Debug.Log("[Aethelborn] Cape guard: cape '" + s.Cloth.name + "' worldInertia " + s.World.ToString("F2") + " localInertia " + s.Local.ToString("F2")
+                + " moveLimit " + (s.MoveLimit != null ? (s.MoveUse ? s.MoveVal.ToString("F2") : "off") : "n/a")
+                + " rotLimit " + (s.RotLimit != null ? (s.RotUse ? s.RotVal.ToString("F0") : "off") : "n/a")
+                + " teleport " + (s.Teleport != null ? s.Teleport.ToString() : "n/a")
+                + " camera culling " + (s.CameraMode != null ? s.CameraMode.ToString() : "n/a"));
+        }
+
+        private static void Scan(Player p)
+        {
+            if (p == null) return;
+            Component[] cloths = p.GetComponentsInChildren(_clothType, true);
+            for (int i = _saved.Count - 1; i >= 0; i--) if (_saved[i].Cloth == null) _saved.RemoveAt(i);
+            for (int i = 0; i < cloths.Length; i++)
+            {
+                bool known = false;
+                for (int k = 0; k < _saved.Count && !known; k++) known = _saved[k].Cloth == cloths[i];
+                if (known) continue;
+                object data = _serialize.GetValue(cloths[i], null);
+                if (data == null) continue;
+                Saved s = new Saved();
+                s.Cloth = cloths[i]; s.Data = data;
+                if (_inertiaField != null)
+                {
+                    s.Inertia = _inertiaField.GetValue(data);
+                    if (s.Inertia != null)
+                    {
+                        if (_world != null) s.World = (float)_world.GetValue(s.Inertia);
+                        if (_local != null) s.Local = (float)_local.GetValue(s.Inertia);
+                        if (_moveLimit != null) { s.MoveLimit = _moveLimit.GetValue(s.Inertia); if (s.MoveLimit != null) { s.MoveUse = (bool)_sliderUse.GetValue(s.MoveLimit); s.MoveVal = (float)_sliderValue.GetValue(s.MoveLimit); } }
+                        if (_rotLimit != null) { s.RotLimit = _rotLimit.GetValue(s.Inertia); if (s.RotLimit != null) { s.RotUse = (bool)_sliderUse.GetValue(s.RotLimit); s.RotVal = (float)_sliderValue.GetValue(s.RotLimit); } }
+                        if (_teleport != null) s.Teleport = _teleport.GetValue(s.Inertia);
+                    }
+                }
+                if (_cullingField != null)
+                {
+                    s.Culling = _cullingField.GetValue(data);
+                    if (s.Culling != null && _cameraMode != null) s.CameraMode = _cameraMode.GetValue(s.Culling);
+                    if (s.Culling != null && _distanceLen != null)
+                    {
+                        s.DistanceSlider = _distanceLen.GetValue(s.Culling);
+                        if (s.DistanceSlider != null) { s.HadDistance = true; s.DistanceUse = (bool)_sliderUse.GetValue(s.DistanceSlider); }
+                    }
+                }
+                Renderer[] rs = cloths[i].GetComponentsInChildren<Renderer>(true);
+                for (int k = 0; k < rs.Length; k++)
+                {
+                    SkinnedMeshRenderer smr = rs[k] as SkinnedMeshRenderer;
+                    if (smr != null) { s.Skins.Add(smr); s.SkinOffscreen.Add(smr.updateWhenOffscreen); }
+                }
+                _saved.Add(s);
+                if (_level > 0f) { Apply(_level); _lastPushed = _level; }
+            }
+        }
+
+        private static void SetSlider(object holder, FieldInfo field, object slider, bool use, float value)
+        {
+            if (slider == null) return;
+            _sliderUse.SetValue(slider, use);
+            _sliderValue.SetValue(slider, value);
+            if (slider.GetType().IsValueType) field.SetValue(holder, slider);
+        }
+
+        // k = 1 guarded, 0 = the cape's own values
+        private static void Apply(float k)
+        {
+            for (int i = 0; i < _saved.Count; i++)
+            {
+                Saved s = _saved[i];
+                if (s.Cloth == null) continue;
+                bool guard = k > 0f;
+                object inertia = s.Inertia;
+                if (inertia != null)
+                {
+                    if (_world != null && s.World >= 0f) _world.SetValue(inertia, Mathf.Lerp(s.World, 0f, k));
+                    if (_local != null && s.Local >= 0f) _local.SetValue(inertia, Mathf.Lerp(s.Local, s.Local * LocalKeep, k));
+                    if (s.MoveLimit != null)
+                    {
+                        float own = s.MoveUse ? s.MoveVal : 30f;
+                        SetSlider(inertia, _moveLimit, s.MoveLimit, guard || s.MoveUse, guard ? Mathf.Lerp(own, Mathf.Min(own, MoveLimitMps), k) : s.MoveVal);
+                    }
+                    if (s.RotLimit != null)
+                    {
+                        float own = s.RotUse ? s.RotVal : 1440f;
+                        SetSlider(inertia, _rotLimit, s.RotLimit, guard || s.RotUse, guard ? Mathf.Lerp(own, Mathf.Min(own, RotLimitDps), k) : s.RotVal);
+                    }
+                    if (_teleport != null && s.Teleport != null) _teleport.SetValue(inertia, guard ? Enum.Parse(_teleport.FieldType, "None") : s.Teleport);
+                    if (inertia.GetType().IsValueType) _inertiaField.SetValue(s.Data, inertia);
+                }
+                if (s.Culling != null)
+                {
+                    if (_cameraMode != null && s.CameraMode != null) _cameraMode.SetValue(s.Culling, guard ? Enum.Parse(_cameraMode.FieldType, "Off") : s.CameraMode);
+                    if (s.HadDistance && s.DistanceSlider != null)
+                    {
+                        _sliderUse.SetValue(s.DistanceSlider, guard ? false : s.DistanceUse);
+                        if (s.DistanceSlider.GetType().IsValueType) _distanceLen.SetValue(s.Culling, s.DistanceSlider);
+                    }
+                    if (s.Culling.GetType().IsValueType) _cullingField.SetValue(s.Data, s.Culling);
+                }
+                for (int r = 0; r < s.Skins.Count; r++) if (s.Skins[r] != null) s.Skins[r].updateWhenOffscreen = guard || s.SkinOffscreen[r];
+                if (_paramChange != null) _paramChange.Invoke(s.Cloth, null);
+            }
+        }
+
+        private static void Restore()
+        {
+            if (_saved.Count > 0 && _clothType != null) Apply(0f);
+            _saved.Clear();
+            _level = 0f;
+            _lastPushed = -1f;
+            _guardOn = false;
+        }
+    }
+}
+
+namespace DragonsAltarCombat
+{
+    // ==================================================================================
+    // v0.25.184 PERFORMANCE MONITOR (user: find what really costs FPS). Measurement only - when it is off (default)
+    // every hook is a single bool check. F7 = overlay + recording on/off, Ctrl+F7 = write the report now,
+    // Alt+F7 = effect lights on/off (A/B test: if FPS jumps with lights off, the GPU pays for light-heavy VFX).
+    // Report: BepInEx/plugins/Aethelborn_Performance.txt (+ summary in LogOutput.log).
+    //  - frame time, FPS, spikes (> SpikeMs) with the active skill, our code time per module, VFX spawn time, GC
+    //  - per skill: casts, VFX spawn ms (avg/max), objects / particle systems / lights / vanilla fx created per cast,
+    //    average frame time in the 4 s after the cast vs idle (the extra the skill costs incl. GPU), spikes, verdict.
+    // ==================================================================================
+    public class DragonPerfSkill
+    {
+        public string Id;
+        public int Casts, VfxCalls, Spikes, WindowFrames;
+        public double VfxMsTotal, VfxMsMax, WindowFrameMs, WindowOurMs, WorstFrameMs;
+        public int Hosts, Systems, Lights, Vanilla;
+        public double[] PhaseMs = new double[4];
+    }
+
+    public static class DragonPerf
+    {
+        public static bool On;
+        public static bool NoEffectLights = true;
+        public static ConfigEntry<bool> EnabledAtStart;
+        public static ConfigEntry<KeyCode> ToggleKey;
+        public static ConfigEntry<float> SpikeMs;
+
+        public const int SecRuntime = 0, SecAdvUpdate = 1, SecAdvLate = 2, SecAdvGui = 3, SecSkills = 4, SecSorcUpdate = 5,
+            SecSorcLate = 6, SecSorcGui = 7, SecRanger = 8, SecVfx = 9, SecCount = 10;
+        public static readonly string[] SecNames = { "Combat runtime Update", "Advanced Update", "Advanced LateUpdate", "Advanced OnGUI (HUD/tree)",
+            "Skills Update", "Sorcerer Update", "Sorcerer LateUpdate", "Sorcerer OnGUI", "Ranger Update", "VFX spawning (all skills)" };
+
+        // creation counters (always counted, int increments only)
+        public static int Hosts, Systems, LightsMade, VanillaFx;
+
+        private static readonly System.Diagnostics.Stopwatch _sw = System.Diagnostics.Stopwatch.StartNew();
+        private static readonly double _msPerTick = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+        internal static readonly long[] FrameTicks = new long[SecCount];
+        internal static readonly double[] IdleMsSum = new double[SecCount];
+        internal static readonly double[] AllMsSum = new double[SecCount];
+        internal static readonly Dictionary<string, DragonPerfSkill> Skills = new Dictionary<string, DragonPerfSkill>();
+        internal static string CurrentSkill;
+        internal static float CurrentAt = -999f;
+        private static int _vfxDepth, _castFrame = -1, _preCastFrame = -1;
+        private static long _vfxStart;
+        private static int _h0, _s0, _l0, _v0;
+
+        public static long Now() { return _sw.ElapsedTicks; }
+        public static double Ms(long ticks) { return ticks * _msPerTick; }
+
+        public static void Add(int section, long startTicks)
+        {
+            FrameTicks[section] += _sw.ElapsedTicks - startTicks;
+        }
+
+        // v0.25.185: + managed memory allocated inside the section (heap growth; a GC inside the section reads as 0)
+        internal static readonly long[] AllocBytes = new long[SecCount];
+        public static long Mem() { return System.GC.GetTotalMemory(false); }
+        public static void Add(int section, long startTicks, long startMem)
+        {
+            FrameTicks[section] += _sw.ElapsedTicks - startTicks;
+            long d = System.GC.GetTotalMemory(false) - startMem;
+            if (d > 0) AllocBytes[section] += d;
+        }
+
+        public static void NoteCast(string id)
+        {
+            if (!On || string.IsNullOrEmpty(id)) return;
+            if (CurrentSkill == id && _castFrame == Time.frameCount) return;   // the same cast reported twice in one frame
+            if (CurrentSkill == id && Time.unscaledTime - CurrentAt < 0.5f && _castFrame != Time.frameCount && _preCastFrame == Time.frameCount) { _castFrame = Time.frameCount; Skill(id).Casts++; return; }
+            _castFrame = Time.frameCount;
+            CurrentSkill = id;
+            CurrentAt = Time.unscaledTime;
+            Skill(id).Casts++;
+        }
+
+        // v0.25.185: called right BEFORE a skill runs, so effects spawned during the cast itself belong to it
+        public static void PreCast(string id)
+        {
+            if (!On || string.IsNullOrEmpty(id)) return;
+            CurrentSkill = id;
+            CurrentAt = Time.unscaledTime;
+            _preCastFrame = Time.frameCount;
+        }
+
+        internal static void ResetStats()
+        {
+            Skills.Clear();
+            for (int i = 0; i < SecCount; i++) { FrameTicks[i] = 0; IdleMsSum[i] = 0; AllMsSum[i] = 0; AllocBytes[i] = 0; }
+            CurrentSkill = null; CurrentAt = -999f; _castFrame = -1; _vfxDepth = 0;
+        }
+
+        internal static string ActiveSkill()
+        {
+            return CurrentSkill != null && Time.unscaledTime - CurrentAt < 4f ? CurrentSkill : null;
+        }
+
+        internal static DragonPerfSkill Skill(string id)
+        {
+            DragonPerfSkill s;
+            if (!Skills.TryGetValue(id, out s)) { s = new DragonPerfSkill(); s.Id = id; Skills[id] = s; }
+            return s;
+        }
+
+        public static void VfxBegin()
+        {
+            if (_vfxDepth++ > 0) return;
+            _vfxStart = _sw.ElapsedTicks;
+            _h0 = Hosts; _s0 = Systems; _l0 = LightsMade; _v0 = VanillaFx;
+        }
+
+        public static void VfxEnd()
+        {
+            if (--_vfxDepth > 0) return;
+            if (_vfxDepth < 0) _vfxDepth = 0;
+            long dt = _sw.ElapsedTicks - _vfxStart;
+            FrameTicks[SecVfx] += dt;
+            string id = ActiveSkill() ?? "(no skill / passive)";
+            DragonPerfSkill s = Skill(id);
+            double ms = Ms(dt);
+            s.VfxCalls++;
+            s.VfxMsTotal += ms;
+            if (ms > s.VfxMsMax) s.VfxMsMax = ms;
+            s.Hosts += Hosts - _h0; s.Systems += Systems - _s0; s.Lights += LightsMade - _l0; s.Vanilla += VanillaFx - _v0;
+        }
+
+        // frame phase stamps (Stopwatch ticks): first Update, last Update, first LateUpdate, last LateUpdate
+        internal static long PUpdStart, PUpdEnd, PLateStart, PLateEnd;
+        public const int PhUpdate = 0, PhCoroutines = 1, PhLate = 2, PhRest = 3, PhCount = 4;
+        public static readonly string[] PhNames = { "Update (all mods + game)", "Coroutines + animation", "LateUpdate (all)", "Render / GUI / physics / GPU wait" };
+
+        // v0.25.185 (perf, user reports: Smite / Tempest / Heaven's Judgement made ~40 point lights per cast): at most
+        // [Visuals] MaxEffectLights_v025185 effect lights are lit at once - each one is an extra render pass in Valheim.
+        public static ConfigEntry<int> MaxLights;
+        private static readonly List<Light> _liveLights = new List<Light>();
+        public static void OnLight(Light l)
+        {
+            if (l != null) { l.enabled = false; UnityEngine.Object.Destroy(l); }
+
+        }
+    }
+
+    // v0.25.184 runs LAST in Update and LateUpdate: closes the Update and LateUpdate phases for the monitor
+    [DefaultExecutionOrder(32000)]
+    public class DragonPerfEdge : MonoBehaviour
+    {
+        private void Update() { if (DragonPerf.On) DragonPerf.PUpdEnd = DragonPerf.Now(); }
+        private void LateUpdate() { if (DragonPerf.On) DragonPerf.PLateEnd = DragonPerf.Now(); }
+    }
+
+    [DefaultExecutionOrder(-32000)]
+    public class DragonPerfMonitor : MonoBehaviour
+    {
+        private readonly double[] _idlePhase = new double[DragonPerf.PhCount];
+        private readonly double[] _allPhase = new double[DragonPerf.PhCount];
+        private bool _skipSpike;
+        private readonly double[] _ph = new double[DragonPerf.PhCount];
+        private void LateUpdate() { if (DragonPerf.On) DragonPerf.PLateStart = DragonPerf.Now(); }
+        private class Spike { public float At; public double Ms, OurMs; public string Skill, Top; public bool Gc; }
+        private readonly List<Spike> _spikes = new List<Spike>();
+        private int _frames, _idleFrames, _spikeCount, _gcCount, _lastGc;
+        private double _frameMsSum, _idleFrameMsSum, _ourMsSum, _idleOurMsSum, _worst;
+        private float _startedAt, _nextAutoReport;
+        private long _lastMem, _allocBytes;
+        // one-second overlay window
+        private float _secStart;
+        private int _secFrames;
+        private double _secMsSum, _secMsMax, _secOurSum, _secVfxSum;
+        private long _secAlloc;
+        private string _overlay = "";
+        private GUIStyle _style;
+
+        private void Start()
+        {
+            if (DragonPerf.EnabledAtStart != null && DragonPerf.EnabledAtStart.Value) Begin();
+        }
+
+        private void Begin()
+        {
+            DragonPerf.On = true;
+            // v0.25.185 every recording starts from zero (v0.25.184 kept adding to the previous one)
+            DragonPerf.ResetStats();
+            _spikes.Clear();
+            _frames = _idleFrames = _spikeCount = _gcCount = 0;
+            _frameMsSum = _idleFrameMsSum = _ourMsSum = _idleOurMsSum = _worst = 0;
+            _allocBytes = 0;
+            for (int k = 0; k < DragonPerf.PhCount; k++) { _idlePhase[k] = 0; _allPhase[k] = 0; }
+            if (GetComponent<DragonPerfEdge>() == null) gameObject.AddComponent<DragonPerfEdge>();
+            DragonPerf.PUpdStart = DragonPerf.PUpdEnd = DragonPerf.PLateStart = DragonPerf.PLateEnd = 0;
+            _startedAt = Time.unscaledTime;
+            _nextAutoReport = Time.unscaledTime + 60f;
+            _lastGc = System.GC.CollectionCount(0);
+            _lastMem = System.GC.GetTotalMemory(false);
+            _secStart = Time.unscaledTime;
+            for (int i = 0; i < DragonPerf.SecCount; i++) DragonPerf.FrameTicks[i] = 0;
+            Debug.Log("[Aethelborn] Performance monitor ON (F7 off, Ctrl+F7 report)");
+        }
+
+        private void End()
+        {
+            WriteReport("monitor turned off");
+            DragonPerf.On = false;
+        }
+
+        private void Update()
+        {
+            KeyCode key = DragonPerf.ToggleKey != null ? DragonPerf.ToggleKey.Value : KeyCode.F7;
+            if (Input.GetKeyDown(key))
+            {
+                bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+                bool alt = Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt);
+                if (alt) { } // Alt+F7 removed: effect point lights are permanently off
+                else if (ctrl) { if (DragonPerf.On) WriteReport("Ctrl+F7"); }
+                else if (DragonPerf.On) End(); else Begin();
+            }
+            if (!DragonPerf.On) return;
+
+            // close the previous frame (this runs first in the frame)
+            double frameMs = Time.unscaledDeltaTime * 1000.0;
+            long nowT = DragonPerf.Now();
+            double[] ph = _ph;
+            for (int k = 0; k < ph.Length; k++) ph[k] = 0;
+            bool phaseOk = DragonPerf.PUpdStart > 0 && DragonPerf.PUpdEnd >= DragonPerf.PUpdStart && DragonPerf.PLateStart >= DragonPerf.PUpdEnd && DragonPerf.PLateEnd >= DragonPerf.PLateStart;
+            if (phaseOk)
+            {
+                ph[DragonPerf.PhUpdate] = DragonPerf.Ms(DragonPerf.PUpdEnd - DragonPerf.PUpdStart);
+                ph[DragonPerf.PhCoroutines] = DragonPerf.Ms(DragonPerf.PLateStart - DragonPerf.PUpdEnd);
+                ph[DragonPerf.PhLate] = DragonPerf.Ms(DragonPerf.PLateEnd - DragonPerf.PLateStart);
+                ph[DragonPerf.PhRest] = DragonPerf.Ms(nowT - DragonPerf.PLateEnd);
+            }
+            DragonPerf.PUpdStart = nowT;
+            double ourMs = 0, topMs = 0; int top = -1;
+            for (int i = 0; i < DragonPerf.SecCount; i++)
+            {
+                double ms = DragonPerf.Ms(DragonPerf.FrameTicks[i]);
+                if (i != DragonPerf.SecVfx) ourMs += ms;   // VFX spawning is already inside the module that called it
+                DragonPerf.AllMsSum[i] += ms;
+                if (ms > topMs) { topMs = ms; top = i; }
+            }
+            double vfxMs = DragonPerf.Ms(DragonPerf.FrameTicks[DragonPerf.SecVfx]);
+            if (vfxMs > ourMs) ourMs = vfxMs;   // VFX spawned from coroutines is outside the module timers
+            int gc = System.GC.CollectionCount(0);
+            bool gcHit = gc != _lastGc;
+            if (gcHit) { _gcCount += gc - _lastGc; _lastGc = gc; }
+            long mem = System.GC.GetTotalMemory(false);
+            if (mem > _lastMem) { _allocBytes += mem - _lastMem; _secAlloc += mem - _lastMem; }
+            _lastMem = mem;
+
+            string skill = DragonPerf.ActiveSkill();
+            _frames++; _frameMsSum += frameMs; _ourMsSum += ourMs;
+            if (frameMs > _worst) _worst = frameMs;
+            for (int k = 0; k < DragonPerf.PhCount; k++) _allPhase[k] += ph[k];
+            if (skill == null)
+            {
+                for (int k = 0; k < DragonPerf.PhCount; k++) _idlePhase[k] += ph[k];
+                _idleFrames++; _idleFrameMsSum += frameMs; _idleOurMsSum += ourMs;
+                for (int i = 0; i < DragonPerf.SecCount; i++) DragonPerf.IdleMsSum[i] += DragonPerf.Ms(DragonPerf.FrameTicks[i]);
+            }
+            else
+            {
+                DragonPerfSkill s = DragonPerf.Skill(skill);
+                s.WindowFrames++; s.WindowFrameMs += frameMs; s.WindowOurMs += ourMs;
+                for (int k = 0; k < DragonPerf.PhCount; k++) s.PhaseMs[k] += ph[k];
+                if (frameMs > s.WorstFrameMs) s.WorstFrameMs = frameMs;
+            }
+            float spikeMs = DragonPerf.SpikeMs != null ? Mathf.Max(5f, DragonPerf.SpikeMs.Value) : 25f;
+            bool skipThis = _skipSpike; _skipSpike = false;
+            if (frameMs > spikeMs && Time.unscaledTime - _startedAt > 2f && !skipThis)
+            {
+                _spikeCount++;
+                if (skill != null) DragonPerf.Skill(skill).Spikes++;
+                Spike sp = new Spike();
+                sp.At = Time.unscaledTime - _startedAt; sp.Ms = frameMs; sp.OurMs = ourMs; sp.Skill = skill; sp.Gc = gcHit;
+                sp.Top = top >= 0 && topMs > 0.05 ? DragonPerf.SecNames[top] + " " + topMs.ToString("0.0") + " ms" : "-";
+                if (phaseOk)
+                {
+                    int big = 0;
+                    for (int k = 1; k < DragonPerf.PhCount; k++) if (ph[k] > ph[big]) big = k;
+                    sp.Top += " | slowest phase: " + DragonPerf.PhNames[big] + " " + ph[big].ToString("0.0") + " ms";
+                }
+                _spikes.Add(sp);
+                if (_spikes.Count > 300) _spikes.RemoveAt(0);
+            }
+            _secFrames++; _secMsSum += frameMs; _secOurSum += ourMs; _secVfxSum += vfxMs;
+            if (frameMs > _secMsMax) _secMsMax = frameMs;
+            for (int i = 0; i < DragonPerf.SecCount; i++) DragonPerf.FrameTicks[i] = 0;
+
+            if (Time.unscaledTime - _secStart >= 1f)
+            {
+                double secs = Time.unscaledTime - _secStart;
+                double avg = _secFrames > 0 ? _secMsSum / _secFrames : 0;
+                _overlay = "AETHELBORN PERF  (F7 off, Ctrl+F7 report, Alt+F7 lights)\n" +
+                    "FPS " + (_secFrames / secs).ToString("0") + "   frame avg " + avg.ToString("0.0") + " ms   max " + _secMsMax.ToString("0.0") + " ms\n" +
+                    "our code " + (_secFrames > 0 ? _secOurSum / _secFrames : 0).ToString("0.00") + " ms/frame   VFX spawn " + _secVfxSum.ToString("0.0") + " ms/s\n" +
+                    "alloc " + (_secAlloc / 1024.0 / secs).ToString("0") + " KB/s   GC " + _gcCount + "   spikes " + _spikeCount + "\n" +
+                    "live VFX " + DragonVfxLife.Alive + "   skill " + (skill ?? "-") + "   effect point lights removed";
+                _secStart = Time.unscaledTime; _secFrames = 0; _secMsSum = 0; _secMsMax = 0; _secOurSum = 0; _secVfxSum = 0; _secAlloc = 0;
+            }
+            if (Time.unscaledTime >= _nextAutoReport) { _nextAutoReport = Time.unscaledTime + 60f; WriteReport("auto (every 60 s)"); _skipSpike = true; }   // the file write itself is not a game spike
+        }
+
+        private void OnGUI()
+        {
+            if (!DragonPerf.On || Event.current.type != EventType.Repaint || string.IsNullOrEmpty(_overlay)) return;
+            if (_style == null) { _style = new GUIStyle(GUI.skin.box); _style.alignment = TextAnchor.UpperLeft; _style.fontSize = 13; _style.normal.textColor = Color.white; _style.wordWrap = false; }
+            GUI.Box(new Rect(Screen.width - 470, 8, 460, 92), _overlay, _style);
+        }
+
+        private void OnApplicationQuit()
+        {
+            if (DragonPerf.On) WriteReport("game closed");
+        }
+
+        private void WriteReport(string why)
+        {
+            try
+            {
+                System.Text.StringBuilder b = new System.Text.StringBuilder();
+                double session = Time.unscaledTime - _startedAt;
+                double baseFrame = _idleFrames > 0 ? _idleFrameMsSum / _idleFrames : (_frames > 0 ? _frameMsSum / _frames : 0);
+                double baseOur = _idleFrames > 0 ? _idleOurMsSum / _idleFrames : 0;
+                b.AppendLine("AETHELBORN ASCENDED - PERFORMANCE REPORT (" + why + ")  " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+                b.AppendLine("Recorded " + session.ToString("0") + " s, " + _frames + " frames. Effect point lights: removed");
+                b.AppendLine();
+                b.AppendLine("IDLE BASELINE (no skill in the last 4 s): frame " + baseFrame.ToString("0.00") + " ms (" + (baseFrame > 0 ? 1000.0 / baseFrame : 0).ToString("0") + " FPS), our code " + baseOur.ToString("0.00") + " ms/frame");
+                b.AppendLine("Overall: frame " + (_frames > 0 ? _frameMsSum / _frames : 0).ToString("0.00") + " ms, worst " + _worst.ToString("0.0") + " ms, spikes " + _spikeCount + ", GC collections " + _gcCount +
+                    ", allocations " + (_allocBytes / 1048576.0 / Math.Max(1.0, session)).ToString("0.00") + " MB/s");
+                b.AppendLine();
+                b.AppendLine("FRAME PHASES (ms per frame, idle / overall) - where the frame time goes:");
+                for (int k = 0; k < DragonPerf.PhCount; k++)
+                    b.AppendLine("  " + DragonPerf.PhNames[k].PadRight(36) + (_idleFrames > 0 ? _idlePhase[k] / _idleFrames : 0).ToString("0.00").PadLeft(8) + " / " + (_frames > 0 ? _allPhase[k] / _frames : 0).ToString("0.00"));
+                b.AppendLine();
+                b.AppendLine("OUR CODE PER MODULE (ms per frame, idle / overall; memory allocated KB/s):");
+                for (int i = 0; i < DragonPerf.SecCount; i++)
+                    b.AppendLine("  " + DragonPerf.SecNames[i].PadRight(30) + (_idleFrames > 0 ? DragonPerf.IdleMsSum[i] / _idleFrames : 0).ToString("0.000").PadLeft(8) + " / " + (_frames > 0 ? DragonPerf.AllMsSum[i] / _frames : 0).ToString("0.000") +
+                        (i == DragonPerf.SecVfx ? "" : ("   alloc " + (DragonPerf.AllocBytes[i] / 1024.0 / Math.Max(1.0, session)).ToString("0") + " KB/s")));
+                b.AppendLine();
+                b.AppendLine("PER SKILL (window = 4 s after each cast; +frame = frame-time difference vs idle (comparison, not isolated skill cost))");
+                b.AppendLine("  skill                      casts  vfx ms avg/max  hosts/cast  psys/cast  lights/cast  vanilla/cast   +frame ms  +our ms  spikes  worst ms  verdict");
+                List<DragonPerfSkill> list = new List<DragonPerfSkill>(DragonPerf.Skills.Values);
+                list.Sort(delegate(DragonPerfSkill x, DragonPerfSkill y) { return Extra(y, baseFrame).CompareTo(Extra(x, baseFrame)); });
+                for (int i = 0; i < list.Count; i++)
+                {
+                    DragonPerfSkill s = list[i];
+                    int casts = Math.Max(1, s.Casts);
+                    double avgVfx = s.VfxCalls > 0 ? s.VfxMsTotal / casts : 0;
+                    double extra = Extra(s, baseFrame);
+                    double extraOur = s.WindowFrames > 0 ? s.WindowOurMs / s.WindowFrames - baseOur : 0;
+                    string verdict = "ok";
+                    if (s.VfxMsMax > 8) verdict = "CPU: VFX spawn hitch";
+                    if (extra > 2 && s.WindowFrames > 0 && _idleFrames > 0)
+                    {
+                        // which frame phase grew the most while this skill was active
+                        int big = 0; double bigD = -999;
+                        for (int k = 0; k < DragonPerf.PhCount; k++)
+                        {
+                            double d = s.PhaseMs[k] / s.WindowFrames - _idlePhase[k] / _idleFrames;
+                            if (d > bigD) { bigD = d; big = k; }
+                        }
+                        string cause = big == DragonPerf.PhRest ? "Render/wait phase grew (cause unconfirmed)" :
+                            big == DragonPerf.PhCoroutines ? "CPU: skill routines (hit checks / movement / effect updates)" :
+                            big == DragonPerf.PhLate ? "CPU: LateUpdate (animation drivers / effect followers)" : "CPU: Update scripts";
+                        verdict = (verdict == "ok" ? "" : verdict + " + ") + cause + " +" + bigD.ToString("0.0") + " ms";
+                    }
+                    if (s.Spikes > 0 && verdict == "ok") verdict = "spikes";
+                    b.AppendLine("  " + s.Id.PadRight(26) + s.Casts.ToString().PadLeft(5) + "  " + (avgVfx.ToString("0.0") + "/" + s.VfxMsMax.ToString("0.0")).PadLeft(13) +
+                        ((double)s.Hosts / casts).ToString("0").PadLeft(12) + ((double)s.Systems / casts).ToString("0").PadLeft(11) + ((double)s.Lights / casts).ToString("0.0").PadLeft(13) +
+                        ((double)s.Vanilla / casts).ToString("0.0").PadLeft(14) + extra.ToString("+0.0;-0.0").PadLeft(12) + extraOur.ToString("+0.00;-0.00").PadLeft(9) +
+                        s.Spikes.ToString().PadLeft(8) + s.WorstFrameMs.ToString("0.0").PadLeft(10) + "  " + verdict);
+                }
+                b.AppendLine();
+                b.AppendLine("LAST SPIKES (time s, frame ms, our ms, skill, biggest of our modules, GC)");
+                int from = Math.Max(0, _spikes.Count - 40);
+                for (int i = from; i < _spikes.Count; i++)
+                {
+                    Spike sp = _spikes[i];
+                    b.AppendLine("  " + sp.At.ToString("0.0").PadLeft(7) + "  " + sp.Ms.ToString("0.0").PadLeft(6) + "  " + sp.OurMs.ToString("0.0").PadLeft(6) + "  " + (sp.Skill ?? "-").PadRight(24) + "  " + sp.Top + (sp.Gc ? "  [GC]" : ""));
+                }
+                b.AppendLine();
+                b.AppendLine("HOW TO READ: +frame = how much slower frames were in the 4 s after that skill vs idle. The verdict names the");
+                b.AppendLine("frame phase that grew: render/wait includes rendering, unmeasured work and frame limiting; skill routines =");
+                b.AppendLine("its per-frame logic; vfx ms max > 8 = its spawn causes a hitch. A spike with low 'our ms' and no skill is not attributed by this monitor to AA scripts; it may involve the");
+                b.AppendLine("game / another mod; [GC] = memory cleanup.");
+                string dir = null;
+                try { dir = System.IO.Path.GetDirectoryName(typeof(DragonPerf).Assembly.Location); } catch { }
+                if (string.IsNullOrEmpty(dir)) dir = Application.persistentDataPath;
+                string path = System.IO.Path.Combine(dir, "Aethelborn_Performance.txt");
+                System.IO.File.WriteAllText(path, b.ToString());
+                Debug.Log("[Aethelborn] Performance report written: " + path);
+            }
+            catch (Exception ex) { Debug.LogWarning("[Aethelborn] Performance report failed: " + ex.Message); }
+        }
+
+        private static double Extra(DragonPerfSkill s, double baseFrame)
+        {
+            return s.WindowFrames > 0 ? s.WindowFrameMs / s.WindowFrames - baseFrame : 0;
+        }
     }
 }

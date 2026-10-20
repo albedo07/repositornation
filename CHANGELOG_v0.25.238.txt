@@ -1,0 +1,172 @@
+v0.25.238 - Warrior Bloodline Anchor
+Baseline: v0.25.237. NEW ANCHOR (replaces v0.25.230).
+- MATCHED LOUDNESS: every Warrior / Sword Master / Mercenary skill's main hit now sits at one level. Each sound was rendered offline exactly as it plays (file + pitch + bass + length + its volume curve, your F8 values included) and measured; only the Skill Volume changed, so the balance inside each skill stays yours:
+  Heavy Slash 108, Impact Wave 115, Impact Punch 130, Moonlight 107, Crescent 115, Blade Storm 78, Frenzied 120, Eclipse 107, Halfmoon 84, Knight's Guidance 135,
+  Stomp 69, Circle Swing 108, Bonecrusher 108, Punishing Bomb 75, Seismic 88, Whirlwind 110, Battlecry 120, Unchained Fury 134. (One-time move.)
+- FIRST-CAST FPS DROPS - three causes found and moved into the background warm-up after you load in (paused while casting/attacking):
+  1. Mod code compiled the first time it ran: a skill's first cast compiled hundreds of methods at once. Now every method of the mod is pre-compiled in 1.5 ms slices.
+  2. Processed sound copies (Speed / Bass / Volume above 100%) were built on the first cast. Now built and kept ready in the background.
+  3. A few VFX textures/meshes were still built on first use, and each effect shader compiled on its first draw. Now built, and each common effect material drawn once (a few pixels, half a second) right after load.
+- Not verifiable here: I cannot run Valheim; please confirm in game (F7 performance monitor still available).
+
+v0.25.237 - Full Swings
+Baseline: v0.25.236. ANCHOR v0.25.230 unchanged.
+- Ascended Whirlwind: Tornado plays from the start of the spin until the final strike (or a recast-cancel / death) - it was capped at the normal Whirlwind's 6 s. Other players get a stop message so theirs ends too.
+- Ascended Heavy Slash: each of the 3 strikes now plays its WHOLE swing, started early so its peak lands on the contact (it used to start at the marker, cutting the swing's first 0.4 s).
+- Circle Swing: the first swing (85% pitch) and the Ascended second swing (original pitch) are announced at the cast / before the gap: whole swing, peak on the hit. Companions of an announced sound (the gust) follow the same timing.
+- Stomp stamp: MidBoom less damped - 88% pitch, 120% bass (one-time move).
+- F8: Esc leaves the window even while a text box is focused (the typed value is applied), and Valheim's game menu no longer opens from that same Esc.
+
+v0.25.236 - Tornado
+Baseline: v0.25.235. ANCHOR v0.25.230 unchanged.
+- Ascended Whirlwind: the user's Tornado recording loops from the start of the spin to its end ("Tornado" sliders; replaces the BigWhoosh2 loop).
+- Stomp stamp: MidBoom, damped into a super stomp instead of an explosion - 75% pitch (darker, heavier) and 170% bass (one-time move to these defaults). BoulderCrash is no longer used (kept in the source library).
+- F8: Esc closes the window even while typing in a box; the typed value is applied and everything is saved.
+
+v0.25.235 - Smooth Config
+Baseline: v0.25.234. ANCHOR v0.25.230 unchanged.
+- PERFORMANCE (F8 window): the settings list was rebuilt by scanning every setting of every module (thousands) on every GUI event, and every row of the section was drawn several times a frame; typed numbers applied on every keystroke; the 2.2 MB config was rewritten after 0.75 s of quiet. Now the list is cached until the section/search changes, only on-screen rows are drawn, and files save after 3 s of quiet or when the window closes.
+- F8 text boxes (numbers and text): typing only edits the box; press Enter to apply.
+- Ascended Seismic Guillotine: the left / right end blasts are smaller (75% radius) and deal 70% of the middle one.
+- Circle Swing: the first swing plays a few pitches down (85%); the Ascended second swing at its original pitch.
+- Mercenary: no rumbling anywhere (Stomp, Bonecrusher, Seismic, Circle Swing debris removed with their sliders). Fury's whoosh layer renamed "Surge".
+- Whirlwind: normal = SpinningSwing only; Ascended adds a whoosh that loops for the whole spin (BigWhoosh2, "Whoosh Loop", 70%), stopped when the spin ends or is recast-cancelled.
+- SFX folder: 23 files.
+
+v0.25.234 - Sword Master Polish
+Baseline: v0.25.233. ANCHOR v0.25.230 unchanged.
+- Punishing Bomb blast = MidBoom (its old MidBoom crack layer is now a SmallBoom crack).
+- Stomp stamp = BoulderCrash (the user's file; marker 340 ms); the aftershock whumpfs and debris unchanged.
+- Circle Swing swing = HeavySwing2.
+- Battlecry: no Grace buff sound; only its deep bass body.
+- Ascended Moonlight Splitter: the fast ghost (afterimage) stays silent; the FINAL GT's sound now keeps the waves' rhythm - it lands exactly one wave interval after the last wave (it used to fire 0.12 s after it, together with the ghost).
+- Sword Master polish (new components, all sliders):
+  Halfmoon Slash: the slash itself now has a sword swing (HeavySwing2, 90% pitch) under the bass drop, timed to the hit.
+  Ascended Eclipse: a rising whoosh as you launch into the spiral (BigWhoosh2, 130% pitch, 80% vol, 45% length).
+- FIXED before release: an array-append bug in the build script that would have crashed the audio setup (caught by the startup test).
+- One-time move of the changed components to these defaults.
+
+v0.25.233 - Stomp and Circle
+Baseline: v0.25.232. ANCHOR v0.25.230 unchanged.
+- Stomp (Claude's design): the stamp = a giant foot coming down - HeavyPunch 65% pitch, 160% bass, 110% vol, timed so it lands on the hit + ~1.3 s of kicked-up debris (Rumbling). Each aftershock ring = a short deep sub "whumpf" (BassDrop 85% pitch, 120% bass, 35% length) + debris; the Ascended third ring plays lower (x0.85) as it rolls out wider.
+- Circle Swing fixed: one spin per swing (SpinningSwing one turn, ~0.7 s, 95% pitch) instead of the whole 3-spin recording; the gust = BigWhoosh climax-drop only (70% vol, 60% length); Ascended eruption = a real ground burst (SolidBoom 90%, 130% bass); its rumble kept but short (~1 s).
+- Punishing Bomb timing fixed: the throw whoosh's marker was 0 but its peak is 0.6 s in; marker 600 ms and it now starts during the wind-up so it peaks on the release. The blast stays on the impact.
+- One-time move of Stomp / Circle Swing / Bomb throw settings to these defaults.
+
+v0.25.232 - Mercenary Sounds
+Baseline: v0.25.231. ANCHOR v0.25.230 unchanged.
+- FIX sounds missing / cut: (1) only 12 voices - with whole recordings playing, new sounds stole old ones mid-play; now 32 (+4 reserved). (2) old code caps still shortened the recordings (Moonlight swing, Eclipse spiral...); now only the Length slider trims (fire loop keeps its cap). (3) a wind-up found no free voice and was skipped; it now takes the voice that ends first.
+- Halfmoon + Frenzied Charge Slash Barrage cuts are curved crescents at random angles and rolls (2 per hit, Eclipse / Blade Storm look) instead of straight lines.
+- Heavy Slash: HeavySwing2; Ascended HeavySwing2, HeavySwing2, HeavySwing (confirmed). Impact Punch untouched.
+- MERCENARY sound design (the user's library only, no Valheim sounds; raw, every value is a slider default):
+  Stomp: stamp SolidBoom 80% pitch; aftershocks SolidBoom 70% pitch + 160% bass; debris = 2 s of Rumbling (70% / 60% vol).
+  Bonecrusher: leap BigWhoosh2 115% pitch (40% length); landing HeavyPunch 75% pitch + 140% bass, BassDrop 80% (half length), Rumbling debris; Ascended aftershock SolidBoom 75% + 150% bass.
+  Punishing Bomb: throw SwordSwing2 110%; blast SolidBoom 95% + MidBoom crack 80% vol + BassDrop 90% pitch; Ascended clusters SmallBoom 115% pitch.
+  Seismic Guillotine: slam HeavyPunch 70% + 140% bass + debris; travelling fissure SmallBoom 135% pitch / 130% speed / 50% vol / 40% length; final eruptions SolidBoom 85% + 130% bass + BassDrop + debris.
+  Whirlwind: one SpinningSwing turn per spin (105% pitch, 35% length); Ascended final sweep HeavySwing 85%.
+  Battlecry: Buff 70% pitch at 120% vol + BassDrop 80% pitch. Unchained Fury: Buff 60% pitch + BigWhoosh2 70% surge.
+  Circle Swing debris: 2 s of Rumbling. Every hit lands on its Hit Marker. One-time move of existing Mercenary sound settings to these defaults.
+- The user's whole config set is now the default (134 values across advanced / combatruntime / guardian / ranger / skills / sorcerer / devtools): DevTools applies them as each setting's real default at load (F8 DEFAULT and the defaults pass use them; settings still at the old default take them). Internal migration flags excluded.
+- SFX folder: 23 files (old CGPT Mercenary stems removed).
+
+v0.25.231 - Slash Barrage Hits
+Baseline + ANCHOR: v0.25.230 Hit Markers (user-confirmed; replaces the v0.25.209 anchor).
+- Your audio config is now the default (F8 DEFAULT returns to it): skill/sound volumes (Righteous Strike, Snare Trap, Flame Burst, Glacial Descent, Stonefang, Crescent Sword Slash 70, Frenzied Windup 100, Moonlight Sword Slash 30), pitches (Crescent Sword Slash 80, Frenzied Dash 50, Moonlight Slash 75), speeds (Moonlight Sword Slash 50), syncs (Frenzied Dash -400, Frenzied Windup -400, Halfmoon Windup -1000), Impact Wave Wave Recording marker 650.
+- Every Slash Barrage (Eclipse, Frenzied Charge, Halfmoon): Pitch 120%, Speed 50% (one-time set on existing configs).
+- Eclipse Slash Barrage: 8 separate hits, 0.05 s apart, each damaging everything in the radius, with its own slash sound and cuts; each hit = 40% of the old single barrage hit (3.2x the old total). F8: SlashBarrageHits / SlashBarrageHitPercent / SlashBarrageInterval.
+- Ascended Frenzied Charge Slash Barrage: one hit every 0.05 s, 0.4 m apart along the dash (was 0.2 s / 1 m): ~2.5x the hits = ~2.5x the damage, each with its sound.
+- Ascended Moonlight Splitter: the fast stun afterimage GT before the final GT is silent (its sliders removed).
+- Ascended Crescent Cleave: SwordSlash on the second strike too (same Sword Slash sliders).
+- Knight's Guidance: new icon (a sword raised in a surge of power, Sword Master blue, Grace frame) in the hotbar and skill tree; its buff indicator uses the damage icon.
+
+v0.25.230 - Hit Markers
+Baseline: v0.25.229 Entire Sounds (below). Anchor v0.25.209 unchanged. Scope: Warrior, Sword Master, Circle Swing sounds.
+- HIT MARKERS: every sound has "Hit Marker (ms)" = where its hit is inside the recording (measured from each file: HeavySwing 620, HeavySwing2 400, SwordSwing 620, HeavyPunch 810, SmallBoom 700, BigWhoosh 950, BigWhoosh2 470, BassDrop 380, SwordSlash 370, BladeStorm 260, Buff / rumbles / wind 0) and "Sync (ms)" (-1000..1000) to nudge it.
+  Skills with a wind-up announce their hit at the click (Heavy Slash, Impact Wave, Impact Punch, Crescent Cleave both strikes, Eclipse, Frenzied Charge dash, Halfmoon bass drop + wind-ups): the sound starts early so its marker lands exactly on the hit, the whole recording still plays. Sounds without a known lead (follow-ups, ruptures, Ascended extra strikes) start at their marker when they fire, so the hit is still on time.
+- STEREO EVERYWHERE: these sounds play as the stereo file (no 3D fold-down that dulled and muddied them); distance falloff (full within 6 m, then quieter, silent at 90 m) and left/right pan are applied by hand from the camera.
+- OTHER PLAYERS hear them: each sound is sent over the network and played by every other player with their own distance, direction and sliders (needs a 2-player test).
+- CLEAN LOUDNESS above 100%: look-ahead limiter (5 ms) instead of peak squashing, so slashes keep their attack.
+
+v0.25.229 - Entire Sounds
+Baseline: v0.25.228 Sword Slashes (below). Anchor v0.25.209 unchanged.
+- User rule: every supplied SFX plays ENTIRE (first sample to last). Removed: leading-silence skip, silent-tail skip, BigWhoosh climb / climax-drop parts, SpinningSwing one-turn, Rumbling slice, 1.5 s wind gust, the 35% Length defaults. All Length sliders reset once to 100; trimming is the user's (Length / Speed / Pitch / Volume).
+- Frenzied Charge wind-up VFX: air drawn in toward the blade for the whole wind-up (inward air streaks + faint wisps, AirInhale); the dash releases it (existing gust/streaks).
+- Halfmoon Slash: heavy dirt cloud under the slash (5 dirt bursts along the arc, a rolling dust ring, a lingering cloud).
+- Crescent Cleave: SwordSlash layered on the first-strike HeavySwing (own "Sword Slash" sliders).
+
+v0.25.228 - Sword Slashes
+Baseline: v0.25.227 Raw Sounds (below). Anchor v0.25.209 unchanged.
+- Slash Barrage (Eclipse, Frenzied Charge, Halfmoon follow-ups) = the user's SwordSlash / SwordSlash2, alternating, raw (Length 100%).
+- Moonlight Splitter: SwordSlash layered over its HeavySwing2 swing on every release (own "Sword Slash" sliders); wind GT kept.
+- Wind-ups kept and protected (Frenzied Charge BigWhoosh climb, Halfmoon BigWhoosh2): sounds held a voice until their FILE ended, so bursts of follow-up cuts could take the voice a wind-up was waiting in, and the raw climb starts very quiet. Now: raw sounds stop where their sound ends (silent file tail skipped at play time, file untouched), one-shots never take a wind-up's voice, and wind-ups default to 200%.
+- One-time reset of the Slash Barrage and wind-up sliders to these defaults. SFX folder: 32 files.
+
+v0.25.227 - Raw Sounds
+Baseline: v0.25.226 R2 Slash Barrage (below). Anchor v0.25.209 unchanged.
+User rule: the supplied recordings play exactly as given - no leveling, trimming, filtering, fades, reverb or echo.
+- SFX files = the user's MP3s decoded to WAV (same sample rate/channels, nothing else); BladeStorm.wav byte-identical to the upload; SM_CCRumble = CGPT's original.
+  Playback starts where each recording's sound starts (leading silence skipped at play time, file untouched); BigWhoosh plays its climax+drop or climb part, SpinningSwing one turn, Rumbling a 1.4 s slice (as before, now chosen at play time).
+- No reverb/echo: Reverb sliders removed; Warrior / Sword Master / Circle Swing sounds bypass Valheim's reverb zones and its SFX mixer (Effects volume still applies). Other classes unchanged.
+- Loud: above 100% the Volume sliders climb as a square (200% = 4x, 300% = 9x; skill x sound multiply, up to 81x) and the boost is baked into the samples (Unity caps volume at 1). Near-field distance 15 m so skills are not quieter right next to you.
+- Moonlight Splitter: HeavySwing2 per slash + Valheim's wind for each GT wave (Wind, default 200%). Ascended Halfmoon finisher GT = the same wind (default 200%).
+- Crescent Cleave: first strike HeavySwing, Ascended second strike HeavySwing2 (own slider); fire trail and rumble kept.
+- MagicSlash deleted. Slash Barrage (follow-ups) and Blade Storm = the raw Blade Storm recording; Blade Storm bass = raw BassDrop.
+- One-time reset of these skills' sliders to the new defaults (Halfmoon wind-up and follow-up Slash Barrage keep Length 35% as approved; set 100 for the whole recording).
+- SFX folder: 30 files.
+
+v0.25.226 - Slash Barrage
+R2: fixed install compile error (ReadHitSkill lives in DragonCombat; the stunned-clang check now calls DragonCombat.ReadHitSkill).
+Baseline: v0.25.225 Sound Shaping (below). Anchor v0.25.209 unchanged.
+- FIX stunned clang: hitting a staggered creature plays its crit "clang" once PER HIT, so multi-hit skills (Blade Storm) stacked dozens of loud clangs; and our skill voices had low Unity priority (140), so Unity dropped them first under that flood. Now: skill voices priority 0 (never culled) and local skill hits clang at most once per 0.35 s (basic attacks unchanged).
+- Every sound of every skill now has its OWN Volume, Length, Pitch, Speed, Bass and Reverb sliders (e.g. Eclipse Opening Sweep and Slash Barrage tune independently). The v0.25.225 per-skill shaping sliders are replaced. Single-sound skills got a named component (Heavy Slash Swing, Impact Punch Punch, Moonlight Slash, Knight's Guidance Buff, ...). F8 DEFAULT restores the tuned defaults below.
+- Slash Barrage: the Blade Storm recording's slashing (above 300 Hz) is now the mod's slash sound; follow-up slashes are called Slash Barrage (Frenzied Charge, Eclipse, Halfmoon follow-ups; default Length 35% = short bursts). Claudeslash removed.
+  Blade Storm stems: Storm (recording below 300 Hz) + Bass Body (BassDrop) + Slash Barrage (default volume 32% = under the bass; was a hidden x0.32).
+- MagicSlash only (MagicSlash2 deleted): Moonlight Splitter defaults Pitch 110% / Speed 120%; Crescent Cleave and the Ascended Halfmoon finisher default Pitch 115%.
+- BassDrop restored exactly as supplied (my v0.25.225 "pure bass" filter removed: there was no wind in it). Halfmoon wind-up: BigWhoosh2 now plays its whole 1.2 s take instead of being cut 0.35 s after the swing (the wind-up is only 0.25 s, so it was buried under BassDrop).
+
+v0.25.225 - Sound Shaping
+Baseline: v0.25.224 Swift Sounds (below). Anchor v0.25.209 unchanged.
+- New per-skill sound sliders (every skill's Audio section in F8; neutral defaults, nothing changes until you move them):
+  Length (%) 10-100 (plays that share, short fade at the cut) · Pitch (%) 50-200 (tape: higher = faster) ·
+  Speed (%) 50-200 (pitch kept, WSOLA stretch) · Bass (%) 0-300 (below ~150 Hz, zero-phase) · Reverb (%) 0-100 (default 0 = dry).
+  Speed and Bass build a cached copy of the sound when the slider changes; Pitch, Length and Reverb are live.
+- Clean stems: BassDrop is now pure bass after its first 40 ms hit (the airy "wind" layer that rose with the Bass Drop slider is gone, ~40 dB down).
+  Blade Storm split into its own stems: Storm (the recording, new "Storm Volume (%)") and Bass Body (BassDrop, keeps your Bass Body slider). Slashes separate as before.
+- Verified: every sound of every skill maps to its own component slider (no shared layers); stretch keeps pitch and level; Bass 0/100/300 measured.
+
+v0.25.224 - Swift Sounds
+Baseline: v0.25.223 Blasts (below). Anchor v0.25.209 unchanged.
+- Impact Wave (+ Ascended): no sound on the wind up (CA); SwordSwing now plays on the actual swing with the wave. Rule: no SFX for cast animations unless the user asks.
+- Swift sounds, no long hanging air: wind-up sounds stop 0.35s after the impact; BigWhoosh2 1.2s, BigWhoosh drop 0.8s, BassDrop 1.2s (fast fade).
+- Claudeslash remade: CGPT's slash raised 4 semitones + crisp steel hiss + faint high glassy ring (sword, not laser). Dry.
+- Crescent Cleave: first strike 2 semitones up (normal + Ascended); Ascended second strike original pitch.
+- Ascended Eclipse spiral: visible VFX = one rising turn of Eclipse's own sweeping arcs (10 steps, 36 deg each); SFX = the opening SwordSwing pitched up. Old thin spiral lines and SwordSwing2 removed.
+- SFX folder: 34 files.
+
+v0.25.223 - Blasts
+Baseline: v0.25.222 Equal Loudness (included below). Anchor v0.25.209 unchanged.
+
+VFX: Blasts vs Explosions (user: Blast = ground/pressure burst like a buried charge; Explosion = fire, dome is fine)
+- New DragonVfx.Blast: a ragged starburst of 10-14 dirt jets thrown up and out from one ground point (15-70 deg off vertical, uneven), dark soil plumes that slow and hang with grit streaks inside, dark core, flying clods, low dust skirt, ground cracks, short flash + shake. No fire, no dome shell, no shockwave ring.
+- Now Blasts: Frenzied Charge ruptures, Ascended Circle Swing eruption, Seismic Guillotine eruptions, Ascended Impact Wave ruptures (travel + aftershocks).
+- Explosions unchanged: Punishing Bomb (+ clusters), Meteor Fall, Elemental Cataclysm, Archmage charged shot, Explosive Arrow, Tempest meteor, Gravity Blast end burst.
+v0.25.222 - Equal Loudness
+Baseline: v0.25.221 Warrior Bloodline Audio. Anchor v0.25.209 unchanged.
+
+Audio (Warrior, Sword Master, Mercenary Circle Swing only; other skills untouched)
+- New bank from the user's AA SFX library, leveled offline to one loudness (-9 LUFS max momentary, peaks <= -1.5 dBFS). Silence trimmed so each sound starts on its hit. No reverb/echo added. These files are played as authored (no runtime re-leveling).
+- Their sliders: default 100% (= equal loudness), range 0-300%. Saved values still at the old 300 default become 100 once; custom levels and mute are kept. Other skills keep their v221 sliders.
+- Windup sounds (Frenzied Charge, Halfmoon) play once, timed so their climax lands on the impact, instead of looping. Cut only if the cast is interrupted.
+- Heavy Slash: HeavySwing2; Ascended HeavySwing2, HeavySwing2, HeavySwing.
+- Impact Wave: SwordSwing + BigWhoosh climax/drop; Ascended ruptures SmallBoom.
+- Impact Punch: HeavyPunch.
+- Moonlight Splitter (+ Ascended): MagicSlash.
+- Crescent Cleave: MagicSlash2 one semitone up; Ascended original pitch + Valheim fire on the trails.
+- Blade Storm: the approved recording cleaned (rumble/hiss filtered) with the BassDrop body under it; Claudeslash slashes quieter than the bass.
+- Eclipse: SwordSwing + Claudeslash; Ascended spiral SwordSwing2.
+- Frenzied Charge: BigWhoosh climb on the windup, climax/drop on the dash, SmallBoom ruptures, Claudeslash follow-ups; Ascended faster.
+- Halfmoon Slash: BigWhoosh2 windup, BassDrop on the swing, Claudeslash follow-ups; Ascended final GT MagicSlash2. The old sweep layer (the wood-like hit) is gone.
+- Knight's Guidance: Buff.
+- Circle Swing: one SpinningSwing turn + BigWhoosh drop; Ascended eruption SmallBoom + low Rumbling debris.
+- Claudeslash: new dry blade slash (swept air + short steel ring), replaces GPTslash.
+- Removed dead Impact Wave overlay/mix code. SFX folder: 35 files (unused recordings dropped).
