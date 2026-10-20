@@ -1,0 +1,24 @@
+Aethelborn Ascended v0.25.239 - Halfmoon GT and Smooth HUD   (baseline: v0.25.238 Anchor; Anchor stays v0.25.238)
+
+CHANGES PER SKILL / AREA
+- Halfmoon Slash (Ascended): the final GT now plays Moonlight Splitter's GT sound - Slash (HeavySwing2) + Valheim wind + SwordSlash,
+  using Moonlight's own sliders. The old HalfmoonFinisher cue is no longer played there. Normal Halfmoon unchanged.
+- Moonlight Splitter (Normal + Ascended) and Halfmoon GT wind: BUG FIX - your log showed "Skill audio skipped: MoonlightWind
+  (ArgumentNullException)". The Valheim wind sound loaded, then crashed while writing its log line, so the wind layer was silent
+  every time. It now plays.
+- F8 Dev Config: pressing Enter in a slider's or text field's input box applies the value AND removes the blinking caret.
+  Esc closes the window while typing (checked on key press and on release, in Update and OnGUI).
+- Performance:
+  * HUD (Advanced OnGUI, 828 KB/s of garbage in your report): HP/STA/EIT numbers, level, buff timers/stacks, food timers,
+    hotbar key numbers, cooldown numbers, the name/class plaque and the 9-slice frame now reuse cached strings/arrays; the hotbar
+    lists are reused. Less garbage = fewer of the ~180 ms [GC] freezes.
+  * First-cast pre-compile (v238): your log never printed "Pre-compiled N methods" - one type that could not be inspected
+    ended the whole warm-up silently. It now skips that type and keeps going, and logs if it ever stops. This is what removes
+    the first-cast hitches (Circle Swing 172 ms, Heavy Slash ~51 ms, Seismic 100 ms).
+- Nothing else changed: no gameplay, VFX, CA, timing, sounds or slider defaults.
+
+FILES: CombatRuntime (wind log fix, pre-compile), Advanced (Halfmoon GT sounds, HUD caches), DevTools (Enter/Esc). 7 modules unchanged.
+
+CHECKS (static, not in-game): all ten modules compile in C# 5 against your real assembly_valheim, assembly_utils,
+SoftReferenceableAssets, UnityEngine*, BepInEx 5.4.21 and Harmony (Jotunn stubbed for Core only).
+NOT VERIFIED: in-game sound, F8 behaviour, FPS. The remaining [GC] freezes are partly Valheim's own garbage (~6 MB/s of the 7.2).

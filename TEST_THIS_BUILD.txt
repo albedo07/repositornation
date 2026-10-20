@@ -1,3 +1,5 @@
-TEST v0.25.238 Warrior Bloodline Anchor
-1. Load in, wait ~1 minute idle (log line "Pre-compiled N methods"), then cast each skill for the first time: no stutter.
-2. All Warrior / Sword Master / Mercenary skills about equally loud.
+TEST v0.25.239
+1. Log shows "[Aethelborn] Pre-compiled N methods" ~1 min after load (if "Pre-compile stopped: ..." appears, send the log).
+2. Moonlight Splitter waves: wind is heard. Ascended Halfmoon final GT: Moonlight's GT sound.
+3. F8: type in a box, Enter -> value applied, caret gone. Esc while typing -> window closes.
+4. F7 perf report: Advanced OnGUI alloc well below 828 KB/s; fewer [GC] spikes.

@@ -37,7 +37,7 @@ namespace DragonsAltarCombat
                 }
                 if (_next >= _queue.Count) { _done = true; Debug.Log("[Aethelborn] Pre-compiled " + _queue.Count + " methods (first casts no longer stall)."); _queue = null; }
             }
-            catch (Exception) { _done = true; }
+            catch (Exception e) { _done = true; Debug.LogWarning("[Aethelborn] Pre-compile stopped: " + e.GetType().Name + " " + e.Message); }
         }
         private static void Build()
         {
@@ -52,8 +52,14 @@ namespace DragonsAltarCombat
                 for (int t = 0; t < types.Length; t++)
                 {
                     Type type = types[t];
-                    if (type == null || type.ContainsGenericParameters || type.IsInterface) continue;
-                    System.Reflection.MethodInfo[] methods = type.GetMethods(all);
+                    System.Reflection.MethodInfo[] methods;
+                    // v0.25.239: one type that cannot be inspected (e.g. it touches an optional mod) no longer ends the whole pre-compile
+                    try
+                    {
+                        if (type == null || type.ContainsGenericParameters || type.IsInterface) continue;
+                        methods = type.GetMethods(all);
+                    }
+                    catch (Exception) { continue; }
                     for (int m = 0; m < methods.Length; m++)
                     {
                         System.Reflection.MethodInfo mi = methods[m];
@@ -1004,7 +1010,7 @@ namespace DragonsAltarCombat
             if (ZNetScene.instance == null || ObjectDB.instance == null) return null;
             bool wind = cue == (int)DragonBaseSound.MoonlightWind || cue == (int)DragonBaseSound.HalfmoonFinisher;
             Profile p = cue == (int)DragonBaseSound.CrescentFire ? FromFire() : (wind ? FromWind() : FromCustom(cue));
-            string selected = p == null ? null : (cue == (int)DragonBaseSound.CrescentFire ? "native campfire crackle" : string.Join(" + ", CustomFiles[cue]));
+            string selected = p == null ? null : (cue == (int)DragonBaseSound.CrescentFire ? "native campfire crackle" : (wind ? "Valheim wind" : string.Join(" + ", CustomFiles[cue])));   // v0.25.239: wind has no file list (was ArgumentNullException = silent wind)
             bool bush = cue == (int)DragonBaseSound.TrapPlace || cue == (int)DragonBaseSound.TrapSnap;
             // Flame Burst uses the actual Staff of Embers release effect references first.
             if (p == null && cue == (int)DragonBaseSound.FlameBurst)

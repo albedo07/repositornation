@@ -176,7 +176,7 @@ namespace DragonsAltarDevTools
                     OpenPanel();
             }
 
-            if (_open && Input.GetKeyDown(KeyCode.Escape))
+            if (_open && (Input.GetKeyDown(KeyCode.Escape) || Input.GetKeyUp(KeyCode.Escape)))   // v0.25.239: also on release, in case a focused box ate the press
             {
                 CommitFocusedBox();
                 CloseByEscape();
@@ -1078,7 +1078,7 @@ namespace DragonsAltarDevTools
 
             // v0.25.236 (user): Esc closes the window even while typing in a box; the typed value is applied and everything saved.
             Event ev = Event.current;
-            if (ev != null && ev.type == EventType.KeyDown && ev.keyCode == KeyCode.Escape)
+            if (ev != null && (ev.type == EventType.KeyDown || ev.type == EventType.KeyUp) && (ev.keyCode == KeyCode.Escape || ev.character == (char)27))
             {
                 CommitFocusedBox();
                 ev.Use();
@@ -1378,6 +1378,9 @@ namespace DragonsAltarDevTools
                         ShowStatus("Test Cooldowns turned OFF so your cooldown values apply.");
                     }
                 }
+                _inputBuffers.Remove(setting.Id);   // v0.25.239: show the applied value, caret removed
+                DropFocus();
+                Event.current.Use();
             }
         }
 
@@ -1428,10 +1431,12 @@ namespace DragonsAltarDevTools
             GUI.SetNextControlName(control);
             string next = GUI.TextField(new Rect(226f, y + 3f, 404f, 28f), buffer);
             if (next != buffer) _inputBuffers[setting.Id] = buffer = next;
-            if (enter && buffer != current)
+            if (enter)
             {
-                SetValue(setting, buffer);
+                if (buffer != current) SetValue(setting, buffer);
                 _inputBuffers.Remove(setting.Id);
+                DropFocus();
+                Event.current.Use();
             }
         }
 
@@ -1489,7 +1494,13 @@ namespace DragonsAltarDevTools
                 }
                 break;
             }
+            DropFocus();
+        }
+        // v0.25.239 (user): Enter applies the box and removes its caret
+        private static void DropFocus()
+        {
             GUI.FocusControl(null);
+            GUIUtility.keyboardControl = 0;
         }
 
         // True on the Enter key press while the named text box has focus.

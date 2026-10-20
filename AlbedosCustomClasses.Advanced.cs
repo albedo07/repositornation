@@ -3392,7 +3392,10 @@ namespace AlbedosCustomClassesAdvanced
             float width = radius * 2f * Mathf.Max(1f, _halfAscFinWidthMult.Value);
             float speed = range / Mathf.Max(0.5f, _halfAscTravel.Value);
             ShowMessage("Halfmoon Slash!");
-            DragonSkillAudio.Play(player, DragonBaseSound.HalfmoonFinisher, origin, 0, 1f);
+            // v0.25.239 (user): the Ascended final GT uses Moonlight Splitter's GT sound (Slash + Valheim wind + SwordSlash)
+            DragonSkillAudio.Play(player, DragonBaseSound.Moonlight, origin);
+            DragonSkillAudio.Play(player, DragonBaseSound.MoonlightWind, origin);
+            DragonSkillAudio.Play(player, DragonBaseSound.MoonlightSlash, origin);
             // v0.25.1: the Ascended finisher wave is the one with the spin (in sm_halfmoon_finisher).
             StartSwordMasterWork(GhostSlashWave(player, origin, dir, range, width, speed, _halfmoonDamageV, Mathf.Max(0f, _halfAscFinDamageMult.Value), 3f, true, "Finisher"));
         }
@@ -16631,7 +16634,7 @@ namespace AlbedosCustomClassesAdvanced
             float barH = 11f * s;
             Rect bar = new Rect(row.x + labelW, row.y + (row.height - barH) * 0.5f, row.width - labelW - valueW, barH);
             IhHudThinBar(bar, max > 0.01f ? cur / max : 0f, fill);
-            IhHudShadowLabel(new Rect(bar.xMax, row.y, valueW, row.height), Mathf.CeilToInt(Mathf.Max(0f, cur)).ToString() + " / " + Mathf.CeilToInt(Mathf.Max(0f, max)).ToString(), _ihHudValue);
+            IhHudShadowLabel(new Rect(bar.xMax, row.y, valueW, row.height), IhPair(Mathf.CeilToInt(Mathf.Max(0f, cur)), Mathf.CeilToInt(Mathf.Max(0f, max))), _ihHudValue);
         }
 
         private static readonly Dictionary<string, MethodInfo> _ihCallFloatCache = new Dictionary<string, MethodInfo>();
@@ -16696,15 +16699,17 @@ namespace AlbedosCustomClassesAdvanced
         private bool _ihHudArtLoaded;
 
         // 9-slice draw of a texture with a border (texture px) drawn at "scale".
+        private static readonly float[] _nsX = new float[4], _nsY = new float[4], _nsU = new float[4], _nsV = new float[4];
         private void IhDrawNineSlice(Rect r, Texture2D tex, float border, float scale)
         {
             if (tex == null) return;
             float tw = tex.width, th = tex.height, b = border, d = border * scale;
             d = Mathf.Min(d, r.width * 0.5f, r.height * 0.5f);
-            float[] xs = { r.x, r.x + d, r.xMax - d, r.xMax };
-            float[] ys = { r.y, r.y + d, r.yMax - d, r.yMax };
-            float[] us = { 0f, b / tw, 1f - b / tw, 1f };
-            float[] vs = { 1f, 1f - b / th, b / th, 0f };
+            float[] xs = _nsX, ys = _nsY, us = _nsU, vs = _nsV;   // v0.25.239 (perf): reused
+            xs[0] = r.x; xs[1] = r.x + d; xs[2] = r.xMax - d; xs[3] = r.xMax;
+            ys[0] = r.y; ys[1] = r.y + d; ys[2] = r.yMax - d; ys[3] = r.yMax;
+            us[0] = 0f; us[1] = b / tw; us[2] = 1f - b / tw; us[3] = 1f;
+            vs[0] = 1f; vs[1] = 1f - b / th; vs[2] = b / th; vs[3] = 0f;
             for (int yi = 0; yi < 3; yi++)
                 for (int xi = 0; xi < 3; xi++)
                 {
@@ -16917,6 +16922,8 @@ namespace AlbedosCustomClassesAdvanced
         private bool _hudExpMax209;
 
         // Current EXP toward the next level. Updated by the separate Experience plugin.
+        private readonly List<string> _hudNames = new List<string>();
+        private readonly List<float> _hudCooldowns = new List<float>();
         private string IhExpGauge(Player player)
         {
             long current, required;
@@ -16935,6 +16942,35 @@ namespace AlbedosCustomClassesAdvanced
         // v0.25.185 (perf): one reused GUIContent for text measuring (CalcSize/CalcHeight read it immediately) instead of a new
         // object per measurement - the HUD's fit loops allocated dozens per frame
         private static readonly GUIContent _ihGc = new GUIContent();
+        // v0.25.239 (perf): HUD numbers come from caches, so a steady HUD allocates nothing per frame (fewer GC stutters)
+        private static readonly Dictionary<long, string> _ihStr = new Dictionary<long, string>();
+        private static string IhCached(int kind, int a, int b, string text)
+        {
+            long key = ((long)kind << 56) ^ ((long)(a & 0xFFFFFFF) << 28) ^ (long)(b & 0xFFFFFFF);
+            string v;
+            if (_ihStr.TryGetValue(key, out v)) return v;
+            if (_ihStr.Count > 4096) _ihStr.Clear();
+            _ihStr[key] = text;
+            return text;
+        }
+        private static string IhNum(int n) { string v; long key = (1L << 56) ^ (n & 0xFFFFFFF); if (_ihStr.TryGetValue(key, out v)) return v; return IhCached(1, 0, n, n.ToString()); }
+        // kinds: 2 = "Ns", 3 = "Nm", 4 = "N/4"
+        private static string IhNumSuffix(int n, string suffix) { int k = suffix == "s" ? 2 : suffix == "m" ? 3 : 4; string v; long key = ((long)k << 56) ^ (n & 0xFFFFFFF); if (_ihStr.TryGetValue(key, out v)) return v; return IhCached(k, 0, n, n.ToString() + suffix); }
+        private static string IhLevel(int n) { string v; long key = (8L << 56) ^ (n & 0xFFFFFFF); if (_ihStr.TryGetValue(key, out v)) return v; return IhCached(8, 0, n, "Lv " + n.ToString()); }
+        private static string IhPair(int a, int b) { string v; long key = (5L << 56) ^ ((long)(a & 0xFFFFFFF) << 28) ^ (b & 0xFFFFFFF); if (_ihStr.TryGetValue(key, out v)) return v; return IhCached(5, a, b, a.ToString() + " / " + b.ToString()); }
+        private static string IhTenths(float x, string suffix)
+        {
+            int t = Mathf.RoundToInt(x * 10f), k = suffix.Length == 0 ? 6 : 7; string v; long key = ((long)k << 56) ^ (t & 0xFFFFFFF);
+            if (_ihStr.TryGetValue(key, out v)) return v;
+            return IhCached(k, 0, t, (t / 10f).ToString("0.0") + suffix);
+        }
+        private static string _ihTitleName, _ihTitleClass, _ihTitleText;
+        private static string IhTitle(string name, string cls)
+        {
+            if (!ReferenceEquals(name, _ihTitleName) || !ReferenceEquals(cls, _ihTitleClass) || _ihTitleText == null)
+            { _ihTitleName = name; _ihTitleClass = cls; _ihTitleText = name + "  ·  " + cls.ToUpper(); }
+            return _ihTitleText;
+        }
         private static GUIContent IhGc(string text)
         {
             _ihGc.text = text;
@@ -17193,7 +17229,7 @@ namespace AlbedosCustomClassesAdvanced
             else
             {
                 // Header plaque on the top edge: Name · CLASS.
-                string title = player.GetPlayerName() + "  ·  " + IhCurrentClassName(player).ToUpper();
+                string title = IhTitle(player.GetPlayerName(), IhCurrentClassName(player));
                 float tw = Mathf.Max(200f * s, _ihHudTitle.CalcSize(IhGc(title)).x + 60f * s);
                 Rect plaque = new Rect(panel.center.x - tw * 0.5f, panel.y - 15f * s, tw, 30f * s);
                 if (_ihHudPlaqueTex != null) IhDrawNineSlice(plaque, _ihHudPlaqueTex, 34f, s * 0.5f);
@@ -17229,12 +17265,12 @@ namespace AlbedosCustomClassesAdvanced
                     if (se.CooldownMarker) IhDrawCooldownChevrons(ir, s);
                     IhHudFill(new Rect(ir.x, ir.yMax + 1f, ir.width, 2f * s), se.CooldownMarker ? new Color(0.9f, 0.42f, 0.18f, 1f) : new Color(0.30f, 0.78f, 0.30f, 1f));
                     // v0.25.8: stacks (e.g. Barrier HP) on the icon AND the timer underneath.
-                    string timer = se.m_ttl > 0f ? Mathf.CeilToInt(se.Remaining()).ToString() + "s" : "";
+                    string timer = se.m_ttl > 0f ? IhNumSuffix(Mathf.CeilToInt(se.Remaining()), "s") : "";
                     if (se.Stacks > 0 && timer.Length > 0)
                     {
                         TextAnchor a0 = _ihHudTiny.alignment;
                         _ihHudTiny.alignment = TextAnchor.LowerRight;
-                        IhHudShadowLabel(new Rect(ir.x - 20f * s, ir.y, ir.width + 20f * s, ir.height + 1f * s), se.Stacks.ToString(), _ihHudTiny);
+                        IhHudShadowLabel(new Rect(ir.x - 20f * s, ir.y, ir.width + 20f * s, ir.height + 1f * s), IhNum(se.Stacks), _ihHudTiny);
                         _ihHudTiny.alignment = a0;
                     }
                     IhHudShadowLabel(new Rect(ir.x - 14f * s, ir.yMax + 3f * s, ir.width + 28f * s, 18f * s), timer.Length > 0 ? timer : se.GetIconText(), _ihHudTiny);
@@ -17307,7 +17343,7 @@ namespace AlbedosCustomClassesAdvanced
             if (!float.TryParse(ReadPlayerData(player, "ImmortalHeroes.EXPRatio"),
                 System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out xp)) xp = 0f;
             xp = Mathf.Clamp01(xp);
-            IhHudShadowLabel(new Rect(sx, sy, 50f * s, rowH), "Lv " + IhGetLevel(player).ToString(), _ihHudText);
+            IhHudShadowLabel(new Rect(sx, sy, 50f * s, rowH), IhLevel(IhGetLevel(player)), _ihHudText);
             float expValueWidth = 110f * s;
             IhHudThinBar(new Rect(sx + 50f * s, sy + (rowH - 4f * s) * 0.5f, sw - 50f * s - expValueWidth, 4f * s), xp, new Color(0.20f, 0.57f, 1f, 1f));
             IhHudShadowLabel(new Rect(sx + sw - expValueWidth, sy, expValueWidth, rowH), IhExpGauge(player), _ihHudValue);
@@ -17323,7 +17359,7 @@ namespace AlbedosCustomClassesAdvanced
                 try { sp = food.m_item == null ? null : food.m_item.GetIcon(); } catch { }
                 IhDrawSprite(new Rect(fr.x + 1f * s, fr.y + 1f * s, fr.width - 2f * s, fr.height - 2f * s), sp);
                 float secs = food.m_time;
-                string label = secs >= 60f ? Mathf.CeilToInt(secs / 60f).ToString() + "m" : Mathf.CeilToInt(secs).ToString() + "s";
+                string label = secs >= 60f ? IhNumSuffix(Mathf.CeilToInt(secs / 60f), "m") : IhNumSuffix(Mathf.CeilToInt(secs), "s");
                 Color c0 = _ihHudText.normal.textColor;
                 if (secs < 60f) _ihHudText.normal.textColor = new Color(1f, 0.45f, 0.35f, 1f);
                 IhHudShadowLabel(new Rect(fr.xMax + 4f * s, fr.y, 40f * s, fIcon), label, _ihHudText);
@@ -17376,8 +17412,8 @@ namespace AlbedosCustomClassesAdvanced
                 return;
 
             string advancement = GetAdvancement(player);
-            List<string> names = new List<string>();
-            List<float> cooldowns = new List<float>();
+            List<string> names = _hudNames; names.Clear();   // v0.25.239 (perf): reused lists
+            List<float> cooldowns = _hudCooldowns; cooldowns.Clear();
 
             if (className == "Warrior")
             {
@@ -17468,11 +17504,11 @@ namespace AlbedosCustomClassesAdvanced
                 float cooldown = cooldowns[i];
                 _slotStyle.normal.background = cooldown > 0.05f ? _slotCooldownTex : _slotReadyTex;
                 GUI.Box(rect, GetSkillInitials(names[i]), _slotStyle);
-                GUI.Label(new Rect(rect.x + 4f * scale, rect.y + 2f * scale, 18f * scale, 16f * scale), (i + 1).ToString(), _hudKeyStyle);
+                GUI.Label(new Rect(rect.x + 4f * scale, rect.y + 2f * scale, 18f * scale, 16f * scale), IhNum(i + 1), _hudKeyStyle);
                 if (advancement == "Sword Master" && names[i] == "Judgement Cut")
-                    GUI.Label(new Rect(rect.x + 3f * scale, rect.y + 30f * scale, rect.width - 6f * scale, 20f * scale), GetJudgementReadyChargeCount().ToString() + "/4", _hudCooldownStyle);
+                    GUI.Label(new Rect(rect.x + 3f * scale, rect.y + 30f * scale, rect.width - 6f * scale, 20f * scale), IhNumSuffix(GetJudgementReadyChargeCount(), "/4"), _hudCooldownStyle);
                 else if (cooldown > 0.05f)
-                    GUI.Label(new Rect(rect.x + 3f * scale, rect.y + 30f * scale, rect.width - 6f * scale, 20f * scale), cooldown.ToString("0.0"), _hudCooldownStyle);
+                    GUI.Label(new Rect(rect.x + 3f * scale, rect.y + 30f * scale, rect.width - 6f * scale, 20f * scale), IhTenths(cooldown, ""), _hudCooldownStyle);
                 _slotStyle.normal.background = previous;
             }
 
@@ -17484,7 +17520,7 @@ namespace AlbedosCustomClassesAdvanced
                 GUI.Label(new Rect(passiveRect.x + 4f * scale, passiveRect.y + 2f * scale, 20f * scale, 16f * scale), "R", _hudKeyStyle);
                 if (advancement == "Mercenary")
                 {
-                    string furyLabel = IsUnchainedFuryActive() ? "FURY!" : Mathf.RoundToInt(_mercFury).ToString();
+                    string furyLabel = IsUnchainedFuryActive() ? "FURY!" : IhNum(Mathf.RoundToInt(_mercFury));
                     GUI.Label(new Rect(passiveRect.x + 3f * scale, passiveRect.y + 30f * scale, passiveRect.width - 6f * scale, 20f * scale), furyLabel, _hudCooldownStyle);
                 }
             }
@@ -17533,7 +17569,7 @@ namespace AlbedosCustomClassesAdvanced
             string status = hotkey;
 
             if (!locked && cooldown > 0.01f)
-                status += "   " + cooldown.ToString("0.0") + "s";
+                status += "   " + IhTenths(cooldown, "s");
 
             GUI.Label(
                 new Rect(rect.x + 38f, rect.y + 31f, rect.width - 44f, 22f),
