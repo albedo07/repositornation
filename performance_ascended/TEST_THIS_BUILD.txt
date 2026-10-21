@@ -1,4 +1,9 @@
-Performance Ascended v0.5.0 - TEST
-1. Extract to an EMPTY folder, INSTALL.bat. Log: "World tweaks: door sleep ready; grass patch size ready".
-2. Doors: open/close several doors, walk away 10 s, come back and use them again; ask a friend to open one if you can.
-3. Same spot, same route: OFF, ON, OFF, ON captures (base with many doors + grass around it). COLLECT_REPORTS.bat -> send.
+Performance Ascended v0.6.0 - TEST
+1. Extract to an EMPTY folder, INSTALL.bat. Log: "Batched Building Drawing: ready".
+2. HUD: open the inventory, drag the indicator and the FPS box where you want them.
+3. Batched drawing test at your big base, same spot (optimization ON both times):
+   a) capture with [Structures] Batched Building Drawing = false
+   b) set it true (edit cfg with the game closed or via a config manager), capture again.
+   While (b) is on, LOOK: any missing, flickering, doubled or wrongly lit walls/roofs? Hover pieces with the hammer,
+   damage/repair one, build/remove one. Tell me exactly what looks wrong, if anything.
+4. COLLECT_REPORTS.bat -> send.

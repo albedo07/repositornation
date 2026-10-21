@@ -1,6 +1,6 @@
-PERFORMANCE ASCENDED 0.5.0 — ALL-IN-ONE: SPREAD UNLOADING, DRAW DISTANCE, LOW SHADOWS, DOOR SLEEP, GRASS PATCHES, FASTER UPLOADS
+PERFORMANCE ASCENDED 0.6.0 — ALL-IN-ONE + BATCHED BUILDING DRAWING (experiment) + MOVABLE HUD + FPS COUNTER
 2026-10-21
-See CHANGELOG_v0.5.0.txt and FPS_MOD_SURVEY.txt first; older notes below are from 0.3.3.
+See CHANGELOG_v0.6.0.txt, CHANGELOG_v0.5.0.txt and FPS_MOD_SURVEY.txt first; older notes below are from 0.3.3.
 
 AETHELBORN PERFORMANCE 0.3.3 — CLEANUP ALLOCATIONS
 2026-10-21 Asia/Manila
@@ -11,7 +11,7 @@ Select ACTIVE PROFILE BepInEx/core/BepInEx.dll, then game
 valheim_Data/Managed/UnityEngine.CoreModule.dll. Paste paths in the usual file
 pickers if easier. Separate Gale/r2modman profiles work. Staged compilation,
 own-DLL backup/replacement; existing config preserved. Client BepInEx5/HarmonyX;
-no AA/Jotunn dependency. Nine C#5 production files remain separate.
+no AA/Jotunn dependency. Ten C#5 production files remain separate.
 Ctrl+Alt+F6 toggle; Ctrl+Alt+F10 record; Ctrl+Alt+F9 optional marker.
 Existing custom shortcuts remain. Badge shows actual toggle binding.
 

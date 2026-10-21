@@ -7,7 +7,8 @@ namespace AethelbornPerformance
     public sealed class PerformanceSettings
     {
         public ConfigEntry<bool> _spreadUnload, _lowShadows, _viewCulling, _gcSlice, _doorSleep, _asyncUpload;
-        public ConfigEntry<float> _grassPatch;
+        public ConfigEntry<float> _grassPatch, _fpsX, _fpsY;
+        public ConfigEntry<bool> _batched, _fpsCounter, _compactIndicator;
         public ConfigEntry<float> _gcSliceMs;
         public ConfigEntry<float> _pieceDrawM, _nonSolidDrawM, _smallDrawM, _lodMax;
         public ConfigEntry<float> _lowShadowDistance;
@@ -29,6 +30,11 @@ namespace AethelbornPerformance
                 _supportCache = config.Bind("Structures", "Efficient Support Cache Subscriptions", true, "Use ordered constant-time callback removal for native terrain support-cache notifications. Preserves clearing, callback order and native object lifetime. Turning OFF restores native subscriptions.");
                 _spreadUnload = config.Bind("Structures", "Spread Object Unloading", true, "When you leave an area Valheim removes every out-of-range object (thousands of building pieces) in ONE frame - the 300-475 ms freezes in the captures. ON removes at most 'Unload Per Tick' objects per unloading tick (Valheim ticks 30 times a second) until done. Same removal steps as Valheim; objects you return to are kept. OFF = Valheim's own unloading.");
                 _unloadPerTick = config.Bind("Structures", "Unload Per Tick", 150, new ConfigDescription("Maximum objects removed per unloading tick (30 ticks per second). 150 = about 4,500 per second. Lower = smoother but slower cleanup.", new AcceptableValueRange<int>(25, 2000)));
+                _batched = config.Bind("Structures", "Batched Building Drawing", false, "EXPERIMENT (off until your capture confirms it). Draws repeated building meshes together (GPU instancing) instead of one draw call per piece. Picture only: pieces keep colliders, support, damage, saves. Only materials Valheim marks as instancing-capable; hovered, snowy, Ashlands-tinted, animated, moving, door/sign/fire/stand pieces stay normal. Any error restores normal drawing.");
+                _fpsCounter = config.Bind("HUD", "FPS Counter", true, "Small FPS box (current FPS and 1% low over the last ~5 s). Drag it with the mouse while the inventory/menu cursor is visible.");
+                _fpsX = config.Bind("HUD", "FPS Counter X", -1f, "Pixels from the left (-1 = top right corner). Saved when you drag it.");
+                _fpsY = config.Bind("HUD", "FPS Counter Y", 8f, "Pixels from the top. Saved when you drag it.");
+                _compactIndicator = config.Bind("HUD", "Compact Indicator", true, "Show the optimization indicator as one short line instead of the 4-line panel.");
                 _doorSleep = config.Bind("World", "Door Sleep", true, "Idle doors stop running their animator every frame (big bases have hundreds). A door wakes the moment it is used, hovered or changed by another player, keeping its open/closed pose.");
                 _grassPatch = config.Bind("World", "Grass Patch Size", 20f, new ConfigDescription("Grass is built and drawn in square patches (game: 10 m). Bigger patches = far fewer grass draw calls and rebuilds; same density. Applies when a world loads. 0 = game default.", new AcceptableValueRange<float>(0f, 40f)));
                 _asyncUpload = config.Bind("World", "Faster Asset Uploads", true, "Gives Unity more time and memory per frame to upload newly loaded meshes and textures to the GPU (4 ms / 64 MB instead of 2 ms / Unity default), so loading areas causes fewer hitches. Restored when off.");
@@ -48,7 +54,7 @@ namespace AethelbornPerformance
                 _shadowMs = config.Bind("Structures", "Shadow Time Budget Milliseconds", 0.5f, new ConfigDescription("Soft per-frame shadow update time limit, in addition to Renderer Budget. Slow frames halve this budget. One engine operation can exceed it.", new AcceptableValueRange<float>(0.1f, 2f)));
                 _configRevision = config.Bind("General", "Config Revision", 0, "Internal one-time migration marker for old discovery and screenshot-conflicting defaults.");
                 _showIndicator = config.Bind("HUD", "Show Optimization Indicator", true, "Show a persistent ON/OFF status while in a world.");
-                _indicatorX = config.Bind("HUD", "Indicator X", 12f, new ConfigDescription("Indicator horizontal position in screen pixels from the left.", new AcceptableValueRange<float>(0f, 8192f)));
+                _indicatorX = config.Bind("HUD", "Indicator X", 12f, new ConfigDescription("Indicator horizontal position in screen pixels from the left. Drag the indicator with the mouse while the inventory/menu cursor is visible; the position is saved.", new AcceptableValueRange<float>(0f, 8192f)));
                 _indicatorY = config.Bind("HUD", "Indicator Y", 12f, new ConfigDescription("Indicator vertical position in screen pixels from the top.", new AcceptableValueRange<float>(0f, 8192f)));
                 _diagnostics = config.Bind("Benchmark", "Detailed Diagnostics", true, "Capture memory, process CPU and feature coverage once per second while recording. Adds diagnostic overhead to both ON and OFF captures.");
                 _renderCounters = config.Bind("Benchmark", "Rendering Counters", true, "Request optional Unity rendering, main/render thread and allocation counters during recordings. Unavailable counters are reported as -1. Does not enable deep profiling.");
@@ -81,6 +87,12 @@ namespace AethelbornPerformance
                     // 0.4.1 (user): shadows back, at the low setting; old installs had Disable All Shadows=true saved.
                     _noShadows.Value = false;
                     _configRevision.Value = 2;
+                }
+                if (_configRevision.Value < 3)
+                {
+                    // 0.6.0 (user): the indicator sat on the hotbar at the top left - move it below the hotbar once
+                    if (_indicatorX.Value == 12f && _indicatorY.Value == 12f) _indicatorY.Value = 140f;
+                    _configRevision.Value = 3;
                 }
         }
     }

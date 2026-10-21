@@ -1,0 +1,22 @@
+Performance Ascended v0.6.0   (baseline v0.5.0)
+
+1. HUD (user: the indicator covered the hotbar)
+   - Drag the indicator with the mouse while the cursor is visible (inventory/menu open); position saved.
+   - One-time move: if it was still at the default 12,12 it moves to 12,140 (below the hotbar).
+   - [HUD] Compact Indicator = true: one short line ("Optimization: ON") instead of the 4-line panel.
+2. FPS counter ([HUD] FPS Counter = true): top-right box "FPS 89   1% 47" (current FPS, 1% low over the last ~512 frames),
+   updated twice a second, no garbage per frame. Green = 1% low >= 60, yellow = average >= 60, red = below. Draggable too.
+3. [Structures] Batched Building Drawing = false (EXPERIMENT - turn on to test).
+   Repeated building meshes in 64 m cells are drawn with GPU instancing instead of one draw call per piece; the original
+   renderers are only hidden. Colliders, support, damage, saves and other players are untouched (client-only, picture-only).
+   Safety (all checked in assembly_valheim IL):
+   - only materials Valheim already marks instancing-capable;
+   - any per-piece material change goes through MaterialMan (hover highlight, roof snow, Ashlands tint) - that piece
+     returns to normal drawing for good, so its look stays correct;
+   - health look changes (new/worn/broken) rebuild the piece; pieces with LOD groups, animators, doors, signs, fires,
+     item/armor stands, moving bodies are never batched;
+   - batched renderers are re-checked in the background; any error = everything back to normal drawing, logged once.
+   Report: BatchedPieces, BatchedExcludedPieces, BatchGroups, BatchedDrawCallsLastFrame, BatchedInstancesLastFrame.
+   Uses the Building Pieces draw distance. Off by default until a capture shows it helps on your PC.
+CHECKS (static): C# 5 compile vs your real DLLs; installer list = 10 files (verified).
+NOT verifiable here: the picture (missing/doubled pieces, lighting) and the FPS effect - that is your test.

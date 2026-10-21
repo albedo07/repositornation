@@ -18,7 +18,7 @@ namespace AethelbornPerformance
     {
         public const string Guid = "albedo.aethelborn.performance";
         public const string Name = "Performance Ascended";
-        public const string Version = "0.5.0";
+        public const string Version = "0.6.0";
         public static PerformancePlugin Instance;
         private PerformanceSettings _settings;
         private GUIStyle _indicatorStyle;
@@ -118,6 +118,7 @@ namespace AethelbornPerformance
                     if (zoneMethods[i].Name == "SpawnZone") _harmony.Patch(zoneMethods[i], postfix: new HarmonyMethod(typeof(PerformancePlugin), "ZoneSpawned"));
                 Logger.LogInfo("Spread Object Unloading: " + UnloadBudget.Install(_harmony, Logger));
                 Logger.LogInfo("World tweaks: " + WorldTweaks.Install(_harmony, Logger));
+                Logger.LogInfo("Batched Building Drawing: " + InstancedPieces.Install(_harmony, Logger));
                 Logger.LogInfo(Name + " " + Version + " ready. Piece registry: " + (_pieceSource != null) + "; cosmetic hook: " + _effectsHook + ". No AA dependency or world/save changes.");
             }
             catch (Exception ex)
@@ -385,6 +386,7 @@ namespace AethelbornPerformance
         private void Update()
         {
             if (_failed) return;
+            SampleFps();
             FrameContext previousActivity = _activity; _activity = new FrameContext();
             long workStart = _recorder.Recording ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;
             try
@@ -452,6 +454,9 @@ namespace AethelbornPerformance
                 UpdateLowShadows(enabledNow && !_settings._noShadows.Value && _settings._lowShadows.Value);
                 UpdateGcSlice(enabledNow && _settings._gcSlice.Value);
                 WorldTweaks.DoorSleepOn = enabledNow && _settings._doorSleep.Value; WorldTweaks.Tick();
+                InstancedPieces.Active = enabledNow && _settings._batched.Value;
+                InstancedPieces.DrawDistance = _settings._viewCulling.Value && _settings._pieceDrawM.Value > 0f ? _settings._pieceDrawM.Value : 1000f;
+                InstancedPieces.Tick();
                 WorldTweaks.GrassPatchSize = _settings._enabled.Value ? _settings._grassPatch.Value : 0f;
                 UpdateAsyncUpload(enabledNow && _settings._asyncUpload.Value);
                 _view.Update(enabledNow && _settings._viewCulling.Value, _settings._pieceDrawM.Value, _settings._nonSolidDrawM.Value, _settings._smallDrawM.Value, _settings._lodMax.Value);
@@ -710,7 +715,7 @@ namespace AethelbornPerformance
             for (int i = 0; i < _systems.Count; i++) RestoreParticle(_systems[i]);
             _systems.Clear(); _knownSystems.Clear();
         }
-        private void RestoreAll() { if (_supportCache != null) _supportCache.SetEnabled(false); RestoreGlobalShadows(); RestoreLowShadows(); _view.Restore(); UpdateGcSlice(false); UpdateAsyncUpload(false); WorldTweaks.WakeAll(); RestoreShadows(); RestoreParticles(); _pending.Clear(); }
+        private void RestoreAll() { if (_supportCache != null) _supportCache.SetEnabled(false); RestoreGlobalShadows(); RestoreLowShadows(); _view.Restore(); UpdateGcSlice(false); UpdateAsyncUpload(false); WorldTweaks.WakeAll(); InstancedPieces.ReleaseAll(); RestoreShadows(); RestoreParticles(); _pending.Clear(); }
         private void Fail(Exception error)
         {
             if (_failed) return; _failed = true; _discoveryReady = false; _discoveryContent.text = "Discovery stopped"; _discoveryHint.text = "Check the performance log.";
@@ -771,6 +776,7 @@ namespace AethelbornPerformance
                 summary += "\n" + _recorder.CauseSummary();
                 summary += "\n" + UnloadBudget.Report();
                 summary += "\n" + WorldTweaks.Report();
+                summary += "\n" + InstancedPieces.Report();
                 summary += "\nGCSliceExperiment=" + _settings._gcSlice.Value + "; RunZoneSpawns=" + _zoneSpawns;
                 summary += "\n" + _view.Report() + "; PieceDrawM=" + _settings._pieceDrawM.Value.ToString(CultureInfo.InvariantCulture) + "; DecorDrawM=" + _settings._nonSolidDrawM.Value.ToString(CultureInfo.InvariantCulture) + "; SmallDrawM=" + _settings._smallDrawM.Value.ToString(CultureInfo.InvariantCulture);
                 summary += "\nPendingDiscoveryPieces=" + _newPieces.Count + "; DiscoveryQueueOverflow=" + _newPieces.Overflowed + "; DiscoveryReconcilePending=" + _reconcileRequested + "; RunFullDiscoverySnapshots=" + (_captureStarted ? _snapshots - _startSnapshots : 0);
@@ -846,7 +852,10 @@ namespace AethelbornPerformance
         }
         private void OnGUI()
         {
-            if (_settings == null || _indicatorUnavailable || !_settings._showIndicator.Value || Player.m_localPlayer == null || Event.current.type != EventType.Repaint) return;
+            if (_settings == null || Player.m_localPlayer == null) return;
+            DrawFpsCounter();
+            if (_indicatorUnavailable || !_settings._showIndicator.Value) return;
+            if (Event.current.type != EventType.Repaint) { DragIndicator(); return; }
             Color previousColor = GUI.color; int previousDepth = GUI.depth;
             try
             {
@@ -863,10 +872,12 @@ namespace AethelbornPerformance
                 _indicatorContent.text = state == 2 ? "Optimization: ERROR" : (state == 0 ? "Optimization: OFF" : (state == 3 ? "Optimization: NO FEATURES" : "Optimization: ON"));
                 Color accent = state == 2 ? new Color(1f, 0.35f, 0.3f) : (state == 1 ? new Color(0.45f, 1f, 0.55f) : new Color(1f, 0.78f, 0.35f));
                 float scale = Mathf.Clamp(Screen.height / 1080f, 0.75f, 1.5f);
-                float width = Mathf.Min(Screen.width, 420f * scale), height = Mathf.Min(Screen.height, 100f * scale);
+                bool compact = _settings._compactIndicator.Value;
+                float width = Mathf.Min(Screen.width, (compact ? 230f : 420f) * scale), height = Mathf.Min(Screen.height, (compact ? 30f : 100f) * scale);
                 float x = Mathf.Clamp(_settings._indicatorX.Value, 0f, Mathf.Max(0f, Screen.width - width));
                 float y = Mathf.Clamp(_settings._indicatorY.Value, 0f, Mathf.Max(0f, Screen.height - height));
                 Rect area = new Rect(x, y, width, height);
+                _indicatorRect = area;
                 GUI.depth = -100;
                 GUI.color = new Color(0.025f, 0.035f, 0.045f, 0.94f);
                 GUI.DrawTexture(area, Texture2D.whiteTexture);
@@ -876,6 +887,7 @@ namespace AethelbornPerformance
                 _indicatorStyle.fontSize = Mathf.RoundToInt(16f * scale);
                 _indicatorStyle.normal.textColor = accent;
                 GUI.Label(new Rect(x, y, width, 30f * scale), _indicatorContent, _indicatorStyle);
+                if (compact) return;
                 _indicatorStyle.fontSize = Mathf.RoundToInt(13f * scale);
                 _indicatorStyle.normal.textColor = _discoveryReady ? new Color(0.45f, 1f, 0.55f) : Color.white;
                 GUI.Label(new Rect(x, y + 30f * scale, width, 22f * scale), _discoveryContent, _indicatorStyle);
@@ -888,6 +900,62 @@ namespace AethelbornPerformance
             { _indicatorUnavailable = true; Logger.LogWarning("Optimization indicator unavailable: " + ex.GetType().Name); }
             finally { GUI.color = previousColor; GUI.depth = previousDepth; }
         }
+        // ---------------- 0.6.0 HUD: draggable indicator + FPS counter (user: the indicator covered the hotbar)
+        private Rect _indicatorRect, _fpsRect;
+        private int _dragging;   // 0 none, 1 indicator, 2 fps
+        private Vector2 _dragOffset;
+        private bool Drag(Rect area, int who, ConfigEntry<float> xs, ConfigEntry<float> ys)
+        {
+            Event e = Event.current;
+            if (!Cursor.visible) { if (_dragging == who) _dragging = 0; return false; }
+            if (e.type == EventType.MouseDown && e.button == 0 && _dragging == 0 && area.Contains(e.mousePosition)) { _dragging = who; _dragOffset = e.mousePosition - area.position; e.Use(); return true; }
+            if (_dragging != who) return false;
+            if (e.type == EventType.MouseDrag) { xs.Value = Mathf.Round(e.mousePosition.x - _dragOffset.x); ys.Value = Mathf.Round(e.mousePosition.y - _dragOffset.y); e.Use(); return true; }
+            if (e.rawType == EventType.MouseUp) { _dragging = 0; try { Config.Save(); } catch (Exception) { } e.Use(); return true; }
+            return false;
+        }
+        private void DragIndicator() { if (_indicatorRect.width > 0f) Drag(_indicatorRect, 1, _settings._indicatorX, _settings._indicatorY); }
+
+        private readonly float[] _fpsRing = new float[512];
+        private readonly float[] _fpsSort = new float[512];
+        private int _fpsHead, _fpsFilled;
+        private float _fpsNext, _fpsAccum; private int _fpsFrames;
+        private int _fpsShown = -1, _lowShown = -1;
+        private readonly GUIContent _fpsContent = new GUIContent();
+        private GUIStyle _fpsStyle;
+        private void SampleFps()
+        {
+            float dt = Time.unscaledDeltaTime;
+            if (dt <= 0f) return;
+            _fpsRing[_fpsHead] = dt; _fpsHead = (_fpsHead + 1) % _fpsRing.Length; if (_fpsFilled < _fpsRing.Length) _fpsFilled++;
+            _fpsAccum += dt; _fpsFrames++;
+            if (Time.unscaledTime < _fpsNext || _fpsAccum <= 0f) return;
+            _fpsNext = Time.unscaledTime + 0.5f;
+            int fps = Mathf.RoundToInt(_fpsFrames / _fpsAccum); _fpsAccum = 0f; _fpsFrames = 0;
+            Array.Copy(_fpsRing, _fpsSort, _fpsFilled); Array.Sort(_fpsSort, 0, _fpsFilled);
+            int k = Math.Max(1, _fpsFilled / 100); float worst = 0f;
+            for (int i = _fpsFilled - k; i < _fpsFilled; i++) worst += _fpsSort[i];
+            int low = Mathf.RoundToInt(k / Mathf.Max(0.0001f, worst));
+            if (fps != _fpsShown || low != _lowShown) { _fpsShown = fps; _lowShown = low; _fpsContent.text = "FPS " + fps + "   1% " + low; }
+        }
+        private void DrawFpsCounter()
+        {
+            if (!_settings._fpsCounter.Value || _fpsShown < 0) return;
+            float scale = Mathf.Clamp(Screen.height / 1080f, 0.75f, 1.5f);
+            float w = 150f * scale, h = 26f * scale;
+            float x = _settings._fpsX.Value < 0f ? Screen.width - w - 8f : Mathf.Clamp(_settings._fpsX.Value, 0f, Mathf.Max(0f, Screen.width - w));
+            float y = Mathf.Clamp(_settings._fpsY.Value, 0f, Mathf.Max(0f, Screen.height - h));
+            _fpsRect = new Rect(x, y, w, h);
+            if (Event.current.type != EventType.Repaint) { Drag(_fpsRect, 2, _settings._fpsX, _settings._fpsY); return; }
+            if (_fpsStyle == null) { _fpsStyle = new GUIStyle(GUI.skin.label); _fpsStyle.fontStyle = FontStyle.Bold; _fpsStyle.alignment = TextAnchor.MiddleCenter; _fpsStyle.richText = false; }
+            _fpsStyle.fontSize = Mathf.RoundToInt(14f * scale);
+            int target = 60;
+            _fpsStyle.normal.textColor = _lowShown >= target ? new Color(0.45f, 1f, 0.55f) : (_fpsShown >= target ? new Color(1f, 0.85f, 0.35f) : new Color(1f, 0.4f, 0.35f));
+            Color c = GUI.color; GUI.color = new Color(0.025f, 0.035f, 0.045f, 0.85f);
+            GUI.DrawTexture(_fpsRect, Texture2D.whiteTexture); GUI.color = c;
+            GUI.Label(_fpsRect, _fpsContent, _fpsStyle);
+        }
+
         private void OnDisable()
         {
             if (_recorder.Recording) FinishBenchmark("Plugin disabled");

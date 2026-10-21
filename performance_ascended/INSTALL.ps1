@@ -2,7 +2,7 @@
 $ErrorActionPreference = "Stop"
 $stage = $null
 Write-Host ""
-Write-Host "PERFORMANCE ASCENDED v0.5.0 - INSTALL" -ForegroundColor Cyan
+Write-Host "PERFORMANCE ASCENDED v0.6.0 - INSTALL" -ForegroundColor Cyan
 Write-Host "AA-style installer: select your active profile and game references." -ForegroundColor Gray
 Write-Host "Compile in staging before replacing this plugin's DLL." -ForegroundColor Gray
 Write-Host ""
@@ -131,7 +131,7 @@ try {
     Need-File (Join-Path $coreDir '0Harmony.dll') '0Harmony.dll'
     $sources = @(Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'src') -Filter '*.cs' | Sort-Object Name | ForEach-Object { $_.FullName })
     # 0.4.1: check the exact source names (a bare count broke when UnloadBudget.cs was added)
-    $required = @('DiagnosticData.cs','FrameRecorder.cs','PerformancePlugin.cs','PerformancePolicy.cs','PerformanceSettings.cs','RuntimeDiagnostics.cs','UnloadBudget.cs','ViewCulling.cs','WorldTweaks.cs')
+    $required = @('DiagnosticData.cs','FrameRecorder.cs','PerformancePlugin.cs','PerformancePolicy.cs','PerformanceSettings.cs','RuntimeDiagnostics.cs','UnloadBudget.cs','ViewCulling.cs','WorldTweaks.cs','InstancedPieces.cs')
     foreach ($name in $required) { if (-not (Test-Path -LiteralPath (Join-Path (Join-Path $PSScriptRoot 'src') $name))) { throw ('Missing src\' + $name + '. Extract the complete archive first.') } }
     if ($sources.Count -ne $required.Count) { throw ('Expected ' + $required.Count + ' source files in src, found ' + $sources.Count + '. Extract the complete archive into an empty folder.') }
     $refs = New-Object System.Collections.ArrayList
