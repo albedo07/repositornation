@@ -8,7 +8,8 @@ namespace AethelbornPerformance
     {
         public ConfigEntry<bool> _spreadUnload, _lowShadows, _viewCulling, _gcSlice, _doorSleep, _asyncUpload;
         public ConfigEntry<float> _grassPatch, _fpsX, _fpsY;
-        public ConfigEntry<bool> _batched, _fpsCounter, _compactIndicator;
+        public ConfigEntry<bool> _batched, _fpsCounter, _compactIndicator, _batchedTest;
+        public ConfigEntry<KeyboardShortcut> _batchKey;
         public ConfigEntry<float> _gcSliceMs;
         public ConfigEntry<float> _pieceDrawM, _nonSolidDrawM, _smallDrawM, _lodMax;
         public ConfigEntry<float> _lowShadowDistance;
@@ -31,6 +32,8 @@ namespace AethelbornPerformance
                 _spreadUnload = config.Bind("Structures", "Spread Object Unloading", true, "When you leave an area Valheim removes every out-of-range object (thousands of building pieces) in ONE frame - the 300-475 ms freezes in the captures. ON removes at most 'Unload Per Tick' objects per unloading tick (Valheim ticks 30 times a second) until done. Same removal steps as Valheim; objects you return to are kept. OFF = Valheim's own unloading.");
                 _unloadPerTick = config.Bind("Structures", "Unload Per Tick", 150, new ConfigDescription("Maximum objects removed per unloading tick (30 ticks per second). 150 = about 4,500 per second. Lower = smoother but slower cleanup.", new AcceptableValueRange<int>(25, 2000)));
                 _batched = config.Bind("Structures", "Batched Building Drawing", false, "EXPERIMENT (off until your capture confirms it). Draws repeated building meshes together (GPU instancing) instead of one draw call per piece. Picture only: pieces keep colliders, support, damage, saves. Only materials Valheim marks as instancing-capable; hovered, snowy, Ashlands-tinted, animated, moving, door/sign/fire/stand pieces stay normal. Any error restores normal drawing.");
+                _batchedTest = config.Bind("Structures", "Batched Test Mode", false, "Diagnostic: same pieces as Batched Building Drawing, but drawn one by one without GPU instancing. Only for finding drawing problems.");
+                _batchKey = config.Bind("Structures", "Batched Drawing Hotkey", new KeyboardShortcut(KeyCode.B, KeyCode.LeftControl, KeyCode.LeftAlt), "Default Left Ctrl + Left Alt + B (F7 is used by Aethelborn Ascended). Cycles: Batched OFF -> Batched ON -> Batched TEST mode -> OFF. A message shows the mode.");
                 _fpsCounter = config.Bind("HUD", "FPS Counter", true, "Small FPS box (current FPS and 1% low over the last ~5 s). Drag it with the mouse while the inventory/menu cursor is visible.");
                 _fpsX = config.Bind("HUD", "FPS Counter X", -1f, "Pixels from the left (-1 = top right corner). Saved when you drag it.");
                 _fpsY = config.Bind("HUD", "FPS Counter Y", 8f, "Pixels from the top. Saved when you drag it.");

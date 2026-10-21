@@ -18,7 +18,7 @@ namespace AethelbornPerformance
     //  - every batched renderer is re-checked in the background; any error = everything returns to normal drawing.
     public static class InstancedPieces
     {
-        public static bool Active;
+        public static bool Active, TestMode;
         public static float DrawDistance = 150f;
         private const float Cell = 32f;   // 0.6.2: smaller cells so each cell's LOD level matches its pieces closely
         private static bool _installed, _faulted;
@@ -129,7 +129,34 @@ namespace AethelbornPerformance
         }
 
         // 0.6.1 diagnostics: v0.6.0 batched 0 pieces on the user's base - every rejection is counted (report + one log summary)
-        public static int RLodBatched;
+        public static int RLodBatched, RPreValued;
+        private static Func<MaterialMan, System.Collections.IDictionary> _blocksOf;   // Dictionary<int, private PropertyContainer>
+        private static bool _blocksResolved;
+        private static bool HasMaterialValues(WearNTear w, Rec r)
+        {
+            if (!_blocksResolved)
+            {
+                _blocksResolved = true;
+                try
+                {
+                    System.Reflection.FieldInfo f = AccessTools.Field(typeof(MaterialMan), "m_blocks");
+                    if (f != null && typeof(System.Collections.IDictionary).IsAssignableFrom(f.FieldType))
+                    {
+                        System.Reflection.Emit.DynamicMethod m = new System.Reflection.Emit.DynamicMethod("PA_Blocks", typeof(System.Collections.IDictionary), new Type[] { typeof(MaterialMan) }, typeof(MaterialMan), true);
+                        System.Reflection.Emit.ILGenerator il = m.GetILGenerator();
+                        il.Emit(System.Reflection.Emit.OpCodes.Ldarg_0); il.Emit(System.Reflection.Emit.OpCodes.Ldfld, f); il.Emit(System.Reflection.Emit.OpCodes.Ret);
+                        _blocksOf = (Func<MaterialMan, System.Collections.IDictionary>)m.CreateDelegate(typeof(Func<MaterialMan, System.Collections.IDictionary>));
+                    }
+                }
+                catch (Exception) { }
+            }
+            if (_blocksOf == null || MaterialMan.instance == null) return false;
+            System.Collections.IDictionary blocks = _blocksOf(MaterialMan.instance);
+            if (blocks == null || blocks.Count == 0) return false;
+            if (blocks.Contains(w.gameObject.GetInstanceID())) return true;
+            for (int i = 0; i < r.Hidden.Count; i++) if (r.Hidden[i] != null && blocks.Contains(r.Hidden[i].gameObject.GetInstanceID())) return true;
+            return false;
+        }
         public static int Seen, RejAnimator, RejSpecial, RejBody, RejSync, RejNview, RSeen, RLod, RNoMesh, RNotInstanced, ROk, RInactive;
         private static readonly HashSet<string> _notInstancedShaders = new HashSet<string>();
         private static bool _summaryLogged;
@@ -154,7 +181,7 @@ namespace AethelbornPerformance
         private static string Reasons()
         {
             return "PiecesSeen=" + Seen + "; PieceRejected Animator/Special/MovingBody/Sync/NotNetworked=" + RejAnimator + "/" + RejSpecial + "/" + RejBody + "/" + RejSync + "/" + RejNview +
-                "; Renderers seen=" + RSeen + " batched=" + ROk + " LOD-level=" + RLodBatched + " skipped LODGroup(fade/invalid)=" + RLod + " noMesh=" + RNoMesh + " materialNotInstancing=" + RNotInstanced + " hidden/disabled=" + RInactive;
+                "; Renderers seen=" + RSeen + " batched=" + ROk + " LOD-level=" + RLodBatched + " piecesWithMaterialValues=" + RPreValued + " skipped LODGroup(fade/invalid)=" + RLod + " noMesh=" + RNoMesh + " materialNotInstancing=" + RNotInstanced + " hidden/disabled=" + RInactive;
         }
 
         private static void Build(WearNTear w)
@@ -226,6 +253,12 @@ namespace AethelbornPerformance
             }
             _lodCache.Clear();
             if (r.Slots.Count == 0) return;
+            if (HasMaterialValues(w, r))
+            {
+                // already had per-object values (snow, wet, tint...) before we saw it: normal drawing keeps its look
+                Release(r, false); r.Excluded = true; Excluded++; _recs[id] = r; _recList.Add(r); RPreValued++;
+                return;
+            }
             _goToPiece[w.gameObject.GetInstanceID()] = id;
             _recs[id] = r; _recList.Add(r);
         }
@@ -295,7 +328,9 @@ namespace AethelbornPerformance
         private static void Draw()
         {
             DrawCallsLastFrame = 0; InstancesLastFrame = 0;
-            Camera cam = Camera.main;
+            Camera cam = null;
+            try { cam = Utils.GetMainCamera(); } catch (Exception) { }
+            if (cam == null) cam = Camera.main;
             if (cam == null) return;
             Vector3 eye = cam.transform.position;
             float reach = DrawDistance + Cell * 0.75f, reach2 = reach * reach;
@@ -322,15 +357,22 @@ namespace AethelbornPerformance
                     int n = Math.Min(1023, b.Count - start);
                     Matrix4x4[] arr = b.Matrices;
                     if (start > 0) { Array.Copy(b.Matrices, start, _chunk, 0, n); arr = _chunk; }
-                    Graphics.DrawMeshInstanced(b.Mesh, b.SubMesh, b.Material, arr, n, null, b.Shadows, b.Receive, b.Layer, null, LightProbeUsage.BlendProbes);
-                    DrawCallsLastFrame++; InstancesLastFrame += n;
+                    if (TestMode)
+                    {
+                        // 0.6.3 diagnostic: identical selection, but each piece drawn on its own (no GPU instancing).
+                        // Visible here but not in normal batched mode = the instanced shader path is the problem.
+                        for (int j = 0; j < n; j++) Graphics.DrawMesh(b.Mesh, arr[j], b.Material, b.Layer, null, b.SubMesh, null, b.Shadows, b.Receive);
+                        DrawCallsLastFrame += n;
+                    }
+                    else { Graphics.DrawMeshInstanced(b.Mesh, b.SubMesh, b.Material, arr, n, null, b.Shadows, b.Receive, b.Layer, null, LightProbeUsage.BlendProbes); DrawCallsLastFrame++; }
+                    InstancesLastFrame += n;
                 }
             }
         }
 
         public static string Report()
         {
-            return "BatchedDrawing=" + (Active && !_faulted) + "; BatchedInstalled=" + _installed + "; BatchedFaulted=" + _faulted + "; BatchedPieces=" + _recList.Count + "; BatchedExcludedPieces=" + Excluded +
+            return "BatchedDrawing=" + (Active && !_faulted) + "; BatchedTestMode=" + TestMode + "; BatchedInstalled=" + _installed + "; BatchedFaulted=" + _faulted + "; BatchedPieces=" + _recList.Count + "; BatchedExcludedPieces=" + Excluded +
                 "; BatchGroups=" + _batches.Count + "; BatchedDrawCallsLastFrame=" + DrawCallsLastFrame + "; BatchedInstancesLastFrame=" + InstancesLastFrame +
                 "\nBatchedCheck: " + Reasons();
         }

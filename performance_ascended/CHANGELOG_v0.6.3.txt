@@ -1,0 +1,14 @@
+Performance Ascended v0.6.3   (baseline v0.6.2)
+Your v0.6.2 test: building pieces (thatch, beams...) invisible with batching on; functional pieces fine; a bumped wall
+showed for a second (Valheim refreshed it = normal drawing) then vanished again; everything batched vanished while
+the menu was open. Normal drawing works, my batched drawing does not show - a bug in my drawing, not a game limit.
+
+1. Hotkey Left Ctrl + Left Alt + B cycles: Batched OFF -> Batched ON (instanced) -> Batched TEST -> OFF, with a message.
+   TEST mode draws the same pieces one by one WITHOUT GPU instancing. It tells us where the fault is:
+   - visible in TEST but missing in ON  = Valheim's piece shader does not draw instanced copies (shader limit)
+   - missing in both                     = my piece selection / distance logic is wrong
+2. Camera: distance is now measured from Valheim's own camera (Utils.GetMainCamera), not Unity's Camera.main - the most
+   likely reason everything vanished with the menu open.
+3. Pieces that already carry per-object material values (set before batching saw them) now stay on normal drawing.
+Batching stays OFF by default. Keep it off for normal play until the test settles it.
+CHECKS (static): C# 5 compile vs your real DLLs; installer list unchanged (10 files).

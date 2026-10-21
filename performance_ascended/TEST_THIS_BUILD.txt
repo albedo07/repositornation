@@ -1,6 +1,5 @@
-Performance Ascended v0.6.2 - TEST
-1. Extract to an EMPTY folder, INSTALL.bat.
-2. Batched Building Drawing = true. Load into your big base, wait ~30 s. LOOK around (near and far, walk away 100 m and
-   back): missing, doubled, flickering or wrongly lit pieces? Hover with the hammer, damage/repair, build/remove one.
-3. If it looks right: same spot, optimization ON, capture once with it true and once with it false.
-4. COLLECT_REPORTS.bat -> send, and tell me what you saw.
+Performance Ascended v0.6.3 - TEST (about 3 minutes)
+1. Extract to an EMPTY folder, INSTALL.bat. Load into your base, stand where you see thatch roofs and beams.
+2. Ctrl+Alt+B -> "ON (instanced)": screenshot.  Ctrl+Alt+B -> "TEST mode": screenshot.  Ctrl+Alt+B -> "OFF": screenshot.
+   In ON and TEST also open/close the menu once and note if pieces vanish.
+3. Send the 3 screenshots + COLLECT_REPORTS zip. Leave it OFF afterwards.
