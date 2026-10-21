@@ -18,7 +18,7 @@ namespace AethelbornPerformance
     {
         public const string Guid = "albedo.aethelborn.performance";
         public const string Name = "Performance Ascended";
-        public const string Version = "0.4.2";
+        public const string Version = "0.4.3";
         public static PerformancePlugin Instance;
         private PerformanceSettings _settings;
         private GUIStyle _indicatorStyle;
@@ -29,6 +29,7 @@ namespace AethelbornPerformance
         private readonly DiscoverySweep<Piece> _sweep = new DiscoverySweep<Piece>();
         private readonly DiscoveryQueue<Piece> _newPieces = new DiscoveryQueue<Piece>(MaximumPieces);
         private bool _reconcileRequested;
+        private static int _zoneSpawns; private int _lastZones;
         private int _hookLoadedCount = -1, _createdPieces, _destroyedPieces, _lastCreated, _lastDestroyed, _snapshots, _startSnapshots;
         private FrameContext _activity;
         private int DiscoveryChecked { get { return _sweep.Examined + _newPieces.Examined; } }
@@ -111,6 +112,10 @@ namespace AethelbornPerformance
                     _pieceHooks = true;
                 }
                 InitializeSupportCache();
+                // 0.4.3: count world-zone generation (terrain, vegetation, locations) to classify heavy load frames
+                List<MethodInfo> zoneMethods = AccessTools.GetDeclaredMethods(typeof(ZoneSystem));
+                for (int i = 0; i < zoneMethods.Count; i++)
+                    if (zoneMethods[i].Name == "SpawnZone") _harmony.Patch(zoneMethods[i], postfix: new HarmonyMethod(typeof(PerformancePlugin), "ZoneSpawned"));
                 Logger.LogInfo("Spread Object Unloading: " + UnloadBudget.Install(_harmony, Logger));
                 Logger.LogInfo(Name + " " + Version + " ready. Piece registry: " + (_pieceSource != null) + "; cosmetic hook: " + _effectsHook + ". No AA dependency or world/save changes.");
             }
@@ -320,6 +325,7 @@ namespace AethelbornPerformance
                     "; RunSupportCallbackBookkeeping_ms=" + DiagnosticLog.Number(_mutationTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency) + "; MaxSupportCallbackBookkeeping_ms=" + DiagnosticLog.Number(_maxMutationTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
             }
         }
+        private static void ZoneSpawned() { unchecked { _zoneSpawns++; } }
         private static void PieceCreated(Piece __instance)
         { ObservePieceLifecycle(__instance, true); }
         private static void PieceDestroyed()
@@ -418,6 +424,7 @@ namespace AethelbornPerformance
                             long main, render, allocated; _runtime.ReadFrameCounters(out main, out render, out allocated); _recorder.SetLastEngineCounters(main, render, allocated);
                             previousActivity.LoadedPieces = LoadedPieceCount();
                             previousActivity.CreatedPieces = _pieceHooks ? unchecked(_createdPieces - _lastCreated) : -1;
+                            previousActivity.ZonesSpawned = unchecked(_zoneSpawns - _lastZones);
                             previousActivity.DestroyedPieces = _pieceHooks ? unchecked(_destroyedPieces - _lastDestroyed) : -1;
                             previousActivity.DiscoveryChecked = DiscoveryChecked; previousActivity.DiscoveryTotal = DiscoveryTotal;
                             previousActivity.DiscoveryQueue = _newPieces.Count;
@@ -425,7 +432,7 @@ namespace AethelbornPerformance
                             _recorder.SetLastContext(previousActivity);
                             _activity.PreviousDiagnosticsMs += MillisecondsSince(diagnosticStart);
                         }
-                        _lastCreated = _createdPieces; _lastDestroyed = _destroyedPieces;
+                        _lastCreated = _createdPieces; _lastDestroyed = _destroyedPieces; _lastZones = _zoneSpawns;
                         if (_settings._markerKey.Value.IsDown())
                         {
                             if (_diagnostics.Mark(Time.realtimeSinceStartup - _recordStart, _recorder.Count)) Notify("Performance marker " + _diagnostics.MarkerCount + " saved.");
@@ -442,6 +449,7 @@ namespace AethelbornPerformance
                 _wasShadows = shadowsNow; _wasParticles = particlesNow;
                 UpdateGlobalShadows(enabledNow && _settings._noShadows.Value);
                 UpdateLowShadows(enabledNow && !_settings._noShadows.Value && _settings._lowShadows.Value);
+                UpdateGcSlice(enabledNow && _settings._gcSlice.Value);
                 _view.Update(enabledNow && _settings._viewCulling.Value, _settings._pieceDrawM.Value, _settings._nonSolidDrawM.Value, _settings._smallDrawM.Value, _settings._lodMax.Value);
                 if (active) RefreshDiscoveryHud(shadowsNow);
                 if (!enabledNow) return;
@@ -614,6 +622,20 @@ namespace AethelbornPerformance
         }
         // 0.4.1 Low Shadows: four quality values, each owned separately (another writer - e.g. Valheim's graphics menu - wins).
         private readonly ViewCulling _view = new ViewCulling();
+        private OwnedValue<ulong> _gcSliceOwned;
+        private void UpdateGcSlice(bool on)
+        {
+            if (!on || !UnityEngine.Scripting.GarbageCollector.isIncremental)
+            {
+                if (_gcSliceOwned != null && _gcSliceOwned.CanRestore(UnityEngine.Scripting.GarbageCollector.incrementalTimeSliceNanoseconds))
+                    UnityEngine.Scripting.GarbageCollector.incrementalTimeSliceNanoseconds = _gcSliceOwned.Original;
+                _gcSliceOwned = null; return;
+            }
+            ulong current = UnityEngine.Scripting.GarbageCollector.incrementalTimeSliceNanoseconds;
+            if (_gcSliceOwned == null) _gcSliceOwned = new OwnedValue<ulong>(current);
+            ulong want = (ulong)(Mathf.Clamp(_settings._gcSliceMs.Value, 1f, 10f) * 1000000f);
+            if (_gcSliceOwned.TryApply(current, want)) UnityEngine.Scripting.GarbageCollector.incrementalTimeSliceNanoseconds = want;
+        }
         private OwnedValue<ShadowQuality> _lowQuality;
         private OwnedValue<ShadowResolution> _lowResolution;
         private OwnedValue<float> _lowDistance;
@@ -670,7 +692,7 @@ namespace AethelbornPerformance
             for (int i = 0; i < _systems.Count; i++) RestoreParticle(_systems[i]);
             _systems.Clear(); _knownSystems.Clear();
         }
-        private void RestoreAll() { if (_supportCache != null) _supportCache.SetEnabled(false); RestoreGlobalShadows(); RestoreLowShadows(); _view.Restore(); RestoreShadows(); RestoreParticles(); _pending.Clear(); }
+        private void RestoreAll() { if (_supportCache != null) _supportCache.SetEnabled(false); RestoreGlobalShadows(); RestoreLowShadows(); _view.Restore(); UpdateGcSlice(false); RestoreShadows(); RestoreParticles(); _pending.Clear(); }
         private void Fail(Exception error)
         {
             if (_failed) return; _failed = true; _discoveryReady = false; _discoveryContent.text = "Discovery stopped"; _discoveryHint.text = "Check the performance log.";
@@ -728,7 +750,9 @@ namespace AethelbornPerformance
                 summary += "\nRunRegisteredCosmeticSystems=" + (_captureStarted ? _registeredSystems - _startRegistered : 0) + "; RunQueueOverflow=" + (_captureStarted ? _pendingDropped - _startDropped : 0) + "; RunTrackingOverflowRoots=" + (_captureStarted ? _trackingOverflow - _startOverflow : 0) + "; RunExpiredQueuedRoots=" + (_captureStarted ? _expiredQueued - _startExpired : 0) + "; RunExternalPropertyChanges=" + (_captureStarted ? _conflicts - _startConflicts : 0);
                 summary += "\nResidentMemorySource=" + _runtime.ResidentSource + "\nDiscoveryReadyAtEnd=" + _discoveryReady + "; DiscoveryCheckedAtEnd=" + DiscoveryChecked + "; DiscoveryTotalAtEnd=" + DiscoveryTotal + "; PendingShadowPieces=" + _pendingFirstApply + "; DiscoveryLimited=" + _sweep.Limited;
                 if (_supportCache != null) summary += "\n" + _supportCache.Report();
+                summary += "\n" + _recorder.CauseSummary();
                 summary += "\n" + UnloadBudget.Report();
+                summary += "\nGCSliceExperiment=" + _settings._gcSlice.Value + "; RunZoneSpawns=" + _zoneSpawns;
                 summary += "\n" + _view.Report() + "; PieceDrawM=" + _settings._pieceDrawM.Value.ToString(CultureInfo.InvariantCulture) + "; DecorDrawM=" + _settings._nonSolidDrawM.Value.ToString(CultureInfo.InvariantCulture) + "; SmallDrawM=" + _settings._smallDrawM.Value.ToString(CultureInfo.InvariantCulture);
                 summary += "\nPendingDiscoveryPieces=" + _newPieces.Count + "; DiscoveryQueueOverflow=" + _newPieces.Overflowed + "; DiscoveryReconcilePending=" + _reconcileRequested + "; RunFullDiscoverySnapshots=" + (_captureStarted ? _snapshots - _startSnapshots : 0);
                 summary += "\n" + _recorder.ContextSummary();

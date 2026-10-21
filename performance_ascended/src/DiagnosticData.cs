@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Globalization;
 using System.Text;
 
@@ -7,6 +7,7 @@ namespace AethelbornPerformance
     public struct FrameContext
     {
         // Loading events/count are sampled at this Update; work fields describe the previous completed Update.
+        public int ZonesSpawned;
         public int LoadedPieces, CreatedPieces, DestroyedPieces, DiscoveryChecked, DiscoveryTotal, DiscoveryQueue, DiscoveryReady;
         public int PreviousExamined, PreviousRegistered, PreviousRendererChecks;
         public float PreviousDiscoveryMs, PreviousShadowMs, PreviousDiagnosticsMs;

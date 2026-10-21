@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -49,6 +49,22 @@ namespace AethelbornPerformance
             return "DiscoveryReadyFrames=" + ready + "; DiscoveryBusyFrames=" + scanning + "; FramesWithPieceAwake=" + loading + "; FramesWithPieceDestroy=" + unloading +
                 "; FramesAtLeast50msWithPieceLifecycle=" + stalledLoading + "; FramesAtLeast50msWithGC0=" + stalledGC +
                 "\nMaxPreviousDiscovery_ms=" + DiagnosticLog.Number(discovery) + "; MaxPreviousShadow_ms=" + DiagnosticLog.Number(shadows) + "; MaxPreviousDiagnostics_ms=" + DiagnosticLog.Number(diagnostics);
+        }
+        // 0.4.3: every frame >= 33 ms gets ONE cause, checked in this order (a frame with several events counts once)
+        public string CauseSummary()
+        {
+            string[] names = { "Unload", "ZoneGeneration", "PieceLoad", "MemoryCleanup", "Other" };
+            int[] count = new int[5]; float[] worst = new float[5];
+            for (int i = 0; i < Count; i++)
+            {
+                if (_frames[i] < 0.033f) continue;
+                FrameContext c = _context[i];
+                int k = c.DestroyedPieces > 0 ? 0 : c.ZonesSpawned > 0 ? 1 : c.CreatedPieces > 0 ? 2 : _gc[i] > 0 ? 3 : 4;
+                count[k]++; if (_frames[i] > worst[k]) worst[k] = _frames[i];
+            }
+            string s = "SlowFramesByCause (>=33 ms; count / worst ms):";
+            for (int k = 0; k < 5; k++) s += " " + names[k] + "=" + count[k] + "/" + DiagnosticLog.Number(worst[k] * 1000f);
+            return s;
         }
         public bool Full { get { return Count >= _frames.Length; } }
         public FrameReport Stop()

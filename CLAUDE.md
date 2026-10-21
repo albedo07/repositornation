@@ -64,3 +64,4 @@ Standing release reporting rule (user, 2026-10-19): every delivered pass must li
 7. Every pass: tools/realbuild.sh (all ten modules vs the user's real DLLs in scratchpad realrefs + jot/) before delivery; cached compile = static only, never claimed as in-game.
 8. Read every [Error]/[Warning] line of a supplied LogOutput.log, group by message, and fix or explain each.
 9. Installers: when a pass adds/removes/renames a file, grep the installer for hard-coded counts/lists and update them (Performance Ascended 0.4.0/0.4.1 "Expected six source files").
+10. Read the native/original code BEFORE proposing a fix to the user (Performance Ascended 0.4.2 proposed budgeting distant loading that Valheim already caps).

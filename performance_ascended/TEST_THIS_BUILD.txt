@@ -1,5 +1,5 @@
-Performance Ascended v0.4.2 - TEST
-1. Extract to an EMPTY folder, run INSTALL.bat.
-2. Inside your biggest base, same spot, 60 s each: OFF, ON, OFF, ON (Ctrl+Alt+F6). Then one walk around the base ON.
-3. Look from a hill at the base: tell me if far pieces vanish too close (raise Building Pieces Metres).
-4. COLLECT_REPORTS.bat -> send ZIP.
+Performance Ascended v0.4.3 - TEST (same spot, same route each time, all with optimization ON)
+1. Capture A: [Memory] Longer Cleanup Slices = false.
+2. Capture B: Longer Cleanup Slices = true (edit cfg with the game closed, or via a config manager).
+3. Optional: one OFF capture for reference.
+4. COLLECT_REPORTS.bat -> send. Look at "SlowFramesByCause" in each TXT: MemoryCleanup count/worst should drop in B.

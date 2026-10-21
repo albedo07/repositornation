@@ -1,6 +1,6 @@
-PERFORMANCE ASCENDED 0.4.2 — BIG BASES (draw distance) + LOW SHADOWS + SPREAD UNLOADING (formerly Aethelborn Performance)
+PERFORMANCE ASCENDED 0.4.3 — SLOW-FRAME CAUSES + MEMORY EXPERIMENT + BIG BASES + LOW SHADOWS + SPREAD UNLOADING
 2026-10-21
-See CHANGELOG_v0.4.2.txt, v0.4.1 and v0.4.0 first; older notes below are from 0.3.3.
+See CHANGELOG_v0.4.3.txt (and v0.4.2, v0.4.1, v0.4.0) first; older notes below are from 0.3.3.
 
 AETHELBORN PERFORMANCE 0.3.3 — CLEANUP ALLOCATIONS
 2026-10-21 Asia/Manila

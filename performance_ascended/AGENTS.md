@@ -8,3 +8,4 @@ Separate client plugin. Do not edit AA or any previous archive. C#5, BepInEx5, H
 2026-10-21: v0.4.1 Low Shadows (user: shadows back, cheapest look): HardOnly/Low res/35 m/2 cascades, owned per value; Disable All Shadows default false (revision 2 migration).
 2026-10-21: v0.4.1 hotfix: INSTALL.ps1 required exactly 6 sources (broke on UnloadBudget.cs). Now checks the named list. Rule: adding/removing a source file = update INSTALL.ps1 required list and grep installers for counts.
 2026-10-21: v0.4.2 Big Bases: ViewCulling.cs (camera layerCullDistances for piece/piece_nonsolid/item/Default_small, spherical, owned; lodBias cap); GC mode in reports. Installer list = 8 files.
+2026-10-21: v0.4.3: CauseSummary (Unload/ZoneGeneration/PieceLoad/MemoryCleanup/Other), ZoneSystem.SpawnZone counter, opt-in GC slice (OwnedValue<ulong>). Correction: creation is already 10/tick shared near+distant - no load budget built. Rule: read the native code BEFORE proposing a fix to the user.

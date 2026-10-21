@@ -1,0 +1,16 @@
+Performance Ascended v0.4.3   (baseline v0.4.2)
+
+CORRECTION of my v0.4.2 analysis: I said distant objects load 100 per tick. After reading Valheim's CreateObjects /
+CreateDistantObjects from your assembly_valheim.dll: near + distant share ONE counter capped at 10 per tick
+(100 only in the loading screen). So "spread out loading" would change nothing and was NOT built. The 46-62-piece load
+frames must come from somewhere else - most likely world-zone generation (terrain, vegetation and location buildings
+spawned together by ZoneSystem.SpawnZone). This build measures that instead of guessing.
+
+1. Report line "SlowFramesByCause": every frame >= 33 ms gets one cause - Unload / ZoneGeneration / PieceLoad /
+   MemoryCleanup / Other - with count and worst ms. RunZoneSpawns counts zones generated.
+2. [Memory] Longer Cleanup Slices = false (EXPERIMENT, opt-in), Cleanup Slice Milliseconds = 5 (Unity default 3).
+   Your game has incremental GC on with 3 ms slices, yet 20-46 ms cleanup frames appear every 7-10 s: garbage outpaces
+   the slices and Unity finishes in one go. ON gives each slice more time. Owned value, restored when off; only applies
+   when incremental GC is active. Whether it helps is exactly what the next capture pair answers.
+Unchanged: unloading spread, draw distance, low shadows, everything else.
+CHECKS (static): C# 5 compile vs your real DLLs; installer list (8 files) verified unchanged.
