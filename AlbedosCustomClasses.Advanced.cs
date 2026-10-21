@@ -1283,6 +1283,7 @@ namespace AlbedosCustomClassesAdvanced
 
         private void PerfUpdateInner()
         {
+            CsPrelearn();
             RegisterCleavePullRpc();
             RegisterKnightsGuidanceRpc();
             UpdateCleavePullNet();
@@ -1502,8 +1503,8 @@ namespace AlbedosCustomClassesAdvanced
                 IhFaceSkillAim(player);
                 Vector3 origin = player.GetEyePoint() - player.transform.up * 0.25f;
                 DragonSkillAudio.Play(player, DragonBaseSound.Moonlight, origin, 0, 1f, Mathf.Max(0.04f, SmSwordCycle - 0.02f));
-                DragonSkillAudio.Play(player, DragonBaseSound.MoonlightWind, origin);   // v227: GT wave = Valheim wind
                 DragonSkillAudio.Play(player, DragonBaseSound.MoonlightSlash, origin);   // v228: SwordSlash over the swing
+                _gtTwinkle = 0.85f;   // v0.25.240 Moonlight GT
                 StartSwordMasterWork(GhostSlashWave(player, origin,
                     AlbedoAimUtility.GetProjectileDirection(player, origin), range, width,
                     speed, _moonDamageV, 1f, 1f, DragonCombat.StunAttack(wave + 1)));
@@ -2256,9 +2257,9 @@ namespace AlbedosCustomClassesAdvanced
                 IhFaceSkillAim(player);
                 Vector3 origin = player.GetEyePoint() - player.transform.up * 0.25f;
                 DragonSkillAudio.Play(player, DragonBaseSound.Moonlight, origin, 0, 1f, Mathf.Max(0.04f, SmAscCycle - 0.02f));
-                DragonSkillAudio.Play(player, DragonBaseSound.MoonlightWind, origin);
                 DragonSkillAudio.Play(player, DragonBaseSound.MoonlightSlash, origin);
                 lastWaveSfx = Time.time;
+                _gtTwinkle = 0.85f;   // v0.25.240 Moonlight GT
                 StartSwordMasterWork(GhostSlashWave(player, origin,
                     AlbedoAimUtility.GetProjectileDirection(player, origin), range, width,
                     speed, _moonDamageV, _moonAscWave.Value / 100f, 1f, DragonCombat.StunAttack(wave + 1)));
@@ -2298,13 +2299,11 @@ namespace AlbedosCustomClassesAdvanced
                     if (due > 0.02f)
                     {
                         DragonSkillAudio.Expect(player, DragonBaseSound.Moonlight, fo, due);
-                        DragonSkillAudio.Expect(player, DragonBaseSound.MoonlightWind, fo, due);
                         DragonSkillAudio.Expect(player, DragonBaseSound.MoonlightSlash, fo, due);
                     }
                     else
                     {
                         DragonSkillAudio.Play(player, DragonBaseSound.Moonlight, fo);
-                        DragonSkillAudio.Play(player, DragonBaseSound.MoonlightWind, fo);
                         DragonSkillAudio.Play(player, DragonBaseSound.MoonlightSlash, fo);
                     }
                 }
@@ -2313,6 +2312,7 @@ namespace AlbedosCustomClassesAdvanced
                     StartSwordMasterWork(GhostSlashWave(player, fo, fd, range, width, afterSpeed, _moonDamageV, _moonAscAfter.Value / 100f, 1f, false, true, "Afterimage"));
                 else
                     // The finisher is 2x WIDTH.
+                    _gtTwinkle = 0.85f;   // v0.25.240 Moonlight final GT
                     StartSwordMasterWork(GhostSlashWave(player, fo, fd, range, width * 2f, finSpeed, _moonDamageV, _moonAscFinisher.Value / 100f, 2f, false, false, "Attack 5", true, 0.3f));   // v0.25.142 persistent: immediately, then every 0.3 s
             }
         }
@@ -2344,6 +2344,16 @@ namespace AlbedosCustomClassesAdvanced
             if (right.sqrMagnitude < 0.01f) right = Vector3.right;
             GameObject visual = null;
             LineRenderer line = null;
+            // v0.25.240 (user): the GT's Twinkle loop sits on the wave (not where it was cast) and stops when the wave ends
+            GameObject twinkle = null;
+            float twinklePitch = _gtTwinkle; _gtTwinkle = 0f;
+            if (twinklePitch > 0f && player == Player.m_localPlayer)
+            {
+                twinkle = new GameObject("AA_GtTwinkle");
+                twinkle.transform.position = origin;
+                GameObject tw = twinkle;
+                DragonSkillAudio.BeginSustain(player, DragonBaseSound.MoonlightWind, origin, 60f, twinklePitch, 1f, delegate { return tw != null; }, false, twinkle.transform);
+            }
             if (_enableVfx.Value)
             {
                 visual = new GameObject("DragonsAltarMoonlightGhost");
@@ -2412,6 +2422,7 @@ namespace AlbedosCustomClassesAdvanced
                     line.SetPosition(0, center - right * width * 0.5f);
                     line.SetPosition(1, center + right * width * 0.5f);
                 }
+                if (twinkle != null) twinkle.transform.position = center;
                 if (visual != null)
                 {
                     visual.transform.position = center;   // v0.25.61 the glow / blade ride the wave (they stayed at the origin)
@@ -2425,8 +2436,9 @@ namespace AlbedosCustomClassesAdvanced
                 Destroy(visual);
             }
             }
-            finally { if (visual != null) Destroy(visual); }
+            finally { if (visual != null) Destroy(visual); if (twinkle != null) Destroy(twinkle); }
         }
+        private float _gtTwinkle;   // v0.25.240: Twinkle pitch for the next GhostSlashWave (0 = silent, e.g. the afterimage)
 
         // ------------------------------------------------------------------ Crescent Cleave
         private sealed class IhCrescentCast
@@ -3392,11 +3404,11 @@ namespace AlbedosCustomClassesAdvanced
             float width = radius * 2f * Mathf.Max(1f, _halfAscFinWidthMult.Value);
             float speed = range / Mathf.Max(0.5f, _halfAscTravel.Value);
             ShowMessage("Halfmoon Slash!");
-            // v0.25.239 (user): the Ascended final GT uses Moonlight Splitter's GT sound (Slash + Valheim wind + SwordSlash)
+            // v0.25.239 (user): the Ascended final GT uses Moonlight Splitter's GT sound (Slash + SwordSlash); v0.25.240 Twinkle rides the GT
             DragonSkillAudio.Play(player, DragonBaseSound.Moonlight, origin);
-            DragonSkillAudio.Play(player, DragonBaseSound.MoonlightWind, origin);
             DragonSkillAudio.Play(player, DragonBaseSound.MoonlightSlash, origin);
             // v0.25.1: the Ascended finisher wave is the one with the spin (in sm_halfmoon_finisher).
+            _gtTwinkle = 1f;   // v0.25.240 (user): Twinkle on the Halfmoon GT
             StartSwordMasterWork(GhostSlashWave(player, origin, dir, range, width, speed, _halfmoonDamageV, Mathf.Max(0f, _halfAscFinDamageMult.Value), 3f, true, "Finisher"));
         }
 
@@ -4048,6 +4060,35 @@ namespace AlbedosCustomClassesAdvanced
             float[] t;
             if (trig != null && _csTiming.TryGetValue(trig, out t)) return t;
             return new float[] { 0.85f, 1.15f, 1.6f };   // first cast guess, replaced by the clip's events
+        }
+
+        // v0.25.240: reads the battleaxe clips' events from the player's animator once after load, so the first cast already
+        // has the real hit / chain timing (clip names as learned in-game: BattleAxe1 / BattleAxe2 / BattleAxe_Combo3).
+        private bool _csPrelearned;
+        private float _csPrelearnAt;
+        private void CsPrelearn()
+        {
+            if (_csPrelearned || Time.unscaledTime < _csPrelearnAt) return;
+            _csPrelearnAt = Time.unscaledTime + 2f;
+            Player p = Player.m_localPlayer;
+            if (p == null) return;
+            try
+            {
+                Animator an = p.GetComponentInChildren<Animator>();
+                if (an == null || an.runtimeAnimatorController == null) return;
+                AnimationClip[] clips = an.runtimeAnimatorController.animationClips;
+                string[] trig = { "battleaxe_attack0", "battleaxe_attack1", "battleaxe_attack2" };
+                string[] clip = { "BattleAxe1", "BattleAxe2", "BattleAxe_Combo3" };
+                for (int i = 0; i < trig.Length; i++)
+                {
+                    string resolved = DragonCombat.ResolveTriggerName(an, trig[i]);
+                    if (resolved == null) continue;
+                    for (int c = 0; c < clips.Length; c++)
+                        if (clips[c] != null && clips[c].name == clip[i]) { CsLearn(resolved, clips[c]); break; }
+                }
+            }
+            catch (Exception) { }
+            _csPrelearned = true;
         }
 
         // Finds the clip the trigger started (an attack clip that is not 'skip') and reads its events.
@@ -15647,16 +15688,17 @@ namespace AlbedosCustomClassesAdvanced
             if (GetAdvancement(player) == "Mercenary")
             {
                 float lockout = _mercFuryCooldownUntil - Time.time;
-                title += IsUnchainedFuryActive() ? "   UNCHAINED FURY " + Mathf.CeilToInt(_mercFuryUntil - Time.time).ToString() + "s"
-                    : lockout > 0f ? "   FURY LOCKED " + Mathf.CeilToInt(lockout).ToString() + "s"
-                    : "   FURY " + Mathf.FloorToInt(_mercFury).ToString();
+                // v0.25.240 (perf): cached per state + number, already trimmed / upper case
+                if (IsUnchainedFuryActive()) { int n = Mathf.CeilToInt(_mercFuryUntil - Time.time); title = IhCached(10, 0, n, "UNCHAINED FURY " + n.ToString() + "S"); }
+                else if (lockout > 0f) { int n = Mathf.CeilToInt(lockout); title = IhCached(10, 1, n, "FURY LOCKED " + n.ToString() + "S"); }
+                else { int n = Mathf.FloorToInt(_mercFury); title = IhCached(10, 2, n, "FURY " + n.ToString()); }
             }
             Rect titleRect = new Rect(x, y - 24f * scale, totalWidth, 20f * scale);
             _titleStyle.fontSize = Mathf.RoundToInt(15f * scale);
             _titleStyle.normal.textColor = new Color(0f, 0f, 0f, 0.85f);
-            GUI.Label(new Rect(titleRect.x + 1.5f, titleRect.y + 1.5f, titleRect.width, titleRect.height), title.Trim().ToUpper(), _titleStyle);
+            GUI.Label(new Rect(titleRect.x + 1.5f, titleRect.y + 1.5f, titleRect.width, titleRect.height), title, _titleStyle);
             _titleStyle.normal.textColor = new Color(0.60f, 0.88f, 1f, 1f);
-            GUI.Label(titleRect, title.Trim().ToUpper(), _titleStyle);
+            GUI.Label(titleRect, title, _titleStyle);
 
             for (int i = 0; i < 7; i++)
             {
@@ -15823,7 +15865,7 @@ namespace AlbedosCustomClassesAdvanced
             GUI.DrawTexture(new Rect(pill.x, pill.y, pill.width, 1.5f), Texture2D.whiteTexture);
             GUI.color = Color.white;
             _hudStackStyle.normal.textColor = ready > 0 ? new Color(1f, 0.92f, 0.62f, 1f) : new Color(0.8f, 0.8f, 0.8f, 1f);
-            GUI.Label(pill, ready.ToString() + "/" + max.ToString(), _hudStackStyle);
+            GUI.Label(pill, IhCached(9, ready, max, ready.ToString() + "/" + max.ToString()), _hudStackStyle);
             if (next > 0.05f)
             {
                 Rect timer = new Rect(inner.x, inner.y - 1f, inner.width, 14f * scale);
@@ -17526,10 +17568,20 @@ namespace AlbedosCustomClassesAdvanced
             }
         }
 
+        private GUIStyle _ihInitialsStyle;
+        private readonly Dictionary<string, string> _initialsCache = new Dictionary<string, string>();
         private string GetSkillInitials(string name)
         {
             if (string.IsNullOrEmpty(name))
                 return "?";
+            string cached;   // v0.25.240 (perf): built once per name
+            if (_initialsCache.TryGetValue(name, out cached)) return cached;
+            cached = GetSkillInitialsUncached(name);
+            _initialsCache[name] = cached;
+            return cached;
+        }
+        private string GetSkillInitialsUncached(string name)
+        {
             string[] words = name.Split(new char[] { ' ', '-', '/' }, StringSplitOptions.RemoveEmptyEntries);
             string result = "";
             for (int i = 0; i < words.Length && result.Length < 3; i++)
@@ -18763,7 +18815,8 @@ namespace AlbedosCustomClassesAdvanced
         {
             if (string.IsNullOrEmpty(id) || !_ihPlaceholderArt.Contains(id)) return;
             IhEnsureTreeStyles();
-            GUIStyle style = new GUIStyle(_ihHeaderStyle);
+            if (_ihInitialsStyle == null) _ihInitialsStyle = new GUIStyle(_ihHeaderStyle);   // v0.25.240 (perf): one style, not one per slot per frame
+            GUIStyle style = _ihInitialsStyle;
             style.alignment = TextAnchor.MiddleCenter;
             style.fontStyle = FontStyle.Bold;
             style.fontSize = Mathf.Max(9, Mathf.RoundToInt(rect.height * 0.36f));
@@ -19368,12 +19421,15 @@ namespace AlbedosCustomClassesAdvanced
             return IsAscendedSkill(id) ? IhAscendedArt(id,texture) : texture;
         }
 
+        private readonly Dictionary<string, Texture2D> _ihUltRed = new Dictionary<string, Texture2D>(), _ihUltMaroon = new Dictionary<string, Texture2D>();
         private Texture2D IhUltimateArt(string id, Texture2D normal, bool ascended)
         {
             if(normal==null) return null;
-            string key=(ascended ? "ult_red:" : "ult_maroon:")+id;
+            Dictionary<string, Texture2D> quick = ascended ? _ihUltRed : _ihUltMaroon;   // v0.25.240 (perf): no key string per frame
             Texture2D result;
-            if(_ihAscendedIconArt.TryGetValue(key,out result)) return result;
+            if(quick.TryGetValue(id,out result) && result != null) return result;
+            string key=(ascended ? "ult_red:" : "ult_maroon:")+id;
+            if(_ihAscendedIconArt.TryGetValue(key,out result)) { quick[id]=result; return result; }
             result=IhCopyTexture(normal,"ImmortalHeroes_Ultimate_"+id);
             int ox,oy,ow,oh;
             IhHotbarOpening(result,out ox,out oy,out ow,out oh);

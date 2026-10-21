@@ -1,0 +1,25 @@
+Aethelborn Ascended v0.25.240 - Twinkle GT and First Casts   (baseline v0.25.239; Anchor stays v0.25.238)
+
+CHANGES PER SKILL
+- Moonlight Splitter (Normal): vanilla wind removed. Each GT now carries a looping Twinkle (pitch 0.85, "big wave") that
+  moves with the GT and stops when it ends. Slash + SwordSlash unchanged.
+- Moonlight Splitter (Ascended): same on every wave and on the final GT (pitch 0.85). The fast afterimage stays silent.
+- Halfmoon Slash (Ascended): final GT = Twinkle loop at normal pitch, riding the GT (vanilla wind removed); Slash + SwordSlash kept.
+  Normal Halfmoon unchanged.
+- No other skill used the vanilla wind; it is no longer loaded at all.
+- Twinkle.wav: your Twinkle.mp3, 0.25-1.95 s, end cross-faded into the start (0.5 s, equal power) -> 1.2 s seamless loop.
+  The seam measures like any normal sample step (no click / gap). Slider: Moonlight "Wind Volume (%)" (same key as before).
+- Heavy Slash (Ascended) + Circle Swing + Halfmoon: the battleaxe swing timings are read from the animator right after load.
+  The first cast used a 0.85 s guess for a 1.39 s swing - that is why the first Ascended Heavy Slash moved slow.
+
+FIXES FROM YOUR LOGS / REPORT
+- Combat Runtime 761 KB/s garbage + first-cast hitches (Frenzied 66 ms, Halfmoon 85 ms): the processed-sound cache held 96
+  copies, fewer than the mod needs, so it emptied itself and rebuilt sounds forever (sometimes during a cast). Now 512.
+- "Can't get data from streamed samples (Amb_MainWind_S_Loop)" spam: gone with the wind; and any game clip that cannot be read
+  is now skipped once and remembered (also stops the "Cannot get data on compressed samples" errors).
+- HUD garbage (818 KB/s, the ~180 ms [GC] freezes): the real source was the skill hotbar - a new text style per slot per frame,
+  skill initials, Blade Storm stack pill, Mercenary Fury title, Ultimate icon lookup. All cached now.
+
+FILES: CombatRuntime, Advanced, INSTALL (Twinkle.wav added, 24 sounds). 8 modules unchanged. No gameplay/VFX/timing changes.
+CHECKS (static): all ten modules compile C# 5 against your real Valheim/Unity/BepInEx/Harmony/Jotunn DLLs. Loop seam measured offline.
+NOT VERIFIED IN GAME: sound, loop smoothness by ear, FPS.

@@ -1,7 +1,7 @@
 ﻿$ErrorActionPreference = "Stop"
 
 Write-Host ""
-Write-Host "IMMORTAL HEROES v0.25.239 - HALFMOON GT AND SMOOTH HUD" -ForegroundColor Cyan
+Write-Host "IMMORTAL HEROES v0.25.240 - TWINKLE GT AND FIRST CASTS" -ForegroundColor Cyan
 Write-Host "All 10 DLLs compile in staging before the live profile is touched." -ForegroundColor Gray
 Write-Host ""
 
@@ -214,7 +214,7 @@ try {
     }
 
     # v211: require and stage the trimmed PCM bank before touching the live installation.
-    $sfxNames = @("BassDrop.wav", "BigWhoosh.wav", "BigWhoosh2.wav", "BladeStorm.wav", "Buff.wav", "BuffSpells.wav", "GD_Formation.wav", "GD_Impact.wav", "GD_Shatter.wav", "HeavyPunch.wav", "HeavySwing.wav", "HeavySwing2.wav", "MidBoom.wav", "SM_CCRumble.wav", "SmallBoom.wav", "SolidBoom.wav", "SpinningSwing.wav", "StoneFang.wav", "SwordSlash.wav", "SwordSlash2.wav", "SwordSwing.wav", "SwordSwing2.wav", "Tornado.wav")
+    $sfxNames = @("BassDrop.wav", "BigWhoosh.wav", "BigWhoosh2.wav", "BladeStorm.wav", "Buff.wav", "BuffSpells.wav", "GD_Formation.wav", "GD_Impact.wav", "GD_Shatter.wav", "HeavyPunch.wav", "HeavySwing.wav", "HeavySwing2.wav", "MidBoom.wav", "SM_CCRumble.wav", "SmallBoom.wav", "SolidBoom.wav", "SpinningSwing.wav", "StoneFang.wav", "SwordSlash.wav", "SwordSlash2.wav", "SwordSwing.wav", "SwordSwing2.wav", "Tornado.wav", "Twinkle.wav")
     $stageSfxDir = Join-Path $stageAssetDir "SFX"
     New-Item -ItemType Directory -Path $stageSfxDir | Out-Null
     foreach ($name in $sfxNames) {
@@ -448,7 +448,7 @@ try {
     Write-Host "  Aethelborn.Experience.dll                 (kill EXP, levels, floating +EXP)" -ForegroundColor Cyan
     Write-Host "  ImmortalHeroesAssets\*.png (Skill Tree art, Tier buttons, Confirm plaque, selection ring)" -ForegroundColor White
     Write-Host ""
-    Write-Host "  ImmortalHeroesAssets\SFX\*.wav (23 skill sound files)" -ForegroundColor White
+    Write-Host "  ImmortalHeroesAssets\SFX\*.wav (24 skill sound files)" -ForegroundColor White
     Write-Host "If a risky combat DLL fails, the staged installer will not replace your current live set." -ForegroundColor Cyan
     Write-Host ""
 }

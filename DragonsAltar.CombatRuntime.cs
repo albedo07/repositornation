@@ -589,20 +589,21 @@ namespace DragonsAltarCombat
             AudioClip cached;
             if (Variants.TryGetValue(key, out cached) && cached != null) return cached;
             float[] samples; int channels, rate;
-            if (!ReadPcm(clip, out samples, out channels, out rate)) return clip;
+            if (UnreadableClips.Contains(clip.GetInstanceID())) return clip;
+            if (!ReadPcm(clip, out samples, out channels, out rate)) { UnreadableClips.Add(clip.GetInstanceID()); return clip; }
             if (Math.Abs(bass - 1f) >= 0.005f) ShapeBass(samples, channels, rate, bass);
             if (drive > 1f) { for (int i = 0; i < samples.Length; i++) samples[i] *= drive; LimitLoud(samples, channels, rate); }
             if (Math.Abs(speed - 1f) >= 0.005f) samples = Stretch(samples, channels, rate, speed);
             AudioClip result = CreatePcm(clip.name + "_r" + key, samples, channels, rate, TargetRms, false);
             if (result == null) return clip;
-            if (Variants.Count >= 96) { foreach (AudioClip old in Variants.Values) if (old != null) RetiredClips.Add(old); Variants.Clear(); }
+            if (Variants.Count >= 512) { foreach (AudioClip old in Variants.Values) if (old != null) RetiredClips.Add(old); Variants.Clear(); }
             Variants[key] = result; ClipLead[result] = Lead(clip) / speed;
             return result;
         }
         private static readonly bool[] CustomWarned = new bool[CueCount];
         private static string _soundFolder;
         private static readonly string[][] CustomFiles = {
-            new string[] { "HeavySwing2.wav", "HeavySwing2.wav", "HeavySwing.wav" }, new string[] { "BigWhoosh.wav" }, new string[] { "HeavyPunch.wav" }, null, null, new string[] { "BuffSpells.wav" }, null, new string[] { "GD_Impact.wav" }, new string[] { "StoneFang.wav" }, null, null, null, new string[] { "GD_Formation.wav" }, null, new string[] { "HeavySwing2.wav" }, new string[] { "HeavySwing.wav" }, new string[] { "SM_CCRumble.wav" }, new string[] { "BladeStorm.wav" }, new string[] { "BigWhoosh.wav" }, new string[] { "SwordSlash.wav", "SwordSlash2.wav" }, new string[] { "SmallBoom.wav" }, new string[] { "SwordSwing.wav" }, new string[] { "SwordSlash.wav", "SwordSlash2.wav" }, null, new string[] { "SwordSlash.wav", "SwordSlash2.wav" }, null, new string[] { "Buff.wav" }, new string[] { "MidBoom.wav" }, new string[] { "BassDrop.wav" }, new string[] { "HeavySwing2.wav" }, new string[] { "SolidBoom.wav" }, new string[] { "BigWhoosh2.wav" }, new string[] { "HeavyPunch.wav" }, new string[] { "SolidBoom.wav" }, new string[] { "SwordSwing2.wav" }, new string[] { "MidBoom.wav" }, new string[] { "SmallBoom.wav" }, new string[] { "HeavyPunch.wav" }, new string[] { "SmallBoom.wav" }, new string[] { "SolidBoom.wav" }, new string[] { "SpinningSwing.wav" }, new string[] { "HeavySwing.wav" }, new string[] { "Buff.wav" }, new string[] { "Buff.wav" }, new string[] { "SmallBoom.wav" }, new string[] { "GD_Shatter.wav" }, new string[] { "BigWhoosh.wav" }, new string[] { "BigWhoosh2.wav" }, new string[] { "HeavySwing2.wav" }, new string[] { "BassDrop.wav" }, new string[] { "SwordSwing.wav" }, null, null, new string[] { "SwordSwing.wav" }, null, null, new string[] { "BigWhoosh.wav" }, null, new string[] { "BassDrop.wav" }, null, null, new string[] { "SmallBoom.wav" }, new string[] { "BassDrop.wav" }, null, new string[] { "BassDrop.wav" }, null, new string[] { "BassDrop.wav" }, new string[] { "BigWhoosh2.wav" }, new string[] { "BassDrop.wav" }, null, new string[] { "HeavySwing2.wav" }, new string[] { "SwordSlash.wav" }, new string[] { "SwordSlash.wav" }, new string[] { "HeavySwing2.wav" }, new string[] { "BigWhoosh2.wav" }, new string[] { "Tornado.wav" }
+            new string[] { "HeavySwing2.wav", "HeavySwing2.wav", "HeavySwing.wav" }, new string[] { "BigWhoosh.wav" }, new string[] { "HeavyPunch.wav" }, null, null, new string[] { "BuffSpells.wav" }, null, new string[] { "GD_Impact.wav" }, new string[] { "StoneFang.wav" }, null, null, null, new string[] { "GD_Formation.wav" }, null, new string[] { "HeavySwing2.wav" }, new string[] { "HeavySwing.wav" }, new string[] { "SM_CCRumble.wav" }, new string[] { "BladeStorm.wav" }, new string[] { "BigWhoosh.wav" }, new string[] { "SwordSlash.wav", "SwordSlash2.wav" }, new string[] { "SmallBoom.wav" }, new string[] { "SwordSwing.wav" }, new string[] { "SwordSlash.wav", "SwordSlash2.wav" }, null, new string[] { "SwordSlash.wav", "SwordSlash2.wav" }, new string[] { "Twinkle.wav" }, new string[] { "Buff.wav" }, new string[] { "MidBoom.wav" }, new string[] { "BassDrop.wav" }, new string[] { "HeavySwing2.wav" }, new string[] { "SolidBoom.wav" }, new string[] { "BigWhoosh2.wav" }, new string[] { "HeavyPunch.wav" }, new string[] { "SolidBoom.wav" }, new string[] { "SwordSwing2.wav" }, new string[] { "MidBoom.wav" }, new string[] { "SmallBoom.wav" }, new string[] { "HeavyPunch.wav" }, new string[] { "SmallBoom.wav" }, new string[] { "SolidBoom.wav" }, new string[] { "SpinningSwing.wav" }, new string[] { "HeavySwing.wav" }, new string[] { "Buff.wav" }, new string[] { "Buff.wav" }, new string[] { "SmallBoom.wav" }, new string[] { "GD_Shatter.wav" }, new string[] { "BigWhoosh.wav" }, new string[] { "BigWhoosh2.wav" }, new string[] { "HeavySwing2.wav" }, new string[] { "BassDrop.wav" }, new string[] { "SwordSwing.wav" }, null, null, new string[] { "SwordSwing.wav" }, null, null, new string[] { "BigWhoosh.wav" }, null, new string[] { "BassDrop.wav" }, null, null, new string[] { "SmallBoom.wav" }, new string[] { "BassDrop.wav" }, null, new string[] { "BassDrop.wav" }, null, new string[] { "BassDrop.wav" }, new string[] { "BigWhoosh2.wav" }, new string[] { "BassDrop.wav" }, new string[] { "Twinkle.wav" }, new string[] { "HeavySwing2.wav" }, new string[] { "SwordSlash.wav" }, new string[] { "SwordSlash.wav" }, new string[] { "HeavySwing2.wav" }, new string[] { "BigWhoosh2.wav" }, new string[] { "Tornado.wav" }
         };
         private static int PcmInt(byte[] bytes, int offset)
         {
@@ -698,6 +699,8 @@ namespace DragonsAltarCombat
             {
                 channels = clip.channels; rate = clip.frequency;
                 if (channels < 1 || channels > 2 || rate < 8000 || rate > 96000 || clip.samples <= 0) return false;
+                // v0.25.240: Unity cannot read compressed / streamed game clips (it logged an error per try) - skip them quietly
+                if (!OwnedClips.Contains(clip) && clip.loadType != AudioClipLoadType.DecompressOnLoad) return false;
                 if (!_readerResolved)
                 {
                     _readerResolved = true;
@@ -850,6 +853,7 @@ namespace DragonsAltarCombat
             return float.IsNaN(value) || float.IsInfinity(value) ? neutral / 100f : value / 100f;
         }
         private static readonly Dictionary<string, AudioClip> Variants = new Dictionary<string, AudioClip>();
+        private static readonly HashSet<int> UnreadableClips = new HashSet<int>();   // v0.25.240: streamed/compressed clips fail once, never retried
         // Bass and Speed are baked into a cached copy of the clip; rebuilt only when that skill's slider changes.
         private static AudioClip Variant(int cue, AudioClip clip)
         {
@@ -859,12 +863,13 @@ namespace DragonsAltarCombat
             AudioClip cached;
             if (Variants.TryGetValue(key, out cached) && cached != null) return cached;
             float[] samples; int channels, rate;
-            if (!ReadPcm(clip, out samples, out channels, out rate)) return clip;
+            if (UnreadableClips.Contains(clip.GetInstanceID())) return clip;
+            if (!ReadPcm(clip, out samples, out channels, out rate)) { UnreadableClips.Add(clip.GetInstanceID()); return clip; }
             if (Math.Abs(bass - 1f) >= 0.005f) ShapeBass(samples, channels, rate, bass);
             if (Math.Abs(speed - 1f) >= 0.005f) samples = Stretch(samples, channels, rate, speed);
             AudioClip result = CreatePcm(clip.name + "_v" + key, samples, channels, rate, TargetRms, false);
             if (result == null) return clip;
-            if (Variants.Count >= 96) { foreach (AudioClip old in Variants.Values) if (old != null) RetiredClips.Add(old); Variants.Clear(); }
+            if (Variants.Count >= 512) { foreach (AudioClip old in Variants.Values) if (old != null) RetiredClips.Add(old); Variants.Clear(); }
             Variants[key] = result; ClipLead[result] = Lead(clip) / speed;
             return result;
         }
@@ -1008,7 +1013,7 @@ namespace DragonsAltarCombat
         {
             if (Profiles[cue] != null) return Profiles[cue];
             if (ZNetScene.instance == null || ObjectDB.instance == null) return null;
-            bool wind = cue == (int)DragonBaseSound.MoonlightWind || cue == (int)DragonBaseSound.HalfmoonFinisher;
+            bool wind = false;   // v0.25.240 (user): no vanilla wind on any skill; the GT cues play Twinkle.wav
             Profile p = cue == (int)DragonBaseSound.CrescentFire ? FromFire() : (wind ? FromWind() : FromCustom(cue));
             string selected = p == null ? null : (cue == (int)DragonBaseSound.CrescentFire ? "native campfire crackle" : (wind ? "Valheim wind" : string.Join(" + ", CustomFiles[cue])));   // v0.25.239: wind has no file list (was ArgumentNullException = silent wind)
             bool bush = cue == (int)DragonBaseSound.TrapPlace || cue == (int)DragonBaseSound.TrapSnap;
@@ -1245,7 +1250,7 @@ namespace DragonsAltarCombat
         {
             voice.Ticket = 0; voice.Sustained = false; voice.Repeat = false; voice.Continue = null; voice.Follow = null;
         }
-        public static int BeginSustain(Player caster, DragonBaseSound cue, Vector3 position, float seconds, float pitchScale = 1f, float gain = 1f, Func<bool> alive = null, bool followCaster = false)
+        public static int BeginSustain(Player caster, DragonBaseSound cue, Vector3 position, float seconds, float pitchScale = 1f, float gain = 1f, Func<bool> alive = null, bool followCaster = false, Transform follow = null)
         {
             if (!Enabled || caster == null || caster != Player.m_localPlayer || caster.IsDead() || AudioMan.instance == null || !(seconds > 0f) || float.IsNaN(seconds) || float.IsInfinity(seconds)) return -1;
             if (RawCue(cue)) SendSfx(2, cue, position, 0, pitchScale, 0f, seconds);
@@ -1260,7 +1265,7 @@ namespace DragonsAltarCombat
                     return keep;
                 };
             }
-            return SustainLocal(cue, position, seconds, pitchScale, gain, watched, followCaster ? caster.transform : null);
+            return SustainLocal(cue, position, seconds, pitchScale, gain, watched, follow != null ? follow : (followCaster ? caster.transform : null));
         }
         private static int SustainLocal(DragonBaseSound cue, Vector3 position, float seconds, float pitchScale, float gain, Func<bool> alive, Transform follow)
         {
@@ -1287,14 +1292,14 @@ namespace DragonsAltarCombat
                     if (slot < 0) return -1;
                 }
                 int index;
-                _hitIn = cue == DragonBaseSound.CrescentDirt || cue == DragonBaseSound.WhirlwindWhoosh ? 0f : Mathf.Min(seconds, 60f);   // a wind-up's marker lands on the hit
+                _hitIn = cue == DragonBaseSound.CrescentDirt || cue == DragonBaseSound.WhirlwindWhoosh || cue == DragonBaseSound.MoonlightWind ? 0f : Mathf.Min(seconds, 60f);   // a wind-up's marker lands on the hit
                 try { index = PlayLayer(profile, cue, position, 0, Mathf.Clamp01(gain), -1, EventLayer(cue), pitchScale, 0f, slot); }
                 finally { _hitIn = 0f; }
                 if (index < 0) return -1;
                 Voice voice = Voices[index]; float now = Time.unscaledTime;
                 _nextTicket = _nextTicket == int.MaxValue ? 1 : _nextTicket + 1;
                 voice.Ticket = _nextTicket; voice.Sustained = true;
-                voice.Repeat = cue == DragonBaseSound.CrescentDirt || cue == DragonBaseSound.WhirlwindWhoosh;   // only the moving ground rumble loops
+                voice.Repeat = cue == DragonBaseSound.CrescentDirt || cue == DragonBaseSound.WhirlwindWhoosh || cue == DragonBaseSound.MoonlightWind;   // v0.25.240 Twinkle loops on the GT   // only the moving ground rumble loops
                 float length = voice.Source.clip.length / voice.Source.pitch;
                 if (voice.Raw)
                 {

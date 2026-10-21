@@ -1,5 +1,5 @@
-TEST v0.25.239
-1. Log shows "[Aethelborn] Pre-compiled N methods" ~1 min after load (if "Pre-compile stopped: ..." appears, send the log).
-2. Moonlight Splitter waves: wind is heard. Ascended Halfmoon final GT: Moonlight's GT sound.
-3. F8: type in a box, Enter -> value applied, caret gone. Esc while typing -> window closes.
-4. F7 perf report: Advanced OnGUI alloc well below 828 KB/s; fewer [GC] spikes.
+TEST v0.25.240
+1. Moonlight Splitter / Ascended Halfmoon: Twinkle follows the GT, loops without a gap, no wind.
+2. First Ascended Heavy Slash after loading: normal speed.
+3. F7 report: Combat runtime and Advanced OnGUI alloc far below 761 / 818 KB/s; fewer [GC] spikes; no first-cast spikes.
+4. Log: no "Amb_MainWind" / "Cannot get data" errors.
