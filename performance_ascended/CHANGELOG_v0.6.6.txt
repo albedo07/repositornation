@@ -1,0 +1,6 @@
+Performance Ascended v0.6.6 - official release build   (baseline anchor v0.6.5)
+1. Capture recorder (Ctrl+Alt+F10) and marker (Ctrl+Alt+F9) hotkeys are OFF by default (developer tools). Existing configs
+   with the old default keys are switched off once (Config Revision 4). Set [Benchmark] Record Hotkey to use them again.
+2. Drag-and-drop build: PerformanceAscended_v0.6.6_DragDrop.zip contains the compiled DLL (built against your Valheim 1.0.20
+   references, C# 5) - no installer needed. The source/installer package remains for future Valheim updates.
+No feature changes.

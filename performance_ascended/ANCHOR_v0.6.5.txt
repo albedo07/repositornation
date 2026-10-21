@@ -1,4 +1,4 @@
-PERFORMANCE ASCENDED - OFFICIAL ANCHOR v0.6.5 (user, 2026-10-21): "our first ever mod born".
+PERFORMANCE ASCENDED - OFFICIAL ANCHOR v0.6.5 (user, 2026-10-21); v0.6.6 = same features, testing hotkeys off + drag-and-drop DLL: "our first ever mod born".
 Future passes start from this version. Default-on features, each measured in the user's captures:
 - Spread Object Unloading (150/tick): leaving a base 300-475 ms freeze -> ~30 ms.
 - Draw Distance (pieces 150 m, decor 90 m, small 80 m, LOD bias cap 1.25): fewer draw calls/triangles in big bases.

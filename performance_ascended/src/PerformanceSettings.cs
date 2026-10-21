@@ -62,7 +62,7 @@ namespace AethelbornPerformance
                 _renderCounters = config.Bind("Benchmark", "Rendering Counters", true, "Request optional Unity rendering, main/render thread and allocation counters during recordings. Unavailable counters are reported as -1. Does not enable deep profiling.");
                 _scenario = config.Bind("Benchmark", "Scenario", "unlabeled", "Optional short label for the scene being tested, for example base_walk or first_skill_cast. Use the same label for comparable runs.");
                 _spikeThreshold = config.Bind("Benchmark", "Spike Threshold Milliseconds", 50f, new ConfigDescription("Frames at or above this duration are also exported to the spikes CSV.", new AcceptableValueRange<float>(16f, 1000f)));
-                _markerKey = config.Bind("Benchmark", "Marker Hotkey", new KeyboardShortcut(KeyCode.F9, KeyCode.LeftControl, KeyCode.LeftAlt), "During a recording, mark an action or slowdown. Default Left Ctrl + Left Alt + F9; markers are numbered in order.");
+                _markerKey = config.Bind("Benchmark", "Marker Hotkey", KeyboardShortcut.Empty, "Testing only (empty = off in the official build; e.g. LeftCtrl + LeftAlt + F9). During a recording, mark an action or slowdown. Default Left Ctrl + Left Alt + F9; markers are numbered in order.");
                 _enabled = config.Bind("General", "Enabled", true, "Enable optimization features. Turning off restores owned instance properties. Benchmarks remain available.");
                 _shadows = config.Bind("Structures", "Distant Shadows", true, "Remove shadows cast by distant building MeshRenderers. Buildings remain visible and interactive.");
                 _shadowDistance = config.Bind("Structures", "Shadow Distance", 40f, new ConfigDescription("Distance in metres beyond which building pieces stop casting shadows.", new AcceptableValueRange<float>(10f, 250f)));
@@ -75,7 +75,7 @@ namespace AethelbornPerformance
                 _effectDistance = config.Bind("Cosmetics", "Far Distance", 30f, new ConfigDescription("Beyond this distance the allocated cosmetic particle cap is halved.", new AcceptableValueRange<float>(5f, 150f)));
                 _allowList = config.Bind("Cosmetics", "Exact Effect Names", "vfx_greydwarf_death,vfx_greydwarf_shaman_death,vfx_greydwarf_elite_death,vfx_skeleton_death,vfx_troll_death,vfx_draugr_death", "Comma-separated exact root prefab names, ignoring (Clone). Only pure cosmetic particle systems are eligible. Add reviewed modded cosmetic effects here; skill telegraphs should remain excluded.");
                 _seconds = config.Bind("Benchmark", "Duration Seconds", 60f, new ConfigDescription("Automatic benchmark duration. A second hotkey press ends it early.", new AcceptableValueRange<float>(10f, 180f)));
-                _recordKey = config.Bind("Benchmark", "Record Hotkey", new KeyboardShortcut(KeyCode.F10, KeyCode.LeftControl, KeyCode.LeftAlt), "Start/stop a benchmark. Default: Left Ctrl + Left Alt + F10.");
+                _recordKey = config.Bind("Benchmark", "Record Hotkey", KeyboardShortcut.Empty, "Testing only (empty = off in the official build; set e.g. LeftCtrl + LeftAlt + F10 to record captures again). Start/stop a benchmark. Default: Left Ctrl + Left Alt + F10.");
                 _toggleKey = config.Bind("General", "Toggle Hotkey", new KeyboardShortcut(KeyCode.F6, KeyCode.LeftControl, KeyCode.LeftAlt), "Toggle optimization features. Default: Left Ctrl + Left Alt + F6. Wait for settings to settle before recording.");
                 if (_configRevision.Value < 1)
                 {
@@ -90,12 +90,19 @@ namespace AethelbornPerformance
                     _noShadows.Value = false;
                     _configRevision.Value = 2;
                 }
+                if (_configRevision.Value < 4)
+                {
+                    // 0.6.6 official build (user): the capture recorder/marker are developer tools - their hotkeys go off once
+                    if (_recordKey.Value.Equals(new KeyboardShortcut(KeyCode.F10, KeyCode.LeftControl, KeyCode.LeftAlt))) _recordKey.Value = KeyboardShortcut.Empty;
+                    if (_markerKey.Value.Equals(new KeyboardShortcut(KeyCode.F9, KeyCode.LeftControl, KeyCode.LeftAlt))) _markerKey.Value = KeyboardShortcut.Empty;
+                }
                 if (_configRevision.Value < 3)
                 {
                     // 0.6.0 (user): the indicator sat on the hotbar at the top left - move it below the hotbar once
                     if (_indicatorX.Value == 12f && _indicatorY.Value == 12f) _indicatorY.Value = 140f;
                     _configRevision.Value = 3;
                 }
+                if (_configRevision.Value < 4) _configRevision.Value = 4;
         }
     }
 }

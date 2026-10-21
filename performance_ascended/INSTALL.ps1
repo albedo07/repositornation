@@ -2,7 +2,7 @@
 $ErrorActionPreference = "Stop"
 $stage = $null
 Write-Host ""
-Write-Host "PERFORMANCE ASCENDED v0.6.5 - INSTALL" -ForegroundColor Cyan
+Write-Host "PERFORMANCE ASCENDED v0.6.6 - INSTALL" -ForegroundColor Cyan
 Write-Host "AA-style installer: select your active profile and game references." -ForegroundColor Gray
 Write-Host "Compile in staging before replacing this plugin's DLL." -ForegroundColor Gray
 Write-Host ""
