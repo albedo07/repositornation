@@ -1,0 +1,21 @@
+Performance Ascended v0.4.2 - Big Bases   (baseline v0.4.1)
+
+Goal (user): many mods + big structures, FPS staying above 60-70.
+Evidence (your 0.4.1 captures): frames are CPU-bound - median 11-13 ms with ~2,000 draw calls and 0.5-1M triangles at
+12-15k pieces; shadows cost ~nothing on your PC; unload freezes are fixed (max 31 ms). Each building piece is a draw call,
+so the steady FPS lever in big bases is how many pieces are DRAWN.
+
+1. NEW [Draw Distance] (on by default):
+   Building Pieces Metres 150 (walls/floors/roofs), Decor Pieces Metres 90 (banners, rugs, decorations),
+   Small Objects Metres 80 (dropped items, small props), LOD Bias Max 1.25 (trees/rocks use simpler models sooner).
+   Unity per-layer camera culling: zero per-object work. Pieces beyond the distance are not drawn but still exist,
+   collide, burn, decay and work normally. Spherical distance, so nothing pops at the screen edge when you turn.
+   Only ever lowers a distance / bias, never raises. If Valheim or another mod changes them, theirs wins (report says so).
+   OFF / optimization OFF restores the camera.
+2. Reports: ViewCulling state, LodBias, draw distances, and Unity GC mode (GCIncremental, GCSlice_ns) for the 20-33 ms
+   memory-cleanup frames seen every 7-10 s.
+
+Tuning: more FPS -> Building Pieces 100, Decor 60. Less popping on hilltops -> Building Pieces 250.
+Chest stutter: one-time UI build by Valheim/inventory mods; not targeted (you said it is fine).
+CHECKS (static): C# 5 compile vs your real game/BepInEx/Harmony DLLs; installer source list updated (8 files).
+In-game: look (popping distance), FPS - send ON/OFF captures at the same spot.

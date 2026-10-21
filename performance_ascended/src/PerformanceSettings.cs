@@ -6,7 +6,8 @@ namespace AethelbornPerformance
     // Actual production binding path can be validated without creating a Unity component.
     public sealed class PerformanceSettings
     {
-        public ConfigEntry<bool> _spreadUnload, _lowShadows;
+        public ConfigEntry<bool> _spreadUnload, _lowShadows, _viewCulling;
+        public ConfigEntry<float> _pieceDrawM, _nonSolidDrawM, _smallDrawM, _lodMax;
         public ConfigEntry<float> _lowShadowDistance;
         public ConfigEntry<int> _lowShadowCascades;
         public ConfigEntry<int> _unloadPerTick;
@@ -26,6 +27,11 @@ namespace AethelbornPerformance
                 _supportCache = config.Bind("Structures", "Efficient Support Cache Subscriptions", true, "Use ordered constant-time callback removal for native terrain support-cache notifications. Preserves clearing, callback order and native object lifetime. Turning OFF restores native subscriptions.");
                 _spreadUnload = config.Bind("Structures", "Spread Object Unloading", true, "When you leave an area Valheim removes every out-of-range object (thousands of building pieces) in ONE frame - the 300-475 ms freezes in the captures. ON removes at most 'Unload Per Tick' objects per unloading tick (Valheim ticks 30 times a second) until done. Same removal steps as Valheim; objects you return to are kept. OFF = Valheim's own unloading.");
                 _unloadPerTick = config.Bind("Structures", "Unload Per Tick", 150, new ConfigDescription("Maximum objects removed per unloading tick (30 ticks per second). 150 = about 4,500 per second. Lower = smoother but slower cleanup.", new AcceptableValueRange<int>(25, 2000)));
+                _viewCulling = config.Bind("Draw Distance", "Enabled", true, "Big bases: stop DRAWING building pieces and small objects beyond the distances below (Unity per-layer culling, no per-object work). They still exist, collide and work; only the picture is skipped. Each building piece is its own draw call, so this is the main FPS lever around large builds. OFF restores the camera.");
+                _pieceDrawM = config.Bind("Draw Distance", "Building Pieces Metres", 150f, new ConfigDescription("Walls, floors, roofs (layer piece). 0 = game default.", new AcceptableValueRange<float>(0f, 1000f)));
+                _nonSolidDrawM = config.Bind("Draw Distance", "Decor Pieces Metres", 90f, new ConfigDescription("Non-solid pieces: banners, rugs, decorations, torches' meshes (layer piece_nonsolid). 0 = game default.", new AcceptableValueRange<float>(0f, 1000f)));
+                _smallDrawM = config.Bind("Draw Distance", "Small Objects Metres", 80f, new ConfigDescription("Dropped items and small props (layers item, Default_small). 0 = game default.", new AcceptableValueRange<float>(0f, 1000f)));
+                _lodMax = config.Bind("Draw Distance", "LOD Bias Max", 1.25f, new ConfigDescription("Cap on Unity's LOD bias (trees/rocks switch to simpler models sooner when lower). Never raises the game's value.", new AcceptableValueRange<float>(0.3f, 5f)));
                 _lowShadows = config.Bind("Structures", "Low Shadows", true, "Keep real-time shadows at the cheapest look that still reads well: hard shadows (no soft filtering), low shadow-map resolution, short distance, few cascades. Used when 'Disable All Shadows' is false. Turning OFF (or optimization OFF) restores the game's values unless another writer changed them.");
                 _lowShadowDistance = config.Bind("Structures", "Low Shadow Distance", 35f, new ConfigDescription("Metres of shadows around the camera in Low Shadows mode (game value in your captures: 80). Shorter = faster.", new AcceptableValueRange<float>(10f, 150f)));
                 _lowShadowCascades = config.Bind("Structures", "Low Shadow Cascades", 2, new ConfigDescription("Shadow cascades in Low Shadows mode: 1 = fastest (blockier up close), 2 = sharper near the player for a small cost, 4 = game-like.", new AcceptableValueList<int>(1, 2, 4)));

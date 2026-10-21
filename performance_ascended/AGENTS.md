@@ -7,3 +7,4 @@ Separate client plugin. Do not edit AA or any previous archive. C#5, BepInEx5, H
 2026-10-21: v0.4.0 Performance Ascended (Claude): budgeted ZNetScene.RemoveObjects (UnloadBudget.cs) after captures attributed every 200-475 ms stall to one-tick removal of ~8,500 pieces. Rule: comparisons need matching LoadedPiecesAtStart and a scenario label.
 2026-10-21: v0.4.1 Low Shadows (user: shadows back, cheapest look): HardOnly/Low res/35 m/2 cascades, owned per value; Disable All Shadows default false (revision 2 migration).
 2026-10-21: v0.4.1 hotfix: INSTALL.ps1 required exactly 6 sources (broke on UnloadBudget.cs). Now checks the named list. Rule: adding/removing a source file = update INSTALL.ps1 required list and grep installers for counts.
+2026-10-21: v0.4.2 Big Bases: ViewCulling.cs (camera layerCullDistances for piece/piece_nonsolid/item/Default_small, spherical, owned; lodBias cap); GC mode in reports. Installer list = 8 files.

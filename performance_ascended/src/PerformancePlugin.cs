@@ -18,7 +18,7 @@ namespace AethelbornPerformance
     {
         public const string Guid = "albedo.aethelborn.performance";
         public const string Name = "Performance Ascended";
-        public const string Version = "0.4.1";
+        public const string Version = "0.4.2";
         public static PerformancePlugin Instance;
         private PerformanceSettings _settings;
         private GUIStyle _indicatorStyle;
@@ -442,6 +442,7 @@ namespace AethelbornPerformance
                 _wasShadows = shadowsNow; _wasParticles = particlesNow;
                 UpdateGlobalShadows(enabledNow && _settings._noShadows.Value);
                 UpdateLowShadows(enabledNow && !_settings._noShadows.Value && _settings._lowShadows.Value);
+                _view.Update(enabledNow && _settings._viewCulling.Value, _settings._pieceDrawM.Value, _settings._nonSolidDrawM.Value, _settings._smallDrawM.Value, _settings._lodMax.Value);
                 if (active) RefreshDiscoveryHud(shadowsNow);
                 if (!enabledNow) return;
                 Vector3 eye = Player.m_localPlayer.transform.position;
@@ -612,6 +613,7 @@ namespace AethelbornPerformance
             }
         }
         // 0.4.1 Low Shadows: four quality values, each owned separately (another writer - e.g. Valheim's graphics menu - wins).
+        private readonly ViewCulling _view = new ViewCulling();
         private OwnedValue<ShadowQuality> _lowQuality;
         private OwnedValue<ShadowResolution> _lowResolution;
         private OwnedValue<float> _lowDistance;
@@ -668,7 +670,7 @@ namespace AethelbornPerformance
             for (int i = 0; i < _systems.Count; i++) RestoreParticle(_systems[i]);
             _systems.Clear(); _knownSystems.Clear();
         }
-        private void RestoreAll() { if (_supportCache != null) _supportCache.SetEnabled(false); RestoreGlobalShadows(); RestoreLowShadows(); RestoreShadows(); RestoreParticles(); _pending.Clear(); }
+        private void RestoreAll() { if (_supportCache != null) _supportCache.SetEnabled(false); RestoreGlobalShadows(); RestoreLowShadows(); _view.Restore(); RestoreShadows(); RestoreParticles(); _pending.Clear(); }
         private void Fail(Exception error)
         {
             if (_failed) return; _failed = true; _discoveryReady = false; _discoveryContent.text = "Discovery stopped"; _discoveryHint.text = "Check the performance log.";
@@ -727,6 +729,7 @@ namespace AethelbornPerformance
                 summary += "\nResidentMemorySource=" + _runtime.ResidentSource + "\nDiscoveryReadyAtEnd=" + _discoveryReady + "; DiscoveryCheckedAtEnd=" + DiscoveryChecked + "; DiscoveryTotalAtEnd=" + DiscoveryTotal + "; PendingShadowPieces=" + _pendingFirstApply + "; DiscoveryLimited=" + _sweep.Limited;
                 if (_supportCache != null) summary += "\n" + _supportCache.Report();
                 summary += "\n" + UnloadBudget.Report();
+                summary += "\n" + _view.Report() + "; PieceDrawM=" + _settings._pieceDrawM.Value.ToString(CultureInfo.InvariantCulture) + "; DecorDrawM=" + _settings._nonSolidDrawM.Value.ToString(CultureInfo.InvariantCulture) + "; SmallDrawM=" + _settings._smallDrawM.Value.ToString(CultureInfo.InvariantCulture);
                 summary += "\nPendingDiscoveryPieces=" + _newPieces.Count + "; DiscoveryQueueOverflow=" + _newPieces.Overflowed + "; DiscoveryReconcilePending=" + _reconcileRequested + "; RunFullDiscoverySnapshots=" + (_captureStarted ? _snapshots - _startSnapshots : 0);
                 summary += "\n" + _recorder.ContextSummary();
                 summary += "\n" + _diagnostics.Summary() + "; EffectNamesOverflowRoots=" + _effectNameOverflow;

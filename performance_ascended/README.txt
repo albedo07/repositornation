@@ -1,6 +1,6 @@
-PERFORMANCE ASCENDED 0.4.1 — LOW SHADOWS + SPREAD OBJECT UNLOADING (formerly Aethelborn Performance)
+PERFORMANCE ASCENDED 0.4.2 — BIG BASES (draw distance) + LOW SHADOWS + SPREAD UNLOADING (formerly Aethelborn Performance)
 2026-10-21
-See CHANGELOG_v0.4.1.txt and CHANGELOG_v0.4.0.txt first; older notes below are from 0.3.3.
+See CHANGELOG_v0.4.2.txt, v0.4.1 and v0.4.0 first; older notes below are from 0.3.3.
 
 AETHELBORN PERFORMANCE 0.3.3 — CLEANUP ALLOCATIONS
 2026-10-21 Asia/Manila
@@ -11,7 +11,7 @@ Select ACTIVE PROFILE BepInEx/core/BepInEx.dll, then game
 valheim_Data/Managed/UnityEngine.CoreModule.dll. Paste paths in the usual file
 pickers if easier. Separate Gale/r2modman profiles work. Staged compilation,
 own-DLL backup/replacement; existing config preserved. Client BepInEx5/HarmonyX;
-no AA/Jotunn dependency. Seven C#5 production files remain separate.
+no AA/Jotunn dependency. Eight C#5 production files remain separate.
 Ctrl+Alt+F6 toggle; Ctrl+Alt+F10 record; Ctrl+Alt+F9 optional marker.
 Existing custom shortcuts remain. Badge shows actual toggle binding.
 

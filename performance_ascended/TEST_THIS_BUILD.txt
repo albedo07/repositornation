@@ -1,5 +1,5 @@
-Performance Ascended v0.4.1 - TEST
-1. Install. Log: "Spread Object Unloading: ready". Shadows visible near you (hard-edged, ~35 m).
-2. Scenario = base_walk. Same spot, same route, 60 s each: OFF, ON, OFF, ON (Ctrl+Alt+F6 between).
-3. Optional: also run once with Disable All Shadows = true to see what the shadows cost on your PC.
-4. COLLECT_REPORTS.bat -> send ZIP. Tell me if the shadows look too blocky (cascades 4) or FPS too low (cascades 1).
+Performance Ascended v0.4.2 - TEST
+1. Extract to an EMPTY folder, run INSTALL.bat.
+2. Inside your biggest base, same spot, 60 s each: OFF, ON, OFF, ON (Ctrl+Alt+F6). Then one walk around the base ON.
+3. Look from a hill at the base: tell me if far pieces vanish too close (raise Building Pieces Metres).
+4. COLLECT_REPORTS.bat -> send ZIP.
