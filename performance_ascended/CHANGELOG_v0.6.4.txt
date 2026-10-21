@@ -1,0 +1,11 @@
+Performance Ascended v0.6.4   (baseline v0.6.3)
+Your ON / TEST / OFF videos:
+- TEST (same pieces, drawn one by one): everything correct -> the piece selection, distance and LOD logic was right.
+- ON (GPU-instanced): some meshes missing (e.g. X-braced wooden walls, parts of the well frame). Valheim's building shader
+  is flagged instancing-capable but does not draw every instanced mesh correctly.
+- FPS in that view: ON ~89 vs OFF ~91 - no gain even where it drew.
+Result: Batched Building Drawing (GPU instancing) is REMOVED - code, hotkey (Ctrl+Alt+B) and settings. As promised: removed
+rather than forced. Your config may still list the old keys; they are ignored.
+Everything else unchanged: spread unloading, draw distance, low shadows, door sleep, grass patches, faster uploads,
+movable HUD, FPS counter, reports.
+CHECKS (static): C# 5 compile vs your real DLLs; installer list = 9 files (verified, InstancedPieces.cs removed).

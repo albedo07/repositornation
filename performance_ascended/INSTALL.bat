@@ -1,5 +1,5 @@
 ﻿@echo off
-title Performance Ascended v0.6.3 - Install
+title Performance Ascended v0.6.4 - Install
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
 echo.
 pause

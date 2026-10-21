@@ -14,3 +14,4 @@ Separate client plugin. Do not edit AA or any previous archive. C#5, BepInEx5, H
 2026-10-21: v0.6.1: InstancedPieces rejection counters (BatchedCheck report line + one log summary, shader names without instancing). v0.6.0 batched 0 pieces on the user's base.
 2026-10-21: v0.6.2: LOD-aware batching (per-LOD-level batches, Unity LOD distance rule, nearest-cell-point distance, 32 m cells, fade groups native). v0.6.1 data: 99% of piece renderers in LOD groups.
 2026-10-21: v0.6.3: Ctrl+Alt+B cycles batching OFF/ON/TEST (TEST = per-object Graphics.DrawMesh, same selection); camera = Utils.GetMainCamera; pieces with existing MaterialMan m_blocks entries stay native. User v0.6.2 report: batched pieces invisible, menu hides all.
+2026-10-21: v0.6.4: GPU-instanced batching REMOVED (user videos: TEST per-object draw correct, instanced draw drops some Custom/Piece meshes; no FPS gain). Do not retry instancing of Valheim piece shaders. Installer list = 9 files.

@@ -1,5 +1,2 @@
-Performance Ascended v0.6.3 - TEST (about 3 minutes)
-1. Extract to an EMPTY folder, INSTALL.bat. Load into your base, stand where you see thatch roofs and beams.
-2. Ctrl+Alt+B -> "ON (instanced)": screenshot.  Ctrl+Alt+B -> "TEST mode": screenshot.  Ctrl+Alt+B -> "OFF": screenshot.
-   In ON and TEST also open/close the menu once and note if pieces vanish.
-3. Send the 3 screenshots + COLLECT_REPORTS zip. Leave it OFF afterwards.
+Performance Ascended v0.6.4
+Extract to an EMPTY folder (so the old InstancedPieces.cs is not left in src), run INSTALL.bat. Play normally.
