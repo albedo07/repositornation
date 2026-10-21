@@ -20,7 +20,7 @@ namespace AethelbornPerformance
     {
         public static bool Active;
         public static float DrawDistance = 150f;
-        private const float Cell = 64f;
+        private const float Cell = 32f;   // 0.6.2: smaller cells so each cell's LOD level matches its pieces closely
         private static bool _installed, _faulted;
         private static ManualLogSource _log;
 
@@ -28,6 +28,8 @@ namespace AethelbornPerformance
         {
             public Mesh Mesh; public Material Material; public int SubMesh, Layer; public ShadowCastingMode Shadows; public bool Receive;
             public Vector3 Center;
+            public bool Lod; public float Size, HStart, HEnd;   // 0.6.2: LOD level range (screen-relative heights, Unity's own LOD rule)
+            public float MinY = float.MaxValue, MaxY = float.MinValue;
             public Matrix4x4[] Matrices = new Matrix4x4[16]; public Slot[] Owners = new Slot[16]; public int Count;
         }
         private sealed class Slot { public Batch Batch; public int Index; public Renderer Renderer; }
@@ -42,6 +44,7 @@ namespace AethelbornPerformance
         private static readonly Matrix4x4[] _chunk = new Matrix4x4[1023];
         private static readonly List<Renderer> _tmpRenderers = new List<Renderer>();
         private static readonly List<Material> _tmpMats = new List<Material>();
+        private static readonly Dictionary<LODGroup, LOD[]> _lodCache = new Dictionary<LODGroup, LOD[]>();
         private static int _verifyCursor;
         private static bool _wasActive;
         private static float _nextPrune;
@@ -126,6 +129,7 @@ namespace AethelbornPerformance
         }
 
         // 0.6.1 diagnostics: v0.6.0 batched 0 pieces on the user's base - every rejection is counted (report + one log summary)
+        public static int RLodBatched;
         public static int Seen, RejAnimator, RejSpecial, RejBody, RejSync, RejNview, RSeen, RLod, RNoMesh, RNotInstanced, ROk, RInactive;
         private static readonly HashSet<string> _notInstancedShaders = new HashSet<string>();
         private static bool _summaryLogged;
@@ -150,7 +154,7 @@ namespace AethelbornPerformance
         private static string Reasons()
         {
             return "PiecesSeen=" + Seen + "; PieceRejected Animator/Special/MovingBody/Sync/NotNetworked=" + RejAnimator + "/" + RejSpecial + "/" + RejBody + "/" + RejSync + "/" + RejNview +
-                "; Renderers seen=" + RSeen + " batched=" + ROk + " skipped LODGroup=" + RLod + " noMesh=" + RNoMesh + " materialNotInstancing=" + RNotInstanced + " hidden/disabled=" + RInactive;
+                "; Renderers seen=" + RSeen + " batched=" + ROk + " LOD-level=" + RLodBatched + " skipped LODGroup(fade/invalid)=" + RLod + " noMesh=" + RNoMesh + " materialNotInstancing=" + RNotInstanced + " hidden/disabled=" + RInactive;
         }
 
         private static void Build(WearNTear w)
@@ -169,7 +173,30 @@ namespace AethelbornPerformance
                 if (mr == null) continue;
                 RSeen++;
                 if (!mr.enabled || mr.forceRenderingOff || !mr.gameObject.activeInHierarchy) { RInactive++; continue; }
-                if (mr.GetComponentInParent<LODGroup>() != null) { RLod++; continue; }   // instancing would skip its LOD switching
+                // 0.6.2: renderers inside a LODGroup are batched per LOD level; each level is drawn only in its own distance range
+                LODGroup lg = mr.GetComponentInParent<LODGroup>();
+                int lodIndex = -1; float hStart = 0f, hEnd = 0f, lodSize = 0f;
+                if (lg != null)
+                {
+                    LOD[] lods;
+                    if (!_lodCache.TryGetValue(lg, out lods)) { lods = lg.GetLODs(); _lodCache[lg] = lods; }
+                    for (int li = 0; li < lods.Length && lodIndex < 0; li++)
+                    {
+                        Renderer[] rs = lods[li].renderers;
+                        if (rs != null) for (int ri = 0; ri < rs.Length; ri++) if (rs[ri] == mr) { lodIndex = li; break; }
+                    }
+                    if (lodIndex >= 0)
+                    {
+                        if (lg.fadeMode != LODFadeMode.None) { RLod++; continue; }   // cross-fading groups stay native
+                        hStart = lodIndex == 0 ? float.MaxValue : lods[lodIndex - 1].screenRelativeTransitionHeight;
+                        hEnd = lods[lodIndex].screenRelativeTransitionHeight;
+                        Vector3 sc = lg.transform.lossyScale;
+                        lodSize = lg.size * Mathf.Max(Mathf.Abs(sc.x), Mathf.Max(Mathf.Abs(sc.y), Mathf.Abs(sc.z)));
+                        if (!(lodSize > 0f) || !(hEnd > 0f) || hEnd >= hStart) { RLod++; continue; }
+                        RLodBatched++;
+                    }
+                    // a renderer under a LODGroup but in none of its levels is drawn always - batched like a plain one
+                }
                 MeshFilter mf = mr.GetComponent<MeshFilter>();
                 if (mf == null || mf.sharedMesh == null) { RNoMesh++; continue; }
                 Mesh mesh = mf.sharedMesh;
@@ -189,24 +216,29 @@ namespace AethelbornPerformance
                 int cx = Mathf.FloorToInt(p.x / Cell), cz = Mathf.FloorToInt(p.z / Cell);
                 for (int m = 0; m < _tmpMats.Count; m++)
                 {
-                    Batch b = GetBatch(mesh, _tmpMats[m], m, mr.gameObject.layer, mr.shadowCastingMode, mr.receiveShadows, cx, cz);
+                    Batch b = GetBatch(mesh, _tmpMats[m], m, mr.gameObject.layer, mr.shadowCastingMode, mr.receiveShadows, cx, cz, lodIndex, lodSize, hStart, hEnd);
                     Slot s = new Slot(); s.Batch = b; s.Renderer = mr; Add(b, s, mr.localToWorldMatrix);
+                    if (p.y < b.MinY) b.MinY = p.y; if (p.y > b.MaxY) b.MaxY = p.y;
                     r.Slots.Add(s);
                 }
                 mr.forceRenderingOff = true; r.Hidden.Add(mr);
                 _goToPiece[mr.gameObject.GetInstanceID()] = id;
             }
+            _lodCache.Clear();
             if (r.Slots.Count == 0) return;
             _goToPiece[w.gameObject.GetInstanceID()] = id;
             _recs[id] = r; _recList.Add(r);
         }
 
-        private static Batch GetBatch(Mesh mesh, Material mat, int sub, int layer, ShadowCastingMode shadows, bool receive, int cx, int cz)
+        private static Batch GetBatch(Mesh mesh, Material mat, int sub, int layer, ShadowCastingMode shadows, bool receive, int cx, int cz, int lod, float size, float hStart, float hEnd)
         {
-            long key = ((long)mesh.GetInstanceID() * 73856093L) ^ ((long)mat.GetInstanceID() * 19349663L) ^ ((long)sub << 50) ^ ((long)layer << 44) ^ ((long)shadows << 42) ^ (receive ? 1L << 41 : 0L) ^ ((long)(cx & 0xFFFFF) << 20) ^ (long)(cz & 0xFFFFF);
+            int sizeQ = lod < 0 ? 0 : Mathf.RoundToInt(size * 20f);
+            long key = ((long)mesh.GetInstanceID() * 73856093L) ^ ((long)mat.GetInstanceID() * 19349663L) ^ ((long)sub << 50) ^ ((long)layer << 44) ^ ((long)shadows << 42) ^ (receive ? 1L << 41 : 0L) ^ ((long)(cx & 0xFFFFF) << 20) ^ (long)(cz & 0xFFFFF)
+                ^ ((long)(lod + 1) << 56) ^ ((long)sizeQ * 83492791L);
             Batch b;
-            if (_batchByKey.TryGetValue(key, out b) && b.Mesh == mesh && b.Material == mat && b.SubMesh == sub && b.Layer == layer) return b;
+            if (_batchByKey.TryGetValue(key, out b) && b.Mesh == mesh && b.Material == mat && b.SubMesh == sub && b.Layer == layer && b.Lod == (lod >= 0) && Mathf.Abs(b.HEnd - hEnd) < 1e-5f && Mathf.Abs(b.Size - size) < 0.06f) return b;
             b = new Batch(); b.Mesh = mesh; b.Material = mat; b.SubMesh = sub; b.Layer = layer; b.Shadows = shadows; b.Receive = receive;
+            b.Lod = lod >= 0; b.Size = size; b.HStart = hStart; b.HEnd = hEnd;
             b.Center = new Vector3((cx + 0.5f) * Cell, 0f, (cz + 0.5f) * Cell);
             if (!_batchByKey.ContainsKey(key)) _batchByKey[key] = b;
             _batches.Add(b);
@@ -267,12 +299,24 @@ namespace AethelbornPerformance
             if (cam == null) return;
             Vector3 eye = cam.transform.position;
             float reach = DrawDistance + Cell * 0.75f, reach2 = reach * reach;
+            float k = cam.orthographic ? 0f : QualitySettings.lodBias / (2f * Mathf.Tan(cam.fieldOfView * 0.5f * Mathf.Deg2Rad));
+            float half = Cell * 0.5f;
             for (int i = 0; i < _batches.Count; i++)
             {
                 Batch b = _batches[i];
                 if (b.Count == 0) continue;
                 float dx = b.Center.x - eye.x, dz = b.Center.z - eye.z;
                 if (dx * dx + dz * dz > reach2) continue;
+                if (b.Lod && k > 0f)
+                {
+                    // nearest point of the cell -> the most detailed level any of its pieces needs (no low-detail pops up close)
+                    float nx = Mathf.Max(0f, Mathf.Abs(dx) - half), nz = Mathf.Max(0f, Mathf.Abs(dz) - half);
+                    float ny = eye.y < b.MinY ? b.MinY - eye.y : (eye.y > b.MaxY ? eye.y - b.MaxY : 0f);
+                    float d = Mathf.Sqrt(nx * nx + ny * ny + nz * nz);
+                    float dEnd = b.Size * k / b.HEnd;
+                    float dStart = b.HStart >= float.MaxValue ? 0f : b.Size * k / b.HStart;
+                    if (d < dStart || d >= dEnd) continue;
+                }
                 for (int start = 0; start < b.Count; start += 1023)
                 {
                     int n = Math.Min(1023, b.Count - start);

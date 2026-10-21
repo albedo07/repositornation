@@ -1,5 +1,6 @@
-Performance Ascended v0.6.1 - TEST (2 minutes)
+Performance Ascended v0.6.2 - TEST
 1. Extract to an EMPTY folder, INSTALL.bat.
-2. Set [Structures] Batched Building Drawing = true, load into your big base, wait ~30 s.
-3. Close the game, COLLECT_REPORTS.bat -> send (the log line "Batched Building Drawing check ..." is what I need;
-   a capture is optional). Then set it back to false.
+2. Batched Building Drawing = true. Load into your big base, wait ~30 s. LOOK around (near and far, walk away 100 m and
+   back): missing, doubled, flickering or wrongly lit pieces? Hover with the hammer, damage/repair, build/remove one.
+3. If it looks right: same spot, optimization ON, capture once with it true and once with it false.
+4. COLLECT_REPORTS.bat -> send, and tell me what you saw.
