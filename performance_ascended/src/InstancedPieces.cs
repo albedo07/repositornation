@@ -113,6 +113,7 @@ namespace AethelbornPerformance
             try
             {
                 for (int n = 0; n < 24 && _pending.Count > 0; n++) Build(_pending.Dequeue());
+                MaybeLogSummary();
                 Verify(48);
                 if (Time.unscaledTime > _nextPrune) { _nextPrune = Time.unscaledTime + 30f; Prune(); }
                 Draw();
@@ -124,15 +125,32 @@ namespace AethelbornPerformance
             }
         }
 
+        // 0.6.1 diagnostics: v0.6.0 batched 0 pieces on the user's base - every rejection is counted (report + one log summary)
+        public static int Seen, RejAnimator, RejSpecial, RejBody, RejSync, RejNview, RSeen, RLod, RNoMesh, RNotInstanced, ROk, RInactive;
+        private static readonly HashSet<string> _notInstancedShaders = new HashSet<string>();
+        private static bool _summaryLogged;
         private static bool Eligible(WearNTear w)
         {
-            if (w.GetComponentInChildren<Animator>(true) != null || w.GetComponent<Door>() != null || w.GetComponent<Sign>() != null) return false;
-            if (w.GetComponent<Fireplace>() != null || w.GetComponent<ItemStand>() != null || w.GetComponent<ArmorStand>() != null) return false;
+            Seen++;
+            if (w.GetComponentInChildren<Animator>(true) != null) { RejAnimator++; return false; }
+            if (w.GetComponent<Door>() != null || w.GetComponent<Sign>() != null || w.GetComponent<Fireplace>() != null || w.GetComponent<ItemStand>() != null || w.GetComponent<ArmorStand>() != null) { RejSpecial++; return false; }
             Rigidbody body = w.GetComponentInParent<Rigidbody>();
-            if (body != null && !body.isKinematic) return false;
-            if (w.GetComponent<ZSyncTransform>() != null) return false;
+            if (body != null && !body.isKinematic) { RejBody++; return false; }
+            if (w.GetComponent<ZSyncTransform>() != null) { RejSync++; return false; }
             ZNetView nview = w.GetComponent<ZNetView>();
-            return nview != null && nview.IsValid();
+            if (nview == null || !nview.IsValid()) { RejNview++; return false; }
+            return true;
+        }
+        private static void MaybeLogSummary()
+        {
+            if (_summaryLogged || Seen < 1500 || _log == null) return;
+            _summaryLogged = true;
+            _log.LogInfo("Batched Building Drawing check after " + Seen + " pieces: " + Reasons() + (_notInstancedShaders.Count > 0 ? " | shaders without instancing: " + string.Join(", ", new List<string>(_notInstancedShaders).ToArray()) : ""));
+        }
+        private static string Reasons()
+        {
+            return "PiecesSeen=" + Seen + "; PieceRejected Animator/Special/MovingBody/Sync/NotNetworked=" + RejAnimator + "/" + RejSpecial + "/" + RejBody + "/" + RejSync + "/" + RejNview +
+                "; Renderers seen=" + RSeen + " batched=" + ROk + " skipped LODGroup=" + RLod + " noMesh=" + RNoMesh + " materialNotInstancing=" + RNotInstanced + " hidden/disabled=" + RInactive;
         }
 
         private static void Build(WearNTear w)
@@ -148,16 +166,25 @@ namespace AethelbornPerformance
             for (int i = 0; i < _tmpRenderers.Count; i++)
             {
                 MeshRenderer mr = _tmpRenderers[i] as MeshRenderer;
-                if (mr == null || !mr.enabled || mr.forceRenderingOff || !mr.gameObject.activeInHierarchy) continue;
-                if (mr.GetComponentInParent<LODGroup>() != null) continue;   // instancing would skip its LOD switching
+                if (mr == null) continue;
+                RSeen++;
+                if (!mr.enabled || mr.forceRenderingOff || !mr.gameObject.activeInHierarchy) { RInactive++; continue; }
+                if (mr.GetComponentInParent<LODGroup>() != null) { RLod++; continue; }   // instancing would skip its LOD switching
                 MeshFilter mf = mr.GetComponent<MeshFilter>();
-                if (mf == null || mf.sharedMesh == null) continue;
+                if (mf == null || mf.sharedMesh == null) { RNoMesh++; continue; }
                 Mesh mesh = mf.sharedMesh;
                 _tmpMats.Clear(); mr.GetSharedMaterials(_tmpMats);
                 if (_tmpMats.Count == 0 || _tmpMats.Count > mesh.subMeshCount) continue;
                 bool ok = true;
-                for (int m = 0; m < _tmpMats.Count; m++) if (_tmpMats[m] == null || !_tmpMats[m].enableInstancing) { ok = false; break; }
-                if (!ok) continue;
+                for (int m = 0; m < _tmpMats.Count; m++)
+                    if (_tmpMats[m] == null || !_tmpMats[m].enableInstancing)
+                    {
+                        ok = false;
+                        if (_tmpMats[m] != null && _tmpMats[m].shader != null && _notInstancedShaders.Count < 12) _notInstancedShaders.Add(_tmpMats[m].shader.name);
+                        break;
+                    }
+                if (!ok) { RNotInstanced++; continue; }
+                ROk++;
                 Vector3 p = mr.transform.position;
                 int cx = Mathf.FloorToInt(p.x / Cell), cz = Mathf.FloorToInt(p.z / Cell);
                 for (int m = 0; m < _tmpMats.Count; m++)
@@ -260,7 +287,8 @@ namespace AethelbornPerformance
         public static string Report()
         {
             return "BatchedDrawing=" + (Active && !_faulted) + "; BatchedInstalled=" + _installed + "; BatchedFaulted=" + _faulted + "; BatchedPieces=" + _recList.Count + "; BatchedExcludedPieces=" + Excluded +
-                "; BatchGroups=" + _batches.Count + "; BatchedDrawCallsLastFrame=" + DrawCallsLastFrame + "; BatchedInstancesLastFrame=" + InstancesLastFrame;
+                "; BatchGroups=" + _batches.Count + "; BatchedDrawCallsLastFrame=" + DrawCallsLastFrame + "; BatchedInstancesLastFrame=" + InstancesLastFrame +
+                "\nBatchedCheck: " + Reasons();
         }
     }
 }

@@ -1,0 +1,10 @@
+Performance Ascended v0.6.1   (baseline v0.6.0)
+Your v0.6.0 test with Batched Building Drawing = true: BatchedPieces=0, BatchGroups=0, no errors - every piece was
+rejected by a safety check, so nothing was batched (and nothing could look wrong). Which check is unknown; no guessing.
+1. Every rejection reason is now counted: report line "BatchedCheck:" and one log line
+   "Batched Building Drawing check after N pieces: ..." (piece reasons + renderer reasons, plus up to 12 shader names
+   whose materials are not marked for instancing). Prime suspect: Valheim building pieces use LOD groups, which this
+   version deliberately skips. The next pass handles whichever reason dominates.
+No behaviour change otherwise. Keep Batched Building Drawing = false for normal play.
+Note on your v0.6.0 ON capture (batching off): 15 of its 19 slow frames are exactly 33 ms in a row at 26 s - Valheim's
+30 FPS limit while a menu/inventory is open (e.g. while dragging the HUD). Not a mod cost.

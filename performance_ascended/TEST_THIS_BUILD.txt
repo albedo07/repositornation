@@ -1,9 +1,5 @@
-Performance Ascended v0.6.0 - TEST
-1. Extract to an EMPTY folder, INSTALL.bat. Log: "Batched Building Drawing: ready".
-2. HUD: open the inventory, drag the indicator and the FPS box where you want them.
-3. Batched drawing test at your big base, same spot (optimization ON both times):
-   a) capture with [Structures] Batched Building Drawing = false
-   b) set it true (edit cfg with the game closed or via a config manager), capture again.
-   While (b) is on, LOOK: any missing, flickering, doubled or wrongly lit walls/roofs? Hover pieces with the hammer,
-   damage/repair one, build/remove one. Tell me exactly what looks wrong, if anything.
-4. COLLECT_REPORTS.bat -> send.
+Performance Ascended v0.6.1 - TEST (2 minutes)
+1. Extract to an EMPTY folder, INSTALL.bat.
+2. Set [Structures] Batched Building Drawing = true, load into your big base, wait ~30 s.
+3. Close the game, COLLECT_REPORTS.bat -> send (the log line "Batched Building Drawing check ..." is what I need;
+   a capture is optional). Then set it back to false.
