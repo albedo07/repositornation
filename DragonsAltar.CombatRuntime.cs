@@ -83,6 +83,7 @@ namespace DragonsAltarCombat
         private sealed class Voice
         {
             public AudioSource Source;
+            public long RemoteKey;   // v0.25.241: which remote sustain this voice plays (sender + serial), 0 = local
             public float End, BaseVolume;
             public bool UsesMixer;
             public int Cue, Layer;
@@ -523,19 +524,25 @@ namespace DragonsAltarCombat
                 Vector3 p = new Vector3(pkg.ReadSingle(), pkg.ReadSingle(), pkg.ReadSingle());
                 int swing = pkg.ReadInt(); float pitch = pkg.ReadSingle(), maxSeconds = pkg.ReadSingle(), time = pkg.ReadSingle();
                 if (id < 0 || id >= CueCount || !RawCue((DragonBaseSound)id) || Player.m_localPlayer == null) return;
-                if (type == 3) { StopRemote(id); return; }
-                if (type == 2) SustainLocal((DragonBaseSound)id, p, time, pitch, 1f, null, null);
+                long key = swing == 0 ? 0L : (sender * 1000003L) ^ swing;
+                if (type == 3) { StopRemote(id, key); return; }
+                if (type == 2)
+                {
+                    int v = SustainLocal((DragonBaseSound)id, p, time, pitch, 1f, null, null);
+                    if (v >= 0 && Voices[v] != null) Voices[v].RemoteKey = key;
+                }
                 else PlayLocal((DragonBaseSound)id, p, swing, pitch, maxSeconds, type == 1 ? time : 0f);
             }
             catch (Exception) { }
         }
-        private static void StopRemote(int id)
+        private static int _sustainSerial;
+        private static void StopRemote(int id, long key)
         {
             float now = Time.unscaledTime;
             for (int i = 0; i < Voices.Length; i++)
             {
                 Voice v = Voices[i];
-                if (v != null && v.Sustained && v.Cue == id && v.Continue == null && v.End > now) v.End = now + 0.08f;
+                if (v != null && v.Sustained && v.Cue == id && v.Continue == null && v.End > now && (key == 0L || v.RemoteKey == key)) v.End = now + 0.08f;
             }
         }
         // v0.25.230 clean loudness above 100%: look-ahead peak limiter (5 ms look-ahead, 1.5 ms attack, 80 ms release) instead of clipping.
@@ -1248,12 +1255,13 @@ namespace DragonsAltarCombat
         private static int _nextTicket;
         private static void ReleaseSustain(Voice voice)
         {
-            voice.Ticket = 0; voice.Sustained = false; voice.Repeat = false; voice.Continue = null; voice.Follow = null;
+            voice.Ticket = 0; voice.Sustained = false; voice.Repeat = false; voice.Continue = null; voice.Follow = null; voice.RemoteKey = 0;
         }
         public static int BeginSustain(Player caster, DragonBaseSound cue, Vector3 position, float seconds, float pitchScale = 1f, float gain = 1f, Func<bool> alive = null, bool followCaster = false, Transform follow = null)
         {
             if (!Enabled || caster == null || caster != Player.m_localPlayer || caster.IsDead() || AudioMan.instance == null || !(seconds > 0f) || float.IsNaN(seconds) || float.IsInfinity(seconds)) return -1;
-            if (RawCue(cue)) SendSfx(2, cue, position, 0, pitchScale, 0f, seconds);
+            int serial = ++_sustainSerial;   // v0.25.241: start/stop messages carry this id (in the swing field)
+            if (RawCue(cue)) SendSfx(2, cue, position, serial, pitchScale, 0f, seconds);
             Func<bool> watched = alive;
             if (alive != null && RawCue(cue))
             {
@@ -1261,11 +1269,13 @@ namespace DragonsAltarCombat
                 watched = delegate
                 {
                     bool keep = alive();
-                    if (!keep && !told[0]) { told[0] = true; SendSfx(3, cue, at, 0, 1f, 0f, 0f); }
+                    if (!keep && !told[0]) { told[0] = true; SendSfx(3, cue, at, serial, 1f, 0f, 0f); }
                     return keep;
                 };
             }
-            return SustainLocal(cue, position, seconds, pitchScale, gain, watched, follow != null ? follow : (followCaster ? caster.transform : null));
+            int started = SustainLocal(cue, position, seconds, pitchScale, gain, watched, follow != null ? follow : (followCaster ? caster.transform : null));
+            if (started < 0 && alive != null && RawCue(cue)) SendSfx(3, cue, position, serial, 1f, 0f, 0f);   // no local voice = no watcher: stop the remote copy now
+            return started;
         }
         private static int SustainLocal(DragonBaseSound cue, Vector3 position, float seconds, float pitchScale, float gain, Func<bool> alive, Transform follow)
         {
@@ -1392,7 +1402,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.221";
+        public const string ModVersion = "0.25.241";
 
         internal static DragonCombatPlugin Instance;
 

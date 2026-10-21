@@ -1,5 +1,4 @@
-TEST v0.25.240
-1. Moonlight Splitter / Ascended Halfmoon: Twinkle follows the GT, loops without a gap, no wind.
-2. First Ascended Heavy Slash after loading: normal speed.
-3. F7 report: Combat runtime and Advanced OnGUI alloc far below 761 / 818 KB/s; fewer [GC] spikes; no first-cast spikes.
-4. Log: no "Amb_MainWind" / "Cannot get data" errors.
+TEST v0.25.241
+1. Ascended Moonlight Splitter: watch a full cycle - the wide finisher wave appears only once at the end, not after each
+   afterimage. Twinkle on every GT.
+2. Log: "[Circle Swing] pre-learned 3/3 ..." and all Aethelborn modules show 0.25.241.

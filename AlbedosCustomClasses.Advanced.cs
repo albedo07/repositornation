@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.221";
+        public const string ModVersion = "0.25.241";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -2311,9 +2311,11 @@ namespace AlbedosCustomClassesAdvanced
                     // Narrower ghost afterimage. Only it applies stun (never bosses).
                     StartSwordMasterWork(GhostSlashWave(player, fo, fd, range, width, afterSpeed, _moonDamageV, _moonAscAfter.Value / 100f, 1f, false, true, "Afterimage"));
                 else
+                {
                     // The finisher is 2x WIDTH.
-                    _gtTwinkle = 0.85f;   // v0.25.240 Moonlight final GT
+                    _gtTwinkle = 0.85f;   // v0.25.240 Moonlight final GT (v0.25.241: braces - the finisher fired after every afterimage too)
                     StartSwordMasterWork(GhostSlashWave(player, fo, fd, range, width * 2f, finSpeed, _moonDamageV, _moonAscFinisher.Value / 100f, 2f, false, false, "Attack 5", true, 0.3f));   // v0.25.142 persistent: immediately, then every 0.3 s
+                }
             }
         }
 
@@ -2352,7 +2354,7 @@ namespace AlbedosCustomClassesAdvanced
                 twinkle = new GameObject("AA_GtTwinkle");
                 twinkle.transform.position = origin;
                 GameObject tw = twinkle;
-                DragonSkillAudio.BeginSustain(player, DragonBaseSound.MoonlightWind, origin, 60f, twinklePitch, 1f, delegate { return tw != null; }, false, twinkle.transform);
+                DragonSkillAudio.BeginSustain(player, DragonBaseSound.MoonlightWind, origin, 15f, twinklePitch, 1f, delegate { return tw != null; }, false, twinkle.transform);
             }
             if (_enableVfx.Value)
             {
@@ -4079,13 +4081,15 @@ namespace AlbedosCustomClassesAdvanced
                 AnimationClip[] clips = an.runtimeAnimatorController.animationClips;
                 string[] trig = { "battleaxe_attack0", "battleaxe_attack1", "battleaxe_attack2" };
                 string[] clip = { "BattleAxe1", "BattleAxe2", "BattleAxe_Combo3" };
+                int learned = 0;
                 for (int i = 0; i < trig.Length; i++)
                 {
                     string resolved = DragonCombat.ResolveTriggerName(an, trig[i]);
                     if (resolved == null) continue;
                     for (int c = 0; c < clips.Length; c++)
-                        if (clips[c] != null && clips[c].name == clip[i]) { CsLearn(resolved, clips[c]); break; }
+                        if (clips[c] != null && clips[c].name == clip[i]) { CsLearn(resolved, clips[c]); learned++; break; }
                 }
+                Logger.LogInfo("[Circle Swing] pre-learned " + learned + "/3 battleaxe swing timings at load" + (learned < 3 ? " (the rest are learned on first use)" : "."));
             }
             catch (Exception) { }
             _csPrelearned = true;
