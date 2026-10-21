@@ -6,7 +6,9 @@ namespace AethelbornPerformance
     // Actual production binding path can be validated without creating a Unity component.
     public sealed class PerformanceSettings
     {
-        public ConfigEntry<bool> _spreadUnload;
+        public ConfigEntry<bool> _spreadUnload, _lowShadows;
+        public ConfigEntry<float> _lowShadowDistance;
+        public ConfigEntry<int> _lowShadowCascades;
         public ConfigEntry<int> _unloadPerTick;
         public ConfigEntry<bool> _enabled, _shadows, _noShadows, _supportCache, _particles, _diagnostics, _renderCounters;
         public ConfigEntry<string> _scenario;
@@ -24,7 +26,10 @@ namespace AethelbornPerformance
                 _supportCache = config.Bind("Structures", "Efficient Support Cache Subscriptions", true, "Use ordered constant-time callback removal for native terrain support-cache notifications. Preserves clearing, callback order and native object lifetime. Turning OFF restores native subscriptions.");
                 _spreadUnload = config.Bind("Structures", "Spread Object Unloading", true, "When you leave an area Valheim removes every out-of-range object (thousands of building pieces) in ONE frame - the 300-475 ms freezes in the captures. ON removes at most 'Unload Per Tick' objects per unloading tick (Valheim ticks 30 times a second) until done. Same removal steps as Valheim; objects you return to are kept. OFF = Valheim's own unloading.");
                 _unloadPerTick = config.Bind("Structures", "Unload Per Tick", 150, new ConfigDescription("Maximum objects removed per unloading tick (30 ticks per second). 150 = about 4,500 per second. Lower = smoother but slower cleanup.", new AcceptableValueRange<int>(25, 2000)));
-                _noShadows = config.Bind("Structures", "Disable All Shadows", true, "Disable all Unity real-time shadows while optimization is ON. Skips building discovery and shadow application. Turning OFF restores the previous quality setting unless another writer changed it. Set false to use the previous distant-building shadow mode.");
+                _lowShadows = config.Bind("Structures", "Low Shadows", true, "Keep real-time shadows at the cheapest look that still reads well: hard shadows (no soft filtering), low shadow-map resolution, short distance, few cascades. Used when 'Disable All Shadows' is false. Turning OFF (or optimization OFF) restores the game's values unless another writer changed them.");
+                _lowShadowDistance = config.Bind("Structures", "Low Shadow Distance", 35f, new ConfigDescription("Metres of shadows around the camera in Low Shadows mode (game value in your captures: 80). Shorter = faster.", new AcceptableValueRange<float>(10f, 150f)));
+                _lowShadowCascades = config.Bind("Structures", "Low Shadow Cascades", 2, new ConfigDescription("Shadow cascades in Low Shadows mode: 1 = fastest (blockier up close), 2 = sharper near the player for a small cost, 4 = game-like.", new AcceptableValueList<int>(1, 2, 4)));
+                _noShadows = config.Bind("Structures", "Disable All Shadows", false, "Disable all Unity real-time shadows while optimization is ON. Skips building discovery and shadow application. Turning OFF restores the previous quality setting unless another writer changed it. Set false to use the previous distant-building shadow mode.");
                 _requireReady = config.Bind("Benchmark", "Require Ready For ON Capture", true, "Wait for building discovery and first shadow application before an ON capture. Set false only to investigate startup/loading deliberately.");
                 _discoveryMs = config.Bind("Structures", "Discovery Time Budget Milliseconds", 0.5f, new ConfigDescription("Soft per-frame discovery time budget. A single hierarchy cannot be interrupted. Slow frames halve this budget.", new AcceptableValueRange<float>(0.1f, 2f)));
                 _shadowMs = config.Bind("Structures", "Shadow Time Budget Milliseconds", 0.5f, new ConfigDescription("Soft per-frame shadow update time limit, in addition to Renderer Budget. Slow frames halve this budget. One engine operation can exceed it.", new AcceptableValueRange<float>(0.1f, 2f)));
@@ -57,6 +62,12 @@ namespace AethelbornPerformance
                     if (_toggleKey.Value.Equals(new KeyboardShortcut(KeyCode.F11, KeyCode.LeftControl, KeyCode.LeftAlt)))
                         _toggleKey.Value = new KeyboardShortcut(KeyCode.F6, KeyCode.LeftControl, KeyCode.LeftAlt);
                     _configRevision.Value = 1;
+                }
+                if (_configRevision.Value < 2)
+                {
+                    // 0.4.1 (user): shadows back, at the low setting; old installs had Disable All Shadows=true saved.
+                    _noShadows.Value = false;
+                    _configRevision.Value = 2;
                 }
         }
     }

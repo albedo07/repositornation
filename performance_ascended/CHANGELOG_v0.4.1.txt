@@ -1,0 +1,15 @@
+Performance Ascended v0.4.1 - Low Shadows   (baseline v0.4.0)
+
+1. Shadows are back, on the cheapest setting that still looks right (new default: Structures / Low Shadows = true):
+   - hard shadows (no soft-edge filtering)        - low shadow-map resolution
+   - Low Shadow Distance = 35 m (your game: 80 m)  - Low Shadow Cascades = 2 (1 = fastest, 4 = game-like)
+   Never turns shadows on if the game has them off, never raises a value above the game's own.
+   Each value is owned separately: if Valheim's graphics menu (or another mod) changes one, theirs wins and is kept.
+   Optimization OFF / Low Shadows OFF restores the game's values.
+2. Disable All Shadows default false; one-time config migration turns it off on existing installs (Config Revision 2).
+   Set it true again for the old no-shadows mode (it overrides Low Shadows).
+3. The old per-building "Distant Shadows" scanner stays idle in Low Shadows mode (the 35 m limit already does its job).
+4. Reports record LowShadows, ShadowResolution, UnityShadowDistance, ShadowCascades, so runs show the shadow state used.
+
+Tuning if FPS is still too low: Low Shadow Cascades 1, then Low Shadow Distance 25. For nicer shadows: distance 50, cascades 4.
+CHECKS (static): C# 5 compile against your real game/BepInEx/Harmony DLLs. Look and FPS are in-game checks.

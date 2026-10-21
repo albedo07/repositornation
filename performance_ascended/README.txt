@@ -1,6 +1,6 @@
-PERFORMANCE ASCENDED 0.4.0 — SPREAD OBJECT UNLOADING (formerly Aethelborn Performance)
+PERFORMANCE ASCENDED 0.4.1 — LOW SHADOWS + SPREAD OBJECT UNLOADING (formerly Aethelborn Performance)
 2026-10-21
-See CHANGELOG_v0.4.0.txt first; older notes below are from 0.3.3.
+See CHANGELOG_v0.4.1.txt and CHANGELOG_v0.4.0.txt first; older notes below are from 0.3.3.
 
 AETHELBORN PERFORMANCE 0.3.3 — CLEANUP ALLOCATIONS
 2026-10-21 Asia/Manila

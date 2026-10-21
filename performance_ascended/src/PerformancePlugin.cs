@@ -18,7 +18,7 @@ namespace AethelbornPerformance
     {
         public const string Guid = "albedo.aethelborn.performance";
         public const string Name = "Performance Ascended";
-        public const string Version = "0.4.0";
+        public const string Version = "0.4.1";
         public static PerformancePlugin Instance;
         private PerformanceSettings _settings;
         private GUIStyle _indicatorStyle;
@@ -60,7 +60,7 @@ namespace AethelbornPerformance
         private SupportCacheStore _supportCache;
         private bool _supportHook;
         private OwnedValue<ShadowQuality> _globalShadows;
-        private bool BuildingShadows { get { return PerformancePolicy.BuildingShadows(_settings._noShadows.Value, _settings._shadows.Value); } }
+        private bool BuildingShadows { get { return PerformancePolicy.BuildingShadows(_settings._noShadows.Value || _settings._lowShadows.Value, _settings._shadows.Value); } }
         private bool _wasShadows, _wasParticles, _failed, _finishing;
         private float _nextParticles, _recordStart;
         private string _recordContext;
@@ -441,6 +441,7 @@ namespace AethelbornPerformance
                 if (_wasParticles && !particlesNow) { RestoreParticles(); _pending.Clear(); }
                 _wasShadows = shadowsNow; _wasParticles = particlesNow;
                 UpdateGlobalShadows(enabledNow && _settings._noShadows.Value);
+                UpdateLowShadows(enabledNow && !_settings._noShadows.Value && _settings._lowShadows.Value);
                 if (active) RefreshDiscoveryHud(shadowsNow);
                 if (!enabledNow) return;
                 Vector3 eye = Player.m_localPlayer.transform.position;
@@ -610,6 +611,39 @@ namespace AethelbornPerformance
                 Logger.LogWarning("Another writer changed shadow quality; its setting is preserved. All-shadows mode will not override it.");
             }
         }
+        // 0.4.1 Low Shadows: four quality values, each owned separately (another writer - e.g. Valheim's graphics menu - wins).
+        private OwnedValue<ShadowQuality> _lowQuality;
+        private OwnedValue<ShadowResolution> _lowResolution;
+        private OwnedValue<float> _lowDistance;
+        private OwnedValue<int> _lowCascades;
+        private void UpdateLowShadows(bool on)
+        {
+            if (!on) { RestoreLowShadows(); return; }
+            if (_lowQuality == null)
+            {
+                _lowQuality = new OwnedValue<ShadowQuality>(QualitySettings.shadows);
+                _lowResolution = new OwnedValue<ShadowResolution>(QualitySettings.shadowResolution);
+                _lowDistance = new OwnedValue<float>(QualitySettings.shadowDistance);
+                _lowCascades = new OwnedValue<int>(QualitySettings.shadowCascades);
+            }
+            // never turn shadows ON if the game has them off; only reduce what is there
+            ShadowQuality q = QualitySettings.shadows == ShadowQuality.Disable ? ShadowQuality.Disable : ShadowQuality.HardOnly;
+            if (_lowQuality.TryApply(QualitySettings.shadows, q)) QualitySettings.shadows = q;
+            if (_lowResolution.TryApply(QualitySettings.shadowResolution, ShadowResolution.Low)) QualitySettings.shadowResolution = ShadowResolution.Low;
+            float dist = Mathf.Min(_settings._lowShadowDistance.Value, _lowDistance.Original);
+            if (_lowDistance.TryApply(QualitySettings.shadowDistance, dist)) QualitySettings.shadowDistance = dist;
+            int cascades = Math.Min(_settings._lowShadowCascades.Value, Math.Max(1, _lowCascades.Original));
+            if (_lowCascades.TryApply(QualitySettings.shadowCascades, cascades)) QualitySettings.shadowCascades = cascades;
+        }
+        private void RestoreLowShadows()
+        {
+            if (_lowQuality == null) return;
+            if (_lowQuality.CanRestore(QualitySettings.shadows)) QualitySettings.shadows = _lowQuality.Original;
+            if (_lowResolution.CanRestore(QualitySettings.shadowResolution)) QualitySettings.shadowResolution = _lowResolution.Original;
+            if (_lowDistance.CanRestore(QualitySettings.shadowDistance)) QualitySettings.shadowDistance = _lowDistance.Original;
+            if (_lowCascades.CanRestore(QualitySettings.shadowCascades)) QualitySettings.shadowCascades = _lowCascades.Original;
+            _lowQuality = null; _lowResolution = null; _lowDistance = null; _lowCascades = null;
+        }
         private void RestoreGlobalShadows()
         {
             if (_globalShadows == null) return;
@@ -634,7 +668,7 @@ namespace AethelbornPerformance
             for (int i = 0; i < _systems.Count; i++) RestoreParticle(_systems[i]);
             _systems.Clear(); _knownSystems.Clear();
         }
-        private void RestoreAll() { if (_supportCache != null) _supportCache.SetEnabled(false); RestoreGlobalShadows(); RestoreShadows(); RestoreParticles(); _pending.Clear(); }
+        private void RestoreAll() { if (_supportCache != null) _supportCache.SetEnabled(false); RestoreGlobalShadows(); RestoreLowShadows(); RestoreShadows(); RestoreParticles(); _pending.Clear(); }
         private void Fail(Exception error)
         {
             if (_failed) return; _failed = true; _discoveryReady = false; _discoveryContent.text = "Discovery stopped"; _discoveryHint.text = "Check the performance log.";
@@ -663,7 +697,7 @@ namespace AethelbornPerformance
             _runtime.Dispose(); _diagnostics.Reset(); _observations.Clear(); _effectNameOverflow = 0;
             _captureStarted = false; _previousWorkMs = 0f; _activity = new FrameContext();
             if (_settings._diagnostics.Value) _runtime.Begin(_settings._renderCounters.Value);
-            _recordContext = "Scenario=" + _settings._scenario.Value.Replace("\r", " ").Replace("\n", " ") + "\nDetailedDiagnostics=" + _settings._diagnostics.Value + "; RenderingCounters=" + _settings._renderCounters.Value + "\nLoadedPiecesAtStart=" + LoadedPieceCount() + "\nOptimizations=" + _settings._enabled.Value + "; Shadows=" + BuildingShadows + "; DisableAllShadows=" + _settings._noShadows.Value + "; UnityShadowQuality=" + QualitySettings.shadows + "; Particles=" + _settings._particles.Value + "; ShadowDistance=" + _settings._shadowDistance.Value.ToString(CultureInfo.InvariantCulture) + "; ParticleMax=" + _settings._particleMax.Value + "; SharedBudget=" + _settings._particleBudget.Value;
+            _recordContext = "Scenario=" + _settings._scenario.Value.Replace("\r", " ").Replace("\n", " ") + "\nDetailedDiagnostics=" + _settings._diagnostics.Value + "; RenderingCounters=" + _settings._renderCounters.Value + "\nLoadedPiecesAtStart=" + LoadedPieceCount() + "\nOptimizations=" + _settings._enabled.Value + "; Shadows=" + BuildingShadows + "; DisableAllShadows=" + _settings._noShadows.Value + "; LowShadows=" + _settings._lowShadows.Value + "; UnityShadowQuality=" + QualitySettings.shadows + "; ShadowResolution=" + QualitySettings.shadowResolution + "; UnityShadowDistance=" + QualitySettings.shadowDistance.ToString(CultureInfo.InvariantCulture) + "; ShadowCascades=" + QualitySettings.shadowCascades + "; Particles=" + _settings._particles.Value + "; ShadowDistance=" + _settings._shadowDistance.Value.ToString(CultureInfo.InvariantCulture) + "; ParticleMax=" + _settings._particleMax.Value + "; SharedBudget=" + _settings._particleBudget.Value;
             _recordContext += "\nSupportCacheHook=" + _supportHook + "; SupportCacheEnabled=" + (_supportCache != null && _supportCache.Enabled) + "; OptimizedSupportSubscriptionsAtStart=" + (_supportCache == null ? 0 : _supportCache.Subscribers);
             _recordContext += "\nDiscoveryMode=" + (_settings._noShadows.Value ? "Not needed: all-shadows mode" : (_pieceHooks ? "Initial snapshot then lifecycle queue" : "Snapshot reconciliation fallback")) + "; ShadowTimeBudget_ms=" + _settings._shadowMs.Value.ToString(CultureInfo.InvariantCulture) + "\nDiscoveryReadyAtStart=" + _discoveryReady + "; DiscoveryChecked=" + DiscoveryChecked + "; DiscoveryTotal=" + DiscoveryTotal + "; PieceLifecycleHooks=" + _pieceHooks + "\nTrackedPiecesAtStart=" + _pieces.Count + "; BuildingRegistry=" + (_pieceSource != null) + "; CosmeticHook=" + _effectsHook + "\nUnity=" + Application.unityVersion + "; CPU=" + SystemInfo.processorType + "; GPU=" + SystemInfo.graphicsDeviceName + "; RAM_MB=" + SystemInfo.systemMemorySize + "; VRAM_MB=" + SystemInfo.graphicsMemorySize;
             _recordContext += "\nResolution=" + Screen.width + "x" + Screen.height + "; VSync=" + QualitySettings.vSyncCount + "; TargetFPS=" + Application.targetFrameRate;

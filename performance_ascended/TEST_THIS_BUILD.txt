@@ -1,9 +1,5 @@
-Performance Ascended v0.4.0 - TEST
-Close Valheim, extract the whole ZIP, run INSTALL.bat.
-1. Log must say: "Spread Object Unloading: ready".
-2. Set [Benchmark] Scenario = base_exit (same label for every run).
-3. Stand at the same spot inside the base. Record (Ctrl+Alt+F10), walk/teleport out of the base the same way.
-   Do it 4 times: OFF, ON, OFF, ON (Ctrl+Alt+F6 between runs). Same route every time.
-4. Expect ON: no 300-475 ms frame at the exit; MaxUnloadedInOneTick <= 150; MaxUnloadBacklog shows the queue.
-5. Normal play check: building, removing pieces, entering/leaving bases, portals - nothing should behave differently.
-6. Run COLLECT_REPORTS.bat and send the ZIP.
+Performance Ascended v0.4.1 - TEST
+1. Install. Log: "Spread Object Unloading: ready". Shadows visible near you (hard-edged, ~35 m).
+2. Scenario = base_walk. Same spot, same route, 60 s each: OFF, ON, OFF, ON (Ctrl+Alt+F6 between).
+3. Optional: also run once with Disable All Shadows = true to see what the shadows cost on your PC.
+4. COLLECT_REPORTS.bat -> send ZIP. Tell me if the shadows look too blocky (cascades 4) or FPS too low (cascades 1).
