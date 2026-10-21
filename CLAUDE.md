@@ -65,3 +65,4 @@ Standing release reporting rule (user, 2026-10-19): every delivered pass must li
 8. Read every [Error]/[Warning] line of a supplied LogOutput.log, group by message, and fix or explain each.
 9. Installers: when a pass adds/removes/renames a file, grep the installer for hard-coded counts/lists and update them (Performance Ascended 0.4.0/0.4.1 "Expected six source files").
 10. Read the native/original code BEFORE proposing a fix to the user (Performance Ascended 0.4.2 proposed budgeting distant loading that Valheim already caps).
+2026-10-21 — Performance Ascended (separate mod, folder performance_ascended/): OFFICIAL ANCHOR v0.6.5 (user). Proven set in performance_ascended/ANCHOR_v0.6.5.txt. Zip SHA-256 586cdb663a2dc4186bbd8bc3558798842466906e158005e61fff9826d8413a3e. AA work resumes from AA anchor v0.25.238 (+ delivered v0.25.239/240).

@@ -9,6 +9,7 @@ namespace AethelbornPerformance
         public ConfigEntry<bool> _spreadUnload, _lowShadows, _viewCulling, _gcSlice, _doorSleep, _asyncUpload;
         public ConfigEntry<float> _grassPatch, _fpsX, _fpsY;
         public ConfigEntry<bool> _fpsCounter, _compactIndicator;
+        public ConfigEntry<KeyboardShortcut> _indicatorKey, _fpsKey;
         public ConfigEntry<float> _gcSliceMs;
         public ConfigEntry<float> _pieceDrawM, _nonSolidDrawM, _smallDrawM, _lodMax;
         public ConfigEntry<float> _lowShadowDistance;
@@ -30,6 +31,8 @@ namespace AethelbornPerformance
                 _supportCache = config.Bind("Structures", "Efficient Support Cache Subscriptions", true, "Use ordered constant-time callback removal for native terrain support-cache notifications. Preserves clearing, callback order and native object lifetime. Turning OFF restores native subscriptions.");
                 _spreadUnload = config.Bind("Structures", "Spread Object Unloading", true, "When you leave an area Valheim removes every out-of-range object (thousands of building pieces) in ONE frame - the 300-475 ms freezes in the captures. ON removes at most 'Unload Per Tick' objects per unloading tick (Valheim ticks 30 times a second) until done. Same removal steps as Valheim; objects you return to are kept. OFF = Valheim's own unloading.");
                 _unloadPerTick = config.Bind("Structures", "Unload Per Tick", 150, new ConfigDescription("Maximum objects removed per unloading tick (30 ticks per second). 150 = about 4,500 per second. Lower = smoother but slower cleanup.", new AcceptableValueRange<int>(25, 2000)));
+                _indicatorKey = config.Bind("HUD", "Indicator Hotkey", new KeyboardShortcut(KeyCode.B, KeyCode.LeftControl, KeyCode.LeftAlt), "Show/hide the optimization indicator. Default Left Ctrl + Left Alt + B.");
+                _fpsKey = config.Bind("HUD", "FPS Counter Hotkey", new KeyboardShortcut(KeyCode.F, KeyCode.LeftControl, KeyCode.LeftAlt), "Show/hide the FPS counter. Default Left Ctrl + Left Alt + F.");
                 _fpsCounter = config.Bind("HUD", "FPS Counter", true, "Small FPS box (current FPS and 1% low over the last ~5 s). Drag it with the mouse while the inventory/menu cursor is visible.");
                 _fpsX = config.Bind("HUD", "FPS Counter X", -1f, "Pixels from the left (-1 = top right corner). Saved when you drag it.");
                 _fpsY = config.Bind("HUD", "FPS Counter Y", 8f, "Pixels from the top. Saved when you drag it.");

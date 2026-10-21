@@ -18,7 +18,7 @@ namespace AethelbornPerformance
     {
         public const string Guid = "albedo.aethelborn.performance";
         public const string Name = "Performance Ascended";
-        public const string Version = "0.6.4";
+        public const string Version = "0.6.5";
         public static PerformancePlugin Instance;
         private PerformanceSettings _settings;
         private GUIStyle _indicatorStyle;
@@ -395,6 +395,8 @@ namespace AethelbornPerformance
                     if (_recorder.Recording) FinishBenchmark("Optimization setting changed");
                     _settings._enabled.Value = !_settings._enabled.Value;
                 }
+                if (_settings._indicatorKey.Value.IsDown()) _settings._showIndicator.Value = !_settings._showIndicator.Value;   // 0.6.5 (user)
+                if (_settings._fpsKey.Value.IsDown()) _settings._fpsCounter.Value = !_settings._fpsCounter.Value;
                 if (_supportCache != null) _supportCache.SetEnabled(_supportHook && _settings._enabled.Value && _settings._supportCache.Value);
                 UnloadBudget.Active = _settings._enabled.Value && _settings._spreadUnload.Value; UnloadBudget.PerTick = _settings._unloadPerTick.Value;
                 bool active = Player.m_localPlayer != null;

@@ -1,6 +1,6 @@
-PERFORMANCE ASCENDED 0.6.4 — ALL-IN-ONE (batching removed) + MOVABLE HUD + FPS COUNTER
+PERFORMANCE ASCENDED 0.6.5 — OFFICIAL (first release): ALL-IN-ONE + MOVABLE HUD + FPS COUNTER
 2026-10-21
-See CHANGELOG_v0.6.0.txt, CHANGELOG_v0.5.0.txt and FPS_MOD_SURVEY.txt first; older notes below are from 0.3.3.
+See CHANGELOG_v0.6.5.txt, ANCHOR_v0.6.5.txt and FPS_MOD_SURVEY.txt first; older notes below are from 0.3.3.
 
 AETHELBORN PERFORMANCE 0.3.3 — CLEANUP ALLOCATIONS
 2026-10-21 Asia/Manila

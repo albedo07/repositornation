@@ -1,0 +1,8 @@
+Performance Ascended v0.6.5 - OFFICIAL   (baseline v0.6.4)
+1. Left Ctrl + Left Alt + B: show/hide the "Optimization: ON" indicator.
+2. Left Ctrl + Left Alt + F: show/hide the FPS counter.
+   Both are saved like the other HUD settings and can be rebound under [HUD] in the config.
+No other changes. CHECKS (static): C# 5 compile vs your real DLLs; installer list = 9 files.
+
+ALL HOTKEYS: Ctrl+Alt+F6 optimization on/off | Ctrl+Alt+B indicator | Ctrl+Alt+F FPS counter |
+             Ctrl+Alt+F10 record 60 s capture | Ctrl+Alt+F9 marker during a capture | drag HUD boxes with the inventory open.

@@ -1,2 +1,2 @@
-Performance Ascended v0.6.4
-Extract to an EMPTY folder (so the old InstancedPieces.cs is not left in src), run INSTALL.bat. Play normally.
+Performance Ascended v0.6.5 - OFFICIAL
+Extract to an EMPTY folder, run INSTALL.bat. Ctrl+Alt+B hides/shows the indicator, Ctrl+Alt+F the FPS counter.
