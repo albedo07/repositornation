@@ -1,0 +1,9 @@
+PASS: supplied Piece.s_allPieces is System.Collections.Generic.List`1[Piece], implementing IList.
+PASS: supplied EffectList has 1 compatible Create method(s).
+PASS: supplied Unity includes ProfilerRecorder LastValue and Dispose APIs.
+PASS: supplied Piece includes Awake and OnDestroy lifecycle methods.
+PASS: native terrain registry/event field adapters construct against supplied assemblies without Unity object creation.
+PASS: actual WearNTear.Start instruction stream changes exactly one event call; every other instruction is retained.
+PASS: actual WearNTear.OnDestroy instruction stream changes exactly one event call; every other instruction is retained.
+PASS: unsupported native instruction layout is rejected rather than partially patched.
+Metadata/instruction-adapter inspection only; no Unity objects or Harmony patches executed.

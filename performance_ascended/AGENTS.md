@@ -1,0 +1,7 @@
+# Aethelborn Performance
+Separate client plugin. Do not edit AA or any previous archive. C#5, BepInEx5, HarmonyX. No per-frame reflection or scene-wide searches. Do not change damage, simulation timing, physics, loot, building support, world/network saves. Optimizations own instance properties only and restore only values they still own; competing writers win. New third-party compatibility patches require an identified measured bottleneck. Static/runtime-adapter tests are not in-game verification.
+
+2026-10-21: User-authorized global exception: Disable All Shadows owns only QualitySettings.shadows, restoring its original value if still owned. No other global quality settings are changed.
+
+2026-10-21: Requested cleanup pass replaces only native terrain support-cache subscription bookkeeping. Cache clearing, callback order, object destruction scheduling and support calculations must remain equivalent. No forced/suppressed GC.
+2026-10-21: v0.4.0 Performance Ascended (Claude): budgeted ZNetScene.RemoveObjects (UnloadBudget.cs) after captures attributed every 200-475 ms stall to one-tick removal of ~8,500 pieces. Rule: comparisons need matching LoadedPiecesAtStart and a scenario label.

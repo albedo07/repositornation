@@ -1,0 +1,3 @@
+Baseline: AethelbornPerformance_v0.3.2_NoShadows.zip
+SHA256: 0d5af7307906c98f78630c14295e60e2a8353e7cb292c91d8f84bbc50c2f44d7
+Preserved unchanged. No anchor promotion.

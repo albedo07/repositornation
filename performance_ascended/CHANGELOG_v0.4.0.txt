@@ -1,0 +1,24 @@
+Performance Ascended v0.4.0 (renamed from Aethelborn Performance; same plugin GUID, config file, report folder and DLL folder,
+so your settings carry over and no duplicate is installed). Baseline: v0.3.3, unchanged except as listed.
+
+1. NEW Structures / Spread Object Unloading = true, Unload Per Tick = 150.
+   What the captures showed: every 200-475 ms freeze was one frame in which ~8,500 building pieces were destroyed at once
+   (leaving a base area / teleporting), ON and OFF alike. Valheim creates at most 10 objects per tick but removes ALL
+   out-of-range objects in a single tick (ZNetScene.RemoveObjects, read from your assembly_valheim.dll).
+   The new prefix runs the same removal steps in the same order (earmark near/distant objects, collect the rest, ResetZDO,
+   Destroy, destroy owned non-persistent ZDOs, unregister), but removes at most 150 per tick (30 ticks/s = 4,500/s;
+   8,500 pieces finish in about 2 s instead of one 300-475 ms frame). The rest are found again on the next tick, so an object
+   you walk back to is kept. OFF or Optimization OFF = Valheim's own method.
+   Safety: installs only if no other mod patches RemoveObjects; on any error it logs once and hands back to Valheim for the
+   session (vanilla rescans every tick, so nothing is left half-done). No world/save/ZDO data change; persistence rules are
+   Valheim's own.
+2. Reports: new SpreadUnload*/RunUnloadedObjects/RunDeferredUnloadTicks/MaxUnloadBacklog/MaxUnloadedInOneTick fields.
+   compare_reports.py flags runs whose building counts differ by more than 5% as NOT COMPARABLE.
+3. Name/version labels: "Performance Ascended 0.4.0" in log, reports, installer.
+
+Unchanged: shadows-off (the proven gain), support-cache adapter, particle budget, recorder, installer flow.
+Note: the particle budget registered 0 systems in all 14 supplied captures - it is inactive for your effect list, not harmful.
+
+CHECKS (static): compiles C# 5 against your real assembly_valheim, assembly_utils, UnityEngine*, BepInEx 5.4.21, HarmonyX.
+Members used were verified public/private in the real IL. NOT possible here: loading Unity outside the game, so the Harmony
+patch attaching and the freeze reduction are in-game checks.

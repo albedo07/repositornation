@@ -1,0 +1,23 @@
+Changed/added text files:
+AGENTS.md
+BASELINE.txt
+CHANGELOG_v0.3.3.txt
+FINDINGS_v0.3.3.txt
+INSTALL.bat
+INSTALL.ps1
+README.txt
+TEST_RESULTS_v0.3.3.txt
+TEST_THIS_BUILD.txt
+src/PerformancePlugin.cs
+src/PerformancePolicy.cs
+src/PerformanceSettings.cs
+tests/PolicyTests.cs
+tests/ReferenceProbe.cs
+tests/SupportPatchProbe.cs
+tools/package.py
+tools/probe.py
+
+Scope: native support-cache callback subscription storage, ordered event policy,
+coverage/cost reporting, bypassed-discovery lifecycle fast path, tests/docs and
+release labels. No changes to native unload scheduling, support calculations,
+AA, particle features, shadow mode, memory adapter, physics or saves.

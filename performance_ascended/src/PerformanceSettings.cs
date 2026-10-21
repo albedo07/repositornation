@@ -1,0 +1,63 @@
+﻿using BepInEx.Configuration;
+using UnityEngine;
+
+namespace AethelbornPerformance
+{
+    // Actual production binding path can be validated without creating a Unity component.
+    public sealed class PerformanceSettings
+    {
+        public ConfigEntry<bool> _spreadUnload;
+        public ConfigEntry<int> _unloadPerTick;
+        public ConfigEntry<bool> _enabled, _shadows, _noShadows, _supportCache, _particles, _diagnostics, _renderCounters;
+        public ConfigEntry<string> _scenario;
+        public ConfigEntry<bool> _showIndicator, _requireReady;
+        public ConfigEntry<float> _indicatorX, _indicatorY, _discoveryMs, _shadowMs;
+        public ConfigEntry<int> _configRevision;
+        public ConfigEntry<float> _spikeThreshold;
+        public ConfigEntry<KeyboardShortcut> _markerKey;
+        public ConfigEntry<float> _shadowDistance, _hysteresis, _effectDistance, _seconds;
+        public ConfigEntry<int> _piecesPerFrame, _renderersPerFrame, _particleMax, _particleBudget;
+        public ConfigEntry<string> _allowList;
+        public ConfigEntry<KeyboardShortcut> _recordKey, _toggleKey;
+        public PerformanceSettings(ConfigFile config)
+        {
+                _supportCache = config.Bind("Structures", "Efficient Support Cache Subscriptions", true, "Use ordered constant-time callback removal for native terrain support-cache notifications. Preserves clearing, callback order and native object lifetime. Turning OFF restores native subscriptions.");
+                _spreadUnload = config.Bind("Structures", "Spread Object Unloading", true, "When you leave an area Valheim removes every out-of-range object (thousands of building pieces) in ONE frame - the 300-475 ms freezes in the captures. ON removes at most 'Unload Per Tick' objects per unloading tick (Valheim ticks 30 times a second) until done. Same removal steps as Valheim; objects you return to are kept. OFF = Valheim's own unloading.");
+                _unloadPerTick = config.Bind("Structures", "Unload Per Tick", 150, new ConfigDescription("Maximum objects removed per unloading tick (30 ticks per second). 150 = about 4,500 per second. Lower = smoother but slower cleanup.", new AcceptableValueRange<int>(25, 2000)));
+                _noShadows = config.Bind("Structures", "Disable All Shadows", true, "Disable all Unity real-time shadows while optimization is ON. Skips building discovery and shadow application. Turning OFF restores the previous quality setting unless another writer changed it. Set false to use the previous distant-building shadow mode.");
+                _requireReady = config.Bind("Benchmark", "Require Ready For ON Capture", true, "Wait for building discovery and first shadow application before an ON capture. Set false only to investigate startup/loading deliberately.");
+                _discoveryMs = config.Bind("Structures", "Discovery Time Budget Milliseconds", 0.5f, new ConfigDescription("Soft per-frame discovery time budget. A single hierarchy cannot be interrupted. Slow frames halve this budget.", new AcceptableValueRange<float>(0.1f, 2f)));
+                _shadowMs = config.Bind("Structures", "Shadow Time Budget Milliseconds", 0.5f, new ConfigDescription("Soft per-frame shadow update time limit, in addition to Renderer Budget. Slow frames halve this budget. One engine operation can exceed it.", new AcceptableValueRange<float>(0.1f, 2f)));
+                _configRevision = config.Bind("General", "Config Revision", 0, "Internal one-time migration marker for old discovery and screenshot-conflicting defaults.");
+                _showIndicator = config.Bind("HUD", "Show Optimization Indicator", true, "Show a persistent ON/OFF status while in a world.");
+                _indicatorX = config.Bind("HUD", "Indicator X", 12f, new ConfigDescription("Indicator horizontal position in screen pixels from the left.", new AcceptableValueRange<float>(0f, 8192f)));
+                _indicatorY = config.Bind("HUD", "Indicator Y", 12f, new ConfigDescription("Indicator vertical position in screen pixels from the top.", new AcceptableValueRange<float>(0f, 8192f)));
+                _diagnostics = config.Bind("Benchmark", "Detailed Diagnostics", true, "Capture memory, process CPU and feature coverage once per second while recording. Adds diagnostic overhead to both ON and OFF captures.");
+                _renderCounters = config.Bind("Benchmark", "Rendering Counters", true, "Request optional Unity rendering, main/render thread and allocation counters during recordings. Unavailable counters are reported as -1. Does not enable deep profiling.");
+                _scenario = config.Bind("Benchmark", "Scenario", "unlabeled", "Optional short label for the scene being tested, for example base_walk or first_skill_cast. Use the same label for comparable runs.");
+                _spikeThreshold = config.Bind("Benchmark", "Spike Threshold Milliseconds", 50f, new ConfigDescription("Frames at or above this duration are also exported to the spikes CSV.", new AcceptableValueRange<float>(16f, 1000f)));
+                _markerKey = config.Bind("Benchmark", "Marker Hotkey", new KeyboardShortcut(KeyCode.F9, KeyCode.LeftControl, KeyCode.LeftAlt), "During a recording, mark an action or slowdown. Default Left Ctrl + Left Alt + F9; markers are numbered in order.");
+                _enabled = config.Bind("General", "Enabled", true, "Enable optimization features. Turning off restores owned instance properties. Benchmarks remain available.");
+                _shadows = config.Bind("Structures", "Distant Shadows", true, "Remove shadows cast by distant building MeshRenderers. Buildings remain visible and interactive.");
+                _shadowDistance = config.Bind("Structures", "Shadow Distance", 40f, new ConfigDescription("Distance in metres beyond which building pieces stop casting shadows.", new AcceptableValueRange<float>(10f, 250f)));
+                _hysteresis = config.Bind("Structures", "Shadow Hysteresis", 5f, new ConfigDescription("Move this much closer before restoring shadows, preventing boundary flicker.", new AcceptableValueRange<float>(0f, 20f)));
+                _piecesPerFrame = config.Bind("Structures", "Discovery Budget", 256, new ConfigDescription("Maximum registry entries examined per frame, also constrained by the discovery time budget.", new AcceptableValueRange<int>(1, 512)));
+                _renderersPerFrame = config.Bind("Structures", "Renderer Budget", 128, new ConfigDescription("Maximum building renderers checked per frame. Large builds take longer to refresh.", new AcceptableValueRange<int>(16, 1024)));
+                _particles = config.Bind("Cosmetics", "Death Particle Budget", true, "Limit particle counts on exact allowlisted cosmetic effects. Unknown effects are unchanged.");
+                _particleMax = config.Bind("Cosmetics", "Particles Per System", 96, new ConfigDescription("Maximum particles per tracked cosmetic system; shared budget can lower this further.", new AcceptableValueRange<int>(8, 512)));
+                _particleBudget = config.Bind("Cosmetics", "Shared Particle Budget", 1024, new ConfigDescription("Total maximum-particle capacity shared among up to 256 tracked cosmetic systems. A minimum of one slot is retained per system.", new AcceptableValueRange<int>(256, 8192)));
+                _effectDistance = config.Bind("Cosmetics", "Far Distance", 30f, new ConfigDescription("Beyond this distance the allocated cosmetic particle cap is halved.", new AcceptableValueRange<float>(5f, 150f)));
+                _allowList = config.Bind("Cosmetics", "Exact Effect Names", "vfx_greydwarf_death,vfx_greydwarf_shaman_death,vfx_greydwarf_elite_death,vfx_skeleton_death,vfx_troll_death,vfx_draugr_death", "Comma-separated exact root prefab names, ignoring (Clone). Only pure cosmetic particle systems are eligible. Add reviewed modded cosmetic effects here; skill telegraphs should remain excluded.");
+                _seconds = config.Bind("Benchmark", "Duration Seconds", 60f, new ConfigDescription("Automatic benchmark duration. A second hotkey press ends it early.", new AcceptableValueRange<float>(10f, 180f)));
+                _recordKey = config.Bind("Benchmark", "Record Hotkey", new KeyboardShortcut(KeyCode.F10, KeyCode.LeftControl, KeyCode.LeftAlt), "Start/stop a benchmark. Default: Left Ctrl + Left Alt + F10.");
+                _toggleKey = config.Bind("General", "Toggle Hotkey", new KeyboardShortcut(KeyCode.F6, KeyCode.LeftControl, KeyCode.LeftAlt), "Toggle optimization features. Default: Left Ctrl + Left Alt + F6. Wait for settings to settle before recording.");
+                if (_configRevision.Value < 1)
+                {
+                    if (_piecesPerFrame.Value == 2) _piecesPerFrame.Value = 256;
+                    if (_toggleKey.Value.Equals(new KeyboardShortcut(KeyCode.F11, KeyCode.LeftControl, KeyCode.LeftAlt)))
+                        _toggleKey.Value = new KeyboardShortcut(KeyCode.F6, KeyCode.LeftControl, KeyCode.LeftAlt);
+                    _configRevision.Value = 1;
+                }
+        }
+    }
+}

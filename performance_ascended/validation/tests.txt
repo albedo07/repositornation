@@ -1,0 +1,2 @@
+HOST allocation comparison only (.NET6, not Valheim/Mono FPS): 2048 removals native=22533280 bytes; ordered=0 bytes.
+PASS: 704 policy, statistics, ownership and real BepInEx configuration assertions.
