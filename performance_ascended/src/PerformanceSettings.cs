@@ -6,7 +6,8 @@ namespace AethelbornPerformance
     // Actual production binding path can be validated without creating a Unity component.
     public sealed class PerformanceSettings
     {
-        public ConfigEntry<bool> _spreadUnload, _lowShadows, _viewCulling, _gcSlice;
+        public ConfigEntry<bool> _spreadUnload, _lowShadows, _viewCulling, _gcSlice, _doorSleep, _asyncUpload;
+        public ConfigEntry<float> _grassPatch;
         public ConfigEntry<float> _gcSliceMs;
         public ConfigEntry<float> _pieceDrawM, _nonSolidDrawM, _smallDrawM, _lodMax;
         public ConfigEntry<float> _lowShadowDistance;
@@ -28,6 +29,9 @@ namespace AethelbornPerformance
                 _supportCache = config.Bind("Structures", "Efficient Support Cache Subscriptions", true, "Use ordered constant-time callback removal for native terrain support-cache notifications. Preserves clearing, callback order and native object lifetime. Turning OFF restores native subscriptions.");
                 _spreadUnload = config.Bind("Structures", "Spread Object Unloading", true, "When you leave an area Valheim removes every out-of-range object (thousands of building pieces) in ONE frame - the 300-475 ms freezes in the captures. ON removes at most 'Unload Per Tick' objects per unloading tick (Valheim ticks 30 times a second) until done. Same removal steps as Valheim; objects you return to are kept. OFF = Valheim's own unloading.");
                 _unloadPerTick = config.Bind("Structures", "Unload Per Tick", 150, new ConfigDescription("Maximum objects removed per unloading tick (30 ticks per second). 150 = about 4,500 per second. Lower = smoother but slower cleanup.", new AcceptableValueRange<int>(25, 2000)));
+                _doorSleep = config.Bind("World", "Door Sleep", true, "Idle doors stop running their animator every frame (big bases have hundreds). A door wakes the moment it is used, hovered or changed by another player, keeping its open/closed pose.");
+                _grassPatch = config.Bind("World", "Grass Patch Size", 20f, new ConfigDescription("Grass is built and drawn in square patches (game: 10 m). Bigger patches = far fewer grass draw calls and rebuilds; same density. Applies when a world loads. 0 = game default.", new AcceptableValueRange<float>(0f, 40f)));
+                _asyncUpload = config.Bind("World", "Faster Asset Uploads", true, "Gives Unity more time and memory per frame to upload newly loaded meshes and textures to the GPU (4 ms / 64 MB instead of 2 ms / Unity default), so loading areas causes fewer hitches. Restored when off.");
                 _gcSlice = config.Bind("Memory", "Longer Cleanup Slices", false, "EXPERIMENT (off by default). Unity cleans memory in small per-frame slices (3 ms). When the game and mods make garbage faster than that, Unity stops and finishes in one go (the 20-46 ms frames every 7-10 s). ON gives each slice more time so cleanups can finish in steps. Compare captures ON/OFF; restored when turned off.");
                 _gcSliceMs = config.Bind("Memory", "Cleanup Slice Milliseconds", 5f, new ConfigDescription("Per-frame cleanup time when the experiment is ON. Unity default: 3.", new AcceptableValueRange<float>(1f, 10f)));
                 _viewCulling = config.Bind("Draw Distance", "Enabled", true, "Big bases: stop DRAWING building pieces and small objects beyond the distances below (Unity per-layer culling, no per-object work). They still exist, collide and work; only the picture is skipped. Each building piece is its own draw call, so this is the main FPS lever around large builds. OFF restores the camera.");

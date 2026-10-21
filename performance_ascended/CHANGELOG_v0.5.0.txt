@@ -1,0 +1,15 @@
+Performance Ascended v0.5.0 - first "all-in-one" pass   (baseline v0.4.3)
+Ideas from the 8-mod survey (FPS_MOD_SURVEY.txt), re-implemented and checked against assembly_valheim IL. New [World] section:
+
+1. Door Sleep = true (idea: FPSDoctor). Valheim's Door only changes its animator when the door's state changes, but an
+   idle door's Animator still updates every frame. Idle doors (4 s after any use) get their Animator disabled with the pose
+   kept (keepAnimatorStateOnDisable); using, hovering or another player opening it wakes it first. 16 doors checked per
+   frame, no scene scans. Report: DoorsTracked / DoorsAsleep.
+2. Grass Patch Size = 20 (idea: vaffle1 FPSPlus; game 10). Fewer, larger grass patches = far fewer grass draws/rebuilds,
+   same density. Applies on world load (ClutterSystem.Awake); never lowers the game value; 0 = game default.
+3. Faster Asset Uploads = true (idea: K_xD optimizer, done safely): async upload 4 ms / 64 MB per frame (only raised,
+   written once and owned - the original rewrote them every frame). Aimed at the 50-76 ms load frames.
+Not adopted this pass (see survey): instanced piece drawing and support/wear sleeping - the biggest wins, but each is its
+own careful pass; everything flagged harmful in the survey.
+CHECKS (static): C# 5 compile vs your real DLLs; installer list = 9 files (verified). In-game: doors open/close normally
+(also when another player uses them), grass look, FPS captures.

@@ -18,7 +18,7 @@ namespace AethelbornPerformance
     {
         public const string Guid = "albedo.aethelborn.performance";
         public const string Name = "Performance Ascended";
-        public const string Version = "0.4.3";
+        public const string Version = "0.5.0";
         public static PerformancePlugin Instance;
         private PerformanceSettings _settings;
         private GUIStyle _indicatorStyle;
@@ -117,6 +117,7 @@ namespace AethelbornPerformance
                 for (int i = 0; i < zoneMethods.Count; i++)
                     if (zoneMethods[i].Name == "SpawnZone") _harmony.Patch(zoneMethods[i], postfix: new HarmonyMethod(typeof(PerformancePlugin), "ZoneSpawned"));
                 Logger.LogInfo("Spread Object Unloading: " + UnloadBudget.Install(_harmony, Logger));
+                Logger.LogInfo("World tweaks: " + WorldTweaks.Install(_harmony, Logger));
                 Logger.LogInfo(Name + " " + Version + " ready. Piece registry: " + (_pieceSource != null) + "; cosmetic hook: " + _effectsHook + ". No AA dependency or world/save changes.");
             }
             catch (Exception ex)
@@ -450,6 +451,9 @@ namespace AethelbornPerformance
                 UpdateGlobalShadows(enabledNow && _settings._noShadows.Value);
                 UpdateLowShadows(enabledNow && !_settings._noShadows.Value && _settings._lowShadows.Value);
                 UpdateGcSlice(enabledNow && _settings._gcSlice.Value);
+                WorldTweaks.DoorSleepOn = enabledNow && _settings._doorSleep.Value; WorldTweaks.Tick();
+                WorldTweaks.GrassPatchSize = _settings._enabled.Value ? _settings._grassPatch.Value : 0f;
+                UpdateAsyncUpload(enabledNow && _settings._asyncUpload.Value);
                 _view.Update(enabledNow && _settings._viewCulling.Value, _settings._pieceDrawM.Value, _settings._nonSolidDrawM.Value, _settings._smallDrawM.Value, _settings._lodMax.Value);
                 if (active) RefreshDiscoveryHud(shadowsNow);
                 if (!enabledNow) return;
@@ -623,6 +627,20 @@ namespace AethelbornPerformance
         // 0.4.1 Low Shadows: four quality values, each owned separately (another writer - e.g. Valheim's graphics menu - wins).
         private readonly ViewCulling _view = new ViewCulling();
         private OwnedValue<ulong> _gcSliceOwned;
+        private OwnedValue<int> _uploadSlice, _uploadBuffer;
+        private void UpdateAsyncUpload(bool on)
+        {
+            if (!on)
+            {
+                if (_uploadSlice != null && _uploadSlice.CanRestore(QualitySettings.asyncUploadTimeSlice)) QualitySettings.asyncUploadTimeSlice = _uploadSlice.Original;
+                if (_uploadBuffer != null && _uploadBuffer.CanRestore(QualitySettings.asyncUploadBufferSize)) QualitySettings.asyncUploadBufferSize = _uploadBuffer.Original;
+                _uploadSlice = null; _uploadBuffer = null; return;
+            }
+            if (_uploadSlice == null) { _uploadSlice = new OwnedValue<int>(QualitySettings.asyncUploadTimeSlice); _uploadBuffer = new OwnedValue<int>(QualitySettings.asyncUploadBufferSize); }
+            int slice = Math.Max(_uploadSlice.Original, 4), buffer = Math.Max(_uploadBuffer.Original, 64);   // only ever raised; written once (owned), not every frame
+            if (_uploadSlice.TryApply(QualitySettings.asyncUploadTimeSlice, slice)) QualitySettings.asyncUploadTimeSlice = slice;
+            if (_uploadBuffer.TryApply(QualitySettings.asyncUploadBufferSize, buffer)) QualitySettings.asyncUploadBufferSize = buffer;
+        }
         private void UpdateGcSlice(bool on)
         {
             if (!on || !UnityEngine.Scripting.GarbageCollector.isIncremental)
@@ -692,7 +710,7 @@ namespace AethelbornPerformance
             for (int i = 0; i < _systems.Count; i++) RestoreParticle(_systems[i]);
             _systems.Clear(); _knownSystems.Clear();
         }
-        private void RestoreAll() { if (_supportCache != null) _supportCache.SetEnabled(false); RestoreGlobalShadows(); RestoreLowShadows(); _view.Restore(); UpdateGcSlice(false); RestoreShadows(); RestoreParticles(); _pending.Clear(); }
+        private void RestoreAll() { if (_supportCache != null) _supportCache.SetEnabled(false); RestoreGlobalShadows(); RestoreLowShadows(); _view.Restore(); UpdateGcSlice(false); UpdateAsyncUpload(false); WorldTweaks.WakeAll(); RestoreShadows(); RestoreParticles(); _pending.Clear(); }
         private void Fail(Exception error)
         {
             if (_failed) return; _failed = true; _discoveryReady = false; _discoveryContent.text = "Discovery stopped"; _discoveryHint.text = "Check the performance log.";
@@ -752,6 +770,7 @@ namespace AethelbornPerformance
                 if (_supportCache != null) summary += "\n" + _supportCache.Report();
                 summary += "\n" + _recorder.CauseSummary();
                 summary += "\n" + UnloadBudget.Report();
+                summary += "\n" + WorldTweaks.Report();
                 summary += "\nGCSliceExperiment=" + _settings._gcSlice.Value + "; RunZoneSpawns=" + _zoneSpawns;
                 summary += "\n" + _view.Report() + "; PieceDrawM=" + _settings._pieceDrawM.Value.ToString(CultureInfo.InvariantCulture) + "; DecorDrawM=" + _settings._nonSolidDrawM.Value.ToString(CultureInfo.InvariantCulture) + "; SmallDrawM=" + _settings._smallDrawM.Value.ToString(CultureInfo.InvariantCulture);
                 summary += "\nPendingDiscoveryPieces=" + _newPieces.Count + "; DiscoveryQueueOverflow=" + _newPieces.Overflowed + "; DiscoveryReconcilePending=" + _reconcileRequested + "; RunFullDiscoverySnapshots=" + (_captureStarted ? _snapshots - _startSnapshots : 0);

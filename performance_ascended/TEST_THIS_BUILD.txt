@@ -1,5 +1,4 @@
-Performance Ascended v0.4.3 - TEST (same spot, same route each time, all with optimization ON)
-1. Capture A: [Memory] Longer Cleanup Slices = false.
-2. Capture B: Longer Cleanup Slices = true (edit cfg with the game closed, or via a config manager).
-3. Optional: one OFF capture for reference.
-4. COLLECT_REPORTS.bat -> send. Look at "SlowFramesByCause" in each TXT: MemoryCleanup count/worst should drop in B.
+Performance Ascended v0.5.0 - TEST
+1. Extract to an EMPTY folder, INSTALL.bat. Log: "World tweaks: door sleep ready; grass patch size ready".
+2. Doors: open/close several doors, walk away 10 s, come back and use them again; ask a friend to open one if you can.
+3. Same spot, same route: OFF, ON, OFF, ON captures (base with many doors + grass around it). COLLECT_REPORTS.bat -> send.

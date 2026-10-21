@@ -1,0 +1,21 @@
+FPS MOD SURVEY (2026-10-21) - 8 mods disassembled and read against Valheim's own code. Ideas, not code, are reused.
+
+FPSDoctor 0.18 (MOXY1337) - the serious one. Big wins: instanced drawing of building pieces per cell (originals set
+  forceRenderingOff), wear/support "sleep" + caching, paced object/location/terrain creation, a sector index replacing the
+  30/s object scan, batched physics transform syncs, effects paused off-screen/far, storm particle caps, many small script
+  throttles (doors, lava checks, minimap pins, build HUD), blur off, opt-in GC pacing. FSR needs its shader bundle.
+  ADOPTED: Door Sleep. NEXT: instanced piece drawing (client-only, renderer-only), then wear/support sleeping.
+PUP_FPS 1.0.37 (PUP82) - bakes 64 m cells into instanced clusters, BUT parks the original pieces' world data ~1.9 million
+  metres away and needs the server + cache files. If the mod/cache is lost the base is invisible. NOT adopted (world risk).
+  The client-only part of the idea (instanced drawing) is planned for us without touching world data.
+KillerGoldFisch ValheimFPSPlus / castix ValheimFPSBoost - one-shot quality presets: shadows off, half-res textures, no
+  pixel lights, aniso off, lodBias 0.3-1.3, and castix destroys post-processing. Big visual loss, mostly GPU savings.
+  Our owned Low Shadows / LOD cap already cover the useful part.
+vaffle1 FPSPlus - grass patch size 20 (ADOPTED), soft particles/reflection probes off. HARMFUL: its LightFlicker
+  replacement skips the light fade/self-destroy, so short-lived lights pile up.
+K_xD ValheimFPSOptimizer - HARMFUL: caps Time.maximumDeltaTime (game time falls behind = slow motion/desync), skips
+  every other Character physics/AI update, forces 60 FPS limit, frustum-toggles renderers. Only the async-upload idea
+  is useful (ADOPTED safely).
+LEGIOmods AutoLodBias - moves lodBias with FPS and dips it during portals. Possible later as an option; causes LOD popping.
+FlamehawkMODS FpsProtector - skips missing-prefab ZDOs and swallows RemoveObjects errors. Your logs have 0 missing-prefab
+  lines and Valheim already handles that path, so nothing to gain; its catch-all would also hide our errors.
