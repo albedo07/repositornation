@@ -11,7 +11,7 @@ Select ACTIVE PROFILE BepInEx/core/BepInEx.dll, then game
 valheim_Data/Managed/UnityEngine.CoreModule.dll. Paste paths in the usual file
 pickers if easier. Separate Gale/r2modman profiles work. Staged compilation,
 own-DLL backup/replacement; existing config preserved. Client BepInEx5/HarmonyX;
-no AA/Jotunn dependency. Six C#5 production files remain separate.
+no AA/Jotunn dependency. Seven C#5 production files remain separate.
 Ctrl+Alt+F6 toggle; Ctrl+Alt+F10 record; Ctrl+Alt+F9 optional marker.
 Existing custom shortcuts remain. Badge shows actual toggle binding.
 

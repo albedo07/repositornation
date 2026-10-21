@@ -1,4 +1,4 @@
-param([string]$BepInExDll, [string]$UnityCoreDll)
+﻿param([string]$BepInExDll, [string]$UnityCoreDll)
 $ErrorActionPreference = "Stop"
 $stage = $null
 Write-Host ""
@@ -130,7 +130,10 @@ try {
     Need-File (Join-Path $managedDir 'assembly_valheim.dll') 'assembly_valheim.dll'
     Need-File (Join-Path $coreDir '0Harmony.dll') '0Harmony.dll'
     $sources = @(Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'src') -Filter '*.cs' | Sort-Object Name | ForEach-Object { $_.FullName })
-    if ($sources.Count -ne 6) { throw 'Expected six source files. Extract the complete archive first.' }
+    # 0.4.1: check the exact source names (a bare count broke when UnloadBudget.cs was added)
+    $required = @('DiagnosticData.cs','FrameRecorder.cs','PerformancePlugin.cs','PerformancePolicy.cs','PerformanceSettings.cs','RuntimeDiagnostics.cs','UnloadBudget.cs')
+    foreach ($name in $required) { if (-not (Test-Path -LiteralPath (Join-Path (Join-Path $PSScriptRoot 'src') $name))) { throw ('Missing src\' + $name + '. Extract the complete archive first.') } }
+    if ($sources.Count -ne $required.Count) { throw ('Expected ' + $required.Count + ' source files in src, found ' + $sources.Count + '. Extract the complete archive into an empty folder.') }
     $refs = New-Object System.Collections.ArrayList
     [void](Add-UniqueRef $refs $BepInExDll)
     [void](Add-UniqueRef $refs (Join-Path $coreDir '0Harmony.dll'))
