@@ -1,4 +1,2 @@
-v0.25.245 - test:
-1. Whirlwind with a Therzie 2H, a 1H, and dual wield: standing and moving - arms out front, weapon pointing out, same both ways.
-2. Sprint/drain stamina: no blinking line on the bar; no see-through parts in the HUD frame (check all four HUD families).
-3. F8 Audio: the listed sliders show 100% (volumes) / your values; skills sound like your tuned cfg.
+v0.25.246 - test Whirlwind with the same five weapons (2H sword, 2H battleaxe, 2H dual sword, dual axe, dual sword),
+standing and moving: blades should point outwards. If one still points up, send LogOutput.log (lines "Weapon tip").

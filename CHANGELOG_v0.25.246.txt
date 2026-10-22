@@ -1,0 +1,11 @@
+Aethelborn Ascended v0.25.246 - Whirlwind Weapon Tips   (base: v0.25.245; Anchor v0.25.244)
+
+WHIRLWIND (Mercenary, Normal and Ascended) - and every skill pose that aims a held weapon
+- Cause (from your videos): vanilla weapons already pointed out; Therzie swords (2H, 2H dual, dual curved) pointed straight up.
+  Their tip was measured wrongly: skinned weapon meshes report their box in another space, so "tip" landed beside the grip.
+- Weapon tip is now measured from the weapon mesh's own bounds (skinned meshes included), then cross-checked against the
+  far end of its world box; if the two disagree by more than 55 degrees the far end wins. One universal rule for vanilla and Therzie.
+- The log now prints one line per weapon: "[Aethelborn] Weapon tip <item> / <mesh> (<type>): (x, y, z)". Send it if any weapon is still off.
+- No damage, timing, VFX or sound change. v0.25.245 sound defaults and HUD fixes kept.
+
+CHECKS: all ten modules compile (C# 5) against your real DLLs. Not tested in game.

@@ -1445,7 +1445,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.245";
+        public const string ModVersion = "0.25.246";
 
         internal static DragonCombatPlugin Instance;
 
@@ -5778,7 +5778,10 @@ namespace DragonsAltarCombat
                 }
                 if (best != null)
                 {
-                    Bounds lb = best.localBounds;
+                    // v0.25.246: a skinned mesh's localBounds are not in its own transform's space (Therzie swords pointed up);
+                    // its mesh bounds are.
+                    SkinnedMeshRenderer smr = best as SkinnedMeshRenderer;
+                    Bounds lb = smr != null && smr.sharedMesh != null ? smr.sharedMesh.bounds : best.localBounds;
                     Vector3 sc = best.transform.lossyScale;
                     Vector3 ext = new Vector3(Mathf.Abs(lb.extents.x * sc.x), Mathf.Abs(lb.extents.y * sc.y), Mathf.Abs(lb.extents.z * sc.z));
                     Vector3 axis = ext.x >= ext.y && ext.x >= ext.z ? new Vector3(lb.extents.x, 0f, 0f) : (ext.y >= ext.z ? new Vector3(0f, lb.extents.y, 0f) : new Vector3(0f, 0f, lb.extents.z));
@@ -5786,12 +5789,36 @@ namespace DragonsAltarCombat
                     float d1 = (p1 - hp).sqrMagnitude, d2 = (p2 - hp).sqrMagnitude;
                     // a grip in the middle (both ends about as far, e.g. bows / staves held centrally) keeps the vanilla angle
                     if (Mathf.Abs(Mathf.Sqrt(d1) - Mathf.Sqrt(d2)) < 0.15f * scale) return false;
-                    tipLocal = hand.InverseTransformPoint(d1 > d2 ? p1 : p2);
+                    Vector3 tipW = d1 > d2 ? p1 : p2;
+                    // cross-check with the world box: the tip must lie towards the box corners farthest from the grip
+                    Vector3 far = FarCorner(best.bounds, hp);
+                    if (Vector3.Angle(tipW - hp, far - hp) > 55f) tipW = far;
+                    tipLocal = hand.InverseTransformPoint(tipW);
+                    LogTip(item, best, tipLocal);
                     return tipLocal.magnitude * hand.lossyScale.x > 0.08f;
                 }
             }
             catch (Exception) { }
             return ItemTipByBounds(item, hand, out tipLocal);
+        }
+        // centre of the box corners lying in the farthest 15% from the grip (the blade end of the box)
+        private static Vector3 FarCorner(Bounds b, Vector3 from)
+        {
+            Vector3[] c = new Vector3[8]; float max = 0f;
+            for (int i = 0; i < 8; i++)
+            {
+                c[i] = b.center + Vector3.Scale(b.extents, new Vector3((i & 1) == 0 ? -1f : 1f, (i & 2) == 0 ? -1f : 1f, (i & 4) == 0 ? -1f : 1f));
+                max = Mathf.Max(max, (c[i] - from).magnitude);
+            }
+            Vector3 sum = Vector3.zero; int n = 0;
+            for (int i = 0; i < 8; i++) if ((c[i] - from).magnitude >= max * 0.85f) { sum += c[i]; n++; }
+            return n > 0 ? sum / n : b.center;
+        }
+        private static readonly HashSet<string> TipLogged = new HashSet<string>();
+        private static void LogTip(GameObject item, Renderer r, Vector3 tip)
+        {
+            try { if (TipLogged.Count < 64 && TipLogged.Add(item.name)) Debug.Log("[Aethelborn] Weapon tip " + item.name + " / " + r.name + " (" + r.GetType().Name + "): " + tip.ToString("F2")); }
+            catch (Exception) { }
         }
         private static bool ItemTipByBounds(GameObject item, Transform hand, out Vector3 tipLocal)
         {
