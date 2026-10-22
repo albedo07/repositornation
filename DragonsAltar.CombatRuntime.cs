@@ -1445,7 +1445,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.253";
+        public const string ModVersion = "0.25.254";
 
         internal static DragonCombatPlugin Instance;
 
@@ -14386,6 +14386,18 @@ namespace DragonsAltarCombat
             if (b == null) b = player.gameObject.AddComponent<DragonBladeForward>();
             b._player = player; b._until = Time.time + seconds; b._start = Time.time; b._loggedArm = false; b.enabled = true;
             b._seenR = null; b._seenL = null; b._tipR = Vector3.zero; b._tipL = Vector3.zero;
+            // v0.25.254: measure NOW, while the hands are still apart in the previous pose (the spin pose holds them together,
+            // which makes a skinned dual weapon's two blades hard to tell apart). A blade's tip is fixed relative to its hand.
+            try
+            {
+                if (b._an == null) b._an = player.GetComponentInChildren<Animator>();
+                if (b._an != null && b._an.isHuman)
+                {
+                    Transform rh = b._an.GetBoneTransform(HumanBodyBones.RightHand), lh = b._an.GetBoneTransform(HumanBodyBones.LeftHand);
+                    if (rh != null && lh != null) b.Measure(rh, lh);
+                }
+            }
+            catch (Exception e) { Debug.LogWarning("[Aethelborn] Whirlwind blade: " + e.Message); }
         }
 
         private GameObject Item(bool right)
@@ -14411,6 +14423,7 @@ namespace DragonsAltarCombat
         // a blade now belongs to the hand bone it is parented / skinned to.
         private static readonly List<Vector3> Pts = new List<Vector3>();
         private static readonly List<byte> Tags = new List<byte>();
+        private static string BakeNote = "";
         private static byte HandOf(Transform t, Transform rh, Transform lh)
         {
             for (int i = 0; t != null && i < 64; i++, t = t.parent) { if (t == rh) return 1; if (t == lh) return 2; }
@@ -14418,7 +14431,7 @@ namespace DragonsAltarCombat
         }
         private static string Collect(GameObject item, Transform rh, Transform lh)
         {
-            Pts.Clear(); Tags.Clear();
+            Pts.Clear(); Tags.Clear(); BakeNote = "";
             int verts = 0, boxes = 0;
             Renderer[] rs = item.GetComponentsInChildren<Renderer>();
             for (int i = 0; i < rs.Length; i++)
@@ -14441,13 +14454,29 @@ namespace DragonsAltarCombat
                 BoneWeight[] bw = null;
                 if (tag == 0 && perBone != null && mesh != null && mesh.isReadable) { try { bw = mesh.boneWeights; } catch (Exception) { bw = null; } }
                 Vector3[] v = null;
+                Matrix4x4 m = r.transform.localToWorldMatrix;
                 try
                 {
-                    if (smr != null) { Mesh baked = new Mesh(); smr.BakeMesh(baked); v = baked.vertices; UnityEngine.Object.Destroy(baked); }
+                    if (smr != null)
+                    {
+                        // v0.25.254 (user log: Therzie tips measured 0.35-0.50 m, real blades ~1 m): the space of baked vertices
+                        // depends on the transform's scale. Bake WITH scale, then pick the placement whose closest point lies at a
+                        // hand (a held weapon's grip is in the hand) - no assumption about Unity's bake space.
+                        Mesh baked = new Mesh(); smr.BakeMesh(baked, true); v = baked.vertices; UnityEngine.Object.Destroy(baked);
+                        Matrix4x4 a = Matrix4x4.TRS(r.transform.position, r.transform.rotation, Vector3.one), b = r.transform.localToWorldMatrix;
+                        float da = float.MaxValue, db = float.MaxValue;
+                        for (int j = 0; v != null && j < v.Length; j += 3)
+                        {
+                            Vector3 pa = a.MultiplyPoint3x4(v[j]), pb = b.MultiplyPoint3x4(v[j]);
+                            da = Mathf.Min(da, Mathf.Min((pa - rh.position).sqrMagnitude, (pa - lh.position).sqrMagnitude));
+                            db = Mathf.Min(db, Mathf.Min((pb - rh.position).sqrMagnitude, (pb - lh.position).sqrMagnitude));
+                        }
+                        m = db < da ? b : a;
+                        BakeNote = "grip " + Mathf.Sqrt(Mathf.Min(da, db)).ToString("F2") + " m from hand (" + (db < da ? "scaled" : "unscaled") + " bake)";
+                    }
                     else if (mesh != null && mesh.isReadable) v = mesh.vertices;
                 }
                 catch (Exception) { v = null; }
-                Matrix4x4 m = r.transform.localToWorldMatrix;   // BakeMesh leaves out the transform's scale; this adds it back
                 if (v != null && v.Length > 0)
                 {
                     verts++;
@@ -14506,7 +14535,7 @@ namespace DragonsAltarCombat
                 if (l == null) _tipL = TipFor(lh, rh, 2);
                 Debug.Log("[Aethelborn] Whirlwind blade: " + r.name + " right tip " + (rh.TransformPoint(_tipR) - rh.position).magnitude.ToString("F2") + " m" +
                     (l == null && _tipL != Vector3.zero ? ", left tip " + (lh.TransformPoint(_tipL) - lh.position).magnitude.ToString("F2") + " m" : "") +
-                    " via " + how + " (" + Pts.Count + " points: right " + Count(1) + ", left " + Count(2) + ", unknown " + Count(0) + ")");
+                    " via " + how + " (" + Pts.Count + " points: right " + Count(1) + ", left " + Count(2) + ", unknown " + Count(0) + ")" + (BakeNote.Length > 0 ? "; " + BakeNote : ""));
             }
             if (l != null && !Skip(l))
             {
@@ -14584,6 +14613,30 @@ namespace DragonsAltarCombat
             _frames = 0; _overwritten = 0; _worst = 0f;
         }
 
+        // v0.25.254 (user: 2H swords glitched): turning the right wrist moved the blade away from the left hand, which the
+        // animation had put on the old grip. The left hand is placed back on the handle (just above the right fist, along the
+        // blade) with a two-bone arm IK, and turned like the right hand.
+        private void Regrip(Transform rh, Vector3 dir)
+        {
+            Transform ua = _an.GetBoneTransform(HumanBodyBones.LeftUpperArm), la = _an.GetBoneTransform(HumanBodyBones.LeftLowerArm), lh = _an.GetBoneTransform(HumanBodyBones.LeftHand);
+            if (ua == null || la == null || lh == null) return;
+            Vector3 target = rh.position + dir * 0.11f;
+            Vector3 a = ua.position, b = la.position, c = lh.position;
+            float l1 = (b - a).magnitude, l2 = (c - b).magnitude;
+            if (l1 < 0.0001f || l2 < 0.0001f) return;
+            Vector3 to = target - a;
+            float d = Mathf.Clamp(to.magnitude, Mathf.Abs(l1 - l2) + 0.001f, l1 + l2 - 0.001f);
+            Vector3 n = to.sqrMagnitude > 0.000001f ? to.normalized : (c - a).normalized;
+            float x = (l1 * l1 - l2 * l2 + d * d) / (2f * d), h = Mathf.Sqrt(Mathf.Max(0f, l1 * l1 - x * x));
+            Vector3 pole = Vector3.down - n * Vector3.Dot(Vector3.down, n);
+            if (pole.sqrMagnitude < 0.000001f) pole = Vector3.Cross(n, Vector3.right);
+            pole.Normalize();
+            Vector3 elbow = a + n * x + pole * h, hand = a + n * d;
+            ua.rotation = Quaternion.FromToRotation(b - a, elbow - a) * ua.rotation;
+            la.rotation = Quaternion.FromToRotation(lh.position - la.position, hand - la.position) * la.rotation;
+            lh.rotation = rh.rotation;
+        }
+
         private void LateUpdate()
         {
             if (_player == null || _player.IsDead() || Time.time > _until) { enabled = false; return; }
@@ -14597,6 +14650,7 @@ namespace DragonsAltarCombat
             try
             {
                 if (_player == null || _player.IsDead() || Time.time > _until) { enabled = false; return; }
+                if (Time.time - _start > 0.3f && !DragonCombat.IsWhirlwindActive(_player)) { enabled = false; return; }   // v0.25.254: ends with the spin
                 if (_an == null) _an = _player.GetComponentInChildren<Animator>();
                 if (_an == null || !_an.isHuman) return;
                 Transform rh = _an.GetBoneTransform(HumanBodyBones.RightHand), lh = _an.GetBoneTransform(HumanBodyBones.LeftHand);
@@ -14615,6 +14669,7 @@ namespace DragonsAltarCombat
                 }
                 Aim(rh, _tipR, want);
                 Aim(lh, _tipL, want);
+                if (_tipL == Vector3.zero && _tipR != Vector3.zero) Regrip(rh, want);
                 if (fromHook && !_loggedArm && Time.time - _start > 0.6f)
                 {
                     _loggedArm = true;

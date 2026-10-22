@@ -1,0 +1,21 @@
+Aethelborn Ascended v0.25.254 - Whirlwind Grip   (base: v0.25.253; Anchor v0.25.244)
+
+WHAT YOUR v0.25.253 LOG SHOWED
+- The final-frame aim works: "hands overwritten after our step on 0 frames" in every spin (vanilla weapons now right).
+- Therzie weapons measured tips of only 0.35-0.50 m (real blades ~1 m): their skinned models were read at the wrong
+  scale, so the computed "tip" was in the wrong place.
+- Stopping the ultimate early: the aim kept running for the full ultimate duration (the weird held stance).
+- 2H swords: after the right wrist turned, the left hand stayed on the old grip, so the hold broke.
+
+WHIRLWIND CA (Normal and Ascended)
+- Therzie / skinned weapons: baked with scale, and the placement is chosen by a self-check - the weapon's grip must sit at
+  your hand. The log reports how far the grip is from the hand (should be ~0.00-0.10 m).
+- The blades are measured the moment you cast, while your hands are still apart in the previous pose (the spin holds
+  them together, which mixed up the two blades of skinned dual weapons).
+- The aim ends the moment the Whirlwind ends, including an early stop / final sweep - no more held stance.
+- Single weapons (1H and 2H): after the wrist turns, the left hand is placed back on the handle just in front of the
+  right fist (arm IK) and turned the same way - a proper two-hand hold.
+- Dual weapons: each blade aimed from its own hand (unchanged).
+- No damage, timing, VFX or sound change.
+
+CHECKS: all ten modules compile (C# 5) against your real DLLs. Not tested in game.
