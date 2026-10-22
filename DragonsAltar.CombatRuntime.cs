@@ -1445,7 +1445,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.248";
+        public const string ModVersion = "0.25.249";
 
         internal static DragonCombatPlugin Instance;
 
@@ -5801,6 +5801,69 @@ namespace DragonsAltarCombat
             catch (Exception) { }
             return ItemTipByBounds(item, hand, out tipLocal);
         }
+        // v0.25.249 (user: the tip is the point of the weapon farthest from the body): read the weapon's actual vertices (skinned
+        // meshes baked in their current pose) and take the one farthest from the hand. Measured once per equipped item; the hand
+        // then turns every frame so that exact point is where the pose says (straight ahead for Whirlwind).
+        private static Mesh _bakeMesh;
+        private static bool ItemTipByVertices(GameObject item, Transform hand, out Vector3 tipLocal)
+        {
+            tipLocal = Vector3.zero;
+            try
+            {
+                Vector3 hp = hand.position;
+                float scale = Mathf.Max(0.2f, Mathf.Abs(hand.lossyScale.x));
+                Renderer[] parts = item.GetComponentsInChildren<Renderer>();
+                float best = 0f; Vector3 bestW = Vector3.zero; bool any = false;
+                for (int i = 0; i < parts.Length; i++)
+                {
+                    Renderer r = parts[i];
+                    if (r == null || !r.enabled || r is ParticleSystemRenderer || r is TrailRenderer || r is LineRenderer) continue;
+                    if (r.bounds.SqrDistance(hp) > 0.3f * 0.3f * scale * scale) continue;   // only the weapon in this hand
+                    Vector3[] v = null; Matrix4x4 m = r.transform.localToWorldMatrix;
+                    SkinnedMeshRenderer smr = r as SkinnedMeshRenderer;
+                    if (smr != null)
+                    {
+                        if (_bakeMesh == null) _bakeMesh = new Mesh();
+                        smr.BakeMesh(_bakeMesh);
+                        v = _bakeMesh.vertices;   // baked without the transform's scale; localToWorldMatrix adds it
+                    }
+                    else
+                    {
+                        MeshFilter mf = r.GetComponent<MeshFilter>();
+                        if (mf == null || mf.sharedMesh == null || !mf.sharedMesh.isReadable) continue;
+                        v = mf.sharedMesh.vertices;
+                    }
+                    if (v == null) continue;
+                    for (int j = 0; j < v.Length; j++)
+                    {
+                        Vector3 w = m.MultiplyPoint3x4(v[j]);
+                        float d = (w - hp).sqrMagnitude;
+                        if (d > best) { best = d; bestW = w; any = true; }
+                    }
+                }
+                if (!any) return false;
+                // centred grips (bows, staves held in the middle) keep the vanilla angle
+                Vector3 far = bestW - hp; float oppD = 0f;
+                for (int i = 0; i < parts.Length; i++)
+                {
+                    Renderer r = parts[i];
+                    if (r == null || !r.enabled || r is ParticleSystemRenderer || r is TrailRenderer || r is LineRenderer) continue;
+                    if (r.bounds.SqrDistance(hp) > 0.3f * 0.3f * scale * scale) continue;
+                    Bounds b = r.bounds; Vector3 back = -far.normalized;
+                    for (int k = 0; k < 8; k++)
+                    {
+                        Vector3 c = b.center + Vector3.Scale(b.extents, new Vector3((k & 1) == 0 ? -1f : 1f, (k & 2) == 0 ? -1f : 1f, (k & 4) == 0 ? -1f : 1f));
+                        float d = Vector3.Dot(c - hp, back);
+                        if (d > oppD) oppD = d;
+                    }
+                }
+                if (oppD > far.magnitude * 0.7f) return false;
+                tipLocal = hand.InverseTransformPoint(bestW);
+                LogTip(item, parts.Length > 0 ? parts[0] : null, tipLocal);
+                return far.magnitude > 0.08f * scale;
+            }
+            catch (Exception) { return false; }
+        }
         // centre of the box corners lying in the farthest 15% from the grip (the blade end of the box)
         private static Vector3 FarCorner(Bounds b, Vector3 from)
         {
@@ -5854,7 +5917,7 @@ namespace DragonsAltarCombat
         private static readonly HashSet<string> TipLogged = new HashSet<string>();
         private static void LogTip(GameObject item, Renderer r, Vector3 tip)
         {
-            try { if (TipLogged.Count < 64 && TipLogged.Add(item.name)) Debug.Log("[Aethelborn] Weapon tip " + item.name + " / " + r.name + " (" + r.GetType().Name + "): " + tip.ToString("F2")); }
+            try { if (TipLogged.Count < 64 && TipLogged.Add(item.name)) Debug.Log("[Aethelborn] Weapon tip " + item.name + " / " + (r != null ? r.name + " (" + r.GetType().Name + ")" : "-") + ": " + tip.ToString("F2")); }
             catch (Exception) { }
         }
         private static bool ItemTipByBounds(GameObject item, Transform hand, out Vector3 tipLocal)
@@ -5944,8 +6007,9 @@ namespace DragonsAltarCombat
                 if ((right ? _tipIdR : _tipIdL) != id)
                 {
                     Vector3 tip;
-                    bool ok = ItemTip(item, hand, out tip);
-                    if (ok && right) tip = UniversalTip(item, tip);   // main hand only (hand axes differ per side; shields are left)
+                    bool exact = ItemTipByVertices(item, hand, out tip);   // v0.25.249: the real farthest point of the model
+                    bool ok = exact || ItemTip(item, hand, out tip);
+                    if (ok && right && !exact) tip = UniversalTip(item, tip);   // main hand only (hand axes differ per side; shields are left)
                     if (right) { _tipIdR = id; _tipR = ok ? tip : Vector3.zero; }
                     else { _tipIdL = id; _tipL = ok ? tip : Vector3.zero; _shieldL = item.name.ToLowerInvariant().Contains("shield"); }
                 }

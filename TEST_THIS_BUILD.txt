@@ -1,3 +1,2 @@
-v0.25.248 - 1) Equip a vanilla weapon (sword or battleaxe), cast Whirlwind once.
-2) Equip your Therzie weapons and cast Whirlwind: arms forward, blade flat pointing ahead.
-If still wrong, send LogOutput.log (lines with "Weapon tip").
+v0.25.249 - Whirlwind with Therzie and vanilla weapons, standing and moving: blade flat, pointing straight ahead.
+If not, send LogOutput.log ("Weapon tip" lines).

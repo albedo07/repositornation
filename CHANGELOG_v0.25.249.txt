@@ -1,0 +1,14 @@
+Aethelborn Ascended v0.25.249 - True Weapon Tip   (base: v0.25.248; Anchor v0.25.244)
+
+WHIRLWIND CA (Normal and Ascended) and every skill pose that aims a held weapon
+- The weapon tip is now the real point of the weapon model farthest from the hand (every vertex is checked; skinned
+  Therzie meshes are baked in their pose first). Before, it was the end of a box drawn around the model, which is off
+  for curved/angled blades - that is why Therzie blades pointed up.
+- Every frame the hand turns so that exact point lies straight ahead, level (Whirlwind: both hands on the weapon,
+  arms forward at shoulder height). Same for vanilla, Therzie and any other mod's weapons.
+- Bows/staves held in the middle keep the vanilla angle. Weapons whose model cannot be read fall back to the old rule
+  (+ v0.25.248 learned direction for Therzie). Measured once per equipped weapon - no combat cost.
+- Log: "[Aethelborn] Weapon tip <item>: (x, y, z)" once per weapon.
+- No damage, timing, VFX or sound change.
+
+CHECKS: all ten modules compile (C# 5) against your real DLLs. Not tested in game.
