@@ -1433,7 +1433,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.243";
+        public const string ModVersion = "0.25.244";
 
         internal static DragonCombatPlugin Instance;
 
@@ -5742,7 +5742,46 @@ namespace DragonsAltarCombat
             return fi == null ? null : fi.GetValue(_vis) as GameObject;
         }
 
+        // v0.25.244 (user: Therzie's weapons did not point outwards in Whirlwind): the tip is the far end of the weapon's own
+        // long axis, measured on the mesh that is actually in this hand. The old rule used the centre of ALL renderers'
+        // world box - wrong for models built along another axis or with extra parts (a dual weapon's second blade in the
+        // other hand, sheaths, trails), so the "tip" pointed across the body and the blade hung down.
         private static bool ItemTip(GameObject item, Transform hand, out Vector3 tipLocal)
+        {
+            tipLocal = Vector3.zero;
+            try
+            {
+                Renderer[] parts = item.GetComponentsInChildren<Renderer>();
+                Vector3 hp = hand.position;
+                float scale = Mathf.Max(0.2f, Mathf.Abs(hand.lossyScale.x));
+                Renderer best = null; float bestSize = 0f;
+                for (int i = 0; i < parts.Length; i++)
+                {
+                    Renderer r = parts[i];
+                    if (r == null || !r.enabled || r is ParticleSystemRenderer || r is TrailRenderer || r is LineRenderer) continue;
+                    Bounds wb = r.bounds;
+                    if (wb.SqrDistance(hp) > 0.3f * 0.3f * scale * scale) continue;   // must touch this hand (not the other blade)
+                    float size = wb.size.sqrMagnitude;
+                    if (size > bestSize) { bestSize = size; best = r; }
+                }
+                if (best != null)
+                {
+                    Bounds lb = best.localBounds;
+                    Vector3 sc = best.transform.lossyScale;
+                    Vector3 ext = new Vector3(Mathf.Abs(lb.extents.x * sc.x), Mathf.Abs(lb.extents.y * sc.y), Mathf.Abs(lb.extents.z * sc.z));
+                    Vector3 axis = ext.x >= ext.y && ext.x >= ext.z ? new Vector3(lb.extents.x, 0f, 0f) : (ext.y >= ext.z ? new Vector3(0f, lb.extents.y, 0f) : new Vector3(0f, 0f, lb.extents.z));
+                    Vector3 p1 = best.transform.TransformPoint(lb.center + axis), p2 = best.transform.TransformPoint(lb.center - axis);
+                    float d1 = (p1 - hp).sqrMagnitude, d2 = (p2 - hp).sqrMagnitude;
+                    // a grip in the middle (both ends about as far, e.g. bows / staves held centrally) keeps the vanilla angle
+                    if (Mathf.Abs(Mathf.Sqrt(d1) - Mathf.Sqrt(d2)) < 0.15f * scale) return false;
+                    tipLocal = hand.InverseTransformPoint(d1 > d2 ? p1 : p2);
+                    return tipLocal.magnitude * hand.lossyScale.x > 0.08f;
+                }
+            }
+            catch (Exception) { }
+            return ItemTipByBounds(item, hand, out tipLocal);
+        }
+        private static bool ItemTipByBounds(GameObject item, Transform hand, out Vector3 tipLocal)
         {
             tipLocal = Vector3.zero;
             Renderer[] rs = item.GetComponentsInChildren<Renderer>();

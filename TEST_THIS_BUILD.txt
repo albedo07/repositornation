@@ -1,4 +1,5 @@
-TEST v0.25.243
-1. Load in, stand idle ~20-30 s until the log shows "Skill sounds warmed: N processed copies ready."
-2. Cast each skill for the first time: no stutter.
-3. If you still feel one: send LogOutput.log - any "Sound copy built during a cast" line names the sound.
+TEST v0.25.244 (Anchor)
+1. Install (extract the whole zip to an empty folder, INSTALL.bat). Log: all Aethelborn modules 0.25.244,
+   "Skill sounds warmed: N processed copies ready." after ~20 s idle.
+2. Whirlwind with a Therzie weapon: blades point outwards. Also check one vanilla sword/axe still looks right.
+3. First casts: no stutter.

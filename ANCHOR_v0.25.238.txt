@@ -1,5 +1,0 @@
-AETHELBORN ASCENDED — USER-CONFIRMED ANCHOR
-Version: v0.25.238 Warrior Bloodline Anchor
-Confirmed by user: 2026-10-20 ("Warrior bloodline is officially done"; this pass = the new anchor)
-Archive: Aethelborn_Ascended_v0.25.238_Warrior_Bloodline_Anchor.zip
-Replaces the v0.25.230 anchor. Future changes use separate passes and exact diffs against v0.25.238.

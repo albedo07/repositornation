@@ -1,0 +1,15 @@
+Aethelborn Ascended v0.25.244 - ANCHOR   (baseline v0.25.243)
+Contains everything since the v0.25.238 anchor: v239 Halfmoon GT + smooth HUD, v240 Twinkle GT + first casts,
+v241 Moonlight finisher fix, v242 sweet-spot volume, v243 first-cast sound fix. Your config file was NOT applied
+(you were still on v240 when it was made).
+
+NEW: weapon aiming for non-vanilla weapons (user: Therzie's weapons did not point outwards in Whirlwind)
+- Every skill pose that aims the held weapon (Whirlwind / Ascended Whirlwind spin, Circle Swing, other spins and swings)
+  finds the weapon's tip on the weapon's own long axis, using only the mesh in that hand. Before, it took the centre of
+  the whole item's bounding box: wrong for models built along another axis or with extra parts (a dual weapon's second
+  blade in the other hand, sheaths, trails), so the blade hung down.
+- Vanilla weapons: same result (tip on the blade axis); centrally held items (bows, staves) keep their vanilla angle.
+- If a model is unusual, the old rule is used as a fallback.
+Limit: a Therzie dual weapon is ONE item; its second blade is part of the model and moves with it as Therzie built it.
+No gameplay, sound or other VFX changes.
+CHECKS (static): all ten modules compile C# 5 against your real DLLs. NOT verified in game (I cannot see Therzie's models).
