@@ -120,7 +120,7 @@ namespace DragonsAltarCombat
         };
         private static readonly int[] CueSkills = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 11, 7, 10,
             12, 13, 13, 14, 15, 15, 15, 16, 16, 17, 17, 17, 18, 19, 19, 20, 20, 21, 21, 21, 22, 22, 22, 23, 23, 23, 24, 24, 25, 26, 1, 7, 15, 17, 12, 17, 1, 13, 14, 16, 19, 19, 20, 20, 21, 21, 21, 22, 22, 23, 23, 23, 25, 26, 14, 12, 13, 12, 13, 17, 16, 24 };
-        private static readonly float[] DefaultVolumes = { 108f, 115f, 130f, 300f, 200f, 300f, 100f, 200f, 200f, 300f, 300f, 200f, 107f, 115f, 78f, 120f, 107f, 84f, 135f, 69f, 108f, 108f, 75f, 88f, 110f, 120f, 134f };
+        private static readonly float[] DefaultVolumes = { 100f, 100f, 100f, 300f, 200f, 300f, 100f, 200f, 200f, 300f, 300f, 200f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f };
         // v222: Warrior, Sword Master and Circle Swing use the equal-loudness bank: 100% default, 300% max.
         private static readonly bool[] Rebalanced = { true, true, true, false, false, false, false, false, false, false, false, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true };
         private static readonly float[] PreviousFactoryVolumes = { 70f, 70f, 70f, 100f, 100f, 100f, 70f, 100f, 70f, 70f, 70f, 70f,
@@ -151,6 +151,8 @@ namespace DragonsAltarCombat
             _configReady = false;
             ConfigEntry<bool> migrated = config.Bind("Skill Audio", "FactoryVolumes300_v025221", false,
                 "Internal one-time migration of old factory sound levels. Custom levels and mute are preserved.");
+            ConfigEntry<bool> sweet = config.Bind("Skill Audio", "SweetSpot100_v025242", false,
+                "Internal one-time reset of the Warrior / Sword Master / Mercenary Skill Volumes to 100% (their level is now built in).");
             ConfigEntry<bool> matched = config.Bind("Skill Audio", "MatchedLoudness_v025238", false,
                 "Internal one-time move of the Warrior / Sword Master / Mercenary Skill Volumes to the matched-loudness defaults.");
             ConfigEntry<bool> v237 = config.Bind("Skill Audio", "StompStamp_v025237", false,
@@ -183,6 +185,7 @@ namespace DragonsAltarCombat
                 if (!raw.Value && Rebalanced[i]) SkillVolumes[i].Value = DefaultVolumes[i];
                 if (!merc.Value && SkillClasses[i] == "Mercenary") SkillVolumes[i].Value = DefaultVolumes[i];
                 if (!matched.Value && Rebalanced[i]) SkillVolumes[i].Value = DefaultVolumes[i];
+                if (!sweet.Value && Rebalanced[i]) SkillVolumes[i].Value = 100f;
             }
             string[] sections = { "Warrior Impact Wave Audio", "Warrior Impact Wave Audio", "Sorcerer Glacial Descent Audio", "Sorcerer Glacial Descent Audio", "Ranger Snare Trap Audio", "Ranger Snare Trap Audio", "Sword Master Crescent Cleave Audio", "Sword Master Crescent Cleave Audio", "Sword Master Frenzied Charge Audio", "Sword Master Frenzied Charge Audio", "Sword Master Frenzied Charge Audio", "Sword Master Eclipse Audio", "Sword Master Eclipse Audio", "Sword Master Halfmoon Slash Audio", "Sword Master Halfmoon Slash Audio", "Sword Master Halfmoon Slash Audio", "Mercenary Stomp Audio", "Mercenary Stomp Audio", "Mercenary Circle Swing Audio", "Mercenary Circle Swing Audio", "Mercenary Bonecrusher Audio", "Mercenary Bonecrusher Audio", "Mercenary Bonecrusher Audio", "Mercenary Punishing Bomb Audio", "Mercenary Punishing Bomb Audio", "Mercenary Punishing Bomb Audio", "Mercenary Seismic Guillotine Audio", "Mercenary Seismic Guillotine Audio", "Mercenary Seismic Guillotine Audio", "Mercenary Whirlwind Audio", "Mercenary Whirlwind Audio", "Warrior Impact Wave Audio", "Sorcerer Glacial Descent Audio", "Sword Master Frenzied Charge Audio", "Sword Master Halfmoon Slash Audio", "Sword Master Moonlight Splitter Audio", "Sword Master Halfmoon Slash Audio", "Sword Master Crescent Cleave Audio", "Sword Master Blade Storm Audio", "Sword Master Eclipse Audio", "Sword Master Blade Storm Audio", "Mercenary Stomp Audio", "Mercenary Stomp Audio", "Mercenary Circle Swing Audio", "Mercenary Circle Swing Audio", "Mercenary Bonecrusher Audio", "Mercenary Bonecrusher Audio", "Mercenary Bonecrusher Audio", "Mercenary Punishing Bomb Audio", "Mercenary Punishing Bomb Audio", "Mercenary Seismic Guillotine Audio", "Mercenary Seismic Guillotine Audio", "Mercenary Seismic Guillotine Audio", "Mercenary Battlecry Audio", "Mercenary Unchained Fury Audio", "Sword Master Blade Storm Audio", "Warrior Heavy Slash Audio", "Warrior Impact Punch Audio", "Cleric Lightning Zap Audio", "Cleric Righteous Strike Audio", "Cleric Holy Wave Audio", "Sorcerer Flame Burst Audio", "Sorcerer Stonefang Eruption Audio", "Ranger Piercing Arrow Audio", "Ranger Tumble Shot Audio", "Sword Master Moonlight Splitter Audio", "Sword Master Knights Guidance Audio", "Mercenary Battlecry Audio", "Mercenary Unchained Fury Audio", "Sword Master Moonlight Splitter Audio", "Sword Master Crescent Cleave Audio", "Sword Master Moonlight Splitter Audio", "Sword Master Crescent Cleave Audio", "Sword Master Halfmoon Slash Audio", "Sword Master Eclipse Audio", "Mercenary Whirlwind Audio" };
             string[] names = { "Wave Recording Volume (%)", "Weapon Swing Volume (%)", "Ice Formation Volume (%)", "Ice Landing Volume (%)", "Trap Placement Volume (%)", "Trap Trigger Volume (%)", "First Strike Volume (%)", "Ground Trail Volume (%)", "Dash Volume (%)", "Slash Barrage Volume (%)", "Pressure Eruptions Volume (%)", "Opening Sweep Volume (%)", "Slash Barrage Volume (%)", "Opening Sweep Volume (%)", "Slash Barrage Volume (%)", "Finisher Wind Volume (%)", "Stamp Volume (%)", "Aftershocks Volume (%)", "Sweeps Volume (%)", "Ascended Eruption Volume (%)", "Leap Volume (%)", "Landing Volume (%)", "Ascended Aftershock Volume (%)", "Throw Volume (%)", "Explosion Volume (%)", "Ascended Cluster Volume (%)", "Slam Volume (%)", "Traveling Cracks Volume (%)", "Final Eruptions Volume (%)", "Spinning Wind Volume (%)", "Ascended Final Sweep Volume (%)", "Ascended Aftershocks Volume (%)", "Ice Shatter Volume (%)", "Windup Volume (%)", "Windup Volume (%)", "Follow-up Cuts Volume (%)", "Bass Drop Volume (%)", "Fire Trail Volume (%)", "Slash Barrage Volume (%)", "Spiral Swing Volume (%)", "Bass Body Volume (%)", "Debris Rumble Volume (%)", "Aftershock Debris Volume (%)", "Wind Body Volume (%)", "Eruption Debris Volume (%)", "Landing Bass Volume (%)", "Landing Debris Volume (%)", "Aftershock Debris Volume (%)", "Blast Crack Volume (%)", "Blast Bass Volume (%)", "Slam Debris Volume (%)", "Final Bass Volume (%)", "Final Debris Volume (%)", "Bass Body Volume (%)", "Surge Volume (%)", "Storm Volume (%)", "Swing Volume (%)", "Punch Volume (%)", "Zap Volume (%)", "Strike Volume (%)", "Wave Volume (%)", "Flames Volume (%)", "Eruption Volume (%)", "Shot Volume (%)", "Shot Volume (%)", "Slash Volume (%)", "Buff Volume (%)", "Cry Volume (%)", "Buff Volume (%)", "Wind Volume (%)", "Second Strike Volume (%)", "Sword Slash Volume (%)", "Sword Slash Volume (%)", "Swing Volume (%)", "Launch Whoosh Volume (%)", "Tornado Volume (%)" };
@@ -231,7 +234,7 @@ namespace DragonsAltarCombat
                     }
                 }
             }
-            migrated.Value = true; rebalanced.Value = true; raw.Value = true; slashes.Value = true; entire.Value = true; barrage.Value = true; merc.Value = true; merc2.Value = true; v234.Value = true; v236.Value = true; v237.Value = true; matched.Value = true;
+            migrated.Value = true; rebalanced.Value = true; raw.Value = true; slashes.Value = true; entire.Value = true; barrage.Value = true; merc.Value = true; merc2.Value = true; v234.Value = true; v236.Value = true; v237.Value = true; matched.Value = true; sweet.Value = true;
             _configReady = true;
         }
         // v217: phase controls and bounded repeat rates, independent of target count/VFX.
@@ -243,7 +246,7 @@ namespace DragonsAltarCombat
         {
             int skill = CueSkills[cue]; ConfigEntry<float> entry = SkillVolumes[skill];
             float value = entry == null ? DefaultVolumes[skill] : entry.Value;
-            return float.IsNaN(value) || float.IsInfinity(value) ? 0f : Mathf.Clamp(value / 100f, 0f, 6f);
+            return float.IsNaN(value) || float.IsInfinity(value) ? 0f : Mathf.Clamp(value / 100f, 0f, 6f) * BuiltinGain(skill);   // v0.25.242
         }
         private static float LayerGain(int layer)
         {
@@ -578,13 +581,26 @@ namespace DragonsAltarCombat
         }
         // v227 (user: 300% must blow your ears off): above 100% each slider climbs as a square (200% = 4x, 300% = 9x);
         // skill x sound multiply. The boost is baked into the samples (Unity caps source volume at 1).
+        // v0.25.242 (user): "subtract 25 on the slider and that's our new 100%". Each Warrior / Sword Master / Mercenary skill keeps
+        // its matched level from v0.25.238 minus 25 slider points, built into the mod; its Skill Volume slider then reads 100%.
+        private static readonly float[] SweetSpotFrom = { 108f, 115f, 130f, 300f, 200f, 300f, 100f, 200f, 200f, 300f, 300f, 200f, 107f, 115f, 78f, 120f, 107f, 84f, 135f, 69f, 108f, 108f, 75f, 88f, 110f, 120f, 134f };
+        private static float[] _builtin;
+        private static float BuiltinGain(int skill)
+        {
+            if (_builtin == null)
+            {
+                _builtin = new float[SweetSpotFrom.Length];
+                for (int i = 0; i < _builtin.Length; i++) _builtin[i] = Rebalanced[i] ? Loud(SweetSpotFrom[i] - 25f) : 1f;
+            }
+            return skill >= 0 && skill < _builtin.Length ? _builtin[skill] : 1f;
+        }
         private static float Loud(float percent) { float v = Mathf.Max(0f, percent) / 100f; return v <= 1f ? v : v * v; }
         private static float RawGain(int cue, float balance)
         {
             int skill = CueSkills[cue], layer = CueLayers[cue];
             float sv = SkillVolumes[skill] == null ? DefaultVolumes[skill] : SkillVolumes[skill].Value;
             float lv = LayerVolumes[layer] == null ? DefaultLayers[layer] : LayerVolumes[layer].Value;
-            float g = Loud(sv) * Loud(lv) * balance;
+            float g = BuiltinGain(skill) * Loud(sv) * Loud(lv) * balance;
             return float.IsNaN(g) || float.IsInfinity(g) ? 0f : Mathf.Clamp(g, 0f, 81f);
         }
         private static AudioClip RawVariant(int cue, AudioClip clip, float gain)
@@ -1402,7 +1418,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.241";
+        public const string ModVersion = "0.25.242";
 
         internal static DragonCombatPlugin Instance;
 

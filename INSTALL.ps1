@@ -1,7 +1,7 @@
 ﻿$ErrorActionPreference = "Stop"
 
 Write-Host ""
-Write-Host "IMMORTAL HEROES v0.25.241 - MOONLIGHT FIX" -ForegroundColor Cyan
+Write-Host "IMMORTAL HEROES v0.25.242 - SWEET SPOT VOLUME" -ForegroundColor Cyan
 Write-Host "All 10 DLLs compile in staging before the live profile is touched." -ForegroundColor Gray
 Write-Host ""
 

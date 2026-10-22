@@ -1,4 +1,1 @@
-TEST v0.25.241
-1. Ascended Moonlight Splitter: watch a full cycle - the wide finisher wave appears only once at the end, not after each
-   afterimage. Twinkle on every GT.
-2. Log: "[Circle Swing] pre-learned 3/3 ..." and all Aethelborn modules show 0.25.241.
+TEST v0.25.242: nothing required (volume only). Skill Volume sliders for Warrior/Sword Master/Mercenary read 100%.

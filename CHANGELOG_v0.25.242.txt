@@ -1,0 +1,16 @@
+Aethelborn Ascended v0.25.242 - Sweet Spot Volume   (baseline v0.25.241; Anchor stays v0.25.238)
+User: "subtract 25 on the slider and that's our new 100%" - built into the mod, sliders read 100%.
+
+Every Warrior / Sword Master / Mercenary skill: its v0.25.238 matched level minus 25 slider points is now built in (not a
+slider), and its Skill Volume slider is reset once to 100% (= that new default). About 3 dB quieter than before:
+  Warrior:      Heavy Slash 108->83 | Impact Wave 115->90 | Impact Punch 130->105
+  Sword Master: Moonlight Splitter 107->82 | Crescent Cleave 115->90 | Blade Storm 78->53 | Frenzied Charge 120->95 |
+                Eclipse 107->82 | Halfmoon Slash 84->59 | Knights Guidance 135->110
+  Mercenary:    Stomp 69->44 | Circle Swing 108->83 | Bonecrusher 108->83 | Punishing Bomb 75->50 |
+                Seismic Guillotine 88->63 | Whirlwind 110->85 | Unchained Fury 134->109 | Battlecry 120->95
+  (numbers = old slider value -> built-in level in slider points; Normal and Ascended share them)
+Unchanged: every component/layer slider (windups, Twinkle, Tornado, slashes...) keeps its relative balance, so held sounds
+stay softer than hits; distance fade unchanged (full within 6 m, then fades with distance - a GT 30 m away plays at
+about 20% - silent by 90 m); pitch/speed/bass/sync; Cleric, Sorcerer and Ranger untouched; no gameplay/VFX changes.
+Slider range is unchanged, so you can still go louder or quieter per skill.
+CHECKS (static): all ten modules compile C# 5 against your real DLLs. Not listened to in game (as agreed).
