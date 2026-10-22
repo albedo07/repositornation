@@ -1,5 +1,4 @@
-TEST v0.25.244 (Anchor)
-1. Install (extract the whole zip to an empty folder, INSTALL.bat). Log: all Aethelborn modules 0.25.244,
-   "Skill sounds warmed: N processed copies ready." after ~20 s idle.
-2. Whirlwind with a Therzie weapon: blades point outwards. Also check one vanilla sword/axe still looks right.
-3. First casts: no stutter.
+v0.25.245 - test:
+1. Whirlwind with a Therzie 2H, a 1H, and dual wield: standing and moving - arms out front, weapon pointing out, same both ways.
+2. Sprint/drain stamina: no blinking line on the bar; no see-through parts in the HUD frame (check all four HUD families).
+3. F8 Audio: the listed sliders show 100% (volumes) / your values; skills sound like your tuned cfg.

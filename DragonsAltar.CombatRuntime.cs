@@ -131,13 +131,13 @@ namespace DragonsAltarCombat
         private static readonly ConfigEntry<float>[] LayerLength = new ConfigEntry<float>[76], LayerPitch = new ConfigEntry<float>[76],
             LayerSpeed = new ConfigEntry<float>[76], LayerBass = new ConfigEntry<float>[76];
         // v0.25.230 hit markers: where in the recording its hit is (ms); the sound is started so that point lands on the skill's hit.
-        private static readonly float[] DefaultMarker = { 650f, 620f, 0f, 0f, 0f, 0f, 620f, 0f, 950f, 370f, 700f, 620f, 370f, 0f, 370f, 0f, 30f, 380f, 400f, 380f, 470f, 810f, 380f, 600f, 30f, 700f, 810f, 700f, 380f, 430f, 620f, 700f, 0f, 950f, 470f, 400f, 380f, 0f, 0f, 620f, 380f, 0f, 0f, 950f, 0f, 380f, 0f, 0f, 700f, 380f, 0f, 380f, 0f, 380f, 470f, 260f, 400f, 810f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 400f, 0f, 0f, 0f, 0f, 400f, 370f, 370f, 400f, 470f, 0f };
+        private static readonly float[] DefaultMarker = { 650f, 620f, 0f, 0f, 0f, 0f, 620f, 0f, 950f, 370f, 700f, 620f, 370f, 0f, 370f, 0f, 30f, 380f, 400f, 380f, 470f, 810f, 380f, 600f, 30f, 700f, 810f, 700f, 380f, 430f, 620f, 700f, 0f, 950f, 470f, 400f, 380f, 0f, 0f, 620f, 380f, 0f, 0f, 950f, 0f, 380f, 0f, 0f, 700f, 380f, 0f, 380f, 0f, 380f, 470f, 260f, 500f, 810f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 400f, 0f, 0f, 0f, 0f, 400f, 370f, 370f, 400f, 470f, 0f };
         // v0.25.231: the user's own tuning is the default (F8 DEFAULT returns to it).
-        private static readonly float[] DefaultPitch = { 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 50f, 120f, 100f, 100f, 120f, 100f, 120f, 100f, 88f, 85f, 100f, 90f, 115f, 75f, 75f, 110f, 95f, 115f, 70f, 135f, 85f, 105f, 85f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 90f, 100f, 100f, 100f, 80f, 70f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 75f, 100f, 70f, 60f, 100f, 100f, 100f, 80f, 90f, 130f, 100f }, DefaultSpeed = { 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 50f, 100f, 100f, 50f, 100f, 50f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 130f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 50f, 100f, 100f, 100f, 100f }, DefaultBass = { 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 120f, 120f, 100f, 130f, 100f, 140f, 150f, 100f, 100f, 100f, 140f, 100f, 130f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f }, DefaultSync = { 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, -400f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, -400f, -1000f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f };
+        private static readonly float[] DefaultPitch = { 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 50f, 120f, 100f, 100f, 120f, 100f, 120f, 100f, 88f, 85f, 100f, 90f, 115f, 75f, 75f, 110f, 95f, 115f, 70f, 135f, 85f, 130f, 85f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 150f, 100f, 80f, 100f, 100f, 100f, 90f, 100f, 100f, 100f, 80f, 70f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 75f, 100f, 70f, 60f, 150f, 100f, 100f, 80f, 90f, 130f, 100f }, DefaultSpeed = { 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 50f, 100f, 100f, 50f, 100f, 50f, 100f, 100f, 100f, 90f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 130f, 100f, 100f, 100f, 100f, 100f, 90f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 120f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 50f, 100f, 100f, 100f, 100f }, DefaultBass = { 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 60f, 100f, 100f, 130f, 100f, 140f, 150f, 100f, 100f, 100f, 140f, 100f, 130f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f }, DefaultSync = { 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, -300f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, -400f, -1000f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, -300f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f };
         private static readonly ConfigEntry<float>[] LayerMarker = new ConfigEntry<float>[76], LayerSync = new ConfigEntry<float>[76];
-        private static readonly float[] DefaultLength = { 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 35f, 100f, 100f, 40f, 100f, 100f, 100f, 100f, 100f, 100f, 40f, 100f, 35f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 3f, 3f, 60f, 2.5f, 50f, 5f, 4f, 100f, 50f, 5f, 50f, 5f, 60f, 50f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 45f, 100f };
+        private static readonly float[] DefaultLength = { 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 25f, 100f, 100f, 40f, 100f, 100f, 100f, 100f, 100f, 100f, 40f, 100f, 35f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 3f, 3f, 60f, 2.5f, 25f, 5f, 4f, 100f, 50f, 5f, 50f, 5f, 60f, 50f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 45f, 100f };
         private static readonly ConfigEntry<float>[] LayerVolumes = new ConfigEntry<float>[76];
-        private static readonly float[] DefaultLayers = { 100f, 100f, 50f, 200f, 200f, 200f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 200f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 80f, 100f, 50f, 100f, 100f, 100f, 100f, 300f, 100f, 200f, 100f, 100f, 100f, 100f, 100f, 100f, 70f, 55f, 70f, 60f, 80f, 70f, 60f, 70f, 90f, 70f, 80f, 70f, 70f, 70f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 120f, 100f, 200f, 100f, 30f, 70f, 100f, 80f, 100f };
+        private static readonly float[] DefaultLayers = { 100f, 100f, 50f, 200f, 200f, 200f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 200f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 80f, 100f, 50f, 100f, 100f, 100f, 100f, 300f, 100f, 200f, 100f, 100f, 100f, 100f, 100f, 100f, 70f, 55f, 100f, 60f, 100f, 70f, 60f, 70f, 90f, 70f, 80f, 70f, 70f, 70f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 120f, 100f, 100f, 100f, 30f, 70f, 100f, 80f, 100f };
         private static readonly bool[] RebalancedLayers = { true, true, false, false, false, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, false, false, false, false, false, false, true, true, true, true, true, true, true, true, true, true, true };
         private static readonly float[] PreviousFactoryLayers = { 100f, 100f, 40f, 100f, 100f, 100f,
             100f, 65f, 100f, 85f, 80f, 100f, 85f, 100f, 75f, 100f, 100f, 85f, 100f, 100f, 85f, 100f, 85f, 80f, 100f, 65f, 100f, 65f, 100f, 90f, 100f, 80f, 35f, 100f, 100f, 100f, 55f
@@ -145,12 +145,15 @@ namespace DragonsAltarCombat
         private static readonly List<AudioClip> RetiredClips = new List<AudioClip>();
         private static float _nextCollect;
 
+        private static readonly int[] UserDefaultLayers245 = { 8, 16, 17, 18, 20, 29, 33, 43, 45, 56, 69 };
         private static bool _configReady;
         public static void BindConfig(ConfigFile config)
         {
             _configReady = false;
             ConfigEntry<bool> migrated = config.Bind("Skill Audio", "FactoryVolumes300_v025221", false,
                 "Internal one-time migration of old factory sound levels. Custom levels and mute are preserved.");
+            ConfigEntry<bool> user245 = config.Bind("Skill Audio", "UserDefaults_v025245", false,
+                "Internal one-time reset of the sliders whose values became the v0.25.245 defaults.");
             ConfigEntry<bool> sweet = config.Bind("Skill Audio", "SweetSpot100_v025242", false,
                 "Internal one-time reset of the Warrior / Sword Master / Mercenary Skill Volumes to 100% (their level is now built in).");
             ConfigEntry<bool> matched = config.Bind("Skill Audio", "MatchedLoudness_v025238", false,
@@ -186,6 +189,7 @@ namespace DragonsAltarCombat
                 if (!merc.Value && SkillClasses[i] == "Mercenary") SkillVolumes[i].Value = DefaultVolumes[i];
                 if (!matched.Value && Rebalanced[i]) SkillVolumes[i].Value = DefaultVolumes[i];
                 if (!sweet.Value && Rebalanced[i]) SkillVolumes[i].Value = 100f;
+                if (!user245.Value && UserSkillGain[i] != 100f) SkillVolumes[i].Value = DefaultVolumes[i];
             }
             string[] sections = { "Warrior Impact Wave Audio", "Warrior Impact Wave Audio", "Sorcerer Glacial Descent Audio", "Sorcerer Glacial Descent Audio", "Ranger Snare Trap Audio", "Ranger Snare Trap Audio", "Sword Master Crescent Cleave Audio", "Sword Master Crescent Cleave Audio", "Sword Master Frenzied Charge Audio", "Sword Master Frenzied Charge Audio", "Sword Master Frenzied Charge Audio", "Sword Master Eclipse Audio", "Sword Master Eclipse Audio", "Sword Master Halfmoon Slash Audio", "Sword Master Halfmoon Slash Audio", "Sword Master Halfmoon Slash Audio", "Mercenary Stomp Audio", "Mercenary Stomp Audio", "Mercenary Circle Swing Audio", "Mercenary Circle Swing Audio", "Mercenary Bonecrusher Audio", "Mercenary Bonecrusher Audio", "Mercenary Bonecrusher Audio", "Mercenary Punishing Bomb Audio", "Mercenary Punishing Bomb Audio", "Mercenary Punishing Bomb Audio", "Mercenary Seismic Guillotine Audio", "Mercenary Seismic Guillotine Audio", "Mercenary Seismic Guillotine Audio", "Mercenary Whirlwind Audio", "Mercenary Whirlwind Audio", "Warrior Impact Wave Audio", "Sorcerer Glacial Descent Audio", "Sword Master Frenzied Charge Audio", "Sword Master Halfmoon Slash Audio", "Sword Master Moonlight Splitter Audio", "Sword Master Halfmoon Slash Audio", "Sword Master Crescent Cleave Audio", "Sword Master Blade Storm Audio", "Sword Master Eclipse Audio", "Sword Master Blade Storm Audio", "Mercenary Stomp Audio", "Mercenary Stomp Audio", "Mercenary Circle Swing Audio", "Mercenary Circle Swing Audio", "Mercenary Bonecrusher Audio", "Mercenary Bonecrusher Audio", "Mercenary Bonecrusher Audio", "Mercenary Punishing Bomb Audio", "Mercenary Punishing Bomb Audio", "Mercenary Seismic Guillotine Audio", "Mercenary Seismic Guillotine Audio", "Mercenary Seismic Guillotine Audio", "Mercenary Battlecry Audio", "Mercenary Unchained Fury Audio", "Sword Master Blade Storm Audio", "Warrior Heavy Slash Audio", "Warrior Impact Punch Audio", "Cleric Lightning Zap Audio", "Cleric Righteous Strike Audio", "Cleric Holy Wave Audio", "Sorcerer Flame Burst Audio", "Sorcerer Stonefang Eruption Audio", "Ranger Piercing Arrow Audio", "Ranger Tumble Shot Audio", "Sword Master Moonlight Splitter Audio", "Sword Master Knights Guidance Audio", "Mercenary Battlecry Audio", "Mercenary Unchained Fury Audio", "Sword Master Moonlight Splitter Audio", "Sword Master Crescent Cleave Audio", "Sword Master Moonlight Splitter Audio", "Sword Master Crescent Cleave Audio", "Sword Master Halfmoon Slash Audio", "Sword Master Eclipse Audio", "Mercenary Whirlwind Audio" };
             string[] names = { "Wave Recording Volume (%)", "Weapon Swing Volume (%)", "Ice Formation Volume (%)", "Ice Landing Volume (%)", "Trap Placement Volume (%)", "Trap Trigger Volume (%)", "First Strike Volume (%)", "Ground Trail Volume (%)", "Dash Volume (%)", "Slash Barrage Volume (%)", "Pressure Eruptions Volume (%)", "Opening Sweep Volume (%)", "Slash Barrage Volume (%)", "Opening Sweep Volume (%)", "Slash Barrage Volume (%)", "Finisher Wind Volume (%)", "Stamp Volume (%)", "Aftershocks Volume (%)", "Sweeps Volume (%)", "Ascended Eruption Volume (%)", "Leap Volume (%)", "Landing Volume (%)", "Ascended Aftershock Volume (%)", "Throw Volume (%)", "Explosion Volume (%)", "Ascended Cluster Volume (%)", "Slam Volume (%)", "Traveling Cracks Volume (%)", "Final Eruptions Volume (%)", "Spinning Wind Volume (%)", "Ascended Final Sweep Volume (%)", "Ascended Aftershocks Volume (%)", "Ice Shatter Volume (%)", "Windup Volume (%)", "Windup Volume (%)", "Follow-up Cuts Volume (%)", "Bass Drop Volume (%)", "Fire Trail Volume (%)", "Slash Barrage Volume (%)", "Spiral Swing Volume (%)", "Bass Body Volume (%)", "Debris Rumble Volume (%)", "Aftershock Debris Volume (%)", "Wind Body Volume (%)", "Eruption Debris Volume (%)", "Landing Bass Volume (%)", "Landing Debris Volume (%)", "Aftershock Debris Volume (%)", "Blast Crack Volume (%)", "Blast Bass Volume (%)", "Slam Debris Volume (%)", "Final Bass Volume (%)", "Final Debris Volume (%)", "Bass Body Volume (%)", "Surge Volume (%)", "Storm Volume (%)", "Swing Volume (%)", "Punch Volume (%)", "Zap Volume (%)", "Strike Volume (%)", "Wave Volume (%)", "Flames Volume (%)", "Eruption Volume (%)", "Shot Volume (%)", "Shot Volume (%)", "Slash Volume (%)", "Buff Volume (%)", "Cry Volume (%)", "Buff Volume (%)", "Wind Volume (%)", "Second Strike Volume (%)", "Sword Slash Volume (%)", "Sword Slash Volume (%)", "Swing Volume (%)", "Launch Whoosh Volume (%)", "Tornado Volume (%)" };
@@ -227,6 +231,11 @@ namespace DragonsAltarCombat
                         LayerVolumes[i].Value = DefaultLayers[i]; LayerLength[i].Value = DefaultLength[i]; LayerPitch[i].Value = DefaultPitch[i];
                         LayerSpeed[i].Value = DefaultSpeed[i]; LayerBass[i].Value = DefaultBass[i]; LayerMarker[i].Value = DefaultMarker[i]; LayerSync[i].Value = DefaultSync[i];
                     }
+                    if (!user245.Value && Array.IndexOf(UserDefaultLayers245, i) >= 0)
+                    {
+                        LayerVolumes[i].Value = DefaultLayers[i]; LayerLength[i].Value = DefaultLength[i]; LayerPitch[i].Value = DefaultPitch[i];
+                        LayerSpeed[i].Value = DefaultSpeed[i]; LayerBass[i].Value = DefaultBass[i]; LayerMarker[i].Value = DefaultMarker[i]; LayerSync[i].Value = DefaultSync[i];
+                    }
                     if (!merc.Value && sections[i].StartsWith("Mercenary"))
                     {
                         LayerVolumes[i].Value = DefaultLayers[i]; LayerLength[i].Value = DefaultLength[i]; LayerPitch[i].Value = DefaultPitch[i];
@@ -234,7 +243,7 @@ namespace DragonsAltarCombat
                     }
                 }
             }
-            migrated.Value = true; rebalanced.Value = true; raw.Value = true; slashes.Value = true; entire.Value = true; barrage.Value = true; merc.Value = true; merc2.Value = true; v234.Value = true; v236.Value = true; v237.Value = true; matched.Value = true; sweet.Value = true;
+            migrated.Value = true; rebalanced.Value = true; raw.Value = true; slashes.Value = true; entire.Value = true; barrage.Value = true; merc.Value = true; merc2.Value = true; v234.Value = true; v236.Value = true; v237.Value = true; matched.Value = true; sweet.Value = true; user245.Value = true;
             _configReady = true;
         }
         // v217: phase controls and bounded repeat rates, independent of target count/VFX.
@@ -253,7 +262,7 @@ namespace DragonsAltarCombat
             if (layer < 0) return 1f;
             ConfigEntry<float> entry = LayerVolumes[layer];
             float value = entry == null ? DefaultLayers[layer] : entry.Value;
-            return float.IsNaN(value) || float.IsInfinity(value) ? 0f : Mathf.Clamp(value / 100f, 0f, 6f);
+            return float.IsNaN(value) || float.IsInfinity(value) ? 0f : Mathf.Clamp(value / 100f, 0f, 6f) * Loud(UserLayerGain[layer]);
         }
         private static int EventLayer(DragonBaseSound cue) { return CueLayers[(int)cue]; }
         // Each slider allows 6x, so master and component can combine to 36x.
@@ -585,13 +594,16 @@ namespace DragonsAltarCombat
         // v0.25.242 (user): "subtract 25 on the slider and that's our new 100%". Each Warrior / Sword Master / Mercenary skill keeps
         // its matched level from v0.25.238 minus 25 slider points, built into the mod; its Skill Volume slider then reads 100%.
         private static readonly float[] SweetSpotFrom = { 108f, 115f, 130f, 300f, 200f, 300f, 100f, 200f, 200f, 300f, 300f, 200f, 107f, 115f, 78f, 120f, 107f, 84f, 135f, 69f, 108f, 108f, 75f, 88f, 110f, 120f, 134f };
+        // v0.25.245 (user cfg = defaults): the user's tuned Skill / sound volumes are built in; those sliders read 100%.
+        private static readonly float[] UserSkillGain = { 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 150f, 120f, 100f, 150f, 150f, 100f, 100f, 100f };
+        private static readonly float[] UserLayerGain = { 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 150f, 150f, 100f, 100f, 150f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 90f, 100f, 150f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 20f, 100f, 100f, 100f, 100f, 100f, 100f };
         private static float[] _builtin;
         private static float BuiltinGain(int skill)
         {
             if (_builtin == null)
             {
                 _builtin = new float[SweetSpotFrom.Length];
-                for (int i = 0; i < _builtin.Length; i++) _builtin[i] = Rebalanced[i] ? Loud(SweetSpotFrom[i] - 25f) : 1f;
+                for (int i = 0; i < _builtin.Length; i++) _builtin[i] = (Rebalanced[i] ? Loud(SweetSpotFrom[i] - 25f) : 1f) * Loud(UserSkillGain[i]);
             }
             return skill >= 0 && skill < _builtin.Length ? _builtin[skill] : 1f;
         }
@@ -601,7 +613,7 @@ namespace DragonsAltarCombat
             int skill = CueSkills[cue], layer = CueLayers[cue];
             float sv = SkillVolumes[skill] == null ? DefaultVolumes[skill] : SkillVolumes[skill].Value;
             float lv = LayerVolumes[layer] == null ? DefaultLayers[layer] : LayerVolumes[layer].Value;
-            float g = BuiltinGain(skill) * Loud(sv) * Loud(lv) * balance;
+            float g = BuiltinGain(skill) * Loud(sv) * Loud(lv) * Loud(UserLayerGain[layer]) * balance;
             return float.IsNaN(g) || float.IsInfinity(g) ? 0f : Mathf.Clamp(g, 0f, 81f);
         }
         // the loudness already baked into a processed copy (the same rounding RawVariant uses)
@@ -1433,7 +1445,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.244";
+        public const string ModVersion = "0.25.245";
 
         internal static DragonCombatPlugin Instance;
 
@@ -5879,6 +5891,7 @@ namespace DragonsAltarCombat
                 float w;
                 Transform fore = _animator.GetBoneTransform(foreBone);
                 Vector3 along = fore != null ? (hand.position - fore.position).normalized : Vector3.zero;
+                if (!right && _shieldL && weight > 0.01f) return;   // v0.25.245: shields stay as held
                 if (weight > 0.01f && dir.sqrMagnitude > 0.0001f)
                 {
                     // explicit direction, blended over the forearm rule
@@ -6305,7 +6318,7 @@ namespace DragonsAltarCombat
             {
                 float tq = Mathf.Max(0.18f, turn);
                 int tt = Mathf.Max(1, Mathf.CeilToInt(Mathf.Max(0.1f, seconds) / tq));
-                PlayClipKeys(player, SbSpin(tt, tq, true), 0.12f);
+                PlayClipKeys(player, SbSpinFront(tt, tq, SpinGrip(player)), 0.12f);   // v0.25.245
                 DragonVfx.WeaponWake(player, 0.12f, seconds);
                 return;
             }
@@ -7463,6 +7476,44 @@ namespace DragonsAltarCombat
             // v0.25.44 heavy atgeir sweep held through the turn: forward lean, low hips, both hands out at waist
             // height on the right, blade level and long, head turned into the spin.
             return Ft(K(t).Sp(14f, 8f, 0f).Ch(4f, 4f, 0f).Hd(-8f, -12f, 0f).Hand(0.75f, -0.32f, 0.5f, 1f).Wp(1f, -0.06f, 0.05f).Two(-0.35f).Off(0f, -0.14f, 0f), 0.28f, 0.16f);
+        }
+
+        // v0.25.245 (user: Whirlwind arms stretched out in front, every weapon pointing outwards, standing or moving):
+        // 0 = one-handed weapon(s): both arms reach forward at chest height, the right weapon points out to the right,
+        //     an off-hand weapon points out to the left (a shield is left as held);
+        // 1 = two-handed weapon: both hands on the grip in front, the weapon points out to the right.
+        // The pose sets spine, arms and weapon direction fully (no deep lean), so walking does not drag the arms back.
+        private static int SpinGrip(Player player)
+        {
+            try
+            {
+                ItemDrop.ItemData right = player.GetCurrentWeapon();
+                if (right != null && right.m_shared != null && right.m_shared.m_itemType == ItemDrop.ItemData.ItemType.TwoHandedWeapon) return 1;
+            }
+            catch (Exception) { }
+            return 0;
+        }
+        private static DragonClipKey SbFrontPose(float t, int grip)
+        {
+            DragonClipKey k = K(t).Sp(4f, 0f, 0f).Ch(2f, 0f, 0f).Hd(-4f, 0f, 0f);
+            if (grip == 1) k = k.Hand(0.28f, -0.12f, 0.62f, 1f).Wp(1f, -0.04f, 0.45f).Two(-0.3f);
+            else k = k.Hand(0.32f, -0.06f, 0.6f, 1f).Wp(1f, -0.04f, 0.35f).LHand(-0.32f, -0.06f, 0.6f, 1f).Oi(-1f, -0.04f, 0.35f);
+            return Ft(k.Off(0f, -0.06f, 0f), 0.18f, 0.1f);
+        }
+        private static DragonClipKey[] SbSpinFront(int turns, float turn, int grip)
+        {
+            List<DragonClipKey> k = new List<DragonClipKey>();
+            k.Add(K(-1f));
+            k.Add(SbFrontPose(-0.5f, grip));
+            k.Add(SbFrontPose(0f, grip));
+            float t = 0f, yaw = 0f, q = turn * 0.25f;
+            for (int i = 0; i < turns * 4; i++)
+            {
+                t += q; yaw += 90f;
+                k.Add(SbFrontPose(t, grip).Rot(0f, yaw, 0f).Linear());
+            }
+            k.Add(K(t + 0.35f).Rot(0f, yaw, 0f));
+            return k.ToArray();
         }
 
         private static DragonClipKey[] SbSpin(int turns, float turn)

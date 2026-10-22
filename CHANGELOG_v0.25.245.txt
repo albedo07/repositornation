@@ -1,0 +1,28 @@
+Aethelborn Ascended v0.25.245 - Whirlwind, HUD and Sound Defaults   (base: Anchor v0.25.244)
+
+WHIRLWIND (Mercenary; Normal and Ascended - both use the same spin)
+- New spin pose: both arms stretched out in front, weapon(s) pointing outwards from the body.
+  Two-handed weapon: both hands on the grip, blade forward. One-handed / dual: each hand forward-out, each weapon pointing out.
+- The same pose is used standing still and while moving (one pose, no lean switch). Shields are never turned.
+- Damage, timing, radius, VFX unchanged.
+
+CORE STATS HUD (all classes: Warrior/Sword Master/Mercenary, Cleric/Paladin/Priest, Sorcerer family, Ranger family)
+- No transparent areas: every see-through hole inside the frame art is filled opaque with the dark backing at load
+  (outer silhouette edges keep their smoothing). Your HUD PNG files are not modified.
+- Stamina (and all bars): the blinking line was a sub-pixel seam between the bar's 3 pieces; pieces now snap to whole pixels and overlap 1 px.
+
+SOUND DEFAULTS (your cfg = new default; F8 DEFAULT returns to these; volume sliders read 100%)
+- Circle Swing: skill volume 120 built in; Sweeps speed 90; Wind Body volume 90 built in, pitch 150, speed 120, sync -300 ms.
+- Bonecrusher: Leap volume 150 built in; Landing Bass volume 150 built in, length 25, pitch 80.
+- Punishing Bomb: skill volume 150 built in.
+- Seismic Guillotine: skill volume 150 built in.
+- Stomp: skill volume 150 built in; Stamp volume 150 built in, bass 60; Aftershocks volume 150 built in, length 25, bass 100.
+- Whirlwind: Spinning Wind pitch 130.
+- Frenzied Charge (Normal/Ascended): Dash sync -300 ms; Windup speed 90.
+- Moonlight Splitter (Normal/Ascended): Wind volume 20 built in, pitch 150.
+- Heavy Slash (Normal/Ascended): Swing hit marker 500 ms.
+- One-time reset (UserDefaults_v025245) puts exactly those sliders on the new defaults. Nothing else in the cfg changed sound.
+- Non-audio entries in the cfg were not applied (gameplay/HUD positions stay yours in your own cfg).
+
+CHECKS
+- All ten modules compile (C# 5) against your real Valheim/BepInEx/Jotunn DLLs. Not tested in game.

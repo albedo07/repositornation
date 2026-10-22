@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.244";
+        public const string ModVersion = "0.25.245";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -16845,8 +16845,50 @@ namespace AlbedosCustomClassesAdvanced
         // v216: opaque panel interiors; decorative exterior cutouts stay transparent.
         // Coordinates are source-art pixels, X right / Y down, before color compensation.
         // Existing names use Wizard=Archmage and Spellcaster=Horizon Walker.
+        // v0.25.245 (user: no transparency in any core stats HUD; Cleric's frame is the model): pixels that are see-through but
+        // enclosed by the frame (not reachable from the image border through transparent pixels) are made opaque over a dark
+        // backing. The exterior cutouts that shape the frame, and their soft edges, stay as painted. Works for every frame.
+        private static void IhFillEnclosedHoles(Texture2D texture)
+        {
+            int w = texture.width, h = texture.height;
+            if (w <= 2 || h <= 2 || w * h > 4096 * 4096) return;
+            Color32[] px = texture.GetPixels32();
+            bool[] outside = new bool[px.Length];
+            int[] queue = new int[px.Length]; int head = 0, tail = 0;   // each pixel is queued at most once
+            for (int i = 0; i < px.Length; i++)
+            {
+                int cx = i % w, cy = i / w;
+                if ((cx == 0 || cy == 0 || cx == w - 1 || cy == h - 1) && px[i].a < 128) { outside[i] = true; queue[tail++] = i; }
+            }
+            while (head < tail)
+            {
+                int i = queue[head++];
+                int cx = i % w, cy = i / w;
+                int n;
+                n = i - 1; if (cx > 0 && !outside[n] && px[n].a < 128) { outside[n] = true; queue[tail++] = n; }
+                n = i + 1; if (cx < w - 1 && !outside[n] && px[n].a < 128) { outside[n] = true; queue[tail++] = n; }
+                n = i - w; if (cy > 0 && !outside[n] && px[n].a < 128) { outside[n] = true; queue[tail++] = n; }
+                n = i + w; if (cy < h - 1 && !outside[n] && px[n].a < 128) { outside[n] = true; queue[tail++] = n; }
+            }
+            Color32 backing = new Color32(16, 15, 16, 255);
+            int changed = 0;
+            for (int i = 0; i < px.Length; i++)
+            {
+                Color32 c = px[i];
+                if (c.a == 255 || outside[i]) continue;
+                int cx = i % w, cy = i / w;
+                bool edge = (cx > 0 && outside[i - 1]) || (cx < w - 1 && outside[i + 1]) || (cy > 0 && outside[i - w]) || (cy < h - 1 && outside[i + w]);
+                if (edge) continue;   // the soft rim of an exterior cutout keeps its anti-aliasing
+                int a = c.a, inv = 255 - a;
+                px[i] = new Color32((byte)((c.r * a + backing.r * inv + 127) / 255), (byte)((c.g * a + backing.g * inv + 127) / 255), (byte)((c.b * a + backing.b * inv + 127) / 255), 255);
+                changed++;
+            }
+            if (changed > 0) { texture.SetPixels32(px); texture.Apply(false, false); }
+        }
+
         private static void IhSolidHudBacking(Texture2D texture, string fileName)
         {
+            if (texture != null && fileName != null && fileName.StartsWith("HUD_Frame_", StringComparison.Ordinal)) IhFillEnclosedHoles(texture);
             bool sorcerer = fileName == "HUD_Frame_Sorcerer.png" || fileName == "HUD_Frame_Wizard.png" || fileName == "HUD_Frame_Spellcaster.png";
             bool ranger = fileName == "HUD_Frame_Ranger.png" || fileName == "HUD_Frame_Acrobat.png" || fileName == "HUD_Frame_Bowmaster.png";
             if (texture == null || (!sorcerer && !ranger)) return;
@@ -16942,11 +16984,14 @@ namespace AlbedosCustomClassesAdvanced
             if (len < 2f) return;
             float tw = tex.width, th = tex.height;
             float cap = Mathf.Min(th * 1.1f, tw / 3f, len * 0.5f);
-            float x = panel.x + l.BarX[i] * k, y = panel.y + l.BarY[i] * k, h = l.BarH[i] * k;
-            GUI.DrawTextureWithTexCoords(new Rect(x, y, cap * k, h), tex, new Rect(0f, 0f, cap / tw, 1f));
+            // v0.25.245 (user: a line blinked in the Stamina bar while it moved): the three slices were placed at fractional
+            // pixels, so a 1 px gap between them opened and closed as the value changed. Whole pixels + 1 px overlap now.
+            float x = panel.x + l.BarX[i] * k, y = Mathf.Round(panel.y + l.BarY[i] * k), h = Mathf.Round(l.BarH[i] * k);
+            float x0 = Mathf.Round(x), x1 = Mathf.Round(x + cap * k), x3 = Mathf.Round(x + len * k), x2 = Mathf.Max(x1, Mathf.Round(x + (len - cap) * k));
+            GUI.DrawTextureWithTexCoords(new Rect(x0, y, Mathf.Max(1f, x1 - x0 + 1f), h), tex, new Rect(0f, 0f, cap / tw, 1f));
             float mid = len - 2f * cap;
-            if (mid > 0f) GUI.DrawTextureWithTexCoords(new Rect(x + cap * k, y, mid * k, h), tex, new Rect(cap / tw, 0f, (tw - 2f * cap) / tw, 1f));
-            GUI.DrawTextureWithTexCoords(new Rect(x + (len - cap) * k, y, cap * k, h), tex, new Rect((tw - cap) / tw, 0f, cap / tw, 1f));
+            if (mid > 0f && x2 > x1) GUI.DrawTextureWithTexCoords(new Rect(x1, y, x2 - x1 + 1f, h), tex, new Rect(cap / tw, 0f, (tw - 2f * cap) / tw, 1f));
+            GUI.DrawTextureWithTexCoords(new Rect(x2, y, Mathf.Max(1f, x3 - x2), h), tex, new Rect((tw - cap) / tw, 0f, cap / tw, 1f));
         }
 
         private readonly int[] _hudCur209 = new int[4], _hudMax209 = new int[4];
