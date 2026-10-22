@@ -1,7 +1,7 @@
 ﻿$ErrorActionPreference = "Stop"
 
 Write-Host ""
-Write-Host "IMMORTAL HEROES v0.25.247 - WHIRLWIND FORWARD HOLD" -ForegroundColor Cyan
+Write-Host "IMMORTAL HEROES v0.25.248 - UNIVERSAL BLADE DIRECTION" -ForegroundColor Cyan
 Write-Host "All 10 DLLs compile in staging before the live profile is touched." -ForegroundColor Gray
 Write-Host ""
 

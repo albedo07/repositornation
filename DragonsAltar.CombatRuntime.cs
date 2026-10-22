@@ -1445,7 +1445,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.247";
+        public const string ModVersion = "0.25.248";
 
         internal static DragonCombatPlugin Instance;
 
@@ -5814,6 +5814,43 @@ namespace DragonsAltarCombat
             for (int i = 0; i < 8; i++) if ((c[i] - from).magnitude >= max * 0.85f) { sum += c[i]; n++; }
             return n > 0 ? sum / n : b.center;
         }
+        // v0.25.248 (user: two universals, vanilla and Therzie): every weapon model is fitted to Valheim's hand the same way, so a
+        // blade's direction in the hand is the same for all weapons. Vanilla weapons measure it reliably; it is learned from them
+        // (and remembered between sessions) and given to Therzie (_TW) weapons, whose meshes measure wrongly. Their length is kept.
+        private static Vector3 _bladeAxis;
+        private static bool _bladeAxisLoaded;
+        private static Vector3 UniversalTip(GameObject item, Vector3 tip)
+        {
+            try
+            {
+                if (!_bladeAxisLoaded)
+                {
+                    _bladeAxisLoaded = true;
+                    string saved = PlayerPrefs.GetString("AA_BladeAxis_v025248", "");
+                    string[] p = saved.Split(',');
+                    float x, y, z;
+                    if (p.Length == 3 && float.TryParse(p[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out x)
+                        && float.TryParse(p[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out y)
+                        && float.TryParse(p[2], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out z))
+                        _bladeAxis = new Vector3(x, y, z).normalized;
+                }
+                string n = item.name;
+                bool therzie = n.IndexOf("_TW", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("TW_", StringComparison.OrdinalIgnoreCase) >= 0;
+                if (!therzie)
+                {
+                    Vector3 d = tip.normalized;
+                    _bladeAxis = _bladeAxis == Vector3.zero ? d : (_bladeAxis * 0.7f + d * 0.3f).normalized;
+                    PlayerPrefs.SetString("AA_BladeAxis_v025248", _bladeAxis.x.ToString("R", System.Globalization.CultureInfo.InvariantCulture) + "," +
+                        _bladeAxis.y.ToString("R", System.Globalization.CultureInfo.InvariantCulture) + "," + _bladeAxis.z.ToString("R", System.Globalization.CultureInfo.InvariantCulture));
+                    return tip;
+                }
+                if (_bladeAxis == Vector3.zero) { Debug.Log("[Aethelborn] Weapon tip: equip a vanilla weapon once so Therzie weapons can learn the blade direction."); return tip; }
+                Vector3 u = _bladeAxis * tip.magnitude;
+                Debug.Log("[Aethelborn] Weapon tip " + n + ": universal blade direction " + u.ToString("F2") + " (measured " + tip.ToString("F2") + ")");
+                return u;
+            }
+            catch (Exception) { return tip; }
+        }
         private static readonly HashSet<string> TipLogged = new HashSet<string>();
         private static void LogTip(GameObject item, Renderer r, Vector3 tip)
         {
@@ -5908,6 +5945,7 @@ namespace DragonsAltarCombat
                 {
                     Vector3 tip;
                     bool ok = ItemTip(item, hand, out tip);
+                    if (ok && right) tip = UniversalTip(item, tip);   // main hand only (hand axes differ per side; shields are left)
                     if (right) { _tipIdR = id; _tipR = ok ? tip : Vector3.zero; }
                     else { _tipIdL = id; _tipL = ok ? tip : Vector3.zero; _shieldL = item.name.ToLowerInvariant().Contains("shield"); }
                 }
