@@ -1,0 +1,20 @@
+Aethelborn Ascended v0.25.251 - Wrist Aim   (base: v0.25.250; Anchor v0.25.244)
+
+WHAT YOUR v0.25.250 LOG SHOWED
+- Arms: "hand-shoulder 0.56 m of arm 0.58 m" - the arms ARE stretched out. The hands looked odd because v0.25.250 turned
+  the weapon around a fist that stayed still.
+- Therzie dual weapons (e.g. DualSwordScimitar_TW) are "attach_skin" items: their blades are skinned onto your hand bones,
+  so turning the weapon object did nothing (tip measured "none").
+
+WHIRLWIND CA (Normal and Ascended)
+- The wrist now turns instead of the weapon object: each hand bone rotates so the weapon's true tip (farthest model
+  point from that hand) points straight ahead, level. The fist follows the blade (no more odd hands), and skinned
+  Therzie blades move with the hand.
+- Therzie dual models holding two blades: each blade is measured from its own hand (points nearer the other hand belong
+  to the other blade), so both point ahead.
+- Shields, torches and bows are left as held. Runs last every frame, only during Whirlwind.
+- Log: "Whirlwind blade: <item> right tip ... left tip ... via ... (N points)" and once per spin
+  "Whirlwind arm: ... blade off straight-ahead X deg" (0 = exactly ahead).
+- No damage, timing, VFX or sound change.
+
+CHECKS: all ten modules compile (C# 5) against your real DLLs. Not tested in game.

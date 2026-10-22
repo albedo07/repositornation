@@ -41,7 +41,7 @@ namespace AlbedosCustomClasses
     {
         public const string ModGuid = "albedo.customclasses";
         public const string ModName = "Aethelborn Ascended - Altar";
-        public const string ModVersion = "0.25.250";
+        public const string ModVersion = "0.25.251";
 
         internal const string ClassDataKey = "AlbedoCustomClasses.Class";
         internal const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
