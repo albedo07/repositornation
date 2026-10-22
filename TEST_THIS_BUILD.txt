@@ -1,2 +1,2 @@
-v0.25.249 - Whirlwind with Therzie and vanilla weapons, standing and moving: blade flat, pointing straight ahead.
-If not, send LogOutput.log ("Weapon tip" lines).
+v0.25.250 - cast Whirlwind (Normal and Ascended) with a Therzie weapon and a vanilla weapon.
+Blades should point straight ahead, level. Send LogOutput.log either way ("Whirlwind blade" / "Whirlwind arm" lines).

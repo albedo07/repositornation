@@ -1,0 +1,18 @@
+Aethelborn Ascended v0.25.250 - Blade Forward   (base: v0.25.249; Anchor v0.25.244)
+
+WHY v0.25.246-249 CHANGED NOTHING
+- Your log has no "Weapon tip" line at all: the hand-aiming step that those passes kept fixing never measured a weapon
+  during Whirlwind, so none of those fixes could run.
+
+WHIRLWIND CA (Normal and Ascended) - new approach
+- A new step runs LAST every frame (after the game's animation, the skill animation and the arm guard) and turns the
+  held weapon itself: the point of the weapon farthest from its grip is put straight ahead of the body, level.
+  It does not depend on the arms or the hand aiming. Main hand and off-hand weapons both; shields/torches/bows left as held.
+- The tip is found from the weapon's actual model points (Therzie skinned models included); if a model cannot be read,
+  from its model box. Measured once per equipped weapon.
+- The weapons' normal rotation is restored the moment the spin ends.
+- Log (always written): "[Aethelborn] Whirlwind blade: <item> (right/left hand) tip ... via vertices|mesh box"
+  and once per spin "[Aethelborn] Whirlwind arm: hand-shoulder X m of arm Y m; clip driver playing/NOT playing".
+- No damage, timing, VFX or sound change.
+
+CHECKS: all ten modules compile (C# 5) against your real DLLs. Not tested in game.

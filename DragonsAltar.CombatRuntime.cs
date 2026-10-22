@@ -1445,7 +1445,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.249";
+        public const string ModVersion = "0.25.250";
 
         internal static DragonCombatPlugin Instance;
 
@@ -6448,6 +6448,7 @@ namespace DragonsAltarCombat
                 float tq = Mathf.Max(0.18f, turn);
                 int tt = Mathf.Max(1, Mathf.CeilToInt(Mathf.Max(0.1f, seconds) / tq));
                 PlayClipKeys(player, SbSpinFront(tt, tq, SpinGrip(player)), 0.12f);   // v0.25.245
+                DragonBladeForward.Run(player, Mathf.Max(0.1f, seconds) + 0.3f);   // v0.25.250
                 DragonVfx.WeaponWake(player, 0.12f, seconds);
                 return;
             }
@@ -9304,7 +9305,7 @@ namespace DragonsAltarCombat
             DragonCombatPlugin.Instance.StartCoroutine(BodyMotionRoutine(player, preset, Mathf.Max(0.1f, duration)));
         }
 
-        private static Transform BodyVisual(Player player)
+        internal static Transform BodyVisual(Player player)
         {
             for (Type t = player.GetType(); t != null; t = t.BaseType)
             {
@@ -14359,6 +14360,148 @@ namespace DragonsAltarCombat
     // is an elliptic cylinder from the hips to the neck, sized from the shoulder width. Any elbow / mid
     // upper arm sample inside it turns the upper arm so it sits on the surface; any hand / mid forearm
     // sample inside turns the forearm about the elbow. Joint twist limits come from the Humanoid avatar.
+    // v0.25.250 (user: Whirlwind blades still pointed up after three passes; the log showed the hand-aim step never measured a
+    // weapon): runs LAST, after the Animator, Mixamo, the clip driver and the arm guard, and turns the held weapon objects
+    // themselves so the point of each weapon farthest from its grip lies straight ahead of the body, level. It does not
+    // depend on the arm pose or on hand aiming. The weapons' own rotation is restored when the spin ends.
+    [DefaultExecutionOrder(32500)]
+    public class DragonBladeForward : MonoBehaviour
+    {
+        private Player _player;
+        private float _until;
+        private static FieldInfo _fR, _fL;
+        private Transform _itemR, _itemL;
+        private Quaternion _baseR, _baseL;
+        private Vector3 _tipR, _tipL;
+        private bool _loggedArm;
+        private float _start;
+
+        public static void Run(Player player, float seconds)
+        {
+            if (player == null) return;
+            DragonBladeForward b = player.GetComponent<DragonBladeForward>();
+            if (b == null) b = player.gameObject.AddComponent<DragonBladeForward>();
+            b._player = player; b._until = Time.time + seconds; b._start = Time.time; b._loggedArm = false; b.enabled = true;
+        }
+
+        private GameObject Item(bool right)
+        {
+            VisEquipment vis = _player.GetComponent<VisEquipment>();
+            if (vis == null) return null;
+            BindingFlags f = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            if (_fR == null) _fR = typeof(VisEquipment).GetField("m_rightItemInstance", f);
+            if (_fL == null) _fL = typeof(VisEquipment).GetField("m_leftItemInstance", f);
+            FieldInfo fi = right ? _fR : _fL;
+            return fi == null ? null : fi.GetValue(vis) as GameObject;
+        }
+
+        // The point of the weapon farthest from its grip (the item's own origin), in the item's local space.
+        private static bool MeasureTip(Transform item, out Vector3 tipLocal, out string how)
+        {
+            tipLocal = Vector3.zero; how = "none";
+            float best = 0f; int verts = 0, boxes = 0;
+            Renderer[] rs = item.GetComponentsInChildren<Renderer>(true);
+            Vector3 grip = item.position;
+            for (int i = 0; i < rs.Length; i++)
+            {
+                Renderer r = rs[i];
+                if (r == null || r is ParticleSystemRenderer || r is TrailRenderer || r is LineRenderer) continue;
+                if (r.bounds.SqrDistance(grip) > 0.35f * 0.35f) continue;   // a second blade held in the other hand is not this weapon
+                Vector3[] v = null;
+                SkinnedMeshRenderer smr = r as SkinnedMeshRenderer;
+                MeshFilter mf = smr == null ? r.GetComponent<MeshFilter>() : null;
+                Mesh mesh = smr != null ? smr.sharedMesh : (mf != null ? mf.sharedMesh : null);
+                try
+                {
+                    if (smr != null) { Mesh baked = new Mesh(); smr.BakeMesh(baked); v = baked.vertices; UnityEngine.Object.Destroy(baked); }
+                    else if (mesh != null && mesh.isReadable) v = mesh.vertices;
+                }
+                catch (Exception) { v = null; }
+                Matrix4x4 m = item.worldToLocalMatrix * r.transform.localToWorldMatrix;
+                if (v != null && v.Length > 0)
+                {
+                    verts++;
+                    for (int j = 0; j < v.Length; j++)
+                    {
+                        Vector3 p = m.MultiplyPoint3x4(v[j]);
+                        float d = p.sqrMagnitude;
+                        if (d > best) { best = d; tipLocal = p; }
+                    }
+                }
+                else if (mesh != null)
+                {
+                    boxes++;
+                    Bounds b = mesh.bounds;
+                    for (int k = 0; k < 8; k++)
+                    {
+                        Vector3 c = b.center + Vector3.Scale(b.extents, new Vector3((k & 1) == 0 ? -1f : 1f, (k & 2) == 0 ? -1f : 1f, (k & 4) == 0 ? -1f : 1f));
+                        Vector3 p = m.MultiplyPoint3x4(c);
+                        float d = p.sqrMagnitude;
+                        if (d > best) { best = d; tipLocal = p; }
+                    }
+                }
+            }
+            how = verts > 0 ? "vertices" : (boxes > 0 ? "mesh box" : "none");
+            return best > 0.0001f;
+        }
+
+        private void Track(bool right, ref Transform item, ref Quaternion baseRot, ref Vector3 tip)
+        {
+            GameObject go = Item(right);
+            Transform t = go != null ? go.transform : null;
+            if (t != item)
+            {
+                if (item != null) item.localRotation = baseRot;
+                item = t; tip = Vector3.zero;
+                if (t == null) return;
+                baseRot = t.localRotation;
+                string n = t.name.ToLowerInvariant();
+                if (n.Contains("shield") || n.Contains("buckler") || n.Contains("torch") || n.Contains("bow")) { tip = Vector3.zero; Debug.Log("[Aethelborn] Whirlwind blade: " + t.name + " left as held"); return; }
+                string how; Vector3 tl;
+                if (MeasureTip(t, out tl, out how)) tip = tl;
+                Debug.Log("[Aethelborn] Whirlwind blade: " + t.name + " (" + (right ? "right" : "left") + " hand) tip " + tip.ToString("F3") + " via " + how);
+            }
+            if (item == null || tip == Vector3.zero) return;
+            Transform body = DragonCombat.BodyVisual(_player);
+            Vector3 want = (body != null ? body : _player.transform).forward; want.y = 0f;
+            if (want.sqrMagnitude < 0.0001f) return;
+            item.localRotation = baseRot;   // start from how the hand holds it this frame
+            Vector3 cur = item.TransformDirection(tip);
+            if (cur.sqrMagnitude < 0.000001f) return;
+            item.rotation = Quaternion.FromToRotation(cur, want.normalized) * item.rotation;
+        }
+
+        private void LateUpdate()
+        {
+            if (_player == null || _player.IsDead() || Time.time > _until) { Stop(); return; }
+            try
+            {
+                Track(true, ref _itemR, ref _baseR, ref _tipR);
+                Track(false, ref _itemL, ref _baseL, ref _tipL);
+                if (!_loggedArm && Time.time - _start > 0.6f)
+                {
+                    _loggedArm = true;
+                    Animator an = _player.GetComponentInChildren<Animator>();
+                    Transform sh = an != null ? an.GetBoneTransform(HumanBodyBones.RightUpperArm) : null, el = an != null ? an.GetBoneTransform(HumanBodyBones.RightLowerArm) : null, h = an != null ? an.GetBoneTransform(HumanBodyBones.RightHand) : null;
+                    DragonSkillClipDriver d = _player.GetComponent<DragonSkillClipDriver>();
+                    if (sh != null && el != null && h != null)
+                        Debug.Log("[Aethelborn] Whirlwind arm: hand-shoulder " + (h.position - sh.position).magnitude.ToString("F2") + " m of arm " + ((el.position - sh.position).magnitude + (h.position - el.position).magnitude).ToString("F2") + " m; clip driver " + (d != null && d.enabled ? "playing" : "NOT playing"));
+                }
+            }
+            catch (Exception e) { Debug.LogWarning("[Aethelborn] Whirlwind blade: " + e.Message); Stop(); }
+        }
+
+        private void Stop()
+        {
+            if (_itemR != null) _itemR.localRotation = _baseR;
+            if (_itemL != null) _itemL.localRotation = _baseL;
+            _itemR = null; _itemL = null;
+            enabled = false;
+        }
+
+        private void OnDestroy() { Stop(); }
+    }
+
     [DefaultExecutionOrder(32000)]
     public class DragonArmGuard : MonoBehaviour
     {
