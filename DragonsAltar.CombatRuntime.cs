@@ -1445,7 +1445,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.252";
+        public const string ModVersion = "0.25.253";
 
         internal static DragonCombatPlugin Instance;
 
@@ -14525,11 +14525,78 @@ namespace DragonsAltarCombat
             hand.rotation = Quaternion.FromToRotation(cur, want) * hand.rotation;
         }
 
+        // v0.25.253 (user: blades flip between up and ahead): [DefaultExecutionOrder] is not guaranteed for a mod loaded at
+        // runtime, so this LateUpdate could run BEFORE the skill animation's own hand code, which then rewrote the hands on
+        // some frames. The aim is now applied by an engine step inserted into Unity's frame loop right before it updates the
+        // renderers and skinned meshes - after every script of every mod - so nothing can overwrite it before the frame is drawn.
+        private static readonly List<DragonBladeForward> Active = new List<DragonBladeForward>();
+        private static bool _hookTried, _hooked;
+        private int _frames, _overwritten;
+        private float _worst;
+
+        private static void InstallHook()
+        {
+            if (_hookTried) return;
+            _hookTried = true;
+            try
+            {
+                UnityEngine.LowLevel.PlayerLoopSystem root = UnityEngine.LowLevel.PlayerLoop.GetCurrentPlayerLoop();
+                UnityEngine.LowLevel.PlayerLoopSystem[] top = root.subSystemList;
+                for (int i = 0; top != null && i < top.Length; i++)
+                {
+                    if (top[i].type != typeof(UnityEngine.PlayerLoop.PostLateUpdate)) continue;
+                    UnityEngine.LowLevel.PlayerLoopSystem[] sub = top[i].subSystemList;
+                    int at = -1;
+                    for (int k = 0; sub != null && k < sub.Length; k++) if (sub[k].type == typeof(UnityEngine.PlayerLoop.PostLateUpdate.UpdateAllRenderers)) { at = k; break; }
+                    if (at < 0) break;
+                    UnityEngine.LowLevel.PlayerLoopSystem mine = new UnityEngine.LowLevel.PlayerLoopSystem();
+                    mine.type = typeof(DragonBladeForward);
+                    mine.updateDelegate = HookTick;
+                    UnityEngine.LowLevel.PlayerLoopSystem[] grown = new UnityEngine.LowLevel.PlayerLoopSystem[sub.Length + 1];
+                    for (int k = 0, j = 0; k < grown.Length; k++) grown[k] = k == at ? mine : sub[j++];
+                    top[i].subSystemList = grown;
+                    root.subSystemList = top;
+                    UnityEngine.LowLevel.PlayerLoop.SetPlayerLoop(root);
+                    _hooked = true;
+                    break;
+                }
+            }
+            catch (Exception e) { Debug.LogWarning("[Aethelborn] Whirlwind blade: frame hook failed (" + e.Message + "); using LateUpdate only"); }
+            Debug.Log("[Aethelborn] Whirlwind blade: frame hook " + (_hooked ? "installed before UpdateAllRenderers" : "NOT installed"));
+        }
+
+        private static void HookTick()
+        {
+            for (int i = Active.Count - 1; i >= 0; i--)
+            {
+                DragonBladeForward b = Active[i];
+                if (b == null || !b.enabled) { Active.RemoveAt(i); continue; }
+                b.Apply(true);
+            }
+        }
+
+        private void OnEnable() { InstallHook(); if (!Active.Contains(this)) Active.Add(this); }
+        private void OnDisable()
+        {
+            Active.Remove(this);
+            if (_frames > 0)
+                Debug.Log("[Aethelborn] Whirlwind blade result: " + _frames + " frames, hands overwritten after our step on " + _overwritten + " frames, worst blade angle before the final aim " + _worst.ToString("F0") + " deg; final aim applied " + (_hooked ? "at the frame hook (after all scripts)" : "in LateUpdate only"));
+            _frames = 0; _overwritten = 0; _worst = 0f;
+        }
+
         private void LateUpdate()
         {
             if (_player == null || _player.IsDead() || Time.time > _until) { enabled = false; return; }
+            Apply(false);
+        }
+
+        // fromHook: the final aim right before the frame is drawn; it also measures how far the blade had been moved off since
+        // the LateUpdate aim (= something rewrote the hands after us).
+        private void Apply(bool fromHook)
+        {
             try
             {
+                if (_player == null || _player.IsDead() || Time.time > _until) { enabled = false; return; }
                 if (_an == null) _an = _player.GetComponentInChildren<Animator>();
                 if (_an == null || !_an.isHuman) return;
                 Transform rh = _an.GetBoneTransform(HumanBodyBones.RightHand), lh = _an.GetBoneTransform(HumanBodyBones.LeftHand);
@@ -14539,16 +14606,22 @@ namespace DragonsAltarCombat
                 Vector3 want = (body != null ? body : _player.transform).forward; want.y = 0f;
                 if (want.sqrMagnitude < 0.0001f) return;
                 want.Normalize();
+                if (fromHook && _tipR != Vector3.zero)
+                {
+                    float off = Vector3.Angle(rh.TransformPoint(_tipR) - rh.position, want);
+                    _frames++;
+                    if (off > 10f) _overwritten++;
+                    if (off > _worst) _worst = off;
+                }
                 Aim(rh, _tipR, want);
                 Aim(lh, _tipL, want);
-                if (!_loggedArm && Time.time - _start > 0.6f)
+                if (fromHook && !_loggedArm && Time.time - _start > 0.6f)
                 {
                     _loggedArm = true;
                     Transform sh = _an.GetBoneTransform(HumanBodyBones.RightUpperArm), el = _an.GetBoneTransform(HumanBodyBones.RightLowerArm);
                     DragonSkillClipDriver d = _player.GetComponent<DragonSkillClipDriver>();
-                    float off = _tipR == Vector3.zero ? -1f : Vector3.Angle(rh.TransformPoint(_tipR) - rh.position, want);
                     if (sh != null && el != null)
-                        Debug.Log("[Aethelborn] Whirlwind arm: hand-shoulder " + (rh.position - sh.position).magnitude.ToString("F2") + " m of arm " + ((el.position - sh.position).magnitude + (rh.position - el.position).magnitude).ToString("F2") + " m; clip driver " + (d != null && d.enabled ? "playing" : "NOT playing") + "; blade off straight-ahead " + off.ToString("F0") + " deg");
+                        Debug.Log("[Aethelborn] Whirlwind arm: hand-shoulder " + (rh.position - sh.position).magnitude.ToString("F2") + " m of arm " + ((el.position - sh.position).magnitude + (rh.position - el.position).magnitude).ToString("F2") + " m; clip driver " + (d != null && d.enabled ? "playing" : "NOT playing"));
                 }
             }
             catch (Exception e) { Debug.LogWarning("[Aethelborn] Whirlwind blade: " + e.Message); enabled = false; }

@@ -1,0 +1,24 @@
+Aethelborn Ascended v0.25.253 - Final Frame Aim   (base: v0.25.252; Anchor v0.25.244)
+
+GOAL (agreed): during Whirlwind (Normal and Ascended), standing or moving, every weapon (vanilla, Therzie, 1H, 2H, dual):
+arms straight out front at shoulder height, hands on the grip, each blade level and pointing straight ahead.
+
+WHY IT FLICKERED (up / ahead / up)
+- The blade tips were measured correctly (v0.25.252 log: 1.68 m, 1.17 m, 0.60 m), but the aim was applied in a script
+  step whose "run last" order Unity does not guarantee for mods loaded at runtime. On some frames the skill animation's
+  own hand code ran after it and rewrote the hands. The old "0 deg" log line measured right after our own aim, so it
+  could never show this.
+
+WHIRLWIND CA (Normal and Ascended)
+- The final aim now runs in a step inserted into Unity's own frame loop, right before Unity updates the renderers and
+  skinned meshes - after every script of every mod. Nothing can rewrite the hands between it and the drawn frame.
+  (The earlier aim is kept too; if the hook cannot be installed, the log says so.)
+- Honest measurement: at that final step the blade angle is measured BEFORE the final aim, so the log shows how often
+  something had moved the hands after us.
+- Log lines:
+  "Whirlwind blade: frame hook installed before UpdateAllRenderers" (once per session)
+  "Whirlwind blade: <item> right tip X m ..." (per weapon)
+  "Whirlwind blade result: N frames, hands overwritten after our step on M frames, worst angle ..." (per spin)
+- No damage, timing, VFX or sound change.
+
+CHECKS: all ten modules compile (C# 5) against your real DLLs. Not tested in game.
