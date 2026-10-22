@@ -358,7 +358,7 @@ namespace DragonsAltarCombat
                     }
                 }
                 // Preserve the native sound mixer; apply the equivalent SFX mixer amplitude only when its template has no group.
-                float level = voice.Raw ? Mathf.Min(1f, RawGain(voice.Cue, voice.BaseVolume)) * Space(voice.Source) : VoiceGain(voice) / PlaybackHeadroom;
+                float level = voice.Raw ? Mathf.Min(1f, RawGain(voice.Cue, voice.BaseVolume) / Baked(RawGain(voice.Cue, 1f))) * Space(voice.Source) : VoiceGain(voice) / PlaybackHeadroom;
                 voice.Source.volume = level * (gameVolume <= 0f ? 0f : (voice.UsesMixer ? 1f : gameVolume)) * Mathf.Clamp01((voice.End - now) / 0.08f);
             }
             if (now >= _nextCollect) { _nextCollect = now + 1f; CollectRetired(); }
@@ -372,6 +372,7 @@ namespace DragonsAltarCombat
             // v0.25.238: then keep every raw sound's processed copy ready (built here, between casts, instead of on the first cast;
             // a cached copy is a dictionary hit, so the round keeps up with slider changes for free)
             int cue = _variantWarm++ % CueCount;
+            if (_variantWarm == CueCount) Debug.Log("[Aethelborn] Skill sounds warmed: " + Variants.Count + " processed copies ready.");
             if (RawCue((DragonBaseSound)cue) && Profiles[cue] != null && Profiles[cue].Clips != null)
                 for (int c = 0; c < Profiles[cue].Clips.Length; c++) RawVariant(cue, Profiles[cue].Clips[c], RawGain(cue, 1f));
         }
@@ -602,6 +603,14 @@ namespace DragonsAltarCombat
             float lv = LayerVolumes[layer] == null ? DefaultLayers[layer] : LayerVolumes[layer].Value;
             float g = BuiltinGain(skill) * Loud(sv) * Loud(lv) * balance;
             return float.IsNaN(g) || float.IsInfinity(g) ? 0f : Mathf.Clamp(g, 0f, 81f);
+        }
+        // the loudness already baked into a processed copy (the same rounding RawVariant uses)
+        private static float Baked(float gain) { return gain > 1f ? Mathf.Round(gain * 20f) / 20f : 1f; }
+        private static int _castBuilds;
+        private static void NoteCastBuild(DragonBaseSound cue)
+        {
+            _castBuilds++;
+            if (_castBuilds <= 3) Debug.LogWarning("[Aethelborn] Sound copy built during a cast (not warmed yet): " + cue + " - tell the developer if this repeats.");
         }
         private static AudioClip RawVariant(int cue, AudioClip clip, float gain)
         {
@@ -1244,7 +1253,13 @@ namespace DragonsAltarCombat
             if (original == null) return -1;
             AudioSource source = voice.Source; float now = Time.unscaledTime;
             float gain = RawGain((int)cue, balance);
-            AudioClip clip = RawVariant((int)cue, original, gain);
+            // v0.25.243 first-cast stutter fix: the processed copy is always the one the warm-up built (full component level);
+            // a hit's share (barrage hits, per-wave sharing, companions) is plain volume. Before, every share built a new copy
+            // (PCM read + limiter + time-stretch) on the main thread during the cast.
+            float full = RawGain((int)cue, 1f);
+            int before = Variants.Count;
+            AudioClip clip = RawVariant((int)cue, original, full);
+            if (Variants.Count > before) NoteCastBuild(cue);
             float speed = Mathf.Clamp(Shape(LayerSpeed, (int)cue, 100f), 0.5f, 2f);
             float scale = clip != original ? 1f / speed : 1f;
             source.Stop(); source.loop = false; source.transform.position = position; source.clip = clip;
@@ -1261,7 +1276,7 @@ namespace DragonsAltarCombat
             // v0.25.232: the user's recordings play whole (Length slider trims); old code-side caps cut them. Only the fire loop keeps its cap.
             if (cue == DragonBaseSound.CrescentFire && maxSeconds > 0f && !float.IsInfinity(maxSeconds)) playable = Mathf.Min(playable, Mathf.Max(0.03f, maxSeconds));
             voice.End = now + delay + Mathf.Clamp(playable, 0.05f, 60f);
-            source.volume = Mathf.Min(1f, gain) * Mathf.Sqrt(Mathf.Clamp01(AudioMan.GetSFXVolume())) * Space(source);
+            source.volume = Mathf.Min(1f, gain / Baked(full)) * Mathf.Sqrt(Mathf.Clamp01(AudioMan.GetSFXVolume())) * Space(source);
             if (delay > 0.02f) { voice.RepeatAt = now + delay; voice.Sustained = true; }   // waiting for its start; nobody may take the voice
             else { voice.RepeatAt = float.MaxValue; source.Play(); }
             return selected;
@@ -1418,7 +1433,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.242";
+        public const string ModVersion = "0.25.243";
 
         internal static DragonCombatPlugin Instance;
 

@@ -1,1 +1,4 @@
-TEST v0.25.242: nothing required (volume only). Skill Volume sliders for Warrior/Sword Master/Mercenary read 100%.
+TEST v0.25.243
+1. Load in, stand idle ~20-30 s until the log shows "Skill sounds warmed: N processed copies ready."
+2. Cast each skill for the first time: no stutter.
+3. If you still feel one: send LogOutput.log - any "Sound copy built during a cast" line names the sound.

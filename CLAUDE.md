@@ -71,3 +71,5 @@ Standing release reporting rule (user, 2026-10-19): every delivered pass must li
 11. Inserting a line before a statement: check the line above for a braceless if/else/for/while (v240 Moonlight finisher regression). Prefer inserting INSIDE a braced block or add braces.
 12. Every pass bumps every module's version label (ModVersion / BepInPlugin version), not just the installer banner.
 2026-10-22 — v0.25.242 Sweet Spot Volume (Claude): user rule 'old slider -25 = new 100%': SweetSpotFrom (v238 matched defaults) -> BuiltinGain = Loud(old-25) for Rebalanced skills, applied in RawGain and SkillGain; DefaultVolumes 100; SweetSpot100_v025242 one-time reset to 100. Layers untouched. Anchor stays v238.
+2026-10-22 — v0.25.243 First Cast Sounds (Claude): PlayRaw always uses the warmed RawVariant (RawGain(cue,1)); hit share = volume gain/Baked(full); NoteCastBuild warns (max 3) when a copy is built mid-cast; warm-up logs 'Skill sounds warmed'. Lesson: a warm-up must request the SAME cache keys the hot path uses.
+13. A warm-up must prepare exactly the cache keys the hot path will request (v243: variants keyed by per-hit share were never warmed).
