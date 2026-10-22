@@ -1,0 +1,16 @@
+Aethelborn Ascended v0.25.256 - Whirlwind Arms   (base: v0.25.255; Anchor v0.25.254)
+
+WHIRLWIND CA (Normal and Ascended) - the arms are now built by the mod itself, not adjusted
+- At the final frame step the mod places BOTH arms with arm IK every frame, the same layout for every weapon, well out
+  in front of the chest (elbows down and slightly out), then turns the wrists so each weapon's real tip points ahead, level.
+- One weapon (any 1H or 2H: swords, axes, maces, battleaxes, atgeirs, spears...): right fist straight ahead of the chest
+  at ~85% of arm reach, left hand on the handle just in front of it - the battleaxe hold, now for every weapon.
+  2H swords no longer pull the arms in to the body.
+- Two weapons (dual wield, Therzie dual models): both arms straight out side by side, each weapon pointing ahead.
+- Spears (thrown spears only): head pointing out (as in v0.25.255) AND the spear now slides forward in the fist so the
+  hand holds it near the butt, like an atgeir. Restored to the normal grip the moment the spin ends.
+- Atgeirs: back to exactly how they were (v0.25.255's spear head check no longer touches them).
+- Pause (Esc): arms held still (unchanged from v0.25.255).
+- No damage, timing, VFX or sound change.
+
+CHECKS: all ten modules compile (C# 5) against your real DLLs. Not tested in game.

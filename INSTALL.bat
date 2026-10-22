@@ -1,5 +1,5 @@
 @echo off
-title Immortal Heroes v0.25.255 - Whirlwind Polish
+title Immortal Heroes v0.25.256 - Whirlwind Arms
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
 echo.
 pause

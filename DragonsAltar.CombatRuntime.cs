@@ -1445,7 +1445,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.255";
+        public const string ModVersion = "0.25.256";
 
         internal static DragonCombatPlugin Instance;
 
@@ -14383,6 +14383,9 @@ namespace DragonsAltarCombat
         private GameObject _seenR, _seenL;
         private Vector3 _tipR, _tipL;   // in the hand bone's local space
         private bool _loggedArm, _dual, _swordGrip;
+        private Transform _spearItem;
+        private Vector3 _spearBase;
+        private float _spearShift;
 
         public static void Run(Player player, float seconds)
         {
@@ -14529,6 +14532,7 @@ namespace DragonsAltarCombat
         // the butt. The head is the end whose model is WIDER (spearhead / atgeir blade vs a bare shaft end).
         private static Vector3 HeadEnd(Transform hand, Vector3 tipLocal, byte tag)
         {
+            ButtDist = 0f;
             Vector3 hp = hand.position, axis = hand.TransformPoint(tipLocal) - hp;
             float len = axis.magnitude;
             if (len < 0.05f) return tipLocal;
@@ -14552,9 +14556,12 @@ namespace DragonsAltarCombat
                 if (p > fwd * 0.8f && w > wF) wF = w;
                 if (-p > back * 0.8f && w > wB) wB = w;
             }
+            ButtDist = wB > wF * 1.15f ? fwd : back;
             Debug.Log("[Aethelborn] Whirlwind blade: pole weapon ends " + fwd.ToString("F2") + " m (width " + wF.ToString("F2") + ") / " + back.ToString("F2") + " m (width " + wB.ToString("F2") + ") - head " + (wB > wF * 1.15f ? "behind, flipped" : "ahead"));
             return wB > wF * 1.15f ? hand.InverseTransformPoint(backPt) : tipLocal;
         }
+
+        private static float ButtDist;
 
         private static string Count(byte tag) { int n = 0; for (int i = 0; i < Tags.Count; i++) if (Tags[i] == tag) n++; return n.ToString(); }
 
@@ -14562,18 +14569,27 @@ namespace DragonsAltarCombat
         {
             GameObject r = Item(true), l = Item(false);
             if (r == _seenR && l == _seenL) return;
+            if (_spearItem != null) { _spearItem.localPosition = _spearBase; _spearItem = null; }
             _seenR = r; _seenL = l; _tipR = Vector3.zero; _tipL = Vector3.zero; _hasFrozen = false;
             _dual = l != null && !Skip(l);
             ItemDrop.ItemData wpn = null;
             try { wpn = _player.GetCurrentWeapon(); } catch (Exception) { }
             Skills.SkillType sk = wpn != null && wpn.m_shared != null ? wpn.m_shared.m_skillType : Skills.SkillType.None;
             _swordGrip = sk == Skills.SkillType.Swords;
-            bool pole = sk == Skills.SkillType.Spears || sk == Skills.SkillType.Polearms;
+            bool pole = sk == Skills.SkillType.Spears;   // v0.25.256 (user): atgeirs were fine - only thrown spears
+            _spearShift = 0f;
             if (r != null && !Skip(r))
             {
                 string how = Collect(r, rh, lh);
                 _tipR = TipFor(rh, lh, 1);
-                if (pole && _tipR != Vector3.zero) _tipR = HeadEnd(rh, _tipR, 1);
+                if (pole && _tipR != Vector3.zero)
+                {
+                    _tipR = HeadEnd(rh, _tipR, 1);
+                    // v0.25.256 (user: hold the spear at the butt like an atgeir): slide the spear forward in the fist so the
+                    // hand ends up near the butt
+                    _spearShift = Mathf.Max(0f, ButtDist - 0.15f);
+                    _spearItem = r.transform; _spearBase = r.transform.localPosition;
+                }
                 // one model can hold both blades (Therzie dual weapons): the left blade is measured from the same points
                 if (l == null) _tipL = TipFor(lh, rh, 2);
                 Debug.Log("[Aethelborn] Whirlwind blade: " + r.name + " right tip " + (rh.TransformPoint(_tipR) - rh.position).magnitude.ToString("F2") + " m" +
@@ -14651,9 +14667,70 @@ namespace DragonsAltarCombat
         private void OnDisable()
         {
             Active.Remove(this);
+            if (_spearItem != null) { _spearItem.localPosition = _spearBase; _spearItem = null; }
             if (_frames > 0)
                 Debug.Log("[Aethelborn] Whirlwind blade result: " + _frames + " frames, hands overwritten after our step on " + _overwritten + " frames, worst blade angle before the final aim " + _worst.ToString("F0") + " deg; final aim applied " + (_hooked ? "at the frame hook (after all scripts)" : "in LateUpdate only"));
             _frames = 0; _overwritten = 0; _worst = 0f;
+        }
+
+        // v0.25.256 (user: "stretch the arms out", same arms for every weapon, then only point each weapon): the final frame step
+        // now places BOTH arms itself with arm IK, the same layout for every weapon, well out in front of the chest:
+        //  - one weapon (1H or 2H, any type): right fist straight ahead of the chest at ~85% arm reach, left hand on the handle
+        //    just in front of it (the battleaxe hold the user liked), wrists turned so the true tip points ahead, level;
+        //  - two weapons (dual wield, Therzie dual models): both arms straight out side by side, each weapon pointing ahead;
+        //  - spears: also slid forward in the fist so the hand is near the butt, head out (atgeirs untouched).
+        private void PoseArms(Transform rh, Transform lh, Vector3 want)
+        {
+            Transform rua = _an.GetBoneTransform(HumanBodyBones.RightUpperArm), rla = _an.GetBoneTransform(HumanBodyBones.RightLowerArm);
+            Transform lua = _an.GetBoneTransform(HumanBodyBones.LeftUpperArm), lla = _an.GetBoneTransform(HumanBodyBones.LeftLowerArm);
+            if (rua == null || rla == null || lua == null || lla == null) { Aim(rh, _tipR, want); Aim(lh, _tipL, want); return; }
+            Vector3 side = Vector3.Cross(Vector3.up, want).normalized;   // the body's right
+            Vector3 center = (rua.position + lua.position) * 0.5f;
+            float arm = (rla.position - rua.position).magnitude + (rh.position - rla.position).magnitude;
+            if (_tipR == Vector3.zero) return;
+            if (_tipL != Vector3.zero)
+            {
+                Vector3 gr = center + side * 0.14f + want * (arm * 0.9f) - Vector3.up * 0.04f;
+                Vector3 gl = center - side * 0.14f + want * (arm * 0.9f) - Vector3.up * 0.04f;
+                ArmIK(rua, rla, rh, gr, side);
+                ArmIK(lua, lla, lh, gl, -side);
+                Aim(rh, _tipR, want);
+                Aim(lh, _tipL, want);
+                return;
+            }
+            Vector3 g = center + side * 0.04f + want * (arm * 0.82f) - Vector3.up * 0.06f;
+            ArmIK(rua, rla, rh, g, side);
+            Aim(rh, _tipR, want);
+            Vector3 blade = rh.TransformPoint(_tipR) - rh.position;
+            blade = blade.sqrMagnitude > 0.000001f ? blade.normalized : want;
+            if (_spearItem != null && _spearShift > 0f)
+            {
+                _spearItem.localPosition = _spearBase;
+                _spearItem.position += blade * _spearShift;
+            }
+            ArmIK(lua, lla, lh, rh.position + blade * 0.11f, -side);
+            lh.rotation = rh.rotation;
+        }
+
+        // Two-bone arm IK: the hand reaches `target` (clamped to the arm's length), elbow hanging down and slightly outward.
+        private static void ArmIK(Transform ua, Transform la, Transform hand, Vector3 target, Vector3 outward)
+        {
+            Vector3 a = ua.position, b = la.position, c = hand.position;
+            float l1 = (b - a).magnitude, l2 = (c - b).magnitude;
+            if (l1 < 0.0001f || l2 < 0.0001f) return;
+            Quaternion keep = hand.rotation;
+            Vector3 to = target - a;
+            float d = Mathf.Clamp(to.magnitude, Mathf.Abs(l1 - l2) + 0.001f, l1 + l2 - 0.001f);
+            Vector3 n = to.sqrMagnitude > 0.000001f ? to.normalized : (c - a).normalized;
+            float x = (l1 * l1 - l2 * l2 + d * d) / (2f * d), h = Mathf.Sqrt(Mathf.Max(0f, l1 * l1 - x * x));
+            Vector3 hint = Vector3.down * 0.8f + outward * 0.45f;
+            Vector3 pole = hint - n * Vector3.Dot(hint, n);
+            if (pole.sqrMagnitude < 0.000001f) pole = Vector3.Cross(n, Vector3.right);
+            pole.Normalize();
+            Vector3 elbow = a + n * x + pole * h, end = a + n * d;
+            ua.rotation = Quaternion.FromToRotation(b - a, elbow - a) * ua.rotation;
+            la.rotation = Quaternion.FromToRotation(hand.position - la.position, end - la.position) * la.rotation;
+            hand.rotation = keep;   // the wrist keeps its turn; Aim() sets the weapon direction next
         }
 
         // v0.25.254 (user: 2H swords glitched): turning the right wrist moved the blade away from the left hand, which the
@@ -14730,9 +14807,8 @@ namespace DragonsAltarCombat
                     if (off > 10f) _overwritten++;
                     if (off > _worst) _worst = off;
                 }
-                Aim(rh, _tipR, want);
-                Aim(lh, _tipL, want);
-                if (_tipL == Vector3.zero && _tipR != Vector3.zero && !_dual) Regrip(rh, want);
+                if (fromHook) PoseArms(rh, lh, want);
+                else { Aim(rh, _tipR, want); Aim(lh, _tipL, want); }
                 if (fromHook) Freeze(true);
                 if (fromHook && !_loggedArm && Time.time - _start > 0.6f)
                 {
