@@ -1,0 +1,11 @@
+Aethelborn Ascended v0.25.247 - Whirlwind Forward Hold   (base: v0.25.246; Anchor v0.25.244)
+
+WHIRLWIND CA (Mercenary, Normal and Ascended)
+- New hold (your sketch): both hands on the weapon, arms straight out in front at shoulder height, weapon laid flat and
+  pointing straight ahead at the enemy. It sweeps a full level circle as he spins. Same standing and moving.
+- One-handed weapons now use the same two-hand hold as two-handed weapons. While spinning, the off-hand item
+  (second weapon / shield / torch) is hidden and the left hand holds the main weapon; it reappears when the spin ends.
+- Vanilla and Therzie weapons both use the v0.25.246 tip measurement.
+- No damage, timing, VFX or sound change.
+
+CHECKS: all ten modules compile (C# 5) against your real DLLs. Not tested in game.

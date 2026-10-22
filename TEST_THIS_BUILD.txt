@@ -1,2 +1,2 @@
-v0.25.246 - test Whirlwind with the same five weapons (2H sword, 2H battleaxe, 2H dual sword, dual axe, dual sword),
-standing and moving: blades should point outwards. If one still points up, send LogOutput.log (lines "Weapon tip").
+v0.25.247 - Whirlwind with 2H sword, 2H battleaxe, 1H axe/sword, dual wield, sword+shield; standing and moving:
+arms straight forward, both hands on the weapon, blade flat pointing ahead. If a blade is off, send LogOutput.log ("Weapon tip" lines).

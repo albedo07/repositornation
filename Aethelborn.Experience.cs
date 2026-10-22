@@ -11,7 +11,7 @@ using UnityEngine;
 
 namespace AethelbornExperience
 {
-    [BepInPlugin("albedo.customclasses.exp", "Aethelborn Ascended - Experience", "0.25.246")]
+    [BepInPlugin("albedo.customclasses.exp", "Aethelborn Ascended - Experience", "0.25.247")]
     [BepInDependency("albedo.customclasses.advanced", BepInDependency.DependencyFlags.HardDependency)]
     public class ExperiencePlugin : BaseUnityPlugin
     {

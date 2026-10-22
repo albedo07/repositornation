@@ -1445,7 +1445,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.246";
+        public const string ModVersion = "0.25.247";
 
         internal static DragonCombatPlugin Instance;
 
@@ -7523,8 +7523,9 @@ namespace DragonsAltarCombat
         private static DragonClipKey SbFrontPose(float t, int grip)
         {
             DragonClipKey k = K(t).Sp(4f, 0f, 0f).Ch(2f, 0f, 0f).Hd(-4f, 0f, 0f);
-            if (grip == 1) k = k.Hand(0.28f, -0.12f, 0.62f, 1f).Wp(1f, -0.04f, 0.45f).Two(-0.3f);
-            else k = k.Hand(0.32f, -0.06f, 0.6f, 1f).Wp(1f, -0.04f, 0.35f).LHand(-0.32f, -0.06f, 0.6f, 1f).Oi(-1f, -0.04f, 0.35f);
+            // v0.25.247 (user sketch): every weapon is held with both hands, arms straight out in front at shoulder height,
+            // the weapon laid flat and pointing straight ahead at the enemy. One-handed weapons use the same two-hand hold.
+            k = k.Hand(-0.2f, 0f, 1f, 0.97f).Wp(0f, 0f, 1f).Two(-0.12f);
             return Ft(k.Off(0f, -0.06f, 0f), 0.18f, 0.1f);
         }
         private static DragonClipKey[] SbSpinFront(int turns, float turn, int grip)
