@@ -1,0 +1,17 @@
+Aethelborn Ascended v0.25.252 - Blade Per Hand   (base: v0.25.251; Anchor v0.25.244)
+
+WHAT YOUR v0.25.251 LOG + VIDEO SHOWED
+- The Therzie scimitar (attach_skin, skinned to your hands) measured a "tip" only ~0.3 m from the hand - a point at the
+  hilt, so turning the wrist to put that point ahead left the blade up. Cause: Whirlwind holds both hands together on
+  the grip, and v0.25.251 decided which blade belongs to which hand by distance - with the hands touching, that split
+  the blade's points between the hands and the far end was thrown away.
+
+WHIRLWIND CA (Normal and Ascended)
+- Each blade now belongs to the hand bone it is actually attached to (parented, or skinned to - read from the
+  weapon's bone list, or per point from its bone weights when the model allows). Distance is only a last resort.
+- Both blades of Therzie dual weapons are measured from their own hands; the wrists turn so each true tip is ahead, level.
+- Log: "Whirlwind blade: <item> right tip X m, left tip Y m via ... (points: right/left/unknown)". A real blade tip
+  should read about 0.6-1.5 m.
+- No damage, timing, VFX or sound change.
+
+CHECKS: all ten modules compile (C# 5) against your real DLLs. Not tested in game.

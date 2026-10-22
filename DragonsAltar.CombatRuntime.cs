@@ -1445,7 +1445,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.251";
+        public const string ModVersion = "0.25.252";
 
         internal static DragonCombatPlugin Instance;
 
@@ -14405,12 +14405,20 @@ namespace DragonsAltarCombat
             return n.Contains("shield") || n.Contains("buckler") || n.Contains("torch") || n.Contains("bow");
         }
 
-        // World positions of the item's model points: real vertices (skinned meshes baked in their current pose), else the
-        // corners of the mesh box.
+        // World positions of the item's model points (real vertices; skinned meshes baked in their current pose; else the mesh
+        // box corners), each tagged with the hand it is attached to: 1 = right, 2 = left, 0 = unknown.
+        // v0.25.252 (user log): Whirlwind holds both hands together on the grip, so splitting by distance mixed the blades -
+        // a blade now belongs to the hand bone it is parented / skinned to.
         private static readonly List<Vector3> Pts = new List<Vector3>();
-        private static string Collect(GameObject item)
+        private static readonly List<byte> Tags = new List<byte>();
+        private static byte HandOf(Transform t, Transform rh, Transform lh)
         {
-            Pts.Clear();
+            for (int i = 0; t != null && i < 64; i++, t = t.parent) { if (t == rh) return 1; if (t == lh) return 2; }
+            return 0;
+        }
+        private static string Collect(GameObject item, Transform rh, Transform lh)
+        {
+            Pts.Clear(); Tags.Clear();
             int verts = 0, boxes = 0;
             Renderer[] rs = item.GetComponentsInChildren<Renderer>();
             for (int i = 0; i < rs.Length; i++)
@@ -14420,6 +14428,18 @@ namespace DragonsAltarCombat
                 SkinnedMeshRenderer smr = r as SkinnedMeshRenderer;
                 MeshFilter mf = smr == null ? r.GetComponent<MeshFilter>() : null;
                 Mesh mesh = smr != null ? smr.sharedMesh : (mf != null ? mf.sharedMesh : null);
+                // which hand: the renderer's own parents, else the bones it is skinned to (one hand only)
+                byte tag = HandOf(r.transform, rh, lh);
+                byte[] perBone = null;
+                if (tag == 0 && smr != null && smr.bones != null)
+                {
+                    perBone = new byte[smr.bones.Length];
+                    bool hasR = false, hasL = false;
+                    for (int k = 0; k < perBone.Length; k++) { perBone[k] = HandOf(smr.bones[k], rh, lh); if (perBone[k] == 1) hasR = true; if (perBone[k] == 2) hasL = true; }
+                    if (hasR && !hasL) tag = 1; else if (hasL && !hasR) tag = 2;
+                }
+                BoneWeight[] bw = null;
+                if (tag == 0 && perBone != null && mesh != null && mesh.isReadable) { try { bw = mesh.boneWeights; } catch (Exception) { bw = null; } }
                 Vector3[] v = null;
                 try
                 {
@@ -14428,33 +14448,50 @@ namespace DragonsAltarCombat
                 }
                 catch (Exception) { v = null; }
                 Matrix4x4 m = r.transform.localToWorldMatrix;   // BakeMesh leaves out the transform's scale; this adds it back
-                if (v != null && v.Length > 0) { verts++; for (int j = 0; j < v.Length; j++) Pts.Add(m.MultiplyPoint3x4(v[j])); }
+                if (v != null && v.Length > 0)
+                {
+                    verts++;
+                    for (int j = 0; j < v.Length; j++)
+                    {
+                        Pts.Add(m.MultiplyPoint3x4(v[j]));
+                        byte t = tag;
+                        if (t == 0 && bw != null && j < bw.Length && bw[j].boneIndex0 < perBone.Length) t = perBone[bw[j].boneIndex0];
+                        Tags.Add(t);
+                    }
+                }
                 else if (mesh != null)
                 {
                     boxes++;
                     Bounds b = mesh.bounds;
                     for (int k = 0; k < 8; k++)
+                    {
                         Pts.Add(m.MultiplyPoint3x4(b.center + Vector3.Scale(b.extents, new Vector3((k & 1) == 0 ? -1f : 1f, (k & 2) == 0 ? -1f : 1f, (k & 4) == 0 ? -1f : 1f))));
+                        Tags.Add(tag);
+                    }
                 }
             }
             return verts > 0 ? "vertices" : (boxes > 0 ? "mesh box" : "none");
         }
 
-        // Farthest point from `hand` among the points nearer to it than to the other hand (a dual model's second blade
-        // belongs to the other hand). Returned in the hand's local space.
-        private static Vector3 TipFor(Transform hand, Transform other)
+        // Farthest point from `hand` among its own points (tag), or, for untagged points, those nearer to it than to the other hand.
+        private static Vector3 TipFor(Transform hand, Transform other, byte tag)
         {
             float best = 0.25f * 0.25f; Vector3 bw = Vector3.zero; bool any = false;
             Vector3 hp = hand.position, op = other != null ? other.position : hp + Vector3.up * 1000f;
             for (int i = 0; i < Pts.Count; i++)
             {
                 Vector3 p = Pts[i];
+                byte t = Tags[i];
+                if (t != 0 && t != tag) continue;
                 float d = (p - hp).sqrMagnitude;
-                if (d <= best || d > 2.2f * 2.2f || d > (p - op).sqrMagnitude) continue;   // nothing past 2.2 m belongs to a held blade
+                if (d <= best || d > 2.2f * 2.2f) continue;   // nothing past 2.2 m belongs to a held blade
+                if (t == 0 && d > (p - op).sqrMagnitude) continue;
                 best = d; bw = p; any = true;
             }
             return any ? hand.InverseTransformPoint(bw) : Vector3.zero;
         }
+
+        private static string Count(byte tag) { int n = 0; for (int i = 0; i < Tags.Count; i++) if (Tags[i] == tag) n++; return n.ToString(); }
 
         private void Measure(Transform rh, Transform lh)
         {
@@ -14463,20 +14500,21 @@ namespace DragonsAltarCombat
             _seenR = r; _seenL = l; _tipR = Vector3.zero; _tipL = Vector3.zero;
             if (r != null && !Skip(r))
             {
-                string how = Collect(r);
-                _tipR = TipFor(rh, lh);
-                // one skinned model can hold both blades (Therzie dual weapons): the left one is measured from the same points
-                bool skin = r.name.StartsWith("attach_skin", StringComparison.Ordinal);
-                if (l == null && skin) _tipL = TipFor(lh, rh);
-                Debug.Log("[Aethelborn] Whirlwind blade: " + r.name + " right tip " + _tipR.ToString("F3") + (l == null && skin ? " left tip " + _tipL.ToString("F3") : "") + " via " + how + " (" + Pts.Count + " points)");
+                string how = Collect(r, rh, lh);
+                _tipR = TipFor(rh, lh, 1);
+                // one model can hold both blades (Therzie dual weapons): the left blade is measured from the same points
+                if (l == null) _tipL = TipFor(lh, rh, 2);
+                Debug.Log("[Aethelborn] Whirlwind blade: " + r.name + " right tip " + (rh.TransformPoint(_tipR) - rh.position).magnitude.ToString("F2") + " m" +
+                    (l == null && _tipL != Vector3.zero ? ", left tip " + (lh.TransformPoint(_tipL) - lh.position).magnitude.ToString("F2") + " m" : "") +
+                    " via " + how + " (" + Pts.Count + " points: right " + Count(1) + ", left " + Count(2) + ", unknown " + Count(0) + ")");
             }
             if (l != null && !Skip(l))
             {
-                string how = Collect(l);
-                _tipL = TipFor(lh, rh);
-                Debug.Log("[Aethelborn] Whirlwind blade: " + l.name + " left tip " + _tipL.ToString("F3") + " via " + how + " (" + Pts.Count + " points)");
+                string how = Collect(l, rh, lh);
+                _tipL = TipFor(lh, rh, 2);
+                Debug.Log("[Aethelborn] Whirlwind blade: " + l.name + " left tip " + (lh.TransformPoint(_tipL) - lh.position).magnitude.ToString("F2") + " m via " + how + " (" + Pts.Count + " points)");
             }
-            Pts.Clear();
+            Pts.Clear(); Tags.Clear();
         }
 
         private static void Aim(Transform hand, Vector3 tip, Vector3 want)

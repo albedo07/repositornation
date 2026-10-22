@@ -1,2 +1,1 @@
-v0.25.251 - Whirlwind (Normal + Ascended) with Blackmetal Scimitars, Hellblade axes, a Therzie 2H and a vanilla weapon.
-Blades straight ahead, wrists natural. Send LogOutput.log ("Whirlwind blade" / "Whirlwind arm" lines).
+v0.25.252 - Whirlwind with Blackmetal Scimitars, Hellblade axes, Therzie 2H, vanilla. Send LogOutput.log ("Whirlwind blade" lines).
