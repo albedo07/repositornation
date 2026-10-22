@@ -1,0 +1,6 @@
+ANCHOR v0.25.254 Whirlwind Grip (user-confirmed 2026-10-22)
+File: Aethelborn_Ascended_v0.25.254_Whirlwind_Grip.zip
+SHA-256: 5d6a139805d32e0b375899c65e26f7cc8c5769b0ec0b9c4afdbbd3a2079d50d9
+User: vanilla weapons point forward, Therzie weapons point forward, 2H swords no longer stuck after an early stop.
+Known open items at anchor: Therzie hand spins briefly when the game is paused (Esc); 2H sword hand pose; spear/atgeir head
+pointing back; dual wield off-hand weapon hidden during the spin.

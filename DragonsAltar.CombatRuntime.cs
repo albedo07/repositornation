@@ -1445,7 +1445,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.254";
+        public const string ModVersion = "0.25.255";
 
         internal static DragonCombatPlugin Instance;
 
@@ -7619,6 +7619,10 @@ namespace DragonsAltarCombat
             {
                 ItemDrop.ItemData right = player.GetCurrentWeapon();
                 if (right != null && right.m_shared != null && right.m_shared.m_itemType == ItemDrop.ItemData.ItemType.TwoHandedWeapon) return 1;
+                // v0.25.255 (user: dual wield lost its off-hand weapon in the spin): a weapon in the left hand = 2, both shown
+                ItemDrop.ItemData left = GetHandItem(player, "m_leftItem");
+                if (left != null && left.m_shared != null && left.m_shared.m_itemType != ItemDrop.ItemData.ItemType.Shield &&
+                    left.m_shared.m_itemType != ItemDrop.ItemData.ItemType.Torch) return 2;
             }
             catch (Exception) { }
             return 0;
@@ -7628,7 +7632,8 @@ namespace DragonsAltarCombat
             DragonClipKey k = K(t).Sp(4f, 0f, 0f).Ch(2f, 0f, 0f).Hd(-4f, 0f, 0f);
             // v0.25.247 (user sketch): every weapon is held with both hands, arms straight out in front at shoulder height,
             // the weapon laid flat and pointing straight ahead at the enemy. One-handed weapons use the same two-hand hold.
-            k = k.Hand(-0.2f, 0f, 1f, 0.97f).Wp(0f, 0f, 1f).Two(-0.12f);
+            if (grip == 2) k = k.Hand(0.12f, -0.04f, 1f, 0.97f).Wp(0f, 0f, 1f).LHand(-0.12f, -0.04f, 1f, 0.97f).Oi(0f, 0f, 1f);   // v0.25.255 dual: both arms forward, both weapons shown
+            else k = k.Hand(-0.2f, 0f, 1f, 0.97f).Wp(0f, 0f, 1f).Two(-0.12f);
             return Ft(k.Off(0f, -0.06f, 0f), 0.18f, 0.1f);
         }
         private static DragonClipKey[] SbSpinFront(int turns, float turn, int grip)
@@ -14377,7 +14382,7 @@ namespace DragonsAltarCombat
         private static FieldInfo _fR, _fL;
         private GameObject _seenR, _seenL;
         private Vector3 _tipR, _tipL;   // in the hand bone's local space
-        private bool _loggedArm;
+        private bool _loggedArm, _dual, _swordGrip;
 
         public static void Run(Player player, float seconds)
         {
@@ -14520,17 +14525,55 @@ namespace DragonsAltarCombat
             return any ? hand.InverseTransformPoint(bw) : Vector3.zero;
         }
 
+        // v0.25.255 (user: the spear pointed its head at us): a spear / atgeir is held near its middle, so the farthest point can be
+        // the butt. The head is the end whose model is WIDER (spearhead / atgeir blade vs a bare shaft end).
+        private static Vector3 HeadEnd(Transform hand, Vector3 tipLocal, byte tag)
+        {
+            Vector3 hp = hand.position, axis = hand.TransformPoint(tipLocal) - hp;
+            float len = axis.magnitude;
+            if (len < 0.05f) return tipLocal;
+            axis /= len;
+            float fwd = 0f, back = 0f; Vector3 backPt = hp;
+            for (int i = 0; i < Pts.Count; i++)
+            {
+                if (Tags[i] != 0 && Tags[i] != tag) continue;
+                float p = Vector3.Dot(Pts[i] - hp, axis);
+                if (p > fwd) fwd = p;
+                if (-p > back) { back = -p; backPt = Pts[i]; }
+            }
+            if (back < 0.3f) return tipLocal;   // gripped at one end: the farthest point is the head
+            float wF = 0f, wB = 0f;
+            for (int i = 0; i < Pts.Count; i++)
+            {
+                if (Tags[i] != 0 && Tags[i] != tag) continue;
+                Vector3 d = Pts[i] - hp;
+                float p = Vector3.Dot(d, axis);
+                float w = (d - axis * p).magnitude;
+                if (p > fwd * 0.8f && w > wF) wF = w;
+                if (-p > back * 0.8f && w > wB) wB = w;
+            }
+            Debug.Log("[Aethelborn] Whirlwind blade: pole weapon ends " + fwd.ToString("F2") + " m (width " + wF.ToString("F2") + ") / " + back.ToString("F2") + " m (width " + wB.ToString("F2") + ") - head " + (wB > wF * 1.15f ? "behind, flipped" : "ahead"));
+            return wB > wF * 1.15f ? hand.InverseTransformPoint(backPt) : tipLocal;
+        }
+
         private static string Count(byte tag) { int n = 0; for (int i = 0; i < Tags.Count; i++) if (Tags[i] == tag) n++; return n.ToString(); }
 
         private void Measure(Transform rh, Transform lh)
         {
             GameObject r = Item(true), l = Item(false);
             if (r == _seenR && l == _seenL) return;
-            _seenR = r; _seenL = l; _tipR = Vector3.zero; _tipL = Vector3.zero;
+            _seenR = r; _seenL = l; _tipR = Vector3.zero; _tipL = Vector3.zero; _hasFrozen = false;
+            _dual = l != null && !Skip(l);
+            ItemDrop.ItemData wpn = null;
+            try { wpn = _player.GetCurrentWeapon(); } catch (Exception) { }
+            Skills.SkillType sk = wpn != null && wpn.m_shared != null ? wpn.m_shared.m_skillType : Skills.SkillType.None;
+            _swordGrip = sk == Skills.SkillType.Swords;
+            bool pole = sk == Skills.SkillType.Spears || sk == Skills.SkillType.Polearms;
             if (r != null && !Skip(r))
             {
                 string how = Collect(r, rh, lh);
                 _tipR = TipFor(rh, lh, 1);
+                if (pole && _tipR != Vector3.zero) _tipR = HeadEnd(rh, _tipR, 1);
                 // one model can hold both blades (Therzie dual weapons): the left blade is measured from the same points
                 if (l == null) _tipL = TipFor(lh, rh, 2);
                 Debug.Log("[Aethelborn] Whirlwind blade: " + r.name + " right tip " + (rh.TransformPoint(_tipR) - rh.position).magnitude.ToString("F2") + " m" +
@@ -14620,7 +14663,9 @@ namespace DragonsAltarCombat
         {
             Transform ua = _an.GetBoneTransform(HumanBodyBones.LeftUpperArm), la = _an.GetBoneTransform(HumanBodyBones.LeftLowerArm), lh = _an.GetBoneTransform(HumanBodyBones.LeftHand);
             if (ua == null || la == null || lh == null) return;
-            Vector3 target = rh.position + dir * 0.11f;
+            // v0.25.255 (user: 2H swords had the worst hand): on a sword the right fist sits at the guard, so the left hand
+            // goes behind it toward the pommel; other weapons keep it just in front
+            Vector3 target = rh.position + dir * (_swordGrip ? -0.12f : 0.11f);
             Vector3 a = ua.position, b = la.position, c = lh.position;
             float l1 = (b - a).magnitude, l2 = (c - b).magnitude;
             if (l1 < 0.0001f || l2 < 0.0001f) return;
@@ -14634,7 +14679,24 @@ namespace DragonsAltarCombat
             Vector3 elbow = a + n * x + pole * h, hand = a + n * d;
             ua.rotation = Quaternion.FromToRotation(b - a, elbow - a) * ua.rotation;
             la.rotation = Quaternion.FromToRotation(lh.position - la.position, hand - la.position) * la.rotation;
-            lh.rotation = rh.rotation;
+            lh.rotation = _swordGrip ? Quaternion.Slerp(lh.rotation, rh.rotation, 0.5f) : rh.rotation;
+        }
+
+        // v0.25.255 (user: Therzie hands spun while the game was paused): with time stopped the animator no longer resets the
+        // hands, so turning them again every frame wound them around the blade. While paused the last drawn arm pose is held.
+        private readonly Quaternion[] _frozen = new Quaternion[6];
+        private bool _hasFrozen;
+        private static readonly HumanBodyBones[] FreezeBones = { HumanBodyBones.RightUpperArm, HumanBodyBones.RightLowerArm, HumanBodyBones.RightHand,
+            HumanBodyBones.LeftUpperArm, HumanBodyBones.LeftLowerArm, HumanBodyBones.LeftHand };
+        private void Freeze(bool store)
+        {
+            for (int i = 0; i < FreezeBones.Length; i++)
+            {
+                Transform t = _an.GetBoneTransform(FreezeBones[i]);
+                if (t == null) continue;
+                if (store) _frozen[i] = t.localRotation; else if (_hasFrozen) t.localRotation = _frozen[i];
+            }
+            if (store) _hasFrozen = true;
         }
 
         private void LateUpdate()
@@ -14655,6 +14717,7 @@ namespace DragonsAltarCombat
                 if (_an == null || !_an.isHuman) return;
                 Transform rh = _an.GetBoneTransform(HumanBodyBones.RightHand), lh = _an.GetBoneTransform(HumanBodyBones.LeftHand);
                 if (rh == null || lh == null) return;
+                if (Time.timeScale < 0.0001f) { if (fromHook) Freeze(false); return; }   // paused: hold the last pose
                 Measure(rh, lh);
                 Transform body = DragonCombat.BodyVisual(_player);
                 Vector3 want = (body != null ? body : _player.transform).forward; want.y = 0f;
@@ -14669,7 +14732,8 @@ namespace DragonsAltarCombat
                 }
                 Aim(rh, _tipR, want);
                 Aim(lh, _tipL, want);
-                if (_tipL == Vector3.zero && _tipR != Vector3.zero) Regrip(rh, want);
+                if (_tipL == Vector3.zero && _tipR != Vector3.zero && !_dual) Regrip(rh, want);
+                if (fromHook) Freeze(true);
                 if (fromHook && !_loggedArm && Time.time - _start > 0.6f)
                 {
                     _loggedArm = true;

@@ -1,0 +1,18 @@
+Aethelborn Ascended v0.25.255 - Whirlwind Polish   (base: ANCHOR v0.25.254, user-confirmed)
+
+WHIRLWIND CA (Normal and Ascended)
+- Dual wield (two one-handed weapons): both weapons now stay visible. Both arms reach forward side by side and each
+  weapon points straight ahead from its own hand (the two-hand grip that hid the off-hand weapon is no longer used here).
+  Shields and torches are still put away during the spin as before.
+- Spears and atgeirs: these are held near the middle, so the farthest point could be the butt. The head is now found as
+  the WIDER end of the model (spearhead / blade vs bare shaft) and that end points ahead. Log line:
+  "pole weapon ends ... - head ahead / behind, flipped".
+- Two-handed swords: the left hand now goes on the handle BEHIND the right fist (toward the pommel) instead of in front of
+  it, and turns only halfway to the right hand's angle - a natural two-hand sword grip. Axes/maces/other weapons unchanged.
+- Pause (Esc): while the game is paused the last drawn arm pose is held, so the hands no longer wind/spin around the
+  blade (Therzie weapons).
+- No damage, timing, VFX or sound change.
+
+ANCHOR: v0.25.254 recorded in ANCHOR_v0.25.254.txt (SHA-256 5d6a139805d32e0b375899c65e26f7cc8c5769b0ec0b9c4afdbbd3a2079d50d9).
+
+CHECKS: all ten modules compile (C# 5) against your real DLLs. Not tested in game.

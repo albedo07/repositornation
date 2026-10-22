@@ -1,2 +1,2 @@
-v0.25.254 - Whirlwind once each: vanilla 1H, vanilla 2H axe, vanilla 2H sword, Therzie 2H, Blackmetal Scimitars,
-Hellblade axes. Also stop one early. Send LogOutput.log ("Whirlwind blade" lines: tip lengths + "grip X m from hand").
+v0.25.255 - Whirlwind: dual wield (both weapons visible, both ahead), a spear and an atgeir (head ahead), a 2H sword
+(left hand behind the right), Esc mid-spin with a Therzie weapon (no hand spin). Send LogOutput.log.
