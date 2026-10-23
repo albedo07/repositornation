@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Reflection;
 using BepInEx.Logging;
@@ -86,7 +86,7 @@ namespace AethelbornPerformance
                 {
                     object c = __args != null && __args.Length > 0 ? __args[0] : null;
                     Container ct = c as Container;
-                    Start(ct != null ? "Chest/container " + (ct.m_name ?? ct.name) : "Inventory");
+                    Start(_warming ? "Inventory warm-up (invisible)" : ct != null ? "Chest/container " + (ct.m_name ?? ct.name) : "Inventory");
                 }
                 else if (n == "Minimap.SetMapMode" && __args != null && __args.Length > 0 && Convert.ToInt32(__args[0]) == 2) Start("Map");
                 else if (n == "StoreGui.Show") Start("Trader");
@@ -117,9 +117,79 @@ namespace AethelbornPerformance
             _lastGc = GC.CollectionCount(0);
         }
 
+        // 0.6.8 INVENTORY WARM-UP (user: chests/inventory stutter; the 0.6.7 trace showed open #1 = 257 ms, later opens ~50 ms).
+        // Once per session, ~8 s after spawning with no window open, the inventory is shown and hidden on consecutive frames with
+        // its canvas fully transparent and its open/close sound effects swapped out, so the one-time build of the inventory (and
+        // every mod's first-open setup on it) runs then. Valheim's own Show/Hide are used; nothing else is changed.
+        public static Func<bool> WarmupEnabled;
+        private static int _warmState;
+        private static float _seenPlayerAt = -1f, _restoreAt;
+        private static CanvasGroup _warmGroup;
+        private static float _warmAlpha; private static bool _warmRaycasts;
+        private static System.Reflection.FieldInfo _openFx, _closeFx;
+        private static object _openSaved, _closeSaved;
+        private static long _warmT0;
+        private static bool _warming;
+
+        private static void Warmup()
+        {
+            try
+            {
+                if (_warmState >= 3) return;
+                Player p = Player.m_localPlayer;
+                InventoryGui gui = InventoryGui.instance;
+                if (p == null || gui == null) { _seenPlayerAt = -1f; return; }
+                if (_seenPlayerAt < 0f) _seenPlayerAt = Time.time;
+                if (_warmState == 0)
+                {
+                    if (WarmupEnabled != null && !WarmupEnabled()) { _warmState = 3; return; }
+                    if (Time.time - _seenPlayerAt < 8f || InventoryGui.IsVisible() || Menu.IsVisible() || Minimap.IsOpen() || TextInput.IsVisible() || p.IsDead()) return;
+                    if (gui.m_inventoryRoot == null) { _warmState = 3; return; }
+                    _warmGroup = gui.m_inventoryRoot.GetComponent<CanvasGroup>();
+                    if (_warmGroup == null) _warmGroup = gui.m_inventoryRoot.gameObject.AddComponent<CanvasGroup>();
+                    _warmAlpha = _warmGroup.alpha; _warmRaycasts = _warmGroup.blocksRaycasts;
+                    _warmGroup.alpha = 0f; _warmGroup.blocksRaycasts = false;
+                    if (_openFx == null) _openFx = AccessTools.Field(typeof(InventoryGui), "m_openInventoryEffects");
+                    if (_closeFx == null) _closeFx = AccessTools.Field(typeof(InventoryGui), "m_closeInventoryEffects");
+                    if (_openFx != null) { _openSaved = _openFx.GetValue(gui); _openFx.SetValue(gui, new EffectList()); }
+                    if (_closeFx != null) { _closeSaved = _closeFx.GetValue(gui); _closeFx.SetValue(gui, new EffectList()); }
+                    _warmT0 = System.Diagnostics.Stopwatch.GetTimestamp();
+                    _warming = true;
+                    try { gui.Show(null, 1); } finally { _warming = false; }
+                    _warmState = 1;
+                    return;
+                }
+                if (_warmState == 1)
+                {
+                    try { gui.Hide(); }
+                    finally
+                    {
+                        if (_openFx != null && _openSaved != null) _openFx.SetValue(gui, _openSaved);
+                        if (_closeFx != null && _closeSaved != null) _closeFx.SetValue(gui, _closeSaved);
+                    }
+                    _restoreAt = Time.time + 0.6f;   // the close animation runs while still transparent
+                    _warmState = 2;
+                    return;
+                }
+                if (_warmState == 2 && (Time.time >= _restoreAt || InventoryGui.IsVisible()))
+                {
+                    if (_warmGroup != null) { _warmGroup.alpha = _warmAlpha; _warmGroup.blocksRaycasts = _warmRaycasts; }
+                    _warmState = 3;
+                    if (_log != null) _log.LogInfo("[PA UI] inventory warm-up done (" + ((System.Diagnostics.Stopwatch.GetTimestamp() - _warmT0) * MsPerTick).ToString("F0") + " ms incl. waiting); the first real open should no longer stutter.");
+                }
+            }
+            catch (Exception e)
+            {
+                _warmState = 3;
+                try { if (_warmGroup != null) { _warmGroup.alpha = _warmAlpha; _warmGroup.blocksRaycasts = _warmRaycasts; } } catch (Exception) { }
+                if (_log != null) _log.LogWarning("[PA UI] inventory warm-up skipped: " + e.Message);
+            }
+        }
+
         // once per frame (plugin Update): closes the previous frame
         public static void Tick()
         {
+            Warmup();
             long now = System.Diagnostics.Stopwatch.GetTimestamp();
             double prev = _lastTick > 0 ? (now - _lastTick) * MsPerTick : 0;
             _lastTick = now;

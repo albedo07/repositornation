@@ -1,11 +1,11 @@
-PERFORMANCE ASCENDED v0.6.7 - official drag-and-drop build + UI tracer (diagnostic)
+PERFORMANCE ASCENDED v0.6.8 - official drag-and-drop build + inventory warm-up + UI tracer
 Client-side Valheim performance mod (BepInEx 5). No world/save changes. Works alone; no other mod required.
 
 INSTALL
 1. Close Valheim.
 2. Copy the folder  BepInEx\plugins\AethelbornPerformance  from this zip into your profile's  BepInEx\plugins  folder
    (Gale: Profile -> Open folder). Replace the existing AethelbornPerformance folder if you had the installer version.
-3. Start the game. Log line: "Performance Ascended 0.6.7 ready."
+3. Start the game. Log line: "Performance Ascended 0.6.8 ready."
 Config: BepInEx\config\albedo.aethelborn.performance.cfg (your existing settings are kept).
 
 HOTKEYS

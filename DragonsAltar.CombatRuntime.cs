@@ -382,8 +382,12 @@ namespace DragonsAltarCombat
             // a cached copy is a dictionary hit, so the round keeps up with slider changes for free)
             int cue = _variantWarm++ % CueCount;
             if (_variantWarm == CueCount) Debug.Log("[Aethelborn] Skill sounds warmed: " + Variants.Count + " processed copies ready.");
-            if (RawCue((DragonBaseSound)cue) && Profiles[cue] != null && Profiles[cue].Clips != null)
-                for (int c = 0; c < Profiles[cue].Clips.Length; c++) RawVariant(cue, Profiles[cue].Clips[c], RawGain(cue, 1f));
+            if (Profiles[cue] != null && Profiles[cue].Clips != null)
+                for (int c = 0; c < Profiles[cue].Clips.Length; c++)
+                {
+                    if (RawCue((DragonBaseSound)cue)) RawVariant(cue, Profiles[cue].Clips[c], RawGain(cue, 1f));
+                    else Variant(cue, Profiles[cue].Clips[c]);   // v0.25.259: base-class sounds' shaped copies warmed too
+                }
         }
         private static Profile Extract(GameObject prefab)
         {
@@ -1120,6 +1124,12 @@ namespace DragonsAltarCombat
         // The Play() at the hit itself is then absorbed.
         public static void Expect(Player caster, DragonBaseSound cue, Vector3 position, float hitIn, float pitchScale = 1f, int swing = 0)
         {
+            long ft = DragonFirstCast.Enter(DragonFirstCast.Sfx);   // v0.25.259 tracer
+            try { ExpectCore(caster, cue, position, hitIn, pitchScale, swing); }
+            finally { DragonFirstCast.Exit(DragonFirstCast.Sfx, ft); }
+        }
+        private static void ExpectCore(Player caster, DragonBaseSound cue, Vector3 position, float hitIn, float pitchScale, int swing)
+        {
             if (!Enabled || caster == null || caster != Player.m_localPlayer || caster.IsDead() || AudioMan.instance == null || !RawCue(cue)) return;
             if (float.IsNaN(hitIn) || float.IsInfinity(hitIn)) return;
             hitIn = Mathf.Clamp(hitIn, 0f, 10f);
@@ -1235,7 +1245,10 @@ namespace DragonsAltarCombat
         private static int PlayLayer(Profile profile, DragonBaseSound cue, Vector3 position, int swing, float layerGain, int avoidVoice, int layer, float pitchScale = 1f, float maxSeconds = 0f, int preferredVoice = -1, int avoidVoice2 = -1)
         {
                 int index = profile.Custom && cue == DragonBaseSound.HeavySlash ? Mathf.Clamp(swing, 0, profile.Clips.Length - 1) : profile.NextClip;
-                AudioClip clip = Variant((int)cue, profile.Clips[index]);
+                // v0.25.259 (first-cast tracer: 50-100 ms on the first play of Moonlight/Eclipse/Seismic hits and the Circle
+                // Swing/Halfmoon/Frenzied cast sounds): raw sounds use PlayRaw's own warmed copy, but this line still built the old
+                // shaped copy (PCM read + bass + time-stretch) for them first and threw it away. Only non-raw sounds need it.
+                AudioClip clip = RawCue(cue) ? profile.Clips[index] : Variant((int)cue, profile.Clips[index]);
                 profile.NextClip = (profile.NextClip + 1) % profile.Clips.Length;
                 if (clip == null) return -1;
                 float now = Time.unscaledTime; int selected = 0;
@@ -1308,6 +1321,12 @@ namespace DragonsAltarCombat
             voice.Ticket = 0; voice.Sustained = false; voice.Repeat = false; voice.Continue = null; voice.Follow = null; voice.RemoteKey = 0;
         }
         public static int BeginSustain(Player caster, DragonBaseSound cue, Vector3 position, float seconds, float pitchScale = 1f, float gain = 1f, Func<bool> alive = null, bool followCaster = false, Transform follow = null)
+        {
+            long ft = DragonFirstCast.Enter(DragonFirstCast.Sfx);   // v0.25.259 tracer
+            try { return BeginSustainCore(caster, cue, position, seconds, pitchScale, gain, alive, followCaster, follow); }
+            finally { DragonFirstCast.Exit(DragonFirstCast.Sfx, ft); }
+        }
+        private static int BeginSustainCore(Player caster, DragonBaseSound cue, Vector3 position, float seconds, float pitchScale, float gain, Func<bool> alive, bool followCaster, Transform follow)
         {
             if (!Enabled || caster == null || caster != Player.m_localPlayer || caster.IsDead() || AudioMan.instance == null || !(seconds > 0f) || float.IsNaN(seconds) || float.IsInfinity(seconds)) return -1;
             int serial = ++_sustainSerial;   // v0.25.241: start/stop messages carry this id (in the swing field)
@@ -1452,7 +1471,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.258";
+        public const string ModVersion = "0.25.259";
 
         internal static DragonCombatPlugin Instance;
 
@@ -6511,6 +6530,7 @@ namespace DragonsAltarCombat
             if (driver != null && driver.enabled && driver.IsPlaying) return true;
             DragonVanillaTail tail = player.GetComponent<DragonVanillaTail>();
             if (tail != null && tail.enabled && tail.IsBusy) return true;
+            if (CaPlayingOut(player)) return true;   // v0.25.259
             Animator animator = player.GetComponentInChildren<Animator>();
             DragonMixamoPlayer source = animator == null ? null : animator.GetComponent<DragonMixamoPlayer>();
             return source != null && source.enabled && source.Live;
@@ -10477,6 +10497,23 @@ namespace DragonsAltarCombat
             int id = player.GetInstanceID();
             SkillAnimSpeed[id] = Mathf.Clamp(multiplier, 0.01f, 6f);
             SkillAnimSpeedUntil[id] = Time.time + Mathf.Max(0f, ttl);
+            // v0.25.259 (user: Ascended Heavy Slash could be cast during Circle Swing's follow-through): a skill that times its
+            // vanilla swing's play-out keeps the caster busy for that time - universal rule "a skill and its CA finish first".
+            // A newer normal attack / dodge cancel (SkillAnimGen) releases it.
+            if (ttl > 0f)
+            {
+                float until, old;
+                until = Time.time + ttl;
+                if (!CaPlayOutUntil.TryGetValue(id, out old) || CaPlayOutGen[id] != SkillAnimGen || old < until) { CaPlayOutUntil[id] = until; CaPlayOutGen[id] = SkillAnimGen; }
+            }
+        }
+        private static readonly Dictionary<int, float> CaPlayOutUntil = new Dictionary<int, float>();
+        private static readonly Dictionary<int, int> CaPlayOutGen = new Dictionary<int, int>();
+        internal static bool CaPlayingOut(Player player)
+        {
+            if (player == null) return false;
+            int id = player.GetInstanceID(); float until; int gen;
+            return CaPlayOutUntil.TryGetValue(id, out until) && Time.time < until && CaPlayOutGen.TryGetValue(id, out gen) && gen == SkillAnimGen;
         }
         private static readonly Dictionary<int, float> AttackSpeedSourceUntil = new Dictionary<int, float>();
         private static readonly Dictionary<int, float> StaminaRegenBlockedUntil = new Dictionary<int, float>();

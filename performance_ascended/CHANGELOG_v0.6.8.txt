@@ -1,0 +1,16 @@
+Performance Ascended v0.6.8 - Inventory Warm-up   (base: v0.6.7; Anchor v0.6.5)
+
+WHAT THE v0.6.7 TRACE SHOWED (your log)
+- Inventory open #1: 257 ms frame (198 ms inside the game's InventoryGui.Show incl. other mods' first-open setup + 59 ms
+  first layout/render, and a garbage collection). Opens #2/#3: ~50 ms frames (10 ms UI code + ~42 ms Unity UI rebuild).
+
+NEW
+- Inventory Warm-up ([UI] Inventory Warm-up, default ON): once per session, ~8 s after you spawn and only while no window /
+  menu / map / text box is open, PA opens the inventory and closes it on the next frame - fully transparent, clicks pass
+  through, open/close sounds swapped out - using Valheim's own Show/Hide. The one-time first-open build happens then
+  (mostly unnoticeable during the first seconds) instead of on your first Tab. Log: "[PA UI] inventory warm-up done".
+- The UI tracer stays on; the warm-up shows in it as "Inventory warm-up (invisible)".
+
+NOT CHANGED
+- The ~50 ms repeat-open frame is Unity rebuilding the inventory canvas each time it opens; no safe fix yet (measure first).
+CHECKS: compiled (mcs, C# 5) against your real Valheim/BepInEx/Harmony DLLs. Not tested in game.

@@ -18,7 +18,7 @@ namespace AethelbornPerformance
     {
         public const string Guid = "albedo.aethelborn.performance";
         public const string Name = "Performance Ascended";
-        public const string Version = "0.6.7";
+        public const string Version = "0.6.8";
         public static PerformancePlugin Instance;
         private PerformanceSettings _settings;
         private GUIStyle _indicatorStyle;
@@ -119,6 +119,7 @@ namespace AethelbornPerformance
                 Logger.LogInfo("Spread Object Unloading: " + UnloadBudget.Install(_harmony, Logger));
                 Logger.LogInfo("World tweaks: " + WorldTweaks.Install(_harmony, Logger));
                 Logger.LogInfo(UiTracer.Install(_harmony, Logger));   // 0.6.7 diagnostic
+                UiTracer.WarmupEnabled = delegate { return _settings != null && _settings._uiWarmup.Value; };   // 0.6.8
                 Logger.LogInfo(Name + " " + Version + " ready. Piece registry: " + (_pieceSource != null) + "; cosmetic hook: " + _effectsHook + ". No AA dependency or world/save changes.");
             }
             catch (Exception ex)

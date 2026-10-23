@@ -1,5 +1,5 @@
 @echo off
-title Immortal Heroes v0.25.258 - First Cast Tracer
+title Immortal Heroes v0.25.259 - Smooth First Casts
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
 echo.
 pause

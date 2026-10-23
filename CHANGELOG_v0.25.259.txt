@@ -1,0 +1,22 @@
+Aethelborn Ascended v0.25.259 - Smooth First Casts   (base: ANCHOR v0.25.257 + v0.25.258 tracer)
+
+FIRST-CAST STUTTERS (measured by the v0.25.258 tracer in your log)
+- Cause (one bug): for every sound of the newer skills, each first play also built an OLD-style processed copy of the
+  recording (whole file read + bass shaping + time-stretch, 50-100 ms) and then threw it away unused - those sounds play
+  their own, already warmed copy. The warm-up never prepared that old copy, and the "sound copy built during a cast"
+  warning only watched the other builder.
+  Measured cost per skill: Eclipse hit 99 ms, Moonlight Splitter hit 92 ms, Seismic Guillotine hit 52 ms, and at the cast
+  Circle Swing ~100 ms, Halfmoon Slash ~85 ms, Frenzied Charge ~70 ms (their wind-up / sweep sounds start at the cast).
+- Fix: the old copy is no longer built for those sounds at all; the older base-class sounds that do use it now have it
+  prepared by the loading warm-up. Applies to Normal and Ascended versions of every skill. Sounds are unchanged.
+- The tracer stays on and now also times the cast-time sound starts, so the next log confirms the result.
+
+SKILL / CA LOCK (Circle Swing, Normal and Ascended - and every skill)
+- Bug: Circle Swing's chain plays vanilla battleaxe swings; only the part up to each hit kept you busy, so Ascended Heavy
+  Slash (or any skill) could start during the swing's follow-through.
+- Fix (universal): whenever a skill times its swing's play-out, you stay busy until that play-out ends - for every skill
+  that does this (Circle Swing, Ascended Heavy Slash strikes, Halfmoon, ...). A normal attack or dodge that cancels the
+  skill releases it as before.
+- No damage, timing, VFX or sound changes.
+
+CHECKS: all ten modules compile (C# 5) against your real DLLs. Not tested in game.

@@ -1,4 +1,3 @@
-v0.25.258 first-cast test:
-1. Start Valheim fresh and load your world (wait ~20 s after spawning so the loading warm-up can finish).
-2. Cast each skill ONCE: the ones that stutter (e.g. Circle Swing) and a few that don't. Use Ascended versions too if you can.
-3. Quit and send BepInEx/LogOutput.log (lines "First cast ...").
+v0.25.259 (+ PA v0.6.8): fresh start, wait ~20 s, cast Circle Swing, Halfmoon, Frenzied Charge, Moonlight, Eclipse,
+Seismic once each (no first-cast stutter expected). Try casting Ascended Heavy Slash during Circle Swing (must wait).
+Open the inventory. Send LogOutput.log ("First cast" / "[PA UI]" lines).

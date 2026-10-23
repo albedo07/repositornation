@@ -1,7 +1,7 @@
 ﻿$ErrorActionPreference = "Stop"
 
 Write-Host ""
-Write-Host "IMMORTAL HEROES v0.25.258 - FIRST CAST TRACER" -ForegroundColor Cyan
+Write-Host "IMMORTAL HEROES v0.25.259 - SMOOTH FIRST CASTS" -ForegroundColor Cyan
 Write-Host "All 10 DLLs compile in staging before the live profile is touched." -ForegroundColor Gray
 Write-Host ""
 

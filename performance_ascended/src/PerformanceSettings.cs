@@ -8,7 +8,7 @@ namespace AethelbornPerformance
     {
         public ConfigEntry<bool> _spreadUnload, _lowShadows, _viewCulling, _gcSlice, _doorSleep, _asyncUpload;
         public ConfigEntry<float> _grassPatch, _fpsX, _fpsY;
-        public ConfigEntry<bool> _fpsCounter, _compactIndicator;
+        public ConfigEntry<bool> _fpsCounter, _compactIndicator, _uiWarmup;
         public ConfigEntry<KeyboardShortcut> _indicatorKey, _fpsKey;
         public ConfigEntry<float> _gcSliceMs;
         public ConfigEntry<float> _pieceDrawM, _nonSolidDrawM, _smallDrawM, _lodMax;
@@ -33,6 +33,7 @@ namespace AethelbornPerformance
                 _unloadPerTick = config.Bind("Structures", "Unload Per Tick", 150, new ConfigDescription("Maximum objects removed per unloading tick (30 ticks per second). 150 = about 4,500 per second. Lower = smoother but slower cleanup.", new AcceptableValueRange<int>(25, 2000)));
                 _indicatorKey = config.Bind("HUD", "Indicator Hotkey", new KeyboardShortcut(KeyCode.B, KeyCode.LeftControl, KeyCode.LeftAlt), "Show/hide the optimization indicator. Default Left Ctrl + Left Alt + B.");
                 _fpsKey = config.Bind("HUD", "FPS Counter Hotkey", new KeyboardShortcut(KeyCode.F, KeyCode.LeftControl, KeyCode.LeftAlt), "Show/hide the FPS counter. Default Left Ctrl + Left Alt + F.");
+                _uiWarmup = config.Bind("UI", "Inventory Warm-up", true, "0.6.8: once per session, ~8 s after you spawn, the inventory is opened and closed invisibly (no sound, not drawn) so its one-time first-open build (the 250 ms stutter, including other mods' setup) happens then instead of when you first press Tab. OFF = no warm-up.");
                 _fpsCounter = config.Bind("HUD", "FPS Counter", true, "Small FPS box (current FPS and 1% low over the last ~5 s). Drag it with the mouse while the inventory/menu cursor is visible.");
                 _fpsX = config.Bind("HUD", "FPS Counter X", -1f, "Pixels from the left (-1 = top right corner). Saved when you drag it.");
                 _fpsY = config.Bind("HUD", "FPS Counter Y", 8f, "Pixels from the top. Saved when you drag it.");
