@@ -1,2 +1,2 @@
-v0.25.256 - Whirlwind with: 2H sword, battleaxe, atgeir, spear, 1H sword, dual wield (SBDW), Therzie dual. Arms well out
-in front for all; weapons ahead; spear held at the butt. Send screenshots + LogOutput.log if anything is off.
+v0.25.257 - Whirlwind with an atgeir (head out, held near the butt). Bonecrusher with Hellblade Cleavers, a Therzie 2H and
+a vanilla weapon (head hits the terrain). Send LogOutput.log ("Weapon head (ground reach)" lines).

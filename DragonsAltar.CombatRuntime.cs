@@ -1445,7 +1445,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.256";
+        public const string ModVersion = "0.25.257";
 
         internal static DragonCombatPlugin Instance;
 
@@ -13904,6 +13904,10 @@ namespace DragonsAltarCombat
                     break;
                 }
             p.SetReach(item == null ? null : item.GetComponentsInChildren<Renderer>(), from, peak, to);
+            // v0.25.257 (user: with the Hellblade Cleavers Bonecrusher stopped hitting the terrain): the head comes from the real
+            // model now (the old box rule read skinned Therzie weapons in the wrong place), for every weapon
+            Vector3 tipLocal;
+            if (DragonBladeForward.TipInRightHand(player, out tipLocal)) p.SetReachTip(tipLocal);
         }
 
         // v0.25.138: the current warp HOLDS its last frame (no fade out) until the next PlayWarp chains from it or
@@ -14101,8 +14105,12 @@ namespace DragonsAltarCombat
         private bool _reachLocked;
         private static int _reachMask = -1;
 
+        private Vector3 _reachTip;
+        private bool _hasReachTip;
+        public void SetReachTip(Vector3 tipLocal) { _reachTip = tipLocal; _hasReachTip = true; }
         public void SetReach(Renderer[] rs, float from, float peak, float to)
         {
+            _hasReachTip = false;
             _reachR = rs; _reachAngle = 0f; _reachLocked = false; _reachFrom = from; _reachPeak = Mathf.Max(from + 0.01f, peak); _reachTo = Mathf.Max(_reachPeak + 0.01f, to);
         }
 
@@ -14128,6 +14136,10 @@ namespace DragonsAltarCombat
                 _spineWritten = spine.localRotation;
                 return;
             }
+            Vector3 tip;
+            if (_hasReachTip) tip = hand.TransformPoint(_reachTip);
+            else
+            {
             bool any = false; Bounds b = new Bounds();
             for (int i = 0; i < _reachR.Length; i++)
             {
@@ -14147,7 +14159,8 @@ namespace DragonsAltarCombat
             if (dir.sqrMagnitude < 0.0001f) return;
             dir.Normalize();
             Vector3 e = b.extents;
-            Vector3 tip = b.center + dir * (Mathf.Abs(dir.x) * e.x + Mathf.Abs(dir.y) * e.y + Mathf.Abs(dir.z) * e.z);
+            tip = b.center + dir * (Mathf.Abs(dir.x) * e.x + Mathf.Abs(dir.y) * e.y + Mathf.Abs(dir.z) * e.z);
+            }
             if (_reachMask == -1) _reachMask = LayerMask.GetMask("Default", "static_solid", "Default_small", "terrain", "piece", "vehicle");
             RaycastHit[] hits = Physics.RaycastAll(tip + Vector3.up * 2f, Vector3.down, 5f, _reachMask, QueryTriggerInteraction.Ignore);
             float gy = float.NegativeInfinity;
@@ -14563,6 +14576,30 @@ namespace DragonsAltarCombat
 
         private static float ButtDist;
 
+        // v0.25.257: the weapon tip in the right hand's local space, measured from the real model (skinned Therzie weapons
+        // baked + grip self-check). Used by Bonecrusher's ground reach so every weapon finds its head the same way.
+        internal static bool TipInRightHand(Player player, out Vector3 tipLocal)
+        {
+            tipLocal = Vector3.zero;
+            try
+            {
+                Animator an = player.GetComponentInChildren<Animator>();
+                if (an == null || !an.isHuman) return false;
+                Transform rh = an.GetBoneTransform(HumanBodyBones.RightHand), lh = an.GetBoneTransform(HumanBodyBones.LeftHand);
+                VisEquipment vis = player.GetComponent<VisEquipment>();
+                if (rh == null || lh == null || vis == null) return false;
+                if (_fR == null) _fR = typeof(VisEquipment).GetField("m_rightItemInstance", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                GameObject item = _fR == null ? null : _fR.GetValue(vis) as GameObject;
+                if (item == null) return false;
+                string how = Collect(item, rh, lh);
+                tipLocal = TipFor(rh, null, 1);
+                Debug.Log("[Aethelborn] Weapon head (ground reach): " + item.name + " " + (rh.TransformPoint(tipLocal) - rh.position).magnitude.ToString("F2") + " m via " + how + (BakeNote.Length > 0 ? "; " + BakeNote : ""));
+                Pts.Clear(); Tags.Clear();
+                return tipLocal != Vector3.zero;
+            }
+            catch (Exception e) { Debug.LogWarning("[Aethelborn] Weapon head (ground reach): " + e.Message); return false; }
+        }
+
         private static string Count(byte tag) { int n = 0; for (int i = 0; i < Tags.Count; i++) if (Tags[i] == tag) n++; return n.ToString(); }
 
         private void Measure(Transform rh, Transform lh)
@@ -14576,7 +14613,8 @@ namespace DragonsAltarCombat
             try { wpn = _player.GetCurrentWeapon(); } catch (Exception) { }
             Skills.SkillType sk = wpn != null && wpn.m_shared != null ? wpn.m_shared.m_skillType : Skills.SkillType.None;
             _swordGrip = sk == Skills.SkillType.Swords;
-            bool pole = sk == Skills.SkillType.Spears;   // v0.25.256 (user): atgeirs were fine - only thrown spears
+            // v0.25.257 (user: the atgeir pointed its head at us): atgeirs and spears both - head out, held near the butt
+            bool pole = sk == Skills.SkillType.Spears || sk == Skills.SkillType.Polearms;
             _spearShift = 0f;
             if (r != null && !Skip(r))
             {

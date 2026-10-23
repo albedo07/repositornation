@@ -1,0 +1,17 @@
+Aethelborn Ascended v0.25.257 - Weapon Heads   (base: v0.25.256; Anchor v0.25.254)
+
+WHIRLWIND CA (Normal and Ascended)
+- Atgeirs: the head pointed back at you because v0.25.256 took atgeirs out of the head check (an atgeir is held near
+  its middle, so its farthest point is the butt). Atgeirs now get exactly the spear treatment: the wider end (the blade)
+  points out, and the weapon slides forward in the fist so the hands hold it near the butt.
+- Spears: unchanged from v0.25.256 (head out, held at the butt).
+
+BONECRUSHER CA (Normal and Ascended jump slam)
+- Cause: the ground reach (the bend that drives the weapon head into the terrain) found the head with the old box rule,
+  which places skinned Therzie weapons (Hellblade Cleavers) in the wrong spot, so it thought the head was already down.
+- Now every weapon's head is found with the same real-model measurement Whirlwind uses (vertices, skinned weapons baked
+  with the grip-at-hand check), so the slam reaches the terrain with vanilla, Therzie and other mods' weapons alike.
+  Old rule kept only as a fallback. Log: "Weapon head (ground reach): <item> X m via ...".
+- No damage, timing, VFX or sound change.
+
+CHECKS: all ten modules compile (C# 5) against your real DLLs. Not tested in game.
