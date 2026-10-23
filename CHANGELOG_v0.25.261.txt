@@ -1,0 +1,18 @@
+Aethelborn Ascended v0.25.261 - CA Trace and Faster Heavy Slash   (base: ANCHOR v0.25.257 + v0.25.258-260)
+
+ASCENDED HEAVY SLASH (Ascended only; Normal Heavy Slash unchanged)
+- Strike interval 0.7 s -> 0.5 s between the three hits (new setting StrikeInterval_v025261, default 0.5, minimum 0.5;
+  the old 0.7 setting is no longer read).
+- So the swings still reach their hit frame on time, each battleaxe swing may now play up to 2x (was capped at 1.25x).
+- Damage, reach, hyper armor, VFX and sounds unchanged; the sound still lands on each contact.
+
+TWO-HANDED SWORD CAs (still slow in your v0.25.260 log)
+- Your log proves the v0.25.260 state hold ran for every borrowed swing (battleaxe, atgeir, sword) but did not fix it,
+  so the animator state was not the (whole) cause. Valheim's own code has no greatsword-specific speed; the
+  difference is inside the animator.
+- New measurement (Lesson 14/17): each borrowed swing logs one "CA trace" line - which clip actually played, on which
+  animator layer, how long until it started, how fast it really played (natural seconds per real second) vs the speed
+  the skill asked for, and every layer's weight/clip while it played. 6 lines per swing with a greatsword/scythe,
+  3 with other weapons (for comparison). Diagnostic only, no behaviour change. The v0.25.260 hold stays.
+
+CHECKS: all ten modules compile (C# 5) against your real DLLs. Not tested in game.

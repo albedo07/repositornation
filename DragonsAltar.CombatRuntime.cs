@@ -1471,7 +1471,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.260";
+        public const string ModVersion = "0.25.261";
 
         internal static DragonCombatPlugin Instance;
 
@@ -7456,6 +7456,7 @@ namespace DragonsAltarCombat
         {
             if (player == null || string.IsNullOrEmpty(trigger)) return;
             HoldStateForTrigger(player, trigger);   // v0.25.260
+            DragonCaTrace.Start(player, trigger);   // v0.25.261 measures what the animator really plays
             if (!trigger.StartsWith("emote", StringComparison.Ordinal)) BlockSkillAnimAttack(player, 2.5f);
             AnimActivation++;
             if (trigger.IndexOf("battleaxe", StringComparison.OrdinalIgnoreCase) >= 0 ||
@@ -10568,6 +10569,13 @@ namespace DragonsAltarCombat
         }
         private static readonly Dictionary<int, float> CaPlayOutUntil = new Dictionary<int, float>();
         private static readonly Dictionary<int, int> CaPlayOutGen = new Dictionary<int, int>();
+        // v0.25.261 (CA trace): the skill speed currently asked of the animator (1 = none)
+        internal static float SkillAnimSpeedNow(Player player)
+        {
+            if (player == null) return 1f;
+            int id = player.GetInstanceID(); float s, until;
+            return SkillAnimSpeed.TryGetValue(id, out s) && SkillAnimSpeedUntil.TryGetValue(id, out until) && Time.time < until ? s : 1f;
+        }
         internal static bool CaPlayingOut(Player player)
         {
             if (player == null) return false;
@@ -23782,7 +23790,123 @@ namespace DragonsAltarCombat
     public class DragonFirstCastClock : MonoBehaviour
     {
         private void Start() { Debug.Log("[Aethelborn] First-cast tracer ready: the first cast of every skill this session is measured (one log line each)."); }
-        private void Update() { DragonFirstCast.Tick(); DragonCombat.TickStateHold(); }
+        private void Update() { DragonFirstCast.Tick(); DragonCombat.TickStateHold(); DragonCaTrace.Tick(); }
+    }
+
+    // v0.25.261 (user: skill CAs slow / out of sync with a two-handed sword, v0.25.260 state hold did not change it):
+    // measures each borrowed vanilla swing as it really plays - which clip on which layer, how long until it started,
+    // natural seconds played per real second, the animator speed and the skill speed asked, and every layer's weight and
+    // clip while it plays. First 3 per weapon state + trigger (Greatsword/Scythe: 6), one log line each. Diagnostic only.
+    public static class DragonCaTrace
+    {
+        private static Player _p; private static Animator _an;
+        private static string _key, _trig; private static float _t0, _foundAt, _real, _nat, _anSum, _askSum, _lastNt; private static int _frames, _layer; private static int[] _pre;
+        private static AnimationClip _clip; private static string _snap;
+        private static readonly Dictionary<string, int> _count = new Dictionary<string, int>();
+        private static readonly System.Text.StringBuilder _b = new System.Text.StringBuilder();
+
+        public static void Start(Player p, string trig)
+        {
+            try
+            {
+                if (p == null || p != Player.m_localPlayer || trig == null || trig.StartsWith("emote", StringComparison.Ordinal)) return;
+                if (_p != null) Finish("the next swing was fired");
+                string st = "None";
+                ItemDrop.ItemData w = p.GetCurrentWeapon();
+                if (w != null && w.m_shared != null) st = w.m_shared.m_animationState.ToString();
+                string key = st + " '" + trig + "'";
+                int n; _count.TryGetValue(key, out n);
+                if (n >= (st == "Greatsword" || st == "Scythe" ? 6 : 3)) return;
+                Animator an = p.GetComponentInChildren<Animator>();
+                if (an == null) return;
+                _count[key] = n + 1;
+                _p = p; _an = an; _key = key + " #" + (n + 1); _trig = trig; _t0 = Time.time; _foundAt = -1f; _real = 0f; _nat = 0f; _anSum = 0f; _askSum = 0f; _frames = 0; _layer = -1; _clip = null; _lastNt = -1f; _snap = null;
+                _pre = new int[an.layerCount];
+                for (int l = 0; l < _pre.Length; l++) _pre[l] = an.GetCurrentAnimatorStateInfo(l).fullPathHash;
+            }
+            catch (Exception) { _p = null; }
+        }
+
+        public static void Tick()
+        {
+            if (_p == null) return;
+            try
+            {
+                if (_an == null || _p.IsDead()) { _p = null; return; }
+                float age = Time.time - _t0;
+                if (_clip == null)
+                {
+                    for (int l = 0; l < _pre.Length && _clip == null; l++)
+                    {
+                        bool tr = _an.IsInTransition(l);
+                        AnimatorStateInfo si = tr ? _an.GetNextAnimatorStateInfo(l) : _an.GetCurrentAnimatorStateInfo(l);
+                        if (si.fullPathHash == _pre[l]) continue;
+                        AnimatorClipInfo[] ci = tr ? _an.GetNextAnimatorClipInfo(l) : _an.GetCurrentAnimatorClipInfo(l);
+                        for (int i = 0; i < ci.Length; i++)
+                        {
+                            AnimationClip c = ci[i].clip;
+                            if (c == null) continue;
+                            AnimationEvent[] ev = c.events;
+                            for (int e = 0; e < ev.Length; e++)
+                                if (ev[e].functionName.IndexOf("Attack", StringComparison.OrdinalIgnoreCase) >= 0 || ev[e].functionName == "Hit") { _clip = c; _layer = l; _foundAt = age; break; }
+                            if (_clip != null) break;
+                        }
+                    }
+                    if (_clip == null) { if (age > 0.8f) { _snap = Layers(); Finish("no attack clip started within 0.8 s"); } return; }
+                }
+                float nt = ClipTime();
+                if (nt < 0f) { Finish("the swing ended"); return; }
+                float dt = Time.deltaTime;
+                if (_lastNt >= 0f && nt > _lastNt) _nat += nt - _lastNt;
+                if (_lastNt >= 0f) { _real += dt; _anSum += _an.speed; _askSum += DragonCombat.SkillAnimSpeedNow(_p); _frames++; }
+                _lastNt = nt;
+                if (_snap == null && age - _foundAt > 0.15f) _snap = Layers();
+                if (age > 4f) Finish("4 s limit");
+            }
+            catch (Exception) { _p = null; }
+        }
+
+        private static float ClipTime()
+        {
+            AnimatorClipInfo[] cur = _an.GetCurrentAnimatorClipInfo(_layer);
+            for (int i = 0; i < cur.Length; i++) if (cur[i].clip == _clip) return _an.GetCurrentAnimatorStateInfo(_layer).normalizedTime * _clip.length;
+            if (_an.IsInTransition(_layer))
+            {
+                AnimatorClipInfo[] nx = _an.GetNextAnimatorClipInfo(_layer);
+                for (int i = 0; i < nx.Length; i++) if (nx[i].clip == _clip) return _an.GetNextAnimatorStateInfo(_layer).normalizedTime * _clip.length;
+            }
+            return -1f;
+        }
+
+        private static string Layers()
+        {
+            _b.Length = 0;
+            for (int l = 0; l < _an.layerCount; l++)
+            {
+                AnimatorClipInfo[] ci = _an.GetCurrentAnimatorClipInfo(l);
+                _b.Append(l == 0 ? "" : " | ").Append(l).Append(" '").Append(_an.GetLayerName(l)).Append("' w").Append(_an.GetLayerWeight(l).ToString("0.00")).Append(':');
+                for (int i = 0; i < ci.Length && i < 3; i++) if (ci[i].clip != null) _b.Append(' ').Append(ci[i].clip.name).Append('@').Append(ci[i].weight.ToString("0.0"));
+                if (_an.IsInTransition(l)) _b.Append(" (blending)");
+            }
+            return _b.ToString();
+        }
+
+        private static void Finish(string why)
+        {
+            Player p = _p; _p = null;
+            if (p == null) return;
+            string s = "[Aethelborn] CA trace " + _key + ": ";
+            if (_clip == null) s += "NO swing found (" + why + "). Layers: " + _snap;
+            else
+            {
+                float rate = _real > 0.01f ? _nat / _real : 0f;
+                s += "clip " + _clip.name + " (" + _clip.length.ToString("0.00") + " s) on layer " + _layer + " '" + _an.GetLayerName(_layer) + "', started after " + _foundAt.ToString("0.00") +
+                    " s; played " + _nat.ToString("0.00") + " s of it in " + _real.ToString("0.00") + " s = " + rate.ToString("0.00") + "x (animator speed avg " +
+                    (_frames > 0 ? _anSum / _frames : 0f).ToString("0.00") + ", skill asked avg " + (_frames > 0 ? _askSum / _frames : 0f).ToString("0.00") + "); ended: " + why +
+                    ". Layers while playing: " + (_snap ?? "-");
+            }
+            Debug.Log(s);
+        }
     }
 
     public static class DragonPerf

@@ -1,3 +1,3 @@
-v0.25.260: equip a two-handed sword, cast Heavy Slash, Circle Swing, Halfmoon and your other swing skills (Normal and
-Ascended). CAs should match the speed/sync you get with a battleaxe. Then swap to a 2H sword normal attack (must look
-vanilla). Send LogOutput.log ("animator held in" lines).
+v0.25.261: 1) Cast Ascended Heavy Slash - hits now 0.5 s apart.
+2) With a BATTLEAXE: cast Heavy Slash, Circle Swing, Halfmoon once each. 3) Swap to the TWO-HANDED SWORD and cast the
+same skills. Send LogOutput.log ("CA trace" lines compare the two weapons).

@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.260";
+        public const string ModVersion = "0.25.261";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -3808,7 +3808,7 @@ namespace AlbedosCustomClassesAdvanced
 
             const string h = "Mercenary Heavy Slash Ascended";
             _hsAscReach = Config.Bind(h, "Reach", 5f, "Ascended reach (normal 3.5m).");
-            _hsAscStrikeInterval = Config.Bind(h, "StrikeInterval_v025195", 0.7f, "Minimum seconds between the three Battleaxe contacts (3SS), never below 0.7s.");
+            _hsAscStrikeInterval = Config.Bind(h, "StrikeInterval_v025261", 0.5f, "Minimum seconds between the three Battleaxe contacts (3SS), never below 0.5s.");   // v0.25.261 (user): 0.7 -> 0.5 s
             _hsAscHyper = Config.Bind(h, "HyperArmorOnHit", 2f, "Hyper Armor seconds when it connects (refreshes, never stacks).");
             _heavyAscDamage = BindDamage("Mercenary Heavy Slash Ascended Damage", 0f, 110f, 0f, 0f, 0f, 0f, 0f, 0f);
 
@@ -4886,7 +4886,7 @@ namespace AlbedosCustomClassesAdvanced
             AnimationClip previous = null;
             float speed = 1f;
             float lastContact = -100f;
-            float spacing = Mathf.Max(0.7f, _hsAscStrikeInterval.Value);
+            float spacing = Mathf.Max(0.5f, _hsAscStrikeInterval.Value);
             for (int strike = 0; strike < 3; strike++)
             {
                 if (player == null || player.IsDead()) yield break;
@@ -4895,16 +4895,17 @@ namespace AlbedosCustomClassesAdvanced
                 if (trigger != null)
                 {
                     // Contact spacing is absolute: class attack-speed bonuses must not collapse this 3SS.
-                    float contactDelay = strike == 0 ? Mathf.Max(0.05f, windup) : Mathf.Max(0.5f, lastContact + spacing - Time.time);
-                    speed = Mathf.Clamp(CsTiming(trigger)[0] / contactDelay, 0.1f, 1.25f);
+                    // v0.25.261 (user: 0.5 s between strikes): the swing may play up to 2x so its hit frame still lands on time
+                    float contactDelay = strike == 0 ? Mathf.Max(0.05f, windup) : Mathf.Max(0.15f, lastContact + spacing - Time.time);
+                    speed = Mathf.Clamp(CsTiming(trigger)[0] / contactDelay, 0.1f, 2f);
                     contactDelay = Mathf.Max(contactDelay, CsTiming(trigger)[0] / speed);
                     DragonSkillAudio.Expect(player, DragonBaseSound.HeavySlash, player.transform.position, contactDelay, 1f, strike);   // v0.25.237: the whole swing, peak on contact
                     DragonCombat.FireVanilla(player, trigger);
                     DragonVfx.WeaponWake(player, contactDelay * 0.6f, 0.55f);
                     AnimationClip current = null;
                     yield return StartCoroutine(CsSwing(player, trigger, speed, previous, 0f, true, 0f,
-                        delegate(AnimationClip c) { current = c; }, contactDelay, 1.25f));
-                    speed = Mathf.Clamp(CsTiming(trigger)[0] / contactDelay, 0.1f, 1.25f);
+                        delegate(AnimationClip c) { current = c; }, contactDelay, 2f));
+                    speed = Mathf.Clamp(CsTiming(trigger)[0] / contactDelay, 0.1f, 2f);
                     previous = current;
                 }
                 else
@@ -4964,7 +4965,7 @@ namespace AlbedosCustomClassesAdvanced
                         b.Append(IhLine("Reach", IhNum(_hsAscReach.Value) + "m"));
                         b.Append(IhLine("On Hit", IhNum(_hsAscHyper.Value) + "s Hyper Armor"));
                         b.Append(IhLine("Strikes", "3 Battleaxe strikes (3SS)"));
-                        b.Append(IhLine("Strike Interval", "At least " + IhNum(Mathf.Max(0.7f, _hsAscStrikeInterval.Value)) + "s between hits"));
+                        b.Append(IhLine("Strike Interval", "At least " + IhNum(Mathf.Max(0.5f, _hsAscStrikeInterval.Value)) + "s between hits"));
                     }
                     else
                     {
