@@ -1,5 +1,5 @@
 @echo off
-title Immortal Heroes v0.25.263 - Holy Sounds
+title Immortal Heroes v0.25.264 - Main Menu
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
 echo.
 pause

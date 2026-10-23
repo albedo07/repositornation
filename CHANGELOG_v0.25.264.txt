@@ -1,0 +1,19 @@
+Aethelborn Ascended v0.25.264 - Main Menu   (base: ANCHOR v0.25.257 + v0.25.258-263)
+
+MAIN MENU (nothing else in Valheim's menu is changed)
+- The Aethelborn Ascended title sits right under Valheim's logo (80% of the logo's width, centred). It is part of the
+  main menu itself, so it hides with it when you open character select, settings and other screens.
+- MenuMusic plays on the main menu: the whole 30 s track, looping forever (also when Valheim's "continuous music" is
+  off). It runs through Valheim's own music system, so the Music volume slider and fades apply.
+- NEW SETTING [Main Menu] Use AA Main Menu = true. false = the standard vanilla main menu (title hidden, vanilla music
+  back). Applies live (F8 > General, or the .cfg).
+- Log lines "[AA Menu] title placed ..." and "[AA Menu] menu music ..." confirm both on start-up.
+
+MOD ICON
+- icon.png (256x256) of the AA crest is included at the top of the package (mod managers / Thunderstore use it).
+
+NEW FILES: ImmortalHeroesAssets\AA_Title.png, ImmortalHeroesAssets\SFX\MenuMusic.wav (decoded from your MP3 unchanged),
+icon.png. The installer copies them with the other assets.
+No skill, combat, VFX or sound-mix changes.
+
+CHECKS: all ten modules compile (C# 5) against your real DLLs. Not tested in game.

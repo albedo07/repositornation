@@ -1033,6 +1033,24 @@ namespace DragonsAltarCombat
             for (int w = 0; w < count; w++) if (energy[w] >= top * 0.7f) return w * 0.01f;
             return 0f;
         }
+        // v0.25.264 main menu music: ImmortalHeroesAssets/SFX/<name> as an AudioClip (null if missing/invalid; caller remembers)
+        public static AudioClip LoadWavClip(string name)
+        {
+            try
+            {
+                if (_soundFolder == null) _soundFolder = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(typeof(DragonSkillAudio).Assembly.Location), "ImmortalHeroesAssets", "SFX");
+                string file = System.IO.Path.Combine(_soundFolder, name);
+                if (!System.IO.File.Exists(file)) return null;
+                float[] samples; int channels, rate;
+                if (!DecodePcm(System.IO.File.ReadAllBytes(file), out samples, out channels, out rate)) return null;
+                AudioClip clip = AudioClip.Create("AA_" + name, samples.Length / channels, channels, rate, false);
+                if (clip == null) return null;
+                if (!WritePcm(clip, samples)) { UnityEngine.Object.Destroy(clip); return null; }
+                UnityEngine.Object.DontDestroyOnLoad(clip);
+                return clip;
+            }
+            catch (Exception) { return null; }
+        }
         private static Profile FromCustom(int cue)
         {
             string[] files = CustomFiles[cue];
@@ -1528,7 +1546,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.263";
+        public const string ModVersion = "0.25.264";
 
         internal static DragonCombatPlugin Instance;
 

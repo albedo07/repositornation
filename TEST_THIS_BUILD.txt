@@ -1,3 +1,2 @@
-v0.25.263: 2H sword skills keep the greatsword stance. Cast each Paladin/Priest skill once (Normal + Ascended), Battlecry
-near enemies (stun), Crescent Cleave, Knight's Guidance (no wings), shorten a sound's Length (it should fade, not cut),
-level up once (Ahhhh + golden particles). Send LogOutput.log ("Skill audio ..." lines show which sounds loaded).
+v0.25.264: start the game - the AA title under the Valheim logo, MenuMusic looping. Set [Main Menu] Use AA Main Menu =
+false (F8 > General) - the vanilla menu returns. Send LogOutput.log ("[AA Menu]" lines) and a screenshot of the menu.
