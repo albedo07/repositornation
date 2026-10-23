@@ -1,0 +1,5 @@
+ANCHOR v0.25.257 Weapon Heads (user-confirmed 2026-10-23: "Perfect")
+File: Aethelborn_Ascended_v0.25.257_Weapon_Heads.zip
+SHA-256: 7d9522fdae23bac09671d0907ebc9f7821f49ce254052be7c7654f3eba7083e7
+Whirlwind CA: every weapon (vanilla, Therzie, 1H, 2H, dual, spear, atgeir) arms out front, tip ahead; Bonecrusher ground reach
+uses the real-model weapon head.
