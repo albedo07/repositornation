@@ -1,2 +1,4 @@
-v0.25.257 - Whirlwind with an atgeir (head out, held near the butt). Bonecrusher with Hellblade Cleavers, a Therzie 2H and
-a vanilla weapon (head hits the terrain). Send LogOutput.log ("Weapon head (ground reach)" lines).
+v0.25.258 first-cast test:
+1. Start Valheim fresh and load your world (wait ~20 s after spawning so the loading warm-up can finish).
+2. Cast each skill ONCE: the ones that stutter (e.g. Circle Swing) and a few that don't. Use Ascended versions too if you can.
+3. Quit and send BepInEx/LogOutput.log (lines "First cast ...").

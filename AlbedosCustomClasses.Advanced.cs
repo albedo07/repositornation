@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.257";
+        public const string ModVersion = "0.25.258";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -15358,7 +15358,9 @@ namespace AlbedosCustomClassesAdvanced
             float staBefore = player.GetStamina(), eitBefore = IhCallFloat(player, "GetEitr");
             IhFaceSkillAim(player);   // Use the crosshair heading for the skill being cast.
             DragonPerf.PreCast(id);   // v0.25.185 performance monitor: effects spawned during the cast belong to this skill
-            IhCastSkillNow(player, id);
+            long firstCast = DragonFirstCast.Begin(id);   // v0.25.258 first-cast tracer
+            try { IhCastSkillNow(player, id); }
+            finally { DragonFirstCast.Exit(DragonFirstCast.Code, firstCast); }
             {
                 // v0.25.65: a skill that really started takes over from any normal attack (aborted, queue dropped)
                 int ra2 = -1, mx2; float nx2;
@@ -15368,6 +15370,7 @@ namespace AlbedosCustomClassesAdvanced
                 if (began) DragonCombat.SwallowAttackInput(player, 0.35f);
                 if (began) { _ihCastId = id; _ihCastAt = Time.time; }
                 if (began) DragonPerf.NoteCast(id);   // v0.25.184 performance monitor attribution
+                if (began) DragonFirstCast.Confirm(id);
                 // v0.25.72 activation rune circle under the caster (bigger + light column for Ultimates and Graces)
                 if (false && began && _enableVfx.Value)   // v0.25.85 (user): no cast flare, the skill's own particles are enough
                 {
@@ -15391,6 +15394,7 @@ namespace AlbedosCustomClassesAdvanced
                 if (started && DragonCombat.SkillMotion(id, out motion, out motionTime)) DragonCombat.PlayBodyMotion(player, motion, motionTime);
                 if (started) { _ihCastId = id; _ihCastAt = Time.time; }   // charges that began count as a cast too
                 if (started) DragonPerf.NoteCast(id);   // v0.25.184 performance monitor attribution (same-frame repeat ignored)
+                if (started) DragonFirstCast.Confirm(id);
             }
             if (tryEmpower && !relicBefore)
             {

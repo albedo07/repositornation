@@ -1,0 +1,14 @@
+Aethelborn Ascended v0.25.258 - First Cast Tracer   (base: ANCHOR v0.25.257)
+
+DIAGNOSTIC ONLY - no gameplay, CA, VFX, SFX, damage or timing change.
+
+- New always-on first-cast tracer. For the FIRST successful cast of every skill in a session (any class, Normal and
+  Ascended, from the hotbar), it measures every frame for 1.5 s and writes one log line:
+  "[Aethelborn] First cast <skill>: worst frame X ms (frame +k, normal ~Y ms). In that frame: SFX a ms, VFX b ms, CA c ms,
+   skill code total d ms, game/Unity rest e ms[, GARBAGE COLLECTION ran]. Whole 1.5 s: ...; slow frames N"
+  - SFX = preparing/playing the skill's sounds; VFX = creating its effects; CA = starting its animation (incl. Mixamo clips);
+    skill code = the cast itself; game/Unity rest = rendering, first-time shader compiles, physics etc.
+- Startup line "First-cast tracer ready" proves it is running. After a skill's first cast it costs nothing.
+- Failed presses (cooldown, no stamina) are not counted; that skill is traced on its first real cast.
+
+CHECKS: all ten modules compile (C# 5) against your real DLLs. Not tested in game.

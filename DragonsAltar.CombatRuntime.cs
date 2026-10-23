@@ -1100,7 +1100,14 @@ namespace DragonsAltarCombat
             return voice;
         }
         private static readonly float[] ExpectedAt = new float[CueCount];
+        // v0.25.258 first-cast tracer: time spent preparing/playing skill sounds
         public static void Play(Player caster, DragonBaseSound cue, Vector3 position, int swing = 0, float pitchScale = 1f, float maxSeconds = 0f)
+        {
+            long ft = DragonFirstCast.Enter(DragonFirstCast.Sfx);
+            try { PlayCore(caster, cue, position, swing, pitchScale, maxSeconds); }
+            finally { DragonFirstCast.Exit(DragonFirstCast.Sfx, ft); }
+        }
+        private static void PlayCore(Player caster, DragonBaseSound cue, Vector3 position, int swing, float pitchScale, float maxSeconds)
         {
             if (!Enabled || caster == null || caster != Player.m_localPlayer || caster.IsDead() || AudioMan.instance == null) return;
             int id = (int)cue; if (id < 0 || id >= CueCount) return;
@@ -1445,7 +1452,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.257";
+        public const string ModVersion = "0.25.258";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1679,6 +1686,7 @@ namespace DragonsAltarCombat
             DragonPerf.SpikeMs = Config.Bind("Performance Monitor", "SpikeMs_v025184", 25f, "A frame slower than this (ms) is logged as a spike with the active skill.");
             DragonPerf.MaxLights = Config.Bind("Visuals", "MaxEffectLights_v025185", 6, "Legacy setting: extra skill point lights were removed in v0.25.195.");
             if (gameObject.GetComponent<DragonPerfMonitor>() == null) gameObject.AddComponent<DragonPerfMonitor>();
+            if (gameObject.GetComponent<DragonFirstCastClock>() == null) gameObject.AddComponent<DragonFirstCastClock>();   // v0.25.258
 
             if (!EnableRuntime.Value)
             {
@@ -6202,9 +6210,10 @@ namespace DragonsAltarCombat
             if (fx == null || !DragonVfx.Enabled) return;
             bool perf = DragonPerf.On;   // v0.25.184 performance monitor: VFX spawn time + objects per skill
             if (perf) DragonPerf.VfxBegin();
+            long ft = DragonFirstCast.Enter(DragonFirstCast.Vfx);   // v0.25.258 first-cast tracer
             try { fx(); }
             catch (Exception ex) { if (DragonCombatPlugin.Instance != null) DragonCombatPlugin.Instance.LogInfo("[Immortal Heroes] VFX error: " + ex.Message); }
-            finally { if (perf) DragonPerf.VfxEnd(); }
+            finally { DragonFirstCast.Exit(DragonFirstCast.Vfx, ft); if (perf) DragonPerf.VfxEnd(); }
         }
 
         // v0.25.66 UNIVERSAL RULE (user): "Physical Objects" = environmental objects (trees, rocks, logs, bushes);
@@ -6365,6 +6374,12 @@ namespace DragonsAltarCombat
         // impact key; hold = stay on the impact pose until ClipImpact / ClipStop.
         public static void PlayClip(Player player, string clip, float windup, bool hold, string tuneName = null)
         {
+            long ft = DragonFirstCast.Enter(DragonFirstCast.Ca);   // v0.25.258 first-cast tracer
+            try { PlayClipCore(player, clip, windup, hold, tuneName); }
+            finally { DragonFirstCast.Exit(DragonFirstCast.Ca, ft); }
+        }
+        private static void PlayClipCore(Player player, string clip, float windup, bool hold, string tuneName)
+        {
             if (player == null || player != Player.m_localPlayer || string.IsNullOrEmpty(clip)) return;
             CheckAnimationClass(player);
             SkillTakeover(player);   // v0.25.154
@@ -6422,6 +6437,12 @@ namespace DragonsAltarCombat
 
         // Plays caller-built keys (variable-length clips such as Whirlwind).
         public static void PlayClipKeys(Player player, DragonClipKey[] keys, float windup)
+        {
+            long ft = DragonFirstCast.Enter(DragonFirstCast.Ca);   // v0.25.258 first-cast tracer
+            try { PlayClipKeysCore(player, keys, windup); }
+            finally { DragonFirstCast.Exit(DragonFirstCast.Ca, ft); }
+        }
+        private static void PlayClipKeysCore(Player player, DragonClipKey[] keys, float windup)
         {
             if (player == null || player != Player.m_localPlayer || keys == null || keys.Length == 0) return;
             if (DragonCombatPlugin.Instance != null && !DragonCombatPlugin.Instance.EnableSkillAnimations.Value) return;
@@ -13850,6 +13871,12 @@ namespace DragonsAltarCombat
         // their beginning (clipTimes[0] ~ 0).
         public static bool PlayWarp(Player player, string name, float[] realTimes, float[] clipTimes, float fadeIn, float fadeOut, bool transferRoot)
         {
+            long ft = DragonFirstCast.Enter(DragonFirstCast.Ca);   // v0.25.258 first-cast tracer (Mixamo clip start)
+            try { return PlayWarpCore(player, name, realTimes, clipTimes, fadeIn, fadeOut, transferRoot); }
+            finally { DragonFirstCast.Exit(DragonFirstCast.Ca, ft); }
+        }
+        private static bool PlayWarpCore(Player player, string name, float[] realTimes, float[] clipTimes, float fadeIn, float fadeOut, bool transferRoot)
+        {
             ShowStatusOnce();
             AnimationClip clip = Resolve(name);
             if (player == null || clip == null || realTimes == null || clipTimes == null || realTimes.Length < 2 || realTimes.Length != clipTimes.Length) return false;
@@ -13981,6 +14008,12 @@ namespace DragonsAltarCombat
         }
 
         public static bool PlaySource(Player player, AnimationClip clip, float from, float to, float seconds, float blend, bool hold, string tune = null)
+        {
+            long ft = DragonFirstCast.Enter(DragonFirstCast.Ca);   // v0.25.258 first-cast tracer
+            try { return PlaySourceCore(player, clip, from, to, seconds, blend, hold, tune); }
+            finally { DragonFirstCast.Exit(DragonFirstCast.Ca, ft); }
+        }
+        private static bool PlaySourceCore(Player player, AnimationClip clip, float from, float to, float seconds, float blend, bool hold, string tune)
         {
             Animator an = player == null ? null : player.GetComponentInChildren<Animator>();
             if (clip == null || an == null || !an.isHuman) return false;
@@ -23555,6 +23588,105 @@ namespace DragonsAltarCombat
         public double VfxMsTotal, VfxMsMax, WindowFrameMs, WindowOurMs, WorstFrameMs;
         public int Hosts, Systems, Lights, Vanilla;
         public double[] PhaseMs = new double[4];
+    }
+
+    // v0.25.258 FIRST-CAST TRACER (user: some skills stutter the first time they are cast, e.g. Circle Swing). Always on,
+    // costs nothing after a skill's first cast. For the first successful cast of every skill this session it records, frame by
+    // frame for 1.5 s: the frame time, and how much of it was the skill's own code, its sounds (SFX), its effects (VFX) and
+    // its animation starts (CA, incl. Mixamo clips); the rest of the frame is the game/Unity (rendering, first-time shader
+    // compiles, physics) and a garbage collection is flagged. One log line per skill: the worst frame and what was in it.
+    public static class DragonFirstCast
+    {
+        public const int Code = 0, Sfx = 1, Vfx = 2, Ca = 3, Count = 4;
+        private static readonly string[] Names = { "skill code", "SFX", "VFX", "CA" };
+        private const int Window = 90;
+        private static readonly HashSet<string> Seen = new HashSet<string>();
+        private static readonly int[] Depth = new int[Count];
+        private static readonly long[,] Ticks = new long[Window, Count];
+        private static readonly double[] FrameMs = new double[Window];
+        private static readonly bool[] Gc = new bool[Window];
+        private static string _id;
+        private static int _startFrame = -1, _lastGc;
+        private static bool _confirmed;
+        private static float _startTime;
+        public static bool Tracing { get { return _id != null; } }
+
+        // called right before a skill's cast code; only the first cast of each skill is traced
+        public static long Begin(string id)
+        {
+            if (string.IsNullOrEmpty(id) || Seen.Contains(id)) return -1;
+            if (_id != null) Finish();
+            Seen.Add(id);
+            _id = id; _startFrame = Time.frameCount; _startTime = Time.unscaledTime; _confirmed = false;
+            Array.Clear(Ticks, 0, Ticks.Length); Array.Clear(FrameMs, 0, FrameMs.Length); Array.Clear(Gc, 0, Gc.Length);
+            for (int i = 0; i < Count; i++) Depth[i] = 0;
+            _lastGc = GC.CollectionCount(0);
+            return Enter(Code);
+        }
+        // the cast really started (cooldown / resource spent); an unconfirmed trace is dropped (the skill stays untraced)
+        public static void Confirm(string id) { if (_id == id) _confirmed = true; }
+
+        public static long Enter(int bucket)
+        {
+            if (_id == null) return -1;
+            if (Depth[bucket]++ > 0) return -1;   // nested calls of the same kind count once
+            return DragonPerf.Now();
+        }
+        public static void Exit(int bucket, long t0)
+        {
+            if (_id == null) return;
+            if (Depth[bucket] > 0) Depth[bucket]--;
+            if (t0 < 0) return;
+            int k = Time.frameCount - _startFrame;
+            if (k >= 0 && k < Window) Ticks[k, bucket] += DragonPerf.Now() - t0;
+        }
+
+        private static long _lastTick;
+        // called at the start of every frame: closes the previous frame
+        internal static void Tick()
+        {
+            long now = DragonPerf.Now();
+            double prevMs = _lastTick > 0 ? DragonPerf.Ms(now - _lastTick) : 0;
+            _lastTick = now;
+            if (_id == null) return;
+            int k = Time.frameCount - 1 - _startFrame;
+            int gc = GC.CollectionCount(0);
+            if (k >= 0 && k < Window) { FrameMs[k] = prevMs; if (gc != _lastGc) Gc[k] = true; }
+            _lastGc = gc;
+            if (k >= 0 && !_confirmed) { Seen.Remove(_id); _id = null; return; }   // the press did not cast
+            if (k >= Window - 1 || Time.unscaledTime - _startTime > 1.5f) Finish();
+        }
+
+        private static void Finish()
+        {
+            string id = _id; _id = null;
+            if (id == null || !_confirmed) { if (id != null) Seen.Remove(id); return; }
+            int n = Mathf.Min(Window, Mathf.Max(1, Time.frameCount - 1 - _startFrame));
+            int worst = 0; double sum = 0; int cnt = 0;
+            for (int k = 0; k < n; k++) { if (FrameMs[k] > FrameMs[worst]) worst = k; }
+            for (int k = Mathf.Max(0, n - 20); k < n; k++) if (k != worst && FrameMs[k] > 0) { sum += FrameMs[k]; cnt++; }
+            double typical = cnt > 0 ? sum / cnt : 0;
+            System.Text.StringBuilder sb = new System.Text.StringBuilder();
+            sb.Append("[Aethelborn] First cast ").Append(id).Append(": worst frame ").Append(FrameMs[worst].ToString("F0")).Append(" ms (frame +").Append(worst)
+              .Append(", normal ~").Append(typical.ToString("F0")).Append(" ms). In that frame: ");
+            double ours = 0;
+            double code = DragonPerf.Ms(Ticks[worst, Code]);
+            for (int b = Sfx; b < Count; b++) { double ms = DragonPerf.Ms(Ticks[worst, b]); sb.Append(Names[b]).Append(" ").Append(ms.ToString("F1")).Append(" ms, "); }
+            double nested = DragonPerf.Ms(Ticks[worst, Sfx] + Ticks[worst, Vfx] + Ticks[worst, Ca]);
+            ours = Math.Max(code, 0) + Math.Max(0, nested - (code > 0 ? Math.Min(code, nested) : 0));
+            sb.Append("skill code total ").Append(code.ToString("F1")).Append(" ms (includes its SFX/VFX/CA), game/Unity rest ")
+              .Append(Math.Max(0, FrameMs[worst] - ours).ToString("F0")).Append(" ms").Append(Gc[worst] ? ", GARBAGE COLLECTION ran" : "").Append(". Whole 1.5 s: ");
+            for (int b = 0; b < Count; b++) { long t = 0; for (int k = 0; k < n; k++) t += Ticks[k, b]; sb.Append(Names[b]).Append(" ").Append(DragonPerf.Ms(t).ToString("F1")).Append(" ms").Append(b < Count - 1 ? ", " : ""); }
+            int spikes = 0; for (int k = 0; k < n; k++) if (FrameMs[k] > Math.Max(25.0, typical * 2.0)) spikes++;
+            sb.Append("; slow frames ").Append(spikes);
+            Debug.Log(sb.ToString());
+        }
+    }
+
+    public class DragonFirstCastClock : MonoBehaviour
+    {
+        private void Start() { Debug.Log("[Aethelborn] First-cast tracer ready: the first cast of every skill this session is measured (one log line each)."); }
+        private void Update() { DragonFirstCast.Tick(); }
     }
 
     public static class DragonPerf
