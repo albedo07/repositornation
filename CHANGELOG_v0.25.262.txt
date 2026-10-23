@@ -1,0 +1,20 @@
+Aethelborn Ascended v0.25.262 - Greatsword Swing Speed   (base: ANCHOR v0.25.257 + v0.25.258-261)
+
+WHAT THE v0.25.261 CA TRACE PROVED (your log)
+- Same skill, same battleaxe swing (BattleAxe1), same speed asked by the skill (1.00x):
+  one-handed weapon -> the animator ran it at 1.28x (whole swing 1.84 s);
+  two-handed sword  -> the animator ran it at 1.09x (whole swing 2.15 s) = ~17% slower.
+- The right clip played on the right layer and started on time (0.01 s), so the state, layer and timing were fine;
+  only the swing's base speed was lower with the greatsword.
+
+FIX (skills with borrowed vanilla swings, Normal and Ascended, only while a greatsword or scythe is equipped)
+- While such a swing plays, its base speed now comes from the swing clip's own built-in speed marks (what the
+  animation is made to play at), the same for every weapon, instead of whatever speed the animator was left at.
+  The skill's own speed (wind-up timing, Ascended Heavy Slash 0.5 s spacing, Circle Swing chain...) is applied on
+  top as before.
+- Affects every skill that borrows a vanilla swing: Heavy Slash / Ascended Heavy Slash, Circle Swing, Halfmoon,
+  Whirlwind finisher, Moonlight/Crescent swings, Frenzied Charge, etc. Other weapons: unchanged.
+- One log line per clip: "... skill swing <clip>: base speed from the clip's own Speed events (...; the animator had ...)".
+- The CA trace from v0.25.261 stays on to confirm the result. No damage, VFX or sound changes.
+
+CHECKS: all ten modules compile (C# 5) against your real DLLs. Not tested in game.

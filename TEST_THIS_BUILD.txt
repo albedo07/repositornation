@@ -1,3 +1,2 @@
-v0.25.261: 1) Cast Ascended Heavy Slash - hits now 0.5 s apart.
-2) With a BATTLEAXE: cast Heavy Slash, Circle Swing, Halfmoon once each. 3) Swap to the TWO-HANDED SWORD and cast the
-same skills. Send LogOutput.log ("CA trace" lines compare the two weapons).
+v0.25.262: with the TWO-HANDED SWORD cast Halfmoon, Heavy Slash (Normal + Ascended), Circle Swing; then the same with a
+one-handed weapon. Greatsword swings should now feel the same speed. Send LogOutput.log ("CA trace" / "base speed" lines).

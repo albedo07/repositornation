@@ -1471,7 +1471,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.261";
+        public const string ModVersion = "0.25.262";
 
         internal static DragonCombatPlugin Instance;
 
@@ -7457,6 +7457,7 @@ namespace DragonsAltarCombat
             if (player == null || string.IsNullOrEmpty(trigger)) return;
             HoldStateForTrigger(player, trigger);   // v0.25.260
             DragonCaTrace.Start(player, trigger);   // v0.25.261 measures what the animator really plays
+            if (player == Player.m_localPlayer && !trigger.StartsWith("emote", StringComparison.Ordinal)) _swingBaseUntil = Time.time + 4f;   // v0.25.262
             if (!trigger.StartsWith("emote", StringComparison.Ordinal)) BlockSkillAnimAttack(player, 2.5f);
             AnimActivation++;
             if (trigger.IndexOf("battleaxe", StringComparison.OrdinalIgnoreCase) >= 0 ||
@@ -10909,6 +10910,12 @@ namespace DragonsAltarCombat
                 baseSpeed = current / state.LastFactor;
             }
 
+            // v0.25.262 (CA trace: the same battleaxe swing ran at animator 1.09x with a greatsword vs 1.28x with a one-hander,
+            // skill asking 1.00 both times): while a skill's borrowed swing plays with a greatsword/scythe, the base speed is
+            // the swing clip's OWN Speed events (what the clip is made to play at), not whatever the animator was left at.
+            float evBase;
+            if (player == Player.m_localPlayer && Time.time < _swingBaseUntil && SwingEventSpeed(player, animator, current, out evBase)) baseSpeed = evBase;
+
             float factor = 1f;
 
             if (player.InAttack())
@@ -10941,6 +10948,54 @@ namespace DragonsAltarCombat
             state.HasOutput = true;
             state.LastFactor = factor;
             state.LastOutputSpeed = output;
+        }
+
+        private static float _swingBaseUntil;
+        private static readonly List<AnimatorClipInfo> _swingClipInfo = new List<AnimatorClipInfo>(4);
+        private static readonly Dictionary<AnimationClip, float[]> _swingEvents = new Dictionary<AnimationClip, float[]>();   // null = not an attack clip
+        private static readonly HashSet<AnimationClip> _swingLogged = new HashSet<AnimationClip>();
+        // speed the swing clip's own Speed events set at its current time (1 before the first event); false = no attack clip playing
+        private static bool SwingEventSpeed(Player player, Animator an, float animatorNow, out float speed)
+        {
+            speed = 1f;
+            try
+            {
+                ItemDrop.ItemData w = player.GetCurrentWeapon();
+                if (w == null || w.m_shared == null) return false;
+                ItemDrop.ItemData.AnimationState st = w.m_shared.m_animationState;
+                if (st != ItemDrop.ItemData.AnimationState.Greatsword && st != ItemDrop.ItemData.AnimationState.Scythe) return false;
+                bool tr = an.IsInTransition(0);
+                if (tr) an.GetNextAnimatorClipInfo(0, _swingClipInfo); else an.GetCurrentAnimatorClipInfo(0, _swingClipInfo);
+                AnimationClip clip = null; float best = -1f;
+                for (int i = 0; i < _swingClipInfo.Count; i++) if (_swingClipInfo[i].clip != null && _swingClipInfo[i].weight > best) { best = _swingClipInfo[i].weight; clip = _swingClipInfo[i].clip; }
+                if (clip == null) return false;
+                float[] ev;
+                if (!_swingEvents.TryGetValue(clip, out ev))
+                {
+                    AnimationEvent[] all = clip.events;
+                    bool attack = false; int n = 0;
+                    for (int e = 0; e < all.Length; e++)
+                    {
+                        if (all[e].functionName.IndexOf("Attack", StringComparison.OrdinalIgnoreCase) >= 0 || all[e].functionName == "Hit") attack = true;
+                        if (all[e].functionName == "Speed") n++;
+                    }
+                    ev = null;
+                    if (attack)
+                    {
+                        ev = new float[n * 2]; int k = 0;
+                        for (int e = 0; e < all.Length; e++) if (all[e].functionName == "Speed") { ev[k++] = all[e].time; ev[k++] = all[e].floatParameter; }
+                    }
+                    _swingEvents[clip] = ev;
+                }
+                if (ev == null) return false;
+                AnimatorStateInfo si = tr ? an.GetNextAnimatorStateInfo(0) : an.GetCurrentAnimatorStateInfo(0);
+                float t = Mathf.Min(si.normalizedTime, 1f) * clip.length;
+                for (int k = 0; k + 1 < ev.Length; k += 2) if (ev[k] <= t && ev[k + 1] > 0.05f) speed = ev[k + 1];
+                if (_swingLogged.Add(clip))
+                    Debug.Log("[Aethelborn] " + st + " skill swing " + clip.name + ": base speed from the clip's own Speed events (" + (ev.Length / 2) + " events, now " + speed.ToString("0.00") + "x; the animator had " + animatorNow.ToString("0.00") + "x).");
+                return true;
+            }
+            catch (Exception) { return false; }
         }
 
         public static float ChainNaturalClock;
