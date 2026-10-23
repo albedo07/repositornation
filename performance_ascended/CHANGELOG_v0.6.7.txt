@@ -1,0 +1,12 @@
+Performance Ascended v0.6.7 - UI Tracer   (base: v0.6.6; Anchor v0.6.5)
+
+DIAGNOSTIC ONLY - nothing about the game, UI or performance settings changes.
+- Every time a window opens (inventory, chest/container, large map, trader) PA measures every frame for 1 s:
+  the frame time, the time spent inside the game's UI methods (InventoryGui Show/Hide/UpdateInventory/UpdateContainer/
+  SetupCrafting/UpdateCraftingPanel/UpdateRecipeList, InventoryGrid UpdateInventory/UpdateGui, Minimap SetMapMode/UpdateMap,
+  StoreGui Show) INCLUDING every other mod's patches on them, and garbage collections. One log line per open:
+  "[PA UI] Chest/container <name> (open #N): worst frame X ms ... UI code Y ms: <method> a ms, ... rest of frame Z ms[, GC]".
+  Open #1 vs later opens shows whether the cost is a one-time build or happens every time.
+- At startup it logs which other mods patch those UI methods ("[PA UI] other mods patching UI methods: ...").
+- New source file src\UiTracer.cs; the installer's required file list includes it.
+CHECKS: compiled (mcs, C# 5) against your real Valheim/BepInEx/Harmony DLLs. Not tested in game.

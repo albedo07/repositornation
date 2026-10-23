@@ -1,4 +1,4 @@
-PERFORMANCE ASCENDED 0.6.6 — OFFICIAL RELEASE BUILD (testing tools off)
+PERFORMANCE ASCENDED 0.6.7 — RELEASE BUILD + UI TRACER (diagnostic)
 2026-10-21
 See CHANGELOG_v0.6.5.txt, ANCHOR_v0.6.5.txt and FPS_MOD_SURVEY.txt first; older notes below are from 0.3.3.
 

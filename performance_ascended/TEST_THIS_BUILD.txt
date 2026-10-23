@@ -1,2 +1,5 @@
-Performance Ascended v0.6.5 - OFFICIAL
-Extract to an EMPTY folder, run INSTALL.bat. Ctrl+Alt+B hides/shows the indicator, Ctrl+Alt+F the FPS counter.
+v0.6.7 (together with AA v0.25.258) - one session, one log:
+1. Start fresh, load the world, wait ~20 s.
+2. AA: cast each skill once (stuttering ones + a few others).
+3. PA: open the inventory 3 times, the same chest 3 times, another chest, the large map 2 times.
+4. Quit, send BepInEx\LogOutput.log.

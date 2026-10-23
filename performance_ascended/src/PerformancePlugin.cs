@@ -18,7 +18,7 @@ namespace AethelbornPerformance
     {
         public const string Guid = "albedo.aethelborn.performance";
         public const string Name = "Performance Ascended";
-        public const string Version = "0.6.6";
+        public const string Version = "0.6.7";
         public static PerformancePlugin Instance;
         private PerformanceSettings _settings;
         private GUIStyle _indicatorStyle;
@@ -118,6 +118,7 @@ namespace AethelbornPerformance
                     if (zoneMethods[i].Name == "SpawnZone") _harmony.Patch(zoneMethods[i], postfix: new HarmonyMethod(typeof(PerformancePlugin), "ZoneSpawned"));
                 Logger.LogInfo("Spread Object Unloading: " + UnloadBudget.Install(_harmony, Logger));
                 Logger.LogInfo("World tweaks: " + WorldTweaks.Install(_harmony, Logger));
+                Logger.LogInfo(UiTracer.Install(_harmony, Logger));   // 0.6.7 diagnostic
                 Logger.LogInfo(Name + " " + Version + " ready. Piece registry: " + (_pieceSource != null) + "; cosmetic hook: " + _effectsHook + ". No AA dependency or world/save changes.");
             }
             catch (Exception ex)
@@ -385,6 +386,7 @@ namespace AethelbornPerformance
         private void Update()
         {
             if (_failed) return;
+            UiTracer.Tick();   // 0.6.7
             SampleFps();
             FrameContext previousActivity = _activity; _activity = new FrameContext();
             long workStart = _recorder.Recording ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;
