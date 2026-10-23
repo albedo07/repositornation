@@ -1,0 +1,53 @@
+Aethelborn Ascended v0.25.263 - Holy Sounds   (base: ANCHOR v0.25.257 + v0.25.258-262)
+
+TWO-HANDED SWORD CA
+- The v0.25.260 trick that switched the animator to the battleaxe stance during skills is removed: with a greatsword or
+  scythe you keep the greatsword stance. The v0.25.262 speed fix stays, so the swings keep the same speed as other weapons.
+
+SOUND LENGTH = FADE (every skill sound)
+- A sound shortened with its Length slider, or one with a set play time (below), now fades out gradually instead of being
+  cut: full volume for the first 40%, then turned down smoothly to silence (like a volume knob turned slowly).
+- Sounds that end early (an interrupted wind-up, a projectile that disappears, a looping bed at its end) also fade out
+  (0.35 s) instead of stopping dead.
+
+MERCENARY
+- Battlecry (Grace): plays Valheim's own Forsaken power activation sound for 1.5 s (fading out). The roar now also STUNS
+  small and big enemies around you (same radius as the buff), no damage; bosses are never stunned.
+
+SWORD MASTER
+- Knight's Guidance (Grace): the wing VFX is removed; the ground ring stays.
+- Crescent Cleave: a Whoosh on each strike (Normal: the strike; Ascended: both fans).
+
+PALADIN (each sound has its own Volume / Length / Pitch / Speed / Bass / Marker / Sync sliders, F8 > Cleric > Audio)
+- Goddess Relic: HeavySwing on the swing; MidBoom + BoulderCrash + Bell together as the cross lands, each 2.5 s.
+  Ascended: + BassDrop (4 sounds, 2.5 s).
+- Shield Charge: Valheim's own running footsteps while charging, matching the ground you are on (grass, stone, wood,
+  snow...). Hammer bash (Normal and Ascended): MidBoom + LightningCrash (the Righteous Strike sound).
+- Judgement Hammer: HeavySwing on the arm swing; SpinningSwing loops on the flying hammer and follows it, so it gets
+  softer the further it flies (Normal and Ascended).
+- Ray of Hope: Buff2.
+- Angel Comet: BigWhoosh2 over the aerial wind-up; Bonecrusher's landing sounds (HeavyPunch + BassDrop).
+  Ascended: SolidBoom on the aftershock.
+- Electric Smite: Bonecrusher's sounds (BigWhoosh2 leap, HeavyPunch + BassDrop landing) + Esmite on landing.
+  Ascended: Electric loops over the lightning storm + LightningCrash on the storm strikes.
+- Heaven's Light (Grace): Holy.
+
+PRIEST
+- Lightning Relic: HeavySwing on the swing; Zappy (the Lightning Zap sound) + BoulderCrash as the relic lands.
+- Holy Relic: HeavySwing on the swing; Bell2 + BoulderCrash as the relic lands.
+- Divine Intervention: Buff2.
+- Heaven's Judgement: HeavySwing on the swing; Judgement plays (looping) for the whole skill; a Thud for the falling
+  beams (one of the recording's ten thuds each time). Ascended: MidBoom on the big final beam.
+- Grand Cross: Crescent Cleave's sounds without the sword slash - HeavySwing + Whoosh on the first swing, HeavySwing2 +
+  Whoosh on the second; Rumbling rides the flying cross (fades as it leaves) - Normal and Ascended.
+- Heaven's Crucible (Grace): Holy.
+
+LEVEL UP
+- Ahhhh plays and golden particles drift down over your character (F8 > General > Level Up Audio for its sliders).
+
+NEW FILES: ImmortalHeroesAssets\SFX\ Ahhhh, Bell, Bell2, BoulderCrash, Buff2, Electric, Esmite, Holy, Judgement, Rumbling,
+Thud, Whoosh (.wav, decoded from your MP3s unchanged). The installer now copies 36 sound files.
+NOT DONE YET (your "later" list): main menu title + MenuMusic.
+
+CHECKS: all ten modules compile (C# 5) against your real DLLs; every sound table checked to 116 sounds / 41 skills.
+Not tested in game.

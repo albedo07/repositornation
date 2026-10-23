@@ -11,7 +11,7 @@ using UnityEngine;
 namespace DragonsAltarCombat
 {
     // v213: balanced Base Class audio, native Effects routing and full Impact Wave mix. Never instantiate an effect prefab or change Unity's random state.
-    public enum DragonBaseSound { HeavySlash, ImpactWave, ImpactPunch, LightningZap, RighteousStrike, HolyWave, FlameBurst, GlacialDescent, Stonefang, Arrow, TrapPlace, TrapSnap, GlacialCreate, TumbleArrow, Moonlight, CrescentSlash, CrescentDirt, BladeStorm, FrenzyDash, FrenzyCut, FrenzyPressure, EclipseSweep, EclipseHail, HalfmoonSweep, HalfmoonCuts, HalfmoonFinisher, KnightsGuidance, StompImpact, StompAfter, CircleSweep, CircleRupture, BoneLeap, BoneImpact, BoneAfter, BombThrow, BombExplosion, BombCluster, SeismicSlam, SeismicTravel, SeismicRupture, Whirlwind, WhirlwindFinisher, Battlecry, Fury, ImpactAfterquake, GlacialShatter, FrenzyCharge, HalfmoonCharge, MoonlightAfter, HalfmoonBoom, ImpactSwing, CrescentFire, BladeStormSlash, EclipseSpiral, StompRumble, StompAfterRumble, CircleGust, CircleRumble, BoneBass, BoneRumble, BoneAfterRumble, BombMid, BombBass, SeismicSlamRumble, SeismicEndBass, SeismicEndRumble, BattlecryBass, FuryRumble, BladeStormBass, MoonlightWind, CrescentSlash2, MoonlightSlash, CrescentSword, HalfmoonSwing, EclipseRise, WhirlwindWhoosh }
+    public enum DragonBaseSound { HeavySlash, ImpactWave, ImpactPunch, LightningZap, RighteousStrike, HolyWave, FlameBurst, GlacialDescent, Stonefang, Arrow, TrapPlace, TrapSnap, GlacialCreate, TumbleArrow, Moonlight, CrescentSlash, CrescentDirt, BladeStorm, FrenzyDash, FrenzyCut, FrenzyPressure, EclipseSweep, EclipseHail, HalfmoonSweep, HalfmoonCuts, HalfmoonFinisher, KnightsGuidance, StompImpact, StompAfter, CircleSweep, CircleRupture, BoneLeap, BoneImpact, BoneAfter, BombThrow, BombExplosion, BombCluster, SeismicSlam, SeismicTravel, SeismicRupture, Whirlwind, WhirlwindFinisher, Battlecry, Fury, ImpactAfterquake, GlacialShatter, FrenzyCharge, HalfmoonCharge, MoonlightAfter, HalfmoonBoom, ImpactSwing, CrescentFire, BladeStormSlash, EclipseSpiral, StompRumble, StompAfterRumble, CircleGust, CircleRumble, BoneBass, BoneRumble, BoneAfterRumble, BombMid, BombBass, SeismicSlamRumble, SeismicEndBass, SeismicEndRumble, BattlecryBass, FuryRumble, BladeStormBass, MoonlightWind, CrescentSlash2, MoonlightSlash, CrescentSword, HalfmoonSwing, EclipseRise, WhirlwindWhoosh, BattlecryForsaken, CrescentWhoosh, RelicSwing, RelicBoom, RelicCrash, RelicBell, RelicBass, ChargeBoom, ChargeCrash, HammerSwing, HammerSpin, RayBuff, CometWindup, CometImpact, CometBass, CometAftershock, SmiteLeap, SmiteImpact, SmiteBass, SmiteEsmite, SmiteStorm, SmiteCrash, HeavensLightHoly, LRelicSwing, LRelicZappy, LRelicCrash, HRelicSwing, HRelicBell, HRelicCrash, DivineBuff, JudgementSwing, JudgementChoir, JudgementThud, JudgementPillar, CrossSwing, CrossSwing2, CrossWhoosh, CrossRumble, CrucibleHoly, LevelUp }
     // v0.25.238: first-cast FPS drops - the first time a method runs, Mono compiles it; one skill cast runs hundreds of the mod's
     // methods (routines, VFX builders, audio). After you load in, every method of the mod's assemblies is compiled ahead of time
     // in small slices (1.5 ms per frame, paused while casting or attacking), on the main thread (no threading risks).
@@ -95,8 +95,9 @@ namespace DragonsAltarCombat
             public Func<bool> Continue;
             public bool Raw;
             public float StartTime;
+            public float FadeFrom;   // v0.25.263 gradual fade-out start (0 = none)
         }
-        private const int CueCount = 76;
+        private const int CueCount = 116;
         private static readonly Profile[] Profiles = new Profile[CueCount];
         private static readonly bool[] Warned = new bool[CueCount];
         private const int OneShotVoices = 32;   // v0.25.232: whole recordings overlap more; 12 voices made new sounds cut old ones
@@ -108,37 +109,34 @@ namespace DragonsAltarCombat
             new string[] { "sfx_staff_fireball_fire" }, new string[] { "sfx_staff_iceshard_hit", "sfx_drake_attack_hit" },
             new string[] { "sfx_pickaxe_hit" }, new string[] { "sfx_bow_fire" },
             new string[] { "sfx_bush_hit", "sfx_bush_destroy", "sfx_bush_destroyed" }, new string[] { "sfx_bush_hit", "sfx_bush_destroy", "sfx_bush_destroyed" }, new string[0], new string[] { "sfx_bow_fire" },
-            new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0] };
-        private static readonly string[] Items = { "SwordIron", "SledgeStagbreaker", "SledgeStagbreaker", "StaffLightning", "StaffLightning", "MeadHealthMedium", "StaffFireball", "StaffIceShards", "PickaxeIron", "BowHuntsman", null, null, null, "BowHuntsman", null, null, null, null, null, null, "SledgeStagbreaker", null, null, null, null, null, null, null, null, null, null, null, null, null, null, "StaffFireball", "StaffFireball", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null };
+            new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[] { "sfx_stafflightning_fire", "sfx_staff_lightning_fire" }, new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[] { "sfx_stafflightning_fire", "sfx_staff_lightning_fire" }, new string[0], new string[0], new string[] { "sfx_thunder", "sfx_lightning" }, new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0], new string[0] };
+        private static readonly string[] Items = { "SwordIron", "SledgeStagbreaker", "SledgeStagbreaker", "StaffLightning", "StaffLightning", "MeadHealthMedium", "StaffFireball", "StaffIceShards", "PickaxeIron", "BowHuntsman", null, null, null, "BowHuntsman", null, null, null, null, null, null, "SledgeStagbreaker", null, null, null, null, null, null, null, null, null, null, null, null, null, null, "StaffFireball", "StaffFireball", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, "StaffLightning", null, null, null, null, null, null, null, null, null, null, null, null, "StaffLightning", null, null, "StaffLightning", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null };
         // 0 swing, 1 terrain impact, 2 projectile release, 3 projectile impact, 4 healing status, 5 ordinary impact.
-        private static readonly int[] Stages = { 0, 1, 5, 3, 2, 4, 2, 3, 1, 2, 5, 5, -1, 2, -1, -1, -1, -1, -1, -1, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 3, 3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+        private static readonly int[] Stages = { 0, 1, 5, 3, 2, 4, 2, 3, 1, 2, 5, 5, -1, 2, -1, -1, -1, -1, -1, -1, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 3, 3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 2, -1, -1, 3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
         private static readonly string[] SkillNames = { "Heavy Slash", "Impact Wave", "Impact Punch", "Lightning Zap", "Righteous Strike", "Holy Wave", "Flame Burst", "Glacial Descent", "Stonefang Eruption", "Piercing Arrow", "Tumble Shot", "Snare Trap",
-            "Moonlight Splitter", "Crescent Cleave", "Blade Storm", "Frenzied Charge", "Eclipse", "Halfmoon Slash", "Knights Guidance", "Stomp", "Circle Swing", "Bonecrusher", "Punishing Bomb", "Seismic Guillotine", "Whirlwind", "Battlecry", "Unchained Fury"
-        };
+            "Moonlight Splitter", "Crescent Cleave", "Blade Storm", "Frenzied Charge", "Eclipse", "Halfmoon Slash", "Knights Guidance", "Stomp", "Circle Swing", "Bonecrusher", "Punishing Bomb", "Seismic Guillotine", "Whirlwind", "Battlecry", "Unchained Fury", "Goddess Relic", "Shield Charge", "Judgement Hammer", "Ray of Hope", "Angel Comet", "Electric Smite", "Heavens Light", "Lightning Relic", "Holy Relic", "Divine Intervention", "Heavens Judgement", "Grand Cross", "Heavens Crucible", "Level Up" };
         private static readonly string[] SkillClasses = { "Warrior", "Warrior", "Warrior", "Cleric", "Cleric", "Cleric", "Sorcerer", "Sorcerer", "Sorcerer", "Ranger", "Ranger", "Ranger",
-            "Sword Master", "Sword Master", "Sword Master", "Sword Master", "Sword Master", "Sword Master", "Sword Master", "Mercenary", "Mercenary", "Mercenary", "Mercenary", "Mercenary", "Mercenary", "Mercenary", "Mercenary"
-        };
+            "Sword Master", "Sword Master", "Sword Master", "Sword Master", "Sword Master", "Sword Master", "Sword Master", "Mercenary", "Mercenary", "Mercenary", "Mercenary", "Mercenary", "Mercenary", "Mercenary", "Mercenary", "Paladin", "Paladin", "Paladin", "Paladin", "Paladin", "Paladin", "Paladin", "Priest", "Priest", "Priest", "Priest", "Priest", "Priest", "General" };
         private static readonly int[] CueSkills = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 11, 7, 10,
-            12, 13, 13, 14, 15, 15, 15, 16, 16, 17, 17, 17, 18, 19, 19, 20, 20, 21, 21, 21, 22, 22, 22, 23, 23, 23, 24, 24, 25, 26, 1, 7, 15, 17, 12, 17, 1, 13, 14, 16, 19, 19, 20, 20, 21, 21, 21, 22, 22, 23, 23, 23, 25, 26, 14, 12, 13, 12, 13, 17, 16, 24 };
-        private static readonly float[] DefaultVolumes = { 100f, 100f, 100f, 300f, 200f, 300f, 100f, 200f, 200f, 300f, 300f, 200f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f };
+            12, 13, 13, 14, 15, 15, 15, 16, 16, 17, 17, 17, 18, 19, 19, 20, 20, 21, 21, 21, 22, 22, 22, 23, 23, 23, 24, 24, 25, 26, 1, 7, 15, 17, 12, 17, 1, 13, 14, 16, 19, 19, 20, 20, 21, 21, 21, 22, 22, 23, 23, 23, 25, 26, 14, 12, 13, 12, 13, 17, 16, 24, 25, 13, 27, 27, 27, 27, 27, 28, 28, 29, 29, 30, 31, 31, 31, 31, 32, 32, 32, 32, 32, 32, 33, 34, 34, 34, 35, 35, 35, 36, 37, 37, 37, 37, 38, 38, 38, 38, 39, 40 };
+        private static readonly float[] DefaultVolumes = { 100f, 100f, 100f, 300f, 200f, 300f, 100f, 200f, 200f, 300f, 300f, 200f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f };
         // v222: Warrior, Sword Master and Circle Swing use the equal-loudness bank: 100% default, 300% max.
-        private static readonly bool[] Rebalanced = { true, true, true, false, false, false, false, false, false, false, false, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true };
+        private static readonly bool[] Rebalanced = { true, true, true, false, false, false, false, false, false, false, false, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true };
         private static readonly float[] PreviousFactoryVolumes = { 70f, 70f, 70f, 100f, 100f, 100f, 70f, 100f, 70f, 70f, 70f, 70f,
-            70f, 70f, 70f, 70f, 70f, 70f, 70f, 70f, 70f, 70f, 70f, 70f, 70f, 70f, 70f
-        };
-        private static readonly ConfigEntry<float>[] SkillVolumes = new ConfigEntry<float>[27];
+            70f, 70f, 70f, 70f, 70f, 70f, 70f, 70f, 70f, 70f, 70f, 70f, 70f, 70f, 70f, -1f, -1f, -1f, -1f, -1f, -1f, -1f, -1f, -1f, -1f, -1f, -1f, -1f, -1f };
+        private static readonly ConfigEntry<float>[] SkillVolumes = new ConfigEntry<float>[41];
         // Sound shaping per component (each sound of a skill): Length, Pitch, Speed (pitch kept), Bass. No reverb (v227, user).
-        private static readonly ConfigEntry<float>[] LayerLength = new ConfigEntry<float>[76], LayerPitch = new ConfigEntry<float>[76],
-            LayerSpeed = new ConfigEntry<float>[76], LayerBass = new ConfigEntry<float>[76];
+        private static readonly ConfigEntry<float>[] LayerLength = new ConfigEntry<float>[CueCount], LayerPitch = new ConfigEntry<float>[CueCount],
+            LayerSpeed = new ConfigEntry<float>[CueCount], LayerBass = new ConfigEntry<float>[CueCount];
         // v0.25.230 hit markers: where in the recording its hit is (ms); the sound is started so that point lands on the skill's hit.
-        private static readonly float[] DefaultMarker = { 650f, 620f, 0f, 0f, 0f, 0f, 620f, 0f, 950f, 370f, 700f, 620f, 370f, 0f, 370f, 0f, 30f, 380f, 400f, 380f, 470f, 810f, 380f, 600f, 30f, 700f, 810f, 700f, 380f, 430f, 620f, 700f, 0f, 950f, 470f, 400f, 380f, 0f, 0f, 620f, 380f, 0f, 0f, 950f, 0f, 380f, 0f, 0f, 700f, 380f, 0f, 380f, 0f, 380f, 470f, 260f, 500f, 810f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 400f, 0f, 0f, 0f, 0f, 400f, 370f, 370f, 400f, 470f, 0f };
+        private static readonly float[] DefaultMarker = { 650f, 620f, 0f, 0f, 0f, 0f, 620f, 0f, 950f, 370f, 700f, 620f, 370f, 0f, 370f, 0f, 30f, 380f, 400f, 380f, 470f, 810f, 380f, 600f, 30f, 700f, 810f, 700f, 380f, 430f, 620f, 700f, 0f, 950f, 470f, 400f, 380f, 0f, 0f, 620f, 380f, 0f, 0f, 950f, 0f, 380f, 0f, 0f, 700f, 380f, 0f, 380f, 0f, 380f, 470f, 260f, 500f, 810f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 400f, 0f, 0f, 0f, 0f, 400f, 370f, 370f, 400f, 470f, 0f, 0f, 1090f, 620f, 30f, 320f, 530f, 20f, 30f, 0f, 620f, 0f, 0f, 500f, 800f, 20f, 380f, 500f, 800f, 20f, 0f, 0f, 0f, 0f, 620f, 0f, 320f, 620f, 210f, 320f, 0f, 620f, 0f, 0f, 30f, 620f, 400f, 1090f, 0f, 0f, 0f };
         // v0.25.231: the user's own tuning is the default (F8 DEFAULT returns to it).
-        private static readonly float[] DefaultPitch = { 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 50f, 120f, 100f, 100f, 120f, 100f, 120f, 100f, 88f, 85f, 100f, 90f, 115f, 75f, 75f, 110f, 95f, 115f, 70f, 135f, 85f, 130f, 85f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 150f, 100f, 80f, 100f, 100f, 100f, 90f, 100f, 100f, 100f, 80f, 70f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 75f, 100f, 70f, 60f, 150f, 100f, 100f, 80f, 90f, 130f, 100f }, DefaultSpeed = { 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 50f, 100f, 100f, 50f, 100f, 50f, 100f, 100f, 100f, 90f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 130f, 100f, 100f, 100f, 100f, 100f, 90f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 120f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 50f, 100f, 100f, 100f, 100f }, DefaultBass = { 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 60f, 100f, 100f, 130f, 100f, 140f, 150f, 100f, 100f, 100f, 140f, 100f, 130f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f }, DefaultSync = { 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, -300f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, -400f, -1000f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, -300f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f };
-        private static readonly ConfigEntry<float>[] LayerMarker = new ConfigEntry<float>[76], LayerSync = new ConfigEntry<float>[76];
-        private static readonly float[] DefaultLength = { 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 25f, 100f, 100f, 40f, 100f, 100f, 100f, 100f, 100f, 100f, 40f, 100f, 35f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 3f, 3f, 60f, 2.5f, 25f, 5f, 4f, 100f, 50f, 5f, 50f, 5f, 60f, 50f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 45f, 100f };
-        private static readonly ConfigEntry<float>[] LayerVolumes = new ConfigEntry<float>[76];
-        private static readonly float[] DefaultLayers = { 100f, 100f, 50f, 200f, 200f, 200f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 200f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 80f, 100f, 50f, 100f, 100f, 100f, 100f, 300f, 100f, 200f, 100f, 100f, 100f, 100f, 100f, 100f, 70f, 55f, 100f, 60f, 100f, 70f, 60f, 70f, 90f, 70f, 80f, 70f, 70f, 70f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 120f, 100f, 100f, 100f, 30f, 70f, 100f, 80f, 100f };
-        private static readonly bool[] RebalancedLayers = { true, true, false, false, false, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, false, false, false, false, false, false, true, true, true, true, true, true, true, true, true, true, true };
+        private static readonly float[] DefaultPitch = { 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 50f, 120f, 100f, 100f, 120f, 100f, 120f, 100f, 88f, 85f, 100f, 90f, 115f, 75f, 75f, 110f, 95f, 115f, 70f, 135f, 85f, 130f, 85f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 150f, 100f, 80f, 100f, 100f, 100f, 90f, 100f, 100f, 100f, 80f, 70f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 75f, 100f, 70f, 60f, 150f, 100f, 100f, 80f, 90f, 130f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f }, DefaultSpeed = { 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 50f, 100f, 100f, 50f, 100f, 50f, 100f, 100f, 100f, 90f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 130f, 100f, 100f, 100f, 100f, 100f, 90f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 120f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 50f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f }, DefaultBass = { 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 60f, 100f, 100f, 130f, 100f, 140f, 150f, 100f, 100f, 100f, 140f, 100f, 130f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f }, DefaultSync = { 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, -300f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, -400f, -1000f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, -300f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f };
+        private static readonly ConfigEntry<float>[] LayerMarker = new ConfigEntry<float>[CueCount], LayerSync = new ConfigEntry<float>[CueCount];
+        private static readonly float[] DefaultLength = { 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 25f, 100f, 100f, 40f, 100f, 100f, 100f, 100f, 100f, 100f, 40f, 100f, 35f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 3f, 3f, 60f, 2.5f, 25f, 5f, 4f, 100f, 50f, 5f, 50f, 5f, 60f, 50f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 45f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f };
+        private static readonly ConfigEntry<float>[] LayerVolumes = new ConfigEntry<float>[CueCount];
+        private static readonly float[] DefaultLayers = { 100f, 100f, 50f, 200f, 200f, 200f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 200f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 80f, 100f, 50f, 100f, 100f, 100f, 100f, 300f, 100f, 200f, 100f, 100f, 100f, 100f, 100f, 100f, 70f, 55f, 100f, 60f, 100f, 70f, 60f, 70f, 90f, 70f, 80f, 70f, 70f, 70f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 120f, 100f, 100f, 100f, 30f, 70f, 100f, 80f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f };
+        private static readonly bool[] RebalancedLayers = { true, true, false, false, false, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, false, false, false, false, false, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true };
         private static readonly float[] PreviousFactoryLayers = { 100f, 100f, 40f, 100f, 100f, 100f,
             100f, 65f, 100f, 85f, 80f, 100f, 85f, 100f, 75f, 100f, 100f, 85f, 100f, 100f, 85f, 100f, 85f, 80f, 100f, 65f, 100f, 65f, 100f, 90f, 100f, 80f, 35f, 100f, 100f, 100f, 55f
         };
@@ -191,8 +189,8 @@ namespace DragonsAltarCombat
                 if (!sweet.Value && Rebalanced[i]) SkillVolumes[i].Value = 100f;
                 if (!user245.Value && UserSkillGain[i] != 100f) SkillVolumes[i].Value = DefaultVolumes[i];
             }
-            string[] sections = { "Warrior Impact Wave Audio", "Warrior Impact Wave Audio", "Sorcerer Glacial Descent Audio", "Sorcerer Glacial Descent Audio", "Ranger Snare Trap Audio", "Ranger Snare Trap Audio", "Sword Master Crescent Cleave Audio", "Sword Master Crescent Cleave Audio", "Sword Master Frenzied Charge Audio", "Sword Master Frenzied Charge Audio", "Sword Master Frenzied Charge Audio", "Sword Master Eclipse Audio", "Sword Master Eclipse Audio", "Sword Master Halfmoon Slash Audio", "Sword Master Halfmoon Slash Audio", "Sword Master Halfmoon Slash Audio", "Mercenary Stomp Audio", "Mercenary Stomp Audio", "Mercenary Circle Swing Audio", "Mercenary Circle Swing Audio", "Mercenary Bonecrusher Audio", "Mercenary Bonecrusher Audio", "Mercenary Bonecrusher Audio", "Mercenary Punishing Bomb Audio", "Mercenary Punishing Bomb Audio", "Mercenary Punishing Bomb Audio", "Mercenary Seismic Guillotine Audio", "Mercenary Seismic Guillotine Audio", "Mercenary Seismic Guillotine Audio", "Mercenary Whirlwind Audio", "Mercenary Whirlwind Audio", "Warrior Impact Wave Audio", "Sorcerer Glacial Descent Audio", "Sword Master Frenzied Charge Audio", "Sword Master Halfmoon Slash Audio", "Sword Master Moonlight Splitter Audio", "Sword Master Halfmoon Slash Audio", "Sword Master Crescent Cleave Audio", "Sword Master Blade Storm Audio", "Sword Master Eclipse Audio", "Sword Master Blade Storm Audio", "Mercenary Stomp Audio", "Mercenary Stomp Audio", "Mercenary Circle Swing Audio", "Mercenary Circle Swing Audio", "Mercenary Bonecrusher Audio", "Mercenary Bonecrusher Audio", "Mercenary Bonecrusher Audio", "Mercenary Punishing Bomb Audio", "Mercenary Punishing Bomb Audio", "Mercenary Seismic Guillotine Audio", "Mercenary Seismic Guillotine Audio", "Mercenary Seismic Guillotine Audio", "Mercenary Battlecry Audio", "Mercenary Unchained Fury Audio", "Sword Master Blade Storm Audio", "Warrior Heavy Slash Audio", "Warrior Impact Punch Audio", "Cleric Lightning Zap Audio", "Cleric Righteous Strike Audio", "Cleric Holy Wave Audio", "Sorcerer Flame Burst Audio", "Sorcerer Stonefang Eruption Audio", "Ranger Piercing Arrow Audio", "Ranger Tumble Shot Audio", "Sword Master Moonlight Splitter Audio", "Sword Master Knights Guidance Audio", "Mercenary Battlecry Audio", "Mercenary Unchained Fury Audio", "Sword Master Moonlight Splitter Audio", "Sword Master Crescent Cleave Audio", "Sword Master Moonlight Splitter Audio", "Sword Master Crescent Cleave Audio", "Sword Master Halfmoon Slash Audio", "Sword Master Eclipse Audio", "Mercenary Whirlwind Audio" };
-            string[] names = { "Wave Recording Volume (%)", "Weapon Swing Volume (%)", "Ice Formation Volume (%)", "Ice Landing Volume (%)", "Trap Placement Volume (%)", "Trap Trigger Volume (%)", "First Strike Volume (%)", "Ground Trail Volume (%)", "Dash Volume (%)", "Slash Barrage Volume (%)", "Pressure Eruptions Volume (%)", "Opening Sweep Volume (%)", "Slash Barrage Volume (%)", "Opening Sweep Volume (%)", "Slash Barrage Volume (%)", "Finisher Wind Volume (%)", "Stamp Volume (%)", "Aftershocks Volume (%)", "Sweeps Volume (%)", "Ascended Eruption Volume (%)", "Leap Volume (%)", "Landing Volume (%)", "Ascended Aftershock Volume (%)", "Throw Volume (%)", "Explosion Volume (%)", "Ascended Cluster Volume (%)", "Slam Volume (%)", "Traveling Cracks Volume (%)", "Final Eruptions Volume (%)", "Spinning Wind Volume (%)", "Ascended Final Sweep Volume (%)", "Ascended Aftershocks Volume (%)", "Ice Shatter Volume (%)", "Windup Volume (%)", "Windup Volume (%)", "Follow-up Cuts Volume (%)", "Bass Drop Volume (%)", "Fire Trail Volume (%)", "Slash Barrage Volume (%)", "Spiral Swing Volume (%)", "Bass Body Volume (%)", "Debris Rumble Volume (%)", "Aftershock Debris Volume (%)", "Wind Body Volume (%)", "Eruption Debris Volume (%)", "Landing Bass Volume (%)", "Landing Debris Volume (%)", "Aftershock Debris Volume (%)", "Blast Crack Volume (%)", "Blast Bass Volume (%)", "Slam Debris Volume (%)", "Final Bass Volume (%)", "Final Debris Volume (%)", "Bass Body Volume (%)", "Surge Volume (%)", "Storm Volume (%)", "Swing Volume (%)", "Punch Volume (%)", "Zap Volume (%)", "Strike Volume (%)", "Wave Volume (%)", "Flames Volume (%)", "Eruption Volume (%)", "Shot Volume (%)", "Shot Volume (%)", "Slash Volume (%)", "Buff Volume (%)", "Cry Volume (%)", "Buff Volume (%)", "Wind Volume (%)", "Second Strike Volume (%)", "Sword Slash Volume (%)", "Sword Slash Volume (%)", "Swing Volume (%)", "Launch Whoosh Volume (%)", "Tornado Volume (%)" };
+            string[] sections = { "Warrior Impact Wave Audio", "Warrior Impact Wave Audio", "Sorcerer Glacial Descent Audio", "Sorcerer Glacial Descent Audio", "Ranger Snare Trap Audio", "Ranger Snare Trap Audio", "Sword Master Crescent Cleave Audio", "Sword Master Crescent Cleave Audio", "Sword Master Frenzied Charge Audio", "Sword Master Frenzied Charge Audio", "Sword Master Frenzied Charge Audio", "Sword Master Eclipse Audio", "Sword Master Eclipse Audio", "Sword Master Halfmoon Slash Audio", "Sword Master Halfmoon Slash Audio", "Sword Master Halfmoon Slash Audio", "Mercenary Stomp Audio", "Mercenary Stomp Audio", "Mercenary Circle Swing Audio", "Mercenary Circle Swing Audio", "Mercenary Bonecrusher Audio", "Mercenary Bonecrusher Audio", "Mercenary Bonecrusher Audio", "Mercenary Punishing Bomb Audio", "Mercenary Punishing Bomb Audio", "Mercenary Punishing Bomb Audio", "Mercenary Seismic Guillotine Audio", "Mercenary Seismic Guillotine Audio", "Mercenary Seismic Guillotine Audio", "Mercenary Whirlwind Audio", "Mercenary Whirlwind Audio", "Warrior Impact Wave Audio", "Sorcerer Glacial Descent Audio", "Sword Master Frenzied Charge Audio", "Sword Master Halfmoon Slash Audio", "Sword Master Moonlight Splitter Audio", "Sword Master Halfmoon Slash Audio", "Sword Master Crescent Cleave Audio", "Sword Master Blade Storm Audio", "Sword Master Eclipse Audio", "Sword Master Blade Storm Audio", "Mercenary Stomp Audio", "Mercenary Stomp Audio", "Mercenary Circle Swing Audio", "Mercenary Circle Swing Audio", "Mercenary Bonecrusher Audio", "Mercenary Bonecrusher Audio", "Mercenary Bonecrusher Audio", "Mercenary Punishing Bomb Audio", "Mercenary Punishing Bomb Audio", "Mercenary Seismic Guillotine Audio", "Mercenary Seismic Guillotine Audio", "Mercenary Seismic Guillotine Audio", "Mercenary Battlecry Audio", "Mercenary Unchained Fury Audio", "Sword Master Blade Storm Audio", "Warrior Heavy Slash Audio", "Warrior Impact Punch Audio", "Cleric Lightning Zap Audio", "Cleric Righteous Strike Audio", "Cleric Holy Wave Audio", "Sorcerer Flame Burst Audio", "Sorcerer Stonefang Eruption Audio", "Ranger Piercing Arrow Audio", "Ranger Tumble Shot Audio", "Sword Master Moonlight Splitter Audio", "Sword Master Knights Guidance Audio", "Mercenary Battlecry Audio", "Mercenary Unchained Fury Audio", "Sword Master Moonlight Splitter Audio", "Sword Master Crescent Cleave Audio", "Sword Master Moonlight Splitter Audio", "Sword Master Crescent Cleave Audio", "Sword Master Halfmoon Slash Audio", "Sword Master Eclipse Audio", "Mercenary Whirlwind Audio", "Mercenary Battlecry Audio", "Sword Master Crescent Cleave Audio", "Paladin Goddess Relic Audio", "Paladin Goddess Relic Audio", "Paladin Goddess Relic Audio", "Paladin Goddess Relic Audio", "Paladin Goddess Relic Audio", "Paladin Shield Charge Audio", "Paladin Shield Charge Audio", "Paladin Judgement Hammer Audio", "Paladin Judgement Hammer Audio", "Paladin Ray of Hope Audio", "Paladin Angel Comet Audio", "Paladin Angel Comet Audio", "Paladin Angel Comet Audio", "Paladin Angel Comet Audio", "Paladin Electric Smite Audio", "Paladin Electric Smite Audio", "Paladin Electric Smite Audio", "Paladin Electric Smite Audio", "Paladin Electric Smite Audio", "Paladin Electric Smite Audio", "Paladin Heavens Light Audio", "Priest Lightning Relic Audio", "Priest Lightning Relic Audio", "Priest Lightning Relic Audio", "Priest Holy Relic Audio", "Priest Holy Relic Audio", "Priest Holy Relic Audio", "Priest Divine Intervention Audio", "Priest Heavens Judgement Audio", "Priest Heavens Judgement Audio", "Priest Heavens Judgement Audio", "Priest Heavens Judgement Audio", "Priest Grand Cross Audio", "Priest Grand Cross Audio", "Priest Grand Cross Audio", "Priest Grand Cross Audio", "Priest Heavens Crucible Audio", "General Level Up Audio" };
+            string[] names = { "Wave Recording Volume (%)", "Weapon Swing Volume (%)", "Ice Formation Volume (%)", "Ice Landing Volume (%)", "Trap Placement Volume (%)", "Trap Trigger Volume (%)", "First Strike Volume (%)", "Ground Trail Volume (%)", "Dash Volume (%)", "Slash Barrage Volume (%)", "Pressure Eruptions Volume (%)", "Opening Sweep Volume (%)", "Slash Barrage Volume (%)", "Opening Sweep Volume (%)", "Slash Barrage Volume (%)", "Finisher Wind Volume (%)", "Stamp Volume (%)", "Aftershocks Volume (%)", "Sweeps Volume (%)", "Ascended Eruption Volume (%)", "Leap Volume (%)", "Landing Volume (%)", "Ascended Aftershock Volume (%)", "Throw Volume (%)", "Explosion Volume (%)", "Ascended Cluster Volume (%)", "Slam Volume (%)", "Traveling Cracks Volume (%)", "Final Eruptions Volume (%)", "Spinning Wind Volume (%)", "Ascended Final Sweep Volume (%)", "Ascended Aftershocks Volume (%)", "Ice Shatter Volume (%)", "Windup Volume (%)", "Windup Volume (%)", "Follow-up Cuts Volume (%)", "Bass Drop Volume (%)", "Fire Trail Volume (%)", "Slash Barrage Volume (%)", "Spiral Swing Volume (%)", "Bass Body Volume (%)", "Debris Rumble Volume (%)", "Aftershock Debris Volume (%)", "Wind Body Volume (%)", "Eruption Debris Volume (%)", "Landing Bass Volume (%)", "Landing Debris Volume (%)", "Aftershock Debris Volume (%)", "Blast Crack Volume (%)", "Blast Bass Volume (%)", "Slam Debris Volume (%)", "Final Bass Volume (%)", "Final Debris Volume (%)", "Bass Body Volume (%)", "Surge Volume (%)", "Storm Volume (%)", "Swing Volume (%)", "Punch Volume (%)", "Zap Volume (%)", "Strike Volume (%)", "Wave Volume (%)", "Flames Volume (%)", "Eruption Volume (%)", "Shot Volume (%)", "Shot Volume (%)", "Slash Volume (%)", "Buff Volume (%)", "Cry Volume (%)", "Buff Volume (%)", "Wind Volume (%)", "Second Strike Volume (%)", "Sword Slash Volume (%)", "Sword Slash Volume (%)", "Swing Volume (%)", "Launch Whoosh Volume (%)", "Tornado Volume (%)", "Forsaken Volume (%)", "Whoosh Volume (%)", "Swing Volume (%)", "Mid Boom Volume (%)", "Boulder Crash Volume (%)", "Bell Volume (%)", "Ascended Bass Drop Volume (%)", "Bash Mid Boom Volume (%)", "Bash Lightning Crash Volume (%)", "Swing Volume (%)", "Hammer Spin Volume (%)", "Buff Volume (%)", "Windup Volume (%)", "Landing Volume (%)", "Landing Bass Volume (%)", "Ascended Aftershock Volume (%)", "Leap Volume (%)", "Landing Volume (%)", "Landing Bass Volume (%)", "Smite Volume (%)", "Ascended Storm Volume (%)", "Ascended Storm Strikes Volume (%)", "Holy Volume (%)", "Swing Volume (%)", "Zappy Volume (%)", "Boulder Crash Volume (%)", "Swing Volume (%)", "Bell Volume (%)", "Boulder Crash Volume (%)", "Buff Volume (%)", "Swing Volume (%)", "Judgement Volume (%)", "Beam Thud Volume (%)", "Ascended Big Beam Volume (%)", "First Swing Volume (%)", "Second Swing Volume (%)", "Whoosh Volume (%)", "Projectile Rumble Volume (%)", "Holy Volume (%)", "Ahhhh Volume (%)" };
             for (int i = 0; i < names.Length; i++)
             {
                 if (i == 13 || i == 38 || i == CueLayers[(int)DragonBaseSound.MoonlightAfter] || i == CueLayers[(int)DragonBaseSound.Battlecry] || IsRumbleLayer(i)) continue;   // unused: Halfmoon's old opening sweep; Blade Storm's separate slashes (the raw recording is the slashes, v227)
@@ -248,9 +246,52 @@ namespace DragonsAltarCombat
         }
         // v217: phase controls and bounded repeat rates, independent of target count/VFX.
         // v226: every sound of every skill is its own component (volume + shaping sliders).
-        private static readonly int[] CueLayers = { 56, 0, 57, 58, 59, 60, 61, 3, 62, 63, 4, 5, 2, 64, 65, 6, 7, 55, 8, 9, 10, 11, 12, 13, 14, 15, 66, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 67, 68, 31, 32, 33, 34, 35, 36, 1, 37, 38, 39, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 40, 69, 70, 71, 72, 73, 74, 75 };
-        private static readonly float[] PhaseGaps = { 0.06f, 0.06f, 0.12f, 0.06f, 0.08f, 0.03f, 0.1f, 0.06f, 0.03f, 0.06f, 0.03f, 0.06f, 0.15f, 0.06f, 0.08f, 0.08f, 0.08f, 0.15f, 0.08f, 0.08f, 0.1f, 0.05f, 0.1f, 0.06f, 0.12f, 0.08f, 0.18f, 0.08f, 0.15f, 0.15f, 0.1f, 0.08f, 0.06f, 0.06f, 0.06f, 0.06f, 0.06f, 0.40f, 0.06f, 0.06f, 0.08f, 0.08f, 0.08f, 0.08f, 0.08f, 0.08f, 0.08f, 0.05f, 0.05f, 0.06f, 0.08f, 0.08f, 0.15f, 0.15f, 0.06f, 0.04f, 0.12f, 0.04f, 0.12f, 0.12f, 0.2f, 0.2f };
+        private static readonly int[] CueLayers = { 56, 0, 57, 58, 59, 60, 61, 3, 62, 63, 4, 5, 2, 64, 65, 6, 7, 55, 8, 9, 10, 11, 12, 13, 14, 15, 66, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 67, 68, 31, 32, 33, 34, 35, 36, 1, 37, 38, 39, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 40, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115 };
+        private static readonly float[] PhaseGaps = { 0.06f, 0.06f, 0.12f, 0.06f, 0.08f, 0.03f, 0.1f, 0.06f, 0.03f, 0.06f, 0.03f, 0.06f, 0.15f, 0.06f, 0.08f, 0.08f, 0.08f, 0.15f, 0.08f, 0.08f, 0.1f, 0.05f, 0.1f, 0.06f, 0.12f, 0.08f, 0.18f, 0.08f, 0.15f, 0.15f, 0.1f, 0.08f, 0.06f, 0.06f, 0.06f, 0.06f, 0.06f, 0.40f, 0.06f, 0.06f, 0.08f, 0.08f, 0.08f, 0.08f, 0.08f, 0.08f, 0.08f, 0.05f, 0.05f, 0.06f, 0.08f, 0.08f, 0.15f, 0.15f, 0.06f, 0.04f, 0.12f, 0.04f, 0.12f, 0.12f, 0.2f, 0.2f, 0.3f, 0.06f, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f, 0.25f, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f, 0.1f, 0.12f, 0.1f, 0.06f, 0.06f, 0.06f, 0.1f, 0.1f, 1f };
         private static readonly float[] CueNext = new float[CueCount];
+        // v0.25.263 (user): a sound may play for a set time (Goddess Relic 2.5 s, Forsaken 1.5 s); a shortened sound fades out
+        // gradually (like turning a volume knob down) instead of being cut.
+        private static readonly float[] CueSeconds = BuildCueSeconds();
+        private static float[] BuildCueSeconds()
+        {
+            float[] s = new float[CueCount];
+            s[(int)DragonBaseSound.BattlecryForsaken] = 1.5f;
+            s[(int)DragonBaseSound.RelicBoom] = 2.5f;
+            s[(int)DragonBaseSound.RelicCrash] = 2.5f;
+            s[(int)DragonBaseSound.RelicBell] = 2.5f;
+            s[(int)DragonBaseSound.RelicBass] = 2.5f;
+            s[(int)DragonBaseSound.JudgementThud] = 0.9f;
+            return s;
+        }
+        // looping beds: wind/tornado/rumble loops plus v0.25.263 Hammer spin, Judgement choir, Smite storm, Grand Cross rumble
+        private static bool LoopCue(DragonBaseSound cue)
+        {
+            return cue == DragonBaseSound.CrescentDirt || cue == DragonBaseSound.WhirlwindWhoosh || cue == DragonBaseSound.MoonlightWind || cue == DragonBaseSound.HammerSpin || cue == DragonBaseSound.SmiteStorm || cue == DragonBaseSound.JudgementChoir || cue == DragonBaseSound.CrossRumble;
+        }
+        // Thud.wav holds ten separate thuds: each falling beam plays the next one (start of each thud in the file, s)
+        private static readonly float[] ThudStarts = { 0.25f, 1.76f, 3.27f, 4.62f, 6.94f, 7.94f, 10.12f, 11.1f, 12.01f, 13.11f };
+        private static int _thudNext;
+        private static float FadeGain(Voice v, float now)
+        {
+            if (v.FadeFrom <= 0f || now <= v.FadeFrom || v.End <= v.FadeFrom) return 1f;
+            float x = Mathf.Clamp01((now - v.FadeFrom) / (v.End - v.FadeFrom));
+            return Mathf.Pow(10f, -1.5f * x) * Mathf.Sqrt(1f - x);   // -30 dB over the fade, reaching silence at the end
+        }
+        // v0.25.263 Mercenary Grace: Valheim's own Forsaken power activation sound
+        private static Profile FromGuardian()
+        {
+            string[] powers = { "GP_Eikthyr", "GP_TheElder", "GP_Bonemass", "GP_Moder", "GP_Yagluth", "GP_Queen", "GP_Fader" };
+            for (int i = 0; i < powers.Length; i++)
+            {
+                StatusEffect se = ObjectDB.instance.GetStatusEffect(powers[i].GetStableHashCode());
+                if (se == null) continue;
+                Profile p = FromEffects(se.m_startEffects);
+                if (p != null) return p;
+            }
+            string[] prefabs = { "fx_GP_Activation", "fx_GP_Player", "sfx_GP_activation" };
+            for (int i = 0; i < prefabs.Length; i++) { Profile p = Extract(ZNetScene.instance.GetPrefab(prefabs[i])); if (p != null) return p; }
+            return null;
+        }
         private static float SkillGain(int cue)
         {
             int skill = CueSkills[cue]; ConfigEntry<float> entry = SkillVolumes[skill];
@@ -353,7 +394,13 @@ namespace DragonsAltarCombat
                     bool keep = true;
                     try { if (voice.Continue != null) keep = voice.Continue(); }
                     catch { keep = false; }
-                    if (!keep) { voice.Source.Stop(); voice.End = now; ReleaseSustain(voice); continue; }
+                    if (!keep)
+                    {
+                        // v0.25.263: an ended sound fades out over 0.35 s instead of stopping dead (not started yet = never starts)
+                        if (!voice.Source.isPlaying || (voice.RepeatAt < float.MaxValue && now < voice.RepeatAt)) { voice.Source.Stop(); voice.End = now; ReleaseSustain(voice); continue; }
+                        voice.Continue = null; voice.RepeatAt = float.MaxValue; voice.Repeat = false;
+                        voice.FadeFrom = now; voice.End = Mathf.Min(voice.End, now + 0.35f);
+                    }
                     if (voice.Follow != null) voice.Source.transform.position = voice.Follow.position;
                     if (now >= voice.RepeatAt)
                     {
@@ -368,7 +415,7 @@ namespace DragonsAltarCombat
                 }
                 // Preserve the native sound mixer; apply the equivalent SFX mixer amplitude only when its template has no group.
                 float level = voice.Raw ? Mathf.Min(1f, RawGain(voice.Cue, voice.BaseVolume) / Baked(RawGain(voice.Cue, 1f))) * Space(voice.Source) : VoiceGain(voice) / PlaybackHeadroom;
-                voice.Source.volume = level * (gameVolume <= 0f ? 0f : (voice.UsesMixer ? 1f : gameVolume)) * Mathf.Clamp01((voice.End - now) / 0.08f);
+                voice.Source.volume = level * (gameVolume <= 0f ? 0f : (voice.UsesMixer ? 1f : gameVolume)) * Mathf.Clamp01((voice.End - now) / 0.08f) * FadeGain(voice, now);
             }
             if (now >= _nextCollect) { _nextCollect = now + 1f; CollectRetired(); }
             if (_scene == null || _db == null || now < _nextWarm || player.InAttack() || DragonCombat.SkillAnimationBusy(player)) return;
@@ -597,10 +644,10 @@ namespace DragonsAltarCombat
         // skill x sound multiply. The boost is baked into the samples (Unity caps source volume at 1).
         // v0.25.242 (user): "subtract 25 on the slider and that's our new 100%". Each Warrior / Sword Master / Mercenary skill keeps
         // its matched level from v0.25.238 minus 25 slider points, built into the mod; its Skill Volume slider then reads 100%.
-        private static readonly float[] SweetSpotFrom = { 108f, 115f, 130f, 300f, 200f, 300f, 100f, 200f, 200f, 300f, 300f, 200f, 107f, 115f, 78f, 120f, 107f, 84f, 135f, 69f, 108f, 108f, 75f, 88f, 110f, 120f, 134f };
+        private static readonly float[] SweetSpotFrom = { 108f, 115f, 130f, 300f, 200f, 300f, 100f, 200f, 200f, 300f, 300f, 200f, 107f, 115f, 78f, 120f, 107f, 84f, 135f, 69f, 108f, 108f, 75f, 88f, 110f, 120f, 134f, 125f, 125f, 125f, 125f, 125f, 125f, 125f, 125f, 125f, 125f, 125f, 125f, 125f, 125f };
         // v0.25.245 (user cfg = defaults): the user's tuned Skill / sound volumes are built in; those sliders read 100%.
-        private static readonly float[] UserSkillGain = { 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 150f, 120f, 100f, 150f, 150f, 100f, 100f, 100f };
-        private static readonly float[] UserLayerGain = { 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 150f, 150f, 100f, 100f, 150f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 90f, 100f, 150f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 20f, 100f, 100f, 100f, 100f, 100f, 100f };
+        private static readonly float[] UserSkillGain = { 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 150f, 120f, 100f, 150f, 150f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f };
+        private static readonly float[] UserLayerGain = { 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 150f, 150f, 100f, 100f, 150f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 90f, 100f, 150f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 20f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f, 100f };
         private static float[] _builtin;
         private static float BuiltinGain(int skill)
         {
@@ -651,8 +698,7 @@ namespace DragonsAltarCombat
         private static readonly bool[] CustomWarned = new bool[CueCount];
         private static string _soundFolder;
         private static readonly string[][] CustomFiles = {
-            new string[] { "HeavySwing2.wav", "HeavySwing2.wav", "HeavySwing.wav" }, new string[] { "BigWhoosh.wav" }, new string[] { "HeavyPunch.wav" }, null, null, new string[] { "BuffSpells.wav" }, null, new string[] { "GD_Impact.wav" }, new string[] { "StoneFang.wav" }, null, null, null, new string[] { "GD_Formation.wav" }, null, new string[] { "HeavySwing2.wav" }, new string[] { "HeavySwing.wav" }, new string[] { "SM_CCRumble.wav" }, new string[] { "BladeStorm.wav" }, new string[] { "BigWhoosh.wav" }, new string[] { "SwordSlash.wav", "SwordSlash2.wav" }, new string[] { "SmallBoom.wav" }, new string[] { "SwordSwing.wav" }, new string[] { "SwordSlash.wav", "SwordSlash2.wav" }, null, new string[] { "SwordSlash.wav", "SwordSlash2.wav" }, new string[] { "Twinkle.wav" }, new string[] { "Buff.wav" }, new string[] { "MidBoom.wav" }, new string[] { "BassDrop.wav" }, new string[] { "HeavySwing2.wav" }, new string[] { "SolidBoom.wav" }, new string[] { "BigWhoosh2.wav" }, new string[] { "HeavyPunch.wav" }, new string[] { "SolidBoom.wav" }, new string[] { "SwordSwing2.wav" }, new string[] { "MidBoom.wav" }, new string[] { "SmallBoom.wav" }, new string[] { "HeavyPunch.wav" }, new string[] { "SmallBoom.wav" }, new string[] { "SolidBoom.wav" }, new string[] { "SpinningSwing.wav" }, new string[] { "HeavySwing.wav" }, new string[] { "Buff.wav" }, new string[] { "Buff.wav" }, new string[] { "SmallBoom.wav" }, new string[] { "GD_Shatter.wav" }, new string[] { "BigWhoosh.wav" }, new string[] { "BigWhoosh2.wav" }, new string[] { "HeavySwing2.wav" }, new string[] { "BassDrop.wav" }, new string[] { "SwordSwing.wav" }, null, null, new string[] { "SwordSwing.wav" }, null, null, new string[] { "BigWhoosh.wav" }, null, new string[] { "BassDrop.wav" }, null, null, new string[] { "SmallBoom.wav" }, new string[] { "BassDrop.wav" }, null, new string[] { "BassDrop.wav" }, null, new string[] { "BassDrop.wav" }, new string[] { "BigWhoosh2.wav" }, new string[] { "BassDrop.wav" }, new string[] { "Twinkle.wav" }, new string[] { "HeavySwing2.wav" }, new string[] { "SwordSlash.wav" }, new string[] { "SwordSlash.wav" }, new string[] { "HeavySwing2.wav" }, new string[] { "BigWhoosh2.wav" }, new string[] { "Tornado.wav" }
-        };
+            new string[] { "HeavySwing2.wav", "HeavySwing2.wav", "HeavySwing.wav" }, new string[] { "BigWhoosh.wav" }, new string[] { "HeavyPunch.wav" }, null, null, new string[] { "BuffSpells.wav" }, null, new string[] { "GD_Impact.wav" }, new string[] { "StoneFang.wav" }, null, null, null, new string[] { "GD_Formation.wav" }, null, new string[] { "HeavySwing2.wav" }, new string[] { "HeavySwing.wav" }, new string[] { "SM_CCRumble.wav" }, new string[] { "BladeStorm.wav" }, new string[] { "BigWhoosh.wav" }, new string[] { "SwordSlash.wav", "SwordSlash2.wav" }, new string[] { "SmallBoom.wav" }, new string[] { "SwordSwing.wav" }, new string[] { "SwordSlash.wav", "SwordSlash2.wav" }, null, new string[] { "SwordSlash.wav", "SwordSlash2.wav" }, new string[] { "Twinkle.wav" }, new string[] { "Buff.wav" }, new string[] { "MidBoom.wav" }, new string[] { "BassDrop.wav" }, new string[] { "HeavySwing2.wav" }, new string[] { "SolidBoom.wav" }, new string[] { "BigWhoosh2.wav" }, new string[] { "HeavyPunch.wav" }, new string[] { "SolidBoom.wav" }, new string[] { "SwordSwing2.wav" }, new string[] { "MidBoom.wav" }, new string[] { "SmallBoom.wav" }, new string[] { "HeavyPunch.wav" }, new string[] { "SmallBoom.wav" }, new string[] { "SolidBoom.wav" }, new string[] { "SpinningSwing.wav" }, new string[] { "HeavySwing.wav" }, new string[] { "Buff.wav" }, new string[] { "Buff.wav" }, new string[] { "SmallBoom.wav" }, new string[] { "GD_Shatter.wav" }, new string[] { "BigWhoosh.wav" }, new string[] { "BigWhoosh2.wav" }, new string[] { "HeavySwing2.wav" }, new string[] { "BassDrop.wav" }, new string[] { "SwordSwing.wav" }, null, null, new string[] { "SwordSwing.wav" }, null, null, new string[] { "BigWhoosh.wav" }, null, new string[] { "BassDrop.wav" }, null, null, new string[] { "SmallBoom.wav" }, new string[] { "BassDrop.wav" }, null, new string[] { "BassDrop.wav" }, null, new string[] { "BassDrop.wav" }, new string[] { "BigWhoosh2.wav" }, new string[] { "BassDrop.wav" }, new string[] { "Twinkle.wav" }, new string[] { "HeavySwing2.wav" }, new string[] { "SwordSlash.wav" }, new string[] { "SwordSlash.wav" }, new string[] { "HeavySwing2.wav" }, new string[] { "BigWhoosh2.wav" }, new string[] { "Tornado.wav" }, null, new string[] { "Whoosh.wav" }, new string[] { "HeavySwing.wav" }, new string[] { "MidBoom.wav" }, new string[] { "BoulderCrash.wav" }, new string[] { "Bell.wav" }, new string[] { "BassDrop.wav" }, new string[] { "MidBoom.wav" }, null, new string[] { "HeavySwing.wav" }, new string[] { "SpinningSwing.wav" }, new string[] { "Buff2.wav" }, new string[] { "BigWhoosh2.wav" }, new string[] { "HeavyPunch.wav" }, new string[] { "BassDrop.wav" }, new string[] { "SolidBoom.wav" }, new string[] { "BigWhoosh2.wav" }, new string[] { "HeavyPunch.wav" }, new string[] { "BassDrop.wav" }, new string[] { "Esmite.wav" }, new string[] { "Electric.wav" }, null, new string[] { "Holy.wav" }, new string[] { "HeavySwing.wav" }, null, new string[] { "BoulderCrash.wav" }, new string[] { "HeavySwing.wav" }, new string[] { "Bell2.wav" }, new string[] { "BoulderCrash.wav" }, new string[] { "Buff2.wav" }, new string[] { "HeavySwing.wav" }, new string[] { "Judgement.wav" }, new string[] { "Thud.wav" }, new string[] { "MidBoom.wav" }, new string[] { "HeavySwing.wav" }, new string[] { "HeavySwing2.wav" }, new string[] { "Whoosh.wav" }, new string[] { "Rumbling.wav" }, new string[] { "Holy.wav" }, new string[] { "Ahhhh.wav" } };
         private static int PcmInt(byte[] bytes, int offset)
         {
             return bytes[offset] | bytes[offset + 1] << 8 | bytes[offset + 2] << 16 | bytes[offset + 3] << 24;
@@ -756,7 +802,7 @@ namespace DragonsAltarCombat
                     if (method != null) _pcmReader = (PcmReader)Delegate.CreateDelegate(typeof(PcmReader), method);
                 }
                 if (_pcmReader == null) return false;
-                int frames = Math.Min(clip.samples, rate * 8);
+                int frames = Math.Min(clip.samples, rate * 16);
                 samples = new float[frames * channels];
                 if (_pcmReader(clip, samples, 0)) return true;
                 // One cold-load attempt only; never decode, allocate or retry on hot playback.
@@ -1065,6 +1111,7 @@ namespace DragonsAltarCombat
             Profile p = cue == (int)DragonBaseSound.CrescentFire ? FromFire() : (wind ? FromWind() : FromCustom(cue));
             string selected = p == null ? null : (cue == (int)DragonBaseSound.CrescentFire ? "native campfire crackle" : (wind ? "Valheim wind" : string.Join(" + ", CustomFiles[cue])));   // v0.25.239: wind has no file list (was ArgumentNullException = silent wind)
             bool bush = cue == (int)DragonBaseSound.TrapPlace || cue == (int)DragonBaseSound.TrapSnap;
+            if (p == null && cue == (int)DragonBaseSound.BattlecryForsaken) { p = FromGuardian(); if (p != null) selected = "Valheim Forsaken power activation"; }   // v0.25.263
             // Flame Burst uses the actual Staff of Embers release effect references first.
             if (p == null && cue == (int)DragonBaseSound.FlameBurst)
             { p = FromRelease("StaffFireball"); if (p != null) selected = "StaffFireball projectile burst/release effects"; }
@@ -1272,6 +1319,7 @@ namespace DragonsAltarCombat
                 voice.BaseVolume = layerGain; voice.Cue = (int)cue; voice.Layer = layer;
                 voice.End = now + Mathf.Clamp(clip.length / source.pitch * Mathf.Clamp(Shape(LayerLength, (int)cue, 100f), 0.1f, 1f), 0.08f, 4f);
                 if (maxSeconds > 0f && !float.IsInfinity(maxSeconds)) voice.End = Mathf.Min(voice.End, now + Mathf.Max(0.03f, maxSeconds));
+                voice.FadeFrom = Shape(LayerLength, (int)cue, 100f) < 0.999f ? now + (voice.End - now) * 0.4f : 0f;   // v0.25.263
                 float gameGain = Mathf.Sqrt(Mathf.Clamp01(AudioMan.GetSFXVolume()));
                 source.volume = (VoiceGain(voice) / PlaybackHeadroom) * (gameGain <= 0f ? 0f : (voice.UsesMixer ? 1f : gameGain));
                 source.PlayOneShot(clip, PlaybackHeadroom);
@@ -1303,11 +1351,19 @@ namespace DragonsAltarCombat
             float lead = MarkerSeconds((int)cue, original) * scale / source.pitch - SyncSeconds((int)cue);
             float delay = _hitIn - lead, offset = 0f;
             if (delay < 0f) { offset = Mathf.Min(-delay * source.pitch, Mathf.Max(0f, clip.length - 0.02f)); delay = 0f; }
+            if (cue == DragonBaseSound.JudgementThud)   // v0.25.263: the next single thud of the recording
+            {
+                offset = Mathf.Min(ThudStarts[_thudNext++ % ThudStarts.Length] * scale, Mathf.Max(0f, clip.length - 0.05f));
+                delay = Mathf.Max(0f, _hitIn);
+            }
             source.time = offset; voice.StartTime = offset;
-            float playable = (clip.length - offset) / source.pitch * Mathf.Clamp(Shape(LayerLength, (int)cue, 100f), 0.1f, 1f);
+            float share = Mathf.Clamp(Shape(LayerLength, (int)cue, 100f), 0.1f, 1f), whole = (clip.length - offset) / source.pitch, cap = CueSeconds[(int)cue];
+            float playable = (cap > 0f ? Mathf.Min(whole, cap) : whole) * share;
+            bool fades = share < 0.999f || (cap > 0f && cap < whole);   // v0.25.263 (user): a shortened sound fades out, never cut
             // v0.25.232: the user's recordings play whole (Length slider trims); old code-side caps cut them. Only the fire loop keeps its cap.
             if (cue == DragonBaseSound.CrescentFire && maxSeconds > 0f && !float.IsInfinity(maxSeconds)) playable = Mathf.Min(playable, Mathf.Max(0.03f, maxSeconds));
             voice.End = now + delay + Mathf.Clamp(playable, 0.05f, 60f);
+            voice.FadeFrom = fades ? now + delay + Mathf.Clamp(playable, 0.05f, 60f) * 0.4f : 0f;
             source.volume = Mathf.Min(1f, gain / Baked(full)) * Mathf.Sqrt(Mathf.Clamp01(AudioMan.GetSFXVolume())) * Space(source);
             if (delay > 0.02f) { voice.RepeatAt = now + delay; voice.Sustained = true; }   // waiting for its start; nobody may take the voice
             else { voice.RepeatAt = float.MaxValue; source.Play(); }
@@ -1318,7 +1374,7 @@ namespace DragonsAltarCombat
         private static int _nextTicket;
         private static void ReleaseSustain(Voice voice)
         {
-            voice.Ticket = 0; voice.Sustained = false; voice.Repeat = false; voice.Continue = null; voice.Follow = null; voice.RemoteKey = 0;
+            voice.Ticket = 0; voice.Sustained = false; voice.Repeat = false; voice.Continue = null; voice.Follow = null; voice.RemoteKey = 0; voice.FadeFrom = 0f;
         }
         public static int BeginSustain(Player caster, DragonBaseSound cue, Vector3 position, float seconds, float pitchScale = 1f, float gain = 1f, Func<bool> alive = null, bool followCaster = false, Transform follow = null)
         {
@@ -1371,19 +1427,19 @@ namespace DragonsAltarCombat
                     if (slot < 0) return -1;
                 }
                 int index;
-                _hitIn = cue == DragonBaseSound.CrescentDirt || cue == DragonBaseSound.WhirlwindWhoosh || cue == DragonBaseSound.MoonlightWind ? 0f : Mathf.Min(seconds, 60f);   // a wind-up's marker lands on the hit
+                _hitIn = LoopCue(cue) ? 0f : Mathf.Min(seconds, 60f);   // a wind-up's marker lands on the hit
                 try { index = PlayLayer(profile, cue, position, 0, Mathf.Clamp01(gain), -1, EventLayer(cue), pitchScale, 0f, slot); }
                 finally { _hitIn = 0f; }
                 if (index < 0) return -1;
                 Voice voice = Voices[index]; float now = Time.unscaledTime;
                 _nextTicket = _nextTicket == int.MaxValue ? 1 : _nextTicket + 1;
                 voice.Ticket = _nextTicket; voice.Sustained = true;
-                voice.Repeat = cue == DragonBaseSound.CrescentDirt || cue == DragonBaseSound.WhirlwindWhoosh || cue == DragonBaseSound.MoonlightWind;   // v0.25.240 Twinkle loops on the GT   // only the moving ground rumble loops
+                voice.Repeat = LoopCue(cue);   // v0.25.240 Twinkle loops on the GT   // only the moving ground rumble loops
                 float length = voice.Source.clip.length / voice.Source.pitch;
                 if (voice.Raw)
                 {
                     // PlayRaw already placed it (marker on the hit, delayed start); a looping rumble just loops for its time.
-                    if (voice.Repeat) { voice.Source.loop = true; voice.End = now + Mathf.Min(seconds, 60f); voice.RepeatAt = float.MaxValue; }
+                    if (voice.Repeat) { voice.Source.loop = true; voice.End = now + Mathf.Min(seconds, 60f); voice.RepeatAt = float.MaxValue; voice.FadeFrom = voice.End - Mathf.Min(1.2f, Mathf.Min(seconds, 60f) * 0.4f); }
                 }
                 else if (voice.Repeat)
                 {
@@ -1429,7 +1485,8 @@ namespace DragonsAltarCombat
                 for (int i = 0; i < Voices.Length; i++)
                 {
                     Voice v = Voices[i]; if (v == null || v.Ticket != ticket) continue;
-                    v.End = Mathf.Min(v.End, Time.unscaledTime + 0.05f); ReleaseSustain(v); return;
+                    float n = Time.unscaledTime; bool waiting = v.RepeatAt < float.MaxValue && n < v.RepeatAt;
+                    v.End = Mathf.Min(v.End, n + (waiting ? 0.02f : 0.3f)); ReleaseSustain(v); if (!waiting) v.FadeFrom = n; return;   // v0.25.263 fade, not a cut
                 }
             }
             catch { }
@@ -1471,7 +1528,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.262";
+        public const string ModVersion = "0.25.263";
 
         internal static DragonCombatPlugin Instance;
 
@@ -7455,7 +7512,6 @@ namespace DragonsAltarCombat
         public static void FireVanilla(Player player, string trigger)
         {
             if (player == null || string.IsNullOrEmpty(trigger)) return;
-            HoldStateForTrigger(player, trigger);   // v0.25.260
             DragonCaTrace.Start(player, trigger);   // v0.25.261 measures what the animator really plays
             if (player == Player.m_localPlayer && !trigger.StartsWith("emote", StringComparison.Ordinal)) _swingBaseUntil = Time.time + 4f;   // v0.25.262
             if (!trigger.StartsWith("emote", StringComparison.Ordinal)) BlockSkillAnimAttack(player, 2.5f);
@@ -17738,6 +17794,19 @@ namespace DragonsAltarCombat
             l.Systems = new ParticleSystem[] { ps };
         }
 
+        // v0.25.263 (user): level up - golden particles drifting down over the character
+        public static void GoldenShower(Transform who)
+        {
+            if (!Enabled || who == null) return;
+            DragonVfxLife l = Host(who.position + Vector3.up * 3.2f, 4.5f, "levelup");
+            l.Follow = who; l.FollowOffset = Vector3.up * 3.2f;
+            Color gold = new Color(1f, 0.82f, 0.32f, 1f), pale = new Color(1f, 0.93f, 0.62f, 0.9f);
+            Particles(l.transform, gold, 0, 55f, 2.4f, 1.7f, 0f, 0.25f, 0.05f, 0.12f, 0.45f, ParticleSystemShapeType.Circle, 0.75f, new Vector3(90f, 0f, 0f), false, true);
+            Particles(l.transform, pale, 0, 25f, 2.4f, 2f, 0f, 0.15f, 0.03f, 0.07f, 0.3f, ParticleSystemShapeType.Circle, 1.1f, new Vector3(90f, 0f, 0f), false, true);
+            l.StopEmitAt = 2.4f;
+            l.Systems = l.GetComponentsInChildren<ParticleSystem>();
+        }
+
         // A ring of dust rolling out along the ground.
         public static void DustRing(Vector3 pos, float radius)
         {
@@ -23845,7 +23914,7 @@ namespace DragonsAltarCombat
     public class DragonFirstCastClock : MonoBehaviour
     {
         private void Start() { Debug.Log("[Aethelborn] First-cast tracer ready: the first cast of every skill this session is measured (one log line each)."); }
-        private void Update() { DragonFirstCast.Tick(); DragonCombat.TickStateHold(); DragonCaTrace.Tick(); }
+        private void Update() { DragonFirstCast.Tick(); DragonCaTrace.Tick(); }
     }
 
     // v0.25.261 (user: skill CAs slow / out of sync with a two-handed sword, v0.25.260 state hold did not change it):

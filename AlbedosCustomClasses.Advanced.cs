@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.262";
+        public const string ModVersion = "0.25.263";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1284,6 +1284,7 @@ namespace AlbedosCustomClassesAdvanced
         private void PerfUpdateInner()
         {
             CsPrelearn();
+            IhLevelUpWatch();
             RegisterCleavePullRpc();
             RegisterKnightsGuidanceRpc();
             UpdateCleavePullNet();
@@ -1611,6 +1612,7 @@ namespace AlbedosCustomClassesAdvanced
             ShowMessage("Crescent Cleave");
             DragonSkillAudio.Expect(player, DragonBaseSound.CrescentSlash, player.transform.position, windup);   // v230: sounds timed to the hit
             DragonSkillAudio.Expect(player, DragonBaseSound.CrescentSword, player.transform.position, windup);
+            DragonSkillAudio.Expect(player, DragonBaseSound.CrescentWhoosh, player.transform.position, windup);   // v0.25.263 (user): Whoosh on each strike
 
             if (windup > 0f)
                 yield return new WaitForSeconds(windup);
@@ -1652,6 +1654,7 @@ namespace AlbedosCustomClassesAdvanced
             Vector3 origin = player.transform.position + baseForward * 0.45f;
             DragonSkillAudio.Play(player, DragonBaseSound.CrescentSlash, origin);   // v227: first strike HeavySwing
             DragonSkillAudio.Play(player, DragonBaseSound.CrescentSword, origin);   // v229: SwordSlash layered on it
+            DragonSkillAudio.Play(player, DragonBaseSound.CrescentWhoosh, origin);
 
             if (IsAscendedSkill("crescent_cleave"))
             {
@@ -1677,11 +1680,13 @@ namespace AlbedosCustomClassesAdvanced
                 DragonCombat.PlayClip(player, "sm_crescent_asc2", f2);
                 DragonSkillAudio.Expect(player, DragonBaseSound.CrescentSlash2, player.transform.position, f2);
                 DragonSkillAudio.Expect(player, DragonBaseSound.CrescentSword, player.transform.position, f2);   // v0.25.231: SwordSlash on the second strike too
+                DragonSkillAudio.Expect(player, DragonBaseSound.CrescentWhoosh, player.transform.position, f2);
                 yield return new WaitForSeconds(f2);
                 if (player == null || player.IsDead() || SmInterrupted(castStart))
                     yield break;
                 DragonSkillAudio.Play(player, DragonBaseSound.CrescentSlash2, origin);   // v227: Ascended second strike HeavySwing2
                 DragonSkillAudio.Play(player, DragonBaseSound.CrescentSword, origin);
+                DragonSkillAudio.Play(player, DragonBaseSound.CrescentWhoosh, origin);
                 for (int i = 0; i < 6; i++)
                 {
                     float a = Mathf.Lerp(-halfSpread, halfSpread, (i + 0.5f) / 6f);
@@ -3479,7 +3484,7 @@ namespace AlbedosCustomClassesAdvanced
             ShowMessage("Knight's Guidance");
             DragonSkillAudio.Play(player, DragonBaseSound.KnightsGuidance, player.transform.position);
             // v0.25.69 (user: the Grace was too bright): a dim, thin column + a plain ring (no ground glow disc).
-            if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.SpiritWings(player.transform, new Color(0.55f, 0.80f, 1f, 1f), 2.2f); });   // v0.25.82 spectral wings
+            // v0.25.263 (user): no wings - the ground ring is enough
             float radius = Mathf.Max(1f, DragonCombat.M(_kgRadius.Value));
             float duration = Mathf.Max(1f, _kgDuration.Value);
             HashSet<Player> allies = new HashSet<Player>();
@@ -4799,6 +4804,11 @@ namespace AlbedosCustomClassesAdvanced
             DragonSkillAudio.Play(player, DragonBaseSound.BattlecryBass, player.transform.position);   // v0.25.234: no Grace buff sound (user)
             if (_enableVfx.Value) { Player bp = player; DragonCombat.RunVfx(delegate { DragonVfx.Gust(bp.transform.position + Vector3.up * 1.4f, bp.transform.forward, 2.5f); DragonVfx.DustRing(bp.transform.position, 2f); DragonVfx.Burst(bp.transform.position + Vector3.up * 1.5f, new Color(1f, 0.55f, 0.25f, 0.8f), 12, 4f, 0.2f, 0.5f, -0.2f); }); }   // v0.25.180 breath/pressure pulse at the chest + boot dust (no sonic rings)
             float radius = Mathf.Max(1f, DragonCombat.M(_bcRadius.Value));
+            DragonSkillAudio.Play(player, DragonBaseSound.BattlecryForsaken, player.transform.position);   // v0.25.263 (user): Forsaken power sound, 1.5 s
+            // v0.25.263 (user): the roar stuns small and big enemies around you (no damage; bosses are never stunned)
+            List<Character> roared = GetSphereTargets(player, player.transform.position, radius);
+            for (int i = 0; i < roared.Count; i++)
+                if (DragonCombat.ShouldSkillStun(player, roared[i], "battlecry", "Roar", true, true, false)) DragonCombat.Stun(roared[i], player.transform.position);
             HashSet<Player> allies = new HashSet<Player>();
             allies.Add(player);
             Collider[] hits = Physics.OverlapSphere(player.transform.position, radius);
@@ -5888,6 +5898,7 @@ namespace AlbedosCustomClassesAdvanced
         private IEnumerator GoddessRelicRoutine(Player player, Vector3 target, float windup)
         {
             ShowMessage("Goddess Relic");
+            DragonSkillAudio.Expect(player, DragonBaseSound.RelicSwing, player.transform.position, windup);   // v0.25.263 the swing
             if (windup > 0f)
                 yield return new WaitForSeconds(windup);
 
@@ -5918,6 +5929,11 @@ namespace AlbedosCustomClassesAdvanced
             if (cross != null && _enableVfx.Value) { GameObject fallingCross = cross; DragonCombat.RunVfx(delegate { DragonVfx.AirStreak(fallingCross.transform, DragonVfx.Holy, 0.5f * sizeMultiplier, 0.35f, delegate { return fallingCross != null && fallingCross.transform.position.y > finalCenter.y + 0.2f; }); }); }   // v0.25.180 narrow streak + displaced air
 
             float fallTime = DragonCombat.GetSkySummonDropTime();
+            // v0.25.263 (user): MidBoom + BoulderCrash + Bell together as the cross lands (2.5 s each); Ascended adds BassDrop
+            DragonSkillAudio.Expect(player, DragonBaseSound.RelicBoom, finalCenter, fallTime);
+            DragonSkillAudio.Expect(player, DragonBaseSound.RelicCrash, finalCenter, fallTime);
+            DragonSkillAudio.Expect(player, DragonBaseSound.RelicBell, finalCenter, fallTime);
+            if (ascended) DragonSkillAudio.Expect(player, DragonBaseSound.RelicBass, finalCenter, fallTime);
             float elapsed = 0f;
             while (elapsed < fallTime)
             {
@@ -6538,6 +6554,7 @@ namespace AlbedosCustomClassesAdvanced
                 yield break;
 
             float radius = Mathf.Max(1f, DragonCombat.M(_rayRadius.Value));
+            DragonSkillAudio.Play(player, DragonBaseSound.RayBuff, player.transform.position);   // v0.25.263 Buff2
             float healPercent = Mathf.Clamp(_rayHealPercent.Value, 0f, 100f) / 100f * IhHealPower(player, "ray_of_hope");
             Collider[] allyHits = Physics.OverlapSphere(player.transform.position, radius);
             HashSet<Player> allies = new HashSet<Player>();
@@ -6697,6 +6714,7 @@ namespace AlbedosCustomClassesAdvanced
                     body.MoveRotation(Quaternion.LookRotation(forward, Vector3.up));
                     if (step > 0f) body.MovePosition(body.position + forward * step);
                     chargeProgress += requested;
+                    IhChargeStep(player);   // v0.25.263 (user): Valheim's own running footsteps for the ground you are on
 
                     // Damage still runs when allowed movement is zero.
                     Vector3 center = player.transform.position + forward * Mathf.Max(0.8f, radius * 0.55f) + Vector3.up;
@@ -6877,6 +6895,21 @@ namespace AlbedosCustomClassesAdvanced
             StartCoroutine(ShieldChargeSlamRoutine(player, forward, slam));
         }
 
+        // v0.25.263 Shield Charge steps: Valheim's FootStep picks the sound (and dust) for the ground material, like sprinting
+        private float _ihChargeStepAt;
+        private FootStep _ihFootStep;
+        private void IhChargeStep(Player player)
+        {
+            try
+            {
+                if (Time.time < _ihChargeStepAt || !player.IsOnGround()) return;
+                _ihChargeStepAt = Time.time + 0.27f;
+                if (_ihFootStep == null || _ihFootStep.gameObject != player.gameObject) _ihFootStep = player.GetComponent<FootStep>();
+                if (_ihFootStep != null) _ihFootStep.OnFoot();
+            }
+            catch (Exception) { }
+        }
+
         private IEnumerator ShieldChargeSlamRoutine(Player player, Vector3 forward, float slam)
         {
             yield return new WaitForSeconds(slam);
@@ -6961,6 +6994,8 @@ namespace AlbedosCustomClassesAdvanced
         {
             if (player == null || player.IsDead()) return;
             ShowMessage("Hammer Slam");
+            DragonSkillAudio.Play(player, DragonBaseSound.ChargeBoom, player.transform.position + forward);   // v0.25.263 MidBoom + LightningCrash
+            DragonSkillAudio.Play(player, DragonBaseSound.ChargeCrash, player.transform.position + forward);
             bool ascended = IsAscendedSkill("shield_charge");
             float radius = Mathf.Max(0.5f, ascended ? DragonCombat.M(_chargeAscBashRadius.Value) : DragonCombat.M(_shieldChargeRadius.Value));
             float halfAngle = Mathf.Clamp(_chargeAscBashAngle.Value, 10f, 360f) * 0.5f;
@@ -7283,6 +7318,7 @@ namespace AlbedosCustomClassesAdvanced
         private IEnumerator ElectricSmiteRoutine(Player player, float takeoffDelay)
         {
             ShowMessage("Electric Smite");
+            DragonSkillAudio.Play(player, DragonBaseSound.SmiteLeap, player.transform.position);   // v0.25.263 Bonecrusher leap sound
             yield return StartCoroutine(AcrobaticJumpUntilLanding(player, takeoffDelay, Mathf.Max(1f, _divineWindup.Value), _divineWindup.Value >= 1f));
             if (player == null || player.IsDead())
                 yield break;
@@ -7290,6 +7326,9 @@ namespace AlbedosCustomClassesAdvanced
             OlympicLanding(player, 0.45f);
             Vector3 point = player.transform.position;
             float radius = Mathf.Max(1f, DragonCombat.M(_divineRadius.Value));
+            DragonSkillAudio.Play(player, DragonBaseSound.SmiteImpact, point);   // v0.25.263 Bonecrusher landing + Esmite
+            DragonSkillAudio.Play(player, DragonBaseSound.SmiteBass, point);
+            DragonSkillAudio.Play(player, DragonBaseSound.SmiteEsmite, point);
             List<Character> targets = GetSphereTargets(player, point, radius);
             for (int i = 0; i < targets.Count; i++)
             {
@@ -7542,6 +7581,7 @@ namespace AlbedosCustomClassesAdvanced
         {
             const string id = "Paladin.JudgementHammer";
             ShowMessage("Judgement Hammer");
+            DragonSkillAudio.Expect(player, DragonBaseSound.HammerSwing, player.transform.position, windup);   // v0.25.263 arm swing
             if (windup > 0f)
                 yield return new WaitForSeconds(windup);
             if (player == null || player.IsDead())
@@ -7559,6 +7599,7 @@ namespace AlbedosCustomClassesAdvanced
             int solidMask = LayerMask.GetMask("Default", "static_solid", "Default_small", "piece", "terrain", "vehicle");
             Dictionary<int, float> nextHitAt = new Dictionary<int, float>();
             GameObject hammer = CreateHolyHammer(pos, new Color(1f, 0.86f, 0.38f, 1f));
+            if (hammer != null) { GameObject spinning = hammer; DragonSkillAudio.BeginSustain(player, DragonBaseSound.HammerSpin, pos, 30f, 1f, 1f, delegate { return spinning != null; }, false, hammer.transform); }   // v0.25.263 SpinningSwing rides the hammer (softer far away)
             float spin = 0f;
             float travelled = 0f;
             float flightTime = 0f;
@@ -7767,6 +7808,7 @@ namespace AlbedosCustomClassesAdvanced
             StartCoroutine(IhCreatureGhost(player, 30f)); // v0.22.6: the dive lands on terrain, never on a Troll's head
             // v0.21.1: jump + nose-dive take WindUpTime (2.5s) in total.
             float total = Mathf.Max(0.6f, _angelWindupTotal.Value);
+            DragonSkillAudio.Expect(player, DragonBaseSound.CometWindup, player.transform.position, total);   // v0.25.263 BigWhoosh2 over the aerial wind-up
             if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.Trail(player.transform, DragonVfx.Holy, 0.9f, total + 0.2f); DragonVfx.Burst(player.transform.position, DragonVfx.HolyWhite, 40, 6f, 0.3f, 0.8f, 0.2f); DragonVfx.PressureCone(player.transform, DragonVfx.Holy, 1.4f, total + 0.3f, null); });   // v0.25.181 vapour cone on the dive
             float riseTime = total * 0.56f;
             float hangTime = total * 0.06f;
@@ -7833,6 +7875,8 @@ namespace AlbedosCustomClassesAdvanced
 
             Vector3 point = player.transform.position;
             float radius = Mathf.Max(1f, DragonCombat.M(_angelRadius.Value));
+            DragonSkillAudio.Play(player, DragonBaseSound.CometImpact, point);   // v0.25.263 Bonecrusher landing sounds
+            DragonSkillAudio.Play(player, DragonBaseSound.CometBass, point);
             List<Character> targets = GetSphereTargets(player, point, radius);
             for (int i = 0; i < targets.Count; i++)
             {
@@ -7862,6 +7906,7 @@ namespace AlbedosCustomClassesAdvanced
                 DragonCombat.GrantHyperArmor(player, Mathf.Max(0f, _angelHyperAfter.Value));
                 StartCoroutine(FallenAngelBurnRingRoutine(player, point, radius));
                 StartCoroutine(AngelAftershock(player, point, radius * 1.5f));
+                DragonSkillAudio.Expect(player, DragonBaseSound.CometAftershock, point, 0.5f);   // v0.25.263 SolidBoom on the aftershock
             }
         }
 
@@ -7922,8 +7967,11 @@ namespace AlbedosCustomClassesAdvanced
             float end = Time.time + Mathf.Max(0.5f, _smiteStormDuration.Value);
             float tick = Mathf.Max(0.1f, _smiteStormTick.Value);
             float dot = Mathf.Max(0.1f, _smiteStormDotDuration.Value);
+            Player stormer = player; float stormEnd = end;
+            DragonSkillAudio.BeginSustain(player, DragonBaseSound.SmiteStorm, center, Mathf.Max(0.5f, end - Time.time), 1f, 1f, delegate { return stormer != null && !stormer.IsDead() && Time.time < stormEnd; });   // v0.25.263 Electric over the storm
             while (Time.time < end && player != null && !player.IsDead())
             {
+                { Vector2 cr = UnityEngine.Random.insideUnitCircle * radius; DragonSkillAudio.Play(player, DragonBaseSound.SmiteCrash, center + new Vector3(cr.x, 0f, cr.y)); }   // LightningCrash strikes
                 stunPulse++;
                 List<Character> targets = GetSphereTargets(player, center, radius);
                 for (int i = 0; i < targets.Count; i++)
@@ -8183,6 +8231,7 @@ namespace AlbedosCustomClassesAdvanced
         {
             int stunPulse = 0;
             ShowMessage("Lightning Relic");
+            DragonSkillAudio.Expect(player, DragonBaseSound.LRelicSwing, player.transform.position, windup);   // v0.25.263 the swing
             if (windup > 0f)
                 yield return new WaitForSeconds(windup);
 
@@ -8215,6 +8264,8 @@ namespace AlbedosCustomClassesAdvanced
             if (cross != null) cross.transform.rotation = relicRot;
 
             float drop = DragonCombat.GetSkySummonDropTime();
+            DragonSkillAudio.Expect(player, DragonBaseSound.LRelicZappy, finalCenter, drop);   // v0.25.263 Zappy + BoulderCrash on landing
+            DragonSkillAudio.Expect(player, DragonBaseSound.LRelicCrash, finalCenter, drop);
             float e = 0f;
             while (e < drop)
             {
@@ -8367,6 +8418,7 @@ namespace AlbedosCustomClassesAdvanced
         private IEnumerator HolyRelicRoutine(Player player, Vector3 target, float windup, string cooldownId)
         {
             ShowMessage("Holy Relic");
+            DragonSkillAudio.Expect(player, DragonBaseSound.HRelicSwing, player.transform.position, windup);   // v0.25.263 the swing
             if (windup > 0f)
                 yield return new WaitForSeconds(windup);
 
@@ -8401,6 +8453,8 @@ namespace AlbedosCustomClassesAdvanced
             if (cross != null) cross.transform.rotation = relicRot;
 
             float drop = DragonCombat.GetSkySummonDropTime();
+            DragonSkillAudio.Expect(player, DragonBaseSound.HRelicBell, finalCenter, drop);   // v0.25.263 Bell2 + BoulderCrash on landing
+            DragonSkillAudio.Expect(player, DragonBaseSound.HRelicCrash, finalCenter, drop);
             float e = 0f;
             while (e < drop)
             {
@@ -8534,6 +8588,7 @@ namespace AlbedosCustomClassesAdvanced
                 yield break;
 
             float radius = Mathf.Max(1f, DragonCombat.M(_interventionRadius.Value));
+            DragonSkillAudio.Play(player, DragonBaseSound.DivineBuff, center);   // v0.25.263 Buff2
 
             if (_enableVfx.Value)
             {
@@ -8626,6 +8681,8 @@ namespace AlbedosCustomClassesAdvanced
             float secondSlash = Mathf.Max(0f, windup - firstSlash);
 
             DragonCombat.PlayClip(player, "cleric_cross_1", firstSlash);
+            DragonSkillAudio.Expect(player, DragonBaseSound.CrossSwing, player.transform.position, firstSlash);   // v0.25.263 Crescent Cleave sounds minus the sword slash
+            DragonSkillAudio.Expect(player, DragonBaseSound.CrossWhoosh, player.transform.position, firstSlash);
             if (firstSlash > 0f)
                 yield return new WaitForSeconds(firstSlash);
 
@@ -8633,6 +8690,8 @@ namespace AlbedosCustomClassesAdvanced
                 yield break;
 
             DragonCombat.PlayClip(player, "cleric_cross_2", secondSlash);
+            DragonSkillAudio.Expect(player, DragonBaseSound.CrossSwing2, player.transform.position, secondSlash);
+            DragonSkillAudio.Expect(player, DragonBaseSound.CrossWhoosh, player.transform.position, secondSlash);
             if (secondSlash > 0f)
                 yield return new WaitForSeconds(secondSlash);
 
@@ -8697,6 +8756,7 @@ namespace AlbedosCustomClassesAdvanced
             int gcSolid = LayerMask.GetMask("Default", "static_solid", "Default_small", "piece_nonsolid", "terrain", "vehicle", "piece", "viewblock");   // same obstacle mask as Crescent
             Quaternion rotation = Quaternion.LookRotation(forward, crossUp);
             float elapsed = 0f;
+            int rumble = DragonSkillAudio.BeginSustain(player, DragonBaseSound.CrossRumble, origin, travelTime + 0.5f);   // v0.25.263 Rumbling rides the cross
 
             while (elapsed <= travelTime)
             {
@@ -8709,6 +8769,7 @@ namespace AlbedosCustomClassesAdvanced
                 float halfHeight = height * 0.5f;
 
                 if (visualRoot != null) visualRoot.transform.position = center;
+                DragonSkillAudio.MoveSustain(rumble, center);
                 if (slashA != null)
                 {
                     slashA.SetPosition(0, center - right * halfWidth - crossUp * halfHeight);
@@ -8762,6 +8823,7 @@ namespace AlbedosCustomClassesAdvanced
                 yield return null;
             }
 
+            DragonSkillAudio.EndSustain(rumble);
             if (visualRoot != null)
                 Destroy(visualRoot);
 
@@ -8793,6 +8855,9 @@ namespace AlbedosCustomClassesAdvanced
             float interval = Mathf.Max(0.1f, _heavensStrikeInterval.Value);
             int beamsPerWave = Mathf.Clamp(_heavensStrikesPerWave.Value, 1, 12);
             float impactRadius = Mathf.Max(0.5f, DragonCombat.M(_heavensStrikeRadius.Value));
+            // v0.25.263 (user): HeavySwing on the swing, Judgement for the whole skill, a Thud per falling beam, MidBoom on the big beam
+            DragonSkillAudio.Expect(player, DragonBaseSound.JudgementSwing, player.transform.position, windup);
+            { Player hjCaster = player; float hjEnd = Time.time + windup + duration + (ascended ? 0.8f : 0.2f); DragonSkillAudio.BeginSustain(player, DragonBaseSound.JudgementChoir, center, hjEnd - Time.time, 1f, 1f, delegate { return hjCaster != null && !hjCaster.IsDead() && Time.time < hjEnd; }); }
 
             if (_enableVfx.Value)
             {
@@ -8841,6 +8906,7 @@ namespace AlbedosCustomClassesAdvanced
                         if (DragonVfx.Enabled) { Vector3 bs0 = sky, bs1 = strike + Vector3.up * 0.3f; DragonCombat.RunVfx(delegate { for (int k = 0; k < 3; k++) DragonVfx.Burst(Vector3.Lerp(bs0, bs1, 0.45f + k * 0.2f), new Color(1f, 0.95f, 0.72f, 0.85f), 5, 0.4f, 0.09f, 0.6f, 2.5f); }); }   // v0.25.191 (user) light drifting down the beam
                     }
 
+                    DragonSkillAudio.Play(player, DragonBaseSound.JudgementThud, strike);
                     List<Character> targets = GetSphereTargets(player, strike, impactRadius);
                     for (int i = 0; i < targets.Count; i++)
                     {
@@ -8869,6 +8935,7 @@ namespace AlbedosCustomClassesAdvanced
             {
                 // Pillar of Heaven at the centre.
                 float pillar = Mathf.Max(0.5f, DragonCombat.M(_hjAscPillarRadius.Value));
+                DragonSkillAudio.Play(player, DragonBaseSound.JudgementPillar, center);   // v0.25.263 MidBoom
                 if (_enableVfx.Value)
                 {
                     CreateTemporaryBeam(DragonCombat.GetIndoorSafeSkyPoint(center, 40f), center, new Color(1f, 0.96f, 0.70f, 1f), 2.4f, 0.7f);
@@ -9068,6 +9135,7 @@ namespace AlbedosCustomClassesAdvanced
                 yield return new WaitForSeconds(windup);
             if (player == null || player.IsDead())
                 yield break;
+            DragonSkillAudio.Play(player, DragonBaseSound.CrucibleHoly, player.transform.position);   // v0.25.263 Holy
 
             float radius = Mathf.Max(1f, DragonCombat.M(_grandRadius.Value));
             // Snapshot: 30% of the Priest's current Armor, not updated if equipment changes later.
@@ -13265,6 +13333,29 @@ namespace AlbedosCustomClassesAdvanced
             }
         }
 
+        // v0.25.263 (user): leveling up plays Ahhhh and drops golden particles over the character
+        private int _ihLevelSeen = -1, _ihLevelPlayer;
+        private float _ihLevelNext;
+        private void IhLevelUpWatch()
+        {
+            if (Time.time < _ihLevelNext) return;
+            _ihLevelNext = Time.time + 0.5f;
+            Player p = Player.m_localPlayer;
+            if (p == null) { _ihLevelSeen = -1; return; }
+            try
+            {
+                int level = IhGetLevel(p);
+                if (_ihLevelPlayer != p.GetInstanceID()) { _ihLevelPlayer = p.GetInstanceID(); _ihLevelSeen = level; return; }
+                if (_ihLevelSeen > 0 && level > _ihLevelSeen)
+                {
+                    DragonSkillAudio.Play(p, DragonBaseSound.LevelUp, p.transform.position);
+                    if (_enableVfx.Value) { Transform who = p.transform; DragonCombat.RunVfx(delegate { DragonVfx.GoldenShower(who); }); }
+                }
+                _ihLevelSeen = level;
+            }
+            catch (Exception) { }
+        }
+
         private int IhGetLevel(Player player)
         {
             return Mathf.Clamp(IhReadInt(player, IhLevelKey, 1), 1, IhMaxLevel);
@@ -15557,6 +15648,7 @@ namespace AlbedosCustomClassesAdvanced
             DragonCombat.LockSkill(player, 0.5f);
             DragonCombat.PlayClip(player, "cleric_light", 0.06f);   // v0.25.16 release-first
             ShowMessage("Heaven's Light");
+            DragonSkillAudio.Play(player, DragonBaseSound.HeavensLightHoly, player.transform.position);   // v0.25.263 Holy
 
             float radius = Mathf.Max(1f, DragonCombat.M(_graceLightRadius.Value));
             float duration = Mathf.Max(1f, _graceLightDuration.Value);

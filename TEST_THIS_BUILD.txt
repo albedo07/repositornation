@@ -1,2 +1,3 @@
-v0.25.262: with the TWO-HANDED SWORD cast Halfmoon, Heavy Slash (Normal + Ascended), Circle Swing; then the same with a
-one-handed weapon. Greatsword swings should now feel the same speed. Send LogOutput.log ("CA trace" / "base speed" lines).
+v0.25.263: 2H sword skills keep the greatsword stance. Cast each Paladin/Priest skill once (Normal + Ascended), Battlecry
+near enemies (stun), Crescent Cleave, Knight's Guidance (no wings), shorten a sound's Length (it should fade, not cut),
+level up once (Ahhhh + golden particles). Send LogOutput.log ("Skill audio ..." lines show which sounds loaded).
