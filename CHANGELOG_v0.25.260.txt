@@ -1,0 +1,16 @@
+Aethelborn Ascended v0.25.260 - Greatsword Skills   (base: ANCHOR v0.25.257 + v0.25.258/259)
+
+TWO-HANDED SWORD (and scythe) SKILL CAs - slow / out of sync
+- Cause: Valheim gives greatswords (and scythes) their own animator weapon state. Most skill CAs borrow vanilla
+  battleaxe / mace / sword / atgeir swings; under the greatsword state those swings do not play the way they do with
+  their own weapon, so the CA ran slow and drifted from the hit timing (the same problem dual wield had, v0.25.161).
+- Fix (all skills, Normal and Ascended): while a skill CA that borrows a vanilla swing plays with a greatsword/scythe
+  equipped, the animator is held in the state that swing belongs to (battleaxe -> two-handed axe, atgeir -> atgeir,
+  mace/sword/axe/knife -> one-handed). Valheim's own weapon setup puts the real greatsword state back as soon as the
+  skill and its play-out are over. Greatsword swings themselves are left alone.
+- Affected when wielding a two-handed sword: every skill that fires vanilla swings, e.g. Heavy Slash / Ascended Heavy
+  Slash strikes, Circle Swing chain, Halfmoon Slash, Mercenary/Sword Master swing-based skills. Other weapons: unchanged.
+- One log line per weapon state + swing: "Skill CA with a Greatsword weapon: animator held in ... state for '...'".
+- No damage, timing, VFX or sound changes.
+
+CHECKS: all ten modules compile (C# 5) against your real DLLs. Not tested in game.

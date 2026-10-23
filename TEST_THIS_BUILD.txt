@@ -1,3 +1,3 @@
-v0.25.259 (+ PA v0.6.8): fresh start, wait ~20 s, cast Circle Swing, Halfmoon, Frenzied Charge, Moonlight, Eclipse,
-Seismic once each (no first-cast stutter expected). Try casting Ascended Heavy Slash during Circle Swing (must wait).
-Open the inventory. Send LogOutput.log ("First cast" / "[PA UI]" lines).
+v0.25.260: equip a two-handed sword, cast Heavy Slash, Circle Swing, Halfmoon and your other swing skills (Normal and
+Ascended). CAs should match the speed/sync you get with a battleaxe. Then swap to a 2H sword normal attack (must look
+vanilla). Send LogOutput.log ("animator held in" lines).

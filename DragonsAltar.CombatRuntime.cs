@@ -1471,7 +1471,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.259";
+        public const string ModVersion = "0.25.260";
 
         internal static DragonCombatPlugin Instance;
 
@@ -7455,6 +7455,7 @@ namespace DragonsAltarCombat
         public static void FireVanilla(Player player, string trigger)
         {
             if (player == null || string.IsNullOrEmpty(trigger)) return;
+            HoldStateForTrigger(player, trigger);   // v0.25.260
             if (!trigger.StartsWith("emote", StringComparison.Ordinal)) BlockSkillAnimAttack(player, 2.5f);
             AnimActivation++;
             if (trigger.IndexOf("battleaxe", StringComparison.OrdinalIgnoreCase) >= 0 ||
@@ -7474,6 +7475,64 @@ namespace DragonsAltarCombat
                 if (a != null) a.SetTrigger(trigger);
             }
             catch (Exception) { }
+        }
+
+        // v0.25.260 (user: with a two-handed sword the skill CAs are slow / out of sync): Valheim's greatswords (and scythes) have
+        // their own animator weapon state (AnimationState.Greatsword = 13). The skills borrow battleaxe / mace / sword / atgeir
+        // swings, and under the greatsword state those triggers do not play like they do with the weapon they belong to (the
+        // same problem dual wield had - v0.25.161 holds SBDW in the one-handed state). While such a skill CA plays, the
+        // animator is put in the state the borrowed swing belongs to; Valheim's own SetupAnimationState restores the real
+        // weapon state as soon as the skill (and its play-out) is over.
+        private static bool _stateHold;
+        private static Player _stateHoldPlayer;
+        private static float _stateHoldAt;
+        private static Component _stateHoldZ;
+        private static MethodInfo _shSetFloat, _shSetInt, _shSetup;
+        private static readonly HashSet<string> _stateHoldLogged = new HashSet<string>();
+        private static void HoldStateForTrigger(Player player, string trigger)
+        {
+            try
+            {
+                if (player != Player.m_localPlayer) return;
+                ItemDrop.ItemData w = player.GetCurrentWeapon();
+                if (w == null || w.m_shared == null) return;
+                ItemDrop.ItemData.AnimationState st = w.m_shared.m_animationState;
+                if (st != ItemDrop.ItemData.AnimationState.Greatsword && st != ItemDrop.ItemData.AnimationState.Scythe) return;
+                string t = trigger.ToLowerInvariant();
+                int target = -1;
+                if (t.Contains("greatsword")) return;   // its own swings: nothing to hold
+                if (t.Contains("battleaxe")) target = (int)ItemDrop.ItemData.AnimationState.TwoHandedAxe;
+                else if (t.Contains("atgeir")) target = (int)ItemDrop.ItemData.AnimationState.Atgeir;
+                else if (t.Contains("mace") || t.Contains("sword") || t.Contains("axe") || t.Contains("knife")) target = (int)ItemDrop.ItemData.AnimationState.OneHanded;
+                if (target < 0) return;
+                Component z = null;
+                Component[] cs = player.GetComponents<Component>();
+                for (int i = 0; i < cs.Length; i++) if (cs[i] != null && cs[i].GetType().Name == "ZSyncAnimation") { z = cs[i]; break; }
+                if (z == null) return;
+                if (_shSetFloat == null) _shSetFloat = z.GetType().GetMethod("SetFloat", new Type[] { typeof(string), typeof(float) });
+                if (_shSetInt == null) _shSetInt = z.GetType().GetMethod("SetInt", new Type[] { typeof(string), typeof(int) });
+                if (_shSetFloat != null) _shSetFloat.Invoke(z, new object[] { "statef", (float)target });
+                if (_shSetInt != null) _shSetInt.Invoke(z, new object[] { "statei", target });
+                _stateHold = true; _stateHoldPlayer = player; _stateHoldAt = Time.time; _stateHoldZ = z;
+                string key = st + ">" + trigger;
+                if (_stateHoldLogged.Add(key)) Debug.Log("[Aethelborn] Skill CA with a " + st + " weapon: animator held in " + (ItemDrop.ItemData.AnimationState)target + " state for '" + trigger + "' (restored when the skill ends).");
+            }
+            catch (Exception) { }
+        }
+        // every frame: give the animator its real weapon state back once the skill CA (incl. play-out) is over
+        internal static void TickStateHold()
+        {
+            if (!_stateHold) return;
+            Player p = _stateHoldPlayer;
+            try
+            {
+                if (p == null || p.IsDead()) { _stateHold = false; return; }
+                if (Time.time - _stateHoldAt < 0.4f || SkillAnimationBusy(p) || IsSkillLocked(p)) return;
+                _stateHold = false;
+                if (_shSetup == null) _shSetup = typeof(Humanoid).GetMethod("SetupAnimationState", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+                if (_shSetup != null) _shSetup.Invoke(p, null);   // Valheim's own: back to the equipped weapon's state
+            }
+            catch (Exception) { _stateHold = false; }
         }
 
         private static Dictionary<string, DragonClipKey[]> _clips;
@@ -23723,7 +23782,7 @@ namespace DragonsAltarCombat
     public class DragonFirstCastClock : MonoBehaviour
     {
         private void Start() { Debug.Log("[Aethelborn] First-cast tracer ready: the first cast of every skill this session is measured (one log line each)."); }
-        private void Update() { DragonFirstCast.Tick(); }
+        private void Update() { DragonFirstCast.Tick(); DragonCombat.TickStateHold(); }
     }
 
     public static class DragonPerf
