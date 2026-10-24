@@ -1,0 +1,50 @@
+Aethelborn Ascended v0.25.272 - Priest Performance   (base: v0.25.271; ANCHOR v0.25.257)
+
+WHAT YOUR LOG SHOWED (12 s after each skill's first cast)
+- Lightning Tempest: 29 hitches (worst 53 ms) - about 34 ms of effect building every 0.35 s pulse (952 ms in total).
+  This was the main lag.
+- Heaven's Judgement: 2,445 effect objects and 2,715 particle systems in one cast (10 beams every 0.15 s, each with
+  pillar + ring + dirt + cracks + 4 spark bursts). No single hitch, but a heavier frame the whole time.
+- Electric Smite (Paladin): 1,270 effect objects (its thunderstorm threw 3 full Ultimate strikes per tick).
+- Goddess Relic, Righteous Strike, Divine Intervention, Grand Cross, Angel Comet, Shield Charge: light (one hitch each at
+  most, with garbage collection; no lasting load). Not changed.
+
+PERFORMANCE - VFX DOWNGRADES (damage, hit counts, timing and sounds unchanged)
+- Lightning Tempest (Priest, Normal and Ascended): per pulse ONE lighter strike (one bolt, two cracks, lighter dirt) and
+  every other strike in that pulse is a single lightning line (no sparks / branches). The cloud sheet flash comes every
+  2nd pulse. Before: up to 3 full Ultimate strikes (2 bolts, 3 cracks, dirt, sparks each) + full bolts + a flash per
+  strike. Roughly a quarter of the objects per pulse.
+- Heaven's Judgement (Priest, Normal and Ascended): every beam keeps its light pillar. The contact ring, dirt + cracks,
+  the contact spark bloom and the light drifting down the beam now come on 2 beams of each wave (1 drifting burst instead
+  of 3) instead of on all 10. Roughly 60% fewer objects. Ascended final Pillar of Heaven unchanged.
+- Electric Smite thunderstorm (Paladin, Normal and Ascended): 1 lighter strike + 2 single lightning lines per tick
+  instead of 3 full Ultimate strikes.
+- New diagnostic in the "Skill load" line: ground lookups made by effects (count and ms), to show whether ground
+  checks are part of the Tempest cost.
+
+SHIELD CHARGE (Paladin, Normal and Ascended) - HOWLING WIND
+- The BigWhoosh build-up and climax from v0.25.270 are removed. HowlingWind plays for the charging duration only.
+- The snippet: your recording is an 82 s wind with a gust every ~4 s. I measured it in 50 ms steps and picked the gust at
+  34.75-38.00 s: it starts in a lull, swells +5.4 dB over the first 1.4 s (a full Normal charge is about 1.4 s) and then
+  holds its peak (Ascended charge + jump keep the peak). Shipped as ImmortalHeroesAssets\SFX\HowlingWind.wav (those
+  3.25 s, samples unchanged). It grows in over 0.2 s, follows you, loops if a charge is ever longer, and fades out when
+  the charge ends. MidBoom + LightningCrash on the slam unchanged.
+- Slider: Paladin Shield Charge Audio > Charge Howling Wind Volume (%) (plus its Pitch/Speed/Length/Bass). The Climax
+  slider is hidden (no longer used).
+
+PRIEST MASTERY - HOLY SHOCKWAVE ON PARRY
+- Likely cause: the parry only counted with a shield the mod judged a "buckler" (name contains buckler, or parry bonus
+  2.5x+). Any other shield gave no shockwave, no Holy Parry and no Mastery icons - which matches what you saw.
+- Now any shield parry counts for the Priest.
+- Holy Shockwave: radius 7 m (new setting Radius_v025272 = 7), BLUNT damage 60 (new section Priest Holy Shockwave Blunt
+  Damage; was Spirit 60), stuns small and big enemies (never bosses) as before, 15 s cooldown as before.
+- VFX: Stomp's strong wind ring over the full 7 m + a holy ground impact + ground fractures (was a faint wind ring).
+- Icons: "Holy Shockwave - Ready" while a shield is equipped, "Holy Shockwave - Cooldown" with the timer, plus the Holy
+  Parry Ready / Active / Cooldown icons - now shown with any shield.
+- Log proof: "[AA Parry] perfect parry with <shield> as <class> ..." (first parry per shield) and
+  "[AA Parry] Holy Shockwave: 7 m, Blunt 60" each time it fires. If you parry and these lines do not appear, the parry
+  itself never reached the mod - send that log.
+
+FILES: new ImmortalHeroesAssets\SFX\HowlingWind.wav; installer now 38 skill sounds + menu music.
+CHECKS: all ten modules compile (C# 5) with the installer's reference set; sound tables 124 entries each. Not tested in
+game.

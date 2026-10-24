@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.271";
+        public const string ModVersion = "0.25.272";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1023,8 +1023,8 @@ namespace AlbedosCustomClassesAdvanced
             _holyTrinityMinPercent = Config.Bind("Paladin Holy Trinity", "SlashPierceMinPercentOfBlunt", 50f, "Holy Trinity: Slash and Pierce are each raised to at least this percent of the hit's Blunt damage (never lowered).");
             _crucibleArmorPercent = Config.Bind("Priest Grand Sigil", "BarrierArmorPercent", 30f, "Heaven's Crucible: Barrier Armor = this percent of the Priest's current Armor, snapshotted at cast.");
             // v0.20.9 Bless Thy Sinners - Buckler Parry (Framework).
-            _shockwaveDamage = BindDamage("Priest Holy Shockwave Damage", 0f, 0f, 0f, 0f, 0f, 0f, 0f, 60f);
-            _shockwaveRadius = Config.Bind("Priest Holy Shockwave", "Radius", 10f, "Buckler Parry: Holy Shockwave radius in meters.");
+            _shockwaveDamage = BindDamage("Priest Holy Shockwave Blunt Damage", 60f, 0f, 0f, 0f, 0f, 0f, 0f, 0f);   // v0.25.272 (user): Blunt
+            _shockwaveRadius = Config.Bind("Priest Holy Shockwave", "Radius_v025272", 7f, "Shield Parry: Holy Shockwave radius in meters (v0.25.272: 7 m).");
             _shockwaveCooldown = Config.Bind("Priest Holy Shockwave", "Cooldown", 15f, "Seconds between Holy Shockwaves.");
             _holyParryEmpowerCooldown = Config.Bind("Priest Holy Shockwave", "EmpowerCooldown", 25f, "Holy Parry: the empowered-skill buff lasts until a skill uses it; after that a Parry can't grant it again for this many seconds.");
             _parryHyperArmorSeconds = Config.Bind("Priest Holy Shockwave", "HyperArmorSeconds", 5f, "Every Buckler Parry grants Hyper Armor for this long.");
@@ -6857,12 +6857,13 @@ namespace AlbedosCustomClassesAdvanced
             // FixedUpdate steps, so the click did nothing).
             bool lmbWasHeld = Input.GetMouseButton(0);
             {
-                // v0.25.270 (user): BigWhoosh builds up over the charge (slowed so it lasts) and its climax lands on the hammer slam
-                // of a full charge; an earlier slam fades it and plays the climax on that slam instead (ShieldChargeBash).
                 float runSpeed = Mathf.Max(1f, player.m_runSpeed) * Mathf.Max(1f, _shieldChargeSpeedMultiplier.Value) * DragonCombat.UnitsPerMeter();
                 float climaxIn = limit / Mathf.Max(0.1f, runSpeed) + (ascended ? Mathf.Max(0.2f, _chargeAscJumpTime.Value) : 0.06f);
                 Player wp = player;
-                DragonSkillAudio.BeginSustain(player, DragonBaseSound.ChargeWhoosh, player.transform.position, climaxIn, 1f, 1f, delegate { return _shieldChargeActive && wp != null && !wp.IsDead(); }, true);
+                // v0.25.272 (user): HowlingWind for the charging duration only - one gust from the recording (34.75-38.0 s) that swells over
+                // the first ~1.4 s (a full charge) and holds its peak; it grows in and fades out when the charge ends
+                int wind = DragonSkillAudio.BeginSustain(player, DragonBaseSound.ChargeWhoosh, player.transform.position, climaxIn + 3f, 1f, 1f, delegate { return _shieldChargeActive && wp != null && !wp.IsDead(); }, true);
+                DragonSkillAudio.SetSustainFades(wind, 0.2f, 0f);
             }
             try
             {
@@ -7075,8 +7076,6 @@ namespace AlbedosCustomClassesAdvanced
         private void ShieldChargeBash(Player player, Vector3 forward)
         {
             if (player == null || player.IsDead()) return;
-            // v0.25.270 (user): the BigWhoosh climax on the slam (the build-up fades as the charge ends)
-            DragonSkillAudio.Expect(player, DragonBaseSound.ChargeWhooshPeak, player.transform.position, IsAscendedSkill("shield_charge") ? Mathf.Max(0.2f, _chargeAscJumpTime.Value) : 0.06f);
             DragonCombat.ForceRun(player, false, false, 0f);
             DragonCombat.ClipStop(player, 0.05f);
             if (IsAscendedSkill("shield_charge")) { StartCoroutine(ShieldChargeJumpSlam(player, forward)); return; }   // v0.25.86
@@ -8180,7 +8179,7 @@ namespace AlbedosCustomClassesAdvanced
                     {
                         Vector2 r = UnityEngine.Random.insideUnitCircle * radius;
                         Vector3 sg = center + new Vector3(r.x, 0f, r.y);
-                        if (DragonVfx.Enabled) { int si = s; DragonCombat.RunVfx(delegate { DragonVfx.UltimateStrike(DragonCombat.GetIndoorSafeSkyPoint(sg, 18f), sg, DragonVfx.UltColor(si), 0.55f, 1.6f); }); }   // v0.25.181 thick tri-colour strikes
+                        if (DragonVfx.Enabled) { int si = s; DragonCombat.RunVfx(delegate { Vector3 sk = DragonCombat.GetIndoorSafeSkyPoint(sg, 18f); if (si == 0) DragonVfx.LiteStrike(sk, sg, DragonVfx.UltColor(si), 0.55f, 1.6f); else DragonVfx.LightBolt(sk, sg, DragonVfx.UltColor(si), 0.55f, 0.3f); }); }   // v0.25.181 tri-colour strikes; v0.25.272 1 full + 2 light (perf)
                         else CreateLightning(sg, new Color(0.62f, 0.86f, 1f, 1f), 0.22f);
                     }
                 }
@@ -9092,11 +9091,19 @@ namespace AlbedosCustomClassesAdvanced
                     if (_enableVfx.Value)
                     {
                         // v0.25.86 (user): bigger beams coming down from high in the sky (visual only)
+                        // v0.25.272 (user log: ~2,700 particle systems in one cast): every beam keeps its light pillar; the contact ring,
+                        // dirt + cracks and the light drifting down the beam now come on 2 beams of each wave instead of all 10.
                         Vector3 sky = DragonCombat.GetIndoorSafeSkyPoint(strike + Vector3.up * 0.1f, 30f);
-                        CreateTemporaryBeam(sky, strike + Vector3.up * 0.08f, new Color(1f, 0.94f, 0.62f, 0.96f), 0.5f, Mathf.Max(0.3f, Mathf.Min(0.35f, interval * 0.9f)));
-                        StartCoroutine(AnimateRing(strike + Vector3.up * 0.06f, 0.25f, Mathf.Max(1.5f, impactRadius), 0.3f, new Color(1f, 0.90f, 0.46f, 0.70f), 0.07f));   // v0.25.181 (user): a brief contact shockwave at every real beam landing
-                        if (DragonVfx.Enabled) { Vector3 bl = strike; float br = impactRadius; DragonCombat.RunVfx(delegate { DragonVfx.DirtBurst(bl, Mathf.Max(0.6f, br * 0.5f), 0.6f); DragonVfx.Cracks(bl, DragonVfx.Holy, Mathf.Max(0.8f, br * 0.6f), 2, 2.5f); }); }   // lands with force (v0.25.185 perf: 2 cracks per beam, was 5)
-                        if (DragonVfx.Enabled) { Vector3 bs0 = sky, bs1 = strike + Vector3.up * 0.3f; DragonCombat.RunVfx(delegate { for (int k = 0; k < 3; k++) DragonVfx.Burst(Vector3.Lerp(bs0, bs1, 0.45f + k * 0.2f), new Color(1f, 0.95f, 0.72f, 0.85f), 5, 0.4f, 0.09f, 0.6f, 2.5f); }); }   // v0.25.191 (user) light drifting down the beam
+                        bool rich = beam % 5 == 0;
+                        if (DragonVfx.Enabled) { Vector3 pe = strike + Vector3.up * 0.08f; float ph = sky.y - pe.y, pl = Mathf.Max(0.3f, Mathf.Min(0.35f, interval * 0.9f)); bool contact = rich;
+                            DragonCombat.RunVfx(delegate { DragonVfx.Pillar(pe, new Color(1f, 0.94f, 0.62f, 0.96f), 0.65f, ph, pl + 0.2f); if (contact) DragonVfx.Burst(pe + Vector3.up * 0.3f, new Color(1f, 0.94f, 0.62f, 0.96f), 13, 5.5f, 0.2f, 0.5f, -0.1f); }); }
+                        else CreateTemporaryBeam(sky, strike + Vector3.up * 0.08f, new Color(1f, 0.94f, 0.62f, 0.96f), 0.5f, Mathf.Max(0.3f, Mathf.Min(0.35f, interval * 0.9f)));
+                        if (rich)
+                        {
+                            StartCoroutine(AnimateRing(strike + Vector3.up * 0.06f, 0.25f, Mathf.Max(1.5f, impactRadius), 0.3f, new Color(1f, 0.90f, 0.46f, 0.70f), 0.07f));   // v0.25.181 (user): a brief contact shockwave
+                            if (DragonVfx.Enabled) { Vector3 bl = strike; float br = impactRadius; DragonCombat.RunVfx(delegate { DragonVfx.DirtBurst(bl, Mathf.Max(0.6f, br * 0.5f), 0.6f); DragonVfx.Cracks(bl, DragonVfx.Holy, Mathf.Max(0.8f, br * 0.6f), 2, 2.5f); }); }
+                            if (DragonVfx.Enabled) { Vector3 bs0 = sky, bs1 = strike + Vector3.up * 0.3f; DragonCombat.RunVfx(delegate { DragonVfx.Burst(Vector3.Lerp(bs0, bs1, 0.65f), new Color(1f, 0.95f, 0.72f, 0.85f), 8, 0.4f, 0.09f, 0.6f, 2.5f); }); }   // v0.25.191 (user) light drifting down the beam
+                        }
                     }
 
                     DragonSkillAudio.Play(player, DragonBaseSound.JudgementThud, strike);
@@ -9183,6 +9190,7 @@ namespace AlbedosCustomClassesAdvanced
             StartCoroutine(LightningTempestRoutine(player, target, windup));
         }
 
+        private int _ihTempestPulse;
         private IEnumerator LightningTempestRoutine(Player player, Vector3 center, float windup)
         {
             int stunMeteor = 0;
@@ -9233,14 +9241,16 @@ namespace AlbedosCustomClassesAdvanced
                             // v0.25.191 (user: visible): every strike leaves the storm canopy itself, with a sheet flash crawling through the cloud
                             // v0.25.270 (user: Tempest heavy): up to 7 strikes every 0.35 s each built ~8 effect objects. Now the first 3
                             // strikes of a pulse are full Ultimate strikes, the others one bolt; one cloud sheet flash per pulse. Damage unchanged.
-                            Vector3 ts = strike; int ti = stunPulse; bool full = sIndex < 3, sheet = sIndex == 0; Vector3 cloud = DragonCombat.GetIndoorSafeSkyPoint(ts, 12f);
+                            // v0.25.272 (user log: 29 hitches, ~34 ms of effect building per pulse): ONE lighter strike per pulse (bolt, cracks,
+                            // dirt), every other strike a single bolt line, the cloud flash every 2nd pulse. Strikes and damage unchanged.
+                            Vector3 ts = strike; int ti = stunPulse; bool full = sIndex == 0, sheet = sIndex == 0 && (_ihTempestPulse++ & 1) == 0; Vector3 cloud = DragonCombat.GetIndoorSafeSkyPoint(ts, 12f);
                             DragonCombat.RunVfx(delegate
                             {
-                                if (full) DragonVfx.UltimateStrike(cloud, ts, DragonVfx.UltColor(ti), 0.6f, DragonCombat.M(1.6f));
-                                else DragonVfx.Bolt(cloud, ts, DragonVfx.UltColor(ti), 0.6f, 0.35f);
+                                if (full) DragonVfx.LiteStrike(cloud, ts, DragonVfx.UltColor(ti), 0.6f, DragonCombat.M(1.6f));
+                                else DragonVfx.LightBolt(cloud, ts, DragonVfx.UltColor(ti), 0.6f, 0.3f);
                                 if (!sheet) return;
                                 Vector3 cs = UnityEngine.Random.insideUnitSphere; cs.y = 0f;
-                                DragonVfx.Bolt(cloud + cs * 4f, cloud - cs * 4f + Vector3.up * 0.5f, new Color(0.75f, 0.85f, 1f, 0.9f), 0.12f, 0.2f);
+                                DragonVfx.LightBolt(cloud + cs * 4f, cloud - cs * 4f + Vector3.up * 0.5f, new Color(0.75f, 0.85f, 1f, 0.9f), 0.12f, 0.2f);
                             });
                         }
                         else CreateLightning(strike, new Color(0.55f, 0.86f, 1f, 1f), 0.28f);
@@ -13454,7 +13464,7 @@ namespace AlbedosCustomClassesAdvanced
             if (Time.time < _ihParryUiNext) return;
             _ihParryUiNext = Time.time + 0.2f;
             bool priest = player != null && IhIsPriest(player) && !player.IsDead();
-            bool equipped = priest && DragonCombat.IsBuckler(DragonCombat.GetHandItem(player, "m_leftItem"));
+            bool equipped = priest && DragonCombat.IsShield(DragonCombat.GetHandItem(player, "m_leftItem"));   // v0.25.272 any shield
             float cd = priest ? GetCooldownRemaining("Priest.HolyParry") : 0f;
             float wave = priest ? GetCooldownRemaining("Priest.HolyShockwave") : 0f;
             float hyper = priest ? DragonCombat.TimedBuffRemaining(player, "Priest.BucklerParry") : 0f;
@@ -13465,7 +13475,7 @@ namespace AlbedosCustomClassesAdvanced
                     (hyper > 0f ? "Hyper Armor: " + Mathf.CeilToInt(hyper) + "s" : "Empower ready to use"));
             else if (equipped && cd <= 0f)
                 DragonCombat.ShowStatusState(player, "priest_holy_parry", "parry", "Holy Parry - Ready", 0f,
-                    "Mastery - Ready\nParry with your Buckler to gain Hyper Armor and empower your next damaging skill");
+                    "Mastery - Ready\nParry with your shield to gain Hyper Armor and empower your next damaging skill");
             else DragonCombat.ClearStatus(player, "priest_holy_parry");
             if (cd > 0f)
                 DragonCombat.ShowStatusState(player, "priest_buckler_recovery", "parry", "Holy Parry - Cooldown", cd,
@@ -13477,7 +13487,7 @@ namespace AlbedosCustomClassesAdvanced
             else DragonCombat.ClearStatus(player, "priest_shockwave_recovery");
             if (equipped && wave <= 0f)
                 DragonCombat.ShowStatusState(player, "priest_shockwave_ready", "parry", "Holy Shockwave - Ready", 0f,
-                    "Mastery - Ready\nA successful Buckler parry releases a Holy Shockwave");
+                    "Mastery - Ready\nA successful shield parry releases a Holy Shockwave (7 m, Blunt, stuns)");
             else DragonCombat.ClearStatus(player, "priest_shockwave_ready");
         }
 
@@ -13504,16 +13514,18 @@ namespace AlbedosCustomClassesAdvanced
 
             Vector3 center = player.transform.position;
             float radius = Mathf.Max(1f, DragonCombat.M(_shockwaveRadius.Value));
+            // v0.25.272 (user): a strong ring like Stomp's over the whole 7 m
+            Logger.LogInfo("[AA Parry] Holy Shockwave: " + IhNum(_shockwaveRadius.Value) + " m, Blunt " + IhNum(_shockwaveDamage.Blunt.Value));
             if (_enableVfx.Value)
             {
-                if (DragonVfx.Enabled) DragonCombat.RunVfx(delegate { DragonVfx.WindRing(center, 0.6f, radius, 0.55f, DragonVfx.HolyWhite, false); });
+                if (DragonVfx.Enabled) DragonCombat.RunVfx(delegate { DragonVfx.StompWindRing(center, 0f, radius, 0.45f); DragonVfx.GroundImpact(center, DragonVfx.Holy, radius, 1.2f); DragonVfx.Shatter(center, radius * 0.8f, 0f); });
                 else StartCoroutine(AnimateRing(center + Vector3.up * 0.08f, 0.6f, radius, 0.45f, new Color(1f, 0.95f, 0.70f, 0.95f), 0.12f));
             }
             List<Character> enemies = GetSphereTargets(player, center, radius);
             for (int i = 0; i < enemies.Count; i++)
             {
                 Character enemy = enemies[i];
-                // Direct Spirit damage, no DoT; Stuns Small and Big (never Bosses).
+                // v0.25.272 Blunt damage, no DoT; Stuns Small and Big (never Bosses).
                 DealDamageScaled(player, enemy, _shockwaveDamage, 1f, 10f, false, "divine_intervention", "Parry Shockwave", true, true, null);
                 if (!enemy.IsBoss())
                     { if (DragonCombat.ShouldSkillStun(player, enemy, "divine_intervention", "Parry Shockwave", true, true, null)) DragonCombat.Stun(enemy, center); }
