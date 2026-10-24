@@ -1595,7 +1595,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.283";
+        public const string ModVersion = "0.25.284";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1865,7 +1865,7 @@ namespace DragonsAltarCombat
             DragonJitWarm.Tick(Player.m_localPlayer);         // v0.25.238 pre-compile the mod's code before the first cast
             DragonSkillAudio.Tick(Player.m_localPlayer);
             DragonCombat.RuntimeUpdate();
-            DragonEnemyDebuffIcons.Ensure();   // v0.25.283 enemy debuff icons over enemy health bars
+            DragonEnemyDebuffIcons.Ensure();   // v0.25.284 enemy debuff icons over enemy health bars
         }
 
         private void OnDestroy()
@@ -2593,7 +2593,7 @@ namespace DragonsAltarCombat
                 // Valheim applies m_timedBlockBonus only to a successful timed parry.
                 if (DragonCombat.GetClassName(player) == "Warrior")
                     __state.ParryField = SetTemporaryBlockMultiplier(blocker.m_shared, "m_timedBlockBonus", 2f, out __state.OriginalParry);
-                // v0.20.9 Bless Thy Sinners: a Priest holding a parrying shield (any but a tower shield, v0.25.283) has doubled Parry strength
+                // v0.20.9 Bless Thy Sinners: a Priest holding a parrying shield (any but a tower shield, v0.25.284) has doubled Parry strength
                 // (Block Force 1.5x comes from Cleric's Blessing below, same as every Cleric shield).
                 if (DragonCombat.GetAdvancementName(player) == "Priest" && DragonCombat.IsBuckler(blocker))
                 {
@@ -9816,7 +9816,7 @@ namespace DragonsAltarCombat
                     existing.Stacks = stacks;
                     if (detail != null) existing.Detail = detail;
                     existing.CooldownMarker = IsCooldownIcon(key, icon);
-                    if (icon != null && existing.m_icon != StatusSprite(icon)) existing.m_icon = StatusSprite(icon);   // v0.25.283 state icons (Ready <-> Cooldown)
+                    if (icon != null && existing.m_icon != StatusSprite(icon)) existing.m_icon = StatusSprite(icon);   // v0.25.284 state icons (Ready <-> Cooldown)
                     if (_relabel) { existing.m_name = label; existing.m_tooltip = label; }   // v0.25.181 state indicators
                     return;
                 }
@@ -9914,7 +9914,7 @@ namespace DragonsAltarCombat
             }
         }
 
-        // v0.25.283: every "_cd" icon is a cooldown (darker icon + cooldown chevrons/bar on the HUD)
+        // v0.25.284: every "_cd" icon is a cooldown (darker icon + cooldown chevrons/bar on the HUD)
         private static bool IsCooldownIcon(string key, string icon)
         {
             return (icon != null && icon.EndsWith("_cd", StringComparison.Ordinal)) || key == "fury_recovery" || key == "priest_buckler_recovery";
@@ -9926,7 +9926,7 @@ namespace DragonsAltarCombat
             return s == null ? null : s.texture;
         }
 
-        // v0.25.283 enemy debuff icons: bit flags 1 Poisoned, 2 Burning, 4 Frost, 8 Crippled, 16 Exposed, 32 Zapped, 64 Stunned
+        // v0.25.284 enemy debuff icons: bit flags 1 Poisoned, 2 Burning, 4 Frost, 8 Crippled, 16 Exposed, 32 Zapped, 64 Stunned
         private static int _hashBurning, _hashPoison, _hashFrost, _hashLightning;
         internal static int EnemyDebuffFlags(Character c)
         {
@@ -10020,12 +10020,12 @@ namespace DragonsAltarCombat
                 case "Paladin.HeavensLight": return "sun";
                 case "Paladin.RayOfHope": return "ray";
                 case "SwordMaster.KnightsGuidance": return "damage";   // v0.25.231: KG is a damage buff
-                case "Mercenary.Battlecry": return "battlecry";   // v0.25.283 red sword (damage) + roar
+                case "Mercenary.Battlecry": return "battlecry";   // v0.25.284 red sword (damage) + roar
                 case "Priest.HolyRelic": return "relic";
                 case "Priest.DivineIntervention": return "wings";
                 case "Priest.EyeOfTheStorm": return "storm";
-                case "Priest.BucklerParry": return "hyper_armor";   // v0.25.283 (user): Hyper Armor gets its own icon
-                case "Priest.GrandSigilRecovery": return "sigil_haste";   // v0.25.283 speed buff = winged boot
+                case "Priest.BucklerParry": return "hyper_armor";   // v0.25.284 (user): Hyper Armor gets its own icon
+                case "Priest.GrandSigilRecovery": return "sigil_haste";   // v0.25.284 speed buff = winged boot
                 case "Acrobat.Tailwind": return "wind";
                 case "Spellcaster.PhaseFlow": return "portal";
             }
@@ -10305,7 +10305,7 @@ namespace DragonsAltarCombat
             catch
             {
             }
-            // v0.25.283 (user): the Priest Mastery works with ANY shield that can parry - every shield except tower shields
+            // v0.25.284 (user): the Priest Mastery works with ANY shield that can parry - every shield except tower shields
             // (a tower shield has no parry bonus: m_timedBlockBonus 1x). Name/prefab "tower" never counts.
             if (name.Contains("tower") || prefab.Contains("tower")) return false;
             if (name.Contains("buckler") || prefab.Contains("buckler")) return true;
@@ -15933,7 +15933,7 @@ namespace DragonsAltarCombat
 
     // Shared meshes/materials; only cached transforms and property blocks change during the portal's life.
     // Distributed ground fire. World-space anchors sampled once; live refill does no raycasts or allocations.
-    // v0.25.283 (user): debuff icons above enemy health bars (Poisoned, Burning, Frost, Crippled, Exposed, Zapped,
+    // v0.25.284 (user): debuff icons above enemy health bars (Poisoned, Burning, Frost, Crippled, Exposed, Zapped,
     // Stunned). Reads Valheim's EnemyHud huds (reflection cached once) every 0.2 s; OnGUI only draws.
     public class DragonEnemyDebuffIcons : MonoBehaviour
     {
@@ -16032,7 +16032,7 @@ namespace DragonsAltarCombat
         private void Emit(int i, float offset)
         {
             ParticleSystem.EmitParams p = new ParticleSystem.EmitParams();
-            p.position = Points[i]; p.velocity = Vector3.up * 0.12f;   // v0.25.283 low rolling flames
+            p.position = Points[i]; p.velocity = Vector3.up * 0.12f;   // v0.25.284 low rolling flames
             p.startLifetime = Mathf.Min(0.7f + offset, Mathf.Max(0.03f, Seconds - _age));
             p.startSize = Size * (0.9f + 0.18f * Mathf.Sin(i * 3.7f + _age * 4f));
             p.startColor = Tint;
@@ -18490,7 +18490,7 @@ namespace DragonsAltarCombat
             ParticleSystem.MainModule fm = fire.main; fm.maxParticles = 300;
             DragonGroundFlames field = l.gameObject.AddComponent<DragonGroundFlames>();
             field.Flames = fire; field.Seconds = seconds;
-            // v0.25.283 (user): Fader-like lingering fire, but shallow (ankle to knee) and in muted natural colours:
+            // v0.25.284 (user): Fader-like lingering fire, but shallow (ankle to knee) and in muted natural colours:
             // many small low tongues instead of a few tall cartoon flames, same anchor cap (no extra cost).
             int anchors = Mathf.Clamp(Mathf.CeilToInt(Mathf.PI * radius * radius / 0.9f * Restraint * PolishBudget() * Mathf.Clamp(Amount / 0.35f, 0.25f, 1.5f)), 4, 180);
             field.Points = GroundFirePoints(pos, radius, anchors);

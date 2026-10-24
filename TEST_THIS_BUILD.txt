@@ -1,6 +1,1 @@
-v0.25.283 Priest Fixes - please test:
-1. Ascended Holy Relic: stand in it -> Sanctified Bloom icon stays the full 10 s.
-2. Parry -> Buckler Parry tooltip shows only Hyper Armor.
-3. Ascended Heaven's Judgement: you heal every 0.5 s while inside the circle.
-4. Judgement Hammer: stops growing after 5 growths, even far away.
-5. For the FPS question: cast Heaven's Judgement and Lightning Tempest once each, then send LogOutput.log ("Skill load" lines).
+v0.25.284 User Defaults - nothing should change in your game (your cfg already has these values). Send the Heaven's Judgement / Lightning Tempest test run log.

@@ -1,0 +1,14 @@
+AETHELBORN ASCENDED v0.25.284 - User Defaults
+
+Your cfg_2 (made on v0.25.283) is now the mod's default set:
+- 204 settings carry your values as their defaults (F8 DEFAULT button, fresh installs, and any setting still at the
+  old code default). Includes every cooldown you changed (Paladin, Priest, Ranger, Sorcerer, base classes), Holy
+  Shockwave 25 s / skill-enhance cooldown 40 s, Judgement Mark 1.2x / 1.5x, Fury drain delay 30 s, Overcharge 22 s,
+  Void Step range 50, Cataclysm range 82, ForceCooldowns off, and your Paladin/Priest audio volumes, pitches and syncs.
+- Left out on purpose: the Testing "AscendedSkills" list (a test switch, not a default) and the one-time internal
+  reset markers.
+- Settings you have already changed are never overwritten. Your own cfg already equals these values, so nothing
+  changes in your game; a fresh install now starts exactly like your setup.
+- Fix in the apply rule: "still at the old default" now compares against the setting's own code default.
+
+No gameplay, VFX or sound code changes. Static compile of all ten modules against the real references only.
