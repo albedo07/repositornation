@@ -1,1 +1,2 @@
-v0.25.267: main menu - AA title in the top-left corner, left of the Valheim logo.
+v0.25.268: start the game from the menu (music fades out), cast Goddess/Lightning/Holy Relic and Judgement Hammer (no swing
+sound), Electric Smite (Electric on every trail, fading), Angel Comet (whoosh through the wind-up, fades at the slam).

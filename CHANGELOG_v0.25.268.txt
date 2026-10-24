@@ -1,0 +1,21 @@
+Aethelborn Ascended v0.25.268 - Soft Endings   (base: v0.25.267; ANCHOR v0.25.257)
+
+RULE (user): no sound effect or music is ever cut - it always fades out gradually.
+
+MAIN MENU MUSIC
+- Leaving the main menu (or turning [Main Menu] Use AA Main Menu off) fades the music out over 2.5 s instead of stopping it.
+  Valheim's own music comes back once the fade has finished. Coming back to the menu restores full volume.
+
+PALADIN / PRIEST
+- Goddess Relic, Lightning Relic, Holy Relic (Priest), Judgement Hammer - Normal and Ascended: the swing sound is removed.
+  Their other sounds are unchanged (landing sounds, hammer spin). The swing sliders are hidden in F8.
+- Electric Smite - Normal and Ascended: each of the 16 lightning trails now carries the Electric sound. It travels with
+  the trail head (louder near you, softer far away) and fades out when the trail ends. Each trail starts at a different
+  point of the recording so they don't sound like one copy, and they share the level so 16 together are not deafening.
+  New slider: Paladin Electric Smite Audio > Lightning Trails Volume (%). Ascended storm sounds unchanged.
+- Angel Comet - Normal and Ascended: the BigWhoosh2 whoosh now plays during the whole aerial wind-up, from the cast,
+  following you, looping if the wind-up is longer than the recording, and fading out at the slam. Before, it was timed
+  so that its loudest point hit at the slam. Landing sounds (HeavyPunch + BassDrop) and the Ascended aftershock
+  (SolidBoom) are unchanged.
+
+CHECKS: all ten modules compile (C# 5) with the installer's reference set. Not tested in game.

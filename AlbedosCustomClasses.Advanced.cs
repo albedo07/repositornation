@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.267";
+        public const string ModVersion = "0.25.268";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1380,6 +1380,7 @@ namespace AlbedosCustomClassesAdvanced
                 _ihMenuSource.clip = _ihMenuClip;
             }
             if (_ihMenuSource.outputAudioMixerGroup == null && mm != null) _ihMenuSource.outputAudioMixerGroup = mm.m_musicMixer;
+            _ihMenuFadeFrom = -1f;   // back on the menu: full level again
             _ihMenuSource.volume = Mathf.Clamp01((_aaMenuMusicVolume == null ? 100f : _aaMenuMusicVolume.Value) / 100f);
             if (!_ihMenuSource.isPlaying) _ihMenuSource.Play();
             if (mm != null)
@@ -1397,9 +1398,19 @@ namespace AlbedosCustomClassesAdvanced
             }
         }
 
+        // v0.25.268 (user rule: no sound or music is ever cut): leaving the menu / turning it off fades the music out over 2.5 s
+        private float _ihMenuFadeFrom = -1f, _ihMenuFadeVol;
         private void IhStopMenuMusic()
         {
-            if (_ihMenuSource != null && _ihMenuSource.isPlaying) _ihMenuSource.Stop();
+            if (_ihMenuSource != null && _ihMenuSource.isPlaying)
+            {
+                float now = Time.unscaledTime;
+                if (_ihMenuFadeFrom < 0f) { _ihMenuFadeFrom = now; _ihMenuFadeVol = _ihMenuSource.volume; }
+                float x = (now - _ihMenuFadeFrom) / 2.5f;
+                if (x < 1f) { _ihMenuSource.volume = _ihMenuFadeVol * Mathf.Pow(10f, -1.5f * x) * Mathf.Sqrt(1f - x); return; }
+                _ihMenuSource.Stop();
+            }
+            _ihMenuFadeFrom = -1f;
             if (_ihVanillaMusic != null) { _ihVanillaMusic.mute = false; _ihVanillaMusic = null; }
         }
 
@@ -6021,7 +6032,6 @@ namespace AlbedosCustomClassesAdvanced
         private IEnumerator GoddessRelicRoutine(Player player, Vector3 target, float windup)
         {
             ShowMessage("Goddess Relic");
-            DragonSkillAudio.Expect(player, DragonBaseSound.RelicSwing, player.transform.position, windup);   // v0.25.263 the swing
             if (windup > 0f)
                 yield return new WaitForSeconds(windup);
 
@@ -7704,7 +7714,6 @@ namespace AlbedosCustomClassesAdvanced
         {
             const string id = "Paladin.JudgementHammer";
             ShowMessage("Judgement Hammer");
-            DragonSkillAudio.Expect(player, DragonBaseSound.HammerSwing, player.transform.position, windup);   // v0.25.263 arm swing
             if (windup > 0f)
                 yield return new WaitForSeconds(windup);
             if (player == null || player.IsDead())
@@ -7931,7 +7940,9 @@ namespace AlbedosCustomClassesAdvanced
             StartCoroutine(IhCreatureGhost(player, 30f)); // v0.22.6: the dive lands on terrain, never on a Troll's head
             // v0.21.1: jump + nose-dive take WindUpTime (2.5s) in total.
             float total = Mathf.Max(0.6f, _angelWindupTotal.Value);
-            DragonSkillAudio.Expect(player, DragonBaseSound.CometWindup, player.transform.position, total);   // v0.25.263 BigWhoosh2 over the aerial wind-up
+            // v0.25.268 (user): BigWhoosh2 over the whole aerial wind-up (from the cast, looping if needed), fading out at the slam
+            bool[] cometLanded = new bool[1];
+            DragonSkillAudio.BeginSustain(player, DragonBaseSound.CometWindup, player.transform.position, total + 3f, 1f, 1f, delegate { return !cometLanded[0]; }, true);
             if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.Trail(player.transform, DragonVfx.Holy, 0.9f, total + 0.2f); DragonVfx.Burst(player.transform.position, DragonVfx.HolyWhite, 40, 6f, 0.3f, 0.8f, 0.2f); DragonVfx.PressureCone(player.transform, DragonVfx.Holy, 1.4f, total + 0.3f, null); });   // v0.25.181 vapour cone on the dive
             float riseTime = total * 0.56f;
             float hangTime = total * 0.06f;
@@ -7990,6 +8001,7 @@ namespace AlbedosCustomClassesAdvanced
             if (player == null || player.IsDead())
                 yield break;
 
+            cometLanded[0] = true;   // the wind-up whoosh fades out
             ResetFallDamageState(player);
             body.velocity = Vector3.zero;
             DragonCombat.LockSkill(player, 0.35f);
@@ -8354,7 +8366,6 @@ namespace AlbedosCustomClassesAdvanced
         {
             int stunPulse = 0;
             ShowMessage("Lightning Relic");
-            DragonSkillAudio.Expect(player, DragonBaseSound.LRelicSwing, player.transform.position, windup);   // v0.25.263 the swing
             if (windup > 0f)
                 yield return new WaitForSeconds(windup);
 
@@ -8541,7 +8552,6 @@ namespace AlbedosCustomClassesAdvanced
         private IEnumerator HolyRelicRoutine(Player player, Vector3 target, float windup, string cooldownId)
         {
             ShowMessage("Holy Relic");
-            DragonSkillAudio.Expect(player, DragonBaseSound.HRelicSwing, player.transform.position, windup);   // v0.25.263 the swing
             if (windup > 0f)
                 yield return new WaitForSeconds(windup);
 
@@ -9820,6 +9830,9 @@ namespace AlbedosCustomClassesAdvanced
                 "viewblock"
             );
 
+            // v0.25.268 (user): every lightning trail carries the Electric sound; 16 trails share the level, each from its own point
+            int trailSfx = DragonSkillAudio.BeginSustain(player, DragonBaseSound.SmiteTrail, origin, travelTime + 0.4f, 1f, 0.3f);
+            DragonSkillAudio.OffsetSustain(trailSfx, UnityEngine.Random.Range(0f, 8f));
             DragonGroundBolt crawl = null;
             if (_enableVfx.Value) { float tl = travelTime; DragonCombat.RunVfx(delegate { Color stc = DragonVfx.UltColor(_ihSmiteTrailIdx++); crawl = DragonVfx.GroundLightning(stc, 0.34f, tl + 1f); }); }   // v0.25.60 real ground lightning; v0.25.181 Ultimate: thick, green / blue / yellow
 
@@ -9829,11 +9842,13 @@ namespace AlbedosCustomClassesAdvanced
                 if (player == null || player.IsDead())
                 {
                     if (crawl != null) crawl.Finish(0.3f);
+                    DragonSkillAudio.EndSustain(trailSfx);
                     yield break;
                 }
 
                 float t = Mathf.Clamp01(elapsed / Mathf.Max(0.05f, travelTime));
                 Vector3 projected = origin + forward * (range * t);
+                DragonSkillAudio.MoveSustain(trailSfx, projected);
                 RaycastHit ground;
 
                 // Ground Projectile nature: each trail rides the physical surface.
@@ -9889,6 +9904,7 @@ namespace AlbedosCustomClassesAdvanced
                 yield return null;
             }
             if (crawl != null) crawl.Finish(0.45f);
+            DragonSkillAudio.EndSustain(trailSfx);   // v0.25.268 fades out with the trail
         }
 
         private List<Character> GetFrontalTargets(Player player, Vector3 origin, Vector3 forward, float range, float angle)
