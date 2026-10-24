@@ -1,2 +1,1 @@
-v0.25.266: start the game - AA title right under "Deep North", MenuMusic playing loud and looping. Send a menu screenshot +
-LogOutput.log ("[AA Menu]" lines) if anything is off.
+v0.25.267: main menu - AA title in the top-left corner, left of the Valheim logo.

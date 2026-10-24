@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.266";
+        public const string ModVersion = "0.25.267";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1345,17 +1345,17 @@ namespace AlbedosCustomClassesAdvanced
             rt.SetParent(root, false);
             UnityEngine.UI.RawImage img = _ihTitleObj.AddComponent<UnityEngine.UI.RawImage>();
             img.texture = _ihTitleTex; img.raycastTarget = false;
-            // Valheim's "Deep North" logo ends about 31% down the screen; the title starts just below it, centred, 26% of the
-            // screen wide (about 500 x 200 px at 1080p) - clear of the menu buttons further down.
+            // v0.25.267 (user sketch): the top-left corner, left of Valheim's logo - 28% of the screen wide (about 540 x 215 px
+            // at 1080p), centred in the free space there (left 15.5% of the width), 6% down from the top.
             float aspect = _ihTitleTex.height > 0 ? (float)_ihTitleTex.width / _ihTitleTex.height : 2.5f;
-            float width = root.rect.width * 0.26f;
-            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
+            float width = root.rect.width * 0.28f;
+            rt.anchorMin = rt.anchorMax = new Vector2(0f, 1f);
             rt.pivot = new Vector2(0.5f, 1f);
             rt.sizeDelta = new Vector2(width, width / aspect);
-            rt.anchoredPosition = new Vector2(0f, -root.rect.height * 0.325f);
+            rt.anchoredPosition = new Vector2(root.rect.width * 0.155f, -root.rect.height * 0.06f);
             rt.SetAsLastSibling();
-            Logger.LogInfo("[AA Menu] title placed under the Valheim logo: " + Mathf.RoundToInt(rt.rect.width) + "x" + Mathf.RoundToInt(rt.rect.height) +
-                " at " + Mathf.RoundToInt(root.rect.height * 0.325f) + " from the top of canvas '" + canvas.name + "' (" + Mathf.RoundToInt(root.rect.width) + "x" + Mathf.RoundToInt(root.rect.height) + ")");
+            Logger.LogInfo("[AA Menu] title placed top-left: " + Mathf.RoundToInt(rt.rect.width) + "x" + Mathf.RoundToInt(rt.rect.height) +
+                " centred " + Mathf.RoundToInt(root.rect.width * 0.155f) + " from the left, " + Mathf.RoundToInt(root.rect.height * 0.06f) + " from the top of canvas '" + canvas.name + "' (" + Mathf.RoundToInt(root.rect.width) + "x" + Mathf.RoundToInt(root.rect.height) + ")");
         }
 
         // MenuMusic on our own looping 2D source routed to Valheim's Music mixer (the Music volume slider applies);

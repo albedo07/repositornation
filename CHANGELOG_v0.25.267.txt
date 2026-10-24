@@ -1,0 +1,8 @@
+Aethelborn Ascended v0.25.267 - Menu Title Corner   (base: v0.25.266; ANCHOR v0.25.257)
+
+- Main menu title moved to the top-left corner (your sketch), left of Valheim's logo: 28% of the screen wide
+  (about 540 x 215 px at 1920x1080), centred in that free space, 6% down from the top. Scales with resolution.
+- Music unchanged (working, per your test). No other changes.
+
+CHECKS: all ten modules compile (C# 5) with the installer's reference set. Placement previewed on your screenshot;
+not tested in game.
