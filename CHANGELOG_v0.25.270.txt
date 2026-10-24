@@ -1,0 +1,55 @@
+Aethelborn Ascended v0.25.270 - Charge Whoosh and Strike Timing   (base: v0.25.269; ANCHOR v0.25.257)
+
+RIGHTEOUS STRIKE RIGHT AFTER GODDESS RELIC - STILL LATE (root cause found)
+- Your log shows that the v0.25.269 restart did happen ("CA sync: 'swing_sledge' was still playing ... restarted"), so
+  the restart was not the problem. The real problem: a restart cross-fades the hammer swing into ITSELF. During that
+  cross-fade both the old swing (Goddess Relic's, nearly finished) and the new one have the same animation state, and the
+  speed code read the OLD one. Its late frame made the new swing look almost done, so the whole new swing was given a
+  very slow speed (about 0.3x) and the hammer came down long after the lightning.
+- Fix: the speed is now worked out from the NEW swing only (the swing being faded in), and nothing is timed until the
+  restart has really begun. This also corrects every skill whose animation starts part-way in (Start % above 0, e.g.
+  Righteous Strike starts at 40%), since that jump is the same kind of self cross-fade.
+- Affects: Righteous Strike (Normal and Ascended), Goddess Relic, Lightning Relic, Holy Relic, Heaven's Judgement and any
+  other skill that borrows a Valheim swing with a Start % or back to back. Damage and skill timing are unchanged; only
+  the animation speed now follows the right swing.
+- New log line (first 3 per animation, plus 3 restarted): "CA timing <animation> #n: the swing's hit frame came X s
+  AFTER/before the skill's hit". This measures the visible result. Please send it if anything still looks late.
+
+SHIELD CHARGE (Paladin) - BIGWHOOSH (your request)
+- Normal and Ascended: BigWhoosh now builds up during the charge. It is slowed to 60% speed (time-stretched, pitch kept)
+  so its rise covers the charge, and it is timed so its climax lands on the Hammer Slam of a full-length charge
+  (Normal: end of the charge + the instant slam; Ascended: end of the charge + the jump to the slam).
+- Slam earlier (Left Click, or a big enemy stops you): the build-up fades out and the BigWhoosh climax plays exactly on
+  that slam instead.
+- Only up to the climax: the build-up fades as the charge ends; the climax copy plays at 85% length and fades out after its
+  peak, so you do not hear the whole recording.
+- Existing footsteps, MidBoom and LightningCrash on the slam are unchanged.
+- New sliders under Paladin Shield Charge Audio: Charge Whoosh Build-up Volume (%) and Charge Whoosh Climax Volume (%),
+  each with its own Pitch / Speed / Length / Bass settings in F8.
+
+MAIN MENU MUSIC (your request)
+- The music fades out (2.5 s curve) when you click Play, and as soon as it is quiet (-20 dB) it stops for good. It no
+  longer keeps playing quietly through the loading screen. The fade runs on real time; a loading hitch counts at most
+  0.25 s, so it can never jump from loud to off.
+
+LIGHTNING TEMPEST (Priest) - FPS
+- Each storm pulse (every 0.35 s) threw up to 7 strikes, and every strike built about 8 effect objects (two bolts,
+  cracks, dirt, sparks, plus a cloud flash) - up to ~150 objects per second for 10 s.
+- Now: the first 3 strikes of each pulse are the full Ultimate strike; any extra strikes in that pulse are a single
+  lightning bolt; the cloud sheet flash plays once per pulse instead of once per strike. The ground layer lookup runs once
+  per pulse. Strike count, positions, damage, frost/expose/zap/burns, meteors and sounds are unchanged (Normal and
+  Ascended).
+
+DIAGNOSTICS (log only)
+- New "Skill load <skill>" line: the 12 s after each skill's first cast - average/worst frame, slow frames, VFX spawning
+  time, VFX objects and particle systems created, garbage collections. Shows which skills stay heavy after the cast.
+
+YOUR LOG (35a6ea0d) - FIRST CASTS
+- The new Cleric SFX cost about 0 ms on every first cast. They are not the cause of the drops.
+- Lightning Tempest first cast: worst frame 70 ms, of which 58 ms is inside Unity/the game (not skill code, SFX or
+  VFX); most likely the first use of the storm's effects/shaders. Heaven's Light: 18 ms in skill code. Holy Wave,
+  Shield Charge, Judgement Hammer, Divine Intervention: 22-25 ms frames (some with garbage collection).
+- The new "Skill load" line and the next log will show whether Tempest is still heavy after the change.
+
+CHECKS: all ten modules compile (C# 5) with the installer's reference set; sound tables checked (124 sounds, every
+parallel array 124). Not tested in game. No new files; installer unchanged except its banner.

@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.269";
+        public const string ModVersion = "0.25.270";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1400,15 +1400,19 @@ namespace AlbedosCustomClassesAdvanced
         }
 
         // v0.25.268 (user rule: no sound or music is ever cut): leaving the menu / turning it off fades the music out over 2.5 s
-        private float _ihMenuFadeFrom = -1f, _ihMenuFadeVol;
+        private float _ihMenuFadeFrom = -1f, _ihMenuFadeVol, _ihMenuFadeLast;
         private void IhStopMenuMusic()
         {
             if (_ihMenuSource != null && _ihMenuSource.isPlaying)
             {
-                if (_ihMenuFadeFrom < 0f) { _ihMenuFadeFrom = 0f; _ihMenuFadeVol = _ihMenuSource.volume; Logger.LogInfo("[AA Menu] music fading out (3 s)"); }
-                _ihMenuFadeFrom += Mathf.Min(Time.unscaledDeltaTime, 0.05f);   // frame-time based: a long loading frame cannot jump the fade
-                float x = _ihMenuFadeFrom / 3f;
-                if (x < 1f) { _ihMenuSource.volume = _ihMenuFadeVol * Mathf.Pow(10f, -1.5f * x) * Mathf.Sqrt(1f - x); return; }
+                // v0.25.270 (user: it kept playing quietly after Play): real time (a loading hitch counts at most 0.25 s), 2.5 s
+                // curve, and once it is quiet (-20 dB) it stops instead of creeping through the loading frames
+                if (_ihMenuFadeFrom < 0f) { _ihMenuFadeFrom = 0f; _ihMenuFadeVol = _ihMenuSource.volume; _ihMenuFadeLast = Time.realtimeSinceStartup; Logger.LogInfo("[AA Menu] music fading out"); }
+                float rt = Time.realtimeSinceStartup;
+                _ihMenuFadeFrom += Mathf.Clamp(rt - _ihMenuFadeLast, 0f, 0.25f); _ihMenuFadeLast = rt;
+                float x = _ihMenuFadeFrom / 2.5f;
+                float g = Mathf.Pow(10f, -1.5f * x) * Mathf.Sqrt(Mathf.Max(0f, 1f - x));
+                if (x < 1f && g > 0.1f) { _ihMenuSource.volume = _ihMenuFadeVol * g; return; }
                 _ihMenuSource.Stop();
                 Logger.LogInfo("[AA Menu] music faded out");
             }
@@ -6811,6 +6815,14 @@ namespace AlbedosCustomClassesAdvanced
             // v0.25.36: Left Click edge read from the held state (GetMouseButtonDown is often missed inside
             // FixedUpdate steps, so the click did nothing).
             bool lmbWasHeld = Input.GetMouseButton(0);
+            {
+                // v0.25.270 (user): BigWhoosh builds up over the charge (slowed so it lasts) and its climax lands on the hammer slam
+                // of a full charge; an earlier slam fades it and plays the climax on that slam instead (ShieldChargeBash).
+                float runSpeed = Mathf.Max(1f, player.m_runSpeed) * Mathf.Max(1f, _shieldChargeSpeedMultiplier.Value) * DragonCombat.UnitsPerMeter();
+                float climaxIn = limit / Mathf.Max(0.1f, runSpeed) + (ascended ? Mathf.Max(0.2f, _chargeAscJumpTime.Value) : 0.06f);
+                Player wp = player;
+                DragonSkillAudio.BeginSustain(player, DragonBaseSound.ChargeWhoosh, player.transform.position, climaxIn, 1f, 1f, delegate { return _shieldChargeActive && wp != null && !wp.IsDead(); }, true);
+            }
             try
             {
                 while (player != null && player == Player.m_localPlayer && !player.IsDead() &&
@@ -7022,6 +7034,8 @@ namespace AlbedosCustomClassesAdvanced
         private void ShieldChargeBash(Player player, Vector3 forward)
         {
             if (player == null || player.IsDead()) return;
+            // v0.25.270 (user): the BigWhoosh climax on the slam (the build-up fades as the charge ends)
+            DragonSkillAudio.Expect(player, DragonBaseSound.ChargeWhooshPeak, player.transform.position, IsAscendedSkill("shield_charge") ? Mathf.Max(0.2f, _chargeAscJumpTime.Value) : 0.06f);
             DragonCombat.ForceRun(player, false, false, 0f);
             DragonCombat.ClipStop(player, 0.05f);
             if (IsAscendedSkill("shield_charge")) { StartCoroutine(ShieldChargeJumpSlam(player, forward)); return; }   // v0.25.86
@@ -9159,14 +9173,14 @@ namespace AlbedosCustomClassesAdvanced
                         DragonCombat.ApplyTimedBuff(allies[i], "Priest.EyeOfTheStorm", interval + 0.6f, 0f, 0f, 0f, Mathf.Clamp(_tempestAscDefense.Value, 0f, 95f) / 100f, 0f, 0f, true);
                 }
                 int strikes = UnityEngine.Random.Range(1, maxStrikes + 1);
+                int tMask = LayerMask.GetMask("Default", "static_solid", "Default_small", "piece_nonsolid", "terrain", "vehicle", "piece", "viewblock");   // v0.25.270 once per pulse
                 for (int sIndex = 0; sIndex < strikes; sIndex++)
                 {
                 stunPulse++;
                     Vector2 circle = UnityEngine.Random.insideUnitCircle * radius;
                     Vector3 strike = center + new Vector3(circle.x, 0f, circle.y);
                     RaycastHit ground;
-                    int mask = LayerMask.GetMask("Default", "static_solid", "Default_small", "piece_nonsolid", "terrain", "vehicle", "piece", "viewblock");
-                    if (Physics.Raycast(strike + Vector3.up * 6f, Vector3.down, out ground, 12f, mask))
+                    if (Physics.Raycast(strike + Vector3.up * 6f, Vector3.down, out ground, 12f, tMask))
                         strike = ground.point;
 
                     if (_enableVfx.Value)
@@ -9176,10 +9190,14 @@ namespace AlbedosCustomClassesAdvanced
                         if (DragonVfx.Enabled)
                         {
                             // v0.25.191 (user: visible): every strike leaves the storm canopy itself, with a sheet flash crawling through the cloud
-                            Vector3 ts = strike; int ti = stunPulse; Vector3 cloud = DragonCombat.GetIndoorSafeSkyPoint(ts, 12f);
+                            // v0.25.270 (user: Tempest heavy): up to 7 strikes every 0.35 s each built ~8 effect objects. Now the first 3
+                            // strikes of a pulse are full Ultimate strikes, the others one bolt; one cloud sheet flash per pulse. Damage unchanged.
+                            Vector3 ts = strike; int ti = stunPulse; bool full = sIndex < 3, sheet = sIndex == 0; Vector3 cloud = DragonCombat.GetIndoorSafeSkyPoint(ts, 12f);
                             DragonCombat.RunVfx(delegate
                             {
-                                DragonVfx.UltimateStrike(cloud, ts, DragonVfx.UltColor(ti), 0.6f, DragonCombat.M(1.6f));
+                                if (full) DragonVfx.UltimateStrike(cloud, ts, DragonVfx.UltColor(ti), 0.6f, DragonCombat.M(1.6f));
+                                else DragonVfx.Bolt(cloud, ts, DragonVfx.UltColor(ti), 0.6f, 0.35f);
+                                if (!sheet) return;
                                 Vector3 cs = UnityEngine.Random.insideUnitSphere; cs.y = 0f;
                                 DragonVfx.Bolt(cloud + cs * 4f, cloud - cs * 4f + Vector3.up * 0.5f, new Color(0.75f, 0.85f, 1f, 0.9f), 0.12f, 0.2f);
                             });

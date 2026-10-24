@@ -1,3 +1,4 @@
-v0.25.269: start a game from the menu (music fades), Goddess Relic then Righteous Strike right away (swing lands with the
-lightning), Bonecrusher + Angel Comet (BoulderCrash), Lightning Tempest (storm + crashes + meteor booms), Heaven's
-Judgement (grows in / fades out). Send LogOutput.log ("CA sync" / "[AA Menu]" lines).
+v0.25.270: 1) Goddess Relic, then Righteous Strike right away (normal and Ascended): the hammer should land with the
+lightning. 2) Shield Charge full length and with an early Left Click: BigWhoosh rises during the charge, climax on the
+slam. 3) Main menu -> Play: music fades and stops, nothing quiet during loading. 4) Lightning Tempest for its full
+duration: FPS. Send LogOutput.log ("CA timing", "Skill load", "First cast", "[AA Menu]" lines).
