@@ -1,3 +1,3 @@
-v0.25.273: Priest with a Buckler: parry an attack - 7 m ring, blunt damage, stun, Holy Shockwave icons. With a tower
-shield or a weapon: nothing. Plus the v0.25.272 tests (Lightning Tempest / Heaven's Judgement FPS, Shield Charge wind).
-Send LogOutput.log ("[AA Parry]", "Skill load").
+v0.25.274: cast Shield Charge (slam), Divine Intervention, Grand Cross, Righteous Strike and Lightning Tempest 3-4 times
+each: the swing should land closer to the hit each cast. Check the Priest Mastery and Battlecry tooltips. Send
+LogOutput.log ("CA timing" lines).

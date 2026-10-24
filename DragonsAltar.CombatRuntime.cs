@@ -433,13 +433,13 @@ namespace DragonsAltarCombat
             // Keep the original Base Class / source-pool warmup priority as the bank grows.
             if (_warm < 14) { Resolve(_warm++); return; }
             if (_warm < 14 + OneShotVoices) { EnsureVoice(_warm++ - 14); return; }
-            if (_warm < Profiles.Length + OneShotVoices) { Resolve(_warm++ - OneShotVoices); return; }
+            if (_warm < Profiles.Length + OneShotVoices) { int rc = _warm++ - OneShotVoices; if (!RetiredCue(rc)) Resolve(rc); return; }
             if (_warm < Profiles.Length + Voices.Length) { EnsureVoice(_warm++ - Profiles.Length); return; }
             // v0.25.238: then keep every raw sound's processed copy ready (built here, between casts, instead of on the first cast;
             // a cached copy is a dictionary hit, so the round keeps up with slider changes for free)
             int cue = _variantWarm++ % CueCount;
             if (_variantWarm == CueCount) Debug.Log("[Aethelborn] Skill sounds warmed: " + Variants.Count + " processed copies ready.");
-            if (Profiles[cue] != null && Profiles[cue].Clips != null)
+            if (!RetiredCue(cue) && Profiles[cue] != null && Profiles[cue].Clips != null)
                 for (int c = 0; c < Profiles[cue].Clips.Length; c++)
                 {
                     if (RawCue((DragonBaseSound)cue)) RawVariant(cue, Profiles[cue].Clips[c], RawGain(cue, 1f));
@@ -533,6 +533,13 @@ namespace DragonsAltarCombat
             return false;
         }
         private static bool RawCue(DragonBaseSound cue) { return RebalancedLayers[CueLayers[(int)cue]]; }
+        // v0.25.274: sounds no skill plays any more (hidden in F8) - the warm-up skips them
+        private static bool RetiredCue(int cue)
+        {
+            DragonBaseSound c = (DragonBaseSound)cue;
+            return IsRumbleLayer(CueLayers[cue]) || c == DragonBaseSound.RelicSwing || c == DragonBaseSound.LRelicSwing || c == DragonBaseSound.HRelicSwing ||
+                c == DragonBaseSound.HammerSwing || c == DragonBaseSound.ChargeWhooshPeak || c == DragonBaseSound.MoonlightAfter || c == DragonBaseSound.Battlecry;
+        }
         // Hit point of this clip in its file (s): the component's marker, shifted by how this clip's own hit differs from the first clip's.
         private static float MarkerSeconds(int cue, AudioClip clip)
         {
@@ -1588,7 +1595,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.273";
+        public const string ModVersion = "0.25.274";
 
         internal static DragonCombatPlugin Instance;
 
@@ -5402,17 +5409,39 @@ namespace DragonsAltarCombat
 
         // v0.25.270 (lesson 15: measure the visible result): when the borrowed swing really reaches its hit frame, compared with
         // the skill's own hit. First 3 per animation (+3 restarted), one line each. Diagnostic only.
+        // v0.25.274 (user log: Shield Charge slam 0.36 s late, Divine Intervention 0.40 s late, Grand Cross 0.15 s late, Tempest
+        // 0.89 s early): every cast measures where the swing's hit frame really landed and keeps a correction per animation
+        // (saved, so the next session starts corrected). The next cast aims its one speed that much earlier / later.
+        // Skill timing and damage never move - only the animation speed (0.25x - 4x).
+        private static readonly Dictionary<string, float> _caLate = new Dictionary<string, float>();
+        private string CaKey() { return (_vaTune ?? _vaTrigger ?? "?") + (_vaRestarted ? "|restart" : ""); }
+        private static float CaLate(string key)
+        {
+            float v;
+            if (_caLate.TryGetValue(key, out v)) return v;
+            try { v = PlayerPrefs.GetFloat("AA_CaLate_v025274_" + key, 0f); } catch (Exception) { v = 0f; }
+            if (float.IsNaN(v) || float.IsInfinity(v)) v = 0f;
+            _caLate[key] = v;
+            return v;
+        }
         private void LogCaHit()
         {
             try
             {
-                string key = (_vaTune ?? _vaTrigger ?? "?") + (_vaRestarted ? " (restarted)" : "");
+                string key = CaKey();
+                float end = _impactAt >= 0f ? _impactAt : _start + _windup;
+                float d = Time.time - end;
+                float old = CaLate(key), now = old;
+                if (Mathf.Abs(d) < 2f)
+                {
+                    now = Mathf.Clamp(old + d * 0.7f, -1.5f, 1.5f);
+                    _caLate[key] = now;
+                    try { PlayerPrefs.SetFloat("AA_CaLate_v025274_" + key, now); } catch (Exception) { }
+                }
                 int n; _vaHitLogged.TryGetValue(key, out n);
                 if (n >= 3) return;
                 _vaHitLogged[key] = n + 1;
-                float end = _impactAt >= 0f ? _impactAt : _start + _windup;
-                float d = Time.time - end;
-                Debug.Log("[Aethelborn] CA timing " + key + " #" + (n + 1) + ": the swing's hit frame came " + Mathf.Abs(d).ToString("0.00") + " s " + (d >= 0f ? "AFTER" : "before") + " the skill's hit (speed " + _uniK.ToString("0.00") + "x).");
+                Debug.Log("[Aethelborn] CA timing " + key + " #" + (n + 1) + ": the swing's hit frame came " + Mathf.Abs(d).ToString("0.00") + " s " + (d >= 0f ? "AFTER" : "before") + " the skill's hit (speed " + _uniK.ToString("0.00") + "x, correction was " + old.ToString("0.00") + " s, next cast " + now.ToString("0.00") + " s).");
             }
             catch (Exception) { }
         }
@@ -5514,7 +5543,8 @@ namespace DragonsAltarCombat
                         // Preserve the exact previous behavior of unrelated skills.
                         float hitN = _vaTrigN > 0.001f ? Mathf.Clamp(_vaTrigN, 0.02f, 1f) : Mathf.Clamp(_vaLead / len, 0.05f, 0.95f);
                         float leftNat = Mathf.Max(0.02f, (hitN - norm) * len);
-                        _uniK = norm >= hitN ? 1f : Mathf.Clamp(leftNat / left, 0.25f, 4f);
+                        float aim = Mathf.Max(0.05f, left - CaLate(CaKey()));   // v0.25.274 learned correction
+                        _uniK = norm >= hitN ? 1f : Mathf.Clamp(leftNat / aim, 0.25f, 4f);
                         _vaHitN = norm >= hitN ? 0f : hitN;   // v0.25.270 measured when the swing really reaches it
                     }
                 }
@@ -7644,64 +7674,6 @@ namespace DragonsAltarCombat
                 if (a != null) a.SetTrigger(trigger);
             }
             catch (Exception) { }
-        }
-
-        // v0.25.260 (user: with a two-handed sword the skill CAs are slow / out of sync): Valheim's greatswords (and scythes) have
-        // their own animator weapon state (AnimationState.Greatsword = 13). The skills borrow battleaxe / mace / sword / atgeir
-        // swings, and under the greatsword state those triggers do not play like they do with the weapon they belong to (the
-        // same problem dual wield had - v0.25.161 holds SBDW in the one-handed state). While such a skill CA plays, the
-        // animator is put in the state the borrowed swing belongs to; Valheim's own SetupAnimationState restores the real
-        // weapon state as soon as the skill (and its play-out) is over.
-        private static bool _stateHold;
-        private static Player _stateHoldPlayer;
-        private static float _stateHoldAt;
-        private static Component _stateHoldZ;
-        private static MethodInfo _shSetFloat, _shSetInt, _shSetup;
-        private static readonly HashSet<string> _stateHoldLogged = new HashSet<string>();
-        private static void HoldStateForTrigger(Player player, string trigger)
-        {
-            try
-            {
-                if (player != Player.m_localPlayer) return;
-                ItemDrop.ItemData w = player.GetCurrentWeapon();
-                if (w == null || w.m_shared == null) return;
-                ItemDrop.ItemData.AnimationState st = w.m_shared.m_animationState;
-                if (st != ItemDrop.ItemData.AnimationState.Greatsword && st != ItemDrop.ItemData.AnimationState.Scythe) return;
-                string t = trigger.ToLowerInvariant();
-                int target = -1;
-                if (t.Contains("greatsword")) return;   // its own swings: nothing to hold
-                if (t.Contains("battleaxe")) target = (int)ItemDrop.ItemData.AnimationState.TwoHandedAxe;
-                else if (t.Contains("atgeir")) target = (int)ItemDrop.ItemData.AnimationState.Atgeir;
-                else if (t.Contains("mace") || t.Contains("sword") || t.Contains("axe") || t.Contains("knife")) target = (int)ItemDrop.ItemData.AnimationState.OneHanded;
-                if (target < 0) return;
-                Component z = null;
-                Component[] cs = player.GetComponents<Component>();
-                for (int i = 0; i < cs.Length; i++) if (cs[i] != null && cs[i].GetType().Name == "ZSyncAnimation") { z = cs[i]; break; }
-                if (z == null) return;
-                if (_shSetFloat == null) _shSetFloat = z.GetType().GetMethod("SetFloat", new Type[] { typeof(string), typeof(float) });
-                if (_shSetInt == null) _shSetInt = z.GetType().GetMethod("SetInt", new Type[] { typeof(string), typeof(int) });
-                if (_shSetFloat != null) _shSetFloat.Invoke(z, new object[] { "statef", (float)target });
-                if (_shSetInt != null) _shSetInt.Invoke(z, new object[] { "statei", target });
-                _stateHold = true; _stateHoldPlayer = player; _stateHoldAt = Time.time; _stateHoldZ = z;
-                string key = st + ">" + trigger;
-                if (_stateHoldLogged.Add(key)) Debug.Log("[Aethelborn] Skill CA with a " + st + " weapon: animator held in " + (ItemDrop.ItemData.AnimationState)target + " state for '" + trigger + "' (restored when the skill ends).");
-            }
-            catch (Exception) { }
-        }
-        // every frame: give the animator its real weapon state back once the skill CA (incl. play-out) is over
-        internal static void TickStateHold()
-        {
-            if (!_stateHold) return;
-            Player p = _stateHoldPlayer;
-            try
-            {
-                if (p == null || p.IsDead()) { _stateHold = false; return; }
-                if (Time.time - _stateHoldAt < 0.4f || SkillAnimationBusy(p) || IsSkillLocked(p)) return;
-                _stateHold = false;
-                if (_shSetup == null) _shSetup = typeof(Humanoid).GetMethod("SetupAnimationState", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-                if (_shSetup != null) _shSetup.Invoke(p, null);   // Valheim's own: back to the equipped weapon's state
-            }
-            catch (Exception) { _stateHold = false; }
         }
 
         private static Dictionary<string, DragonClipKey[]> _clips;

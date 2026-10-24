@@ -41,7 +41,7 @@ namespace AlbedosCustomClasses
     {
         public const string ModGuid = "albedo.customclasses";
         public const string ModName = "Aethelborn Ascended - Altar";
-        public const string ModVersion = "0.25.273";
+        public const string ModVersion = "0.25.274";
 
         internal const string ClassDataKey = "AlbedoCustomClasses.Class";
         internal const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1549,7 +1549,7 @@ namespace AlbedosCustomClasses
             }
             if (advancementName == "Priest")
             {
-                return "<b>IDENTITY</b>\nPriest is the battlefield support: holy Relics anchor the fight, while heals, barriers and judgement rain from afar.\n\n<b>SAVING GRACE (MASTERY)</b>\n+10% Magic Damage. When you or an ally within 20m would die, survive at 1 HP and recover 50% HP over time with a burst of speed. Your save has a 20-minute cooldown; each ally has a separate 40-minute cooldown. With a Buckler your Parry is doubled; a Parry grants 5s Hyper Armor, +35% Damage to your next skill (kept until used, 25s cooldown after) and a 10m Holy Shockwave that Stuns.\n\n<b>HEAVEN'S CRUCIBLE (GRACE)</b>\nWrap yourself and nearby allies in a holy Barrier that holds until it breaks.\n\n<b>BEST FOR</b>\nPlayers who want to keep everyone alive and control the battlefield.";
+                return "<b>IDENTITY</b>\nPriest is the battlefield support: holy Relics anchor the fight, while heals, barriers and judgement rain from afar.\n\n<b>SAVING GRACE (MASTERY)</b>\n+10% Magic Damage. When you or an ally within 20m would die, survive at 1 HP and recover 50% HP over time with a burst of speed. Your save has a 20-minute cooldown; each ally has a separate 40-minute cooldown. With a Buckler your Parry is doubled; a Parry grants 5s Hyper Armor, +35% Damage to your next skill (kept until used, 25s cooldown after) and a 7m Holy Shockwave that deals Blunt damage and Stuns.\n\n<b>HEAVEN'S CRUCIBLE (GRACE)</b>\nWrap yourself and nearby allies in a holy Barrier that holds until it breaks.\n\n<b>BEST FOR</b>\nPlayers who want to keep everyone alive and control the battlefield.";
             }
             if (advancementName == "Wizard")
             {

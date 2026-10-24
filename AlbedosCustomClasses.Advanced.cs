@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.273";
+        public const string ModVersion = "0.25.274";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -14999,7 +14999,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "seismic_guillotine": return "Tear a fissure through the ground to your aim, ending in a seismic explosion.";
                 case "punishing_bomb": return "Bat a bomb into the enemy lines. It bursts on the first thing it touches and leaves them burning.";
                 case "whirlwind": return "Spin into a whirlwind of steel, carving everything that comes near.";
-                case "battlecry": return "A war cry that drives you and your allies to hit harder, in battle and at work.";
+                case "battlecry": return "A war cry that stuns the enemies around you and drives you and your allies to hit harder, in battle and at work.";
                 // v0.22.0 Sorcerer
                 case "flame_burst": return "A cone of fire bursts from your hands, setting every foe ablaze.";
                 case "glacial_descent": return "Drop a massive diamond of ice from the sky onto your aim, freezing the ground around it.";
@@ -15145,7 +15145,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "seismic_guillotine": return "Opens a fissure along the ground to the aimed spot that damages enemies and explodes at its end.";
                 case "punishing_bomb": return "Bats a bomb forward that explodes on the first thing it hits, damaging and burning enemies around it.";
                 case "whirlwind": return "Spins continuously, damaging every enemy around you; recast to stop.";
-                case "battlecry": return "Grants you and nearby allies bonus damage against creatures and against trees, rocks and ore ({Buff}; {Labor}).";
+                case "battlecry": return "Grants you and nearby allies bonus damage against creatures and against trees, rocks and ore ({Buff}; {Labor}). The roar Stuns small and big enemies around you (never bosses).";
                 // Sorcerer
                 case "flame_burst": return "Blasts a cone of fire that damages enemies in front of you and sets them on Fire Burn.";
                 case "glacial_descent": return "Drops a block of ice on the aimed spot that damages and Frosts every enemy in the area.";
@@ -21312,7 +21312,7 @@ namespace AlbedosCustomClassesAdvanced
             }
 
             if (advancement == "Priest")
-                return "+10% Magic Damage (Fire, Frost, Lightning, Poison, Spirit). Saving Grace: you and allies within 20m survive a lethal hit at 1 HP, then recover 50% HP over 6s with +50% Move Speed and -70% Stamina use. Self 20 min, each ally 40 min.\n\nBuckler: doubled Parry. A Parry grants 5s Hyper Armor and empowers your next skill with +35% Damage (kept until used, then 25s before a Parry can grant it again), and releases a 10m Holy Shockwave (Spirit damage, Stuns Small and Big; 15s cooldown).";
+                return "+10% Magic Damage (Fire, Frost, Lightning, Poison, Spirit). Saving Grace: you and allies within 20m survive a lethal hit at 1 HP, then recover 50% HP over 6s with +50% Move Speed and -70% Stamina use. Self 20 min, each ally 40 min.\n\nBuckler: doubled Parry. A Parry grants 5s Hyper Armor and empowers your next skill with +35% Damage (kept until used, then 25s before a Parry can grant it again), and releases a 7m Holy Shockwave (Blunt damage, Stuns Small and Big; 15s cooldown).";
 
             return "";
         }

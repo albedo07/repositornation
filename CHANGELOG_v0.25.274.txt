@@ -1,0 +1,29 @@
+Aethelborn Ascended v0.25.274 - Clean-up and Swing Timing   (base: v0.25.273; ANCHOR v0.25.257)
+
+OUTDATED TEXT FIXED
+- Priest Mastery (Saving Grace) - skill tree tooltip and class description: "10m Holy Shockwave (Spirit damage)" ->
+  "7m Holy Shockwave (Blunt damage)", matching v0.25.272.
+- Mercenary Battlecry - short and long descriptions now say the roar Stuns small and big enemies around you (never
+  bosses), added in v0.25.263 but never written into the text.
+
+LEFTOVER CODE REMOVED / SKIPPED
+- The greatsword "battleaxe stance" hold (removed from use in v0.25.263 at your request) is deleted from the code; nothing
+  called it.
+- Retired sounds are no longer loaded and processed by the startup warm-up: Relic / Holy Relic / Lightning Relic and
+  Judgement Hammer swing, the Shield Charge BigWhoosh climax, Moonlight afterimage, the old Battlecry cry and the seven
+  Mercenary rumbles. Nothing plays them; they were costing warm-up time and memory. Their F8 sliders were already hidden.
+
+SWING TIMING (borrowed Valheim swings, every class)
+- Your last log measured the swing's hit frame against the skill's hit: Shield Charge hammer slam 0.36 s late (every
+  cast), Divine Intervention 0.40 s late, Grand Cross second swing 0.15 s late, Righteous Strike 0.20 s late on its
+  first cast, Lightning Tempest 0.89 s early.
+- Now every cast measures that difference and keeps a correction per animation (70% of the error each cast, at most
+  1.5 s, saved between sessions). The next cast sets its swing speed so the hit frame lands that much earlier / later.
+  It settles within a few casts.
+- Only the animation speed changes (still limited to 0.25x - 4x). Skill timing, hits, damage and sounds do not move.
+- Limit: the Normal Shield Charge slam is instant (0.06 s); if even 4x cannot reach the hit frame, it gets as close as 4x
+  allows.
+- Log: "CA timing <animation> #n: ... (speed Kx, correction was A s, next cast B s)" for the first 3 casts of each.
+
+Not changed (your call): the old Sword Master Grace and Priest Grace footer paintings; the legacy F8 settings.
+CHECKS: all ten modules compile (C# 5) with the installer's reference set. Not tested in game.
