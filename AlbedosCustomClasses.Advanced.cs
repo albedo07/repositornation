@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.274";
+        public const string ModVersion = "0.25.275";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -19034,6 +19034,11 @@ namespace AlbedosCustomClassesAdvanced
             IhComposeHotbarIcons(ClericPriestReferenceNodes,_ihPriestBackdropTex);
             // The Grace slot keeps its original frame too.
             if(!hasOwn) IhBlitArt(_ihPriestBackdropTex,new Rect(670,548,44,44),source,new Rect(394.8f,422.4f,44.4f,40.2f));
+            // v0.25.275 (user: Grace icons): the footer Grace box is painted into each class canvas and was never redrawn, so a
+            // repainted Grace (Sword Master Knight's Guidance, v0.25.231) kept its old picture there. It now always shows a copy
+            // of the Grace painting in the tree (Grace node opening -> footer opening).
+            if (hasOwn) IhBlitArt(_ihPriestBackdropTex, new Rect(671f, 551f, 41f, 39f), _ihPriestBackdropTex, Rect.MinMaxRect(393f, 421f, 441f, 466f));
+
             _ihPriestBackdropTex.Apply(false,false);
             Destroy(source);
             _ihPriestLockedTex=IhMakeSharedLockedBackdrop(_ihPriestBackdropTex);
@@ -19170,6 +19175,11 @@ namespace AlbedosCustomClassesAdvanced
             // Grace box in the footer.
             Rect graceBox = new Rect(670f, 548f, 44f, 44f);
             if (!hasArt) IhFillPlaceholder(canvas, Rect.MinMaxRect(671f, 551f, 712f, 590f));
+            // v0.25.275 (user: Grace icons): the footer Grace box is painted into each class canvas and was never redrawn, so a
+            // repainted Grace (Sword Master Knight's Guidance, v0.25.231) kept its old picture there. It now always shows a copy
+            // of the Grace painting in the tree (Grace node opening -> footer opening).
+            if (hasArt) IhBlitArt(canvas, new Rect(671f, 551f, 41f, 39f), canvas, Rect.MinMaxRect(393f, 421f, 441f, 466f));
+
             canvas.Apply(false, false);
             if (art != null) Destroy(art);
             IhComposeHotbarIcons(nodes, canvas);

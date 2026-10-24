@@ -1,0 +1,15 @@
+Aethelborn Ascended v0.25.275 - Grace Footer   (base: v0.25.274; ANCHOR v0.25.257)
+
+GRACE PICTURE IN THE SKILL-TREE FOOTER
+- The Grace box in the footer of each class's skill tree is painted into that class's artwork and was never redrawn.
+  When Knight's Guidance was repainted (v0.25.231, the blue sword), the tree node and the hotbar got the new picture but
+  the Sword Master footer kept the old swirl painting.
+- Fix: when the tree loads, the footer Grace box now copies the Grace painting from the tree node itself. It can no
+  longer go out of date, now or after any future repaint.
+- Checked all 7 class canvases offline: only Sword Master was wrong. Priest's footer already matched its Grace
+  (Heaven's Crucible); my earlier note that it showed Heaven's Light was a mistake. The others already matched.
+- Offline preview (same copy and scale as the game code): the Sword Master footer now shows the blue Knight's Guidance
+  sword. No image files changed.
+
+All v0.25.274 changes are included. No other changes.
+CHECKS: all ten modules compile (C# 5) with the installer's reference set. Not tested in game.

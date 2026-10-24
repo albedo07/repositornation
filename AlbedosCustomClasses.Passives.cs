@@ -9,7 +9,7 @@ namespace AlbedosCustomClassesPassives
     {
         public const string ModGuid = "albedo.customclasses.passives";
         public const string ModName = "Aethelborn Ascended - Base Blessings Compatibility";
-        public const string ModVersion = "0.25.274";
+        public const string ModVersion = "0.25.275";
 
         private void Awake()
         {

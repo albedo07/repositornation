@@ -1,3 +1,2 @@
-v0.25.274: cast Shield Charge (slam), Divine Intervention, Grand Cross, Righteous Strike and Lightning Tempest 3-4 times
-each: the swing should land closer to the hit each cast. Check the Priest Mastery and Battlecry tooltips. Send
-LogOutput.log ("CA timing" lines).
+v0.25.275: open the skill tree as Sword Master: the footer Grace box shows the blue Knight's Guidance sword. Check one
+other class's footer is unchanged. Plus the v0.25.274 tests (swing timing, tooltips).
