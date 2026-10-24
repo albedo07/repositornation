@@ -1,0 +1,28 @@
+Aethelborn Ascended v0.25.277 - Deep North Title   (base: v0.25.276; ANCHOR v0.25.257)
+
+MAIN MENU: OUR TITLE IN DEEP NORTH'S PLACE (option 3)
+- Your log showed Valheim draws VALHEIM + 1.0 + DEEP NORTH as ONE picture (Image 'Logo DeepNorth1 .0', sprite
+  Valheim_DeepNorth_Logo), so Deep North could not be switched off on its own.
+- Now, when the main menu loads, the mod reads that picture once and makes a copy in memory with only the DEEP NORTH
+  letters erased. The copy is shown instead of the original while the AA menu is on.
+  - Kept pixel for pixel: the fiery VALHEIM, the 1.0, the icy underline (as you asked) and the tip of the big V.
+  - How the letters are found: icy-blue pixels are counted per row; DEEP NORTH is the heaviest solid block of blue rows
+    (the thinner underline above it is a separate block, so it is never touched). The cut line sits a few pixels above
+    the letters (their frosty glow), always below the underline. The letters' left/right edges are measured on their
+    lower half, so the underline's curled end beside the D stays. Inside that box everything that is not fiery
+    orange/red is erased.
+  - Valheim's own files and sprite are never changed. Turning [Main Menu] Use AA Main Menu off shows the original logo
+    again; the copy is freed when you leave the menu.
+- Our title goes in the freed space: as wide as the DEEP NORTH letters, its top on the cut line, following the logo if
+  the menu moves it.
+- Colour: the title's gold is recoloured to the average blue of the erased DEEP NORTH letters themselves (exact match),
+  keeping its own brightness and shading.
+- Safety: if anything about the logo is not as expected (no logo, packed sprite, no blue letter block, letters too
+  narrow), nothing is cut and the title stays top-left in blue, with the reason in the log.
+- Log: "[AA Menu] Deep North replaced on 'Logo DeepNorth1 .0': logo WxH, N blue blocks, letters ..., cut at ...,
+  columns ..., N pixels erased; title WxH, Deep North blue #xxxxxx".
+
+Checked offline on your screenshot (sky masked, since the real logo has a transparent background): the detection boxes
+exactly the DEEP NORTH letters and leaves the underline, V and 1.0 outside; mock-up of the result attached. All v0.25.276
+changes included (ornament-free AA_Title.png).
+CHECKS: all ten modules compile (C# 5) with the installer's reference set. Not tested in game.

@@ -1,3 +1,2 @@
-v0.25.276: start the game: our title sits where Deep North was, in blue, nothing covering the Valheim logo. Turn the
-option off in F8 [Main Menu]: Deep North returns. Send LogOutput.log ("[AA Menu]" lines), and a screenshot if it is
-off-place.
+v0.25.277: start the game - DEEP NORTH gone, underline / VALHEIM / 1.0 intact, our blue title under the underline.
+Toggle [Main Menu] Use AA Main Menu off in F8 - original logo back. Send LogOutput.log ("[AA Menu]" lines) + screenshot.

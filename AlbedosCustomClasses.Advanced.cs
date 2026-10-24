@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.276";
+        public const string ModVersion = "0.25.277";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1306,7 +1306,7 @@ namespace AlbedosCustomClassesAdvanced
             if (fs == null)
             {
                 if (_ihTitleObj != null) { Destroy(_ihTitleObj); _ihTitleObj = null; }
-                _ihDeepNorth = null;
+                IhReleaseLogoCut();
                 IhMenuMusicTick(on);   // v0.25.271 the menu music keeps following Valheim's own fade while the game loads
                 return;
             }
@@ -1316,9 +1316,13 @@ namespace AlbedosCustomClassesAdvanced
                 {
                     bool show = on && fs.m_mainMenu != null && fs.m_mainMenu.activeInHierarchy;
                     if (_ihTitleObj.activeSelf != show) _ihTitleObj.SetActive(show);
-                    // v0.25.276: our title takes Deep North's place; Valheim's Deep North comes back whenever ours is hidden
-                    if (_ihDeepNorth != null && _ihDeepNorth.enabled == show) _ihDeepNorth.enabled = !show;
-                    if (show && _ihDeepNorth != null) IhPlaceOnDeepNorth();
+                    // v0.25.277: while our title shows, Valheim's logo shows our copy without the DEEP NORTH letters; the original otherwise
+                    if (_ihLogo != null && _ihLogoCut != null)
+                    {
+                        Sprite want = show ? _ihLogoCut : _ihLogoOrig;
+                        if (_ihLogo.sprite != want) _ihLogo.sprite = want;
+                        if (show) IhPlaceUnderLogo();
+                    }
                 }
                 IhMenuMusicTick(on);
                 if (Time.unscaledTime < _ihMenuNext) return;
@@ -1328,96 +1332,176 @@ namespace AlbedosCustomClassesAdvanced
             catch (Exception ex) { if (!_ihTitleLogged) { _ihTitleLogged = true; Logger.LogWarning("[AA Menu] main menu skipped: " + ex.Message); } }
         }
 
-        // ------------------------------------------------------------------ v0.25.276 title in Deep North's place
-        private UnityEngine.UI.Graphic _ihDeepNorth;
+        // ------------------------------------------------------------------ v0.25.277 title in Deep North's place
+        // Valheim draws VALHEIM + 1.0 + DEEP NORTH as ONE image (Image 'Logo DeepNorth1 .0', sprite Valheim_DeepNorth_Logo -
+        // v0.25.276 log). So the mod reads that picture once, makes a copy with only the DEEP NORTH letters erased (VALHEIM,
+        // 1.0 and the icy underline are kept pixel for pixel), shows the copy while the AA menu is on, and puts our title in
+        // the freed space in Deep North's own blue. Valheim's files and sprite are never changed; option off = original.
+        private UnityEngine.UI.Image _ihLogo;
+        private Sprite _ihLogoOrig, _ihLogoCut;
+        private Texture2D _ihLogoCutTex;
+        private Rect _ihDnBox;   // the erased letters in the sprite, normalised (0..1, y up)
         private bool _ihTitleBlue;
         private Color _ihTitleTint = new Color(0.45f, 0.75f, 1f, 1f);
         private readonly Vector3[] _ihDnCorners = new Vector3[4];
 
-        // Valheim's Deep North logo: a menu graphic whose object, sprite / texture or text says deep / north. A graphic that
-        // covers most of the screen is never taken (lesson: v0.25.264 "logo" spanned to the bottom).
-        private UnityEngine.UI.Graphic IhFindDeepNorth(RectTransform root, System.Text.StringBuilder seen)
+        private void IhReleaseLogoCut()
         {
-            UnityEngine.UI.Graphic[] gs = root.GetComponentsInChildren<UnityEngine.UI.Graphic>(true);
-            float sw = Mathf.Max(1f, Screen.width), sh = Mathf.Max(1f, Screen.height);
-            for (int i = 0; i < gs.Length; i++)
-            {
-                UnityEngine.UI.Graphic g = gs[i];
-                if (g == null || (_ihTitleObj != null && g.gameObject == _ihTitleObj)) continue;
-                string asset = "", text = "";
-                UnityEngine.UI.Image im = g as UnityEngine.UI.Image;
-                if (im != null && im.sprite != null) asset = im.sprite.name;
-                UnityEngine.UI.RawImage ri = g as UnityEngine.UI.RawImage;
-                if (ri != null && ri.texture != null) asset = ri.texture.name;
-                try { PropertyInfo tp = g.GetType().GetProperty("text", typeof(string)); if (tp != null) text = (tp.GetValue(g, null) as string) ?? ""; } catch (Exception) { }
-                string all = (g.gameObject.name + " " + asset + " " + text).ToLowerInvariant();
-                g.rectTransform.GetWorldCorners(_ihDnCorners);
-                float w = Mathf.Abs(_ihDnCorners[2].x - _ihDnCorners[0].x), h = Mathf.Abs(_ihDnCorners[2].y - _ihDnCorners[0].y);
-                if (g.gameObject.activeInHierarchy && seen.Length < 2500)
-                    seen.Append(g.gameObject.name).Append('[').Append(asset).Append(text.Length > 0 ? "|" + (text.Length > 20 ? text.Substring(0, 20) : text) : "").Append("] ");
-                if (all.IndexOf("deep", StringComparison.Ordinal) < 0 && all.IndexOf("north", StringComparison.Ordinal) < 0) continue;
-                if (w > sw * 0.8f || h > sh * 0.5f || w < 4f || h < 4f) { seen.Append("(rejected ").Append(g.gameObject.name).Append(' ').Append(Mathf.RoundToInt(w)).Append('x').Append(Mathf.RoundToInt(h)).Append(") "); continue; }
-                return g;
-            }
-            return null;
+            if (_ihLogo != null && _ihLogoOrig != null && _ihLogo.sprite == _ihLogoCut) _ihLogo.sprite = _ihLogoOrig;
+            if (_ihLogoCut != null) Destroy(_ihLogoCut);
+            if (_ihLogoCutTex != null) Destroy(_ihLogoCutTex);
+            _ihLogo = null; _ihLogoOrig = null; _ihLogoCut = null; _ihLogoCutTex = null;
         }
 
-        // our title over Deep North's rectangle every frame (it follows the logo if the menu moves it); as wide as Deep North
-        private void IhPlaceOnDeepNorth()
+        // Valheim's menu logo: an Image whose sprite name says logo (Deep North's logo first)
+        private UnityEngine.UI.Image IhFindLogo(RectTransform root, System.Text.StringBuilder seen)
         {
-            if (_ihTitleObj == null || _ihDeepNorth == null || _ihTitleTex == null) return;
+            UnityEngine.UI.Image best = null;
+            UnityEngine.UI.Image[] ims = root.GetComponentsInChildren<UnityEngine.UI.Image>(true);
+            for (int i = 0; i < ims.Length; i++)
+            {
+                UnityEngine.UI.Image im = ims[i];
+                if (im == null || im.sprite == null) continue;
+                string sn = im.sprite.name.ToLowerInvariant();
+                if (sn.IndexOf("logo", StringComparison.Ordinal) < 0) continue;
+                if (seen.Length < 1500) seen.Append(im.gameObject.name).Append('[').Append(im.sprite.name).Append("] ");
+                if (sn.IndexOf("deepnorth", StringComparison.Ordinal) >= 0) return im;
+                if (best == null) best = im;
+            }
+            return best;
+        }
+
+        // reads the logo, erases the DEEP NORTH letters in a copy; false (logged) if anything does not look as expected
+        private bool IhCutDeepNorth(UnityEngine.UI.Image img, out Color blue, System.Text.StringBuilder why)
+        {
+            blue = new Color(0f, 0f, 0f, 0f);
+            Sprite sp = img.sprite;
+            if (sp == null || sp.texture == null) { why.Append("no sprite"); return false; }
+            if (sp.packed && sp.packingMode == SpritePackingMode.Tight) { why.Append("tightly packed sprite"); return false; }
+            Texture2D src = sp.texture; Rect tr = sp.textureRect;
+            int w = Mathf.RoundToInt(tr.width), h = Mathf.RoundToInt(tr.height);
+            if (w < 64 || h < 64 || w > 4096 || h > 4096) { why.Append("size ").Append(w).Append('x').Append(h); return false; }
+            RenderTexture rtx = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
+            RenderTexture prev = RenderTexture.active;
+            Texture2D tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
+            try
+            {
+                Graphics.Blit(src, rtx, new Vector2(tr.width / src.width, tr.height / src.height), new Vector2(tr.x / src.width, tr.y / src.height));
+                RenderTexture.active = rtx;
+                tex.ReadPixels(new Rect(0f, 0f, w, h), 0, 0);
+                tex.Apply(false);
+            }
+            finally { RenderTexture.active = prev; RenderTexture.ReleaseTemporary(rtx); }
+            Color32[] px = tex.GetPixels32();
+            // 1. icy-blue pixels per row (y up)
+            bool[] isBlue = new bool[px.Length];
+            int[] rowBlue = new int[h];
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    Color32 c = px[y * w + x];
+                    if (c.a < 60) continue;
+                    float hh, ss, vv; Color.RGBToHSV(c, out hh, out ss, out vv);
+                    if (hh >= 0.42f && hh <= 0.66f && ss >= 0.25f && vv >= 0.35f) { isBlue[y * w + x] = true; rowBlue[y]++; }
+                }
+            int yLow = -1, yHigh = -1;
+            for (int y = 0; y < h; y++) if (rowBlue[y] >= 3) { if (yLow < 0) yLow = y; yHigh = y; }
+            if (yLow < 0 || yHigh - yLow < 12) { why.Append("no blue band"); Destroy(tex); return false; }
+            // 2. rows smoothed over 3
+            int[] sm = new int[h];
+            for (int y = 0; y < h; y++) sm[y] = (rowBlue[Mathf.Max(0, y - 1)] + rowBlue[y] + rowBlue[Mathf.Min(h - 1, y + 1)]) / 3;
+            // the letters = the heaviest solid block of well-filled blue rows (stray specks, the thinner underline and anything
+            // else blue are separate, lighter blocks); threshold = a quarter of the 90th-percentile row
+            List<int> filled = new List<int>();
+            for (int y = 0; y < h; y++) if (sm[y] >= 3) filled.Add(sm[y]);
+            filled.Sort();
+            int p90 = filled.Count > 0 ? filled[Mathf.Min(filled.Count - 1, filled.Count * 9 / 10)] : 0;
+            int thr = Mathf.Max(3, p90 / 4);
+            int bestMass = 0, bestLo = -1, bestHi = -1, blocks = 0;
+            for (int y = 0; y < h; y++)
+            {
+                if (sm[y] < thr) continue;
+                int lo = y, mass = 0;
+                while (y < h && sm[y] >= thr) { mass += sm[y]; y++; }
+                blocks++;
+                if (mass > bestMass) { bestMass = mass; bestLo = lo; bestHi = y - 1; }
+            }
+            if (bestLo < 0 || bestHi - bestLo < 8) { why.Append("no letter block"); Destroy(tex); return false; }
+            yLow = bestLo;
+            int top = bestHi;
+            why.Append(blocks).Append(" blue blocks, ");
+            // the cut line: a few rows above the letters for their frosty glow, but always below the next blue block (the underline)
+            int next = h;
+            for (int y = top + 1; y < h; y++) if (sm[y] >= thr) { next = y; break; }
+            int cut = Mathf.Min(Mathf.Min(h - 1, top + Mathf.Max(2, h / 150)), next - 2);
+            if (cut < top) cut = top;
+            // 3. the letters' left / right from their lower 45% (the underline's curled end beside the D reaches ~40% down and stays)
+            int dnLeft = w, dnRight = -1;
+            int lettersFrom = yLow, lettersTo = yLow + Mathf.Max(1, (top - yLow) * 45 / 100);
+            for (int x = 0; x < w; x++)
+            {
+                int n = 0;
+                for (int y = lettersFrom; y <= lettersTo && n < 2; y++) if (isBlue[y * w + x]) n++;
+                if (n < 2) continue;   // a single stray blue pixel never widens the box
+                if (x < dnLeft) dnLeft = x;
+                dnRight = x;
+            }
+            if (dnRight - dnLeft < w / 6) { why.Append("letters too narrow ").Append(dnRight - dnLeft); Destroy(tex); return false; }
+            int m = Mathf.Max(4, w / 90);
+            int x0 = Mathf.Max(0, dnLeft - m), x1 = Mathf.Min(w - 1, dnRight + m);
+            // 4. erase: inside the letters' box everything that is not fiery orange / red; average the letters' blue
+            float br = 0f, bg = 0f, bb = 0f, bw = 0f; int erased = 0;
+            int yBottom = Mathf.Max(0, yLow - m);
+            for (int y = yBottom; y <= cut; y++)
+                for (int x = x0; x <= x1; x++)
+                {
+                    int k = y * w + x; Color32 c = px[k];
+                    if (c.a == 0) continue;
+                    float hh, ss, vv; Color.RGBToHSV(c, out hh, out ss, out vv);
+                    bool warm = (hh <= 0.14f || hh >= 0.9f) && ss >= 0.3f && vv >= 0.2f;
+                    if (warm) continue;
+                    if (isBlue[k]) { float wt = ss * vv * c.a / 255f; br += c.r / 255f * wt; bg += c.g / 255f * wt; bb += c.b / 255f * wt; bw += wt; }
+                    px[k] = new Color32(c.r, c.g, c.b, 0); erased++;
+                }
+            tex.SetPixels32(px);
+            tex.wrapMode = TextureWrapMode.Clamp; tex.filterMode = FilterMode.Bilinear;
+            tex.Apply(false, false);
+            if (bw > 0.5f) blue = new Color(br / bw, bg / bw, bb / bw, 1f);
+            _ihLogoCutTex = tex;
+            _ihLogoCut = Sprite.Create(tex, new Rect(0f, 0f, w, h), new Vector2(sp.pivot.x / tr.width, sp.pivot.y / tr.height), sp.pixelsPerUnit, 0, SpriteMeshType.FullRect, sp.border);
+            _ihLogoCut.name = sp.name + "_AA";
+            _ihDnBox = new Rect((float)x0 / w, (float)yBottom / h, (float)(x1 - x0 + 1) / w, (float)(cut - yBottom + 1) / h);
+            why.Append("logo ").Append(w).Append('x').Append(h).Append(", blue rows ").Append(yLow).Append('-').Append(yHigh)
+               .Append(", letters ").Append(yLow).Append('-').Append(top).Append(" (cut at ").Append(cut).Append(", kept above: underline / VALHEIM / 1.0)")
+               .Append(", columns ").Append(x0).Append('-').Append(x1).Append(", ").Append(erased).Append(" pixels erased");
+            return true;
+        }
+
+        // our title in the freed space every frame (follows the logo): as wide as the DEEP NORTH letters, top on the cut line
+        private void IhPlaceUnderLogo()
+        {
+            if (_ihTitleObj == null || _ihLogo == null || _ihLogoCut == null || _ihTitleTex == null) return;
             RectTransform rt = (RectTransform)_ihTitleObj.transform;
             RectTransform parent = rt.parent as RectTransform;
             if (parent == null) return;
-            _ihDeepNorth.rectTransform.GetWorldCorners(_ihDnCorners);
-            float scale = Mathf.Max(0.0001f, parent.lossyScale.x);
-            float w = Mathf.Abs(_ihDnCorners[2].x - _ihDnCorners[0].x) / scale, h = Mathf.Abs(_ihDnCorners[2].y - _ihDnCorners[0].y) / scale;
-            float aspect = _ihTitleTex.height > 0 ? (float)_ihTitleTex.width / _ihTitleTex.height : 2.5f;
-            float tw = w * 1.15f, th = tw / aspect;
-            if (th > h * 3.2f) { th = h * 3.2f; tw = th * aspect; }
-            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
-            rt.pivot = new Vector2(0.5f, 0.5f);
-            rt.sizeDelta = new Vector2(tw, th);
-            rt.position = (_ihDnCorners[0] + _ihDnCorners[2]) * 0.5f;
-        }
-
-        // Deep North's colour: its picture read back through a small render texture (its tint applied); the colourful pixels win
-        private Color IhSampleColor(UnityEngine.UI.Graphic g)
-        {
-            Color tint = g.color;
-            try
+            RectTransform lr = _ihLogo.rectTransform;
+            Rect r = lr.rect;
+            float sa = _ihLogoCut.rect.width / Mathf.Max(1f, _ihLogoCut.rect.height);
+            if (_ihLogo.preserveAspect && r.height > 0f)
             {
-                Texture tex = null; Rect uv = new Rect(0f, 0f, 1f, 1f);
-                UnityEngine.UI.Image im = g as UnityEngine.UI.Image;
-                if (im != null && im.sprite != null && im.sprite.texture != null)
-                {
-                    tex = im.sprite.texture; Rect tr = im.sprite.textureRect;
-                    uv = new Rect(tr.x / tex.width, tr.y / tex.height, tr.width / tex.width, tr.height / tex.height);
-                }
-                UnityEngine.UI.RawImage ri = g as UnityEngine.UI.RawImage;
-                if (ri != null && ri.texture != null) { tex = ri.texture; uv = ri.uvRect; }
-                if (tex != null)
-                {
-                    RenderTexture rtx = RenderTexture.GetTemporary(96, 32, 0, RenderTextureFormat.ARGB32);
-                    Graphics.Blit(tex, rtx, new Vector2(uv.width, uv.height), new Vector2(uv.x, uv.y));
-                    RenderTexture prev = RenderTexture.active; RenderTexture.active = rtx;
-                    Texture2D read = new Texture2D(96, 32, TextureFormat.RGBA32, false);
-                    read.ReadPixels(new Rect(0f, 0f, 96f, 32f), 0, 0); read.Apply(false);
-                    RenderTexture.active = prev; RenderTexture.ReleaseTemporary(rtx);
-                    Color32[] px = read.GetPixels32(); Destroy(read);
-                    float r = 0f, gg = 0f, b = 0f, wsum = 0f;
-                    for (int i = 0; i < px.Length; i++)
-                    {
-                        Color c = px[i]; c *= tint;
-                        float h, s, v; Color.RGBToHSV(c, out h, out s, out v);
-                        float wgt = c.a * s * v;
-                        r += c.r * wgt; gg += c.g * wgt; b += c.b * wgt; wsum += wgt;
-                    }
-                    if (wsum > 0.5f) return new Color(r / wsum, gg / wsum, b / wsum, 1f);
-                }
+                if (r.width / r.height > sa) { float nw = r.height * sa; r.x += (r.width - nw) * 0.5f; r.width = nw; }
+                else { float nh = r.width / sa; r.y += (r.height - nh) * 0.5f; r.height = nh; }
             }
-            catch (Exception ex) { Logger.LogWarning("[AA Menu] Deep North colour not readable: " + ex.Message); }
-            return tint;
+            Vector3 bl = lr.TransformPoint(new Vector3(r.x + _ihDnBox.xMin * r.width, r.y + _ihDnBox.yMin * r.height, 0f));
+            Vector3 tp = lr.TransformPoint(new Vector3(r.x + _ihDnBox.xMax * r.width, r.y + _ihDnBox.yMax * r.height, 0f));
+            float scale = Mathf.Max(0.0001f, parent.lossyScale.x);
+            float bw = Mathf.Abs(tp.x - bl.x) / scale, bh = Mathf.Abs(tp.y - bl.y) / scale;
+            float aspect = _ihTitleTex.height > 0 ? (float)_ihTitleTex.width / _ihTitleTex.height : 3.2f;
+            float tw = Mathf.Min(bw, bh * 1.8f * aspect), th = tw / aspect;
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 1f);
+            rt.sizeDelta = new Vector2(tw, th);
+            rt.position = new Vector3((bl.x + tp.x) * 0.5f, Mathf.Max(bl.y, tp.y), lr.position.z);
         }
 
         // gold / bronze / cream parts of the title take Deep North's blue (same brightness, so the design and its shading stay);
@@ -1465,25 +1549,33 @@ namespace AlbedosCustomClassesAdvanced
             rt.SetParent(root, false);
             UnityEngine.UI.RawImage img = _ihTitleObj.AddComponent<UnityEngine.UI.RawImage>();
             img.texture = _ihTitleTex; img.raycastTarget = false;
-            // v0.25.276 (user): the title REPLACES Valheim's "Deep North" logo, in Deep North's blue
-            System.Text.StringBuilder seen = new System.Text.StringBuilder();
-            _ihDeepNorth = IhFindDeepNorth(root, seen);
+            // v0.25.277 (user): DEEP NORTH is erased from a copy of Valheim's logo and our title takes its place, in its blue
+            System.Text.StringBuilder seen = new System.Text.StringBuilder(), why = new System.Text.StringBuilder();
+            IhReleaseLogoCut();
+            UnityEngine.UI.Image logo = IhFindLogo(root, seen);
+            Color blue = new Color(0f, 0f, 0f, 0f);
+            bool cutOk = false;
+            if (logo != null)
+            {
+                try { cutOk = IhCutDeepNorth(logo, out blue, why); }
+                catch (Exception ex) { why.Append("error ").Append(ex.Message); cutOk = false; }
+            }
             if (!_ihTitleBlue)
             {
                 _ihTitleBlue = true;
-                Color blue = _ihDeepNorth != null ? IhSampleColor(_ihDeepNorth) : new Color(0f, 0f, 0f, 0f);
                 IhRecolorTitle(_ihTitleTex, blue);
             }
-            if (_ihDeepNorth != null)
+            if (cutOk)
             {
-                _ihDeepNorth.enabled = false;
-                IhPlaceOnDeepNorth();
+                _ihLogo = logo; _ihLogoOrig = logo.sprite;
+                _ihLogo.sprite = _ihLogoCut;
+                IhPlaceUnderLogo();
                 rt.SetAsLastSibling();
-                Logger.LogInfo("[AA Menu] title replaces Deep North ('" + _ihDeepNorth.gameObject.name + "', " + _ihDeepNorth.GetType().Name + "): " + Mathf.RoundToInt(rt.rect.width) + "x" + Mathf.RoundToInt(rt.rect.height) +
-                    " at " + Mathf.RoundToInt(rt.anchoredPosition.x) + "," + Mathf.RoundToInt(rt.anchoredPosition.y) + " from the canvas centre, blue " + ColorUtility.ToHtmlStringRGB(_ihTitleTint));
+                Logger.LogInfo("[AA Menu] Deep North replaced on '" + logo.gameObject.name + "': " + why.ToString() + "; title " + Mathf.RoundToInt(rt.rect.width) + "x" + Mathf.RoundToInt(rt.rect.height) +
+                    ", Deep North blue " + (blue.a > 0f ? ColorUtility.ToHtmlStringRGB(blue) : "not read") + ", title tint " + ColorUtility.ToHtmlStringRGB(_ihTitleTint));
                 return;
             }
-            Logger.LogWarning("[AA Menu] Valheim's Deep North logo was not found - title kept top-left (blue). Menu graphics seen: " + seen.ToString());
+            Logger.LogWarning("[AA Menu] Deep North could not be cut from Valheim's logo (" + (logo == null ? "logo not found" : why.ToString()) + ") - title kept top-left (blue). Logos seen: " + seen.ToString());
             // v0.25.267 (user sketch): the top-left corner, left of Valheim's logo - 28% of the screen wide (about 540 x 215 px
             // at 1080p), centred in the free space there (left 15.5% of the width), 6% down from the top.
             float aspect = _ihTitleTex.height > 0 ? (float)_ihTitleTex.width / _ihTitleTex.height : 2.5f;
