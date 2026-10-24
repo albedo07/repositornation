@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.275";
+        public const string ModVersion = "0.25.276";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1306,6 +1306,7 @@ namespace AlbedosCustomClassesAdvanced
             if (fs == null)
             {
                 if (_ihTitleObj != null) { Destroy(_ihTitleObj); _ihTitleObj = null; }
+                _ihDeepNorth = null;
                 IhMenuMusicTick(on);   // v0.25.271 the menu music keeps following Valheim's own fade while the game loads
                 return;
             }
@@ -1315,6 +1316,9 @@ namespace AlbedosCustomClassesAdvanced
                 {
                     bool show = on && fs.m_mainMenu != null && fs.m_mainMenu.activeInHierarchy;
                     if (_ihTitleObj.activeSelf != show) _ihTitleObj.SetActive(show);
+                    // v0.25.276: our title takes Deep North's place; Valheim's Deep North comes back whenever ours is hidden
+                    if (_ihDeepNorth != null && _ihDeepNorth.enabled == show) _ihDeepNorth.enabled = !show;
+                    if (show && _ihDeepNorth != null) IhPlaceOnDeepNorth();
                 }
                 IhMenuMusicTick(on);
                 if (Time.unscaledTime < _ihMenuNext) return;
@@ -1322,6 +1326,122 @@ namespace AlbedosCustomClassesAdvanced
                 if (on && _ihTitleObj == null && fs.m_mainMenu != null) IhBuildTitle(fs);
             }
             catch (Exception ex) { if (!_ihTitleLogged) { _ihTitleLogged = true; Logger.LogWarning("[AA Menu] main menu skipped: " + ex.Message); } }
+        }
+
+        // ------------------------------------------------------------------ v0.25.276 title in Deep North's place
+        private UnityEngine.UI.Graphic _ihDeepNorth;
+        private bool _ihTitleBlue;
+        private Color _ihTitleTint = new Color(0.45f, 0.75f, 1f, 1f);
+        private readonly Vector3[] _ihDnCorners = new Vector3[4];
+
+        // Valheim's Deep North logo: a menu graphic whose object, sprite / texture or text says deep / north. A graphic that
+        // covers most of the screen is never taken (lesson: v0.25.264 "logo" spanned to the bottom).
+        private UnityEngine.UI.Graphic IhFindDeepNorth(RectTransform root, System.Text.StringBuilder seen)
+        {
+            UnityEngine.UI.Graphic[] gs = root.GetComponentsInChildren<UnityEngine.UI.Graphic>(true);
+            float sw = Mathf.Max(1f, Screen.width), sh = Mathf.Max(1f, Screen.height);
+            for (int i = 0; i < gs.Length; i++)
+            {
+                UnityEngine.UI.Graphic g = gs[i];
+                if (g == null || (_ihTitleObj != null && g.gameObject == _ihTitleObj)) continue;
+                string asset = "", text = "";
+                UnityEngine.UI.Image im = g as UnityEngine.UI.Image;
+                if (im != null && im.sprite != null) asset = im.sprite.name;
+                UnityEngine.UI.RawImage ri = g as UnityEngine.UI.RawImage;
+                if (ri != null && ri.texture != null) asset = ri.texture.name;
+                try { PropertyInfo tp = g.GetType().GetProperty("text", typeof(string)); if (tp != null) text = (tp.GetValue(g, null) as string) ?? ""; } catch (Exception) { }
+                string all = (g.gameObject.name + " " + asset + " " + text).ToLowerInvariant();
+                g.rectTransform.GetWorldCorners(_ihDnCorners);
+                float w = Mathf.Abs(_ihDnCorners[2].x - _ihDnCorners[0].x), h = Mathf.Abs(_ihDnCorners[2].y - _ihDnCorners[0].y);
+                if (g.gameObject.activeInHierarchy && seen.Length < 2500)
+                    seen.Append(g.gameObject.name).Append('[').Append(asset).Append(text.Length > 0 ? "|" + (text.Length > 20 ? text.Substring(0, 20) : text) : "").Append("] ");
+                if (all.IndexOf("deep", StringComparison.Ordinal) < 0 && all.IndexOf("north", StringComparison.Ordinal) < 0) continue;
+                if (w > sw * 0.8f || h > sh * 0.5f || w < 4f || h < 4f) { seen.Append("(rejected ").Append(g.gameObject.name).Append(' ').Append(Mathf.RoundToInt(w)).Append('x').Append(Mathf.RoundToInt(h)).Append(") "); continue; }
+                return g;
+            }
+            return null;
+        }
+
+        // our title over Deep North's rectangle every frame (it follows the logo if the menu moves it); as wide as Deep North
+        private void IhPlaceOnDeepNorth()
+        {
+            if (_ihTitleObj == null || _ihDeepNorth == null || _ihTitleTex == null) return;
+            RectTransform rt = (RectTransform)_ihTitleObj.transform;
+            RectTransform parent = rt.parent as RectTransform;
+            if (parent == null) return;
+            _ihDeepNorth.rectTransform.GetWorldCorners(_ihDnCorners);
+            float scale = Mathf.Max(0.0001f, parent.lossyScale.x);
+            float w = Mathf.Abs(_ihDnCorners[2].x - _ihDnCorners[0].x) / scale, h = Mathf.Abs(_ihDnCorners[2].y - _ihDnCorners[0].y) / scale;
+            float aspect = _ihTitleTex.height > 0 ? (float)_ihTitleTex.width / _ihTitleTex.height : 2.5f;
+            float tw = w * 1.15f, th = tw / aspect;
+            if (th > h * 3.2f) { th = h * 3.2f; tw = th * aspect; }
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.sizeDelta = new Vector2(tw, th);
+            rt.position = (_ihDnCorners[0] + _ihDnCorners[2]) * 0.5f;
+        }
+
+        // Deep North's colour: its picture read back through a small render texture (its tint applied); the colourful pixels win
+        private Color IhSampleColor(UnityEngine.UI.Graphic g)
+        {
+            Color tint = g.color;
+            try
+            {
+                Texture tex = null; Rect uv = new Rect(0f, 0f, 1f, 1f);
+                UnityEngine.UI.Image im = g as UnityEngine.UI.Image;
+                if (im != null && im.sprite != null && im.sprite.texture != null)
+                {
+                    tex = im.sprite.texture; Rect tr = im.sprite.textureRect;
+                    uv = new Rect(tr.x / tex.width, tr.y / tex.height, tr.width / tex.width, tr.height / tex.height);
+                }
+                UnityEngine.UI.RawImage ri = g as UnityEngine.UI.RawImage;
+                if (ri != null && ri.texture != null) { tex = ri.texture; uv = ri.uvRect; }
+                if (tex != null)
+                {
+                    RenderTexture rtx = RenderTexture.GetTemporary(96, 32, 0, RenderTextureFormat.ARGB32);
+                    Graphics.Blit(tex, rtx, new Vector2(uv.width, uv.height), new Vector2(uv.x, uv.y));
+                    RenderTexture prev = RenderTexture.active; RenderTexture.active = rtx;
+                    Texture2D read = new Texture2D(96, 32, TextureFormat.RGBA32, false);
+                    read.ReadPixels(new Rect(0f, 0f, 96f, 32f), 0, 0); read.Apply(false);
+                    RenderTexture.active = prev; RenderTexture.ReleaseTemporary(rtx);
+                    Color32[] px = read.GetPixels32(); Destroy(read);
+                    float r = 0f, gg = 0f, b = 0f, wsum = 0f;
+                    for (int i = 0; i < px.Length; i++)
+                    {
+                        Color c = px[i]; c *= tint;
+                        float h, s, v; Color.RGBToHSV(c, out h, out s, out v);
+                        float wgt = c.a * s * v;
+                        r += c.r * wgt; gg += c.g * wgt; b += c.b * wgt; wsum += wgt;
+                    }
+                    if (wsum > 0.5f) return new Color(r / wsum, gg / wsum, b / wsum, 1f);
+                }
+            }
+            catch (Exception ex) { Logger.LogWarning("[AA Menu] Deep North colour not readable: " + ex.Message); }
+            return tint;
+        }
+
+        // gold / bronze / cream parts of the title take Deep North's blue (same brightness, so the design and its shading stay);
+        // the dark letter fill and the blue gems are left as they are
+        private void IhRecolorTitle(Texture2D tex, Color sample)
+        {
+            float hb, sb, vb;
+            Color.RGBToHSV(sample, out hb, out sb, out vb);
+            if (sample.a <= 0f || sb < 0.15f || hb < 0.45f || hb > 0.75f) { hb = 0.57f; sb = 0.55f; }   // not a blue we can use: icy blue
+            _ihTitleTint = Color.HSVToRGB(hb, sb, 1f);
+            Color32[] px = tex.GetPixels32();
+            for (int i = 0; i < px.Length; i++)
+            {
+                Color32 p = px[i];
+                if (p.a == 0) continue;
+                float h, s, v; Color.RGBToHSV(p, out h, out s, out v);
+                float warm = Mathf.Clamp01(1f - Mathf.Max(0f, Mathf.Abs(h - 0.11f) - 0.06f) / 0.03f) * Mathf.Clamp01((s - 0.06f) / 0.12f);
+                if (warm <= 0f) continue;
+                Color blue = Color.HSVToRGB(hb, Mathf.Clamp01(sb * Mathf.Clamp01(s / 0.65f) * 1.1f), Mathf.Clamp01(v * 1.04f));
+                Color mixed = Color.Lerp(p, blue, warm);
+                px[i] = new Color32((byte)Mathf.RoundToInt(mixed.r * 255f), (byte)Mathf.RoundToInt(mixed.g * 255f), (byte)Mathf.RoundToInt(mixed.b * 255f), p.a);
+            }
+            tex.SetPixels32(px);
+            tex.Apply(true, false);
         }
 
         private void IhBuildTitle(FejdStartup fs)
@@ -1345,6 +1465,25 @@ namespace AlbedosCustomClassesAdvanced
             rt.SetParent(root, false);
             UnityEngine.UI.RawImage img = _ihTitleObj.AddComponent<UnityEngine.UI.RawImage>();
             img.texture = _ihTitleTex; img.raycastTarget = false;
+            // v0.25.276 (user): the title REPLACES Valheim's "Deep North" logo, in Deep North's blue
+            System.Text.StringBuilder seen = new System.Text.StringBuilder();
+            _ihDeepNorth = IhFindDeepNorth(root, seen);
+            if (!_ihTitleBlue)
+            {
+                _ihTitleBlue = true;
+                Color blue = _ihDeepNorth != null ? IhSampleColor(_ihDeepNorth) : new Color(0f, 0f, 0f, 0f);
+                IhRecolorTitle(_ihTitleTex, blue);
+            }
+            if (_ihDeepNorth != null)
+            {
+                _ihDeepNorth.enabled = false;
+                IhPlaceOnDeepNorth();
+                rt.SetAsLastSibling();
+                Logger.LogInfo("[AA Menu] title replaces Deep North ('" + _ihDeepNorth.gameObject.name + "', " + _ihDeepNorth.GetType().Name + "): " + Mathf.RoundToInt(rt.rect.width) + "x" + Mathf.RoundToInt(rt.rect.height) +
+                    " at " + Mathf.RoundToInt(rt.anchoredPosition.x) + "," + Mathf.RoundToInt(rt.anchoredPosition.y) + " from the canvas centre, blue " + ColorUtility.ToHtmlStringRGB(_ihTitleTint));
+                return;
+            }
+            Logger.LogWarning("[AA Menu] Valheim's Deep North logo was not found - title kept top-left (blue). Menu graphics seen: " + seen.ToString());
             // v0.25.267 (user sketch): the top-left corner, left of Valheim's logo - 28% of the screen wide (about 540 x 215 px
             // at 1080p), centred in the free space there (left 15.5% of the width), 6% down from the top.
             float aspect = _ihTitleTex.height > 0 ? (float)_ihTitleTex.width / _ihTitleTex.height : 2.5f;

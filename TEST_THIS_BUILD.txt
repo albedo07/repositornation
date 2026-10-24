@@ -1,2 +1,3 @@
-v0.25.275: open the skill tree as Sword Master: the footer Grace box shows the blue Knight's Guidance sword. Check one
-other class's footer is unchanged. Plus the v0.25.274 tests (swing timing, tooltips).
+v0.25.276: start the game: our title sits where Deep North was, in blue, nothing covering the Valheim logo. Turn the
+option off in F8 [Main Menu]: Deep North returns. Send LogOutput.log ("[AA Menu]" lines), and a screenshot if it is
+off-place.

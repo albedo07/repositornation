@@ -1,0 +1,19 @@
+Aethelborn Ascended v0.25.276 - Blue Title   (base: v0.25.275; ANCHOR v0.25.257)
+
+MAIN MENU TITLE TAKES DEEP NORTH'S PLACE (your idea)
+- The Aethelborn Ascended title now replaces Valheim's "Deep North" logo: the Deep North graphic is hidden and our title
+  is placed on its spot (centred on it, a little wider than it, following it if the menu moves it).
+- Blue like Deep North: when the menu loads, Deep North's picture is read back and its blue is measured; the gold, bronze
+  and cream parts of our title are recoloured to that blue at the same brightness, so the design, bevels and shading
+  stay. The dark letter fill and the blue gems are untouched. If the colour cannot be read, an icy blue is used.
+- The top ornament (compass star and scrolls above AETHELBORN) is removed from AA_Title.png so it does not cover the
+  Valheim logo above it; the star's spike through the first E was repaired. The bottom flourish stays. The image is now
+  1600x502 (empty top trimmed).
+- Turning [Main Menu] Use AA Main Menu off brings Deep North back.
+- If Valheim's Deep North graphic cannot be found by name/picture/text, the title stays top-left (in blue) and the log
+  lists the menu graphics it saw ("[AA Menu] Valheim's Deep North logo was not found ...") so it can be targeted exactly.
+  When found, the log says "[AA Menu] title replaces Deep North (...)".
+
+All v0.25.275 changes are included. No other changes.
+CHECKS: all ten modules compile (C# 5) with the installer's reference set. The recolour preview was made offline with the
+same algorithm (icy-blue fallback colour); the real Deep North blue is only read in game. Not tested in game.
