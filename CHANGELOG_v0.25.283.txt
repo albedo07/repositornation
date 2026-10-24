@@ -1,0 +1,14 @@
+AETHELBORN ASCENDED v0.25.283 - Priest Fixes
+
+1. Sanctified Bloom (Ascended Holy Relic / Lightning Relic / Holy Wave)
+   Bug: a Relic pulses every second. Its 2nd pulse treated you as "already Sanctified", Bloomed and REMOVED
+   the Sanctified it had applied one second earlier -> the 10 s icon vanished (and it looped Sanctify/Bloom).
+   Fix: the skill that applied Sanctified no longer Blooms it. It lasts its full 10 s, and a DIFFERENT skill
+   (e.g. Holy Wave onto a Holy Relic's Sanctified) triggers the Bloom as designed.
+2. Buckler Parry buff tooltip: Hyper Armor only. The "+50% next skill" text lives on the Skill Enhanced icon.
+3. Heaven's Judgement Ascended: no longer heals per beam. While the skill is active, you and allies inside the
+   circle heal 3% Max HP every 0.5 s (new key HealEveryHalfSecondPercent_v025283). Normal unchanged.
+4. Judgement Hammer (Normal + Ascended): the hammer grows 5 times (0.2 s apart), then keeps that size, also on
+   the Ascended return flight (new key MaxGrowths_v025283 = 5). Damage growth unchanged (capped at 3x).
+
+Checks: static compile of all ten modules against the real references only. Not tested in game.

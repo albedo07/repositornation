@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.282";
+        public const string ModVersion = "0.25.283";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -396,6 +396,7 @@ namespace AlbedosCustomClassesAdvanced
         private ConfigEntry<float> _parryEmpowerPercent;
         private bool _parryEmpowerPending;
         // v0.21.0 Priest Ascended
+        private ConfigEntry<int> _hammerMaxGrowths;
         private ConfigEntry<float> _sanctifiedDuration, _bloomHealPercent, _bloomRadius;
         private ConfigEntry<float> _crossAscExpose, _crossAscDotMultiplier;
         private DamageConfig _bloomDamage, _relicAscBlastDamage, _crossAscBurstDamage, _pillarDamage;
@@ -954,6 +955,7 @@ namespace AlbedosCustomClassesAdvanced
             _hammerAscMaxHeight = Config.Bind("Paladin Judgement Hammer Ascended", "LegacyMaxHeight_v0172", 10f, "Ascended size cap (meters tall). Keeps growing on the return flight up to this.");
             _hammerAscMaxWidth = Config.Bind("Paladin Judgement Hammer Ascended", "LegacyMaxWidth_v0172", 3f, "Ascended size cap (meters wide).");
             _hammerAscWidthPerStep = Config.Bind("Paladin Judgement Hammer Ascended", "WidthPerStep_v0172", 0.2f, "Ascended meters of width per growth step.");
+            _hammerMaxGrowths = Config.Bind("Paladin Judgement Hammer", "MaxGrowths_v025283", 5, "The hammer grows this many times, then keeps its size (also on the Ascended return).");
             _hammerDamageCap = Config.Bind("Paladin Judgement Hammer", "MaxDamageMultiplier_v0212", 3f, "Damage growth stops at this multiplier. The hammer itself keeps growing (no size cap).");
             _hammerDamagePerStep = Config.Bind("Paladin Judgement Hammer", "DamageGrowthPerStep", 0.2f, "+0.2x damage per step (Framework doc).");
             _hammerTick = Config.Bind("Paladin Judgement Hammer", "PersistentHitInterval", 0.3f, "Persistent Damage interval per enemy.");
@@ -1028,8 +1030,8 @@ namespace AlbedosCustomClassesAdvanced
             // v0.20.9 Bless Thy Sinners - Buckler Parry (Framework).
             _shockwaveDamage = BindDamage("Priest Holy Shockwave Blunt Damage", 60f, 0f, 0f, 0f, 0f, 0f, 0f, 0f);   // v0.25.272 (user): Blunt
             _shockwaveRadius = Config.Bind("Priest Holy Shockwave", "Radius_v025272", 7f, "Shield Parry: Holy Shockwave radius in meters (v0.25.272: 7 m).");
-            _shockwaveCooldown = Config.Bind("Priest Holy Shockwave", "Cooldown_v025282", 20f, "Seconds between Holy Shockwaves (v0.25.282: 20 s).");
-            _holyParryEmpowerCooldown = Config.Bind("Priest Holy Shockwave", "EmpowerCooldown_v025282", 30f, "Holy Parry: the empowered-skill buff lasts until a skill uses it; after that a Parry can't grant it again for this many seconds (v0.25.282: 30 s).");
+            _shockwaveCooldown = Config.Bind("Priest Holy Shockwave", "Cooldown_v025282", 20f, "Seconds between Holy Shockwaves (v0.25.283: 20 s).");
+            _holyParryEmpowerCooldown = Config.Bind("Priest Holy Shockwave", "EmpowerCooldown_v025282", 30f, "Holy Parry: the empowered-skill buff lasts until a skill uses it; after that a Parry can't grant it again for this many seconds (v0.25.283: 30 s).");
             _parryHyperArmorSeconds = Config.Bind("Priest Holy Shockwave", "HyperArmorSeconds", 5f, "Every shield Parry (any but a tower shield) grants Hyper Armor for this long.");
             const string pa = "Priest Ascended";
             _sanctifiedDuration = Config.Bind(pa, "SanctifiedDuration", 10f, "Sanctified lasts this long on an ally.");
@@ -1067,7 +1069,7 @@ namespace AlbedosCustomClassesAdvanced
             _crossAscBurstDamage = BindDamage("Priest Grand Cross Ascended Burst Damage", 0f, 0f, 0f, 0f, 0f, 50f, 0f, 50f);
             _hjAscRadius = Config.Bind("Priest Heavens Judgement Ascended", "Radius", 14f, "Ascended Heaven's Judgement radius.");
             _hjAscDuration = Config.Bind("Priest Heavens Judgement Ascended", "BarrageDuration", 4f, "Ascended barrage duration.");
-            _hjAscBeamHeal = Config.Bind("Priest Heavens Judgement Ascended", "BeamHealPercent", 3f, "Each beam heals allies in the circle, % Max HP.");
+            _hjAscBeamHeal = Config.Bind("Priest Heavens Judgement Ascended", "HealEveryHalfSecondPercent_v025283", 3f, "Every 0.5 s while the skill is active, you and allies inside the circle heal this % of Max HP.");
             _hjAscPillarRadius = Config.Bind("Priest Heavens Judgement Ascended", "PillarRadius", 4f, "Final Pillar of Heaven radius at the centre.");
             _pillarDamage = BindDamage("Priest Heavens Judgement Pillar Damage", 0f, 0f, 0f, 0f, 0f, 120f, 0f, 120f);
             _tempestAscRadius = Config.Bind("Priest Lightning Tempest Ascended", "Radius", 12f, "Ascended Tempest radius (stays where it was cast).");
@@ -1076,7 +1078,7 @@ namespace AlbedosCustomClassesAdvanced
             _tempestAscMeteorBurn = Config.Bind("Priest Lightning Tempest Ascended", "MeteorFireBurnPerSecond_v02586", 12f, "Meteor Fire Burn per second, 3s, refreshed by every meteor hit.");
             _tempestAscMeteorRadius = Config.Bind("Priest Lightning Tempest Ascended", "MeteorRadius_v02586", 2.5f, "Meteor impact radius (m).");
             _tempestAscMeteorEvery = Config.Bind("Priest Lightning Tempest Ascended", "MeteorEveryStrikes_v02586", 1f, "One meteor per storm pulse (every HitInterval).");
-            _parryEmpowerPercent = Config.Bind("Priest Holy Shockwave", "NextSkillDamagePercent_v025282", 50f, "Every shield Parry empowers the next damaging skill by this percent of its damage for that entire skill instance (v0.25.282: 50%).");
+            _parryEmpowerPercent = Config.Bind("Priest Holy Shockwave", "NextSkillDamagePercent_v025282", 50f, "Every shield Parry empowers the next damaging skill by this percent of its damage for that entire skill instance (v0.25.283: 50%).");
 
             _lightningRelicCooldown = Config.Bind("Priest Lightning Relic", "Cooldown", 14f, "Cooldown starts only after the active Relic is relinquished or its 16s lifetime ends.");
             _lightningRelicStamina = Config.Bind("Priest Lightning Relic", "StaminaCost", 30f, "Stamina cost.");
@@ -8073,7 +8075,7 @@ namespace AlbedosCustomClassesAdvanced
         // Returns true once the size cap is reached.
         private bool UpdateHammerSize(float flightTime, bool ascended, out float height, out float width)
         {
-            int steps = Mathf.FloorToInt(flightTime / Mathf.Max(0.05f, _hammerGrowthInterval.Value));
+            int steps = Mathf.Min(Mathf.Max(0, _hammerMaxGrowths.Value), Mathf.FloorToInt(flightTime / Mathf.Max(0.05f, _hammerGrowthInterval.Value)));   // v0.25.283 (user): stops after 5 growths
             float widthStep = Mathf.Max(0f, ascended ? DragonCombat.M(_hammerAscWidthPerStep.Value) : DragonCombat.M(_hammerWidthPerStep.Value));
             float rawHeight = Mathf.Max(0.5f, DragonCombat.M(_hammerStartHeight.Value)) + Mathf.Max(0f, DragonCombat.M(_hammerHeightPerStep.Value)) * steps;
             float rawWidth = Mathf.Max(0.2f, DragonCombat.M(_hammerStartWidth.Value)) + widthStep * steps;
@@ -8717,7 +8719,7 @@ namespace AlbedosCustomClassesAdvanced
                         }
                         List<Player> blessed = IhAlliesInRadius(player, target, radius);
                         for (int i = 0; i < blessed.Count; i++)
-                            IhSanctify(player, blessed[i]);
+                            IhSanctify(player, blessed[i], "lightning_relic");
                     }
 
                     if (_enableVfx.Value)
@@ -8891,7 +8893,7 @@ namespace AlbedosCustomClassesAdvanced
                         if (ascended)
                         {
                             CleanseAilments(ally);
-                            IhSanctify(player, ally);
+                            IhSanctify(player, ally, "holy_relic");
                         }
                         DragonCombat.ApplyTimedBuff(
                             ally,
@@ -9260,6 +9262,7 @@ namespace AlbedosCustomClassesAdvanced
                 "viewblock"
             );
 
+            if (ascended) StartCoroutine(IhJudgementHeal(player, center, radius, duration));   // v0.25.283 (user)
             float elapsed = 0f;
             while (elapsed < duration)
             {
@@ -9305,12 +9308,6 @@ namespace AlbedosCustomClassesAdvanced
                         DragonCombat.ApplyFrost(enemy, Mathf.Max(0.1f, _heavensFrostDuration.Value));
                     }
 
-                    if (ascended)
-                    {
-                        List<Player> allies = IhAlliesInRadius(player, center, radius);
-                        for (int i = 0; i < allies.Count; i++)
-                            Heal(allies[i], allies[i].GetMaxHealth() * Mathf.Max(0f, _hjAscBeamHeal.Value) / 100f);
-                    }
                 }
 
                 elapsed += interval;
@@ -9321,7 +9318,7 @@ namespace AlbedosCustomClassesAdvanced
             {
                 // Pillar of Heaven at the centre.
                 float pillar = Mathf.Max(0.5f, DragonCombat.M(_hjAscPillarRadius.Value));   // visual size of the big beam
-                float pillarHit = Mathf.Max(pillar, radius);   // v0.25.282 (user): the final beam damages the entire skill radius
+                float pillarHit = Mathf.Max(pillar, radius);   // v0.25.283 (user): the final beam damages the entire skill radius
                 DragonSkillAudio.Play(player, DragonBaseSound.JudgementPillar, center);   // v0.25.263 MidBoom
                 if (_enableVfx.Value)
                 {
@@ -9339,6 +9336,20 @@ namespace AlbedosCustomClassesAdvanced
                 List<Character> hit = GetSphereTargets(player, center, pillarHit);
                 for (int i = 0; i < hit.Count; i++)
                     DealDamageScaled(player, hit[i], _pillarDamage, 1f, 10f, false, "heavens_judgement", "Final Pillar", false, false, null);
+            }
+        }
+
+        // v0.25.283 (user): Ascended Heaven's Judgement heals you (and allies) every 0.5 s while inside its circle.
+        private IEnumerator IhJudgementHeal(Player player, Vector3 center, float radius, float seconds)
+        {
+            float end = Time.time + seconds;
+            WaitForSeconds wait = new WaitForSeconds(0.5f);
+            while (Time.time < end && player != null && !player.IsDead())
+            {
+                List<Player> allies = IhAlliesInRadius(player, center, radius);
+                for (int i = 0; i < allies.Count; i++)
+                    Heal(allies[i], allies[i].GetMaxHealth() * Mathf.Max(0f, _hjAscBeamHeal.Value) / 100f);
+                yield return wait;
             }
         }
 
@@ -13521,12 +13532,18 @@ namespace AlbedosCustomClassesAdvanced
         // ------------------------------------------------------------------ v0.21.0 Sanctified
         // Applied only by Ascended Holy Wave and the Ascended Signature. Touching an ally who is
         // already Sanctified makes them Bloom (heal + holy pulse) and removes it: it never loops.
-        private void IhSanctify(Player caster, Player ally)
+        // v0.25.283 (user: icon said 10s then vanished): a Relic pulses every second, so its own next pulse Bloomed and
+        // removed the Sanctified it had just applied. Now only a DIFFERENT skill Blooms it; the same skill leaves it running.
+        private readonly Dictionary<int, string> _sanctifiedBy = new Dictionary<int, string>();
+        private void IhSanctify(Player caster, Player ally, string source)
         {
             if (caster == null || ally == null || ally.IsDead())
                 return;
             int id = ally.GetInstanceID();
             float until;
+            string by;
+            if (_sanctifiedUntil.TryGetValue(id, out until) && Time.time < until && _sanctifiedBy.TryGetValue(id, out by) && by == source)
+                return;
             if (_sanctifiedUntil.TryGetValue(id, out until) && Time.time < until)
             {
                 _sanctifiedUntil.Remove(id);
@@ -13544,6 +13561,7 @@ namespace AlbedosCustomClassesAdvanced
                 return;
             }
             _sanctifiedUntil[id] = Time.time + Mathf.Max(0.5f, _sanctifiedDuration.Value);
+            _sanctifiedBy[id] = source;
             float sanctSecs = Mathf.Max(0.5f, _sanctifiedDuration.Value);
             DragonCombat.RunVfx(delegate { DragonVfx.Status(ally, "sanctified", sanctSecs); });
         }
@@ -13590,7 +13608,7 @@ namespace AlbedosCustomClassesAdvanced
                 float immediate = DragonCombat.PercentMaxHeal(ally.GetMaxHealth(), instant, 1f);
                 Heal(ally, low ? immediate * 2f : immediate);
                 StartCoroutine(IhHealOverTime(ally, perSecond, duration));
-                IhSanctify(player, ally);
+                IhSanctify(player, ally, "holy_wave");
             }
             yield return new WaitForSeconds(Mathf.Max(0.1f, _ahwEchoDelay.Value));
             if (player == null || player.IsDead())
@@ -13651,10 +13669,10 @@ namespace AlbedosCustomClassesAdvanced
             if (Time.time < _ihParryUiNext) return;
             _ihParryUiNext = Time.time + 0.2f;
             bool priest = player != null && IhIsPriest(player) && !player.IsDead();
-            bool equipped = priest && DragonCombat.IsBuckler(DragonCombat.GetHandItem(player, "m_leftItem"));   // v0.25.282 any shield that can parry, never a tower shield (user)
+            bool equipped = priest && DragonCombat.IsBuckler(DragonCombat.GetHandItem(player, "m_leftItem"));   // v0.25.283 any shield that can parry, never a tower shield (user)
             float cd = priest ? GetCooldownRemaining("Priest.HolyParry") : 0f;
             float wave = priest ? GetCooldownRemaining("Priest.HolyShockwave") : 0f;
-            // v0.25.282 (user): no Holy Parry Ready/Active icons. Skill Enhanced while the next skill is boosted, Holy Parry
+            // v0.25.283 (user): no Holy Parry Ready/Active icons. Skill Enhanced while the next skill is boosted, Holy Parry
             // Cooldown while the boost recharges, one Holy Shockwave icon (Ready <-> Cooldown); the parry's Hyper Armor
             // shows as its own Hyper Armor buff.
             DragonCombat.ClearStatus(player, "priest_holy_parry");
@@ -13684,7 +13702,7 @@ namespace AlbedosCustomClassesAdvanced
 
             // Every parry: Hyper Armor. v0.23.8: the empowered-skill buff is granted once, kept
             // until a skill uses it (one prompt), then "Priest.HolyParry" blocks it for 25s.
-            DragonCombat.SetBuffNote("Priest.BucklerParry", "Your next damaging skill deals +" + IhNum(_parryEmpowerPercent.Value) + "% damage (one empower at a time, " + IhNum(_holyParryEmpowerCooldown.Value) + "s cooldown)");
+            DragonCombat.SetBuffNote("Priest.BucklerParry", null);   // v0.25.283 (user): the boost lives on the Skill Enhanced icon only
             DragonCombat.ApplyTimedBuff(player, "Priest.BucklerParry", Mathf.Max(0.1f, _parryHyperArmorSeconds.Value), 0f, 0f, 0f, 0f, 0f, 0f, true);
             if (!_parryEmpowerPending && GetCooldownRemaining("Priest.HolyParry") <= 0f)
             {
@@ -16197,7 +16215,7 @@ namespace AlbedosCustomClassesAdvanced
             {
                 float lockout = _mercFuryCooldownUntil - Time.time;
                 // v0.25.240 (perf): cached per state + number, already trimmed / upper case
-                if (IsUnchainedFuryActive()) title = "";   // v0.25.282: the Unchained Fury banner replaces the small title
+                if (IsUnchainedFuryActive()) title = "";   // v0.25.283: the Unchained Fury banner replaces the small title
                 else if (lockout > 0f) { int n = Mathf.CeilToInt(lockout); title = IhCached(10, 1, n, "FURY LOCKED " + n.ToString() + "S"); }
                 else { int n = Mathf.FloorToInt(_mercFury); title = IhCached(10, 2, n, "FURY " + n.ToString()); }
             }
@@ -16240,7 +16258,7 @@ namespace AlbedosCustomClassesAdvanced
             finally { GUI.matrix = barM0; }
         }
 
-        // v0.25.282 (user: "I sometimes forget I have Fury / Overcharge"): a bold glowing title over the hotbar,
+        // v0.25.283 (user: "I sometimes forget I have Fury / Overcharge"): a bold glowing title over the hotbar,
         // a pulsing frame around it, the seconds left, and a flash when it starts.
         private string _ihBannerOn;
         private float _ihBannerStart, _ihBannerLeft;
@@ -17922,7 +17940,7 @@ namespace AlbedosCustomClassesAdvanced
             }
 
             // Buffs / debuffs: one centred row on top of the HUD (timer fully visible under each).
-            float icon = 34f * s, iconGap = 12f * s;   // v0.25.282 (user): a tad bigger
+            float icon = 34f * s, iconGap = 12f * s;   // v0.25.283 (user): a tad bigger
             int count = _ihHudEffects.Count;
             if (count > 0)
             {
@@ -19647,7 +19665,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "holy_relic": return "Pulse radius increases to 14m and buffs increase to 30%. Pulses remove Burn, Poison and Frost and grant Sanctify. When the Relic ends, it heals allies for 25% of their maximum HP.";
                 case "divine_intervention": return "With both Relics active, targeting a Relic casts from both of them. Grants a barrier that absorbs 250 damage and pulls enemies inward.";
                 case "grand_cross": return "Attack width increases from " + IhNum(Instance._grandCrossWidth.Value) + "m to " + IhNum(Instance._crossAscWidth.Value) + "m, and range increases from " + IhNum(Instance._grandCrossRange.Value) + "m to " + IhNum(Instance._crossAscRange.Value) + "m. Hits apply Expose for " + IhNum(Instance._crossAscExpose.Value) + "s and deal twice the Spirit Burn damage.";
-                case "heavens_judgement": return "Attack radius increases to 14m and the barrage lasts 3s. Each beam heals allies for 3% of their maximum HP. Ends with a large final beam that strikes the entire area.";
+                case "heavens_judgement": return "Attack radius increases to 14m and the barrage lasts 3s. While it lasts, you and allies inside heal 3% of maximum HP every 0.5s. Ends with a large final beam that strikes the entire area.";
                 case "lightning_tempest": return "Creates a storm with a 12m radius at the target and adds falling meteors. Allies inside gain 20% Defense and Hyper Armor. When it ends, all Zap marks explode.";
             }
             return "";

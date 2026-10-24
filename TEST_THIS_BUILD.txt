@@ -1,8 +1,6 @@
-v0.25.282 Icons and Banners - please test:
-1. Priest with a (non-tower) shield: parry -> Hyper Armor icon, Skill Enhanced icon, Holy Shockwave goes dark (20 s).
-   Cast a damaging skill -> Skill Enhanced disappears, Holy Parry Cooldown (30 s) appears; damage numbers +50%.
-2. Ascended Heaven's Judgement: the last big beam hits enemies at the edge of the area.
-3. Look at all buff icons (bigger now) - tell me any that read wrong.
-4. Burn / poison / frost / stun an enemy: icons above its health bar. If none show, send LogOutput.log ("[AA] Enemy debuff").
-5. Any fire field (Punishing Bomb Ascended, Meteor, Crescent trail): low, natural fire; FPS same or better.
-6. Mercenary: trigger Unchained Fury. Wizard: trigger Overcharge. Banner over the hotbar with countdown + flash.
+v0.25.283 Priest Fixes - please test:
+1. Ascended Holy Relic: stand in it -> Sanctified Bloom icon stays the full 10 s.
+2. Parry -> Buckler Parry tooltip shows only Hyper Armor.
+3. Ascended Heaven's Judgement: you heal every 0.5 s while inside the circle.
+4. Judgement Hammer: stops growing after 5 growths, even far away.
+5. For the FPS question: cast Heaven's Judgement and Lightning Tempest once each, then send LogOutput.log ("Skill load" lines).
