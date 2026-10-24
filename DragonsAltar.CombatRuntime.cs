@@ -281,13 +281,16 @@ namespace DragonsAltarCombat
         private static Profile FromGuardian()
         {
             string[] powers = { "GP_Eikthyr", "GP_TheElder", "GP_Bonemass", "GP_Moder", "GP_Yagluth", "GP_Queen", "GP_Fader" };
-            for (int i = 0; i < powers.Length; i++)
-            {
-                StatusEffect se = ObjectDB.instance.GetStatusEffect(powers[i].GetStableHashCode());
-                if (se == null) continue;
-                Profile p = FromEffects(se.m_startEffects);
-                if (p != null) return p;
-            }
+            // v0.25.265: found by name (string.GetStableHashCode lives in assembly_utils, which the installer does not reference)
+            List<StatusEffect> all = ObjectDB.instance.m_StatusEffects;
+            for (int i = 0; i < powers.Length && all != null; i++)
+                for (int j = 0; j < all.Count; j++)
+                {
+                    StatusEffect se = all[j];
+                    if (se == null || se.name != powers[i]) continue;
+                    Profile p = FromEffects(se.m_startEffects);
+                    if (p != null) return p;
+                }
             string[] prefabs = { "fx_GP_Activation", "fx_GP_Player", "sfx_GP_activation" };
             for (int i = 0; i < prefabs.Length; i++) { Profile p = Extract(ZNetScene.instance.GetPrefab(prefabs[i])); if (p != null) return p; }
             return null;
@@ -1546,7 +1549,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.264";
+        public const string ModVersion = "0.25.265";
 
         internal static DragonCombatPlugin Instance;
 

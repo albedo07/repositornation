@@ -1,0 +1,14 @@
+Aethelborn Ascended v0.25.265 - Main Menu Fix   (base: v0.25.264; ANCHOR v0.25.257)
+
+INSTALL FIX
+- v0.25.263/264 failed to install (Add-Type: 'string' does not contain a definition for 'GetStableHashCode').
+  The Battlecry Forsaken sound lookup used Valheim's string.GetStableHashCode(), which lives in a Valheim DLL the
+  installer does not reference. It now finds the Forsaken power by name instead. Same sound, same behaviour.
+- My test build now uses exactly the installer's references and its dependency rule, so this kind of error is caught
+  before delivery.
+
+EVERYTHING FROM v0.25.263 + v0.25.264 IS IN THIS BUILD (they never installed): Paladin/Priest/level-up sounds, sound
+fade-out instead of cuts, Battlecry Forsaken + stun, no Knight's Guidance wings, Crescent Cleave whoosh, greatsword
+stance kept, AA main menu title + looping MenuMusic + [Main Menu] Use AA Main Menu, mod icon. See their changelogs.
+
+CHECKS: all ten modules compile (C# 5) against your real DLLs with the installer's reference set. Not tested in game.
