@@ -1,0 +1,19 @@
+Aethelborn Ascended v0.25.278 - AA Menu Logo   (base: v0.25.277; ANCHOR v0.25.257)
+
+MAIN MENU: OUR LOGO REPLACES VALHEIM'S
+- Your new artwork (VALHEIM 1.0 over AETHELBORN ASCENDED) is ImmortalHeroesAssets\AA_MenuLogo.png (1492x625, its
+  transparent background kept exactly; only the empty edge trimmed). The old AA_Title.png is no longer used.
+- Valheim's logo picture is simply switched off while the AA menu is on - no cutting, no painting, no patch over it.
+  The v0.25.276/277 Deep North cut-out and recolour code is removed.
+- Our logo is attached INSIDE Valheim's logo object, so it gets exactly its position, scale and any menu animation, at
+  any resolution.
+- Size: the visible part of Valheim's logo is taken from the outline mesh Unity keeps for that picture (no pixel guessing,
+  the cause of the bad placement in v0.25.277); our logo is fitted inside that space, centred, shape kept.
+- The embers stay: they are separate objects and keep drifting around our logo (our logo is drawn under them).
+- F8 [Main Menu]: Logo Scale (%) (100 = Valheim's space), Logo Offset X (%) and Logo Offset Y (%); they apply live.
+- Use AA Main Menu = false: Valheim's logo comes back.
+- Log proof: "[AA Menu] Valheim logo replaced (...). Valheim's visible logo: x ..., y ...; ours: x ..., y ..." in screen
+  pixels, so any offset can be measured exactly.
+
+All v0.25.277 changes otherwise included (menu music etc.).
+CHECKS: all ten modules compile (C# 5) with the installer's reference set. Not tested in game.

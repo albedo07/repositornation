@@ -1,2 +1,2 @@
-v0.25.277: start the game - DEEP NORTH gone, underline / VALHEIM / 1.0 intact, our blue title under the underline.
-Toggle [Main Menu] Use AA Main Menu off in F8 - original logo back. Send LogOutput.log ("[AA Menu]" lines) + screenshot.
+v0.25.278: main menu - only our logo, where Valheim's was, embers around it. Try F8 [Main Menu] Logo Scale/Offset.
+Send a screenshot + LogOutput.log ("[AA Menu] Valheim logo replaced" line).
