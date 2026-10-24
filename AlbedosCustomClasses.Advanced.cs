@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.268";
+        public const string ModVersion = "0.25.269";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1316,7 +1316,8 @@ namespace AlbedosCustomClassesAdvanced
                     bool show = on && fs.m_mainMenu != null && fs.m_mainMenu.activeInHierarchy;
                     if (_ihTitleObj.activeSelf != show) _ihTitleObj.SetActive(show);
                 }
-                if (on) IhMenuMusicPlay(); else IhStopMenuMusic();
+                bool loading = fs.m_loading != null && fs.m_loading.activeInHierarchy;   // v0.25.269: starting a game fades the music from the loading screen on
+                if (on && !loading) IhMenuMusicPlay(); else IhStopMenuMusic();
                 if (Time.unscaledTime < _ihMenuNext) return;
                 _ihMenuNext = Time.unscaledTime + 0.5f;
                 if (on && _ihTitleObj == null && fs.m_mainMenu != null) IhBuildTitle(fs);
@@ -1404,11 +1405,12 @@ namespace AlbedosCustomClassesAdvanced
         {
             if (_ihMenuSource != null && _ihMenuSource.isPlaying)
             {
-                float now = Time.unscaledTime;
-                if (_ihMenuFadeFrom < 0f) { _ihMenuFadeFrom = now; _ihMenuFadeVol = _ihMenuSource.volume; }
-                float x = (now - _ihMenuFadeFrom) / 2.5f;
+                if (_ihMenuFadeFrom < 0f) { _ihMenuFadeFrom = 0f; _ihMenuFadeVol = _ihMenuSource.volume; Logger.LogInfo("[AA Menu] music fading out (3 s)"); }
+                _ihMenuFadeFrom += Mathf.Min(Time.unscaledDeltaTime, 0.05f);   // frame-time based: a long loading frame cannot jump the fade
+                float x = _ihMenuFadeFrom / 3f;
                 if (x < 1f) { _ihMenuSource.volume = _ihMenuFadeVol * Mathf.Pow(10f, -1.5f * x) * Mathf.Sqrt(1f - x); return; }
                 _ihMenuSource.Stop();
+                Logger.LogInfo("[AA Menu] music faded out");
             }
             _ihMenuFadeFrom = -1f;
             if (_ihVanillaMusic != null) { _ihVanillaMusic.mute = false; _ihVanillaMusic = null; }
@@ -4610,6 +4612,7 @@ namespace AlbedosCustomClassesAdvanced
             OlympicLanding(player, 0.6f);
             Vector3 center = player.transform.position;
             DragonSkillAudio.Play(player, DragonBaseSound.BoneImpact, center);
+            DragonSkillAudio.Play(player, DragonBaseSound.BoneCrash, center);   // v0.25.269 BoulderCrash when grounded
             float radius = Mathf.Max(0.5f, DragonCombat.M(_boneRadius.Value));
             List<Character> targets = GetSphereTargets(player, center, radius);
             for (int i = 0; i < targets.Count; i++)
@@ -8012,6 +8015,7 @@ namespace AlbedosCustomClassesAdvanced
             float radius = Mathf.Max(1f, DragonCombat.M(_angelRadius.Value));
             DragonSkillAudio.Play(player, DragonBaseSound.CometImpact, point);   // v0.25.263 Bonecrusher landing sounds
             DragonSkillAudio.Play(player, DragonBaseSound.CometBass, point);
+            DragonSkillAudio.Play(player, DragonBaseSound.CometCrash, point);   // v0.25.269 BoulderCrash when grounded
             List<Character> targets = GetSphereTargets(player, point, radius);
             for (int i = 0; i < targets.Count; i++)
             {
@@ -8990,7 +8994,8 @@ namespace AlbedosCustomClassesAdvanced
             float impactRadius = Mathf.Max(0.5f, DragonCombat.M(_heavensStrikeRadius.Value));
             // v0.25.263 (user): HeavySwing on the swing, Judgement for the whole skill, a Thud per falling beam, MidBoom on the big beam
             DragonSkillAudio.Expect(player, DragonBaseSound.JudgementSwing, player.transform.position, windup);
-            { Player hjCaster = player; float hjEnd = Time.time + windup + duration + (ascended ? 0.8f : 0.2f); DragonSkillAudio.BeginSustain(player, DragonBaseSound.JudgementChoir, center, hjEnd - Time.time, 1f, 1f, delegate { return hjCaster != null && !hjCaster.IsDead() && Time.time < hjEnd; }); }
+            { Player hjCaster = player; float hjEnd = Time.time + windup + duration + (ascended ? 0.8f : 0.2f); int hjChoir = DragonSkillAudio.BeginSustain(player, DragonBaseSound.JudgementChoir, center, hjEnd - Time.time + 1.5f, 1f, 1f, delegate { return hjCaster != null && !hjCaster.IsDead(); });
+              DragonSkillAudio.SetSustainFades(hjChoir, Mathf.Max(0.5f, windup), 1.5f); }   // v0.25.269 (user): grows in over the wind-up, fades out at the end
 
             if (_enableVfx.Value)
             {
@@ -9138,6 +9143,10 @@ namespace AlbedosCustomClassesAdvanced
             int maxStrikes = Mathf.Clamp(_tempestMaxStrikes.Value, 1, 7);
             float elapsed = 0f;
             if (_enableVfx.Value) { Vector3 tc = center; float tr = radius, td = duration; DragonCombat.RunVfx(delegate { DragonVfx.StormCloud(tc, tr, 12f, td); }); }   // v0.25.57
+            // v0.25.269 (user): LightningStorm over the whole storm, growing in and fading out; LightningCrash on every strike, MidBoom per meteor
+            { Player tCaster = player;
+              int storm = DragonSkillAudio.BeginSustain(player, DragonBaseSound.TempestStorm, center, duration + 1.5f, 1f, 1f, delegate { return tCaster != null && !tCaster.IsDead(); });   // ends by its own 1.5 s fade after the storm
+              DragonSkillAudio.SetSustainFades(storm, 0.8f, 1.5f); }
 
             while (elapsed < duration)
             {
@@ -9178,6 +9187,7 @@ namespace AlbedosCustomClassesAdvanced
                         else CreateLightning(strike, new Color(0.55f, 0.86f, 1f, 1f), 0.28f);
                     }
 
+                    DragonSkillAudio.Play(player, DragonBaseSound.TempestCrash, strike);
                     List<Character> targets = GetSphereTargets(player, strike, DragonCombat.M(1.6f));
                     for (int i = 0; i < targets.Count; i++)
                     {
@@ -9221,6 +9231,7 @@ namespace AlbedosCustomClassesAdvanced
         private IEnumerator TempestMeteor(Player player, Vector3 ground, string stunAttack = "Attack 1")
         {
             float fall = 0.55f;
+            DragonSkillAudio.Expect(player, DragonBaseSound.TempestMeteor, ground, fall);   // v0.25.269 MidBoom as the meteor lands
             float r = Mathf.Max(0.5f, DragonCombat.M(_tempestAscMeteorRadius.Value));
             GameObject rock = null;
             Vector3 sky = ground + Vector3.up * 22f + new Vector3(UnityEngine.Random.Range(-4f, 4f), 0f, UnityEngine.Random.Range(-4f, 4f));

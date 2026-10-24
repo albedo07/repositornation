@@ -1,0 +1,32 @@
+Aethelborn Ascended v0.25.269 - Storm Sounds and Strike Sync   (base: v0.25.268; ANCHOR v0.25.257)
+
+MAIN MENU MUSIC
+- Starting a game now fades the music out (3 s) from the moment Valheim shows its loading screen, instead of cutting.
+  The fade counts real frames, so a long loading frame can no longer skip it. Log: "[AA Menu] music fading out" /
+  "[AA Menu] music faded out".
+
+RIGHTEOUS STRIKE (Ascended) RIGHT AFTER GODDESS RELIC - CA OUT OF SYNC (your video)
+- Both skills borrow Valheim's hammer swing (swing_sledge). When Righteous Strike was cast while Goddess Relic's swing
+  was still finishing, the new swing was not restarted: the animation waited for the old swing to end and then played
+  at its natural speed, so the lightning landed while you were still swinging. The mod now restarts the swing from its
+  first frame in that case and times it to the strike, also after the animator was rebuilt.
+- Applies to every skill pair that borrows the same Valheim swing back to back (the Relics, Heaven's Judgement,
+  Righteous Strike - Normal and Ascended).
+- Log lines "CA sync: '<swing>' was still playing ... restarted" / "... was not followed" show what happened.
+
+MERCENARY / PALADIN
+- Bonecrusher (Normal and Ascended): BoulderCrash added on landing (with HeavyPunch + BassDrop).
+- Angel Comet (Normal and Ascended): BoulderCrash added on landing (with HeavyPunch + BassDrop).
+
+PRIEST
+- Lightning Tempest (Normal and Ascended): LightningStorm (your new recording) plays over the whole storm, growing in over
+  0.8 s and fading out over 1.5 s after the last strike; LightningCrash (the Righteous Strike sound) on every lightning
+  strike. Ascended: MidBoom as each meteor lands. New audio section: Priest Lightning Tempest Audio (Skill Volume +
+  Lightning Storm / Lightning Crash / Meteor Boom sliders).
+- Heaven's Judgement (Normal and Ascended): the Judgement sound now grows in gradually over the whole wind-up and fades
+  out gradually (1.5 s) after the skill ends - no instant start or stop.
+
+NEW FILE: ImmortalHeroesAssets\SFX\LightningStorm.wav (decoded from your MP3, unchanged). Installer: 37 skill sounds + menu music.
+
+CHECKS: all ten modules compile (C# 5) with the installer's reference set; sound tables checked (122 sounds / 42 skills).
+Not tested in game.

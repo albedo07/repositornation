@@ -1,2 +1,3 @@
-v0.25.268: start the game from the menu (music fades out), cast Goddess/Lightning/Holy Relic and Judgement Hammer (no swing
-sound), Electric Smite (Electric on every trail, fading), Angel Comet (whoosh through the wind-up, fades at the slam).
+v0.25.269: start a game from the menu (music fades), Goddess Relic then Righteous Strike right away (swing lands with the
+lightning), Bonecrusher + Angel Comet (BoulderCrash), Lightning Tempest (storm + crashes + meteor booms), Heaven's
+Judgement (grows in / fades out). Send LogOutput.log ("CA sync" / "[AA Menu]" lines).

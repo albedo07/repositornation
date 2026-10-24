@@ -1,5 +1,5 @@
 @echo off
-title Immortal Heroes v0.25.268 - Soft Endings
+title Immortal Heroes v0.25.269 - Storm Sounds and Strike Sync
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
 echo.
 pause
