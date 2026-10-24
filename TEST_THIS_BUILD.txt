@@ -1,2 +1,2 @@
-v0.25.264: start the game - the AA title under the Valheim logo, MenuMusic looping. Set [Main Menu] Use AA Main Menu =
-false (F8 > General) - the vanilla menu returns. Send LogOutput.log ("[AA Menu]" lines) and a screenshot of the menu.
+v0.25.266: start the game - AA title right under "Deep North", MenuMusic playing loud and looping. Send a menu screenshot +
+LogOutput.log ("[AA Menu]" lines) if anything is off.

@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.265";
+        public const string ModVersion = "0.25.266";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -658,6 +658,7 @@ namespace AlbedosCustomClassesAdvanced
 
             _enableVfx = Config.Bind("Interface", "EnableVFX", true, "Enable advanced-skill visual effects.");
             _showCombatHud = Config.Bind("Interface", "ShowCombatHud", true, "Show the unified class skill HUD.");
+            _aaMenuMusicVolume = Config.Bind("Main Menu", "Menu Music Volume (%)", 100f, new ConfigDescription("Volume of the AA menu music (the Valheim Music slider also applies). 100 = full.", new AcceptableValueRange<float>(0f, 100f)));   // v0.25.266
             _aaMainMenu = Config.Bind("Main Menu", "Use AA Main Menu", true, "true = the Aethelborn Ascended title under the Valheim logo and the AA menu music; false = the standard vanilla main menu. Applies live.");   // v0.25.264
             _uiColorSpaceCorrection = Config.Bind("Interface", "SkillTreeColorSpaceCorrection", true, "Compensate the Skill Tree artwork for Valheim's Linear color space so it is not drawn washed out. Disable only if the tree looks too dark.");
             _hudScale = Config.Bind("Interface", "HudScale", 1f, "Unified HUD scale.");
@@ -1282,35 +1283,42 @@ namespace AlbedosCustomClassesAdvanced
             finally { DragonPerf.Add(DragonPerf.SecAdvUpdate, perfT, perfM); }
         }
 
-        // ------------------------------------------------------------------ v0.25.264 AA main menu
-        // (user): the Aethelborn Ascended title right under Valheim's logo and MenuMusic on the main menu, nothing else
-        // changed; [Main Menu] Use AA Main Menu = false keeps the vanilla menu (applies live).
+        // ------------------------------------------------------------------ v0.25.264/266 AA main menu
+        // (user): the Aethelborn Ascended title right under Valheim's "Deep North" logo, not too big, and MenuMusic loud and
+        // looping on the main menu; [Main Menu] Use AA Main Menu = false keeps the vanilla menu (applies live).
+        // v0.25.266: v264 anchored the title to an object named "logo" that turned out to span to the bottom of the screen,
+        // and the music swap inside Valheim's music list was not heard. Now: fixed screen placement on the menu canvas, and
+        // our own looping music source on Valheim's Music channel while the vanilla menu music is muted.
         private ConfigEntry<bool> _aaMainMenu;
+        private ConfigEntry<float> _aaMenuMusicVolume;
         private Texture2D _ihTitleTex;
-        private bool _ihTitleTried, _ihMenuClipTried, _ihTitleLogged;
+        private bool _ihTitleTried, _ihMenuClipTried, _ihTitleLogged, _ihMusicLogged;
         private GameObject _ihTitleObj;
-        private RectTransform _ihTitleLogo;
         private AudioClip _ihMenuClip;
-        private AudioClip[] _ihVanillaMenuClips;
-        private bool _ihVanillaMenuLoop;
+        private AudioSource _ihMenuSource;
+        private AudioSource _ihVanillaMusic;
         private float _ihMenuNext;
         private static FieldInfo _ihMusicSourceField;
         private void IhMainMenuTick()
         {
             FejdStartup fs = FejdStartup.instance;
             bool on = _aaMainMenu == null || _aaMainMenu.Value;
-            if (fs == null) { if (_ihTitleObj != null) { Destroy(_ihTitleObj); _ihTitleObj = null; } return; }
+            if (fs == null)
+            {
+                if (_ihTitleObj != null) { Destroy(_ihTitleObj); _ihTitleObj = null; }
+                IhStopMenuMusic();
+                return;
+            }
             try
             {
                 if (_ihTitleObj != null)
                 {
                     bool show = on && fs.m_mainMenu != null && fs.m_mainMenu.activeInHierarchy;
                     if (_ihTitleObj.activeSelf != show) _ihTitleObj.SetActive(show);
-                    if (show) IhPlaceTitle();
                 }
+                if (on) IhMenuMusicPlay(); else IhStopMenuMusic();
                 if (Time.unscaledTime < _ihMenuNext) return;
                 _ihMenuNext = Time.unscaledTime + 0.5f;
-                IhMenuMusic(on);
                 if (on && _ihTitleObj == null && fs.m_mainMenu != null) IhBuildTitle(fs);
             }
             catch (Exception ex) { if (!_ihTitleLogged) { _ihTitleLogged = true; Logger.LogWarning("[AA Menu] main menu skipped: " + ex.Message); } }
@@ -1327,94 +1335,72 @@ namespace AlbedosCustomClassesAdvanced
                 finally { _ihSkipCompensation = false; }
                 if (_ihTitleTex == null) return;
             }
-            // Valheim's logo: the active image under the start-up screen whose name says logo (highest on screen)
-            _ihTitleLogo = null; float best = float.MinValue;
-            foreach (UnityEngine.UI.Graphic g in fs.GetComponentsInChildren<UnityEngine.UI.Graphic>(true))
-            {
-                if (g == null || g.gameObject.name.IndexOf("logo", StringComparison.OrdinalIgnoreCase) < 0) continue;
-                if (!g.transform.IsChildOf(fs.m_mainMenu.transform) && !g.gameObject.activeInHierarchy) continue;
-                float y = g.rectTransform.position.y;
-                if (y > best) { best = y; _ihTitleLogo = g.rectTransform; }
-            }
-            Transform parent = _ihTitleLogo != null ? _ihTitleLogo.parent : fs.m_mainMenu.transform;
+            Canvas canvas = fs.m_mainMenu.GetComponentInParent<Canvas>();
+            if (canvas == null) return;
+            canvas = canvas.rootCanvas;
+            RectTransform root = (RectTransform)canvas.transform;
             _ihTitleObj = new GameObject("AA_MainMenuTitle", typeof(RectTransform));
-            _ihTitleObj.layer = parent.gameObject.layer;
+            _ihTitleObj.layer = canvas.gameObject.layer;
             RectTransform rt = (RectTransform)_ihTitleObj.transform;
-            rt.SetParent(parent, false);
-            if (_ihTitleLogo != null) rt.SetSiblingIndex(_ihTitleLogo.GetSiblingIndex() + 1);
+            rt.SetParent(root, false);
             UnityEngine.UI.RawImage img = _ihTitleObj.AddComponent<UnityEngine.UI.RawImage>();
             img.texture = _ihTitleTex; img.raycastTarget = false;
-            IhPlaceTitle();
-            Canvas canvas = _ihTitleObj.GetComponentInParent<Canvas>();
-            Logger.LogInfo("[AA Menu] title placed " + (_ihTitleLogo != null ? "under '" + _ihTitleLogo.name + "' (" + Mathf.RoundToInt(_ihTitleLogo.rect.width) + "x" + Mathf.RoundToInt(_ihTitleLogo.rect.height) + ")" : "at the top centre (no Valheim logo object found)") +
-                "; title " + Mathf.RoundToInt(rt.rect.width) + "x" + Mathf.RoundToInt(rt.rect.height) + (canvas != null ? ", canvas " + canvas.name + " " + canvas.renderMode : ""));
-        }
-
-        // right under the logo, 80% of its width, centred; follows the logo if the menu animates it
-        private void IhPlaceTitle()
-        {
-            RectTransform rt = (RectTransform)_ihTitleObj.transform;
-            float aspect = _ihTitleTex != null && _ihTitleTex.height > 0 ? (float)_ihTitleTex.width / _ihTitleTex.height : 2.5f;
+            // Valheim's "Deep North" logo ends about 31% down the screen; the title starts just below it, centred, 26% of the
+            // screen wide (about 500 x 200 px at 1080p) - clear of the menu buttons further down.
+            float aspect = _ihTitleTex.height > 0 ? (float)_ihTitleTex.width / _ihTitleTex.height : 2.5f;
+            float width = root.rect.width * 0.26f;
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
             rt.pivot = new Vector2(0.5f, 1f);
-            if (_ihTitleLogo != null)
+            rt.sizeDelta = new Vector2(width, width / aspect);
+            rt.anchoredPosition = new Vector2(0f, -root.rect.height * 0.325f);
+            rt.SetAsLastSibling();
+            Logger.LogInfo("[AA Menu] title placed under the Valheim logo: " + Mathf.RoundToInt(rt.rect.width) + "x" + Mathf.RoundToInt(rt.rect.height) +
+                " at " + Mathf.RoundToInt(root.rect.height * 0.325f) + " from the top of canvas '" + canvas.name + "' (" + Mathf.RoundToInt(root.rect.width) + "x" + Mathf.RoundToInt(root.rect.height) + ")");
+        }
+
+        // MenuMusic on our own looping 2D source routed to Valheim's Music mixer (the Music volume slider applies);
+        // the vanilla menu track is muted while it plays and unmuted when you leave the menu or turn the option off.
+        private void IhMenuMusicPlay()
+        {
+            if (_ihMenuClip == null)
             {
-                Vector3[] c = new Vector3[4];
-                _ihTitleLogo.GetWorldCorners(c);   // 0 bottom-left, 1 top-left, 2 top-right, 3 bottom-right
-                Vector3 bottom = (c[0] + c[3]) * 0.5f;
-                RectTransform parent = (RectTransform)rt.parent;
-                float scale = Mathf.Max(0.0001f, parent.lossyScale.x);
-                float width = (c[3] - c[0]).magnitude / scale * 0.8f;
-                rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
-                rt.sizeDelta = new Vector2(width, width / aspect);
-                rt.position = bottom;
+                if (_ihMenuClipTried) return;   // a missing/invalid file is reported once, never retried
+                _ihMenuClipTried = true;
+                _ihMenuClip = DragonSkillAudio.LoadWavClip("MenuMusic.wav");
+                if (_ihMenuClip == null) { Logger.LogWarning("[AA Menu] MenuMusic.wav missing or invalid (ImmortalHeroesAssets/SFX); the vanilla menu music plays."); return; }
             }
-            else
+            MusicMan mm = MusicMan.instance;
+            if (_ihMenuSource == null)
             {
-                rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
-                RectTransform parent = (RectTransform)rt.parent;
-                float width = Mathf.Max(200f, parent.rect.width * 0.3f);
-                rt.sizeDelta = new Vector2(width, width / aspect);
-                rt.anchoredPosition = new Vector2(0f, -parent.rect.height * 0.31f);
+                GameObject go = new GameObject("AA_MenuMusic");
+                DontDestroyOnLoad(go);
+                _ihMenuSource = go.AddComponent<AudioSource>();
+                _ihMenuSource.playOnAwake = false; _ihMenuSource.loop = true; _ihMenuSource.spatialBlend = 0f;
+                _ihMenuSource.priority = 0; _ihMenuSource.bypassReverbZones = true; _ihMenuSource.ignoreListenerPause = true;
+                _ihMenuSource.clip = _ihMenuClip;
+            }
+            if (_ihMenuSource.outputAudioMixerGroup == null && mm != null) _ihMenuSource.outputAudioMixerGroup = mm.m_musicMixer;
+            _ihMenuSource.volume = Mathf.Clamp01((_aaMenuMusicVolume == null ? 100f : _aaMenuMusicVolume.Value) / 100f);
+            if (!_ihMenuSource.isPlaying) _ihMenuSource.Play();
+            if (mm != null)
+            {
+                if (_ihMusicSourceField == null) _ihMusicSourceField = typeof(MusicMan).GetField("m_musicSource", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+                AudioSource vanilla = _ihMusicSourceField == null ? null : _ihMusicSourceField.GetValue(mm) as AudioSource;
+                if (vanilla != null && vanilla != _ihMenuSource) { vanilla.mute = true; _ihVanillaMusic = vanilla; }
+            }
+            if (!_ihMusicLogged)
+            {
+                _ihMusicLogged = true;
+                Logger.LogInfo("[AA Menu] menu music: MenuMusic.wav (" + _ihMenuClip.length.ToString("0.0") + " s, looping), " +
+                    (_ihMenuSource.outputAudioMixerGroup != null ? "Music channel '" + _ihMenuSource.outputAudioMixerGroup.name + "'" : "no music channel found (plays at full level)") +
+                    ", volume " + Mathf.RoundToInt(_ihMenuSource.volume * 100f) + "%, vanilla menu music " + (_ihVanillaMusic != null ? "muted" : "not found"));
             }
         }
 
-        // MenuMusic replaces Valheim's "menu" track inside its own music system (same Music volume slider, fades and mixer)
-        private void IhMenuMusic(bool on)
+        private void IhStopMenuMusic()
         {
-            MusicMan mm = MusicMan.instance;
-            if (mm == null || mm.m_music == null) return;
-            MusicMan.NamedMusic menu = null;
-            for (int i = 0; i < mm.m_music.Count; i++) if (mm.m_music[i] != null && mm.m_music[i].m_name == "menu") { menu = mm.m_music[i]; break; }
-            if (menu == null) return;
-            bool ours = _ihMenuClip != null && menu.m_clips != null && menu.m_clips.Length == 1 && menu.m_clips[0] == _ihMenuClip;
-            if (on && !ours)
-            {
-                if (_ihMenuClip == null)
-                {
-                    if (_ihMenuClipTried) return;   // a missing/invalid file is reported once, never retried
-                    _ihMenuClipTried = true;
-                    _ihMenuClip = DragonSkillAudio.LoadWavClip("MenuMusic.wav");
-                    if (_ihMenuClip == null) { Logger.LogWarning("[AA Menu] MenuMusic.wav missing or invalid (ImmortalHeroesAssets/SFX); the vanilla menu music plays."); return; }
-                }
-                _ihVanillaMenuClips = menu.m_clips; _ihVanillaMenuLoop = menu.m_loop;
-                menu.m_clips = new AudioClip[] { _ihMenuClip }; menu.m_loop = true;
-                if (FejdStartup.instance != null) FejdStartup.instance.ResetStartupMusic();
-                Logger.LogInfo("[AA Menu] menu music: MenuMusic.wav (" + _ihMenuClip.length.ToString("0.0") + " s, looping)");
-            }
-            else if (on && ours)
-            {
-                // (user) the whole track, looping forever - even with Valheim's "continuous music" off
-                menu.m_loop = true;
-                if (_ihMusicSourceField == null) _ihMusicSourceField = typeof(MusicMan).GetField("m_musicSource", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-                AudioSource src = _ihMusicSourceField == null ? null : _ihMusicSourceField.GetValue(mm) as AudioSource;
-                if (src != null && src.clip == _ihMenuClip && !src.loop) src.loop = true;
-            }
-            else if (!on && ours && _ihVanillaMenuClips != null)
-            {
-                menu.m_clips = _ihVanillaMenuClips; menu.m_loop = _ihVanillaMenuLoop;
-                if (FejdStartup.instance != null) FejdStartup.instance.ResetStartupMusic();
-                Logger.LogInfo("[AA Menu] vanilla main menu restored");
-            }
+            if (_ihMenuSource != null && _ihMenuSource.isPlaying) _ihMenuSource.Stop();
+            if (_ihVanillaMusic != null) { _ihVanillaMusic.mute = false; _ihVanillaMusic = null; }
         }
 
         private void PerfUpdateInner()

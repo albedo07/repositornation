@@ -1,0 +1,18 @@
+Aethelborn Ascended v0.25.266 - Menu Title and Music   (base: v0.25.265; ANCHOR v0.25.257)
+
+TITLE POSITION
+- v0.25.264/265 hooked the title to an object named "logo" that turned out to reach the bottom of the screen, so the title
+  sat at the very bottom. Now it is placed by screen position: centred, starting just under "Deep North" (32.5% down the
+  screen), 26% of the screen wide (about 500 x 200 px at 1920x1080) - above the menu buttons, not blocking the view.
+
+MENU MUSIC (was not heard)
+- MenuMusic now plays on its own looping player (the whole 30 s track, forever) at full level on Valheim's Music channel
+  (your Music volume slider still applies), and Valheim's own menu music is muted while it plays. Leaving the menu or
+  turning the option off stops it and brings the vanilla music back.
+- NEW SETTING [Main Menu] Menu Music Volume (%) = 100 (0-100).
+- [Main Menu] Use AA Main Menu = true/false unchanged (false = vanilla menu).
+- Log lines "[AA Menu] title placed ..." and "[AA Menu] menu music ..." report position, channel and volume.
+
+No skill, combat, VFX or skill-sound changes. Includes everything from v0.25.263-265.
+
+CHECKS: all ten modules compile (C# 5) with the installer's reference set. Not tested in game.
