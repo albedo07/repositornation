@@ -1,0 +1,15 @@
+Aethelborn Ascended v0.25.273 - Buckler Parry   (base: v0.25.272; ANCHOR v0.25.257)
+
+PRIEST MASTERY - HOLY SHOCKWAVE / HOLY PARRY: BUCKLER ONLY AGAIN (your request)
+- Before v0.25.272 it already worked only with a Buckler. v0.25.272 had widened it to any shield; that is reverted.
+- Counts as a Buckler: a shield whose name or prefab contains "buckler", or a non-tower shield with a parry bonus of 2.5x
+  or more. Tower shields, other shields and weapon parries never trigger it.
+- The Mastery icons (Holy Shockwave Ready / Cooldown, Holy Parry Ready / Active / Cooldown) show only with a Buckler
+  equipped.
+- Kept from v0.25.272: 7 m radius, Blunt damage 60, stuns small and big enemies (never bosses), Stomp-like strong ring,
+  15 s cooldown, and the log lines "[AA Parry] perfect parry with <item> as <class> - ..." (first parry per item) and
+  "[AA Parry] Holy Shockwave: 7 m, Blunt 60".
+- Why you saw nothing: you parried with a weapon, which never counted.
+
+All v0.25.272 changes (Priest performance, Shield Charge HowlingWind) are included. No other changes.
+CHECKS: all ten modules compile (C# 5) with the installer's reference set. Not tested in game.

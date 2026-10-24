@@ -1588,7 +1588,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.272";
+        public const string ModVersion = "0.25.273";
 
         internal static DragonCombatPlugin Instance;
 
@@ -2668,14 +2668,13 @@ namespace DragonsAltarCombat
         {
             Player player = humanoid as Player;
             if (player == null || player != Player.m_localPlayer) return;
-            // v0.25.272 (user: parrying gave no Holy Shockwave and no icons): every shield parry counts, not only "bucklers";
-            // one line per shield / class proves the parry reached the mod.
+            // v0.25.273 (user): Buckler only (never tower shields or other shields); one line per item / class proves the parry reached the mod.
             ItemDrop.ItemData shield = DragonCombat.GetHandItem(player, "m_leftItem");
             string adv = DragonCombat.GetAdvancementName(player);
             string seen = (shield != null && shield.m_shared != null ? shield.m_shared.m_name : "no shield") + "|" + adv;
             if (_parrySeen.Add(seen) && Instance != null) Instance.Logger.LogInfo("[AA Parry] perfect parry with " + (shield != null && shield.m_shared != null ? shield.m_shared.m_name : "no shield") + " as " + adv +
-                (adv == "Priest" && DragonCombat.IsShield(shield) ? " - Holy Shockwave / Holy Parry run" : " - no Priest shield parry"));
-            if (adv != "Priest" || !DragonCombat.IsShield(shield) || DragonCombat.BucklerParryHandler == null) return;
+                (adv == "Priest" && DragonCombat.IsBuckler(shield) ? " - Holy Shockwave / Holy Parry run" : " - not a Priest Buckler parry (no Holy Shockwave)"));
+            if (adv != "Priest" || !DragonCombat.IsBuckler(shield) || DragonCombat.BucklerParryHandler == null) return;
             try { DragonCombat.BucklerParryHandler(player); }
             catch (Exception ex) { if (Instance != null) Instance.Logger.LogWarning("Buckler Parry failed: " + ex.Message); }
         }

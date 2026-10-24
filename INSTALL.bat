@@ -1,5 +1,5 @@
 @echo off
-title Immortal Heroes v0.25.272 - Priest Performance
+title Immortal Heroes v0.25.273 - Buckler Parry
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
 echo.
 pause

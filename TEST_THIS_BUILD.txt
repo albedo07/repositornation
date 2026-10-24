@@ -1,3 +1,3 @@
-v0.25.272: 1) Lightning Tempest and Heaven's Judgement (Normal + Ascended): FPS during the whole skill. 2) Shield Charge:
-HowlingWind over the charge, fading at the slam. 3) Priest with any shield: parry an attack - strong 7 m ring, blunt
-damage, stun, Holy Shockwave icons. Send LogOutput.log ("Skill load", "[AA Parry]").
+v0.25.273: Priest with a Buckler: parry an attack - 7 m ring, blunt damage, stun, Holy Shockwave icons. With a tower
+shield or a weapon: nothing. Plus the v0.25.272 tests (Lightning Tempest / Heaven's Judgement FPS, Shield Charge wind).
+Send LogOutput.log ("[AA Parry]", "Skill load").

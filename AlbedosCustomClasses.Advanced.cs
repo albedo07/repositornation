@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.272";
+        public const string ModVersion = "0.25.273";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1024,7 +1024,7 @@ namespace AlbedosCustomClassesAdvanced
             _crucibleArmorPercent = Config.Bind("Priest Grand Sigil", "BarrierArmorPercent", 30f, "Heaven's Crucible: Barrier Armor = this percent of the Priest's current Armor, snapshotted at cast.");
             // v0.20.9 Bless Thy Sinners - Buckler Parry (Framework).
             _shockwaveDamage = BindDamage("Priest Holy Shockwave Blunt Damage", 60f, 0f, 0f, 0f, 0f, 0f, 0f, 0f);   // v0.25.272 (user): Blunt
-            _shockwaveRadius = Config.Bind("Priest Holy Shockwave", "Radius_v025272", 7f, "Shield Parry: Holy Shockwave radius in meters (v0.25.272: 7 m).");
+            _shockwaveRadius = Config.Bind("Priest Holy Shockwave", "Radius_v025272", 7f, "Buckler Parry: Holy Shockwave radius in meters (v0.25.272: 7 m).");
             _shockwaveCooldown = Config.Bind("Priest Holy Shockwave", "Cooldown", 15f, "Seconds between Holy Shockwaves.");
             _holyParryEmpowerCooldown = Config.Bind("Priest Holy Shockwave", "EmpowerCooldown", 25f, "Holy Parry: the empowered-skill buff lasts until a skill uses it; after that a Parry can't grant it again for this many seconds.");
             _parryHyperArmorSeconds = Config.Bind("Priest Holy Shockwave", "HyperArmorSeconds", 5f, "Every Buckler Parry grants Hyper Armor for this long.");
@@ -13464,7 +13464,7 @@ namespace AlbedosCustomClassesAdvanced
             if (Time.time < _ihParryUiNext) return;
             _ihParryUiNext = Time.time + 0.2f;
             bool priest = player != null && IhIsPriest(player) && !player.IsDead();
-            bool equipped = priest && DragonCombat.IsShield(DragonCombat.GetHandItem(player, "m_leftItem"));   // v0.25.272 any shield
+            bool equipped = priest && DragonCombat.IsBuckler(DragonCombat.GetHandItem(player, "m_leftItem"));   // v0.25.273 Buckler only (user)
             float cd = priest ? GetCooldownRemaining("Priest.HolyParry") : 0f;
             float wave = priest ? GetCooldownRemaining("Priest.HolyShockwave") : 0f;
             float hyper = priest ? DragonCombat.TimedBuffRemaining(player, "Priest.BucklerParry") : 0f;
@@ -13475,7 +13475,7 @@ namespace AlbedosCustomClassesAdvanced
                     (hyper > 0f ? "Hyper Armor: " + Mathf.CeilToInt(hyper) + "s" : "Empower ready to use"));
             else if (equipped && cd <= 0f)
                 DragonCombat.ShowStatusState(player, "priest_holy_parry", "parry", "Holy Parry - Ready", 0f,
-                    "Mastery - Ready\nParry with your shield to gain Hyper Armor and empower your next damaging skill");
+                    "Mastery - Ready\nParry with your Buckler to gain Hyper Armor and empower your next damaging skill");
             else DragonCombat.ClearStatus(player, "priest_holy_parry");
             if (cd > 0f)
                 DragonCombat.ShowStatusState(player, "priest_buckler_recovery", "parry", "Holy Parry - Cooldown", cd,
@@ -13487,7 +13487,7 @@ namespace AlbedosCustomClassesAdvanced
             else DragonCombat.ClearStatus(player, "priest_shockwave_recovery");
             if (equipped && wave <= 0f)
                 DragonCombat.ShowStatusState(player, "priest_shockwave_ready", "parry", "Holy Shockwave - Ready", 0f,
-                    "Mastery - Ready\nA successful shield parry releases a Holy Shockwave (7 m, Blunt, stuns)");
+                    "Mastery - Ready\nA successful Buckler parry releases a Holy Shockwave (7 m, Blunt, stuns)");
             else DragonCombat.ClearStatus(player, "priest_shockwave_ready");
         }
 
