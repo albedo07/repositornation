@@ -1,0 +1,15 @@
+Aethelborn Ascended v0.25.280 - Menu Music Fade   (base: v0.25.279; ANCHOR v0.25.257)
+
+MAIN MENU MUSIC - NEVER STOPS INSTANTLY
+- Checked first: the menu music code was byte-for-byte unchanged since v0.25.271; the logo passes did not edit it.
+- Two weak points found and fixed:
+  1. The music ran inside the same error guard as the logo code, so a failing logo step could skip the music update.
+     The music now has its own guard and always runs.
+  2. The music only followed Valheim's own fade. If Valheim drops or cuts its menu track at once when the world starts
+     loading, ours stopped on that same frame - the instant stop you heard. Now, the moment the world starts loading,
+     our music runs its OWN 3-second fade (real time; a loading hitch counts at most 0.25 s) and stops only once silent.
+- Everything else unchanged: it still replaces Valheim's menu track, starts with it, and the vanilla menu music never
+  plays. Log: "[AA Menu] world loading: menu music fading out over 3 s (...)" then "... faded out (3 s)".
+
+All v0.25.279 changes included (logo in place).
+CHECKS: all ten modules compile (C# 5) with the installer's reference set. Not tested in game.

@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.279";
+        public const string ModVersion = "0.25.280";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1309,8 +1309,8 @@ namespace AlbedosCustomClassesAdvanced
             if (fs == null)
             {
                 if (_ihTitleObj != null) { Destroy(_ihTitleObj); _ihTitleObj = null; }
-                IhReleaseLogoCut();
-                IhMenuMusicTick(on);   // v0.25.271 the menu music keeps following Valheim's own fade while the game loads
+                try { IhReleaseLogoCut(); } catch (Exception) { }
+                IhMenuMusicSafe(on);   // v0.25.271 the menu music keeps following Valheim's own fade while the game loads
                 return;
             }
             try
@@ -1328,12 +1328,20 @@ namespace AlbedosCustomClassesAdvanced
                         if (_ihLogo.sprite != want) _ihLogo.sprite = want;
                     }
                 }
-                IhMenuMusicTick(on);
-                if (Time.unscaledTime < _ihMenuNext) return;
+                if (Time.unscaledTime < _ihMenuNext) { IhMenuMusicSafe(on); return; }
                 _ihMenuNext = Time.unscaledTime + 0.5f;
                 if (on && _ihTitleObj == null && fs.m_mainMenu != null) IhBuildTitle(fs);
             }
             catch (Exception ex) { if (!_ihTitleLogged) { _ihTitleLogged = true; Logger.LogWarning("[AA Menu] main menu skipped: " + ex.Message); } }
+            IhMenuMusicSafe(on);
+        }
+
+        // v0.25.280: the menu music runs on its own, outside the logo code's error guard
+        private bool _ihMusicErrLogged;
+        private void IhMenuMusicSafe(bool on)
+        {
+            try { IhMenuMusicTick(on); }
+            catch (Exception ex) { if (!_ihMusicErrLogged) { _ihMusicErrLogged = true; Logger.LogWarning("[AA Menu] menu music step failed: " + ex.Message); } }
         }
 
         // ------------------------------------------------------------------ v0.25.279 our logo replaces Valheim's
@@ -1526,6 +1534,7 @@ namespace AlbedosCustomClassesAdvanced
         // world starts loading). Valheim's source stays muted while its track is "menu"; it is unmuted only once Valheim has faded
         // the menu track out and moved on to the next music (or when [Main Menu] Use AA Main Menu is turned off).
         private bool _ihMenuSeen, _ihMenuFadeLogged;
+        private float _ihOwnFadeT = -1f, _ihOwnFadeLast;
         private static FieldInfo _ihCurMusicField, _ihCurVolField;
         private void IhMenuMusicTick(bool on)
         {
@@ -1546,19 +1555,35 @@ namespace AlbedosCustomClassesAdvanced
             {
                 if (_ihCurMusicField != null && !menu) return;   // Valheim has not started its menu track (yet)
                 if (FejdStartup.instance == null) return;
-                _ihMenuSeen = true; _ihMenuFadeLogged = false;
+                _ihMenuSeen = true; _ihMenuFadeLogged = false; _ihOwnFadeT = -1f;
                 Logger.LogInfo("[AA Menu] menu music follows Valheim's menu track (its fade-in / fade-out, vanilla track muted)");
             }
-            if (Game.instance != null && !menu && _ihCurMusicField != null)
+            // v0.25.280 (user: it stopped instantly again): Valheim may drop or cut its menu track at once when the world loads,
+            // and ours used to stop on that same frame. Now, from the moment the world starts loading (Valheim's fade begins or its
+            // menu track is gone), ours runs its OWN 3 s fade on real time (a loading hitch counts at most 0.25 s) and stops only
+            // at silence.
+            if (Game.instance != null && _ihOwnFadeT < 0f && (!menu || env < 0.999f))
             {
-                // Valheim finished fading its menu track out (volume 0) and moved on: ours ends with it, silent, never cut
-                if (_ihMenuSource != null && _ihMenuSource.isPlaying) _ihMenuSource.Stop();
-                if (_ihVanillaMusic != null) { _ihVanillaMusic.mute = false; _ihVanillaMusic = null; }
-                _ihMenuSeen = false;
-                Logger.LogInfo("[AA Menu] menu music faded out with Valheim's own fade; in-game music continues");
+                _ihOwnFadeT = 0f; _ihOwnFadeLast = Time.realtimeSinceStartup;
+                if (!_ihMenuFadeLogged) { _ihMenuFadeLogged = true; Logger.LogInfo("[AA Menu] world loading: menu music fading out over 3 s (Valheim's track " + (menu ? "fading" : "already gone") + ")"); }
+            }
+            if (_ihOwnFadeT >= 0f)
+            {
+                float rtNow = Time.realtimeSinceStartup;
+                _ihOwnFadeT += Mathf.Clamp(rtNow - _ihOwnFadeLast, 0f, 0.25f); _ihOwnFadeLast = rtNow;
+                float x = Mathf.Clamp01(_ihOwnFadeT / 3f);
+                float g = x >= 1f ? 0f : Mathf.Pow(10f, -1.5f * x) * Mathf.Sqrt(1f - x);
+                if (g <= 0.02f)
+                {
+                    if (_ihMenuSource != null && _ihMenuSource.isPlaying) _ihMenuSource.Stop();
+                    if (_ihVanillaMusic != null) { _ihVanillaMusic.mute = false; _ihVanillaMusic = null; }
+                    _ihMenuSeen = false; _ihOwnFadeT = -1f;
+                    Logger.LogInfo("[AA Menu] menu music faded out (3 s); in-game music continues");
+                    return;
+                }
+                IhMenuMusicPlay(g);
                 return;
             }
-            if (Game.instance != null && env < 0.999f && !_ihMenuFadeLogged) { _ihMenuFadeLogged = true; Logger.LogInfo("[AA Menu] world loading: menu music fading out with Valheim's fade"); }
             IhMenuMusicPlay(menu ? env : 1f);
         }
 

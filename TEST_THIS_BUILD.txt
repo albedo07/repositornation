@@ -1,1 +1,2 @@
-v0.25.279: main menu - our logo exactly where Valheim's title was (top), embers around it. Screenshot + LogOutput.log.
+v0.25.280: main menu -> start a world: the music fades out over ~3 s, no instant stop. Also check the logo position.
+Send LogOutput.log ("[AA Menu]" lines) + a menu screenshot.
