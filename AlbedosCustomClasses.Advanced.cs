@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.278";
+        public const string ModVersion = "0.25.279";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1319,10 +1319,14 @@ namespace AlbedosCustomClassesAdvanced
                 {
                     bool show = on && fs.m_mainMenu != null && fs.m_mainMenu.activeInHierarchy;
                     if (_ihTitleObj.activeSelf != show) _ihTitleObj.SetActive(show);
-                    // v0.25.278: Valheim's logo picture is switched off while our logo shows (on again when the AA menu is off);
-                    // its embers are separate objects and keep drifting around ours
-                    if (_ihLogo != null && _ihLogo.enabled == show) _ihLogo.enabled = !show;
-                    if (show && _ihLogo != null) IhPlaceInLogo();   // F8 Logo Scale / Offset apply live
+                    // v0.25.279: Valheim's logo Image draws OUR picture while the AA menu is on (its own picture otherwise); the
+                    // embers are separate objects and keep drifting around it
+                    if (_ihLogo != null && _ihLogoAa != null)
+                    {
+                        if (show && IhLogoSettingsChanged()) IhBuildLogoSprite();   // F8 Logo Scale / Offset: rebuilt once per change
+                        Sprite want = show ? _ihLogoAa : _ihLogoOrig;
+                        if (_ihLogo.sprite != want) _ihLogo.sprite = want;
+                    }
                 }
                 IhMenuMusicTick(on);
                 if (Time.unscaledTime < _ihMenuNext) return;
@@ -1332,23 +1336,29 @@ namespace AlbedosCustomClassesAdvanced
             catch (Exception ex) { if (!_ihTitleLogged) { _ihTitleLogged = true; Logger.LogWarning("[AA Menu] main menu skipped: " + ex.Message); } }
         }
 
-        // ------------------------------------------------------------------ v0.25.278 our logo replaces Valheim's
-        // (user: replace Valheim's title, no patch over it): Valheim's logo Image (sprite Valheim_DeepNorth_Logo) is switched
-        // off and our logo is a CHILD of that Image's RectTransform, so it inherits the exact position, scale and any menu
-        // animation. Its box = the visible part of Valheim's logo, taken from the sprite's own outline mesh (Unity's tight
-        // sprite mesh: no pixel guessing, no flips); our art is fitted inside it, centred, aspect kept. Nothing is painted
-        // over anything. [Main Menu] Logo Scale / Offset fine-tune it.
+        // ------------------------------------------------------------------ v0.25.279 our logo replaces Valheim's
+        // (user: keep the original title's position exactly). v0.25.278 placed our logo by its own maths and came out ~280 px
+        // low. Now Valheim's logo Image itself draws our logo: we read Valheim's picture (the same read-back that drew the
+        // v0.25.277 copy exactly in place), find where its visible pixels are, and paint our art - fitted, centred, aspect
+        // kept - into a transparent picture of the SAME size at that spot. Unity then draws it with Valheim's own settings,
+        // position, scale and animation. Nothing is painted over anything; Valheim's files are untouched.
         private UnityEngine.UI.Image _ihLogo;
+        private Sprite _ihLogoOrig, _ihLogoAa;
+        private Texture2D _ihLogoAaTex;
         private ConfigEntry<float> _aaLogoScale, _aaLogoOffX, _aaLogoOffY;
-        private Rect _ihLogoVisible;   // normalised in the drawn sprite (0..1, y up)
+        private RectInt _ihLogoVis;          // Valheim's visible pixels in its sprite (y up)
+        private int _ihLogoW, _ihLogoH;
+        private float _ihLogoBuiltScale = -1f, _ihLogoBuiltX, _ihLogoBuiltY;
+        private Color32[] _ihArtPx; private int _ihArtW, _ihArtH;
 
         private void IhReleaseLogoCut()
         {
-            if (_ihLogo != null) _ihLogo.enabled = true;
-            _ihLogo = null;
+            if (_ihLogo != null && _ihLogoOrig != null) { _ihLogo.sprite = _ihLogoOrig; _ihLogo.enabled = true; }
+            if (_ihLogoAa != null) Destroy(_ihLogoAa);
+            if (_ihLogoAaTex != null) Destroy(_ihLogoAaTex);
+            _ihLogo = null; _ihLogoOrig = null; _ihLogoAa = null; _ihLogoAaTex = null; _ihLogoBuiltScale = -1f;
         }
 
-        // Valheim's menu logo: an Image whose sprite name says logo (Deep North's logo first)
         private UnityEngine.UI.Image IhFindLogo(RectTransform root, System.Text.StringBuilder seen)
         {
             UnityEngine.UI.Image best = null;
@@ -1366,92 +1376,98 @@ namespace AlbedosCustomClassesAdvanced
             return best;
         }
 
-        // the visible part of the sprite, normalised: from its outline mesh; if the mesh is a full rectangle, from its alpha
-        private bool IhVisibleBounds(Sprite sp, out Rect vis, System.Text.StringBuilder why)
+        // reads Valheim's sprite once: its size and where its visible pixels are
+        private bool IhMeasureLogo(Sprite sp, System.Text.StringBuilder why)
         {
-            vis = new Rect(0f, 0f, 1f, 1f);
-            Bounds b = sp.bounds;
-            Vector2[] v = sp.vertices;
-            if (v != null && v.Length >= 3 && b.size.x > 0f && b.size.y > 0f)
-            {
-                float x0 = float.MaxValue, y0 = float.MaxValue, x1 = float.MinValue, y1 = float.MinValue;
-                for (int i = 0; i < v.Length; i++) { x0 = Mathf.Min(x0, v[i].x); y0 = Mathf.Min(y0, v[i].y); x1 = Mathf.Max(x1, v[i].x); y1 = Mathf.Max(y1, v[i].y); }
-                vis = Rect.MinMaxRect((x0 - b.min.x) / b.size.x, (y0 - b.min.y) / b.size.y, (x1 - b.min.x) / b.size.x, (y1 - b.min.y) / b.size.y);
-                why.Append("outline mesh ").Append(v.Length).Append(" vertices");
-                if (vis.width < 0.97f || vis.height < 0.97f) return true;
-                why.Append(" (full rectangle)");
-            }
-            // full-rectangle mesh: read the picture once and take the alpha bounds
+            if (sp.packed && sp.packingMode == SpritePackingMode.Tight) { why.Append("tightly packed sprite"); return false; }
+            Texture2D src = sp.texture; Rect tr = sp.textureRect;
+            int w = Mathf.RoundToInt(tr.width), h = Mathf.RoundToInt(tr.height);
+            if (w < 64 || h < 64 || w > 4096 || h > 4096) { why.Append("size ").Append(w).Append('x').Append(h); return false; }
+            RenderTexture rtx = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
+            RenderTexture prev = RenderTexture.active;
+            Texture2D tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
+            Color32[] px;
             try
             {
-                Texture2D src = sp.texture; Rect tr = sp.textureRect;
-                int w = Mathf.Clamp(Mathf.RoundToInt(tr.width), 16, 4096), h = Mathf.Clamp(Mathf.RoundToInt(tr.height), 16, 4096);
-                RenderTexture rtx = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
-                RenderTexture prev = RenderTexture.active;
-                Texture2D tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
-                try
-                {
-                    Graphics.Blit(src, rtx, new Vector2(tr.width / src.width, tr.height / src.height), new Vector2(tr.x / src.width, tr.y / src.height));
-                    RenderTexture.active = rtx;
-                    tex.ReadPixels(new Rect(0f, 0f, w, h), 0, 0);
-                }
-                finally { RenderTexture.active = prev; RenderTexture.ReleaseTemporary(rtx); }
-                Color32[] px = tex.GetPixels32(); Destroy(tex);
-                int ax0 = w, ay0 = h, ax1 = -1, ay1 = -1;
-                for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) if (px[y * w + x].a > 40) { if (x < ax0) ax0 = x; if (x > ax1) ax1 = x; if (y < ay0) ay0 = y; if (y > ay1) ay1 = y; }
-                if (ax1 > ax0 && ay1 > ay0)
-                {
-                    vis = Rect.MinMaxRect((float)ax0 / w, (float)ay0 / h, (float)(ax1 + 1) / w, (float)(ay1 + 1) / h);
-                    why.Append(", alpha bounds");
-                    return true;
-                }
+                Graphics.Blit(src, rtx, new Vector2(tr.width / src.width, tr.height / src.height), new Vector2(tr.x / src.width, tr.y / src.height));
+                RenderTexture.active = rtx;
+                tex.ReadPixels(new Rect(0f, 0f, w, h), 0, 0);
+                px = tex.GetPixels32();
             }
-            catch (Exception ex) { why.Append(", alpha read failed: ").Append(ex.Message); }
-            why.Append(", whole sprite used");
+            finally { RenderTexture.active = prev; RenderTexture.ReleaseTemporary(rtx); Destroy(tex); }
+            int x0 = w, y0 = h, x1 = -1, y1 = -1;
+            for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) if (px[y * w + x].a > 60) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+            if (x1 <= x0 || y1 <= y0) { why.Append("no visible pixels"); return false; }
+            _ihLogoW = w; _ihLogoH = h;
+            _ihLogoVis = new RectInt(x0, y0, x1 - x0 + 1, y1 - y0 + 1);
+            why.Append("sprite ").Append(w).Append('x').Append(h).Append(", visible x ").Append(x0).Append('-').Append(x1).Append(" y ").Append(y0).Append('-').Append(y1).Append(" (from bottom)");
             return true;
         }
 
-        // anchors our logo (a child of Valheim's logo) to the visible box; follows everything Valheim does to its logo
-        private void IhPlaceInLogo()
+        private bool IhLogoSettingsChanged()
         {
-            if (_ihTitleObj == null || _ihLogo == null || _ihTitleTex == null) return;
-            RectTransform rt = (RectTransform)_ihTitleObj.transform;
-            Rect r = _ihLogo.rectTransform.rect;
-            Sprite sp = _ihLogo.sprite;
-            // where Unity draws the sprite inside the Image rect (Simple + Preserve Aspect letterboxes it)
-            Rect draw = new Rect(0f, 0f, 1f, 1f);
-            if (sp != null && _ihLogo.preserveAspect && r.width > 0f && r.height > 0f && _ihLogo.type == UnityEngine.UI.Image.Type.Simple)
-            {
-                float sa = sp.rect.width / Mathf.Max(1f, sp.rect.height), ra = r.width / r.height;
-                if (ra > sa) { float f = sa / ra; draw = new Rect((1f - f) * 0.5f, 0f, f, 1f); }
-                else { float f = ra / sa; draw = new Rect(0f, (1f - f) * 0.5f, 1f, f); }
-            }
-            Rect vis = new Rect(draw.x + _ihLogoVisible.x * draw.width, draw.y + _ihLogoVisible.y * draw.height, _ihLogoVisible.width * draw.width, _ihLogoVisible.height * draw.height);
-            // fit our art inside the visible box (in the Image's own units), centred, aspect kept, then the user's scale / offset
-            float bw = vis.width * r.width, bh = vis.height * r.height;
-            float aspect = _ihTitleTex.height > 0 ? (float)_ihTitleTex.width / _ihTitleTex.height : 2.4f;
-            float tw = bw, th = tw / aspect;
-            if (th > bh) { th = bh; tw = th * aspect; }
-            float k = Mathf.Clamp((_aaLogoScale == null ? 100f : _aaLogoScale.Value) / 100f, 0.3f, 3f);
-            tw *= k; th *= k;
-            Vector2 c = new Vector2(r.x + (vis.x + vis.width * 0.5f) * r.width, r.y + (vis.y + vis.height * 0.5f) * r.height);
-            c += new Vector2((_aaLogoOffX == null ? 0f : _aaLogoOffX.Value) / 100f * bw, (_aaLogoOffY == null ? 0f : _aaLogoOffY.Value) / 100f * bh);
-            Vector2 pv = _ihLogo.rectTransform.pivot;
-            rt.anchorMin = rt.anchorMax = pv;   // the parent's pivot point = local (0,0)
-            rt.pivot = new Vector2(0.5f, 0.5f);
-            rt.sizeDelta = new Vector2(tw, th);
-            rt.anchoredPosition = c;
-            rt.localRotation = Quaternion.identity; rt.localScale = Vector3.one;
+            float s = _aaLogoScale == null ? 100f : _aaLogoScale.Value, x = _aaLogoOffX == null ? 0f : _aaLogoOffX.Value, y = _aaLogoOffY == null ? 0f : _aaLogoOffY.Value;
+            return Mathf.Abs(s - _ihLogoBuiltScale) > 0.01f || Mathf.Abs(x - _ihLogoBuiltX) > 0.01f || Mathf.Abs(y - _ihLogoBuiltY) > 0.01f;
         }
 
-        // proof line: Valheim's visible logo and ours, in screen pixels
-        private string IhScreenBox(RectTransform t, Rect local)
+        // our art painted into a transparent picture of Valheim's size (x2 for sharpness), at Valheim's visible box
+        private void IhBuildLogoSprite()
         {
-            Vector3 a0 = t.TransformPoint(new Vector3(local.xMin, local.yMin, 0f)), a1 = t.TransformPoint(new Vector3(local.xMax, local.yMax, 0f));
-            Canvas cv = t.GetComponentInParent<Canvas>();
-            Camera cam = cv != null && cv.renderMode != RenderMode.ScreenSpaceOverlay ? cv.worldCamera : null;
-            Vector2 s0 = RectTransformUtility.WorldToScreenPoint(cam, a0), s1 = RectTransformUtility.WorldToScreenPoint(cam, a1);
-            return "x " + Mathf.RoundToInt(Mathf.Min(s0.x, s1.x)) + "-" + Mathf.RoundToInt(Mathf.Max(s0.x, s1.x)) + ", y " + Mathf.RoundToInt(Screen.height - Mathf.Max(s0.y, s1.y)) + "-" + Mathf.RoundToInt(Screen.height - Mathf.Min(s0.y, s1.y)) + " (from top)";
+            if (_ihLogo == null || _ihLogoOrig == null || _ihTitleTex == null) return;
+            if (_ihArtPx == null) { _ihArtPx = _ihTitleTex.GetPixels32(); _ihArtW = _ihTitleTex.width; _ihArtH = _ihTitleTex.height; }
+            float s = _aaLogoScale == null ? 100f : _aaLogoScale.Value, ox = _aaLogoOffX == null ? 0f : _aaLogoOffX.Value, oy = _aaLogoOffY == null ? 0f : _aaLogoOffY.Value;
+            _ihLogoBuiltScale = s; _ihLogoBuiltX = ox; _ihLogoBuiltY = oy;
+            int k = (_ihLogoW * 2 <= 4096 && _ihLogoH * 2 <= 4096) ? 2 : 1;
+            int W = _ihLogoW * k, H = _ihLogoH * k;
+            float bw = _ihLogoVis.width * k, bh = _ihLogoVis.height * k;
+            float aspect = (float)_ihArtW / _ihArtH;
+            float tw = bw, th = tw / aspect;
+            if (th > bh) { th = bh; tw = th * aspect; }
+            float sc = Mathf.Clamp(s / 100f, 0.3f, 3f); tw *= sc; th *= sc;
+            float cx = (_ihLogoVis.x + _ihLogoVis.width * 0.5f) * k + ox / 100f * bw, cy = (_ihLogoVis.y + _ihLogoVis.height * 0.5f) * k + oy / 100f * bh;
+            float left = cx - tw * 0.5f, bottom = cy - th * 0.5f;
+            Color32[] dst = new Color32[W * H];
+            float fx = _ihArtW / tw, fy = _ihArtH / th;   // source pixels per destination pixel
+            int xa = Mathf.Max(0, Mathf.FloorToInt(left)), xb = Mathf.Min(W - 1, Mathf.CeilToInt(left + tw));
+            int ya = Mathf.Max(0, Mathf.FloorToInt(bottom)), yb = Mathf.Min(H - 1, Mathf.CeilToInt(bottom + th));
+            for (int y = ya; y <= yb; y++)
+            {
+                float sy0 = (y - bottom) * fy, sy1 = sy0 + fy;
+                for (int x = xa; x <= xb; x++)
+                {
+                    float sx0 = (x - left) * fx, sx1 = sx0 + fx;
+                    // area average over the source footprint, premultiplied (no dark / light fringes on the glow)
+                    int ix0 = Mathf.Max(0, Mathf.FloorToInt(sx0)), ix1 = Mathf.Min(_ihArtW - 1, Mathf.CeilToInt(sx1) - 1);
+                    int iy0 = Mathf.Max(0, Mathf.FloorToInt(sy0)), iy1 = Mathf.Min(_ihArtH - 1, Mathf.CeilToInt(sy1) - 1);
+                    if (ix1 < ix0 || iy1 < iy0) continue;
+                    float r = 0f, g = 0f, b = 0f, al = 0f, wsum = 0f;
+                    for (int iy = iy0; iy <= iy1; iy++)
+                    {
+                        float wy = Mathf.Min(sy1, iy + 1) - Mathf.Max(sy0, iy); if (wy <= 0f) continue;
+                        for (int ix = ix0; ix <= ix1; ix++)
+                        {
+                            float wx = Mathf.Min(sx1, ix + 1) - Mathf.Max(sx0, ix); if (wx <= 0f) continue;
+                            Color32 c = _ihArtPx[iy * _ihArtW + ix];   // PNG rows are bottom-up in Unity, like the sprite
+                            float wgt = wx * wy, a = c.a / 255f * wgt;
+                            r += c.r * a; g += c.g * a; b += c.b * a; al += a; wsum += wgt;
+                        }
+                    }
+                    if (wsum <= 0f || al <= 0f) continue;
+                    float alpha = al / wsum;
+                    dst[y * W + x] = new Color32((byte)Mathf.Clamp(Mathf.RoundToInt(r / al), 0, 255), (byte)Mathf.Clamp(Mathf.RoundToInt(g / al), 0, 255), (byte)Mathf.Clamp(Mathf.RoundToInt(b / al), 0, 255), (byte)Mathf.Clamp(Mathf.RoundToInt(alpha * 255f), 0, 255));
+                }
+            }
+            Texture2D tex = new Texture2D(W, H, TextureFormat.RGBA32, true);
+            tex.wrapMode = TextureWrapMode.Clamp; tex.filterMode = FilterMode.Trilinear;
+            tex.SetPixels32(dst); tex.Apply(true, false);
+            Sprite o = _ihLogoOrig;
+            Sprite aa = Sprite.Create(tex, new Rect(0f, 0f, W, H), new Vector2(o.pivot.x / o.rect.width, o.pivot.y / o.rect.height), o.pixelsPerUnit * k, 0, SpriteMeshType.FullRect, o.border * k);
+            aa.name = o.name + "_AA";
+            bool showing = _ihLogo.sprite == _ihLogoAa;
+            if (_ihLogoAa != null) Destroy(_ihLogoAa);
+            if (_ihLogoAaTex != null) Destroy(_ihLogoAaTex);
+            _ihLogoAa = aa; _ihLogoAaTex = tex;
+            if (showing) _ihLogo.sprite = aa;
         }
 
         private void IhBuildTitle(FejdStartup fs)
@@ -1461,7 +1477,7 @@ namespace AlbedosCustomClassesAdvanced
                 if (_ihTitleTried) return;
                 _ihTitleTried = true;
                 _ihSkipCompensation = true;   // drawn by Unity UI (correct in Linear space), not IMGUI
-                try { _ihTitleTex = LoadUiPng("AA_MenuLogo.png", true); }
+                try { _ihTitleTex = LoadUiPng("AA_MenuLogo.png", false); }
                 finally { _ihSkipCompensation = false; }
                 if (_ihTitleTex == null) return;
             }
@@ -1472,29 +1488,28 @@ namespace AlbedosCustomClassesAdvanced
             System.Text.StringBuilder seen = new System.Text.StringBuilder(), why = new System.Text.StringBuilder();
             IhReleaseLogoCut();
             UnityEngine.UI.Image logo = IhFindLogo(root, seen);
-            _ihTitleObj = new GameObject("AA_MainMenuLogo", typeof(RectTransform));
+            _ihTitleObj = new GameObject("AA_MainMenuLogo", typeof(RectTransform));   // show/hide marker (and the fallback picture)
             RectTransform rt = (RectTransform)_ihTitleObj.transform;
-            UnityEngine.UI.RawImage img = _ihTitleObj.AddComponent<UnityEngine.UI.RawImage>();
-            img.texture = _ihTitleTex; img.raycastTarget = false;
+            rt.SetParent(root, false);
+            bool ok = false;
             if (logo != null && logo.sprite != null)
             {
-                // v0.25.278: our logo replaces Valheim's - same place, Valheim's picture switched off
-                _ihTitleObj.layer = logo.gameObject.layer;
-                rt.SetParent(logo.rectTransform, false);
-                rt.SetAsFirstSibling();   // under the embers (children of the logo draw after it)
-                IhVisibleBounds(logo.sprite, out _ihLogoVisible, why);
-                _ihLogo = logo;
-                IhPlaceInLogo();
-                logo.enabled = false;
-                Rect lr = logo.rectTransform.rect;
-                Logger.LogInfo("[AA Menu] Valheim logo replaced ('" + logo.gameObject.name + "', sprite " + logo.sprite.name + ", " + why.ToString() + ", preserveAspect " + logo.preserveAspect +
-                    "). Valheim's visible logo: " + IhScreenBox(logo.rectTransform, new Rect(lr.x + _ihLogoVisible.x * lr.width, lr.y + _ihLogoVisible.y * lr.height, _ihLogoVisible.width * lr.width, _ihLogoVisible.height * lr.height)) +
-                    "; ours: " + IhScreenBox(rt, rt.rect) + ", screen " + Screen.width + "x" + Screen.height);
+                try { ok = IhMeasureLogo(logo.sprite, why); }
+                catch (Exception ex) { why.Append("error ").Append(ex.Message); ok = false; }
+            }
+            if (ok)
+            {
+                _ihLogo = logo; _ihLogoOrig = logo.sprite;
+                IhBuildLogoSprite();
+                _ihLogo.enabled = true;
+                _ihLogo.sprite = _ihLogoAa;
+                Logger.LogInfo("[AA Menu] Valheim logo replaced in place ('" + logo.gameObject.name + "', " + _ihLogoOrig.name + ", " + why.ToString() + "): our logo drawn by Valheim's own logo Image at its visible spot.");
                 return;
             }
-            Logger.LogWarning("[AA Menu] Valheim's logo was not found - our logo is placed top-centre. Logos seen: " + seen.ToString());
+            Logger.LogWarning("[AA Menu] Valheim's logo could not be replaced in place (" + (logo == null ? "logo not found" : why.ToString()) + ") - our logo is placed top-centre. Logos seen: " + seen.ToString());
             _ihTitleObj.layer = canvas.gameObject.layer;
-            rt.SetParent(root, false);
+            UnityEngine.UI.RawImage img = _ihTitleObj.AddComponent<UnityEngine.UI.RawImage>();
+            img.texture = _ihTitleTex; img.raycastTarget = false;
             float aspect = _ihTitleTex.height > 0 ? (float)_ihTitleTex.width / _ihTitleTex.height : 2.4f;
             float width = root.rect.width * 0.4f;
             rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);

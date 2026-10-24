@@ -1,0 +1,15 @@
+Aethelborn Ascended v0.25.279 - Logo In Place   (base: v0.25.278; ANCHOR v0.25.257)
+
+MAIN MENU LOGO - EXACTLY WHERE VALHEIM'S WAS
+- v0.25.278 sized our logo right but placed it with its own position maths, and it came out about 280 px too low.
+- Now Valheim's own logo object draws our logo. The mod reads Valheim's logo picture once (the same read-back that drew
+  the v0.25.277 copy exactly in place), finds where its visible pixels are, and paints our artwork - fitted, centred, shape
+  kept - into a transparent picture of the same size at exactly that spot (2x resolution for sharpness, smooth
+  downscaling, no edge fringes). Unity then draws it with Valheim's own position, scale and animation, so it lands where
+  the original title was. No position maths of ours is involved any more.
+- Nothing is painted over Valheim's logo; Valheim's files are untouched. The embers keep drifting around it.
+- F8 [Main Menu] Logo Scale / Offset X / Offset Y still work (the picture is rebuilt once per change).
+- Use AA Main Menu = false: Valheim's original logo is shown again.
+- Log: "[AA Menu] Valheim logo replaced in place (..., sprite WxH, visible x .. y ..)".
+
+CHECKS: all ten modules compile (C# 5) with the installer's reference set. Not tested in game.

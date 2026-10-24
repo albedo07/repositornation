@@ -1,2 +1,1 @@
-v0.25.278: main menu - only our logo, where Valheim's was, embers around it. Try F8 [Main Menu] Logo Scale/Offset.
-Send a screenshot + LogOutput.log ("[AA Menu] Valheim logo replaced" line).
+v0.25.279: main menu - our logo exactly where Valheim's title was (top), embers around it. Screenshot + LogOutput.log.
