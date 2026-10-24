@@ -1595,7 +1595,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.281";
+        public const string ModVersion = "0.25.282";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1865,6 +1865,7 @@ namespace DragonsAltarCombat
             DragonJitWarm.Tick(Player.m_localPlayer);         // v0.25.238 pre-compile the mod's code before the first cast
             DragonSkillAudio.Tick(Player.m_localPlayer);
             DragonCombat.RuntimeUpdate();
+            DragonEnemyDebuffIcons.Ensure();   // v0.25.282 enemy debuff icons over enemy health bars
         }
 
         private void OnDestroy()
@@ -2592,7 +2593,7 @@ namespace DragonsAltarCombat
                 // Valheim applies m_timedBlockBonus only to a successful timed parry.
                 if (DragonCombat.GetClassName(player) == "Warrior")
                     __state.ParryField = SetTemporaryBlockMultiplier(blocker.m_shared, "m_timedBlockBonus", 2f, out __state.OriginalParry);
-                // v0.20.9 Bless Thy Sinners: a Priest holding a parrying shield (any but a tower shield, v0.25.281) has doubled Parry strength
+                // v0.20.9 Bless Thy Sinners: a Priest holding a parrying shield (any but a tower shield, v0.25.282) has doubled Parry strength
                 // (Block Force 1.5x comes from Cleric's Blessing below, same as every Cleric shield).
                 if (DragonCombat.GetAdvancementName(player) == "Priest" && DragonCombat.IsBuckler(blocker))
                 {
@@ -9814,7 +9815,8 @@ namespace DragonsAltarCombat
                     SetStatusTime(existing, 0f);
                     existing.Stacks = stacks;
                     if (detail != null) existing.Detail = detail;
-                    existing.CooldownMarker = key == "fury_recovery" || key == "priest_buckler_recovery" || key == "priest_shockwave_recovery";
+                    existing.CooldownMarker = IsCooldownIcon(key, icon);
+                    if (icon != null && existing.m_icon != StatusSprite(icon)) existing.m_icon = StatusSprite(icon);   // v0.25.282 state icons (Ready <-> Cooldown)
                     if (_relabel) { existing.m_name = label; existing.m_tooltip = label; }   // v0.25.181 state indicators
                     return;
                 }
@@ -9827,7 +9829,7 @@ namespace DragonsAltarCombat
                 se.Stacks = stacks;
                 se.Detail = detail;
                 se.m_icon = StatusSprite(icon);
-                se.CooldownMarker = key == "fury_recovery" || key == "priest_buckler_recovery" || key == "priest_shockwave_recovery";
+                se.CooldownMarker = IsCooldownIcon(key, icon);
                 MethodInfo[] methods = seman.GetType().GetMethods(BindingFlags.Instance | BindingFlags.Public);
                 for (int i = 0; i < methods.Length; i++)
                 {
@@ -9912,6 +9914,50 @@ namespace DragonsAltarCombat
             }
         }
 
+        // v0.25.282: every "_cd" icon is a cooldown (darker icon + cooldown chevrons/bar on the HUD)
+        private static bool IsCooldownIcon(string key, string icon)
+        {
+            return (icon != null && icon.EndsWith("_cd", StringComparison.Ordinal)) || key == "fury_recovery" || key == "priest_buckler_recovery";
+        }
+
+        internal static Texture2D StatusTexture(string icon)
+        {
+            Sprite s = StatusSprite(icon);
+            return s == null ? null : s.texture;
+        }
+
+        // v0.25.282 enemy debuff icons: bit flags 1 Poisoned, 2 Burning, 4 Frost, 8 Crippled, 16 Exposed, 32 Zapped, 64 Stunned
+        private static int _hashBurning, _hashPoison, _hashFrost, _hashLightning;
+        internal static int EnemyDebuffFlags(Character c)
+        {
+            if (c == null || c.IsDead()) return 0;
+            if (_hashBurning == 0) { _hashBurning = StableHash("Burning"); _hashPoison = StableHash("Poison"); _hashFrost = StableHash("Frost"); _hashLightning = StableHash("Lightning"); }
+            int f = 0;
+            float now = Time.time;
+            try
+            {
+                SEMan se = c.GetSEMan();
+                if (se != null)
+                {
+                    if (se.HaveStatusEffect(_hashPoison)) f |= 1;
+                    if (se.HaveStatusEffect(_hashBurning)) f |= 2;
+                    if (se.HaveStatusEffect(_hashFrost)) f |= 4;
+                    if (se.HaveStatusEffect(_hashLightning)) f |= 32;
+                }
+            }
+            catch { }
+            DebuffState st;
+            if (Debuffs.TryGetValue(c.GetInstanceID(), out st) && st != null)
+            {
+                if (now < st.FrostUntil) f |= 4;
+                if (now < st.CrippleUntil) f |= 8;
+                if (now < st.ExposeUntil) f |= 16;
+                if (st.ZapPending) f |= 32;
+            }
+            try { if (c.IsStaggering()) f |= 64; } catch { }
+            return f;
+        }
+
         private static Sprite StatusSprite(string icon)
         {
             Sprite sprite;
@@ -9974,12 +10020,12 @@ namespace DragonsAltarCombat
                 case "Paladin.HeavensLight": return "sun";
                 case "Paladin.RayOfHope": return "ray";
                 case "SwordMaster.KnightsGuidance": return "damage";   // v0.25.231: KG is a damage buff
-                case "Mercenary.Battlecry": return "horn";
+                case "Mercenary.Battlecry": return "battlecry";   // v0.25.282 red sword (damage) + roar
                 case "Priest.HolyRelic": return "relic";
                 case "Priest.DivineIntervention": return "wings";
                 case "Priest.EyeOfTheStorm": return "storm";
-                case "Priest.BucklerParry": return "parry";
-                case "Priest.GrandSigilRecovery": return "heart";
+                case "Priest.BucklerParry": return "hyper_armor";   // v0.25.282 (user): Hyper Armor gets its own icon
+                case "Priest.GrandSigilRecovery": return "sigil_haste";   // v0.25.282 speed buff = winged boot
                 case "Acrobat.Tailwind": return "wind";
                 case "Spellcaster.PhaseFlow": return "portal";
             }
@@ -10259,7 +10305,7 @@ namespace DragonsAltarCombat
             catch
             {
             }
-            // v0.25.281 (user): the Priest Mastery works with ANY shield that can parry - every shield except tower shields
+            // v0.25.282 (user): the Priest Mastery works with ANY shield that can parry - every shield except tower shields
             // (a tower shield has no parry bonus: m_timedBlockBonus 1x). Name/prefab "tower" never counts.
             if (name.Contains("tower") || prefab.Contains("tower")) return false;
             if (name.Contains("buckler") || prefab.Contains("buckler")) return true;
@@ -15887,8 +15933,89 @@ namespace DragonsAltarCombat
 
     // Shared meshes/materials; only cached transforms and property blocks change during the portal's life.
     // Distributed ground fire. World-space anchors sampled once; live refill does no raycasts or allocations.
+    // v0.25.282 (user): debuff icons above enemy health bars (Poisoned, Burning, Frost, Crippled, Exposed, Zapped,
+    // Stunned). Reads Valheim's EnemyHud huds (reflection cached once) every 0.2 s; OnGUI only draws.
+    public class DragonEnemyDebuffIcons : MonoBehaviour
+    {
+        private static DragonEnemyDebuffIcons _inst;
+        private static readonly string[] Icons = { "debuff_poisoned", "debuff_burning", "debuff_frost", "debuff_crippled", "debuff_exposed", "debuff_zapped", "debuff_stunned" };
+        private static Texture2D[] _tex;
+        private static FieldInfo _hudsF, _guiF;
+        private static bool _failed;
+        private readonly List<Transform> _gui = new List<Transform>();
+        private readonly List<int> _flags = new List<int>();
+        private float _next;
+
+        public static void Ensure()
+        {
+            if (_inst != null || _failed) return;
+            GameObject g = new GameObject("AA_EnemyDebuffIcons");
+            DontDestroyOnLoad(g);
+            _inst = g.AddComponent<DragonEnemyDebuffIcons>();
+        }
+
+        private void Update()
+        {
+            if (Time.time < _next) return;
+            _next = Time.time + 0.2f;
+            _gui.Clear(); _flags.Clear();
+            try
+            {
+                EnemyHud hud = EnemyHud.instance;
+                if (hud == null || Player.m_localPlayer == null) return;
+                if (_hudsF == null) _hudsF = typeof(EnemyHud).GetField("m_huds", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+                System.Collections.IDictionary huds = _hudsF == null ? null : _hudsF.GetValue(hud) as System.Collections.IDictionary;
+                if (huds == null) return;
+                foreach (System.Collections.DictionaryEntry e in huds)
+                {
+                    Character c = e.Key as Character;
+                    if (c == null || e.Value == null || c is Player) continue;
+                    int f = DragonCombat.EnemyDebuffFlags(c);
+                    if (f == 0) continue;
+                    if (_guiF == null) _guiF = e.Value.GetType().GetField("m_gui", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+                    GameObject go = _guiF == null ? null : _guiF.GetValue(e.Value) as GameObject;
+                    if (go == null) continue;
+                    _gui.Add(go.transform); _flags.Add(f);
+                }
+            }
+            catch (Exception ex)
+            {
+                _failed = true;
+                Debug.LogWarning("[AA] Enemy debuff icons disabled: " + ex.Message);
+                Destroy(gameObject);
+            }
+        }
+
+        private void OnGUI()
+        {
+            if (_gui.Count == 0 || Event.current.type != EventType.Repaint) return;
+            if (_tex == null)
+            {
+                _tex = new Texture2D[Icons.Length];
+                for (int i = 0; i < Icons.Length; i++) _tex[i] = DragonCombat.StatusTexture(Icons[i]);
+            }
+            float k = Screen.height / 1080f, size = 24f * k, gap = 3f * k;
+            for (int i = 0; i < _gui.Count; i++)
+            {
+                Transform t = _gui[i];
+                if (t == null || !t.gameObject.activeInHierarchy) continue;
+                Vector3 p = t.position;
+                int f = _flags[i], n = 0;
+                for (int b = 0; b < Icons.Length; b++) if ((f & (1 << b)) != 0) n++;
+                float x = p.x - (n * size + (n - 1) * gap) * 0.5f, y = Screen.height - p.y - 44f * k - size;
+                for (int b = 0; b < Icons.Length; b++)
+                {
+                    if ((f & (1 << b)) == 0) continue;
+                    if (_tex[b] != null) GUI.DrawTexture(new Rect(x, y, size, size), _tex[b]);
+                    x += size + gap;
+                }
+            }
+        }
+    }
+
     public class DragonGroundFlames : MonoBehaviour
     {
+        public Color Tint = new Color(1f, 0.88f, 0.66f, 0.95f);
         public ParticleSystem Flames;
         public Vector3[] Points;
         public float Seconds, Size = 1f;
@@ -15905,10 +16032,10 @@ namespace DragonsAltarCombat
         private void Emit(int i, float offset)
         {
             ParticleSystem.EmitParams p = new ParticleSystem.EmitParams();
-            p.position = Points[i]; p.velocity = Vector3.up * 0.25f;
-            p.startLifetime = Mathf.Min(0.85f + offset, Mathf.Max(0.03f, Seconds - _age));
+            p.position = Points[i]; p.velocity = Vector3.up * 0.12f;   // v0.25.282 low rolling flames
+            p.startLifetime = Mathf.Min(0.7f + offset, Mathf.Max(0.03f, Seconds - _age));
             p.startSize = Size * (0.9f + 0.18f * Mathf.Sin(i * 3.7f + _age * 4f));
-            p.startColor = new Color(1f, 0.88f, 0.66f, 0.95f);
+            p.startColor = Tint;
             p.applyShapeToPosition = false;
             Flames.Emit(p, 1);
         }
@@ -18363,22 +18490,25 @@ namespace DragonsAltarCombat
             ParticleSystem.MainModule fm = fire.main; fm.maxParticles = 300;
             DragonGroundFlames field = l.gameObject.AddComponent<DragonGroundFlames>();
             field.Flames = fire; field.Seconds = seconds;
-            int anchors = Mathf.Clamp(Mathf.CeilToInt(Mathf.PI * radius * radius / 1.5f * Restraint * PolishBudget() * Mathf.Clamp(Amount / 0.35f, 0.25f, 1.5f)), 4, 180);
+            // v0.25.282 (user): Fader-like lingering fire, but shallow (ankle to knee) and in muted natural colours:
+            // many small low tongues instead of a few tall cartoon flames, same anchor cap (no extra cost).
+            int anchors = Mathf.Clamp(Mathf.CeilToInt(Mathf.PI * radius * radius / 0.9f * Restraint * PolishBudget() * Mathf.Clamp(Amount / 0.35f, 0.25f, 1.5f)), 4, 180);
             field.Points = GroundFirePoints(pos, radius, anchors);
-            field.Size = Mathf.Min(4f, Mathf.Max(1f, radius * Mathf.Sqrt(Mathf.PI / anchors) * 1.8f));
+            field.Size = Mathf.Clamp(radius * Mathf.Sqrt(Mathf.PI / anchors) * 1.15f, 0.38f, 0.7f);
+            field.Tint = new Color(0.92f, 0.58f, 0.36f, 0.85f);
             field.Begin();
-            Color bedC = new Color(1f, 0.45f, 0.12f, 0.35f);
+            Color bedC = new Color(0.62f, 0.22f, 0.07f, 0.42f);
             ParticleSystem bed = Particles(l.transform, bedC, 4, Mathf.Clamp(4f + radius * 3f, 5f, 24f), seconds, 0.9f, 0f, 0.02f, radius * 0.5f, radius * 0.9f, 0f,
                 ParticleSystemShapeType.Circle, radius * 0.6f, new Vector3(-90f, 0f, 0f), false, true);
             ParticleSystem.MainModule bm = bed.main; bm.maxParticles = 24;
-            ParticleSystem smoke = Particles(l.transform, new Color(0.14f, 0.11f, 0.10f, 0.3f), 0, Mathf.Clamp(3f + radius * 2f, 4f, 16f), seconds, 1.6f, 0.6f, 1.2f, 0.5f, 1.1f, -0.1f,
+            ParticleSystem smoke = Particles(l.transform, new Color(0.08f, 0.07f, 0.065f, 0.4f), 0, Mathf.Clamp(3f + radius * 2f, 4f, 16f), seconds, 1.6f, 0.25f, 0.55f, 0.5f, 1.1f, -0.06f,
                 ParticleSystemShapeType.Circle, radius * 0.8f, new Vector3(-90f, 0f, 0f), false, false);
             Material smm = Mat(SmokeTex(), false);
             if (smm != null) smoke.GetComponent<ParticleSystemRenderer>().sharedMaterial = smm;
             ParticleSystem.MainModule smk = smoke.main; smk.maxParticles = 30;
-            ParticleSystem sparks = Particles(l.transform, new Color(1f, 0.70f, 0.22f, 0.9f), 3, density * 0.12f, seconds,
+            ParticleSystem sparks = Particles(l.transform, new Color(1f, 0.62f, 0.25f, 0.8f), 3, density * 0.06f, seconds,
                 0.6f, 0.3f, 0.8f, 0.035f, 0.08f, -0.15f, ParticleSystemShapeType.Circle, radius, new Vector3(-90f, 0f, 0f), false, true);
-            ParticleSystem.MainModule sm = sparks.main; sm.maxParticles = 24;
+            ParticleSystem.MainModule sm = sparks.main; sm.maxParticles = 14;
             l.StopEmitAt = seconds;
             l.Systems = new ParticleSystem[] { fire, sparks, bed, smoke };
         }

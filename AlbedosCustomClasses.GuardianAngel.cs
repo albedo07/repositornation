@@ -17,7 +17,7 @@ namespace AlbedosCustomClassesGuardian
     {
         public const string ModGuid = "albedo.customclasses.guardian";
         public const string ModName = "Aethelborn Ascended - Saving Grace";
-        public const string ModVersion = "0.25.281";
+        public const string ModVersion = "0.25.282";
 
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
         // Each owner advertises only Priest membership; cooldowns remain on the protected player's client.
@@ -90,7 +90,7 @@ namespace AlbedosCustomClassesGuardian
             }
             _indicatorShown = true;
             float left = Mathf.Max(0f, until - Time.time);
-            DragonCombat.ShowStatusState(player, "priest_life_token", "heart", "Saving Grace" + (left > 0f ? " - Cooldown" : " - Ready"), left,
+            DragonCombat.ShowStatusState(player, "priest_life_token", left > 0f ? "life_token_cd" : "life_token", "Saving Grace" + (left > 0f ? " - Cooldown" : " - Ready"), left,
                 left > 0f ? "Saving Grace is on cooldown for " + Mathf.CeilToInt(left) + "s. This timer continues outside Priest range."
                     : (self ? "Survive a lethal hit at 1 HP, then recover."
                         : "A living Priest is nearby. Survive a lethal hit at 1 HP, then recover. Stay within Priest range."));

@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.281";
+        public const string ModVersion = "0.25.282";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1028,8 +1028,8 @@ namespace AlbedosCustomClassesAdvanced
             // v0.20.9 Bless Thy Sinners - Buckler Parry (Framework).
             _shockwaveDamage = BindDamage("Priest Holy Shockwave Blunt Damage", 60f, 0f, 0f, 0f, 0f, 0f, 0f, 0f);   // v0.25.272 (user): Blunt
             _shockwaveRadius = Config.Bind("Priest Holy Shockwave", "Radius_v025272", 7f, "Shield Parry: Holy Shockwave radius in meters (v0.25.272: 7 m).");
-            _shockwaveCooldown = Config.Bind("Priest Holy Shockwave", "Cooldown", 15f, "Seconds between Holy Shockwaves.");
-            _holyParryEmpowerCooldown = Config.Bind("Priest Holy Shockwave", "EmpowerCooldown", 25f, "Holy Parry: the empowered-skill buff lasts until a skill uses it; after that a Parry can't grant it again for this many seconds.");
+            _shockwaveCooldown = Config.Bind("Priest Holy Shockwave", "Cooldown_v025282", 20f, "Seconds between Holy Shockwaves (v0.25.282: 20 s).");
+            _holyParryEmpowerCooldown = Config.Bind("Priest Holy Shockwave", "EmpowerCooldown_v025282", 30f, "Holy Parry: the empowered-skill buff lasts until a skill uses it; after that a Parry can't grant it again for this many seconds (v0.25.282: 30 s).");
             _parryHyperArmorSeconds = Config.Bind("Priest Holy Shockwave", "HyperArmorSeconds", 5f, "Every shield Parry (any but a tower shield) grants Hyper Armor for this long.");
             const string pa = "Priest Ascended";
             _sanctifiedDuration = Config.Bind(pa, "SanctifiedDuration", 10f, "Sanctified lasts this long on an ally.");
@@ -1076,7 +1076,7 @@ namespace AlbedosCustomClassesAdvanced
             _tempestAscMeteorBurn = Config.Bind("Priest Lightning Tempest Ascended", "MeteorFireBurnPerSecond_v02586", 12f, "Meteor Fire Burn per second, 3s, refreshed by every meteor hit.");
             _tempestAscMeteorRadius = Config.Bind("Priest Lightning Tempest Ascended", "MeteorRadius_v02586", 2.5f, "Meteor impact radius (m).");
             _tempestAscMeteorEvery = Config.Bind("Priest Lightning Tempest Ascended", "MeteorEveryStrikes_v02586", 1f, "One meteor per storm pulse (every HitInterval).");
-            _parryEmpowerPercent = Config.Bind("Priest Holy Shockwave", "NextSkillDamagePercent_v0212", 35f, "Every shield Parry empowers the next damaging skill by this percent for that entire skill instance.");
+            _parryEmpowerPercent = Config.Bind("Priest Holy Shockwave", "NextSkillDamagePercent_v025282", 50f, "Every shield Parry empowers the next damaging skill by this percent of its damage for that entire skill instance (v0.25.282: 50%).");
 
             _lightningRelicCooldown = Config.Bind("Priest Lightning Relic", "Cooldown", 14f, "Cooldown starts only after the active Relic is relinquished or its 16s lifetime ends.");
             _lightningRelicStamina = Config.Bind("Priest Lightning Relic", "StaminaCost", 30f, "Stamina cost.");
@@ -9320,7 +9320,8 @@ namespace AlbedosCustomClassesAdvanced
             if (ascended && player != null && !player.IsDead())
             {
                 // Pillar of Heaven at the centre.
-                float pillar = Mathf.Max(0.5f, DragonCombat.M(_hjAscPillarRadius.Value));
+                float pillar = Mathf.Max(0.5f, DragonCombat.M(_hjAscPillarRadius.Value));   // visual size of the big beam
+                float pillarHit = Mathf.Max(pillar, radius);   // v0.25.282 (user): the final beam damages the entire skill radius
                 DragonSkillAudio.Play(player, DragonBaseSound.JudgementPillar, center);   // v0.25.263 MidBoom
                 if (_enableVfx.Value)
                 {
@@ -9333,9 +9334,9 @@ namespace AlbedosCustomClassesAdvanced
                         DragonVfx.Burst(hc + Vector3.up * 1f, DragonVfx.Holy, 30, 10f, 0.3f, 0.7f, -0.1f);   // v0.25.180 compact contact bloom
                         DragonVfx.Flash(hc + Vector3.up * 2f, DragonVfx.HolyWhite, 0.9f, hr * 2f, 0.2f);
                     });
-                    StartCoroutine(AnimateRing(center + Vector3.up * 0.08f, 0.5f, pillar, 0.4f, new Color(1f, 0.94f, 0.62f, 0.95f), 0.14f));
+                    StartCoroutine(AnimateRing(center + Vector3.up * 0.08f, 0.5f, pillarHit, 0.5f, new Color(1f, 0.94f, 0.62f, 0.95f), 0.14f));
                 }
-                List<Character> hit = GetSphereTargets(player, center, pillar);
+                List<Character> hit = GetSphereTargets(player, center, pillarHit);
                 for (int i = 0; i < hit.Count; i++)
                     DealDamageScaled(player, hit[i], _pillarDamage, 1f, 10f, false, "heavens_judgement", "Final Pillar", false, false, null);
             }
@@ -11012,7 +11013,7 @@ namespace AlbedosCustomClassesAdvanced
             DragonCombat.ShowStatusUntil(player, "fury", "fury", "Unchained Fury", advancement == "Mercenary" ? _mercFuryUntil * alive : 0f, 0,
                 "Attack Buff\nMercenary skills use their Ascended versions");
             float lockUntil = advancement == "Mercenary" && Time.time >= _mercFuryUntil ? _mercFuryCooldownUntil * alive : 0f;
-            DragonCombat.ShowStatusUntil(player, "fury_recovery", "fury", "Fury Recovery", lockUntil, 0,
+            DragonCombat.ShowStatusUntil(player, "fury_recovery", "fury_cd", "Fury Recovery", lockUntil, 0,
                 "Fury cannot build until this cooldown ends");
             DragonCombat.ShowStatusUntil(player, "empty_sheath", "parry", "Empty Sheath", advancement == "Sword Master" ? _emptySheathCounterUntil * alive : 0f, 0,
                 "Counter window is active");
@@ -13650,31 +13651,30 @@ namespace AlbedosCustomClassesAdvanced
             if (Time.time < _ihParryUiNext) return;
             _ihParryUiNext = Time.time + 0.2f;
             bool priest = player != null && IhIsPriest(player) && !player.IsDead();
-            bool equipped = priest && DragonCombat.IsBuckler(DragonCombat.GetHandItem(player, "m_leftItem"));   // v0.25.281 any shield that can parry, never a tower shield (user)
+            bool equipped = priest && DragonCombat.IsBuckler(DragonCombat.GetHandItem(player, "m_leftItem"));   // v0.25.282 any shield that can parry, never a tower shield (user)
             float cd = priest ? GetCooldownRemaining("Priest.HolyParry") : 0f;
             float wave = priest ? GetCooldownRemaining("Priest.HolyShockwave") : 0f;
-            float hyper = priest ? DragonCombat.TimedBuffRemaining(player, "Priest.BucklerParry") : 0f;
-            bool active = priest && (_parryEmpowerPending || hyper > 0f);
-            if (active)
-                DragonCombat.ShowStatusState(player, "priest_holy_parry", "parry", "Holy Parry - Active", hyper,
-                    "Mastery - Active\n" + (_parryEmpowerPending ? "Next damaging skill +" + IhNum(_parryEmpowerPercent.Value) + "% damage (kept until used)\n" : "") +
-                    (hyper > 0f ? "Hyper Armor: " + Mathf.CeilToInt(hyper) + "s" : "Empower ready to use"));
-            else if (equipped && cd <= 0f)
-                DragonCombat.ShowStatusState(player, "priest_holy_parry", "parry", "Holy Parry - Ready", 0f,
-                    "Mastery - Ready\nParry with your shield (not a tower shield) to gain Hyper Armor and empower your next damaging skill");
-            else DragonCombat.ClearStatus(player, "priest_holy_parry");
+            // v0.25.282 (user): no Holy Parry Ready/Active icons. Skill Enhanced while the next skill is boosted, Holy Parry
+            // Cooldown while the boost recharges, one Holy Shockwave icon (Ready <-> Cooldown); the parry's Hyper Armor
+            // shows as its own Hyper Armor buff.
+            DragonCombat.ClearStatus(player, "priest_holy_parry");
+            DragonCombat.ClearStatus(player, "priest_shockwave_ready");
+            DragonCombat.ClearStatus(player, "priest_shockwave_recovery");
+            if (priest && _parryEmpowerPending)
+                DragonCombat.ShowStatusState(player, "priest_skill_enhanced", "enhanced", "Skill Enhanced", 0f,
+                    "Skill Damage Buff\nYour next damaging skill deals +" + IhNum(_parryEmpowerPercent.Value) + "% damage for the whole skill (kept until used)");
+            else DragonCombat.ClearStatus(player, "priest_skill_enhanced");
             if (cd > 0f)
-                DragonCombat.ShowStatusState(player, "priest_buckler_recovery", "parry", "Holy Parry - Cooldown", cd,
-                    "Mastery - Cooldown\nNext-skill empower ready in " + Mathf.CeilToInt(cd) + "s\nSuccessful parries can still grant Hyper Armor");
+                DragonCombat.ShowStatusState(player, "priest_buckler_recovery", "parry_cd", "Holy Parry - Cooldown", cd,
+                    "Mastery - Cooldown\nA Parry can enhance your next skill again in " + Mathf.CeilToInt(cd) + "s");
             else DragonCombat.ClearStatus(player, "priest_buckler_recovery");
             if (wave > 0f)
-                DragonCombat.ShowStatusState(player, "priest_shockwave_recovery", "parry", "Holy Shockwave - Cooldown", wave,
+                DragonCombat.ShowStatusState(player, "priest_shockwave", "shockwave_cd", "Holy Shockwave - Cooldown", wave,
                     "Mastery - Cooldown\nHoly Shockwave ready in " + Mathf.CeilToInt(wave) + "s");
-            else DragonCombat.ClearStatus(player, "priest_shockwave_recovery");
-            if (equipped && wave <= 0f)
-                DragonCombat.ShowStatusState(player, "priest_shockwave_ready", "parry", "Holy Shockwave - Ready", 0f,
-                    "Mastery - Ready\nA successful shield parry releases a Holy Shockwave (7 m, Blunt, stuns)");
-            else DragonCombat.ClearStatus(player, "priest_shockwave_ready");
+            else if (equipped)
+                DragonCombat.ShowStatusState(player, "priest_shockwave", "shockwave", "Holy Shockwave - Ready", 0f,
+                    "Mastery - Ready\nA successful shield parry releases a Holy Shockwave (" + IhNum(_shockwaveRadius.Value) + " m, Blunt, stuns)");
+            else DragonCombat.ClearStatus(player, "priest_shockwave");
         }
 
         private void OnBucklerParry(Player player)
@@ -13684,7 +13684,7 @@ namespace AlbedosCustomClassesAdvanced
 
             // Every parry: Hyper Armor. v0.23.8: the empowered-skill buff is granted once, kept
             // until a skill uses it (one prompt), then "Priest.HolyParry" blocks it for 25s.
-            DragonCombat.SetBuffNote("Priest.BucklerParry", "Your next damaging skill deals +" + IhNum(_parryEmpowerPercent.Value) + "% damage (one empower at a time, 25s cooldown)");
+            DragonCombat.SetBuffNote("Priest.BucklerParry", "Your next damaging skill deals +" + IhNum(_parryEmpowerPercent.Value) + "% damage (one empower at a time, " + IhNum(_holyParryEmpowerCooldown.Value) + "s cooldown)");
             DragonCombat.ApplyTimedBuff(player, "Priest.BucklerParry", Mathf.Max(0.1f, _parryHyperArmorSeconds.Value), 0f, 0f, 0f, 0f, 0f, 0f, true);
             if (!_parryEmpowerPending && GetCooldownRemaining("Priest.HolyParry") <= 0f)
             {
@@ -16197,7 +16197,7 @@ namespace AlbedosCustomClassesAdvanced
             {
                 float lockout = _mercFuryCooldownUntil - Time.time;
                 // v0.25.240 (perf): cached per state + number, already trimmed / upper case
-                if (IsUnchainedFuryActive()) { int n = Mathf.CeilToInt(_mercFuryUntil - Time.time); title = IhCached(10, 0, n, "UNCHAINED FURY " + n.ToString() + "S"); }
+                if (IsUnchainedFuryActive()) title = "";   // v0.25.282: the Unchained Fury banner replaces the small title
                 else if (lockout > 0f) { int n = Mathf.CeilToInt(lockout); title = IhCached(10, 1, n, "FURY LOCKED " + n.ToString() + "S"); }
                 else { int n = Mathf.FloorToInt(_mercFury); title = IhCached(10, 2, n, "FURY " + n.ToString()); }
             }
@@ -16235,8 +16235,92 @@ namespace AlbedosCustomClassesAdvanced
                     GUI.DrawTexture(new Rect(graceInner.xMax - grace.width * 0.36f, graceInner.yMax - grace.width * 0.36f, grace.width * 0.40f, grace.width * 0.40f), _ihPadlockTex);
                 GUI.Label(new Rect(grace.x - 10f, grace.yMax - 1f, grace.width + 20f, 16f * scale), FormatHotbarBinding(BindGrace), _hudKeyCenterStyle);
             }
+            IhDrawPowerBanner(player, x, y, totalWidth, size, scale);
             }
             finally { GUI.matrix = barM0; }
+        }
+
+        // v0.25.282 (user: "I sometimes forget I have Fury / Overcharge"): a bold glowing title over the hotbar,
+        // a pulsing frame around it, the seconds left, and a flash when it starts.
+        private string _ihBannerOn;
+        private float _ihBannerStart, _ihBannerLeft;
+        private GUIStyle _ihBannerStyle;
+        private void IhDrawPowerBanner(Player player, float x, float y, float w, float size, float scale)
+        {
+            string name = null; float left = 0f, total = 1f; Color hot = Color.white, deep = Color.white;
+            if (GetAdvancement(player) == "Mercenary" && IsUnchainedFuryActive())
+            {
+                name = "UNCHAINED FURY"; left = _mercFuryUntil - Time.time; total = Mathf.Max(1f, _furyDurationV.Value);
+                hot = new Color(1f, 0.70f, 0.22f, 1f); deep = new Color(0.95f, 0.18f, 0.05f, 1f);
+            }
+            else
+            {
+                IhGatherHudFrame(player);
+                for (int i = 0; i < _ihHudEffects.Count; i++)
+                {
+                    IhStatusDisplay se = _ihHudEffects[i] as IhStatusDisplay;
+                    if (se == null || se.name != "IH_wizard_overcharge" || se.Remaining() <= 0f) continue;
+                    name = "OVERCHARGE"; left = se.Remaining(); total = Mathf.Max(1f, se.m_ttl);
+                    hot = new Color(0.90f, 0.70f, 1f, 1f); deep = new Color(0.58f, 0.20f, 1f, 1f);
+                    break;
+                }
+            }
+            if (name == null) { _ihBannerOn = null; return; }
+            if (_ihBannerOn != name || left > _ihBannerLeft + 0.5f) _ihBannerStart = Time.unscaledTime;
+            _ihBannerOn = name; _ihBannerLeft = left;
+            Event ev = Event.current;
+            if (ev == null || ev.type != EventType.Repaint || _titleStyle == null) return;
+            float t = Time.unscaledTime, since = t - _ihBannerStart;
+            float pulse = 0.5f + 0.5f * Mathf.Sin(t * 5.5f);
+            Color c0 = GUI.color;
+            // flash when it starts
+            if (since < 0.6f)
+            {
+                float f = 1f - since / 0.6f;
+                GUI.color = new Color(hot.r, hot.g, hot.b, 0.55f * f * f);
+                GUI.DrawTexture(new Rect(x - 30f * scale, y - 60f * scale, w + 60f * scale, size * 1.1f + 80f * scale), Texture2D.whiteTexture);
+            }
+            // pulsing frame around the hotbar
+            Rect fr = new Rect(x - 6f * scale, y - 6f * scale, w + 12f * scale, size * 1.18f + 12f * scale);
+            float th = Mathf.Max(2f, 3f * scale);
+            for (int k = 0; k < 3; k++)
+            {
+                float grow = k * 3f * scale, a = (0.75f - k * 0.25f) * (0.45f + 0.55f * pulse);
+                Rect r = new Rect(fr.x - grow, fr.y - grow, fr.width + grow * 2f, fr.height + grow * 2f);
+                GUI.color = new Color(deep.r, deep.g, deep.b, a);
+                GUI.DrawTexture(new Rect(r.x, r.y, r.width, th), Texture2D.whiteTexture);
+                GUI.DrawTexture(new Rect(r.x, r.yMax - th, r.width, th), Texture2D.whiteTexture);
+                GUI.DrawTexture(new Rect(r.x, r.y, th, r.height), Texture2D.whiteTexture);
+                GUI.DrawTexture(new Rect(r.xMax - th, r.y, th, r.height), Texture2D.whiteTexture);
+            }
+            // time-left bar under the title
+            float frac = Mathf.Clamp01(left / total);
+            Rect bar = new Rect(x + w * 0.25f, y - 14f * scale, w * 0.5f, 4f * scale);
+            GUI.color = new Color(0f, 0f, 0f, 0.6f); GUI.DrawTexture(bar, Texture2D.whiteTexture);
+            GUI.color = new Color(hot.r, hot.g, hot.b, 0.95f); GUI.DrawTexture(new Rect(bar.x, bar.y, bar.width * frac, bar.height), Texture2D.whiteTexture);
+            // bold glowing title
+            if (_ihBannerStyle == null)
+            {
+                _ihBannerStyle = new GUIStyle(_titleStyle);
+                _ihBannerStyle.fontStyle = FontStyle.Bold; _ihBannerStyle.alignment = TextAnchor.MiddleCenter; _ihBannerStyle.wordWrap = false;
+            }
+            float pop = since < 0.35f ? 1f + (0.35f - since) * 1.4f : 1f;
+            _ihBannerStyle.fontSize = Mathf.RoundToInt(27f * scale * pop);
+            int n = Mathf.CeilToInt(left);
+            string text = IhCached(12, name == "OVERCHARGE" ? 1 : 0, n, name + "  " + n.ToString() + "s");
+            Rect tr = new Rect(x - 40f * scale, y - 52f * scale, w + 80f * scale, 36f * scale);
+            _ihBannerStyle.normal.textColor = new Color(deep.r, deep.g, deep.b, 0.22f + 0.22f * pulse);
+            float gl = 2.5f * scale;
+            for (int k = 0; k < 8; k++)
+            {
+                float ang = k * Mathf.PI * 0.25f;
+                GUI.Label(new Rect(tr.x + Mathf.Cos(ang) * gl, tr.y + Mathf.Sin(ang) * gl, tr.width, tr.height), text, _ihBannerStyle);
+            }
+            _ihBannerStyle.normal.textColor = new Color(0f, 0f, 0f, 0.9f);
+            GUI.Label(new Rect(tr.x + 2f, tr.y + 2f, tr.width, tr.height), text, _ihBannerStyle);
+            _ihBannerStyle.normal.textColor = Color.Lerp(hot, Color.white, 0.25f * pulse);
+            GUI.Label(tr, text, _ihBannerStyle);
+            GUI.color = c0;
         }
 
         private bool _ihArtActive;
@@ -17838,7 +17922,7 @@ namespace AlbedosCustomClassesAdvanced
             }
 
             // Buffs / debuffs: one centred row on top of the HUD (timer fully visible under each).
-            float icon = 28f * s, iconGap = 12f * s;
+            float icon = 34f * s, iconGap = 12f * s;   // v0.25.282 (user): a tad bigger
             int count = _ihHudEffects.Count;
             if (count > 0)
             {
@@ -17856,7 +17940,7 @@ namespace AlbedosCustomClassesAdvanced
                     IhHudFill(new Rect(ir.x, ir.yMax - 1f, ir.width, 1f), edge);
                     IhHudFill(new Rect(ir.x, ir.y, 1f, ir.height), edge);
                     IhHudFill(new Rect(ir.xMax - 1f, ir.y, 1f, ir.height), edge);
-                    IhDrawSprite(new Rect(ir.x + 3f * s, ir.y + 3f * s, ir.width - 6f * s, ir.height - 6f * s), se.m_icon);
+                    IhDrawSprite(new Rect(ir.x + 2f * s, ir.y + 2f * s, ir.width - 4f * s, ir.height - 4f * s), se.m_icon);
                     if (se.CooldownMarker) IhDrawCooldownChevrons(ir, s);
                     IhHudFill(new Rect(ir.x, ir.yMax + 1f, ir.width, 2f * s), se.CooldownMarker ? new Color(0.9f, 0.42f, 0.18f, 1f) : new Color(0.30f, 0.78f, 0.30f, 1f));
                     // v0.25.8: stacks (e.g. Barrier HP) on the icon AND the timer underneath.
@@ -19563,7 +19647,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "holy_relic": return "Pulse radius increases to 14m and buffs increase to 30%. Pulses remove Burn, Poison and Frost and grant Sanctify. When the Relic ends, it heals allies for 25% of their maximum HP.";
                 case "divine_intervention": return "With both Relics active, targeting a Relic casts from both of them. Grants a barrier that absorbs 250 damage and pulls enemies inward.";
                 case "grand_cross": return "Attack width increases from " + IhNum(Instance._grandCrossWidth.Value) + "m to " + IhNum(Instance._crossAscWidth.Value) + "m, and range increases from " + IhNum(Instance._grandCrossRange.Value) + "m to " + IhNum(Instance._crossAscRange.Value) + "m. Hits apply Expose for " + IhNum(Instance._crossAscExpose.Value) + "s and deal twice the Spirit Burn damage.";
-                case "heavens_judgement": return "Attack radius increases to 14m and the barrage lasts 3s. Each beam heals allies for 3% of their maximum HP. Ends with a large final beam.";
+                case "heavens_judgement": return "Attack radius increases to 14m and the barrage lasts 3s. Each beam heals allies for 3% of their maximum HP. Ends with a large final beam that strikes the entire area.";
                 case "lightning_tempest": return "Creates a storm with a 12m radius at the target and adds falling meteors. Allies inside gain 20% Defense and Hyper Armor. When it ends, all Zap marks explode.";
             }
             return "";
@@ -21508,7 +21592,7 @@ namespace AlbedosCustomClassesAdvanced
             }
 
             if (advancement == "Priest")
-                return "+10% Magic Damage (Fire, Frost, Lightning, Poison, Spirit). Saving Grace: you and allies within 20m survive a lethal hit at 1 HP, then recover 50% HP over 6s with +50% Move Speed and -70% Stamina use. Self 20 min, each ally 40 min.\n\nShield (any but a tower shield): doubled Parry. A Parry grants 5s Hyper Armor and empowers your next skill with +35% Damage (kept until used, then 25s before a Parry can grant it again), and releases a 7m Holy Shockwave (Blunt damage, Stuns Small and Big; 15s cooldown).";
+                return "+10% Magic Damage (Fire, Frost, Lightning, Poison, Spirit). Saving Grace: you and allies within 20m survive a lethal hit at 1 HP, then recover 50% HP over 6s with +50% Move Speed and -70% Stamina use. Self 20 min, each ally 40 min.\n\nShield (any but a tower shield): doubled Parry. A Parry grants 5s Hyper Armor and empowers your next skill with +50% Damage for that whole skill (kept until used, then 30s before a Parry can grant it again), and releases a 7m Holy Shockwave (Blunt damage, Stuns Small and Big; 20s cooldown).";
 
             return "";
         }

@@ -1,0 +1,49 @@
+AETHELBORN ASCENDED v0.25.282 - Icons and Banners
+=================================================
+
+PRIEST - Shield Mastery (Holy Parry / Holy Shockwave)
+- Holy Shockwave cooldown 15 s -> 20 s (new config key Cooldown_v025282).
+- Skill enhancement from a parry: +35% -> +50% of the skill's damage for the WHOLE skill instance
+  (e.g. a Lightning Relic pulse of 50 becomes 75 for every pulse). New key NextSkillDamagePercent_v025282.
+- Enhancement cooldown 25 s -> 30 s, starting when the enhanced skill uses it (new key EmpowerCooldown_v025282).
+- Icons: "Holy Parry - Ready" and "Holy Parry - Active" removed.
+  * Holy Shockwave: ONE icon that switches between Ready (gold rings) and Cooldown (dark, 20 s).
+  * Skill Enhanced (blue sword + gold sparkle) while the next skill is boosted.
+  * Holy Parry - Cooldown (dark buckler) during the 30 s recharge.
+  * The parry's Hyper Armor shows the Hyper Armor icon (chestplate).
+- Mastery text updated (+50% for the whole skill, 30 s, 20 s).
+
+PRIEST - Heaven's Judgement (Ascended only)
+- The final big beam now damages the ENTIRE skill radius (was only the small pillar radius).
+  Its gold ring now expands over the whole area so you can see it. Normal version unchanged.
+
+ICONS (all status icons repainted with one symbol language; tools/paint_icons.py)
+- Red sword = Attack Damage (Knight's Guidance, Battlecry + roar, Ray of Hope + sun, Deadeye Focus + crosshair,
+  Hawk's Vigil + eye, Unchained Fury in flames). Blue sword = Skill Damage (Skill Enhanced).
+- Shield = Defense (Heaven's Light + sun, Eye of the Storm + storm, Barrier, Purity). Chestplate = Hyper Armor.
+- Winged boot = Speed (Tailwind + wind, Saving Grace Recovery + heart). Crossed swords = Attack Speed.
+- Eitr drop, Stamina bolt, Heart regen, Overcharge star, Portal, Relic, Wings, Labor, Clockwork.
+- Cooldowns are darker (grey ring, dimmed symbol, hourglass badge): Fury Recovery, Holy Shockwave, Holy Parry,
+  Saving Grace. Any "_cd" icon gets the cooldown chevrons/bar automatically.
+- Mercenary Grace (Battlecry): red sword + roaring horn = roar + damage buff.
+- Status icons on the HUD are bigger (28 -> 34 px at 1080p).
+
+ENEMY DEBUFF ICONS (new)
+- Small diamond icons above enemy health bars: Poisoned, Burning, Frost, Crippled, Exposed, Zapped, Stunned.
+  Read from Valheim's enemy HUD every 0.2 s; drawing only in OnGUI. If the HUD layout cannot be read the feature
+  turns itself off once and logs "[AA] Enemy debuff icons disabled".
+
+GROUND FIRE
+- Fader-like lingering fire, but shallow (ankle to knee): many small low tongues (size 0.38-0.7 instead of up to 4),
+  slower rise, muted orange-red flames, a darker glowing ember bed, low dark rolling smoke, half the sparks.
+  Same anchor cap (180) and particle caps -> same or lower cost. Used by every fire field (Bomb, Crescent trail,
+  Meteor, Ranger fire field, Flame Burst, etc.).
+
+FURY / OVERCHARGE BANNER (new)
+- While Unchained Fury (Mercenary) or Overcharge (Wizard) is active: a bold glowing title over the hotbar
+  ("UNCHAINED FURY 14s" fire red-orange / "OVERCHARGE 9s" arcane violet), a pulsing frame around the hotbar,
+  a time-left bar, and a flash + pop when it starts. Replaces the small blue Fury title while Fury is active.
+
+CHECKS
+- Static: all ten modules compile (mcs C#5) against your real game references with the installer's reference rule.
+- NOT tested in game: icon look at real size, enemy icon placement over health bars, fire look/FPS, banner.
