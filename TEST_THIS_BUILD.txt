@@ -1,2 +1,2 @@
-v0.25.280: main menu -> start a world: the music fades out over ~3 s, no instant stop. Also check the logo position.
-Send LogOutput.log ("[AA Menu]" lines) + a menu screenshot.
+v0.25.281: Priest with a round shield: parry -> Holy Shockwave + icons. With a tower shield: nothing. Plus v0.25.280
+tests (menu music fade, logo position). Send LogOutput.log ("[AA Parry]", "[AA Menu]").

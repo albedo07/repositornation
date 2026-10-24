@@ -1595,7 +1595,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.280";
+        public const string ModVersion = "0.25.281";
 
         internal static DragonCombatPlugin Instance;
 
@@ -2592,7 +2592,7 @@ namespace DragonsAltarCombat
                 // Valheim applies m_timedBlockBonus only to a successful timed parry.
                 if (DragonCombat.GetClassName(player) == "Warrior")
                     __state.ParryField = SetTemporaryBlockMultiplier(blocker.m_shared, "m_timedBlockBonus", 2f, out __state.OriginalParry);
-                // v0.20.9 Bless Thy Sinners: a Priest holding a Buckler has doubled Parry strength
+                // v0.20.9 Bless Thy Sinners: a Priest holding a parrying shield (any but a tower shield, v0.25.281) has doubled Parry strength
                 // (Block Force 1.5x comes from Cleric's Blessing below, same as every Cleric shield).
                 if (DragonCombat.GetAdvancementName(player) == "Priest" && DragonCombat.IsBuckler(blocker))
                 {
@@ -2680,7 +2680,7 @@ namespace DragonsAltarCombat
             string adv = DragonCombat.GetAdvancementName(player);
             string seen = (shield != null && shield.m_shared != null ? shield.m_shared.m_name : "no shield") + "|" + adv;
             if (_parrySeen.Add(seen) && Instance != null) Instance.Logger.LogInfo("[AA Parry] perfect parry with " + (shield != null && shield.m_shared != null ? shield.m_shared.m_name : "no shield") + " as " + adv +
-                (adv == "Priest" && DragonCombat.IsBuckler(shield) ? " - Holy Shockwave / Holy Parry run" : " - not a Priest Buckler parry (no Holy Shockwave)"));
+                (adv == "Priest" && DragonCombat.IsBuckler(shield) ? " - Holy Shockwave / Holy Parry run" : " - not a Priest shield parry (tower shields and weapons do not count)"));
             if (adv != "Priest" || !DragonCombat.IsBuckler(shield) || DragonCombat.BucklerParryHandler == null) return;
             try { DragonCombat.BucklerParryHandler(player); }
             catch (Exception ex) { if (Instance != null) Instance.Logger.LogWarning("Buckler Parry failed: " + ex.Message); }
@@ -10259,8 +10259,11 @@ namespace DragonsAltarCombat
             catch
             {
             }
+            // v0.25.281 (user): the Priest Mastery works with ANY shield that can parry - every shield except tower shields
+            // (a tower shield has no parry bonus: m_timedBlockBonus 1x). Name/prefab "tower" never counts.
+            if (name.Contains("tower") || prefab.Contains("tower")) return false;
             if (name.Contains("buckler") || prefab.Contains("buckler")) return true;
-            return !name.Contains("tower") && !prefab.Contains("tower") && item.m_shared.m_timedBlockBonus >= 2.5f;
+            return item.m_shared.m_timedBlockBonus > 1.01f;
         }
 
         // Same test Valheim uses for a timed block: the block started less than 0.25s ago.

@@ -1,0 +1,13 @@
+Aethelborn Ascended v0.25.281 - Priest Shield Mastery   (base: v0.25.280; ANCHOR v0.25.257)
+
+PRIEST MASTERY (SAVING GRACE / HOLY PARRY): ANY SHIELD THAT CAN PARRY
+- Counts: every shield except tower shields - i.e. any shield with a parry bonus above 1x (bucklers, round shields,
+  modded shields...). Never counts: tower shields (no parry bonus, or "tower" in the name/prefab) and weapon parries.
+- Applies to the whole Mastery: doubled Parry strength, Holy Shockwave (7 m, Blunt 60, stuns small and big, 15 s
+  cooldown), Holy Parry (Hyper Armor + next-skill empower) and the Mastery icons.
+- Texts updated: skill tree tooltip, class description, Altar description, icon tooltips and config descriptions now say
+  "shield (not a tower shield)" instead of "Buckler".
+- Only the Priest Mastery uses this check; no other class or skill is affected.
+
+All v0.25.280 changes included (menu music fade, logo in place).
+CHECKS: all ten modules compile (C# 5) with the installer's reference set. Not tested in game.

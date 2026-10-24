@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.280";
+        public const string ModVersion = "0.25.281";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1027,10 +1027,10 @@ namespace AlbedosCustomClassesAdvanced
             _crucibleArmorPercent = Config.Bind("Priest Grand Sigil", "BarrierArmorPercent", 30f, "Heaven's Crucible: Barrier Armor = this percent of the Priest's current Armor, snapshotted at cast.");
             // v0.20.9 Bless Thy Sinners - Buckler Parry (Framework).
             _shockwaveDamage = BindDamage("Priest Holy Shockwave Blunt Damage", 60f, 0f, 0f, 0f, 0f, 0f, 0f, 0f);   // v0.25.272 (user): Blunt
-            _shockwaveRadius = Config.Bind("Priest Holy Shockwave", "Radius_v025272", 7f, "Buckler Parry: Holy Shockwave radius in meters (v0.25.272: 7 m).");
+            _shockwaveRadius = Config.Bind("Priest Holy Shockwave", "Radius_v025272", 7f, "Shield Parry: Holy Shockwave radius in meters (v0.25.272: 7 m).");
             _shockwaveCooldown = Config.Bind("Priest Holy Shockwave", "Cooldown", 15f, "Seconds between Holy Shockwaves.");
             _holyParryEmpowerCooldown = Config.Bind("Priest Holy Shockwave", "EmpowerCooldown", 25f, "Holy Parry: the empowered-skill buff lasts until a skill uses it; after that a Parry can't grant it again for this many seconds.");
-            _parryHyperArmorSeconds = Config.Bind("Priest Holy Shockwave", "HyperArmorSeconds", 5f, "Every Buckler Parry grants Hyper Armor for this long.");
+            _parryHyperArmorSeconds = Config.Bind("Priest Holy Shockwave", "HyperArmorSeconds", 5f, "Every shield Parry (any but a tower shield) grants Hyper Armor for this long.");
             const string pa = "Priest Ascended";
             _sanctifiedDuration = Config.Bind(pa, "SanctifiedDuration", 10f, "Sanctified lasts this long on an ally.");
             _bloomHealPercent = Config.Bind(pa, "BloomHealPercent", 15f, "Bloom: instant heal, % of the ally's Max HP.");
@@ -1076,7 +1076,7 @@ namespace AlbedosCustomClassesAdvanced
             _tempestAscMeteorBurn = Config.Bind("Priest Lightning Tempest Ascended", "MeteorFireBurnPerSecond_v02586", 12f, "Meteor Fire Burn per second, 3s, refreshed by every meteor hit.");
             _tempestAscMeteorRadius = Config.Bind("Priest Lightning Tempest Ascended", "MeteorRadius_v02586", 2.5f, "Meteor impact radius (m).");
             _tempestAscMeteorEvery = Config.Bind("Priest Lightning Tempest Ascended", "MeteorEveryStrikes_v02586", 1f, "One meteor per storm pulse (every HitInterval).");
-            _parryEmpowerPercent = Config.Bind("Priest Holy Shockwave", "NextSkillDamagePercent_v0212", 35f, "Every Buckler Parry empowers the next damaging skill by this percent for that entire skill instance.");
+            _parryEmpowerPercent = Config.Bind("Priest Holy Shockwave", "NextSkillDamagePercent_v0212", 35f, "Every shield Parry empowers the next damaging skill by this percent for that entire skill instance.");
 
             _lightningRelicCooldown = Config.Bind("Priest Lightning Relic", "Cooldown", 14f, "Cooldown starts only after the active Relic is relinquished or its 16s lifetime ends.");
             _lightningRelicStamina = Config.Bind("Priest Lightning Relic", "StaminaCost", 30f, "Stamina cost.");
@@ -13650,7 +13650,7 @@ namespace AlbedosCustomClassesAdvanced
             if (Time.time < _ihParryUiNext) return;
             _ihParryUiNext = Time.time + 0.2f;
             bool priest = player != null && IhIsPriest(player) && !player.IsDead();
-            bool equipped = priest && DragonCombat.IsBuckler(DragonCombat.GetHandItem(player, "m_leftItem"));   // v0.25.273 Buckler only (user)
+            bool equipped = priest && DragonCombat.IsBuckler(DragonCombat.GetHandItem(player, "m_leftItem"));   // v0.25.281 any shield that can parry, never a tower shield (user)
             float cd = priest ? GetCooldownRemaining("Priest.HolyParry") : 0f;
             float wave = priest ? GetCooldownRemaining("Priest.HolyShockwave") : 0f;
             float hyper = priest ? DragonCombat.TimedBuffRemaining(player, "Priest.BucklerParry") : 0f;
@@ -13661,7 +13661,7 @@ namespace AlbedosCustomClassesAdvanced
                     (hyper > 0f ? "Hyper Armor: " + Mathf.CeilToInt(hyper) + "s" : "Empower ready to use"));
             else if (equipped && cd <= 0f)
                 DragonCombat.ShowStatusState(player, "priest_holy_parry", "parry", "Holy Parry - Ready", 0f,
-                    "Mastery - Ready\nParry with your Buckler to gain Hyper Armor and empower your next damaging skill");
+                    "Mastery - Ready\nParry with your shield (not a tower shield) to gain Hyper Armor and empower your next damaging skill");
             else DragonCombat.ClearStatus(player, "priest_holy_parry");
             if (cd > 0f)
                 DragonCombat.ShowStatusState(player, "priest_buckler_recovery", "parry", "Holy Parry - Cooldown", cd,
@@ -13673,7 +13673,7 @@ namespace AlbedosCustomClassesAdvanced
             else DragonCombat.ClearStatus(player, "priest_shockwave_recovery");
             if (equipped && wave <= 0f)
                 DragonCombat.ShowStatusState(player, "priest_shockwave_ready", "parry", "Holy Shockwave - Ready", 0f,
-                    "Mastery - Ready\nA successful Buckler parry releases a Holy Shockwave (7 m, Blunt, stuns)");
+                    "Mastery - Ready\nA successful shield parry releases a Holy Shockwave (7 m, Blunt, stuns)");
             else DragonCombat.ClearStatus(player, "priest_shockwave_ready");
         }
 
@@ -21508,7 +21508,7 @@ namespace AlbedosCustomClassesAdvanced
             }
 
             if (advancement == "Priest")
-                return "+10% Magic Damage (Fire, Frost, Lightning, Poison, Spirit). Saving Grace: you and allies within 20m survive a lethal hit at 1 HP, then recover 50% HP over 6s with +50% Move Speed and -70% Stamina use. Self 20 min, each ally 40 min.\n\nBuckler: doubled Parry. A Parry grants 5s Hyper Armor and empowers your next skill with +35% Damage (kept until used, then 25s before a Parry can grant it again), and releases a 7m Holy Shockwave (Blunt damage, Stuns Small and Big; 15s cooldown).";
+                return "+10% Magic Damage (Fire, Frost, Lightning, Poison, Spirit). Saving Grace: you and allies within 20m survive a lethal hit at 1 HP, then recover 50% HP over 6s with +50% Move Speed and -70% Stamina use. Self 20 min, each ally 40 min.\n\nShield (any but a tower shield): doubled Parry. A Parry grants 5s Hyper Armor and empowers your next skill with +35% Damage (kept until used, then 25s before a Parry can grant it again), and releases a 7m Holy Shockwave (Blunt damage, Stuns Small and Big; 15s cooldown).";
 
             return "";
         }
