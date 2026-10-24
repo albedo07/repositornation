@@ -1,4 +1,3 @@
-v0.25.270: 1) Goddess Relic, then Righteous Strike right away (normal and Ascended): the hammer should land with the
-lightning. 2) Shield Charge full length and with an early Left Click: BigWhoosh rises during the charge, climax on the
-slam. 3) Main menu -> Play: music fades and stops, nothing quiet during loading. 4) Lightning Tempest for its full
-duration: FPS. Send LogOutput.log ("CA timing", "Skill load", "First cast", "[AA Menu]" lines).
+v0.25.271: main menu -> Play -> character -> Start: MenuMusic keeps playing, fades only when the world loads (like
+vanilla), no vanilla menu music at any point; then log out to the menu (MenuMusic again). Also the v0.25.270 tests
+(Goddess Relic -> Righteous Strike, Shield Charge whoosh, Lightning Tempest FPS). Send LogOutput.log.

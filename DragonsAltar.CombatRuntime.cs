@@ -1588,7 +1588,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.270";
+        public const string ModVersion = "0.25.271";
 
         internal static DragonCombatPlugin Instance;
 

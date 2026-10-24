@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.270";
+        public const string ModVersion = "0.25.271";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1306,7 +1306,7 @@ namespace AlbedosCustomClassesAdvanced
             if (fs == null)
             {
                 if (_ihTitleObj != null) { Destroy(_ihTitleObj); _ihTitleObj = null; }
-                IhStopMenuMusic();
+                IhMenuMusicTick(on);   // v0.25.271 the menu music keeps following Valheim's own fade while the game loads
                 return;
             }
             try
@@ -1316,8 +1316,7 @@ namespace AlbedosCustomClassesAdvanced
                     bool show = on && fs.m_mainMenu != null && fs.m_mainMenu.activeInHierarchy;
                     if (_ihTitleObj.activeSelf != show) _ihTitleObj.SetActive(show);
                 }
-                bool loading = fs.m_loading != null && fs.m_loading.activeInHierarchy;   // v0.25.269: starting a game fades the music from the loading screen on
-                if (on && !loading) IhMenuMusicPlay(); else IhStopMenuMusic();
+                IhMenuMusicTick(on);
                 if (Time.unscaledTime < _ihMenuNext) return;
                 _ihMenuNext = Time.unscaledTime + 0.5f;
                 if (on && _ihTitleObj == null && fs.m_mainMenu != null) IhBuildTitle(fs);
@@ -1361,7 +1360,48 @@ namespace AlbedosCustomClassesAdvanced
 
         // MenuMusic on our own looping 2D source routed to Valheim's Music mixer (the Music volume slider applies);
         // the vanilla menu track is muted while it plays and unmuted when you leave the menu or turn the option off.
-        private void IhMenuMusicPlay()
+        // v0.25.271 (user): MenuMusic REPLACES Valheim's menu track - it is never handed back to the vanilla track. It plays exactly
+        // when Valheim's "menu" music plays and follows Valheim's own volume envelope (its fade-in, and its fade-out when the game
+        // world starts loading). Valheim's source stays muted while its track is "menu"; it is unmuted only once Valheim has faded
+        // the menu track out and moved on to the next music (or when [Main Menu] Use AA Main Menu is turned off).
+        private bool _ihMenuSeen, _ihMenuFadeLogged;
+        private static FieldInfo _ihCurMusicField, _ihCurVolField;
+        private void IhMenuMusicTick(bool on)
+        {
+            if (!on) { _ihMenuSeen = false; IhStopMenuMusic(); return; }
+            MusicMan mm = MusicMan.instance;
+            if (mm == null) return;
+            if (_ihCurMusicField == null)
+            {
+                _ihCurMusicField = typeof(MusicMan).GetField("m_currentMusic", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+                _ihCurVolField = typeof(MusicMan).GetField("m_currentMusicVol", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+                if (_ihCurMusicField == null || _ihCurVolField == null) Logger.LogWarning("[AA Menu] Valheim's music fields not found; the menu music plays at a fixed level.");
+            }
+            MusicMan.NamedMusic cur = _ihCurMusicField == null ? null : _ihCurMusicField.GetValue(mm) as MusicMan.NamedMusic;
+            bool menu = cur != null && cur.m_name == "menu";
+            float env = 1f;
+            if (menu && _ihCurVolField != null) env = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((float)_ihCurVolField.GetValue(mm)));
+            if (!_ihMenuSeen)
+            {
+                if (_ihCurMusicField != null && !menu) return;   // Valheim has not started its menu track (yet)
+                if (FejdStartup.instance == null) return;
+                _ihMenuSeen = true; _ihMenuFadeLogged = false;
+                Logger.LogInfo("[AA Menu] menu music follows Valheim's menu track (its fade-in / fade-out, vanilla track muted)");
+            }
+            if (Game.instance != null && !menu && _ihCurMusicField != null)
+            {
+                // Valheim finished fading its menu track out (volume 0) and moved on: ours ends with it, silent, never cut
+                if (_ihMenuSource != null && _ihMenuSource.isPlaying) _ihMenuSource.Stop();
+                if (_ihVanillaMusic != null) { _ihVanillaMusic.mute = false; _ihVanillaMusic = null; }
+                _ihMenuSeen = false;
+                Logger.LogInfo("[AA Menu] menu music faded out with Valheim's own fade; in-game music continues");
+                return;
+            }
+            if (Game.instance != null && env < 0.999f && !_ihMenuFadeLogged) { _ihMenuFadeLogged = true; Logger.LogInfo("[AA Menu] world loading: menu music fading out with Valheim's fade"); }
+            IhMenuMusicPlay(menu ? env : 1f);
+        }
+
+        private void IhMenuMusicPlay(float envelope)
         {
             if (_ihMenuClip == null)
             {
@@ -1382,9 +1422,9 @@ namespace AlbedosCustomClassesAdvanced
             }
             if (_ihMenuSource.outputAudioMixerGroup == null && mm != null) _ihMenuSource.outputAudioMixerGroup = mm.m_musicMixer;
             _ihMenuFadeFrom = -1f;   // back on the menu: full level again
-            _ihMenuSource.volume = Mathf.Clamp01((_aaMenuMusicVolume == null ? 100f : _aaMenuMusicVolume.Value) / 100f);
+            _ihMenuSource.volume = Mathf.Clamp01((_aaMenuMusicVolume == null ? 100f : _aaMenuMusicVolume.Value) / 100f) * Mathf.Clamp01(envelope);
             if (!_ihMenuSource.isPlaying) _ihMenuSource.Play();
-            if (mm != null)
+            if (mm != null && _ihVanillaMusic == null)
             {
                 if (_ihMusicSourceField == null) _ihMusicSourceField = typeof(MusicMan).GetField("m_musicSource", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
                 AudioSource vanilla = _ihMusicSourceField == null ? null : _ihMusicSourceField.GetValue(mm) as AudioSource;
@@ -1399,7 +1439,8 @@ namespace AlbedosCustomClassesAdvanced
             }
         }
 
-        // v0.25.268 (user rule: no sound or music is ever cut): leaving the menu / turning it off fades the music out over 2.5 s
+        // v0.25.268 (user rule: no sound or music is ever cut): turning [Main Menu] Use AA Main Menu off fades ours out over 2.5 s,
+        // then the vanilla menu track (your choice) is unmuted. Leaving the menu is handled by IhMenuMusicTick (Valheim's own fade).
         private float _ihMenuFadeFrom = -1f, _ihMenuFadeVol, _ihMenuFadeLast;
         private void IhStopMenuMusic()
         {

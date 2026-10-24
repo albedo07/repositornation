@@ -1,0 +1,20 @@
+Aethelborn Ascended v0.25.271 - Menu Music Replacement   (base: v0.25.270; ANCHOR v0.25.257)
+
+MAIN MENU MUSIC - REPLACES VALHEIM'S MENU MUSIC (your correction)
+- Before: when our music stopped, the mod unmuted Valheim's music source, which was still playing the vanilla menu track,
+  so the vanilla menu music came back. That was wrong: MenuMusic replaces the vanilla menu track; it does not sit on top
+  of it.
+- Now MenuMusic plays exactly when Valheim's own "menu" track plays, and follows Valheim's own volume curve:
+  - it fades in the way Valheim's menu music fades in;
+  - clicking Play / the character and world screens / the first loading screen: it keeps playing (no early fade);
+  - when the game world starts loading, Valheim fades its menu track out - MenuMusic fades out with exactly that fade;
+  - when Valheim's fade reaches silence and Valheim moves on to the in-game music, MenuMusic ends (already silent), and
+    only then is Valheim's music source unmuted - for the in-game music, never for the vanilla menu track.
+- Logging out back to the main menu starts MenuMusic again the same way.
+- [Main Menu] Use AA Main Menu = false still fades MenuMusic out (2.5 s) and gives you the vanilla menu music, as that
+  option asks for.
+- Log lines: "[AA Menu] menu music follows Valheim's menu track", "world loading: menu music fading out with Valheim's
+  fade", "menu music faded out with Valheim's own fade; in-game music continues".
+
+No skill, sound, VFX or animation changes. All v0.25.270 changes are included.
+CHECKS: all ten modules compile (C# 5) with the installer's reference set. Not tested in game.
