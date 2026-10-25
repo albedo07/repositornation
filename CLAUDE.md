@@ -169,3 +169,4 @@ Standing release reporting rule (user, 2026-10-19): every delivered pass must li
 51. USER RULE: when told to change X, change only X, then read the WHOLE skill X end to end for flaws and report them (example given: removing Moonlight Splitter SFX -> re-check all of Moonlight Splitter).
 52. USER RULE (repeated): a projectile carries its own sound (follow the projectile), never the caster. And when the user names a reference ("like Heaven's Judgement"), reuse that reference's actual technique.
 53. "On hit" sounds must also fire where the projectile meets the ground, not only on creatures (v0.25.293 crashes never played when shooting at nothing).
+2026-10-26 — v0.25.294 ANCHOR (user: "v294's good. It's now our anchor."). ANCHOR_v0.25.294.txt (zip SHA-256 1d8326a7a38f6a2656a3da3c842b83f4d0246da0c9a2d31bba1042a846257cc7). Astral Greatblade slam timing fixed by the USER themselves outside this repo - do not redo; ask for their file if Archmage work resumes.

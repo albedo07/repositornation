@@ -168,7 +168,7 @@ Read this whole file before you touch anything. Then read `CLAUDE.md`: its dated
 
 ## 8. Open items and current state (v0.25.294)
 
-- **Waiting for the user's go-ahead: Astral Greatblade (Archmage) slam timing.**
+- **Astral Greatblade slam timing: FIXED BY THE USER themselves (not in the repo). Do not touch it.**
   - Problem: `Slam.wav` has no clean transient (it's loud from 0 to ~1.4 s). Its marker is 247 ms, so the slam starts ~0.25 s before the blade lands, and the three Ascended slams smear together.
   - Proposed fix: start Slam on the hit (marker 0), shorten it to ~0.6 s with a fade, and let Boulder Crash carry the impact. **Don't do it until they say go.**
 - **To verify in game from v0.25.294:**
@@ -178,7 +178,7 @@ Read this whole file before you touch anything. Then read `CLAUDE.md`: its dated
 - **Not yet confirmed fixed:** the Meteor Fall / Elemental Cataclysm staff charge hand (staffs use the v243 box-centre tip, `ItemTipBoxCentre`). There's been no user feedback since v0.25.290.
 - **Acrobat fall damage:** the log proves −75% is working (100 → 25). Raw values are simply big falls.
 - **Remaining performance note:** Heaven's Judgement / Lightning Tempest drop to ~120–150 fps from 200, a GPU overdraw type of cost. Already reduced, still open.
-- **Anchors** (user-confirmed good builds): AA v0.25.257 (`ANCHOR_v0.25.257.txt`); Performance Ascended v0.6.5. Zips exist for every version, but they were in Claude's scratchpad, so the git history is the record.
+- **Anchors** (user-confirmed good builds): AA **v0.25.294** (`ANCHOR_v0.25.294.txt`, current; previous v0.25.257); Performance Ascended v0.6.5. Zips exist for every version, but they were in Claude's scratchpad, so the git history is the record.
 
 ## 9. The lessons, condensed (full text in CLAUDE.md, numbered 1–53)
 

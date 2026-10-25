@@ -1,0 +1,5 @@
+AETHELBORN ASCENDED - ANCHOR v0.25.294 Big Arrows and Starfall (user-confirmed 2026-10-26: "v294's good. It's now our anchor.")
+Commit: fbf479a (branch claude/admiring-allen-lddoh3)
+Delivered zip: AA_v0.25.294_Big_Arrows_Starfall.zip  SHA-256: 1d8326a7a38f6a2656a3da3c842b83f4d0246da0c9a2d31bba1042a846257cc7
+Note: the user fixed Astral Greatblade (slam timing) themselves after this build - do not redo it; their change is not in this commit.
+Previous anchor: v0.25.257.
