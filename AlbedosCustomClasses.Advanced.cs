@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.289";
+        public const string ModVersion = "0.25.290";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -15094,7 +15094,7 @@ namespace AlbedosCustomClassesAdvanced
                         return;
                     }
                     b.Append(IhLine("Damage", IhNum(IhW("Spellcaster Afterimage Arsenal", "DamageMultiplier", 1f) * 100f) + "% of your weapon per phantom shot"));
-                    b.Append(IhLine("Phantom", "a living copy of you stays where you cast it (floats if cast in the air) and moves as you move; it fires with you every 0.5s while Mouse1 is held"));
+                    b.Append(IhLine("Phantom", "a living copy of you stays where you cast it (floats if cast in the air) and moves as you move; it fires with every attack of your held weapon (same attack speed)"));
                     b.Append(IhLine("Duration", IhNum(IhW("Spellcaster Afterimage Arsenal", "Duration", 16f)) + "s, up to 3 phantoms (Void Step / Rift travel leave more)"));
                     b.Append(IhLine("Charges", IhNum(IhW("Spellcaster Afterimage Arsenal", "Charges_v02585", 2f)) + ", each recharges on the cooldown"));
                     IhEitrCosts(b, IhW("Spellcaster Afterimage Arsenal", "EitrCost", 50f) * 0.5f, "None", IhW("Spellcaster Afterimage Arsenal", "Cooldown", 18f));
@@ -15108,7 +15108,7 @@ namespace AlbedosCustomClassesAdvanced
                     return;
                 case "rift_echo":
                     b.Append(IhLine("Damage", IhNum(IhW("Spellcaster Rift Echo", "EchoDamageMultiplier", 1f) * 100f) + "% of your weapon per echo"));
-                    b.Append(IhLine("Echo", (ascended ? "3 rifts, " : "") + "every " + IhNum(IhW("Spellcaster Rift Echo", "EchoInterval_v0234", 0.3f)) + "s while Mouse1 is held, " + IhNum(IhW("Spellcaster Rift Echo", "Duration", 16f)) + "s"));
+                    b.Append(IhLine("Echo", (ascended ? "3 rifts, " : "") + "fires with every attack of your held weapon (same attack speed), " + IhNum(IhW("Spellcaster Rift Echo", "Duration", 16f)) + "s"));
                     b.Append(IhLine("Indicator", "you glow purple while Rift Echo is active"));
                     IhEitrCosts(b, IhW("Spellcaster Rift Echo", "EitrCost", 45f) * 0.5f, "None", IhW("Spellcaster Rift Echo", "Cooldown", 16f));
                     return;
@@ -15128,7 +15128,7 @@ namespace AlbedosCustomClassesAdvanced
                     b.Append(IhLine("Charges", IhNum(ascended ? IhW("Spellcaster Arcane Rupture Ascended", "MaxCharges", 4f) : IhW("Spellcaster Arcane Rupture", "MaxCharges", 3f)) + ", each recharges in " + IhNum(IhW("Spellcaster Arcane Rupture", "RechargeSeconds", 20f)) + "s"));
                     return;
                 case "rift_walker":
-                    b.Append(IhLine("Portals", "A, then B within " + IhNum(IhW("Spellcaster Rift Walker", "PlacementWindow", 30f)) + "s, each up to " + IhNum(IhW("Spellcaster Rift Walker", "PlacementRange", 50f)) + "m (Free Aim, mid-air allowed)"));
+                    b.Append(IhLine("Portals", "A, then B within " + IhNum(IhW("Spellcaster Rift Walker", "PlacementWindow_v025290", 5f)) + "s, each up to " + IhNum(IhW("Spellcaster Rift Walker", "PlacementRange", 50f)) + "m (Free Aim, mid-air allowed)"));
                     b.Append(IhLine("Travel", "E at either portal, " + IhNum(IhW("Spellcaster Rift Walker", "LinkedLifetime", 30f)) + "s once linked; airborne exits grant Feather Falling"));
                     b.Append(IhLine("Cost", "None"));
                     b.Append(IhLine("Wind Up Time", "None"));
@@ -15283,7 +15283,7 @@ namespace AlbedosCustomClassesAdvanced
                 case "astral_greatblade": return "Strikes three times and no longer needs charging.";
                 case "frost_nova": return "Leaves frost on the ground for 6s. Enemies standing on it receive Frost.";
                 case "elemental_cataclysm": return "Adds a second bombardment that deals 60% damage.";
-                case "stonefang_eruption": return "Attack radius increases to 7m. The spikes remain for 4s and keep damaging enemies.";
+                case "stonefang_eruption": return "Attack radius increases to 7m. The spikes stay up for 8s; enemies that move inside them take damage every 0.3s.";
                 case "arcane_phalanx": return "Sword count increases to 8. A full volley also releases Astral Spears.";
                 case "afterimage_arsenal": return "Creates three copies that follow you and repeat your attacks at full damage.";
                 case "void_step": return "Charge capacity increases to 2. Keeps your movement momentum through the teleport.";

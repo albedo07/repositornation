@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Aethelborn Ascended - Sorcerer Advancements";
-        public const string ModVersion = "0.25.289";
+        public const string ModVersion = "0.25.290";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -287,6 +287,8 @@ namespace DragonsAltarSorcerer
         private readonly List<float> _ruptureRechargeAt = new List<float>();
         private readonly List<GameObject> _phalanxSwords = new List<GameObject>();
         private readonly List<GameObject> _spellcasterAfterimages = new List<GameObject>();
+        private readonly Dictionary<GameObject, int> _phantomSlot = new Dictionary<GameObject, int>();
+        private readonly Dictionary<GameObject, float> _phantomEnd = new Dictionary<GameObject, float>();
         private readonly Dictionary<Attack, GunStaffTimingState> _gunStaffTimingStates = new Dictionary<Attack, GunStaffTimingState>();
 
         private Harmony _harmony;
@@ -697,7 +699,8 @@ namespace DragonsAltarSorcerer
                     BuildRiftGlow(src);
                     if (_reGlow == null) return;
                 }
-                if (_reGlowSrc.Length != _reGlowBones.Length || Time.frameCount % 30 == 0 && src.GetComponentsInChildren<Transform>(true).Length != _reGlowSrc.Length)
+                // v0.25.290 (user: the outline kept the cast-time weapon, even holstered): rebuild when the visible gear changes
+                if (_reGlowSrc.Length != _reGlowBones.Length || Time.frameCount % 15 == 0 && GearSignature(src) != _reGlowSig)
                 {
                     BuildRiftGlow(src);
                     if (_reGlow == null) return;
@@ -741,6 +744,21 @@ namespace DragonsAltarSorcerer
             _reGlowRoot = src;
             _reGlowSrc = src.GetComponentsInChildren<Transform>(true);
             _reGlowBones = copy.GetComponentsInChildren<Transform>(true);
+            _reGlowSig = GearSignature(src);
+        }
+
+        private int _reGlowSig;
+        private readonly List<Renderer> _gearScratch = new List<Renderer>();
+
+        // Visible renderers under the player's visual (held / holstered items are separate instances, so any swap changes it).
+        private int GearSignature(Transform src)
+        {
+            _gearScratch.Clear();
+            src.GetComponentsInChildren<Renderer>(false, _gearScratch);
+            int sig = _gearScratch.Count;
+            for (int i = 0; i < _gearScratch.Count; i++) if (_gearScratch[i] != null && _gearScratch[i].enabled) sig = sig * 31 + _gearScratch[i].GetInstanceID();
+            _gearScratch.Clear();
+            return sig;
         }
 
         // v0.25.184 performance monitor: times this module's Update (one bool check when the monitor is off)
@@ -1057,9 +1075,22 @@ namespace DragonsAltarSorcerer
                 "Movement Buff\n+15% Movement Speed\n+25% Eitr Regen\nFaster attacks");
             DragonCombat.ShowStatusUntil(player, "walker_echo", "portal", "Rift Echo", walker ? _riftEchoUntil : 0f, 0,
                 "Attack Buff\nRifts repeat your attacks while Left Click is held");
-            float phantomEnd = walker ? (IsSpellAscended(player, "afterimage_arsenal") ? _mimicUntil : _afterimageUntil) : 0f;
-            DragonCombat.ShowStatusUntil(player, "walker_phantom", "generic", "Arcane Phantom", phantomEnd, 0,
+            // v0.25.290 (user): one icon per phantom (number badge 1/2/3), each with its own timer - a new phantom never resets another's
+            bool ascPhantom = IsSpellAscended(player, "afterimage_arsenal");
+            DragonCombat.ShowStatusUntil(player, "walker_phantom", "generic", "Arcane Phantom", walker && ascPhantom ? _mimicUntil : 0f, 0,
                 "Attack Buff\nSpectral copies repeat your attacks");
+            for (int n = 1; n <= 3; n++)
+            {
+                float end = 0f;
+                if (walker && !ascPhantom)
+                    for (int i = 0; i < _spellcasterAfterimages.Count; i++)
+                    {
+                        GameObject g = _spellcasterAfterimages[i]; int slot; float until;
+                        if (g != null && _phantomSlot.TryGetValue(g, out slot) && slot == n && _phantomEnd.TryGetValue(g, out until)) end = Mathf.Max(end, Mathf.Min(until, _afterimageUntil));
+                    }
+                DragonCombat.ShowStatusUntil(player, "walker_phantom_" + n, "phantom_" + n, "Arcane Phantom " + n, end, 0,
+                    "Attack Buff\nThis phantom repeats your attacks");
+            }
             DragonCombat.ShowStatusUntil(player, "walker_phalanx", "damage", "Arcane Phalanx", walker && _phalanxSwords.Count > 0 ? _phalanxExpireAt : 0f,
                 _phalanxSwords.Count, "Attack Buff\n{stacks} spectral swords remaining");
             DragonCombat.ShowStatusUntil(player, "walker_portals", "portal", "Rift Walker", walker && _riftA != null ? _riftEndTime : 0f, 0,
@@ -2060,6 +2091,24 @@ namespace DragonsAltarSorcerer
             }
 
             _spellcasterAfterimages.Add(root);
+            // v0.25.290: lowest free number among the living phantoms; own end time for its icon
+            int free = 1;
+            while (true)
+            {
+                bool used = false;
+                for (int i = 0; i < _spellcasterAfterimages.Count; i++)
+                {
+                    GameObject g = _spellcasterAfterimages[i]; int sl;
+                    if (g != null && g != root && _phantomSlot.TryGetValue(g, out sl) && sl == free) { used = true; break; }
+                }
+                if (!used) break;
+                free++;
+            }
+            List<GameObject> gone = null;
+            foreach (GameObject g in _phantomSlot.Keys) if (g == null || !_spellcasterAfterimages.Contains(g)) { if (gone == null) gone = new List<GameObject>(); gone.Add(g); }
+            if (gone != null) for (int i = 0; i < gone.Count; i++) { _phantomSlot.Remove(gone[i]); _phantomEnd.Remove(gone[i]); }
+            _phantomSlot[root] = free;
+            _phantomEnd[root] = Time.time + Mathf.Max(1f, _afterimageDuration.Value);
             Destroy(root, Mathf.Max(1f, _afterimageDuration.Value));
         }
 
@@ -2226,7 +2275,7 @@ namespace DragonsAltarSorcerer
             Vector3 momentum = body != null ? body.velocity : Vector3.zero;
             DragonCombat.PlayAccent(player, "hw_voidstep", 0.05f);   // v0.25.18 Ghost Step never replaces the running pose
             Vector3 vfxFrom = player.transform.position;   // v0.25.180 VFX only: departure point for the fold
-            DragonSkillAudio.Play(player, DragonBaseSound.VoidDBZ, vfxFrom);   // v0.25.287 (user)
+            DragonSkillAudio.BeginSustain(player, DragonBaseSound.VoidDBZ, player.transform.position, 0.01f, 1f, 1f, null, true);   // v0.25.290 (user): the teleport sound travels with you
             TeleportPlayer(player, dest);
             if (body != null && IsSpellAscended(player, "void_step"))
                 body.velocity = momentum; // Ascended keeps momentum
@@ -2629,7 +2678,40 @@ namespace DragonsAltarSorcerer
             // being classified as Magic or on Attack.Start repeating correctly.
             if (!DragonCombat.CanUseWorldInput(player) || GetAdvancement(player) != "Spellcaster" || !Input.GetKey(KeyCode.Mouse0))
                 return;
+            // v0.25.290 (user: Staff of Embers fired like a machine gun): Rift Echo and the phantoms fire with every real
+            // attack of the held weapon, so they copy its own attack speed; burst weapons repeat at their burst interval.
+            if (weapon == null) weapon = GetCurrentWeapon(player);
+            FireHeldEchoes(player, weapon);
+            int bursts; float gap;
+            WeaponBursts(weapon, out bursts, out gap);
+            _echoBurstsLeft = bursts > 1 && gap > 0.01f ? bursts - 1 : 0;
+            _echoBurstGap = Mathf.Max(0.06f, gap);
+            _nextEchoBurst = Time.time + _echoBurstGap;
             TryTriggerSpellcasterHeldFire(player);
+        }
+
+        private int _echoBurstsLeft;
+        private float _echoBurstGap, _nextEchoBurst;
+        private static FieldInfo _burstsField, _burstGapField;
+
+        private static void WeaponBursts(ItemDrop.ItemData weapon, out int bursts, out float gap)
+        {
+            bursts = 1; gap = 0f;
+            try
+            {
+                if (weapon == null || weapon.m_shared == null || weapon.m_shared.m_attack == null) return;
+                if (_burstsField == null) _burstsField = typeof(Attack).GetField("m_projectileBursts", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (_burstGapField == null) _burstGapField = typeof(Attack).GetField("m_burstInterval", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (_burstsField != null) bursts = Mathf.Clamp((int)_burstsField.GetValue(weapon.m_shared.m_attack), 1, 20);
+                if (_burstGapField != null) gap = (float)_burstGapField.GetValue(weapon.m_shared.m_attack);
+            }
+            catch (Exception) { bursts = 1; gap = 0f; }
+        }
+
+        private void FireHeldEchoes(Player player, ItemDrop.ItemData weapon)
+        {
+            if (Time.time < _riftEchoUntil) FireRiftEcho(player, weapon);
+            if (Time.time < _afterimageUntil && _spellcasterAfterimages.Count > 0) FireAfterimages(player, weapon);
         }
 
         private void UpdateSpellcasterHeldFire(Player player)
@@ -2638,6 +2720,7 @@ namespace DragonsAltarSorcerer
             {
                 // A fresh press always gets an immediate first trigger.
                 _nextSpellcasterHeldFire = 0f;
+                _echoBurstsLeft = 0;
                 return;
             }
 
@@ -2648,19 +2731,13 @@ namespace DragonsAltarSorcerer
         {
             if (!DragonCombat.CanUseWorldInput(player))
                 return;
-            ItemDrop.ItemData weapon = GetCurrentWeapon(player);
-            // Rift Echo, Afterimages and Astral Clones pulse on a fixed cadence while Mouse1 is held,
-            // regardless of what the Spellcaster has equipped (Ascended Rift Echo: 0.35s).
-            // v0.23.4: Rift Echo fires every 0.3s (normal and Ascended), afterimages every 0.5s.
-            if (Time.time < _riftEchoUntil && Time.time >= _nextSpellcasterHeldFire)
+            // v0.25.290: Rift Echo / phantoms follow the weapon's own attacks (OnNormalMagicAttack); here only the
+            // remaining shots of a burst weapon, at its burst interval, while Mouse1 is held.
+            if (_echoBurstsLeft > 0 && Time.time >= _nextEchoBurst)
             {
-                _nextSpellcasterHeldFire = Time.time + Mathf.Max(0.05f, _reAscCadence.Value);
-                FireRiftEcho(player, weapon);
-            }
-            if (Time.time < _afterimageUntil && _spellcasterAfterimages.Count > 0 && Time.time >= _nextAfterimageFire)
-            {
-                _nextAfterimageFire = Time.time + 0.5f;
-                FireAfterimages(player, weapon);
+                _echoBurstsLeft--;
+                _nextEchoBurst = Time.time + _echoBurstGap;
+                FireHeldEchoes(player, GetCurrentWeapon(player));
             }
             // Arcane Phalanx: each sword has a hard launch buffer that releasing Mouse1 never resets.
             if (_phalanxSwords.Count > 0 && !_phalanxVolleyArmed && Time.time >= _nextPhalanxLaunch)
@@ -2847,14 +2924,14 @@ namespace DragonsAltarSorcerer
             const string w = "Spellcaster Rift Walker";
             _riftWalkerCooldown = Config.Bind(w, "Cooldown", 120f, "Seconds, starting when Portal A is placed (a failed B still uses it).");
             _riftWalkerRange = Config.Bind(w, "PlacementRange", 50f, "Max distance for each portal (physical aim; Free Aim mid-air otherwise).");
-            _riftWalkerWindow = Config.Bind(w, "PlacementWindow", 30f, "Seconds to place Portal B after A.");
+            _riftWalkerWindow = Config.Bind(w, "PlacementWindow_v025290", 5f, "Seconds to place Portal B after A; Portal A closes if none is placed.");
             _riftWalkerLife = Config.Bind(w, "LinkedLifetime", 30f, "Seconds both portals work once B is placed.");
             _yyAttackSpeed = Config.Bind("Spellcaster Gun Staff", "AttackSpeedMultiplier_v0232", 0f, "Staff / Wand attack-speed multiplier. 0 or 1 keeps native speed; values above 1 increase animation speed.");
             const string sa = "Spellcaster Stonefang Eruption Ascended";
             _saAscRadius = Config.Bind(sa, "Radius", 7f, "Ascended radius.");
             _saAscEruption = Config.Bind(sa, "EruptionPercent", 80f, "Eruption damage %.");
-            _saAscTickPercent = Config.Bind(sa, "SpikeTickPercent", 20f, "Spikes: % every 0.5s.");
-            _saAscDuration = Config.Bind(sa, "SpikeDuration", 4f, "Spikes stay this long (8 ticks).");
+            _saAscTickPercent = Config.Bind(sa, "SpikeMoveTickPercent_v025290", 12f, "Spikes: damage % every 0.3 s to an enemy that moves inside the spike field.");
+            _saAscDuration = Config.Bind(sa, "SpikeDuration_v025290", 8f, "Seconds the spikes stay up.");
             _saAscCooldown = Config.Bind(sa, "Cooldown", 9f, "Seconds.");
             _saAscEitr = Config.Bind(sa, "EitrCost", 24f, "Eitr cost.");
             _saAscRange = Config.Bind(sa, "GroundPACRange", 40f, "Ground PAC range.");
@@ -2865,7 +2942,7 @@ namespace DragonsAltarSorcerer
             _paAscSpearRadius = Config.Bind(pa, "AstralSpearRadius", 4f, "Full 8-sword volley: eruption on the first impact.");
             _paAscSpearPercent = Config.Bind(pa, "AstralSpearPercent", 80f, "Eruption: % of one sword.");
             _vsAscCharges = Config.Bind("Spellcaster Void Step Ascended", "Charges", 2, "Charges, recovered one after the other; keeps momentum.");
-            _reAscCadence = Config.Bind("Spellcaster Rift Echo", "EchoInterval_v0234", 0.3f, "Seconds between echoes while Mouse1 is held (normal and Ascended; Ascended opens 3 rifts).");
+            _reAscCadence = Config.Bind("Spellcaster Rift Echo", "EchoInterval_v0234", 0.3f, "Legacy (v0.25.290): echoes now fire with every attack of the held weapon.");
             const string ga = "Spellcaster Gravity Blast Ascended";
             _gbAscRange = Config.Bind(ga, "Range", 25f, "Ascended travel distance (same speed).");
             _gbAscBurst = Config.Bind(ga, "EndBurstPercent", 130f, "Burst when the orb ends (Ascended) or is detonated by the 2nd recast (normal too): % of one hit.");
@@ -2982,7 +3059,7 @@ namespace DragonsAltarSorcerer
 
         private void AstralSpearEruption(Player player, Vector3 point, float swordPercent)
         {
-            DragonSkillAudio.Play(player, DragonBaseSound.PhalanxSpear, point);   // v0.25.287 (user) MagicSword, lower
+            DragonSkillAudio.Play(player, DragonBaseSound.PhalanxSpear, point);   // v0.25.290 (user) MagicSword3
             float radius = DragonCombat.M(_paAscSpearRadius.Value);
             List<Character> targets = GetSphereTargets(player, point, radius);
             for (int i = 0; i < targets.Count; i++)
@@ -3217,16 +3294,31 @@ namespace DragonsAltarSorcerer
                 if (DragonCombat.ShouldSkillStun(player, enemy, "stonefang_eruption", "Attack 1", true, DragonCombat.IsSmallEnemy(enemy), true)) DragonCombat.Stun(enemy, target);
                 if (!IsBoss(enemy)) DragonCombat.ApplyCripple(enemy, 6f);
             }
-            if (_enableVfx.Value) { CreateStoneSpikes(target, radius); Vector3 sft = target; float sfr = radius; DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(sft, new Color(0.85f, 0.60f, 0.30f, 1f), sfr, 2f); DragonVfx.SpikeRing(sft, DragonVfx.Rock, sfr * 0.85f, 12, 2.4f, 2f); }); }   // v0.25.58
-            int ticks = Mathf.Max(1, Mathf.RoundToInt(_saAscDuration.Value / 0.5f));
-            for (int t = 0; t < ticks; t++)
+            // v0.25.290 (user): one eruption - the spikes stay up for the whole duration (no repeated spikes);
+            // an enemy inside takes damage every 0.3 s while it keeps moving.
+            float hold = Mathf.Max(1f, _saAscDuration.Value);
+            if (_enableVfx.Value) { Vector3 sft = target; float sfr = radius; float sh = hold; DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(sft, new Color(0.85f, 0.60f, 0.30f, 1f), sfr, 2f); DragonVfx.SpikeRing(sft, DragonVfx.Rock, sfr * 0.9f, 14, 2.4f, sh); DragonVfx.SpikeRing(sft, DragonVfx.Rock, sfr * 0.5f, 8, 2.0f, sh); }); }
+            Dictionary<Character, Vector3> last = new Dictionary<Character, Vector3>();
+            for (int i = 0; i < targets.Count; i++) if (targets[i] != null) last[targets[i]] = targets[i].transform.position;
+            float end = Time.time + hold;
+            int t = 0;
+            while (Time.time < end)
             {
-                yield return new WaitForSeconds(0.5f);
+                yield return new WaitForSeconds(0.3f);
                 if (player == null) yield break;
                 List<Character> inside = GetSphereTargets(player, target, radius);
                 for (int i = 0; i < inside.Count; i++)
-                    DealWiz(player, inside[i], _stoneAscDmg, _saAscTickPercent.Value / 100f, "stonefang_eruption", 0f, false, "stonefang_eruption", DragonCombat.StunAttack(t + 2), false, false, true);
-                if (_enableVfx.Value && t % 2 == 1) { CreateStoneSpikes(target, radius); Vector3 sft2 = target; float sfr2 = radius; DragonCombat.RunVfx(delegate { DragonVfx.Debris(sft2, new Color(0.45f, 0.38f, 0.30f, 1f), 6, 6f, 0.3f, 1.8f); DragonVfx.Shake(sft2, 20f, 0.6f); }); }
+                {
+                    Character c = inside[i];
+                    if (c == null) continue;
+                    Vector3 now = c.transform.position;
+                    Vector3 was;
+                    bool moved = !last.TryGetValue(c, out was) || (now - was).sqrMagnitude > 0.0025f;   // entered, or moved > 5 cm
+                    last[c] = now;
+                    if (!moved) continue;
+                    DealWiz(player, c, _stoneAscDmg, _saAscTickPercent.Value / 100f, "stonefang_eruption", 0f, false, "stonefang_eruption", DragonCombat.StunAttack(t + 2), false, false, true);
+                }
+                t++;
             }
         }
 
@@ -3607,6 +3699,11 @@ namespace DragonsAltarSorcerer
         {
             DragonSkillAudio.Expect(player, DragonBaseSound.RuptureBoomBass, target, Mathf.Max(0.1f, _ruptureWindup.Value));   // v0.25.287 (user)
             DragonSkillAudio.Expect(player, DragonBaseSound.RuptureSolid, target, Mathf.Max(0.1f, _ruptureWindup.Value));
+            // v0.25.290 (user): the wind-up has its own sound - the void swirl (BlackHole2, higher) fades in at the spot and
+            // hands over to the boom with a short overlap.
+            int ruw = DragonSkillAudio.BeginSustain(player, DragonBaseSound.RuptureWindup, target, Mathf.Max(0.1f, _ruptureWindup.Value));
+            DragonSkillAudio.SetSustainFades(ruw, Mathf.Min(0.6f, Mathf.Max(0.1f, _ruptureWindup.Value) * 0.6f), 0f);
+            DragonSkillAudio.SetSustainEnd(ruw, Mathf.Max(0.1f, _ruptureWindup.Value) + 0.12f, 0.3f);
             if (_enableVfx.Value && !DragonVfx.Enabled) StartCoroutine(GuideVfx(player, target, DragonCombat.M(_ruptureRadius.Value), new Color(0.58f, 0.10f, 0.95f, 0.70f), _ruptureWindup.Value));
             if (_enableVfx.Value) { Vector3 rv = target; float rr = DragonCombat.M(_ruptureRadius.Value), rt = Mathf.Max(0.1f, _ruptureWindup.Value); DragonCombat.RunVfx(delegate { DragonVfx.RuptureCharge(rv, rr, rt); DragonVfx.Vortex(null, rv + Vector3.up * 0.6f, new Color(0.58f, 0.10f, 0.95f, 1f), rr, rt); DragonVfx.Glyph(player, rv, new Color(0.58f, 0.10f, 0.95f, 1f), rr, rt + 0.3f, -90f, false); }); }
             yield return new WaitForSeconds(Mathf.Max(0.1f, _ruptureWindup.Value));
@@ -4271,15 +4368,8 @@ namespace DragonsAltarSorcerer
                     float a = (float)i / 32f * Mathf.PI * 2f;
                     line.SetPosition(i, new Vector3(Mathf.Cos(a) * 1.15f, 1.35f + Mathf.Sin(a) * 1.35f, 0f));
                 }
-                GameObject riftObj = root;
-                if (DragonVfx.Enabled) { try { DragonVfx.RiftPortal(root.transform, new Vector3(0f, 1.35f, 0f), 1.15f, 1.35f); line.enabled = false; } catch (Exception) { line.enabled = true; } }   // v0.25.80 swirling void portal
-                DragonCombat.RunVfx(delegate
-                {
-                    GameObject g = new GameObject("riftGlow");
-                    g.transform.SetParent(riftObj.transform, false);
-                    g.transform.localPosition = new Vector3(0f, 1.35f, 0f);
-                    DragonVfx.AttachGlow(g.transform, new Color(0.75f, 0.25f, 1f, 1f), 1.1f, 60f, 6f);
-                });
+                // v0.25.290 (user): flat single-layer vortex; the purple centre glow is gone
+                if (DragonVfx.Enabled) { try { DragonVfx.RiftPortal(root.transform, new Vector3(0f, 1.35f, 0f), 1.15f, 1.35f); line.enabled = false; } catch (Exception) { line.enabled = true; } }
             }
         }
 
@@ -4295,7 +4385,9 @@ namespace DragonsAltarSorcerer
             if (player != null)
             {
                 int s = DragonSkillAudio.BeginSustain(player, DragonBaseSound.RiftConjure, p, RiftOpenDelay, 1f, 1f, delegate { return watched != null; });   // v0.25.288 swell peak on the opening
-                DragonSkillAudio.SetSustainEnd(s, 5.3f, 0.8f);
+                // v0.25.290 (user: the sound dipped to nothing before the loop): two -30 dB fades crossing at the same time
+                // left both voices ~-18 dB at the midpoint. Now the hum is already at full level before this one fades.
+                DragonSkillAudio.SetSustainEnd(s, 5.5f, 0.7f);
             }
             if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.RiftConjure(p, f, RiftOpenDelay, HwBlue); });
             yield return new WaitForSeconds(RiftOpenDelay);
@@ -4304,10 +4396,10 @@ namespace DragonsAltarSorcerer
             SphereCollider col = rift.GetComponent<SphereCollider>();
             if (col != null) col.enabled = true;
             if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.SpaceFold(p, true, HwBlue, 1.4f); });
-            yield return new WaitForSeconds(3.9f);   // v0.25.288 the hum loop fades in while the recording fades out (overlap, no gap)
+            yield return new WaitForSeconds(3.6f);   // hum fades in 4.2 -> 4.8 s; the recording holds full until 4.8, then fades by 5.5 s
             if (rift == null || player == null) yield break;
             int h = DragonSkillAudio.BeginSustain(player, DragonBaseSound.RiftHum, p, 600f, 1f, 1f, delegate { return watched != null; });
-            DragonSkillAudio.SetSustainFades(h, 0.8f, 0f);
+            DragonSkillAudio.SetSustainFades(h, 0.6f, 0f);
         }
 
         private GameObject CreateRift(Vector3 position, bool conjure = false)

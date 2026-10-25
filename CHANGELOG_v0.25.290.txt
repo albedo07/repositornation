@@ -1,0 +1,46 @@
+AETHELBORN ASCENDED v0.25.290 - Horizon Walker Pass   (Sorcerer bloodline only; Warrior and Cleric untouched)
+
+HORIZON WALKER
+- Stonefang Eruption (Ascended): ONE eruption. The spikes rise once and stay up for 8 s (no repeated spikes). Every
+  0.3 s, an enemy inside the field that moved (or just walked in) takes 12% damage; enemies standing still take none.
+  Config: SpikeDuration_v025290 (8 s), SpikeMoveTickPercent_v025290 (12%). The tooltip states the new rule.
+- Void Step: the teleport sound (DBZ) follows you instead of staying at the start point.
+- Arcane Phantom / Rift Echo: they now fire with every real attack of the weapon you hold, so they copy its attack
+  speed (Staff of Embers is no longer a machine gun; Gun Staff and other staves fire at their own rates). For
+  burst weapons, each burst shot is mirrored at the weapon's own burst interval. (EchoInterval_v0234 is no longer used.)
+- Arcane Phantom (Normal): each phantom has its own buff icon with its number in the bottom-left corner
+  (1, 2, 3) and its own timer. Conjuring a new phantom no longer resets the icon of the existing one.
+  Ascended twins keep the single Arcane Phantom icon.
+- Arcane Phalanx: summon = your new MagicSword recording (leading silence trimmed, level matched to the
+  other sword sounds). Ascended spears = MagicSword3 at normal pitch (the old pitched-down reuse is gone).
+- Arcane Rupture: new wind-up sound. The void swirl (BlackHole2, raised to 120% pitch) fades in at the target
+  during the wind-up and hands over to BoomBass + SolidBoom with a short overlap. New slider:
+  Spellcaster Arcane Rupture Audio > Wind Up Volume (%).
+- Rift Walker:
+  * Portal A closes if Portal B is not placed within 5 s (PlacementWindow_v025290 = 5).
+  * Portal look: one flat disc (no tunnel cones or double rim, so it no longer looks like a yoyo from the side),
+    with no purple glow in the middle. It is a violet vortex with spinning spiral streaks, a bright rim and small
+    crackling lightning arcs along the edge.
+  * Sound: the drop before the hum loop is fixed. Cause: the recording faded out while the loop faded in, both on
+    the same -30 dB curve, so halfway through both were near -18 dB (a ~15 dB hole). Now the hum reaches full level
+    first (4.2-4.8 s), and only then does the recording fade out (4.8-5.5 s).
+- Rift Echo: the purple outline rebuilds whenever your visible gear changes. It now follows the weapon you hold, and
+  a holstered weapon is outlined on your back as it actually sits (no leftover cast-time weapon).
+
+ARCHMAGE
+- Astral Greatblade (Normal + Ascended): checked. MagicSword2 (the conjuring) plays once per cast. The three
+  Ascended slams play only Slam and Boulder Crash. No change was needed.
+- Meteor Fall / Elemental Cataclysm charge hand: your log shows the staff rule now runs
+  ("attach(clone)||$item_stafffireball|ElementalMagic: staff rule"), yet the hand still differed. The staff now uses
+  the exact tip rule the charge poses were made with before v0.25.244 (the centre of the item's box).
+  Since v0.25.244 staffs had been using the newer long-axis tip, and that changed the wrist angle.
+
+FILES
+- New: ImmortalHeroesAssets/SFX/MagicSword3.wav, ImmortalHeroesAssets/Buff_phantom_1/2/3.png.
+- Replaced: ImmortalHeroesAssets/SFX/MagicSword.wav (your new recording).
+- The installer now requires 62 skill sounds (plus the menu music).
+
+CHECKS (static only)
+- All ten modules compile with C# 5 against your real game DLLs (tools/realbuild.sh, installer reference set).
+- The generator (e290) asserted every parallel cue array before saving: 164 cues.
+- NOT tested in game: sound levels and timing, the portal look, phantom icons, the staff hand, and fire rates per weapon.

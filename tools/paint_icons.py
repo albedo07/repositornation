@@ -194,6 +194,28 @@ I['life_token_cd']=render(lambda d: heart(d,GOLD), GOLD, cooldown=True)
 I['labor']       = render(lambda d: (d.line([(150,380),(330,170)],fill=BROWN,width=30), d.polygon([(290,120),(390,170),(360,210),(270,160)],fill=GREY), d.line([(180,170),(360,380)],fill=BROWN,width=30), d.polygon([(130,170),(220,120),(240,160),(160,215)],fill=GREY)), BROWN)
 I['clockwork']   = render(lambda d: (star(d,GOLD,256,256,170,12,.8), d.ellipse((150,150,362,362),fill=(30,30,30)), d.line([(256,256),(256,180)],fill=GOLD,width=20), d.line([(256,256),(310,280)],fill=GOLD,width=20)), GOLD)
 I['generic']     = render(lambda d: star(d,WHITE), WHITE)
+# ---- v0.25.290 Arcane Phantom: one icon per phantom, number badge in the bottom-left corner ----
+def ghost(d, c, cx=256, cy=250, k=1.0):
+    d.ellipse((cx-70*k,cy-150*k,cx+70*k,cy-10*k),fill=c)
+    pts=[(cx-95*k,cy-60*k),(cx+95*k,cy-60*k),(cx+110*k,cy+150*k)]
+    for i in range(6): pts.append((cx+110*k-44*k*(i+1), cy+(150 if i%2 else 110)*k))
+    d.polygon(pts,fill=c); d.ellipse((cx-38*k,cy-100*k,cx-14*k,cy-70*k),fill=(30,20,45)); d.ellipse((cx+14*k,cy-100*k,cx+38*k,cy-70*k),fill=(30,20,45))
+def number_badge(n):
+    def fn(img, ring):
+        from PIL import ImageFont
+        b=Image.new('RGBA',(S,S),(0,0,0,0)); d=ImageDraw.Draw(b); cx,cy,r=140,372,108
+        d.ellipse((cx-r,cy-r,cx+r,cy+r), fill=(14,15,19), outline=ring, width=16)
+        f=ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',150)
+        d.text((cx,cy),str(n),font=f,fill=WHITE,anchor='mm'); img.alpha_composite(b)
+    return fn
+def phantom(n):
+    img=Image.new('RGBA',(S,S),(0,0,0,0)); d=ImageDraw.Draw(img); plate(d, VIOLET)
+    layer=Image.new('RGBA',(S,S),(0,0,0,0)); ghost(ImageDraw.Draw(layer), lighter(VIOLET,.25), 280, 250, 1.0)
+    img.alpha_composite(layer.filter(ImageFilter.GaussianBlur(18))); img.alpha_composite(layer)
+    number_badge(n)(img, VIOLET); return img.resize((64,64), Image.LANCZOS)
+I['phantom_1']   = phantom(1)
+I['phantom_2']   = phantom(2)
+I['phantom_3']   = phantom(3)
 # ---- Enemy debuffs (diamond plate) ----
 DR=(200,50,50)
 I['debuff_poisoned']=render(lambda d: skull_drop(d,POISON,256,256,1), POISON, debuff=True)

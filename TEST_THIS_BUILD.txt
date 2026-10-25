@@ -1,3 +1,12 @@
-v0.25.289 Sorcerer Sound Fixes - test: Astral Greatblade (conjure sound on cast, Boulder Crash on slams), Astral Railcannon
-Normal + Ascended (wind-up, BassDrop on the shot, laser held), Arcane Phantom (Teleport), Arcane Phalanx (no voice),
-Meteor Fall / Cataclysm charge (staff hand). Send LogOutput.log ("Hand aim item").
+TEST THIS BUILD - v0.25.290 Horizon Walker Pass
+1. Ascended Stonefang: spikes rise once and stay ~8 s; a standing enemy takes no tick damage, a moving one does every 0.3 s.
+2. Void Step: the DBZ sound stays with you after the teleport.
+3. Rift Echo + Arcane Phantom with Staff of Embers, then a Gun Staff, then a normal staff: echo/phantom shots match each weapon's own fire rate.
+4. Cast Arcane Phantom twice: two icons "1" and "2"; the first keeps its timer when the second is conjured.
+5. Arcane Phalanx: new MagicSword on summon; Ascended spears = MagicSword3.
+6. Arcane Rupture: a swirl sound fades in during the wind-up and hands over to the boom.
+7. Rift Walker: place Portal A and wait 5 s (it should close). Look at a portal from the side: it should be flat, with
+   no purple ball in the middle. Listen at ~4-6 s after placing: there should be no drop before the hum.
+8. Rift Echo: swap weapons and holster during the buff; the outline should follow the gear.
+9. Meteor Fall / Cataclysm charge: compare the staff hand with how it looked before v0.25.244. Send LogOutput.log
+   (line "Hand aim item ... staff rule (v0.25.243 box centre)").
