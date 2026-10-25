@@ -1,0 +1,64 @@
+AETHELBORN ASCENDED v0.25.291 - Ranger Sounds   (Ranger bloodline audio + Sorcerer bloodline fixes; Warrior/Cleric untouched)
+
+RANGER BLOODLINE - NEW SOUND DESIGN (every sound has its own F8 slider, 0-600%)
+Shared by all bows (new F8 entry "Bow Shots"): every skill shot plays Valheim's own bow release; every skill arrow
+that strikes a creature or the ground plays Valheim's arrow hit; Ballista Shot / Ascended Explosive Arrow charges
+start with Valheim's bow draw. (These are native game sounds, found by name at load; the log says if one is missing.)
+
+RANGER
+- Piercing Arrow: bow release (Normal: 1 shot, Ascended: each of the 3) + arrow hit on what it pierces.
+- Tumble Shot: a fast whoosh as you flip (BigWhoosh2, higher); arrows keep their release sound.
+- Snare Trap: unchanged (native bush sounds).
+ACROBAT
+- Gale Volley: bow release + a gale gust with each fan (Ascended: both fans).
+- Cyclone Arrow: Tornado wind that TRAVELS with the cyclone, fades in, and fades out when it ends
+  (Ascended tornado: deeper, 85% pitch).
+- Swallow Dive: a fast dash whoosh; a blade-wind cut when it goes through enemies (Ascended aftershock: a lower cut).
+- Skyfall Barrage: a whoosh as you rise; release + arrow hits for every volley; Ascended dive slam = Boulder Crash +
+  BassDrop timed to land exactly on the slam.
+- Somersault Dance: flip whoosh, foot slam (HeavyPunch + Boulder Crash) on landing, a second whoosh on the backflip.
+- Furious Winds: a held wind storm (Tornado, higher) that follows you and fades out when it ends or you cancel;
+  Ascended end burst = gust + BassDrop.
+- Tailwind: a soft gust + buff shimmer.
+BOWMASTER
+- Ballista Shot: draw on charge; release = bow + heavy launch whoosh (deeper with each charge stack) + BassDrop;
+  a heavy impact on hit; Ascended shockwave = Mid Boom.
+- Arrow Rain: YOUR ArrowVolley recording - the whistle swells and its first wave lands 0.35 s after the shot, then
+  a seamless loop of its impacts keeps raining until the rain ends (fade in / fade out).
+- Pinning Shot: a heavy thud per pinned enemy; Ascended delayed explosion = Small Boom + BassDrop.
+- Explosive Arrow: a fire explosion (Mid Boom + Small Boom crack) where it lands; cluster bombs whistle down and
+  burst once per cluster; Ascended charge starts with the draw.
+- Splitting Arrow: a tearing whoosh with every fan; Great Arrow = deep launch whoosh + BassDrop; Ascended Sky Arrow =
+  Boulder Crash + HeavyPunch landing exactly with the arrow.
+- Starfall Volley: a channel shimmer whose swell lands as the stars begin, a star-rain bed for the whole barrage
+  (fades out when it ends or you cancel), a bright impact per star; Ascended final star = Solid Boom + BassDrop.
+- Hawks Vigil: a wing flap + buff shimmer.
+Levels: each recording measured (momentary loudness) and set so explosions/slams are loudest, impacts next,
+whooshes and wind beds sit underneath. Raw files only (no load-time normalisation).
+
+SORCERER BLOODLINE FIXES
+- Elemental Cataclysm: the dip before the held-climax loop is gone (same cause as Rift Portal: two fades crossing at
+  the same time). The loop is now at full level before the build-up fades.
+- Elemental Cataclysm / Meteor Fall charging: the inner guide ring was spawned EVERY FRAME for 0.1 s out of every
+  0.4 s (~20 ground rings per burst at 200 fps) - your log showed 176 slow frames during Cataclysm. Now one ring
+  every 0.12 s (looks the same, a fraction of the work).
+- Rift Echo / Arcane Phantom: now fire on every real shot of your weapon (the hook Valheim calls per projectile
+  burst / melee hit). Gun Staff no longer stops after a few seconds (its stream is one long attack); the normal staff
+  can no longer double-fire (one echo per real shot, guarded).
+- Ascended Stonefang: enemies inside the spikes stay Crippled the whole time (refreshed every 1.5 s while inside).
+- Rift Portal: the spiral streaks and lightning arcs now show on BOTH faces.
+
+PERFORMANCE WHEN NOT CASTING
+Your log has no measurement of that moment (no skill trace was running), so I could not name a cause from it.
+Added: an always-on idle watch. If a 10 s stretch with no skill cast is 1.5x slower than your best quiet stretch,
+one log line lists what this mod has alive (effect meshes, particle systems, ghost copies, sounds playing). Next
+time it happens, send that log (and press F7 / Ctrl+F7 for the full report if you can).
+
+FILES
+New: ImmortalHeroesAssets/SFX/ArrowVolley.wav (your recording, quiet lead trimmed, hit point = first wave),
+ArrowRainLoop.wav (seamless loop of its impact section). Installer: 64 skill sounds + menu music.
+
+NOT CHANGED (waiting for your answer): Astral Greatblade slam timing (see my last message).
+
+CHECKS (static only): all ten modules compile (C# 5, your real DLLs, installer reference set); generator asserted
+all parallel tables (208 cues / 71 skills). Not tested in game: levels, timing, native sound availability, fire rates.

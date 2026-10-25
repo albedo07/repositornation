@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Aethelborn Ascended - Sorcerer Advancements";
-        public const string ModVersion = "0.25.290";
+        public const string ModVersion = "0.25.291";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -652,6 +652,9 @@ namespace DragonsAltarSorcerer
                 if (player == null || player != Player.m_localPlayer) return;
                 ItemDrop.ItemData weapon = _attackWeaponField == null ? null : _attackWeaponField.GetValue(__instance) as ItemDrop.ItemData;
                 Instance.QueueMimicAttack(player, weapon);
+                // v0.25.291 (user: Gun Staff echoes stopped after a few seconds, staff sometimes doubled): echoes fire on every
+                // real shot (one call per projectile burst / melee hit) - a Gun Staff's held stream is one long attack.
+                if (Instance.GetAdvancement(player) == "Spellcaster") Instance.FireHeldEchoes(player, weapon);
             }
             catch { }
         }
@@ -1593,7 +1596,7 @@ namespace DragonsAltarSorcerer
                 // a second ring filling it as the charge builds
                 float mfFull = DragonCombat.M(_meteorRadius.Value) * 1.3f;
                 if (_enableVfx.Value && holding && Time.time >= nextMarker) { nextMarker = Time.time + 0.2f; StartCoroutine(GuideVfx(player, target, mfFull, new Color(1f, 0.45f, 0.10f, 0.45f), 0.22f)); }
-                if (_enableVfx.Value && holding && ((int)(elapsed * 10f) % 4 == 0)) StartCoroutine(GuideVfx(player, target, mfFull * Mathf.Clamp01(0.2f + heldFor / 3f * 0.8f), new Color(1f, 0.45f, 0.10f, 0.55f), 0.16f));
+                if (_enableVfx.Value && holding && Time.time >= _guideFillAt) { _guideFillAt = Time.time + 0.12f; StartCoroutine(GuideVfx(player, target, mfFull * Mathf.Clamp01(0.2f + heldFor / 3f * 0.8f), new Color(1f, 0.45f, 0.10f, 0.55f), 0.16f)); }
                 int now = Mathf.Min(3, Mathf.FloorToInt(heldFor));
                 if (now > stacks) { stacks = now; _meteorChargeShown = stacks; ShowMessage("Meteor Fall " + stacks + "/3" + (stacks >= 3 ? " - release to drop it where you aim" : "")); }
                 if (elapsed >= windup && !holding) break;
@@ -1810,6 +1813,7 @@ namespace DragonsAltarSorcerer
         }
 
         private float _ccBuildAt;
+        private float _guideFillAt;
         private int _ccBuildIdx;
 
         private IEnumerator CataclysmRoutine(Player player, Vector3 target)
@@ -1846,8 +1850,10 @@ namespace DragonsAltarSorcerer
                 {
                     // v0.25.288 (user): held at full charge = the climax keeps going (seamless loop), crossfaded from the build-up
                     ccLoop = DragonSkillAudio.BeginSustain(player, DragonBaseSound.CataclysmLoop, player.transform.position, 120f, 1f, 1f, delegate { return ccp != null && !ccp.IsDead(); }, true);
-                    DragonSkillAudio.SetSustainFades(ccLoop, 0.6f, 0f);
-                    DragonSkillAudio.SetSustainEnd(ccPower, 0.8f, 0.8f);
+                    // v0.25.291 (user: super fade-out before the loop): the loop is at full level (0.4 s) before the build-up
+                    // starts fading (0.5 -> 1.0 s); crossing two -30 dB fades at once left a ~15 dB hole
+                    DragonSkillAudio.SetSustainFades(ccLoop, 0.4f, 0f);
+                    DragonSkillAudio.SetSustainEnd(ccPower, 1.0f, 0.5f);
                 }
                 _cataclysmCharge01 = charge / max;
                 // v0.25.38 (user): on-screen stack prompt like Meteor Fall (one stack per charge second).
@@ -1862,7 +1868,8 @@ namespace DragonsAltarSorcerer
                 Vector3 aimNow;
                 if (holding && AlbedoAimUtility.TryGetPhysicalTarget(player, DragonCombat.M(_cataclysmRange.Value), out aimNow)) target = aimNow;
                 if (_enableVfx.Value && holding && Time.time >= nextMarker) { nextMarker = Time.time + 0.2f; StartCoroutine(GuideVfx(player, target, radius, new Color(0.76f, 0.30f, 1f, 0.45f), 0.22f)); }
-                if (_enableVfx.Value && ((int)(elapsed * 10f) % 4 == 0)) StartCoroutine(GuideVfx(player, target, radius * Mathf.Clamp01(0.2f + charge / max), new Color(0.76f, 0.30f, 1f, 0.55f), 0.16f));
+                // v0.25.291 (perf): was "every frame for 0.1 s of every 0.4 s" (~20 ground rings per burst at 200 fps); now one per 0.12 s
+                if (_enableVfx.Value && Time.time >= _guideFillAt) { _guideFillAt = Time.time + 0.12f; StartCoroutine(GuideVfx(player, target, radius * Mathf.Clamp01(0.2f + charge / max), new Color(0.76f, 0.30f, 1f, 0.55f), 0.16f)); }
                 if (_enableVfx.Value && DragonVfx.Enabled && holding && Time.time >= _ccBuildAt)
                 {
                     // v0.25.191 elemental build-up at the target while charging: fire, frost and lightning take turns, stronger with charge
@@ -2681,35 +2688,15 @@ namespace DragonsAltarSorcerer
             // v0.25.290 (user: Staff of Embers fired like a machine gun): Rift Echo and the phantoms fire with every real
             // attack of the held weapon, so they copy its own attack speed; burst weapons repeat at their burst interval.
             if (weapon == null) weapon = GetCurrentWeapon(player);
-            FireHeldEchoes(player, weapon);
-            int bursts; float gap;
-            WeaponBursts(weapon, out bursts, out gap);
-            _echoBurstsLeft = bursts > 1 && gap > 0.01f ? bursts - 1 : 0;
-            _echoBurstGap = Mathf.Max(0.06f, gap);
-            _nextEchoBurst = Time.time + _echoBurstGap;
+            if (!_mimicShotHooks) FireHeldEchoes(player, weapon);   // fallback only: shots normally come from AttackShotPostfix
             TryTriggerSpellcasterHeldFire(player);
         }
 
-        private int _echoBurstsLeft;
-        private float _echoBurstGap, _nextEchoBurst;
-        private static FieldInfo _burstsField, _burstGapField;
-
-        private static void WeaponBursts(ItemDrop.ItemData weapon, out int bursts, out float gap)
-        {
-            bursts = 1; gap = 0f;
-            try
-            {
-                if (weapon == null || weapon.m_shared == null || weapon.m_shared.m_attack == null) return;
-                if (_burstsField == null) _burstsField = typeof(Attack).GetField("m_projectileBursts", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (_burstGapField == null) _burstGapField = typeof(Attack).GetField("m_burstInterval", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (_burstsField != null) bursts = Mathf.Clamp((int)_burstsField.GetValue(weapon.m_shared.m_attack), 1, 20);
-                if (_burstGapField != null) gap = (float)_burstGapField.GetValue(weapon.m_shared.m_attack);
-            }
-            catch (Exception) { bursts = 1; gap = 0f; }
-        }
-
+        private float _lastHeldEchoAt = -1f;
         private void FireHeldEchoes(Player player, ItemDrop.ItemData weapon)
         {
+            if (Time.time - _lastHeldEchoAt < 0.05f) return;   // one echo per real shot even if two hooks report the same one
+            _lastHeldEchoAt = Time.time;
             if (Time.time < _riftEchoUntil) FireRiftEcho(player, weapon);
             if (Time.time < _afterimageUntil && _spellcasterAfterimages.Count > 0) FireAfterimages(player, weapon);
         }
@@ -2720,7 +2707,6 @@ namespace DragonsAltarSorcerer
             {
                 // A fresh press always gets an immediate first trigger.
                 _nextSpellcasterHeldFire = 0f;
-                _echoBurstsLeft = 0;
                 return;
             }
 
@@ -2733,12 +2719,7 @@ namespace DragonsAltarSorcerer
                 return;
             // v0.25.290: Rift Echo / phantoms follow the weapon's own attacks (OnNormalMagicAttack); here only the
             // remaining shots of a burst weapon, at its burst interval, while Mouse1 is held.
-            if (_echoBurstsLeft > 0 && Time.time >= _nextEchoBurst)
-            {
-                _echoBurstsLeft--;
-                _nextEchoBurst = Time.time + _echoBurstGap;
-                FireHeldEchoes(player, GetCurrentWeapon(player));
-            }
+
             // Arcane Phalanx: each sword has a hard launch buffer that releasing Mouse1 never resets.
             if (_phalanxSwords.Count > 0 && !_phalanxVolleyArmed && Time.time >= _nextPhalanxLaunch)
             {
@@ -3299,6 +3280,8 @@ namespace DragonsAltarSorcerer
             float hold = Mathf.Max(1f, _saAscDuration.Value);
             if (_enableVfx.Value) { Vector3 sft = target; float sfr = radius; float sh = hold; DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(sft, new Color(0.85f, 0.60f, 0.30f, 1f), sfr, 2f); DragonVfx.SpikeRing(sft, DragonVfx.Rock, sfr * 0.9f, 14, 2.4f, sh); DragonVfx.SpikeRing(sft, DragonVfx.Rock, sfr * 0.5f, 8, 2.0f, sh); }); }
             Dictionary<Character, Vector3> last = new Dictionary<Character, Vector3>();
+            Dictionary<Character, float> cripUntil = new Dictionary<Character, float>();
+            for (int i = 0; i < targets.Count; i++) if (targets[i] != null) cripUntil[targets[i]] = Time.time + 5f;   // the eruption's own 6 s cripple
             for (int i = 0; i < targets.Count; i++) if (targets[i] != null) last[targets[i]] = targets[i].transform.position;
             float end = Time.time + hold;
             int t = 0;
@@ -3311,6 +3294,10 @@ namespace DragonsAltarSorcerer
                 {
                     Character c = inside[i];
                     if (c == null) continue;
+                    // v0.25.291 (user): slowed the whole time it stays inside - refreshed (2 s) every 1.5 s, not every tick (each
+                    // ApplyCripple also spawns its status effect)
+                    float crAt;
+                    if (!IsBoss(c) && (!cripUntil.TryGetValue(c, out crAt) || Time.time >= crAt)) { DragonCombat.ApplyCripple(c, 2f); cripUntil[c] = Time.time + 1.5f; }
                     Vector3 now = c.transform.position;
                     Vector3 was;
                     bool moved = !last.TryGetValue(c, out was) || (now - was).sqrMagnitude > 0.0025f;   // entered, or moved > 5 cm

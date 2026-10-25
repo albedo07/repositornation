@@ -42,7 +42,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Aethelborn Ascended - Ranger";
-        public const string ModVersion = "0.25.290";
+        public const string ModVersion = "0.25.291";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -869,8 +869,7 @@ namespace DragonsAltarRanger
                 Vector3 origin = ShotOrigin(player);
                 Vector3 dir = AimDir(player, origin);
                 if (!ascended) DragonCombat.PlayClip(player, "rg_power", 0.1f);
-                Shoot(player, shot == 0 ? "Piercing Arrow" : null); // native bow_fire for every Ascended arrow
-                DragonSkillAudio.Play(player, DragonBaseSound.Arrow, origin);
+                Shoot(player, shot == 0 ? "Piercing Arrow" : null); // native bow_fire for every Ascended arrow (Shoot plays it)
                 if (_enableVfx.Value) { Vector3 po = origin, pd = dir; DragonCombat.RunVfx(delegate { DragonVfx.Gust(po + pd * 1.2f, pd, 0.8f); }); }
                 bool first = true;
                 float endWidth = DragonCombat.M(Mathf.Max(0.3f, _paAscWidth.Value));
@@ -902,6 +901,7 @@ namespace DragonsAltarRanger
         {
             Vector3 start = player.transform.position;
             ShowMessage("Tumble Shot");
+            DragonSkillAudio.Play(player, DragonBaseSound.TumbleFlip, start);   // v0.25.291
             if (ascended)
             {
                 List<Character> gust = GetSphereTargets(player, start, DragonCombat.M(_tsAscGust.Value));
@@ -1118,6 +1118,7 @@ namespace DragonsAltarRanger
                         if (_enableVfx.Value && enemy != null && player != null) { Vector3 gp = enemy.transform.position + Vector3.up * 0.8f, gd = enemy.transform.position - player.transform.position; DragonCombat.RunVfx(delegate { DragonVfx.Gust(gp, gd, 1.2f); }); }   // v0.25.181 contact gust
                     });
                 Shoot(player, null);
+                DragonSkillAudio.Play(player, DragonBaseSound.GaleGust, player.transform.position);   // v0.25.291
                 if (f + 1 < fans) yield return new WaitForSeconds(Mathf.Max(0.05f, _gvAscDelay.Value));
             }
         }
@@ -1156,6 +1157,10 @@ namespace DragonsAltarRanger
                 GameObject ca = cyArrow, cvx = vfx; float lr = radius * 0.7f; Color acol = new Color(0.55f, 1f, 0.90f, 0.9f);
                 DragonCombat.RunVfx(delegate { DragonVfx.SpiritArrow(ca.transform, acol, 1.1f); DragonVfx.LeafOrbit(cvx.transform, lr, 3); });
             }
+            // v0.25.291 the wind travels with the cyclone (anchor follows it), fades in, and fades out when it ends
+            GameObject cyAudio = new GameObject("AA_CycloneSfx"); cyAudio.transform.position = pos;
+            int cyWind = DragonSkillAudio.BeginSustain(player, DragonBaseSound.CycloneWind, pos, travel + 0.5f, ascended ? 0.85f : 1f, 1f, delegate { return cyAudio != null; }, false, cyAudio.transform);
+            DragonSkillAudio.SetSustainFades(cyWind, 0.25f, 0f);
             float speed = range / travel;
             float traveled = 0f, nextHit = 0f;
             RangerArrowDamage d = ArrowDamage(player);
@@ -1169,6 +1174,7 @@ namespace DragonsAltarRanger
                     break;
                 pos += dir * step;
                 traveled += step;
+                if (cyAudio != null) cyAudio.transform.position = pos;
                 if (vfx != null)
                 {
                     Vector3 vp = ascended ? GroundAt(pos) : pos;
@@ -1209,6 +1215,7 @@ namespace DragonsAltarRanger
             }
             if (vfx != null) Destroy(vfx);
             if (cyArrow != null) Destroy(cyArrow);
+            if (cyAudio != null) Destroy(cyAudio);
         }
 
         // A tall funnel of wind rings, narrow at the ground and wide at the top.
@@ -1304,6 +1311,7 @@ namespace DragonsAltarRanger
             Vector3 end = start + dir * distance;
             Rigidbody body = player.GetComponent<Rigidbody>();
             DragonCombat.PlayClip(player, "rg_dive", 0.08f);
+            DragonSkillAudio.Play(player, DragonBaseSound.DiveDash, start);   // v0.25.291
             float t = 0f, duration = 0.25f;
             if (_enableVfx.Value) { Player dp = player; float dend = Time.time + duration + 0.05f; DragonCombat.RunVfx(delegate { DragonVfx.AirStreak(dp.transform, DragonVfx.Wind, 0.6f, 0.35f, delegate { return dp != null && Time.time < dend; }); }); }   // v0.25.181 clean wake following the real dash
             while (t < duration && player != null)
@@ -1321,6 +1329,7 @@ namespace DragonsAltarRanger
             List<Character> hits = PathTargets(player, start, end, DragonCombat.M(_sdRadius.Value));
             RangerArrowDamage d = ArrowDamage(player);
             for (int i = 0; i < hits.Count; i++) { Deal(player, hits[i], d, mult, 4f, false, "swallow_dive", "Attack 1", false, false, ascended); OnSkillHit(player); }
+            if (hits.Count > 0) DragonSkillAudio.Play(player, DragonBaseSound.DiveCut, end);   // v0.25.291
             if (_enableVfx.Value && DragonVfx.Enabled)
             {
                 // v0.25.190 a short wind slice on every enemy the dash cut + a few leaf fragments peeling off the wake
@@ -1346,6 +1355,7 @@ namespace DragonsAltarRanger
                 if (player == null) yield break;
                 List<Character> again = PathTargets(player, start, end, DragonCombat.M(_sdRadius.Value));
                 for (int i = 0; i < again.Count; i++) Deal(player, again[i], d, mult * _sdAscPercent.Value / 100f, 2f, false, "swallow_dive", "Aftershock", false, false, ascended);
+                if (again.Count > 0) DragonSkillAudio.Play(player, DragonBaseSound.DiveCut, end, 0, 0.85f);   // v0.25.291 the aftershock cut, lower
                 if (_enableVfx.Value) LineVfx(start + Vector3.up, end + Vector3.up, new Color(0.85f, 1f, 1f, 0.95f), 0.20f, 0.25f);
             }
         }
@@ -1381,6 +1391,7 @@ namespace DragonsAltarRanger
             if (Physics.Raycast(start + Vector3.up, Vector3.up, out ceiling, DragonCombat.M(_sbHeight.Value), SolidMask(), QueryTriggerInteraction.Ignore))
                 top = start + Vector3.up * Mathf.Max(0f, ceiling.distance - 1.5f);
             DragonCombat.PlayClip(player, "rg_shot", 0.1f);   // v0.25.32 normal bow shot on the way up
+            DragonSkillAudio.Play(player, DragonBaseSound.SkyfallRise, start);   // v0.25.291
             float t = 0f;
             while (t < 0.5f && player != null)
             {
@@ -1417,6 +1428,7 @@ namespace DragonsAltarRanger
                     fired++;
                     List<Character> hits = GetSphereTargets(player, point, radius);
                     for (int i = 0; i < hits.Count; i++) { Deal(player, hits[i], d, mult, 2f, false, "skyfall_barrage", DragonCombat.StunAttack(fired), false, false, ascended); OnSkillHit(player); }
+                    DragonSkillAudio.Play(player, DragonBaseSound.ArrowHit, point);   // v0.25.291 the arrows land
                     if (_enableVfx.Value)
                     {
                         for (int k = 0; k < 6; k++)
@@ -1443,6 +1455,7 @@ namespace DragonsAltarRanger
                 FaceTowards(player, land);
                 float dropTime = Mathf.Clamp(Vector3.Distance(from, land) / DragonCombat.M(40f), 0.2f, 0.9f);
                 DragonCombat.PlayClip(player, "rg_dive", 0.08f);
+                DragonSkillAudio.Expect(player, DragonBaseSound.SkyfallSlam, land, dropTime); DragonSkillAudio.Expect(player, DragonBaseSound.SkyfallBass, land, dropTime);   // v0.25.291 lands on the slam
                 t = 0f;
                 while (t < dropTime && player != null)
                 {
@@ -1512,6 +1525,7 @@ namespace DragonsAltarRanger
             DragonCombat.LockSkill(player, flipTime + backTime + 0.4f);
             GrantIFrames(player, flipTime);
             FaceTowards(player, land);
+            DragonSkillAudio.Play(player, DragonBaseSound.SomersaultFlip, start);   // v0.25.291
             yield return StartCoroutine(ArcFlip(player, start, land, DragonCombat.M(Mathf.Max(0.5f, _ssFlipHeight.Value)), flipTime, 1));
             if (player == null || player.IsDead()) { _somersaultActive = false; _hovering = false; yield break; }
             // v0.25.85 (user): never slam the air - while you touch no terrain / Structure you keep falling (a fast
@@ -1533,6 +1547,7 @@ namespace DragonsAltarRanger
             blunt.Blunt = d.Total();
             float mult = _ssDamage.Value / 100f * DragonCombat.GetSkillPower(player, "ricochet_arrow");
             DragonCombat.PlayClip(player, "merc_stomp", 0.05f);
+            DragonSkillAudio.Play(player, DragonBaseSound.SomersaultSlam, land); DragonSkillAudio.Play(player, DragonBaseSound.SomersaultCrash, land);   // v0.25.291 the foot slam
             List<Character> hits = GetSphereTargets(player, land, radius);
             for (int i = 0; i < hits.Count; i++)
             {
@@ -1552,6 +1567,7 @@ namespace DragonsAltarRanger
             Vector3 back = -player.transform.forward;
             Vector3 away = FlatPoint(land, back, DragonCombat.M(Mathf.Max(0f, _ssBackDistance.Value)));
             GrantIFrames(player, backTime);
+            DragonSkillAudio.Play(player, DragonBaseSound.SomersaultFlip, land, 0, 1.1f);   // v0.25.291 the backflip out
             if (!ascended)
             {
                 yield return StartCoroutine(ArcFlip(player, land, away, DragonCombat.M(Mathf.Max(0.3f, _ssBackHeight.Value)), backTime, -1));
@@ -1644,6 +1660,8 @@ namespace DragonsAltarRanger
             float end = Time.time + duration, nextTick = 0f, nextDot = Time.time + 0.5f;
             _fwActive = true; _fwStop = false;
             _windsUntil = end;
+            int fwStorm = DragonSkillAudio.BeginSustain(player, DragonBaseSound.FuriousStorm, player.transform.position, duration + 0.5f, 1f, 1f, delegate { return _fwActive; }, true);   // v0.25.291 fades out when the storm ends
+            DragonSkillAudio.SetSustainFades(fwStorm, 0.4f, 0f);
             float fwFollow = Time.time;
             List<Character> near = null; float nearAt = 0f;
             while (Time.time < end && player != null && !player.IsDead() && !_fwStop)
@@ -1737,6 +1755,7 @@ namespace DragonsAltarRanger
                     Deal(player, burst[i], d, _fwAscBurst.Value / 100f * power, DragonCombat.IsSmallEnemy(burst[i]) ? 40f : 8f, false, "furious_winds", "End Burst", false, false, ascended);
                     if (DragonCombat.IsSmallEnemy(burst[i])) Launch(burst[i], 9f);
                 }
+                DragonSkillAudio.Play(player, DragonBaseSound.FuriousBurst, player.transform.position); DragonSkillAudio.Play(player, DragonBaseSound.FuriousBass, player.transform.position);   // v0.25.291
                 if (_enableVfx.Value) { StartCoroutine(RingVfx(player.transform.position, radius, new Color(0.55f, 1f, 0.70f, 1f), 0.8f)); Vector3 fw = player.transform.position; float fwr = radius; DragonCombat.RunVfx(delegate { DragonVfx.GroundImpact(fw, new Color(0.55f, 1f, 0.70f, 1f), fwr, 1.4f); DragonVfx.SlashStreaks(fw + Vector3.up, new Color(0.55f, 1f, 0.70f, 1f), fwr, 10, 0.4f); }); }   // v0.25.58
             }
             // The DoT keeps ticking after the storm until each enemy's 6s run out.
@@ -1853,6 +1872,7 @@ namespace DragonsAltarRanger
             StartCooldown("Acrobat.Tailwind", _twCooldown.Value);
             DragonCombat.LockSkill(player, 0.5f);
             DragonCombat.PlayClip(player, "rg_tailwind", 0.06f);   // v0.25.16 release-first
+            DragonSkillAudio.Play(player, DragonBaseSound.TailwindGust, player.transform.position); DragonSkillAudio.Play(player, DragonBaseSound.TailwindBuff, player.transform.position);   // v0.25.291
             ShowMessage("Tailwind");
             float duration = Mathf.Max(1f, _twDuration.Value);
             HashSet<Player> allies = new HashSet<Player>();
@@ -2726,6 +2746,7 @@ namespace DragonsAltarRanger
             _ballistaStacks = 0;
             _ballistaNextStack = Time.time + 1f;
             ShowMessage("Ballista Shot - hold to charge");
+            DragonSkillAudio.Play(player, DragonBaseSound.BowDraw, player.transform.position);   // v0.25.291 the heavy draw
             DragonCombat.PlayClip(player, "rg_ballista", 0.35f, true);   // crouched heavy draw while charging
             float started = Time.time;
             while (player != null && !player.IsDead() && (DragonCombat.IsTreeSkillKeyHeld("ballista_shot") || Time.time - started < 0.15f))
@@ -2754,12 +2775,14 @@ namespace DragonsAltarRanger
             Vector3 origin = ShotOrigin(player);
             Vector3 dir = AimDir(player, origin);
             Shoot(player, "BALLISTA SHOT" + (stacks > 0 ? " x" + stacks : ""));
+            DragonSkillAudio.Play(player, DragonBaseSound.BallistaLaunch, origin, 0, 1f - 0.04f * stacks); DragonSkillAudio.Play(player, DragonBaseSound.BallistaBass, origin);   // v0.25.291 siege launch, deeper per stack
             DragonCombat.ClipImpact(player);   // release: siege recoil
             StartCoroutine(ArrowFlight(player, origin, dir, DragonCombat.M(90f), range, width * 0.5f, true, new Color(0.75f, 1f, 0.55f, 1f), 0f,
                 delegate(Character enemy)
                 {
                     bool small = DragonCombat.IsSmallEnemy(enemy);
                     Deal(player, enemy, d, mult, small ? 30f : 6f, !small, "ballista_shot", "Attack 1", false, false, ascended);
+                    DragonSkillAudio.Play(player, DragonBaseSound.BallistaImpact, enemy.transform.position + Vector3.up);   // v0.25.291
                     // v0.24.2 Ascended: the after-effect happens on hit (a piercing shot has no one left at its end).
                     if (ascended && stacks >= 3) BallistaShockwave(player, enemy, d, mult * _bsAscLinePercent.Value / 100f);
                     return true;
@@ -2784,6 +2807,7 @@ namespace DragonsAltarRanger
             if (player == null || source == null) return;
             Vector3 at = source.transform.position;
             float radius = DragonCombat.M(Mathf.Max(0.5f, _bsAscLine.Value));
+            DragonSkillAudio.Play(player, DragonBaseSound.BallistaShock, at);   // v0.25.291
             List<Character> hits = GetSphereTargets(player, at, radius);
             for (int i = 0; i < hits.Count; i++)
             {
@@ -2803,6 +2827,19 @@ namespace DragonsAltarRanger
             DragonCombat.PlayClip(player, "rg_sky", 0.15f);   // loose into the sky
             Shoot(player, "Arrow Rain");
             StartCoroutine(ArrowRainRoutine(player, point, DragonCombat.IsSkillAscended(player, "arrow_rain")));
+            StartCoroutine(ArrowRainSound(player, point, Mathf.Max(0.5f, _arDuration.Value)));
+        }
+
+        // v0.25.291 (user ArrowVolley.wav): the volley's whistle swells and its first wave lands 0.35 s after the shot; once its
+        // impacts thin out, a seamless loop of its impacts keeps raining until the rain ends (fade-in 0.4 s, fades with the rain).
+        private IEnumerator ArrowRainSound(Player player, Vector3 point, float duration)
+        {
+            DragonSkillAudio.Expect(player, DragonBaseSound.RainVolley, point, 0.35f);
+            yield return new WaitForSeconds(1.5f);
+            float left = duration - 1.5f;
+            if (player == null || left < 0.6f) yield break;
+            int rain = DragonSkillAudio.BeginSustain(player, DragonBaseSound.RainLoop, point, left);
+            DragonSkillAudio.SetSustainFades(rain, 0.4f, 0f);
         }
 
         private IEnumerator ArrowRainRoutine(Player player, Vector3 point, bool ascended)
@@ -2892,6 +2929,7 @@ namespace DragonsAltarRanger
         {
             Deal(player, target, d, mult, 0f, false, "pinning_shot", "Attack 1", false, false, ascended);
             OnSkillHit(player);
+            DragonSkillAudio.Play(player, DragonBaseSound.PinThud, target.transform.position);   // v0.25.291 pinned to the ground
             float seconds;
             if (IsBossTarget(target))
             {
@@ -2936,6 +2974,7 @@ namespace DragonsAltarRanger
             blast.Fire = d.Total() * 0.5f;
             blast.Blunt = d.Total() * 0.5f;
             float m = _psAscExplodePercent.Value / 100f * DragonCombat.GetSkillPower(player, "pinning_shot");
+            DragonSkillAudio.Play(player, DragonBaseSound.PinBoom, at); DragonSkillAudio.Play(player, DragonBaseSound.PinBass, at);   // v0.25.291
             List<Character> hits = GetSphereTargets(player, at, radius);
             for (int i = 0; i < hits.Count; i++) { Deal(player, hits[i], blast, m, 8f, false, "pinning_shot", "Delayed Explosion", false, false, true); OnSkillHit(player); }
             if (!target.IsDead()) DragonCombat.ApplyExpose(target, Mathf.Max(0.5f, _psAscExposeAfter.Value));
@@ -3018,6 +3057,7 @@ namespace DragonsAltarRanger
             _exNextStack = Time.time + 1f;
             int maxStacks = Mathf.Max(1, Mathf.RoundToInt(_eaAscCharge.Value));
             ShowMessage("Explosive Arrow - hold to charge");
+            DragonSkillAudio.Play(player, DragonBaseSound.BowDraw, player.transform.position);   // v0.25.291
             DragonCombat.PlayClip(player, "rg_ballista", 0.35f, true);   // heavy draw while charging
             float started = Time.time;
             while (player != null && !player.IsDead() && (DragonCombat.IsTreeSkillKeyHeld("explosive_arrow") || Time.time - started < 0.15f))
@@ -3081,6 +3121,7 @@ namespace DragonsAltarRanger
                     Vector3[] marks = RowOfThree(GroundAt(points[p]), dirs[p], r);
                     for (int c = 0; c < marks.Length; c++) StartCoroutine(GuideVfx(player, marks[c], r, new Color(1f, 0.45f, 0.15f, 0.45f), 0.3f));
                 }
+            if (points.Count > 0) DragonSkillAudio.Expect(player, DragonBaseSound.ClusterFall, points[0], 0.3f);   // v0.25.291 the bombs whistle down
             yield return new WaitForSeconds(0.3f);   // the bombs fall
             if (player == null) yield break;
             for (int p = 0; p < points.Count; p++) ClusterHit(player, points[p], dirs[p], blast, mult, r, ascended, "Cluster " + (p + 1).ToString());
@@ -3108,6 +3149,7 @@ namespace DragonsAltarRanger
             blast.Fire = total * 0.5f;
             blast.Blunt = total * 0.5f;
             float mult = _eaDamage.Value / 100f * DragonCombat.GetSkillPower(player, "explosive_arrow") * scale;
+            DragonSkillAudio.Play(player, DragonBaseSound.ExplosiveBoom, at); DragonSkillAudio.Play(player, DragonBaseSound.ExplosiveCrack, at);   // v0.25.291 fire explosion
             List<Character> hits = GetSphereTargets(player, at, radius);
             for (int i = 0; i < hits.Count; i++)
             {
@@ -3138,6 +3180,7 @@ namespace DragonsAltarRanger
         {
             Vector3[] circles = RowOfThree(GroundAt(at), dir, r);
             HashSet<int> done = new HashSet<int>();
+            if (player != null) DragonSkillAudio.Play(player, DragonBaseSound.ClusterBoom, GroundAt(at), 0, UnityEngine.Random.Range(0.92f, 1.08f));   // v0.25.291 one burst per cluster
             for (int c = 0; c < circles.Length; c++)
             {
                 List<Character> hits = GetSphereTargets(player, circles[c], r);
@@ -3238,6 +3281,7 @@ namespace DragonsAltarRanger
                 flat.Normalize();
                 FaceTowards(player, player.transform.position + flat);
                 Shoot(player, null);
+                DragonSkillAudio.Play(player, DragonBaseSound.SplitWhoosh, origin);   // v0.25.291 the fan of arrows tears the air
                 DragonCombat.PlayClip(player, v % 2 == 0 ? "rg_split_a" : "rg_split_b", 0.06f);   // alternating sweep per volley
                 if (_enableVfx.Value)
                     for (int i = 0; i < arrows; i++)
@@ -3277,6 +3321,7 @@ namespace DragonsAltarRanger
             Vector3 dir = AimDir(player, origin);
             DragonCombat.PlayClip(player, "rg_power", 0.08f);   // snap draw, strong recoil
             Shoot(player, "GREAT ARROW");
+            DragonSkillAudio.Play(player, DragonBaseSound.GreatLaunch, origin); DragonSkillAudio.Play(player, DragonBaseSound.GreatBass, origin);   // v0.25.291
             StartCoroutine(ArrowFlight(player, origin, dir, DragonCombat.M(80f), range, width * 0.5f, true, new Color(0.80f, 1f, 0.60f, 1f), 0f,
                 delegate(Character enemy)
                 {
@@ -3317,6 +3362,7 @@ namespace DragonsAltarRanger
         private IEnumerator SkyArrowRoutine(Player player, Vector3 point, RangerArrowDamage d, float power)
         {
             float radius = DragonCombat.M(Mathf.Max(0.5f, _saAscSkyRadius.Value));
+            DragonSkillAudio.Expect(player, DragonBaseSound.SkyCrash, point, 0.4f); DragonSkillAudio.Expect(player, DragonBaseSound.SkyPunch, point, 0.4f);   // v0.25.291 lands with the arrow
             if (_enableVfx.Value) { StartCoroutine(GuideVfx(player, point, radius, new Color(0.85f, 1f, 0.70f, 0.5f), 0.4f)); }   // v0.25.180 the marker is a guide
             yield return new WaitForSeconds(0.4f);
             if (player == null) yield break;
@@ -3363,6 +3409,7 @@ namespace DragonsAltarRanger
             float channel = Mathf.Max(0f, _sfChannel.Value);
             DragonCombat.LockSkill(player, channel);
             DragonCombat.PlayClip(player, "rg_starfall", Mathf.Max(0.2f, channel));
+            DragonSkillAudio.Expect(player, DragonBaseSound.StarfallChannel, player.transform.position, channel);   // v0.25.291 its swell lands as the stars begin
             float radius = DragonCombat.M(_sfRadius.Value);
             if (_enableVfx.Value) StartCoroutine(GuideVfx(player, point, radius, new Color(0.80f, 1f, 0.60f, 0.8f), channel + _sfDuration.Value));
             yield return new WaitForSeconds(channel);
@@ -3373,6 +3420,8 @@ namespace DragonsAltarRanger
             float end = Time.time + Mathf.Max(0.5f, _sfDuration.Value);
             float nextTick = 0f;
             float sfFollow = Time.time;
+            int sfRain = DragonSkillAudio.BeginSustain(player, DragonBaseSound.StarfallRain, point, Mathf.Max(0.5f, _sfDuration.Value) + 0.3f, 1f, 1f, delegate { return _sfActive; });   // v0.25.291
+            DragonSkillAudio.SetSustainFades(sfRain, 0.3f, 0f);
             // v0.24.2: every tick hits EVERY enemy in the 20m area; the falling arrows are cosmetic.
             while (Time.time < end && player != null && !_sfStop)
             {
@@ -3391,12 +3440,14 @@ namespace DragonsAltarRanger
                     if (inArea.Count > 0) { Character tc = inArea[UnityEngine.Random.Range(0, inArea.Count)]; sp = tc != null ? tc.transform.position : point; }
                     else { Vector2 r = UnityEngine.Random.insideUnitCircle * radius; sp = point + new Vector3(r.x, 0f, r.y); }
                     StarVfx(GroundAt(sp), impact, 0.4f);
+                    DragonSkillAudio.Play(player, DragonBaseSound.StarfallImpact, GroundAt(sp), 0, UnityEngine.Random.Range(0.9f, 1.1f));   // v0.25.291
                 }
                 yield return new WaitForSeconds(Mathf.Max(0.05f, _sfInterval.Value));
             }
             _sfActive = false;
             if (ascended && player != null && !_sfStop)
             {
+                DragonSkillAudio.Expect(player, DragonBaseSound.StarfallFinal, point, 0.3f); DragonSkillAudio.Expect(player, DragonBaseSound.StarfallBass, point, 0.3f);   // v0.25.291 the big final star
                 yield return new WaitForSeconds(0.3f);
                 if (_enableVfx.Value) StarVfx(GroundAt(point), DragonCombat.M(_sfAscRadius.Value), 4f);   // v0.25.85 (user): the final arrow is BIG (visual only)
                 StarHitAll(player, point, DragonCombat.M(_sfAscRadius.Value), d, _sfAscDamage.Value / 100f * DragonCombat.GetSkillPower(player, "starfall_volley"), "Final Star");
@@ -3434,6 +3485,7 @@ namespace DragonsAltarRanger
             StartCooldown("Bowmaster.HawksVigil", _hvCooldown.Value);
             DragonCombat.LockSkill(player, 0.5f);
             DragonCombat.PlayClip(player, "rg_vigil", 0.06f);   // v0.25.16 release-first
+            DragonSkillAudio.Play(player, DragonBaseSound.VigilWing, player.transform.position); DragonSkillAudio.Play(player, DragonBaseSound.VigilBuff, player.transform.position);   // v0.25.291
             ShowMessage("Hawk's Vigil");
             float duration = Mathf.Max(1f, _hvDuration.Value);
             Collider[] hits = Physics.OverlapSphere(player.transform.position, DragonCombat.M(_hvRadius.Value));
@@ -3604,6 +3656,7 @@ namespace DragonsAltarRanger
                     if (ch != null)
                     {
                         if (!IsEnemy(player, ch) || !done.Add(ch.GetInstanceID())) continue;
+                        DragonSkillAudio.Play(player, DragonBaseSound.ArrowHit, ch.transform.position + Vector3.up);   // v0.25.291
                         onHit(ch);
                         if (_enableVfx.Value && pierce) { Vector3 hp = ch.transform.position + Vector3.up * 1f, hd = dir; Color hc = color; float hw = Mathf.Clamp(radius * 0.5f, 0.05f, 0.4f); DragonCombat.RunVfx(delegate { DragonVfx.Streak(hp - hd * 0.6f, hp + hd * 1.6f, hc, hw, 0.2f); DragonVfx.Burst(hp, hc, 6, 6f, 0.06f, 0.25f, 0.3f); }); }   // v0.25.181 directional pass-through streak
                         if (!pierce) { stop = true; pos += dir * hits[i].distance; }
@@ -3616,6 +3669,7 @@ namespace DragonsAltarRanger
                         if (hits[i].distance <= 0.001f && r > 0.4f && traveled < r * 2f + 1f) continue;
                         stop = true;
                         pos += dir * hits[i].distance;
+                        DragonSkillAudio.Play(player, DragonBaseSound.ArrowHit, pos);   // v0.25.291 the arrow thunks into the ground
                         if (_enableVfx.Value)
                         {
                             Vector3 pp = pos, pdir = dir; float plen = radius >= DragonCombat.M(0.9f) ? 2.5f + radius * 3f : UnityEngine.Random.Range(0.85f, 1.05f); Color pcol = color;   // v0.25.85 big only for real big shots (meters, not units)
@@ -3643,6 +3697,7 @@ namespace DragonsAltarRanger
             // tilt read as shaking during quick-shot chains).
             DragonCombat.LockSkill(player, 0.35f);
             DragonCombat.PlayWeaponAnimation(player, false, "bow_fire");
+            DragonSkillAudio.Play(player, DragonBaseSound.BowShot, ShotOrigin(player));   // v0.25.291 every skill shot = the bow's own release
             if (!string.IsNullOrEmpty(message)) ShowMessage(message);
         }
 

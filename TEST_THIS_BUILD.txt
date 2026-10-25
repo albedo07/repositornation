@@ -1,12 +1,9 @@
-TEST THIS BUILD - v0.25.290 Horizon Walker Pass
-1. Ascended Stonefang: spikes rise once and stay ~8 s; a standing enemy takes no tick damage, a moving one does every 0.3 s.
-2. Void Step: the DBZ sound stays with you after the teleport.
-3. Rift Echo + Arcane Phantom with Staff of Embers, then a Gun Staff, then a normal staff: echo/phantom shots match each weapon's own fire rate.
-4. Cast Arcane Phantom twice: two icons "1" and "2"; the first keeps its timer when the second is conjured.
-5. Arcane Phalanx: new MagicSword on summon; Ascended spears = MagicSword3.
-6. Arcane Rupture: a swirl sound fades in during the wind-up and hands over to the boom.
-7. Rift Walker: place Portal A and wait 5 s (it should close). Look at a portal from the side: it should be flat, with
-   no purple ball in the middle. Listen at ~4-6 s after placing: there should be no drop before the hum.
-8. Rift Echo: swap weapons and holster during the buff; the outline should follow the gear.
-9. Meteor Fall / Cataclysm charge: compare the staff hand with how it looked before v0.25.244. Send LogOutput.log
-   (line "Hand aim item ... staff rule (v0.25.243 box centre)").
+TEST THIS BUILD - v0.25.291 Ranger Sounds
+1. Every Ranger / Acrobat / Bowmaster skill once (Normal and Ascended): shots, hits, whooshes, slams, explosions.
+2. Arrow Rain: whistle -> first wave lands right after the shot -> steady rain -> fades with the rain.
+3. Cyclone Arrow / Furious Winds / Starfall Volley: the wind/rain bed follows the skill and fades out at the end.
+4. F8 > Ranger / Acrobat / Bowmaster > Audio: each sound has its own slider.
+5. Elemental Cataclysm: hold to full charge - no dip before the loop; FPS while charging.
+6. Rift Echo + Phantom with Gun Staff (hold several seconds) and normal Staff (no double shots).
+7. Ascended Stonefang: enemies stay slowed inside. Rift Portal: swirl on both sides.
+8. If the game gets slow while not casting: send LogOutput.log (look for "Slow period with no skill cast").
