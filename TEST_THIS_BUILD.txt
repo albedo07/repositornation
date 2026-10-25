@@ -1,4 +1,3 @@
-v0.25.285 - please test:
-1. Wizard: hold Meteor Fall / Elemental Cataclysm - staff and hand like before.
-2. Heaven's Judgement and Lightning Tempest: FPS while they run (was 120-150 vs 190-200).
-3. Judgement Hammer a few times right after Righteous Strike; send LogOutput.log ("CA trace").
+v0.25.286 Sorcerer Sounds - please listen to every Sorcerer / Archmage / Horizon Walker skill, Normal and Ascended.
+Main checks: Gravity Dominion vanish peak on the end (+ Ascended blast), Phalanx volley = one SwordSlash,
+Meteor Fall / Cataclysm loops stop smoothly on release. Each sound has its own slider in F8 (search Audio).

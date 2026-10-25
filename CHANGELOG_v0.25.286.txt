@@ -1,0 +1,40 @@
+AETHELBORN ASCENDED v0.25.286 - Sorcerer Sounds
+
+Your SorcererSFX recordings, decoded to WAV with no edits (one trim: the Black Hole "vanish" second, see Gravity
+Dominion). 14 new sound files, 29 new sound entries, 12 new audio sections in F8 (each sound its own Volume slider
+plus the usual Length / Pitch / Speed / Bass / Sync).
+
+SORCERER (base)
+- Flame Burst, Stonefang Eruption: unchanged (your "Flame2" and "Earth").
+- Glacial Descent (Normal + Ascended): IceForming plays the moment you cast (during the wind-up); IceCrash lands with
+  the ice (its hit lined up with the landing). The old GD_Formation / GD_Impact cues are no longer used.
+
+ARCHMAGE (Wizard)
+- Meteor Fall: Flame starts at the cast and loops for as long as you hold the charge (past 3 stacks too), fading out
+  on release. The meteor crash = SolidBoom (hit lined up with the landing).
+  Ascended: every small meteor = MidBoom.
+- Gravity Dominion: BlackHole plays for the whole well (fades in, fades out near the end). The recording's vanishing
+  second (0:02-0:01 before its end, cut with a soft fade so it never stops abruptly) is timed so its peak lands on the
+  end of the well. Ascended: the end blast = MidBoom + BassDrop, on that same peak.
+  (Normal Gravity Dominion has no blast, so it ends with the vanish only.)
+- Astral Railcannon: Railcannon during the wind-up, BassDrop on the shot.
+  Ascended: Railcannon loops for the whole beam, then BassDrop when it ends.
+- Astral Greatblade: MagicSword2 when the blade is conjured, Slam on the slam (hit lined up).
+  Ascended: one conjure, a Slam on each of the 3 slams.
+- Frost Nova (Normal + Ascended): IceSlam, 1.5 s (gradual fade), its hit on the nova.
+- Elemental Cataclysm: PowerUp from the cast, looping while the charge is held; on landing BoomBass + SolidBoom
+  together. Ascended: the second blast gets BoomBass + SolidBoom too.
+
+HORIZON WALKER (Spellcaster)
+- Arcane Phalanx: MagicSword when the swords appear; SwordSlash on release. Releasing all at once plays ONE
+  SwordSlash (0.3 s gap, no stacking). Ascended: the Astral Spears = MagicSword pitched lower (80%).
+- Rift Echo: SwordSlash2 at 88% pitch on each echo shot.
+- Arcane Phantom (Afterimage Arsenal): SwordSlash2 at 118% pitch when the afterimages fire; Ascended when the twins appear.
+- Void Step: DBZ on the teleport.
+- Gravity Blast: BlackHole2 rides the orb for as long as it exists; its explosion = MidBoom + BassDrop (same as Gravity
+  Dominion).
+- Arcane Rupture: BoomBass + SolidBoom on the rupture (hit lined up).
+
+Not used: Teleport.mp3 (no skill named for it).
+Installer: 52 skill sound files (was 38). Static compile of all ten modules against the real references only.
+Nothing heard in game yet: timing, volume and the vanish sync need your ears.
