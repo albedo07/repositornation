@@ -1,0 +1,37 @@
+AETHELBORN ASCENDED v0.25.289 - Sorcerer Sound Fixes   (Sorcerer bloodline: Sorcerer, Archmage, Horizon Walker)
+
+ROOT CAUSE FOUND: SILENCE AT THE START OF RECORDINGS
+Several recordings begin with dead silence, so a sound played "on the cast" was only heard later and landed on the
+wrong moment (MagicSword2 0.57 s, Laserbeam 0.63 s, Slam 0.63 s, DBZ 0.48 s, IceSlam 0.40 s, BlackHole2 0.39 s,
+Teleport 0.37 s, BuffClock 0.28 s, MagicSword 0.12 s). The silence is trimmed off (a 5 ms pre-roll and a 3 ms fade-in
+are kept; nothing else changed) and every hit point was re-measured.
+
+PER SKILL
+- Astral Greatblade (Normal + Ascended): MagicSword2 is the conjuring sound - heard the instant you cast (it used to
+  sound together with the slam). NEW: Boulder Crash with every slam, together with Slam.
+- Astral Railcannon:
+  Normal: wind-up = a snippet of Railcannon (its build-up to the crack, ending 0.3 s after it with a fade), starting on
+  the cast; the crack and the BassDrop land on the shot.
+  Ascended: same wind-up; when the laser fires: BassDrop + your Laserbeam's fire at full force (not at the end any
+  more); the held part of the Laserbeam loops seamlessly while you hold the beam and fades out when it ends.
+- Arcane Phantom: Teleport = the conjuring of the phantom image (on cast), and of the Ascended twins.
+- Arcane Phalanx: MagicSword's "AudioJungle" voice tag removed. The voice sits right after the sword ring
+  (0.76-0.95 s); the sound now ends before it with a natural 0.22 s decay. Summon and Ascended spear levels raised
+  to match.
+- Void Step (DBZ), Gravity Blast (BlackHole2), Frost Nova (IceSlam), Clockwork (BuffClock), Rift Walker (RiftPortal):
+  silence trimmed, so they now start exactly when they happen.
+- Horizon Walker reviewed with the same rules: instant events (Rift Echo / Phantom shots, Phalanx release, Void Step,
+  Rupture, Gravity Blast explosion) start at full force; held sounds fade in and out; no other change was needed.
+
+STAFF HAND (Meteor Fall / Elemental Cataclysm charge)
+Your log showed the staff fix never ran: the held object is only called "attach(Clone)", so the staff wasn't
+recognised. The equipped item itself is now checked (Elemental / Blood Magic weapons use the staff rule). The log line
+"Hand aim item ..." now names the item and its skill.
+
+GRAVITY DOMINION
+Your log shows Valheim's "come here" animation started on the first cast this time ("GetOverHere"). If it still looks
+missing in game, tell me and send the log.
+
+Files: + RailWindup, LaserStart, LaserLoop, Teleport; trimmed: BlackHole2, MagicSword, MagicSword2, Slam, IceSlam, DBZ,
+BuffClock, ClockWorkEcho, RiftPortal; - RailcannonCharge, RailBeamLoop. Installer: 61 skill sounds.
+Static compile of all ten modules against the real references only. Nothing heard in game.

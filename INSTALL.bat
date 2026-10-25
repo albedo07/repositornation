@@ -1,5 +1,5 @@
 @echo off
-title Immortal Heroes v0.25.288 - Sorcerer Sound Pass
+title Immortal Heroes v0.25.289 - Sorcerer Sound Fixes
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
 echo.
 pause

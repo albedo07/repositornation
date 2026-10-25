@@ -17,7 +17,7 @@ namespace AlbedosCustomClassesGuardian
     {
         public const string ModGuid = "albedo.customclasses.guardian";
         public const string ModName = "Aethelborn Ascended - Saving Grace";
-        public const string ModVersion = "0.25.288";
+        public const string ModVersion = "0.25.289";
 
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
         // Each owner advertises only Priest membership; cooldowns remain on the protected player's client.

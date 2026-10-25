@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Aethelborn Ascended - Sorcerer Advancements";
-        public const string ModVersion = "0.25.288";
+        public const string ModVersion = "0.25.289";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1323,7 +1323,7 @@ namespace DragonsAltarSorcerer
             DragonCombat.PlayClip(player, "wiz_greatblade", windup);
             SummonStaffBlade(player, windup, windup + 0.45f);
             DragonSkillAudio.Play(player, DragonBaseSound.BladeConjure, player.transform.position);   // v0.25.287 (user)
-            DragonSkillAudio.Expect(player, DragonBaseSound.BladeSlam, player.transform.position, windup);
+            DragonSkillAudio.Expect(player, DragonBaseSound.BladeSlam, player.transform.position, windup); DragonSkillAudio.Expect(player, DragonBaseSound.BladeBoulder, player.transform.position, windup);   // v0.25.289 (user)
             if (windup > 0f) yield return new WaitForSeconds(windup);
             if (player == null || player.IsDead()) yield break;
             GreatbladeSlam(player, 1f);
@@ -1408,7 +1408,7 @@ namespace DragonsAltarSorcerer
             DragonCombat.FollowAimForWindup(player, Mathf.Max(1f, windup + 2f * (gap + recover) + recover));
             SummonStaffBlade(player, windup, windup + 2f * (gap + recover) + 0.45f);
             DragonSkillAudio.Play(player, DragonBaseSound.BladeConjure, player.transform.position);   // v0.25.287 (user)
-            DragonSkillAudio.Expect(player, DragonBaseSound.BladeSlam, player.transform.position, windup);
+            DragonSkillAudio.Expect(player, DragonBaseSound.BladeSlam, player.transform.position, windup); DragonSkillAudio.Expect(player, DragonBaseSound.BladeBoulder, player.transform.position, windup);   // v0.25.289 (user)
             if (windup > 0f) yield return new WaitForSeconds(windup);
 
             for (int slam = 0; slam < 3; slam++)
@@ -1424,7 +1424,7 @@ namespace DragonsAltarSorcerer
                         DragonMixamo.PlaySource(player, slamClip, 0f, slamClip.length,
                             interval * slamClip.length / Mathf.Max(0.03f, contact), Mathf.Min(0.25f, gap * 0.3f), false, "wiz_greatblade_slam_asc");
                     else DragonCombat.PlayClip(player, "wiz_greatblade", interval);
-                    DragonSkillAudio.Expect(player, DragonBaseSound.BladeSlam, player.transform.position, interval);   // v0.25.287 a Slam on every slam
+                    DragonSkillAudio.Expect(player, DragonBaseSound.BladeSlam, player.transform.position, interval); DragonSkillAudio.Expect(player, DragonBaseSound.BladeBoulder, player.transform.position, interval);   // v0.25.287 a Slam on every slam
                     yield return new WaitForSeconds(interval);
                     if (player == null || player.IsDead()) yield break;
                 }
@@ -1724,7 +1724,16 @@ namespace DragonsAltarSorcerer
         }
 
         // Ascended: a steerable beam for up to 4s (20 ticks x 9% of the normal shot); releasing ends it.
-        private int _railBeam;
+        private int _railBeam, _laserFire;
+        private bool _railBeamOn;
+        // v0.25.289: the held laser loop fades in under the Laserbeam's fire sound (overlap, no gap)
+        private IEnumerator LaserHoldSound(Player player)
+        {
+            yield return new WaitForSeconds(0.9f);
+            if (!_railBeamOn || player == null || player.IsDead()) yield break;
+            _railBeam = DragonSkillAudio.BeginSustain(player, DragonBaseSound.RailBeam, player.transform.position, 30f, 1f, 1f, null, true);
+            DragonSkillAudio.SetSustainFades(_railBeam, 0.6f, 0f);
+        }
         private IEnumerator AscendedRailcannonRoutine(Player player, float windup)
         {
             int stunPulse = 0;
@@ -1732,7 +1741,14 @@ namespace DragonsAltarSorcerer
             if (windup > 0f) yield return new WaitForSeconds(windup);
             float tick = Mathf.Max(0.05f, _rcAscTick.Value);
             float end = Time.time + Mathf.Max(tick, _rcAscDuration.Value);
-            if (player != null) { _railBeam = DragonSkillAudio.BeginSustain(player, DragonBaseSound.RailBeam, player.transform.position, 30f, 1f, 1f, null, true); DragonSkillAudio.SetSustainFades(_railBeam, 0.3f, 0f); }   // v0.25.288 beam loop from the shot
+            if (player != null)
+            {
+                // v0.25.289 (user): the laser fires = BassDrop + the Laserbeam's own fire, at full force; its held part loops seamlessly
+                DragonSkillAudio.Play(player, DragonBaseSound.RailShot, player.transform.position);
+                _laserFire = DragonSkillAudio.BeginSustain(player, DragonBaseSound.LaserStart, player.transform.position, 0.01f, 1f, 1f, null, true);
+                _railBeamOn = true;
+                StartCoroutine(LaserHoldSound(player));
+            }
             float shot = Mathf.Max(0f, _railShotMultiplier.Value) * _rcAscTickPercent.Value / 100f;
             bool first = true;
             while (player != null && !player.IsDead() && Time.time < end)
@@ -1747,8 +1763,9 @@ namespace DragonsAltarSorcerer
                 yield return new WaitForSeconds(tick);
             }
             _railFacingUntil = 0f;
-            DragonSkillAudio.SetSustainEnd(_railBeam, 0.4f, 0.4f);   // v0.25.288 the beam fades, BassDrop as it ends
-            if (player != null) DragonSkillAudio.Play(player, DragonBaseSound.RailShot, player.transform.position);
+            _railBeamOn = false;   // v0.25.289 the laser fades out with the beam (the BassDrop played when it fired)
+            DragonSkillAudio.SetSustainEnd(_railBeam, 0.4f, 0.4f);
+            DragonSkillAudio.SetSustainEnd(_laserFire, 0.4f, 0.4f);
             DragonCombat.PlayClip(player, "wiz_railcannon", 0.05f);   // last kick, then rest
         }
 
@@ -2005,6 +2022,7 @@ namespace DragonsAltarSorcerer
             _cooldowns["Spellcaster.AfterimageArsenal"] = _aaCharges > 0 ? 0f : _aaNextCharge;
             _afterimageUntil = Time.time + Mathf.Max(1f, _afterimageDuration.Value);
             SpawnAfterimage(player.transform.position, player.transform.rotation);
+            DragonSkillAudio.Play(player, DragonBaseSound.PhantomConjure, player.transform.position);   // v0.25.289 (user) Teleport = conjuring the image
             DragonCombat.PlayClip(player, "hw_afterimage", 0.1f);
             ShowMessage("Arcane Phantom ACTIVE");
         }
@@ -3331,7 +3349,7 @@ namespace DragonsAltarSorcerer
             ClearClones();
             _mimicUntil = Time.time + Mathf.Max(1f, _afterimageDuration.Value);
             BuildAstralMimics(player);
-            DragonSkillAudio.Play(player, DragonBaseSound.PhantomSlash, player.transform.position);   // v0.25.287 Ascended twins appear
+            DragonSkillAudio.Play(player, DragonBaseSound.PhantomConjure, player.transform.position);   // v0.25.289 (user) Ascended twins conjured
             DragonCombat.PlayClip(player, "hw_afterimage", 0.1f);
             ShowMessage("Arcane Phantom - 3 Astral twins");
         }
