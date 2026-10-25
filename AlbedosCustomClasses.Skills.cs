@@ -232,7 +232,7 @@ namespace AlbedosCustomClassesSkills
         public static SkillsPlugin Instance;
         public const string ModGuid = "albedo.customclasses.skills";
         public const string ModName = "Aethelborn Ascended - Starter Skills";
-        public const string ModVersion = "0.25.286";
+        public const string ModVersion = "0.25.287";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string WarriorRunBonusKey = "AlbedoCustomClasses.WarriorRunBonus";
@@ -1022,14 +1022,14 @@ namespace AlbedosCustomClassesSkills
         {
             Vector3 target; if (!TryGetPhysicalAimPoint(player, Mathf.Max(1f, DragonCombat.M(_glacialRange.Value)), out target)) { ShowMessage("Aim at a physical target"); return; }
             const string id = "Sorcerer.GlacialDescent"; if (!BeginCastEitr(player, id, _glacialCooldown.Value, _glacialEitr.Value)) return;
-            float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _glacialWindup.Value)); DragonCombat.LockSkill(player, windup); DragonCombat.PlayClip(player, "sorc_glacial", windup); DragonSkillAudio.Play(player, DragonBaseSound.GlacialIceForm, player.transform.position); StartCoroutine(GlacialDescentRoutine(player, target, windup));   // v0.25.286 (user) Ice Forming at the cast
+            float windup = DragonCombat.ScaleWindup(player, Mathf.Max(0f, _glacialWindup.Value)); DragonCombat.LockSkill(player, windup); DragonCombat.PlayClip(player, "sorc_glacial", windup); DragonSkillAudio.Play(player, DragonBaseSound.GlacialIceForm, player.transform.position); StartCoroutine(GlacialDescentRoutine(player, target, windup));   // v0.25.287 (user) Ice Forming at the cast
         }
 
         private IEnumerator GlacialDescentRoutine(Player player, Vector3 target, float windup)
         {
             ShowMessage("Glacial Descent"); if (windup > 0f) yield return new WaitForSeconds(windup); if (player == null || player.IsDead()) yield break;
             Vector3 start = DragonCombat.GetIndoorSafeSkyPoint(target, 10f); GameObject chunk = null;
-            DragonSkillAudio.Expect(player, DragonBaseSound.GlacialIceCrash, target, 0.45f);   // v0.25.286 (user) Ice Crash lands with the ice
+            DragonSkillAudio.Expect(player, DragonBaseSound.GlacialIceCrash, target, 0.45f);   // v0.25.287 (user) Ice Crash lands with the ice
             if (_enableVfx.Value && DragonVfx.Enabled) { try { chunk = DragonVfx.IceDiamond(start, Mathf.Max(2f, DragonCombat.M(_glacialRadius.Value) * 0.9f)); } catch (Exception) { chunk = null; } }   // v0.25.75 diamond of ice
             if (_enableVfx.Value && chunk == null) { chunk = GameObject.CreatePrimitive(PrimitiveType.Cube); chunk.name = "DragonsAltarGlacialDescent"; chunk.transform.position = start; chunk.transform.localScale = new Vector3(4.8f, 3.6f, 4.8f); chunk.transform.rotation = Quaternion.Euler(18f, 28f, 12f); Collider c = chunk.GetComponent<Collider>(); if (c != null) Destroy(c); Renderer r = chunk.GetComponent<Renderer>(); if (r != null) { Shader s = Shader.Find("Sprites/Default"); if (s != null) r.material = new Material(s); if (r.material != null) r.material.color = new Color(0.48f, 0.86f, 1f, 0.86f); } }
             float elapsed = 0f; while (elapsed < 0.45f) { float t = Mathf.Clamp01(elapsed / 0.45f); if (chunk != null) { chunk.transform.position = Vector3.Lerp(start, target + Vector3.up * 1.4f, t); if (chunk.name != "IH_IceDiamond") chunk.transform.Rotate(new Vector3(38f, 22f, 17f) * Time.deltaTime); } elapsed += Time.deltaTime; yield return null; } if (chunk != null) Destroy(chunk); DragonSkillAudio.Play(player, DragonBaseSound.GlacialIceCrash, target);

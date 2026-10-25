@@ -1,3 +1,1 @@
-v0.25.286 Sorcerer Sounds - please listen to every Sorcerer / Archmage / Horizon Walker skill, Normal and Ascended.
-Main checks: Gravity Dominion vanish peak on the end (+ Ascended blast), Phalanx volley = one SwordSlash,
-Meteor Fall / Cataclysm loops stop smoothly on release. Each sound has its own slider in F8 (search Audio).
+v0.25.287 Grace Sounds: cast Clockwork (echo ending) and Rift Walker (A then B: conjure 0.6 s, opens on the sound's peak, hum loops until it closes).

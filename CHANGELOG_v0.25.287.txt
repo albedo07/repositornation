@@ -1,0 +1,18 @@
+AETHELBORN ASCENDED v0.25.287 - Grace Sounds
+
+ARCHMAGE GRACE - Clockwork
+- BuffClock + ClockWork play together on the cast.
+- ClockWork now ends with a subtle echo tail (ClockWorkEcho.wav): the recording itself is unchanged, followed by a
+  quiet, darkening hall echo (~1.5 s) that rings it out instead of stopping short. Gentle fade at the very end.
+
+HORIZON WALKER GRACE - Rift Walker
+- RiftPortal plays when each portal (A and B) is placed.
+- The cast is still instant (no wind-up animation). Only the portal waits for the sound: for the first 0.6 s (the
+  swell of RiftPortal) violet air and light are drawn in to the spot and a ring grows from a point to the portal's
+  size; at the sound's peak the portal snaps open (fold flash) and becomes usable.
+- The portal hum (a seamless loop cut from the steady part of RiftPortal) takes over before the recording ends and
+  loops for as long as the portal exists; when the portal closes the sound fades out. Never cut.
+- Twin Rift (the other portal skill) is unchanged.
+
+4 new sound files (installer: 56 skill sounds), 2 new audio sections (Wizard Clockwork Audio, Spellcaster Rift Walker
+Audio). Static compile of all ten modules against the real references only - not heard or seen in game yet.
