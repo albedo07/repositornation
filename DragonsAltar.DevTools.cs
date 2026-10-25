@@ -41,7 +41,7 @@ namespace DragonsAltarDevTools
     {
         public const string ModGuid = "albedo.customclasses.devtools";
         public const string ModName = "Aethelborn Ascended - Developer Tools";
-        public const string ModVersion = "0.25.292";
+        public const string ModVersion = "0.25.293";
 
         public static DeveloperToolsPlugin Instance;
 
@@ -272,6 +272,8 @@ namespace DragonsAltarDevTools
         // use it) and an entry still at the old default takes the new one (fresh installs).
         // v0.25.287 (user: "make the defaults first"): rebuilt from the user cfg_2 (made on v0.25.287); f[3] is informational,
         // the "still at the old default" check uses the entry's own code default.
+        // v0.25.293 (user cfg_3, made on v0.25.292): merged into the table; f[3] is informational,
+        // the "still at the old default" check uses the entry's own code default.
         private static readonly string[] UserDefaults = {
             "albedo.customclasses.advanced|Cleric Blessing|FlatHealth|35|40",
             "albedo.customclasses.advanced|Immortal HUD|PosX|2|1",
@@ -316,7 +318,12 @@ namespace DragonsAltarDevTools
             "albedo.customclasses.advanced|Testing|AscendedSkills||lightning_relic, holy_relic, divine_intervention, grand_cross, heavens_judgement, lightning_tempest, arcane_rupture, gravity_blast, rift_echo, void_step, afterimage_arsenal, arcane_phalanx, splitting_arrow, starfall_volley, explosive_arrow, pinning_shot, arrow_rain, ballista_shot, eclipse, frenzied_charge, crescent_cleave, halfmoon_slash",
             "albedo.customclasses.advanced|Testing|ForceCooldowns|false|false",
             "albedo.customclasses.combatruntime|Acrobat Tailwind Animation|AnimTriggerPercent_v025136|0|100",
+            "albedo.customclasses.combatruntime|Acrobat Tailwind Audio|Buff Hit Marker (ms)|320|100",
+            "albedo.customclasses.combatruntime|Acrobat Tailwind Audio|Buff Volume (%)|100|70",
+            "albedo.customclasses.combatruntime|Acrobat Tailwind Audio|Strong Wind Hit Marker (ms)|90|0",
+            "albedo.customclasses.combatruntime|Acrobat Tailwind Audio|Strong Wind Volume (%)|100|120",
             "albedo.customclasses.combatruntime|Bowmaster Hawks Vigil Animation|CASpeed_v025138c|0|2.3",
+            "albedo.customclasses.combatruntime|Bowmaster Hawks Vigil Audio|Skill Volume (%)|100|50",
             "albedo.customclasses.combatruntime|Cleric Holy Wave Animation|Ally AnimEndPercent_v025133|100|80",
             "albedo.customclasses.combatruntime|Cleric Holy Wave Animation|Ally AnimTriggerPercent_v025136|0|100",
             "albedo.customclasses.combatruntime|Cleric Holy Wave Animation|AnimEndPercent_v025133|100|80",
@@ -350,6 +357,7 @@ namespace DragonsAltarDevTools
             "albedo.customclasses.combatruntime|Paladin Ray of Hope Animation|AnimTriggerPercent_v025136|0|100",
             "albedo.customclasses.combatruntime|Paladin Ray of Hope Audio|Skill Volume (%)|100|40",
             "albedo.customclasses.combatruntime|Paladin Shield Charge Animation|Hammer Slam AnimStartPercent_v025133|45|0",
+            "albedo.customclasses.combatruntime|Paladin Shield Charge Animation|Hammer Slam CASpeed_v025138c|0|2",
             "albedo.customclasses.combatruntime|Paladin Shield Charge Audio|Charge Howling Wind Volume (%)|100|40",
             "albedo.customclasses.combatruntime|Paladin Shield Charge Stun Ascended|Attack 1 Stun|false|true",
             "albedo.customclasses.combatruntime|Paladin Shield Charge Stun Normal|Attack 1 Stun|false|true",
@@ -375,6 +383,9 @@ namespace DragonsAltarDevTools
             "albedo.customclasses.combatruntime|Sorcerer Flame Burst Animation|AnimTriggerPercent_v025136|0|100",
             "albedo.customclasses.combatruntime|Sorcerer Glacial Descent Animation|AnimTriggerPercent_v025136|0|70",
             "albedo.customclasses.combatruntime|Sorcerer Glacial Descent Animation|Ascended AnimTriggerPercent_v025136|0|70",
+            "albedo.customclasses.combatruntime|Sorcerer Glacial Descent Audio|Ice Crash Sync (ms)|0|300",
+            "albedo.customclasses.combatruntime|Sorcerer Glacial Descent Audio|Ice Forming Sync (ms)|0|200",
+            "albedo.customclasses.combatruntime|Sorcerer Glacial Descent Audio|Skill Volume (%)|200|300",
             "albedo.customclasses.combatruntime|Sorcerer Stonefang Eruption Animation|AnimEndPercent_v025133|100|90",
             "albedo.customclasses.combatruntime|Sorcerer Stonefang Eruption Animation|AnimTriggerPercent_v025136|0|100",
             "albedo.customclasses.combatruntime|Sorcerer Stonefang Eruption Animation|Ascended AnimEndPercent_v025133|100|90",
@@ -385,14 +396,26 @@ namespace DragonsAltarDevTools
             "albedo.customclasses.combatruntime|Spellcaster Arcane Phalanx Animation|AnimTriggerPercent_v025136|0|100",
             "albedo.customclasses.combatruntime|Spellcaster Arcane Phalanx Animation|Launch AnimEndPercent_v025133|100|50",
             "albedo.customclasses.combatruntime|Spellcaster Arcane Phalanx Animation|Launch AnimTriggerPercent_v025136|0|100",
+            "albedo.customclasses.combatruntime|Spellcaster Arcane Phalanx Audio|Ascended Spears Hit Marker (ms)|90|0",
+            "albedo.customclasses.combatruntime|Spellcaster Arcane Phalanx Audio|Ascended Spears Pitch (%)|100|80",
+            "albedo.customclasses.combatruntime|Spellcaster Arcane Phalanx Audio|Summon Hit Marker (ms)|80|0",
+            "albedo.customclasses.combatruntime|Spellcaster Arcane Phantom Audio|Slash Volume (%)|100|35",
             "albedo.customclasses.combatruntime|Spellcaster Arcane Rupture Animation|AnimEndPercent_v025133|100|50",
             "albedo.customclasses.combatruntime|Spellcaster Arcane Rupture Animation|AnimTriggerPercent_v025136|0|100",
+            "albedo.customclasses.combatruntime|Spellcaster Arcane Rupture Audio|Wind Up Pitch (%)|120|130",
+            "albedo.customclasses.combatruntime|Spellcaster Arcane Rupture Audio|Wind Up Volume (%)|100|200",
             "albedo.customclasses.combatruntime|Spellcaster Gravity Blast Animation|AnimEndPercent_v025133|100|80",
             "albedo.customclasses.combatruntime|Spellcaster Gravity Blast Animation|AnimTriggerPercent_v025136|0|100",
+            "albedo.customclasses.combatruntime|Spellcaster Gravity Blast Audio|Black Hole Volume (%)|100|150",
+            "albedo.customclasses.combatruntime|Spellcaster Gravity Blast Audio|Explosion Bass Drop Sync (ms)|0|-200",
+            "albedo.customclasses.combatruntime|Spellcaster Gravity Blast Audio|Explosion Mid Boom Volume (%)|100|150",
             "albedo.customclasses.combatruntime|Spellcaster Rift Echo Animation|AnimEndPercent_v025133|100|80",
             "albedo.customclasses.combatruntime|Spellcaster Rift Echo Animation|AnimTriggerPercent_v025136|0|100",
+            "albedo.customclasses.combatruntime|Spellcaster Rift Echo Audio|Slash Volume (%)|100|35",
             "albedo.customclasses.combatruntime|Spellcaster Rift Walker Animation|AnimEndPercent_v025133|100|80",
             "albedo.customclasses.combatruntime|Spellcaster Rift Walker Animation|AnimTriggerPercent_v025136|0|100",
+            "albedo.customclasses.combatruntime|Spellcaster Rift Walker Audio|Rift Portal Hit Marker (ms)|565|0",
+            "albedo.customclasses.combatruntime|Spellcaster Rift Walker Audio|Rift Portal Sync (ms)|0|-200",
             "albedo.customclasses.combatruntime|Sword Master Crescent Cleave Audio|First Strike Pitch (%)|100|80",
             "albedo.customclasses.combatruntime|Sword Master Crescent Cleave Audio|First Strike Volume (%)|100|70",
             "albedo.customclasses.combatruntime|Sword Master Crescent Cleave Audio|Second Strike Pitch (%)|100|80",
@@ -432,10 +455,21 @@ namespace DragonsAltarDevTools
             "albedo.customclasses.combatruntime|Warrior Impact Wave Audio|Weapon Swing Pitch (%)|100|120",
             "albedo.customclasses.combatruntime|Warrior Impact Wave Audio|Weapon Swing Volume (%)|100|150",
             "albedo.customclasses.combatruntime|Wizard Astral Greatblade Animation|CASpeed_v025138c|0|1.1",
+            "albedo.customclasses.combatruntime|Wizard Astral Greatblade Audio|Boulder Crash Sync (ms)|0|-200",
+            "albedo.customclasses.combatruntime|Wizard Astral Railcannon Audio|Shot Bass Drop Sync (ms)|0|-200",
             "albedo.customclasses.combatruntime|Wizard Clockwork Animation|AnimEndPercent_v025133|100|40",
+            "albedo.customclasses.combatruntime|Wizard Clockwork Audio|Buff Clock Sync (ms)|0|-300",
+            "albedo.customclasses.combatruntime|Wizard Clockwork Audio|Buff Clock Volume (%)|100|150",
+            "albedo.customclasses.combatruntime|Wizard Clockwork Audio|Clockwork Volume (%)|100|25",
             "albedo.customclasses.combatruntime|Wizard Frost Nova Animation|AnimTriggerPercent_v025136|0|100",
+            "albedo.customclasses.combatruntime|Wizard Frost Nova Audio|Ice Slam Hit Marker (ms)|409|805",
+            "albedo.customclasses.combatruntime|Wizard Frost Nova Audio|Ice Slam Sync (ms)|0|200",
             "albedo.customclasses.combatruntime|Wizard Gravity Dominion Animation|AnimEndPercent_v025133|100|30",
             "albedo.customclasses.combatruntime|Wizard Gravity Dominion Animation|AnimTriggerPercent_v025136|0|25",
+            "albedo.customclasses.combatruntime|Wizard Gravity Dominion Audio|Black Hole Volume (%)|100|300",
+            "albedo.customclasses.combatruntime|Wizard Gravity Dominion Audio|Explosion Bass Drop Volume (%)|100|300",
+            "albedo.customclasses.combatruntime|Wizard Gravity Dominion Audio|Explosion Mid Boom Volume (%)|100|300",
+            "albedo.customclasses.combatruntime|Wizard Gravity Dominion Audio|Skill Volume (%)|100|300",
             "albedo.customclasses.guardian|Testing|ForceCooldowns|false|false",
             "albedo.customclasses.ranger|Acrobat Cyclone Arrow|Cooldown|12|26",
             "albedo.customclasses.ranger|Acrobat Furious Winds|Cooldown|90|72",

@@ -1,0 +1,48 @@
+AETHELBORN ASCENDED v0.25.293 - Ranger Polish
+
+HORIZON WALKER (now a no-touch zone with Warrior and Cleric)
+- Rift Walker portal sound: heard only near the portal, like Valheim's own portals - full level within 2 m of YOU
+  (not the camera), fading to silence by 6 m. Applies to the conjure and the looping hum.
+- Bug fix: Ascended Arcane Phantom twins threw an error every frame for a while (16 errors in your log,
+  UpdateCloneHold). One list of its pose delay buffer was not cleared with the others when the twins were rebuilt.
+  All five are now cleared together and checked before use. Its per-frame pose arrays are reused instead of newly
+  allocated (less garbage while the twins are out).
+
+ACROBAT
+- Gale Volley, Tumble Shot: the wind whoosh is removed (bow release / arrow hits only).
+- Swallow Dive: the dash is your FastSlash recording (silence trimmed, pitch 118%); the separate cut is removed;
+  Ascended aftershock = FastSlash, lower.
+- Ascended Skyfall Barrage: slam = Boulder Crash only (BassDrop removed).
+- Fall damage: no fall-damage code has changed since v0.25.244, and your cfg still has Acrobat -75%. To find out what
+  happens, the first 12 falls per session now log "Fall damage: raw -> after (rule, class/advancement)".
+  Send a log after a painful fall.
+
+BOWMASTER
+- Every bow draw, release and arrow hit now plays at Valheim's own loudness (they were being leveled up at load, which
+  is why the draw was so loud). Their sliders: F8 > Ranger > "Ranger Bow Shots Audio" (Bow Release / Bow Draw /
+  Arrow Hit Volume).
+- Ballista Shot: BassDrop removed; launch whoosh kept. Charged (1+ stacks, the arrow is bigger): Boulder Crash on
+  hit; uncharged: the vanilla arrow hit only.
+- Big arrows = Boulder Crash: Great Arrow (Splitting Arrow) now crashes on hit (new slider "Great Arrow Crash";
+  its BassDrop removed); Ascended Sky Arrow = Boulder Crash only (HeavyPunch removed).
+- Starfall Volley: a normal bow draw on the channel and the release when the stars begin; vanilla arrow hits for the
+  stars. Buff, rain bed and punch sounds removed. Ascended final star untouched.
+  VFX: arrows now rain over the whole area - 3 falling arrow bodies every 0.25 s (no line renderers/particles of
+  their own, each lives 0.35 s), on top of the existing star impacts.
+
+DEFAULTS
+- Your cfg (made on v0.25.292) merged into the built-in defaults: 32 new values (Tailwind/Glacial/Gravity Dominion/
+  Clockwork/Phalanx/Rupture/Gravity Blast/Rift sounds etc.). Not taken: Testing toggles (ForceCooldowns, Ascended
+  test list), one-time flags, and the two Ballista sliders whose sounds changed in this pass.
+
+PERFORMANCE (your log)
+- Skills: every first cast and 12 s "skill load" window was smooth (worst frames 13-36 ms on first casts only).
+- The four "slow period with no skill cast" lines all show ZERO effects, particles or ghosts from this mod alive. Two
+  of them are exactly 33.3 ms on every frame (a 30 fps cap - typically the game unfocused/alt-tabbed or a pause/menu
+  frame limit), so that slowdown was not our skills. Scene roots stay ~7,900 (the world itself).
+- Fixed: the Phantom-twin error spam (above), which costs time every frame it throws.
+- Still open: inventory opens ~60-70 ms (Valheim's own crafting list rebuild; Performance Ascended territory).
+
+FILES: new ImmortalHeroesAssets/SFX/FastSlash.wav; installer 66 skill sounds + menu music.
+CHECKS (static only): all ten modules compile against your real DLLs. Not heard/seen in game.
+Still waiting for your answer: Astral Greatblade slam timing.

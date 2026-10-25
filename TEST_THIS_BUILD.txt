@@ -1,10 +1,8 @@
-TEST THIS BUILD - v0.25.292 Grace Sounds (+ v0.25.291 list)
-0. Hawks Vigil = eagle cry + Buff; Tailwind = strong wind + Buff2.
-1. Every Ranger / Acrobat / Bowmaster skill once (Normal and Ascended): shots, hits, whooshes, slams, explosions.
-2. Arrow Rain: whistle -> first wave lands right after the shot -> steady rain -> fades with the rain.
-3. Cyclone Arrow / Furious Winds / Starfall Volley: the wind/rain bed follows the skill and fades out at the end.
-4. F8 > Ranger / Acrobat / Bowmaster > Audio: each sound has its own slider.
-5. Elemental Cataclysm: hold to full charge - no dip before the loop; FPS while charging.
-6. Rift Echo + Phantom with Gun Staff (hold several seconds) and normal Staff (no double shots).
-7. Ascended Stonefang: enemies stay slowed inside. Rift Portal: swirl on both sides.
-8. If the game gets slow while not casting: send LogOutput.log (look for "Slow period with no skill cast").
+TEST THIS BUILD - v0.25.293 Ranger Polish
+1. Rift Walker: hum only within ~2 m of a portal, gone by ~6 m.
+2. Ascended Arcane Phantom: no error spam in the log.
+3. Gale Volley / Tumble Shot: no wind. Swallow Dive: FastSlash. Asc Skyfall slam: no bass drop.
+4. Bow draw / release / hit at vanilla loudness (F8 > Ranger > Ranger Bow Shots Audio).
+5. Ballista: uncharged = arrow hit, charged = Boulder Crash. Great Arrow + Sky Arrow = Boulder Crash.
+6. Starfall: draw, release, arrow hits, many falling arrows; Ascended final star unchanged. FPS during it.
+7. Acrobat: after a fall that hurts, send the log (lines "Fall damage: ...").

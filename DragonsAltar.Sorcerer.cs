@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Aethelborn Ascended - Sorcerer Advancements";
-        public const string ModVersion = "0.25.292";
+        public const string ModVersion = "0.25.293";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -3457,7 +3457,7 @@ namespace DragonsAltarSorcerer
         private void BuildAstralMimics(Player player)
         {
             for (int i = 0; i < 3; i++) { if (_clones[i] != null) Destroy(_clones[i]); _clones[i] = null; _mimicBones[i] = null; }
-            _poseLocalPos.Clear(); _poseLocalRot.Clear(); _poseRootPos.Clear(); _poseRootRot.Clear();
+            _mimicTimes.Clear(); _poseLocalPos.Clear(); _poseLocalRot.Clear(); _poseRootPos.Clear(); _poseRootRot.Clear();   // v0.25.293 times too (the lists desynced -> RemoveAt on an empty list every frame)
             _mimicSource = FindPlayerVisual(player);
             if (_mimicSource == null) return;
             _mimicSourceBones = _mimicSource.GetComponentsInChildren<Transform>(true);
@@ -3554,6 +3554,8 @@ namespace DragonsAltarSorcerer
             _mimicAttackWeapon.Add(weapon);
         }
 
+        private readonly Stack<Vector3[]> _posePosPool = new Stack<Vector3[]>();
+        private readonly Stack<Quaternion[]> _poseRotPool = new Stack<Quaternion[]>();
         private void UpdateCloneHold(Player player)
         {
             if (ActiveCloneCount() == 0)
@@ -3569,8 +3571,11 @@ namespace DragonsAltarSorcerer
                 if (_mimicSource.GetComponentsInChildren<Transform>(true).Length != _mimicSourceBones.Length) { BuildAstralMimics(player); return; }
             }
             int n = _mimicSourceBones.Length;
-            Vector3[] lp = new Vector3[n];
-            Quaternion[] lr = new Quaternion[n];
+            // v0.25.293 (perf): pose buffers are reused instead of two new arrays every frame
+            Vector3[] lp = _posePosPool.Count > 0 ? _posePosPool.Pop() : null;
+            Quaternion[] lr = _poseRotPool.Count > 0 ? _poseRotPool.Pop() : null;
+            if (lp == null || lp.Length != n) lp = new Vector3[n];
+            if (lr == null || lr.Length != n) lr = new Quaternion[n];
             for (int k = 0; k < n; k++)
             {
                 Transform t = _mimicSourceBones[k];
@@ -3583,8 +3588,15 @@ namespace DragonsAltarSorcerer
             _poseLocalRot.Add(lr);
             _poseRootPos.Add(_mimicSource.position);
             _poseRootRot.Add(_mimicSource.rotation);
+            if (_mimicTimes.Count != _poseLocalPos.Count || _poseLocalPos.Count != _poseLocalRot.Count || _poseLocalRot.Count != _poseRootPos.Count || _poseRootPos.Count != _poseRootRot.Count)
+            {   // never index lists that disagree: start the delay buffer over from this frame
+                _mimicTimes.Clear(); _poseLocalPos.Clear(); _poseLocalRot.Clear(); _poseRootPos.Clear(); _poseRootRot.Clear();
+                _mimicTimes.Add(Time.time); _poseLocalPos.Add(lp); _poseLocalRot.Add(lr); _poseRootPos.Add(_mimicSource.position); _poseRootRot.Add(_mimicSource.rotation);
+            }
             while (_mimicTimes.Count > 2 && _mimicTimes[1] <= Time.time - 0.2f)
             {
+                if (_posePosPool.Count < 64) _posePosPool.Push(_poseLocalPos[0]);
+                if (_poseRotPool.Count < 64) _poseRotPool.Push(_poseLocalRot[0]);
                 _mimicTimes.RemoveAt(0); _poseLocalPos.RemoveAt(0); _poseLocalRot.RemoveAt(0); _poseRootPos.RemoveAt(0); _poseRootRot.RemoveAt(0);
             }
             Vector3[] sp = _poseLocalPos[0];
