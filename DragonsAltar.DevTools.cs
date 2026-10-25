@@ -41,7 +41,7 @@ namespace DragonsAltarDevTools
     {
         public const string ModGuid = "albedo.customclasses.devtools";
         public const string ModName = "Aethelborn Ascended - Developer Tools";
-        public const string ModVersion = "0.25.293";
+        public const string ModVersion = "0.25.294";
 
         public static DeveloperToolsPlugin Instance;
 
@@ -317,11 +317,16 @@ namespace DragonsAltarDevTools
             "albedo.customclasses.advanced|Sword Master Moonlight Splitter Ascended Animation|SlashWindup_v025138d|0.2|0.3",
             "albedo.customclasses.advanced|Testing|AscendedSkills||lightning_relic, holy_relic, divine_intervention, grand_cross, heavens_judgement, lightning_tempest, arcane_rupture, gravity_blast, rift_echo, void_step, afterimage_arsenal, arcane_phalanx, splitting_arrow, starfall_volley, explosive_arrow, pinning_shot, arrow_rain, ballista_shot, eclipse, frenzied_charge, crescent_cleave, halfmoon_slash",
             "albedo.customclasses.advanced|Testing|ForceCooldowns|false|false",
+            "albedo.customclasses.combatruntime|Acrobat Swallow Dive Audio|Fast Slash Hit Marker (ms)|40|0",
+            "albedo.customclasses.combatruntime|Acrobat Swallow Dive Audio|Fast Slash Pitch (%)|118|150",
+            "albedo.customclasses.combatruntime|Acrobat Swallow Dive Audio|Fast Slash Volume (%)|100|80",
             "albedo.customclasses.combatruntime|Acrobat Tailwind Animation|AnimTriggerPercent_v025136|0|100",
             "albedo.customclasses.combatruntime|Acrobat Tailwind Audio|Buff Hit Marker (ms)|320|100",
             "albedo.customclasses.combatruntime|Acrobat Tailwind Audio|Buff Volume (%)|100|70",
             "albedo.customclasses.combatruntime|Acrobat Tailwind Audio|Strong Wind Hit Marker (ms)|90|0",
             "albedo.customclasses.combatruntime|Acrobat Tailwind Audio|Strong Wind Volume (%)|100|120",
+            "albedo.customclasses.combatruntime|Bowmaster Ballista Shot Audio|Big Arrow Crash Volume (%)|100|300",
+            "albedo.customclasses.combatruntime|Bowmaster Ballista Shot Audio|Launch Bass Volume (%)|100|0",
             "albedo.customclasses.combatruntime|Bowmaster Hawks Vigil Animation|CASpeed_v025138c|0|2.3",
             "albedo.customclasses.combatruntime|Bowmaster Hawks Vigil Audio|Skill Volume (%)|100|50",
             "albedo.customclasses.combatruntime|Cleric Holy Wave Animation|Ally AnimEndPercent_v025133|100|80",

@@ -1,8 +1,4 @@
-TEST THIS BUILD - v0.25.293 Ranger Polish
-1. Rift Walker: hum only within ~2 m of a portal, gone by ~6 m.
-2. Ascended Arcane Phantom: no error spam in the log.
-3. Gale Volley / Tumble Shot: no wind. Swallow Dive: FastSlash. Asc Skyfall slam: no bass drop.
-4. Bow draw / release / hit at vanilla loudness (F8 > Ranger > Ranger Bow Shots Audio).
-5. Ballista: uncharged = arrow hit, charged = Boulder Crash. Great Arrow + Sky Arrow = Boulder Crash.
-6. Starfall: draw, release, arrow hits, many falling arrows; Ascended final star unchanged. FPS during it.
-7. Acrobat: after a fall that hurts, send the log (lines "Fall damage: ...").
+TEST THIS BUILD - v0.25.294
+1. Starfall Volley: volley whistle -> first wave as the stars start -> steady rain -> fade at the end; many light beams; FPS.
+2. Ballista (1+ stacks) and Great Arrow: Boulder Crash where the arrow strikes (enemy OR ground); the whoosh flies with the arrow.
+3. Tailwind first cast after loading in: full cheer animation. (Also check Gravity Dominion's first cast.)

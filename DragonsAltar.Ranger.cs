@@ -42,7 +42,7 @@ namespace DragonsAltarRanger
     {
         public const string ModGuid = "albedo.customclasses.ranger";
         public const string ModName = "Aethelborn Ascended - Ranger";
-        public const string ModVersion = "0.25.293";
+        public const string ModVersion = "0.25.294";
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
 
@@ -2784,14 +2784,14 @@ namespace DragonsAltarRanger
             Vector3 origin = ShotOrigin(player);
             Vector3 dir = AimDir(player, origin);
             Shoot(player, "BALLISTA SHOT" + (stacks > 0 ? " x" + stacks : ""));
-            DragonSkillAudio.Play(player, DragonBaseSound.BallistaLaunch, origin, 0, 1f - 0.04f * stacks);   // v0.25.291 siege launch, deeper per stack (v0.25.293 no BassDrop)
+            _nextFlightWhoosh = (int)DragonBaseSound.BallistaLaunch; _nextFlightPitch = 1f - 0.04f * stacks;   // v0.25.294 the whoosh rides the bolt (deeper per stack)
+            if (stacks >= 1) _nextFlightCrash = (int)DragonBaseSound.BallistaImpact;   // charged = big arrow: Boulder Crash where it strikes
             DragonCombat.ClipImpact(player);   // release: siege recoil
             StartCoroutine(ArrowFlight(player, origin, dir, DragonCombat.M(90f), range, width * 0.5f, true, new Color(0.75f, 1f, 0.55f, 1f), 0f,
                 delegate(Character enemy)
                 {
                     bool small = DragonCombat.IsSmallEnemy(enemy);
                     Deal(player, enemy, d, mult, small ? 30f : 6f, !small, "ballista_shot", "Attack 1", false, false, ascended);
-                    if (stacks >= 1) DragonSkillAudio.Play(player, DragonBaseSound.BallistaImpact, enemy.transform.position + Vector3.up);   // v0.25.293 (user): Boulder Crash once the arrow is big (charged); else the vanilla arrow hit only
                     // v0.24.2 Ascended: the after-effect happens on hit (a piercing shot has no one left at its end).
                     if (ascended && stacks >= 3) BallistaShockwave(player, enemy, d, mult * _bsAscLinePercent.Value / 100f);
                     return true;
@@ -3039,6 +3039,10 @@ namespace DragonsAltarRanger
         // blast and leave burning ground.
         private bool _exCharging;
         private bool _nextArrowFlame;   // v0.25.181 the next ArrowFlight carries a flame (Explosive Arrow)
+        // v0.25.294 (user: projectiles carry their sound, not the player): the next ArrowFlight carries this whoosh (follows
+        // the arrow, fades out where it ends) and plays this crash where it first strikes a creature or the ground
+        private int _nextFlightWhoosh = -1, _nextFlightCrash = -1;
+        private float _nextFlightPitch = 1f;
         private int _exStacks;
         private float _exNextStack;
 
@@ -3330,12 +3334,11 @@ namespace DragonsAltarRanger
             Vector3 dir = AimDir(player, origin);
             DragonCombat.PlayClip(player, "rg_power", 0.08f);   // snap draw, strong recoil
             Shoot(player, "GREAT ARROW");
-            DragonSkillAudio.Play(player, DragonBaseSound.GreatLaunch, origin);   // v0.25.291 (v0.25.293 no BassDrop)
+            _nextFlightWhoosh = (int)DragonBaseSound.GreatLaunch; _nextFlightCrash = (int)DragonBaseSound.GreatCrash;   // v0.25.294 whoosh rides the arrow, Boulder Crash where it strikes
             StartCoroutine(ArrowFlight(player, origin, dir, DragonCombat.M(80f), range, width * 0.5f, true, new Color(0.80f, 1f, 0.60f, 1f), 0f,
                 delegate(Character enemy)
                 {
                     Deal(player, enemy, d, mult, DragonCombat.IsSmallEnemy(enemy) ? 25f : 6f, true, "splitting_arrow", "Great Arrow", false, false, null);
-                    DragonSkillAudio.Play(player, DragonBaseSound.GreatCrash, enemy.transform.position + Vector3.up);   // v0.25.293 (user) big arrows hit with Boulder Crash
                     OnSkillHit(player);
                     return true;
                 }, null));
@@ -3420,6 +3423,7 @@ namespace DragonsAltarRanger
             DragonCombat.LockSkill(player, channel);
             DragonCombat.PlayClip(player, "rg_starfall", Mathf.Max(0.2f, channel));
             DragonSkillAudio.Play(player, DragonBaseSound.BowDraw, player.transform.position);   // v0.25.293 (user): a normal draw...
+            DragonSkillAudio.Expect(player, DragonBaseSound.StarfallVolley, point, channel);   // v0.25.294 ArrowVolley: its first wave lands as the stars begin
             float radius = DragonCombat.M(_sfRadius.Value);
             if (_enableVfx.Value) StartCoroutine(GuideVfx(player, point, radius, new Color(0.80f, 1f, 0.60f, 0.8f), channel + _sfDuration.Value));
             yield return new WaitForSeconds(channel);
@@ -3431,6 +3435,7 @@ namespace DragonsAltarRanger
             float nextTick = 0f;
             float sfFollow = Time.time;
             DragonSkillAudio.Play(player, DragonBaseSound.BowShot, ShotOrigin(player));   // ...and the release as the stars begin
+            StartCoroutine(StarfallRainSound(player, point));   // v0.25.294 then its impacts keep raining (seamless loop) until the barrage ends
             // v0.24.2: every tick hits EVERY enemy in the 20m area; the falling arrows are cosmetic.
             while (Time.time < end && player != null && !_sfStop)
             {
@@ -3449,17 +3454,25 @@ namespace DragonsAltarRanger
                     if (inArea.Count > 0) { Character tc = inArea[UnityEngine.Random.Range(0, inArea.Count)]; sp = tc != null ? tc.transform.position : point; }
                     else { Vector2 r = UnityEngine.Random.insideUnitCircle * radius; sp = point + new Vector3(r.x, 0f, r.y); }
                     StarVfx(GroundAt(sp), impact, 0.4f);
-                    DragonSkillAudio.Play(player, DragonBaseSound.ArrowHit, GroundAt(sp));   // v0.25.293 vanilla arrow hits
-                    // v0.25.293 (user: many arrows falling, like Heaven's Judgement): 3 light arrow bodies per tick (no line
-                    // renderers, no particles of their own; each lives 0.35 s), spread over the area
+                    // v0.25.294 (user: beams like Heaven's Judgement): 5 light beams per tick (20/s) from high in the sky over the
+                    // whole area - the same cheap 2-quad Beam Heaven's Judgement uses for most of its beams (no particles) - plus
+                    // 2 falling arrow bodies. The ArrowVolley recording carries the impacts (no per-star hit sound).
                     if (DragonVfx.Enabled)
-                        for (int fa = 0; fa < 3; fa++)
+                        for (int fa = 0; fa < 7; fa++)
                         {
                             Vector2 fr = UnityEngine.Random.insideUnitCircle * radius;
-                            Vector3 fg = GroundAt(point + new Vector3(fr.x, 0f, fr.y)) + Vector3.up * 0.3f;
-                            Vector3 ftop = fg + Vector3.up * DragonCombat.M(14f) + new Vector3(UnityEngine.Random.Range(-1f, 1f), 0f, UnityEngine.Random.Range(-1f, 1f));
-                            Color fcol = new Color(0.85f, 1f, 0.70f, 1f);
-                            DragonCombat.RunVfx(delegate { DragonVfx.FallingArrow(ftop, fg, fcol, 0.35f); });
+                            Vector3 fg = GroundAt(point + new Vector3(fr.x, 0f, fr.y)) + Vector3.up * 0.08f;
+                            Color fcol = new Color(0.85f, 1f, 0.70f, 0.95f);
+                            if (fa < 5)
+                            {
+                                Vector3 fsky = DragonCombat.GetIndoorSafeSkyPoint(fg + Vector3.up * 0.1f, 30f); float fh = fsky.y - fg.y;
+                                DragonCombat.RunVfx(delegate { DragonVfx.Beam(fg, fcol, 0.45f, fh, 0.45f); });
+                            }
+                            else
+                            {
+                                Vector3 ftop = fg + Vector3.up * DragonCombat.M(14f) + new Vector3(UnityEngine.Random.Range(-1f, 1f), 0f, UnityEngine.Random.Range(-1f, 1f));
+                                DragonCombat.RunVfx(delegate { DragonVfx.FallingArrow(ftop, fg + Vector3.up * 0.3f, fcol, 0.35f); });
+                            }
                         }
                 }
                 yield return new WaitForSeconds(Mathf.Max(0.05f, _sfInterval.Value));
@@ -3472,6 +3485,15 @@ namespace DragonsAltarRanger
                 if (_enableVfx.Value) StarVfx(GroundAt(point), DragonCombat.M(_sfAscRadius.Value), 4f);   // v0.25.85 (user): the final arrow is BIG (visual only)
                 StarHitAll(player, point, DragonCombat.M(_sfAscRadius.Value), d, _sfAscDamage.Value / 100f * DragonCombat.GetSkillPower(player, "starfall_volley"), "Final Star");
             }
+        }
+
+        // v0.25.294 Starfall bed: once the volley's own impacts thin out, a seamless loop of them until the barrage ends (fade)
+        private IEnumerator StarfallRainSound(Player player, Vector3 point)
+        {
+            yield return new WaitForSeconds(1.5f);
+            if (player == null || !_sfActive) yield break;
+            int rain = DragonSkillAudio.BeginSustain(player, DragonBaseSound.StarfallRain, point, Mathf.Max(0.5f, _sfDuration.Value), 1f, 1f, delegate { return _sfActive; });
+            DragonSkillAudio.SetSustainFades(rain, 0.4f, 0f);
         }
 
         private void StarVfx(Vector3 at, float radius, float width)
@@ -3659,6 +3681,15 @@ namespace DragonsAltarRanger
         {
             GameObject vfx = _enableVfx.Value ? CreateArrowVfx(color, radius) : null;
             if (_nextArrowFlame) { _nextArrowFlame = false; if (vfx != null) { GameObject fo = vfx; DragonCombat.RunVfx(delegate { DragonVfx.ProjectileFlame(fo.transform, 0.35f, delegate { return fo != null; }); }); } }   // v0.25.181 burning Explosive Arrow
+            int crashCue = _nextFlightCrash; _nextFlightCrash = -1;
+            GameObject sfx = null;
+            if (_nextFlightWhoosh >= 0 && player != null)
+            {
+                sfx = new GameObject("AA_ArrowSfx"); sfx.transform.position = pos;
+                GameObject sa = sfx;
+                DragonSkillAudio.BeginSustain(player, (DragonBaseSound)_nextFlightWhoosh, pos, 0.01f, _nextFlightPitch, 1f, delegate { return sa != null; }, false, sfx.transform);
+            }
+            _nextFlightWhoosh = -1; _nextFlightPitch = 1f;
             HashSet<int> done = new HashSet<int>();
             float traveled = 0f;
             bool stop = false;
@@ -3677,6 +3708,7 @@ namespace DragonsAltarRanger
                     {
                         if (!IsEnemy(player, ch) || !done.Add(ch.GetInstanceID())) continue;
                         DragonSkillAudio.Play(player, DragonBaseSound.ArrowHit, ch.transform.position + Vector3.up);   // v0.25.291
+                        if (crashCue >= 0) { DragonSkillAudio.Play(player, (DragonBaseSound)crashCue, ch.transform.position + Vector3.up); crashCue = -1; }   // v0.25.294 first strike
                         onHit(ch);
                         if (_enableVfx.Value && pierce) { Vector3 hp = ch.transform.position + Vector3.up * 1f, hd = dir; Color hc = color; float hw = Mathf.Clamp(radius * 0.5f, 0.05f, 0.4f); DragonCombat.RunVfx(delegate { DragonVfx.Streak(hp - hd * 0.6f, hp + hd * 1.6f, hc, hw, 0.2f); DragonVfx.Burst(hp, hc, 6, 6f, 0.06f, 0.25f, 0.3f); }); }   // v0.25.181 directional pass-through streak
                         if (!pierce) { stop = true; pos += dir * hits[i].distance; }
@@ -3690,6 +3722,7 @@ namespace DragonsAltarRanger
                         stop = true;
                         pos += dir * hits[i].distance;
                         DragonSkillAudio.Play(player, DragonBaseSound.ArrowHit, pos);   // v0.25.291 the arrow thunks into the ground
+                        if (crashCue >= 0) { DragonSkillAudio.Play(player, (DragonBaseSound)crashCue, pos); crashCue = -1; }   // v0.25.294 a big arrow crashes into the ground
                         if (_enableVfx.Value)
                         {
                             Vector3 pp = pos, pdir = dir; float plen = radius >= DragonCombat.M(0.9f) ? 2.5f + radius * 3f : UnityEngine.Random.Range(0.85f, 1.05f); Color pcol = color;   // v0.25.85 big only for real big shots (meters, not units)
@@ -3698,6 +3731,7 @@ namespace DragonsAltarRanger
                     }
                 }
                 if (!stop) { pos += dir * step; traveled += step; }
+                if (sfx != null) sfx.transform.position = pos;
                 if (vfx != null)
                 {
                     vfx.transform.position = pos;
@@ -3707,6 +3741,7 @@ namespace DragonsAltarRanger
                 yield return null;
             }
             if (vfx != null) Destroy(vfx);
+            if (sfx != null) Destroy(sfx);   // the whoosh fades out where the arrow ends
             if (onEnd != null) onEnd(pos);
         }
 

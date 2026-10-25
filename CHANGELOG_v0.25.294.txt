@@ -1,0 +1,39 @@
+AETHELBORN ASCENDED v0.25.294 - Big Arrows and Starfall
+
+BOWMASTER
+- Starfall Volley:
+  * Sound: your ArrowVolley recording - its whistle swells during the channel and the first wave lands exactly as the
+    stars begin; then its impacts keep raining in a seamless loop until the barrage ends (fade in / fade out).
+    Draw on the channel and the release as the stars begin stay. The per-star hit sound is removed (the recording
+    carries the impacts). New sliders: "Arrow Volley" and "Arrow Rain" (Bowmaster Starfall Volley Audio).
+    Ascended final star unchanged.
+  * VFX: light beams from high in the sky like Heaven's Judgement - 5 beams every 0.25 s (20/s) spread over the whole
+    area, plus 2 falling arrows per tick and the existing star impacts. They use the same cheap 2-quad light
+    beam that Heaven's Judgement uses for most of its beams (no particles).
+- Big arrows (charged Ballista Shot, Great Arrow):
+  * WHY you heard no Boulder Crash: it only played when the arrow hit a CREATURE. Now it plays where the big
+    arrow first strikes, creature OR ground/wall. Uncharged Ballista keeps the vanilla arrow hit only.
+    Ascended Sky Arrow unchanged (it already crashed).
+  * The launch whoosh now travels WITH the arrow (it follows the projectile and fades out where the arrow ends),
+    instead of sounding from you.
+
+ACROBAT
+- Tailwind (and every other skill animation that uses a Valheim emote): ROOT CAUSE of the missing animation on
+  the FIRST cast - Valheim clears a leftover "emote_stop" animator trigger before it starts a one-shot emote; our
+  skills didn't, so a leftover stop trigger cancelled the first emote at once. The skill emote now clears it first,
+  exactly like Valheim. This one shared fix also covers Gravity Dominion's earlier first-cast miss and every other
+  emote-based skill animation (no other behaviour changes).
+- Fall damage: your log proves the Acrobat reduction is working - every fall was cut by 75% (e.g. 100 -> 25,
+  27.5 -> 6.9). A raw 100 is simply a very high fall.
+
+DEFAULTS: your new cfg merged (Swallow Dive Fast Slash volume 80 / pitch 150 / marker 0, Ballista crash 300).
+Note: Ballista crash 300% was set while it only played on creature hits; it now also plays on ground hits.
+
+CHECKED END TO END (the skills touched): Starfall Volley (cast/cancel/death during channel, Ascended finale),
+Ballista Shot (charge/cancel/release, pierce, Ascended shockwave), Splitting Arrow (volleys, Great Arrow,
+Ascended Sky Arrow window), Tailwind. No other flaws found.
+The "sound copy built during a cast: DiveDash" warning in your log came from editing its sliders in that session (a
+one-time rebuild after a slider edit), not a warm-up gap.
+
+CHECKS (static only): all ten modules compile against your real DLLs. Not seen/heard in game.
+Still waiting for your answer: Astral Greatblade slam timing.
