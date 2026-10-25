@@ -1,5 +1,5 @@
 @echo off
-title Immortal Heroes v0.25.291 - Ranger Sounds
+title Immortal Heroes v0.25.292 - Grace Sounds
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL.ps1"
 echo.
 pause

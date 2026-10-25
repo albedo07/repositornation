@@ -1,0 +1,12 @@
+AETHELBORN ASCENDED v0.25.292 - Grace Sounds   (Ranger bloodline Graces only)
+
+- Hawk's Vigil (Bowmaster Grace): your Eagle recording (leading 0.49 s of silence trimmed, so the cry starts on the
+  cast) layered with Buff. F8 slider "Eagle Cry Volume (%)" replaces "Wings".
+- Tailwind (Acrobat Grace): strong wind (Tornado, its opening ~2 s with a gradual fade) layered with Buff2.
+  F8 sliders "Strong Wind Volume (%)" and "Buff Volume (%)".
+- Levels: eagle cry set a little above the buff shimmer; wind under the buff. Buff2 is the shared file the Paladin
+  skills use, so its level here is set relative to how the game prepares it (not re-normalised).
+
+FILES: new ImmortalHeroesAssets/SFX/Eagle.wav. Installer: 65 skill sounds + menu music.
+CHECKS (static only): all ten modules compile against your real DLLs. Not heard in game.
+Still waiting for your answer: Astral Greatblade slam timing.

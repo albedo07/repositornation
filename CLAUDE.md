@@ -161,3 +161,4 @@ Standing release reporting rule (user, 2026-10-19): every delivered pass must li
 46. "Every frame for part of the time" (int)(t*10)%4==0 spawns per FRAME, not per period - frame-rate dependent object floods. Gate spawns on a next-time field.
 47. A weapon "attack" can be one long held stream (Gun Staff): copy per real SHOT (FireProjectileBurst/DoMeleeAttack hook), never per Attack.Start + guessed bursts.
 48. Before reusing a file in a new cue, check PreLeveled: a load-leveled shared file cannot be re-balanced for one class without changing the others.
+2026-10-25 — v0.25.292 Grace Sounds (Claude): user Eagle.mp3 -> Eagle.wav (onset 488 ms trimmed, PreLeveled, marker 20, gain 117) = VigilWing (Hawk's Vigil) + VigilBuff (Buff); Tailwind = TailwindGust Tornado.wav (Length 15, gain 63) + TailwindBuff Buff2.wav (load-leveled shared file, gain 40). Generator e292.py (set_elem only). Installer 65. Anchor v257.
