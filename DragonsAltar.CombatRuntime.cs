@@ -538,7 +538,8 @@ namespace DragonsAltarCombat
         {
             DragonBaseSound c = (DragonBaseSound)cue;
             return IsRumbleLayer(CueLayers[cue]) || c == DragonBaseSound.RelicSwing || c == DragonBaseSound.LRelicSwing || c == DragonBaseSound.HRelicSwing ||
-                c == DragonBaseSound.HammerSwing || c == DragonBaseSound.ChargeWhooshPeak || c == DragonBaseSound.MoonlightAfter || c == DragonBaseSound.Battlecry;
+                c == DragonBaseSound.HammerSwing || c == DragonBaseSound.ChargeWhooshPeak || c == DragonBaseSound.MoonlightAfter || c == DragonBaseSound.Battlecry ||
+                c == DragonBaseSound.HalfmoonSweep || c == DragonBaseSound.BladeStormSlash;   // v0.25.285: no skill plays these any more
         }
         // Hit point of this clip in its file (s): the component's marker, shifted by how this clip's own hit differs from the first clip's.
         private static float MarkerSeconds(int cue, AudioClip clip)
@@ -1595,7 +1596,7 @@ namespace DragonsAltarCombat
     {
         public const string ModGuid = "albedo.customclasses.combatruntime";
         public const string ModName = "Aethelborn Ascended - Combat Runtime";
-        public const string ModVersion = "0.25.284";
+        public const string ModVersion = "0.25.285";
 
         internal static DragonCombatPlugin Instance;
 
@@ -1865,7 +1866,7 @@ namespace DragonsAltarCombat
             DragonJitWarm.Tick(Player.m_localPlayer);         // v0.25.238 pre-compile the mod's code before the first cast
             DragonSkillAudio.Tick(Player.m_localPlayer);
             DragonCombat.RuntimeUpdate();
-            DragonEnemyDebuffIcons.Ensure();   // v0.25.284 enemy debuff icons over enemy health bars
+            DragonEnemyDebuffIcons.Ensure();   // v0.25.285 enemy debuff icons over enemy health bars
         }
 
         private void OnDestroy()
@@ -2593,7 +2594,7 @@ namespace DragonsAltarCombat
                 // Valheim applies m_timedBlockBonus only to a successful timed parry.
                 if (DragonCombat.GetClassName(player) == "Warrior")
                     __state.ParryField = SetTemporaryBlockMultiplier(blocker.m_shared, "m_timedBlockBonus", 2f, out __state.OriginalParry);
-                // v0.20.9 Bless Thy Sinners: a Priest holding a parrying shield (any but a tower shield, v0.25.284) has doubled Parry strength
+                // v0.20.9 Bless Thy Sinners: a Priest holding a parrying shield (any but a tower shield, v0.25.285) has doubled Parry strength
                 // (Block Force 1.5x comes from Cleric's Blessing below, same as every Cleric shield).
                 if (DragonCombat.GetAdvancementName(player) == "Priest" && DragonCombat.IsBuckler(blocker))
                 {
@@ -5964,6 +5965,23 @@ namespace DragonsAltarCombat
         private Vector3 _tipR, _tipL;
         private bool _shieldL;
 
+        // v0.25.285: the equipped prefab name (the instance is often just "attach(Clone)")
+        private FieldInfo _visRightName, _visLeftName;
+        private string HeldItemName(bool right)
+        {
+            try
+            {
+                if (_vis == null && HeldItem(right) == null) return "";
+                BindingFlags f = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+                if (_visRightName == null) _visRightName = _vis.GetType().GetField("m_rightItem", f);
+                if (_visLeftName == null) _visLeftName = _vis.GetType().GetField("m_leftItem", f);
+                FieldInfo fi = right ? _visRightName : _visLeftName;
+                string n = fi == null ? null : fi.GetValue(_vis) as string;
+                return n ?? "";
+            }
+            catch (Exception) { return ""; }
+        }
+
         private GameObject HeldItem(bool right)
         {
             if (_vis == null)
@@ -6232,9 +6250,14 @@ namespace DragonsAltarCombat
                 if ((right ? _tipIdR : _tipIdL) != id)
                 {
                     Vector3 tip;
-                    bool exact = ItemTipByVertices(item, hand, out tip);   // v0.25.249: the real farthest point of the model
+                    // v0.25.285 (user: Sorcerer charge hands changed): staffs / wands keep the v0.25.244 anchor rule (ItemTip only);
+                    // the farthest-vertex tip (v249) and the learned blade axis (v248) were made for blades in Whirlwind.
+                    string iname = (item.name + "|" + HeldItemName(right)).ToLowerInvariant();
+                    bool staff = iname.Contains("staff") || iname.Contains("wand") || iname.Contains("scepter") || iname.Contains("sceptre");
+                    tip = Vector3.zero;
+                    bool exact = !staff && ItemTipByVertices(item, hand, out tip);   // v0.25.249: the real farthest point of the model
                     bool ok = exact || ItemTip(item, hand, out tip);
-                    if (ok && right && !exact) tip = UniversalTip(item, tip);   // main hand only (hand axes differ per side; shields are left)
+                    if (ok && right && !exact && !staff) tip = UniversalTip(item, tip);   // main hand only (hand axes differ per side; shields are left)
                     if (right) { _tipIdR = id; _tipR = ok ? tip : Vector3.zero; }
                     else { _tipIdL = id; _tipL = ok ? tip : Vector3.zero; _shieldL = item.name.ToLowerInvariant().Contains("shield"); }
                 }
@@ -9816,7 +9839,7 @@ namespace DragonsAltarCombat
                     existing.Stacks = stacks;
                     if (detail != null) existing.Detail = detail;
                     existing.CooldownMarker = IsCooldownIcon(key, icon);
-                    if (icon != null && existing.m_icon != StatusSprite(icon)) existing.m_icon = StatusSprite(icon);   // v0.25.284 state icons (Ready <-> Cooldown)
+                    if (icon != null && existing.m_icon != StatusSprite(icon)) existing.m_icon = StatusSprite(icon);   // v0.25.285 state icons (Ready <-> Cooldown)
                     if (_relabel) { existing.m_name = label; existing.m_tooltip = label; }   // v0.25.181 state indicators
                     return;
                 }
@@ -9914,7 +9937,7 @@ namespace DragonsAltarCombat
             }
         }
 
-        // v0.25.284: every "_cd" icon is a cooldown (darker icon + cooldown chevrons/bar on the HUD)
+        // v0.25.285: every "_cd" icon is a cooldown (darker icon + cooldown chevrons/bar on the HUD)
         private static bool IsCooldownIcon(string key, string icon)
         {
             return (icon != null && icon.EndsWith("_cd", StringComparison.Ordinal)) || key == "fury_recovery" || key == "priest_buckler_recovery";
@@ -9926,7 +9949,7 @@ namespace DragonsAltarCombat
             return s == null ? null : s.texture;
         }
 
-        // v0.25.284 enemy debuff icons: bit flags 1 Poisoned, 2 Burning, 4 Frost, 8 Crippled, 16 Exposed, 32 Zapped, 64 Stunned
+        // v0.25.285 enemy debuff icons: bit flags 1 Poisoned, 2 Burning, 4 Frost, 8 Crippled, 16 Exposed, 32 Zapped, 64 Stunned
         private static int _hashBurning, _hashPoison, _hashFrost, _hashLightning;
         internal static int EnemyDebuffFlags(Character c)
         {
@@ -10020,12 +10043,12 @@ namespace DragonsAltarCombat
                 case "Paladin.HeavensLight": return "sun";
                 case "Paladin.RayOfHope": return "ray";
                 case "SwordMaster.KnightsGuidance": return "damage";   // v0.25.231: KG is a damage buff
-                case "Mercenary.Battlecry": return "battlecry";   // v0.25.284 red sword (damage) + roar
+                case "Mercenary.Battlecry": return "battlecry";   // v0.25.285 red sword (damage) + roar
                 case "Priest.HolyRelic": return "relic";
                 case "Priest.DivineIntervention": return "wings";
                 case "Priest.EyeOfTheStorm": return "storm";
-                case "Priest.BucklerParry": return "hyper_armor";   // v0.25.284 (user): Hyper Armor gets its own icon
-                case "Priest.GrandSigilRecovery": return "sigil_haste";   // v0.25.284 speed buff = winged boot
+                case "Priest.BucklerParry": return "hyper_armor";   // v0.25.285 (user): Hyper Armor gets its own icon
+                case "Priest.GrandSigilRecovery": return "sigil_haste";   // v0.25.285 speed buff = winged boot
                 case "Acrobat.Tailwind": return "wind";
                 case "Spellcaster.PhaseFlow": return "portal";
             }
@@ -10305,7 +10328,7 @@ namespace DragonsAltarCombat
             catch
             {
             }
-            // v0.25.284 (user): the Priest Mastery works with ANY shield that can parry - every shield except tower shields
+            // v0.25.285 (user): the Priest Mastery works with ANY shield that can parry - every shield except tower shields
             // (a tower shield has no parry bonus: m_timedBlockBonus 1x). Name/prefab "tower" never counts.
             if (name.Contains("tower") || prefab.Contains("tower")) return false;
             if (name.Contains("buckler") || prefab.Contains("buckler")) return true;
@@ -15933,7 +15956,7 @@ namespace DragonsAltarCombat
 
     // Shared meshes/materials; only cached transforms and property blocks change during the portal's life.
     // Distributed ground fire. World-space anchors sampled once; live refill does no raycasts or allocations.
-    // v0.25.284 (user): debuff icons above enemy health bars (Poisoned, Burning, Frost, Crippled, Exposed, Zapped,
+    // v0.25.285 (user): debuff icons above enemy health bars (Poisoned, Burning, Frost, Crippled, Exposed, Zapped,
     // Stunned). Reads Valheim's EnemyHud huds (reflection cached once) every 0.2 s; OnGUI only draws.
     public class DragonEnemyDebuffIcons : MonoBehaviour
     {
@@ -16032,7 +16055,7 @@ namespace DragonsAltarCombat
         private void Emit(int i, float offset)
         {
             ParticleSystem.EmitParams p = new ParticleSystem.EmitParams();
-            p.position = Points[i]; p.velocity = Vector3.up * 0.12f;   // v0.25.284 low rolling flames
+            p.position = Points[i]; p.velocity = Vector3.up * 0.12f;   // v0.25.285 low rolling flames
             p.startLifetime = Mathf.Min(0.7f + offset, Mathf.Max(0.03f, Seconds - _age));
             p.startSize = Size * (0.9f + 0.18f * Mathf.Sin(i * 3.7f + _age * 4f));
             p.startColor = Tint;
@@ -18037,8 +18060,11 @@ namespace DragonsAltarCombat
             DragonVfxLife l = Host(ground + Vector3.up * height, seconds + 2f, "storm");
             // v0.25.191 (user: the storm must be clearly visible): bigger, denser, darker canopy puffs (size grows with the storm)
             float puff = Mathf.Clamp(radius * 0.32f, 2.5f, 7f);
-            Particles(l.transform, new Color(0.14f, 0.15f, 0.20f, 0.9f), 45, 40f, seconds, puff, 0.1f, 0.6f, radius * 0.35f, radius * 0.6f, 0f,
+            // v0.25.285 (user: 200 fps -> 120-150 while Tempest runs): 40 puffs/s x up to 7 s kept ~200 overlapping 5-8 m see-through
+            // puffs over the camera (GPU overdraw). Now 12/s, a little bigger, capped at 90 alive: same dark canopy, ~1/3 the puffs.
+            ParticleSystem canopy = Particles(l.transform, new Color(0.14f, 0.15f, 0.20f, 0.9f), 30, 12f, seconds, puff, 0.1f, 0.6f, radius * 0.42f, radius * 0.72f, 0f,
                 ParticleSystemShapeType.Circle, radius, new Vector3(90f, 0f, 0f), false, false);
+            ParticleSystem.MainModule cm = canopy.main; cm.maxParticles = 90;
             Particles(l.transform, Storm, 0, 6f, seconds, 0.25f, 0f, 0.1f, radius * 0.3f, radius * 0.5f, 0f,
                 ParticleSystemShapeType.Circle, radius * 0.8f, new Vector3(90f, 0f, 0f), false, true);
             l.StopEmitAt = seconds;
@@ -18490,7 +18516,7 @@ namespace DragonsAltarCombat
             ParticleSystem.MainModule fm = fire.main; fm.maxParticles = 300;
             DragonGroundFlames field = l.gameObject.AddComponent<DragonGroundFlames>();
             field.Flames = fire; field.Seconds = seconds;
-            // v0.25.284 (user): Fader-like lingering fire, but shallow (ankle to knee) and in muted natural colours:
+            // v0.25.285 (user): Fader-like lingering fire, but shallow (ankle to knee) and in muted natural colours:
             // many small low tongues instead of a few tall cartoon flames, same anchor cap (no extra cost).
             int anchors = Mathf.Clamp(Mathf.CeilToInt(Mathf.PI * radius * radius / 0.9f * Restraint * PolishBudget() * Mathf.Clamp(Amount / 0.35f, 0.25f, 1.5f)), 4, 180);
             field.Points = GroundFirePoints(pos, radius, anchors);
@@ -24260,7 +24286,7 @@ namespace DragonsAltarCombat
                     if (_clip == null) { if (age > 0.8f) { _snap = Layers(); Finish("no attack clip started within 0.8 s"); } return; }
                 }
                 float nt = ClipTime();
-                if (nt < 0f) { Finish("the swing ended"); return; }
+                if (nt < 0f) { _snap = Layers(); Finish(_frames < 3 ? "the swing was replaced right after it started (layers now listed)" : "the swing ended"); return; }
                 float dt = Time.deltaTime;
                 if (_lastNt >= 0f && nt > _lastNt) _nat += nt - _lastNt;
                 if (_lastNt >= 0f) { _real += dt; _anSum += _an.speed; _askSum += DragonCombat.SkillAnimSpeedNow(_p); _frames++; }
@@ -24279,6 +24305,13 @@ namespace DragonsAltarCombat
             {
                 AnimatorClipInfo[] nx = _an.GetNextAnimatorClipInfo(_layer);
                 for (int i = 0; i < nx.Length; i++) if (nx[i].clip == _clip) return _an.GetNextAnimatorStateInfo(_layer).normalizedTime * _clip.length;
+            }
+            // v0.25.285: the same swing can move to another layer (full body -> upper body while running); follow it there
+            for (int l = 0; l < _an.layerCount; l++)
+            {
+                if (l == _layer) continue;
+                AnimatorClipInfo[] o = _an.GetCurrentAnimatorClipInfo(l);
+                for (int i = 0; i < o.Length; i++) if (o[i].clip == _clip) { _layer = l; return _an.GetCurrentAnimatorStateInfo(l).normalizedTime * _clip.length; }
             }
             return -1f;
         }

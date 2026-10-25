@@ -1,0 +1,19 @@
+AETHELBORN ASCENDED v0.25.285 - Staff Hands and Storm FPS
+
+1. Sorcerer charge poses (Meteor Fall, Elemental Cataclysm, every skill that aims a held staff)
+   Cause: v0.25.248/249 changed how the "tip" of a held item is found (farthest model point + a blade direction
+   learned from swords), made for Whirlwind blades. The same code aims staffs in skill poses, so the staff/hand turned
+   differently. Staffs, wands and scepters now use the v0.25.244 (Anchor) rule again. Blades unchanged.
+2. Lightning Tempest FPS: the storm cloud kept ~200 overlapping 5-8 m see-through puffs over the camera (GPU
+   overdraw). Now 12 puffs/s (was 40), slightly bigger, at most 90 alive: same dark canopy, about a third of the cost.
+   Strikes, damage, sounds unchanged.
+3. Heaven's Judgement FPS: the full light pillar (particles + beam) now on 2 beams of each wave; the other 8 beams
+   are the light beam alone (no particle system). Same beam count, positions, damage and sounds.
+4. Two leftover sounds (HalfmoonSweep, BladeStormSlash - no skill plays them) are no longer loaded, so their
+   "Skill audio unavailable" warnings are gone.
+5. Animation trace: a swing that moves to the upper-body layer (running) is followed there instead of being
+   reported as ended; a swing replaced right after it starts now lists what replaced it. (Your Judgement Hammer
+   line: code review found no skill that cancels the throw, and the hit-timing line right after shows the throw's
+   hit landed 0.01 s from the hammer's release, so it did play.)
+
+Static compile of all ten modules against the real references only. FPS and looks not tested in game.

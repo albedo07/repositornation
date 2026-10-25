@@ -1,1 +1,4 @@
-v0.25.284 User Defaults - nothing should change in your game (your cfg already has these values). Send the Heaven's Judgement / Lightning Tempest test run log.
+v0.25.285 - please test:
+1. Wizard: hold Meteor Fall / Elemental Cataclysm - staff and hand like before.
+2. Heaven's Judgement and Lightning Tempest: FPS while they run (was 120-150 vs 190-200).
+3. Judgement Hammer a few times right after Righteous Strike; send LogOutput.log ("CA trace").

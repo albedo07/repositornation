@@ -41,7 +41,7 @@ namespace DragonsAltarDevTools
     {
         public const string ModGuid = "albedo.customclasses.devtools";
         public const string ModName = "Aethelborn Ascended - Developer Tools";
-        public const string ModVersion = "0.25.284";
+        public const string ModVersion = "0.25.285";
 
         public static DeveloperToolsPlugin Instance;
 
@@ -270,7 +270,7 @@ namespace DragonsAltarDevTools
         // v0.25.232 (user: "everything in my config is now the default"): guid|section|key|old default|new default.
         // Applied once all modules are loaded: the entry's DefaultValue becomes the user's value (F8 DEFAULT and the defaults pass
         // use it) and an entry still at the old default takes the new one (fresh installs).
-        // v0.25.284 (user: "make the defaults first"): rebuilt from the user cfg_2 (made on v0.25.284); f[3] is informational,
+        // v0.25.285 (user: "make the defaults first"): rebuilt from the user cfg_2 (made on v0.25.285); f[3] is informational,
         // the "still at the old default" check uses the entry's own code default.
         private static readonly string[] UserDefaults = {
             "albedo.customclasses.advanced|Cleric Blessing|FlatHealth|35|40",
@@ -510,7 +510,7 @@ namespace DragonsAltarDevTools
                     try
                     {
                         object value = TomlTypeConverter.ConvertToValue(f[4], pair.Value.SettingType);
-                        // v0.25.284: "still at the old default" = still at the code's own default (read before it is replaced)
+                        // v0.25.285: "still at the old default" = still at the code's own default (read before it is replaced)
                         string codeDefault = pair.Value.DefaultValue == null ? f[3] : TomlTypeConverter.ConvertToString(pair.Value.DefaultValue, pair.Value.SettingType);
                         bool atDefault = string.Equals(pair.Value.GetSerializedValue(), codeDefault, StringComparison.Ordinal) || string.Equals(pair.Value.GetSerializedValue(), f[3], StringComparison.Ordinal);
                         if (backing != null) backing.SetValue(pair.Value, value);
