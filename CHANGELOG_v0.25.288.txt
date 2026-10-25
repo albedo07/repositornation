@@ -1,0 +1,48 @@
+AETHELBORN ASCENDED v0.25.288 - Sorcerer Sound Pass   (Sorcerer / Archmage / Horizon Walker only)
+
+ROOT CAUSES FIXED
+- Balance: every new Sorcerer recording was force-leveled at load (pushed to one loudness and soft-clipped), so quiet
+  wind-ups like Ice Forming came out as loud as explosions. They now play raw, like every other skill sound, with a
+  built-in level per sound: explosions/impacts loudest (about -10.5 dB), slashes/swords mid (-16 to -20),
+  wind-ups/charges/hums lowest (-18 to -23). Your sliders still multiply on top of these levels.
+- Timing: for a one-shot sound kept alive by its skill, the duration I passed was treated as "when the hit lands", so
+  the Railcannon charge started AT the shot (and then played its full 7 s) and the Rift Portal sound started ~6 s late.
+  Every timed sound now has an explicit start (hit-synced) and an explicit faded end.
+
+PER SKILL
+- Glacial Descent (Normal + Ascended): Ice Forming now comes from the spell's spot (not you), fades in softly on the
+  cast. Ice Crash + NEW Boulder Crash land with the ice, full force.
+- Meteor Fall: Flame fades in over 0.6 s from the cast and loops a seamless section for as long as you charge (no
+  restart cut); fades out over 0.5 s on release. SolidBoom crash / Ascended MidBoom small meteors unchanged, louder.
+- Gravity Dominion: the Black Hole recording's own forming start -> its steady middle looped seamlessly (fades in under
+  the start, fades out before the end) -> its own collapse (the recording's ending build, cut 0.85 s before its last
+  second with soft edges) peaking exactly as the well ends. Ascended: MidBoom + BassDrop explode on that peak.
+- Astral Railcannon: the charge starts on the cast with a soft fade-in; its crack lands on the shot. To make the crack
+  match the 1.5 s wind-up, the first 1.25 s of Railcannon was time-stretched (pitch unchanged; your call to me). Faster
+  wind-ups (attack speed / Overcharge) start further into the build-up instead. Right after the crack it fades out
+  into the BassDrop boom. Ascended: same charge, then the steady part of Railcannon loops seamlessly for the whole beam,
+  fading out into BassDrop when it ends.
+- Astral Greatblade: unchanged timing (MagicSword2 conjure, Slam on every slam), rebalanced (Slam much louder).
+- Frost Nova: IceSlam's hit lands on the nova, 1.5 s with a gradual 0.6 s fade.
+- Elemental Cataclysm: PowerUp builds from the cast (soft fade-in). At full charge its climax section crossfades into a
+  seamless loop for as long as you keep holding. Release: both fade out over 0.4 s; BoomBass + SolidBoom land with the
+  blast (and with the Ascended second blast).
+- Arcane Phalanx / Rift Echo / Arcane Phantom / Void Step / Arcane Rupture: timing unchanged, rebalanced.
+- Gravity Blast: BlackHole2 from its own start (fade-in), fades out over 0.4 s into the MidBoom + BassDrop explosion.
+- Clockwork: rebalanced (buff sound down, echo tail up a little).
+- Rift Walker: the RiftPortal swell now peaks exactly as the portal opens (was ~6 s late); the hum loop fades in while
+  the recording fades out (overlap, no gap); fades out when the portal closes.
+
+SLIDER NOTE (MidBoom and other bass sounds): those recordings already reach the digital ceiling at 100%. Above 100%
+the mod can only push them into its limiter, which gets denser, not much louder. So the balance is done by making
+everything else quieter: explosions now sit about 8-12 dB above the wind-ups.
+
+OTHER
+- Tooltips: an Ascended skill's changes are labelled "Ascension" (was "Skill Effect"). This one shared tooltip line is
+  used by every class.
+- Diagnostics (log only): "Hand aim item ..." says whether the staff rule is used (Meteor Fall / Cataclysm staff hand),
+  and borrowed emote animations are now traced ("CA trace ... emote_comehere", Gravity Dominion first cast).
+- Files: + FlameLoop, BlackHoleLoop, PowerUpLoop, RailBeamLoop, RailcannonCharge; GravityVanish re-cut;
+  - Flame.wav, Railcannon.wav (no longer used). Installer: 59 skill sounds.
+
+Static compile of all ten modules against the real references only. Nothing heard in game.

@@ -1,1 +1,3 @@
-v0.25.287 Grace Sounds: cast Clockwork (echo ending) and Rift Walker (A then B: conjure 0.6 s, opens on the sound's peak, hum loops until it closes).
+v0.25.288 Sorcerer Sound Pass - listen to every Sorcerer / Archmage / Horizon Walker skill (Normal + Ascended).
+Then send LogOutput.log: it now shows "Hand aim item ..." (staff hand during Meteor Fall / Cataclysm charge) and
+"CA trace ... emote_comehere" (Gravity Dominion first cast without its animation).

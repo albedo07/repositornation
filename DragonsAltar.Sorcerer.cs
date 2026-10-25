@@ -165,7 +165,7 @@ namespace DragonsAltarSorcerer
     {
         public const string ModGuid = "albedo.customclasses.sorcerer";
         public const string ModName = "Aethelborn Ascended - Sorcerer Advancements";
-        public const string ModVersion = "0.25.287";
+        public const string ModVersion = "0.25.288";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -961,7 +961,7 @@ namespace DragonsAltarSorcerer
             float windup = ScaleWindup(player, 1f);
             DragonCombat.LockSkill(player, windup);
             DragonCombat.PlayClip(player, "sorc_glacial", windup);
-            DragonSkillAudio.Play(player, DragonBaseSound.GlacialIceForm, player.transform.position);   // v0.25.287 (user)
+            { int gi = DragonSkillAudio.BeginSustain(player, DragonBaseSound.GlacialIceForm, target, 0.01f); DragonSkillAudio.SetSustainFades(gi, 0.15f, 0f); }   // v0.25.288 at the spell's spot, gentle fade-in
             StartCoroutine(GlacialRoutine(player, target, windup));
         }
 
@@ -979,7 +979,7 @@ namespace DragonsAltarSorcerer
                 yield return null;
             }
             if (chunk != null) Destroy(chunk, 0.30f);
-            DragonSkillAudio.Play(player, DragonBaseSound.GlacialIceCrash, target);   // v0.25.287 (user)
+            DragonSkillAudio.Play(player, DragonBaseSound.GlacialIceCrash, target); DragonSkillAudio.Play(player, DragonBaseSound.GlacialBoulder, target);   // v0.25.287 (user)
             List<Character> targets = GetSphereTargets(player, target, DragonCombat.M(_iceRadius.Value));
             for (int i = 0; i < targets.Count; i++)
             {
@@ -1230,9 +1230,11 @@ namespace DragonsAltarSorcerer
             float end = Time.time + Mathf.Max(0.5f, duration);
             // v0.25.287 (user): Black Hole while the well lasts; the recording's vanishing second (0:02-0:01 before its end) peaks on
             // the end of the well, together with the Ascended explosion (MidBoom + BassDrop)
-            { int gdHole = DragonSkillAudio.BeginSustain(player, DragonBaseSound.DominionHole, center, Mathf.Max(0.5f, duration), 1f, 1f, null);
-              DragonSkillAudio.SetSustainFades(gdHole, 0.4f, Mathf.Min(1.2f, Mathf.Max(0.3f, duration * 0.4f)));
-              StartCoroutine(SfxExpectAt(player, DragonBaseSound.DominionVanish, center, end, 1.2f));
+            { float gdDur = Mathf.Max(0.5f, duration);
+              int gdForm = DragonSkillAudio.BeginSustain(player, DragonBaseSound.DominionHole, center, 0.01f, 1f, 1f, null);   // v0.25.288 forming (its own start)
+              DragonSkillAudio.SetSustainEnd(gdForm, Mathf.Min(2.2f, gdDur), Mathf.Min(0.6f, gdDur * 0.3f));
+              if (gdDur > 3f) StartCoroutine(DominionLoopSound(player, center, gdDur));
+              StartCoroutine(SfxExpectAt(player, DragonBaseSound.DominionVanish, center, end, 1.8f));
               if (ascended) { StartCoroutine(SfxExpectAt(player, DragonBaseSound.DominionBoom, center, end, 0.3f)); StartCoroutine(SfxExpectAt(player, DragonBaseSound.DominionBass, center, end, 0.3f)); } }
             if (_enableVfx.Value)
             {
@@ -1280,7 +1282,16 @@ namespace DragonsAltarSorcerer
             if (_enableVfx.Value) { StartCoroutine(RingVfx(center, radius, new Color(0.75f, 0.30f, 1f, 1f), 0.6f)); CreateLightningBurst(center, radius); Vector3 bc = center; float br = radius; DragonCombat.RunVfx(delegate { DragonVfx.HeavyLanding(bc, new Color(0.75f, 0.30f, 1f, 1f), br, 1.8f); }); }
         }
 
-        // v0.25.287: a sound whose hit must land at an exact moment later on (the hit-sync marker lands on hitTime)
+        // v0.25.288: the Black Hole's steady middle (seamless loop) fades in under the forming sound and out before the collapse
+        private IEnumerator DominionLoopSound(Player player, Vector3 center, float duration)
+        {
+            yield return new WaitForSeconds(1.6f);
+            if (player == null || player.IsDead()) yield break;
+            int loop = DragonSkillAudio.BeginSustain(player, DragonBaseSound.DominionLoop, center, Mathf.Max(0.5f, duration - 2.0f), 1f, 1f, null);
+            DragonSkillAudio.SetSustainFades(loop, 0.6f, 1.0f);
+        }
+
+        // v0.25.286: a sound whose hit must land at an exact moment later on (the hit-sync marker lands on hitTime)
         private IEnumerator SfxExpectAt(Player p, DragonBaseSound cue, Vector3 at, float hitTime, float lead)
         {
             float wait = hitTime - lead - Time.time;
@@ -1442,7 +1453,8 @@ namespace DragonsAltarSorcerer
             float windup = ScaleWindup(player, Mathf.Max(0f, _novaWindup.Value));
             DragonCombat.LockSkill(player, windup);
             DragonCombat.PlayClip(player, "wiz_nova", windup);
-            DragonSkillAudio.Expect(player, DragonBaseSound.NovaSlam, player.transform.position, windup);   // v0.25.287 (user) 1.5 s
+            { int ns = DragonSkillAudio.BeginSustain(player, DragonBaseSound.NovaSlam, player.transform.position, Mathf.Max(0.01f, windup), 1f, 1f, null, true);
+              DragonSkillAudio.SetSustainEnd(ns, windup + 1.5f, 0.6f); }   // v0.25.288 hit on the nova, 1.5 s, gradual fade
             StartCoroutine(ascended ? FrostAuraRoutine(player, windup) : FrostNovaRoutine(player, windup));
         }
 
@@ -1516,7 +1528,7 @@ namespace DragonsAltarSorcerer
             float windup = ScaleWindup(player, Mathf.Max(0f, IsWizAscended(player, "meteor_fall") ? _mfAscWindup.Value : _meteorWindup.Value));
             DragonCombat.LockSkill(player, windup + 0.1f);
             DragonCombat.PlayClip(player, "wiz_meteor", Mathf.Max(0.25f, windup), true);
-            { Player mp = player; _meteorFlame = DragonSkillAudio.BeginSustain(player, DragonBaseSound.MeteorFlame, player.transform.position, 60f, 1f, 1f, delegate { return mp != null && !mp.IsDead(); }, true); }   // v0.25.287 (user)
+            { Player mp = player; _meteorFlame = DragonSkillAudio.BeginSustain(player, DragonBaseSound.MeteorFlame, player.transform.position, 60f, 1f, 1f, delegate { return mp != null && !mp.IsDead(); }, true); DragonSkillAudio.SetSustainFades(_meteorFlame, 0.6f, 0f); }   // v0.25.287 (user)
             StartCoroutine(MeteorRoutine(player, target, windup));
         }
 
@@ -1536,7 +1548,7 @@ namespace DragonsAltarSorcerer
                 if (!DragonCombat.CanUseWorldInput(player))
                 {
                     _meteorChargeShown = 0; _meteorChargeNext = 0f;
-                    DragonSkillAudio.EndSustain(_meteorFlame);
+                    DragonSkillAudio.SetSustainEnd(_meteorFlame, 0.5f, 0.5f);
                     DragonCombat.ClipStop(player, 0.1f); yield break;
                 }
                 float elapsed = Time.time - pressed;
@@ -1561,7 +1573,7 @@ namespace DragonsAltarSorcerer
             if (player == null || player.IsDead()) yield break;
             _meteorChargeShown = 0;
             _meteorChargeNext = 0f;
-            DragonSkillAudio.EndSustain(_meteorFlame);   // v0.25.287 the charging flame fades out on release
+            DragonSkillAudio.SetSustainEnd(_meteorFlame, 0.5f, 0.5f);   // v0.25.287 the charging flame fades out on release
             DragonCombat.ClipImpact(player);   // release: drag the sky down
             float damageMul = 1f + 0.2f * stacks;
             float radius = DragonCombat.M(_meteorRadius.Value) * (1f + 0.1f * stacks);
@@ -1647,12 +1659,13 @@ namespace DragonsAltarSorcerer
             DragonCombat.LockSkill(player, windup);
             _railFacingUntil = Time.time + windup + 0.5f;
             DragonCombat.PlayClip(player, ascended ? "wiz_railcannon_hold" : "wiz_railcannon", windup, ascended);
-            if (ascended) _railBeam = DragonSkillAudio.BeginSustain(player, DragonBaseSound.RailBeam, player.transform.position, 30f, 1f, 1f, null, true);   // v0.25.287 (user)
-            else
+            // v0.25.288 (user): the charge starts on the cast and its crack (1.49 s into RailcannonCharge.wav) lands on the shot;
+            // it fades out right after, into the BassDrop boom. Ascended: the beam loop takes over at the shot.
             {
-                int rc = DragonSkillAudio.BeginSustain(player, DragonBaseSound.RailCharge, player.transform.position, windup + 0.12f, 1f, 1f, null, true);
-                DragonSkillAudio.SetSustainFades(rc, 0f, 0.2f);
-                DragonSkillAudio.Expect(player, DragonBaseSound.RailShot, player.transform.position, windup);
+                int rc = DragonSkillAudio.BeginSustain(player, DragonBaseSound.RailCharge, player.transform.position, Mathf.Max(0.01f, windup), 1f, 1f, null, true);
+                DragonSkillAudio.SetSustainFades(rc, 0.15f, 0f);
+                DragonSkillAudio.SetSustainEnd(rc, windup + 0.3f, 0.45f);
+                if (!ascended) DragonSkillAudio.Expect(player, DragonBaseSound.RailShot, player.transform.position, windup);
             }
             StartCoroutine(ascended ? AscendedRailcannonRoutine(player, windup) : AstralRailcannonRoutine(player, windup));
         }
@@ -1719,6 +1732,7 @@ namespace DragonsAltarSorcerer
             if (windup > 0f) yield return new WaitForSeconds(windup);
             float tick = Mathf.Max(0.05f, _rcAscTick.Value);
             float end = Time.time + Mathf.Max(tick, _rcAscDuration.Value);
+            if (player != null) { _railBeam = DragonSkillAudio.BeginSustain(player, DragonBaseSound.RailBeam, player.transform.position, 30f, 1f, 1f, null, true); DragonSkillAudio.SetSustainFades(_railBeam, 0.3f, 0f); }   // v0.25.288 beam loop from the shot
             float shot = Mathf.Max(0f, _railShotMultiplier.Value) * _rcAscTickPercent.Value / 100f;
             bool first = true;
             while (player != null && !player.IsDead() && Time.time < end)
@@ -1733,7 +1747,7 @@ namespace DragonsAltarSorcerer
                 yield return new WaitForSeconds(tick);
             }
             _railFacingUntil = 0f;
-            DragonSkillAudio.EndSustain(_railBeam);   // v0.25.287 the beam sound fades, BassDrop as it ends
+            DragonSkillAudio.SetSustainEnd(_railBeam, 0.4f, 0.4f);   // v0.25.288 the beam fades, BassDrop as it ends
             if (player != null) DragonSkillAudio.Play(player, DragonBaseSound.RailShot, player.transform.position);
             DragonCombat.PlayClip(player, "wiz_railcannon", 0.05f);   // last kick, then rest
         }
@@ -1763,13 +1777,15 @@ namespace DragonsAltarSorcerer
             int ccShown = 0;
             DragonCombat.PlayClip(player, "wiz_cataclysm", Mathf.Max(0.3f, minWindup), true);
             Player ccp = player;
-            int ccPower = DragonSkillAudio.BeginSustain(player, DragonBaseSound.CataclysmPower, player.transform.position, 60f, 1f, 1f, delegate { return ccp != null && !ccp.IsDead(); }, true);   // v0.25.287 (user)
+            int ccPower = DragonSkillAudio.BeginSustain(player, DragonBaseSound.CataclysmPower, player.transform.position, 0.01f, 1f, 1f, delegate { return ccp != null && !ccp.IsDead(); }, true);   // v0.25.288 (user)
+            DragonSkillAudio.SetSustainFades(ccPower, 0.3f, 0f);
+            int ccLoop = 0;
             while (player != null && !player.IsDead() && (elapsed < minWindup || holding))
             {
                 if (!DragonCombat.CanUseWorldInput(player))
                 {
                     _cataclysmCharge01 = 0f;
-                    DragonSkillAudio.EndSustain(ccPower);
+                    DragonSkillAudio.SetSustainEnd(ccPower, 0.4f, 0.4f); DragonSkillAudio.SetSustainEnd(ccLoop, 0.4f, 0.4f);
                     DragonCombat.ClipStop(player, 0.1f); yield break;
                 }
                 DragonCombat.LockSkill(player, 0.12f);
@@ -1778,6 +1794,13 @@ namespace DragonsAltarSorcerer
                 // charge timer from the key press; it stops the moment the key is released
                 if (holding && SkillKeyHeld(player, "elemental_cataclysm", _skill9.Value)) charge = Mathf.Min(max, elapsed);
                 else holding = false;
+                if (holding && ccLoop == 0 && (charge >= max || elapsed >= 8f))
+                {
+                    // v0.25.288 (user): held at full charge = the climax keeps going (seamless loop), crossfaded from the build-up
+                    ccLoop = DragonSkillAudio.BeginSustain(player, DragonBaseSound.CataclysmLoop, player.transform.position, 120f, 1f, 1f, delegate { return ccp != null && !ccp.IsDead(); }, true);
+                    DragonSkillAudio.SetSustainFades(ccLoop, 0.6f, 0f);
+                    DragonSkillAudio.SetSustainEnd(ccPower, 0.8f, 0.8f);
+                }
                 _cataclysmCharge01 = charge / max;
                 // v0.25.38 (user): on-screen stack prompt like Meteor Fall (one stack per charge second).
                 int ccMax = Mathf.Max(2, Mathf.RoundToInt(_cataclysmCharge.Value));
@@ -1807,7 +1830,7 @@ namespace DragonsAltarSorcerer
                 yield return null;
             }
             _cataclysmCharge01 = 0f;
-            DragonSkillAudio.EndSustain(ccPower);
+            DragonSkillAudio.SetSustainEnd(ccPower, 0.4f, 0.4f); DragonSkillAudio.SetSustainEnd(ccLoop, 0.4f, 0.4f);
             if (player == null) yield break;
             DragonCombat.ClipImpact(player);
             DragonSkillAudio.Expect(player, DragonBaseSound.CataclysmBoomBass, target, 0.5f);   // v0.25.287 lands with the blast
@@ -1886,7 +1909,7 @@ namespace DragonsAltarSorcerer
             float windup = ScaleWindup(player, Mathf.Max(0f, _gdAscWindup.Value));
             DragonCombat.LockSkill(player, windup);
             DragonCombat.PlayClip(player, "sorc_glacial_asc", windup);
-            DragonSkillAudio.Play(player, DragonBaseSound.GlacialIceForm, player.transform.position);   // v0.25.287 (user)
+            { int gi = DragonSkillAudio.BeginSustain(player, DragonBaseSound.GlacialIceForm, target, 0.01f); DragonSkillAudio.SetSustainFades(gi, 0.15f, 0f); }   // v0.25.288 at the spell's spot, gentle fade-in
             StartCoroutine(AscendedGlacialRoutine(player, target, windup));
         }
 
@@ -1897,7 +1920,8 @@ namespace DragonsAltarSorcerer
             float radius = DragonCombat.M(_gdAscRadius.Value);
             float core = DragonCombat.M(_gdAscCore.Value);
             Vector3 sky = DragonCombat.GetIndoorSafeSkyPoint(target, 12f);
-            DragonSkillAudio.Expect(player, DragonBaseSound.GlacialIceCrash, target, 0.45f);   // v0.25.287 (user)
+            DragonSkillAudio.Expect(player, DragonBaseSound.GlacialIceCrash, target, 0.45f);   // v0.25.286 (user)
+            DragonSkillAudio.Expect(player, DragonBaseSound.GlacialBoulder, target, 0.45f);   // v0.25.288 (user)
             GameObject chunk = _enableVfx.Value ? CreateIceChunk(sky, DragonVfx.Enabled ? core * 1.3f : radius * 0.6f) : null;
             float e = 0f;
             while (e < 0.45f)
@@ -1908,7 +1932,7 @@ namespace DragonsAltarSorcerer
             }
             if (chunk != null) Destroy(chunk);
             if (player == null) yield break;
-            DragonSkillAudio.Play(player, DragonBaseSound.GlacialIceCrash, target);
+            DragonSkillAudio.Play(player, DragonBaseSound.GlacialIceCrash, target); DragonSkillAudio.Play(player, DragonBaseSound.GlacialBoulder, target);
             List<Character> targets = GetSphereTargets(player, target, radius);
             for (int i = 0; i < targets.Count; i++)
             {
@@ -3002,7 +3026,7 @@ namespace DragonsAltarSorcerer
             int solid = LayerMask.GetMask("Default", "static_solid", "Default_small", "piece", "terrain", "vehicle");
             GameObject orb = _enableVfx.Value ? (DragonVfx.Enabled ? DragonVfx.GravityOrb(origin, DragonCombat.M(_gbOrbSize.Value)) : CreateOrb(origin, DragonCombat.M(_gbOrbSize.Value), new Color(0.18f, 0.02f, 0.30f, 0.92f))) : null;   // v0.25.180 dark transparent orb + rim + air wake
             if (orb != null) { Transform ot = orb.transform; float vr = radius, vl = life + 2f; DragonCombat.RunVfx(delegate { DragonVfx.GravityWell(ot, ot.position, vr, vl); }); }   // v0.25.169 gravity: air ripples + streaks + loose dirt dragged after the orb
-            int gbHole = DragonSkillAudio.BeginSustain(player, DragonBaseSound.BlastHole, origin, life + 2f, 1f, 1f, null, false, orb != null ? orb.transform : null);   // v0.25.287 (user)
+            int gbHole = DragonSkillAudio.BeginSustain(player, DragonBaseSound.BlastHole, origin, 0.01f, 1f, 1f, null, false, orb != null ? orb.transform : null);   // v0.25.287 (user)
             DragonSkillAudio.SetSustainFades(gbHole, 0.25f, 0f);
             Vector3 pos = origin;
             bool moving = true;
@@ -3062,7 +3086,7 @@ namespace DragonsAltarSorcerer
                 elapsed += Time.deltaTime;
                 yield return null;
             }
-            DragonSkillAudio.EndSustain(gbHole);
+            DragonSkillAudio.SetSustainEnd(gbHole, 0.4f, 0.4f);
             if (player != null) { DragonSkillAudio.Play(player, DragonBaseSound.BlastBoom, pos); DragonSkillAudio.Play(player, DragonBaseSound.BlastBass, pos); }   // v0.25.287 same explosion as Gravity Dominion
             if (orb != null) Destroy(orb);
             if (scale >= 1f) _gbOrbActive = false;
@@ -4252,8 +4276,8 @@ namespace DragonsAltarSorcerer
             GameObject watched = rift;
             if (player != null)
             {
-                int s = DragonSkillAudio.BeginSustain(player, DragonBaseSound.RiftConjure, p, 5.9f, 1f, 1f, delegate { return watched != null; });
-                DragonSkillAudio.SetSustainFades(s, 0f, 0.8f);
+                int s = DragonSkillAudio.BeginSustain(player, DragonBaseSound.RiftConjure, p, RiftOpenDelay, 1f, 1f, delegate { return watched != null; });   // v0.25.288 swell peak on the opening
+                DragonSkillAudio.SetSustainEnd(s, 5.3f, 0.8f);
             }
             if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.RiftConjure(p, f, RiftOpenDelay, HwBlue); });
             yield return new WaitForSeconds(RiftOpenDelay);
@@ -4262,7 +4286,7 @@ namespace DragonsAltarSorcerer
             SphereCollider col = rift.GetComponent<SphereCollider>();
             if (col != null) col.enabled = true;
             if (_enableVfx.Value) DragonCombat.RunVfx(delegate { DragonVfx.SpaceFold(p, true, HwBlue, 1.4f); });
-            yield return new WaitForSeconds(4.5f);   // the recording's steady hum starts fading at ~5.1 s: hand over to the loop
+            yield return new WaitForSeconds(3.9f);   // v0.25.288 the hum loop fades in while the recording fades out (overlap, no gap)
             if (rift == null || player == null) yield break;
             int h = DragonSkillAudio.BeginSustain(player, DragonBaseSound.RiftHum, p, 600f, 1f, 1f, delegate { return watched != null; });
             DragonSkillAudio.SetSustainFades(h, 0.8f, 0f);

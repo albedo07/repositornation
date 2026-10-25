@@ -116,7 +116,7 @@ namespace AlbedosCustomClassesAdvanced
     {
         public const string ModGuid = "albedo.customclasses.advanced";
         public const string ModName = "Aethelborn Ascended - Advancements";
-        public const string ModVersion = "0.25.287";
+        public const string ModVersion = "0.25.288";
 
         private const string ClassDataKey = "AlbedoCustomClasses.Class";
         private const string AdvancementDataKey = "AlbedoCustomClasses.Advancement";
@@ -1030,8 +1030,8 @@ namespace AlbedosCustomClassesAdvanced
             // v0.20.9 Bless Thy Sinners - Buckler Parry (Framework).
             _shockwaveDamage = BindDamage("Priest Holy Shockwave Blunt Damage", 60f, 0f, 0f, 0f, 0f, 0f, 0f, 0f);   // v0.25.272 (user): Blunt
             _shockwaveRadius = Config.Bind("Priest Holy Shockwave", "Radius_v025272", 7f, "Shield Parry: Holy Shockwave radius in meters (v0.25.272: 7 m).");
-            _shockwaveCooldown = Config.Bind("Priest Holy Shockwave", "Cooldown_v025282", 20f, "Seconds between Holy Shockwaves (v0.25.287: 20 s).");
-            _holyParryEmpowerCooldown = Config.Bind("Priest Holy Shockwave", "EmpowerCooldown_v025282", 30f, "Holy Parry: the empowered-skill buff lasts until a skill uses it; after that a Parry can't grant it again for this many seconds (v0.25.287: 30 s).");
+            _shockwaveCooldown = Config.Bind("Priest Holy Shockwave", "Cooldown_v025282", 20f, "Seconds between Holy Shockwaves (v0.25.282: 20 s).");
+            _holyParryEmpowerCooldown = Config.Bind("Priest Holy Shockwave", "EmpowerCooldown_v025282", 30f, "Holy Parry: the empowered-skill buff lasts until a skill uses it; after that a Parry can't grant it again for this many seconds (v0.25.282: 30 s).");
             _parryHyperArmorSeconds = Config.Bind("Priest Holy Shockwave", "HyperArmorSeconds", 5f, "Every shield Parry (any but a tower shield) grants Hyper Armor for this long.");
             const string pa = "Priest Ascended";
             _sanctifiedDuration = Config.Bind(pa, "SanctifiedDuration", 10f, "Sanctified lasts this long on an ally.");
@@ -1078,7 +1078,7 @@ namespace AlbedosCustomClassesAdvanced
             _tempestAscMeteorBurn = Config.Bind("Priest Lightning Tempest Ascended", "MeteorFireBurnPerSecond_v02586", 12f, "Meteor Fire Burn per second, 3s, refreshed by every meteor hit.");
             _tempestAscMeteorRadius = Config.Bind("Priest Lightning Tempest Ascended", "MeteorRadius_v02586", 2.5f, "Meteor impact radius (m).");
             _tempestAscMeteorEvery = Config.Bind("Priest Lightning Tempest Ascended", "MeteorEveryStrikes_v02586", 1f, "One meteor per storm pulse (every HitInterval).");
-            _parryEmpowerPercent = Config.Bind("Priest Holy Shockwave", "NextSkillDamagePercent_v025282", 50f, "Every shield Parry empowers the next damaging skill by this percent of its damage for that entire skill instance (v0.25.287: 50%).");
+            _parryEmpowerPercent = Config.Bind("Priest Holy Shockwave", "NextSkillDamagePercent_v025282", 50f, "Every shield Parry empowers the next damaging skill by this percent of its damage for that entire skill instance (v0.25.282: 50%).");
 
             _lightningRelicCooldown = Config.Bind("Priest Lightning Relic", "Cooldown", 14f, "Cooldown starts only after the active Relic is relinquished or its 16s lifetime ends.");
             _lightningRelicStamina = Config.Bind("Priest Lightning Relic", "StaminaCost", 30f, "Stamina cost.");
@@ -15543,7 +15543,7 @@ namespace AlbedosCustomClassesAdvanced
             if (ascended)
             {
                 string changed = IhAscensionText(id);
-                if (changed.Length > 0) b.Append(IhOut("Skill Effect", changed));
+                if (changed.Length > 0) b.Append(IhOut("Ascension", changed));   // v0.25.288 (user)
             }
             if (stamina != null) b.Append(IhOut("Stamina Cost", stamina));
             if (eitr != null) b.Append(IhOut("Eitr Cost", eitr));
