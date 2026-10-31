@@ -284,3 +284,10 @@ LESSON 88: a missing spawn/placement point inside authored content must degrade 
 - USER RULE: EVERY additional on-screen UI must be movable.
 - ITEM OWNERSHIP (server option): Hard lock = everything you loot or craft can never be picked up by other players (friends included); Soft lock = only gear + Aethel Smithing items; Vanilla = off.
 - Aethelborn (on the user's word): every skill wind-up >= 0.3 s becomes exactly 1 s (Exalted too, Ultimates 1 s); follow-up strikes of multi-strike skills 0.7 s or 1 s (Claude decides per skill, e.g. Exalted Heavy Slash 1 s then 0.7/0.7, Exalted Astral Greatblade 1 s per slam); Graces NEVER change. Purpose: heraldry Cast Time Reduction matters.
+2026-10-31 — v2.3 DECISIONS (user):
+- Gold sources: vanilla dungeon/ruin chests keep their drop chance but give only 1-3 Coins; enemies drop none. Treasures still sell to traders for 1 (lowest) .. 5 (rarest) gold each - map every valuable (vanilla + modded) by its vanilla m_value rank at load. Price anchor: repairing a +10 Uncommon = 3 gold.
+- Repair gold (Claude): max(1, floor(P/4)), P = level power index incl. rarity steps (Uncommon from +6: 1 .. +10: 3; Rare+ always; Exalted +10: 6). Enhance gold per attempt (Claude): +1-3 1, +4-6 2, +7 4, +8 6, +9 8, +10 10, x rarity (Unc 1, Rare 1.5, Epic 2, Leg 3, Exalted 4); main material +1-3 1, +4-6 2, +7 4, +8 6, +9 8, +10 10. All in config.
+- ITEM OWNERSHIP (replaces the 3 modes): one rule - Aethelborn custom items (anything our mods create), gold, and gear YOU crafted can never be received freely by another player (no pickup of your drops, no taking from containers). Treasures and other vanilla items trade freely; gold moves only via the Coin Pouch Give button. Assumption: rarity gear from Realms reward chests binds to the looter.
+- Give targets: friends, party members or guild members within 5 m (leaving the party/guild removes the right).
+- Wind-up rule corrected: skills with wind-up 0.3-0.7 s (and anything under 1 s) become 1 s; wind-ups of 1 s or longer stay as they are. Graces never change.
+- Set bonus stacks with other mods' set bonuses (Therzie).
